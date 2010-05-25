@@ -51,7 +51,7 @@ namespace xVerilog {
             /** 
              * @brief C'tor in LLVM style
              */
-            ReduceWordWidthPass() : FunctionPass((intptr_t)&ID) {}
+            ReduceWordWidthPass() : FunctionPass((intptr_t)&ID),  Context(0){}
 
             /** 
              * @brief Requires LoopInfo analysis and tells llvm that
@@ -69,7 +69,7 @@ namespace xVerilog {
             virtual bool runOnFunction(Function &F);
 
         private:
-
+          LLVMContext *Context;
     }; // class
 
 

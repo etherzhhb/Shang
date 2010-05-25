@@ -15,7 +15,7 @@ namespace xVerilog {
     string instructionPriority::toString() {
         stringstream ss;
 
-        ss<<"InstructionPriority for \""<<BB->getName()<<"\"["<<getMaxDepth()<<"]\n";
+        ss<<"InstructionPriority for \""<<BB->getNameStr()<<"\"["<<getMaxDepth()<<"]\n";
         for (unsigned int i=0; i<getMaxDepth(); i++) {
             ss<<i<<":"<<std::endl;
             for (BasicBlock::const_iterator it = BB->begin(); it != BB->end(); ++it) {
@@ -53,7 +53,7 @@ namespace xVerilog {
     unsigned int instructionPriority::getLocalUses(const Instruction* inst, const BasicBlock* BB) {
         unsigned int uses = 0;
         // For all of the users of this instructions
-        for (Instruction::use_const_iterator it = inst->use_begin(); it!= inst->use_end(); ++it) {
+        for (Instruction::const_use_iterator it = inst->use_begin(); it!= inst->use_end(); ++it) {
             // Which are really instructions
             if (const Instruction* d = dyn_cast<Instruction>(*it)) {
                 // And are in this basic block

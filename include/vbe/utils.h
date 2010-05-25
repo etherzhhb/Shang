@@ -88,7 +88,7 @@ namespace {
         if (CI && !isa<GlobalValue>(CI)) {
             stringstream ss;
             const Type* Ty = CI->getType();
-            if (Ty == Type::Int1Ty)
+            if (Ty->isIntegerTy(1))
                 ss<<((CI->getZExtValue() ? "1" : "0"));
             else {
                 ss << "(";
@@ -108,7 +108,7 @@ namespace {
             VarName = toPrintable(Name);
 
             const Type* tp = Operand->getType();
-            if (tp->isInteger()) {
+            if (tp->isIntegerTy()) {
                 Name = "i_" + VarName;
             } else if(tp->isSized()) {
                 Name = "p_" + VarName;
