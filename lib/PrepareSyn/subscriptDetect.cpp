@@ -41,7 +41,7 @@ namespace xVerilog {
         assert(ptr && "ptr is not of GetElementPtrInst type");
         // Pointer to the value that the GetElementPtrInst uses as index of the array
         Value* index = ptr->getOperand(1);
-        cerr<<"DBG: working on index"<<*index;  
+        errs()<<"DBG: working on index"<<*index;  
        
         // In this case, change the 'ADD' instruction to reflect the offset
         if (BinaryOperator* bin = dyn_cast<BinaryOperator>(index)) {
@@ -57,7 +57,7 @@ namespace xVerilog {
                     if (ConstantInt *con = dyn_cast<ConstantInt>(bin->getOperand(param_num))) {
                         unsigned int current_off = con->getValue().getZExtValue();
                         // create a new constant
-                        ConstantInt *ncon = ConstantInt::get(APInt(bitWidth, offset + current_off));
+                        ConstantInt *ncon = ConstantInt::get(IntegerType::get(*Context, bitWidth), offset + current_off);
                         bin->setOperand(param_num,ncon);
                     }
                 }
@@ -82,7 +82,7 @@ namespace xVerilog {
         unsigned int bitWidth = cast<IntegerType>(index->getType())->getBitWidth();
         // New add instruction, place it before the GetElementPtrInst 
         BinaryOperator* newIndex = BinaryOperator::Create(Instruction::Add, 
-                ConstantInt::get(APInt(bitWidth, offset)) , index, "i_offset", ptr);
+                ConstantInt::get(IntegerType::get(*Context, bitWidth), offset) , index, "i_offset", ptr);
         // Tell GetElementPtrInst to use it instead of the normal PHI
         ptr->setOperand(1,newIndex); 
     }
@@ -130,6 +130,7 @@ namespace xVerilog {
 
     bool subscriptDetect::runOnFunction(Function &F) {
         LoopInfo *LInfo = &getAnalysis<LoopInfo>();
+        Context = &F.getContext();
 
         // for each BB, find it's loop
         for (Function::const_iterator I = F.begin(), E = F.end(); I!=E; ++I) {
@@ -145,10 +146,10 @@ namespace xVerilog {
         for (inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i) {
             Instruction *inst = &*i;
             if (isStoreSubscript(inst)) {
-                cerr<<"Found Store "<<*inst;
+                errs()<<"Found Store "<<*inst;
                 m_StoreSubscripts.insert(inst);
             } else if (isLoadSubscript(inst)) {
-                cerr<<"Found Load "<<*inst;
+                errs()<<"Found Load "<<*inst;
                 m_LoadSubscripts.insert(inst);
             }
         }

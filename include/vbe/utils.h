@@ -34,7 +34,7 @@ namespace {
      * Set the terminal to color mode. Each line from this point will
      * be printed in color (white over blue).
      */
-    std::string xBlue() {
+    static inline std::string xBlue() {
         return "\033[44;37;5m";
     }
 
@@ -42,7 +42,7 @@ namespace {
      * Set the terminal to color mode. Each line from this point will
      * be printed in color (white over blue).
      */
-    std::string xRed() {
+    static inline std::string xRed() {
         return "\033[22;31;5m";
     }
 
@@ -53,7 +53,7 @@ namespace {
         return "\033[0m";
     }
 
-    void logPassMessage(std::string passName,int line ,std::string message, bool good=true) {
+    static inline void logPassMessage(std::string passName,int line ,std::string message, bool good=true) {
         if (good) {
             errs()<<xBlue();
         } else {
@@ -63,7 +63,7 @@ namespace {
     }
 
 
-    string toPrintable(const string& in ){
+    static inline string toPrintable(const string& in ){
         string VarName;
         VarName.reserve(in.capacity());
 
@@ -80,7 +80,24 @@ namespace {
         return VarName;
     }
 
-    string valueToString(Mangler* mang ,const Value *Operand) {
+    /// Mangle stuff
+    /// Mangle is not is looks like before, please have a look at CBackend.cpp
+    static inline std::string VBEMangle(const std::string &S) {
+      std::string Result;
+
+      for (unsigned i = 0, e = S.size(); i != e; ++i)
+        if (isalnum(S[i]) || S[i] == '_') {
+          Result += S[i];
+        } else {
+          Result += '_';
+          Result += 'A'+(S[i]&15);
+          Result += 'A'+((S[i]>>4)&15);
+          Result += '_';
+        }
+        return Result;
+    }
+
+    static inline string valueToString(Mangler* mang ,const Value *Operand) {
         std::string Name;
 
         const ConstantInt* CI = dyn_cast<ConstantInt>(Operand);
@@ -122,14 +139,10 @@ namespace {
  		 return "(0) /* NULL */";
 	}
 	//TODO: pass mang to this method ...
-        Name = mang->getValueName(Operand);
+        Name = VBEMangle(Operand->getNameStr());//mang->getValueName(Operand);
         
 
         return Name;
     }
-
-
-
-
 } //end of namespace
 #endif // h guard

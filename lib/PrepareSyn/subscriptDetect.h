@@ -53,7 +53,7 @@ namespace xVerilog {
             /** 
              * @brief C'tor in LLVM style
              */
-            subscriptDetect() : FunctionPass((intptr_t)&ID) {}
+            subscriptDetect() : FunctionPass((intptr_t)&ID), Context(0) {}
 
             /** 
              * @brief Requires LoopInfo analysis and tells llvm that
@@ -80,6 +80,9 @@ namespace xVerilog {
             static vector<Instruction*> findAllArrayReferences(Function *F);
 
         private:
+          /// 
+          LLVMContext *Context;
+
             /** 
              * @brief This will increment the index of the array access. 
              *  For example, It will turn A[i+3] to A[i+5] (for offset = 2).

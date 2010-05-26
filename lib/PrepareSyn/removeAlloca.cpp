@@ -60,7 +60,7 @@ namespace xVerilog {
         (--NewF->arg_end())->setName(name);
 
 
-        std::vector<ReturnInst*> Returns;  // Ignore returns cloned...
+        SmallVector<ReturnInst*, 4> Returns;  // Ignore returns cloned...
         CloneFunctionInto(NewF, F, ValueMap, Returns, "", 0);
         return NewF;
     }

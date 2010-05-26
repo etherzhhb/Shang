@@ -14,12 +14,14 @@ namespace xVerilog {
 
     string instructionPriority::toString() {
         stringstream ss;
-
+        /// XXX: O(n^2)?
         ss<<"InstructionPriority for \""<<BB->getNameStr()<<"\"["<<getMaxDepth()<<"]\n";
         for (unsigned int i=0; i<getMaxDepth(); i++) {
             ss<<i<<":"<<std::endl;
             for (BasicBlock::const_iterator it = BB->begin(); it != BB->end(); ++it) {
-                if (i == m_depth[it]) ss<<"\t"<<*it<<std::endl;
+                if (i == m_depth[it])
+                  // XXX: use getNameStr
+                  ss<<"\t"<<(*it).getNameStr() <<std::endl;
             }
 
         }    
