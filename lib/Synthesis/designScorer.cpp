@@ -9,7 +9,7 @@
 * Nadav Rotem. 
 */
 #include "designScorer.h"
-#include "../params.h"
+#include "vbe/params.h"
 
 namespace xVerilog {
 
@@ -105,20 +105,20 @@ namespace xVerilog {
 
         double delay = 0;
 
-        if (dyn_cast<LoadInst>(inst)) delay =  BASE_ASSIGN_DELAY;
-        if (dyn_cast<StoreInst>(inst)) delay = BASE_ASSIGN_DELAY;
-        if (dyn_cast<SelectInst>(inst)) delay = BASE_ASSIGN_DELAY;
-        if (dyn_cast<PHINode>(inst)) delay = BASE_ASSIGN_DELAY;
+        if (isa<LoadInst>(inst)) delay =  BASE_ASSIGN_DELAY;
+        if (isa<StoreInst>(inst)) delay = BASE_ASSIGN_DELAY;
+        if (isa<SelectInst>(inst)) delay = BASE_ASSIGN_DELAY;
+        if (isa<PHINode>(inst)) delay = BASE_ASSIGN_DELAY;
 
         // Converting bits from one format to another
-        if (dyn_cast<BitCastInst>(inst)) delay = 0.1;
-        if (dyn_cast<IntToPtrInst>(inst)) delay = 0.1;
-        if (dyn_cast<PtrToIntInst>(inst)) delay = 0.1;
-        if (dyn_cast<ZExtInst>(inst)) delay = 0.1;
-        if (dyn_cast<TruncInst>(inst)) delay =  0.1;
+        if (isa<BitCastInst>(inst)) delay = 0.1;
+        if (isa<IntToPtrInst>(inst)) delay = 0.1;
+        if (isa<PtrToIntInst>(inst)) delay = 0.1;
+        if (isa<ZExtInst>(inst)) delay = 0.1;
+        if (isa<TruncInst>(inst)) delay =  0.1;
 
         // Binary instructions
-        if (dyn_cast<BinaryOperator>(inst))  {
+        if (isa<BinaryOperator>(inst))  {
             BinaryOperator* bin = (BinaryOperator*) inst;
             // Simple binary functions 
             if (bin->getOpcode() == Instruction::Add || bin->getOpcode() == Instruction::Sub) {
@@ -139,7 +139,7 @@ namespace xVerilog {
             // Shift, may be constant (routing ), may be assign part (shl module)
             if ((bin->getOpcode()) == Instruction::Shl || bin->getOpcode() == Instruction::LShr) {
                 // shift by constant
-                if (dyn_cast<Constant>(bin->getOperand(1))) delay = 0;
+                if (isa<Constant>(bin->getOperand(1))) delay = 0;
                 // Assign part
                 delay =  BASE_ASSIGN_DELAY;
             } 
@@ -147,7 +147,7 @@ namespace xVerilog {
 
         const Type* Ty = inst->getType();
         // if we don't know this type, don't normalize it
-        if (!Ty->isPrimitiveType() || !Ty->isInteger() || !Ty->isSized()) return delay;
+        if (!Ty->isPrimitiveType() || !Ty->isIntegerTy() || !Ty->isSized()) return delay;
         if (Ty->getTypeID() ==  Type::IntegerTyID) {
             unsigned NBits = cast<IntegerType>(Ty)->getBitWidth();
             delay = (delay/32)*NBits;
@@ -177,7 +177,7 @@ namespace xVerilog {
 
     int designScorer::getInstructionSize(Instruction* inst) {
         const Type* Ty = inst->getType();
-        if (!Ty->isPrimitiveType() || !Ty->isInteger() || !Ty->isSized()) return 1;
+        if (!Ty->isPrimitiveType() || !Ty->isIntegerTy() || !Ty->isSized()) return 1;
         unsigned int gates = 0;
 
         switch (Ty->getTypeID()) {

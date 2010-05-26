@@ -16,7 +16,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Constants.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/Streams.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Module.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallVector.h"
@@ -43,16 +43,29 @@ namespace xVerilog {
      * pointer to the actual data. This allows control of all of the global variables
      * in a single location. 
      */
+  /// XXX: Implement as a ImmutablePass
     class globalVarRegistry {
 
         public:
-            void init(Module *M) {m_module  = M; }
+            void init(Module *M) {
+              m_module  = M;
+              Context = &M->getContext();
+              if (!Zero1)
+                Zero1 = ConstantInt::get(IntegerType::get(*Context, 1), 0);
+              if (!One1)
+                One1 = ConstantInt::get(IntegerType::get(*Context, 1), 1);
+              if (!Zero32)
+                Zero1 = ConstantInt::get(IntegerType::get(*Context, 32), 0);
+              if (!One32)
+                One32 = ConstantInt::get(IntegerType::get(*Context, 32), 1);
+            }
 
             void destroy();
 
             /*
              * add this variable to a list of instructions to be destructed on exit
              */
+            // Use bumpAllXXX
             void trashWhenDone(Instruction* val) { m_garbage.push_back(val); }
 
             /*
@@ -75,8 +88,11 @@ namespace xVerilog {
             static Value *Zero32;
             static Value *One32;
 
+            LLVMContext &getContext() const { return *Context;}
+
         private:
             static Module* m_module;
+            static LLVMContext *Context;
             static map<string, GlobalVariable*> m_map;
             static vector<Instruction*> m_garbage;
     };

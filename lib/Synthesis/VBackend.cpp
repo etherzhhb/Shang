@@ -26,14 +26,14 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/CodeGen/IntrinsicLowering.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Target/TargetMachineRegistry.h"
-#include "llvm/Target/TargetAsmInfo.h"
+#include "llvm/Target/TargetRegistry.h "
+//#include "llvm/Target/TargetAsmInfo.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/CFG.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/InstVisitor.h"
-#include "llvm/Support/Mangler.h"
+#include "llvm/Target/Mangler.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/STLExtras.h"
@@ -49,15 +49,20 @@
 #include "listScheduler.h"
 #include "verilogLang.h"
 #include "designScorer.h"
-#include "../params.h"
+#include "vbe/params.h"
 
 using namespace llvm;
 using std::string;
 using std::stringstream;
 using llvm::TargetData; //JAWAD
 namespace xVerilog {
+    /// Reference CBackend.cpp
     // Register the target.
-    static RegisterTarget<VTargetMachine> MXVVE("v", "Verilog backend");
+    //extern "C" void LLVMInitializeCBackendTarget() { 
+    //  // Register the target.
+    //  RegisterTargetMachine<CTargetMachine> X(TheCBackendTarget);
+    //}
+    ///static RegisterTargetMachine<VTargetMachine> MXVVE("vbe", "Verilog backend");
   
     /// VWriter - This class is the main chunk of code that converts an LLVM
     /// module to a Verilog translation unit.
@@ -72,8 +77,7 @@ namespace xVerilog {
 
             void getAnalysisUsage(AnalysisUsage &AU) const {
                 AU.addRequired<LoopInfo>();
-                AU.addPreserved<LoopInfo>();
-	        AU.addRequired<TargetData>();//JAWAD 
+	              AU.addRequired<TargetData>();//JAWAD 
                 AU.setPreservesAll();
             }
 
@@ -101,7 +105,7 @@ namespace xVerilog {
         //DenseMap <const Value *, Value *> ValueMap;
         //Function *newFunc =  llvm::CloneFunction   (&F,ValueMap);  
 
-        //std::cerr<<"Converting to verilog this function:\n" <<F<<"\n\n";
+        //errs()<<"Converting to verilog this function:\n" <<F<<"\n\n";
 
  	TargetData * TD =  &getAnalysis<TargetData>();//JAWAD
         verilogLanguage verilogPrinter(F.getParent(),Mang,TD);
@@ -145,11 +149,11 @@ namespace xVerilog {
         if (0==include_clocks) clocks = 1;
         if (0==include_size) gsize = 1;
 
-        cerr<<"\n\n---  Synthesis Report ----\n";
-        cerr<<"Estimated circuit delay   : " << freq<<"ns ("<<1000/freq<<"Mhz)\n";
-        cerr<<"Estimated circuit size    : " << gsize<<"\n";
-        cerr<<"Calculated loop throughput: " << clocks<<"\n";
-        cerr<<"--------------------------\n";
+        errs()<<"\n\n---  Synthesis Report ----\n";
+        errs()<<"Estimated circuit delay   : " << freq<<"ns ("<<1000/freq<<"Mhz)\n";
+        errs()<<"Estimated circuit size    : " << gsize<<"\n";
+        errs()<<"Calculated loop throughput: " << clocks<<"\n";
+        errs()<<"--------------------------\n";
 
         Out<<"/* Total Score= |"<< ((clocks*sqrt(clocks))*(freq)*(gsize))/(MDF) <<"| */"; 
         Out<<"/* freq="<<freq<<" clocks="<<clocks<<" size="<<gsize<<"*/\n"; 
@@ -186,7 +190,7 @@ namespace xVerilog {
         Out<<verilogPrinter.createBinOpModule("shl","<<",resourceMap["delay_shl"]);
         Out<<verilogPrinter.getBRAMDefinition(resourceMap["mem_wordsize"],resourceMap["membus_size"]);
         Out<<verilogPrinter.getTestBench(F);
-        //std::cerr<<"done scheduling function\n";
+        //errs()<<"done scheduling function\n";
         return true;
     }
 

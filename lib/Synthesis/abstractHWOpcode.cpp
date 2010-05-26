@@ -138,7 +138,7 @@ static string getVarName(Value* Op){
                 return;
             }
 
-            if (dyn_cast<PHINode>(inst)) {
+            if (isa<PHINode>(inst)) {
                 m_opcodeName = "other";
                 //empty instruction;
                 InstructionCycle cycle;
@@ -159,8 +159,8 @@ static string getVarName(Value* Op){
                         gvr.getGlobalVariableByName("mem_"+arrName+"_mode",1,false)); 
                 // store address first
                 const Type* addr_type = inst->getOperand(0)->getType(); //JAWAD
-		std::cout <<"ADDR_TYPE1 = : " << *addr_type << "   arrName:  " << arrName <<"\n";
-		std::cout <<"ADDR_TYPE2 = : " << *addr_type << "   arrName:  " << arrName <<"\n";
+		std::cout <<"ADDR_TYPE1 = : " << addr_type->getDescription() << "   arrName:  " << arrName <<"\n";
+		std::cout <<"ADDR_TYPE2 = : " << addr_type->getDescription() << "   arrName:  " << arrName <<"\n";
                 Value* port = gvr.getGlobalVariableByName("mem_"+arrName+"_addr",addr_type);
                 StoreInst* l2 = new StoreInst(inst->getOperand(0) ,port);
                 // read answer after
@@ -251,7 +251,7 @@ static string getVarName(Value* Op){
                 this->appendInstructionCycle(cycle1, 1);
                 this->appendInstructionCycle(nop, 0);
                 return;
-            } else if (dyn_cast<BinaryOperator>(inst)) {
+            } else if (isa<BinaryOperator>(inst)) {
                 BinaryOperator* bin = (BinaryOperator*) inst;
                 // in here, add a switch where 'add' and 'neg' will turn into verilog
                 // key words. However, << and mod, div will turn into scheduling blocks,
@@ -411,7 +411,7 @@ static string getVarName(Value* Op){
                  * The return instruction must come last. Also, a return is usually
                  * not inside a loop so we do not care about loosing a cycle or two. 
                  */
-                if (dyn_cast<ReturnInst>(*inst_it)) this->addDependency(hwop);
+                if (isa<ReturnInst>(*inst_it)) this->addDependency(hwop);
 
                 // for each dependency of each instruction in our opcode
                 for (User::op_iterator dep_iter = (*inst_it)->op_begin();
@@ -453,14 +453,14 @@ static string getVarName(Value* Op){
         // User guided parameters
         map<string, unsigned int> resourceMap = machineResourceConfig::getResourceTable();
 
-        if (dyn_cast<TruncInst>(inst)) return true;
-        if (dyn_cast<IntToPtrInst>(inst)) return true;
-        if (dyn_cast<PtrToIntInst>(inst)) return true;
-        if (dyn_cast<ZExtInst>(inst)) return true;
-        if (dyn_cast<SExtInst>(inst)) return true;
-        if (dyn_cast<TruncInst>(inst)) return true;
-        if (dyn_cast<CallInst>(inst)) return true;
-        if (dyn_cast<GetElementPtrInst>(inst)) return true;
+        if (isa<TruncInst>(inst)) return true;
+        if (isa<IntToPtrInst>(inst)) return true;
+        if (isa<PtrToIntInst>(inst)) return true;
+        if (isa<ZExtInst>(inst)) return true;
+        if (isa<SExtInst>(inst)) return true;
+        if (isa<TruncInst>(inst)) return true;
+        if (isa<CallInst>(inst)) return true;
+        if (isa<GetElementPtrInst>(inst)) return true;
 
         
         if (inst->hasOneUse()) {
@@ -485,13 +485,13 @@ static string getVarName(Value* Op){
             // the MUX any ways)
             unsigned int bitWidth = cast<IntegerType>(calc->getType())->getBitWidth();
             if (bitWidth <= resourceMap["inline_op_to_wire"]) {
-                //cerr<<"Treating register as wire: "<<*calc;
+                //errs()<<"Treating register as wire: "<<*calc;
                 return true;
             }
 
             // if second parameter is a constant (shift by constant is wiring)
             Value* param1 = calc->getOperand(1);
-            if (dyn_cast<ConstantInt>(param1)) {
+            if (isa<ConstantInt>(param1)) {
                 if (calc->getOpcode() == Instruction::Shl) return true;
                 if (calc->getOpcode() == Instruction::LShr || 
                         calc->getOpcode() == Instruction::AShr) return true; 
@@ -500,7 +500,7 @@ static string getVarName(Value* Op){
             } 
             // if constant is truncated ...
             if (TruncInst* tr = dyn_cast<TruncInst>(param1)) {
-                if (dyn_cast<ConstantInt>(tr->getOperand(0))) {
+                if (isa<ConstantInt>(tr->getOperand(0))) {
                     if (calc->getOpcode() == Instruction::Shl) return true;
                     if (calc->getOpcode() == Instruction::LShr || 
                             calc->getOpcode() == Instruction::AShr) return true; 
@@ -599,15 +599,15 @@ static string getVarName(Value* Op){
 		}
 	}
 
-        //cerr<<"Param:" << *param<<"\n"; 
+        //errs()<<"Param:" << *param<<"\n"; 
         // If the param is from a PHINode, never mind. Pick any
         // hope that the first iteration reads the same value as the
         // body of the loop.
         // TODO: BUG in case of split PHI node of two basic blocks. 
         if (PHINode* phi = dyn_cast<PHINode>(array)){
-            if (dyn_cast<Argument>(phi->getOperand(0))) {
+            if (isa<Argument>(phi->getOperand(0))) {
                 array = phi->getOperand(0);
-            } else if (dyn_cast<Argument>(phi->getOperand(2))) {
+            } else if (isa<Argument>(phi->getOperand(2))) {
                 array = phi->getOperand(2);
             }
             assert(array && "Unable to find the array argument from the PHI node");

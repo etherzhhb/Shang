@@ -13,6 +13,7 @@
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
+#include "llvm/Support/MathExtras.h"
 
 #include "verilogLang.h"
 #include "intrinsics.h"
@@ -137,7 +138,7 @@ namespace xVerilog {
             case Instruction::LShr:{ss<<evalValue(val0)<<" >> "<<evalValue(val1);break;}
             case Instruction::Shl:{ss<<evalValue(val0)<<" << "<<evalValue(val1);break;}
             default: {
-                         cerr<<"Unhandaled: "<<*inst;
+                         errs()<<"Unhandaled: "<<*inst;
                          abort();
                      }
         }
@@ -286,7 +287,7 @@ namespace xVerilog {
             case ICmpInst::ICMP_SLT: ss << " < "; break;
             case ICmpInst::ICMP_UGT:
             case ICmpInst::ICMP_SGT: ss << " > "; break;
-            default: cerr << "Invalid icmp predicate!"; abort();
+            default: errs() << "Invalid icmp predicate!"; abort();
         }
 
         ss << evalValue(cmp->getOperand(1));
@@ -328,31 +329,31 @@ namespace xVerilog {
     }
 
     bool verilogLanguage::isInstructionDatapath(Instruction *inst) {
-        if (dyn_cast<BinaryOperator>(inst))     return true;
-        if (dyn_cast<CmpInst>(inst))            return true;
-        if (dyn_cast<GetElementPtrInst>(inst))  return true;
-        if (dyn_cast<SelectInst>(inst))         return true;
-        if (dyn_cast<ZExtInst>(inst))           return true;
-        if (dyn_cast<IntToPtrInst>(inst))       return true;
+        if (isa<BinaryOperator>(inst))     return true;
+        if (isa<CmpInst>(inst))            return true;
+        if (isa<GetElementPtrInst>(inst))  return true;
+        if (isa<SelectInst>(inst))         return true;
+        if (isa<ZExtInst>(inst))           return true;
+        if (isa<IntToPtrInst>(inst))       return true;
         return false;
     }
     string verilogLanguage::printInstruction(Instruction *inst, unsigned int resourceId) {
         const string colon(";\n");
-        if (dyn_cast<StoreInst>(inst))      return printStoreInst(inst, resourceId, 0) + colon;
-        if (dyn_cast<LoadInst>(inst))       return printLoadInst(inst, resourceId , 0) + colon;
-        if (dyn_cast<ReturnInst>(inst))     return printReturnInst(inst) + colon;
-        if (dyn_cast<BranchInst>(inst))     return printBranchInst(inst);
-        if (dyn_cast<PHINode>(inst))        return "" ; // we do not print PHINodes 
-        if (dyn_cast<BinaryOperator>(inst)) return printBinaryOperatorInst(inst, 0, 0) + colon;
-        if (dyn_cast<CmpInst>(inst))        return printCmpInst(inst) + colon;
-        if (dyn_cast<GetElementPtrInst>(inst)) return printGetElementPtrInst(inst)+ colon;
-        if (dyn_cast<SelectInst>(inst))     return printSelectInst(inst) + colon;
-        if (dyn_cast<ZExtInst>(inst))       return printZxtInst(inst) + colon;
-        if (dyn_cast<BitCastInst>(inst))    return printBitCastInst(inst) + colon; //JAWAD
-        if (dyn_cast<AllocaInst>(inst))     return printAllocaInst(inst) + colon;
-        if (dyn_cast<IntToPtrInst>(inst))   return printIntToPtrInst(inst) + colon;
-        if (dyn_cast<CallInst>(inst))       return printIntrinsic(inst) + colon;
-        if (dyn_cast<Instruction>(inst)) std::cerr<<"Unable to process "<<*inst<<"\n";
+        if (isa<StoreInst>(inst))      return printStoreInst(inst, resourceId, 0) + colon;
+        if (isa<LoadInst>(inst))       return printLoadInst(inst, resourceId , 0) + colon;
+        if (isa<ReturnInst>(inst))     return printReturnInst(inst) + colon;
+        if (isa<BranchInst>(inst))     return printBranchInst(inst);
+        if (isa<PHINode>(inst))        return "" ; // we do not print PHINodes 
+        if (isa<BinaryOperator>(inst)) return printBinaryOperatorInst(inst, 0, 0) + colon;
+        if (isa<CmpInst>(inst))        return printCmpInst(inst) + colon;
+        if (isa<GetElementPtrInst>(inst)) return printGetElementPtrInst(inst)+ colon;
+        if (isa<SelectInst>(inst))     return printSelectInst(inst) + colon;
+        if (isa<ZExtInst>(inst))       return printZxtInst(inst) + colon;
+        if (isa<BitCastInst>(inst))    return printBitCastInst(inst) + colon; //JAWAD
+        if (isa<AllocaInst>(inst))     return printAllocaInst(inst) + colon;
+        if (isa<IntToPtrInst>(inst))   return printIntToPtrInst(inst) + colon;
+        if (isa<CallInst>(inst))       return printIntrinsic(inst) + colon;
+        if (isa<Instruction>(inst)) errs()<<"Unable to process "<<*inst<<"\n";
         assert(0 && "Unhandaled instruction");
         abort();
         return colon;
@@ -386,8 +387,8 @@ namespace xVerilog {
                 ss << " " << prefix;
                 ss << " [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<";\n";
             } else {
-                cerr<<"Unable to accept non integer params: "<<*I<<"\n";
-                cerr<<"Types:"<<I->getType()->getTypeID()<<" "<<Type::ArrayTyID <<"\n";
+                errs()<<"Unable to accept non integer params: "<<*I<<"\n";
+                errs()<<"Types:"<<I->getType()->getTypeID()<<" "<<Type::ArrayTyID <<"\n";
                 abort(); }
         }
 
@@ -428,7 +429,7 @@ namespace xVerilog {
             //If we return void, we have a dummy one bit return val
             ss << " wire return_value;\n";
         } else if (F.getReturnType()->getTypeID()!=Type::IntegerTyID) {
-            cerr<<"Unable to accept non integer return func";
+            errs()<<"Unable to accept non integer return func";
             abort();
         } else {
             unsigned NumBits = cast<IntegerType>(F.getReturnType())->getBitWidth();
@@ -461,7 +462,7 @@ namespace xVerilog {
 
 
     string verilogLanguage::getTypeDecl(const Type *Ty, bool isSigned, const std::string &NameSoFar) {
-        assert((Ty->isPrimitiveType() || Ty->isInteger() || Ty->isSized()) && "Invalid type decl");
+        assert((Ty->isPrimitiveType() || Ty->isIntegerTy() || Ty->isSized()) && "Invalid type decl");
         std::stringstream ss;
         switch (Ty->getTypeID()) {
             case Type::VoidTyID: { 
@@ -479,7 +480,7 @@ namespace xVerilog {
                                         return ss.str();
                                     }
             default :
-                                    cerr << "Unknown primitive type: " << *Ty << "\n";
+                                    errs() << "Unknown primitive type: " << *Ty << "\n";
                                     abort();
         }
     }
@@ -541,7 +542,7 @@ namespace xVerilog {
                 // for each instruction in each cycle in each LS
                 for (vector<Instruction*>::iterator I = inst.begin(); I!=inst.end(); ++I) {
                     // if has a return type, print it as a variable name
-                    if ((*I)->getType() != Type::VoidTy) {
+                    if (!(*I)->getType()->isVoidTy()) {
                         ss << " ";
                         ss << getTypeDecl((*I)->getType(), false, GetValueName(*I));
                         ss << ";   /*local var*/\n";
@@ -552,9 +553,9 @@ namespace xVerilog {
             // Print all PHINode variables as well
             BasicBlock *bb= (*lsi)->getBB(); 
             for (BasicBlock::iterator bit = bb->begin(); bit != bb->end(); bit++) { 
-                if (dyn_cast<PHINode>(bit)) {
+                if (isa<PHINode>(bit)) {
                     // if has a return type, print it as a variable name 
-                    if ((bit)->getType() != Type::VoidTy) { 
+                    if (!(bit)->getType()->isVoidTy()) { 
                         ss << " "; 
                         ss << getTypeDecl((bit)->getType(), false, GetValueName(bit)); 
                         ss << ";   /*phi var*/\n"; 
@@ -580,7 +581,7 @@ namespace xVerilog {
         unsigned int numberOfStates = getNumberOfStates(lsv);
 
         // Instruction pointer of n bits, n^2 states
-        unsigned int NumOfStateBits = (int) ceil(log(numberOfStates+1)/log(2))-1;
+        unsigned int NumOfStateBits = Log2_32_Ceil(numberOfStates+1) -1;
 
         ss<<"\n // Number of states:"<<numberOfStates<<"\n";
         ss << " reg ["<< NumOfStateBits<<":0] eip;\n";
@@ -670,32 +671,32 @@ namespace xVerilog {
             } else if (calc->getOpcode() == Instruction::Or) {
                 ss<<evalValue(v0)<<" | "<<evalValue(v1);
             } else {
-                cerr<<"Unknown Instruction "<<*calc;
+                errs()<<"Unknown Instruction "<<*calc;
                 abort();
             }
-        } else if (dyn_cast<TruncInst>(inst)) { 
+        } else if (isa<TruncInst>(inst)) { 
             // make the cast
             ss <<  evalValue(inst->getOperand(0));
-        } else if (dyn_cast<SExtInst>(inst)) { 
+        } else if (isa<SExtInst>(inst)) { 
             // make the cast
             ss <<  evalValue(inst->getOperand(0));
-        } else if (dyn_cast<ZExtInst>(inst)) { 
+        } else if (isa<ZExtInst>(inst)) { 
             // make the cast
             ss <<  evalValue(inst->getOperand(0));
-        } else if (dyn_cast<IntToPtrInst>(inst)) { 
+        } else if (isa<IntToPtrInst>(inst)) { 
             // make the cast
             ss <<  evalValue(inst->getOperand(0));
-        } else if (dyn_cast<GetElementPtrInst>(inst)) { 
+        } else if (isa<GetElementPtrInst>(inst)) { 
             // make the cast
             ss <<  getGetElementPtrInst(inst);
-        } else if (dyn_cast<CallInst>(inst)) { 
+        } else if (isa<CallInst>(inst)) { 
             // make the cast
             ss <<  getIntrinsic(dyn_cast<CallInst>(inst));
-        } else if (dyn_cast<PtrToIntInst>(inst)) { 
+        } else if (isa<PtrToIntInst>(inst)) { 
             // make the cast
             ss <<  evalValue(inst->getOperand(0));
         } else {
-            std::cerr<<"Unknown wire instruction "<<*inst;
+            errs()<<"Unknown wire instruction "<<*inst;
             abort();
         }
 
@@ -746,7 +747,7 @@ namespace xVerilog {
             ss << " output return_value;\n";
             ss << " reg return_value;\n";
         } else if (F->getReturnType()->getTypeID()!=Type::IntegerTyID) {
-            cerr<<"Unable to accept non integer return func";
+            errs()<<"Unable to accept non integer return func";
             abort();
         } else {
             unsigned NumBits = cast<IntegerType>(F->getReturnType())->getBitWidth();

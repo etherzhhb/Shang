@@ -243,7 +243,7 @@ namespace xVerilog {
         for(vector<resourceUnit*>::iterator it = m_units.begin(); it!=m_units.end(); ++it) {
             if ((*it)->hasInstruction(inst)) return (*it)->getId();
         }
-        cerr<<"unable to find the resource unit for instruction "<<inst<<"\n";
+        errs()<<"unable to find the resource unit for instruction "<<inst<<"\n";
         abort();
         return 0;
     }
@@ -304,7 +304,7 @@ namespace xVerilog {
             // After finding the best resource unit, schedule this opcode there
             assert(best_unit && "Unable to find best unit to schedule the opcode");
             if ((*depop)->isMustBeLastOpcode()) {
-                //cerr<<"placing at "<<length()-1<<" or "<<best_loc<<" inside:\n "<<best_unit->toString()<<"\n";
+                //errs()<<"placing at "<<length()-1<<" or "<<best_loc<<" inside:\n "<<best_unit->toString()<<"\n";
                 unsigned int cur_max_len = ((length()>0) ? length()-1 : 0) ;
                 best_unit->place(*depop, std::max(cur_max_len, best_loc));
             } else {
@@ -315,12 +315,12 @@ namespace xVerilog {
 
         //print list Scheduler
         // debug
-        cerr<<"---=="<<this->getBB()->getName()<<"["<<this->length()<<"]==---\n";
+        errs()<<"---=="<<this->getBB()->getName()<<"["<<this->length()<<"]==---\n";
         for (vector<resourceUnit*>::iterator un = m_units.begin(); un!=m_units.end();++un) {
-            cerr<<(*un)->toString();
+            errs()<<(*un)->toString();
         }
 
-        cerr<<"resource usage: "
+        errs()<<"resource usage: "
             <<"memport:"<<getMaxResourceUsage("mem")<<" "
             <<"mul:"<<getMaxResourceUsage("mul")<<" "
             <<"div:"<<getMaxResourceUsage("div")<<" "

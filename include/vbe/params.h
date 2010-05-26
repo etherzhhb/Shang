@@ -17,7 +17,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Constants.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/Streams.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Module.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallVector.h"
@@ -41,7 +41,7 @@ namespace xVerilog {
     // define the integer parser
     struct UnitNumParser : public cl::basic_parser<unsigned> {
         // parse - Return true on error.
-        bool parse(cl::Option &O, const char *ArgName, const std::string &ArgValue,
+        bool parse(cl::Option &O, StringRef ArgName, const std::string &ArgValue,
                 unsigned &Val);
     };
    

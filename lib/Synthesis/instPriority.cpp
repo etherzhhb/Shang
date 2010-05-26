@@ -29,13 +29,13 @@ namespace xVerilog {
         }
         return uses;
     }
-
+    /// XXX: pass a set in, and fill it.
     set<Instruction*> instructionPriority::getDependencies(Instruction* inst) {
         set<Instruction*> deps;
 
         // We do not count PHINodes because they may create cyclic dependencies.
         // We only want to get dependencies which are within this BB's iteration.
-        if (dyn_cast<PHINode>(inst)) {
+        if (isa<PHINode>(inst)) {
             return deps;
         }
 
