@@ -33,6 +33,9 @@
 #include "llvm/Support/CFG.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/InstVisitor.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCSymbol.h"
 #include "llvm/Target/Mangler.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/ADT/StringExtras.h"
@@ -56,6 +59,15 @@ using std::string;
 using std::stringstream;
 using llvm::TargetData; //JAWAD
 namespace xVerilog {
+
+  class VBEMCAsmInfo : public MCAsmInfo {
+  public:
+    VBEMCAsmInfo() {
+      GlobalPrefix = "";
+      PrivateGlobalPrefix = "";
+    }
+  };
+
     /// Reference CBackend.cpp
     // Register the target.
     //extern "C" void LLVMInitializeCBackendTarget() { 
@@ -89,6 +101,9 @@ namespace xVerilog {
         private:
             llvm::raw_ostream &Out;
             Mangler *Mang;
+            const MCAsmInfo* TAsm;
+            MCContext *TCtx;
+            const TargetData* TD;
     };
 
 
@@ -198,12 +213,17 @@ namespace xVerilog {
         globalVarRegistry gvr;
         gvr.destroy();
         delete Mang;
+        delete TD;
+        delete TAsm;
+        delete TCtx;
         return true;
     }
 
     bool VWriter::doInitialization(Module &M) { 
-        Mang = new Mangler(M);
-        Mang->markCharUnacceptable('.');
+        TD = new TargetData(&M);
+        TAsm = new VBEMCAsmInfo();
+        TCtx = new MCContext(*TAsm);
+        Mang = new Mangler(*TCtx, *TD);
         globalVarRegistry gvr;
         gvr.init(&M);
         return true;
@@ -217,7 +237,7 @@ namespace xVerilog {
 
 bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM, llvm::raw_ostream &o, 
         CodeGenFileType FileType, bool Fast) {
-    if (FileType != TargetMachine::AssemblyFile) return true;
+    if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
 
     PM.add(new xVerilog::VWriter(o));
     return false;

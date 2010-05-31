@@ -324,7 +324,7 @@ namespace xVerilog {
             <<"memport:"<<getMaxResourceUsage("mem")<<" "
             <<"mul:"<<getMaxResourceUsage("mul")<<" "
             <<"div:"<<getMaxResourceUsage("div")<<" "
-            <<"shl:"<<getMaxResourceUsage("shl")<<std::endl;
+            <<"shl:"<<getMaxResourceUsage("shl")<<"\n";
 
     }//method
 

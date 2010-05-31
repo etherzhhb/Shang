@@ -81,7 +81,7 @@ namespace {
     }
 
     /// Mangle stuff
-    /// Mangle is not is looks like before, please have a look at CBackend.cpp
+    /// Mangle is not it looks like before, please have a look at CBackend.cpp
     static inline std::string VBEMangle(const std::string &S) {
       std::string Result;
 

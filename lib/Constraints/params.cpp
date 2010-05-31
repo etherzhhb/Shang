@@ -14,7 +14,7 @@
 namespace xVerilog {
 
  // the parser method for our integer parser 
-    bool UnitNumParser::parse(cl::Option &O, const char *ArgName,
+    bool UnitNumParser::parse(cl::Option &O, StringRef ArgName,
             const std::string &Arg, unsigned &Val) {
         const char *ArgStart = Arg.c_str();
         char *End;

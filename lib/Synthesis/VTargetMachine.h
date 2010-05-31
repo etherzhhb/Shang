@@ -21,7 +21,7 @@ struct VTargetMachine : public TargetMachine {
 
   VTargetMachine(const Target &T, const std::string &TT
     , const std::string &FS, const Module *M)
-    : TargetMachine(&T), DataLayout(M) {}
+    : TargetMachine(T), DataLayout(M) {}
 
   virtual bool WantsWholeFile() const { return true; }
   virtual bool addPassesToEmitWholeFile(PassManager &PM, raw_ostream &Out,

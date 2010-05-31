@@ -31,11 +31,11 @@ namespace xVerilog{
         Instruction(Ty,OtherOpsEnd,0,0), m_type(Ty), m_toSave(value), m_extern(where){
         }
 
-    InInst* InInst::clone() const {
+    InInst* InInst::clone_impl() const {
         assert(0 && "Cannot clone EOL");abort();
         return 0;
     }
 
-     CastInst   *DelayInst::clone()     const { return new DelayInst(*this); }
+     CastInst   *DelayInst::clone_impl()     const { return new DelayInst(*this); }
 
 } // namespace
