@@ -8,7 +8,7 @@ add_llvm_target(VerilogBackend
   intrinsics.cpp
   listScheduler.cpp
   VBackend.cpp
-  verilogLang.cpp
+  RTLWriter.cpp
   )
   
  target_link_libraries (LLVMVerilogBackend LLVMConstr LLVMPreSyn LLVMVerilogBackendInfo)
