@@ -55,6 +55,12 @@
 #include "vbe/params.h"
 
 using namespace llvm;
+
+extern "C" void LLVMInitializeVerilogBackendTarget() { 
+  // Register the target.
+  RegisterTargetMachine<VTargetMachine> X(TheVBackendTarget);
+}
+
 using std::string;
 using std::stringstream;
 using llvm::TargetData; //JAWAD
@@ -235,10 +241,13 @@ namespace xVerilog {
 //                       External Interface declaration
 //===----------------------------------------------------------------------===//
 
-bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM, llvm::raw_ostream &o, 
-        CodeGenFileType FileType, bool Fast) {
+bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
+                                              formatted_raw_ostream &Out,
+                                              CodeGenFileType FileType,
+                                              CodeGenOpt::Level OptLevel,
+                                              bool DisableVerify) {
     if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
 
-    PM.add(new xVerilog::VWriter(o));
+    PM.add(new xVerilog::VWriter(Out));
     return false;
 }

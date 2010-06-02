@@ -360,40 +360,37 @@ namespace xVerilog {
     }
 
 
-    string verilogLanguage::getArgumentListDecl(const Function &F, const string& prefix) {
-        std::stringstream ss;
-
-        Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();
-
-        // Loop over the arguments, printing them as input variables.
-        I = F.arg_begin();
-        E = F.arg_end();
-        for (; I != E; ++I) {
-            // integers:
-            if (I->getType()->getTypeID()==Type::IntegerTyID) {
-                unsigned NumBits = cast<IntegerType>(I->getType())->getBitWidth();
-                ss <<" "<<prefix;
-                ss <<" [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<";\n";
-            }  // array of integers:
-            else if (I->getType()->getTypeID()==Type::ArrayTyID) {
-                //ArrayType *Arr = cast<ArrayType>(I->getType());
-                unsigned NumBits = cast<IntegerType>(
-                        cast<ArrayType>(I->getType())->getElementType())->getBitWidth();
-                unsigned NumElements = cast<ArrayType>(I->getType())->getNumElements(); 
-                ss << " " << prefix;
-                ss << " [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<"["<<NumElements<<":0];\n";
-            }  else if (I->getType()->getTypeID()==Type::PointerTyID) {
-                unsigned NumBits = m_pointerSize; // 32bit for pointers
-                ss << " " << prefix;
-                ss << " [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<";\n";
-            } else {
-                errs()<<"Unable to accept non integer params: "<<*I<<"\n";
-                errs()<<"Types:"<<I->getType()->getTypeID()<<" "<<Type::ArrayTyID <<"\n";
-                abort(); }
-        }
-
-        return ss.str();
+  std::string verilogLanguage::getArgumentListDecl(const Function &F,
+                                                   const std::string& prefix) {
+    std::stringstream ss;
+    for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end(); I != E; ++I) {
+      // integers:
+      if (I->getType()->getTypeID()==Type::IntegerTyID) {
+        unsigned NumBits = cast<IntegerType>(I->getType())->getBitWidth();
+        ss <<" "<<prefix;
+        ss <<" [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<";\n";
+      }  // array of integers:
+      // FIXME: Do not make the array port!
+      else if (I->getType()->getTypeID()==Type::ArrayTyID) {
+        //ArrayType *Arr = cast<ArrayType>(I->getType());
+        unsigned NumBits = cast<IntegerType>(
+        cast<ArrayType>(I->getType())->getElementType())->getBitWidth();
+        unsigned NumElements = cast<ArrayType>(I->getType())->getNumElements(); 
+        ss << " " << prefix;
+        ss << " [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<"["<<NumElements<<":0];\n";
+      }  else if (I->getType()->getTypeID()==Type::PointerTyID) {
+        // FIXME: Reduce the bitwitdh of address bus.
+        unsigned NumBits = m_pointerSize; // 32bit for pointers
+        ss << " " << prefix;
+        ss << " [" <<  NumBits-1 <<":0] "<<GetValueName(I)<<";\n";
+        } else {
+        errs()<<"Unable to accept non integer params: "<<*I<<"\n";
+        errs()<<"Types:"<<I->getType()->getTypeID()<<" "<<Type::ArrayTyID <<"\n";
+        abort(); }
     }
+
+    return ss.str();
+  }
 
 
     string verilogLanguage::getTestBench(Function &F) {

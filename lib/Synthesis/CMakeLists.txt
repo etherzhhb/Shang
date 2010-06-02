@@ -7,7 +7,10 @@ add_llvm_target(VerilogBackend
   instPriority.cpp
   intrinsics.cpp
   listScheduler.cpp
-  Opcodes.cpp
   VBackend.cpp
   verilogLang.cpp
   )
+  
+ target_link_libraries (LLVMVerilogBackend LLVMConstr LLVMPreSyn LLVMVerilogBackendInfo)
+
+add_subdirectory(TargetInfo)

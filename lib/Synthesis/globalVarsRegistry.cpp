@@ -13,9 +13,10 @@
 namespace xVerilog {
 
     /// static variables
-    Module* globalVarRegistry::m_module;
+    Module* globalVarRegistry::m_module = 0;
     map<string, GlobalVariable*> globalVarRegistry::m_map;
     vector<Instruction*> globalVarRegistry::m_garbage;
+    LLVMContext *globalVarRegistry::Context = 0;
 
     /// initial values
     Value* globalVarRegistry::Zero1 = 0; //ConstantInt::get(Type::Int1Ty, 0);
