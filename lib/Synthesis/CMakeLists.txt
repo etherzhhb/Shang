@@ -9,7 +9,7 @@ add_llvm_target(VerilogBackend
   listScheduler.cpp
   VBackend.cpp
   RTLWriter.cpp
-  TestbechWriter.cpp
+  TestbenchWriter.cpp
   )
   
  target_link_libraries (LLVMVerilogBackend LLVMConstr LLVMPreSyn LLVMVerilogBackendInfo)

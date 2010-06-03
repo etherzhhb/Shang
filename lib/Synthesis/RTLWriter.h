@@ -8,8 +8,8 @@
 * install copy or modify this software without written permission from 
 * Nadav Rotem. 
 */
-#ifndef LLVM_VERILOG_LANG_H
-#define LLVM_VERILOG_LANG_H
+#ifndef VBE_RTL_WRITER_H
+#define VBE_RTL_WRITER_H
 
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
