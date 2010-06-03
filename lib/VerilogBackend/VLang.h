@@ -23,6 +23,8 @@
 #include "llvm/Function.h"
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetData.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -30,7 +32,9 @@ using namespace llvm;
 namespace xVerilog {
 class VLang : public ImmutablePass {
   const TargetData* TD;
-  Mangler* Mang;
+  Mangler *Mang;
+  const MCAsmInfo* TAsm;
+  MCContext *TCtx;
   // For unname value
   DenseMap<const Value*, unsigned> AnonValueNumbers;
   unsigned NextAnonValueNumber;
@@ -40,7 +44,14 @@ class VLang : public ImmutablePass {
   }
 public:
   static char ID;
-  explicit VLang() : ImmutablePass(&ID) {}
+  explicit VLang() : ImmutablePass(&ID), NextAnonValueNumber(0) {}
+
+  ~VLang() {
+    clear();
+    delete Mang;
+    delete TAsm;
+    delete TCtx;
+  }
 
   /// @name Value and Type printing
   //{
@@ -51,8 +62,6 @@ public:
   ///
   /// @return The unique name of the Value.
   std::string GetValueName(const Value *Operand); 
-
-  static std::string VLangMangle(const std::string &S);
 
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);

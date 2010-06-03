@@ -14,7 +14,6 @@
 #include "llvm/DerivedTypes.h"
 #include "llvm/Module.h"
 #include "llvm/Instructions.h"
-//#include "llvm/ParameterAttributes.h"
 #include "llvm/Pass.h"
 #include "llvm/PassManager.h"
 #include "llvm/TypeSymbolTable.h"
@@ -27,7 +26,6 @@
 #include "llvm/CodeGen/IntrinsicLowering.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Target/TargetRegistry.h "
-//#include "llvm/Target/TargetAsmInfo.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/CFG.h"
@@ -66,21 +64,9 @@ using std::string;
 using std::stringstream;
 using llvm::TargetData; //JAWAD
 namespace {
-
-class VBEMCAsmInfo : public MCAsmInfo {
-public:
-  VBEMCAsmInfo() {
-    GlobalPrefix = "";
-    PrivateGlobalPrefix = "";
-  }
-};
-
 class VWriter : public FunctionPass {
   llvm::raw_ostream &Out;
-  Mangler *Mang;
-  const MCAsmInfo* TAsm;
-  MCContext *TCtx;
-  const TargetData* TD;
+ 
 public:
   static char ID;
   VWriter(llvm::raw_ostream &o) : FunctionPass((intptr_t)&ID),Out(o) {}
@@ -91,7 +77,8 @@ public:
   //{
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<LoopInfo>();
-    AU.addRequired<TargetData>();//JAWAD 
+    AU.addRequired<TargetData>();//JAWAD
+    AU.addRequired<VLang>();
     AU.setPreservesAll();
   }
   virtual bool doInitialization(Module &M);
@@ -110,13 +97,8 @@ bool VWriter::runOnFunction(Function &F) {
     I->setName (argname);
   };
 
-  //DenseMap <const Value *, Value *> ValueMap;
-  //Function *newFunc =  llvm::CloneFunction   (&F,ValueMap);  
-
-  //errs()<<"Converting to verilog this function:\n" <<F<<"\n\n";
-
-  TargetData * TD =  &getAnalysis<TargetData>();//JAWAD
-  RTLWriter DesignWriter(F.getParent(),Mang,TD);
+  TargetData *TD =  &getAnalysis<TargetData>();//JAWAD
+  RTLWriter DesignWriter(getAnalysis<VLang>(), TD);
 
   listSchedulerVector lv;
 
@@ -203,18 +185,10 @@ bool VWriter::runOnFunction(Function &F) {
 bool VWriter::doFinalization(Module &M) {
   globalVarRegistry gvr;
   gvr.destroy();
-  delete Mang;
-  delete TD;
-  delete TAsm;
-  delete TCtx;
   return true;
 }
 
 bool VWriter::doInitialization(Module &M) { 
-  TD = new TargetData(&M);
-  TAsm = new VBEMCAsmInfo();
-  TCtx = new MCContext(*TAsm);
-  Mang = new Mangler(*TCtx, *TD);
   globalVarRegistry gvr;
   gvr.init(&M);
   return true;
@@ -231,6 +205,9 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
                                               CodeGenOpt::Level OptLevel,
                                               bool DisableVerify) {
     if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
+
+    //Add the language writer.
+    PM.add(new VLang());
 
     PM.add(new VWriter(Out));
     return false;

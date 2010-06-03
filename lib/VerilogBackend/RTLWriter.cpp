@@ -103,7 +103,7 @@ LoadInst* load = (LoadInst*) inst; // make the cast
 * number to it
 * */
 stringstream ss;
-ss<<GetValueName(load)<<" <= "<<evalValue(load->getOperand(0))<<unitNum;
+ss<<vlang.GetValueName(load)<<" <= "<<evalValue(load->getOperand(0))<<unitNum;
 return ss.str();
 }
 
@@ -123,7 +123,7 @@ string RTLWriter::printBinaryOperatorInst(Instruction* inst, int unitNum, int cy
 stringstream ss;
 BinaryOperator* bin = (BinaryOperator*) inst;
 
-string rec = GetValueName(bin);
+string rec = vlang.GetValueName(bin);
 Value* val0 = bin->getOperand(0);
 Value* val1 = bin->getOperand(1);
 ss << rec <<" <= ";
@@ -171,7 +171,7 @@ string RTLWriter::printSelectInst(Instruction* inst) {
 stringstream ss;
 SelectInst* sel = (SelectInst*) inst; // make the cast
 // (cond) ? i_b : _ib;
-ss << GetValueName(sel) <<" <= ";
+ss << vlang.GetValueName(sel) <<" <= ";
 ss << "(" << evalValue(sel->getOperand(0)) << " ? ";
 ss << evalValue(sel->getOperand(1)) << " : ";
 ss << evalValue(sel->getOperand(2))<<")";
@@ -182,7 +182,7 @@ string RTLWriter::printAllocaInst(Instruction* inst) {
 stringstream ss;
 AllocaInst* alca = (AllocaInst*) inst; // make the cast
 // a <= b;
-ss << GetValueName(alca) <<" <= 0";
+ss << vlang.GetValueName(alca) <<" <= 0";
 ss << "/* AllocaInst hack, fix this by giving a stack address */"; 
 return ss.str();
 }
@@ -201,14 +201,14 @@ return ss.str();
 }
 
 string RTLWriter::printIntrinsic(Instruction* inst) {
-return GetValueName(inst)  + string(" <= ") + getIntrinsic(inst);
+return vlang.GetValueName(inst)  + string(" <= ") + getIntrinsic(inst);
 }
 
 string RTLWriter::printIntToPtrInst(Instruction* inst) {
 stringstream ss;
 IntToPtrInst* i2p = (IntToPtrInst*) inst; // make the cast
 // a <= b;
-ss << GetValueName(i2p) <<" <= ";
+ss << vlang.GetValueName(i2p) <<" <= ";
 ss <<  evalValue(i2p->getOperand(0));
 return ss.str();
 }
@@ -217,7 +217,7 @@ string RTLWriter::printZxtInst(Instruction* inst) {
 stringstream ss;
 ZExtInst* zxt = (ZExtInst*) inst; // make the cast
 // a <= b;
-ss << GetValueName(zxt) <<" <= ";
+ss << vlang.GetValueName(zxt) <<" <= ";
 ss <<  evalValue(zxt->getOperand(0));
 return ss.str();
 }
@@ -225,7 +225,7 @@ string RTLWriter::printBitCastInst(Instruction* inst) { //JAWAD
 stringstream ss;
 BitCastInst* btcst = (BitCastInst*) inst; // make the cast
 // a <= b;
-ss << GetValueName(btcst) <<" <= ";
+ss << vlang.GetValueName(btcst) <<" <= ";
 ss <<  evalValue(btcst->getOperand(0));
 return ss.str();
 }
@@ -238,7 +238,7 @@ PHINode *PN = cast<PHINode>(I);
 //Now we have to do the printing.
 Value *IV = PN->getIncomingValueForBlock(CurBlock);
 if (!isa<UndefValue>(IV)) {
-ss <<"\t\t"<< GetValueName(I) << " <= " << evalValue(IV);
+ss <<"\t\t"<< vlang.GetValueName(I) << " <= " << evalValue(IV);
 ss << ";\n";
 }
 }
@@ -274,7 +274,7 @@ return ss.str();
 string RTLWriter::printCmpInst(Instruction* inst) {
 stringstream ss;
 CmpInst* cmp = (CmpInst*) inst; // make the cast
-ss << GetValueName(inst) << " <= ";
+ss << vlang.GetValueName(inst) << " <= ";
 ss << "(";
 ss<< evalValue(cmp->getOperand(0));
 
@@ -321,111 +321,11 @@ return ss.str();
 
 string RTLWriter::printGetElementPtrInst(Instruction* inst) {
 stringstream ss;
-ss << GetValueName(inst) <<" <= ";
+ss << vlang.GetValueName(inst) <<" <= ";
 ss<< getGetElementPtrInst(inst);
 return ss.str();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Value and type printing
-std::string RTLWriter::VLangMangle(const std::string &S) {
-  std::string Result;
-
-  for (unsigned i = 0, e = S.size(); i != e; ++i)
-  if (isalnum(S[i]) || S[i] == '_') {
-  Result += S[i];
-  } else {
-  Result += '_';
-  Result += 'A'+(S[i]&15);
-  Result += 'A'+((S[i]>>4)&15);
-  Result += '_';
-  }
-  return Result;
-}
-std::string RTLWriter::printBitWitdh(const Type *Ty, int LowestBit,
-                                           bool printOneBit) {
-  std::stringstream bw;
-  int BitWitdh = cast<IntegerType>(Ty)->getBitWidth();
-  if (BitWitdh !=1) 
-    bw << "[" << (BitWitdh - 1 + LowestBit) << ":" << LowestBit << "] ";
-  else if(printOneBit)
-    bw << "[" << LowestBit << "] ";
-  bw << " ";
-  return bw.str();
-}
-
-std::string RTLWriter::GetValueName(const Value *Operand) {
-  // Mangle globals with the standard mangler interface for LLC compatibility.
-  if (const GlobalValue *GV = dyn_cast<GlobalValue>(Operand)) {
-    SmallString<128> Str;
-    Mang->getNameWithPrefix(Str, GV, false);
-    return VLangMangle(Str.str().str());
-  }
-
-  std::string Name = Operand->getName();
-
-  if (Name.empty()) { // Assign unique names to local temporaries.
-    unsigned &No = AnonValueNumbers[Operand];
-    if (No == 0)
-      No = ++NextAnonValueNumber;
-    Name = "tmp__" + utostr(No);
-  }
-
-  std::string VarName;
-  VarName.reserve(Name.capacity());
-
-  for (std::string::iterator I = Name.begin(), E = Name.end();
-      I != E; ++I) {
-    char ch = *I;
-
-  if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-      (ch >= '0' && ch <= '9') || ch == '_')) {
-    char buffer[5];
-    sprintf(buffer, "_%x_", ch);
-    VarName += buffer;
-  } else
-    VarName += ch;
-  }
-
-  return "llvm_vbe_" + VarName;
-}
-
-std::string RTLWriter::printType(const Type *Ty,
-                                       bool isSigned /* = false */,
-                                       const std::string &VariableName /* =  */,
-                                       const std::string &SignalType /* =  */,
-                                       const std::string &Direction /* =  */,
-                                       bool IgnoreName /* = false */,
-                                       const AttrListPtr &PAL /* = AttrListPtr */)
-{
-  std::stringstream ss;
-  ss << Direction;
-  if (Ty->isIntegerTy()) {
-    ss << printSimpleType(Ty, isSigned, VariableName, SignalType);
-    return ss.str();
-  }
-  
-}
-
-std::string RTLWriter::printSimpleType(const Type *Ty, bool isSigned,
-                                             const std::string &NameSoFar /* =  */,
-                                             const std::string &SignalType /* = */){
-  std::stringstream ss;
-  //wire or reg?
-	ss << SignalType;
-	//signed?
-	if(isSigned)
-		ss << "signed ";
-
-  switch (Ty->getTypeID()) {
-  case Type::IntegerTyID:
-    ss << printBitWitdh(Ty) << NameSoFar;
-    return ss.str();
-  default:
-    llvm_unreachable("Unsupport type!");
-  }
-}
-///////////////////////////////////////////////////////////////////////////////
 bool RTLWriter::isInstructionDatapath(Instruction *inst) {
 if (isa<BinaryOperator>(inst))     return true;
 if (isa<CmpInst>(inst))            return true;
@@ -536,7 +436,7 @@ for (vector<Instruction*>::iterator I = inst.begin(); I!=inst.end(); ++I) {
 // if has a return type, print it as a variable name
 if (!(*I)->getType()->isVoidTy()) {
 ss << " ";
-ss << getTypeDecl((*I)->getType(), false, GetValueName(*I));
+ss << getTypeDecl((*I)->getType(), false, vlang.GetValueName(*I));
 ss << ";   /*local var*/\n";
 }    
 }
@@ -549,7 +449,7 @@ if (isa<PHINode>(bit)) {
 // if has a return type, print it as a variable name 
 if (!(bit)->getType()->isVoidTy()) { 
 ss << " "; 
-ss << getTypeDecl((bit)->getType(), false, GetValueName(bit)); 
+ss << getTypeDecl((bit)->getType(), false, vlang.GetValueName(bit)); 
 ss << ";   /*phi var*/\n"; 
 }     
 }
@@ -639,7 +539,7 @@ string RTLWriter::evalValue(Value* val) {
 if (Instruction* inst = dyn_cast<Instruction>(val)) {
 if (abstractHWOpcode::isInstructionOnlyWires(inst)) return printInlinedInstructions(inst);
 }
-return GetValueName(val);
+return vlang.GetValueName(val);
 }
 
 string RTLWriter::printInlinedInstructions(Instruction* inst) {
@@ -704,7 +604,7 @@ string RTLWriter::getFunctionSignature(const Function *F) {
   ss << "module ";
 
   // Print out the name...
-  ss << GetValueName(F) << "(\n"
+  ss << vlang.GetValueName(F) << "(\n"
      << "input wire clk, \n"
      << "input wire reset,\n"
      << "output reg rdy,// control \n\t";
@@ -727,9 +627,9 @@ string RTLWriter::getFunctionSignature(const Function *F) {
     I != E; ++I) {
       // integers:
       const Type *ArgTy = I->getType();
-      ss << printType(ArgTy,
+      ss << VLang::printType(ArgTy,
         /*isSigned=*/PAL.paramHasAttr(Idx, Attribute::SExt),
-        GetValueName(I), "wire ", "input ");
+        vlang.GetValueName(I), "wire ", "input ");
       ++Idx;
       ss << ",\n";
   }
@@ -739,7 +639,7 @@ string RTLWriter::getFunctionSignature(const Function *F) {
     // Do something?
   } else {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    ss << printType(RetTy, false, "return_value", "reg ", "output ") << ");\n";
+    ss << VLang::printType(RetTy, false, "return_value", "reg ", "output ") << ");\n";
   }
 
   return ss.str();

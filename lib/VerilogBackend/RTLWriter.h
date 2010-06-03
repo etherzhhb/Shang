@@ -32,6 +32,7 @@
 #include <set>
 
 #include "listScheduler.h"
+#include "VLang.h"
 #include "vbe/utils.h"
 #include "vbe/params.h"
 
@@ -68,19 +69,15 @@ namespace xVerilog {
     };
 
 class RTLWriter {
-  Module* m_module;
-  Mangler* Mang;
   TargetData* TD; //JAWAD
+  VLang &vlang;
   /// The number of memory ports to render in this design
   unsigned int m_memportNum;
   unsigned int m_pointerSize;
-  // For unname value
-  DenseMap<const Value*, unsigned> AnonValueNumbers;
-  unsigned NextAnonValueNumber;
 
   public:
-    RTLWriter(Module *module, Mangler *mang,TargetData* TD)
-      : m_module(module), Mang(mang), TD(TD), NextAnonValueNumber(0) {//JAWAD
+    RTLWriter(VLang &v, TargetData* TD)
+      : vlang(v), TD(TD) {//JAWAD
     std::map<std::string, unsigned int> rt =
       machineResourceConfig::getResourceTable();
     m_pointerSize = rt["membus_size"];
@@ -123,32 +120,6 @@ class RTLWriter {
   string getGetElementPtrInst(Instruction* inst);
   string printGetElementPtrInst(Instruction* inst);
 
-  /// @name Value and Type printing
-  //{
-  /// @brief Get the name of Value, if the Value have no name, 
-  ///       just create one for it.
-  ///
-  /// @param Operand The Value to get the name.
-  ///
-  /// @return The unique name of the Value.
-  std::string GetValueName(const Value *Operand); 
-
-  static std::string VLangMangle(const std::string &S);
-
-  static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
-                                   bool printOneBit = false);
-  static std::string printType(const Type *Ty, 
-                              bool isSigned = false,
-                              const std::string &VariableName = "", 
-                              const std::string &SignalType = "wire",
-                              const std::string &Direction = "",
-                              bool IgnoreName = false,
-                              const AttrListPtr &PAL = AttrListPtr());
-  static std::string printSimpleType(const Type *Ty, 
-                                    bool isSigned, 
-                                    const std::string &NameSoFar = "",
-                                    const std::string &SignalType = "wire");
-  //}
   bool isInstructionDatapath(Instruction *inst);
 
   string printInstruction(Instruction *inst, unsigned int resourceId);

@@ -39,9 +39,8 @@ namespace {
   };
 }
 
-//===----------------------------------------------------------------------===//
-// Value and type printing
-std::string VLang::VLangMangle(const std::string &S) {
+// Helper functions
+static std::string VLangMangle(const std::string &S) {
   std::string Result;
 
   for (unsigned i = 0, e = S.size(); i != e; ++i)
@@ -55,6 +54,29 @@ std::string VLang::VLangMangle(const std::string &S) {
   }
   return Result;
 }
+
+std::stringstream &indent(std::stringstream &ss, unsigned NumSpaces) {
+  static const char Spaces[] = "                                "
+    "                                "
+    "                ";
+
+  // Usually the indentation is small, handle it with a fastpath.
+  if (NumSpaces < array_lengthof(Spaces))
+    return write(Spaces, NumSpaces);
+
+  while (NumSpaces) {
+    unsigned NumToWrite = std::min(NumSpaces,
+      (unsigned)array_lengthof(Spaces)-1);
+    ss.write(Spaces, NumToWrite);
+    NumSpaces -= NumToWrite;
+  }
+  return ss;
+}
+
+
+//===----------------------------------------------------------------------===//
+// Value and type printing
+
 std::string VLang::printBitWitdh(const Type *Ty, int LowestBit,
                                            bool printOneBit) {
   std::stringstream bw;
@@ -137,3 +159,15 @@ std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
     llvm_unreachable("Unsupport type!");
   }
 }
+
+void VLang::initializePass() {
+  TD = getAnalysisIfAvailable<TargetData>();
+  TAsm = new VBEMCAsmInfo();
+  TCtx = new MCContext(*TAsm);
+  Mang = new Mangler(*TCtx, *TD);
+}
+
+char VLang::ID = 0;
+
+static RegisterPass<VLang> X("vlang", "Verilog language writer",
+                             false, true);
