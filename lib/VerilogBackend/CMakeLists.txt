@@ -8,6 +8,7 @@ add_llvm_target(VerilogBackend
   intrinsics.cpp
   listScheduler.cpp
   VBackend.cpp
+  VLang.cpp
   RTLWriter.cpp
   TestbenchWriter.cpp
   )
