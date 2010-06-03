@@ -402,38 +402,38 @@ ss<<"\n\n";
 return ss.str();
 }
 
-string RTLWriter::getFunctionLocalVariables(listSchedulerVector lsv) {
+std::string RTLWriter::getFunctionLocalVariables(listSchedulerVector lsv) {
 
-std::stringstream ss;
-// for each listScheduler of a basic block
-for (listSchedulerVector::iterator lsi=lsv.begin(); lsi!=lsv.end();++lsi) {
-// for each cycle in each LS
-for (unsigned int cycle=0; cycle<(*lsi)->length();cycle++) {
-vector<Instruction*> inst = (*lsi)->getInstructionForCycle(cycle);
-// for each instruction in each cycle in each LS
-for (vector<Instruction*>::iterator I = inst.begin(); I!=inst.end(); ++I) {
-// if has a return type, print it as a variable name
-if (!(*I)->getType()->isVoidTy()) {
-ss << " ";
-ss << getTypeDecl((*I)->getType(), false, vlang.GetValueName(*I));
-ss << ";   /*local var*/\n";
-}    
-}
-}// for each cycle    
+  std::stringstream ss;
+  // for each listScheduler of a basic block
+  for (listSchedulerVector::iterator lsi=lsv.begin(); lsi!=lsv.end();++lsi) {
+    // for each cycle in each LS
+    for (unsigned int cycle=0; cycle<(*lsi)->length();cycle++) {
+      std::vector<Instruction*> inst = (*lsi)->getInstructionForCycle(cycle);
+      // for each instruction in each cycle in each LS
+      for (std::vector<Instruction*>::iterator I = inst.begin(); I!=inst.end(); ++I) {
+        // if has a return type, print it as a variable name
+        if (!(*I)->getType()->isVoidTy()) {
+          ss << " ";
+          ss << getTypeDecl((*I)->getType(), false, vlang.GetValueName(*I));
+          ss << ";   /*local var*/\n";
+        }    
+      }
+    }// for each cycle    
 
-// Print all PHINode variables as well
-BasicBlock *bb= (*lsi)->getBB(); 
-for (BasicBlock::iterator bit = bb->begin(); bit != bb->end(); bit++) { 
-if (isa<PHINode>(bit)) {
-// if has a return type, print it as a variable name 
-if (!(bit)->getType()->isVoidTy()) { 
-ss << " "; 
-ss << getTypeDecl((bit)->getType(), false, vlang.GetValueName(bit)); 
-ss << ";   /*phi var*/\n"; 
-}     
-}
-} 
-}// for each listScheduler
+    // Print all PHINode variables as well
+    BasicBlock *bb= (*lsi)->getBB(); 
+    for (BasicBlock::iterator bit = bb->begin(); bit != bb->end(); bit++) { 
+      if (isa<PHINode>(bit)) {
+        // if has a return type, print it as a variable name 
+        if (!(bit)->getType()->isVoidTy()) { 
+          ss << " "; 
+          ss << getTypeDecl((bit)->getType(), false, vlang.GetValueName(bit)); 
+          ss << ";   /*phi var*/\n"; 
+        }     
+      }
+    } 
+  }// for each listScheduler
 
 return ss.str();
 }
