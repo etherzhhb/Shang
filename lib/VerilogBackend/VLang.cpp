@@ -21,6 +21,7 @@
 #include "VLang.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -61,8 +62,10 @@ std::stringstream &indent(std::stringstream &ss, unsigned NumSpaces) {
     "                ";
 
   // Usually the indentation is small, handle it with a fastpath.
-  if (NumSpaces < array_lengthof(Spaces))
-    return write(Spaces, NumSpaces);
+  if (NumSpaces < array_lengthof(Spaces)) {
+    ss.write(Spaces, NumSpaces);
+    return ss;
+  }
 
   while (NumSpaces) {
     unsigned NumToWrite = std::min(NumSpaces,
@@ -165,6 +168,64 @@ void VLang::initializePass() {
   TAsm = new VBEMCAsmInfo();
   TCtx = new MCContext(*TAsm);
   Mang = new Mangler(*TCtx, *TD);
+}
+
+std::string VLang::emitAlwaysffBegin(unsigned level /* = 0 */,
+                                const std::string &Clk /* =  */,
+                                const std::string &ClkEdge /* =  */,
+                                const std::string &Rst /* = */,
+                                const std::string &RstEdge /* =  */) const {
+  level *= 2;
+  std::stringstream ss;
+  // TODO: Support Sync reset
+  // TODO: SystemVerilog always_ff?
+  indent(ss, level) << "always @("
+                    << ClkEdge << " "<< Clk <<", "
+                    << RstEdge << " " << Rst
+                    <<") begin\n";
+  level += 2;
+  indent(ss, level) << "if (";
+  // negative edge reset?
+  if (RstEdge == "negedge")
+    ss << "!";
+  ss << Rst << ") begin\n";
+  level += 2;
+  indent(ss, level) << "eip<=0;\n";
+  indent(ss, level) << "rdy<=0;\n";
+  // TODO: Reset other registers!
+  level -= 2;
+  indent(ss, level) << "end\n";
+  // TODO: clock enable
+  indent(ss, level) << "else begin //else reset\n";
+  return ss.str();
+}
+
+std::string VLang::emitEndAlwaysff(unsigned level /* = 0 */) const {
+  std::stringstream ss;
+  level *= 2;
+  indent(ss, level + 2) << "end //else reset\n";
+  indent(ss, level) << "end //always @(..)\n\n";
+  return ss.str();
+}
+
+std::string VLang::emitCaseBegin(unsigned level /* = 0 */) const {
+  std::stringstream ss;
+  level *= 2;
+  indent(ss, level) << "case (eip)\n";
+  return ss.str();
+}
+std::string VLang::emitEndCase(unsigned level /* = 0 */) const {
+  std::stringstream ss;
+  level *= 2;
+  indent(ss, level) << " endcase //eip\n";
+  return ss.str();
+}
+
+std::string VLang::emitEndModule(unsigned level /* = 0 */) const {
+  std::stringstream ss;
+  level *= 2;
+  indent(ss, level) << "endmodule\n\n";
+  return ss.str();
 }
 
 char VLang::ID = 0;

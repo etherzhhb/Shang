@@ -78,6 +78,16 @@ public:
     const std::string &SignalType = "wire");
   //}
 
+  std::string emitAlwaysffBegin(unsigned level = 0,
+                                const std::string &Clk = "clk",
+                                const std::string &ClkEdge = "posedge",
+                                const std::string &Rst = "rstN",
+                                const std::string &RstEdge = "negedge") const;
+  std::string emitEndAlwaysff(unsigned level = 0) const;
+  std::string emitCaseBegin(unsigned level = 0) const;
+  std::string emitEndCase(unsigned level = 0) const;
+  std::string emitEndModule(unsigned level = 0) const;
+
   virtual void initializePass();
 
   virtual void getAnalysisUsage(AnalysisUsage &AU) {

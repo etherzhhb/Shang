@@ -401,27 +401,6 @@ ss<<"output reg mem_"<<name<<"_mode"<<i<<";\n";
 ss<<"\n\n";
 return ss.str();
 }
-string RTLWriter::getClockHeader() {
-stringstream ss;
-ss<<"always @(posedge clk)\n begin\n  if (reset)\n   begin\n";
-ss<<"    $display(\"@hard reset\");\n    eip<=0;\n    rdy<=0;\n   end\n\n";
-return ss.str();
-}
-string RTLWriter::getCaseHeader() {
-stringstream ss;
-ss<<"case (eip)\n";
-return ss.str();
-}
-string RTLWriter::getClockFooter() {
-stringstream ss;
-ss<<"end //always @(..)\n\n";
-return ss.str();
-}
-string RTLWriter::getCaseFooter() {
-stringstream ss;
-ss<<" endcase //eip\n";
-return ss.str();
-}
 
 string RTLWriter::getFunctionLocalVariables(listSchedulerVector lsv) {
 

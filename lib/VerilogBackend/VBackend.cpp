@@ -98,7 +98,8 @@ bool VWriter::runOnFunction(Function &F) {
   };
 
   TargetData *TD =  &getAnalysis<TargetData>();//JAWAD
-  RTLWriter DesignWriter(getAnalysis<VLang>(), TD);
+  VLang &vlang = getAnalysis<VLang>();
+  RTLWriter DesignWriter(vlang, TD);
 
   listSchedulerVector lv;
 
@@ -139,6 +140,7 @@ bool VWriter::runOnFunction(Function &F) {
   if (0==include_clocks) clocks = 1;
   if (0==include_size) gsize = 1;
 
+  // TODO: Output to log file!
   errs()<<"\n\n---  Synthesis Report ----\n";
   errs()<<"Estimated circuit delay   : " << freq<<"ns ("<<1000/freq<<"Mhz)\n";
   errs()<<"Estimated circuit size    : " << gsize<<"\n";
@@ -159,21 +161,21 @@ bool VWriter::runOnFunction(Function &F) {
 
   Out<<DesignWriter.getAssignmentString(lv);
 
-  Out<<DesignWriter.getClockHeader();
+  Out<<vlang.emitAlwaysffBegin(1);
   Out<<"\n// Datapath \n";
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockDatapath(*I);
 
   Out<<"\n\n// Control \n";
-  Out<<DesignWriter.getCaseHeader();
+  Out<<vlang.emitCaseBegin(2);
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockControl(*I);
 
-  Out<<DesignWriter.getCaseFooter();
-  Out<<DesignWriter.getClockFooter();
-  Out<<DesignWriter.getModuleFooter();
+  Out<<vlang.emitEndCase(2);
+  Out<<vlang.emitEndAlwaysff(1);
+  Out<<vlang.emitEndModule();
   Out<<"\n\n// -- Library components --  \n";
   Out<<DesignWriter.createBinOpModule("mul","*",resourceMap["delay_mul"]);
   Out<<DesignWriter.createBinOpModule("div","/",resourceMap["delay_div"]);

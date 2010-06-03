@@ -126,13 +126,7 @@ class RTLWriter {
 
   string getTypeDecl(const Type *Ty, bool isSigned, const std::string &NameSoFar);
   string getMemDecl(Function *F);
-  string getClockHeader();
-  string getClockFooter();
-  string getCaseHeader();
-  string getCaseFooter();
-  std::string getModuleFooter() {
-    return "endmodule\n\n";
-  }
+
   string getFunctionLocalVariables(listSchedulerVector lsv);
   unsigned int getNumberOfStates(listSchedulerVector &lsv);
   string getStateDefs(listSchedulerVector &lsv);
