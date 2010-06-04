@@ -212,5 +212,6 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(new VLang());
 
     PM.add(new VWriter(Out));
+    PM.add(new TestbenchWriter(Out));
     return false;
 }
