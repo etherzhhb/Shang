@@ -50,7 +50,7 @@
 #include "listScheduler.h"
 #include "RTLWriter.h"
 #include "designScorer.h"
-#include "vbe/params.h"
+#include "vbe/DesignResourceConfig.h"
 
 using namespace llvm;
 using namespace xVerilog;

@@ -34,7 +34,7 @@
 #include "listScheduler.h"
 #include "VLang.h"
 #include "vbe/utils.h"
-#include "vbe/params.h"
+#include "vbe/DesignResourceConfig.h"
 
 using namespace llvm;
 

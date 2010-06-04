@@ -9,7 +9,7 @@
 * Nadav Rotem. 
 */
 
-#include "vbe/params.h"
+#include "vbe/DesignResourceConfig.h"
 
 namespace xVerilog {
 
