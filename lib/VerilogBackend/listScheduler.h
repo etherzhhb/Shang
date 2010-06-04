@@ -31,7 +31,7 @@
 #include <set>
 
 #include "vbe/utils.h"
-#include "vbe/params.h"
+#include "vbe/DesignResourceConfig.h"
 #include "abstractHWOpcode.h"
 
 

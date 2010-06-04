@@ -31,7 +31,7 @@
 #include <set>
 #include <map>
 
-#include "vbe/params.h"
+#include "vbe/DesignResourceConfig.h"
 #include "globalVarsRegistry.h"
 using namespace llvm;
 
