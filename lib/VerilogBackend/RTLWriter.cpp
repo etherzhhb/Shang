@@ -25,23 +25,23 @@ namespace xVerilog {
 
 string assignPartBuilder::toString(RTLWriter* vl) {
 stringstream sb;
-
+//if eip=m_state,choose the operand.
 sb << "wire [31:0] "<<m_name<<"_in_a"<<";\n";
 sb << "wire [31:0] "<<m_name<<"_in_b"<<";\n";
 sb <<" assign " <<m_name<<"_in_a"<<" = ";
 for (vector<assignPartEntry*>::iterator it=m_parts.begin(); it!=m_parts.end();++it) {
 assignPartEntry *part = *it;
 sb <<"\n (eip == "<<part->getState()<<") ? "<<
-vl->evalValue(part->getLeft())<<" :";
+vl->evalValue(part->getLeft())<<" :";    //left operand
 }   
-sb <<"0;\n";
 
+sb <<"0;\n";
 sb <<" assign " <<m_name<<"_in_b"<<" = ";
 for (vector<assignPartEntry*>::iterator it=m_parts.begin(); it!=m_parts.end();++it) {
-assignPartEntry *part = *it;
-sb <<"\n (eip == "<<part->getState()<<") ? "<<
-vl->evalValue(part->getRight())<<" :";
-}   
+  assignPartEntry *part = *it;
+  sb <<"\n (eip == "<<part->getState()<<") ? "<<
+  vl->evalValue(part->getRight())<<" :";
+}   //right operand
 sb <<"0;\n\n";
 
 sb<<"wire [31:0] out_"<<m_name<<";\n";
@@ -54,44 +54,44 @@ return sb.str();
 /// Verilog printer below
 
 string RTLWriter::printBasicBlockDatapath(listScheduler *ls) {
-stringstream ss;
-// for each cycle in this basic block
-for (unsigned int cycle=0; cycle<ls->length();cycle++) {
-vector<Instruction*> inst = ls->getInstructionForCycle(cycle);
-// for each instruction in cycle, print it ...
-for (vector<Instruction*>::iterator ii = inst.begin(); ii != inst.end(); ++ii) {
-if (isInstructionDatapath(*ii)) {
-ss<<printInstruction(*ii, 0);
-}
-}
-}// for each cycle      
-return ss.str();
+  stringstream ss;
+  // for each cycle in this basic block
+  for (unsigned int cycle=0; cycle<ls->length();cycle++) {
+    vector<Instruction*> inst = ls->getInstructionForCycle(cycle);
+    // for each instruction in cycle, print it ...
+    for (vector<Instruction*>::iterator ii = inst.begin(); ii != inst.end(); ++ii) {
+      if (isInstructionDatapath(*ii)) {
+        ss<<printInstruction(*ii, 0);
+      }
+    }
+  }// for each cycle      
+  return ss.str();
 }
 
 string RTLWriter::printBasicBlockControl(listScheduler *ls) {
-stringstream ss;
-const string space("\t");
-string name = toPrintable(ls->getBB()->getName());
-// for each cycle in this basic block
-for (unsigned int cycle=0; cycle<ls->length();cycle++) {
-ss<<""<<name<<cycle<<":\n"; //header
-ss<<"begin\n";
-vector<Instruction*> inst = ls->getInstructionForCycle(cycle);
-// for each instruction in cycle, print it ...
-for (vector<Instruction*>::iterator ii = inst.begin(); ii != inst.end(); ++ii) {
-unsigned int id = ls->getResourceIdForInstruction(*ii);
-if (!isInstructionDatapath(*ii)) {
-ss<<space<<printInstruction(*ii, id);
-}
-}
+  stringstream ss;
+  const string space("\t");
+  string name = toPrintable(ls->getBB()->getName());
+  // for each cycle in this basic block
+  for (unsigned int cycle=0; cycle<ls->length();cycle++) {
+    ss<<""<<name<<cycle<<":\n"; //header
+    ss<<"begin\n";
+    vector<Instruction*> inst = ls->getInstructionForCycle(cycle);
+    // for each instruction in cycle, print it ...
+    for (vector<Instruction*>::iterator ii = inst.begin(); ii != inst.end(); ++ii) {
+      unsigned int id = ls->getResourceIdForInstruction(*ii);
+      if (!isInstructionDatapath(*ii)) {
+        ss<<space<<printInstruction(*ii, id);
+      }
+    }
 
-if (cycle+1 != ls->length()) { 
-ss<<"\teip <= "<<name<<cycle+1<<";\n"; //header
-}
-ss<<"end\n";
-}// for each cycle      
+    if (cycle+1 != ls->length()) { 
+    ss<<"\teip <= "<<name<<cycle+1<<";\n"; //header
+    }
+    ss<<"end\n";
+  }// for each cycle      
 
-return ss.str();
+  return ss.str();
 }
 
 
@@ -515,10 +515,11 @@ return printAssignPart(parts, this);
 }
 
 string RTLWriter::evalValue(Value* val) {
-if (Instruction* inst = dyn_cast<Instruction>(val)) {
-if (abstractHWOpcode::isInstructionOnlyWires(inst)) return printInlinedInstructions(inst);
-}
-return vlang.GetValueName(val);
+  if (Instruction* inst = dyn_cast<Instruction>(val)) {
+    if (abstractHWOpcode::isInstructionOnlyWires(inst))
+      return printInlinedInstructions(inst);
+  }
+  return vlang.GetValueName(val);
 }
 
 string RTLWriter::printInlinedInstructions(Instruction* inst) {
