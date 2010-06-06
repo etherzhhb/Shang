@@ -49,6 +49,7 @@
 
 #include "listScheduler.h"
 #include "RTLWriter.h"
+#include "TestBenchWriter.h"
 #include "designScorer.h"
 #include "vbe/DesignResourceConfig.h"
 

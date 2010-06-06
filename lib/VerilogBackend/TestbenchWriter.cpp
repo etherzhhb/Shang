@@ -115,3 +115,5 @@ std::string TestbenchWriter::testBech(Function&F,unsigned level) {
 
   return ss.str();
 }
+
+char TestbenchWriter::ID = 0;

@@ -29,7 +29,6 @@ namespace xVerilog {
 
 class TestbenchWriter : public FunctionPass{
     raw_ostream &Out;
-    unsigned level;
 
 public:
     static char ID; 
@@ -38,8 +37,8 @@ public:
       :FunctionPass(&ID),Out(O) {}
 
     virtual bool runOnFunction(Function &F) {
-
-      Out<<testBech(F,level);
+      // Dirty Hack
+      Out<<testBech(F,1);
 
       return false;
     }
