@@ -161,21 +161,21 @@ bool VWriter::runOnFunction(Function &F) {
 
   Out<<DesignWriter.getAssignmentString(lv);
 
-  Out<<vlang.emitAlwaysffBegin();
+  vlang.emitAlwaysffBegin(Out);
   Out<<"\n// Datapath \n";
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockDatapath(*I);
 
-  Out<<"\n\n// Control \n";
-  Out<<vlang.emitCaseBegin();
+  vlang.indent(Out)<<"\n\n// Control \n";
+  vlang.emitCaseBegin(Out);
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockControl(*I);
 
-  Out<<vlang.emitEndCase();
-  Out<<vlang.emitEndAlwaysff();
-  Out<<vlang.emitEndModule();
+  vlang.emitEndCase(Out);
+  vlang.emitEndAlwaysff(Out);
+  vlang.emitEndModule(Out);
   Out<<"\n\n// -- Library components --  \n";
   Out<<DesignWriter.createBinOpModule("mul","*",ResourceConfig::getResConfig("delay_mul"));
   Out<<DesignWriter.createBinOpModule("div","/",ResourceConfig::getResConfig("delay_div"));

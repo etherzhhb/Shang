@@ -564,7 +564,7 @@ return ss.str();
 string RTLWriter::getFunctionSignature(const Function *F) {
   std::stringstream ss;
 
-  ss << vlang.emitModuleBegin(F->getNameStr());
+  vlang.emitModuleBegin(ss, F->getNameStr());
 
   const AttrListPtr &PAL = F->getAttributes();
   unsigned Idx = 1;
@@ -573,9 +573,8 @@ string RTLWriter::getFunctionSignature(const Function *F) {
     // integers:
     const Type *ArgTy = I->getType();
     if (ArgTy->isPointerTy()) {
-      vlang.indent(ss) << vlang.printPtrDecl(I, TD->getPointerSizeInBits(),
-                               m_pointerSize)
-                       << ",\n";
+      vlang.printPtrDecl(ss, I, TD->getPointerSizeInBits(),
+                         m_pointerSize) << ",\n";
     } else if(ArgTy->isIntegerTy()) {
       vlang.indent(ss) <<
         VLang::printType(ArgTy,
@@ -595,7 +594,7 @@ string RTLWriter::getFunctionSignature(const Function *F) {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
     vlang.indent(ss) << VLang::printType(RetTy, false, "return_value", "reg ", "output ");
   }
-  ss << vlang.emitEndModuleDecl();
+  vlang.emitEndModuleDecl(ss);
 
   return ss.str();
 }
