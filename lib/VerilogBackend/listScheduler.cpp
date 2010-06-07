@@ -11,7 +11,7 @@
 #include "listScheduler.h"
 #include "instPriority.h"
 
-namespace xVerilog {
+using namespace xVerilog;
 
     resourceUnit::resourceUnit(string name, unsigned int id, unsigned int streamNum):
         m_name(name),m_id(id),m_seq(streamNum) {
@@ -181,21 +181,26 @@ namespace xVerilog {
 
     /// list scheduler below
 
-    listScheduler::listScheduler(BasicBlock* BB,llvm::TargetData* TD, GVRegistry *GVR):TD(TD),//JAWAD
-        m_bb(BB),
-        m_memoryPorts(getMemoryPortDeclerations(BB->getParent(),TD)) { //JAWAD
-            for (MemportMap::iterator k = m_memoryPorts.begin(); k!=m_memoryPorts.end(); ++k) {
-                // Add a 'resource' with this name
-                addResource("mem_" + k->first, ResourceConfig::getResConfig("memport"));
-            }
+listScheduler::listScheduler(BasicBlock* BB,
+                             TargetData* TD, GVRegistry *GVR)
+                             :  TD(TD), m_bb(BB) { //JAWAD
+  Function *F = BB->getParent();
+  for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
+      I != E; ++I) {
+    // integers:
+    const Type *ArgTy = I->getType();
+    if (ArgTy->isPointerTy())
+      addResource("mem_" + I->getNameStr(),
+                  ResourceConfig::getResConfig("memport"));
+  }
 
-            addResource("mul", ResourceConfig::getResConfig("mul"));
-            addResource("div", ResourceConfig::getResConfig("div"));
-            addResource("shl", ResourceConfig::getResConfig("shl"));
-            addResource("other",1);
+  addResource("mul", ResourceConfig::getResConfig("mul"));
+  addResource("div", ResourceConfig::getResConfig("div"));
+  addResource("shl", ResourceConfig::getResConfig("shl"));
+  addResource("other",1);
 
-            scheduleBasicBlock(BB, GVR);
-        }
+  scheduleBasicBlock(BB, GVR);
+}
 
     vector<Instruction*> listScheduler::getInstructionForCycle(unsigned int cycleNum) {
         vector<Instruction*> ret;
@@ -342,38 +347,3 @@ namespace xVerilog {
         }
         return units;
     }
-            
-    MemportMap listScheduler::getMemoryPortDeclerations(const Function* F,TargetData* TData) {//JAWAD
-        assert(F && "not a function. cannot continue");
-        MemportMap memports;
-        // TODO: scalar do not need any memport!
-
-
-        // For each parameter in function header
-        for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end(); I != E; ++I) { //JAWAD
-		unsigned NumBits;
-		std::string name = I->getName();
-		if(const StructType *ST = abstractHWOpcode::isPtrToStructType(I)) {
-			std::string field_name; 
-                	for (unsigned i = 0, e = ST->getNumElements(); i != e; ++i) {
-				//NumBits = abstractHWOpcode::getBitWidthFromType(ST->getElementType(i));	
-                		NumBits = TData->getTypeSizeInBits(ST->getElementType(i));	
-			        stringstream i_str;
-				i_str << i;	
-				field_name = name + std::string("_field_") + i_str.str();
-				memports[field_name] = NumBits;  
-			};
-			NumBits = TData->getTypeSizeInBits(I->getType());
-			memports[name] = NumBits;
-		}else{
-                	NumBits = TData->getTypeSizeInBits(I->getType());
-
-                	memports[name] = NumBits;
-		};
-      }
-
-          return memports;
-    }
-
-
-} // namespace

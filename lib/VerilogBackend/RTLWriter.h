@@ -122,7 +122,6 @@ class RTLWriter {
   string printInstruction(Instruction *inst, unsigned int resourceId);
 
   string getTypeDecl(const Type *Ty, bool isSigned, const std::string &NameSoFar);
-  string getMemDecl(Function *F);
 
   string getFunctionLocalVariables(listSchedulerVector lsv);
   unsigned int getNumberOfStates(listSchedulerVector &lsv);

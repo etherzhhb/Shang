@@ -181,14 +181,6 @@ namespace xVerilog {
              */
             unsigned int getResourceIdForInstruction(Instruction* inst);
 
-            /** 
-             * @brief Returns a list of memory port names and their decleration types
-             * 
-             * @param F The function we want to scan
-             * 
-             * @return A map of name to bitwidth
-             */
-            static MemportMap getMemoryPortDeclerations(const Function* F,TargetData* );  //JAWAD
 	    InstructionVector skipped_instructions;
 	    TargetData* TD;
         private:
@@ -222,8 +214,6 @@ namespace xVerilog {
             BasicBlock* m_bb;
             /// lists all of the abstractHWOpcodes which were scheduled
             vector<abstractHWOpcode*> m_ops;
-            /// A list of all memory ports and their bitwidth
-            MemportMap m_memoryPorts; 
     }; //class
 
     typedef vector<listScheduler*> listSchedulerVector;

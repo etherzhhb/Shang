@@ -156,26 +156,25 @@ bool VWriter::runOnFunction(Function &F) {
   F.dump();
 
   Out<<DesignWriter.getFunctionSignature(&F);
-  Out<<DesignWriter.getMemDecl(&F);
   Out<<DesignWriter.getFunctionLocalVariables(lv);
   Out<<DesignWriter.getStateDefs(lv);
 
   Out<<DesignWriter.getAssignmentString(lv);
 
-  Out<<vlang.emitAlwaysffBegin(1);
+  Out<<vlang.emitAlwaysffBegin();
   Out<<"\n// Datapath \n";
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockDatapath(*I);
 
   Out<<"\n\n// Control \n";
-  Out<<vlang.emitCaseBegin(2);
+  Out<<vlang.emitCaseBegin();
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockControl(*I);
 
-  Out<<vlang.emitEndCase(2);
-  Out<<vlang.emitEndAlwaysff(1);
+  Out<<vlang.emitEndCase();
+  Out<<vlang.emitEndAlwaysff();
   Out<<vlang.emitEndModule();
   Out<<"\n\n// -- Library components --  \n";
   Out<<DesignWriter.createBinOpModule("mul","*",ResourceConfig::getResConfig("delay_mul"));

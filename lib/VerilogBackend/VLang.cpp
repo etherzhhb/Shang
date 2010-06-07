@@ -58,7 +58,7 @@ static std::string VLangMangle(const std::string &S) {
   return Result;
 }
 
-std::stringstream &indent(std::stringstream &ss, unsigned NumSpaces) {
+static std::stringstream &indent_imp(std::stringstream &ss, unsigned NumSpaces) {
   static const char Spaces[] = "                                "
     "                                "
     "                ";
@@ -77,7 +77,6 @@ std::stringstream &indent(std::stringstream &ss, unsigned NumSpaces) {
   }
   return ss;
 }
-
 
 //===----------------------------------------------------------------------===//
 // Value and type printing
@@ -192,6 +191,8 @@ std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
   case Type::IntegerTyID:
     ss << printBitWitdh(Ty) << NameSoFar;
     return ss.str();
+  case Type::VoidTyID:
+    return " reg /*void*/";
   default:
     llvm_unreachable("Unsupport type!");
   }
@@ -204,63 +205,127 @@ void VLang::initializePass() {
   Mang = new Mangler(*TCtx, *TD);
 }
 
-std::string VLang::emitAlwaysffBegin(unsigned level /* = 0 */,
-                                const std::string &Clk /* =  */,
-                                const std::string &ClkEdge /* =  */,
-                                const std::string &Rst /* = */,
-                                const std::string &RstEdge /* =  */) const {
-  level *= 2;
+std::string VLang::emitAlwaysffBegin(const std::string &Clk /* =  */,
+                                    const std::string &ClkEdge /* =  */,
+                                    const std::string &Rst /* = */,
+                                    const std::string &RstEdge /* =  */,
+                                    unsigned level /* = 0 */) {
+  ind_level = level;
   std::stringstream ss;
   // TODO: Support Sync reset
   // TODO: SystemVerilog always_ff?
-  indent(ss, level) << "always @("
+  indent_imp(ss, ind_level) << "always @("
                     << ClkEdge << " "<< Clk <<", "
                     << RstEdge << " " << Rst
                     <<") begin\n";
-  level += 2;
-  indent(ss, level) << "if (";
+  ind_level += 2;
+  indent_imp(ss, ind_level) << "if (";
   // negative edge reset?
   if (RstEdge == "negedge")
     ss << "!";
   ss << Rst << ") begin\n";
-  level += 2;
-  indent(ss, level) << "eip<=0;\n";
-  indent(ss, level) << "rdy<=0;\n";
+  ind_level += 2;
+  indent_imp(ss, ind_level) << "eip<=0;\n";
+  indent_imp(ss, ind_level) << "rdy<=0;\n";
   // TODO: Reset other registers!
   level -= 2;
-  indent(ss, level) << "end\n";
+  indent_imp(ss, ind_level) << "end\n";
   // TODO: clock enable
-  indent(ss, level) << "else begin //else reset\n";
+  indent_imp(ss, ind_level) << "else begin //else reset\n";
   return ss.str();
 }
 
-std::string VLang::emitEndAlwaysff(unsigned level /* = 0 */) const {
+std::string VLang::emitEndAlwaysff(unsigned level /* = 0 */) {
+  ind_level = level;
   std::stringstream ss;
-  level *= 2;
-  indent(ss, level + 2) << "end //else reset\n";
-  indent(ss, level) << "end //always @(..)\n\n";
+  indent_imp(ss, ind_level) << "end //else reset\n";
+  ind_level -=2;
+  indent_imp(ss, ind_level) << "end //always @(..)\n\n";
+  ind_level +=2;
   return ss.str();
 }
 
-std::string VLang::emitCaseBegin(unsigned level /* = 0 */) const {
+std::string VLang::emitCaseBegin(unsigned level /* = 0 */) {
   std::stringstream ss;
-  level *= 2;
-  indent(ss, level) << "case (eip)\n";
+  ind_level = level;
+  indent_imp(ss, ind_level) << "case (eip)\n";
+  ind_level += 2;
   return ss.str();
 }
-std::string VLang::emitEndCase(unsigned level /* = 0 */) const {
+std::string VLang::emitEndCase(unsigned level /* = 0 */) {
   std::stringstream ss;
-  level *= 2;
-  indent(ss, level) << " endcase //eip\n";
+  ind_level = level;
+  indent_imp(ss, ind_level) << " endcase //eip\n";
+  ind_level -= 2;
   return ss.str();
 }
 
-std::string VLang::emitEndModule(unsigned level /* = 0 */) const {
+std::string VLang::emitEndModule(unsigned level /* = 0 */) {
   std::stringstream ss;
-  level *= 2;
-  indent(ss, level) << "endmodule\n\n";
+  ind_level = level;
+  indent_imp(ss, ind_level) << "endmodule\n\n";
   return ss.str();
 }
+
+
+std::string VLang::printPtrDecl(const Argument *Arg,
+                                unsigned DataWidth, unsigned BusWidth,
+                                unsigned ind) {
+  ind_level = ind;
+  std::string name = Arg->getNameStr();
+  const PointerType *PtrTy = dyn_cast<PointerType>(Arg->getType());
+  assert(PtrTy && "Arg is not ptr!");
+  // TODO: whats memport?
+  unsigned i = 0;
+  // Pointer size
+  std::stringstream ss;
+  ss              << "input wire [" << (DataWidth-1) << ":0] mem_"
+                  <<name<< "_out" << i <<",\n";
+
+  indent_imp(ss, ind_level) << "output reg [" << (DataWidth - 1) << ":0] mem_"
+                  << name << "_in" << i << ",\n";
+
+  indent_imp(ss, ind_level) << "output reg [" << (BusWidth - 1) <<":0] mem_"
+                  << name << "_addr"<< i << ",\n";
+
+  indent_imp(ss, ind_level) << "output reg mem_" << (name) << "_mode" << i;
+  return ss.str();
+}
+
+std::string VLang::emitModuleBegin(std::string &ModuleName,
+                                   const std::string &Clk /*= "clk"*/,
+                                   const std::string &Rst /*= "rstN"*/,
+                                   const std::string &Rdy /*= "rdy"*/,
+                                   unsigned level) {
+  std::stringstream ss;
+  ind_level = level;
+  indent_imp(ss, ind_level) << "module " << ModuleName << "(\n";
+  ind_level+=4;
+  // FIXME: mutiple clk!
+  if (!Clk.empty())
+    indent_imp(ss, ind_level) << "input wire " << Clk << ",\n";
+  if (!Rst.empty())
+    indent_imp(ss, ind_level) << "input wire " << Rst << ",\n";
+  if (!Rdy.empty())
+    indent_imp(ss, ind_level) << "output reg " << Rdy << ",\n";
+  return ss.str();
+}
+
+std::string VLang::emitEndModuleDecl(unsigned level /*= ind_level*/){
+  ind_level=level;
+  std::stringstream ss;
+  ss <<  ");\n";
+  ind_level-=2;
+  return ss.str();
+}
+
+std::stringstream &VLang::indent(std::stringstream &ss,
+                                 unsigned level /*= ind_level*/ ) {
+  // Update the indent and indent.
+  return indent_imp(ss, (ind_level = level));
+}
+
+unsigned VLang::ind_level = 0;
 
 char VLang::ID = 0;
 

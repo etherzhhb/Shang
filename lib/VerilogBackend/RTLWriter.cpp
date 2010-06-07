@@ -382,26 +382,6 @@ abort();
 }
 }
 
-string RTLWriter::getMemDecl(Function *F) {
-stringstream ss;
-MemportMap memports = listScheduler::getMemoryPortDeclerations(F,TD);//JAWAD  
-
-// For each of the instances of each memory port)
-for (unsigned int i=0; i<m_memportNum; i++) {
-for (MemportMap::iterator it = memports.begin(); it != memports.end(); ++it) {
-std::string name = it->first;
-int width = it->second;
-ss<<"input wire ["<<width-1<<":0] mem_"<<name<<"_out"<<i<<";\n";
-ss<<"output reg ["<<width-1<<":0] mem_"<<name<<"_in"<<i<<";\n";
-ss<<"output reg ["<<m_pointerSize-1<<":0] mem_"<<name<<"_addr"<<i<<";\n";
-ss<<"output reg mem_"<<name<<"_mode"<<i<<";\n";
-} 
-}
-
-ss<<"\n\n";
-return ss.str();
-}
-
 std::string RTLWriter::getFunctionLocalVariables(listSchedulerVector lsv) {
 
   std::stringstream ss;
@@ -584,48 +564,38 @@ return ss.str();
 string RTLWriter::getFunctionSignature(const Function *F) {
   std::stringstream ss;
 
-  MemportMap memports = listScheduler::getMemoryPortDeclerations(F,TD);//JAWAD  
+  ss << vlang.emitModuleBegin(F->getNameStr());
 
-  ss << "module ";
-
-  // Print out the name...
-  ss << vlang.GetValueName(F) << "(\n"
-     << "input wire clk, \n"
-     << "input wire reset,\n"
-     << "output reg rdy,// control \n\t";
-
-  // For each of the instances of each memory port)
-  for (unsigned int i=0; i<m_memportNum; i++) {
-    // print memory port decl
-    for (MemportMap::iterator it = memports.begin(); it != memports.end(); ++it) {
-    std::string name = it->first;
-    ss<<"mem_"<<name<<"_out"<<i
-      <<", mem_"<<name<<"_in"<<i
-      <<", mem_"<<name<<"_addr"<<i
-      <<", mem_"<<name<<"_mode"<<i
-      <<", // memport for: "<<name<<" \n\t";
-  }
-}
   const AttrListPtr &PAL = F->getAttributes();
   unsigned Idx = 1;
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
-    I != E; ++I) {
-      // integers:
-      const Type *ArgTy = I->getType();
-      ss << VLang::printType(ArgTy,
-        /*isSigned=*/PAL.paramHasAttr(Idx, Attribute::SExt),
-        vlang.GetValueName(I), "wire ", "input ");
+      I != E; ++I) {
+    // integers:
+    const Type *ArgTy = I->getType();
+    if (ArgTy->isPointerTy()) {
+      vlang.indent(ss) << vlang.printPtrDecl(I, TD->getPointerSizeInBits(),
+                               m_pointerSize)
+                       << ",\n";
+    } else if(ArgTy->isIntegerTy()) {
+      vlang.indent(ss) <<
+        VLang::printType(ArgTy,
+          /*isSigned=*/PAL.paramHasAttr(Idx, Attribute::SExt),
+          vlang.GetValueName(I), "wire ", "input ") << "\n";
       ++Idx;
-      ss << ",\n";
+    } else {
+      vlang.indent(ss) << "/*unsupport*type/\n";
+    }
   }
 
   const Type *RetTy = F->getReturnType();
   if (RetTy->isVoidTy()) {
     // Do something?
+    vlang.indent(ss) << "*/return void*/";
   } else {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    ss << VLang::printType(RetTy, false, "return_value", "reg ", "output ") << ");\n";
+    vlang.indent(ss) << VLang::printType(RetTy, false, "return_value", "reg ", "output ");
   }
+  ss << vlang.emitEndModuleDecl();
 
   return ss.str();
 }

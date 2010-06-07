@@ -39,12 +39,16 @@ class VLang : public ImmutablePass {
   DenseMap<const Value*, unsigned> AnonValueNumbers;
   unsigned NextAnonValueNumber;
 
+  //
+  static unsigned ind_level;
+
   void clear() {
     AnonValueNumbers.clear();
   }
 public:
   static char ID;
-  explicit VLang() : ImmutablePass(&ID), NextAnonValueNumber(0) {}
+  explicit VLang() 
+    : ImmutablePass(&ID), NextAnonValueNumber(0) {}
 
   ~VLang() {
     clear();
@@ -66,6 +70,10 @@ public:
   std::string printConstant(Constant *C);
   std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
 
+  std::string printPtrDecl(const Argument *Arg, 
+                           unsigned DataWidth, unsigned BusWidth,
+                           unsigned level = ind_level);
+
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);
   static std::string printType(const Type *Ty, 
@@ -81,15 +89,26 @@ public:
     const std::string &SignalType = "wire");
   //}
 
-  std::string emitAlwaysffBegin(unsigned level = 0,
-                                const std::string &Clk = "clk",
+  
+  std::stringstream &indent(std::stringstream &ss,
+                            unsigned level = ind_level);
+
+  std::string emitModuleBegin(std::string &ModuleName,
+                              const std::string &Clk = "clk",
+                              const std::string &Rst = "rstN",
+                              const std::string &Rdy = "rdy",
+                              unsigned level = ind_level);
+  std::string emitEndModuleDecl(unsigned level = ind_level);
+
+  std::string emitAlwaysffBegin(const std::string &Clk = "clk",
                                 const std::string &ClkEdge = "posedge",
                                 const std::string &Rst = "rstN",
-                                const std::string &RstEdge = "negedge") const;
-  std::string emitEndAlwaysff(unsigned level = 0) const;
-  std::string emitCaseBegin(unsigned level = 0) const;
-  std::string emitEndCase(unsigned level = 0) const;
-  std::string emitEndModule(unsigned level = 0) const;
+                                const std::string &RstEdge = "negedge",
+                                unsigned level = ind_level);
+  std::string emitEndAlwaysff(unsigned level = ind_level);
+  std::string emitCaseBegin(unsigned level = ind_level);
+  std::string emitEndCase(unsigned level = ind_level);
+  std::string emitEndModule(unsigned level = ind_level);
 
   virtual void initializePass();
 
