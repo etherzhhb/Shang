@@ -9,19 +9,15 @@
 * Nadav Rotem. 
 */
 #include "designScorer.h"
-#include "vbe/DesignResourceConfig.h"
+#include "vbe/ResourceConfig.h"
 
 namespace xVerilog {
 
 
     double designScorer::getDesignFrequency() {
-
-        map<string, unsigned int> resourceMap = 
-            machineResourceConfig::getResourceTable();
-
-        unsigned int mul_pipes = resourceMap["delay_mul"];
-        unsigned int shl_pipes = resourceMap["delay_shl"];
-        unsigned int div_pipes = resourceMap["delay_div"];
+        unsigned int mul_pipes = ResourceConfig::getResConfig("delay_mul");
+        unsigned int shl_pipes = ResourceConfig::getResConfig("delay_shl");
+        unsigned int div_pipes = ResourceConfig::getResConfig("delay_div");
 
 
         unsigned int min_stages = 
@@ -160,12 +156,9 @@ namespace xVerilog {
 
         unsigned int totalGateSize = 0;
 
-        map<string, unsigned int> resourceMap = 
-            machineResourceConfig::getResourceTable();
-
-        unsigned int mul_count = resourceMap["mul"];
-        unsigned int div_count = resourceMap["div"];
-        unsigned int shl_count = resourceMap["shl"];
+        unsigned int mul_count = ResourceConfig::getResConfig("mul");
+        unsigned int div_count = ResourceConfig::getResConfig("div");
+        unsigned int shl_count = ResourceConfig::getResConfig("shl");
 
         totalGateSize += mul_count*1088 + div_count*1500 + shl_count*1000;
 

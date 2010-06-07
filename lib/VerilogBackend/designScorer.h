@@ -51,9 +51,7 @@ namespace xVerilog {
              * we want to examine 
              */
             designScorer(LoopInfo* LInfo):m_loopInfo(LInfo){
-                 // get the configuration of the units from the command line
-                map<string, unsigned int> resourceMap = machineResourceConfig::getResourceTable();
-                m_pointerSize = resourceMap["mem_wordsize"];
+                m_pointerSize = ResourceConfig::getResConfig("mem_wordsize");
             };
 
             /** 

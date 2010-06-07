@@ -34,7 +34,7 @@
 #include "listScheduler.h"
 #include "VLang.h"
 #include "vbe/utils.h"
-#include "vbe/DesignResourceConfig.h"
+#include "vbe/ResourceConfig.h"
 
 using namespace llvm;
 
@@ -76,12 +76,9 @@ class RTLWriter {
   unsigned int m_pointerSize;
 
   public:
-    RTLWriter(VLang &v, TargetData* TD)
-      : vlang(v), TD(TD) {//JAWAD
-    std::map<std::string, unsigned int> rt =
-      machineResourceConfig::getResourceTable();
-    m_pointerSize = rt["membus_size"];
-    m_memportNum =  rt["memport"];
+    RTLWriter(VLang &v, TargetData* TD) : vlang(v), TD(TD) {
+    m_pointerSize = ResourceConfig::getResConfig("membus_size");
+    m_memportNum =  ResourceConfig::getResConfig("memport");
   }
 
   // print a value as either an expression or as a variable name

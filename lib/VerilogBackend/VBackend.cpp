@@ -51,7 +51,7 @@
 #include "RTLWriter.h"
 #include "TestBenchWriter.h"
 #include "designScorer.h"
-#include "vbe/DesignResourceConfig.h"
+#include "vbe/ResourceConfig.h"
 
 using namespace llvm;
 using namespace xVerilog;
@@ -94,7 +94,7 @@ char VWriter::ID = 0;
 bool VWriter::runOnFunction(Function &F) { 
   for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end(); I != E; ++I) { //JAWAD
     string argname = I->getName(); 
-    argname = machineResourceConfig::chrsubst(argname,'.','_');
+    argname = ResourceConfig::chrsubst(argname,'.','_');
     I->setName (argname);
   };
 
@@ -125,13 +125,10 @@ bool VWriter::runOnFunction(Function &F) {
     ds.addListScheduler(ls);
   }
 
-  std::map<string, unsigned int> resourceMap =
-    machineResourceConfig::getResourceTable();
-
-  unsigned int include_size = resourceMap["include_size"];
-  unsigned int include_freq = resourceMap["include_freq"];
-  unsigned int include_clocks = resourceMap["include_clocks"];
-  float MDF = (float)resourceMap["delay_memport"];
+  unsigned int include_size = ResourceConfig::getResConfig("include_size");
+  unsigned int include_freq = ResourceConfig::getResConfig("include_freq");
+  unsigned int include_clocks = ResourceConfig::getResConfig("include_clocks");
+  float MDF = (float)ResourceConfig::getResConfig("delay_memport");
 
   float freq = ds.getDesignFrequency();
   float clocks = ds.getDesignClocks();
@@ -178,10 +175,11 @@ bool VWriter::runOnFunction(Function &F) {
   Out<<vlang.emitEndAlwaysff(1);
   Out<<vlang.emitEndModule();
   Out<<"\n\n// -- Library components --  \n";
-  Out<<DesignWriter.createBinOpModule("mul","*",resourceMap["delay_mul"]);
-  Out<<DesignWriter.createBinOpModule("div","/",resourceMap["delay_div"]);
-  Out<<DesignWriter.createBinOpModule("shl","<<",resourceMap["delay_shl"]);
-  Out<<DesignWriter.getBRAMDefinition(resourceMap["mem_wordsize"],resourceMap["membus_size"]);
+  Out<<DesignWriter.createBinOpModule("mul","*",ResourceConfig::getResConfig("delay_mul"));
+  Out<<DesignWriter.createBinOpModule("div","/",ResourceConfig::getResConfig("delay_div"));
+  Out<<DesignWriter.createBinOpModule("shl","<<",ResourceConfig::getResConfig("delay_shl"));
+  Out<<DesignWriter.getBRAMDefinition(ResourceConfig::getResConfig("mem_wordsize"),
+                                      ResourceConfig::getResConfig("membus_size"));
   return false;
 }
 
@@ -209,9 +207,11 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
                                               bool DisableVerify) {
     if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
 
-    //Add the language writer.
+    // Resource config
+    PM.add(new ResourceConfig());
+    // Add the language writer.
     PM.add(new VLang());
-
+    //
     PM.add(new VWriter(Out));
     PM.add(new TestbenchWriter(Out));
     return false;

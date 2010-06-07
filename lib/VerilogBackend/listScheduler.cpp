@@ -184,17 +184,14 @@ namespace xVerilog {
     listScheduler::listScheduler(BasicBlock* BB,llvm::TargetData* TD):TD(TD),//JAWAD
         m_bb(BB),
         m_memoryPorts(getMemoryPortDeclerations(BB->getParent(),TD)) { //JAWAD
-
-            map<string, unsigned int> rt =  machineResourceConfig::getResourceTable();
-
             for (MemportMap::iterator k = m_memoryPorts.begin(); k!=m_memoryPorts.end(); ++k) {
                 // Add a 'resource' with this name
-                addResource("mem_" + k->first, rt["memport"]);
+                addResource("mem_" + k->first, ResourceConfig::getResConfig("memport"));
             }
 
-            addResource("mul", rt["mul"]);
-            addResource("div", rt["div"]);
-            addResource("shl", rt["shl"]);
+            addResource("mul", ResourceConfig::getResConfig("mul"));
+            addResource("div", ResourceConfig::getResConfig("div"));
+            addResource("shl", ResourceConfig::getResConfig("shl"));
             addResource("other",1);
 
             scheduleBasicBlock(BB);

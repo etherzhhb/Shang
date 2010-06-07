@@ -119,7 +119,6 @@ static string getVarName(Value* Op){
     abstractHWOpcode::abstractHWOpcode(Instruction* inst, string stateName, unsigned int streamNum,TargetData* TD): 
         TD(TD),m_empty(false),m_place(0),m_stateName(stateName),m_iv(streamNum),m_mustBeLast(false) {
             // get the configuration of the units from the command line
-            map<string, unsigned int> resourceMap = machineResourceConfig::getResourceTable();
 
             // Init global registry with this module
             globalVarRegistry gvr;  
@@ -179,9 +178,10 @@ static string getVarName(Value* Op){
                 this->appendInstructionCycle(cycle0, 0);
 
                 // add memport delay
-                for (unsigned int i=0; i<(resourceMap["delay_memport"]-1); i++) {
-                    this->appendInstructionCycle(nop, 1);
-                    this->appendInstructionCycle(cycle0, 0);
+                for (unsigned int i=0, e = ResourceConfig::getResConfig("delay_memport") - 1;
+                    i< e; i++) {
+                  this->appendInstructionCycle(nop, 1);
+                  this->appendInstructionCycle(cycle0, 0);
                 }
 
                 this->appendInstructionCycle(nop, 0);
@@ -244,7 +244,8 @@ static string getVarName(Value* Op){
                 this->appendInstructionCycle(cycle0, 0);
                 this->appendInstructionCycle(nop, 1);
                 // add memport delay
-                for (unsigned int i=0; i<(resourceMap["delay_memport"]-1); i++) {
+                for (unsigned int i=0, e = ResourceConfig::getResConfig("delay_memport") - 1;
+                    i < e; i++) {
                     this->appendInstructionCycle(cycle0, 1);
                     this->appendInstructionCycle(nop, 0);
                 }
@@ -258,18 +259,18 @@ static string getVarName(Value* Op){
                 // similar to the 'load' instruction. 
 
                 if ((bin->getOpcode()) == Instruction::Mul) {
-                    addBinaryInstruction(bin, "mul", resourceMap["delay_mul"]);
+                    addBinaryInstruction(bin, "mul", ResourceConfig::getResConfig("delay_mul"));
                     return;
                 }
                 if ((bin->getOpcode()) == Instruction::SDiv) {
-                    addBinaryInstruction(bin, "div", resourceMap["delay_div"]);
+                    addBinaryInstruction(bin, "div", ResourceConfig::getResConfig("delay_div"));
                     return;
                 }
                 if ((bin->getOpcode()) == Instruction::Shl) {
                     // do not create an assign part if this shift
                     // is by a constant  example: (a<<2)
                     if (!dyn_cast<Constant>(bin->getOperand(1))) {
-                        addBinaryInstruction(bin, "shl", resourceMap["delay_shl"]);
+                        addBinaryInstruction(bin, "shl", ResourceConfig::getResConfig("delay_shl"));
                         return;
                     }
                 }
@@ -450,9 +451,6 @@ static string getVarName(Value* Op){
 
 
     bool abstractHWOpcode::isInstructionOnlyWires(Instruction* inst) {
-        // User guided parameters
-        map<string, unsigned int> resourceMap = machineResourceConfig::getResourceTable();
-
         if (isa<TruncInst>(inst)) return true;
         if (isa<IntToPtrInst>(inst)) return true;
         if (isa<PtrToIntInst>(inst)) return true;
@@ -460,6 +458,7 @@ static string getVarName(Value* Op){
         if (isa<SExtInst>(inst)) return true;
         if (isa<TruncInst>(inst)) return true;
         if (isa<CallInst>(inst)) return true;
+        // FIXME: this is not true!
         if (isa<GetElementPtrInst>(inst)) return true;
 
         
@@ -484,7 +483,7 @@ static string getVarName(Value* Op){
             // which are simply a few gates (we are going to get killed by
             // the MUX any ways)
             unsigned int bitWidth = cast<IntegerType>(calc->getType())->getBitWidth();
-            if (bitWidth <= resourceMap["inline_op_to_wire"]) {
+            if (bitWidth <= ResourceConfig::getResConfig("inline_op_to_wire")) {
                 //errs()<<"Treating register as wire: "<<*calc;
                 return true;
             }
@@ -620,7 +619,7 @@ static string getVarName(Value* Op){
 
         ArrayInfo p;
 	string array_name = get_array_port_name(inst) + suffix; //JAWAD
-	array_name = machineResourceConfig::chrsubst(array_name,'.','_');
+	array_name = ResourceConfig::chrsubst(array_name,'.','_');
         p.first = array_name;
         p.second = NumBits;
         return p;
