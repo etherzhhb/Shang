@@ -107,7 +107,8 @@ namespace xVerilog {
              *  resource 1a: ..AB...
              *  resource 1b: ...AB..
              */
-            abstractHWOpcode(Instruction* inst, std::string stateName, unsigned int streamNum = 2,TargetData* TD = NULL); //JAWAD
+            abstractHWOpcode(Instruction* inst, std::string stateName,
+              GVRegistry *GVR, unsigned int streamNum = 2, TargetData* TD = NULL); //JAWAD
             /*
              * A builder function used to define a hardware opcode using LLVM opcodes.
              *  Adds a cycle of instructions to the opcode. The cycle may be empty from any ops. 
@@ -234,6 +235,8 @@ namespace xVerilog {
              */
             static const StructType* isPtrToStructType(const Value* Op); //JAWAD
 	    llvm::TargetData* TD;	 //JAWAD
+      GVRegistry *GVR; 
+
         private:
             /*
              * Add a dependency of this opcode on 'hwop' if it has an opcode

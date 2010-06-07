@@ -157,7 +157,7 @@ namespace xVerilog {
             /*
              *C'tor list scheduler
              */
-            listScheduler(BasicBlock* BB,TargetData* TD); //JAWAD
+            listScheduler(BasicBlock* BB,TargetData* TD, GVRegistry *GVR); //JAWAD
             /*
              * @return the BasicBlock that we are scheduling
              *
@@ -203,7 +203,7 @@ namespace xVerilog {
              *  instructions with meaningless loads and stores to virtual
              *  registers.)
              */
-            void scheduleBasicBlock(BasicBlock* BB);
+            void scheduleBasicBlock(BasicBlock* BB, GVRegistry *GVR);
 
             /** 
              * 

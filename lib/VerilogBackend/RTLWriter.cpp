@@ -519,6 +519,11 @@ string RTLWriter::evalValue(Value* val) {
     if (abstractHWOpcode::isInstructionOnlyWires(inst))
       return printInlinedInstructions(inst);
   }
+
+  // If val is just a constant?
+  if (Constant *C = dyn_cast<Constant>(val))
+    return vlang.printConstant(C);
+
   return vlang.GetValueName(val);
 }
 

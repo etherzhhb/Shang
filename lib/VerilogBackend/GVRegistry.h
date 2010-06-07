@@ -15,6 +15,7 @@
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
 #include "llvm/Constants.h"
+#include "llvm/LLVMContext.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/FormattedStream.h"
@@ -45,22 +46,20 @@ namespace xVerilog {
      * in a single location. 
      */
   /// XXX: Implement as a ImmutablePass
-class globalVarRegistry {
+class GVRegistry : public ImmutablePass {
 
 public:
-  void init(Module *M) {
-    m_module  = M;
-    Context = &M->getContext();
-  }
+  static char ID;
 
-  void destroy();
+  explicit GVRegistry() : ImmutablePass(&ID) {}
+  ~GVRegistry();
 
   ConstantInt *getZero(unsigned NumBits) {
-    return ConstantInt::get(IntegerType::get(getContext(), NumBits), 0);
+    return ConstantInt::get(IntegerType::get(getGlobalContext(), NumBits), 0);
   }
 
   ConstantInt *getOne(unsigned NumBits) {
-    return ConstantInt::get(IntegerType::get(getContext(), NumBits), 1);
+    return ConstantInt::get(IntegerType::get(getGlobalContext(), NumBits), 1);
   }
 
   /*
@@ -83,11 +82,8 @@ public:
   */
   const Type* bitNumToType(int bitnum);
 
-  LLVMContext &getContext() const { return *Context;}
   BumpPtrAllocator &getAllocator() { return GVRAllocator; }
 private:
-  Module* m_module;
-  LLVMContext *Context;
   std::map<string, GlobalVariable*> m_map;
   BumpPtrAllocator GVRAllocator;
   std::vector<Instruction*> CreateInsts;

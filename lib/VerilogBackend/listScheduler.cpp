@@ -181,7 +181,7 @@ namespace xVerilog {
 
     /// list scheduler below
 
-    listScheduler::listScheduler(BasicBlock* BB,llvm::TargetData* TD):TD(TD),//JAWAD
+    listScheduler::listScheduler(BasicBlock* BB,llvm::TargetData* TD, GVRegistry *GVR):TD(TD),//JAWAD
         m_bb(BB),
         m_memoryPorts(getMemoryPortDeclerations(BB->getParent(),TD)) { //JAWAD
             for (MemportMap::iterator k = m_memoryPorts.begin(); k!=m_memoryPorts.end(); ++k) {
@@ -194,7 +194,7 @@ namespace xVerilog {
             addResource("shl", ResourceConfig::getResConfig("shl"));
             addResource("other",1);
 
-            scheduleBasicBlock(BB);
+            scheduleBasicBlock(BB, GVR);
         }
 
     vector<Instruction*> listScheduler::getInstructionForCycle(unsigned int cycleNum) {
@@ -256,14 +256,14 @@ namespace xVerilog {
 
     /// This is the heart of the list scheduler, the "do-it-all" algorithem
 
-    void listScheduler::scheduleBasicBlock(BasicBlock* BB) {
+    void listScheduler::scheduleBasicBlock(BasicBlock* BB, GVRegistry *GVR) {
         // create the "abstract Hardware Opcodes"
 
         instructionPriority prioritizer(BB);
         InstructionVector order = prioritizer.getOrderedInstructions();
 
         for (InstructionVector::iterator I = order.begin(), E = order.end(); I != E; ++I) {
-            abstractHWOpcode *op = new abstractHWOpcode(*I, toPrintable(BB->getName()),2,TD); //JAWAD
+            abstractHWOpcode *op = new abstractHWOpcode(*I, toPrintable(BB->getName()),GVR, 2,TD); //JAWAD
             m_ops.push_back(op);
             // establish dependencies with previously generated opcodes
             for (vector<abstractHWOpcode*>::iterator depop = m_ops.begin(); depop!= m_ops.end(); ++depop) {

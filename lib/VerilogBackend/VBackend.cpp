@@ -80,10 +80,10 @@ public:
     AU.addRequired<LoopInfo>();
     AU.addRequired<TargetData>();//JAWAD
     AU.addRequired<VLang>();
+    AU.addRequired<GVRegistry>();
     AU.setPreservesAll();
   }
-  virtual bool doInitialization(Module &M);
-  virtual bool doFinalization(Module &M);
+
   bool runOnFunction(Function &F);
   //}
 };
@@ -101,6 +101,7 @@ bool VWriter::runOnFunction(Function &F) {
   TargetData *TD =  &getAnalysis<TargetData>();//JAWAD
   VLang &vlang = getAnalysis<VLang>();
   RTLWriter DesignWriter(vlang, TD);
+  GVRegistry *GVR = &getAnalysis<GVRegistry>();
 
   listSchedulerVector lv;
 
@@ -120,7 +121,7 @@ bool VWriter::runOnFunction(Function &F) {
   designScorer ds(LInfo);
 
   for (Function::iterator BB = F.begin(), E = F.end(); BB != E; ++BB) {
-    listScheduler *ls = new listScheduler(BB,TD); //JAWAD
+    listScheduler *ls = new listScheduler(BB,TD,GVR); //JAWAD
     lv.push_back(ls);
     ds.addListScheduler(ls);
   }
@@ -151,6 +152,8 @@ bool VWriter::runOnFunction(Function &F) {
   errs()<<"/* Design Freq= |"<< freq <<"| */\n"; 
   errs()<<"/* Gates Count = |"<< gsize <<"| */\n"; 
   errs()<<"/* Loop BB Percent = |"<< ds.getLoopBlocksCount() <<"| */\n"; 
+  
+  F.dump();
 
   Out<<DesignWriter.getFunctionSignature(&F);
   Out<<DesignWriter.getMemDecl(&F);
@@ -180,19 +183,10 @@ bool VWriter::runOnFunction(Function &F) {
   Out<<DesignWriter.createBinOpModule("shl","<<",ResourceConfig::getResConfig("delay_shl"));
   Out<<DesignWriter.getBRAMDefinition(ResourceConfig::getResConfig("mem_wordsize"),
                                       ResourceConfig::getResConfig("membus_size"));
+  
+  F.dump();
+  
   return false;
-}
-
-bool VWriter::doFinalization(Module &M) {
-  globalVarRegistry gvr;
-  gvr.destroy();
-  return true;
-}
-
-bool VWriter::doInitialization(Module &M) { 
-  globalVarRegistry gvr;
-  gvr.init(&M);
-  return true;
 }
 
 
@@ -211,6 +205,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(new ResourceConfig());
     // Add the language writer.
     PM.add(new VLang());
+    PM.add(new GVRegistry());
     //
     PM.add(new VWriter(Out));
     PM.add(new TestbenchWriter(Out));

@@ -32,15 +32,13 @@ namespace xVerilog{
 
     /// abstractHWOpcode impl
 
-    void abstractHWOpcode::addBinaryInstruction(Instruction *inst, string op, unsigned int delay) {
-
-        globalVarRegistry gvr;  
+    void abstractHWOpcode::addBinaryInstruction(Instruction *inst, string op, unsigned int delay) { 
         // TODO: if operands of this bin command are not 32bit then we need
         // to cast them.               
 
         m_opcodeName = op;
         // get global register from global storage 
-        GlobalValue* BinO = gvr.getGVByName(string("out_")+op,32);
+        GlobalValue* BinO = GVR->getGVByName(string("out_")+op,32);
 
         // create the assign part multiplexer for the the binary unit
         m_assignPart = new assignPartEntry(inst->getOperand(0), inst->getOperand(1));
@@ -116,14 +114,11 @@ static string getVarName(Value* Op){
 	}
         return "VAR";	
 }
-    abstractHWOpcode::abstractHWOpcode(Instruction* inst, string stateName, unsigned int streamNum,TargetData* TD): 
-        TD(TD),m_empty(false),m_place(0),m_stateName(stateName),m_iv(streamNum),m_mustBeLast(false) {
-            // get the configuration of the units from the command line
-
-            // Init global registry with this module
-            globalVarRegistry gvr;  
-            gvr.init(inst->getParent()->getParent()->getParent());
-
+    abstractHWOpcode::abstractHWOpcode(Instruction* inst, string stateName,GVRegistry *gvr,  unsigned int streamNum,
+      TargetData* TD): 
+        TD(TD),GVR(gvr), m_empty(false),m_place(0),m_stateName(stateName),m_iv(streamNum),m_mustBeLast(false) {
+              
+         
             // this may not be used
             m_assignPart = NULL;
 
@@ -154,19 +149,19 @@ static string getVarName(Value* Op){
                 m_opcodeName = "mem_" + arrName;
 
                 // store the mode
-                StoreInst* l1 = new StoreInst(gvr.getZero(1), 
-                        gvr.getGVByName("mem_"+arrName+"_mode",1,false)); 
+                StoreInst* l1 = new StoreInst(GVR->getZero(1), 
+                        GVR->getGVByName("mem_"+arrName+"_mode",1,false)); 
                 // store address first
                 const Type* addr_type = inst->getOperand(0)->getType(); //JAWAD
 		std::cout <<"ADDR_TYPE1 = : " << addr_type->getDescription() << "   arrName:  " << arrName <<"\n";
 		std::cout <<"ADDR_TYPE2 = : " << addr_type->getDescription() << "   arrName:  " << arrName <<"\n";
-                Value* port = gvr.getGVByName("mem_"+arrName+"_addr",addr_type);
+                Value* port = GVR->getGVByName("mem_"+arrName+"_addr",addr_type);
                 StoreInst* l2 = new StoreInst(inst->getOperand(0) ,port);
                 // read answer after
-                gvr.trashWhenDone(l1);
-                gvr.trashWhenDone(l2);
+                GVR->trashWhenDone(l1);
+                GVR->trashWhenDone(l2);
         
-                inst->setOperand(0,gvr.getGVByName("mem_"+arrName+"_out", inst->getOperand(0)->getType())); 
+                inst->setOperand(0,GVR->getGVByName("mem_"+arrName+"_out", inst->getOperand(0)->getType())); 
                 InstructionCycle cycle0;
                 InstructionCycle cycle1;
                 cycle0.push_back(l1);
@@ -195,7 +190,7 @@ static string getVarName(Value* Op){
 
     		const Type* typ0 =  inst->getOperand(0)->getType(); //JAWAD
 		GlobalVariable*  v1;
-                	v1 = gvr.getGVByName("mem_"+arrName+"_in", typ0);
+                	v1 = GVR->getGVByName("mem_"+arrName+"_in", typ0);
 		StoreInst* s1;
 		//check if there is IntToPtrInst ...
 		if (IntToPtrInst* i2p = dyn_cast<IntToPtrInst>(inst->getOperand(0))) {
@@ -205,15 +200,15 @@ static string getVarName(Value* Op){
                 	s1 = new StoreInst(inst->getOperand(0),v1); 
 		}
                 // store the data write mode 
-                StoreInst* s2 = new StoreInst(gvr.getOne(1), 
-                        gvr.getGVByName("mem_"+arrName+"_mode",1));
+                StoreInst* s2 = new StoreInst(GVR->getOne(1), 
+                        GVR->getGVByName("mem_"+arrName+"_mode",1));
                 // store address
 		GlobalVariable*  v2;
 
 		getVarName( inst->getOperand(1));
       
                 const Type* addr_type = inst->getOperand(1)->getType();
-		v2 = gvr.getGVByName("mem_"+arrName+"_addr", addr_type);	
+		v2 = GVR->getGVByName("mem_"+arrName+"_addr", addr_type);	
 		StoreInst* s3 ;
                 
 		if (BitCastInst *BCI = dyn_cast<BitCastInst>((inst->getOperand(1)))){
@@ -223,16 +218,16 @@ static string getVarName(Value* Op){
                 	s3 = new StoreInst(inst->getOperand(1),v2); 
 		}
                 // store the data write mode 
-                StoreInst* s4 = new StoreInst(gvr.getZero(1), 
-                        gvr.getGVByName("mem_"+arrName+"_mode",1));
+                StoreInst* s4 = new StoreInst(GVR->getZero(1), 
+                        GVR->getGVByName("mem_"+arrName+"_mode",1));
 
                 InstructionCycle cycle0;
                 InstructionCycle cycle1;
 
-                gvr.trashWhenDone(s1);
-                gvr.trashWhenDone(s2);
-                gvr.trashWhenDone(s3);
-                gvr.trashWhenDone(s4);
+                GVR->trashWhenDone(s1);
+                GVR->trashWhenDone(s2);
+                GVR->trashWhenDone(s3);
+                GVR->trashWhenDone(s4);
 
                 cycle0.push_back(s1);
                 cycle0.push_back(s2);

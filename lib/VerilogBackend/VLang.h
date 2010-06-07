@@ -63,6 +63,9 @@ public:
   /// @return The unique name of the Value.
   std::string GetValueName(const Value *Operand); 
 
+  std::string printConstant(Constant *C);
+  std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
+
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);
   static std::string printType(const Type *Ty, 

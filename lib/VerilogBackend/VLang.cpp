@@ -19,6 +19,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "VLang.h"
+#include "llvm/Constants.h"
+#include "llvm/GlobalVariable.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/STLExtras.h"
@@ -92,6 +94,36 @@ std::string VLang::printBitWitdh(const Type *Ty, int LowestBit,
   return bw.str();
 }
 
+std::string VLang::printConstant(Constant *CPV) {
+  if (ConstantInt* CI=dyn_cast<ConstantInt>(CPV)) {
+    bool isMinValue=CI->isMinValue(true);
+    uint64_t v = isMinValue ? CI->getZExtValue() :
+                             (uint64_t)CI->getSExtValue();
+    return printConstantInt(v,CI->getBitWidth(),isMinValue);
+  } else if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(CPV))
+    return GetValueName(GVar);
+
+  return "??Constant??";
+}
+
+std::string VLang::printConstantInt(uint64_t value,
+                                    int bitwidth, bool isMinValue) {
+  std::stringstream pc;
+  pc<<bitwidth<<"'h";
+  if(isMinValue)
+    pc<<std::hex<<value;
+  else{
+    std::stringstream ss;
+    ss<<std::hex<<value;
+    unsigned int uselength=(bitwidth/4)+(((bitwidth%3)==0)?0:1);
+    std::string sout=ss.str();
+    if(uselength<sout.length())
+      sout=sout.substr(sout.length()-uselength,uselength);
+    pc<<sout;
+  }
+  return pc.str();
+}
+
 std::string VLang::GetValueName(const Value *Operand) {
   // Mangle globals with the standard mangler interface for LLC compatibility.
   if (const GlobalValue *GV = dyn_cast<GlobalValue>(Operand)) {
@@ -101,6 +133,8 @@ std::string VLang::GetValueName(const Value *Operand) {
   }
 
   std::string Name = Operand->getName();
+
+  // Constant
 
   if (Name.empty()) { // Assign unique names to local temporaries.
     unsigned &No = AnonValueNumbers[Operand];
@@ -230,5 +264,5 @@ std::string VLang::emitEndModule(unsigned level /* = 0 */) const {
 
 char VLang::ID = 0;
 
-static RegisterPass<VLang> X("vlang", "Verilog language writer",
+static RegisterPass<VLang> X("vlang", "vbe - Verilog language writer",
                              false, true);
