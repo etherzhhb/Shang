@@ -347,7 +347,7 @@ namespace xVerilog {
         assert(F && "not a function. cannot continue");
         MemportMap memports;
         // TODO: scalar do not need any memport!
-#if 0
+
 
         // For each parameter in function header
         for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end(); I != E; ++I) { //JAWAD
@@ -371,7 +371,7 @@ namespace xVerilog {
                 	memports[name] = NumBits;
 		};
       }
-#endif  
+
           return memports;
     }
 

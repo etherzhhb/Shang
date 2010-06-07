@@ -3,7 +3,7 @@ set(LLVM_NO_RTTI 1)
 add_llvm_target(VerilogBackend
   abstractHWOpcode.cpp
   designScorer.cpp
-  globalVarsRegistry.cpp
+  GVRegistry.cpp
   instPriority.cpp
   intrinsics.cpp
   listScheduler.cpp

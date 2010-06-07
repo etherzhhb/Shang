@@ -65,6 +65,10 @@ std::string TestbenchWriter::testBech(Function&F,unsigned level) {
     ss<<I->getNameStr();
     ss<<"=";
     const IntegerType *Ty = dyn_cast<IntegerType>(I->getType());
+    //
+    if (!Ty)
+      continue;
+    
     assert(Ty && "Expect Ty is int!");
     ss << Ty->getBitWidth() << "'b0";
     if (x!=F.arg_size())

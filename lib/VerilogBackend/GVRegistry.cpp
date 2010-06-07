@@ -8,46 +8,36 @@
 * install copy or modify this software without written permission from 
 * Nadav Rotem. 
 */
-#include "globalVarsRegistry.h"
+#include "GVRegistry.h"
 
-namespace xVerilog {
+using namespace xVerilog;
 
-    /// static variables
-    Module* globalVarRegistry::m_module = 0;
-    map<string, GlobalVariable*> globalVarRegistry::m_map;
-    vector<Instruction*> globalVarRegistry::m_garbage;
-    LLVMContext *globalVarRegistry::Context = 0;
+void globalVarRegistry::destroy() {
+  // destroy all variables that should be destroied
+  // We do that so that we don't have dead values with users
+  // flying around
 
-    /// initial values
-    Value* globalVarRegistry::Zero1 = 0; //ConstantInt::get(Type::Int1Ty, 0);
-    Value* globalVarRegistry::One1 = 0; //ConstantInt::get(Type::Int1Ty, 1);
-    Value* globalVarRegistry::Zero32 = 0; //ConstantInt::get(Type::Int32Ty, 0);
-    Value* globalVarRegistry::One32 = 0; //ConstantInt::get(Type::Int32Ty, 1);
+  // destroy all keys in hash table (all global variables)
+  for( map<string, GlobalVariable*>::iterator I = m_map.begin();
+      I != m_map.end(); ++I ) {
+    // Replace all used of this variable with a null pointer
+    I->second->replaceAllUsesWith(ConstantPointerNull::get(I->second->getType()));
+    // Remove this global variable from its parent module
+    I->second->removeFromParent();
+    // Delete it
+    delete I->second;
+  }
 
-    void globalVarRegistry::destroy() {
-        // destroy all variables that should be destroied
-        // We do that so that we don't have dead values with users
-        // flying around
-
-        // destroy all keys in hash table (all global variables)
-        for( map<string, GlobalVariable*>::iterator it = m_map.begin();
-                it != m_map.end(); ++it ) {
-            // Replace all used of this variable with a null pointer
-            it->second->replaceAllUsesWith(ConstantPointerNull::get(it->second->getType()));
-            // Remove this global variable from its parent module
-            it->second->removeFromParent();
-            // Delete it
-            delete it->second;
-        }
-
-        // For each load instruction that we have modified
-        for (vector<Instruction*>::iterator it = m_garbage.begin(); it!=m_garbage.end();it++) {
-            // Replace the users of this dummy instruction with zero;
-            if (!(*it)->hasNUses(0)) (*it)->replaceAllUsesWith(ConstantInt::get((*it)->getType(),0));
-            // And delete it
-            delete *it;
-        }
-    }
+  // For each load instruction that we have modified
+  while(!CreateInsts.empty()) {
+    Instruction *Inst = CreateInsts.front();
+    // Replace the users of this dummy instruction with zero;
+    if (Inst->hasNUsesOrMore(1))
+      Inst->replaceAllUsesWith(ConstantInt::get(Inst->getType(),0));
+    delete Inst;
+  }
+  GVRAllocator.Reset();
+}
 
     const Type* globalVarRegistry::bitNumToType(int bitnum){
         if (bitnum==64) return IntegerType::get(*Context, 64);
@@ -59,7 +49,7 @@ namespace xVerilog {
         abort();
     }
 
-    GlobalVariable* globalVarRegistry::getGlobalVariableByName(string varName, 
+    GlobalVariable* globalVarRegistry::getGVByName(string varName, 
             int bits, bool pointer ,int val) {
         if (m_map[varName] != NULL) return m_map[varName];
         GlobalVariable *glob;  
@@ -78,7 +68,7 @@ namespace xVerilog {
         return glob;
     } 
 
-    GlobalVariable* globalVarRegistry::getGlobalVariableByName(string varName, const Type* type) {
+    GlobalVariable* globalVarRegistry::getGVByName(string varName, const Type* type) {
         if (m_map[varName] != NULL) { 
                 return m_map[varName];
         }
@@ -86,5 +76,3 @@ namespace xVerilog {
         m_map[varName] = glob;
         return glob;
     } 
-
-} // namespace

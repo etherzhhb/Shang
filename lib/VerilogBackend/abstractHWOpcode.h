@@ -32,7 +32,7 @@
 #include <map>
 
 #include "vbe/ResourceConfig.h"
-#include "globalVarsRegistry.h"
+#include "GVRegistry.h"
 using namespace llvm;
 
 using std::set;

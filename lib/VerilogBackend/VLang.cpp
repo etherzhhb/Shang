@@ -141,7 +141,7 @@ std::string VLang::printType(const Type *Ty,
     ss << printSimpleType(Ty, isSigned, VariableName, SignalType);
     return ss.str();
   }
-  
+  return "???";
 }
 
 std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
