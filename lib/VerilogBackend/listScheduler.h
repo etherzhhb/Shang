@@ -157,7 +157,7 @@ namespace xVerilog {
             /*
              *C'tor list scheduler
              */
-            listScheduler(BasicBlock* BB,TargetData* TD, GVRegistry *GVR); //JAWAD
+            listScheduler(BasicBlock* BB,TargetData* TD); //JAWAD
             /*
              * @return the BasicBlock that we are scheduling
              *
@@ -181,6 +181,13 @@ namespace xVerilog {
              */
             unsigned int getResourceIdForInstruction(Instruction* inst);
 
+            /*
+            * Populate the scheduler data structure with micro-commands
+            *  this may destroy the BasicBlock. (It will replace well formed
+            *  instructions with meaningless loads and stores to virtual
+            *  registers.)
+            */
+            void scheduleBasicBlock(BasicBlock* BB, GVRegistry *GVR);
 	    InstructionVector skipped_instructions;
 	    TargetData* TD;
         private:
@@ -189,13 +196,6 @@ namespace xVerilog {
              */
             void addResource(string name, unsigned int count);
 
-            /*
-             * Populate the scheduler data structure with micro-commands
-             *  this may destroy the BasicBlock. (It will replace well formed
-             *  instructions with meaningless loads and stores to virtual
-             *  registers.)
-             */
-            void scheduleBasicBlock(BasicBlock* BB, GVRegistry *GVR);
 
             /** 
              * 
@@ -222,9 +222,44 @@ namespace xVerilog {
 class ListSchedDriver : public FunctionPass {
   ListSchedVector ListScheders;
 
+  void clear();
+
 public:
   static char ID;
   explicit ListSchedDriver() : FunctionPass(&ID) {}
+  ~ListSchedDriver() { clear(); }
+
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const;
+  virtual void releaseMemory() { clear(); }
+  bool runOnFunction(Function &F);
+
+  const ListSchedVector &getSchedulers() const { return ListScheders; }
+
+  typedef ListSchedVector::iterator iterator;
+  typedef ListSchedVector::const_iterator const_iterator;
+  iterator begin() { return ListScheders.begin(); }
+  iterator end()   { return ListScheders.end(); }
+  const_iterator begin() const { return ListScheders.begin(); }
+  const_iterator end()   const { return ListScheders.end(); }
+
+  // Get the total states of the function.
+  unsigned getNumStates() const {
+    unsigned NumStates = 0;
+    for (const_iterator I = begin(), E = end(); I != E; ++I)
+      NumStates += (*I)->length();
+    
+    // Note: We have an "Idle" state
+    ++NumStates;
+
+    return NumStates;
+  }
+
+  unsigned getStatesBitWidth() const {
+    unsigned int numberOfStates = getNumStates();
+    return Log2_32_Ceil(numberOfStates+1);
+  }
+
+  void getRegisters(InstructionVector &Insts) const; 
 };
 } //end of namespace
 #endif // h guard

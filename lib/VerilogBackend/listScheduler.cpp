@@ -8,7 +8,12 @@
 * install copy or modify this software without written permission from 
 * Nadav Rotem. 
 */
+
+#include "llvm/Analysis/LoopInfo.h"
+
+#include "designScorer.h"
 #include "listScheduler.h"
+#include "VLang.h"
 #include "instPriority.h"
 
 using namespace xVerilog;
@@ -182,7 +187,7 @@ using namespace xVerilog;
     /// list scheduler below
 
 listScheduler::listScheduler(BasicBlock* BB,
-                             TargetData* TD, GVRegistry *GVR)
+                             TargetData* TD)
                              :  TD(TD), m_bb(BB) { //JAWAD
   Function *F = BB->getParent();
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
@@ -198,8 +203,6 @@ listScheduler::listScheduler(BasicBlock* BB,
   addResource("div", ResourceConfig::getResConfig("div"));
   addResource("shl", ResourceConfig::getResConfig("shl"));
   addResource("other",1);
-
-  scheduleBasicBlock(BB, GVR);
 }
 
     vector<Instruction*> listScheduler::getInstructionForCycle(unsigned int cycleNum) {
@@ -268,7 +271,11 @@ listScheduler::listScheduler(BasicBlock* BB,
         InstructionVector order = prioritizer.getOrderedInstructions();
 
         for (InstructionVector::iterator I = order.begin(), E = order.end(); I != E; ++I) {
-            abstractHWOpcode *op = new abstractHWOpcode(*I, toPrintable(BB->getName()),GVR, 2,TD); //JAWAD
+            abstractHWOpcode *op = 
+              new abstractHWOpcode(*I,
+              //toPrintable(
+              BB->getName(),
+              GVR, 2,TD); //JAWAD
             m_ops.push_back(op);
             // establish dependencies with previously generated opcodes
             for (vector<abstractHWOpcode*>::iterator depop = m_ops.begin(); depop!= m_ops.end(); ++depop) {
@@ -347,3 +354,108 @@ listScheduler::listScheduler(BasicBlock* BB,
         }
         return units;
     }
+
+
+void ListSchedDriver::clear() {
+  while (!ListScheders.empty()) {
+    listScheduler *LS = ListScheders.back();
+    delete LS;
+    ListScheders.pop_back();
+  }
+}
+
+void ListSchedDriver::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<LoopInfo>();
+  AU.addRequired<TargetData>();//JAWAD
+  AU.addRequired<VLang>();
+  AU.addRequired<GVRegistry>();
+  // This is not true!!!
+  AU.setPreservesAll();
+}
+
+bool ListSchedDriver::runOnFunction(Function &F) {
+  // Setup the function name??
+  for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end(); I != E; ++I){
+    string argname = I->getName(); 
+    argname = ResourceConfig::chrsubst(argname,'.','_');
+    I->setName (argname);
+  }
+
+  TargetData *TD =  &getAnalysis<TargetData>();
+  GVRegistry *GVR = &getAnalysis<GVRegistry>();
+  LoopInfo *LInfo = &getAnalysis<LoopInfo>();
+
+  designScorer ds(LInfo);
+
+  //
+  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
+    listScheduler *ls = new listScheduler(I,TD); //JAWAD
+    ls->scheduleBasicBlock(I, GVR);
+    ListScheders.push_back(ls);
+    ds.addListScheduler(ls);
+  }
+
+  unsigned int include_size = ResourceConfig::getResConfig("include_size");
+  unsigned int include_freq = ResourceConfig::getResConfig("include_freq");
+  unsigned int include_clocks = ResourceConfig::getResConfig("include_clocks");
+  float MDF = (float)ResourceConfig::getResConfig("delay_memport");
+
+  float freq = ds.getDesignFrequency();
+  float clocks = ds.getDesignClocks();
+  float gsize = ds.getDesignSizeInGates(&F);
+
+  if (0==include_freq) freq = 1;
+  if (0==include_clocks) clocks = 1;
+  if (0==include_size) gsize = 1;
+
+  // TODO: Output to log file!
+  errs()<<"\n\n---  Synthesis Report ----\n";
+  errs()<<"Estimated circuit delay   : " << freq<<"ns ("<<1000/freq<<"Mhz)\n";
+  errs()<<"Estimated circuit size    : " << gsize<<"\n";
+  errs()<<"Calculated loop throughput: " << clocks<<"\n";
+  errs()<<"--------------------------\n";
+
+  errs()<<"/* Total Score= |"<< ((clocks*sqrt(clocks))*(freq)*(gsize))/(MDF) <<"| */"; 
+  errs()<<"/* freq="<<freq<<" clocks="<<clocks<<" size="<<gsize<<"*/\n"; 
+  errs()<<"/* Clocks to finish= |"<< clocks <<"| */\n"; 
+  errs()<<"/* Design Freq= |"<< freq <<"| */\n"; 
+  errs()<<"/* Gates Count = |"<< gsize <<"| */\n"; 
+  errs()<<"/* Loop BB Percent = |"<< ds.getLoopBlocksCount() <<"| */\n"; 
+
+
+  // This is not true!!!
+  return false;
+}
+
+void ListSchedDriver::getRegisters(InstructionVector &Insts) const {
+  for (const_iterator I = begin(), E = end(); I != E; ++I) {
+    listScheduler *ls = *I;
+    // for each cycle in each LS
+    for (unsigned int cycle=0, max_cycle = ls->length();
+        cycle< max_cycle;cycle++) {
+      // FIXME: do not return instruction!
+      InstructionVector inst = ls->getInstructionForCycle(cycle);
+      // for each instruction in each cycle in each LS
+      for (std::vector<Instruction*>::iterator I = inst.begin(); I!=inst.end(); ++I) {
+        // if has a return type, print it as a variable name
+        if (!(*I)->getType()->isVoidTy())
+          Insts.push_back(*I);
+      }
+    }// for each cycle    
+
+    // Print all PHINode variables as well
+    BasicBlock *BB = ls->getBB();
+    Instruction *NotPhi = BB->getFirstNonPHI();
+    BasicBlock::iterator I = BB->begin();
+    while (&*I != NotPhi) {
+      Insts.push_back(I);
+      ++I;
+    }
+  }
+}
+
+char ListSchedDriver::ID = 0;
+
+RegisterPass<ListSchedDriver> X("vbe-ls-dirver",
+                                "vbe - list scheduler driver",
+                                false, false);

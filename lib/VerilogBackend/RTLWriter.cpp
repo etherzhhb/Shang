@@ -26,6 +26,7 @@ namespace xVerilog {
 string assignPartBuilder::toString(RTLWriter* vl) {
 stringstream sb;
 //if eip=m_state,choose the operand.
+// TODO: Wire witdh!
 sb << "wire [31:0] "<<m_name<<"_in_a"<<";\n";
 sb << "wire [31:0] "<<m_name<<"_in_b"<<";\n";
 sb <<" assign " <<m_name<<"_in_a"<<" = ";
@@ -49,75 +50,6 @@ sb<<m_op<<"  "<<m_name<<"_instance (.clk(clk), .a("<<
 m_name<<"_in_a)"<<", .b("<<m_name<<"_in_b), .p(out_"<<m_name<<"));\n\n";
 return sb.str();
 }
-
-
-/// Verilog printer below
-
-string RTLWriter::printBasicBlockDatapath(listScheduler *ls) {
-  stringstream ss;
-  // for each cycle in this basic block
-  for (unsigned int cycle=0; cycle<ls->length();cycle++) {
-    vector<Instruction*> inst = ls->getInstructionForCycle(cycle);
-    // for each instruction in cycle, print it ...
-    for (vector<Instruction*>::iterator ii = inst.begin(); ii != inst.end(); ++ii) {
-      if (isInstructionDatapath(*ii)) {
-        ss<<printInstruction(*ii, 0);
-      }
-    }
-  }// for each cycle      
-  return ss.str();
-}
-
-string RTLWriter::printBasicBlockControl(listScheduler *ls) {
-  stringstream ss;
-  const string space("\t");
-  string name = toPrintable(ls->getBB()->getName());
-  // for each cycle in this basic block
-  for (unsigned int cycle=0; cycle<ls->length();cycle++) {
-    ss<<""<<name<<cycle<<":\n"; //header
-    ss<<"begin\n";
-    vector<Instruction*> inst = ls->getInstructionForCycle(cycle);
-    // for each instruction in cycle, print it ...
-    for (vector<Instruction*>::iterator ii = inst.begin(); ii != inst.end(); ++ii) {
-      unsigned int id = ls->getResourceIdForInstruction(*ii);
-      if (!isInstructionDatapath(*ii)) {
-        ss<<space<<printInstruction(*ii, id);
-      }
-    }
-
-    if (cycle+1 != ls->length()) { 
-    ss<<"\teip <= "<<name<<cycle+1<<";\n"; //header
-    }
-    ss<<"end\n";
-  }// for each cycle      
-
-  return ss.str();
-}
-
-
-string RTLWriter::printLoadInst(Instruction* inst, int unitNum, int cycleNum) {
-LoadInst* load = (LoadInst*) inst; // make the cast
-/*
-* If this is a regular load/store command then we just print it
-* however, if this is a memory port then we need to assign a port
-* number to it
-* */
-stringstream ss;
-ss<<vlang.GetValueName(load)<<" <= "<<evalValue(load->getOperand(0))<<unitNum;
-return ss.str();
-}
-
-
-string RTLWriter::printStoreInst(Instruction* inst, int unitNum, int cycleNum) {
-stringstream ss;
-StoreInst* store = (StoreInst*) inst; // make the cast
-string first = evalValue(store->getOperand(0));
-string second = evalValue(store->getOperand(1)); 
-ss << second<<unitNum<< " <= " << first;
-return ss.str();
-}
-
-
 
 string RTLWriter::printBinaryOperatorInst(Instruction* inst, int unitNum, int cycleNum) {
 stringstream ss;
@@ -144,37 +76,6 @@ errs()<<"Unhandaled: "<<*inst;
 abort();
 }
 }
-return ss.str();
-}
-
-
-string RTLWriter::printReturnInst(Instruction* inst) {
-stringstream ss;
-ReturnInst* ret = (ReturnInst*) inst; // make the cast
-if (ret->getNumOperands()) {
-ss << " rdy <= 1;\n";
-ss << " return_value <= ";
-ss << evalValue(ret->getOperand(0))<<";\n";
-ss << " $display($time, \" Return (0x%x) \","<<evalValue(ret->getOperand(0))<<");";
-ss << "\n $finish()";
-} else  {
-// if ret void
-ss << " rdy <= 1;\n";
-ss << " return_value <= 0;";
-ss << "\n $finish()";
-}
-return ss.str();
-}
-
-
-string RTLWriter::printSelectInst(Instruction* inst) {
-stringstream ss;
-SelectInst* sel = (SelectInst*) inst; // make the cast
-// (cond) ? i_b : _ib;
-ss << vlang.GetValueName(sel) <<" <= ";
-ss << "(" << evalValue(sel->getOperand(0)) << " ? ";
-ss << evalValue(sel->getOperand(1)) << " : ";
-ss << evalValue(sel->getOperand(2))<<")";
 return ss.str();
 }
 
@@ -230,73 +131,6 @@ ss <<  evalValue(btcst->getOperand(0));
 return ss.str();
 }
 
-string RTLWriter::printPHICopiesForSuccessor(BasicBlock *CurBlock,BasicBlock *Successor){
-stringstream ss;
-
-for (BasicBlock::iterator I = Successor->begin(); isa<PHINode>(I); ++I) {
-PHINode *PN = cast<PHINode>(I);
-//Now we have to do the printing.
-Value *IV = PN->getIncomingValueForBlock(CurBlock);
-if (!isa<UndefValue>(IV)) {
-ss <<"\t\t"<< vlang.GetValueName(I) << " <= " << evalValue(IV);
-ss << ";\n";
-}
-}
-return ss.str();
-}
-
-string RTLWriter::printBranchInst(Instruction* inst) {
-
-stringstream ss;
-BranchInst* branch = (BranchInst*) inst; // make the cast
-
-if (branch->isConditional()) {
-ss << "if (";
-ss << evalValue(branch->getCondition());
-ss << ") begin\n";
-ss<<printPHICopiesForSuccessor(branch->getParent(),branch->getSuccessor(0));
-// we add a zero because the first entry in the basic block is '0'
-// i.e we jump to the first state in the basic block
-ss << "\t\teip <= " << toPrintable(branch->getSuccessor(0)->getName())<<"0;\n";
-ss << "\tend else begin\n";
-ss<<printPHICopiesForSuccessor(branch->getParent(),branch->getSuccessor(1));
-// we add a zero because the first entry in the basic block is '0'
-ss << "\t\teip <= "<<toPrintable(branch->getSuccessor(1)->getName())<<"0;\n";
-ss << "\tend\n";
-} else {
-ss<<printPHICopiesForSuccessor(branch->getParent(),branch->getSuccessor(0));
-ss << "\t\teip <= " << toPrintable(branch->getSuccessor(0)->getName())<<"0;\n";
-}
-return ss.str();
-}
-
-
-string RTLWriter::printCmpInst(Instruction* inst) {
-stringstream ss;
-CmpInst* cmp = (CmpInst*) inst; // make the cast
-ss << vlang.GetValueName(inst) << " <= ";
-ss << "(";
-ss<< evalValue(cmp->getOperand(0));
-
-switch (cmp->getPredicate()) {
-case ICmpInst::ICMP_EQ:  ss << " == "; break;
-case ICmpInst::ICMP_NE:  ss << " != "; break;
-case ICmpInst::ICMP_ULE:
-case ICmpInst::ICMP_SLE: ss << " <= "; break;
-case ICmpInst::ICMP_UGE:
-case ICmpInst::ICMP_SGE: ss << " >= "; break;
-case ICmpInst::ICMP_ULT:
-case ICmpInst::ICMP_SLT: ss << " < "; break;
-case ICmpInst::ICMP_UGT:
-case ICmpInst::ICMP_SGT: ss << " > "; break;
-default: errs() << "Invalid icmp predicate!"; abort();
-}
-
-ss << evalValue(cmp->getOperand(1));
-ss << ")";
-return ss.str();
-}
-
 string RTLWriter::getGetElementPtrInst(Instruction* inst) {
 stringstream ss;
 GetElementPtrInst* get = (GetElementPtrInst *) inst;
@@ -335,27 +169,6 @@ if (isa<ZExtInst>(inst))           return true;
 if (isa<IntToPtrInst>(inst))       return true;
 return false;
 }
-string RTLWriter::printInstruction(Instruction *inst, unsigned int resourceId) {
-const string colon(";\n");
-if (isa<StoreInst>(inst))      return printStoreInst(inst, resourceId, 0) + colon;
-if (isa<LoadInst>(inst))       return printLoadInst(inst, resourceId , 0) + colon;
-if (isa<ReturnInst>(inst))     return printReturnInst(inst) + colon;
-if (isa<BranchInst>(inst))     return printBranchInst(inst);
-if (isa<PHINode>(inst))        return "" ; // we do not print PHINodes 
-if (isa<BinaryOperator>(inst)) return printBinaryOperatorInst(inst, 0, 0) + colon;
-if (isa<CmpInst>(inst))        return printCmpInst(inst) + colon;
-if (isa<GetElementPtrInst>(inst)) return printGetElementPtrInst(inst)+ colon;
-if (isa<SelectInst>(inst))     return printSelectInst(inst) + colon;
-if (isa<ZExtInst>(inst))       return printZxtInst(inst) + colon;
-if (isa<BitCastInst>(inst))    return printBitCastInst(inst) + colon; //JAWAD
-if (isa<AllocaInst>(inst))     return printAllocaInst(inst) + colon;
-if (isa<IntToPtrInst>(inst))   return printIntToPtrInst(inst) + colon;
-if (isa<CallInst>(inst))       return printIntrinsic(inst) + colon;
-if (isa<Instruction>(inst)) errs()<<"Unable to process "<<*inst<<"\n";
-assert(0 && "Unhandaled instruction");
-abort();
-return colon;
-}
 
 
 string RTLWriter::getTypeDecl(const Type *Ty, bool isSigned, const std::string &NameSoFar) {
@@ -380,118 +193,6 @@ default :
 errs() << "Unknown primitive type: " << *Ty << "\n";
 abort();
 }
-}
-
-std::string RTLWriter::getFunctionLocalVariables(ListSchedVector lsv) {
-
-  std::stringstream ss;
-  // for each listScheduler of a basic block
-  for (ListSchedVector::iterator lsi=lsv.begin(); lsi!=lsv.end();++lsi) {
-    // for each cycle in each LS
-    for (unsigned int cycle=0; cycle<(*lsi)->length();cycle++) {
-      std::vector<Instruction*> inst = (*lsi)->getInstructionForCycle(cycle);
-      // for each instruction in each cycle in each LS
-      for (std::vector<Instruction*>::iterator I = inst.begin(); I!=inst.end(); ++I) {
-        // if has a return type, print it as a variable name
-        if (!(*I)->getType()->isVoidTy()) {
-          ss << " ";
-          ss << getTypeDecl((*I)->getType(), false, vlang.GetValueName(*I));
-          ss << ";   /*local var*/\n";
-        }    
-      }
-    }// for each cycle    
-
-    // Print all PHINode variables as well
-    BasicBlock *bb= (*lsi)->getBB(); 
-    for (BasicBlock::iterator bit = bb->begin(); bit != bb->end(); bit++) { 
-      if (isa<PHINode>(bit)) {
-        // if has a return type, print it as a variable name 
-        if (!(bit)->getType()->isVoidTy()) { 
-          ss << " "; 
-          ss << getTypeDecl((bit)->getType(), false, vlang.GetValueName(bit)); 
-          ss << ";   /*phi var*/\n"; 
-        }     
-      }
-    } 
-  }// for each listScheduler
-
-return ss.str();
-}
-
-unsigned int RTLWriter::getNumberOfStates(ListSchedVector &lsv){
-int numberOfStates = 0;
-for (ListSchedVector::iterator it = lsv.begin(); it!=lsv.end();it++) {
-numberOfStates += (*it)->length();
-}
-return numberOfStates;
-}
-
-string RTLWriter::getStateDefs(ListSchedVector &lsv)  {
-std::stringstream ss;
-
-unsigned int numberOfStates = getNumberOfStates(lsv);
-
-// Instruction pointer of n bits, n^2 states
-unsigned int NumOfStateBits = Log2_32_Ceil(numberOfStates+1) -1;
-
-ss<<"\n // Number of states:"<<numberOfStates<<"\n";
-ss << " reg ["<< NumOfStateBits<<":0] eip;\n";
-
-int stateCounter = 0;
-// print the definitions for the values of the EIP values.
-//     // for example: 'define start 16'd0  ...
-for (ListSchedVector::iterator it = lsv.begin(); it!=lsv.end(); it++) {
-// each cycle in the BB
-for (unsigned int i=0;i<(*it)->length();i++) {
-ss << " parameter "<<toPrintable((*it)->getBB()->getName())<<i
-<<" = "<<NumOfStateBits+1<<"'d"<<stateCounter<<";\n";
-stateCounter++;
-}
-}
-ss<<"\n";
-return ss.str();
-}
-
-
-
-string RTLWriter::printAssignPart(vector<assignPartEntry*> ass, RTLWriter* lang) {
-stringstream sb;
-map<string,string> unitNames;
-
-sb <<"// Assign part ("<< ass.size() <<")\n";
-
-// extract all unit names from assign part
-for (vector<assignPartEntry*>::iterator it = ass.begin(); it!=ass.end(); ++it) {
-unitNames[(*it)->getUnitName()] = (*it)->getUnitType();
-}
-
-// for each uniqe name 
-for (map<string,string>::iterator nm = unitNames.begin(); nm!=unitNames.end(); ++nm) {
-assignPartBuilder apb(nm->first, nm->second);
-// for all assign parts with this name
-for (vector<assignPartEntry*>::iterator it = ass.begin(); it!=ass.end(); ++it) {
-if (nm->first==(*it)->getUnitName()) {
-apb.addPart(*it);
-}
-}
-sb<<apb.toString(this);
-}
-sb << "\n\n";
-return sb.str();
-}
-
-
-string RTLWriter::getAssignmentString(ListSchedVector lv) {
-stringstream sb;
-
-vector<assignPartEntry*> parts;
-for (ListSchedVector::iterator it=lv.begin(); it!=lv.end(); ++it) {
-vector<assignPartEntry*> p = (*it)->getAssignParts();
-parts.insert(parts.begin(),p.begin(),p.end());
-}
-
-return printAssignPart(parts, this); 
-
 }
 
 string RTLWriter::evalValue(Value* val) {

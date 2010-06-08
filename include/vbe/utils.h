@@ -61,23 +61,5 @@ namespace {
         }
         errs() << "OPT:"<< passName << "," << line << ":" << xReset() << message <<"\n";
     }
-
-
-    static inline string toPrintable(const string& in ){
-        string VarName;
-        VarName.reserve(in.capacity());
-
-        for (std::string::const_iterator I = in.begin(), E = in.end();
-                I != E; ++I) {
-            char ch = *I;
-
-            if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-                        (ch >= '0' && ch <= '9') || ch == '_'))
-                VarName += '_';
-            else
-                VarName += ch;
-        }
-        return VarName;
-    }
 } //end of namespace
 #endif // h guard

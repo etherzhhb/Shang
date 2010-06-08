@@ -27,6 +27,7 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Format.h"
 
 using namespace llvm;
 
@@ -42,7 +43,7 @@ class VLang : public ImmutablePass {
   unsigned NextAnonValueNumber;
 
   //
-  static unsigned ind_level;
+  unsigned ind_level;
 
   void clear() {
     AnonValueNumbers.clear();
@@ -73,30 +74,6 @@ public:
   std::string printConstant(Constant *C);
   std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
 
-  template<class StreamTy>
-  StreamTy &printPtrDecl(StreamTy &ss, const Argument *Arg, 
-                           unsigned DataWidth, unsigned BusWidth,
-                           unsigned level = ind_level) {
-    ind_level = level;
-    std::string name = Arg->getNameStr();
-    const PointerType *PtrTy = dyn_cast<PointerType>(Arg->getType());
-    assert(PtrTy && "Arg is not ptr!");
-    // TODO: whats memport?
-    unsigned i = 0;
-    // Pointer size
-    ss.indent(ind_level) << "input wire [" << (DataWidth-1) << ":0] mem_"
-                    <<name<< "_out" << i <<",\n";
-
-    ss.indent(ind_level) << "output reg [" << (DataWidth - 1) << ":0] mem_"
-                    << name << "_in" << i << ",\n";
-
-    ss.indent(ind_level) << "output reg [" << (BusWidth - 1) <<":0] mem_"
-                    << name << "_addr"<< i << ",\n";
-
-    ss.indent(ind_level) << "output reg mem_" << (name) << "_mode" << i;
-    return ss;
-  }
-
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);
   static std::string printType(const Type *Ty, 
@@ -113,94 +90,151 @@ public:
   //}
 
   template<class StreamTy>
-  StreamTy &indent(StreamTy &ss, unsigned level = ind_level) {
-    return ss.indent((ind_level = level));
+  StreamTy &indent(StreamTy &ss) {
+    //ss << "ind(" << format("%02d", ind_level) << ")";
+    return static_cast<StreamTy&>(ss.indent(ind_level));
   }
-
   template<class StreamTy>
-  StreamTy &emitModuleBegin(StreamTy &ss, std::string &ModuleName,
-                              const std::string &Clk = "clk",
-                              const std::string &Rst = "rstN",
-                              const std::string &Rdy = "rdy",
-                              unsigned level = ind_level) {
-    ind_level = level;
-    ss.indent(ind_level) << "module " << ModuleName << "(\n";
-    ind_level+=4;
-    // FIXME: mutiple clk!
-    if (!Clk.empty())
-      ss.indent(ind_level) << "input wire " << Clk << ",\n";
-    if (!Rst.empty())
-      ss.indent(ind_level) << "input wire " << Rst << ",\n";
-    if (!Rdy.empty())
-      ss.indent(ind_level) << "output reg " << Rdy << ",\n";
+  StreamTy &emitCommentBegin(StreamTy &ss){
+    ss << "\n";
+    indent(ss) << "//  ";
     return ss;
   }
 
   template<class StreamTy>
-  StreamTy &emitEndModuleDecl(StreamTy &ss, unsigned level = ind_level) {
-    ind_level=level;
+  StreamTy &emitModuleBegin(StreamTy &ss, std::string &ModuleName,
+                            const std::string &Clk = "clk",
+                            const std::string &Rst = "rstN",
+                            unsigned ind = 0) {
+    ind_level = ind;
+    indent(ss) << "module " << ModuleName << "(\n";
+    ind_level+=4;
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitEndModuleDecl(StreamTy &ss) {
     ss <<  ");\n";
     ind_level-=2;
     return ss;
   }
 
   template<class StreamTy>
-  StreamTy &emitAlwaysffBegin(StreamTy &ss, const std::string &Clk = "clk",
-                                const std::string &ClkEdge = "posedge",
-                                const std::string &Rst = "rstN",
-                                const std::string &RstEdge = "negedge",
-                                unsigned level = ind_level) {
-    ind_level = level;
+  StreamTy &emitAlwaysffBegin(StreamTy &ss,
+                              const std::string &Clk = "clk",
+                              const std::string &ClkEdge = "posedge",
+                              const std::string &Rst = "rstN",
+                              const std::string &RstEdge = "negedge") {
+
     // TODO: Support Sync reset
     // TODO: SystemVerilog always_ff?
-    ss.indent(ind_level) << "always @("
+    indent(ss) << "always @("
                       << ClkEdge << " "<< Clk <<", "
                       << RstEdge << " " << Rst
                       <<") begin\n";
     ind_level += 2;
-    ss.indent(ind_level) << "if (";
+    indent(ss) << "if (";
     // negative edge reset?
     if (RstEdge == "negedge")
       ss << "!";
     ss << Rst << ") begin\n";
     ind_level += 2;
-    ss.indent(ind_level) << "eip<=0;\n";
-    ss.indent(ind_level) << "rdy<=0;\n";
+    indent(ss) << "// reset registers\n";
     // TODO: Reset other registers!
-    level -= 2;
-    ss.indent(ind_level) << "end\n";
-    // TODO: clock enable
-    ss.indent(ind_level) << "else begin //else reset\n";
-    return ss;
-  }
-  template<class StreamTy>
-  StreamTy &emitEndAlwaysff(StreamTy &ss, unsigned level = ind_level) {
-    ind_level = level;
-    ss.indent(ind_level) << "end //else reset\n";
-    ind_level -=2;
-    ss.indent(ind_level) << "end //always @(..)\n\n";
-    ind_level +=2;
-    return ss;
-  }
-  template<class StreamTy>
-  StreamTy &emitCaseBegin(StreamTy &ss, unsigned level = ind_level) {
-    ind_level = level;
-    ss.indent(ind_level) << "case (eip)\n";
-    ind_level += 2;
-    return ss;
-  }
-  template<class StreamTy>
-  StreamTy &emitEndCase(StreamTy &ss, unsigned level = ind_level) {
-    ind_level = level;
-    ss.indent(ind_level) << " endcase //eip\n";
-    ind_level -= 2;
     return ss;
   }
 
   template<class StreamTy>
-  StreamTy &emitEndModule(StreamTy &ss, unsigned level = ind_level) {
-    ind_level = level;
-    ss.indent(ind_level) << "endmodule\n\n";
+  StreamTy &emitResetRegister(StreamTy &ss,
+                              const std::string &Name,
+                              unsigned BitWidth,
+                              unsigned InitVal = 0) {
+    indent(ss) << Name << " <=  "
+      << printConstantInt(InitVal, BitWidth, false)
+      << ";\n";;
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitParam(StreamTy &ss,
+                      const std::string &Name,
+                      unsigned BitWidth,
+                      unsigned Val) {
+    indent(ss) << "parameter " << Name
+      << " = " << printConstantInt(Val, BitWidth, false) << "\n";
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitEndReset(StreamTy &ss) {
+    ind_level -= 2;
+    indent(ss) << "end\n";
+    // TODO: clock enable
+    indent(ss) << "else begin //else reset\n";
+    ind_level += 2;
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitEndAlwaysff(StreamTy &ss) {
+
+    ind_level -=2;
+    indent(ss) << "end //else reset\n";
+    ind_level -=2;
+    indent(ss) << "end //always @(..)\n\n";
+    return ss;
+  }
+  template<class StreamTy>
+  StreamTy &emitCaseBegin(StreamTy &ss) {
+
+    indent(ss) << "case (eip)\n";
+    // Do not need to indent
+    //ind_level += 2;
+    return ss;
+  }
+  template<class StreamTy>
+  StreamTy &emitCaseStateBegin(StreamTy &ss, const std::string &StateName) {
+    indent(ss) << StateName << ": begin\n";
+    ind_level += 2;
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitIfBegin(StreamTy &ss, const std::string &Condition) {
+    indent(ss) << "if (" << Condition << ") begin\n";
+    ind_level += 2;
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitIfElse(StreamTy &ss) {
+    ind_level -=2;
+    indent(ss) << "end else begin\n";
+    ind_level +=2;
+    return ss;
+  }
+
+
+  template<class StreamTy>
+  StreamTy &emitEnd(StreamTy &ss) {
+    ind_level -= 2;
+    indent(ss) << "end\n";
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitEndCase(StreamTy &ss) {
+    // Do "case" dose not indent
+    //ind_level -= 2;
+    indent(ss) << " endcase //eip\n";
+    return ss;
+  }
+
+  template<class StreamTy>
+  StreamTy &emitEndModule(StreamTy &ss) {
+
+    ind_level -=2;
+    indent(ss) << "endmodule\n\n";
     return ss;
   }
 

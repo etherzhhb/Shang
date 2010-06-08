@@ -184,8 +184,6 @@ void VLang::initializePass() {
   Mang = new Mangler(*TCtx, *TD);
 }
 
-unsigned VLang::ind_level = 0;
-
 char VLang::ID = 0;
 
 static RegisterPass<VLang> X("vlang", "vbe - Verilog language writer",
