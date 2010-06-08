@@ -32,27 +32,6 @@ using namespace llvm;
 
 namespace xVerilog {
 
-template<class StreamTy>
-static StreamTy &indent_imp(StreamTy &ss, unsigned NumSpaces) {
-  static const char Spaces[] = "                                "
-    "                                "
-    "                ";
-
-  // Usually the indentation is small, handle it with a fastpath.
-  if (NumSpaces < array_lengthof(Spaces)) {
-    ss.write(Spaces, NumSpaces);
-    return ss;
-  }
-
-  while (NumSpaces) {
-    unsigned NumToWrite = std::min(NumSpaces,
-      (unsigned)array_lengthof(Spaces)-1);
-    ss.write(Spaces, NumToWrite);
-    NumSpaces -= NumToWrite;
-  }
-  return ss;
-}
-
 class VLang : public ImmutablePass {
   const TargetData* TD;
   Mangler *Mang;
@@ -68,6 +47,28 @@ class VLang : public ImmutablePass {
   void clear() {
     AnonValueNumbers.clear();
   }
+  
+  template<class StreamTy>
+  static StreamTy &indent_imp(StreamTy &ss, unsigned NumSpaces) {
+    static const char Spaces[] = "                                "
+      "                                "
+      "                ";
+
+    // Usually the indentation is small, handle it with a fastpath.
+    if (NumSpaces < array_lengthof(Spaces)) {
+      ss.write(Spaces, NumSpaces);
+      return ss;
+    }
+
+    while (NumSpaces) {
+      unsigned NumToWrite = std::min(NumSpaces,
+        (unsigned)array_lengthof(Spaces)-1);
+      ss.write(Spaces, NumToWrite);
+      NumSpaces -= NumToWrite;
+    }
+    return ss;
+  }
+
 public:
   static char ID;
   explicit VLang() 

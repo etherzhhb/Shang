@@ -152,8 +152,6 @@ bool VWriter::runOnFunction(Function &F) {
   errs()<<"/* Design Freq= |"<< freq <<"| */\n"; 
   errs()<<"/* Gates Count = |"<< gsize <<"| */\n"; 
   errs()<<"/* Loop BB Percent = |"<< ds.getLoopBlocksCount() <<"| */\n"; 
-  
-  F.dump();
 
   Out<<DesignWriter.getFunctionSignature(&F);
   Out<<DesignWriter.getFunctionLocalVariables(lv);
@@ -162,7 +160,7 @@ bool VWriter::runOnFunction(Function &F) {
   Out<<DesignWriter.getAssignmentString(lv);
 
   vlang.emitAlwaysffBegin(Out);
-  Out<<"\n// Datapath \n";
+  vlang.indent(Out) << "\n// Datapath \n";
   for (listSchedulerVector::iterator I = lv.begin(), E = lv.end();
       I != E; ++I)
     Out<<DesignWriter.printBasicBlockDatapath(*I);
@@ -182,8 +180,6 @@ bool VWriter::runOnFunction(Function &F) {
   Out<<DesignWriter.createBinOpModule("shl","<<",ResourceConfig::getResConfig("delay_shl"));
   Out<<DesignWriter.getBRAMDefinition(ResourceConfig::getResConfig("mem_wordsize"),
                                       ResourceConfig::getResConfig("membus_size"));
-  
-  F.dump();
   
   return false;
 }
