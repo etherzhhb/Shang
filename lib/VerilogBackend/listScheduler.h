@@ -216,9 +216,15 @@ namespace xVerilog {
             vector<abstractHWOpcode*> m_ops;
     }; //class
 
-    typedef vector<listScheduler*> listSchedulerVector;
+    typedef vector<listScheduler*> ListSchedVector;
 
 
+class ListSchedDriver : public FunctionPass {
+  ListSchedVector ListScheders;
 
+public:
+  static char ID;
+  explicit ListSchedDriver() : FunctionPass(&ID) {}
+};
 } //end of namespace
 #endif // h guard

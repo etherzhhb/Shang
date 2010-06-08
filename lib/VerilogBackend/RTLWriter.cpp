@@ -382,11 +382,11 @@ abort();
 }
 }
 
-std::string RTLWriter::getFunctionLocalVariables(listSchedulerVector lsv) {
+std::string RTLWriter::getFunctionLocalVariables(ListSchedVector lsv) {
 
   std::stringstream ss;
   // for each listScheduler of a basic block
-  for (listSchedulerVector::iterator lsi=lsv.begin(); lsi!=lsv.end();++lsi) {
+  for (ListSchedVector::iterator lsi=lsv.begin(); lsi!=lsv.end();++lsi) {
     // for each cycle in each LS
     for (unsigned int cycle=0; cycle<(*lsi)->length();cycle++) {
       std::vector<Instruction*> inst = (*lsi)->getInstructionForCycle(cycle);
@@ -418,15 +418,15 @@ std::string RTLWriter::getFunctionLocalVariables(listSchedulerVector lsv) {
 return ss.str();
 }
 
-unsigned int RTLWriter::getNumberOfStates(listSchedulerVector &lsv){
+unsigned int RTLWriter::getNumberOfStates(ListSchedVector &lsv){
 int numberOfStates = 0;
-for (listSchedulerVector::iterator it = lsv.begin(); it!=lsv.end();it++) {
+for (ListSchedVector::iterator it = lsv.begin(); it!=lsv.end();it++) {
 numberOfStates += (*it)->length();
 }
 return numberOfStates;
 }
 
-string RTLWriter::getStateDefs(listSchedulerVector &lsv)  {
+string RTLWriter::getStateDefs(ListSchedVector &lsv)  {
 std::stringstream ss;
 
 unsigned int numberOfStates = getNumberOfStates(lsv);
@@ -440,7 +440,7 @@ ss << " reg ["<< NumOfStateBits<<":0] eip;\n";
 int stateCounter = 0;
 // print the definitions for the values of the EIP values.
 //     // for example: 'define start 16'd0  ...
-for (listSchedulerVector::iterator it = lsv.begin(); it!=lsv.end(); it++) {
+for (ListSchedVector::iterator it = lsv.begin(); it!=lsv.end(); it++) {
 // each cycle in the BB
 for (unsigned int i=0;i<(*it)->length();i++) {
 ss << " parameter "<<toPrintable((*it)->getBB()->getName())<<i
@@ -481,11 +481,11 @@ return sb.str();
 }
 
 
-string RTLWriter::getAssignmentString(listSchedulerVector lv) {
+string RTLWriter::getAssignmentString(ListSchedVector lv) {
 stringstream sb;
 
 vector<assignPartEntry*> parts;
-for (listSchedulerVector::iterator it=lv.begin(); it!=lv.end(); ++it) {
+for (ListSchedVector::iterator it=lv.begin(); it!=lv.end(); ++it) {
 vector<assignPartEntry*> p = (*it)->getAssignParts();
 parts.insert(parts.begin(),p.begin(),p.end());
 }
@@ -559,44 +559,6 @@ abort();
 
 ss<<")";
 return ss.str();
-}
-
-string RTLWriter::getFunctionSignature(const Function *F) {
-  std::stringstream ss;
-
-  vlang.emitModuleBegin(ss, F->getNameStr());
-
-  const AttrListPtr &PAL = F->getAttributes();
-  unsigned Idx = 1;
-  for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
-      I != E; ++I) {
-    // integers:
-    const Type *ArgTy = I->getType();
-    if (ArgTy->isPointerTy()) {
-      vlang.printPtrDecl(ss, I, TD->getPointerSizeInBits(),
-                         m_pointerSize) << ",\n";
-    } else if(ArgTy->isIntegerTy()) {
-      vlang.indent(ss) <<
-        VLang::printType(ArgTy,
-          /*isSigned=*/PAL.paramHasAttr(Idx, Attribute::SExt),
-          vlang.GetValueName(I), "wire ", "input ") << "\n";
-      ++Idx;
-    } else {
-      vlang.indent(ss) << "/*unsupport*type/\n";
-    }
-  }
-
-  const Type *RetTy = F->getReturnType();
-  if (RetTy->isVoidTy()) {
-    // Do something?
-    vlang.indent(ss) << "*/return void*/";
-  } else {
-    assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    vlang.indent(ss) << VLang::printType(RetTy, false, "return_value", "reg ", "output ");
-  }
-  vlang.emitEndModuleDecl(ss);
-
-  return ss.str();
 }
 
 string RTLWriter::getBRAMDefinition(unsigned int wordBits, unsigned int addressBits) {

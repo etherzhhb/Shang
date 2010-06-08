@@ -127,7 +127,7 @@ namespace xVerilog {
              */
             int getInstructionSize(Instruction* inst);
             /// a vector of schedulers to evaluate
-            listSchedulerVector m_basicBlocks;
+            ListSchedVector m_basicBlocks;
             LoopInfo* m_loopInfo;
             unsigned int m_pointerSize;
     };

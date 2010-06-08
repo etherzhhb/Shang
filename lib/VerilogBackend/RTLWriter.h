@@ -22,14 +22,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CFG.h"
 #include "llvm/DerivedTypes.h"
-
 #include "llvm/Target/Mangler.h"
-
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <vector>
-#include <set>
 
 #include "listScheduler.h"
 #include "VLang.h"
@@ -38,10 +31,6 @@
 
 using namespace llvm;
 
-using std::vector;
-using std::pair;
-using std::string;
-using std::stringstream;
 
 namespace xVerilog {
     
@@ -123,15 +112,49 @@ class RTLWriter {
 
   string getTypeDecl(const Type *Ty, bool isSigned, const std::string &NameSoFar);
 
-  string getFunctionLocalVariables(listSchedulerVector lsv);
-  unsigned int getNumberOfStates(listSchedulerVector &lsv);
-  string getStateDefs(listSchedulerVector &lsv);
+  string getFunctionLocalVariables(ListSchedVector lsv);
+  unsigned int getNumberOfStates(ListSchedVector &lsv);
+  string getStateDefs(ListSchedVector &lsv);
   string printAssignPart(vector<assignPartEntry*> ass, RTLWriter* lang);
-  string getAssignmentString(listSchedulerVector lv);
+  string getAssignmentString(ListSchedVector lv);
   string getIntrinsic(Instruction* inst);
   string printIntrinsic(Instruction* inst);
 
-  string getFunctionSignature(const Function *F);
+  template<class StreamTy>
+  StreamTy &getFunctionSignature(StreamTy &ss, const Function *F) {
+    vlang.emitModuleBegin(ss, F->getNameStr());
+
+    const AttrListPtr &PAL = F->getAttributes();
+    unsigned Idx = 1;
+    for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
+      I != E; ++I) {
+        // integers:
+        const Type *ArgTy = I->getType();
+        if (ArgTy->isPointerTy()) {
+          vlang.printPtrDecl(ss, I, TD->getPointerSizeInBits(),
+            m_pointerSize) << ",\n";
+        } else if(ArgTy->isIntegerTy()) {
+          vlang.indent(ss) <<
+            VLang::printType(ArgTy,
+            /*isSigned=*/PAL.paramHasAttr(Idx, Attribute::SExt),
+            vlang.GetValueName(I), "wire ", "input ") << "\n";
+          ++Idx;
+        } else {
+          vlang.indent(ss) << "/*unsupport*type/\n";
+        }
+    }
+
+    const Type *RetTy = F->getReturnType();
+    if (RetTy->isVoidTy()) {
+      // Do something?
+      vlang.indent(ss) << "*/return void*/";
+    } else {
+      assert(RetTy->isIntegerTy() && "Only support return integer now!");
+      vlang.indent(ss) << VLang::printType(RetTy, false, "return_value", "reg ", "output ");
+    }
+    vlang.emitEndModuleDecl(ss);
+    return ss;
+  }
 
   string getBRAMDefinition(unsigned int wordBits, unsigned int addressBits);
 

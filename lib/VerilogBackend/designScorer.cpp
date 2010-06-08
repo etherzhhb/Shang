@@ -46,7 +46,7 @@ namespace xVerilog {
     unsigned int designScorer::getDesignClocks() {
         unsigned int max_loop_clocks = 0;
         unsigned int max_clocks = 0;
-        for (listSchedulerVector::iterator it = m_basicBlocks.begin(); 
+        for (ListSchedVector::iterator it = m_basicBlocks.begin(); 
                 it != m_basicBlocks.end(); ++it) {
             // Is this BasicBlock a part of a loop ?
             if (m_loopInfo->getLoopFor((*it)->getBB())) {
@@ -63,7 +63,7 @@ namespace xVerilog {
         bbs = 0;
         lbbs = 0;
 
-        for (listSchedulerVector::iterator it = m_basicBlocks.begin(); it != m_basicBlocks.end(); ++it) {
+        for (ListSchedVector::iterator it = m_basicBlocks.begin(); it != m_basicBlocks.end(); ++it) {
             bbs+=(*it)->length();
             // Is this BasicBlock a part of a loop ?
             if (m_loopInfo->getLoopFor((*it)->getBB())) {
