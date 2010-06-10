@@ -25,7 +25,7 @@
 
 using namespace llvm;
 
-namespace xVerilog {
+namespace esyn {
 
 class TestbenchWriter : public FunctionPass{
     raw_ostream &Out;

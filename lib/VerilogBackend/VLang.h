@@ -31,7 +31,7 @@
 
 using namespace llvm;
 
-namespace xVerilog {
+namespace esyn {
 
 class VLang : public ImmutablePass {
   const TargetData* TD;

@@ -1,3 +1,2 @@
-add_subdirectory(PrepareSyn)
 add_subdirectory(VerilogBackend)
-add_subdirectory(Constraints)
+add_subdirectory(DesignConfig)

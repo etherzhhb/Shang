@@ -16,63 +16,72 @@
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
 #include "llvm/Constants.h"
+#include "llvm/DerivedTypes.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Module.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CFG.h"
-#include "llvm/DerivedTypes.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/System/DataTypes.h"
 
 #include <map>
-#include <algorithm>
 #include <sstream>
-
-
-using std::map;
-using std::string;
-using std::stringstream;
 
 using namespace llvm;
 
-namespace xVerilog {
+namespace esyn {
 
-// define the integer parser
+/// @brief Represent hardware resource
+class HWResource {
+  // The name of resource
+  const std::string Name;
+  // How many cycles to finish?
+  const unsigned Latency;
+  // Start interval
+  const unsigned StartInt;
+  // How many resources available?
+  const unsigned TotalRes;
+
+  HWResource(const HWResource &);            // DO NOT IMPLEMENT
+  void operator=(const HWResource &);  // DO NOT IMPLEMENT
+public:
+  static const unsigned Infinite = UINT32_MAX;
+
+  explicit HWResource(std::string name,
+    unsigned latency, unsigned startInt, unsigned totalRes)
+    : Name(name), Latency(latency), StartInt(startInt), TotalRes(totalRes) {}
+  unsigned getLatency() const { return Latency; }
+  unsigned getTotalRes() const { return TotalRes; }
+  bool isInfinite() const { return TotalRes == Infinite; }
+  unsigned getStartInt() const { return StartInt; }
+  const std::string &getName() const { return Name; }
+
+  // TODO: how to instance this resource.
+}; 
+
+/// @brief Resource Table
+class HWResTable {
+  /// The resource and the instances left
+
+  /// Get the least busy resource of a given kind
+};
 
 class ResourceConfig : public ImmutablePass {
   
-  typedef std::map<string, unsigned int> ResTabTy;
+  typedef std::map<std::string, HWResource*> ResTabTy;
 
-  static ResTabTy ResTab;
+  ResTabTy ResTab;
 
 public:
   static char ID;
   explicit ResourceConfig() : ImmutablePass(&ID) {};
 
+  ~ResourceConfig();
+
   virtual void initializePass();
-  /*
-  * Load all of the values into a structure which will be used by the scheduler
-  * to build the hardware description table.
-  */
-  static unsigned int getResConfig(std::string ResName) {
-    ResTabTy::iterator at = ResTab.find(ResName);
-    return at == ResTab.end()? 0 : at->second;
-  }
-  // FIXME: This could be done by vbe.
-  static std::string  chrsubst(string str , int ch, int ch2) { //JAWAD
-    char *s1   = new char [str.size()+1];  
-    strcpy (s1, str.c_str());
-    int count = 0; /* The count to return */
-    char *wrk = strchr(s1, ch); /* Find first char in s1 */
-    while (wrk) { /* While we have matches */
-      *wrk = (char) ch2; /* Replace the character */
-      count++, wrk++; /* Increment the count & pointer */
-      wrk = strchr(wrk, ch); /* Search for next occurance */
-    }
-    //return count; /* Return the count */
-    return  string(s1);
-  }   
+
 }; //class
 
 } // namespace

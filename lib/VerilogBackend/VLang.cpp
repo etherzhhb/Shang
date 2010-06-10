@@ -29,7 +29,7 @@
 #include <sstream>
 
 using namespace llvm;
-using namespace xVerilog;
+using namespace esyn;
 
 namespace {
   class VBEMCAsmInfo : public MCAsmInfo {

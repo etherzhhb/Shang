@@ -27,7 +27,7 @@
 #include <sstream>
 
 using namespace llvm;
-using namespace xVerilog;
+using namespace esyn;
 
 std::string TestbenchWriter::testBech(Function&F,unsigned level) {
   std::stringstream ss;
