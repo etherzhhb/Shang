@@ -25,6 +25,7 @@
 #include "llvm/Support/CFG.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/System/DataTypes.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <map>
 #include <sstream>
@@ -52,11 +53,14 @@ public:
   explicit HWResource(std::string name,
     unsigned latency, unsigned startInt, unsigned totalRes)
     : Name(name), Latency(latency), StartInt(startInt), TotalRes(totalRes) {}
+  
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
   bool isInfinite() const { return TotalRes == Infinite; }
   unsigned getStartInt() const { return StartInt; }
   const std::string &getName() const { return Name; }
+
+  void print(raw_ostream &OS) const;
 
   // TODO: how to instance this resource.
 }; 
@@ -74,6 +78,8 @@ class ResourceConfig : public ImmutablePass {
 
   ResTabTy ResTab;
 
+  void ParseConfigFile(const std::string &Filename);
+
 public:
   static char ID;
   explicit ResourceConfig() : ImmutablePass(&ID) {};
@@ -82,6 +88,12 @@ public:
 
   virtual void initializePass();
 
+  void print(raw_ostream &OS) const;
+
+  HWResource *getResource(std::string Name) const {
+    ResTabTy::const_iterator at = ResTab.find(Name);
+    return at == ResTab.end() ? 0 : at->second;
+  }
 }; //class
 
 } // namespace

@@ -37,22 +37,27 @@
 
 #include "vbe/ResourceConfig.h"
 
+namespace llvm {
+class LoopInfo;
+}
 using namespace llvm;
 
 namespace esyn {
 
-
 enum HWAtomTypes {
   atomSignedPrefix,   // Represent the Signed marker, use in Ashr
-  atomBitCast,        // Trunc, Z/SExt, PtrToInt, IntToPtr
+  atomWireOp,        // Trunc, Z/SExt, PtrToInt, IntToPtr
                       // Data communication atom
-  atomAssignRegister, // Assign value to register, use in infinite scheduler
+  atomRegister,       // Assign value to register, use in infinite scheduler
                       // Schedeable atoms
                       // Operate resource
                       // on pre-allocate resource,
   atomOpPreAllRes,    // operate infinite resource 
-  atomOpPostAllRes    // on post-allocated limited resource
+  atomOpPostAllRes,   // on post-allocated limited resource
                       // all infinite resource is pre-allocate
+  atomStateBegin,     // state transfer
+  atomStateEnd,
+  atomEmitNextLoop
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -64,26 +69,48 @@ class HWAtom : public FoldingSetNode {
   // The HWAtom baseclass this node corresponds to
   const unsigned short HWAtomType;
 
+  /// First of all, we schedule all atom base on dependence
+  HWAtom *const *Deps;
+  size_t NumDeps;
+
 private:
   HWAtom(const HWAtom &);            // DO NOT IMPLEMENT
   void operator=(const HWAtom &);  // DO NOT IMPLEMENT
 
 protected:
   // The corresponding LLVM Instruction
-  Instruction &Inst;
+  Value &Val;
 
   virtual ~HWAtom();
 public:
   explicit HWAtom(const FoldingSetNodeIDRef ID,
-    unsigned HWAtomTy, Instruction &I) :
-  FastID(ID), HWAtomType(HWAtomTy), Inst(I) {}
+    unsigned HWAtomTy, Value &V, 
+    HWAtom *const *deps, size_t numDeps) :
+  FastID(ID), HWAtomType(HWAtomTy), Val(V), Deps(deps), NumDeps(numDeps) {}
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
   /// Profile - FoldingSet support.
   void Profile(FoldingSetNodeID& ID) { ID = FastID; }
 
-  Instruction &getInst() const { return Inst; }
+  Value &getValue() const { return Val; }
+
+  /// @name Dependences
+  //{
+  size_t getNumDeps() const { return NumDeps; }
+  HWAtom *getDep(unsigned i) const {
+    assert(i < NumDeps && "Operand index out of range!");
+    return Deps[i];
+  }
+
+  typedef HWAtom *const *dep_iterator;
+  dep_iterator dep_begin() { return Deps; }
+  dep_iterator dep_end() { return Deps + NumDeps; }
+
+  typedef const HWAtom *const *const_dep_iterator;
+  const_dep_iterator dep_begin() const { return Deps; }
+  const_dep_iterator dep_end() const { return Deps + NumDeps; }
+  //}
 
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
@@ -97,26 +124,25 @@ public:
 
 /// @brief Inline operation
 class HWAInline : public HWAtom {
-  HWAtom *Op;
 protected:
   explicit HWAInline(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    HWAtom *O) : HWAtom(ID, T, O->getInst()), Op(O) {}
+    Value &V, HWAtom *const *O) : HWAtom(ID, T, V, O, 1) {}
 public:
-  HWAtom *getOperand() const { return Op; }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAInline *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomSignedPrefix || atomBitCast
-      || atomAssignRegister;
+    return A->getHWAtomType() == atomSignedPrefix ||
+      A->getHWAtomType() == atomWireOp ||
+      A->getHWAtomType() == atomRegister;
   }
 };
 
 /// @brief The signed wire marker
 class HWASigned : public HWAInline {
 public:
-  explicit HWASigned(const FoldingSetNodeIDRef ID, HWAtom *O)
-    : HWAInline(ID, atomSignedPrefix, O){}
+  explicit HWASigned(const FoldingSetNodeIDRef ID, HWAtom *const *O)
+    : HWAInline(ID, atomSignedPrefix, O[0]->getValue(), O){}
 
   void print(raw_ostream &OS) const;
 
@@ -128,66 +154,136 @@ public:
 };
 
 /// @brief The register atom will break the WAR dependence
-class HWARegeister : public HWAInline {
+class HWARegister : public HWAInline {
 public:
-  explicit HWARegeister(const FoldingSetNodeIDRef ID, HWAtom *O)
-    : HWAInline(ID, atomAssignRegister, O) {}
+  explicit HWARegister(const FoldingSetNodeIDRef ID, Instruction &I,
+    HWAtom *const *O) 
+    : HWAInline(ID, atomRegister, I, O) {}
 
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWARegeister *A) { return true; }
+  static inline bool classof(const HWARegister *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomAssignRegister;
+    return A->getHWAtomType() == atomRegister;
   } 
 };
 
-class HWABitCast : public HWAInline {
-  Instruction &CastInst;
+class HWAWireOp : public HWAInline {
 public:
-  explicit HWABitCast(const FoldingSetNodeIDRef ID, HWAtom *O,
-    Instruction &Inst)
-    : HWAInline(ID, atomBitCast, O), CastInst(Inst) {}
+  explicit HWAWireOp(const FoldingSetNodeIDRef ID, Instruction &Inst,
+    HWAtom *const *O) : HWAInline(ID, atomWireOp, Inst, O) {}
 
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWABitCast *A) { return true; }
+  static inline bool classof(const HWAWireOp *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomBitCast;
+    return A->getHWAtomType() == atomWireOp;
   }
 };
 
+class HWAStateTrans : public HWAtom {
+public:
+  explicit HWAStateTrans(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+    Value &Val, HWAtom *const *deps, size_t numDep)
+    : HWAtom(ID, T, Val, deps, numDep) {}
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAStateTrans *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomStateBegin ||
+           A->getHWAtomType() == atomStateEnd;
+  }
+};
+
+class HWAStateBegin : public HWAStateTrans {
+  typedef std::vector<HWAtom*> HWAtomVecType;
+
+  // Atoms in this state
+  HWAtomVecType Atoms;
+public:
+  explicit HWAStateBegin(const FoldingSetNodeIDRef ID, BasicBlock &BB)
+    : HWAStateTrans(ID, atomStateBegin, BB, 0, 0) {}
+
+  void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
+
+  typedef HWAtomVecType::iterator iterator;
+  iterator begin() { return Atoms.begin(); }
+  iterator end() { return Atoms.end(); }
+
+  typedef HWAtomVecType::const_iterator const_iterator;
+  const_iterator begin() const { return Atoms.begin(); }
+  const_iterator end() const { return Atoms.end(); }
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAStateBegin *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomStateBegin;
+  }
+};
+
+class HWAStateEnd : public HWAStateTrans {
+public:
+  explicit HWAStateEnd(const FoldingSetNodeIDRef ID,
+    TerminatorInst &Term, HWAtom *const *deps, size_t numDep)
+    : HWAStateTrans(ID, atomStateEnd, Term, deps, numDep) {}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAStateEnd *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomStateEnd;
+  }
+};
+
+
 /// @brief The Schedulable Hardware Atom
 class HWASchedable : public HWAtom {
-  /// First of all, we schedule all atom base on dependence
-  HWAtom *const *Deps;
-  size_t NumDeps;
-
   // the scheduled slot is manage by the scheduler
   // unsigned slot
+
+protected:
+  explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+    Instruction &Inst, HWAtom *const *deps, size_t numDep)
+    : HWAtom(ID, T, Inst, deps, numDep) {}
+public:
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWASchedable *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomOpPreAllRes ||
+      A->getHWAtomType() == atomOpPostAllRes ||
+      A->getHWAtomType() == atomEmitNextLoop;
+  }
+};
+
+class HWAEmitNextLoop : public HWASchedable {
+public:
+  explicit HWAEmitNextLoop(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+    Instruction &Inst, HWAtom *const *deps, size_t numDep)
+    : HWASchedable(ID, T, Inst, deps, numDep) {}
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAEmitNextLoop *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomEmitNextLoop;
+  }
+};
+
+class HWAOpRes : public HWASchedable {
 
   // The resoure that this atom using.
   HWResource &UsingRes;
 
 protected:
-  explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-     Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWAtom(ID, T, Inst), Deps(deps), NumDeps(numDep), UsingRes(Res) {}
+  explicit HWAOpRes(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+    Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
+    : HWASchedable(ID, T, Inst, deps, numDep), UsingRes(Res) {}
 public:
-  /// @name Dependences
-  //{
-  size_t getNumDeps() const { return NumDeps; }
-  HWAtom *getDep(unsigned i) const {
-    assert(i < NumDeps && "Operand index out of range!");
-    return Deps[i];
-  }
-
-  typedef HWAtom *const *op_iterator;
-  op_iterator dep_begin() { return Deps; }
-  op_iterator dep_end() { return Deps + NumDeps; }
-  //}
-
   /// @name The using resource
   //{
   HWResource &getUsingResource() const {
@@ -200,27 +296,43 @@ public:
   //}
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWASchedable *A) { return true; }
+  static inline bool classof(const HWAOpRes *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() ==
-      atomOpPreAllRes || atomOpPostAllRes;
+    return A->getHWAtomType() == atomOpPostAllRes ||
+      A->getHWAtomType() == atomOpPreAllRes;
   }
 };
 
 /// @brief The atom that operates post-allocate resources
-class HWAOpPostAllRes : public HWASchedable {
+class HWAOpPostAllRes : public HWAOpRes {
 public:
   explicit HWAOpPostAllRes(const FoldingSetNodeIDRef ID,
     Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWASchedable(ID, atomOpPostAllRes, Inst, deps, numDep, Res) {}
+    : HWAOpRes(ID, atomOpPostAllRes, Inst, deps, numDep, Res) {}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAOpPostAllRes *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomOpPostAllRes;
+  }
 };
 
 /// @brief The atom that operate in infinite resource
-class HWAOpPreAllRes : public HWASchedable {
+class HWAOpPreAllRes : public HWAOpRes {
 public:
   explicit HWAOpPreAllRes(const FoldingSetNodeIDRef ID,
     Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWASchedable(ID, atomOpPreAllRes, Inst, deps, numDep, Res) {}
+    : HWAOpRes(ID, atomOpPreAllRes, Inst, deps, numDep, Res) {}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAOpPreAllRes *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomOpPreAllRes;
+  }
 };
 
 /// @brief Hardware atom construction pass
@@ -230,10 +342,20 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   /// @name InstVisitor interface
   //{
   friend class InstVisitor<HWAtomInfo>;
-  void visitReturnInst(ReturnInst &I){}
-  void visitBranchInst(BranchInst &I){}
-  void visitSwitchInst(SwitchInst &I){}
-  void visitIndirectBrInst(IndirectBrInst &I){}
+  void visitTerminatorInst(TerminatorInst &I);
+
+  void visitReturnInst(ReturnInst &I) {
+    visitTerminatorInst(I);
+  }
+  void visitBranchInst(BranchInst &I) {
+    visitTerminatorInst(I);
+  }
+  void visitSwitchInst(SwitchInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
+  void visitIndirectBrInst(IndirectBrInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
   void visitInvokeInst(InvokeInst &I) {
     llvm_unreachable("HWAtomFilterPass pass didn't work!");
   }
@@ -243,29 +365,50 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   }
   void visitUnreachableInst(UnreachableInst &I){}
 
-  void visitPHINode(PHINode &I){}
-  void visitBinaryOperator(Instruction &I){}
-  void visitICmpInst(ICmpInst &I){}
-  void visitFCmpInst(FCmpInst &I){}
+  void visitPHINode(PHINode &I);
+  void visitBinaryOperator(Instruction &I);
+  void visitICmpInst(ICmpInst &I);
+  void visitFCmpInst(FCmpInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
 
-  void visitCastInst (CastInst &I){}
-  void visitSelectInst(SelectInst &I){}
-  void visitCallInst (CallInst &I){}
-  void visitInlineAsm(CallInst &I){}
-  bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee){}
+  void visitCastInst (CastInst &I);
+  void visitSelectInst(SelectInst &I);
+  void visitCallInst (CallInst &I){
+    llvm_unreachable("Instruction not support yet!");}
+  void visitInlineAsm(CallInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
+  bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee) {
+    llvm_unreachable("Instruction not support yet!");
+  }
 
-  void visitAllocaInst(AllocaInst &I){}
-  void visitLoadInst  (LoadInst   &I){}
-  void visitStoreInst (StoreInst  &I){}
-  void visitGetElementPtrInst(GetElementPtrInst &I){}
-  void visitVAArgInst (VAArgInst &I){}
+  void visitAllocaInst(AllocaInst &I) {
+    llvm_unreachable("Instruction not support yet!");
+  }
+  void visitLoadInst  (LoadInst   &I);
+  void visitStoreInst (StoreInst  &I);
+  void visitGetElementPtrInst(GetElementPtrInst &I);
+  void visitVAArgInst (VAArgInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
 
-  void visitInsertElementInst(InsertElementInst &I){}
-  void visitExtractElementInst(ExtractElementInst &I){}
-  void visitShuffleVectorInst(ShuffleVectorInst &SVI){}
+  void visitInsertElementInst(InsertElementInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
+  void visitExtractElementInst(ExtractElementInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
+  void visitShuffleVectorInst(ShuffleVectorInst &SVI){
+    llvm_unreachable("Instruction not support yet!");
+  }
 
-  void visitInsertValueInst(InsertValueInst &I){}
-  void visitExtractValueInst(ExtractValueInst &I){}
+  void visitInsertValueInst(InsertValueInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
+  void visitExtractValueInst(ExtractValueInst &I){
+    llvm_unreachable("Instruction not support yet!");
+  }
 
   void visitInstruction(Instruction &I) {
 #ifndef NDEBUG
@@ -281,23 +424,110 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
   
+  HWAStateBegin *getStateBegin(BasicBlock &BB);
+
+  HWAStateEnd *getStateEnd(TerminatorInst &Term,
+                           SmallVectorImpl<HWAtom*> &Deps);
+
+  HWARegister *getRegister(Instruction &I, HWAtom *Using);
+
+  HWASigned *getSigned(HWAtom *Using);
+
+  HWAWireOp *getWireOp(Instruction &I, HWAtom *Using);
+
+  HWAOpRes *getOpRes(Instruction &I,
+                            SmallVectorImpl<HWAtom*> &Deps,
+                            HWResource &Res) {   
+    if (Res.isInfinite())
+      return getOpPreAllRes(I, Deps, Res);
+    else
+      return getOpPostAllRes(I, Deps, Res);
+  }
+
+  HWAOpPostAllRes *getOpPostAllRes(Instruction &I,
+                                   SmallVectorImpl<HWAtom*> &Deps,
+                                   HWResource &Res);
+
+  HWAOpPreAllRes *getOpPreAllRes(Instruction &I,
+                                 SmallVectorImpl<HWAtom*> &Deps,
+                                 HWResource &Res);
+
+
   // Maping Instruction to HWAtoms
-  typedef std::vector<HWAtom*> HWAtomVecType;
-  typedef DenseMap<const Instruction*, HWAtomVecType> AtomMapType;
+  typedef DenseMap<const Instruction*, HWAtom*> AtomMapType;
   AtomMapType InstToHWAtoms;
-  
+
+
+
+  HWAtom *getAtomFor(Instruction &Inst) const {
+    AtomMapType::const_iterator At = InstToHWAtoms.find(&Inst);
+    assert(At != InstToHWAtoms.end() && "Can not get the Atom!");
+    return  At->second;
+  }
+
+  typedef DenseMap<const BasicBlock*, HWAStateBegin*> StateMapType;
+  StateMapType BBToStates;
+  HWAtom *ControlRoot;
+  HWAStateBegin *CurState;
+
+  HWAStateBegin *getCurState() {
+    return CurState;
+  }
+
+  void updateStateTo(BasicBlock &BB) {
+    CurState = getStateBegin(BB);
+    BBToStates.insert(
+      std::make_pair<const BasicBlock*, HWAStateBegin*>(&BB, CurState));
+    SetControlRoot(CurState);
+  }
+
+  HWAtom *getControlRoot() {
+    return ControlRoot;
+  }
+
+  HWAtom *getAtomInState(Instruction &Inst, BasicBlock *BB) {
+    if (BB == Inst.getParent())
+      return getAtomFor(Inst);
+    else
+      // Create the register
+      return getRegister(Inst, CurState);
+  }
+  void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
+    BasicBlock *ParentBB = I.getParent();
+    HWAStateBegin *CurState = getStateFor(*ParentBB);
+    for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
+        OI != OE; ++OI) {
+      if (Instruction *OpI = dyn_cast<Instruction>(OI))
+        // Restrict the dependences in the current state
+        Deps.push_back(getAtomInState(*OpI, ParentBB));
+    }
+  }
+
+  void SetControlRoot(HWAtom *NewRoot) {
+    ControlRoot = NewRoot;
+  }
+
+  HWAStateBegin *getStateFor(BasicBlock &BB) const {
+    StateMapType::const_iterator At = BBToStates.find(&BB);
+    assert(At != BBToStates.end() && "Can not get the State!");
+    return  At->second;
+  }
 
   void clear();
+
+  // The loop Info
+  LoopInfo *LI;
+  ResourceConfig *RC;
 public:
 
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID) {}
+  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RC(0) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();
-  void getAnalysisUsage(AnalysisUsage &) const;
+  void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const;
   //}
 };

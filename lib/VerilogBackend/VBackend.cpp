@@ -47,6 +47,7 @@
 #include <llvm/ADT/DenseMap.h>
 #include "llvm/Transforms/Utils/Cloning.h"
 
+#include "HWAtom.h"
 #include "RTLWriter.h"
 #include "TestBenchWriter.h"
 #include "vbe/ResourceConfig.h"
@@ -165,6 +166,8 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(new ResourceConfig());
     // Add the language writer.
     PM.add(new VLang());
+    //
+    PM.add(new HWAtomInfo());
     //
     PM.add(new VWriter(Out));
     PM.add(new TestbenchWriter(Out));
