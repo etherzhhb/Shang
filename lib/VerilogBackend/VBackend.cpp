@@ -163,11 +163,12 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
 
     // Resource config
-    PM.add(new ResourceConfig());
+    ResourceConfig *RC = new ResourceConfig();
+    PM.add(RC);
     // Add the language writer.
     PM.add(new VLang());
     //
-    PM.add(new HWAtomInfo());
+    PM.add(new HWAtomInfo(*RC));
     //
     PM.add(new VWriter(Out));
     PM.add(new TestbenchWriter(Out));

@@ -348,13 +348,14 @@ class HWResTable {
   ///
   ResourceConfig &RC;
 
-  void clear();
 
 public:
   explicit HWResTable(ResourceConfig &rc) : RC(rc) {}
   ~HWResTable();
 
   HWResource *initResource(std::string Name);
+
+  void clear();
 
   /// Get the least busy resource of a given kind
 };

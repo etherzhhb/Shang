@@ -41,7 +41,6 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool HWAtomInfo::runOnFunction(Function &F) {
   LI = &getAnalysis<LoopInfo>();
-  RC = &getAnalysis<ResourceConfig>();
 
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     // Setup the state.
@@ -63,6 +62,7 @@ void HWAtomInfo::clear() {
   UniqiueHWAtoms.clear();
   InstToHWAtoms.clear();
   BBToStates.clear();
+  RT.clear();
 }
 
 void HWAtomInfo::releaseMemory() {
@@ -99,7 +99,7 @@ void HWAtomInfo::visitPHINode(PHINode &I) {
 void HWAtomInfo::visitSelectInst(SelectInst &I) {
   SmallVector<HWAtom*, 4> Deps;
   addOperandDeps(I, Deps);
-  HWResource *Res = RC->getResource("Mux");
+  HWResource *Res = RT.initResource("Mux");
   assert(Res && "Can find resource!");
 
   HWAtom *SelAtom = getOpRes(I, Deps, *Res);
@@ -126,7 +126,7 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   // Push the control root base on dependence analysis
   Deps.push_back(getControlRoot());
 
-  HWResource *Res = RC->getResource("MemoryBus");
+  HWResource *Res = RT.initResource("MemoryBus");
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
@@ -146,7 +146,7 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   // Push the control root base on dependence analysis
   Deps.push_back(getControlRoot());
 
-  HWResource *Res = RC->getResource("MemoryBus");
+  HWResource *Res = RT.initResource("MemoryBus");
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
@@ -165,7 +165,7 @@ void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   SmallVector<HWAtom*, 2> Deps;
   addOperandDeps(I, Deps);
 
-  HWResource *Res = RC->getResource("Add");
+  HWResource *Res = RT.initResource("Add");
   assert(Res && "Can find resource!");
 
   // Create the atom
@@ -193,7 +193,7 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
     Deps.push_back(RHS);
   }
 
-  HWResource *Res = RC->getResource("ICmp");
+  HWResource *Res = RT.initResource("ICmp");
   assert(Res && "Can find resource!");
   HWAtom *CmpAtom = getOpRes(I, Deps, *Res);
   // Register it
@@ -213,41 +213,43 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
 
   if (Instruction *RHI = dyn_cast<Instruction>(I.getOperand(1)))
     RHS = getAtomInState(*RHI, I.getParent());
-
+  
+  std::string ResName("Unknown");
   // Select the resource
   switch (I.getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
-      Res = RC->getResource("Add");
+      ResName = "Add";
       break;
     case Instruction::Mul:
-      Res = RC->getResource("Mul");
+      ResName ="Mul";
       break;
     case Instruction::And:
-      Res = RC->getResource("And");
+      ResName ="And";
       break;
     case Instruction::Or:
-      Res = RC->getResource("Or");
+      ResName ="Or";
       break;
     case Instruction::Xor:
-      Res = RC->getResource("Xor");
+      ResName ="Xor";
       break;
     case Instruction::Shl:
-      Res = RC->getResource("Shl");
+      ResName ="Shl";
       break;
     case Instruction::LShr:
-      Res = RC->getResource("LShr");
+      ResName ="LShr";
       break;
     case Instruction::AShr:
       // Add the signed prefix
       if (LHS)
         LHS = getSigned(LHS);
       
-      Res = RC->getResource("AShr");
+      ResName ="AShr";
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");
   }
+  Res = RT.initResource(ResName);
   assert(Res && "Can find resource!");
   SmallVector<HWAtom*, 2> Deps;
   if (LHS)  Deps.push_back(LHS);
@@ -421,4 +423,10 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
       I != E; ++I) {
     I->second->print(O);
   }
+}
+
+HWAtomInfo::HWAtomInfo()
+: FunctionPass(&ID), ControlRoot(0), CurState(0),
+LI(0), RT(*(new ResourceConfig()))  {
+  llvm_unreachable("We can not create HWSAtomInfo like this!");
 }

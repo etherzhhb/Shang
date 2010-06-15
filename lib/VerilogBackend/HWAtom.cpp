@@ -85,7 +85,11 @@ void HWAOpPreAllRes::print(raw_ostream &OS) const {
 
 //===----------------------------------------------------------------------===//
 void HWResTable::clear() {
-  ResSet.clear();
+  while (!ResSet.empty()) {
+    ResourceSetType::iterator I = ResSet.begin();
+    (*I)->clear();
+    ResSet.erase(I);
+  }
 }
 
 HWResTable::~HWResTable() {

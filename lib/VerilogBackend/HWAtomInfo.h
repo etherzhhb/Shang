@@ -214,13 +214,16 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   // The loop Info
   LoopInfo *LI;
-  ResourceConfig *RC;
+  HWResTable RT;
 public:
 
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RC(0) {}
+  explicit HWAtomInfo(ResourceConfig &RC)
+    : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RT(RC) {}
+
+  explicit HWAtomInfo();
 
   bool runOnFunction(Function &F);
   void releaseMemory();
