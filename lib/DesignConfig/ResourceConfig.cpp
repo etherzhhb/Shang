@@ -10,6 +10,7 @@
 */
 
 #include "vbe/ResourceConfig.h"
+#include "vbe/HWAtom.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
@@ -46,6 +47,11 @@ void HWResource::print(raw_ostream &OS) const {
   OS.indent(2) << "TotalNum: " << TotalRes << '\n';
   OS.indent(2) << "Latency: " << Latency << '\n';
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
+}
+
+void HWResource::clear() {
+  UsingAtoms.clear();
+  CycMap.clear();
 }
 
 //===----------------------------------------------------------------------===//

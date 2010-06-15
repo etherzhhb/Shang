@@ -15,8 +15,6 @@
 //
 // This file define the HWAtom class, which represent the basic atom operation
 // in hardware.
-// This file also define the HWAtomInfo class, which construction the HWAtom
-// represent from LLVM IR.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -37,9 +35,6 @@
 
 #include "vbe/ResourceConfig.h"
 
-namespace llvm {
-class LoopInfo;
-}
 using namespace llvm;
 
 namespace esyn {
@@ -277,21 +272,28 @@ public:
 class HWAOpRes : public HWASchedable {
 
   // The resoure that this atom using.
-  HWResource &UsingRes;
+  HWResource &Used;
+
+  // The instance of allocate resource
+  unsigned AllInst;
 
 protected:
   explicit HWAOpRes(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWASchedable(ID, T, Inst, deps, numDep), UsingRes(Res) {}
+    Instruction &Inst, HWAtom *const *deps, size_t numDep,
+    HWResource &Res, unsigned Instance)
+    : HWASchedable(ID, T, Inst, deps, numDep), Used(Res), AllInst(Instance) {
+    // Remember we used this resource.
+    Used.addUsingAtom(this);
+  }
 public:
   /// @name The using resource
   //{
-  HWResource &getUsingResource() const {
-    return UsingRes;
+  HWResource &getUsedResource() const {
+    return Used;
   }
   // Get the latancy of this atom
   unsigned getLatency() const {
-    return UsingRes.getLatency();
+    return Used.getLatency();
   }
   //}
 
@@ -308,7 +310,7 @@ class HWAOpPostAllRes : public HWAOpRes {
 public:
   explicit HWAOpPostAllRes(const FoldingSetNodeIDRef ID,
     Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWAOpRes(ID, atomOpPostAllRes, Inst, deps, numDep, Res) {}
+    : HWAOpRes(ID, atomOpPostAllRes, Inst, deps, numDep, Res, 0) {}
 
   void print(raw_ostream &OS) const;
 
@@ -323,8 +325,9 @@ public:
 class HWAOpPreAllRes : public HWAOpRes {
 public:
   explicit HWAOpPreAllRes(const FoldingSetNodeIDRef ID,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWAOpRes(ID, atomOpPreAllRes, Inst, deps, numDep, Res) {}
+    Instruction &Inst, HWAtom *const *deps, size_t numDep,
+    HWResource &Res, unsigned Instance)
+    : HWAOpRes(ID, atomOpPreAllRes, Inst, deps, numDep, Res, Instance) {}
 
   void print(raw_ostream &OS) const;
 
@@ -335,201 +338,25 @@ public:
   }
 };
 
-/// @brief Hardware atom construction pass
-///
-class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
-  /// @name InstVisitor interface
-  //{
-  friend class InstVisitor<HWAtomInfo>;
-  void visitTerminatorInst(TerminatorInst &I);
-
-  void visitReturnInst(ReturnInst &I) {
-    visitTerminatorInst(I);
-  }
-  void visitBranchInst(BranchInst &I) {
-    visitTerminatorInst(I);
-  }
-  void visitSwitchInst(SwitchInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitIndirectBrInst(IndirectBrInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitInvokeInst(InvokeInst &I) {
-    llvm_unreachable("HWAtomFilterPass pass didn't work!");
-  }
-
-  void visitUnwindInst(UnwindInst &I) {
-    llvm_unreachable("HWAtomFilterPass pass didn't work!");
-  }
-  void visitUnreachableInst(UnreachableInst &I){}
-
-  void visitPHINode(PHINode &I);
-  void visitBinaryOperator(Instruction &I);
-  void visitICmpInst(ICmpInst &I);
-  void visitFCmpInst(FCmpInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-
-  void visitCastInst (CastInst &I);
-  void visitSelectInst(SelectInst &I);
-  void visitCallInst (CallInst &I){
-    llvm_unreachable("Instruction not support yet!");}
-  void visitInlineAsm(CallInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee) {
-    llvm_unreachable("Instruction not support yet!");
-  }
-
-  void visitAllocaInst(AllocaInst &I) {
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitLoadInst  (LoadInst   &I);
-  void visitStoreInst (StoreInst  &I);
-  void visitGetElementPtrInst(GetElementPtrInst &I);
-  void visitVAArgInst (VAArgInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-
-  void visitInsertElementInst(InsertElementInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitExtractElementInst(ExtractElementInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitShuffleVectorInst(ShuffleVectorInst &SVI){
-    llvm_unreachable("Instruction not support yet!");
-  }
-
-  void visitInsertValueInst(InsertValueInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitExtractValueInst(ExtractValueInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-
-  void visitInstruction(Instruction &I) {
-#ifndef NDEBUG
-    errs() << "HWAtomInfo does not know about " << I;
-#endif
-    llvm_unreachable(0);
-  }
-  //}
-
-  // Allocator
-  BumpPtrAllocator HWAtomAllocator;
-
-  // 
-  FoldingSet<HWAtom> UniqiueHWAtoms;
-  
-  HWAStateBegin *getStateBegin(BasicBlock &BB);
-
-  HWAStateEnd *getStateEnd(TerminatorInst &Term,
-                           SmallVectorImpl<HWAtom*> &Deps);
-
-  HWARegister *getRegister(Instruction &I, HWAtom *Using);
-
-  HWASigned *getSigned(HWAtom *Using);
-
-  HWAWireOp *getWireOp(Instruction &I, HWAtom *Using);
-
-  HWAOpRes *getOpRes(Instruction &I,
-                            SmallVectorImpl<HWAtom*> &Deps,
-                            HWResource &Res) {   
-    if (Res.isInfinite())
-      return getOpPreAllRes(I, Deps, Res);
-    else
-      return getOpPostAllRes(I, Deps, Res);
-  }
-
-  HWAOpPostAllRes *getOpPostAllRes(Instruction &I,
-                                   SmallVectorImpl<HWAtom*> &Deps,
-                                   HWResource &Res);
-
-  HWAOpPreAllRes *getOpPreAllRes(Instruction &I,
-                                 SmallVectorImpl<HWAtom*> &Deps,
-                                 HWResource &Res);
-
-
-  // Maping Instruction to HWAtoms
-  typedef DenseMap<const Instruction*, HWAtom*> AtomMapType;
-  AtomMapType InstToHWAtoms;
-
-
-
-  HWAtom *getAtomFor(Instruction &Inst) const {
-    AtomMapType::const_iterator At = InstToHWAtoms.find(&Inst);
-    assert(At != InstToHWAtoms.end() && "Can not get the Atom!");
-    return  At->second;
-  }
-
-  typedef DenseMap<const BasicBlock*, HWAStateBegin*> StateMapType;
-  StateMapType BBToStates;
-  HWAtom *ControlRoot;
-  HWAStateBegin *CurState;
-
-  HWAStateBegin *getCurState() {
-    return CurState;
-  }
-
-  void updateStateTo(BasicBlock &BB) {
-    CurState = getStateBegin(BB);
-    BBToStates.insert(
-      std::make_pair<const BasicBlock*, HWAStateBegin*>(&BB, CurState));
-    SetControlRoot(CurState);
-  }
-
-  HWAtom *getControlRoot() {
-    return ControlRoot;
-  }
-
-  HWAtom *getAtomInState(Instruction &Inst, BasicBlock *BB) {
-    if (BB == Inst.getParent())
-      return getAtomFor(Inst);
-    else
-      // Create the register
-      return getRegister(Inst, CurState);
-  }
-  void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
-    BasicBlock *ParentBB = I.getParent();
-    HWAStateBegin *CurState = getStateFor(*ParentBB);
-    for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
-        OI != OE; ++OI) {
-      if (Instruction *OpI = dyn_cast<Instruction>(OI))
-        // Restrict the dependences in the current state
-        Deps.push_back(getAtomInState(*OpI, ParentBB));
-    }
-  }
-
-  void SetControlRoot(HWAtom *NewRoot) {
-    ControlRoot = NewRoot;
-  }
-
-  HWAStateBegin *getStateFor(BasicBlock &BB) const {
-    StateMapType::const_iterator At = BBToStates.find(&BB);
-    assert(At != BBToStates.end() && "Can not get the State!");
-    return  At->second;
-  }
+/// @brief Resource Table
+class HWResTable {
+  /// mapping allocated instences to atom
+  typedef std::set<HWResource*> ResourceSetType;
+  ///
+  ResourceSetType ResSet;
+  ///
+  ResourceConfig &RC;
 
   void clear();
 
-  // The loop Info
-  LoopInfo *LI;
-  ResourceConfig *RC;
 public:
+  explicit HWResTable(ResourceConfig &rc) : RC(rc) {}
+  ~HWResTable();
 
-  /// @name FunctionPass interface
-  //{
-  static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RC(0) {}
+  HWResource *initResource(std::string Name);
 
-  bool runOnFunction(Function &F);
-  void releaseMemory();
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const;
-  //}
+  /// Get the least busy resource of a given kind
 };
 
 } // end namespace

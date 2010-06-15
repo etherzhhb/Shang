@@ -9,8 +9,8 @@
 * Nadav Rotem. 
 */
 
-#ifndef LLVM_PARAMS_H
-#define LLVM_PARAMS_H
+#ifndef VBE_RESOURCE_CONFIG_H
+#define VBE_RESOURCE_CONFIG_H
 
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
@@ -27,12 +27,14 @@
 #include "llvm/System/DataTypes.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <set>
 #include <map>
 #include <sstream>
 
 using namespace llvm;
 
 namespace esyn {
+class HWAOpRes;
 
 /// @brief Represent hardware resource
 class HWResource {
@@ -44,6 +46,13 @@ class HWResource {
   const unsigned StartInt;
   // How many resources available?
   const unsigned TotalRes;
+
+  typedef std::set<HWAOpRes*> HWAtomSetType;
+  HWAtomSetType UsingAtoms;
+
+  typedef std::map<unsigned, unsigned> CycleMapType;
+  // Mapping resource instance to its last start cycle.
+  CycleMapType CycMap;
 
   HWResource(const HWResource &);            // DO NOT IMPLEMENT
   void operator=(const HWResource &);  // DO NOT IMPLEMENT
@@ -62,15 +71,14 @@ public:
 
   void print(raw_ostream &OS) const;
 
-  // TODO: how to instance this resource.
+  void addUsingAtom(HWAOpRes *Atom) {
+    UsingAtoms.insert(Atom);
+  } 
+
+  size_t getUsingCount() const { return UsingAtoms.size(); }
+
+  void clear();
 }; 
-
-/// @brief Resource Table
-class HWResTable {
-  /// The resource and the instances left
-
-  /// Get the least busy resource of a given kind
-};
 
 class ResourceConfig : public ImmutablePass {
   

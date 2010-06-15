@@ -47,7 +47,7 @@
 #include <llvm/ADT/DenseMap.h>
 #include "llvm/Transforms/Utils/Cloning.h"
 
-#include "HWAtom.h"
+#include "HWAtomInfo.h"
 #include "RTLWriter.h"
 #include "TestBenchWriter.h"
 #include "vbe/ResourceConfig.h"
