@@ -118,7 +118,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
-  HWAStateBegin *getStateBegin(BasicBlock &BB);
+  HWAState *getState(BasicBlock &BB);
 
   HWAStateEnd *getStateEnd(TerminatorInst &Term,
     SmallVectorImpl<HWAtom*> &Deps);
@@ -162,19 +162,19 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     return  At->second;
   }
 
-  typedef DenseMap<const BasicBlock*, HWAStateBegin*> StateMapType;
+  typedef DenseMap<const BasicBlock*, HWAState*> StateMapType;
   StateMapType BBToStates;
   HWAtom *ControlRoot;
-  HWAStateBegin *CurState;
+  HWAState *CurState;
 
-  HWAStateBegin *getCurState() {
+  HWAState *getCurState() {
     return CurState;
   }
 
   void updateStateTo(BasicBlock &BB) {
-    CurState = getStateBegin(BB);
+    CurState = getState(BB);
     BBToStates.insert(
-      std::make_pair<const BasicBlock*, HWAStateBegin*>(&BB, CurState));
+      std::make_pair<const BasicBlock*, HWAState*>(&BB, CurState));
     SetControlRoot(CurState);
   }
 
@@ -191,7 +191,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   }
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
     BasicBlock *ParentBB = I.getParent();
-    HWAStateBegin *CurState = getStateFor(*ParentBB);
+    HWAState &CurState = getStateFor(*ParentBB);
     for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
       OI != OE; ++OI) {
         if (Instruction *OpI = dyn_cast<Instruction>(OI))
@@ -202,12 +202,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   void SetControlRoot(HWAtom *NewRoot) {
     ControlRoot = NewRoot;
-  }
-
-  HWAStateBegin *getStateFor(BasicBlock &BB) const {
-    StateMapType::const_iterator At = BBToStates.find(&BB);
-    assert(At != BBToStates.end() && "Can not get the State!");
-    return  At->second;
   }
 
   void clear();
@@ -224,6 +218,12 @@ public:
     : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RT(RC) {}
 
   explicit HWAtomInfo();
+
+  HWAState &getStateFor(BasicBlock &BB) const {
+    StateMapType::const_iterator At = BBToStates.find(&BB);
+    assert(At != BBToStates.end() && "Can not get the State!");
+    return  *(At->second);
+  }
 
   bool runOnFunction(Function &F);
   void releaseMemory();

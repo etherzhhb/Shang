@@ -20,3 +20,67 @@
 //
 
 #include "ScheduleDriver.h"
+
+#include "llvm/Support/Debug.h"
+
+
+using namespace llvm;
+using namespace esyn;
+
+void ScheduleDriver::getAnalysisUsage(AnalysisUsage &AU) const {
+}
+
+
+void ScheduleDriver::releaseMemory() {
+
+}
+
+bool ScheduleDriver::runOnFunction(Function &F) {
+  return false;
+}
+
+void ScheduleDriver::print(raw_ostream &O, const Module *M) const {
+
+}
+
+void ScheduleDriver::clear() {
+}
+
+char ScheduleDriver::ID = 0;
+
+void Scheduler::clear() {
+  ResCycMap.clear();
+}
+
+Scheduler::~Scheduler() {
+  clear();
+}
+
+unsigned Scheduler::getReadyCycle(const HWResource *Resource,
+                                  unsigned Instance) {
+  return ResCycMap[Resource][Instance];
+}
+
+void Scheduler::rememberReadyCycle(const HWResource *Resource,
+                                   unsigned Instance,
+                                   unsigned ReadyCycle){
+  ResCycMap[Resource][Instance] = ReadyCycle;
+}
+
+HWAtom* Scheduler::getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
+                                 unsigned Cycle) const {
+  typedef SmallVectorImpl<HWAtom*> AtomVec;
+  for (AtomVec::iterator I = ToSchedAtoms.begin(), E = ToSchedAtoms.end();
+      I != E; ++I) {
+    HWAtom *atom = *I;
+    if (atom->getSlot() > Cycle
+        && atom->isAllDepsOpFin(Cycle)) {
+      
+      atom->print(dbgs());
+      dbgs() << " is Ready\n";
+
+      return atom;
+    }
+  }
+  return 0;
+}

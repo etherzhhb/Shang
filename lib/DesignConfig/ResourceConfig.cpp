@@ -49,9 +49,24 @@ void HWResource::print(raw_ostream &OS) const {
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
 }
 
+unsigned HWResource::getLeastBusyInstance() const {
+  // {Least using count, idx}
+  std::pair<unsigned, unsigned> ret(0, 0);
+  for (unsigned i = 0, e = UsingCount.size(); i != e; ++i) {
+    if (UsingCount[i] == 0)
+      return i + 1;
+    if (UsingCount[i] < ret.first) {
+      ret.first = UsingCount[i];
+      ret.second = i;
+    }
+  }
+  return ret.second + 1;
+}
+
 void HWResource::clear() {
   UsingAtoms.clear();
-  CycMap.clear();
+  for (unsigned i = 0, e = UsingCount.size(); i != e; ++i)
+    UsingCount[i] = 0;
 }
 
 //===----------------------------------------------------------------------===//

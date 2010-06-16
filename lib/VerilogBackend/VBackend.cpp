@@ -44,10 +44,11 @@
 #include <sstream>
 #include "llvm/Support/raw_ostream.h"
 
-#include <llvm/ADT/DenseMap.h>
-#include "llvm/Transforms/Utils/Cloning.h"
+
+#include "llvm/Support/Debug.h"
 
 #include "HWAtomInfo.h"
+#include "ScheduleDriver.h"
 #include "RTLWriter.h"
 #include "TestBenchWriter.h"
 #include "vbe/ResourceConfig.h"
@@ -76,7 +77,7 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<TargetData>();//JAWAD
     AU.addRequired<VLang>();
-    //AU.addRequired<ListSchedDriver>();
+    AU.addRequired<HWAtomInfo>();
     AU.setPreservesAll();
   }
 
@@ -90,6 +91,9 @@ char VWriter::ID = 0;
 bool VWriter::runOnFunction(Function &F) { 
   TargetData *TD =  &getAnalysis<TargetData>();//JAWAD
   VLang &vlang = getAnalysis<VLang>();
+  dbgs() << "============================================================\n";
+  getAnalysis<HWAtomInfo>().print(dbgs(), 0);
+
 //  RTLWriter DesignWriter(vlang, TD);
 //
 //  ListSchedDriver &LSD = getAnalysis<ListSchedDriver>();
@@ -169,6 +173,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(new VLang());
     //
     PM.add(new HWAtomInfo(*RC));
+    PM.add(new ListScheduler());
     //
     PM.add(new VWriter(Out));
     PM.add(new TestbenchWriter(Out));

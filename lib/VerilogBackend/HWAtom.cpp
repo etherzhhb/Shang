@@ -62,15 +62,40 @@ void HWAStateEnd::print(raw_ostream &OS) const {
   OS << "State Transfer: " << Val;
 }
 
-void HWAStateBegin::print(raw_ostream &OS) const {
+
+void HWAState::getScheduleMap(std::multimap<unsigned, HWAtom*> &Atoms) const {
+  for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
+    HWAtom *A = *I;
+    Atoms.insert(std::make_pair<unsigned, HWAtom*>(A->getSlot(), A));
+  }
+}
+
+void HWAState::print(raw_ostream &OS) const {
   OS << "State: ";
   WriteAsOperand(OS, &getValue(), false);
   OS << "\n";
-  for (HWAStateBegin::const_iterator I = begin(), E = end(); I != E; ++I) {
-    (*I)->print(OS.indent(2));
-    OS << "\n";
+  //for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
+  //  (*I)->print(OS.indent(2));
+  //  OS << "\n";
+  //}
+  unsigned oldSlot = 0;
+
+  std::multimap<unsigned, HWAtom*> Atoms;
+  getScheduleMap(Atoms);
+  for (std::multimap<unsigned, HWAtom*>::iterator I = Atoms.begin(),
+      E = Atoms.end(); I != E; ++I) {
+    HWAtom *A = I->second;
+    if (A->getSlot() != oldSlot) {
+      oldSlot = A->getSlot();
+      OS << "Cycle: " << oldSlot << "\n";
+    }
+    A->print(OS.indent(2));
+    OS << " at "<< A->getSlot() << "\n";
   }
-  
+
+  const HWAStateEnd &StateEnd = *getStateEnd();
+  StateEnd.print(OS.indent(2));
+  OS << " at "<< StateEnd.getSlot() << "\n";
 }
 
 void HWAOpPostAllRes::print(raw_ostream &OS) const {

@@ -68,6 +68,7 @@ class HWAtom : public FoldingSetNode {
   HWAtom *const *Deps;
   size_t NumDeps;
 
+
 private:
   HWAtom(const HWAtom &);            // DO NOT IMPLEMENT
   void operator=(const HWAtom &);  // DO NOT IMPLEMENT
@@ -76,12 +77,17 @@ protected:
   // The corresponding LLVM Instruction
   Value &Val;
 
+  // The time slot that this atom scheduled to.
+  unsigned SchedSlot;
+
   virtual ~HWAtom();
+
 public:
   explicit HWAtom(const FoldingSetNodeIDRef ID,
     unsigned HWAtomTy, Value &V, 
-    HWAtom *const *deps, size_t numDeps) :
-  FastID(ID), HWAtomType(HWAtomTy), Val(V), Deps(deps), NumDeps(numDeps) {}
+    HWAtom *const *deps, size_t numDeps) 
+    : FastID(ID), HWAtomType(HWAtomTy), Val(V), Deps(deps),
+    NumDeps(numDeps), SchedSlot(UINT32_MAX >> 1) {}
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
@@ -107,6 +113,21 @@ public:
   const_dep_iterator dep_end() const { return Deps + NumDeps; }
   //}
 
+  virtual void reset() { SchedSlot = UINT32_MAX  >> 1; }
+
+  void scheduledTo(unsigned slot) { SchedSlot = slot; }
+  unsigned getSlot() const { return SchedSlot; }
+
+  virtual bool isOperationFinish(unsigned CurSlot) const = 0;
+
+  bool isAllDepsOpFin(unsigned CurSlot) const {
+    for (const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
+      if (!(*I)->isOperationFinish(CurSlot))
+        return false;
+    }
+    return true;
+  }
+
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
   /// purposes.
@@ -123,6 +144,10 @@ protected:
   explicit HWAInline(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Value &V, HWAtom *const *O) : HWAtom(ID, T, V, O, 1) {}
 public:
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return SchedSlot <= CurSlot;
+  }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAInline *A) { return true; }
@@ -184,39 +209,16 @@ public:
     Value &Val, HWAtom *const *deps, size_t numDep)
     : HWAtom(ID, T, Val, deps, numDep) {}
 
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return SchedSlot < CurSlot;
+  }
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAStateTrans *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomStateBegin ||
            A->getHWAtomType() == atomStateEnd;
-  }
-};
-
-class HWAStateBegin : public HWAStateTrans {
-  typedef std::vector<HWAtom*> HWAtomVecType;
-
-  // Atoms in this state
-  HWAtomVecType Atoms;
-public:
-  explicit HWAStateBegin(const FoldingSetNodeIDRef ID, BasicBlock &BB)
-    : HWAStateTrans(ID, atomStateBegin, BB, 0, 0) {}
-
-  void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
-
-  typedef HWAtomVecType::iterator iterator;
-  iterator begin() { return Atoms.begin(); }
-  iterator end() { return Atoms.end(); }
-
-  typedef HWAtomVecType::const_iterator const_iterator;
-  const_iterator begin() const { return Atoms.begin(); }
-  const_iterator end() const { return Atoms.end(); }
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAStateBegin *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomStateBegin;
   }
 };
 
@@ -232,6 +234,53 @@ public:
   static inline bool classof(const HWAStateEnd *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomStateEnd;
+  }
+};
+
+
+class HWAState : public HWAStateTrans {
+  typedef std::vector<HWAtom*> HWAtomVecType;
+
+  HWAStateEnd *StateEnd;
+
+  // Atoms in this state
+  HWAtomVecType Atoms;
+
+
+public:
+  explicit HWAState(const FoldingSetNodeIDRef ID, BasicBlock &BB)
+    : HWAStateTrans(ID, atomStateBegin, BB, 0, 0), StateEnd(0) {}
+
+  void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
+
+  typedef HWAtomVecType::iterator iterator;
+  iterator begin() { return Atoms.begin(); }
+  iterator end() { return Atoms.end(); }
+
+  typedef HWAtomVecType::const_iterator const_iterator;
+  const_iterator begin() const { return Atoms.begin(); }
+  const_iterator end() const { return Atoms.end(); }
+
+  void resetAll() {
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      (*I)->reset();
+  }
+
+  void endWith(HWAStateEnd &stateEnd) {
+    StateEnd = &stateEnd;
+  }
+
+  HWAStateEnd *getStateEnd() { return StateEnd; }
+  const HWAStateEnd *getStateEnd() const { return StateEnd; }
+
+  void getScheduleMap(std::multimap<unsigned, HWAtom*> &Atoms) const;
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAState *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomStateBegin;
   }
 };
 
@@ -273,7 +322,7 @@ class HWAOpRes : public HWASchedable {
 
   // The resoure that this atom using.
   HWResource &Used;
-
+protected:
   // The instance of allocate resource
   unsigned AllInst;
 
@@ -291,11 +340,21 @@ public:
   HWResource &getUsedResource() const {
     return Used;
   }
+
+  unsigned getAllocatedResourceInstance() const {
+    return AllInst;
+  }
+
   // Get the latancy of this atom
   unsigned getLatency() const {
     return Used.getLatency();
   }
   //}
+
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return SchedSlot + getLatency() <= CurSlot;
+  }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAOpRes *A) { return true; }
@@ -305,8 +364,14 @@ public:
   }
 };
 
+/// TODO: remove these two class.
 /// @brief The atom that operates post-allocate resources
 class HWAOpPostAllRes : public HWAOpRes {
+protected:
+  virtual void reset() { 
+    HWAtom::reset();
+    AllInst = 0;
+  }
 public:
   explicit HWAOpPostAllRes(const FoldingSetNodeIDRef ID,
     Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)

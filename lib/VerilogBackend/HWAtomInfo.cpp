@@ -35,7 +35,7 @@ RegisterPass<HWAtomInfo> X("vbe-hw-atom-info",
 
 void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LoopInfo>();
-  AU.addRequired<ResourceConfig>();
+  AU.addRequiredTransitive<ResourceConfig>();
   AU.setPreservesAll();
 }
 
@@ -74,12 +74,10 @@ void HWAtomInfo::releaseMemory() {
 // Construct atom
 void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // TODO: the emitNextLoop atom
+  HWAState *CurState = getCurState();
 
-  SmallVector<HWAtom*, 2> Deps;
-  addOperandDeps(I, Deps);
-
-  // Push the control root?
-  Deps.push_back(getControlRoot());
+  // State end depand on or others atoms
+  SmallVector<HWAtom*, 64> Deps(CurState->begin(), CurState->end());
   // Get the atom
   HWAStateEnd *Atom = getStateEnd(I, Deps);
   // Remember the atom.
@@ -92,7 +90,7 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 void HWAtomInfo::visitPHINode(PHINode &I) {
   // Create the register
-  HWARegister *Reg = getRegister(I, getStateFor(*I.getParent()));
+  HWARegister *Reg = getRegister(I, &getStateFor(*I.getParent()));
   InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Reg));
 }
 
@@ -265,17 +263,17 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
 
 //===----------------------------------------------------------------------===//
 // Create atom
-HWAStateBegin *HWAtomInfo::getStateBegin(BasicBlock &BB) {
+HWAState *HWAtomInfo::getState(BasicBlock &BB) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomStateBegin);
   ID.AddPointer(&BB);
 
   void *IP = 0;
-  HWAStateBegin *A =
-    static_cast<HWAStateBegin*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAState *A =
+    static_cast<HWAState*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAStateBegin(ID.Intern(HWAtomAllocator), BB);
+    A = new (HWAtomAllocator) HWAState(ID.Intern(HWAtomAllocator), BB);
     // Dont Add New Atom
     // getCurState()->addNewAtom(A);
   }
@@ -283,7 +281,7 @@ HWAStateBegin *HWAtomInfo::getStateBegin(BasicBlock &BB) {
 }
 
 HWAStateEnd *HWAtomInfo::getStateEnd(TerminatorInst &Term,
-                                          SmallVectorImpl<HWAtom*> &Deps) {
+                                     SmallVectorImpl<HWAtom*> &Deps) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomStateEnd);
   ID.AddPointer(&Term);
@@ -301,7 +299,7 @@ HWAStateEnd *HWAtomInfo::getStateEnd(TerminatorInst &Term,
     A = new (HWAtomAllocator) HWAStateEnd(ID.Intern(HWAtomAllocator),
       Term, O, Deps.size());
     // Add New Atom
-    getCurState()->addNewAtom(A);
+    getCurState()->endWith(*A);
   }
   return A;
 }

@@ -50,9 +50,8 @@ class HWResource {
   typedef std::set<HWAOpRes*> HWAtomSetType;
   HWAtomSetType UsingAtoms;
 
-  typedef std::map<unsigned, unsigned> CycleMapType;
-  // Mapping resource instance to its last start cycle.
-  CycleMapType CycMap;
+  typedef std::vector<unsigned> UsingCountVec;
+  UsingCountVec UsingCount;
 
   HWResource(const HWResource &);            // DO NOT IMPLEMENT
   void operator=(const HWResource &);  // DO NOT IMPLEMENT
@@ -61,7 +60,11 @@ public:
 
   explicit HWResource(std::string name,
     unsigned latency, unsigned startInt, unsigned totalRes)
-    : Name(name), Latency(latency), StartInt(startInt), TotalRes(totalRes) {}
+    : Name(name), Latency(latency), StartInt(startInt),
+      TotalRes(totalRes), UsingCount(totalRes != UINT32_MAX ? totalRes : 0) {
+    //
+    clear();
+  }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
@@ -75,7 +78,19 @@ public:
     UsingAtoms.insert(Atom);
   } 
 
-  size_t getUsingCount() const { return UsingAtoms.size(); }
+  size_t getUsingCount(unsigned idx = 0) const {
+    assert(idx <= UsingCount.size() + 1 && "idx out of range!");
+    if (idx == 0)
+      return UsingAtoms.size(); 
+    else
+      return UsingCount[idx - 1];
+  }
+
+  void assignToInstance(unsigned instance) {
+    ++UsingCount[instance - 1];
+  }
+
+  unsigned getLeastBusyInstance() const;
 
   void clear();
 }; 
