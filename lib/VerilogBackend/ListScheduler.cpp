@@ -88,6 +88,9 @@ bool esyn::ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
       ReadyAtom->print(dbgs());
       dbgs() << " scheduled\n";
+      // Remove the exist atom
+      HWAtomVec::iterator at = std::find(Atoms.begin(), Atoms.end(), ReadyAtom);
+      Atoms.erase(at);
     }
 
     // Advance the state
