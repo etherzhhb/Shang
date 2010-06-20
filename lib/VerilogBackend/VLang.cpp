@@ -262,45 +262,41 @@ raw_ostream &VLang::emitEndCase(raw_ostream &ss) {
   return ss;
 }
 
-raw_ostream &VLang::emitEnd(raw_ostream &ss)
-{
+raw_ostream &VLang::emitEnd(raw_ostream &ss) {
   ind_level -= 2;
   indent(ss) << "end\n";
   return ss;
 }
 
-raw_ostream &VLang::emitIfElse(raw_ostream &ss)
-{
+raw_ostream &VLang::emitIfElse(raw_ostream &ss) {
   ind_level -=2;
   indent(ss) << "end else begin\n";
   ind_level +=2;
   return ss;
 }
 
-raw_ostream &VLang::emitIfBegin(raw_ostream &ss, const std::string &Condition)
-{
+raw_ostream &VLang::emitIfBegin(raw_ostream &ss,
+                                const std::string &Condition) {
   indent(ss) << "if (" << Condition << ") begin\n";
   ind_level += 2;
   return ss;
 }
 
-raw_ostream &VLang::emitCaseStateBegin(raw_ostream &ss, const std::string &StateName)
-{
+raw_ostream &VLang::emitCaseStateBegin(raw_ostream &ss,
+                                       const std::string &StateName) {
   indent(ss) << StateName << ": begin\n";
   ind_level += 2;
   return ss;
 }
 
-raw_ostream &VLang::emitCaseBegin(raw_ostream &ss)
-{
+raw_ostream &VLang::emitCaseBegin(raw_ostream &ss) {
   indent(ss) << "case (eip)\n";
   // Do not need to indent
   //ind_level += 2;
   return ss;
 }
 
-raw_ostream &VLang::emitEndAlwaysff(raw_ostream &ss)
-{
+raw_ostream &VLang::emitEndAlwaysff(raw_ostream &ss) {
   ind_level -=2;
   indent(ss) << "end //else reset\n";
   ind_level -=2;
@@ -308,8 +304,7 @@ raw_ostream &VLang::emitEndAlwaysff(raw_ostream &ss)
   return ss;
 }
 
-raw_ostream &VLang::emitEndReset(raw_ostream &ss)
-{
+raw_ostream &VLang::emitEndReset(raw_ostream &ss) {
   ind_level -= 2;
   indent(ss) << "end\n";
   // TODO: clock enable
@@ -318,8 +313,10 @@ raw_ostream &VLang::emitEndReset(raw_ostream &ss)
   return ss;
 }
 
-raw_ostream &VLang::emitParam(raw_ostream &ss, const std::string &Name, unsigned BitWidth, unsigned Val)
-{
+raw_ostream &VLang::emitParam(raw_ostream &ss,
+                              const std::string &Name,
+                              unsigned BitWidth,
+                              unsigned Val) {
   indent(ss) << "parameter " << Name
     << " = " << printConstantInt(Val, BitWidth, false) << ";\n";
   return ss;
