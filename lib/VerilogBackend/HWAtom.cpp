@@ -98,14 +98,10 @@ void HWAState::print(raw_ostream &OS) const {
   OS << " at "<< StateEnd.getSlot() << "\n";
 }
 
-void HWAOpPostAllRes::print(raw_ostream &OS) const {
+void HWAOpRes::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
-  OS << " PostAllRes: " << getUsedResource().getName();
-}
-
-void HWAOpPreAllRes::print(raw_ostream &OS) const {
-  WriteAsOperand(OS, &getValue(), false);
-  OS << " PreAllRes: " << getUsedResource().getName();
+  OS << " Res: " << getUsedResource().getName()
+    << " Instance: " << AllInst << '\n';
 }
 
 //===----------------------------------------------------------------------===//

@@ -128,7 +128,7 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *LoadAtom = getOpPreAllRes(I, Deps, *Res, 1);
+  HWAtom *LoadAtom = getOpRes(I, Deps, *Res, 1);
   // Set as new atom
   SetControlRoot(LoadAtom);
   // And register the result
@@ -148,7 +148,7 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *StoreAtom = getOpPreAllRes(I, Deps, *Res, 1);
+  HWAtom *StoreAtom = getOpRes(I, Deps, *Res, 1);
   // Set as new atom
   SetControlRoot(StoreAtom);
 
@@ -364,51 +364,27 @@ HWAWireOp *HWAtomInfo::getWireOp(Instruction &I, HWAtom *Using) {
   return A;
 }
 
-HWAOpPostAllRes *HWAtomInfo::getOpPostAllRes(Instruction &I,
-                                             SmallVectorImpl<HWAtom*> &Deps,
-                                             HWResource &Res) {
+HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
+                               SmallVectorImpl<HWAtom*> &Deps,
+                               HWResource &Res, unsigned ResInst) {
+  if (Res.isInfinite() && ResInst == 0)
+    ResInst = Res.getUsingCount() + 1;
+
   FoldingSetNodeID ID;
-  ID.AddInteger(atomOpPostAllRes);
-  ID.AddPointer(&I);
-  ID.AddInteger(Deps.size());
-  ID.AddPointer(&Res);
-  for (unsigned i = 0, e = Deps.size(); i != e; ++i)
-    ID.AddPointer(Deps[i]);
-
-  void *IP = 0;
-  HWAOpPostAllRes *A =
-    static_cast<HWAOpPostAllRes*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
-
-  if (!A) {
-    HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
-    std::uninitialized_copy(Deps.begin(), Deps.end(), O);
-    A = new (HWAtomAllocator) HWAOpPostAllRes(ID.Intern(HWAtomAllocator),
-      I, O, Deps.size(), Res);
-    // Add New Atom
-    getCurState()->addNewAtom(A);
-  }
-  return A;
-}
-
-
-HWAOpPreAllRes *HWAtomInfo::getOpPreAllRes(Instruction &I,
-                                           SmallVectorImpl<HWAtom*> &Deps,
-                                           HWResource &Res, unsigned ResInst) {
-  FoldingSetNodeID ID;
-  ID.AddInteger(atomOpPreAllRes);
+  ID.AddInteger(atomOpRes);
   ID.AddPointer(&I);
   ID.AddInteger(Deps.size());
   for (unsigned i = 0, e = Deps.size(); i != e; ++i)
     ID.AddPointer(Deps[i]);
 
   void *IP = 0;
-  HWAOpPreAllRes *A =
-    static_cast<HWAOpPreAllRes*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAOpRes *A =
+    static_cast<HWAOpRes*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
-    A = new (HWAtomAllocator) HWAOpPreAllRes(ID.Intern(HWAtomAllocator),
+    A = new (HWAtomAllocator) HWAOpRes(ID.Intern(HWAtomAllocator),
       I, O, Deps.size(), Res, ResInst);
     // Add New Atom
     getCurState()->addNewAtom(A);

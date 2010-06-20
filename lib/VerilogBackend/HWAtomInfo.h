@@ -129,26 +129,8 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   HWAWireOp *getWireOp(Instruction &I, HWAtom *Using);
 
-  HWAOpRes *getOpRes(Instruction &I,
-    SmallVectorImpl<HWAtom*> &Deps,
-    HWResource &Res) {   
-      if (Res.isInfinite())
-        return getOpPreAllRes(I, Deps,
-                              Res,
-                              // Allocate a new instance for infinite resource
-                              Res.getUsingCount() + 1);
-      else
-        return getOpPostAllRes(I, Deps, Res);
-  }
-
-  HWAOpPostAllRes *getOpPostAllRes(Instruction &I,
-    SmallVectorImpl<HWAtom*> &Deps,
-    HWResource &Res);
-
-  HWAOpPreAllRes *getOpPreAllRes(Instruction &I,
-    SmallVectorImpl<HWAtom*> &Deps,
-    HWResource &Res, unsigned ResInst);
-
+  HWAOpRes *getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps, 
+                     HWResource &Res, unsigned ResInst = 0);
 
   // Maping Instruction to HWAtoms
   typedef DenseMap<const Instruction*, HWAtom*> AtomMapType;

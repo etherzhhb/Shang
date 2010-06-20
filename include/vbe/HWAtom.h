@@ -41,14 +41,12 @@ namespace esyn {
 
 enum HWAtomTypes {
   atomSignedPrefix,   // Represent the Signed marker, use in Ashr
-  atomWireOp,        // Trunc, Z/SExt, PtrToInt, IntToPtr
+  atomWireOp,         // Trunc, Z/SExt, PtrToInt, IntToPtr
                       // Data communication atom
   atomRegister,       // Assign value to register, use in infinite scheduler
                       // Schedeable atoms
                       // Operate resource
-                      // on pre-allocate resource,
-  atomOpPreAllRes,    // operate infinite resource 
-  atomOpPostAllRes,   // on post-allocated limited resource
+  atomOpRes,          // operate infinite resource
                       // all infinite resource is pre-allocate
   atomStateBegin,     // state transfer
   atomStateEnd,
@@ -299,8 +297,7 @@ public:
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWASchedable *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpPreAllRes ||
-      A->getHWAtomType() == atomOpPostAllRes ||
+    return A->getHWAtomType() == atomOpRes ||
       A->getHWAtomType() == atomEmitNextLoop;
   }
 };
@@ -326,15 +323,15 @@ protected:
   // The instance of allocate resource
   unsigned AllInst;
 
-protected:
-  explicit HWAOpRes(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep,
-    HWResource &Res, unsigned Instance)
-    : HWASchedable(ID, T, Inst, deps, numDep), Used(Res), AllInst(Instance) {
+public:
+  explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
+    HWAtom *const *deps, size_t numDep, HWResource &Res, unsigned Instance)
+    : HWASchedable(ID, atomOpRes, Inst, deps, numDep),
+      Used(Res), AllInst(Instance) {
     // Remember we used this resource.
     Used.addUsingAtom(this);
   }
-public:
+
   /// @name The using resource
   //{
   HWResource &getUsedResource() const {
@@ -356,53 +353,14 @@ public:
     return SchedSlot + getLatency() <= CurSlot;
   }
 
+  void print(raw_ostream &OS) const;
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAOpRes *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpPostAllRes ||
-      A->getHWAtomType() == atomOpPreAllRes;
+    return A->getHWAtomType() == atomOpRes;
   }
 };
-
-/// TODO: remove these two class.
-/// @brief The atom that operates post-allocate resources
-class HWAOpPostAllRes : public HWAOpRes {
-protected:
-  virtual void reset() { 
-    HWAtom::reset();
-    AllInst = 0;
-  }
-public:
-  explicit HWAOpPostAllRes(const FoldingSetNodeIDRef ID,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep, HWResource &Res)
-    : HWAOpRes(ID, atomOpPostAllRes, Inst, deps, numDep, Res, 0) {}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAOpPostAllRes *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpPostAllRes;
-  }
-};
-
-/// @brief The atom that operate in infinite resource
-class HWAOpPreAllRes : public HWAOpRes {
-public:
-  explicit HWAOpPreAllRes(const FoldingSetNodeIDRef ID,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep,
-    HWResource &Res, unsigned Instance)
-    : HWAOpRes(ID, atomOpPreAllRes, Inst, deps, numDep, Res, Instance) {}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAOpPreAllRes *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpPreAllRes;
-  }
-};
-
 
 /// @brief Resource Table
 class HWResTable {
