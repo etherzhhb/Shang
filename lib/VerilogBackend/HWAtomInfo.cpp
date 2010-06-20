@@ -45,14 +45,14 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     // Setup the state.
     BasicBlock &BB = *I;
-    dbgs() << "Building atom for BB: " << BB.getName() << '\n';
+    DEBUG(dbgs() << "Building atom for BB: " << BB.getName() << '\n');
     updateStateTo(BB);
     for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE; ++BI) {
       visit(*BI);
     }
   }
 
-  print(dbgs(), 0);
+  DEBUG(print(dbgs(), 0));
 
   return false;
 }

@@ -44,7 +44,7 @@ void HWASigned::print(raw_ostream &OS) const {
 }
 
 
-void HWARegister::print( raw_ostream &OS ) const {
+void HWARegister::print(raw_ostream &OS) const {
   OS << "Register: ";
   WriteAsOperand(OS, &Val, false);
   OS << " using ";

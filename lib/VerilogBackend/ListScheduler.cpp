@@ -33,17 +33,17 @@ void ListScheduler::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void ListScheduler::getAnalysisUsage( AnalysisUsage &AU ) const {
+void ListScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   //AU.addRequired<ScheduleDriver>();
   AU.setPreservesAll();
 }
 
 
-bool esyn::ListScheduler::runOnBasicBlock(BasicBlock &BB) {
+bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
 
-  dbgs() << "At BB: " << BB.getName() << '\n';
+  DEBUG(dbgs() << "At BB: " << BB.getName() << '\n');
 
   unsigned CurCycle = 0;
 
@@ -63,7 +63,7 @@ bool esyn::ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
   // TODO: Check if the atoms are empty
   while (!StateEnd->isAllDepsOpFin(CurCycle)) {
-    dbgs() << "======Cycle " << CurCycle << "\n";
+    DEBUG(dbgs() << "======Cycle " << CurCycle << "\n");
     // Find all ready atoms
 
     // For each ready atoms
@@ -86,8 +86,8 @@ bool esyn::ListScheduler::runOnBasicBlock(BasicBlock &BB) {
       }
       ReadyAtom->scheduledTo(CurCycle);
 
-      ReadyAtom->print(dbgs());
-      dbgs() << " scheduled\n";
+      DEBUG(ReadyAtom->print(dbgs()));
+      DEBUG(dbgs() << " scheduled\n");
       // Remove the exist atom
       HWAtomVec::iterator at = std::find(Atoms.begin(), Atoms.end(), ReadyAtom);
       Atoms.erase(at);
@@ -99,7 +99,7 @@ bool esyn::ListScheduler::runOnBasicBlock(BasicBlock &BB) {
   // schedule the state end;
   StateEnd->scheduledTo(CurCycle);
 
-  State.print(dbgs());
+  DEBUG(State.print(dbgs()));
   return false;
 }
 

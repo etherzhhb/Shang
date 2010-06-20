@@ -74,10 +74,8 @@ HWAtom* Scheduler::getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
       I != E; ++I) {
     HWAtom *atom = *I;
     if (atom->isAllDepsOpFin(Cycle)) {
-      
-      atom->print(dbgs());
-      dbgs() << " is Ready\n";
-
+      DEBUG(atom->print(dbgs()));
+      DEBUG(dbgs() << " is Ready\n");
       return atom;
     }
   }

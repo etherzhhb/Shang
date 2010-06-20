@@ -76,6 +76,7 @@ public:
 
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);
+
   static std::string printType(const Type *Ty, 
     bool isSigned = false,
     const std::string &VariableName = "", 
@@ -89,154 +90,55 @@ public:
     const std::string &SignalType = "wire");
   //}
 
-  template<class StreamTy>
-  StreamTy &indent(StreamTy &ss) {
-    //ss << "ind(" << format("%02d", ind_level) << ")";
-    return static_cast<StreamTy&>(ss.indent(ind_level));
-  }
-  template<class StreamTy>
-  StreamTy &emitCommentBegin(StreamTy &ss){
-    ss << "\n";
-    indent(ss) << "//  ";
-    return ss;
-  }
-
-  template<class StreamTy>
-  StreamTy &emitModuleBegin(StreamTy &ss, std::string &ModuleName,
+  
+  raw_ostream &indent(raw_ostream &ss) const;
+  
+  raw_ostream &emitCommentBegin(raw_ostream &ss) const;
+  
+  raw_ostream &emitModuleBegin(raw_ostream &ss, std::string &ModuleName,
                             const std::string &Clk = "clk",
                             const std::string &Rst = "rstN",
-                            unsigned ind = 0) {
-    ind_level = ind;
-    indent(ss) << "module " << ModuleName << "(\n";
-    ind_level+=4;
-    return ss;
-  }
+                            unsigned ind = 0);
 
-  template<class StreamTy>
-  StreamTy &emitEndModuleDecl(StreamTy &ss) {
-    ss <<  ");\n";
-    ind_level-=2;
-    return ss;
-  }
+  
+  raw_ostream &emitEndModuleDecl(raw_ostream &ss);
 
-  template<class StreamTy>
-  StreamTy &emitAlwaysffBegin(StreamTy &ss,
-                              const std::string &Clk = "clk",
-                              const std::string &ClkEdge = "posedge",
-                              const std::string &Rst = "rstN",
-                              const std::string &RstEdge = "negedge") {
+  raw_ostream &emitAlwaysffBegin(raw_ostream &ss,
+                                const std::string &Clk = "clk",
+                                const std::string &ClkEdge = "posedge",
+                                const std::string &Rst = "rstN",
+                                const std::string &RstEdge = "negedge");
 
-    // TODO: Support Sync reset
-    // TODO: SystemVerilog always_ff?
-    indent(ss) << "always @("
-                      << ClkEdge << " "<< Clk <<", "
-                      << RstEdge << " " << Rst
-                      <<") begin\n";
-    ind_level += 2;
-    indent(ss) << "if (";
-    // negative edge reset?
-    if (RstEdge == "negedge")
-      ss << "!";
-    ss << Rst << ") begin\n";
-    ind_level += 2;
-    indent(ss) << "// reset registers\n";
-    // TODO: Reset other registers!
-    return ss;
-  }
+  
+  raw_ostream &emitResetRegister(raw_ostream &ss,
+                                const std::string &Name,
+                                unsigned BitWidth,
+                                unsigned InitVal = 0);
 
-  template<class StreamTy>
-  StreamTy &emitResetRegister(StreamTy &ss,
-                              const std::string &Name,
-                              unsigned BitWidth,
-                              unsigned InitVal = 0) {
-    indent(ss) << Name << " <=  "
-      << printConstantInt(InitVal, BitWidth, false)
-      << ";\n";;
-    return ss;
-  }
+  
+  raw_ostream &emitParam(raw_ostream &ss,
+                        const std::string &Name,
+                        unsigned BitWidth,
+                        unsigned Val);
 
-  template<class StreamTy>
-  StreamTy &emitParam(StreamTy &ss,
-                      const std::string &Name,
-                      unsigned BitWidth,
-                      unsigned Val) {
-    indent(ss) << "parameter " << Name
-      << " = " << printConstantInt(Val, BitWidth, false) << "\n";
-    return ss;
-  }
+  
+  raw_ostream &emitEndReset(raw_ostream &ss);
 
-  template<class StreamTy>
-  StreamTy &emitEndReset(StreamTy &ss) {
-    ind_level -= 2;
-    indent(ss) << "end\n";
-    // TODO: clock enable
-    indent(ss) << "else begin //else reset\n";
-    ind_level += 2;
-    return ss;
-  }
+  raw_ostream &emitEndAlwaysff(raw_ostream &ss);
+  
+  raw_ostream &emitCaseBegin(raw_ostream &ss);
+  
+  raw_ostream &emitCaseStateBegin(raw_ostream &ss, const std::string &StateName);
 
-  template<class StreamTy>
-  StreamTy &emitEndAlwaysff(StreamTy &ss) {
+  raw_ostream &emitIfBegin(raw_ostream &ss, const std::string &Condition);
+  
+  raw_ostream &emitIfElse(raw_ostream &ss);
 
-    ind_level -=2;
-    indent(ss) << "end //else reset\n";
-    ind_level -=2;
-    indent(ss) << "end //always @(..)\n\n";
-    return ss;
-  }
-  template<class StreamTy>
-  StreamTy &emitCaseBegin(StreamTy &ss) {
-
-    indent(ss) << "case (eip)\n";
-    // Do not need to indent
-    //ind_level += 2;
-    return ss;
-  }
-  template<class StreamTy>
-  StreamTy &emitCaseStateBegin(StreamTy &ss, const std::string &StateName) {
-    indent(ss) << StateName << ": begin\n";
-    ind_level += 2;
-    return ss;
-  }
-
-  template<class StreamTy>
-  StreamTy &emitIfBegin(StreamTy &ss, const std::string &Condition) {
-    indent(ss) << "if (" << Condition << ") begin\n";
-    ind_level += 2;
-    return ss;
-  }
-
-  template<class StreamTy>
-  StreamTy &emitIfElse(StreamTy &ss) {
-    ind_level -=2;
-    indent(ss) << "end else begin\n";
-    ind_level +=2;
-    return ss;
-  }
-
-
-  template<class StreamTy>
-  StreamTy &emitEnd(StreamTy &ss) {
-    ind_level -= 2;
-    indent(ss) << "end\n";
-    return ss;
-  }
-
-  template<class StreamTy>
-  StreamTy &emitEndCase(StreamTy &ss) {
-    // Do "case" dose not indent
-    //ind_level -= 2;
-    indent(ss) << " endcase //eip\n";
-    return ss;
-  }
-
-  template<class StreamTy>
-  StreamTy &emitEndModule(StreamTy &ss) {
-
-    ind_level -=2;
-    indent(ss) << "endmodule\n\n";
-    return ss;
-  }
+  raw_ostream &emitEnd(raw_ostream &ss);
+  
+  raw_ostream &emitEndCase(raw_ostream &ss);
+  
+  raw_ostream &emitEndModule(raw_ostream &ss);
 
   virtual void initializePass();
 
