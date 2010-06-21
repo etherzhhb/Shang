@@ -380,6 +380,15 @@ public:
 
   void clear();
 
+  typedef ResourceSetType::iterator iterator;
+  typedef ResourceSetType::const_iterator const_iterator;
+
+  iterator begin() { return ResSet.begin(); }
+  const_iterator begin() const { return ResSet.begin(); }
+
+  iterator end() { return ResSet.end(); }
+  const_iterator end() const { return ResSet.end(); }
+
   /// Get the least busy resource of a given kind
 };
 

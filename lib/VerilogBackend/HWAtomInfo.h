@@ -201,17 +201,26 @@ public:
 
   explicit HWAtomInfo();
 
+  bool runOnFunction(Function &F);
+  void releaseMemory();
+  void getAnalysisUsage(AnalysisUsage &AU) const;
+  virtual void print(raw_ostream &O, const Module *M) const;
+  //}
+
   HWAState &getStateFor(BasicBlock &BB) const {
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");
     return  *(At->second);
   }
 
-  bool runOnFunction(Function &F);
-  void releaseMemory();
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const;
-  //}
+  typedef HWResTable::iterator resource_iterator;
+  typedef HWResTable::const_iterator const_resource_iterator;
+
+  resource_iterator resource_begin() { return RT.begin(); }
+  const_resource_iterator resource_begin() const { return RT.begin(); }
+
+  resource_iterator resource_end() { return RT.end(); }
+  const_resource_iterator resource_end() const { return RT.end(); }
 };
 } // end namespace
 #endif

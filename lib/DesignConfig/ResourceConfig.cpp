@@ -73,7 +73,7 @@ void HWResource::clear() {
 /// Resource config implement
 void ResourceConfig::initializePass() {
   ParseConfigFile(ConfigFilename);
-  print(dbgs());
+  DEBUG(print(dbgs()));
 }
 
 #define DefXmlNode(Parent, Name); \
