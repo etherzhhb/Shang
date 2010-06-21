@@ -37,16 +37,28 @@
 #include "vbe/utils.h"
 #include "vbe/ResourceConfig.h"
 
-#include "HWAtomInfo.h"
 #include "VLang.h"
 
 using namespace llvm;
 
 
 namespace esyn {
+class HWAtomInfo;
 
 class RTLWriter : public FunctionPass {
   raw_ostream &Out;
+  TargetData *TD;
+  VLang *vlang;
+  HWAtomInfo *HI;
+
+  // Buffers
+  raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath, AlwaysBlock;
+
+  void emitFunctionSignature(raw_ostream &ss, VLang *vlang, const Function &F);
+
+  void emitFiniteResources(HWResource &Resource);
+
+  void emitBasicBlocks(BasicBlock &BB);
 
   void clear();
 
@@ -55,7 +67,15 @@ public:
   //{
   static char ID;
   explicit RTLWriter(raw_ostream &O)
-    : FunctionPass(&ID), Out(O) {}
+    : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0),
+    ModDecl(*(new std::string("//Design module\n"))),
+    StateDecl(*(new std::string("  // State Decl\n"))),
+    SignalDecl(*(new std::string("  // Signal Decl\n"))),
+    DataPath(*(new std::string("  // Data Path\n"))),
+    AlwaysBlock(*(new std::string("  // AlwaysBlock\n"))) {
+
+  }
+  ~RTLWriter();
 
   bool runOnFunction(Function &F);
   void releaseMemory() { clear(); }
