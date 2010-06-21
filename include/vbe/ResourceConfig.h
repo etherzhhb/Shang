@@ -58,8 +58,8 @@ class HWResource {
 public:
   static const unsigned Infinite = UINT32_MAX;
 
-  explicit HWResource(std::string name,
-    unsigned latency, unsigned startInt, unsigned totalRes)
+  explicit HWResource(std::string name, unsigned latency,
+    unsigned startInt, unsigned totalRes)
     : Name(name), Latency(latency), StartInt(startInt),
       TotalRes(totalRes), UsingCount(totalRes != UINT32_MAX ? totalRes : 0) {
     //
@@ -80,9 +80,9 @@ public:
 
   size_t getUsingCount(unsigned idx = 0) const {
     assert(idx <= UsingCount.size() + 1 && "idx out of range!");
-    if (idx == 0)
+    if (idx == 0) // Return the total usage
       return UsingAtoms.size(); 
-    else
+    else // 
       return UsingCount[idx - 1];
   }
 
