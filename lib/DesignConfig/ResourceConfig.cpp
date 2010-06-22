@@ -109,9 +109,9 @@ static unsigned getSubNodeAsInteger(XmlNode *Node, std::string name) {
 HWMemBus * HWMemBus::createFromXml(XmlNode *Node) {
   assert(Node && "Node can not be null!");
   return new HWMemBus(getSubNodeAsString(Node, "Name"),
-                      getSubNodeAsInteger(Node, "TotalNum"),
                       getSubNodeAsInteger(Node, "Latency"),
                       getSubNodeAsInteger(Node, "StartInterval"),
+                      getSubNodeAsInteger(Node, "TotalNum"),
                       getSubNodeAsInteger(Node, "AddressWidth"),
                       getSubNodeAsInteger(Node, "DataWidth"));
 }
@@ -146,13 +146,15 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
     switch (getResourceType(ResNode)) {
     case MemoryBus:
       Res = HWMemBus::createFromXml(ResNode);
+      break;
     default:
       Res =
         new HWResource(LogicUnit,
         getSubNodeAsString(ResNode, "Name"),
-        getSubNodeAsInteger(ResNode, "TotalNum"),
         getSubNodeAsInteger(ResNode, "Latency"),
-        getSubNodeAsInteger(ResNode, "StartInterval"));
+        getSubNodeAsInteger(ResNode, "StartInterval"),
+        getSubNodeAsInteger(ResNode, "TotalNum"));
+      break;
     }
     ResTab.insert(std::pair<std::string, HWResource*> (Res->getName(), Res));
   }

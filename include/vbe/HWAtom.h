@@ -271,7 +271,9 @@ public:
   HWAStateEnd *getStateEnd() { return StateEnd; }
   const HWAStateEnd *getStateEnd() const { return StateEnd; }
 
-  void getScheduleMap(std::multimap<unsigned, HWAtom*> &Atoms) const;
+  typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
+
+  void getScheduleMap(ScheduleMapType &Atoms) const;
 
   void print(raw_ostream &OS) const;
 

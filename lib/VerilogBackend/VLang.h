@@ -93,52 +93,53 @@ public:
   
   raw_ostream &indent(raw_ostream &ss) const;
   
-  raw_ostream &emitCommentBegin(raw_ostream &ss) const;
+  raw_ostream &comment(raw_ostream &ss) const;
   
-  raw_ostream &emitModuleBegin(raw_ostream &ss, std::string &ModuleName,
-                            const std::string &Clk = "clk",
-                            const std::string &Rst = "rstN",
-                            unsigned ind = 0);
+  raw_ostream &moduleBegin(raw_ostream &ss, std::string &ModuleName);
 
   
-  raw_ostream &emitEndModuleDecl(raw_ostream &ss);
+  raw_ostream &endModuleDecl(raw_ostream &ss);
 
-  raw_ostream &emitAlwaysffBegin(raw_ostream &ss,
-                                const std::string &Clk = "clk",
-                                const std::string &ClkEdge = "posedge",
-                                const std::string &Rst = "rstN",
-                                const std::string &RstEdge = "negedge");
+  raw_ostream &alwaysBegin(raw_ostream &ss, unsigned ind,
+                          const std::string &Clk = "clk",
+                          const std::string &ClkEdge = "posedge",
+                          const std::string &Rst = "rstN",
+                          const std::string &RstEdge = "negedge");
 
   
-  raw_ostream &emitResetRegister(raw_ostream &ss,
+  raw_ostream &resetRegister(raw_ostream &ss,
                                 const std::string &Name,
                                 unsigned BitWidth,
                                 unsigned InitVal = 0);
 
   
-  raw_ostream &emitParam(raw_ostream &ss,
+  raw_ostream &param(raw_ostream &ss,
                         const std::string &Name,
                         unsigned BitWidth,
                         unsigned Val);
 
-  
-  raw_ostream &emitEndReset(raw_ostream &ss);
+  raw_ostream &declSignal(raw_ostream &ss,
+                            const std::string &Name,
+                            unsigned BitWidth,
+                            unsigned Val,
+                            const std::string &SignalType = "reg ",
+                            bool isSigned = false);
 
-  raw_ostream &emitEndAlwaysff(raw_ostream &ss);
+  raw_ostream &alwaysEnd(raw_ostream &ss, unsigned ind);
   
-  raw_ostream &emitCaseBegin(raw_ostream &ss);
+  raw_ostream &switchCase(raw_ostream &ss, const std::string &StateName);
   
-  raw_ostream &emitCaseStateBegin(raw_ostream &ss, const std::string &StateName);
+  raw_ostream &matchCase(raw_ostream &ss, const std::string &StateName);
 
-  raw_ostream &emitIfBegin(raw_ostream &ss, const std::string &Condition);
+  raw_ostream &ifBegin(raw_ostream &ss, const std::string &Condition);
   
-  raw_ostream &emitIfElse(raw_ostream &ss);
+  raw_ostream &ifElse(raw_ostream &ss);
 
-  raw_ostream &emitEnd(raw_ostream &ss);
+  raw_ostream &end(raw_ostream &ss);
   
-  raw_ostream &emitEndCase(raw_ostream &ss);
+  raw_ostream &endSwitch(raw_ostream &ss);
   
-  raw_ostream &emitEndModule(raw_ostream &ss);
+  raw_ostream &endModule(raw_ostream &ss);
 
   virtual void initializePass();
 

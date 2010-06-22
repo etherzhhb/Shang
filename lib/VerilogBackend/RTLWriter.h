@@ -36,6 +36,7 @@
 
 #include "vbe/utils.h"
 #include "vbe/ResourceConfig.h"
+#include "vbe/HWAtom.h"
 
 #include "VLang.h"
 
@@ -45,22 +46,95 @@ using namespace llvm;
 namespace esyn {
 class HWAtomInfo;
 
-class RTLWriter : public FunctionPass {
+class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
   raw_ostream &Out;
   TargetData *TD;
   VLang *vlang;
   HWAtomInfo *HI;
 
   // Buffers
-  raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath, AlwaysBlock;
+  raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
+    ControlBlock, ResetBlock;
 
-  void emitFunctionSignature(raw_ostream &ss, VLang *vlang, const Function &F);
+  void emitFunctionSignature(const Function &F);
+  void emitCommonPort();
+  void emitBasicBlock(BasicBlock &BB);
 
-  void emitFiniteResources(HWResource &Resource);
+  // Resource
+  void emitResources(HWResource &Resource);
+  void emitMemBus(HWMemBus &MemBus);
 
-  void emitBasicBlocks(BasicBlock &BB);
-
+  // Atoms
+  void emitRegister(HWARegister *Register);
+  void emitOpRes(HWAOpRes *OpRes);
   void clear();
+
+  raw_ostream &getStateDeclBuffer() {
+    return StateDecl.indent(2);
+  }
+
+  raw_ostream &getModDeclBuffer() {
+    return ModDecl.indent(4);
+  }
+
+  raw_ostream &getSignalDeclBuffer() {
+    return SignalDecl.indent(2);
+  }
+
+  raw_ostream &getResetBlockBuffer() {
+    return ResetBlock.indent(6);
+  }
+
+  void emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset = 0);
+
+  /// @name InstVisitor interface
+  //{
+  friend class InstVisitor<RTLWriter>;
+
+  void visitReturnInst(ReturnInst &I){}
+  void visitBranchInst(BranchInst &I){}
+  void visitSwitchInst(SwitchInst &I){}
+  void visitIndirectBrInst(IndirectBrInst &I){}
+  void visitInvokeInst(InvokeInst &I) {
+    llvm_unreachable("Lowerinvoke pass didn't work!");
+  }
+
+  void visitUnwindInst(UnwindInst &I) {
+    llvm_unreachable("Lowerinvoke pass didn't work!");
+  }
+  void visitUnreachableInst(UnreachableInst &I){}
+
+  void visitPHINode(PHINode &I){}
+  void visitBinaryOperator(Instruction &I){}
+  void visitICmpInst(ICmpInst &I){}
+  void visitFCmpInst(FCmpInst &I){}
+
+  void visitCastInst (CastInst &I){}
+  void visitSelectInst(SelectInst &I){}
+  void visitCallInst (CallInst &I){}
+  void visitInlineAsm(CallInst &I){}
+  bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee){}
+
+  void visitAllocaInst(AllocaInst &I){}
+  void visitLoadInst  (LoadInst   &I){}
+  void visitStoreInst (StoreInst  &I){}
+  void visitGetElementPtrInst(GetElementPtrInst &I){}
+  void visitVAArgInst (VAArgInst &I){}
+
+  void visitInsertElementInst(InsertElementInst &I){}
+  void visitExtractElementInst(ExtractElementInst &I){}
+  void visitShuffleVectorInst(ShuffleVectorInst &SVI){}
+
+  void visitInsertValueInst(InsertValueInst &I){}
+  void visitExtractValueInst(ExtractValueInst &I){}
+
+  void visitInstruction(Instruction &I) {
+#ifndef NDEBUG
+    errs() << "C Writer does not know about " << I;
+#endif
+    llvm_unreachable(0);
+  }
+  //}
 
 public:
   /// @name FunctionPass interface
@@ -68,12 +142,12 @@ public:
   static char ID;
   explicit RTLWriter(raw_ostream &O)
     : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0),
-    ModDecl(*(new std::string("//Design module\n"))),
-    StateDecl(*(new std::string("  // State Decl\n"))),
-    SignalDecl(*(new std::string("  // Signal Decl\n"))),
-    DataPath(*(new std::string("  // Data Path\n"))),
-    AlwaysBlock(*(new std::string("  // AlwaysBlock\n"))) {
-
+    ModDecl(*(new std::string())),
+    StateDecl(*(new std::string())),
+    SignalDecl(*(new std::string())),
+    DataPath(*(new std::string())),
+    ControlBlock(*(new std::string())),
+    ResetBlock(*(new std::string())){
   }
   ~RTLWriter();
 

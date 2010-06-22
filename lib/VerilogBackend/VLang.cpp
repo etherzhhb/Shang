@@ -189,9 +189,8 @@ char VLang::ID = 0;
 static RegisterPass<VLang> X("vlang", "vbe - Verilog language writer",
                              false, true);
 
-raw_ostream &VLang::emitCommentBegin(raw_ostream &ss) const {
-  ss << "\n";
-  indent(ss) << "//  ";
+raw_ostream &VLang::comment(raw_ostream &ss) const {
+  ss <<  "//  ";
   return ss;
 }
 
@@ -199,125 +198,108 @@ raw_ostream &VLang::indent(raw_ostream &ss) const {
   return ss.indent(ind_level);
 }
 
-raw_ostream &VLang::emitModuleBegin(raw_ostream &ss,
-                                    std::string &ModuleName,
-                                    const std::string &Clk /*= "clk"*/,
-                                    const std::string &Rst /*= "rstN"*/,
-                                    unsigned ind /*= 0*/) {
-  ind_level = ind;
-  indent(ss) << "module " << ModuleName << "(\n";
-  ind_level+=4;
+raw_ostream &VLang::moduleBegin(raw_ostream &ss, std::string &ModuleName) {
+  ss << "module " << ModuleName << "(\n";
   return ss;
 }
 
-raw_ostream &VLang::emitEndModuleDecl(raw_ostream &ss) {
+raw_ostream &VLang::endModuleDecl(raw_ostream &ss) {
   ss <<  ");\n";
-  ind_level-=2;
   return ss;
 }
 
-raw_ostream &VLang::emitAlwaysffBegin(raw_ostream &ss,
-                                      const std::string &Clk /*= "clk"*/,
-                                      const std::string &ClkEdge /*= "posedge"*/,
-                                      const std::string &Rst /*= "rstN"*/,
-                                      const std::string &RstEdge /*= "negedge"*/){
+raw_ostream &VLang::alwaysBegin(raw_ostream &ss, unsigned ind,
+                                const std::string &Clk /*= "clk"*/,
+                                const std::string &ClkEdge /*= "posedge"*/,
+                                const std::string &Rst /*= "rstN"*/,
+                                const std::string &RstEdge /*= "negedge"*/){
   // TODO: Support Sync reset
   // TODO: SystemVerilog always_ff?
-  indent(ss) << "always @("
+  ss.indent(ind) << "always @("
     << ClkEdge << " "<< Clk <<", "
     << RstEdge << " " << Rst
     <<") begin\n";
-  ind_level += 2;
-  indent(ss) << "if (";
+  ind += 2;
+  ss.indent(ind) << "if (";
   // negative edge reset?
   if (RstEdge == "negedge")
     ss << "!";
   ss << Rst << ") begin\n";
-  ind_level += 2;
-  indent(ss) << "// reset registers\n";
-  // TODO: Reset other registers!
+  ind += 2;
+  ss.indent(ind) << "// reset registers\n";
   return ss;
 }
 
-raw_ostream &VLang::emitResetRegister(raw_ostream &ss,
+raw_ostream &VLang::resetRegister(raw_ostream &ss,
                                      const std::string &Name,
                                      unsigned BitWidth,
                                      unsigned InitVal /*= 0*/){
-  indent(ss) << Name << " <=  "
-    << printConstantInt(InitVal, BitWidth, false)
-    << ";\n";;
+  ss << Name << " <=  " << printConstantInt(InitVal, BitWidth, false)
+     << ";\n";
   return ss;
 }
 
-raw_ostream &VLang::emitEndModule(raw_ostream &ss) {
-  ind_level -=2;
-  indent(ss) << "endmodule\n\n";
+raw_ostream &VLang::endModule(raw_ostream &ss) {
+  ss << "endmodule\n\n";
   return ss;
 }
 
-raw_ostream &VLang::emitEndCase(raw_ostream &ss) {
-  // Do "case" dose not indent
-  //ind_level -= 2;
-  indent(ss) << " endcase //eip\n";
+raw_ostream &VLang::endSwitch(raw_ostream &ss) {
+  ss << "endcase\n";
   return ss;
 }
 
-raw_ostream &VLang::emitEnd(raw_ostream &ss) {
-  ind_level -= 2;
-  indent(ss) << "end\n";
+raw_ostream &VLang::end(raw_ostream &ss) {
+  ss << "end\n";
   return ss;
 }
 
-raw_ostream &VLang::emitIfElse(raw_ostream &ss) {
-  ind_level -=2;
-  indent(ss) << "end else begin\n";
-  ind_level +=2;
+raw_ostream &VLang::ifElse(raw_ostream &ss) {
+  ss << "end else begin\n";
   return ss;
 }
 
-raw_ostream &VLang::emitIfBegin(raw_ostream &ss,
-                                const std::string &Condition) {
-  indent(ss) << "if (" << Condition << ") begin\n";
-  ind_level += 2;
+raw_ostream &VLang::ifBegin(raw_ostream &ss, const std::string &Condition) {
+  ss << "if (" << Condition << ") begin\n";
   return ss;
 }
 
-raw_ostream &VLang::emitCaseStateBegin(raw_ostream &ss,
-                                       const std::string &StateName) {
-  indent(ss) << StateName << ": begin\n";
-  ind_level += 2;
+raw_ostream &VLang::matchCase(raw_ostream &ss, const std::string &StateName) {
+  ss << StateName << ": begin\n";
   return ss;
 }
 
-raw_ostream &VLang::emitCaseBegin(raw_ostream &ss) {
-  indent(ss) << "case (eip)\n";
-  // Do not need to indent
-  //ind_level += 2;
+raw_ostream &VLang::switchCase(raw_ostream &ss, const std::string &StateName) {
+  ss << "case (" << StateName <<")\n";
   return ss;
 }
 
-raw_ostream &VLang::emitEndAlwaysff(raw_ostream &ss) {
-  ind_level -=2;
-  indent(ss) << "end //else reset\n";
-  ind_level -=2;
-  indent(ss) << "end //always @(..)\n\n";
+raw_ostream &VLang::alwaysEnd(raw_ostream &ss, unsigned ind) {
+  ss.indent(ind + 2) << "end //else reset\n";
+  ss.indent(ind) << "end //always @(..)\n\n";
   return ss;
 }
 
-raw_ostream &VLang::emitEndReset(raw_ostream &ss) {
-  ind_level -= 2;
-  indent(ss) << "end\n";
-  // TODO: clock enable
-  indent(ss) << "else begin //else reset\n";
-  ind_level += 2;
-  return ss;
-}
-
-raw_ostream &VLang::emitParam(raw_ostream &ss,
+raw_ostream &VLang::param(raw_ostream &ss,
                               const std::string &Name,
                               unsigned BitWidth,
                               unsigned Val) {
-  indent(ss) << "parameter " << Name
+  ss << "parameter " << Name
     << " = " << printConstantInt(Val, BitWidth, false) << ";\n";
+  return ss;
+}
+
+raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
+                                 unsigned BitWidth, unsigned Val,
+                                 const std::string &SignalType,
+                                 bool isSigned) {
+  ss << SignalType;
+  
+  if(isSigned) ss << "signed ";
+
+  if (BitWidth != 1) ss << "[" << BitWidth - 1 << ":0]";
+  
+  ss << " " << Name << " = "
+     << printConstantInt(0, BitWidth, false) << ";\n";
   return ss;
 }

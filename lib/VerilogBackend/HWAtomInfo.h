@@ -21,6 +21,9 @@
 
 #ifndef VBE_HARDWARE_ATOMINFO_H
 #define VBE_HARDWARE_ATOMINFO_H
+
+#include "llvm/Support/MathExtras.h"
+
 #include "vbe/HWAtom.h"
 
 namespace llvm {
@@ -191,13 +194,17 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // The loop Info
   LoopInfo *LI;
   HWResTable RT;
+
+  // Total states
+  unsigned totalCycle;
+
 public:
 
   /// @name FunctionPass interface
   //{
   static char ID;
   explicit HWAtomInfo(ResourceConfig &RC)
-    : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RT(RC) {}
+    : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RT(RC), totalCycle(1) {}
 
   explicit HWAtomInfo();
 
@@ -212,6 +219,16 @@ public:
     assert(At != BBToStates.end() && "Can not get the State!");
     return  *(At->second);
   }
+
+  unsigned getTotalCycle() const {
+    return totalCycle;
+  }
+
+  unsigned getTotalCycleBitWidth() const {
+    return Log2_32_Ceil(totalCycle);
+  }
+
+  void incTotalCycle() { ++totalCycle; }
 
   typedef HWResTable::iterator resource_iterator;
   typedef HWResTable::const_iterator const_resource_iterator;

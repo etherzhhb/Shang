@@ -45,8 +45,6 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
   DEBUG(dbgs() << "At BB: " << BB.getName() << '\n');
 
-  unsigned CurCycle = 0;
-
   HWAState &State = HI->getStateFor(BB);
   HWAStateEnd *StateEnd = State.getStateEnd();
   assert(StateEnd && "Why StateEnd is null?");
@@ -57,17 +55,17 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
   // TODO: sort the atoms
 
   // Remember the state start, so we can schedule this bb again
-  State.scheduledTo(CurCycle);
-  ++CurCycle;
+  State.scheduledTo(HI->getTotalCycle());
+  HI->incTotalCycle();
   // Schedule StateBegin
 
   // TODO: Check if the atoms are empty
-  while (!StateEnd->isAllDepsOpFin(CurCycle)) {
-    DEBUG(dbgs() << "======Cycle " << CurCycle << "\n");
+  while (!StateEnd->isAllDepsOpFin(HI->getTotalCycle())) {
+    DEBUG(dbgs() << "======Cycle " << HI->getTotalCycle() << "\n");
     // Find all ready atoms
 
     // For each ready atoms
-    while(HWAtom *ReadyAtom = getReadyAtoms(Atoms, CurCycle)){
+    while(HWAtom *ReadyAtom = getReadyAtoms(Atoms, HI->getTotalCycle())){
       if (HWAOpRes *OpRes = dyn_cast<HWAOpRes>(ReadyAtom)) {
         HWResource *Res = &OpRes->getUsedResource();
         unsigned ResInstance = OpRes->getAllocatedResourceInstance();
@@ -78,13 +76,14 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
         // Is the resource available?
         unsigned readyCyc = getReadyCycle(Res, ResInstance);
-        if (readyCyc > CurCycle)
+        if (readyCyc > HI->getTotalCycle())
           continue;
         
         //
-        rememberReadyCycle(Res, ResInstance, CurCycle + Res->getLatency());
+        rememberReadyCycle(Res, ResInstance,
+                          HI->getTotalCycle() + Res->getLatency());
       }
-      ReadyAtom->scheduledTo(CurCycle);
+      ReadyAtom->scheduledTo(HI->getTotalCycle());
 
       DEBUG(ReadyAtom->print(dbgs()));
       DEBUG(dbgs() << " scheduled\n");
@@ -94,10 +93,10 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
     }
 
     // Advance the state
-    ++CurCycle;
+    HI->incTotalCycle();
   }
   // schedule the state end;
-  StateEnd->scheduledTo(CurCycle);
+  StateEnd->scheduledTo(HI->getTotalCycle());
 
   DEBUG(State.print(dbgs()));
   return false;

@@ -63,6 +63,8 @@ void HWAtomInfo::clear() {
   InstToHWAtoms.clear();
   BBToStates.clear();
   RT.clear();
+  // Reset total Cycle
+  totalCycle = 1;
 }
 
 void HWAtomInfo::releaseMemory() {

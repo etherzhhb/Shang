@@ -63,7 +63,7 @@ void HWAStateEnd::print(raw_ostream &OS) const {
 }
 
 
-void HWAState::getScheduleMap(std::multimap<unsigned, HWAtom*> &Atoms) const {
+void HWAState::getScheduleMap(ScheduleMapType &Atoms) const {
   for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
     HWAtom *A = *I;
     Atoms.insert(std::make_pair<unsigned, HWAtom*>(A->getSlot(), A));
