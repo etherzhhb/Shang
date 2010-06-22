@@ -31,13 +31,29 @@
 #include <map>
 #include <sstream>
 
+namespace rapidxml {
+template<class> class xml_node;
+}
+
 using namespace llvm;
+
 
 namespace esyn {
 class HWAOpRes;
 
+enum HWResourceTypes {
+  MemoryBus = 1,
+  Shifter = 2,
+  Comparator = 3,
+  LogicUnit = 4,
+  ArithUnit = 5,
+
+};
+
 /// @brief Represent hardware resource
 class HWResource {
+  // The HWResource baseclass this node corresponds to
+  const unsigned short ResourceType;
   // The name of resource
   const std::string Name;
   // How many cycles to finish?
@@ -58,13 +74,15 @@ class HWResource {
 public:
   static const unsigned Infinite = UINT32_MAX;
 
-  explicit HWResource(std::string name, unsigned latency,
-    unsigned startInt, unsigned totalRes)
-    : Name(name), Latency(latency), StartInt(startInt),
+  explicit HWResource(enum HWResourceTypes type,
+    std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
+    : ResourceType(type), Name(name), Latency(latency), StartInt(startInt),
       TotalRes(totalRes), UsingCount(totalRes != UINT32_MAX ? totalRes : 0) {
     //
     clear();
   }
+
+  unsigned getResourceType() const { return ResourceType; }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
@@ -72,7 +90,7 @@ public:
   unsigned getStartInt() const { return StartInt; }
   const std::string &getName() const { return Name; }
 
-  void print(raw_ostream &OS) const;
+  virtual void print(raw_ostream &OS) const;
 
   void addUsingAtom(HWAOpRes *Atom) {
     UsingAtoms.insert(Atom);
@@ -94,6 +112,29 @@ public:
 
   void clear();
 }; 
+
+class HWMemBus : public HWResource {
+  unsigned AddrWidth;
+  unsigned DataWidth;
+  // Read latency and write latency
+
+  explicit HWMemBus(std::string name, unsigned latency,
+    unsigned startInt, unsigned totalRes,
+    unsigned addrWidth, unsigned dataWidth)
+    : HWResource(MemoryBus, name, latency, startInt, totalRes),
+    AddrWidth(addrWidth), DataWidth(dataWidth) {}
+public:
+  unsigned getAddrWidth() const { return AddrWidth; }
+  unsigned getDataWidth() const { return DataWidth; }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWMemBus *A) { return true; }
+  static inline bool classof(const HWResource *A) {
+    return A->getResourceType() == MemoryBus;
+  }
+
+  static HWMemBus *createFromXml(rapidxml::xml_node<char> Node);
+};
 
 class ResourceConfig : public ImmutablePass {
   

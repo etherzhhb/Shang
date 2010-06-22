@@ -29,6 +29,9 @@ using namespace llvm;
 using namespace esyn;
 using namespace rapidxml;
 
+//
+typedef xml_node<> XmlNode;
+
 //===----------------------------------------------------------------------===//
 /// Xml stuff
 static cl::opt<std::string>
@@ -70,20 +73,37 @@ void HWResource::clear() {
 }
 
 //===----------------------------------------------------------------------===//
+// Resource parsing
+
+static char *getSubNodeAsString(XmlNode *Node, std::string name) {
+  assert(Node && "Node can not be null!");
+  XmlNode *SubNode = Node->first_node(name.c_str());
+  if (SubNode == 0)
+    report_fatal_error("Can not parse " + name + "!\n");
+
+  return SubNode->value();
+}
+
+static unsigned getSubNodeAsInteger(XmlNode *Node, std::string name) {
+  unsigned ret;
+  StringRef val = StringRef(getSubNodeAsString(Node, name));
+  if (val.getAsInteger(0, ret))
+    report_fatal_error("Not integer node: " + name + "!\n");
+
+  return ret;
+}
+
+HWMemBus * HWMemBus::createFromXml(xml_node<> Node) {
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
 /// Resource config implement
 void ResourceConfig::initializePass() {
   ParseConfigFile(ConfigFilename);
   DEBUG(print(dbgs()));
 }
 
-#define DefXmlNode(Parent, Name); \
-  XmlNode *XmlNode##Name = ResNode->first_node(#Name); \
-  if (!XmlNode##Name) report_fatal_error("Can not parse: "#Name); \
-  StringRef Name##Val = XmlNode##Name->value();
-
-#define GetAsInteger(Name, Result); \
-  if (Name##Val.getAsInteger(0, Result)) \
-    report_fatal_error("Not integer: "#Name);
 
 void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   std::string ErrMsg;
@@ -100,27 +120,17 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   xml_document<> xml;
   xml.parse<0>(context);
 
-  typedef xml_node<> XmlNode;
   
   for (XmlNode *ResNode = xml.first_node("Resources");
       ResNode != 0; ResNode = ResNode->next_sibling("Resources")) {
-    DefXmlNode(ResNode, Name);
-    DefXmlNode(ResNode, TotalNum);
-    DefXmlNode(ResNode, Latency);
-    DefXmlNode(ResNode, StartInterval);
-    
-    //
-    unsigned totalNum;
-    GetAsInteger(TotalNum, totalNum);
-    
-    unsigned latency ;
-    GetAsInteger(Latency, latency);
 
-    unsigned startInterval;
-    GetAsInteger(StartInterval, startInterval);
-
-    HWResource *Res = new HWResource(NameVal, latency, startInterval, totalNum);
-    ResTab.insert(std::pair<std::string, HWResource*> (NameVal.str(), Res));
+    HWResource *Res =
+      new HWResource(LogicUnit,
+                     getSubNodeAsString(ResNode, "Name"),
+                     getSubNodeAsInteger(ResNode, "TotalNum"),
+                     getSubNodeAsInteger(ResNode, "Latency"),
+                     getSubNodeAsInteger(ResNode, "StartInterval"));
+    ResTab.insert(std::pair<std::string, HWResource*> (Res->getName(), Res));
   }
 }
 
