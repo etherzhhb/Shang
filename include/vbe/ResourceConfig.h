@@ -48,6 +48,8 @@ enum HWResourceTypes {
   LogicUnit = 4,
   ArithUnit = 5,
 
+  FirstResourceType = MemoryBus,
+  LastResourceType = ArithUnit
 };
 
 /// @brief Represent hardware resource
@@ -133,7 +135,7 @@ public:
     return A->getResourceType() == MemoryBus;
   }
 
-  static HWMemBus *createFromXml(rapidxml::xml_node<char> Node);
+  static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
 };
 
 class ResourceConfig : public ImmutablePass {

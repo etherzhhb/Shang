@@ -31,6 +31,7 @@ using namespace rapidxml;
 
 //
 typedef xml_node<> XmlNode;
+typedef xml_attribute<> XmlAttr;
 
 //===----------------------------------------------------------------------===//
 /// Xml stuff
@@ -74,6 +75,18 @@ void HWResource::clear() {
 
 //===----------------------------------------------------------------------===//
 // Resource parsing
+static enum HWResourceTypes getResourceType(XmlNode *Node) {
+  XmlAttr *attr = Node->first_attribute("type");
+  if (attr == 0)
+    return ArithUnit;
+  unsigned ret;
+  StringRef val = StringRef(attr->value());
+  if (val.getAsInteger(0, ret)
+      || (ret > LastResourceType || ret < FirstResourceType))
+    report_fatal_error("Bad resource type!\n");
+  
+  return (HWResourceTypes)ret;
+}
 
 static char *getSubNodeAsString(XmlNode *Node, std::string name) {
   assert(Node && "Node can not be null!");
@@ -93,8 +106,14 @@ static unsigned getSubNodeAsInteger(XmlNode *Node, std::string name) {
   return ret;
 }
 
-HWMemBus * HWMemBus::createFromXml(xml_node<> Node) {
-  return 0;
+HWMemBus * HWMemBus::createFromXml(XmlNode *Node) {
+  assert(Node && "Node can not be null!");
+  return new HWMemBus(getSubNodeAsString(Node, "Name"),
+                      getSubNodeAsInteger(Node, "TotalNum"),
+                      getSubNodeAsInteger(Node, "Latency"),
+                      getSubNodeAsInteger(Node, "StartInterval"),
+                      getSubNodeAsInteger(Node, "AddressWidth"),
+                      getSubNodeAsInteger(Node, "DataWidth"));
 }
 
 //===----------------------------------------------------------------------===//
@@ -123,13 +142,18 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   
   for (XmlNode *ResNode = xml.first_node("Resources");
       ResNode != 0; ResNode = ResNode->next_sibling("Resources")) {
-
-    HWResource *Res =
-      new HWResource(LogicUnit,
-                     getSubNodeAsString(ResNode, "Name"),
-                     getSubNodeAsInteger(ResNode, "TotalNum"),
-                     getSubNodeAsInteger(ResNode, "Latency"),
-                     getSubNodeAsInteger(ResNode, "StartInterval"));
+    HWResource *Res = 0;
+    switch (getResourceType(ResNode)) {
+    case MemoryBus:
+      Res = HWMemBus::createFromXml(ResNode);
+    default:
+      Res =
+        new HWResource(LogicUnit,
+        getSubNodeAsString(ResNode, "Name"),
+        getSubNodeAsInteger(ResNode, "TotalNum"),
+        getSubNodeAsInteger(ResNode, "Latency"),
+        getSubNodeAsInteger(ResNode, "StartInterval"));
+    }
     ResTab.insert(std::pair<std::string, HWResource*> (Res->getName(), Res));
   }
 }
