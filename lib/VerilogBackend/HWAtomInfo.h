@@ -130,10 +130,12 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   HWASigned *getSigned(HWAtom *Using);
 
-  HWAWireOp *getWireOp(Instruction &I, HWAtom *Using);
-
   HWAOpRes *getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps, 
-                     HWResource &Res, unsigned ResInst = 0);
+                     HWResource &Res,  unsigned latency, 
+                     unsigned ResInst = 0);
+
+  HWAOpInst *getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+                       unsigned latency);
 
   // Maping Instruction to HWAtoms
   // FIXME: Map value to atoms, so we can handle argument

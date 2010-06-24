@@ -209,6 +209,9 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
       case atomOpRes:
         emitOpRes(cast<HWAOpRes>(A));
         break;
+      case atomOpInst:
+        emitOpInst(cast<HWAOpInst>(A));
+        break;
       default:
         ;
       }
@@ -301,11 +304,16 @@ std::string RTLWriter::getAsOperand(Value *V) {
     return vlang->GetValueName(V);
 
   //
-  if (Instruction *I = dyn_cast<Instruction>(V))
+  if (Instruction *I = dyn_cast<Instruction>(V)) {
+    // Phi node is a register.
+    if (PHINode *PHI = dyn_cast<PHINode>(I))
+      return vlang->GetValueName(PHI) + "_phi_r";
+    
     return getAsOperand(*HI->getAtomFor(*I));
+  }
 
   //
-  return "<Unknown>";
+  return "<Unknown Inst>";
 }
 
 std::string RTLWriter::getAsOperand(HWAtom &A) {
@@ -313,9 +321,10 @@ std::string RTLWriter::getAsOperand(HWAtom &A) {
     case atomRegister:
       return vlang->GetValueName(&A.getValue()) + "_r";
     case atomOpRes:
+    case atomOpInst:
       return vlang->GetValueName(&A.getValue()) + "_w";
     default:
-      return "<Unknown>";
+      return "<Unknown Atom>";
   }
 }
 
@@ -338,7 +347,7 @@ void RTLWriter::emitRegister(HWARegister *Register) {
                          << getAsOperand(*Register->getDep(0)) << ";\n";
 }
 
-void RTLWriter::emitOpInst(HWAOpRes *OpRes) {
+void RTLWriter::emitOpInst(HWAOpInst *OpRes) {
   Instruction &Inst = cast<Instruction>(OpRes->getValue());
   std::string Name = getAsOperand(*OpRes);
   unsigned BitWidth = 0;
@@ -358,9 +367,7 @@ void RTLWriter::emitOpInst(HWAOpRes *OpRes) {
 }
 
 void RTLWriter::emitOpRes(HWAOpRes *OpRes) {
-  if (OpRes->getUsedResource().isInfinite())
-    emitOpInst(OpRes);
-  
+
 }
 
 void esyn::RTLWriter::emitStateEnd(HWAStateEnd *StateEnd) {
@@ -380,24 +387,67 @@ void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) 
 //===----------------------------------------------------------------------===//
 // Emit instructions
 void RTLWriter::visitICmpInst(ICmpInst &I) {
-  raw_ostream &ss = DataPath.indent(2);
-  ss << "(" << getAsOperand(I.getOperand(0));
+  DataPath << "(" << getAsOperand(I.getOperand(0));
   switch (I.getPredicate()) {
-      case ICmpInst::ICMP_EQ:  ss << " == "; break;
-      case ICmpInst::ICMP_NE:  ss << " != "; break;
+      case ICmpInst::ICMP_EQ:  DataPath << " == "; break;
+      case ICmpInst::ICMP_NE:  DataPath << " != "; break;
       case ICmpInst::ICMP_ULE:
-      case ICmpInst::ICMP_SLE: ss << " <= "; break;
+      case ICmpInst::ICMP_SLE: DataPath << " <= "; break;
       case ICmpInst::ICMP_UGE:
-      case ICmpInst::ICMP_SGE: ss << " >= "; break;
+      case ICmpInst::ICMP_SGE: DataPath << " >= "; break;
       case ICmpInst::ICMP_ULT:
-      case ICmpInst::ICMP_SLT: ss << " < "; break;
+      case ICmpInst::ICMP_SLT: DataPath << " < "; break;
       case ICmpInst::ICMP_UGT:
-      case ICmpInst::ICMP_SGT: ss << " > "; break;
+      case ICmpInst::ICMP_SGT: DataPath << " > "; break;
       default: DataPath << "Unknown icmppredicate";
   }
-  ss << getAsOperand(I.getOperand(1));
-  ss << ");";
-  vlang->comment(ss) << "Fixme: if operand is argument, the signed prefix lost!\n";
+  DataPath << getAsOperand(I.getOperand(1)) << ");";
+  vlang->comment(DataPath) 
+    << "Fixme: if operand is argument, the signed prefix lost!\n";
+}
+
+
+void RTLWriter::visitPHINode(PHINode &I) {
+  unsigned BitWidth = 0;
+  if (const IntegerType *IntTy = dyn_cast<IntegerType>(I.getType()))
+    BitWidth = IntTy->getBitWidth();
+  else if (I.getType()->isPointerTy())
+    BitWidth =  TD->getPointerSizeInBits();
+
+  std::string Name = getAsOperand(&I);
+
+  // Declare the register
+  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
+  // Reset the register
+  vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
+  // Phi node will be assign at terminate state
+}
+
+void RTLWriter::visitCastInst(CastInst &I) {
+  const IntegerType *Ty = cast<IntegerType>(I.getType());
+  Value *V = I.getOperand(0);
+  const IntegerType *ChTy = cast<IntegerType>(V->getType());
+
+  switch(I.getOpcode()){
+  default:
+    llvm_unreachable("Unknown cast Inst!");
+    return;
+  case Instruction::Trunc:
+    DataPath << getAsOperand(V) << vlang->printBitWitdh(Ty, 0, true) << "\n";
+    return;
+  case Instruction::ZExt:
+  case Instruction::SExt:
+    int DiffBits = Ty->getBitWidth() - ChTy->getBitWidth();	
+    DataPath << "{{" << DiffBits << "{";
+
+    if(I.getOpcode() == Instruction::ZExt)
+      DataPath << "1'b0";
+    else
+      DataPath << getAsOperand(V) << "["<< (ChTy->getBitWidth()-1)<<"]";
+
+    DataPath <<"}}," << getAsOperand(V) << "}" <<";\n";   
+    return;
+  }
 }
 
 

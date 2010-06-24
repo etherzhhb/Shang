@@ -45,9 +45,8 @@ enum HWAtomTypes {
                       // Data communication atom
   atomRegister,       // Assign value to register, use in infinite scheduler
                       // Schedeable atoms
-                      // Operate resource
-  atomOpRes,          // operate infinite resource
-                      // all infinite resource is pre-allocate
+  atomOpRes,          // Operate shared resource
+  atomOpInst,         // Operate on inline instruction
   atomStateBegin,     // state transfer
   atomStateEnd,
   atomEmitNextLoop
@@ -187,44 +186,16 @@ public:
   } 
 };
 
-class HWAWireOp : public HWAInline {
-public:
-  explicit HWAWireOp(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    HWAtom *const *O) : HWAInline(ID, atomWireOp, Inst, O) {}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAWireOp *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomWireOp;
-  }
-};
-
-class HWAStateTrans : public HWAtom {
-public:
-  explicit HWAStateTrans(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Value &Val, HWAtom *const *deps, size_t numDep)
-    : HWAtom(ID, T, Val, deps, numDep) {}
-
-
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return SchedSlot < CurSlot;
-  }
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAStateTrans *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomStateBegin ||
-           A->getHWAtomType() == atomStateEnd;
-  }
-};
-
-class HWAStateEnd : public HWAStateTrans {
+// FIXME: this atom is not necessary
+class HWAStateEnd : public HWAtom {
 public:
   explicit HWAStateEnd(const FoldingSetNodeIDRef ID,
     TerminatorInst &Term, HWAtom *const *deps, size_t numDep)
-    : HWAStateTrans(ID, atomStateEnd, Term, deps, numDep) {}
+    : HWAtom(ID, atomStateEnd, Term, deps, numDep) {}
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    llvm_unreachable("Unexpect to check state end!");
+  }
 
   void print(raw_ostream &OS) const;
 
@@ -236,7 +207,7 @@ public:
 };
 
 
-class HWAState : public HWAStateTrans {
+class HWAState : public HWAtom {
   typedef std::vector<HWAtom*> HWAtomVecType;
 
   HWAStateEnd *StateEnd;
@@ -244,10 +215,13 @@ class HWAState : public HWAStateTrans {
   // Atoms in this state
   HWAtomVecType Atoms;
 
-
 public:
   explicit HWAState(const FoldingSetNodeIDRef ID, BasicBlock &BB)
-    : HWAStateTrans(ID, atomStateBegin, BB, 0, 0), StateEnd(0) {}
+    : HWAtom(ID, atomStateBegin, BB, 0, 0), StateEnd(0) {}
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return true;
+  }
 
   void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
 
@@ -287,20 +261,28 @@ public:
 
 /// @brief The Schedulable Hardware Atom
 class HWASchedable : public HWAtom {
-  // the scheduled slot is manage by the scheduler
-  // unsigned slot
+  unsigned Latency;
 
 protected:
   explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep)
-    : HWAtom(ID, T, Inst, deps, numDep) {}
+    Instruction &Inst, unsigned latency, HWAtom *const *deps, size_t numDep)
+    : HWAtom(ID, T, Inst, deps, numDep), Latency(latency) {}
 public:
+  // Get the latency of this atom
+  unsigned getLatency() const {
+    return Latency;
+  }
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return SchedSlot + Latency <= CurSlot;
+  }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWASchedable *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomOpRes ||
-      A->getHWAtomType() == atomEmitNextLoop;
+      A->getHWAtomType() == atomEmitNextLoop ||
+      A->getHWAtomType() == atomOpInst;
   }
 };
 
@@ -308,7 +290,7 @@ class HWAEmitNextLoop : public HWASchedable {
 public:
   explicit HWAEmitNextLoop(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, HWAtom *const *deps, size_t numDep)
-    : HWASchedable(ID, T, Inst, deps, numDep) {}
+    : HWASchedable(ID, T, Inst, 0, deps, numDep) {}
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAEmitNextLoop *A) { return true; }
@@ -317,43 +299,44 @@ public:
   }
 };
 
-class HWAOpRes : public HWASchedable {
+class HWAOpInst : public HWASchedable {
+public:
+  explicit HWAOpInst(const FoldingSetNodeIDRef ID, Instruction &Inst,
+    unsigned latency, HWAtom *const *deps, size_t numDep)
+    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep) {}
 
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAOpInst *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomOpInst;
+  }
+};
+
+class HWAOpRes : public HWASchedable {
   // The resoure that this atom using.
   HWResource &Used;
 protected:
   // The instance of allocate resource
-  unsigned AllInst;
+  unsigned ResId;
 
 public:
   explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    HWAtom *const *deps, size_t numDep, HWResource &Res, unsigned Instance)
-    : HWASchedable(ID, atomOpRes, Inst, deps, numDep),
-      Used(Res), AllInst(Instance) {
+    unsigned latency, HWAtom *const *deps, size_t numDep,
+    HWResource &Res, unsigned Instance)
+    : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep),
+      Used(Res), ResId(Instance) {
     // Remember we used this resource.
     Used.addUsingAtom(this);
   }
 
   /// @name The using resource
   //{
-  HWResource &getUsedResource() const {
-    return Used;
-  }
+  HWResource &getUsedResource() const { return Used; }
 
-  unsigned getAllocatedResourceInstance() const {
-    return AllInst;
-  }
-
-  // Get the latancy of this atom
-  unsigned getLatency() const {
-    return Used.getLatency();
-  }
+  unsigned getResourceId() const { return ResId; }
   //}
-
-
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return SchedSlot + getLatency() <= CurSlot;
-  }
 
   void print(raw_ostream &OS) const;
 

@@ -91,31 +91,31 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 
 void HWAtomInfo::visitPHINode(PHINode &I) {
-  // Create the register
-  HWARegister *Reg = getRegister(I, &getStateFor(*I.getParent()));
-  InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Reg));
+  SmallVector<HWAtom*, 0> Deps;
+  // PHI node always have no latency
+  HWAtom *Phi = getOpInst(I, Deps, 0);
+  InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Phi));
 }
 
 void HWAtomInfo::visitSelectInst(SelectInst &I) {
   SmallVector<HWAtom*, 4> Deps;
   addOperandDeps(I, Deps);
-  HWResource *Res = RT.initResource("Mux");
-  assert(Res && "Can find resource!");
 
-  HWAtom *SelAtom = getOpRes(I, Deps, *Res);
+  // FIXME: Read latency from configure file
+  HWAtom *SelAtom = getOpInst(I, Deps, 1);
 
   InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, SelAtom));
 }
 
 void HWAtomInfo::visitCastInst(CastInst &I) {
-  HWAtom *Using;
+  SmallVector<HWAtom*, 1> Deps;
   if (Instruction *Op = dyn_cast<Instruction>(I.getOperand(0))) {
     assert(Op && "Expect casting a Instruction");
-    Using = getAtomInState(I, I.getParent());
+    Deps.push_back(getAtomInState(I, I.getParent()));
   } else // Just use a always ready atom
-    Using = getCurState();
-
-  HWAtom *CastAtom = getWireOp(I, Using);
+    Deps.push_back(getCurState());
+  // CastInst do not have any latency
+  HWAtom *CastAtom = getOpInst(I, Deps, 0);
   InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, CastAtom));
 }
 
@@ -165,11 +165,15 @@ void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   SmallVector<HWAtom*, 2> Deps;
   addOperandDeps(I, Deps);
 
-  HWResource *Res = RT.initResource("Add");
-  assert(Res && "Can find resource!");
+  HWAtom *GEPAtom = 0;
 
   // Create the atom
-  HWAtom *GEPAtom = getOpRes(I, Deps, *Res);
+  if (HWResource *Res = RT.initResource("Add"))
+    GEPAtom = getOpRes(I, Deps, *Res, Res->getLatency());
+  else
+    // FIXME: Read latency from configure file
+    GEPAtom = getOpInst(I, Deps, 1);
+
   // Register the result
   GEPAtom = getRegister(I, GEPAtom);
 
@@ -193,9 +197,8 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
     Deps.push_back(RHS);
   }
 
-  HWResource *Res = RT.initResource("ICmp");
-  assert(Res && "Can find resource!");
-  HWAtom *CmpAtom = getOpRes(I, Deps, *Res);
+  // FIXME: Read latency from configure file
+  HWAtom *CmpAtom = getOpInst(I, Deps, 1);
   // Register it
   CmpAtom = getRegister(I, CmpAtom);
 
@@ -203,8 +206,6 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
 }
 
 void HWAtomInfo::visitBinaryOperator(Instruction &I) {
-  HWResource *Res = 0;
-
   // Get the operand;
   HWAtom *LHS = 0, *RHS = 0;
 
@@ -249,13 +250,17 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
     default: 
       llvm_unreachable("Instruction not support yet!");
   }
-  Res = RT.initResource(ResName);
-  assert(Res && "Can find resource!");
   SmallVector<HWAtom*, 2> Deps;
   if (LHS)  Deps.push_back(LHS);
   if (RHS)  Deps.push_back(RHS);
   
-  HWAtom *BinOpAtom = getOpRes(I, Deps, *Res);
+  HWAtom *BinOpAtom = 0;
+  if (HWResource *Res = RT.initResource(ResName))
+    BinOpAtom = getOpRes(I, Deps, *Res, Res->getLatency());
+  else
+    // FIXME: Read latency from configure file
+    BinOpAtom = getOpInst(I, Deps, 1);
+
   // Register it
   BinOpAtom = getRegister(I, BinOpAtom);
 
@@ -345,30 +350,10 @@ HWASigned *HWAtomInfo::getSigned(HWAtom *Using) {
   return A;
 }
 
-
-HWAWireOp *HWAtomInfo::getWireOp(Instruction &I, HWAtom *Using) {
-  FoldingSetNodeID ID;
-  ID.AddInteger(atomWireOp);
-  ID.AddPointer(&I);
-  ID.AddPointer(Using);
-
-  void *IP = 0;
-  HWAWireOp *A =
-    static_cast<HWAWireOp*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
-
-  if (!A) {
-    HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(1);
-    O[0] = Using;
-    A = new (HWAtomAllocator) HWAWireOp(ID.Intern(HWAtomAllocator), I , O);
-    // Add New Atom
-    getCurState()->addNewAtom(A);
-  }
-  return A;
-}
-
 HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
                                SmallVectorImpl<HWAtom*> &Deps,
-                               HWResource &Res, unsigned ResInst) {
+                               HWResource &Res, unsigned latency,
+                               unsigned ResInst) {
   if (Res.isInfinite() && ResInst == 0)
     ResInst = Res.getUsingCount() + 1;
 
@@ -376,6 +361,7 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
   ID.AddInteger(atomOpRes);
   ID.AddPointer(&I);
   ID.AddInteger(Deps.size());
+  ID.AddInteger(latency);
   for (unsigned i = 0, e = Deps.size(); i != e; ++i)
     ID.AddPointer(Deps[i]);
 
@@ -387,7 +373,32 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
     A = new (HWAtomAllocator) HWAOpRes(ID.Intern(HWAtomAllocator),
-      I, O, Deps.size(), Res, ResInst);
+      I, latency, O, Deps.size(), Res, ResInst);
+    // Add New Atom
+    getCurState()->addNewAtom(A);
+  }
+  return A;
+}
+
+HWAOpInst *HWAtomInfo::getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+                               unsigned latency) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomOpInst);
+  ID.AddPointer(&I);
+  ID.AddInteger(Deps.size());
+  ID.AddInteger(latency);
+  for (unsigned i = 0, e = Deps.size(); i != e; ++i)
+    ID.AddPointer(Deps[i]);
+
+  void *IP = 0;
+  HWAOpInst *A =
+    static_cast<HWAOpInst*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
+    std::uninitialized_copy(Deps.begin(), Deps.end(), O);
+    A = new (HWAtomAllocator) HWAOpInst(ID.Intern(HWAtomAllocator),
+      I, latency, O, Deps.size());
     // Add New Atom
     getCurState()->addNewAtom(A);
   }

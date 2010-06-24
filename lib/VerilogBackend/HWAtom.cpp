@@ -51,13 +51,6 @@ void HWARegister::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
-void HWAWireOp::print(raw_ostream &OS) const {
-  OS << "Wire Op ";
-  WriteAsOperand(OS, &getDep(0)->getValue(), false);
-  OS << " to ";
-  WriteAsOperand(OS, &Val, false);
-}
-
 void HWAStateEnd::print(raw_ostream &OS) const {
   OS << "State Transfer: " << Val;
 }
@@ -104,7 +97,12 @@ void HWAState::print(raw_ostream &OS) const {
 void HWAOpRes::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
   OS << " Res: " << getUsedResource().getName()
-    << " Instance: " << AllInst << '\n';
+    << " Instance: " << ResId << '\n';
+}
+
+void HWAOpInst::print(raw_ostream &OS) const {
+  OS << "OpInst: ";
+  WriteAsOperand(OS, &getValue(), false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -122,7 +120,8 @@ HWResTable::~HWResTable() {
 
 HWResource *HWResTable::initResource(std::string Name){
   HWResource *HR = RC.getResource(Name);
-  assert(HR && "Can not init resource!");
-  ResSet.insert(HR);
+  if (HR != 0)
+    ResSet.insert(HR);
+
   return HR;
 }

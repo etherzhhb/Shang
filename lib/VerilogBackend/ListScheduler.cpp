@@ -68,7 +68,7 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
     while(HWAtom *ReadyAtom = getReadyAtoms(Atoms, HI->getTotalCycle())){
       if (HWAOpRes *OpRes = dyn_cast<HWAOpRes>(ReadyAtom)) {
         HWResource *Res = &OpRes->getUsedResource();
-        unsigned ResInstance = OpRes->getAllocatedResourceInstance();
+        unsigned ResInstance = OpRes->getResourceId();
         if (ResInstance == 0) // Not allocate?
           // Try to allocate a resource for it
           // Or just get the "idle instance?"

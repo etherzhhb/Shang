@@ -68,7 +68,7 @@ class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
   void emitRegister(HWARegister *Register);
   void emitOpRes(HWAOpRes *OpRes);
   //
-  void emitOpInst(HWAOpRes *OpRes);
+  void emitOpInst(HWAOpInst *OpRes);
   void emitStateEnd(HWAStateEnd *StateEnd);
   // Helper function for state end
   // Copy incoming value for Phi node.
@@ -116,12 +116,12 @@ class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
   }
   void visitUnreachableInst(UnreachableInst &I){}
 
-  void visitPHINode(PHINode &I){}
+  void visitPHINode(PHINode &I);
   void visitBinaryOperator(Instruction &I){}
   void visitICmpInst(ICmpInst &I);
   void visitFCmpInst(FCmpInst &I){}
 
-  void visitCastInst (CastInst &I){}
+  void visitCastInst (CastInst &I);
   void visitSelectInst(SelectInst &I){}
   void visitCallInst (CallInst &I){}
   void visitInlineAsm(CallInst &I){}
