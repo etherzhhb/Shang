@@ -91,6 +91,7 @@ bool RTLWriter::runOnFunction(Function &F) {
   Out << "\n\n";
 
   // Datapath
+  vlang->comment(Out.indent(2)) << "Datapath\n";
   Out << DataPath.str();
 
   Out << "\n\n";
@@ -186,12 +187,11 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   typedef HWAState::ScheduleMapType::iterator cycle_iterator;
 
   State.getScheduleMap(Atoms);
-
+  unsigned StartSlot = State.getSlot();
+  HWAStateEnd *End = State.getStateEnd();
   //
   vlang->comment(ControlBlock.indent(6)) << StateName << '\n';
-
-  for (unsigned i = State.getSlot(), e = State.getStateEnd()->getSlot();
-      i != e; ++i) {
+  for (unsigned i = State.getSlot(), e = End->getSlot(); i != e; ++i) {
     vlang->param(getStateDeclBuffer(),
                  StateName + utostr(i),
                  totalStatesBits, i);
@@ -207,15 +207,29 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
         emitRegister(cast<HWARegister>(A));
         break;
       case atomOpRes:
+        emitOpRes(cast<HWAOpRes>(A));
         break;
       default:
         ;
       }
     }
-
+    // Transfer to next state
+    emitNextState(ControlBlock.indent(8), BB, (i - StartSlot) + 1);
     // Case end
     vlang->end(ControlBlock.indent(6));
-  }
+  }// end for
+
+  vlang->comment(ControlBlock.indent(6)) << "Terminator of "
+    << StateName << '\n';
+  // Emit end state
+  unsigned Slot = End->getSlot();
+  vlang->param(getStateDeclBuffer(), StateName + utostr(Slot),
+               totalStatesBits, Slot);
+  // Case begin
+  vlang->matchCase(ControlBlock.indent(6), StateName + utostr(Slot));
+  emitStateEnd(cast<HWAStateEnd>(End));
+  // Case end
+  vlang->end(ControlBlock.indent(6));
 }
 
 void RTLWriter::emitCommonPort() {
@@ -274,6 +288,37 @@ RTLWriter::~RTLWriter() {
   delete &(ResetBlock.str());
 }
 
+
+//===----------------------------------------------------------------------===//
+// Emit hardware atoms
+
+
+std::string RTLWriter::getAsOperand(Value *V) {
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
+    return vlang->printConstant(CI);
+  
+  if (Argument *Arg = dyn_cast<Argument>(V))
+    return vlang->GetValueName(V);
+
+  //
+  if (Instruction *I = dyn_cast<Instruction>(V))
+    return getAsOperand(*HI->getAtomFor(*I));
+
+  //
+  return "<Unknown>";
+}
+
+std::string RTLWriter::getAsOperand(HWAtom &A) {
+  switch (A.getHWAtomType()) {
+    case atomRegister:
+      return vlang->GetValueName(&A.getValue()) + "_r";
+    case atomOpRes:
+      return vlang->GetValueName(&A.getValue()) + "_w";
+    default:
+      return "<Unknown>";
+  }
+}
+
 void RTLWriter::emitRegister(HWARegister *Register) {
   Instruction &Inst = cast<Instruction>(Register->getValue());
   unsigned BitWidth = 0;
@@ -282,23 +327,109 @@ void RTLWriter::emitRegister(HWARegister *Register) {
   else if (Inst.getType()->isPointerTy())
     BitWidth =  TD->getPointerSizeInBits();
   
-  std::string Name = vlang->GetValueName(&Inst);
+  std::string Name = getAsOperand(*Register);
 
   // Declare the register
   vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
   // Reset the register
   vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
+  // assign the register
+  ControlBlock.indent(8) << Name << " <= "
+                         << getAsOperand(*Register->getDep(0)) << ";\n";
+}
+
+void RTLWriter::emitOpInst(HWAOpRes *OpRes) {
+  Instruction &Inst = cast<Instruction>(OpRes->getValue());
+  std::string Name = getAsOperand(*OpRes);
+  unsigned BitWidth = 0;
+  if (const IntegerType *IntTy = dyn_cast<IntegerType>(Inst.getType()))
+    BitWidth = IntTy->getBitWidth();
+  else if (Inst.getType()->isPointerTy())
+    BitWidth =  TD->getPointerSizeInBits();
+
+  // Declare the signal
+  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0, "wire ");
+  //
+  DataPath.indent(2) << "assign " << Name << " = ";
+  // Emit the data path
+  visit(Inst);
+  //
+  DataPath << "\n";
 }
 
 void RTLWriter::emitOpRes(HWAOpRes *OpRes) {
-  Instruction &Inst = cast<Instruction>(OpRes->getValue());
-  visit(Inst);
+  if (OpRes->getUsedResource().isInfinite())
+    emitOpInst(OpRes);
+  
 }
 
+void esyn::RTLWriter::emitStateEnd(HWAStateEnd *StateEnd) {
+  // Emit Br
+  visit(cast<TerminatorInst>(StateEnd->getValue()));
+}
+
+//===----------------------------------------------------------------------===//
 void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) {
   HWAState &State = HI->getStateFor(BB);
   unsigned stateCycle = State.getSlot() + offset;
-  assert( stateCycle < State.getStateEnd()->getSlot() 
+  assert(stateCycle <= State.getStateEnd()->getSlot() 
          && "Offest out of range!");
   ss << "CurState <= " << vlang->GetValueName(&BB) << stateCycle << ";\n";
+}
+
+//===----------------------------------------------------------------------===//
+// Emit instructions
+void RTLWriter::visitICmpInst(ICmpInst &I) {
+  raw_ostream &ss = DataPath.indent(2);
+  ss << "(" << getAsOperand(I.getOperand(0));
+  switch (I.getPredicate()) {
+      case ICmpInst::ICMP_EQ:  ss << " == "; break;
+      case ICmpInst::ICMP_NE:  ss << " != "; break;
+      case ICmpInst::ICMP_ULE:
+      case ICmpInst::ICMP_SLE: ss << " <= "; break;
+      case ICmpInst::ICMP_UGE:
+      case ICmpInst::ICMP_SGE: ss << " >= "; break;
+      case ICmpInst::ICMP_ULT:
+      case ICmpInst::ICMP_SLT: ss << " < "; break;
+      case ICmpInst::ICMP_UGT:
+      case ICmpInst::ICMP_SGT: ss << " > "; break;
+      default: DataPath << "Unknown icmppredicate";
+  }
+  ss << getAsOperand(I.getOperand(1));
+  ss << ");";
+  vlang->comment(ss) << "Fixme: if operand is argument, the signed prefix lost!\n";
+}
+
+
+void RTLWriter::visitBranchInst(BranchInst &I) {
+  if (I.isConditional()) {
+    BasicBlock &NextBB0 = *(I.getSuccessor(0)), 
+               &NextBB1 = *(I.getSuccessor(1)), 
+               &CurBB = *(I.getParent());
+    vlang->ifBegin(ControlBlock.indent(8), getAsOperand(I.getCondition()));
+    emitPHICopiesForSucc(CurBB, NextBB0, 2);
+    emitNextState(ControlBlock.indent(10), NextBB0, 0);
+    vlang->ifElse(ControlBlock.indent(8));
+    emitPHICopiesForSucc(CurBB, NextBB1, 2);
+    emitNextState(ControlBlock.indent(10), NextBB1, 0);
+    vlang->end(ControlBlock.indent(8));
+  } else {
+    BasicBlock &NextBB = *(I.getSuccessor(0)), &CurBB = *(I.getParent());
+    emitPHICopiesForSucc(CurBB, NextBB);
+    emitNextState(ControlBlock.indent(8), NextBB, 0);
+  }
+}
+
+void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
+                                     unsigned ind) {
+  vlang->comment(ControlBlock.indent(8 + ind)) << "Phi Node:\n";
+  Instruction *NotPhi = Succ.getFirstNonPHI();
+  BasicBlock::iterator I = Succ.begin();
+  while (&*I != NotPhi) {
+    PHINode *PN = cast<PHINode>(I);
+    Value *IV = PN->getIncomingValueForBlock(&CurBlock);
+    ControlBlock.indent(8 + ind) << getAsOperand(I)
+      << " <= " << getAsOperand(IV) << ";\n";      
+    ++I;
+  }
 }

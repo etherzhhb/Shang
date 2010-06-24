@@ -56,7 +56,7 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
   // Remember the state start, so we can schedule this bb again
   State.scheduledTo(HI->getTotalCycle());
-  HI->incTotalCycle();
+  //HI->incTotalCycle();
   // Schedule StateBegin
 
   // TODO: Check if the atoms are empty
@@ -97,6 +97,7 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
   }
   // schedule the state end;
   StateEnd->scheduledTo(HI->getTotalCycle());
+  HI->incTotalCycle();
 
   DEBUG(State.print(dbgs()));
   return false;

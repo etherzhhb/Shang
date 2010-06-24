@@ -68,6 +68,9 @@ void HWAState::getScheduleMap(ScheduleMapType &Atoms) const {
     HWAtom *A = *I;
     Atoms.insert(std::make_pair<unsigned, HWAtom*>(A->getSlot(), A));
   }
+  // insert the end state
+  HWAtom *End =const_cast<HWAStateEnd*>(getStateEnd());
+  Atoms.insert(std::make_pair<unsigned, HWAtom*>(End->getSlot(), End));
 }
 
 void HWAState::print(raw_ostream &OS) const {

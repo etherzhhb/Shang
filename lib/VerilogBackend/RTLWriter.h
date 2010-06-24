@@ -67,7 +67,19 @@ class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
   // Atoms
   void emitRegister(HWARegister *Register);
   void emitOpRes(HWAOpRes *OpRes);
+  //
+  void emitOpInst(HWAOpRes *OpRes);
+  void emitStateEnd(HWAStateEnd *StateEnd);
+  // Helper function for state end
+  // Copy incoming value for Phi node.
+  void emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
+                            unsigned ind = 0);
+
   void clear();
+
+  std::string getAsOperand(Value *V);
+  std::string getAsOperand(HWAtom &A);
+
 
   raw_ostream &getStateDeclBuffer() {
     return StateDecl.indent(2);
@@ -92,7 +104,7 @@ class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
   friend class InstVisitor<RTLWriter>;
 
   void visitReturnInst(ReturnInst &I){}
-  void visitBranchInst(BranchInst &I){}
+  void visitBranchInst(BranchInst &I);
   void visitSwitchInst(SwitchInst &I){}
   void visitIndirectBrInst(IndirectBrInst &I){}
   void visitInvokeInst(InvokeInst &I) {
@@ -106,7 +118,7 @@ class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
 
   void visitPHINode(PHINode &I){}
   void visitBinaryOperator(Instruction &I){}
-  void visitICmpInst(ICmpInst &I){}
+  void visitICmpInst(ICmpInst &I);
   void visitFCmpInst(FCmpInst &I){}
 
   void visitCastInst (CastInst &I){}

@@ -136,16 +136,9 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
                      HWResource &Res, unsigned ResInst = 0);
 
   // Maping Instruction to HWAtoms
+  // FIXME: Map value to atoms, so we can handle argument
   typedef DenseMap<const Instruction*, HWAtom*> AtomMapType;
   AtomMapType InstToHWAtoms;
-
-
-
-  HWAtom *getAtomFor(Instruction &Inst) const {
-    AtomMapType::const_iterator At = InstToHWAtoms.find(&Inst);
-    assert(At != InstToHWAtoms.end() && "Can not get the Atom!");
-    return  At->second;
-  }
 
   typedef DenseMap<const BasicBlock*, HWAState*> StateMapType;
   StateMapType BBToStates;
@@ -218,6 +211,12 @@ public:
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");
     return  *(At->second);
+  }
+
+  HWAtom *getAtomFor(Instruction &Inst) const {
+    AtomMapType::const_iterator At = InstToHWAtoms.find(&Inst);
+    assert(At != InstToHWAtoms.end() && "Can not get the Atom!");
+    return  At->second;
   }
 
   unsigned getTotalCycle() const {
