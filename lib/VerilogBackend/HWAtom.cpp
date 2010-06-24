@@ -37,6 +37,10 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
+void HWAConst::print(raw_ostream &OS) const {
+  OS << "Const (" << getValue() << ")";
+}
+
 void HWASigned::print(raw_ostream &OS) const {
   OS << "signed (";
   WriteAsOperand(OS, &getDep(0)->getValue(), false);
@@ -54,7 +58,6 @@ void HWARegister::print(raw_ostream &OS) const {
 void HWAStateEnd::print(raw_ostream &OS) const {
   OS << "State Transfer: " << Val;
 }
-
 
 void HWAState::getScheduleMap(ScheduleMapType &Atoms) const {
   for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {

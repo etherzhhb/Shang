@@ -40,6 +40,7 @@ using namespace llvm;
 namespace esyn {
 
 enum HWAtomTypes {
+  atomConst,          // The constant Atom
   atomSignedPrefix,   // Represent the Signed marker, use in Ashr
   atomWireOp,         // Trunc, Z/SExt, PtrToInt, IntToPtr
                       // Data communication atom
@@ -133,6 +134,26 @@ public:
   /// dump - This method is used for debugging.
   ///
   void dump() const;
+};
+
+/// @brief Constant node
+class HWAConst : public HWAtom {
+public:
+  explicit HWAConst(const FoldingSetNodeIDRef ID, Value &V)
+    : HWAtom(ID, atomConst, V, 0, 0) {}
+
+  // Constant is always ready
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return true;
+  }
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAConst *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomConst;
+  }
 };
 
 /// @brief Inline operation

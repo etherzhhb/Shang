@@ -303,26 +303,12 @@ RTLWriter::~RTLWriter() {
 
 //===----------------------------------------------------------------------===//
 // Emit hardware atoms
-
-
 std::string RTLWriter::getAsOperand(Value *V) {
-  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
-    return vlang->printConstant(CI);
+  // Phi node is a register.
+  if (PHINode *PHI = dyn_cast<PHINode>(V))
+    return vlang->GetValueName(PHI) + "_phi_r";
   
-  if (Argument *Arg = dyn_cast<Argument>(V))
-    return vlang->GetValueName(V);
-
-  //
-  if (Instruction *I = dyn_cast<Instruction>(V)) {
-    // Phi node is a register.
-    if (PHINode *PHI = dyn_cast<PHINode>(I))
-      return vlang->GetValueName(PHI) + "_phi_r";
-    
-    return getAsOperand(*HI->getAtomFor(*I));
-  }
-
-  //
-  return "<Unknown Inst>";
+  return getAsOperand(*HI->getAtomFor(*V));
 }
 
 std::string RTLWriter::getAsOperand(HWAtom &A) {
@@ -332,6 +318,17 @@ std::string RTLWriter::getAsOperand(HWAtom &A) {
     case atomOpRes:
     case atomOpInst:
       return vlang->GetValueName(&A.getValue()) + "_w";
+    case atomConst: {
+      Value *V = &A.getValue();
+      if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
+        return vlang->printConstant(CI);
+
+      if (Argument *Arg = dyn_cast<Argument>(V))
+        return vlang->GetValueName(V);
+
+      llvm_unreachable("Broken Constant atom find!");
+      return "<Unkown Constant>";
+    }
     default:
       return "<Unknown Atom>";
   }

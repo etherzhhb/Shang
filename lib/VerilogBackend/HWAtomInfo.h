@@ -126,9 +126,11 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   HWAStateEnd *getStateEnd(TerminatorInst &Term,
     SmallVectorImpl<HWAtom*> &Deps);
 
+  HWAtom *getConstant(Value &V);
+
   HWARegister *getRegister(Instruction &I, HWAtom *Using);
 
-  HWASigned *getSigned(HWAtom *Using);
+  HWAtom *getSigned(HWAtom *Using);
 
   HWAOpRes *getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps, 
                      HWResource &Res,  unsigned latency, 
@@ -137,10 +139,8 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   HWAOpInst *getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                        unsigned latency);
 
-  // Maping Instruction to HWAtoms
-  // FIXME: Map value to atoms, so we can handle argument
-  typedef DenseMap<const Instruction*, HWAtom*> AtomMapType;
-  AtomMapType InstToHWAtoms;
+  typedef DenseMap<const Value*, HWAtom*> AtomMapType;
+  AtomMapType ValueToHWAtoms;
 
   typedef DenseMap<const BasicBlock*, HWAState*> StateMapType;
   StateMapType BBToStates;
@@ -162,21 +162,32 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     return ControlRoot;
   }
 
-  HWAtom *getAtomInState(Instruction &Inst, BasicBlock *BB) {
+  HWAtom *getAtomInState(Value &V, BasicBlock *BB) {
+    // Is this not a instruction?
+    if (!isa<Instruction>(V))
+      return getConstant(V);
+
+    // Now it is an Instruction
+    Instruction &Inst = cast<Instruction>(V);
     if (BB == Inst.getParent())
       return getAtomFor(Inst);
     else
       // Create the register
+      // FIXME: Return the state and then Reassign the real register
+      // After schedule
       return getRegister(Inst, CurState);
   }
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
     BasicBlock *ParentBB = I.getParent();
     HWAState &CurState = getStateFor(*ParentBB);
     for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
-      OI != OE; ++OI) {
-        if (Instruction *OpI = dyn_cast<Instruction>(OI))
-          // Restrict the dependences in the current state
-          Deps.push_back(getAtomInState(*OpI, ParentBB));
+        OI != OE; ++OI) {
+      if (Instruction *OpI = dyn_cast<Instruction>(OI))
+        // Restrict the dependences in the current state
+        Deps.push_back(getAtomInState(*OpI, ParentBB));
+      else 
+        // Otherwise it is a constant
+        Deps.push_back(getConstant(**OI));
     }
   }
 
@@ -215,10 +226,14 @@ public:
     return  *(At->second);
   }
 
-  HWAtom *getAtomFor(Instruction &Inst) const {
-    AtomMapType::const_iterator At = InstToHWAtoms.find(&Inst);
-    assert(At != InstToHWAtoms.end() && "Can not get the Atom!");
-    return  At->second;
+  HWAtom *getAtomFor(Value &V) const {
+    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
+    if (At != ValueToHWAtoms.end())
+      return  At->second;
+
+    assert((isa<Constant>(V) || isa<Argument>(V))
+      && "Only Constant missing!");
+    return const_cast<HWAtomInfo*>(this)->getConstant(V);
   }
 
   unsigned getTotalCycle() const {
