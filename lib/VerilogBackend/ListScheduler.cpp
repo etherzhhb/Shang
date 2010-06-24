@@ -51,7 +51,7 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
   typedef SmallVector<HWAtom*, 64> HWAtomVec;
   HWAtomVec Atoms(State.begin(), State.end());
-
+  Atoms.push_back(StateEnd);
   // TODO: sort the atoms
 
   // Remember the state start, so we can schedule this bb again
@@ -60,7 +60,7 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
   // Schedule StateBegin
 
   // TODO: Check if the atoms are empty
-  while (!StateEnd->isAllDepsOpFin(HI->getTotalCycle())) {
+  while (!StateEnd->isOperationFinish(HI->getTotalCycle())) {
     DEBUG(dbgs() << "======Cycle " << HI->getTotalCycle() << "\n");
     // Find all ready atoms
 
@@ -95,9 +95,9 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
     // Advance the state
     HI->incTotalCycle();
   }
-  // schedule the state end;
-  StateEnd->scheduledTo(HI->getTotalCycle());
-  HI->incTotalCycle();
+  //// schedule the state end;
+  //StateEnd->scheduledTo(HI->getTotalCycle());
+  //HI->incTotalCycle();
 
   DEBUG(State.print(dbgs()));
   return false;

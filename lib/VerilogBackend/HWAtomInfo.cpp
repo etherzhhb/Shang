@@ -98,9 +98,8 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
       Deps[0] = Using;
     }
   }
-  
 
-  // Get the atom
+  // Get the atom, Terminator do not have any latency
   HWAOpInst *Atom = getOpInst(I, Deps, 0);
   // Remember the terminate state.
   getCurState()->getTerminateState(*Atom);

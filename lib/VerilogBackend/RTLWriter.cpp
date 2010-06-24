@@ -190,11 +190,12 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   typedef HWAState::ScheduleMapType::iterator cycle_iterator;
 
   State.getScheduleMap(Atoms);
-  unsigned StartSlot = State.getSlot();
   HWAOpInst *End = State.getStateEnd();
+
+  unsigned StartSlot = State.getSlot(), EndSlot = End->getSlot();
   //
   vlang->comment(ControlBlock.indent(6)) << StateName << '\n';
-  for (unsigned i = State.getSlot(), e = End->getSlot(); i != e; ++i) {
+  for (unsigned i = State.getSlot(), e = End->getSlot() + 1; i != e; ++i) {
     vlang->param(getStateDeclBuffer(),
                  StateName + utostr(i),
                  totalStatesBits, i);
@@ -229,25 +230,13 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
         ;
       }
     }
+
     // Transfer to next state
-    emitNextState(ControlBlock.indent(8), BB, (i - StartSlot) + 1);
+    if (i != EndSlot)
+      emitNextState(ControlBlock.indent(8), BB, (i - StartSlot) + 1);
     // Case end
     vlang->end(ControlBlock.indent(6));
   }// end for
-
-  vlang->comment(ControlBlock.indent(6)) << "Terminator of "
-    << StateName << '\n';
-  // Emit end state
-  unsigned Slot = End->getSlot();
-  vlang->param(getStateDeclBuffer(), StateName + utostr(Slot),
-               totalStatesBits, Slot);
-  // Case begin
-  vlang->matchCase(ControlBlock.indent(6), StateName + utostr(Slot));
-  // Emit the origin IR as comment.
-  vlang->comment(ControlBlock.indent(8)) << End->getValue() << '\n';
-  emitOpInst(cast<HWAOpInst>(End));
-  // Case end
-  vlang->end(ControlBlock.indent(6));
 }
 
 void RTLWriter::emitCommonPort() {
