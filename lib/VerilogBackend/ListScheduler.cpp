@@ -46,7 +46,7 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "At BB: " << BB.getName() << '\n');
 
   HWAState &State = HI->getStateFor(BB);
-  HWAStateEnd *StateEnd = State.getStateEnd();
+  HWAOpInst *StateEnd = State.getStateEnd();
   assert(StateEnd && "Why StateEnd is null?");
 
   typedef SmallVector<HWAtom*, 64> HWAtomVec;

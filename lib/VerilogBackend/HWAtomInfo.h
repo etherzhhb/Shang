@@ -41,27 +41,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   friend class InstVisitor<HWAtomInfo>;
   void visitTerminatorInst(TerminatorInst &I);
 
-  void visitReturnInst(ReturnInst &I) {
-    visitTerminatorInst(I);
-  }
-  void visitBranchInst(BranchInst &I) {
-    visitTerminatorInst(I);
-  }
-  void visitSwitchInst(SwitchInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitIndirectBrInst(IndirectBrInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitInvokeInst(InvokeInst &I) {
-    llvm_unreachable("HWAtomFilterPass pass didn't work!");
-  }
-
-  void visitUnwindInst(UnwindInst &I) {
-    llvm_unreachable("HWAtomFilterPass pass didn't work!");
-  }
-  void visitUnreachableInst(UnreachableInst &I){}
-
   void visitPHINode(PHINode &I);
   void visitBinaryOperator(Instruction &I);
   void visitICmpInst(ICmpInst &I);
@@ -122,9 +101,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
   HWAState *getState(BasicBlock &BB);
-
-  HWAStateEnd *getStateEnd(TerminatorInst &Term,
-    SmallVectorImpl<HWAtom*> &Deps);
 
   HWAtom *getConstant(Value &V);
 

@@ -81,7 +81,9 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // State end depand on or others atoms
   SmallVector<HWAtom*, 64> Deps(CurState->begin(), CurState->end());
   // Get the atom
-  HWAStateEnd *Atom = getStateEnd(I, Deps);
+  HWAOpInst *Atom = getOpInst(I, Deps, 0);
+  // Remember the terminate state.
+  getCurState()->getTerminateState(*Atom);
   // Remember the atom.
   ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Atom));
 
@@ -272,30 +274,6 @@ HWAState *HWAtomInfo::getState(BasicBlock &BB) {
     A = new (HWAtomAllocator) HWAState(ID.Intern(HWAtomAllocator), BB);
     // Dont Add New Atom
     // getCurState()->addNewAtom(A);
-  }
-  return A;
-}
-
-HWAStateEnd *HWAtomInfo::getStateEnd(TerminatorInst &Term,
-                                     SmallVectorImpl<HWAtom*> &Deps) {
-  FoldingSetNodeID ID;
-  ID.AddInteger(atomStateEnd);
-  ID.AddPointer(&Term);
-  ID.AddInteger(Deps.size());
-  for (unsigned i = 0, e = Deps.size(); i != e; ++i)
-    ID.AddPointer(Deps[i]);
-
-  void *IP = 0;
-  HWAStateEnd *A =
-    static_cast<HWAStateEnd*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
-
-  if (!A) {
-    HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
-    std::uninitialized_copy(Deps.begin(), Deps.end(), O);
-    A = new (HWAtomAllocator) HWAStateEnd(ID.Intern(HWAtomAllocator),
-      Term, O, Deps.size());
-    // Add New Atom
-    getCurState()->endWith(*A);
   }
   return A;
 }

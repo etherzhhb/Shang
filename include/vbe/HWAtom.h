@@ -207,79 +207,6 @@ public:
   } 
 };
 
-// FIXME: this atom is not necessary
-class HWAStateEnd : public HWAtom {
-public:
-  explicit HWAStateEnd(const FoldingSetNodeIDRef ID,
-    TerminatorInst &Term, HWAtom *const *deps, size_t numDep)
-    : HWAtom(ID, atomStateEnd, Term, deps, numDep) {}
-
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    llvm_unreachable("Unexpect to check state end!");
-  }
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAStateEnd *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomStateEnd;
-  }
-};
-
-
-class HWAState : public HWAtom {
-  typedef std::vector<HWAtom*> HWAtomVecType;
-
-  HWAStateEnd *StateEnd;
-
-  // Atoms in this state
-  HWAtomVecType Atoms;
-
-public:
-  explicit HWAState(const FoldingSetNodeIDRef ID, BasicBlock &BB)
-    : HWAtom(ID, atomStateBegin, BB, 0, 0), StateEnd(0) {}
-
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return true;
-  }
-
-  void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
-
-  typedef HWAtomVecType::iterator iterator;
-  iterator begin() { return Atoms.begin(); }
-  iterator end() { return Atoms.end(); }
-
-  typedef HWAtomVecType::const_iterator const_iterator;
-  const_iterator begin() const { return Atoms.begin(); }
-  const_iterator end() const { return Atoms.end(); }
-
-  void resetAll() {
-    for (iterator I = begin(), E = end(); I != E; ++I)
-      (*I)->reset();
-  }
-
-  void endWith(HWAStateEnd &stateEnd) {
-    StateEnd = &stateEnd;
-  }
-
-  HWAStateEnd *getStateEnd() { return StateEnd; }
-  const HWAStateEnd *getStateEnd() const { return StateEnd; }
-
-  typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
-
-  void getScheduleMap(ScheduleMapType &Atoms) const;
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAState *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomStateBegin;
-  }
-};
-
-
 /// @brief The Schedulable Hardware Atom
 class HWASchedable : public HWAtom {
   unsigned Latency;
@@ -326,6 +253,14 @@ public:
     unsigned latency, HWAtom *const *deps, size_t numDep)
     : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep) {}
 
+  template<class InstTy>
+  InstTy &getInst() { return cast<InstTy>(getValue()); }
+
+  // Return the opcode of the instruction
+  unsigned getOpcode() const {
+    return cast<Instruction>(getValue()).getOpcode();
+  }
+
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -365,6 +300,57 @@ public:
   static inline bool classof(const HWAOpRes *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomOpRes;
+  }
+};
+
+class HWAState : public HWAtom {
+  typedef std::vector<HWAtom*> HWAtomVecType;
+
+  HWAOpInst *StateEnd;
+
+  // Atoms in this state
+  HWAtomVecType Atoms;
+
+public:
+  explicit HWAState(const FoldingSetNodeIDRef ID, BasicBlock &BB)
+    : HWAtom(ID, atomStateBegin, BB, 0, 0), StateEnd(0) {}
+
+  virtual bool isOperationFinish(unsigned CurSlot) const {
+    return true;
+  }
+
+  void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
+
+  typedef HWAtomVecType::iterator iterator;
+  iterator begin() { return Atoms.begin(); }
+  iterator end() { return Atoms.end(); }
+
+  typedef HWAtomVecType::const_iterator const_iterator;
+  const_iterator begin() const { return Atoms.begin(); }
+  const_iterator end() const { return Atoms.end(); }
+
+  void resetAll() {
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      (*I)->reset();
+  }
+
+  void getTerminateState(HWAOpInst &stateEnd) {
+    StateEnd = &stateEnd;
+  }
+
+  HWAOpInst *getStateEnd() { return StateEnd; }
+  const HWAOpInst *getStateEnd() const { return StateEnd; }
+
+  typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
+
+  void getScheduleMap(ScheduleMapType &Atoms) const;
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAState *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomStateBegin;
   }
 };
 

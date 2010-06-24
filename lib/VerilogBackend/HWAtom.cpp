@@ -55,18 +55,11 @@ void HWARegister::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
-void HWAStateEnd::print(raw_ostream &OS) const {
-  OS << "State Transfer: " << Val;
-}
-
 void HWAState::getScheduleMap(ScheduleMapType &Atoms) const {
   for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
     HWAtom *A = *I;
     Atoms.insert(std::make_pair<unsigned, HWAtom*>(A->getSlot(), A));
   }
-  // insert the end state
-  HWAtom *End =const_cast<HWAStateEnd*>(getStateEnd());
-  Atoms.insert(std::make_pair<unsigned, HWAtom*>(End->getSlot(), End));
 }
 
 void HWAState::print(raw_ostream &OS) const {
@@ -92,7 +85,7 @@ void HWAState::print(raw_ostream &OS) const {
     OS << " at "<< A->getSlot() << "\n";
   }
 
-  const HWAStateEnd &StateEnd = *getStateEnd();
+  const HWAOpInst &StateEnd = *getStateEnd();
   StateEnd.print(OS.indent(2));
   OS << " at "<< StateEnd.getSlot() << "\n";
 }
