@@ -256,6 +256,14 @@ public:
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
 
+  HWAtom *getOperand(unsigned idx) {
+    assert(idx < getInst<Instruction>().getNumOperands()
+      && "index Out of range!");
+    assert(&(getDep(idx)->getValue()) == getInst<Instruction>().getOperand(idx)
+      && "HWOpInst operands broken!");
+    return getDep(idx);
+  }
+
   // Return the opcode of the instruction
   unsigned getOpcode() const {
     return cast<Instruction>(getValue()).getOpcode();

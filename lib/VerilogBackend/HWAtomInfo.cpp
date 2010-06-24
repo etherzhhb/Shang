@@ -80,6 +80,26 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
   // State end depand on or others atoms
   SmallVector<HWAtom*, 64> Deps(CurState->begin(), CurState->end());
+  // Move the Condition to the right place
+  if (I.getNumOperands() > 0 && (!isa<BasicBlock>(I.getOperand(0)))) {
+    // Get the operand.
+    HWAtom *Using = getAtomInState(*I.getOperand(0), I.getParent());
+    for (unsigned i = 1, e = Deps.size(); i != e; ++i)
+      if (Deps[i] == Using) {
+        // Swap using to deps[0]
+        std::swap(Deps[0], Deps[i]);
+        break;
+      }
+
+    // Using not in deps?
+    if (Deps[0] != Using) {
+      // Move dep[0] to the last position
+      Deps.push_back(Deps[0]);
+      Deps[0] = Using;
+    }
+  }
+  
+
   // Get the atom
   HWAOpInst *Atom = getOpInst(I, Deps, 0);
   // Remember the terminate state.

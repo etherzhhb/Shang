@@ -67,7 +67,7 @@ class RTLWriter : public FunctionPass {
   // Atoms
   void emitRegister(HWARegister *Register);
   void emitOpRes(HWAOpRes *OpRes);
-  //
+  void emitSigned(HWASigned *Signed);
   void emitOpInst(HWAOpInst *OpRes);
   // Helper function for state end
   // Copy incoming value for Phi node.
@@ -75,9 +75,9 @@ class RTLWriter : public FunctionPass {
                             unsigned ind = 0);
 
   void clear();
-
+  
   std::string getAsOperand(Value *V);
-  std::string getAsOperand(HWAtom &A);
+  std::string getAsOperand(HWAtom *A);
 
 
   raw_ostream &getStateDeclBuffer() {
@@ -100,70 +100,70 @@ class RTLWriter : public FunctionPass {
 
   /// @name InstVisitor interface
   //{
-  void visitReturnInst(HWAOpInst *A);
-  void visitBranchInst(HWAOpInst *A);
-  void visitSwitchInst(HWAOpInst *A){}
-  void visitIndirectBrInst(HWAOpInst *A){}
-  void visitInvokeInst(HWAOpInst *A) {
+  void visitReturnInst(HWAOpInst &A);
+  void visitBranchInst(HWAOpInst &A);
+  void visitSwitchInst(HWAOpInst &A){}
+  void visitIndirectBrInst(HWAOpInst &A){}
+  void visitInvokeInst(HWAOpInst &A) {
     llvm_unreachable("Lowerinvoke pass didn't work!");
   }
 
-  void visitUnwindInst(HWAOpInst *A) {
+  void visitUnwindInst(HWAOpInst &A) {
     llvm_unreachable("Lowerinvoke pass didn't work!");
   }
-  void visitUnreachableInst(HWAOpInst *A){}
+  void visitUnreachableInst(HWAOpInst &A){}
 
-  void visitPHINode(HWAOpInst *A);
-  void visitBinaryOperator(HWAOpInst *A){}
-  void visitICmpInst(HWAOpInst *A);
-  void visitFCmpInst(HWAOpInst *A){}
+  void visitPHINode(HWAOpInst &A);
+  void visitBinaryOperator(HWAOpInst &A){}
+  void visitICmpInst(HWAOpInst &A);
+  void visitFCmpInst(HWAOpInst &A){}
 
-  void visitTruncInst(HWAOpInst *A);
+  void visitTruncInst(HWAOpInst &A);
 
-  void visitExtInst (HWAOpInst *A);
-  void visitZExtInst(HWAOpInst *A)      { visitExtInst(A); }
-  void visitSExtInst(HWAOpInst *A)      { visitExtInst(A); }
+  void visitExtInst (HWAOpInst &A);
+  void visitZExtInst(HWAOpInst &A)      { visitExtInst(A); }
+  void visitSExtInst(HWAOpInst &A)      { visitExtInst(A); }
 
   //
-  void visitFPTruncInst(HWAOpInst *A)   { }
-  void visitFPExtInst(HWAOpInst *A)     { }
-  void visitFPToUIInst(HWAOpInst *A)    { }
-  void visitFPToSIInst(HWAOpInst *A)    { }
-  void visitUIToFPInst(HWAOpInst *A)    { }
-  void visitSIToFPInst(HWAOpInst *A)    { }
-  void visitPtrToIntInst(HWAOpInst *A)  { }
-  void visitIntToPtrInst(HWAOpInst *A)  { }
-  void visitBitCastInst(HWAOpInst *A)   { }
+  void visitFPTruncInst(HWAOpInst &A)   { }
+  void visitFPExtInst(HWAOpInst &A)     { }
+  void visitFPToUIInst(HWAOpInst &A)    { }
+  void visitFPToSIInst(HWAOpInst &A)    { }
+  void visitUIToFPInst(HWAOpInst &A)    { }
+  void visitSIToFPInst(HWAOpInst &A)    { }
+  void visitPtrToIntInst(HWAOpInst &A)  { }
+  void visitIntToPtrInst(HWAOpInst &A)  { }
+  void visitBitCastInst(HWAOpInst &A)   { }
 
-  void visitSelectInst(HWAOpInst *A){}
-  void visitCallInst (HWAOpInst *A){}
-  void visitInlineAsm(HWAOpInst *A){}
+  void visitSelectInst(HWAOpInst &A){}
+  void visitCallInst (HWAOpInst &A){}
+  void visitInlineAsm(HWAOpInst &A){}
   bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee){}
 
-  void visitAllocaInst(HWAOpInst *A) {}
-  void visitLoadInst  (HWAOpInst *A){}
-  void visitStoreInst (HWAOpInst *A){}
-  void visitGetElementPtrInst(HWAOpInst *A){}
-  void visitVAArgInst (HWAOpInst *A){}
+  void visitAllocaInst(HWAOpInst &A) {}
+  void visitLoadInst  (HWAOpInst &A){}
+  void visitStoreInst (HWAOpInst &A){}
+  void visitGetElementPtrInst(HWAOpInst &A){}
+  void visitVAArgInst (HWAOpInst &A){}
 
-  void visitInsertElementInst(HWAOpInst *A){}
-  void visitExtractElementInst(HWAOpInst *A){}
-  void visitShuffleVectorInst(HWAOpInst *A){}
+  void visitInsertElementInst(HWAOpInst &A){}
+  void visitExtractElementInst(HWAOpInst &A){}
+  void visitShuffleVectorInst(HWAOpInst &A){}
 
-  void visitInsertValueInst(HWAOpInst *A){}
-  void visitExtractValueInst(HWAOpInst *A){}
+  void visitInsertValueInst(HWAOpInst &A){}
+  void visitExtractValueInst(HWAOpInst &A){}
 
-  void visitInstruction(HWAOpInst *A) {
+  void visitInstruction(HWAOpInst &A) {
     llvm_unreachable("Unknown instruction!");
   }
 
 
 #define HANDLE_INST(NUM, OPCODE, CLASS) \
-  void visit##OPCODE(HWAOpInst *A) { visit##CLASS(A); }
+  void visit##OPCODE(HWAOpInst &A) { visit##CLASS(A); }
 #include "llvm/Instruction.def"
 
-  void visit(HWAOpInst *A) {
-    switch (A->getOpcode()) {
+  void visit(HWAOpInst &A) {
+    switch (A.getOpcode()) {
     default: llvm_unreachable("Unknown instruction type encountered!");
       // Build the switch statement using the Instruction.def file...
 #define HANDLE_INST(NUM, OPCODE, CLASS) \
