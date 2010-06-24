@@ -280,26 +280,27 @@ raw_ostream &VLang::alwaysEnd(raw_ostream &ss, unsigned ind) {
   return ss;
 }
 
-raw_ostream &VLang::param(raw_ostream &ss,
-                              const std::string &Name,
-                              unsigned BitWidth,
-                              unsigned Val) {
+raw_ostream &VLang::param(raw_ostream &ss, const std::string &Name,
+                          unsigned BitWidth, unsigned Val) {
   ss << "parameter " << Name
     << " = " << printConstantInt(Val, BitWidth, false) << ";\n";
   return ss;
 }
 
 raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
-                                 unsigned BitWidth, unsigned Val,
-                                 const std::string &SignalType,
-                                 bool isSigned) {
-  ss << SignalType;
+                               unsigned BitWidth, unsigned Val,
+                               bool isReg, bool isSigned) {
+  ss << (isReg ? "reg " : "wire ");
   
   if(isSigned) ss << "signed ";
 
   if (BitWidth != 1) ss << "[" << BitWidth - 1 << ":0]";
-  
-  ss << " " << Name << " = "
-     << printConstantInt(0, BitWidth, false) << ";\n";
+
+  ss << " " << Name;
+
+  if (isReg)
+    ss << " = " << printConstantInt(0, BitWidth, false);
+
+  ss << ";\n";
   return ss;
 }

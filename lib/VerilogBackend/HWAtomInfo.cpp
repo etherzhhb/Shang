@@ -103,6 +103,8 @@ void HWAtomInfo::visitSelectInst(SelectInst &I) {
 
   // FIXME: Read latency from configure file
   HWAtom *SelAtom = getOpInst(I, Deps, 1);
+  // Register the result
+  SelAtom = getRegister(I, SelAtom);
 
   InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, SelAtom));
 }
@@ -115,7 +117,10 @@ void HWAtomInfo::visitCastInst(CastInst &I) {
   } else // Just use a always ready atom
     Deps.push_back(getCurState());
   // CastInst do not have any latency
-  HWAtom *CastAtom = getOpInst(I, Deps, 0);
+  // FIXME: Create the AtomReAssign Pass and set the latency to 0
+  HWAtom *CastAtom = getOpInst(I, Deps, 1);
+  // Register the result
+  CastAtom = getRegister(I, CastAtom);
   InstToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, CastAtom));
 }
 

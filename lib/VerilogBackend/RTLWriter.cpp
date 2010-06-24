@@ -59,7 +59,10 @@ bool RTLWriter::runOnFunction(Function &F) {
   // Idle state
   vlang->param(getStateDeclBuffer(), "state_idle", HI->getTotalCycleBitWidth(), 0);
   vlang->matchCase(ControlBlock.indent(6), "state_idle");
+  // Idle state is always ready.
+  ControlBlock.indent(8) << "fin <= 1'h0;\n";
   vlang->ifBegin(ControlBlock.indent(8), "start");
+  // The module is busy now
   emitNextState(ControlBlock.indent(10), F.getEntryBlock());
   vlang->ifElse(ControlBlock.indent(8));
   ControlBlock.indent(10) << "CurState <= state_idle\n";
@@ -207,9 +210,13 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
         emitRegister(cast<HWARegister>(A));
         break;
       case atomOpRes:
+        // Emit the origin IR as comment.
+        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
         emitOpRes(cast<HWAOpRes>(A));
         break;
       case atomOpInst:
+        // Emit the origin IR as comment.
+        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
         emitOpInst(cast<HWAOpInst>(A));
         break;
       default:
@@ -230,6 +237,8 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
                totalStatesBits, Slot);
   // Case begin
   vlang->matchCase(ControlBlock.indent(6), StateName + utostr(Slot));
+  // Emit the origin IR as comment.
+  vlang->comment(ControlBlock.indent(8)) << End->getValue() << '\n';
   emitStateEnd(cast<HWAStateEnd>(End));
   // Case end
   vlang->end(ControlBlock.indent(6));
@@ -241,9 +250,9 @@ void RTLWriter::emitCommonPort() {
   getModDeclBuffer() << "input wire " << "clk" << ",\n";
   getModDeclBuffer() << "input wire " << "rstN" << ",\n";
   getModDeclBuffer() << "input wire " << "start" << ",\n";
-  getModDeclBuffer() << "output reg " << "rdy";
-  // Reset rdy
-  vlang->resetRegister(getResetBlockBuffer(), "rdy", 1);
+  getModDeclBuffer() << "output reg " << "fin";
+  // Reset fin
+  vlang->resetRegister(getResetBlockBuffer(), "fin", 1);
 }
 
 void RTLWriter::emitResources(HWResource &Resource) {
@@ -329,6 +338,11 @@ std::string RTLWriter::getAsOperand(HWAtom &A) {
 }
 
 void RTLWriter::emitRegister(HWARegister *Register) {
+  HWAtom &Val = *Register->getDep(0);
+  // Do not emit the dump register
+  if (isa<HWAState>(Val))
+    return;
+
   Instruction &Inst = cast<Instruction>(Register->getValue());
   unsigned BitWidth = 0;
   if (const IntegerType *IntTy = dyn_cast<IntegerType>(Inst.getType()))
@@ -342,9 +356,9 @@ void RTLWriter::emitRegister(HWARegister *Register) {
   vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
   // Reset the register
   vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
+
   // assign the register
-  ControlBlock.indent(8) << Name << " <= "
-                         << getAsOperand(*Register->getDep(0)) << ";\n";
+  ControlBlock.indent(8) << Name << " <= " << getAsOperand(Val) << ";\n";
 }
 
 void RTLWriter::emitOpInst(HWAOpInst *OpRes) {
@@ -357,7 +371,7 @@ void RTLWriter::emitOpInst(HWAOpInst *OpRes) {
     BitWidth =  TD->getPointerSizeInBits();
 
   // Declare the signal
-  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0, "wire ");
+  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0, false);
   //
   DataPath.indent(2) << "assign " << Name << " = ";
   // Emit the data path
@@ -448,6 +462,12 @@ void RTLWriter::visitCastInst(CastInst &I) {
     DataPath <<"}}," << getAsOperand(V) << "}" <<";\n";   
     return;
   }
+}
+
+
+void esyn::RTLWriter::visitReturnInst(ReturnInst &I) {
+  ControlBlock.indent(8) << "fin <= 1'h0;\n";
+  ControlBlock.indent(8) << "CurState <= state_idle\n";
 }
 
 

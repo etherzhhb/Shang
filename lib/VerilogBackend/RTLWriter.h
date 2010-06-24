@@ -103,7 +103,7 @@ class RTLWriter : public FunctionPass, public InstVisitor<RTLWriter> {
   //{
   friend class InstVisitor<RTLWriter>;
 
-  void visitReturnInst(ReturnInst &I){}
+  void visitReturnInst(ReturnInst &I);
   void visitBranchInst(BranchInst &I);
   void visitSwitchInst(SwitchInst &I){}
   void visitIndirectBrInst(IndirectBrInst &I){}

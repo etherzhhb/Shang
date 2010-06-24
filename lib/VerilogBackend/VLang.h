@@ -122,7 +122,7 @@ public:
                             const std::string &Name,
                             unsigned BitWidth,
                             unsigned Val,
-                            const std::string &SignalType = "reg ",
+                            bool isReg = true,
                             bool isSigned = false);
 
   raw_ostream &alwaysEnd(raw_ostream &ss, unsigned ind);
