@@ -56,7 +56,7 @@ class RTLWriter : public FunctionPass {
   raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
     ControlBlock, ResetBlock;
 
-  void emitFunctionSignature(const Function &F);
+  void emitFunctionSignature(Function &F);
   void emitCommonPort();
   void emitBasicBlock(BasicBlock &BB);
 
@@ -77,7 +77,7 @@ class RTLWriter : public FunctionPass {
 
   void clear();
   
-  std::string getAsOperand(Value *V);
+  std::string getAsOperand(Value *V, const std::string &postfix);
   std::string getAsOperand(HWAtom *A);
 
 

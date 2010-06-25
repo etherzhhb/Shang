@@ -104,7 +104,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   HWAtom *getConstant(Value &V);
 
-  HWARegister *getRegister(Instruction &I, HWAtom *Using);
+  HWARegister *getRegister(Value &V, HWAtom *Using);
 
   HWAtom *getSigned(HWAtom *Using);
 

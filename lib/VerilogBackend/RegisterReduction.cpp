@@ -58,7 +58,8 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
           if (R->isDummy())
             A->setDep(i, HI.getAtomFor(R->getValue()));
             // delete R?
-          // Remove unnecessary register level
+          // Only remove unnecessary register level for
+          // "inline" operation
           else if (A->getLatency() == 0 && R->getSlot() == A->getSlot())
             A->setDep(i, R->getDVal());
           else // This is just a normal register

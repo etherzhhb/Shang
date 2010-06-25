@@ -38,19 +38,6 @@ bool RTLWriter::runOnFunction(Function &F) {
   TD = &getAnalysis<TargetData>();
   vlang = &getAnalysis<VLang>();
   HI = &getAnalysis<HWAtomInfo>();
-
-  emitFunctionSignature(F);
-
-  // Emit resources
-  for(HWAtomInfo::resource_iterator I = HI->resource_begin(),
-    E = HI->resource_end();I != E; ++I) {
-      HWResource &Resource = **I;
-      // Ignore the infinite resources, we will emit them on the fly.
-      if (Resource.isInfinite())
-        continue;
-
-      emitResources(Resource);
-  }
   // Emit control register and idle state
   unsigned totalStatesBits = HI->getTotalCycleBitWidth();
   vlang->declSignal(getSignalDeclBuffer(), "CurState", totalStatesBits, 0);
@@ -64,6 +51,22 @@ bool RTLWriter::runOnFunction(Function &F) {
   vlang->ifBegin(ControlBlock.indent(8), "start");
   // The module is busy now
   emitNextState(ControlBlock.indent(10), F.getEntryBlock());
+  
+  // Remember the parameters
+  emitFunctionSignature(F);
+
+  // Emit resources
+  for(HWAtomInfo::resource_iterator I = HI->resource_begin(),
+    E = HI->resource_end();I != E; ++I) {
+      HWResource &Resource = **I;
+      // Ignore the infinite resources, we will emit them on the fly.
+      if (Resource.isInfinite())
+        continue;
+
+      emitResources(Resource);
+  }
+
+  //
   vlang->ifElse(ControlBlock.indent(8));
   ControlBlock.indent(10) << "CurState <= state_idle\n";
   vlang->end(ControlBlock.indent(8));
@@ -137,29 +140,26 @@ void RTLWriter::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void RTLWriter::emitFunctionSignature(const Function &F) {
+void RTLWriter::emitFunctionSignature(Function &F) {
   const AttrListPtr &PAL = F.getAttributes();
   unsigned Idx = 1;
-  for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();
-    I != E; ++I) {
-      // integers:
-      const Type *ArgTy = I->getType();
-      if (ArgTy->isPointerTy()) {
-        // Get the pointer bit witdh, only print the input parameter now.
-        unsigned PtrBitWitdh = TD->getPointerSizeInBits();
-        getModDeclBuffer()
-          << VLang::printType(IntegerType::get(F.getContext(), PtrBitWitdh),
-                              false,
-                              vlang->GetValueName(I), "wire ", "input ")
-          << ",\n";
-      } else if(ArgTy->isIntegerTy()) {
-        getModDeclBuffer() <<
-          VLang::printType(ArgTy, PAL.paramHasAttr(Idx, Attribute::SExt),
-                           vlang->GetValueName(I), "wire ", "input ") << ",\n";
-        ++Idx;
-      } else {
-        vlang->comment(getModDeclBuffer()) << "Unsopport Type\n";
-      }
+  for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end();
+      I != E; ++I) {
+    Argument &Arg = *I;
+    unsigned BitWidth = vlang->getBitWidth(Arg);
+
+    std::string Name = vlang->GetValueName(&Arg), 
+                RegName = getAsOperand(&Arg, "");
+    //
+    vlang->declSignal((getModDeclBuffer() << "input "),
+      Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt));
+    // Declare the register
+    vlang->declSignal(getSignalDeclBuffer(), RegName, BitWidth, 0);
+    // Reset the register
+    vlang->resetRegister(getResetBlockBuffer(), RegName, BitWidth, 0);
+    // Assign the register
+    ControlBlock.indent(10) << RegName << " <= " << Name << ";\n";
+    ++Idx;
   }
 
   const Type *RetTy = F.getReturnType();
@@ -274,37 +274,30 @@ RTLWriter::~RTLWriter() {
 
 //===----------------------------------------------------------------------===//
 // Emit hardware atoms
-std::string RTLWriter::getAsOperand(Value *V) {
-  // Phi node is a register.
-  //if (PHINode *PHI = dyn_cast<PHINode>(V))
-  //  return vlang->GetValueName(PHI) + "_phi_r";
+std::string RTLWriter::getAsOperand(Value *V, const std::string &postfix) {
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
+    return vlang->printConstant(CI);
 
-  return getAsOperand(HI->getAtomFor(*V));
+  if (PHINode *PHI = dyn_cast<PHINode>(V))
+    return vlang->GetValueName(PHI) + "_phi_r";
+
+  if (Argument *Arg = dyn_cast<Argument>(V))
+    return vlang->GetValueName(V) + "_pr";
+
+  return vlang->GetValueName(V) + postfix;
 }
 std::string RTLWriter::getAsOperand(HWAtom *A) {
   Value *V = &A->getValue();
   switch (A->getHWAtomType()) {
     case atomRegister:
-      return vlang->GetValueName(&A->getValue()) + "_r";
+      return getAsOperand(V, "_r");
     case atomOpRes:
     case atomOpInst:
-      // Phi node is a register.
-      if (PHINode *PHI = dyn_cast<PHINode>(V))
-        return vlang->GetValueName(PHI) + "_phi_r";
-
-      return vlang->GetValueName(&A->getValue()) + "_w";
-    case atomConst: {
-      if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
-        return vlang->printConstant(CI);
-
-      if (Argument *Arg = dyn_cast<Argument>(V))
-        return vlang->GetValueName(V);
-
-      llvm_unreachable("Broken Constant atom find!");
-      return "<Unkown Constant>";
-    }
+      return getAsOperand(V, "_w");
+    case atomConst:
+      return getAsOperand(V, "");
     case atomSignedPrefix:
-      return vlang->GetValueName(&A->getValue()) + "_signed_w";
+      return getAsOperand(V, "") + "_signed_w";
     default:
       return "<Unknown Atom>";
   }
@@ -353,8 +346,8 @@ void RTLWriter::emitRegister(HWARegister *Register) {
   if (Register->isDummy())
     return;
 
-  Instruction &Inst = cast<Instruction>(Register->getValue());
-  unsigned BitWidth = vlang->getBitWidth(Inst);
+  Value &V = Register->getValue();
+  unsigned BitWidth = vlang->getBitWidth(V);
   
   std::string Name = getAsOperand(Register);
 
@@ -522,8 +515,8 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
   while (&*I != NotPhi) {
     PHINode *PN = cast<PHINode>(I);
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
-    ControlBlock.indent(8 + ind) << getAsOperand(I)
-      << " <= " << getAsOperand(IV) << ";\n";      
+    ControlBlock.indent(8 + ind) << getAsOperand(HI->getAtomFor(*I))
+      << " <= " << getAsOperand(HI->getAtomFor(*IV)) << ";\n";      
     ++I;
   }
 }

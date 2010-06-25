@@ -199,9 +199,9 @@ public:
 /// @brief The register atom will break the WAR dependence
 class HWARegister : public HWAInline {
 public:
-  explicit HWARegister(const FoldingSetNodeIDRef ID, Instruction &I,
+  explicit HWARegister(const FoldingSetNodeIDRef ID, Value &V,
     HWAtom **O) 
-    : HWAInline(ID, atomRegister, I, O) {}
+    : HWAInline(ID, atomRegister, V, O) {}
 
   // The "D" input for the register
   HWAtom *getDVal() { return getDep(0); }

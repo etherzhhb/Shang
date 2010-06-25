@@ -309,15 +309,15 @@ HWAtom *HWAtomInfo::getConstant(Value &V) {
     return At->second;
 
   FoldingSetNodeID ID;
-  HWAConst *A = new (HWAtomAllocator) HWAConst(ID.Intern(HWAtomAllocator), V);
+  HWAtom *A = new (HWAtomAllocator) HWAConst(ID.Intern(HWAtomAllocator), V);
   ValueToHWAtoms.insert(std::make_pair<const Value*, HWAtom*>(&V, A));
   return A;
 }
 
-HWARegister *HWAtomInfo::getRegister(Instruction &I, HWAtom *Using) {
+HWARegister *HWAtomInfo::getRegister(Value &V, HWAtom *Using) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomRegister);
-  ID.AddPointer(&I);
+  ID.AddPointer(&V);
   ID.AddPointer(Using);
 
   void *IP = 0;
@@ -327,7 +327,7 @@ HWARegister *HWAtomInfo::getRegister(Instruction &I, HWAtom *Using) {
   if (!A) {
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(1);
     O[0] = Using;
-    A = new (HWAtomAllocator) HWARegister(ID.Intern(HWAtomAllocator), I , O);
+    A = new (HWAtomAllocator) HWARegister(ID.Intern(HWAtomAllocator), V , O);
     // Add New Atom
     getCurState()->addNewAtom(A);
   }
