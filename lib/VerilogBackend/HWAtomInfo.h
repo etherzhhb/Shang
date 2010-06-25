@@ -158,10 +158,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     if (BB == Inst.getParent())
       return getAtomFor(Inst);
     else
-      // Create the register
-      // FIXME: Return the state and then Reassign the real register
-      // After schedule
-      return getRegister(Inst, CurState);
+      return CurState;
   }
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
     BasicBlock *ParentBB = I.getParent();

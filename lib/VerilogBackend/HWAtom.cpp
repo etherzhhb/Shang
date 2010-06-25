@@ -47,12 +47,6 @@ void HWASigned::print(raw_ostream &OS) const {
   OS << ")";
 }
 
-
-
-bool HWARegister::isDummy() /*const*/ {
-  return isa<HWAState>(getDVal());
-}
-
 void HWARegister::print(raw_ostream &OS) const {
   OS << "Register: ";
   WriteAsOperand(OS, &Val, false);

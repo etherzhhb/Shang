@@ -205,7 +205,6 @@ public:
 
   // The "D" input for the register
   HWAtom *getDVal() { return getDep(0); }
-  bool isDummy() /*const*/;
 
   void print(raw_ostream &OS) const;
 

@@ -296,7 +296,7 @@ void RTLWriter::emitAtom(HWAtom *A) {
         emitSigned(cast<HWASigned>(A));
         break;
       default:
-        ;
+        llvm_unreachable("Unknow Atom!");;
   }
 }
 
@@ -313,9 +313,6 @@ void RTLWriter::emitSigned(HWASigned *Signed) {
 
 void RTLWriter::emitRegister(HWARegister *Register) {
   HWAtom *Val = Register->getDVal();
-  // Do not emit the dump register
-  if (Register->isDummy())
-    return;
 
   Value &V = Register->getValue();
   unsigned BitWidth = vlang->getBitWidth(V);
@@ -385,10 +382,13 @@ void RTLWriter::opMemBus(HWAOpRes *OpRes) {
     StoreInst &S = OpRes->getInst<StoreInst>();
     // Address
     ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
-      getAsOperand(OpRes->getOperand(LoadInst::getPointerOperandIndex()))
+      getAsOperand(OpRes->getOperand(StoreInst::getPointerOperandIndex()))
       << ";\n";
+    // modify the store value
+    ControlBlock.indent(8) << "membus_in" << ResourceId
+      << " = " << getAsOperand(OpRes->getOperand(0)) << ";\n";
     // modify the read mode
-    ControlBlock.indent(8) << "membus_mode = 1'b1;\n";
+    ControlBlock.indent(8) << "membus_mode" << ResourceId << " = 1'b1;\n";
   }
 }
 
@@ -406,6 +406,9 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus) {
       << "output reg [" << (DataWidth - 1) << ":0] membus_in" << i << ",\n";
     vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(i),
       DataWidth);
+    // Set the default state of read mode
+    PreAssign.indent(6) << "membus_in" << i <<" = "
+      << vlang->printConstantInt(0, DataWidth, false) << ";\n";
 
     getModDeclBuffer()
       << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"<< i << ",\n";
@@ -416,7 +419,7 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus) {
     vlang->resetRegister(getResetBlockBuffer(), "membus_mode" + utostr(i),
       1);
     // Set the default state of read mode
-    PreAssign.indent(6) << "membus_mode = 1'b0;\n";
+    PreAssign.indent(6) << "membus_mode" << i <<" = 1'b0;\n";
   }
 }
 

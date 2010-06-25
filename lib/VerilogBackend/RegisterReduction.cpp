@@ -45,36 +45,28 @@ bool RegReduction::runOnFunction(Function &F) {
 bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   HWAState &State = HI.getStateFor(BB);
-  SmallVector<HWARegister*, 4> DummyRegs;
   // For each atom
   for (HWAState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     if (HWASchedable *A = dyn_cast<HWASchedable>(*I)) {
       Instruction &Inst = A->getInst<Instruction>();
-
-      for (unsigned i = 0, e = A->getEffectiveNumOps(); i != e; ++i)
+      for (unsigned i = 0, e = A->getEffectiveNumOps(); i != e; ++i) {
+        // Remove the false dependence for live in registers
+        if (A->getDep(i) == &State)
+          A->setDep(i, HI.getAtomFor(*Inst.getOperand(i)));
+        
         // For all register
-        // FIXME: use get operand! but this fail on terminator
-        while (HWARegister *R = dyn_cast<HWARegister>(A->getDep(i))) {
-          // Remove the dummy registers
-          if (R->isDummy()) {
-            A->setDep(i, HI.getAtomFor(R->getValue()));
-            // Remember and delete R later
-            DummyRegs.push_back(R);
-          }
+        while (HWARegister *R = dyn_cast<HWARegister>(A->getOperand(i))) {
           // Only remove unnecessary register level for
           // "inline" operation
-          else if ((isa<HWAOpRes>(A) || A->getLatency() == 0)
+          if ((isa<HWAOpRes>(A) || A->getLatency() == 0)
                    && R->getSlot() == A->getSlot())
             A->setDep(i, R->getDVal());
           else // This is just a normal register
             break;
         }
+      }
     }
   }
-  
-  // Remove all dumy register
-  for (unsigned i = 0, e = DummyRegs.size(); i != e; ++i)
-    State.eraseAtom(DummyRegs[i]);
   
   return false;
 }
