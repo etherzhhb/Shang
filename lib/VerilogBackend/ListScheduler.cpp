@@ -20,12 +20,25 @@
 //
 
 #include "ScheduleDriver.h"
+#include "HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 using namespace esyn;
+
+namespace {
+class ListScheduler : public Scheduler {
+public:
+  static char ID;
+  explicit ListScheduler() : Scheduler(&ID) {}
+  bool runOnBasicBlock(BasicBlock &BB);
+  void releaseMemory();
+  void getAnalysisUsage(AnalysisUsage &AU) const;
+  virtual void print(raw_ostream &O, const Module *M) const;
+};
+} //end namespace
 
 char ListScheduler::ID = 0;
 
@@ -106,4 +119,8 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
 
 void ListScheduler::releaseMemory() {
   clear();
+}
+
+Pass *esyn::createListSchedulePass() {
+  return new ListScheduler();
 }

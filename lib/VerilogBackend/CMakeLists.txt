@@ -6,6 +6,7 @@ add_llvm_target(VerilogBackend
   ListScheduler.cpp
   VBackend.cpp
   VLang.cpp
+  RegisterReduction.cpp
   RTLWriter.cpp
   ScheduleDriver.cpp
   TestbenchWriter.cpp

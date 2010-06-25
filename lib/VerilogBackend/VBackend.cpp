@@ -9,48 +9,16 @@
 * Nadav Rotem. 
 */
 #include "VTargetMachine.h"
-#include "llvm/CallingConv.h"
-#include "llvm/Constants.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Module.h"
-#include "llvm/Instructions.h"
-#include "llvm/Pass.h"
 #include "llvm/PassManager.h"
-#include "llvm/TypeSymbolTable.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/IntrinsicInst.h"
-#include "llvm/InlineAsm.h"
-#include "llvm/Analysis/ConstantsScanner.h"
-#include "llvm/Analysis/FindUsedTypes.h"
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/CodeGen/IntrinsicLowering.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Target/TargetRegistry.h "
-#include "llvm/Target/TargetData.h"
-#include "llvm/Support/CallSite.h"
-#include "llvm/Support/CFG.h"
-#include "llvm/Support/GetElementPtrTypeIterator.h"
-#include "llvm/Support/InstVisitor.h"
-#include "llvm/MC/MCAsmInfo.h"
-#include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCSymbol.h"
-#include "llvm/Target/Mangler.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Config/config.h"
-#include <algorithm>
-#include <sstream>
+#include "llvm/Target/TargetRegistry.h"
+
 #include "llvm/Support/raw_ostream.h"
-
-
-#include "llvm/Support/Debug.h"
 
 #include "HWAtomInfo.h"
 #include "ScheduleDriver.h"
 #include "RTLWriter.h"
 #include "TestBenchWriter.h"
+#include "HWAtomPasses.h"
 #include "vbe/ResourceConfig.h"
 
 using namespace llvm;
@@ -79,7 +47,9 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(new VLang());
     //
     PM.add(new HWAtomInfo(*RC));
-    PM.add(new ListScheduler());
+    PM.add(createListSchedulePass());
+
+    PM.add(createRegisterReductionPass());
     //
     PM.add(new RTLWriter(Out));
     PM.add(new TestbenchWriter(Out));

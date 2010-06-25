@@ -58,16 +58,6 @@ public:
   virtual ~Scheduler();
 };
 
-class ListScheduler : public Scheduler {
-public:
-  static char ID;
-  ListScheduler() : Scheduler(&ID) {}
-  bool runOnBasicBlock(BasicBlock &BB);
-  void releaseMemory();
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const;
-};
-
 /// @brief Hardware atome schedule pass.
 class ScheduleDriver :public FunctionPass {
   // The loop info 

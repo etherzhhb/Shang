@@ -352,9 +352,9 @@ void RTLWriter::emitSigned(HWASigned *Signed) {
 }
 
 void RTLWriter::emitRegister(HWARegister *Register) {
-  HWAtom *Val = Register->getDep(0);
+  HWAtom *Val = Register->getDVal();
   // Do not emit the dump register
-  if (isa<HWAState>(Val))
+  if (Register->isDummy())
     return;
 
   Instruction &Inst = cast<Instruction>(Register->getValue());

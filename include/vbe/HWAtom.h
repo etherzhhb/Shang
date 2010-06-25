@@ -63,7 +63,7 @@ class HWAtom : public FoldingSetNode {
   const unsigned short HWAtomType;
 
   /// First of all, we schedule all atom base on dependence
-  HWAtom *const *Deps;
+  HWAtom **Deps;
   size_t NumDeps;
 
 
@@ -83,7 +83,7 @@ protected:
 public:
   explicit HWAtom(const FoldingSetNodeIDRef ID,
     unsigned HWAtomTy, Value &V, 
-    HWAtom *const *deps, size_t numDeps) 
+    HWAtom **deps, size_t numDeps) 
     : FastID(ID), HWAtomType(HWAtomTy), Val(V), Deps(deps),
     NumDeps(numDeps), SchedSlot(UINT32_MAX >> 1) {}
 
@@ -100,6 +100,11 @@ public:
   HWAtom *getDep(unsigned i) const {
     assert(i < NumDeps && "Operand index out of range!");
     return Deps[i];
+  }
+
+  void setDep(unsigned idx, HWAtom *NewDep) {
+    assert(idx < NumDeps && "Operand index out of range!");
+    Deps[idx] = NewDep;
   }
 
   typedef HWAtom *const *dep_iterator;
@@ -160,7 +165,7 @@ public:
 class HWAInline : public HWAtom {
 protected:
   explicit HWAInline(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Value &V, HWAtom *const *O) : HWAtom(ID, T, V, O, 1) {}
+    Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
 public:
 
   virtual bool isOperationFinish(unsigned CurSlot) const {
@@ -179,7 +184,7 @@ public:
 /// @brief The signed wire marker
 class HWASigned : public HWAInline {
 public:
-  explicit HWASigned(const FoldingSetNodeIDRef ID, HWAtom *const *O)
+  explicit HWASigned(const FoldingSetNodeIDRef ID, HWAtom **O)
     : HWAInline(ID, atomSignedPrefix, O[0]->getValue(), O){}
 
   void print(raw_ostream &OS) const;
@@ -195,8 +200,12 @@ public:
 class HWARegister : public HWAInline {
 public:
   explicit HWARegister(const FoldingSetNodeIDRef ID, Instruction &I,
-    HWAtom *const *O) 
+    HWAtom **O) 
     : HWAInline(ID, atomRegister, I, O) {}
+
+  // The "D" input for the register
+  HWAtom *getDVal() { return getDep(0); }
+  bool isDummy() /*const*/;
 
   void print(raw_ostream &OS) const;
 
@@ -213,7 +222,7 @@ class HWASchedable : public HWAtom {
 
 protected:
   explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, unsigned latency, HWAtom *const *deps, size_t numDep)
+    Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep)
     : HWAtom(ID, T, Inst, deps, numDep), Latency(latency) {}
 public:
   // Get the latency of this atom
@@ -224,34 +233,6 @@ public:
   virtual bool isOperationFinish(unsigned CurSlot) const {
     return SchedSlot + Latency <= CurSlot;
   }
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWASchedable *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpRes ||
-      A->getHWAtomType() == atomEmitNextLoop ||
-      A->getHWAtomType() == atomOpInst;
-  }
-};
-
-class HWAEmitNextLoop : public HWASchedable {
-public:
-  explicit HWAEmitNextLoop(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, HWAtom *const *deps, size_t numDep)
-    : HWASchedable(ID, T, Inst, 0, deps, numDep) {}
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAEmitNextLoop *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomEmitNextLoop;
-  }
-};
-
-class HWAOpInst : public HWASchedable {
-public:
-  explicit HWAOpInst(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom *const *deps, size_t numDep)
-    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep) {}
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -268,6 +249,21 @@ public:
   unsigned getOpcode() const {
     return cast<Instruction>(getValue()).getOpcode();
   }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWASchedable *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomOpRes ||
+      A->getHWAtomType() == atomEmitNextLoop ||
+      A->getHWAtomType() == atomOpInst;
+  }
+};
+
+class HWAOpInst : public HWASchedable {
+public:
+  explicit HWAOpInst(const FoldingSetNodeIDRef ID, Instruction &Inst,
+    unsigned latency, HWAtom **deps, size_t numDep)
+    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep) {}
 
   void print(raw_ostream &OS) const;
 
@@ -287,7 +283,7 @@ protected:
 
 public:
   explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom *const *deps, size_t numDep,
+    unsigned latency, HWAtom **deps, size_t numDep,
     HWResource &Res, unsigned Instance)
     : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep),
       Used(Res), ResId(Instance) {
