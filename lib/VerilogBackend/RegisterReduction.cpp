@@ -59,7 +59,7 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
             A->setDep(i, HI.getAtomFor(R->getValue()));
             // delete R?
           // Remove unnecessary register level
-          else if (R->getSlot() == A->getSlot())
+          else if (A->getLatency() == 0 && R->getSlot() == A->getSlot())
             A->setDep(i, R->getDVal());
           else // This is just a normal register
             break;

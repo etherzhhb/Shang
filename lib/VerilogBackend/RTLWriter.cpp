@@ -369,6 +369,12 @@ void RTLWriter::emitRegister(HWARegister *Register) {
 
 void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
   Instruction &Inst = cast<Instruction>(OpInst->getValue());
+  // Do not emit phi node.
+  if (isa<PHINode>(Inst))
+    return;
+  
+  vlang->comment(DataPath.indent(2)) << "at slot: " << OpInst->getSlot()
+                                     << '\n';
   std::string Name = getAsOperand(OpInst);
   // Do not decl signal for void type
   if (!Inst.getType()->isVoidTy()) {
@@ -379,8 +385,6 @@ void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
   }
   // Emit the data path
   visit(*OpInst);
-  //
-  DataPath << "\n";
 }
 
 void RTLWriter::emitOpRes(HWAOpRes *OpRes) {
@@ -453,6 +457,34 @@ void RTLWriter::visitExtInst(HWAOpInst &A) {
 void esyn::RTLWriter::visitReturnInst(HWAOpInst &A) {
   ControlBlock.indent(8) << "fin <= 1'h0;\n";
   ControlBlock.indent(8) << "CurState <= state_idle\n";
+}
+
+void esyn::RTLWriter::visitGetElementPtrInst(HWAOpInst &A) {
+  GetElementPtrInst &I = A.getInst<GetElementPtrInst>();
+  const Type *Ty = I.getOperand(0)->getType();
+  assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
+  assert(I.getNumIndices() < 2 && "Too much indices in GEP!");
+
+  DataPath << getAsOperand(A.getOperand(0)) << " + "
+           << getAsOperand(A.getOperand(1)) << ";\n"; // FIXME multipy the element size.
+}
+
+void esyn::RTLWriter::visitBinaryOperator(HWAOpInst &A) {
+  DataPath << getAsOperand(A.getOperand(0));
+  Instruction &I = A.getInst<Instruction>();
+  switch (I.getOpcode()) {
+  case Instruction::Add:  DataPath << " + "; break;
+  case Instruction::Sub:  DataPath << " - "; break;
+  case Instruction::Mul:  DataPath << " * "; break;
+  case Instruction::And:  DataPath << " & "; break;
+  case Instruction::Or:   DataPath << " | "; break;
+  case Instruction::Xor:  DataPath << " ^ "; break;
+  case Instruction::Shl : DataPath << " << "; break;
+  case Instruction::LShr: DataPath << " >> "; break;
+  case Instruction::AShr: DataPath << " >>> ";  break;
+  default: DataPath << " <unsupport> "; break;
+  }
+  DataPath << getAsOperand(A.getOperand(1)) << ";\n";
 }
 
 void RTLWriter::visitTruncInst(HWAOpInst &A) {

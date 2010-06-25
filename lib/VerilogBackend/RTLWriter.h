@@ -115,7 +115,7 @@ class RTLWriter : public FunctionPass {
   void visitUnreachableInst(HWAOpInst &A){}
 
   void visitPHINode(HWAOpInst &A);
-  void visitBinaryOperator(HWAOpInst &A){}
+  void visitBinaryOperator(HWAOpInst &A);
   void visitICmpInst(HWAOpInst &A);
   void visitFCmpInst(HWAOpInst &A){}
 
@@ -144,7 +144,7 @@ class RTLWriter : public FunctionPass {
   void visitAllocaInst(HWAOpInst &A) {}
   void visitLoadInst  (HWAOpInst &A){}
   void visitStoreInst (HWAOpInst &A){}
-  void visitGetElementPtrInst(HWAOpInst &A){}
+  void visitGetElementPtrInst(HWAOpInst &A);
   void visitVAArgInst (HWAOpInst &A){}
 
   void visitInsertElementInst(HWAOpInst &A){}
