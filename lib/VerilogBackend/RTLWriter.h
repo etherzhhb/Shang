@@ -54,7 +54,7 @@ class RTLWriter : public FunctionPass {
 
   // Buffers
   raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
-    ControlBlock, ResetBlock;
+    ControlBlock, ResetBlock, PreAssign;
 
   void emitFunctionSignature(Function &F);
   void emitCommonPort();
@@ -63,6 +63,7 @@ class RTLWriter : public FunctionPass {
   // Resource
   void emitResources(HWResource &Resource);
   void emitMemBus(HWMemBus &MemBus);
+  void opMemBus(HWAOpRes *OpRes);
 
   // Atoms
   void emitAtom(HWAtom *A);
@@ -77,7 +78,7 @@ class RTLWriter : public FunctionPass {
 
   void clear();
   
-  std::string getAsOperand(Value *V, const std::string &postfix);
+  std::string getAsOperand(Value *V, const std::string &postfix = "");
   std::string getAsOperand(HWAtom *A);
 
 
@@ -185,7 +186,8 @@ public:
     SignalDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
-    ResetBlock(*(new std::string())){
+    ResetBlock(*(new std::string())),
+    PreAssign(*(new std::string())){
   }
   ~RTLWriter();
 

@@ -148,12 +148,7 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
       Res = HWMemBus::createFromXml(ResNode);
       break;
     default:
-      Res =
-        new HWResource(LogicUnit,
-        getSubNodeAsString(ResNode, "Name"),
-        getSubNodeAsInteger(ResNode, "Latency"),
-        getSubNodeAsInteger(ResNode, "StartInterval"),
-        getSubNodeAsInteger(ResNode, "TotalNum"));
+      report_fatal_error("Unknow resource type!");
       break;
     }
     ResTab.insert(std::pair<std::string, HWResource*> (Res->getName(), Res));

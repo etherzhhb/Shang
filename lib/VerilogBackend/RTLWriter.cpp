@@ -38,6 +38,8 @@ bool RTLWriter::runOnFunction(Function &F) {
   TD = &getAnalysis<TargetData>();
   vlang = &getAnalysis<VLang>();
   HI = &getAnalysis<HWAtomInfo>();
+
+
   // Emit control register and idle state
   unsigned totalStatesBits = HI->getTotalCycleBitWidth();
   vlang->declSignal(getSignalDeclBuffer(), "CurState", totalStatesBits, 0);
@@ -57,14 +59,8 @@ bool RTLWriter::runOnFunction(Function &F) {
 
   // Emit resources
   for(HWAtomInfo::resource_iterator I = HI->resource_begin(),
-    E = HI->resource_end();I != E; ++I) {
-      HWResource &Resource = **I;
-      // Ignore the infinite resources, we will emit them on the fly.
-      if (Resource.isInfinite())
-        continue;
-
-      emitResources(Resource);
-  }
+    E = HI->resource_end();I != E; ++I)
+    emitResources(**I);
 
   //
   vlang->ifElse(ControlBlock.indent(8));
@@ -105,6 +101,11 @@ bool RTLWriter::runOnFunction(Function &F) {
   vlang->alwaysBegin(Out, 2);
   Out << ResetBlock.str();
   vlang->ifElse(Out.indent(4));
+
+  vlang->comment(Out.indent(6)) << "PreAssign\n";
+  Out << PreAssign.str();
+
+  vlang->comment(Out.indent(6)) << "FSM\n";
   vlang->switchCase(Out.indent(6), "CurState");
   Out << ControlBlock.str();
   vlang->endSwitch(Out.indent(6));
@@ -127,6 +128,8 @@ void RTLWriter::clear() {
   ControlBlock.str().clear();
 
   ResetBlock.str().clear();
+
+  PreAssign.str().clear();
 }
 
 void RTLWriter::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -149,7 +152,7 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     unsigned BitWidth = vlang->getBitWidth(Arg);
 
     std::string Name = vlang->GetValueName(&Arg), 
-                RegName = getAsOperand(&Arg, "");
+                RegName = getAsOperand(&Arg);
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
       Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt));
@@ -203,6 +206,8 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
     vlang->matchCase(ControlBlock.indent(6), StateName + utostr(i));
 
     // Emit all atoms at cycle i
+
+    vlang->comment(DataPath.indent(2)) << "at cycle: " << i << '\n';
     for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
         CI != CE; ++CI)
       emitAtom(CI->second);
@@ -224,42 +229,6 @@ void RTLWriter::emitCommonPort() {
   getModDeclBuffer() << "output reg " << "fin";
   // Reset fin
   vlang->resetRegister(getResetBlockBuffer(), "fin", 1);
-}
-
-void RTLWriter::emitResources(HWResource &Resource) {
-  assert(!Resource.isInfinite() && "Resource expect to be finite!");
-  switch (Resource.getResourceType()) {
-  case MemoryBus:
-    emitMemBus(cast<HWMemBus>(Resource));
-  default:
-    return;
-  }
-}
-
-void RTLWriter::emitMemBus(HWMemBus &MemBus) {
-  unsigned DataWidth = MemBus.getDataWidth(),
-           AddrWidth = MemBus.getAddrWidth();
-  // TODO: only emit the used ports
-  for (unsigned i = 1, e = MemBus.getTotalRes() + 1; i != e; ++i) {
-    ModDecl << '\n';
-    vlang->comment(getModDeclBuffer()) << "Memory bus " << i << '\n';
-    getModDeclBuffer()
-      << "input wire [" << (DataWidth-1) << ":0] membus_out" << i <<",\n";
-
-    getModDeclBuffer()
-      << "output reg [" << (DataWidth - 1) << ":0] membus_in" << i << ",\n";
-    vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(i),
-                        DataWidth);
-  
-    getModDeclBuffer()
-      << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"<< i << ",\n";
-    vlang->resetRegister(getResetBlockBuffer(), "membus_addr" + utostr(i),
-                        AddrWidth);
-
-    getModDeclBuffer() << "output reg membus_mode" << i << ",\n";
-    vlang->resetRegister(getResetBlockBuffer(), "membus_mode" + utostr(i),
-                        1);
-  }
 }
 
 RTLWriter::~RTLWriter() {
@@ -295,9 +264,9 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomOpInst:
       return getAsOperand(V, "_w");
     case atomConst:
-      return getAsOperand(V, "");
+      return getAsOperand(V);
     case atomSignedPrefix:
-      return getAsOperand(V, "") + "_signed_w";
+      return getAsOperand(V) + "_signed_w";
     default:
       return "<Unknown Atom>";
   }
@@ -307,18 +276,20 @@ void RTLWriter::emitAtom(HWAtom *A) {
   switch (A->getHWAtomType()) {
       case atomRegister:
         // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << "Write Result to Reg: "
+        vlang->comment(ControlBlock.indent(8)) << "Finish: "
           << A->getValue() << '\n';
         emitRegister(cast<HWARegister>(A));
         break;
       case atomOpRes:
         // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
+        vlang->comment(ControlBlock.indent(8)) << "Emit: "
+          << A->getValue() << '\n';
         emitOpRes(cast<HWAOpRes>(A));
         break;
       case atomOpInst:
         // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
+        vlang->comment(ControlBlock.indent(8)) << "Emit: "
+          << A->getValue() << '\n';
         emitOpInst(cast<HWAOpInst>(A));
         break;
       case atomSignedPrefix:
@@ -365,9 +336,7 @@ void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
   // Do not emit phi node.
   if (isa<PHINode>(Inst))
     return;
-  
-  vlang->comment(DataPath.indent(2)) << "at slot: " << OpInst->getSlot()
-                                     << '\n';
+
   std::string Name = getAsOperand(OpInst);
   // Do not decl signal for void type
   if (!Inst.getType()->isVoidTy()) {
@@ -381,7 +350,74 @@ void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
 }
 
 void RTLWriter::emitOpRes(HWAOpRes *OpRes) {
+  switch (OpRes->getUsedResource().getResourceType()) {
+  case MemoryBus:
+    opMemBus(OpRes);
+    break;
+  }
+}
 
+void RTLWriter::emitResources(HWResource &Resource) {
+  switch (Resource.getResourceType()) {
+  case MemoryBus:
+    emitMemBus(cast<HWMemBus>(Resource));
+  default:
+    return;
+  }
+}
+
+void RTLWriter::opMemBus(HWAOpRes *OpRes) {
+  HWMemBus &MemBus = cast<HWMemBus>(OpRes->getUsedResource());
+
+  unsigned DataWidth = MemBus.getDataWidth(),
+           AddrWidth = MemBus.getAddrWidth(),
+           ResourceId = OpRes->getResourceId();
+
+  if (LoadInst *L = dyn_cast<LoadInst>(&OpRes->getValue())) {
+    // Address
+    ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
+      getAsOperand(OpRes->getOperand(LoadInst::getPointerOperandIndex()))
+      << ";\n";
+    // Data
+    DataPath.indent(2) <<  "assign " << getAsOperand(OpRes) 
+      << " = membus_out" << ResourceId <<";\n";
+  } else {
+    StoreInst &S = OpRes->getInst<StoreInst>();
+    // Address
+    ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
+      getAsOperand(OpRes->getOperand(LoadInst::getPointerOperandIndex()))
+      << ";\n";
+    // modify the read mode
+    ControlBlock.indent(8) << "membus_mode = 1'b1;\n";
+  }
+}
+
+void RTLWriter::emitMemBus(HWMemBus &MemBus) {
+  unsigned DataWidth = MemBus.getDataWidth(),
+    AddrWidth = MemBus.getAddrWidth();
+  // TODO: only emit the used ports
+  for (unsigned i = 1, e = MemBus.getTotalRes() + 1; i != e; ++i) {
+    ModDecl << '\n';
+    vlang->comment(getModDeclBuffer()) << "Memory bus " << i << '\n';
+    getModDeclBuffer()
+      << "input wire [" << (DataWidth-1) << ":0] membus_out" << i <<",\n";
+
+    getModDeclBuffer()
+      << "output reg [" << (DataWidth - 1) << ":0] membus_in" << i << ",\n";
+    vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(i),
+      DataWidth);
+
+    getModDeclBuffer()
+      << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"<< i << ",\n";
+    vlang->resetRegister(getResetBlockBuffer(), "membus_addr" + utostr(i),
+      AddrWidth);
+
+    getModDeclBuffer() << "output reg membus_mode" << i << ",\n";
+    vlang->resetRegister(getResetBlockBuffer(), "membus_mode" + utostr(i),
+      1);
+    // Set the default state of read mode
+    PreAssign.indent(6) << "membus_mode = 1'b0;\n";
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -443,7 +479,7 @@ void RTLWriter::visitExtInst(HWAOpInst &A) {
   else
     DataPath << getAsOperand(&A) << "["<< (ChTy->getBitWidth()-1)<<"]";
 
-  DataPath <<"}}," << getAsOperand(&A) << "}" <<";\n";   
+  DataPath <<"}}," << getAsOperand(A.getOperand(0)) << "}" <<";\n";   
 }
 
 

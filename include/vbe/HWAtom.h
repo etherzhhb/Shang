@@ -329,7 +329,16 @@ public:
     return true;
   }
 
-  void addNewAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
+  void pushAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
+  bool eraseAtom(HWAtom *Atom) {
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      if (*I == Atom) {
+        Atoms.erase(I);
+        return true;
+      }
+
+    return false;
+  }
 
   typedef HWAtomVecType::iterator iterator;
   iterator begin() { return Atoms.begin(); }

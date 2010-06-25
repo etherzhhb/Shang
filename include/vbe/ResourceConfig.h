@@ -73,22 +73,19 @@ class HWResource {
 
   HWResource(const HWResource &);            // DO NOT IMPLEMENT
   void operator=(const HWResource &);  // DO NOT IMPLEMENT
-public:
-  static const unsigned Infinite = UINT32_MAX;
-
+protected:
   explicit HWResource(enum HWResourceTypes type,
     std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
     : ResourceType(type), Name(name), Latency(latency), StartInt(startInt),
-      TotalRes(totalRes), UsingCount(totalRes != UINT32_MAX ? totalRes : 0) {
+      TotalRes(totalRes), UsingCount(totalRes) {
     //
     clear();
   }
-
+public:
   unsigned getResourceType() const { return ResourceType; }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
-  bool isInfinite() const { return TotalRes == Infinite; }
   unsigned getStartInt() const { return StartInt; }
   const std::string &getName() const { return Name; }
 

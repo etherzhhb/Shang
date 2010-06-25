@@ -137,7 +137,7 @@ std::string VLang::GetValueName(const Value *Operand) {
     VarName += ch;
   }
 
-  return "llvm_vbe_" + VarName;
+  return "esyn_" + VarName;
 }
 
 std::string VLang::printType(const Type *Ty,

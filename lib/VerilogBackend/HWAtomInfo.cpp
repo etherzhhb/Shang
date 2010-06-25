@@ -329,7 +329,7 @@ HWARegister *HWAtomInfo::getRegister(Value &V, HWAtom *Using) {
     O[0] = Using;
     A = new (HWAtomAllocator) HWARegister(ID.Intern(HWAtomAllocator), V , O);
     // Add New Atom
-    getCurState()->addNewAtom(A);
+    getCurState()->pushAtom(A);
   }
   return A;
 }
@@ -352,7 +352,7 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
     O[0] = Using;
     A = new (HWAtomAllocator) HWASigned(ID.Intern(HWAtomAllocator), O);
     // Add New Atom
-    getCurState()->addNewAtom(A);
+    getCurState()->pushAtom(A);
   }
   return A;
 }
@@ -360,9 +360,6 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
 HWAOpRes *HWAtomInfo::getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                                size_t OpNum, HWResource &Res, unsigned latency,
                                unsigned ResInst) {
-  if (Res.isInfinite() && ResInst == 0)
-    ResInst = Res.getUsingCount() + 1;
-
   FoldingSetNodeID ID;
   ID.AddInteger(atomOpRes);
   ID.AddPointer(&I);
@@ -377,7 +374,7 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
     A = new (HWAtomAllocator) HWAOpRes(ID.Intern(HWAtomAllocator),
       I, latency, O, Deps.size(), OpNum, Res, ResInst);
     // Add New Atom
-    getCurState()->addNewAtom(A);
+    getCurState()->pushAtom(A);
   }
   return A;
 }
@@ -398,7 +395,7 @@ HWAOpInst *HWAtomInfo::getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
     A = new (HWAtomAllocator) HWAOpInst(ID.Intern(HWAtomAllocator),
       I, latency, O, Deps.size(), OpNum);
     // Add New Atom
-    getCurState()->addNewAtom(A);
+    getCurState()->pushAtom(A);
   }
   return A;
 }
