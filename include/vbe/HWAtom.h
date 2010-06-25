@@ -218,12 +218,17 @@ public:
 
 /// @brief The Schedulable Hardware Atom
 class HWASchedable : public HWAtom {
+  // The latency of this atom
   unsigned Latency;
-
+  
+  //
+  unsigned EffectiveNumOps;
 protected:
   explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep)
-    : HWAtom(ID, T, Inst, deps, numDep), Latency(latency) {}
+    Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep,
+    size_t OpNum)
+    : HWAtom(ID, T, Inst, deps, numDep), Latency(latency),
+    EffectiveNumOps(OpNum) {}
 public:
   // Get the latency of this atom
   unsigned getLatency() const {
@@ -237,9 +242,10 @@ public:
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
 
+  size_t getEffectiveNumOps () const { return EffectiveNumOps; }
+
   HWAtom *getOperand(unsigned idx) {
-    assert(idx < getInst<Instruction>().getNumOperands()
-      && "index Out of range!");
+    assert(idx < EffectiveNumOps && "index Out of range!");
     assert(&(getDep(idx)->getValue()) == getInst<Instruction>().getOperand(idx)
       && "HWOpInst operands broken!");
     return getDep(idx);
@@ -262,8 +268,8 @@ public:
 class HWAOpInst : public HWASchedable {
 public:
   explicit HWAOpInst(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom **deps, size_t numDep)
-    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep) {}
+    unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum)
+    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep, OpNum) {}
 
   void print(raw_ostream &OS) const;
 
@@ -283,9 +289,9 @@ protected:
 
 public:
   explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom **deps, size_t numDep,
+    unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
     HWResource &Res, unsigned Instance)
-    : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep),
+    : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep, OpNum),
       Used(Res), ResId(Instance) {
     // Remember we used this resource.
     Used.addUsingAtom(this);

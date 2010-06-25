@@ -204,32 +204,8 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
 
     // Emit all atoms at cycle i
     for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
-        CI != CE; ++CI) {
-      HWAtom *A = CI->second;
-      switch (A->getHWAtomType()) {
-      case atomRegister:
-        // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << "Write Result to Reg: "
-          << A->getValue() << '\n';
-        emitRegister(cast<HWARegister>(A));
-        break;
-      case atomOpRes:
-        // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
-        emitOpRes(cast<HWAOpRes>(A));
-        break;
-      case atomOpInst:
-        // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
-        emitOpInst(cast<HWAOpInst>(A));
-        break;
-      case atomSignedPrefix:
-        emitSigned(cast<HWASigned>(A));
-        break;
-      default:
-        ;
-      }
-    }
+        CI != CE; ++CI)
+      emitAtom(CI->second);
 
     // Transfer to next state
     if (i != EndSlot)
@@ -334,19 +310,39 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
+void RTLWriter::emitAtom(HWAtom *A) {
+  switch (A->getHWAtomType()) {
+      case atomRegister:
+        // Emit the origin IR as comment.
+        vlang->comment(ControlBlock.indent(8)) << "Write Result to Reg: "
+          << A->getValue() << '\n';
+        emitRegister(cast<HWARegister>(A));
+        break;
+      case atomOpRes:
+        // Emit the origin IR as comment.
+        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
+        emitOpRes(cast<HWAOpRes>(A));
+        break;
+      case atomOpInst:
+        // Emit the origin IR as comment.
+        vlang->comment(ControlBlock.indent(8)) << A->getValue() << '\n';
+        emitOpInst(cast<HWAOpInst>(A));
+        break;
+      case atomSignedPrefix:
+        emitSigned(cast<HWASigned>(A));
+        break;
+      default:
+        ;
+  }
+}
 
 void RTLWriter::emitSigned(HWASigned *Signed) {
   std::string Name = getAsOperand(Signed);
   Value &V = Signed->getValue();
 
-  // TODO: move this to a function
-  unsigned BitWidth = 0;
-  if (const IntegerType *IntTy = dyn_cast<IntegerType>(V.getType()))
-    BitWidth = IntTy->getBitWidth();
-  else if (V.getType()->isPointerTy())
-    BitWidth =  TD->getPointerSizeInBits();
   // Declare the signal
-  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0, false, true);
+  vlang->declSignal(getSignalDeclBuffer(), Name,
+                    vlang->getBitWidth(V), 0, false, true);
   DataPath.indent(2) << "assign " <<
     Name << " = " << getAsOperand(Signed->getDep(0)) << ";\n";
 }
@@ -358,11 +354,7 @@ void RTLWriter::emitRegister(HWARegister *Register) {
     return;
 
   Instruction &Inst = cast<Instruction>(Register->getValue());
-  unsigned BitWidth = 0;
-  if (const IntegerType *IntTy = dyn_cast<IntegerType>(Inst.getType()))
-    BitWidth = IntTy->getBitWidth();
-  else if (Inst.getType()->isPointerTy())
-    BitWidth =  TD->getPointerSizeInBits();
+  unsigned BitWidth = vlang->getBitWidth(Inst);
   
   std::string Name = getAsOperand(Register);
 
@@ -378,16 +370,13 @@ void RTLWriter::emitRegister(HWARegister *Register) {
 void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
   Instruction &Inst = cast<Instruction>(OpInst->getValue());
   std::string Name = getAsOperand(OpInst);
-  unsigned BitWidth = 0;
-  if (const IntegerType *IntTy = dyn_cast<IntegerType>(Inst.getType()))
-    BitWidth = IntTy->getBitWidth();
-  else if (Inst.getType()->isPointerTy())
-    BitWidth =  TD->getPointerSizeInBits();
-
-  // Declare the signal
-  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0, false);
-  //
-  DataPath.indent(2) << "assign " << Name << " = ";
+  // Do not decl signal for void type
+  if (!Inst.getType()->isVoidTy()) {
+    // Declare the signal
+    vlang->declSignal(getSignalDeclBuffer(), Name, vlang->getBitWidth(Inst), 0, false);
+    //
+    DataPath.indent(2) << "assign " << Name << " = ";
+  }
   // Emit the data path
   visit(*OpInst);
   //
@@ -431,11 +420,7 @@ void RTLWriter::visitICmpInst(HWAOpInst &A) {
 
 void RTLWriter::visitPHINode(HWAOpInst &A) {
   PHINode &I = A.getInst<PHINode>();//A.getInst<PHINode>();
-  unsigned BitWidth = 0;
-  if (const IntegerType *IntTy = dyn_cast<IntegerType>(I.getType()))
-    BitWidth = IntTy->getBitWidth();
-  else if (I.getType()->isPointerTy())
-    BitWidth =  TD->getPointerSizeInBits();
+  unsigned BitWidth = vlang->getBitWidth(I);
 
   std::string Name = getAsOperand(&A);
 

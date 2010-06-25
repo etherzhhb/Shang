@@ -77,30 +77,35 @@ void HWAtomInfo::releaseMemory() {
 void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // TODO: the emitNextLoop atom
   HWAState *CurState = getCurState();
-
+  size_t OpNum = 0;
   // State end depand on or others atoms
   SmallVector<HWAtom*, 64> Deps(CurState->begin(), CurState->end());
   // Move the Condition to the right place
   if (I.getNumOperands() > 0 && (!isa<BasicBlock>(I.getOperand(0)))) {
+    OpNum = 1;
     // Get the operand.
     HWAtom *Using = getAtomInState(*I.getOperand(0), I.getParent());
-    for (unsigned i = 1, e = Deps.size(); i != e; ++i)
-      if (Deps[i] == Using) {
-        // Swap using to deps[0]
-        std::swap(Deps[0], Deps[i]);
-        break;
-      }
+    if (Deps.empty())
+      Deps.push_back(Using);
+    else {
+      for (unsigned i = 1, e = Deps.size(); i != e; ++i)
+        if (Deps[i] == Using) {
+          // Swap using to deps[0]
+          std::swap(Deps[0], Deps[i]);
+          break;
+        }
 
-    // Using not in deps?
-    if (Deps[0] != Using) {
-      // Move dep[0] to the last position
-      Deps.push_back(Deps[0]);
-      Deps[0] = Using;
+      // Using not in deps?
+      if (Deps[0] != Using) {
+        // Move dep[0] to the last position
+        Deps.push_back(Deps[0]);
+        Deps[0] = Using;
+      }
     }
   }
 
   // Get the atom, Terminator do not have any latency
-  HWAOpInst *Atom = getOpInst(I, Deps, 0);
+  HWAOpInst *Atom = getOpInst(I, Deps, OpNum, 0);
   // Remember the terminate state.
   getCurState()->getTerminateState(*Atom);
   // Remember the atom.
@@ -114,7 +119,7 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 void HWAtomInfo::visitPHINode(PHINode &I) {
   SmallVector<HWAtom*, 0> Deps;
   // PHI node always have no latency
-  HWAtom *Phi = getOpInst(I, Deps, 0);
+  HWAtom *Phi = getOpInst(I, Deps, 0, 0);
   ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Phi));
 }
 
@@ -352,9 +357,8 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
   return A;
 }
 
-HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
-                               SmallVectorImpl<HWAtom*> &Deps,
-                               HWResource &Res, unsigned latency,
+HWAOpRes *HWAtomInfo::getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+                               size_t OpNum, HWResource &Res, unsigned latency,
                                unsigned ResInst) {
   if (Res.isInfinite() && ResInst == 0)
     ResInst = Res.getUsingCount() + 1;
@@ -362,10 +366,6 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
   FoldingSetNodeID ID;
   ID.AddInteger(atomOpRes);
   ID.AddPointer(&I);
-  ID.AddInteger(Deps.size());
-  ID.AddInteger(latency);
-  for (unsigned i = 0, e = Deps.size(); i != e; ++i)
-    ID.AddPointer(Deps[i]);
 
   void *IP = 0;
   HWAOpRes *A =
@@ -375,7 +375,7 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
     A = new (HWAtomAllocator) HWAOpRes(ID.Intern(HWAtomAllocator),
-      I, latency, O, Deps.size(), Res, ResInst);
+      I, latency, O, Deps.size(), OpNum, Res, ResInst);
     // Add New Atom
     getCurState()->addNewAtom(A);
   }
@@ -383,14 +383,10 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I,
 }
 
 HWAOpInst *HWAtomInfo::getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
-                               unsigned latency) {
+                                size_t OpNum, unsigned latency) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomOpInst);
   ID.AddPointer(&I);
-  ID.AddInteger(Deps.size());
-  ID.AddInteger(latency);
-  for (unsigned i = 0, e = Deps.size(); i != e; ++i)
-    ID.AddPointer(Deps[i]);
 
   void *IP = 0;
   HWAOpInst *A =
@@ -400,7 +396,7 @@ HWAOpInst *HWAtomInfo::getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
     A = new (HWAtomAllocator) HWAOpInst(ID.Intern(HWAtomAllocator),
-      I, latency, O, Deps.size());
+      I, latency, O, Deps.size(), OpNum);
     // Add New Atom
     getCurState()->addNewAtom(A);
   }

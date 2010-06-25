@@ -74,6 +74,8 @@ public:
   std::string printConstant(Constant *C);
   std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
 
+  unsigned getBitWidth(Value &V);
+
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);
 
@@ -107,23 +109,16 @@ public:
                           const std::string &RstEdge = "negedge");
 
   
-  raw_ostream &resetRegister(raw_ostream &ss,
-                                const std::string &Name,
-                                unsigned BitWidth,
-                                unsigned InitVal = 0);
+  raw_ostream &resetRegister(raw_ostream &ss, const std::string &Name,
+                            unsigned BitWidth, unsigned InitVal = 0);
 
   
-  raw_ostream &param(raw_ostream &ss,
-                        const std::string &Name,
-                        unsigned BitWidth,
-                        unsigned Val);
+  raw_ostream &param(raw_ostream &ss, const std::string &Name,
+                    unsigned BitWidth, unsigned Val);
 
-  raw_ostream &declSignal(raw_ostream &ss,
-                            const std::string &Name,
-                            unsigned BitWidth,
-                            unsigned Val,
-                            bool isReg = true,
-                            bool isSigned = false);
+  raw_ostream &declSignal(raw_ostream &ss, const std::string &Name,
+                          unsigned BitWidth, unsigned Val,
+                          bool isReg = true, bool isSigned = false);
 
   raw_ostream &alwaysEnd(raw_ostream &ss, unsigned ind);
   

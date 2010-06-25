@@ -49,12 +49,10 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
   for (HWAState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     if (HWASchedable *A = dyn_cast<HWASchedable>(*I)) {
       Instruction &Inst = A->getInst<Instruction>();
-      // Ignore the Phi Node
-      // TODO: Create a special Atom type for Phi Node
-      if (isa<PHINode>(Inst))
-        continue;
-      for (unsigned i = 0, e = Inst.getNumOperands(); i != e; ++i)
+
+      for (unsigned i = 0, e = A->getEffectiveNumOps(); i != e; ++i)
         // For all register
+        // FIXME: use get operand! but this fail on terminator
         while (HWARegister *R = dyn_cast<HWARegister>(A->getDep(i))) {
           // Remove the dummy registers
           if (R->isDummy())
@@ -76,7 +74,6 @@ void RegReduction::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.setPreservesAll();
 }
-
 
 char RegReduction::ID = 0;
 

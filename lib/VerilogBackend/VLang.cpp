@@ -177,6 +177,16 @@ std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
   }
 }
 
+unsigned VLang::getBitWidth(Value &V) {
+  unsigned BitWidth = 0;
+  if (const IntegerType *IntTy = dyn_cast<IntegerType>(V.getType()))
+    return IntTy->getBitWidth();
+  else if (V.getType()->isPointerTy())
+    return TD->getPointerSizeInBits();
+  //
+  return 0;
+}
+
 void VLang::initializePass() {
   TD = getAnalysisIfAvailable<TargetData>();
   TAsm = new VBEMCAsmInfo();

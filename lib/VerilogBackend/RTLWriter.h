@@ -65,6 +65,7 @@ class RTLWriter : public FunctionPass {
   void emitMemBus(HWMemBus &MemBus);
 
   // Atoms
+  void emitAtom(HWAtom *A);
   void emitRegister(HWARegister *Register);
   void emitOpRes(HWAOpRes *OpRes);
   void emitSigned(HWASigned *Signed);
