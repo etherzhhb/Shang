@@ -401,8 +401,9 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus) {
 
     getModDeclBuffer()
       << "output reg [" << (DataWidth - 1) << ":0] membus_in" << i << ",\n";
+    // Use blocking assignment for precompute signal
     vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(i),
-      DataWidth);
+      DataWidth, 0, true);
     // Set the default state of read mode
     PreAssign.indent(6) << "membus_in" << i <<" = "
       << vlang->printConstantInt(0, DataWidth, false) << ";\n";
@@ -413,8 +414,9 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus) {
       AddrWidth);
 
     getModDeclBuffer() << "output reg membus_mode" << i << ",\n";
+    // Use blocking assignment for precompute signal
     vlang->resetRegister(getResetBlockBuffer(), "membus_mode" + utostr(i),
-      1);
+      1, 0, true);
     // Set the default state of read mode
     PreAssign.indent(6) << "membus_mode" << i <<" = 1'b0;\n";
   }

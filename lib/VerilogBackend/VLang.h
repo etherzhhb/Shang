@@ -110,7 +110,8 @@ public:
 
   
   raw_ostream &resetRegister(raw_ostream &ss, const std::string &Name,
-                            unsigned BitWidth, unsigned InitVal = 0);
+                            unsigned BitWidth, unsigned InitVal = 0,
+                            bool BlockingAssign = false);
 
   
   raw_ostream &param(raw_ostream &ss, const std::string &Name,
