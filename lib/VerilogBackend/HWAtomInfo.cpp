@@ -157,7 +157,7 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *LoadAtom = getOpRes(I, Deps, *Res, 1);
+  HWAtom *LoadAtom = getOpRes(I, Deps, *Res, Res->getLatency(), 1);
   // Set as new atom
   SetControlRoot(LoadAtom);
   // And register the result
@@ -177,7 +177,7 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *StoreAtom = getOpRes(I, Deps, *Res, 1);
+  HWAtom *StoreAtom = getOpRes(I, Deps, *Res, Res->getLatency(), 1);
   // Set as new atom
   SetControlRoot(StoreAtom);
 

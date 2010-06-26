@@ -118,7 +118,8 @@ public:
 
   raw_ostream &declSignal(raw_ostream &ss, const std::string &Name,
                           unsigned BitWidth, unsigned Val,
-                          bool isReg = true, bool isSigned = false);
+                          bool isReg = true, bool isSigned = false,
+                          const std::string &Term = ";");
 
   raw_ostream &alwaysEnd(raw_ostream &ss, unsigned ind);
   

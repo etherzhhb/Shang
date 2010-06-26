@@ -299,7 +299,8 @@ raw_ostream &VLang::param(raw_ostream &ss, const std::string &Name,
 
 raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
                                unsigned BitWidth, unsigned Val,
-                               bool isReg, bool isSigned) {
+                               bool isReg, bool isSigned,
+                               const std::string &Term) {
   ss << (isReg ? "reg " : "wire ");
   
   if(isSigned) ss << "signed ";
@@ -311,6 +312,6 @@ raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
   if (isReg)
     ss << " = " << printConstantInt(0, BitWidth, false);
 
-  ss << ";\n";
+  ss << Term <<'\n';
   return ss;
 }

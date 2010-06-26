@@ -64,7 +64,7 @@ bool RTLWriter::runOnFunction(Function &F) {
 
   //
   vlang->ifElse(ControlBlock.indent(8));
-  ControlBlock.indent(10) << "CurState <= state_idle\n";
+  ControlBlock.indent(10) << "CurState <= state_idle;\n";
   vlang->end(ControlBlock.indent(8));
   vlang->end(ControlBlock.indent(6));
 
@@ -155,7 +155,7 @@ void RTLWriter::emitFunctionSignature(Function &F) {
                 RegName = getAsOperand(&Arg);
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
-      Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt));
+      Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
     // Declare the register
     vlang->declSignal(getSignalDeclBuffer(), RegName, BitWidth, 0);
     // Reset the register
@@ -330,16 +330,13 @@ void RTLWriter::emitRegister(HWARegister *Register) {
 
 void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
   Instruction &Inst = cast<Instruction>(OpInst->getValue());
-  // Do not emit phi node.
-  if (isa<PHINode>(Inst))
-    return;
-
   std::string Name = getAsOperand(OpInst);
   // Do not decl signal for void type
-  if (!Inst.getType()->isVoidTy()) {
+  // And do not emit data path for phi node.
+  if (!Inst.getType()->isVoidTy() && !isa<PHINode>(Inst)) {
     // Declare the signal
     vlang->declSignal(getSignalDeclBuffer(), Name, vlang->getBitWidth(Inst), 0, false);
-    //
+    // Emit data path
     DataPath.indent(2) << "assign " << Name << " = ";
   }
   // Emit the data path
@@ -488,7 +485,7 @@ void RTLWriter::visitExtInst(HWAOpInst &A) {
 
 void esyn::RTLWriter::visitReturnInst(HWAOpInst &A) {
   ControlBlock.indent(8) << "fin <= 1'h0;\n";
-  ControlBlock.indent(8) << "CurState <= state_idle\n";
+  ControlBlock.indent(8) << "CurState <= state_idle;\n";
 }
 
 void esyn::RTLWriter::visitGetElementPtrInst(HWAOpInst &A) {
