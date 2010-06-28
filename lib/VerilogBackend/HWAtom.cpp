@@ -91,10 +91,10 @@ void HWAState::print(raw_ostream &OS) const {
 
 void HWAOpRes::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << ResId << '\n';
+  OS << " Res: " << SubClassData << '\n';
 }
 
 void HWAOpInst::print(raw_ostream &OS) const {
-  OS << "OpInst: ";
   WriteAsOperand(OS, &getValue(), false);
+  OS << " OpInst: " << SubClassData;
 }

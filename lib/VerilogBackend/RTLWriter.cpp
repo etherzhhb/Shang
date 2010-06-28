@@ -176,7 +176,6 @@ void RTLWriter::emitFunctionSignature(Function &F) {
   }
 }
 
-
 void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   HWAState &State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
@@ -340,7 +339,10 @@ void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
 }
 
 void RTLWriter::emitOpRes(HWAOpRes *OpRes) {
-  switch (OpRes->getResourceType()) {
+  // Remember this atom
+  ResourceMap[OpRes->getResourceId()].push_back(OpRes);
+  //
+  switch (OpRes->getOpClass()) {
   case HWResource::MemoryBus:
     opMemBus(OpRes);
     break;
@@ -365,27 +367,13 @@ void RTLWriter::emitResources() {
 void RTLWriter::opMemBus(HWAOpRes *OpRes) {
   unsigned MemBusInst = OpRes->getAllocatedInstance();
   if (LoadInst *L = dyn_cast<LoadInst>(&OpRes->getValue())) {
-    //// Address
-    //ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
-    //  getAsOperand(OpRes->getOperand(LoadInst::getPointerOperandIndex()))
-    //  << ";\n";
-    // Data
     DataPath.indent(2) <<  "assign " << getAsOperand(OpRes) 
       << " = membus_out" << MemBusInst <<";\n";
-  } else {
+  } else { // It must be a store.
     StoreInst &S = OpRes->getInst<StoreInst>();
-    // Address
-    //ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
-    //  getAsOperand(OpRes->getOperand(StoreInst::getPointerOperandIndex()))
-    //  << ";\n";
-    // modify the store value
     ControlBlock.indent(8) << "membus_in" << MemBusInst
       << " = " << getAsOperand(OpRes->getOperand(0)) << ";\n";
-    // modify the read mode
-    //ControlBlock.indent(8) << "membus_mode" << ResourceId << " = 1'b1;\n";
   }
-  // Remember this atom
-  ResourceMap[OpRes->getResourceId()].push_back(OpRes);
 }
 
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAOpResVecTy &Atoms) {

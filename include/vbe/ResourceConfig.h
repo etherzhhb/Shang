@@ -46,13 +46,16 @@ class HWResource {
 public:
   enum ResTypes {
     MemoryBus = 1,
-    Shifter = 2,
-    Comparator = 3,
-    LogicUnit = 4,
-    ArithUnit = 5,
+    SHL = 2,
+    ASR = 3,
+    LSR = 4,
+    Logic = 5,
+    AddSub = 6,
+    Mul = 7,
+    Other = 8,
 
     FirstResourceType = MemoryBus,
-    LastResourceType = ArithUnit
+    LastResourceType = Other
   };
 private:
   // The HWResource baseclass this node corresponds to

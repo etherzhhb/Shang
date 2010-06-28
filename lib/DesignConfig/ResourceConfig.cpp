@@ -77,7 +77,7 @@ void HWResource::clear() {
 static enum HWResource::ResTypes getResourceType(XmlNode *Node) {
   XmlAttr *attr = Node->first_attribute("type");
   if (attr == 0)
-    return HWResource::ArithUnit;
+    return HWResource::AddSub;
   unsigned ret;
   StringRef val = StringRef(attr->value());
   if (val.getAsInteger(0, ret) || 

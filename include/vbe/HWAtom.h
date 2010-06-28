@@ -219,21 +219,22 @@ public:
 class HWASchedable : public HWAtom {
   // The latency of this atom
   unsigned Latency;
-  
-  //
+  // Effective operand number
   unsigned EffectiveNumOps;
 protected:
+  unsigned SubClassData;
+
   explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep,
-    size_t OpNum)
+    size_t OpNum, unsigned subClassData = 0)
     : HWAtom(ID, T, Inst, deps, numDep), Latency(latency),
-    EffectiveNumOps(OpNum) {}
+    EffectiveNumOps(OpNum), SubClassData(subClassData) {}
 public:
   // Get the latency of this atom
   unsigned getLatency() const {
     return Latency;
   }
-
+  // Is operation finished at slot?
   virtual bool isOperationFinish(unsigned CurSlot) const {
     return SchedSlot + Latency <= CurSlot;
   }
@@ -250,7 +251,12 @@ public:
     return getDep(idx);
   }
 
-  // Return the opcode of the instruction
+  // Help the scheduler to identify difference operation class
+  virtual enum HWResource::ResTypes getOpClass() const {
+    return HWResource::Other;
+  }
+
+  // Return the opcode of the instruction.
   unsigned getOpcode() const {
     return cast<Instruction>(getValue()).getOpcode();
   }
@@ -267,8 +273,10 @@ public:
 class HWAOpInst : public HWASchedable {
 public:
   explicit HWAOpInst(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum)
-    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep, OpNum) {}
+    unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
+      enum HWResource::ResTypes OpClass)
+    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep, OpNum, OpClass)
+  {}
 
   void print(raw_ostream &OS) const;
 
@@ -280,32 +288,31 @@ public:
 };
 
 class HWAOpRes : public HWASchedable {
-  // The instance of allocate resource
-  HWResource::ResIdType ResId;
-
 public:
   explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
     unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
     HWResource &Res, unsigned Instance = 0)
-    : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep, OpNum),
-    ResId(HWResource::createResId(Res.getResourceType(), Instance)) {
-    if (Instance != 0)
-      Res.assignToInstance(Instance);
+    : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep, OpNum,
+    HWResource::createResId(Res.getResourceType(), Instance)) {
+    if (isResAllocated() != 0)
+      Res.assignToInstance(getAllocatedInstance());
   }
 
   /// @name The using resource
   //{
-  HWResource::ResIdType getResourceId() const { return ResId; }
+  // Help the scheduler to identify difference resource unit.
+  HWResource::ResIdType getResourceId() const { return SubClassData; }
   bool isResAllocated() const { 
-    return (HWResource::extractInstanceId(ResId) != 0);
+    return (HWResource::extractInstanceId(getResourceId()) != 0);
   }
-  enum HWResource::ResTypes getResourceType() const {
-    return HWResource::extractResType(ResId);
+
+  enum HWResource::ResTypes getOpClass() const {
+    return HWResource::extractResType(getResourceId());
   }
   unsigned getAllocatedInstance() const {
-    return HWResource::extractInstanceId(ResId);
+    return HWResource::extractInstanceId(getResourceId());
   }
-  void assignToResource(HWResource::ResIdType resId) { ResId = resId; }
+  void assignToResource(HWResource::ResIdType resId) { SubClassData = resId; }
   //}
 
   void print(raw_ostream &OS) const;

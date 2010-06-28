@@ -118,11 +118,11 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   }
 
   HWAOpInst *getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
-                       size_t OpNum, unsigned latency);
+    size_t OpNum, unsigned latency, enum HWResource::ResTypes OpClass);
 
   HWAOpInst *getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
-                       unsigned latency) {
-    return getOpInst(I, Deps, I.getNumOperands(), latency);
+                       unsigned latency, enum HWResource::ResTypes OpClass) {
+    return getOpInst(I, Deps, I.getNumOperands(), latency, OpClass);
   }
 
   typedef DenseMap<const Value*, HWAtom*> AtomMapType;
