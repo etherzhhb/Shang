@@ -56,15 +56,13 @@ Scheduler::~Scheduler() {
   clear();
 }
 
-unsigned Scheduler::getReadyCycle(const HWResource *Resource,
-                                  unsigned Instance) {
-  return ResCycMap[Resource][Instance];
+unsigned Scheduler::getReadyCycle(HWResource::ResIdType ResId) {
+  return ResCycMap[ResId];
 }
 
-void Scheduler::rememberReadyCycle(const HWResource *Resource,
-                                   unsigned Instance,
-                                   unsigned ReadyCycle){
-  ResCycMap[Resource][Instance] = ReadyCycle;
+void Scheduler::rememberReadyCycle(HWResource::ResIdType ResId,
+                                   unsigned ReadyCycle) {
+  ResCycMap[ResId] = ReadyCycle;
 }
 
 HWAtom* Scheduler::getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
@@ -80,4 +78,23 @@ HWAtom* Scheduler::getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
     }
   }
   return 0;
+}
+
+void Scheduler::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<HWAtomInfo>();
+  AU.addRequired<ResourceConfig>();
+}
+
+bool Scheduler::runOnBasicBlock(BasicBlock &BB) {
+  HI = &getAnalysis<HWAtomInfo>();
+  RC = &getAnalysis<ResourceConfig>();
+
+  HWAState &State = HI->getStateFor(BB);
+  scheduleBasicBlock(State);
+  return false;
+}
+
+void Scheduler::releaseMemory() {
+  clear();
+  releaseContext();
 }

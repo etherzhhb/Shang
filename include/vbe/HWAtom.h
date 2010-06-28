@@ -280,27 +280,32 @@ public:
 };
 
 class HWAOpRes : public HWASchedable {
-  // The resoure that this atom using.
-  HWResource &Used;
-protected:
   // The instance of allocate resource
-  unsigned ResId;
+  HWResource::ResIdType ResId;
 
 public:
   explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
     unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
-    HWResource &Res, unsigned Instance)
+    HWResource &Res, unsigned Instance = 0)
     : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep, OpNum),
-      Used(Res), ResId(Instance) {
-    // Remember we used this resource.
-    Used.addUsingAtom(this);
+    ResId(HWResource::createResId(Res.getResourceType(), Instance)) {
+    if (Instance != 0)
+      Res.assignToInstance(Instance);
   }
 
   /// @name The using resource
   //{
-  HWResource &getUsedResource() const { return Used; }
-
-  unsigned getResourceId() const { return ResId; }
+  HWResource::ResIdType getResourceId() const { return ResId; }
+  bool isResAllocated() const { 
+    return (HWResource::extractInstanceId(ResId) != 0);
+  }
+  enum HWResource::ResTypes getResourceType() const {
+    return HWResource::extractResType(ResId);
+  }
+  unsigned getAllocatedInstance() const {
+    return HWResource::extractInstanceId(ResId);
+  }
+  void assignToResource(HWResource::ResIdType resId) { ResId = resId; }
   //}
 
   void print(raw_ostream &OS) const;
@@ -370,36 +375,6 @@ public:
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomStateBegin;
   }
-};
-
-/// @brief Resource Table
-class HWResTable {
-  /// mapping allocated instences to atom
-  typedef std::set<HWResource*> ResourceSetType;
-  ///
-  ResourceSetType ResSet;
-  ///
-  ResourceConfig &RC;
-
-
-public:
-  explicit HWResTable(ResourceConfig &rc) : RC(rc) {}
-  ~HWResTable();
-
-  HWResource *initResource(std::string Name);
-
-  void clear();
-
-  typedef ResourceSetType::iterator iterator;
-  typedef ResourceSetType::const_iterator const_iterator;
-
-  iterator begin() { return ResSet.begin(); }
-  const_iterator begin() const { return ResSet.begin(); }
-
-  iterator end() { return ResSet.end(); }
-  const_iterator end() const { return ResSet.end(); }
-
-  /// Get the least busy resource of a given kind
 };
 
 } // end namespace

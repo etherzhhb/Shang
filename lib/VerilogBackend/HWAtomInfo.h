@@ -182,8 +182,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   // The loop Info
   LoopInfo *LI;
-  HWResTable RT;
-
+  ResourceConfig *RC;
   // Total states
   unsigned totalCycle;
 
@@ -192,10 +191,8 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  explicit HWAtomInfo(ResourceConfig &RC)
-    : FunctionPass(&ID), ControlRoot(0), CurState(0), LI(0), RT(RC), totalCycle(1) {}
-
-  explicit HWAtomInfo();
+  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), CurState(0),
+    LI(0), totalCycle(1) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();
@@ -228,15 +225,6 @@ public:
   }
 
   void incTotalCycle() { ++totalCycle; }
-
-  typedef HWResTable::iterator resource_iterator;
-  typedef HWResTable::const_iterator const_resource_iterator;
-
-  resource_iterator resource_begin() { return RT.begin(); }
-  const_resource_iterator resource_begin() const { return RT.begin(); }
-
-  resource_iterator resource_end() { return RT.end(); }
-  const_resource_iterator resource_end() const { return RT.end(); }
 };
 } // end namespace
 #endif

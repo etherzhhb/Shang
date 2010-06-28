@@ -46,7 +46,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     // Add the language writer.
     PM.add(new VLang());
     //
-    PM.add(new HWAtomInfo(*RC));
+    PM.add(new HWAtomInfo());
     PM.add(createListSchedulePass());
 
     PM.add(createRegisterReductionPass());

@@ -39,7 +39,6 @@ bool RTLWriter::runOnFunction(Function &F) {
   vlang = &getAnalysis<VLang>();
   HI = &getAnalysis<HWAtomInfo>();
 
-
   // Emit control register and idle state
   unsigned totalStatesBits = HI->getTotalCycleBitWidth();
   vlang->declSignal(getSignalDeclBuffer(), "CurState", totalStatesBits, 0);
@@ -57,11 +56,6 @@ bool RTLWriter::runOnFunction(Function &F) {
   // Remember the parameters
   emitFunctionSignature(F);
 
-  // Emit resources
-  for(HWAtomInfo::resource_iterator I = HI->resource_begin(),
-    E = HI->resource_end();I != E; ++I)
-    emitResources(**I);
-
   //
   vlang->ifElse(ControlBlock.indent(8));
   ControlBlock.indent(10) << "CurState <= state_idle;\n";
@@ -73,6 +67,9 @@ bool RTLWriter::runOnFunction(Function &F) {
     BasicBlock &BB = *I;
     emitBasicBlock(BB);
   }
+
+  // Emit resouces
+  emitResources();
 
   // emit misc
   emitCommonPort();
@@ -102,8 +99,8 @@ bool RTLWriter::runOnFunction(Function &F) {
   Out << ResetBlock.str();
   vlang->ifElse(Out.indent(4));
 
-  vlang->comment(Out.indent(6)) << "PreAssign\n";
-  Out << PreAssign.str();
+  vlang->comment(Out.indent(6)) << "SeqCompute:\n";
+  Out << SeqCompute.str();
 
   vlang->comment(Out.indent(6)) << "FSM\n";
   vlang->switchCase(Out.indent(6), "CurState");
@@ -117,25 +114,24 @@ bool RTLWriter::runOnFunction(Function &F) {
 }
 
 void RTLWriter::clear() {
+  // Clear buffers
   ModDecl.str().clear();
-
   StateDecl.str().clear();
-
   SignalDecl.str().clear();
-
   DataPath.str().clear();
-
   ControlBlock.str().clear();
-
   ResetBlock.str().clear();
+  SeqCompute.str().clear();
 
-  PreAssign.str().clear();
+  // Clear resource map
+  ResourceMap.clear();
 }
 
 void RTLWriter::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<VLang>();
   AU.addRequired<TargetData>();
+  AU.addRequired<ResourceConfig>();
   AU.setPreservesAll();
 }
 
@@ -344,82 +340,106 @@ void RTLWriter::emitOpInst(HWAOpInst *OpInst) {
 }
 
 void RTLWriter::emitOpRes(HWAOpRes *OpRes) {
-  switch (OpRes->getUsedResource().getResourceType()) {
-  case MemoryBus:
+  switch (OpRes->getResourceType()) {
+  case HWResource::MemoryBus:
     opMemBus(OpRes);
     break;
   }
 }
 
-void RTLWriter::emitResources(HWResource &Resource) {
-  switch (Resource.getResourceType()) {
-  case MemoryBus:
-    emitMemBus(cast<HWMemBus>(Resource));
-  default:
-    return;
+void RTLWriter::emitResources() {
+  ResourceConfig &RC = getAnalysis<ResourceConfig>();
+
+  for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
+      I != E; ++I) {
+    HWResource &Res = *(RC.getResource(HWResource::extractResType(I->first)));
+    switch (Res.getResourceType()) {
+    case HWResource::MemoryBus:
+      emitMemBus(cast<HWMemBus>(Res), I->second);
+    default:
+      return;
+    }
   }
 }
 
 void RTLWriter::opMemBus(HWAOpRes *OpRes) {
-  HWMemBus &MemBus = cast<HWMemBus>(OpRes->getUsedResource());
-
-  unsigned DataWidth = MemBus.getDataWidth(),
-           AddrWidth = MemBus.getAddrWidth(),
-           ResourceId = OpRes->getResourceId();
-
+  unsigned MemBusInst = OpRes->getAllocatedInstance();
   if (LoadInst *L = dyn_cast<LoadInst>(&OpRes->getValue())) {
-    // Address
-    ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
-      getAsOperand(OpRes->getOperand(LoadInst::getPointerOperandIndex()))
-      << ";\n";
+    //// Address
+    //ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
+    //  getAsOperand(OpRes->getOperand(LoadInst::getPointerOperandIndex()))
+    //  << ";\n";
     // Data
     DataPath.indent(2) <<  "assign " << getAsOperand(OpRes) 
-      << " = membus_out" << ResourceId <<";\n";
+      << " = membus_out" << MemBusInst <<";\n";
   } else {
     StoreInst &S = OpRes->getInst<StoreInst>();
     // Address
-    ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
-      getAsOperand(OpRes->getOperand(StoreInst::getPointerOperandIndex()))
-      << ";\n";
+    //ControlBlock.indent(8) << "membus_addr" << ResourceId << " <= " <<
+    //  getAsOperand(OpRes->getOperand(StoreInst::getPointerOperandIndex()))
+    //  << ";\n";
     // modify the store value
-    ControlBlock.indent(8) << "membus_in" << ResourceId
+    ControlBlock.indent(8) << "membus_in" << MemBusInst
       << " = " << getAsOperand(OpRes->getOperand(0)) << ";\n";
     // modify the read mode
-    ControlBlock.indent(8) << "membus_mode" << ResourceId << " = 1'b1;\n";
+    //ControlBlock.indent(8) << "membus_mode" << ResourceId << " = 1'b1;\n";
   }
+  // Remember this atom
+  ResourceMap[OpRes->getResourceId()].push_back(OpRes);
 }
 
-void RTLWriter::emitMemBus(HWMemBus &MemBus) {
+void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAOpResVecTy &Atoms) {
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
-  // TODO: only emit the used ports
-  for (unsigned i = 1, e = MemBus.getTotalRes() + 1; i != e; ++i) {
-    ModDecl << '\n';
-    vlang->comment(getModDeclBuffer()) << "Memory bus " << i << '\n';
-    getModDeclBuffer()
-      << "input wire [" << (DataWidth-1) << ":0] membus_out" << i <<",\n";
+  unsigned ResourceId = Atoms[0]->getAllocatedInstance();
 
-    getModDeclBuffer()
-      << "output reg [" << (DataWidth - 1) << ":0] membus_in" << i << ",\n";
-    // Use blocking assignment for precompute signal
-    vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(i),
-      DataWidth, 0, true);
-    // Set the default state of read mode
-    PreAssign.indent(6) << "membus_in" << i <<" = "
-      << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+  // Emit the ports;
+  ModDecl << '\n';
+  vlang->comment(getModDeclBuffer()) << "Memory bus " << ResourceId << '\n';
+  getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
+                     << ResourceId <<",\n";
+  getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
+                     << ResourceId << ",\n";
+  vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(ResourceId),
+                       DataWidth, 0);
+  getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
+                     << ResourceId << ",\n";
+  vlang->resetRegister(getResetBlockBuffer(),
+                       "membus_addr" + utostr(ResourceId), AddrWidth);
 
-    getModDeclBuffer()
-      << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"<< i << ",\n";
-    vlang->resetRegister(getResetBlockBuffer(), "membus_addr" + utostr(i),
-      AddrWidth);
+  getModDeclBuffer() << "output reg membus_mode" << ResourceId << ",\n";
+  vlang->resetRegister(getResetBlockBuffer(), 
+                       "membus_mode" + utostr(ResourceId), 1, 0);
 
-    getModDeclBuffer() << "output reg membus_mode" << i << ",\n";
-    // Use blocking assignment for precompute signal
-    vlang->resetRegister(getResetBlockBuffer(), "membus_mode" + utostr(i),
-      1, 0, true);
-    // Set the default state of read mode
-    PreAssign.indent(6) << "membus_mode" << i <<" = 1'b0;\n";
+  // Emit all resource operation
+  for (HWAOpResVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
+    HWAOpRes *A = *I;
+    Instruction *Inst = &(A->getInst<Instruction>());
+    BasicBlock *BB = Inst->getParent();
+    vlang->ifBegin(SeqCompute.indent(6),
+      "CurState == " + vlang->GetValueName(BB) + utostr(A->getSlot()));
+
+    SeqCompute.indent(8) << "membus_addr" << ResourceId << " <= ";
+
+    // Emit the operation
+    if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
+      SeqCompute << getAsOperand(A->getOperand(LoadInst::getPointerOperandIndex()))
+                << ";\n";
+      SeqCompute.indent(8) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+    } else { // It must be a store
+      SeqCompute << getAsOperand(A->getOperand(StoreInst::getPointerOperandIndex()))
+        << ";\n";
+      SeqCompute.indent(8) << "membus_mode" << ResourceId << "<= 1'b1;\n";
+    }
+    // Else for other atoms
+    vlang->ifElse(SeqCompute.indent(6));
   }
+  // Else for Resource is idle
+  SeqCompute.indent(8) << "membus_addr" << ResourceId
+    << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
+  SeqCompute.indent(8) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+
+  vlang->end(SeqCompute.indent(6));
 }
 
 //===----------------------------------------------------------------------===//

@@ -41,6 +41,7 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool HWAtomInfo::runOnFunction(Function &F) {
   LI = &getAnalysis<LoopInfo>();
+  RC = &getAnalysis<ResourceConfig>();
 
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     // Setup the state.
@@ -62,7 +63,6 @@ void HWAtomInfo::clear() {
   UniqiueHWAtoms.clear();
   ValueToHWAtoms.clear();
   BBToStates.clear();
-  RT.clear();
   // Reset total Cycle
   totalCycle = 1;
 }
@@ -153,7 +153,7 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   // Push the control root base on dependence analysis
   Deps.push_back(getControlRoot());
 
-  HWResource *Res = RT.initResource("MemoryBus");
+  HWResource *Res = RC->getResource(HWResource::MemoryBus);
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
@@ -173,7 +173,7 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   // Push the control root base on dependence analysis
   Deps.push_back(getControlRoot());
 
-  HWResource *Res = RT.initResource("MemoryBus");
+  HWResource *Res = RC->getResource(HWResource::MemoryBus);
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
@@ -195,7 +195,7 @@ void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   HWAtom *GEPAtom = 0;
 
   // Create the atom
-  if (HWResource *Res = RT.initResource("Add"))
+  if (HWResource *Res = RC->getResource(HWResource::ArithUnit))
     GEPAtom = getOpRes(I, Deps, *Res, Res->getLatency());
   else
     // FIXME: Read latency from configure file
@@ -235,42 +235,33 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
   // RHS
   Deps.push_back(getAtomInState(*I.getOperand(1), I.getParent()));
   
-  std::string ResName("Unknown");
+  enum HWResource::ResTypes T;
   // Select the resource
   switch (I.getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
-      ResName = "Add";
-      break;
     case Instruction::Mul:
-      ResName ="Mul";
+      T = HWResource::ArithUnit;
       break;
     case Instruction::And:
-      ResName ="And";
-      break;
     case Instruction::Or:
-      ResName ="Or";
-      break;
     case Instruction::Xor:
-      ResName ="Xor";
-      break;
-    case Instruction::Shl:
-      ResName ="Shl";
-      break;
-    case Instruction::LShr:
-      ResName ="LShr";
+      T = HWResource::LogicUnit;
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
       Deps[0] = getSigned(Deps[0]);
-      ResName ="AShr";
+      // Fall though
+    case Instruction::Shl:
+    case Instruction::LShr:
+      T = HWResource::Shifter;
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");
   }
   
   HWAtom *BinOpAtom = 0;
-  if (HWResource *Res = RT.initResource(ResName))
+  if (HWResource *Res = RC->getResource(T))
     BinOpAtom = getOpRes(I, Deps, *Res, Res->getLatency());
   else
     // FIXME: Read latency from configure file
@@ -405,10 +396,4 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
       I != E; ++I) {
     I->second->print(O);
   }
-}
-
-HWAtomInfo::HWAtomInfo()
-: FunctionPass(&ID), ControlRoot(0), CurState(0),
-LI(0), RT(*(new ResourceConfig()))  {
-  llvm_unreachable("We can not create HWSAtomInfo like this!");
 }

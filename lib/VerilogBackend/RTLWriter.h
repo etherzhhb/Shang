@@ -54,15 +54,21 @@ class RTLWriter : public FunctionPass {
 
   // Buffers
   raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
-    ControlBlock, ResetBlock, PreAssign;
+    ControlBlock, ResetBlock, SeqCompute;
+
+  // Mapping used resouces to the using atoms
+  typedef std::vector<HWAOpRes*> HWAOpResVecTy;
+  typedef std::map<HWResource::ResIdType,HWAOpResVecTy> ResourceMapType;
+
+  ResourceMapType ResourceMap;
 
   void emitFunctionSignature(Function &F);
   void emitCommonPort();
   void emitBasicBlock(BasicBlock &BB);
 
   // Resource
-  void emitResources(HWResource &Resource);
-  void emitMemBus(HWMemBus &MemBus);
+  void emitResources();
+  void emitMemBus(HWMemBus &MemBus, HWAOpResVecTy &Atoms);
   void opMemBus(HWAOpRes *OpRes);
 
   // Atoms
@@ -187,7 +193,7 @@ public:
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     ResetBlock(*(new std::string())),
-    PreAssign(*(new std::string())){
+    SeqCompute(*(new std::string())){
   }
   ~RTLWriter();
 

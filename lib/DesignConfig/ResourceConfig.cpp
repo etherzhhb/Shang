@@ -68,24 +68,23 @@ unsigned HWResource::getLeastBusyInstance() const {
 }
 
 void HWResource::clear() {
-  UsingAtoms.clear();
   for (unsigned i = 0, e = UsingCount.size(); i != e; ++i)
     UsingCount[i] = 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Resource parsing
-static enum HWResourceTypes getResourceType(XmlNode *Node) {
+static enum HWResource::ResTypes getResourceType(XmlNode *Node) {
   XmlAttr *attr = Node->first_attribute("type");
   if (attr == 0)
-    return ArithUnit;
+    return HWResource::ArithUnit;
   unsigned ret;
   StringRef val = StringRef(attr->value());
-  if (val.getAsInteger(0, ret)
-      || (ret > LastResourceType || ret < FirstResourceType))
+  if (val.getAsInteger(0, ret) || 
+      (ret > HWResource::LastResourceType || ret < HWResource::FirstResourceType))
     report_fatal_error("Bad resource type!\n");
   
-  return (HWResourceTypes)ret;
+  return (HWResource::ResTypes)ret;
 }
 
 static char *getSubNodeAsString(XmlNode *Node, std::string name) {
@@ -144,31 +143,32 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
       ResNode != 0; ResNode = ResNode->next_sibling("Resources")) {
     HWResource *Res = 0;
     switch (getResourceType(ResNode)) {
-    case MemoryBus:
+    case HWResource::MemoryBus:
       Res = HWMemBus::createFromXml(ResNode);
       break;
     default:
       report_fatal_error("Unknow resource type!");
       break;
     }
-    ResTab.insert(std::pair<std::string, HWResource*> (Res->getName(), Res));
+
+    unsigned idx = (unsigned)Res->getResourceType() - 1;
+    ResSet[idx] = Res;
   }
 }
 
 void ResourceConfig::print(raw_ostream &OS) const {
   OS << "-=========================Resource Config=========================-\n";
-  for (ResTabTy::const_iterator I = ResTab.begin(), E = ResTab.end();
-      I != E; ++I) {
-    I->second->print(OS);
-    OS << '\n';
+  for (const_iterator I = begin(), E = end(); I != E; ++I) {
+    if (*I != 0) {
+      (*I)->print(OS);
+      OS << '\n';
+    }
   }
 }
 
 ResourceConfig::~ResourceConfig() {
-  while (!ResTab.empty()) {
-    delete ResTab.begin()->second;
-    ResTab.erase(ResTab.begin());
-  }
+  for (iterator I = begin(), E = end(); I != E; ++I)
+    delete *I;
 }
 
 char ResourceConfig::ID = 0;

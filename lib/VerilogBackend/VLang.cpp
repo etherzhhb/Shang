@@ -241,9 +241,8 @@ raw_ostream &VLang::alwaysBegin(raw_ostream &ss, unsigned ind,
 }
 
 raw_ostream &VLang::resetRegister(raw_ostream &ss, const std::string &Name,
-                                  unsigned BitWidth, unsigned InitVal,
-                                  bool BlockingAssign){
-  ss << Name << (BlockingAssign ? " = " :" <=  ")
+                                  unsigned BitWidth, unsigned InitVal){
+  ss << Name << " <=  "
      << printConstantInt(InitVal, BitWidth, false)
      << ";\n";
   return ss;

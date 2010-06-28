@@ -29,36 +29,28 @@ using namespace llvm;
 using namespace esyn;
 
 namespace {
-class ListScheduler : public Scheduler {
+class ASAPScheduler : public Scheduler {
 public:
   static char ID;
-  explicit ListScheduler() : Scheduler(&ID) {}
-  bool runOnBasicBlock(BasicBlock &BB);
-  void releaseMemory();
+  explicit ASAPScheduler() : Scheduler(&ID) {}
+  void scheduleBasicBlock(HWAState &State);
   void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const;
 };
 } //end namespace
 
-char ListScheduler::ID = 0;
+char ASAPScheduler::ID = 0;
 
-void ListScheduler::print(raw_ostream &O, const Module *M) const {
+void ASAPScheduler::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void ListScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<HWAtomInfo>();
-  //AU.addRequired<ScheduleDriver>();
+void ASAPScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
+  Scheduler::getAnalysisUsage(AU);
   AU.setPreservesAll();
 }
 
-
-bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
-  HI = &getAnalysis<HWAtomInfo>();
-
-  DEBUG(dbgs() << "At BB: " << BB.getName() << '\n');
-
-  HWAState &State = HI->getStateFor(BB);
+void ASAPScheduler::scheduleBasicBlock(HWAState &State) {
   HWAOpInst *StateEnd = State.getStateEnd();
   assert(StateEnd && "Why StateEnd is null?");
 
@@ -80,21 +72,19 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
     // For each ready atoms
     while(HWAtom *ReadyAtom = getReadyAtoms(Atoms, HI->getTotalCycle())){
       if (HWAOpRes *OpRes = dyn_cast<HWAOpRes>(ReadyAtom)) {
-        HWResource *Res = &OpRes->getUsedResource();
-        unsigned ResInstance = OpRes->getResourceId();
-        if (ResInstance == 0) // Not allocate?
+        if (!OpRes->isResAllocated()) {// Not allocate?
           // Try to allocate a resource for it
           // Or just get the "idle instance?"
-          ResInstance = Res->getLeastBusyInstance();
-
+          assert(0 && "Resource allocate not support yet!");
+        }
+        HWResource::ResIdType ResId = OpRes->getResourceId();
         // Is the resource available?
-        unsigned readyCyc = getReadyCycle(Res, ResInstance);
+        unsigned readyCyc = getReadyCycle(ResId);
         if (readyCyc > HI->getTotalCycle())
           continue;
         
         //
-        rememberReadyCycle(Res, ResInstance,
-                          HI->getTotalCycle() + Res->getLatency());
+        rememberReadyCycle(ResId, HI->getTotalCycle() + OpRes->getLatency());
       }
       ReadyAtom->scheduledTo(HI->getTotalCycle());
 
@@ -109,18 +99,11 @@ bool ListScheduler::runOnBasicBlock(BasicBlock &BB) {
     HI->incTotalCycle();
   }
   //// schedule the state end;
-  //StateEnd->scheduledTo(HI->getTotalCycle());
-  //HI->incTotalCycle();
 
   DEBUG(State.print(dbgs()));
-  return false;
 }
 
-
-void ListScheduler::releaseMemory() {
-  clear();
-}
 
 Pass *esyn::createListSchedulePass() {
-  return new ListScheduler();
+  return new ASAPScheduler();
 }

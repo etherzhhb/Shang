@@ -91,32 +91,10 @@ void HWAState::print(raw_ostream &OS) const {
 
 void HWAOpRes::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << getUsedResource().getName()
-    << " Instance: " << ResId << '\n';
+  OS << " Res: " << ResId << '\n';
 }
 
 void HWAOpInst::print(raw_ostream &OS) const {
   OS << "OpInst: ";
   WriteAsOperand(OS, &getValue(), false);
-}
-
-//===----------------------------------------------------------------------===//
-void HWResTable::clear() {
-  while (!ResSet.empty()) {
-    ResourceSetType::iterator I = ResSet.begin();
-    (*I)->clear();
-    ResSet.erase(I);
-  }
-}
-
-HWResTable::~HWResTable() {
-  clear();
-}
-
-HWResource *HWResTable::initResource(std::string Name){
-  HWResource *HR = RC.getResource(Name);
-  if (HR != 0)
-    ResSet.insert(HR);
-
-  return HR;
 }

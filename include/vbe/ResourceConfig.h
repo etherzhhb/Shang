@@ -41,21 +41,22 @@ using namespace llvm;
 namespace esyn {
 class HWAOpRes;
 
-enum HWResourceTypes {
-  MemoryBus = 1,
-  Shifter = 2,
-  Comparator = 3,
-  LogicUnit = 4,
-  ArithUnit = 5,
-
-  FirstResourceType = MemoryBus,
-  LastResourceType = ArithUnit
-};
-
 /// @brief Represent hardware resource
 class HWResource {
+public:
+  enum ResTypes {
+    MemoryBus = 1,
+    Shifter = 2,
+    Comparator = 3,
+    LogicUnit = 4,
+    ArithUnit = 5,
+
+    FirstResourceType = MemoryBus,
+    LastResourceType = ArithUnit
+  };
+private:
   // The HWResource baseclass this node corresponds to
-  const unsigned short ResourceType;
+  ResTypes ResourceType;
   // The name of resource
   const std::string Name;
   // How many cycles to finish?
@@ -65,16 +66,14 @@ class HWResource {
   // How many resources available?
   const unsigned TotalRes;
 
-  typedef std::set<HWAOpRes*> HWAtomSetType;
-  HWAtomSetType UsingAtoms;
-
+  // Use a map mapping instance to count?
   typedef std::vector<unsigned> UsingCountVec;
   UsingCountVec UsingCount;
 
   HWResource(const HWResource &);            // DO NOT IMPLEMENT
   void operator=(const HWResource &);  // DO NOT IMPLEMENT
 protected:
-  explicit HWResource(enum HWResourceTypes type,
+  explicit HWResource(enum ResTypes type,
     std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
     : ResourceType(type), Name(name), Latency(latency), StartInt(startInt),
       TotalRes(totalRes), UsingCount(totalRes) {
@@ -82,7 +81,7 @@ protected:
     clear();
   }
 public:
-  unsigned getResourceType() const { return ResourceType; }
+  ResTypes getResourceType() const { return ResourceType; }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
@@ -91,25 +90,47 @@ public:
 
   virtual void print(raw_ostream &OS) const;
 
-  void addUsingAtom(HWAOpRes *Atom) {
-    UsingAtoms.insert(Atom);
-  } 
+  size_t getTotalUsed() const {
+    size_t ret = 0;
+    for (UsingCountVec::const_iterator I = UsingCount.begin(),
+        E = UsingCount.end(); I != E; ++I)
+      ret += *I;
+    
+    return ret;
+  }
 
-  size_t getUsingCount(unsigned idx = 0) const {
-    assert(idx <= UsingCount.size() + 1 && "idx out of range!");
-    if (idx == 0) // Return the total usage
-      return UsingAtoms.size(); 
-    else // 
-      return UsingCount[idx - 1];
+  size_t getUsingCount(unsigned instance) const {
+    assert(instance != 0 && "Instance 0 dose not exist!");
+      return UsingCount[instance - 1];
   }
 
   void assignToInstance(unsigned instance) {
+    assert(instance != 0 && "Instance 0 dose not exist!");
     ++UsingCount[instance - 1];
   }
 
   unsigned getLeastBusyInstance() const;
 
   void clear();
+
+  typedef unsigned ResIdType;
+  // Create A resource id for a given type of resource and a given instance.
+  static ResIdType createResId(enum ResTypes type, unsigned InstanceId) {
+    // {instanceId, TypeId}
+    unsigned ret = (InstanceId << 4) | (0xf & type);
+    assert((extractInstanceId(ret) == InstanceId) 
+          && (extractResType(ret) == type)
+          && "ResId overflow!");
+    return ret;
+  }
+
+  static enum ResTypes extractResType(ResIdType ResId) {
+    return (ResTypes)(ResId & 0xf);
+  }
+
+  static unsigned extractInstanceId(ResIdType ResId) {
+    return (ResId >> 4);
+  }
 }; 
 
 class HWMemBus : public HWResource {
@@ -120,7 +141,7 @@ class HWMemBus : public HWResource {
   explicit HWMemBus(std::string name, unsigned latency,
     unsigned startInt, unsigned totalRes,
     unsigned addrWidth, unsigned dataWidth)
-    : HWResource(MemoryBus, name, latency, startInt, totalRes),
+    : HWResource(HWResource::MemoryBus, name, latency, startInt, totalRes),
     AddrWidth(addrWidth), DataWidth(dataWidth) {}
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
@@ -129,7 +150,7 @@ public:
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWMemBus *A) { return true; }
   static inline bool classof(const HWResource *A) {
-    return A->getResourceType() == MemoryBus;
+    return A->getResourceType() == HWResource::MemoryBus;
   }
 
   static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
@@ -137,15 +158,17 @@ public:
 
 class ResourceConfig : public ImmutablePass {
   
-  typedef std::map<std::string, HWResource*> ResTabTy;
-
-  ResTabTy ResTab;
+  /// mapping allocated instences to atom
+  HWResource *ResSet[(size_t)HWResource::LastResourceType];
 
   void ParseConfigFile(const std::string &Filename);
 
 public:
   static char ID;
-  explicit ResourceConfig() : ImmutablePass(&ID) {};
+  explicit ResourceConfig() : ImmutablePass(&ID) {
+    for (size_t i = 0, e = (size_t)HWResource::LastResourceType; i != e; ++i)
+      ResSet[i] = 0;
+  }
 
   ~ResourceConfig();
 
@@ -153,9 +176,27 @@ public:
 
   void print(raw_ostream &OS) const;
 
-  HWResource *getResource(std::string Name) const {
-    ResTabTy::const_iterator at = ResTab.find(Name);
-    return at == ResTab.end() ? 0 : at->second;
+  HWResource *getResource(enum HWResource::ResTypes T) const {
+    unsigned idx = (unsigned)T - 1;
+    return ResSet[idx];
+  }
+
+
+  HWResource *operator[] (enum HWResource::ResTypes T) const {
+    return getResource(T);
+  }
+
+  typedef HWResource *const * iterator;
+  typedef const HWResource *const * const_iterator;
+
+  iterator begin() { return &ResSet[0]; }
+  const_iterator begin() const { return &ResSet[0]; }
+
+  iterator end() { 
+    return begin() + (size_t)HWResource::LastResourceType;
+  }
+  const_iterator end() const { 
+    return begin() + (size_t)HWResource::LastResourceType;
   }
 }; //class
 

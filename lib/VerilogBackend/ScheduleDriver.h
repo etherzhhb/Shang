@@ -34,20 +34,23 @@ namespace esyn {
 
 class Scheduler : public BasicBlockPass {
   // {instance, next available cycle}
-  typedef std::map<unsigned, unsigned> CycMapType;
-  typedef std::map<const HWResource*, CycMapType> ResCycMapType;
+  typedef std::map<HWResource::ResIdType, unsigned> ResCycMapType;
 
   ResCycMapType ResCycMap;
+
 protected:
   HWAtomInfo *HI;
-  
+  ResourceConfig *RC;
+
   void clear();
 
-  unsigned getReadyCycle(const HWResource *Resource, unsigned Instance);
+  // Get the ready cycle of the given resource.
+  unsigned getReadyCycle(HWResource::ResIdType ResId);
 
-  void rememberReadyCycle(const HWResource *Resource, unsigned Instance,
-                          unsigned ReadyCycle);
+  // Remember the ready cycle of the given resource.
+  void rememberReadyCycle(HWResource::ResIdType ResId, unsigned ReadyCycle);
 
+  // Get Any ready atom.
   HWAtom *getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
                         unsigned Cycle) const;
 
@@ -56,6 +59,16 @@ public:
   explicit Scheduler(intptr_t pid) : BasicBlockPass(pid), HI(0) {}
 
   virtual ~Scheduler();
+
+  // Request common analysis usage for scheduler
+  void getAnalysisUsage(AnalysisUsage &AU) const;
+  // Do common Initialization for scheduler
+  bool runOnBasicBlock(BasicBlock &BB);
+  void releaseMemory();
+
+  // Interface for schedulers
+  virtual void scheduleBasicBlock(HWAState &State) = 0;
+  virtual void releaseContext() {}
 };
 
 /// @brief Hardware atome schedule pass.
