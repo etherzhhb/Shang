@@ -46,13 +46,12 @@ class HWResource {
 public:
   enum ResTypes {
     MemoryBus = 1,
-    SHL = 2,
-    ASR = 3,
-    LSR = 4,
-    Logic = 5,
-    AddSub = 6,
-    Mul = 7,
-    Other = 8,
+    SHL,
+    ASR,
+    LSR,
+    AddSub,
+    Mul,
+    Other,
 
     FirstResourceType = MemoryBus,
     LastResourceType = Other

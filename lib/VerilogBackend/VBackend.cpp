@@ -45,10 +45,11 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(RC);
     // Add the language writer.
     PM.add(new VLang());
-    //
+    // Memory dependencies analysis
     PM.add(new HWAtomInfo());
     PM.add(createListSchedulePass());
-
+    // Resource binding
+    // Region Base global resource binding
     PM.add(createRegisterReductionPass());
     //
     PM.add(new RTLWriter(Out));

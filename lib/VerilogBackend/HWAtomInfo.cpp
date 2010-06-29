@@ -73,7 +73,8 @@ void HWAtomInfo::releaseMemory() {
 
 
 //===----------------------------------------------------------------------===//
-// Construct atom
+// Construct atom from LLVM-IR
+// What if the one of the operand is Constant?
 void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // TODO: the emitNextLoop atom
   HWAState *CurState = getCurState();
@@ -214,13 +215,22 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
   Deps.push_back(getAtomInState(*I.getOperand(0), I.getParent()));
   // RHS
   Deps.push_back(getAtomInState(*I.getOperand(1), I.getParent()));
+
+  enum HWResource::ResTypes T;
+  // It is trivial if one of the operand is constant
+  if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
+    T = HWResource::Other;
+  else // We need to do a subtraction for the comparison.
+    T = HWResource::AddSub;
+
   if (I.isSigned()) {
     Deps[0] = getSigned(Deps[0]);
     Deps[1] = getSigned(Deps[1]);
   }
 
   // FIXME: Read latency from configure file
-  HWAtom *CmpAtom = getOpInst(I, Deps, 1, HWResource::Other);
+  // 
+  HWAtom *CmpAtom = getOpInst(I, Deps, 1, T);
   // Register it
   CmpAtom = getRegister(I, CmpAtom);
 
@@ -234,31 +244,32 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
   Deps.push_back(getAtomInState(*I.getOperand(0), I.getParent()));
   // RHS
   Deps.push_back(getAtomInState(*I.getOperand(1), I.getParent()));
-  
+  bool isTrivial = isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1));
   enum HWResource::ResTypes T;
   // Select the resource
   switch (I.getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
       T = HWResource::AddSub;
+      break;
     case Instruction::Mul:
       T = HWResource::Mul;
       break;
     case Instruction::And:
     case Instruction::Or:
     case Instruction::Xor:
-      T = HWResource::Logic;
+      T = HWResource::Other;
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
       Deps[0] = getSigned(Deps[0]);
-      T = HWResource::ASR;
+      T = isTrivial ? HWResource::Other : HWResource::ASR;
       break;
     case Instruction::LShr:
-      T = HWResource::LSR;
+      T = isTrivial ? HWResource::Other : HWResource::LSR;
       break;
     case Instruction::Shl:
-      T = HWResource::SHL;
+      T = isTrivial ? HWResource::Other : HWResource::SHL;
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");
