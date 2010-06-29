@@ -89,7 +89,7 @@ bool Scheduler::runOnBasicBlock(BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
   RC = &getAnalysis<ResourceConfig>();
 
-  HWAState &State = HI->getStateFor(BB);
+  ExecStage &State = HI->getStateFor(BB);
   scheduleBasicBlock(State);
   return false;
 }

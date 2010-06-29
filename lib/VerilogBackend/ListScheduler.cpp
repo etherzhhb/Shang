@@ -23,6 +23,8 @@
 #include "HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"
+
+#define DEBUG_TYPE "vbe-asap-schedule"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -33,7 +35,7 @@ class ASAPScheduler : public Scheduler {
 public:
   static char ID;
   explicit ASAPScheduler() : Scheduler(&ID) {}
-  void scheduleBasicBlock(HWAState &State);
+  void scheduleBasicBlock(ExecStage &State);
   void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const;
 };
@@ -50,27 +52,23 @@ void ASAPScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
 }
 
-void ASAPScheduler::scheduleBasicBlock(HWAState &State) {
-  HWAOpInst *StateEnd = State.getStateEnd();
-  assert(StateEnd && "Why StateEnd is null?");
+void ASAPScheduler::scheduleBasicBlock(ExecStage &State) {
+  HWAEntryRoot &EntryRoot = State.getEntryRoot();
+  HWAOpInst &ExitRoot = State.getExitRoot();
+  EntryRoot.scheduledTo(HI->getTotalCycle());
+  //HI->incTotalCycle();
+  // Schedule EntryRoot
 
   typedef SmallVector<HWAtom*, 64> HWAtomVec;
   HWAtomVec Atoms(State.begin(), State.end());
-  Atoms.push_back(StateEnd);
-  // TODO: sort the atoms
-
-  // Remember the state start, so we can schedule this bb again
-  State.scheduledTo(HI->getTotalCycle());
-  //HI->incTotalCycle();
-  // Schedule StateBegin
-
   // TODO: Check if the atoms are empty
-  while (!StateEnd->isOperationFinish(HI->getTotalCycle())) {
+  while (!ExitRoot.isOperationFinish(HI->getTotalCycle())) {
     DEBUG(dbgs() << "======Cycle " << HI->getTotalCycle() << "\n");
     // Find all ready atoms
 
     // For each ready atoms
     while(HWAtom *ReadyAtom = getReadyAtoms(Atoms, HI->getTotalCycle())){
+      assert(ReadyAtom != &EntryRoot && "Why we have a Entry ready?");
       if (HWAOpRes *OpRes = dyn_cast<HWAOpRes>(ReadyAtom)) {
         if (!OpRes->isResAllocated()) {// Not allocate?
           // Try to allocate a resource for it

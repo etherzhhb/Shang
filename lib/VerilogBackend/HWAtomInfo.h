@@ -100,8 +100,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
-  HWAState *getState(BasicBlock &BB);
-
   HWAtom *getConstant(Value &V);
 
   HWARegister *getRegister(Value &V, HWAtom *Using);
@@ -125,23 +123,18 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     return getOpInst(I, Deps, I.getNumOperands(), latency, OpClass);
   }
 
+  HWAEntryRoot *getEntryRoot(BasicBlock *BB);
+
   typedef DenseMap<const Value*, HWAtom*> AtomMapType;
   AtomMapType ValueToHWAtoms;
 
-  typedef DenseMap<const BasicBlock*, HWAState*> StateMapType;
+  typedef DenseMap<const BasicBlock*, ExecStage*> StateMapType;
   StateMapType BBToStates;
   HWAtom *ControlRoot;
-  HWAState *CurState;
+  std::set<HWAtom*> AtomsInCurState;
 
-  HWAState *getCurState() {
-    return CurState;
-  }
-
-  void updateStateTo(BasicBlock &BB) {
-    CurState = getState(BB);
-    BBToStates.insert(
-      std::make_pair<const BasicBlock*, HWAState*>(&BB, CurState));
-    SetControlRoot(CurState);
+  void SetControlRoot(HWAtom *NewRoot) {
+    ControlRoot = NewRoot;
   }
 
   HWAtom *getControlRoot() {
@@ -158,24 +151,19 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     if (BB == Inst.getParent())
       return getAtomFor(Inst);
     else
-      return CurState;
+      return getEntryRoot(BB);
   }
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
     BasicBlock *ParentBB = I.getParent();
-    HWAState &CurState = getStateFor(*ParentBB);
     for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
         OI != OE; ++OI) {
       if (Instruction *OpI = dyn_cast<Instruction>(OI))
         // Restrict the dependences in the current state
         Deps.push_back(getAtomInState(*OpI, ParentBB));
-      else 
+      else if(!isa<BasicBlock>(OI)) // Ignore the basic Block.
         // Otherwise it is a constant
         Deps.push_back(getConstant(**OI));
     }
-  }
-
-  void SetControlRoot(HWAtom *NewRoot) {
-    ControlRoot = NewRoot;
   }
 
   void clear();
@@ -191,8 +179,7 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), CurState(0),
-    LI(0), totalCycle(1) {}
+  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0), totalCycle(1) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();
@@ -200,7 +187,7 @@ public:
   virtual void print(raw_ostream &O, const Module *M) const;
   //}
 
-  HWAState &getStateFor(BasicBlock &BB) const {
+  ExecStage &getStateFor(BasicBlock &BB) const {
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");
     return  *(At->second);

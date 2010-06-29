@@ -26,6 +26,7 @@
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
 #include "llvm/Intrinsics.h"
+#include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
@@ -48,8 +49,7 @@ enum HWAtomTypes {
                       // Schedeable atoms
   atomOpRes,          // Operate shared resource
   atomOpInst,         // Operate on inline instruction
-  atomStateBegin,     // state transfer
-  atomStateEnd,
+  atomEntryRoot,      // Virtual Root 
   atomEmitNextLoop
 };
 
@@ -85,7 +85,9 @@ public:
     unsigned HWAtomTy, Value &V, 
     HWAtom **deps, size_t numDeps) 
     : FastID(ID), HWAtomType(HWAtomTy), Val(V), Deps(deps),
-    NumDeps(numDeps), SchedSlot(UINT32_MAX >> 1) {}
+    NumDeps(numDeps),
+    // Make a shift so that it do not get a overflow when we are doing an addition
+    SchedSlot(UINT32_MAX >> 1) {}
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
@@ -121,6 +123,7 @@ public:
   void scheduledTo(unsigned slot) { SchedSlot = slot; }
   unsigned getSlot() const { return SchedSlot; }
 
+  // TOOD: move these to schedule dag.
   virtual bool isOperationFinish(unsigned CurSlot) const = 0;
 
   bool isAllDepsOpFin(unsigned CurSlot) const {
@@ -158,6 +161,26 @@ public:
   static inline bool classof(const HWAConst *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomConst;
+  }
+};
+
+// Virtual Root
+class HWAEntryRoot : public HWAtom {
+public:
+  explicit HWAEntryRoot(const FoldingSetNodeIDRef ID, BasicBlock &BB)
+    : HWAtom(ID, atomEntryRoot, BB, 0, 0) {}
+
+  BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
+
+  bool isOperationFinish(unsigned CurSlot) const {
+    return SchedSlot <= CurSlot;
+  }
+
+  void print(raw_ostream &OS) const;
+
+  static inline bool classof(const HWAEntryRoot *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomEntryRoot;
   }
 };
 
@@ -324,21 +347,32 @@ public:
   }
 };
 
-class HWAState : public HWAtom {
+// Execute state.
+class ExecStage {
   typedef std::vector<HWAtom*> HWAtomVecType;
 
-  HWAOpInst *StateEnd;
+  HWAEntryRoot &EntryRoot;
+  HWAOpInst &ExitRoot;
 
   // Atoms in this state
   HWAtomVecType Atoms;
 
 public:
-  explicit HWAState(const FoldingSetNodeIDRef ID, BasicBlock &BB)
-    : HWAtom(ID, atomStateBegin, BB, 0, 0), StateEnd(0) {}
-
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return true;
+  explicit ExecStage(HWAEntryRoot *entry, HWAOpInst *exit)
+    : EntryRoot(*entry), ExitRoot(*exit),
+    Atoms(exit->dep_begin(), exit->dep_end()) {
+    Atoms.push_back(exit);
   }
+
+
+  /// @name Roots
+  //{
+  HWAEntryRoot &getEntryRoot() const { return EntryRoot; }
+  HWAOpInst &getExitRoot() const { return ExitRoot; }
+
+  HWAEntryRoot &getEntryRoot() { return EntryRoot; }
+  HWAOpInst &getExitRoot() { return ExitRoot; }
+  //}
 
   void pushAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
   bool eraseAtom(HWAtom *Atom) {
@@ -350,6 +384,10 @@ public:
 
     return false;
   }
+
+  // Return the corresponding basiclbocl of this Execute stage.
+  BasicBlock *getBasicBlock() { return &EntryRoot.getBasicBlock(); }
+  BasicBlock *getBasicBlock() const { return &EntryRoot.getBasicBlock(); }
 
   typedef HWAtomVecType::iterator iterator;
   iterator begin() { return Atoms.begin(); }
@@ -364,13 +402,6 @@ public:
       (*I)->reset();
   }
 
-  void getTerminateState(HWAOpInst &stateEnd) {
-    StateEnd = &stateEnd;
-  }
-
-  HWAOpInst *getStateEnd() { return StateEnd; }
-  const HWAOpInst *getStateEnd() const { return StateEnd; }
-
   typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
 
   void getScheduleMap(ScheduleMapType &Atoms) const;
@@ -378,9 +409,9 @@ public:
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAState *A) { return true; }
+  static inline bool classof(const ExecStage *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomStateBegin;
+    return A->getHWAtomType() == atomEntryRoot;
   }
 };
 

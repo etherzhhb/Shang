@@ -67,7 +67,7 @@ public:
   void releaseMemory();
 
   // Interface for schedulers
-  virtual void scheduleBasicBlock(HWAState &State) = 0;
+  virtual void scheduleBasicBlock(ExecStage &State) = 0;
   virtual void releaseContext() {}
 };
 

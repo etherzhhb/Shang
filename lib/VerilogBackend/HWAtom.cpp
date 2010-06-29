@@ -20,7 +20,6 @@
 
 #include "vbe/HWAtom.h"
 
-#include "llvm/Assembly/Writer.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Analysis/LoopInfo.h"
 
@@ -54,16 +53,16 @@ void HWARegister::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
-void HWAState::getScheduleMap(ScheduleMapType &Atoms) const {
-  for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
+void ExecStage::getScheduleMap(ScheduleMapType &Atoms) const {
+  for (ExecStage::const_iterator I = begin(), E = end(); I != E; ++I) {
     HWAtom *A = *I;
     Atoms.insert(std::make_pair<unsigned, HWAtom*>(A->getSlot(), A));
   }
 }
 
-void HWAState::print(raw_ostream &OS) const {
+void ExecStage::print(raw_ostream &OS) const {
   OS << "State: ";
-  WriteAsOperand(OS, &getValue(), false);
+  WriteAsOperand(OS, getBasicBlock(), false);
   OS << "\n";
   //for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
   //  (*I)->print(OS.indent(2));
@@ -84,17 +83,20 @@ void HWAState::print(raw_ostream &OS) const {
     OS << " at "<< A->getSlot() << "\n";
   }
 
-  const HWAOpInst &StateEnd = *getStateEnd();
-  StateEnd.print(OS.indent(2));
-  OS << " at "<< StateEnd.getSlot() << "\n";
+  const HWAOpInst &ExitRoot = getExitRoot();
+  ExitRoot.print(OS.indent(2));
+  OS << " at "<< ExitRoot.getSlot() << "\n";
 }
 
 void HWAOpRes::print(raw_ostream &OS) const {
-  WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << SubClassData << '\n';
+  OS << getValue() << " Res: " << SubClassData << '\n';
 }
 
 void HWAOpInst::print(raw_ostream &OS) const {
+  OS << getValue() << " OpInst: " << SubClassData;
+}
+
+void HWAEntryRoot::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
-  OS << " OpInst: " << SubClassData;
+  OS << " Entry";
 }

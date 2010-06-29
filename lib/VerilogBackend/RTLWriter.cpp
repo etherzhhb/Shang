@@ -177,23 +177,24 @@ void RTLWriter::emitFunctionSignature(Function &F) {
 }
 
 void RTLWriter::emitBasicBlock(BasicBlock &BB) {
-  HWAState &State = HI->getStateFor(BB);
+  ExecStage &State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
   
   unsigned totalStatesBits = HI->getTotalCycleBitWidth();
   vlang->comment(getStateDeclBuffer()) << "State for " << StateName << '\n';
 
   //
-  HWAState::ScheduleMapType Atoms;
-  typedef HWAState::ScheduleMapType::iterator cycle_iterator;
+  ExecStage::ScheduleMapType Atoms;
+  typedef ExecStage::ScheduleMapType::iterator cycle_iterator;
 
   State.getScheduleMap(Atoms);
-  HWAOpInst *End = State.getStateEnd();
+  HWAEntryRoot &Entry = State.getEntryRoot();
+  HWAOpInst &Exit = State.getExitRoot();
 
-  unsigned StartSlot = State.getSlot(), EndSlot = End->getSlot();
+  unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
   //
   vlang->comment(ControlBlock.indent(6)) << StateName << '\n';
-  for (unsigned i = State.getSlot(), e = End->getSlot() + 1; i != e; ++i) {
+  for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
     vlang->param(getStateDeclBuffer(),
                  StateName + utostr(i),
                  totalStatesBits, i);
@@ -432,9 +433,9 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAOpResVecTy &Atoms) {
 
 //===----------------------------------------------------------------------===//
 void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) {
-  HWAState &State = HI->getStateFor(BB);
-  unsigned stateCycle = State.getSlot() + offset;
-  assert(stateCycle <= State.getStateEnd()->getSlot() 
+  ExecStage &State = HI->getStateFor(BB);
+  unsigned stateCycle = State.getEntryRoot().getSlot() + offset;
+  assert(stateCycle <= State.getExitRoot().getSlot() 
          && "Offest out of range!");
   ss << "CurState <= " << vlang->GetValueName(&BB) << stateCycle << ";\n";
 }
@@ -494,7 +495,8 @@ void RTLWriter::visitExtInst(HWAOpInst &A) {
 
 
 void esyn::RTLWriter::visitReturnInst(HWAOpInst &A) {
-  ControlBlock.indent(8) << "fin <= 1'h0;\n";
+  // Operation finish.
+  ControlBlock.indent(8) << "fin <= 1'h1;\n";
   ControlBlock.indent(8) << "CurState <= state_idle;\n";
 }
 

@@ -44,14 +44,15 @@ bool RegReduction::runOnFunction(Function &F) {
 
 bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-  HWAState &State = HI.getStateFor(BB);
+  ExecStage &State = HI.getStateFor(BB);
+  HWAEntryRoot *EntryRoot = &State.getEntryRoot();
   // For each atom
-  for (HWAState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+  for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     if (HWASchedable *A = dyn_cast<HWASchedable>(*I)) {
       Instruction &Inst = A->getInst<Instruction>();
       for (unsigned i = 0, e = A->getEffectiveNumOps(); i != e; ++i) {
         // Remove the false dependence for live in registers
-        if (A->getDep(i) == &State)
+        if (A->getDep(i) == EntryRoot)
           A->setDep(i, HI.getAtomFor(*Inst.getOperand(i)));
         
         // For all register
