@@ -58,13 +58,13 @@ unsigned HWResource::getLeastBusyInstance() const {
   std::pair<unsigned, unsigned> ret(0, 0);
   for (unsigned i = 0, e = UsingCount.size(); i != e; ++i) {
     if (UsingCount[i] == 0)
-      return i + 1;
+      return i;
     if (UsingCount[i] < ret.first) {
       ret.first = UsingCount[i];
       ret.second = i;
     }
   }
-  return ret.second + 1;
+  return ret.second;
 }
 
 void HWResource::clear() {

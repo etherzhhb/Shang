@@ -32,6 +32,14 @@ using namespace llvm;
 
 namespace esyn {
 
+class SchedAtom {
+  // Corresponding atom
+  HWAtom *Atom;
+
+public:
+  SchedAtom(HWAtom *atom) : Atom(atom) {}
+};
+
 class Scheduler : public BasicBlockPass {
   // {instance, next available cycle}
   typedef std::map<HWResource::ResIdType, unsigned> ResCycMapType;

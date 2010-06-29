@@ -83,17 +83,17 @@ void ExecStage::print(raw_ostream &OS) const {
     OS << " at "<< A->getSlot() << "\n";
   }
 
-  const HWAOpInst &ExitRoot = getExitRoot();
+  const HWAPostBind &ExitRoot = getExitRoot();
   ExitRoot.print(OS.indent(2));
   OS << " at "<< ExitRoot.getSlot() << "\n";
 }
 
-void HWAOpRes::print(raw_ostream &OS) const {
+void HWAPreBind::print(raw_ostream &OS) const {
   OS << getValue() << " Res: " << SubClassData << '\n';
 }
 
-void HWAOpInst::print(raw_ostream &OS) const {
-  OS << getValue() << " OpInst: " << SubClassData;
+void HWAPostBind::print(raw_ostream &OS) const {
+  OS << getValue() << " PostBind: " << SubClassData;
 }
 
 void HWAEntryRoot::print(raw_ostream &OS) const {

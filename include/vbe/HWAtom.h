@@ -47,10 +47,9 @@ enum HWAtomTypes {
                       // Data communication atom
   atomRegister,       // Assign value to register, use in infinite scheduler
                       // Schedeable atoms
-  atomOpRes,          // Operate shared resource
-  atomOpInst,         // Operate on inline instruction
-  atomEntryRoot,      // Virtual Root 
-  atomEmitNextLoop
+  atomPreBind,      // Operate on pre bind resource
+  atomPostBind,     // Operate on post binding resource
+  atomEntryRoot       // Virtual Root
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -239,19 +238,19 @@ public:
 };
 
 /// @brief The Schedulable Hardware Atom
-class HWASchedable : public HWAtom {
+class HWAOpInst : public HWAtom {
   // The latency of this atom
   unsigned Latency;
   // Effective operand number
-  unsigned EffectiveNumOps;
+  unsigned InstNumOps;
 protected:
   unsigned SubClassData;
 
-  explicit HWASchedable(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+  explicit HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep,
     size_t OpNum, unsigned subClassData = 0)
     : HWAtom(ID, T, Inst, deps, numDep), Latency(latency),
-    EffectiveNumOps(OpNum), SubClassData(subClassData) {}
+    InstNumOps(OpNum), SubClassData(subClassData) {}
 public:
   // Get the latency of this atom
   unsigned getLatency() const {
@@ -265,17 +264,17 @@ public:
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
 
-  size_t getEffectiveNumOps () const { return EffectiveNumOps; }
+  size_t getInstNumOps () const { return InstNumOps; }
 
   HWAtom *getOperand(unsigned idx) {
-    assert(idx < EffectiveNumOps && "index Out of range!");
+    assert(idx < InstNumOps && "index Out of range!");
     assert(&(getDep(idx)->getValue()) == getInst<Instruction>().getOperand(idx)
-      && "HWOpInst operands broken!");
+      && "HWPostBind operands broken!");
     return getDep(idx);
   }
 
   // Help the scheduler to identify difference operation class
-  virtual enum HWResource::ResTypes getOpClass() const {
+  virtual enum HWResource::ResTypes getResClass() const {
     return HWResource::Other;
   }
 
@@ -285,65 +284,60 @@ public:
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWASchedable *A) { return true; }
+  static inline bool classof(const HWAOpInst *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpRes ||
-      A->getHWAtomType() == atomEmitNextLoop ||
-      A->getHWAtomType() == atomOpInst;
+    return A->getHWAtomType() == atomPreBind ||
+      A->getHWAtomType() == atomPostBind;
   }
 };
 
-class HWAOpInst : public HWASchedable {
+class HWAPostBind : public HWAOpInst {
 public:
-  explicit HWAOpInst(const FoldingSetNodeIDRef ID, Instruction &Inst,
+  explicit HWAPostBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
     unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
       enum HWResource::ResTypes OpClass)
-    : HWASchedable(ID, atomOpInst, Inst, latency, deps, numDep, OpNum, OpClass)
-  {}
+    : HWAOpInst(ID, atomPostBind, Inst, latency,
+                  deps, numDep, OpNum, OpClass) {}
+  enum HWResource::ResTypes getResClass() const {
+    return (HWResource::ResTypes)SubClassData;
+  }
 
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAOpInst *A) { return true; }
+  static inline bool classof(const HWAPostBind *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpInst;
+    return A->getHWAtomType() == atomPostBind;
   }
 };
 
-class HWAOpRes : public HWASchedable {
+class HWAPreBind : public HWAOpInst {
 public:
-  explicit HWAOpRes(const FoldingSetNodeIDRef ID, Instruction &Inst,
+  explicit HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
     unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
     HWResource &Res, unsigned Instance = 0)
-    : HWASchedable(ID, atomOpRes, Inst, latency, deps, numDep, OpNum,
-    HWResource::createResId(Res.getResourceType(), Instance)) {
-    if (isResAllocated() != 0)
-      Res.assignToInstance(getAllocatedInstance());
-  }
+    : HWAOpInst(ID, atomPreBind, Inst, latency, deps, numDep, OpNum,
+    HWResource::createResId(Res.getResourceType(), Instance)) {}
 
   /// @name The using resource
   //{
   // Help the scheduler to identify difference resource unit.
   HWResource::ResIdType getResourceId() const { return SubClassData; }
-  bool isResAllocated() const { 
-    return (HWResource::extractInstanceId(getResourceId()) != 0);
-  }
 
-  enum HWResource::ResTypes getOpClass() const {
+  enum HWResource::ResTypes getResClass() const {
     return HWResource::extractResType(getResourceId());
   }
   unsigned getAllocatedInstance() const {
     return HWResource::extractInstanceId(getResourceId());
   }
-  void assignToResource(HWResource::ResIdType resId) { SubClassData = resId; }
   //}
 
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAOpRes *A) { return true; }
+  static inline bool classof(const HWAPreBind *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpRes;
+    return A->getHWAtomType() == atomPreBind;
   }
 };
 
@@ -352,13 +346,13 @@ class ExecStage {
   typedef std::vector<HWAtom*> HWAtomVecType;
 
   HWAEntryRoot &EntryRoot;
-  HWAOpInst &ExitRoot;
+  HWAPostBind &ExitRoot;
 
   // Atoms in this state
   HWAtomVecType Atoms;
 
 public:
-  explicit ExecStage(HWAEntryRoot *entry, HWAOpInst *exit)
+  explicit ExecStage(HWAEntryRoot *entry, HWAPostBind *exit)
     : EntryRoot(*entry), ExitRoot(*exit),
     Atoms(exit->dep_begin(), exit->dep_end()) {
     Atoms.push_back(exit);
@@ -368,10 +362,10 @@ public:
   /// @name Roots
   //{
   HWAEntryRoot &getEntryRoot() const { return EntryRoot; }
-  HWAOpInst &getExitRoot() const { return ExitRoot; }
+  HWAPostBind &getExitRoot() const { return ExitRoot; }
 
   HWAEntryRoot &getEntryRoot() { return EntryRoot; }
-  HWAOpInst &getExitRoot() { return ExitRoot; }
+  HWAPostBind &getExitRoot() { return ExitRoot; }
   //}
 
   void pushAtom(HWAtom *Atom) { Atoms.push_back(Atom); }

@@ -54,7 +54,7 @@ void ASAPScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
 
 void ASAPScheduler::scheduleBasicBlock(ExecStage &State) {
   HWAEntryRoot &EntryRoot = State.getEntryRoot();
-  HWAOpInst &ExitRoot = State.getExitRoot();
+  HWAPostBind &ExitRoot = State.getExitRoot();
   EntryRoot.scheduledTo(HI->getTotalCycle());
   //HI->incTotalCycle();
   // Schedule EntryRoot
@@ -69,20 +69,15 @@ void ASAPScheduler::scheduleBasicBlock(ExecStage &State) {
     // For each ready atoms
     while(HWAtom *ReadyAtom = getReadyAtoms(Atoms, HI->getTotalCycle())){
       assert(ReadyAtom != &EntryRoot && "Why we have a Entry ready?");
-      if (HWAOpRes *OpRes = dyn_cast<HWAOpRes>(ReadyAtom)) {
-        if (!OpRes->isResAllocated()) {// Not allocate?
-          // Try to allocate a resource for it
-          // Or just get the "idle instance?"
-          assert(0 && "Resource allocate not support yet!");
-        }
-        HWResource::ResIdType ResId = OpRes->getResourceId();
+      if (HWAPreBind *PreBind = dyn_cast<HWAPreBind>(ReadyAtom)) {
+        HWResource::ResIdType ResId = PreBind->getResourceId();
         // Is the resource available?
         unsigned readyCyc = getReadyCycle(ResId);
         if (readyCyc > HI->getTotalCycle())
           continue;
         
         //
-        rememberReadyCycle(ResId, HI->getTotalCycle() + OpRes->getLatency());
+        rememberReadyCycle(ResId, HI->getTotalCycle() + PreBind->getLatency());
       }
       ReadyAtom->scheduledTo(HI->getTotalCycle());
 

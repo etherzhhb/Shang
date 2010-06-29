@@ -53,7 +53,7 @@ bool HWAtomInfo::runOnFunction(Function &F) {
       visit(*BI);
     }
     BBToStates[BB] = new ExecStage(getEntryRoot(BB),
-                                   cast<HWAOpInst>(getControlRoot()));
+                                   cast<HWAPostBind>(getControlRoot()));
     // AtomsInCurStates not use any more
     AtomsInCurState.clear();
   }
@@ -92,7 +92,7 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
-  HWAOpInst *Atom = getOpInst(I, Deps, OpSize, 0, HWResource::Other);
+  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, 0, HWResource::Other);
   // Remember the atom.
   ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Atom));
 
@@ -104,7 +104,7 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 void HWAtomInfo::visitPHINode(PHINode &I) {
   SmallVector<HWAtom*, 0> Deps;
   // PHI node always have no latency
-  HWAtom *Phi = getOpInst(I, Deps, 0, 0, HWResource::Other);
+  HWAtom *Phi = getPostBind(I, Deps, 0, 0, HWResource::Other);
   ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Phi));
 }
 
@@ -113,7 +113,7 @@ void HWAtomInfo::visitSelectInst(SelectInst &I) {
   addOperandDeps(I, Deps);
 
   // FIXME: Read latency from configure file
-  HWAtom *SelAtom = getOpInst(I, Deps, 1, HWResource::Other);
+  HWAtom *SelAtom = getPostBind(I, Deps, 1, HWResource::Other);
   // Register the result
   SelAtom = getRegister(I, SelAtom);
 
@@ -125,7 +125,7 @@ void HWAtomInfo::visitCastInst(CastInst &I) {
   Deps.push_back(getAtomInState(*I.getOperand(0), I.getParent()));
   // CastInst do not have any latency
   // FIXME: Create the AtomReAssign Pass and set the latency to 0
-  HWAtom *CastAtom = getOpInst(I, Deps, 1, HWResource::Other);
+  HWAtom *CastAtom = getPostBind(I, Deps, 1, HWResource::Other);
   // Register the result
   CastAtom = getRegister(I, CastAtom);
   ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, CastAtom));
@@ -141,8 +141,8 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   HWResource *Res = RC->getResource(HWResource::MemoryBus);
   assert(Res && "Can find resource!");
 
-  // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *LoadAtom = getOpRes(I, Deps, *Res, Res->getLatency(), 1);
+  // Dirty Hack: allocate membus 0 to all load/store at this moment
+  HWAtom *LoadAtom = getPreBind(I, Deps, *Res, Res->getLatency(), 0);
   // Set as new atom
   SetControlRoot(LoadAtom);
   // And register the result
@@ -161,8 +161,8 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   HWResource *Res = RC->getResource(HWResource::MemoryBus);
   assert(Res && "Can find resource!");
 
-  // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *StoreAtom = getOpRes(I, Deps, *Res, Res->getLatency(), 1);
+  // Dirty Hack: allocate membus 0 to all load/store at this moment
+  HWAtom *StoreAtom = getPreBind(I, Deps, *Res, Res->getLatency(), 0);
   // Set as new atom
   SetControlRoot(StoreAtom);
 
@@ -177,14 +177,7 @@ void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   SmallVector<HWAtom*, 2> Deps;
   addOperandDeps(I, Deps);
 
-  HWAtom *GEPAtom = 0;
-
-  // Create the atom
-  if (HWResource *Res = RC->getResource(HWResource::AddSub))
-    GEPAtom = getOpRes(I, Deps, *Res, Res->getLatency());
-  else
-    // FIXME: Read latency from configure file
-    GEPAtom = getOpInst(I, Deps, 1, HWResource::AddSub);
+  HWAtom *GEPAtom = getPostBind(I, Deps, 1, HWResource::AddSub);
 
   // Register the result
   GEPAtom = getRegister(I, GEPAtom);
@@ -214,7 +207,7 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
 
   // FIXME: Read latency from configure file
   // 
-  HWAtom *CmpAtom = getOpInst(I, Deps, 1, T);
+  HWAtom *CmpAtom = getPostBind(I, Deps, 1, T);
   // Register it
   CmpAtom = getRegister(I, CmpAtom);
 
@@ -259,12 +252,7 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
       llvm_unreachable("Instruction not support yet!");
   }
   
-  HWAtom *BinOpAtom = 0;
-  if (HWResource *Res = RC->getResource(T))
-    BinOpAtom = getOpRes(I, Deps, *Res, Res->getLatency());
-  else
-    // FIXME: Read latency from configure file
-    BinOpAtom = getOpInst(I, Deps, 1, T);
+  HWAtom *BinOpAtom = getPostBind(I, Deps, 1, T);
 
   // Register it
   BinOpAtom = getRegister(I, BinOpAtom);
@@ -334,21 +322,21 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
   return A;
 }
 
-HWAOpRes *HWAtomInfo::getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                                size_t OpNum, HWResource &Res, unsigned latency,
                                unsigned ResInst) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomOpRes);
+  ID.AddInteger(atomPreBind);
   ID.AddPointer(&I);
 
   void *IP = 0;
-  HWAOpRes *A =
-    static_cast<HWAOpRes*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAPreBind *A =
+    static_cast<HWAPreBind*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
-    A = new (HWAtomAllocator) HWAOpRes(ID.Intern(HWAtomAllocator),
+    A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
       I, latency, O, Deps.size(), OpNum, Res, ResInst);
     UniqiueHWAtoms.InsertNode(A, IP);
     // Add New Atom
@@ -357,21 +345,21 @@ HWAOpRes *HWAtomInfo::getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
   return A;
 }
 
-HWAOpInst *HWAtomInfo::getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+HWAPostBind *HWAtomInfo::getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                                  size_t OpNum, unsigned latency,
                                  enum HWResource::ResTypes OpClass) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomOpInst);
+  ID.AddInteger(atomPostBind);
   ID.AddPointer(&I);
 
   void *IP = 0;
-  HWAOpInst *A =
-    static_cast<HWAOpInst*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAPostBind *A =
+    static_cast<HWAPostBind*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
-    A = new (HWAtomAllocator) HWAOpInst(ID.Intern(HWAtomAllocator),
+    A = new (HWAtomAllocator) HWAPostBind(ID.Intern(HWAtomAllocator),
       I, latency, O, Deps.size(), OpNum, OpClass);
     UniqiueHWAtoms.InsertNode(A, IP);
     // Add New Atom

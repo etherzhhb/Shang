@@ -106,21 +106,21 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   HWAtom *getSigned(HWAtom *Using);
 
-  HWAOpRes *getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                      size_t OpNum, HWResource &Res,  unsigned latency, 
                      unsigned ResInst = 0);
-  HWAOpRes *getOpRes(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                      HWResource &Res,  unsigned latency, 
                      unsigned ResInst = 0) {
-    return getOpRes(I, Deps, I.getNumOperands(), Res, latency, ResInst);
+    return getPreBind(I, Deps, I.getNumOperands(), Res, latency, ResInst);
   }
 
-  HWAOpInst *getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
     size_t OpNum, unsigned latency, enum HWResource::ResTypes OpClass);
 
-  HWAOpInst *getOpInst(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                        unsigned latency, enum HWResource::ResTypes OpClass) {
-    return getOpInst(I, Deps, I.getNumOperands(), latency, OpClass);
+    return getPostBind(I, Deps, I.getNumOperands(), latency, OpClass);
   }
 
   HWAEntryRoot *getEntryRoot(BasicBlock *BB);

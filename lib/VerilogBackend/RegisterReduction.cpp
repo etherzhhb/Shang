@@ -48,9 +48,9 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
   HWAEntryRoot *EntryRoot = &State.getEntryRoot();
   // For each atom
   for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I) {
-    if (HWASchedable *A = dyn_cast<HWASchedable>(*I)) {
+    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
       Instruction &Inst = A->getInst<Instruction>();
-      for (unsigned i = 0, e = A->getEffectiveNumOps(); i != e; ++i) {
+      for (unsigned i = 0, e = A->getInstNumOps(); i != e; ++i) {
         // Remove the false dependence for live in registers
         if (A->getDep(i) == EntryRoot)
           A->setDep(i, HI.getAtomFor(*Inst.getOperand(i)));
@@ -59,7 +59,7 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
         while (HWARegister *R = dyn_cast<HWARegister>(A->getOperand(i))) {
           // Only remove unnecessary register level for
           // "inline" operation
-          if ((isa<HWAOpRes>(A) || A->getLatency() == 0)
+          if ((isa<HWAPreBind>(A) || A->getLatency() == 0)
                    && R->getSlot() == A->getSlot())
             A->setDep(i, R->getDVal());
           else // This is just a normal register

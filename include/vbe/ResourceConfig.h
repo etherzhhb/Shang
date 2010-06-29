@@ -39,7 +39,7 @@ using namespace llvm;
 
 
 namespace esyn {
-class HWAOpRes;
+class HWAPreBind;
 
 /// @brief Represent hardware resource
 class HWResource {
@@ -102,13 +102,11 @@ public:
   }
 
   size_t getUsingCount(unsigned instance) const {
-    assert(instance != 0 && "Instance 0 dose not exist!");
-      return UsingCount[instance - 1];
+      return UsingCount[instance];
   }
 
   void assignToInstance(unsigned instance) {
-    assert(instance != 0 && "Instance 0 dose not exist!");
-    ++UsingCount[instance - 1];
+    ++UsingCount[instance];
   }
 
   unsigned getLeastBusyInstance() const;
