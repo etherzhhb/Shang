@@ -37,7 +37,38 @@ class SchedAtom {
   HWAtom *Atom;
 
 public:
-  SchedAtom(HWAtom *atom) : Atom(atom) {}
+  /*implicit*/ SchedAtom(HWAtom &atom) : Atom(&atom) {}
+
+  /// @name Smart Pointer
+  //{
+  HWAtom *operator*() const { return Atom; }
+  HWAtom *operator->() const { return Atom; }
+  //}
+
+  typedef HWAtom::const_dep_iterator const_dep_iterator;
+  typedef HWAtom::dep_iterator dep_iterator;
+
+  HWAtom *getAtom() const { return Atom; }
+
+  /// operator== - Convenience function for get().operator==
+  bool operator==(const SchedAtom &V) const {
+    return Atom == V.getAtom();
+  }
+
+  /// operator!= - Convenience function for get().operator!=
+  bool operator!=(const SchedAtom &V) const {
+    return !operator ==(V);
+  }
+
+  /// operator< - Convenience function for get().operator<
+  bool operator<(const SchedAtom &V) const {
+    return Atom < V.getAtom();
+  }
+  
+  // TOOD: move these to schedule dag.
+  bool isOperationFinish(unsigned CurSlot) const;
+
+  bool isAllDepsOpFin(unsigned CurSlot) const;
 };
 
 class Scheduler : public BasicBlockPass {
@@ -47,6 +78,9 @@ class Scheduler : public BasicBlockPass {
   ResCycMapType ResCycMap;
 
 protected:
+  typedef std::vector<SchedAtom*> SchedAtomVec;
+  SchedAtomVec ScheduleAtoms;
+
   HWAtomInfo *HI;
   ResourceConfig *RC;
 
@@ -59,9 +93,9 @@ protected:
   void rememberReadyCycle(HWResource::ResIdType ResId, unsigned ReadyCycle);
 
   // Get Any ready atom.
-  HWAtom *getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
-                        unsigned Cycle) const;
+  SchedAtom *getReadyAtoms(unsigned Cycle);
 
+  void removeFromList(SchedAtom *Atom);
 public:
   explicit Scheduler(const void *pid) : BasicBlockPass(pid), HI(0) {}
   explicit Scheduler(intptr_t pid) : BasicBlockPass(pid), HI(0) {}
@@ -79,26 +113,24 @@ public:
   virtual void releaseContext() {}
 };
 
-/// @brief Hardware atome schedule pass.
-class ScheduleDriver :public FunctionPass {
-  // The loop info 
-  LoopInfo *LI;
-
-  // The hardware atoms
-  //HWAtomInfo *HI;
-
-  void clear();
-public:
-  /// @name FunctionPass interface
-  //{
-  static char ID;
-  explicit ScheduleDriver() : FunctionPass(&ID), LI(0)/*, HI(0)*/{}
-  bool runOnFunction(Function &F);
-  void releaseMemory();
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const;
-  //}
-};
 } // end namespace
+
+namespace llvm {
+  /// simplify_type specializations - Allow casting operators to work directly on
+  /// SDValues as if they were SDNode*'s.
+  template<> struct simplify_type<esyn::SchedAtom> {
+    typedef esyn::HWAtom* SimpleType;
+    static SimpleType getSimplifiedValue(const esyn::SchedAtom &Val) {
+      return Val.getAtom();
+    }
+  };
+
+  template<> struct simplify_type<const esyn::SchedAtom> {
+    typedef esyn::HWAtom* SimpleType;
+    static SimpleType getSimplifiedValue(const esyn::SchedAtom &Val) {
+      return Val.getAtom();
+    }
+  };
+}
 
 #endif

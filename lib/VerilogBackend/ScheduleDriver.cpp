@@ -27,28 +27,36 @@
 using namespace llvm;
 using namespace esyn;
 
-void ScheduleDriver::getAnalysisUsage(AnalysisUsage &AU) const {
+//===----------------------------------------------------------------------===//
+static bool isAtomFinish(const HWAtom &Atom, unsigned CurSlot) {
+  if (const HWAOpInst *Op = dyn_cast<HWAOpInst>(&Atom))
+    return Op->getSlot() + Op->getLatency() <= CurSlot;
+
+  if (isa<HWAInline>(Atom))
+    return Atom.getSlot() <= CurSlot;
+
+  // Constant is always finish
+  // Entry root is always finish
+  return true;
 }
 
-
-void ScheduleDriver::releaseMemory() {
-
+bool SchedAtom::isOperationFinish(unsigned CurSlot) const {
+  return isAtomFinish(*Atom, CurSlot);
 }
 
-bool ScheduleDriver::runOnFunction(Function &F) {
-  return false;
+bool SchedAtom::isAllDepsOpFin(unsigned CurSlot) const {
+  for (const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
+      I != E; ++I) {
+    const HWAtom &A = **I;  
+    if (!isAtomFinish(A, CurSlot))
+      return false;
+  }
+  return true;
 }
 
-void ScheduleDriver::print(raw_ostream &O, const Module *M) const {
-
-}
-
-void ScheduleDriver::clear() {
-}
-
-char ScheduleDriver::ID = 0;
-
+//===----------------------------------------------------------------------===//
 void Scheduler::clear() {
+  ScheduleAtoms.clear();
   ResCycMap.clear();
 }
 
@@ -65,19 +73,23 @@ void Scheduler::rememberReadyCycle(HWResource::ResIdType ResId,
   ResCycMap[ResId] = ReadyCycle;
 }
 
-HWAtom* Scheduler::getReadyAtoms(SmallVectorImpl<HWAtom*> &ToSchedAtoms,
-                                 unsigned Cycle) const {
-  typedef SmallVectorImpl<HWAtom*> AtomVec;
-  for (AtomVec::iterator I = ToSchedAtoms.begin(), E = ToSchedAtoms.end();
-      I != E; ++I) {
-    HWAtom *atom = *I;
+SchedAtom *Scheduler::getReadyAtoms(unsigned Cycle) {
+  for (SchedAtomVec::iterator I = ScheduleAtoms.begin(),
+      E = ScheduleAtoms.end(); I != E; ++I) {
+    SchedAtom *atom = *I;
     if (atom->isAllDepsOpFin(Cycle)) {
-      DEBUG(atom->print(dbgs()));
+      DEBUG((*atom)->print(dbgs()));
       DEBUG(dbgs() << " is Ready\n");
       return atom;
     }
   }
   return 0;
+}
+
+void Scheduler::removeFromList(SchedAtom *Atom) {
+  SchedAtomVec::iterator at = std::find(ScheduleAtoms.begin(),
+                                        ScheduleAtoms.end(), Atom);
+  ScheduleAtoms.erase(at);
 }
 
 void Scheduler::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -90,6 +102,10 @@ bool Scheduler::runOnBasicBlock(BasicBlock &BB) {
   RC = &getAnalysis<ResourceConfig>();
 
   ExecStage &State = HI->getStateFor(BB);
+  // Buidl the schedule atom list
+  for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I)
+    ScheduleAtoms.push_back(new SchedAtom(**I));
+  
   scheduleBasicBlock(State);
   return false;
 }

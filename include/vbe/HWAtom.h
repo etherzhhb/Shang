@@ -122,17 +122,6 @@ public:
   void scheduledTo(unsigned slot) { SchedSlot = slot; }
   unsigned getSlot() const { return SchedSlot; }
 
-  // TOOD: move these to schedule dag.
-  virtual bool isOperationFinish(unsigned CurSlot) const = 0;
-
-  bool isAllDepsOpFin(unsigned CurSlot) const {
-    for (const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
-      if (!(*I)->isOperationFinish(CurSlot))
-        return false;
-    }
-    return true;
-  }
-
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
   /// purposes.
@@ -148,11 +137,6 @@ class HWAConst : public HWAtom {
 public:
   explicit HWAConst(const FoldingSetNodeIDRef ID, Value &V)
     : HWAtom(ID, atomConst, V, 0, 0) {}
-
-  // Constant is always ready
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return true;
-  }
 
   void print(raw_ostream &OS) const;
 
@@ -171,10 +155,6 @@ public:
 
   BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
 
-  bool isOperationFinish(unsigned CurSlot) const {
-    return SchedSlot <= CurSlot;
-  }
-
   void print(raw_ostream &OS) const;
 
   static inline bool classof(const HWAEntryRoot *A) { return true; }
@@ -189,10 +169,6 @@ protected:
   explicit HWAInline(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
 public:
-
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return SchedSlot <= CurSlot;
-  }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAInline *A) { return true; }
@@ -256,10 +232,6 @@ public:
   unsigned getLatency() const {
     return Latency;
   }
-  // Is operation finished at slot?
-  virtual bool isOperationFinish(unsigned CurSlot) const {
-    return SchedSlot + Latency <= CurSlot;
-  }
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -322,7 +294,9 @@ public:
   /// @name The using resource
   //{
   // Help the scheduler to identify difference resource unit.
-  HWResource::ResIdType getResourceId() const { return SubClassData; }
+  HWResource::ResIdType getResourceId() const {
+    return SubClassData;
+  }
 
   enum HWResource::ResTypes getResClass() const {
     return HWResource::extractResType(getResourceId());
