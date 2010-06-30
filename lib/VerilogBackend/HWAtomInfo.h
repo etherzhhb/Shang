@@ -100,7 +100,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
-  HWAtom *getConstant(Value &V);
+  HWAtom *getConstant(Value &V, BasicBlock *Scop);
 
   HWARegister *getRegister(Value &V, HWAtom *Using);
 
@@ -123,7 +123,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     return getPostBind(I, Deps, I.getNumOperands(), latency, OpClass);
   }
 
-  HWAEntryRoot *getEntryRoot(BasicBlock *BB);
+  HWAVRoot *getEntryRoot(BasicBlock *BB);
 
   typedef DenseMap<const Value*, HWAtom*> AtomMapType;
   AtomMapType ValueToHWAtoms;
@@ -131,7 +131,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   typedef DenseMap<const BasicBlock*, ExecStage*> StateMapType;
   StateMapType BBToStates;
   HWAtom *ControlRoot;
-  std::set<HWAtom*> AtomsInCurState;
 
   void SetControlRoot(HWAtom *NewRoot) {
     ControlRoot = NewRoot;
@@ -144,7 +143,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   HWAtom *getAtomInState(Value &V, BasicBlock *BB) {
     // Is this not a instruction?
     if (!isa<Instruction>(V))
-      return getConstant(V);
+      return getConstant(V, BB);
 
     // Now it is an Instruction
     Instruction &Inst = cast<Instruction>(V);
@@ -156,14 +155,9 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
     BasicBlock *ParentBB = I.getParent();
     for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
-        OI != OE; ++OI) {
-      if (Instruction *OpI = dyn_cast<Instruction>(OI))
-        // Restrict the dependences in the current state
-        Deps.push_back(getAtomInState(*OpI, ParentBB));
-      else if(!isa<BasicBlock>(OI)) // Ignore the basic Block.
-        // Otherwise it is a constant
-        Deps.push_back(getConstant(**OI));
-    }
+        OI != OE; ++OI)
+      if(!isa<BasicBlock>(OI)) // Ignore the basic Block.
+        Deps.push_back(getAtomInState(**OI, ParentBB));
   }
 
   void clear();
@@ -195,12 +189,8 @@ public:
 
   HWAtom *getAtomFor(Value &V) const {
     AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
-    if (At != ValueToHWAtoms.end())
-      return  At->second;
-
-    assert((isa<Constant>(V) || isa<Argument>(V))
-      && "Only Constant missing!");
-    return const_cast<HWAtomInfo*>(this)->getConstant(V);
+    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
+    return  At->second;    
   }
 
   unsigned getTotalCycle() const {

@@ -188,7 +188,7 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   typedef ExecStage::ScheduleMapType::iterator cycle_iterator;
 
   State.getScheduleMap(Atoms);
-  HWAEntryRoot &Entry = State.getEntryRoot();
+  HWAVRoot &Entry = State.getEntryRoot();
   HWAPostBind &Exit = State.getExitRoot();
 
   unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
@@ -291,6 +291,15 @@ void RTLWriter::emitAtom(HWAtom *A) {
       case atomSignedPrefix:
         emitSigned(cast<HWASigned>(A));
         break;
+      case atomVRoot:
+        break;
+      case atomConst:
+        if (isa<PHINode>(A->getValue())) {
+          vlang->comment(ControlBlock.indent(8)) << "Emit: "
+            << A->getValue() << '\n';
+          visitPHINode(cast<HWAConst>(A));
+        }
+        break;
       default:
         llvm_unreachable("Unknow Atom!");;
   }
@@ -326,10 +335,11 @@ void RTLWriter::emitRegister(HWARegister *Register) {
 
 void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
   Instruction &Inst = cast<Instruction>(PostBind->getValue());
+  assert(!isa<PHINode>(Inst) && "PHINode is not PostBind atom!");
   std::string Name = getAsOperand(PostBind);
   // Do not decl signal for void type
   // And do not emit data path for phi node.
-  if (!Inst.getType()->isVoidTy() && !isa<PHINode>(Inst)) {
+  if (!Inst.getType()->isVoidTy()) {
     // Declare the signal
     vlang->declSignal(getSignalDeclBuffer(), Name, vlang->getBitWidth(Inst), 0, false);
     // Emit data path
@@ -468,11 +478,11 @@ void RTLWriter::visitICmpInst(HWAPostBind &A) {
 }
 
 
-void RTLWriter::visitPHINode(HWAPostBind &A) {
-  PHINode &I = A.getInst<PHINode>();//A.getInst<PHINode>();
+void RTLWriter::visitPHINode(HWAConst *A) {
+  PHINode &I = cast<PHINode>(A->getValue());
   unsigned BitWidth = vlang->getBitWidth(I);
 
-  std::string Name = getAsOperand(&A);
+  std::string Name = getAsOperand(A);
 
   // Declare the register
   vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);

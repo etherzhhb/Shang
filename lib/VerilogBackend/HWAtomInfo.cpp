@@ -54,8 +54,6 @@ bool HWAtomInfo::runOnFunction(Function &F) {
     }
     BBToStates[BB] = new ExecStage(getEntryRoot(BB),
                                    cast<HWAPostBind>(getControlRoot()));
-    // AtomsInCurStates not use any more
-    AtomsInCurState.clear();
   }
 
   DEBUG(print(dbgs(), 0));
@@ -81,20 +79,26 @@ void HWAtomInfo::releaseMemory() {
 // What if the one of the operand is Constant?
 void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // State end depand on or others atoms
-  SmallVector<HWAtom*, 1> Deps;
+  SmallVector<HWAtom*, 16> Deps;
   addOperandDeps(I, Deps);
+  HWAtom *Pred = 0;
   // Do not add the operand twice
   if (!Deps.empty())
-    AtomsInCurState.erase(Deps[0]);
+    Pred = Deps[0];
   unsigned OpSize = Deps.size();
-  // Only emit the terminator when all others operation emited.
-  Deps.append(AtomsInCurState.begin(), AtomsInCurState.end());
+
+  // All node should finish before terminator run.
+  HWAVRoot *Root = getEntryRoot(I.getParent());
+  for (HWAVRoot::tree_iterator TI = Root->begin(), TE = Root->end();
+      TI != TE; ++TI)
+    if (*TI != Pred && TI->use_empty())
+      Deps.push_back(*TI);
 
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
   HWAPostBind *Atom = getPostBind(I, Deps, OpSize, 0, HWResource::Other);
   // Remember the atom.
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Atom));
+  ValueToHWAtoms.insert(std::make_pair(&I, Atom));
 
   // This is a control atom.
   SetControlRoot(Atom);
@@ -102,10 +106,17 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 
 void HWAtomInfo::visitPHINode(PHINode &I) {
-  SmallVector<HWAtom*, 0> Deps;
   // PHI node always have no latency
-  HWAtom *Phi = getPostBind(I, Deps, 0, 0, HWResource::Other);
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, Phi));
+  HWAtom *Phi = getConstant(I, I.getParent());
+  for (Instruction::op_iterator OI = I.op_begin(), OE = I.op_end();
+      OI != OE; ++OI) {
+    // Emit the constants.
+    if (!isa<Instruction>(*OI) && !isa<BasicBlock>(*OI))
+      (void) getConstant(**OI, I.getParent());
+    
+  }
+  
+  ValueToHWAtoms.insert(std::make_pair(&I, Phi));
 }
 
 void HWAtomInfo::visitSelectInst(SelectInst &I) {
@@ -117,7 +128,7 @@ void HWAtomInfo::visitSelectInst(SelectInst &I) {
   // Register the result
   SelAtom = getRegister(I, SelAtom);
 
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, SelAtom));
+  ValueToHWAtoms.insert(std::make_pair(&I, SelAtom));
 }
 
 void HWAtomInfo::visitCastInst(CastInst &I) {
@@ -128,7 +139,7 @@ void HWAtomInfo::visitCastInst(CastInst &I) {
   HWAtom *CastAtom = getPostBind(I, Deps, 1, HWResource::Other);
   // Register the result
   CastAtom = getRegister(I, CastAtom);
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, CastAtom));
+  ValueToHWAtoms.insert(std::make_pair(&I, CastAtom));
 }
 
 void HWAtomInfo::visitLoadInst(LoadInst &I) {
@@ -148,7 +159,7 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   // And register the result
   LoadAtom =  getRegister(I, LoadAtom);
 
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, LoadAtom));
+  ValueToHWAtoms.insert(std::make_pair(&I, LoadAtom));
 }
 
 void HWAtomInfo::visitStoreInst(StoreInst &I) {
@@ -166,7 +177,7 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   // Set as new atom
   SetControlRoot(StoreAtom);
 
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, StoreAtom));
+  ValueToHWAtoms.insert(std::make_pair(&I, StoreAtom));
 }
 
 void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -182,7 +193,7 @@ void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   // Register the result
   GEPAtom = getRegister(I, GEPAtom);
 
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, GEPAtom));
+  ValueToHWAtoms.insert(std::make_pair(&I, GEPAtom));
 }
 
 void HWAtomInfo::visitICmpInst(ICmpInst &I) {
@@ -211,7 +222,7 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
   // Register it
   CmpAtom = getRegister(I, CmpAtom);
 
-  ValueToHWAtoms.insert(std::make_pair<const Instruction*, HWAtom*>(&I, CmpAtom));
+  ValueToHWAtoms.insert(std::make_pair(&I, CmpAtom));
 }
 
 void HWAtomInfo::visitBinaryOperator(Instruction &I) {
@@ -258,22 +269,29 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
   BinOpAtom = getRegister(I, BinOpAtom);
 
   ValueToHWAtoms.insert(
-    std::make_pair<const Instruction*, HWAtom*>(&I, BinOpAtom));
+    std::make_pair(&I, BinOpAtom));
 }
 
 //===----------------------------------------------------------------------===//
 // Create atom
 
-HWAtom *HWAtomInfo::getConstant(Value &V) {
-  assert((isa<Constant>(V) || isa<Argument>(V)) && "Not a constant!");
-  AtomMapType::iterator At = ValueToHWAtoms.find(&V);
-  if (At != ValueToHWAtoms.end())
-    return At->second;
-
+HWAtom *HWAtomInfo::getConstant(Value &V, BasicBlock *Scope) {
   FoldingSetNodeID ID;
-  HWAtom *A = new (HWAtomAllocator) HWAConst(ID.Intern(HWAtomAllocator), V);
-  //UniqiueHWAtoms.InsertNode(A, IP);
-  ValueToHWAtoms.insert(std::make_pair<const Value*, HWAtom*>(&V, A));
+  ID.AddInteger(atomConst);
+  ID.AddPointer(&V);
+  HWAVRoot *Root = getEntryRoot(Scope);
+  ID.AddPointer(Root);
+
+  void *IP = 0;
+  HWAConst *A = static_cast<HWAConst*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(1);
+    O[0] = Root;
+    A = new (HWAtomAllocator) HWAConst(ID.Intern(HWAtomAllocator), V, O);
+    UniqiueHWAtoms.InsertNode(A, IP);
+    ValueToHWAtoms[&V] = A;
+  }
   return A;
 }
 
@@ -292,8 +310,6 @@ HWARegister *HWAtomInfo::getRegister(Value &V, HWAtom *Using) {
     O[0] = Using;
     A = new (HWAtomAllocator) HWARegister(ID.Intern(HWAtomAllocator), V , O);
     UniqiueHWAtoms.InsertNode(A, IP);
-    // Add New Atom
-    AtomsInCurState.insert(A);
   }
   return A;
 }
@@ -316,8 +332,6 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
     O[0] = Using;
     A = new (HWAtomAllocator) HWASigned(ID.Intern(HWAtomAllocator), O);
     UniqiueHWAtoms.InsertNode(A, IP);
-    // Add New Atom
-    AtomsInCurState.insert(A);
   }
   return A;
 }
@@ -339,8 +353,6 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Dep
     A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
       I, latency, O, Deps.size(), OpNum, Res, ResInst);
     UniqiueHWAtoms.InsertNode(A, IP);
-    // Add New Atom
-    AtomsInCurState.insert(A);
   }
   return A;
 }
@@ -362,25 +374,23 @@ HWAPostBind *HWAtomInfo::getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &D
     A = new (HWAtomAllocator) HWAPostBind(ID.Intern(HWAtomAllocator),
       I, latency, O, Deps.size(), OpNum, OpClass);
     UniqiueHWAtoms.InsertNode(A, IP);
-    // Add New Atom
-    AtomsInCurState.insert(A);
   }
   return A;
 }
 
 
-HWAEntryRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
+HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
   assert(BB && "BB can not be null!");
   FoldingSetNodeID ID;
-  ID.AddInteger(atomEntryRoot);
+  ID.AddInteger(atomVRoot);
   ID.AddPointer(BB);
 
   void *IP = 0;
-  HWAEntryRoot *A =
-    static_cast<HWAEntryRoot*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAVRoot *A =
+    static_cast<HWAVRoot*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAEntryRoot(ID.Intern(HWAtomAllocator), *BB);
+    A = new (HWAtomAllocator) HWAVRoot(ID.Intern(HWAtomAllocator), *BB);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;

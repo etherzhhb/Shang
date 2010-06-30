@@ -121,7 +121,10 @@ class RTLWriter : public FunctionPass {
   }
   void visitUnreachableInst(HWAPostBind &A){}
 
-  void visitPHINode(HWAPostBind &A);
+  void visitPHINode(HWAPostBind &A) {}
+  // PHINode is a constant node.
+  void visitPHINode(HWAConst *A);
+
   void visitBinaryOperator(HWAPostBind &A);
   void visitICmpInst(HWAPostBind &A);
   void visitFCmpInst(HWAPostBind &A){}

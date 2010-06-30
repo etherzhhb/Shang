@@ -98,10 +98,11 @@ bool Scheduler::runOnBasicBlock(BasicBlock &BB) {
 
   ExecStage &State = HI->getStateFor(BB);
   // Buidl the schedule atom list
-  for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I)
+  for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+    I->dump();
     ScheduleAtoms.push_back(*I);
-  
-  scheduleBasicBlock(State);
+  }
+   scheduleBasicBlock(State);
   return false;
 }
 

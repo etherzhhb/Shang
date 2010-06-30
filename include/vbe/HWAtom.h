@@ -28,6 +28,7 @@
 #include "llvm/Intrinsics.h"
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
@@ -52,7 +53,7 @@ enum HWAtomTypes {
                       // Schedeable atoms
   atomPreBind,      // Operate on pre bind resource
   atomPostBind,     // Operate on post binding resource
-  atomEntryRoot       // Virtual Root
+  atomVRoot       // Virtual Root
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -145,7 +146,7 @@ public:
   HWAtom *use_back() { return UseList.back(); }
   HWAtom *use_back() const { return UseList.back(); }
 
-  bool isUseEmpty() { return UseList.empty(); }
+  bool use_empty() { return UseList.empty(); }
   //}
 
   virtual void reset() { SchedSlot = UINT32_MAX  >> 1; }
@@ -192,6 +193,7 @@ template<> struct GraphTraits<Inverse<const esyn::HWAtom*> > {
 template<> struct GraphTraits<esyn::HWAtom*> {
   typedef esyn::HWAtom NodeType;
   typedef esyn::HWAtom::use_iterator ChildIteratorType;
+  static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->use_begin();
   }
@@ -203,6 +205,7 @@ template<> struct GraphTraits<esyn::HWAtom*> {
 template<> struct GraphTraits<const esyn::HWAtom*> {
   typedef const esyn::HWAtom NodeType;
   typedef esyn::HWAtom::const_use_iterator ChildIteratorType;
+  static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->use_begin();
   }
@@ -215,12 +218,46 @@ template<> struct GraphTraits<const esyn::HWAtom*> {
 
 // FIXME: Move to a seperate header.
 namespace esyn {
+// Virtual Root
+class HWAVRoot : public HWAtom {
+public:
+  explicit HWAVRoot(const FoldingSetNodeIDRef ID, BasicBlock &BB)
+    : HWAtom(ID, atomVRoot, BB, 0, 0) {}
+
+  BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
+
+  typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
+    GraphTraits<HWAtom*> > tree_iterator;
+  typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
+    GraphTraits<const HWAtom*> > const_tree_iterator;
+
+  tree_iterator begin() {
+    return tree_iterator::begin(this);
+  }
+  tree_iterator end() {
+    return tree_iterator::end(this);
+  }
+
+  const_tree_iterator begin() const { 
+    return const_tree_iterator::begin(this);
+  }
+  const_tree_iterator end() const {
+    return const_tree_iterator::begin(this);
+  }
+
+  void print(raw_ostream &OS) const;
+
+  static inline bool classof(const HWAVRoot *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomVRoot;
+  }
+};
 
 /// @brief Constant node
 class HWAConst : public HWAtom {
 public:
-  explicit HWAConst(const FoldingSetNodeIDRef ID, Value &V)
-    : HWAtom(ID, atomConst, V, 0, 0) {}
+  explicit HWAConst(const FoldingSetNodeIDRef ID, Value &V, HWAtom **E)
+    : HWAtom(ID, atomConst, V, E, 1) {}
 
   void print(raw_ostream &OS) const;
 
@@ -228,22 +265,6 @@ public:
   static inline bool classof(const HWAConst *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomConst;
-  }
-};
-
-// Virtual Root
-class HWAEntryRoot : public HWAtom {
-public:
-  explicit HWAEntryRoot(const FoldingSetNodeIDRef ID, BasicBlock &BB)
-    : HWAtom(ID, atomEntryRoot, BB, 0, 0) {}
-
-  BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
-
-  void print(raw_ostream &OS) const;
-
-  static inline bool classof(const HWAEntryRoot *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomEntryRoot;
   }
 };
 
@@ -403,51 +424,35 @@ public:
 class ExecStage {
   typedef std::vector<HWAtom*> HWAtomVecType;
 
-  HWAEntryRoot &EntryRoot;
+  HWAVRoot &EntryRoot;
   HWAPostBind &ExitRoot;
 
-  // Atoms in this state
-  HWAtomVecType Atoms;
-
 public:
-  explicit ExecStage(HWAEntryRoot *entry, HWAPostBind *exit)
-    : EntryRoot(*entry), ExitRoot(*exit),
-    Atoms(exit->dep_begin(), exit->dep_end()) {
-    Atoms.push_back(exit);
-  }
+  explicit ExecStage(HWAVRoot *entry, HWAPostBind *exit)
+    : EntryRoot(*entry), ExitRoot(*exit) {}
 
 
   /// @name Roots
   //{
-  HWAEntryRoot &getEntryRoot() const { return EntryRoot; }
+  HWAVRoot &getEntryRoot() const { return EntryRoot; }
   HWAPostBind &getExitRoot() const { return ExitRoot; }
 
-  HWAEntryRoot &getEntryRoot() { return EntryRoot; }
+  HWAVRoot &getEntryRoot() { return EntryRoot; }
   HWAPostBind &getExitRoot() { return ExitRoot; }
   //}
-
-  void pushAtom(HWAtom *Atom) { Atoms.push_back(Atom); }
-  bool eraseAtom(HWAtom *Atom) {
-    for (iterator I = begin(), E = end(); I != E; ++I)
-      if (*I == Atom) {
-        Atoms.erase(I);
-        return true;
-      }
-
-    return false;
-  }
 
   // Return the corresponding basiclbocl of this Execute stage.
   BasicBlock *getBasicBlock() { return &EntryRoot.getBasicBlock(); }
   BasicBlock *getBasicBlock() const { return &EntryRoot.getBasicBlock(); }
 
-  typedef HWAtomVecType::iterator iterator;
-  iterator begin() { return Atoms.begin(); }
-  iterator end() { return Atoms.end(); }
+  typedef HWAVRoot::tree_iterator iterator;
+  typedef HWAVRoot::const_tree_iterator const_iterator;
 
-  typedef HWAtomVecType::const_iterator const_iterator;
-  const_iterator begin() const { return Atoms.begin(); }
-  const_iterator end() const { return Atoms.end(); }
+  iterator begin() { return EntryRoot.begin(); }
+  const_iterator begin() const { return ((const HWAVRoot&)EntryRoot).begin(); }
+
+  iterator end() { return EntryRoot.end(); }
+  const_iterator end() const { return ((const HWAVRoot&)EntryRoot).end(); }
 
   void resetAll() {
     for (iterator I = begin(), E = end(); I != E; ++I)
@@ -459,12 +464,6 @@ public:
   void getScheduleMap(ScheduleMapType &Atoms) const;
 
   void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const ExecStage *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomEntryRoot;
-  }
 };
 
 } // end namespace

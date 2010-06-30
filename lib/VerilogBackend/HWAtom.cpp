@@ -54,9 +54,9 @@ void HWARegister::print(raw_ostream &OS) const {
 }
 
 void ExecStage::getScheduleMap(ScheduleMapType &Atoms) const {
-  for (ExecStage::const_iterator I = begin(), E = end(); I != E; ++I) {
-    HWAtom *A = *I;
-    Atoms.insert(std::make_pair<unsigned, HWAtom*>(A->getSlot(), A));
+  for (ExecStage::iterator I = const_cast<ExecStage*>(this)->begin(), E = const_cast<ExecStage*>(this)->end(); I != E; ++I) {
+    HWAtom *A = const_cast<HWAtom*>(*I);
+    Atoms.insert(std::make_pair(A->getSlot(), A));
   }
 }
 
@@ -82,21 +82,17 @@ void ExecStage::print(raw_ostream &OS) const {
     A->print(OS.indent(2));
     OS << " at "<< A->getSlot() << "\n";
   }
-
-  const HWAPostBind &ExitRoot = getExitRoot();
-  ExitRoot.print(OS.indent(2));
-  OS << " at "<< ExitRoot.getSlot() << "\n";
 }
 
 void HWAPreBind::print(raw_ostream &OS) const {
-  OS << getValue() << " Res: " << SubClassData << '\n';
+  OS << getValue() << " Res: " << SubClassData;
 }
 
 void HWAPostBind::print(raw_ostream &OS) const {
   OS << getValue() << " PostBind: " << SubClassData;
 }
 
-void HWAEntryRoot::print(raw_ostream &OS) const {
+void HWAVRoot::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
   OS << " Entry";
 }

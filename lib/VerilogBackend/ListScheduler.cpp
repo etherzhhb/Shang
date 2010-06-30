@@ -53,7 +53,7 @@ void ASAPScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 void ASAPScheduler::scheduleBasicBlock(ExecStage &State) {
-  HWAEntryRoot &EntryRoot = State.getEntryRoot();
+  HWAVRoot &EntryRoot = State.getEntryRoot();
   HWAtom *ExitRoot = &State.getExitRoot();
   EntryRoot.scheduledTo(HI->getTotalCycle());
   //HI->incTotalCycle();

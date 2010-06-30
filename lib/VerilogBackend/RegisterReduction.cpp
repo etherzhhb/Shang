@@ -45,7 +45,7 @@ bool RegReduction::runOnFunction(Function &F) {
 bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   ExecStage &State = HI.getStateFor(BB);
-  HWAEntryRoot *EntryRoot = &State.getEntryRoot();
+  HWAVRoot *EntryRoot = &State.getEntryRoot();
   // For each atom
   for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
