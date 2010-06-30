@@ -308,7 +308,7 @@ void RTLWriter::emitSigned(HWASigned *Signed) {
 }
 
 void RTLWriter::emitRegister(HWARegister *Register) {
-  HWAtom *Val = Register->getDVal();
+  HWAtom *Val = Register->getRefVal();
 
   Value &V = Register->getValue();
   unsigned BitWidth = vlang->getBitWidth(V);

@@ -170,6 +170,9 @@ protected:
     Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
 public:
 
+  // The referenced value.
+  HWAtom *getRefVal() { return getDep(0); }
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAInline *A) { return true; }
   static inline bool classof(const HWAtom *A) {
@@ -200,9 +203,6 @@ public:
   explicit HWARegister(const FoldingSetNodeIDRef ID, Value &V,
     HWAtom **O) 
     : HWAInline(ID, atomRegister, V, O) {}
-
-  // The "D" input for the register
-  HWAtom *getDVal() { return getDep(0); }
 
   void print(raw_ostream &OS) const;
 

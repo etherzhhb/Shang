@@ -59,13 +59,20 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
         while (HWARegister *R = dyn_cast<HWARegister>(A->getOperand(i))) {
           // Only remove unnecessary register level for
           // "inline" operation
+          // FIXME: if (not compute in datapath)
           if ((isa<HWAPreBind>(A) || A->getLatency() == 0)
                    && R->getSlot() == A->getSlot())
-            A->setDep(i, R->getDVal());
+            A->setDep(i, R->getRefVal());
           else // This is just a normal register
             break;
         }
       }
+    } else if (HWASigned *S = dyn_cast<HWASigned>(*I)) {
+      if (S->getRefVal() == EntryRoot)
+        S->setDep(0, HI.getAtomFor(S->getValue()));
+
+      while (HWARegister *R = dyn_cast<HWARegister>(S->getRefVal()))
+        S->setDep(0, R->getRefVal());
     }
   }
   
