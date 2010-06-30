@@ -197,6 +197,11 @@ public:
     return totalCycle;
   }
 
+
+  void setTotalCycle(unsigned Cyc) {
+    totalCycle = Cyc;
+  }
+
   unsigned getTotalCycleBitWidth() const {
     return Log2_32_Ceil(totalCycle);
   }

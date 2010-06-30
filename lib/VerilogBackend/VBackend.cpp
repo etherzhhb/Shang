@@ -47,7 +47,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(new VLang());
     // Memory dependencies analysis
     PM.add(new HWAtomInfo());
-    PM.add(createListSchedulePass());
+    PM.add(createFDLSchedulePass());
     // Resource binding
     // Region Base global resource binding
     PM.add(createRegisterReductionPass());

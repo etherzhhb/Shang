@@ -109,6 +109,6 @@ void ASAPScheduler::releaseMemory() {
 }
 
 
-Pass *esyn::createListSchedulePass() {
+Pass *esyn::createASAPSchedulePass() {
   return new ASAPScheduler();
 }

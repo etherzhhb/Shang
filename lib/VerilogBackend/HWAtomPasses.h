@@ -26,8 +26,11 @@ using namespace llvm;
 
 namespace esyn {
 
-// Simple List Scheduler
-Pass *createListSchedulePass();
+// Simple As Soon As Possible Scheduler
+Pass *createASAPSchedulePass();
+
+// Force-directed Scheduler
+Pass *createFDLSchedulePass();
 
 // Reduce un-necessary registers
 Pass *createRegisterReductionPass();
