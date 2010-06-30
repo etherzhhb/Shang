@@ -100,3 +100,12 @@ void HWAEntryRoot::print(raw_ostream &OS) const {
   WriteAsOperand(OS, &getValue(), false);
   OS << " Entry";
 }
+
+HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+               HWAtom **deps, size_t numDeps) : FastID(ID),
+               HWAtomType(HWAtomTy), Val(V), Deps(deps), NumDeps(numDeps),
+               // Make a shift so that it do not get a overflow when we are doing an addition
+               SchedSlot(UINT32_MAX >> 1) {
+  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+    (*I)->addToUseList(this);
+}

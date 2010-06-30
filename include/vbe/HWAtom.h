@@ -36,6 +36,8 @@
 
 #include "vbe/ResourceConfig.h"
 
+#include <list>
+
 using namespace llvm;
 
 namespace esyn {
@@ -65,8 +67,20 @@ class HWAtom : public FoldingSetNode {
   HWAtom **Deps;
   size_t NumDeps;
 
+  // The atoms that using this atom.
+  std::list<HWAtom*> UseList;
 
-private:
+  void addToUseList(HWAtom *User) {
+    UseList.push_back(User);
+  }
+
+  void removeFromList(HWAtom *User) {
+    std::list<HWAtom*>::iterator at = std::find(UseList.begin(), UseList.end(),
+                                                User);
+    assert(at != UseList.end() && "Not in use list!");
+    UseList.erase(at);
+  }
+
   HWAtom(const HWAtom &);            // DO NOT IMPLEMENT
   void operator=(const HWAtom &);  // DO NOT IMPLEMENT
 
@@ -80,13 +94,8 @@ protected:
   virtual ~HWAtom();
 
 public:
-  explicit HWAtom(const FoldingSetNodeIDRef ID,
-    unsigned HWAtomTy, Value &V, 
-    HWAtom **deps, size_t numDeps) 
-    : FastID(ID), HWAtomType(HWAtomTy), Val(V), Deps(deps),
-    NumDeps(numDeps),
-    // Make a shift so that it do not get a overflow when we are doing an addition
-    SchedSlot(UINT32_MAX >> 1) {}
+  explicit HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+    HWAtom **deps, size_t numDeps);
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
@@ -105,6 +114,10 @@ public:
 
   void setDep(unsigned idx, HWAtom *NewDep) {
     assert(idx < NumDeps && "Operand index out of range!");
+    // Update use list
+    Deps[idx]->removeFromList(this);
+    NewDep->addToUseList(this);
+    // Setup the dependence list.
     Deps[idx] = NewDep;
   }
 
@@ -115,6 +128,23 @@ public:
   typedef const HWAtom *const *const_dep_iterator;
   const_dep_iterator dep_begin() const { return Deps; }
   const_dep_iterator dep_end() const { return Deps + NumDeps; }
+  //}
+
+  /// @name Use
+  //{
+  typedef std::list<HWAtom*>::iterator use_iterator;
+  typedef std::list<HWAtom*>::const_iterator const_use_iterator;
+
+  use_iterator begin() { return UseList.begin(); }
+  const_use_iterator begin() const { return UseList.begin(); }
+  
+  use_iterator end() { return UseList.end(); }
+  const_use_iterator end() const { return UseList.end(); }
+
+  HWAtom *use_back() { return UseList.back(); }
+  HWAtom *use_back() const { return UseList.back(); }
+
+  bool isUseEmpty() { return UseList.empty(); }
   //}
 
   virtual void reset() { SchedSlot = UINT32_MAX  >> 1; }
@@ -314,7 +344,9 @@ public:
     return A->getHWAtomType() == atomPreBind;
   }
 };
+}
 
+namespace esyn {
 // Execute state.
 class ExecStage {
   typedef std::vector<HWAtom*> HWAtomVecType;
