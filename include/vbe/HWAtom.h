@@ -27,6 +27,7 @@
 #include "llvm/Instructions.h"
 #include "llvm/Intrinsics.h"
 #include "llvm/Assembly/Writer.h"
+#include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
@@ -135,11 +136,11 @@ public:
   typedef std::list<HWAtom*>::iterator use_iterator;
   typedef std::list<HWAtom*>::const_iterator const_use_iterator;
 
-  use_iterator begin() { return UseList.begin(); }
-  const_use_iterator begin() const { return UseList.begin(); }
+  use_iterator use_begin() { return UseList.begin(); }
+  const_use_iterator use_begin() const { return UseList.begin(); }
   
-  use_iterator end() { return UseList.end(); }
-  const_use_iterator end() const { return UseList.end(); }
+  use_iterator use_end() { return UseList.end(); }
+  const_use_iterator use_end() const { return UseList.end(); }
 
   HWAtom *use_back() { return UseList.back(); }
   HWAtom *use_back() const { return UseList.back(); }
@@ -161,6 +162,59 @@ public:
   ///
   void dump() const;
 };
+
+}
+
+namespace llvm {
+
+template<> struct GraphTraits<Inverse<esyn::HWAtom*> > {
+  typedef esyn::HWAtom NodeType;
+  typedef esyn::HWAtom::dep_iterator ChildIteratorType;
+  static inline ChildIteratorType child_begin(NodeType *N) {
+    return N->dep_begin();
+  }
+  static inline ChildIteratorType child_end(NodeType *N) {
+    return N->dep_end();
+  }
+};
+
+template<> struct GraphTraits<Inverse<const esyn::HWAtom*> > {
+  typedef const esyn::HWAtom NodeType;
+  typedef esyn::HWAtom::const_dep_iterator ChildIteratorType;
+  static inline ChildIteratorType child_begin(NodeType *N) {
+    return N->dep_begin();
+  }
+  static inline ChildIteratorType child_end(NodeType *N) {
+    return N->dep_end();
+  }
+};
+
+template<> struct GraphTraits<esyn::HWAtom*> {
+  typedef esyn::HWAtom NodeType;
+  typedef esyn::HWAtom::use_iterator ChildIteratorType;
+  static inline ChildIteratorType child_begin(NodeType *N) {
+    return N->use_begin();
+  }
+  static inline ChildIteratorType child_end(NodeType *N) {
+    return N->use_end();
+  }
+};
+
+template<> struct GraphTraits<const esyn::HWAtom*> {
+  typedef const esyn::HWAtom NodeType;
+  typedef esyn::HWAtom::const_use_iterator ChildIteratorType;
+  static inline ChildIteratorType child_begin(NodeType *N) {
+    return N->use_begin();
+  }
+  static inline ChildIteratorType child_end(NodeType *N) {
+    return N->use_end();
+  }
+};
+
+}
+
+// FIXME: Move to a seperate header.
+namespace esyn {
 
 /// @brief Constant node
 class HWAConst : public HWAtom {
@@ -344,9 +398,7 @@ public:
     return A->getHWAtomType() == atomPreBind;
   }
 };
-}
 
-namespace esyn {
 // Execute state.
 class ExecStage {
   typedef std::vector<HWAtom*> HWAtomVecType;
