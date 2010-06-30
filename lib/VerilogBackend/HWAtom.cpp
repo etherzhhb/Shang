@@ -54,7 +54,7 @@ void HWARegister::print(raw_ostream &OS) const {
 }
 
 void ExecStage::getScheduleMap(ScheduleMapType &Atoms) const {
-  for (ExecStage::const_entry_iterator I = entry_begin(), E = entry_end(); I != E; ++I) {
+  for (const_usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I) {
     HWAtom *A = const_cast<HWAtom*>(*I);
     Atoms.insert(std::make_pair(A->getSlot(), A));
   }

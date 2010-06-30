@@ -50,13 +50,13 @@ bool Scheduler::isAllDepsOpFin(const HWAtom *Atom, unsigned CurSlot) {
   return true;
 }
 
-void Scheduler::clear() {
+void Scheduler::clearSchedulerBase() {
   ScheduleAtoms.clear();
   ResCycMap.clear();
 }
 
 Scheduler::~Scheduler() {
-  clear();
+  clearSchedulerBase();
 }
 
 unsigned Scheduler::getReadyCycle(HWResource::ResIdType ResId) {
@@ -89,7 +89,7 @@ void Scheduler::removeFromList(HWAtom *Atom) {
 
 void esyn::Scheduler::createAtomList(HWAtomInfo *HI, BasicBlock &BB) {
   ExecStage &Stage = HI->getStateFor(BB);
-  for (ExecStage::entry_iterator I = Stage.entry_begin(), E = Stage.entry_end();
+  for (usetree_iterator I = Stage.usetree_begin(), E = Stage.usetree_end();
       I != E; ++I)
     ScheduleAtoms.push_back(*I);
 }

@@ -39,7 +39,7 @@ protected:
   typedef std::list<HWAtom*> SchedAtomVec;
   SchedAtomVec ScheduleAtoms;
 
-  void clear();
+  void clearSchedulerBase();
 
   //
   static bool isOperationFinish(const HWAtom *Atom, unsigned CurSlot);

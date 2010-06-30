@@ -47,7 +47,7 @@ bool RegReduction::runOnBasicBlock(BasicBlock &BB) {
   ExecStage &State = HI.getStateFor(BB);
   HWAVRoot *EntryRoot = &State.getEntryRoot();
   // For each atom
-  for (ExecStage::entry_iterator I = State.entry_begin(), E = State.entry_end();
+  for (usetree_iterator I = State.usetree_begin(), E = State.usetree_end();
       I != E; ++I) {
     if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
       Instruction &Inst = A->getInst<Instruction>();

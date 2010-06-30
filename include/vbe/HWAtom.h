@@ -220,6 +220,20 @@ template<> struct GraphTraits<const esyn::HWAtom*> {
 
 // FIXME: Move to a seperate header.
 namespace esyn {
+
+// Use tree iterator.
+typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
+  GraphTraits<HWAtom*> > usetree_iterator;
+typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
+  GraphTraits<const HWAtom*> > const_usetree_iterator;
+
+// Predecessor tree iterator, travel the tree from exit node.
+typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
+  GraphTraits<Inverse<HWAtom*> > > deptree_iterator;
+
+typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
+  GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
+
 // Virtual Root
 class HWAVRoot : public HWAtom {
 public:
@@ -228,23 +242,19 @@ public:
 
   BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
 
-  typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
-    GraphTraits<HWAtom*> > tree_iterator;
-  typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
-    GraphTraits<const HWAtom*> > const_tree_iterator;
 
-  tree_iterator begin() {
-    return tree_iterator::begin(this);
+  usetree_iterator begin() {
+    return usetree_iterator::begin(this);
   }
-  tree_iterator end() {
-    return tree_iterator::end(this);
+  usetree_iterator end() {
+    return usetree_iterator::end(this);
   }
 
-  const_tree_iterator begin() const { 
-    return const_tree_iterator::begin(this);
+  const_usetree_iterator begin() const { 
+    return const_usetree_iterator::begin(this);
   }
-  const_tree_iterator end() const {
-    return const_tree_iterator::end(this);
+  const_usetree_iterator end() const {
+    return const_usetree_iterator::end(this);
   }
 
   void print(raw_ostream &OS) const;
@@ -448,38 +458,28 @@ public:
   BasicBlock *getBasicBlock() const { return &EntryRoot.getBasicBlock(); }
 
   // Successor tree iterator, travel the tree from entry node.
-  typedef HWAVRoot::tree_iterator entry_iterator;
-  typedef HWAVRoot::const_tree_iterator const_entry_iterator;
-
-  entry_iterator entry_begin() { return EntryRoot.begin(); }
-  const_entry_iterator entry_begin() const {
+  usetree_iterator usetree_begin() { return EntryRoot.begin(); }
+  const_usetree_iterator usetree_begin() const {
     return ((const HWAVRoot&)EntryRoot).begin();
   }
 
-  entry_iterator entry_end() { return EntryRoot.end(); }
-  const_entry_iterator entry_end() const {
+  usetree_iterator usetree_end() { return EntryRoot.end(); }
+  const_usetree_iterator usetree_end() const {
     return ((const HWAVRoot&)EntryRoot).end();
   }
 
-  // Predecessor tree iterator, travel the tree from exit node.
-  typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
-    GraphTraits<Inverse<HWAtom*> > > exit_iterator;
-
-  typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
-    GraphTraits<Inverse<const HWAtom*> > > const_exit_iterator;
-
-  exit_iterator exit_begin() { return exit_iterator::begin(&ExitRoot); }
-  const_exit_iterator exit_begin() const {
-    return const_exit_iterator::begin(&ExitRoot);
+  deptree_iterator deptree_begin() { return deptree_iterator::begin(&ExitRoot); }
+  const_deptree_iterator deptree_begin() const {
+    return const_deptree_iterator::begin(&ExitRoot);
   }
 
-  exit_iterator exit_end() { return exit_iterator::end(&ExitRoot); }
-  const_exit_iterator exit_end()  const {
-    return const_exit_iterator::end(&ExitRoot);
+  deptree_iterator deptree_end() { return deptree_iterator::end(&ExitRoot); }
+  const_deptree_iterator deptree_end()  const {
+    return const_deptree_iterator::end(&ExitRoot);
   }
 
   void resetAll() {
-    for (entry_iterator I = entry_begin(), E = entry_end(); I != E; ++I)
+    for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
       (*I)->reset();
   }
 

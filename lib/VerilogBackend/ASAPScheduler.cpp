@@ -1,4 +1,4 @@
-//===------- ScheduleDriver.cpp - The Scheduler driver pass  ----*- C++ -*-===//
+//===--- ASAPScheduler.cpp - The As Soon As possible scheduler  -*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -23,7 +23,6 @@
 #include "HWAtomInfo.h"
 #include "HWAtomPasses.h"
 
-#include "llvm/Analysis/LoopInfo.h"
 
 #define DEBUG_TYPE "vbe-asap-schedule"
 #include "llvm/Support/Debug.h"
@@ -36,7 +35,7 @@ struct ASAPScheduler : public BasicBlockPass, public Scheduler {
   HWAtomInfo *HI;
   ResourceConfig *RC;
   static char ID;
-  explicit ASAPScheduler() : BasicBlockPass(&ID), Scheduler() {}
+  ASAPScheduler() : BasicBlockPass(&ID), Scheduler() {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -106,7 +105,7 @@ bool ASAPScheduler::runOnBasicBlock(BasicBlock &BB) {
 }
 
 void ASAPScheduler::releaseMemory() {
-  clear();
+  clearSchedulerBase();
 }
 
 

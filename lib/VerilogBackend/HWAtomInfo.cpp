@@ -89,7 +89,7 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
   // All node should finish before terminator run.
   HWAVRoot *Root = getEntryRoot(I.getParent());
-  for (HWAVRoot::tree_iterator TI = Root->begin(), TE = Root->end();
+  for (usetree_iterator TI = Root->begin(), TE = Root->end();
       TI != TE; ++TI)
     if (*TI != Pred && TI->use_empty())
       Deps.push_back(*TI);
