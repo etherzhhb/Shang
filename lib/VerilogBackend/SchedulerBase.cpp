@@ -33,12 +33,7 @@ bool Scheduler::isOperationFinish(const HWAtom *Atom, unsigned CurSlot) {
   if (const HWAOpInst *Op = dyn_cast<HWAOpInst>(Atom))
     return Op->getSlot() + Op->getLatency() <= CurSlot;
 
-  if (isa<HWAInline>(Atom))
-    return Atom->getSlot() <= CurSlot;
-
-  // Constant is always finish
-  // Entry root is always finish
-  return true;
+  return Atom->getSlot() <= CurSlot;
 }
 
 bool Scheduler::isAllDepsOpFin(const HWAtom *Atom, unsigned CurSlot) {
