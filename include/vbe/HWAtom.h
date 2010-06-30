@@ -171,6 +171,7 @@ namespace llvm {
 template<> struct GraphTraits<Inverse<esyn::HWAtom*> > {
   typedef esyn::HWAtom NodeType;
   typedef esyn::HWAtom::dep_iterator ChildIteratorType;
+  static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->dep_begin();
   }
@@ -182,6 +183,7 @@ template<> struct GraphTraits<Inverse<esyn::HWAtom*> > {
 template<> struct GraphTraits<Inverse<const esyn::HWAtom*> > {
   typedef const esyn::HWAtom NodeType;
   typedef esyn::HWAtom::const_dep_iterator ChildIteratorType;
+  static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->dep_begin();
   }
@@ -445,17 +447,39 @@ public:
   BasicBlock *getBasicBlock() { return &EntryRoot.getBasicBlock(); }
   BasicBlock *getBasicBlock() const { return &EntryRoot.getBasicBlock(); }
 
-  typedef HWAVRoot::tree_iterator iterator;
-  typedef HWAVRoot::const_tree_iterator const_iterator;
+  // Successor tree iterator, depth first iterator
+  typedef HWAVRoot::tree_iterator entry_iterator;
+  typedef HWAVRoot::const_tree_iterator const_entry_iterator;
 
-  iterator begin() { return EntryRoot.begin(); }
-  const_iterator begin() const { return ((const HWAVRoot&)EntryRoot).begin(); }
+  entry_iterator entry_begin() { return EntryRoot.begin(); }
+  const_entry_iterator entry_begin() const {
+    return ((const HWAVRoot&)EntryRoot).begin();
+  }
 
-  iterator end() { return EntryRoot.end(); }
-  const_iterator end() const { return ((const HWAVRoot&)EntryRoot).end(); }
+  entry_iterator entry_end() { return EntryRoot.end(); }
+  const_entry_iterator entry_end() const {
+    return ((const HWAVRoot&)EntryRoot).end();
+  }
+
+  // Predecessor tree iterator, post order iterator
+  typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
+    GraphTraits<Inverse<HWAtom*> > > exit_iterator;
+
+  typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
+    GraphTraits<Inverse<const HWAtom*> > > const_exit_iterator;
+
+  exit_iterator exit_begin() { return exit_iterator::begin(&ExitRoot); }
+  const_exit_iterator exit_begin() const {
+    return const_exit_iterator::begin(&ExitRoot);
+  }
+
+  exit_iterator exit_end() { return exit_iterator::end(&ExitRoot); }
+  const_exit_iterator exit_end()  const {
+    return const_exit_iterator::end(&ExitRoot);
+  }
 
   void resetAll() {
-    for (iterator I = begin(), E = end(); I != E; ++I)
+    for (entry_iterator I = entry_begin(), E = entry_end(); I != E; ++I)
       (*I)->reset();
   }
 

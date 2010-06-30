@@ -54,7 +54,7 @@ void HWARegister::print(raw_ostream &OS) const {
 }
 
 void ExecStage::getScheduleMap(ScheduleMapType &Atoms) const {
-  for (ExecStage::const_iterator I = begin(), E = end(); I != E; ++I) {
+  for (ExecStage::const_entry_iterator I = entry_begin(), E = entry_end(); I != E; ++I) {
     HWAtom *A = const_cast<HWAtom*>(*I);
     Atoms.insert(std::make_pair(A->getSlot(), A));
   }
@@ -64,10 +64,6 @@ void ExecStage::print(raw_ostream &OS) const {
   OS << "State: ";
   WriteAsOperand(OS, getBasicBlock(), false);
   OS << "\n";
-  //for (HWAState::const_iterator I = begin(), E = end(); I != E; ++I) {
-  //  (*I)->print(OS.indent(2));
-  //  OS << "\n";
-  //}
   unsigned oldSlot = 0;
 
   std::multimap<unsigned, HWAtom*> Atoms;
