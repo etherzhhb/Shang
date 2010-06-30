@@ -242,7 +242,7 @@ public:
     return const_tree_iterator::begin(this);
   }
   const_tree_iterator end() const {
-    return const_tree_iterator::begin(this);
+    return const_tree_iterator::end(this);
   }
 
   void print(raw_ostream &OS) const;
