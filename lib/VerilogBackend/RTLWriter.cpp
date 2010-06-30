@@ -368,12 +368,17 @@ void RTLWriter::emitResources() {
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
   unsigned MemBusInst = PreBind->getAllocatedInstance();
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
+    std::string Name = getAsOperand(PreBind);
+    // Declare the signal
+    vlang->declSignal(getSignalDeclBuffer(), Name,
+                      vlang->getBitWidth(*L), 0, false);
+    // Emit the datapath
     DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
       << " = membus_out" << MemBusInst <<";\n";
   } else { // It must be a store.
     StoreInst &S = PreBind->getInst<StoreInst>();
     ControlBlock.indent(8) << "membus_in" << MemBusInst
-      << " = " << getAsOperand(PreBind->getOperand(0)) << ";\n";
+      << " <= " << getAsOperand(PreBind->getOperand(0)) << ";\n";
   }
 }
 
@@ -421,8 +426,9 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
       SeqCompute.indent(8) << "membus_mode" << ResourceId << "<= 1'b1;\n";
     }
     // Else for other atoms
-    vlang->ifElse(SeqCompute.indent(6));
+    vlang->ifElse(SeqCompute.indent(6), false);
   }
+  vlang->begin(SeqCompute.indent(6));
   // Else for Resource is idle
   SeqCompute.indent(8) << "membus_addr" << ResourceId
     << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";

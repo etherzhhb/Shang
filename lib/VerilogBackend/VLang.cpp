@@ -258,13 +258,18 @@ raw_ostream &VLang::endSwitch(raw_ostream &ss) {
   return ss;
 }
 
+raw_ostream &VLang::begin(raw_ostream &ss) {
+  ss << "begin\n";
+  return ss;
+}
+
 raw_ostream &VLang::end(raw_ostream &ss) {
   ss << "end\n";
   return ss;
 }
 
-raw_ostream &VLang::ifElse(raw_ostream &ss) {
-  ss << "end else begin\n";
+raw_ostream &VLang::ifElse(raw_ostream &ss, bool Begin) {
+  ss << "end else" << (Begin ? " begin\n" : "\n");
   return ss;
 }
 

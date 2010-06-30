@@ -129,7 +129,9 @@ public:
 
   raw_ostream &ifBegin(raw_ostream &ss, const std::string &Condition);
   
-  raw_ostream &ifElse(raw_ostream &ss);
+  raw_ostream &ifElse(raw_ostream &ss, bool Begin = true);
+
+  raw_ostream &begin(raw_ostream &ss);
 
   raw_ostream &end(raw_ostream &ss);
   
