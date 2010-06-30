@@ -28,29 +28,24 @@ using namespace llvm;
 using namespace esyn;
 
 //===----------------------------------------------------------------------===//
-static bool isAtomFinish(const HWAtom &Atom, unsigned CurSlot) {
-  if (const HWAOpInst *Op = dyn_cast<HWAOpInst>(&Atom))
+bool Scheduler::isOperationFinish(const HWAtom *Atom, unsigned CurSlot) {
+  if (const HWAOpInst *Op = dyn_cast<HWAOpInst>(Atom))
     return Op->getSlot() + Op->getLatency() <= CurSlot;
 
   if (isa<HWAInline>(Atom))
-    return Atom.getSlot() <= CurSlot;
+    return Atom->getSlot() <= CurSlot;
 
   // Constant is always finish
   // Entry root is always finish
   return true;
 }
 
-bool SchedAtom::isOperationFinish(unsigned CurSlot) const {
-  return isAtomFinish(*Atom, CurSlot);
-}
-
-bool SchedAtom::isAllDepsOpFin(unsigned CurSlot) const {
-  for (const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
-      I != E; ++I) {
-    const HWAtom &A = **I;  
-    if (!isAtomFinish(A, CurSlot))
+bool Scheduler::isAllDepsOpFin(const HWAtom *Atom, unsigned CurSlot) {
+  for (HWAtom::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
+      I != E; ++I)
+    if (!isOperationFinish(*I, CurSlot))
       return false;
-  }
+
   return true;
 }
 
@@ -73,12 +68,12 @@ void Scheduler::rememberReadyCycle(HWResource::ResIdType ResId,
   ResCycMap[ResId] = ReadyCycle;
 }
 
-SchedAtom *Scheduler::getReadyAtoms(unsigned Cycle) {
+HWAtom *Scheduler::getReadyAtoms(unsigned Cycle) {
   for (SchedAtomVec::iterator I = ScheduleAtoms.begin(),
       E = ScheduleAtoms.end(); I != E; ++I) {
-    SchedAtom *atom = *I;
-    if (atom->isAllDepsOpFin(Cycle)) {
-      DEBUG((*atom)->print(dbgs()));
+    HWAtom *atom = *I;
+    if (isAllDepsOpFin(atom, Cycle)) {
+      DEBUG(atom->print(dbgs()));
       DEBUG(dbgs() << " is Ready\n");
       return atom;
     }
@@ -86,7 +81,7 @@ SchedAtom *Scheduler::getReadyAtoms(unsigned Cycle) {
   return 0;
 }
 
-void Scheduler::removeFromList(SchedAtom *Atom) {
+void Scheduler::removeFromList(HWAtom *Atom) {
   SchedAtomVec::iterator at = std::find(ScheduleAtoms.begin(),
                                         ScheduleAtoms.end(), Atom);
   ScheduleAtoms.erase(at);
@@ -104,7 +99,7 @@ bool Scheduler::runOnBasicBlock(BasicBlock &BB) {
   ExecStage &State = HI->getStateFor(BB);
   // Buidl the schedule atom list
   for (ExecStage::iterator I = State.begin(), E = State.end(); I != E; ++I)
-    ScheduleAtoms.push_back(new SchedAtom(**I));
+    ScheduleAtoms.push_back(*I);
   
   scheduleBasicBlock(State);
   return false;
