@@ -1,4 +1,4 @@
-//===------- ScheduleDriver.cpp - The Scheduler driver pass  ----*- C++ -*-===//
+//===------ ScheduleBase.cpp - The BaseClass of all scheduler  ----*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,13 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the ScheduleDriver Pass, which run difference schedulers
-// on a llvm function to schedule the Hardware atoms.
+// This file implement the SchedulerBase class, which provide common service for
+// schedulers.
 //
 //===----------------------------------------------------------------------===//
 //
 
-#include "ScheduleDriver.h"
+#include "vbe/SchedulerBase.h"
 
 #include "llvm/Support/Debug.h"
 

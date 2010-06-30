@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 //
 
-#include "ScheduleDriver.h"
+#include "vbe/SchedulerBase.h"
 #include "HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"

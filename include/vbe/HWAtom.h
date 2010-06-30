@@ -447,7 +447,7 @@ public:
   BasicBlock *getBasicBlock() { return &EntryRoot.getBasicBlock(); }
   BasicBlock *getBasicBlock() const { return &EntryRoot.getBasicBlock(); }
 
-  // Successor tree iterator, depth first iterator
+  // Successor tree iterator, travel the tree from entry node.
   typedef HWAVRoot::tree_iterator entry_iterator;
   typedef HWAVRoot::const_tree_iterator const_entry_iterator;
 
@@ -461,7 +461,7 @@ public:
     return ((const HWAVRoot&)EntryRoot).end();
   }
 
-  // Predecessor tree iterator, post order iterator
+  // Predecessor tree iterator, travel the tree from exit node.
   typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
     GraphTraits<Inverse<HWAtom*> > > exit_iterator;
 

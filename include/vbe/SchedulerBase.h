@@ -1,4 +1,4 @@
-//===-------- ScheduleDriver.h - The Scheduler driver pass  ------*- C++ -*-===//
+//===--- vbe/SchedulerBase.h - The BaseClass of all scheduler  ----*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,19 +13,16 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file define the ScheduleDriver Pass, which run difference schedulers on
-// a llvm function to schedule the Hardware atoms.
+// This file define the common interface of a scheduler
 //
 //===----------------------------------------------------------------------===//
 //
-#ifndef VBE_SCHEDULE_DRIVER_H
-#define VBE_SCHEDULE_DRIVER_H
+#ifndef VBE_SCHEDULER_BASE_H
+#define VBE_SCHEDULER_BASE_H
 
 #include "HWAtomInfo.h"
 #include "vbe/ResourceConfig.h"
 #include "vbe/HWAtom.h"
-
-#include "llvm/ADT/ScopedHashTable.h"
 
 #include <list>
 
