@@ -20,16 +20,16 @@
 #ifndef VBE_SCHEDULER_BASE_H
 #define VBE_SCHEDULER_BASE_H
 
-#include "HWAtomInfo.h"
 #include "vbe/ResourceConfig.h"
-#include "vbe/HWAtom.h"
-
 #include <list>
 
 using namespace llvm;
 
 namespace esyn {
-class Scheduler : public BasicBlockPass {
+class HWAtomInfo;
+class HWAtom;
+
+class Scheduler {
   // {instance, next available cycle}
   typedef std::map<HWResource::ResIdType, unsigned> ResCycMapType;
 
@@ -38,9 +38,6 @@ class Scheduler : public BasicBlockPass {
 protected:
   typedef std::list<HWAtom*> SchedAtomVec;
   SchedAtomVec ScheduleAtoms;
-
-  HWAtomInfo *HI;
-  ResourceConfig *RC;
 
   void clear();
 
@@ -57,21 +54,12 @@ protected:
   HWAtom *getReadyAtoms(unsigned Cycle);
 
   void removeFromList(HWAtom *Atom);
-public:
-  explicit Scheduler(const void *pid) : BasicBlockPass(pid), HI(0) {}
-  explicit Scheduler(intptr_t pid) : BasicBlockPass(pid), HI(0) {}
 
+  void createAtomList(HWAtomInfo *HI, BasicBlock &BB);
+public:
+  Scheduler() {}
   virtual ~Scheduler();
 
-  // Request common analysis usage for scheduler
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  // Do common Initialization for scheduler
-  bool runOnBasicBlock(BasicBlock &BB);
-  void releaseMemory();
-
-  // Interface for schedulers
-  virtual void scheduleBasicBlock(ExecStage &State) = 0;
-  virtual void releaseContext() {}
 };
 
 } // end namespace

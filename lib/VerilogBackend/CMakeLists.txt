@@ -3,7 +3,8 @@ set(LLVM_NO_RTTI 1)
 add_llvm_target(VerilogBackend
   HWAtom.cpp
   HWAtomInfo.cpp
-  ListScheduler.cpp
+  ASAPScheduler.cpp
+  ForceDirectedScheduler.cpp
   VBackend.cpp
   VLang.cpp
   RegisterReduction.cpp

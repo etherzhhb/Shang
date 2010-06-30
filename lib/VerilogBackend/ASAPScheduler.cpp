@@ -20,6 +20,7 @@
 //
 
 #include "vbe/SchedulerBase.h"
+#include "HWAtomInfo.h"
 #include "HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"
@@ -31,11 +32,13 @@ using namespace llvm;
 using namespace esyn;
 
 namespace {
-class ASAPScheduler : public Scheduler {
-public:
+struct ASAPScheduler : public BasicBlockPass, public Scheduler {
+  HWAtomInfo *HI;
+  ResourceConfig *RC;
   static char ID;
-  explicit ASAPScheduler() : Scheduler(&ID) {}
-  void scheduleBasicBlock(ExecStage &State);
+  explicit ASAPScheduler() : BasicBlockPass(&ID), Scheduler() {}
+  bool runOnBasicBlock(BasicBlock &BB);
+  void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const;
 };
@@ -48,11 +51,18 @@ void ASAPScheduler::print(raw_ostream &O, const Module *M) const {
 }
 
 void ASAPScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
-  Scheduler::getAnalysisUsage(AU);
+  AU.addRequired<HWAtomInfo>();
+  AU.addRequired<ResourceConfig>();
   AU.setPreservesAll();
 }
 
-void ASAPScheduler::scheduleBasicBlock(ExecStage &State) {
+bool ASAPScheduler::runOnBasicBlock(BasicBlock &BB) {
+  HI = &getAnalysis<HWAtomInfo>();
+  RC = &getAnalysis<ResourceConfig>();
+
+  ExecStage &State = HI->getStateFor(BB);
+  createAtomList(HI, BB);
+
   HWAVRoot &EntryRoot = State.getEntryRoot();
   HWAtom *ExitRoot = &State.getExitRoot();
   EntryRoot.scheduledTo(HI->getTotalCycle());
@@ -92,6 +102,11 @@ void ASAPScheduler::scheduleBasicBlock(ExecStage &State) {
   //// schedule the state end;
 
   DEBUG(State.print(dbgs()));
+  return false;
+}
+
+void ASAPScheduler::releaseMemory() {
+  clear();
 }
 
 

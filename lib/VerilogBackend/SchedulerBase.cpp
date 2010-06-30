@@ -21,6 +21,7 @@
 
 #include "vbe/SchedulerBase.h"
 
+#include "HWAtomInfo.h"
 #include "llvm/Support/Debug.h"
 
 
@@ -49,7 +50,6 @@ bool Scheduler::isAllDepsOpFin(const HWAtom *Atom, unsigned CurSlot) {
   return true;
 }
 
-//===----------------------------------------------------------------------===//
 void Scheduler::clear() {
   ScheduleAtoms.clear();
   ResCycMap.clear();
@@ -87,27 +87,9 @@ void Scheduler::removeFromList(HWAtom *Atom) {
   ScheduleAtoms.erase(at);
 }
 
-void Scheduler::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<HWAtomInfo>();
-  AU.addRequired<ResourceConfig>();
-}
-
-bool Scheduler::runOnBasicBlock(BasicBlock &BB) {
-  HI = &getAnalysis<HWAtomInfo>();
-  RC = &getAnalysis<ResourceConfig>();
-
-  ExecStage &State = HI->getStateFor(BB);
-  // Buidl the schedule atom list
-  for (ExecStage::entry_iterator I = State.entry_begin(), E = State.entry_end();
-      I != E; ++I) {
-    DEBUG(I->dump());
+void esyn::Scheduler::createAtomList(HWAtomInfo *HI, BasicBlock &BB) {
+  ExecStage &Stage = HI->getStateFor(BB);
+  for (ExecStage::entry_iterator I = Stage.entry_begin(), E = Stage.entry_end();
+      I != E; ++I)
     ScheduleAtoms.push_back(*I);
-  }
-   scheduleBasicBlock(State);
-  return false;
-}
-
-void Scheduler::releaseMemory() {
-  clear();
-  releaseContext();
 }

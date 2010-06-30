@@ -19,7 +19,6 @@
 #include "TestBenchWriter.h"
 #include "HWAtomPasses.h"
 
-#include "vbe/SchedulerBase.h"
 #include "vbe/ResourceConfig.h"
 
 using namespace llvm;
