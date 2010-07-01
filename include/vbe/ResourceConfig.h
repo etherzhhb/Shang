@@ -51,10 +51,10 @@ public:
     LSR,
     AddSub,
     Mul,
-    Other,
+    Trivial,
 
     FirstResourceType = MemoryBus,
-    LastResourceType = Other
+    LastResourceType = Trivial
   };
 private:
   // The HWResource baseclass this node corresponds to

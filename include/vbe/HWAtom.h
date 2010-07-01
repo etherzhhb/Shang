@@ -386,7 +386,7 @@ public:
 
   // Help the scheduler to identify difference operation class
   virtual enum HWResource::ResTypes getResClass() const {
-    return HWResource::Other;
+    return HWResource::Trivial;
   }
 
   // Return the opcode of the instruction.
@@ -427,9 +427,9 @@ class HWAPreBind : public HWAOpInst {
 public:
   explicit HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
     unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
-    HWResource &Res, unsigned Instance = 0)
+    enum HWResource::ResTypes OpClass, unsigned Instance = 0)
     : HWAOpInst(ID, atomPreBind, Inst, latency, deps, numDep, OpNum,
-    HWResource::createResId(Res.getResourceType(), Instance)) {}
+    HWResource::createResId(OpClass, Instance)) {}
 
   /// @name The using resource
   //{

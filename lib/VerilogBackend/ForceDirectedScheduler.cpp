@@ -124,10 +124,9 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       AtomToTF[OpInst] = std::make_pair(0, UINT32_MAX);
 
   buildTimeFrame();
-  buildDGraph();
 
   while (!isListEmpty()) {
-
+    buildDGraph();
     buildAvgDG();
 
     // TODO: Short the list
@@ -283,6 +282,9 @@ void FDLScheduler::buildDGraph() {
   for (usetree_iterator I = CurStage->usetree_begin(),
       E = CurStage->usetree_end(); I != E; ++I){
     if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
+      if (OpInst->getResClass() == HWResource::Trivial)
+        continue;
+      
       double Prob = 1.0 / (double) getTimeFrame(OpInst);
       // Including ALAPStep.
       for (unsigned i = getASAPStep(OpInst), e = getALAPStep(OpInst) + 1;
@@ -299,10 +301,10 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
       re = HWResource::LastResourceType; ri != re; ++ri) {
     OS << "DG for resource: " << ri <<'\n';
     for (unsigned i = CurStage->getEntryRoot().getSlot(),
-        e = getASAPStep(&CurStage->getExitRoot()) + 1; i != e; ++i) {
-          OS.indent(2) << "At step " << i << " : " <<
-            getDGraphAt(i, (enum HWResource::ResTypes)ri) << '\n';
-    }
+        e = getASAPStep(&CurStage->getExitRoot()) + 1; i != e; ++i)
+      OS.indent(2) << "At step " << i << " : "
+        << getDGraphAt(i, (enum HWResource::ResTypes)ri) << '\n';
+
     OS << '\n';
   }
 }

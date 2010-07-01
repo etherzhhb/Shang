@@ -96,7 +96,7 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
-  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, 0, HWResource::Other);
+  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, 0, HWResource::Trivial);
   // Remember the atom.
   ValueToHWAtoms.insert(std::make_pair(&I, Atom));
 
@@ -109,12 +109,10 @@ void HWAtomInfo::visitPHINode(PHINode &I) {
   // PHI node always have no latency
   HWAtom *Phi = getConstant(I, I.getParent());
   for (Instruction::op_iterator OI = I.op_begin(), OE = I.op_end();
-      OI != OE; ++OI) {
+      OI != OE; ++OI)
     // Emit the constants.
     if (!isa<Instruction>(*OI) && !isa<BasicBlock>(*OI))
       (void) getConstant(**OI, I.getParent());
-    
-  }
   
   ValueToHWAtoms.insert(std::make_pair(&I, Phi));
 }
@@ -124,7 +122,7 @@ void HWAtomInfo::visitSelectInst(SelectInst &I) {
   addOperandDeps(I, Deps);
 
   // FIXME: Read latency from configure file
-  HWAtom *SelAtom = getPostBind(I, Deps, 1, HWResource::Other);
+  HWAtom *SelAtom = getPostBind(I, Deps, 1, HWResource::Trivial);
   // Register the result
   SelAtom = getRegister(I, SelAtom);
 
@@ -136,7 +134,7 @@ void HWAtomInfo::visitCastInst(CastInst &I) {
   Deps.push_back(getAtomInState(*I.getOperand(0), I.getParent()));
   // CastInst do not have any latency
   // FIXME: Create the AtomReAssign Pass and set the latency to 0
-  HWAtom *CastAtom = getPostBind(I, Deps, 1, HWResource::Other);
+  HWAtom *CastAtom = getPostBind(I, Deps, 1, HWResource::Trivial);
   // Register the result
   CastAtom = getRegister(I, CastAtom);
   ValueToHWAtoms.insert(std::make_pair(&I, CastAtom));
@@ -153,7 +151,8 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 0 to all load/store at this moment
-  HWAtom *LoadAtom = getPreBind(I, Deps, *Res, Res->getLatency(), 0);
+  HWAtom *LoadAtom = getPreBind(I, Deps, HWResource::MemoryBus,
+                                Res->getLatency(), 0);
   // Set as new atom
   SetControlRoot(LoadAtom);
   // And register the result
@@ -173,7 +172,8 @@ void HWAtomInfo::visitStoreInst(StoreInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 0 to all load/store at this moment
-  HWAtom *StoreAtom = getPreBind(I, Deps, *Res, Res->getLatency(), 0);
+  HWAtom *StoreAtom = getPreBind(I, Deps, HWResource::MemoryBus,
+                                 Res->getLatency(), 0);
   // Set as new atom
   SetControlRoot(StoreAtom);
 
@@ -207,7 +207,7 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
   enum HWResource::ResTypes T;
   // It is trivial if one of the operand is constant
   if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
-    T = HWResource::Other;
+    T = HWResource::Trivial;
   else // We need to do a subtraction for the comparison.
     T = HWResource::AddSub;
 
@@ -246,18 +246,18 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
     case Instruction::And:
     case Instruction::Or:
     case Instruction::Xor:
-      T = HWResource::Other;
+      T = HWResource::Trivial;
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
       Deps[0] = getSigned(Deps[0]);
-      T = isTrivial ? HWResource::Other : HWResource::ASR;
+      T = isTrivial ? HWResource::Trivial : HWResource::ASR;
       break;
     case Instruction::LShr:
-      T = isTrivial ? HWResource::Other : HWResource::LSR;
+      T = isTrivial ? HWResource::Trivial : HWResource::LSR;
       break;
     case Instruction::Shl:
-      T = isTrivial ? HWResource::Other : HWResource::SHL;
+      T = isTrivial ? HWResource::Trivial : HWResource::SHL;
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");
@@ -337,8 +337,8 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
 }
 
 HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
-                               size_t OpNum, HWResource &Res, unsigned latency,
-                               unsigned ResInst) {
+                               size_t OpNum, enum HWResource::ResTypes OpClass,
+                               unsigned latency, unsigned ResInst) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomPreBind);
   ID.AddPointer(&I);
@@ -351,7 +351,7 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Dep
     HWAtom **O = HWAtomAllocator.Allocate<HWAtom *>(Deps.size());
     std::uninitialized_copy(Deps.begin(), Deps.end(), O);
     A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-      I, latency, O, Deps.size(), OpNum, Res, ResInst);
+      I, latency, O, Deps.size(), OpNum, OpClass, ResInst);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;

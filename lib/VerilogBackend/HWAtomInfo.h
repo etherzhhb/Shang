@@ -107,12 +107,12 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   HWAtom *getSigned(HWAtom *Using);
 
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
-                     size_t OpNum, HWResource &Res,  unsigned latency, 
-                     unsigned ResInst = 0);
+                     size_t OpNum, enum HWResource::ResTypes OpClass,
+                     unsigned latency, unsigned ResInst = 0);
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
-                     HWResource &Res,  unsigned latency, 
+                     enum HWResource::ResTypes OpClass,  unsigned latency, 
                      unsigned ResInst = 0) {
-    return getPreBind(I, Deps, I.getNumOperands(), Res, latency, ResInst);
+    return getPreBind(I, Deps, I.getNumOperands(), OpClass, latency, ResInst);
   }
 
   HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
