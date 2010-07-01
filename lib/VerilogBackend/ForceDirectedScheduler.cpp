@@ -35,28 +35,54 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
 
   HWAtomInfo *HI;
   ResourceConfig *RC;
-  
+  ExecStage *CurStage;
+
   // Time Frame {asap step, alap step }
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
   typedef std::map<HWAtom*, TimeFrame> TimeFrameMapType;
 
+  /// @name TimeFrame
+  //{
   TimeFrameMapType AtomToTF;
-  void resetTimeFrame(HWAtom *Root);
-  unsigned getASAPStep(HWAtom *A);
+  void buildTimeFrame();
+
+  unsigned computeASAPStep(HWAtom *A);
+  unsigned getASAPStep(HWAtom *A) const {
+    return const_cast<FDLScheduler*>(this)->AtomToTF[A].first;
+  }
   void setASAPStep(HWAtom *A, unsigned step);
 
-  unsigned getALAPStep(HWAtom *A);
+  unsigned computeALAPStep(HWAtom *A);
+  unsigned getALAPStep(HWAtom *A) const { 
+    return const_cast<FDLScheduler*>(this)->AtomToTF[A].second;
+  }
   void setALAPStep(HWAtom *A, unsigned step);
 
-  void printTimeFrame(HWAtom *A, raw_ostream &OS);
+  unsigned getTimeFrame(HWAtom *A) const {
+    return getALAPStep(A) - getASAPStep(A) + 1;
+  }
 
+  void printTimeFrame(raw_ostream &OS) const ;
+  //}
+
+  /// @name Distribuition Graphs
+  //{
+  // The Key of DG, { step, resource type }
+  typedef std::map<unsigned, double> DGType;
+
+  DGType DGraph;
+  void buildDGraph();
+  double getDGraphAt(unsigned step, enum HWResource::ResTypes ResType) const;
+  void accDGraphAt(unsigned step, enum HWResource::ResTypes ResType, double d);
+  void printDG(raw_ostream &OS) const ;
+  //}
   void clear();
 
   /// @name Common pass interface
   //{
   static char ID;
-  FDLScheduler() : BasicBlockPass(&ID), Scheduler() {}
+  FDLScheduler() : BasicBlockPass(&ID), Scheduler(), HI(0), RC(0), CurStage(0) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -76,18 +102,12 @@ void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
 bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HI = &getAnalysis<HWAtomInfo>();
-  ExecStage &Stage = HI->getStateFor(BB);
-  HWAVRoot &Entry = Stage.getEntryRoot();
-  // Build the time frame
-  setASAPStep(&Entry, 1);
-  DEBUG(printTimeFrame(&Entry, dbgs()));
-  for (usetree_iterator I = usetree_iterator::begin(&Entry),
-      E = usetree_iterator::end(&Entry); I != E; ++I) {
-    HWAtom *A = *I;
-    A->scheduledTo(HI->getTotalCycle() + AtomToTF[A].first - 1);
-  }
-  HI->setTotalCycle(Stage.getExitRoot().getSlot() + 1);
-  // Build the Distribution Graphs
+  CurStage = &(HI->getStateFor(BB));
+  
+  buildTimeFrame();
+
+  buildDGraph();
+
   return false;
 }
 
@@ -96,19 +116,62 @@ void FDLScheduler::releaseMemory() {
   clearSchedulerBase();
 }
 
-void FDLScheduler::resetTimeFrame(HWAtom *Root) {
-  // Reset the time frame
-  for (usetree_iterator I = usetree_iterator::begin(Root),
-      E = usetree_iterator::end(Root); I != E; ++I)
-    AtomToTF.erase(*I);
+double FDLScheduler::getDGraphAt(unsigned step,
+                                 enum HWResource::ResTypes ResType) const {
+  unsigned key = (step << 4) | (0xf & ResType);
+  DGType::const_iterator at = DGraph.find(key);
+  
+  if (at != DGraph.end()) return at->second;  
+
+  return 0.0;
 }
 
-unsigned FDLScheduler::getASAPStep(HWAtom *A) {
+void FDLScheduler::accDGraphAt(unsigned step, enum HWResource::ResTypes ResType,
+                               double d) {
+  unsigned key = (step << 4) | (0xf & ResType);
+  DGraph[step] = d;
+}
+
+void FDLScheduler::buildDGraph() {
+  for (usetree_iterator I = CurStage->usetree_begin(),
+      E = CurStage->usetree_end(); I != E; ++I){
+    if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
+      double Prob = 1 / (double) getTimeFrame(OpInst);
+      // Including ALAPStep.
+      for (unsigned i = getASAPStep(OpInst), e = getALAPStep(OpInst) + 1;
+          i != e; ++i)
+        accDGraphAt(i, OpInst->getResClass(), Prob);
+    }
+  }
+}
+
+void FDLScheduler::printDG(raw_ostream &OS) const {
+
+}
+
+void FDLScheduler::buildTimeFrame() {
+  HWAVRoot &Entry = CurStage->getEntryRoot();
+  // Build the time frame
+  setASAPStep(&Entry, 1); 
+  HWAOpInst &Exit = CurStage->getExitRoot();
+  unsigned ExitStep = getASAPStep(&Exit);
+  setALAPStep(&Exit, ExitStep);
+  DEBUG(printTimeFrame(dbgs()));
+  //Schedule to asap step.
+  for (usetree_iterator I = usetree_iterator::begin(&Entry),
+      E = usetree_iterator::end(&Entry); I != E; ++I) {
+    HWAtom *A = *I;
+    A->scheduledTo(HI->getTotalCycle() + AtomToTF[A].first - 1);
+  }
+  HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
+}
+
+unsigned FDLScheduler::computeASAPStep(HWAtom *A) {
   unsigned ret = 0;
   for (HWAtom::dep_iterator I = A->dep_begin(), E = A->dep_end();
       I != E; ++I) {
     HWAtom *Dep = *I;
-    unsigned AsapStep = AtomToTF[Dep].first;
+    unsigned AsapStep = getASAPStep(Dep);
     if (AsapStep == 0) // The node not visit yet
       return 0;
 
@@ -124,18 +187,19 @@ unsigned FDLScheduler::getASAPStep(HWAtom *A) {
 
 
 void FDLScheduler::setASAPStep(HWAtom *A, unsigned step) {
-  DEBUG(A->dump());
-  DEBUG(dbgs() << "set to asap " << step << '\n');
+  //DEBUG(A->dump());
+  //DEBUG(dbgs() << "set to asap " << step << '\n');
+  // TODO: Consider the scheduled node
   AtomToTF[A].first = step;;
   
   for (HWAtom::use_iterator I = A->use_begin(), E = A->use_end();
       I != E; ++I) {
     HWAtom *U = *I;
     // U was already been schedule to a asap step.
-    if (AtomToTF[U].first != 0)
+    if (getASAPStep(U) != 0)
       continue;
     
-    unsigned dep_step = getASAPStep(U);
+    unsigned dep_step = computeASAPStep(U);
     // Some dependencies of U not finish
     if (dep_step == 0)
       continue;
@@ -145,36 +209,65 @@ void FDLScheduler::setASAPStep(HWAtom *A, unsigned step) {
   }
 }
 
-unsigned FDLScheduler::getALAPStep(HWAtom *A) {
-  unsigned ret = 0;
+unsigned FDLScheduler::computeALAPStep(HWAtom *A) {
+  unsigned ret = UINT32_MAX;
   for (HWAtom::use_iterator I = A->use_begin(), E = A->use_end();
     I != E; ++I) {
       HWAtom *Dep = *I;
-      unsigned AsapStep = AtomToTF[Dep].second;
-      if (AsapStep == 0) // The node not visit yet
+      unsigned AlapStep = getALAPStep(Dep);
+      if (AlapStep == 0) // The node not visit yet
         return 0;
       // The Node will be schedule only when the first use need it.
-      else if(AsapStep < ret)
-        ret = AsapStep;
+      else if(AlapStep < ret)
+        ret = AlapStep;
   }
+  // Now ret is the step that A should be finish, place it to the
+  // right place so that i can be finish at this step
+  if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A))
+    ret -= OI->getLatency();
+  
   return ret;
+}
+
+void FDLScheduler::setALAPStep(HWAtom *A, unsigned step) {
+  //DEBUG(A->dump());
+  //DEBUG(dbgs() << "set to alap " << step << '\n');
+  // TODO: Consider the scheduled node
+  AtomToTF[A].second = step;;
+
+  for (HWAtom::dep_iterator I = A->dep_begin(), E = A->dep_end();
+    I != E; ++I) {
+      HWAtom *U = *I;
+      // U was already been schedule to a asap step.
+      if (getALAPStep(U) != 0)
+        continue;
+
+      unsigned use_step = computeALAPStep(U);
+      // Some dependencies of U not finish
+      if (use_step == 0)
+        continue;
+
+      // All depends of U finish, schedule it to a step.
+      setALAPStep(U, use_step);
+  }
 }
 
 void FDLScheduler::clear() {
   AtomToTF.clear();
+  DGraph.clear();
 }
 
-void FDLScheduler::printTimeFrame(HWAtom *A, raw_ostream &OS) {
-  for (usetree_iterator I = usetree_iterator::begin(A),
-    E = usetree_iterator::end(A); I != E; ++I) {
+void FDLScheduler::printTimeFrame(raw_ostream &OS) const {
+  for (usetree_iterator I = CurStage->usetree_begin(),
+    E = CurStage->usetree_end(); I != E; ++I) {
     (*I)->print(OS);
-    OS << "\n{" << AtomToTF[*I].first << "," << AtomToTF[*I].second << "}\n";
+    OS << "\n{" << getASAPStep(*I) << "," << getALAPStep(*I)
+       << "} " <<  getTimeFrame(*I) << "\n";
   }
   
 }
 
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
-
 
 Pass *esyn::createFDLSchedulePass() {
   return new FDLScheduler();
