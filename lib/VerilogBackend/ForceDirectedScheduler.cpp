@@ -117,15 +117,11 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
     buildDGraph();
 
     // TODO: Short the list
-    HWAtom *A = *list_begin();
-    if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(A)) {
-    }
-    //
-    break;
+    HWAOpInst *A = *list_begin();
+    A->scheduledTo(getASAPStep(A));
+    removeFromList(list_begin());
   }
   
-  HWAOpInst &Exit = CurStage->getExitRoot();
-  Exit.scheduledTo(getALAPStep(&Exit));
   HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
 
   return false;
@@ -188,13 +184,6 @@ void FDLScheduler::buildTimeFrame() {
   unsigned ExitStep = getASAPStep(&Exit);
   setALAPStep(&Exit, ExitStep);
   DEBUG(printTimeFrame(dbgs()));
-  ////Schedule to asap step.
-  //for (usetree_iterator I = usetree_iterator::begin(&Entry),
-  //    E = usetree_iterator::end(&Entry); I != E; ++I) {
-  //  HWAtom *A = *I;
-  //  A->scheduledTo(HI->getTotalCycle() + AtomToTF[A].first - 1);
-  //}
-  //HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
 }
 
 unsigned FDLScheduler::computeASAPStep(HWAtom *A) {
@@ -220,6 +209,9 @@ void FDLScheduler::setASAPStep(HWAtom *A, unsigned step) {
   //DEBUG(A->dump());
   //DEBUG(dbgs() << "set to asap " << step << '\n');
   // TODO: Consider the scheduled node
+  if (A->isScheduled())
+    step = A->getSlot();
+  
   AtomToTF[A].first = step;;
   
   for (HWAtom::use_iterator I = A->use_begin(), E = A->use_end();
@@ -261,8 +253,10 @@ unsigned FDLScheduler::computeALAPStep(HWAtom *A) {
 void FDLScheduler::setALAPStep(HWAtom *A, unsigned step) {
   //DEBUG(A->dump());
   //DEBUG(dbgs() << "set to alap " << step << '\n');
-  // TODO: Consider the scheduled node
-  AtomToTF[A].second = step;;
+  if (A->isScheduled())
+    step = A->getSlot();
+
+  AtomToTF[A].second = step;
 
   for (HWAtom::dep_iterator I = A->dep_begin(), E = A->dep_end();
     I != E; ++I) {

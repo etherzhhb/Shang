@@ -33,8 +33,8 @@ bool Scheduler::isOperationFinish(const HWAtom *Atom, unsigned CurSlot) {
   return Atom->getSlot() +Atom->getLatency() <= CurSlot;
 }
 
-bool Scheduler::isAllDepsOpFin(const HWActive *Atom, unsigned CurSlot) {
-  for (HWActive::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
+bool Scheduler::isAllDepsOpFin(const HWAOpInst *Atom, unsigned CurSlot) {
+  for (HWAOpInst::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
       I != E; ++I)
     if (!isOperationFinish(*I, CurSlot))
       return false;
@@ -42,8 +42,8 @@ bool Scheduler::isAllDepsOpFin(const HWActive *Atom, unsigned CurSlot) {
   return true;
 }
 
-bool Scheduler::isAllDepsScheduled(const HWActive *Atom) {
-  for (HWActive::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
+bool Scheduler::isAllDepsScheduled(const HWAOpInst *Atom) {
+  for (HWAOpInst::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
     I != E; ++I)
     if (!(*I)->isScheduled())
       return false;
@@ -72,7 +72,7 @@ void Scheduler::rememberReadyCycle(HWResource::ResIdType ResId,
 Scheduler::ListIt Scheduler::getReadyAtoms(unsigned Cycle) {
   for (SchedAtomVec::iterator I = ScheduleAtoms.begin(),
       E = ScheduleAtoms.end(); I != E; ++I) {
-    HWActive *atom = *I;
+    HWAOpInst *atom = *I;
     if (isAllDepsOpFin(atom, Cycle)) {
       DEBUG(atom->print(dbgs()));
       DEBUG(dbgs() << " is Ready\n");
@@ -89,6 +89,6 @@ void Scheduler::removeFromList(ListIt At) {
 void esyn::Scheduler::createAtomList() {
   for (usetree_iterator I = CurStage->usetree_begin(), E = CurStage->usetree_end();
       I != E; ++I)
-    if (HWActive *A = dyn_cast<HWActive>(*I))    
+    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))    
       ScheduleAtoms.push_back(A);
 }

@@ -28,7 +28,7 @@ using namespace llvm;
 namespace esyn {
 class HWAtomInfo;
 class HWAtom;
-class HWActive;
+class HWAOpInst;
 class ExecStage;
 
 class Scheduler {
@@ -38,8 +38,8 @@ class Scheduler {
   ResCycMapType ResCycMap;
 
 protected:
-  typedef std::list<HWActive*> SchedAtomVec;
-  typedef std::list<HWActive*>::iterator ListIt;
+  typedef std::list<HWAOpInst*> SchedAtomVec;
+  typedef std::list<HWAOpInst*>::iterator ListIt;
   SchedAtomVec ScheduleAtoms;
 
   ExecStage *CurStage;
@@ -48,8 +48,8 @@ protected:
 
   //
   static bool isOperationFinish(const HWAtom *Atom, unsigned CurSlot);
-  static bool isAllDepsOpFin(const HWActive *Atom, unsigned CurSlot);
-  static bool isAllDepsScheduled(const HWActive *Atom);
+  static bool isAllDepsOpFin(const HWAOpInst *Atom, unsigned CurSlot);
+  static bool isAllDepsScheduled(const HWAOpInst *Atom);
   // Get the ready cycle of the given resource.
   unsigned getReadyCycle(HWResource::ResIdType ResId);
 
