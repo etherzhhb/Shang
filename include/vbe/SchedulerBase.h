@@ -28,6 +28,8 @@ using namespace llvm;
 namespace esyn {
 class HWAtomInfo;
 class HWAtom;
+class HWActive;
+class ExecStage;
 
 class Scheduler {
   // {instance, next available cycle}
@@ -36,14 +38,18 @@ class Scheduler {
   ResCycMapType ResCycMap;
 
 protected:
-  typedef std::list<HWAtom*> SchedAtomVec;
+  typedef std::list<HWActive*> SchedAtomVec;
+  typedef std::list<HWActive*>::iterator ListIt;
   SchedAtomVec ScheduleAtoms;
+
+  ExecStage *CurStage;
 
   void clearSchedulerBase();
 
   //
   static bool isOperationFinish(const HWAtom *Atom, unsigned CurSlot);
-  static bool isAllDepsOpFin(const HWAtom *Atom, unsigned CurSlot);
+  static bool isAllDepsOpFin(const HWActive *Atom, unsigned CurSlot);
+  static bool isAllDepsScheduled(const HWActive *Atom);
   // Get the ready cycle of the given resource.
   unsigned getReadyCycle(HWResource::ResIdType ResId);
 
@@ -51,13 +57,16 @@ protected:
   void rememberReadyCycle(HWResource::ResIdType ResId, unsigned ReadyCycle);
 
   // Get Any ready atom.
-  HWAtom *getReadyAtoms(unsigned Cycle);
+  ListIt getReadyAtoms(unsigned Cycle);
 
-  void removeFromList(HWAtom *Atom);
+  ListIt list_begin() { return ScheduleAtoms.begin(); }
+  ListIt list_end() { return ScheduleAtoms.end(); }
+  bool isListEmpty() const { return ScheduleAtoms.empty(); }
+  void removeFromList(ListIt It);
 
-  void createAtomList(HWAtomInfo *HI, BasicBlock &BB);
+  void createAtomList();
 public:
-  Scheduler() {}
+  Scheduler() : CurStage(0) {}
   virtual ~Scheduler();
 
 };

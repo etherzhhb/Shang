@@ -37,7 +37,9 @@ void HWAtom::dump() const {
 }
 
 void HWAConst::print(raw_ostream &OS) const {
-  OS << "Const (" << getValue() << ")";
+  OS << "Const (";
+  WriteAsOperand(OS, &getValue(), false);
+  OS << ")";
 }
 
 void HWASigned::print(raw_ostream &OS) const {
@@ -81,11 +83,19 @@ void ExecStage::print(raw_ostream &OS) const {
 }
 
 void HWAPreBind::print(raw_ostream &OS) const {
-  OS << getValue() << " Res: " << SubClassData;
+  if (getValue().getType()->isVoidTy())
+    OS << getValue() << '\n';
+  else
+    WriteAsOperand(OS, &getValue(), false);
+  OS << " Res: " << SubClassData;
 }
 
 void HWAPostBind::print(raw_ostream &OS) const {
-  OS << getValue() << " PostBind: " << SubClassData;
+  if (getValue().getType()->isVoidTy())
+    OS << getValue() << '\n';
+  else
+    WriteAsOperand(OS, &getValue(), false);
+  OS << " PostBind: " << SubClassData;
 }
 
 void HWAVRoot::print(raw_ostream &OS) const {
@@ -100,4 +110,14 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
                SchedSlot(UINT32_MAX >> 1) {
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     (*I)->addToUseList(this);
+}
+
+void HWAtom::scheduledTo(unsigned slot) {
+  SchedSlot = slot;
+  for (use_iterator I = use_begin(), E = use_end(); I != E; ++I) {
+    HWAtom *A = *I;
+    if (HWAPassive *IA = dyn_cast<HWAPassive>(*I))
+      // Schedule the passive atom when this atom finish
+      IA->scheduledTo(slot + getLatency());
+  }
 }

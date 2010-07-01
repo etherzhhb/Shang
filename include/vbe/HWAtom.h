@@ -96,7 +96,7 @@ protected:
   virtual ~HWAtom();
 
 public:
-  explicit HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
     HWAtom **deps, size_t numDeps);
 
   unsigned getHWAtomType() const { return HWAtomType; }
@@ -150,9 +150,12 @@ public:
   //}
 
   virtual void reset() { SchedSlot = UINT32_MAX  >> 1; }
-
-  void scheduledTo(unsigned slot) { SchedSlot = slot; }
   unsigned getSlot() const { return SchedSlot; }
+  bool isScheduled() const { return SchedSlot != (UINT32_MAX  >> 1); }
+  void scheduledTo(unsigned slot);
+
+  // Get the latency of this atom
+  virtual unsigned getLatency() const { return 0; }
 
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
@@ -234,10 +237,91 @@ typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
 typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
   GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
 
+/// @brief Inline operation
+class HWAPassive : public HWAtom {
+protected:
+  HWAPassive(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+    Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
+public:
+
+  // The referenced value.
+  HWAtom *getRefVal() { return getDep(0); }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAPassive *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomSignedPrefix ||
+      A->getHWAtomType() == atomWireOp ||
+      A->getHWAtomType() == atomRegister ||
+      A->getHWAtomType() == atomConst;
+  }
+};
+
+/// @brief Constant node
+class HWAConst : public HWAPassive {
+public:
+  HWAConst(const FoldingSetNodeIDRef ID, Value &V, HWAtom **E)
+    : HWAPassive(ID, atomConst, V, E) {}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAConst *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomConst;
+  }
+};
+
+/// @brief The signed wire marker
+class HWASigned : public HWAPassive {
+public:
+  HWASigned(const FoldingSetNodeIDRef ID, HWAtom **O)
+    : HWAPassive(ID, atomSignedPrefix, O[0]->getValue(), O){}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWASigned *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomSignedPrefix;
+  }
+};
+
+/// @brief The register atom will break the WAR dependence
+class HWARegister : public HWAPassive {
+public:
+  HWARegister(const FoldingSetNodeIDRef ID, Value &V,
+    HWAtom **O) 
+    : HWAPassive(ID, atomRegister, V, O) {}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWARegister *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomRegister;
+  } 
+};
+
+class HWActive : public HWAtom {
+protected:
+  HWActive(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+    HWAtom **deps, size_t numDeps) : HWAtom(ID, HWAtomTy, V, deps, numDeps) {}
+public:
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWActive *A) { return true; }
+  static inline bool classof(const HWAtom *A) {
+    return A->getHWAtomType() == atomVRoot ||
+      A->getHWAtomType() == atomPreBind ||
+      A->getHWAtomType() == atomPostBind;
+  }
+};
+
 // Virtual Root
 class HWAVRoot : public HWAtom {
 public:
-  explicit HWAVRoot(const FoldingSetNodeIDRef ID, BasicBlock &BB)
+  HWAVRoot(const FoldingSetNodeIDRef ID, BasicBlock &BB)
     : HWAtom(ID, atomVRoot, BB, 0, 0) {}
 
   BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
@@ -265,73 +349,10 @@ public:
   }
 };
 
-/// @brief Constant node
-class HWAConst : public HWAtom {
-public:
-  explicit HWAConst(const FoldingSetNodeIDRef ID, Value &V, HWAtom **E)
-    : HWAtom(ID, atomConst, V, E, 1) {}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAConst *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomConst;
-  }
-};
-
-/// @brief Inline operation
-class HWAInline : public HWAtom {
-protected:
-  explicit HWAInline(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
-public:
-
-  // The referenced value.
-  HWAtom *getRefVal() { return getDep(0); }
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAInline *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomSignedPrefix ||
-      A->getHWAtomType() == atomWireOp ||
-      A->getHWAtomType() == atomRegister;
-  }
-};
-
-/// @brief The signed wire marker
-class HWASigned : public HWAInline {
-public:
-  explicit HWASigned(const FoldingSetNodeIDRef ID, HWAtom **O)
-    : HWAInline(ID, atomSignedPrefix, O[0]->getValue(), O){}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWASigned *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomSignedPrefix;
-  }
-};
-
-/// @brief The register atom will break the WAR dependence
-class HWARegister : public HWAInline {
-public:
-  explicit HWARegister(const FoldingSetNodeIDRef ID, Value &V,
-    HWAtom **O) 
-    : HWAInline(ID, atomRegister, V, O) {}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWARegister *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomRegister;
-  } 
-};
+// Create the ative atom class for register, and operate on instruction
 
 /// @brief The Schedulable Hardware Atom
-class HWAOpInst : public HWAtom {
+class HWAOpInst : public HWActive {
   // The latency of this atom
   unsigned Latency;
   // Effective operand number
@@ -339,10 +360,10 @@ class HWAOpInst : public HWAtom {
 protected:
   unsigned SubClassData;
 
-  explicit HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
+  HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep,
     size_t OpNum, unsigned subClassData = 0)
-    : HWAtom(ID, T, Inst, deps, numDep), Latency(latency),
+    : HWActive(ID, T, Inst, deps, numDep), Latency(latency),
     InstNumOps(OpNum), SubClassData(subClassData) {}
 public:
   // Get the latency of this atom
@@ -372,6 +393,7 @@ public:
     return cast<Instruction>(getValue()).getOpcode();
   }
 
+  
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAOpInst *A) { return true; }
   static inline bool classof(const HWAtom *A) {

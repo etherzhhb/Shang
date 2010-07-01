@@ -59,11 +59,11 @@ bool ASAPScheduler::runOnBasicBlock(BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
   RC = &getAnalysis<ResourceConfig>();
 
-  ExecStage &State = HI->getStateFor(BB);
-  createAtomList(HI, BB);
+  CurStage = &HI->getStateFor(BB);
+  createAtomList();
 
-  HWAVRoot &EntryRoot = State.getEntryRoot();
-  HWAtom *ExitRoot = &State.getExitRoot();
+  HWAVRoot &EntryRoot = CurStage->getEntryRoot();
+  HWAtom *ExitRoot = &CurStage->getExitRoot();
   EntryRoot.scheduledTo(HI->getTotalCycle());
   //HI->incTotalCycle();
   // Schedule EntryRoot
@@ -74,8 +74,10 @@ bool ASAPScheduler::runOnBasicBlock(BasicBlock &BB) {
     // Find all ready atoms
 
     // For each ready atoms
-    while(HWAtom *ReadyAtom = getReadyAtoms(HI->getTotalCycle())){
-      if (HWAPreBind *PreBind = dyn_cast<HWAPreBind>(ReadyAtom)) {
+    for(ListIt ReadyIt = getReadyAtoms(HI->getTotalCycle());
+        ReadyIt != list_end();  ReadyIt = getReadyAtoms(HI->getTotalCycle())){
+
+      if (HWAPreBind *PreBind = dyn_cast<HWAPreBind>(*ReadyIt)) {
         HWResource::ResIdType ResId = PreBind->getResourceId();
         // Is the resource available?
         unsigned readyCyc = getReadyCycle(ResId);
@@ -87,12 +89,12 @@ bool ASAPScheduler::runOnBasicBlock(BasicBlock &BB) {
         //
         rememberReadyCycle(ResId, HI->getTotalCycle() + PreBind->getLatency());
       }
-      ReadyAtom->scheduledTo(HI->getTotalCycle());
+      (*ReadyIt)->scheduledTo(HI->getTotalCycle());
 
-      DEBUG(ReadyAtom->print(dbgs()));
+      DEBUG((*ReadyIt)->print(dbgs()));
       DEBUG(dbgs() << " scheduled\n");
       // Remove the exist atom
-      removeFromList(ReadyAtom);
+      removeFromList(ReadyIt);
     }
 
     // Advance the state
@@ -100,7 +102,7 @@ bool ASAPScheduler::runOnBasicBlock(BasicBlock &BB) {
   }
   //// schedule the state end;
 
-  DEBUG(State.print(dbgs()));
+  DEBUG(CurStage->print(dbgs()));
   return false;
 }
 

@@ -30,16 +30,22 @@ using namespace esyn;
 
 //===----------------------------------------------------------------------===//
 bool Scheduler::isOperationFinish(const HWAtom *Atom, unsigned CurSlot) {
-  if (const HWAOpInst *Op = dyn_cast<HWAOpInst>(Atom))
-    return Op->getSlot() + Op->getLatency() <= CurSlot;
-
-  return Atom->getSlot() <= CurSlot;
+  return Atom->getSlot() +Atom->getLatency() <= CurSlot;
 }
 
-bool Scheduler::isAllDepsOpFin(const HWAtom *Atom, unsigned CurSlot) {
-  for (HWAtom::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
+bool Scheduler::isAllDepsOpFin(const HWActive *Atom, unsigned CurSlot) {
+  for (HWActive::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
       I != E; ++I)
     if (!isOperationFinish(*I, CurSlot))
+      return false;
+
+  return true;
+}
+
+bool Scheduler::isAllDepsScheduled(const HWActive *Atom) {
+  for (HWActive::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
+    I != E; ++I)
+    if (!(*I)->isScheduled())
       return false;
 
   return true;
@@ -63,28 +69,26 @@ void Scheduler::rememberReadyCycle(HWResource::ResIdType ResId,
   ResCycMap[ResId] = ReadyCycle;
 }
 
-HWAtom *Scheduler::getReadyAtoms(unsigned Cycle) {
+Scheduler::ListIt Scheduler::getReadyAtoms(unsigned Cycle) {
   for (SchedAtomVec::iterator I = ScheduleAtoms.begin(),
       E = ScheduleAtoms.end(); I != E; ++I) {
-    HWAtom *atom = *I;
+    HWActive *atom = *I;
     if (isAllDepsOpFin(atom, Cycle)) {
       DEBUG(atom->print(dbgs()));
       DEBUG(dbgs() << " is Ready\n");
-      return atom;
+      return I;
     }
   }
-  return 0;
+  return ScheduleAtoms.end();
 }
 
-void Scheduler::removeFromList(HWAtom *Atom) {
-  SchedAtomVec::iterator at = std::find(ScheduleAtoms.begin(),
-                                        ScheduleAtoms.end(), Atom);
-  ScheduleAtoms.erase(at);
+void Scheduler::removeFromList(ListIt At) {
+  ScheduleAtoms.erase(At);
 }
 
-void esyn::Scheduler::createAtomList(HWAtomInfo *HI, BasicBlock &BB) {
-  ExecStage &Stage = HI->getStateFor(BB);
-  for (usetree_iterator I = Stage.usetree_begin(), E = Stage.usetree_end();
+void esyn::Scheduler::createAtomList() {
+  for (usetree_iterator I = CurStage->usetree_begin(), E = CurStage->usetree_end();
       I != E; ++I)
-    ScheduleAtoms.push_back(*I);
+    if (HWActive *A = dyn_cast<HWActive>(*I))    
+      ScheduleAtoms.push_back(A);
 }
