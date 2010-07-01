@@ -147,6 +147,7 @@ public:
   HWAtom *use_back() const { return UseList.back(); }
 
   bool use_empty() { return UseList.empty(); }
+  size_t num_use() const { return UseList.size(); }
   //}
 
   virtual void reset() { SchedSlot = UINT32_MAX  >> 1; }
