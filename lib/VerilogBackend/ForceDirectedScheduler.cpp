@@ -82,7 +82,11 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   double getRangeDG(HWAPostBind *A, unsigned start, unsigned end/*included*/);
 
   double computeSelfForceAt(HWAOpInst *OpInst, double step);
+  /// This function will invalid the asap step of all node in
+  /// successor tree
   double computeSuccForceAt(HWAOpInst *OpInst, double step);
+  /// This function will invalid the alap step of all node in
+  /// predecessor tree
   double computePredForceAt(HWAOpInst *OpInst, double step);
 
   void reset();
@@ -140,19 +144,14 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       double SelfForce = computeSelfForceAt(A, i);
       DEBUG(dbgs() << " Self Force: " << SelfForce);
 
-      // Update time frame
-      buildASAPStep(A, i);
-      // Make schedule to i.
-      buildALAPStep(A, i + A->getLatency());
-
+      // Compute the forces.
       double PredForce = computePredForceAt(A, i);
       DEBUG(dbgs() << " Pred Force: " << PredForce);
-
       double SuccForce = computeSuccForceAt(A, i);
       DEBUG(dbgs() << " Succ Force: " << SuccForce);
-
       double Force = SelfForce + PredForce + SuccForce;
 
+      // Do us find a better step?
       if (Force < bestStep.second)
         bestStep = std::make_pair(i, Force);
 
@@ -219,8 +218,8 @@ double FDLScheduler::computeSelfForceAt(HWAOpInst *OpInst, double step) {
 }
 
 double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
-  // All successor will start when this operation finish
-  unsigned newStep = step + OpInst->getLatency();
+  // Update time frame
+  buildASAPStep(OpInst, step);
   
   double ret = 0;
 
@@ -241,8 +240,8 @@ double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
 
 
 double FDLScheduler::computePredForceAt(HWAOpInst *OpInst, double step) {
-  // All successor will start when this operation finish
-  unsigned newStep = step + OpInst->getLatency();
+  // Make schedule to step.
+  buildALAPStep(OpInst, step + OpInst->getLatency());
 
   double ret = 0;
 
