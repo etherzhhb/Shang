@@ -22,6 +22,7 @@
 #include "HWAtomInfo.h"
 #include "HWAtomPasses.h"
 
+#include "llvm/ADT/PriorityQueue.h"
 
 #define DEBUG_TYPE "vbe-fd-schedule"
 #include "llvm/Support/Debug.h"
@@ -32,7 +33,6 @@ using namespace esyn;
 namespace {
 
 struct FDLScheduler : public BasicBlockPass, public Scheduler {
-
   HWAtomInfo *HI;
   ResourceConfig *RC;
 
@@ -61,7 +61,8 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 
-  void printTimeFrame(raw_ostream &OS) const ;
+  void printTimeFrame(raw_ostream &OS) const;
+  void dumpTimeFrame() const;
   //}
 
   /// @name Distribuition Graphs
@@ -76,9 +77,11 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   void printDG(raw_ostream &OS) const ;
   //}
 
+  /// @name Force computation
+  //{
   std::map<HWAPostBind*, double> AvgDG;
   void buildAvgDG();
-  double getAvgDG(HWAPostBind *A);
+  double getAvgDG(HWAPostBind *A) {  return AvgDG[A]; }
   double getRangeDG(HWAPostBind *A, unsigned start, unsigned end/*included*/);
 
   double computeSelfForceAt(HWAOpInst *OpInst, double step);
@@ -88,6 +91,10 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   /// This function will invalid the alap step of all node in
   /// predecessor tree
   double computePredForceAt(HWAOpInst *OpInst, double step);
+
+  unsigned findBestStep(HWAOpInst *A);
+  //}
+
 
   void reset();
   void clear();
@@ -136,38 +143,19 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
     HWAOpInst *A = *list_begin();
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " Active to schedule:-------------------\n");
-    // Remember the best Step.
-    std::pair<unsigned, double> bestStep = std::make_pair(0, 1e8);
-    // For each possible step:
-    for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-      DEBUG(dbgs() << "At Step " << i);
-      double SelfForce = computeSelfForceAt(A, i);
-      DEBUG(dbgs() << " Self Force: " << SelfForce);
 
-      // Compute the forces.
-      double PredForce = computePredForceAt(A, i);
-      DEBUG(dbgs() << " Pred Force: " << PredForce);
-      double SuccForce = computeSuccForceAt(A, i);
-      DEBUG(dbgs() << " Succ Force: " << SuccForce);
-      double Force = SelfForce + PredForce + SuccForce;
-
-      // Do us find a better step?
-      if (Force < bestStep.second)
-        bestStep = std::make_pair(i, Force);
-
-      DEBUG(dbgs() << '\n');
-    }
-    
-    A->scheduledTo(bestStep.first);
-    // Dirty hack, Recover the time frame.
+    // Schedule to the best step.
+    A->scheduledTo(findBestStep(A));
+    // Recover the time frame by force rebuild
+    AtomToTF[A] = std::make_pair(0, UINT32_MAX);
     buildASAPStep(A, A->getSlot());
     buildALAPStep(A, A->getSlot() + A->getLatency());
 
     removeFromList(list_begin());
 
     DEBUG(dbgs() << " After schedule:-------------------\n");
-    DEBUG(printTimeFrame(dbgs()));
-    
+    DEBUG(dumpTimeFrame());
+    // Rebuild DG.
     buildDGraph();
     buildAvgDG();
     
@@ -177,6 +165,33 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
 
   return false;
+}
+
+
+unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
+  // Remember the best Step and lowest force.
+  std::pair<unsigned, double> bestStep = std::make_pair(0, 1e8);
+  // For each possible step:
+  for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
+    // Compute the forces.
+    DEBUG(dbgs() << "At Step " << i);
+    double SelfForce = computeSelfForceAt(A, i);
+    // The follow function will invalid the time frame.
+    DEBUG(dbgs() << " Self Force: " << SelfForce);
+    double PredForce = computePredForceAt(A, i);
+    DEBUG(dbgs() << " Pred Force: " << PredForce);
+    double SuccForce = computeSuccForceAt(A, i);
+    DEBUG(dbgs() << " Succ Force: " << SuccForce);
+    double Force = SelfForce + PredForce + SuccForce;
+
+    // Do us find a better step?
+    if (Force < bestStep.second)
+      bestStep = std::make_pair(i, Force);
+
+    DEBUG(dbgs() << '\n');
+  }
+
+  return bestStep.first;
 }
 
 void FDLScheduler::buildAvgDG() {
@@ -192,11 +207,6 @@ void FDLScheduler::buildAvgDG() {
       AvgDG[A] = res;
     }
 }
-
-double FDLScheduler::getAvgDG(HWAPostBind *A) {
-  return AvgDG[A];
-}
-
 
 double FDLScheduler::getRangeDG(HWAPostBind *A,
                                 unsigned start, unsigned end/*included*/) {
@@ -220,7 +230,7 @@ double FDLScheduler::computeSelfForceAt(HWAOpInst *OpInst, double step) {
 double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
   // Update time frame
   buildASAPStep(OpInst, step);
-  
+
   double ret = 0;
 
   for (usetree_iterator I = usetree_iterator::begin(OpInst),
@@ -228,13 +238,16 @@ double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
     if (*I == OpInst)
       continue;
     
-    if (HWAPostBind *U = dyn_cast<HWAPostBind>(*I)) {
-      double UF = getRangeDG(U, getASAPStep(U), getALAPStep(U)) - getAvgDG(U);
-      ret += UF;
-      // Dirty hack, invalid the time frame of U
-      AtomToTF[OpInst] = std::make_pair(0, UINT32_MAX);
+    if (HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
+      if (HWAPostBind *P = dyn_cast<HWAPostBind>(U))
+        ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
+
+      // Dirty hack, invalid the asap step, because we change it.
+      if (!U->isScheduled())      
+        AtomToTF[U] = std::make_pair(0, getALAPStep(U));
     }
   }
+
   return ret;
 }
 
@@ -250,14 +263,16 @@ double FDLScheduler::computePredForceAt(HWAOpInst *OpInst, double step) {
     if (*I == OpInst)
       continue;
 
-    if (HWAPostBind *U = dyn_cast<HWAPostBind>(*I)) {
-      double UF = getRangeDG(U, getASAPStep(U), getALAPStep(U)) - getAvgDG(U);
-      ret += UF;
-      // Dirty hack, invalid the time frame of U
-      AtomToTF[OpInst] = std::make_pair(0, UINT32_MAX);
+    if (HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
+      if (HWAPostBind *P = dyn_cast<HWAPostBind>(U))
+        ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
+
+      // Dirty hack, invalid the alap step, because we change it.
+      if (!U->isScheduled())  
+        AtomToTF[U] = std::make_pair(getASAPStep(U), UINT32_MAX);
     }
   }
-  
+
   return ret;
 }
 
@@ -324,7 +339,7 @@ void FDLScheduler::buildASAPStep(HWAtom *A, unsigned step) {
       step = A->getSlot();  
 
     // A is not ready at this step.
-    if (ExistStep >= step)
+    if (ExistStep > step)
       return;
 
     AtomToTF[OI].first = step;
@@ -349,7 +364,7 @@ void FDLScheduler::buildALAPStep(HWAtom *A, unsigned step) {
       step = A->getSlot();  
 
     // A is not ready at this step or alreay schedule to this step.
-    if (ExistStep <= step)
+    if (ExistStep < step)
       return;
 
     AtomToTF[OI].second = step;
@@ -366,7 +381,7 @@ void FDLScheduler::buildTimeFrame() {
   HWAOpInst &Exit = CurStage->getExitRoot();
   unsigned ExitStep = getASAPStep(&Exit);
   buildALAPStep(&Exit, ExitStep);
-  DEBUG(printTimeFrame(dbgs()));
+  DEBUG(dumpTimeFrame());
 }
 
 void FDLScheduler::clear() {
@@ -384,10 +399,14 @@ void FDLScheduler::printTimeFrame(raw_ostream &OS) const {
          << "} " <<  getTimeFrame(A) << "\n";
     }
   }
-  
+}
+
+void FDLScheduler::dumpTimeFrame() const {
+  printTimeFrame(dbgs());
 }
 
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
+
 
 Pass *esyn::createFDLSchedulePass() {
   return new FDLScheduler();
