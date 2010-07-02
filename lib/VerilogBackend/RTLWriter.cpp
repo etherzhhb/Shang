@@ -168,10 +168,10 @@ void RTLWriter::emitFunctionSignature(Function &F) {
   } else {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
     getModDeclBuffer()
-      << VLang::printType(RetTy, false, "return_value", "reg ", "output ")
+      << VLang::printType(RetTy, false, "return_value", "wire ", "output ")
       << ",\n";
     // reset the register
-    vlang->resetRegister(ResetBlock, "return_value",
+    vlang->resetRegister(getResetBlockBuffer(), "return_value",
                          cast<IntegerType>(RetTy)->getBitWidth());
   }
 }
