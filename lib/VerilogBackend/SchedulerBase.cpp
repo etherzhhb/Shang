@@ -86,7 +86,7 @@ void Scheduler::removeFromList(ListIt At) {
   ScheduleAtoms.erase(At);
 }
 
-void esyn::Scheduler::createAtomList() {
+void Scheduler::createAtomList() {
   for (usetree_iterator I = CurStage->usetree_begin(), E = CurStage->usetree_end();
       I != E; ++I)
     if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))    

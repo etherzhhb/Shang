@@ -31,6 +31,13 @@ using namespace llvm;
 using namespace esyn;
 
 namespace {
+struct FDLScheduler;
+
+struct fds_sort {
+  FDLScheduler *S;
+  fds_sort(FDLScheduler *s) : S(s) {}
+  bool operator() (const HWAOpInst* LHS, const HWAOpInst* RHS) const;
+};
 
 struct FDLScheduler : public BasicBlockPass, public Scheduler {
   HWAtomInfo *HI;
@@ -84,17 +91,22 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   double getAvgDG(HWAPostBind *A) {  return AvgDG[A]; }
   double getRangeDG(HWAPostBind *A, unsigned start, unsigned end/*included*/);
 
-  double computeSelfForceAt(HWAOpInst *OpInst, double step);
+  double computeSelfForceAt(HWAOpInst *OpInst, unsigned step);
   /// This function will invalid the asap step of all node in
   /// successor tree
-  double computeSuccForceAt(HWAOpInst *OpInst, double step);
+  double computeSuccForceAt(HWAOpInst *OpInst, unsigned step);
   /// This function will invalid the alap step of all node in
   /// predecessor tree
-  double computePredForceAt(HWAOpInst *OpInst, double step);
+  double computePredForceAt(HWAOpInst *OpInst, unsigned step);
 
   unsigned findBestStep(HWAOpInst *A);
   //}
 
+  /// @name PriorityQueue
+  //{
+  PriorityQueue<HWAOpInst*, std::vector<HWAOpInst*>, fds_sort> PQueue;
+  void fillPQueue();
+  //}
 
   void reset();
   void clear();
@@ -102,7 +114,8 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   /// @name Common pass interface
   //{
   static char ID;
-  FDLScheduler() : BasicBlockPass(&ID), Scheduler(), HI(0), RC(0) {}
+  FDLScheduler()
+    : BasicBlockPass(&ID), Scheduler(), HI(0), RC(0), PQueue(fds_sort(this)) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -111,6 +124,12 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
 };
 } //end namespace
 
+//===----------------------------------------------------------------------===//
+bool fds_sort::operator()(const HWAOpInst* LHS, const HWAOpInst* RHS) const {
+  return LHS < RHS;
+}
+
+//===----------------------------------------------------------------------===//
 char FDLScheduler::ID = 0;
 
 void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -119,12 +138,19 @@ void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
 }
 
+void FDLScheduler::fillPQueue() {
+  for (usetree_iterator I = CurStage->usetree_begin(), E = CurStage->usetree_end();
+      I != E; ++I)
+    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))    
+      PQueue.push(A);
+}
+
 bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HI = &getAnalysis<HWAtomInfo>();
   CurStage = &(HI->getStateFor(BB));
-  
-  createAtomList();
+
+  fillPQueue();
 
   HWAVRoot &EntryRoot = CurStage->getEntryRoot();
   EntryRoot.scheduledTo(HI->getTotalCycle());
@@ -138,20 +164,26 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   buildDGraph();
   buildAvgDG();
 
-  while (!isListEmpty()) {
+  while (!PQueue.empty()) {
     // TODO: Short the list
-    HWAOpInst *A = *list_begin();
+    HWAOpInst *A = PQueue.top();
+    PQueue.pop();
+
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " Active to schedule:-------------------\n");
-
+    
+    // TODO: Do check if this step is valid for others constrain.
+    unsigned step = getASAPStep(A);
+    if (getTimeFrame(A) != 1) {
+      step = findBestStep(A);
+      AtomToTF[A] = std::make_pair(0, UINT32_MAX);
+    }
+    
     // Schedule to the best step.
-    A->scheduledTo(findBestStep(A));
+    A->scheduledTo(step);
     // Recover the time frame by force rebuild
-    AtomToTF[A] = std::make_pair(0, UINT32_MAX);
     buildASAPStep(A, A->getSlot());
     buildALAPStep(A, A->getSlot() + A->getLatency());
-
-    removeFromList(list_begin());
 
     DEBUG(dbgs() << " After schedule:-------------------\n");
     DEBUG(dumpTimeFrame());
@@ -219,7 +251,7 @@ double FDLScheduler::getRangeDG(HWAPostBind *A,
   return ret;
 }
 
-double FDLScheduler::computeSelfForceAt(HWAOpInst *OpInst, double step) {
+double FDLScheduler::computeSelfForceAt(HWAOpInst *OpInst, unsigned step) {
   if (HWAPostBind *A = dyn_cast<HWAPostBind>(OpInst))  
     return getDGraphAt(step, A->getResClass()) - getAvgDG(A);
 
@@ -227,8 +259,9 @@ double FDLScheduler::computeSelfForceAt(HWAOpInst *OpInst, double step) {
   return 0.0;
 }
 
-double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
-  // Update time frame
+double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, unsigned step) {
+  // Force update time frame
+  AtomToTF[OpInst] = std::make_pair(0, getALAPStep(OpInst));
   buildASAPStep(OpInst, step);
 
   double ret = 0;
@@ -252,8 +285,9 @@ double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
 }
 
 
-double FDLScheduler::computePredForceAt(HWAOpInst *OpInst, double step) {
-  // Make schedule to step.
+double FDLScheduler::computePredForceAt(HWAOpInst *OpInst, unsigned step) {
+  // Force update time frame
+  AtomToTF[OpInst] = std::make_pair(getASAPStep(OpInst), UINT32_MAX);
   buildALAPStep(OpInst, step + OpInst->getLatency());
 
   double ret = 0;
@@ -339,7 +373,7 @@ void FDLScheduler::buildASAPStep(HWAtom *A, unsigned step) {
       step = A->getSlot();  
 
     // A is not ready at this step.
-    if (ExistStep > step)
+    if (ExistStep >= step)
       return;
 
     AtomToTF[OI].first = step;
@@ -364,7 +398,7 @@ void FDLScheduler::buildALAPStep(HWAtom *A, unsigned step) {
       step = A->getSlot();  
 
     // A is not ready at this step or alreay schedule to this step.
-    if (ExistStep < step)
+    if (ExistStep <= step)
       return;
 
     AtomToTF[OI].second = step;
@@ -387,6 +421,8 @@ void FDLScheduler::buildTimeFrame() {
 void FDLScheduler::clear() {
   AtomToTF.clear();
   DGraph.clear();
+  AvgDG.clear();
+  PQueue.clear();
 }
 
 void FDLScheduler::printTimeFrame(raw_ostream &OS) const {
