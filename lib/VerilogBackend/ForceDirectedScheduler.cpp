@@ -76,10 +76,10 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   void printDG(raw_ostream &OS) const ;
   //}
 
-  std::map<HWAOpInst*, double> AvgDG;
+  std::map<HWAPostBind*, double> AvgDG;
   void buildAvgDG();
-  double getAvgDG(HWAOpInst *A);
-  double getRangeDG(HWAOpInst *A, unsigned start, unsigned end/*included*/);
+  double getAvgDG(HWAPostBind *A);
+  double getRangeDG(HWAPostBind *A, unsigned start, unsigned end/*included*/);
 
   double computeSelfForceAt(HWAOpInst *OpInst, double step);
   double computeSuccForceAt(HWAOpInst *OpInst, double step);
@@ -124,11 +124,10 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       AtomToTF[OpInst] = std::make_pair(0, UINT32_MAX);
 
   buildTimeFrame();
+  buildDGraph();
+  buildAvgDG();
 
   while (!isListEmpty()) {
-    buildDGraph();
-    buildAvgDG();
-
     // TODO: Short the list
     HWAOpInst *A = *list_begin();
     DEBUG(A->print(dbgs()));
@@ -162,18 +161,20 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
     
     A->scheduledTo(bestStep.first);
     // Dirty hack, Recover the time frame.
-    // Update time frame
     buildASAPStep(A, A->getSlot());
-    // Make schedule to i.
     buildALAPStep(A, A->getSlot() + A->getLatency());
 
     removeFromList(list_begin());
 
     DEBUG(dbgs() << " After schedule:-------------------\n");
     DEBUG(printTimeFrame(dbgs()));
+    
+    buildDGraph();
+    buildAvgDG();
+    
     DEBUG(dbgs() << "\n\n\n");
   }
-  
+
   HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
 
   return false;
@@ -182,7 +183,8 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
 void FDLScheduler::buildAvgDG() {
   for (usetree_iterator I = CurStage->usetree_begin(),
       E = CurStage->usetree_end(); I != E; ++I)
-    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
+    // We only care about the utilization of prebind resource. 
+    if (HWAPostBind *A = dyn_cast<HWAPostBind>(*I)) {
       double res = 0.0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
         res += getDGraphAt(i, A->getResClass());
@@ -192,12 +194,12 @@ void FDLScheduler::buildAvgDG() {
     }
 }
 
-double FDLScheduler::getAvgDG(HWAOpInst *A) {
+double FDLScheduler::getAvgDG(HWAPostBind *A) {
   return AvgDG[A];
 }
 
 
-double FDLScheduler::getRangeDG(HWAOpInst *A,
+double FDLScheduler::getRangeDG(HWAPostBind *A,
                                 unsigned start, unsigned end/*included*/) {
   double range = end - start + 1;
   double ret = 0.0;
@@ -209,7 +211,11 @@ double FDLScheduler::getRangeDG(HWAOpInst *A,
 }
 
 double FDLScheduler::computeSelfForceAt(HWAOpInst *OpInst, double step) {
-  return getDGraphAt(step, OpInst->getResClass()) - getAvgDG(OpInst);
+  if (HWAPostBind *A = dyn_cast<HWAPostBind>(OpInst))  
+    return getDGraphAt(step, A->getResClass()) - getAvgDG(A);
+
+  // The force about the pre-bind resoure dose not matter.
+  return 0.0;
 }
 
 double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
@@ -223,7 +229,7 @@ double FDLScheduler::computeSuccForceAt(HWAOpInst *OpInst, double step) {
     if (*I == OpInst)
       continue;
     
-    if (HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
+    if (HWAPostBind *U = dyn_cast<HWAPostBind>(*I)) {
       double UF = getRangeDG(U, getASAPStep(U), getALAPStep(U)) - getAvgDG(U);
       ret += UF;
       // Dirty hack, invalid the time frame of U
@@ -245,7 +251,7 @@ double FDLScheduler::computePredForceAt(HWAOpInst *OpInst, double step) {
     if (*I == OpInst)
       continue;
 
-    if (HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
+    if (HWAPostBind *U = dyn_cast<HWAPostBind>(*I)) {
       double UF = getRangeDG(U, getASAPStep(U), getALAPStep(U)) - getAvgDG(U);
       ret += UF;
       // Dirty hack, invalid the time frame of U
@@ -281,7 +287,8 @@ void FDLScheduler::buildDGraph() {
   DGraph.clear();
   for (usetree_iterator I = CurStage->usetree_begin(),
       E = CurStage->usetree_end(); I != E; ++I){
-    if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
+    // We only try to balance the post bind resource.
+    if (HWAPostBind *OpInst = dyn_cast<HWAPostBind>(*I)) {
       if (OpInst->getResClass() == HWResource::Trivial)
         continue;
       
