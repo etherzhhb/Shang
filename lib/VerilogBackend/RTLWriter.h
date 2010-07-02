@@ -146,7 +146,7 @@ class RTLWriter : public FunctionPass {
   void visitIntToPtrInst(HWAPostBind &A)  { }
   void visitBitCastInst(HWAPostBind &A)   { }
 
-  void visitSelectInst(HWAPostBind &A){}
+  void visitSelectInst(HWAPostBind &A);
   void visitCallInst (HWAPostBind &A){}
   void visitInlineAsm(HWAPostBind &A){}
   bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee){}

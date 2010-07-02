@@ -93,7 +93,7 @@ std::string VLang::printConstantInt(uint64_t value,
   else{
     std::stringstream ss;
     ss<<std::hex<<value;
-    unsigned int uselength=(bitwidth/4)+(((bitwidth%3)==0)?0:1);
+    unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
     std::string sout=ss.str();
     if(uselength<sout.length())
       sout=sout.substr(sout.length()-uselength,uselength);

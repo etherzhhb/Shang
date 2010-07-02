@@ -550,6 +550,12 @@ void esyn::RTLWriter::visitBinaryOperator(HWAPostBind &A) {
   DataPath << getAsOperand(A.getOperand(1)) << ";\n";
 }
 
+void esyn::RTLWriter::visitSelectInst(HWAPostBind &A) {
+  DataPath << getAsOperand(A.getOperand(0)) << " ? "
+           << getAsOperand(A.getOperand(1)) << " : "
+           << getAsOperand(A.getOperand(2)) << ";\n";
+}
+
 void RTLWriter::visitTruncInst(HWAPostBind &A) {
   TruncInst &I = A.getInst<TruncInst>();
   const IntegerType *Ty = cast<IntegerType>(I.getType());

@@ -51,7 +51,6 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   /// @name TimeFrame
   //{
   TimeFrameMapType AtomToTF;
-  void buildTimeFrame();
 
   void buildASAPStep(const HWAtom *A, unsigned step);
   unsigned getASAPStep(const HWAOpInst *A) const {
@@ -126,11 +125,16 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
 
 //===----------------------------------------------------------------------===//
 bool fds_sort::operator()(const HWAOpInst* LHS, const HWAOpInst* RHS) const {
-  unsigned LHSTF = FDS->getTimeFrame(LHS), RHSTF = FDS->getTimeFrame(RHS);
   // Schedule the low mobility nodes first.
-  if (LHSTF < RHSTF)
-    return true;
+  if (FDS->getTimeFrame(LHS) > FDS->getTimeFrame(RHS))
+    return true; // Place RHS first.
   
+  unsigned LHSLatency = FDS->getASAPStep(LHS);
+  unsigned RHSLatency = FDS->getASAPStep(RHS);
+  // Schedule as soon as possible?
+  if (LHSLatency < RHSLatency) return true;
+  if (LHSLatency > RHSLatency) return false;
+
   return false;
 }
 
@@ -156,15 +160,21 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   CurStage = &(HI->getStateFor(BB));
 
 
-  HWAVRoot &EntryRoot = CurStage->getEntryRoot();
-  EntryRoot.scheduledTo(HI->getTotalCycle());
+  // Build the time frame
+  HWAVRoot &Entry = CurStage->getEntryRoot();
+  Entry.scheduledTo(HI->getTotalCycle());
 
   for (usetree_iterator I = CurStage->usetree_begin(),
       E = CurStage->usetree_end(); I != E; ++I)
     if (const HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I))
       AtomToTF[OpInst] = std::make_pair(0, UINT32_MAX);
 
-  buildTimeFrame();
+  buildASAPStep(&Entry, Entry.getSlot()); 
+  HWAOpInst &Exit = CurStage->getExitRoot();
+  unsigned ExitStep = getASAPStep(&Exit);
+  buildALAPStep(&Exit, ExitStep);
+  DEBUG(dumpTimeFrame());
+
   buildDGraph();
   buildAvgDG();
 
@@ -413,16 +423,6 @@ void FDLScheduler::buildALAPStep(const HWAtom *A, unsigned step) {
   for (HWAtom::const_dep_iterator I = A->dep_begin(), E = A->dep_end();
       I != E; ++I)
     buildALAPStep(*I, step);
-}
-
-void FDLScheduler::buildTimeFrame() {
-  HWAVRoot &Entry = CurStage->getEntryRoot();
-  // Build the time frame
-  buildASAPStep(&Entry, Entry.getSlot()); 
-  HWAOpInst &Exit = CurStage->getExitRoot();
-  unsigned ExitStep = getASAPStep(&Exit);
-  buildALAPStep(&Exit, ExitStep);
-  DEBUG(dumpTimeFrame());
 }
 
 void FDLScheduler::clear() {
