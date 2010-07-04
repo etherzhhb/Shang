@@ -242,7 +242,9 @@ typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
 class HWAPassive : public HWAtom {
 protected:
   HWAPassive(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
+    Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {
+    scheduledTo(getRefVal()->getSlot() + getRefVal()->getLatency());
+  }
 public:
 
   // The referenced value.
@@ -374,6 +376,17 @@ public:
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
+
+  template<class InstTy>
+  const InstTy &getInst() const { return cast<InstTy>(getValue()); }
+
+  Value *getIOperand(unsigned idx) {
+    return getInst<Instruction>().getOperand(idx);
+  }
+
+  Value *getIOperand(unsigned idx) const {
+    return getInst<Instruction>().getOperand(idx);
+  }
 
   size_t getInstNumOps () const { return InstNumOps; }
 

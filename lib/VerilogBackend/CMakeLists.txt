@@ -4,10 +4,11 @@ add_llvm_target(VerilogBackend
   HWAtom.cpp
   HWAtomInfo.cpp
   ASAPScheduler.cpp
+  CompPathBinding.cpp
   ForceDirectedScheduler.cpp
   VBackend.cpp
   VLang.cpp
-  RegisterReduction.cpp
+  RegisterAllocation.cpp
   RTLWriter.cpp
   SchedulerBase.cpp
   TestbenchWriter.cpp

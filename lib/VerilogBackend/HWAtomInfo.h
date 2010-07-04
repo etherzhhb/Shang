@@ -100,12 +100,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
-  HWAtom *getConstant(Value &V, BasicBlock *Scop);
-
-  HWARegister *getRegister(Value &V, HWAtom *Using);
-
-  HWAtom *getSigned(HWAtom *Using);
-
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
                      size_t OpNum, enum HWResource::ResTypes OpClass,
                      unsigned latency, unsigned ResInst = 0);
@@ -143,7 +137,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   HWAtom *getAtomInState(Value &V, BasicBlock *BB) {
     // Is this not a instruction?
     if (!isa<Instruction>(V))
-      return getConstant(V, BB);
+      return getEntryRoot(BB);
 
     // Now it is an Instruction
     Instruction &Inst = cast<Instruction>(V);
@@ -192,6 +186,16 @@ public:
     assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
     return  At->second;    
   }
+
+  void updateAtomMap(Value &V, HWAtom *A) {
+    ValueToHWAtoms[&V] = A;
+  }
+
+  HWAtom *getConstant(Value &V, BasicBlock *Scop);
+
+  HWARegister *getRegister(Value &V, HWAtom *Using);
+
+  HWAtom *getSigned(HWAtom *Using);
 
   unsigned getTotalCycle() const {
     return totalCycle;

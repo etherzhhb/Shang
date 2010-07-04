@@ -107,12 +107,13 @@ void HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 void HWAtomInfo::visitPHINode(PHINode &I) {
   // PHI node always have no latency
-  HWAtom *Phi = getConstant(I, I.getParent());
-  for (Instruction::op_iterator OI = I.op_begin(), OE = I.op_end();
-      OI != OE; ++OI)
-    // Emit the constants.
-    if (!isa<Instruction>(*OI) && !isa<BasicBlock>(*OI))
-      (void) getConstant(**OI, I.getParent());
+  HWAtom *Phi = getEntryRoot(I.getParent());
+  //getConstant(I, I.getParent());
+  //for (Instruction::op_iterator OI = I.op_begin(), OE = I.op_end();
+  //    OI != OE; ++OI)
+  //  // Emit the constants.
+  //  if (!isa<Instruction>(*OI) && !isa<BasicBlock>(*OI))
+  //    (void) getConstant(**OI, I.getParent());
   
   ValueToHWAtoms.insert(std::make_pair(&I, Phi));
 }
@@ -123,8 +124,6 @@ void HWAtomInfo::visitSelectInst(SelectInst &I) {
 
   // FIXME: Read latency from configure file
   HWAtom *SelAtom = getPostBind(I, Deps, 1, HWResource::Trivial);
-  // Register the result
-  SelAtom = getRegister(I, SelAtom);
 
   ValueToHWAtoms.insert(std::make_pair(&I, SelAtom));
 }
@@ -135,8 +134,6 @@ void HWAtomInfo::visitCastInst(CastInst &I) {
   // CastInst do not have any latency
   // FIXME: Create the AtomReAssign Pass and set the latency to 0
   HWAtom *CastAtom = getPostBind(I, Deps, 1, HWResource::Trivial);
-  // Register the result
-  CastAtom = getRegister(I, CastAtom);
   ValueToHWAtoms.insert(std::make_pair(&I, CastAtom));
 }
 
@@ -155,8 +152,6 @@ void HWAtomInfo::visitLoadInst(LoadInst &I) {
                                 Res->getLatency(), 0);
   // Set as new atom
   SetControlRoot(LoadAtom);
-  // And register the result
-  LoadAtom =  getRegister(I, LoadAtom);
 
   ValueToHWAtoms.insert(std::make_pair(&I, LoadAtom));
 }
@@ -190,9 +185,6 @@ void HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
 
   HWAtom *GEPAtom = getPostBind(I, Deps, 1, HWResource::AddSub);
 
-  // Register the result
-  GEPAtom = getRegister(I, GEPAtom);
-
   ValueToHWAtoms.insert(std::make_pair(&I, GEPAtom));
 }
 
@@ -211,16 +203,14 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
   else // We need to do a subtraction for the comparison.
     T = HWResource::AddSub;
 
-  if (I.isSigned()) {
-    Deps[0] = getSigned(Deps[0]);
-    Deps[1] = getSigned(Deps[1]);
-  }
+  //if (I.isSigned()) {
+  //  Deps[0] = getSigned(Deps[0]);
+  //  Deps[1] = getSigned(Deps[1]);
+  //}
 
   // FIXME: Read latency from configure file
   // 
   HWAtom *CmpAtom = getPostBind(I, Deps, 1, T);
-  // Register it
-  CmpAtom = getRegister(I, CmpAtom);
 
   ValueToHWAtoms.insert(std::make_pair(&I, CmpAtom));
 }
@@ -250,7 +240,7 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
-      Deps[0] = getSigned(Deps[0]);
+      //Deps[0] = getSigned(Deps[0]);
       T = isTrivial ? HWResource::Trivial : HWResource::ASR;
       break;
     case Instruction::LShr:
@@ -264,9 +254,6 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
   }
   
   HWAtom *BinOpAtom = getPostBind(I, Deps, 1, T);
-
-  // Register it
-  BinOpAtom = getRegister(I, BinOpAtom);
 
   ValueToHWAtoms.insert(
     std::make_pair(&I, BinOpAtom));
@@ -296,6 +283,9 @@ HWAtom *HWAtomInfo::getConstant(Value &V, BasicBlock *Scope) {
 }
 
 HWARegister *HWAtomInfo::getRegister(Value &V, HWAtom *Using) {
+  if ((&Using->getValue() == &V) && isa<HWARegister>(Using))
+    return cast<HWARegister>(Using);
+
   FoldingSetNodeID ID;
   ID.AddInteger(atomRegister);
   ID.AddPointer(&V);

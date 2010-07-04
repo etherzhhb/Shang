@@ -51,7 +51,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     //PM.add(createASAPSchedulePass());
     // Resource binding
     // Region Base global resource binding
-    PM.add(createRegisterReductionPass());
+    PM.add(createRegisterAllocationPass());
     //
     PM.add(new RTLWriter(Out));
     PM.add(new TestbenchWriter(Out));

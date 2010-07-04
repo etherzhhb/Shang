@@ -114,10 +114,10 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
 
 void HWAtom::scheduledTo(unsigned slot) {
   SchedSlot = slot;
-  for (use_iterator I = use_begin(), E = use_end(); I != E; ++I) {
-    HWAtom *A = *I;
-    if (HWAPassive *IA = dyn_cast<HWAPassive>(*I))
-      // Schedule the passive atom when this atom finish
-      IA->scheduledTo(slot + getLatency());
-  }
+  //for (use_iterator I = use_begin(), E = use_end(); I != E; ++I) {
+  //  HWAtom *A = *I;
+  //  if (HWAPassive *IA = dyn_cast<HWAPassive>(*I))
+  //    // Schedule the passive atom when this atom finish
+  //    IA->scheduledTo(slot + getLatency());
+  //}
 }

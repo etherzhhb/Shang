@@ -33,7 +33,7 @@ Pass *createASAPSchedulePass();
 Pass *createFDLSchedulePass();
 
 // Reduce un-necessary registers
-Pass *createRegisterReductionPass();
+Pass *createRegisterAllocationPass();
 
 } // end namespace
 

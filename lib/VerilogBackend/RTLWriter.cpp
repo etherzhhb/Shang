@@ -591,8 +591,13 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
   while (&*I != NotPhi) {
     PHINode *PN = cast<PHINode>(I);
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
+    HWAtom *Incoming = HI->getAtomFor(*IV);
+    while (isa<HWARegister>(Incoming) 
+          && Incoming->getSlot() == HI->getStateFor(CurBlock).getExitRoot().getSlot())
+      Incoming = cast<HWARegister>(Incoming)->getRefVal();
+    
     ControlBlock.indent(8 + ind) << getAsOperand(HI->getAtomFor(*I))
-      << " <= " << getAsOperand(HI->getAtomFor(*IV)) << ";\n";      
+      << " <= " << getAsOperand(Incoming) << ";\n";      
     ++I;
   }
 }
