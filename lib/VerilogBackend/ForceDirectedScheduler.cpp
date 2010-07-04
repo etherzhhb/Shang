@@ -46,12 +46,12 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   // Time Frame {asap step, alap step }
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
-  typedef std::map<const HWAOpInst*, TimeFrame> TimeFrameMapType;
+  typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
 
   /// @name TimeFrame
   //{
   TimeFrameMapType AtomToTF;
-
+  unsigned CriticalPathLength;
   void buildASAPStep(const HWAtom *A, unsigned step);
   unsigned getASAPStep(const HWAOpInst *A) const {
     return const_cast<FDLScheduler*>(this)->AtomToTF[A].first;
@@ -98,7 +98,7 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   /// predecessor tree
   double computePredForceAt(const HWAOpInst *OpInst, unsigned step);
 
-  unsigned findBestStep(const HWAOpInst *A);
+  unsigned findBestStep(HWAOpInst *A);
   //}
 
   /// @name PriorityQueue
@@ -129,11 +129,11 @@ bool fds_sort::operator()(const HWAOpInst* LHS, const HWAOpInst* RHS) const {
   if (FDS->getTimeFrame(LHS) > FDS->getTimeFrame(RHS))
     return true; // Place RHS first.
   
-  unsigned LHSLatency = FDS->getASAPStep(LHS);
-  unsigned RHSLatency = FDS->getASAPStep(RHS);
-  // Schedule as soon as possible?
-  if (LHSLatency < RHSLatency) return true;
-  if (LHSLatency > RHSLatency) return false;
+  //unsigned LHSLatency = FDS->getASAPStep(LHS);
+  //unsigned RHSLatency = FDS->getASAPStep(RHS);
+  //// Schedule as soon as possible?
+  //if (LHSLatency < RHSLatency) return true;
+  //if (LHSLatency > RHSLatency) return false;
 
   return false;
 }
@@ -164,15 +164,10 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   HWAVRoot &Entry = CurStage->getEntryRoot();
   Entry.scheduledTo(HI->getTotalCycle());
 
-  for (usetree_iterator I = CurStage->usetree_begin(),
-      E = CurStage->usetree_end(); I != E; ++I)
-    if (const HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I))
-      AtomToTF[OpInst] = std::make_pair(0, UINT32_MAX);
-
   buildASAPStep(&Entry, Entry.getSlot()); 
   HWAOpInst &Exit = CurStage->getExitRoot();
-  unsigned ExitStep = getASAPStep(&Exit);
-  buildALAPStep(&Exit, ExitStep);
+  CriticalPathLength = getASAPStep(&Exit);
+  buildALAPStep(&Exit, CriticalPathLength);
   DEBUG(dumpTimeFrame());
 
   buildDGraph();
@@ -191,25 +186,22 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
     // TODO: Do check if this step is valid for others constrain.
     unsigned step = getASAPStep(A);
     if (getTimeFrame(A) != 1) {
-      TimeFrameMapType TmpMap = AtomToTF;
       step = findBestStep(A);
-      AtomToTF = TmpMap;
-      AtomToTF[A] = std::make_pair(0, UINT32_MAX);
+      A->scheduledTo(step);
       // Recover the time frame by force rebuild
-      buildASAPStep(A, step);
-      buildALAPStep(A, step + A->getLatency());
+      buildASAPStep(&Entry, Entry.getSlot()); 
+      buildALAPStep(&Exit, CriticalPathLength);
+      // Rebuild DG.
+      buildDGraph();
+      buildAvgDG();
       PQueue.reheapify();
+    } else {
+      // Schedule to the best step.
+      A->scheduledTo(step);
     }
-    
-    // Schedule to the best step.
-    A->scheduledTo(step);
 
     DEBUG(dbgs() << " After schedule:-------------------\n");
     DEBUG(dumpTimeFrame());
-    // Rebuild DG.
-    buildDGraph();
-    buildAvgDG();
-    
     DEBUG(dbgs() << "\n\n\n");
   }
 
@@ -219,43 +211,35 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
 }
 
 
-unsigned FDLScheduler::findBestStep(const HWAOpInst *A) {
-  // Remember the best Step and lowest force.
-  unsigned Frame = getTimeFrame(A), FrameStart = getASAPStep(A);
-  SmallVector<double, 8> Forces(Frame);
+unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
+  HWAVRoot &Entry = CurStage->getEntryRoot();
+  HWAOpInst &Exit = CurStage->getExitRoot();
+
+  std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   // For each possible step:
-  for (unsigned i = 0, e = Frame; i != e; ++i) {
-    unsigned ASAPStep = FrameStart + i, ALAPStep = FrameStart + Frame - i - 1; 
+  for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
     // Compute the forces.
-    DEBUG(dbgs() << "At Step " << ASAPStep);
-    double SelfForce = computeSelfForceAt(A, ASAPStep);
+    DEBUG(dbgs() << "At Step " << i);
+    double SelfForce = computeSelfForceAt(A, i);
     // Force update time frame
-    AtomToTF[A] = std::make_pair(0, UINT32_MAX);
-    buildASAPStep(A, ASAPStep);
-    buildALAPStep(A, ALAPStep + A->getLatency());
+    A->scheduledTo(i);
+    // Recover the time frame by force rebuild
+    buildASAPStep(&Entry, Entry.getSlot()); 
+    buildALAPStep(&Exit, CriticalPathLength);
 
     // The follow function will invalid the time frame.
     DEBUG(dbgs() << " Self Force: " << SelfForce);
-    double PredForce = computePredForceAt(A, ALAPStep);
+    double PredForce = computePredForceAt(A, i);
     DEBUG(dbgs() << " Pred Force: " << PredForce);
-    double SuccForce = computeSuccForceAt(A, ASAPStep);
+    double SuccForce = computeSuccForceAt(A, i);
     DEBUG(dbgs() << " Succ Force: " << SuccForce);
-    //double Force = SelfForce + PredForce + SuccForce;
-    Forces[i] += SelfForce + SuccForce;
-    Forces[Frame - i - 1] += PredForce;
+    double Force = SelfForce + PredForce + SuccForce;
+    if (Force < BestStep.second)
+      BestStep = std::make_pair(i, Force);
 
     DEBUG(dbgs() << '\n');
   }
-
-  DEBUG(
-    for (unsigned i = 0, e = Frame; i != e; ++i)
-      dbgs() << "Force at : " << Forces[i] << '\n';
-  ); 
-
-  SmallVector<double, 8>::iterator MimForceAt
-    = std::min_element(Forces.begin(), Forces.end());
-
-  return FrameStart + (MimForceAt - Forces.begin());
+  return BestStep.first;
 }
 
 void FDLScheduler::buildAvgDG() {
@@ -380,49 +364,69 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
 }
 
 void FDLScheduler::buildASAPStep(const HWAtom *A, unsigned step) {
-  if (const HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-    unsigned ExistStep = getASAPStep(OI);
+  typedef HWAtom::const_use_iterator ChildIt;
+  SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
+  DenseMap<const HWAtom*, unsigned> VisitCount;
+  //
+  AtomToTF[A].first = step;
+  WorkStack.push_back(std::make_pair(A, A->use_begin()));
+  //
+  while (!WorkStack.empty()) {
+    const HWAtom *Node = WorkStack.back().first;
+    ChildIt It = WorkStack.back().second;
 
-    // Schedule A to this step.
-    if (A->isScheduled())
-      step = A->getSlot();  
+    if (It == Node->use_end())
+      WorkStack.pop_back();
+    else {
+      const HWAtom *ChildNode = *It;
+      ++WorkStack.back().second;
+      unsigned VC = ++VisitCount[ChildNode];
 
-    // A is not ready at this step.
-    if (ExistStep > step)
-      return;
+      unsigned NewStep = AtomToTF[Node].first + Node->getLatency();
+      if (ChildNode->isScheduled())
+        NewStep = ChildNode->getSlot();
 
-    AtomToTF[OI].first = step;
+      if (VC == 1 || AtomToTF[ChildNode].first < NewStep)
+        AtomToTF[ChildNode].first = NewStep;
+      
+      // Only move forwork when we visit the node from all its deps.
+      if (VC == ChildNode->getNumDeps())
+        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
+    }
   }
-
-  // The successor will be schedule when A is finish
-  step += A->getLatency(); 
-
-  for (HWAtom::const_use_iterator I = A->use_begin(), E = A->use_end();
-      I != E; ++I)
-    buildASAPStep(*I, step);
 }
 
 void FDLScheduler::buildALAPStep(const HWAtom *A, unsigned step) {
-  // The step is the finish time, translate it to start time;
-  step -= A->getLatency(); 
+  typedef HWAtom::const_dep_iterator ChildIt;
+  SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
+  DenseMap<const HWAtom*, unsigned> VisitCount;
+  //
+  AtomToTF[A].second = step;
+  WorkStack.push_back(std::make_pair(A, A->dep_begin()));
+  //
+  while (!WorkStack.empty()) {
+    const HWAtom *Node = WorkStack.back().first;
+    ChildIt It = WorkStack.back().second;
 
-  if (const HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-    unsigned ExistStep = getALAPStep(OI);
+    if (It == Node->dep_end())
+      WorkStack.pop_back();
+    else {
+      const HWAtom *ChildNode = *It;
+      ++WorkStack.back().second;
+      unsigned VC = ++VisitCount[ChildNode];
 
-    // Schedule A to this step.
-    if (A->isScheduled())
-      step = A->getSlot();  
+      unsigned NewStep = AtomToTF[Node].second - ChildNode->getLatency();
+      if (ChildNode->isScheduled())
+        NewStep = ChildNode->getSlot();
 
-    // A is not ready at this step or alreay schedule to this step.
-    if (ExistStep < step)
-      return;
+      if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
+        AtomToTF[ChildNode].second = NewStep;
 
-    AtomToTF[OI].second = step;
+      // Only move forwork when we visit the node from all its deps.
+      if (VC == ChildNode->getNumUses())
+        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+    }
   }
-
-  for (HWAtom::const_dep_iterator I = A->dep_begin(), E = A->dep_end();
-      I != E; ++I)
-    buildALAPStep(*I, step);
 }
 
 void FDLScheduler::clear() {
