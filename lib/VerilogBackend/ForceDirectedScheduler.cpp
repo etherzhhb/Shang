@@ -52,13 +52,13 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   //{
   TimeFrameMapType AtomToTF;
   unsigned CriticalPathLength;
-  void buildASAPStep(const HWAtom *A, unsigned step);
+  void buildASAPStep();
   unsigned getASAPStep(const HWAOpInst *A) const {
     return const_cast<FDLScheduler*>(this)->AtomToTF[A].first;
   }
 
 
-  void buildALAPStep(const HWAtom *A, unsigned step);
+  void buildALAPStep();
   unsigned getALAPStep(const HWAOpInst *A) const { 
     return const_cast<FDLScheduler*>(this)->AtomToTF[A].second;
   }
@@ -164,10 +164,10 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   HWAVRoot &Entry = CurStage->getEntryRoot();
   Entry.scheduledTo(HI->getTotalCycle());
 
-  buildASAPStep(&Entry, Entry.getSlot()); 
+  buildASAPStep(); 
   HWAOpInst &Exit = CurStage->getExitRoot();
   CriticalPathLength = getASAPStep(&Exit);
-  buildALAPStep(&Exit, CriticalPathLength);
+  buildALAPStep();
   DEBUG(dumpTimeFrame());
 
   buildDGraph();
@@ -189,8 +189,8 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       step = findBestStep(A);
       A->scheduledTo(step);
       // Recover the time frame by force rebuild
-      buildASAPStep(&Entry, Entry.getSlot()); 
-      buildALAPStep(&Exit, CriticalPathLength);
+      buildASAPStep(); 
+      buildALAPStep();
       // Rebuild DG.
       buildDGraph();
       buildAvgDG();
@@ -212,9 +212,6 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
 
 
 unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
-  HWAVRoot &Entry = CurStage->getEntryRoot();
-  HWAOpInst &Exit = CurStage->getExitRoot();
-
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   // For each possible step:
   for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
@@ -224,8 +221,8 @@ unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
     // Force update time frame
     A->scheduledTo(i);
     // Recover the time frame by force rebuild
-    buildASAPStep(&Entry, Entry.getSlot()); 
-    buildALAPStep(&Exit, CriticalPathLength);
+    buildASAPStep(); 
+    buildALAPStep();
 
     // The follow function will invalid the time frame.
     DEBUG(dbgs() << " Self Force: " << SelfForce);
@@ -363,13 +360,15 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
   }
 }
 
-void FDLScheduler::buildASAPStep(const HWAtom *A, unsigned step) {
+void FDLScheduler::buildASAPStep() {
+  HWAVRoot *Root = &CurStage->getEntryRoot();
+
   typedef HWAtom::const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
-  AtomToTF[A].first = step;
-  WorkStack.push_back(std::make_pair(A, A->use_begin()));
+  AtomToTF[Root].first = Root->getSlot();
+  WorkStack.push_back(std::make_pair(Root, Root->use_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
@@ -396,13 +395,15 @@ void FDLScheduler::buildASAPStep(const HWAtom *A, unsigned step) {
   }
 }
 
-void FDLScheduler::buildALAPStep(const HWAtom *A, unsigned step) {
+void FDLScheduler::buildALAPStep() {
+  HWAPostBind *Root = &CurStage->getExitRoot();
+
   typedef HWAtom::const_dep_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
-  AtomToTF[A].second = step;
-  WorkStack.push_back(std::make_pair(A, A->dep_begin()));
+  AtomToTF[Root].second = CriticalPathLength;
+  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
