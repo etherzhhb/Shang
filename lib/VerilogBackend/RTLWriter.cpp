@@ -427,9 +427,9 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 
     DataPath.indent(6) << Mode;
     if (Inst->getOpcode() == Instruction::Sub)
-      SeqCompute << " <= 1'b0;\n";
+      DataPath << " <= 1'b0;\n";
     else
-      SeqCompute << " <= 1'b1;\n";
+      DataPath << " <= 1'b1;\n";
 
     DataPath.indent(6) <<  OpA << " <= "
       << getAsOperand(A->getOperand(0)) << ";\n";
