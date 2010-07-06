@@ -32,8 +32,12 @@ Pass *createASAPSchedulePass();
 // Force-directed Scheduler
 Pass *createFDLSchedulePass();
 
-// Reduce un-necessary registers
+// Registers Allocation
 Pass *createRegisterAllocationPass();
+
+
+// Compatibility Path Based Binding
+Pass *createCompPathBindingPass();
 
 } // end namespace
 

@@ -175,6 +175,8 @@ public:
   virtual void print(raw_ostream &O, const Module *M) const;
   //}
 
+  HWAPreBind *bindToResource(HWAPostBind &PostBind, unsigned Instance);
+
   ExecStage &getStateFor(BasicBlock &BB) const {
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");

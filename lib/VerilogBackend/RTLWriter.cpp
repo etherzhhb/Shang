@@ -357,6 +357,9 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   case HWResource::MemoryBus:
     opMemBus(PreBind);
     break;
+  case HWResource::AddSub:
+    opAddSub(PreBind);
+    break;
   }
 }
 
@@ -369,10 +372,83 @@ void RTLWriter::emitResources() {
     switch (Res.getResourceType()) {
     case HWResource::MemoryBus:
       emitMemBus(cast<HWMemBus>(Res), I->second);
+      break;
+    case HWResource::AddSub:
+      emitAddSub(cast<HWAddSub>(Res), I->second);
+      break;
     default:
-      return;
+      break;
     }
   }
+}
+
+void RTLWriter::opAddSub(HWAPreBind *PreBind) {
+  std::string Name = getAsOperand(PreBind);
+  // Declare the signal
+  vlang->declSignal(getSignalDeclBuffer(), Name,
+    vlang->getBitWidth(PreBind->getValue()), 0, false);
+
+  DataPath.indent(2) <<  "assign " << getAsOperand(PreBind)
+    << " = addsub_res" << PreBind->getAllocatedInstance() << ";\n";
+}
+
+void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
+  unsigned ResourceId = Atoms[0]->getAllocatedInstance();
+
+  unsigned MaxBitWidth = AddSub.getMaxBitWidth();
+
+  std::string OpA = "addsub_a" + utostr(ResourceId);
+  std::string OpB = "addsub_b" + utostr(ResourceId);
+  std::string Mode = "addsub_mode" + utostr(ResourceId);
+  std::string Res = "addsub_res" + utostr(ResourceId);
+
+  vlang->declSignal(getSignalDeclBuffer(), OpA, MaxBitWidth, 0);
+  
+  vlang->declSignal(getSignalDeclBuffer(), OpB, MaxBitWidth, 0);
+
+  vlang->declSignal(getSignalDeclBuffer(), Res, MaxBitWidth, 0, false);
+  
+  vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
+
+  DataPath.indent(2) << "assign " << Res << " = " << Mode << " ? ";
+  DataPath           << "(" << OpA << " + " << OpB << ") : ";
+  DataPath           << "(" << OpA << " - " << OpB << ");\n";
+
+  DataPath.indent(2) << "always @(*)\n";
+  vlang->switchCase(DataPath.indent(4), "CurState");
+  // Emit all resource operation
+  for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
+    HWAPreBind *A = *I;
+    Instruction *Inst = &(A->getInst<Instruction>());
+
+    BasicBlock *BB = Inst->getParent();
+    vlang->matchCase(DataPath.indent(4),
+      vlang->GetValueName(BB) + utostr(A->getSlot()));
+
+    DataPath.indent(6) << Mode;
+    if (Inst->getOpcode() == Instruction::Sub)
+      SeqCompute << " <= 1'b0;\n";
+    else
+      SeqCompute << " <= 1'b1;\n";
+
+    DataPath.indent(6) <<  OpA << " <= "
+      << getAsOperand(A->getOperand(0)) << ";\n";
+    DataPath.indent(6) <<  OpB << " <= "
+      << getAsOperand(A->getOperand(1)) << ";\n";
+
+    // Else for other atoms
+    vlang->end(DataPath.indent(4));
+  }
+  DataPath.indent(4) << "default: begin\n";
+  // Else for Resource is idle
+  DataPath.indent(6) << OpA << " <= "
+    << vlang->printConstantInt(0, MaxBitWidth, false) << ";\n";
+  DataPath.indent(6) << OpB << " <= "
+    << vlang->printConstantInt(0, MaxBitWidth, false) << ";\n";
+  DataPath.indent(6) << Mode << " <= 1'b0;\n";
+
+  vlang->end(DataPath.indent(4));
+  vlang->endSwitch(DataPath.indent(4));
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
@@ -404,47 +480,45 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
                      << ResourceId <<",\n";
   getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
                      << ResourceId << ",\n";
-  vlang->resetRegister(getResetBlockBuffer(), "membus_in" + utostr(ResourceId),
-                       DataWidth, 0);
+
   getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
                      << ResourceId << ",\n";
-  vlang->resetRegister(getResetBlockBuffer(),
-                       "membus_addr" + utostr(ResourceId), AddrWidth);
 
   getModDeclBuffer() << "output reg membus_mode" << ResourceId << ",\n";
-  vlang->resetRegister(getResetBlockBuffer(), 
-                       "membus_mode" + utostr(ResourceId), 1, 0);
 
   // Emit all resource operation
+  DataPath.indent(2) << "always @(*)\n";
+  vlang->switchCase(DataPath.indent(4), "CurState");
   for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
     HWAPreBind *A = *I;
     Instruction *Inst = &(A->getInst<Instruction>());
     BasicBlock *BB = Inst->getParent();
-    vlang->ifBegin(SeqCompute.indent(6),
-      "CurState == " + vlang->GetValueName(BB) + utostr(A->getSlot()));
+    vlang->matchCase(DataPath.indent(4),
+      vlang->GetValueName(BB) + utostr(A->getSlot()));
 
-    SeqCompute.indent(8) << "membus_addr" << ResourceId << " <= ";
+    DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
 
     // Emit the operation
     if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
-      SeqCompute << getAsOperand(A->getOperand(LoadInst::getPointerOperandIndex()))
+      DataPath << getAsOperand(A->getOperand(LoadInst::getPointerOperandIndex()))
                 << ";\n";
-      SeqCompute.indent(8) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+      DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
     } else { // It must be a store
-      SeqCompute << getAsOperand(A->getOperand(StoreInst::getPointerOperandIndex()))
+      DataPath << getAsOperand(A->getOperand(StoreInst::getPointerOperandIndex()))
         << ";\n";
-      SeqCompute.indent(8) << "membus_mode" << ResourceId << "<= 1'b1;\n";
+      DataPath.indent(6) << "membus_mode" << ResourceId << "<= 1'b1;\n";
     }
     // Else for other atoms
-    vlang->ifElse(SeqCompute.indent(6), false);
+    vlang->end(DataPath.indent(4));
   }
-  vlang->begin(SeqCompute.indent(6));
+  DataPath.indent(4) << "default: begin\n";
   // Else for Resource is idle
-  SeqCompute.indent(8) << "membus_addr" << ResourceId
+  DataPath.indent(6) << "membus_addr" << ResourceId
     << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  SeqCompute.indent(8) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
 
-  vlang->end(SeqCompute.indent(6));
+  vlang->end(DataPath.indent(4));
+  vlang->endSwitch(DataPath.indent(4));
 }
 
 //===----------------------------------------------------------------------===//

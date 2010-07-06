@@ -114,10 +114,31 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
 
 void HWAtom::scheduledTo(unsigned slot) {
   SchedSlot = slot;
-  //for (use_iterator I = use_begin(), E = use_end(); I != E; ++I) {
-  //  HWAtom *A = *I;
-  //  if (HWAPassive *IA = dyn_cast<HWAPassive>(*I))
-  //    // Schedule the passive atom when this atom finish
-  //    IA->scheduledTo(slot + getLatency());
-  //}
+}
+
+
+void HWAtom::replaceAllUseBy(HWAtom *A) {
+  while (!use_empty()) {
+    HWAtom *U = use_back();
+
+    U->setDep(U->getDepIdx(this) - U->dep_begin(), A);
+  }
+}
+
+HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
+                       unsigned Instance)
+                       : HWAOpInst(ID, atomPreBind,
+                       PostBind.getInst<Instruction>(), PostBind.getLatency(),
+                       (HWAtom**)PostBind.dep_begin(), PostBind.getNumDeps(),
+                       PostBind.getInstNumOps(),
+                       HWResource::createResId(PostBind.getResClass(),
+                       Instance)) {
+  // Remove the PostBind atom from the use list of its dep.
+  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+    (*I)->removeFromList(&PostBind);
+
+  PostBind.replaceAllUseBy(this);
+
+  // Setup the step
+  scheduledTo(PostBind.getSlot());
 }

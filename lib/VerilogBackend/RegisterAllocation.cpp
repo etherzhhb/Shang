@@ -55,7 +55,9 @@ bool RegAllocation::runOnFunction(Function &F) {
           if (isa<Constant>(V) || isa<Argument>(V))
             (void) HI.getConstant(*V, &BB);
           else if (isa<Instruction>(V)) {
-            HI.updateAtomMap(*V, HI.getRegister(*V, HI.getAtomFor(*V)));
+            HWAtom *A = HI.getAtomFor(*V);
+            HWARegister *R = HI.getRegister(*V, A);
+            HI.updateAtomMap(*V, R);
           }
       }
     } 
@@ -65,14 +67,17 @@ bool RegAllocation::runOnFunction(Function &F) {
       HWAtom *Dep = Exit.getDep(i);
       const Type *Ty = Dep->getValue().getType();
       // Emit export register.
-      if (!Ty->isVoidTy() && !Ty->isLabelTy())
-        HI.updateAtomMap(Dep->getValue(), HI.getRegister(Dep->getValue(), Dep));
-
+      if (!Ty->isVoidTy() && !Ty->isLabelTy()) {
+        HWARegister *R = HI.getRegister(Dep->getValue(), Dep);
+        HI.updateAtomMap(Dep->getValue(), R);
+        Exit.setDep(i, R);
+      }
     }
   }
 
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
     runOnBasicBlock(*I, HI);
+
   return false;
 }
 
@@ -118,7 +123,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     }
   }
 
-
+  //State.print(dbgs());
   
   return false;
 }

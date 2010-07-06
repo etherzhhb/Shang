@@ -138,7 +138,7 @@ class HWMemBus : public HWResource {
   unsigned DataWidth;
   // Read latency and write latency
 
-  explicit HWMemBus(std::string name, unsigned latency,
+  HWMemBus(std::string name, unsigned latency,
     unsigned startInt, unsigned totalRes,
     unsigned addrWidth, unsigned dataWidth)
     : HWResource(HWResource::MemoryBus, name, latency, startInt, totalRes),
@@ -156,6 +156,26 @@ public:
   static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
 };
 
+class HWAddSub : public HWResource {
+  unsigned MaxBitWidth;
+  // Read latency and write latency
+
+  HWAddSub(std::string name, unsigned latency,
+    unsigned startInt, unsigned totalRes, unsigned maxBitWidth)
+    : HWResource(HWResource::AddSub, name, latency, startInt, totalRes),
+    MaxBitWidth(maxBitWidth) {}
+public:
+  unsigned getMaxBitWidth() const { return MaxBitWidth; }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAddSub *A) { return true; }
+  static inline bool classof(const HWResource *A) {
+    return A->getResourceType() == HWResource::AddSub;
+  }
+
+  static HWAddSub *createFromXml(rapidxml::xml_node<char> *Node);
+};
+
 class ResourceConfig : public ImmutablePass {
   
   /// mapping allocated instences to atom
@@ -165,7 +185,7 @@ class ResourceConfig : public ImmutablePass {
 
 public:
   static char ID;
-  explicit ResourceConfig() : ImmutablePass(&ID) {
+  ResourceConfig() : ImmutablePass(&ID) {
     for (size_t i = 0, e = (size_t)HWResource::LastResourceType; i != e; ++i)
       ResSet[i] = 0;
   }

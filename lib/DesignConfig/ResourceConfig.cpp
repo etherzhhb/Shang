@@ -105,7 +105,7 @@ static unsigned getSubNodeAsInteger(XmlNode *Node, std::string name) {
   return ret;
 }
 
-HWMemBus * HWMemBus::createFromXml(XmlNode *Node) {
+HWMemBus *HWMemBus::createFromXml(XmlNode *Node) {
   assert(Node && "Node can not be null!");
   return new HWMemBus(getSubNodeAsString(Node, "Name"),
                       getSubNodeAsInteger(Node, "Latency"),
@@ -113,6 +113,15 @@ HWMemBus * HWMemBus::createFromXml(XmlNode *Node) {
                       getSubNodeAsInteger(Node, "TotalNum"),
                       getSubNodeAsInteger(Node, "AddressWidth"),
                       getSubNodeAsInteger(Node, "DataWidth"));
+}
+
+HWAddSub *HWAddSub::createFromXml(XmlNode *Node) {
+  return new HWAddSub(getSubNodeAsString(Node, "Name"),
+    getSubNodeAsInteger(Node, "Latency"),
+    getSubNodeAsInteger(Node, "StartInterval"),
+    getSubNodeAsInteger(Node, "TotalNum"),
+    getSubNodeAsInteger(Node, "MaxBitWidth"));
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -145,6 +154,9 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
     switch (getResourceType(ResNode)) {
     case HWResource::MemoryBus:
       Res = HWMemBus::createFromXml(ResNode);
+      break;
+    case HWResource::AddSub:
+      Res = HWAddSub::createFromXml(ResNode);
       break;
     default:
       report_fatal_error("Unknow resource type!");

@@ -68,8 +68,13 @@ class RTLWriter : public FunctionPass {
 
   // Resource
   void emitResources();
+
   void emitMemBus(HWMemBus &MemBus, HWAPreBindVecTy &Atoms);
   void opMemBus(HWAPreBind *PreBind);
+
+  void emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms);
+  void opAddSub(HWAPreBind *PreBind);
+
 
   // Atoms
   void emitAtom(HWAtom *A);

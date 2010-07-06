@@ -201,7 +201,7 @@ void HWAtomInfo::visitICmpInst(ICmpInst &I) {
   if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
     T = HWResource::Trivial;
   else // We need to do a subtraction for the comparison.
-    T = HWResource::AddSub;
+    T = HWResource::Trivial;
 
   //if (I.isSigned()) {
   //  Deps[0] = getSigned(Deps[0]);
@@ -323,6 +323,29 @@ HWAtom *HWAtomInfo::getSigned(HWAtom *Using) {
     A = new (HWAtomAllocator) HWASigned(ID.Intern(HWAtomAllocator), O);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
+  return A;
+}
+
+HWAPreBind * esyn::HWAtomInfo::bindToResource(HWAPostBind &PostBind,
+                                              unsigned Instance) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomPreBind);
+  ID.AddPointer(&PostBind.getValue());
+
+  void *IP = 0;
+  HWAPreBind *A =
+    static_cast<HWAPreBind*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  assert(!A && "Why the instruction is bind?");
+
+  A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
+                                       PostBind, Instance);
+
+  updateAtomMap(PostBind.getValue(), A); 
+
+  UniqiueHWAtoms.InsertNode(A, IP);
+  UniqiueHWAtoms.RemoveNode(&PostBind);
+
   return A;
 }
 

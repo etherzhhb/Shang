@@ -63,7 +63,7 @@ class HWAtom : public FoldingSetNode {
   FoldingSetNodeIDRef FastID;
 
   // The HWAtom baseclass this node corresponds to
-  const unsigned short HWAtomType;
+  unsigned short HWAtomType;
 
   /// First of all, we schedule all atom base on dependence
   HWAtom **Deps;
@@ -76,13 +76,6 @@ class HWAtom : public FoldingSetNode {
     UseList.push_back(User);
   }
 
-  void removeFromList(HWAtom *User) {
-    std::list<HWAtom*>::iterator at = std::find(UseList.begin(), UseList.end(),
-                                                User);
-    assert(at != UseList.end() && "Not in use list!");
-    UseList.erase(at);
-  }
-
   HWAtom(const HWAtom &);            // DO NOT IMPLEMENT
   void operator=(const HWAtom &);  // DO NOT IMPLEMENT
 
@@ -92,6 +85,8 @@ protected:
 
   // The time slot that this atom scheduled to.
   unsigned SchedSlot;
+  
+  void setTypeTo(unsigned short NewType) { HWAtomType = NewType; }
 
   virtual ~HWAtom();
 
@@ -130,6 +125,16 @@ public:
   typedef const HWAtom *const *const_dep_iterator;
   const_dep_iterator dep_begin() const { return Deps; }
   const_dep_iterator dep_end() const { return Deps + NumDeps; }
+
+  // If this Depend on A? return the position if found, return dep_end otherwise.
+  const_dep_iterator getDepIdx(HWAtom *A) const {
+    return std::find(dep_begin(), dep_end(), A);
+  }
+  dep_iterator getDepIdx(HWAtom *A) {
+    return std::find(dep_begin(), dep_end(), A);
+  }
+  // If the current atom depend on A?
+  bool isDepOn(HWAtom *A) const { return getDepIdx(A) != dep_end(); }
   //}
 
   /// @name Use
@@ -145,6 +150,16 @@ public:
 
   HWAtom *use_back() { return UseList.back(); }
   HWAtom *use_back() const { return UseList.back(); }
+
+
+  void removeFromList(HWAtom *User) {
+    std::list<HWAtom*>::iterator at = std::find(UseList.begin(), UseList.end(),
+      User);
+    assert(at != UseList.end() && "Not in use list!");
+    UseList.erase(at);
+  }
+
+  void replaceAllUseBy(HWAtom *A);
 
   bool use_empty() { return UseList.empty(); }
   size_t getNumUses() const { return UseList.size(); }
@@ -443,6 +458,9 @@ public:
     enum HWResource::ResTypes OpClass, unsigned Instance = 0)
     : HWAOpInst(ID, atomPreBind, Inst, latency, deps, numDep, OpNum,
     HWResource::createResId(OpClass, Instance)) {}
+
+  HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
+    unsigned Instance);
 
   /// @name The using resource
   //{
