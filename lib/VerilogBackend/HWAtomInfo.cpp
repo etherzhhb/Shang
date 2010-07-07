@@ -228,6 +228,7 @@ void HWAtomInfo::visitBinaryOperator(Instruction &I) {
   switch (I.getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
+      //T = isTrivial ? HWResource::Trivial : HWResource::AddSub;
       T = HWResource::AddSub;
       break;
     case Instruction::Mul:

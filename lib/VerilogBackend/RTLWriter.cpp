@@ -506,7 +506,7 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
     } else { // It must be a store
       DataPath << getAsOperand(A->getOperand(StoreInst::getPointerOperandIndex()))
         << ";\n";
-      DataPath.indent(6) << "membus_mode" << ResourceId << "<= 1'b1;\n";
+      DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b1;\n";
     }
     // Else for other atoms
     vlang->end(DataPath.indent(4));

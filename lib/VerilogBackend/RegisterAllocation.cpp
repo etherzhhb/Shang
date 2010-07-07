@@ -108,7 +108,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
           A->setDep(i, HI.getAtomFor(V));
 
       } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(dep)) {
-        if (DI->getSlot() + DI->getLatency() != A->getSlot()) {
+        if (DI->getSlot() + DI->getLatency() != A->getSlot() ||
+            isa<HWAPreBind>(A)) {
           DEBUG(DI->print(dbgs()));
           DEBUG(dbgs() << " Registered\n");
 
