@@ -122,7 +122,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   typedef DenseMap<const Value*, HWAtom*> AtomMapType;
   AtomMapType ValueToHWAtoms;
 
-  typedef DenseMap<const BasicBlock*, ExecStage*> StateMapType;
+  typedef DenseMap<const BasicBlock*, FSMState*> StateMapType;
   StateMapType BBToStates;
   HWAtom *ControlRoot;
 
@@ -136,15 +136,17 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
 
   HWAtom *getAtomInState(Value &V, BasicBlock *BB) {
     // Is this not a instruction?
-    if (!isa<Instruction>(V))
-      return getEntryRoot(BB);
+    if (isa<Argument>(V))
+      return getValDepEdge(getEntryRoot(BB), V, getRegNumForLiveVal(V));
+    else if (isa<Constant>(V))
+      return getValDepEdge(getEntryRoot(BB), V);
 
     // Now it is an Instruction
     Instruction &Inst = cast<Instruction>(V);
     if (BB == Inst.getParent())
       return getAtomFor(Inst);
     else
-      return getEntryRoot(BB);
+      return getValDepEdge(getEntryRoot(BB), V, getRegNumForLiveVal(V));
   }
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
     BasicBlock *ParentBB = I.getParent();
@@ -155,6 +157,15 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   }
 
   void clear();
+
+  unsigned NumRegs;
+  // Mapping Phi node to registers
+  std::map<Value*, HWReg*> LiveValueReg;
+
+  void setRegNum(Value &V, HWReg *R) {
+    R->addValue(V);
+    LiveValueReg.insert(std::make_pair(&V, R));
+  }
 
   // The loop Info
   LoopInfo *LI;
@@ -167,7 +178,8 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0), totalCycle(1) {}
+  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0),
+    totalCycle(1), NumRegs(1) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();
@@ -177,10 +189,29 @@ public:
 
   HWAPreBind *bindToResource(HWAPostBind &PostBind, unsigned Instance);
 
-  ExecStage &getStateFor(BasicBlock &BB) const {
+  HWAValDep *getValDepEdge(HWAtom *Src, Value &Val,
+                           HWReg *R = 0, bool isSigned = 0);
+
+  HWACtrlDep *getCtrlDepEdge(HWAtom *Src, Value &Val);
+
+  FSMState &getStateFor(BasicBlock &BB) const {
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");
     return  *(At->second);
+  }
+
+  HWReg *getRegNumForLiveVal(Value &V) {
+    if (isa<Constant>(V))
+      return 0;
+
+    std::map<Value*, HWReg*>::iterator at = LiveValueReg.find(&V);
+    if (at != LiveValueReg.end())
+      return at->second;
+
+    HWReg *R = new (HWAtomAllocator) HWReg(++NumRegs, V);
+
+    LiveValueReg.insert(std::make_pair(&V, R));
+    return R;
   }
 
   HWAtom *getAtomFor(Value &V) const {
@@ -192,12 +223,6 @@ public:
   void updateAtomMap(Value &V, HWAtom *A) {
     ValueToHWAtoms[&V] = A;
   }
-
-  HWAtom *getConstant(Value &V, BasicBlock *Scop);
-
-  HWARegister *getRegister(Value &V, HWAtom *Using);
-
-  HWAtom *getSigned(HWAtom *Using);
 
   unsigned getTotalCycle() const {
     return totalCycle;

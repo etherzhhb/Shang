@@ -71,6 +71,9 @@ bool RTLWriter::runOnFunction(Function &F) {
   // Emit resouces
   emitResources();
 
+  // Emit all Regs
+  emitAllRegisters();
+
   // emit misc
   emitCommonPort();
 
@@ -124,6 +127,7 @@ void RTLWriter::clear() {
   SeqCompute.str().clear();
 
   // Clear resource map
+  UsedRegs.clear();
   ResourceMap.clear();
 }
 
@@ -148,7 +152,7 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     unsigned BitWidth = vlang->getBitWidth(Arg);
 
     std::string Name = vlang->GetValueName(&Arg), 
-                RegName = getAsOperand(&Arg);
+                RegName = "Reg" + utostr(HI->getRegNumForLiveVal(Arg)->getRegNum());
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
       Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
@@ -177,19 +181,19 @@ void RTLWriter::emitFunctionSignature(Function &F) {
 }
 
 void RTLWriter::emitBasicBlock(BasicBlock &BB) {
-  ExecStage &State = HI->getStateFor(BB);
+  FSMState &State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
   
   unsigned totalStatesBits = HI->getTotalCycleBitWidth();
   vlang->comment(getStateDeclBuffer()) << "State for " << StateName << '\n';
 
   //
-  ExecStage::ScheduleMapType Atoms;
-  typedef ExecStage::ScheduleMapType::iterator cycle_iterator;
+  FSMState::ScheduleMapType Atoms;
+  typedef FSMState::ScheduleMapType::iterator cycle_iterator;
 
   State.getScheduleMap(Atoms);
   HWAVRoot &Entry = State.getEntryRoot();
-  HWAPostBind &Exit = State.getExitRoot();
+  HWAOpInst &Exit = State.getExitRoot();
 
   unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
   //
@@ -240,12 +244,6 @@ RTLWriter::~RTLWriter() {
 //===----------------------------------------------------------------------===//
 // Emit hardware atoms
 std::string RTLWriter::getAsOperand(Value *V, const std::string &postfix) {
-  if (ConstantInt *CI = dyn_cast<ConstantInt>(V))
-    return vlang->printConstant(CI);
-
-  if (PHINode *PHI = dyn_cast<PHINode>(V))
-    return vlang->GetValueName(PHI) + "_phi_r";
-
   if (Argument *Arg = dyn_cast<Argument>(V))
     return vlang->GetValueName(V) + "_pr";
 
@@ -253,16 +251,23 @@ std::string RTLWriter::getAsOperand(Value *V, const std::string &postfix) {
 }
 std::string RTLWriter::getAsOperand(HWAtom *A) {
   Value *V = &A->getValue();
+
   switch (A->getHWAtomType()) {
-    case atomRegister:
-      return getAsOperand(V, "_r");
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomConst:
-      return getAsOperand(V);
-    case atomSignedPrefix:
-      return getAsOperand(V) + "_signed_w";
+    case atomValDep: {
+      if (isa<ConstantInt>(V))
+        return vlang->printConstant(cast<ConstantInt>(V));
+
+      HWAValDep *VD = cast<HWAValDep>(A);
+      if (HWReg *R = VD->getReg())
+        return "Reg"+utostr(R->getRegNum())
+        + " /*" + vlang->GetValueName(V) +"*/";
+      else
+        return getAsOperand(VD->getSrc());
+      break;
+    }
     default:
       return "<Unknown Atom>";
   }
@@ -270,12 +275,6 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
 
 void RTLWriter::emitAtom(HWAtom *A) {
   switch (A->getHWAtomType()) {
-      case atomRegister:
-        // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << "Finish: "
-          << A->getValue() << '\n';
-        emitRegister(cast<HWARegister>(A));
-        break;
       case atomPreBind:
         // Emit the origin IR as comment.
         vlang->comment(ControlBlock.indent(8)) << "Emit: "
@@ -288,50 +287,59 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomSignedPrefix:
-        emitSigned(cast<HWASigned>(A));
+      case atomValDep:
+        emitValDep(cast<HWAValDep>(A));
         break;
       case atomVRoot:
         break;
-      case atomConst:
-        if (isa<PHINode>(A->getValue())) {
-          vlang->comment(ControlBlock.indent(8)) << "Emit: "
-            << A->getValue() << '\n';
-          visitPHINode(cast<HWAConst>(A));
-        }
-        break;
       default:
-        llvm_unreachable("Unknow Atom!");;
+        //llvm_unreachable("Unknow Atom!");
+        ;
   }
 }
 
-void RTLWriter::emitSigned(HWASigned *Signed) {
-  std::string Name = getAsOperand(Signed);
-  Value &V = Signed->getValue();
 
-  // Declare the signal
-  vlang->declSignal(getSignalDeclBuffer(), Name,
-                    vlang->getBitWidth(V), 0, false, true);
-  DataPath.indent(2) << "assign " <<
-    Name << " = " << getAsOperand(Signed->getDep(0)) << ";\n";
+
+void RTLWriter::emitAllRegisters() {
+  for (std::set<HWReg*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
+      I != E; ++I) {
+    HWReg *R = *I;
+    unsigned BitWidth = vlang->getBitWidth(R->getType());
+    std::string Name = "Reg"+utostr(R->getRegNum());
+
+    vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
+    vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
+  } 
 }
 
-void RTLWriter::emitRegister(HWARegister *Register) {
-  HWAtom *Val = Register->getRefVal();
+void RTLWriter::emitValDep(HWAValDep *Dep) {
+  if (isa<HWAVRoot>(Dep->getSrc()))
+    return;
 
-  Value &V = Register->getValue();
-  unsigned BitWidth = vlang->getBitWidth(V);
-  
-  std::string Name = getAsOperand(Register);
-
-  // Declare the register
-  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
-  // Reset the register
-  vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
-
-  // assign the register
-  ControlBlock.indent(8) << Name << " <= " << getAsOperand(Val) << ";\n";
+  if (HWReg *R = Dep->getReg()) {
+    UsedRegs.insert(R);
+    
+    std::string Name = getAsOperand(Dep);
+    ControlBlock.indent(8) << Name << " <= " << getAsOperand(Dep->getSrc()) << ";\n";
+  }
 }
+
+//void RTLWriter::emitValDep(HWARegister *Register) {
+//  HWAtom *Val = Register->getRefVal();
+//
+//  Value &V = Register->getValue();
+//  unsigned BitWidth = vlang->getBitWidth(V);
+//  
+//  std::string Name = getAsOperand(Register);
+//
+//  // Declare the register
+//  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
+//  // Reset the register
+//  vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
+//
+//  // assign the register
+//  ControlBlock.indent(8) << Name << " <= " << getAsOperand(Val) << ";\n";
+//}
 
 void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
   Instruction &Inst = cast<Instruction>(PostBind->getValue());
@@ -461,10 +469,6 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
     // Emit the datapath
     DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
       << " = membus_out" << MemBusInst <<";\n";
-  } else { // It must be a store.
-    StoreInst &S = PreBind->getInst<StoreInst>();
-    ControlBlock.indent(8) << "membus_in" << MemBusInst
-      << " <= " << getAsOperand(PreBind->getOperand(0)) << ";\n";
   }
 }
 
@@ -503,10 +507,14 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
       DataPath << getAsOperand(A->getOperand(LoadInst::getPointerOperandIndex()))
                 << ";\n";
       DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+      DataPath.indent(6) << "membus_in" << ResourceId
+        << " <= " << vlang->printConstantInt(0, DataWidth, false);
     } else { // It must be a store
       DataPath << getAsOperand(A->getOperand(StoreInst::getPointerOperandIndex()))
         << ";\n";
       DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b1;\n";
+      DataPath.indent(6) << "membus_in" << ResourceId
+        << " <= " << getAsOperand(A->getOperand(0)) << ";\n";
     }
     // Else for other atoms
     vlang->end(DataPath.indent(4));
@@ -516,14 +524,15 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
   DataPath.indent(6) << "membus_addr" << ResourceId
     << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
   DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
-
+  DataPath.indent(6) << "membus_in" << ResourceId
+    << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   vlang->end(DataPath.indent(4));
   vlang->endSwitch(DataPath.indent(4));
 }
 
 //===----------------------------------------------------------------------===//
 void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) {
-  ExecStage &State = HI->getStateFor(BB);
+  FSMState &State = HI->getStateFor(BB);
   unsigned stateCycle = State.getEntryRoot().getSlot() + offset;
   assert(stateCycle <= State.getExitRoot().getSlot() 
          && "Offest out of range!");
@@ -552,7 +561,7 @@ void RTLWriter::visitICmpInst(HWAPostBind &A) {
 }
 
 
-void RTLWriter::visitPHINode(HWAConst *A) {
+void RTLWriter::visitPHINode(HWAValDep *A) {
   PHINode &I = cast<PHINode>(A->getValue());
   unsigned BitWidth = vlang->getBitWidth(I);
 
@@ -643,7 +652,8 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
     BasicBlock &NextBB0 = *(I.getSuccessor(0)), 
                &NextBB1 = *(I.getSuccessor(1)), 
                &CurBB = *(I.getParent());
-    vlang->ifBegin(ControlBlock.indent(8), getAsOperand(A.getOperand(0)));
+    HWAtom *Cnd = A.getOperand(0);
+    vlang->ifBegin(ControlBlock.indent(8), getAsOperand(Cnd));
     emitPHICopiesForSucc(CurBB, NextBB0, 2);
     emitNextState(ControlBlock.indent(10), NextBB0, 0);
     vlang->ifElse(ControlBlock.indent(8));
@@ -665,13 +675,12 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
   while (&*I != NotPhi) {
     PHINode *PN = cast<PHINode>(I);
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
-    HWAtom *Incoming = HI->getAtomFor(*IV);
-    while (isa<HWARegister>(Incoming) 
-          && Incoming->getSlot() == HI->getStateFor(CurBlock).getExitRoot().getSlot())
-      Incoming = cast<HWARegister>(Incoming)->getRefVal();
-    
-    ControlBlock.indent(8 + ind) << getAsOperand(HI->getAtomFor(*I))
-      << " <= " << getAsOperand(Incoming) << ";\n";      
+    if (Constant *C = dyn_cast<Constant>(IV)) {
+      HWReg *R = HI->getRegNumForLiveVal(*PN);
+      ControlBlock.indent(8 + ind) << "Reg" + utostr(R->getRegNum())
+        << "/*" << vlang->GetValueName(PN) << "*/"
+        << " <= " << vlang->printConstant(C) << ";\n";      
+    }
     ++I;
   }
 }

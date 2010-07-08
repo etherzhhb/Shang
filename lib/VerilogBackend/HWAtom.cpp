@@ -36,33 +36,28 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
-void HWAConst::print(raw_ostream &OS) const {
-  OS << "Const (";
-  WriteAsOperand(OS, &getValue(), false);
-  OS << ")";
-}
-
-void HWASigned::print(raw_ostream &OS) const {
-  OS << "signed (";
-  WriteAsOperand(OS, &getDep(0)->getValue(), false);
-  OS << ")";
-}
-
-void HWARegister::print(raw_ostream &OS) const {
-  OS << "Register: ";
+void HWACtrlDep::print(raw_ostream &OS) const {
+  OS << "Value dep: ";
   WriteAsOperand(OS, &Val, false);
-  OS << " using ";
+  OS << " -> ";
   WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
-void ExecStage::getScheduleMap(ScheduleMapType &Atoms) const {
+void HWAValDep::print(raw_ostream &OS) const {
+  OS << "Control dep: ";
+  WriteAsOperand(OS, &Val, false);
+  OS << " -> ";
+  WriteAsOperand(OS, &getDep(0)->getValue(), false);
+}
+
+void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
   for (const_usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I) {
     HWAtom *A = const_cast<HWAtom*>(*I);
     Atoms.insert(std::make_pair(A->getSlot(), A));
   }
 }
 
-void ExecStage::print(raw_ostream &OS) const {
+void FSMState::print(raw_ostream &OS) const {
   OS << "State: ";
   WriteAsOperand(OS, getBasicBlock(), false);
   OS << "\n";
@@ -105,9 +100,8 @@ void HWAVRoot::print(raw_ostream &OS) const {
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
                HWAtom **deps, size_t numDeps) : FastID(ID),
-               HWAtomType(HWAtomTy), Val(V), Deps(deps), NumDeps(numDeps),
-               // Make a shift so that it do not get a overflow when we are doing an addition
-               SchedSlot(UINT32_MAX >> 1) {
+               HWAtomType(HWAtomTy), Val(V), Deps(deps),
+               NumDeps(numDeps), SchedSlot(0) {
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     (*I)->addToUseList(this);
 }
@@ -127,12 +121,10 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 
 HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
                        unsigned Instance)
-                       : HWAOpInst(ID, atomPreBind,
-                       PostBind.getInst<Instruction>(), PostBind.getLatency(),
-                       (HWAtom**)PostBind.dep_begin(), PostBind.getNumDeps(),
-                       PostBind.getInstNumOps(),
-                       HWResource::createResId(PostBind.getResClass(),
-                       Instance)) {
+  : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
+  PostBind.getLatency(), (HWAtom**)PostBind.dep_begin(), PostBind.getNumDeps(),
+  PostBind.getInstNumOps(),
+  HWResource::createResId(PostBind.getResClass(), Instance)) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     (*I)->removeFromList(&PostBind);
@@ -141,4 +133,11 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
 
   // Setup the step
   scheduledTo(PostBind.getSlot());
+}
+
+bool HWAtom::willCauseCycle(const HWAtom *Edge) {
+  if (const HWAMemDep *MD = dyn_cast<HWAMemDep>(Edge))
+    return MD->getItDst() != 0;
+
+  return false;
 }

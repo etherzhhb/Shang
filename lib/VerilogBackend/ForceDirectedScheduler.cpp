@@ -24,7 +24,7 @@
 
 #include "llvm/ADT/PriorityQueue.h"
 
-#define DEBUG_TYPE "vbe-fd-schedule"
+#define DEBUG_TYPE "vbe-fd-sched"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -191,6 +191,10 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       // Recover the time frame by force rebuild
       buildASAPStep(); 
       buildALAPStep();
+
+      DEBUG(dbgs() << " After schedule:-------------------\n");
+      DEBUG(dumpTimeFrame());
+      DEBUG(dbgs() << "\n\n\n");
       // Rebuild DG.
       buildDGraph();
       buildAvgDG();
@@ -199,10 +203,6 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       // Schedule to the best step.
       A->scheduledTo(step);
     }
-
-    DEBUG(dbgs() << " After schedule:-------------------\n");
-    DEBUG(dumpTimeFrame());
-    DEBUG(dbgs() << "\n\n\n");
   }
 
   HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
@@ -352,7 +352,7 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
       re = HWResource::LastResourceType; ri != re; ++ri) {
     OS << "DG for resource: " << ri <<'\n';
     for (unsigned i = CurStage->getEntryRoot().getSlot(),
-        e = getASAPStep(&CurStage->getExitRoot()) + 1; i != e; ++i)
+        e = getALAPStep(&CurStage->getExitRoot()) + 1; i != e; ++i)
       OS.indent(2) << "At step " << i << " : "
         << getDGraphAt(i, (enum HWResource::ResTypes)ri) << '\n';
 
@@ -361,20 +361,20 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
 }
 
 void FDLScheduler::buildASAPStep() {
-  HWAVRoot *Root = &CurStage->getEntryRoot();
+  const HWAVRoot *Root = &CurStage->getEntryRoot();
 
-  typedef HWAtom::const_use_iterator ChildIt;
+  typedef HWAtom::dag_const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
   AtomToTF[Root].first = Root->getSlot();
-  WorkStack.push_back(std::make_pair(Root, Root->use_begin()));
+  WorkStack.push_back(std::make_pair(Root, Root->dag_use_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
     ChildIt It = WorkStack.back().second;
 
-    if (It == Node->use_end())
+    if (It == Node->dag_use_end())
       WorkStack.pop_back();
     else {
       const HWAtom *ChildNode = *It;
@@ -389,27 +389,27 @@ void FDLScheduler::buildASAPStep() {
         AtomToTF[ChildNode].first = NewStep;
       
       // Only move forwork when we visit the node from all its deps.
-      if (VC == ChildNode->getNumDeps())
-        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
+      if (VC == ChildNode->getNumDAGDeps())
+        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dag_use_begin()));
     }
   }
 }
 
 void FDLScheduler::buildALAPStep() {
-  HWAPostBind *Root = &CurStage->getExitRoot();
+  const HWAOpInst *Root = &CurStage->getExitRoot();
 
-  typedef HWAtom::const_dep_iterator ChildIt;
+  typedef HWAtom::dag_const_dep_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
   AtomToTF[Root].second = CriticalPathLength;
-  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
+  WorkStack.push_back(std::make_pair(Root, Root->dag_dep_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
     ChildIt It = WorkStack.back().second;
 
-    if (It == Node->dep_end())
+    if (It == Node->dag_dep_end())
       WorkStack.pop_back();
     else {
       const HWAtom *ChildNode = *It;
@@ -424,8 +424,8 @@ void FDLScheduler::buildALAPStep() {
         AtomToTF[ChildNode].second = NewStep;
 
       // Only move forwork when we visit the node from all its deps.
-      if (VC == ChildNode->getNumUses())
-        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+      if (VC == ChildNode->getNumDAGUses())
+        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dag_dep_begin()));
     }
   }
 }

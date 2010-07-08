@@ -29,7 +29,7 @@ namespace esyn {
 class HWAtomInfo;
 class HWAtom;
 class HWAOpInst;
-class ExecStage;
+class FSMState;
 
 class Scheduler {
   // {instance, next available cycle}
@@ -42,7 +42,7 @@ protected:
   typedef std::list<HWAOpInst*>::iterator ListIt;
   SchedAtomVec ScheduleAtoms;
 
-  ExecStage *CurStage;
+  FSMState *CurStage;
 
   void clearSchedulerBase();
 

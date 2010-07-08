@@ -38,42 +38,6 @@ struct RegAllocation : public FunctionPass {
 
 bool RegAllocation::runOnFunction(Function &F) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-  // Emit phi nodes
-  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
-    BasicBlock &BB = *I;
-    BasicBlock::iterator It = BB.begin();
-    while (isa<PHINode>(It)) {
-      PHINode *PN = cast<PHINode>(It++);
-      // Emit the PHINode.
-      HI.getConstant(*PN, &BB);
-      // And its operand. 
-      for (Instruction::op_iterator OI = PN->op_begin(), OE = PN->op_end();
-        OI != OE; ++OI) {
-          Value *V = *OI;
-         
-          // Emit the constants.
-          if (isa<Constant>(V) || isa<Argument>(V))
-            (void) HI.getConstant(*V, &BB);
-          else if (isa<Instruction>(V)) {
-            HWAtom *A = HI.getAtomFor(*V);
-            HWARegister *R = HI.getRegister(*V, A);
-            HI.updateAtomMap(*V, R);
-          }
-      }
-    } 
-
-    HWAPostBind &Exit = HI.getStateFor(BB).getExitRoot();
-    for (unsigned i = Exit.getInstNumOps(), e = Exit.getNumDeps(); i != e; ++i) {
-      HWAtom *Dep = Exit.getDep(i);
-      const Type *Ty = Dep->getValue().getType();
-      // Emit export register.
-      if (!Ty->isVoidTy() && !Ty->isLabelTy()) {
-        HWARegister *R = HI.getRegister(Dep->getValue(), Dep);
-        HI.updateAtomMap(Dep->getValue(), R);
-        Exit.setDep(i, R);
-      }
-    }
-  }
 
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
     runOnBasicBlock(*I, HI);
@@ -82,13 +46,23 @@ bool RegAllocation::runOnFunction(Function &F) {
 }
 
 bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
-  ExecStage &State = HI.getStateFor(BB);
+  FSMState &State = HI.getStateFor(BB);
   HWAVRoot *EntryRoot = &State.getEntryRoot();
 
   SmallVector<HWAtom*, 32> Worklist(usetree_iterator::begin(EntryRoot),
                                     usetree_iterator::end(EntryRoot));
 
+
+  SmallVector<HWAValDep*, 32> NewRegs;
+
   while(!Worklist.empty()) {
+    if (HWAValDep* D = dyn_cast<HWAValDep>(Worklist.back())) {
+      NewRegs.push_back(D);
+      Worklist.pop_back();
+      continue;
+    }
+    
+
     HWAOpInst *A = dyn_cast<HWAOpInst>(Worklist.back());
     Worklist.pop_back();
     
@@ -99,32 +73,42 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     DEBUG(dbgs() << " Visited\n");
 
     for (unsigned i = 0, e = A->getInstNumOps(); i != e; ++i) {
-      HWAtom *dep = A->getDep(i);
+      HWAtom *dep = A->getOperand(i);
       Value &V = *A->getIOperand(i);
-      if (isa<HWAVRoot>(dep)) {
-        if (isa<Constant>(V) || isa<Argument>(V))
-          A->setDep(i, HI.getConstant(V, &BB));
-        else
-          A->setDep(i, HI.getAtomFor(V));
 
-      } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(dep)) {
-        if (DI->getSlot() + DI->getLatency() != A->getSlot() ||
-            isa<HWAPreBind>(A)) {
+      bool isSigned = (((A->getOpcode() == Instruction::AShr) && (i == 0))
+                        || ((A->getOpcode() == Instruction::ICmp)
+                        && (A->getInst<ICmpInst>().isSigned())));
+
+      if (HWAOpInst *DI = dyn_cast<HWAOpInst>(dep)) {
+        if (DI->getLatency() != 0) {
           DEBUG(DI->print(dbgs()));
           DEBUG(dbgs() << " Registered\n");
-
-          A->setDep(i, HI.getRegister(DI->getValue(), DI));
+          HWAValDep *R = HI.getValDepEdge(DI, V, HI.getRegNumForLiveVal(V), isSigned);
+          NewRegs.push_back(R);
+          A->setDep(i, R);
         }
       }
-
-      if (((A->getOpcode() == Instruction::AShr) && (i == 0))
-          || ((A->getOpcode() == Instruction::ICmp)
-              && (A->getInst<ICmpInst>().isSigned())))      
-        A->setDep(i, HI.getSigned(A->getDep(i)));
     }
   }
 
-  //State.print(dbgs());
+  while (!NewRegs.empty()) {
+    HWAValDep *D = NewRegs.back();
+    NewRegs.pop_back();
+    D->scheduledTo(D->getSrc()->getSlot() + D->getSrc()->getLatency());
+  }
+  
+  HWAOpInst &Exit = State.getExitRoot();
+  if (Exit.getInstNumOps()) {
+    HWAValDep *D = cast<HWAValDep>(Exit.getOperand(0));
+    Value &V = *Exit.getIOperand(0);
+    // Create a register for condition.
+    if (D->getSlot() != Exit.getSlot()) {
+      HWAValDep *R = HI.getValDepEdge(D->getSrc(), V, HI.getRegNumForLiveVal(V));
+      Exit.setDep(0, R);
+      R->scheduledTo(D->getSlot());
+    }
+  }
   
   return false;
 }

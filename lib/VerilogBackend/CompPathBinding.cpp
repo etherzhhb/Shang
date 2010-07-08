@@ -240,10 +240,10 @@ unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
       weight += 2;
     // Common inputs.
     SmallPtrSet<HWAtom*, 8> Inputs;
-    Inputs.insert(Src->dep_begin(), Src->dep_end());
-    Inputs.insert(Dst->dep_begin(), Dst->dep_end());
+    Inputs.insert(Src->dag_dep_begin(), Src->dag_dep_end());
+    Inputs.insert(Dst->dag_dep_begin(), Dst->dag_dep_end());
 
-    weight += Src->getNumDeps() + Dst->getNumDeps() - Inputs.size();
+    weight += Src->getNumDAGDeps() + Dst->getNumDAGDeps() - Inputs.size();
   }
 
   WeightMap.insert(std::make_pair(N, weight));
@@ -331,7 +331,7 @@ struct CompPathBinding : public BasicBlockPass {
   PathGraphNode PGEntry, PGExit;
 
   HWAtomInfo *HI;
-  ExecStage *CurStage;
+  FSMState *CurStage;
 
   unsigned ResCount;
 

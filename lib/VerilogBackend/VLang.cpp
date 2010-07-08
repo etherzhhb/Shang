@@ -177,11 +177,11 @@ std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
   }
 }
 
-unsigned VLang::getBitWidth(Value &V) {
+unsigned VLang::getBitWidth(const Type *T) {
   unsigned BitWidth = 0;
-  if (const IntegerType *IntTy = dyn_cast<IntegerType>(V.getType()))
+  if (const IntegerType *IntTy = dyn_cast<IntegerType>(T))
     return IntTy->getBitWidth();
-  else if (V.getType()->isPointerTy())
+  else if (T->isPointerTy())
     return TD->getPointerSizeInBits();
   //
   return 0;

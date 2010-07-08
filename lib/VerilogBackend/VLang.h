@@ -74,7 +74,8 @@ public:
   std::string printConstant(Constant *C);
   std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
 
-  unsigned getBitWidth(Value &V);
+  unsigned getBitWidth(const Type *T);
+  unsigned getBitWidth(Value &V) { return getBitWidth(V.getType()); }
 
   static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
     bool printOneBit = false);

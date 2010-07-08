@@ -78,10 +78,14 @@ class RTLWriter : public FunctionPass {
 
   // Atoms
   void emitAtom(HWAtom *A);
-  void emitRegister(HWARegister *Register);
+  void emitValDep(HWAValDep *Dep);
   void emitPreBind(HWAPreBind *PreBind);
-  void emitSigned(HWASigned *Signed);
   void emitPostBind(HWAPostBind *PreBind);
+
+  std::set<HWReg*> UsedRegs;
+
+  void emitAllRegisters();
+
   // Helper function for state end
   // Copy incoming value for Phi node.
   void emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
@@ -128,7 +132,7 @@ class RTLWriter : public FunctionPass {
 
   void visitPHINode(HWAPostBind &A) {}
   // PHINode is a constant node.
-  void visitPHINode(HWAConst *A);
+  void visitPHINode(HWAValDep *A);
 
   void visitBinaryOperator(HWAPostBind &A);
   void visitICmpInst(HWAPostBind &A);
