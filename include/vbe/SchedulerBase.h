@@ -38,33 +38,16 @@ class Scheduler {
   ResCycMapType ResCycMap;
 
 protected:
-  typedef std::list<HWAOpInst*> SchedAtomVec;
-  typedef std::list<HWAOpInst*>::iterator ListIt;
-  SchedAtomVec ScheduleAtoms;
-
   FSMState *CurStage;
 
   void clearSchedulerBase();
 
-  //
-  static bool isOperationFinish(const HWAtom *Atom, unsigned CurSlot);
-  static bool isAllDepsOpFin(const HWAOpInst *Atom, unsigned CurSlot);
-  static bool isAllDepsScheduled(const HWAOpInst *Atom);
   // Get the ready cycle of the given resource.
   unsigned getReadyCycle(HWResource::ResIdType ResId);
 
   // Remember the ready cycle of the given resource.
   void rememberReadyCycle(HWResource::ResIdType ResId, unsigned ReadyCycle);
 
-  // Get Any ready atom.
-  ListIt getReadyAtoms(unsigned Cycle);
-
-  ListIt list_begin() { return ScheduleAtoms.begin(); }
-  ListIt list_end() { return ScheduleAtoms.end(); }
-  bool isListEmpty() const { return ScheduleAtoms.empty(); }
-  void removeFromList(ListIt It);
-
-  void createAtomList();
 public:
   Scheduler() : CurStage(0) {}
   virtual ~Scheduler();

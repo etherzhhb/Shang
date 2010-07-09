@@ -52,17 +52,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
   SmallVector<HWAtom*, 32> Worklist(usetree_iterator::begin(EntryRoot),
                                     usetree_iterator::end(EntryRoot));
 
-
-  SmallVector<HWAValDep*, 32> NewRegs;
-
   while(!Worklist.empty()) {
-    if (HWAValDep* D = dyn_cast<HWAValDep>(Worklist.back())) {
-      NewRegs.push_back(D);
-      Worklist.pop_back();
-      continue;
-    }
-    
-
     HWAOpInst *A = dyn_cast<HWAOpInst>(Worklist.back());
     Worklist.pop_back();
     
@@ -72,44 +62,20 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
-    for (unsigned i = 0, e = A->getInstNumOps(); i != e; ++i) {
-      HWAtom *dep = A->getOperand(i);
-      Value &V = *A->getIOperand(i);
+    for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i)
+      if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i)))
+        if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getSrc())) {
+          if (DI->getLatency() != 0) {
+            Value &V = DI->getValue();
+            DEBUG(DI->print(dbgs()));
+            DEBUG(dbgs() << " Registered\n");
+            HWADrvReg *DR = HI.getDrvReg(DI, HI.getRegNumForLiveVal(V));
 
-      bool isSigned = (((A->getOpcode() == Instruction::AShr) && (i == 0))
-                        || ((A->getOpcode() == Instruction::ICmp)
-                        && (A->getInst<ICmpInst>().isSigned())));
-
-      if (HWAOpInst *DI = dyn_cast<HWAOpInst>(dep)) {
-        if (DI->getLatency() != 0) {
-          DEBUG(DI->print(dbgs()));
-          DEBUG(dbgs() << " Registered\n");
-          HWAValDep *R = HI.getValDepEdge(DI, V, HI.getRegNumForLiveVal(V), isSigned);
-          NewRegs.push_back(R);
-          A->setDep(i, R);
+            A->setDep(i, DR);
+          }
         }
-      }
-    }
   }
 
-  while (!NewRegs.empty()) {
-    HWAValDep *D = NewRegs.back();
-    NewRegs.pop_back();
-    D->scheduledTo(D->getSrc()->getSlot() + D->getSrc()->getLatency());
-  }
-  
-  HWAOpInst &Exit = State.getExitRoot();
-  if (Exit.getInstNumOps()) {
-    HWAValDep *D = cast<HWAValDep>(Exit.getOperand(0));
-    Value &V = *Exit.getIOperand(0);
-    // Create a register for condition.
-    if (D->getSlot() != Exit.getSlot()) {
-      HWAValDep *R = HI.getValDepEdge(D->getSrc(), V, HI.getRegNumForLiveVal(V));
-      Exit.setDep(0, R);
-      R->scheduledTo(D->getSlot());
-    }
-  }
-  
   return false;
 }
 

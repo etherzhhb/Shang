@@ -363,18 +363,18 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
 void FDLScheduler::buildASAPStep() {
   const HWAVRoot *Root = &CurStage->getEntryRoot();
 
-  typedef HWAtom::dag_const_use_iterator ChildIt;
+  typedef HWAtom::const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
   AtomToTF[Root].first = Root->getSlot();
-  WorkStack.push_back(std::make_pair(Root, Root->dag_use_begin()));
+  WorkStack.push_back(std::make_pair(Root, Root->use_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
     ChildIt It = WorkStack.back().second;
 
-    if (It == Node->dag_use_end())
+    if (It == Node->use_end())
       WorkStack.pop_back();
     else {
       const HWAtom *ChildNode = *It;
@@ -389,8 +389,8 @@ void FDLScheduler::buildASAPStep() {
         AtomToTF[ChildNode].first = NewStep;
       
       // Only move forwork when we visit the node from all its deps.
-      if (VC == ChildNode->getNumDAGDeps())
-        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dag_use_begin()));
+      if (VC == ChildNode->getNumDeps())
+        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
     }
   }
 }
@@ -398,18 +398,18 @@ void FDLScheduler::buildASAPStep() {
 void FDLScheduler::buildALAPStep() {
   const HWAOpInst *Root = &CurStage->getExitRoot();
 
-  typedef HWAtom::dag_const_dep_iterator ChildIt;
+  typedef HWAtom::const_dep_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
   AtomToTF[Root].second = CriticalPathLength;
-  WorkStack.push_back(std::make_pair(Root, Root->dag_dep_begin()));
+  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
     ChildIt It = WorkStack.back().second;
 
-    if (It == Node->dag_dep_end())
+    if (It == Node->dep_end())
       WorkStack.pop_back();
     else {
       const HWAtom *ChildNode = *It;
@@ -423,9 +423,13 @@ void FDLScheduler::buildALAPStep() {
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
         AtomToTF[ChildNode].second = NewStep;
 
+      dbgs() << "Visit " << "\n";
+      ChildNode->dump();
+      dbgs() << "VC: " << VC << " total use: " << ChildNode->getNumUses() << '\n';
+
       // Only move forwork when we visit the node from all its deps.
-      if (VC == ChildNode->getNumDAGUses())
-        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dag_dep_begin()));
+      if (VC == ChildNode->getNumUses())
+        WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
     }
   }
 }

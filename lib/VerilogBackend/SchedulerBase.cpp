@@ -29,30 +29,7 @@ using namespace llvm;
 using namespace esyn;
 
 //===----------------------------------------------------------------------===//
-bool Scheduler::isOperationFinish(const HWAtom *Atom, unsigned CurSlot) {
-  return Atom->getSlot() +Atom->getLatency() <= CurSlot;
-}
-
-bool Scheduler::isAllDepsOpFin(const HWAOpInst *Atom, unsigned CurSlot) {
-  for (HWAOpInst::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
-      I != E; ++I)
-    if (!isOperationFinish(*I, CurSlot))
-      return false;
-
-  return true;
-}
-
-bool Scheduler::isAllDepsScheduled(const HWAOpInst *Atom) {
-  for (HWAOpInst::const_dep_iterator I = Atom->dep_begin(), E = Atom->dep_end();
-    I != E; ++I)
-    if (!(*I)->isScheduled())
-      return false;
-
-  return true;
-}
-
 void Scheduler::clearSchedulerBase() {
-  ScheduleAtoms.clear();
   ResCycMap.clear();
 }
 
@@ -67,28 +44,4 @@ unsigned Scheduler::getReadyCycle(HWResource::ResIdType ResId) {
 void Scheduler::rememberReadyCycle(HWResource::ResIdType ResId,
                                    unsigned ReadyCycle) {
   ResCycMap[ResId] = ReadyCycle;
-}
-
-Scheduler::ListIt Scheduler::getReadyAtoms(unsigned Cycle) {
-  for (SchedAtomVec::iterator I = ScheduleAtoms.begin(),
-      E = ScheduleAtoms.end(); I != E; ++I) {
-    HWAOpInst *atom = *I;
-    if (isAllDepsOpFin(atom, Cycle)) {
-      DEBUG(atom->print(dbgs()));
-      DEBUG(dbgs() << " is Ready\n");
-      return I;
-    }
-  }
-  return ScheduleAtoms.end();
-}
-
-void Scheduler::removeFromList(ListIt At) {
-  ScheduleAtoms.erase(At);
-}
-
-void Scheduler::createAtomList() {
-  for (usetree_iterator I = CurStage->usetree_begin(), E = CurStage->usetree_end();
-      I != E; ++I)
-    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))    
-      ScheduleAtoms.push_back(A);
 }

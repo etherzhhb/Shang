@@ -30,6 +30,7 @@
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/InstVisitor.h"
@@ -45,49 +46,170 @@ using namespace llvm;
 namespace esyn {
 
 enum HWAtomTypes {
-  atomValDep,          // The constant Atom
-  atomMemDep,
-  atomCtrlDep,
-
+  atomDrvReg,
   atomPreBind,      // Operate on pre bind resource
   atomPostBind,     // Operate on post binding resource
   atomVRoot       // Virtual Root
 };
 
-template <class GraphType>
-class DAG {};
+enum HWEdgeTypes {
+  edgeValDep,          // The constant Atom
+  edgeMemDep,
+  edgeCtrlDep,
+};
+
+class HWAtom;
+
+/// @brief Inline operation
+class HWEdge {
+  const unsigned short EdgeType;
+  HWAtom *Src;
+  // Iterate distance.
+  unsigned ItDst;
+
+  HWEdge(const HWEdge &);            // DO NOT IMPLEMENT
+  void operator=(const HWEdge &);  // DO NOT IMPLEMENT
+
+protected:
+  HWEdge(enum HWEdgeTypes T, HWAtom *src,
+    unsigned Dst) : EdgeType(T), Src(src), ItDst(Dst) {}
+public:
+  unsigned getEdgeType() const { return EdgeType; }
+  // The referenced value.
+  HWAtom *getSrc() const { return Src; }
+  void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
+
+  virtual void print(raw_ostream &OS) const = 0;
+};
+
+class HWReg {
+  std::set<Value*> Vals;
+  const Type *Ty;
+  unsigned Num;
+
+public:
+  explicit HWReg(unsigned num, Value &V)
+    : Ty(V.getType()), Num(num) {
+      Vals.insert(&V);
+  }
+
+  const Type *getType() const { return Ty; }
+
+  void addValue(Value &V) {
+    assert(Ty == V.getType() && "Can merge difference type!");
+    Vals.insert(&V);
+  }
+
+  unsigned getRegNum() const { return Num; }
+
+  typedef std::set<Value*>::iterator iterator;
+  typedef std::set<Value*>::const_iterator const_iterator;
+
+  iterator begin() { return Vals.begin(); }
+  const_iterator begin() const { return Vals.begin(); }
+
+  iterator end() { return Vals.begin(); }
+  const_iterator end() const { return Vals.begin(); }
+}; 
+
+/// @brief Constant node
+class HWValDep : public HWEdge {
+  const bool Signed;
+  PointerUnion<HWReg*, Constant*> Data;
+public:
+  HWValDep(HWAtom *Src, bool isSigned, HWReg *Reg)
+    : HWEdge(edgeValDep, Src, 0), Signed(isSigned), Data(Reg) {}
+
+  HWValDep(HWAtom *Src, bool isSigned, Constant *C)
+    : HWEdge(edgeValDep, Src, 0), Signed(isSigned), Data(C) {}
+
+  HWReg *getReg() const { return Data.get<HWReg*>(); }
+  Constant *getConstant() const { return Data.get<Constant*>(); }
+  bool isConstant() const { return Data.is<Constant*>(); }
+
+  bool isWire() const { return Data.isNull(); }
+  
+  bool isSigned() const { return Signed; }
+
+  void assignRegister(HWReg *R) { Data = R; }
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWValDep *A) { return true; }
+  static inline bool classof(const HWEdge *A) {
+    return A->getEdgeType() == edgeValDep;
+  }
+};
+
+class HWCtrlDep : public HWEdge {
+public:
+  HWCtrlDep(HWAtom *Src) : HWEdge(edgeCtrlDep, Src, 0) {}
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWCtrlDep *A) { return true; }
+  static inline bool classof(const HWEdge *A) {
+    return A->getEdgeType() == edgeCtrlDep;
+  }
+};
+
+class HWAMemDep : public HWEdge {
+public:
+  enum MemDepTypes {
+    TrueDep, AntiDep, OutputDep
+  };
+private:
+  enum MemDepTypes DepType;
+public:
+  HWAMemDep(HWAtom *Src, enum MemDepTypes DT, unsigned Dst)
+    : HWEdge(edgeMemDep, Src, Dst), DepType(DT) {}
+
+  enum MemDepTypes getDepType() const { return DepType; }
+
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWCtrlDep *A) { return true; }
+  static inline bool classof(const HWEdge *A) {
+    return A->getEdgeType() == edgeMemDep;
+  }
+};
 
 template<class IteratorType, class NodeType>
-class DAGIterator : public std::iterator<std::forward_iterator_tag,
-  NodeType*, ptrdiff_t> {
-  IteratorType I, E;
+class HWAtomDepIterator : public std::iterator<std::forward_iterator_tag,
+                                               NodeType*, ptrdiff_t> {
+  IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
 public:
-  inline DAGIterator(IteratorType i, IteratorType e);
+  HWAtomDepIterator(IteratorType i) : I(i) {}
 
-  bool operator==(const DAGIterator RHS) const { 
-    return (I == RHS.I && E == RHS.E);
-  }
-  bool operator!=(const DAGIterator RHS) const { 
-    return !operator==(RHS);
-  }
+  bool operator==(const HWAtomDepIterator RHS) const { return I == RHS.I; }
+  bool operator!=(const HWAtomDepIterator RHS) const { return I != RHS.I; }
 
-  inline const DAGIterator &operator=(const DAGIterator &RHS) {
+  const HWAtomDepIterator &operator=(const HWAtomDepIterator &RHS) {
     I = RHS.I;
-    E = RHS.E;
     return *this;
   }
 
-  inline NodeType* operator*() const {
+  NodeType* operator*() const {
+    return (*I)->getSrc();
+  }
+  NodeType* operator->() const { return operator*(); }
+
+  HWAtomDepIterator& operator++() {                // Preincrement
+    ++I;
+    return *this;
+  }
+  HWAtomDepIterator operator++(int) { // Postincrement
+    HWAtomDepIterator tmp = *this; ++*this; return tmp; 
+  }
+
+  HWEdge *getEdge() {
     return *I;
   }
-  inline NodeType* operator->() const { return operator*(); }
-
-  inline DAGIterator& operator++();                // Preincrement
-
-  inline DAGIterator operator++(int) {              // Postincrement
-    DAGIterator tmp = *this;
-    ++*this;
-    return tmp; 
+  const HWEdge *getEdge() const {
+    return *I;
   }
 };
 
@@ -101,8 +223,7 @@ class HWAtom : public FoldingSetNode {
   const unsigned short HWAtomType;
 
   /// First of all, we schedule all atom base on dependence
-  HWAtom **Deps;
-  unsigned char NumDeps;
+  SmallVector<HWEdge*, 4> Deps;
 
   // The atoms that using this atom.
   std::list<HWAtom*> UseList;
@@ -124,68 +245,76 @@ protected:
   virtual ~HWAtom();
 
 public:
+  template <class It>
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-    HWAtom **deps, size_t numOps);
+    It depbegin, It depend)  : FastID(ID), HWAtomType(HWAtomTy),
+    Deps(depbegin, depend), Val(V), SchedSlot(0) {
+    for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
+      //Deps.push_back(*I);
+      (*I)->addToUseList(this);
+    }
+  }
+
+  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V);
+
+  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, HWEdge *Dep0);
 
   unsigned getHWAtomType() const { return HWAtomType; }
+
+  SmallVectorImpl<HWEdge*>::iterator edge_begin() { return Deps.begin(); }
+  SmallVectorImpl<HWEdge*>::iterator edge_end() { return Deps.end(); }
 
   /// Profile - FoldingSet support.
   void Profile(FoldingSetNodeID& ID) { ID = FastID; }
 
   Value &getValue() const { return Val; }
 
-  static bool willCauseCycle(const HWAtom *Edge);
-
   /// @name Operands
   //{
-  HWAtom *getDep(unsigned i) const {
-    assert(i < NumDeps && "Operand index out of range!");
+  HWEdge *getDep(unsigned i) const {
     return Deps[i];
   }
 
-  void setDep(unsigned idx, HWAtom *NewDep) {
-    assert(idx < NumDeps && "Operand index out of range!");
-    // Update use list
-    Deps[idx]->removeFromList(this);
+  typedef HWAtomDepIterator<SmallVectorImpl<HWEdge*>::iterator, HWAtom>
+    dep_iterator;
+  typedef HWAtomDepIterator<SmallVectorImpl<HWEdge*>::const_iterator, const HWAtom>
+    const_dep_iterator;
+  dep_iterator dep_begin() { return Deps.begin(); }
+  dep_iterator dep_end() { return Deps.end(); }
+  const_dep_iterator dep_begin() const { return Deps.begin(); }
+  const_dep_iterator dep_end() const { return Deps.end(); }
+
+  size_t getNumDeps() const { return Deps.size(); }
+
+  void setDep(dep_iterator I, HWAtom *NewDep) {
+    I->removeFromList(this);
     NewDep->addToUseList(this);
     // Setup the dependence list.
-    Deps[idx] = NewDep;
+    I.getEdge()->setSrc(NewDep);
   }
 
-  typedef HWAtom *const *dep_iterator;
-  typedef const HWAtom *const *const_dep_iterator;
-  typedef DAGIterator<dep_iterator, HWAtom> dag_dep_iterator;
-  typedef DAGIterator<const_dep_iterator, const HWAtom> dag_const_dep_iterator;
-
-  dep_iterator dep_begin() { return Deps; }
-  dep_iterator dep_end() { return Deps + NumDeps; }
-  const_dep_iterator dep_begin() const { return Deps; }
-  const_dep_iterator dep_end() const { return Deps + NumDeps; }
-
-  dag_dep_iterator dag_dep_begin() {
-    return dag_dep_iterator(dep_begin(), dep_end());
-  }
-  dag_dep_iterator dag_dep_end() {
-    return dag_dep_iterator(dep_end(), dep_end());
-  }
-  dag_const_dep_iterator dag_dep_begin() const {
-    return dag_const_dep_iterator(dep_begin(), dep_end());
-  }
-  dag_const_dep_iterator dag_dep_end() const {
-    return dag_const_dep_iterator(dep_end(), dep_end());
-  }
-
-  size_t getNumDeps() const { return NumDeps; }
-  size_t getNumDAGDeps() const {
-    return std::distance(dag_dep_begin(), dag_dep_end());
+  void setDep(unsigned idx, HWAtom *NewDep) {
+    // Update use list
+    Deps[idx]->getSrc()->removeFromList(this);
+    NewDep->addToUseList(this);
+    // Setup the dependence list.
+    Deps[idx]->setSrc(NewDep);
   }
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
   const_dep_iterator getDepIdx(HWAtom *A) const {
-    return std::find(dep_begin(), dep_end(), A);
+    for (const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+      if ((*I) == A)
+        return I;
+
+    return dep_end();
   }
   dep_iterator getDepIdx(HWAtom *A) {
-    return std::find(dep_begin(), dep_end(), A);
+    for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+      if ((*I) == A)
+        return I;
+    
+    return dep_end();
   }
   // If the current atom depend on A?
   bool isDepOn(HWAtom *A) const { return getDepIdx(A) != dep_end(); }
@@ -195,35 +324,13 @@ public:
   //{
   typedef std::list<HWAtom*>::iterator use_iterator;
   typedef std::list<HWAtom*>::const_iterator const_use_iterator;
-  typedef DAGIterator<use_iterator, HWAtom> dag_use_iterator;
-  typedef DAGIterator<const_use_iterator, const HWAtom> dag_const_use_iterator;
-
   use_iterator use_begin() { return UseList.begin(); }
   const_use_iterator use_begin() const { return UseList.begin(); }
   use_iterator use_end() { return UseList.end(); }
   const_use_iterator use_end() const { return UseList.end(); }
 
-  dag_use_iterator dag_use_begin() {
-    return dag_use_iterator(use_begin(), use_end());
-  }
-  dag_use_iterator dag_use_end() {
-    return dag_use_iterator(use_end(), use_end());
-  }
-  dag_const_use_iterator dag_use_begin() const {
-    return dag_const_use_iterator(use_begin(), use_end());
-  }
-  dag_const_use_iterator dag_use_end() const {
-    return dag_const_use_iterator(use_end(), use_end());
-  }
-
-  size_t getNumDAGUses() const {
-    return std::distance(dag_use_begin(), dag_use_end());
-  }
-
-
   HWAtom *use_back() { return UseList.back(); }
   HWAtom *use_back() const { return UseList.back(); }
-
 
   void removeFromList(HWAtom *User) {
     std::list<HWAtom*>::iterator at = std::find(UseList.begin(), UseList.end(),
@@ -255,25 +362,6 @@ public:
   ///
   void dump() const;
 };
-
-
-template<class IteratorType, class NodeType>
-inline DAGIterator<IteratorType, NodeType>::DAGIterator(IteratorType i,
-                                                        IteratorType e)
-                                                        : I(i), E(e) {
-  while(I != E && HWAtom::willCauseCycle(*I))
-    ++I;
-}
-
-template<class IteratorType, class NodeType>
-inline DAGIterator<IteratorType, NodeType>&
-DAGIterator<IteratorType, NodeType>::operator++() {
-  do
-    ++I;
-  while(I != E && HWAtom::willCauseCycle(*I));
-
-  return *this;
-}
 
 }
 
@@ -325,51 +413,6 @@ template<> struct GraphTraits<const esyn::HWAtom*> {
 };
 
 
-template<> struct GraphTraits<Inverse<esyn::DAG<esyn::HWAtom*> > > {
-  typedef esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::dag_dep_iterator ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->dag_dep_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->dag_dep_end();
-  }
-};
-template<> struct GraphTraits<Inverse<esyn::DAG<const esyn::HWAtom*> > > {
-  typedef const esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::dag_const_dep_iterator ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->dag_dep_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->dag_dep_end();
-  }
-};
-template<> struct GraphTraits<esyn::DAG<esyn::HWAtom*> > {
-  typedef esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::dag_use_iterator ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->dag_use_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->dag_use_end();
-  }
-};
-template<> struct GraphTraits<esyn::DAG<const esyn::HWAtom*> > {
-  typedef const esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::dag_const_use_iterator ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->dag_use_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->dag_use_end();
-  }
-};
-
 }
 
 // FIXME: Move to a seperate header.
@@ -377,131 +420,42 @@ namespace esyn {
 
 // Use tree iterator.
 typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
-  GraphTraits<esyn::DAG<HWAtom*> > > usetree_iterator;
+  GraphTraits<HWAtom*> > usetree_iterator;
 typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
-  GraphTraits<esyn::DAG<const HWAtom*> > > const_usetree_iterator;
+  GraphTraits<const HWAtom*> > const_usetree_iterator;
 
 // Predecessor tree iterator, travel the tree from exit node.
 typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
-  GraphTraits<Inverse<esyn::DAG<HWAtom*> > > > deptree_iterator;
+  GraphTraits<Inverse<HWAtom*> > > deptree_iterator;
 
 typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
-  GraphTraits<Inverse<esyn::DAG<const HWAtom*> > > > const_deptree_iterator;
+  GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
 
-/// @brief Inline operation
-class HWADepEdge : public HWAtom {
-protected:
-  HWADepEdge(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Value &V, HWAtom **O) : HWAtom(ID, T, V, O, 1) {}
+// Drive register
+class HWADrvReg : public HWAtom {
 public:
+  HWADrvReg(const FoldingSetNodeIDRef ID, HWEdge *Edge)
+    : HWAtom(ID, atomDrvReg, Edge->getSrc()->getValue(), Edge) {
+    scheduledTo(Edge->getSrc()->getSlot() + Edge->getSrc()->getLatency());
+  }
 
-  // The referenced value.
-  HWAtom *getSrc() { return getDep(0); }
+  const HWReg *getReg() const {
+    return cast<HWValDep>(getDep(0))->getReg();
+  }
 
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWADepEdge *A) { return true; }
+  static inline bool classof(const HWADrvReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomValDep ||
-      A->getHWAtomType() == atomMemDep ||
-      A->getHWAtomType() == atomCtrlDep;
+    return A->getHWAtomType() == atomDrvReg;
   }
-};
-
-class HWReg {
-  std::set<Value*> Vals;
-  const Type *Ty;
-  unsigned Num;
-
-public:
-  explicit HWReg(unsigned num, Value &V)
-    : Ty(V.getType()), Num(num) {
-    Vals.insert(&V);
-  }
-
-  const Type *getType() const { return Ty; }
-
-  void addValue(Value &V) {
-    assert(Ty == V.getType() && "Can merge difference type!");
-    Vals.insert(&V);
-  }
-
-  unsigned getRegNum() const { return Num; }
-
-  typedef std::set<Value*>::iterator iterator;
-  typedef std::set<Value*>::const_iterator const_iterator;
-
-  iterator begin() { return Vals.begin(); }
-  const_iterator begin() const { return Vals.begin(); }
-
-  iterator end() { return Vals.begin(); }
-  const_iterator end() const { return Vals.begin(); }
-}; 
-
-/// @brief Constant node
-class HWAValDep : public HWADepEdge {
-  bool Signed;
-  HWReg *R;
-public:
-  HWAValDep(const FoldingSetNodeIDRef ID, Value &V, HWAtom **E,
-    bool isSigned, HWReg *Reg)
-    : HWADepEdge(ID, atomValDep, V, E), Signed(isSigned), R(Reg) {}
-
-  HWReg *getReg() const { return R; }
 
   void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAValDep *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomValDep;
-  }
-};
-
-class HWACtrlDep : public HWADepEdge {
-public:
-  HWACtrlDep(const FoldingSetNodeIDRef ID, Value &V, HWAtom **E)
-    : HWADepEdge(ID, atomCtrlDep, V, E) {}
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWACtrlDep *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomCtrlDep;
-  }
-};
-
-class HWAMemDep : public HWADepEdge {
-public:
-  enum MemDepTypes {
-    TrueDep, AntiDep, OutputDep
-  };
-private:
-  enum MemDepTypes DepType;
-  // Iteration distance.
-  unsigned ItDst;
-public:
-  HWAMemDep(const FoldingSetNodeIDRef ID, Value &V, HWAtom **E,
-    enum MemDepTypes DT, unsigned Dst)
-    : HWADepEdge(ID, atomMemDep, V, E), DepType(DT), ItDst(Dst) {}
-
-  enum MemDepTypes getDepType() const { return DepType; }
-  unsigned getItDst() const { return ItDst; }
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWACtrlDep *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomMemDep;
-  }
 };
 
 // Virtual Root
 class HWAVRoot : public HWAtom {
 public:
   HWAVRoot(const FoldingSetNodeIDRef ID, BasicBlock &BB)
-    : HWAtom(ID, atomVRoot, BB, 0, 0) {}
+    : HWAtom(ID, atomVRoot, BB) {}
 
   BasicBlock &getBasicBlock() { return cast<BasicBlock>(getValue()); }
 
@@ -538,10 +492,11 @@ class HWAOpInst : public HWAtom {
 protected:
   unsigned SubClassData;
 
+  template <class It>
   HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, unsigned latency, HWAtom **deps, size_t numDep,
+    Instruction &Inst, unsigned latency, It depbegin, It depend,
     size_t OpNum, unsigned subClassData = 0)
-    : HWAtom(ID, T, Inst, deps, numDep), Latency(latency), NumOps(OpNum),
+    : HWAtom(ID, T, Inst, depbegin, depend), Latency(latency), NumOps(OpNum),
     SubClassData(subClassData) {}
 public:
   // Get the latency of this atom
@@ -565,11 +520,16 @@ public:
 
   size_t getInstNumOps () const { return NumOps; }
 
+  HWValDep *getValDep(unsigned idx) {
+    assert(idx < NumOps && "index Out of range!");
+    return cast<HWValDep>(getDep(idx));
+  }
+
   HWAtom *getOperand(unsigned idx) {
     assert(idx < NumOps && "index Out of range!");
-    assert(&(getDep(idx)->getValue()) == getInst<Instruction>().getOperand(idx)
-      && "HWPostBind operands broken!");
-    return getDep(idx);
+    //assert(&(getDep(idx)->getSrc()->getValue()) == getInst<Instruction>().getOperand(idx)
+    //  && "HWPostBind operands broken!");
+    return getDep(idx)->getSrc();
   }
 
   // Help the scheduler to identify difference operation class
@@ -593,11 +553,13 @@ public:
 
 class HWAPostBind : public HWAOpInst {
 public:
+  template <class It>
   explicit HWAPostBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
+    unsigned latency, It depbegin, It depend, size_t OpNum,
       enum HWResource::ResTypes OpClass)
-    : HWAOpInst(ID, atomPostBind, Inst, latency,
-                  deps, numDep, OpNum, OpClass) {}
+    : HWAOpInst(ID, atomPostBind, Inst, latency, 
+    depbegin, depend, OpNum, OpClass) {}
+  
   enum HWResource::ResTypes getResClass() const {
     return (HWResource::ResTypes)SubClassData;
   }
@@ -613,10 +575,11 @@ public:
 
 class HWAPreBind : public HWAOpInst {
 public:
+  template <class It>
   explicit HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, HWAtom **deps, size_t numDep, size_t OpNum,
+    unsigned latency, It depbegin, It depend, unsigned OpNum,
     enum HWResource::ResTypes OpClass, unsigned Instance = 0)
-    : HWAOpInst(ID, atomPreBind, Inst, latency, deps, numDep, OpNum,
+    : HWAOpInst(ID, atomPreBind, Inst, latency, depbegin, depend, OpNum,
     HWResource::createResId(OpClass, Instance)) {}
 
   HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,

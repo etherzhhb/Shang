@@ -78,11 +78,11 @@ class RTLWriter : public FunctionPass {
 
   // Atoms
   void emitAtom(HWAtom *A);
-  void emitValDep(HWAValDep *Dep);
   void emitPreBind(HWAPreBind *PreBind);
   void emitPostBind(HWAPostBind *PreBind);
+  void emitDrvReg(HWADrvReg *DR);
 
-  std::set<HWReg*> UsedRegs;
+  std::set<const HWReg*> UsedRegs;
 
   void emitAllRegisters();
 
@@ -94,6 +94,7 @@ class RTLWriter : public FunctionPass {
   void clear();
   
   std::string getAsOperand(Value *V, const std::string &postfix = "");
+  std::string getAsOperand(HWEdge *E);
   std::string getAsOperand(HWAtom *A);
 
 
@@ -131,8 +132,6 @@ class RTLWriter : public FunctionPass {
   void visitUnreachableInst(HWAPostBind &A){}
 
   void visitPHINode(HWAPostBind &A) {}
-  // PHINode is a constant node.
-  void visitPHINode(HWAValDep *A);
 
   void visitBinaryOperator(HWAPostBind &A);
   void visitICmpInst(HWAPostBind &A);

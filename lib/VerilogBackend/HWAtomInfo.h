@@ -100,19 +100,19 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
   // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
-  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
                      size_t OpNum, enum HWResource::ResTypes OpClass,
                      unsigned latency, unsigned ResInst = 0);
-  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
                      enum HWResource::ResTypes OpClass,  unsigned latency, 
                      unsigned ResInst = 0) {
     return getPreBind(I, Deps, I.getNumOperands(), OpClass, latency, ResInst);
   }
 
-  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
     size_t OpNum, unsigned latency, enum HWResource::ResTypes OpClass);
 
-  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWAtom*> &Deps,
+  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
                        unsigned latency, enum HWResource::ResTypes OpClass) {
     return getPostBind(I, Deps, I.getNumOperands(), latency, OpClass);
   }
@@ -134,26 +134,40 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     return ControlRoot;
   }
 
-  HWAtom *getAtomInState(Value &V, BasicBlock *BB) {
+  HWValDep *getValDepEdge(HWAtom *Src, HWReg *R, bool isSigned = 0) {
+    return new (HWAtomAllocator) HWValDep(Src, isSigned, R);
+  }
+
+  HWValDep *getValDepEdge(HWAtom *Src, Constant *C, bool isSigned = 0) {
+    return new (HWAtomAllocator) HWValDep(Src, isSigned, C);
+  }
+
+  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
+    return new (HWAtomAllocator) HWCtrlDep(Src);
+  }
+
+  HWValDep *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
-    if (isa<Argument>(V))
-      return getValDepEdge(getEntryRoot(BB), V, getRegNumForLiveVal(V));
-    else if (isa<Constant>(V))
-      return getValDepEdge(getEntryRoot(BB), V);
+    if (isa<Argument>(V) || isa<PHINode>(V))
+      return getValDepEdge(getEntryRoot(BB), getRegNumForLiveVal(V), isSigned);
+    else if (Constant *C = dyn_cast<Constant>(&V))
+      return getValDepEdge(getEntryRoot(BB), C, isSigned);
 
     // Now it is an Instruction
     Instruction &Inst = cast<Instruction>(V);
     if (BB == Inst.getParent())
-      return getAtomFor(Inst);
+      // Create a wire dep for atoms in the same state.
+      return getValDepEdge(getAtomFor(Inst), (HWReg*)0, isSigned);
     else
-      return getValDepEdge(getEntryRoot(BB), V, getRegNumForLiveVal(V));
+      // Otherwise we need a register.
+      return getValDepEdge(getEntryRoot(BB), getRegNumForLiveVal(V), isSigned);
   }
-  void addOperandDeps(Instruction &I, SmallVectorImpl<HWAtom*> &Deps) {
+  void addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps) {
     BasicBlock *ParentBB = I.getParent();
     for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
         OI != OE; ++OI)
       if(!isa<BasicBlock>(OI)) // Ignore the basic Block.
-        Deps.push_back(getAtomInState(**OI, ParentBB));
+        Deps.push_back(getValDepInState(**OI, ParentBB));
   }
 
   void clear();
@@ -189,11 +203,6 @@ public:
 
   HWAPreBind *bindToResource(HWAPostBind &PostBind, unsigned Instance);
 
-  HWAValDep *getValDepEdge(HWAtom *Src, Value &Val,
-                           HWReg *R = 0, bool isSigned = 0);
-
-  HWACtrlDep *getCtrlDepEdge(HWAtom *Src, Value &Val);
-
   FSMState &getStateFor(BasicBlock &BB) const {
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");
@@ -213,6 +222,8 @@ public:
     LiveValueReg.insert(std::make_pair(&V, R));
     return R;
   }
+
+  HWADrvReg *getDrvReg(HWAtom *Src, HWReg *Reg);
 
   HWAtom *getAtomFor(Value &V) const {
     AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);

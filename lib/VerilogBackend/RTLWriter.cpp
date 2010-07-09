@@ -256,20 +256,34 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomValDep: {
-      if (isa<ConstantInt>(V))
-        return vlang->printConstant(cast<ConstantInt>(V));
-
-      HWAValDep *VD = cast<HWAValDep>(A);
-      if (HWReg *R = VD->getReg())
-        return "Reg"+utostr(R->getRegNum())
-        + " /*" + vlang->GetValueName(V) +"*/";
-      else
-        return getAsOperand(VD->getSrc());
-      break;
-    }
+    case atomDrvReg:
+      return "Reg"+utostr(cast<HWADrvReg>(A)->getReg()->getRegNum())
+        + " /*" + vlang->GetValueName(&A->getValue()) +"*/";
     default:
       return "<Unknown Atom>";
+  }
+}
+
+std::string RTLWriter::getAsOperand(HWEdge *E) {
+  switch (E->getEdgeType()) {
+  case edgeValDep: {
+    HWValDep *VD = cast<HWValDep>(E);
+    if (VD->isConstant())
+      return vlang->printConstant(VD->getConstant());
+    
+    if (VD->isWire())
+      return getAsOperand(VD->getSrc());
+ 
+    if (HWReg *R = VD->getReg()) {
+      Value *V = &(VD->getSrc()->getValue());
+      return "Reg"+utostr(R->getRegNum())
+      + " /*" + vlang->GetValueName(V) +"*/";
+    }
+    break;
+  }
+  default:
+    llvm_unreachable("Do not use other edge as operand!");
+    return "<Unknown edge>";
   }
 }
 
@@ -287,8 +301,8 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomValDep:
-        emitValDep(cast<HWAValDep>(A));
+      case atomDrvReg:
+        emitDrvReg(cast<HWADrvReg>(A));
         break;
       case atomVRoot:
         break;
@@ -298,12 +312,18 @@ void RTLWriter::emitAtom(HWAtom *A) {
   }
 }
 
-
+void RTLWriter::emitDrvReg(HWADrvReg *DR) {
+  const HWReg *R = DR->getReg();
+  UsedRegs.insert(R);
+  
+  std::string Name = getAsOperand(DR);
+  ControlBlock.indent(8) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
+}
 
 void RTLWriter::emitAllRegisters() {
-  for (std::set<HWReg*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
+  for (std::set<const HWReg*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
       I != E; ++I) {
-    HWReg *R = *I;
+    const HWReg *R = *I;
     unsigned BitWidth = vlang->getBitWidth(R->getType());
     std::string Name = "Reg"+utostr(R->getRegNum());
 
@@ -312,17 +332,17 @@ void RTLWriter::emitAllRegisters() {
   } 
 }
 
-void RTLWriter::emitValDep(HWAValDep *Dep) {
-  if (isa<HWAVRoot>(Dep->getSrc()))
-    return;
-
-  if (HWReg *R = Dep->getReg()) {
-    UsedRegs.insert(R);
-    
-    std::string Name = getAsOperand(Dep);
-    ControlBlock.indent(8) << Name << " <= " << getAsOperand(Dep->getSrc()) << ";\n";
-  }
-}
+//void RTLWriter::emitValDep(HWValDep *Dep) {
+//  if (isa<HWAVRoot>(Dep->getSrc()))
+//    return;
+//
+//  if (HWReg *R = Dep->getReg()) {
+//    UsedRegs.insert(R);
+//    
+//    std::string Name = getAsOperand(Dep);
+//    ControlBlock.indent(8) << Name << " <= " << getAsOperand(Dep->getSrc()) << ";\n";
+//  }
+//}
 
 //void RTLWriter::emitValDep(HWARegister *Register) {
 //  HWAtom *Val = Register->getRefVal();
@@ -558,20 +578,6 @@ void RTLWriter::visitICmpInst(HWAPostBind &A) {
       default: DataPath << "Unknown icmppredicate";
   }
   DataPath << getAsOperand(A.getOperand(1)) << ");\n";
-}
-
-
-void RTLWriter::visitPHINode(HWAValDep *A) {
-  PHINode &I = cast<PHINode>(A->getValue());
-  unsigned BitWidth = vlang->getBitWidth(I);
-
-  std::string Name = getAsOperand(A);
-
-  // Declare the register
-  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
-  // Reset the register
-  vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
-  // Phi node will be assign at terminate state
 }
 
 void RTLWriter::visitExtInst(HWAPostBind &A) {
