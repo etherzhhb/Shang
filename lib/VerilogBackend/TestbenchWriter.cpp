@@ -20,6 +20,7 @@
 #include "TestbenchWriter.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/ADT/StringExtras.h"
+//#include "llvm/Argument.h"
 
 #define DEBUG_TYPE "vbe-tb-writer"
 #include "llvm/Support/Debug.h"
@@ -31,33 +32,42 @@ using namespace xVerilog;
 
 std::string TestbenchWriter::testBech(Function&F,unsigned level) {
   std::stringstream ss;
+  
   int k=0;
+  int x=0;
   int y=0;
+  
   ss<<"module tb;\n";
-  const Type *RetTy = F.getReturnType();
-  assert((RetTy->isIntegerTy() || RetTy->isVoidTy()) && "Unsupport type.");
-  ss<<" import \"DPI-C\" pure function int " << F.getNameStr() << "(";
+
+  const Type *RetTy = F.getReturnType(); 
+  ss<<"import \"DIP-C\" funtion "<<F.getReturnType()<<" "<<F.getNameStr()<<"(";
+
   if (!F.arg_empty()) {
     for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();
       I != E; ++I) {
         k++;
-        ss<<"int ";
+        Argument *Arg=J;
+        
+        ss<<J->getType()<<" ";
+     
         assert(!I->getNameStr().empty() && "Arg without name?");
         ss<<I->getNameStr();
         if (k!=F.arg_size())
           ss<<",";
     }
   }
-
   ss<<");\n";
+
   ss<<"reg clk = 1'b0,\n";
-  ss<<" rstN = 1'b0,\n";
-  ss<<"start = 1'b0;\n";
-  ss<<"wire [31:0] r1;\n";
-  ss<<"reg[31:0]  r0 = 32'b0,";
-
-  int x=0;
-
+  ss<<"   rstN = 1'b0,\n";
+  ss<<"  start = 1'b0,\n";
+  ss<<"    fin = 1'b0;\n";
+  ss<<"wire [31:0] r1;\n";//??
+  ss<<"reg[31:0]  r0 = 32'b0,";//??
+  //why reg clk,rstN,start,wire[31:0] r1,reg[31:0] r0?? Are they common? Or should be common??
+  //clk,rst,start,fin maybe always needed
+  
+//testbench initial
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();
       I != E; ++I) {
     x++;
@@ -86,15 +96,17 @@ std::string TestbenchWriter::testBech(Function&F,unsigned level) {
 
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();I != E; ++I) {
     assert(!I->getNameStr().empty() && "Arg without name?");
+    ss<<I->getNameStr();
     ss<<"<= $random();\n";
   }
   ss<<"end\n";
 
-  for(unsigned i = 0; i < level; ++i)
+  for(unsigned i = 0; i < level; ++i)//??
     ss<<"@(negedge clk)\n;\n";
 
   ss<<"@(negedge clk)\n";
   ss<<"r0 <= add(";
+  
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();I != E; ++I) {
     y++;
     assert(!I->getNameStr().empty() && "Arg without name?");
@@ -103,9 +115,10 @@ std::string TestbenchWriter::testBech(Function&F,unsigned level) {
       ss<<",";
   }
 
-  ss<<");;\n";
+  ss<<");\n";
   ss<<"end\n";
-  ss<<"add dut(";
+  ss<<F.getReturnType();
+  ss<<" dut(";
 
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();I != E; ++I) {
     ss<<".";
@@ -114,7 +127,7 @@ std::string TestbenchWriter::testBech(Function&F,unsigned level) {
     ss<<I->getNameStr()<<"),";
   }
 
-  ss<<".clk(clk),.reset(rstN),.Ret_add(r1));\n";
+  ss<<".clk(clk),.reset(rstN),start(start),.fin(fin),.Ret_add(r1));\n";
   ss<<"endmodule\n";
 
   return ss.str();
