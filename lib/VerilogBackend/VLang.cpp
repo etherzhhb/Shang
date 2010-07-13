@@ -29,7 +29,7 @@
 #include <sstream>
 
 using namespace llvm;
-using namespace xVerilog;
+using namespace esyn;
 
 namespace {
   class VBEMCAsmInfo : public MCAsmInfo {
@@ -93,7 +93,7 @@ std::string VLang::printConstantInt(uint64_t value,
   else{
     std::stringstream ss;
     ss<<std::hex<<value;
-    unsigned int uselength=(bitwidth/4)+(((bitwidth%3)==0)?0:1);
+    unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
     std::string sout=ss.str();
     if(uselength<sout.length())
       sout=sout.substr(sout.length()-uselength,uselength);
@@ -137,7 +137,7 @@ std::string VLang::GetValueName(const Value *Operand) {
     VarName += ch;
   }
 
-  return "llvm_vbe_" + VarName;
+  return "esyn_" + VarName;
 }
 
 std::string VLang::printType(const Type *Ty,
@@ -177,6 +177,16 @@ std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
   }
 }
 
+unsigned VLang::getBitWidth(Value &V) {
+  unsigned BitWidth = 0;
+  if (const IntegerType *IntTy = dyn_cast<IntegerType>(V.getType()))
+    return IntTy->getBitWidth();
+  else if (V.getType()->isPointerTy())
+    return TD->getPointerSizeInBits();
+  //
+  return 0;
+}
+
 void VLang::initializePass() {
   TD = getAnalysisIfAvailable<TargetData>();
   TAsm = new VBEMCAsmInfo();
@@ -188,3 +198,124 @@ char VLang::ID = 0;
 
 static RegisterPass<VLang> X("vlang", "vbe - Verilog language writer",
                              false, true);
+
+raw_ostream &VLang::comment(raw_ostream &ss) const {
+  ss <<  "//  ";
+  return ss;
+}
+
+raw_ostream &VLang::indent(raw_ostream &ss) const {
+  return ss.indent(ind_level);
+}
+
+raw_ostream &VLang::moduleBegin(raw_ostream &ss, std::string &ModuleName) {
+  ss << "module " << ModuleName << "(\n";
+  return ss;
+}
+
+raw_ostream &VLang::endModuleDecl(raw_ostream &ss) {
+  ss <<  ");\n";
+  return ss;
+}
+
+raw_ostream &VLang::alwaysBegin(raw_ostream &ss, unsigned ind,
+                                const std::string &Clk /*= "clk"*/,
+                                const std::string &ClkEdge /*= "posedge"*/,
+                                const std::string &Rst /*= "rstN"*/,
+                                const std::string &RstEdge /*= "negedge"*/){
+  // TODO: Support Sync reset
+  // TODO: SystemVerilog always_ff?
+  ss.indent(ind) << "always @("
+    << ClkEdge << " "<< Clk <<", "
+    << RstEdge << " " << Rst
+    <<") begin\n";
+  ind += 2;
+  ss.indent(ind) << "if (";
+  // negative edge reset?
+  if (RstEdge == "negedge")
+    ss << "!";
+  ss << Rst << ") begin\n";
+  ind += 2;
+  ss.indent(ind) << "// reset registers\n";
+  return ss;
+}
+
+raw_ostream &VLang::resetRegister(raw_ostream &ss, const std::string &Name,
+                                  unsigned BitWidth, unsigned InitVal){
+  ss << Name << " <=  "
+     << printConstantInt(InitVal, BitWidth, false)
+     << ";\n";
+  return ss;
+}
+
+raw_ostream &VLang::endModule(raw_ostream &ss) {
+  ss << "endmodule\n\n";
+  return ss;
+}
+
+raw_ostream &VLang::endSwitch(raw_ostream &ss) {
+  ss << "endcase\n";
+  return ss;
+}
+
+raw_ostream &VLang::begin(raw_ostream &ss) {
+  ss << "begin\n";
+  return ss;
+}
+
+raw_ostream &VLang::end(raw_ostream &ss) {
+  ss << "end\n";
+  return ss;
+}
+
+raw_ostream &VLang::ifElse(raw_ostream &ss, bool Begin) {
+  ss << "end else" << (Begin ? " begin\n" : "\n");
+  return ss;
+}
+
+raw_ostream &VLang::ifBegin(raw_ostream &ss, const std::string &Condition) {
+  ss << "if (" << Condition << ") begin\n";
+  return ss;
+}
+
+raw_ostream &VLang::matchCase(raw_ostream &ss, const std::string &StateName) {
+  ss << StateName << ": begin\n";
+  return ss;
+}
+
+raw_ostream &VLang::switchCase(raw_ostream &ss, const std::string &StateName) {
+  ss << "case (" << StateName <<")\n";
+  return ss;
+}
+
+raw_ostream &VLang::alwaysEnd(raw_ostream &ss, unsigned ind) {
+  ss.indent(ind + 2) << "end //else reset\n";
+  ss.indent(ind) << "end //always @(..)\n\n";
+  return ss;
+}
+
+raw_ostream &VLang::param(raw_ostream &ss, const std::string &Name,
+                          unsigned BitWidth, unsigned Val) {
+  ss << "parameter " << Name
+    << " = " << printConstantInt(Val, BitWidth, false) << ";\n";
+  return ss;
+}
+
+raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
+                               unsigned BitWidth, unsigned Val,
+                               bool isReg, bool isSigned,
+                               const std::string &Term) {
+  ss << (isReg ? "reg " : "wire ");
+  
+  if(isSigned) ss << "signed ";
+
+  if (BitWidth != 1) ss << "[" << BitWidth - 1 << ":0]";
+
+  ss << " " << Name;
+
+  if (isReg)
+    ss << " = " << printConstantInt(0, BitWidth, false);
+
+  ss << Term <<'\n';
+  return ss;
+}

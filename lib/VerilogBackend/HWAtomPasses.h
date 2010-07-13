@@ -1,4 +1,4 @@
-//===-- vbe/TestbenchWriter.h - Testbench auto generation --------*- C++ -*-===//
+//===------------- HWAtomPasses.h - Passes run on HWAtoms --------*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,40 +13,32 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This class generate Testbench for verilog design automatically. 
+// HWAtoms optimization passes
 //
 //===----------------------------------------------------------------------===//
-#ifndef VBE_TESTBENCH_WRITER
-#define VBE_TESTBENCH_WRITER
-
-#include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Support/raw_ostream.h"
+#ifndef VBE_HARDWARE_ATOM_PASSES_H
+#define VBE_HARDWARE_ATOM_PASSES_H
+namespace llvm {
+  class Pass;
+}
 
 using namespace llvm;
 
 namespace esyn {
 
-class TestbenchWriter : public FunctionPass{
-    raw_ostream &Out;
+// Simple As Soon As Possible Scheduler
+Pass *createASAPSchedulePass();
 
-public:
-    static char ID; 
+// Force-directed Scheduler
+Pass *createFDLSchedulePass();
 
-    explicit TestbenchWriter(raw_ostream &O)
-      :FunctionPass(&ID),Out(O) {}
+// Registers Allocation
+Pass *createRegisterAllocationPass();
 
-    virtual bool runOnFunction(Function &F) {
-      // Dirty Hack
-      Out<<testBech(F,1);
 
-      return false;
-    }
+// Compatibility Path Based Binding
+Pass *createCompPathBindingPass();
 
-    std::string testBech(Function&F,unsigned level);
-  };
-
-} //end namespace
-
+} // end namespace
 
 #endif
