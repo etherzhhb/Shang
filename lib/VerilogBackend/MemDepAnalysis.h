@@ -44,15 +44,20 @@ class HWAtomInfo;
 class MemDepInfo : public FunctionPass {
 public:
   struct DepInfo {
-    HWMemDep::MemDepTypes Dep  : 2;
-    unsigned ItDst                  : 30;
+    unsigned Dep    : 2;
+    unsigned ItDst  : 30;
 
     DepInfo(HWMemDep::MemDepTypes dep, unsigned itDst);
 
-    DepInfo() : Dep(HWMemDep::NoDep), ItDst(0) {}
+    DepInfo();
 
     bool hasDep() const {
       return Dep != HWMemDep::NoDep ;
+    }
+
+    unsigned getItDst() const { return ItDst; }
+    enum HWMemDep::MemDepTypes getDepType() const {
+      return (HWMemDep::MemDepTypes) Dep;
     }
   };
 private:
@@ -62,7 +67,8 @@ private:
   LoopInfo *LI;
 
   DepInfo advancedDepAnalysis(GetElementPtrInst *SrcAddr, GetElementPtrInst *DstAddr,
-    bool SrcLoad, bool DstLoad, BasicBlock &BB, bool SrcBeforeDest);
+    bool SrcLoad, bool DstLoad, BasicBlock &BB, bool SrcBeforeDest,
+    unsigned ElSizeInByte);
 
   DepInfo AnalyzeDeps(Value *SrcAddr, Value *DstAddr, bool SrcLoad, bool DstLoad,
     BasicBlock &BB, bool SrcBeforeDest);

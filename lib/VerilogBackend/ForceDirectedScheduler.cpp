@@ -423,9 +423,10 @@ void FDLScheduler::buildALAPStep() {
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
         AtomToTF[ChildNode].second = NewStep;
 
-      dbgs() << "Visit " << "\n";
-      ChildNode->dump();
-      dbgs() << "VC: " << VC << " total use: " << ChildNode->getNumUses() << '\n';
+      DEBUG(dbgs() << "Visit " << "\n");
+      DEBUG(ChildNode->dump());
+      DEBUG(dbgs() << "VC: " << VC << " total use: "
+                   << ChildNode->getNumUses() << '\n');
 
       // Only move forwork when we visit the node from all its deps.
       if (VC == ChildNode->getNumUses())

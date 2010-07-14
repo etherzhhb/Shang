@@ -109,8 +109,8 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB)
         continue;
 
       // Add dependencies edges.
-      HWMemDep *MemDep = getMemDepEdge(Src, getEntryRoot(BB),
-                                        Dep.Dep, Dep.ItDst);
+      HWMemDep *MemDep = getMemDepEdge(Src, getEntryRoot(&BB),
+                                        Dep.getDepType(), Dep.getItDst());
       Dst->addDep(MemDep);
     }
   }
@@ -410,7 +410,8 @@ HWADrvReg *HWAtomInfo::getDrvReg(HWAtom *Src, HWReg *Reg) {
 HWMemDep *HWAtomInfo::getMemDepEdge(HWAOpInst *Src, HWAVRoot *Root,
                                     enum HWMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
-  return new (HWAtomAllocator) HWMemDep(Diff > 0 ? Root : Src, Src, DepType, Diff);
+  return new (HWAtomAllocator) HWMemDep(Diff > 0 ? (HWAtom*)Root : (HWAtom*)Src,
+                                        Src, DepType, Diff);
 }
 
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {

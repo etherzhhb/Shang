@@ -24,7 +24,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/LoopInfo.h"
-#define DEBUG_TYPE "vbe-mem-dep-analyze-info"
+#define DEBUG_TYPE "vbe-mem-dep-info"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -49,16 +49,19 @@ MemDepInfo::DepInfo::DepInfo(HWMemDep::MemDepTypes dep, unsigned itDst)
     dbgs() << " dep, with distance: " << itDst << '\n';
   );
 }
+
+MemDepInfo::DepInfo::DepInfo() : Dep(HWMemDep::NoDep), ItDst(0) { 
+}
 //===----------------------------------------------------------------------===//
-char HWAtomInfo::ID = 0;
-RegisterPass<HWAtomInfo> X("vbe-memdep",
+char MemDepInfo::ID = 0;
+RegisterPass<MemDepInfo> X("vbe-memdep",
                            "vbe - Memory dependencies analyzsis");
 
 MemDepInfo::DepInfo
-MemDepInfo::getDepInfo(Instruction &Src, Instruction &Dst,
-                               BasicBlock &BB, bool SrcBeforeDest) {
+MemDepInfo::getDepInfo(Instruction &Src, Instruction &Dst, BasicBlock &BB,
+                       bool SrcBeforeDest) {
   assert(&Src != &Dst && "No self deps!");
-  DEBUG(dbgs() << "Compute deps between: "
+  DEBUG(dbgs() << "Compute deps between:\n"
                << Src << "\n\tand \n" << Dst << "\n:");
 
   if (LoadInst *L = dyn_cast<LoadInst>(&Src)) {
@@ -115,8 +118,12 @@ MemDepInfo::AnalyzeDeps(Value *SrcAddr, Value *DstAddr, bool SrcLoad, bool DstLo
 
   switch(AA->alias(SGPtr, SrcSize, DGPtr, DstSize)) {
   case AliasAnalysis::MustAlias:
-    return advancedDepAnalysis(SrcGEP, DstGEP, SrcLoad, DstLoad,
-                                BB, SrcBeforeDest);
+    // We can only handle two access have the same element size.
+    if (SrcSize == DstSize)
+      return advancedDepAnalysis(SrcGEP, DstGEP, SrcLoad, DstLoad,
+                                BB, SrcBeforeDest, SrcSize);
+    // FIXME: Handle gep with difference size.
+    // Fall thoungh.
   case AliasAnalysis::MayAlias:
     return createDep(SrcLoad, DstLoad, SrcBeforeDest);
   default:
@@ -131,17 +138,21 @@ MemDepInfo::DepInfo
 MemDepInfo::advancedDepAnalysis(GetElementPtrInst *SrcAddr,
                                 GetElementPtrInst *DstAddr,
                                 bool SrcLoad, bool DstLoad,
-                                BasicBlock &BB, bool SrcBeforeDest) {
+                                BasicBlock &BB, bool SrcBeforeDest,
+                                unsigned ElSizeInByte) {
   const SCEV *SSAddr = SE->getSCEVAtScope(SrcAddr, LI->getLoopFor(&BB)),
              *SDAddr = SE->getSCEVAtScope(DstAddr, LI->getLoopFor(&BB));
-
+  DEBUG(dbgs() << *SSAddr << " and " << *SDAddr << '\n');
   // Use SCEV to compute the dependencies distance.
   const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
   // TODO: Get range.
   if (const SCEVConstant *C = dyn_cast<SCEVConstant>(Distance)) {
     int ItDistance = C->getValue()->getSExtValue();
     if (ItDistance >= 0)
-      return createDep(SrcLoad, DstLoad, SrcBeforeDest, ItDistance);
+      // The pointer distance is in Byte, but we need to get the distance in
+      // Iteration.
+      return createDep(SrcLoad, DstLoad, SrcBeforeDest,
+                      ItDistance / ElSizeInByte);
     else
       return DepInfo();
   }

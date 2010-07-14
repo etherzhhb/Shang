@@ -41,6 +41,10 @@ void esyn::HWADrvReg::print(raw_ostream &OS) const {
 
 }
 
+void HWMemDep::print(raw_ostream &OS) const {
+
+}
+
 void HWCtrlDep::print(raw_ostream &OS) const {
   //OS << "Value dep: ";
   //WriteAsOperand(OS, &Val, false);
