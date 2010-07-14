@@ -6,12 +6,13 @@ add_llvm_target(VerilogBackend
   CompPathBinding.cpp
   DDG.cpp
   ForceDirectedScheduler.cpp
-  VBackend.cpp
-  VLang.cpp
+  MemDepAnalysis.cpp
   RegisterAllocation.cpp
   RTLWriter.cpp
   SchedulerBase.cpp
   TestbenchWriter.cpp
+  VBackend.cpp
+  VLang.cpp
   )
   
  target_link_libraries (LLVMVerilogBackend LLVMDesignConfig LLVMVerilogBackendInfo)

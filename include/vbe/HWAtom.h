@@ -30,6 +30,7 @@
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
@@ -59,6 +60,7 @@ enum HWEdgeTypes {
 };
 
 class HWAtom;
+class HWAOpInst;
 
 /// @brief Inline operation
 class HWEdge {
@@ -155,18 +157,20 @@ public:
   }
 };
 
-class HWAMemDep : public HWEdge {
+class HWMemDep : public HWEdge {
 public:
   enum MemDepTypes {
-    TrueDep, AntiDep, OutputDep
+    TrueDep, AntiDep, OutputDep, NoDep
   };
 private:
-  enum MemDepTypes DepType;
+  PointerIntPair<HWAOpInst*, 2, enum MemDepTypes> Data;
 public:
-  HWAMemDep(HWAtom *Src, enum MemDepTypes DT, unsigned Dst)
-    : HWEdge(edgeMemDep, Src, Dst), DepType(DT) {}
+  HWMemDep(HWAtom *Src, HWAOpInst *DepSrc, enum MemDepTypes DT,
+          unsigned Distance) : HWEdge(edgeMemDep, Src, Distance),
+          Data(DepSrc, DT) {}
 
-  enum MemDepTypes getDepType() const { return DepType; }
+  enum MemDepTypes getDepType() const { return Data.getInt(); }
+
 
   void print(raw_ostream &OS) const;
 
@@ -202,15 +206,13 @@ public:
     return *this;
   }
   HWAtomDepIterator operator++(int) { // Postincrement
-    HWAtomDepIterator tmp = *this; ++*this; return tmp; 
+    HWAtomDepIterator tmp = *this;
+    ++*this;
+    return tmp; 
   }
 
-  HWEdge *getEdge() {
-    return *I;
-  }
-  const HWEdge *getEdge() const {
-    return *I;
-  }
+  HWEdge *getEdge() { return *I; }
+  const HWEdge *getEdge() const { return *I; }
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -253,6 +255,12 @@ public:
       //Deps.push_back(*I);
       (*I)->addToUseList(this);
     }
+  }
+
+  // Add a new depencence edge to the atom.
+  void addDep(HWEdge *E) {
+    E->getSrc()->addToUseList(this);
+    Deps.push_back(E);
   }
 
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V);
@@ -411,8 +419,6 @@ template<> struct GraphTraits<const esyn::HWAtom*> {
     return N->use_end();
   }
 };
-
-
 }
 
 // FIXME: Move to a seperate header.

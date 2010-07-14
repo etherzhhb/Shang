@@ -32,65 +32,80 @@ namespace llvm {
 using namespace llvm;
 
 namespace esyn {
+class MemDepInfo;
+
 /// @brief Hardware atom construction pass
 ///
-class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
+class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> {
 
   /// @name InstVisitor interface
   //{
-  friend class InstVisitor<HWAtomInfo>;
-  void visitTerminatorInst(TerminatorInst &I);
+  friend class InstVisitor<HWAtomInfo, HWAtom*>;
+  HWAtom *visitTerminatorInst(TerminatorInst &I);
 
-  void visitPHINode(PHINode &I);
-  void visitBinaryOperator(Instruction &I);
-  void visitICmpInst(ICmpInst &I);
-  void visitFCmpInst(FCmpInst &I){
+  HWAtom *visitPHINode(PHINode &I);
+  HWAtom *visitBinaryOperator(Instruction &I);
+  HWAtom *visitICmpInst(ICmpInst &I);
+  HWAtom *visitFCmpInst(FCmpInst &I){
     llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
 
-  void visitCastInst (CastInst &I);
-  void visitSelectInst(SelectInst &I);
-  void visitCallInst (CallInst &I){
-    llvm_unreachable("Instruction not support yet!");}
-  void visitInlineAsm(CallInst &I){
+  HWAtom *visitCastInst (CastInst &I);
+  HWAtom *visitSelectInst(SelectInst &I);
+  HWAtom *visitCallInst (CallInst &I){
     llvm_unreachable("Instruction not support yet!");
+    return 0;
+  }
+  HWAtom *visitInlineAsm(CallInst &I){
+    llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
   bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee) {
     llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
 
-  void visitAllocaInst(AllocaInst &I) {
+  HWAtom *visitAllocaInst(AllocaInst &I) {
     llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
-  void visitLoadInst  (LoadInst   &I);
-  void visitStoreInst (StoreInst  &I);
-  void visitGetElementPtrInst(GetElementPtrInst &I);
-  void visitVAArgInst (VAArgInst &I){
+  HWAtom *visitLoadInst  (LoadInst   &I);
+  HWAtom *visitStoreInst (StoreInst  &I);
+  HWAtom *visitGetElementPtrInst(GetElementPtrInst &I);
+  HWAtom *visitVAArgInst (VAArgInst &I){
     llvm_unreachable("Instruction not support yet!");
-  }
-
-  void visitInsertElementInst(InsertElementInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitExtractElementInst(ExtractElementInst &I){
-    llvm_unreachable("Instruction not support yet!");
-  }
-  void visitShuffleVectorInst(ShuffleVectorInst &SVI){
-    llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
 
-  void visitInsertValueInst(InsertValueInst &I){
+  HWAtom *visitInsertElementInst(InsertElementInst &I){
     llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
-  void visitExtractValueInst(ExtractValueInst &I){
+  HWAtom *visitExtractElementInst(ExtractElementInst &I){
     llvm_unreachable("Instruction not support yet!");
+    return 0;
+  }
+  HWAtom *visitShuffleVectorInst(ShuffleVectorInst &SVI){
+    llvm_unreachable("Instruction not support yet!");
+    return 0;
   }
 
-  void visitInstruction(Instruction &I) {
+  HWAtom *visitInsertValueInst(InsertValueInst &I){
+    llvm_unreachable("Instruction not support yet!");
+    return 0;
+  }
+  HWAtom *visitExtractValueInst(ExtractValueInst &I){
+    llvm_unreachable("Instruction not support yet!");
+    return 0;
+  }
+
+  HWAtom *visitInstruction(Instruction &I) {
 #ifndef NDEBUG
     errs() << "HWAtomInfo does not know about " << I;
 #endif
     llvm_unreachable(0);
+    return 0;
   }
   //}
 
@@ -146,6 +161,10 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     return new (HWAtomAllocator) HWCtrlDep(Src);
   }
 
+  HWMemDep *getMemDepEdge(HWAOpInst *Src, HWAVRoot *Root, 
+                          enum HWMemDep::MemDepTypes DepType,
+                          unsigned Diff); 
+
   HWValDep *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
     if (isa<Argument>(V) || isa<PHINode>(V))
@@ -181,19 +200,23 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo> {
     LiveValueReg.insert(std::make_pair(&V, R));
   }
 
+  void addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB);
+
   // The loop Info
   LoopInfo *LI;
   ResourceConfig *RC;
   // Total states
   unsigned totalCycle;
 
+  // Analysis for dependence analyzes.
+  MemDepInfo *MDA;
 public:
 
   /// @name FunctionPass interface
   //{
   static char ID;
   HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0),
-    totalCycle(1), NumRegs(1) {}
+    totalCycle(1), NumRegs(1), MDA(0) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();
