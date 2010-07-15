@@ -90,9 +90,11 @@ public:
   bool isCompatible(_Self *N) { 
     if (isVRoot() || N->isVRoot())
       return true;
-    
-    return (getData()->getSlot() != N->getData()->getSlot());
+
+    return computeCompatible(N);  
   } 
+
+  bool computeCompatible(_Self *N);
 
   pred_iterator pred_begin() { return Preds.begin(); }
   const_pred_iterator pred_begin() const { return Preds.begin(); }
@@ -249,6 +251,11 @@ unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
   return weight;
 }
 
+template<>
+bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
+  return (getData()->getSlot() != N->getData()->getSlot());
+}
+
 } // end namespace
 
 namespace llvm {
@@ -324,7 +331,7 @@ struct CompPathBinding : public BasicBlockPass {
   PathGraphNode PGEntry, PGExit;
 
   HWAtomInfo *HI;
-  ExecStage *CurStage;
+  FSMState *CurStage;
 
   unsigned ResCount;
 

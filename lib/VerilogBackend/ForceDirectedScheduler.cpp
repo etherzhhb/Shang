@@ -24,7 +24,7 @@
 
 #include "llvm/ADT/PriorityQueue.h"
 
-#define DEBUG_TYPE "vbe-fd-schedule"
+#define DEBUG_TYPE "vbe-fd-sched"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -39,9 +39,11 @@ struct fds_sort {
   bool operator() (const HWAOpInst* LHS, const HWAOpInst* RHS) const;
 };
 
-struct FDLScheduler : public BasicBlockPass, public Scheduler {
+struct FDLScheduler : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
+
+  FSMState *CurStage;
 
   // Time Frame {asap step, alap step }
   typedef std::pair<unsigned, unsigned> TimeFrame;
@@ -114,7 +116,7 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   //{
   static char ID;
   FDLScheduler()
-    : BasicBlockPass(&ID), Scheduler(), HI(0), RC(0), PQueue(fds_sort(this)) {}
+    : BasicBlockPass(&ID), HI(0), RC(0), PQueue(fds_sort(this)) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -191,6 +193,10 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       // Recover the time frame by force rebuild
       buildASAPStep(); 
       buildALAPStep();
+
+      DEBUG(dbgs() << " After schedule:-------------------\n");
+      DEBUG(dumpTimeFrame());
+      DEBUG(dbgs() << "\n\n\n");
       // Rebuild DG.
       buildDGraph();
       buildAvgDG();
@@ -199,10 +205,6 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       // Schedule to the best step.
       A->scheduledTo(step);
     }
-
-    DEBUG(dbgs() << " After schedule:-------------------\n");
-    DEBUG(dumpTimeFrame());
-    DEBUG(dbgs() << "\n\n\n");
   }
 
   HI->setTotalCycle(CurStage->getExitRoot().getSlot() + 1);
@@ -308,7 +310,6 @@ double FDLScheduler::computePredForceAt(const HWAOpInst *OpInst, unsigned step) 
 
 void FDLScheduler::releaseMemory() {
   clear();
-  clearSchedulerBase();
 }
 
 double FDLScheduler::getDGraphAt(unsigned step,
@@ -352,7 +353,7 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
       re = HWResource::LastResourceType; ri != re; ++ri) {
     OS << "DG for resource: " << ri <<'\n';
     for (unsigned i = CurStage->getEntryRoot().getSlot(),
-        e = getASAPStep(&CurStage->getExitRoot()) + 1; i != e; ++i)
+        e = getALAPStep(&CurStage->getExitRoot()) + 1; i != e; ++i)
       OS.indent(2) << "At step " << i << " : "
         << getDGraphAt(i, (enum HWResource::ResTypes)ri) << '\n';
 
@@ -361,7 +362,7 @@ void FDLScheduler::printDG(raw_ostream &OS) const {
 }
 
 void FDLScheduler::buildASAPStep() {
-  HWAVRoot *Root = &CurStage->getEntryRoot();
+  const HWAVRoot *Root = &CurStage->getEntryRoot();
 
   typedef HWAtom::const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
@@ -396,7 +397,7 @@ void FDLScheduler::buildASAPStep() {
 }
 
 void FDLScheduler::buildALAPStep() {
-  HWAPostBind *Root = &CurStage->getExitRoot();
+  const HWAOpInst *Root = &CurStage->getExitRoot();
 
   typedef HWAtom::const_dep_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
@@ -422,6 +423,11 @@ void FDLScheduler::buildALAPStep() {
 
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
         AtomToTF[ChildNode].second = NewStep;
+
+      DEBUG(dbgs() << "Visit " << "\n");
+      DEBUG(ChildNode->dump());
+      DEBUG(dbgs() << "VC: " << VC << " total use: "
+                   << ChildNode->getNumUses() << '\n');
 
       // Only move forwork when we visit the node from all its deps.
       if (VC == ChildNode->getNumUses())
