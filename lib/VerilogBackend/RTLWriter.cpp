@@ -41,6 +41,8 @@ bool RTLWriter::runOnFunction(Function &F) {
 
   // Emit control register and idle state
   unsigned totalStatesBits = HI->getTotalCycleBitWidth();
+  vlang->declSignal(getSignalDeclBuffer(), "NextState", totalStatesBits, 0);
+  vlang->resetRegister(getResetBlockBuffer(), "NextState", totalStatesBits, 0);
   vlang->declSignal(getSignalDeclBuffer(), "CurState", totalStatesBits, 0);
   vlang->resetRegister(getResetBlockBuffer(), "CurState", totalStatesBits, 0);
   
@@ -58,7 +60,7 @@ bool RTLWriter::runOnFunction(Function &F) {
 
   //
   vlang->ifElse(ControlBlock.indent(8));
-  ControlBlock.indent(10) << "CurState <= state_idle;\n";
+  ControlBlock.indent(10) << "NextState <= state_idle;\n";
   vlang->end(ControlBlock.indent(8));
   vlang->end(ControlBlock.indent(6));
 
@@ -106,7 +108,8 @@ bool RTLWriter::runOnFunction(Function &F) {
   Out << SeqCompute.str();
 
   vlang->comment(Out.indent(6)) << "FSM\n";
-  vlang->switchCase(Out.indent(6), "CurState");
+  Out.indent(6) << "CurState <= NextState;\n";
+  vlang->switchCase(Out.indent(6), "NextState");
   Out << ControlBlock.str();
   vlang->endSwitch(Out.indent(6));
   vlang->alwaysEnd(Out, 2);
@@ -556,7 +559,7 @@ void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) 
   unsigned stateCycle = State.getEntryRoot().getSlot() + offset;
   assert(stateCycle <= State.getExitRoot().getSlot() 
          && "Offest out of range!");
-  ss << "CurState <= " << vlang->GetValueName(&BB) << stateCycle << ";\n";
+  ss << "NextState <= " << vlang->GetValueName(&BB) << stateCycle << ";\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -602,7 +605,7 @@ void RTLWriter::visitExtInst(HWAPostBind &A) {
 void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
   // Operation finish.
   ControlBlock.indent(8) << "fin <= 1'h1;\n";
-  ControlBlock.indent(8) << "CurState <= state_idle;\n";
+  ControlBlock.indent(8) << "NextState <= state_idle;\n";
   // If returing a value
   ReturnInst &Ret = A.getInst<ReturnInst>();
   if (Ret.getNumOperands() != 0)

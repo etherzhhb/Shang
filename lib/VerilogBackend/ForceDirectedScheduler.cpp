@@ -39,9 +39,11 @@ struct fds_sort {
   bool operator() (const HWAOpInst* LHS, const HWAOpInst* RHS) const;
 };
 
-struct FDLScheduler : public BasicBlockPass, public Scheduler {
+struct FDLScheduler : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
+
+  FSMState *CurStage;
 
   // Time Frame {asap step, alap step }
   typedef std::pair<unsigned, unsigned> TimeFrame;
@@ -114,7 +116,7 @@ struct FDLScheduler : public BasicBlockPass, public Scheduler {
   //{
   static char ID;
   FDLScheduler()
-    : BasicBlockPass(&ID), Scheduler(), HI(0), RC(0), PQueue(fds_sort(this)) {}
+    : BasicBlockPass(&ID), HI(0), RC(0), PQueue(fds_sort(this)) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -308,7 +310,6 @@ double FDLScheduler::computePredForceAt(const HWAOpInst *OpInst, unsigned step) 
 
 void FDLScheduler::releaseMemory() {
   clear();
-  clearSchedulerBase();
 }
 
 double FDLScheduler::getDGraphAt(unsigned step,

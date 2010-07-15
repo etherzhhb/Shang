@@ -9,7 +9,6 @@ add_llvm_target(VerilogBackend
   MemDepAnalysis.cpp
   RegisterAllocation.cpp
   RTLWriter.cpp
-  SchedulerBase.cpp
   TestbenchWriter.cpp
   VBackend.cpp
   VLang.cpp
