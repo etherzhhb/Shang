@@ -74,6 +74,7 @@ public:
   double getDGraphAt(unsigned step, enum HWResource::ResTypes ResType) const;
   void accDGraphAt(unsigned step, enum HWResource::ResTypes ResType, double d);
   void printDG(FSMState *State, raw_ostream &OS) const ;
+  void dumpDG(FSMState *State) const ;
   //}
 
   /// @name Force computation
@@ -94,7 +95,9 @@ public:
   //}
 
   unsigned buildFDInfo(FSMState *State, unsigned StartStep,
-                       unsigned MII = 0, unsigned EndStep = 0);
+                       unsigned EndStep = 0);
+
+  void enableModuleFD(unsigned II) { Modulo = II; }
 
   void clear();
   /// @name Common pass interface

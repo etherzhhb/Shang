@@ -33,17 +33,27 @@ class ModuloScheduleInfo : public FunctionPass {
     LoopInfo *LI;
     ResourceConfig *RC;
 
-    std::map<unsigned, std::vector<HWAtom*> > RecList;
+    typedef std::multimap<unsigned, std::vector<HWAtom*> > RecMapType;
+    RecMapType RecList;
     
 public:
   void clear();
+
+  typedef RecMapType::iterator rec_iterator;
+  typedef RecMapType::const_iterator const_rec_iterator;
+  rec_iterator rec_begin(unsigned II) { return RecList.lower_bound(II); }
+  const_rec_iterator rec_begin(unsigned II) const { return RecList.lower_bound(II); }
+  rec_iterator rec_end(unsigned II) { return RecList.upper_bound(II); }
+  const_rec_iterator rec_end(unsigned II) const { return RecList.upper_bound(II); }
+  
+  typedef std::vector<HWAtom*> scc_vector;
 
   /// Could us preform modulo schedule on the given state?
   bool isModuloSchedulable(FSMState &State) const;
 
   unsigned computeResMII(FSMState &State) const;
 
-  ///
+  static unsigned computeRecII(scc_vector &Scc);
   unsigned computeRecMII(FSMState &State);
 
   /// @name Common pass interface

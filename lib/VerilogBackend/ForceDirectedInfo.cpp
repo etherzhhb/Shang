@@ -99,11 +99,16 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
 
       unsigned NewStep = ChildNode->getSlot();
 
-      if (!ChildNode->isScheduled())
+      if (!ChildNode->isScheduled()) {
         // Latency is ChildNode->Node.
         NewStep = AtomToTF[Node].second - ChildNode->getLatency()
-                  + Modulo * It.getEdge()->getItDst();// delta ChildNode -> Node.    
-      
+                  + Modulo * It.getEdge()->getItDst();// delta ChildNode -> Node.
+        // Do not exceed Modulo step when we preform a modulo schedule. 
+        if (Modulo != 0)
+          NewStep = std::min(NewStep,
+                             getASAPStep(cast<HWAOpInst>(ChildNode)) + Modulo - 1);
+      }
+
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
         AtomToTF[ChildNode].second = NewStep;
 
@@ -156,12 +161,15 @@ void ForceDirectedInfo::buildDGraph(FSMState *State) {
 }
 
 void ForceDirectedInfo::printDG(FSMState *State, raw_ostream &OS) const {
+  unsigned StartStep = State->getEntryRoot().getSlot();
+  unsigned EndStep = Modulo > 0 ? (StartStep + Modulo - 1)
+                                  : getALAPStep(&State->getExitRoot());
   // For each step
   for (unsigned ri = HWResource::FirstResourceType,
     re = HWResource::LastResourceType; ri != re; ++ri) {
       OS << "DG for resource: " << ri <<'\n';
-      for (unsigned i = State->getEntryRoot().getSlot(),
-        e = getALAPStep(&State->getExitRoot()) + 1; i != e; ++i)
+      for (unsigned i = StartStep,
+        e = EndStep + 1; i != e; ++i)
         OS.indent(2) << "At step " << i << " : "
         << getDGraphAt(i, (enum HWResource::ResTypes)ri) << '\n';
 
@@ -171,6 +179,9 @@ void ForceDirectedInfo::printDG(FSMState *State, raw_ostream &OS) const {
 
 double ForceDirectedInfo::getDGraphAt(unsigned step,
                                  enum HWResource::ResTypes ResType) const {
+  // Modulo DG for modulo schedule.
+  if (Modulo != 0)
+    step = step % Modulo;
   unsigned key = (step << 4) | (0xf & ResType);
   DGType::const_iterator at = DGraph.find(key);
   
@@ -182,6 +193,9 @@ double ForceDirectedInfo::getDGraphAt(unsigned step,
 void ForceDirectedInfo::accDGraphAt(unsigned step,
                                     enum HWResource::ResTypes ResType,
                                     double d) {
+  // Modulo DG for modulo schedule.
+  if (Modulo != 0)
+    step = step % Modulo;
   unsigned key = (step << 4) | (0xf & ResType);
   DGraph[key] += d;
 }
@@ -274,8 +288,7 @@ bool ForceDirectedInfo::runOnFunction(Function &F) {
 }
 
 unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
-                                        unsigned MII, unsigned EndStep) {
-  Modulo = MII;
+                                        unsigned EndStep) {
   // Build the time frame
   HWAtom *Entry = &State->getEntryRoot();
   buildASAPStep(Entry, StartStep); 
@@ -292,4 +305,8 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
   buildAvgDG(State);
 
   return EndStep;
+}
+
+void ForceDirectedInfo::dumpDG(FSMState *State) const {
+  printDG(State, dbgs());
 }

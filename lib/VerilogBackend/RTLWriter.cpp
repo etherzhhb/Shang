@@ -335,35 +335,6 @@ void RTLWriter::emitAllRegisters() {
   } 
 }
 
-//void RTLWriter::emitValDep(HWValDep *Dep) {
-//  if (isa<HWAVRoot>(Dep->getSrc()))
-//    return;
-//
-//  if (HWReg *R = Dep->getReg()) {
-//    UsedRegs.insert(R);
-//    
-//    std::string Name = getAsOperand(Dep);
-//    ControlBlock.indent(8) << Name << " <= " << getAsOperand(Dep->getSrc()) << ";\n";
-//  }
-//}
-
-//void RTLWriter::emitValDep(HWARegister *Register) {
-//  HWAtom *Val = Register->getRefVal();
-//
-//  Value &V = Register->getValue();
-//  unsigned BitWidth = vlang->getBitWidth(V);
-//  
-//  std::string Name = getAsOperand(Register);
-//
-//  // Declare the register
-//  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
-//  // Reset the register
-//  vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
-//
-//  // assign the register
-//  ControlBlock.indent(8) << Name << " <= " << getAsOperand(Val) << ";\n";
-//}
-
 void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
   Instruction &Inst = cast<Instruction>(PostBind->getValue());
   assert(!isa<PHINode>(Inst) && "PHINode is not PostBind atom!");

@@ -692,6 +692,8 @@ public:
   void getScheduleMap(ScheduleMapType &Atoms) const;
 
   void print(raw_ostream &OS) const;
+
+  void dump() const;
 };
 
 } // end namespace

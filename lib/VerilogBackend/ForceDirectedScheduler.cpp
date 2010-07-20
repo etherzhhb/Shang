@@ -143,17 +143,29 @@ void FDLScheduler::FDModuloSchedule() {
 
   // Set up Resource table
   FDInfo->clear();
-  EndStep = FDInfo->buildFDInfo(CurState, StartStep, MII);
+
+  FDInfo->enableModuleFD(MII);
+  EndStep = FDInfo->buildFDInfo(CurState, StartStep);
 
   //
   fds_sort s(FDInfo);
+  AtomQueueType AQueue(s);
 
+  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
+  typedef ModuloScheduleInfo::scc_vector scc_vector;
   // Schedule all SCCs.
   for (unsigned i = MII; i > 0; --i) {
+    for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
+        I != E; ++I) {
+      scc_vector &SCC = I->second;
+      AQueue.clear();
+      fillQueue(AQueue, SCC.begin(), SCC.end());
+      scheduleQueue(AQueue);
+    }
   }
-  
 
-  FDListSchedule();
+  DEBUG(FDInfo->dumpTimeFrame(CurState));
+  DEBUG(FDInfo->dumpDG(CurState));
 }
 
 void FDLScheduler::FDListSchedule() {

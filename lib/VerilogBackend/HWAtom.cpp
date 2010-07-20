@@ -37,7 +37,7 @@ void HWAtom::dump() const {
 }
 
 
-void esyn::HWADrvReg::print(raw_ostream &OS) const {
+void HWADrvReg::print(raw_ostream &OS) const {
 
 }
 
@@ -150,4 +150,8 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
 
 HWAtom *HWMemDep::getSCCSrc() const {
   return Data.getPointer();
+}
+
+void esyn::FSMState::dump() const {
+  print(dbgs());
 }

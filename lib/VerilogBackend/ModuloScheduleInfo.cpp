@@ -113,43 +113,6 @@ typedef GraphTraits<DepScc<const esyn::HWAtom*> > ConstHWAtomSccGT;
 
 typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
 typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
-
-//===----------------------------------------------------------------------===//
-typedef std::vector<HWAtom*> SccVectorTy;
-static unsigned computeRecII(SccVectorTy &Scc) {
-  assert(Scc.size() > 1 && "No self loop expect in DDG!");
-  unsigned totalLatency = 0;
-  unsigned totalItDist = 0;
-  HWAtom *LastAtom = 0;
-  // Make a circle.
-  Scc.push_back(Scc.front());
-  for (SccVectorTy::const_iterator I = Scc.begin(), E = Scc.end();
-      I != E; ++I) {
-    HWAtom *CurAtom = *I;
-    totalLatency += CurAtom->getLatency();
-
-    if (LastAtom) {
-      HWAtomSccGT::ChildIteratorType EI =
-        HWAtomSccGT::ChildIteratorType::findSccEdge(LastAtom, CurAtom);
-      assert(EI != HWAtomSccGT::child_end(LastAtom) && "Edge not found!");
-      if (HWMemDep *MemEdge = dyn_cast<HWMemDep>(EI.getEdge())) {
-        unsigned ItDst = MemEdge->getItDst();
-        if (ItDst > 0) {
-          totalItDist = ItDst;
-        }
-      }
-    }
-    // Update last atom we had visited.
-    LastAtom = CurAtom;
-  }
-  // The latency of the first node had been count twice.
-  totalLatency -= Scc.front()->getLatency();
-  // Recover the Scc vector.
-  Scc.pop_back();
-  assert(totalItDist != 0 && "No cross iteration dependence?");
-  return ceil((double)totalLatency / totalItDist);
-}
-
 //===----------------------------------------------------------------------===//
 char ModuloScheduleInfo::ID = 0;
 
@@ -184,6 +147,41 @@ bool ModuloScheduleInfo::isModuloSchedulable(FSMState &State) const {
   return true;
 }
 
+unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
+  assert(Scc.size() > 1 && "No self loop expect in DDG!");
+  unsigned totalLatency = 0;
+  unsigned totalItDist = 0;
+  HWAtom *LastAtom = 0;
+  // Make a circle.
+  Scc.push_back(Scc.front());
+  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
+    I != E; ++I) {
+      HWAtom *CurAtom = *I;
+      totalLatency += CurAtom->getLatency();
+
+      if (LastAtom) {
+        HWAtomSccGT::ChildIteratorType EI =
+          HWAtomSccGT::ChildIteratorType::findSccEdge(LastAtom, CurAtom);
+        assert(EI != HWAtomSccGT::child_end(LastAtom) && "Edge not found!");
+        if (HWMemDep *MemEdge = dyn_cast<HWMemDep>(EI.getEdge())) {
+          unsigned ItDst = MemEdge->getItDst();
+          if (ItDst > 0) {
+            totalItDist = ItDst;
+          }
+        }
+      }
+      // Update last atom we had visited.
+      LastAtom = CurAtom;
+  }
+  // The latency of the first node had been count twice.
+  totalLatency -= Scc.front()->getLatency();
+  // Recover the Scc vector.
+  Scc.pop_back();
+  assert(totalItDist != 0 && "No cross iteration dependence?");
+  return ceil((double)totalLatency / totalItDist);
+}
+
+
 unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
   HWAtom *Root = &State.getExitRoot();
   unsigned MaxRecII = 1;
@@ -191,7 +189,7 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
   std::vector<HWAtom*> TrivialNodes;
   for (dep_scc_iterator SCCI = dep_scc_iterator::begin(Root),
       SCCE = dep_scc_iterator::end(Root); SCCI != SCCE; ++SCCI) {
-    SccVectorTy &Atoms = *SCCI;
+    scc_vector &Atoms = *SCCI;
     if (Atoms.size() == 1) {
       assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
       TrivialNodes.push_back(Atoms[0]);
@@ -200,7 +198,7 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
 
     DEBUG(dbgs() << "SCC found:\n");
     DEBUG(
-      for (SccVectorTy::const_iterator I = Atoms.begin(), E = Atoms.end();
+      for (scc_vector::const_iterator I = Atoms.begin(), E = Atoms.end();
           I != E; ++I)
         (*I)->getValue().dump();
     );
