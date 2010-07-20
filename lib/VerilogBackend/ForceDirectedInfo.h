@@ -42,6 +42,9 @@ class ForceDirectedInfo : public FunctionPass {
   DGType DGraph;
 
   std::map<const HWAPostBind*, double> AvgDG;
+
+  // MII in modulo schedule.
+  unsigned Modulo;
 public:
 
   /// @name TimeFrame
@@ -90,8 +93,8 @@ public:
   unsigned findBestStep(HWAOpInst *A);
   //}
 
-  void buildFDInfo(FSMState *State,
-                  unsigned /*output*/ &StartStep, unsigned /*output*/ &EndStep);
+  unsigned buildFDInfo(FSMState *State, unsigned StartStep,
+                       unsigned MII = 0, unsigned EndStep = 0);
 
   void clear();
   /// @name Common pass interface

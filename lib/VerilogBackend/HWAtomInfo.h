@@ -161,7 +161,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return new (HWAtomAllocator) HWCtrlDep(Src);
   }
 
-  HWMemDep *getMemDepEdge(HWAOpInst *Src, HWAVRoot *Root, 
+  HWMemDep *getMemDepEdge(HWAOpInst *Src, HWAtom *Root, 
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff); 
 

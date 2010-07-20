@@ -84,6 +84,7 @@ public:
   unsigned getItDst() const { return ItDst; }
 
   virtual HWAtom *getSCCSrc() const { return Src; }
+  bool isBackEdge() const { return getDagSrc() != getSCCSrc(); }
 
   virtual void print(raw_ostream &OS) const = 0;
 };
@@ -303,7 +304,7 @@ public:
   size_t getNumDeps() const { return Deps.size(); }
 
   // If the current atom depend on A?
-  bool isDepOn(HWAtom *A) const { return getDepIt(A) != dep_end(); }
+  bool isDepOn(const HWAtom *A) const { return getDepIt(A) != dep_end(); }
 
   void setDep(dep_iterator I, HWAtom *NewDep) {
     assert(I != dep_end() && "I out of range!");
@@ -322,14 +323,14 @@ public:
   }
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
-  const_dep_iterator getDepIt(HWAtom *A) const {
+  const_dep_iterator getDepIt(const HWAtom *A) const {
     for (const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       if ((*I) == A)
         return I;
 
     return dep_end();
   }
-  dep_iterator getDepIt(HWAtom *A) {
+  dep_iterator getDepIt(const HWAtom *A) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       if ((*I) == A)
         return I;
@@ -337,11 +338,11 @@ public:
     return dep_end();
   }
 
-  HWEdge *getDepEdge(HWAtom *A) {
+  HWEdge *getDepEdge(const HWAtom *A) {
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();
   }
-  HWEdge *getDepEdge(HWAtom *A) const {
+  HWEdge *getDepEdge(const HWAtom *A) const {
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();
   }

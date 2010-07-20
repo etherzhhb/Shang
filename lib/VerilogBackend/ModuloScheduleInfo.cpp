@@ -135,7 +135,6 @@ static unsigned computeRecII(SccVectorTy &Scc) {
       if (HWMemDep *MemEdge = dyn_cast<HWMemDep>(EI.getEdge())) {
         unsigned ItDst = MemEdge->getItDst();
         if (ItDst > 0) {
-          assert(totalItDist == 0 && "Why we got multiple back edge?");
           totalItDist = ItDst;
         }
       }

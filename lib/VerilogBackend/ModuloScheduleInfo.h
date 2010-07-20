@@ -28,7 +28,7 @@ namespace llvm {
 using namespace llvm;
 
 namespace esyn {
-  class ModuloScheduleInfo : public FunctionPass {
+class ModuloScheduleInfo : public FunctionPass {
     HWAtomInfo *HI;
     LoopInfo *LI;
     ResourceConfig *RC;

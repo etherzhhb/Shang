@@ -60,9 +60,13 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
       ++WorkStack.back().second;
       unsigned VC = ++VisitCount[ChildNode];
 
-      unsigned NewStep = AtomToTF[Node].first + Node->getLatency();
-      if (ChildNode->isScheduled())
-        NewStep = ChildNode->getSlot();
+      unsigned NewStep = ChildNode->getSlot();
+      if (!ChildNode->isScheduled()) {
+        int SNewStep = AtomToTF[Node].first + Node->getLatency() -
+          // delta Node -> ChildNode
+          Modulo * ChildNode->getDepEdge(Node)->getItDst();
+        NewStep = std::max(0, SNewStep);
+      }
 
       if (VC == 1 || AtomToTF[ChildNode].first < NewStep)
         AtomToTF[ChildNode].first = NewStep;
@@ -93,10 +97,13 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
       ++WorkStack.back().second;
       unsigned VC = ++VisitCount[ChildNode];
 
-      unsigned NewStep = AtomToTF[Node].second - ChildNode->getLatency();
-      if (ChildNode->isScheduled())
-        NewStep = ChildNode->getSlot();
+      unsigned NewStep = ChildNode->getSlot();
 
+      if (!ChildNode->isScheduled())
+        // Latency is ChildNode->Node.
+        NewStep = AtomToTF[Node].second - ChildNode->getLatency()
+                  + Modulo * It.getEdge()->getItDst();// delta ChildNode -> Node.    
+      
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
         AtomToTF[ChildNode].second = NewStep;
 
@@ -255,6 +262,7 @@ void ForceDirectedInfo::clear() {
   AtomToTF.clear();
   DGraph.clear();
   AvgDG.clear();
+  Modulo = 0;
 }
 
 void ForceDirectedInfo::releaseMemory() {
@@ -265,19 +273,23 @@ bool ForceDirectedInfo::runOnFunction(Function &F) {
   return false;
 }
 
-void ForceDirectedInfo::buildFDInfo(FSMState *State,
-                             unsigned /*output*/ &StartStep,
-                             unsigned /*output*/ &EndStep) {
-    // Build the time frame
+unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
+                                        unsigned MII, unsigned EndStep) {
+  Modulo = MII;
+  // Build the time frame
   HWAtom *Entry = &State->getEntryRoot();
   buildASAPStep(Entry, StartStep); 
   
   HWAOpInst *Exit = &State->getExitRoot();
-  EndStep = getASAPStep(Exit);
+  // Compute the EndStep if it is not given.
+  if (EndStep == 0)
+    EndStep = getASAPStep(Exit);
   buildALAPStep(Exit, EndStep);
 
   DEBUG(dumpTimeFrame(State));
 
   buildDGraph(State);
   buildAvgDG(State);
+
+  return EndStep;
 }

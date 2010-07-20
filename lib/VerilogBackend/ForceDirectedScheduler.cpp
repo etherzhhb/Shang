@@ -143,19 +143,22 @@ void FDLScheduler::FDModuloSchedule() {
 
   // Set up Resource table
   FDInfo->clear();
-  FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+  EndStep = FDInfo->buildFDInfo(CurState, StartStep, MII);
 
   //
   fds_sort s(FDInfo);
 
   // Schedule all SCCs.
+  for (unsigned i = MII; i > 0; --i) {
+  }
+  
 
   FDListSchedule();
 }
 
 void FDLScheduler::FDListSchedule() {
   FDInfo->clear();
-  FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+  EndStep = FDInfo->buildFDInfo(CurState, StartStep);
 
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
@@ -219,7 +222,7 @@ bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
       A->scheduledTo(step);
 
       DEBUG(dbgs() << " After schedule:-------------------\n");
-      FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+      FDInfo->buildFDInfo(CurState, StartStep);
       DEBUG(dbgs() << "\n\n\n");
       Queue.reheapify();
     } else {
