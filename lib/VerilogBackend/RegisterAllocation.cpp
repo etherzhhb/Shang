@@ -64,7 +64,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
 
     for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i)
       if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i)))
-        if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getSrc())) {
+        if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
           if (DI->getLatency() != 0) {
             Value &V = DI->getValue();
             DEBUG(DI->print(dbgs()));

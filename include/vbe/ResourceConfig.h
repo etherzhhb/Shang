@@ -213,10 +213,12 @@ public:
   const_iterator begin() const { return &ResSet[0]; }
 
   iterator end() { 
-    return begin() + (size_t)HWResource::LastResourceType;
+    return begin() + (size_t)HWResource::LastResourceType -
+      (size_t)HWResource::FirstResourceType;
   }
   const_iterator end() const { 
-    return begin() + (size_t)HWResource::LastResourceType;
+    return begin() + (size_t)HWResource::LastResourceType -
+      (size_t)HWResource::FirstResourceType;
   }
 }; //class
 

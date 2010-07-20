@@ -275,10 +275,10 @@ std::string RTLWriter::getAsOperand(HWEdge *E) {
       return vlang->printConstant(VD->getConstant());
     
     if (VD->isWire())
-      return getAsOperand(VD->getSrc());
+      return getAsOperand(VD->getDagSrc());
  
     if (HWReg *R = VD->getReg()) {
-      Value *V = &(VD->getSrc()->getValue());
+      Value *V = &(VD->getDagSrc()->getValue());
       return "Reg"+utostr(R->getRegNum())
       + " /*" + vlang->GetValueName(V) +"*/";
     }

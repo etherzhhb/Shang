@@ -141,7 +141,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   HWAtom *Pred = 0;
   // Do not add the operand twice
   if (!Deps.empty()) {
-    Pred = Deps[0]->getSrc();
+    Pred = Deps[0]->getDagSrc();
   }
 
   unsigned OpSize = Deps.size();

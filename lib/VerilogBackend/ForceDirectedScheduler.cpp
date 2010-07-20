@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedInfo.h"
+#include "ModuloScheduleInfo.h"
 #include "HWAtomPasses.h"
 
 #include "llvm/ADT/PriorityQueue.h"
@@ -40,6 +41,7 @@ struct FDLScheduler : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
   ForceDirectedInfo *FDInfo;
+  ModuloScheduleInfo *MSInfo;
   FSMState *CurState;
 
   HWAVRoot *Entry; 
@@ -50,18 +52,23 @@ struct FDLScheduler : public BasicBlockPass {
   //{
   typedef PriorityQueue<HWAOpInst*, std::vector<HWAOpInst*>, fds_sort> AtomQueueType;
   
-  void fillAQueue(AtomQueueType &Queue);
+  template<class It>
+  void fillQueue(AtomQueueType &Queue, It begin, It end);
+
+  bool scheduleQueue(AtomQueueType &Queue);
   //}
 
   unsigned findBestStep(HWAOpInst *A);
 
   void clear();
 
+  void FDListSchedule();
+  void FDModuloSchedule();
+
   /// @name Common pass interface
   //{
   static char ID;
-  FDLScheduler()
-    : BasicBlockPass(&ID), HI(0), RC(0) {}
+  FDLScheduler() : BasicBlockPass(&ID) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -92,12 +99,14 @@ void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<ResourceConfig>();
   AU.addRequired<ForceDirectedInfo>();
+  //
+  AU.addRequired<ModuloScheduleInfo>();
   AU.setPreservesAll();
 }
 
-void FDLScheduler::fillAQueue(AtomQueueType &Queue) {
-  for (usetree_iterator I = CurState->usetree_begin(), E = CurState->usetree_end();
-      I != E; ++I)
+template<class It>
+void FDLScheduler::fillQueue(AtomQueueType &Queue, It begin, It end) {
+  for (It I = begin, E = end; I != E; ++I)
     if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))    
       Queue.push(A);
 }
@@ -106,6 +115,7 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HI = &getAnalysis<HWAtomInfo>();
   FDInfo = &getAnalysis<ForceDirectedInfo>();
+  MSInfo = &getAnalysis<ModuloScheduleInfo>();
   CurState = &(HI->getStateFor(BB));
 
   // Build the time frame
@@ -115,39 +125,43 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   StartStep = HI->getTotalCycle();
   Entry->scheduledTo(StartStep);
 
+  if (MSInfo->isModuloSchedulable(*CurState))
+    FDModuloSchedule();
+  else
+    FDListSchedule();
+  
+  HI->setTotalCycle(CurState->getExitRoot().getSlot() + 1);
+
+  return false;
+}
+
+void FDLScheduler::FDModuloSchedule() {
+  // Compute MII.
+  unsigned RecMII = MSInfo->computeRecMII(*CurState);
+  unsigned ResMII = MSInfo->computeResMII(*CurState);
+  unsigned MII = std::max(RecMII, ResMII);
+
+  // Set up Resource table
+  FDInfo->clear();
+  FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+
+  //
+  fds_sort s(FDInfo);
+
+  // Schedule all SCCs.
+
+  FDListSchedule();
+}
+
+void FDLScheduler::FDListSchedule() {
   FDInfo->clear();
   FDInfo->buildFDInfo(CurState, StartStep, EndStep);
 
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
-  fillAQueue(AQueue);
 
-  while (!AQueue.empty()) {
-    // TODO: Short the list
-    HWAOpInst *A = AQueue.top();
-    AQueue.pop();
-
-    DEBUG(A->print(dbgs()));
-    DEBUG(dbgs() << " Active to schedule:-------------------\n");
-    
-    // TODO: Do check if this step is valid for others constrain.
-    unsigned step = FDInfo->getASAPStep(A);
-    if (FDInfo->getTimeFrame(A) != 1) {
-      step = findBestStep(A);
-      A->scheduledTo(step);
-
-      DEBUG(dbgs() << " After schedule:-------------------\n");
-      FDInfo->buildFDInfo(CurState, StartStep, EndStep);
-      DEBUG(dbgs() << "\n\n\n");
-      AQueue.reheapify();
-    } else {
-      // Schedule to the best step.
-      A->scheduledTo(step);
-    }
-  }
-  HI->setTotalCycle(CurState->getExitRoot().getSlot() + 1);
-
-  return false;
+  fillQueue(AQueue, CurState->usetree_begin(), CurState->usetree_end());
+  scheduleQueue(AQueue);
 }
 
 
@@ -189,6 +203,32 @@ void FDLScheduler::clear() {
 
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
 
+bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
+  while (!Queue.empty()) {
+    // TODO: Short the list
+    HWAOpInst *A = Queue.top();
+    Queue.pop();
+
+    DEBUG(A->print(dbgs()));
+    DEBUG(dbgs() << " Active to schedule:-------------------\n");
+
+    // TODO: Do check if this step is valid for others constrain.
+    unsigned step = FDInfo->getASAPStep(A);
+    if (FDInfo->getTimeFrame(A) != 1) {
+      step = findBestStep(A);
+      A->scheduledTo(step);
+
+      DEBUG(dbgs() << " After schedule:-------------------\n");
+      FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+      DEBUG(dbgs() << "\n\n\n");
+      Queue.reheapify();
+    } else {
+      // Schedule to the best step.
+      A->scheduledTo(step);
+    }
+  }
+  return true;
+}
 
 Pass *esyn::createFDLSchedulePass() {
   return new FDLScheduler();

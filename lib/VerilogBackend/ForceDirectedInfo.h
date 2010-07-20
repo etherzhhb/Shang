@@ -25,7 +25,7 @@
 using namespace llvm;
 
 namespace esyn {
-struct ForceDirectedInfo : public FunctionPass {
+class ForceDirectedInfo : public FunctionPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
 
@@ -101,7 +101,7 @@ public:
   bool runOnFunction(Function &F);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const {};
+  virtual void print(raw_ostream &O, const Module *M) const {}
   //}
 };
 } // End namespace.

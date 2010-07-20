@@ -35,8 +35,8 @@ RegisterPass<ForceDirectedInfo> X("vbe-fd-info",
                            " directed scheduling passes");
 
 void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<HWAtomInfo>();
-  AU.addRequired<ResourceConfig>();
+  AU.addRequiredTransitive<HWAtomInfo>();
+  AU.addRequiredTransitive<ResourceConfig>();
   AU.setPreservesAll();
 }
 

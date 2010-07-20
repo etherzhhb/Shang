@@ -4,7 +4,7 @@ add_llvm_target(VerilogBackend
   HWAtom.cpp
   HWAtomInfo.cpp
   CompPathBinding.cpp
-  DDG.cpp
+  ModuloScheduleInfo.cpp
   ForceDirectedInfo.cpp
   ForceDirectedScheduler.cpp
   MemDepAnalysis.cpp

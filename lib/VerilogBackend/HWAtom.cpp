@@ -115,7 +115,7 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
                Value &V, HWEdge *Dep0) : FastID(ID),
                HWAtomType(HWAtomTy), Val(V), SchedSlot(0)  {
   Deps.push_back(Dep0);
-  Dep0->getSrc()->addToUseList(this);
+  Dep0->getDagSrc()->addToUseList(this);
 }
 
 
@@ -128,7 +128,7 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
   while (!use_empty()) {
     HWAtom *U = use_back();
 
-    U->setDep(U->getDepIdx(this), A);
+    U->setDep(U->getDepIt(this), A);
   }
 }
 
@@ -146,4 +146,8 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
 
   // Setup the step
   scheduledTo(PostBind.getSlot());
+}
+
+HWAtom *HWMemDep::getSCCSrc() const {
+  return Data.getPointer();
 }
