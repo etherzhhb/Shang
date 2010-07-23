@@ -112,26 +112,70 @@ public:
   unsigned getLeastBusyInstance() const;
 
   void clear();
-
-  typedef unsigned ResIdType;
-  // Create A resource id for a given type of resource and a given instance.
-  static ResIdType createResId(enum ResTypes type, unsigned InstanceId) {
-    // {instanceId, TypeId}
-    unsigned ret = (InstanceId << 4) | (0xf & type);
-    assert((extractInstanceId(ret) == InstanceId) 
-          && (extractResType(ret) == type)
-          && "ResId overflow!");
-    return ret;
-  }
-
-  static enum ResTypes extractResType(ResIdType ResId) {
-    return (ResTypes)(ResId & 0xf);
-  }
-
-  static unsigned extractInstanceId(ResIdType ResId) {
-    return (ResId >> 4);
-  }
 }; 
+
+
+struct HWFUnitID {
+  union {
+    struct {
+      HWResource::ResTypes T : 4;
+      unsigned UnitID        : 28;
+    } S;
+    unsigned Data;
+  } U;
+
+  /*implicit*/ inline HWFUnitID(enum HWResource::ResTypes type,
+                                unsigned UID = 0) {
+    U.S.T = type;
+    U.S.UnitID = UID;
+    assert(U.S.T == type && U.S.UnitID == UID && "Data overflow!");
+  }
+  /*implicit*/ inline HWFUnitID(unsigned Data) { U.Data = Data; }
+
+  inline HWFUnitID(const HWFUnitID &O) { U.Data = O.U.Data; }
+  inline const HWFUnitID &operator=(const HWFUnitID &O) { U.Data = O.U.Data; }
+
+  inline enum HWResource::ResTypes getResType() const { return U.S.T; }
+  inline unsigned getUnitID() const { return U.S.UnitID; }
+
+  inline unsigned getRawData() const { return U.Data; }
+};
+
+
+/// Print a RegionNode.
+inline raw_ostream &operator<<(raw_ostream &OS, const HWFUnitID UID) {
+  OS << UID.getRawData();
+  return OS;
+}
+
+/// @name HWFUnitID Comparison Operators
+/// @{
+
+inline bool operator==(HWFUnitID LHS, HWFUnitID RHS) {
+  return LHS.U.Data == RHS.U.Data;
+}
+
+inline bool operator!=(HWFUnitID LHS, HWFUnitID RHS) {
+  return !(LHS == RHS);
+}
+
+inline bool operator<(HWFUnitID LHS, HWFUnitID RHS) {
+  return LHS.U.Data < RHS.U.Data;
+}
+
+inline bool operator<=(HWFUnitID LHS, HWFUnitID RHS) {
+  return LHS.U.Data <= RHS.U.Data;
+}
+
+inline bool operator>(HWFUnitID LHS, HWFUnitID RHS) {
+  return LHS.U.Data > RHS.U.Data;
+}
+
+inline bool operator>=(HWFUnitID LHS, HWFUnitID RHS) {
+  return LHS.U.Data >= RHS.U.Data;
+}
+
+/// @}
 
 class HWMemBus : public HWResource {
   unsigned AddrWidth;

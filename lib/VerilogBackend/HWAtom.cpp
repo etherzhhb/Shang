@@ -91,7 +91,7 @@ void HWAPreBind::print(raw_ostream &OS) const {
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << SubClassData;
+  OS << " Res: " << FUnitID;
 }
 
 void HWAPostBind::print(raw_ostream &OS) const {
@@ -99,7 +99,7 @@ void HWAPostBind::print(raw_ostream &OS) const {
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " PostBind: " << SubClassData;
+  OS << " PostBind: " << FUnitID;
 }
 
 void HWAVRoot::print(raw_ostream &OS) const {
@@ -136,8 +136,7 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
                        unsigned Instance)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
   PostBind.getLatency(), PostBind.edge_begin(), PostBind.edge_end(),
-  PostBind.getInstNumOps(),
-  HWResource::createResId(PostBind.getResClass(), Instance)) {
+  PostBind.getInstNumOps(), HWFUnitID(PostBind.getResClass(), Instance)) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);

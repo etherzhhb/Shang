@@ -517,19 +517,27 @@ class HWAOpInst : public HWAtom {
   unsigned Latency;
   unsigned NumOps;
 protected:
-  unsigned SubClassData;
+  HWFUnitID FUnitID;
 
   template <class It>
   HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, unsigned latency, It depbegin, It depend,
-    size_t OpNum, unsigned subClassData = 0)
+    size_t OpNum, HWFUnitID UID = HWResource::Trivial)
     : HWAtom(ID, T, Inst, depbegin, depend), Latency(latency), NumOps(OpNum),
-    SubClassData(subClassData) {}
+    FUnitID(UID) {}
 public:
   // Get the latency of this atom
   unsigned getLatency() const {
     return Latency;
   }
+
+  HWFUnitID getFunUnitID() const { return FUnitID; }
+
+  enum HWResource::ResTypes getResClass() const {
+    return FUnitID.getResType();
+  }
+
+  unsigned getUnitID() const { return FUnitID.getUnitID(); }
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -559,11 +567,6 @@ public:
     return getDep(idx)->getDagSrc();
   }
 
-  // Help the scheduler to identify difference operation class
-  virtual enum HWResource::ResTypes getResClass() const {
-    return HWResource::Trivial;
-  }
-
   // Return the opcode of the instruction.
   unsigned getOpcode() const {
     return cast<Instruction>(getValue()).getOpcode();
@@ -586,10 +589,6 @@ public:
       enum HWResource::ResTypes OpClass)
     : HWAOpInst(ID, atomPostBind, Inst, latency, 
     depbegin, depend, OpNum, OpClass) {}
-  
-  enum HWResource::ResTypes getResClass() const {
-    return (HWResource::ResTypes)SubClassData;
-  }
 
   void print(raw_ostream &OS) const;
 
@@ -607,25 +606,10 @@ public:
     unsigned latency, It depbegin, It depend, unsigned OpNum,
     enum HWResource::ResTypes OpClass, unsigned Instance = 0)
     : HWAOpInst(ID, atomPreBind, Inst, latency, depbegin, depend, OpNum,
-    HWResource::createResId(OpClass, Instance)) {}
+    HWFUnitID(OpClass, Instance)) {}
 
   HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
     unsigned Instance);
-
-  /// @name The using resource
-  //{
-  // Help the scheduler to identify difference resource unit.
-  HWResource::ResIdType getResourceId() const {
-    return SubClassData;
-  }
-
-  enum HWResource::ResTypes getResClass() const {
-    return HWResource::extractResType(getResourceId());
-  }
-  unsigned getAllocatedInstance() const {
-    return HWResource::extractInstanceId(getResourceId());
-  }
-  //}
 
   void print(raw_ostream &OS) const;
 

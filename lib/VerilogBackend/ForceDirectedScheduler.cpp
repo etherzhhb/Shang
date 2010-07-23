@@ -55,7 +55,9 @@ struct FDLScheduler : public BasicBlockPass {
   template<class It>
   void fillQueue(AtomQueueType &Queue, It begin, It end);
 
-  bool scheduleQueue(AtomQueueType &Queue);
+  // Return the first node that we fail to schedule, return null if all nodes are scheduled.
+  HWAOpInst *scheduleQueue(AtomQueueType &Queue);
+  HWAOpInst *scheduleAtII(unsigned II);
   //}
 
   unsigned findBestStep(HWAOpInst *A);
@@ -140,32 +142,62 @@ void FDLScheduler::FDModuloSchedule() {
   unsigned RecMII = MSInfo->computeRecMII(*CurState);
   unsigned ResMII = MSInfo->computeResMII(*CurState);
   unsigned MII = std::max(RecMII, ResMII);
+  HWAOpInst *FailNode = 0;
 
-  // Set up Resource table
-  FDInfo->clear();
+  EndStep = 0;
 
-  FDInfo->enableModuleFD(MII);
-  EndStep = FDInfo->buildFDInfo(CurState, StartStep);
+  do {
+    // Set up Resource table
+    FDInfo->clear();
+    FDInfo->enableModuleFD(MII);
+    EndStep = FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+    if (FailNode = scheduleAtII(MII)) {
+      // If we fail because II too small.
+      if (FDInfo->isModuloConstrains(FailNode))
+        ++MII;
+      else // Otherwise the critical path is too short.
+        ++EndStep;
+      // Unscheduled all node.
+      CurState->resetSchedule();
+      // Reset resource reserve table.
+      // ??
+    }
+    // While we fail to schedule some node.
+  } while(FailNode);
 
-  //
+  DEBUG(FDInfo->dumpTimeFrame(CurState));
+  DEBUG(FDInfo->dumpDG(CurState));
+}
+
+HWAOpInst *FDLScheduler::scheduleAtII(unsigned II) {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
 
   typedef ModuloScheduleInfo::rec_iterator rec_iterator;
   typedef ModuloScheduleInfo::scc_vector scc_vector;
   // Schedule all SCCs.
-  for (unsigned i = MII; i > 0; --i) {
+  for (unsigned i = II; i > 0; --i) {
     for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
         I != E; ++I) {
       scc_vector &SCC = I->second;
       AQueue.clear();
+      // TODO:
+      // First of all Schedule the node that do not have any predecessor in
+      // the SCC (Schedule First Node).
+      // First Node = ...
+      // And schedule rest nodes in SCC, but the max latency of the SCC
+      // should not exceed II.
       fillQueue(AQueue, SCC.begin(), SCC.end());
-      scheduleQueue(AQueue);
+      // Throw the Node if we can not schedule it.
+      if (HWAOpInst *FailNode = scheduleQueue(AQueue))
+        return FailNode;
+      //assert(((SCC.front()->getSlot() - SCC.back()->getSlot() < II)
+      //         || (SCC.front()->getSlot() - SCC.back()->getSlot() < II) ) 
+      //       && "Dependencies break!");
     }
   }
 
-  DEBUG(FDInfo->dumpTimeFrame(CurState));
-  DEBUG(FDInfo->dumpDG(CurState));
+  return 0;
 }
 
 void FDLScheduler::FDListSchedule() {
@@ -182,9 +214,13 @@ void FDLScheduler::FDListSchedule() {
 
 unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
+
   // For each possible step:
   for (unsigned i = FDInfo->getASAPStep(A), e = FDInfo->getALAPStep(A) + 1;
       i != e; ++i) {
+    // Check if we can schedule the node at this step because the resource
+    // is not enough.
+
     // Compute the forces.
     DEBUG(dbgs() << "At Step " << i);
     double SelfForce = FDInfo->computeSelfForceAt(A, i);
@@ -214,11 +250,16 @@ void FDLScheduler::releaseMemory() {
 }
 
 void FDLScheduler::clear() {
+  CurState = 0;
+  StartStep = 0;
+  EndStep = 0;
+  FDInfo->clear();
+  MSInfo->clear();
 }
 
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
 
-bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
+HWAOpInst *FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
     HWAOpInst *A = Queue.top();
@@ -231,6 +272,10 @@ bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
     unsigned step = FDInfo->getASAPStep(A);
     if (FDInfo->getTimeFrame(A) != 1) {
       step = findBestStep(A);
+      // If we can not schedule A.
+      if (step == 0)
+        return A;
+
       A->scheduledTo(step);
 
       DEBUG(dbgs() << " After schedule:-------------------\n");
@@ -242,7 +287,7 @@ bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
       A->scheduledTo(step);
     }
   }
-  return true;
+  return 0;
 }
 
 Pass *esyn::createFDLSchedulePass() {

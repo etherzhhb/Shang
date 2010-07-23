@@ -353,7 +353,7 @@ void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
 
 void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   // Remember this atom
-  ResourceMap[PreBind->getResourceId()].push_back(PreBind);
+  ResourceMap[PreBind->getFunUnitID()].push_back(PreBind);
   //
   switch (PreBind->getResClass()) {
   case HWResource::MemoryBus:
@@ -370,7 +370,7 @@ void RTLWriter::emitResources() {
 
   for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
       I != E; ++I) {
-    HWResource &Res = *(RC.getResource(HWResource::extractResType(I->first)));
+    HWResource &Res = *(RC.getResource(I->first.getResType()));
     switch (Res.getResourceType()) {
     case HWResource::MemoryBus:
       emitMemBus(cast<HWMemBus>(Res), I->second);
@@ -391,11 +391,11 @@ void RTLWriter::opAddSub(HWAPreBind *PreBind) {
     vlang->getBitWidth(PreBind->getValue()), 0, false);
 
   DataPath.indent(2) <<  "assign " << getAsOperand(PreBind)
-    << " = addsub_res" << PreBind->getAllocatedInstance() << ";\n";
+    << " = addsub_res" << PreBind->getUnitID() << ";\n";
 }
 
 void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
-  unsigned ResourceId = Atoms[0]->getAllocatedInstance();
+  unsigned ResourceId = Atoms[0]->getUnitID();
 
   unsigned MaxBitWidth = AddSub.getMaxBitWidth();
 
@@ -454,7 +454,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  unsigned MemBusInst = PreBind->getAllocatedInstance();
+  unsigned MemBusInst = PreBind->getUnitID();
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
     std::string Name = getAsOperand(PreBind);
     // Declare the signal
@@ -469,7 +469,7 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
-  unsigned ResourceId = Atoms[0]->getAllocatedInstance();
+  unsigned ResourceId = Atoms[0]->getUnitID();
 
   // Emit the ports;
   ModDecl << '\n';

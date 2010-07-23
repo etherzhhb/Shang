@@ -64,11 +64,16 @@ public:
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 
+  // If the TimeFrame Constrains by II.
+  bool isModuloConstrains(const HWAOpInst *A) const {
+    return getTimeFrame(A) == Modulo;
+  }
+
   void printTimeFrame(FSMState *State, raw_ostream &OS) const;
   void dumpTimeFrame(FSMState *State) const;
   //}
 
-  /// @name Distribuition Graphs
+  /// @name Distribution Graphs
   //{
   void buildDGraph(FSMState *State);
   double getDGraphAt(unsigned step, enum HWResource::ResTypes ResType) const;

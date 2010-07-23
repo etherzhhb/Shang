@@ -260,7 +260,7 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
 void ForceDirectedInfo::buildAvgDG(FSMState *State) {
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I)
-    // We only care about the utilization of prebind resource. 
+    // We only care about the utilization of post bind resource. 
     if (HWAPostBind *A = dyn_cast<HWAPostBind>(*I)) {
       double res = 0.0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)

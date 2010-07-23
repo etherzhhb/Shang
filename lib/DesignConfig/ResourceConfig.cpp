@@ -131,7 +131,6 @@ void ResourceConfig::initializePass() {
   DEBUG(print(dbgs()));
 }
 
-
 void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   std::string ErrMsg;
   MemoryBuffer *F = MemoryBuffer::getFile(Filename, &ErrMsg);
