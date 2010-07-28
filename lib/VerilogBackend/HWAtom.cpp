@@ -86,20 +86,12 @@ void FSMState::print(raw_ostream &OS) const {
   }
 }
 
-void HWAPreBind::print(raw_ostream &OS) const {
+void HWAOpInst::print(raw_ostream &OS) const {
   if (getValue().getType()->isVoidTy())
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << FUnitID;
-}
-
-void HWAPostBind::print(raw_ostream &OS) const {
-  if (getValue().getType()->isVoidTy())
-    OS << getValue() << '\n';
-  else
-    WriteAsOperand(OS, &getValue(), false);
-  OS << " PostBind: " << FUnitID;
+  OS << " Res: " << getFunUnitID();
 }
 
 void HWAVRoot::print(raw_ostream &OS) const {
@@ -133,10 +125,10 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 }
 
 HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-                       unsigned Instance)
+                       HWFUnit FUID)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
-  PostBind.getLatency(), PostBind.edge_begin(), PostBind.edge_end(),
-  PostBind.getInstNumOps(), HWFUnitID(PostBind.getResClass(), Instance)) {
+              PostBind.edge_begin(), PostBind.edge_end(),
+              PostBind.getInstNumOps(), FUID) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);

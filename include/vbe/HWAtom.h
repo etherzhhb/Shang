@@ -516,28 +516,28 @@ class HWAOpInst : public HWAtom {
   // The latency of this atom
   unsigned Latency;
   unsigned NumOps;
-protected:
-  HWFUnitID FUnitID;
+  HWFUnit FUnit;
 
+protected:
   template <class It>
   HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, unsigned latency, It depbegin, It depend,
-    size_t OpNum, HWFUnitID UID = HWResource::Trivial)
-    : HWAtom(ID, T, Inst, depbegin, depend), Latency(latency), NumOps(OpNum),
-    FUnitID(UID) {}
+    Instruction &Inst, It depbegin, It depend, size_t OpNum, HWFUnit UID)
+    : HWAtom(ID, T, Inst, depbegin, depend), Latency(UID.getLatency()),
+    NumOps(OpNum), FUnit(UID) {}
 public:
   // Get the latency of this atom
   unsigned getLatency() const {
     return Latency;
   }
 
-  HWFUnitID getFunUnitID() const { return FUnitID; }
+  HWFUnit getFunUnit() const { return FUnit; }
+  HWFUnitID getFunUnitID() const { return FUnit.getFUnitID(); }
 
   enum HWResource::ResTypes getResClass() const {
-    return FUnitID.getResType();
+    return FUnit.getResType();
   }
 
-  unsigned getUnitID() const { return FUnitID.getUnitID(); }
+  unsigned getUnitNum() const { return FUnit.getUnitNum(); }
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -572,12 +572,13 @@ public:
     return cast<Instruction>(getValue()).getOpcode();
   }
 
+  void print(raw_ostream &OS) const;
   
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAOpInst *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomPreBind ||
-      A->getHWAtomType() == atomPostBind;
+           A->getHWAtomType() == atomPostBind;
   }
 };
 
@@ -585,12 +586,9 @@ class HWAPostBind : public HWAOpInst {
 public:
   template <class It>
   explicit HWAPostBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, It depbegin, It depend, size_t OpNum,
-      enum HWResource::ResTypes OpClass)
-    : HWAOpInst(ID, atomPostBind, Inst, latency, 
-    depbegin, depend, OpNum, OpClass) {}
-
-  void print(raw_ostream &OS) const;
+                       It depbegin, It depend, size_t OpNum, HWFUnit FUID)
+    : HWAOpInst(ID, atomPostBind, Inst,
+                depbegin, depend, OpNum, FUID) {}
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAPostBind *A) { return true; }
@@ -603,15 +601,12 @@ class HWAPreBind : public HWAOpInst {
 public:
   template <class It>
   explicit HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
-    unsigned latency, It depbegin, It depend, unsigned OpNum,
-    enum HWResource::ResTypes OpClass, unsigned Instance = 0)
-    : HWAOpInst(ID, atomPreBind, Inst, latency, depbegin, depend, OpNum,
-    HWFUnitID(OpClass, Instance)) {}
+                      It depbegin, It depend, unsigned OpNum, HWFUnit FUID)
+    : HWAOpInst(ID, atomPreBind, Inst, depbegin, depend,
+                OpNum, FUID) {}
 
   HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-    unsigned Instance);
-
-  void print(raw_ostream &OS) const;
+             HWFUnit FUID);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAPreBind *A) { return true; }

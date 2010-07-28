@@ -116,20 +116,18 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                     size_t OpNum, enum HWResource::ResTypes OpClass,
-                     unsigned latency, unsigned ResInst = 0);
+                         size_t OpNum, HWFUnit FUID);
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                     enum HWResource::ResTypes OpClass,  unsigned latency, 
-                     unsigned ResInst = 0) {
-    return getPreBind(I, Deps, I.getNumOperands(), OpClass, latency, ResInst);
+                         HWFUnit FUID) {
+    return getPreBind(I, Deps, I.getNumOperands(), FUID);
   }
 
   HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-    size_t OpNum, unsigned latency, enum HWResource::ResTypes OpClass);
+                           size_t OpNum, HWFUnit FUID);
 
   HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                       unsigned latency, enum HWResource::ResTypes OpClass) {
-    return getPostBind(I, Deps, I.getNumOperands(), latency, OpClass);
+                           HWFUnit FUID) {
+    return getPostBind(I, Deps, I.getNumOperands(), FUID);
   }
 
   HWAVRoot *getEntryRoot(BasicBlock *BB);

@@ -354,7 +354,7 @@ void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
 void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   // Remember this atom
   ResourceMap[PreBind->getFunUnitID()].push_back(PreBind);
-  //
+
   switch (PreBind->getResClass()) {
   case HWResource::MemoryBus:
     opMemBus(PreBind);
@@ -362,6 +362,8 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   case HWResource::AddSub:
     opAddSub(PreBind);
     break;
+  default:
+    assert(!"Unexcept resource type!");
   }
 }
 
@@ -391,11 +393,11 @@ void RTLWriter::opAddSub(HWAPreBind *PreBind) {
     vlang->getBitWidth(PreBind->getValue()), 0, false);
 
   DataPath.indent(2) <<  "assign " << getAsOperand(PreBind)
-    << " = addsub_res" << PreBind->getUnitID() << ";\n";
+    << " = addsub_res" << PreBind->getUnitNum() << ";\n";
 }
 
 void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
-  unsigned ResourceId = Atoms[0]->getUnitID();
+  unsigned ResourceId = Atoms[0]->getUnitNum();
 
   unsigned MaxBitWidth = AddSub.getMaxBitWidth();
 
@@ -454,7 +456,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  unsigned MemBusInst = PreBind->getUnitID();
+  unsigned MemBusInst = PreBind->getUnitNum();
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
     std::string Name = getAsOperand(PreBind);
     // Declare the signal
@@ -469,7 +471,7 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
-  unsigned ResourceId = Atoms[0]->getUnitID();
+  unsigned ResourceId = Atoms[0]->getUnitNum();
 
   // Emit the ports;
   ModDecl << '\n';

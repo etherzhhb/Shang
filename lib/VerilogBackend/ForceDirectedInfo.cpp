@@ -141,6 +141,11 @@ void ForceDirectedInfo::dumpTimeFrame(FSMState *State) const {
   printTimeFrame(State, dbgs());
 }
 
+bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
+  unsigned key = computeStepKey(step, FU.getFUnitID());
+  return const_cast<ForceDirectedInfo*>(this)->ResUsage[key] < FU.getTotalFUs();
+}
+
 void ForceDirectedInfo::buildDGraph(FSMState *State) {
   DGraph.clear();
   for (usetree_iterator I = State->usetree_begin(),
@@ -150,11 +155,17 @@ void ForceDirectedInfo::buildDGraph(FSMState *State) {
         if (OpInst->getResClass() == HWResource::Trivial)
           continue;
 
-        double Prob = 1.0 / (double) getTimeFrame(OpInst);
+        unsigned TimeFrame = getTimeFrame(OpInst);
+        unsigned ASAPStep = getASAPStep(OpInst);
+        // Remember the Function unit usage of the scheduled instruction.
+        if (TimeFrame == 1)
+          ++ResUsage[computeStepKey(ASAPStep, OpInst->getFunUnit())];
+
+        double Prob = 1.0 / (double) TimeFrame;
         // Including ALAPStep.
-        for (unsigned i = getASAPStep(OpInst), e = getALAPStep(OpInst) + 1;
+        for (unsigned i = ASAPStep, e = getALAPStep(OpInst) + 1;
           i != e; ++i)
-          accDGraphAt(i, OpInst->getResClass(), Prob);
+          accDGraphAt(i, OpInst->getFunUnitID(), Prob);
       }
   }
   DEBUG(printDG(State, dbgs()));
@@ -177,27 +188,36 @@ void ForceDirectedInfo::printDG(FSMState *State, raw_ostream &OS) const {
   }
 }
 
-double ForceDirectedInfo::getDGraphAt(unsigned step,
-                                 enum HWResource::ResTypes ResType) const {
-  // Modulo DG for modulo schedule.
+unsigned
+ForceDirectedInfo::computeStepKey(unsigned step, HWFUnitID FUID) const {
   if (Modulo != 0)
     step = step % Modulo;
-  unsigned key = (step << 4) | (0xf & ResType);
-  DGType::const_iterator at = DGraph.find(key);
+  
+  union {
+    struct {
+      unsigned Step     : 16;
+      unsigned ResData  : 16;
+    } S;
+    unsigned Data;
+  } U;
+
+  U.S.Step = step;
+  U.S.ResData = FUID.getRawData();
+  return U.Data;
+}
+
+double ForceDirectedInfo::getDGraphAt(unsigned step, HWFUnitID FUID) const {
+  // Modulo DG for modulo schedule.
+  DGType::const_iterator at = DGraph.find(computeStepKey(step , FUID));
   
   if (at != DGraph.end()) return at->second;  
 
   return 0.0;
 }
 
-void ForceDirectedInfo::accDGraphAt(unsigned step,
-                                    enum HWResource::ResTypes ResType,
-                                    double d) {
+void ForceDirectedInfo::accDGraphAt(unsigned step, HWFUnitID FUID, double d) {
   // Modulo DG for modulo schedule.
-  if (Modulo != 0)
-    step = step % Modulo;
-  unsigned key = (step << 4) | (0xf & ResType);
-  DGraph[key] += d;
+  DGraph[computeStepKey(step , FUID)] += d;
 }
 
 double ForceDirectedInfo::getRangeDG(const HWAPostBind *A,
@@ -205,7 +225,7 @@ double ForceDirectedInfo::getRangeDG(const HWAPostBind *A,
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
-    ret += getDGraphAt(i, A->getResClass());
+    ret += getDGraphAt(i, A->getFunUnitID());
 
   ret /= range;
   return ret;
@@ -214,7 +234,7 @@ double ForceDirectedInfo::getRangeDG(const HWAPostBind *A,
 double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
   if (const HWAPostBind *A = dyn_cast<HWAPostBind>(OpInst))  
-    return getDGraphAt(step, A->getResClass()) - getAvgDG(A);
+    return getDGraphAt(step, A->getFunUnitID()) - getAvgDG(A);
 
   // The force about the pre-bind resoure dose not matter.
   return 0.0;
@@ -256,7 +276,6 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
   return ret;
 }
 
-
 void ForceDirectedInfo::buildAvgDG(FSMState *State) {
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I)
@@ -264,17 +283,17 @@ void ForceDirectedInfo::buildAvgDG(FSMState *State) {
     if (HWAPostBind *A = dyn_cast<HWAPostBind>(*I)) {
       double res = 0.0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
-        res += getDGraphAt(i, A->getResClass());
+        res += getDGraphAt(i, A->getFunUnitID());
 
       res /= (double) getTimeFrame(A);
       AvgDG[A] = res;
     }
 }
 
-
 void ForceDirectedInfo::clear() {
   AtomToTF.clear();
   DGraph.clear();
+  ResUsage.clear();
   AvgDG.clear();
   Modulo = 0;
 }
