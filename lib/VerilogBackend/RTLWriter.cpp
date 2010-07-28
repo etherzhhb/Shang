@@ -504,7 +504,7 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
                 << ";\n";
       DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
       DataPath.indent(6) << "membus_in" << ResourceId
-        << " <= " << vlang->printConstantInt(0, DataWidth, false);
+        << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
     } else { // It must be a store
       DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
         << ";\n";
