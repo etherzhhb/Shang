@@ -152,6 +152,7 @@ void FDLScheduler::FDModuloSchedule() {
     FDInfo->enableModuleFD(MII);
     EndStep = FDInfo->buildFDInfo(CurState, StartStep, EndStep);
     if (FailNode = scheduleAtII(MII)) {
+      // FIXME: Time Frame changed after we do some schedule.
       // If we fail because II too small.
       if (FDInfo->isModuloConstrains(FailNode))
         ++MII;
@@ -199,14 +200,22 @@ HWAOpInst *FDLScheduler::scheduleAtII(unsigned II) {
 }
 
 void FDLScheduler::FDListSchedule() {
-  FDInfo->clear();
-  EndStep = FDInfo->buildFDInfo(CurState, StartStep);
+  HWAOpInst *FailNode = 0;
 
-  fds_sort s(FDInfo);
-  AtomQueueType AQueue(s);
+  EndStep = 0;
 
-  fillQueue(AQueue, CurState->usetree_begin(), CurState->usetree_end());
-  scheduleQueue(AQueue);
+  do {
+    FDInfo->clear();
+    EndStep = FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+
+    fds_sort s(FDInfo);
+    AtomQueueType AQueue(s);
+
+    fillQueue(AQueue, CurState->usetree_begin(), CurState->usetree_end());
+
+    if (FailNode = scheduleQueue(AQueue))
+      ++EndStep;
+  } while (FailNode)
 }
 
 
