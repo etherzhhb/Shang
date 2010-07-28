@@ -106,7 +106,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
         // Do not exceed Modulo step when we preform a modulo schedule. 
         if (Modulo != 0)
           NewStep = std::min(NewStep,
-                             getASAPStep(cast<HWAOpInst>(ChildNode)) + Modulo - 1);
+                             getASAPStep(ChildNode) + Modulo - 1);
       }
 
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
@@ -143,7 +143,8 @@ void ForceDirectedInfo::dumpTimeFrame(FSMState *State) const {
 
 bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
   unsigned key = computeStepKey(step, FU.getFUnitID());
-  return const_cast<ForceDirectedInfo*>(this)->ResUsage[key] < FU.getTotalFUs();
+  unsigned usage = const_cast<ForceDirectedInfo*>(this)->ResUsage[key];
+  return usage < FU.getTotalFUs();
 }
 
 void ForceDirectedInfo::buildDGraph(FSMState *State) {
@@ -151,7 +152,7 @@ void ForceDirectedInfo::buildDGraph(FSMState *State) {
   for (usetree_iterator I = State->usetree_begin(),
     E = State->usetree_end(); I != E; ++I){
       // We only try to balance the post bind resource.
-      if (HWAPostBind *OpInst = dyn_cast<HWAPostBind>(*I)) {
+      if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
         if (OpInst->getResClass() == HWResource::Trivial)
           continue;
 
@@ -159,12 +160,14 @@ void ForceDirectedInfo::buildDGraph(FSMState *State) {
         unsigned ASAPStep = getASAPStep(OpInst);
         // Remember the Function unit usage of the scheduled instruction.
         if (TimeFrame == 1)
-          ++ResUsage[computeStepKey(ASAPStep, OpInst->getFunUnit())];
+          ++ResUsage[computeStepKey(ASAPStep, OpInst->getFunUnitID())];
+
+
 
         double Prob = 1.0 / (double) TimeFrame;
         // Including ALAPStep.
         for (unsigned i = ASAPStep, e = getALAPStep(OpInst) + 1;
-          i != e; ++i)
+            i != e; ++i)
           accDGraphAt(i, OpInst->getFunUnitID(), Prob);
       }
   }

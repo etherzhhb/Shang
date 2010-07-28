@@ -55,12 +55,14 @@ public:
   /// @name TimeFrame
   //{
   void buildASAPStep(const HWAtom *Root, unsigned step);
-  unsigned getASAPStep(const HWAOpInst *A) const {
+  unsigned getASAPStep(const HWAtom *A) const {
+    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A)) && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
   void buildALAPStep(const HWAtom *Root, unsigned step);
-  unsigned getALAPStep(const HWAOpInst *A) const { 
+  unsigned getALAPStep(const HWAtom *A) const {
+    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A)) && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }
 

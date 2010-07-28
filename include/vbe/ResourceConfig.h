@@ -129,6 +129,7 @@ class HWFUnit {
                           : ID(type, UID), TotalFUs(totalFUs), Latency(latency) {
     assert(TotalFUs == totalFUs && Latency == latency
            && "Data overflow!");
+    assert(totalFUs && "Unavailabe Function Unit?");
   }
   friend class HWResource;
   friend class ResourceConfig;
@@ -267,7 +268,8 @@ public:
   }
 
   HWFUnit allocaTrivialFU(unsigned latency) {
-    return HWFUnit(HWResource::Trivial, 0, latency, 0);
+    // We have infinite function unit.
+    return HWFUnit(HWResource::Trivial, ~0 & 0xfff, latency, 0);
   }
 
   typedef HWResource *const * iterator;

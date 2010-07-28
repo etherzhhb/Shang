@@ -159,8 +159,6 @@ void FDLScheduler::FDModuloSchedule() {
         ++EndStep;
       // Unscheduled all node.
       CurState->resetSchedule();
-      // Reset resource reserve table.
-      // ??
     }
     // While we fail to schedule some node.
   } while(FailNode);
@@ -218,11 +216,13 @@ unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
   // For each possible step:
   for (unsigned i = FDInfo->getASAPStep(A), e = FDInfo->getALAPStep(A) + 1;
       i != e; ++i) {
+    DEBUG(dbgs() << "At Step " << i << "\n");
     // Check if we can schedule the node at this step because the resource
     // is not enough.
+    if (!FDInfo->isFUAvailalbe(i, A->getFunUnit()))
+      continue;
 
     // Compute the forces.
-    DEBUG(dbgs() << "At Step " << i);
     double SelfForce = FDInfo->computeSelfForceAt(A, i);
     // Force update time frame
     A->scheduledTo(i);
