@@ -46,7 +46,6 @@ struct FDLScheduler : public BasicBlockPass {
 
   HWAVRoot *Entry; 
   HWAOpInst *Exit;
-  unsigned StartStep, EndStep;
 
   /// @name PriorityQueue
   //{
@@ -64,8 +63,8 @@ struct FDLScheduler : public BasicBlockPass {
 
   void clear();
 
-  void FDListSchedule();
-  void FDModuloSchedule();
+  void FDListSchedule(unsigned StartStep);
+  void FDModuloSchedule(unsigned StartStep);
 
   /// @name Common pass interface
   //{
@@ -124,27 +123,27 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   Entry = &CurState->getEntryRoot(); 
   Exit = &CurState->getExitRoot();
 
-  StartStep = HI->getTotalCycle();
+  unsigned StartStep = HI->getTotalCycle();
   Entry->scheduledTo(StartStep);
 
   if (MSInfo->isModuloSchedulable(*CurState))
-    FDModuloSchedule();
+    FDModuloSchedule(StartStep);
   else
-    FDListSchedule();
+    FDListSchedule(StartStep);
   
   HI->setTotalCycle(CurState->getExitRoot().getSlot() + 1);
 
   return false;
 }
 
-void FDLScheduler::FDModuloSchedule() {
+void FDLScheduler::FDModuloSchedule(unsigned StartStep) {
   // Compute MII.
   unsigned RecMII = MSInfo->computeRecMII(*CurState);
   unsigned ResMII = MSInfo->computeResMII(*CurState);
   unsigned MII = std::max(RecMII, ResMII);
   HWAOpInst *FailNode = 0;
 
-  EndStep = 0;
+  unsigned EndStep = 0;
 
   do {
     // Set up Resource table
@@ -199,10 +198,10 @@ HWAOpInst *FDLScheduler::scheduleAtII(unsigned II) {
   return 0;
 }
 
-void FDLScheduler::FDListSchedule() {
+void FDLScheduler::FDListSchedule(unsigned StartStep) {
   HWAOpInst *FailNode = 0;
 
-  EndStep = 0;
+  unsigned EndStep = 0;
 
   do {
     FDInfo->clear();
@@ -215,7 +214,7 @@ void FDLScheduler::FDListSchedule() {
 
     if (FailNode = scheduleQueue(AQueue))
       ++EndStep;
-  } while (FailNode)
+  } while (FailNode);
 }
 
 
@@ -236,8 +235,8 @@ unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
     // Force update time frame
     A->scheduledTo(i);
     // Recover the time frame by force rebuild
-    FDInfo->buildASAPStep(Entry, StartStep); 
-    FDInfo->buildALAPStep(Exit, EndStep);
+    FDInfo->buildASAPStep(CurState); 
+    FDInfo->buildALAPStep(CurState);
 
     // The follow function will invalid the time frame.
     DEBUG(dbgs() << " Self Force: " << SelfForce);
@@ -260,8 +259,6 @@ void FDLScheduler::releaseMemory() {
 
 void FDLScheduler::clear() {
   CurState = 0;
-  StartStep = 0;
-  EndStep = 0;
   FDInfo->clear();
   MSInfo->clear();
 }
@@ -288,7 +285,7 @@ HWAOpInst *FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
       A->scheduledTo(step);
 
       DEBUG(dbgs() << " After schedule:-------------------\n");
-      FDInfo->buildFDInfo(CurState, StartStep);
+      FDInfo->recoverFDInfo(CurState);
       DEBUG(dbgs() << "\n\n\n");
       Queue.reheapify();
     } else {

@@ -316,9 +316,9 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
   buildASAPStep(Entry, StartStep); 
   
   HWAOpInst *Exit = &State->getExitRoot();
-  // Compute the EndStep if it is not given.
   if (EndStep == 0)
     EndStep = getASAPStep(Exit);
+
   buildALAPStep(Exit, EndStep);
 
   DEBUG(dumpTimeFrame(State));
@@ -327,6 +327,18 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
   buildAvgDG(State);
 
   return EndStep;
+}
+
+void ForceDirectedInfo::recoverFDInfo(FSMState *State) {
+  // Build the time frame
+  buildASAPStep(State); 
+  buildALAPStep(State);
+
+  DEBUG(dumpTimeFrame(State));
+
+  buildDGraph(State);
+  buildAvgDG(State);
+
 }
 
 void ForceDirectedInfo::dumpDG(FSMState *State) const {

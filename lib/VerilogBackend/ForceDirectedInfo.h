@@ -55,12 +55,20 @@ public:
   /// @name TimeFrame
   //{
   void buildASAPStep(const HWAtom *Root, unsigned step);
+  void buildASAPStep(FSMState *State) {
+    const HWAtom *Root = &State->getEntryRoot();
+    buildASAPStep(Root, getASAPStep(Root));
+  }
   unsigned getASAPStep(const HWAtom *A) const {
     assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A)) && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
   void buildALAPStep(const HWAtom *Root, unsigned step);
+  void buildALAPStep(FSMState *State) {
+    const HWAtom *Root = &State->getExitRoot();
+    buildALAPStep(Root, getALAPStep(Root));
+  }
   unsigned getALAPStep(const HWAtom *A) const {
     assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A)) && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
@@ -112,7 +120,9 @@ public:
   //}
 
   unsigned buildFDInfo(FSMState *State, unsigned StartStep,
-                       unsigned EndStep = 0);
+                       unsigned EndStep);
+
+  void recoverFDInfo(FSMState *State);
 
   void enableModuleFD(unsigned II) { Modulo = II; }
 
