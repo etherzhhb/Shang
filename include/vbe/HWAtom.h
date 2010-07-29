@@ -47,7 +47,7 @@ using namespace llvm;
 namespace esyn {
 
 enum HWAtomTypes {
-  atomDrvReg,
+  atomWrReg,
   atomPreBind,      // Operate on pre bind resource
   atomPostBind,     // Operate on post binding resource
   atomVRoot       // Virtual Root
@@ -458,11 +458,11 @@ typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
 typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
   GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
 
-// Drive register
-class HWADrvReg : public HWAtom {
+// Write register
+class HWAWrReg : public HWAtom {
 public:
-  HWADrvReg(const FoldingSetNodeIDRef ID, HWEdge *Edge)
-    : HWAtom(ID, atomDrvReg, Edge->getDagSrc()->getValue(), Edge) {
+  HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge *Edge)
+    : HWAtom(ID, atomWrReg, Edge->getDagSrc()->getValue(), Edge) {
     scheduledTo(Edge->getDagSrc()->getSlot() + Edge->getDagSrc()->getLatency());
   }
 
@@ -470,9 +470,9 @@ public:
     return cast<HWValDep>(getDep(0))->getReg();
   }
 
-  static inline bool classof(const HWADrvReg *A) { return true; }
+  static inline bool classof(const HWAWrReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomDrvReg;
+    return A->getHWAtomType() == atomWrReg;
   }
 
   void print(raw_ostream &OS) const;

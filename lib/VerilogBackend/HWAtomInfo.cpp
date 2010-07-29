@@ -380,18 +380,18 @@ HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
   return A;
 }
 
-HWADrvReg *HWAtomInfo::getDrvReg(HWAtom *Src, HWReg *Reg) {
+HWAWrReg *HWAtomInfo::getDrvReg(HWAtom *Src, HWReg *Reg) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomDrvReg);
+  ID.AddInteger(atomWrReg);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
 
   void *IP = 0;
-  HWADrvReg *A =
-    static_cast<HWADrvReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAWrReg *A =
+    static_cast<HWAWrReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWADrvReg(ID.Intern(HWAtomAllocator), getValDepEdge(Src, Reg));
+    A = new (HWAtomAllocator) HWAWrReg(ID.Intern(HWAtomAllocator), getValDepEdge(Src, Reg));
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;

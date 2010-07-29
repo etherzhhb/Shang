@@ -259,8 +259,8 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomDrvReg:
-      return "Reg"+utostr(cast<HWADrvReg>(A)->getReg()->getRegNum())
+    case atomWrReg:
+      return "Reg"+utostr(cast<HWAWrReg>(A)->getReg()->getRegNum())
         + " /*" + vlang->GetValueName(&A->getValue()) +"*/";
     default:
       return "<Unknown Atom>";
@@ -304,8 +304,8 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomDrvReg:
-        emitDrvReg(cast<HWADrvReg>(A));
+      case atomWrReg:
+        emitDrvReg(cast<HWAWrReg>(A));
         break;
       case atomVRoot:
         break;
@@ -315,7 +315,7 @@ void RTLWriter::emitAtom(HWAtom *A) {
   }
 }
 
-void RTLWriter::emitDrvReg(HWADrvReg *DR) {
+void RTLWriter::emitDrvReg(HWAWrReg *DR) {
   const HWReg *R = DR->getReg();
   UsedRegs.insert(R);
   

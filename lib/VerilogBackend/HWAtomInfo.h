@@ -244,7 +244,7 @@ public:
     return R;
   }
 
-  HWADrvReg *getDrvReg(HWAtom *Src, HWReg *Reg);
+  HWAWrReg *getDrvReg(HWAtom *Src, HWReg *Reg);
 
   HWAtom *getAtomFor(Value &V) const {
     AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);

@@ -69,7 +69,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
             Value &V = DI->getValue();
             DEBUG(DI->print(dbgs()));
             DEBUG(dbgs() << " Registered\n");
-            HWADrvReg *DR = HI.getDrvReg(DI, HI.getRegNumForLiveVal(V));
+            HWAWrReg *DR = HI.getDrvReg(DI, HI.getRegNumForLiveVal(V));
 
             A->setDep(i, DR);
           }

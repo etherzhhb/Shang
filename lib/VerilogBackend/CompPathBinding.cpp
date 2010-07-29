@@ -138,7 +138,9 @@ public:
     if (LHS->isVRExit())
       return false;
 
-    // TODO: this is not true in Modulo Schedule
+    // TODO: this is not true in Modulo Schedule.
+    // Infact ealier is some kind of ealier in dependencies graph? So this is ok
+    // in Modulo Schedule.
     return LHS->getData()->getSlot() < RHS->getData()->getSlot();
   }
 
@@ -226,7 +228,7 @@ public:
 typedef CompGraphNode<HWAOpInst> PostBindNodeType;
 typedef CompGrapPath<HWAOpInst> PostBindNodePath;
 
-typedef CompGraphNode<PostBindNodePath> PathGraphNode;
+typedef CompGraphNode<PostBindNodePath> PathGraphNodeType;
 
 template<>
 unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
@@ -255,7 +257,6 @@ template<>
 bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
   return (getData()->getSlot() != N->getData()->getSlot());
 }
-
 } // end namespace
 
 namespace llvm {
@@ -320,6 +321,13 @@ struct CompPathBinding : public BasicBlockPass {
   typedef df_iterator<const PostBindNodeType*, SmallVector<const PostBindNodeType*, 8>,
     false, GraphTraits<const PostBindNodeType*> > wocg_const_df_it;
 
+  //PathGraphNodeType
+  typedef df_iterator<PathGraphNodeType*, SmallVector<PathGraphNodeType*, 8>, false,
+    GraphTraits<PathGraphNodeType*> > pg_df_it;
+  typedef df_iterator<const PathGraphNodeType*, SmallVector<const PathGraphNodeType*, 8>,
+    false, GraphTraits<const PathGraphNodeType*> > pg_const_df_it;
+
+
   // Types
   typedef std::pair<PostBindNodeType*, PostBindNodeType*> FUWOCGType;
 
@@ -327,8 +335,10 @@ struct CompPathBinding : public BasicBlockPass {
 
   BumpPtrAllocator NodeAllocator;
 
+  // WOCG
   WOCGMapType WOCG;
-  PathGraphNode PGEntry, PGExit;
+  // Path Graph
+  PathGraphNodeType PGEntry, PGExit;
 
   HWAtomInfo *HI;
   FSMState *CurStage;
@@ -344,11 +354,13 @@ struct CompPathBinding : public BasicBlockPass {
   PostBindNodeType *getGraphExit(enum HWResource::ResTypes T) {
     return WOCG[T].second;
   }
-  
+  // Build the Weighted Compatibility Graph.
   void buildWOCGForRes();
   void insertToWOCG(HWAPostBind *PB);
-
+  // Build all operation in longest path to a function unit.
   void buildLongestPostBindPath();
+  // Bind register to function unit.
+  void bindFunUnitReg();
 
   static char ID;
   CompPathBinding();
@@ -413,6 +425,10 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   return false;
 }
 
+void CompPathBinding::bindFunUnitReg() {
+  // For each Function unit(longest path graph node), bind a FU register.
+}
+
 void CompPathBinding::buildLongestPostBindPath() {
   for (WOCGMapType::iterator I = WOCG.begin(), E = WOCG.end(); I != E; ++I) {
     FUWOCGType FWOCG = I->second;
@@ -436,7 +452,7 @@ void CompPathBinding::buildLongestPostBindPath() {
           Node->removeFromGraph();
       }
 
-      PathGraphNode *Node = new (NodeAllocator) PathGraphNode(Path);
+      PathGraphNodeType *Node = new (NodeAllocator) PathGraphNodeType(Path);
 
       // Instert to the path graph, but ignore the oreder at this moment;
       PGEntry.addSucc(Node);

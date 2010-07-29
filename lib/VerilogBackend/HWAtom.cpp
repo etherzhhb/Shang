@@ -37,7 +37,7 @@ void HWAtom::dump() const {
 }
 
 
-void HWADrvReg::print(raw_ostream &OS) const {
+void HWAWrReg::print(raw_ostream &OS) const {
 
 }
 
