@@ -99,13 +99,14 @@ void HWAVRoot::print(raw_ostream &OS) const {
   OS << " Entry";
 }
 
-HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V)
-: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0) {}
+HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+               unsigned latancy)
+: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {}
 
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
-               Value &V, HWEdge *Dep0) : FastID(ID),
-               HWAtomType(HWAtomTy), Val(V), SchedSlot(0)  {
+               Value &V, HWEdge *Dep0, unsigned latancy) : FastID(ID),
+               HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {
   Deps.push_back(Dep0);
   Dep0->getDagSrc()->addToUseList(this);
 }

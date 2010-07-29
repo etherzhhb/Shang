@@ -93,7 +93,8 @@ class HWReg {
   std::set<Value*> Vals;
   const Type *Ty;
   unsigned Num;
-
+  // The life time of this register, Including EndSlot.
+  unsigned short StartSlot, EndSlot;
 public:
   explicit HWReg(unsigned num, Value &V)
     : Ty(V.getType()), Num(num) {
@@ -101,6 +102,9 @@ public:
   }
 
   const Type *getType() const { return Ty; }
+  const std::pair<unsigned short, unsigned short> getLifeTime() const {
+    return std::make_pair(StartSlot, EndSlot);
+  }
 
   void addValue(Value &V) {
     assert(Ty == V.getType() && "Can merge difference type!");
@@ -229,12 +233,14 @@ class HWAtom : public FoldingSetNode {
 
   // The HWAtom baseclass this node corresponds to
   const unsigned short HWAtomType;
+  const unsigned short Latancy;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<HWEdge*, 4> Deps;
 
   // The atoms that using this atom.
   std::list<HWAtom*> UseList;
+
 
   void addToUseList(HWAtom *User) {
     UseList.push_back(User);
@@ -255,8 +261,9 @@ protected:
 public:
   template <class It>
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-    It depbegin, It depend)  : FastID(ID), HWAtomType(HWAtomTy),
-    Deps(depbegin, depend), Val(V), SchedSlot(0) {
+    It depbegin, It depend, unsigned latancy = 0)  : FastID(ID),
+    HWAtomType(HWAtomTy), Deps(depbegin, depend), Val(V), SchedSlot(0),
+    Latancy(latancy) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
       //Deps.push_back(*I);
       (*I)->addToUseList(this);
@@ -269,9 +276,11 @@ public:
     Deps.push_back(E);
   }
 
-  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V);
+  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+         unsigned latancy = 0);
 
-  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, HWEdge *Dep0);
+  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, HWEdge *Dep0,
+         unsigned latancy = 0);
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
@@ -380,7 +389,7 @@ public:
   void scheduledTo(unsigned slot);
 
   // Get the latency of this atom
-  virtual unsigned getLatency() const { return 0; }
+  unsigned getLatency() const { return Latancy; }
 
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
@@ -462,7 +471,8 @@ typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
 class HWAWrReg : public HWAtom {
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge *Edge)
-    : HWAtom(ID, atomWrReg, Edge->getDagSrc()->getValue(), Edge) {
+    : HWAtom(ID, atomWrReg, Edge->getDagSrc()->getValue(), Edge,
+    1/*The latancy of a write register operation is 1*/) {
     scheduledTo(Edge->getDagSrc()->getSlot() + Edge->getDagSrc()->getLatency());
   }
 
@@ -513,8 +523,6 @@ public:
 
 /// @brief The Schedulable Hardware Atom
 class HWAOpInst : public HWAtom {
-  // The latency of this atom
-  unsigned Latency;
   unsigned NumOps;
   HWFUnit FUnit;
 
@@ -522,14 +530,9 @@ protected:
   template <class It>
   HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, It depbegin, It depend, size_t OpNum, HWFUnit UID)
-    : HWAtom(ID, T, Inst, depbegin, depend), Latency(UID.getLatency()),
+    : HWAtom(ID, T, Inst, depbegin, depend, UID.getLatency()),
     NumOps(OpNum), FUnit(UID) {}
 public:
-  // Get the latency of this atom
-  unsigned getLatency() const {
-    return Latency;
-  }
-
   HWFUnit getFunUnit() const { return FUnit; }
   HWFUnitID getFunUnitID() const { return FUnit.getFUnitID(); }
 
