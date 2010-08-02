@@ -58,7 +58,7 @@ class RTLWriter : public FunctionPass {
 
   // Mapping used resouces to the using atoms
   typedef std::vector<HWAPreBind*> HWAPreBindVecTy;
-  typedef std::map<HWResource::ResIdType,HWAPreBindVecTy> ResourceMapType;
+  typedef std::map<HWFUnitID,HWAPreBindVecTy> ResourceMapType;
 
   ResourceMapType ResourceMap;
 

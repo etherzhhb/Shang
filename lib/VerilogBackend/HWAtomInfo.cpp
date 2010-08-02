@@ -108,9 +108,12 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB)
       if (!Dep.hasDep())
         continue;
 
+      // There is a backedge if src not before dest, so we will ad a dummy src to build
+      // the dag.
+      HWAtom *Root = srcBeforeDest ? (HWAtom*)Src : (HWAtom*)getEntryRoot(&BB);
+
       // Add dependencies edges.
-      HWMemDep *MemDep = getMemDepEdge(Src, getEntryRoot(&BB),
-                                        Dep.getDepType(), Dep.getItDst());
+      HWMemDep *MemDep = getMemDepEdge(Src, Root, Dep.getDepType(), Dep.getItDst());
       Dst->addDep(MemDep);
     }
   }
@@ -141,7 +144,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   HWAtom *Pred = 0;
   // Do not add the operand twice
   if (!Deps.empty()) {
-    Pred = Deps[0]->getSrc();
+    Pred = Deps[0]->getDagSrc();
   }
 
   unsigned OpSize = Deps.size();
@@ -407,11 +410,10 @@ HWADrvReg *HWAtomInfo::getDrvReg(HWAtom *Src, HWReg *Reg) {
 }
 
 
-HWMemDep *HWAtomInfo::getMemDepEdge(HWAOpInst *Src, HWAVRoot *Root,
+HWMemDep *HWAtomInfo::getMemDepEdge(HWAOpInst *Src, HWAtom *Root,
                                     enum HWMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
-  return new (HWAtomAllocator) HWMemDep(Diff > 0 ? (HWAtom*)Root : (HWAtom*)Src,
-                                        Src, DepType, Diff);
+  return new (HWAtomAllocator) HWMemDep(Root, Src, DepType, Diff);
 }
 
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {

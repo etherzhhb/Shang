@@ -275,10 +275,10 @@ std::string RTLWriter::getAsOperand(HWEdge *E) {
       return vlang->printConstant(VD->getConstant());
     
     if (VD->isWire())
-      return getAsOperand(VD->getSrc());
+      return getAsOperand(VD->getDagSrc());
  
     if (HWReg *R = VD->getReg()) {
-      Value *V = &(VD->getSrc()->getValue());
+      Value *V = &(VD->getDagSrc()->getValue());
       return "Reg"+utostr(R->getRegNum())
       + " /*" + vlang->GetValueName(V) +"*/";
     }
@@ -335,35 +335,6 @@ void RTLWriter::emitAllRegisters() {
   } 
 }
 
-//void RTLWriter::emitValDep(HWValDep *Dep) {
-//  if (isa<HWAVRoot>(Dep->getSrc()))
-//    return;
-//
-//  if (HWReg *R = Dep->getReg()) {
-//    UsedRegs.insert(R);
-//    
-//    std::string Name = getAsOperand(Dep);
-//    ControlBlock.indent(8) << Name << " <= " << getAsOperand(Dep->getSrc()) << ";\n";
-//  }
-//}
-
-//void RTLWriter::emitValDep(HWARegister *Register) {
-//  HWAtom *Val = Register->getRefVal();
-//
-//  Value &V = Register->getValue();
-//  unsigned BitWidth = vlang->getBitWidth(V);
-//  
-//  std::string Name = getAsOperand(Register);
-//
-//  // Declare the register
-//  vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
-//  // Reset the register
-//  vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
-//
-//  // assign the register
-//  ControlBlock.indent(8) << Name << " <= " << getAsOperand(Val) << ";\n";
-//}
-
 void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
   Instruction &Inst = cast<Instruction>(PostBind->getValue());
   assert(!isa<PHINode>(Inst) && "PHINode is not PostBind atom!");
@@ -382,7 +353,7 @@ void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
 
 void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   // Remember this atom
-  ResourceMap[PreBind->getResourceId()].push_back(PreBind);
+  ResourceMap[PreBind->getFunUnitID()].push_back(PreBind);
   //
   switch (PreBind->getResClass()) {
   case HWResource::MemoryBus:
@@ -399,7 +370,7 @@ void RTLWriter::emitResources() {
 
   for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
       I != E; ++I) {
-    HWResource &Res = *(RC.getResource(HWResource::extractResType(I->first)));
+    HWResource &Res = *(RC.getResource(I->first.getResType()));
     switch (Res.getResourceType()) {
     case HWResource::MemoryBus:
       emitMemBus(cast<HWMemBus>(Res), I->second);
@@ -420,11 +391,11 @@ void RTLWriter::opAddSub(HWAPreBind *PreBind) {
     vlang->getBitWidth(PreBind->getValue()), 0, false);
 
   DataPath.indent(2) <<  "assign " << getAsOperand(PreBind)
-    << " = addsub_res" << PreBind->getAllocatedInstance() << ";\n";
+    << " = addsub_res" << PreBind->getUnitID() << ";\n";
 }
 
 void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
-  unsigned ResourceId = Atoms[0]->getAllocatedInstance();
+  unsigned ResourceId = Atoms[0]->getUnitID();
 
   unsigned MaxBitWidth = AddSub.getMaxBitWidth();
 
@@ -463,9 +434,9 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
       DataPath << " <= 1'b1;\n";
 
     DataPath.indent(6) <<  OpA << " <= "
-      << getAsOperand(A->getOperand(0)) << ";\n";
+      << getAsOperand(A->getValDep(0)) << ";\n";
     DataPath.indent(6) <<  OpB << " <= "
-      << getAsOperand(A->getOperand(1)) << ";\n";
+      << getAsOperand(A->getValDep(1)) << ";\n";
 
     // Else for other atoms
     vlang->end(DataPath.indent(4));
@@ -483,7 +454,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  unsigned MemBusInst = PreBind->getAllocatedInstance();
+  unsigned MemBusInst = PreBind->getUnitID();
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
     std::string Name = getAsOperand(PreBind);
     // Declare the signal
@@ -498,7 +469,7 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
-  unsigned ResourceId = Atoms[0]->getAllocatedInstance();
+  unsigned ResourceId = Atoms[0]->getUnitID();
 
   // Emit the ports;
   ModDecl << '\n';
@@ -527,17 +498,17 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
 
     // Emit the operation
     if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
-      DataPath << getAsOperand(A->getOperand(LoadInst::getPointerOperandIndex()))
+      DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
                 << ";\n";
       DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
       DataPath.indent(6) << "membus_in" << ResourceId
         << " <= " << vlang->printConstantInt(0, DataWidth, false);
     } else { // It must be a store
-      DataPath << getAsOperand(A->getOperand(StoreInst::getPointerOperandIndex()))
+      DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
         << ";\n";
       DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b1;\n";
       DataPath.indent(6) << "membus_in" << ResourceId
-        << " <= " << getAsOperand(A->getOperand(0)) << ";\n";
+        << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
     }
     // Else for other atoms
     vlang->end(DataPath.indent(4));
@@ -566,7 +537,7 @@ void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) 
 // Emit instructions
 void RTLWriter::visitICmpInst(HWAPostBind &A) {
   ICmpInst &I = A.getInst<ICmpInst>();
-  DataPath << "(" << getAsOperand(A.getOperand(0));
+  DataPath << "(" << getAsOperand(A.getValDep(0));
   switch (I.getPredicate()) {
       case ICmpInst::ICMP_EQ:  DataPath << " == "; break;
       case ICmpInst::ICMP_NE:  DataPath << " != "; break;
@@ -580,7 +551,7 @@ void RTLWriter::visitICmpInst(HWAPostBind &A) {
       case ICmpInst::ICMP_SGT: DataPath << " > "; break;
       default: DataPath << "Unknown icmppredicate";
   }
-  DataPath << getAsOperand(A.getOperand(1)) << ");\n";
+  DataPath << getAsOperand(A.getValDep(1)) << ");\n";
 }
 
 void RTLWriter::visitExtInst(HWAPostBind &A) {
@@ -598,7 +569,7 @@ void RTLWriter::visitExtInst(HWAPostBind &A) {
   else
     DataPath << getAsOperand(&A) << "["<< (ChTy->getBitWidth()-1)<<"]";
 
-  DataPath <<"}}," << getAsOperand(A.getOperand(0)) << "}" <<";\n";   
+  DataPath <<"}}," << getAsOperand(A.getValDep(0)) << "}" <<";\n";   
 }
 
 
@@ -611,7 +582,7 @@ void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
   if (Ret.getNumOperands() != 0)
         // Emit data path
    ControlBlock.indent(8) << "return_value" << " <= "
-                          << getAsOperand(A.getOperand(0)) << ";\n";
+                          << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
 void esyn::RTLWriter::visitGetElementPtrInst(HWAPostBind &A) {
@@ -620,12 +591,12 @@ void esyn::RTLWriter::visitGetElementPtrInst(HWAPostBind &A) {
   assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
   assert(I.getNumIndices() < 2 && "Too much indices in GEP!");
 
-  DataPath << getAsOperand(A.getOperand(0)) << " + "
-           << getAsOperand(A.getOperand(1)) << ";\n"; // FIXME multipy the element size.
+  DataPath << getAsOperand(A.getValDep(0)) << " + "
+           << getAsOperand(A.getValDep(1)) << ";\n"; // FIXME multipy the element size.
 }
 
 void esyn::RTLWriter::visitBinaryOperator(HWAPostBind &A) {
-  DataPath << getAsOperand(A.getOperand(0));
+  DataPath << getAsOperand(A.getValDep(0));
   Instruction &I = A.getInst<Instruction>();
   switch (I.getOpcode()) {
   case Instruction::Add:  DataPath << " + "; break;
@@ -639,19 +610,19 @@ void esyn::RTLWriter::visitBinaryOperator(HWAPostBind &A) {
   case Instruction::AShr: DataPath << " >>> ";  break;
   default: DataPath << " <unsupport> "; break;
   }
-  DataPath << getAsOperand(A.getOperand(1)) << ";\n";
+  DataPath << getAsOperand(A.getValDep(1)) << ";\n";
 }
 
 void esyn::RTLWriter::visitSelectInst(HWAPostBind &A) {
-  DataPath << getAsOperand(A.getOperand(0)) << " ? "
-           << getAsOperand(A.getOperand(1)) << " : "
-           << getAsOperand(A.getOperand(2)) << ";\n";
+  DataPath << getAsOperand(A.getValDep(0)) << " ? "
+           << getAsOperand(A.getValDep(1)) << " : "
+           << getAsOperand(A.getValDep(2)) << ";\n";
 }
 
 void RTLWriter::visitTruncInst(HWAPostBind &A) {
   TruncInst &I = A.getInst<TruncInst>();
   const IntegerType *Ty = cast<IntegerType>(I.getType());
-  DataPath << getAsOperand(A.getOperand(0)) << vlang->printBitWitdh(Ty, 0, true) << "\n";
+  DataPath << getAsOperand(A.getValDep(0)) << vlang->printBitWitdh(Ty, 0, true) << "\n";
 }
 
 
@@ -661,7 +632,7 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
     BasicBlock &NextBB0 = *(I.getSuccessor(0)), 
                &NextBB1 = *(I.getSuccessor(1)), 
                &CurBB = *(I.getParent());
-    HWAtom *Cnd = A.getOperand(0);
+    HWEdge *Cnd = A.getValDep(0);
     vlang->ifBegin(ControlBlock.indent(8), getAsOperand(Cnd));
     emitPHICopiesForSucc(CurBB, NextBB0, 2);
     emitNextState(ControlBlock.indent(10), NextBB0, 0);

@@ -78,8 +78,13 @@ protected:
 public:
   unsigned getEdgeType() const { return EdgeType; }
   // The referenced value.
-  HWAtom *getSrc() const { return Src; }
-  void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
+  HWAtom *getDagSrc() const { return Src; }
+  void setDagSrc(HWAtom *NewSrc) { Src = NewSrc; }
+
+  unsigned getItDst() const { return ItDst; }
+
+  virtual HWAtom *getSCCSrc() const { return Src; }
+  bool isBackEdge() const { return getDagSrc() != getSCCSrc(); }
 
   virtual void print(raw_ostream &OS) const = 0;
 };
@@ -171,6 +176,7 @@ public:
 
   enum MemDepTypes getDepType() const { return Data.getInt(); }
 
+  HWAtom *getSCCSrc() const;
 
   void print(raw_ostream &OS) const;
 
@@ -197,7 +203,7 @@ public:
   }
 
   NodeType* operator*() const {
-    return (*I)->getSrc();
+    return (*I)->getDagSrc();
   }
   NodeType* operator->() const { return operator*(); }
 
@@ -259,7 +265,7 @@ public:
 
   // Add a new depencence edge to the atom.
   void addDep(HWEdge *E) {
-    E->getSrc()->addToUseList(this);
+    E->getDagSrc()->addToUseList(this);
     Deps.push_back(E);
   }
 
@@ -271,6 +277,9 @@ public:
 
   SmallVectorImpl<HWEdge*>::iterator edge_begin() { return Deps.begin(); }
   SmallVectorImpl<HWEdge*>::iterator edge_end() { return Deps.end(); }
+
+  SmallVectorImpl<HWEdge*>::const_iterator edge_begin() const { return Deps.begin(); }
+  SmallVectorImpl<HWEdge*>::const_iterator edge_end() const { return Deps.end(); }
 
   /// Profile - FoldingSet support.
   void Profile(FoldingSetNodeID& ID) { ID = FastID; }
@@ -294,38 +303,50 @@ public:
 
   size_t getNumDeps() const { return Deps.size(); }
 
+  // If the current atom depend on A?
+  bool isDepOn(const HWAtom *A) const { return getDepIt(A) != dep_end(); }
+
   void setDep(dep_iterator I, HWAtom *NewDep) {
+    assert(I != dep_end() && "I out of range!");
     I->removeFromList(this);
     NewDep->addToUseList(this);
     // Setup the dependence list.
-    I.getEdge()->setSrc(NewDep);
+    I.getEdge()->setDagSrc(NewDep);
   }
 
   void setDep(unsigned idx, HWAtom *NewDep) {
     // Update use list
-    Deps[idx]->getSrc()->removeFromList(this);
+    Deps[idx]->getDagSrc()->removeFromList(this);
     NewDep->addToUseList(this);
     // Setup the dependence list.
-    Deps[idx]->setSrc(NewDep);
+    Deps[idx]->setDagSrc(NewDep);
   }
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
-  const_dep_iterator getDepIdx(HWAtom *A) const {
+  const_dep_iterator getDepIt(const HWAtom *A) const {
     for (const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       if ((*I) == A)
         return I;
 
     return dep_end();
   }
-  dep_iterator getDepIdx(HWAtom *A) {
+  dep_iterator getDepIt(const HWAtom *A) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       if ((*I) == A)
         return I;
     
     return dep_end();
   }
-  // If the current atom depend on A?
-  bool isDepOn(HWAtom *A) const { return getDepIdx(A) != dep_end(); }
+
+  HWEdge *getDepEdge(const HWAtom *A) {
+    assert(isDepOn(A) && "Current atom not depend on A!");
+    return getDepIt(A).getEdge();
+  }
+  HWEdge *getDepEdge(const HWAtom *A) const {
+    assert(isDepOn(A) && "Current atom not depend on A!");
+    return getDepIt(A).getEdge();
+  }
+
   //}
 
   /// @name Use
@@ -441,8 +462,8 @@ typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
 class HWADrvReg : public HWAtom {
 public:
   HWADrvReg(const FoldingSetNodeIDRef ID, HWEdge *Edge)
-    : HWAtom(ID, atomDrvReg, Edge->getSrc()->getValue(), Edge) {
-    scheduledTo(Edge->getSrc()->getSlot() + Edge->getSrc()->getLatency());
+    : HWAtom(ID, atomDrvReg, Edge->getDagSrc()->getValue(), Edge) {
+    scheduledTo(Edge->getDagSrc()->getSlot() + Edge->getDagSrc()->getLatency());
   }
 
   const HWReg *getReg() const {
@@ -496,19 +517,27 @@ class HWAOpInst : public HWAtom {
   unsigned Latency;
   unsigned NumOps;
 protected:
-  unsigned SubClassData;
+  HWFUnitID FUnitID;
 
   template <class It>
   HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
     Instruction &Inst, unsigned latency, It depbegin, It depend,
-    size_t OpNum, unsigned subClassData = 0)
+    size_t OpNum, HWFUnitID UID = HWResource::Trivial)
     : HWAtom(ID, T, Inst, depbegin, depend), Latency(latency), NumOps(OpNum),
-    SubClassData(subClassData) {}
+    FUnitID(UID) {}
 public:
   // Get the latency of this atom
   unsigned getLatency() const {
     return Latency;
   }
+
+  HWFUnitID getFunUnitID() const { return FUnitID; }
+
+  enum HWResource::ResTypes getResClass() const {
+    return FUnitID.getResType();
+  }
+
+  unsigned getUnitID() const { return FUnitID.getUnitID(); }
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -535,12 +564,7 @@ public:
     assert(idx < NumOps && "index Out of range!");
     //assert(&(getDep(idx)->getSrc()->getValue()) == getInst<Instruction>().getOperand(idx)
     //  && "HWPostBind operands broken!");
-    return getDep(idx)->getSrc();
-  }
-
-  // Help the scheduler to identify difference operation class
-  virtual enum HWResource::ResTypes getResClass() const {
-    return HWResource::Trivial;
+    return getDep(idx)->getDagSrc();
   }
 
   // Return the opcode of the instruction.
@@ -565,10 +589,6 @@ public:
       enum HWResource::ResTypes OpClass)
     : HWAOpInst(ID, atomPostBind, Inst, latency, 
     depbegin, depend, OpNum, OpClass) {}
-  
-  enum HWResource::ResTypes getResClass() const {
-    return (HWResource::ResTypes)SubClassData;
-  }
 
   void print(raw_ostream &OS) const;
 
@@ -586,25 +606,10 @@ public:
     unsigned latency, It depbegin, It depend, unsigned OpNum,
     enum HWResource::ResTypes OpClass, unsigned Instance = 0)
     : HWAOpInst(ID, atomPreBind, Inst, latency, depbegin, depend, OpNum,
-    HWResource::createResId(OpClass, Instance)) {}
+    HWFUnitID(OpClass, Instance)) {}
 
   HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
     unsigned Instance);
-
-  /// @name The using resource
-  //{
-  // Help the scheduler to identify difference resource unit.
-  HWResource::ResIdType getResourceId() const {
-    return SubClassData;
-  }
-
-  enum HWResource::ResTypes getResClass() const {
-    return HWResource::extractResType(getResourceId());
-  }
-  unsigned getAllocatedInstance() const {
-    return HWResource::extractInstanceId(getResourceId());
-  }
-  //}
 
   void print(raw_ostream &OS) const;
 
@@ -671,6 +676,8 @@ public:
   void getScheduleMap(ScheduleMapType &Atoms) const;
 
   void print(raw_ostream &OS) const;
+
+  void dump() const;
 };
 
 } // end namespace

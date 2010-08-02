@@ -37,7 +37,7 @@ void HWAtom::dump() const {
 }
 
 
-void esyn::HWADrvReg::print(raw_ostream &OS) const {
+void HWADrvReg::print(raw_ostream &OS) const {
 
 }
 
@@ -91,7 +91,7 @@ void HWAPreBind::print(raw_ostream &OS) const {
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << SubClassData;
+  OS << " Res: " << FUnitID;
 }
 
 void HWAPostBind::print(raw_ostream &OS) const {
@@ -99,7 +99,7 @@ void HWAPostBind::print(raw_ostream &OS) const {
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " PostBind: " << SubClassData;
+  OS << " PostBind: " << FUnitID;
 }
 
 void HWAVRoot::print(raw_ostream &OS) const {
@@ -115,7 +115,7 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
                Value &V, HWEdge *Dep0) : FastID(ID),
                HWAtomType(HWAtomTy), Val(V), SchedSlot(0)  {
   Deps.push_back(Dep0);
-  Dep0->getSrc()->addToUseList(this);
+  Dep0->getDagSrc()->addToUseList(this);
 }
 
 
@@ -128,7 +128,7 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
   while (!use_empty()) {
     HWAtom *U = use_back();
 
-    U->setDep(U->getDepIdx(this), A);
+    U->setDep(U->getDepIt(this), A);
   }
 }
 
@@ -136,8 +136,7 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
                        unsigned Instance)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
   PostBind.getLatency(), PostBind.edge_begin(), PostBind.edge_end(),
-  PostBind.getInstNumOps(),
-  HWResource::createResId(PostBind.getResClass(), Instance)) {
+  PostBind.getInstNumOps(), HWFUnitID(PostBind.getResClass(), Instance)) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);
@@ -146,4 +145,12 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
 
   // Setup the step
   scheduledTo(PostBind.getSlot());
+}
+
+HWAtom *HWMemDep::getSCCSrc() const {
+  return Data.getPointer();
+}
+
+void esyn::FSMState::dump() const {
+  print(dbgs());
 }
