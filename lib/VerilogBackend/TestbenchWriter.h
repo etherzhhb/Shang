@@ -26,24 +26,23 @@
 using namespace llvm;
 
 namespace esyn {
+class VLang;
 
 class TestbenchWriter : public FunctionPass{
     raw_ostream &Out;
-
+    VLang *vlang;
 public:
     static char ID; 
 
     explicit TestbenchWriter(raw_ostream &O)
       :FunctionPass(&ID),Out(O) {}
 
-    virtual bool runOnFunction(Function &F) {
-      // Dirty Hack
-      Out<<testBech(F,1);
+    void printFunctionSignature(raw_ostream &Out, const Function *F);
+    virtual void getAnalysisUsage(AnalysisUsage &AU) const;
 
-      return false;
-    }
+    virtual bool runOnFunction(Function &F);
 
-    std::string testBech(Function&F,unsigned level);
+    std::string testBech(Function&F);
   };
 
 } //end namespace

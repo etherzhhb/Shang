@@ -18,7 +18,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vbe/SchedulerBase.h"
 #include "HWAtomInfo.h"
 #include "HWAtomPasses.h"
 
