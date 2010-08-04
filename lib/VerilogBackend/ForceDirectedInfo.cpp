@@ -128,12 +128,11 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
 void ForceDirectedInfo::printTimeFrame(FSMState *State, raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (usetree_iterator I = State->usetree_begin(),
-    E = State->usetree_end(); I != E; ++I) {
-      if (const HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
-        A->print(OS);
-        OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
-          << "} " <<  getTimeFrame(A) << "\n";
-      }
+      E = State->usetree_end(); I != E; ++I) {
+    HWAtom *A = *I;
+    A->print(OS);
+    OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
+      << "} " <<  getTimeFrame(A) << "\n";
   }
 }
 

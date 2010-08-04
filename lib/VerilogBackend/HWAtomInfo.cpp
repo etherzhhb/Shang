@@ -127,7 +127,7 @@ void HWAtomInfo::clear() {
   // Reset total Cycle
   totalCycle = 1;
   NumRegs = 1;
-  LiveValueReg.clear();
+  RegForValues.clear();
 }
 
 void HWAtomInfo::releaseMemory() {
@@ -158,12 +158,15 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
       if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
         Instruction &Inst = OI->getInst<Instruction>();
         if (!Inst.getType()->isVoidTy()) {
-          Deps.push_back(getValDepEdge(A, getRegNumForLiveVal(Inst)));
+          Deps.push_back(getValDepEdge(A));
           continue;
         }
       }
       Deps.push_back(getCtrlDepEdge(A));
     }
+  
+  // Create delay atom for phi node.
+  addPhiDelays(*I.getParent(), Deps);
 
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
@@ -175,11 +178,11 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 
 HWAtom *HWAtomInfo::visitPHINode(PHINode &I) {
-  // Create a physics register for phi node.
-  HWReg *Reg = getRegNumForLiveVal(I);
-  // Merge the export register to PHI node.
-  for (unsigned i = 0, e = I.getNumIncomingValues(); i != e; ++i)
-    setRegNum(*I.getIncomingValue(i), Reg);
+  //// Create a physics register for phi node.
+  //HWReg *Reg = getRegNumForLiveVal(I);
+  //// Merge the export register to PHI node.
+  //for (unsigned i = 0, e = I.getNumIncomingValues(); i != e; ++i)
+  //  setRegNum(*I.getIncomingValue(i), Reg);
 
   return 0;
 }
@@ -380,18 +383,57 @@ HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
   return A;
 }
 
-HWAWrReg *HWAtomInfo::getDrvReg(HWAtom *Src, HWReg *Reg) {
+HWAWrStg *HWAtomInfo::getWrStg(HWAtom *Src, HWReg *Reg) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomWrReg);
+  ID.AddInteger(atomWrStg);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
 
   void *IP = 0;
-  HWAWrReg *A =
-    static_cast<HWAWrReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAWrStg *A =
+    static_cast<HWAWrStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAWrReg(ID.Intern(HWAtomAllocator), getValDepEdge(Src, Reg));
+    A = new (HWAtomAllocator) HWAWrStg(ID.Intern(HWAtomAllocator),
+                                       getValDepEdge(Src, false), Reg);
+    UniqiueHWAtoms.InsertNode(A, IP);
+  }
+  return A;
+}
+
+HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomDelay);
+  ID.AddPointer(Src);
+  ID.AddInteger(Delay);
+
+  void *IP = 0;
+  HWADelay *A =
+    static_cast<HWADelay*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    A = new (HWAtomAllocator) HWADelay(ID.Intern(HWAtomAllocator),
+      getCtrlDepEdge(Src), Delay);
+    UniqiueHWAtoms.InsertNode(A, IP);
+  }
+  return A;
+}
+
+
+HWAImpStg *HWAtomInfo::getImpStg(HWAtom *Src, HWReg *Reg, Value &V) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomImpStg);
+  ID.AddPointer(Src);
+  ID.AddPointer(Reg);
+  ID.AddPointer(&V);
+
+  void *IP = 0;
+  HWAImpStg *A =
+    static_cast<HWAImpStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    A = new (HWAtomAllocator) HWAImpStg(ID.Intern(HWAtomAllocator),
+      getValDepEdge(Src, false), Reg, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -408,5 +450,36 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
   for (StateMapType::const_iterator I = BBToStates.begin(), E = BBToStates.end();
       I != E; ++I) {
     I->second->print(O);
+  }
+}
+
+void esyn::HWAtomInfo::addPhiDelays(BasicBlock &BB,
+                                    SmallVectorImpl<HWEdge*> &Deps) {
+  for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
+    BasicBlock *SuccBB = *SI;
+    for (BasicBlock::iterator II = SuccBB->begin(),
+        IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
+      PHINode *PN = cast<PHINode>(II);
+      Instruction *Inst =
+        dyn_cast<Instruction>(PN->getIncomingValueForBlock(&BB));
+      // No instruction value do not need to delay.
+      if (!Inst)
+        continue;
+      // We do not need to delay if the value not define in the current BB.
+      if (Inst->getParent() != &BB)
+        continue;
+      // Dirty Hack: We do not need to delay if source is PHI.
+      if (isa<PHINode>(Inst))
+        continue;
+
+      HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
+      // We do not delay the trivial operation, because the delay
+      // is cause by the function unit register.
+      if (OpInst->isTrivial())
+        continue;
+
+      HWADelay *Delay = getDelay(OpInst, 1);
+      Deps.push_back(getCtrlDepEdge(Delay));
+    }
   }
 }

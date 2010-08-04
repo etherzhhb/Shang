@@ -155,7 +155,7 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     unsigned BitWidth = vlang->getBitWidth(Arg);
 
     std::string Name = vlang->GetValueName(&Arg), 
-                RegName = "Reg" + utostr(HI->getRegNumForLiveVal(Arg)->getRegNum());
+                RegName = getAsOperand(HI->lookupRegForValue(&Arg));
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
       Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
@@ -252,6 +252,7 @@ std::string RTLWriter::getAsOperand(Value *V, const std::string &postfix) {
 
   return vlang->GetValueName(V) + postfix;
 }
+
 std::string RTLWriter::getAsOperand(HWAtom *A) {
   Value *V = &A->getValue();
 
@@ -259,31 +260,32 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomWrReg:
-      return "Reg"+utostr(cast<HWAWrReg>(A)->getReg()->getRegNum())
-        + " /*" + vlang->GetValueName(&A->getValue()) +"*/";
+    case atomWrStg:
+      return getAsOperand(cast<HWAWrStg>(A)->getReg())
+        + " /*" + vlang->GetValueName(&A->getValue()) + "*/";
+    case atomImpStg:
+      return getAsOperand(cast<HWAImpStg>(A)->getReg())
+        + " /*" + vlang->GetValueName(&A->getValue()) + "*/";
     default:
+      llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
   }
 }
 
+std::string RTLWriter::getAsOperand(HWReg *R) {
+  if (R->isFuReg()) {
+    return "FU" + utostr(R->getFUnit().getRawData()) + "Reg";
+  }
+  // Else not a function unit Reg.
+  return "Reg"+utostr(R->getRegNum());
+}
+
 std::string RTLWriter::getAsOperand(HWEdge *E) {
   switch (E->getEdgeType()) {
-  case edgeValDep: {
-    HWValDep *VD = cast<HWValDep>(E);
-    if (VD->isConstant())
-      return vlang->printConstant(VD->getConstant());
-    
-    if (VD->isWire())
-      return getAsOperand(VD->getDagSrc());
- 
-    if (HWReg *R = VD->getReg()) {
-      Value *V = &(VD->getDagSrc()->getValue());
-      return "Reg"+utostr(R->getRegNum())
-      + " /*" + vlang->GetValueName(V) +"*/";
-    }
-    break;
-  }
+  case edgeConst:
+    return vlang->printConstant(cast<HWConst>(E)->getConstant());
+  case edgeValDep:
+    return getAsOperand(cast<HWValDep>(E)->getDagSrc());
   default:
     llvm_unreachable("Do not use other edge as operand!");
     return "<Unknown edge>";
@@ -304,18 +306,21 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomWrReg:
-        emitDrvReg(cast<HWAWrReg>(A));
+      case atomWrStg:
+        emitDrvReg(cast<HWAWrStg>(A));
         break;
+      // Do nothing.
+      case atomImpStg:
+      case atomDelay:
       case atomVRoot:
         break;
       default:
-        //llvm_unreachable("Unknow Atom!");
-        ;
+        llvm_unreachable("Unknow Atom!");
+        break;
   }
 }
 
-void RTLWriter::emitDrvReg(HWAWrReg *DR) {
+void RTLWriter::emitDrvReg(HWAWrStg *DR) {
   const HWReg *R = DR->getReg();
   UsedRegs.insert(R);
   
@@ -656,12 +661,15 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
   BasicBlock::iterator I = Succ.begin();
   while (&*I != NotPhi) {
     PHINode *PN = cast<PHINode>(I);
+    HWReg *PR = HI->lookupRegForValue(PN);
+
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
     if (Constant *C = dyn_cast<Constant>(IV)) {
-      HWReg *R = HI->getRegNumForLiveVal(*PN);
-      ControlBlock.indent(8 + ind) << "Reg" + utostr(R->getRegNum())
+      ControlBlock.indent(8 + ind) << getAsOperand(PR)
         << "/*" << vlang->GetValueName(PN) << "*/"
         << " <= " << vlang->printConstant(C) << ";\n";      
+    } else {
+
     }
     ++I;
   }

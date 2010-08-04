@@ -60,7 +60,8 @@ public:
     buildASAPStep(Root, getASAPStep(Root));
   }
   unsigned getASAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A)) && "Bad atom type!");
+    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+          && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
@@ -70,11 +71,12 @@ public:
     buildALAPStep(Root, getALAPStep(Root));
   }
   unsigned getALAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A)) && "Bad atom type!");
+    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+          && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }
 
-  unsigned getTimeFrame(const HWAOpInst *A) const {
+  unsigned getTimeFrame(const HWAtom *A) const {
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 

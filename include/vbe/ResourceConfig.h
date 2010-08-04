@@ -100,11 +100,15 @@ union HWFUnitID {
   } S;
   unsigned Data            : 16;
 
-  HWFUnitID(enum HWResource::ResTypes type = HWResource::Trivial,
-            unsigned UID = 0) {
+  inline HWFUnitID(enum HWResource::ResTypes type = HWResource::Trivial,
+                   unsigned UID = 0) {
     S.T = type;
     S.UnitID = UID;
     assert(S.T == type && S.UnitID == UID && "Data overflow!"); 
+  }
+
+  inline /*implicit*/ HWFUnitID(unsigned data) {
+    Data = data;
   }
 
   inline HWFUnitID(const HWFUnitID &O) : Data(O.Data) {}

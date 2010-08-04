@@ -137,6 +137,16 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   
   HI->setTotalCycle(CurState->getExitRoot().getSlot() + 1);
 
+  // Do not forget to schedule the delay atomp;
+  for (usetree_iterator I = CurState->usetree_begin(),
+      E = CurState->usetree_end(); I != E; ++I) {
+    HWAtom *A = *I;
+    if (!A->isScheduled()) {
+      assert(isa<HWADelay>(A) && "Some atom not scheduled!");
+      A->scheduledTo(FDInfo->getASAPStep(A));
+    }
+  }
+  
   return false;
 }
 

@@ -316,15 +316,15 @@ template<class DataTy> struct GraphTraits<const esyn::CompGraphNode<DataTy>*> {
 namespace esyn {
 struct CompPathBinding : public BasicBlockPass {
   // Iterators
-  typedef df_iterator<PostBindNodeType*, SmallVector<PostBindNodeType*, 8>, false,
+  typedef df_iterator<PostBindNodeType*, SmallPtrSet<PostBindNodeType*, 8>, false,
     GraphTraits<PostBindNodeType*> > wocg_df_it;
-  typedef df_iterator<const PostBindNodeType*, SmallVector<const PostBindNodeType*, 8>,
+  typedef df_iterator<const PostBindNodeType*, SmallPtrSet<const PostBindNodeType*, 8>,
     false, GraphTraits<const PostBindNodeType*> > wocg_const_df_it;
 
   //PathGraphNodeType
-  typedef df_iterator<PathGraphNodeType*, SmallVector<PathGraphNodeType*, 8>, false,
+  typedef df_iterator<PathGraphNodeType*, SmallPtrSet<PathGraphNodeType*, 8>, false,
     GraphTraits<PathGraphNodeType*> > pg_df_it;
-  typedef df_iterator<const PathGraphNodeType*, SmallVector<const PathGraphNodeType*, 8>,
+  typedef df_iterator<const PathGraphNodeType*, SmallPtrSet<const PathGraphNodeType*, 8>,
     false, GraphTraits<const PathGraphNodeType*> > pg_const_df_it;
 
 
@@ -427,6 +427,28 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 
 void CompPathBinding::bindFunUnitReg() {
   // For each Function unit(longest path graph node), bind a FU register.
+  // For each nodes in
+  for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
+      I != E; ++I) {
+    PathGraphNodeType &Node = **I;
+    for (PostBindNodePath::path_iterator PI = Node->path_begin(),
+        PE = Node->path_end(); PI != PE; ++PI) {
+      HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
+      DEBUG(dbgs() << "For PostBind Node: ");
+      DEBUG(A->dump());
+      // Bind a register to this function unit.
+      HWReg *FUR = HI->allocaFURegister(A);
+      HWAWrStg *WR = HI->getWrStg(A, FUR);
+      for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
+          UI != UE; ++UI ) {
+        if (*UI == WR)
+          continue;
+        // Read the result for From this Register.
+        (*UI)->setDep((*UI)->getDepIt(A), WR);
+      }
+    }
+  }
+  
 }
 
 void CompPathBinding::buildLongestPostBindPath() {

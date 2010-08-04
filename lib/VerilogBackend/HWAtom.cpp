@@ -36,9 +36,14 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
+void HWAWrStg::print(raw_ostream &OS) const {
+}
 
-void HWAWrReg::print(raw_ostream &OS) const {
+void HWAImpStg::print(raw_ostream &OS) const {
+}
 
+void HWADelay::print(raw_ostream &OS) const {
+  OS << "Delay: " << getLatency();
 }
 
 void HWMemDep::print(raw_ostream &OS) const {
@@ -52,11 +57,15 @@ void HWCtrlDep::print(raw_ostream &OS) const {
   //WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
-void HWValDep::print(raw_ostream &OS) const {
+void HWConst::print(raw_ostream &OS) const {
   //OS << "Control dep: ";
   //WriteAsOperand(OS, &Val, false);
   //OS << " -> ";
   //WriteAsOperand(OS, &getDep(0)->getValue(), false);
+}
+
+void HWValDep::print(raw_ostream &OS) const {
+
 }
 
 void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
@@ -146,4 +155,9 @@ HWAtom *HWMemDep::getSCCSrc() const {
 
 void esyn::FSMState::dump() const {
   print(dbgs());
+}
+
+HWValDep::HWValDep(HWAtom *Src, bool isSigned, bool isImport)
+: HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), IsImport(isImport) {
+  assert((!IsImport || isa<HWAVRoot>(Src)) && "Bad import edge!");
 }
