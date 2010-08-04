@@ -272,10 +272,14 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
+std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
+  return "FU" + utostr(FUID.getRawData()) + "Reg";
+}
+
 std::string RTLWriter::getAsOperand(HWReg *R) {
-  if (R->isFuReg()) {
-    return "FU" + utostr(R->getFUnit().getRawData()) + "Reg";
-  }
+  if (R->isFuReg())
+    return getFURegisterName(R->getFUnit());
+
   // Else not a function unit Reg.
   return "Reg"+utostr(R->getRegNum());
 }
@@ -664,13 +668,13 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     HWReg *PR = HI->lookupRegForValue(PN);
 
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
-    if (Constant *C = dyn_cast<Constant>(IV)) {
-      ControlBlock.indent(8 + ind) << getAsOperand(PR)
-        << "/*" << vlang->GetValueName(PN) << "*/"
-        << " <= " << vlang->printConstant(C) << ";\n";      
-    } else {
-
-    }
+    ControlBlock.indent(8 + ind) << getAsOperand(PR)
+                                 << "/*" << vlang->GetValueName(PN) << "*/";
+    if (Constant *C = dyn_cast<Constant>(IV))
+      ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
+    else
+      ControlBlock << " <= " << getAsOperand(HI->getLiveOutRegAtTerm(IV))
+                   << ";\n";    
     ++I;
   }
 }

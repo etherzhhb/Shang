@@ -128,6 +128,7 @@ void HWAtomInfo::clear() {
   totalCycle = 1;
   NumRegs = 1;
   RegForValues.clear();
+  LiveOutRegAtTerm.clear();
 }
 
 void HWAtomInfo::releaseMemory() {
@@ -321,8 +322,6 @@ HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind, unsigned Instance)
   A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
                                        PostBind, FU);
 
-  updateAtomMap(PostBind.getValue(), A); 
-
   UniqiueHWAtoms.InsertNode(A, IP);
 
   return A;
@@ -473,10 +472,10 @@ void esyn::HWAtomInfo::addPhiDelays(BasicBlock &BB,
         continue;
 
       HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
-      // We do not delay the trivial operation, because the delay
-      // is cause by the function unit register.
-      if (OpInst->isTrivial())
-        continue;
+      //// We do not delay the trivial operation, because the delay
+      //// is cause by the function unit register.
+      //if (OpInst->isTrivial())
+      //  continue;
 
       HWADelay *Delay = getDelay(OpInst, 1);
       Deps.push_back(getCtrlDepEdge(Delay));

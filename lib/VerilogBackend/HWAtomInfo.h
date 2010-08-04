@@ -166,6 +166,12 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff); 
 
+  HWAtom *getAtomFor(Value &V) const {
+    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
+    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
+    return  At->second;    
+  }
+
   HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
     if (isa<Argument>(V))
@@ -200,6 +206,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   unsigned NumRegs;
   // Mapping Value to registers
   std::map<const Value*, HWReg*> RegForValues;
+  std::map<const Value*, HWReg*> LiveOutRegAtTerm;
 
   HWReg *allocaRegister(const Type *Ty, unsigned StartSlot, unsigned EndSlot) {
     return new (HWAtomAllocator) HWReg(++NumRegs, Ty, StartSlot, EndSlot);
@@ -267,14 +274,16 @@ public:
   HWAWrStg *getWrStg(HWAtom *Src, HWReg *Reg);
   HWAImpStg *getImpStg(HWAtom *Src, HWReg *Reg, Value &V);
 
-  HWAtom *getAtomFor(Value &V) const {
-    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
-    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
-    return  At->second;    
+  void updateLiveOutReg(Value *V, HWReg *R) {
+    LiveOutRegAtTerm[V] = R;
   }
 
-  void updateAtomMap(Value &V, HWAtom *A) {
-    ValueToHWAtoms[&V] = A;
+  HWReg *getLiveOutRegAtTerm(Value *V) {
+    std::map<const Value*, HWReg*>::iterator At = LiveOutRegAtTerm.find(V);
+    if (At == LiveOutRegAtTerm.end())
+      return 0;
+
+    return At->second;
   }
 
   unsigned getTotalCycle() const {

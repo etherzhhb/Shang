@@ -674,8 +674,6 @@ public:
 
 // Execute state.
 class FSMState {
-  typedef std::vector<HWAtom*> HWAtomVecType;
-
   HWAVRoot &EntryRoot;
   HWAOpInst &ExitRoot;
 

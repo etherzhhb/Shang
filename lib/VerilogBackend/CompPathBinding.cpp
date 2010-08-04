@@ -23,6 +23,7 @@
 
 #include "vbe/ResourceConfig.h"
 
+#include "llvm/Analysis/LiveValues.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/Allocator.h"
 
@@ -341,6 +342,8 @@ struct CompPathBinding : public BasicBlockPass {
   PathGraphNodeType PGEntry, PGExit;
 
   HWAtomInfo *HI;
+  LiveValues *LV;
+
   FSMState *CurStage;
 
   unsigned ResCount;
@@ -411,11 +414,13 @@ void CompPathBinding::clear() {
 void CompPathBinding::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<ResourceConfig>();
+  AU.addRequired<LiveValues>();
   AU.setPreservesAll();
 }
 
 bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
+  LV = &getAnalysis<LiveValues>();
   CurStage = &HI->getStateFor(BB);
   // 1. build WOCG_FUNTYPE
   buildWOCGForRes();
@@ -426,6 +431,8 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 }
 
 void CompPathBinding::bindFunUnitReg() {
+  HWAOpInst &Exit = CurStage->getExitRoot();
+  unsigned LastSlot = Exit.getSlot();
   // For each Function unit(longest path graph node), bind a FU register.
   // For each nodes in
   for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
@@ -436,9 +443,25 @@ void CompPathBinding::bindFunUnitReg() {
       HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
       DEBUG(dbgs() << "For PostBind Node: ");
       DEBUG(A->dump());
+      Instruction *Inst = &A->getInst<Instruction>();
       // Bind a register to this function unit.
       HWReg *FUR = HI->allocaFURegister(A);
       HWAWrStg *WR = HI->getWrStg(A, FUR);
+      // Updata live out register.
+      if (WR->getFinSlot()== LastSlot) {
+        HI->updateLiveOutReg(Inst, FUR);
+
+        HWADelay *Delay = cast<HWADelay>(WR->use_back());
+        Exit.setDep(Exit.getDepIt(Delay), WR);
+        //
+        if (!LV->isKilledInBlock(Inst, Inst->getParent())) {
+          HWReg *R = HI->getRegForValue(Inst, WR->getFinSlot(), LastSlot);
+          HWAWrStg *ExportReg = HI->getWrStg(WR, R);
+          Exit.setDep(Exit.getDepIt(WR), ExportReg);
+        }
+      }
+      
+
       for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
           UI != UE; ++UI ) {
         if (*UI == WR)

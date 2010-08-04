@@ -56,6 +56,19 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
   FSMState &State = HI.getStateFor(BB);
   HWAVRoot *EntryRoot = &State.getEntryRoot();
 
+  // Emit the operand of PHINode.
+  for (BasicBlock::iterator II = BB.begin(), IE = BB.getFirstNonPHI();
+      II != IE; ++II) {
+    PHINode *PN = cast<PHINode>(II);
+    for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
+      Value *IV = PN->getIncomingValue(i);
+      if (isa<Instruction>(IV) && !HI.getLiveOutRegAtTerm(IV))
+        HI.updateLiveOutReg(IV, HI.getRegForValue(IV,
+                                                  EntryRoot->getSlot(),
+                                                  EntryRoot->getSlot()));
+    }
+  }
+
   SmallVector<HWAtom*, 32> Worklist(usetree_iterator::begin(EntryRoot),
                                     usetree_iterator::end(EntryRoot));
 
@@ -76,6 +89,10 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
           // Insert the import node.
           HWAVRoot *Root = cast<HWAVRoot>(VD->getDagSrc());
           HWReg *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
+          // Update the live out value.
+          if (!HI.getLiveOutRegAtTerm(V))
+            HI.updateLiveOutReg(V, R);
+
           HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
           A->setDep(i, ImpStg);
         } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
