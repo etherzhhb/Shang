@@ -422,11 +422,38 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
   LV = &getAnalysis<LiveValues>();
   CurStage = &HI->getStateFor(BB);
-  // 1. build WOCG_FUNTYPE
-  buildWOCGForRes();
-  // 2. find the longest path
-  buildLongestPostBindPath();
 
+  DEBUG(
+    dbgs() << "\n\nBefore binding:\n";
+    for (usetree_iterator I = CurStage->usetree_begin(),
+      E = CurStage->usetree_end(); I != E; ++I) {
+        HWAtom *A = *I;
+        dbgs() << "Schedule\n";
+        A->dump();
+        dbgs() << "To slot: " << A->getSlot() << '\n';
+    }
+    dbgs() << "\n\n";
+  );
+
+  // 1. Build WOCG_FUNTYPE.
+  buildWOCGForRes();
+  // 2. Find the longest path.
+  buildLongestPostBindPath();
+  // 3. Bind a register to the function unit.
+  bindFunUnitReg();
+
+
+  DEBUG(
+    dbgs() << "\n\nAfter binding:\n";
+    for (usetree_iterator I = CurStage->usetree_begin(),
+      E = CurStage->usetree_end(); I != E; ++I) {
+        HWAtom *A = *I;
+        dbgs() << "Schedule\n";
+        A->dump();
+        dbgs() << "To slot: " << A->getSlot() << '\n';
+    }
+    dbgs() << "\n\n";
+  );
   return false;
 }
 
@@ -438,6 +465,9 @@ void CompPathBinding::bindFunUnitReg() {
   for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
       I != E; ++I) {
     PathGraphNodeType &Node = **I;
+    if (Node.isVRoot())
+      continue;
+    
     for (PostBindNodePath::path_iterator PI = Node->path_begin(),
         PE = Node->path_end(); PI != PE; ++PI) {
       HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
@@ -447,31 +477,39 @@ void CompPathBinding::bindFunUnitReg() {
       // Bind a register to this function unit.
       HWReg *FUR = HI->allocaFURegister(A);
       HWAWrStg *WR = HI->getWrStg(A, FUR);
+      DEBUG(dbgs() << "Create FU Register: ");
+      DEBUG(WR->dump());
       // Updata live out register.
       if (WR->getFinSlot()== LastSlot) {
         HI->updateLiveOutReg(Inst, FUR);
-
-        HWADelay *Delay = cast<HWADelay>(WR->use_back());
-        Exit.setDep(Exit.getDepIt(Delay), WR);
-        //
-        if (!LV->isKilledInBlock(Inst, Inst->getParent())) {
-          HWReg *R = HI->getRegForValue(Inst, WR->getFinSlot(), LastSlot);
-          HWAWrStg *ExportReg = HI->getWrStg(WR, R);
-          Exit.setDep(Exit.getDepIt(WR), ExportReg);
-        }
       }
-      
 
-      for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
-          UI != UE; ++UI ) {
-        if (*UI == WR)
+      bool FURegRead = false;
+      std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
+      while(!WorkStack.empty()) {
+        HWAtom *Use = WorkStack.back();
+        WorkStack.pop_back();
+
+        // FIXME: How should us handle delay atom?
+        if (Use == WR || isa<HWADelay>(Use))
           continue;
+
+        FURegRead = true;
+        DEBUG(dbgs() << "Replace Use: ");
+        DEBUG(Use->dump());
         // Read the result for From this Register.
-        (*UI)->setDep((*UI)->getDepIt(A), WR);
+        Use->setDep(Use->getDepIt(A), WR);
+      }
+
+      // Move the value to a register if this value live out the BB,
+      // but not ready by atoms in this BB.
+      if (!FURegRead && !LV->isKilledInBlock(Inst, Inst->getParent())) {
+        HWReg *R = HI->getRegForValue(Inst, WR->getFinSlot(), LastSlot);
+        HWAWrStg *ExportReg = HI->getWrStg(WR, R);
+        Exit.addDep(HI->getCtrlDepEdge(ExportReg));
       }
     }
   }
-  
 }
 
 void CompPathBinding::buildLongestPostBindPath() {

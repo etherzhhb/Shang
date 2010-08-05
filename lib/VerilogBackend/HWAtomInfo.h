@@ -158,10 +158,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return new (HWAtomAllocator) HWConst(Src, C);
   }
 
-  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
-    return new (HWAtomAllocator) HWCtrlDep(Src);
-  }
-
   HWMemDep *getMemDepEdge(HWAOpInst *Src, HWAtom *Root, 
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff); 
@@ -273,6 +269,10 @@ public:
 
   HWAWrStg *getWrStg(HWAtom *Src, HWReg *Reg);
   HWAImpStg *getImpStg(HWAtom *Src, HWReg *Reg, Value &V);
+  
+  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
+    return new (HWAtomAllocator) HWCtrlDep(Src);
+  }
 
   void updateLiveOutReg(Value *V, HWReg *R) {
     LiveOutRegAtTerm[V] = R;
