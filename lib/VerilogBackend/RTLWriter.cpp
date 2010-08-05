@@ -311,11 +311,17 @@ void RTLWriter::emitAtom(HWAtom *A) {
         emitPostBind(cast<HWAPostBind>(A));
         break;
       case atomWrStg:
-        emitDrvReg(cast<HWAWrStg>(A));
+        vlang->comment(ControlBlock.indent(8)) << "Read:"
+          << A->getValue() << '\n';
+        emitWrStg(cast<HWAWrStg>(A));
+        break;
+      case atomDelay:
+        vlang->comment(ControlBlock.indent(8));
+        A->print(ControlBlock);
+        ControlBlock << '\n';
         break;
       // Do nothing.
       case atomImpStg:
-      case atomDelay:
       case atomVRoot:
         break;
       default:
@@ -324,8 +330,12 @@ void RTLWriter::emitAtom(HWAtom *A) {
   }
 }
 
-void RTLWriter::emitDrvReg(HWAWrStg *DR) {
+void RTLWriter::emitWrStg(HWAWrStg *DR) {
   const HWReg *R = DR->getReg();
+  // Function unit register will emit with function unit.
+  if (R->isFuReg())
+    return;
+  
   UsedRegs.insert(R);
   
   std::string Name = getAsOperand(DR);
@@ -396,36 +406,36 @@ void RTLWriter::emitResources() {
 }
 
 void RTLWriter::opAddSub(HWAPreBind *PreBind) {
-  std::string Name = getAsOperand(PreBind);
-  // Declare the signal
-  vlang->declSignal(getSignalDeclBuffer(), Name,
-    vlang->getBitWidth(PreBind->getValue()), 0, false);
-
-  DataPath.indent(2) <<  "assign " << getAsOperand(PreBind)
-    << " = addsub_res" << PreBind->getUnitNum() << ";\n";
 }
 
 void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
-  unsigned ResourceId = Atoms[0]->getUnitNum();
+  HWFUnitID FUID = Atoms[0]->getFunUnitID();
+  unsigned ResourceId = FUID.getUnitNum();
 
   unsigned MaxBitWidth = AddSub.getMaxBitWidth();
 
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = "addsub_res" + utostr(ResourceId);
+  std::string Res = getFURegisterName(FUID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, MaxBitWidth, 0);
   
   vlang->declSignal(getSignalDeclBuffer(), OpB, MaxBitWidth, 0);
 
-  vlang->declSignal(getSignalDeclBuffer(), Res, MaxBitWidth, 0, false);
+  vlang->declSignal(getSignalDeclBuffer(), Res, MaxBitWidth, 0);
   
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
-  DataPath.indent(2) << "assign " << Res << " = " << Mode << " ? ";
+  vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: "
+                                     << FUID.getRawData() << '\n';
+  vlang->alwaysBegin(DataPath, 2);
+  vlang->resetRegister(DataPath.indent(6), Res, MaxBitWidth);
+  vlang->ifElse(DataPath.indent(4));
+  DataPath.indent(6) << Res << " = " << Mode << " ? ";
   DataPath           << "(" << OpA << " + " << OpB << ") : ";
   DataPath           << "(" << OpA << " - " << OpB << ");\n";
+  vlang->alwaysEnd(DataPath, 2);
 
   DataPath.indent(2) << "always @(*)\n";
   vlang->switchCase(DataPath.indent(4), "CurState");

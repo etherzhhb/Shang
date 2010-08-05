@@ -80,7 +80,7 @@ class RTLWriter : public FunctionPass {
   void emitAtom(HWAtom *A);
   void emitPreBind(HWAPreBind *PreBind);
   void emitPostBind(HWAPostBind *PreBind);
-  void emitDrvReg(HWAWrStg *DR);
+  void emitWrStg(HWAWrStg *DR);
 
   std::set<const HWReg*> UsedRegs;
 
