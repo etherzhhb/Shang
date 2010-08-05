@@ -37,9 +37,13 @@ void HWAtom::dump() const {
 }
 
 void HWAWrStg::print(raw_ostream &OS) const {
+  OS << "Write Storage "
+     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
 void HWAImpStg::print(raw_ostream &OS) const {
+  OS << "Import Storage "
+     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
 void HWADelay::print(raw_ostream &OS) const {
@@ -142,6 +146,8 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);
+    // This is done in the constructor of HWAtom.
+    //I->addToUseList(this);
 
   PostBind.replaceAllUseBy(this);
 

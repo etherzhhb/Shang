@@ -258,7 +258,6 @@ class HWAtom : public FoldingSetNode {
   // The atoms that using this atom.
   std::list<HWAtom*> UseList;
 
-
   void addToUseList(HWAtom *User) {
     UseList.push_back(User);
   }
