@@ -155,15 +155,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   for (usetree_iterator TI = Root->begin(), TE = Root->end();
       TI != TE; ++TI)
     if (*TI != Pred && TI->use_empty()) {
-      HWAtom *A = *TI;
-      if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-        Instruction &Inst = OI->getInst<Instruction>();
-        if (!Inst.getType()->isVoidTy()) {
-          Deps.push_back(getValDepEdge(A));
-          continue;
-        }
-      }
-      Deps.push_back(getCtrlDepEdge(A));
+      Deps.push_back(getCtrlDepEdge(*TI));
     }
   
   // Create delay atom for phi node.
