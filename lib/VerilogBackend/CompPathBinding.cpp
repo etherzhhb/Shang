@@ -262,7 +262,15 @@ unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
 
 template<>
 bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
-  return (getData()->getSlot() != N->getData()->getSlot());
+  unsigned ThisSlot = getData()->getSlot(),
+           NSlot = N->getData()->getSlot();
+
+  if (unsigned II = getData()->getParent()->getII()) {
+    ThisSlot = ThisSlot % II;
+    NSlot = NSlot % II;
+  }
+
+  return (ThisSlot != NSlot);
 }
 } // end namespace
 

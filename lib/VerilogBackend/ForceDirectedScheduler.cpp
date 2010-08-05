@@ -177,6 +177,8 @@ void FDLScheduler::FDModuloSchedule(unsigned StartStep) {
       continue;
     }
   }
+  // Set up the initial interval.
+  CurState->setII(MII);
 }
 
 FDLScheduler::SchedResult FDLScheduler::scheduleAtII(unsigned II) {

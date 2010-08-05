@@ -64,6 +64,7 @@ enum HWEdgeTypes {
 
 class HWAtom;
 class HWAOpInst;
+class FSMState;
 
 /// @brief Inline operation
 class HWEdge {
@@ -255,6 +256,9 @@ class HWAtom : public FoldingSetNode {
   // The HWAtom baseclass this node corresponds to
   const unsigned short HWAtomType;
   const unsigned short Latancy;
+  // The time slot that this atom scheduled to.
+  unsigned SchedSlot;
+  FSMState *Parant;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<HWEdge*, 4> Deps;
@@ -273,11 +277,12 @@ protected:
   // The corresponding LLVM Instruction
   Value &Val;
 
-  // The time slot that this atom scheduled to.
-  unsigned SchedSlot;
-
   virtual ~HWAtom();
+  
+  friend class FSMState;
 
+  void resetSchedule() { SchedSlot = 0; }
+  void setParent(FSMState *State) { Parant = State; }
 public:
   template <class It>
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
@@ -290,13 +295,16 @@ public:
     }
   }
 
+  FSMState *getParent() { return Parant; }
+  FSMState *getParent() const { return Parant; }
+
   // Add a new depencence edge to the atom.
   void addDep(HWEdge *E) {
     E->getDagSrc()->addToUseList(this);
     Deps.push_back(E);
   }
 
-  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, 
          unsigned latancy = 0);
 
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, HWEdge *Dep0,
@@ -403,7 +411,6 @@ public:
   size_t getNumUses() const { return UseList.size(); }
   //}
 
-  void resetSchedule() { SchedSlot = 0; }
   unsigned getSlot() const { return SchedSlot; }
   unsigned getFinSlot() const { return SchedSlot + Latancy; }
   bool isScheduled() const { return SchedSlot != 0; }
@@ -683,9 +690,15 @@ class FSMState {
   HWAOpInst &ExitRoot;
 
   std::map<const Value*, HWReg*> LiveOutRegAtTerm;
+
+  // Modulo for modulo schedule.
+  unsigned short II;
 public:
   FSMState(HWAVRoot *entry, HWAOpInst *exit)
-    : EntryRoot(*entry), ExitRoot(*exit) {}
+    : EntryRoot(*entry), ExitRoot(*exit), II(0) {
+    for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
+      (*I)->setParent(this);
+  }
   ~FSMState() { LiveOutRegAtTerm.clear(); }
   
   /// @name Roots
@@ -738,6 +751,10 @@ public:
 
     return At->second;
   }
+
+  // II for Modulo schedule
+  void setII(unsigned ii) { II = ii; }
+  unsigned getII() const { return II; }
 
   typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
 
