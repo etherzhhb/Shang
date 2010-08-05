@@ -97,8 +97,7 @@ std::string TestbenchWriter::testBech(Function &F) {
   ss<<" @(negedge clk)\n";
   ss<<" start = 1'b0;\n";
   ss<<" @(negedge clk);\n";
-  ss<<" @(negedge fin) ;\n";
-  ss<<"\n";
+  ss<<" @(posedge fin) ;\n";
   ss<<" r0 <= ";
   ss<<F.getNameStr();
   ss<<"(";
@@ -110,6 +109,7 @@ std::string TestbenchWriter::testBech(Function &F) {
       ss<<",";
   }
   ss<<");\n";
+  ss<<" @(negedge fin) ;\n";
   ss<<" end\n";
   ss<<"end\n\n";
  
@@ -126,7 +126,7 @@ std::string TestbenchWriter::testBech(Function &F) {
         ss<<I->getNameStr()<<"), ";
       }
         
-  ss<<".return_value(r1),.clk(clk),.reset(rstN),.start(start),.fin(fin));\n\n";
+  ss<<".return_value(r1),.clk(clk),.rstN(rstN),.start(start),.fin(fin));\n\n";
   ss<<"endmodule\n";
 
   return ss.str();
