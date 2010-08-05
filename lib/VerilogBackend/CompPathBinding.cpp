@@ -23,7 +23,6 @@
 
 #include "vbe/ResourceConfig.h"
 
-#include "llvm/Analysis/LiveValues.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/CommandLine.h"
@@ -356,7 +355,6 @@ struct CompPathBinding : public BasicBlockPass {
   PathGraphNodeType PGEntry, PGExit;
 
   HWAtomInfo *HI;
-  LiveValues *LV;
 
   FSMState *CurStage;
 
@@ -428,7 +426,6 @@ void CompPathBinding::clear() {
 void CompPathBinding::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<ResourceConfig>();
-  AU.addRequired<LiveValues>();
   AU.setPreservesAll();
 }
 
@@ -437,7 +434,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   if (NoFUBinding)  return false;
 
   HI = &getAnalysis<HWAtomInfo>();
-  LV = &getAnalysis<LiveValues>();
   CurStage = &HI->getStateFor(BB);
 
   DEBUG(
