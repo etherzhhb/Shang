@@ -694,7 +694,8 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     if (Constant *C = dyn_cast<Constant>(IV))
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
     else {
-      HWReg *LiveOutReg = HI->getLiveOutRegAtTerm(IV);
+      FSMState &CurStage = HI->getStateFor(CurBlock);
+      HWReg *LiveOutReg = CurStage.getLiveOutRegAtTerm(IV);
       ControlBlock << " <= " << getAsOperand(LiveOutReg) << ";\n";
     }
     ++I;

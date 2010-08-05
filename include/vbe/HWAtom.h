@@ -678,11 +678,12 @@ class FSMState {
   HWAVRoot &EntryRoot;
   HWAOpInst &ExitRoot;
 
+  std::map<const Value*, HWReg*> LiveOutRegAtTerm;
 public:
-  explicit FSMState(HWAVRoot *entry, HWAOpInst *exit)
+  FSMState(HWAVRoot *entry, HWAOpInst *exit)
     : EntryRoot(*entry), ExitRoot(*exit) {}
-
-
+  ~FSMState() { LiveOutRegAtTerm.clear(); }
+  
   /// @name Roots
   //{
   HWAVRoot &getEntryRoot() const { return EntryRoot; }
@@ -720,6 +721,18 @@ public:
   void resetSchedule() {
     for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
       (*I)->resetSchedule();
+  }
+
+  void updateLiveOutReg(Value *V, HWReg *R) {
+    LiveOutRegAtTerm[V] = R;
+  }
+
+  HWReg *getLiveOutRegAtTerm(Value *V) {
+    std::map<const Value*, HWReg*>::iterator At = LiveOutRegAtTerm.find(V);
+    if (At == LiveOutRegAtTerm.end())
+      return 0;
+
+    return At->second;
   }
 
   typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;

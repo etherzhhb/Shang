@@ -62,10 +62,12 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     PHINode *PN = cast<PHINode>(II);
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *IV = PN->getIncomingValue(i);
-      if (isa<Instruction>(IV) && !HI.getLiveOutRegAtTerm(IV))
-        HI.updateLiveOutReg(IV, HI.getRegForValue(IV,
-                                                  EntryRoot->getSlot(),
-                                                  EntryRoot->getSlot()));
+      FSMState &IncomingStage = HI.getStateFor(*PN->getIncomingBlock(i));
+      if (isa<Instruction>(IV) && !IncomingStage.getLiveOutRegAtTerm(IV)) {
+        HWReg *IR = HI.getRegForValue(IV, EntryRoot->getSlot(),
+                                      EntryRoot->getSlot());
+        IncomingStage.updateLiveOutReg(IV, IR);
+      }
     }
   }
 
@@ -90,8 +92,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
           HWAVRoot *Root = cast<HWAVRoot>(VD->getDagSrc());
           HWReg *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
           // Update the live out value.
-          if (!HI.getLiveOutRegAtTerm(V))
-            HI.updateLiveOutReg(V, R);
+          if (!State.getLiveOutRegAtTerm(V))
+            State.updateLiveOutReg(V, R);
 
           HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
           A->setDep(i, ImpStg);

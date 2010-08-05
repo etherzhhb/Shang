@@ -490,7 +490,7 @@ void CompPathBinding::bindFunUnitReg() {
       DEBUG(WR->dump());
       // Updata live out register.
       if (WR->getFinSlot()== LastSlot) {
-        HI->updateLiveOutReg(Inst, FUR);
+        CurStage->updateLiveOutReg(Inst, FUR);
       }
 
       bool FURegRead = false;

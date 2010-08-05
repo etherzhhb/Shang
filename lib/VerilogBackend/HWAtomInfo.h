@@ -203,9 +203,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   // Mapping Value to registers
   std::map<const Value*, HWReg*> RegForValues;
 
-  // FIXME: We need to consider the basic block, too.
-  std::map<const Value*, HWReg*> LiveOutRegAtTerm;
-
   HWReg *allocaRegister(const Type *Ty, unsigned StartSlot, unsigned EndSlot) {
     return new (HWAtomAllocator) HWReg(++NumRegs, Ty, StartSlot, EndSlot);
   }
@@ -274,18 +271,6 @@ public:
   
   HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
     return new (HWAtomAllocator) HWCtrlDep(Src);
-  }
-
-  void updateLiveOutReg(Value *V, HWReg *R) {
-    LiveOutRegAtTerm[V] = R;
-  }
-
-  HWReg *getLiveOutRegAtTerm(Value *V) {
-    std::map<const Value*, HWReg*>::iterator At = LiveOutRegAtTerm.find(V);
-    if (At == LiveOutRegAtTerm.end())
-      return 0;
-
-    return At->second;
   }
 
   unsigned getTotalCycle() const {

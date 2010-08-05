@@ -128,7 +128,6 @@ void HWAtomInfo::clear() {
   totalCycle = 1;
   NumRegs = 1;
   RegForValues.clear();
-  LiveOutRegAtTerm.clear();
 }
 
 void HWAtomInfo::releaseMemory() {
