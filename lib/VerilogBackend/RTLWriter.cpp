@@ -261,11 +261,11 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPostBind:
       return getAsOperand(V, "_w");
     case atomWrStg:
-      return getAsOperand(cast<HWAWrStg>(A)->getReg())
-        + " /*" + vlang->GetValueName(&A->getValue()) + "*/";
+      return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
+        + getAsOperand(cast<HWAWrStg>(A)->getReg());
     case atomImpStg:
-      return getAsOperand(cast<HWAImpStg>(A)->getReg())
-        + " /*" + vlang->GetValueName(&A->getValue()) + "*/";
+      return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
+        + getAsOperand(cast<HWAImpStg>(A)->getReg());
     default:
       llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
@@ -585,12 +585,14 @@ void RTLWriter::visitExtInst(HWAPostBind &A) {
   int DiffBits = Ty->getBitWidth() - ChTy->getBitWidth();	
   DataPath << "{{" << DiffBits << "{";
 
+  HWEdge *Op = A.getValDep(0);
+
   if(I.getOpcode() == Instruction::ZExt)
     DataPath << "1'b0";
   else
-    DataPath << getAsOperand(&A) << "["<< (ChTy->getBitWidth()-1)<<"]";
+    DataPath << getAsOperand(Op) << "["<< (ChTy->getBitWidth()-1)<<"]";
 
-  DataPath <<"}}," << getAsOperand(A.getValDep(0)) << "}" <<";\n";   
+  DataPath <<"}}," << getAsOperand(Op) << "}" <<";\n";   
 }
 
 
