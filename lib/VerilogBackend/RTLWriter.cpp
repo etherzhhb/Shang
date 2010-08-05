@@ -418,10 +418,13 @@ void RTLWriter::opAddSub(HWAPreBind *PreBind) {
 }
 
 void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
-  HWFUnitID FUID = Atoms[0]->getFunUnitID();
+  HWAPreBind *FirstAtom = Atoms[0];
+  HWFUnitID FUID = FirstAtom->getFunUnitID();
   unsigned ResourceId = FUID.getUnitNum();
 
-  unsigned MaxBitWidth = AddSub.getMaxBitWidth();
+  // FIXME: Do mix difference type in a function unit.
+  unsigned MaxBitWidth = vlang->getBitWidth(FirstAtom->getValue());
+  //AddSub.getMaxBitWidth();
 
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);

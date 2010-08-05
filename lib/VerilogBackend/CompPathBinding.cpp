@@ -571,8 +571,12 @@ void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
         (**I)->print(dbgs());
         dbgs() << " at " << (**I)->getSlot() << ", ";
         PB->print(dbgs());
-        dbgs() << " at " << PB->getSlot() << '\n';);
-      PostBindNodeType::makeEdge(*I, Node);
+        dbgs() << " at " << PB->getSlot() << '\n';
+      );
+
+      // FIXME: Do mix difference type in a function unit.
+      if (PB->getValue().getType() == (**I)->getValue().getType())      
+        PostBindNodeType::makeEdge(*I, Node);
     }
   // Insert the edge
   PostBindNodeType::makeEdge(Entry, Node);
