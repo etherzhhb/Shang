@@ -202,6 +202,8 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   unsigned NumRegs;
   // Mapping Value to registers
   std::map<const Value*, HWReg*> RegForValues;
+
+  // FIXME: We need to consider the basic block, too.
   std::map<const Value*, HWReg*> LiveOutRegAtTerm;
 
   HWReg *allocaRegister(const Type *Ty, unsigned StartSlot, unsigned EndSlot) {

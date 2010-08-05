@@ -529,6 +529,8 @@ public:
 
   HWReg *getReg() const { return Reg;  }
 
+  bool isPHINode() const { return isa<PHINode>(getValue()); }
+
   static inline bool classof(const HWAImpStg *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomImpStg;

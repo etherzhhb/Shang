@@ -315,13 +315,17 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitWrStg(cast<HWAWrStg>(A));
         break;
+      case atomImpStg:
+        vlang->comment(ControlBlock.indent(8)) << "Import:"
+          << A->getValue() << '\n';
+        emitImpStg(cast<HWAImpStg>(A));
+        break;
       case atomDelay:
         vlang->comment(ControlBlock.indent(8));
         A->print(ControlBlock);
         ControlBlock << '\n';
         break;
       // Do nothing.
-      case atomImpStg:
       case atomVRoot:
         break;
       default:
@@ -340,6 +344,11 @@ void RTLWriter::emitWrStg(HWAWrStg *DR) {
   
   std::string Name = getAsOperand(DR);
   ControlBlock.indent(8) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
+}
+
+void RTLWriter::emitImpStg(HWAImpStg *DR) {
+  if (DR->isPHINode())
+    UsedRegs.insert(DR->getReg());
 }
 
 void RTLWriter::emitAllRegisters() {
@@ -684,9 +693,10 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
                                  << "/*" << vlang->GetValueName(PN) << "*/";
     if (Constant *C = dyn_cast<Constant>(IV))
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
-    else
-      ControlBlock << " <= " << getAsOperand(HI->getLiveOutRegAtTerm(IV))
-                   << ";\n";    
+    else {
+      HWReg *LiveOutReg = HI->getLiveOutRegAtTerm(IV);
+      ControlBlock << " <= " << getAsOperand(LiveOutReg) << ";\n";
+    }
     ++I;
   }
 }
