@@ -441,7 +441,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
   vlang->alwaysBegin(DataPath, 2);
   vlang->resetRegister(DataPath.indent(6), Res, MaxBitWidth);
   vlang->ifElse(DataPath.indent(4));
-  DataPath.indent(6) << Res << " = " << Mode << " ? ";
+  DataPath.indent(6) << Res << " <= " << Mode << " ? ";
   DataPath           << "(" << OpA << " + " << OpB << ") : ";
   DataPath           << "(" << OpA << " - " << OpB << ");\n";
   vlang->alwaysEnd(DataPath, 2);
