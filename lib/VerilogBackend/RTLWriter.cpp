@@ -456,6 +456,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
     BasicBlock *BB = Inst->getParent();
     vlang->matchCase(DataPath.indent(4),
       vlang->GetValueName(BB) + utostr(A->getSlot()));
+    vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
     DataPath.indent(6) << Mode;
     if (Inst->getOpcode() == Instruction::Sub)
@@ -523,6 +524,7 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
     BasicBlock *BB = Inst->getParent();
     vlang->matchCase(DataPath.indent(4),
       vlang->GetValueName(BB) + utostr(A->getSlot()));
+    vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
     DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
 
