@@ -55,6 +55,6 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createRegisterAllocationPass());
     //
     PM.add(new RTLWriter(Out));
-    PM.add(new TestbenchWriter(Out));
+    //PM.add(new TestbenchWriter(Out));
     return false;
 }

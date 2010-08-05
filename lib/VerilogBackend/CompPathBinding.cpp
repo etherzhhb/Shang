@@ -26,12 +26,18 @@
 #include "llvm/Analysis/LiveValues.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/CommandLine.h"
 
 #define DEBUG_TYPE "vbe-comp-path"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 using namespace esyn;
+
+static cl::opt<bool>
+NoBinding("disable-resource-binding",
+         cl::desc("vbe - Do not bind PostBind atom to Function Unit"),
+         cl::Hidden, cl::init(false));
 
 namespace esyn {
 template<class DataTy>
@@ -419,6 +425,9 @@ void CompPathBinding::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
+  // Are we disable resource binding?
+  if (NoBinding)  return false;
+
   HI = &getAnalysis<HWAtomInfo>();
   LV = &getAnalysis<LiveValues>();
   CurStage = &HI->getStateFor(BB);

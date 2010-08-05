@@ -24,11 +24,18 @@
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vbe-ms-info"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 using namespace esyn;
+
+
+static cl::opt<bool>
+NoModuloSchedule("disable-modulo-schedule",
+          cl::desc("vbe - Do not preform modulo schedule"),
+          cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
 namespace {
@@ -135,6 +142,9 @@ bool ModuloScheduleInfo::runOnFunction(Function &F) {
 }
 
 bool ModuloScheduleInfo::isModuloSchedulable(FSMState &State) const {
+  // Are we disable modulo schedule?
+  if (NoModuloSchedule) return false;
+  
   BasicBlock *BB = State.getBasicBlock();
   Loop *L = LI->getLoopFor(BB);
   // States that not in loops are not MSable.
