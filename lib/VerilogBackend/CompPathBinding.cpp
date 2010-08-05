@@ -35,9 +35,15 @@ using namespace llvm;
 using namespace esyn;
 
 static cl::opt<bool>
-NoBinding("disable-resource-binding",
+NoFUBinding("disable-resource-binding",
          cl::desc("vbe - Do not bind PostBind atom to Function Unit"),
          cl::Hidden, cl::init(false));
+
+
+static cl::opt<bool>
+NoFURegBinding("disable-fu-register-binding",
+          cl::desc("vbe - Do not register to Function Unit"),
+          cl::Hidden, cl::init(false));
 
 namespace esyn {
 template<class DataTy>
@@ -426,7 +432,7 @@ void CompPathBinding::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   // Are we disable resource binding?
-  if (NoBinding)  return false;
+  if (NoFUBinding)  return false;
 
   HI = &getAnalysis<HWAtomInfo>();
   LV = &getAnalysis<LiveValues>();
@@ -448,8 +454,9 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   buildWOCGForRes();
   // 2. Find the longest path.
   buildLongestPostBindPath();
-  // 3. Bind a register to the function unit.
-  bindFunUnitReg();
+  if (!NoFURegBinding)  
+    // 3. Bind a register to the function unit.
+    bindFunUnitReg();
 
 
   DEBUG(
