@@ -53,25 +53,6 @@ void HWResource::print(raw_ostream &OS) const {
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
 }
 
-unsigned HWResource::getLeastBusyInstance() const {
-  // {Least using count, idx}
-  std::pair<unsigned, unsigned> ret(0, 0);
-  for (unsigned i = 0, e = UsingCount.size(); i != e; ++i) {
-    if (UsingCount[i] == 0)
-      return i;
-    if (UsingCount[i] < ret.first) {
-      ret.first = UsingCount[i];
-      ret.second = i;
-    }
-  }
-  return ret.second;
-}
-
-void HWResource::clear() {
-  for (unsigned i = 0, e = UsingCount.size(); i != e; ++i)
-    UsingCount[i] = 0;
-}
-
 //===----------------------------------------------------------------------===//
 // Resource parsing
 static enum HWResource::ResTypes getResourceType(XmlNode *Node) {
@@ -124,12 +105,18 @@ HWAddSub *HWAddSub::createFromXml(XmlNode *Node) {
 
 }
 
+HWFUnit HWResource::allocaFU(unsigned UnitID) {
+  return HWFUnit(getResourceType(), UnitID == 0 ? getTotalRes() : 1,
+                 getLatency(), UnitID);
+}
+
 //===----------------------------------------------------------------------===//
 /// Resource config implement
 void ResourceConfig::initializePass() {
   ParseConfigFile(ConfigFilename);
   DEBUG(print(dbgs()));
 }
+
 
 void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   std::string ErrMsg;

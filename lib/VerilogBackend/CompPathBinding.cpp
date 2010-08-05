@@ -23,6 +23,7 @@
 
 #include "vbe/ResourceConfig.h"
 
+#include "llvm/Analysis/LiveValues.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/Allocator.h"
 
@@ -138,7 +139,9 @@ public:
     if (LHS->isVRExit())
       return false;
 
-    // TODO: this is not true in Modulo Schedule
+    // TODO: this is not true in Modulo Schedule.
+    // Infact ealier is some kind of ealier in dependencies graph? So this is ok
+    // in Modulo Schedule.
     return LHS->getData()->getSlot() < RHS->getData()->getSlot();
   }
 
@@ -226,7 +229,7 @@ public:
 typedef CompGraphNode<HWAOpInst> PostBindNodeType;
 typedef CompGrapPath<HWAOpInst> PostBindNodePath;
 
-typedef CompGraphNode<PostBindNodePath> PathGraphNode;
+typedef CompGraphNode<PostBindNodePath> PathGraphNodeType;
 
 template<>
 unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
@@ -255,7 +258,6 @@ template<>
 bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
   return (getData()->getSlot() != N->getData()->getSlot());
 }
-
 } // end namespace
 
 namespace llvm {
@@ -315,10 +317,17 @@ template<class DataTy> struct GraphTraits<const esyn::CompGraphNode<DataTy>*> {
 namespace esyn {
 struct CompPathBinding : public BasicBlockPass {
   // Iterators
-  typedef df_iterator<PostBindNodeType*, SmallVector<PostBindNodeType*, 8>, false,
+  typedef df_iterator<PostBindNodeType*, SmallPtrSet<PostBindNodeType*, 8>, false,
     GraphTraits<PostBindNodeType*> > wocg_df_it;
-  typedef df_iterator<const PostBindNodeType*, SmallVector<const PostBindNodeType*, 8>,
+  typedef df_iterator<const PostBindNodeType*, SmallPtrSet<const PostBindNodeType*, 8>,
     false, GraphTraits<const PostBindNodeType*> > wocg_const_df_it;
+
+  //PathGraphNodeType
+  typedef df_iterator<PathGraphNodeType*, SmallPtrSet<PathGraphNodeType*, 8>, false,
+    GraphTraits<PathGraphNodeType*> > pg_df_it;
+  typedef df_iterator<const PathGraphNodeType*, SmallPtrSet<const PathGraphNodeType*, 8>,
+    false, GraphTraits<const PathGraphNodeType*> > pg_const_df_it;
+
 
   // Types
   typedef std::pair<PostBindNodeType*, PostBindNodeType*> FUWOCGType;
@@ -327,10 +336,14 @@ struct CompPathBinding : public BasicBlockPass {
 
   BumpPtrAllocator NodeAllocator;
 
+  // WOCG
   WOCGMapType WOCG;
-  PathGraphNode PGEntry, PGExit;
+  // Path Graph
+  PathGraphNodeType PGEntry, PGExit;
 
   HWAtomInfo *HI;
+  LiveValues *LV;
+
   FSMState *CurStage;
 
   unsigned ResCount;
@@ -344,11 +357,13 @@ struct CompPathBinding : public BasicBlockPass {
   PostBindNodeType *getGraphExit(enum HWResource::ResTypes T) {
     return WOCG[T].second;
   }
-  
+  // Build the Weighted Compatibility Graph.
   void buildWOCGForRes();
   void insertToWOCG(HWAPostBind *PB);
-
+  // Build all operation in longest path to a function unit.
   void buildLongestPostBindPath();
+  // Bind register to function unit.
+  void bindFunUnitReg();
 
   static char ID;
   CompPathBinding();
@@ -399,18 +414,102 @@ void CompPathBinding::clear() {
 void CompPathBinding::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<ResourceConfig>();
+  AU.addRequired<LiveValues>();
   AU.setPreservesAll();
 }
 
 bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
+  LV = &getAnalysis<LiveValues>();
   CurStage = &HI->getStateFor(BB);
-  // 1. build WOCG_FUNTYPE
-  buildWOCGForRes();
-  // 2. find the longest path
-  buildLongestPostBindPath();
 
+  DEBUG(
+    dbgs() << "\n\nBefore binding:\n";
+    for (usetree_iterator I = CurStage->usetree_begin(),
+      E = CurStage->usetree_end(); I != E; ++I) {
+        HWAtom *A = *I;
+        dbgs() << "Schedule\n";
+        A->dump();
+        dbgs() << "To slot: " << A->getSlot() << '\n';
+    }
+    dbgs() << "\n\n";
+  );
+
+  // 1. Build WOCG_FUNTYPE.
+  buildWOCGForRes();
+  // 2. Find the longest path.
+  buildLongestPostBindPath();
+  // 3. Bind a register to the function unit.
+  bindFunUnitReg();
+
+
+  DEBUG(
+    dbgs() << "\n\nAfter binding:\n";
+    for (usetree_iterator I = CurStage->usetree_begin(),
+      E = CurStage->usetree_end(); I != E; ++I) {
+        HWAtom *A = *I;
+        dbgs() << "Schedule\n";
+        A->dump();
+        dbgs() << "To slot: " << A->getSlot() << '\n';
+    }
+    dbgs() << "\n\n";
+  );
   return false;
+}
+
+void CompPathBinding::bindFunUnitReg() {
+  HWAOpInst &Exit = CurStage->getExitRoot();
+  unsigned LastSlot = Exit.getSlot();
+  // For each Function unit(longest path graph node), bind a FU register.
+  // For each nodes in
+  for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
+      I != E; ++I) {
+    PathGraphNodeType &Node = **I;
+    if (Node.isVRoot())
+      continue;
+    
+    for (PostBindNodePath::path_iterator PI = Node->path_begin(),
+        PE = Node->path_end(); PI != PE; ++PI) {
+      HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
+      DEBUG(dbgs() << "For PostBind Node: ");
+      DEBUG(A->dump());
+      Instruction *Inst = &A->getInst<Instruction>();
+      // Bind a register to this function unit.
+      HWReg *FUR = HI->allocaFURegister(A);
+      HWAWrStg *WR = HI->getWrStg(A, FUR);
+      DEBUG(dbgs() << "Create FU Register: ");
+      DEBUG(WR->dump());
+      // Updata live out register.
+      if (WR->getFinSlot()== LastSlot) {
+        HI->updateLiveOutReg(Inst, FUR);
+      }
+
+      bool FURegRead = false;
+      std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
+      while(!WorkStack.empty()) {
+        HWAtom *Use = WorkStack.back();
+        WorkStack.pop_back();
+
+        // FIXME: How should us handle delay atom?
+        if (Use == WR || isa<HWADelay>(Use))
+          continue;
+
+        FURegRead = true;
+        DEBUG(dbgs() << "Replace Use: ");
+        DEBUG(Use->dump());
+        // Read the result for From this Register.
+        Use->setDep(Use->getDepIt(A), WR);
+      }
+
+      // Move the value to a register if this value live out the BB,
+      // but not ready by atoms in this BB.
+      if (!FURegRead && !LV->isKilledInBlock(Inst, Inst->getParent())) {
+        HWReg *R = HI->getRegForValue(Inst, WR->getFinSlot(), LastSlot);
+        HWAWrStg *ExportReg = HI->getWrStg(WR, R);
+        Exit.addDep(HI->getCtrlDepEdge(ExportReg));
+      }
+    }
+  }
 }
 
 void CompPathBinding::buildLongestPostBindPath() {
@@ -436,7 +535,7 @@ void CompPathBinding::buildLongestPostBindPath() {
           Node->removeFromGraph();
       }
 
-      PathGraphNode *Node = new (NodeAllocator) PathGraphNode(Path);
+      PathGraphNodeType *Node = new (NodeAllocator) PathGraphNodeType(Path);
 
       // Instert to the path graph, but ignore the oreder at this moment;
       PGEntry.addSucc(Node);

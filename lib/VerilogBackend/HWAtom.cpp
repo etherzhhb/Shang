@@ -36,9 +36,18 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
+void HWAWrStg::print(raw_ostream &OS) const {
+  OS << "Write Storage "
+     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
+}
 
-void HWADrvReg::print(raw_ostream &OS) const {
+void HWAImpStg::print(raw_ostream &OS) const {
+  OS << "Import Storage "
+     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
+}
 
+void HWADelay::print(raw_ostream &OS) const {
+  OS << "Delay: " << getLatency();
 }
 
 void HWMemDep::print(raw_ostream &OS) const {
@@ -52,11 +61,15 @@ void HWCtrlDep::print(raw_ostream &OS) const {
   //WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
-void HWValDep::print(raw_ostream &OS) const {
+void HWConst::print(raw_ostream &OS) const {
   //OS << "Control dep: ";
   //WriteAsOperand(OS, &Val, false);
   //OS << " -> ";
   //WriteAsOperand(OS, &getDep(0)->getValue(), false);
+}
+
+void HWValDep::print(raw_ostream &OS) const {
+
 }
 
 void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
@@ -86,20 +99,12 @@ void FSMState::print(raw_ostream &OS) const {
   }
 }
 
-void HWAPreBind::print(raw_ostream &OS) const {
+void HWAOpInst::print(raw_ostream &OS) const {
   if (getValue().getType()->isVoidTy())
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << FUnitID;
-}
-
-void HWAPostBind::print(raw_ostream &OS) const {
-  if (getValue().getType()->isVoidTy())
-    OS << getValue() << '\n';
-  else
-    WriteAsOperand(OS, &getValue(), false);
-  OS << " PostBind: " << FUnitID;
+  OS << " Res: " << getFunUnitID();
 }
 
 void HWAVRoot::print(raw_ostream &OS) const {
@@ -107,13 +112,14 @@ void HWAVRoot::print(raw_ostream &OS) const {
   OS << " Entry";
 }
 
-HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V)
-: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0) {}
+HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
+               unsigned latancy)
+: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {}
 
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
-               Value &V, HWEdge *Dep0) : FastID(ID),
-               HWAtomType(HWAtomTy), Val(V), SchedSlot(0)  {
+               Value &V, HWEdge *Dep0, unsigned latancy) : FastID(ID),
+               HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {
   Deps.push_back(Dep0);
   Dep0->getDagSrc()->addToUseList(this);
 }
@@ -133,13 +139,15 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 }
 
 HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-                       unsigned Instance)
+                       HWFUnit FUID)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
-  PostBind.getLatency(), PostBind.edge_begin(), PostBind.edge_end(),
-  PostBind.getInstNumOps(), HWFUnitID(PostBind.getResClass(), Instance)) {
+              PostBind.edge_begin(), PostBind.edge_end(),
+              PostBind.getInstNumOps(), FUID) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);
+    // This is done in the constructor of HWAtom.
+    //I->addToUseList(this);
 
   PostBind.replaceAllUseBy(this);
 
@@ -153,4 +161,9 @@ HWAtom *HWMemDep::getSCCSrc() const {
 
 void esyn::FSMState::dump() const {
   print(dbgs());
+}
+
+HWValDep::HWValDep(HWAtom *Src, bool isSigned, bool isImport)
+: HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), IsImport(isImport) {
+  assert((!IsImport || isa<HWAVRoot>(Src)) && "Bad import edge!");
 }

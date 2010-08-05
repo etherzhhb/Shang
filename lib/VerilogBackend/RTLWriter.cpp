@@ -155,7 +155,7 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     unsigned BitWidth = vlang->getBitWidth(Arg);
 
     std::string Name = vlang->GetValueName(&Arg), 
-                RegName = "Reg" + utostr(HI->getRegNumForLiveVal(Arg)->getRegNum());
+                RegName = getAsOperand(HI->lookupRegForValue(&Arg));
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
       Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
@@ -252,6 +252,7 @@ std::string RTLWriter::getAsOperand(Value *V, const std::string &postfix) {
 
   return vlang->GetValueName(V) + postfix;
 }
+
 std::string RTLWriter::getAsOperand(HWAtom *A) {
   Value *V = &A->getValue();
 
@@ -259,31 +260,36 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomDrvReg:
-      return "Reg"+utostr(cast<HWADrvReg>(A)->getReg()->getRegNum())
-        + " /*" + vlang->GetValueName(&A->getValue()) +"*/";
+    case atomWrStg:
+      return getAsOperand(cast<HWAWrStg>(A)->getReg())
+        + " /*" + vlang->GetValueName(&A->getValue()) + "*/";
+    case atomImpStg:
+      return getAsOperand(cast<HWAImpStg>(A)->getReg())
+        + " /*" + vlang->GetValueName(&A->getValue()) + "*/";
     default:
+      llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
   }
 }
 
+std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
+  return "FU" + utostr(FUID.getRawData()) + "Reg";
+}
+
+std::string RTLWriter::getAsOperand(HWReg *R) {
+  if (R->isFuReg())
+    return getFURegisterName(R->getFUnit());
+
+  // Else not a function unit Reg.
+  return "Reg"+utostr(R->getRegNum());
+}
+
 std::string RTLWriter::getAsOperand(HWEdge *E) {
   switch (E->getEdgeType()) {
-  case edgeValDep: {
-    HWValDep *VD = cast<HWValDep>(E);
-    if (VD->isConstant())
-      return vlang->printConstant(VD->getConstant());
-    
-    if (VD->isWire())
-      return getAsOperand(VD->getDagSrc());
- 
-    if (HWReg *R = VD->getReg()) {
-      Value *V = &(VD->getDagSrc()->getValue());
-      return "Reg"+utostr(R->getRegNum())
-      + " /*" + vlang->GetValueName(V) +"*/";
-    }
-    break;
-  }
+  case edgeConst:
+    return vlang->printConstant(cast<HWConst>(E)->getConstant());
+  case edgeValDep:
+    return getAsOperand(cast<HWValDep>(E)->getDagSrc());
   default:
     llvm_unreachable("Do not use other edge as operand!");
     return "<Unknown edge>";
@@ -304,19 +310,32 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomDrvReg:
-        emitDrvReg(cast<HWADrvReg>(A));
+      case atomWrStg:
+        vlang->comment(ControlBlock.indent(8)) << "Read:"
+          << A->getValue() << '\n';
+        emitWrStg(cast<HWAWrStg>(A));
         break;
+      case atomDelay:
+        vlang->comment(ControlBlock.indent(8));
+        A->print(ControlBlock);
+        ControlBlock << '\n';
+        break;
+      // Do nothing.
+      case atomImpStg:
       case atomVRoot:
         break;
       default:
-        //llvm_unreachable("Unknow Atom!");
-        ;
+        llvm_unreachable("Unknow Atom!");
+        break;
   }
 }
 
-void RTLWriter::emitDrvReg(HWADrvReg *DR) {
+void RTLWriter::emitWrStg(HWAWrStg *DR) {
   const HWReg *R = DR->getReg();
+  // Function unit register will emit with function unit.
+  if (R->isFuReg())
+    return;
+  
   UsedRegs.insert(R);
   
   std::string Name = getAsOperand(DR);
@@ -354,7 +373,7 @@ void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
 void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   // Remember this atom
   ResourceMap[PreBind->getFunUnitID()].push_back(PreBind);
-  //
+
   switch (PreBind->getResClass()) {
   case HWResource::MemoryBus:
     opMemBus(PreBind);
@@ -362,6 +381,8 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   case HWResource::AddSub:
     opAddSub(PreBind);
     break;
+  default:
+    assert(!"Unexcept resource type!");
   }
 }
 
@@ -385,36 +406,36 @@ void RTLWriter::emitResources() {
 }
 
 void RTLWriter::opAddSub(HWAPreBind *PreBind) {
-  std::string Name = getAsOperand(PreBind);
-  // Declare the signal
-  vlang->declSignal(getSignalDeclBuffer(), Name,
-    vlang->getBitWidth(PreBind->getValue()), 0, false);
-
-  DataPath.indent(2) <<  "assign " << getAsOperand(PreBind)
-    << " = addsub_res" << PreBind->getUnitID() << ";\n";
 }
 
 void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
-  unsigned ResourceId = Atoms[0]->getUnitID();
+  HWFUnitID FUID = Atoms[0]->getFunUnitID();
+  unsigned ResourceId = FUID.getUnitNum();
 
   unsigned MaxBitWidth = AddSub.getMaxBitWidth();
 
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = "addsub_res" + utostr(ResourceId);
+  std::string Res = getFURegisterName(FUID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, MaxBitWidth, 0);
   
   vlang->declSignal(getSignalDeclBuffer(), OpB, MaxBitWidth, 0);
 
-  vlang->declSignal(getSignalDeclBuffer(), Res, MaxBitWidth, 0, false);
+  vlang->declSignal(getSignalDeclBuffer(), Res, MaxBitWidth, 0);
   
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
-  DataPath.indent(2) << "assign " << Res << " = " << Mode << " ? ";
+  vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: "
+                                     << FUID.getRawData() << '\n';
+  vlang->alwaysBegin(DataPath, 2);
+  vlang->resetRegister(DataPath.indent(6), Res, MaxBitWidth);
+  vlang->ifElse(DataPath.indent(4));
+  DataPath.indent(6) << Res << " = " << Mode << " ? ";
   DataPath           << "(" << OpA << " + " << OpB << ") : ";
   DataPath           << "(" << OpA << " - " << OpB << ");\n";
+  vlang->alwaysEnd(DataPath, 2);
 
   DataPath.indent(2) << "always @(*)\n";
   vlang->switchCase(DataPath.indent(4), "CurState");
@@ -454,7 +475,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  unsigned MemBusInst = PreBind->getUnitID();
+  unsigned MemBusInst = PreBind->getUnitNum();
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
     std::string Name = getAsOperand(PreBind);
     // Declare the signal
@@ -469,7 +490,7 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
-  unsigned ResourceId = Atoms[0]->getUnitID();
+  unsigned ResourceId = Atoms[0]->getUnitNum();
 
   // Emit the ports;
   ModDecl << '\n';
@@ -502,7 +523,7 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
                 << ";\n";
       DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
       DataPath.indent(6) << "membus_in" << ResourceId
-        << " <= " << vlang->printConstantInt(0, DataWidth, false);
+        << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
     } else { // It must be a store
       DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
         << ";\n";
@@ -654,13 +675,16 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
   BasicBlock::iterator I = Succ.begin();
   while (&*I != NotPhi) {
     PHINode *PN = cast<PHINode>(I);
+    HWReg *PR = HI->lookupRegForValue(PN);
+
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
-    if (Constant *C = dyn_cast<Constant>(IV)) {
-      HWReg *R = HI->getRegNumForLiveVal(*PN);
-      ControlBlock.indent(8 + ind) << "Reg" + utostr(R->getRegNum())
-        << "/*" << vlang->GetValueName(PN) << "*/"
-        << " <= " << vlang->printConstant(C) << ";\n";      
-    }
+    ControlBlock.indent(8 + ind) << getAsOperand(PR)
+                                 << "/*" << vlang->GetValueName(PN) << "*/";
+    if (Constant *C = dyn_cast<Constant>(IV))
+      ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
+    else
+      ControlBlock << " <= " << getAsOperand(HI->getLiveOutRegAtTerm(IV))
+                   << ";\n";    
     ++I;
   }
 }

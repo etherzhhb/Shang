@@ -127,7 +127,8 @@ void HWAtomInfo::clear() {
   // Reset total Cycle
   totalCycle = 1;
   NumRegs = 1;
-  LiveValueReg.clear();
+  RegForValues.clear();
+  LiveOutRegAtTerm.clear();
 }
 
 void HWAtomInfo::releaseMemory() {
@@ -154,20 +155,15 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   for (usetree_iterator TI = Root->begin(), TE = Root->end();
       TI != TE; ++TI)
     if (*TI != Pred && TI->use_empty()) {
-      HWAtom *A = *TI;
-      if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-        Instruction &Inst = OI->getInst<Instruction>();
-        if (!Inst.getType()->isVoidTy()) {
-          Deps.push_back(getValDepEdge(A, getRegNumForLiveVal(Inst)));
-          continue;
-        }
-      }
-      Deps.push_back(getCtrlDepEdge(A));
+      Deps.push_back(getCtrlDepEdge(*TI));
     }
+  
+  // Create delay atom for phi node.
+  addPhiDelays(*I.getParent(), Deps);
 
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
-  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, 0, HWResource::Trivial);
+  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(0));
   // This is a control atom.
   SetControlRoot(Atom);
   return Atom;
@@ -175,11 +171,11 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 
 HWAtom *HWAtomInfo::visitPHINode(PHINode &I) {
-  // Create a physics register for phi node.
-  HWReg *Reg = getRegNumForLiveVal(I);
-  // Merge the export register to PHI node.
-  for (unsigned i = 0, e = I.getNumIncomingValues(); i != e; ++i)
-    setRegNum(*I.getIncomingValue(i), Reg);
+  //// Create a physics register for phi node.
+  //HWReg *Reg = getRegNumForLiveVal(I);
+  //// Merge the export register to PHI node.
+  //for (unsigned i = 0, e = I.getNumIncomingValues(); i != e; ++i)
+  //  setRegNum(*I.getIncomingValue(i), Reg);
 
   return 0;
 }
@@ -189,31 +185,22 @@ HWAtom *HWAtomInfo::visitSelectInst(SelectInst &I) {
   addOperandDeps(I, Deps);
 
   // FIXME: Read latency from configure file
-  return getPostBind(I, Deps, 1, HWResource::Trivial);
+  return getPostBind(I, Deps, RC->allocaTrivialFU(1));
 }
 
 HWAtom *HWAtomInfo::visitCastInst(CastInst &I) {
   SmallVector<HWEdge*, 1> Deps;
   Deps.push_back(getValDepInState(*I.getOperand(0), I.getParent()));
   // CastInst do not have any latency
-  return getPostBind(I, Deps, 0, HWResource::Trivial);
+  return getPostBind(I, Deps, RC->allocaTrivialFU(0));
 }
 
 HWAtom *HWAtomInfo::visitLoadInst(LoadInst &I) {
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
 
-  // Push the control root base on dependence analysis
-  // Deps.push_back(getControlRoot());
-
-  HWResource *Res = RC->getResource(HWResource::MemoryBus);
-  assert(Res && "Can find resource!");
-
-  // Dirty Hack: allocate membus 0 to all load/store at this moment
-  HWAtom *LoadAtom = getPreBind(I, Deps, HWResource::MemoryBus,
-                                Res->getLatency(), 0);
-  // Set as new atom
-  SetControlRoot(LoadAtom);
+  // Dirty Hack: allocate membus 1 to all load/store at this moment
+  HWAtom *LoadAtom = getPreBind(I, Deps, RC->allocaFU(HWResource::MemoryBus, 1));
 
   return LoadAtom;
 }
@@ -229,8 +216,7 @@ HWAtom *HWAtomInfo::visitStoreInst(StoreInst &I) {
   assert(Res && "Can find resource!");
 
   // Dirty Hack: allocate membus 0 to all load/store at this moment
-  HWAtom *StoreAtom = getPreBind(I, Deps, HWResource::MemoryBus,
-                                 Res->getLatency(), 0);
+  HWAtom *StoreAtom = getPreBind(I, Deps, Res->allocaFU(1));
   // Set as new atom
   SetControlRoot(StoreAtom);
 
@@ -244,8 +230,7 @@ HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
 
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
-
-  return getPostBind(I, Deps, 1, HWResource::AddSub);
+  return getPostBind(I, Deps, RC->allocaFU(HWResource::AddSub));
 }
 
 HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
@@ -256,16 +241,11 @@ HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
   // RHS
   Deps.push_back(getValDepInState(*I.getOperand(1), I.getParent(), I.isSigned()));
 
-  enum HWResource::ResTypes T;
   // It is trivial if one of the operand is constant
   if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
-    T = HWResource::Trivial;
+    return getPostBind(I, Deps, RC->allocaTrivialFU(1));
   else // We need to do a subtraction for the comparison.
-    T = HWResource::Trivial;
-
-  // FIXME: Read latency from configure file
-  // 
-  return getPostBind(I, Deps, 1, T);
+    return getPostBind(I, Deps, RC->allocaTrivialFU(1));
 }
 
 HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
@@ -273,32 +253,32 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
   SmallVector<HWEdge*, 2> Deps;
   bool isSigned = false;
   bool isTrivial = isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1));
-  enum HWResource::ResTypes T;
+  HWFUnit FU;
   // Select the resource
   switch (I.getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
       //T = isTrivial ? HWResource::Trivial : HWResource::AddSub;
-      T = HWResource::AddSub;
+      FU = RC->allocaFU(HWResource::AddSub);
       break;
     case Instruction::Mul:
-      T = HWResource::Mul;
+      FU = RC->allocaFU(HWResource::Mul);
       break;
     case Instruction::And:
     case Instruction::Or:
     case Instruction::Xor:
-      T = HWResource::Trivial;
+      FU = RC->allocaTrivialFU(1);
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
       isSigned = true;
-      T = isTrivial ? HWResource::Trivial : HWResource::ASR;
+      FU = isTrivial ? RC->allocaTrivialFU(1) : RC->allocaFU(HWResource::ASR);
       break;
     case Instruction::LShr:
-      T = isTrivial ? HWResource::Trivial : HWResource::LSR;
+      FU = isTrivial ? RC->allocaTrivialFU(1) : RC->allocaFU(HWResource::LSR);
       break;
     case Instruction::Shl:
-      T = isTrivial ? HWResource::Trivial : HWResource::SHL;
+      FU = isTrivial ? RC->allocaTrivialFU(1) : RC->allocaFU(HWResource::SHL);
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");
@@ -308,14 +288,17 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
   // RHS
   Deps.push_back(getValDepInState(*I.getOperand(1), I.getParent()));
   
-  return getPostBind(I, Deps, 1, T);
+  return getPostBind(I, Deps, FU);
 }
 
 //===----------------------------------------------------------------------===//
 // Create atom
 
-HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind,
-                                              unsigned Instance) {
+HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind, unsigned Instance)
+{
+  assert(Instance && "Instance can not be 0 !");
+  UniqiueHWAtoms.RemoveNode(&PostBind);
+
   FoldingSetNodeID ID;
   ID.AddInteger(atomPreBind);
   ID.AddPointer(&PostBind.getValue());
@@ -326,20 +309,19 @@ HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind,
 
   assert(!A && "Why the instruction is bind?");
 
-  A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-                                       PostBind, Instance);
+  HWFUnit FU = RC->allocaFU(PostBind.getResClass(), Instance);
 
-  updateAtomMap(PostBind.getValue(), A); 
+  A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
+                                       PostBind, FU);
 
   UniqiueHWAtoms.InsertNode(A, IP);
-  UniqiueHWAtoms.RemoveNode(&PostBind);
 
   return A;
 }
 
-HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                               size_t OpNum, enum HWResource::ResTypes OpClass,
-                               unsigned latency, unsigned ResInst) {
+HWAPreBind *HWAtomInfo::getPreBind(Instruction &I,
+                                   SmallVectorImpl<HWEdge*> &Deps,
+                                   size_t OpNum, HWFUnit FUID) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomPreBind);
   ID.AddPointer(&I);
@@ -350,15 +332,15 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Dep
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-      I, latency, Deps.begin(), Deps.end(), OpNum, OpClass, ResInst);
+      I, Deps.begin(), Deps.end(), OpNum, FUID);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
 }
 
-HWAPostBind *HWAtomInfo::getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                                 size_t OpNum, unsigned latency,
-                                 enum HWResource::ResTypes OpClass) {
+HWAPostBind *HWAtomInfo::getPostBind(Instruction &I,
+                                     SmallVectorImpl<HWEdge*> &Deps,
+                                     size_t OpNum, HWFUnit FUID) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomPostBind);
   ID.AddPointer(&I);
@@ -369,7 +351,7 @@ HWAPostBind *HWAtomInfo::getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &D
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPostBind(ID.Intern(HWAtomAllocator),
-      I, latency, Deps.begin(), Deps.end(), OpNum, OpClass);
+      I, Deps.begin(), Deps.end(), OpNum, FUID);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -392,18 +374,57 @@ HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
   return A;
 }
 
-HWADrvReg *HWAtomInfo::getDrvReg(HWAtom *Src, HWReg *Reg) {
+HWAWrStg *HWAtomInfo::getWrStg(HWAtom *Src, HWReg *Reg) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomDrvReg);
+  ID.AddInteger(atomWrStg);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
 
   void *IP = 0;
-  HWADrvReg *A =
-    static_cast<HWADrvReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAWrStg *A =
+    static_cast<HWAWrStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWADrvReg(ID.Intern(HWAtomAllocator), getValDepEdge(Src, Reg));
+    A = new (HWAtomAllocator) HWAWrStg(ID.Intern(HWAtomAllocator),
+                                       getValDepEdge(Src, false), Reg);
+    UniqiueHWAtoms.InsertNode(A, IP);
+  }
+  return A;
+}
+
+HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomDelay);
+  ID.AddPointer(Src);
+  ID.AddInteger(Delay);
+
+  void *IP = 0;
+  HWADelay *A =
+    static_cast<HWADelay*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    A = new (HWAtomAllocator) HWADelay(ID.Intern(HWAtomAllocator),
+      getCtrlDepEdge(Src), Delay);
+    UniqiueHWAtoms.InsertNode(A, IP);
+  }
+  return A;
+}
+
+
+HWAImpStg *HWAtomInfo::getImpStg(HWAtom *Src, HWReg *Reg, Value &V) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomImpStg);
+  ID.AddPointer(Src);
+  ID.AddPointer(Reg);
+  ID.AddPointer(&V);
+
+  void *IP = 0;
+  HWAImpStg *A =
+    static_cast<HWAImpStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    A = new (HWAtomAllocator) HWAImpStg(ID.Intern(HWAtomAllocator),
+      getValDepEdge(Src, false), Reg, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -420,5 +441,36 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
   for (StateMapType::const_iterator I = BBToStates.begin(), E = BBToStates.end();
       I != E; ++I) {
     I->second->print(O);
+  }
+}
+
+void esyn::HWAtomInfo::addPhiDelays(BasicBlock &BB,
+                                    SmallVectorImpl<HWEdge*> &Deps) {
+  for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
+    BasicBlock *SuccBB = *SI;
+    for (BasicBlock::iterator II = SuccBB->begin(),
+        IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
+      PHINode *PN = cast<PHINode>(II);
+      Instruction *Inst =
+        dyn_cast<Instruction>(PN->getIncomingValueForBlock(&BB));
+      // No instruction value do not need to delay.
+      if (!Inst)
+        continue;
+      // We do not need to delay if the value not define in the current BB.
+      if (Inst->getParent() != &BB)
+        continue;
+      // Dirty Hack: We do not need to delay if source is PHI.
+      if (isa<PHINode>(Inst))
+        continue;
+
+      HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
+      //// We do not delay the trivial operation, because the delay
+      //// is cause by the function unit register.
+      //if (OpInst->isTrivial())
+      //  continue;
+
+      HWADelay *Delay = getDelay(OpInst, 1);
+      Deps.push_back(getCtrlDepEdge(Delay));
+    }
   }
 }

@@ -80,7 +80,7 @@ class RTLWriter : public FunctionPass {
   void emitAtom(HWAtom *A);
   void emitPreBind(HWAPreBind *PreBind);
   void emitPostBind(HWAPostBind *PreBind);
-  void emitDrvReg(HWADrvReg *DR);
+  void emitWrStg(HWAWrStg *DR);
 
   std::set<const HWReg*> UsedRegs;
 
@@ -96,7 +96,8 @@ class RTLWriter : public FunctionPass {
   std::string getAsOperand(Value *V, const std::string &postfix = "");
   std::string getAsOperand(HWEdge *E);
   std::string getAsOperand(HWAtom *A);
-
+  std::string getAsOperand(HWReg *R);
+  static std::string getFURegisterName(HWFUnitID FUID);
 
   raw_ostream &getStateDeclBuffer() {
     return StateDecl.indent(2);

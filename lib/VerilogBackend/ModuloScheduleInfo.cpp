@@ -225,9 +225,10 @@ unsigned ModuloScheduleInfo::computeResMII(FSMState &State) const {
 
   unsigned MaxResII = 0;
   typedef std::map<HWResource::ResTypes, unsigned>::iterator UsageIt;
-  for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I) {
-    if (HWResource *R = RC->getResource(I->first))
-      MaxResII = std::max(MaxResII, I->second / R->getTotalRes());
+  for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
+    if (I->first != HWResource::Trivial)
+      MaxResII = std::max(MaxResII,
+                          I->second / RC->getResource(I->first)->getTotalRes());
   }
   DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
   return MaxResII;

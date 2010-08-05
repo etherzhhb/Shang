@@ -39,8 +39,8 @@ using namespace llvm;
 
 
 namespace esyn {
-class HWAPreBind;
-
+class HWFUnit;
+class ResourceConfig;
 /// @brief Represent hardware resource
 class HWResource {
 public:
@@ -68,9 +68,9 @@ private:
   // How many resources available?
   const unsigned TotalRes;
 
-  // Use a map mapping instance to count?
-  typedef std::vector<unsigned> UsingCountVec;
-  UsingCountVec UsingCount;
+  //// Use a map mapping instance to count?
+  //typedef std::vector<unsigned> UsingCountVec;
+  //UsingCountVec UsingCount;
 
   HWResource(const HWResource &);            // DO NOT IMPLEMENT
   void operator=(const HWResource &);  // DO NOT IMPLEMENT
@@ -78,10 +78,7 @@ protected:
   explicit HWResource(enum ResTypes type,
     std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
     : ResourceType(type), Name(name), Latency(latency), StartInt(startInt),
-      TotalRes(totalRes), UsingCount(totalRes) {
-    //
-    clear();
-  }
+      TotalRes(totalRes) {}
 public:
   ResTypes getResourceType() const { return ResourceType; }
   
@@ -92,53 +89,74 @@ public:
 
   virtual void print(raw_ostream &OS) const;
 
-  size_t getTotalUsed() const {
-    size_t ret = 0;
-    for (UsingCountVec::const_iterator I = UsingCount.begin(),
-        E = UsingCount.end(); I != E; ++I)
-      ret += *I;
-    
-    return ret;
-  }
+  HWFUnit allocaFU(unsigned UnitID = 0);
 
-  size_t getUsingCount(unsigned instance) const {
-      return UsingCount[instance];
-  }
-
-  void assignToInstance(unsigned instance) {
-    ++UsingCount[instance];
-  }
-
-  unsigned getLeastBusyInstance() const;
-
-  void clear();
 }; 
 
+union HWFUnitID {
+  struct {
+    HWResource::ResTypes T : 4;
+    unsigned UnitID        : 12;
+  } S;
+  unsigned Data            : 16;
 
-struct HWFUnitID {
-  union {
-    struct {
-      HWResource::ResTypes T : 4;
-      unsigned UnitID        : 28;
-    } S;
-    unsigned Data;
-  } U;
-
-  /*implicit*/ inline HWFUnitID(enum HWResource::ResTypes type,
-                                unsigned UID = 0) {
-    U.S.T = type;
-    U.S.UnitID = UID;
-    assert(U.S.T == type && U.S.UnitID == UID && "Data overflow!");
+  inline HWFUnitID(enum HWResource::ResTypes type = HWResource::Trivial,
+                   unsigned UID = 0) {
+    S.T = type;
+    S.UnitID = UID;
+    assert(S.T == type && S.UnitID == UID && "Data overflow!"); 
   }
-  /*implicit*/ inline HWFUnitID(unsigned Data) { U.Data = Data; }
 
-  inline HWFUnitID(const HWFUnitID &O) { U.Data = O.U.Data; }
-  inline const HWFUnitID &operator=(const HWFUnitID &O) { U.Data = O.U.Data; }
+  inline /*implicit*/ HWFUnitID(unsigned data) {
+    Data = data;
+  }
 
-  inline enum HWResource::ResTypes getResType() const { return U.S.T; }
-  inline unsigned getUnitID() const { return U.S.UnitID; }
+  inline HWFUnitID(const HWFUnitID &O) : Data(O.Data) {}
 
-  inline unsigned getRawData() const { return U.Data; }
+  inline const HWFUnitID &operator=(const HWFUnitID &O) {
+    Data = O.Data;
+    return *this;
+  }
+
+  inline enum HWResource::ResTypes getResType() const { return S.T; }
+  inline unsigned getUnitNum() const { return S.UnitID; }
+  inline unsigned getRawData() const { return Data; }
+};
+
+class HWFUnit {
+  HWFUnitID ID;
+  unsigned TotalFUs         : 12;
+  unsigned Latency          : 4;
+
+  inline explicit HWFUnit(enum HWResource::ResTypes type, unsigned totalFUs,
+                          unsigned latency, unsigned UID)
+                          : ID(type, UID), TotalFUs(totalFUs), Latency(latency) {
+    assert(TotalFUs == totalFUs && Latency == latency
+           && "Data overflow!");
+    assert(totalFUs && "Unavailabe Function Unit?");
+  }
+  friend class HWResource;
+  friend class ResourceConfig;
+  ///*implicit*/ inline HWFUnitID(unsigned Data) { U.Data = Data; }
+public:
+  inline HWFUnit() : ID(), TotalFUs(0), Latency(0) {}
+
+  inline HWFUnit(const HWFUnit &O) : ID(O.ID), TotalFUs(O.TotalFUs),
+    Latency(O.Latency) {}
+
+  inline const HWFUnit &operator=(const HWFUnit &O) {
+    ID = O.ID;
+    TotalFUs = O.TotalFUs;
+    Latency = O.Latency;
+    return *this;
+  }
+
+  inline HWFUnitID getFUnitID() const { return ID; }
+  inline enum HWResource::ResTypes getResType() const { return ID.getResType(); }
+  inline unsigned getUnitNum() const { return ID.getUnitNum(); }
+  
+  inline unsigned getTotalFUs() const { return TotalFUs; }
+  inline unsigned getLatency() const { return Latency; }
 };
 
 
@@ -151,28 +169,28 @@ inline raw_ostream &operator<<(raw_ostream &OS, const HWFUnitID UID) {
 /// @name HWFUnitID Comparison Operators
 /// @{
 
-inline bool operator==(HWFUnitID LHS, HWFUnitID RHS) {
-  return LHS.U.Data == RHS.U.Data;
+inline bool operator==(const HWFUnitID LHS, const HWFUnitID RHS) {
+  return LHS.getRawData() == RHS.getRawData();
 }
 
-inline bool operator!=(HWFUnitID LHS, HWFUnitID RHS) {
+inline bool operator!=(const HWFUnitID LHS, const HWFUnitID RHS) {
   return !(LHS == RHS);
 }
 
-inline bool operator<(HWFUnitID LHS, HWFUnitID RHS) {
-  return LHS.U.Data < RHS.U.Data;
+inline bool operator<(const HWFUnitID LHS, const HWFUnitID RHS) {
+  return LHS.getRawData() < RHS.getRawData();
 }
 
-inline bool operator<=(HWFUnitID LHS, HWFUnitID RHS) {
-  return LHS.U.Data <= RHS.U.Data;
+inline bool operator<=(const HWFUnitID LHS, const HWFUnitID RHS) {
+  return LHS.getRawData() <= RHS.getRawData();
 }
 
-inline bool operator>(HWFUnitID LHS, HWFUnitID RHS) {
-  return LHS.U.Data > RHS.U.Data;
+inline bool operator>(const HWFUnitID LHS, const HWFUnitID RHS) {
+  return LHS.getRawData() > RHS.getRawData();
 }
 
-inline bool operator>=(HWFUnitID LHS, HWFUnitID RHS) {
-  return LHS.U.Data >= RHS.U.Data;
+inline bool operator>=(const HWFUnitID LHS, const HWFUnitID RHS) {
+  return LHS.getRawData() >= RHS.getRawData();
 }
 
 /// @}
@@ -190,6 +208,8 @@ class HWMemBus : public HWResource {
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
   unsigned getDataWidth() const { return DataWidth; }
+
+  void bindToFUNum(unsigned Num);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWMemBus *A) { return true; }
@@ -223,7 +243,8 @@ public:
 class ResourceConfig : public ImmutablePass {
   
   /// mapping allocated instences to atom
-  HWResource *ResSet[(size_t)HWResource::LastResourceType];
+  HWResource *ResSet[(size_t)HWResource::LastResourceType -
+                     (size_t)HWResource::FirstResourceType + 1];
 
   void ParseConfigFile(const std::string &Filename);
 
@@ -241,13 +262,18 @@ public:
   void print(raw_ostream &OS) const;
 
   HWResource *getResource(enum HWResource::ResTypes T) const {
-    unsigned idx = (unsigned)T - 1;
+    unsigned idx = (unsigned)T - (size_t)HWResource::FirstResourceType;
+    assert(ResSet[idx] && "Bad resource!");
     return ResSet[idx];
   }
 
+  HWFUnit allocaFU(enum HWResource::ResTypes T, unsigned UnitID = 0) {
+    return getResource(T)->allocaFU(UnitID);
+  }
 
-  HWResource *operator[] (enum HWResource::ResTypes T) const {
-    return getResource(T);
+  HWFUnit allocaTrivialFU(unsigned latency) {
+    // We have infinite function unit.
+    return HWFUnit(HWResource::Trivial, ~0 & 0xfff, latency, 0);
   }
 
   typedef HWResource *const * iterator;

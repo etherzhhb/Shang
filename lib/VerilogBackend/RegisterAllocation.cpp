@@ -39,6 +39,13 @@ struct RegAllocation : public FunctionPass {
 bool RegAllocation::runOnFunction(Function &F) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
 
+  // Allocate register for argument.
+  //for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end();
+  //    I != E; ++I) {
+  //  Argument *Arg = I;
+  //  HI.getRegForValue(Arg, 1, 1);
+  //}
+
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
     runOnBasicBlock(*I, HI);
 
@@ -48,6 +55,19 @@ bool RegAllocation::runOnFunction(Function &F) {
 bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
   FSMState &State = HI.getStateFor(BB);
   HWAVRoot *EntryRoot = &State.getEntryRoot();
+
+  // Emit the operand of PHINode.
+  for (BasicBlock::iterator II = BB.begin(), IE = BB.getFirstNonPHI();
+      II != IE; ++II) {
+    PHINode *PN = cast<PHINode>(II);
+    for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
+      Value *IV = PN->getIncomingValue(i);
+      if (isa<Instruction>(IV) && !HI.getLiveOutRegAtTerm(IV))
+        HI.updateLiveOutReg(IV, HI.getRegForValue(IV,
+                                                  EntryRoot->getSlot(),
+                                                  EntryRoot->getSlot()));
+    }
+  }
 
   SmallVector<HWAtom*, 32> Worklist(usetree_iterator::begin(EntryRoot),
                                     usetree_iterator::end(EntryRoot));
@@ -62,20 +82,44 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
-    for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i)
-      if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i)))
-        if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
+    for (unsigned i = 0, e = A->getInstNumOps(); i != e; ++i) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i))) {
+        Value *V = A->getIOperand(i);
+        if (VD->isImport()) {
+          // Insert the import node.
+          HWAVRoot *Root = cast<HWAVRoot>(VD->getDagSrc());
+          HWReg *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
+          // Update the live out value.
+          if (!HI.getLiveOutRegAtTerm(V))
+            HI.updateLiveOutReg(V, R);
+
+          HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
+          A->setDep(i, ImpStg);
+        } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
           if (DI->getLatency() != 0) {
-            Value &V = DI->getValue();
             DEBUG(DI->print(dbgs()));
             DEBUG(dbgs() << " Registered\n");
-            HWADrvReg *DR = HI.getDrvReg(DI, HI.getRegNumForLiveVal(V));
-
-            A->setDep(i, DR);
+            // Store the value to register.
+            HWReg *R = HI.getRegForValue(V, DI->getFinSlot(), A->getSlot());
+            HWAWrStg *WR = HI.getWrStg(DI, R);
+            A->setDep(i, WR);
+          }
+        } else if (HWAWrStg *WrStg = dyn_cast<HWAWrStg>(VD->getDagSrc())) {
+          // Move the value out of the Function unit register.
+          assert(WrStg->getReg()->isFuReg()
+                 && "Only Expect function unit register!");
+          if (WrStg->getReg()->getEndSlot() < A->getSlot()) {
+            DEBUG(WrStg->print(dbgs()));
+            DEBUG(dbgs() << " extended\n");
+            HWReg *R = HI.getRegForValue(V, WrStg->getFinSlot(), A->getSlot());
+            HWAWrStg *WR = HI.getWrStg(WrStg, R);
+            A->setDep(i, WR);
           }
         }
+      }
+    }
   }
-
+  
   return false;
 }
 

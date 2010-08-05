@@ -38,8 +38,13 @@ class ForceDirectedInfo : public FunctionPass {
 
   // The Key of DG, { step, resource type }
   typedef std::map<unsigned, double> DGType;
-
   DGType DGraph;
+
+  // Resource usage.
+  typedef std::map<unsigned, unsigned> ResUsageTabType;
+  ResUsageTabType ResUsage;
+
+  unsigned computeStepKey(unsigned step, HWFUnitID FUID) const;
 
   std::map<const HWAPostBind*, double> AvgDG;
 
@@ -50,17 +55,28 @@ public:
   /// @name TimeFrame
   //{
   void buildASAPStep(const HWAtom *Root, unsigned step);
-  unsigned getASAPStep(const HWAOpInst *A) const {
+  void buildASAPStep(FSMState *State) {
+    const HWAtom *Root = &State->getEntryRoot();
+    buildASAPStep(Root, getASAPStep(Root));
+  }
+  unsigned getASAPStep(const HWAtom *A) const {
+    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+          && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-
   void buildALAPStep(const HWAtom *Root, unsigned step);
-  unsigned getALAPStep(const HWAOpInst *A) const { 
+  void buildALAPStep(FSMState *State) {
+    const HWAtom *Root = &State->getExitRoot();
+    buildALAPStep(Root, getALAPStep(Root));
+  }
+  unsigned getALAPStep(const HWAtom *A) const {
+    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+          && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }
 
-  unsigned getTimeFrame(const HWAOpInst *A) const {
+  unsigned getTimeFrame(const HWAtom *A) const {
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 
@@ -76,10 +92,16 @@ public:
   /// @name Distribution Graphs
   //{
   void buildDGraph(FSMState *State);
-  double getDGraphAt(unsigned step, enum HWResource::ResTypes ResType) const;
-  void accDGraphAt(unsigned step, enum HWResource::ResTypes ResType, double d);
+  double getDGraphAt(unsigned step, HWFUnitID FUID) const;
+  void accDGraphAt(unsigned step, HWFUnitID FUID, double d);
   void printDG(FSMState *State, raw_ostream &OS) const ;
   void dumpDG(FSMState *State) const ;
+  //}
+
+  /// @name Resource usage table
+  //{
+  /// @brief If the usage of given kind of FU not exceed the maximum available number.
+  bool isFUAvailalbe(unsigned step, HWFUnit FU) const;
   //}
 
   /// @name Force computation
@@ -100,7 +122,9 @@ public:
   //}
 
   unsigned buildFDInfo(FSMState *State, unsigned StartStep,
-                       unsigned EndStep = 0);
+                       unsigned EndStep);
+
+  void recoverFDInfo(FSMState *State);
 
   void enableModuleFD(unsigned II) { Modulo = II; }
 
