@@ -71,6 +71,9 @@ bool HWAtomInfo::runOnFunction(Function &F) {
     // preform memory dependencies analysis to add corresponding edges.
     addMemDepEdges(MemOps, *BB);
 
+    // Add SCC for loop.
+    addLoopIVSCC(BB);
+
     BBToStates[BB] = new FSMState(getEntryRoot(BB),
                                    cast<HWAPostBind>(getControlRoot()));
 
@@ -80,6 +83,32 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   DEBUG(print(dbgs(), 0));
 
   return false;
+}
+
+void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
+  Loop *L = LI->getLoopFor(BB);
+
+  // Not in any loop.
+  if (!L) return;
+  // Dirty Hack: Only support one block loop at this moment.
+  if (L->getBlocks().size() != 1) return;
+  
+  PHINode *IV = L->getCanonicalInductionVariable();
+  // And we need loop in canonical form.
+  if (!IV) return;
+  
+  // Get the induction variable increment.
+  Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
+  HWAOpInst *IVIncAtom = cast<HWAOpInst>(getAtomFor(*IVInc));
+  // And get the predicate
+  BranchInst *Br = cast<BranchInst>(BB->getTerminator());
+  ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
+  HWAOpInst *Pred = cast<HWAOpInst>(getAtomFor(*ICmp));
+
+  // The Next loop depend on the result of predicate.
+  HWMemDep *LoopDep = getMemDepEdge(Pred, getEntryRoot(BB),
+                                    HWMemDep::TrueDep, 1);
+  IVIncAtom->addDep(LoopDep);
 }
 
 void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB) {
@@ -449,8 +478,7 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
   }
 }
 
-void esyn::HWAtomInfo::addPhiDelays(BasicBlock &BB,
-                                    SmallVectorImpl<HWEdge*> &Deps) {
+void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
     BasicBlock *SuccBB = *SI;
     for (BasicBlock::iterator II = SuccBB->begin(),
@@ -464,7 +492,8 @@ void esyn::HWAtomInfo::addPhiDelays(BasicBlock &BB,
       // We do not need to delay if the value not define in the current BB.
       if (Inst->getParent() != &BB)
         continue;
-      // Dirty Hack: We do not need to delay if source is PHI.
+      // We do not need to delay if source is PHI, because it is ready before
+      // entering this FSMState.
       if (isa<PHINode>(Inst))
         continue;
 

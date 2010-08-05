@@ -212,6 +212,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   }
 
   void addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB);
+  void addLoopIVSCC(BasicBlock *BB);
 
   // The loop Info
   LoopInfo *LI;
