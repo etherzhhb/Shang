@@ -230,6 +230,7 @@ void FDLScheduler::FDListSchedule(unsigned StartStep) {
     else // Break the loop if we schedule successful.
       break;
   }
+  DEBUG(FDInfo->dumpTimeFrame(CurState));
 }
 
 
