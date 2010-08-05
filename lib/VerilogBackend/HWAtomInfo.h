@@ -158,9 +158,13 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return new (HWAtomAllocator) HWConst(Src, C);
   }
 
+  HWCtrlDep *getCtrlDepEdge(HWAtom *Src, bool isExport = false) {
+    return new (HWAtomAllocator) HWCtrlDep(Src, isExport);
+  }
+
   HWMemDep *getMemDepEdge(HWAOpInst *Src, HWAtom *Root, 
                           enum HWMemDep::MemDepTypes DepType,
-                          unsigned Diff); 
+                          unsigned Diff);
 
   HWAtom *getAtomFor(Value &V) const {
     AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
@@ -268,10 +272,6 @@ public:
 
   HWAWrStg *getWrStg(HWAtom *Src, HWReg *Reg);
   HWAImpStg *getImpStg(HWAtom *Src, HWReg *Reg, Value &V);
-  
-  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
-    return new (HWAtomAllocator) HWCtrlDep(Src);
-  }
 
   unsigned getTotalCycle() const {
     return totalCycle;

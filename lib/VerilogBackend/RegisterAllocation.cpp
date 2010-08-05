@@ -84,7 +84,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
-    for (unsigned i = 0, e = A->getInstNumOps(); i != e; ++i) {
+    for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i) {
       if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i))) {
         Value *V = A->getIOperand(i);
         if (VD->isImport()) {
@@ -97,6 +97,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
 
           HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
           A->setDep(i, ImpStg);
+
         } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
           // We need to register the value if the value life through
           // several cycle. Or we need to keep the value until the computation
@@ -126,6 +127,32 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     }
   }
   
+  // Emit the exported register.
+  HWAOpInst *Exit = &State.getExitRoot();
+  for (unsigned i = Exit->getInstNumOps(), e = Exit->getNumDeps(); i != e; ++i) {
+    HWCtrlDep *CD = dyn_cast<HWCtrlDep>(Exit->getDep(i));
+    if (!(CD && CD->isExport())) continue;
+
+    HWAtom *SrcAtom = CD->getDagSrc();
+
+    // If we already emit the register, just skip it.
+    if (HWAWrStg *WR = dyn_cast<HWAWrStg>(SrcAtom))
+      if (!WR->getReg()->isFuReg())
+        continue;
+
+    Value *V = &SrcAtom->getValue();
+
+    DEBUG(SrcAtom->print(dbgs()));
+    DEBUG(dbgs() << " Registered for export.\n");
+    // Store the value to register.
+    HWReg *R = HI.getRegForValue(V, SrcAtom->getFinSlot(), Exit->getSlot());
+    HWAWrStg *WR = HI.getWrStg(SrcAtom, R);
+
+    if (!State.getLiveOutRegAtTerm(V))
+      State.updateLiveOutReg(V, R);
+    Exit->setDep(i, WR);
+  }
+
   return false;
 }
 

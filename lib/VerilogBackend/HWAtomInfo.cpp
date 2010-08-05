@@ -154,9 +154,15 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   for (usetree_iterator TI = Root->begin(), TE = Root->end();
       TI != TE; ++TI)
     if (*TI != Pred && TI->use_empty()) {
-      Deps.push_back(getCtrlDepEdge(*TI));
+      HWAtom *A = *TI;
+      bool isExport = false;
+      if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
+        isExport = !OI->getInst<Instruction>().getType()->isVoidTy();
+      }
+      // We must wait until all atom finish.
+      Deps.push_back(getCtrlDepEdge(A, isExport));
     }
-  
+
   // Create delay atom for phi node.
   addPhiDelays(*I.getParent(), Deps);
 
@@ -403,7 +409,7 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWADelay(ID.Intern(HWAtomAllocator),
-      getCtrlDepEdge(Src), Delay);
+      getCtrlDepEdge(Src, false), Delay);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;

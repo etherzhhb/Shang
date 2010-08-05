@@ -39,12 +39,6 @@ NoFUBinding("disable-resource-binding",
          cl::desc("vbe - Do not bind PostBind atom to Function Unit"),
          cl::Hidden, cl::init(false));
 
-
-static cl::opt<bool>
-NoFURegBinding("disable-fu-register-binding",
-          cl::desc("vbe - Do not register to Function Unit"),
-          cl::Hidden, cl::init(false));
-
 namespace esyn {
 template<class DataTy>
 class CompGraphNode {
@@ -454,9 +448,8 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   buildWOCGForRes();
   // 2. Find the longest path.
   buildLongestPostBindPath();
-  if (!NoFURegBinding)  
-    // 3. Bind a register to the function unit.
-    bindFunUnitReg();
+  // 3. Bind a register to the function unit.
+  bindFunUnitReg();
 
 
   DEBUG(
@@ -506,23 +499,19 @@ void CompPathBinding::bindFunUnitReg() {
         HWAtom *Use = WorkStack.back();
         WorkStack.pop_back();
 
-        // FIXME: How should us handle delay atom?
-        if (Use == WR || isa<HWADelay>(Use))
+        // Do not make self loop.
+        if (Use == WR) continue;
+        // Replace the delay atom.
+        if (HWADelay *Delay = dyn_cast<HWADelay>(Use)) {
+          Delay->replaceAllUseBy(WR);
+          A->removeFromList(Delay);
           continue;
+        }
 
-        FURegRead = true;
         DEBUG(dbgs() << "Replace Use: ");
         DEBUG(Use->dump());
         // Read the result for From this Register.
         Use->setDep(Use->getDepIt(A), WR);
-      }
-
-      // Move the value to a register if this value live out the BB,
-      // but not ready by atoms in this BB.
-      if (!FURegRead && !LV->isKilledInBlock(Inst, Inst->getParent())) {
-        HWReg *R = HI->getRegForValue(Inst, WR->getFinSlot(), LastSlot);
-        HWAWrStg *ExportReg = HI->getWrStg(WR, R);
-        Exit.addDep(HI->getCtrlDepEdge(ExportReg));
       }
     }
   }

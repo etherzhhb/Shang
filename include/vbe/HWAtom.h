@@ -171,8 +171,12 @@ public:
 };
 
 class HWCtrlDep : public HWEdge {
+  bool IsExport;
 public:
-  HWCtrlDep(HWAtom *Src) : HWEdge(edgeCtrlDep, Src, 0) {}
+  HWCtrlDep(HWAtom *Src, bool isExport)
+    : HWEdge(edgeCtrlDep, Src, 0), IsExport(isExport) {}
+
+  bool isExport() const { return IsExport; }
 
   void print(raw_ostream &OS) const;
 
