@@ -98,7 +98,11 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
           HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
           A->setDep(i, ImpStg);
         } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
-          if (DI->getLatency() != 0) {
+          // We need to register the value if the value life through
+          // several cycle. Or we need to keep the value until the computation
+          // finish.
+          if (DI->getFinSlot() != A->getSlot() || A->getLatency() > 0) {
+            assert(DI->getFinSlot() <= A->getSlot() && "Bad Schedule!");
             DEBUG(DI->print(dbgs()));
             DEBUG(dbgs() << " Registered\n");
             // Store the value to register.
