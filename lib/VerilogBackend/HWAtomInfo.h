@@ -166,12 +166,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
-  HWAtom *getAtomFor(Value &V) const {
-    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
-    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
-    return  At->second;    
-  }
-
   HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
     if (isa<Argument>(V))
@@ -269,6 +263,12 @@ public:
     StateMapType::const_iterator At = BBToStates.find(&BB);
     assert(At != BBToStates.end() && "Can not get the State!");
     return  *(At->second);
+  }
+
+  HWAtom *getAtomFor(Value &V) const {
+    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
+    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
+    return  At->second;    
   }
 
   HWAWrStg *getWrStg(HWAtom *Src, HWReg *Reg);

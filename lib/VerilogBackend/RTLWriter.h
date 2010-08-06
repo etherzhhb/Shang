@@ -64,6 +64,8 @@ class RTLWriter : public FunctionPass {
 
   ResourceMapType ResourceMap;
 
+  std::string getSlotEnable(BasicBlock &BB, unsigned Slot);
+
   void emitFunctionSignature(Function &F);
   void emitCommonPort();
   void emitBasicBlock(BasicBlock &BB);
@@ -130,6 +132,8 @@ class RTLWriter : public FunctionPass {
   void emitNextFSMState(raw_ostream &ss, BasicBlock &BB);
   void emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
                           const std::string &NewState);
+  std::string computeNextMircoStateEnable(FSMState &State);
+
   /// @name InstVisitor interface
   //{
   void visitReturnInst(HWAPostBind &A);

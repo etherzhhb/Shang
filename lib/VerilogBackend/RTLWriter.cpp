@@ -186,32 +186,35 @@ void RTLWriter::emitFunctionSignature(Function &F) {
 void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   FSMState &State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
-  
+
+  HWAVRoot &Entry = State.getEntryRoot();
+  HWAOpInst &Exit = State.getExitRoot();
+  unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
+  unsigned totalSlot = State.getTotalSlot();
+
   vlang->comment(getStateDeclBuffer()) << "State for " << StateName << '\n';
   vlang->param(getStateDeclBuffer(), StateName, TotalFSMStatesBit,
                ++CurFSMStateNum);
 
   vlang->declSignal(getSignalDeclBuffer(),
-                    StateName + "_enable", State.getTotalSlot() + 1, 0);
+                    StateName + "_enable", totalSlot + 1, 0);
   vlang->resetRegister(getResetBlockBuffer(),
-                    StateName + "_enable", State.getTotalSlot() + 1, 0);
+                    StateName + "_enable", totalSlot + 1, 0);
   //
   FSMState::ScheduleMapType Atoms;
   typedef FSMState::ScheduleMapType::iterator cycle_iterator;
 
   State.getScheduleMap(Atoms);
-  HWAVRoot &Entry = State.getEntryRoot();
-  HWAOpInst &Exit = State.getExitRoot();
 
-  unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
   //
-  vlang->comment(ControlBlock.indent(6)) << StateName << '\n';
+  vlang->comment(ControlBlock.indent(6)) << StateName 
+    << " Total Slot: " << State.getTotalSlot()
+    << " II: " << State.getII() <<  '\n';
   // Case begin
   vlang->matchCase(ControlBlock.indent(6), StateName);
 
   for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-    vlang->ifBegin(ControlBlock.indent(8),
-                    StateName + "_enable[" + utostr(i - StartSlot) + "]");
+    vlang->ifBegin(ControlBlock.indent(8), getSlotEnable(BB, i));
     // Emit all atoms at cycle i
 
     vlang->comment(DataPath.indent(2)) << "at cycle: " << i << '\n';
@@ -221,9 +224,24 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
     vlang->end(ControlBlock.indent(8));
   }// end for
 
-  emitNextMicroState(ControlBlock.indent(8), BB, "1'b0");
+  emitNextMicroState(ControlBlock.indent(8), BB,
+                     computeNextMircoStateEnable(State));
   // Case end
   vlang->end(ControlBlock.indent(6));
+}
+
+
+std::string RTLWriter::getSlotEnable(BasicBlock &BB, unsigned Slot) {
+  FSMState &State = HI->getStateFor(BB);
+  std::string StateName = vlang->GetValueName(&BB);
+  raw_string_ostream ss(StateName);
+  ss << "_enable";
+
+  if (State.getTotalSlot() == 0)
+    return ss.str();
+
+  ss << "[" << (Slot - State.getEntryRoot().getSlot()) << "]";
+  return ss.str();
 }
 
 void RTLWriter::emitCommonPort() {
@@ -579,9 +597,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
 
     vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
-    SelEval << vlang->GetValueName(BB) << "_enable["
-            << (A->getSlot() - A->getParent()->getEntryRoot().getSlot())
-            << ']';
+    SelEval << getSlotEnable(*BB, A->getSlot());
 
     emitResourceOp<ResType>(A);
   
@@ -640,16 +656,45 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
   unsigned totalSlot = State.getTotalSlot();
   std::string StateName = vlang->GetValueName(&BB);
   ss << StateName << "_enable <= ";
-  if (totalSlot > 1)
-    ss << "{" << StateName << "_enable[" <<  totalSlot - 1 << ": 0],";
+  if (totalSlot > 0)
+    ss << "{ " << StateName << "_enable[" <<  totalSlot - 1 << ": 0], ";
 
   ss << NewState;
 
-  if (totalSlot > 1)
-    ss << "}";
+  if (totalSlot > 0)
+    ss << " }";
 
   ss << ";\n";
 }
+
+std::string  RTLWriter::computeNextMircoStateEnable(FSMState &State) {
+  unsigned IISlot = State.getII();
+  if (IISlot == 0)
+    return "1'b0";
+
+  BasicBlock *BB = State.getBasicBlock();
+  IISlot += State.getEntryRoot().getSlot();
+  std::string MircoState = getSlotEnable(*BB, IISlot);
+
+  BranchInst *Br = cast<BranchInst>(BB->getTerminator());
+  ICmpInst *Icmp = cast<ICmpInst>(Br->getCondition());
+  HWAOpInst *Pred = cast<HWAOpInst>(HI->getAtomFor(*Icmp));
+
+
+  assert(isa<HWAPostBind>(Pred) && "Prebind predicate not support yet!");
+  if (Pred->getFinSlot() == IISlot)
+    return MircoState + " & " + getAsOperand(Pred);
+  
+  if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
+    return MircoState + " & " +
+           getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
+
+      
+  HWReg *PredReg = HI->lookupRegForValue(&Pred->getValue());
+  return MircoState + " & " + getAsOperand(PredReg);
+
+}
+
 
 //===----------------------------------------------------------------------===//
 // Emit instructions
@@ -756,15 +801,17 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
     vlang->ifBegin(ControlBlock.indent(10), getAsOperand(Cnd));
     emitPHICopiesForSucc(CurBB, NextBB0, 2);
 
-    emitNextFSMState(ControlBlock.indent(10), NextBB0);
-    if (&NextBB0 != &CurBB)
-      emitNextMicroState(ControlBlock.indent(10), NextBB0, "1'b1");
+    if (&NextBB0 != &CurBB) {
+      emitNextFSMState(ControlBlock.indent(12), NextBB0);
+      emitNextMicroState(ControlBlock.indent(12), NextBB0, "1'b1");
+    }
 
     vlang->ifElse(ControlBlock.indent(10));
     emitPHICopiesForSucc(CurBB, NextBB1, 2);
-    emitNextFSMState(ControlBlock.indent(10), NextBB1);
-    if (&NextBB1 != &CurBB)
-      emitNextMicroState(ControlBlock.indent(10), NextBB1, "1'b1");
+    if (&NextBB1 != &CurBB) {
+      emitNextFSMState(ControlBlock.indent(12), NextBB1);
+      emitNextMicroState(ControlBlock.indent(12), NextBB1, "1'b1");
+    }
 
     vlang->end(ControlBlock.indent(10));
   } else {
@@ -777,7 +824,7 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
 
 void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
                                      unsigned ind) {
-  vlang->comment(ControlBlock.indent(8 + ind)) << "Phi Node:\n";
+  vlang->comment(ControlBlock.indent(10 + ind)) << "Phi Node:\n";
   Instruction *NotPhi = Succ.getFirstNonPHI();
   BasicBlock::iterator I = Succ.begin();
   while (&*I != NotPhi) {
@@ -785,7 +832,7 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     HWReg *PR = HI->lookupRegForValue(PN);
 
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
-    ControlBlock.indent(8 + ind) << getAsOperand(PR)
+    ControlBlock.indent(10 + ind) << getAsOperand(PR)
                                  << "/*" << vlang->GetValueName(PN) << "*/";
     if (Constant *C = dyn_cast<Constant>(IV))
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      

@@ -63,7 +63,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *IV = PN->getIncomingValue(i);
       FSMState &IncomingStage = HI.getStateFor(*PN->getIncomingBlock(i));
-      if (isa<Instruction>(IV) && !IncomingStage.getLiveOutRegAtTerm(IV)) {
+      if ((isa<Instruction>(IV) || isa<Argument>(IV))
+          && !IncomingStage.getLiveOutRegAtTerm(IV)) {
         HWReg *IR = HI.getRegForValue(IV, EntryRoot->getSlot(),
                                       EntryRoot->getSlot());
         IncomingStage.updateLiveOutReg(IV, IR);

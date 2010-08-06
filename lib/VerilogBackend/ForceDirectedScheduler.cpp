@@ -168,6 +168,8 @@ void FDLScheduler::FDModuloSchedule(unsigned StartStep) {
     case FDLScheduler::SchedSucc:
       DEBUG(FDInfo->dumpTimeFrame(CurState));
       DEBUG(FDInfo->dumpDG(CurState));
+      // Set up the initial interval.
+      CurState->setII(MII);
       return;
     case FDLScheduler::SchedFailCricitalPath:
       ++EndStep;
@@ -177,8 +179,6 @@ void FDLScheduler::FDModuloSchedule(unsigned StartStep) {
       continue;
     }
   }
-  // Set up the initial interval.
-  CurState->setII(MII);
 }
 
 FDLScheduler::SchedResult FDLScheduler::scheduleAtII(unsigned II) {
