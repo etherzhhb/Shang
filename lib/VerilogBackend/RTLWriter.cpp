@@ -45,17 +45,9 @@ bool RTLWriter::runOnFunction(Function &F) {
 
   vlang->declSignal(getSignalDeclBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
   vlang->resetRegister(getResetBlockBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
-  vlang->declSignal(getSignalDeclBuffer(), "CurFSMState", TotalFSMStatesBit, 0);
-  vlang->resetRegister(getResetBlockBuffer(), "CurFSMState", TotalFSMStatesBit, 0);
-
-  TotalStatesBits = HI->getTotalCycleBitWidth();
-  vlang->declSignal(getSignalDeclBuffer(), "GlobalState", TotalStatesBits, 0);
-  vlang->resetRegister(getResetBlockBuffer(), "GlobalState", TotalStatesBits, 0);
   
   // Idle state
   vlang->param(getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  vlang->param(getStateDeclBuffer(), "global_state_idle",
-               HI->getTotalCycleBitWidth(), 0);
   vlang->matchCase(ControlBlock.indent(6), "state_idle");
   // Idle state is always ready.
   ControlBlock.indent(8) << "fin <= 1'h0;\n";
@@ -70,7 +62,6 @@ bool RTLWriter::runOnFunction(Function &F) {
   //
   vlang->ifElse(ControlBlock.indent(8));
   ControlBlock.indent(10) << "NextFSMState <= state_idle;\n";
-  ControlBlock.indent(10) << "GlobalState <= global_state_idle;\n";
   vlang->end(ControlBlock.indent(8));
   vlang->end(ControlBlock.indent(6));
 
@@ -118,7 +109,6 @@ bool RTLWriter::runOnFunction(Function &F) {
   Out << SeqCompute.str();
 
   vlang->comment(Out.indent(6)) << "FSM\n";
-  Out.indent(6) << "CurFSMState <= NextFSMState;\n";
   vlang->switchCase(Out.indent(6), "NextFSMState");
   Out << ControlBlock.str();
   vlang->endSwitch(Out.indent(6));
@@ -228,11 +218,6 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
     for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
         CI != CE; ++CI)
       emitAtom(CI->second);
-    // Emit global state.
-    vlang->param(getStateDeclBuffer(),
-                 "global_" + StateName + utostr(i), TotalStatesBits, i);
-    ControlBlock.indent(10) << "GlobalState <= global_" << StateName << i
-                            << '\n';
     vlang->end(ControlBlock.indent(8));
   }// end for
 
@@ -439,6 +424,11 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
   HWAPreBind *FirstAtom = Atoms[0];
   HWFUnitID FUID = FirstAtom->getFunUnitID();
   unsigned ResourceId = FUID.getUnitNum();
+  // Dirty Hack: Resource only share inside bb at this moment.
+  FSMState *State = FirstAtom->getParent();
+  BasicBlock *BB = State->getBasicBlock();
+  unsigned SlotWidth = State->getTotalSlot() + 1;
+  unsigned StartSlot = State->getEntryRoot().getSlot();
 
   // FIXME: Do mix difference type in a function unit.
   unsigned MaxBitWidth = vlang->getBitWidth(FirstAtom->getValue());
@@ -468,7 +458,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
   vlang->alwaysEnd(DataPath, 2);
 
   DataPath.indent(2) << "always @(*)\n";
-  vlang->switchCase(DataPath.indent(4), "GlobalState");
+  vlang->switchCase(DataPath.indent(4), vlang->GetValueName(BB) + "_enable");
   // Emit all resource operation
   for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
     HWAPreBind *A = *I;
@@ -476,7 +466,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 
     BasicBlock *BB = Inst->getParent();
     vlang->matchCase(DataPath.indent(4),
-                     vlang->GetValueName(BB) + utostr(A->getSlot()));
+      utostr(SlotWidth) + "'h" + utohexstr(1 << (A->getSlot() - StartSlot)));
     vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
     DataPath.indent(6) << Mode;
@@ -519,6 +509,13 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
 }
 
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
+  HWAPreBind *FirstAtom = Atoms[0];
+  // Dirty Hack: Resource only share inside bb at this moment.
+  FSMState *State = FirstAtom->getParent();
+  BasicBlock *BB = State->getBasicBlock();
+  unsigned SlotWidth = State->getTotalSlot() + 1;
+  unsigned StartSlot = State->getEntryRoot().getSlot();
+
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
   unsigned ResourceId = Atoms[0]->getUnitNum();
@@ -538,13 +535,13 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
 
   // Emit all resource operation
   DataPath.indent(2) << "always @(*)\n";
-  vlang->switchCase(DataPath.indent(4), "GlobalState");
+  vlang->switchCase(DataPath.indent(4), vlang->GetValueName(BB) + "_enable");
   for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
     HWAPreBind *A = *I;
     Instruction *Inst = &(A->getInst<Instruction>());
     BasicBlock *BB = Inst->getParent();
     vlang->matchCase(DataPath.indent(4),
-                     vlang->GetValueName(BB) + utostr(A->getSlot()));
+      utostr(SlotWidth) + "'h" + utohexstr(1 << (A->getSlot() - StartSlot)));
     vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
     DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";

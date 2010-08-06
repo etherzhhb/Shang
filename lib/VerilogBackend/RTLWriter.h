@@ -56,7 +56,7 @@ class RTLWriter : public FunctionPass {
   raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
     ControlBlock, ResetBlock, SeqCompute;
 
-  unsigned TotalFSMStatesBit, CurFSMStateNum, TotalStatesBits;
+  unsigned TotalFSMStatesBit, CurFSMStateNum;
 
   // Mapping used resouces to the using atoms
   typedef std::vector<HWAPreBind*> HWAPreBindVecTy;
@@ -210,7 +210,8 @@ public:
     ControlBlock(*(new std::string())),
     ResetBlock(*(new std::string())),
     SeqCompute(*(new std::string())),
-    TotalFSMStatesBit(0), CurFSMStateNum(0), TotalStatesBits(0) {}
+    TotalFSMStatesBit(0), CurFSMStateNum(0) {
+  }
   ~RTLWriter();
 
   bool runOnFunction(Function &F);
