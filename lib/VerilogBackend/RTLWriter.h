@@ -51,7 +51,7 @@ class RTLWriter : public FunctionPass {
   TargetData *TD;
   VLang *vlang;
   HWAtomInfo *HI;
-
+  ResourceConfig *RC;
   // Buffers
   raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
     ControlBlock, ResetBlock, SeqCompute;
@@ -71,10 +71,19 @@ class RTLWriter : public FunctionPass {
   // Resource
   void emitResources();
 
-  void emitMemBus(HWMemBus &MemBus, HWAPreBindVecTy &Atoms);
+  template<class ResType>
+  void emitResource(HWAPreBindVecTy &Atoms);
+
+  template<class ResType>
+  void emitResourceDecl(HWAPreBindVecTy &Atoms);
+
+  template<class ResType>
+  void emitResourceOp(HWAPreBind *A);
+
+  template<class ResType>
+  void emitResourceDefaultOp(HWFUnit FU);
   void opMemBus(HWAPreBind *PreBind);
 
-  void emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms);
   void opAddSub(HWAPreBind *PreBind);
 
 
@@ -202,7 +211,7 @@ public:
   //{
   static char ID;
   explicit RTLWriter(raw_ostream &O)
-    : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0),
+    : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0), RC(0),
     ModDecl(*(new std::string())),
     StateDecl(*(new std::string())),
     SignalDecl(*(new std::string())),

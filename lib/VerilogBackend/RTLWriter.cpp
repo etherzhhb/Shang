@@ -398,29 +398,11 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   }
 }
 
-void RTLWriter::emitResources() {
-  ResourceConfig &RC = getAnalysis<ResourceConfig>();
-
-  for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
-      I != E; ++I) {
-    HWResource &Res = *(RC.getResource(I->first.getResType()));
-    switch (Res.getResourceType()) {
-    case HWResource::MemoryBus:
-      emitMemBus(cast<HWMemBus>(Res), I->second);
-      break;
-    case HWResource::AddSub:
-      emitAddSub(cast<HWAddSub>(Res), I->second);
-      break;
-    default:
-      break;
-    }
-  }
-}
-
 void RTLWriter::opAddSub(HWAPreBind *PreBind) {
 }
 
-void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
+template<>
+void RTLWriter::emitResourceDecl<HWAddSub>(HWAPreBindVecTy &Atoms) {
   HWAPreBind *FirstAtom = Atoms[0];
   HWFUnitID FUID = FirstAtom->getFunUnitID();
   unsigned ResourceId = FUID.getUnitNum();
@@ -456,43 +438,182 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
   DataPath           << "(" << OpA << " + " << OpB << ") : ";
   DataPath           << "(" << OpA << " - " << OpB << ");\n";
   vlang->alwaysEnd(DataPath, 2);
+}
 
-  DataPath.indent(2) << "always @(*)\n";
-  vlang->switchCase(DataPath.indent(4), vlang->GetValueName(BB) + "_enable");
-  // Emit all resource operation
-  for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
-    HWAPreBind *A = *I;
-    Instruction *Inst = &(A->getInst<Instruction>());
 
-    BasicBlock *BB = Inst->getParent();
-    vlang->matchCase(DataPath.indent(4),
-      utostr(SlotWidth) + "'h" + utohexstr(1 << (A->getSlot() - StartSlot)));
-    vlang->comment(DataPath.indent(6)) << *Inst << '\n';
+template<>
+void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
+  unsigned ResourceId = A->getUnitNum();
+  std::string OpA = "addsub_a" + utostr(ResourceId);
+  std::string OpB = "addsub_b" + utostr(ResourceId);
+  std::string Mode = "addsub_mode" + utostr(ResourceId);
+  std::string Res = getFURegisterName(A->getFunUnitID());
 
-    DataPath.indent(6) << Mode;
-    if (Inst->getOpcode() == Instruction::Sub)
-      DataPath << " <= 1'b0;\n";
-    else
-      DataPath << " <= 1'b1;\n";
+  Instruction *Inst = &(A->getInst<Instruction>());
+  DataPath.indent(6) << Mode;
+  if (Inst->getOpcode() == Instruction::Sub)
+    DataPath << " <= 1'b0;\n";
+  else
+    DataPath << " <= 1'b1;\n";
 
-    DataPath.indent(6) <<  OpA << " <= "
-      << getAsOperand(A->getValDep(0)) << ";\n";
-    DataPath.indent(6) <<  OpB << " <= "
-      << getAsOperand(A->getValDep(1)) << ";\n";
+  DataPath.indent(6) <<  OpA << " <= "
+    << getAsOperand(A->getValDep(0)) << ";\n";
+  DataPath.indent(6) <<  OpB << " <= "
+    << getAsOperand(A->getValDep(1)) << ";\n";
+}
 
-    // Else for other atoms
-    vlang->end(DataPath.indent(4));
-  }
-  DataPath.indent(4) << "default: begin\n";
-  // Else for Resource is idle
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit FU) {
+  unsigned ResourceId = FU.getUnitNum();
+  std::string OpA = "addsub_a" + utostr(ResourceId);
+  std::string OpB = "addsub_b" + utostr(ResourceId);
+  std::string Mode = "addsub_mode" + utostr(ResourceId);
+  // FIXME: Bitwidth is not correct!
   DataPath.indent(6) << OpA << " <= "
-    << vlang->printConstantInt(0, MaxBitWidth, false) << ";\n";
+    << vlang->printConstantInt(0, 64, false) << ";\n";
   DataPath.indent(6) << OpB << " <= "
-    << vlang->printConstantInt(0, MaxBitWidth, false) << ";\n";
+    << vlang->printConstantInt(0, 64, false) << ";\n";
   DataPath.indent(6) << Mode << " <= 1'b0;\n";
 
   vlang->end(DataPath.indent(4));
+}
+
+
+template<>
+void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
+  HWMemBus *MemBus = cast<HWMemBus>(RC->getResource(HWResource::MemoryBus));
+  HWAPreBind *FirstAtom = Atoms[0];
+  // Dirty Hack: Resource only share inside bb at this moment.
+  FSMState *State = FirstAtom->getParent();
+  BasicBlock *BB = State->getBasicBlock();
+  unsigned SlotWidth = State->getTotalSlot() + 1;
+  unsigned StartSlot = State->getEntryRoot().getSlot();
+
+  unsigned DataWidth = MemBus->getDataWidth(),
+           AddrWidth = MemBus->getAddrWidth();
+  unsigned ResourceId = FirstAtom->getUnitNum();
+
+  // Emit the ports;
+  ModDecl << '\n';
+  vlang->comment(getModDeclBuffer()) << "Memory bus " << ResourceId << '\n';
+  getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
+    << ResourceId <<",\n";
+  getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
+    << ResourceId << ",\n";
+
+  getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
+    << ResourceId << ",\n";
+
+  getModDeclBuffer() << "output reg membus_mode" << ResourceId << ",\n";
+
+}
+
+template<>
+void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
+  HWMemBus *MemBus = cast<HWMemBus>(RC->getResource(HWResource::MemoryBus));
+  unsigned DataWidth = MemBus->getDataWidth(),
+           AddrWidth = MemBus->getAddrWidth();
+
+  unsigned ResourceId = A->getUnitNum();
+  Instruction *Inst = &(A->getInst<Instruction>());
+  DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
+
+  // Emit the operation
+  if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
+    DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
+      << ";\n";
+    DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+    DataPath.indent(6) << "membus_in" << ResourceId
+      << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+  } else { // It must be a store
+    DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
+      << ";\n";
+    DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b1;\n";
+    DataPath.indent(6) << "membus_in" << ResourceId
+      << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
+  }
+}
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit FU) {
+  HWMemBus *MemBus = cast<HWMemBus>(RC->getResource(HWResource::MemoryBus));
+  unsigned DataWidth = MemBus->getDataWidth(),
+           AddrWidth = MemBus->getAddrWidth();
+
+  unsigned ResourceId = FU.getUnitNum();
+
+  DataPath.indent(6) << "membus_addr" << ResourceId
+    << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
+  DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_in" << ResourceId
+    << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+}
+
+template<class ResType>
+void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
+  HWAPreBind *FirstAtom = Atoms[0];
+  unsigned FUNum = FirstAtom->getUnitNum();
+
+  std::string SelName = ResType::getResourceName() + utostr(FUNum) + "Mux";
+  unsigned SelBitWidth = Atoms.size();
+  vlang->declSignal(getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
+
+  emitResourceDecl<ResType>(Atoms);
+  DataPath.indent(2) << "always @(*)\n";
+
+  unsigned AtomCounter = 0;
+  vlang->switchCase(DataPath.indent(4), SelName);
+  raw_string_ostream SelEval(SelName);
+  SelEval << " = { ";
+
+  // Emit all resource operation
+  for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end();
+      I != E; ++I) {
+    HWAPreBind *A = *I;
+    Instruction *Inst = &(A->getInst<Instruction>());
+    BasicBlock *BB = Inst->getParent();
+    std::string SelCase = vlang->printConstantInt(1 << AtomCounter,
+                                                  SelBitWidth, false);
+    vlang->matchCase(DataPath.indent(4), SelCase);
+
+    vlang->comment(DataPath.indent(6)) << *Inst << '\n';
+
+    SelEval << vlang->GetValueName(BB) << "_enable["
+            << (A->getSlot() - A->getParent()->getEntryRoot().getSlot())
+            << ']';
+
+    emitResourceOp<ResType>(A);
+  
+    // Else for other atoms
+    vlang->end(DataPath.indent(4));
+    // Next atom
+    ++AtomCounter;
+    if (AtomCounter != SelBitWidth)
+      SelEval << ", ";
+  }
+  DataPath.indent(4) << "default: begin\n";
+  // Else for Resource is idle
+  emitResourceDefaultOp<ResType>(FirstAtom->getFunUnit());
   vlang->endSwitch(DataPath.indent(4));
+  //
+  DataPath.indent(4) << "assign " << SelEval.str() << " };\n";
+}
+
+void RTLWriter::emitResources() {
+  for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
+      I != E; ++I) {
+    switch (I->first.getResType()) {
+    case HWResource::MemoryBus:
+      emitResource<HWMemBus>(I->second);
+      break;
+    case HWResource::AddSub:
+      emitResource<HWAddSub>(I->second);
+      break;
+    default:
+      break;
+    }
+  }
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
@@ -506,72 +627,6 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
     DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
       << " = membus_out" << MemBusInst <<";\n";
   }
-}
-
-void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
-  HWAPreBind *FirstAtom = Atoms[0];
-  // Dirty Hack: Resource only share inside bb at this moment.
-  FSMState *State = FirstAtom->getParent();
-  BasicBlock *BB = State->getBasicBlock();
-  unsigned SlotWidth = State->getTotalSlot() + 1;
-  unsigned StartSlot = State->getEntryRoot().getSlot();
-
-  unsigned DataWidth = MemBus.getDataWidth(),
-    AddrWidth = MemBus.getAddrWidth();
-  unsigned ResourceId = Atoms[0]->getUnitNum();
-
-  // Emit the ports;
-  ModDecl << '\n';
-  vlang->comment(getModDeclBuffer()) << "Memory bus " << ResourceId << '\n';
-  getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
-                     << ResourceId <<",\n";
-  getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
-                     << ResourceId << ",\n";
-
-  getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
-                     << ResourceId << ",\n";
-
-  getModDeclBuffer() << "output reg membus_mode" << ResourceId << ",\n";
-
-  // Emit all resource operation
-  DataPath.indent(2) << "always @(*)\n";
-  vlang->switchCase(DataPath.indent(4), vlang->GetValueName(BB) + "_enable");
-  for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
-    HWAPreBind *A = *I;
-    Instruction *Inst = &(A->getInst<Instruction>());
-    BasicBlock *BB = Inst->getParent();
-    vlang->matchCase(DataPath.indent(4),
-      utostr(SlotWidth) + "'h" + utohexstr(1 << (A->getSlot() - StartSlot)));
-    vlang->comment(DataPath.indent(6)) << *Inst << '\n';
-
-    DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
-
-    // Emit the operation
-    if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
-      DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
-                << ";\n";
-      DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
-      DataPath.indent(6) << "membus_in" << ResourceId
-        << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
-    } else { // It must be a store
-      DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
-        << ";\n";
-      DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b1;\n";
-      DataPath.indent(6) << "membus_in" << ResourceId
-        << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
-    }
-    // Else for other atoms
-    vlang->end(DataPath.indent(4));
-  }
-  DataPath.indent(4) << "default: begin\n";
-  // Else for Resource is idle
-  DataPath.indent(6) << "membus_addr" << ResourceId
-    << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
-  DataPath.indent(6) << "membus_in" << ResourceId
-    << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
-  vlang->end(DataPath.indent(4));
-  vlang->endSwitch(DataPath.indent(4));
 }
 
 //===----------------------------------------------------------------------===//
