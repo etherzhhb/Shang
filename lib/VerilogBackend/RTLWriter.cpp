@@ -562,7 +562,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   emitResourceDecl<ResType>(Atoms);
   DataPath.indent(2) << "always @(*)\n";
 
-  unsigned AtomCounter = 0;
+  unsigned AtomCounter = SelBitWidth;
   vlang->switchCase(DataPath.indent(4), SelName);
   raw_string_ostream SelEval(SelName);
   SelEval << " = { ";
@@ -573,7 +573,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
     HWAPreBind *A = *I;
     Instruction *Inst = &(A->getInst<Instruction>());
     BasicBlock *BB = Inst->getParent();
-    std::string SelCase = vlang->printConstantInt(1 << AtomCounter,
+    std::string SelCase = vlang->printConstantInt(1 << (--AtomCounter),
                                                   SelBitWidth, false);
     vlang->matchCase(DataPath.indent(4), SelCase);
 
@@ -588,8 +588,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
     // Else for other atoms
     vlang->end(DataPath.indent(4));
     // Next atom
-    ++AtomCounter;
-    if (AtomCounter != SelBitWidth)
+    if (AtomCounter > 0)
       SelEval << ", ";
   }
   DataPath.indent(4) << "default: begin\n";
