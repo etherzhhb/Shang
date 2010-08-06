@@ -680,18 +680,22 @@ std::string  RTLWriter::computeNextMircoStateEnable(FSMState &State) {
   ICmpInst *Icmp = cast<ICmpInst>(Br->getCondition());
   HWAOpInst *Pred = cast<HWAOpInst>(HI->getAtomFor(*Icmp));
 
+  MircoState += " & ";
+  // Invert the pred if necessary.
+  if (Br->getSuccessor(1) == BB)
+    MircoState += "~";
 
   assert(isa<HWAPostBind>(Pred) && "Prebind predicate not support yet!");
   if (Pred->getFinSlot() == IISlot)
-    return MircoState + " & " + getAsOperand(Pred);
+    return MircoState + getAsOperand(Pred);
   
   if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
-    return MircoState + " & " +
+    return MircoState +
            getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
 
       
   HWReg *PredReg = HI->lookupRegForValue(&Pred->getValue());
-  return MircoState + " & " + getAsOperand(PredReg);
+  return MircoState + getAsOperand(PredReg);
 
 }
 
