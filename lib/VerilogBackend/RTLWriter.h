@@ -56,6 +56,8 @@ class RTLWriter : public FunctionPass {
   raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
     ControlBlock, ResetBlock, SeqCompute;
 
+  unsigned TotalFSMStatesBit, CurFSMStateNum;
+
   // Mapping used resouces to the using atoms
   typedef std::vector<HWAPreBind*> HWAPreBindVecTy;
   typedef std::map<HWFUnitID,HWAPreBindVecTy> ResourceMapType;
@@ -116,8 +118,9 @@ class RTLWriter : public FunctionPass {
     return ResetBlock.indent(6);
   }
 
-  void emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset = 0);
-
+  void emitNextFSMState(raw_ostream &ss, BasicBlock &BB);
+  void emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
+                          const std::string &NewState);
   /// @name InstVisitor interface
   //{
   void visitReturnInst(HWAPostBind &A);
@@ -206,7 +209,8 @@ public:
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     ResetBlock(*(new std::string())),
-    SeqCompute(*(new std::string())){
+    SeqCompute(*(new std::string())),
+    TotalFSMStatesBit(0), CurFSMStateNum(0) {
   }
   ~RTLWriter();
 

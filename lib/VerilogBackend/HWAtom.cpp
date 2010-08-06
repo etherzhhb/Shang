@@ -150,9 +150,9 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
     //I->addToUseList(this);
 
   PostBind.replaceAllUseBy(this);
-
   // Setup the step
   scheduledTo(PostBind.getSlot());
+  setParent(PostBind.getParent());
 }
 
 HWAtom *HWMemDep::getSCCSrc() const {
