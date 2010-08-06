@@ -45,6 +45,9 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(RC);
     // Add the language writer.
     PM.add(new VLang());
+    // Topological sort BBs in structural CFG, so we can construct a correct
+    // live interval for registers.
+    PM.add(createTopSortBBPass());
     // Memory dependencies analysis
     PM.add(new HWAtomInfo());
     PM.add(createFDLSchedulePass());

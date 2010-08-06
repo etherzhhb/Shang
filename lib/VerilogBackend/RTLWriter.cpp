@@ -40,11 +40,13 @@ bool RTLWriter::runOnFunction(Function &F) {
   HI = &getAnalysis<HWAtomInfo>();
 
   // Emit control register and idle state
-  unsigned totalStatesBits = HI->getTotalCycleBitWidth();
-  vlang->declSignal(getSignalDeclBuffer(), "NextState", totalStatesBits, 0);
-  vlang->resetRegister(getResetBlockBuffer(), "NextState", totalStatesBits, 0);
-  vlang->declSignal(getSignalDeclBuffer(), "CurState", totalStatesBits, 0);
-  vlang->resetRegister(getResetBlockBuffer(), "CurState", totalStatesBits, 0);
+  unsigned totalFSMStates = F.size() + 1;
+  TotalFSMStatesBit = Log2_32_Ceil(totalFSMStates);
+
+  vlang->declSignal(getSignalDeclBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
+  vlang->resetRegister(getResetBlockBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
+  vlang->declSignal(getSignalDeclBuffer(), "CurFSMState", TotalFSMStatesBit, 0);
+  vlang->resetRegister(getResetBlockBuffer(), "CurFSMState", TotalFSMStatesBit, 0);
   
   // Idle state
   vlang->param(getStateDeclBuffer(), "state_idle", HI->getTotalCycleBitWidth(), 0);
@@ -53,14 +55,15 @@ bool RTLWriter::runOnFunction(Function &F) {
   ControlBlock.indent(8) << "fin <= 1'h0;\n";
   vlang->ifBegin(ControlBlock.indent(8), "start");
   // The module is busy now
-  emitNextState(ControlBlock.indent(10), F.getEntryBlock());
+  emitNextFSMState(ControlBlock.indent(10), F.getEntryBlock());
+  emitNextMicroState(ControlBlock.indent(10), F.getEntryBlock(), "1'b1");
   
   // Remember the parameters
   emitFunctionSignature(F);
 
   //
   vlang->ifElse(ControlBlock.indent(8));
-  ControlBlock.indent(10) << "NextState <= state_idle;\n";
+  ControlBlock.indent(10) << "NextFSMState <= state_idle;\n";
   vlang->end(ControlBlock.indent(8));
   vlang->end(ControlBlock.indent(6));
 
@@ -108,8 +111,8 @@ bool RTLWriter::runOnFunction(Function &F) {
   Out << SeqCompute.str();
 
   vlang->comment(Out.indent(6)) << "FSM\n";
-  Out.indent(6) << "CurState <= NextState;\n";
-  vlang->switchCase(Out.indent(6), "NextState");
+  Out.indent(6) << "CurFSMState <= NextFSMState;\n";
+  vlang->switchCase(Out.indent(6), "NextFSMState");
   Out << ControlBlock.str();
   vlang->endSwitch(Out.indent(6));
   vlang->alwaysEnd(Out, 2);
@@ -187,9 +190,14 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   FSMState &State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
   
-  unsigned totalStatesBits = HI->getTotalCycleBitWidth();
   vlang->comment(getStateDeclBuffer()) << "State for " << StateName << '\n';
+  vlang->param(getStateDeclBuffer(), StateName, TotalFSMStatesBit,
+               ++CurFSMStateNum);
 
+  vlang->declSignal(getSignalDeclBuffer(),
+                    StateName + "_enable", State.getTotalSlot() + 1, 0);
+  vlang->resetRegister(getResetBlockBuffer(),
+                    StateName + "_enable", State.getTotalSlot() + 1, 0);
   //
   FSMState::ScheduleMapType Atoms;
   typedef FSMState::ScheduleMapType::iterator cycle_iterator;
@@ -201,26 +209,24 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
   //
   vlang->comment(ControlBlock.indent(6)) << StateName << '\n';
-  for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-    vlang->param(getStateDeclBuffer(),
-                 StateName + utostr(i),
-                 totalStatesBits, i);
-    // Case begin
-    vlang->matchCase(ControlBlock.indent(6), StateName + utostr(i));
+  // Case begin
+  vlang->matchCase(ControlBlock.indent(6), StateName);
 
+  for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
+    vlang->ifBegin(ControlBlock.indent(8),
+                    StateName + "_enable[" + utostr(i - StartSlot) + "]");
     // Emit all atoms at cycle i
 
     vlang->comment(DataPath.indent(2)) << "at cycle: " << i << '\n';
     for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
         CI != CE; ++CI)
       emitAtom(CI->second);
-
-    // Transfer to next state
-    if (i != EndSlot)
-      emitNextState(ControlBlock.indent(8), BB, (i - StartSlot) + 1);
-    // Case end
-    vlang->end(ControlBlock.indent(6));
+    vlang->end(ControlBlock.indent(8));
   }// end for
+
+  emitNextMicroState(ControlBlock.indent(8), BB, "1'b0");
+  // Case end
+  vlang->end(ControlBlock.indent(6));
 }
 
 void RTLWriter::emitCommonPort() {
@@ -300,28 +306,28 @@ void RTLWriter::emitAtom(HWAtom *A) {
   switch (A->getHWAtomType()) {
       case atomPreBind:
         // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << "Emit: "
+        vlang->comment(ControlBlock.indent(10)) << "Emit: "
           << A->getValue() << '\n';
         emitPreBind(cast<HWAPreBind>(A));
         break;
       case atomPostBind:
         // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(8)) << "Emit: "
+        vlang->comment(ControlBlock.indent(10)) << "Emit: "
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
       case atomWrStg:
-        vlang->comment(ControlBlock.indent(8)) << "Read:"
+        vlang->comment(ControlBlock.indent(10)) << "Read:"
           << A->getValue() << '\n';
         emitWrStg(cast<HWAWrStg>(A));
         break;
       case atomImpStg:
-        vlang->comment(ControlBlock.indent(8)) << "Import:"
+        vlang->comment(ControlBlock.indent(10)) << "Import:"
           << A->getValue() << '\n';
         emitImpStg(cast<HWAImpStg>(A));
         break;
       case atomDelay:
-        vlang->comment(ControlBlock.indent(8));
+        vlang->comment(ControlBlock.indent(10));
         A->print(ControlBlock);
         ControlBlock << '\n';
         break;
@@ -343,7 +349,7 @@ void RTLWriter::emitWrStg(HWAWrStg *DR) {
   UsedRegs.insert(R);
   
   std::string Name = getAsOperand(DR);
-  ControlBlock.indent(8) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
+  ControlBlock.indent(10) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
 }
 
 void RTLWriter::emitImpStg(HWAImpStg *DR) {
@@ -421,6 +427,11 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
   HWAPreBind *FirstAtom = Atoms[0];
   HWFUnitID FUID = FirstAtom->getFunUnitID();
   unsigned ResourceId = FUID.getUnitNum();
+  // Dirty Hack: Resource only share inside bb at this moment.
+  FSMState *State = FirstAtom->getParent();
+  BasicBlock *BB = State->getBasicBlock();
+  unsigned SlotWidth = State->getTotalSlot() + 1;
+  unsigned StartSlot = State->getEntryRoot().getSlot();
 
   // FIXME: Do mix difference type in a function unit.
   unsigned MaxBitWidth = vlang->getBitWidth(FirstAtom->getValue());
@@ -450,7 +461,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
   vlang->alwaysEnd(DataPath, 2);
 
   DataPath.indent(2) << "always @(*)\n";
-  vlang->switchCase(DataPath.indent(4), "CurState");
+  vlang->switchCase(DataPath.indent(4), vlang->GetValueName(BB) + "_enable");
   // Emit all resource operation
   for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
     HWAPreBind *A = *I;
@@ -458,7 +469,7 @@ void RTLWriter::emitAddSub(HWAddSub &AddSub, HWAPreBindVecTy &Atoms) {
 
     BasicBlock *BB = Inst->getParent();
     vlang->matchCase(DataPath.indent(4),
-      vlang->GetValueName(BB) + utostr(A->getSlot()));
+      utostr(SlotWidth) + "'h" + utohexstr(1 << (A->getSlot() - StartSlot)));
     vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
     DataPath.indent(6) << Mode;
@@ -501,6 +512,13 @@ void RTLWriter::opMemBus(HWAPreBind *PreBind) {
 }
 
 void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
+  HWAPreBind *FirstAtom = Atoms[0];
+  // Dirty Hack: Resource only share inside bb at this moment.
+  FSMState *State = FirstAtom->getParent();
+  BasicBlock *BB = State->getBasicBlock();
+  unsigned SlotWidth = State->getTotalSlot() + 1;
+  unsigned StartSlot = State->getEntryRoot().getSlot();
+
   unsigned DataWidth = MemBus.getDataWidth(),
     AddrWidth = MemBus.getAddrWidth();
   unsigned ResourceId = Atoms[0]->getUnitNum();
@@ -520,13 +538,13 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
 
   // Emit all resource operation
   DataPath.indent(2) << "always @(*)\n";
-  vlang->switchCase(DataPath.indent(4), "CurState");
+  vlang->switchCase(DataPath.indent(4), vlang->GetValueName(BB) + "_enable");
   for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end(); I != E; ++I) {
     HWAPreBind *A = *I;
     Instruction *Inst = &(A->getInst<Instruction>());
     BasicBlock *BB = Inst->getParent();
     vlang->matchCase(DataPath.indent(4),
-      vlang->GetValueName(BB) + utostr(A->getSlot()));
+      utostr(SlotWidth) + "'h" + utohexstr(1 << (A->getSlot() - StartSlot)));
     vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
     DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
@@ -560,12 +578,26 @@ void RTLWriter::emitMemBus(HWMemBus &MemBus,  HWAPreBindVecTy &Atoms) {
 }
 
 //===----------------------------------------------------------------------===//
-void RTLWriter::emitNextState(raw_ostream &ss, BasicBlock &BB, unsigned offset) {
+void RTLWriter::emitNextFSMState(raw_ostream &ss, BasicBlock &BB)
+{
+  ss << "NextFSMState <= " << vlang->GetValueName(&BB) << ";\n";
+}
+
+void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
+                                   const std::string &NewState) {
   FSMState &State = HI->getStateFor(BB);
-  unsigned stateCycle = State.getEntryRoot().getSlot() + offset;
-  assert(stateCycle <= State.getExitRoot().getSlot() 
-         && "Offest out of range!");
-  ss << "NextState <= " << vlang->GetValueName(&BB) << stateCycle << ";\n";
+  unsigned totalSlot = State.getTotalSlot();
+  std::string StateName = vlang->GetValueName(&BB);
+  ss << StateName << "_enable <= ";
+  if (totalSlot > 1)
+    ss << "{" << StateName << "_enable[" <<  totalSlot - 1 << ": 0],";
+
+  ss << NewState;
+
+  if (totalSlot > 1)
+    ss << "}";
+
+  ss << ";\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -612,13 +644,13 @@ void RTLWriter::visitExtInst(HWAPostBind &A) {
 
 void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
   // Operation finish.
-  ControlBlock.indent(8) << "fin <= 1'h1;\n";
-  ControlBlock.indent(8) << "NextState <= state_idle;\n";
+  ControlBlock.indent(10) << "fin <= 1'h1;\n";
+  ControlBlock.indent(10) << "NextFSMState <= state_idle;\n";
   // If returing a value
   ReturnInst &Ret = A.getInst<ReturnInst>();
   if (Ret.getNumOperands() != 0)
         // Emit data path
-   ControlBlock.indent(8) << "return_value" << " <= "
+   ControlBlock.indent(10) << "return_value" << " <= "
                           << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
@@ -670,17 +702,25 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
                &NextBB1 = *(I.getSuccessor(1)), 
                &CurBB = *(I.getParent());
     HWEdge *Cnd = A.getValDep(0);
-    vlang->ifBegin(ControlBlock.indent(8), getAsOperand(Cnd));
+    vlang->ifBegin(ControlBlock.indent(10), getAsOperand(Cnd));
     emitPHICopiesForSucc(CurBB, NextBB0, 2);
-    emitNextState(ControlBlock.indent(10), NextBB0, 0);
-    vlang->ifElse(ControlBlock.indent(8));
+
+    emitNextFSMState(ControlBlock.indent(10), NextBB0);
+    if (&NextBB0 != &CurBB)
+      emitNextMicroState(ControlBlock.indent(10), NextBB0, "1'b1");
+
+    vlang->ifElse(ControlBlock.indent(10));
     emitPHICopiesForSucc(CurBB, NextBB1, 2);
-    emitNextState(ControlBlock.indent(10), NextBB1, 0);
-    vlang->end(ControlBlock.indent(8));
+    emitNextFSMState(ControlBlock.indent(10), NextBB1);
+    if (&NextBB1 != &CurBB)
+      emitNextMicroState(ControlBlock.indent(10), NextBB1, "1'b1");
+
+    vlang->end(ControlBlock.indent(10));
   } else {
     BasicBlock &NextBB = *(I.getSuccessor(0)), &CurBB = *(I.getParent());
     emitPHICopiesForSucc(CurBB, NextBB);
-    emitNextState(ControlBlock.indent(8), NextBB, 0);
+    emitNextFSMState(ControlBlock.indent(10), NextBB);
+    emitNextMicroState(ControlBlock.indent(10), NextBB, "1'b1");
   }
 }
 

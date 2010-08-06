@@ -503,6 +503,7 @@ public:
     : HWAtom(ID, atomWrStg, Edge->getDagSrc()->getValue(), Edge,
     1/*The latancy of a write register operation is 1*/), Reg(reg) {
     scheduledTo(Edge->getDagSrc()->getFinSlot());
+    setParent(Edge->getDagSrc()->getParent());
   }
 
   HWReg *getReg() const { return Reg;  }
@@ -536,6 +537,7 @@ public:
     : HWAtom(ID, atomImpStg, V, Edge,
     1/*The latancy of a write register operation is 1*/), Reg(reg) {
       scheduledTo(Edge->getDagSrc()->getFinSlot());
+      setParent(Edge->getDagSrc()->getParent());
   }
 
   HWReg *getReg() const { return Reg;  }
@@ -750,6 +752,10 @@ public:
       return 0;
 
     return At->second;
+  }
+
+  unsigned getTotalSlot() const {
+    return getExitRoot().getSlot() - getEntryRoot().getSlot();
   }
 
   // II for Modulo schedule

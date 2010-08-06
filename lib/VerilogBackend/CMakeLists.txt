@@ -11,6 +11,7 @@ add_llvm_target(VerilogBackend
   RegisterAllocation.cpp
   RTLWriter.cpp
   TestbenchWriter.cpp
+  TopSortBB.cpp
   VBackend.cpp
   VLang.cpp
   )
