@@ -77,7 +77,7 @@ struct FDLScheduler : public BasicBlockPass {
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const;
+  void print(raw_ostream &O, const Module *M) const;
   //}
 };
 } //end namespace

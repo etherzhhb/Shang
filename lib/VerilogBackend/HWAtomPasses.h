@@ -35,9 +35,11 @@ Pass *createFDLSchedulePass();
 // Registers Allocation
 Pass *createRegisterAllocationPass();
 
-
 // Compatibility Path Based Binding
 Pass *createCompPathBindingPass();
+
+// Topological sort BBs in structural CFG
+Pass *createTopSortBBPass();
 
 } // end namespace
 
