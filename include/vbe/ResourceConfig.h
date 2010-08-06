@@ -218,6 +218,7 @@ public:
   }
 
   static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
+  static std::string getResourceName() { return "MemoryBus"; }
 };
 
 class HWAddSub : public HWResource {
@@ -238,6 +239,7 @@ public:
   }
 
   static HWAddSub *createFromXml(rapidxml::xml_node<char> *Node);
+  static std::string getResourceName() { return "AddSub"; }
 };
 
 class ResourceConfig : public ImmutablePass {
