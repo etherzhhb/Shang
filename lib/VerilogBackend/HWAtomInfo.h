@@ -130,8 +130,6 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return getPostBind(I, Deps, I.getNumOperands(), FUID);
   }
 
-  HWADelay *getDelay(HWAtom *Src, unsigned Delay);
-
   HWAVRoot *getEntryRoot(BasicBlock *BB);
 
   typedef DenseMap<const Value*, HWAtom*> AtomMapType;
@@ -199,11 +197,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
 
   unsigned NumRegs;
   // Mapping Value to registers
-  std::map<const Value*, HWReg*> RegForValues;
-
-  HWReg *allocaRegister(const Type *Ty, unsigned StartSlot, unsigned EndSlot) {
-    return new (HWAtomAllocator) HWReg(++NumRegs, Ty, StartSlot, EndSlot);
-  }
+  std::map<const Value*, HWScalarStorage*> RegForValues;
 
   void addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB);
 
@@ -234,9 +228,9 @@ public:
 
   HWAPreBind *bindToResource(HWAPostBind &PostBind, unsigned Instance);
 
-  HWReg *getRegForValue(const Value *V, unsigned StartSlot, unsigned EndSlot) {
-    std::map<const Value*, HWReg*>::iterator at = RegForValues.find(V);
-    HWReg *R = 0;
+  HWScalarStorage *getRegForValue(const Value *V, unsigned StartSlot, unsigned EndSlot) {
+    std::map<const Value*, HWScalarStorage*>::iterator at = RegForValues.find(V);
+    HWScalarStorage *R = 0;
     if (at == RegForValues.end()) {
       R = allocaRegister(V->getType(), StartSlot, EndSlot);
       RegForValues.insert(std::make_pair(V, R));
@@ -248,17 +242,23 @@ public:
     return R;
   }
 
-  HWReg *lookupRegForValue(const Value *V) {
-    std::map<const Value*, HWReg*>::iterator at = RegForValues.find(V);
+  HWScalarStorage *lookupRegForValue(const Value *V) {
+    std::map<const Value*, HWScalarStorage*>::iterator at = RegForValues.find(V);
     assert(at != RegForValues.end() && "Register not found!");
     return at->second;
   }
 
-  HWReg *allocaFURegister(HWAPreBind *A) {
+  HWScalarStorage *allocaFURegister(HWAPreBind *A) {
     int RegNum = A->getFunUnitID().getRawData();
     unsigned Slot = A->getFinSlot();
-    return new (HWAtomAllocator) HWReg(-RegNum, A->getValue().getType(),
+    return new (HWAtomAllocator) HWScalarStorage(-RegNum, A->getValue().getType(),
                                        Slot, Slot);
+  }
+
+  HWScalarStorage *allocaRegister(const Type *Ty,
+                                  unsigned StartSlot, unsigned EndSlot) {
+    return new (HWAtomAllocator) HWScalarStorage(++NumRegs, Ty,
+                                                 StartSlot, EndSlot);
   }
 
   FSMState &getStateFor(BasicBlock &BB) const {
@@ -273,8 +273,9 @@ public:
     return  At->second;    
   }
 
-  HWAWrStg *getWrStg(HWAtom *Src, HWReg *Reg);
-  HWAImpStg *getImpStg(HWAtom *Src, HWReg *Reg, Value &V);
+  HWADelay *getDelay(HWAtom *Src, unsigned Delay);
+  HWAWrSS *getWrSS(HWAtom *Src, HWScalarStorage *Reg);
+  HWAImpSS *getImpSS(HWAtom *Src, HWScalarStorage *Reg, Value &V);
 
   unsigned getTotalCycle() const {
     return totalCycle;

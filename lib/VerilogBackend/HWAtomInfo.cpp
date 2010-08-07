@@ -421,18 +421,18 @@ HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
   return A;
 }
 
-HWAWrStg *HWAtomInfo::getWrStg(HWAtom *Src, HWReg *Reg) {
+HWAWrSS *HWAtomInfo::getWrSS(HWAtom *Src, HWScalarStorage *Reg) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomWrStg);
+  ID.AddInteger(atomWrSS);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
 
   void *IP = 0;
-  HWAWrStg *A =
-    static_cast<HWAWrStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAWrSS *A =
+    static_cast<HWAWrSS*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAWrStg(ID.Intern(HWAtomAllocator),
+    A = new (HWAtomAllocator) HWAWrSS(ID.Intern(HWAtomAllocator),
                                        getValDepEdge(Src, false), Reg);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
@@ -458,19 +458,19 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 }
 
 
-HWAImpStg *HWAtomInfo::getImpStg(HWAtom *Src, HWReg *Reg, Value &V) {
+HWAImpSS *HWAtomInfo::getImpSS(HWAtom *Src, HWScalarStorage *Reg, Value &V) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomImpStg);
+  ID.AddInteger(atomImpSS);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
   ID.AddPointer(&V);
 
   void *IP = 0;
-  HWAImpStg *A =
-    static_cast<HWAImpStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAImpSS *A =
+    static_cast<HWAImpSS*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAImpStg(ID.Intern(HWAtomAllocator),
+    A = new (HWAtomAllocator) HWAImpSS(ID.Intern(HWAtomAllocator),
       getValDepEdge(Src, false), Reg, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }

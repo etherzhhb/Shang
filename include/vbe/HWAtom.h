@@ -47,8 +47,8 @@ using namespace llvm;
 namespace esyn {
 
 enum HWAtomTypes {
-  atomWrStg,      // Write to local storage, i.e. register, scalar fifo.
-  atomImpStg,     // Import local storage form predecessor BB.
+  atomWrSS,      // Write to local storage, i.e. register, scalar fifo.
+  atomImpSS,     // Import local storage form predecessor BB.
   atomPreBind,    // Operate on pre bind resource
   atomPostBind,   // Operate on post binding resource
   atomDelay,      // The delay atom.
@@ -93,13 +93,13 @@ public:
   virtual void print(raw_ostream &OS) const = 0;
 };
 
-class HWReg {
+class HWScalarStorage {
   const Type *Ty;
   int Num;
   // The life time of this register, Including EndSlot.
   unsigned short StartSlot, EndSlot;
 public:
-  explicit HWReg(unsigned num, const Type *T,
+  explicit HWScalarStorage(unsigned num, const Type *T,
                  unsigned startSlot, unsigned endSlot)
     : Ty(T), Num(num), StartSlot(startSlot), EndSlot(endSlot) {}
 
@@ -496,21 +496,21 @@ typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
   GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
 
 // Write local storage.
-class HWAWrStg : public HWAtom {
-  HWReg *Reg;
+class HWAWrSS : public HWAtom {
+  HWScalarStorage *Reg;
 public:
-  HWAWrStg(const FoldingSetNodeIDRef ID, HWEdge *Edge, HWReg *reg)
-    : HWAtom(ID, atomWrStg, Edge->getDagSrc()->getValue(), Edge,
+  HWAWrSS(const FoldingSetNodeIDRef ID, HWEdge *Edge, HWScalarStorage *reg)
+    : HWAtom(ID, atomWrSS, Edge->getDagSrc()->getValue(), Edge,
     1/*The latancy of a write register operation is 1*/), Reg(reg) {
     scheduledTo(Edge->getDagSrc()->getFinSlot());
     setParent(Edge->getDagSrc()->getParent());
   }
 
-  HWReg *getReg() const { return Reg;  }
+  HWScalarStorage *getReg() const { return Reg;  }
 
-  static inline bool classof(const HWAWrStg *A) { return true; }
+  static inline bool classof(const HWAWrSS *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomWrStg;
+    return A->getHWAtomType() == atomWrSS;
   }
 
   void print(raw_ostream &OS) const;
@@ -530,23 +530,23 @@ public:
 };
 
 // Import local storage from predecessor basicblock.
-class HWAImpStg : public HWAtom {
-  HWReg *Reg;
+class HWAImpSS : public HWAtom {
+  HWScalarStorage *Reg;
 public:
-  HWAImpStg(const FoldingSetNodeIDRef ID, HWEdge *Edge, HWReg *reg, Value &V)
-    : HWAtom(ID, atomImpStg, V, Edge,
+  HWAImpSS(const FoldingSetNodeIDRef ID, HWEdge *Edge, HWScalarStorage *reg, Value &V)
+    : HWAtom(ID, atomImpSS, V, Edge,
     1/*The latancy of a write register operation is 1*/), Reg(reg) {
       scheduledTo(Edge->getDagSrc()->getFinSlot());
       setParent(Edge->getDagSrc()->getParent());
   }
 
-  HWReg *getReg() const { return Reg;  }
+  HWScalarStorage *getReg() const { return Reg;  }
 
   bool isPHINode() const { return isa<PHINode>(getValue()); }
 
-  static inline bool classof(const HWAImpStg *A) { return true; }
+  static inline bool classof(const HWAImpSS *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomImpStg;
+    return A->getHWAtomType() == atomImpSS;
   }
 
   void print(raw_ostream &OS) const;
@@ -692,7 +692,7 @@ class FSMState {
   HWAOpInst &ExitRoot;
 
   // The registers that store the source value of PHINodes.
-  std::map<const Value*, HWReg*> PHISrc;
+  std::map<const Value*, HWScalarStorage*> PHISrc;
 
   // Modulo for modulo schedule.
   unsigned short II;
@@ -744,12 +744,12 @@ public:
       (*I)->resetSchedule();
   }
 
-  void updatePHISrc(const Value *V, HWReg *R) {
+  void updatePHISrc(const Value *V, HWScalarStorage *R) {
     PHISrc[V] = R;
   }
 
-  HWReg *getPHISrc(const Value *V) {
-    std::map<const Value*, HWReg*>::iterator At = PHISrc.find(V);
+  HWScalarStorage *getPHISrc(const Value *V) {
+    std::map<const Value*, HWScalarStorage*>::iterator At = PHISrc.find(V);
     if (At == PHISrc.end())
       return 0;
 

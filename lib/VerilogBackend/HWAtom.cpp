@@ -36,12 +36,12 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
-void HWAWrStg::print(raw_ostream &OS) const {
+void HWAWrSS::print(raw_ostream &OS) const {
   OS << "Write Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
-void HWAImpStg::print(raw_ostream &OS) const {
+void HWAImpSS::print(raw_ostream &OS) const {
   OS << "Import Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }

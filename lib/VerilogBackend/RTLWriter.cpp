@@ -289,12 +289,14 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomWrStg:
+    case atomWrSS:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
-        + getAsOperand(cast<HWAWrStg>(A)->getReg());
-    case atomImpStg:
+        + getAsOperand(cast<HWAWrSS>(A)->getReg());
+    case atomImpSS:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
-        + getAsOperand(cast<HWAImpStg>(A)->getReg());
+        + getAsOperand(cast<HWAImpSS>(A)->getReg());
+    case atomDelay:
+      return getAsOperand(cast<HWADelay>(A)->getDep(0)->getDagSrc());
     default:
       llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
@@ -305,7 +307,7 @@ std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
   return "FU" + utostr(FUID.getRawData()) + "Reg";
 }
 
-std::string RTLWriter::getAsOperand(HWReg *R) {
+std::string RTLWriter::getAsOperand(HWScalarStorage *R) {
   if (R->isFuReg())
     return getFURegisterName(R->getFUnit());
 
@@ -339,15 +341,15 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomWrStg:
+      case atomWrSS:
         vlang->comment(ControlBlock.indent(10)) << "Read:"
           << A->getValue() << '\n';
-        emitWrStg(cast<HWAWrStg>(A));
+        emitWrSS(cast<HWAWrSS>(A));
         break;
-      case atomImpStg:
+      case atomImpSS:
         vlang->comment(ControlBlock.indent(10)) << "Import:"
           << A->getValue() << '\n';
-        emitImpStg(cast<HWAImpStg>(A));
+        emitImpSS(cast<HWAImpSS>(A));
         break;
       case atomDelay:
         vlang->comment(ControlBlock.indent(10));
@@ -363,8 +365,8 @@ void RTLWriter::emitAtom(HWAtom *A) {
   }
 }
 
-void RTLWriter::emitWrStg(HWAWrStg *DR) {
-  const HWReg *R = DR->getReg();
+void RTLWriter::emitWrSS(HWAWrSS *DR) {
+  const HWScalarStorage *R = DR->getReg();
   // Function unit register will emit with function unit.
   if (R->isFuReg())
     return;
@@ -375,15 +377,15 @@ void RTLWriter::emitWrStg(HWAWrStg *DR) {
   ControlBlock.indent(10) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
 }
 
-void RTLWriter::emitImpStg(HWAImpStg *DR) {
+void RTLWriter::emitImpSS(HWAImpSS *DR) {
   if (DR->isPHINode())
     UsedRegs.insert(DR->getReg());
 }
 
 void RTLWriter::emitAllRegisters() {
-  for (std::set<const HWReg*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
+  for (std::set<const HWScalarStorage*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
       I != E; ++I) {
-    const HWReg *R = *I;
+    const HWScalarStorage *R = *I;
     unsigned BitWidth = vlang->getBitWidth(R->getType());
     std::string Name = "Reg"+utostr(R->getRegNum());
 
@@ -702,7 +704,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState &State) {
              getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
 
         
-    HWReg *PredReg = HI->lookupRegForValue(&Pred->getValue());
+    HWScalarStorage *PredReg = HI->lookupRegForValue(&Pred->getValue());
     return MircoState + getAsOperand(PredReg);
   } else if (ConstantInt *CI = dyn_cast<ConstantInt>(Cnd))
     return MircoState + vlang->printConstant(CI);
@@ -847,7 +849,7 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
   BasicBlock::iterator I = Succ.begin();
   while (&*I != NotPhi) {
     PHINode *PN = cast<PHINode>(I);
-    HWReg *PR = HI->lookupRegForValue(PN);
+    HWScalarStorage *PR = HI->lookupRegForValue(PN);
 
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
     ControlBlock.indent(10 + ind) << getAsOperand(PR)
@@ -855,7 +857,7 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     if (Constant *C = dyn_cast<Constant>(IV))
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
     else {
-      HWReg *PHISrc = CurStage.getPHISrc(IV);
+      HWScalarStorage *PHISrc = CurStage.getPHISrc(IV);
       ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     }
     ++I;

@@ -488,8 +488,8 @@ void CompPathBinding::bindFunUnitReg() {
       DEBUG(A->dump());
       Instruction *Inst = &A->getInst<Instruction>();
       // Bind a register to this function unit.
-      HWReg *FUR = HI->allocaFURegister(A);
-      HWAWrStg *WR = HI->getWrStg(A, FUR);
+      HWScalarStorage *FUR = HI->allocaFURegister(A);
+      HWAWrSS *WR = HI->getWrSS(A, FUR);
       DEBUG(dbgs() << "Create FU Register: ");
       DEBUG(WR->dump());
 
