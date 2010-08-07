@@ -164,6 +164,7 @@ void FDLScheduler::FDModuloSchedule(unsigned StartStep) {
     FDInfo->clear();
     FDInfo->enableModuleFD(MII);
     EndStep = FDInfo->buildFDInfo(CurState, StartStep, EndStep);
+
     switch (scheduleAtII(MII)) {
     case FDLScheduler::SchedSucc:
       DEBUG(FDInfo->dumpTimeFrame(CurState));

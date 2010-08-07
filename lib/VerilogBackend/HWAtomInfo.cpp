@@ -109,19 +109,20 @@ void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
   PHINode *IV = L->getCanonicalInductionVariable();
   // And we need loop in canonical form.
   if (!IV) return;
-  
+
+  HWAVRoot *Entry = getEntryRoot(BB);
   // Get the induction variable increment.
-  Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
-  HWAOpInst *IVIncAtom = cast<HWAOpInst>(getAtomFor(*IVInc));
+  //Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
+  //HWAOpInst *IVIncAtom = cast<HWAOpInst>(getAtomFor(*IVInc));
   // And get the predicate
   BranchInst *Br = cast<BranchInst>(BB->getTerminator());
   ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
   HWAOpInst *Pred = cast<HWAOpInst>(getAtomFor(*ICmp));
 
   // The Next loop depend on the result of predicate.
-  HWMemDep *LoopDep = getMemDepEdge(Pred, getEntryRoot(BB),
-                                    HWMemDep::TrueDep, 1);
-  IVIncAtom->addDep(LoopDep);
+  HWMemDep *LoopDep = getMemDepEdge(Pred, Entry, HWMemDep::TrueDep, 1);
+  //IVIncAtom->addDep(LoopDep);
+  Entry->addDep(LoopDep);
 }
 
 void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB) {

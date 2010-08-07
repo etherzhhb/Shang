@@ -41,13 +41,14 @@ void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 
-void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
+void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
+                                      unsigned step) {
   typedef HWAtom::const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
-  AtomToTF[Root].first = step;
-  WorkStack.push_back(std::make_pair(Root, Root->use_begin()));
+  AtomToTF[EntryRoot].first = step;
+  WorkStack.push_back(std::make_pair(EntryRoot, EntryRoot->use_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
@@ -78,13 +79,19 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
   }
 }
 
-void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
+void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
+                                      unsigned step) {
+  const HWAOpInst *Pred = 0;
+  // Find out the predicate for modulo schedule.
+  if (Modulo)
+    Pred = cast<HWAOpInst>(ExitRoot->getOperand(0));
+
   typedef HWAtom::const_dep_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
-  AtomToTF[Root].second = step;
-  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
+  AtomToTF[ExitRoot].second = step;
+  WorkStack.push_back(std::make_pair(ExitRoot, ExitRoot->dep_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
@@ -104,9 +111,16 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
         NewStep = AtomToTF[Node].second - ChildNode->getLatency()
                   + Modulo * It.getEdge()->getItDst();// delta ChildNode -> Node.
         // Do not exceed Modulo step when we preform a modulo schedule. 
-        if (Modulo != 0)
+        if (Modulo) {
           NewStep = std::min(NewStep,
                              getASAPStep(ChildNode) + Modulo - 1);
+          if (ChildNode == Pred) {
+            // Pred must Finish before next loop emit.
+            unsigned startSlot = ExitRoot->getParent()->getEntryRoot().getSlot();
+            unsigned PredALAP = startSlot + Modulo - Pred->getLatency();
+            NewStep = std::min(NewStep, PredALAP);
+          }
+        }
       }
 
       if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
@@ -311,7 +325,7 @@ bool ForceDirectedInfo::runOnFunction(Function &F) {
 unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
                                         unsigned EndStep) {
   // Build the time frame
-  HWAtom *Entry = &State->getEntryRoot();
+  HWAVRoot *Entry = &State->getEntryRoot();
   buildASAPStep(Entry, StartStep); 
   
   HWAOpInst *Exit = &State->getExitRoot();

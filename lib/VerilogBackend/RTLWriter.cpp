@@ -694,7 +694,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState &State) {
   Value *Cnd = Br->getCondition();
   if (Instruction *IPred = dyn_cast<Instruction>(Cnd)) {
     HWAOpInst *Pred = cast<HWAOpInst>(HI->getAtomFor(*IPred));
-
+    assert(Pred->getFinSlot() <= IISlot && "Pred can not finish in time!");
     assert(isa<HWAPostBind>(Pred) && "Prebind predicate not support yet!");
     if (Pred->getFinSlot() == IISlot)
       return MircoState + getAsOperand(Pred);

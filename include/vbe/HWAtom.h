@@ -631,7 +631,7 @@ public:
     return getDep(idx);
   }
 
-  HWAtom *getOperand(unsigned idx) {
+  HWAtom *getOperand(unsigned idx) const {
     assert(idx < NumOps && "index Out of range!");
     //assert(&(getDep(idx)->getSrc()->getValue()) == getInst<Instruction>().getOperand(idx)
     //  && "HWPostBind operands broken!");

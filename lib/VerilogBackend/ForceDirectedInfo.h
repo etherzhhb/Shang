@@ -35,6 +35,8 @@ class ForceDirectedInfo : public FunctionPass {
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
 
   TimeFrameMapType AtomToTF;
+  void buildASAPStep(const HWAVRoot *EntryRoot, unsigned step);
+  void buildALAPStep(const HWAOpInst *ExitRoot, unsigned step);
 
   // The Key of DG, { step, resource type }
   typedef std::map<unsigned, double> DGType;
@@ -54,9 +56,8 @@ public:
 
   /// @name TimeFrame
   //{
-  void buildASAPStep(const HWAtom *Root, unsigned step);
   void buildASAPStep(FSMState *State) {
-    const HWAtom *Root = &State->getEntryRoot();
+    const HWAVRoot *Root = &State->getEntryRoot();
     buildASAPStep(Root, getASAPStep(Root));
   }
   unsigned getASAPStep(const HWAtom *A) const {
@@ -65,9 +66,8 @@ public:
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-  void buildALAPStep(const HWAtom *Root, unsigned step);
   void buildALAPStep(FSMState *State) {
-    const HWAtom *Root = &State->getExitRoot();
+    const HWAOpInst *Root = &State->getExitRoot();
     buildALAPStep(Root, getALAPStep(Root));
   }
   unsigned getALAPStep(const HWAtom *A) const {
