@@ -269,6 +269,7 @@ bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
     NSlot = NSlot % II;
   }
 
+  // FIXME: Handle multi-cycle atom.
   return (ThisSlot != NSlot);
 }
 } // end namespace

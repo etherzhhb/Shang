@@ -695,9 +695,10 @@ class FSMState {
 
   // Modulo for modulo schedule.
   unsigned short II;
+  bool HaveSelfLoop;
 public:
-  FSMState(HWAVRoot *entry, HWAOpInst *exit)
-    : EntryRoot(*entry), ExitRoot(*exit), II(0) {
+  FSMState(HWAVRoot *entry, HWAOpInst *exit, bool haveSelfLoop)
+    : EntryRoot(*entry), ExitRoot(*exit), II(0), HaveSelfLoop(haveSelfLoop) {
     for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
       (*I)->setParent(this);
   }
@@ -759,8 +760,10 @@ public:
   }
 
   // II for Modulo schedule
+
   void setII(unsigned ii) { II = ii; }
   unsigned getII() const { return II; }
+  bool haveSelfLoop() const { return HaveSelfLoop; }
 
   typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
 

@@ -668,35 +668,42 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
 }
 
 std::string  RTLWriter::computeNextMircoStateEnable(FSMState &State) {
-  unsigned IISlot = State.getII();
-  if (IISlot == 0)
+  if (!State.haveSelfLoop())
     return "1'b0";
+
+  unsigned IISlot = State.getII();
 
   BasicBlock *BB = State.getBasicBlock();
   IISlot += State.getEntryRoot().getSlot();
   std::string MircoState = getSlotEnable(*BB, IISlot);
 
   BranchInst *Br = cast<BranchInst>(BB->getTerminator());
-  ICmpInst *Icmp = cast<ICmpInst>(Br->getCondition());
-  HWAOpInst *Pred = cast<HWAOpInst>(HI->getAtomFor(*Icmp));
 
   MircoState += " & ";
   // Invert the pred if necessary.
   if (Br->getSuccessor(1) == BB)
     MircoState += "~";
-
-  assert(isa<HWAPostBind>(Pred) && "Prebind predicate not support yet!");
-  if (Pred->getFinSlot() == IISlot)
-    return MircoState + getAsOperand(Pred);
   
-  if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
-    return MircoState +
-           getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
+  Value *Cnd = Br->getCondition();
+  if (Instruction *IPred = dyn_cast<Instruction>(Cnd)) {
+    HWAOpInst *Pred = cast<HWAOpInst>(HI->getAtomFor(*IPred));
 
-      
-  HWReg *PredReg = HI->lookupRegForValue(&Pred->getValue());
-  return MircoState + getAsOperand(PredReg);
+    assert(isa<HWAPostBind>(Pred) && "Prebind predicate not support yet!");
+    if (Pred->getFinSlot() == IISlot)
+      return MircoState + getAsOperand(Pred);
+    
+    if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
+      return MircoState +
+             getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
 
+        
+    HWReg *PredReg = HI->lookupRegForValue(&Pred->getValue());
+    return MircoState + getAsOperand(PredReg);
+  } else if (ConstantInt *CI = dyn_cast<ConstantInt>(Cnd))
+    return MircoState + vlang->printConstant(CI);
+
+  assert(0 && "Not support Pred!");
+  return "<Not Support>";
 }
 
 

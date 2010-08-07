@@ -53,7 +53,8 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     // Setup the state.
     BasicBlock *BB = &*I;
-    SetControlRoot(getEntryRoot(BB));
+    HWAVRoot *Entry = getEntryRoot(BB);
+    SetControlRoot(Entry);
     DEBUG(dbgs() << "Building atom for BB: " << BB->getName() << '\n');
     for (BasicBlock::iterator BI = BB->begin(), BE = BB->end();
         BI != BE; ++BI) {
@@ -71,11 +72,14 @@ bool HWAtomInfo::runOnFunction(Function &F) {
     // preform memory dependencies analysis to add corresponding edges.
     addMemDepEdges(MemOps, *BB);
 
+    bool selfLoop = haveSelfLoop(BB);
+    
     // Add SCC for loop.
-    addLoopIVSCC(BB);
+    if (selfLoop)
+      addLoopIVSCC(BB);
 
-    BBToStates[BB] = new FSMState(getEntryRoot(BB),
-                                   cast<HWAPostBind>(getControlRoot()));
+    HWAOpInst *Exit = cast<HWAPostBind>(getControlRoot());
+    BBToStates[BB] = new FSMState(Entry, Exit, selfLoop);
 
     MemOps.clear();
   }
@@ -85,13 +89,22 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   return false;
 }
 
-void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
+
+bool HWAtomInfo::haveSelfLoop(BasicBlock *BB) {
   Loop *L = LI->getLoopFor(BB);
 
   // Not in any loop.
-  if (!L) return;
+  if (!L) return false;
   // Dirty Hack: Only support one block loop at this moment.
-  if (L->getBlocks().size() != 1) return;
+  if (L->getBlocks().size() != 1) return false;
+
+  return true;
+}
+
+void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
+  assert(haveSelfLoop(BB) && "Loop SCC only exist in self loop!");
+
+  Loop *L = LI->getLoopFor(BB);
   
   PHINode *IV = L->getCanonicalInductionVariable();
   // And we need loop in canonical form.

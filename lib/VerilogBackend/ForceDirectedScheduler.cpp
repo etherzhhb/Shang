@@ -232,6 +232,10 @@ void FDLScheduler::FDListSchedule(unsigned StartStep) {
     else // Break the loop if we schedule successful.
       break;
   }
+  // Set the Initial Interval to the total slot, so we can generate the correct
+  // control logic for loop if MS is disable.
+  if (CurState->haveSelfLoop())
+    CurState->setII(CurState->getTotalSlot());
   DEBUG(FDInfo->dumpTimeFrame(CurState));
 }
 
