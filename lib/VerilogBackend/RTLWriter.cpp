@@ -835,6 +835,7 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
 
 void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
                                      unsigned ind) {
+  FSMState &CurStage = HI->getStateFor(CurBlock);
   vlang->comment(ControlBlock.indent(10 + ind)) << "Phi Node:\n";
   Instruction *NotPhi = Succ.getFirstNonPHI();
   BasicBlock::iterator I = Succ.begin();
@@ -848,9 +849,8 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     if (Constant *C = dyn_cast<Constant>(IV))
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
     else {
-      FSMState &CurStage = HI->getStateFor(CurBlock);
-      HWReg *LiveOutReg = CurStage.getLiveOutRegAtTerm(IV);
-      ControlBlock << " <= " << getAsOperand(LiveOutReg) << ";\n";
+      HWReg *PHISrc = CurStage.getPHISrc(IV);
+      ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     }
     ++I;
   }

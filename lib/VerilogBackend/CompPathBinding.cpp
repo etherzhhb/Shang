@@ -473,7 +473,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 
 void CompPathBinding::bindFunUnitReg() {
   HWAOpInst &Exit = CurStage->getExitRoot();
-  unsigned LastSlot = Exit.getSlot();
   // For each Function unit(longest path graph node), bind a FU register.
   // For each nodes in
   for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
@@ -493,10 +492,6 @@ void CompPathBinding::bindFunUnitReg() {
       HWAWrStg *WR = HI->getWrStg(A, FUR);
       DEBUG(dbgs() << "Create FU Register: ");
       DEBUG(WR->dump());
-      // Updata live out register.
-      if (WR->getFinSlot()== LastSlot) {
-        CurStage->updateLiveOutReg(Inst, FUR);
-      }
 
       bool FURegRead = false;
       std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());

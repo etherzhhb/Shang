@@ -47,12 +47,25 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *IV = PN->getIncomingValue(i);
       FSMState &IncomingStage = HI.getStateFor(*PN->getIncomingBlock(i));
-      if ((isa<Instruction>(IV) || isa<Argument>(IV))
-          && !IncomingStage.getLiveOutRegAtTerm(IV)) {
-        HWReg *IR = HI.getRegForValue(IV, EntryRoot->getSlot(),
-                                      EntryRoot->getSlot());
-        IncomingStage.updateLiveOutReg(IV, IR);
-      }
+      unsigned lastSlot = IncomingStage.getExitRoot().getSlot();
+
+      if (IncomingStage.getPHISrc(IV) != 0)
+        continue;
+
+      if (isa<Constant>(IV))
+        continue;
+      
+      // We may read the value from function unit register.
+      if (isa<Instruction>(IV))
+        if (HWAPreBind *PB = dyn_cast<HWAPreBind>(HI.getAtomFor(*IV)))
+          if (HWAWrStg *WR = dyn_cast<HWAWrStg>(PB->use_back()))
+            if (WR->getFinSlot() == lastSlot) {
+              IncomingStage.updatePHISrc(IV, WR->getReg());
+              continue;
+            }
+
+      HWReg *IR = HI.getRegForValue(IV, lastSlot, lastSlot);
+      IncomingStage.updatePHISrc(IV, IR);
     }
   }
 
@@ -76,10 +89,6 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
           // Insert the import node.
           HWAVRoot *Root = cast<HWAVRoot>(VD->getDagSrc());
           HWReg *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
-          // Update the live out value.
-          if (!State.getLiveOutRegAtTerm(V))
-            State.updateLiveOutReg(V, R);
-
           HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
           A->setDep(i, ImpStg);
 
@@ -132,9 +141,6 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     // Store the value to register.
     HWReg *R = HI.getRegForValue(V, SrcAtom->getFinSlot(), Exit->getSlot());
     HWAWrStg *WR = HI.getWrStg(SrcAtom, R);
-
-    if (!State.getLiveOutRegAtTerm(V))
-      State.updateLiveOutReg(V, R);
     Exit->setDep(i, WR);
   }
 

@@ -691,7 +691,8 @@ class FSMState {
   HWAVRoot &EntryRoot;
   HWAOpInst &ExitRoot;
 
-  std::map<const Value*, HWReg*> LiveOutRegAtTerm;
+  // The registers that store the source value of PHINodes.
+  std::map<const Value*, HWReg*> PHISrc;
 
   // Modulo for modulo schedule.
   unsigned short II;
@@ -702,7 +703,7 @@ public:
     for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
       (*I)->setParent(this);
   }
-  ~FSMState() { LiveOutRegAtTerm.clear(); }
+  ~FSMState() { PHISrc.clear(); }
   
   /// @name Roots
   //{
@@ -743,13 +744,13 @@ public:
       (*I)->resetSchedule();
   }
 
-  void updateLiveOutReg(Value *V, HWReg *R) {
-    LiveOutRegAtTerm[V] = R;
+  void updatePHISrc(const Value *V, HWReg *R) {
+    PHISrc[V] = R;
   }
 
-  HWReg *getLiveOutRegAtTerm(Value *V) {
-    std::map<const Value*, HWReg*>::iterator At = LiveOutRegAtTerm.find(V);
-    if (At == LiveOutRegAtTerm.end())
+  HWReg *getPHISrc(const Value *V) {
+    std::map<const Value*, HWReg*>::iterator At = PHISrc.find(V);
+    if (At == PHISrc.end())
       return 0;
 
     return At->second;
