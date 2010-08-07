@@ -224,8 +224,16 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
     vlang->end(ControlBlock.indent(8));
   }// end for
 
-  emitNextMicroState(ControlBlock.indent(8), BB,
-                     computeNextMircoStateEnable(State));
+  // Emit Self Loop logic.
+  if (State.haveSelfLoop()) {
+    vlang->comment(ControlBlock.indent(8)) << "For self loop:\n";
+    std::string SelfLoopEnable = computeSelfLoopEnable(State);
+    vlang->ifBegin(ControlBlock.indent(8), SelfLoopEnable);
+    emitPHICopiesForSucc(BB, BB, 0);
+    vlang->end(ControlBlock.indent(8));
+    emitNextMicroState(ControlBlock.indent(8), BB, SelfLoopEnable);
+  } else
+    emitNextMicroState(ControlBlock.indent(8), BB, "1'b0");
   // Case end
   vlang->end(ControlBlock.indent(6));
 }
@@ -667,10 +675,7 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
   ss << ";\n";
 }
 
-std::string  RTLWriter::computeNextMircoStateEnable(FSMState &State) {
-  if (!State.haveSelfLoop())
-    return "1'b0";
-
+std::string  RTLWriter::computeSelfLoopEnable(FSMState &State) {
   unsigned IISlot = State.getII();
 
   BasicBlock *BB = State.getBasicBlock();
@@ -810,16 +815,17 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
                &CurBB = *(I.getParent());
     HWEdge *Cnd = A.getValDep(0);
     vlang->ifBegin(ControlBlock.indent(10), getAsOperand(Cnd));
-    emitPHICopiesForSucc(CurBB, NextBB0, 2);
 
     if (&NextBB0 != &CurBB) {
+      emitPHICopiesForSucc(CurBB, NextBB0, 2);
       emitNextFSMState(ControlBlock.indent(12), NextBB0);
       emitNextMicroState(ControlBlock.indent(12), NextBB0, "1'b1");
     }
 
     vlang->ifElse(ControlBlock.indent(10));
-    emitPHICopiesForSucc(CurBB, NextBB1, 2);
+
     if (&NextBB1 != &CurBB) {
+      emitPHICopiesForSucc(CurBB, NextBB1, 2);
       emitNextFSMState(ControlBlock.indent(12), NextBB1);
       emitNextMicroState(ControlBlock.indent(12), NextBB1, "1'b1");
     }
