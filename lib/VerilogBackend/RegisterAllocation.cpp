@@ -27,32 +27,16 @@ using namespace llvm;
 using namespace esyn;
 
 namespace {
-struct RegAllocation : public FunctionPass {
+struct RegAllocation : public BasicBlockPass {
   static char ID;
-  explicit RegAllocation() : FunctionPass(&ID) {}
-  bool runOnFunction(Function &F);
-  bool runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI);
+  RegAllocation() : BasicBlockPass(&ID) {}
+  bool runOnBasicBlock(BasicBlock &BB);
   void getAnalysisUsage(AnalysisUsage &AU) const;
 };
 }
 
-bool RegAllocation::runOnFunction(Function &F) {
+bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-
-  // Allocate register for argument.
-  //for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end();
-  //    I != E; ++I) {
-  //  Argument *Arg = I;
-  //  HI.getRegForValue(Arg, 1, 1);
-  //}
-
-  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
-    runOnBasicBlock(*I, HI);
-
-  return false;
-}
-
-bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
   FSMState &State = HI.getStateFor(BB);
   HWAVRoot *EntryRoot = &State.getEntryRoot();
 
