@@ -313,16 +313,14 @@ bool ForceDirectedInfo::runOnFunction(Function &F) {
   return false;
 }
 
-unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
-                                        unsigned EndStep) {
+unsigned ForceDirectedInfo::buildFDInfo(FSMState *State) {
   // Build the time frame
   HWAVRoot *Entry = &State->getEntryRoot();
-  buildASAPStep(Entry, StartStep); 
+  assert(Entry->isScheduled() && "Entry must be scheduled first!");
+  buildASAPStep(Entry, Entry->getSlot());
   
   HWAOpInst *Exit = &State->getExitRoot();
-  if (EndStep == 0)
-    EndStep = getASAPStep(Exit);
-  CriticalPathEnd = EndStep;
+  CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 
   // Dirty Hack: Just place all SCC at the first II.
   // TODO: Move the whole SCC around and find the best place.
@@ -338,17 +336,6 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
   buildAvgDG(State);
 
   return CriticalPathEnd;
-}
-
-void ForceDirectedInfo::recoverFDInfo(FSMState *State) {
-  // Build the time frame
-  buildASAPStep(State); 
-  buildALAPStep(State);
-
-  DEBUG(dumpTimeFrame(State));
-
-  buildDGraph(State);
-  buildAvgDG(State);
 }
 
 void ForceDirectedInfo::dumpDG(FSMState *State) const {

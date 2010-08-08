@@ -54,7 +54,7 @@ class ForceDirectedInfo : public FunctionPass {
   std::map<const HWAPostBind*, double> AvgDG;
 
   // MII in modulo schedule.
-  unsigned MII, CriticalLength;
+  unsigned MII, CriticalPathEnd;
 public:
 
   /// @name TimeFrame
@@ -92,7 +92,7 @@ public:
     if (at != AtomToSCCALAP.end())
       return at->second;
    
-    return CriticalLength;
+    return CriticalPathEnd;
   }
 
   void buildALAPStep(FSMState *State) {
@@ -111,7 +111,7 @@ public:
 
   // If the TimeFrame Constrains by II.
   bool constrainByMII(const HWAOpInst *A) const {
-    return getALAPStep(A) == getSCCALAPStep(A);
+    return getTimeFrame(A) == MII - A->getLatency();
   }
 
   void printTimeFrame(FSMState *State, raw_ostream &OS) const;
@@ -150,10 +150,7 @@ public:
   unsigned findBestStep(HWAOpInst *A);
   //}
 
-  unsigned buildFDInfo(FSMState *State, unsigned StartStep,
-                       unsigned EndStep);
-
-  void recoverFDInfo(FSMState *State);
+  unsigned buildFDInfo(FSMState *State);
 
   template<class It>
   bool updateFDInfoForSCC(FSMState *State, unsigned FirstStep, unsigned II,
@@ -169,7 +166,10 @@ public:
     return true;
   }
 
-  void enableModuleFD(unsigned II) { MII = II; }
+  void initMII(unsigned II) { MII = II; }
+
+  unsigned lengthenMII() { return ++MII; }
+  unsigned lengthenCriticalPath() { return ++CriticalPathEnd; }
 
   void clear();
   /// @name Common pass interface
