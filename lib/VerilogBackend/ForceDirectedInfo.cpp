@@ -302,7 +302,7 @@ void ForceDirectedInfo::clear() {
   ResUsage.clear();
   AvgDG.clear();
   MII = 0;
-  CriticalLength = 0;
+  CriticalPathEnd = 0;
 }
 
 void ForceDirectedInfo::releaseMemory() {
@@ -322,16 +322,22 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
   HWAOpInst *Exit = &State->getExitRoot();
   if (EndStep == 0)
     EndStep = getASAPStep(Exit);
-  CriticalLength = EndStep;
+  CriticalPathEnd = EndStep;
 
-  buildALAPStep(Exit, CriticalLength);
+  // Dirty Hack: Just place all SCC at the first II.
+  // TODO: Move the whole SCC around and find the best place.
+  if (MII)
+    buildSCCASAPStep(State, CriticalPathEnd, MII,
+                     Entry->use_begin(), Entry->use_end());
+
+  buildALAPStep(Exit, CriticalPathEnd);
 
   DEBUG(dumpTimeFrame(State));
 
   buildDGraph(State);
   buildAvgDG(State);
 
-  return CriticalLength;
+  return CriticalPathEnd;
 }
 
 void ForceDirectedInfo::recoverFDInfo(FSMState *State) {
