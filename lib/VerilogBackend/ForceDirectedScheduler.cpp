@@ -63,7 +63,10 @@ struct FDLScheduler : public BasicBlockPass {
   template<class It>
   void fillQueue(AtomQueueType &Queue, It begin, It end, HWAtom *FirstNode = 0);
 
-  // Return the first node that we fail to schedule, return null if all nodes are scheduled.
+  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
+  typedef ModuloScheduleInfo::scc_vector scc_vector;
+
+  SchedResult scheduleAtom(HWAtom *A);
   SchedResult scheduleQueue(AtomQueueType &Queue);
   SchedResult scheduleAtII(unsigned II);
   //}
@@ -213,9 +216,6 @@ void FDLScheduler::FDModuloSchedule() {
 FDLScheduler::SchedResult FDLScheduler::scheduleAtII(unsigned II) {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
-
-  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
-  typedef ModuloScheduleInfo::scc_vector scc_vector;
   // Schedule all SCCs.
   for (unsigned i = II; i > 0; --i) {
     for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
@@ -229,33 +229,13 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtII(unsigned II) {
       // And schedule rest nodes in SCC, but the max latency of the SCC
       // should not exceed II.
       HWAtom *FirstNode = findFirstNode(SCC.begin(), SCC.end());
+      SchedResult Result = scheduleAtom(FirstNode);
+      if (Result != FDLScheduler::SchedSucc)
+        return Result;
+
       fillQueue(AQueue, SCC.begin(), SCC.end(), FirstNode);
-
-      DEBUG(FirstNode->print(dbgs()));
-      DEBUG(dbgs() << " Schedule First Node:-------------------\n");
-      unsigned step = FDInfo->getASAPStep(FirstNode);
-      if (FDInfo->getTimeFrame(FirstNode) != 1) {
-        HWAOpInst *OI = cast<HWAOpInst>(FirstNode);
-        bool ConstrainByMII = FDInfo->constrainByMII(OI);
-        step = findBestStep(OI);
-        // If we can not schedule A.
-        if (step == 0)
-          return ConstrainByMII ? FDLScheduler::SchedFailII :
-                                  FDLScheduler::SchedFailCricitalPath;
-
-        FirstNode->scheduledTo(step);
-      } else //if(!FirstNode->isScheduled())
-        // Schedule to the best step.
-        FirstNode->scheduledTo(step);
-
-      if (!FDInfo->updateFDInfoForSCC(CurState, step, II,
-                                      SCC.begin(), SCC.end()))
-        return FDLScheduler::SchedFailII;
-
-      DEBUG(FDInfo->dumpTimeFrame(CurState));
-
       // schedule other nodes.
-      SchedResult Result = scheduleQueue(AQueue);
+      Result = scheduleQueue(AQueue);
       if (Result != FDLScheduler::SchedSucc)
         return Result;
     }
@@ -340,37 +320,40 @@ void FDLScheduler::clear() {
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
 
 
+FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
+  DEBUG(A->print(dbgs()));
+  DEBUG(dbgs() << " Schedule First Node:-------------------\n");
+  unsigned step = FDInfo->getASAPStep(A);
+  if (FDInfo->getTimeFrame(A) != 1) {
+    HWAOpInst *OI = cast<HWAOpInst>(A);
+    bool ConstrainByMII = FDInfo->constrainByMII(OI);
+    step = findBestStep(OI);
+    // If we can not schedule A.
+    if (step == 0)
+      return ConstrainByMII ? FDLScheduler::SchedFailII :
+                              FDLScheduler::SchedFailCricitalPath;
+
+    A->scheduledTo(step);
+    FDInfo->buildFDInfo(CurState);
+  } else //if(!A->isScheduled())
+    // Schedule to the best step.
+    A->scheduledTo(step);
+
+  return FDLScheduler::SchedSucc;
+}
+
 FDLScheduler::SchedResult FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
     HWAOpInst *A = Queue.top();
     Queue.pop();
 
-    bool ConstrainByMII = FDInfo->constrainByMII(A);
+    SchedResult Result = scheduleAtom(A);
+    if (Result != FDLScheduler::SchedSucc)
+      return Result;
 
-    DEBUG(A->print(dbgs()));
-    DEBUG(dbgs() << " Active to schedule:-------------------\n");
-
-    // TODO: Do check if this step is valid for others constrain.
-    unsigned step = FDInfo->getASAPStep(A);
-    if (FDInfo->getTimeFrame(A) != 1) {
-      step = findBestStep(A);
-      // If we can not schedule A.
-      if (step == 0)
-        return ConstrainByMII ? FDLScheduler::SchedFailII :
-                                FDLScheduler::SchedFailCricitalPath;
-
-      A->scheduledTo(step);
-
-      DEBUG(dbgs() << " After schedule:-------------------\n");
-      FDInfo->buildFDInfo(CurState);
-      DEBUG(dbgs() << "\n\n\n");
-      Queue.reheapify();
-    } else {
-      // Schedule to the best step.
-      A->scheduledTo(step);
-    }
   }
+
   return FDLScheduler::SchedSucc;
 }
 

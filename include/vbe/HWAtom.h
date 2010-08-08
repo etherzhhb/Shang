@@ -295,6 +295,8 @@ public:
     }
   }
 
+  static const unsigned MaxSlot = ~0;
+
   FSMState *getParent() { return Parant; }
   FSMState *getParent() const { return Parant; }
 

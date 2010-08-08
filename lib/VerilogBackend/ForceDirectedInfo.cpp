@@ -48,6 +48,7 @@ void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
   AtomToTF[EntryRoot].first = step;
+  AtomToTF[EntryRoot].second = step;
   WorkStack.push_back(std::make_pair(EntryRoot, EntryRoot->use_begin()));
   //
   while (!WorkStack.empty()) {
@@ -73,8 +74,15 @@ void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
         AtomToTF[ChildNode].first = NewStep;
 
       // Only move forward when we visit the node from all its deps.
-      if (VC == ChildNode->getNumDeps())
+      if (VC == ChildNode->getNumDeps()) {
         WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
+        // Set up the II constrain.
+        if (MII)
+          AtomToTF[ChildNode].second = getASAPStep(ChildNode)
+                                       + MII - ChildNode->getLatency();
+        else
+          AtomToTF[ChildNode].second = HWAtom::MaxSlot;
+      }
     }
   }
 }
@@ -105,11 +113,10 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
         // Latency is ChildNode->Node.
         NewStep = AtomToTF[Node].second - ChildNode->getLatency()
                   + MII * It.getEdge()->getItDst();// delta ChildNode -> Node.
-        // Consider the SCC ALAP constrain.
-        NewStep = std::min(NewStep, getSCCALAPStep(ChildNode));
       }
 
-      if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
+      assert(AtomToTF[ChildNode].second && "Broken ALAP!");
+      if (AtomToTF[ChildNode].second > NewStep)
         AtomToTF[ChildNode].second = NewStep;
 
       DEBUG(dbgs() << "Visit " << "\n");
@@ -247,7 +254,7 @@ double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
 
 double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
-  double ret = 0;
+  double ret = 0.0;
 
   for (const_usetree_iterator I = const_usetree_iterator::begin(OpInst),
       E = const_usetree_iterator::end(OpInst); I != E; ++I) {
@@ -293,7 +300,6 @@ void ForceDirectedInfo::buildAvgDG(FSMState *State) {
 
 void ForceDirectedInfo::clear() {
   AtomToTF.clear();
-  AtomToSCCALAP.clear();
   DGraph.clear();
   ResUsage.clear();
   AvgDG.clear();
@@ -313,16 +319,17 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State) {
   // Build the time frame
   HWAVRoot *Entry = &State->getEntryRoot();
   assert(Entry->isScheduled() && "Entry must be scheduled first!");
-  buildASAPStep(Entry, Entry->getSlot());
+  unsigned FirstStep = Entry->getSlot();
+  buildASAPStep(Entry, FirstStep);
   
   HWAOpInst *Exit = &State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 
-  // Dirty Hack: Just place all SCC at the first II.
-  // TODO: Move the whole SCC around and find the best place.
+  // Emit the Pred before next loop start.
   if (MII)
-    buildSCCASAPStep(State, CriticalPathEnd, MII,
-                     Entry->use_begin(), Entry->use_end());
+    if (HWAOpInst *Pred = dyn_cast<HWAOpInst>(Exit->getOperand(0)))
+      AtomToTF[Pred].second = std::min(AtomToTF[Pred].second,
+                                       FirstStep + MII - Pred->getLatency());
 
   buildALAPStep(Exit, CriticalPathEnd);
 

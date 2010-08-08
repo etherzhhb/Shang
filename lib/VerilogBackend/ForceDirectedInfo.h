@@ -33,10 +33,8 @@ class ForceDirectedInfo : public FunctionPass {
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
-  typedef std::map<const HWAtom*, unsigned> SCCALAPMapType;
 
   TimeFrameMapType AtomToTF;
-  SCCALAPMapType AtomToSCCALAP;
 
   void buildASAPStep(const HWAVRoot *EntryRoot, unsigned step);
   void buildALAPStep(const HWAOpInst *ExitRoot, unsigned step);
@@ -67,32 +65,6 @@ public:
     assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
-  }
-
-  // Build the ALAP step constrain by SCC.
-  template<class It>
-  bool buildSCCASAPStep(FSMState *State, unsigned FirstStep, unsigned II,
-                        It SCCBegin, It SCCEnd) {
-      // Build SCC ALAP constrain before we build the ALAP steps.
-      for (It I = SCCBegin, E = SCCEnd; I != E; ++I) {
-        HWAtom *A = *I;
-        unsigned SCCALAP = std::min(getASAPStep(A) + MII - A->getLatency(),
-                                    FirstStep + II - A->getLatency());
-
-        if (SCCALAP < getASAPStep(A))
-          return false;
-
-        AtomToSCCALAP[A] = SCCALAP;
-      }
-      return true;
-  }
-
-  unsigned getSCCALAPStep(const HWAtom *A) const {
-    SCCALAPMapType::const_iterator at = AtomToSCCALAP.find(A);
-    if (at != AtomToSCCALAP.end())
-      return at->second;
-   
-    return CriticalPathEnd;
   }
 
   void buildALAPStep(FSMState *State) {
@@ -151,20 +123,6 @@ public:
   //}
 
   unsigned buildFDInfo(FSMState *State);
-
-  template<class It>
-  bool updateFDInfoForSCC(FSMState *State, unsigned FirstStep, unsigned II,
-                          It SCCBegin, It SCCEnd) {
-    // Build the time frame
-    buildASAPStep(State); 
-    if (!buildSCCASAPStep(State, FirstStep, II, SCCBegin, SCCEnd))
-      return false;
-
-    buildALAPStep(State);
-    buildDGraph(State);
-    buildAvgDG(State);
-    return true;
-  }
 
   void initMII(unsigned II) { MII = II; }
 
