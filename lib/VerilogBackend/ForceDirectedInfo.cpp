@@ -253,11 +253,9 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
       E = const_usetree_iterator::end(OpInst); I != E; ++I) {
     if (*I == OpInst)
       continue;
-    
-    if (const HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
-      if (const HWAPostBind *P = dyn_cast<HWAPostBind>(U))
-        ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
-    }
+  
+    if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
+      ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);  
   }
 
   return ret;
@@ -272,10 +270,8 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
     if (*I == OpInst)
       continue;
 
-    if (const HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
-      if (const HWAPostBind *P = dyn_cast<HWAPostBind>(U))
-        ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
-    }
+    if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
+      ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
   }
 
   return ret;

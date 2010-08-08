@@ -204,7 +204,7 @@ void FDLScheduler::FDModuloSchedule() {
       FDInfo->lengthenCriticalPath();
       continue;
     case FDLScheduler::SchedFailII:
-      FDInfo->lengthenMII();
+      MII = FDInfo->lengthenMII();
       continue;
     }
   }
