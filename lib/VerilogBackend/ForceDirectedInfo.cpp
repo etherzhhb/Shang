@@ -135,7 +135,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
 }
 
 
-void ForceDirectedInfo::printTimeFrame(FSMState *State, raw_ostream &OS) const {
+void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I) {
@@ -146,8 +146,8 @@ void ForceDirectedInfo::printTimeFrame(FSMState *State, raw_ostream &OS) const {
   }
 }
 
-void ForceDirectedInfo::dumpTimeFrame(FSMState *State) const {
-  printTimeFrame(State, dbgs());
+void ForceDirectedInfo::dumpTimeFrame() const {
+  printTimeFrame(dbgs());
 }
 
 bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
@@ -156,7 +156,7 @@ bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
   return usage < FU.getTotalFUs();
 }
 
-void ForceDirectedInfo::buildDGraph(FSMState *State) {
+void ForceDirectedInfo::buildDGraph() {
   DGraph.clear();
   for (usetree_iterator I = State->usetree_begin(),
     E = State->usetree_end(); I != E; ++I){
@@ -180,10 +180,10 @@ void ForceDirectedInfo::buildDGraph(FSMState *State) {
           accDGraphAt(i, OpInst->getFunUnitID(), Prob);
       }
   }
-  DEBUG(printDG(State, dbgs()));
+  DEBUG(printDG(dbgs()));
 }
 
-void ForceDirectedInfo::printDG(FSMState *State, raw_ostream &OS) const {
+void ForceDirectedInfo::printDG(raw_ostream &OS) const {
   unsigned StartStep = State->getEntryRoot().getSlot();
   unsigned EndStep = MII > 0 ? (StartStep + MII - 1)
                                   : getALAPStep(&State->getExitRoot());
@@ -284,7 +284,7 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
   return ret;
 }
 
-void ForceDirectedInfo::buildAvgDG(FSMState *State) {
+void ForceDirectedInfo::buildAvgDG() {
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I)
     // We only care about the utilization of post bind resource. 
@@ -298,24 +298,26 @@ void ForceDirectedInfo::buildAvgDG(FSMState *State) {
     }
 }
 
-void ForceDirectedInfo::clear() {
+void ForceDirectedInfo::reset() {
   AtomToTF.clear();
   DGraph.clear();
   ResUsage.clear();
   AvgDG.clear();
+}
+
+void ForceDirectedInfo::releaseMemory() {
+  reset();
   MII = 0;
   CriticalPathEnd = 0;
 }
 
-void ForceDirectedInfo::releaseMemory() {
-  clear();
-}
-
-bool ForceDirectedInfo::runOnFunction(Function &F) {
+bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
+  HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
+  State = &HI.getStateFor(BB);
   return false;
 }
 
-unsigned ForceDirectedInfo::buildFDInfo(FSMState *State) {
+unsigned ForceDirectedInfo::buildFDInfo() {
   // Build the time frame
   HWAVRoot *Entry = &State->getEntryRoot();
   assert(Entry->isScheduled() && "Entry must be scheduled first!");
@@ -333,14 +335,14 @@ unsigned ForceDirectedInfo::buildFDInfo(FSMState *State) {
 
   buildALAPStep(Exit, CriticalPathEnd);
 
-  DEBUG(dumpTimeFrame(State));
+  DEBUG(dumpTimeFrame());
 
-  buildDGraph(State);
-  buildAvgDG(State);
+  buildDGraph();
+  buildAvgDG();
 
   return CriticalPathEnd;
 }
 
-void ForceDirectedInfo::dumpDG(FSMState *State) const {
-  printDG(State, dbgs());
+void ForceDirectedInfo::dumpDG() const {
+  printDG(dbgs());
 }

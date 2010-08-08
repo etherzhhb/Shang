@@ -25,9 +25,11 @@
 using namespace llvm;
 
 namespace esyn {
-class ForceDirectedInfo : public FunctionPass {
+class ForceDirectedInfo : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
+
+  FSMState *State;
 
   // Time Frame { {asap step, alap step }, isMIIContraint }
   typedef std::pair<unsigned, unsigned> TimeFrame;
@@ -57,7 +59,7 @@ public:
 
   /// @name TimeFrame
   //{
-  void buildASAPStep(FSMState *State) {
+  void buildASAPStep() {
     const HWAVRoot *Root = &State->getEntryRoot();
     buildASAPStep(Root, getASAPStep(Root));
   }
@@ -67,7 +69,7 @@ public:
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-  void buildALAPStep(FSMState *State) {
+  void buildALAPStep() {
     const HWAOpInst *Root = &State->getExitRoot();
     buildALAPStep(Root, getALAPStep(Root));
   }
@@ -86,17 +88,17 @@ public:
     return getTimeFrame(A) == MII - A->getLatency();
   }
 
-  void printTimeFrame(FSMState *State, raw_ostream &OS) const;
-  void dumpTimeFrame(FSMState *State) const;
+  void printTimeFrame(raw_ostream &OS) const;
+  void dumpTimeFrame() const;
   //}
 
   /// @name Distribution Graphs
   //{
-  void buildDGraph(FSMState *State);
+  void buildDGraph();
   double getDGraphAt(unsigned step, HWFUnitID FUID) const;
   void accDGraphAt(unsigned step, HWFUnitID FUID, double d);
-  void printDG(FSMState *State, raw_ostream &OS) const ;
-  void dumpDG(FSMState *State) const ;
+  void printDG(raw_ostream &OS) const ;
+  void dumpDG() const ;
   //}
 
   /// @name Resource usage table
@@ -107,7 +109,7 @@ public:
 
   /// @name Force computation
   //{
-  void buildAvgDG(FSMState *State);
+  void buildAvgDG();
   double getAvgDG(const HWAPostBind *A) {  return AvgDG[A]; }
   double getRangeDG(const HWAPostBind *A, unsigned start, unsigned end/*included*/);
 
@@ -122,19 +124,20 @@ public:
   unsigned findBestStep(HWAOpInst *A);
   //}
 
-  unsigned buildFDInfo(FSMState *State);
+  unsigned buildFDInfo();
 
   void initMII(unsigned II) { MII = II; }
 
   unsigned lengthenMII() { return ++MII; }
   unsigned lengthenCriticalPath() { return ++CriticalPathEnd; }
 
-  void clear();
+  void reset();
   /// @name Common pass interface
   //{
   static char ID;
-  ForceDirectedInfo() : FunctionPass(&ID), HI(0), RC(0) {}
-  bool runOnFunction(Function &F);
+  ForceDirectedInfo() : BasicBlockPass(&ID), HI(0), RC(0),
+    MII(0), CriticalPathEnd(0) {}
+  bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const {}

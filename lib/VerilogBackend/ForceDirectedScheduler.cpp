@@ -192,14 +192,14 @@ void FDLScheduler::FDModuloSchedule() {
 
   for(;;) {
     // Set up Resource table
-    FDInfo->clear();
+    FDInfo->reset();
     FDInfo->initMII(MII);
-    FDInfo->buildFDInfo(CurState);
+    FDInfo->buildFDInfo();
 
     switch (scheduleAtII(MII)) {
     case FDLScheduler::SchedSucc:
-      DEBUG(FDInfo->dumpTimeFrame(CurState));
-      DEBUG(FDInfo->dumpDG(CurState));
+      DEBUG(FDInfo->dumpTimeFrame());
+      DEBUG(FDInfo->dumpDG());
       // Set up the initial interval.
       CurState->setII(MII);
       return;
@@ -251,8 +251,8 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtII(unsigned II) {
 
 void FDLScheduler::FDListSchedule() {
   for(;;) {
-    FDInfo->clear();
-    FDInfo->buildFDInfo(CurState);
+    FDInfo->reset();
+    FDInfo->buildFDInfo();
 
     fds_sort s(FDInfo);
     AtomQueueType AQueue(s);
@@ -268,7 +268,7 @@ void FDLScheduler::FDListSchedule() {
   // control logic for loop if MS is disable.
   if (CurState->haveSelfLoop())
     CurState->setII(CurState->getTotalSlot());
-  DEBUG(FDInfo->dumpTimeFrame(CurState));
+  DEBUG(FDInfo->dumpTimeFrame());
 }
 
 
@@ -289,8 +289,8 @@ unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
     // Force update time frame
     A->scheduledTo(i);
     // Recover the time frame by force rebuild
-    FDInfo->buildASAPStep(CurState); 
-    FDInfo->buildALAPStep(CurState);
+    FDInfo->buildASAPStep(); 
+    FDInfo->buildALAPStep();
 
     // The follow function will invalid the time frame.
     DEBUG(dbgs() << " Self Force: " << SelfForce);
@@ -313,7 +313,7 @@ void FDLScheduler::releaseMemory() {
 
 void FDLScheduler::clear() {
   CurState = 0;
-  FDInfo->clear();
+  FDInfo->reset();
   MSInfo->clear();
 }
 
@@ -334,7 +334,7 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
                               FDLScheduler::SchedFailCricitalPath;
 
     A->scheduledTo(step);
-    FDInfo->buildFDInfo(CurState);
+    FDInfo->buildFDInfo();
   } else //if(!A->isScheduled())
     // Schedule to the best step.
     A->scheduledTo(step);
