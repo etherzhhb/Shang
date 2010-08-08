@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedInfo.h"
+#include "ModuloScheduleInfo.h"
 #include "HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-fd-info"
@@ -36,6 +37,7 @@ RegisterPass<ForceDirectedInfo> X("vbe-fd-info",
 
 void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequiredTransitive<HWAtomInfo>();
+  AU.addRequiredTransitive<ModuloScheduleInfo>();
   AU.addRequiredTransitive<ResourceConfig>();
   AU.setPreservesAll();
 }
@@ -313,7 +315,16 @@ void ForceDirectedInfo::releaseMemory() {
 
 bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
+  MSInfo = &getAnalysis<ModuloScheduleInfo>();
   State = &HI.getStateFor(BB);
+
+  if (MSInfo->isModuloSchedulable(*State)) {
+    unsigned RecMII = MSInfo->computeRecMII(*State);
+    unsigned ResMII = MSInfo->computeResMII(*State);
+    MII = std::max(RecMII, ResMII);
+  } else
+    MII = 0;
+
   return false;
 }
 

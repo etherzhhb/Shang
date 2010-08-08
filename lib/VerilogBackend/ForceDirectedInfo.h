@@ -25,10 +25,12 @@
 using namespace llvm;
 
 namespace esyn {
+class ModuloScheduleInfo;
+
 class ForceDirectedInfo : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
-
+  ModuloScheduleInfo *MSInfo;
   FSMState *State;
 
   // Time Frame { {asap step, alap step }, isMIIContraint }
@@ -126,16 +128,15 @@ public:
 
   unsigned buildFDInfo();
 
-  void initMII(unsigned II) { MII = II; }
-
-  unsigned lengthenMII() { return ++MII; }
-  unsigned lengthenCriticalPath() { return ++CriticalPathEnd; }
+  unsigned getMII() const { return MII; }
+  void lengthenMII() { ++MII; }
+  void lengthenCriticalPath() { ++CriticalPathEnd; }
 
   void reset();
   /// @name Common pass interface
   //{
   static char ID;
-  ForceDirectedInfo() : BasicBlockPass(&ID), HI(0), RC(0),
+  ForceDirectedInfo() : BasicBlockPass(&ID), MSInfo(0), HI(0), RC(0),
     MII(0), CriticalPathEnd(0) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();

@@ -68,7 +68,7 @@ struct FDLScheduler : public BasicBlockPass {
 
   SchedResult scheduleAtom(HWAtom *A);
   SchedResult scheduleQueue(AtomQueueType &Queue);
-  SchedResult scheduleAtII(unsigned II);
+  SchedResult scheduleAtII();
   //}
 
   unsigned findBestStep(HWAOpInst *A);
@@ -186,38 +186,34 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
 
 void FDLScheduler::FDModuloSchedule() {
   // Compute MII.
-  unsigned RecMII = MSInfo->computeRecMII(*CurState);
-  unsigned ResMII = MSInfo->computeResMII(*CurState);
-  unsigned MII = std::max(RecMII, ResMII);
 
   for(;;) {
     // Set up Resource table
     FDInfo->reset();
-    FDInfo->initMII(MII);
     FDInfo->buildFDInfo();
 
-    switch (scheduleAtII(MII)) {
+    switch (scheduleAtII()) {
     case FDLScheduler::SchedSucc:
       DEBUG(FDInfo->dumpTimeFrame());
       DEBUG(FDInfo->dumpDG());
       // Set up the initial interval.
-      CurState->setII(MII);
+      CurState->setII(FDInfo->getMII());
       return;
     case FDLScheduler::SchedFailCricitalPath:
       FDInfo->lengthenCriticalPath();
       continue;
     case FDLScheduler::SchedFailII:
-      MII = FDInfo->lengthenMII();
+      FDInfo->lengthenMII();
       continue;
     }
   }
 }
 
-FDLScheduler::SchedResult FDLScheduler::scheduleAtII(unsigned II) {
+FDLScheduler::SchedResult FDLScheduler::scheduleAtII() {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
   // Schedule all SCCs.
-  for (unsigned i = II; i > 0; --i) {
+  for (unsigned i = FDInfo->getMII(); i > 0; --i) {
     for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
         I != E; ++I) {
       scc_vector &SCC = I->second;
