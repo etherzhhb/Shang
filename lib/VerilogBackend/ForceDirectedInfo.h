@@ -69,6 +69,24 @@ public:
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
+  // Build the ALAP step constrain by SCC.
+  template<class It>
+  bool buildSCCASAPStep(FSMState *State, unsigned FirstStep, unsigned II,
+                        It SCCBegin, It SCCEnd) {
+      // Build SCC ALAP constrain before we build the ALAP steps.
+      for (It I = SCCBegin, E = SCCEnd; I != E; ++I) {
+        HWAtom *A = *I;
+        unsigned SCCALAP = std::min(getASAPStep(A) + MII - A->getLatency(),
+                                    FirstStep + II - A->getLatency());
+
+        if (SCCALAP < getASAPStep(A))
+          return false;
+
+        AtomToSCCALAP[A] = SCCALAP;
+      }
+      return true;
+  }
+
   unsigned getSCCALAPStep(const HWAtom *A) const {
     SCCALAPMapType::const_iterator at = AtomToSCCALAP.find(A);
     if (at != AtomToSCCALAP.end())
@@ -142,18 +160,8 @@ public:
                           It SCCBegin, It SCCEnd) {
     // Build the time frame
     buildASAPStep(State); 
-
-    // Build SCC ALAP constrain before we build the ALAP steps.
-    for (It I = SCCBegin, E = SCCEnd; I != E; ++I) {
-      HWAtom *A = *I;
-      unsigned SCCALAP = std::min(getASAPStep(A) + MII - A->getLatency(),
-                                  FirstStep + II - A->getLatency());
-
-      if (SCCALAP < getASAPStep(A))
-        return false;
-
-      AtomToSCCALAP[A] = SCCALAP;
-    }
+    if (!buildSCCASAPStep(State, FirstStep, II, SCCBegin, SCCEnd))
+      return false;
 
     buildALAPStep(State);
     buildDGraph(State);

@@ -61,7 +61,6 @@ struct FDLScheduler : public BasicBlockPass {
   HWAtom *fillQueue(AtomQueueType &Queue, It begin, It end);
 
   // Return the first node that we fail to schedule, return null if all nodes are scheduled.
-  SchedResult scheduleFirstNodeInSCC(HWAtom *Node, unsigned II);
   SchedResult scheduleQueue(AtomQueueType &Queue);
   SchedResult scheduleAtII(unsigned II);
   //}
