@@ -195,8 +195,6 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
 unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
   HWAtom *Root = &State.getExitRoot();
   unsigned MaxRecII = 1;
-  // Nodes that not in any scc.
-  std::vector<HWAtom*> TrivialNodes;
   for (dep_scc_iterator SCCI = dep_scc_iterator::begin(Root),
       SCCE = dep_scc_iterator::end(Root); SCCI != SCCE; ++SCCI) {
     scc_vector &Atoms = *SCCI;
@@ -218,9 +216,6 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
     RecList.insert(std::make_pair(RecII, Atoms));
     DEBUG(dbgs() << "RecII: " << RecII << '\n');
   }
-
-  // Also remember the trivial nodes.
-  RecList.insert(std::make_pair(1, TrivialNodes));
 
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
   return MaxRecII;

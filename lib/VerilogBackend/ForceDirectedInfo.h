@@ -29,12 +29,15 @@ class ForceDirectedInfo : public FunctionPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
 
-  // Time Frame {asap step, alap step }
+  // Time Frame { {asap step, alap step }, isMIIContraint }
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
+  typedef std::map<const HWAtom*, unsigned> SCCALAPMapType;
 
   TimeFrameMapType AtomToTF;
+  SCCALAPMapType AtomToSCCALAP;
+
   void buildASAPStep(const HWAVRoot *EntryRoot, unsigned step);
   void buildALAPStep(const HWAOpInst *ExitRoot, unsigned step);
 
@@ -51,7 +54,7 @@ class ForceDirectedInfo : public FunctionPass {
   std::map<const HWAPostBind*, double> AvgDG;
 
   // MII in modulo schedule.
-  unsigned Modulo;
+  unsigned MII, CriticalLength;
 public:
 
   /// @name TimeFrame
@@ -64,6 +67,14 @@ public:
     assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
+  }
+
+  unsigned getSCCALAPStep(const HWAtom *A) const {
+    SCCALAPMapType::const_iterator at = AtomToSCCALAP.find(A);
+    if (at != AtomToSCCALAP.end())
+      return at->second;
+   
+    return CriticalLength;
   }
 
   void buildALAPStep(FSMState *State) {
@@ -81,8 +92,8 @@ public:
   }
 
   // If the TimeFrame Constrains by II.
-  bool isModuloConstrains(const HWAOpInst *A) const {
-    return getTimeFrame(A) == Modulo;
+  bool constrainByMII(const HWAOpInst *A) const {
+    return getALAPStep(A) == getSCCALAPStep(A);
   }
 
   void printTimeFrame(FSMState *State, raw_ostream &OS) const;
@@ -126,7 +137,31 @@ public:
 
   void recoverFDInfo(FSMState *State);
 
-  void enableModuleFD(unsigned II) { Modulo = II; }
+  template<class It>
+  bool updateFDInfoForSCC(FSMState *State, unsigned FirstStep, unsigned II,
+                          It SCCBegin, It SCCEnd) {
+    // Build the time frame
+    buildASAPStep(State); 
+
+    // Build SCC ALAP constrain before we build the ALAP steps.
+    for (It I = SCCBegin, E = SCCEnd; I != E; ++I) {
+      HWAtom *A = *I;
+      unsigned SCCALAP = std::min(getASAPStep(A) + MII - A->getLatency(),
+                                  FirstStep + II - A->getLatency());
+
+      if (SCCALAP < getASAPStep(A))
+        return false;
+
+      AtomToSCCALAP[A] = SCCALAP;
+    }
+
+    buildALAPStep(State);
+    buildDGraph(State);
+    buildAvgDG(State);
+    return true;
+  }
+
+  void enableModuleFD(unsigned II) { MII = II; }
 
   void clear();
   /// @name Common pass interface
