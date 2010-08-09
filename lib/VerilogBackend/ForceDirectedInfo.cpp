@@ -62,20 +62,37 @@ void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
     else {
       const HWAtom *ChildNode = *It;
       ++WorkStack.back().second;
-      unsigned VC = ++VisitCount[ChildNode];
 
+      unsigned VC = ++VisitCount[ChildNode];
+      // Ignore backedge, so the visited node will not be push into the stack
+      // again by backedge.
+      if (VC > ChildNode->getNumDeps())
+        continue;
+
+      HWEdge *Edge = ChildNode->getEdgeFrom(Node);
       unsigned NewStep = ChildNode->getSlot();
       if (!ChildNode->isScheduled()) {
         int SNewStep = AtomToTF[Node].first + Node->getLatency() -
           // delta Node -> ChildNode
-          MII * ChildNode->getDepEdge(Node)->getItDst();
-        NewStep = std::max(0, SNewStep);
+          MII * Edge->getItDst();
+        assert(SNewStep >= (int)step && "Bad ASAP step!");
+        NewStep = SNewStep;
       }
 
-      if (VC == 1 || AtomToTF[ChildNode].first < NewStep)
+      if (VC == 1) { // Handle backedge;
+        for (HWAtom::const_dep_iterator DI = ChildNode->dep_begin(),
+            DE = ChildNode->dep_end(); DI != DE; ++DI) {
+          if (!DI.getEdge()->isBackEdge())
+            continue;
+          // Increase the visit count cause by backedge.
+          ++VisitCount[ChildNode];
+        }
+      }
+      if (AtomToTF[ChildNode].first < NewStep)
         AtomToTF[ChildNode].first = NewStep;
 
       // Only move forward when we visit the node from all its deps.
+      // Only push the node into the stack ONCE.
       if (VC == ChildNode->getNumDeps()) {
         WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
         // Set up the II constrain.
@@ -107,7 +124,10 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
     else {
       const HWAtom *ChildNode = *It;
       ++WorkStack.back().second;
+
       unsigned VC = ++VisitCount[ChildNode];
+      if (VC > ChildNode->getNumUses())
+        continue;
 
       unsigned NewStep = ChildNode->getSlot();
 
@@ -115,6 +135,16 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
         // Latency is ChildNode->Node.
         NewStep = AtomToTF[Node].second - ChildNode->getLatency()
                   + MII * It.getEdge()->getItDst();// delta ChildNode -> Node.
+      }
+
+      if (VC == 1) { // Handle backedge;
+        for (HWAtom::const_use_iterator UI = ChildNode->use_begin(),
+            UE = ChildNode->use_end(); UI != UE; ++UI) {
+          if (!(*UI)->getEdgeFrom(ChildNode)->isBackEdge())
+            continue;
+          // Increase the visit count cause by backedge.
+          ++VisitCount[ChildNode];
+        }
       }
 
       assert(AtomToTF[ChildNode].second && "Broken ALAP!");

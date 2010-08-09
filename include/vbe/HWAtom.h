@@ -71,24 +71,23 @@ class HWEdge {
   const unsigned short EdgeType;
   HWAtom *Src;
   // Iterate distance.
-  unsigned ItDst;
+  unsigned ItDst : 15;
+  bool IsBackEdge : 1;
 
   HWEdge(const HWEdge &);            // DO NOT IMPLEMENT
-  void operator=(const HWEdge &);  // DO NOT IMPLEMENT
+  void operator=(const HWEdge &);    // DO NOT IMPLEMENT
 
 protected:
-  HWEdge(enum HWEdgeTypes T, HWAtom *src,
-    unsigned Dst) : EdgeType(T), Src(src), ItDst(Dst) {}
+  HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned Dst, bool isBackEdge = false)
+    : EdgeType(T), Src(src), ItDst(Dst), IsBackEdge(isBackEdge) {}
 public:
   unsigned getEdgeType() const { return EdgeType; }
   // The referenced value.
-  HWAtom *getDagSrc() const { return Src; }
-  void setDagSrc(HWAtom *NewSrc) { Src = NewSrc; }
+  HWAtom *getSrc() const { return Src; }
+  void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
 
   unsigned getItDst() const { return ItDst; }
-
-  virtual HWAtom *getSCCSrc() const { return Src; }
-  bool isBackEdge() const { return getDagSrc() != getSCCSrc(); }
+  bool isBackEdge() const { return IsBackEdge; }
 
   virtual void print(raw_ostream &OS) const = 0;
 };
@@ -194,15 +193,12 @@ public:
     TrueDep, AntiDep, OutputDep, NoDep
   };
 private:
-  PointerIntPair<HWAOpInst*, 2, enum MemDepTypes> Data;
+  enum MemDepTypes DepType;
 public:
-  HWMemDep(HWAtom *Src, HWAOpInst *DepSrc, enum MemDepTypes DT,
-          unsigned Distance) : HWEdge(edgeMemDep, Src, Distance),
-          Data(DepSrc, DT) {}
+  HWMemDep(HWAtom *Src, bool isBackEdge, enum MemDepTypes DT, unsigned Dist)
+    : HWEdge(edgeMemDep, Src, Dist, isBackEdge), DepType(DT) {}
 
-  enum MemDepTypes getDepType() const { return Data.getInt(); }
-
-  HWAtom *getSCCSrc() const;
+  enum MemDepTypes getDepType() const { return DepType; }
 
   void print(raw_ostream &OS) const;
 
@@ -217,6 +213,7 @@ template<class IteratorType, class NodeType>
 class HWAtomDepIterator : public std::iterator<std::forward_iterator_tag,
                                                NodeType*, ptrdiff_t> {
   IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
+  typedef HWAtomDepIterator<IteratorType, NodeType> Self;
 public:
   HWAtomDepIterator(IteratorType i) : I(i) {}
 
@@ -229,7 +226,7 @@ public:
   }
 
   NodeType* operator*() const {
-    return (*I)->getDagSrc();
+    return (*I)->getSrc();
   }
   NodeType* operator->() const { return operator*(); }
 
@@ -245,6 +242,12 @@ public:
 
   HWEdge *getEdge() { return *I; }
   const HWEdge *getEdge() const { return *I; }
+
+  static Self findSccEdge(NodeType *Src, NodeType *Dst) {
+  return std::find(Self(Dst->edge_begin()),
+                   Self(Dst->edge_end()),
+                   Src);
+  }
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -302,7 +305,7 @@ public:
 
   // Add a new depencence edge to the atom.
   void addDep(HWEdge *E) {
-    E->getDagSrc()->addToUseList(this);
+    E->getSrc()->addToUseList(this);
     Deps.push_back(E);
   }
 
@@ -350,15 +353,15 @@ public:
     I->removeFromList(this);
     NewDep->addToUseList(this);
     // Setup the dependence list.
-    I.getEdge()->setDagSrc(NewDep);
+    I.getEdge()->setSrc(NewDep);
   }
 
   void setDep(unsigned idx, HWAtom *NewDep) {
     // Update use list
-    Deps[idx]->getDagSrc()->removeFromList(this);
+    Deps[idx]->getSrc()->removeFromList(this);
     NewDep->addToUseList(this);
     // Setup the dependence list.
-    Deps[idx]->setDagSrc(NewDep);
+    Deps[idx]->setSrc(NewDep);
   }
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
@@ -377,11 +380,11 @@ public:
     return dep_end();
   }
 
-  HWEdge *getDepEdge(const HWAtom *A) {
+  HWEdge *getEdgeFrom(const HWAtom *A) {
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();
   }
-  HWEdge *getDepEdge(const HWAtom *A) const {
+  HWEdge *getEdgeFrom(const HWAtom *A) const {
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();
   }
@@ -502,10 +505,10 @@ class HWAWrSS : public HWAtom {
   HWScalarStorage *Reg;
 public:
   HWAWrSS(const FoldingSetNodeIDRef ID, HWEdge *Edge, HWScalarStorage *reg)
-    : HWAtom(ID, atomWrSS, Edge->getDagSrc()->getValue(), Edge,
+    : HWAtom(ID, atomWrSS, Edge->getSrc()->getValue(), Edge,
     1/*The latancy of a write register operation is 1*/), Reg(reg) {
-    scheduledTo(Edge->getDagSrc()->getFinSlot());
-    setParent(Edge->getDagSrc()->getParent());
+    scheduledTo(Edge->getSrc()->getFinSlot());
+    setParent(Edge->getSrc()->getParent());
   }
 
   HWScalarStorage *getReg() const { return Reg;  }
@@ -521,7 +524,7 @@ public:
 class HWADelay : public HWAtom {
 public:
   HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep *Edge, unsigned Delay)
-    : HWAtom(ID, atomDelay, Edge->getDagSrc()->getValue(), Edge, Delay) {}
+    : HWAtom(ID, atomDelay, Edge->getSrc()->getValue(), Edge, Delay) {}
 
   static inline bool classof(const HWADelay *A) { return true; }
   static inline bool classof(const HWAtom *A) {
@@ -538,8 +541,8 @@ public:
   HWAImpSS(const FoldingSetNodeIDRef ID, HWEdge *Edge, HWScalarStorage *reg, Value &V)
     : HWAtom(ID, atomImpSS, V, Edge,
     1/*The latancy of a write register operation is 1*/), Reg(reg) {
-      scheduledTo(Edge->getDagSrc()->getFinSlot());
-      setParent(Edge->getDagSrc()->getParent());
+      scheduledTo(Edge->getSrc()->getFinSlot());
+      setParent(Edge->getSrc()->getParent());
   }
 
   HWScalarStorage *getReg() const { return Reg;  }
@@ -637,7 +640,7 @@ public:
     assert(idx < NumOps && "index Out of range!");
     //assert(&(getDep(idx)->getSrc()->getValue()) == getInst<Instruction>().getOperand(idx)
     //  && "HWPostBind operands broken!");
-    return getDep(idx)->getDagSrc();
+    return getDep(idx)->getSrc();
   }
 
   // Return the opcode of the instruction.

@@ -121,7 +121,7 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
                Value &V, HWEdge *Dep0, unsigned latancy) : FastID(ID),
                HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {
   Deps.push_back(Dep0);
-  Dep0->getDagSrc()->addToUseList(this);
+  Dep0->getSrc()->addToUseList(this);
 }
 
 
@@ -153,10 +153,6 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
   // Setup the step
   scheduledTo(PostBind.getSlot());
   setParent(PostBind.getParent());
-}
-
-HWAtom *HWMemDep::getSCCSrc() const {
-  return Data.getPointer();
 }
 
 void esyn::FSMState::dump() const {

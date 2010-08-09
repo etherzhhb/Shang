@@ -296,7 +296,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
         + getAsOperand(cast<HWAImpSS>(A)->getReg());
     case atomDelay:
-      return getAsOperand(cast<HWADelay>(A)->getDep(0)->getDagSrc());
+      return getAsOperand(cast<HWADelay>(A)->getDep(0)->getSrc());
     default:
       llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
@@ -320,7 +320,7 @@ std::string RTLWriter::getAsOperand(HWEdge *E) {
   case edgeConst:
     return vlang->printConstant(cast<HWConst>(E)->getConstant());
   case edgeValDep:
-    return getAsOperand(cast<HWValDep>(E)->getDagSrc());
+    return getAsOperand(cast<HWValDep>(E)->getSrc());
   default:
     llvm_unreachable("Do not use other edge as operand!");
     return "<Unknown edge>";

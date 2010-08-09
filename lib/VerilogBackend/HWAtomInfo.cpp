@@ -120,7 +120,7 @@ void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
   HWAOpInst *Pred = cast<HWAOpInst>(getAtomFor(*ICmp));
 
   // The Next loop depend on the result of predicate.
-  HWMemDep *LoopDep = getMemDepEdge(Pred, Entry, HWMemDep::TrueDep, 1);
+  HWMemDep *LoopDep = getMemDepEdge(Pred, true, HWMemDep::TrueDep, 1);
   //IVIncAtom->addDep(LoopDep);
   Entry->addDep(LoopDep);
 }
@@ -151,12 +151,10 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB)
       if (!Dep.hasDep())
         continue;
 
-      // There is a backedge if src not before dest, so we will ad a dummy src to build
-      // the dag.
-      HWAtom *Root = srcBeforeDest ? (HWAtom*)Src : (HWAtom*)getEntryRoot(&BB);
-
       // Add dependencies edges.
-      HWMemDep *MemDep = getMemDepEdge(Src, Root, Dep.getDepType(), Dep.getItDst());
+      // The edge is back edge if destination before source.
+      HWMemDep *MemDep = getMemDepEdge(Src, !srcBeforeDest, 
+                                       Dep.getDepType(), Dep.getItDst());
       Dst->addDep(MemDep);
     }
   }
@@ -187,7 +185,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   HWAtom *Pred = 0;
   // Do not add the operand twice
   if (!Deps.empty()) {
-    Pred = Deps[0]->getDagSrc();
+    Pred = Deps[0]->getSrc();
   }
 
   unsigned OpSize = Deps.size();
@@ -479,10 +477,10 @@ HWAImpSS *HWAtomInfo::getImpSS(HWAtom *Src, HWScalarStorage *Reg, Value &V) {
 }
 
 
-HWMemDep *HWAtomInfo::getMemDepEdge(HWAOpInst *Src, HWAtom *Root,
+HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
                                     enum HWMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
-  return new (HWAtomAllocator) HWMemDep(Root, Src, DepType, Diff);
+  return new (HWAtomAllocator) HWMemDep(Src, isBackEdge, DepType, Diff);
 }
 
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {

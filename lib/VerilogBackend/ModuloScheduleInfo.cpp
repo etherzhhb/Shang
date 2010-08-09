@@ -38,88 +38,17 @@ NoModuloSchedule("disable-modulo-schedule",
           cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-namespace {
-template<class IteratorType, class NodeType>
-class HWAtomSccEdgeIterator : public std::iterator<std::forward_iterator_tag,
-                                                  NodeType*, ptrdiff_t> {
-  IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
-  typedef HWAtomSccEdgeIterator<IteratorType, NodeType> Self;
-public:
-  HWAtomSccEdgeIterator(IteratorType i) : I(i) {}
-
-  bool operator==(const HWAtomSccEdgeIterator RHS) const { return I == RHS.I; }
-  bool operator!=(const HWAtomSccEdgeIterator RHS) const { return I != RHS.I; }
-
-  const HWAtomSccEdgeIterator &operator=(const HWAtomSccEdgeIterator &RHS) {
-    I = RHS.I;
-    return *this;
-  }
-
-  NodeType* operator*() const {
-    return (*I)->getSCCSrc();
-  }
-  NodeType* operator->() const { return operator*(); }
-
-  Self operator++() {                // Preincrement
-    ++I;
-    return *this;
-  }
-  Self operator++(int) { // Postincrement
-    HWAtomSccEdgeIterator tmp = *this;
-    ++*this;
-    return tmp; 
-  }
-
-  HWEdge *getEdge() { return *I; }
-  const HWEdge *getEdge() const { return *I; }
-
-  static Self findSccEdge(NodeType *Src, NodeType *Dst) {
-    return std::find(Self(Dst->edge_begin()),
-                     Self(Dst->edge_end()),
-                     Src);
-  }
-};
-}
-//===----------------------------------------------------------------------===//
-namespace llvm {
-template <class GraphType>
-struct DepScc {
-  const GraphType &Graph;
-
-  inline DepScc(const GraphType &G) : Graph(G) {}
-};
-
-template<> struct GraphTraits<DepScc<esyn::HWAtom*> > {
-  typedef esyn::HWAtom NodeType;
-  typedef HWAtomSccEdgeIterator<SmallVectorImpl<HWEdge*>::iterator, HWAtom>
-    ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->edge_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->edge_end();
-  }
-};
-template<> struct GraphTraits<DepScc<const esyn::HWAtom*> > {
-  typedef const esyn::HWAtom NodeType;
-  typedef HWAtomSccEdgeIterator<SmallVectorImpl<HWEdge*>::const_iterator,
-    const HWAtom>
-    ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->edge_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->edge_end();
-  }
-};
-}
-typedef GraphTraits<DepScc<esyn::HWAtom*> > HWAtomSccGT;
-typedef GraphTraits<DepScc<const esyn::HWAtom*> > ConstHWAtomSccGT;
+typedef GraphTraits<Inverse<esyn::HWAtom*> > HWAtomSccGT;
+typedef GraphTraits<Inverse<const esyn::HWAtom*> > ConstHWAtomSccGT;
 
 typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
 typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
+
+//static Self findSccEdge(NodeType *Src, NodeType *Dst) {
+//  return std::find(Self(Dst->edge_begin()),
+//    Self(Dst->edge_end()),
+//    Src);
+//}
 //===----------------------------------------------------------------------===//
 char ModuloScheduleInfo::ID = 0;
 

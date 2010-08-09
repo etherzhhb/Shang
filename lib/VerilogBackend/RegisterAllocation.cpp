@@ -87,12 +87,12 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         Value *V = A->getIOperand(i);
         if (VD->isImport()) {
           // Insert the import node.
-          HWAVRoot *Root = cast<HWAVRoot>(VD->getDagSrc());
+          HWAVRoot *Root = cast<HWAVRoot>(VD->getSrc());
           HWScalarStorage *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
           HWAImpSS *ImpStg = HI.getImpSS(Root, R, *V);
           A->setDep(i, ImpStg);
 
-        } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
+        } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getSrc())) {
           // We need to register the value if the value life through
           // several cycle. Or we need to keep the value until the computation
           // finish.
@@ -105,7 +105,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
             HWAWrSS *WR = HI.getWrSS(DI, R);
             A->setDep(i, WR);
           }
-        } else if (HWAWrSS *WrSS = dyn_cast<HWAWrSS>(VD->getDagSrc())) {
+        } else if (HWAWrSS *WrSS = dyn_cast<HWAWrSS>(VD->getSrc())) {
           // Move the value out of the Function unit register.
           assert(WrSS->getReg()->isFuReg()
                  && "Only Expect function unit register!");
@@ -127,7 +127,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     HWCtrlDep *CD = dyn_cast<HWCtrlDep>(Exit->getDep(i));
     if (!(CD && CD->isExport())) continue;
 
-    HWAtom *SrcAtom = CD->getDagSrc();
+    HWAtom *SrcAtom = CD->getSrc();
 
     // If we already emit the register, just skip it.
     if (HWAWrSS *WR = dyn_cast<HWAWrSS>(SrcAtom))
