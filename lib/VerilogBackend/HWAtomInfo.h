@@ -202,23 +202,22 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   void addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB);
 
   bool haveSelfLoop(BasicBlock *BB);
-  void addLoopIVSCC(BasicBlock *BB);
+  void addLoopPredBackEdge(BasicBlock *BB);
 
   // The loop Info
   LoopInfo *LI;
   ResourceConfig *RC;
   // Total states
-  unsigned totalCycle;
-
+  unsigned short totalCycle;
+  unsigned short InstIdx;
   // Analysis for dependence analyzes.
   MemDepInfo *MDA;
 public:
-
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0),
-    totalCycle(1), NumRegs(1), MDA(0) {}
+  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0), totalCycle(1),
+    InstIdx(0), NumRegs(1), MDA(0) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();

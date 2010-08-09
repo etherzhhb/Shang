@@ -37,17 +37,17 @@ void HWAtom::dump() const {
 }
 
 void HWAWrSS::print(raw_ostream &OS) const {
-  OS << "Write Storage "
+  OS << "[" << getIdx() << "] " << "Write Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
 void HWAImpSS::print(raw_ostream &OS) const {
-  OS << "Import Storage "
+  OS << "[" << getIdx() << "] " << "Import Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
 void HWADelay::print(raw_ostream &OS) const {
-  OS << "Delay: " << getLatency();
+  OS << "[" << getIdx() << "] " << "Delay: " << getLatency();
 }
 
 void HWMemDep::print(raw_ostream &OS) const {
@@ -100,6 +100,7 @@ void FSMState::print(raw_ostream &OS) const {
 }
 
 void HWAOpInst::print(raw_ostream &OS) const {
+  OS << "[" << getIdx() << "] ";
   if (getValue().getType()->isVoidTy())
     OS << getValue() << '\n';
   else
@@ -108,18 +109,21 @@ void HWAOpInst::print(raw_ostream &OS) const {
 }
 
 void HWAVRoot::print(raw_ostream &OS) const {
+  OS << "[" << getIdx() << "] ";
   WriteAsOperand(OS, &getValue(), false);
   OS << " Entry";
 }
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-               unsigned latancy)
-: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {}
+               unsigned latancy, unsigned short Idx)
+: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
+InstIdx(Idx) {}
 
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
-               Value &V, HWEdge *Dep0, unsigned latancy) : FastID(ID),
-               HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {
+               Value &V, HWEdge *Dep0, unsigned latancy, unsigned short Idx) : FastID(ID),
+               HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
+               InstIdx(Idx) {
   Deps.push_back(Dep0);
   Dep0->getSrc()->addToUseList(this);
 }
@@ -142,7 +146,7 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
                        HWFUnit FUID)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
               PostBind.edge_begin(), PostBind.edge_end(),
-              PostBind.getInstNumOps(), FUID) {
+              PostBind.getInstNumOps(), FUID, PostBind.getIdx()) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);

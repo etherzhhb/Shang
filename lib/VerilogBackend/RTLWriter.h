@@ -108,7 +108,7 @@ class RTLWriter : public FunctionPass {
   void clear();
   
   std::string getAsOperand(Value *V, const std::string &postfix = "");
-  std::string getAsOperand(HWEdge *E);
+  std::string getAsOperand(HWEdge &E);
   std::string getAsOperand(HWAtom *A);
   std::string getAsOperand(HWScalarStorage *R);
   static std::string getFURegisterName(HWFUnitID FUID);

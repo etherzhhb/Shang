@@ -46,26 +46,30 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     PHINode *PN = cast<PHINode>(II);
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *IV = PN->getIncomingValue(i);
-      FSMState &IncomingStage = HI.getStateFor(*PN->getIncomingBlock(i));
-      unsigned lastSlot = IncomingStage.getExitRoot().getSlot();
+      FSMState &InStage = HI.getStateFor(*PN->getIncomingBlock(i));
+      unsigned lastSlot = (&State == &InStage) ? (InStage.getEntryRoot().getSlot() + InStage.getII()) :
+                                                 InStage.getExitRoot().getSlot();
 
-      if (IncomingStage.getPHISrc(IV) != 0)
+      if (InStage.getPHISrc(IV) != 0)
         continue;
 
       if (isa<Constant>(IV))
         continue;
       
       // We may read the value from function unit register.
-      if (isa<Instruction>(IV))
-        if (HWAPreBind *PB = dyn_cast<HWAPreBind>(HI.getAtomFor(*IV)))
-          if (HWAWrSS *WR = dyn_cast<HWAWrSS>(PB->use_back()))
+      if (isa<Instruction>(IV)) {
+        HWAtom *A = HI.getAtomFor(*IV);
+        if (HWAPreBind *PB = dyn_cast<HWAPreBind>(A)) {
+          HWAtom *Use = PB->use_back();
+          if (HWAWrSS *WR = dyn_cast<HWAWrSS>(Use))
             if (WR->getFinSlot() == lastSlot) {
-              IncomingStage.updatePHISrc(IV, WR->getReg());
+              InStage.updatePHISrc(IV, WR->getReg());
               continue;
             }
-
+        }
+      }
       HWScalarStorage *IR = HI.getRegForValue(IV, lastSlot, lastSlot);
-      IncomingStage.updatePHISrc(IV, IR);
+      InStage.updatePHISrc(IV, IR);
     }
   }
 
@@ -83,7 +87,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     DEBUG(dbgs() << " Visited\n");
 
     for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i) {
-      if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i))) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(&A->getDep(i))) {
         Value *V = A->getIOperand(i);
         if (VD->isImport()) {
           // Insert the import node.
@@ -124,7 +128,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   // Emit the exported register.
   HWAOpInst *Exit = &State.getExitRoot();
   for (unsigned i = Exit->getInstNumOps(), e = Exit->getNumDeps(); i != e; ++i) {
-    HWCtrlDep *CD = dyn_cast<HWCtrlDep>(Exit->getDep(i));
+    HWCtrlDep *CD = dyn_cast<HWCtrlDep>(&Exit->getDep(i));
     if (!(CD && CD->isExport())) continue;
 
     HWAtom *SrcAtom = CD->getSrc();

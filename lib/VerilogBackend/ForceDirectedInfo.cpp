@@ -77,7 +77,7 @@ void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
         assert(SNewStep >= (int)step && "Bad ASAP step!");
         unsigned NewStep = SNewStep;
 
-        if (VC == 1) // Handle backedge;
+        if (VC == 1) // Handle backedge when we first visit this node.
           for (HWAtom::const_dep_iterator DI = ChildNode->dep_begin(),
               DE = ChildNode->dep_end(); DI != DE; ++DI) {
             if (!DI.getEdge()->isBackEdge())
@@ -87,9 +87,9 @@ void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
             
             const HWAtom *BackDep = *DI;
             if (BackDep->isScheduled())
-              NewStep = std::max(NewStep,
-                                 BackDep->getSlot() + BackDep->getLatency()
-                                 - MII * DI.getEdge()->getItDst());
+              NewStep = std::max(BackDep->getSlot() + BackDep->getLatency()
+                                 - MII * DI.getEdge()->getItDst(),
+                                 NewStep);
           }
 
         if (AtomToTF[ChildNode].first < NewStep)
@@ -144,7 +144,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
                            // delta ChildNode -> Node.
                            + MII * It.getEdge()->getItDst();
 
-        if (VC == 1) // Handle backedge;
+        if (VC == 1) // Handle backedge when we first visit this node.
           for (HWAtom::const_use_iterator UI = ChildNode->use_begin(),
               UE = ChildNode->use_end(); UI != UE; ++UI) {
             HWEdge *UseEdge = (*UI)->getEdgeFrom(ChildNode);
@@ -155,9 +155,9 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
             
             const HWAtom *BackUse = *UI;
             if (BackUse->isScheduled())
-              NewStep = std::min(NewStep,
-                                 BackUse->getSlot() - ChildNode->getLatency()
-                                 + MII * UseEdge->getItDst());
+              NewStep = std::min(BackUse->getSlot() - ChildNode->getLatency()
+                                 + MII * UseEdge->getItDst(),
+                                 NewStep);
           }
 
         assert(AtomToTF[ChildNode].second && "Broken ALAP!");

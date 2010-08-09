@@ -296,7 +296,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
         + getAsOperand(cast<HWAImpSS>(A)->getReg());
     case atomDelay:
-      return getAsOperand(cast<HWADelay>(A)->getDep(0)->getSrc());
+      return getAsOperand(cast<HWADelay>(A)->getDep(0).getSrc());
     default:
       llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
@@ -315,12 +315,12 @@ std::string RTLWriter::getAsOperand(HWScalarStorage *R) {
   return "Reg"+utostr(R->getRegNum());
 }
 
-std::string RTLWriter::getAsOperand(HWEdge *E) {
-  switch (E->getEdgeType()) {
+std::string RTLWriter::getAsOperand(HWEdge &E) {
+  switch (E.getEdgeType()) {
   case edgeConst:
-    return vlang->printConstant(cast<HWConst>(E)->getConstant());
+    return vlang->printConstant(cast<HWConst>(E).getConstant());
   case edgeValDep:
-    return getAsOperand(cast<HWValDep>(E)->getSrc());
+    return getAsOperand(cast<HWValDep>(E).getSrc());
   default:
     llvm_unreachable("Do not use other edge as operand!");
     return "<Unknown edge>";
@@ -745,7 +745,7 @@ void RTLWriter::visitExtInst(HWAPostBind &A) {
   int DiffBits = Ty->getBitWidth() - ChTy->getBitWidth();	
   DataPath << "{{" << DiffBits << "{";
 
-  HWEdge *Op = A.getValDep(0);
+  HWEdge &Op = A.getValDep(0);
 
   if(I.getOpcode() == Instruction::ZExt)
     DataPath << "1'b0";
@@ -815,7 +815,7 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
     BasicBlock &NextBB0 = *(I.getSuccessor(0)), 
                &NextBB1 = *(I.getSuccessor(1)), 
                &CurBB = *(I.getParent());
-    HWEdge *Cnd = A.getValDep(0);
+    HWEdge &Cnd = A.getValDep(0);
     vlang->ifBegin(ControlBlock.indent(10), getAsOperand(Cnd));
 
     if (&NextBB0 != &CurBB) {

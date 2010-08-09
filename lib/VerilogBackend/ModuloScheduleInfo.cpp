@@ -28,6 +28,8 @@
 #define DEBUG_TYPE "vbe-ms-info"
 #include "llvm/Support/Debug.h"
 
+#include <algorithm>
+
 using namespace llvm;
 using namespace esyn;
 
@@ -44,11 +46,14 @@ typedef GraphTraits<Inverse<const esyn::HWAtom*> > ConstHWAtomSccGT;
 typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
 typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
 
-//static Self findSccEdge(NodeType *Src, NodeType *Dst) {
-//  return std::find(Self(Dst->edge_begin()),
-//    Self(Dst->edge_end()),
-//    Src);
-//}
+namespace {
+  struct top_sort {
+    bool operator() (const HWAtom* LHS, const HWAtom* RHS) const {
+      return LHS->getIdx() < RHS->getIdx();
+    }
+  };
+}
+
 //===----------------------------------------------------------------------===//
 char ModuloScheduleInfo::ID = 0;
 
@@ -90,32 +95,36 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
   assert(Scc.size() > 1 && "No self loop expect in DDG!");
   unsigned totalLatency = 0;
   unsigned totalItDist = 0;
-  HWAtom *LastAtom = 0;
-  // Make a circle.
-  Scc.push_back(Scc.front());
-  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
-    I != E; ++I) {
-      HWAtom *CurAtom = *I;
-      totalLatency += CurAtom->getLatency();
 
-      if (LastAtom) {
-        HWAtomSccGT::ChildIteratorType EI =
-          HWAtomSccGT::ChildIteratorType::findSccEdge(LastAtom, CurAtom);
-        assert(EI != HWAtomSccGT::child_end(LastAtom) && "Edge not found!");
-        if (HWMemDep *MemEdge = dyn_cast<HWMemDep>(EI.getEdge())) {
-          unsigned ItDst = MemEdge->getItDst();
-          if (ItDst > 0) {
-            totalItDist = ItDst;
-          }
-        }
-      }
-      // Update last atom we had visited.
-      LastAtom = CurAtom;
+  
+  std::sort(Scc.begin(), Scc.end(), top_sort());
+  //
+  DEBUG(
+  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
+      I != E; ++I)
+    (*I)->dump();
+  );
+  const HWAtom *FirstAtom = Scc.front();
+  std::map<const HWAtom*, unsigned> MaxLatency, MaxItDist;
+  MaxLatency[FirstAtom] = 0;
+  MaxItDist[FirstAtom] = 0;
+  // All nodes longest path.
+  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
+      I != E; ++I) {
+    const HWAtom *CurAtom = *I;
+    for (HWAtom::const_use_iterator UI = CurAtom->use_begin(),
+        UE = CurAtom->use_end();UI != UE; ++UI) {
+      const HWAtom *UseAtom = *UI;
+      MaxLatency[UseAtom] = std::max(MaxLatency[CurAtom] + CurAtom->getLatency(),
+                                     MaxLatency[UseAtom]);
+      HWEdge *Edge = UseAtom->getEdgeFrom(CurAtom);
+      MaxItDist[UseAtom] = std::max(MaxItDist[CurAtom] + Edge->getItDst(),
+                                    MaxItDist[UseAtom]);
+    }
   }
-  // The latency of the first node had been count twice.
-  totalLatency -= Scc.front()->getLatency();
-  // Recover the Scc vector.
-  Scc.pop_back();
+
+  totalLatency = MaxLatency[FirstAtom];
+  totalItDist = MaxItDist[FirstAtom];
   assert(totalItDist != 0 && "No cross iteration dependence?");
   return ceil((double)totalLatency / totalItDist);
 }

@@ -76,7 +76,7 @@ bool HWAtomInfo::runOnFunction(Function &F) {
     
     // Add SCC for loop.
     if (selfLoop)
-      addLoopIVSCC(BB);
+      addLoopPredBackEdge(BB);
 
     HWAOpInst *Exit = cast<HWAPostBind>(getControlRoot());
     BBToStates[BB] = new FSMState(Entry, Exit, selfLoop);
@@ -101,7 +101,7 @@ bool HWAtomInfo::haveSelfLoop(BasicBlock *BB) {
   return true;
 }
 
-void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
+void HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
   assert(haveSelfLoop(BB) && "Loop SCC only exist in self loop!");
 
   Loop *L = LI->getLoopFor(BB);
@@ -168,6 +168,7 @@ void HWAtomInfo::clear() {
   // Reset total Cycle
   totalCycle = 1;
   NumRegs = 1;
+  InstIdx = 0;
   RegForValues.clear();
 }
 
@@ -360,6 +361,8 @@ HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind, unsigned Instance)
   A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
                                        PostBind, FU);
 
+  // Update the Map.
+  ValueToHWAtoms[&PostBind.getValue()] = A;
   UniqiueHWAtoms.InsertNode(A, IP);
 
   return A;
@@ -378,7 +381,7 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I,
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-      I, Deps.begin(), Deps.end(), OpNum, FUID);
+      I, Deps.begin(), Deps.end(), OpNum, FUID, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -397,7 +400,7 @@ HWAPostBind *HWAtomInfo::getPostBind(Instruction &I,
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPostBind(ID.Intern(HWAtomAllocator),
-      I, Deps.begin(), Deps.end(), OpNum, FUID);
+      I, Deps.begin(), Deps.end(), OpNum, FUID, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -414,7 +417,8 @@ HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
     static_cast<HWAVRoot*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAVRoot(ID.Intern(HWAtomAllocator), *BB);
+    A = new (HWAtomAllocator) HWAVRoot(ID.Intern(HWAtomAllocator), *BB,
+                                       ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -432,7 +436,7 @@ HWAWrSS *HWAtomInfo::getWrSS(HWAtom *Src, HWScalarStorage *Reg) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWAWrSS(ID.Intern(HWAtomAllocator),
-                                       getValDepEdge(Src, false), Reg);
+                                       *getValDepEdge(Src, false), Reg);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -450,7 +454,7 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWADelay(ID.Intern(HWAtomAllocator),
-      getCtrlDepEdge(Src, false), Delay);
+      *getCtrlDepEdge(Src, false), Delay, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -470,7 +474,7 @@ HWAImpSS *HWAtomInfo::getImpSS(HWAtom *Src, HWScalarStorage *Reg, Value &V) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWAImpSS(ID.Intern(HWAtomAllocator),
-      getValDepEdge(Src, false), Reg, V);
+      *getValDepEdge(Src, false), Reg, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -491,6 +495,7 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
 }
 
 void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
+  HWAVRoot *Entry = getEntryRoot(&BB);
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
     BasicBlock *SuccBB = *SI;
     for (BasicBlock::iterator II = SuccBB->begin(),
@@ -517,6 +522,13 @@ void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
 
       HWADelay *Delay = getDelay(OpInst, 1);
       Deps.push_back(getCtrlDepEdge(Delay));
+
+      if (&BB == SuccBB) {// Self Loop?
+        // The Next loop depend on the result of phi.
+        HWMemDep *PHIDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
+        //IVIncAtom->addDep(LoopDep);
+        Entry->addDep(PHIDep);
+      }
     }
   }
 }

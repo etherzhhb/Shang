@@ -91,15 +91,14 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
       if (Dst->getSlot() - Src->getSlot() > II) {
         DEBUG(dbgs() << "Anti dependency found:\n");
         if (NewWrSS == 0) {
-          // Delay count from the finish slot of Src,
-          // but II is count from the start time, so we need to minus 1.
-          HWADelay *Delay = HI.getDelay(Src, II - 1);
+          HWADelay *Delay = HI.getDelay(Src, II);
           Delay->scheduledTo(Src->getFinSlot());
           unsigned StartSlot = Delay->getFinSlot();
-          HWScalarStorage *NewReg = HI.allocaRegister(Ty, StartSlot, StartSlot + II);
+          HWScalarStorage *NewReg = HI.allocaRegister(Ty, StartSlot,
+                                                      StartSlot + II);
           NewWrSS = HI.getWrSS(Delay, NewReg);
         }
-        Dst->setDep(Dst->getDepIt(Src), NewWrSS);
+        Dst->replaceDep(Src, NewWrSS);
       }
     } // End foreach RegUsers.
 

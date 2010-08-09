@@ -511,7 +511,7 @@ void CompPathBinding::bindFunUnitReg() {
         DEBUG(dbgs() << "Replace Use: ");
         DEBUG(Use->dump());
         // Read the result for From this Register.
-        Use->setDep(Use->getDepIt(A), WR);
+        Use->replaceDep(A, WR);
       }
     }
   }
