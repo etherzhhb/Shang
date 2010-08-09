@@ -53,7 +53,9 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
     // Setup the state.
     BasicBlock *BB = &*I;
-    SetControlRoot(getEntryRoot(BB));
+    FSMState *State = getState(BB);
+    ValueToHWAtoms[BB] = State;
+    SetControlRoot(State);
     DEBUG(dbgs() << "Building atom for BB: " << BB->getName() << '\n');
     for (BasicBlock::iterator BI = BB->begin(), BE = BB->end();
         BI != BE; ++BI) {
@@ -71,11 +73,15 @@ bool HWAtomInfo::runOnFunction(Function &F) {
     // preform memory dependencies analysis to add corresponding edges.
     addMemDepEdges(MemOps, *BB);
 
+    bool selfLoop = haveSelfLoop(BB);
+    
     // Add SCC for loop.
-    addLoopIVSCC(BB);
+    if (selfLoop)
+      addLoopPredBackEdge(BB);
 
-    BBToStates[BB] = new FSMState(getEntryRoot(BB),
-                                   cast<HWAPostBind>(getControlRoot()));
+    HWAOpInst *Exit = cast<HWAPostBind>(getControlRoot());
+    State->setExitRoot(Exit);
+    State->setHaveSelfLoop(selfLoop);
 
     MemOps.clear();
   }
@@ -85,30 +91,40 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   return false;
 }
 
-void HWAtomInfo::addLoopIVSCC(BasicBlock *BB) {
+
+bool HWAtomInfo::haveSelfLoop(BasicBlock *BB) {
   Loop *L = LI->getLoopFor(BB);
 
   // Not in any loop.
-  if (!L) return;
+  if (!L) return false;
   // Dirty Hack: Only support one block loop at this moment.
-  if (L->getBlocks().size() != 1) return;
+  if (L->getBlocks().size() != 1) return false;
+
+  return true;
+}
+
+void HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
+  assert(haveSelfLoop(BB) && "Loop SCC only exist in self loop!");
+
+  Loop *L = LI->getLoopFor(BB);
   
   PHINode *IV = L->getCanonicalInductionVariable();
   // And we need loop in canonical form.
   if (!IV) return;
-  
+
+  FSMState *State = getState(BB);
   // Get the induction variable increment.
-  Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
-  HWAOpInst *IVIncAtom = cast<HWAOpInst>(getAtomFor(*IVInc));
+  //Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
+  //HWAOpInst *IVIncAtom = cast<HWAOpInst>(getAtomFor(*IVInc));
   // And get the predicate
   BranchInst *Br = cast<BranchInst>(BB->getTerminator());
   ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
   HWAOpInst *Pred = cast<HWAOpInst>(getAtomFor(*ICmp));
 
   // The Next loop depend on the result of predicate.
-  HWMemDep *LoopDep = getMemDepEdge(Pred, getEntryRoot(BB),
-                                    HWMemDep::TrueDep, 1);
-  IVIncAtom->addDep(LoopDep);
+  HWMemDep *LoopDep = getMemDepEdge(Pred, true, HWMemDep::TrueDep, 1);
+  //IVIncAtom->addDep(LoopDep);
+  State->addDep(LoopDep);
 }
 
 void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB) {
@@ -137,12 +153,10 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB)
       if (!Dep.hasDep())
         continue;
 
-      // There is a backedge if src not before dest, so we will ad a dummy src to build
-      // the dag.
-      HWAtom *Root = srcBeforeDest ? (HWAtom*)Src : (HWAtom*)getEntryRoot(&BB);
-
       // Add dependencies edges.
-      HWMemDep *MemDep = getMemDepEdge(Src, Root, Dep.getDepType(), Dep.getItDst());
+      // The edge is back edge if destination before source.
+      HWMemDep *MemDep = getMemDepEdge(Src, !srcBeforeDest, 
+                                       Dep.getDepType(), Dep.getItDst());
       Dst->addDep(MemDep);
     }
   }
@@ -152,10 +166,10 @@ void HWAtomInfo::clear() {
   HWAtomAllocator.Reset();
   UniqiueHWAtoms.clear();
   ValueToHWAtoms.clear();
-  BBToStates.clear();
   // Reset total Cycle
   totalCycle = 1;
   NumRegs = 1;
+  InstIdx = 0;
   RegForValues.clear();
 }
 
@@ -173,14 +187,14 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   HWAtom *Pred = 0;
   // Do not add the operand twice
   if (!Deps.empty()) {
-    Pred = Deps[0]->getDagSrc();
+    Pred = Deps[0]->getSrc();
   }
 
   unsigned OpSize = Deps.size();
 
   // All node should finish before terminator run.
-  HWAVRoot *Root = getEntryRoot(I.getParent());
-  for (usetree_iterator TI = Root->begin(), TE = Root->end();
+  FSMState *State = getState(I.getParent());
+  for (usetree_iterator TI = State->usetree_begin(), TE = State->usetree_end();
       TI != TE; ++TI)
     if (*TI != Pred && TI->use_empty()) {
       HWAtom *A = *TI;
@@ -348,6 +362,8 @@ HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind, unsigned Instance)
   A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
                                        PostBind, FU);
 
+  // Update the Map.
+  ValueToHWAtoms[&PostBind.getValue()] = A;
   UniqiueHWAtoms.InsertNode(A, IP);
 
   return A;
@@ -366,7 +382,7 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I,
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-      I, Deps.begin(), Deps.end(), OpNum, FUID);
+      I, Deps.begin(), Deps.end(), OpNum, FUID, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -385,42 +401,43 @@ HWAPostBind *HWAtomInfo::getPostBind(Instruction &I,
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPostBind(ID.Intern(HWAtomAllocator),
-      I, Deps.begin(), Deps.end(), OpNum, FUID);
+      I, Deps.begin(), Deps.end(), OpNum, FUID, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
 }
 
-HWAVRoot *HWAtomInfo::getEntryRoot(BasicBlock *BB) {
+FSMState *HWAtomInfo::getState(BasicBlock *BB) {
   assert(BB && "BB can not be null!");
   FoldingSetNodeID ID;
   ID.AddInteger(atomVRoot);
   ID.AddPointer(BB);
 
   void *IP = 0;
-  HWAVRoot *A =
-    static_cast<HWAVRoot*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  FSMState *A =
+    static_cast<FSMState*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAVRoot(ID.Intern(HWAtomAllocator), *BB);
+    A = new (HWAtomAllocator) FSMState(ID.Intern(HWAtomAllocator), *BB,
+                                       ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
 }
 
-HWAWrStg *HWAtomInfo::getWrStg(HWAtom *Src, HWReg *Reg) {
+HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomWrStg);
+  ID.AddInteger(atomWrReg);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
 
   void *IP = 0;
-  HWAWrStg *A =
-    static_cast<HWAWrStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWAWrReg *A =
+    static_cast<HWAWrReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAWrStg(ID.Intern(HWAtomAllocator),
-                                       getValDepEdge(Src, false), Reg);
+    A = new (HWAtomAllocator) HWAWrReg(ID.Intern(HWAtomAllocator),
+                                       *getValDepEdge(Src, false), Reg);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -438,47 +455,43 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWADelay(ID.Intern(HWAtomAllocator),
-      getCtrlDepEdge(Src, false), Delay);
+      *getCtrlDepEdge(Src, false), Delay, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
 }
 
 
-HWAImpStg *HWAtomInfo::getImpStg(HWAtom *Src, HWReg *Reg, Value &V) {
+HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWRegister *Reg, Value &V) {
   FoldingSetNodeID ID;
-  ID.AddInteger(atomImpStg);
+  ID.AddInteger(atomRdReg);
   ID.AddPointer(Src);
   ID.AddPointer(Reg);
   ID.AddPointer(&V);
 
   void *IP = 0;
-  HWAImpStg *A =
-    static_cast<HWAImpStg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+  HWARdReg *A =
+    static_cast<HWARdReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWAImpStg(ID.Intern(HWAtomAllocator),
-      getValDepEdge(Src, false), Reg, V);
+    A = new (HWAtomAllocator) HWARdReg(ID.Intern(HWAtomAllocator),
+      *getValDepEdge(Src, false), Reg, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
 }
 
 
-HWMemDep *HWAtomInfo::getMemDepEdge(HWAOpInst *Src, HWAtom *Root,
+HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
                                     enum HWMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
-  return new (HWAtomAllocator) HWMemDep(Root, Src, DepType, Diff);
+  return new (HWAtomAllocator) HWMemDep(Src, isBackEdge, DepType, Diff);
 }
 
-void HWAtomInfo::print(raw_ostream &O, const Module *M) const {
-  for (StateMapType::const_iterator I = BBToStates.begin(), E = BBToStates.end();
-      I != E; ++I) {
-    I->second->print(O);
-  }
-}
+void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 
 void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
+  FSMState *State = getState(&BB);
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
     BasicBlock *SuccBB = *SI;
     for (BasicBlock::iterator II = SuccBB->begin(),
@@ -505,6 +518,13 @@ void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
 
       HWADelay *Delay = getDelay(OpInst, 1);
       Deps.push_back(getCtrlDepEdge(Delay));
+
+      if (&BB == SuccBB) {// Self Loop?
+        // The Next loop depend on the result of phi.
+        HWMemDep *PHIDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
+        //IVIncAtom->addDep(LoopDep);
+        State->addDep(PHIDep);
+      }
     }
   }
 }

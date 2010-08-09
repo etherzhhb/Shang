@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedInfo.h"
+#include "ModuloScheduleInfo.h"
 #include "HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-fd-info"
@@ -36,18 +37,21 @@ RegisterPass<ForceDirectedInfo> X("vbe-fd-info",
 
 void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequiredTransitive<HWAtomInfo>();
+  AU.addRequiredTransitive<ModuloScheduleInfo>();
   AU.addRequiredTransitive<ResourceConfig>();
   AU.setPreservesAll();
 }
 
 
-void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
+void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
+                                      unsigned step) {
   typedef HWAtom::const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
-  AtomToTF[Root].first = step;
-  WorkStack.push_back(std::make_pair(Root, Root->use_begin()));
+  AtomToTF[EntryRoot].first = step;
+  AtomToTF[EntryRoot].second = step;
+  WorkStack.push_back(std::make_pair(EntryRoot, EntryRoot->use_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
@@ -58,33 +62,67 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
     else {
       const HWAtom *ChildNode = *It;
       ++WorkStack.back().second;
-      unsigned VC = ++VisitCount[ChildNode];
 
-      unsigned NewStep = ChildNode->getSlot();
+      unsigned VC = ++VisitCount[ChildNode];
+      // Ignore backedge, so the visited node will not be push into the stack
+      // again by backedge.
+      if (VC > ChildNode->getNumDeps())
+        continue;
+
+      HWEdge *Edge = ChildNode->getEdgeFrom(Node);
       if (!ChildNode->isScheduled()) {
         int SNewStep = AtomToTF[Node].first + Node->getLatency() -
-          // delta Node -> ChildNode
-          Modulo * ChildNode->getDepEdge(Node)->getItDst();
-        NewStep = std::max(0, SNewStep);
+                       // delta Node -> ChildNode
+                       MII * Edge->getItDst();
+        assert(SNewStep >= (int)step && "Bad ASAP step!");
+        unsigned NewStep = SNewStep;
+
+        if (VC == 1) // Handle backedge when we first visit this node.
+          for (HWAtom::const_dep_iterator DI = ChildNode->dep_begin(),
+              DE = ChildNode->dep_end(); DI != DE; ++DI) {
+            if (!DI.getEdge()->isBackEdge())
+              continue;
+            // Increase the visit count cause by backedge.
+            ++VisitCount[ChildNode];
+            
+            const HWAtom *BackDep = *DI;
+            if (BackDep->isScheduled())
+              NewStep = std::max(BackDep->getSlot() + BackDep->getLatency()
+                                 - MII * DI.getEdge()->getItDst(),
+                                 NewStep);
+          }
+
+        if (AtomToTF[ChildNode].first < NewStep)
+          AtomToTF[ChildNode].first = NewStep;
+      } else { // We do not need to compute the step of Child Node.
+        VisitCount[ChildNode] = ChildNode->getNumDeps(); // Force push ChildNode.
+        AtomToTF[ChildNode].first = ChildNode->getSlot();
       }
 
-      if (VC == 1 || AtomToTF[ChildNode].first < NewStep)
-        AtomToTF[ChildNode].first = NewStep;
 
-      // Only move forwork when we visit the node from all its deps.
-      if (VC == ChildNode->getNumDeps())
+      // Only move forward when we visit the node from all its deps.
+      // Only push the node into the stack ONCE.
+      if (VC == ChildNode->getNumDeps()) {
         WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
+        // Set up the II constrain.
+        if (MII)
+          AtomToTF[ChildNode].second = getASAPStep(ChildNode)
+                                       + MII - ChildNode->getLatency();
+        else
+          AtomToTF[ChildNode].second = HWAtom::MaxSlot;
+      }
     }
   }
 }
 
-void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
+void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
+                                      unsigned step) {
   typedef HWAtom::const_dep_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
   DenseMap<const HWAtom*, unsigned> VisitCount;
   //
-  AtomToTF[Root].second = step;
-  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
+  AtomToTF[ExitRoot].second = step;
+  WorkStack.push_back(std::make_pair(ExitRoot, ExitRoot->dep_begin()));
   //
   while (!WorkStack.empty()) {
     const HWAtom *Node = WorkStack.back().first;
@@ -95,37 +133,59 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
     else {
       const HWAtom *ChildNode = *It;
       ++WorkStack.back().second;
-      unsigned VC = ++VisitCount[ChildNode];
 
-      unsigned NewStep = ChildNode->getSlot();
+      unsigned VC = ++VisitCount[ChildNode];
+      if (VC > ChildNode->getNumUses())
+        continue;
 
       if (!ChildNode->isScheduled()) {
         // Latency is ChildNode->Node.
-        NewStep = AtomToTF[Node].second - ChildNode->getLatency()
-                  + Modulo * It.getEdge()->getItDst();// delta ChildNode -> Node.
-        // Do not exceed Modulo step when we preform a modulo schedule. 
-        if (Modulo != 0)
-          NewStep = std::min(NewStep,
-                             getASAPStep(ChildNode) + Modulo - 1);
-      }
+        unsigned NewStep = AtomToTF[Node].second - ChildNode->getLatency()
+                           // delta ChildNode -> Node.
+                           + MII * It.getEdge()->getItDst();
 
-      if (VC == 1 || AtomToTF[ChildNode].second > NewStep)
-        AtomToTF[ChildNode].second = NewStep;
+        if (VC == 1) // Handle backedge when we first visit this node.
+          for (HWAtom::const_use_iterator UI = ChildNode->use_begin(),
+              UE = ChildNode->use_end(); UI != UE; ++UI) {
+            HWEdge *UseEdge = (*UI)->getEdgeFrom(ChildNode);
+            if (!UseEdge->isBackEdge())
+              continue;
+            // Increase the visit count cause by backedge.
+            ++VisitCount[ChildNode];
+            
+            const HWAtom *BackUse = *UI;
+            if (BackUse->isScheduled())
+              NewStep = std::min(BackUse->getSlot() - ChildNode->getLatency()
+                                 + MII * UseEdge->getItDst(),
+                                 NewStep);
+          }
+
+        assert(AtomToTF[ChildNode].second && "Broken ALAP!");
+        if (AtomToTF[ChildNode].second > NewStep)
+          AtomToTF[ChildNode].second = NewStep;
+
+      } else { // We do not need to compute the step of Child Node.
+        VisitCount[ChildNode] = ChildNode->getNumUses(); // Force push ChildNode.
+        AtomToTF[ChildNode].second = ChildNode->getSlot();
+      }
 
       DEBUG(dbgs() << "Visit " << "\n");
       DEBUG(ChildNode->dump());
       DEBUG(dbgs() << "VC: " << VC << " total use: "
         << ChildNode->getNumUses() << '\n');
 
-      // Only move forwork when we visit the node from all its deps.
-      if (VC == ChildNode->getNumUses())
+      // Only move forward when we visit the node from all its deps.
+      if (VC == ChildNode->getNumUses()) {
+        assert(getALAPStep(ChildNode) >= getASAPStep(ChildNode)
+               && "Broken time frame!");
         WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
+      }
     }
   }
 }
 
 
-void ForceDirectedInfo::printTimeFrame(FSMState *State, raw_ostream &OS) const {
+void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I) {
@@ -136,8 +196,8 @@ void ForceDirectedInfo::printTimeFrame(FSMState *State, raw_ostream &OS) const {
   }
 }
 
-void ForceDirectedInfo::dumpTimeFrame(FSMState *State) const {
-  printTimeFrame(State, dbgs());
+void ForceDirectedInfo::dumpTimeFrame() const {
+  printTimeFrame(dbgs());
 }
 
 bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
@@ -146,7 +206,7 @@ bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
   return usage < FU.getTotalFUs();
 }
 
-void ForceDirectedInfo::buildDGraph(FSMState *State) {
+void ForceDirectedInfo::buildDGraph() {
   DGraph.clear();
   for (usetree_iterator I = State->usetree_begin(),
     E = State->usetree_end(); I != E; ++I){
@@ -170,13 +230,13 @@ void ForceDirectedInfo::buildDGraph(FSMState *State) {
           accDGraphAt(i, OpInst->getFunUnitID(), Prob);
       }
   }
-  DEBUG(printDG(State, dbgs()));
+  DEBUG(printDG(dbgs()));
 }
 
-void ForceDirectedInfo::printDG(FSMState *State, raw_ostream &OS) const {
-  unsigned StartStep = State->getEntryRoot().getSlot();
-  unsigned EndStep = Modulo > 0 ? (StartStep + Modulo - 1)
-                                  : getALAPStep(&State->getExitRoot());
+void ForceDirectedInfo::printDG(raw_ostream &OS) const {
+  unsigned StartStep = State->getSlot();
+  unsigned EndStep = MII > 0 ? (StartStep + MII - 1)
+                               : getALAPStep(State->getExitRoot());
   // For each step
   for (unsigned ri = HWResource::FirstResourceType,
     re = HWResource::LastResourceType; ri != re; ++ri) {
@@ -192,8 +252,8 @@ void ForceDirectedInfo::printDG(FSMState *State, raw_ostream &OS) const {
 
 unsigned
 ForceDirectedInfo::computeStepKey(unsigned step, HWFUnitID FUID) const {
-  if (Modulo != 0)
-    step = step % Modulo;
+  if (MII != 0)
+    step = step % MII;
   
   union {
     struct {
@@ -244,17 +304,15 @@ double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
 
 double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
-  double ret = 0;
+  double ret = 0.0;
 
   for (const_usetree_iterator I = const_usetree_iterator::begin(OpInst),
       E = const_usetree_iterator::end(OpInst); I != E; ++I) {
     if (*I == OpInst)
       continue;
-    
-    if (const HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
-      if (const HWAPostBind *P = dyn_cast<HWAPostBind>(U))
-        ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
-    }
+  
+    if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
+      ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);  
   }
 
   return ret;
@@ -269,16 +327,14 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
     if (*I == OpInst)
       continue;
 
-    if (const HWAOpInst *U = dyn_cast<HWAOpInst>(*I)) {
-      if (const HWAPostBind *P = dyn_cast<HWAPostBind>(U))
-        ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
-    }
+    if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
+      ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
   }
 
   return ret;
 }
 
-void ForceDirectedInfo::buildAvgDG(FSMState *State) {
+void ForceDirectedInfo::buildAvgDG() {
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I)
     // We only care about the utilization of post bind resource. 
@@ -292,54 +348,55 @@ void ForceDirectedInfo::buildAvgDG(FSMState *State) {
     }
 }
 
-void ForceDirectedInfo::clear() {
+void ForceDirectedInfo::reset() {
   AtomToTF.clear();
   DGraph.clear();
   ResUsage.clear();
   AvgDG.clear();
-  Modulo = 0;
 }
 
 void ForceDirectedInfo::releaseMemory() {
-  clear();
+  reset();
+  MII = 0;
+  CriticalPathEnd = 0;
 }
 
-bool ForceDirectedInfo::runOnFunction(Function &F) {
+bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
+  HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
+  MSInfo = &getAnalysis<ModuloScheduleInfo>();
+  State = HI.getStateFor(BB);
+
+  if (!MSInfo->isModuloSchedulable(*State)) {
+    MII = 0;
+    return false;
+  }
+
+  unsigned RecMII = MSInfo->computeRecMII(*State);
+  unsigned ResMII = MSInfo->computeResMII(*State);
+  MII = std::max(RecMII, ResMII);
+
   return false;
 }
 
-unsigned ForceDirectedInfo::buildFDInfo(FSMState *State, unsigned StartStep,
-                                        unsigned EndStep) {
+unsigned ForceDirectedInfo::buildFDInfo() {
   // Build the time frame
-  HWAtom *Entry = &State->getEntryRoot();
-  buildASAPStep(Entry, StartStep); 
+  assert(State->isScheduled() && "Entry must be scheduled first!");
+  unsigned FirstStep = State->getSlot();
+  buildASAPStep(State, FirstStep);
   
-  HWAOpInst *Exit = &State->getExitRoot();
-  if (EndStep == 0)
-    EndStep = getASAPStep(Exit);
+  HWAOpInst *Exit = State->getExitRoot();
+  CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 
-  buildALAPStep(Exit, EndStep);
+  buildALAPStep(Exit, CriticalPathEnd);
 
-  DEBUG(dumpTimeFrame(State));
+  DEBUG(dumpTimeFrame());
 
-  buildDGraph(State);
-  buildAvgDG(State);
+  buildDGraph();
+  buildAvgDG();
 
-  return EndStep;
+  return CriticalPathEnd;
 }
 
-void ForceDirectedInfo::recoverFDInfo(FSMState *State) {
-  // Build the time frame
-  buildASAPStep(State); 
-  buildALAPStep(State);
-
-  DEBUG(dumpTimeFrame(State));
-
-  buildDGraph(State);
-  buildAvgDG(State);
-
-}
-
-void ForceDirectedInfo::dumpDG(FSMState *State) const {
-  printDG(State, dbgs());
+void ForceDirectedInfo::dumpDG() const {
+  printDG(dbgs());
 }

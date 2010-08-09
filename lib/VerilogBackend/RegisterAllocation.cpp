@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement a pass that reduce unnecessary registers
+// This file implement the register allocation pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,34 +27,17 @@ using namespace llvm;
 using namespace esyn;
 
 namespace {
-struct RegAllocation : public FunctionPass {
+struct RegAllocation : public BasicBlockPass {
   static char ID;
-  explicit RegAllocation() : FunctionPass(&ID) {}
-  bool runOnFunction(Function &F);
-  bool runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI);
+  RegAllocation() : BasicBlockPass(&ID) {}
+  bool runOnBasicBlock(BasicBlock &BB);
   void getAnalysisUsage(AnalysisUsage &AU) const;
 };
 }
 
-bool RegAllocation::runOnFunction(Function &F) {
+bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-
-  // Allocate register for argument.
-  //for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end();
-  //    I != E; ++I) {
-  //  Argument *Arg = I;
-  //  HI.getRegForValue(Arg, 1, 1);
-  //}
-
-  for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
-    runOnBasicBlock(*I, HI);
-
-  return false;
-}
-
-bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
-  FSMState &State = HI.getStateFor(BB);
-  HWAVRoot *EntryRoot = &State.getEntryRoot();
+  FSMState *State = HI.getStateFor(BB);
 
   // Emit the operand of PHINode.
   for (BasicBlock::iterator II = BB.begin(), IE = BB.getFirstNonPHI();
@@ -62,17 +45,35 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     PHINode *PN = cast<PHINode>(II);
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *IV = PN->getIncomingValue(i);
-      FSMState &IncomingStage = HI.getStateFor(*PN->getIncomingBlock(i));
-      if (isa<Instruction>(IV) && !IncomingStage.getLiveOutRegAtTerm(IV)) {
-        HWReg *IR = HI.getRegForValue(IV, EntryRoot->getSlot(),
-                                      EntryRoot->getSlot());
-        IncomingStage.updateLiveOutReg(IV, IR);
+      FSMState *InStage = HI.getStateFor(*PN->getIncomingBlock(i));
+      unsigned lastSlot = (State == InStage) ?
+                          InStage->getIISlot() : InStage->getEndSlot();
+
+      if (InStage->getPHISrc(IV) != 0)
+        continue;
+
+      if (isa<Constant>(IV))
+        continue;
+      
+      // We may read the value from function unit register.
+      if (isa<Instruction>(IV)) {
+        HWAtom *A = HI.getAtomFor(*IV);
+        if (HWAPreBind *PB = dyn_cast<HWAPreBind>(A)) {
+          HWAtom *Use = PB->use_back();
+          if (HWAWrReg *WR = dyn_cast<HWAWrReg>(Use))
+            if (WR->getFinSlot() == lastSlot) {
+              InStage->updatePHISrc(IV, WR->getReg());
+              continue;
+            }
+        }
       }
+      HWRegister *IR = HI.getRegForValue(IV, lastSlot, lastSlot);
+      InStage->updatePHISrc(IV, IR);
     }
   }
 
-  SmallVector<HWAtom*, 32> Worklist(usetree_iterator::begin(EntryRoot),
-                                    usetree_iterator::end(EntryRoot));
+  SmallVector<HWAtom*, 32> Worklist(State->usetree_begin(),
+                                    State->usetree_end());
 
   while(!Worklist.empty()) {
     HWAOpInst *A = dyn_cast<HWAOpInst>(Worklist.back());
@@ -85,20 +86,15 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     DEBUG(dbgs() << " Visited\n");
 
     for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i) {
-      if (HWValDep *VD = dyn_cast<HWValDep>(A->getDep(i))) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(&A->getDep(i))) {
         Value *V = A->getIOperand(i);
         if (VD->isImport()) {
           // Insert the import node.
-          HWAVRoot *Root = cast<HWAVRoot>(VD->getDagSrc());
-          HWReg *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
-          // Update the live out value.
-          if (!State.getLiveOutRegAtTerm(V))
-            State.updateLiveOutReg(V, R);
-
-          HWAImpStg *ImpStg = HI.getImpStg(Root, R, *V);
+          HWRegister *R = HI.getRegForValue(V, State->getSlot(), A->getSlot());
+          HWARdReg *ImpStg = HI.getRdReg(State, R, *V);
           A->setDep(i, ImpStg);
 
-        } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getDagSrc())) {
+        } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getSrc())) {
           // We need to register the value if the value life through
           // several cycle. Or we need to keep the value until the computation
           // finish.
@@ -107,19 +103,19 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
             DEBUG(DI->print(dbgs()));
             DEBUG(dbgs() << " Registered\n");
             // Store the value to register.
-            HWReg *R = HI.getRegForValue(V, DI->getFinSlot(), A->getSlot());
-            HWAWrStg *WR = HI.getWrStg(DI, R);
+            HWRegister *R = HI.getRegForValue(V, DI->getFinSlot(), A->getSlot());
+            HWAWrReg *WR = HI.getWrReg(DI, R);
             A->setDep(i, WR);
           }
-        } else if (HWAWrStg *WrStg = dyn_cast<HWAWrStg>(VD->getDagSrc())) {
+        } else if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(VD->getSrc())) {
           // Move the value out of the Function unit register.
-          assert(WrStg->getReg()->isFuReg()
+          assert(WrReg->getReg()->isFuReg()
                  && "Only Expect function unit register!");
-          if (WrStg->getReg()->getEndSlot() < A->getSlot()) {
-            DEBUG(WrStg->print(dbgs()));
+          if (WrReg->getReg()->getEndSlot() < A->getSlot()) {
+            DEBUG(WrReg->print(dbgs()));
             DEBUG(dbgs() << " extended\n");
-            HWReg *R = HI.getRegForValue(V, WrStg->getFinSlot(), A->getSlot());
-            HWAWrStg *WR = HI.getWrStg(WrStg, R);
+            HWRegister *R = HI.getRegForValue(V, WrReg->getFinSlot(), A->getSlot());
+            HWAWrReg *WR = HI.getWrReg(WrReg, R);
             A->setDep(i, WR);
           }
         }
@@ -128,15 +124,15 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
   }
   
   // Emit the exported register.
-  HWAOpInst *Exit = &State.getExitRoot();
+  HWAOpInst *Exit = State->getExitRoot();
   for (unsigned i = Exit->getInstNumOps(), e = Exit->getNumDeps(); i != e; ++i) {
-    HWCtrlDep *CD = dyn_cast<HWCtrlDep>(Exit->getDep(i));
+    HWCtrlDep *CD = dyn_cast<HWCtrlDep>(&Exit->getDep(i));
     if (!(CD && CD->isExport())) continue;
 
-    HWAtom *SrcAtom = CD->getDagSrc();
+    HWAtom *SrcAtom = CD->getSrc();
 
     // If we already emit the register, just skip it.
-    if (HWAWrStg *WR = dyn_cast<HWAWrStg>(SrcAtom))
+    if (HWAWrReg *WR = dyn_cast<HWAWrReg>(SrcAtom))
       if (!WR->getReg()->isFuReg())
         continue;
 
@@ -145,11 +141,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB, HWAtomInfo &HI) {
     DEBUG(SrcAtom->print(dbgs()));
     DEBUG(dbgs() << " Registered for export.\n");
     // Store the value to register.
-    HWReg *R = HI.getRegForValue(V, SrcAtom->getFinSlot(), Exit->getSlot());
-    HWAWrStg *WR = HI.getWrStg(SrcAtom, R);
-
-    if (!State.getLiveOutRegAtTerm(V))
-      State.updateLiveOutReg(V, R);
+    HWRegister *R = HI.getRegForValue(V, SrcAtom->getFinSlot(), Exit->getSlot());
+    HWAWrReg *WR = HI.getWrReg(SrcAtom, R);
     Exit->setDep(i, WR);
   }
 

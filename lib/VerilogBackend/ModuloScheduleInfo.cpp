@@ -28,6 +28,8 @@
 #define DEBUG_TYPE "vbe-ms-info"
 #include "llvm/Support/Debug.h"
 
+#include <algorithm>
+
 using namespace llvm;
 using namespace esyn;
 
@@ -38,88 +40,20 @@ NoModuloSchedule("disable-modulo-schedule",
           cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-namespace {
-template<class IteratorType, class NodeType>
-class HWAtomSccEdgeIterator : public std::iterator<std::forward_iterator_tag,
-                                                  NodeType*, ptrdiff_t> {
-  IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
-  typedef HWAtomSccEdgeIterator<IteratorType, NodeType> Self;
-public:
-  HWAtomSccEdgeIterator(IteratorType i) : I(i) {}
-
-  bool operator==(const HWAtomSccEdgeIterator RHS) const { return I == RHS.I; }
-  bool operator!=(const HWAtomSccEdgeIterator RHS) const { return I != RHS.I; }
-
-  const HWAtomSccEdgeIterator &operator=(const HWAtomSccEdgeIterator &RHS) {
-    I = RHS.I;
-    return *this;
-  }
-
-  NodeType* operator*() const {
-    return (*I)->getSCCSrc();
-  }
-  NodeType* operator->() const { return operator*(); }
-
-  Self operator++() {                // Preincrement
-    ++I;
-    return *this;
-  }
-  Self operator++(int) { // Postincrement
-    HWAtomSccEdgeIterator tmp = *this;
-    ++*this;
-    return tmp; 
-  }
-
-  HWEdge *getEdge() { return *I; }
-  const HWEdge *getEdge() const { return *I; }
-
-  static Self findSccEdge(NodeType *Src, NodeType *Dst) {
-    return std::find(Self(Dst->edge_begin()),
-                     Self(Dst->edge_end()),
-                     Src);
-  }
-};
-}
-//===----------------------------------------------------------------------===//
-namespace llvm {
-template <class GraphType>
-struct DepScc {
-  const GraphType &Graph;
-
-  inline DepScc(const GraphType &G) : Graph(G) {}
-};
-
-template<> struct GraphTraits<DepScc<esyn::HWAtom*> > {
-  typedef esyn::HWAtom NodeType;
-  typedef HWAtomSccEdgeIterator<SmallVectorImpl<HWEdge*>::iterator, HWAtom>
-    ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->edge_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->edge_end();
-  }
-};
-template<> struct GraphTraits<DepScc<const esyn::HWAtom*> > {
-  typedef const esyn::HWAtom NodeType;
-  typedef HWAtomSccEdgeIterator<SmallVectorImpl<HWEdge*>::const_iterator,
-    const HWAtom>
-    ChildIteratorType;
-  static NodeType *getEntryNode(NodeType* N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->edge_begin();
-  }
-  static inline ChildIteratorType child_end(NodeType *N) {
-    return N->edge_end();
-  }
-};
-}
-typedef GraphTraits<DepScc<esyn::HWAtom*> > HWAtomSccGT;
-typedef GraphTraits<DepScc<const esyn::HWAtom*> > ConstHWAtomSccGT;
+typedef GraphTraits<esyn::HWAtom*> HWAtomSccGT;
+typedef GraphTraits<const esyn::HWAtom*> ConstHWAtomSccGT;
 
 typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
 typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
+
+namespace {
+  struct top_sort {
+    bool operator() (const HWAtom* LHS, const HWAtom* RHS) const {
+      return LHS->getIdx() < RHS->getIdx();
+    }
+  };
+}
+
 //===----------------------------------------------------------------------===//
 char ModuloScheduleInfo::ID = 0;
 
@@ -161,42 +95,44 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
   assert(Scc.size() > 1 && "No self loop expect in DDG!");
   unsigned totalLatency = 0;
   unsigned totalItDist = 0;
-  HWAtom *LastAtom = 0;
-  // Make a circle.
-  Scc.push_back(Scc.front());
-  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
-    I != E; ++I) {
-      HWAtom *CurAtom = *I;
-      totalLatency += CurAtom->getLatency();
 
-      if (LastAtom) {
-        HWAtomSccGT::ChildIteratorType EI =
-          HWAtomSccGT::ChildIteratorType::findSccEdge(LastAtom, CurAtom);
-        assert(EI != HWAtomSccGT::child_end(LastAtom) && "Edge not found!");
-        if (HWMemDep *MemEdge = dyn_cast<HWMemDep>(EI.getEdge())) {
-          unsigned ItDst = MemEdge->getItDst();
-          if (ItDst > 0) {
-            totalItDist = ItDst;
-          }
-        }
-      }
-      // Update last atom we had visited.
-      LastAtom = CurAtom;
+  
+  std::sort(Scc.begin(), Scc.end(), top_sort());
+  //
+  DEBUG(
+  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
+      I != E; ++I)
+    (*I)->dump();
+  );
+  const HWAtom *FirstAtom = Scc.front();
+  std::map<const HWAtom*, unsigned> MaxLatency, MaxItDist;
+  MaxLatency[FirstAtom] = 0;
+  MaxItDist[FirstAtom] = 0;
+  // All nodes longest path.
+  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
+      I != E; ++I) {
+    const HWAtom *CurAtom = *I;
+    for (HWAtom::const_use_iterator UI = CurAtom->use_begin(),
+        UE = CurAtom->use_end();UI != UE; ++UI) {
+      const HWAtom *UseAtom = *UI;
+      MaxLatency[UseAtom] = std::max(MaxLatency[CurAtom] + CurAtom->getLatency(),
+                                     MaxLatency[UseAtom]);
+      HWEdge *Edge = UseAtom->getEdgeFrom(CurAtom);
+      MaxItDist[UseAtom] = std::max(MaxItDist[CurAtom] + Edge->getItDst(),
+                                    MaxItDist[UseAtom]);
+    }
   }
-  // The latency of the first node had been count twice.
-  totalLatency -= Scc.front()->getLatency();
-  // Recover the Scc vector.
-  Scc.pop_back();
+
+  totalLatency = MaxLatency[FirstAtom];
+  totalItDist = MaxItDist[FirstAtom];
   assert(totalItDist != 0 && "No cross iteration dependence?");
   return ceil((double)totalLatency / totalItDist);
 }
 
 
 unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
-  HWAtom *Root = &State.getExitRoot();
+  HWAtom *Root = &State;
   unsigned MaxRecII = 1;
-  // Nodes that not in any scc.
-  std::vector<HWAtom*> TrivialNodes;
   for (dep_scc_iterator SCCI = dep_scc_iterator::begin(Root),
       SCCE = dep_scc_iterator::end(Root); SCCI != SCCE; ++SCCI) {
     scc_vector &Atoms = *SCCI;
@@ -207,20 +143,12 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
     }
 
     DEBUG(dbgs() << "SCC found:\n");
-    DEBUG(
-      for (scc_vector::const_iterator I = Atoms.begin(), E = Atoms.end();
-          I != E; ++I)
-        (*I)->getValue().dump();
-    );
     unsigned RecII = computeRecII(Atoms);
     // Update maxrecii.
     MaxRecII = std::max(RecII, MaxRecII);
     RecList.insert(std::make_pair(RecII, Atoms));
     DEBUG(dbgs() << "RecII: " << RecII << '\n');
   }
-
-  // Also remember the trivial nodes.
-  RecList.insert(std::make_pair(1, TrivialNodes));
 
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
   return MaxRecII;

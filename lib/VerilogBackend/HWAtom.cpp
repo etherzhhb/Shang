@@ -36,18 +36,18 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
-void HWAWrStg::print(raw_ostream &OS) const {
-  OS << "Write Storage "
+void HWAWrReg::print(raw_ostream &OS) const {
+  OS << "[" << getIdx() << "] " << "Write Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
-void HWAImpStg::print(raw_ostream &OS) const {
-  OS << "Import Storage "
+void HWARdReg::print(raw_ostream &OS) const {
+  OS << "[" << getIdx() << "] " << "Import Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
 void HWADelay::print(raw_ostream &OS) const {
-  OS << "Delay: " << getLatency();
+  OS << "[" << getIdx() << "] " << "Delay: " << getLatency();
 }
 
 void HWMemDep::print(raw_ostream &OS) const {
@@ -80,26 +80,31 @@ void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
 }
 
 void FSMState::print(raw_ostream &OS) const {
-  OS << "State: ";
-  WriteAsOperand(OS, getBasicBlock(), false);
-  OS << "\n";
-  unsigned oldSlot = 0;
+  OS << "[" << getIdx() << "] ";
+  WriteAsOperand(OS, &getValue(), false);
+  OS << " Entry";
 
-  std::multimap<unsigned, HWAtom*> Atoms;
-  getScheduleMap(Atoms);
-  for (std::multimap<unsigned, HWAtom*>::iterator I = Atoms.begin(),
-      E = Atoms.end(); I != E; ++I) {
-    HWAtom *A = I->second;
-    if (A->getSlot() != oldSlot) {
-      oldSlot = A->getSlot();
-      OS << "Cycle: " << oldSlot << "\n";
-    }
-    A->print(OS.indent(2));
-    OS << " at "<< A->getSlot() << "\n";
-  }
+  //OS << "State: ";
+  //WriteAsOperand(OS, getBasicBlock(), false);
+  //OS << "\n";
+  //unsigned oldSlot = 0;
+
+  //std::multimap<unsigned, HWAtom*> Atoms;
+  //getScheduleMap(Atoms);
+  //for (std::multimap<unsigned, HWAtom*>::iterator I = Atoms.begin(),
+  //    E = Atoms.end(); I != E; ++I) {
+  //  HWAtom *A = I->second;
+  //  if (A->getSlot() != oldSlot) {
+  //    oldSlot = A->getSlot();
+  //    OS << "Cycle: " << oldSlot << "\n";
+  //  }
+  //  A->print(OS.indent(2));
+  //  OS << " at "<< A->getSlot() << "\n";
+  //}
 }
 
 void HWAOpInst::print(raw_ostream &OS) const {
+  OS << "[" << getIdx() << "] ";
   if (getValue().getType()->isVoidTy())
     OS << getValue() << '\n';
   else
@@ -107,21 +112,18 @@ void HWAOpInst::print(raw_ostream &OS) const {
   OS << " Res: " << getFunUnitID();
 }
 
-void HWAVRoot::print(raw_ostream &OS) const {
-  WriteAsOperand(OS, &getValue(), false);
-  OS << " Entry";
-}
-
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-               unsigned latancy)
-: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {}
+               unsigned latancy, unsigned short Idx)
+: FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
+InstIdx(Idx) {}
 
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
-               Value &V, HWEdge *Dep0, unsigned latancy) : FastID(ID),
-               HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy) {
+               Value &V, HWEdge *Dep0, unsigned latancy, unsigned short Idx) : FastID(ID),
+               HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
+               InstIdx(Idx) {
   Deps.push_back(Dep0);
-  Dep0->getDagSrc()->addToUseList(this);
+  Dep0->getSrc()->addToUseList(this);
 }
 
 
@@ -142,7 +144,7 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
                        HWFUnit FUID)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
               PostBind.edge_begin(), PostBind.edge_end(),
-              PostBind.getInstNumOps(), FUID) {
+              PostBind.getInstNumOps(), FUID, PostBind.getIdx()) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);
@@ -155,15 +157,11 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
   setParent(PostBind.getParent());
 }
 
-HWAtom *HWMemDep::getSCCSrc() const {
-  return Data.getPointer();
-}
-
 void esyn::FSMState::dump() const {
   print(dbgs());
 }
 
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, bool isImport)
 : HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), IsImport(isImport) {
-  assert((!IsImport || isa<HWAVRoot>(Src)) && "Bad import edge!");
+  assert((!IsImport || isa<FSMState>(Src)) && "Bad import edge!");
 }

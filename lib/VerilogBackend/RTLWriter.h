@@ -64,6 +64,8 @@ class RTLWriter : public FunctionPass {
 
   ResourceMapType ResourceMap;
 
+  std::string getSlotEnable(BasicBlock &BB, unsigned Slot);
+
   void emitFunctionSignature(Function &F);
   void emitCommonPort();
   void emitBasicBlock(BasicBlock &BB);
@@ -91,10 +93,10 @@ class RTLWriter : public FunctionPass {
   void emitAtom(HWAtom *A);
   void emitPreBind(HWAPreBind *PreBind);
   void emitPostBind(HWAPostBind *PreBind);
-  void emitWrStg(HWAWrStg *DR);
-  void emitImpStg(HWAImpStg *DR);
+  void emitWrReg(HWAWrReg *DR);
+  void emitRdReg(HWARdReg *DR);
 
-  std::set<const HWReg*> UsedRegs;
+  std::set<const HWRegister*> UsedRegs;
 
   void emitAllRegisters();
 
@@ -106,9 +108,9 @@ class RTLWriter : public FunctionPass {
   void clear();
   
   std::string getAsOperand(Value *V, const std::string &postfix = "");
-  std::string getAsOperand(HWEdge *E);
+  std::string getAsOperand(HWEdge &E);
   std::string getAsOperand(HWAtom *A);
-  std::string getAsOperand(HWReg *R);
+  std::string getAsOperand(HWRegister *R);
   static std::string getFURegisterName(HWFUnitID FUID);
 
   raw_ostream &getStateDeclBuffer() {
@@ -130,6 +132,8 @@ class RTLWriter : public FunctionPass {
   void emitNextFSMState(raw_ostream &ss, BasicBlock &BB);
   void emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
                           const std::string &NewState);
+  std::string computeSelfLoopEnable(FSMState *State);
+
   /// @name InstVisitor interface
   //{
   void visitReturnInst(HWAPostBind &A);

@@ -25,16 +25,23 @@
 using namespace llvm;
 
 namespace esyn {
-class ForceDirectedInfo : public FunctionPass {
+class ModuloScheduleInfo;
+
+class ForceDirectedInfo : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
+  ModuloScheduleInfo *MSInfo;
+  FSMState *State;
 
-  // Time Frame {asap step, alap step }
+  // Time Frame { {asap step, alap step }, isMIIContraint }
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
 
   TimeFrameMapType AtomToTF;
+
+  void buildASAPStep(const FSMState *EntryRoot, unsigned step);
+  void buildALAPStep(const HWAOpInst *ExitRoot, unsigned step);
 
   // The Key of DG, { step, resource type }
   typedef std::map<unsigned, double> DGType;
@@ -49,29 +56,26 @@ class ForceDirectedInfo : public FunctionPass {
   std::map<const HWAPostBind*, double> AvgDG;
 
   // MII in modulo schedule.
-  unsigned Modulo;
+  unsigned MII, CriticalPathEnd;
 public:
 
   /// @name TimeFrame
   //{
-  void buildASAPStep(const HWAtom *Root, unsigned step);
-  void buildASAPStep(FSMState *State) {
-    const HWAtom *Root = &State->getEntryRoot();
-    buildASAPStep(Root, getASAPStep(Root));
+  void buildASAPStep() {
+    buildASAPStep(State, State->getSlot());
   }
   unsigned getASAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-  void buildALAPStep(const HWAtom *Root, unsigned step);
-  void buildALAPStep(FSMState *State) {
-    const HWAtom *Root = &State->getExitRoot();
+  void buildALAPStep() {
+    const HWAOpInst *Root = State->getExitRoot();
     buildALAPStep(Root, getALAPStep(Root));
   }
   unsigned getALAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }
@@ -81,21 +85,21 @@ public:
   }
 
   // If the TimeFrame Constrains by II.
-  bool isModuloConstrains(const HWAOpInst *A) const {
-    return getTimeFrame(A) == Modulo;
+  bool constrainByMII(const HWAOpInst *A) const {
+    return getTimeFrame(A) == MII - A->getLatency();
   }
 
-  void printTimeFrame(FSMState *State, raw_ostream &OS) const;
-  void dumpTimeFrame(FSMState *State) const;
+  void printTimeFrame(raw_ostream &OS) const;
+  void dumpTimeFrame() const;
   //}
 
   /// @name Distribution Graphs
   //{
-  void buildDGraph(FSMState *State);
+  void buildDGraph();
   double getDGraphAt(unsigned step, HWFUnitID FUID) const;
   void accDGraphAt(unsigned step, HWFUnitID FUID, double d);
-  void printDG(FSMState *State, raw_ostream &OS) const ;
-  void dumpDG(FSMState *State) const ;
+  void printDG(raw_ostream &OS) const ;
+  void dumpDG() const ;
   //}
 
   /// @name Resource usage table
@@ -106,7 +110,7 @@ public:
 
   /// @name Force computation
   //{
-  void buildAvgDG(FSMState *State);
+  void buildAvgDG();
   double getAvgDG(const HWAPostBind *A) {  return AvgDG[A]; }
   double getRangeDG(const HWAPostBind *A, unsigned start, unsigned end/*included*/);
 
@@ -121,19 +125,19 @@ public:
   unsigned findBestStep(HWAOpInst *A);
   //}
 
-  unsigned buildFDInfo(FSMState *State, unsigned StartStep,
-                       unsigned EndStep);
+  unsigned buildFDInfo();
 
-  void recoverFDInfo(FSMState *State);
+  unsigned getMII() const { return MII; }
+  void lengthenMII() { ++MII; }
+  void lengthenCriticalPath() { ++CriticalPathEnd; }
 
-  void enableModuleFD(unsigned II) { Modulo = II; }
-
-  void clear();
+  void reset();
   /// @name Common pass interface
   //{
   static char ID;
-  ForceDirectedInfo() : FunctionPass(&ID), HI(0), RC(0) {}
-  bool runOnFunction(Function &F);
+  ForceDirectedInfo() : BasicBlockPass(&ID), MSInfo(0), HI(0), RC(0),
+    MII(0), CriticalPathEnd(0) {}
+  bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const {}

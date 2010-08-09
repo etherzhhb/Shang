@@ -269,6 +269,7 @@ bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
     NSlot = NSlot % II;
   }
 
+  // FIXME: Handle multi-cycle atom.
   return (ThisSlot != NSlot);
 }
 } // end namespace
@@ -434,7 +435,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   if (NoFUBinding)  return false;
 
   HI = &getAnalysis<HWAtomInfo>();
-  CurStage = &HI->getStateFor(BB);
+  CurStage = HI->getStateFor(BB);
 
   DEBUG(
     dbgs() << "\n\nBefore binding:\n";
@@ -471,8 +472,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 }
 
 void CompPathBinding::bindFunUnitReg() {
-  HWAOpInst &Exit = CurStage->getExitRoot();
-  unsigned LastSlot = Exit.getSlot();
   // For each Function unit(longest path graph node), bind a FU register.
   // For each nodes in
   for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
@@ -488,14 +487,10 @@ void CompPathBinding::bindFunUnitReg() {
       DEBUG(A->dump());
       Instruction *Inst = &A->getInst<Instruction>();
       // Bind a register to this function unit.
-      HWReg *FUR = HI->allocaFURegister(A);
-      HWAWrStg *WR = HI->getWrStg(A, FUR);
+      HWRegister *FUR = HI->allocaFURegister(A);
+      HWAWrReg *WR = HI->getWrReg(A, FUR);
       DEBUG(dbgs() << "Create FU Register: ");
       DEBUG(WR->dump());
-      // Updata live out register.
-      if (WR->getFinSlot()== LastSlot) {
-        CurStage->updateLiveOutReg(Inst, FUR);
-      }
 
       bool FURegRead = false;
       std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
@@ -515,7 +510,7 @@ void CompPathBinding::bindFunUnitReg() {
         DEBUG(dbgs() << "Replace Use: ");
         DEBUG(Use->dump());
         // Read the result for From this Register.
-        Use->setDep(Use->getDepIt(A), WR);
+        Use->replaceDep(A, WR);
       }
     }
   }

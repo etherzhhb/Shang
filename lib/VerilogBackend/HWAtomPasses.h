@@ -41,6 +41,9 @@ Pass *createCompPathBindingPass();
 // Topological sort BBs in structural CFG
 Pass *createTopSortBBPass();
 
+// Scalar Streamization.
+Pass *createScalarStreamizationPass();
+
 } // end namespace
 
 #endif

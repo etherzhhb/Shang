@@ -130,15 +130,11 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return getPostBind(I, Deps, I.getNumOperands(), FUID);
   }
 
-  HWADelay *getDelay(HWAtom *Src, unsigned Delay);
-
-  HWAVRoot *getEntryRoot(BasicBlock *BB);
+  FSMState *getState(BasicBlock *BB);
 
   typedef DenseMap<const Value*, HWAtom*> AtomMapType;
   AtomMapType ValueToHWAtoms;
 
-  typedef DenseMap<const BasicBlock*, FSMState*> StateMapType;
-  StateMapType BBToStates;
   HWAtom *ControlRoot;
 
   void SetControlRoot(HWAtom *NewRoot) {
@@ -162,24 +158,18 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return new (HWAtomAllocator) HWCtrlDep(Src, isExport);
   }
 
-  HWMemDep *getMemDepEdge(HWAOpInst *Src, HWAtom *Root, 
+  HWMemDep *getMemDepEdge(HWAtom *Src, bool isBackEdge,
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff);
-
-  HWAtom *getAtomFor(Value &V) const {
-    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
-    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
-    return  At->second;    
-  }
 
   HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
     if (isa<Argument>(V))
-      return getValDepEdge(getEntryRoot(BB), isSigned, true);
+      return getValDepEdge(getState(BB), isSigned, true);
     else if (isa<PHINode>(V)) // PHINode is an import edge.
-      return getValDepEdge(getEntryRoot(BB), isSigned, true);
+      return getValDepEdge(getState(BB), isSigned, true);
     else if (Constant *C = dyn_cast<Constant>(&V))
-      return getConstEdge(getEntryRoot(BB), C);
+      return getConstEdge(getState(BB), C);
 
     // Now it is an Instruction
     Instruction &Inst = cast<Instruction>(V);
@@ -188,7 +178,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
       return getValDepEdge(getAtomFor(Inst), isSigned);
     else
       // Otherwise this edge is an import edge.
-      return getValDepEdge(getEntryRoot(BB), isSigned, true);
+      return getValDepEdge(getState(BB), isSigned, true);
   }
 
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps) {
@@ -205,30 +195,27 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
 
   unsigned NumRegs;
   // Mapping Value to registers
-  std::map<const Value*, HWReg*> RegForValues;
-
-  HWReg *allocaRegister(const Type *Ty, unsigned StartSlot, unsigned EndSlot) {
-    return new (HWAtomAllocator) HWReg(++NumRegs, Ty, StartSlot, EndSlot);
-  }
+  std::map<const Value*, HWRegister*> RegForValues;
 
   void addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB);
-  void addLoopIVSCC(BasicBlock *BB);
+
+  bool haveSelfLoop(BasicBlock *BB);
+  void addLoopPredBackEdge(BasicBlock *BB);
 
   // The loop Info
   LoopInfo *LI;
   ResourceConfig *RC;
   // Total states
-  unsigned totalCycle;
-
+  unsigned short totalCycle;
+  unsigned short InstIdx;
   // Analysis for dependence analyzes.
   MemDepInfo *MDA;
 public:
-
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0),
-    totalCycle(1), NumRegs(1), MDA(0) {}
+  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0), totalCycle(1),
+    InstIdx(0), NumRegs(1), MDA(0) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();
@@ -238,9 +225,9 @@ public:
 
   HWAPreBind *bindToResource(HWAPostBind &PostBind, unsigned Instance);
 
-  HWReg *getRegForValue(const Value *V, unsigned StartSlot, unsigned EndSlot) {
-    std::map<const Value*, HWReg*>::iterator at = RegForValues.find(V);
-    HWReg *R = 0;
+  HWRegister *getRegForValue(const Value *V, unsigned StartSlot, unsigned EndSlot) {
+    std::map<const Value*, HWRegister*>::iterator at = RegForValues.find(V);
+    HWRegister *R = 0;
     if (at == RegForValues.end()) {
       R = allocaRegister(V->getType(), StartSlot, EndSlot);
       RegForValues.insert(std::make_pair(V, R));
@@ -252,27 +239,38 @@ public:
     return R;
   }
 
-  HWReg *lookupRegForValue(const Value *V) {
-    std::map<const Value*, HWReg*>::iterator at = RegForValues.find(V);
+  HWRegister *lookupRegForValue(const Value *V) {
+    std::map<const Value*, HWRegister*>::iterator at = RegForValues.find(V);
     assert(at != RegForValues.end() && "Register not found!");
     return at->second;
   }
 
-  HWReg *allocaFURegister(HWAPreBind *A) {
+  HWRegister *allocaFURegister(HWAPreBind *A) {
     int RegNum = A->getFunUnitID().getRawData();
     unsigned Slot = A->getFinSlot();
-    return new (HWAtomAllocator) HWReg(-RegNum, A->getValue().getType(),
+    return new (HWAtomAllocator) HWRegister(-RegNum, A->getValue().getType(),
                                        Slot, Slot);
   }
 
-  FSMState &getStateFor(BasicBlock &BB) const {
-    StateMapType::const_iterator At = BBToStates.find(&BB);
-    assert(At != BBToStates.end() && "Can not get the State!");
-    return  *(At->second);
+  HWRegister *allocaRegister(const Type *Ty,
+                                  unsigned StartSlot, unsigned EndSlot) {
+    return new (HWAtomAllocator) HWRegister(++NumRegs, Ty,
+                                                 StartSlot, EndSlot);
   }
 
-  HWAWrStg *getWrStg(HWAtom *Src, HWReg *Reg);
-  HWAImpStg *getImpStg(HWAtom *Src, HWReg *Reg, Value &V);
+  HWAtom *getAtomFor(Value &V) const {
+    AtomMapType::const_iterator At = ValueToHWAtoms.find(&V);
+    assert(At != ValueToHWAtoms.end() && "Atom can not be found!");
+    return  At->second;    
+  }
+
+  FSMState *getStateFor(BasicBlock &BB) const {
+    return cast<FSMState>(getAtomFor(BB));
+  }
+
+  HWADelay *getDelay(HWAtom *Src, unsigned Delay);
+  HWAWrReg *getWrReg(HWAtom *Src, HWRegister *Reg);
+  HWARdReg *getRdReg(HWAtom *Src, HWRegister *Reg, Value &V);
 
   unsigned getTotalCycle() const {
     return totalCycle;
