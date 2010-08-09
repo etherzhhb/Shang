@@ -40,8 +40,8 @@ NoModuloSchedule("disable-modulo-schedule",
           cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-typedef GraphTraits<Inverse<esyn::HWAtom*> > HWAtomSccGT;
-typedef GraphTraits<Inverse<const esyn::HWAtom*> > ConstHWAtomSccGT;
+typedef GraphTraits<esyn::HWAtom*> HWAtomSccGT;
+typedef GraphTraits<const esyn::HWAtom*> ConstHWAtomSccGT;
 
 typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
 typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
@@ -131,7 +131,7 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
 
 
 unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
-  HWAtom *Root = &State.getExitRoot();
+  HWAtom *Root = &State;
   unsigned MaxRecII = 1;
   for (dep_scc_iterator SCCI = dep_scc_iterator::begin(Root),
       SCCE = dep_scc_iterator::end(Root); SCCI != SCCE; ++SCCI) {
@@ -143,11 +143,6 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
     }
 
     DEBUG(dbgs() << "SCC found:\n");
-    DEBUG(
-      for (scc_vector::const_iterator I = Atoms.begin(), E = Atoms.end();
-          I != E; ++I)
-        (*I)->getValue().dump();
-    );
     unsigned RecII = computeRecII(Atoms);
     // Update maxrecii.
     MaxRecII = std::max(RecII, MaxRecII);

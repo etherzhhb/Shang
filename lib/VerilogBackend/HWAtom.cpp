@@ -36,12 +36,12 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
-void HWAWrSS::print(raw_ostream &OS) const {
+void HWAWrReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Write Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
 
-void HWAImpSS::print(raw_ostream &OS) const {
+void HWARdReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Import Storage "
      << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
 }
@@ -80,23 +80,27 @@ void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
 }
 
 void FSMState::print(raw_ostream &OS) const {
-  OS << "State: ";
-  WriteAsOperand(OS, getBasicBlock(), false);
-  OS << "\n";
-  unsigned oldSlot = 0;
+  OS << "[" << getIdx() << "] ";
+  WriteAsOperand(OS, &getValue(), false);
+  OS << " Entry";
 
-  std::multimap<unsigned, HWAtom*> Atoms;
-  getScheduleMap(Atoms);
-  for (std::multimap<unsigned, HWAtom*>::iterator I = Atoms.begin(),
-      E = Atoms.end(); I != E; ++I) {
-    HWAtom *A = I->second;
-    if (A->getSlot() != oldSlot) {
-      oldSlot = A->getSlot();
-      OS << "Cycle: " << oldSlot << "\n";
-    }
-    A->print(OS.indent(2));
-    OS << " at "<< A->getSlot() << "\n";
-  }
+  //OS << "State: ";
+  //WriteAsOperand(OS, getBasicBlock(), false);
+  //OS << "\n";
+  //unsigned oldSlot = 0;
+
+  //std::multimap<unsigned, HWAtom*> Atoms;
+  //getScheduleMap(Atoms);
+  //for (std::multimap<unsigned, HWAtom*>::iterator I = Atoms.begin(),
+  //    E = Atoms.end(); I != E; ++I) {
+  //  HWAtom *A = I->second;
+  //  if (A->getSlot() != oldSlot) {
+  //    oldSlot = A->getSlot();
+  //    OS << "Cycle: " << oldSlot << "\n";
+  //  }
+  //  A->print(OS.indent(2));
+  //  OS << " at "<< A->getSlot() << "\n";
+  //}
 }
 
 void HWAOpInst::print(raw_ostream &OS) const {
@@ -106,12 +110,6 @@ void HWAOpInst::print(raw_ostream &OS) const {
   else
     WriteAsOperand(OS, &getValue(), false);
   OS << " Res: " << getFunUnitID();
-}
-
-void HWAVRoot::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] ";
-  WriteAsOperand(OS, &getValue(), false);
-  OS << " Entry";
 }
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
@@ -165,5 +163,5 @@ void esyn::FSMState::dump() const {
 
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, bool isImport)
 : HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), IsImport(isImport) {
-  assert((!IsImport || isa<HWAVRoot>(Src)) && "Bad import edge!");
+  assert((!IsImport || isa<FSMState>(Src)) && "Bad import edge!");
 }

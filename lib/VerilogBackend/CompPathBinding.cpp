@@ -435,7 +435,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   if (NoFUBinding)  return false;
 
   HI = &getAnalysis<HWAtomInfo>();
-  CurStage = &HI->getStateFor(BB);
+  CurStage = HI->getStateFor(BB);
 
   DEBUG(
     dbgs() << "\n\nBefore binding:\n";
@@ -472,7 +472,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 }
 
 void CompPathBinding::bindFunUnitReg() {
-  HWAOpInst &Exit = CurStage->getExitRoot();
   // For each Function unit(longest path graph node), bind a FU register.
   // For each nodes in
   for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
@@ -488,8 +487,8 @@ void CompPathBinding::bindFunUnitReg() {
       DEBUG(A->dump());
       Instruction *Inst = &A->getInst<Instruction>();
       // Bind a register to this function unit.
-      HWScalarStorage *FUR = HI->allocaFURegister(A);
-      HWAWrSS *WR = HI->getWrSS(A, FUR);
+      HWRegister *FUR = HI->allocaFURegister(A);
+      HWAWrReg *WR = HI->getWrReg(A, FUR);
       DEBUG(dbgs() << "Create FU Register: ");
       DEBUG(WR->dump());
 

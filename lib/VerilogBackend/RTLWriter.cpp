@@ -184,13 +184,11 @@ void RTLWriter::emitFunctionSignature(Function &F) {
 }
 
 void RTLWriter::emitBasicBlock(BasicBlock &BB) {
-  FSMState &State = HI->getStateFor(BB);
+  FSMState *State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
 
-  HWAVRoot &Entry = State.getEntryRoot();
-  HWAOpInst &Exit = State.getExitRoot();
-  unsigned StartSlot = Entry.getSlot(), EndSlot = Exit.getSlot();
-  unsigned totalSlot = State.getTotalSlot();
+  unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
+  unsigned totalSlot = State->getTotalSlot();
 
   vlang->comment(getStateDeclBuffer()) << "State for " << StateName << '\n';
   vlang->param(getStateDeclBuffer(), StateName, TotalFSMStatesBit,
@@ -204,12 +202,12 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   FSMState::ScheduleMapType Atoms;
   typedef FSMState::ScheduleMapType::iterator cycle_iterator;
 
-  State.getScheduleMap(Atoms);
+  State->getScheduleMap(Atoms);
 
   //
   vlang->comment(ControlBlock.indent(6)) << StateName 
-    << " Total Slot: " << State.getTotalSlot()
-    << " II: " << State.getII() <<  '\n';
+    << " Total Slot: " << State->getTotalSlot()
+    << " II: " << State->getII() <<  '\n';
   // Case begin
   vlang->matchCase(ControlBlock.indent(6), StateName);
 
@@ -225,7 +223,7 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   }// end for
 
   // Emit Self Loop logic.
-  if (State.haveSelfLoop()) {
+  if (State->haveSelfLoop()) {
     vlang->comment(ControlBlock.indent(8)) << "For self loop:\n";
     std::string SelfLoopEnable = computeSelfLoopEnable(State);
     vlang->ifBegin(ControlBlock.indent(8), SelfLoopEnable);
@@ -240,15 +238,15 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
 
 
 std::string RTLWriter::getSlotEnable(BasicBlock &BB, unsigned Slot) {
-  FSMState &State = HI->getStateFor(BB);
+  FSMState *State = HI->getStateFor(BB);
   std::string StateName = vlang->GetValueName(&BB);
   raw_string_ostream ss(StateName);
   ss << "_enable";
 
-  if (State.getTotalSlot() == 0)
+  if (State->getTotalSlot() == 0)
     return ss.str();
 
-  ss << "[" << (Slot - State.getEntryRoot().getSlot()) << "]";
+  ss << "[" << (Slot - State->getSlot()) << "]";
   return ss.str();
 }
 
@@ -289,12 +287,12 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomPreBind:
     case atomPostBind:
       return getAsOperand(V, "_w");
-    case atomWrSS:
+    case atomWrReg:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
-        + getAsOperand(cast<HWAWrSS>(A)->getReg());
-    case atomImpSS:
+        + getAsOperand(cast<HWAWrReg>(A)->getReg());
+    case atomRdReg:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
-        + getAsOperand(cast<HWAImpSS>(A)->getReg());
+        + getAsOperand(cast<HWARdReg>(A)->getReg());
     case atomDelay:
       return getAsOperand(cast<HWADelay>(A)->getDep(0).getSrc());
     default:
@@ -307,7 +305,7 @@ std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
   return "FU" + utostr(FUID.getRawData()) + "Reg";
 }
 
-std::string RTLWriter::getAsOperand(HWScalarStorage *R) {
+std::string RTLWriter::getAsOperand(HWRegister *R) {
   if (R->isFuReg())
     return getFURegisterName(R->getFUnit());
 
@@ -341,15 +339,15 @@ void RTLWriter::emitAtom(HWAtom *A) {
           << A->getValue() << '\n';
         emitPostBind(cast<HWAPostBind>(A));
         break;
-      case atomWrSS:
+      case atomWrReg:
         vlang->comment(ControlBlock.indent(10)) << "Read:"
           << A->getValue() << '\n';
-        emitWrSS(cast<HWAWrSS>(A));
+        emitWrReg(cast<HWAWrReg>(A));
         break;
-      case atomImpSS:
+      case atomRdReg:
         vlang->comment(ControlBlock.indent(10)) << "Import:"
           << A->getValue() << '\n';
-        emitImpSS(cast<HWAImpSS>(A));
+        emitRdReg(cast<HWARdReg>(A));
         break;
       case atomDelay:
         vlang->comment(ControlBlock.indent(10));
@@ -365,8 +363,8 @@ void RTLWriter::emitAtom(HWAtom *A) {
   }
 }
 
-void RTLWriter::emitWrSS(HWAWrSS *DR) {
-  const HWScalarStorage *R = DR->getReg();
+void RTLWriter::emitWrReg(HWAWrReg *DR) {
+  const HWRegister *R = DR->getReg();
   // Function unit register will emit with function unit.
   if (R->isFuReg())
     return;
@@ -377,15 +375,15 @@ void RTLWriter::emitWrSS(HWAWrSS *DR) {
   ControlBlock.indent(10) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
 }
 
-void RTLWriter::emitImpSS(HWAImpSS *DR) {
+void RTLWriter::emitRdReg(HWARdReg *DR) {
   if (DR->isPHINode())
     UsedRegs.insert(DR->getReg());
 }
 
 void RTLWriter::emitAllRegisters() {
-  for (std::set<const HWScalarStorage*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
+  for (std::set<const HWRegister*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
       I != E; ++I) {
-    const HWScalarStorage *R = *I;
+    const HWRegister *R = *I;
     unsigned BitWidth = vlang->getBitWidth(R->getType());
     std::string Name = "Reg"+utostr(R->getRegNum());
 
@@ -438,7 +436,7 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWAPreBindVecTy &Atoms) {
   FSMState *State = FirstAtom->getParent();
   BasicBlock *BB = State->getBasicBlock();
   unsigned SlotWidth = State->getTotalSlot() + 1;
-  unsigned StartSlot = State->getEntryRoot().getSlot();
+  unsigned StartSlot = State->getSlot();
 
   // FIXME: Do mix difference type in a function unit.
   unsigned MaxBitWidth = vlang->getBitWidth(FirstAtom->getValue());
@@ -516,7 +514,7 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
   FSMState *State = FirstAtom->getParent();
   BasicBlock *BB = State->getBasicBlock();
   unsigned SlotWidth = State->getTotalSlot() + 1;
-  unsigned StartSlot = State->getEntryRoot().getSlot();
+  unsigned StartSlot = State->getSlot();
 
   unsigned DataWidth = MemBus->getDataWidth(),
            AddrWidth = MemBus->getAddrWidth();
@@ -662,8 +660,8 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, BasicBlock &BB)
 
 void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
                                    const std::string &NewState) {
-  FSMState &State = HI->getStateFor(BB);
-  unsigned totalSlot = State.getTotalSlot();
+  FSMState *State = HI->getStateFor(BB);
+  unsigned totalSlot = State->getTotalSlot();
   std::string StateName = vlang->GetValueName(&BB);
   ss << StateName << "_enable <= ";
   if (totalSlot > 0)
@@ -677,11 +675,10 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
   ss << ";\n";
 }
 
-std::string  RTLWriter::computeSelfLoopEnable(FSMState &State) {
-  unsigned IISlot = State.getII();
+std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
+  unsigned IISlot = State->getIISlot();
 
-  BasicBlock *BB = State.getBasicBlock();
-  IISlot += State.getEntryRoot().getSlot();
+  BasicBlock *BB = State->getBasicBlock();
   std::string MircoState = getSlotEnable(*BB, IISlot);
 
   BranchInst *Br = cast<BranchInst>(BB->getTerminator());
@@ -704,7 +701,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState &State) {
              getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
 
         
-    HWScalarStorage *PredReg = HI->lookupRegForValue(&Pred->getValue());
+    HWRegister *PredReg = HI->lookupRegForValue(&Pred->getValue());
     return MircoState + getAsOperand(PredReg);
   } else if (ConstantInt *CI = dyn_cast<ConstantInt>(Cnd))
     return MircoState + vlang->printConstant(CI);
@@ -843,13 +840,14 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
 
 void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
                                      unsigned ind) {
-  FSMState &CurStage = HI->getStateFor(CurBlock);
+  FSMState *CurStage = HI->getStateFor(CurBlock);
   vlang->comment(ControlBlock.indent(10 + ind)) << "Phi Node:\n";
   Instruction *NotPhi = Succ.getFirstNonPHI();
-  BasicBlock::iterator I = Succ.begin();
-  while (&*I != NotPhi) {
+  
+  for (BasicBlock::iterator I = Succ.begin(), E = Succ.getFirstNonPHI();
+      I != E; ++I) {
     PHINode *PN = cast<PHINode>(I);
-    HWScalarStorage *PR = HI->lookupRegForValue(PN);
+    HWRegister *PR = HI->lookupRegForValue(PN);
 
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
     ControlBlock.indent(10 + ind) << getAsOperand(PR)
@@ -857,9 +855,8 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     if (Constant *C = dyn_cast<Constant>(IV))
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
     else {
-      HWScalarStorage *PHISrc = CurStage.getPHISrc(IV);
+      HWRegister *PHISrc = CurStage->getPHISrc(IV);
       ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     }
-    ++I;
   }
 }

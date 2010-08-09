@@ -43,7 +43,7 @@ void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 
-void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
+void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
                                       unsigned step) {
   typedef HWAtom::const_use_iterator ChildIt;
   SmallVector<std::pair<const HWAtom*, ChildIt>, 32> WorkStack;
@@ -234,9 +234,9 @@ void ForceDirectedInfo::buildDGraph() {
 }
 
 void ForceDirectedInfo::printDG(raw_ostream &OS) const {
-  unsigned StartStep = State->getEntryRoot().getSlot();
+  unsigned StartStep = State->getSlot();
   unsigned EndStep = MII > 0 ? (StartStep + MII - 1)
-                                  : getALAPStep(&State->getExitRoot());
+                               : getALAPStep(State->getExitRoot());
   // For each step
   for (unsigned ri = HWResource::FirstResourceType,
     re = HWResource::LastResourceType; ri != re; ++ri) {
@@ -364,7 +364,7 @@ void ForceDirectedInfo::releaseMemory() {
 bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   MSInfo = &getAnalysis<ModuloScheduleInfo>();
-  State = &HI.getStateFor(BB);
+  State = HI.getStateFor(BB);
 
   if (!MSInfo->isModuloSchedulable(*State)) {
     MII = 0;
@@ -380,12 +380,11 @@ bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
 
 unsigned ForceDirectedInfo::buildFDInfo() {
   // Build the time frame
-  HWAVRoot *Entry = &State->getEntryRoot();
-  assert(Entry->isScheduled() && "Entry must be scheduled first!");
-  unsigned FirstStep = Entry->getSlot();
-  buildASAPStep(Entry, FirstStep);
+  assert(State->isScheduled() && "Entry must be scheduled first!");
+  unsigned FirstStep = State->getSlot();
+  buildASAPStep(State, FirstStep);
   
-  HWAOpInst *Exit = &State->getExitRoot();
+  HWAOpInst *Exit = State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 
   buildALAPStep(Exit, CriticalPathEnd);

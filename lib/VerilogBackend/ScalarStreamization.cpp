@@ -39,29 +39,29 @@ namespace {
 
 bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-  FSMState &State = HI.getStateFor(BB);
-  HWAOpInst *Exit = &State.getExitRoot();
+  FSMState *State = HI.getStateFor(BB);
+  HWAOpInst *Exit = State->getExitRoot();
 
   // Only handle MSed Loop.
-  if (!State.haveSelfLoop())
+  if (!State->haveSelfLoop())
     return false;
   
-  unsigned II = State.getII();
+  unsigned II = State->getII();
 
   // No need to SS.
-  if (II == State.getTotalSlot())
+  if (II == State->getTotalSlot())
     return false;
 
   DEBUG(dbgs() << "Find Self Loop :" << BB.getName() << " II: " << II << '\n');
   std::vector<HWAtom*> WorkList;
-  for (usetree_iterator I = State.usetree_begin(), E = State.usetree_end();
+  for (usetree_iterator I = State->usetree_begin(), E = State->usetree_end();
       I != E; ++I)
-    if (HWAWrSS *WrSS = dyn_cast<HWAWrSS>(*I)) {
-      if (!WrSS->getReg()->isFuReg())
-        WorkList.push_back(WrSS);
-    } else if (HWAImpSS *ImpSS = dyn_cast<HWAImpSS>(*I)) {
-      if (ImpSS->isPHINode())
-        WorkList.push_back(ImpSS);
+    if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(*I)) {
+      if (!WrReg->getReg()->isFuReg())
+        WorkList.push_back(WrReg);
+    } else if (HWARdReg *RdReg = dyn_cast<HWARdReg>(*I)) {
+      if (RdReg->isPHINode())
+        WorkList.push_back(RdReg);
     }
 
   while (!WorkList.empty()) {
@@ -71,7 +71,7 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
 
 
     std::vector<HWAtom *> RegUsers(Src->use_begin(), Src->use_end());
-    HWAWrSS *NewWrSS = 0;
+    HWAWrReg *NewWrReg = 0;
     while (!RegUsers.empty()) {
       HWAtom *Dst = RegUsers.back();
       RegUsers.pop_back();
@@ -90,21 +90,21 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
       );
       if (Dst->getSlot() - Src->getSlot() > II) {
         DEBUG(dbgs() << "Anti dependency found:\n");
-        if (NewWrSS == 0) {
+        if (NewWrReg == 0) {
           HWADelay *Delay = HI.getDelay(Src, II);
           Delay->scheduledTo(Src->getFinSlot());
           unsigned StartSlot = Delay->getFinSlot();
-          HWScalarStorage *NewReg = HI.allocaRegister(Ty, StartSlot,
+          HWRegister *NewReg = HI.allocaRegister(Ty, StartSlot,
                                                       StartSlot + II);
-          NewWrSS = HI.getWrSS(Delay, NewReg);
+          NewWrReg = HI.getWrReg(Delay, NewReg);
         }
-        Dst->replaceDep(Src, NewWrSS);
+        Dst->replaceDep(Src, NewWrReg);
       }
     } // End foreach RegUsers.
 
     // Add new node to list so we could check it.
-    if (NewWrSS)
-      WorkList.push_back(NewWrSS);
+    if (NewWrReg)
+      WorkList.push_back(NewWrReg);
   }
 
   return false;

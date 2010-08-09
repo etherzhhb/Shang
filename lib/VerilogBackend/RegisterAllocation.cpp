@@ -37,8 +37,7 @@ struct RegAllocation : public BasicBlockPass {
 
 bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-  FSMState &State = HI.getStateFor(BB);
-  HWAVRoot *EntryRoot = &State.getEntryRoot();
+  FSMState *State = HI.getStateFor(BB);
 
   // Emit the operand of PHINode.
   for (BasicBlock::iterator II = BB.begin(), IE = BB.getFirstNonPHI();
@@ -46,11 +45,11 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     PHINode *PN = cast<PHINode>(II);
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *IV = PN->getIncomingValue(i);
-      FSMState &InStage = HI.getStateFor(*PN->getIncomingBlock(i));
-      unsigned lastSlot = (&State == &InStage) ? (InStage.getEntryRoot().getSlot() + InStage.getII()) :
-                                                 InStage.getExitRoot().getSlot();
+      FSMState *InStage = HI.getStateFor(*PN->getIncomingBlock(i));
+      unsigned lastSlot = (State == InStage) ?
+                          InStage->getIISlot() : InStage->getEndSlot();
 
-      if (InStage.getPHISrc(IV) != 0)
+      if (InStage->getPHISrc(IV) != 0)
         continue;
 
       if (isa<Constant>(IV))
@@ -61,20 +60,20 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         HWAtom *A = HI.getAtomFor(*IV);
         if (HWAPreBind *PB = dyn_cast<HWAPreBind>(A)) {
           HWAtom *Use = PB->use_back();
-          if (HWAWrSS *WR = dyn_cast<HWAWrSS>(Use))
+          if (HWAWrReg *WR = dyn_cast<HWAWrReg>(Use))
             if (WR->getFinSlot() == lastSlot) {
-              InStage.updatePHISrc(IV, WR->getReg());
+              InStage->updatePHISrc(IV, WR->getReg());
               continue;
             }
         }
       }
-      HWScalarStorage *IR = HI.getRegForValue(IV, lastSlot, lastSlot);
-      InStage.updatePHISrc(IV, IR);
+      HWRegister *IR = HI.getRegForValue(IV, lastSlot, lastSlot);
+      InStage->updatePHISrc(IV, IR);
     }
   }
 
-  SmallVector<HWAtom*, 32> Worklist(usetree_iterator::begin(EntryRoot),
-                                    usetree_iterator::end(EntryRoot));
+  SmallVector<HWAtom*, 32> Worklist(State->usetree_begin(),
+                                    State->usetree_end());
 
   while(!Worklist.empty()) {
     HWAOpInst *A = dyn_cast<HWAOpInst>(Worklist.back());
@@ -91,9 +90,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         Value *V = A->getIOperand(i);
         if (VD->isImport()) {
           // Insert the import node.
-          HWAVRoot *Root = cast<HWAVRoot>(VD->getSrc());
-          HWScalarStorage *R = HI.getRegForValue(V, Root->getSlot(), A->getSlot());
-          HWAImpSS *ImpStg = HI.getImpSS(Root, R, *V);
+          HWRegister *R = HI.getRegForValue(V, State->getSlot(), A->getSlot());
+          HWARdReg *ImpStg = HI.getRdReg(State, R, *V);
           A->setDep(i, ImpStg);
 
         } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getSrc())) {
@@ -105,19 +103,19 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
             DEBUG(DI->print(dbgs()));
             DEBUG(dbgs() << " Registered\n");
             // Store the value to register.
-            HWScalarStorage *R = HI.getRegForValue(V, DI->getFinSlot(), A->getSlot());
-            HWAWrSS *WR = HI.getWrSS(DI, R);
+            HWRegister *R = HI.getRegForValue(V, DI->getFinSlot(), A->getSlot());
+            HWAWrReg *WR = HI.getWrReg(DI, R);
             A->setDep(i, WR);
           }
-        } else if (HWAWrSS *WrSS = dyn_cast<HWAWrSS>(VD->getSrc())) {
+        } else if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(VD->getSrc())) {
           // Move the value out of the Function unit register.
-          assert(WrSS->getReg()->isFuReg()
+          assert(WrReg->getReg()->isFuReg()
                  && "Only Expect function unit register!");
-          if (WrSS->getReg()->getEndSlot() < A->getSlot()) {
-            DEBUG(WrSS->print(dbgs()));
+          if (WrReg->getReg()->getEndSlot() < A->getSlot()) {
+            DEBUG(WrReg->print(dbgs()));
             DEBUG(dbgs() << " extended\n");
-            HWScalarStorage *R = HI.getRegForValue(V, WrSS->getFinSlot(), A->getSlot());
-            HWAWrSS *WR = HI.getWrSS(WrSS, R);
+            HWRegister *R = HI.getRegForValue(V, WrReg->getFinSlot(), A->getSlot());
+            HWAWrReg *WR = HI.getWrReg(WrReg, R);
             A->setDep(i, WR);
           }
         }
@@ -126,7 +124,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   }
   
   // Emit the exported register.
-  HWAOpInst *Exit = &State.getExitRoot();
+  HWAOpInst *Exit = State->getExitRoot();
   for (unsigned i = Exit->getInstNumOps(), e = Exit->getNumDeps(); i != e; ++i) {
     HWCtrlDep *CD = dyn_cast<HWCtrlDep>(&Exit->getDep(i));
     if (!(CD && CD->isExport())) continue;
@@ -134,7 +132,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     HWAtom *SrcAtom = CD->getSrc();
 
     // If we already emit the register, just skip it.
-    if (HWAWrSS *WR = dyn_cast<HWAWrSS>(SrcAtom))
+    if (HWAWrReg *WR = dyn_cast<HWAWrReg>(SrcAtom))
       if (!WR->getReg()->isFuReg())
         continue;
 
@@ -143,8 +141,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     DEBUG(SrcAtom->print(dbgs()));
     DEBUG(dbgs() << " Registered for export.\n");
     // Store the value to register.
-    HWScalarStorage *R = HI.getRegForValue(V, SrcAtom->getFinSlot(), Exit->getSlot());
-    HWAWrSS *WR = HI.getWrSS(SrcAtom, R);
+    HWRegister *R = HI.getRegForValue(V, SrcAtom->getFinSlot(), Exit->getSlot());
+    HWAWrReg *WR = HI.getWrReg(SrcAtom, R);
     Exit->setDep(i, WR);
   }
 

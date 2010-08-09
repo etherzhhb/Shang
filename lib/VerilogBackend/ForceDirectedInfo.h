@@ -40,7 +40,7 @@ class ForceDirectedInfo : public BasicBlockPass {
 
   TimeFrameMapType AtomToTF;
 
-  void buildASAPStep(const HWAVRoot *EntryRoot, unsigned step);
+  void buildASAPStep(const FSMState *EntryRoot, unsigned step);
   void buildALAPStep(const HWAOpInst *ExitRoot, unsigned step);
 
   // The Key of DG, { step, resource type }
@@ -62,21 +62,20 @@ public:
   /// @name TimeFrame
   //{
   void buildASAPStep() {
-    const HWAVRoot *Root = &State->getEntryRoot();
-    buildASAPStep(Root, getASAPStep(Root));
+    buildASAPStep(State, State->getSlot());
   }
   unsigned getASAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
   void buildALAPStep() {
-    const HWAOpInst *Root = &State->getExitRoot();
+    const HWAOpInst *Root = State->getExitRoot();
     buildALAPStep(Root, getALAPStep(Root));
   }
   unsigned getALAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<HWAVRoot>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }

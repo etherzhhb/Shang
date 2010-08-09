@@ -43,8 +43,6 @@ struct FDLScheduler : public BasicBlockPass {
   ForceDirectedInfo *FDInfo;
   ModuloScheduleInfo *MSInfo;
   FSMState *CurState;
-
-  HWAVRoot *Entry; 
   HWAOpInst *Exit;
 
   enum SchedResult {
@@ -155,21 +153,17 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
   FDInfo = &getAnalysis<ForceDirectedInfo>();
   MSInfo = &getAnalysis<ModuloScheduleInfo>();
-  CurState = &(HI->getStateFor(BB));
-
-  // Build the time frame
-  Entry = &CurState->getEntryRoot(); 
-  Exit = &CurState->getExitRoot();
+  CurState = HI->getStateFor(BB);
 
   unsigned StartStep = HI->getTotalCycle();
-  Entry->scheduledTo(StartStep);
+  CurState->scheduledTo(StartStep);
 
   if (MSInfo->isModuloSchedulable(*CurState))
     FDModuloSchedule();
   else
     FDListSchedule();
   
-  HI->setTotalCycle(CurState->getExitRoot().getSlot() + 1);
+  HI->setTotalCycle(CurState->getEndSlot() + 1);
 
   // Do not forget to schedule the delay atom;
   for (usetree_iterator I = CurState->usetree_begin(),
