@@ -318,12 +318,14 @@ bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
   MSInfo = &getAnalysis<ModuloScheduleInfo>();
   State = &HI.getStateFor(BB);
 
-  if (MSInfo->isModuloSchedulable(*State)) {
-    unsigned RecMII = MSInfo->computeRecMII(*State);
-    unsigned ResMII = MSInfo->computeResMII(*State);
-    MII = std::max(RecMII, ResMII);
-  } else
+  if (!MSInfo->isModuloSchedulable(*State)) {
     MII = 0;
+    return false;
+  }
+
+  unsigned RecMII = MSInfo->computeRecMII(*State);
+  unsigned ResMII = MSInfo->computeResMII(*State);
+  MII = std::max(RecMII, ResMII);
 
   return false;
 }
