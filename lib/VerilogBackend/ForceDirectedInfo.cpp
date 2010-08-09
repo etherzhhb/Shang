@@ -72,23 +72,28 @@ void ForceDirectedInfo::buildASAPStep(const HWAVRoot *EntryRoot,
       HWEdge *Edge = ChildNode->getEdgeFrom(Node);
       if (!ChildNode->isScheduled()) {
         int SNewStep = AtomToTF[Node].first + Node->getLatency() -
-          // delta Node -> ChildNode
-          MII * Edge->getItDst();
+                       // delta Node -> ChildNode
+                       MII * Edge->getItDst();
         assert(SNewStep >= (int)step && "Bad ASAP step!");
         unsigned NewStep = SNewStep;
 
+        if (VC == 1) // Handle backedge;
+          for (HWAtom::const_dep_iterator DI = ChildNode->dep_begin(),
+              DE = ChildNode->dep_end(); DI != DE; ++DI) {
+            if (!DI.getEdge()->isBackEdge())
+              continue;
+            // Increase the visit count cause by backedge.
+            ++VisitCount[ChildNode];
+            
+            const HWAtom *BackDep = *DI;
+            if (BackDep->isScheduled())
+              NewStep = std::max(NewStep,
+                                 BackDep->getSlot() + BackDep->getLatency()
+                                 - MII * DI.getEdge()->getItDst());
+          }
+
         if (AtomToTF[ChildNode].first < NewStep)
           AtomToTF[ChildNode].first = NewStep;
-
-        if (VC == 1) { // Handle backedge;
-          for (HWAtom::const_dep_iterator DI = ChildNode->dep_begin(),
-            DE = ChildNode->dep_end(); DI != DE; ++DI) {
-              if (!DI.getEdge()->isBackEdge())
-                continue;
-              // Increase the visit count cause by backedge.
-              ++VisitCount[ChildNode];
-          }
-        }
       } else { // We do not need to compute the step of Child Node.
         VisitCount[ChildNode] = ChildNode->getNumDeps(); // Force push ChildNode.
         AtomToTF[ChildNode].first = ChildNode->getSlot();
@@ -136,21 +141,29 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
       if (!ChildNode->isScheduled()) {
         // Latency is ChildNode->Node.
         unsigned NewStep = AtomToTF[Node].second - ChildNode->getLatency()
-                  + MII * It.getEdge()->getItDst();// delta ChildNode -> Node.
+                           // delta ChildNode -> Node.
+                           + MII * It.getEdge()->getItDst();
+
+        if (VC == 1) // Handle backedge;
+          for (HWAtom::const_use_iterator UI = ChildNode->use_begin(),
+              UE = ChildNode->use_end(); UI != UE; ++UI) {
+            HWEdge *UseEdge = (*UI)->getEdgeFrom(ChildNode);
+            if (!UseEdge->isBackEdge())
+              continue;
+            // Increase the visit count cause by backedge.
+            ++VisitCount[ChildNode];
+            
+            const HWAtom *BackUse = *UI;
+            if (BackUse->isScheduled())
+              NewStep = std::min(NewStep,
+                                 BackUse->getSlot() - ChildNode->getLatency()
+                                 + MII * UseEdge->getItDst());
+          }
 
         assert(AtomToTF[ChildNode].second && "Broken ALAP!");
         if (AtomToTF[ChildNode].second > NewStep)
           AtomToTF[ChildNode].second = NewStep;
 
-        if (VC == 1) { // Handle backedge;
-          for (HWAtom::const_use_iterator UI = ChildNode->use_begin(),
-            UE = ChildNode->use_end(); UI != UE; ++UI) {
-              if (!(*UI)->getEdgeFrom(ChildNode)->isBackEdge())
-                continue;
-              // Increase the visit count cause by backedge.
-              ++VisitCount[ChildNode];
-          }
-        }
       } else { // We do not need to compute the step of Child Node.
         VisitCount[ChildNode] = ChildNode->getNumUses(); // Force push ChildNode.
         AtomToTF[ChildNode].second = ChildNode->getSlot();
@@ -374,12 +387,6 @@ unsigned ForceDirectedInfo::buildFDInfo() {
   
   HWAOpInst *Exit = &State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
-
-  // Emit the Pred before next loop start.
-  if (MII)
-    if (HWAOpInst *Pred = dyn_cast<HWAOpInst>(Exit->getOperand(0)))
-      AtomToTF[Pred].second = std::min(AtomToTF[Pred].second,
-                                       FirstStep + MII - Pred->getLatency());
 
   buildALAPStep(Exit, CriticalPathEnd);
 
