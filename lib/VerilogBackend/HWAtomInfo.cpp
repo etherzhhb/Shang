@@ -511,12 +511,6 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
         continue;
 
       HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
-      //// We do not delay the trivial operation, because the delay
-      //// is cause by the function unit register.
-      //if (OpInst->isTrivial())
-      //  continue;
-
-      //HWADelay *Delay = getDelay(OpInst, 1);
       Deps.push_back(getCtrlDepEdge(OpInst, true));
 
       if (&BB == SuccBB) {// Self Loop?

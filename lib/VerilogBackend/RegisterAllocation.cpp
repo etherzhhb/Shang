@@ -76,48 +76,50 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
                                     State->usetree_end());
 
   while(!Worklist.empty()) {
-    HWAOpInst *A = dyn_cast<HWAOpInst>(Worklist.back());
+    HWAtom *A = Worklist.back();
     Worklist.pop_back();
-    
-    if (A == 0)
+
+    HWAOpInst *OI = dyn_cast<HWAOpInst>(A);
+    if (OI == 0)
       continue;
 
-    DEBUG(A->print(dbgs()));
+    DEBUG(OI->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
-    for (unsigned i = 0, e = A->getNumDeps(); i != e; ++i) {
-      if (HWValDep *VD = dyn_cast<HWValDep>(&A->getDep(i))) {
-        Value *V = A->getIOperand(i);
+    // Extend the life time of value by move the value to a register.
+    HWAWrReg *ExtReg = 0;
+
+    std::vector<HWAtom *> Users(OI->use_begin(), OI->use_end());
+    while (!Users.empty()) {
+      HWAtom *Dst = Users.back();
+      Users.pop_back();
+    
+      // We need to register the value if the value life through
+      // several cycle. Or we need to keep the value until the computation
+      // finish.
+      if (Dst->getSlot() == OI->getFinSlot() && Dst->getLatency() == 0)
+        continue;
+      // Create the register if necessary.
+      if (ExtReg == 0) {
+        DEBUG(OI->print(dbgs()));
+        DEBUG(dbgs() << " extended\n");
+        HWRegister *R = HI.getRegForValue(&OI->getValue(),
+                                          OI->getFinSlot(),
+                                          Dst->getSlot());
+        ExtReg = HI.getWrReg(OI, R);
+      }
+    Dst->replaceDep(OI, ExtReg);
+    }
+
+    for (unsigned i = 0, e = OI->getNumDeps(); i != e; ++i) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
+        Value *V = OI->getIOperand(i);
         if (VD->isImport()) {
           // Insert the import node.
-          HWRegister *R = HI.getRegForValue(V, State->getSlot(), A->getSlot());
+          HWRegister *R = HI.getRegForValue(V, State->getSlot(), OI->getSlot());
           HWARdReg *ImpStg = HI.getRdReg(State, R, *V);
-          A->setDep(i, ImpStg);
+          OI->setDep(i, ImpStg);
 
-        } else if (HWAOpInst *DI = dyn_cast<HWAOpInst>(VD->getSrc())) {
-          // We need to register the value if the value life through
-          // several cycle. Or we need to keep the value until the computation
-          // finish.
-          if (DI->getFinSlot() != A->getSlot() || A->getLatency() > 0) {
-            assert(DI->getFinSlot() <= A->getSlot() && "Bad Schedule!");
-            DEBUG(DI->print(dbgs()));
-            DEBUG(dbgs() << " Registered\n");
-            // Store the value to register.
-            HWRegister *R = HI.getRegForValue(V, DI->getFinSlot(), A->getSlot());
-            HWAWrReg *WR = HI.getWrReg(DI, R);
-            A->setDep(i, WR);
-          }
-        } else if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(VD->getSrc())) {
-          // Move the value out of the Function unit register.
-          assert(WrReg->getReg()->isFuReg()
-                 && "Only Expect function unit register!");
-          if (WrReg->getReg()->getEndSlot() < A->getSlot()) {
-            DEBUG(WrReg->print(dbgs()));
-            DEBUG(dbgs() << " extended\n");
-            HWRegister *R = HI.getRegForValue(V, WrReg->getFinSlot(), A->getSlot());
-            HWAWrReg *WR = HI.getWrReg(WrReg, R);
-            A->setDep(i, WR);
-          }
         }
       }
     }
@@ -133,7 +135,6 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
 
     // If we already emit the register, just skip it.
     if (HWAWrReg *WR = dyn_cast<HWAWrReg>(SrcAtom))
-      if (!WR->getReg()->isFuReg())
         continue;
 
     Value *V = &SrcAtom->getValue();

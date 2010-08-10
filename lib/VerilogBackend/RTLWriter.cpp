@@ -268,6 +268,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
 
   switch (A->getHWAtomType()) {
     case atomPreBind:
+      return getFURegisterName(cast<HWAPreBind>(A)->getFunUnitID());
     case atomPostBind:
       return getAsOperand(V, "_w");
     case atomWrReg:
