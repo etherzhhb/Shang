@@ -890,7 +890,8 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
       ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     } else {
       Instruction *Inst = cast<Instruction>(IV);
-      ControlBlock << " <= " << getAsOperand(CurStage->getPHISrc(Inst));
+      ControlBlock << " <= " << getAsOperand(CurStage->getPHISrc(Inst))
+                   << ";\n";
     }
   }
 }

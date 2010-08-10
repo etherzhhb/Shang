@@ -109,6 +109,9 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       } else if (VD->getDepType() == HWValDep::PHI) {
         DEBUG(dbgs() << "Visit value use by PHI: " << SrcAtom->getValue() << "\n");
         DEBUG(SrcAtom->dump());
+        // It is ok to read the value at II slot even the the value is export
+        // for exit blocks, because the value at the last iteration will not
+        // be overwritten.
         unsigned lastSlot = State->haveSelfLoop() ? State->getIISlot()
                                                   : State->getEndSlot();
         // Just read value from the atom is ok.
