@@ -207,7 +207,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
     }
 
   // Create delay atom for phi node.
-  addPhiDelays(*I.getParent(), Deps);
+  addPhiExportEdges(*I.getParent(), Deps);
 
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
@@ -490,7 +490,7 @@ HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
 
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 
-void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
+void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
   FSMState *State = getStateFor(BB);
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
     BasicBlock *SuccBB = *SI;
@@ -516,12 +516,12 @@ void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
       //if (OpInst->isTrivial())
       //  continue;
 
-      HWADelay *Delay = getDelay(OpInst, 1);
-      Deps.push_back(getCtrlDepEdge(Delay, true));
+      //HWADelay *Delay = getDelay(OpInst, 1);
+      Deps.push_back(getCtrlDepEdge(OpInst, true));
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.
-        HWMemDep *PHIDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
+        HWMemDep *PHIDep = getMemDepEdge(OpInst, true, HWMemDep::TrueDep, 1);
         //IVIncAtom->addDep(LoopDep);
         State->addDep(PHIDep);
       }

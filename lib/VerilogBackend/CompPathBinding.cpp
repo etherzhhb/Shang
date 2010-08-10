@@ -500,12 +500,6 @@ void CompPathBinding::bindFunUnitReg() {
 
         // Do not make self loop.
         if (Use == WR) continue;
-        // Replace the delay atom.
-        if (HWADelay *Delay = dyn_cast<HWADelay>(Use)) {
-          Delay->replaceAllUseBy(WR);
-          A->removeFromList(Delay);
-          continue;
-        }
 
         DEBUG(dbgs() << "Replace Use: ");
         DEBUG(Use->dump());
