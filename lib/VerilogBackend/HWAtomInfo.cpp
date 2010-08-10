@@ -433,7 +433,7 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWAtom *Reader) {
   ID.AddInteger(atomWrReg);
   ID.AddPointer(Src);
   HWRegister *R = getRegForValue(&Src->getValue(),
-                                 Src->getSlot(), Reader->getSlot());
+                                 Src->getFinSlot(), Reader->getSlot());
 
   void *IP = 0;
   HWAWrReg *A =
@@ -441,7 +441,27 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWAtom *Reader) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWAWrReg(ID.Intern(HWAtomAllocator),
-                                       *getValDepEdge(Src, false), R);
+                                       *getValDepEdge(Src, false), R,
+                                       Src->getFinSlot());
+    UniqiueHWAtoms.InsertNode(A, IP);
+  }
+  return A;
+}
+
+HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg,
+                               unsigned short Slot) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(atomWrReg);
+  ID.AddPointer(Src);
+
+  void *IP = 0;
+  HWAWrReg *A =
+    static_cast<HWAWrReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(ID, IP));
+
+  if (!A) {
+    A = new (HWAtomAllocator) HWAWrReg(ID.Intern(HWAtomAllocator),
+                                       *getValDepEdge(Src, false), Reg,
+                                       Slot);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -471,7 +491,7 @@ HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWAtom *Reader, Value &V) {
   ID.AddInteger(atomRdReg);
   ID.AddPointer(Src);
   ID.AddPointer(&V);
-  HWRegister *R = getRegForValue(&V, Src->getSlot(), Reader->getSlot());
+  HWRegister *R = getRegForValue(&V, Src->getFinSlot(), Reader->getSlot());
 
   void *IP = 0;
   HWARdReg *A =
