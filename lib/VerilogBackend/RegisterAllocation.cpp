@@ -106,23 +106,24 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         DEBUG(dbgs() << " Registered\n");
         // Store the value to register.
         Exit->setDep(i, HI.getWrReg(SrcAtom, Exit));
-      } else if (VD->getDepType() == HWValDep::SelfLoop) {
+      } else if (VD->getDepType() == HWValDep::PHI) {
         DEBUG(dbgs() << "Visit value use by PHI: " << SrcAtom->getValue() << "\n");
         DEBUG(SrcAtom->dump());
         // It is ok to read the value at II slot even the the value is export
         // for exit blocks, because the value at the last iteration will not
         // be overwritten.
-        unsigned IISlot = State->getIISlot();
+        unsigned lastSlot = State->haveSelfLoop() ? State->getIISlot()
+                                                  : State->getEndSlot();
         // Just read value from the atom is ok.
-        if (SrcAtom->getFinSlot() == IISlot) {
+        if (SrcAtom->getFinSlot() == lastSlot) {
           DEBUG(dbgs() << "Do not need register\n");
-          State->updateSelfPHISrc(cast<Instruction>(V), SrcAtom);
+          State->updatePHISrc(cast<Instruction>(V), SrcAtom);
           continue;
         }
 
         assert(!isa<HWAWrReg>(SrcAtom) && "Unexpected Register for phi node!");
         HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
-        State->updateSelfPHISrc(cast<Instruction>(V), WR);
+        State->updatePHISrc(cast<Instruction>(V), WR);
         Exit->setDep(i, WR);
       }
     }

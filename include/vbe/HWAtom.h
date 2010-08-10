@@ -204,7 +204,7 @@ public:
 class HWValDep : public HWEdge {
 public:
   enum ValDepTypes{
-    Normal, Import, Export, SelfLoop
+    Normal, Import, Export, PHI
   };
   HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T);
 
@@ -742,11 +742,11 @@ public:
       (*I)->resetSchedule();
   }
 
-  void updateSelfPHISrc(const Instruction *Inst, HWAtom *A) {
+  void updatePHISrc(const Instruction *Inst, HWAtom *A) {
     PHISrc[Inst] = A;
   }
 
-  HWAtom *getSelfPHISrc(const Instruction *Inst) {
+  HWAtom *getPHISrc(const Instruction *Inst) {
     PHISrcMapType::iterator At = PHISrc.find(Inst);
     if (At == PHISrc.end())
       return 0;
