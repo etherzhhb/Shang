@@ -658,7 +658,7 @@ void RTLWriter::createMircoStateEnable(FSMState *State) {
   vlang->resetRegister(getResetBlockBuffer(),
     "cur_" + StateName + "_enable", totalSlot + 1, 0);
 
-  ControlBlock.indent(6) << "cur_" << StateName << "_enable <= next_"
+  SeqCompute.indent(6) << "cur_" << StateName << "_enable <= next_"
                                    << StateName << "_enable;\n";
 }
 
