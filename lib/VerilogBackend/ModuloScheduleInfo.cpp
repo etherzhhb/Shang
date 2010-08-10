@@ -104,10 +104,11 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
       I != E; ++I)
     (*I)->dump();
   );
+
+  typedef SmallVector<std::pair<const HWAtom*, HWEdge*>, 4> BEVector;
+  BEVector BackEdges;
   const HWAtom *FirstAtom = Scc.front();
   std::map<const HWAtom*, unsigned> MaxLatency, MaxItDist;
-  MaxLatency[FirstAtom] = 0;
-  MaxItDist[FirstAtom] = 0;
   // All nodes longest path.
   for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
       I != E; ++I) {
@@ -117,16 +118,31 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
       // FIXME: Take care of back edge!
       const HWAtom *UseAtom = *UI;
       HWEdge *Edge = UseAtom->getEdgeFrom(CurAtom);
-
+      // Ignore the backedge at this moment.
+      if (Edge->isBackEdge()) {
+        BackEdges.push_back(std::make_pair(UseAtom, Edge));
+        continue;
+      }
+      
       MaxLatency[UseAtom] = std::max(MaxLatency[CurAtom] + CurAtom->getLatency(),
                                      MaxLatency[UseAtom]);
       MaxItDist[UseAtom] = std::max(MaxItDist[CurAtom] + Edge->getItDst(),
                                     MaxItDist[UseAtom]);
     }
   }
+  totalLatency = 0;
+  totalItDist = 0;
+  // For each backedge.
+  for (BEVector::iterator I = BackEdges.begin(), E = BackEdges.end();
+      I != E; ++I) {
+    HWEdge *BE = I->second;
+    const HWAtom *Src = BE->getSrc(), *Dst = I->first; 
+    assert(MaxLatency[Dst] == 0 && MaxItDist[Dst] == 0
+           && "Back edge dst reachable from other Nodes?");
+    totalLatency = std::max(totalLatency, MaxLatency[Src] + Src->getLatency());
+    totalItDist = std::max(totalItDist, MaxItDist[Src] + BE->getItDst());
+  }
 
-  totalLatency = MaxLatency[FirstAtom];
-  totalItDist = MaxItDist[FirstAtom];
   assert(totalItDist != 0 && "No cross iteration dependence?");
   return ceil((double)totalLatency / totalItDist);
 }

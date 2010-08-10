@@ -695,7 +695,7 @@ class FSMState  : public HWAtom {
   friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
-    : HWAtom(ID, atomVRoot, BB, 0, Idx) {
+    : HWAtom(ID, atomVRoot, BB, 0, Idx) , HaveSelfLoop(false), II(0) {
   }
   ~FSMState() { PHISrc.clear(); }
   
