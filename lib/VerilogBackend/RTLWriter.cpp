@@ -653,24 +653,24 @@ void RTLWriter::createMircoStateEnable(FSMState *State) {
   vlang->resetRegister(getResetBlockBuffer(),
     "next_" + StateName + "_enable", totalSlot + 1, 0);
 
-  // current state
+    // current state
   vlang->declSignal(getSignalDeclBuffer(),
     "cur_" + StateName + "_enable", totalSlot + 1, 0);
   vlang->resetRegister(getResetBlockBuffer(),
     "cur_" + StateName + "_enable", totalSlot + 1, 0);
 
   SeqCompute.indent(6) << "cur_" << StateName << "_enable <= next_"
-                                   << StateName << "_enable;\n";
+                       << StateName << "_enable;\n";
 }
 
 std::string RTLWriter::getMircoStateEnableName(FSMState *State,
                                                bool InFSMBlock) {
   std::string StateName = vlang->GetValueName(State->getBasicBlock());
-  
+
   if (InFSMBlock)
     StateName = "next_" + StateName;
   else
-    StateName = "next_" + StateName;
+    StateName = "cur_" + StateName;
 
   return StateName + "_enable";
 }
