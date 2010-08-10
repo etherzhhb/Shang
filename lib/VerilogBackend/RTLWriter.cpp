@@ -268,7 +268,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
 
   switch (A->getHWAtomType()) {
     case atomPreBind:
-      return getFURegisterName(cast<HWAPreBind>(A)->getFunUnitID());
+      return getAsOperand(cast<HWAPreBind>(A)->getFunUnitID());
     case atomPostBind:
       return getAsOperand(V, "_w");
     case atomWrReg:
@@ -285,14 +285,11 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
-std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
+std::string RTLWriter::getAsOperand(HWFUnitID FUID) {
   return "FU" + utostr(FUID.getRawData()) + "Reg";
 }
 
 std::string RTLWriter::getAsOperand(HWRegister *R) {
-  if (R->isFuReg())
-    return getFURegisterName(R->getFUnit());
-
   // Else not a function unit Reg.
   return "Reg"+utostr(R->getRegNum());
 }
@@ -348,11 +345,7 @@ void RTLWriter::emitAtom(HWAtom *A) {
 }
 
 void RTLWriter::emitWrReg(HWAWrReg *DR) {
-  const HWRegister *R = DR->getReg();
-  // Function unit register will emit with function unit.
-  if (R->isFuReg())
-    return;
-  
+  const HWRegister *R = DR->getReg();  
   UsedRegs.insert(R);
   
   std::string Name = getAsOperand(DR);
@@ -429,7 +422,7 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWAPreBindVecTy &Atoms) {
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getFURegisterName(FUID);
+  std::string Res = getAsOperand(FUID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, MaxBitWidth, 0);
   
@@ -457,7 +450,7 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getFURegisterName(A->getFunUnitID());
+  std::string Res = getAsOperand(A->getFunUnitID());
 
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;
@@ -726,7 +719,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
     
     if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
       return MircoState +
-             getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
+             getAsOperand(cast<HWAPreBind>(Pred)->getFunUnitID());
 
         
     HWRegister *PredReg = HI->lookupRegForValue(&Pred->getValue());

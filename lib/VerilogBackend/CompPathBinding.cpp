@@ -375,8 +375,6 @@ struct CompPathBinding : public BasicBlockPass {
   void insertToWOCG(HWAPostBind *PB);
   // Build all operation in longest path to a function unit.
   void buildLongestPostBindPath();
-  // Bind register to function unit.
-  void bindFunUnitReg();
 
   static char ID;
   CompPathBinding();
@@ -453,8 +451,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   buildWOCGForRes();
   // 2. Find the longest path.
   buildLongestPostBindPath();
-  // 3. Bind a register to the function unit.
-  //bindFunUnitReg();
 
 
   DEBUG(
@@ -469,45 +465,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
     dbgs() << "\n\n";
   );
   return false;
-}
-
-void CompPathBinding::bindFunUnitReg() {
-  // For each Function unit(longest path graph node), bind a FU register.
-  // For each nodes in
-  for (pg_df_it I = pg_df_it::begin(&PGEntry), E = pg_df_it::end(&PGExit);
-      I != E; ++I) {
-    PathGraphNodeType &Node = **I;
-    if (Node.isVRoot())
-      continue;
-    
-    for (PostBindNodePath::path_iterator PI = Node->path_begin(),
-        PE = Node->path_end(); PI != PE; ++PI) {
-      HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
-      DEBUG(dbgs() << "For PostBind Node: ");
-      DEBUG(A->dump());
-      Instruction *Inst = &A->getInst<Instruction>();
-      // Bind a register to this function unit.
-      HWRegister *FUR = HI->allocaFURegister(A);
-      HWAWrReg *WR = HI->getWrReg(A, FUR);
-      DEBUG(dbgs() << "Create FU Register: ");
-      DEBUG(WR->dump());
-
-      bool FURegRead = false;
-      std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
-      while(!WorkStack.empty()) {
-        HWAtom *Use = WorkStack.back();
-        WorkStack.pop_back();
-
-        // Do not make self loop.
-        if (Use == WR) continue;
-
-        DEBUG(dbgs() << "Replace Use: ");
-        DEBUG(Use->dump());
-        // Read the result for From this Register.
-        Use->replaceDep(A, WR);
-      }
-    }
-  }
 }
 
 void CompPathBinding::buildLongestPostBindPath() {

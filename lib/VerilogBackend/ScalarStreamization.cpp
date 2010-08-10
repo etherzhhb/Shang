@@ -56,10 +56,9 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
   std::vector<HWAtom*> WorkList;
   for (usetree_iterator I = State->usetree_begin(), E = State->usetree_end();
       I != E; ++I)
-    if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(*I)) {
-      if (!WrReg->getReg()->isFuReg())
+    if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(*I))
         WorkList.push_back(WrReg);
-    } else if (HWARdReg *RdReg = dyn_cast<HWARdReg>(*I)) {
+    else if (HWARdReg *RdReg = dyn_cast<HWARdReg>(*I)) {
       if (RdReg->isPHINode())
         WorkList.push_back(RdReg);
     }

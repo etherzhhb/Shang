@@ -142,12 +142,12 @@ public:
 
 class HWRegister {
   const Type *Ty;
-  int Num;
+  unsigned Num;
   // The life time of this register, Including EndSlot.
   unsigned short StartSlot, EndSlot;
 public:
   explicit HWRegister(unsigned num, const Type *T,
-                 unsigned startSlot, unsigned endSlot)
+                      unsigned startSlot, unsigned endSlot)
     : Ty(T), Num(num), StartSlot(startSlot), EndSlot(endSlot) {}
 
   const Type *getType() const { return Ty; }
@@ -164,13 +164,6 @@ public:
     assert(Num > 0 && "Not an ordinary Register!");
     return Num;
   }
-
-  HWFUnitID getFUnit() const {
-    assert(Num < 0 && "Not a Function unit Register!");
-    return HWFUnitID(-Num);
-  }
-
-  bool isFuReg() const { return Num < 0; }
 
   //typedef std::set<Value*>::iterator iterator;
   //typedef std::set<Value*>::const_iterator const_iterator;
@@ -519,8 +512,8 @@ class HWAWrReg : public HWAtom {
   HWRegister *Reg;
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg)
-    : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, reg->isFuReg() ? 0 :1,
-    Edge->getIdx()), Reg(reg) {
+    : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, 0, Edge->getIdx()),
+    Reg(reg) {
     scheduledTo(Edge->getFinSlot());
     setParent(Edge->getParent());
   }

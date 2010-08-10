@@ -38,12 +38,12 @@ void HWAtom::dump() const {
 
 void HWAWrReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Write Storage "
-     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
+     << Reg->getRegNum();
 }
 
 void HWARdReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Import Storage "
-     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
+     << Reg->getRegNum();
 }
 
 void HWADelay::print(raw_ostream &OS) const {
