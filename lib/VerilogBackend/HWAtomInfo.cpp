@@ -192,6 +192,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
   unsigned OpSize = Deps.size();
 
+  std::set<HWEdge*> ExportEdges;
   // All node should finish before terminator run.
   FSMState *State = getStateFor(*I.getParent());
   for (usetree_iterator TI = State->usetree_begin(), TE = State->usetree_end();
@@ -203,12 +204,14 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
         isExport = !OI->getInst<Instruction>().getType()->isVoidTy();
       }
       // We must wait until all atom finish.
-      Deps.push_back(getCtrlDepEdge(A, isExport));
+      if (isExport)
+        Deps.push_back(getValDepEdge(A, false, HWValDep::Export));
+      else
+        Deps.push_back(getCtrlDepEdge(A));
     }
 
   // Create delay atom for phi node.
   addPhiExportEdges(*I.getParent(), Deps);
-
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
   HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(0));
@@ -425,11 +428,12 @@ FSMState *HWAtomInfo::getState(BasicBlock *BB) {
   return A;
 }
 
-HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg) {
+HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWAtom *Reader) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomWrReg);
   ID.AddPointer(Src);
-  ID.AddPointer(Reg);
+  HWRegister *R = getRegForValue(&Src->getValue(),
+                                 Src->getSlot(), Reader->getSlot());
 
   void *IP = 0;
   HWAWrReg *A =
@@ -437,7 +441,7 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWAWrReg(ID.Intern(HWAtomAllocator),
-                                       *getValDepEdge(Src, false), Reg);
+                                       *getValDepEdge(Src, false), R);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -455,19 +459,19 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWADelay(ID.Intern(HWAtomAllocator),
-      *getCtrlDepEdge(Src, false), Delay, ++InstIdx);
+                                       *getCtrlDepEdge(Src), Delay, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
 }
 
 
-HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWRegister *Reg, Value &V) {
+HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWAtom *Reader, Value &V) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomRdReg);
   ID.AddPointer(Src);
-  ID.AddPointer(Reg);
   ID.AddPointer(&V);
+  HWRegister *R = getRegForValue(&V, Src->getSlot(), Reader->getSlot());
 
   void *IP = 0;
   HWARdReg *A =
@@ -475,7 +479,7 @@ HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWRegister *Reg, Value &V) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWARdReg(ID.Intern(HWAtomAllocator),
-      *getValDepEdge(Src, false), Reg, V);
+      *getValDepEdge(Src, false), R, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -493,16 +497,16 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
   FSMState *State = getStateFor(BB);
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
-    BasicBlock *SuccBB = *SI;
+      BasicBlock *SuccBB = *SI;
     for (BasicBlock::iterator II = SuccBB->begin(),
         IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
       PHINode *PN = cast<PHINode>(II);
       Instruction *Inst =
         dyn_cast<Instruction>(PN->getIncomingValueForBlock(&BB));
-      // No instruction value do not need to delay.
+      // No instruction value do not need to Export.
       if (!Inst)
         continue;
-      // We do not need to delay if the value not define in the current BB.
+      // We do not need to Export if the value not define in the current BB.
       if (Inst->getParent() != &BB)
         continue;
       // We do not need to delay if source is PHI, because it is ready before
@@ -511,7 +515,7 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
         continue;
 
       HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
-      Deps.push_back(getCtrlDepEdge(OpInst, true));
+      Deps.push_back(getValDepEdge(OpInst, false, HWValDep::PHI));
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.

@@ -161,7 +161,8 @@ void esyn::FSMState::dump() const {
   print(dbgs());
 }
 
-HWValDep::HWValDep(HWAtom *Src, bool isSigned, bool isImport)
-: HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), IsImport(isImport) {
-  assert((!IsImport || isa<FSMState>(Src)) && "Bad import edge!");
+HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
+: HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), DepType(T) {
+  assert((!DepType != HWValDep::Import || isa<FSMState>(Src))
+          && "Bad import edge!");
 }

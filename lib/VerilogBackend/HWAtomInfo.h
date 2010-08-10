@@ -146,16 +146,16 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   }
 
   HWValDep *getValDepEdge(HWAtom *Src, bool isSigned = false,
-                          bool isImport = false) {
-    return new (HWAtomAllocator) HWValDep(Src, isSigned, isImport);
+                          enum HWValDep::ValDepTypes T = HWValDep::Normal) {
+    return new (HWAtomAllocator) HWValDep(Src, isSigned, T);
   }
 
   HWConst *getConstEdge(HWAtom *Src, Constant *C) {
     return new (HWAtomAllocator) HWConst(Src, C);
   }
 
-  HWCtrlDep *getCtrlDepEdge(HWAtom *Src, bool isExport = false) {
-    return new (HWAtomAllocator) HWCtrlDep(Src, isExport);
+  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
+    return new (HWAtomAllocator) HWCtrlDep(Src);
   }
 
   HWMemDep *getMemDepEdge(HWAtom *Src, bool isBackEdge,
@@ -165,9 +165,9 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
     if (isa<Argument>(V))
-      return getValDepEdge(getStateFor(*BB), isSigned, true);
+      return getValDepEdge(getStateFor(*BB), isSigned, HWValDep::Import);
     else if (isa<PHINode>(V)) // PHINode is an import edge.
-      return getValDepEdge(getStateFor(*BB), isSigned, true);
+      return getValDepEdge(getStateFor(*BB), isSigned, HWValDep::Import);
     else if (Constant *C = dyn_cast<Constant>(&V))
       return getConstEdge(getStateFor(*BB), C);
 
@@ -178,7 +178,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
       return getValDepEdge(getAtomFor(Inst), isSigned);
     else
       // Otherwise this edge is an import edge.
-      return getValDepEdge(getStateFor(*BB), isSigned, true);
+      return getValDepEdge(getStateFor(*BB), isSigned, HWValDep::Import);
   }
 
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps) {
@@ -189,6 +189,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
         Deps.push_back(getValDepInState(**OI, ParentBB));
   }
 
+  // TODO: other export edge.
   void addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps);
 
   void clear();
@@ -260,8 +261,8 @@ public:
   }
 
   HWADelay *getDelay(HWAtom *Src, unsigned Delay);
-  HWAWrReg *getWrReg(HWAtom *Src, HWRegister *Reg);
-  HWARdReg *getRdReg(HWAtom *Src, HWRegister *Reg, Value &V);
+  HWAWrReg *getWrReg(HWAtom *Src, HWAtom *Reader);
+  HWARdReg *getRdReg(HWAtom *Src, HWAtom *Reader, Value &V);
 
   unsigned getTotalCycle() const {
     return totalCycle;

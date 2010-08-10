@@ -195,12 +195,14 @@ public:
 
 /// @brief Value Dependence Edge.
 class HWValDep : public HWEdge {
-  bool IsSigned, IsImport;
 public:
-  HWValDep(HWAtom *Src, bool isSigned, bool isImport);
+  enum ValDepTypes{
+    Normal, Import, Export, PHI
+  };
+  HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T);
 
   bool isSigned() const { return IsSigned; }
-  bool isImport() const { return IsImport; }
+  enum ValDepTypes getDepType() const { return DepType;}
 
   void print(raw_ostream &OS) const;
 
@@ -209,15 +211,15 @@ public:
   static inline bool classof(const HWEdge *A) {
     return A->getEdgeType() == edgeValDep;
   }
+
+private:
+  bool IsSigned;
+  enum ValDepTypes DepType;
 };
 
 class HWCtrlDep : public HWEdge {
-  bool IsExport;
 public:
-  HWCtrlDep(HWAtom *Src, bool isExport)
-    : HWEdge(edgeCtrlDep, Src, 0), IsExport(isExport) {}
-
-  bool isExport() const { return IsExport; }
+  HWCtrlDep(HWAtom *Src) : HWEdge(edgeCtrlDep, Src, 0) {}
 
   void print(raw_ostream &OS) const;
 
@@ -671,7 +673,8 @@ class FSMState  : public HWAtom {
   HWAOpInst *ExitRoot;
 
   // The registers that store the source value of PHINodes.
-  std::map<const Value*, HWRegister*> PHISrc;
+  typedef std::map<const Instruction*, HWAtom*> PHISrcMapType;
+  PHISrcMapType PHISrc;
 
   // Modulo for modulo schedule.
   unsigned short II;
@@ -732,12 +735,12 @@ public:
       (*I)->resetSchedule();
   }
 
-  void updatePHISrc(const Value *V, HWRegister *R) {
-    PHISrc[V] = R;
+  void updatePHISrc(const Instruction *Inst, HWAtom *A) {
+    PHISrc[Inst] = A;
   }
 
-  HWRegister *getPHISrc(const Value *V) {
-    std::map<const Value*, HWRegister*>::iterator At = PHISrc.find(V);
+  HWAtom *getPHISrc(const Instruction *Inst) {
+    PHISrcMapType::iterator At = PHISrc.find(Inst);
     if (At == PHISrc.end())
       return 0;
 

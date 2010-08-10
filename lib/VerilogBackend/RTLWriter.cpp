@@ -873,11 +873,17 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     Value *IV = PN->getIncomingValueForBlock(&CurBlock);
     ControlBlock.indent(10 + ind) << getAsOperand(PR)
                                  << "/*" << vlang->GetValueName(PN) << "*/";
-    if (Constant *C = dyn_cast<Constant>(IV))
-      ControlBlock << " <= " << vlang->printConstant(C) << ";\n";      
-    else {
-      HWRegister *PHISrc = CurStage->getPHISrc(IV);
+
+    if (Constant *C = dyn_cast<Constant>(IV)) {
+      ControlBlock << " <= " << vlang->printConstant(C) << ";\n";
+      continue;
+    } else if (Argument *Arg = dyn_cast<Argument>(IV)) {
+      // Loop up the register for argument.
+      HWRegister *PHISrc = HI->lookupRegForValue(Arg);
       ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
+    } else {
+      Instruction *Inst = cast<Instruction>(IV);
+      ControlBlock << " <= " << getAsOperand(CurStage->getPHISrc(Inst));
     }
   }
 }
