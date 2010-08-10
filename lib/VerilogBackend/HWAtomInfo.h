@@ -189,8 +189,8 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
         Deps.push_back(getValDepInState(**OI, ParentBB));
   }
 
-  // TODO: other export edge.
-  void addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps);
+  // Add the backedge cause by phi.
+  void addSelfPhiEdges(BasicBlock *BB, SmallVectorImpl<HWEdge*> &Deps);
 
   void clear();
 

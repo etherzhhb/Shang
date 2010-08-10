@@ -869,6 +869,8 @@ void RTLWriter::visitBranchInst(HWAPostBind &A) {
 void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
                                      unsigned ind) {
   FSMState *CurStage = HI->getStateFor(CurBlock);
+  bool SelfLoop = (&CurBlock == &Succ);
+
   vlang->comment(ControlBlock.indent(10 + ind)) << "Phi Node:\n";
   Instruction *NotPhi = Succ.getFirstNonPHI();
   
@@ -884,14 +886,15 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     if (Constant *C = dyn_cast<Constant>(IV)) {
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";
       continue;
-    } else if (Argument *Arg = dyn_cast<Argument>(IV)) {
-      // Loop up the register for argument.
-      HWRegister *PHISrc = HI->lookupRegForValue(Arg);
-      ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
-    } else {
+    } else if (SelfLoop && isa<Instruction>(IV)) {
+      // Loop up the self phi source table.
       Instruction *Inst = cast<Instruction>(IV);
-      ControlBlock << " <= " << getAsOperand(CurStage->getPHISrc(Inst))
+      ControlBlock << " <= " << getAsOperand(CurStage->getSelfPHISrc(Inst))
                    << ";\n";
+    } else {
+      // Just loop up the register.
+      HWRegister *PHISrc = HI->lookupRegForValue(IV);
+      ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     }
   }
 }
