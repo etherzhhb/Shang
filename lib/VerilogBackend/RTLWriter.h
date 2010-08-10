@@ -64,8 +64,6 @@ class RTLWriter : public FunctionPass {
 
   ResourceMapType ResourceMap;
 
-  std::string getSlotEnable(BasicBlock &BB, unsigned Slot);
-
   void emitFunctionSignature(Function &F);
   void emitCommonPort();
   void emitBasicBlock(BasicBlock &BB);
@@ -129,6 +127,10 @@ class RTLWriter : public FunctionPass {
     return ResetBlock.indent(6);
   }
 
+  // Create the enable registers for mirco states.
+  std::string getMircoStateEnableName(FSMState *State, bool InFSMBlock);
+  std::string getMircoStateEnable(FSMState *State, unsigned Slot, bool InFSMBlock);
+  void createMircoStateEnable(FSMState *State);
   void emitNextFSMState(raw_ostream &ss, BasicBlock &BB);
   void emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
                           const std::string &NewState);

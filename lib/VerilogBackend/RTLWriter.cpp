@@ -188,31 +188,28 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   std::string StateName = vlang->GetValueName(&BB);
 
   unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
-  unsigned totalSlot = State->getTotalSlot();
 
   vlang->comment(getStateDeclBuffer()) << "State for " << StateName << '\n';
   vlang->param(getStateDeclBuffer(), StateName, TotalFSMStatesBit,
                ++CurFSMStateNum);
 
-  vlang->declSignal(getSignalDeclBuffer(),
-                    StateName + "_enable", totalSlot + 1, 0);
-  vlang->resetRegister(getResetBlockBuffer(),
-                    StateName + "_enable", totalSlot + 1, 0);
-  //
+  // State information.
+  vlang->comment(ControlBlock.indent(6)) << StateName 
+    << " Total Slot: " << State->getTotalSlot()
+    << " II: " << State->getII() <<  '\n';
+  // Mirco state enable.
+  createMircoStateEnable(State);
+
   FSMState::ScheduleMapType Atoms;
   typedef FSMState::ScheduleMapType::iterator cycle_iterator;
 
   State->getScheduleMap(Atoms);
 
-  //
-  vlang->comment(ControlBlock.indent(6)) << StateName 
-    << " Total Slot: " << State->getTotalSlot()
-    << " II: " << State->getII() <<  '\n';
   // Case begin
   vlang->matchCase(ControlBlock.indent(6), StateName);
 
   for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-    vlang->ifBegin(ControlBlock.indent(8), getSlotEnable(BB, i));
+    vlang->ifBegin(ControlBlock.indent(8), getMircoStateEnable(State, i, true));
     // Emit all atoms at cycle i
 
     vlang->comment(DataPath.indent(2)) << "at cycle: " << i << '\n';
@@ -234,20 +231,6 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
     emitNextMicroState(ControlBlock.indent(8), BB, "1'b0");
   // Case end
   vlang->end(ControlBlock.indent(6));
-}
-
-
-std::string RTLWriter::getSlotEnable(BasicBlock &BB, unsigned Slot) {
-  FSMState *State = HI->getStateFor(BB);
-  std::string StateName = vlang->GetValueName(&BB);
-  raw_string_ostream ss(StateName);
-  ss << "_enable";
-
-  if (State->getTotalSlot() == 0)
-    return ss.str();
-
-  ss << "[" << (Slot - State->getSlot()) << "]";
-  return ss.str();
 }
 
 void RTLWriter::emitCommonPort() {
@@ -605,7 +588,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
 
     vlang->comment(DataPath.indent(6)) << *Inst << '\n';
 
-    SelEval << getSlotEnable(*BB, A->getSlot());
+    SelEval << getMircoStateEnable(A->getParent(), A->getSlot(), false);
 
     emitResourceOp<ResType>(A);
   
@@ -658,14 +641,58 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, BasicBlock &BB)
   ss << "NextFSMState <= " << vlang->GetValueName(&BB) << ";\n";
 }
 
+
+void RTLWriter::createMircoStateEnable(FSMState *State) {
+  std::string StateName = vlang->GetValueName(State->getBasicBlock());
+  unsigned totalSlot = State->getTotalSlot();
+
+  // Next state
+  vlang->declSignal(getSignalDeclBuffer(),
+    "next_" + StateName + "_enable", totalSlot + 1, 0);
+  vlang->resetRegister(getResetBlockBuffer(),
+    "next_" + StateName + "_enable", totalSlot + 1, 0);
+
+  // current state
+  vlang->declSignal(getSignalDeclBuffer(),
+    "cur_" + StateName + "_enable", totalSlot + 1, 0);
+  vlang->resetRegister(getResetBlockBuffer(),
+    "cur_" + StateName + "_enable", totalSlot + 1, 0);
+
+  ControlBlock.indent(6) << "cur_" << StateName << "_enable <= next_"
+                                   << StateName << "_enable;\n";
+}
+
+std::string RTLWriter::getMircoStateEnableName(FSMState *State,
+                                               bool InFSMBlock) {
+  std::string StateName = vlang->GetValueName(State->getBasicBlock());
+  
+  if (InFSMBlock)
+    StateName = "next_" + StateName;
+  else
+    StateName = "cur_" + StateName;
+
+  return StateName + "_enable";
+}
+
+std::string RTLWriter::getMircoStateEnable(FSMState *State, unsigned Slot,
+                                           bool InFSMBlock) {
+  std::string StateName = getMircoStateEnableName(State, InFSMBlock);
+  raw_string_ostream ss(StateName);
+
+  if (State->getTotalSlot() != 0)
+    ss << "[" << (Slot - State->getSlot()) << "]";
+
+  return ss.str();
+}
+
 void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
                                    const std::string &NewState) {
   FSMState *State = HI->getStateFor(BB);
   unsigned totalSlot = State->getTotalSlot();
-  std::string StateName = vlang->GetValueName(&BB);
-  ss << StateName << "_enable <= ";
+  std::string StateName = getMircoStateEnableName(State, true);
+  ss << StateName << " <= ";
   if (totalSlot > 0)
-    ss << "{ " << StateName << "_enable[" <<  totalSlot - 1 << ": 0], ";
+    ss << "{ " << StateName << "[" <<  totalSlot - 1 << ": 0], ";
 
   ss << NewState;
 
@@ -678,9 +705,9 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, BasicBlock &BB,
 std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
   unsigned IISlot = State->getIISlot();
 
+  std::string MircoState = getMircoStateEnable(State, IISlot, true);
+  
   BasicBlock *BB = State->getBasicBlock();
-  std::string MircoState = getSlotEnable(*BB, IISlot);
-
   BranchInst *Br = cast<BranchInst>(BB->getTerminator());
 
   MircoState += " & ";
