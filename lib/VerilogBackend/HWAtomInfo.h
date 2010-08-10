@@ -189,7 +189,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
         Deps.push_back(getValDepInState(**OI, ParentBB));
   }
 
-  void addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps);
+  void addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps);
 
   void clear();
 
