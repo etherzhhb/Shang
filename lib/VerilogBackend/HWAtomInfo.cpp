@@ -73,15 +73,8 @@ bool HWAtomInfo::runOnFunction(Function &F) {
     // preform memory dependencies analysis to add corresponding edges.
     addMemDepEdges(MemOps, *BB);
 
-    bool selfLoop = haveSelfLoop(BB);
-    
-    // Add SCC for loop.
-    if (selfLoop)
-      addLoopPredBackEdge(BB);
-
     HWAOpInst *Exit = cast<HWAPostBind>(getControlRoot());
     State->setExitRoot(Exit);
-    State->setHaveSelfLoop(selfLoop);
 
     MemOps.clear();
   }
@@ -211,7 +204,8 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
     }
 
   // Create delay atom for phi node.
-  addPhiExportEdges(*I.getParent(), Deps);
+  addSelfPhiEdges(I.getParent(), Deps);
+  
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
   HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(0));
@@ -514,35 +508,34 @@ HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
 
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 
-void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
-  FSMState *State = getStateFor(BB);
-  for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
-      BasicBlock *SuccBB = *SI;
+void HWAtomInfo::addSelfPhiEdges(BasicBlock *CurBB,
+                                 SmallVectorImpl<HWEdge*> &Deps) {
+  FSMState *State = getStateFor(*CurBB);
+  for (succ_iterator SI = succ_begin(CurBB), SE = succ_end(CurBB);
+       SI != SE; ++SI){
+    
+    BasicBlock *SuccBB = *SI;
+    if (SuccBB != CurBB)
+      continue;
+
+    addLoopPredBackEdge(CurBB);
+    State->setHaveSelfLoop(true);
+
     for (BasicBlock::iterator II = SuccBB->begin(),
         IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
       PHINode *PN = cast<PHINode>(II);
-      Instruction *Inst =
-        dyn_cast<Instruction>(PN->getIncomingValueForBlock(&BB));
-      // No instruction value do not need to Export.
-      if (!Inst)
-        continue;
-      // We do not need to Export if the value not define in the current BB.
-      if (Inst->getParent() != &BB)
-        continue;
-      // We do not need to delay if source is PHI, because it is ready before
-      // entering this FSMState.
-      if (isa<PHINode>(Inst))
-        continue;
+      Value *IV = PN->getIncomingValueForBlock(CurBB);
+      Instruction *Inst = cast<Instruction>(IV);
 
+      // Add the edge for phi that using some instrunction in its parent
+      // BB.
       HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
-      Deps.push_back(getValDepEdge(OpInst, false, HWValDep::PHI));
-
-      if (&BB == SuccBB) {// Self Loop?
-        // The Next loop depend on the result of phi.
-        HWMemDep *PHIDep = getMemDepEdge(OpInst, true, HWMemDep::TrueDep, 1);
-        //IVIncAtom->addDep(LoopDep);
-        State->addDep(PHIDep);
-      }
+      Deps.push_back(getValDepEdge(OpInst, false, HWValDep::SelfLoop));
+      
+      // The Next loop depend on the result of phi.
+      HWMemDep *PHIDep = getMemDepEdge(OpInst, true, HWMemDep::TrueDep, 1);
+      //IVIncAtom->addDep(LoopDep);
+      State->addDep(PHIDep);
     }
   }
 }
