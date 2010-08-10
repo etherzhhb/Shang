@@ -114,10 +114,12 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
     const HWAtom *CurAtom = *I;
     for (HWAtom::const_use_iterator UI = CurAtom->use_begin(),
         UE = CurAtom->use_end();UI != UE; ++UI) {
+      // FIXME: Take care of back edge!
       const HWAtom *UseAtom = *UI;
+      HWEdge *Edge = UseAtom->getEdgeFrom(CurAtom);
+
       MaxLatency[UseAtom] = std::max(MaxLatency[CurAtom] + CurAtom->getLatency(),
                                      MaxLatency[UseAtom]);
-      HWEdge *Edge = UseAtom->getEdgeFrom(CurAtom);
       MaxItDist[UseAtom] = std::max(MaxItDist[CurAtom] + Edge->getItDst(),
                                     MaxItDist[UseAtom]);
     }

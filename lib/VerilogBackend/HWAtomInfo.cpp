@@ -112,7 +112,7 @@ void HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
   // And we need loop in canonical form.
   if (!IV) return;
 
-  FSMState *State = getState(BB);
+  FSMState *State = getStateFor(*BB);
   // Get the induction variable increment.
   //Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
   //HWAOpInst *IVIncAtom = cast<HWAOpInst>(getAtomFor(*IVInc));
@@ -193,7 +193,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   unsigned OpSize = Deps.size();
 
   // All node should finish before terminator run.
-  FSMState *State = getState(I.getParent());
+  FSMState *State = getStateFor(*I.getParent());
   for (usetree_iterator TI = State->usetree_begin(), TE = State->usetree_end();
       TI != TE; ++TI)
     if (*TI != Pred && TI->use_empty()) {
@@ -491,7 +491,7 @@ HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 
 void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
-  FSMState *State = getState(&BB);
+  FSMState *State = getStateFor(BB);
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
     BasicBlock *SuccBB = *SI;
     for (BasicBlock::iterator II = SuccBB->begin(),
@@ -517,7 +517,7 @@ void HWAtomInfo::addPhiDelays(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
       //  continue;
 
       HWADelay *Delay = getDelay(OpInst, 1);
-      Deps.push_back(getCtrlDepEdge(Delay));
+      Deps.push_back(getCtrlDepEdge(Delay, true));
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.
