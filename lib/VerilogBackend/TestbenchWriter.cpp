@@ -129,7 +129,7 @@ std::string TestbenchWriter::testBech(Function &F) {
   ss<<".return_value(r1),.clk(clk),.rstN(rstN),.start(start),.fin(fin));\n\n";
   
   ss<<"property same_r0_with_r1_p;\n";
-  ss<<"  @(posedge fin) r0==r1;\n";
+  ss<<"  @(negedge fin) r0==r1;\n";
   ss<<"endproperty\n";
   ss<<"same_r0_with_r1_p_a: assert property(same_r0_with_r1_p)\n";
   ss<<"                  $display(\"assertion success!\",$time);\n";
