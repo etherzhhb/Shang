@@ -89,17 +89,15 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
         dbgs() << "Interval: " << (Dst->getSlot() - Src->getSlot()) << "\n\n";
       );
       if (Dst->getSlot() - Src->getSlot() > II) {
-        assert(0 && "Implement SS!");
-        //DEBUG(dbgs() << "Anti dependency found:\n");
-        //if (NewWrReg == 0) {
-        //  HWADelay *Delay = HI.getDelay(Src, II);
-        //  Delay->scheduledTo(Src->getFinSlot());
-        //  unsigned StartSlot = Delay->getFinSlot();
-        //  HWRegister *NewReg = HI.allocaRegister(Ty, StartSlot,
-        //                                              StartSlot + II);
-        //  NewWrReg = HI.getWrReg(Delay, NewReg);
-        //}
-        //Dst->replaceDep(Src, NewWrReg);
+        DEBUG(dbgs() << "Anti dependency found:\n");
+        if (NewWrReg == 0) {
+          HWADelay *Delay = HI.getDelay(Src, II);
+          unsigned StartSlot = Src->getSlot() + II;
+          HWRegister *NewReg = HI.allocaRegister(Ty, StartSlot,
+                                                     StartSlot + II);
+          NewWrReg = HI.getWrReg(Delay, NewReg, StartSlot);
+        }
+        Dst->replaceDep(Src, NewWrReg);
       }
     } // End foreach RegUsers.
 

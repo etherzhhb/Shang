@@ -47,7 +47,7 @@ using namespace llvm;
 namespace esyn {
 
 enum HWAtomTypes {
-  atomWrReg,      // Write to local storage, i.e. register, scalar fifo.
+  atomWrReg,      // Write to local storage, i.e. register.
   atomRdReg,     // Import local storage form predecessor BB.
   atomPreBind,    // Operate on pre bind resource
   atomPostBind,   // Operate on post binding resource
@@ -520,10 +520,10 @@ typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
 class HWAWrReg : public HWAtom {
   HWRegister *Reg;
 public:
-  HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg)
-    : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, reg->isFuReg() ? 0 :1,
-    Edge->getIdx()), Reg(reg) {
-    scheduledTo(Edge->getFinSlot());
+  HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
+    unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
+    1, Edge->getIdx()), Reg(reg) {
+    scheduledTo(Slot);
     setParent(Edge->getParent());
   }
 

@@ -271,6 +271,7 @@ public:
 
   HWADelay *getDelay(HWAtom *Src, unsigned Delay);
   HWAWrReg *getWrReg(HWAtom *Src, HWAtom *Reader);
+  HWAWrReg *getWrReg(HWAtom *Src, HWRegister *Reg, unsigned short Slot);
   HWARdReg *getRdReg(HWAtom *Src, HWAtom *Reader, Value &V);
 
   unsigned getTotalCycle() const {
