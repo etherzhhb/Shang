@@ -675,7 +675,6 @@ public:
 
 // Virtual Root
 class FSMState  : public HWAtom {
-public:
   HWAOpInst *ExitRoot;
 
   // The registers that store the source value of PHINodes.
@@ -685,7 +684,6 @@ public:
   unsigned short II;
   bool HaveSelfLoop;
 
-  friend class HWAtomInfo;
   void setExitRoot(HWAOpInst *Exit) {
     ExitRoot = Exit;
 
@@ -693,6 +691,8 @@ public:
       (*I)->setParent(this);
   }
   void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
+
+  friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
     : HWAtom(ID, atomVRoot, BB, 0, Idx) {

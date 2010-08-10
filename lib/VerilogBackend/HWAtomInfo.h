@@ -165,11 +165,11 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
     // Is this not a instruction?
     if (isa<Argument>(V))
-      return getValDepEdge(getState(BB), isSigned, true);
+      return getValDepEdge(getStateFor(*BB), isSigned, true);
     else if (isa<PHINode>(V)) // PHINode is an import edge.
-      return getValDepEdge(getState(BB), isSigned, true);
+      return getValDepEdge(getStateFor(*BB), isSigned, true);
     else if (Constant *C = dyn_cast<Constant>(&V))
-      return getConstEdge(getState(BB), C);
+      return getConstEdge(getStateFor(*BB), C);
 
     // Now it is an Instruction
     Instruction &Inst = cast<Instruction>(V);
@@ -178,7 +178,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
       return getValDepEdge(getAtomFor(Inst), isSigned);
     else
       // Otherwise this edge is an import edge.
-      return getValDepEdge(getState(BB), isSigned, true);
+      return getValDepEdge(getStateFor(*BB), isSigned, true);
   }
 
   void addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps) {
