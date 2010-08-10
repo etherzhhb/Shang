@@ -39,38 +39,6 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   FSMState *State = HI.getStateFor(BB);
 
-  // Emit the operand of PHINode.
-  for (BasicBlock::iterator II = BB.begin(), IE = BB.getFirstNonPHI();
-      II != IE; ++II) {
-    PHINode *PN = cast<PHINode>(II);
-    for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
-      Value *IV = PN->getIncomingValue(i);
-      FSMState *InStage = HI.getStateFor(*PN->getIncomingBlock(i));
-
-
-      //if (InStage->getPHISrc(IV) != 0)
-      //  continue;
-
-      //if (isa<Constant>(IV))
-      //  continue;
-      //
-      //// We may read the value from function unit register.
-      //if (isa<Instruction>(IV)) {
-      //  HWAtom *A = HI.getAtomFor(*IV);
-      //  if (HWAPreBind *PB = dyn_cast<HWAPreBind>(A)) {
-      //    HWAtom *Use = PB->use_back();
-      //    if (HWAWrReg *WR = dyn_cast<HWAWrReg>(Use))
-      //      if (WR->getFinSlot() == lastSlot) {
-      //        InStage->updatePHISrc(IV, WR->getReg());
-      //        continue;
-      //      }
-      //  }
-      //}
-      //HWRegister *IR = HI.getRegForValue(IV, lastSlot, lastSlot);
-      //InStage->updatePHISrc(IV, IR);
-    }
-  }
-
   SmallVector<HWAtom*, 32> Worklist(State->usetree_begin(),
                                     State->usetree_end());
 
@@ -82,6 +50,15 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     if (OI == 0)
       continue;
 
+    for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
+        Value *V = OI->getIOperand(i);
+        if (VD->getDepType() == HWValDep::Import)
+          // Insert the import node.
+          OI->setDep(i, HI.getRdReg(State, OI, *V));
+      }
+    }
+
     DEBUG(OI->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
@@ -89,24 +66,28 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     while (!Users.empty()) {
       HWAtom *Dst = Users.back();
       Users.pop_back();
-    
+
+      // Only insert register for normal edge.
+      if (HWValDep *VD = dyn_cast<HWValDep>(Dst->getEdgeFrom(OI))) {
+        if (VD->getDepType() != HWValDep::Normal)
+          continue;
+      } else
+        continue;
+
       // We need to register the value if the value life through
       // several cycle. Or we need to keep the value until the computation
       // finish.
       if (Dst->getSlot() == OI->getFinSlot() && Dst->getLatency() == 0)
         continue;
 
-      // Extend the life time of value by move the value to a register.
-      Dst->replaceDep(OI, HI.getWrReg(OI, Dst));
-    }
+      HWAWrReg *WrReg = HI.getWrReg(OI, Dst);
 
-    for (unsigned i = 0, e = OI->getNumDeps(); i != e; ++i) {
-      if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
-        Value *V = OI->getIOperand(i);
-        if (VD->getDepType() == HWValDep::Import)
-          // Insert the import node.
-          OI->setDep(i, HI.getRdReg(State, OI, *V));
-      }
+      DEBUG(dbgs() << "Insert ");
+      DEBUG(WrReg->dump());
+      DEBUG(dbgs() << "before ");
+      DEBUG(Dst->dump());
+      // Extend the life time of value by move the value to a register.
+      Dst->replaceDep(OI, WrReg);
     }
   }
   
@@ -121,24 +102,27 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         // If we already emit the register, just skip it.
         if (isa<HWAWrReg>(SrcAtom))
             continue;
+
+        DEBUG(dbgs() << " Registered\n");
+        // Store the value to register.
+        Exit->setDep(i, HI.getWrReg(SrcAtom, Exit));
       } else if (VD->getDepType() == HWValDep::PHI) {
+        DEBUG(dbgs() << "Visit value use by PHI: " << SrcAtom->getValue() << "\n");
+        DEBUG(SrcAtom->dump());
         unsigned lastSlot = State->haveSelfLoop() ? State->getIISlot()
                                                   : State->getEndSlot();
         // Just read value from the atom is ok.
         if (SrcAtom->getFinSlot() == lastSlot) {
+          DEBUG(dbgs() << "Do not need register\n");
           State->updatePHISrc(cast<Instruction>(V), SrcAtom);
           continue;
         }
 
         assert(!isa<HWAWrReg>(SrcAtom) && "Unexpected Register for phi node!");
+        HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
+        State->updatePHISrc(cast<Instruction>(V), WR);
+        Exit->setDep(i, WR);
       }
-
-
-      DEBUG(SrcAtom->print(dbgs()));
-      DEBUG(dbgs() << " Registered for export.\n");
-      // Store the value to register.
-      HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
-      Exit->setDep(i, WR);
     }
   }
 

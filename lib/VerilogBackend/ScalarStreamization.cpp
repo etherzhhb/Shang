@@ -78,6 +78,9 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
       if (Dst == Exit)
         continue;
 
+      if (Dst->getEdgeFrom(Src)->isBackEdge())
+        continue;
+
       // Anti dependency occur because new value will write to the original register
       // before it read.
       DEBUG(
