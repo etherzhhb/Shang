@@ -669,7 +669,7 @@ std::string RTLWriter::getMircoStateEnableName(FSMState *State,
   if (InFSMBlock)
     StateName = "next_" + StateName;
   else
-    StateName = "cur_" + StateName;
+    StateName = "next_" + StateName;
 
   return StateName + "_enable";
 }
