@@ -175,11 +175,11 @@ void RTLWriter::emitFunctionSignature(Function &F) {
   } else {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
     getModDeclBuffer()
-      << VLang::printType(RetTy, false, "return_value", "reg ", "output ")
+      << VLang::printType(RetTy, false, "return_value", "wire ", "output ")
       << ",\n";
     // reset the register
-    vlang->resetRegister(getResetBlockBuffer(), "return_value",
-                         cast<IntegerType>(RetTy)->getBitWidth());
+    //vlang->resetRegister(getResetBlockBuffer(), "return_value",
+    //                     cast<IntegerType>(RetTy)->getBitWidth());
   }
 }
 
@@ -789,8 +789,8 @@ void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
   ReturnInst &Ret = A.getInst<ReturnInst>();
   if (Ret.getNumOperands() != 0)
         // Emit data path
-   ControlBlock.indent(10) << "return_value" << " <= "
-                          << getAsOperand(A.getValDep(0)) << ";\n";
+    DataPath.indent(2) << "assign return_value" << " = "
+                       << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
 void esyn::RTLWriter::visitGetElementPtrInst(HWAPostBind &A) {
