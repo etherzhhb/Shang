@@ -544,7 +544,7 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.
-        HWMemDep *PHIDep = getMemDepEdge(OpInst, true, HWMemDep::TrueDep, 1);
+        HWMemDep *PHIDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
         //IVIncAtom->addDep(LoopDep);
         State->addDep(PHIDep);
       }

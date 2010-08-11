@@ -502,11 +502,8 @@ void CompPathBinding::bindFunUnitReg() {
         if (Use == WR) continue;
 
         // Replace the delay.
-        if (HWADelay *Delay = dyn_cast<HWADelay>(Use)) {
+        if (HWADelay *Delay = dyn_cast<HWADelay>(Use))
           Delay->replaceAllUseBy(WR);
-          continue;
-        }
-        
 
         DEBUG(dbgs() << "Replace Use: ");
         DEBUG(Use->dump());

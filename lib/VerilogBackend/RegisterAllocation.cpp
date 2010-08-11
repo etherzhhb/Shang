@@ -45,24 +45,29 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
                                     State->usetree_end());
 
   while(!Worklist.empty()) {
-    HWAtom *A = Worklist.back();
+    HWAtom *SrcAtom = Worklist.back();
     Worklist.pop_back();
 
-    HWAOpInst *SrcAtom = dyn_cast<HWAOpInst>(A);
-    if (SrcAtom == 0)
-      continue;
-
-    for (unsigned i = 0, e = SrcAtom->getInstNumOps(); i != e; ++i) {
-      if (HWValDep *VD = dyn_cast<HWValDep>(&SrcAtom->getDep(i))) {
-        Value *V = SrcAtom->getIOperand(i);
-        if (VD->getDepType() == HWValDep::Import)
-          // Insert the import node.
-          SrcAtom->setDep(i, HI.getRdReg(State, SrcAtom, *V));
+    if (SrcAtom == State) continue;
+    
+    if (HWAOpInst *OI = dyn_cast<HWAOpInst>(SrcAtom)) {
+      for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
+        if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
+          Value *V = OI->getIOperand(i);
+          if (VD->getDepType() == HWValDep::Import)
+            // Insert the import node.
+            OI->setDep(i, HI.getRdReg(State, OI, *V));
+        }
       }
     }
 
     DEBUG(SrcAtom->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
+
+    // Already registered.
+    if (isa<HWAPreBind>(SrcAtom))
+      continue;
+
 
     std::vector<HWAtom *> Users(SrcAtom->use_begin(), SrcAtom->use_end());
     while (!Users.empty()) {
@@ -84,13 +89,18 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         // FIXME: the function unit register only valid for one cycle, but its
         // user may require the register stable for mutiple cycles
         // (i.e. multi cycle function unit.)
-        if (isa<HWAPreBind>(SrcAtom))
-          continue;
 
         // Do not need to register, the computation will finish in time.
         if (Dst->getLatency() == 0)
           continue;
         
+      } else if (HWAWrReg *WR = dyn_cast<HWAWrReg>(SrcAtom)) {
+        // Otherwise if the function unit register could hold the value untill
+        // the computation finish.
+        assert(WR->writeFUReg()
+          && "Expect write to function unit register!");
+        if (WR->getFinSlot() == Dst->getFinSlot())          
+          continue;
       }
 
       HWAWrReg *WrReg = HI.getWrReg(SrcAtom, Dst);
