@@ -522,12 +522,13 @@ class HWAWrReg : public HWAtom {
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
     unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
-    1, Edge->getIdx()), Reg(reg) {
+    0, Edge->getIdx()), Reg(reg) {
     scheduledTo(Slot);
     setParent(Edge->getParent());
   }
 
   HWRegister *getReg() const { return Reg;  }
+  bool writeFUReg() const { return Reg->isFuReg(); }
 
   static inline bool classof(const HWAWrReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {

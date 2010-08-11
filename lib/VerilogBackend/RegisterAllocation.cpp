@@ -139,7 +139,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       }
       // FIXME: Create read atom for argument or PHINode as operand of PHINode.
       // Create register for PHINode.
-      assert(!isa<HWAWrReg>(SrcAtom) && "Unexpected Register for phi node!");
+      assert((!isa<HWAWrReg>(SrcAtom) || cast<HWAWrReg>(SrcAtom)->writeFUReg())
+             && "Unexpected Register for phi node!");
       HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
       Exit->replaceDep(SrcAtom, WR);
     }

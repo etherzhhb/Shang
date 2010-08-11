@@ -454,7 +454,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   // 2. Find the longest path.
   buildLongestPostBindPath();
   // 3. Bind a register to the function unit.
-  //bindFunUnitReg();
+  bindFunUnitReg();
 
 
   DEBUG(
@@ -488,7 +488,7 @@ void CompPathBinding::bindFunUnitReg() {
       Instruction *Inst = &A->getInst<Instruction>();
       // Bind a register to this function unit.
       HWRegister *FUR = HI->allocaFURegister(A);
-      HWAWrReg *WR = HI->getWrReg(A, FUR);
+      HWAWrReg *WR = HI->getWrReg(A, FUR, A->getFinSlot());
       DEBUG(dbgs() << "Create FU Register: ");
       DEBUG(WR->dump());
 

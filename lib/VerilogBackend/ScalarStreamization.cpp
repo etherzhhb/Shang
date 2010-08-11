@@ -57,7 +57,7 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
   for (usetree_iterator I = State->usetree_begin(), E = State->usetree_end();
       I != E; ++I)
     if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(*I)) {
-      if (!WrReg->getReg()->isFuReg())
+      if (!WrReg->writeFUReg())
         WorkList.push_back(WrReg);
     } else if (HWARdReg *RdReg = dyn_cast<HWARdReg>(*I)) {
       if (RdReg->isPHINode())
