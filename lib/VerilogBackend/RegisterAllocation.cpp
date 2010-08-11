@@ -38,6 +38,8 @@ struct RegAllocation : public BasicBlockPass {
 bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   FSMState *State = HI.getStateFor(BB);
+  // Emit the exported register.
+  HWAOpInst *Exit = State->getExitRoot();
 
   SmallVector<HWAtom*, 32> Worklist(State->usetree_begin(),
                                     State->usetree_end());
@@ -84,6 +86,11 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         // (i.e. multi cycle function unit.)
         if (isa<HWAPreBind>(SrcAtom))
           continue;
+
+        // Do not need to register, the computation will finish in time.
+        if (Dst->getLatency() == 0)
+          continue;
+        
       }
 
       HWAWrReg *WrReg = HI.getWrReg(SrcAtom, Dst);
@@ -95,9 +102,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       Dst->replaceDep(SrcAtom, WrReg);
     }
   }
-  
-  // Emit the exported register.
-  HWAOpInst *Exit = State->getExitRoot();
+
   for (unsigned i = Exit->getInstNumOps(), e = Exit->getNumDeps(); i != e; ++i) {
     if (HWValDep *VD = dyn_cast<HWValDep>(&Exit->getDep(i))) {
       HWAtom *SrcAtom = VD->getSrc();

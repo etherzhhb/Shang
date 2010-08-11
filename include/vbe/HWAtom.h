@@ -522,7 +522,7 @@ class HWAWrReg : public HWAtom {
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
     unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
-    0, Edge->getIdx()), Reg(reg) {
+    1, Edge->getIdx()), Reg(reg) {
     scheduledTo(Slot);
     setParent(Edge->getParent());
   }
