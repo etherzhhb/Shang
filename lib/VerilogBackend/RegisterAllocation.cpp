@@ -134,6 +134,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       Value *V = &SrcAtom->getValue();
       DEBUG(dbgs() << "Visit value: " << *V << "use by PHI: " << *PN << "\n");
       DEBUG(SrcAtom->dump());
+      DEBUG(dbgs() << "At slot " << SrcAtom->getSlot() << "\n");
       unsigned lastSlot = (SuccBB == &BB) ? State->getIISlot()
                                           : State->getEndSlot();
 
@@ -147,6 +148,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       assert((!isa<HWAWrReg>(SrcAtom) || cast<HWAWrReg>(SrcAtom)->writeFUReg())
              && "Unexpected Register for phi node!");
       HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
+      DEBUG(dbgs() << "Registered by:\n");
+      DEBUG(WR->dump());
       Exit->replaceDep(SrcAtom, WR);
     }
   }

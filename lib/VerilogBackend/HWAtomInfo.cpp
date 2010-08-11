@@ -535,7 +535,9 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
         continue;
       // Create the PHI edge.
       HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
-      HWValDep *PHIEdge = getValDepEdge(OpInst, false, HWValDep::PHI);
+      // Delay one cycle to wait the value finish.
+      HWADelay *Delay = getDelay(OpInst, 1);
+      HWValDep *PHIEdge = getValDepEdge(Delay, false, HWValDep::PHI);
       Deps.push_back(PHIEdge);
       // Remember this edge and its dest PHINode.
       State->addPHIEdge(PN, PHIEdge);
