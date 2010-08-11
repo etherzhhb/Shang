@@ -868,8 +868,9 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
       HWRegister *PHISrc = HI->lookupRegForValue(Arg);
       ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     } else {
-      Instruction *Inst = cast<Instruction>(IV);
-      ControlBlock << " <= " << getAsOperand(CurStage->getPHISrc(Inst))
+      assert(isa<Instruction>(IV) && "Global const for PHINode?");
+      // Read the value from PHI source.
+      ControlBlock << " <= " << getAsOperand(CurStage->getPHIEdge(PN)->getSrc())
                    << ";\n";
     }
   }
