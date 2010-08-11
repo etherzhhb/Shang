@@ -533,9 +533,12 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
       // entering this FSMState.
       if (isa<PHINode>(Inst))
         continue;
-
+      // Create the PHI edge.
       HWAOpInst *OpInst = cast<HWAOpInst>(getAtomFor(*Inst));
-      Deps.push_back(getValDepEdge(OpInst, false, HWValDep::PHI));
+      HWValDep *PHIEdge = getValDepEdge(OpInst, false, HWValDep::PHI);
+      Deps.push_back(PHIEdge);
+      // Remember this edge and its dest PHINode.
+      State->addPHIEdge(PN, PHIEdge);
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.

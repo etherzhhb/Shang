@@ -110,26 +110,37 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         DEBUG(dbgs() << " Registered\n");
         // Store the value to register.
         Exit->setDep(i, HI.getWrReg(SrcAtom, Exit));
-      } else if (VD->getDepType() == HWValDep::PHI) {
-        DEBUG(dbgs() << "Visit value use by PHI: " << SrcAtom->getValue() << "\n");
-        DEBUG(SrcAtom->dump());
-        // It is ok to read the value at II slot even the the value is export
-        // for exit blocks, because the value at the last iteration will not
-        // be overwritten.
-        unsigned lastSlot = State->haveSelfLoop() ? State->getIISlot()
-                                                  : State->getEndSlot();
-        // Just read value from the atom is ok.
-        if (SrcAtom->getFinSlot() == lastSlot) {
-          DEBUG(dbgs() << "Do not need register\n");
-          State->updatePHISrc(cast<Instruction>(V), SrcAtom);
-          continue;
-        }
-
-        assert(!isa<HWAWrReg>(SrcAtom) && "Unexpected Register for phi node!");
-        HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
-        State->updatePHISrc(cast<Instruction>(V), WR);
-        Exit->setDep(i, WR);
       }
+    }
+  }
+
+  // Foreach PHINode in succ.
+  for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
+    BasicBlock *SuccBB = *SI;
+    for (BasicBlock::iterator II = SuccBB->begin(),
+        IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
+      PHINode *PN = cast<PHINode>(II);
+      HWValDep *VD = State->getPHIEdge(PN);
+      // If the edge had been ignored.
+      if (VD == 0) continue;
+      
+      HWAtom *SrcAtom = VD->getSrc();
+      Value *V = &SrcAtom->getValue();
+      DEBUG(dbgs() << "Visit value: " << *V << "use by PHI: " << *PN << "\n");
+      DEBUG(SrcAtom->dump());
+      unsigned lastSlot = (SuccBB == &BB) ? State->getIISlot()
+                                          : State->getEndSlot();
+
+      // Just read value from the atom is ok.
+      if (SrcAtom->getFinSlot() == lastSlot) {
+        DEBUG(dbgs() << "Do not need register\n");
+        continue;
+      }
+      // FIXME: Create read atom for argument or PHINode as operand of PHINode.
+      // Create register for PHINode.
+      assert(!isa<HWAWrReg>(SrcAtom) && "Unexpected Register for phi node!");
+      HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
+      Exit->replaceDep(SrcAtom, WR);
     }
   }
 

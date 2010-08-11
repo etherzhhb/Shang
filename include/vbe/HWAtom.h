@@ -680,8 +680,12 @@ class FSMState  : public HWAtom {
   HWAOpInst *ExitRoot;
 
   // The registers that store the source value of PHINodes.
-  typedef std::map<const Instruction*, HWAtom*> PHISrcMapType;
-  PHISrcMapType PHISrc;
+  typedef std::map<const PHINode*, HWValDep*> PHIEdgeMapType;
+  PHIEdgeMapType PHIEdge;
+
+  void addPHIEdge(const PHINode *Phi, HWValDep *Edge) {
+    PHIEdge[Phi] = Edge;
+  }
 
   // Modulo for modulo schedule.
   unsigned short II;
@@ -700,7 +704,7 @@ public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
     : HWAtom(ID, atomVRoot, BB, 0, Idx) , HaveSelfLoop(false), II(0) {
   }
-  ~FSMState() { PHISrc.clear(); }
+  ~FSMState() { PHIEdge.clear(); }
   
   /// @name Roots
   //{
@@ -742,23 +746,16 @@ public:
       (*I)->resetSchedule();
   }
 
-  void updatePHISrc(const Instruction *Inst, HWAtom *A) {
-    PHISrc[Inst] = A;
-  }
-
-  HWAtom *getPHISrc(const Instruction *Inst) {
-    PHISrcMapType::iterator At = PHISrc.find(Inst);
-    if (At == PHISrc.end())
+  HWValDep *getPHIEdge(const PHINode *Phi) {
+    PHIEdgeMapType::iterator At = PHIEdge.find(Phi);
+    if (At == PHIEdge.end())
       return 0;
 
     return At->second;
   }
 
   unsigned getEndSlot() const { return getExitRoot()->getSlot(); }
-
-  unsigned getTotalSlot() const {
-    return getEndSlot() - getSlot();
-  }
+  unsigned getTotalSlot() const { return getEndSlot() - getSlot(); }
 
   // II for Modulo schedule
 
