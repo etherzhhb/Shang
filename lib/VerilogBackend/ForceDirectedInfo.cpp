@@ -100,6 +100,9 @@ void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
       }
 
 
+      // Reload VC, because we may changed it when backedge exist or the node
+      // scheduled.
+      VC = VisitCount[ChildNode];
       // Only move forward when we visit the node from all its deps.
       // Only push the node into the stack ONCE.
       if (VC == ChildNode->getNumDeps()) {
@@ -134,6 +137,11 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
       const HWAtom *ChildNode = *It;
       ++WorkStack.back().second;
 
+      DEBUG(dbgs() << "Current ALAP step is: " << AtomToTF[ChildNode].second
+                   << " for \n";
+            ChildNode->dump();
+            dbgs() << "\n\n";);
+
       unsigned VC = ++VisitCount[ChildNode];
       if (VC > ChildNode->getNumUses())
         continue;
@@ -161,8 +169,12 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
           }
 
         assert(AtomToTF[ChildNode].second && "Broken ALAP!");
-        if (AtomToTF[ChildNode].second > NewStep)
+        if (AtomToTF[ChildNode].second > NewStep) {
+          DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
+                ChildNode->dump();
+                dbgs() << "\n\n";);
           AtomToTF[ChildNode].second = NewStep;
+        }
 
       } else { // We do not need to compute the step of Child Node.
         VisitCount[ChildNode] = ChildNode->getNumUses(); // Force push ChildNode.
@@ -174,6 +186,9 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
       DEBUG(dbgs() << "VC: " << VC << " total use: "
         << ChildNode->getNumUses() << '\n');
 
+      // Reload VC, because we may changed it when backedge exist or the node
+      // scheduled.
+      VC = VisitCount[ChildNode];
       // Only move forward when we visit the node from all its deps.
       if (VC == ChildNode->getNumUses()) {
         assert(getALAPStep(ChildNode) >= getASAPStep(ChildNode)

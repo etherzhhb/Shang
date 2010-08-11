@@ -268,7 +268,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
 
   switch (A->getHWAtomType()) {
     case atomPreBind:
-      return getAsOperand(cast<HWAPreBind>(A)->getFunUnitID());
+      return getFURegisterName(cast<HWAPreBind>(A)->getFunUnitID());
     case atomPostBind:
       return getAsOperand(V, "_w");
     case atomWrReg:
@@ -285,11 +285,14 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
-std::string RTLWriter::getAsOperand(HWFUnitID FUID) {
+std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
   return "FU" + utostr(FUID.getRawData()) + "Reg";
 }
 
 std::string RTLWriter::getAsOperand(HWRegister *R) {
+  if (R->isFuReg())
+    return getFURegisterName(R->getFUnit());
+
   // Else not a function unit Reg.
   return "Reg"+utostr(R->getRegNum());
 }
@@ -345,7 +348,11 @@ void RTLWriter::emitAtom(HWAtom *A) {
 }
 
 void RTLWriter::emitWrReg(HWAWrReg *DR) {
-  const HWRegister *R = DR->getReg();  
+  const HWRegister *R = DR->getReg();
+  // Function unit register will emit with function unit.
+  if (R->isFuReg())
+    return;
+  
   UsedRegs.insert(R);
   
   std::string Name = getAsOperand(DR);
@@ -422,7 +429,7 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWAPreBindVecTy &Atoms) {
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getAsOperand(FUID);
+  std::string Res = getFURegisterName(FUID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, MaxBitWidth, 0);
   
@@ -450,7 +457,7 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getAsOperand(A->getFunUnitID());
+  std::string Res = getFURegisterName(A->getFunUnitID());
 
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;
@@ -645,13 +652,27 @@ void RTLWriter::createMircoStateEnable(FSMState *State) {
     "next_" + StateName + "_enable", totalSlot + 1, 0);
   vlang->resetRegister(getResetBlockBuffer(),
     "next_" + StateName + "_enable", totalSlot + 1, 0);
+
+    // current state
+  vlang->declSignal(getSignalDeclBuffer(),
+    "cur_" + StateName + "_enable", totalSlot + 1, 0);
+  vlang->resetRegister(getResetBlockBuffer(),
+    "cur_" + StateName + "_enable", totalSlot + 1, 0);
+
+  SeqCompute.indent(6) << "cur_" << StateName << "_enable <= next_"
+                       << StateName << "_enable;\n";
 }
 
 std::string RTLWriter::getMircoStateEnableName(FSMState *State,
                                                bool InFSMBlock) {
   std::string StateName = vlang->GetValueName(State->getBasicBlock());
 
-  return "next_" + StateName + "_enable";
+  if (InFSMBlock)
+    StateName = "next_" + StateName;
+  else
+    StateName = "cur_" + StateName;
+
+  return StateName + "_enable";
 }
 
 std::string RTLWriter::getMircoStateEnable(FSMState *State, unsigned Slot,
@@ -705,7 +726,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
     
     if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
       return MircoState +
-             getAsOperand(cast<HWAPreBind>(Pred)->getFunUnitID());
+             getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
 
         
     HWRegister *PredReg = HI->lookupRegForValue(&Pred->getValue());

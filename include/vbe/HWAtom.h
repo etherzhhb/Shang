@@ -142,12 +142,12 @@ public:
 
 class HWRegister {
   const Type *Ty;
-  unsigned Num;
+  int Num;
   // The life time of this register, Including EndSlot.
   unsigned short StartSlot, EndSlot;
 public:
   explicit HWRegister(unsigned num, const Type *T,
-                      unsigned startSlot, unsigned endSlot)
+                 unsigned startSlot, unsigned endSlot)
     : Ty(T), Num(num), StartSlot(startSlot), EndSlot(endSlot) {}
 
   const Type *getType() const { return Ty; }
@@ -164,6 +164,13 @@ public:
     assert(Num > 0 && "Not an ordinary Register!");
     return Num;
   }
+
+  HWFUnitID getFUnit() const {
+    assert(Num < 0 && "Not a Function unit Register!");
+    return HWFUnitID(-Num);
+  }
+
+  bool isFuReg() const { return Num < 0; }
 
   //typedef std::set<Value*>::iterator iterator;
   //typedef std::set<Value*>::const_iterator const_iterator;
@@ -515,12 +522,13 @@ class HWAWrReg : public HWAtom {
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
     unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
-    0, Edge->getIdx()), Reg(reg) {
+    1, Edge->getIdx()), Reg(reg) {
     scheduledTo(Slot);
     setParent(Edge->getParent());
   }
 
   HWRegister *getReg() const { return Reg;  }
+  bool writeFUReg() const { return Reg->isFuReg(); }
 
   static inline bool classof(const HWAWrReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {

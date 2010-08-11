@@ -89,7 +89,7 @@ std::string TestbenchWriter::testBech(Function &F) {
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end();I != E; ++I) {
   assert(!I->getNameStr().empty() && "Arg without name?");
   ss<<" "<<I->getNameStr();
-  ss<<"<= $random();\n";
+  ss<<"<= 8;\n";
   }
   
   ss<<" @(negedge clk)\n";

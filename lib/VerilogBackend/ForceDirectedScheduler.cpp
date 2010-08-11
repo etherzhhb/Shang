@@ -185,6 +185,7 @@ void FDLScheduler::FDModuloSchedule() {
     // Set up Resource table
     FDInfo->reset();
     FDInfo->buildFDInfo();
+    DEBUG(FDInfo->dumpTimeFrame());
 
     switch (scheduleAtII()) {
     case FDLScheduler::SchedSucc:
@@ -219,13 +220,19 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtII() {
       // And schedule rest nodes in SCC, but the max latency of the SCC
       // should not exceed II.
       HWAtom *FirstNode = findFirstNode(SCC.begin(), SCC.end());
+      DEBUG(dbgs() << " Schedule First Node:-------------------\n");
       SchedResult Result = scheduleAtom(FirstNode);
       if (Result != FDLScheduler::SchedSucc)
         return Result;
 
+      DEBUG(FDInfo->dumpTimeFrame());
+
       fillQueue(AQueue, SCC.begin(), SCC.end(), FirstNode);
       // schedule other nodes.
       Result = scheduleQueue(AQueue);
+      DEBUG(dbgs() << " Schedule SCC at II: " << FDInfo->getMII()
+                   << "-------------------\n");
+      DEBUG(FDInfo->dumpTimeFrame());
       if (Result != FDLScheduler::SchedSucc)
         return Result;
     }
@@ -312,12 +319,12 @@ void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
 
 FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
   DEBUG(A->print(dbgs()));
-  DEBUG(dbgs() << " Schedule First Node:-------------------\n");
   unsigned step = FDInfo->getASAPStep(A);
   if (FDInfo->getTimeFrame(A) != 1) {
     HWAOpInst *OI = cast<HWAOpInst>(A);
     bool ConstrainByMII = FDInfo->constrainByMII(OI);
     step = findBestStep(OI);
+    DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
     if (step == 0)
       return ConstrainByMII ? FDLScheduler::SchedFailII :
@@ -325,9 +332,11 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
 
     A->scheduledTo(step);
     FDInfo->buildFDInfo();
-  } else //if(!A->isScheduled())
+  } else { //if(!A->isScheduled())
     // Schedule to the best step.
     A->scheduledTo(step);
+    DEBUG(dbgs() << "\n\nasap step: " << step << "\n");
+  }
 
   return FDLScheduler::SchedSucc;
 }
@@ -338,6 +347,7 @@ FDLScheduler::SchedResult FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
     HWAOpInst *A = Queue.top();
     Queue.pop();
 
+    DEBUG(dbgs() << " Schedule Node:-------------------\n");
     SchedResult Result = scheduleAtom(A);
     if (Result != FDLScheduler::SchedSucc)
       return Result;

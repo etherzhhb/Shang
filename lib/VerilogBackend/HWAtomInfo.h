@@ -246,8 +246,17 @@ public:
     return at->second;
   }
 
-  HWRegister *allocaRegister(const Type *Ty, unsigned Start, unsigned End) {
-    return new (HWAtomAllocator) HWRegister(++NumRegs, Ty, Start, End);
+  HWRegister *allocaFURegister(HWAPreBind *A) {
+    int RegNum = A->getFunUnitID().getRawData();
+    unsigned Slot = A->getFinSlot();
+    return new (HWAtomAllocator) HWRegister(-RegNum, A->getValue().getType(),
+                                       Slot, Slot);
+  }
+
+  HWRegister *allocaRegister(const Type *Ty,
+                                  unsigned StartSlot, unsigned EndSlot) {
+    return new (HWAtomAllocator) HWRegister(++NumRegs, Ty,
+                                                 StartSlot, EndSlot);
   }
 
   HWAtom *getAtomFor(Value &V) const {
