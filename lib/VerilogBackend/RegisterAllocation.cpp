@@ -77,15 +77,22 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       // We need to register the value if the value life through
       // several cycle. Or we need to keep the value until the computation
       // finish.
-      // FIXME: the function unit register only valid for one cycle, but its
-      // user may require the register stable for mutiple cycles
-      // (i.e. multi cycle function unit.)
-      if (Dst->getSlot() == OI->getFinSlot()
-          && (Dst->getLatency() == 0 || isa<HWAPreBind>(Dst)))
-        continue;
+      if (Dst->getSlot() == OI->getFinSlot())  {
+        // Value registered.
+        // FIXME: the function unit register only valid for one cycle, but its
+        // user may require the register stable for mutiple cycles
+        // (i.e. multi cycle function unit.)
+        if (isa<HWAPreBind>(OI))
+          continue;
+
+        // We do not need to register this value because the operation could
+        // finish before value change.
+        if (Dst->getLatency() == 0)
+          continue;
+        
+      }
 
       HWAWrReg *WrReg = HI.getWrReg(OI, Dst);
-
       DEBUG(dbgs() << "Insert ");
       DEBUG(WrReg->dump());
       DEBUG(dbgs() << "before ");

@@ -499,7 +499,7 @@ HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWAtom *Reader, Value &V) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWARdReg(ID.Intern(HWAtomAllocator),
-      *getValDepEdge(Src, false), R, V);
+                                       *getValDepEdge(Src, false), R, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
