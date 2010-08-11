@@ -46,29 +46,29 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     HWAtom *A = Worklist.back();
     Worklist.pop_back();
 
-    HWAOpInst *OI = dyn_cast<HWAOpInst>(A);
-    if (OI == 0)
+    HWAOpInst *SrcAtom = dyn_cast<HWAOpInst>(A);
+    if (SrcAtom == 0)
       continue;
 
-    for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
-      if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
-        Value *V = OI->getIOperand(i);
+    for (unsigned i = 0, e = SrcAtom->getInstNumOps(); i != e; ++i) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(&SrcAtom->getDep(i))) {
+        Value *V = SrcAtom->getIOperand(i);
         if (VD->getDepType() == HWValDep::Import)
           // Insert the import node.
-          OI->setDep(i, HI.getRdReg(State, OI, *V));
+          SrcAtom->setDep(i, HI.getRdReg(State, SrcAtom, *V));
       }
     }
 
-    DEBUG(OI->print(dbgs()));
+    DEBUG(SrcAtom->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
-    std::vector<HWAtom *> Users(OI->use_begin(), OI->use_end());
+    std::vector<HWAtom *> Users(SrcAtom->use_begin(), SrcAtom->use_end());
     while (!Users.empty()) {
       HWAtom *Dst = Users.back();
       Users.pop_back();
 
       // Only insert register for normal edge.
-      if (HWValDep *VD = dyn_cast<HWValDep>(Dst->getEdgeFrom(OI))) {
+      if (HWValDep *VD = dyn_cast<HWValDep>(Dst->getEdgeFrom(SrcAtom))) {
         if (VD->getDepType() != HWValDep::Normal)
           continue;
       } else
@@ -77,28 +77,22 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       // We need to register the value if the value life through
       // several cycle. Or we need to keep the value until the computation
       // finish.
-      if (Dst->getSlot() == OI->getFinSlot())  {
+      if (Dst->getSlot() == SrcAtom->getFinSlot())  {
         // Value registered.
         // FIXME: the function unit register only valid for one cycle, but its
         // user may require the register stable for mutiple cycles
         // (i.e. multi cycle function unit.)
-        if (isa<HWAPreBind>(OI))
+        if (isa<HWAPreBind>(SrcAtom))
           continue;
-
-        // We do not need to register this value because the operation could
-        // finish before value change.
-        if (Dst->getLatency() == 0)
-          continue;
-        
       }
 
-      HWAWrReg *WrReg = HI.getWrReg(OI, Dst);
+      HWAWrReg *WrReg = HI.getWrReg(SrcAtom, Dst);
       DEBUG(dbgs() << "Insert ");
       DEBUG(WrReg->dump());
       DEBUG(dbgs() << "before ");
       DEBUG(Dst->dump());
       // Extend the life time of value by move the value to a register.
-      Dst->replaceDep(OI, WrReg);
+      Dst->replaceDep(SrcAtom, WrReg);
     }
   }
   
