@@ -99,9 +99,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         // the computation finish.
         assert(WR->writeFUReg()
           && "Expect write to function unit register!");
-        if (WR->getFinSlot() == Dst->getFinSlot()) {
+        if (WR->getFinSlot() == Dst->getFinSlot())          
           continue;
-        }
       }
 
       HWAWrReg *WrReg = HI.getWrReg(SrcAtom, Dst);

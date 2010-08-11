@@ -214,9 +214,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   addPhiExportEdges(*I.getParent(), Deps);
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
-  // Return instruction take 1 cycle.
-  unsigned Latancy = (I.getOpcode() == Instruction::Ret) ? 1 : 0;
-  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(Latancy));
+  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(0));
   // This is a control atom.
   SetControlRoot(Atom);
   return Atom;
