@@ -516,7 +516,8 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
   getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
     << ResourceId << ",\n";
 
-  getModDeclBuffer() << "output reg membus_mode" << ResourceId << ",\n";
+  getModDeclBuffer() << "output reg membus_we" << ResourceId << ",\n";
+  getModDeclBuffer() << "output reg membus_en" << ResourceId << ",\n";
 
 }
 
@@ -528,19 +529,22 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
 
   unsigned ResourceId = A->getUnitNum();
   Instruction *Inst = &(A->getInst<Instruction>());
+  // Enable the memory
+  DataPath.indent(6) << "membus_en" << ResourceId << " <= 1'b1;\n";
+  // Send the address.
   DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
 
   // Emit the operation
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
     DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+    DataPath.indent(6) << "membus_we" << ResourceId << " <= 1'b0;\n";
     DataPath.indent(6) << "membus_in" << ResourceId
       << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   } else { // It must be a store
     DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b1;\n";
+    DataPath.indent(6) << "membus_we" << ResourceId << " <= 1'b1;\n";
     DataPath.indent(6) << "membus_in" << ResourceId
       << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
   }
@@ -554,9 +558,10 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit FU) {
 
   unsigned ResourceId = FU.getUnitNum();
 
+  DataPath.indent(6) << "membus_en" << ResourceId << " <= 1'b0;\n";
   DataPath.indent(6) << "membus_addr" << ResourceId
     << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_we" << ResourceId << " <= 1'b0;\n";
   DataPath.indent(6) << "membus_in" << ResourceId
     << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   vlang->end(DataPath.indent(4));
