@@ -38,6 +38,7 @@ bool RTLWriter::runOnFunction(Function &F) {
   TD = &getAnalysis<TargetData>();
   vlang = &getAnalysis<VLang>();
   HI = &getAnalysis<HWAtomInfo>();
+  RC = &getAnalysis<ResourceConfig>();
 
   // Emit control register and idle state
   unsigned totalFSMStates = F.size() + 1;
@@ -558,6 +559,7 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit FU) {
   DataPath.indent(6) << "membus_mode" << ResourceId << " <= 1'b0;\n";
   DataPath.indent(6) << "membus_in" << ResourceId
     << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+  vlang->end(DataPath.indent(4));
 }
 
 template<class ResType>
@@ -604,7 +606,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   emitResourceDefaultOp<ResType>(FirstAtom->getFunUnit());
   vlang->endSwitch(DataPath.indent(4));
   //
-  DataPath.indent(4) << "assign " << SelEval.str() << " };\n";
+  DataPath.indent(2) << "assign " << SelEval.str() << " };\n";
 }
 
 void RTLWriter::emitResources() {
@@ -830,7 +832,7 @@ void esyn::RTLWriter::visitSelectInst(HWAPostBind &A) {
 void RTLWriter::visitTruncInst(HWAPostBind &A) {
   TruncInst &I = A.getInst<TruncInst>();
   const IntegerType *Ty = cast<IntegerType>(I.getType());
-  DataPath << getAsOperand(A.getValDep(0)) << vlang->printBitWitdh(Ty, 0, true) << "\n";
+  DataPath << getAsOperand(A.getValDep(0)) << vlang->printBitWitdh(Ty, 0, true) << ";\n";
 }
 
 
