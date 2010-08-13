@@ -149,8 +149,11 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
       break;
     }
 
-    unsigned idx = (unsigned)Res->getResourceType() - 1;
-    ResSet[idx] = Res;
+    if (Res != 0) { // Only setup the available resources.
+      unsigned idx = (unsigned)Res->getResourceType()
+                      - (unsigned)HWResource::FirstResourceType;
+      ResSet[idx] = Res;
+    }
   }
 }
 

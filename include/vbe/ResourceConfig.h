@@ -264,7 +264,7 @@ public:
   void print(raw_ostream &OS) const;
 
   HWResource *getResource(enum HWResource::ResTypes T) const {
-    unsigned idx = (unsigned)T - (size_t)HWResource::FirstResourceType;
+    unsigned idx = (unsigned)T - (unsigned)HWResource::FirstResourceType;
     assert(ResSet[idx] && "Bad resource!");
     return ResSet[idx];
   }
