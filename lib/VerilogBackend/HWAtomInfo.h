@@ -28,6 +28,7 @@
 
 namespace llvm {
   class LoopInfo;
+  class LiveValues;
 }
 using namespace llvm;
 
@@ -206,6 +207,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   // The loop Info
   LoopInfo *LI;
   ResourceConfig *RC;
+  LiveValues *LV;
   // Total states
   unsigned short totalCycle;
   unsigned short InstIdx;

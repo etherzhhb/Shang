@@ -22,6 +22,7 @@
 #include "MemDepAnalysis.h"
 
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/LiveValues.h"
 
 #define DEBUG_TYPE "vbe-hw-atom-info"
 #include "llvm/Support/Debug.h"
@@ -37,6 +38,7 @@ RegisterPass<HWAtomInfo> X("vbe-hw-atom-info",
                            " on llvm IR");
 
 void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<LiveValues>();
   AU.addRequired<LoopInfo>();
   AU.addRequired<ResourceConfig>();
   AU.addRequired<MemDepInfo>();
@@ -44,6 +46,7 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool HWAtomInfo::runOnFunction(Function &F) {
+  LV = &getAnalysis<LiveValues>();
   LI = &getAnalysis<LoopInfo>();
   RC = &getAnalysis<ResourceConfig>();
   MDA = &getAnalysis<MemDepInfo>();
@@ -195,23 +198,30 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   std::set<HWEdge*> ExportEdges;
   // All node should finish before terminator run.
   FSMState *State = getStateFor(*I.getParent());
-  for (usetree_iterator TI = State->usetree_begin(), TE = State->usetree_end();
-      TI != TE; ++TI)
-    if (*TI != Pred && TI->use_empty()) {
-      HWAtom *A = *TI;
-      bool isExport = false;
-      if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-        isExport = !OI->getInst<Instruction>().getType()->isVoidTy();
-      }
-      // We must wait until all atom finish.
-      if (isExport)
-        Deps.push_back(getValDepEdge(A, false, HWValDep::Export));
-      else
-        Deps.push_back(getCtrlDepEdge(A));
+  BasicBlock *BB = I.getParent();
+
+  // And export the live values.
+  for (BasicBlock::iterator II = BB->getFirstNonPHI(), IE = --BB->end(); II != IE; ++II) {
+    Instruction &Inst = *II;
+    HWAtom *A = getAtomFor(Inst);
+    
+    if (!LV->isKilledInBlock(&Inst, BB)) {
+      Deps.push_back(getValDepEdge(A, false, HWValDep::Export));
+      continue;
     }
 
+    if (!A->use_empty() || A == Pred)
+      continue;
+
+    const Type *Ty =A->getValue().getType();
+    if (Ty->isVoidTy() || Ty->isLabelTy()) {
+      Deps.push_back(getCtrlDepEdge(A));
+    } 
+  }
+  
+
   // Create delay atom for phi node.
-  addPhiExportEdges(*I.getParent(), Deps);
+  addPhiExportEdges(*BB, Deps);
   // Get the atom, Terminator do not have any latency
   // Do not count basicblocks as operands
   // Return instruction take 1 cycle.
