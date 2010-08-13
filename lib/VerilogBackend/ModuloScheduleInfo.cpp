@@ -196,4 +196,5 @@ ModuloScheduleInfo::~ModuloScheduleInfo() {
 
 void ModuloScheduleInfo::clear() {
   RecList.clear();
+  TrivialNodes.clear();
 }
