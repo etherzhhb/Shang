@@ -162,7 +162,7 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
     FDModuloSchedule();
   else
     FDListSchedule();
-  
+
   HI->setTotalCycle(CurState->getEndSlot() + 1);
 
   // Do not forget to schedule the delay atom;

@@ -128,6 +128,7 @@ HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy,
 
 
 void HWAtom::scheduledTo(unsigned slot) {
+  assert(slot && "Can not schedule to slot 0!");
   SchedSlot = slot;
 }
 
