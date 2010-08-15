@@ -74,7 +74,7 @@ void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
         int SNewStep = AtomToTF[Node].first + Node->getLatency() -
                        // delta Node -> ChildNode
                        MII * Edge->getItDst();
-        assert(SNewStep >= (int)step && "Bad ASAP step!");
+        assert(SNewStep >= 0 && "Bad ASAP step!");
         unsigned NewStep = SNewStep;
 
         if (VC == 1) // Handle backedge when we first visit this node.
@@ -106,6 +106,7 @@ void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
       // Only move forward when we visit the node from all its deps.
       // Only push the node into the stack ONCE.
       if (VC == ChildNode->getNumDeps()) {
+        assert(AtomToTF[ChildNode].first >= step && "Bad ASAP step!");
         WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
         // Set up the II constrain.
         if (MII)
@@ -191,6 +192,9 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
       VC = VisitCount[ChildNode];
       // Only move forward when we visit the node from all its deps.
       if (VC == ChildNode->getNumUses()) {
+        assert(AtomToTF[ChildNode].first <= AtomToTF[ChildNode].second
+               && "Bad ALAP step!");
+
         assert(getALAPStep(ChildNode) >= getASAPStep(ChildNode)
                && "Broken time frame!");
         WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
