@@ -269,7 +269,6 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
 
   switch (A->getHWAtomType()) {
     case atomPreBind:
-      return getFURegisterName(cast<HWAPreBind>(A)->getFunUnitID());
     case atomPostBind:
       return getAsOperand(V, "_w");
     case atomWrReg:
@@ -518,7 +517,6 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
 
   getModDeclBuffer() << "output reg membus_we" << ResourceId << ",\n";
   getModDeclBuffer() << "output reg membus_en" << ResourceId << ",\n";
-
 }
 
 template<>
@@ -631,15 +629,15 @@ void RTLWriter::emitResources() {
 }
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  unsigned MemBusInst = PreBind->getUnitNum();
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
+    unsigned MemBusInst = PreBind->getUnitNum();
     std::string Name = getAsOperand(PreBind);
     // Declare the signal
     vlang->declSignal(getSignalDeclBuffer(), Name,
                       vlang->getBitWidth(*L), 0, false);
     // Emit the datapath
     DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
-      << " = membus_out" << MemBusInst <<";\n";
+                       << " = membus_out" << MemBusInst <<";\n";
   }
 }
 
