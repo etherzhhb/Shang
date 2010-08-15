@@ -91,14 +91,16 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
         Dst->dump();
         dbgs() << "Interval: " << (Dst->getSlot() - Src->getSlot()) << "\n\n";
       );
-      if (Dst->getSlot() - Src->getSlot() > II) {
+      // The new value will come at slot II, and we must copy the old value out
+      // before this moment, that means we need to emit the copy at
+      // II - latancy of register assignment in FSM slot.
+      if (Dst->getSlot() - Src->getSlot() >= II) {
         DEBUG(dbgs() << "Anti dependency found:\n");
         if (NewWrReg == 0) {
-          HWADelay *Delay = HI.getDelay(Src, II);
           unsigned StartSlot = Src->getSlot() + II;
           HWRegister *NewReg = HI.allocaRegister(Ty, StartSlot,
-                                                     StartSlot + II);
-          NewWrReg = HI.getWrReg(Delay, NewReg, StartSlot);
+                                                     StartSlot + II -1);
+          NewWrReg = HI.getWrReg(Src, NewReg, StartSlot);
         }
         Dst->replaceDep(Src, NewWrReg);
       }
