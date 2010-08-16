@@ -64,11 +64,6 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     DEBUG(SrcAtom->print(dbgs()));
     DEBUG(dbgs() << " Visited\n");
 
-    // Already registered.
-    if (isa<HWAPreBind>(SrcAtom))
-      continue;
-
-
     std::vector<HWAtom *> Users(SrcAtom->use_begin(), SrcAtom->use_end());
     while (!Users.empty()) {
       HWAtom *Dst = Users.back();
@@ -85,10 +80,9 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       // several cycle. Or we need to keep the value until the computation
       // finish.
       if (Dst->getSlot() == SrcAtom->getFinSlot())  {
-        // Value registered.
-        // FIXME: the function unit register only valid for one cycle, but its
-        // user may require the register stable for mutiple cycles
-        // (i.e. multi cycle function unit.)
+        // Already registered by function unit register.
+        if (isa<HWAPreBind>(SrcAtom) && isa<HWAWrReg>(Dst))
+          continue;
 
         // Do not need to register, the computation will finish in time.
         if (Dst->getLatency() == 0)
