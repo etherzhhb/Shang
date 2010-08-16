@@ -102,6 +102,10 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
                                                      StartSlot + II -1);
           NewWrReg = HI.getWrReg(Src, NewReg, StartSlot);
         }
+        DEBUG(dbgs() << "---------------->Insert SS Reg ");
+        DEBUG(NewWrReg->dump());
+        DEBUG(dbgs() << "before ");
+        DEBUG(Dst->dump());
         Dst->replaceDep(Src, NewWrReg);
       }
     } // End foreach RegUsers.
