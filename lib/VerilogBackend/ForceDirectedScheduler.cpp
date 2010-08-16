@@ -333,6 +333,12 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
     A->scheduledTo(step);
     FDInfo->buildFDInfo();
   } else { //if(!A->isScheduled())
+    if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
+      bool ConstrainByMII = FDInfo->constrainByMII(OI);
+      if (!FDInfo->isFUAvailalbe(step, OI->getFunUnit()))
+        return ConstrainByMII ? FDLScheduler::SchedFailII :
+                                FDLScheduler::SchedFailCricitalPath;
+    }
     // Schedule to the best step.
     A->scheduledTo(step);
     DEBUG(dbgs() << "\n\nasap step: " << step << "\n");
