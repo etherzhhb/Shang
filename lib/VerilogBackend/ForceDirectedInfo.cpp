@@ -74,8 +74,8 @@ void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
         int SNewStep = AtomToTF[Node].first + Node->getLatency() -
                        // delta Node -> ChildNode
                        MII * Edge->getItDst();
-        assert(SNewStep >= 0 && "Bad ASAP step!");
-        unsigned NewStep = SNewStep;
+        //assert(SNewStep >= 0 && "Bad ASAP step!");
+        unsigned NewStep = std::max(SNewStep, 0);
 
         if (VC == 1) // Handle backedge when we first visit this node.
           for (HWAtom::const_dep_iterator DI = ChildNode->dep_begin(),
@@ -222,34 +222,39 @@ void ForceDirectedInfo::dumpTimeFrame() const {
 bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
   unsigned key = computeStepKey(step, FU.getFUnitID());
   unsigned usage = const_cast<ForceDirectedInfo*>(this)->ResUsage[key];
-  return usage <= FU.getTotalFUs();
+  return usage < FU.getTotalFUs();
+}
+
+void ForceDirectedInfo::presevesFUForAtom(HWAtom *A) {
+  assert(A->isScheduled() && "Can only preseves FU for Scheduled Atom!");
+  if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
+    if (OI->isTrivial())
+      return;
+    // Increase the resource usage for scheduled atom.
+    unsigned StepKey = computeStepKey(OI->getSlot(),
+                                      OI->getFunUnitID());
+    ++ResUsage[StepKey];
+  }
 }
 
 void ForceDirectedInfo::buildDGraph() {
   DGraph.clear();
-  ResUsage.clear();
   for (usetree_iterator I = State->usetree_begin(),
-    E = State->usetree_end(); I != E; ++I){
-      // We only try to balance the post bind resource.
-      if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
-        if (OpInst->getResClass() == HWResource::Trivial)
-          continue;
+      E = State->usetree_end(); I != E; ++I){
+    // We only try to balance the post bind resource.
+    if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
+      if (OpInst->getResClass() == HWResource::Trivial)
+        continue;
 
-        unsigned TimeFrame = getTimeFrame(OpInst);
-        unsigned ASAPStep = getASAPStep(OpInst);
-        // Remember the Function unit usage of the scheduled instruction.
-        if (OpInst->isScheduled()) {
-          unsigned StepKey = computeStepKey(OpInst->getSlot(),
-                                            OpInst->getFunUnitID());
-          ++ResUsage[StepKey];
-        }
+      unsigned TimeFrame = getTimeFrame(OpInst);
+      unsigned ASAPStep = getASAPStep(OpInst);
 
-        double Prob = 1.0 / (double) TimeFrame;
-        // Including ALAPStep.
-        for (unsigned i = ASAPStep, e = getALAPStep(OpInst) + 1;
-            i != e; ++i)
-          accDGraphAt(i, OpInst->getFunUnitID(), Prob);
-      }
+      double Prob = 1.0 / (double) TimeFrame;
+      // Including ALAPStep.
+      for (unsigned i = ASAPStep, e = getALAPStep(OpInst) + 1;
+          i != e; ++i)
+        accDGraphAt(i, OpInst->getFunUnitID(), Prob);
+    }
   }
   DEBUG(printDG(dbgs()));
 }

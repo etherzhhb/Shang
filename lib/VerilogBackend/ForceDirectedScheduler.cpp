@@ -321,26 +321,30 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
   DEBUG(A->print(dbgs()));
   unsigned step = FDInfo->getASAPStep(A);
   if (FDInfo->getTimeFrame(A) != 1) {
-    HWAOpInst *OI = cast<HWAOpInst>(A);
     bool ConstrainByMII = FDInfo->constrainByMII(OI);
+    HWAOpInst *OI = cast<HWAOpInst>(A);
     step = findBestStep(OI);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
-    if (step == 0)
+    if (step == 0) {
+      DEBUG(dbgs() << " Can not find avaliable step!\n\n");
       return ConstrainByMII ? FDLScheduler::SchedFailII :
                               FDLScheduler::SchedFailCricitalPath;
+    }
 
     A->scheduledTo(step);
+    FDInfo->presevesFUForAtom(A);
     FDInfo->buildFDInfo();
   } else { //if(!A->isScheduled())
     if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-      bool ConstrainByMII = FDInfo->constrainByMII(OI);
-      if (!FDInfo->isFUAvailalbe(step, OI->getFunUnit()))
-        return ConstrainByMII ? FDLScheduler::SchedFailII :
-                                FDLScheduler::SchedFailCricitalPath;
+      if (!FDInfo->isFUAvailalbe(step, OI->getFunUnit())) {
+        DEBUG(dbgs() << " No avaliable step!\n\n");
+        return FDLScheduler::SchedFailCricitalPath;   
+      }
     }
     // Schedule to the best step.
     A->scheduledTo(step);
+    FDInfo->presevesFUForAtom(A);
     DEBUG(dbgs() << "\n\nasap step: " << step << "\n");
   }
 

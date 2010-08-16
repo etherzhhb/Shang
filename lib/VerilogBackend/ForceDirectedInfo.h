@@ -106,6 +106,7 @@ public:
   //{
   /// @brief If the usage of given kind of FU not exceed the maximum available number.
   bool isFUAvailalbe(unsigned step, HWFUnit FU) const;
+  void presevesFUForAtom(HWAtom *A);
   //}
 
   /// @name Force computation
