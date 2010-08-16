@@ -101,10 +101,16 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
           && "Expect write to function unit register!");
         if (WR->getFinSlot() == Dst->getFinSlot())          
           continue;
+        else if (WR->getSlot() == Dst->getFinSlot()) {
+          // Function unit reigster driving combintional logic.
+          assert(Dst->getLatency() == 0 && Dst != Exit
+                 && "Bad timing!");
+          continue;
+        }
       }
 
       HWAWrReg *WrReg = HI.getWrReg(SrcAtom, Dst);
-      DEBUG(dbgs() << "Insert ");
+      DEBUG(dbgs() << "---------------->Insert ");
       DEBUG(WrReg->dump());
       DEBUG(dbgs() << "before ");
       DEBUG(Dst->dump());
