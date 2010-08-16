@@ -222,11 +222,12 @@ void ForceDirectedInfo::dumpTimeFrame() const {
 bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
   unsigned key = computeStepKey(step, FU.getFUnitID());
   unsigned usage = const_cast<ForceDirectedInfo*>(this)->ResUsage[key];
-  return usage < FU.getTotalFUs();
+  return usage <= FU.getTotalFUs();
 }
 
 void ForceDirectedInfo::buildDGraph() {
   DGraph.clear();
+  ResUsage.clear();
   for (usetree_iterator I = State->usetree_begin(),
     E = State->usetree_end(); I != E; ++I){
       // We only try to balance the post bind resource.
@@ -237,10 +238,11 @@ void ForceDirectedInfo::buildDGraph() {
         unsigned TimeFrame = getTimeFrame(OpInst);
         unsigned ASAPStep = getASAPStep(OpInst);
         // Remember the Function unit usage of the scheduled instruction.
-        if (TimeFrame == 1)
-          ++ResUsage[computeStepKey(ASAPStep, OpInst->getFunUnitID())];
-
-
+        if (OpInst->isScheduled()) {
+          unsigned StepKey = computeStepKey(OpInst->getSlot(),
+                                            OpInst->getFunUnitID());
+          ++ResUsage[StepKey];
+        }
 
         double Prob = 1.0 / (double) TimeFrame;
         // Including ALAPStep.
