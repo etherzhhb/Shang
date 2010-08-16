@@ -243,8 +243,8 @@ void ForceDirectedInfo::buildDGraph() {
       E = State->usetree_end(); I != E; ++I){
     // We only try to balance the post bind resource.
     if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
-      if (OpInst->getResClass() == HWResource::Trivial)
-        continue;
+      // Ignore the DG for trivial resources.
+      if (OpInst->isTrivial()) continue;
 
       unsigned TimeFrame = getTimeFrame(OpInst);
       unsigned ASAPStep = getASAPStep(OpInst);
@@ -308,12 +308,12 @@ void ForceDirectedInfo::accDGraphAt(unsigned step, HWFUnitID FUID, double d) {
   DGraph[computeStepKey(step , FUID)] += d;
 }
 
-double ForceDirectedInfo::getRangeDG(const HWAPostBind *A,
-                                unsigned start, unsigned end/*included*/) {
+double ForceDirectedInfo::getRangeDG(HWFUnitID FUID, unsigned start,
+                                     unsigned end/*included*/) {
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
-    ret += getDGraphAt(i, A->getFunUnitID());
+    ret += getDGraphAt(i, FUID);
 
   ret /= range;
   return ret;
@@ -324,7 +324,7 @@ double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
   if (const HWAPostBind *A = dyn_cast<HWAPostBind>(OpInst))  
     return getDGraphAt(step, A->getFunUnitID()) - getAvgDG(A);
 
-  // The force about the pre-bind resoure dose not matter.
+  // The self force about the pre-bind resoure dose not matter.
   return 0.0;
 }
 
@@ -338,7 +338,8 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
       continue;
   
     if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
-      ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);  
+      ret += getRangeDG(P->getFunUnitID(), getASAPStep(P), getALAPStep(P))
+             - getAvgDG(P);  
   }
 
   return ret;
@@ -354,7 +355,8 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
       continue;
 
     if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
-      ret += getRangeDG(P, getASAPStep(P), getALAPStep(P)) - getAvgDG(P);
+      ret += getRangeDG(P->getFunUnitID(), getASAPStep(P), getALAPStep(P))
+             - getAvgDG(P);
   }
 
   return ret;

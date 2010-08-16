@@ -113,7 +113,7 @@ public:
   //{
   void buildAvgDG();
   double getAvgDG(const HWAPostBind *A) {  return AvgDG[A]; }
-  double getRangeDG(const HWAPostBind *A, unsigned start, unsigned end/*included*/);
+  double getRangeDG(HWFUnitID FUID, unsigned start, unsigned end/*included*/);
 
   double computeSelfForceAt(const HWAOpInst *OpInst, unsigned step);
   /// This function will invalid the asap step of all node in
