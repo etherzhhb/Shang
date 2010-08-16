@@ -187,11 +187,13 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // State end depand on or others atoms
   SmallVector<HWEdge*, 16> Deps;
   addOperandDeps(I, Deps);
-  HWAtom *Pred = 0;
-  // Do not add the operand twice
-  if (!Deps.empty()) {
-    Pred = Deps[0]->getSrc();
-  }
+  // We may need to wait until the operation for return value finish.
+  // FIXME: If we make return port a wire, then we do not need to delay
+  // the operation.
+  if (!Deps.empty() && isa<ReturnInst>(I))
+    if (HWAOpInst *OI = dyn_cast<HWAOpInst>(Deps[0]->getSrc())) {
+      Deps[0]->setSrc(getDelay(OI, 1));
+    }
 
   unsigned OpSize = Deps.size();
 
@@ -210,23 +212,20 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
       continue;
     }
 
-    if (!A->use_empty() || A == Pred)
-      continue;
-
+    Value *V = &A->getValue();
     const Type *Ty =A->getValue().getType();
-    if (Ty->isVoidTy() || Ty->isLabelTy()) {
+    if (Ty->isVoidTy() || V == BB) {
       Deps.push_back(getCtrlDepEdge(A));
     } 
   }
-  
 
   // Create delay atom for phi node.
   addPhiExportEdges(*BB, Deps);
-  // Get the atom, Terminator do not have any latency
-  // Do not count basicblocks as operands
-  // Return instruction take 1 cycle.
-  unsigned Latancy = (I.getOpcode() == Instruction::Ret) ? 1 : 0;
-  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(Latancy));
+  // handle the situation that a BB that only contains a "ret void".
+  if (State->getNumUses() == 0)
+    Deps.push_back(getCtrlDepEdge(State));
+  
+  HWAPostBind *Atom = getPostBind(I, Deps, OpSize, RC->allocaTrivialFU(0));
   // This is a control atom.
   SetControlRoot(Atom);
   return Atom;

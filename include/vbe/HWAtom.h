@@ -83,6 +83,7 @@ class HWEdge {
   friend class
     HWAtomDepIterator<SmallVectorImpl<HWEdge*>::const_iterator, const HWAtom>;
   friend class HWAtom;
+  friend class HWAtomInfo;
   void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
 protected:
   HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned Dst, bool isBackEdge = false)
