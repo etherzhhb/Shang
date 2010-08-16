@@ -132,15 +132,25 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
   }
   totalLatency = 0;
   totalItDist = 0;
+  DEBUG(dbgs() << "\n\n\nBackedge:\n");
   // For each backedge.
   for (BEVector::iterator I = BackEdges.begin(), E = BackEdges.end();
       I != E; ++I) {
     HWEdge *BE = I->second;
     const HWAtom *Src = BE->getSrc(), *Dst = I->first; 
-    assert(MaxLatency[Dst] == 0 && MaxItDist[Dst] == 0
-           && "Back edge dst reachable from other Nodes?");
-    totalLatency = std::max(totalLatency, MaxLatency[Src] + Src->getLatency());
-    totalItDist = std::max(totalItDist, MaxItDist[Src] + BE->getItDst());
+    DEBUG(Src->dump());
+    DEBUG(dbgs() << "->\n");
+    DEBUG(Dst->dump());
+    //assert(MaxLatency[Dst] == 0 && MaxItDist[Dst] == 0
+    //       && "Back edge dst reachable from other Nodes?");
+    totalLatency = std::max(totalLatency,
+                            MaxLatency[Src] + Src->getLatency()
+                            - MaxLatency[Dst]); // Dirty hack.
+    totalItDist = std::max(totalItDist,
+                           MaxItDist[Src] + BE->getItDst()
+                           - MaxItDist[Dst]);
+    DEBUG(dbgs() << "latancy: " << totalLatency
+                 << " dist: " << totalItDist << "\n\n\n");
   }
 
   assert(totalItDist != 0 && "No cross iteration dependence?");
