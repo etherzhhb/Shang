@@ -54,7 +54,7 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
 
   DEBUG(dbgs() << "Find Self Loop :" << BB.getName() << " II: " << II << '\n');
   std::vector<HWAtom*> WorkList;
-  for (usetree_iterator I = State->usetree_begin(), E = State->usetree_end();
+  for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I)
     if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(*I)) {
       if (!WrReg->writeFUReg())

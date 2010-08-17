@@ -46,14 +46,6 @@ typedef GraphTraits<const esyn::HWAtom*> ConstHWAtomSccGT;
 typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
 typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
 
-namespace {
-  struct top_sort {
-    bool operator() (const HWAtom* LHS, const HWAtom* RHS) const {
-      return LHS->getIdx() < RHS->getIdx();
-    }
-  };
-}
-
 //===----------------------------------------------------------------------===//
 char ModuloScheduleInfo::ID = 0;
 
@@ -95,9 +87,8 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
   assert(Scc.size() > 1 && "No self loop expect in DDG!");
   unsigned totalLatency = 0;
   unsigned totalItDist = 0;
-
   
-  std::sort(Scc.begin(), Scc.end(), top_sort());
+  std::sort(Scc.begin(), Scc.end(), HWAtom::top_sort());
   //
   DEBUG(
   for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
@@ -184,8 +175,7 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
 
 unsigned ModuloScheduleInfo::computeResMII(FSMState &State) const {
   std::map<HWResource::ResTypes, unsigned> TotalResUsage;
-  for (usetree_iterator I = State.usetree_begin(), E = State.usetree_end();
-    I != E; ++I)
+  for (FSMState::iterator I = State.begin(), E = State.end(); I != E; ++I)
     if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))
       ++TotalResUsage[A->getResClass()];
 

@@ -439,12 +439,12 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 
   DEBUG(
     dbgs() << "\n\nBefore binding:\n";
-    for (usetree_iterator I = CurStage->usetree_begin(),
-      E = CurStage->usetree_end(); I != E; ++I) {
-        HWAtom *A = *I;
-        dbgs() << "Schedule\n";
-        A->dump();
-        dbgs() << "To slot: " << A->getSlot() << '\n';
+    for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
+         I != E; ++I) {
+      HWAtom *A = *I;
+      dbgs() << "Schedule\n";
+      A->dump();
+      dbgs() << "To slot: " << A->getSlot() << '\n';
     }
     dbgs() << "\n\n";
   );
@@ -459,12 +459,12 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 
   DEBUG(
     dbgs() << "\n\nAfter binding:\n";
-    for (usetree_iterator I = CurStage->usetree_begin(),
-      E = CurStage->usetree_end(); I != E; ++I) {
-        HWAtom *A = *I;
-        dbgs() << "Schedule\n";
-        A->dump();
-        dbgs() << "To slot: " << A->getSlot() << '\n';
+    for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
+         I != E; ++I) {
+      HWAtom *A = *I;
+      dbgs() << "Schedule\n";
+      A->dump();
+      dbgs() << "To slot: " << A->getSlot() << '\n';
     }
     dbgs() << "\n\n";
   );
@@ -546,8 +546,8 @@ void CompPathBinding::buildLongestPostBindPath() {
 }
 
 void CompPathBinding::buildWOCGForRes() {
-  for (usetree_iterator I = CurStage->usetree_begin(),
-      E = CurStage->usetree_end(); I != E; ++I) {
+  for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
+       I != E; ++I) {
     if (HWAPostBind *PB = dyn_cast<HWAPostBind>(*I))
       if (PB->getResClass() != HWResource::Trivial)      
         insertToWOCG(PB);
@@ -558,8 +558,7 @@ void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
   PostBindNodeType *Entry = getGraphEntry(PB->getResClass()),
                    *Exit = getGraphExit(PB->getResClass()),
                    *Node = new (NodeAllocator) PostBindNodeType(PB);
-  
-  
+
   for (PostBindNodeType::succ_iterator I = Entry->succ_begin(), E = Entry->succ_end();
       I != E; ++I)
     if ((*I)->isCompatible(Node)) {

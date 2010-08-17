@@ -41,8 +41,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   // Emit the exported register.
   HWAOpInst *Exit = State->getExitRoot();
 
-  SmallVector<HWAtom*, 32> Worklist(State->usetree_begin(),
-                                    State->usetree_end());
+  SmallVector<HWAtom*, 32> Worklist(State->begin(), State->end());
 
   while(!Worklist.empty()) {
     HWAtom *SrcAtom = Worklist.back();

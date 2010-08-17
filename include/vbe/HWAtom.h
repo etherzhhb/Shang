@@ -305,7 +305,7 @@ protected:
   friend class FSMState;
 
   void resetSchedule() { SchedSlot = 0; }
-  void setParent(FSMState *State) { Parant = State; }
+  void setParent(FSMState *State);
 
 public:
   template <class It>
@@ -321,6 +321,11 @@ public:
 
   static const unsigned short MaxSlot = ~0;
   unsigned short getIdx() const { return InstIdx; }
+  struct top_sort {
+    bool operator() (const HWAtom* LHS, const HWAtom* RHS) const {
+      return LHS->getIdx() < RHS->getIdx();
+    }
+  };
 
   FSMState *getParent() { return Parant; }
   FSMState *getParent() const { return Parant; }
@@ -679,7 +684,11 @@ public:
 
 // Virtual Root
 class FSMState  : public HWAtom {
+public:
+  typedef std::vector<HWAtom*> AtomVecTy;
+private:
   HWAOpInst *ExitRoot;
+  AtomVecTy Atoms;
 
   // The registers that store the source value of PHINodes.
   typedef std::map<const PHINode*, HWValDep*> PHIEdgeMapType;
@@ -696,17 +705,24 @@ class FSMState  : public HWAtom {
   void setExitRoot(HWAOpInst *Exit) {
     ExitRoot = Exit;
 
-    for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
+    for (usetree_iterator I = usetree_iterator::begin(this),
+         E = usetree_iterator::end(this); I != E; ++I)
       (*I)->setParent(this);
+
+    std::sort(Atoms.begin(), Atoms.end(), HWAtom::top_sort());
   }
   void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
 
+  friend class HWAtom;
   friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
     : HWAtom(ID, atomVRoot, BB, 0, Idx) , HaveSelfLoop(false), II(0) {
   }
-  ~FSMState() { PHIEdge.clear(); }
+  ~FSMState() {
+    PHIEdge.clear();
+    Atoms.clear();
+  }
   
   /// @name Roots
   //{
@@ -718,33 +734,24 @@ public:
   BasicBlock *getBasicBlock() { return &cast<BasicBlock>(getValue()); }
   BasicBlock *getBasicBlock() const { return &cast<BasicBlock>(getValue()); }
 
-  // Successor tree iterator, travel the tree from entry node.
-  usetree_iterator usetree_begin() {
-    return usetree_iterator::begin(this);
-  }
-  usetree_iterator usetree_end() {
-    return usetree_iterator::end(this);
-  }
+  typedef AtomVecTy::iterator iterator;
+  typedef AtomVecTy::const_iterator const_iterator;
 
-  const_usetree_iterator usetree_begin() const { 
-    return const_usetree_iterator::begin(this);
-  }
-  const_usetree_iterator usetree_end() const {
-    return const_usetree_iterator::end(this);
-  }
+  iterator begin()  { return Atoms.begin(); }
+  iterator end()    { return Atoms.end(); }
+  const_iterator begin() const { return Atoms.begin(); }
+  const_iterator end()   const { return Atoms.end(); }
 
-  deptree_iterator deptree_begin() { return deptree_iterator::begin(ExitRoot); }
-  const_deptree_iterator deptree_begin() const {
-    return const_deptree_iterator::begin(ExitRoot);
-  }
+  typedef AtomVecTy::reverse_iterator reverse_iterator;
+  typedef AtomVecTy::const_reverse_iterator const_reverse_iterator;
 
-  deptree_iterator deptree_end() { return deptree_iterator::end(ExitRoot); }
-  const_deptree_iterator deptree_end()  const {
-    return const_deptree_iterator::end(ExitRoot);
-  }
+  reverse_iterator rbegin()  { return Atoms.rbegin(); }
+  reverse_iterator rend()    { return Atoms.rend(); }
+  const_reverse_iterator rbegin() const { return Atoms.rbegin(); }
+  const_reverse_iterator rend()   const { return Atoms.rend(); }
 
   void resetSchedule() {
-    for (usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I)
+    for (iterator I = begin(), E = end(); I != E; ++I)
       (*I)->resetSchedule();
   }
 

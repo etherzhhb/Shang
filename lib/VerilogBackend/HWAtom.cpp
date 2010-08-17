@@ -73,7 +73,7 @@ void HWValDep::print(raw_ostream &OS) const {
 }
 
 void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
-  for (const_usetree_iterator I = usetree_begin(), E = usetree_end(); I != E; ++I) {
+  for (const_iterator I = begin(), E = end(); I != E; ++I) {
     HWAtom *A = const_cast<HWAtom*>(*I);
     Atoms.insert(std::make_pair(A->getSlot(), A));
   }
@@ -164,3 +164,8 @@ void esyn::FSMState::dump() const {
 
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
 : HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), DepType(T) {}
+
+void HWAtom::setParent(FSMState *State) {
+  Parant = State;
+  State->Atoms.push_back(this);
+}
