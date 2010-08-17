@@ -252,7 +252,7 @@ public:
     int RegNum = A->getFunUnitID().getRawData();
     unsigned Slot = A->getFinSlot();
     return new (HWAtomAllocator) HWRegister(-RegNum, A->getValue().getType(),
-                                       Slot, Slot);
+                                            Slot, Slot);
   }
 
   HWRegister *allocaRegister(const Type *Ty,
