@@ -30,7 +30,6 @@ class ModuloScheduleInfo;
 class ForceDirectedInfo : public BasicBlockPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
-  ModuloScheduleInfo *MSInfo;
   FSMState *State;
 
   // Time Frame { {asap step, alap step }, isMIIContraint }
@@ -72,10 +71,14 @@ public:
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
+  void initALAPStep();
+
   void buildALAPStep() {
+    initALAPStep();
     const HWAOpInst *Root = State->getExitRoot();
-    buildALAPStep(Root, getALAPStep(Root));
+    return buildALAPStep(Root, getALAPStep(Root));
   }
+
   unsigned getALAPStep(const HWAtom *A) const {
     assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
@@ -130,6 +133,7 @@ public:
 
   unsigned buildFDInfo();
 
+  void setMII(unsigned II) { MII = II; }
   unsigned getMII() const { return MII; }
   void lengthenMII() { ++MII; }
   void lengthenCriticalPath() { ++CriticalPathEnd; }
@@ -138,8 +142,8 @@ public:
   /// @name Common pass interface
   //{
   static char ID;
-  ForceDirectedInfo() : BasicBlockPass(&ID), MSInfo(0), HI(0), RC(0),
-    MII(0), CriticalPathEnd(0) {}
+  ForceDirectedInfo() : BasicBlockPass(&ID), HI(0), RC(0), MII(0),
+    CriticalPathEnd(0) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
