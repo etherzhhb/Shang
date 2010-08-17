@@ -174,12 +174,8 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
     unsigned RecMII = MSInfo->computeRecMII(*CurState);
     unsigned ResMII = MSInfo->computeResMII(*CurState);
     MII = std::max(RecMII, ResMII);
-  } else
-    MII = 0;
-
-  if (MSInfo->isModuloSchedulable(*CurState))
     FDModuloSchedule();
-  else
+  } else
     FDListSchedule();
 
   HI->setTotalCycle(CurState->getEndSlot() + 1);
