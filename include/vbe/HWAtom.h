@@ -713,17 +713,15 @@ private:
   }
   void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
 
-  friend class HWAtom;
   friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
-    : HWAtom(ID, atomVRoot, BB, 0, Idx) , HaveSelfLoop(false), II(0) {
-  }
+    : HWAtom(ID, atomVRoot, BB, 0, Idx) , HaveSelfLoop(false), II(0) {}
   ~FSMState() {
     PHIEdge.clear();
     Atoms.clear();
   }
-  
+
   /// @name Roots
   //{
   HWAOpInst *getExitRoot() const { return ExitRoot; }
@@ -749,6 +747,13 @@ public:
   reverse_iterator rend()    { return Atoms.rend(); }
   const_reverse_iterator rbegin() const { return Atoms.rbegin(); }
   const_reverse_iterator rend()   const { return Atoms.rend(); }
+
+  void addAtom(HWAtom *A) { Atoms.push_back(A); }
+  void eraseAtom(HWAtom *A) {
+    iterator at = std::find(begin(), end(), A);
+    assert(at != end() && "Can not find atom!");
+    Atoms.erase(at);
+  }
 
   void resetSchedule() {
     for (iterator I = begin(), E = end(); I != E; ++I)

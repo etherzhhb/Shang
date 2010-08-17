@@ -152,10 +152,12 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
     // This is done in the constructor of HWAtom.
     //I->addToUseList(this);
 
-  PostBind.replaceAllUseBy(this);
   // Setup the step
   scheduledTo(PostBind.getSlot());
+
   setParent(PostBind.getParent());
+  PostBind.replaceAllUseBy(this);
+  getParent()->eraseAtom(&PostBind);
 }
 
 void esyn::FSMState::dump() const {
@@ -167,5 +169,5 @@ HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
 
 void HWAtom::setParent(FSMState *State) {
   Parant = State;
-  State->Atoms.push_back(this);
+  State->addAtom(this);
 }
