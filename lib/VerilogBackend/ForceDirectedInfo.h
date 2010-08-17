@@ -53,7 +53,9 @@ class ForceDirectedInfo : public BasicBlockPass {
 
   unsigned computeStepKey(unsigned step, HWFUnitID FUID) const;
 
-  std::map<const HWAPostBind*, double> AvgDG;
+  static void decompseStepKey(unsigned key, unsigned &step, unsigned &FUID);
+
+  std::map<const HWAOpInst*, double> AvgDG;
 
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
@@ -112,7 +114,7 @@ public:
   /// @name Force computation
   //{
   void buildAvgDG();
-  double getAvgDG(const HWAPostBind *A) {  return AvgDG[A]; }
+  double getAvgDG(const HWAOpInst *A) {  return AvgDG[A]; }
   double getRangeDG(HWFUnitID FUID, unsigned start, unsigned end/*included*/);
 
   double computeSelfForceAt(const HWAOpInst *OpInst, unsigned step);

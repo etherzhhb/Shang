@@ -260,19 +260,14 @@ void ForceDirectedInfo::buildDGraph() {
 }
 
 void ForceDirectedInfo::printDG(raw_ostream &OS) const {
-  unsigned StartStep = State->getSlot();
-  unsigned EndStep = MII > 0 ? (StartStep + MII - 1)
-                               : getALAPStep(State->getExitRoot());
   // For each step
-  for (unsigned ri = HWResource::FirstResourceType,
-    re = HWResource::LastResourceType; ri != re; ++ri) {
-      OS << "DG for resource: " << ri <<'\n';
-      for (unsigned i = StartStep,
-        e = EndStep + 1; i != e; ++i)
-        OS.indent(2) << "At step " << i << " : "
-        << getDGraphAt(i, (enum HWResource::ResTypes)ri) << '\n';
+  for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end(); I != E; ++I) {
+    unsigned Key = I->first;
+    double V = I->second;
 
-      OS << '\n';
+    unsigned Step, FUID;
+    decompseStepKey(Key, Step, FUID);
+    OS << '[' << FUID << "] @ " << Step << ": " << V << '\n';
   }
 }
 
@@ -292,6 +287,22 @@ ForceDirectedInfo::computeStepKey(unsigned step, HWFUnitID FUID) const {
   U.S.Step = step;
   U.S.ResData = FUID.getRawData();
   return U.Data;
+}
+
+void ForceDirectedInfo::decompseStepKey(unsigned key,
+                                        unsigned &step, unsigned &FUID) {
+  union {
+    struct {
+      unsigned Step     : 16;
+      unsigned ResData  : 16;
+    } S;
+    unsigned Data;
+  } U;
+
+  U.Data = key;
+
+  step = U.S.Step;
+  FUID = U.S.ResData;
 }
 
 double ForceDirectedInfo::getDGraphAt(unsigned step, HWFUnitID FUID) const {
@@ -321,11 +332,7 @@ double ForceDirectedInfo::getRangeDG(HWFUnitID FUID, unsigned start,
 
 double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
-  if (const HWAPostBind *A = dyn_cast<HWAPostBind>(OpInst))  
-    return getDGraphAt(step, A->getFunUnitID()) - getAvgDG(A);
-
-  // The self force about the pre-bind resoure dose not matter.
-  return 0.0;
+  return getDGraphAt(step, OpInst->getFunUnitID()) - getAvgDG(OpInst);
 }
 
 double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
@@ -337,7 +344,7 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
     if (*I == OpInst)
       continue;
   
-    if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
+    if (const HWAOpInst *P = dyn_cast<HWAOpInst>(*I))
       ret += getRangeDG(P->getFunUnitID(), getASAPStep(P), getALAPStep(P))
              - getAvgDG(P);  
   }
@@ -354,7 +361,7 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
     if (*I == OpInst)
       continue;
 
-    if (const HWAPostBind *P = dyn_cast<HWAPostBind>(*I))
+    if (const HWAOpInst *P = dyn_cast<HWAOpInst>(*I))
       ret += getRangeDG(P->getFunUnitID(), getASAPStep(P), getALAPStep(P))
              - getAvgDG(P);
   }
@@ -366,7 +373,7 @@ void ForceDirectedInfo::buildAvgDG() {
   for (usetree_iterator I = State->usetree_begin(),
       E = State->usetree_end(); I != E; ++I)
     // We only care about the utilization of post bind resource. 
-    if (HWAPostBind *A = dyn_cast<HWAPostBind>(*I)) {
+    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
       double res = 0.0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
         res += getDGraphAt(i, A->getFunUnitID());
