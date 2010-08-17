@@ -133,9 +133,12 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   xml_document<> xml;
   xml.parse<0>(context);
 
-  
-  for (XmlNode *ResNode = xml.first_node("Resources");
-      ResNode != 0; ResNode = ResNode->next_sibling("Resources")) {
+  XmlNode *ResConfNode = xml.first_node("ResourcesConfiguration");
+  if (!ResConfNode)
+    report_fatal_error("Can not resource configuration!");
+
+  for (XmlNode *ResNode = ResConfNode->first_node("Resource");
+      ResNode != 0; ResNode = ResNode->next_sibling("Resource")) {
     HWResource *Res = 0;
     switch (getResourceType(ResNode)) {
     case HWResource::MemoryBus:
