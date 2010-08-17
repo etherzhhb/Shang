@@ -90,17 +90,26 @@ struct FDLScheduler : public BasicBlockPass {
 
 //===----------------------------------------------------------------------===//
 bool fds_sort::operator()(const HWAOpInst* LHS, const HWAOpInst* RHS) const {
+  HWFUnit LFU = LHS->getFunUnit(), RFU = RHS->getFunUnit();
+  // Schedule the atom with less available function unit first.
+  if (LFU.getTotalFUs() > RFU.getTotalFUs())
+    return true;
+  else if (LFU.getTotalFUs() < RFU.getTotalFUs())
+    return false;
+
   // Schedule the low mobility nodes first.
   if (Info->getTimeFrame(LHS) > Info->getTimeFrame(RHS))
     return true; // Place RHS first.
-  
+  else if (Info->getTimeFrame(LHS) < Info->getTimeFrame(RHS))
+    return false;
+
   //unsigned LHSLatency = FDS->getASAPStep(LHS);
   //unsigned RHSLatency = FDS->getASAPStep(RHS);
   //// Schedule as soon as possible?
   //if (LHSLatency < RHSLatency) return true;
   //if (LHSLatency > RHSLatency) return false;
 
-  return false;
+  return LHS->getIdx() > RHS->getIdx();
 }
 
 //===----------------------------------------------------------------------===//
@@ -186,6 +195,10 @@ void FDLScheduler::FDModuloSchedule() {
     FDInfo->reset();
     FDInfo->buildFDInfo();
     DEBUG(FDInfo->dumpTimeFrame());
+    // TODO: check if we could ever schedule these node without breaking the
+    // resource constrain by check the DG.
+    // If the resource average DG is bigger than the total available resource
+    // we can never schedule the nodes without breaking the resource constrain.
 
     switch (scheduleAtII()) {
     case FDLScheduler::SchedSucc:
@@ -321,8 +334,8 @@ FDLScheduler::SchedResult FDLScheduler::scheduleAtom(HWAtom *A) {
   DEBUG(A->print(dbgs()));
   unsigned step = FDInfo->getASAPStep(A);
   if (FDInfo->getTimeFrame(A) != 1) {
-    bool ConstrainByMII = FDInfo->constrainByMII(OI);
     HWAOpInst *OI = cast<HWAOpInst>(A);
+    bool ConstrainByMII = FDInfo->constrainByMII(OI);
     step = findBestStep(OI);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
