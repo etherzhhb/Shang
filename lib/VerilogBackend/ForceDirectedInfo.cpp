@@ -19,7 +19,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedInfo.h"
-#include "ModuloScheduleInfo.h"
 #include "HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-fd-info"
@@ -37,7 +36,6 @@ RegisterPass<ForceDirectedInfo> X("vbe-fd-info",
 
 void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequiredTransitive<HWAtomInfo>();
-  AU.addRequiredTransitive<ResourceConfig>();
   AU.setPreservesAll();
 }
 
@@ -168,7 +166,7 @@ void ForceDirectedInfo::buildDGraph() {
       unsigned TimeFrame = getTimeFrame(OpInst);
       unsigned ASAPStep = getASAPStep(OpInst), ALAPStep = getALAPStep(OpInst);
 
-      HWFUnit FU= OpInst->getFunUnit();
+      HWFUnit FU = OpInst->getFunUnit();
       double Prob = 1.0 / (double) TimeFrame;
       // Including ALAPStep.
       for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
@@ -178,13 +176,48 @@ void ForceDirectedInfo::buildDGraph() {
   DEBUG(printDG(dbgs()));
 }
 
+
+bool esyn::ForceDirectedInfo::isResourceConstraintPreserved() {
+  HWFUnitID FUID;
+  unsigned DummyStep;
+  decompseStepKey(DGraph.begin()->first, DummyStep, FUID);
+
+  double TotalDG = 0;
+  unsigned AvailableSteps = 0;
+  for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end(); I != E; ++I) {
+    unsigned Step = 0;
+ 
+    HWFUnitID CurID;
+    decompseStepKey(I->first, Step, CurID);
+    // We iterate to a new function unit?
+    if (CurID != FUID) {
+      // Compute the average usage of the old function unit.
+      double AverageDG = TotalDG / AvailableSteps;
+      if (AverageDG > LocalAvailabeRes[FUID])
+        return false;
+
+      // Update data to count a new FU.
+      FUID = CurID;
+      AvailableSteps = 0;
+      TotalDG = 0.0;
+    }
+    ++AvailableSteps;
+    TotalDG += I->second;
+  }
+  // Do not forget the last one.
+  double AverageDG = TotalDG / AvailableSteps;
+  // NOTE: we do not use <= because "==" of float point number dose not make sence. 
+  return  !(AverageDG > LocalAvailabeRes[FUID]);
+}
+
 void ForceDirectedInfo::printDG(raw_ostream &OS) const {  
   // For each step
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end(); I != E; ++I) {
     unsigned Key = I->first;
     double V = I->second;
 
-    unsigned Step, FUID;
+    unsigned Step;
+    HWFUnitID FUID;
     decompseStepKey(Key, Step, FUID);
     OS << '[' << FUID << "] @ " << Step << ": " << V << '\n';
   }
@@ -215,7 +248,7 @@ ForceDirectedInfo::computeStepKey(unsigned step, HWFUnitID FUID) const {
 }
 
 void ForceDirectedInfo::decompseStepKey(unsigned key,
-                                        unsigned &step, unsigned &FUID) {
+                                        unsigned &step, HWFUnitID &FUID) {
   union {
     struct {
       unsigned Step     : 16;
@@ -259,6 +292,7 @@ double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
  double Force = getDGraphAt(step, OpInst->getFunUnitID()) - getAvgDG(OpInst);
  HWFUnit FU = OpInst->getFunUnit();
+ // Make the atoms taking expensive function unit have bigger force.
  return Force / FU.getTotalFUs();
 }
 
@@ -324,6 +358,7 @@ void ForceDirectedInfo::reset() {
 
 void ForceDirectedInfo::releaseMemory() {
   reset();
+  LocalAvailabeRes.clear();
   MII = 0;
   CriticalPathEnd = 0;
 }
@@ -331,6 +366,10 @@ void ForceDirectedInfo::releaseMemory() {
 bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   State = HI.getStateFor(BB);
+  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I)
+    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))
+      LocalAvailabeRes[A->getFunUnitID()] = A->getFunUnit().getTotalFUs();
+  
   return false;
 }
 

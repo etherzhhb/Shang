@@ -24,12 +24,10 @@
 
 using namespace llvm;
 
-namespace esyn {
-class ModuloScheduleInfo;
+namespace esyn {;
 
 class ForceDirectedInfo : public BasicBlockPass {
   HWAtomInfo *HI;
-  ResourceConfig *RC;
   FSMState *State;
 
   // Time Frame { {asap step, alap step }, isMIIContraint }
@@ -47,12 +45,15 @@ class ForceDirectedInfo : public BasicBlockPass {
   DGType DGraph;
 
   // Resource usage.
+  // FIXME: Remove this.
   typedef std::map<unsigned, unsigned> ResUsageTabType;
   ResUsageTabType ResUsage;
 
+  std::map<HWFUnitID, unsigned> LocalAvailabeRes;
+
   unsigned computeStepKey(unsigned step, HWFUnitID FUID) const;
 
-  static void decompseStepKey(unsigned key, unsigned &step, unsigned &FUID);
+  static void decompseStepKey(unsigned key, unsigned &step, HWFUnitID &FUID);
 
   std::map<const HWAOpInst*, double> AvgDG;
 
@@ -89,8 +90,8 @@ public:
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 
-  // If the TimeFrame Constrains by II.
-  bool constrainByMII(const HWAOpInst *A) const {
+  // If the TimeFrame Constraints by II.
+  bool constraintByMII(const HWAOpInst *A) const {
     return getTimeFrame(A) == MII - A->getLatency();
   }
 
@@ -103,8 +104,11 @@ public:
   void buildDGraph();
   double getDGraphAt(unsigned step, HWFUnitID FUID) const;
   void accDGraphAt(unsigned step, HWFUnitID FUID, double d);
-  void printDG(raw_ostream &OS) const ;
-  void dumpDG() const ;
+  void printDG(raw_ostream &OS) const;
+  void dumpDG() const;
+  /// Check the distribution graphs to see if we could schedule the nodes
+  /// without breaking the resource constrain.
+  bool isResourceConstraintPreserved();
   //}
 
   /// @name Resource usage table
@@ -142,7 +146,7 @@ public:
   /// @name Common pass interface
   //{
   static char ID;
-  ForceDirectedInfo() : BasicBlockPass(&ID), HI(0), RC(0), MII(0),
+  ForceDirectedInfo() : BasicBlockPass(&ID), HI(0), MII(0),
     CriticalPathEnd(0) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
