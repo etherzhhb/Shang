@@ -431,7 +431,7 @@ public:
     assert(at != UseList.end() && "Not in use list!");
     UseList.erase(at);
   }
-
+  void dropAllReferences();
   void replaceAllUseBy(HWAtom *A);
 
   bool use_empty() { return UseList.empty(); }
@@ -753,6 +753,10 @@ public:
     iterator at = std::find(begin(), end(), A);
     assert(at != end() && "Can not find atom!");
     Atoms.erase(at);
+
+    assert((std::find(usetree_iterator::begin(this),
+                      usetree_iterator::end(this), A)
+            == usetree_iterator::end(getParent())) && "Who using dead atom?");
   }
 
   void resetSchedule() {

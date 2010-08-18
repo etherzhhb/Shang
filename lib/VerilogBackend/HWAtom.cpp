@@ -132,6 +132,10 @@ void HWAtom::scheduledTo(unsigned slot) {
   SchedSlot = slot;
 }
 
+void HWAtom::dropAllReferences() {
+  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+    I->removeFromList(this);
+}
 
 void HWAtom::replaceAllUseBy(HWAtom *A) {
   while (!use_empty()) {
@@ -139,6 +143,9 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 
     U->setDep(U->getDepIt(this), A);
   }
+
+  // The Atom dead.
+  getParent()->eraseAtom(this);
 }
 
 HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
@@ -157,7 +164,6 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
 
   setParent(PostBind.getParent());
   PostBind.replaceAllUseBy(this);
-  getParent()->eraseAtom(&PostBind);
 }
 
 void esyn::FSMState::dump() const {
