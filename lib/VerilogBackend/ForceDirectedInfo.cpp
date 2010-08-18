@@ -94,8 +94,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
       continue;
     }
 
-    unsigned NewStep = SCCAtoms.count(A) ? getASAPStep(A) + MII - A->getLatency()
-                       : HWAtom::MaxSlot;
+    unsigned NewStep = HWAtom::MaxSlot;
  
     for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
@@ -351,7 +350,6 @@ void ForceDirectedInfo::buildAvgDG() {
 
 void ForceDirectedInfo::reset() {
   AtomToTF.clear();
-  SCCAtoms.clear();
   DGraph.clear();
   ResUsage.clear();
   AvgDG.clear();
