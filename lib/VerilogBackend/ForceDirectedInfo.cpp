@@ -141,24 +141,6 @@ void ForceDirectedInfo::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-bool ForceDirectedInfo::isFUAvailalbe(unsigned step, HWFUnit FU) const {
-  unsigned key = computeStepKey(step, FU.getFUnitID());
-  unsigned usage = const_cast<ForceDirectedInfo*>(this)->ResUsage[key];
-  return usage < FU.getTotalFUs();
-}
-
-void ForceDirectedInfo::presevesFUForAtom(HWAtom *A) {
-  assert(A->isScheduled() && "Can only preseves FU for Scheduled Atom!");
-  if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A)) {
-    if (OI->isTrivial())
-      return;
-    // Increase the resource usage for scheduled atom.
-    unsigned StepKey = computeStepKey(OI->getSlot(),
-                                      OI->getFunUnitID());
-    ++ResUsage[StepKey];
-  }
-}
-
 void ForceDirectedInfo::buildDGraph() {
   DGraph.clear();
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I){
@@ -181,7 +163,10 @@ void ForceDirectedInfo::buildDGraph() {
 }
 
 
-bool esyn::ForceDirectedInfo::isResourceConstraintPreserved() {
+bool ForceDirectedInfo::isResourceConstraintPreserved() {
+  // No resource in use.
+  if (DGraph.empty()) return true;
+  
   HWFUnitID FUID;
   unsigned DummyStep;
   decompseStepKey(DGraph.begin()->first, DummyStep, FUID);
