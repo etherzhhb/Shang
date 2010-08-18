@@ -266,15 +266,10 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
   double ret = 0.0;
 
-  for (const_usetree_iterator I = const_usetree_iterator::begin(OpInst),
-      E = const_usetree_iterator::end(OpInst); I != E; ++I) {
-    if (*I == OpInst)
-      continue;
-    
-    // Ignore backedge.
-    if (I->getIdx() < OpInst->getIdx())
-      continue;
+  FSMState::iterator at = std::find(State->begin(), State->end(), OpInst);
+  assert(at != State->end() && "Can not find Atom!");
 
+  for (FSMState::iterator I = ++at, E = State->end(); I != E; ++I) {
     if (const HWAOpInst *P = dyn_cast<HWAOpInst>(*I)) {
       HWFUnit FU = P->getFunUnit();
       double Force = getRangeDG(P->getFunUnitID(), getASAPStep(P), getALAPStep(P))
@@ -290,15 +285,11 @@ double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
   double ret = 0;
 
-  for (const_deptree_iterator I = const_deptree_iterator::begin(OpInst),
-      E = const_deptree_iterator::end(OpInst); I != E; ++I) {
-    if (*I == OpInst)
-      continue;
 
-    // Ignore backedge.
-    if (I->getIdx() > OpInst->getIdx())
-      continue;
+  FSMState::iterator at = std::find(State->begin(), State->end(), OpInst);
+  assert(at != State->end() && "Can not find Atom!");
 
+  for (FSMState::iterator I = State->begin(), E = at; I != E; ++I) {
     if (const HWAOpInst *P = dyn_cast<HWAOpInst>(*I)) {
       HWFUnit FU = P->getFunUnit();
       double Force = getRangeDG(P->getFunUnitID(), getASAPStep(P), getALAPStep(P))

@@ -48,7 +48,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     Worklist.pop_back();
 
     if (SrcAtom == State) continue;
-    
+
     if (HWAOpInst *OI = dyn_cast<HWAOpInst>(SrcAtom)) {
       for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
         if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
