@@ -300,50 +300,52 @@ double ForceDirectedInfo::getRangeDG(HWFUnitID FUID, unsigned start,
   return ret;
 }
 
-double ForceDirectedInfo::computeSelfForceAt(const HWAOpInst *OpInst,
-                                             unsigned step) {
-   double Force = getDGraphAt(step, OpInst->getFunUnitID()) - getAvgDG(OpInst);
-   HWFUnit FU = OpInst->getFunUnit();
-   // Make the atoms taking expensive function unit have bigger force.
-   return Force / FU.getTotalFUs();
+double ForceDirectedInfo::computeSelfForceAt(const HWAtom *A, unsigned step) {
+  const HWAOpInst *OpInst = dyn_cast<HWAOpInst>(A);
+  if (!OpInst) return 0.0;
+
+  double Force = getDGraphAt(step, OpInst->getFunUnitID()) - getAvgDG(OpInst);
+  HWFUnit FU = OpInst->getFunUnit();
+  // Make the atoms taking expensive function unit have bigger force.
+  return Force / FU.getTotalFUs();
 }
 
-double ForceDirectedInfo::computeRangeForce(const esyn::HWAOpInst *OpInst,
-                                            unsigned int start,
+double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
                                             unsigned int end) {
+  const HWAOpInst *OpInst = dyn_cast<HWAOpInst>(A);
+  if (!OpInst) return 0.0;
+
   HWFUnit FU = OpInst->getFunUnit();
   double Force = getRangeDG(FU.getFUnitID(), start, end) - getAvgDG(OpInst);
   return Force / FU.getTotalFUs();
 }
 
-double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
-                                             unsigned step) {
+double ForceDirectedInfo::computeSuccForceAt(const HWAtom *A, unsigned step) {
   // Adjust the time frame.
-  buildASAPStep(OpInst, step); 
+  buildASAPStep(A, step); 
 
   double ret = 0.0;
-  FSMState::iterator at = std::find(State->begin(), State->end(), OpInst);
+  FSMState::iterator at = std::find(State->begin(), State->end(), A);
   assert(at != State->end() && "Can not find Atom!");
 
   for (FSMState::iterator I = ++at, E = State->end(); I != E; ++I)
-    if (const HWAOpInst *P = dyn_cast<HWAOpInst>(*I))
-      ret += computeRangeForce(P, getASAPStep(P), getALAPStep(P));
+    if (const HWAOpInst *OI = dyn_cast<HWAOpInst>(*I))
+      ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
 
   return ret;
 }
 
-double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
-                                             unsigned step) {
+double ForceDirectedInfo::computePredForceAt(const HWAtom *A, unsigned step) {
   // Adjust the time frame.
-  buildALAPStep(OpInst, step);
+  buildALAPStep(A, step);
 
   double ret = 0;
-  FSMState::iterator at = std::find(State->begin(), State->end(), OpInst);
+  FSMState::iterator at = std::find(State->begin(), State->end(), A);
   assert(at != State->end() && "Can not find Atom!");
 
   for (FSMState::iterator I = State->begin(), E = at; I != E; ++I)
-    if (const HWAOpInst *P = dyn_cast<HWAOpInst>(*I))
-      ret += computeRangeForce(P, getASAPStep(P), getALAPStep(P));
+    if (const HWAOpInst *OI = dyn_cast<HWAOpInst>(*I))
+      ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
 
   return ret;
 }
