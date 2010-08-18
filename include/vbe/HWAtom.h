@@ -703,6 +703,7 @@ private:
   bool HaveSelfLoop;
 
   void setExitRoot(HWAOpInst *Exit);
+
   void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
 
   friend class HWAtomInfo;
