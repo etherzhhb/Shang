@@ -31,7 +31,6 @@ namespace esyn {
 class ModuloScheduleInfo : public FunctionPass {
     HWAtomInfo *HI;
     LoopInfo *LI;
-    ResourceConfig *RC;
 
     typedef std::multimap<unsigned, std::vector<HWAtom*> > RecMapType;
     RecMapType RecList;
@@ -62,7 +61,7 @@ public:
   /// @name Common pass interface
   //{
   static char ID;
-  ModuloScheduleInfo() : FunctionPass(&ID), HI(0), LI(0), RC(0) {}
+  ModuloScheduleInfo() : FunctionPass(&ID), HI(0), LI(0) {}
   ~ModuloScheduleInfo();
   bool runOnFunction(Function &F);
   void releaseMemory() { clear(); }

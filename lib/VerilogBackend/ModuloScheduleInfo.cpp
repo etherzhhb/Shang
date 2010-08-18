@@ -63,7 +63,6 @@ void ModuloScheduleInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 bool ModuloScheduleInfo::runOnFunction(Function &F) {
   HI = &getAnalysis<HWAtomInfo>();
   LI = &getAnalysis<LoopInfo>();
-  RC = &getAnalysis<ResourceConfig>();
   return false;
 }
 
@@ -174,17 +173,19 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
 }
 
 unsigned ModuloScheduleInfo::computeResMII(FSMState &State) const {
-  std::map<HWResource::ResTypes, unsigned> TotalResUsage;
+  std::map<HWFUnitID, unsigned> TotalResUsage;
+  std::map<HWFUnitID, unsigned> TotalAvailabeRes;
   for (FSMState::iterator I = State.begin(), E = State.end(); I != E; ++I)
-    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I))
-      ++TotalResUsage[A->getResClass()];
+    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
+      ++TotalResUsage[A->getFunUnitID()];
+      TotalAvailabeRes[A->getFunUnitID()] = A->getFunUnit().getTotalFUs();
+    }
 
   unsigned MaxResII = 0;
-  typedef std::map<HWResource::ResTypes, unsigned>::iterator UsageIt;
+  typedef std::map<HWFUnitID, unsigned>::iterator UsageIt;
   for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
-    if (I->first != HWResource::Trivial)
       MaxResII = std::max(MaxResII,
-                          I->second / RC->getResource(I->first)->getTotalRes());
+                          I->second / TotalAvailabeRes[I->first]);
   }
   DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
   return MaxResII;
