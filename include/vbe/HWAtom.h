@@ -87,7 +87,10 @@ class HWEdge {
   void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
 protected:
   HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned Dst, bool isBackEdge = false)
-    : EdgeType(T), Src(src), ItDst(Dst), IsBackEdge(isBackEdge) {}
+    : EdgeType(T), Src(src), ItDst(Dst), IsBackEdge(isBackEdge) {
+    assert(!isBackEdge || Dst != 0
+           && "Back edge must have a non-zero iterate distance!");
+  }
 public:
   unsigned getEdgeType() const { return EdgeType; }
 
