@@ -124,6 +124,8 @@ public:
   double getAvgDG(const HWAOpInst *A) {  return AvgDG[A]; }
   double getRangeDG(HWFUnitID FUID, unsigned start, unsigned end/*included*/);
 
+  double computeRangeForce(const HWAOpInst *OpInst,
+                           unsigned start, unsigned end/*include*/);
   double computeSelfForceAt(const HWAOpInst *OpInst, unsigned step);
   /// This function will invalid the asap step of all node in
   /// successor tree
