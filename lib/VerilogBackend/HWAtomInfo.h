@@ -248,6 +248,7 @@ public:
     return at->second;
   }
 
+  // FIXME: We need to give the type of the register.
   HWRegister *allocaFURegister(HWAPreBind *A) {
     int RegNum = A->getFunUnitID().getRawData();
     unsigned Slot = A->getFinSlot();
