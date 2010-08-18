@@ -702,15 +702,7 @@ private:
   unsigned short II;
   bool HaveSelfLoop;
 
-  void setExitRoot(HWAOpInst *Exit) {
-    ExitRoot = Exit;
-
-    for (usetree_iterator I = usetree_iterator::begin(this),
-         E = usetree_iterator::end(this); I != E; ++I)
-      (*I)->setParent(this);
-
-    std::sort(Atoms.begin(), Atoms.end(), HWAtom::top_sort());
-  }
+  void setExitRoot(HWAOpInst *Exit);
   void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
 
   friend class HWAtomInfo;

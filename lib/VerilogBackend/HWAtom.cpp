@@ -170,6 +170,17 @@ void esyn::FSMState::dump() const {
   print(dbgs());
 }
 
+void FSMState::setExitRoot(HWAOpInst *Exit) {
+  ExitRoot = Exit;
+
+  for (usetree_iterator I = usetree_iterator::begin(this),
+    E = usetree_iterator::end(this); I != E; ++I) {
+      (*I)->setParent(this);
+  }
+
+  std::sort(Atoms.begin(), Atoms.end(), HWAtom::top_sort());
+}
+
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
 : HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), DepType(T) {}
 
