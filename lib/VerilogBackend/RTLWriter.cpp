@@ -286,6 +286,9 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
 }
 
 std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
+  if (FUID.getResType() == HWResource::MemoryBus)
+    return "membus_out" + utostr(FUID.getUnitNum());
+  
   return "FU" + utostr(FUID.getRawData()) + "Reg";
 }
 
@@ -628,22 +631,10 @@ void RTLWriter::emitResources() {
   }
 }
 
-void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
-    unsigned MemBusInst = PreBind->getUnitNum();
-    std::string Name = getAsOperand(PreBind);
-    // Declare the signal
-    vlang->declSignal(getSignalDeclBuffer(), Name,
-                      vlang->getBitWidth(*L), 0, false);
-    // Emit the datapath
-    DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
-                       << " = membus_out" << MemBusInst <<";\n";
-  }
-}
+void RTLWriter::opMemBus(HWAPreBind *PreBind) { }
 
 //===----------------------------------------------------------------------===//
-void RTLWriter::emitNextFSMState(raw_ostream &ss, BasicBlock &BB)
-{
+void RTLWriter::emitNextFSMState(raw_ostream &ss, BasicBlock &BB) {
   ss << "NextFSMState <= " << vlang->GetValueName(&BB) << ";\n";
 }
 
