@@ -40,12 +40,13 @@ void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 
-void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
-                                      unsigned step) {
+void ForceDirectedInfo::buildASAPStep(const HWAtom *EntryRoot, unsigned step) {
   AtomToTF[EntryRoot].first = step;
 
-  for (FSMState::iterator I = State->begin(), E = State->end();
-       I != E; ++I) {
+  FSMState::iterator Start = std::find(State->begin(), State->end(),
+                                       EntryRoot);
+
+  for (FSMState::iterator I = ++Start, E = State->end(); I != E; ++I) {
     HWAtom *A = *I;
     if (A->isScheduled()) {
       AtomToTF[A].first = A->getSlot();
@@ -79,11 +80,13 @@ void ForceDirectedInfo::buildASAPStep(const FSMState *EntryRoot,
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
-                                      unsigned step) {
+void ForceDirectedInfo::buildALAPStep(const HWAtom *ExitRoot, unsigned step) {
   AtomToTF[ExitRoot].second = step;
 
-  for (FSMState::reverse_iterator I = State->rbegin(), E = State->rend();
+  FSMState::reverse_iterator Start = std::find(State->rbegin(), State->rend(),
+                                               ExitRoot);
+
+  for (FSMState::reverse_iterator I = ++Start, E = State->rend();
        I != E; ++I) {
     HWAtom *A = *I;
     if (A->isScheduled()) {
@@ -91,7 +94,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAOpInst *ExitRoot,
       continue;
     }
 
-    unsigned NewStep = AtomToTF[A].second;
+    unsigned NewStep = ExtALAP[A];
  
     for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
@@ -193,8 +196,11 @@ bool esyn::ForceDirectedInfo::isResourceConstraintPreserved() {
     if (CurID != FUID) {
       // Compute the average usage of the old function unit.
       double AverageDG = TotalDG / AvailableSteps;
-      if (AverageDG > LocalAvailabeRes[FUID])
+      if (AverageDG > LocalAvailabeRes[FUID]) {
+        DEBUG(dbgs() << "Bad resource usage: Average " << AverageDG
+                     << " Available: " << LocalAvailabeRes[FUID] << '\n');
         return false;
+      }
 
       // Update data to count a new FU.
       FUID = CurID;
@@ -206,6 +212,11 @@ bool esyn::ForceDirectedInfo::isResourceConstraintPreserved() {
   }
   // Do not forget the last one.
   double AverageDG = TotalDG / AvailableSteps;
+  DEBUG(
+    if (AverageDG > LocalAvailabeRes[FUID])
+      dbgs() << "Bad resource usage: Average " << AverageDG
+             << " Available: " << LocalAvailabeRes[FUID] << '\n';
+    );
   // NOTE: we do not use <= because "==" of float point number dose not make sence. 
   return  !(AverageDG > LocalAvailabeRes[FUID]);
 }
@@ -349,6 +360,7 @@ void ForceDirectedInfo::buildAvgDG() {
 
 void ForceDirectedInfo::reset() {
   AtomToTF.clear();
+  ExtALAP.clear();
   DGraph.clear();
   ResUsage.clear();
   AvgDG.clear();
@@ -371,16 +383,16 @@ bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
   return false;
 }
 
-void ForceDirectedInfo::initALAPStep() {
+void ForceDirectedInfo::initExtALAP() {
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;
     //
     // Set up the II constrain.
     if (MII)
-      AtomToTF[A].second = getASAPStep(A) + MII - A->getLatency();
+      ExtALAP[A] = getASAPStep(A) + MII - A->getLatency();
     else
-      AtomToTF[A].second = HWAtom::MaxSlot;
+      ExtALAP[A] = HWAtom::MaxSlot;
   }
 }
 
@@ -389,7 +401,7 @@ unsigned ForceDirectedInfo::buildFDInfo() {
   assert(State->isScheduled() && "Entry must be scheduled first!");
   unsigned FirstStep = State->getSlot();
   buildASAPStep(State, FirstStep);
-  initALAPStep();
+  initExtALAP();
   buildALAPStep(State->getExitRoot(), CriticalPathEnd);
 
   DEBUG(dumpTimeFrame());

@@ -34,11 +34,10 @@ class ForceDirectedInfo : public BasicBlockPass {
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
+  typedef std::map<const HWAtom*, unsigned> ExtALAPMapType;
 
   TimeFrameMapType AtomToTF;
-
-  void buildASAPStep(const FSMState *EntryRoot, unsigned step);
-  void buildALAPStep(const HWAOpInst *ExitRoot, unsigned step);
+  ExtALAPMapType ExtALAP;
 
   // The Key of DG, { step, resource type }
   typedef std::map<unsigned, double> DGType;
@@ -72,10 +71,13 @@ public:
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-  void initALAPStep();
+  void initExtALAP();
+
+  void buildASAPStep(const HWAtom *EntryRoot, unsigned step);
+  void buildALAPStep(const HWAtom *ExitRoot, unsigned step);
 
   void buildALAPStep() {
-    initALAPStep();
+    initExtALAP();
     const HWAOpInst *Root = State->getExitRoot();
     return buildALAPStep(Root, getALAPStep(Root));
   }
