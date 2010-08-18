@@ -40,11 +40,11 @@ void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 
-void ForceDirectedInfo::buildASAPStep(const HWAtom *EntryRoot, unsigned step) {
-  AtomToTF[EntryRoot].first = step;
+void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
+  AtomToTF[Root].first = step;
 
   FSMState::iterator Start = std::find(State->begin(), State->end(),
-                                       EntryRoot);
+                                       Root);
 
   for (FSMState::iterator I = ++Start, E = State->end(); I != E; ++I) {
     HWAtom *A = *I;
@@ -80,11 +80,11 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *EntryRoot, unsigned step) {
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-void ForceDirectedInfo::buildALAPStep(const HWAtom *ExitRoot, unsigned step) {
-  AtomToTF[ExitRoot].second = step;
+void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
+  AtomToTF[Root].second = step;
 
   FSMState::reverse_iterator Start = std::find(State->rbegin(), State->rend(),
-                                               ExitRoot);
+                                               Root);
 
   for (FSMState::reverse_iterator I = ++Start, E = State->rend();
        I != E; ++I) {
@@ -94,7 +94,8 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *ExitRoot, unsigned step) {
       continue;
     }
 
-    unsigned NewStep = ExtALAP[A];
+    unsigned NewStep = SCCAtoms.count(A) ? getASAPStep(A) + MII - A->getLatency()
+                       : HWAtom::MaxSlot;
  
     for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
@@ -317,8 +318,10 @@ double ForceDirectedInfo::computeRangeForce(const esyn::HWAOpInst *OpInst,
 
 double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
-  double ret = 0.0;
+  // Adjust the time frame.
+  buildASAPStep(OpInst, step); 
 
+  double ret = 0.0;
   FSMState::iterator at = std::find(State->begin(), State->end(), OpInst);
   assert(at != State->end() && "Can not find Atom!");
 
@@ -331,9 +334,10 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAOpInst *OpInst,
 
 double ForceDirectedInfo::computePredForceAt(const HWAOpInst *OpInst,
                                              unsigned step) {
+  // Adjust the time frame.
+  buildALAPStep(OpInst, step);
+
   double ret = 0;
-
-
   FSMState::iterator at = std::find(State->begin(), State->end(), OpInst);
   assert(at != State->end() && "Can not find Atom!");
 
@@ -360,7 +364,7 @@ void ForceDirectedInfo::buildAvgDG() {
 
 void ForceDirectedInfo::reset() {
   AtomToTF.clear();
-  ExtALAP.clear();
+  SCCAtoms.clear();
   DGraph.clear();
   ResUsage.clear();
   AvgDG.clear();
@@ -383,25 +387,11 @@ bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
   return false;
 }
 
-void ForceDirectedInfo::initExtALAP() {
-  for (FSMState::iterator I = State->begin(), E = State->end();
-      I != E; ++I) {
-    HWAtom *A = *I;
-    //
-    // Set up the II constrain.
-    if (MII)
-      ExtALAP[A] = getASAPStep(A) + MII - A->getLatency();
-    else
-      ExtALAP[A] = HWAtom::MaxSlot;
-  }
-}
-
 unsigned ForceDirectedInfo::buildFDInfo() {
   // Build the time frame
   assert(State->isScheduled() && "Entry must be scheduled first!");
   unsigned FirstStep = State->getSlot();
   buildASAPStep(State, FirstStep);
-  initExtALAP();
   buildALAPStep(State->getExitRoot(), CriticalPathEnd);
 
   DEBUG(dumpTimeFrame());

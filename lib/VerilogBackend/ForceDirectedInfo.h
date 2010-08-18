@@ -34,10 +34,12 @@ class ForceDirectedInfo : public BasicBlockPass {
   typedef std::pair<unsigned, unsigned> TimeFrame;
   // Mapping hardware atoms to time frames.
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
-  typedef std::map<const HWAtom*, unsigned> ExtALAPMapType;
 
   TimeFrameMapType AtomToTF;
-  ExtALAPMapType ExtALAP;
+
+  // Atoms constrain by MII;
+  typedef std::set<const HWAtom*> MIIALAPAtomSetType;
+  MIIALAPAtomSetType SCCAtoms;
 
   // The Key of DG, { step, resource type }
   typedef std::map<unsigned, double> DGType;
@@ -62,25 +64,22 @@ public:
 
   /// @name TimeFrame
   //{
-  void buildASAPStep() {
-    buildASAPStep(State, State->getSlot());
-  }
   unsigned getASAPStep(const HWAtom *A) const {
     assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-  void initExtALAP();
-
-  void buildASAPStep(const HWAtom *EntryRoot, unsigned step);
-  void buildALAPStep(const HWAtom *ExitRoot, unsigned step);
-
-  void buildALAPStep() {
-    initExtALAP();
-    const HWAOpInst *Root = State->getExitRoot();
-    return buildALAPStep(Root, getALAPStep(Root));
+  template<class It>
+  void addSCCAtoms(It Begin, It End) {
+    assert(MII && "initMIIExtALAP only work when MII not zero!");
+    for (It I = Begin, E = End; I != E; ++I) {
+      SCCAtoms.insert(*I);
+    }
   }
+
+  void buildASAPStep(const HWAtom *Root, unsigned step);
+  void buildALAPStep(const HWAtom *Root, unsigned step);
 
   unsigned getALAPStep(const HWAtom *A) const {
     assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
