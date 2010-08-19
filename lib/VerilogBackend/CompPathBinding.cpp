@@ -359,7 +359,7 @@ struct CompPathBinding : public BasicBlockPass {
   TargetData *TD;
   HWAtomInfo *HI;
 
-  FSMState *CurStage;
+  FSMState *CurState;
 
   unsigned ResCount;
 
@@ -379,6 +379,10 @@ struct CompPathBinding : public BasicBlockPass {
   void buildLongestPostBindPath();
   // Bind register to function unit.
   void bindFunUnitReg();
+  // Bind register for prebind atoms.
+  void allocaPrebindReg();
+  // Helper function to bind register.
+  void bindRegister(HWAPreBind *PB, HWRegister *R);
 
   static char ID;
   CompPathBinding();
@@ -437,11 +441,11 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   if (NoFUBinding)  return false;
   TD = getAnalysisIfAvailable<TargetData>();
   HI = &getAnalysis<HWAtomInfo>();
-  CurStage = HI->getStateFor(BB);
+  CurState = HI->getStateFor(BB);
 
   DEBUG(
     dbgs() << "\n\nBefore binding:\n";
-    for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
+    for (FSMState::iterator I = CurState->begin(), E = CurState->end();
          I != E; ++I) {
       HWAtom *A = *I;
       dbgs() << "Schedule\n";
@@ -450,6 +454,8 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
     }
     dbgs() << "\n\n";
   );
+  // Bind register for prebind atoms.
+  allocaPrebindReg();
 
   // 1. Build WOCG_FUNTYPE.
   buildWOCGForRes();
@@ -461,7 +467,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
 
   DEBUG(
     dbgs() << "\n\nAfter binding:\n";
-    for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
+    for (FSMState::iterator I = CurState->begin(), E = CurState->end();
          I != E; ++I) {
       HWAtom *A = *I;
       dbgs() << "Schedule\n";
@@ -473,6 +479,57 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   return false;
 }
 
+void CompPathBinding::bindRegister(HWAPreBind *A, HWRegister *R) {
+  HWAWrReg *WR = HI->getWrReg(A, R, A->getFinSlot());
+  DEBUG(dbgs() << "Create FU Register: ");
+  DEBUG(WR->dump());
+
+  bool FURegRead = false;
+  std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
+  while(!WorkStack.empty()) {
+    HWAtom *Use = WorkStack.back();
+    WorkStack.pop_back();
+
+    // Do not make self loop.
+    if (Use == WR) continue;
+
+    // Replace the delay.
+    if (HWADelay *Delay = dyn_cast<HWADelay>(Use)) {
+      Delay->dropAllReferences();
+      Delay->replaceAllUseBy(WR);
+      continue;
+    }
+
+    DEBUG(dbgs() << "Replace Use: ");
+    DEBUG(Use->dump());
+    // Read the result for From this Register.
+    Use->replaceDep(A, WR);
+  }
+}
+
+void CompPathBinding::allocaPrebindReg() {
+  std::map<HWFUnit*, HWRegister*> RegMap;
+  std::vector<HWAtom*> WorkList(CurState->begin(), CurState->end());
+  for (std::vector<HWAtom*>::iterator I = WorkList.begin(), E = WorkList.end();
+      I != E; ++I) {
+    HWAPreBind *PB = dyn_cast<HWAPreBind>(*I);
+    if (!PB) continue;
+
+    HWFUnit *ID = PB->getFunUnit();
+    HWRegister *R = 0;
+    std::map<HWFUnit*, HWRegister*>::iterator at = RegMap.find(ID);
+    if (at == RegMap.end()) {
+      // Create the register.
+      R = HI->allocaFURegister(PB);
+      RegMap.insert(std::make_pair(ID, R));
+    } else
+      R = at->second;
+
+    // Bind the register.
+    bindRegister(PB, R);
+  }
+}
+
 void CompPathBinding::bindFunUnitReg() {
   // For each Function unit(longest path graph node), bind a FU register.
   // For each nodes in
@@ -481,40 +538,17 @@ void CompPathBinding::bindFunUnitReg() {
     PathGraphNodeType &Node = **I;
     if (Node.isVRoot())
       continue;
-    
+    HWRegister *FUR = 0;
     for (PostBindNodePath::path_iterator PI = Node->path_begin(),
         PE = Node->path_end(); PI != PE; ++PI) {
       HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
       DEBUG(dbgs() << "For PostBind Node: ");
       DEBUG(A->dump());
-      Instruction *Inst = &A->getInst<Instruction>();
+
+      if (FUR == 0)
+        FUR = HI->allocaFURegister(A);
       // Bind a register to this function unit.
-      HWRegister *FUR = HI->allocaFURegister(A);
-      HWAWrReg *WR = HI->getWrReg(A, FUR, A->getFinSlot());
-      DEBUG(dbgs() << "Create FU Register: ");
-      DEBUG(WR->dump());
-
-      bool FURegRead = false;
-      std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
-      while(!WorkStack.empty()) {
-        HWAtom *Use = WorkStack.back();
-        WorkStack.pop_back();
-
-        // Do not make self loop.
-        if (Use == WR) continue;
-
-        // Replace the delay.
-        if (HWADelay *Delay = dyn_cast<HWADelay>(Use)) {
-          Delay->dropAllReferences();
-          Delay->replaceAllUseBy(WR);
-          continue;
-        }
-
-        DEBUG(dbgs() << "Replace Use: ");
-        DEBUG(Use->dump());
-        // Read the result for From this Register.
-        Use->replaceDep(A, WR);
-      }
+      bindRegister(A, FUR);
     }
   }
 }
@@ -551,7 +585,7 @@ void CompPathBinding::buildLongestPostBindPath() {
 }
 
 void CompPathBinding::buildWOCGForRes() {
-  for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
+  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
        I != E; ++I) {
     if (HWAPostBind *PB = dyn_cast<HWAPostBind>(*I))
       if (PB->getResClass() != HWResType::Trivial)      

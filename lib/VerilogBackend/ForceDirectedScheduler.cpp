@@ -191,16 +191,13 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
 
 void FDLScheduler::FDModuloSchedule() {
   unsigned StartStep = HI->getTotalCycle();
-  // Dirty Hack: Search the solution by increasing MII and critical path
-  // alternatively.
-  bool lastIncMII = true;
+  CurState->scheduledTo(StartStep);
+
+  // Ensure us can schedule the critical path.
   for(;;) {
-    CurState->resetSchedule();
-    CurState->scheduledTo(StartStep);
 
     // Set up Resource table
     FDInfo->reset();
-    FDInfo->setMII(0);
     FDInfo->buildFDInfo();
     DEBUG(FDInfo->dumpTimeFrame());
     // TODO: check if we could ever schedule these node without breaking the
@@ -209,9 +206,24 @@ void FDLScheduler::FDModuloSchedule() {
     // we can never schedule the nodes without breaking the resource constrain.
     if (!FDInfo->isResourceConstraintPreserved()) {
       FDInfo->lengthenCriticalPath();
-      lastIncMII = false;
       continue;
-    }
+    } else
+      break;
+  }
+
+  // Dirty Hack: Search the solution by increasing MII and critical path
+  // alternatively.
+  bool lastIncMII = true;
+  FDInfo->setMII(MII);
+  for (;;) {
+    CurState->resetSchedule();
+    CurState->scheduledTo(StartStep);
+
+    // Set up Resource table
+    FDInfo->reset();
+    FDInfo->buildFDInfo();
+    assert(FDInfo->isResourceConstraintPreserved()
+           && "MSInfo compute wrong MII!");
 
     if (scheduleAtII()) {
       DEBUG(FDInfo->dumpTimeFrame());
@@ -236,61 +248,6 @@ bool FDLScheduler::scheduleAtII() {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
 
-  FDInfo->setMII(MII);
-  FDInfo->buildFDInfo();
-  assert(FDInfo->isResourceConstraintPreserved()
-         && "MSInfo compute wrong MII!");
-
-  // Schedule all SCCs.
-  //for (unsigned i = FDInfo->getMII(); i > 0; --i) {
-  //  for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
-  //      I != E; ++I) {
-  //    scc_vector &SCC = I->second;
-  //    AQueue.clear();
-  //    // FIXME: schedule all first nodes and then schedule other nodes.
-  //    // First of all Schedule the node that do not have any predecessor in
-  //    // the SCC (Schedule First Node).
-  //    // First Node = ...
-  //    // And schedule rest nodes in SCC, but the max latency of the SCC
-  //    // should not exceed II.
-  //    HWAtom *FirstNode = findFirstNode(SCC.begin(), SCC.end());
-  //    DEBUG(dbgs() << " Schedule First Node:-------------------\n");
-  //    DEBUG(FirstNode->dump());
-  //    // Schedule the whole SCC.
-  //    if (FDInfo->getTimeFrame(FirstNode) > MII - FirstNode->getLatency()) {
-  //      std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
-  //      for (unsigned Start = FDInfo->getASAPStep(FirstNode),
-  //           End = FDInfo->getALAPStep(FirstNode) + FirstNode->getLatency() - MII;
-  //           Start != End; ++Start) {
-  //         unsigned ASAP = Start, ALAP = Start + MII - FirstNode->getLatency();
-
-  //         // Compute the forces.
-  //         double SelfForce = FDInfo->computeRangeForce(FirstNode, ASAP, ALAP);
-  //         // The follow function will invalid the time frame.
-  //         DEBUG(dbgs() << " Self Force: " << SelfForce);
-  //         double PredForce = FDInfo->computePredForceAt(FirstNode, ASAP);
-  //         DEBUG(dbgs() << " Pred Force: " << PredForce);
-  //         double SuccForce = FDInfo->computeSuccForceAt(FirstNode, ALAP);
-  //         DEBUG(dbgs() << " Succ Force: " << SuccForce);
-  //         double Force = SelfForce + PredForce + SuccForce;
-  //         DEBUG(dbgs() << " Force: " << Force);
-  //         if (Force < BestStep.second)
-  //           BestStep = std::make_pair(i, Force);
-
-  //         DEBUG(dbgs() << '\n');
-  //      }
-  //    }
-
-  //    // Apply the SCC constraint to the whole SCC.
-  //    FDInfo->addSCCAtoms(SCC.begin(), SCC.end());
-  //    FDInfo->buildFDInfo();
-
-  //    DEBUG(FDInfo->dumpTimeFrame());
-  //    if (!FDInfo->isResourceConstraintPreserved())
-  //      return FDLScheduler::SchedFailII;
-  //  }
-  //}
-
   for (unsigned i = FDInfo->getMII(); i > 0; --i) {
     for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
         I != E; ++I) {
@@ -308,8 +265,6 @@ bool FDLScheduler::scheduleAtII() {
 
       bool Result = scheduleAtom(FirstNode);
       assert(Result && "Why first node can not be scheduled?");
-      // Apply the SCC constraint to the whole SCC.
-      FDInfo->addSCCAtoms(SCC.begin(), SCC.end());
       FDInfo->buildFDInfo();
       DEBUG(FDInfo->dumpTimeFrame());
       // FIXME: We should increase II directly.

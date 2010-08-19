@@ -87,7 +87,10 @@ class HWEdge {
   void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
 protected:
   HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned Dst, bool isBackEdge = false)
-    : EdgeType(T), Src(src), ItDst(Dst), IsBackEdge(isBackEdge) {}
+    : EdgeType(T), Src(src), ItDst(Dst), IsBackEdge(isBackEdge) {
+    assert(!isBackEdge || Dst != 0
+           && "Back edge must have a non-zero iterate distance!");
+  }
 public:
   unsigned getEdgeType() const { return EdgeType; }
 
@@ -142,36 +145,28 @@ public:
 };
 
 class HWRegister {
-  const Type *Ty;
-  int Num;
+  unsigned short BitWidth;
+  unsigned short Num : 15;
+  bool IsFuReg       : 1;
   // The life time of this register, Including EndSlot.
   unsigned short StartSlot, EndSlot;
+  const std::string &Name;
 public:
-  explicit HWRegister(unsigned num, const Type *T,
-                 unsigned startSlot, unsigned endSlot)
-    : Ty(T), Num(num), StartSlot(startSlot), EndSlot(endSlot) {}
+  HWRegister(unsigned short num, unsigned short BitWidth, bool isFuReg,
+             unsigned startSlot, unsigned endSlot, const std::string &name = "R")
+    : BitWidth(BitWidth), Num(num), StartSlot(startSlot), EndSlot(endSlot),
+      Name(name) {}
 
-  const Type *getType() const { return Ty; }
   unsigned getStartSlot() const { return StartSlot; }
   unsigned getEndSlot() const { return EndSlot; }
   const std::pair<unsigned short, unsigned short> getLifeTime() const {
     return std::make_pair(StartSlot, EndSlot);
   }
 
-  // TODO: provide merge function.
-  // HWReg* mergeReg(const HWReg &Other)
-
-  unsigned getRegNum() const {
-    assert(Num > 0 && "Not an ordinary Register!");
-    return Num;
-  }
-
-  unsigned getFUnit() const {
-    assert(Num < 0 && "Not a Function unit Register!");
-    return -Num;
-  }
-
-  bool isFuReg() const { return Num < 0; }
+  unsigned getBitWidth() const { return BitWidth; }
+  unsigned getRegNum() const { return Num; }
+  std::string getRegName() const { return Name + utostr(Num); }
+  bool isFuReg() const { return IsFuReg; }
 
   //typedef std::set<Value*>::iterator iterator;
   //typedef std::set<Value*>::const_iterator const_iterator;
@@ -533,8 +528,10 @@ public:
     setParent(Edge->getParent());
   }
 
+  HWAtom *getSrc() const { return getDep(0).getSrc(); }
+
   HWRegister *getReg() const { return Reg;  }
-  bool writeFUReg() const { return Reg->isFuReg(); }
+  bool writeFUReg() const;
 
   static inline bool classof(const HWAWrReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {

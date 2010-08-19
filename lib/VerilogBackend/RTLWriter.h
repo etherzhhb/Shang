@@ -109,7 +109,6 @@ class RTLWriter : public FunctionPass {
   std::string getAsOperand(HWEdge &E);
   std::string getAsOperand(HWAtom *A);
   std::string getAsOperand(HWRegister *R);
-  static std::string getFURegisterName(unsigned ID);
 
   raw_ostream &getStateDeclBuffer() {
     return StateDecl.indent(2);

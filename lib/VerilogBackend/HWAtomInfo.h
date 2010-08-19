@@ -232,7 +232,8 @@ public:
     std::map<const Value*, HWRegister*>::iterator at = RegForValues.find(V);
     HWRegister *R = 0;
     if (at == RegForValues.end()) {
-      R = allocaRegister(V->getType(), StartSlot, EndSlot);
+      unsigned BitWidth = TD->getTypeAllocSizeInBits(V->getType());
+      R = allocaRegister(BitWidth, StartSlot, EndSlot);
       RegForValues.insert(std::make_pair(V, R));
     } else
       R = at->second;
@@ -248,17 +249,23 @@ public:
     return at->second;
   }
 
+  // FIXME: We need to give the type of the register.
   HWRegister *allocaFURegister(HWAPreBind *A) {
-    int RegNum = A->getFUID();
     unsigned Slot = A->getFinSlot();
-    return new (HWAtomAllocator) HWRegister(-RegNum, A->getValue().getType(),
-                                            Slot, Slot);
+    return new (HWAtomAllocator) HWRegister(A->getFUID(),
+      A->getFunUnit()->getOutputBitwidth(0), true, Slot, Slot,
+      A->getFunUnit()->getOutputPrefix());
   }
 
   HWRegister *allocaRegister(const Type *Ty,
-                                  unsigned StartSlot, unsigned EndSlot) {
-    return new (HWAtomAllocator) HWRegister(++NumRegs, Ty,
-                                                 StartSlot, EndSlot);
+                             unsigned StartSlot, unsigned EndSlot) {
+    unsigned BitWidth = TD->getTypeAllocSizeInBits(Ty);
+    return allocaRegister(BitWidth, StartSlot, EndSlot);
+  }
+
+  HWRegister *allocaRegister(unsigned BitWitdh, unsigned StartSlot, unsigned EndSlot) {
+    return new (HWAtomAllocator) HWRegister(++NumRegs, BitWitdh, false,
+                                            StartSlot, EndSlot);
   }
 
   HWAtom *getAtomFor(Value &V) const {

@@ -38,12 +38,12 @@ void HWAtom::dump() const {
 
 void HWAWrReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Write Storage "
-     << (Reg->isFuReg() ? Reg->getFUnit() : Reg->getRegNum());
+     << Reg->getRegName();
 }
 
 void HWARdReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Import Storage "
-     << (Reg->isFuReg() ? Reg->getFUnit() : Reg->getRegNum());
+     << Reg->getRegName();
 }
 
 void HWADelay::print(raw_ostream &OS) const {
@@ -167,7 +167,7 @@ HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
   PostBind.replaceAllUseBy(this);
 }
 
-void esyn::FSMState::dump() const {
+void FSMState::dump() const {
   print(dbgs());
 }
 
@@ -188,4 +188,8 @@ HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
 void HWAtom::setParent(FSMState *State) {
   Parant = State;
   State->addAtom(this);
+}
+
+bool HWAWrReg::writeFUReg() const {
+  return isa<HWAPreBind>(getSrc());
 }

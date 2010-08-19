@@ -277,24 +277,14 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
     case atomRdReg:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
         + getAsOperand(cast<HWARdReg>(A)->getReg());
-    case atomDelay:
-      return getAsOperand(cast<HWADelay>(A)->getDep(0).getSrc());
     default:
       llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
   }
 }
 
-std::string RTLWriter::getFURegisterName(unsigned ID) {
-  return "FU" + utostr(ID) + "Reg";
-}
-
 std::string RTLWriter::getAsOperand(HWRegister *R) {
-  if (R->isFuReg())
-    return getFURegisterName(R->getFUnit());
-
-  // Else not a function unit Reg.
-  return "Reg"+utostr(R->getRegNum());
+  return R->getRegName();
 }
 
 std::string RTLWriter::getAsOperand(HWEdge &E) {
@@ -368,8 +358,8 @@ void RTLWriter::emitAllRegisters() {
   for (std::set<const HWRegister*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
       I != E; ++I) {
     const HWRegister *R = *I;
-    unsigned BitWidth = vlang->getBitWidth(R->getType());
-    std::string Name = "Reg"+utostr(R->getRegNum());
+    unsigned BitWidth = R->getBitWidth();
+    std::string Name = R->getRegName();
 
     vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
     vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
@@ -416,7 +406,7 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
   std::string OpA = "addsub_a" + utostr(ID);
   std::string OpB = "addsub_b" + utostr(ID);
   std::string Mode = "addsub_mode" + utostr(ID);
-  std::string Res = getFURegisterName(ID);
+  std::string Res = FU->getOutputPrefix() + utostr(ID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   
@@ -439,11 +429,11 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
 
 template<>
 void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
-  unsigned ResourceId = A->getFUID();
-  std::string OpA = "addsub_a" + utostr(ResourceId);
-  std::string OpB = "addsub_b" + utostr(ResourceId);
-  std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getFURegisterName(ResourceId);
+  unsigned ID = A->getFUID();
+  std::string OpA = "addsub_a" + utostr(ID);
+  std::string OpB = "addsub_b" + utostr(ID);
+  std::string Mode = "addsub_mode" + utostr(ID);
+  std::string Res = A->getFunUnit()->getOutputPrefix() + utostr(ID);
 
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;
@@ -500,25 +490,25 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
   unsigned DataWidth = A->getFunUnit()->getInputBitwidth(0),
            AddrWidth = A->getFunUnit()->getInputBitwidth(1);
 
-  unsigned ResourceId = A->getFUID();
+  unsigned ID = A->getFUID();
   Instruction *Inst = &(A->getInst<Instruction>());
   // Enable the memory
-  DataPath.indent(6) << "membus_en" << ResourceId << " <= 1'b1;\n";
+  DataPath.indent(6) << "membus_en" << ID << " <= 1'b1;\n";
   // Send the address.
-  DataPath.indent(6) << "membus_addr" << ResourceId << " <= ";
+  DataPath.indent(6) << "membus_addr" << ID << " <= ";
 
   // Emit the operation
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
     DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_we" << ResourceId << " <= 1'b0;\n";
-    DataPath.indent(6) << "membus_in" << ResourceId
+    DataPath.indent(6) << "membus_we" << ID << " <= 1'b0;\n";
+    DataPath.indent(6) << "membus_in" << ID
       << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   } else { // It must be a store
     DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_we" << ResourceId << " <= 1'b1;\n";
-    DataPath.indent(6) << "membus_in" << ResourceId
+    DataPath.indent(6) << "membus_we" << ID << " <= 1'b1;\n";
+    DataPath.indent(6) << "membus_in" << ID
       << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
   }
 }
@@ -701,9 +691,10 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
     if (Pred->getFinSlot() == IISlot)
       return MircoState + getAsOperand(Pred);
     
-    if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
-      return MircoState +
-             getFURegisterName(cast<HWAPreBind>(Pred)->getFUID());
+    if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred))) {
+      assert(isa<HWAWrReg>(Pred->use_back()) && "Expect write to register!");
+      return MircoState + getAsOperand(Pred->use_back());
+    }
 
         
     HWRegister *PredReg = HI->lookupRegForValue(&Pred->getValue());

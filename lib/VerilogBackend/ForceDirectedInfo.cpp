@@ -59,7 +59,9 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
         DI != DE; ++DI) {
       const HWAtom *Dep = *DI;
       if (!DI.getEdge()->isBackEdge() || (Dep->isScheduled() && MII)) {
-        unsigned Step = getASAPStep(Dep) + Dep->getLatency()
+        unsigned DepASAP = Dep->isScheduled() ?
+                           Dep->getSlot() : getASAPStep(Dep);
+        unsigned Step = DepASAP + Dep->getLatency()
                         - MII * DI.getEdge()->getItDst();
         DEBUG(dbgs() << "From ";
               if (DI.getEdge()->isBackEdge())
@@ -94,17 +96,17 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
       continue;
     }
 
-    unsigned NewStep = SCCAtoms.count(A) ? getASAPStep(A) + MII - A->getLatency()
-                       : HWAtom::MaxSlot;
+    unsigned NewStep = HWAtom::MaxSlot;
  
     for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
       HWEdge *UseEdge = (*UI)->getEdgeFrom(A);
       const HWAtom *Use = *UI;
 
-      if (!UseEdge->isBackEdge()
-          || (Use->isScheduled() && MII)) {
-        unsigned Step = getALAPStep(Use) - A->getLatency()
+      if (!UseEdge->isBackEdge() || (Use->isScheduled() && MII)) {
+        unsigned UseALAP = Use->isScheduled() ?
+                           Use->getSlot() : getALAPStep(Use);
+        unsigned Step = UseALAP - A->getLatency()
                         + MII * UseEdge->getItDst();
         DEBUG(dbgs() << "From ";
               if (UseEdge->isBackEdge())
@@ -121,10 +123,9 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
     AtomToTF[A].second = NewStep;
 
     assert(getALAPStep(A) >= getASAPStep(A)
-      && "Broken time frame!");
+           && "Broken time frame!");
   }
 }
-
 
 void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
@@ -307,7 +308,6 @@ void ForceDirectedInfo::buildAvgDG() {
 
 void ForceDirectedInfo::reset() {
   AtomToTF.clear();
-  SCCAtoms.clear();
   DGraph.clear();
   AvgDG.clear();
 }

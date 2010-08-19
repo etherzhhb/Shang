@@ -37,10 +37,6 @@ class ForceDirectedInfo : public BasicBlockPass {
 
   TimeFrameMapType AtomToTF;
 
-  // Atoms constrain by MII;
-  typedef std::set<const HWAtom*> MIIALAPAtomSetType;
-  MIIALAPAtomSetType SCCAtoms;
-
   typedef std::map<unsigned, double> DGStepMapType;
   typedef std::map<HWFUnit*, std::map<unsigned, double> > DGType;
   DGType DGraph;
@@ -59,14 +55,6 @@ public:
     assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
-  }
-
-  template<class It>
-  void addSCCAtoms(It Begin, It End) {
-    assert(MII && "initMIIExtALAP only work when MII not zero!");
-    for (It I = Begin, E = End; I != E; ++I) {
-      SCCAtoms.insert(*I);
-    }
   }
 
   void buildASAPStep(const HWAtom *Root, unsigned step);
