@@ -11,7 +11,7 @@
 #include "VTargetMachine.h"
 #include "llvm/PassManager.h"
 #include "llvm/Target/TargetRegistry.h"
-
+#include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "HWAtomInfo.h"
@@ -45,6 +45,17 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(RC);
     // Add the language writer.
     PM.add(new VLang());
+
+    // Lower the instructions.
+    PM.add(createInstLoweringPass());
+
+    // Run no-load GVN.
+    PM.add(createGVNPass(/*NoLoads=*/true));
+    // Run loop strength reduction before anything else.
+    PM.add(createLoopStrengthReducePass(getTargetLowering()));
+
+
+
     // Topological sort BBs in structural CFG, so we can construct a correct
     // live interval for registers.
     PM.add(createTopSortBBPass());

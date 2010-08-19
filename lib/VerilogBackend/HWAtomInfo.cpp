@@ -288,7 +288,12 @@ HWAtom *HWAtomInfo::visitStoreInst(StoreInst &I) {
 HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   const Type *Ty = I.getOperand(0)->getType();
   assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
-  assert(I.getNumIndices() < 2 && "Too much indices in GEP!");
+  if (I.getNumIndices() > 1) {
+    assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
+    SmallVector<HWEdge*, 8> Deps;
+    addOperandDeps(I, Deps);
+    return getPostBind(I, Deps, RC->allocaTrivialFU(0));
+  }
 
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
@@ -314,7 +319,7 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
   // Get the operand;
   SmallVector<HWEdge*, 2> Deps;
   bool isSigned = false;
-  bool isTrivial = isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1));
+  bool isOp1Const = isa<Constant>(I.getOperand(1));
   HWFUnit FU;
   // Select the resource
   switch (I.getOpcode()) {
@@ -329,18 +334,22 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
     case Instruction::And:
     case Instruction::Or:
     case Instruction::Xor:
+      // FIXME: Enable chaining.
       FU = RC->allocaTrivialFU(1);
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
       isSigned = true;
-      FU = isTrivial ? RC->allocaTrivialFU(1) : RC->allocaFU(HWResource::ASR);
+      FU = isOp1Const ? RC->allocaTrivialFU(1)
+                      : RC->allocaFU(HWResource::ASR);
       break;
     case Instruction::LShr:
-      FU = isTrivial ? RC->allocaTrivialFU(1) : RC->allocaFU(HWResource::LSR);
+      FU = isOp1Const ? RC->allocaTrivialFU(1)
+                      : RC->allocaFU(HWResource::LSR);
       break;
     case Instruction::Shl:
-      FU = isTrivial ? RC->allocaTrivialFU(1) : RC->allocaFU(HWResource::SHL);
+      FU = isOp1Const ? RC->allocaTrivialFU(1)
+                      : RC->allocaFU(HWResource::SHL);
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");

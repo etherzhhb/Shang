@@ -791,12 +791,18 @@ void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
 
 void esyn::RTLWriter::visitGetElementPtrInst(HWAPostBind &A) {
   GetElementPtrInst &I = A.getInst<GetElementPtrInst>();
+  if (I.getNumIndices() > 1) {
+    assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
+    // Only emit the pointer.
+    DataPath << getAsOperand(A.getValDep(0)) << ";\n";
+    return;
+  }
+
+  // InstLowering pass already take care of the element size.
   const Type *Ty = I.getOperand(0)->getType();
   assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
-  assert(I.getNumIndices() < 2 && "Too much indices in GEP!");
-
   DataPath << getAsOperand(A.getValDep(0)) << " + "
-           << getAsOperand(A.getValDep(1)) << ";\n"; // FIXME multipy the element size.
+           << getAsOperand(A.getValDep(1)) << ";\n";
 }
 
 void esyn::RTLWriter::visitBinaryOperator(HWAPostBind &A) {
