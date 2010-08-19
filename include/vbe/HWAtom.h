@@ -596,12 +596,12 @@ public:
   HWFUnit getFunUnit() const { return FUnit; }
   HWFUnitID getFunUnitID() const { return FUnit.getFUnitID(); }
 
-  enum HWResource::ResTypes getResClass() const {
+  enum HWResType::Types getResClass() const {
     return FUnit.getResType();
   }
 
   bool isTrivial() const {
-    return getResClass() == HWResource::Trivial;
+    return getResClass() == HWResType::Trivial;
   }
 
   unsigned getUnitNum() const { return FUnit.getUnitNum(); }

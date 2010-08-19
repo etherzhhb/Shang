@@ -347,7 +347,7 @@ struct CompPathBinding : public BasicBlockPass {
   // Types
   typedef std::pair<PostBindNodeType*, PostBindNodeType*> FUWOCGType;
 
-  typedef std::map<enum HWResource::ResTypes, FUWOCGType> WOCGMapType;
+  typedef std::map<enum HWResType::Types, FUWOCGType> WOCGMapType;
 
   BumpPtrAllocator NodeAllocator;
 
@@ -365,11 +365,11 @@ struct CompPathBinding : public BasicBlockPass {
 
   void clear();
 
-  PostBindNodeType *getGraphEntry(enum HWResource::ResTypes T) {
+  PostBindNodeType *getGraphEntry(enum HWResType::Types T) {
     return WOCG[T].first;
   }
 
-  PostBindNodeType *getGraphExit(enum HWResource::ResTypes T) {
+  PostBindNodeType *getGraphExit(enum HWResType::Types T) {
     return WOCG[T].second;
   }
   // Build the Weighted Compatibility Graph.
@@ -396,11 +396,11 @@ struct CompPathBinding : public BasicBlockPass {
 
 CompPathBinding::CompPathBinding()
   : BasicBlockPass(&ID), PGEntry(0, 1), PGExit(0, 0), ResCount(0) {
-  for (unsigned i = HWResource::FirstResourceType,
-      e = HWResource::LastResourceType; i != e; ++i) {
+  for (unsigned i = HWResType::FirstResourceType,
+      e = HWResType::LastResourceType; i != e; ++i) {
     PostBindNodeType *Entry = new PostBindNodeType(0, 1),
                      *Exit = new PostBindNodeType(0, 0);
-    WOCG[(HWResource::ResTypes)i] = std::make_pair(Entry, Exit);
+    WOCG[(HWResType::Types)i] = std::make_pair(Entry, Exit);
   }
 }
 
@@ -554,7 +554,7 @@ void CompPathBinding::buildWOCGForRes() {
   for (FSMState::iterator I = CurStage->begin(), E = CurStage->end();
        I != E; ++I) {
     if (HWAPostBind *PB = dyn_cast<HWAPostBind>(*I))
-      if (PB->getResClass() != HWResource::Trivial)      
+      if (PB->getResClass() != HWResType::Trivial)      
         insertToWOCG(PB);
   } 
 }

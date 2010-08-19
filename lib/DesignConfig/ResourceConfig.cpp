@@ -46,7 +46,7 @@ void rapidxml::parse_error_handler(const char *what, void *where) {
 
 //===----------------------------------------------------------------------===//
 /// Hardware resource.
-void HWResource::print(raw_ostream &OS) const {
+void HWResType::print(raw_ostream &OS) const {
   OS << "Resource: " << Name << '\n';
   OS.indent(2) << "TotalNum: " << TotalRes << '\n';
   OS.indent(2) << "Latency: " << Latency << '\n';
@@ -55,17 +55,17 @@ void HWResource::print(raw_ostream &OS) const {
 
 //===----------------------------------------------------------------------===//
 // Resource parsing
-static enum HWResource::ResTypes getResourceType(XmlNode *Node) {
+static enum HWResType::Types getResourceType(XmlNode *Node) {
   XmlAttr *attr = Node->first_attribute("type");
   if (attr == 0)
-    return HWResource::AddSub;
+    return HWResType::AddSub;
   unsigned ret;
   StringRef val = StringRef(attr->value());
   if (val.getAsInteger(0, ret) || 
-      (ret > HWResource::LastResourceType || ret < HWResource::FirstResourceType))
+      (ret > HWResType::LastResourceType || ret < HWResType::FirstResourceType))
     report_fatal_error("Bad resource type!\n");
   
-  return (HWResource::ResTypes)ret;
+  return (HWResType::Types)ret;
 }
 
 static char *getSubNodeAsString(XmlNode *Node, std::string name) {
@@ -105,8 +105,8 @@ HWAddSub *HWAddSub::createFromXml(XmlNode *Node) {
 
 }
 
-HWFUnit HWResource::allocaFU(unsigned UnitID) {
-  return HWFUnit(getResourceType(), UnitID == 0 ? getTotalRes() : 1,
+HWFUnit HWResType::allocaFU(unsigned UnitID) {
+  return HWFUnit(getType(), UnitID == 0 ? getTotalRes() : 1,
                  getLatency(), UnitID);
 }
 
@@ -139,12 +139,12 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
 
   for (XmlNode *ResNode = ResConfNode->first_node("Resource");
       ResNode != 0; ResNode = ResNode->next_sibling("Resource")) {
-    HWResource *Res = 0;
+    HWResType *Res = 0;
     switch (getResourceType(ResNode)) {
-    case HWResource::MemoryBus:
+    case HWResType::MemoryBus:
       Res = HWMemBus::createFromXml(ResNode);
       break;
-    case HWResource::AddSub:
+    case HWResType::AddSub:
       Res = HWAddSub::createFromXml(ResNode);
       break;
     default:
@@ -153,8 +153,8 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
     }
 
     if (Res != 0) { // Only setup the available resources.
-      unsigned idx = (unsigned)Res->getResourceType()
-                      - (unsigned)HWResource::FirstResourceType;
+      unsigned idx = (unsigned)Res->getType()
+                      - (unsigned)HWResType::FirstResourceType;
       ResSet[idx] = Res;
     }
   }

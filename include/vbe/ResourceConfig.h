@@ -42,9 +42,9 @@ namespace esyn {
 class HWFUnit;
 class ResourceConfig;
 /// @brief Represent hardware resource
-class HWResource {
+class HWResType {
 public:
-  enum ResTypes {
+  enum Types {
     MemoryBus = 1,
     SHL,
     ASR,
@@ -58,7 +58,7 @@ public:
   };
 private:
   // The HWResource baseclass this node corresponds to
-  ResTypes ResourceType;
+  Types ResourceType;
   // The name of resource
   const std::string Name;
   // How many cycles to finish?
@@ -72,15 +72,15 @@ private:
   //typedef std::vector<unsigned> UsingCountVec;
   //UsingCountVec UsingCount;
 
-  HWResource(const HWResource &);            // DO NOT IMPLEMENT
-  void operator=(const HWResource &);  // DO NOT IMPLEMENT
+  HWResType(const HWResType &);            // DO NOT IMPLEMENT
+  void operator=(const HWResType &);  // DO NOT IMPLEMENT
 protected:
-  explicit HWResource(enum ResTypes type,
+  explicit HWResType(enum Types type,
     std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
     : ResourceType(type), Name(name), Latency(latency), StartInt(startInt),
       TotalRes(totalRes) {}
 public:
-  ResTypes getResourceType() const { return ResourceType; }
+  Types getType() const { return ResourceType; }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
@@ -93,14 +93,64 @@ public:
 
 }; 
 
+class HWMemBus : public HWResType {
+  unsigned AddrWidth;
+  unsigned DataWidth;
+  // Read latency and write latency
+
+  HWMemBus(std::string name, unsigned latency,
+    unsigned startInt, unsigned totalRes,
+    unsigned addrWidth, unsigned dataWidth)
+    : HWResType(HWResType::MemoryBus, name, latency, startInt, totalRes),
+    AddrWidth(addrWidth), DataWidth(dataWidth) {}
+public:
+  unsigned getAddrWidth() const { return AddrWidth; }
+  unsigned getDataWidth() const { return DataWidth; }
+
+  void bindToFUNum(unsigned Num);
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWMemBus *A) { return true; }
+  static inline bool classof(const HWResType *A) {
+    return A->getType() == HWResType::MemoryBus;
+  }
+
+  static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
+  static std::string getTypeName() { return "MemoryBus"; }
+  static Types getType() { return HWResType::MemoryBus; }
+};
+
+class HWAddSub : public HWResType {
+  unsigned MaxBitWidth;
+  // Read latency and write latency
+
+  HWAddSub(std::string name, unsigned latency,
+    unsigned startInt, unsigned totalRes, unsigned maxBitWidth)
+    : HWResType(HWResType::AddSub, name, latency, startInt, totalRes),
+    MaxBitWidth(maxBitWidth) {}
+public:
+  unsigned getMaxBitWidth() const { return MaxBitWidth; }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWAddSub *A) { return true; }
+  static inline bool classof(const HWResType *A) {
+    return A->getType() == HWResType::AddSub;
+  }
+
+  static HWAddSub *createFromXml(rapidxml::xml_node<char> *Node);
+  static std::string getTypeName() { return "AddSub"; }
+  static Types getType() { return HWResType::AddSub; }
+};
+
+
 union HWFUnitID {
   struct {
-    HWResource::ResTypes T : 4;
+    HWResType::Types T : 4;
     unsigned UnitID        : 12;
   } S;
   unsigned Data            : 16;
 
-  inline HWFUnitID(enum HWResource::ResTypes type = HWResource::Trivial,
+  inline HWFUnitID(enum HWResType::Types type = HWResType::Trivial,
                    unsigned UID = 0) {
     S.T = type;
     S.UnitID = UID;
@@ -118,7 +168,7 @@ union HWFUnitID {
     return *this;
   }
 
-  inline enum HWResource::ResTypes getResType() const { return S.T; }
+  inline enum HWResType::Types getResType() const { return S.T; }
   inline unsigned getUnitNum() const { return S.UnitID; }
   inline unsigned getRawData() const { return Data; }
 };
@@ -128,14 +178,14 @@ class HWFUnit {
   unsigned TotalFUs         : 12;
   unsigned Latency          : 4;
 
-  inline explicit HWFUnit(enum HWResource::ResTypes type, unsigned totalFUs,
+  inline explicit HWFUnit(enum HWResType::Types type, unsigned totalFUs,
                           unsigned latency, unsigned UID)
                           : ID(type, UID), TotalFUs(totalFUs), Latency(latency) {
     assert(TotalFUs == totalFUs && Latency == latency
            && "Data overflow!");
     assert(totalFUs && "Unavailabe Function Unit?");
   }
-  friend class HWResource;
+  friend class HWResType;
   friend class ResourceConfig;
   ///*implicit*/ inline HWFUnitID(unsigned Data) { U.Data = Data; }
 public:
@@ -152,7 +202,7 @@ public:
   }
 
   inline HWFUnitID getFUnitID() const { return ID; }
-  inline enum HWResource::ResTypes getResType() const { return ID.getResType(); }
+  inline enum HWResType::Types getResType() const { return ID.getResType(); }
   inline unsigned getUnitNum() const { return ID.getUnitNum(); }
   
   inline unsigned getTotalFUs() const { return TotalFUs; }
@@ -195,65 +245,24 @@ inline bool operator>=(const HWFUnitID LHS, const HWFUnitID RHS) {
 
 /// @}
 
-class HWMemBus : public HWResource {
-  unsigned AddrWidth;
-  unsigned DataWidth;
-  // Read latency and write latency
-
-  HWMemBus(std::string name, unsigned latency,
-    unsigned startInt, unsigned totalRes,
-    unsigned addrWidth, unsigned dataWidth)
-    : HWResource(HWResource::MemoryBus, name, latency, startInt, totalRes),
-    AddrWidth(addrWidth), DataWidth(dataWidth) {}
-public:
-  unsigned getAddrWidth() const { return AddrWidth; }
-  unsigned getDataWidth() const { return DataWidth; }
-
-  void bindToFUNum(unsigned Num);
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWMemBus *A) { return true; }
-  static inline bool classof(const HWResource *A) {
-    return A->getResourceType() == HWResource::MemoryBus;
-  }
-
-  static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
-  static std::string getResourceName() { return "MemoryBus"; }
-};
-
-class HWAddSub : public HWResource {
-  unsigned MaxBitWidth;
-  // Read latency and write latency
-
-  HWAddSub(std::string name, unsigned latency,
-    unsigned startInt, unsigned totalRes, unsigned maxBitWidth)
-    : HWResource(HWResource::AddSub, name, latency, startInt, totalRes),
-    MaxBitWidth(maxBitWidth) {}
-public:
-  unsigned getMaxBitWidth() const { return MaxBitWidth; }
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAddSub *A) { return true; }
-  static inline bool classof(const HWResource *A) {
-    return A->getResourceType() == HWResource::AddSub;
-  }
-
-  static HWAddSub *createFromXml(rapidxml::xml_node<char> *Node);
-  static std::string getResourceName() { return "AddSub"; }
-};
-
 class ResourceConfig : public ImmutablePass {
   
   /// mapping allocated instences to atom
-  HWResource *ResSet[(size_t)HWResource::LastResourceType -
-                     (size_t)HWResource::FirstResourceType + 1];
+  HWResType *ResSet[(size_t)HWResType::LastResourceType -
+                     (size_t)HWResType::FirstResourceType + 1];
 
   void ParseConfigFile(const std::string &Filename);
+
+  HWResType *getResType(enum HWResType::Types T) const {
+    unsigned idx = (unsigned)T - (unsigned)HWResType::FirstResourceType;
+    assert(ResSet[idx] && "Bad resource!");
+    return ResSet[idx];
+  }
 
 public:
   static char ID;
   ResourceConfig() : ImmutablePass(&ID) {
-    for (size_t i = 0, e = (size_t)HWResource::LastResourceType; i != e; ++i)
+    for (size_t i = 0, e = (size_t)HWResType::LastResourceType; i != e; ++i)
       ResSet[i] = 0;
   }
 
@@ -263,34 +272,33 @@ public:
 
   void print(raw_ostream &OS) const;
 
-  HWResource *getResource(enum HWResource::ResTypes T) const {
-    unsigned idx = (unsigned)T - (unsigned)HWResource::FirstResourceType;
-    assert(ResSet[idx] && "Bad resource!");
-    return ResSet[idx];
+  template<class ResType>
+  ResType *getResType() const {
+    return cast<ResType>(getResType(ResType::getType()));
   }
 
-  HWFUnit allocaFU(enum HWResource::ResTypes T, unsigned UnitID = 0) {
-    return getResource(T)->allocaFU(UnitID);
+  HWFUnit allocaFU(enum HWResType::Types T, unsigned UnitID = 0) {
+    return getResType(T)->allocaFU(UnitID);
   }
 
   HWFUnit allocaTrivialFU(unsigned latency) {
     // We have infinite function unit.
-    return HWFUnit(HWResource::Trivial, ~0 & 0xfff, latency, 0);
+    return HWFUnit(HWResType::Trivial, ~0 & 0xfff, latency, 0);
   }
 
-  typedef HWResource *const * iterator;
-  typedef const HWResource *const * const_iterator;
+  typedef HWResType *const * iterator;
+  typedef const HWResType *const * const_iterator;
 
   iterator begin() { return &ResSet[0]; }
   const_iterator begin() const { return &ResSet[0]; }
 
   iterator end() { 
-    return begin() + (size_t)HWResource::LastResourceType -
-      (size_t)HWResource::FirstResourceType;
+    return begin() + (size_t)HWResType::LastResourceType -
+      (size_t)HWResType::FirstResourceType;
   }
   const_iterator end() const { 
-    return begin() + (size_t)HWResource::LastResourceType -
-      (size_t)HWResource::FirstResourceType;
+    return begin() + (size_t)HWResType::LastResourceType -
+      (size_t)HWResType::FirstResourceType;
   }
 }; //class
 

@@ -262,7 +262,7 @@ HWAtom *HWAtomInfo::visitLoadInst(LoadInst &I) {
   addOperandDeps(I, Deps);
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *LoadAtom = getPreBind(I, Deps, RC->allocaFU(HWResource::MemoryBus, 1));
+  HWAtom *LoadAtom = getPreBind(I, Deps, RC->allocaFU(HWResType::MemoryBus, 1));
 
   return LoadAtom;
 }
@@ -271,11 +271,7 @@ HWAtom *HWAtomInfo::visitStoreInst(StoreInst &I) {
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
 
-  // Push the control root base on dependence analysis
-  // Deps.push_back(getControlRoot());
-
-  HWResource *Res = RC->getResource(HWResource::MemoryBus);
-  assert(Res && "Can find resource!");
+  HWMemBus *Res = RC->getResType<HWMemBus>();
 
   // Dirty Hack: allocate membus 0 to all load/store at this moment
   HWAtom *StoreAtom = getPreBind(I, Deps, Res->allocaFU(1));
@@ -297,7 +293,7 @@ HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
 
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
-  return getPostBind(I, Deps, RC->allocaFU(HWResource::AddSub));
+  return getPostBind(I, Deps, RC->allocaFU(HWResType::AddSub));
 }
 
 HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
@@ -326,10 +322,10 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
     case Instruction::Add:
     case Instruction::Sub:
       //T = isTrivial ? HWResource::Trivial : HWResource::AddSub;
-      FU = RC->allocaFU(HWResource::AddSub);
+      FU = RC->allocaFU(HWResType::AddSub);
       break;
     case Instruction::Mul:
-      FU = RC->allocaFU(HWResource::Mul);
+      FU = RC->allocaFU(HWResType::Mul);
       break;
     case Instruction::And:
     case Instruction::Or:
@@ -341,15 +337,15 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
       // Add the signed prefix for lhs
       isSigned = true;
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : RC->allocaFU(HWResource::ASR);
+                      : RC->allocaFU(HWResType::ASR);
       break;
     case Instruction::LShr:
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : RC->allocaFU(HWResource::LSR);
+                      : RC->allocaFU(HWResType::LSR);
       break;
     case Instruction::Shl:
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : RC->allocaFU(HWResource::SHL);
+                      : RC->allocaFU(HWResType::SHL);
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");

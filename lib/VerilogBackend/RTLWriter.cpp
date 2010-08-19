@@ -397,10 +397,10 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   ResourceMap[PreBind->getFunUnitID()].push_back(PreBind);
 
   switch (PreBind->getResClass()) {
-  case HWResource::MemoryBus:
+  case HWResType::MemoryBus:
     opMemBus(PreBind);
     break;
-  case HWResource::AddSub:
+  case HWResType::AddSub:
     opAddSub(PreBind);
     break;
   default:
@@ -492,7 +492,7 @@ void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit FU) {
 
 template<>
 void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
-  HWMemBus *MemBus = cast<HWMemBus>(RC->getResource(HWResource::MemoryBus));
+  HWMemBus *MemBus = RC->getResType<HWMemBus>();
   HWAPreBind *FirstAtom = Atoms[0];
   // Dirty Hack: Resource only share inside bb at this moment.
   FSMState *State = FirstAtom->getParent();
@@ -521,7 +521,7 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
 
 template<>
 void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
-  HWMemBus *MemBus = cast<HWMemBus>(RC->getResource(HWResource::MemoryBus));
+  HWMemBus *MemBus = RC->getResType<HWMemBus>();
   unsigned DataWidth = MemBus->getDataWidth(),
            AddrWidth = MemBus->getAddrWidth();
 
@@ -550,7 +550,7 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
 
 template<>
 void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit FU) {
-  HWMemBus *MemBus = cast<HWMemBus>(RC->getResource(HWResource::MemoryBus));
+  HWMemBus *MemBus = RC->getResType<HWMemBus>();
   unsigned DataWidth = MemBus->getDataWidth(),
            AddrWidth = MemBus->getAddrWidth();
 
@@ -570,7 +570,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   HWAPreBind *FirstAtom = Atoms[0];
   unsigned FUNum = FirstAtom->getUnitNum();
 
-  std::string SelName = ResType::getResourceName() + utostr(FUNum) + "Mux";
+  std::string SelName = ResType::getTypeName() + utostr(FUNum) + "Mux";
   unsigned SelBitWidth = Atoms.size();
   vlang->declSignal(getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
 
@@ -616,10 +616,10 @@ void RTLWriter::emitResources() {
   for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
       I != E; ++I) {
     switch (I->first.getResType()) {
-    case HWResource::MemoryBus:
+    case HWResType::MemoryBus:
       emitResource<HWMemBus>(I->second);
       break;
-    case HWResource::AddSub:
+    case HWResType::AddSub:
       emitResource<HWAddSub>(I->second);
       break;
     default:

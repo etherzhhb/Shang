@@ -54,8 +54,6 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     // Run loop strength reduction before anything else.
     PM.add(createLoopStrengthReducePass(getTargetLowering()));
 
-
-
     // Topological sort BBs in structural CFG, so we can construct a correct
     // live interval for registers.
     PM.add(createTopSortBBPass());
@@ -70,6 +68,6 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createScalarStreamizationPass());
     //
     PM.add(new RTLWriter(Out));
-    PM.add(new TestbenchWriter(Out));
+    // PM.add(new TestbenchWriter(Out));
     return false;
 }
