@@ -213,7 +213,7 @@ void FDLScheduler::FDModuloSchedule() {
 
   // Dirty Hack: Search the solution by increasing MII and critical path
   // alternatively.
-  bool lastIncMII = true;
+
   FDInfo->setMII(MII);
   for (;;) {
     CurState->resetSchedule();
@@ -222,8 +222,17 @@ void FDLScheduler::FDModuloSchedule() {
     // Set up Resource table
     FDInfo->reset();
     FDInfo->buildFDInfo();
-    assert(FDInfo->isResourceConstraintPreserved()
-           && "MSInfo compute wrong MII!");
+    if (!FDInfo->isResourceConstraintPreserved()) {
+      FDInfo->lengthenMII();
+      continue;
+    } else
+      break;
+  }
+
+  bool lastIncMII = true;
+  for (;;) {
+    CurState->resetSchedule();
+    CurState->scheduledTo(StartStep);
 
     if (scheduleAtII()) {
       DEBUG(FDInfo->dumpTimeFrame());
