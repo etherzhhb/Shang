@@ -23,6 +23,7 @@
 
 #include "vbe/ResourceConfig.h"
 
+#include "llvm/Target/TargetData.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/CommandLine.h"
@@ -355,6 +356,7 @@ struct CompPathBinding : public BasicBlockPass {
   // Path Graph
   PathGraphNodeType PGEntry, PGExit;
 
+  TargetData *TD;
   HWAtomInfo *HI;
 
   FSMState *CurStage;
@@ -433,7 +435,7 @@ void CompPathBinding::getAnalysisUsage(AnalysisUsage &AU) const {
 bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   // Are we disable resource binding?
   if (NoFUBinding)  return false;
-
+  TD = getAnalysisIfAvailable<TargetData>();
   HI = &getAnalysis<HWAtomInfo>();
   CurStage = HI->getStateFor(BB);
 
@@ -563,20 +565,30 @@ void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
                    *Node = new (NodeAllocator) PostBindNodeType(PB);
 
   for (PostBindNodeType::succ_iterator I = Entry->succ_begin(), E = Entry->succ_end();
-      I != E; ++I)
-    if ((*I)->isCompatible(Node)) {
+      I != E; ++I) {
+    PostBindNodeType *N = *I;
+    HWAOpInst *OI = N->getData();
+    if (N->isCompatible(Node)) {
       DEBUG(
         dbgs() << "Find compatible: ";
-        (**I)->print(dbgs());
-        dbgs() << " at " << (**I)->getSlot() << ", ";
+        OI->print(dbgs());
+        dbgs() << " at " << OI->getSlot() << ", ";
         PB->print(dbgs());
         dbgs() << " at " << PB->getSlot() << '\n';
       );
 
       // FIXME: Do mix difference type in a function unit.
-      if (PB->getValue().getType() == (**I)->getValue().getType())      
+      if (TD) {
+        if (TD->getTypeSizeInBits(PB->getValue().getType())
+            == TD->getTypeSizeInBits(OI->getValue().getType()))
+          PostBindNodeType::makeEdge(*I, Node);
+        continue;
+      }
+
+      if (PB->getValue().getType() == OI->getValue().getType())      
         PostBindNodeType::makeEdge(*I, Node);
     }
+  }
   // Insert the edge
   PostBindNodeType::makeEdge(Entry, Node);
   PostBindNodeType::makeEdge(Node, Exit);
