@@ -90,11 +90,11 @@ struct FDLScheduler : public BasicBlockPass {
 
 //===----------------------------------------------------------------------===//
 bool fds_sort::operator()(const HWAOpInst* LHS, const HWAOpInst* RHS) const {
-  HWFUnit LFU = LHS->getFunUnit(), RFU = RHS->getFunUnit();
+  HWFUnit *LFU = LHS->getFunUnit(), *RFU = RHS->getFunUnit();
   // Schedule the atom with less available function unit first.
-  if (LFU.getTotalFUs() > RFU.getTotalFUs())
+  if (LFU->getTotalFUs() > RFU->getTotalFUs())
     return true;
-  else if (LFU.getTotalFUs() < RFU.getTotalFUs())
+  else if (LFU->getTotalFUs() < RFU->getTotalFUs())
     return false;
 
   // Schedule the low mobility nodes first.

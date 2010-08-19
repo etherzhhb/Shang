@@ -10,7 +10,6 @@
 */
 
 #include "vbe/ResourceConfig.h"
-#include "vbe/HWAtom.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
@@ -47,7 +46,7 @@ void rapidxml::parse_error_handler(const char *what, void *where) {
 //===----------------------------------------------------------------------===//
 /// Hardware resource.
 void HWResType::print(raw_ostream &OS) const {
-  OS << "Resource: " << Name << '\n';
+  // OS << "Resource: " << Name << '\n';
   OS.indent(2) << "TotalNum: " << TotalRes << '\n';
   OS.indent(2) << "Latency: " << Latency << '\n';
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
@@ -104,11 +103,11 @@ HWAddSub *HWAddSub::createFromXml(XmlNode *Node) {
     getSubNodeAsInteger(Node, "MaxBitWidth"));
 
 }
-
-HWFUnit HWResType::allocaFU(unsigned UnitID) {
-  return HWFUnit(getType(), UnitID == 0 ? getTotalRes() : 1,
-                 getLatency(), UnitID);
-}
+//
+//HWFUnit HWResType::allocaFU(unsigned UnitID) {
+//  return HWFUnit(getType(), UnitID == 0 ? getTotalRes() : 1,
+//                 getLatency(), UnitID);
+//}
 
 //===----------------------------------------------------------------------===//
 /// Resource config implement
@@ -116,7 +115,6 @@ void ResourceConfig::initializePass() {
   ParseConfigFile(ConfigFilename);
   DEBUG(print(dbgs()));
 }
-
 
 void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   std::string ErrMsg;
@@ -160,6 +158,66 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   }
 }
 
+HWFUnit *ResourceConfig::allocaAddSubFU(unsigned BitWitdh, unsigned UnitID) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(HWResType::AddSub);
+  ID.AddInteger(BitWitdh);
+  //ID.AddInteger(UnitID);
+
+  void *IP = 0;
+  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
+  if (FU) return FU;
+  // TODO: Assert bit width smaller than max bit width.
+  unsigned short Inputs[] = { BitWitdh, BitWitdh };
+  unsigned short Outputs[] = { BitWitdh };
+  HWAddSub *HWTy = getResType<HWAddSub>();
+  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::AddSub,
+                                   HWTy->getTotalRes(), HWTy->getLatency(),
+                                   Inputs, Inputs + 2, Outputs, Outputs + 1);
+  UniqiueHWFUs.InsertNode(FU, IP);
+  return FU;
+}
+
+
+HWFUnit *ResourceConfig::allocaMemBusFU(unsigned UnitID) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(HWResType::MemoryBus);
+  ID.AddInteger(UnitID);
+
+  void *IP = 0;
+
+  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
+  if (FU) return FU;
+
+  HWMemBus *HWTy = getResType<HWMemBus>();
+  unsigned short Inputs[] = { HWTy->getDataWidth(), HWTy->getAddrWidth() };
+  unsigned short Outputs[] = { HWTy->getDataWidth() };
+  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::MemoryBus,
+                                   1, HWTy->getLatency(),
+                                   Inputs, Inputs + 2, Outputs, Outputs + 1);
+  UniqiueHWFUs.InsertNode(FU, IP);
+  return FU;
+}
+
+
+HWFUnit *ResourceConfig::allocaTrivialFU(unsigned latency) {
+  FoldingSetNodeID ID;
+  ID.AddInteger(HWResType::Trivial);
+  ID.AddInteger(latency);
+
+  void *IP = 0;
+
+  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
+  if (FU) return FU;
+
+  unsigned short *Null = 0;
+  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::Trivial,
+                                   ~0, latency, Null, Null, Null, Null);
+  UniqiueHWFUs.InsertNode(FU, IP);
+  return FU;
+  return 0;
+}
+
 void ResourceConfig::print(raw_ostream &OS) const {
   OS << "-=========================Resource Config=========================-\n";
   for (const_iterator I = begin(), E = end(); I != E; ++I) {
@@ -173,6 +231,9 @@ void ResourceConfig::print(raw_ostream &OS) const {
 ResourceConfig::~ResourceConfig() {
   for (iterator I = begin(), E = end(); I != E; ++I)
     delete *I;
+
+  HWFUAllocator.Reset();
+  UniqiueHWFUs.clear();
 }
 
 char ResourceConfig::ID = 0;

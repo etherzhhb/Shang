@@ -41,20 +41,11 @@ class ForceDirectedInfo : public BasicBlockPass {
   typedef std::set<const HWAtom*> MIIALAPAtomSetType;
   MIIALAPAtomSetType SCCAtoms;
 
-  // The Key of DG, { step, resource type }
-  typedef std::map<unsigned, double> DGType;
+  typedef std::map<unsigned, double> DGStepMapType;
+  typedef std::map<HWFUnit*, std::map<unsigned, double> > DGType;
   DGType DGraph;
 
-  // Resource usage.
-  // FIXME: Remove this.
-  typedef std::map<unsigned, unsigned> ResUsageTabType;
-  ResUsageTabType ResUsage;
-
-  std::map<HWFUnitID, unsigned> LocalAvailabeRes;
-
-  unsigned computeStepKey(unsigned step, HWFUnitID FUID) const;
-
-  static void decompseStepKey(unsigned key, unsigned &step, HWFUnitID &FUID);
+  unsigned computeStepKey(unsigned step) const;
 
   std::map<const HWAOpInst*, double> AvgDG;
 
@@ -103,8 +94,8 @@ public:
   /// @name Distribution Graphs
   //{
   void buildDGraph();
-  double getDGraphAt(unsigned step, HWFUnitID FUID) const;
-  void accDGraphAt(unsigned step, HWFUnitID FUID, double d);
+  double getDGraphAt(unsigned step, HWFUnit *FU) const;
+  void accDGraphAt(unsigned step, HWFUnit  *FUID, double d);
   void printDG(raw_ostream &OS) const;
   void dumpDG() const;
   /// Check the distribution graphs to see if we could schedule the nodes
@@ -116,7 +107,7 @@ public:
   //{
   void buildAvgDG();
   double getAvgDG(const HWAOpInst *A) {  return AvgDG[A]; }
-  double getRangeDG(HWFUnitID FUID, unsigned start, unsigned end/*included*/);
+  double getRangeDG(HWFUnit *FU, unsigned start, unsigned end/*included*/);
 
   double computeRangeForce(const HWAtom *A,
                            unsigned start, unsigned end/*include*/);

@@ -50,6 +50,8 @@ bool HWAtomInfo::runOnFunction(Function &F) {
   LI = &getAnalysis<LoopInfo>();
   RC = &getAnalysis<ResourceConfig>();
   MDA = &getAnalysis<MemDepInfo>();
+  TD = getAnalysisIfAvailable<TargetData>();
+  assert(TD && "Can not work without TD!");
 
   std::vector<HWAOpInst*> MemOps;
 
@@ -262,7 +264,7 @@ HWAtom *HWAtomInfo::visitLoadInst(LoadInst &I) {
   addOperandDeps(I, Deps);
 
   // Dirty Hack: allocate membus 1 to all load/store at this moment
-  HWAtom *LoadAtom = getPreBind(I, Deps, RC->allocaFU(HWResType::MemoryBus, 1));
+  HWAtom *LoadAtom = getPreBind(I, Deps, RC->allocaMemBusFU(1), 1);
 
   return LoadAtom;
 }
@@ -271,10 +273,8 @@ HWAtom *HWAtomInfo::visitStoreInst(StoreInst &I) {
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
 
-  HWMemBus *Res = RC->getResType<HWMemBus>();
-
   // Dirty Hack: allocate membus 0 to all load/store at this moment
-  HWAtom *StoreAtom = getPreBind(I, Deps, Res->allocaFU(1));
+  HWAtom *StoreAtom = getPreBind(I, Deps, RC->allocaMemBusFU(1), 1);
   // Set as new atom
   SetControlRoot(StoreAtom);
 
@@ -293,7 +293,7 @@ HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
 
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
-  return getPostBind(I, Deps, RC->allocaFU(HWResType::AddSub));
+  return getPostBind(I, Deps, RC->allocaAddSubFU(TD->getPointerSizeInBits()));
 }
 
 HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
@@ -316,16 +316,17 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
   SmallVector<HWEdge*, 2> Deps;
   bool isSigned = false;
   bool isOp1Const = isa<Constant>(I.getOperand(1));
-  HWFUnit FU;
+  unsigned BitWidth = TD->getTypeAllocSizeInBits(I.getType());
+  HWFUnit *FU;
   // Select the resource
   switch (I.getOpcode()) {
     case Instruction::Add:
     case Instruction::Sub:
       //T = isTrivial ? HWResource::Trivial : HWResource::AddSub;
-      FU = RC->allocaFU(HWResType::AddSub);
+      FU = RC->allocaAddSubFU(BitWidth);
       break;
     case Instruction::Mul:
-      FU = RC->allocaFU(HWResType::Mul);
+      //FU = RC->allocaFU(HWResType::Mul);
       break;
     case Instruction::And:
     case Instruction::Or:
@@ -337,15 +338,15 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
       // Add the signed prefix for lhs
       isSigned = true;
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : RC->allocaFU(HWResType::ASR);
+                      : 0;
       break;
     case Instruction::LShr:
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : RC->allocaFU(HWResType::LSR);
+                      : 0;
       break;
     case Instruction::Shl:
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : RC->allocaFU(HWResType::SHL);
+                      : 0;
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");
@@ -376,10 +377,8 @@ HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind, unsigned Instance)
 
   assert(!A && "Why the instruction is bind?");
 
-  HWFUnit FU = RC->allocaFU(PostBind.getResClass(), Instance);
-
   A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-                                       PostBind, FU);
+                                       PostBind, Instance);
 
   // Update the Map.
   ValueToHWAtoms[&PostBind.getValue()] = A;
@@ -388,9 +387,8 @@ HWAPreBind *HWAtomInfo::bindToResource(HWAPostBind &PostBind, unsigned Instance)
   return A;
 }
 
-HWAPreBind *HWAtomInfo::getPreBind(Instruction &I,
-                                   SmallVectorImpl<HWEdge*> &Deps,
-                                   size_t OpNum, HWFUnit FUID) {
+HWAPreBind *HWAtomInfo::getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
+                                   size_t OpNum, HWFUnit *FU, unsigned id) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomPreBind);
   ID.AddPointer(&I);
@@ -401,7 +399,7 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I,
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPreBind(ID.Intern(HWAtomAllocator),
-      I, Deps.begin(), Deps.end(), OpNum, FUID, ++InstIdx);
+      I, OpNum, Deps.begin(), Deps.end(), FU, id, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -409,7 +407,7 @@ HWAPreBind *HWAtomInfo::getPreBind(Instruction &I,
 
 HWAPostBind *HWAtomInfo::getPostBind(Instruction &I,
                                      SmallVectorImpl<HWEdge*> &Deps,
-                                     size_t OpNum, HWFUnit FUID) {
+                                     size_t OpNum, HWFUnit *FU) {
   FoldingSetNodeID ID;
   ID.AddInteger(atomPostBind);
   ID.AddPointer(&I);
@@ -420,7 +418,7 @@ HWAPostBind *HWAtomInfo::getPostBind(Instruction &I,
 
   if (!A) {
     A = new (HWAtomAllocator) HWAPostBind(ID.Intern(HWAtomAllocator),
-      I, Deps.begin(), Deps.end(), OpNum, FUID, ++InstIdx);
+      I, FU, Deps.begin(), Deps.end(), OpNum, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;

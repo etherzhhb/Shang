@@ -23,6 +23,7 @@
 #define VBE_HARDWARE_ATOMINFO_H
 
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Target/TargetData.h"
 
 #include "vbe/HWAtom.h"
 
@@ -112,23 +113,21 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
 
   // Allocator
   BumpPtrAllocator HWAtomAllocator;
-
-  // 
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                         size_t OpNum, HWFUnit FUID);
+                         size_t OpNum, HWFUnit *FU, unsigned id);
   HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                         HWFUnit FUID) {
-    return getPreBind(I, Deps, I.getNumOperands(), FUID);
+                         HWFUnit *FU, unsigned id) {
+    return getPreBind(I, Deps, I.getNumOperands(), FU, id);
   }
 
   HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                           size_t OpNum, HWFUnit FUID);
+                           size_t OpNum, HWFUnit *FU);
 
   HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                           HWFUnit FUID) {
-    return getPostBind(I, Deps, I.getNumOperands(), FUID);
+                           HWFUnit *FU) {
+    return getPostBind(I, Deps, I.getNumOperands(), FU);
   }
 
   FSMState *getState(BasicBlock *BB);
@@ -206,6 +205,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
 
   // The loop Info
   LoopInfo *LI;
+  TargetData *TD;
   ResourceConfig *RC;
   LiveValues *LV;
   // Total states
@@ -249,7 +249,7 @@ public:
   }
 
   HWRegister *allocaFURegister(HWAPreBind *A) {
-    int RegNum = A->getFunUnitID().getRawData();
+    int RegNum = A->getFUID();
     unsigned Slot = A->getFinSlot();
     return new (HWAtomAllocator) HWRegister(-RegNum, A->getValue().getType(),
                                             Slot, Slot);

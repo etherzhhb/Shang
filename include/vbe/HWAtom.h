@@ -166,9 +166,9 @@ public:
     return Num;
   }
 
-  HWFUnitID getFUnit() const {
+  unsigned getFUnit() const {
     assert(Num < 0 && "Not a Function unit Register!");
-    return HWFUnitID(-Num);
+    return -Num;
   }
 
   bool isFuReg() const { return Num < 0; }
@@ -584,27 +584,24 @@ public:
 /// @brief The Schedulable Hardware Atom
 class HWAOpInst : public HWAtom {
   unsigned NumOps;
-  HWFUnit FUnit;
+  HWFUnit *FU;
 
 protected:
   template <class It>
   HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, It depbegin, It depend, size_t OpNum, HWFUnit UID,
-    unsigned short Idx) : HWAtom(ID, T, Inst, depbegin, depend,
-    UID.getLatency(), Idx), NumOps(OpNum), FUnit(UID) {}
+    Instruction &Inst, It depbegin, It depend, size_t OpNum, HWFUnit *fu,
+    unsigned short Idx)
+    : HWAtom(ID, T, Inst, depbegin, depend, fu->getLatency(), Idx),
+    NumOps(OpNum), FU(fu) {}
 public:
-  HWFUnit getFunUnit() const { return FUnit; }
-  HWFUnitID getFunUnitID() const { return FUnit.getFUnitID(); }
-
+  HWFUnit *getFunUnit() const { return FU; }
   enum HWResType::Types getResClass() const {
-    return FUnit.getResType();
+    return FU->getResType();
   }
 
   bool isTrivial() const {
     return getResClass() == HWResType::Trivial;
   }
-
-  unsigned getUnitNum() const { return FUnit.getUnitNum(); }
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -652,10 +649,10 @@ public:
 class HWAPostBind : public HWAOpInst {
 public:
   template <class It>
-  HWAPostBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
-               It depbegin, It depend, size_t OpNum, HWFUnit FUID,
-               unsigned short Idx) : HWAOpInst(ID, atomPostBind, Inst,
-               depbegin, depend, OpNum, FUID, Idx) {}
+  HWAPostBind(const FoldingSetNodeIDRef ID, Instruction &Inst, HWFUnit *FU,
+               It depbegin, It depend, size_t OpNum, unsigned short Idx)
+               : HWAOpInst(ID, atomPostBind, Inst, depbegin, depend, OpNum,
+               FU, Idx) {}
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAPostBind *A) { return true; }
@@ -665,15 +662,18 @@ public:
 };
 
 class HWAPreBind : public HWAOpInst {
+  unsigned FUID;
 public:
   template <class It>
-  HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst,
-             It depbegin, It depend, unsigned OpNum, HWFUnit FUID,
+  HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst, unsigned OpNum,
+             It depbegin, It depend, HWFUnit *FU, unsigned id,
              unsigned short Idx) : HWAOpInst(ID, atomPreBind, Inst,
-             depbegin, depend, OpNum, FUID, Idx) {}
+             depbegin, depend, OpNum, FU, Idx), FUID(id) {}
 
   HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-             HWFUnit FUID);
+             unsigned id);
+
+  unsigned getFUID() const { return FUID; }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAPreBind *A) { return true; }

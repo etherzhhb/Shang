@@ -285,8 +285,8 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
-std::string RTLWriter::getFURegisterName(HWFUnitID FUID) {
-  return "FU" + utostr(FUID.getRawData()) + "Reg";
+std::string RTLWriter::getFURegisterName(unsigned ID) {
+  return "FU" + utostr(ID) + "Reg";
 }
 
 std::string RTLWriter::getAsOperand(HWRegister *R) {
@@ -394,7 +394,7 @@ void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
 
 void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   // Remember this atom
-  ResourceMap[PreBind->getFunUnitID()].push_back(PreBind);
+  ResourceMap[PreBind->getFunUnit()].push_back(PreBind);
 
   switch (PreBind->getResClass()) {
   case HWResType::MemoryBus:
@@ -412,37 +412,23 @@ void RTLWriter::opAddSub(HWAPreBind *PreBind) {
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWAddSub>(HWAPreBindVecTy &Atoms) {
-  HWAPreBind *FirstAtom = Atoms[0];
-  HWFUnitID FUID = FirstAtom->getFunUnitID();
-  unsigned ResourceId = FUID.getUnitNum();
-  // Dirty Hack: Resource only share inside bb at this moment.
-  FSMState *State = FirstAtom->getParent();
-  BasicBlock *BB = State->getBasicBlock();
-  unsigned SlotWidth = State->getTotalSlot() + 1;
-  unsigned StartSlot = State->getSlot();
+void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
+  std::string OpA = "addsub_a" + utostr(ID);
+  std::string OpB = "addsub_b" + utostr(ID);
+  std::string Mode = "addsub_mode" + utostr(ID);
+  std::string Res = getFURegisterName(ID);
 
-  // FIXME: Do mix difference type in a function unit.
-  unsigned MaxBitWidth = vlang->getBitWidth(FirstAtom->getValue());
-  //AddSub.getMaxBitWidth();
-
-  std::string OpA = "addsub_a" + utostr(ResourceId);
-  std::string OpB = "addsub_b" + utostr(ResourceId);
-  std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getFURegisterName(FUID);
-
-  vlang->declSignal(getSignalDeclBuffer(), OpA, MaxBitWidth, 0);
+  vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   
-  vlang->declSignal(getSignalDeclBuffer(), OpB, MaxBitWidth, 0);
+  vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
 
-  vlang->declSignal(getSignalDeclBuffer(), Res, MaxBitWidth, 0);
+  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(0), 0);
   
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
-  vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: "
-                                     << FUID.getRawData() << '\n';
+  vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: " << ID << '\n';
   vlang->alwaysBegin(DataPath, 2);
-  vlang->resetRegister(DataPath.indent(6), Res, MaxBitWidth);
+  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth(0));
   vlang->ifElse(DataPath.indent(4));
   DataPath.indent(6) << Res << " <= " << Mode << " ? ";
   DataPath           << "(" << OpA << " + " << OpB << ") : ";
@@ -453,11 +439,11 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWAPreBindVecTy &Atoms) {
 
 template<>
 void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
-  unsigned ResourceId = A->getUnitNum();
+  unsigned ResourceId = A->getFUID();
   std::string OpA = "addsub_a" + utostr(ResourceId);
   std::string OpB = "addsub_b" + utostr(ResourceId);
   std::string Mode = "addsub_mode" + utostr(ResourceId);
-  std::string Res = getFURegisterName(A->getFunUnitID());
+  std::string Res = getFURegisterName(ResourceId);
 
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;
@@ -474,16 +460,15 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
 
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit FU) {
-  unsigned ResourceId = FU.getUnitNum();
-  std::string OpA = "addsub_a" + utostr(ResourceId);
-  std::string OpB = "addsub_b" + utostr(ResourceId);
-  std::string Mode = "addsub_mode" + utostr(ResourceId);
+void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU, unsigned ID) {
+  std::string OpA = "addsub_a" + utostr(ID);
+  std::string OpB = "addsub_b" + utostr(ID);
+  std::string Mode = "addsub_mode" + utostr(ID);
   // FIXME: Bitwidth is not correct!
   DataPath.indent(6) << OpA << " <= "
-    << vlang->printConstantInt(0, 64, false) << ";\n";
+    << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
   DataPath.indent(6) << OpB << " <= "
-    << vlang->printConstantInt(0, 64, false) << ";\n";
+    << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
   DataPath.indent(6) << Mode << " <= 1'b0;\n";
 
   vlang->end(DataPath.indent(4));
@@ -491,41 +476,31 @@ void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit FU) {
 
 
 template<>
-void RTLWriter::emitResourceDecl<HWMemBus>(HWAPreBindVecTy &Atoms) {
-  HWMemBus *MemBus = RC->getResType<HWMemBus>();
-  HWAPreBind *FirstAtom = Atoms[0];
-  // Dirty Hack: Resource only share inside bb at this moment.
-  FSMState *State = FirstAtom->getParent();
-  BasicBlock *BB = State->getBasicBlock();
-  unsigned SlotWidth = State->getTotalSlot() + 1;
-  unsigned StartSlot = State->getSlot();
-
-  unsigned DataWidth = MemBus->getDataWidth(),
-           AddrWidth = MemBus->getAddrWidth();
-  unsigned ResourceId = FirstAtom->getUnitNum();
+void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU, unsigned ID) {
+  unsigned DataWidth = FU->getInputBitwidth(0),
+           AddrWidth = FU->getInputBitwidth(1);
 
   // Emit the ports;
   ModDecl << '\n';
-  vlang->comment(getModDeclBuffer()) << "Memory bus " << ResourceId << '\n';
+  vlang->comment(getModDeclBuffer()) << "Memory bus " << ID << '\n';
   getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
-    << ResourceId <<",\n";
+    << ID <<",\n";
   getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
-    << ResourceId << ",\n";
+    << ID << ",\n";
 
   getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
-    << ResourceId << ",\n";
+    << ID << ",\n";
 
-  getModDeclBuffer() << "output reg membus_we" << ResourceId << ",\n";
-  getModDeclBuffer() << "output reg membus_en" << ResourceId << ",\n";
+  getModDeclBuffer() << "output reg membus_we" << ID << ",\n";
+  getModDeclBuffer() << "output reg membus_en" << ID << ",\n";
 }
 
 template<>
 void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
-  HWMemBus *MemBus = RC->getResType<HWMemBus>();
-  unsigned DataWidth = MemBus->getDataWidth(),
-           AddrWidth = MemBus->getAddrWidth();
+  unsigned DataWidth = A->getFunUnit()->getInputBitwidth(0),
+           AddrWidth = A->getFunUnit()->getInputBitwidth(1);
 
-  unsigned ResourceId = A->getUnitNum();
+  unsigned ResourceId = A->getFUID();
   Instruction *Inst = &(A->getInst<Instruction>());
   // Enable the memory
   DataPath.indent(6) << "membus_en" << ResourceId << " <= 1'b1;\n";
@@ -549,18 +524,15 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit FU) {
-  HWMemBus *MemBus = RC->getResType<HWMemBus>();
-  unsigned DataWidth = MemBus->getDataWidth(),
-           AddrWidth = MemBus->getAddrWidth();
+void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU, unsigned ID) {
+  unsigned DataWidth = FU->getInputBitwidth(0),
+           AddrWidth = FU->getInputBitwidth(1);
 
-  unsigned ResourceId = FU.getUnitNum();
-
-  DataPath.indent(6) << "membus_en" << ResourceId << " <= 1'b0;\n";
-  DataPath.indent(6) << "membus_addr" << ResourceId
+  DataPath.indent(6) << "membus_en" << ID << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_addr" << ID
     << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  DataPath.indent(6) << "membus_we" << ResourceId << " <= 1'b0;\n";
-  DataPath.indent(6) << "membus_in" << ResourceId
+  DataPath.indent(6) << "membus_we" << ID << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_in" << ID
     << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   vlang->end(DataPath.indent(4));
 }
@@ -568,13 +540,13 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit FU) {
 template<class ResType>
 void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   HWAPreBind *FirstAtom = Atoms[0];
-  unsigned FUNum = FirstAtom->getUnitNum();
+  unsigned FUNum = FirstAtom->getFUID();
 
   std::string SelName = ResType::getTypeName() + utostr(FUNum) + "Mux";
   unsigned SelBitWidth = Atoms.size();
   vlang->declSignal(getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
 
-  emitResourceDecl<ResType>(Atoms);
+  emitResourceDecl<ResType>(FirstAtom->getFunUnit(), FUNum);
   DataPath.indent(2) << "always @(*)\n";
 
   unsigned AtomCounter = SelBitWidth;
@@ -606,7 +578,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   }
   DataPath.indent(4) << "default: begin\n";
   // Else for Resource is idle
-  emitResourceDefaultOp<ResType>(FirstAtom->getFunUnit());
+  emitResourceDefaultOp<ResType>(FirstAtom->getFunUnit(), FUNum);
   vlang->endSwitch(DataPath.indent(4));
   //
   DataPath.indent(2) << "assign " << SelEval.str() << " };\n";
@@ -615,7 +587,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
 void RTLWriter::emitResources() {
   for (ResourceMapType::iterator I = ResourceMap.begin(), E = ResourceMap.end();
       I != E; ++I) {
-    switch (I->first.getResType()) {
+    switch (I->first->getResType()) {
     case HWResType::MemoryBus:
       emitResource<HWMemBus>(I->second);
       break;
@@ -630,11 +602,11 @@ void RTLWriter::emitResources() {
 
 void RTLWriter::opMemBus(HWAPreBind *PreBind) {
   if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
-    unsigned MemBusInst = PreBind->getUnitNum();
+    unsigned MemBusInst = PreBind->getFUID();
     std::string Name = getAsOperand(PreBind);
     // Declare the signal
     vlang->declSignal(getSignalDeclBuffer(), Name,
-                      vlang->getBitWidth(*L), 0, false);
+                      PreBind->getFunUnit()->getOutputBitwidth(0), 0, false);
     // Emit the datapath
     DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
                        << " = membus_out" << MemBusInst <<";\n";
@@ -731,7 +703,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
     
     if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred)))
       return MircoState +
-             getFURegisterName(cast<HWAPreBind>(Pred)->getFunUnitID());
+             getFURegisterName(cast<HWAPreBind>(Pred)->getFUID());
 
         
     HWRegister *PredReg = HI->lookupRegForValue(&Pred->getValue());

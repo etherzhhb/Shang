@@ -60,7 +60,7 @@ class RTLWriter : public FunctionPass {
 
   // Mapping used resouces to the using atoms
   typedef std::vector<HWAPreBind*> HWAPreBindVecTy;
-  typedef std::map<HWFUnitID,HWAPreBindVecTy> ResourceMapType;
+  typedef std::map<HWFUnit*,HWAPreBindVecTy> ResourceMapType;
 
   ResourceMapType ResourceMap;
 
@@ -75,13 +75,13 @@ class RTLWriter : public FunctionPass {
   void emitResource(HWAPreBindVecTy &Atoms);
 
   template<class ResType>
-  void emitResourceDecl(HWAPreBindVecTy &Atoms);
+  void emitResourceDecl(HWFUnit *FU, unsigned ID);
 
   template<class ResType>
   void emitResourceOp(HWAPreBind *A);
 
   template<class ResType>
-  void emitResourceDefaultOp(HWFUnit FU);
+  void emitResourceDefaultOp(HWFUnit *FU, unsigned ID);
   void opMemBus(HWAPreBind *PreBind);
 
   void opAddSub(HWAPreBind *PreBind);
@@ -109,7 +109,7 @@ class RTLWriter : public FunctionPass {
   std::string getAsOperand(HWEdge &E);
   std::string getAsOperand(HWAtom *A);
   std::string getAsOperand(HWRegister *R);
-  static std::string getFURegisterName(HWFUnitID FUID);
+  static std::string getFURegisterName(unsigned ID);
 
   raw_ostream &getStateDeclBuffer() {
     return StateDecl.indent(2);

@@ -173,19 +173,17 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
 }
 
 unsigned ModuloScheduleInfo::computeResMII(FSMState &State) const {
-  std::map<HWFUnitID, unsigned> TotalResUsage;
-  std::map<HWFUnitID, unsigned> TotalAvailabeRes;
+  std::map<HWFUnit*, unsigned> TotalResUsage;
   for (FSMState::iterator I = State.begin(), E = State.end(); I != E; ++I)
     if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
-      ++TotalResUsage[A->getFunUnitID()];
-      TotalAvailabeRes[A->getFunUnitID()] = A->getFunUnit().getTotalFUs();
+      ++TotalResUsage[A->getFunUnit()];
     }
 
   unsigned MaxResII = 0;
-  typedef std::map<HWFUnitID, unsigned>::iterator UsageIt;
+  typedef std::map<HWFUnit*, unsigned>::iterator UsageIt;
   for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
       MaxResII = std::max(MaxResII,
-                          I->second / TotalAvailabeRes[I->first]);
+                          I->second / I->first->getTotalFUs());
   }
   DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
   return MaxResII;

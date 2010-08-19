@@ -577,15 +577,8 @@ void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
         dbgs() << " at " << PB->getSlot() << '\n';
       );
 
-      // FIXME: Do mix difference type in a function unit.
-      if (TD) {
-        if (TD->getTypeSizeInBits(PB->getValue().getType())
-            == TD->getTypeSizeInBits(OI->getValue().getType()))
-          PostBindNodeType::makeEdge(*I, Node);
-        continue;
-      }
 
-      if (PB->getValue().getType() == OI->getValue().getType())      
+      if (PB->getFunUnit() == OI->getFunUnit())     
         PostBindNodeType::makeEdge(*I, Node);
     }
   }

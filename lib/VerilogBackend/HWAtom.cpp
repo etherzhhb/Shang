@@ -38,12 +38,12 @@ void HWAtom::dump() const {
 
 void HWAWrReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Write Storage "
-     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
+     << (Reg->isFuReg() ? Reg->getFUnit() : Reg->getRegNum());
 }
 
 void HWARdReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Import Storage "
-     << (Reg->isFuReg() ? Reg->getFUnit().getRawData() : Reg->getRegNum());
+     << (Reg->isFuReg() ? Reg->getFUnit() : Reg->getRegNum());
 }
 
 void HWADelay::print(raw_ostream &OS) const {
@@ -109,7 +109,7 @@ void HWAOpInst::print(raw_ostream &OS) const {
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << getFunUnitID();
+  OS << " Res: " << *getFunUnit();
 }
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
@@ -149,10 +149,11 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 }
 
 HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-                       HWFUnit FUID)
+                       unsigned id)
   : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
               PostBind.edge_begin(), PostBind.edge_end(),
-              PostBind.getInstNumOps(), FUID, PostBind.getIdx()) {
+              PostBind.getInstNumOps(), PostBind.getFunUnit(), PostBind.getIdx()),
+              FUID(id) {
   // Remove the PostBind atom from the use list of its dep.
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(&PostBind);

@@ -22,6 +22,8 @@
 #include "llvm/Module.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/FoldingSet.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/CFG.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/System/DataTypes.h"
@@ -36,7 +38,6 @@ template<class> class xml_node;
 }
 
 using namespace llvm;
-
 
 namespace esyn {
 class HWFUnit;
@@ -59,8 +60,6 @@ public:
 private:
   // The HWResource baseclass this node corresponds to
   Types ResourceType;
-  // The name of resource
-  const std::string Name;
   // How many cycles to finish?
   const unsigned Latency;
   // Start interval
@@ -77,7 +76,7 @@ private:
 protected:
   explicit HWResType(enum Types type,
     std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
-    : ResourceType(type), Name(name), Latency(latency), StartInt(startInt),
+    : ResourceType(type), Latency(latency), StartInt(startInt),
       TotalRes(totalRes) {}
 public:
   Types getType() const { return ResourceType; }
@@ -85,12 +84,8 @@ public:
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
   unsigned getStartInt() const { return StartInt; }
-  const std::string &getName() const { return Name; }
 
   virtual void print(raw_ostream &OS) const;
-
-  HWFUnit allocaFU(unsigned UnitID = 0);
-
 }; 
 
 class HWMemBus : public HWResType {
@@ -106,8 +101,6 @@ class HWMemBus : public HWResType {
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
   unsigned getDataWidth() const { return DataWidth; }
-
-  void bindToFUNum(unsigned Num);
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWMemBus *A) { return true; }
@@ -142,108 +135,57 @@ public:
   static Types getType() { return HWResType::AddSub; }
 };
 
+class HWFUnit : public FoldingSetNode {
+  /// FastID - A reference to an Interned FoldingSetNodeID for this node.
+  /// The ScalarEvolution's BumpPtrAllocator holds the data.
+  FoldingSetNodeIDRef FastID;
 
-union HWFUnitID {
-  struct {
-    HWResType::Types T : 4;
-    unsigned UnitID        : 12;
-  } S;
-  unsigned Data            : 16;
+  enum HWResType::Types T;
+  unsigned short Latency;
+  unsigned TotalFUs;
 
-  inline HWFUnitID(enum HWResType::Types type = HWResType::Trivial,
-                   unsigned UID = 0) {
-    S.T = type;
-    S.UnitID = UID;
-    assert(S.T == type && S.UnitID == UID && "Data overflow!"); 
-  }
+  SmallVector<unsigned short, 2> InputBitWidth;
+  SmallVector<unsigned short, 2> OutputBitWidth;
 
-  inline /*implicit*/ HWFUnitID(unsigned data) {
-    Data = data;
-  }
-
-  inline HWFUnitID(const HWFUnitID &O) : Data(O.Data) {}
-
-  inline const HWFUnitID &operator=(const HWFUnitID &O) {
-    Data = O.Data;
-    return *this;
-  }
-
-  inline enum HWResType::Types getResType() const { return S.T; }
-  inline unsigned getUnitNum() const { return S.UnitID; }
-  inline unsigned getRawData() const { return Data; }
-};
-
-class HWFUnit {
-  HWFUnitID ID;
-  unsigned TotalFUs         : 12;
-  unsigned Latency          : 4;
-
-  inline explicit HWFUnit(enum HWResType::Types type, unsigned totalFUs,
-                          unsigned latency, unsigned UID)
-                          : ID(type, UID), TotalFUs(totalFUs), Latency(latency) {
-    assert(TotalFUs == totalFUs && Latency == latency
-           && "Data overflow!");
-    assert(totalFUs && "Unavailabe Function Unit?");
+  template<class InputIt, class OutputIt>
+  inline HWFUnit(const FoldingSetNodeIDRef ID, enum HWResType::Types type,
+                 unsigned totalFUs, unsigned latency,
+                 InputIt InBegin, InputIt InEnd,
+                 OutputIt OutBegin, OutputIt OutEnd)
+    : FastID(ID), T(type), TotalFUs(totalFUs), Latency(latency),
+    InputBitWidth(InBegin, InEnd), OutputBitWidth(OutBegin, OutEnd) {
+    assert(totalFUs && "Unavailable Function Unit?");
   }
   friend class HWResType;
   friend class ResourceConfig;
-  ///*implicit*/ inline HWFUnitID(unsigned Data) { U.Data = Data; }
 public:
-  inline HWFUnit() : ID(), TotalFUs(0), Latency(0) {}
+  /// Profile - FoldingSet support.
+  void Profile(FoldingSetNodeID& ID) { ID = FastID; }
 
-  inline HWFUnit(const HWFUnit &O) : ID(O.ID), TotalFUs(O.TotalFUs),
-    Latency(O.Latency) {}
-
-  inline const HWFUnit &operator=(const HWFUnit &O) {
-    ID = O.ID;
-    TotalFUs = O.TotalFUs;
-    Latency = O.Latency;
-    return *this;
-  }
-
-  inline HWFUnitID getFUnitID() const { return ID; }
-  inline enum HWResType::Types getResType() const { return ID.getResType(); }
-  inline unsigned getUnitNum() const { return ID.getUnitNum(); }
+  inline enum HWResType::Types getResType() const { return T; }
   
   inline unsigned getTotalFUs() const { return TotalFUs; }
   inline unsigned getLatency() const { return Latency; }
+
+  inline unsigned getInputBitwidth(unsigned idx) const {
+    return InputBitWidth[idx];
+  }
+
+  inline unsigned getNumInputs() const { return InputBitWidth.size(); }
+
+  inline unsigned getOutputBitwidth(unsigned idx) const {
+    return OutputBitWidth[idx];
+  }
+
+  inline unsigned getNumOutputs() const { return OutputBitWidth.size(); }
 };
 
 
 /// Print a RegionNode.
-inline raw_ostream &operator<<(raw_ostream &OS, const HWFUnitID UID) {
-  OS << UID.getRawData();
+inline raw_ostream &operator<<(raw_ostream &OS, const HWFUnit &U) {
+  OS << U.getResType();
   return OS;
 }
-
-/// @name HWFUnitID Comparison Operators
-/// @{
-
-inline bool operator==(const HWFUnitID LHS, const HWFUnitID RHS) {
-  return LHS.getRawData() == RHS.getRawData();
-}
-
-inline bool operator!=(const HWFUnitID LHS, const HWFUnitID RHS) {
-  return !(LHS == RHS);
-}
-
-inline bool operator<(const HWFUnitID LHS, const HWFUnitID RHS) {
-  return LHS.getRawData() < RHS.getRawData();
-}
-
-inline bool operator<=(const HWFUnitID LHS, const HWFUnitID RHS) {
-  return LHS.getRawData() <= RHS.getRawData();
-}
-
-inline bool operator>(const HWFUnitID LHS, const HWFUnitID RHS) {
-  return LHS.getRawData() > RHS.getRawData();
-}
-
-inline bool operator>=(const HWFUnitID LHS, const HWFUnitID RHS) {
-  return LHS.getRawData() >= RHS.getRawData();
-}
-
-/// @}
 
 class ResourceConfig : public ImmutablePass {
   
@@ -258,6 +200,10 @@ class ResourceConfig : public ImmutablePass {
     assert(ResSet[idx] && "Bad resource!");
     return ResSet[idx];
   }
+
+  // Allocator
+  BumpPtrAllocator HWFUAllocator;
+  FoldingSet<HWFUnit> UniqiueHWFUs;
 
 public:
   static char ID;
@@ -277,14 +223,9 @@ public:
     return cast<ResType>(getResType(ResType::getType()));
   }
 
-  HWFUnit allocaFU(enum HWResType::Types T, unsigned UnitID = 0) {
-    return getResType(T)->allocaFU(UnitID);
-  }
-
-  HWFUnit allocaTrivialFU(unsigned latency) {
-    // We have infinite function unit.
-    return HWFUnit(HWResType::Trivial, ~0 & 0xfff, latency, 0);
-  }
+  HWFUnit *allocaAddSubFU(unsigned BitWitdh, unsigned UnitID = 0);
+  HWFUnit *allocaMemBusFU(unsigned UnitID);
+  HWFUnit *allocaTrivialFU(unsigned latency);
 
   typedef HWResType *const * iterator;
   typedef const HWResType *const * const_iterator;
@@ -301,7 +242,6 @@ public:
       (size_t)HWResType::FirstResourceType;
   }
 }; //class
-
 } // namespace
 
 #endif // h guard
