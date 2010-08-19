@@ -241,7 +241,7 @@ char ResourceConfig::ID = 0;
 static RegisterPass<ResourceConfig>
 X("vbe-resource-config", "vbe - resource config", false, true);
 
-const std::string &HWFUnit::getOutputPrefix() const {
+std::string HWFUnit::getOutputPrefix() const {
   switch (getResType()) {
   case HWResType::AddSub:
     return "AddSubResult";

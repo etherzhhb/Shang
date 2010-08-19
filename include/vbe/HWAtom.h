@@ -150,10 +150,10 @@ class HWRegister {
   bool IsFuReg       : 1;
   // The life time of this register, Including EndSlot.
   unsigned short StartSlot, EndSlot;
-  const std::string &Name;
+  std::string Name;
 public:
   HWRegister(unsigned short num, unsigned short BitWidth, bool isFuReg,
-             unsigned startSlot, unsigned endSlot, const std::string &name = "R")
+             unsigned startSlot, unsigned endSlot, std::string name = "R")
     : BitWidth(BitWidth), Num(num), StartSlot(startSlot), EndSlot(endSlot),
       Name(name) {}
 
