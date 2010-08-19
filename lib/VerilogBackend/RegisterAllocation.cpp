@@ -41,6 +41,14 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   // Emit the exported register.
   HWAOpInst *Exit = State->getExitRoot();
 
+  // Emit register for PHI incoming value.
+  for (BasicBlock::iterator I = BB.begin(), E = BB.getFirstNonPHI();
+       I != E; ++I) {
+    PHINode *PN = cast<PHINode>(I);
+    for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i)
+      (void)HI.getRegForValue(PN->getIncomingValue(i), 1, State->getSlot());
+  }
+
   SmallVector<HWAtom*, 32> Worklist(State->begin(), State->end());
 
   while(!Worklist.empty()) {
