@@ -1,12 +1,13 @@
 set(LLVM_NO_RTTI 1)
 
 add_llvm_target(VerilogBackend
-  HWAtom.cpp
-  HWAtomInfo.cpp
   CompPathBinding.cpp
-  ModuloScheduleInfo.cpp
   ForceDirectedInfo.cpp
   ForceDirectedScheduler.cpp
+  HWAtom.cpp
+  HWAtomInfo.cpp
+  InstLowering.cpp
+  ModuloScheduleInfo.cpp
   MemDepAnalysis.cpp
   RegisterAllocation.cpp
   RTLWriter.cpp

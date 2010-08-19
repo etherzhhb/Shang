@@ -288,7 +288,12 @@ HWAtom *HWAtomInfo::visitStoreInst(StoreInst &I) {
 HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
   const Type *Ty = I.getOperand(0)->getType();
   assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
-  assert(I.getNumIndices() < 2 && "Too much indices in GEP!");
+  if (I.getNumIndices() > 1) {
+    assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
+    SmallVector<HWEdge*, 8> Deps;
+    addOperandDeps(I, Deps);
+    return getPostBind(I, Deps, RC->allocaTrivialFU(0));
+  }
 
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
