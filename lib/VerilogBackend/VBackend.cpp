@@ -49,10 +49,11 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     // Lower the instructions.
     PM.add(createInstLoweringPass());
 
-    // Run no-load GVN.
-    PM.add(createGVNPass(/*NoLoads=*/true));
     // Run loop strength reduction before anything else.
     PM.add(createLoopStrengthReducePass(getTargetLowering()));
+
+    // Run no-load GVN.
+    PM.add(createGVNPass(/*NoLoads=*/true));
 
     // Topological sort BBs in structural CFG, so we can construct a correct
     // live interval for registers.
