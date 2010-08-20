@@ -51,7 +51,7 @@ public:
     ASR,
     LSR,
     AddSub,
-    Mul,
+    Mult,
     Trivial,
 
     FirstResourceType = MemoryBus,
@@ -74,10 +74,9 @@ private:
   HWResType(const HWResType &);            // DO NOT IMPLEMENT
   void operator=(const HWResType &);  // DO NOT IMPLEMENT
 protected:
-  explicit HWResType(enum Types type,
-    std::string name, unsigned latency, unsigned startInt, unsigned totalRes)
+  HWResType(Types type, unsigned latency, unsigned startInt, unsigned totalRes)
     : ResourceType(type), Latency(latency), StartInt(startInt),
-      TotalRes(totalRes) {}
+    TotalRes(totalRes) {}
 public:
   Types getType() const { return ResourceType; }
   
@@ -91,12 +90,10 @@ public:
 class HWMemBus : public HWResType {
   unsigned AddrWidth;
   unsigned DataWidth;
-  // Read latency and write latency
 
-  HWMemBus(std::string name, unsigned latency,
-    unsigned startInt, unsigned totalRes,
+  HWMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
     unsigned addrWidth, unsigned dataWidth)
-    : HWResType(HWResType::MemoryBus, name, latency, startInt, totalRes),
+    : HWResType(HWResType::MemoryBus, latency, startInt, totalRes),
     AddrWidth(addrWidth), DataWidth(dataWidth) {}
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
@@ -113,24 +110,67 @@ public:
   static Types getType() { return HWResType::MemoryBus; }
 };
 
-class HWAddSub : public HWResType {
+class HWBinOpResType : public HWResType {
   unsigned MaxBitWidth;
-  // Read latency and write latency
 
-  HWAddSub(std::string name, unsigned latency,
-    unsigned startInt, unsigned totalRes, unsigned maxBitWidth)
-    : HWResType(HWResType::AddSub, name, latency, startInt, totalRes),
-    MaxBitWidth(maxBitWidth) {}
+protected:
+  HWBinOpResType(HWResType::Types T, unsigned latency, unsigned startInt,
+    unsigned totalRes, unsigned maxBitWidth)
+    : HWResType(T, latency, startInt, totalRes), MaxBitWidth(maxBitWidth) {}
+
 public:
   unsigned getMaxBitWidth() const { return MaxBitWidth; }
 
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWBinOpResType *A) { return true; }
+  static inline bool classof(const HWResType *A) {
+    return A->getType() == HWResType::AddSub
+      || A->getType() == HWResType::SHL
+      || A->getType() == HWResType::ASR
+      || A->getType() == HWResType::LSR
+      || A->getType() == HWResType::Mult;
+  }
+
+  template<class BinOpResType>
+  static BinOpResType *createFromXml(rapidxml::xml_node<char> *Node);
+};
+
+class HWMult : public HWBinOpResType {
+  unsigned MaxBitWidth;
+
+  HWMult(unsigned latency, unsigned startInt, unsigned totalRes,
+    unsigned maxBitWidth)
+    : HWBinOpResType(HWResType::Mult, latency, startInt, totalRes, maxBitWidth)
+  {}
+
+  friend class HWBinOpResType;
+public:
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const HWMult *A) { return true; }
+  static inline bool classof(const HWResType *A) {
+    return A->getType() == HWResType::Mult;
+  }
+
+  static std::string getTypeName() { return "Mult"; }
+  static Types getType() { return HWResType::Mult; }
+};
+
+class HWAddSub : public HWBinOpResType {
+  unsigned MaxBitWidth;
+
+  HWAddSub(unsigned latency, unsigned startInt, unsigned totalRes,
+    unsigned maxBitWidth)
+    : HWBinOpResType(HWResType::AddSub, latency, startInt, totalRes, maxBitWidth)
+  {}
+
+  friend class HWBinOpResType;
+public:
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAddSub *A) { return true; }
   static inline bool classof(const HWResType *A) {
     return A->getType() == HWResType::AddSub;
   }
 
-  static HWAddSub *createFromXml(rapidxml::xml_node<char> *Node);
   static std::string getTypeName() { return "AddSub"; }
   static Types getType() { return HWResType::AddSub; }
 };
@@ -223,7 +263,8 @@ public:
     return cast<ResType>(getResType(ResType::getType()));
   }
 
-  HWFUnit *allocaAddSubFU(unsigned BitWitdh, unsigned UnitID = 0);
+  HWFUnit *allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
+                         unsigned UnitID = 0);
   HWFUnit *allocaMemBusFU(unsigned UnitID);
   HWFUnit *allocaTrivialFU(unsigned latency);
 

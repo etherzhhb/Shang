@@ -293,7 +293,8 @@ HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
 
   SmallVector<HWEdge*, 2> Deps;
   addOperandDeps(I, Deps);
-  return getPostBind(I, Deps, RC->allocaAddSubFU(TD->getPointerSizeInBits()));
+  return getPostBind(I, Deps, RC->allocaBinOpFU(HWResType::AddSub,
+                                                TD->getPointerSizeInBits()));
 }
 
 HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
@@ -323,10 +324,10 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
     case Instruction::Add:
     case Instruction::Sub:
       //T = isTrivial ? HWResource::Trivial : HWResource::AddSub;
-      FU = RC->allocaAddSubFU(BitWidth);
+      FU = RC->allocaBinOpFU(HWResType::AddSub, BitWidth);
       break;
     case Instruction::Mul:
-      //FU = RC->allocaFU(HWResType::Mul);
+      FU = RC->allocaBinOpFU(HWResType::Mult, BitWidth);
       break;
     case Instruction::And:
     case Instruction::Or:
@@ -338,15 +339,15 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
       // Add the signed prefix for lhs
       isSigned = true;
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : 0;
+                      : RC->allocaBinOpFU(HWResType::ASR, BitWidth);
       break;
     case Instruction::LShr:
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : 0;
+                      : RC->allocaBinOpFU(HWResType::LSR, BitWidth);
       break;
     case Instruction::Shl:
       FU = isOp1Const ? RC->allocaTrivialFU(1)
-                      : 0;
+                      : RC->allocaBinOpFU(HWResType::SHL, BitWidth);
       break;
     default: 
       llvm_unreachable("Instruction not support yet!");

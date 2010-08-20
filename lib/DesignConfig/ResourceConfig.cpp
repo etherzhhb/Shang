@@ -87,27 +87,27 @@ static unsigned getSubNodeAsInteger(XmlNode *Node, std::string name) {
 
 HWMemBus *HWMemBus::createFromXml(XmlNode *Node) {
   assert(Node && "Node can not be null!");
-  return new HWMemBus(getSubNodeAsString(Node, "Name"),
-                      getSubNodeAsInteger(Node, "Latency"),
+  if (getSubNodeAsString(Node, "Name") != HWMemBus::getTypeName())
+    report_fatal_error("Bad Resource name, not match " +  getTypeName());
+  return new HWMemBus(getSubNodeAsInteger(Node, "Latency"),
                       getSubNodeAsInteger(Node, "StartInterval"),
                       getSubNodeAsInteger(Node, "TotalNum"),
                       getSubNodeAsInteger(Node, "AddressWidth"),
                       getSubNodeAsInteger(Node, "DataWidth"));
 }
 
-HWAddSub *HWAddSub::createFromXml(XmlNode *Node) {
-  return new HWAddSub(getSubNodeAsString(Node, "Name"),
+template<class BinOpResType>
+BinOpResType *HWBinOpResType::createFromXml(XmlNode *Node) {
+  assert(Node && "Node can not be null!");
+  if (getSubNodeAsString(Node, "Name") != BinOpResType::getTypeName())
+    report_fatal_error("Bad Resource name, not match " + BinOpResType::getTypeName());
+  
+  return new BinOpResType(//,
     getSubNodeAsInteger(Node, "Latency"),
     getSubNodeAsInteger(Node, "StartInterval"),
     getSubNodeAsInteger(Node, "TotalNum"),
     getSubNodeAsInteger(Node, "MaxBitWidth"));
-
 }
-//
-//HWFUnit HWResType::allocaFU(unsigned UnitID) {
-//  return HWFUnit(getType(), UnitID == 0 ? getTotalRes() : 1,
-//                 getLatency(), UnitID);
-//}
 
 //===----------------------------------------------------------------------===//
 /// Resource config implement
@@ -143,7 +143,10 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
       Res = HWMemBus::createFromXml(ResNode);
       break;
     case HWResType::AddSub:
-      Res = HWAddSub::createFromXml(ResNode);
+      Res = HWBinOpResType::createFromXml<HWAddSub>(ResNode);
+      break;
+    case HWResType::Mult:
+      Res = HWBinOpResType::createFromXml<HWMult>(ResNode);
       break;
     default:
       report_fatal_error("Unknow resource type!");
@@ -158,11 +161,12 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   }
 }
 
-HWFUnit *ResourceConfig::allocaAddSubFU(unsigned BitWitdh, unsigned UnitID) {
+HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
+                                       unsigned UnitID) {
   FoldingSetNodeID ID;
-  ID.AddInteger(HWResType::AddSub);
+  ID.AddInteger(T);
   ID.AddInteger(BitWitdh);
-  //ID.AddInteger(UnitID);
+  ID.AddInteger(UnitID);
 
   void *IP = 0;
   HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
@@ -170,8 +174,8 @@ HWFUnit *ResourceConfig::allocaAddSubFU(unsigned BitWitdh, unsigned UnitID) {
   // TODO: Assert bit width smaller than max bit width.
   unsigned short Inputs[] = { BitWitdh, BitWitdh };
   unsigned short Outputs[] = { BitWitdh };
-  HWAddSub *HWTy = getResType<HWAddSub>();
-  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::AddSub,
+  HWBinOpResType *HWTy = cast<HWBinOpResType>(getResType(T));
+  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), T,
                                    HWTy->getTotalRes(), HWTy->getLatency(),
                                    Inputs, Inputs + 2, Outputs, Outputs + 1);
   UniqiueHWFUs.InsertNode(FU, IP);
