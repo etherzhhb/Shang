@@ -135,45 +135,29 @@ public:
   static BinOpResType *createFromXml(rapidxml::xml_node<char> *Node);
 };
 
-class HWMult : public HWBinOpResType {
-  unsigned MaxBitWidth;
-
-  HWMult(unsigned latency, unsigned startInt, unsigned totalRes,
-    unsigned maxBitWidth)
-    : HWBinOpResType(HWResType::Mult, latency, startInt, totalRes, maxBitWidth)
-  {}
-
-  friend class HWBinOpResType;
-public:
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWMult *A) { return true; }
-  static inline bool classof(const HWResType *A) {
-    return A->getType() == HWResType::Mult;
-  }
-
-  static std::string getTypeName() { return "Mult"; }
-  static Types getType() { return HWResType::Mult; }
+#define BINOPRESTYPECLASS(Name) \
+class HW##Name : public HWBinOpResType { \
+  unsigned MaxBitWidth; \
+  HW##Name(unsigned latency, unsigned startInt, unsigned totalRes, \
+  unsigned maxBitWidth) \
+  : HWBinOpResType(HWResType::##Name, latency, startInt, totalRes, \
+  maxBitWidth) \
+{} \
+  friend class HWBinOpResType; \
+public: \
+  static inline bool classof(const HW##Name *A) { return true; } \
+  static inline bool classof(const HWResType *A) { \
+  return A->getType() == HWResType::##Name; \
+} \
+  static std::string getTypeName() { return #Name; } \
+  static Types getType() { return HWResType::##Name; } \
 };
 
-class HWAddSub : public HWBinOpResType {
-  unsigned MaxBitWidth;
-
-  HWAddSub(unsigned latency, unsigned startInt, unsigned totalRes,
-    unsigned maxBitWidth)
-    : HWBinOpResType(HWResType::AddSub, latency, startInt, totalRes, maxBitWidth)
-  {}
-
-  friend class HWBinOpResType;
-public:
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAddSub *A) { return true; }
-  static inline bool classof(const HWResType *A) {
-    return A->getType() == HWResType::AddSub;
-  }
-
-  static std::string getTypeName() { return "AddSub"; }
-  static Types getType() { return HWResType::AddSub; }
-};
+BINOPRESTYPECLASS(Mult);
+BINOPRESTYPECLASS(AddSub);
+BINOPRESTYPECLASS(SHL);
+BINOPRESTYPECLASS(ASR);
+BINOPRESTYPECLASS(LSR);
 
 class HWFUnit : public FoldingSetNode {
   /// FastID - A reference to an Interned FoldingSetNodeID for this node.

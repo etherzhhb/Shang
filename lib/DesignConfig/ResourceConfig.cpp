@@ -148,6 +148,15 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
     case HWResType::Mult:
       Res = HWBinOpResType::createFromXml<HWMult>(ResNode);
       break;
+    case HWResType::SHL:
+      Res = HWBinOpResType::createFromXml<HWSHL>(ResNode);
+      break;
+    case HWResType::ASR:
+      Res = HWBinOpResType::createFromXml<HWASR>(ResNode);
+      break;
+    case HWResType::LSR:
+      Res = HWBinOpResType::createFromXml<HWLSR>(ResNode);
+      break;
     default:
       report_fatal_error("Unknow resource type!");
       break;
