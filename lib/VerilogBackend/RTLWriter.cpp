@@ -388,22 +388,18 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
 
   switch (PreBind->getResType()) {
   case HWResType::MemoryBus:
-    opMemBus(PreBind);
-    break;
   case HWResType::AddSub:
-    opAddSub(PreBind);
+  case HWResType::Mult:
     break;
   default:
     assert(!"Unexcept resource type!");
   }
 }
 
-void RTLWriter::opAddSub(HWAPreBind *PreBind) {
-}
-
 std::string RTLWriter::getRegPrefix(HWResType::Types T) {
   switch (T) {
   case HWResType::AddSub:     return "addsub_result";
+  case HWResType::Mult:       return "mult_result";
   case HWResType::MemoryBus:  return "membus_out";
   case HWResType::Trivial:    return "R";
   default:                    return "<Unknown>";
@@ -450,6 +446,31 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
   vlang->alwaysEnd(DataPath, 2);
 }
 
+
+template<>
+void RTLWriter::emitResourceDecl<HWMult>(HWFUnit *FU, unsigned ID) {
+  emitResourceDeclForBinOpRes(FU, ID, "mult", " * ");
+}
+
+template<>
+void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU, unsigned ID) {
+  unsigned DataWidth = FU->getInputBitwidth(0),
+    AddrWidth = FU->getInputBitwidth(1);
+
+  // Emit the ports;
+  ModDecl << '\n';
+  vlang->comment(getModDeclBuffer()) << "Memory bus " << ID << '\n';
+  getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
+    << ID <<",\n";
+  getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
+    << ID << ",\n";
+  getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
+    << ID << ",\n";
+
+  getModDeclBuffer() << "output reg membus_we" << ID << ",\n";
+  getModDeclBuffer() << "output reg membus_en" << ID << ",\n";
+}
+
 void RTLWriter::emitResourceOpForBinOpRes(HWAPreBind *A, const std::string &OpPrefix) {
   unsigned ID = A->getFUID();
   std::string OpA = OpPrefix + "_a" + utostr(ID);
@@ -476,51 +497,15 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
   emitResourceOpForBinOpRes(A, "addsub");
 }
 
-
-void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
-                                                 const std::string &OpPrefix) {
-  std::string OpA = OpPrefix + "_a" + utostr(ID);
-  std::string OpB = OpPrefix + "_b" + utostr(ID);
-
-  DataPath.indent(6) << OpA << " <= "
-    << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
-  DataPath.indent(6) << OpB << " <= "
-    << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
-}
-
 template<>
-void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU, unsigned ID) {
-  std::string Mode = "addsub_mode" + utostr(ID);
-  DataPath.indent(6) << Mode << " <= 1'b0;\n";
-  emitResourceDefaultOpForBinOpRes(FU, ID, "addsub");
-  vlang->end(DataPath.indent(4));
-}
-
-
-template<>
-void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU, unsigned ID) {
-  unsigned DataWidth = FU->getInputBitwidth(0),
-           AddrWidth = FU->getInputBitwidth(1);
-
-  // Emit the ports;
-  ModDecl << '\n';
-  vlang->comment(getModDeclBuffer()) << "Memory bus " << ID << '\n';
-  getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
-    << ID <<",\n";
-  getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
-    << ID << ",\n";
-
-  getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
-    << ID << ",\n";
-
-  getModDeclBuffer() << "output reg membus_we" << ID << ",\n";
-  getModDeclBuffer() << "output reg membus_en" << ID << ",\n";
+void RTLWriter::emitResourceOp<HWMult>(HWAPreBind *A) {
+  emitResourceOpForBinOpRes(A, "mult");
 }
 
 template<>
 void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
   unsigned DataWidth = A->getFunUnit()->getInputBitwidth(0),
-           AddrWidth = A->getFunUnit()->getInputBitwidth(1);
+    AddrWidth = A->getFunUnit()->getInputBitwidth(1);
 
   unsigned ID = A->getFUID();
   Instruction *Inst = &(A->getInst<Instruction>());
@@ -543,6 +528,30 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
     DataPath.indent(6) << "membus_in" << ID
       << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
   }
+}
+
+void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
+                                                 const std::string &OpPrefix) {
+  std::string OpA = OpPrefix + "_a" + utostr(ID);
+  std::string OpB = OpPrefix + "_b" + utostr(ID);
+
+  DataPath.indent(6) << OpA << " <= "
+    << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
+  DataPath.indent(6) << OpB << " <= "
+    << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
+  vlang->end(DataPath.indent(4));
+}
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU, unsigned ID) {
+  std::string Mode = "addsub_mode" + utostr(ID);
+  DataPath.indent(6) << Mode << " <= 1'b0;\n";
+  emitResourceDefaultOpForBinOpRes(FU, ID, "addsub");
+}
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU, unsigned ID) {
+  emitResourceDefaultOpForBinOpRes(FU, ID, "mult");
 }
 
 template<>
@@ -616,22 +625,12 @@ void RTLWriter::emitResources() {
     case HWResType::AddSub:
       emitResource<HWAddSub>(I->second);
       break;
+    case HWResType::Mult:
+      emitResource<HWMult>(I->second);
+      break;
     default:
       break;
     }
-  }
-}
-
-void RTLWriter::opMemBus(HWAPreBind *PreBind) {
-  if (LoadInst *L = dyn_cast<LoadInst>(&PreBind->getValue())) {
-    unsigned MemBusInst = PreBind->getFUID();
-    std::string Name = getAsOperand(PreBind);
-    // Declare the signal
-    vlang->declSignal(getSignalDeclBuffer(), Name,
-                      PreBind->getFunUnit()->getOutputBitwidth(0), 0, false);
-    // Emit the datapath
-    DataPath.indent(2) <<  "assign " << getAsOperand(PreBind) 
-                       << " = membus_out" << MemBusInst <<";\n";
   }
 }
 

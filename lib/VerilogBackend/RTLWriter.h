@@ -89,10 +89,6 @@ class RTLWriter : public FunctionPass {
   void emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
                                         const std::string &OpPrefix);
 
-  void opMemBus(HWAPreBind *PreBind);
-  void opAddSub(HWAPreBind *PreBind);
-
-
   // Atoms
   void emitAtom(HWAtom *A);
   void emitPreBind(HWAPreBind *PreBind);
