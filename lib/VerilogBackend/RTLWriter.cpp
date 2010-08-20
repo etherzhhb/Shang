@@ -283,15 +283,6 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
-std::string RTLWriter::getRegPrefix(HWResType::Types T) {
-  switch (T) {
-  case HWResType::AddSub:     return "AddSubResult";
-  case HWResType::MemoryBus:  return "membus_out";
-  case HWResType::Trivial:    return "R";
-  default:                    return "<Unknown>";
-  }
-}
-
 std::string RTLWriter::getAsOperand(const HWRegister *R) {
   return getRegPrefix(R->getResType()) + utostr(R->getRegNum());
 }
@@ -410,6 +401,33 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
 void RTLWriter::opAddSub(HWAPreBind *PreBind) {
 }
 
+std::string RTLWriter::getRegPrefix(HWResType::Types T) {
+  switch (T) {
+  case HWResType::AddSub:     return "addsub_result";
+  case HWResType::MemoryBus:  return "membus_out";
+  case HWResType::Trivial:    return "R";
+  default:                    return "<Unknown>";
+  }
+}
+
+void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU, unsigned ID,
+                                            const std::string &OpPrefix,
+                                            const std::string &Operator) {
+  std::string OpA = OpPrefix + "_a" + utostr(ID);
+  std::string OpB = OpPrefix + "_b" + utostr(ID);
+  std::string Res = getRegPrefix(FU->getResType()) + utostr(ID);
+
+  vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
+  vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
+  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(0), 0);
+
+  vlang->alwaysBegin(DataPath, 2);
+  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth(0));
+  vlang->ifElse(DataPath.indent(4));
+  DataPath.indent(6) << Res << " <= " << OpA << Operator << OpB << ";\n";
+  vlang->alwaysEnd(DataPath, 2);
+}
+
 template<>
 void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
   std::string OpA = "addsub_a" + utostr(ID);
@@ -418,11 +436,8 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
   std::string Res = getRegPrefix(FU->getResType()) + utostr(ID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
-  
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-
   vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(0), 0);
-  
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
   vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: " << ID << '\n';
@@ -435,12 +450,20 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
   vlang->alwaysEnd(DataPath, 2);
 }
 
+void RTLWriter::emitResourceOpForBinOpRes(HWAPreBind *A, const std::string &OpPrefix) {
+  unsigned ID = A->getFUID();
+  std::string OpA = OpPrefix + "_a" + utostr(ID);
+  std::string OpB = OpPrefix + "_b" + utostr(ID);
+
+  DataPath.indent(6) <<  OpA << " <= "
+    << getAsOperand(A->getValDep(0)) << ";\n";
+  DataPath.indent(6) <<  OpB << " <= "
+    << getAsOperand(A->getValDep(1)) << ";\n";
+}
 
 template<>
 void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
   unsigned ID = A->getFUID();
-  std::string OpA = "addsub_a" + utostr(ID);
-  std::string OpB = "addsub_b" + utostr(ID);
   std::string Mode = "addsub_mode" + utostr(ID);
 
   Instruction *Inst = &(A->getInst<Instruction>());
@@ -450,25 +473,26 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
   else
     DataPath << " <= 1'b1;\n";
 
-  DataPath.indent(6) <<  OpA << " <= "
-    << getAsOperand(A->getValDep(0)) << ";\n";
-  DataPath.indent(6) <<  OpB << " <= "
-    << getAsOperand(A->getValDep(1)) << ";\n";
+  emitResourceOpForBinOpRes(A, "addsub");
 }
 
 
-template<>
-void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU, unsigned ID) {
-  std::string OpA = "addsub_a" + utostr(ID);
-  std::string OpB = "addsub_b" + utostr(ID);
-  std::string Mode = "addsub_mode" + utostr(ID);
-  // FIXME: Bitwidth is not correct!
+void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
+                                                 const std::string &OpPrefix) {
+  std::string OpA = OpPrefix + "_a" + utostr(ID);
+  std::string OpB = OpPrefix + "_b" + utostr(ID);
+
   DataPath.indent(6) << OpA << " <= "
     << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
   DataPath.indent(6) << OpB << " <= "
     << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
-  DataPath.indent(6) << Mode << " <= 1'b0;\n";
+}
 
+template<>
+void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU, unsigned ID) {
+  std::string Mode = "addsub_mode" + utostr(ID);
+  DataPath.indent(6) << Mode << " <= 1'b0;\n";
+  emitResourceDefaultOpForBinOpRes(FU, ID, "addsub");
   vlang->end(DataPath.indent(4));
 }
 

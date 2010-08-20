@@ -76,14 +76,20 @@ class RTLWriter : public FunctionPass {
 
   template<class ResType>
   void emitResourceDecl(HWFUnit *FU, unsigned ID);
+  void emitResourceDeclForBinOpRes(HWFUnit *FU, unsigned ID,
+                                   const std::string &OpPrefix,
+                                   const std::string &Operator);
 
   template<class ResType>
   void emitResourceOp(HWAPreBind *A);
+  void emitResourceOpForBinOpRes(HWAPreBind *A, const std::string &OpPrefix);
 
   template<class ResType>
   void emitResourceDefaultOp(HWFUnit *FU, unsigned ID);
-  void opMemBus(HWAPreBind *PreBind);
+  void emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
+                                        const std::string &OpPrefix);
 
+  void opMemBus(HWAPreBind *PreBind);
   void opAddSub(HWAPreBind *PreBind);
 
 
