@@ -177,8 +177,6 @@ public:
     return OutputBitWidth[idx];
   }
 
-  std::string getOutputPrefix() const;
-
   inline unsigned getNumOutputs() const { return OutputBitWidth.size(); }
 };
 

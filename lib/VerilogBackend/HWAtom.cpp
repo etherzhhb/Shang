@@ -38,12 +38,12 @@ void HWAtom::dump() const {
 
 void HWAWrReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Write Storage "
-     << Reg->getRegName();
+     << Reg->getResType() << "$" << Reg->getRegNum();
 }
 
 void HWARdReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Import Storage "
-     << Reg->getRegName();
+     << Reg->getResType() << "$" << Reg->getRegNum();
 }
 
 void HWADelay::print(raw_ostream &OS) const {
@@ -191,5 +191,5 @@ void HWAtom::setParent(FSMState *State) {
 }
 
 bool HWAWrReg::writeFUReg() const {
-  return isa<HWAPreBind>(getSrc());
+  return Reg->isFuReg();
 }

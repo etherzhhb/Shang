@@ -283,8 +283,17 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   }
 }
 
-std::string RTLWriter::getAsOperand(HWRegister *R) {
-  return R->getRegName();
+std::string RTLWriter::getRegPrefix(HWResType::Types T) {
+  switch (T) {
+  case HWResType::AddSub:     return "AddSubResult";
+  case HWResType::MemoryBus:  return "membus_out";
+  case HWResType::Trivial:    return "R";
+  default:                    return "<Unknown>";
+  }
+}
+
+std::string RTLWriter::getAsOperand(const HWRegister *R) {
+  return getRegPrefix(R->getResType()) + utostr(R->getRegNum());
 }
 
 std::string RTLWriter::getAsOperand(HWEdge &E) {
@@ -359,7 +368,7 @@ void RTLWriter::emitAllRegisters() {
       I != E; ++I) {
     const HWRegister *R = *I;
     unsigned BitWidth = R->getBitWidth();
-    std::string Name = R->getRegName();
+    std::string Name = getAsOperand(R);
 
     vlang->declSignal(getSignalDeclBuffer(), Name, BitWidth, 0);
     vlang->resetRegister(getResetBlockBuffer(), Name, BitWidth, 0);
@@ -386,7 +395,7 @@ void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
   // Remember this atom
   ResourceMap[PreBind->getFunUnit()].push_back(PreBind);
 
-  switch (PreBind->getResClass()) {
+  switch (PreBind->getResType()) {
   case HWResType::MemoryBus:
     opMemBus(PreBind);
     break;
@@ -406,7 +415,7 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
   std::string OpA = "addsub_a" + utostr(ID);
   std::string OpB = "addsub_b" + utostr(ID);
   std::string Mode = "addsub_mode" + utostr(ID);
-  std::string Res = FU->getOutputPrefix() + utostr(ID);
+  std::string Res = getRegPrefix(FU->getResType()) + utostr(ID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   
@@ -433,7 +442,6 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
   std::string OpA = "addsub_a" + utostr(ID);
   std::string OpB = "addsub_b" + utostr(ID);
   std::string Mode = "addsub_mode" + utostr(ID);
-  std::string Res = A->getFunUnit()->getOutputPrefix() + utostr(ID);
 
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;

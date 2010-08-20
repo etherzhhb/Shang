@@ -145,17 +145,16 @@ public:
 };
 
 class HWRegister {
-  unsigned short BitWidth;
-  unsigned short Num : 15;
-  bool IsFuReg       : 1;
+  unsigned       Num : 20;
+  unsigned  BitWidth : 8;
+  HWResType::Types T : 4;
   // The life time of this register, Including EndSlot.
   unsigned short StartSlot, EndSlot;
-  std::string Name;
 public:
-  HWRegister(unsigned short num, unsigned short BitWidth, bool isFuReg,
-             unsigned startSlot, unsigned endSlot, std::string name = "R")
-    : BitWidth(BitWidth), Num(num), StartSlot(startSlot), EndSlot(endSlot),
-      Name(name) {}
+  HWRegister(unsigned short num, unsigned short BitWidth, HWResType::Types t,
+             unsigned startSlot, unsigned endSlot)
+    : BitWidth(BitWidth), Num(num), T(t), StartSlot(startSlot), EndSlot(endSlot)
+  {}
 
   unsigned getStartSlot() const { return StartSlot; }
   unsigned getEndSlot() const { return EndSlot; }
@@ -163,10 +162,10 @@ public:
     return std::make_pair(StartSlot, EndSlot);
   }
 
+  enum HWResType::Types getResType() const { return T; };
   unsigned getBitWidth() const { return BitWidth; }
   unsigned getRegNum() const { return Num; }
-  std::string getRegName() const { return Name + utostr(Num); }
-  bool isFuReg() const { return IsFuReg; }
+  bool isFuReg() const { return T != HWResType::Trivial; }
 
   //typedef std::set<Value*>::iterator iterator;
   //typedef std::set<Value*>::const_iterator const_iterator;
@@ -592,12 +591,12 @@ protected:
     NumOps(OpNum), FU(fu) {}
 public:
   HWFUnit *getFunUnit() const { return FU; }
-  enum HWResType::Types getResClass() const {
+  enum HWResType::Types getResType() const {
     return FU->getResType();
   }
 
   bool isTrivial() const {
-    return getResClass() == HWResType::Trivial;
+    return getResType() == HWResType::Trivial;
   }
 
   template<class InstTy>

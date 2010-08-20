@@ -588,14 +588,14 @@ void CompPathBinding::buildWOCGForRes() {
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
        I != E; ++I) {
     if (HWAPostBind *PB = dyn_cast<HWAPostBind>(*I))
-      if (PB->getResClass() != HWResType::Trivial)      
+      if (PB->getResType() != HWResType::Trivial)      
         insertToWOCG(PB);
   } 
 }
 
 void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
-  PostBindNodeType *Entry = getGraphEntry(PB->getResClass()),
-                   *Exit = getGraphExit(PB->getResClass()),
+  PostBindNodeType *Entry = getGraphEntry(PB->getResType()),
+                   *Exit = getGraphExit(PB->getResType()),
                    *Node = new (NodeAllocator) PostBindNodeType(PB);
 
   for (PostBindNodeType::succ_iterator I = Entry->succ_begin(), E = Entry->succ_end();

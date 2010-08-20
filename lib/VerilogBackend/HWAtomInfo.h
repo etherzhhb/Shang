@@ -253,8 +253,7 @@ public:
   HWRegister *allocaFURegister(HWAPreBind *A) {
     unsigned Slot = A->getFinSlot();
     return new (HWAtomAllocator) HWRegister(A->getFUID(),
-      A->getFunUnit()->getOutputBitwidth(0), true, Slot, Slot,
-      A->getFunUnit()->getOutputPrefix());
+      A->getFunUnit()->getOutputBitwidth(0), A->getResType(), Slot, Slot);
   }
 
   HWRegister *allocaRegister(const Type *Ty,
@@ -264,7 +263,7 @@ public:
   }
 
   HWRegister *allocaRegister(unsigned BitWitdh, unsigned StartSlot, unsigned EndSlot) {
-    return new (HWAtomAllocator) HWRegister(++NumRegs, BitWitdh, false,
+    return new (HWAtomAllocator) HWRegister(++NumRegs, BitWitdh, HWResType::Trivial,
                                             StartSlot, EndSlot);
   }
 
