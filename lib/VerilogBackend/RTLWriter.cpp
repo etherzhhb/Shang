@@ -402,10 +402,10 @@ std::string RTLWriter::getRegPrefix(HWResType::Types T) {
 void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
                                             const std::string &OpPrefix,
                                             const std::string &Operator) {
-  unsigned ID = FU->getUnitID();
-  std::string OpA = OpPrefix + "_a" + utostr(ID);
-  std::string OpB = OpPrefix + "_b" + utostr(ID);
-  std::string Res = getRegPrefix(FU->getResType()) + utostr(ID);
+  unsigned FUID = FU->getUnitID();
+  std::string OpA = OpPrefix + "_a" + utostr(FUID);
+  std::string OpB = OpPrefix + "_b" + utostr(FUID);
+  std::string Res = getRegPrefix(FU->getResType()) + utostr(FUID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
@@ -420,18 +420,18 @@ void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
 
 template<>
 void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
-  unsigned ID = FU->getUnitID();
-  std::string OpA = "addsub_a" + utostr(ID);
-  std::string OpB = "addsub_b" + utostr(ID);
-  std::string Mode = "addsub_mode" + utostr(ID);
-  std::string Res = getRegPrefix(FU->getResType()) + utostr(ID);
+  unsigned FUID = FU->getUnitID();
+  std::string OpA = "addsub_a" + utostr(FUID);
+  std::string OpB = "addsub_b" + utostr(FUID);
+  std::string Mode = "addsub_mode" + utostr(FUID);
+  std::string Res = getRegPrefix(FU->getResType()) + utostr(FUID);
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
   vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0);
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
-  vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: " << ID << '\n';
+  vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: " << FUID << '\n';
   vlang->alwaysBegin(DataPath, 2);
   vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
   vlang->ifElse(DataPath.indent(4));
@@ -451,26 +451,26 @@ template<>
 void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU) {
   unsigned DataWidth = FU->getInputBitwidth(0),
            AddrWidth = FU->getInputBitwidth(1),
-           ID = FU->getUnitID();
+           FUID = FU->getUnitID();
 
   // Emit the ports;
   ModDecl << '\n';
-  vlang->comment(getModDeclBuffer()) << "Memory bus " << ID << '\n';
+  vlang->comment(getModDeclBuffer()) << "Memory bus " << FUID << '\n';
   getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
-    << ID <<",\n";
+    << FUID <<",\n";
   getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
-    << ID << ",\n";
+    << FUID << ",\n";
   getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
-    << ID << ",\n";
+    << FUID << ",\n";
 
-  getModDeclBuffer() << "output reg membus_we" << ID << ",\n";
-  getModDeclBuffer() << "output reg membus_en" << ID << ",\n";
+  getModDeclBuffer() << "output reg membus_we" << FUID << ",\n";
+  getModDeclBuffer() << "output reg membus_en" << FUID << ",\n";
 }
 
 void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefix) {
-  unsigned ID = A->getUnitID();
-  std::string OpA = OpPrefix + "_a" + utostr(ID);
-  std::string OpB = OpPrefix + "_b" + utostr(ID);
+  unsigned FUID = A->getUnitID();
+  std::string OpA = OpPrefix + "_a" + utostr(FUID);
+  std::string OpB = OpPrefix + "_b" + utostr(FUID);
 
   DataPath.indent(6) <<  OpA << " <= "
     << getAsOperand(A->getValDep(0)) << ";\n";
@@ -480,8 +480,8 @@ void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefi
 
 template<>
 void RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
-  unsigned ID = A->getUnitID();
-  std::string Mode = "addsub_mode" + utostr(ID);
+  unsigned FUID = A->getUnitID();
+  std::string Mode = "addsub_mode" + utostr(FUID);
 
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;
@@ -503,33 +503,33 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
   unsigned DataWidth = A->getInputBitwidth(0),
            AddrWidth = A->getInputBitwidth(1);
 
-  unsigned ID = A->getUnitID();
+  unsigned FUID = A->getUnitID();
   Instruction *Inst = &(A->getInst<Instruction>());
   // Enable the memory
-  DataPath.indent(6) << "membus_en" << ID << " <= 1'b1;\n";
+  DataPath.indent(6) << "membus_en" << FUID << " <= 1'b1;\n";
   // Send the address.
-  DataPath.indent(6) << "membus_addr" << ID << " <= ";
+  DataPath.indent(6) << "membus_addr" << FUID << " <= ";
 
   // Emit the operation
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
     DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_we" << ID << " <= 1'b0;\n";
-    DataPath.indent(6) << "membus_in" << ID
+    DataPath.indent(6) << "membus_we" << FUID << " <= 1'b0;\n";
+    DataPath.indent(6) << "membus_in" << FUID
       << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   } else { // It must be a store
     DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_we" << ID << " <= 1'b1;\n";
-    DataPath.indent(6) << "membus_in" << ID
+    DataPath.indent(6) << "membus_we" << FUID << " <= 1'b1;\n";
+    DataPath.indent(6) << "membus_in" << FUID
       << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
   }
 }
 
 void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string &OpPrefix) {
-  unsigned ID = FU->getUnitID();
-  std::string OpA = OpPrefix + "_a" + utostr(ID);
-  std::string OpB = OpPrefix + "_b" + utostr(ID);
+  unsigned FUID = FU->getUnitID();
+  std::string OpA = OpPrefix + "_a" + utostr(FUID);
+  std::string OpB = OpPrefix + "_b" + utostr(FUID);
 
   DataPath.indent(6) << OpA << " <= "
     << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
@@ -540,7 +540,7 @@ void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string 
 
 template<>
 void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
-  std::string Mode = "addsub_mode" + utostr(ID);
+  std::string Mode = "addsub_mode" + utostr(FU->getUnitID());
   DataPath.indent(6) << Mode << " <= 1'b0;\n";
   emitResourceDefaultOpForBinOpRes(FU, "addsub");
 }
@@ -553,14 +553,14 @@ void RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU) {
 template<>
 void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
   unsigned DataWidth = FU->getInputBitwidth(0),
-           AddrWidth = FU->getInputBitwidth(1);
-           ID = FU->getUnitID();
+           AddrWidth = FU->getInputBitwidth(1),
+           FUID = FU->getUnitID();
 
-  DataPath.indent(6) << "membus_en" << ID << " <= 1'b0;\n";
-  DataPath.indent(6) << "membus_addr" << ID
+  DataPath.indent(6) << "membus_en" << FUID << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_addr" << FUID
     << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  DataPath.indent(6) << "membus_we" << ID << " <= 1'b0;\n";
-  DataPath.indent(6) << "membus_in" << ID
+  DataPath.indent(6) << "membus_we" << FUID << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_in" << FUID
     << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   vlang->end(DataPath.indent(4));
 }
@@ -569,9 +569,9 @@ template<class ResType>
 void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   HWAOpFU *FirstAtom = Atoms[0];
   HWFUnit *FU = FirstAtom->getFUnit();
-  unsigned ID = FU->getUnitID();
+  unsigned FUID = FU->getUnitID();
 
-  std::string SelName = ResType::getTypeName() + utostr(ID) + "Mux";
+  std::string SelName = ResType::getTypeName() + utostr(FUID) + "Mux";
   unsigned SelBitWidth = Atoms.size();
   vlang->declSignal(getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
 

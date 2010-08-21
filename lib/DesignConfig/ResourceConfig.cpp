@@ -172,20 +172,20 @@ void ResourceConfig::ParseConfigFile(const std::string &Filename) {
 
 HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
                                        unsigned UnitID) {
-  FoldingSetNodeID ID;
-  ID.AddInteger(T);
-  ID.AddInteger(BitWitdh);
-  ID.AddInteger(UnitID);
+  FoldingSetNodeID FUID;
+  FUID.AddInteger(T);
+  FUID.AddInteger(BitWitdh);
+  FUID.AddInteger(UnitID);
 
   void *IP = 0;
-  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
+  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(FUID, IP);
   if (FU) return FU;
   // TODO: Assert bit width smaller than max bit width.
   uint8_t Inputs[] = { BitWitdh, BitWitdh };
   uint8_t *I = HWFUAllocator.Allocate<uint8_t>(2);
   std::uninitialized_copy(Inputs, Inputs + 2, I);
   HWBinOpResType *HWTy = cast<HWBinOpResType>(getResType(T));
-  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), T,
+  FU = new (HWFUAllocator) HWFUnit(FUID.Intern(HWFUAllocator), T,
                                    HWTy->getTotalRes(), HWTy->getLatency(),
                                    UnitID, I, 2, BitWitdh);
   UniqiueHWFUs.InsertNode(FU, IP);
@@ -194,20 +194,20 @@ HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
 
 
 HWFUnit *ResourceConfig::allocaMemBusFU(unsigned UnitID) {
-  FoldingSetNodeID ID;
-  ID.AddInteger(HWResType::MemoryBus);
-  ID.AddInteger(UnitID);
+  FoldingSetNodeID FUID;
+  FUID.AddInteger(HWResType::MemoryBus);
+  FUID.AddInteger(UnitID);
 
   void *IP = 0;
 
-  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
+  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(FUID, IP);
   if (FU) return FU;
 
   HWMemBus *HWTy = getResType<HWMemBus>();
   uint8_t Inputs[] = { HWTy->getDataWidth(), HWTy->getAddrWidth() };
   uint8_t *I = HWFUAllocator.Allocate<uint8_t>(2);
   std::uninitialized_copy(Inputs, Inputs + 2, I);
-  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::MemoryBus,
+  FU = new (HWFUAllocator) HWFUnit(FUID.Intern(HWFUAllocator), HWResType::MemoryBus,
                                    1, HWTy->getLatency(), UnitID, I, 2,
                                    HWTy->getDataWidth());
   UniqiueHWFUs.InsertNode(FU, IP);
@@ -216,30 +216,30 @@ HWFUnit *ResourceConfig::allocaMemBusFU(unsigned UnitID) {
 
 
 HWFUnit *ResourceConfig::allocaTrivialFU(unsigned Latency, unsigned BitWitdh) {
-  FoldingSetNodeID ID;
-  ID.AddInteger(HWResType::Trivial);
-  ID.AddInteger(Latency);
-  ID.AddInteger(BitWitdh);
+  FoldingSetNodeID FUID;
+  FUID.AddInteger(HWResType::Trivial);
+  FUID.AddInteger(Latency);
+  FUID.AddInteger(BitWitdh);
 
   void *IP = 0;
 
-  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
+  HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(FUID, IP);
   if (FU) return FU;
 
-  FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::Trivial,
+  FU = new (HWFUAllocator) HWFUnit(FUID.Intern(HWFUAllocator), HWResType::Trivial,
                                    ~0, Latency, 0, 0, 0, BitWitdh);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
 
-HWFUnit *ResourceConfig::assignIDToFU(HWFUnit *U, unsigned ID) {
+HWFUnit *ResourceConfig::assignIDToFU(HWFUnit *U, unsigned FUID) {
   switch (U->getResType()) {
   case HWResType::Trivial:
   case HWResType::MemoryBus:
     assert(0 && "Bad unit type!");
     return 0;
   default: // FIXME: Use the right bit width.
-    return allocaBinOpFU(U->getResType(), U->getInputBitwidth(0), ID);
+    return allocaBinOpFU(U->getResType(), U->getInputBitwidth(0), FUID);
   }
 }
 
