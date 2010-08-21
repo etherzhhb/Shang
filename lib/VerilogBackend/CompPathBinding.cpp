@@ -75,7 +75,6 @@ public:
     assert(Data.getPointer() && "Can not get data for virtual root!");
     return Data.getPointer();
   }
-  void updateData(DataTy *D) { Data.setPointer(D); }
   DataTy *operator ->() const { return Data.getPointer(); }
   DataTy *operator *() const { return Data.getPointer(); }
 
@@ -232,18 +231,18 @@ public:
   }
 };
 
-typedef CompGraphNode<HWAOpInst> PostBindNodeType;
-typedef CompGrapPath<HWAOpInst> PostBindNodePath;
+typedef CompGraphNode<HWAOpFU> PostBindNodeType;
+typedef CompGrapPath<HWAOpFU> PostBindNodePath;
 
 typedef CompGraphNode<PostBindNodePath> PathGraphNodeType;
 
 template<>
-unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
+unsigned CompGraphNode<HWAOpFU>::updateWeightTo(PostBindNodeType* N) {
   // compute the weight.
   unsigned weight = 1;
   if (!isVREntry() && !N->isVRExit()) {
     // Wij = alpha * Fij + MINij + 1;
-    HWAOpInst *Src = getData(), *Dst = N->getData();
+    HWAOpFU *Src = getData(), *Dst = N->getData();
     // Find flow dependency.
     if (Dst->isDepOn(Src))
       weight += 2;
@@ -261,7 +260,7 @@ unsigned CompGraphNode<HWAOpInst>::updateWeightTo(PostBindNodeType* N) {
 }
 
 template<>
-bool CompGraphNode<HWAOpInst>::computeCompatible(_Self *N) {
+bool CompGraphNode<HWAOpFU>::computeCompatible(_Self *N) {
   unsigned ThisSlot = getData()->getSlot(),
            NSlot = N->getData()->getSlot();
 
@@ -374,15 +373,15 @@ struct CompPathBinding : public BasicBlockPass {
   }
   // Build the Weighted Compatibility Graph.
   void buildWOCGForRes();
-  void insertToWOCG(HWAPostBind *PB);
+  void insertToWOCG(HWAOpFU *PB);
   // Build all operation in longest path to a function unit.
   void buildLongestPostBindPath();
   // Bind register to function unit.
   void bindFunUnitReg();
   // Bind register for prebind atoms.
-  void allocaPrebindReg();
+  void allocaPreBindReg();
   // Helper function to bind register.
-  void bindRegister(HWAPreBind *PB, HWRegister *R);
+  void bindRegister(HWAOpFU *PB, HWRegister *R);
 
   static char ID;
   CompPathBinding();
@@ -455,7 +454,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
     dbgs() << "\n\n";
   );
   // Bind register for prebind atoms.
-  allocaPrebindReg();
+  allocaPreBindReg();
 
   // 1. Build WOCG_FUNTYPE.
   buildWOCGForRes();
@@ -479,7 +478,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   return false;
 }
 
-void CompPathBinding::bindRegister(HWAPreBind *A, HWRegister *R) {
+void CompPathBinding::bindRegister(HWAOpFU *A, HWRegister *R) {
   HWAWrReg *WR = HI->getWrReg(A, R, A->getFinSlot());
   DEBUG(dbgs() << "Create FU Register: ");
   DEBUG(WR->dump());
@@ -507,26 +506,27 @@ void CompPathBinding::bindRegister(HWAPreBind *A, HWRegister *R) {
   }
 }
 
-void CompPathBinding::allocaPrebindReg() {
+void CompPathBinding::allocaPreBindReg() {
   std::map<HWFUnit*, HWRegister*> RegMap;
   std::vector<HWAtom*> WorkList(CurState->begin(), CurState->end());
   for (std::vector<HWAtom*>::iterator I = WorkList.begin(), E = WorkList.end();
       I != E; ++I) {
-    HWAPreBind *PB = dyn_cast<HWAPreBind>(*I);
-    if (!PB) continue;
+    HWAOpFU *OF = dyn_cast<HWAOpFU>(*I);
+    if (!OF) continue;
+    if (!OF->isBinded()) continue;
 
-    HWFUnit *ID = PB->getFunUnit();
+    HWFUnit *ID = OF->getFUnit();
     HWRegister *R = 0;
     std::map<HWFUnit*, HWRegister*>::iterator at = RegMap.find(ID);
     if (at == RegMap.end()) {
       // Create the register.
-      R = HI->allocaFURegister(PB);
+      R = HI->allocaFURegister(OF);
       RegMap.insert(std::make_pair(ID, R));
     } else
       R = at->second;
 
     // Bind the register.
-    bindRegister(PB, R);
+    bindRegister(OF, R);
   }
 }
 
@@ -541,7 +541,7 @@ void CompPathBinding::bindFunUnitReg() {
     HWRegister *FUR = 0;
     for (PostBindNodePath::path_iterator PI = Node->path_begin(),
         PE = Node->path_end(); PI != PE; ++PI) {
-      HWAPreBind *A =cast<HWAPreBind>((*PI)->getData());
+      HWAOpFU *A =(*PI)->getData();
       DEBUG(dbgs() << "For PostBind Node: ");
       DEBUG(A->dump());
 
@@ -567,9 +567,7 @@ void CompPathBinding::buildLongestPostBindPath() {
         E = Path->path_end(); I != E; ++I ) {
           PostBindNodeType *Node = *I;
           // Bind to resource, fix me: the bitwitdh of the resource?
-          HWAPreBind *PreBind =
-            HI->bindToResource(*cast<HWAPostBind>(Node->getData()), ResCount);
-          Node->updateData(PreBind);
+          HWAOpFU *PreBind = HI->bindToFU(Node->getData(), ResCount);
           // Bind to resource
           DEBUG(PreBind->print(dbgs()));
           DEBUG(dbgs() << " at " << PreBind->getSlot() << '\n');
@@ -587,13 +585,13 @@ void CompPathBinding::buildLongestPostBindPath() {
 void CompPathBinding::buildWOCGForRes() {
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
        I != E; ++I) {
-    if (HWAPostBind *PB = dyn_cast<HWAPostBind>(*I))
-      if (PB->getResType() != HWResType::Trivial)      
-        insertToWOCG(PB);
+    if (HWAOpFU *OF = dyn_cast<HWAOpFU>(*I))
+      if (!OF->isBinded() && !OF->isTrivial())     
+        insertToWOCG(OF);
   } 
 }
 
-void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
+void CompPathBinding::insertToWOCG(HWAOpFU *PB) {
   PostBindNodeType *Entry = getGraphEntry(PB->getResType()),
                    *Exit = getGraphExit(PB->getResType()),
                    *Node = new (NodeAllocator) PostBindNodeType(PB);
@@ -601,7 +599,7 @@ void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
   for (PostBindNodeType::succ_iterator I = Entry->succ_begin(), E = Entry->succ_end();
       I != E; ++I) {
     PostBindNodeType *N = *I;
-    HWAOpInst *OI = N->getData();
+    HWAOpFU *OI = N->getData();
     if (N->isCompatible(Node)) {
       DEBUG(
         dbgs() << "Find compatible: ";
@@ -612,7 +610,7 @@ void CompPathBinding::insertToWOCG(HWAPostBind *PB) {
       );
 
 
-      if (PB->getFunUnit() == OI->getFunUnit())     
+      if (PB->getFUnit() == OI->getFUnit())     
         PostBindNodeType::makeEdge(*I, Node);
     }
   }

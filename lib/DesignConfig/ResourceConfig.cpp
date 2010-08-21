@@ -190,7 +190,7 @@ HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
   HWBinOpResType *HWTy = cast<HWBinOpResType>(getResType(T));
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), T,
                                    HWTy->getTotalRes(), HWTy->getLatency(),
-                                   I, 2, O, 1);
+                                   UnitID, I, 2, O, 1);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
@@ -214,7 +214,7 @@ HWFUnit *ResourceConfig::allocaMemBusFU(unsigned UnitID) {
   uint8_t *O = HWFUAllocator.Allocate<uint8_t>(1);
   std::uninitialized_copy(Outputs, Outputs + 1, O);
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::MemoryBus,
-                                   1, HWTy->getLatency(), I, 2, O, 1);
+                                   1, HWTy->getLatency(), UnitID, I, 2, O, 1);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
@@ -231,9 +231,20 @@ HWFUnit *ResourceConfig::allocaTrivialFU(unsigned latency) {
   if (FU) return FU;
 
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::Trivial,
-                                   ~0, latency, 0, 0, 0, 0);
+                                   ~0, latency, 0, 0, 0, 0, 0);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
+}
+
+HWFUnit *ResourceConfig::assignIDToFU(HWFUnit *U, unsigned ID) {
+  switch (U->getResType()) {
+  case HWResType::Trivial:
+  case HWResType::MemoryBus:
+    assert(0 && "Bad unit type!");
+    return 0;
+  default: // FIXME: Use the right bit width.
+    return allocaBinOpFU(U->getResType(), U->getInputBitwidth(0), ID);
+  }
 }
 
 void ResourceConfig::print(raw_ostream &OS) const {

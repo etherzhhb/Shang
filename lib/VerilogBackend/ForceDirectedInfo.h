@@ -43,7 +43,7 @@ class ForceDirectedInfo : public BasicBlockPass {
 
   unsigned computeStepKey(unsigned step) const;
 
-  std::map<const HWAOpInst*, double> AvgDG;
+  std::map<const HWAOpFU*, double> AvgDG;
 
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
@@ -52,7 +52,7 @@ public:
   /// @name TimeFrame
   //{
   unsigned getASAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpFU>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
@@ -61,7 +61,7 @@ public:
   void buildALAPStep(const HWAtom *Root, unsigned step);
 
   unsigned getALAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpInst>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpFU>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }
@@ -71,7 +71,7 @@ public:
   }
 
   // If the TimeFrame Constraints by II.
-  bool constraintByMII(const HWAOpInst *A) const {
+  bool constraintByMII(const HWAOpFU *A) const {
     return getTimeFrame(A) == MII - A->getLatency();
   }
 
@@ -94,7 +94,7 @@ public:
   /// @name Force computation
   //{
   void buildAvgDG();
-  double getAvgDG(const HWAOpInst *A) {  return AvgDG[A]; }
+  double getAvgDG(const HWAOpFU *A) {  return AvgDG[A]; }
   double getRangeDG(HWFUnit *FU, unsigned start, unsigned end/*included*/);
 
   double computeRangeForce(const HWAtom *A,
@@ -107,7 +107,7 @@ public:
   /// predecessor tree
   double computePredForceAt(const HWAtom *A, unsigned step);
 
-  unsigned findBestStep(HWAOpInst *A);
+  unsigned findBestStep(HWAOpFU *A);
   //}
 
   unsigned buildFDInfo();

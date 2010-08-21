@@ -115,19 +115,10 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   BumpPtrAllocator HWAtomAllocator;
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
-  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                         size_t OpNum, HWFUnit *FU, unsigned id);
-  HWAPreBind *getPreBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                         HWFUnit *FU, unsigned id) {
-    return getPreBind(I, Deps, I.getNumOperands(), FU, id);
-  }
-
-  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                           size_t OpNum, HWFUnit *FU);
-
-  HWAPostBind *getPostBind(Instruction &I, SmallVectorImpl<HWEdge*> &Deps,
-                           HWFUnit *FU) {
-    return getPostBind(I, Deps, I.getNumOperands(), FU);
+  HWAOpFU *getOpFU(Instruction &I, SmallVectorImpl<HWEdge*> &Deps, size_t OpNum,
+                   HWFUnit *FU);
+  HWAOpFU *getOpFU(Instruction &I, SmallVectorImpl<HWEdge*> &Deps, HWFUnit *FU) {
+    return getOpFU(I, Deps, I.getNumOperands(), FU);
   }
 
   FSMState *getState(BasicBlock *BB);
@@ -198,7 +189,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   // Mapping Value to registers
   std::map<const Value*, HWRegister*> RegForValues;
 
-  void addMemDepEdges(std::vector<HWAOpInst*> &MemOps, BasicBlock &BB);
+  void addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB);
 
   bool haveSelfLoop(BasicBlock *BB);
   void addLoopPredBackEdge(BasicBlock *BB);
@@ -226,7 +217,7 @@ public:
   void print(raw_ostream &O, const Module *M) const;
   //}
 
-  HWAPreBind *bindToResource(HWAPostBind &PostBind, unsigned Instance);
+  HWAOpFU *bindToFU(HWAOpFU *PostBind, unsigned ID);
 
   HWRegister *getRegForValue(const Value *V, unsigned StartSlot, unsigned EndSlot) {
     std::map<const Value*, HWRegister*>::iterator at = RegForValues.find(V);
@@ -250,10 +241,10 @@ public:
   }
 
   // FIXME: We need to give the type of the register.
-  HWRegister *allocaFURegister(HWAPreBind *A) {
+  HWRegister *allocaFURegister(HWAOpFU *A) {
     unsigned Slot = A->getFinSlot();
-    return new (HWAtomAllocator) HWRegister(A->getFUID(),
-      A->getFunUnit()->getOutputBitwidth(0), A->getResType(), Slot, Slot);
+    return new (HWAtomAllocator) HWRegister(A->getUnitID(),
+      A->getFUnit()->getOutputBitwidth(0), A->getResType(), Slot, Slot);
   }
 
   HWRegister *allocaRegister(const Type *Ty,

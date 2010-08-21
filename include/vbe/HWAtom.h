@@ -48,9 +48,8 @@ namespace esyn {
 
 enum HWAtomTypes {
   atomWrReg,      // Write to local storage, i.e. register.
-  atomRdReg,     // Import local storage form predecessor BB.
-  atomPreBind,    // Operate on pre bind resource
-  atomPostBind,   // Operate on post binding resource
+  atomRdReg,      // Import local storage form predecessor BB.
+  atomOpFU,       // Operate function unit.
   atomDelay,      // The delay atom.
   atomVRoot       // Virtual Root
 };
@@ -63,7 +62,7 @@ enum HWEdgeTypes {
 };
 
 class HWAtom;
-class HWAOpInst;
+class HWAOpFU;
 class FSMState;
 template<class IteratorType, class NodeType> class HWAtomDepIterator;
 class HWAtomInfo;
@@ -166,15 +165,6 @@ public:
   unsigned getBitWidth() const { return BitWidth; }
   unsigned getRegNum() const { return Num; }
   bool isFuReg() const { return T != HWResType::Trivial; }
-
-  //typedef std::set<Value*>::iterator iterator;
-  //typedef std::set<Value*>::const_iterator const_iterator;
-
-  //iterator begin() { return Vals.begin(); }
-  //const_iterator begin() const { return Vals.begin(); }
-
-  //iterator end() { return Vals.begin(); }
-  //const_iterator end() const { return Vals.begin(); }
 }; 
 
 /// @brief Constant node
@@ -578,26 +568,39 @@ public:
 // Create the ative atom class for register, and operate on instruction
 
 /// @brief The Schedulable Hardware Atom
-class HWAOpInst : public HWAtom {
+class HWAOpFU : public HWAtom {
   unsigned NumOps;
   HWFUnit *FU;
 
-protected:
-  template <class It>
-  HWAOpInst(const FoldingSetNodeIDRef ID, enum HWAtomTypes T,
-    Instruction &Inst, It depbegin, It depend, size_t OpNum, HWFUnit *fu,
-    unsigned short Idx)
-    : HWAtom(ID, T, Inst, depbegin, depend, fu->getLatency(), Idx),
-    NumOps(OpNum), FU(fu) {}
 public:
-  HWFUnit *getFunUnit() const { return FU; }
-  enum HWResType::Types getResType() const {
-    return FU->getResType();
+  template <class It>
+  HWAOpFU(const FoldingSetNodeIDRef ID, Instruction &Inst, HWFUnit *fu,
+    It depbegin, It depend, size_t OpNum, unsigned short Idx)
+    : HWAtom(ID, atomOpFU, Inst, depbegin, depend, fu->getLatency(), Idx),
+    NumOps(OpNum), FU(fu) {}
+
+  HWFUnit *getFUnit() const { return FU; }
+  void reAssignFUnit(HWFUnit *U) { FU = U; }
+  // Forward function for FUnit.
+
+  inline HWResType::Types getResType() const { return FU->getResType(); }
+  inline unsigned getUnitID() const { return FU->getUnitID(); }
+  inline uint8_t getInputBitwidth(unsigned idx) const {
+    return FU->getInputBitwidth(idx);
   }
+  inline unsigned getNumInputs() const { return FU->getNumInputs(); }
+
+  inline uint8_t getOutputBitwidth(unsigned idx) const {
+    return FU->getOutputBitwidth(idx);
+  }
+  inline unsigned getNumOutputs() const { return FU->getNumOutputs(); }
+  // TODO: NumInputs.
 
   bool isTrivial() const {
     return getResType() == HWResType::Trivial;
   }
+
+  bool isBinded() const { return FU->getUnitID() != 0; }
 
   template<class InstTy>
   InstTy &getInst() { return cast<InstTy>(getValue()); }
@@ -635,46 +638,9 @@ public:
   void print(raw_ostream &OS) const;
   
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAOpInst *A) { return true; }
+  static inline bool classof(const HWAOpFU *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomPreBind ||
-           A->getHWAtomType() == atomPostBind;
-  }
-};
-
-class HWAPostBind : public HWAOpInst {
-public:
-  template <class It>
-  HWAPostBind(const FoldingSetNodeIDRef ID, Instruction &Inst, HWFUnit *FU,
-               It depbegin, It depend, size_t OpNum, unsigned short Idx)
-               : HWAOpInst(ID, atomPostBind, Inst, depbegin, depend, OpNum,
-               FU, Idx) {}
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAPostBind *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomPostBind;
-  }
-};
-
-class HWAPreBind : public HWAOpInst {
-  unsigned FUID;
-public:
-  template <class It>
-  HWAPreBind(const FoldingSetNodeIDRef ID, Instruction &Inst, unsigned OpNum,
-             It depbegin, It depend, HWFUnit *FU, unsigned id,
-             unsigned short Idx) : HWAOpInst(ID, atomPreBind, Inst,
-             depbegin, depend, OpNum, FU, Idx), FUID(id) {}
-
-  HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-             unsigned id);
-
-  unsigned getFUID() const { return FUID; }
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAPreBind *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomPreBind;
+    return A->getHWAtomType() == atomOpFU;
   }
 };
 
@@ -683,7 +649,7 @@ class FSMState  : public HWAtom {
 public:
   typedef std::vector<HWAtom*> AtomVecTy;
 private:
-  HWAOpInst *ExitRoot;
+  HWAOpFU *ExitRoot;
   AtomVecTy Atoms;
 
   // The registers that store the source value of PHINodes.
@@ -698,7 +664,7 @@ private:
   unsigned short II;
   bool HaveSelfLoop;
 
-  void setExitRoot(HWAOpInst *Exit);
+  void setExitRoot(HWAOpFU *Exit);
 
   void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
 
@@ -713,8 +679,8 @@ public:
 
   /// @name Roots
   //{
-  HWAOpInst *getExitRoot() const { return ExitRoot; }
-  HWAOpInst *getExitRoot() { return ExitRoot; }
+  HWAOpFU *getExitRoot() const { return ExitRoot; }
+  HWAOpFU *getExitRoot() { return ExitRoot; }
   //}
 
   // Return the corresponding basiclbocl of this Execute stage.

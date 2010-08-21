@@ -39,7 +39,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   FSMState *State = HI.getStateFor(BB);
   // Emit the exported register.
-  HWAOpInst *Exit = State->getExitRoot();
+  HWAOpFU *Exit = State->getExitRoot();
 
   // Emit register for PHI incoming value.
   for (BasicBlock::iterator I = BB.begin(), E = BB.getFirstNonPHI();
@@ -57,7 +57,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
 
     if (SrcAtom == State) continue;
 
-    if (HWAOpInst *OI = dyn_cast<HWAOpInst>(SrcAtom)) {
+    if (HWAOpFU *OI = dyn_cast<HWAOpFU>(SrcAtom)) {
       for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
         if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
           Value *V = OI->getIOperand(i);
@@ -88,8 +88,9 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       // finish.
       if (Dst->getSlot() == SrcAtom->getFinSlot())  {
         // Already registered by function unit register.
-        if (isa<HWAPreBind>(SrcAtom) && isa<HWAWrReg>(Dst))
-          continue;
+        if (HWAOpFU *OF = dyn_cast<HWAOpFU>(SrcAtom))
+          if (OF->isBinded() && isa<HWAWrReg>(Dst))
+            continue;
 
         // Do not need to register, the computation will finish in time.
         if (Dst->getLatency() == 0)

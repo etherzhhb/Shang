@@ -103,13 +103,13 @@ void FSMState::print(raw_ostream &OS) const {
   //}
 }
 
-void HWAOpInst::print(raw_ostream &OS) const {
+void HWAOpFU::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
   if (getValue().getType()->isVoidTy())
     OS << getValue() << '\n';
   else
     WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << *getFunUnit();
+  OS << " Res: " << *getFUnit();
 }
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
@@ -148,30 +148,11 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
   getParent()->eraseAtom(this);
 }
 
-HWAPreBind::HWAPreBind(const FoldingSetNodeIDRef ID, HWAPostBind &PostBind,
-                       unsigned id)
-  : HWAOpInst(ID, atomPreBind, PostBind.getInst<Instruction>(),
-              PostBind.edge_begin(), PostBind.edge_end(),
-              PostBind.getInstNumOps(), PostBind.getFunUnit(), PostBind.getIdx()),
-              FUID(id) {
-  // Remove the PostBind atom from the use list of its dep.
-  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
-    I->removeFromList(&PostBind);
-    // This is done in the constructor of HWAtom.
-    //I->addToUseList(this);
-
-  // Setup the step
-  scheduledTo(PostBind.getSlot());
-
-  setParent(PostBind.getParent());
-  PostBind.replaceAllUseBy(this);
-}
-
 void FSMState::dump() const {
   print(dbgs());
 }
 
-void FSMState::setExitRoot(HWAOpInst *Exit) {
+void FSMState::setExitRoot(HWAOpFU *Exit) {
   ExitRoot = Exit;
 
   for (usetree_iterator I = usetree_iterator::begin(this),

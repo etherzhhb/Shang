@@ -78,7 +78,7 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
     AtomToTF[A].first = NewStep;
   }
 
-  HWAOpInst *Exit = State->getExitRoot();
+  HWAOpFU *Exit = State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
@@ -146,14 +146,14 @@ void ForceDirectedInfo::buildDGraph() {
   DGraph.clear();
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I){
     // We only try to balance the post bind resource.
-    if (HWAOpInst *OpInst = dyn_cast<HWAOpInst>(*I)) {
+    if (HWAOpFU *OpInst = dyn_cast<HWAOpFU>(*I)) {
       // Ignore the DG for trivial resources.
       if (OpInst->isTrivial()) continue;
 
       unsigned TimeFrame = getTimeFrame(OpInst);
       unsigned ASAPStep = getASAPStep(OpInst), ALAPStep = getALAPStep(OpInst);
 
-      HWFUnit *FU = OpInst->getFunUnit();
+      HWFUnit *FU = OpInst->getFUnit();
       double Prob = 1.0 / (double) TimeFrame;
       // Including ALAPStep.
       for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
@@ -242,10 +242,10 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
 }
 
 double ForceDirectedInfo::computeSelfForceAt(const HWAtom *A, unsigned step) {
-  const HWAOpInst *OpInst = dyn_cast<HWAOpInst>(A);
+  const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
-  HWFUnit *FU = OpInst->getFunUnit();
+  HWFUnit *FU = OpInst->getFUnit();
   double Force = getDGraphAt(step, FU) - getAvgDG(OpInst);
 
   // Make the atoms taking expensive function unit have bigger force.
@@ -254,10 +254,10 @@ double ForceDirectedInfo::computeSelfForceAt(const HWAtom *A, unsigned step) {
 
 double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
                                             unsigned int end) {
-  const HWAOpInst *OpInst = dyn_cast<HWAOpInst>(A);
+  const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
-  HWFUnit *FU = OpInst->getFunUnit();
+  HWFUnit *FU = OpInst->getFUnit();
   double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
   return Force / FU->getTotalFUs();
 }
@@ -271,7 +271,7 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAtom *A, unsigned step) {
   assert(at != State->end() && "Can not find Atom!");
 
   for (FSMState::iterator I = ++at, E = State->end(); I != E; ++I)
-    if (const HWAOpInst *OI = dyn_cast<HWAOpInst>(*I))
+    if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
       ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
 
   return ret;
@@ -286,7 +286,7 @@ double ForceDirectedInfo::computePredForceAt(const HWAtom *A, unsigned step) {
   assert(at != State->end() && "Can not find Atom!");
 
   for (FSMState::iterator I = State->begin(), E = at; I != E; ++I)
-    if (const HWAOpInst *OI = dyn_cast<HWAOpInst>(*I))
+    if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
       ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
 
   return ret;
@@ -296,10 +296,10 @@ void ForceDirectedInfo::buildAvgDG() {
   for (FSMState::iterator I = State->begin(), E = State->end();
        I != E; ++I)
     // We only care about the utilization of post bind resource. 
-    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
+    if (HWAOpFU *A = dyn_cast<HWAOpFU>(*I)) {
       double res = 0.0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
-        res += getDGraphAt(i, A->getFunUnit());
+        res += getDGraphAt(i, A->getFUnit());
 
       res /= (double) getTimeFrame(A);
       AvgDG[A] = res;

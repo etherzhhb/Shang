@@ -268,8 +268,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   Value *V = &A->getValue();
 
   switch (A->getHWAtomType()) {
-    case atomPreBind:
-    case atomPostBind:
+    case atomOpFU:
       return getAsOperand(V, "_w");
     case atomWrReg:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
@@ -301,17 +300,11 @@ std::string RTLWriter::getAsOperand(HWEdge &E) {
 
 void RTLWriter::emitAtom(HWAtom *A) {
   switch (A->getHWAtomType()) {
-      case atomPreBind:
+      case atomOpFU:
         // Emit the origin IR as comment.
         vlang->comment(ControlBlock.indent(10)) << "Emit: "
           << A->getValue() << '\n';
-        emitPreBind(cast<HWAPreBind>(A));
-        break;
-      case atomPostBind:
-        // Emit the origin IR as comment.
-        vlang->comment(ControlBlock.indent(10)) << "Emit: "
-          << A->getValue() << '\n';
-        emitPostBind(cast<HWAPostBind>(A));
+        emitOpFU(cast<HWAOpFU>(A));
         break;
       case atomWrReg:
         vlang->comment(ControlBlock.indent(10)) << "Read:"
@@ -366,33 +359,33 @@ void RTLWriter::emitAllRegisters() {
   } 
 }
 
-void RTLWriter::emitPostBind(HWAPostBind *PostBind) {
-  Instruction &Inst = cast<Instruction>(PostBind->getValue());
-  assert(!isa<PHINode>(Inst) && "PHINode is not PostBind atom!");
-  std::string Name = getAsOperand(PostBind);
-  // Do not decl signal for void type
-  // And do not emit data path for phi node.
-  if (!Inst.getType()->isVoidTy()) {
-    // Declare the signal
-    vlang->declSignal(getSignalDeclBuffer(), Name, vlang->getBitWidth(Inst), 0, false);
-    // Emit data path
-    DataPath.indent(2) << "assign " << Name << " = ";
-  }
-  // Emit the data path
-  visit(*PostBind);
-}
+void RTLWriter::emitOpFU(HWAOpFU *OF) {
+  if (OF->isBinded()) { 
+    // Remember this atom
+    ResourceMap[OF->getFUnit()].push_back(OF);
 
-void RTLWriter::emitPreBind(HWAPreBind *PreBind) {
-  // Remember this atom
-  ResourceMap[PreBind->getFunUnit()].push_back(PreBind);
-
-  switch (PreBind->getResType()) {
-  case HWResType::MemoryBus:
-  case HWResType::AddSub:
-  case HWResType::Mult:
-    break;
-  default:
-    assert(!"Unexcept resource type!");
+    switch (OF->getResType()) {
+    case HWResType::MemoryBus:
+    case HWResType::AddSub:
+    case HWResType::Mult:
+      break;
+    default:
+      assert(!"Unexcept resource type!");
+    }
+  } else {
+    Instruction &Inst = cast<Instruction>(OF->getValue());
+    assert(!isa<PHINode>(Inst) && "PHINode is not PostBind atom!");
+    std::string Name = getAsOperand(OF);
+    // Do not decl signal for void type
+    // And do not emit data path for phi node.
+    if (!Inst.getType()->isVoidTy()) {
+      // Declare the signal
+      vlang->declSignal(getSignalDeclBuffer(), Name, vlang->getBitWidth(Inst), 0, false);
+      // Emit data path
+      DataPath.indent(2) << "assign " << Name << " = ";
+    }
+    // Emit the data path
+    visit(*OF);
   }
 }
 
@@ -406,9 +399,10 @@ std::string RTLWriter::getRegPrefix(HWResType::Types T) {
   }
 }
 
-void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU, unsigned ID,
+void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
                                             const std::string &OpPrefix,
                                             const std::string &Operator) {
+  unsigned ID = FU->getUnitID();
   std::string OpA = OpPrefix + "_a" + utostr(ID);
   std::string OpB = OpPrefix + "_b" + utostr(ID);
   std::string Res = getRegPrefix(FU->getResType()) + utostr(ID);
@@ -425,7 +419,8 @@ void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU, unsigned ID,
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
+void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
+  unsigned ID = FU->getUnitID();
   std::string OpA = "addsub_a" + utostr(ID);
   std::string OpB = "addsub_b" + utostr(ID);
   std::string Mode = "addsub_mode" + utostr(ID);
@@ -448,14 +443,15 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU, unsigned ID) {
 
 
 template<>
-void RTLWriter::emitResourceDecl<HWMult>(HWFUnit *FU, unsigned ID) {
-  emitResourceDeclForBinOpRes(FU, ID, "mult", " * ");
+void RTLWriter::emitResourceDecl<HWMult>(HWFUnit *FU) {
+  emitResourceDeclForBinOpRes(FU, "mult", " * ");
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU, unsigned ID) {
+void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU) {
   unsigned DataWidth = FU->getInputBitwidth(0),
-    AddrWidth = FU->getInputBitwidth(1);
+           AddrWidth = FU->getInputBitwidth(1),
+           ID = FU->getUnitID();
 
   // Emit the ports;
   ModDecl << '\n';
@@ -471,8 +467,8 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU, unsigned ID) {
   getModDeclBuffer() << "output reg membus_en" << ID << ",\n";
 }
 
-void RTLWriter::emitResourceOpForBinOpRes(HWAPreBind *A, const std::string &OpPrefix) {
-  unsigned ID = A->getFUID();
+void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefix) {
+  unsigned ID = A->getUnitID();
   std::string OpA = OpPrefix + "_a" + utostr(ID);
   std::string OpB = OpPrefix + "_b" + utostr(ID);
 
@@ -483,8 +479,8 @@ void RTLWriter::emitResourceOpForBinOpRes(HWAPreBind *A, const std::string &OpPr
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
-  unsigned ID = A->getFUID();
+void RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
+  unsigned ID = A->getUnitID();
   std::string Mode = "addsub_mode" + utostr(ID);
 
   Instruction *Inst = &(A->getInst<Instruction>());
@@ -498,16 +494,16 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAPreBind *A) {
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWMult>(HWAPreBind *A) {
+void RTLWriter::emitResourceOp<HWMult>(HWAOpFU *A) {
   emitResourceOpForBinOpRes(A, "mult");
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
-  unsigned DataWidth = A->getFunUnit()->getInputBitwidth(0),
-    AddrWidth = A->getFunUnit()->getInputBitwidth(1);
+void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
+  unsigned DataWidth = A->getInputBitwidth(0),
+           AddrWidth = A->getInputBitwidth(1);
 
-  unsigned ID = A->getFUID();
+  unsigned ID = A->getUnitID();
   Instruction *Inst = &(A->getInst<Instruction>());
   // Enable the memory
   DataPath.indent(6) << "membus_en" << ID << " <= 1'b1;\n";
@@ -530,8 +526,8 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAPreBind *A) {
   }
 }
 
-void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
-                                                 const std::string &OpPrefix) {
+void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string &OpPrefix) {
+  unsigned ID = FU->getUnitID();
   std::string OpA = OpPrefix + "_a" + utostr(ID);
   std::string OpB = OpPrefix + "_b" + utostr(ID);
 
@@ -543,21 +539,22 @@ void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, unsigned ID,
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU, unsigned ID) {
+void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
   std::string Mode = "addsub_mode" + utostr(ID);
   DataPath.indent(6) << Mode << " <= 1'b0;\n";
-  emitResourceDefaultOpForBinOpRes(FU, ID, "addsub");
+  emitResourceDefaultOpForBinOpRes(FU, "addsub");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU, unsigned ID) {
-  emitResourceDefaultOpForBinOpRes(FU, ID, "mult");
+void RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU) {
+  emitResourceDefaultOpForBinOpRes(FU, "mult");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU, unsigned ID) {
+void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
   unsigned DataWidth = FU->getInputBitwidth(0),
            AddrWidth = FU->getInputBitwidth(1);
+           ID = FU->getUnitID();
 
   DataPath.indent(6) << "membus_en" << ID << " <= 1'b0;\n";
   DataPath.indent(6) << "membus_addr" << ID
@@ -570,14 +567,15 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU, unsigned ID) {
 
 template<class ResType>
 void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
-  HWAPreBind *FirstAtom = Atoms[0];
-  unsigned FUNum = FirstAtom->getFUID();
+  HWAOpFU *FirstAtom = Atoms[0];
+  HWFUnit *FU = FirstAtom->getFUnit();
+  unsigned ID = FU->getUnitID();
 
-  std::string SelName = ResType::getTypeName() + utostr(FUNum) + "Mux";
+  std::string SelName = ResType::getTypeName() + utostr(ID) + "Mux";
   unsigned SelBitWidth = Atoms.size();
   vlang->declSignal(getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
 
-  emitResourceDecl<ResType>(FirstAtom->getFunUnit(), FUNum);
+  emitResourceDecl<ResType>(FU);
   DataPath.indent(2) << "always @(*)\n";
 
   unsigned AtomCounter = SelBitWidth;
@@ -588,7 +586,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   // Emit all resource operation
   for (HWAPreBindVecTy::iterator I = Atoms.begin(), E = Atoms.end();
       I != E; ++I) {
-    HWAPreBind *A = *I;
+    HWAOpFU *A = *I;
     Instruction *Inst = &(A->getInst<Instruction>());
     BasicBlock *BB = Inst->getParent();
     std::string SelCase = vlang->printConstantInt(1 << (--AtomCounter),
@@ -609,7 +607,7 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
   }
   DataPath.indent(4) << "default: begin\n";
   // Else for Resource is idle
-  emitResourceDefaultOp<ResType>(FirstAtom->getFunUnit(), FUNum);
+  emitResourceDefaultOp<ResType>(FU);
   vlang->endSwitch(DataPath.indent(4));
   //
   DataPath.indent(2) << "assign " << SelEval.str() << " };\n";
@@ -716,13 +714,12 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
   
   Value *Cnd = Br->getCondition();
   if (Instruction *IPred = dyn_cast<Instruction>(Cnd)) {
-    HWAOpInst *Pred = cast<HWAOpInst>(HI->getAtomFor(*IPred));
+    HWAOpFU *Pred = cast<HWAOpFU>(HI->getAtomFor(*IPred));
     assert(Pred->getFinSlot() <= IISlot && "Pred can not finish in time!");
-    assert(isa<HWAPostBind>(Pred) && "Prebind predicate not support yet!");
     if (Pred->getFinSlot() == IISlot)
       return MircoState + getAsOperand(Pred);
     
-    if ((Pred->getFinSlot() + 1 == IISlot) && (isa<HWAPreBind>(Pred))) {
+    if ((Pred->getFinSlot() + 1 == IISlot) && (Pred->isBinded())) {
       assert(isa<HWAWrReg>(Pred->use_back()) && "Expect write to register!");
       return MircoState + getAsOperand(Pred->use_back());
     }
@@ -740,7 +737,7 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
 
 //===----------------------------------------------------------------------===//
 // Emit instructions
-void RTLWriter::visitICmpInst(HWAPostBind &A) {
+void RTLWriter::visitICmpInst(HWAOpFU &A) {
   ICmpInst &I = A.getInst<ICmpInst>();
   DataPath << "(" << getAsOperand(A.getValDep(0));
   switch (I.getPredicate()) {
@@ -759,7 +756,7 @@ void RTLWriter::visitICmpInst(HWAPostBind &A) {
   DataPath << getAsOperand(A.getValDep(1)) << ");\n";
 }
 
-void RTLWriter::visitExtInst(HWAPostBind &A) {
+void RTLWriter::visitExtInst(HWAOpFU &A) {
   CastInst &I = A.getInst<CastInst>();
   const IntegerType *Ty = cast<IntegerType>(I.getType());
 
@@ -780,7 +777,7 @@ void RTLWriter::visitExtInst(HWAPostBind &A) {
 }
 
 
-void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
+void esyn::RTLWriter::visitReturnInst(HWAOpFU &A) {
   // Operation finish.
   ControlBlock.indent(10) << "fin <= 1'h1;\n";
   ControlBlock.indent(10) << "NextFSMState <= state_idle;\n";
@@ -792,7 +789,7 @@ void esyn::RTLWriter::visitReturnInst(HWAPostBind &A) {
                           << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
-void esyn::RTLWriter::visitGetElementPtrInst(HWAPostBind &A) {
+void esyn::RTLWriter::visitGetElementPtrInst(HWAOpFU &A) {
   GetElementPtrInst &I = A.getInst<GetElementPtrInst>();
   if (I.getNumIndices() > 1) {
     assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
@@ -808,7 +805,7 @@ void esyn::RTLWriter::visitGetElementPtrInst(HWAPostBind &A) {
            << getAsOperand(A.getValDep(1)) << ";\n";
 }
 
-void esyn::RTLWriter::visitBinaryOperator(HWAPostBind &A) {
+void esyn::RTLWriter::visitBinaryOperator(HWAOpFU &A) {
   DataPath << getAsOperand(A.getValDep(0));
   Instruction &I = A.getInst<Instruction>();
   switch (I.getOpcode()) {
@@ -826,20 +823,20 @@ void esyn::RTLWriter::visitBinaryOperator(HWAPostBind &A) {
   DataPath << getAsOperand(A.getValDep(1)) << ";\n";
 }
 
-void esyn::RTLWriter::visitSelectInst(HWAPostBind &A) {
+void esyn::RTLWriter::visitSelectInst(HWAOpFU &A) {
   DataPath << getAsOperand(A.getValDep(0)) << " ? "
            << getAsOperand(A.getValDep(1)) << " : "
            << getAsOperand(A.getValDep(2)) << ";\n";
 }
 
-void RTLWriter::visitTruncInst(HWAPostBind &A) {
+void RTLWriter::visitTruncInst(HWAOpFU &A) {
   TruncInst &I = A.getInst<TruncInst>();
   const IntegerType *Ty = cast<IntegerType>(I.getType());
   DataPath << getAsOperand(A.getValDep(0)) << vlang->printBitWitdh(Ty, 0, true) << ";\n";
 }
 
 
-void RTLWriter::visitBranchInst(HWAPostBind &A) {
+void RTLWriter::visitBranchInst(HWAOpFU &A) {
   BranchInst &I = A.getInst<BranchInst>();
   if (I.isConditional()) {
     BasicBlock &NextBB0 = *(I.getSuccessor(0)), 

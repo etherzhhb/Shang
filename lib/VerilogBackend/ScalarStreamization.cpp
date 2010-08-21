@@ -40,7 +40,7 @@ namespace {
 bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
   FSMState *State = HI.getStateFor(BB);
-  HWAOpInst *Exit = State->getExitRoot();
+  HWAOpFU *Exit = State->getExitRoot();
 
   // Only handle MSed Loop.
   if (!State->haveSelfLoop())

@@ -167,6 +167,7 @@ class HWFUnit : public FoldingSetNode {
   enum HWResType::Types T : 4;
   unsigned Latency        : 4;
   unsigned TotalFUs       : 24;
+  unsigned UnitID;
 
   // FIXME: char is enough for bit width.
   uint8_t *const InputBitWidth;
@@ -175,9 +176,9 @@ class HWFUnit : public FoldingSetNode {
   size_t NumOutputs;
 
   inline HWFUnit(const FoldingSetNodeIDRef ID, HWResType::Types type,
-                 unsigned totalFUs, unsigned latency,
+                 unsigned totalFUs, unsigned latency, unsigned UID,
                  uint8_t *I, size_t NI, uint8_t *O, size_t NO)
-    : FastID(ID), T(type), TotalFUs(totalFUs), Latency(latency),
+    : FastID(ID), T(type), TotalFUs(totalFUs), Latency(latency), UnitID(UID),
     InputBitWidth(I), NumInputs(NI), OutputBitWidth(O), NumOutputs(NO) {
     assert(totalFUs && "Unavailable Function Unit?");
     assert((totalFUs == TotalFUs || T == HWResType::Trivial)
@@ -198,6 +199,8 @@ public:
     assert(idx < NumInputs && "Index out of range!");
     return InputBitWidth[idx];
   }
+
+  inline unsigned getUnitID() const { return UnitID; }
 
   inline unsigned getNumInputs() const { return NumInputs; }
 
@@ -256,6 +259,8 @@ public:
                          unsigned UnitID = 0);
   HWFUnit *allocaMemBusFU(unsigned UnitID);
   HWFUnit *allocaTrivialFU(unsigned latency);
+
+  HWFUnit *assignIDToFU(HWFUnit *U, unsigned ID);
 
   typedef HWResType *const * iterator;
   typedef const HWResType *const * const_iterator;

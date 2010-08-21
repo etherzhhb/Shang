@@ -34,7 +34,7 @@ namespace {
 struct fds_sort {
   ForceDirectedInfo *Info;
   fds_sort(ForceDirectedInfo *s) : Info(s) {}
-  bool operator() (const HWAOpInst* LHS, const HWAOpInst* RHS) const;
+  bool operator() (const HWAOpFU* LHS, const HWAOpFU* RHS) const;
 };
 
 struct FDLScheduler : public BasicBlockPass {
@@ -43,13 +43,13 @@ struct FDLScheduler : public BasicBlockPass {
   ForceDirectedInfo *FDInfo;
   ModuloScheduleInfo *MSInfo;
   FSMState *CurState;
-  HWAOpInst *Exit;
+  HWAOpFU *Exit;
 
   unsigned MII;
 
   /// @name PriorityQueue
   //{
-  typedef PriorityQueue<HWAOpInst*, std::vector<HWAOpInst*>, fds_sort> AtomQueueType;
+  typedef PriorityQueue<HWAOpFU*, std::vector<HWAOpFU*>, fds_sort> AtomQueueType;
   
   // Find the Node the do not have dependency in this Queue.
   template<class It>
@@ -69,7 +69,7 @@ struct FDLScheduler : public BasicBlockPass {
   bool scheduleAtII();
   //}
 
-  unsigned findBestStep(HWAOpInst *A);
+  unsigned findBestStep(HWAOpFU *A);
 
   void clear();
 
@@ -89,8 +89,8 @@ struct FDLScheduler : public BasicBlockPass {
 } //end namespace
 
 //===----------------------------------------------------------------------===//
-bool fds_sort::operator()(const HWAOpInst* LHS, const HWAOpInst* RHS) const {
-  HWFUnit *LFU = LHS->getFunUnit(), *RFU = RHS->getFunUnit();
+bool fds_sort::operator()(const HWAOpFU* LHS, const HWAOpFU* RHS) const {
+  HWFUnit *LFU = LHS->getFUnit(), *RFU = RHS->getFUnit();
   // Schedule the atom with less available function unit first.
   if (LFU->getTotalFUs() > RFU->getTotalFUs())
     return true;
@@ -133,7 +133,7 @@ void FDLScheduler::fillQueue(AtomQueueType &Queue, It begin, It end,
     if (A == FirstNode || A->isScheduled())
       continue;
     
-    if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A))    
+    if (HWAOpFU *OI = dyn_cast<HWAOpFU>(A))    
       Queue.push(OI);
   }
   //
@@ -320,7 +320,7 @@ void FDLScheduler::FDListSchedule() {
 }
 
 
-unsigned FDLScheduler::findBestStep(HWAOpInst *A) {
+unsigned FDLScheduler::findBestStep(HWAOpFU *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   DEBUG(dbgs() << "\tScan for best step:\n");
   // For each possible step:
@@ -367,7 +367,7 @@ void FDLScheduler::scheduleCriticalPath() {
       continue;
 
     unsigned step = FDInfo->getASAPStep(A);
-    if (HWAOpInst *OI = dyn_cast<HWAOpInst>(A))
+    if (HWAOpFU *OI = dyn_cast<HWAOpFU>(A))
       A->scheduledTo(step);
   }
 }
@@ -376,7 +376,7 @@ bool FDLScheduler::scheduleAtom(HWAtom *A) {
   DEBUG(A->print(dbgs()));
   unsigned step = FDInfo->getASAPStep(A);
   if (FDInfo->getTimeFrame(A) != 1) {
-    HWAOpInst *OI = cast<HWAOpInst>(A);
+    HWAOpFU *OI = cast<HWAOpFU>(A);
     step = findBestStep(OI);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
@@ -400,7 +400,7 @@ bool FDLScheduler::scheduleAtom(HWAtom *A) {
 bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
-    HWAOpInst *A = Queue.top();
+    HWAOpFU *A = Queue.top();
     Queue.pop();
 
     DEBUG(dbgs() << " Schedule Node:-------------------\n");

@@ -175,8 +175,8 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
 unsigned ModuloScheduleInfo::computeResMII(FSMState &State) const {
   std::map<HWFUnit*, unsigned> TotalResUsage;
   for (FSMState::iterator I = State.begin(), E = State.end(); I != E; ++I)
-    if (HWAOpInst *A = dyn_cast<HWAOpInst>(*I)) {
-      ++TotalResUsage[A->getFunUnit()];
+    if (HWAOpFU *A = dyn_cast<HWAOpFU>(*I)) {
+      ++TotalResUsage[A->getFUnit()];
     }
 
   unsigned MaxResII = 0;
