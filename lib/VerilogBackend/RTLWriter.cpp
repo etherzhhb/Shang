@@ -889,15 +889,15 @@ void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
     if (Constant *C = dyn_cast<Constant>(IV)) {
       ControlBlock << " <= " << vlang->printConstant(C) << ";\n";
       continue;
-    } else if (Argument *Arg = dyn_cast<Argument>(IV)) {
-      // Loop up the register for argument.
-      HWRegister *PHISrc = HI->lookupRegForValue(Arg);
-      ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
-    } else {
-      assert(isa<Instruction>(IV) && "Global const for PHINode?");
+    } else if (HWValDep *PE = CurStage->getPHIEdge(PN)) {
       // Read the value from PHI source.
-      ControlBlock << " <= " << getAsOperand(CurStage->getPHIEdge(PN)->getSrc())
-                   << ";\n";
+      // FIXME: We may need the PHIAtom.
+      ControlBlock << " <= " << getAsOperand(PE->getSrc())
+                   << ";\n"; 
+    } else {
+      // Loop up the register for argument.
+      HWRegister *PHISrc = HI->lookupRegForValue(IV);
+      ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
     }
   }
 }
