@@ -223,7 +223,7 @@ public:
     std::map<const Value*, HWRegister*>::iterator at = RegForValues.find(V);
     HWRegister *R = 0;
     if (at == RegForValues.end()) {
-      unsigned BitWidth = TD->getTypeAllocSizeInBits(V->getType());
+      unsigned BitWidth = TD->getTypeSizeInBits(V->getType());
       R = allocaRegister(BitWidth, StartSlot, EndSlot);
       RegForValues.insert(std::make_pair(V, R));
     } else
@@ -249,7 +249,7 @@ public:
 
   HWRegister *allocaRegister(const Type *Ty,
                              unsigned StartSlot, unsigned EndSlot) {
-    unsigned BitWidth = TD->getTypeAllocSizeInBits(Ty);
+    unsigned BitWidth = TD->getTypeSizeInBits(Ty);
     return allocaRegister(BitWidth, StartSlot, EndSlot);
   }
 

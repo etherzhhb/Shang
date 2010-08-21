@@ -250,7 +250,7 @@ HWAtom *HWAtomInfo::visitSelectInst(SelectInst &I) {
   addOperandDeps(I, Deps);
 
   // FIXME: Read latency from configure file
-  HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeAllocSizeInBits(I.getType()));
+  HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeSizeInBits(I.getType()));
   return getOpFU(I, Deps, FU);
 }
 
@@ -258,8 +258,7 @@ HWAtom *HWAtomInfo::visitCastInst(CastInst &I) {
   SmallVector<HWEdge*, 1> Deps;
   Deps.push_back(getValDepInState(*I.getOperand(0), I.getParent()));
   // CastInst do not have any latency
-
-  HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeAllocSizeInBits(I.getType()));
+  HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeSizeInBits(I.getType()));
   return getOpFU(I, Deps, FU);
 }
 
@@ -293,7 +292,7 @@ HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
     SmallVector<HWEdge*, 8> Deps;
     addOperandDeps(I, Deps);
 
-    HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeAllocSizeInBits(I.getType()));
+    HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeSizeInBits(I.getType()));
     return getOpFU(I, Deps, FU);
   }
 
@@ -313,10 +312,10 @@ HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
 
   // It is trivial if one of the operand is constant
   if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1))) {
-    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeAllocSizeInBits(I.getType()));
+    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeSizeInBits(I.getType()));
     return getOpFU(I, Deps, FU);
   } else {// We need to do a subtraction for the comparison.
-    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeAllocSizeInBits(I.getType()));
+    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeSizeInBits(I.getType()));
     return getOpFU(I, Deps, FU);
   }
 }
@@ -326,7 +325,7 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
   SmallVector<HWEdge*, 2> Deps;
   bool isSigned = false;
   bool isOp1Const = isa<Constant>(I.getOperand(1));
-  unsigned BitWidth = TD->getTypeAllocSizeInBits(I.getType());
+  unsigned BitWidth = TD->getTypeSizeInBits(I.getType());
   HWFUnit *FU;
   // Select the resource
   switch (I.getOpcode()) {
