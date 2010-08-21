@@ -92,7 +92,7 @@ class RTLWriter : public FunctionPass {
   void emitAtom(HWAtom *A);
   void emitOpFU(HWAOpFU *OF);
   void emitWrReg(HWAWrReg *DR);
-  void emitRdReg(HWARdReg *DR);
+  void emitLIReg(HWALIReg *DR);
 
   std::set<const HWRegister*> UsedRegs;
 

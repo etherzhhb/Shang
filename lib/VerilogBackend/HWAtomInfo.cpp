@@ -472,19 +472,19 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 }
 
 
-HWARdReg *HWAtomInfo::getRdReg(HWAtom *Src, HWAtom *Reader, Value &V) {
+HWALIReg *HWAtomInfo::getLIReg(HWAtom *Src, HWAtom *Reader, Value &V) {
   FoldingSetNodeID FUID;
-  FUID.AddInteger(atomRdReg);
+  FUID.AddInteger(atomLIReg);
   FUID.AddPointer(Src);
   FUID.AddPointer(&V);
   HWRegister *R = getRegForValue(&V, Src->getFinSlot(), Reader->getSlot());
 
   void *IP = 0;
-  HWARdReg *A =
-    static_cast<HWARdReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(FUID, IP));
+  HWALIReg *A =
+    static_cast<HWALIReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(FUID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWARdReg(FUID.Intern(HWAtomAllocator),
+    A = new (HWAtomAllocator) HWALIReg(FUID.Intern(HWAtomAllocator),
                                        *getValDepEdge(Src, false), R, V);
     UniqiueHWAtoms.InsertNode(A, IP);
   }

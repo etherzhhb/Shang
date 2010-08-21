@@ -59,9 +59,9 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
     if (HWAWrReg *WrReg = dyn_cast<HWAWrReg>(*I)) {
       if (!WrReg->writeFUReg())
         WorkList.push_back(WrReg);
-    } else if (HWARdReg *RdReg = dyn_cast<HWARdReg>(*I)) {
-      if (RdReg->isPHINode())
-        WorkList.push_back(RdReg);
+    } else if (HWALIReg *LIReg = dyn_cast<HWALIReg>(*I)) {
+      if (LIReg->isPHINode())
+        WorkList.push_back(LIReg);
     }
 
   while (!WorkList.empty()) {

@@ -41,7 +41,7 @@ void HWAWrReg::print(raw_ostream &OS) const {
      << Reg->getResType() << "$" << Reg->getRegNum();
 }
 
-void HWARdReg::print(raw_ostream &OS) const {
+void HWALIReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Import Storage "
      << Reg->getResType() << "$" << Reg->getRegNum();
 }

@@ -48,7 +48,7 @@ namespace esyn {
 
 enum HWAtomTypes {
   atomWrReg,      // Write to local storage, i.e. register.
-  atomRdReg,      // Import local storage form predecessor BB.
+  atomLIReg,      // Import local storage form predecessor BB.
   atomOpFU,       // Operate function unit.
   atomDelay,      // The delay atom.
   atomVRoot       // Virtual Root
@@ -538,7 +538,7 @@ class HWADelay : public HWAtom {
 public:
   HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
            unsigned Idx) : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,
-           Delay, Edge->getBitWidth(), Idx) {}
+           Delay, 0, Idx) {}
 
   static inline bool classof(const HWADelay *A) { return true; }
   static inline bool classof(const HWAtom *A) {
@@ -549,11 +549,11 @@ public:
 };
 
 // Import local storage from predecessor basicblock.
-class HWARdReg : public HWAtom {
+class HWALIReg : public HWAtom {
   HWRegister *Reg;
 public:
-  HWARdReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg, Value &V)
-    : HWAtom(ID, atomRdReg, V, &Edge, 0, reg->getBitWidth(), Edge->getIdx()), Reg(reg) {
+  HWALIReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg, Value &V)
+    : HWAtom(ID, atomLIReg, V, &Edge, 0, reg->getBitWidth(), Edge->getIdx()), Reg(reg) {
       scheduledTo(Edge->getFinSlot());
       setParent(Edge->getParent());
   }
@@ -562,9 +562,9 @@ public:
 
   bool isPHINode() const { return isa<PHINode>(getValue()); }
 
-  static inline bool classof(const HWARdReg *A) { return true; }
+  static inline bool classof(const HWALIReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomRdReg;
+    return A->getHWAtomType() == atomLIReg;
   }
 
   void print(raw_ostream &OS) const;

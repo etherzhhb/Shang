@@ -63,7 +63,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
           Value *V = OI->getIOperand(i);
           if (VD->getDepType() == HWValDep::Import)
             // Insert the import node.
-            OI->setDep(i, HI.getRdReg(State, OI, *V));
+            OI->setDep(i, HI.getLIReg(State, OI, *V));
         }
       }
     }
