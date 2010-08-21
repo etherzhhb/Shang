@@ -55,7 +55,8 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
 
     // Run no-load GVN.
     PM.add(createGVNPass(/*NoLoads=*/true));
-
+    PM.add(createCodeGenPreparePass(getTargetLowering()));
+    PM.add(createCFGSimplificationPass());
     // Topological sort BBs in structural CFG, so we can construct a correct
     // live interval for registers.
     PM.add(createTopSortBBPass());
@@ -70,6 +71,6 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createScalarStreamizationPass());
     //
     PM.add(new RTLWriter(Out));
-    // PM.add(new TestbenchWriter(Out));
+    PM.add(new TestbenchWriter(Out));
     return false;
 }
