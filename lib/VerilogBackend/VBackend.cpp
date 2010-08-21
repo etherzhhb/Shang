@@ -45,7 +45,8 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(RC);
     // Add the language writer.
     PM.add(new VLang());
-
+    // We can not handle switch now.
+    PM.add(createLowerSwitchPass());
     // Lower the instructions.
     PM.add(createInstLoweringPass());
 
