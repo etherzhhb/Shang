@@ -244,7 +244,7 @@ public:
   HWRegister *allocaFURegister(HWAOpFU *A) {
     unsigned Slot = A->getFinSlot();
     return new (HWAtomAllocator) HWRegister(A->getUnitID(),
-      A->getOutputBitwidth(), A->getResType(), Slot, Slot);
+      A->getBitwidth(), A->getResType(), Slot, Slot);
   }
 
   HWRegister *allocaRegister(const Type *Ty,

@@ -252,7 +252,8 @@ class HWAtom : public FoldingSetNode {
 
   // The HWAtom baseclass this node corresponds to
   const unsigned short HWAtomType;
-  const unsigned short Latancy;
+  const uint8_t Latancy;
+  const uint8_t BitWidth;
   // The time slot that this atom scheduled to.
   // TODO: typedef SlotType
   unsigned short SchedSlot;
@@ -294,9 +295,9 @@ protected:
 public:
   template <class It>
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-    It depbegin, It depend, unsigned latancy, unsigned short Idx)  : FastID(ID),
-    HWAtomType(HWAtomTy), Deps(depbegin, depend), Val(V), SchedSlot(0),
-    Latancy(latancy), InstIdx(Idx) {
+    It depbegin, It depend, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
+    : FastID(ID), HWAtomType(HWAtomTy), Deps(depbegin, depend), Val(V), SchedSlot(0),
+    Latancy(latancy), BitWidth(bitWidth), InstIdx(Idx) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
       //Deps.push_back(*I);
       (*I)->addToUseList(this);
@@ -321,10 +322,10 @@ public:
   }
 
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, 
-         unsigned latancy, unsigned short Idx) ;
+         uint8_t latancy, uint8_t bitWidth, unsigned short Idx) ;
 
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, HWEdge *Dep0,
-         unsigned latancy, unsigned short Idx);
+         uint8_t latancy, uint8_t bitWidth, unsigned short Idx);
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
@@ -427,6 +428,9 @@ public:
   bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
 
+  // BitWidth
+  inline uint8_t getBitwidth() const { return BitWidth; }
+
   // Get the latency of this atom
   unsigned getLatency() const { return Latancy; }
 
@@ -512,7 +516,7 @@ class HWAWrReg : public HWAtom {
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
     unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
-    1, Edge->getIdx()), Reg(reg) {
+    1, Edge->getBitwidth(), Edge->getIdx()), Reg(reg) {
     scheduledTo(Slot);
     setParent(Edge->getParent());
   }
@@ -534,7 +538,7 @@ class HWADelay : public HWAtom {
 public:
   HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
            unsigned Idx) : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,
-           Delay, Idx) {}
+           Delay, Edge->getBitwidth(), Idx) {}
 
   static inline bool classof(const HWADelay *A) { return true; }
   static inline bool classof(const HWAtom *A) {
@@ -549,7 +553,7 @@ class HWARdReg : public HWAtom {
   HWRegister *Reg;
 public:
   HWARdReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg, Value &V)
-    : HWAtom(ID, atomRdReg, V, &Edge, 0, Edge->getIdx()), Reg(reg) {
+    : HWAtom(ID, atomRdReg, V, &Edge, 0, reg->getBitWidth(), Edge->getIdx()), Reg(reg) {
       scheduledTo(Edge->getFinSlot());
       setParent(Edge->getParent());
   }
@@ -576,8 +580,9 @@ public:
   template <class It>
   HWAOpFU(const FoldingSetNodeIDRef ID, Instruction &Inst, HWFUnit *fu,
     It depbegin, It depend, size_t OpNum, unsigned short Idx)
-    : HWAtom(ID, atomOpFU, Inst, depbegin, depend, fu->getLatency(), Idx),
-    NumOps(OpNum), FU(fu) {}
+    : HWAtom(ID, atomOpFU, Inst, depbegin, depend, fu->getLatency(),
+             fu->getOutputBitwidth(), Idx),
+      NumOps(OpNum), FU(fu) {}
 
   HWFUnit *getFUnit() const { return FU; }
   void reAssignFUnit(HWFUnit *U) { FU = U; }
@@ -589,11 +594,6 @@ public:
     return FU->getInputBitwidth(idx);
   }
   inline unsigned getNumInputs() const { return FU->getNumInputs(); }
-
-  inline uint8_t getOutputBitwidth() const {
-    return FU->getOutputBitwidth();
-  }
-  // TODO: NumInputs.
 
   bool isTrivial() const {
     return getResType() == HWResType::Trivial;
@@ -670,7 +670,7 @@ private:
   friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
-    : HWAtom(ID, atomVRoot, BB, 0, Idx) , HaveSelfLoop(false), II(0) {}
+    : HWAtom(ID, atomVRoot, BB, 0, 0, Idx) , HaveSelfLoop(false), II(0) {}
   ~FSMState() {
     PHIEdge.clear();
     Atoms.clear();
