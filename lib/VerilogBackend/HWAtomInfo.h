@@ -115,6 +115,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   BumpPtrAllocator HWAtomAllocator;
   FoldingSet<HWAtom> UniqiueHWAtoms;
 
+  HWALIReg *getLIReg(HWAtom *Src, Value &V);
   HWAOpFU *getOpFU(Instruction &I, SmallVectorImpl<HWEdge*> &Deps, size_t OpNum,
                    HWFUnit *FU);
   HWAOpFU *getOpFU(Instruction &I, SmallVectorImpl<HWEdge*> &Deps, HWFUnit *FU) {
@@ -153,32 +154,9 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
-  HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false) {
-    // Is this not a instruction?
-    if (isa<Argument>(V))
-      return getValDepEdge(getStateFor(*BB), isSigned, HWValDep::Import);
-    else if (isa<PHINode>(V)) // PHINode is an import edge.
-      return getValDepEdge(getStateFor(*BB), isSigned, HWValDep::Import);
-    else if (Constant *C = dyn_cast<Constant>(&V))
-      return getConstEdge(getStateFor(*BB), C);
+  HWEdge *getValDepInState(Value &V, BasicBlock *BB, bool isSigned = false);
 
-    // Now it is an Instruction
-    Instruction &Inst = cast<Instruction>(V);
-    if (BB == Inst.getParent())
-      // Create a wire dep for atoms in the same state.
-      return getValDepEdge(getAtomFor(Inst), isSigned);
-    else
-      // Otherwise this edge is an import edge.
-      return getValDepEdge(getStateFor(*BB), isSigned, HWValDep::Import);
-  }
-
-  void addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps) {
-    BasicBlock *ParentBB = I.getParent();
-    for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
-        OI != OE; ++OI)
-      if(!isa<BasicBlock>(OI)) // Ignore the basic Block.
-        Deps.push_back(getValDepInState(**OI, ParentBB));
-  }
+  void addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps);
 
   // TODO: other export edge.
   void addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps);
@@ -271,7 +249,6 @@ public:
   HWADelay *getDelay(HWAtom *Src, unsigned Delay);
   HWAWrReg *getWrReg(HWAtom *Src, HWAtom *Reader);
   HWAWrReg *getWrReg(HWAtom *Src, HWRegister *Reg, unsigned short Slot);
-  HWALIReg *getLIReg(HWAtom *Src, HWAtom *Reader, Value &V);
 
   unsigned getTotalCycle() const {
     return totalCycle;

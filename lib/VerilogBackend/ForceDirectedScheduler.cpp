@@ -69,7 +69,7 @@ struct FDLScheduler : public BasicBlockPass {
   bool scheduleAtII();
   //}
 
-  unsigned findBestStep(HWAOpFU *A);
+  unsigned findBestStep(HWAtom *A);
 
   void clear();
 
@@ -181,8 +181,9 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
        I != E; ++I) {
     HWAtom *A = *I;
     if (!A->isScheduled()) {
-      assert(isa<HWADelay>(A) && "Some atom not scheduled!");
-      A->scheduledTo(FDInfo->getASAPStep(A));
+      assert((isa<HWADelay>(A) || isa<HWALIReg>(A))
+              && "Some atom not scheduled!");
+      A->scheduledTo(FDInfo->getALAPStep(A));
     }
   }
   
@@ -320,7 +321,7 @@ void FDLScheduler::FDListSchedule() {
 }
 
 
-unsigned FDLScheduler::findBestStep(HWAOpFU *A) {
+unsigned FDLScheduler::findBestStep(HWAtom *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   DEBUG(dbgs() << "\tScan for best step:\n");
   // For each possible step:
@@ -376,8 +377,7 @@ bool FDLScheduler::scheduleAtom(HWAtom *A) {
   DEBUG(A->print(dbgs()));
   unsigned step = FDInfo->getASAPStep(A);
   if (FDInfo->getTimeFrame(A) != 1) {
-    HWAOpFU *OI = cast<HWAOpFU>(A);
-    step = findBestStep(OI);
+    step = findBestStep(A);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
     if (step == 0) {

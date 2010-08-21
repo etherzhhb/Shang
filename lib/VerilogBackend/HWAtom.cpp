@@ -42,8 +42,8 @@ void HWAWrReg::print(raw_ostream &OS) const {
 }
 
 void HWALIReg::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] " << "Import Storage "
-     << Reg->getResType() << "$" << Reg->getRegNum();
+  OS << "[" << getIdx() << "] " << "Live in register for ";
+  WriteAsOperand(OS, &getValue(), false);
 }
 
 void HWADelay::print(raw_ostream &OS) const {

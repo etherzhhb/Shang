@@ -275,7 +275,7 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
         + getAsOperand(cast<HWAWrReg>(A)->getReg());
     case atomLIReg:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
-        + getAsOperand(cast<HWALIReg>(A)->getReg());
+        + getAsOperand(HI->lookupRegForValue(&A->getValue()));
     default:
       llvm_unreachable("Do not use other atom as operand!");
       return "<Unknown Atom>";
@@ -342,9 +342,9 @@ void RTLWriter::emitWrReg(HWAWrReg *DR) {
   ControlBlock.indent(10) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
 }
 
-void RTLWriter::emitLIReg(HWALIReg *DR) {
-  if (DR->isPHINode())
-    UsedRegs.insert(DR->getReg());
+void RTLWriter::emitLIReg(HWALIReg *LIR) {
+  if (LIR->isPHINode())
+    UsedRegs.insert(HI->lookupRegForValue(&LIR->getValue()));
 }
 
 void RTLWriter::emitAllRegisters() {

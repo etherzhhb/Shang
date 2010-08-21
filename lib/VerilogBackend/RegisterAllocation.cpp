@@ -56,14 +56,15 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     Worklist.pop_back();
 
     if (SrcAtom == State) continue;
-
+    if (isa<HWALIReg>(SrcAtom))
+      continue;
+    
+    // Emit the register.
     if (HWAOpFU *OI = dyn_cast<HWAOpFU>(SrcAtom)) {
       for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
-        if (HWValDep *VD = dyn_cast<HWValDep>(&OI->getDep(i))) {
+        if (HWALIReg *LIR = dyn_cast<HWALIReg>(OI->getValDep(i).getSrc())) {
           Value *V = OI->getIOperand(i);
-          if (VD->getDepType() == HWValDep::Import)
-            // Insert the import node.
-            OI->setDep(i, HI.getLIReg(State, OI, *V));
+          (void)HI.getRegForValue(V, State->getSlot(), OI->getSlot());
         }
       }
     }

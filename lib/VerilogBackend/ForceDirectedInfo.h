@@ -52,7 +52,8 @@ public:
   /// @name TimeFrame
   //{
   unsigned getASAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpFU>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpFU>(A) || isa<FSMState>(A)
+            || isa<HWADelay>(A)|| isa<HWALIReg>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
@@ -61,7 +62,8 @@ public:
   void buildALAPStep(const HWAtom *Root, unsigned step);
 
   unsigned getALAPStep(const HWAtom *A) const {
-    assert((isa<HWAOpFU>(A) || isa<FSMState>(A) || isa<HWADelay>(A))
+    assert((isa<HWAOpFU>(A) || isa<FSMState>(A)
+            || isa<HWADelay>(A)|| isa<HWALIReg>(A))
           && "Bad atom type!");
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
   }

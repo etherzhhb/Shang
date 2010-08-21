@@ -236,13 +236,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
 
 HWAtom *HWAtomInfo::visitPHINode(PHINode &I) {
-  //// Create a physics register for phi node.
-  //HWReg *Reg = getRegNumForLiveVal(I);
-  //// Merge the export register to PHI node.
-  //for (unsigned i = 0, e = I.getNumIncomingValues(); i != e; ++i)
-  //  setRegNum(*I.getIncomingValue(i), Reg);
-
-  return 0;
+  return getLIReg(getStateFor(*I.getParent()), I);
 }
 
 HWAtom *HWAtomInfo::visitSelectInst(SelectInst &I) {
@@ -472,20 +466,21 @@ HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
 }
 
 
-HWALIReg *HWAtomInfo::getLIReg(HWAtom *Src, HWAtom *Reader, Value &V) {
+HWALIReg *HWAtomInfo::getLIReg(HWAtom *Src, Value &V) {
   FoldingSetNodeID FUID;
   FUID.AddInteger(atomLIReg);
   FUID.AddPointer(Src);
   FUID.AddPointer(&V);
-  HWRegister *R = getRegForValue(&V, Src->getFinSlot(), Reader->getSlot());
 
   void *IP = 0;
   HWALIReg *A =
     static_cast<HWALIReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(FUID, IP));
 
   if (!A) {
-    A = new (HWAtomAllocator) HWALIReg(FUID.Intern(HWAtomAllocator),
-                                       *getValDepEdge(Src, false), R, V);
+    A = new (HWAtomAllocator) HWALIReg(FUID.Intern(HWAtomAllocator), V,
+                                       getValDepEdge(Src, false, HWValDep::Import), 
+                                       TD->getTypeSizeInBits(V.getType()),
+                                       ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -531,9 +526,34 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.
         HWMemDep *PHIDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
-        //IVIncAtom->addDep(LoopDep);
-        State->addDep(PHIDep);
+        // Create the cycle for PHINode.
+        getAtomFor(*PN)->addDep(PHIDep);
       }
     }
   }
+}
+
+HWEdge *HWAtomInfo::getValDepInState(Value &V, BasicBlock *BB, bool isSigned) {
+  // Is this not a instruction?
+  if (isa<Argument>(V))
+    return getValDepEdge(getLIReg(getStateFor(*BB), V), isSigned);
+  else if (Constant *C = dyn_cast<Constant>(&V))
+    return getConstEdge(getStateFor(*BB), C);
+
+  // Now it is an Instruction
+  Instruction &Inst = cast<Instruction>(V);
+  if (BB == Inst.getParent())
+    // Create a wire dep for atoms in the same state.
+    return getValDepEdge(getAtomFor(Inst), isSigned);
+  else
+    // Otherwise this edge is an import edge.
+    return getValDepEdge(getLIReg(getStateFor(*BB), Inst), isSigned);
+}
+
+void HWAtomInfo::addOperandDeps(Instruction &I, SmallVectorImpl<HWEdge*> &Deps) {
+  BasicBlock *ParentBB = I.getParent();
+  for (ReturnInst::op_iterator OI = I.op_begin(), OE = I.op_end();
+      OI != OE; ++OI)
+    if(!isa<BasicBlock>(OI)) // Ignore the basic Block.
+      Deps.push_back(getValDepInState(**OI, ParentBB));
 }

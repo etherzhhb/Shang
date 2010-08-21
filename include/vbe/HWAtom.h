@@ -548,19 +548,20 @@ public:
   void print(raw_ostream &OS) const;
 };
 
-// Import local storage from predecessor basicblock.
+// Live in register copy from predecessor basicblock.
 class HWALIReg : public HWAtom {
-  HWRegister *Reg;
 public:
-  HWALIReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg, Value &V)
-    : HWAtom(ID, atomLIReg, V, &Edge, 0, reg->getBitWidth(), Edge->getIdx()), Reg(reg) {
-      scheduledTo(Edge->getFinSlot());
-      setParent(Edge->getParent());
+  HWALIReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge *VEdge,
+           uint8_t bitWidth, unsigned short Idx)
+    : HWAtom(ID, atomLIReg, V, VEdge, 0, bitWidth, Idx) {}
+
+  bool isPHINode() const {
+    // Ensure we are defining a PHINode, not importing a PHINode.
+    if (PHINode *PN = dyn_cast<PHINode>(&getValue()))
+      return (PN->getParent() == &getDep(0)->getValue());
+
+    return true;
   }
-
-  HWRegister *getReg() const { return Reg;  }
-
-  bool isPHINode() const { return isa<PHINode>(getValue()); }
 
   static inline bool classof(const HWALIReg *A) { return true; }
   static inline bool classof(const HWAtom *A) {
