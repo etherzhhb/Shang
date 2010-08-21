@@ -409,10 +409,10 @@ void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(0), 0);
+  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0);
 
   vlang->alwaysBegin(DataPath, 2);
-  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth(0));
+  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
   vlang->ifElse(DataPath.indent(4));
   DataPath.indent(6) << Res << " <= " << OpA << Operator << OpB << ";\n";
   vlang->alwaysEnd(DataPath, 2);
@@ -428,12 +428,12 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(0), 0);
+  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0);
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
   vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: " << ID << '\n';
   vlang->alwaysBegin(DataPath, 2);
-  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth(0));
+  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
   vlang->ifElse(DataPath.indent(4));
   DataPath.indent(6) << Res << " <= " << Mode << " ? ";
   DataPath           << "(" << OpA << " + " << OpB << ") : ";

@@ -172,14 +172,13 @@ class HWFUnit : public FoldingSetNode {
   // FIXME: char is enough for bit width.
   uint8_t *const InputBitWidth;
   size_t NumInputs;
-  uint8_t *const OutputBitWidth;
-  size_t NumOutputs;
+  uint8_t OutputBitWidth;
 
   inline HWFUnit(const FoldingSetNodeIDRef ID, HWResType::Types type,
                  unsigned totalFUs, unsigned latency, unsigned UID,
-                 uint8_t *I, size_t NI, uint8_t *O, size_t NO)
+                 uint8_t *I, size_t NI, uint8_t OW)
     : FastID(ID), T(type), TotalFUs(totalFUs), Latency(latency), UnitID(UID),
-    InputBitWidth(I), NumInputs(NI), OutputBitWidth(O), NumOutputs(NO) {
+    InputBitWidth(I), NumInputs(NI), OutputBitWidth(OW){
     assert(totalFUs && "Unavailable Function Unit?");
     assert((totalFUs == TotalFUs || T == HWResType::Trivial)
            && latency == Latency && "Data overflow!");
@@ -204,12 +203,9 @@ public:
 
   inline unsigned getNumInputs() const { return NumInputs; }
 
-  inline uint8_t getOutputBitwidth(unsigned idx) const {
-    assert(idx < NumOutputs && "Index out of range!");
-    return OutputBitWidth[idx];
+  inline uint8_t getOutputBitwidth() const {
+    return OutputBitWidth;
   }
-
-  inline unsigned getNumOutputs() const { return NumOutputs; }
 };
 
 
@@ -258,7 +254,7 @@ public:
   HWFUnit *allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
                          unsigned UnitID = 0);
   HWFUnit *allocaMemBusFU(unsigned UnitID);
-  HWFUnit *allocaTrivialFU(unsigned latency);
+  HWFUnit *allocaTrivialFU(unsigned latency, unsigned BitWitdh);
 
   HWFUnit *assignIDToFU(HWFUnit *U, unsigned ID);
 

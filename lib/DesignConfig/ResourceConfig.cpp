@@ -184,13 +184,10 @@ HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
   uint8_t Inputs[] = { BitWitdh, BitWitdh };
   uint8_t *I = HWFUAllocator.Allocate<uint8_t>(2);
   std::uninitialized_copy(Inputs, Inputs + 2, I);
-  uint8_t Outputs[] = { BitWitdh };
-  uint8_t *O = HWFUAllocator.Allocate<uint8_t>(1);
-  std::uninitialized_copy(Outputs, Outputs + 1, O);
   HWBinOpResType *HWTy = cast<HWBinOpResType>(getResType(T));
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), T,
                                    HWTy->getTotalRes(), HWTy->getLatency(),
-                                   UnitID, I, 2, O, 1);
+                                   UnitID, I, 2, BitWitdh);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
@@ -210,20 +207,19 @@ HWFUnit *ResourceConfig::allocaMemBusFU(unsigned UnitID) {
   uint8_t Inputs[] = { HWTy->getDataWidth(), HWTy->getAddrWidth() };
   uint8_t *I = HWFUAllocator.Allocate<uint8_t>(2);
   std::uninitialized_copy(Inputs, Inputs + 2, I);
-  uint8_t Outputs[] = { HWTy->getDataWidth() };
-  uint8_t *O = HWFUAllocator.Allocate<uint8_t>(1);
-  std::uninitialized_copy(Outputs, Outputs + 1, O);
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::MemoryBus,
-                                   1, HWTy->getLatency(), UnitID, I, 2, O, 1);
+                                   1, HWTy->getLatency(), UnitID, I, 2,
+                                   HWTy->getDataWidth());
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
 
 
-HWFUnit *ResourceConfig::allocaTrivialFU(unsigned latency) {
+HWFUnit *ResourceConfig::allocaTrivialFU(unsigned Latency, unsigned BitWitdh) {
   FoldingSetNodeID ID;
   ID.AddInteger(HWResType::Trivial);
-  ID.AddInteger(latency);
+  ID.AddInteger(Latency);
+  ID.AddInteger(BitWitdh);
 
   void *IP = 0;
 
@@ -231,7 +227,7 @@ HWFUnit *ResourceConfig::allocaTrivialFU(unsigned latency) {
   if (FU) return FU;
 
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::Trivial,
-                                   ~0, latency, 0, 0, 0, 0, 0);
+                                   ~0, Latency, 0, 0, 0, BitWitdh);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }

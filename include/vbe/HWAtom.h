@@ -590,10 +590,9 @@ public:
   }
   inline unsigned getNumInputs() const { return FU->getNumInputs(); }
 
-  inline uint8_t getOutputBitwidth(unsigned idx) const {
-    return FU->getOutputBitwidth(idx);
+  inline uint8_t getOutputBitwidth() const {
+    return FU->getOutputBitwidth();
   }
-  inline unsigned getNumOutputs() const { return FU->getNumOutputs(); }
   // TODO: NumInputs.
 
   bool isTrivial() const {

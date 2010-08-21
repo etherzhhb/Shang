@@ -226,8 +226,9 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // handle the situation that a BB that only contains a "ret void".
   if (State->getNumUses() == 0)
     Deps.push_back(getCtrlDepEdge(State));
-  
-  HWAOpFU *Atom = getOpFU(I, Deps, OpSize, RC->allocaTrivialFU(0));
+
+  HWFUnit *FU = RC->allocaTrivialFU(0, 0);
+  HWAOpFU *Atom = getOpFU(I, Deps, OpSize, FU);
   // This is a control atom.
   SetControlRoot(Atom);
   return Atom;
@@ -249,14 +250,17 @@ HWAtom *HWAtomInfo::visitSelectInst(SelectInst &I) {
   addOperandDeps(I, Deps);
 
   // FIXME: Read latency from configure file
-  return getOpFU(I, Deps, RC->allocaTrivialFU(1));
+  HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeAllocSizeInBits(I.getType()));
+  return getOpFU(I, Deps, FU);
 }
 
 HWAtom *HWAtomInfo::visitCastInst(CastInst &I) {
   SmallVector<HWEdge*, 1> Deps;
   Deps.push_back(getValDepInState(*I.getOperand(0), I.getParent()));
   // CastInst do not have any latency
-  return getOpFU(I, Deps, RC->allocaTrivialFU(0));
+
+  HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeAllocSizeInBits(I.getType()));
+  return getOpFU(I, Deps, FU);
 }
 
 HWAtom *HWAtomInfo::visitLoadInst(LoadInst &I) {
@@ -288,7 +292,9 @@ HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
     assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
     SmallVector<HWEdge*, 8> Deps;
     addOperandDeps(I, Deps);
-    return getOpFU(I, Deps, RC->allocaTrivialFU(0));
+
+    HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeAllocSizeInBits(I.getType()));
+    return getOpFU(I, Deps, FU);
   }
 
   SmallVector<HWEdge*, 2> Deps;
@@ -306,10 +312,13 @@ HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
   Deps.push_back(getValDepInState(*I.getOperand(1), I.getParent(), I.isSigned()));
 
   // It is trivial if one of the operand is constant
-  if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1)))
-    return getOpFU(I, Deps, RC->allocaTrivialFU(1));
-  else // We need to do a subtraction for the comparison.
-    return getOpFU(I, Deps, RC->allocaTrivialFU(1));
+  if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1))) {
+    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeAllocSizeInBits(I.getType()));
+    return getOpFU(I, Deps, FU);
+  } else {// We need to do a subtraction for the comparison.
+    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeAllocSizeInBits(I.getType()));
+    return getOpFU(I, Deps, FU);
+  }
 }
 
 HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
@@ -333,20 +342,20 @@ HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
     case Instruction::Or:
     case Instruction::Xor:
       // FIXME: Enable chaining.
-      FU = RC->allocaTrivialFU(1);
+      FU = RC->allocaTrivialFU(1, BitWidth);
       break;
     case Instruction::AShr:
       // Add the signed prefix for lhs
       isSigned = true;
-      FU = isOp1Const ? RC->allocaTrivialFU(1)
+      FU = isOp1Const ? RC->allocaTrivialFU(1, BitWidth)
                       : RC->allocaBinOpFU(HWResType::ASR, BitWidth);
       break;
     case Instruction::LShr:
-      FU = isOp1Const ? RC->allocaTrivialFU(1)
+      FU = isOp1Const ? RC->allocaTrivialFU(1, BitWidth)
                       : RC->allocaBinOpFU(HWResType::LSR, BitWidth);
       break;
     case Instruction::Shl:
-      FU = isOp1Const ? RC->allocaTrivialFU(1)
+      FU = isOp1Const ? RC->allocaTrivialFU(1, BitWidth)
                       : RC->allocaBinOpFU(HWResType::SHL, BitWidth);
       break;
     default: 

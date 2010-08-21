@@ -69,7 +69,6 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
     const Type *Ty = Src->getValue().getType();
     WorkList.pop_back();
 
-
     std::vector<HWAtom *> RegUsers(Src->use_begin(), Src->use_end());
     HWAWrReg *NewWrReg = 0;
     while (!RegUsers.empty()) {
