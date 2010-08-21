@@ -60,12 +60,11 @@ static std::string VLangMangle(const std::string &S) {
 //===----------------------------------------------------------------------===//
 // Value and type printing
 
-std::string VLang::printBitWitdh(const Type *Ty, int LowestBit,
-                                           bool printOneBit) {
+std::string VLang::printBitWitdh(unsigned BitWidth, int LowestBit,
+                                 bool printOneBit) {
   std::stringstream bw;
-  int BitWitdh = cast<IntegerType>(Ty)->getBitWidth();
-  if (BitWitdh !=1) 
-    bw << "[" << (BitWitdh - 1 + LowestBit) << ":" << LowestBit << "] ";
+  if (BitWidth !=1) 
+    bw << "[" << (BitWidth - 1 + LowestBit) << ":" << LowestBit << "] ";
   else if(printOneBit)
     bw << "[" << LowestBit << "] ";
   bw << " ";
@@ -138,53 +137,6 @@ std::string VLang::GetValueName(const Value *Operand) {
   }
 
   return "esyn_" + VarName;
-}
-
-std::string VLang::printType(const Type *Ty,
-                             bool isSigned /* = false */,
-                             const std::string &VariableName /* =  */,
-                             const std::string &SignalType /* =  */,
-                             const std::string &Direction /* =  */,
-                             bool IgnoreName /* = false */,
-                             const AttrListPtr &PAL /* = AttrListPtr */) {
-  std::stringstream ss;
-  ss << Direction;
-  if (Ty->isIntegerTy()) {
-    ss << printSimpleType(Ty, isSigned, VariableName, SignalType);
-    return ss.str();
-  }
-  return "???";
-}
-
-std::string VLang::printSimpleType(const Type *Ty, bool isSigned,
-                                   const std::string &NameSoFar /* =  */,
-                                   const std::string &SignalType /* = */){
-  std::stringstream ss;
-  //wire or reg?
-	ss << SignalType;
-	//signed?
-	if(isSigned)
-		ss << "signed ";
-
-  switch (Ty->getTypeID()) {
-  case Type::IntegerTyID:
-    ss << printBitWitdh(Ty) << NameSoFar;
-    return ss.str();
-  case Type::VoidTyID:
-    return "reg /*void*/";
-  default:
-    llvm_unreachable("Unsupport type!");
-  }
-}
-
-unsigned VLang::getBitWidth(const Type *T) {
-  unsigned BitWidth = 0;
-  if (const IntegerType *IntTy = dyn_cast<IntegerType>(T))
-    return IntTy->getBitWidth();
-  else if (T->isPointerTy())
-    return TD->getPointerSizeInBits();
-  //
-  return 0;
 }
 
 void VLang::initializePass() {
@@ -313,7 +265,8 @@ raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
 
   ss << " " << Name;
 
-  if (isReg)
+  // Dirty Hack: We not always assign the initialize for register! 
+  if (isReg && Term == ";")
     ss << " = " << printConstantInt(0, BitWidth, false);
 
   ss << Term <<'\n';

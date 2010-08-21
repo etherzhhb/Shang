@@ -429,7 +429,7 @@ public:
   void scheduledTo(unsigned slot);
 
   // BitWidth
-  inline uint8_t getBitwidth() const { return BitWidth; }
+  inline uint8_t getBitWidth() const { return BitWidth; }
 
   // Get the latency of this atom
   unsigned getLatency() const { return Latancy; }
@@ -516,7 +516,7 @@ class HWAWrReg : public HWAtom {
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
     unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
-    1, Edge->getBitwidth(), Edge->getIdx()), Reg(reg) {
+    1, Edge->getBitWidth(), Edge->getIdx()), Reg(reg) {
     scheduledTo(Slot);
     setParent(Edge->getParent());
   }
@@ -538,7 +538,7 @@ class HWADelay : public HWAtom {
 public:
   HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
            unsigned Idx) : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,
-           Delay, Edge->getBitwidth(), Idx) {}
+           Delay, Edge->getBitWidth(), Idx) {}
 
   static inline bool classof(const HWADelay *A) { return true; }
   static inline bool classof(const HWAtom *A) {

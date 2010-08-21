@@ -74,25 +74,9 @@ public:
   std::string printConstant(Constant *C);
   std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
 
-  unsigned getBitWidth(const Type *T);
-  unsigned getBitWidth(Value &V) { return getBitWidth(V.getType()); }
-
-  static std::string printBitWitdh(const Type *Ty, int LowestBit = 0, 
+  static std::string printBitWitdh(unsigned BitWidth, int LowestBit = 0, 
     bool printOneBit = false);
-
-  static std::string printType(const Type *Ty, 
-    bool isSigned = false,
-    const std::string &VariableName = "", 
-    const std::string &SignalType = "wire",
-    const std::string &Direction = "",
-    bool IgnoreName = false,
-    const AttrListPtr &PAL = AttrListPtr());
-  static std::string printSimpleType(const Type *Ty, 
-    bool isSigned, 
-    const std::string &NameSoFar = "",
-    const std::string &SignalType = "wire");
   //}
-
   
   raw_ostream &indent(raw_ostream &ss) const;
   

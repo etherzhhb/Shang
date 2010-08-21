@@ -152,11 +152,12 @@ void RTLWriter::emitFunctionSignature(Function &F) {
   unsigned Idx = 1;
   for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end();
       I != E; ++I) {
-    Argument &Arg = *I;
-    unsigned BitWidth = vlang->getBitWidth(Arg);
+    Argument *Arg = I;
+    HWRegister *ArgReg = HI->lookupRegForValue(Arg);
+    unsigned BitWidth = ArgReg->getBitWidth();
 
-    std::string Name = vlang->GetValueName(&Arg), 
-                RegName = getAsOperand(HI->lookupRegForValue(&Arg));
+    std::string Name = vlang->GetValueName(Arg), 
+                RegName = getAsOperand(ArgReg);
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
       Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
@@ -175,9 +176,8 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     //vlang->indent(ModDecl) << "/*return void*/";
   } else {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    getModDeclBuffer()
-      << VLang::printType(RetTy, false, "return_value", "reg ", "output ")
-      << ",\n";
+    vlang->declSignal((getModDeclBuffer() << "output "), "return_value",
+      cast<IntegerType>(RetTy)->getBitWidth(), 0, true, false, ",");
     // reset the register
     vlang->resetRegister(getResetBlockBuffer(), "return_value",
                          cast<IntegerType>(RetTy)->getBitWidth());
@@ -380,7 +380,7 @@ void RTLWriter::emitOpFU(HWAOpFU *OF) {
     // And do not emit data path for phi node.
     if (!Inst.getType()->isVoidTy()) {
       // Declare the signal
-      vlang->declSignal(getSignalDeclBuffer(), Name, vlang->getBitWidth(Inst), 0, false);
+      vlang->declSignal(getSignalDeclBuffer(), Name, OF->getBitWidth(), 0, false);
       // Emit data path
       DataPath.indent(2) << "assign " << Name << " = ";
     }
@@ -757,21 +757,19 @@ void RTLWriter::visitICmpInst(HWAOpFU &A) {
 }
 
 void RTLWriter::visitExtInst(HWAOpFU &A) {
-  CastInst &I = A.getInst<CastInst>();
-  const IntegerType *Ty = cast<IntegerType>(I.getType());
+  unsigned TyWidth = A.getBitWidth();
+  unsigned ChTyWidth = A.getValDep(0)->getBitWidth();
 
-  Value *V = I.getOperand(0);
-  const IntegerType *ChTy = cast<IntegerType>(V->getType());
-
-  int DiffBits = Ty->getBitWidth() - ChTy->getBitWidth();	
+  int DiffBits = TyWidth - ChTyWidth;	
   DataPath << "{{" << DiffBits << "{";
 
   HWEdge &Op = A.getValDep(0);
 
+  CastInst &I = A.getInst<CastInst>();
   if(I.getOpcode() == Instruction::ZExt)
     DataPath << "1'b0";
   else
-    DataPath << getAsOperand(Op) << "["<< (ChTy->getBitWidth()-1)<<"]";
+    DataPath << getAsOperand(Op) << "["<< (ChTyWidth - 1) << "]";
 
   DataPath <<"}}," << getAsOperand(Op) << "}" <<";\n";   
 }
@@ -786,7 +784,7 @@ void esyn::RTLWriter::visitReturnInst(HWAOpFU &A) {
   if (Ret.getNumOperands() != 0)
         // Emit data path
    ControlBlock.indent(10) << "return_value" << " <= "
-                          << getAsOperand(A.getValDep(0)) << ";\n";
+                           << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
 void esyn::RTLWriter::visitGetElementPtrInst(HWAOpFU &A) {
@@ -799,8 +797,6 @@ void esyn::RTLWriter::visitGetElementPtrInst(HWAOpFU &A) {
   }
 
   // InstLowering pass already take care of the element size.
-  const Type *Ty = I.getOperand(0)->getType();
-  assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
   DataPath << getAsOperand(A.getValDep(0)) << " + "
            << getAsOperand(A.getValDep(1)) << ";\n";
 }
@@ -830,9 +826,8 @@ void esyn::RTLWriter::visitSelectInst(HWAOpFU &A) {
 }
 
 void RTLWriter::visitTruncInst(HWAOpFU &A) {
-  TruncInst &I = A.getInst<TruncInst>();
-  const IntegerType *Ty = cast<IntegerType>(I.getType());
-  DataPath << getAsOperand(A.getValDep(0)) << vlang->printBitWitdh(Ty, 0, true) << ";\n";
+  DataPath << getAsOperand(A.getValDep(0))
+           << vlang->printBitWitdh(A.getBitWidth(), 0, true) << ";\n";
 }
 
 
