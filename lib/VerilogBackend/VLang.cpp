@@ -156,10 +156,6 @@ raw_ostream &VLang::comment(raw_ostream &ss) const {
   return ss;
 }
 
-raw_ostream &VLang::indent(raw_ostream &ss) const {
-  return ss.indent(ind_level);
-}
-
 raw_ostream &VLang::moduleBegin(raw_ostream &ss, std::string &ModuleName) {
   ss << "module " << ModuleName << "(\n";
   return ss;

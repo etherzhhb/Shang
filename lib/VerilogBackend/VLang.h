@@ -42,9 +42,6 @@ class VLang : public ImmutablePass {
   DenseMap<const Value*, unsigned> AnonValueNumbers;
   unsigned NextAnonValueNumber;
 
-  //
-  unsigned ind_level;
-
   void clear() {
     AnonValueNumbers.clear();
   }
@@ -77,13 +74,10 @@ public:
   static std::string printBitWitdh(unsigned BitWidth, int LowestBit = 0, 
     bool printOneBit = false);
   //}
-  
-  raw_ostream &indent(raw_ostream &ss) const;
-  
+
   raw_ostream &comment(raw_ostream &ss) const;
   
   raw_ostream &moduleBegin(raw_ostream &ss, std::string &ModuleName);
-
   
   raw_ostream &endModuleDecl(raw_ostream &ss);
 
@@ -93,7 +87,6 @@ public:
                           const std::string &Rst = "rstN",
                           const std::string &RstEdge = "negedge");
 
-  
   raw_ostream &resetRegister(raw_ostream &ss, const std::string &Name,
                             unsigned BitWidth, unsigned InitVal = 0);
 
