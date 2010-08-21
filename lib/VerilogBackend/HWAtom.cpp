@@ -115,13 +115,13 @@ void HWAOpFU::print(raw_ostream &OS) const {
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
                uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
   : FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
-  BitWidth(bitWidth), InstIdx(Idx) {}
+  BitWidth(bitWidth), InstIdx(Idx), Parent(0) {}
 
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
                HWEdge *Dep0, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
   : FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
-  BitWidth(bitWidth), InstIdx(Idx) {
+  BitWidth(bitWidth), InstIdx(Idx), Parent(0) {
   Deps.push_back(Dep0);
   Dep0->getSrc()->addToUseList(this);
 }
@@ -154,12 +154,6 @@ void FSMState::dump() const {
 
 void FSMState::setExitRoot(HWAOpFU *Exit) {
   ExitRoot = Exit;
-
-  for (usetree_iterator I = usetree_iterator::begin(this),
-    E = usetree_iterator::end(this); I != E; ++I) {
-      (*I)->setParent(this);
-  }
-
   std::sort(Atoms.begin(), Atoms.end(), HWAtom::top_sort());
 }
 
@@ -167,10 +161,29 @@ HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
 : HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), DepType(T) {}
 
 void HWAtom::setParent(FSMState *State) {
-  Parant = State;
-  State->addAtom(this);
+  Parent = State;
 }
 
 bool HWAWrReg::writeFUReg() const {
   return Reg->isFuReg();
+}
+
+HWADelay::HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
+                   unsigned Idx )
+  : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,Delay, 0, Idx) {
+  Edge->getParent()->addAtom(this);
+}
+
+HWAWrReg::HWAWrReg( const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
+                   unsigned short Slot )
+  : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, 1, Edge->getBitWidth(),
+           Edge->getIdx()), Reg(reg) {
+  scheduledTo(Slot);
+  Edge->getParent()->addAtom(this);
+}
+
+HWALIReg::HWALIReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge *VEdge,
+                   uint8_t bitWidth, unsigned short Idx )
+  : HWAtom(ID, atomLIReg, V, VEdge, 0, bitWidth, Idx) {
+  (*VEdge)->getParent()->addAtom(this);
 }

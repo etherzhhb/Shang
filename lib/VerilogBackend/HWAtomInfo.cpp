@@ -68,6 +68,11 @@ bool HWAtomInfo::runOnFunction(Function &F) {
       HWAtom *A = visit(Inst);
       
       if (!A) continue;
+      // Add the Atom to state.
+      // FIXME: Some atom will add them to parent atoms vector automatically,
+      // but this is not a good idea.
+      if (!State->getParent())
+        State->addAtom(A);
 
       // Remember the atom.
       ValueToHWAtoms.insert(std::make_pair(&Inst, A));

@@ -258,7 +258,7 @@ class HWAtom : public FoldingSetNode {
   // TODO: typedef SlotType
   unsigned short SchedSlot;
   unsigned short InstIdx;
-  FSMState *Parant;
+  FSMState *Parent;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<HWEdge*, 4> Deps;
@@ -286,7 +286,7 @@ protected:
   Value &Val;
 
   virtual ~HWAtom();
-  
+
   friend class FSMState;
 
   void resetSchedule() { SchedSlot = 0; }
@@ -297,7 +297,7 @@ public:
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
     It depbegin, It depend, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
     : FastID(ID), HWAtomType(HWAtomTy), Deps(depbegin, depend), Val(V), SchedSlot(0),
-    Latancy(latancy), BitWidth(bitWidth), InstIdx(Idx) {
+    Latancy(latancy), BitWidth(bitWidth), InstIdx(Idx), Parent(0) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
       //Deps.push_back(*I);
       (*I)->addToUseList(this);
@@ -312,8 +312,8 @@ public:
     }
   };
 
-  FSMState *getParent() { return Parant; }
-  FSMState *getParent() const { return Parant; }
+  FSMState *getParent() { return Parent; }
+  FSMState *getParent() const { return Parent; }
 
   // Add a new depencence edge to the atom.
   void addDep(HWEdge *E) {
@@ -515,11 +515,7 @@ class HWAWrReg : public HWAtom {
   HWRegister *Reg;
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
-    unsigned short Slot) : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge,
-    1, Edge->getBitWidth(), Edge->getIdx()), Reg(reg) {
-    scheduledTo(Slot);
-    setParent(Edge->getParent());
-  }
+    unsigned short Slot);
 
   HWAtom *getSrc() const { return getDep(0).getSrc(); }
 
@@ -537,8 +533,7 @@ public:
 class HWADelay : public HWAtom {
 public:
   HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
-           unsigned Idx) : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,
-           Delay, 0, Idx) {}
+           unsigned Idx);
 
   static inline bool classof(const HWADelay *A) { return true; }
   static inline bool classof(const HWAtom *A) {
@@ -552,8 +547,7 @@ public:
 class HWALIReg : public HWAtom {
 public:
   HWALIReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge *VEdge,
-           uint8_t bitWidth, unsigned short Idx)
-    : HWAtom(ID, atomLIReg, V, VEdge, 0, bitWidth, Idx) {}
+           uint8_t bitWidth, unsigned short Idx);
 
   bool isPHINode() const {
     // Ensure we are defining a PHINode, not importing a PHINode.
@@ -671,7 +665,10 @@ private:
   friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
-    : HWAtom(ID, atomVRoot, BB, 0, 0, Idx) , HaveSelfLoop(false), II(0) {}
+    : HWAtom(ID, atomVRoot, BB, 0, 0, Idx) , HaveSelfLoop(false), II(0) {
+    setParent(this);
+    Atoms.push_back(this);
+  }
   ~FSMState() {
     PHIEdge.clear();
     Atoms.clear();
@@ -703,7 +700,11 @@ public:
   const_reverse_iterator rbegin() const { return Atoms.rbegin(); }
   const_reverse_iterator rend()   const { return Atoms.rend(); }
 
-  void addAtom(HWAtom *A) { Atoms.push_back(A); }
+  void addAtom(HWAtom *A) {
+    assert(A->getParent() == 0 && "Already have parent!");
+    A->setParent(this);
+    Atoms.push_back(A);
+  }
   void eraseAtom(HWAtom *A) {
     iterator at = std::find(begin(), end(), A);
     assert(at != end() && "Can not find atom!");
