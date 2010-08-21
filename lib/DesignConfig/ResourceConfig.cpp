@@ -181,12 +181,16 @@ HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
   HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
   if (FU) return FU;
   // TODO: Assert bit width smaller than max bit width.
-  unsigned short Inputs[] = { BitWitdh, BitWitdh };
-  unsigned short Outputs[] = { BitWitdh };
+  uint8_t Inputs[] = { BitWitdh, BitWitdh };
+  uint8_t *I = HWFUAllocator.Allocate<uint8_t>(2);
+  std::uninitialized_copy(Inputs, Inputs + 2, I);
+  uint8_t Outputs[] = { BitWitdh };
+  uint8_t *O = HWFUAllocator.Allocate<uint8_t>(1);
+  std::uninitialized_copy(Outputs, Outputs + 1, O);
   HWBinOpResType *HWTy = cast<HWBinOpResType>(getResType(T));
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), T,
                                    HWTy->getTotalRes(), HWTy->getLatency(),
-                                   Inputs, Inputs + 2, Outputs, Outputs + 1);
+                                   I, 2, O, 1);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
@@ -203,11 +207,14 @@ HWFUnit *ResourceConfig::allocaMemBusFU(unsigned UnitID) {
   if (FU) return FU;
 
   HWMemBus *HWTy = getResType<HWMemBus>();
-  unsigned short Inputs[] = { HWTy->getDataWidth(), HWTy->getAddrWidth() };
-  unsigned short Outputs[] = { HWTy->getDataWidth() };
+  uint8_t Inputs[] = { HWTy->getDataWidth(), HWTy->getAddrWidth() };
+  uint8_t *I = HWFUAllocator.Allocate<uint8_t>(2);
+  std::uninitialized_copy(Inputs, Inputs + 2, I);
+  uint8_t Outputs[] = { HWTy->getDataWidth() };
+  uint8_t *O = HWFUAllocator.Allocate<uint8_t>(1);
+  std::uninitialized_copy(Outputs, Outputs + 1, O);
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::MemoryBus,
-                                   1, HWTy->getLatency(),
-                                   Inputs, Inputs + 2, Outputs, Outputs + 1);
+                                   1, HWTy->getLatency(), I, 2, O, 1);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
 }
@@ -223,12 +230,10 @@ HWFUnit *ResourceConfig::allocaTrivialFU(unsigned latency) {
   HWFUnit *FU = UniqiueHWFUs.FindNodeOrInsertPos(ID, IP);
   if (FU) return FU;
 
-  unsigned short *Null = 0;
   FU = new (HWFUAllocator) HWFUnit(ID.Intern(HWFUAllocator), HWResType::Trivial,
-                                   ~0, latency, Null, Null, Null, Null);
+                                   ~0, latency, 0, 0, 0, 0);
   UniqiueHWFUs.InsertNode(FU, IP);
   return FU;
-  return 0;
 }
 
 void ResourceConfig::print(raw_ostream &OS) const {

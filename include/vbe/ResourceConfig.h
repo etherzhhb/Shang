@@ -164,21 +164,24 @@ class HWFUnit : public FoldingSetNode {
   /// The ScalarEvolution's BumpPtrAllocator holds the data.
   FoldingSetNodeIDRef FastID;
 
-  enum HWResType::Types T;
-  unsigned short Latency;
-  unsigned TotalFUs;
+  enum HWResType::Types T : 4;
+  unsigned Latency        : 4;
+  unsigned TotalFUs       : 24;
 
-  SmallVector<unsigned short, 2> InputBitWidth;
-  SmallVector<unsigned short, 2> OutputBitWidth;
+  // FIXME: char is enough for bit width.
+  uint8_t *const InputBitWidth;
+  size_t NumInputs;
+  uint8_t *const OutputBitWidth;
+  size_t NumOutputs;
 
-  template<class InputIt, class OutputIt>
-  inline HWFUnit(const FoldingSetNodeIDRef ID, enum HWResType::Types type,
+  inline HWFUnit(const FoldingSetNodeIDRef ID, HWResType::Types type,
                  unsigned totalFUs, unsigned latency,
-                 InputIt InBegin, InputIt InEnd,
-                 OutputIt OutBegin, OutputIt OutEnd)
+                 uint8_t *I, size_t NI, uint8_t *O, size_t NO)
     : FastID(ID), T(type), TotalFUs(totalFUs), Latency(latency),
-    InputBitWidth(InBegin, InEnd), OutputBitWidth(OutBegin, OutEnd) {
+    InputBitWidth(I), NumInputs(NI), OutputBitWidth(O), NumOutputs(NO) {
     assert(totalFUs && "Unavailable Function Unit?");
+    assert((totalFUs == TotalFUs || T == HWResType::Trivial)
+           && latency == Latency && "Data overflow!");
   }
   friend class HWResType;
   friend class ResourceConfig;
@@ -191,17 +194,19 @@ public:
   inline unsigned getTotalFUs() const { return TotalFUs; }
   inline unsigned getLatency() const { return Latency; }
 
-  inline unsigned getInputBitwidth(unsigned idx) const {
+  inline uint8_t getInputBitwidth(unsigned idx) const {
+    assert(idx < NumInputs && "Index out of range!");
     return InputBitWidth[idx];
   }
 
-  inline unsigned getNumInputs() const { return InputBitWidth.size(); }
+  inline unsigned getNumInputs() const { return NumInputs; }
 
-  inline unsigned getOutputBitwidth(unsigned idx) const {
+  inline uint8_t getOutputBitwidth(unsigned idx) const {
+    assert(idx < NumOutputs && "Index out of range!");
     return OutputBitWidth[idx];
   }
 
-  inline unsigned getNumOutputs() const { return OutputBitWidth.size(); }
+  inline unsigned getNumOutputs() const { return NumOutputs; }
 };
 
 
