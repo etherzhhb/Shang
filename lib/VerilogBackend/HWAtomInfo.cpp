@@ -210,7 +210,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   BasicBlock *BB = I.getParent();
 
   // And export the live values.
-  for (BasicBlock::iterator II = BB->getFirstNonPHI(), IE = --BB->end(); II != IE; ++II) {
+  for (BasicBlock::iterator II = BB->begin(), IE = --BB->end(); II != IE; ++II) {
     Instruction &Inst = *II;
     HWAtom *A = getAtomFor(Inst);
     
@@ -221,7 +221,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
 
     Value *V = &A->getValue();
     const Type *Ty =A->getValue().getType();
-    if (Ty->isVoidTy() || V == BB) {
+    if (Ty->isVoidTy() || A->use_empty()) {
       Deps.push_back(getCtrlDepEdge(A));
     } 
   }
@@ -232,6 +232,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   if (State->getNumUses() == 0)
     Deps.push_back(getCtrlDepEdge(State));
 
+  assert(!Deps.empty() && "exit root not connect to anything.");
   HWFUnit *FU = RC->allocaTrivialFU(0, 0);
   HWAOpFU *Atom = getOpFU(I, Deps, OpSize, FU);
   // This is a control atom.
