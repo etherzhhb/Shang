@@ -554,7 +554,7 @@ public:
     if (PHINode *PN = dyn_cast<PHINode>(&getValue()))
       return (PN->getParent() == &getDep(0)->getValue());
 
-    return true;
+    return false;
   }
 
   static inline bool classof(const HWALIReg *A) { return true; }
