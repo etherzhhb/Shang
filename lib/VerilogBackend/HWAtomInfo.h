@@ -170,7 +170,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
   void addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB);
 
   bool haveSelfLoop(BasicBlock *BB);
-  void addLoopPredBackEdge(BasicBlock *BB);
+  HWADelay *addLoopPredBackEdge(BasicBlock *BB);
 
   // The loop Info
   LoopInfo *LI;

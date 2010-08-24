@@ -85,9 +85,6 @@ bool HWAtomInfo::runOnFunction(Function &F) {
 
     bool selfLoop = haveSelfLoop(BB);
     
-    // Add SCC for loop.
-    if (selfLoop)
-      addLoopPredBackEdge(BB);
 
     HWAOpFU *Exit = cast<HWAOpFU>(getControlRoot());
     State->setExitRoot(Exit);
@@ -113,15 +110,9 @@ bool HWAtomInfo::haveSelfLoop(BasicBlock *BB) {
   return true;
 }
 
-void HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
+HWADelay *HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
   assert(haveSelfLoop(BB) && "Loop SCC only exist in self loop!");
-
-  Loop *L = LI->getLoopFor(BB);
   
-  PHINode *IV = L->getCanonicalInductionVariable();
-  // And we need loop in canonical form.
-  if (!IV) return;
-
   FSMState *State = getStateFor(*BB);
   // Get the induction variable increment.
   //Instruction *IVInc = cast<Instruction>(IV->getIncomingValueForBlock(BB));
@@ -133,9 +124,12 @@ void HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
 
   // The Next loop depend on the result of predicate.
   // Dirty Hack: The FSM have a delay of 1.
-  HWMemDep *LoopDep = getMemDepEdge(getDelay(Pred, 1), true, HWMemDep::TrueDep, 1);
+  HWADelay *Delay = getDelay(Pred, 1);
+  HWMemDep *LoopDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
   //IVIncAtom->addDep(LoopDep);
   State->addDep(LoopDep);
+
+  return Delay;
 }
 
 void HWAtomInfo::addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB) {
@@ -233,11 +227,16 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   if (State->getNumUses() == 0)
     Deps.push_back(getCtrlDepEdge(State));
 
+  // Emit all atom before exit.
+  if (haveSelfLoop(BB))
+    Deps.push_back(getCtrlDepEdge(addLoopPredBackEdge(BB)));
+
   assert(!Deps.empty() && "exit root not connect to anything.");
   HWFUnit *FU = RC->allocaTrivialFU(0, 0);
   HWAOpFU *Atom = getOpFU(I, Deps, OpSize, FU);
   // This is a control atom.
   SetControlRoot(Atom);
+
   return Atom;
 }
 
