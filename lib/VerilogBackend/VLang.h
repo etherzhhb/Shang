@@ -69,7 +69,7 @@ public:
   std::string GetValueName(const Value *Operand); 
 
   std::string printConstant(Constant *C);
-  std::string printConstantInt(uint64_t value,int bitwidth, bool isMinValue);
+  std::string printConstantInt(uint64_t value,unsigned bitwidth, bool isMinValue);
 
   static std::string printBitWitdh(unsigned BitWidth, int LowestBit = 0, 
     bool printOneBit = false);

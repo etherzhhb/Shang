@@ -79,12 +79,20 @@ std::string VLang::printConstant(Constant *CPV) {
     return printConstantInt(v,CI->getBitWidth(),isMinValue);
   } else if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(CPV))
     return GetValueName(GVar);
-
+  else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(CPV)) {
+    switch (CE->getOpcode()) {
+    case Instruction::PtrToInt:
+    case Instruction::IntToPtr:
+    case Instruction::BitCast:
+      return printConstant(CE->getOperand(0));
+    }
+    
+  }
+  
   return "??Constant??";
 }
 
-std::string VLang::printConstantInt(uint64_t value,
-                                    int bitwidth, bool isMinValue) {
+std::string VLang::printConstantInt(uint64_t value, unsigned bitwidth, bool isMinValue) {
   std::stringstream pc;
   pc<<bitwidth<<"'h";
   if(isMinValue)
