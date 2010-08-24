@@ -64,12 +64,14 @@ bool InstLowering::runOnBasicBlock(BasicBlock &BB) {
 }
 
 void InstLowering::lowerGEP(GetElementPtrInst *GEP) {
-  // No need to lower.
-  if (GEP->getNumIndices() < 2)
-    return;
+  //// No need to lower.
+  //if (GEP->getNumIndices() < 2)
+  //  return;
   
   Value *BaseAddr = GEP->getOperand(0);
   const Type *BaseTy = BaseAddr->getType();
+  const Type *ElemTy = dyn_cast<SequentialType>(BaseTy)->getElementType();
+  uint64_t ElemTyAllocSize = TD->getTypeAllocSize(ElemTy);
 
   uint64_t TotalConstOffs = 0;
   Value *LastIndex = 0;
@@ -94,6 +96,9 @@ void InstLowering::lowerGEP(GetElementPtrInst *GEP) {
 
     // The offset.
     uint64_t TypeAllocSize = TD->getTypeAllocSize(BaseTy);
+    // Dirty Hack:
+    // Our address is base on Element size.
+    TypeAllocSize /= ElemTyAllocSize;
 
     if (TypeAllocSize != 1) {
       if (isPowerOf2_64(TypeAllocSize)) {
