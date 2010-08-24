@@ -535,6 +535,8 @@ public:
   HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
            unsigned Idx);
 
+  HWAtom *getSrc() const { return getDep(0).getSrc(); }
+
   static inline bool classof(const HWADelay *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomDelay;
