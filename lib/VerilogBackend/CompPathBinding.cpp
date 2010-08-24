@@ -454,7 +454,7 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
     dbgs() << "\n\n";
   );
   // Bind register for prebind atoms.
-  //allocaPreBindReg();
+  allocaPreBindReg();
 
   // 1. Build WOCG_FUNTYPE.
   buildWOCGForRes();
