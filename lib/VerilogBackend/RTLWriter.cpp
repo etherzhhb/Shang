@@ -381,6 +381,7 @@ void RTLWriter::emitOpFU(HWAOpFU *OF) {
     if (!Inst.getType()->isVoidTy()) {
       // Declare the signal
       vlang->declSignal(getSignalDeclBuffer(), Name, OF->getBitWidth(), 0, false);
+      vlang->comment(DataPath.indent(2)) << OF->getValue() << '\n';
       // Emit data path
       DataPath.indent(2) << "assign " << Name << " = ";
     }
@@ -823,6 +824,10 @@ void esyn::RTLWriter::visitSelectInst(HWAOpFU &A) {
   DataPath << getAsOperand(A.getValDep(0)) << " ? "
            << getAsOperand(A.getValDep(1)) << " : "
            << getAsOperand(A.getValDep(2)) << ";\n";
+}
+
+void esyn::RTLWriter::visitIntCastInst(HWAOpFU &A) {
+  DataPath << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
 void RTLWriter::visitTruncInst(HWAOpFU &A) {

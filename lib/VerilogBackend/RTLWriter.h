@@ -170,9 +170,11 @@ class RTLWriter : public FunctionPass {
   void visitFPToSIInst(HWAOpFU &A)    { }
   void visitUIToFPInst(HWAOpFU &A)    { }
   void visitSIToFPInst(HWAOpFU &A)    { }
-  void visitPtrToIntInst(HWAOpFU &A)  { }
-  void visitIntToPtrInst(HWAOpFU &A)  { }
-  void visitBitCastInst(HWAOpFU &A)   { }
+
+  void visitIntCastInst(HWAOpFU &A);
+  void visitPtrToIntInst(HWAOpFU &A)  { visitIntCastInst(A); }
+  void visitIntToPtrInst(HWAOpFU &A)  { visitIntCastInst(A); }
+  void visitBitCastInst(HWAOpFU &A)   { visitIntCastInst(A); }
 
   void visitSelectInst(HWAOpFU &A);
   void visitCallInst (HWAOpFU &A){}
