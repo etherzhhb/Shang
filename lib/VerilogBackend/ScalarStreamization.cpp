@@ -78,8 +78,13 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
       if (Dst == Exit)
         continue;
 
-      if (Dst->getEdgeFrom(Src)->isBackEdge())
+      HWEdge *E = Dst->getEdgeFrom(Src);
+      if (E->isBackEdge())
         continue;
+      // Ignore the PHI edge.
+      else if (HWValDep *VD = dyn_cast<HWValDep>(E))
+        if (VD->getDepType() == HWValDep::PHI)
+          continue;
 
       // Anti dependency occur because new value will write to the original register
       // before it read.
@@ -97,8 +102,7 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
         DEBUG(dbgs() << "Anti dependency found:\n");
         if (NewWrReg == 0) {
           unsigned StartSlot = Src->getSlot() + II;
-          HWRegister *NewReg = HI.allocaRegister(Ty, StartSlot,
-                                                     StartSlot + II -1);
+          HWRegister *NewReg = HI.allocaRegister(Ty);
           NewWrReg = HI.getWrReg(Src, NewReg, StartSlot);
         }
         DEBUG(dbgs() << "---------------->Insert SS Reg ");

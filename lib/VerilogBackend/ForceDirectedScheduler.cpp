@@ -181,9 +181,7 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
        I != E; ++I) {
     HWAtom *A = *I;
     if (!A->isScheduled()) {
-      assert((isa<HWADelay>(A) || isa<HWALIReg>(A))
-              && "Some atom not scheduled!");
-      A->scheduledTo(FDInfo->getALAPStep(A));
+      A->scheduledTo(FDInfo->getASAPStep(A));
     }
   }
   

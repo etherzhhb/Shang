@@ -46,7 +46,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
        I != E; ++I) {
     PHINode *PN = cast<PHINode>(I);
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i)
-      (void)HI.getRegForValue(PN->getIncomingValue(i), 1, State->getSlot());
+      (void)HI.getRegForValue(PN->getIncomingValue(i));
   }
 
   SmallVector<HWAtom*, 32> Worklist(State->begin(), State->end());
@@ -64,7 +64,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
         if (HWALIReg *LIR = dyn_cast<HWALIReg>(OI->getValDep(i).getSrc())) {
           Value *V = OI->getIOperand(i);
-          (void)HI.getRegForValue(V, State->getSlot(), OI->getSlot());
+          (void)HI.getRegForValue(V);
         }
       }
     }
@@ -100,8 +100,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       } else if (HWAWrReg *WR = dyn_cast<HWAWrReg>(SrcAtom)) {
         // Otherwise if the function unit register could hold the value untill
         // the computation finish.
-        assert(WR->writeFUReg()
-          && "Expect write to function unit register!");
+        //assert(WR->writeFUReg()
+        //  && "Expect write to function unit register!");
         if (WR->getFinSlot() == Dst->getFinSlot())          
           continue;
         else if (WR->getSlot() == Dst->getFinSlot()) {
@@ -112,7 +112,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         }
       }
 
-      HWAWrReg *WrReg = HI.getWrReg(SrcAtom, Dst);
+      HWAWrReg *WrReg = HI.getWrReg(SrcAtom);
       DEBUG(dbgs() << "---------------->Insert ");
       DEBUG(WrReg->dump());
       DEBUG(dbgs() << "before ");
@@ -134,49 +134,8 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
 
         DEBUG(dbgs() << " Registered\n");
         // Store the value to register.
-        Exit->setDep(i, HI.getWrReg(SrcAtom, Exit));
+        Exit->setDep(i, HI.getWrReg(SrcAtom));
       }
-    }
-  }
-
-  // Foreach PHINode in succ.
-  for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
-    BasicBlock *SuccBB = *SI;
-    for (BasicBlock::iterator II = SuccBB->begin(),
-        IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
-      PHINode *PN = cast<PHINode>(II);
-      HWValDep *VD = State->getPHIEdge(PN);
-      // If the edge had been ignored.
-      if (VD == 0) continue;
-
-      HWAtom *SrcAtom = VD->getSrc();
-      // The delay atom is not use any more.
-      if (HWADelay *D = dyn_cast<HWADelay>(SrcAtom)) {
-        SrcAtom = D->getSrc();
-        D->dropAllReferences();
-        D->replaceAllUseBy(SrcAtom);
-      }
-      
-      Value *V = &SrcAtom->getValue();
-      DEBUG(dbgs() << "Visit value: " << *V << "use by PHI: " << *PN << "\n");
-      DEBUG(SrcAtom->dump());
-      DEBUG(dbgs() << "At slot " << SrcAtom->getSlot() << "\n");
-      unsigned lastSlot = (SuccBB == &BB) ? State->getIISlot()
-                                          : State->getEndSlot();
-
-      // Just read value from the atom is ok.
-      if (SrcAtom->getFinSlot() == lastSlot) {
-        DEBUG(dbgs() << "Do not need register\n");
-        continue;
-      }
-      // FIXME: Create read atom for argument or PHINode as operand of PHINode.
-      // Create register for PHINode.
-      assert((!isa<HWAWrReg>(SrcAtom) || cast<HWAWrReg>(SrcAtom)->writeFUReg())
-             && "Unexpected Register for phi node!");
-      HWAWrReg *WR = HI.getWrReg(SrcAtom, Exit);
-      DEBUG(dbgs() << "Registered by:\n");
-      DEBUG(WR->dump());
-      Exit->replaceDep(SrcAtom, WR);
     }
   }
 

@@ -147,19 +147,9 @@ class HWRegister {
   unsigned       Num : 20;
   unsigned  BitWidth : 8;
   HWResType::Types T : 4;
-  // The life time of this register, Including EndSlot.
-  unsigned short StartSlot, EndSlot;
 public:
-  HWRegister(unsigned short num, unsigned short BitWidth, HWResType::Types t,
-             unsigned startSlot, unsigned endSlot)
-    : BitWidth(BitWidth), Num(num), T(t), StartSlot(startSlot), EndSlot(endSlot)
-  {}
-
-  unsigned getStartSlot() const { return StartSlot; }
-  unsigned getEndSlot() const { return EndSlot; }
-  const std::pair<unsigned short, unsigned short> getLifeTime() const {
-    return std::make_pair(StartSlot, EndSlot);
-  }
+  HWRegister(unsigned short num, unsigned short BitWidth, HWResType::Types t)
+    : BitWidth(BitWidth), Num(num), T(t) {}
 
   enum HWResType::Types getResType() const { return T; };
   unsigned getBitWidth() const { return BitWidth; }
@@ -737,7 +727,7 @@ public:
 
   void setII(unsigned ii) { II = ii; }
   unsigned getII() const { return II; }
-  unsigned getIISlot() const { return getSlot() + II; }
+  unsigned getIISlot() const { return getSlot() + II - 1; }
   bool haveSelfLoop() const { return HaveSelfLoop; }
 
   typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;

@@ -224,9 +224,6 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   if (State->haveSelfLoop()) {
     vlang->comment(ControlBlock.indent(8)) << "For self loop:\n";
     std::string SelfLoopEnable = computeSelfLoopEnable(State);
-    vlang->ifBegin(ControlBlock.indent(8), SelfLoopEnable);
-    emitPHICopiesForSucc(BB, BB, 0);
-    vlang->end(ControlBlock.indent(8));
     emitNextMicroState(ControlBlock.indent(8), BB, SelfLoopEnable);
   } else
     emitNextMicroState(ControlBlock.indent(8), BB, "1'b0");
@@ -268,8 +265,13 @@ std::string RTLWriter::getAsOperand(HWAtom *A) {
   Value *V = &A->getValue();
 
   switch (A->getHWAtomType()) {
-    case atomOpFU:
-      return getAsOperand(V, "_w");
+    case atomOpFU: {
+      HWAOpFU *OF = cast<HWAOpFU>(A);
+      if (OF->isTrivial())
+        return getAsOperand(V, "_w");
+      else
+        return getRegPrefix(OF->getResType()) + utostr(OF->getUnitID());
+    }
     case atomWrReg:
       return "/*" + vlang->GetValueName(&A->getValue()) + "*/"
         + getAsOperand(cast<HWAWrReg>(A)->getReg());
@@ -307,8 +309,6 @@ void RTLWriter::emitAtom(HWAtom *A) {
         emitOpFU(cast<HWAOpFU>(A));
         break;
       case atomWrReg:
-        vlang->comment(ControlBlock.indent(10)) << "Read:"
-          << A->getValue() << '\n';
         emitWrReg(cast<HWAWrReg>(A));
         break;
       case atomLIReg:
@@ -335,11 +335,15 @@ void RTLWriter::emitWrReg(HWAWrReg *DR) {
   // Function unit register will emit with function unit.
   if (R->isFuReg())
     return;
-  
+
   UsedRegs.insert(R);
-  
+  HWEdge &E = DR->getDep(0);
+  if (!isa<HWConst>(E))
+    vlang->comment(ControlBlock.indent(10)) << "Read:"
+    << DR->getValue() << '\n';
+
   std::string Name = getAsOperand(DR);
-  ControlBlock.indent(10) << Name << " <= " << getAsOperand(DR->getDep(0)) << ";\n";
+  ControlBlock.indent(10) << Name << " <= " << getAsOperand(E) << ";\n";
 }
 
 void RTLWriter::emitLIReg(HWALIReg *LIR) {
@@ -410,13 +414,13 @@ void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0);
+  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0, false);
 
-  vlang->alwaysBegin(DataPath, 2);
-  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
-  vlang->ifElse(DataPath.indent(4));
-  DataPath.indent(6) << Res << " <= " << OpA << Operator << OpB << ";\n";
-  vlang->alwaysEnd(DataPath, 2);
+  // vlang->alwaysBegin(DataPath, 2);
+  // vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
+  // vlang->ifElse(DataPath.indent(4));
+  DataPath.indent(2) << "assign "<< Res << " = " << OpA << Operator << OpB << ";\n";
+  // vlang->alwaysEnd(DataPath, 2);
 }
 
 template<>
@@ -429,17 +433,17 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
 
   vlang->declSignal(getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
   vlang->declSignal(getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0);
+  vlang->declSignal(getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0, false);
   vlang->declSignal(getSignalDeclBuffer(), Mode, 1, 0);
 
   vlang->comment(DataPath.indent(2)) << "Add/Sub Unit: " << FUID << '\n';
-  vlang->alwaysBegin(DataPath, 2);
-  vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
-  vlang->ifElse(DataPath.indent(4));
-  DataPath.indent(6) << Res << " <= " << Mode << " ? ";
+  // vlang->alwaysBegin(DataPath, 2);
+  // vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
+  // vlang->ifElse(DataPath.indent(4));
+  DataPath.indent(2) << "assign " << Res << " = " << Mode << " ? ";
   DataPath           << "(" << OpA << " + " << OpB << ") : ";
   DataPath           << "(" << OpA << " - " << OpB << ");\n";
-  vlang->alwaysEnd(DataPath, 2);
+  // vlang->alwaysEnd(DataPath, 2);
 }
 
 
@@ -846,7 +850,6 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
     vlang->ifBegin(ControlBlock.indent(10), getAsOperand(Cnd));
 
     if (&NextBB0 != &CurBB) {
-      emitPHICopiesForSucc(CurBB, NextBB0, 2);
       emitNextFSMState(ControlBlock.indent(12), NextBB0);
       emitNextMicroState(ControlBlock.indent(12), NextBB0, "1'b1");
     }
@@ -854,7 +857,6 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
     vlang->ifElse(ControlBlock.indent(10));
 
     if (&NextBB1 != &CurBB) {
-      emitPHICopiesForSucc(CurBB, NextBB1, 2);
       emitNextFSMState(ControlBlock.indent(12), NextBB1);
       emitNextMicroState(ControlBlock.indent(12), NextBB1, "1'b1");
     }
@@ -862,39 +864,7 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
     vlang->end(ControlBlock.indent(10));
   } else {
     BasicBlock &NextBB = *(I.getSuccessor(0)), &CurBB = *(I.getParent());
-    emitPHICopiesForSucc(CurBB, NextBB);
     emitNextFSMState(ControlBlock.indent(10), NextBB);
     emitNextMicroState(ControlBlock.indent(10), NextBB, "1'b1");
-  }
-}
-
-void RTLWriter::emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
-                                     unsigned ind) {
-  FSMState *CurStage = HI->getStateFor(CurBlock);
-  vlang->comment(ControlBlock.indent(10 + ind)) << "Phi Node:\n";
-  Instruction *NotPhi = Succ.getFirstNonPHI();
-  
-  for (BasicBlock::iterator I = Succ.begin(), E = Succ.getFirstNonPHI();
-      I != E; ++I) {
-    PHINode *PN = cast<PHINode>(I);
-    HWRegister *PR = HI->lookupRegForValue(PN);
-
-    Value *IV = PN->getIncomingValueForBlock(&CurBlock);
-    ControlBlock.indent(10 + ind) << getAsOperand(PR)
-                                 << "/*" << vlang->GetValueName(PN) << "*/";
-
-    if (Constant *C = dyn_cast<Constant>(IV)) {
-      ControlBlock << " <= " << vlang->printConstant(C) << ";\n";
-      continue;
-    } else if (HWValDep *PE = CurStage->getPHIEdge(PN)) {
-      // Read the value from PHI source.
-      // FIXME: We may need the PHIAtom.
-      ControlBlock << " <= " << getAsOperand(PE->getSrc())
-                   << ";\n"; 
-    } else {
-      // Loop up the register for argument.
-      HWRegister *PHISrc = HI->lookupRegForValue(IV);
-      ControlBlock << " <= " << getAsOperand(PHISrc) << ";\n";
-    }
   }
 }

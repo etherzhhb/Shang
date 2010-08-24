@@ -98,11 +98,6 @@ class RTLWriter : public FunctionPass {
 
   void emitAllRegisters();
 
-  // Helper function for state end
-  // Copy incoming value for Phi node.
-  void emitPHICopiesForSucc(BasicBlock &CurBlock, BasicBlock &Succ,
-                            unsigned ind = 0);
-
   void clear();
   
   std::string getAsOperand(Value *V, const std::string &postfix = "");

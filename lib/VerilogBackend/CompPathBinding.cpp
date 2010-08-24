@@ -454,14 +454,14 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
     dbgs() << "\n\n";
   );
   // Bind register for prebind atoms.
-  allocaPreBindReg();
+  //allocaPreBindReg();
 
   // 1. Build WOCG_FUNTYPE.
   buildWOCGForRes();
   // 2. Find the longest path.
   buildLongestPostBindPath();
   // 3. Bind a register to the function unit.
-  bindFunUnitReg();
+  //bindFunUnitReg();
 
 
   DEBUG(

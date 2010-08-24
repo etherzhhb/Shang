@@ -132,7 +132,8 @@ void HWAtomInfo::addLoopPredBackEdge(BasicBlock *BB) {
   HWAOpFU *Pred = cast<HWAOpFU>(getAtomFor(*ICmp));
 
   // The Next loop depend on the result of predicate.
-  HWMemDep *LoopDep = getMemDepEdge(Pred, true, HWMemDep::TrueDep, 1);
+  // Dirty Hack: The FSM have a delay of 1.
+  HWMemDep *LoopDep = getMemDepEdge(getDelay(Pred, 1), true, HWMemDep::TrueDep, 1);
   //IVIncAtom->addDep(LoopDep);
   State->addDep(LoopDep);
 }
@@ -197,10 +198,10 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // We may need to wait until the operation for return value finish.
   // FIXME: If we make return port a wire, then we do not need to delay
   // the operation.
-  if (!Deps.empty() && isa<ReturnInst>(I))
-    if (HWAOpFU *OI = dyn_cast<HWAOpFU>(Deps[0]->getSrc())) {
-      Deps[0]->setSrc(getDelay(OI, 1));
-    }
+  //if (!Deps.empty() && isa<ReturnInst>(I))
+  //  if (HWAOpFU *OI = dyn_cast<HWAOpFU>(Deps[0]->getSrc())) {
+  //    Deps[0]->setSrc(getDelay(OI, 1));
+  //  }
 
   unsigned OpSize = Deps.size();
 
@@ -414,12 +415,12 @@ FSMState *HWAtomInfo::getState(BasicBlock *BB) {
   return A;
 }
 
-HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWAtom *Reader) {
+HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src) {
   FoldingSetNodeID FUID;
   FUID.AddInteger(atomWrReg);
   FUID.AddPointer(Src);
-  HWRegister *R = getRegForValue(&Src->getValue(),
-                                 Src->getFinSlot(), Reader->getSlot());
+  HWRegister *R = getRegForValue(&Src->getValue());
+  FUID.AddPointer(R);
 
   void *IP = 0;
   HWAWrReg *A =
@@ -439,6 +440,7 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg,
   FoldingSetNodeID FUID;
   FUID.AddInteger(atomWrReg);
   FUID.AddPointer(Src);
+  FUID.AddPointer(Reg);
 
   void *IP = 0;
   HWAWrReg *A =
@@ -448,6 +450,25 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg,
     A = new (HWAtomAllocator) HWAWrReg(FUID.Intern(HWAtomAllocator),
                                        *getValDepEdge(Src, false), Reg,
                                        Slot);
+    UniqiueHWAtoms.InsertNode(A, IP);
+  }
+  return A;
+}
+
+HWAWrReg *HWAtomInfo::getWrReg(HWEdge *SrcEdge, Value *V) {
+  FoldingSetNodeID FUID;
+  FUID.AddInteger(atomWrReg);
+  FUID.AddPointer(SrcEdge->getSrc());
+  HWRegister *R = getRegForValue(V);
+  FUID.AddPointer(R);
+
+  void *IP = 0;
+  HWAWrReg *A =
+    static_cast<HWAWrReg*>(UniqiueHWAtoms.FindNodeOrInsertPos(FUID, IP));
+
+  if (!A) {
+    A = new (HWAtomAllocator) HWAWrReg(FUID.Intern(HWAtomAllocator),
+                                       *SrcEdge, R, 0);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -508,30 +529,33 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
     for (BasicBlock::iterator II = SuccBB->begin(),
         IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
       PHINode *PN = cast<PHINode>(II);
-      Instruction *Inst =
-        dyn_cast<Instruction>(PN->getIncomingValueForBlock(&BB));
-      // No instruction value do not need to Export.
-      if (!Inst)
-        continue;
-      // We do not need to Export if the value not define in the current BB.
-      if (Inst->getParent() != &BB)
-        continue;
-      // We do not need to delay if source is PHI, because it is ready before
-      // entering this FSMState.
-      if (isa<PHINode>(Inst))
-        continue;
-      // Create the PHI edge.
-      HWAOpFU *OpInst = cast<HWAOpFU>(getAtomFor(*Inst));
-      // Delay one cycle to wait the value finish.
-      HWADelay *Delay = getDelay(OpInst, 1);
-      HWValDep *PHIEdge = getValDepEdge(Delay, false, HWValDep::PHI);
+      Value *IV = PN->getIncomingValueForBlock(&BB);
+      //// No instruction value do not need to Export.
+      //if (!Inst)
+      //  continue;
+      //// We do not need to Export if the value not define in the current BB.
+      //if (Inst->getParent() != &BB)
+      //  continue;
+      //// We do not need to delay if source is PHI, because it is ready before
+      //// entering this FSMState.
+      //if (isa<PHINode>(Inst))
+      //  continue;
+      HWEdge *PHIEdge = getValDepInState(*IV, &BB);
+      HWAWrReg *WR = getWrReg(PHIEdge, PN);
+      PHIEdge = getValDepEdge(WR, false, HWValDep::PHI);
       Deps.push_back(PHIEdge);
-      // Remember this edge and its dest PHINode.
-      State->addPHIEdge(PN, PHIEdge);
+      //// Create the PHI edge.
+      //HWAOpFU *OpInst = cast<HWAOpFU>(getAtomFor(*Inst));
+      //// Delay one cycle to wait the value finish.
+      //HWADelay *Delay = getDelay(OpInst, 1);
+      //HWValDep *PHIEdge = getValDepEdge(Delay, false, HWValDep::PHI);
+      //Deps.push_back(PHIEdge);
+      //// Remember this edge and its dest PHINode.
+      //State->addPHIEdge(PN, PHIEdge);
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.
-        HWMemDep *PHIDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
+        HWMemDep *PHIDep = getMemDepEdge(WR, true, HWMemDep::TrueDep, 1);
         // Create the cycle for PHINode.
         getAtomFor(*PN)->addDep(PHIDep);
       }
