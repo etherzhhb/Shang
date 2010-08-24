@@ -707,6 +707,8 @@ public:
             == usetree_iterator::end(getParent())) && "Who using dead atom?");
   }
 
+  size_t getNumAtoms() const { return Atoms.size(); }
+
   void resetSchedule() {
     for (iterator I = begin(), E = end(); I != E; ++I)
       (*I)->resetSchedule();
