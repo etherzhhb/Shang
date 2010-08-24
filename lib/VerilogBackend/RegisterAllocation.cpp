@@ -148,8 +148,15 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       HWValDep *VD = State->getPHIEdge(PN);
       // If the edge had been ignored.
       if (VD == 0) continue;
-      
+
       HWAtom *SrcAtom = VD->getSrc();
+      // The delay atom is not use any more.
+      if (HWADelay *D = dyn_cast<HWADelay>(SrcAtom)) {
+        SrcAtom = D->getSrc();
+        D->dropAllReferences();
+        D->replaceAllUseBy(SrcAtom);
+      }
+      
       Value *V = &SrcAtom->getValue();
       DEBUG(dbgs() << "Visit value: " << *V << "use by PHI: " << *PN << "\n");
       DEBUG(SrcAtom->dump());
