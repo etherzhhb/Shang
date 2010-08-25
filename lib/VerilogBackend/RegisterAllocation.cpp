@@ -129,8 +129,10 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
       if (VD->getDepType() == HWValDep::Export) {
 
         // If we already emit the register, just skip it.
-        if (isa<HWAWrReg>(SrcAtom))
+        if (HWAWrReg *WR = dyn_cast<HWAWrReg>(SrcAtom)) {
+          if (!WR->writeFUReg())          
             continue;
+        }
 
         DEBUG(dbgs() << " Registered\n");
         // Store the value to register.
