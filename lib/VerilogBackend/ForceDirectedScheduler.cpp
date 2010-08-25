@@ -232,6 +232,9 @@ void FDLScheduler::FDModuloSchedule() {
   for (;;) {
     CurState->resetSchedule();
     CurState->scheduledTo(StartStep);
+    // Set up Resource table
+    FDInfo->reset();
+    FDInfo->buildFDInfo();
 
     if (scheduleAtII()) {
       DEBUG(FDInfo->dumpTimeFrame());
