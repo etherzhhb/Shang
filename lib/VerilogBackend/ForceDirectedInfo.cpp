@@ -53,6 +53,9 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
       continue;
     }
 
+    DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
+          A->dump(););
+
     unsigned NewStep = 0;
 
     for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
@@ -95,6 +98,9 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
       AtomToTF[A].second = A->getSlot();
       continue;
     }
+
+    DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
+          A->dump(););
 
     unsigned NewStep = HWAtom::MaxSlot;
  
@@ -264,7 +270,7 @@ double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
 
 double ForceDirectedInfo::computeSuccForceAt(const HWAtom *A, unsigned step) {
   // Adjust the time frame.
-  buildASAPStep(A, step); 
+  //buildASAPStep(A, step); 
 
   double ret = 0.0;
   FSMState::iterator at = std::find(State->begin(), State->end(), A);
@@ -279,7 +285,7 @@ double ForceDirectedInfo::computeSuccForceAt(const HWAtom *A, unsigned step) {
 
 double ForceDirectedInfo::computePredForceAt(const HWAtom *A, unsigned step) {
   // Adjust the time frame.
-  buildALAPStep(A, step);
+  //buildALAPStep(A, step);
 
   double ret = 0;
   FSMState::iterator at = std::find(State->begin(), State->end(), A);

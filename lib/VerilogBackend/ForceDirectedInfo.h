@@ -112,6 +112,7 @@ public:
   unsigned getMII() const { return MII; }
   void lengthenMII() { ++MII; }
   void lengthenCriticalPath() { ++CriticalPathEnd; }
+  unsigned getCriticalPathEnd() { return CriticalPathEnd; }
 
   void reset();
   /// @name Common pass interface
