@@ -140,7 +140,13 @@ void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
     HWAtom *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
-      << "} " <<  getTimeFrame(A) << "\n";
+      << "} " <<  getTimeFrame(A);
+
+    for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end(); DI != DE;
+        ++DI)
+      OS << " [" << DI->getIdx() << "]"; 
+    
+    OS << '\n';
   }
 }
 
