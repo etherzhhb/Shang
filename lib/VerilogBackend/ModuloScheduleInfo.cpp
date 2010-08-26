@@ -109,6 +109,7 @@ class HWSubGraph {
   typedef std::set<SubGraphNode*> SubGrapNodeSet;
 
   const FSMState *GraphEntry;
+  ModuloScheduleInfo *MSInfo;
 
   //Set of blocked nodes
   SubGrapNodeSet blocked;
@@ -126,9 +127,12 @@ class HWSubGraph {
   CacheTy ExtCache;
   
   unsigned CurIdx;
+  unsigned RecMII;
 public:
-  HWSubGraph(FSMState *Entry)
-    : GraphEntry(Entry), CurIdx(GraphEntry->getIdx()) {}
+  HWSubGraph(FSMState *Entry, ModuloScheduleInfo *MS)
+    : GraphEntry(Entry), MSInfo(MS), CurIdx(GraphEntry->getIdx()), RecMII(0) {}
+
+  unsigned getRecMII() const { return RecMII; }
 
   ~HWSubGraph() { releaseCache(); }
 
@@ -174,7 +178,7 @@ public:
 
   void findAllCircuits();
   bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex);
-  void addRec();
+  void addRecurrence();
   void unblock(SubGraphNode *N);
 };
 
@@ -189,10 +193,37 @@ void HWSubGraph::unblock(SubGraphNode *N) {
   }
 }
 
-void HWSubGraph::addRec() {
-  dbgs() << "\nRecurrence:\n";
-  for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I)
-    (*I)->dump();
+void HWSubGraph::addRecurrence() {
+  DEBUG(dbgs() << "\nRecurrence:\n");
+  ModuloScheduleInfo::scc_vector Recurrence;
+  unsigned TotalLatency = 0;
+  unsigned TotalDistance = 0;
+  const HWAtom *LastAtom = stack.back()->getAtom();
+  
+  for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I) {
+    SubGraphNode *N = *I;
+
+
+    const HWAtom *A = N->getAtom();
+    TotalLatency += A->getLatency();
+    
+    HWEdge *Edge = LastAtom->getEdgeFrom(A);
+    if (Edge->isBackEdge()) {
+      //  assert(TotalDistance == 0 && "Multiple back edge?"); 
+      DEBUG(dbgs() << "Backedge --> ");
+    }
+    TotalDistance += Edge->getItDst();
+  
+    DEBUG(N->dump());
+    LastAtom = A;
+    // Dirty Hack.
+    Recurrence.push_back(const_cast<HWAtom*>(A));
+  }
+
+  unsigned RecII = TotalLatency / TotalDistance;
+  MSInfo->addRecurrence(RecII, Recurrence);
+  RecMII = std::max(RecMII, RecII);
+  DEBUG(dbgs() << "RecII: " << RecII << '\n');
 }
 
 bool HWSubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
@@ -213,7 +244,7 @@ bool HWSubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
     SubGraphNode *N = *I;
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.
-      addRec();
+      addRecurrence();
       ret = true;
     } else if (!blocked.count(N) && circuit(N, LeastVertex))
       ret = true;
@@ -237,7 +268,6 @@ bool HWSubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
 void HWSubGraph::findAllCircuits() {
   HWAOpFU *ExitRoot = GraphEntry->getExitRoot();
   unsigned ExitIdx = ExitRoot->getIdx();
-
 
   // While the subgraph not empty.
   while (CurIdx < ExitIdx) {
@@ -306,7 +336,7 @@ void HWSubGraph::findAllCircuits() {
     // Move forward.
     ++CurIdx;
     
-
+    //
     releaseCache();
   }
 }
@@ -325,15 +355,13 @@ const SubGraphNode & SubGraphNode::operator=(const SubGraphNode &RHS) {
 }
 
 SubGraphNode::ChildIt SubGraphNode::child_begin() const {
-  if (A)
-    return ChildIt(A->dep_begin(), *this);
+  if (A) return ChildIt(A->dep_begin(), *this);
   // The node outside the subgraph.
   return ChildIt(SubGraph->dummy_end(), *this);
 }
 
 SubGraphNode::ChildIt SubGraphNode::child_end() const {
-  if (A)
-    return ChildIt(A->dep_end(), *this);
+  if (A) return ChildIt(A->dep_end(), *this);
 
   // The node outside the subgraph.
   return ChildIt(SubGraph->dummy_end(), *this);
@@ -376,69 +404,9 @@ bool ModuloScheduleInfo::isModuloSchedulable(FSMState &State) const {
   return true;
 }
 
-unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
-  assert(Scc.size() > 1 && "No self loop expect in DDG!");
-  unsigned totalLatency = 0;
-  unsigned totalItDist = 0;
-  
-  std::sort(Scc.begin(), Scc.end(), HWAtom::top_sort());
-  //
-  DEBUG(
-  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
-      I != E; ++I)
-    (*I)->dump();
-  );
 
-  typedef SmallVector<std::pair<const HWAtom*, HWEdge*>, 4> BEVector;
-  BEVector BackEdges;
-  const HWAtom *FirstAtom = Scc.front();
-  std::map<const HWAtom*, unsigned> MaxLatency, MaxItDist;
-  // All nodes longest path.
-  for (scc_vector::const_iterator I = Scc.begin(), E = Scc.end();
-      I != E; ++I) {
-    const HWAtom *CurAtom = *I;
-    for (HWAtom::const_use_iterator UI = CurAtom->use_begin(),
-        UE = CurAtom->use_end();UI != UE; ++UI) {
-      // FIXME: Take care of back edge!
-      const HWAtom *UseAtom = *UI;
-      HWEdge *Edge = UseAtom->getEdgeFrom(CurAtom);
-      // Ignore the backedge at this moment.
-      if (Edge->isBackEdge()) {
-        BackEdges.push_back(std::make_pair(UseAtom, Edge));
-        continue;
-      }
-      
-      MaxLatency[UseAtom] = std::max(MaxLatency[CurAtom] + CurAtom->getLatency(),
-                                     MaxLatency[UseAtom]);
-      MaxItDist[UseAtom] = std::max(MaxItDist[CurAtom] + Edge->getItDst(),
-                                    MaxItDist[UseAtom]);
-    }
-  }
-  totalLatency = 0;
-  totalItDist = 0;
-  DEBUG(dbgs() << "\n\n\nBackedge:\n");
-  // For each backedge.
-  for (BEVector::iterator I = BackEdges.begin(), E = BackEdges.end();
-      I != E; ++I) {
-    HWEdge *BE = I->second;
-    const HWAtom *Src = BE->getSrc(), *Dst = I->first; 
-    DEBUG(Src->dump());
-    DEBUG(dbgs() << "->\n");
-    DEBUG(Dst->dump());
-    //assert(MaxLatency[Dst] == 0 && MaxItDist[Dst] == 0
-    //       && "Back edge dst reachable from other Nodes?");
-    totalLatency = std::max(totalLatency,
-                            MaxLatency[Src] + Src->getLatency()
-                            - MaxLatency[Dst]); // Dirty hack.
-    totalItDist = std::max(totalItDist,
-                           MaxItDist[Src] + BE->getItDst()
-                           - MaxItDist[Dst]);
-    DEBUG(dbgs() << "latancy: " << totalLatency
-                 << " dist: " << totalItDist << "\n\n\n");
-  }
-
-  assert(totalItDist != 0 && "No cross iteration dependence?");
-  return ceil((double)totalLatency / totalItDist);
+void ModuloScheduleInfo::addRecurrence(unsigned II, scc_vector Rec) {
+  RecList.insert(std::make_pair(II, Rec));
 }
 
 unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
@@ -446,10 +414,11 @@ unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
   unsigned MaxRecII = 1;
 
   //// Find all recurrents with Johnson's algorithm.
-  HWSubGraph SubGraph(&State);
+  HWSubGraph SubGraph(&State, this);
   SubGraph.findAllCircuits();
-
+  MaxRecII = SubGraph.getRecMII();
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
+
   return MaxRecII;
 }
 
@@ -476,5 +445,4 @@ ModuloScheduleInfo::~ModuloScheduleInfo() {
 
 void ModuloScheduleInfo::clear() {
   RecList.clear();
-  TrivialNodes.clear();
 }

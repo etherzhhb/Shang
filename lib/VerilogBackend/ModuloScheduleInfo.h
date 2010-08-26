@@ -34,9 +34,6 @@ class ModuloScheduleInfo : public FunctionPass {
 
     typedef std::multimap<unsigned, std::vector<HWAtom*> > RecMapType;
     RecMapType RecList;
- 
-    // Nodes that not in any scc.
-    std::vector<HWAtom*> TrivialNodes;
 public:
   void clear();
 
@@ -46,16 +43,16 @@ public:
   const_rec_iterator rec_begin(unsigned II) const { return RecList.lower_bound(II); }
   rec_iterator rec_end(unsigned II) { return RecList.upper_bound(II); }
   const_rec_iterator rec_end(unsigned II) const { return RecList.upper_bound(II); }
-  
+
   typedef std::vector<HWAtom*> scc_vector;
-  const scc_vector &getTrivalNodes() { return TrivialNodes; }
+
+  void addRecurrence(unsigned II, scc_vector Rec);
 
   /// Could us preform modulo schedule on the given state?
   bool isModuloSchedulable(FSMState &State) const;
 
   unsigned computeResMII(FSMState &State) const;
 
-  static unsigned computeRecII(scc_vector &Scc);
   unsigned computeRecMII(FSMState &State);
 
   /// @name Common pass interface
