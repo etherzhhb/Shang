@@ -24,6 +24,7 @@
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vbe-ms-info"
 #include "llvm/Support/Debug.h"
@@ -40,13 +41,306 @@ NoModuloSchedule("disable-modulo-schedule",
           cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-typedef GraphTraits<esyn::HWAtom*> HWAtomSccGT;
-typedef GraphTraits<const esyn::HWAtom*> ConstHWAtomSccGT;
+class HWSubGraph;
 
-typedef scc_iterator<HWAtom*, HWAtomSccGT> dep_scc_iterator;
-typedef scc_iterator<const HWAtom*, ConstHWAtomSccGT> const_dep_scc_iterator;
+struct SubGraphNode {
+  unsigned FirstNode;
+  const HWAtom *A;
+  HWSubGraph *SubGraph;
+
+  SubGraphNode(unsigned First, const HWAtom *Atom,
+                   HWSubGraph *subGraph)
+    : FirstNode(First), A(Atom), SubGraph(subGraph) {}
+
+  SubGraphNode(const SubGraphNode &O)
+    : FirstNode(O.FirstNode), A(O.A), SubGraph(O.SubGraph) {}
+
+  const SubGraphNode &operator=(const SubGraphNode &RHS);
+
+  const HWAtom *getAtom() const { return A; }
+  unsigned getIdx() const { return A->getIdx(); }
+
+  typedef SubGraphNode *result_type;
+  result_type operator()(const HWAtom *Atom) const;
+
+  typedef mapped_iterator<HWAtom::const_dep_iterator, SubGraphNode>
+    ChildIt;
+
+  ChildIt child_begin() const;
+  ChildIt child_end() const;
+
+  void dump() const {
+    if (A) {
+      dbgs() << A->getIdx() << " {";
+
+      for (HWAtom::const_dep_iterator DI = A->dep_begin(), DE = A->dep_end(); DI != DE;
+           ++DI)
+        dbgs() << " [" << DI->getIdx() << "]";
+
+      dbgs() << "}\n";
+    } else
+      dbgs() << "dummy\n";
+  }
+};
+
+// GraphTraits
+namespace llvm {
+  template<> struct GraphTraits<SubGraphNode*> {
+    typedef SubGraphNode NodeType;
+    typedef SubGraphNode::ChildIt ChildIteratorType;
+    static NodeType *getEntryNode(NodeType* N) { return N; }
+    static inline ChildIteratorType child_begin(NodeType *N) {
+      return N->child_begin();
+    }
+    static inline ChildIteratorType child_end(NodeType *N) {
+      return N->child_end();
+    }
+  };
+}
+
+typedef GraphTraits<SubGraphNode*> HWAtomSccGT;
+
+typedef scc_iterator<SubGraphNode*, HWAtomSccGT> dep_scc_iterator;
 
 //===----------------------------------------------------------------------===//
+// Find all recurrents with Johnson's algorithm.
+class HWSubGraph {
+  typedef std::vector<SubGraphNode*> SubGrapNodeVec;
+  typedef std::set<SubGraphNode*> SubGrapNodeSet;
+
+  const FSMState *GraphEntry;
+
+  //Set of blocked nodes
+  SubGrapNodeSet blocked;
+  //Stack holding current circuit
+  SubGrapNodeVec stack;
+  //Map for B Lists
+  std::map<SubGraphNode*, SubGrapNodeSet> B;
+  //
+  SubGrapNodeSet Visited;
+  // SCC with least vertex.
+  SubGrapNodeVec Vk;
+
+  // SubGraph stuff
+  typedef std::map<const HWAtom*, SubGraphNode*> CacheTy;
+  CacheTy ExtCache;
+  
+  unsigned CurIdx;
+public:
+  HWSubGraph(FSMState *Entry)
+    : GraphEntry(Entry), CurIdx(GraphEntry->getIdx()) {}
+
+  ~HWSubGraph() { releaseCache(); }
+
+  HWAtom::const_dep_iterator dummy_end() const { return GraphEntry->dep_end(); }
+
+  // Create or loop up a node.
+  SubGraphNode *getNode(const HWAtom *A) {
+    CacheTy::iterator at = ExtCache.find(A);
+    if (at != ExtCache.end())
+      return at->second;
+
+    SubGraphNode *NewNode
+      = new SubGraphNode(CurIdx, A, this);
+
+    ExtCache.insert(std::make_pair(A, NewNode));
+    return NewNode;
+  }
+
+  void releaseCache() {
+    // Release the temporary nodes in subgraphs.
+    for (CacheTy::iterator I = ExtCache.begin(),
+      E = ExtCache.end(); I != E; ++I) {
+        delete I->second;
+    }
+    ExtCache.clear();
+  }
+
+  // Iterate over the subgraph start from idx.
+  // Node: The atom list of FSMState already sort by getIdx.
+  typedef mapped_iterator<FSMState::AtomVecTy::const_iterator, SubGraphNode>
+    nodes_iterator;
+
+  nodes_iterator sub_graph_begin() {
+    FSMState::AtomVecTy::const_iterator I = GraphEntry->begin();
+    while ((*I)->getIdx() < CurIdx && I != GraphEntry->end())
+      ++I;
+
+    return nodes_iterator(I, *getNode(*I));
+  }
+  nodes_iterator sub_graph_end() {
+    return nodes_iterator(GraphEntry->end(), *getNode(0));
+  }
+
+  void findAllCircuits();
+  bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex);
+  void addRec();
+  void unblock(SubGraphNode *N);
+};
+
+void HWSubGraph::unblock(SubGraphNode *N) {
+  blocked.erase(N);
+
+  while (!B[N].empty()) {
+    SubGraphNode *W = *B[N].begin();
+    B[N].erase(W);
+    if(blocked.count(W))
+      unblock(W);
+  }
+}
+
+void HWSubGraph::addRec() {
+  dbgs() << "\nRecurrence:\n";
+  for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I)
+    (*I)->dump();
+}
+
+bool HWSubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
+  bool ret = false;
+
+  stack.push_back(CurNode);
+  blocked.insert(CurNode);
+
+  SubGrapNodeSet AkV;
+  for (SubGraphNode::ChildIt I = CurNode->child_begin(),
+       E = CurNode->child_end(); I != E; ++I) {
+    SubGraphNode *N = *I;
+    if (std::find(Vk.begin(), Vk.end(), N) != Vk.end())
+      AkV.insert(N);
+  }
+
+  for (SubGrapNodeSet::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+    SubGraphNode *N = *I;
+    if (N == LeastVertex) {
+      //We have a circuit, so add it to recurrent list.
+      addRec();
+      ret = true;
+    } else if (!blocked.count(N) && circuit(N, LeastVertex))
+      ret = true;
+  }
+
+  if (ret)
+    unblock(CurNode);
+  else
+    for (SubGrapNodeSet::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+      SubGraphNode *N = *I;
+      B[N].insert(CurNode);
+    }
+  
+  // Pop current node.
+  stack.pop_back();
+
+  return ret;
+}
+
+
+void HWSubGraph::findAllCircuits() {
+  HWAOpFU *ExitRoot = GraphEntry->getExitRoot();
+  unsigned ExitIdx = ExitRoot->getIdx();
+
+
+  // While the subgraph not empty.
+  while (CurIdx < ExitIdx) {
+    DEBUG(dbgs() << "Current Idx: " << CurIdx << '\n');
+    // Initialize the subgraph induced by {CurIdx, ...., ExitIdx}
+    SubGraphNode *RootNode = getNode(ExitRoot);
+
+    //Iterate over all the SCCs in the graph
+    Visited.clear();
+    Vk.clear();
+    // least vertex in Vk
+    SubGraphNode *LeastVertex = 0;
+
+    //Find scc with the least vertex
+    for (nodes_iterator I = sub_graph_begin(), E = sub_graph_end();
+        I != E; ++I) {
+      SubGraphNode *Node = *I;
+      // If the Node visited.
+      if (!Visited.insert(Node).second)
+        continue;
+
+      for (dep_scc_iterator SCCI = dep_scc_iterator::begin(RootNode),
+           SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
+        SubGrapNodeVec &nextSCC = *SCCI;  
+        SubGraphNode *FirstNode = nextSCC.front();
+        // If FirstNode visited.
+        if (!Visited.insert(FirstNode).second)
+          continue;
+        
+        if (nextSCC.size() == 1) {
+          assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
+          continue;
+        }
+
+        // The entire SCC visited.
+        Visited.insert(nextSCC.begin() + 1, nextSCC.end());
+        // Find the lest vetex
+        SubGraphNode *OldLeastVertex = LeastVertex;
+        for (SubGrapNodeVec::iterator I = (*SCCI).begin(),
+             E = (*SCCI).end();I != E; ++I) {
+          SubGraphNode *CurNode = *I;
+          if (!LeastVertex || CurNode->getIdx() < LeastVertex->getIdx())
+            LeastVertex = CurNode;
+        }
+        // Update Vk if leastVe
+        if (OldLeastVertex != LeastVertex)
+          Vk = nextSCC; 
+      }
+    }
+
+    // No SCC?
+    if (Vk.empty())
+      break;
+    
+    // Now we have the SCC with the least vertex.
+    CurIdx = LeastVertex->getIdx();
+    // Do some clear up.
+    for (SubGrapNodeVec::iterator I = Vk.begin(), E = Vk.end(); I != E; ++I) {
+      SubGraphNode *N = *I;
+      blocked.erase(N);
+      B[N].clear();
+    }
+    // Find the circuit.
+    circuit(LeastVertex, LeastVertex);
+
+    // Move forward.
+    ++CurIdx;
+    
+
+    releaseCache();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+SubGraphNode::result_type SubGraphNode::operator()(const HWAtom *Atom) const {
+  return Atom->getIdx() < FirstNode ? SubGraph->getNode(0) 
+                                    : SubGraph->getNode(Atom); 
+}
+
+const SubGraphNode & SubGraphNode::operator=(const SubGraphNode &RHS) {
+  FirstNode = RHS.FirstNode;
+  A = RHS.A;
+  SubGraph = RHS.SubGraph;
+  return *this;
+}
+
+SubGraphNode::ChildIt SubGraphNode::child_begin() const {
+  if (A)
+    return ChildIt(A->dep_begin(), *this);
+  // The node outside the subgraph.
+  return ChildIt(SubGraph->dummy_end(), *this);
+}
+
+SubGraphNode::ChildIt SubGraphNode::child_end() const {
+  if (A)
+    return ChildIt(A->dep_end(), *this);
+
+  // The node outside the subgraph.
+  return ChildIt(SubGraph->dummy_end(), *this);
+}
+
+//===----------------------------------------------------------------------===//
+
 char ModuloScheduleInfo::ID = 0;
 
 RegisterPass<ModuloScheduleInfo> X("vbe-ms-info",
@@ -147,26 +441,13 @@ unsigned ModuloScheduleInfo::computeRecII(scc_vector &Scc) {
   return ceil((double)totalLatency / totalItDist);
 }
 
-
 unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
-  HWAtom *Root = &State;
+  HWAtom *Root = State.getExitRoot();
   unsigned MaxRecII = 1;
-  for (dep_scc_iterator SCCI = dep_scc_iterator::begin(Root),
-      SCCE = dep_scc_iterator::end(Root); SCCI != SCCE; ++SCCI) {
-    scc_vector &Atoms = *SCCI;
-    if (Atoms.size() == 1) {
-      assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
-      TrivialNodes.push_back(Atoms[0]);
-      continue;
-    }
 
-    DEBUG(dbgs() << "SCC found:\n");
-    unsigned RecII = computeRecII(Atoms);
-    // Update maxrecii.
-    MaxRecII = std::max(RecII, MaxRecII);
-    RecList.insert(std::make_pair(RecII, Atoms));
-    DEBUG(dbgs() << "RecII: " << RecII << '\n');
-  }
+  //// Find all recurrents with Johnson's algorithm.
+  HWSubGraph SubGraph(&State);
+  SubGraph.findAllCircuits();
 
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
   return MaxRecII;
