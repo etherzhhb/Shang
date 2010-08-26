@@ -366,16 +366,8 @@ void RTLWriter::emitAllRegisters() {
 void RTLWriter::emitOpFU(HWAOpFU *OF) {
   if (OF->isBinded()) { 
     // Remember this atom
+    assert(!OF->isTrivial() &&"Unexcept resource type!");
     ResourceMap[OF->getFUnit()].push_back(OF);
-
-    switch (OF->getResType()) {
-    case HWResType::MemoryBus:
-    case HWResType::AddSub:
-    case HWResType::Mult:
-      break;
-    default:
-      assert(!"Unexcept resource type!");
-    }
   } else {
     Instruction &Inst = cast<Instruction>(OF->getValue());
     assert(!isa<PHINode>(Inst) && "PHINode is not PostBind atom!");
@@ -396,12 +388,17 @@ void RTLWriter::emitOpFU(HWAOpFU *OF) {
 
 std::string RTLWriter::getRegPrefix(HWResType::Types T) {
   switch (T) {
+  case HWResType::MemoryBus:  return "membus_out";
+  case HWResType::SHL:        return "shl_result";
+  case HWResType::ASR:        return "asr_result";
+  case HWResType::LSR:        return "lsr_result";
   case HWResType::AddSub:     return "addsub_result";
   case HWResType::Mult:       return "mult_result";
-  case HWResType::MemoryBus:  return "membus_out";
   case HWResType::Trivial:    return "R";
-  default:                    return "<Unknown>";
   }
+
+  llvm_unreachable("Unknown ResType!");
+  return "<Unknown>";
 }
 
 void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
@@ -446,10 +443,24 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
   // vlang->alwaysEnd(DataPath, 2);
 }
 
-
 template<>
 void RTLWriter::emitResourceDecl<HWMult>(HWFUnit *FU) {
   emitResourceDeclForBinOpRes(FU, "mult", " * ");
+}
+
+template<>
+void RTLWriter::emitResourceDecl<HWSHL>(HWFUnit *FU) {
+  emitResourceDeclForBinOpRes(FU, "shl", " * ");
+}
+
+template<>
+void RTLWriter::emitResourceDecl<HWASR>(HWFUnit *FU) {
+  emitResourceDeclForBinOpRes(FU, "asr", " * ");
+}
+
+template<>
+void RTLWriter::emitResourceDecl<HWLSR>(HWFUnit *FU) {
+  emitResourceDeclForBinOpRes(FU, "lsr", " * ");
 }
 
 template<>
@@ -504,6 +515,21 @@ void RTLWriter::emitResourceOp<HWMult>(HWAOpFU *A) {
 }
 
 template<>
+void RTLWriter::emitResourceOp<HWSHL>(HWAOpFU *A) {
+  emitResourceOpForBinOpRes(A, "shl");
+}
+
+template<>
+void RTLWriter::emitResourceOp<HWASR>(HWAOpFU *A) {
+  emitResourceOpForBinOpRes(A, "asr");
+}
+
+template<>
+void RTLWriter::emitResourceOp<HWLSR>(HWAOpFU *A) {
+  emitResourceOpForBinOpRes(A, "lsr");
+}
+
+template<>
 void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
   unsigned DataWidth = A->getInputBitwidth(0),
            AddrWidth = A->getInputBitwidth(1);
@@ -553,6 +579,21 @@ void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
 template<>
 void RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU) {
   emitResourceDefaultOpForBinOpRes(FU, "mult");
+}
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWSHL>(HWFUnit *FU) {
+  emitResourceDefaultOpForBinOpRes(FU, "shl");
+}
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWASR>(HWFUnit *FU) {
+  emitResourceDefaultOpForBinOpRes(FU, "asr");
+}
+
+template<>
+void RTLWriter::emitResourceDefaultOp<HWLSR>(HWFUnit *FU) {
+  emitResourceDefaultOpForBinOpRes(FU, "lsr");
 }
 
 template<>
@@ -624,6 +665,15 @@ void RTLWriter::emitResources() {
     switch (I->first->getResType()) {
     case HWResType::MemoryBus:
       emitResource<HWMemBus>(I->second);
+      break;
+    case HWResType::SHL:
+      emitResource<HWSHL>(I->second);
+      break;
+    case HWResType::ASR:
+      emitResource<HWASR>(I->second);
+      break;
+    case HWResType::LSR:
+      emitResource<HWLSR>(I->second);
       break;
     case HWResType::AddSub:
       emitResource<HWAddSub>(I->second);
