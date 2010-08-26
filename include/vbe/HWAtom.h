@@ -505,7 +505,7 @@ class HWAWrReg : public HWAtom {
   HWRegister *Reg;
 public:
   HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
-    unsigned short Slot);
+    unsigned short Slot, unsigned short Idx);
 
   HWAtom *getSrc() const { return getDep(0).getSrc(); }
 

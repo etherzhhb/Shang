@@ -428,7 +428,7 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src) {
   if (!A) {
     A = new (HWAtomAllocator) HWAWrReg(FUID.Intern(HWAtomAllocator),
                                        *getValDepEdge(Src, false), R,
-                                       Src->getFinSlot());
+                                       Src->getFinSlot(), ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -448,7 +448,7 @@ HWAWrReg *HWAtomInfo::getWrReg(HWAtom *Src, HWRegister *Reg,
   if (!A) {
     A = new (HWAtomAllocator) HWAWrReg(FUID.Intern(HWAtomAllocator),
                                        *getValDepEdge(Src, false), Reg,
-                                       Slot);
+                                       Slot, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;
@@ -467,7 +467,7 @@ HWAWrReg *HWAtomInfo::getWrReg(HWEdge *SrcEdge, Value *V) {
 
   if (!A) {
     A = new (HWAtomAllocator) HWAWrReg(FUID.Intern(HWAtomAllocator),
-                                       *SrcEdge, R, 0);
+                                       *SrcEdge, R, 0, ++InstIdx);
     UniqiueHWAtoms.InsertNode(A, IP);
   }
   return A;

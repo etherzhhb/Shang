@@ -175,9 +175,9 @@ HWADelay::HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay
 }
 
 HWAWrReg::HWAWrReg( const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
-                   unsigned short Slot)
-  : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, 1, Edge->getBitWidth(),
-           Edge->getIdx()), Reg(reg) {
+                   unsigned short Slot, unsigned short Idx)
+  : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, 1, Edge->getBitWidth(), Idx),
+  Reg(reg) {
   if (Slot)
     scheduledTo(Slot);
   Edge->getParent()->addAtom(this);
