@@ -697,9 +697,10 @@ public:
 
   size_t getNumAtoms() const { return Atoms.size(); }
 
-  void resetSchedule() {
+  void resetSchedule(unsigned FirstStep) {
     for (iterator I = begin(), E = end(); I != E; ++I)
       (*I)->resetSchedule();
+    this->scheduledTo(FirstStep);
   }
 
   HWValDep *getPHIEdge(const PHINode *Phi) {
