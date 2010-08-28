@@ -188,3 +188,6 @@ HWALIReg::HWALIReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge *VEdge,
   : HWAtom(ID, atomLIReg, V, VEdge, 0, bitWidth, Idx) {
   (*VEdge)->getParent()->addAtom(this);
 }
+
+HWConst::HWConst(FSMState *Src, Constant *Const)
+: HWEdge(edgeConst, Src, 0), C(Const) {}

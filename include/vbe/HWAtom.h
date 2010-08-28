@@ -62,10 +62,7 @@ enum HWEdgeTypes {
 };
 
 class HWAtom;
-class HWAOpFU;
 class FSMState;
-template<class IteratorType, class NodeType> class HWAtomDepIterator;
-class HWAtomInfo;
 
 /// @brief Inline operation
 class HWEdge {
@@ -78,11 +75,7 @@ class HWEdge {
   HWEdge(const HWEdge &);            // DO NOT IMPLEMENT
   void operator=(const HWEdge &);    // DO NOT IMPLEMENT
 
-  friend class HWAtomDepIterator<SmallVectorImpl<HWEdge*>::iterator, HWAtom>;
-  friend class
-    HWAtomDepIterator<SmallVectorImpl<HWEdge*>::const_iterator, const HWAtom>;
   friend class HWAtom;
-  friend class HWAtomInfo;
   void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
 protected:
   HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned Dst, bool isBackEdge = false)
@@ -137,10 +130,6 @@ public:
 
   HWEdge *getEdge() { return *I; }
   const HWEdge *getEdge() const { return *I; }
-
-  static Self findSccEdge(NodeType *Src, NodeType *Dst) {
-    return std::find(Self(Dst->edge_begin()), Self(Dst->edge_end()), Src);
-  }
 };
 
 class HWRegister {
@@ -161,8 +150,7 @@ public:
 class HWConst : public HWEdge {
   Constant *C; 
 public:
-  HWConst(HWAtom *Src, Constant *Const)
-    : HWEdge(edgeConst, Src, 0), C(Const) {}
+  HWConst(FSMState *Src, Constant *Const);
 
   Constant *getConstant() const { return C; }
 

@@ -142,7 +142,7 @@ class HWAtomInfo : public FunctionPass, public InstVisitor<HWAtomInfo, HWAtom*> 
     return new (HWAtomAllocator) HWValDep(Src, isSigned, T);
   }
 
-  HWConst *getConstEdge(HWAtom *Src, Constant *C) {
+  HWConst *getConstEdge(FSMState *Src, Constant *C) {
     return new (HWAtomAllocator) HWConst(Src, C);
   }
 
