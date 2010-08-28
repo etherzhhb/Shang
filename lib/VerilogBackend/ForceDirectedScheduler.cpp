@@ -60,9 +60,11 @@ struct FDLScheduler : public BasicBlockPass {
   void fillQueue(AtomQueueType &Queue, It begin, It end, HWAtom *FirstNode = 0);
 
   typedef ModuloScheduleInfo::rec_iterator rec_iterator;
-  typedef ModuloScheduleInfo::scc_vector scc_vector;
+  typedef ModuloScheduleInfo::rec_vector rec_vector;
 
-  void scheduleCriticalPath();
+  // Return true when resource constraints preserved after citical path
+  // scheduled
+  bool scheduleCriticalPath();
 
   bool scheduleAtom(HWAtom *A);
   bool scheduleQueue(AtomQueueType &Queue);
@@ -193,21 +195,17 @@ void FDLScheduler::FDModuloSchedule() {
   CurState->scheduledTo(StartStep);
 
   // Ensure us can schedule the critical path.
-  for(;;) {
-
-    // Set up Resource table
-    FDInfo->reset();
+  for (;;) {
     FDInfo->buildFDInfo();
+    if (scheduleCriticalPath())
+      break;
     DEBUG(FDInfo->dumpTimeFrame());
     // TODO: check if we could ever schedule these node without breaking the
     // resource constrain by check the DG.
     // If the resource average DG is bigger than the total available resource
     // we can never schedule the nodes without breaking the resource constrain.
-    if (!FDInfo->isResourceConstraintPreserved()) {
-      FDInfo->lengthenCriticalPath();
-      continue;
-    } else
-      break;
+    CurState->resetSchedule(StartStep);
+    FDInfo->lengthenCriticalPath();
   }
 
   // Dirty Hack: Search the solution by increasing MII and critical path
@@ -215,31 +213,19 @@ void FDLScheduler::FDModuloSchedule() {
 
   FDInfo->setMII(MII);
   for (;;) {
-    CurState->resetSchedule();
-    CurState->scheduledTo(StartStep);
-
-    // Set up Resource table
-    FDInfo->reset();
     FDInfo->buildFDInfo();
-    if (!FDInfo->isResourceConstraintPreserved()) {
-      FDInfo->lengthenMII();
-      continue;
-    } else
+    if (scheduleCriticalPath())
       break;
+    DEBUG(FDInfo->dumpTimeFrame());
+    FDInfo->lengthenMII();
+    CurState->resetSchedule(StartStep);
   }
 
   bool lastIncMII = true;
   for (;;) {
-    CurState->resetSchedule();
-    CurState->scheduledTo(StartStep);
-    // Set up Resource table
-    FDInfo->reset();
-    FDInfo->buildFDInfo();
-
-    scheduleCriticalPath();
-    assert(FDInfo->isResourceConstraintPreserved()
+    bool SchedSucc = scheduleCriticalPath();
+    assert(SchedSucc
       && "Why nodes critical path can not be schedule since DG is ok?");
-    FDInfo->buildFDInfo();
 
     if (scheduleAtII()) {
       DEBUG(FDInfo->dumpTimeFrame());
@@ -250,13 +236,14 @@ void FDLScheduler::FDModuloSchedule() {
     } else if (lastIncMII) {
       FDInfo->lengthenCriticalPath();
       lastIncMII = false;
-      continue;
     } else {
       FDInfo->lengthenMII();
       MII = FDInfo->getMII();
       lastIncMII = true;
-      continue;
     }
+    // Prepare for next schedule.
+    CurState->resetSchedule(StartStep);
+    FDInfo->buildFDInfo();
   }
 }
 
@@ -267,48 +254,31 @@ bool FDLScheduler::scheduleAtII() {
   for (unsigned i = FDInfo->getMII(); i > 0; --i) {
     for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
         I != E; ++I) {
-      scc_vector &SCC = I->second;
+      rec_vector &Rec = I->second;
+      HWAtom *LastAtom = Rec.back();
 
-      DEBUG(dbgs() << "Recurrence at " << i << "--------------------\n";
-      for (scc_vector::iterator SI = SCC.begin(), SE = SCC.end();
+      DEBUG(dbgs() << "Recurrence at " << i << "--------------------\n");
+      for (rec_vector::iterator SI = Rec.begin(), SE = Rec.end();
           SI != SE; ++SI) {
         HWAtom *A = *SI;
         A->print(dbgs());
-        if (A->isScheduled())
-          dbgs() << " [Scheduled] ";
-        
-        dbgs() << "{" << FDInfo->getASAPStep(A) << ", "
-          << FDInfo->getALAPStep(A) << "}\n";
-      });
-
-      AQueue.clear();
-      // FIXME: schedule all first nodes and then schedule other nodes.
-      // First of all Schedule the node that do not have any predecessor in
-      // the SCC (Schedule First Node).
-      // First Node = ...
-      // And schedule rest nodes in SCC, but the max latency of the SCC
-      // should not exceed II.
-      // FIXME: Find a better node.
-      HWAtom *FirstNode = findFirstNode(SCC.begin(), SCC.end());
-      DEBUG(dbgs() << " Schedule First Node:-------------------\n");
-      DEBUG(FirstNode->dump());
-
-      bool Result = scheduleAtom(FirstNode);
-      assert(Result && "Why first node can not be scheduled?");
-      FDInfo->buildFDInfo();
+        HWEdge *Edge = LastAtom->getEdgeFrom(A);
+        LastAtom = A;
+        DEBUG(dbgs() << "{" << FDInfo->getASAPStep(A) << ", "
+          << FDInfo->getALAPStep(A) << "}");
+        if (A->isScheduled()) {
+          DEBUG(dbgs() << " [Scheduled]\n");
+          continue;
+        }
+        DEBUG(dbgs() << "\n");
+        if (Edge->isBackEdge()) {
+          if (!scheduleAtom(A)) 
+            return false;
+        }
+      }
       DEBUG(FDInfo->dumpTimeFrame());
-      // FIXME: We should increase II directly.
-      if (!FDInfo->isResourceConstraintPreserved())
-        return false;
-
-      scheduleCriticalPath();
-      FDInfo->buildFDInfo();
     }
   }
-
-  scheduleCriticalPath();
-  assert(FDInfo->isResourceConstraintPreserved()
-         && "Why nodes critical path can not be schedule since DG is ok?");
 
   // The nodes not in any SCC.
   AQueue.clear();
@@ -320,10 +290,7 @@ bool FDLScheduler::scheduleAtII() {
 void FDLScheduler::FDListSchedule() {
   unsigned StartStep = HI->getTotalCycle();
   for(;;) {
-    CurState->resetSchedule();
-    CurState->scheduledTo(StartStep);
-
-    FDInfo->reset();
+    CurState->resetSchedule(StartStep);
     FDInfo->buildFDInfo();
 
     fds_sort s(FDInfo);
@@ -381,13 +348,13 @@ void FDLScheduler::releaseMemory() {
 
 void FDLScheduler::clear() {
   CurState = 0;
-  FDInfo->reset();
   MSInfo->clear();
 }
 
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
 
-void FDLScheduler::scheduleCriticalPath() {
+bool FDLScheduler::scheduleCriticalPath() {
+  bool AnyScheduled = false;
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
       I != E; ++I) {
     HWAtom *A = *I;
@@ -396,14 +363,26 @@ void FDLScheduler::scheduleCriticalPath() {
       continue;
 
     unsigned step = FDInfo->getASAPStep(A);
+    DEBUG(A->print(dbgs()));
+    DEBUG(dbgs() << " asap step: " << step << "\n");
     A->scheduledTo(step);
+    AnyScheduled = true;
   }
+
+  // Time frame may changed because of backedge constraints of scheduled nodes.
+  if (AnyScheduled) {
+    FDInfo->buildFDInfo();
+    return FDInfo->isResourceConstraintPreserved();
+  }
+  // Else the time frame not changed.
+  return true;
 }
 
 bool FDLScheduler::scheduleAtom(HWAtom *A) {
+  assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
   unsigned step = FDInfo->getASAPStep(A);
-  if (FDInfo->getTimeFrame(A) != 1) {
+  if (FDInfo->getTimeFrame(A) > 1) {
     step = findBestStep(A);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
@@ -411,20 +390,11 @@ bool FDLScheduler::scheduleAtom(HWAtom *A) {
       DEBUG(dbgs() << " Can not find avaliable step!\n\n");
       return false;
     }
-
-    A->scheduledTo(step);
-    FDInfo->buildFDInfo();
-  } else { //if(!A->isScheduled())
-    // Schedule to the best step.
-    A->scheduledTo(step);
-    // We need to update the time frame considering backedge constraints.
-    FDInfo->buildFDInfo();
-    DEBUG(dbgs() << "\n\nasap step: " << step << "\n");
   }
 
-  scheduleCriticalPath();
+  A->scheduledTo(step);
   FDInfo->buildFDInfo();
-  return true;
+  return scheduleCriticalPath();
 }
 
 bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
@@ -434,10 +404,7 @@ bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
     Queue.pop();
 
     DEBUG(dbgs() << " Schedule Node:-------------------\n");
-    if (!scheduleAtom(A))
-      return false;
-
-    if (!FDInfo->isResourceConstraintPreserved())
+    if (!A->isScheduled() && !scheduleAtom(A))
       return false;
 
     Queue.reheapify();
