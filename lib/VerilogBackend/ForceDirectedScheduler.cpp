@@ -256,25 +256,32 @@ bool FDLScheduler::scheduleAtII() {
         I != E; ++I) {
       rec_vector &Rec = I->second;
       HWAtom *LastAtom = Rec.back();
-
       DEBUG(dbgs() << "Recurrence at " << i << "--------------------\n");
       for (rec_vector::iterator SI = Rec.begin(), SE = Rec.end();
           SI != SE; ++SI) {
         HWAtom *A = *SI;
-        A->print(dbgs());
         HWEdge *Edge = LastAtom->getEdgeFrom(A);
         LastAtom = A;
-        DEBUG(dbgs() << "{" << FDInfo->getASAPStep(A) << ", "
-          << FDInfo->getALAPStep(A) << "}");
-        if (A->isScheduled()) {
-          DEBUG(dbgs() << " [Scheduled]\n");
+        DEBUG(
+          A->print(dbgs());
+          dbgs() << " {" << FDInfo->getASAPStep(A) << ", "
+                 << FDInfo->getALAPStep(A) << "}";
+          if (Edge->isBackEdge())
+            dbgs() << " Back-edge";
+          
+          if (A->isScheduled())
+            dbgs() << " [Scheduled]\n";
+        );
+
+        // Only schedule backedge source at this phase.
+        if (!Edge->isBackEdge())
           continue;
-        }
-        DEBUG(dbgs() << "\n");
-        if (Edge->isBackEdge()) {
-          if (!scheduleAtom(A)) 
+
+        if (A->isScheduled())
+          continue;
+
+        if (!scheduleAtom(A))
             return false;
-        }
       }
       DEBUG(FDInfo->dumpTimeFrame());
     }
