@@ -121,7 +121,10 @@ void InstLowering::lowerGEP(GetElementPtrInst *GEP) {
     ConstantInt *ConstOffs
       = ConstantInt::get(TD->getIntPtrType(BaseTy->getContext()),
                          TotalConstOffs);
-    LastIndex = Builder.CreateAdd(LastIndex, ConstOffs);
+    if (LastIndex)    
+      LastIndex = Builder.CreateAdd(LastIndex, ConstOffs);
+    else
+      LastIndex = ConstOffs;
   }
 
   // Build Base addr to match the type.
