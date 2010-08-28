@@ -44,9 +44,9 @@ public:
   rec_iterator rec_end(unsigned II) { return RecList.upper_bound(II); }
   const_rec_iterator rec_end(unsigned II) const { return RecList.upper_bound(II); }
 
-  typedef std::vector<HWAtom*> scc_vector;
+  typedef std::vector<HWAtom*> rec_vector;
 
-  void addRecurrence(unsigned II, scc_vector Rec);
+  void addRecurrence(unsigned II, rec_vector Rec);
 
   /// Could us preform modulo schedule on the given state?
   bool isModuloSchedulable(FSMState &State) const;

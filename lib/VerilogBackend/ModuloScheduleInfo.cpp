@@ -195,14 +195,13 @@ void HWSubGraph::unblock(SubGraphNode *N) {
 
 void HWSubGraph::addRecurrence() {
   DEBUG(dbgs() << "\nRecurrence:\n");
-  ModuloScheduleInfo::scc_vector Recurrence;
+  ModuloScheduleInfo::rec_vector Recurrence;
   unsigned TotalLatency = 0;
   unsigned TotalDistance = 0;
   const HWAtom *LastAtom = stack.back()->getAtom();
   
   for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I) {
     SubGraphNode *N = *I;
-
 
     const HWAtom *A = N->getAtom();
     TotalLatency += A->getLatency();
@@ -405,7 +404,7 @@ bool ModuloScheduleInfo::isModuloSchedulable(FSMState &State) const {
 }
 
 
-void ModuloScheduleInfo::addRecurrence(unsigned II, scc_vector Rec) {
+void ModuloScheduleInfo::addRecurrence(unsigned II, rec_vector Rec) {
   RecList.insert(std::make_pair(II, Rec));
 }
 
