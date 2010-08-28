@@ -410,8 +410,11 @@ bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
     HWAOpFU *A = Queue.top();
     Queue.pop();
 
+    if (A->isScheduled())
+      continue;
+
     DEBUG(dbgs() << " Schedule Node:-------------------\n");
-    if (!A->isScheduled() && !scheduleAtom(A))
+    if (!scheduleAtom(A))
       return false;
 
     Queue.reheapify();
