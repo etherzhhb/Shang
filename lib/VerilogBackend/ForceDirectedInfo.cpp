@@ -64,14 +64,15 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
       if (!DI.getEdge()->isBackEdge() || (Dep->isScheduled() && MII)) {
         unsigned DepASAP = Dep->isScheduled() ?
                            Dep->getSlot() : getASAPStep(Dep);
-        unsigned Step = DepASAP + Dep->getLatency()
+        int Step = DepASAP + Dep->getLatency()
                         - MII * DI.getEdge()->getItDst();
         DEBUG(dbgs() << "From ";
               if (DI.getEdge()->isBackEdge())
                 dbgs() << "BackEdge ";
               Dep->print(dbgs());
               dbgs() << " Step " << Step << '\n');
-        NewStep = std::max(Step, NewStep);
+        unsigned UStep = std::max(0, Step);
+        NewStep = std::max(UStep, NewStep);
       }
     }
 
@@ -305,6 +306,7 @@ double ForceDirectedInfo::computePredForceAt(const HWAtom *A, unsigned step) {
 }
 
 void ForceDirectedInfo::buildAvgDG() {
+  AvgDG.clear();
   for (FSMState::iterator I = State->begin(), E = State->end();
        I != E; ++I)
     // We only care about the utilization of post bind resource. 
@@ -318,14 +320,10 @@ void ForceDirectedInfo::buildAvgDG() {
     }
 }
 
-void ForceDirectedInfo::reset() {
+void ForceDirectedInfo::releaseMemory() {
   AtomToTF.clear();
   DGraph.clear();
   AvgDG.clear();
-}
-
-void ForceDirectedInfo::releaseMemory() {
-  reset();
   MII = 0;
   CriticalPathEnd = 0;
 }
@@ -338,6 +336,7 @@ bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
 }
 
 unsigned ForceDirectedInfo::buildFDInfo() {
+  AtomToTF.clear();
   // Build the time frame
   assert(State->isScheduled() && "Entry must be scheduled first!");
   unsigned FirstStep = State->getSlot();

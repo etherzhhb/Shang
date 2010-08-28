@@ -114,7 +114,6 @@ public:
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   unsigned getCriticalPathEnd() { return CriticalPathEnd; }
 
-  void reset();
   /// @name Common pass interface
   //{
   static char ID;
