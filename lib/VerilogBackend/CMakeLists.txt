@@ -7,6 +7,7 @@ add_llvm_target(VerilogBackend
   HWAtom.cpp
   HWAtomInfo.cpp
   InstLowering.cpp
+  LocalLEA.cpp
   ModuloScheduleInfo.cpp
   MemDepAnalysis.cpp
   RegisterAllocation.cpp

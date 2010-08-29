@@ -70,6 +70,10 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     // Resource binding
     // Region Base global resource binding
     PM.add(createRegisterAllocationPass());
+
+    // Local register merging.
+    PM.add(createLocalLEAPass());
+
     PM.add(createScalarStreamizationPass());
     //
     PM.add(new RTLWriter(Out));

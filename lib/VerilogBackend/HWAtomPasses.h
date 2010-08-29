@@ -44,6 +44,9 @@ Pass *createTopSortBBPass();
 // Instruction lowering pass.
 Pass *createInstLoweringPass();
 
+// Local LEA based register merging pass.
+Pass *createLocalLEAPass();
+
 // Scalar Streamization.
 Pass *createScalarStreamizationPass();
 
