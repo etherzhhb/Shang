@@ -137,7 +137,33 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
         DEBUG(dbgs() << " Registered\n");
         // Store the value to register.
         Exit->setDep(i, HI.getWrReg(SrcAtom));
+      } else if (VD->getDepType() == HWValDep::PHI) {
+        PHINode &PN = cast<PHINode>(SrcAtom->getValue());
+        // PHINode define in other BB is just ok.
+        if (PN.getParent() != &BB) continue;
+        // Get the PHIAtom, and check if we break the anti dependence.
+        // If so, preserve the anti dependence by copy the origin PHINode out.
+        HWALIReg *PHIAtom = cast<HWALIReg>(HI.getAtomFor(PN));
+
+        std::vector<HWAtom*> WorkList(PHIAtom->use_begin(),
+                                      PHIAtom->use_end());
+        HWAWrReg *NewWrReg = 0;
+        while (!WorkList.empty()) {
+          HWAtom *U = WorkList.back();
+          WorkList.pop_back();
+          // Anti-dependence preserved.
+          if (U->getSlot() < SrcAtom->getSlot())
+            continue;
+
+          if (NewWrReg == 0) {
+            unsigned Slot = SrcAtom->getSlot();
+            HWRegister *Reg = HI.allocaRegister(PHIAtom->getBitWidth());
+            NewWrReg = HI.getWrReg(PHIAtom, Reg, Slot);
+          }
+          U->replaceDep(PHIAtom, NewWrReg);
+        }        
       }
+      
     }
   }
 
