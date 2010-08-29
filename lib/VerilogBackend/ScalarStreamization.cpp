@@ -29,12 +29,12 @@ using namespace llvm;
 using namespace esyn;
 
 namespace {
-  struct ScalarStreamization : public BasicBlockPass {
-    static char ID;
-    ScalarStreamization() : BasicBlockPass(&ID) {}
-    bool runOnBasicBlock(BasicBlock &BB);
-    void getAnalysisUsage(AnalysisUsage &AU) const;
-  };
+struct ScalarStreamization : public BasicBlockPass {
+  static char ID;
+  ScalarStreamization() : BasicBlockPass(&ID) {}
+  bool runOnBasicBlock(BasicBlock &BB);
+  void getAnalysisUsage(AnalysisUsage &AU) const;
+};
 }
 
 bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
