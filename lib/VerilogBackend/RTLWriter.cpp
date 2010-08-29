@@ -161,10 +161,8 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     //
     vlang->declSignal((getModDeclBuffer() << "input "),
       Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
-    // Declare the register
-    vlang->declSignal(getSignalDeclBuffer(), RegName, BitWidth, 0);
-    // Reset the register
-    vlang->resetRegister(getResetBlockBuffer(), RegName, BitWidth, 0);
+
+    UsedRegs.insert(std::make_pair(ArgReg->getRegNum(), ArgReg));
     // Assign the register
     ControlBlock.indent(10) << RegName << " <= " << Name << ";\n";
     ++Idx;
