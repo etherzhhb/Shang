@@ -336,7 +336,7 @@ void RTLWriter::emitWrReg(HWAWrReg *DR) {
   if (R->isFuReg())
     return;
 
-  UsedRegs.insert(R);
+  UsedRegs.insert(std::make_pair(R->getRegNum(), R));
   HWEdge &E = DR->getDep(0);
   if (!isa<HWConst>(E))
     vlang->comment(ControlBlock.indent(10)) << "Read:"
@@ -347,14 +347,17 @@ void RTLWriter::emitWrReg(HWAWrReg *DR) {
 }
 
 void RTLWriter::emitLIReg(HWALIReg *LIR) {
-  if (LIR->isPHINode())
-    UsedRegs.insert(HI->lookupRegForValue(&LIR->getValue()));
+  if (!LIR->isPHINode())
+    return;
+
+  const HWRegister *R = HI->lookupRegForValue(&LIR->getValue());
+  UsedRegs.insert(std::make_pair(R->getRegNum(), R));
 }
 
 void RTLWriter::emitAllRegisters() {
-  for (std::set<const HWRegister*>::iterator I = UsedRegs.begin(), E = UsedRegs.end();
-      I != E; ++I) {
-    const HWRegister *R = *I;
+  for (std::map<unsigned, const HWRegister*>::iterator I = UsedRegs.begin(),
+      E = UsedRegs.end(); I != E; ++I) {
+    const HWRegister *R = I->second;
     unsigned BitWidth = R->getBitWidth();
     std::string Name = getAsOperand(R);
 

@@ -94,7 +94,7 @@ class RTLWriter : public FunctionPass {
   void emitWrReg(HWAWrReg *DR);
   void emitLIReg(HWALIReg *DR);
 
-  std::set<const HWRegister*> UsedRegs;
+  std::map<unsigned, const HWRegister*> UsedRegs;
 
   void emitAllRegisters();
 
