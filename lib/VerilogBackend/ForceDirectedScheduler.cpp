@@ -34,7 +34,7 @@ namespace {
 struct fds_sort {
   ForceDirectedInfo *Info;
   fds_sort(ForceDirectedInfo *s) : Info(s) {}
-  bool operator() (const HWAOpFU* LHS, const HWAOpFU* RHS) const;
+  bool operator() (const HWAOpFU *LHS, const HWAOpFU *RHS) const;
 };
 
 struct FDLScheduler : public BasicBlockPass {
@@ -268,7 +268,6 @@ bool FDLScheduler::scheduleAtII() {
                  << FDInfo->getALAPStep(A) << "}";
           if (Edge->isBackEdge())
             dbgs() << " Back-edge";
-          
           if (A->isScheduled())
             dbgs() << " [Scheduled]\n";
         );
@@ -281,13 +280,15 @@ bool FDLScheduler::scheduleAtII() {
           continue;
 
         if (!scheduleAtom(A))
-            return false;
+          return false;
+        else // Only schedule one backedge.
+          break;
       }
       DEBUG(FDInfo->dumpTimeFrame());
     }
   }
 
-  // The nodes not in any SCC.
+  // Schedule other nodes.
   AQueue.clear();
   fillQueue(AQueue, CurState->begin(), CurState->end());
 
