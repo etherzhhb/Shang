@@ -150,15 +150,15 @@ bool HWAWrReg::writeFUReg() const {
   return Reg->isFuReg();
 }
 
-HWADelay::HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
-                   unsigned Idx )
+HWADelay::HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge,
+                   unsigned Delay, unsigned Idx )
   : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,Delay, 0, Idx) {
   Edge->getParent()->addAtom(this);
 }
 
-HWAWrReg::HWAWrReg( const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
-                   unsigned short Slot, unsigned short Idx)
-  : HWAtom(ID, atomWrReg, Edge->getValue(), &Edge, 1, Edge->getBitWidth(), Idx),
+HWAWrReg::HWAWrReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge &Edge,
+                   HWRegister *reg, unsigned short Slot, unsigned short Idx)
+  : HWAtom(ID, atomWrReg, V, &Edge, 1, Edge->getBitWidth(), Idx),
   Reg(reg) {
   if (Slot)
     scheduledTo(Slot);

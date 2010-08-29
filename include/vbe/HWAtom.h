@@ -487,10 +487,15 @@ typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
 class HWAWrReg : public HWAtom {
   HWRegister *Reg;
 public:
-  HWAWrReg(const FoldingSetNodeIDRef ID, HWEdge &Edge, HWRegister *reg,
-    unsigned short Slot, unsigned short Idx);
+  HWAWrReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge &Edge,
+    HWRegister *reg, unsigned short Slot, unsigned short Idx);
 
-  HWAtom *getSrc() const { return getDep(0).getSrc(); }
+  HWAtom *getSrc() const {
+    if (HWValDep *VD = dyn_cast<HWValDep>(&getDep(0)))
+      return VD->getSrc();
+    
+    return 0;
+  }
 
   HWRegister *getReg() const { return Reg;  }
   bool writeFUReg() const;
