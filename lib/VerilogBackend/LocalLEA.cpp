@@ -120,6 +120,7 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
   // First of all, build live interval for
   // Live-in register and write register atoms.
   SmallVector<RegChann*, 64> Channs;
+  SmallVector<HWAWrReg*, 8> WrToPHI;
 
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
     HWAtom *A = *I;
@@ -129,13 +130,25 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
       // Function unit register merging is not perform in this stage.
       if (WR->writeFUReg())
         continue;
+      // Ignore the write to PHINode atom.
+      if (HWValDep *VD = dyn_cast<HWValDep>(WR->use_back()->getEdgeFrom(WR)))
+        if (VD->getDepType() == HWValDep::PHI) {
+          // Write to PHINode atom may become a nop after registers merged.
+          WrToPHI.push_back(WR);
+          continue;
+        }
+        
 
       R = WR->getReg();
     } else if (HWALIReg *LI = dyn_cast<HWALIReg>(A)) {
       R = HI.lookupRegForValue(&LI->getValue());
     } else
       continue;
-    
+
+    DEBUG(A->print(dbgs()));
+    DEBUG(dbgs() << " refering reg: ");
+    DEBUG(R->print(dbgs()));
+    DEBUG(dbgs() << " used by :");
 
     unsigned Start = A->getFinSlot();
     unsigned End = Start;
@@ -144,7 +157,10 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
          UI != UE; ++UI) {
       HWAtom *U = *UI;
       End = std::max(End, U->getFinSlot());
+      DEBUG(dbgs() << "\n\tat slot " << U->getFinSlot() << " >");
+      DEBUG(U->print(dbgs()));
     }
+    DEBUG(dbgs() << '\n');
     
     RegChann *RegCh = createChann(R, Start, End);
     Channs.push_back(RegCh);
@@ -206,6 +222,26 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
     if (RegChann *Ch = *I)
       Ch->dump();          
   );
+
+  // Eliminate Nops.
+  while (!WrToPHI.empty()) {
+    HWAWrReg *WritePHI = WrToPHI.back();
+    WrToPHI.pop_back();
+
+    HWAtom *Src = WritePHI->getSrc();
+    // Writing a constant.
+    if (!Src) continue;
+    
+
+    HWRegister *SrcReg = HI.lookupRegForValue(&Src->getValue()),
+               *PHIReg = WritePHI->getReg();
+    // This Write atom is not necessary.
+    if (SrcReg->getRegNum() ==  PHIReg->getRegNum()) {
+      WritePHI->dropAllReferences();
+      WritePHI->replaceAllUseBy(Src);
+    }
+  }
+  
 
   return false;
 }
