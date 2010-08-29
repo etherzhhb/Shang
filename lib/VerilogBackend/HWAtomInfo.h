@@ -22,10 +22,11 @@
 #ifndef VBE_HARDWARE_ATOMINFO_H
 #define VBE_HARDWARE_ATOMINFO_H
 
+#include "vbe/HWAtom.h"
+
+#include "llvm/Support/InstVisitor.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Target/TargetData.h"
-
-#include "vbe/HWAtom.h"
 
 namespace llvm {
   class LoopInfo;

@@ -23,6 +23,8 @@
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LiveValues.h"
+#include "llvm/Support/Allocator.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #define DEBUG_TYPE "vbe-hw-atom-info"
 #include "llvm/Support/Debug.h"
@@ -219,6 +221,19 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
     if (Ty->isVoidTy() || A->use_empty()) {
       Deps.push_back(getCtrlDepEdge(A));
     } 
+  }
+
+  // Also Export live in value, to simplify the Local LEA based register
+  // merging alogrithm.
+  for (FSMState::iterator AI = State->begin(), AE = State->end();
+       AI != AE; ++AI) {
+    if (HWALIReg *LI = dyn_cast<HWALIReg>(*AI)) {
+      if (LV->isKilledInBlock(&LI->getValue(), BB))
+        continue;
+
+      // Dirty Hack: Just add as control dependencies first.
+      Deps.push_back(getCtrlDepEdge(LI));
+    }
   }
 
   // Create delay atom for phi node.
@@ -529,28 +544,13 @@ void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Dep
         IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
       PHINode *PN = cast<PHINode>(II);
       Value *IV = PN->getIncomingValueForBlock(&BB);
-      //// No instruction value do not need to Export.
-      //if (!Inst)
-      //  continue;
-      //// We do not need to Export if the value not define in the current BB.
-      //if (Inst->getParent() != &BB)
-      //  continue;
-      //// We do not need to delay if source is PHI, because it is ready before
-      //// entering this FSMState.
-      //if (isa<PHINode>(Inst))
+
       //  continue;
       HWEdge *PHIEdge = getValDepInState(*IV, &BB);
       HWAWrReg *WR = getWrReg(PHIEdge, PN);
+      // The source of PHI nodes suppose live untill the state finished. 
       PHIEdge = getValDepEdge(WR, false, HWValDep::PHI);
       Deps.push_back(PHIEdge);
-      //// Create the PHI edge.
-      //HWAOpFU *OpInst = cast<HWAOpFU>(getAtomFor(*Inst));
-      //// Delay one cycle to wait the value finish.
-      //HWADelay *Delay = getDelay(OpInst, 1);
-      //HWValDep *PHIEdge = getValDepEdge(Delay, false, HWValDep::PHI);
-      //Deps.push_back(PHIEdge);
-      //// Remember this edge and its dest PHINode.
-      //State->addPHIEdge(PN, PHIEdge);
 
       if (&BB == SuccBB) {// Self Loop?
         // The Next loop depend on the result of phi.
