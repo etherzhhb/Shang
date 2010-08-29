@@ -36,14 +36,19 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
+
+void HWRegister::print(raw_ostream &OS) const {
+  OS << getRegNum() << "(" << getResType() << ")";
+}
+
 void HWAWrReg::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] " << "Write Storage "
-     << Reg->getResType() << "$" << Reg->getRegNum();
+  OS << "[" << getIdx() << "] " << "Write Storage ";
+  Reg->print(OS);
 }
 
 void HWALIReg::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] " << "Live in register for ";
-  WriteAsOperand(OS, &getValue(), false);
+  WriteAsOperand(OS, &getValue(), false);  
 }
 
 void HWADelay::print(raw_ostream &OS) const {
@@ -55,21 +60,12 @@ void HWMemDep::print(raw_ostream &OS) const {
 }
 
 void HWCtrlDep::print(raw_ostream &OS) const {
-  //OS << "Value dep: ";
-  //WriteAsOperand(OS, &Val, false);
-  //OS << " -> ";
-  //WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
 void HWConst::print(raw_ostream &OS) const {
-  //OS << "Control dep: ";
-  //WriteAsOperand(OS, &Val, false);
-  //OS << " -> ";
-  //WriteAsOperand(OS, &getDep(0)->getValue(), false);
 }
 
 void HWValDep::print(raw_ostream &OS) const {
-
 }
 
 void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
@@ -83,24 +79,6 @@ void FSMState::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
   WriteAsOperand(OS, &getValue(), false);
   OS << " Entry";
-
-  //OS << "State: ";
-  //WriteAsOperand(OS, getBasicBlock(), false);
-  //OS << "\n";
-  //unsigned oldSlot = 0;
-
-  //std::multimap<unsigned, HWAtom*> Atoms;
-  //getScheduleMap(Atoms);
-  //for (std::multimap<unsigned, HWAtom*>::iterator I = Atoms.begin(),
-  //    E = Atoms.end(); I != E; ++I) {
-  //  HWAtom *A = I->second;
-  //  if (A->getSlot() != oldSlot) {
-  //    oldSlot = A->getSlot();
-  //    OS << "Cycle: " << oldSlot << "\n";
-  //  }
-  //  A->print(OS.indent(2));
-  //  OS << " at "<< A->getSlot() << "\n";
-  //}
 }
 
 void HWAOpFU::print(raw_ostream &OS) const {
@@ -152,9 +130,13 @@ void FSMState::dump() const {
   print(dbgs());
 }
 
+static inline bool top_sort(const HWAtom* LHS, const HWAtom* RHS) {
+  return LHS->getIdx() < RHS->getIdx();
+}
+
 void FSMState::setExitRoot(HWAOpFU *Exit) {
   ExitRoot = Exit;
-  std::sort(Atoms.begin(), Atoms.end(), HWAtom::top_sort());
+  std::sort(Atoms.begin(), Atoms.end(), top_sort);
 }
 
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)

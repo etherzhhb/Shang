@@ -33,10 +33,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/FoldingSet.h"
-#include "llvm/Support/Allocator.h"
-#include "llvm/Support/InstVisitor.h"
 #include "llvm/Support/raw_os_ostream.h"
-#include "llvm/Support/ErrorHandling.h"
 
 #include "vbe/ResourceConfig.h"
 
@@ -143,7 +140,10 @@ public:
   enum HWResType::Types getResType() const { return T; };
   unsigned getBitWidth() const { return BitWidth; }
   unsigned getRegNum() const { return Num; }
+  void setRegNum(unsigned NewNum) { Num = NewNum; }
   bool isFuReg() const { return T != HWResType::Trivial; }
+
+  void print(raw_ostream &OS) const;
 }; 
 
 /// @brief Constant node
@@ -167,7 +167,7 @@ public:
 class HWValDep : public HWEdge {
 public:
   enum ValDepTypes{
-    Normal, Import, Export, PHI
+    Normal, Import, Export, PHI,
   };
   HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T);
 
@@ -284,11 +284,6 @@ public:
 
   static const unsigned short MaxSlot = ~0;
   unsigned short getIdx() const { return InstIdx; }
-  struct top_sort {
-    bool operator() (const HWAtom* LHS, const HWAtom* RHS) const {
-      return LHS->getIdx() < RHS->getIdx();
-    }
-  };
 
   FSMState *getParent() { return Parent; }
   FSMState *getParent() const { return Parent; }
