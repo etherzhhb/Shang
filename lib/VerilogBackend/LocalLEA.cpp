@@ -231,7 +231,6 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
     HWAtom *Src = WritePHI->getSrc();
     // Writing a constant.
     if (!Src) continue;
-    
 
     HWRegister *SrcReg = HI.lookupRegForValue(&Src->getValue()),
                *PHIReg = WritePHI->getReg();
