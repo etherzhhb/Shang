@@ -126,6 +126,8 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
     HWAtom *A = *I;
     HWRegister *R = 0;
 
+    unsigned Start = A->getFinSlot();
+
     if (HWAWrReg *WR = dyn_cast<HWAWrReg>(A)) {
       // Function unit register merging is not perform in this stage.
       if (WR->writeFUReg())
@@ -142,16 +144,17 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
       R = WR->getReg();
     } else if (HWALIReg *LI = dyn_cast<HWALIReg>(A)) {
       R = HI.lookupRegForValue(&LI->getValue());
+      // Live-in register start when the state begin.
+      Start = State->getSlot();
     } else
       continue;
 
+    unsigned End = Start;
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " refering reg: ");
     DEBUG(R->print(dbgs()));
     DEBUG(dbgs() << " used by :");
 
-    unsigned Start = A->getFinSlot();
-    unsigned End = Start;
 
     for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
