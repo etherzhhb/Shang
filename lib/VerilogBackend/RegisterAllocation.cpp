@@ -56,17 +56,12 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     Worklist.pop_back();
 
     if (SrcAtom == State) continue;
-    if (isa<HWALIReg>(SrcAtom))
-      continue;
-    
     // Emit the register.
-    if (HWAOpFU *OI = dyn_cast<HWAOpFU>(SrcAtom)) {
-      for (unsigned i = 0, e = OI->getInstNumOps(); i != e; ++i) {
-        if (HWALIReg *LIR = dyn_cast<HWALIReg>(OI->getValDep(i).getSrc())) {
-          Value *V = OI->getIOperand(i);
-          (void)HI.getRegForValue(V);
-        }
-      }
+    if (HWALIReg *LI = dyn_cast<HWALIReg>(SrcAtom)) {
+      Value *V = &LI->getValue();
+      (void)HI.getRegForValue(V);
+      V->dump();
+      continue;
     }
 
     DEBUG(SrcAtom->print(dbgs()));
