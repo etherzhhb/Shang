@@ -63,8 +63,7 @@ struct SubGraphNode {
   typedef SubGraphNode *result_type;
   result_type operator()(const HWAtom *Atom) const;
 
-  typedef mapped_iterator<HWAtom::const_dep_iterator, SubGraphNode>
-    ChildIt;
+  typedef mapped_iterator<HWAtom::const_dep_iterator, SubGraphNode> ChildIt;
 
   ChildIt child_begin() const;
   ChildIt child_end() const;
@@ -144,8 +143,7 @@ public:
     if (at != ExtCache.end())
       return at->second;
 
-    SubGraphNode *NewNode
-      = new SubGraphNode(CurIdx, A, this);
+    SubGraphNode *NewNode = new SubGraphNode(CurIdx, A, this);
 
     ExtCache.insert(std::make_pair(A, NewNode));
     return NewNode;
