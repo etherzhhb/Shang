@@ -24,6 +24,7 @@
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/ADT/PriorityQueue.h"
+#include "llvm/ADT/OwningPtr.h"
 
 #define DEBUG_TYPE "vbe-fd-sched"
 #include "llvm/Support/Debug.h"
@@ -75,16 +76,35 @@ protected:
   unsigned findBestStep(HWAtom *A);
 
   bool scheduleAtom(HWAtom *A);
+  void schedulePassiveAtoms();
   bool scheduleQueue(AtomQueueType &Queue);
-  bool scheduleAtII();
   //}
 
 public:
   FDSBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
     : HI(HAInfo), FDInfo(HAInfo, S), CurState(S), II(MII) {}
-  void FDListSchedule();
-  void FDModuloSchedule();
+
+  virtual void scheduleState() = 0;
 };
+
+class FDLS : public FDSBase {
+
+public:
+  FDLS(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : FDSBase(HAInfo, S, MII) {}
+  
+  void scheduleState();
+};
+
+class FDMS : public FDSBase {
+public:
+  FDMS(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : FDSBase(HAInfo, S, MII) {}
+
+  void scheduleState();
+  bool scheduleAtII();
+};
+
 } //end namespace
 
 //===----------------------------------------------------------------------===//
@@ -129,12 +149,14 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   // Create the FDInfo.
   ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), CurState);
   
-  FDSBase fds(HI, CurState, MSInfo.computeMII());
+  OwningPtr<FDSBase> fds(0); //(HI, CurState, MSInfo.computeMII());
 
   if (MSInfo.isModuloSchedulable()) {
-    fds.FDModuloSchedule();
+    fds.reset(new FDMS(HI, CurState, MSInfo.computeMII()));
   } else
-    fds.FDListSchedule();
+    fds.reset(new FDLS(HI, CurState, MSInfo.computeMII()));
+
+  fds->scheduleState();
 
   HI->setTotalCycle(CurState->getEndSlot() + 1);
 
@@ -148,7 +170,39 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   return false;
 }
 
-bool FDSBase::scheduleAtII() {
+
+//===----------------------------------------------------------------------===//
+
+void FDLS::scheduleState() {
+  unsigned StartStep = HI->getTotalCycle();
+  for(;;) {
+    CurState->resetSchedule(StartStep);
+    FDInfo.buildFDInfo();
+
+    fds_sort s(FDInfo);
+    AtomQueueType AQueue(s);
+
+    fillQueue(AQueue, CurState->begin(), CurState->end());
+
+    if (!scheduleQueue(AQueue))
+      FDInfo.lengthenCriticalPath();
+    else // Break the loop if we schedule successful.
+      break;
+  }
+
+  schedulePassiveAtoms();
+
+  // Set the Initial Interval to the total slot, so we can generate the correct
+  // control logic for loop if MS is disable.
+  if (CurState->haveSelfLoop())
+    CurState->setII(CurState->getTotalSlot());
+  DEBUG(FDInfo.dumpTimeFrame());
+}
+
+
+//===----------------------------------------------------------------------===//
+
+bool FDMS::scheduleAtII() {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
 
@@ -159,7 +213,7 @@ bool FDSBase::scheduleAtII() {
   return scheduleQueue(AQueue);
 }
 
-void FDSBase::FDModuloSchedule() {
+void FDMS::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
   CurState->scheduledTo(StartStep);
 
@@ -215,11 +269,18 @@ void FDSBase::FDModuloSchedule() {
     FDInfo.buildFDInfo();
   }
 
+  schedulePassiveAtoms();
+}
+
+//===----------------------------------------------------------------------===//
+
+void FDSBase::schedulePassiveAtoms() {
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
       I != E; ++I) {
     HWAtom *A = *I;
     if (A->isScheduled())
       continue;
+
     bool res = scheduleAtom(A);
     assert(res && "Why A can not schedule?");
   }
@@ -241,40 +302,6 @@ void FDSBase::fillQueue(AtomQueueType &Queue, It begin, It end,
   //
   Queue.reheapify();
 }
-
-void FDSBase::FDListSchedule() {
-  unsigned StartStep = HI->getTotalCycle();
-  for(;;) {
-    CurState->resetSchedule(StartStep);
-    FDInfo.buildFDInfo();
-
-    fds_sort s(FDInfo);
-    AtomQueueType AQueue(s);
-
-    fillQueue(AQueue, CurState->begin(), CurState->end());
-
-    if (!scheduleQueue(AQueue))
-      FDInfo.lengthenCriticalPath();
-    else // Break the loop if we schedule successful.
-      break;
-  }
-  // Set the Initial Interval to the total slot, so we can generate the correct
-  // control logic for loop if MS is disable.
-  if (CurState->haveSelfLoop())
-    CurState->setII(CurState->getTotalSlot());
-  DEBUG(FDInfo.dumpTimeFrame());
-
-  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
-      I != E; ++I) {
-    HWAtom *A = *I;
-    if (A->isScheduled())
-      continue;
-    
-    bool res = scheduleAtom(A);
-    assert(res && "Why A can not schedule?");
-  }
-}
-
 
 unsigned FDSBase::findBestStep(HWAtom *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
