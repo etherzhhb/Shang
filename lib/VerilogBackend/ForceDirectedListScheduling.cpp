@@ -28,23 +28,15 @@ using namespace esyn;
 //===----------------------------------------------------------------------===//
 bool ForceDirectedListSchedulingBase::fds_sort::operator()(const HWAOpFU* LHS, const HWAOpFU* RHS) const {
   HWFUnit *LFU = LHS->getFUnit(), *RFU = RHS->getFUnit();
+  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
   // Schedule the atom with less available function unit first.
-  if (LFU->getTotalFUs() > RFU->getTotalFUs())
-    return true;
-  else if (LFU->getTotalFUs() < RFU->getTotalFUs())
-    return false;
+  if (LTFU > RTFU) return true;
+  if (LTFU < RTFU) return false;
 
+  unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
   // Schedule the low mobility nodes first.
-  if (Info.getTimeFrame(LHS) > Info.getTimeFrame(RHS))
-    return true; // Place RHS first.
-  else if (Info.getTimeFrame(LHS) < Info.getTimeFrame(RHS))
-    return false;
-
-  //unsigned LHSLatency = FDS->getASAPStep(LHS);
-  //unsigned RHSLatency = FDS->getASAPStep(RHS);
-  //// Schedule as soon as possible?
-  //if (LHSLatency < RHSLatency) return true;
-  //if (LHSLatency > RHSLatency) return false;
+  if (LTF > RTF) return true; // Place RHS first.
+  if (LTF < RTF) return false;
 
   return LHS->getIdx() > RHS->getIdx();
 }
@@ -213,7 +205,6 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
 }
 
 bool ForceDirectedListSchedulingBase::scheduleCriticalPath() {
-  bool AnyScheduled = false;
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
       I != E; ++I) {
     HWAtom *A = *I;
@@ -225,16 +216,10 @@ bool ForceDirectedListSchedulingBase::scheduleCriticalPath() {
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " asap step: " << step << "\n");
     A->scheduledTo(step);
-    AnyScheduled = true;
   }
 
-  // Time frame may changed because of backedge constraints of scheduled nodes.
-  if (AnyScheduled) {
-    FDInfo.buildFDInfo();
-    return FDInfo.isResourceConstraintPreserved();
-  }
-  // Else the time frame not changed.
-  return true;
+  FDInfo.buildFDInfo();
+  return FDInfo.isResourceConstraintPreserved();
 }
 
 bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {

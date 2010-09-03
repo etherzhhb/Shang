@@ -39,6 +39,7 @@ class ForceDirectedInfo {
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
 
   TimeFrameMapType AtomToTF;
+  TimeFrameMapType AtomToSTF;
 
   typedef std::map<unsigned, double> DGStepMapType;
   typedef std::map<HWFUnit*, std::map<unsigned, double> > DGType;
@@ -107,8 +108,6 @@ public:
   /// This function will invalid the alap step of all node in
   /// predecessor tree
   double computePredForceAt(const HWAtom *A, unsigned step);
-
-  unsigned findBestStep(HWAOpFU *A);
   //}
 
   unsigned buildFDInfo();

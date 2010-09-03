@@ -279,6 +279,8 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
 double ForceDirectedInfo::computeSelfForceAt(const HWAtom *A, unsigned step) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
+  //
+  // if (!OpInst->isBinded()) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
   double Force = getDGraphAt(step, FU) - getAvgDG(OpInst);
@@ -291,6 +293,8 @@ double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
                                             unsigned int end) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
+  //
+  // if (!OpInst->isBinded()) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
   double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
