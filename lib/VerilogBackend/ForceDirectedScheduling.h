@@ -21,6 +21,9 @@
 #define VBE_FORCE_DIRECTED_INFO
 
 #include "HWAtomInfo.h"
+#include "ModuloScheduleInfo.h"
+
+#include "llvm/ADT/PriorityQueue.h"
 
 using namespace llvm;
 
@@ -119,5 +122,67 @@ public:
   ForceDirectedInfo(HWAtomInfo *HAInfo, FSMState *S) : HI(HAInfo), State(S),
     MII(0), CriticalPathEnd(0) {}
 };
+
+class ForceDirectedListSchedulingBase {
+protected:
+  HWAtomInfo *HI;
+  ForceDirectedInfo FDInfo;
+  FSMState *CurState;
+
+  unsigned II;
+
+  /// @name PriorityQueue
+  //{
+  struct fds_sort {
+    ForceDirectedInfo &Info;
+    fds_sort(ForceDirectedInfo &s) : Info(s) {}
+    bool operator() (const HWAOpFU *LHS, const HWAOpFU *RHS) const;
+  };
+
+  typedef PriorityQueue<HWAOpFU*, std::vector<HWAOpFU*>, fds_sort> AtomQueueType;
+
+  // Fill the priorityQueue, ignore FirstNode.
+  template<class It>
+  void fillQueue(AtomQueueType &Queue, It begin, It end, HWAtom *FirstNode = 0);
+
+  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
+  typedef ModuloScheduleInfo::rec_vector rec_vector;
+
+  // Return true when resource constraints preserved after citical path
+  // scheduled
+  bool scheduleCriticalPath();
+
+  unsigned findBestStep(HWAtom *A);
+
+  bool scheduleAtom(HWAtom *A);
+  void schedulePassiveAtoms();
+  bool scheduleQueue(AtomQueueType &Queue);
+  //}
+
+public:
+  ForceDirectedListSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : HI(HAInfo), FDInfo(HAInfo, S), CurState(S), II(MII) {}
+
+  virtual void scheduleState() = 0;
+};
+
+class ForceDirectedListScheduler : public ForceDirectedListSchedulingBase {
+
+public:
+  ForceDirectedListScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : ForceDirectedListSchedulingBase(HAInfo, S, MII) {}
+
+  void scheduleState();
+};
+
+class ForceDirectedModuloScheduler : public ForceDirectedListSchedulingBase {
+public:
+  ForceDirectedModuloScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : ForceDirectedListSchedulingBase(HAInfo, S, MII) {}
+
+  void scheduleState();
+  bool scheduleAtII();
+};
+
 } // End namespace.
 #endif

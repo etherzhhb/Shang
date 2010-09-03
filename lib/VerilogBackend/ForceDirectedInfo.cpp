@@ -18,7 +18,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ForceDirectedInfo.h"
+#include "ForceDirectedScheduling.h"
 #include "HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-fd-info"

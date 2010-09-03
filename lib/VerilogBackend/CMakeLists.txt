@@ -3,6 +3,7 @@ set(LLVM_NO_RTTI 1)
 add_llvm_target(VerilogBackend
   CompPathBinding.cpp
   ForceDirectedInfo.cpp
+  ForceDirectedListScheduling.cpp
   ForceDirectedScheduler.cpp
   HWAtom.cpp
   HWAtomInfo.cpp
