@@ -212,15 +212,7 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
     // force. Because the back edge constraint from A will be considered.
     FDInfo.scheduleAtomTo(A, i);
     FDInfo.buildTimeFrame();
-    // Compute the forces.
-    double SelfForce = FDInfo.computeSelfForce(A);
-    // The follow function will invalid the time frame.
-    DEBUG(dbgs() << " Self Force: " << SelfForce);
-    double PredForce = FDInfo.computePredForce(A);
-    DEBUG(dbgs() << " Pred Force: " << PredForce);
-    double SuccForce = FDInfo.computeSuccForce(A);
-    DEBUG(dbgs() << " Succ Force: " << SuccForce);
-    double Force = SelfForce + PredForce + SuccForce;
+    double Force = FDInfo.computeForce(A);
     DEBUG(dbgs() << " Force: " << Force);
     if (Force < BestStep.second)
       BestStep = std::make_pair(i, Force);

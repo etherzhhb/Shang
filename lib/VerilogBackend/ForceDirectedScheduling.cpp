@@ -282,6 +282,20 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
   return ret;
 }
 
+double ForceDirectedInfo::computeForce(const HWAtom *A) {
+  // Compute the forces.
+  double SelfForce = computeSelfForce(A);
+  // The follow function will invalid the time frame.
+  DEBUG(dbgs() << " Self Force: " << SelfForce);
+  double PredForce = computePredForce(A);
+  DEBUG(dbgs() << " Pred Force: " << PredForce);
+  double SuccForce = computeSuccForce(A);
+  DEBUG(dbgs() << " Succ Force: " << SuccForce);
+  double Force = SelfForce + PredForce + SuccForce;
+  DEBUG(dbgs() << " Force: " << Force);
+  return Force;
+}
+
 double ForceDirectedInfo::computeSelfForce(const HWAtom *A) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;

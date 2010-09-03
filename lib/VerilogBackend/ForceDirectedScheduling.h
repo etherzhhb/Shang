@@ -127,6 +127,8 @@ public:
   /// This function will invalid the alap step of all node in
   /// predecessor tree
   double computePredForce(const HWAtom *A);
+
+  double computeForce(const HWAtom *A);
   //}
 
   unsigned buildFDInfo(bool resetSTF);
