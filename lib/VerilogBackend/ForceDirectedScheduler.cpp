@@ -255,43 +255,6 @@ bool FDLScheduler::scheduleAtII() {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
 
-  for (unsigned i = FDInfo->getMII(); i > 0; --i) {
-    for (rec_iterator I = MSInfo->rec_begin(i), E = MSInfo->rec_end(i);
-        I != E; ++I) {
-      rec_vector &Rec = I->second;
-      HWAtom *LastAtom = Rec.back();
-      DEBUG(dbgs() << "Recurrence at " << i << "--------------------\n");
-      for (rec_vector::iterator SI = Rec.begin(), SE = Rec.end();
-          SI != SE; ++SI) {
-        HWAtom *A = *SI;
-        HWEdge *Edge = LastAtom->getEdgeFrom(A);
-        LastAtom = A;
-        DEBUG(
-          A->print(dbgs());
-          dbgs() << " {" << FDInfo->getASAPStep(A) << ", "
-                 << FDInfo->getALAPStep(A) << "}";
-          if (Edge->isBackEdge())
-            dbgs() << " Back-edge";
-          if (A->isScheduled())
-            dbgs() << " [Scheduled]\n";
-        );
-
-        // Only schedule backedge source at this phase.
-        if (!Edge->isBackEdge())
-          continue;
-
-        if (A->isScheduled())
-          continue;
-
-        if (!scheduleAtom(A))
-          return false;
-        else // Only schedule one backedge.
-          break;
-      }
-      DEBUG(FDInfo->dumpTimeFrame());
-    }
-  }
-
   // Schedule other nodes.
   AQueue.clear();
   fillQueue(AQueue, CurState->begin(), CurState->end());
