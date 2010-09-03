@@ -49,16 +49,16 @@ ForceDirectedListSchedulingBase::fds_sort::operator()(const HWAOpFU* LHS,
 void ForceDirectedListScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
   for(;;) {
-    CurState->resetSchedule(StartStep);
-    FDInfo.buildFDInfo(true);
+    State->resetSchedule(StartStep);
+    buildFDInfo(true);
 
-    fds_sort s(FDInfo);
+    fds_sort s(*this);
     AtomQueueType AQueue(s);
 
-    fillQueue(AQueue, CurState->begin(), CurState->end());
+    fillQueue(AQueue, State->begin(), State->end());
 
     if (!scheduleQueue(AQueue))
-      FDInfo.lengthenCriticalPath();
+      lengthenCriticalPath();
     else // Break the loop if we schedule successful.
       break;
   }
@@ -67,54 +67,54 @@ void ForceDirectedListScheduler::scheduleState() {
 
   // Set the Initial Interval to the total slot, so we can generate the correct
   // control logic for loop if MS is disable.
-  if (CurState->haveSelfLoop())
-    CurState->setII(CurState->getTotalSlot());
-  DEBUG(FDInfo.dumpTimeFrame());
+  if (State->haveSelfLoop())
+    State->setII(State->getTotalSlot());
+  DEBUG(dumpTimeFrame());
 }
 
 
 //===----------------------------------------------------------------------===//
 
 bool ForceDirectedModuloScheduler::scheduleAtII() {
-  fds_sort s(FDInfo);
+  fds_sort s(*this);
   AtomQueueType AQueue(s);
 
   // Schedule other nodes.
   AQueue.clear();
-  fillQueue(AQueue, CurState->begin(), CurState->end());
+  fillQueue(AQueue, State->begin(), State->end());
 
   return scheduleQueue(AQueue);
 }
 
 void ForceDirectedModuloScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
-  CurState->scheduledTo(StartStep);
+  State->scheduledTo(StartStep);
 
   // Ensure us can schedule the critical path.
   for (;;) {
-    FDInfo.buildFDInfo(true);
+    buildFDInfo(true);
     if (scheduleCriticalPath())
       break;
-    DEBUG(FDInfo.dumpTimeFrame());
+    DEBUG(dumpTimeFrame());
     // TODO: check if we could ever schedule these node without breaking the
     // resource constrain by check the DG.
     // If the resource average DG is bigger than the total available resource
     // we can never schedule the nodes without breaking the resource constrain.
-    CurState->resetSchedule(StartStep);
-    FDInfo.lengthenCriticalPath();
+    State->resetSchedule(StartStep);
+    lengthenCriticalPath();
   }
 
   // Dirty Hack: Search the solution by increasing MII and critical path
   // alternatively.
 
-  FDInfo.setMII(II);
+  setMII(II);
   for (;;) {
-    FDInfo.buildFDInfo(true);
+    buildFDInfo(true);
     if (scheduleCriticalPath())
       break;
-    DEBUG(FDInfo.dumpTimeFrame());
-    FDInfo.lengthenMII();
-    CurState->resetSchedule(StartStep);
+    DEBUG(dumpTimeFrame());
+    lengthenMII();
+    State->resetSchedule(StartStep);
   }
 
   bool lastIncMII = true;
@@ -124,22 +124,22 @@ void ForceDirectedModuloScheduler::scheduleState() {
       && "Why nodes critical path can not be schedule since DG is ok?");
 
     if (scheduleAtII()) {
-      DEBUG(FDInfo.dumpTimeFrame());
-      DEBUG(FDInfo.dumpDG());
+      DEBUG(dumpTimeFrame());
+      DEBUG(dumpDG());
       // Set up the initial interval.
-      CurState->setII(FDInfo.getMII());
+      State->setII(getMII());
       break;
     } else if (lastIncMII) {
-      FDInfo.lengthenCriticalPath();
+      lengthenCriticalPath();
       lastIncMII = false;
     } else {
-      FDInfo.lengthenMII();
-      II = FDInfo.getMII();
+      lengthenMII();
+      II = getMII();
       lastIncMII = true;
     }
     // Prepare for next schedule.
-    CurState->resetSchedule(StartStep);
-    FDInfo.buildFDInfo(true);
+    State->resetSchedule(StartStep);
+    buildFDInfo(true);
   }
 
   schedulePassiveAtoms();
@@ -148,17 +148,17 @@ void ForceDirectedModuloScheduler::scheduleState() {
 //===----------------------------------------------------------------------===//
 
 void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
-  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
+  for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;
     if (A->isScheduled())
       continue;
 
     DEBUG(A->print(dbgs()));
-    unsigned step = FDInfo.getASAPStep(A);
+    unsigned step = getASAPStep(A);
     A->scheduledTo(step);
-    FDInfo.buildFDInfo(false);
-    FDInfo.updateSTF();
+    buildFDInfo(false);
+    updateSTF();
     bool res = scheduleCriticalPath();
 
     assert(res && "Why A can not schedule?");
@@ -166,21 +166,21 @@ void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
 }
 
 bool ForceDirectedSchedulingBase::scheduleCriticalPath() {
-  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
+  for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;
   
-    if (A->isScheduled() || FDInfo.getTimeFrame(A) != 1)
+    if (A->isScheduled() || getTimeFrame(A) != 1)
       continue;
 
-    unsigned step = FDInfo.getASAPStep(A);
+    unsigned step = getASAPStep(A);
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " asap step: " << step << "\n");
     A->scheduledTo(step);
   }
   // Do not need to update STF.
-  FDInfo.buildFDInfo(false);
-  return FDInfo.isResourceConstraintPreserved();
+  buildFDInfo(false);
+  return isResourceConstraintPreserved();
 }
 //===----------------------------------------------------------------------===//
 
@@ -205,10 +205,10 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   DEBUG(dbgs() << "\tScan for best step:\n");
   // For each possible step:
-  for (unsigned i = FDInfo.getASAPStep(A), e = FDInfo.getALAPStep(A) + 1;
+  for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1;
       i != e; ++i) {
     DEBUG(dbgs() << "At Step " << i << "\n");
-    double Force = FDInfo.computeForce(A, i, i);
+    double Force = computeForce(A, i, i);
     DEBUG(dbgs() << " Force: " << Force);
     if (Force < BestStep.second)
       BestStep = std::make_pair(i, Force);
@@ -221,8 +221,8 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
 bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
   assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
-  unsigned step = FDInfo.getASAPStep(A);
-  if (FDInfo.getTimeFrame(A) > 1) {
+  unsigned step = getASAPStep(A);
+  if (getTimeFrame(A) > 1) {
     step = findBestStep(A);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
     // If we can not schedule A.
@@ -233,8 +233,8 @@ bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
   }
 
   A->scheduledTo(step);
-  FDInfo.buildFDInfo(false);
-  FDInfo.updateSTF();
+  buildFDInfo(false);
+  updateSTF();
   return scheduleCriticalPath();
 }
 
@@ -264,16 +264,16 @@ void ForceDirectedScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
 
   //for(;;) {
-  //  CurState->resetSchedule(StartStep);
-  //  FDInfo.buildFDInfo(true);
+  //  State->resetSchedule(StartStep);
+  //  buildFDInfo(true);
 
   //  fds_sort s(FDInfo);
   //  AtomQueueType AQueue(s);
 
-  //  fillQueue(AQueue, CurState->begin(), CurState->end());
+  //  fillQueue(AQueue, State->begin(), State->end());
 
   //  if (!scheduleQueue(AQueue))
-  //    FDInfo.lengthenCriticalPath();
+  //    lengthenCriticalPath();
   //  else // Break the loop if we schedule successful.
   //    break;
   //}
@@ -282,15 +282,37 @@ void ForceDirectedScheduler::scheduleState() {
 
   // Set the Initial Interval to the total slot, so we can generate the correct
   // control logic for loop if MS is disable.
-  if (CurState->haveSelfLoop())
-    CurState->setII(CurState->getTotalSlot());
-  DEBUG(FDInfo.dumpTimeFrame());
+  if (State->haveSelfLoop())
+    State->setII(State->getTotalSlot());
+  DEBUG(dumpTimeFrame());
 }
 
 void ForceDirectedScheduler::findBestSink() {
 
 }
 
-void ForceDirectedScheduler::trySinkAtom(HWAtom *A) {
-  unsigned ASAP = FDInfo.getASAPStep(A), ALAP = FDInfo.getALAPStep(A);
+double ForceDirectedScheduler::trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame) {
+  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
+
+  double ASAPForce = computeForce(A, ASAP, ASAP),
+         ALAPForce = computeForce(A, ALAP, ALAP);
+
+  double FMax = std::max(ASAPForce, ALAPForce),
+         FMin = std::min(ASAPForce, ALAPForce);
+
+  double FMinStar = FMin;
+
+  if (ASAP + 1 < ALAP)
+    FMinStar = std::min(FMinStar, 0.0);
+  else
+    assert(ASAP + 1 == ALAP && "Broken time frame!");
+  
+  double FGain = FMax - FMinStar;
+
+  if (ASAPForce >= ALAPForce)
+    NewTimeFrame = std::make_pair(ASAP, ALAP -1);
+  else
+    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
+  
+  return FGain;
 }

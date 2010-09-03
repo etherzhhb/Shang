@@ -58,24 +58,24 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HWAtomInfo *HI = &getAnalysis<HWAtomInfo>();
 
-  FSMState *CurState = HI->getStateFor(BB);
+  FSMState *State = HI->getStateFor(BB);
 
   // Create the FDInfo.
-  ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), CurState);
+  ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
   
   OwningPtr<ForceDirectedSchedulingBase> fds(0);
 
   if (MSInfo.isModuloSchedulable()) {
-    fds.reset(new ForceDirectedModuloScheduler(HI, CurState, MSInfo.computeMII()));
+    fds.reset(new ForceDirectedModuloScheduler(HI, State, MSInfo.computeMII()));
   } else
-    fds.reset(new ForceDirectedListScheduler(HI, CurState, MSInfo.computeMII()));
+    fds.reset(new ForceDirectedListScheduler(HI, State, MSInfo.computeMII()));
 
   fds->scheduleState();
 
-  HI->setTotalCycle(CurState->getEndSlot() + 1);
+  HI->setTotalCycle(State->getEndSlot() + 1);
 
   // Do not forget to schedule the delay atom;
-  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
+  for (FSMState::iterator I = State->begin(), E = State->end();
        I != E; ++I) {
     HWAtom *A = *I;
     assert(A->isScheduled() && "Schedule incomplete!");

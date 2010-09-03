@@ -1,4 +1,4 @@
-//===- ForceDirectedInfo.cpp - ForceDirected information analyze --*- C++ -*-===//
+//===- ForceDirectedSchedulingBase.cpp - ForceDirected information analyze --*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -34,7 +34,7 @@ NoFDSchedule("disable-fd-schedule",
              cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-void ForceDirectedInfo::buildTimeFrame() {
+void ForceDirectedSchedulingBase::buildTimeFrame() {
   AtomToTF.clear();
   // Build the time frame
   assert(State->isScheduled() && "Entry must be scheduled first!");
@@ -45,7 +45,7 @@ void ForceDirectedInfo::buildTimeFrame() {
   DEBUG(dumpTimeFrame());
 }
 
-void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
+void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *Root, unsigned step) {
   AtomToTF[Root].first = step;
 
   FSMState::iterator Start = std::find(State->begin(), State->end(),
@@ -100,7 +100,7 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
+void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *Root, unsigned step) {
   AtomToTF[Root].second = step;
 
   FSMState::reverse_iterator Start = std::find(State->rbegin(), State->rend(),
@@ -162,7 +162,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
   } while (changed);
 }
 
-void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
+void ForceDirectedSchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
@@ -179,11 +179,11 @@ void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
   }
 }
 
-void ForceDirectedInfo::dumpTimeFrame() const {
+void ForceDirectedSchedulingBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-void ForceDirectedInfo::buildDGraph() {
+void ForceDirectedSchedulingBase::buildDGraph() {
   DGraph.clear();
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I){
     // We only try to balance the post bind resource.
@@ -205,7 +205,7 @@ void ForceDirectedInfo::buildDGraph() {
 }
 
 
-bool ForceDirectedInfo::isResourceConstraintPreserved() {
+bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
   // No resource in use.
   if (DGraph.empty()) return true;
 
@@ -227,7 +227,7 @@ bool ForceDirectedInfo::isResourceConstraintPreserved() {
   return true;
 }
 
-void ForceDirectedInfo::printDG(raw_ostream &OS) const {  
+void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {  
   // For each step
   // For each FU.
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
@@ -241,7 +241,7 @@ void ForceDirectedInfo::printDG(raw_ostream &OS) const {
   }
 }
 
-double ForceDirectedInfo::getDGraphAt(unsigned step, HWFUnit *FU) const {
+double ForceDirectedSchedulingBase::getDGraphAt(unsigned step, HWFUnit *FU) const {
   // Modulo DG for modulo schedule.
   DGType::const_iterator at = DGraph.find(FU);
   if (at != DGraph.end()) {
@@ -253,7 +253,7 @@ double ForceDirectedInfo::getDGraphAt(unsigned step, HWFUnit *FU) const {
   return 0.0;
 }
 
-unsigned ForceDirectedInfo::computeStepKey(unsigned step) const {
+unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
   if (MII != 0) {
 #ifndef NDEBUG
     unsigned StartSlot = State->getSlot();
@@ -266,13 +266,13 @@ unsigned ForceDirectedInfo::computeStepKey(unsigned step) const {
   return step;
 }
 
-void ForceDirectedInfo::accDGraphAt(unsigned step, HWFUnit *FU, double d) {
+void ForceDirectedSchedulingBase::accDGraphAt(unsigned step, HWFUnit *FU, double d) {
   // Modulo DG for modulo schedule.
   DGraph[FU][computeStepKey(step)] += d;
 }
 
 // Including end.
-double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end) {
+double ForceDirectedSchedulingBase::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end) {
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
@@ -282,7 +282,7 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
   return ret;
 }
 
-double ForceDirectedInfo::computeForce(const HWAtom *A,
+double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
                                        unsigned ASAP, unsigned ALAP) {
   sinkSTF(A, ASAP, ALAP);
   buildTimeFrame();
@@ -299,7 +299,7 @@ double ForceDirectedInfo::computeForce(const HWAtom *A,
   return Force;
 }
 
-double ForceDirectedInfo::computeSelfForce(const HWAtom *A) {
+double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
@@ -313,7 +313,7 @@ double ForceDirectedInfo::computeSelfForce(const HWAtom *A) {
   return Force / FU->getTotalFUs();
 }
 
-double ForceDirectedInfo::computeRangeForce(const HWAtom *A,
+double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
                                             unsigned int start,
                                             unsigned int end) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
@@ -326,7 +326,7 @@ double ForceDirectedInfo::computeRangeForce(const HWAtom *A,
   return Force / FU->getTotalFUs();
 }
 
-double ForceDirectedInfo::computeSuccForce(const HWAtom *A) {
+double ForceDirectedSchedulingBase::computeSuccForce(const HWAtom *A) {
   double ret = 0.0;
 
   for (const_usetree_iterator I = const_usetree_iterator::begin(A),
@@ -337,7 +337,7 @@ double ForceDirectedInfo::computeSuccForce(const HWAtom *A) {
   return ret;
 }
 
-double ForceDirectedInfo::computePredForce(const HWAtom *A) {
+double ForceDirectedSchedulingBase::computePredForce(const HWAtom *A) {
   // Adjust the time frame.
   //buildALAPStep(A, step);
 
@@ -351,7 +351,7 @@ double ForceDirectedInfo::computePredForce(const HWAtom *A) {
   return ret;
 }
 
-void ForceDirectedInfo::buildAvgDG() {
+void ForceDirectedSchedulingBase::buildAvgDG() {
   AvgDG.clear();
   for (FSMState::iterator I = State->begin(), E = State->end();
        I != E; ++I)
@@ -366,7 +366,7 @@ void ForceDirectedInfo::buildAvgDG() {
     }
 }
 
-unsigned ForceDirectedInfo::buildFDInfo(bool rstSTF) {
+unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
   if (rstSTF) resetSTF();
   buildTimeFrame();
   if (rstSTF) updateSTF();
@@ -377,22 +377,22 @@ unsigned ForceDirectedInfo::buildFDInfo(bool rstSTF) {
   return CriticalPathEnd;
 }
 
-void ForceDirectedInfo::dumpDG() const {
+void ForceDirectedSchedulingBase::dumpDG() const {
   printDG(dbgs());
 }
 
-void ForceDirectedInfo::resetSTF() {
+void ForceDirectedSchedulingBase::resetSTF() {
   for (FSMState::iterator I = State->begin(), E = State->end();
        I != E; ++I)
     AtomToSTF.insert(std::make_pair(*I, std::make_pair(0, HWAtom::MaxSlot)));
 }
 
-void ForceDirectedInfo::sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP) {
+void ForceDirectedSchedulingBase::sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP) {
   assert(ASAP <= ALAP && "Bad time frame to sink!");
   AtomToSTF[A] = std::make_pair(ASAP, ALAP);
 }
 
-void ForceDirectedInfo::updateSTF() {
+void ForceDirectedSchedulingBase::updateSTF() {
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;

@@ -1,4 +1,4 @@
-//===- ForceDirectedInfo.h - ForceDirected information analyze --*- C++ -*-===//
+//===- ForceDirectedSchedulingBase.h - ForceDirected information analyze --*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -29,12 +29,14 @@ using namespace llvm;
 
 namespace esyn {;
 
-class ForceDirectedInfo {
-  HWAtomInfo *HI;
-  FSMState *State;
+class ForceDirectedSchedulingBase {
+  // MII in modulo schedule.
+  unsigned MII, CriticalPathEnd;
 
-  // Time Frame { {asap step, alap step }, isMIIContraint }
+  // Time Frame {asap step, alap step }
+public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
+private:
   // Mapping hardware atoms to time frames.
   typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
 
@@ -52,15 +54,27 @@ class ForceDirectedInfo {
   void buildASAPStep(const HWAtom *Root, unsigned step);
   void buildALAPStep(const HWAtom *Root, unsigned step);
 
-  // MII in modulo schedule.
-  unsigned MII, CriticalPathEnd;
-
   void resetSTF();
 
   unsigned getScheduleTimeFrame(const HWAtom *A) const {
     return getSTFALAP(A) - getSTFASAP(A) + 1;
   }
+
+protected:
+  HWAtomInfo *HI;
+  FSMState *State;
+  unsigned II;
+
+  // Return true when resource constraints preserved after citical path
+  // scheduled
+  bool scheduleCriticalPath();
+  void schedulePassiveAtoms();
+
 public:
+  ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned mii)
+    : HI(HAInfo), State(S), II(mii), MII(0), CriticalPathEnd(0) {}
+
+  virtual void scheduleState() = 0;
 
   /// @name TimeFrame
   //{
@@ -70,17 +84,17 @@ public:
   void buildTimeFrame();
 
   unsigned getASAPStep(const HWAtom *A) const {
-    return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
+    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToTF[A].first;
   }
   unsigned getALAPStep(const HWAtom *A) const {
-    return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
+    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToTF[A].second;
   }
 
   unsigned getSTFASAP(const HWAtom *A) const {
-    return const_cast<ForceDirectedInfo*>(this)->AtomToSTF[A].first;
+    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToSTF[A].first;
   }
   unsigned getSTFALAP(const HWAtom *A) const {
-    return const_cast<ForceDirectedInfo*>(this)->AtomToSTF[A].second;
+    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToSTF[A].second;
   }
 
   unsigned getTimeFrame(const HWAtom *A) const {
@@ -134,27 +148,6 @@ public:
   void lengthenMII() { ++MII; }
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   unsigned getCriticalPathEnd() { return CriticalPathEnd; }
-
-  ForceDirectedInfo(HWAtomInfo *HAInfo, FSMState *S) : HI(HAInfo), State(S),
-    MII(0), CriticalPathEnd(0) {}
-};
-
-class ForceDirectedSchedulingBase {
-protected:
-  HWAtomInfo *HI;
-  ForceDirectedInfo FDInfo;
-  FSMState *CurState;
-  unsigned II;
-
-  // Return true when resource constraints preserved after citical path
-  // scheduled
-  bool scheduleCriticalPath();
-  void schedulePassiveAtoms();
-
-  ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
-    : HI(HAInfo), FDInfo(HAInfo, S), CurState(S), II(MII) {}
-public:
-  virtual void scheduleState() = 0;
 };
 
 class ForceDirectedListSchedulingBase : public ForceDirectedSchedulingBase {
@@ -162,8 +155,8 @@ protected:
   /// @name PriorityQueue
   //{
   struct fds_sort {
-    ForceDirectedInfo &Info;
-    fds_sort(ForceDirectedInfo &s) : Info(s) {}
+    ForceDirectedSchedulingBase &Info;
+    fds_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
     bool operator() (const HWAOpFU *LHS, const HWAOpFU *RHS) const;
   };
 
@@ -208,7 +201,7 @@ public:
     : ForceDirectedSchedulingBase(HAInfo, S, MII) {}
 
   void scheduleState();
-  void trySinkAtom(HWAtom *A);
+  double trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame);
   void findBestSink();
 };
 
