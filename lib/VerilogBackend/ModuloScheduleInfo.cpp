@@ -380,7 +380,6 @@ bool ModuloScheduleInfo::isModuloSchedulable() const {
   return true;
 }
 
-
 void ModuloScheduleInfo::addRecurrence(unsigned II, rec_vector Rec) {
   RecList.insert(std::make_pair(II, Rec));
 }
@@ -393,6 +392,12 @@ unsigned ModuloScheduleInfo::computeRecMII() {
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
 
   return MaxRecII;
+}
+
+unsigned ModuloScheduleInfo::computeMII() {
+  unsigned RecMII = computeRecMII();
+  unsigned ResMII = computeResMII();
+  return std::max(RecMII, ResMII);
 }
 
 unsigned ModuloScheduleInfo::computeResMII() const {

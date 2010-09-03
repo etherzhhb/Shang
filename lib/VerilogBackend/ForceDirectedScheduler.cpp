@@ -40,9 +40,7 @@ struct fds_sort {
 
 struct FDLScheduler : public BasicBlockPass {
   HWAtomInfo *HI;
-  ResourceConfig *RC;
   ForceDirectedInfo *FDInfo;
-  ModuloScheduleInfo *MSInfo;
   FSMState *CurState;
   HWAOpFU *Exit;
 
@@ -51,10 +49,6 @@ struct FDLScheduler : public BasicBlockPass {
   /// @name PriorityQueue
   //{
   typedef PriorityQueue<HWAOpFU*, std::vector<HWAOpFU*>, fds_sort> AtomQueueType;
-  
-  // Find the Node the do not have dependency in this Queue.
-  template<class It>
-  HWAtom *findFirstNode(It begin, It end);
 
   // Fill the priorityQueue, ignore FirstNode.
   template<class It>
@@ -120,7 +114,6 @@ char FDLScheduler::ID = 0;
 
 void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
-  AU.addRequired<ResourceConfig>();
   AU.addRequired<LoopInfo>();
   AU.setPreservesAll();
 }
@@ -142,24 +135,6 @@ void FDLScheduler::fillQueue(AtomQueueType &Queue, It begin, It end,
   Queue.reheapify();
 }
 
-template<class It>
-HWAtom *FDLScheduler::findFirstNode(It begin, It end) {
-  if (begin == end) return 0;
-
-  std::pair<HWAtom*, unsigned> Ret =
-    std::make_pair(*begin, FDInfo->getASAPStep(*begin));
-
-  while (++begin != end) {
-    HWAtom *A = *begin;
-
-    unsigned ASAP = FDInfo->getASAPStep(A);
-    if (ASAP < Ret.second)
-      Ret = std::make_pair(A, ASAP);
-  }
-
-  return Ret.first;
-}
-
 bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HI = &getAnalysis<HWAtomInfo>();
@@ -168,12 +143,10 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
 
   // Create the FDInfo.
   FDInfo = new ForceDirectedInfo(HI, CurState);
-  MSInfo = new ModuloScheduleInfo(HI, &getAnalysis<LoopInfo>(), CurState);
+  ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), CurState);
 
-  if (MSInfo->isModuloSchedulable()) {
-    unsigned RecMII = MSInfo->computeRecMII();
-    unsigned ResMII = MSInfo->computeResMII();
-    MII = std::max(RecMII, ResMII);
+  if (MSInfo.isModuloSchedulable()) {
+    MII = MSInfo.computeMII();
     FDModuloSchedule();
   } else
     FDListSchedule();
@@ -322,7 +295,6 @@ void FDLScheduler::releaseMemory() {
 
 void FDLScheduler::clear() {
   CurState = 0;
-  MSInfo->clear();
 }
 
 void FDLScheduler::print(raw_ostream &O, const Module *M) const { }

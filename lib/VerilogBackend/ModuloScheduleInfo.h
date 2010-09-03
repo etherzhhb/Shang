@@ -56,6 +56,8 @@ public:
 
   unsigned computeRecMII();
 
+  unsigned computeMII();
+
   /// @name Common pass interface
   //{
   ModuloScheduleInfo(HWAtomInfo *HAInfo, LoopInfo *LInfo, FSMState *S)
