@@ -45,6 +45,9 @@ class ForceDirectedInfo : public BasicBlockPass {
 
   std::map<const HWAOpFU*, double> AvgDG;
 
+  void buildASAPStep(const HWAtom *Root, unsigned step);
+  void buildALAPStep(const HWAtom *Root, unsigned step);
+
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
 public:
@@ -55,8 +58,7 @@ public:
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
 
-  void buildASAPStep(const HWAtom *Root, unsigned step);
-  void buildALAPStep(const HWAtom *Root, unsigned step);
+  void buildTimeFrame();
 
   unsigned getALAPStep(const HWAtom *A) const {
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;

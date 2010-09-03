@@ -282,7 +282,7 @@ public:
     }
   }
 
-  static const unsigned short MaxSlot = ~0;
+  static const unsigned short MaxSlot = ~0 >> 1;
   unsigned short getIdx() const { return InstIdx; }
 
   FSMState *getParent() { return Parent; }

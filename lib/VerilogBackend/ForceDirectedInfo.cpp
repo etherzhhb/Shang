@@ -40,47 +40,67 @@ void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 
+void ForceDirectedInfo::buildTimeFrame() {
+  AtomToTF.clear();
+  // Build the time frame
+  assert(State->isScheduled() && "Entry must be scheduled first!");
+  unsigned FirstStep = State->getSlot();
+  buildASAPStep(State, FirstStep);
+  buildALAPStep(State->getExitRoot(), CriticalPathEnd);
+
+  DEBUG(dumpTimeFrame());
+}
+
 void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
   AtomToTF[Root].first = step;
 
   FSMState::iterator Start = std::find(State->begin(), State->end(),
                                        Root);
 
-  for (FSMState::iterator I = ++Start, E = State->end(); I != E; ++I) {
-    HWAtom *A = *I;
-    if (A->isScheduled()) {
-      AtomToTF[A].first = A->getSlot();
-      continue;
-    }
+  bool changed = false;
 
-    DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
-          A->dump(););
+  // Build the time frame iteratively.
+  do {
+    changed = false;
+    for (FSMState::iterator I = ++Start, E = State->end(); I != E; ++I) {
+      HWAtom *A = *I;
+      if (A->isScheduled()) {
+        AtomToTF[A].first = A->getSlot();
+        continue;
+      }
 
-    unsigned NewStep = 0;
+      DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
+            A->dump(););
 
-    for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
-        DI != DE; ++DI) {
-      const HWAtom *Dep = *DI;
-      if (!DI.getEdge()->isBackEdge() || (Dep->isScheduled() && MII)) {
-        unsigned DepASAP = Dep->isScheduled() ?
-                           Dep->getSlot() : getASAPStep(Dep);
-        int Step = DepASAP + Dep->getLatency()
-                        - MII * DI.getEdge()->getItDst();
-        DEBUG(dbgs() << "From ";
-              if (DI.getEdge()->isBackEdge())
-                dbgs() << "BackEdge ";
-              Dep->print(dbgs());
-              dbgs() << " Step " << Step << '\n');
-        unsigned UStep = std::max(0, Step);
-        NewStep = std::max(UStep, NewStep);
+      unsigned NewStep = 0;
+
+      for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
+          DI != DE; ++DI) {
+        const HWAtom *Dep = *DI;
+        if (!DI.getEdge()->isBackEdge() || MII) {
+          unsigned DepASAP = Dep->isScheduled() ?
+                             Dep->getSlot() : getASAPStep(Dep);
+          int Step = DepASAP + Dep->getLatency()
+                          - MII * DI.getEdge()->getItDst();
+          DEBUG(dbgs() << "From ";
+                if (DI.getEdge()->isBackEdge())
+                  dbgs() << "BackEdge ";
+                Dep->print(dbgs());
+                dbgs() << " Step " << Step << '\n');
+          unsigned UStep = std::max(0, Step);
+          NewStep = std::max(UStep, NewStep);
+        }
+      }
+
+      DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
+      A->dump();
+      dbgs() << "\n\n";);
+      if (AtomToTF[A].first != NewStep) {
+        AtomToTF[A].first = NewStep;
+        changed |= true;
       }
     }
-
-    DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
-    A->dump();
-    dbgs() << "\n\n";);
-    AtomToTF[A].first = NewStep;
-  }
+  } while (changed);
 
   HWAOpFU *Exit = State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
@@ -92,46 +112,61 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
   FSMState::reverse_iterator Start = std::find(State->rbegin(), State->rend(),
                                                Root);
 
-  for (FSMState::reverse_iterator I = ++Start, E = State->rend();
-       I != E; ++I) {
-    HWAtom *A = *I;
-    if (A->isScheduled()) {
-      AtomToTF[A].second = A->getSlot();
-      continue;
-    }
+  bool changed = false;
 
-    DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
-          A->dump(););
-
-    unsigned NewStep = HWAtom::MaxSlot;
- 
-    for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
-         UI != UE; ++UI) {
-      HWEdge *UseEdge = (*UI)->getEdgeFrom(A);
-      const HWAtom *Use = *UI;
-
-      if (!UseEdge->isBackEdge() || (Use->isScheduled() && MII)) {
-        unsigned UseALAP = Use->isScheduled() ?
-                           Use->getSlot() : getALAPStep(Use);
-        unsigned Step = UseALAP - A->getLatency()
-                        + MII * UseEdge->getItDst();
-        DEBUG(dbgs() << "From ";
-              if (UseEdge->isBackEdge())
-                dbgs() << "BackEdge ";
-              Use->print(dbgs());
-              dbgs() << " Step " << Step << '\n');
-        NewStep = std::min(Step, NewStep);
+  // Build the time frame iteratively.
+  do {
+    changed = false;
+    for (FSMState::reverse_iterator I = ++Start, E = State->rend();
+         I != E; ++I) {
+      HWAtom *A = *I;
+      if (A->isScheduled()) {
+        AtomToTF[A].second = A->getSlot();
+        continue;
       }
+
+      DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
+            A->dump(););
+
+      unsigned NewStep = HWAtom::MaxSlot;
+   
+      for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
+           UI != UE; ++UI) {
+        HWEdge *UseEdge = (*UI)->getEdgeFrom(A);
+        const HWAtom *Use = *UI;
+
+        if (!UseEdge->isBackEdge() || MII) {
+          unsigned UseALAP = Use->isScheduled() ?
+                             Use->getSlot() : getALAPStep(Use);
+          if (UseALAP == 0) {
+            assert(UseEdge->isBackEdge() && "Broken time frame!");
+            UseALAP = HWAtom::MaxSlot;
+          }
+          
+          unsigned Step = UseALAP - A->getLatency()
+                          + MII * UseEdge->getItDst();
+          DEBUG(dbgs() << "From ";
+                if (UseEdge->isBackEdge())
+                  dbgs() << "BackEdge ";
+                Use->print(dbgs());
+                dbgs() << " Step " << Step << '\n');
+          NewStep = std::min(Step, NewStep);
+        }
+      }
+
+      DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
+            A->dump();
+            dbgs() << "\n\n";);
+      if (AtomToTF[A].second != NewStep) {
+        AtomToTF[A].second = NewStep;
+        changed = true;
+      }
+
+      assert(getALAPStep(A) >= getASAPStep(A)
+             && "Broken time frame!");
     }
 
-    DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
-          A->dump();
-          dbgs() << "\n\n";);
-    AtomToTF[A].second = NewStep;
-
-    assert(getALAPStep(A) >= getASAPStep(A)
-           && "Broken time frame!");
-  }
+  } while (changed);
 }
 
 void ForceDirectedInfo::printTimeFrame(raw_ostream &OS) const {
@@ -336,15 +371,7 @@ bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
 }
 
 unsigned ForceDirectedInfo::buildFDInfo() {
-  AtomToTF.clear();
-  // Build the time frame
-  assert(State->isScheduled() && "Entry must be scheduled first!");
-  unsigned FirstStep = State->getSlot();
-  buildASAPStep(State, FirstStep);
-  buildALAPStep(State->getExitRoot(), CriticalPathEnd);
-
-  DEBUG(dumpTimeFrame());
-
+  buildTimeFrame();
   buildDGraph();
   buildAvgDG();
 

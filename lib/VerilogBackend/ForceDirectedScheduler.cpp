@@ -330,8 +330,7 @@ unsigned FDLScheduler::findBestStep(HWAtom *A) {
     // Temporary schedule A to i so we can get a more accurate pred and succ
     // force. Because the back edge constraint from A will be considered.
     A->scheduledTo(i);
-    FDInfo->buildASAPStep(CurState, CurState->getSlot());
-    FDInfo->buildALAPStep(CurState->getExitRoot(), FDInfo->getCriticalPathEnd());
+    FDInfo->buildTimeFrame();
     // Compute the forces.
     double SelfForce = FDInfo->computeSelfForceAt(A, i);
     // The follow function will invalid the time frame.
