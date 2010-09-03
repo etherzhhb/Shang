@@ -27,6 +27,12 @@
 using namespace llvm;
 using namespace esyn;
 
+
+static cl::opt<bool>
+NoFDSchedule("disable-fd-schedule",
+             cl::desc("vbe - Do not preform force-directed schedule"),
+             cl::Hidden, cl::init(false));
+
 //===----------------------------------------------------------------------===//
 void ForceDirectedInfo::buildTimeFrame() {
   AtomToTF.clear();
@@ -279,8 +285,8 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
 double ForceDirectedInfo::computeSelfForceAt(const HWAtom *A, unsigned step) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
-  //
-  // if (!OpInst->isBinded()) return 0.0;
+
+  if (NoFDSchedule && !OpInst->isBinded()) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
   double Force = getDGraphAt(step, FU) - getAvgDG(OpInst);
@@ -293,8 +299,8 @@ double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
                                             unsigned int end) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
-  //
-  // if (!OpInst->isBinded()) return 0.0;
+
+  if (NoFDSchedule && !OpInst->isBinded()) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
   double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
