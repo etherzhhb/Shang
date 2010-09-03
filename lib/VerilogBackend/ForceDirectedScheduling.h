@@ -145,9 +145,6 @@ protected:
   template<class It>
   void fillQueue(AtomQueueType &Queue, It begin, It end, HWAtom *FirstNode = 0);
 
-  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
-  typedef ModuloScheduleInfo::rec_vector rec_vector;
-
   // Return true when resource constraints preserved after citical path
   // scheduled
   bool scheduleCriticalPath();
@@ -176,6 +173,8 @@ public:
 };
 
 class ForceDirectedModuloScheduler : public ForceDirectedListSchedulingBase {
+  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
+  typedef ModuloScheduleInfo::rec_vector rec_vector;
 public:
   ForceDirectedModuloScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
     : ForceDirectedListSchedulingBase(HAInfo, S, MII) {}
