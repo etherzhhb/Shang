@@ -48,7 +48,7 @@ void ForceDirectedListScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
   for(;;) {
     CurState->resetSchedule(StartStep);
-    FDInfo.buildFDInfo();
+    FDInfo.buildFDInfo(true);
 
     fds_sort s(FDInfo);
     AtomQueueType AQueue(s);
@@ -90,7 +90,7 @@ void ForceDirectedModuloScheduler::scheduleState() {
 
   // Ensure us can schedule the critical path.
   for (;;) {
-    FDInfo.buildFDInfo();
+    FDInfo.buildFDInfo(true);
     if (scheduleCriticalPath())
       break;
     DEBUG(FDInfo.dumpTimeFrame());
@@ -107,7 +107,7 @@ void ForceDirectedModuloScheduler::scheduleState() {
 
   FDInfo.setMII(II);
   for (;;) {
-    FDInfo.buildFDInfo();
+    FDInfo.buildFDInfo(true);
     if (scheduleCriticalPath())
       break;
     DEBUG(FDInfo.dumpTimeFrame());
@@ -137,7 +137,7 @@ void ForceDirectedModuloScheduler::scheduleState() {
     }
     // Prepare for next schedule.
     CurState->resetSchedule(StartStep);
-    FDInfo.buildFDInfo();
+    FDInfo.buildFDInfo(true);
   }
 
   schedulePassiveAtoms();
@@ -218,7 +218,7 @@ bool ForceDirectedListSchedulingBase::scheduleCriticalPath() {
     A->scheduledTo(step);
   }
 
-  FDInfo.buildFDInfo();
+  FDInfo.buildFDInfo(false);
   return FDInfo.isResourceConstraintPreserved();
 }
 
@@ -237,7 +237,7 @@ bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
   }
 
   A->scheduledTo(step);
-  FDInfo.buildFDInfo();
+  FDInfo.buildFDInfo(false);
   return scheduleCriticalPath();
 }
 

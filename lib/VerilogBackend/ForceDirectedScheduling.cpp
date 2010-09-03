@@ -66,7 +66,7 @@ void ForceDirectedInfo::buildASAPStep(const HWAtom *Root, unsigned step) {
       DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
             A->dump(););
 
-      unsigned NewStep = 0;
+      unsigned NewStep = getSTFASAP(A);
 
       for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
           DI != DE; ++DI) {
@@ -122,7 +122,7 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
       DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
             A->dump(););
 
-      unsigned NewStep = HWAtom::MaxSlot;
+      unsigned NewStep = getSTFALAP(A);
    
       for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
            UI != UE; ++UI) {
@@ -352,8 +352,11 @@ void ForceDirectedInfo::buildAvgDG() {
     }
 }
 
-unsigned ForceDirectedInfo::buildFDInfo() {
+unsigned ForceDirectedInfo::buildFDInfo(bool rstSTF) {
+  if (rstSTF) resetSTF();
   buildTimeFrame();
+  if (rstSTF) updateSTF();
+
   buildDGraph();
   buildAvgDG();
 
@@ -362,4 +365,23 @@ unsigned ForceDirectedInfo::buildFDInfo() {
 
 void ForceDirectedInfo::dumpDG() const {
   printDG(dbgs());
+}
+
+void ForceDirectedInfo::resetSTF() {
+  for (FSMState::iterator I = State->begin(), E = State->end();
+       I != E; ++I)
+    AtomToSTF.insert(std::make_pair(*I, std::make_pair(0, HWAtom::MaxSlot)));
+}
+
+void ForceDirectedInfo::sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP) {
+  assert(ASAP <= ALAP && "Bad time frame to sink!");
+  AtomToSTF[A] = std::make_pair(ASAP, ALAP);
+}
+
+void ForceDirectedInfo::updateSTF() {
+  for (FSMState::iterator I = State->begin(), E = State->end();
+      I != E; ++I) {
+    HWAtom *A = *I;
+    sinkSTF(A, getASAPStep(A), getALAPStep(A));
+  }
 }

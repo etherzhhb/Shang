@@ -54,18 +54,28 @@ class ForceDirectedInfo {
 
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
+
+  void resetSTF();
+  void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
+  void updateSTF();
 public:
 
   /// @name TimeFrame
   //{
+  void buildTimeFrame();
+
   unsigned getASAPStep(const HWAtom *A) const {
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].first;
   }
-
-  void buildTimeFrame();
-
   unsigned getALAPStep(const HWAtom *A) const {
     return const_cast<ForceDirectedInfo*>(this)->AtomToTF[A].second;
+  }
+
+  unsigned getSTFASAP(const HWAtom *A) const {
+    return const_cast<ForceDirectedInfo*>(this)->AtomToSTF[A].first;
+  }
+  unsigned getSTFALAP(const HWAtom *A) const {
+    return const_cast<ForceDirectedInfo*>(this)->AtomToSTF[A].second;
   }
 
   unsigned getTimeFrame(const HWAtom *A) const {
@@ -110,7 +120,7 @@ public:
   double computePredForceAt(const HWAtom *A, unsigned step);
   //}
 
-  unsigned buildFDInfo();
+  unsigned buildFDInfo(bool resetSTF);
 
   void setMII(unsigned II) { MII = II; }
   unsigned getMII() const { return MII; }
