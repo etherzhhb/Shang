@@ -33,11 +33,16 @@ using namespace esyn;
 
 namespace {
 struct FDSPass : public BasicBlockPass {
+  FSMState *State;
+  ForceDirectedSchedulingBase *Scheduler;
   /// @name Common pass interface
   //{
   static char ID;
-  FDSPass() : BasicBlockPass(&ID) {}
+  FDSPass() : BasicBlockPass(&ID), State(0) {}
   bool runOnBasicBlock(BasicBlock &BB);
+  void releaseMemory();
+  void scheduleACyclicCodeRegion();
+  void scheduleCyclicCodeRegion(unsigned II);
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void print(raw_ostream &O, const Module *M) const;
   //}
@@ -58,19 +63,17 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HWAtomInfo *HI = &getAnalysis<HWAtomInfo>();
 
-  FSMState *State = HI->getStateFor(BB);
+  State = HI->getStateFor(BB);
 
   // Create the FDInfo.
   ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
   
-  OwningPtr<ForceDirectedSchedulingBase> fds(0);
+  Scheduler = new ForceDirectedListScheduler(HI, State);
 
-  if (MSInfo.isModuloSchedulable()) {
-    fds.reset(new ForceDirectedModuloScheduler(HI, State, MSInfo.computeMII()));
-  } else
-    fds.reset(new ForceDirectedListScheduler(HI, State, MSInfo.computeMII()));
-
-  fds->scheduleState();
+  if (MSInfo.isModuloSchedulable())
+    scheduleCyclicCodeRegion(MSInfo.computeMII());
+  else
+    scheduleACyclicCodeRegion();
 
   HI->setTotalCycle(State->getEndSlot() + 1);
 
@@ -85,6 +88,65 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
 }
 
 void FDSPass::print(raw_ostream &O, const Module *M) const { }
+
+void FDSPass::scheduleACyclicCodeRegion() {
+  while (!Scheduler->scheduleState())
+    Scheduler->lengthenCriticalPath();
+
+  // Set the Initial Interval to the total slot, so we can generate the correct
+  // control logic for loop if MS is disable.
+  if (State->haveSelfLoop())
+    State->setII(State->getTotalSlot());
+  DEBUG(Scheduler->dumpTimeFrame());
+}
+
+void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
+  // Ensure us can schedule the critical path.
+  for (;;) {
+    Scheduler->buildFDInfo(true);
+    if (Scheduler->scheduleCriticalPath())
+      break;
+    DEBUG(Scheduler->dumpTimeFrame());
+    // TODO: check if we could ever schedule these node without breaking the
+    // resource constrain by check the DG.
+    // If the resource average DG is bigger than the total available resource
+    // we can never schedule the nodes without breaking the resource constrain.
+    Scheduler->lengthenCriticalPath();
+  }
+
+  // Dirty Hack: Search the solution by increasing MII and critical path
+  // alternatively.
+  Scheduler->setMII(II);
+  for (;;) {
+    Scheduler->buildFDInfo(true);
+    if (Scheduler->scheduleCriticalPath())
+      break;
+    DEBUG(Scheduler->dumpTimeFrame());
+    Scheduler->lengthenMII();
+  }
+
+  bool lastIncMII = true;
+  for (;;) {
+    if (Scheduler->scheduleState()) {
+      // Set up the initial interval.
+      State->setII(Scheduler->getMII());
+      break;
+    } else if (lastIncMII) {
+      Scheduler->lengthenCriticalPath();
+      lastIncMII = false;
+    } else {
+      Scheduler->lengthenMII();
+      II = Scheduler->getMII();
+      lastIncMII = true;
+    }
+  }
+}
+
+void FDSPass::releaseMemory() {
+  State = 0;
+  delete Scheduler;
+  Scheduler = 0;
+}
 
 Pass *esyn::createFDLSPass() {
   return new FDSPass();

@@ -367,7 +367,11 @@ void ForceDirectedSchedulingBase::buildAvgDG() {
 }
 
 unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
-  if (rstSTF) resetSTF();
+  if (rstSTF) {
+    resetSTF();
+    unsigned StartStep = HI->getTotalCycle();
+    State->resetSchedule(StartStep);
+  }
   buildTimeFrame();
   if (rstSTF) updateSTF();
 

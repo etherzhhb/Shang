@@ -27,8 +27,8 @@ using namespace esyn;
 
 //===----------------------------------------------------------------------===//
 bool
-ForceDirectedListSchedulingBase::fds_sort::operator()(const HWAOpFU* LHS,
-                                                      const HWAOpFU* RHS) const {
+ForceDirectedListScheduler::fds_sort::operator()(const HWAOpFU* LHS,
+                                                 const HWAOpFU* RHS) const {
   HWFUnit *LFU = LHS->getFUnit(), *RFU = RHS->getFUnit();
   unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
   // Schedule the atom with less available function unit first.
@@ -46,103 +46,26 @@ ForceDirectedListSchedulingBase::fds_sort::operator()(const HWAOpFU* LHS,
 
 //===----------------------------------------------------------------------===//
 
-void ForceDirectedListScheduler::scheduleState() {
+bool ForceDirectedListScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
-  for(;;) {
-    State->resetSchedule(StartStep);
-    buildFDInfo(true);
+  State->resetSchedule(StartStep);
+  buildFDInfo(true);
+  if (!scheduleCriticalPath())
+    return false;
 
-    fds_sort s(*this);
-    AtomQueueType AQueue(s);
-
-    fillQueue(AQueue, State->begin(), State->end());
-
-    if (!scheduleQueue(AQueue))
-      lengthenCriticalPath();
-    else // Break the loop if we schedule successful.
-      break;
-  }
-
-  schedulePassiveAtoms();
-
-  // Set the Initial Interval to the total slot, so we can generate the correct
-  // control logic for loop if MS is disable.
-  if (State->haveSelfLoop())
-    State->setII(State->getTotalSlot());
-  DEBUG(dumpTimeFrame());
-}
-
-
-//===----------------------------------------------------------------------===//
-
-bool ForceDirectedModuloScheduler::scheduleAtII() {
   fds_sort s(*this);
   AtomQueueType AQueue(s);
 
-  // Schedule other nodes.
-  AQueue.clear();
   fillQueue(AQueue, State->begin(), State->end());
 
-  return scheduleQueue(AQueue);
-}
-
-void ForceDirectedModuloScheduler::scheduleState() {
-  unsigned StartStep = HI->getTotalCycle();
-  State->scheduledTo(StartStep);
-
-  // Ensure us can schedule the critical path.
-  for (;;) {
-    buildFDInfo(true);
-    if (scheduleCriticalPath())
-      break;
-    DEBUG(dumpTimeFrame());
-    // TODO: check if we could ever schedule these node without breaking the
-    // resource constrain by check the DG.
-    // If the resource average DG is bigger than the total available resource
-    // we can never schedule the nodes without breaking the resource constrain.
-    State->resetSchedule(StartStep);
-    lengthenCriticalPath();
-  }
-
-  // Dirty Hack: Search the solution by increasing MII and critical path
-  // alternatively.
-
-  setMII(II);
-  for (;;) {
-    buildFDInfo(true);
-    if (scheduleCriticalPath())
-      break;
-    DEBUG(dumpTimeFrame());
-    lengthenMII();
-    State->resetSchedule(StartStep);
-  }
-
-  bool lastIncMII = true;
-  for (;;) {
-    bool SchedSucc = scheduleCriticalPath();
-    assert(SchedSucc
-      && "Why nodes critical path can not be schedule since DG is ok?");
-
-    if (scheduleAtII()) {
-      DEBUG(dumpTimeFrame());
-      DEBUG(dumpDG());
-      // Set up the initial interval.
-      State->setII(getMII());
-      break;
-    } else if (lastIncMII) {
-      lengthenCriticalPath();
-      lastIncMII = false;
-    } else {
-      lengthenMII();
-      II = getMII();
-      lastIncMII = true;
-    }
-    // Prepare for next schedule.
-    State->resetSchedule(StartStep);
-    buildFDInfo(true);
-  }
+  if (!scheduleQueue(AQueue))
+    return false;
 
   schedulePassiveAtoms();
+
+  DEBUG(dumpTimeFrame());
+  DEBUG(dumpDG());
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -185,7 +108,7 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath() {
 //===----------------------------------------------------------------------===//
 
 template<class It>
-void ForceDirectedListSchedulingBase::fillQueue(AtomQueueType &Queue, It begin, It end,
+void ForceDirectedListScheduler::fillQueue(AtomQueueType &Queue, It begin, It end,
                         HWAtom *FirstNode) {
   for (It I = begin, E = end; I != E; ++I) {
     HWAtom *A = *I;
@@ -201,7 +124,7 @@ void ForceDirectedListSchedulingBase::fillQueue(AtomQueueType &Queue, It begin, 
   Queue.reheapify();
 }
 
-unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
+unsigned ForceDirectedListScheduler::findBestStep(HWAtom *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   DEBUG(dbgs() << "\tScan for best step:\n");
   // For each possible step:
@@ -218,7 +141,7 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
   return BestStep.first;
 }
 
-bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
+bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
   assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
   unsigned step = getASAPStep(A);
@@ -238,7 +161,7 @@ bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
   return scheduleCriticalPath();
 }
 
-bool ForceDirectedListSchedulingBase::scheduleQueue(AtomQueueType &Queue) {
+bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
     HWAOpFU *A = Queue.top();
@@ -259,7 +182,7 @@ bool ForceDirectedListSchedulingBase::scheduleQueue(AtomQueueType &Queue) {
 
 //===----------------------------------------------------------------------===//
 
-void ForceDirectedScheduler::scheduleState() {
+bool ForceDirectedScheduler::scheduleState() {
 
   unsigned StartStep = HI->getTotalCycle();
 
@@ -285,6 +208,7 @@ void ForceDirectedScheduler::scheduleState() {
   if (State->haveSelfLoop())
     State->setII(State->getTotalSlot());
   DEBUG(dumpTimeFrame());
+  return true;
 }
 
 void ForceDirectedScheduler::findBestSink() {

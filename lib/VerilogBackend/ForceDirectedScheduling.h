@@ -63,18 +63,16 @@ private:
 protected:
   HWAtomInfo *HI;
   FSMState *State;
-  unsigned II;
 
+public:
+  ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S)
+    : HI(HAInfo), State(S), MII(0), CriticalPathEnd(0) {}
+
+  virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
   // scheduled
   bool scheduleCriticalPath();
   void schedulePassiveAtoms();
-
-public:
-  ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned mii)
-    : HI(HAInfo), State(S), II(mii), MII(0), CriticalPathEnd(0) {}
-
-  virtual void scheduleState() = 0;
 
   /// @name TimeFrame
   //{
@@ -150,7 +148,7 @@ public:
   unsigned getCriticalPathEnd() { return CriticalPathEnd; }
 };
 
-class ForceDirectedListSchedulingBase : public ForceDirectedSchedulingBase {
+class ForceDirectedListScheduler : public ForceDirectedSchedulingBase {
 protected:
   /// @name PriorityQueue
   //{
@@ -172,35 +170,18 @@ protected:
   bool scheduleQueue(AtomQueueType &Queue);
   //}
 
-  ForceDirectedListSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII) 
-    : ForceDirectedSchedulingBase(HAInfo, S, MII) {}
-};
-
-class ForceDirectedListScheduler : public ForceDirectedListSchedulingBase {
+  bool scheduleState();
 public:
-  ForceDirectedListScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
-    : ForceDirectedListSchedulingBase(HAInfo, S, MII) {}
-
-  void scheduleState();
-};
-
-class ForceDirectedModuloScheduler : public ForceDirectedListSchedulingBase {
-  typedef ModuloScheduleInfo::rec_iterator rec_iterator;
-  typedef ModuloScheduleInfo::rec_vector rec_vector;
-public:
-  ForceDirectedModuloScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
-    : ForceDirectedListSchedulingBase(HAInfo, S, MII) {}
-
-  void scheduleState();
-  bool scheduleAtII();
+  ForceDirectedListScheduler(HWAtomInfo *HAInfo, FSMState *S) 
+    : ForceDirectedSchedulingBase(HAInfo, S) {}
 };
 
 class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
 public:
-  ForceDirectedScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
-    : ForceDirectedSchedulingBase(HAInfo, S, MII) {}
+  ForceDirectedScheduler(HWAtomInfo *HAInfo, FSMState *S)
+    : ForceDirectedSchedulingBase(HAInfo, S) {}
 
-  void scheduleState();
+  bool scheduleState();
   double trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame);
   void findBestSink();
 };
