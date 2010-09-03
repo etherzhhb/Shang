@@ -58,10 +58,19 @@ class ForceDirectedInfo {
   void resetSTF();
   void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
   void updateSTF();
+
+  unsigned getScheduleTimeFrame(const HWAtom *A) const {
+    return getSTFALAP(A) - getSTFASAP(A) + 1;
+  }
 public:
 
   /// @name TimeFrame
   //{
+  void scheduleAtomTo(HWAtom *A, unsigned step) {
+    A->scheduledTo(step);
+    sinkSTF(A, step, step);
+  }
+
   void buildTimeFrame();
 
   unsigned getASAPStep(const HWAtom *A) const {
@@ -111,13 +120,13 @@ public:
 
   double computeRangeForce(const HWAtom *A,
                            unsigned start, unsigned end/*include*/);
-  double computeSelfForceAt(const HWAtom *A, unsigned step);
+  double computeSelfForce(const HWAtom *A);
   /// This function will invalid the asap step of all node in
   /// successor tree
-  double computeSuccForceAt(const HWAtom *A, unsigned step);
+  double computeSuccForce(const HWAtom *A);
   /// This function will invalid the alap step of all node in
   /// predecessor tree
-  double computePredForceAt(const HWAtom *A, unsigned step);
+  double computePredForce(const HWAtom *A);
   //}
 
   unsigned buildFDInfo(bool resetSTF);
@@ -132,14 +141,26 @@ public:
     MII(0), CriticalPathEnd(0) {}
 };
 
-class ForceDirectedListSchedulingBase {
+class ForceDirectedSchedulingBase {
 protected:
   HWAtomInfo *HI;
   ForceDirectedInfo FDInfo;
   FSMState *CurState;
-
   unsigned II;
 
+  // Return true when resource constraints preserved after citical path
+  // scheduled
+  bool scheduleCriticalPath();
+  void schedulePassiveAtoms();
+
+  ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : HI(HAInfo), FDInfo(HAInfo, S), CurState(S), II(MII) {}
+public:
+  virtual void scheduleState() = 0;
+};
+
+class ForceDirectedListSchedulingBase : public ForceDirectedSchedulingBase {
+protected:
   /// @name PriorityQueue
   //{
   struct fds_sort {
@@ -154,26 +175,17 @@ protected:
   template<class It>
   void fillQueue(AtomQueueType &Queue, It begin, It end, HWAtom *FirstNode = 0);
 
-  // Return true when resource constraints preserved after citical path
-  // scheduled
-  bool scheduleCriticalPath();
-
   unsigned findBestStep(HWAtom *A);
 
   bool scheduleAtom(HWAtom *A);
-  void schedulePassiveAtoms();
   bool scheduleQueue(AtomQueueType &Queue);
   //}
 
-public:
-  ForceDirectedListSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
-    : HI(HAInfo), FDInfo(HAInfo, S), CurState(S), II(MII) {}
-
-  virtual void scheduleState() = 0;
+  ForceDirectedListSchedulingBase(HWAtomInfo *HAInfo, FSMState *S, unsigned MII) 
+    : ForceDirectedSchedulingBase(HAInfo, S, MII) {}
 };
 
 class ForceDirectedListScheduler : public ForceDirectedListSchedulingBase {
-
 public:
   ForceDirectedListScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
     : ForceDirectedListSchedulingBase(HAInfo, S, MII) {}
@@ -190,6 +202,16 @@ public:
 
   void scheduleState();
   bool scheduleAtII();
+};
+
+class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
+public:
+  ForceDirectedScheduler(HWAtomInfo *HAInfo, FSMState *S, unsigned MII)
+    : ForceDirectedSchedulingBase(HAInfo, S, MII) {}
+
+  void scheduleState();
+  void trySinkAtom(HWAtom *A);
+  void findBestSink();
 };
 
 } // End namespace.

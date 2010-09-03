@@ -63,7 +63,7 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   // Create the FDInfo.
   ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), CurState);
   
-  OwningPtr<ForceDirectedListSchedulingBase> fds(0);
+  OwningPtr<ForceDirectedSchedulingBase> fds(0);
 
   if (MSInfo.isModuloSchedulable()) {
     fds.reset(new ForceDirectedModuloScheduler(HI, CurState, MSInfo.computeMII()));

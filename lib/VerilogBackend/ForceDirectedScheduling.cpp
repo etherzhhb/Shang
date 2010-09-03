@@ -282,20 +282,22 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
   return ret;
 }
 
-double ForceDirectedInfo::computeSelfForceAt(const HWAtom *A, unsigned step) {
+double ForceDirectedInfo::computeSelfForce(const HWAtom *A) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
   if (NoFDSchedule && !OpInst->isBinded()) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
-  double Force = getDGraphAt(step, FU) - getAvgDG(OpInst);
+  double Force = getRangeDG(FU, getSTFASAP(A), getSTFASAP(A))
+                 - getAvgDG(OpInst);
 
   // Make the atoms taking expensive function unit have bigger force.
   return Force / FU->getTotalFUs();
 }
 
-double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
+double ForceDirectedInfo::computeRangeForce(const HWAtom *A,
+                                            unsigned int start,
                                             unsigned int end) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
@@ -307,30 +309,25 @@ double ForceDirectedInfo::computeRangeForce(const HWAtom *A, unsigned int start,
   return Force / FU->getTotalFUs();
 }
 
-double ForceDirectedInfo::computeSuccForceAt(const HWAtom *A, unsigned step) {
-  // Adjust the time frame.
-  //buildASAPStep(A, step); 
-
+double ForceDirectedInfo::computeSuccForce(const HWAtom *A) {
   double ret = 0.0;
-  FSMState::iterator at = std::find(State->begin(), State->end(), A);
-  assert(at != State->end() && "Can not find Atom!");
 
-  for (FSMState::iterator I = ++at, E = State->end(); I != E; ++I)
+  for (const_usetree_iterator I = const_usetree_iterator::begin(A),
+       E = const_usetree_iterator::end(A); I != E; ++I)
     if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
       ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
 
   return ret;
 }
 
-double ForceDirectedInfo::computePredForceAt(const HWAtom *A, unsigned step) {
+double ForceDirectedInfo::computePredForce(const HWAtom *A) {
   // Adjust the time frame.
   //buildALAPStep(A, step);
 
   double ret = 0;
-  FSMState::iterator at = std::find(State->begin(), State->end(), A);
-  assert(at != State->end() && "Can not find Atom!");
 
-  for (FSMState::iterator I = State->begin(), E = at; I != E; ++I)
+  for (const_deptree_iterator I = const_deptree_iterator::begin(A),
+       E = const_deptree_iterator::end(A); I != E; ++I)
     if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
       ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
 

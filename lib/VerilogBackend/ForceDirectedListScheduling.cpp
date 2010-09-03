@@ -26,7 +26,9 @@ using namespace llvm;
 using namespace esyn;
 
 //===----------------------------------------------------------------------===//
-bool ForceDirectedListSchedulingBase::fds_sort::operator()(const HWAOpFU* LHS, const HWAOpFU* RHS) const {
+bool
+ForceDirectedListSchedulingBase::fds_sort::operator()(const HWAOpFU* LHS,
+                                                      const HWAOpFU* RHS) const {
   HWFUnit *LFU = LHS->getFUnit(), *RFU = RHS->getFUnit();
   unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
   // Schedule the atom with less available function unit first.
@@ -86,7 +88,7 @@ bool ForceDirectedModuloScheduler::scheduleAtII() {
 
 void ForceDirectedModuloScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
-  CurState->scheduledTo(StartStep);
+  FDInfo.scheduleAtomTo(CurState, StartStep);
 
   // Ensure us can schedule the critical path.
   for (;;) {
@@ -145,17 +147,41 @@ void ForceDirectedModuloScheduler::scheduleState() {
 
 //===----------------------------------------------------------------------===//
 
-void ForceDirectedListSchedulingBase::schedulePassiveAtoms() {
+void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
       I != E; ++I) {
     HWAtom *A = *I;
     if (A->isScheduled())
       continue;
 
-    bool res = scheduleAtom(A);
+    DEBUG(A->print(dbgs()));
+    unsigned step = FDInfo.getASAPStep(A);
+    FDInfo.scheduleAtomTo(A, step);
+    FDInfo.buildFDInfo(false);
+    bool res = scheduleCriticalPath();
+
     assert(res && "Why A can not schedule?");
   }
 }
+
+bool ForceDirectedSchedulingBase::scheduleCriticalPath() {
+  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
+      I != E; ++I) {
+    HWAtom *A = *I;
+  
+    if (A->isScheduled() || FDInfo.getTimeFrame(A) != 1)
+      continue;
+
+    unsigned step = FDInfo.getASAPStep(A);
+    DEBUG(A->print(dbgs()));
+    DEBUG(dbgs() << " asap step: " << step << "\n");
+    FDInfo.scheduleAtomTo(A, step);
+  }
+
+  FDInfo.buildFDInfo(false);
+  return FDInfo.isResourceConstraintPreserved();
+}
+//===----------------------------------------------------------------------===//
 
 template<class It>
 void ForceDirectedListSchedulingBase::fillQueue(AtomQueueType &Queue, It begin, It end,
@@ -184,15 +210,15 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
 
     // Temporary schedule A to i so we can get a more accurate pred and succ
     // force. Because the back edge constraint from A will be considered.
-    A->scheduledTo(i);
+    FDInfo.scheduleAtomTo(A, i);
     FDInfo.buildTimeFrame();
     // Compute the forces.
-    double SelfForce = FDInfo.computeSelfForceAt(A, i);
+    double SelfForce = FDInfo.computeSelfForce(A);
     // The follow function will invalid the time frame.
     DEBUG(dbgs() << " Self Force: " << SelfForce);
-    double PredForce = FDInfo.computePredForceAt(A, i);
+    double PredForce = FDInfo.computePredForce(A);
     DEBUG(dbgs() << " Pred Force: " << PredForce);
-    double SuccForce = FDInfo.computeSuccForceAt(A, i);
+    double SuccForce = FDInfo.computeSuccForce(A);
     DEBUG(dbgs() << " Succ Force: " << SuccForce);
     double Force = SelfForce + PredForce + SuccForce;
     DEBUG(dbgs() << " Force: " << Force);
@@ -202,24 +228,6 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
     DEBUG(dbgs() << '\n');
   }
   return BestStep.first;
-}
-
-bool ForceDirectedListSchedulingBase::scheduleCriticalPath() {
-  for (FSMState::iterator I = CurState->begin(), E = CurState->end();
-      I != E; ++I) {
-    HWAtom *A = *I;
-  
-    if (A->isScheduled() || FDInfo.getTimeFrame(A) != 1)
-      continue;
-
-    unsigned step = FDInfo.getASAPStep(A);
-    DEBUG(A->print(dbgs()));
-    DEBUG(dbgs() << " asap step: " << step << "\n");
-    A->scheduledTo(step);
-  }
-
-  FDInfo.buildFDInfo(false);
-  return FDInfo.isResourceConstraintPreserved();
 }
 
 bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
@@ -236,7 +244,7 @@ bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
     }
   }
 
-  A->scheduledTo(step);
+  FDInfo.scheduleAtomTo(A, step);
   FDInfo.buildFDInfo(false);
   return scheduleCriticalPath();
 }
@@ -258,4 +266,45 @@ bool ForceDirectedListSchedulingBase::scheduleQueue(AtomQueueType &Queue) {
   }
 
   return true;
+}
+
+//===----------------------------------------------------------------------===//
+
+void ForceDirectedScheduler::scheduleState() {
+
+  unsigned StartStep = HI->getTotalCycle();
+
+  //for(;;) {
+  //  CurState->resetSchedule(StartStep);
+  //  FDInfo.buildFDInfo(true);
+
+  //  fds_sort s(FDInfo);
+  //  AtomQueueType AQueue(s);
+
+  //  fillQueue(AQueue, CurState->begin(), CurState->end());
+
+  //  if (!scheduleQueue(AQueue))
+  //    FDInfo.lengthenCriticalPath();
+  //  else // Break the loop if we schedule successful.
+  //    break;
+  //}
+
+  schedulePassiveAtoms();
+
+  // Set the Initial Interval to the total slot, so we can generate the correct
+  // control logic for loop if MS is disable.
+  if (CurState->haveSelfLoop())
+    CurState->setII(CurState->getTotalSlot());
+  DEBUG(FDInfo.dumpTimeFrame());
+}
+
+void ForceDirectedScheduler::findBestSink() {
+
+}
+
+void ForceDirectedScheduler::trySinkAtom(HWAtom *A) {
+  unsigned ASAP = FDInfo.getASAPStep(A), ALAP = FDInfo.getALAPStep(A);
+  
+  //
+
 }
