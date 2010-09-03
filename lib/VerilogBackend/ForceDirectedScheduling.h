@@ -56,8 +56,6 @@ class ForceDirectedInfo {
   unsigned MII, CriticalPathEnd;
 
   void resetSTF();
-  void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
-  void updateSTF();
 
   unsigned getScheduleTimeFrame(const HWAtom *A) const {
     return getSTFALAP(A) - getSTFASAP(A) + 1;
@@ -66,10 +64,8 @@ public:
 
   /// @name TimeFrame
   //{
-  void scheduleAtomTo(HWAtom *A, unsigned step) {
-    A->scheduledTo(step);
-    sinkSTF(A, step, step);
-  }
+  void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
+  void updateSTF();
 
   void buildTimeFrame();
 
@@ -128,7 +124,7 @@ public:
   /// predecessor tree
   double computePredForce(const HWAtom *A);
 
-  double computeForce(const HWAtom *A);
+  double computeForce(const HWAtom *A, unsigned ASAP, unsigned ALAP);
   //}
 
   unsigned buildFDInfo(bool resetSTF);

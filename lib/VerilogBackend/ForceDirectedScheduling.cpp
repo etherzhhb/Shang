@@ -282,7 +282,10 @@ double ForceDirectedInfo::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end)
   return ret;
 }
 
-double ForceDirectedInfo::computeForce(const HWAtom *A) {
+double ForceDirectedInfo::computeForce(const HWAtom *A,
+                                       unsigned ASAP, unsigned ALAP) {
+  sinkSTF(A, ASAP, ALAP);
+  buildTimeFrame();
   // Compute the forces.
   double SelfForce = computeSelfForce(A);
   // The follow function will invalid the time frame.

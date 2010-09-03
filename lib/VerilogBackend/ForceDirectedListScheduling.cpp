@@ -88,7 +88,7 @@ bool ForceDirectedModuloScheduler::scheduleAtII() {
 
 void ForceDirectedModuloScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
-  FDInfo.scheduleAtomTo(CurState, StartStep);
+  CurState->scheduledTo(StartStep);
 
   // Ensure us can schedule the critical path.
   for (;;) {
@@ -156,8 +156,9 @@ void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
 
     DEBUG(A->print(dbgs()));
     unsigned step = FDInfo.getASAPStep(A);
-    FDInfo.scheduleAtomTo(A, step);
+    A->scheduledTo(step);
     FDInfo.buildFDInfo(false);
+    FDInfo.updateSTF();
     bool res = scheduleCriticalPath();
 
     assert(res && "Why A can not schedule?");
@@ -175,9 +176,9 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath() {
     unsigned step = FDInfo.getASAPStep(A);
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " asap step: " << step << "\n");
-    FDInfo.scheduleAtomTo(A, step);
+    A->scheduledTo(step);
   }
-
+  // Do not need to update STF.
   FDInfo.buildFDInfo(false);
   return FDInfo.isResourceConstraintPreserved();
 }
@@ -207,12 +208,7 @@ unsigned ForceDirectedListSchedulingBase::findBestStep(HWAtom *A) {
   for (unsigned i = FDInfo.getASAPStep(A), e = FDInfo.getALAPStep(A) + 1;
       i != e; ++i) {
     DEBUG(dbgs() << "At Step " << i << "\n");
-
-    // Temporary schedule A to i so we can get a more accurate pred and succ
-    // force. Because the back edge constraint from A will be considered.
-    FDInfo.scheduleAtomTo(A, i);
-    FDInfo.buildTimeFrame();
-    double Force = FDInfo.computeForce(A);
+    double Force = FDInfo.computeForce(A, i, i);
     DEBUG(dbgs() << " Force: " << Force);
     if (Force < BestStep.second)
       BestStep = std::make_pair(i, Force);
@@ -236,8 +232,9 @@ bool ForceDirectedListSchedulingBase::scheduleAtom(HWAtom *A) {
     }
   }
 
-  FDInfo.scheduleAtomTo(A, step);
+  A->scheduledTo(step);
   FDInfo.buildFDInfo(false);
+  FDInfo.updateSTF();
   return scheduleCriticalPath();
 }
 
@@ -296,7 +293,4 @@ void ForceDirectedScheduler::findBestSink() {
 
 void ForceDirectedScheduler::trySinkAtom(HWAtom *A) {
   unsigned ASAP = FDInfo.getASAPStep(A), ALAP = FDInfo.getALAPStep(A);
-  
-  //
-
 }
