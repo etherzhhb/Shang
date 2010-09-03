@@ -192,7 +192,7 @@ void HWSubGraph::unblock(SubGraphNode *N) {
 
 void HWSubGraph::addRecurrence() {
   DEBUG(dbgs() << "\nRecurrence:\n");
-  ModuloScheduleInfo::rec_vector Recurrence;
+  std::vector<HWAtom*> Recurrence;
   unsigned TotalLatency = 0;
   unsigned TotalDistance = 0;
   const HWAtom *LastAtom = stack.back()->getAtom();

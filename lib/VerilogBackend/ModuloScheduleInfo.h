@@ -33,7 +33,7 @@ class ModuloScheduleInfo {
   LoopInfo *LI;
   FSMState *State;
 
-  typedef std::multimap<unsigned, std::vector<HWAtom*> > RecMapType;
+  typedef std::multimap<unsigned, const std::vector<HWAtom*> > RecMapType;
   RecMapType RecList;
 public:
   void clear();
@@ -45,7 +45,7 @@ public:
   rec_iterator rec_end(unsigned II) { return RecList.upper_bound(II); }
   const_rec_iterator rec_end(unsigned II) const { return RecList.upper_bound(II); }
 
-  typedef std::vector<HWAtom*> rec_vector;
+  typedef const std::vector<HWAtom*> rec_vector;
 
   void addRecurrence(unsigned II, rec_vector Rec);
 
