@@ -42,7 +42,6 @@ struct FDSPass : public BasicBlockPass {
   HWAtomInfo *HI;
   ForceDirectedInfo *FDInfo;
   FSMState *CurState;
-  HWAOpFU *Exit;
 
   unsigned MII;
 
