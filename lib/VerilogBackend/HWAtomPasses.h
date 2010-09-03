@@ -30,7 +30,7 @@ namespace esyn {
 Pass *createASAPSchedulePass();
 
 // Force-directed Scheduler
-Pass *createFDLSchedulePass();
+Pass *createFDLSPass();
 
 // Registers Allocation
 Pass *createRegisterAllocationPass();

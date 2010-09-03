@@ -38,7 +38,7 @@ struct fds_sort {
   bool operator() (const HWAOpFU *LHS, const HWAOpFU *RHS) const;
 };
 
-struct FDLScheduler : public BasicBlockPass {
+struct FDSPass : public BasicBlockPass {
   HWAtomInfo *HI;
   ForceDirectedInfo *FDInfo;
   FSMState *CurState;
@@ -76,7 +76,7 @@ struct FDLScheduler : public BasicBlockPass {
   /// @name Common pass interface
   //{
   static char ID;
-  FDLScheduler() : BasicBlockPass(&ID) {}
+  FDSPass() : BasicBlockPass(&ID) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
@@ -110,16 +110,16 @@ bool fds_sort::operator()(const HWAOpFU* LHS, const HWAOpFU* RHS) const {
 }
 
 //===----------------------------------------------------------------------===//
-char FDLScheduler::ID = 0;
+char FDSPass::ID = 0;
 
-void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
+void FDSPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<LoopInfo>();
   AU.setPreservesAll();
 }
 
 template<class It>
-void FDLScheduler::fillQueue(AtomQueueType &Queue, It begin, It end,
+void FDSPass::fillQueue(AtomQueueType &Queue, It begin, It end,
                              HWAtom *FirstNode) {
   for (It I = begin, E = end; I != E; ++I) {
     HWAtom *A = *I;
@@ -135,7 +135,7 @@ void FDLScheduler::fillQueue(AtomQueueType &Queue, It begin, It end,
   Queue.reheapify();
 }
 
-bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
+bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HI = &getAnalysis<HWAtomInfo>();
 
@@ -167,7 +167,7 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   return false;
 }
 
-void FDLScheduler::FDModuloSchedule() {
+void FDSPass::FDModuloSchedule() {
   unsigned StartStep = HI->getTotalCycle();
   CurState->scheduledTo(StartStep);
 
@@ -224,7 +224,7 @@ void FDLScheduler::FDModuloSchedule() {
   }
 }
 
-bool FDLScheduler::scheduleAtII() {
+bool FDSPass::scheduleAtII() {
   fds_sort s(FDInfo);
   AtomQueueType AQueue(s);
 
@@ -235,7 +235,7 @@ bool FDLScheduler::scheduleAtII() {
   return scheduleQueue(AQueue);
 }
 
-void FDLScheduler::FDListSchedule() {
+void FDSPass::FDListSchedule() {
   unsigned StartStep = HI->getTotalCycle();
   for(;;) {
     CurState->resetSchedule(StartStep);
@@ -259,7 +259,7 @@ void FDLScheduler::FDListSchedule() {
 }
 
 
-unsigned FDLScheduler::findBestStep(HWAtom *A) {
+unsigned FDSPass::findBestStep(HWAtom *A) {
   std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
   DEBUG(dbgs() << "\tScan for best step:\n");
   // For each possible step:
@@ -289,17 +289,17 @@ unsigned FDLScheduler::findBestStep(HWAtom *A) {
   return BestStep.first;
 }
 
-void FDLScheduler::releaseMemory() {
+void FDSPass::releaseMemory() {
   clear();
 }
 
-void FDLScheduler::clear() {
+void FDSPass::clear() {
   CurState = 0;
 }
 
-void FDLScheduler::print(raw_ostream &O, const Module *M) const { }
+void FDSPass::print(raw_ostream &O, const Module *M) const { }
 
-bool FDLScheduler::scheduleCriticalPath() {
+bool FDSPass::scheduleCriticalPath() {
   bool AnyScheduled = false;
   for (FSMState::iterator I = CurState->begin(), E = CurState->end();
       I != E; ++I) {
@@ -324,7 +324,7 @@ bool FDLScheduler::scheduleCriticalPath() {
   return true;
 }
 
-bool FDLScheduler::scheduleAtom(HWAtom *A) {
+bool FDSPass::scheduleAtom(HWAtom *A) {
   assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
   unsigned step = FDInfo->getASAPStep(A);
@@ -343,7 +343,7 @@ bool FDLScheduler::scheduleAtom(HWAtom *A) {
   return scheduleCriticalPath();
 }
 
-bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
+bool FDSPass::scheduleQueue(AtomQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
     HWAOpFU *A = Queue.top();
@@ -362,6 +362,6 @@ bool FDLScheduler::scheduleQueue(AtomQueueType &Queue) {
   return true;
 }
 
-Pass *esyn::createFDLSchedulePass() {
-  return new FDLScheduler();
+Pass *esyn::createFDLSPass() {
+  return new FDSPass();
 }

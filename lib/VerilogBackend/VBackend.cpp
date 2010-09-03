@@ -64,7 +64,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createTopSortBBPass());
     // Memory dependencies analysis
     PM.add(new HWAtomInfo());
-    PM.add(createFDLSchedulePass());
+    PM.add(createFDLSPass());
     PM.add(createCompPathBindingPass());
     //PM.add(createASAPSchedulePass());
     // Resource binding
