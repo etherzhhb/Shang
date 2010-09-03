@@ -28,18 +28,6 @@ using namespace llvm;
 using namespace esyn;
 
 //===----------------------------------------------------------------------===//
-char ForceDirectedInfo::ID = 0;
-
-RegisterPass<ForceDirectedInfo> X("vbe-fd-info",
-                           "vbe - Compute necessary information for force"
-                           " directed scheduling passes");
-
-void ForceDirectedInfo::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequiredTransitive<HWAtomInfo>();
-  AU.setPreservesAll();
-}
-
-
 void ForceDirectedInfo::buildTimeFrame() {
   AtomToTF.clear();
   // Build the time frame
@@ -165,7 +153,6 @@ void ForceDirectedInfo::buildALAPStep(const HWAtom *Root, unsigned step) {
       assert(getALAPStep(A) >= getASAPStep(A)
              && "Broken time frame!");
     }
-
   } while (changed);
 }
 
@@ -353,21 +340,6 @@ void ForceDirectedInfo::buildAvgDG() {
       res /= (double) getTimeFrame(A);
       AvgDG[A] = res;
     }
-}
-
-void ForceDirectedInfo::releaseMemory() {
-  AtomToTF.clear();
-  DGraph.clear();
-  AvgDG.clear();
-  MII = 0;
-  CriticalPathEnd = 0;
-}
-
-bool ForceDirectedInfo::runOnBasicBlock(BasicBlock &BB) {
-  HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
-  State = HI.getStateFor(BB);
-  
-  return false;
 }
 
 unsigned ForceDirectedInfo::buildFDInfo() {

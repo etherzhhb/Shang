@@ -28,12 +28,13 @@ namespace llvm {
 using namespace llvm;
 
 namespace esyn {
-class ModuloScheduleInfo : public FunctionPass {
-    HWAtomInfo *HI;
-    LoopInfo *LI;
+class ModuloScheduleInfo {
+  HWAtomInfo *HI;
+  LoopInfo *LI;
+  FSMState *State;
 
-    typedef std::multimap<unsigned, std::vector<HWAtom*> > RecMapType;
-    RecMapType RecList;
+  typedef std::multimap<unsigned, std::vector<HWAtom*> > RecMapType;
+  RecMapType RecList;
 public:
   void clear();
 
@@ -49,21 +50,17 @@ public:
   void addRecurrence(unsigned II, rec_vector Rec);
 
   /// Could us preform modulo schedule on the given state?
-  bool isModuloSchedulable(FSMState &State) const;
+  bool isModuloSchedulable() const;
 
-  unsigned computeResMII(FSMState &State) const;
+  unsigned computeResMII() const;
 
-  unsigned computeRecMII(FSMState &State);
+  unsigned computeRecMII();
 
   /// @name Common pass interface
   //{
-  static char ID;
-  ModuloScheduleInfo() : FunctionPass(&ID), HI(0), LI(0) {}
+  ModuloScheduleInfo(HWAtomInfo *HAInfo, LoopInfo *LInfo, FSMState *S)
+    : HI(HAInfo), LI(LInfo), State(S) {}
   ~ModuloScheduleInfo();
-  bool runOnFunction(Function &F);
-  void releaseMemory() { clear(); }
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const {}
   //}
 };
 }

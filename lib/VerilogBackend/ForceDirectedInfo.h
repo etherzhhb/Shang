@@ -26,7 +26,7 @@ using namespace llvm;
 
 namespace esyn {;
 
-class ForceDirectedInfo : public BasicBlockPass {
+class ForceDirectedInfo {
   HWAtomInfo *HI;
   FSMState *State;
 
@@ -116,16 +116,8 @@ public:
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   unsigned getCriticalPathEnd() { return CriticalPathEnd; }
 
-  /// @name Common pass interface
-  //{
-  static char ID;
-  ForceDirectedInfo() : BasicBlockPass(&ID), HI(0), MII(0),
-    CriticalPathEnd(0) {}
-  bool runOnBasicBlock(BasicBlock &BB);
-  void releaseMemory();
-  void getAnalysisUsage(AnalysisUsage &AU) const;
-  virtual void print(raw_ostream &O, const Module *M) const {}
-  //}
+  ForceDirectedInfo(HWAtomInfo *HAInfo, FSMState *S) : HI(HAInfo), State(S),
+    MII(0), CriticalPathEnd(0) {}
 };
 } // End namespace.
 #endif

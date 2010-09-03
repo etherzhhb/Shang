@@ -22,6 +22,7 @@
 #include "ModuloScheduleInfo.h"
 #include "HWAtomPasses.h"
 
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/ADT/PriorityQueue.h"
 
 #define DEBUG_TYPE "vbe-fd-sched"
@@ -120,8 +121,7 @@ char FDLScheduler::ID = 0;
 void FDLScheduler::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<HWAtomInfo>();
   AU.addRequired<ResourceConfig>();
-  AU.addRequired<ForceDirectedInfo>();
-  AU.addRequired<ModuloScheduleInfo>();
+  AU.addRequired<LoopInfo>();
   AU.setPreservesAll();
 }
 
@@ -163,14 +163,16 @@ HWAtom *FDLScheduler::findFirstNode(It begin, It end) {
 bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
   DEBUG(dbgs() << "==================== " << BB.getName() << '\n');
   HI = &getAnalysis<HWAtomInfo>();
-  FDInfo = &getAnalysis<ForceDirectedInfo>();
-  MSInfo = &getAnalysis<ModuloScheduleInfo>();
 
   CurState = HI->getStateFor(BB);
 
-  if (MSInfo->isModuloSchedulable(*CurState)) {
-    unsigned RecMII = MSInfo->computeRecMII(*CurState);
-    unsigned ResMII = MSInfo->computeResMII(*CurState);
+  // Create the FDInfo.
+  FDInfo = new ForceDirectedInfo(HI, CurState);
+  MSInfo = new ModuloScheduleInfo(HI, &getAnalysis<LoopInfo>(), CurState);
+
+  if (MSInfo->isModuloSchedulable()) {
+    unsigned RecMII = MSInfo->computeRecMII();
+    unsigned ResMII = MSInfo->computeResMII();
     MII = std::max(RecMII, ResMII);
     FDModuloSchedule();
   } else
@@ -186,7 +188,9 @@ bool FDLScheduler::runOnBasicBlock(BasicBlock &BB) {
       A->scheduledTo(FDInfo->getASAPStep(A));
     }
   }
-  
+
+  delete FDInfo;
+
   return false;
 }
 

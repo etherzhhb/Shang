@@ -34,7 +34,6 @@
 using namespace llvm;
 using namespace esyn;
 
-
 static cl::opt<bool>
 NoModuloSchedule("disable-modulo-schedule",
           cl::desc("vbe - Do not preform modulo schedule"),
@@ -365,31 +364,11 @@ SubGraphNode::ChildIt SubGraphNode::child_end() const {
 }
 
 //===----------------------------------------------------------------------===//
-
-char ModuloScheduleInfo::ID = 0;
-
-RegisterPass<ModuloScheduleInfo> X("vbe-ms-info",
-                                  "vbe - Compute necessary information for modulo"
-                                  " schedule scheduling passes");
-
-void ModuloScheduleInfo::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequiredTransitive<HWAtomInfo>();
-  AU.addRequiredTransitive<ResourceConfig>();
-  AU.addRequired<LoopInfo>();
-  AU.setPreservesAll();
-}
-
-bool ModuloScheduleInfo::runOnFunction(Function &F) {
-  HI = &getAnalysis<HWAtomInfo>();
-  LI = &getAnalysis<LoopInfo>();
-  return false;
-}
-
-bool ModuloScheduleInfo::isModuloSchedulable(FSMState &State) const {
+bool ModuloScheduleInfo::isModuloSchedulable() const {
   // Are we disable modulo schedule?
   if (NoModuloSchedule) return false;
   
-  BasicBlock *BB = State.getBasicBlock();
+  BasicBlock *BB = State->getBasicBlock();
   Loop *L = LI->getLoopFor(BB);
   // States that not in loops are not MSable.
   if (!L) return false;
@@ -406,22 +385,19 @@ void ModuloScheduleInfo::addRecurrence(unsigned II, rec_vector Rec) {
   RecList.insert(std::make_pair(II, Rec));
 }
 
-unsigned ModuloScheduleInfo::computeRecMII(FSMState &State) {
-  HWAtom *Root = State.getExitRoot();
-  unsigned MaxRecII = 1;
-
+unsigned ModuloScheduleInfo::computeRecMII() {
   //// Find all recurrents with Johnson's algorithm.
-  HWSubGraph SubGraph(&State, this);
+  HWSubGraph SubGraph(State, this);
   SubGraph.findAllCircuits();
-  MaxRecII = SubGraph.getRecMII();
+  unsigned MaxRecII = SubGraph.getRecMII();
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
 
   return MaxRecII;
 }
 
-unsigned ModuloScheduleInfo::computeResMII(FSMState &State) const {
+unsigned ModuloScheduleInfo::computeResMII() const {
   std::map<HWFUnit*, unsigned> TotalResUsage;
-  for (FSMState::iterator I = State.begin(), E = State.end(); I != E; ++I)
+  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I)
     if (HWAOpFU *A = dyn_cast<HWAOpFU>(*I)) {
       ++TotalResUsage[A->getFUnit()];
     }
