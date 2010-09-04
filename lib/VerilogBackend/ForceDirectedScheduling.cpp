@@ -27,7 +27,6 @@
 using namespace llvm;
 using namespace esyn;
 
-
 static cl::opt<bool>
 NoFDSchedule("disable-fd-schedule",
              cl::desc("vbe - Do not preform force-directed schedule"),

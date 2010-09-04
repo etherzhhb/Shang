@@ -31,6 +31,11 @@
 using namespace llvm;
 using namespace esyn;
 
+static cl::opt<bool>
+NoFDLS("disable-fdls",
+       cl::desc("vbe - Do not preform force-directed list schedule"),
+       cl::Hidden, cl::init(false));
+
 namespace {
 struct FDSPass : public BasicBlockPass {
   FSMState *State;
@@ -68,8 +73,10 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   // Create the FDInfo.
   ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
   
-  Scheduler = new ForceDirectedScheduler(HI, State);
-    //ForceDirectedListScheduler(HI, State);
+  if (NoFDLS)
+    Scheduler = new ForceDirectedScheduler(HI, State);
+  else
+    Scheduler = new ForceDirectedListScheduler(HI, State);
 
   if (MSInfo.isModuloSchedulable())
     scheduleCyclicCodeRegion(MSInfo.computeMII());
