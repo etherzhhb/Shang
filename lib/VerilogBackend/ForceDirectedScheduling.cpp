@@ -386,6 +386,7 @@ void ForceDirectedSchedulingBase::dumpDG() const {
 }
 
 void ForceDirectedSchedulingBase::resetSTF() {
+  AtomToSTF.clear();
   for (FSMState::iterator I = State->begin(), E = State->end();
        I != E; ++I)
     AtomToSTF.insert(std::make_pair(*I, std::make_pair(0, HWAtom::MaxSlot)));

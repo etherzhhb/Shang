@@ -50,7 +50,7 @@ bool ForceDirectedListScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
   State->resetSchedule(StartStep);
   buildFDInfo(true);
-  if (!scheduleCriticalPath())
+  if (!scheduleCriticalPath(false))
     return false;
 
   fds_sort s(*this);
@@ -82,13 +82,16 @@ void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
     A->scheduledTo(step);
     buildFDInfo(false);
     updateSTF();
-    bool res = scheduleCriticalPath();
+    bool res = scheduleCriticalPath(false);
 
     assert(res && "Why A can not schedule?");
   }
 }
 
-bool ForceDirectedSchedulingBase::scheduleCriticalPath() {
+bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
+  if (refreshFDInfo)
+    buildFDInfo(true);
+
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;
@@ -158,7 +161,7 @@ bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
   A->scheduledTo(step);
   buildFDInfo(false);
   updateSTF();
-  return scheduleCriticalPath();
+  return scheduleCriticalPath(false);
 }
 
 bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
@@ -183,35 +186,53 @@ bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
 //===----------------------------------------------------------------------===//
 
 bool ForceDirectedScheduler::scheduleState() {
-
   unsigned StartStep = HI->getTotalCycle();
+  State->resetSchedule(StartStep);
+  buildFDInfo(true);
+  if (!scheduleCriticalPath(false))
+    return false;
 
-  //for(;;) {
-  //  State->resetSchedule(StartStep);
-  //  buildFDInfo(true);
-
-  //  fds_sort s(FDInfo);
-  //  AtomQueueType AQueue(s);
-
-  //  fillQueue(AQueue, State->begin(), State->end());
-
-  //  if (!scheduleQueue(AQueue))
-  //    lengthenCriticalPath();
-  //  else // Break the loop if we schedule successful.
-  //    break;
-  //}
+  while (findBestSink()) {
+    if (!scheduleCriticalPath(false))
+      return false;
+  }
 
   schedulePassiveAtoms();
 
-  // Set the Initial Interval to the total slot, so we can generate the correct
-  // control logic for loop if MS is disable.
-  if (State->haveSelfLoop())
-    State->setII(State->getTotalSlot());
   DEBUG(dumpTimeFrame());
+  DEBUG(dumpDG());
   return true;
 }
 
-void ForceDirectedScheduler::findBestSink() {
+bool ForceDirectedScheduler::findBestSink() {
+  TimeFrame BestSink;
+  HWAtom *BestSinkAtom = 0;
+  double BestGain = 0.0;
+
+  for (FSMState::iterator I = State->begin(), E = State->end();
+      I != E; ++I) {
+    HWAtom *A = *I;
+    if (A->isScheduled())
+      continue;
+    
+    TimeFrame CurSink;
+
+    double CurGain = trySinkAtom(A, CurSink);
+    if (CurGain > BestGain) {
+      BestSinkAtom = A;
+      BestSink = CurSink;
+      BestGain = CurGain;
+    }
+  }
+
+  if (!BestSinkAtom) return false;
+  
+  sinkSTF(BestSinkAtom, BestSink.first, BestSink.second);
+  if (getScheduleTimeFrame(BestSinkAtom) == 1)
+    BestSinkAtom->scheduledTo(BestSink.first);
+  buildFDInfo(false);
+  updateSTF();
+  return true;
 
 }
 
@@ -234,9 +255,12 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame) {
   double FGain = FMax - FMinStar;
 
   if (ASAPForce >= ALAPForce)
-    NewTimeFrame = std::make_pair(ASAP, ALAP -1);
-  else
     NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
-  
+  else
+    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
+
+  // recover time frame
+  sinkSTF(A, ASAP, ALAP);
+  buildTimeFrame();
   return FGain;
 }

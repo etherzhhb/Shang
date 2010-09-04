@@ -68,7 +68,8 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   // Create the FDInfo.
   ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
   
-  Scheduler = new ForceDirectedListScheduler(HI, State);
+  Scheduler = new ForceDirectedScheduler(HI, State);
+    //ForceDirectedListScheduler(HI, State);
 
   if (MSInfo.isModuloSchedulable())
     scheduleCyclicCodeRegion(MSInfo.computeMII());
@@ -102,36 +103,16 @@ void FDSPass::scheduleACyclicCodeRegion() {
 
 void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
   // Ensure us can schedule the critical path.
-  for (;;) {
-    Scheduler->buildFDInfo(true);
-    if (Scheduler->scheduleCriticalPath())
-      break;
-    DEBUG(Scheduler->dumpTimeFrame());
-    // TODO: check if we could ever schedule these node without breaking the
-    // resource constrain by check the DG.
-    // If the resource average DG is bigger than the total available resource
-    // we can never schedule the nodes without breaking the resource constrain.
+  while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->lengthenCriticalPath();
-  }
 
-  // Dirty Hack: Search the solution by increasing MII and critical path
-  // alternatively.
   Scheduler->setMII(II);
-  for (;;) {
-    Scheduler->buildFDInfo(true);
-    if (Scheduler->scheduleCriticalPath())
-      break;
-    DEBUG(Scheduler->dumpTimeFrame());
+  while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->lengthenMII();
-  }
 
   bool lastIncMII = true;
-  for (;;) {
-    if (Scheduler->scheduleState()) {
-      // Set up the initial interval.
-      State->setII(Scheduler->getMII());
-      break;
-    } else if (lastIncMII) {
+  while (!Scheduler->scheduleState()) {
+    if (lastIncMII) {
       Scheduler->lengthenCriticalPath();
       lastIncMII = false;
     } else {
@@ -140,6 +121,8 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
       lastIncMII = true;
     }
   }
+
+  State->setII(Scheduler->getMII());
 }
 
 void FDSPass::releaseMemory() {

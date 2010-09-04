@@ -56,10 +56,6 @@ private:
 
   void resetSTF();
 
-  unsigned getScheduleTimeFrame(const HWAtom *A) const {
-    return getSTFALAP(A) - getSTFASAP(A) + 1;
-  }
-
 protected:
   HWAtomInfo *HI;
   FSMState *State;
@@ -71,7 +67,7 @@ public:
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
   // scheduled
-  bool scheduleCriticalPath();
+  bool scheduleCriticalPath(bool refreshFDInfo);
   void schedulePassiveAtoms();
 
   /// @name TimeFrame
@@ -99,9 +95,8 @@ public:
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 
-  // If the TimeFrame Constraints by II.
-  bool constraintByMII(const HWAOpFU *A) const {
-    return getTimeFrame(A) == MII - A->getLatency();
+  unsigned getScheduleTimeFrame(const HWAtom *A) const {
+    return getSTFALAP(A) - getSTFASAP(A) + 1;
   }
 
   void printTimeFrame(raw_ostream &OS) const;
@@ -183,7 +178,7 @@ public:
 
   bool scheduleState();
   double trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame);
-  void findBestSink();
+  bool findBestSink();
 };
 
 } // End namespace.
