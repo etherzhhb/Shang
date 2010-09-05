@@ -104,8 +104,6 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
     DEBUG(dbgs() << " asap step: " << step << "\n");
     A->scheduledTo(step);
   }
-  // Do not need to update STF.
-  buildFDInfo(false);
   return isResourceConstraintPreserved();
 }
 //===----------------------------------------------------------------------===//
