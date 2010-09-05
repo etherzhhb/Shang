@@ -144,6 +144,11 @@ public:
     if (LHS->isVRExit())
       return false;
 
+    if (unsigned II = LHS->getData()->getParent()->getII()) {
+      return LHS->getData()->getSlot() % II
+             < RHS->getData()->getSlot() % II;
+    }
+
     // TODO: this is not true in Modulo Schedule.
     // Infact ealier is some kind of ealier in dependencies graph? So this is ok
     // in Modulo Schedule.
@@ -203,7 +208,7 @@ public:
       if (It == Node->succ_end())
         WorkStack.pop_back();
       else {
-        // 
+        //
         _NodeTy *ChildNode = *It;
         ++WorkStack.back().second;
         unsigned VC = ++VisitCount[ChildNode];
@@ -222,7 +227,6 @@ public:
         if (VC == ChildNode->num_pred())
           WorkStack.push_back(std::make_pair(ChildNode, ChildNode->succ_begin()));
       }
-      
     }
 
     // Build the path.
@@ -442,17 +446,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   HI = &getAnalysis<HWAtomInfo>();
   CurState = HI->getStateFor(BB);
 
-  DEBUG(
-    dbgs() << "\n\nBefore binding:\n";
-    for (FSMState::iterator I = CurState->begin(), E = CurState->end();
-         I != E; ++I) {
-      HWAtom *A = *I;
-      dbgs() << "Schedule\n";
-      A->dump();
-      dbgs() << "To slot: " << A->getSlot() << '\n';
-    }
-    dbgs() << "\n\n";
-  );
   // Bind register for prebind atoms.
   allocaPreBindReg();
 
@@ -463,18 +456,6 @@ bool CompPathBinding::runOnBasicBlock(llvm::BasicBlock &BB) {
   // 3. Bind a register to the function unit.
   //bindFunUnitReg();
 
-
-  DEBUG(
-    dbgs() << "\n\nAfter binding:\n";
-    for (FSMState::iterator I = CurState->begin(), E = CurState->end();
-         I != E; ++I) {
-      HWAtom *A = *I;
-      dbgs() << "Schedule\n";
-      A->dump();
-      dbgs() << "To slot: " << A->getSlot() << '\n';
-    }
-    dbgs() << "\n\n";
-  );
   return false;
 }
 
@@ -572,6 +553,14 @@ void CompPathBinding::buildLongestPostBindPath() {
           DEBUG(PreBind->print(dbgs()));
           DEBUG(dbgs() << " at " << PreBind->getSlot() << '\n');
           Node->removeFromGraph();
+
+          DEBUG(
+            for (PostBindNodePath::path_iterator PI = Path->path_begin(),
+                 PE = Path->path_end(); PI != PE; ++PI ) {
+              PostBindNodeType *U = *PI;
+              assert((U == Node || U->isCompatible(Node))
+                      && "Uncompatible node found!");
+            });
       }
 
       PathGraphNodeType *Node = new (NodeAllocator) PathGraphNodeType(Path);
