@@ -115,8 +115,9 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
   HWAtomInfo &HI = getAnalysis<HWAtomInfo>();
 
   FSMState *State = HI.getStateFor(BB);
+  unsigned II = State->getII();
   DEBUG(dbgs() << "\nState " << BB.getName() << " {" << State->getSlot() << ", "
-               << State->getEndSlot() << "}\n");
+               << State->getEndSlot() << "} II: " << II << "\n");
   // First of all, build live interval for
   // Live-in register and write register atoms.
   SmallVector<RegChann*, 64> Channs;
@@ -164,6 +165,17 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
       DEBUG(U->print(dbgs()));
     }
     DEBUG(dbgs() << '\n');
+    if (II) {
+      assert((End - A->getSlot() <= II || State->getExitRoot()->isDepOn(A))
+             && "Anti dependence Find!");
+      unsigned StateStart = State->getSlot();
+      unsigned Length = End - Start;
+      // TODO: In fact the live time of live in register is not that long.
+      // Move Start to the first iteration.
+      Start = StateStart + (Start - StateStart) % II;
+      // We get a live-in register or a export value.
+      End = Start + std::max(II, Length);
+    }
     
     RegChann *RegCh = createChann(R, Start, End);
     Channs.push_back(RegCh);
