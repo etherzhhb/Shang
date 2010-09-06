@@ -115,18 +115,25 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
 
   Scheduler->setMII(II);
   while (!Scheduler->scheduleCriticalPath(true))
-    Scheduler->lengthenMII();
+    Scheduler->increaseMII();
+
+  unsigned MII = II;
 
   bool lastIncMII = true;
+  double lastRequirement = 0.0;
   while (!Scheduler->scheduleState()) {
     if (lastIncMII) {
       Scheduler->lengthenCriticalPath();
       lastIncMII = false;
     } else {
-      Scheduler->lengthenMII();
+      if (Scheduler->getExtraResourceRequire() >  lastRequirement)
+        Scheduler->shortenCriticalPath();
+
+      Scheduler->increaseMII();
       II = Scheduler->getMII();
       lastIncMII = true;
     }
+    lastRequirement = Scheduler->getExtraResourceRequire();
   }
 
   State->setII(Scheduler->getMII());

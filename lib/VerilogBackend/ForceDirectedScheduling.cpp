@@ -205,6 +205,7 @@ void ForceDirectedSchedulingBase::buildDGraph() {
 
 
 bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
+  ExtraRresRequirement = 0.0;
   // No resource in use.
   if (DGraph.empty()) return true;
 
@@ -221,9 +222,10 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
     double AverageDG = TotalDG / AvailableSteps;
     DEBUG(dbgs() << AverageDG << '\n');
     if (AverageDG > I->first->getTotalFUs())
-      return false;
+      ExtraRresRequirement += (AverageDG - I->first->getTotalFUs())
+                              /  I->first->getTotalFUs();
   }
-  return true;
+  return ExtraRresRequirement == 0.0;
 }
 
 void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {  

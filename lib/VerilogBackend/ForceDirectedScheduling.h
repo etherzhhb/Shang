@@ -32,7 +32,7 @@ namespace esyn {;
 class ForceDirectedSchedulingBase {
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
-
+  double ExtraRresRequirement;
   // Time Frame {asap step, alap step }
 public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
@@ -62,7 +62,8 @@ protected:
 
 public:
   ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S)
-    : HI(HAInfo), State(S), MII(0), CriticalPathEnd(0) {}
+    : HI(HAInfo), State(S), MII(0), CriticalPathEnd(0),
+    ExtraRresRequirement(0.0) {}
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
@@ -113,6 +114,7 @@ public:
   /// Check the distribution graphs to see if we could schedule the nodes
   /// without breaking the resource constrain.
   bool isResourceConstraintPreserved();
+  double getExtraResourceRequire() const { return ExtraRresRequirement; }
   //}
 
   /// @name Force computation
@@ -138,8 +140,10 @@ public:
 
   void setMII(unsigned II) { MII = II; }
   unsigned getMII() const { return MII; }
-  void lengthenMII() { ++MII; }
+  void increaseMII() { ++MII; }
+  void decreaseMII() { --MII; }
   void lengthenCriticalPath() { ++CriticalPathEnd; }
+  void shortenCriticalPath() { --CriticalPathEnd; }
   unsigned getCriticalPathEnd() { return CriticalPathEnd; }
 };
 
