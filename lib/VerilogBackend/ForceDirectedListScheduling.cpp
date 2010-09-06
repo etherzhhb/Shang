@@ -48,7 +48,6 @@ ForceDirectedListScheduler::fds_sort::operator()(const HWAOpFU* LHS,
 
 bool ForceDirectedListScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
-  State->resetSchedule(StartStep);
   buildFDInfo(true);
   if (!scheduleCriticalPath(false))
     return false;
@@ -185,7 +184,6 @@ bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
 
 bool ForceDirectedScheduler::scheduleState() {
   unsigned StartStep = HI->getTotalCycle();
-  State->resetSchedule(StartStep);
   buildFDInfo(true);
   if (!scheduleCriticalPath(false))
     return false;
