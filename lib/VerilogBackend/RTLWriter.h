@@ -34,7 +34,6 @@
 #include "llvm/DerivedTypes.h"
 #include "llvm/Target/Mangler.h"
 
-#include "vbe/utils.h"
 #include "vbe/ResourceConfig.h"
 #include "vbe/HWAtom.h"
 
