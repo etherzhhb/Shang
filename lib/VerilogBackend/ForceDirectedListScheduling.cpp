@@ -75,15 +75,12 @@ void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
     HWAtom *A = *I;
     if (A->isScheduled())
       continue;
-
+    assert(!isa<HWAOpFU>(A) && "OpFU not schedule?");
     DEBUG(A->print(dbgs()));
     unsigned step = getASAPStep(A);
     A->scheduledTo(step);
     buildFDInfo(false);
     updateSTF();
-    bool res = scheduleCriticalPath(false);
-
-    assert(res && "Why A can not schedule?");
   }
 }
 
@@ -203,7 +200,7 @@ bool ForceDirectedScheduler::scheduleState() {
 bool ForceDirectedScheduler::findBestSink() {
   TimeFrame BestSink;
   HWAtom *BestSinkAtom = 0;
-  double BestGain = 0.0;
+  double BestGain = -1.0;
 
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
