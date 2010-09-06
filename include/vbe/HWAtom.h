@@ -717,6 +717,7 @@ public:
   // II for Modulo schedule
 
   void setII(unsigned ii) { II = ii; }
+  void setNoOverlapII() { II = getTotalSlot() + 1; }
   unsigned getII() const { return II; }
   unsigned getIISlot() const { return getSlot() + II - 1; }
   bool haveSelfLoop() const { return HaveSelfLoop; }
