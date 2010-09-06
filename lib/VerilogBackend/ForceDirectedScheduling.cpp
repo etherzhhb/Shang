@@ -220,8 +220,10 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
       TotalDG += SI->second;
     }
     double AverageDG = TotalDG / AvailableSteps;
+    // The upper bound of error: Only 0.5 extra functional unit need.
+    double e = 0.5 / AvailableSteps;
     DEBUG(dbgs() << AverageDG << '\n');
-    if (AverageDG > I->first->getTotalFUs())
+    if (AverageDG > I->first->getTotalFUs() + e)
       ExtraRresRequirement += (AverageDG - I->first->getTotalFUs())
                               /  I->first->getTotalFUs();
   }
