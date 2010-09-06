@@ -62,6 +62,10 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     // Topological sort BBs in structural CFG, so we can construct a correct
     // live interval for registers.
     PM.add(createTopSortBBPass());
+
+    // Eliminate dead code.
+    PM.add(createAggressiveDCEPass());
+
     // Memory dependencies analysis
     PM.add(new HWAtomInfo());
     PM.add(createFDLSPass());

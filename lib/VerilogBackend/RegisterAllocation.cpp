@@ -60,7 +60,7 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
     if (HWALIReg *LI = dyn_cast<HWALIReg>(SrcAtom)) {
       Value *V = &LI->getValue();
       (void)HI.getRegForValue(V);
-      V->dump();
+      DEBUG(V->dump());
       continue;
     }
 

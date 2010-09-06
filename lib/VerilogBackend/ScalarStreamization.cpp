@@ -74,8 +74,11 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
     while (!RegUsers.empty()) {
       HWAtom *Dst = RegUsers.back();
       RegUsers.pop_back();
-      
-      if (Dst == Exit)
+
+      // We need to pipeline the pred
+      // Because there may be anti dependence across iterations.
+      if (Dst == Exit
+          && (Exit->getInstNumOps() == 0 || Exit->getOperand(0) != Src))
         continue;
 
       HWEdge *E = Dst->getEdgeFrom(Src);
