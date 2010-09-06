@@ -30,6 +30,10 @@
 #include "HWAtomInfo.h"
 #include "RTLWriter.h"
 
+
+static cl::opt<std::string>
+DesignName("vbe-design-name", cl::desc("Design Name."), cl::init(""));
+
 using namespace esyn;
 
 char RTLWriter::ID = 0;
@@ -81,9 +85,11 @@ bool RTLWriter::runOnFunction(Function &F) {
   // emit misc
   emitCommonPort();
 
+  if (DesignName.empty())
+    DesignName = F.getNameStr();
 
   // Write buffers to output
-  vlang->moduleBegin(Out, F.getNameStr());
+  vlang->moduleBegin(Out, DesignName);
   Out << ModDecl.str();
   vlang->endModuleDecl(Out);
   Out << "\n\n";
