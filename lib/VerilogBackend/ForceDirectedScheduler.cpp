@@ -104,7 +104,7 @@ void FDSPass::scheduleACyclicCodeRegion() {
   // Set the Initial Interval to the total slot, so we can generate the correct
   // control logic for loop if MS is disable.
   if (State->haveSelfLoop())
-    State->setII(State->getTotalSlot());
+    State->setNoOverlapII();
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
