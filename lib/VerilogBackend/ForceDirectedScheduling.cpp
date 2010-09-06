@@ -293,11 +293,9 @@ double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
   double SelfForce = computeSelfForce(A);
   // The follow function will invalid the time frame.
   DEBUG(dbgs() << " Self Force: " << SelfForce);
-  double PredForce = computePredForce(A);
-  DEBUG(dbgs() << " Pred Force: " << PredForce);
-  double SuccForce = computeSuccForce(A);
-  DEBUG(dbgs() << " Succ Force: " << SuccForce);
-  double Force = SelfForce + PredForce + SuccForce;
+  double OtherForce = computeOtherForce(A);
+  DEBUG(dbgs() << " Other Force: " << OtherForce);
+  double Force = SelfForce + OtherForce;
   DEBUG(dbgs() << " Force: " << Force);
   return Force;
 }
@@ -329,28 +327,15 @@ double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
   return Force / FU->getTotalFUs();
 }
 
-double ForceDirectedSchedulingBase::computeSuccForce(const HWAtom *A) {
+double ForceDirectedSchedulingBase::computeOtherForce(const HWAtom *A) {
   double ret = 0.0;
 
-  for (const_usetree_iterator I = const_usetree_iterator::begin(A),
-       E = const_usetree_iterator::end(A); I != E; ++I)
+  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+    if (A == *I) continue;
+    
     if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
       ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
-
-  return ret;
-}
-
-double ForceDirectedSchedulingBase::computePredForce(const HWAtom *A) {
-  // Adjust the time frame.
-  //buildALAPStep(A, step);
-
-  double ret = 0;
-
-  for (const_deptree_iterator I = const_deptree_iterator::begin(A),
-       E = const_deptree_iterator::end(A); I != E; ++I)
-    if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
-      ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
-
+  }
   return ret;
 }
 

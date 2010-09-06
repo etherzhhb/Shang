@@ -126,12 +126,13 @@ public:
   double computeRangeForce(const HWAtom *A,
                            unsigned start, unsigned end/*include*/);
   double computeSelfForce(const HWAtom *A);
-  /// This function will invalid the asap step of all node in
-  /// successor tree
-  double computeSuccForce(const HWAtom *A);
-  /// This function will invalid the alap step of all node in
-  /// predecessor tree
-  double computePredForce(const HWAtom *A);
+
+  /// If there are recurrences in the graph,
+  /// Define "pred tree" and "succ tree" may intersect.
+  /// All we can do is compute "other force", and the time frame of atoms
+  /// not in "pred tree" or "succ tree" will not change, and not contribute
+  /// to the force.
+  double computeOtherForce(const HWAtom *A);
 
   double computeForce(const HWAtom *A, unsigned ASAP, unsigned ALAP);
   //}
@@ -144,7 +145,9 @@ public:
   void decreaseMII() { --MII; }
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   void shortenCriticalPath() { --CriticalPathEnd; }
-  unsigned getCriticalPathEnd() { return CriticalPathEnd; }
+  unsigned getCriticalPathLength() {
+    return CriticalPathEnd - State->getSlot();
+  }
 };
 
 class ForceDirectedListScheduler : public ForceDirectedSchedulingBase {
