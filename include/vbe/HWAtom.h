@@ -718,6 +718,7 @@ public:
 
   void setII(unsigned ii) { II = ii; }
   void setNoOverlapII() { II = getTotalSlot() + 1; }
+  bool isPipelined() const { return II != 0 && II != getTotalSlot() + 1; }
   unsigned getII() const { return II; }
   unsigned getIISlot() const { return getSlot() + II - 1; }
   bool haveSelfLoop() const { return HaveSelfLoop; }

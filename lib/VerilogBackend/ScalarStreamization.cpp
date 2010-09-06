@@ -42,15 +42,11 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
   FSMState *State = HI.getStateFor(BB);
   HWAOpFU *Exit = State->getExitRoot();
 
-  // Only handle MSed Loop.
-  if (!State->haveSelfLoop())
-    return false;
-  
-  unsigned II = State->getII();
-
   // No need to SS.
-  if (II == State->getTotalSlot())
+  if (!State->isPipelined())
     return false;
+
+  unsigned II = State->getII();
 
   DEBUG(dbgs() << "Find Self Loop :" << BB.getName() << " II: " << II << '\n');
   std::vector<HWAtom*> WorkList;
