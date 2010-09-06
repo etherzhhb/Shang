@@ -160,14 +160,16 @@ bool LocalLEA::runOnBasicBlock(BasicBlock &BB) {
     for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
          UI != UE; ++UI) {
       HWAtom *U = *UI;
+      // Ignore backedges, their are cross iterate boundary.
+      HWEdge *E = U->getEdgeFrom(A);
+      if (E->isBackEdge())
+        continue;
       End = std::max(End, U->getFinSlot());
       DEBUG(dbgs() << "\n\tat slot " << U->getFinSlot() << " >");
       DEBUG(U->print(dbgs()));
     }
     DEBUG(dbgs() << '\n');
     if (II) {
-      assert((End - A->getSlot() <= II || State->getExitRoot()->isDepOn(A))
-             && "Anti dependence Find!");
       unsigned StateStart = State->getSlot();
       unsigned Length = End - Start;
       // TODO: In fact the live time of live in register is not that long.
