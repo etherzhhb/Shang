@@ -151,7 +151,7 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB) {
       if (Src == Dst)
         continue;
       
-      bool srcBeforeDest = SrcI < DstI;
+      bool srcBeforeDest = Src->getIdx() < Dst->getIdx();
 
       // Get dependencies information.
       DepInfoType Dep = MDA->getDepInfo(Src->getInst<Instruction>(),
@@ -162,7 +162,7 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB) {
 
       // Add dependencies edges.
       // The edge is back edge if destination before source.
-      HWMemDep *MemDep = getMemDepEdge(Src, !srcBeforeDest, 
+      HWMemDep *MemDep = getMemDepEdge(Src, Src->getIdx() > Dst->getIdx(), 
                                        Dep.getDepType(), Dep.getItDst());
       Dst->addDep(MemDep);
     }
