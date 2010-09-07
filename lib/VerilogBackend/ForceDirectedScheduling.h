@@ -158,6 +158,9 @@ public:
   unsigned getCriticalPathLength() {
     return CriticalPathEnd - State->getSlot();
   }
+  void settCriticalPathLength(unsigned L) {
+    CriticalPathEnd = State->getSlot() + L;
+  }
 };
 
 class ForceDirectedListScheduler : public ForceDirectedSchedulingBase {

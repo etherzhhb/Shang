@@ -117,39 +117,38 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
   while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->increaseMII();
 
-  bool lastDec = false;
-  bool lastIncMII = true;
-  double lastRequirement = 1e9;
+  // The point of current solution.
+  typedef std::pair<unsigned, unsigned> SolutionPoint;
+  SolutionPoint CurPoint
+    = std::make_pair(Scheduler->getMII(), Scheduler->getCriticalPathLength());
+  SmallVector<SolutionPoint, 3> NextPoints;
+
+  double lastReq = 1e9;
+
   while (!Scheduler->scheduleState()) {
-    if (Scheduler->getExtraResReq() >  lastRequirement) {
-      if (lastDec) {
-        if (lastIncMII)
-          Scheduler->lengthenCriticalPath();
-        else
-          Scheduler->increaseMII();
-        lastDec = false;
-        lastRequirement = Scheduler->getExtraResReq();
-      } else {
-        lastDec = true;  
-        if (lastIncMII)
-          Scheduler->decreaseMII();
-        else
-          Scheduler->shortenCriticalPath();
-      }
-    } else {
-      lastRequirement = Scheduler->getExtraResReq();
-      lastDec = false;
+    double CurReq = Scheduler->getExtraResReq();
+    if (lastReq > CurReq) {
+      CurPoint = std::make_pair(Scheduler->getMII(),
+                                Scheduler->getCriticalPathLength());
+      lastReq = CurReq;
+      NextPoints.clear();
     }
-    if (lastIncMII
-        || Scheduler->getCriticalPathLength() < Scheduler->getMII()) {
-      Scheduler->lengthenCriticalPath();
-      lastIncMII = false;
-    } else {
-      Scheduler->increaseMII();
-      lastIncMII = true;
+
+    if (NextPoints.empty()) {
+      NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second  + 1));
+      if (Scheduler->getCriticalPathLength() >= Scheduler->getMII())
+        NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
+      NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
+      // Add both by default.
+      CurPoint = std::make_pair(CurPoint.first + 1, CurPoint.second  + 1);
     }
+
+    Scheduler->setMII(NextPoints.back().first);
+    Scheduler->settCriticalPathLength(NextPoints.back().second);
+    NextPoints.pop_back();
   }
 
+  //Scheduler->getCriticalPathLength() < Scheduler->getMII())
   State->setII(Scheduler->getMII());
 }
 
