@@ -76,6 +76,7 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
       for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
           DI != DE; ++DI) {
         const HWAtom *Dep = *DI;
+        
         if (!DI.getEdge()->isBackEdge() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
                              Dep->getSlot() : getASAPStep(Dep);
@@ -107,7 +108,8 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
 
 void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
                                                 unsigned ClampedALAP) {
-  AtomToTF[State->getExitRoot()].second = CriticalPathEnd;
+  HWAtom *Exit = State->getExitRoot();
+  AtomToTF[Exit].second = Exit == ClampedAtom ? ClampedALAP : CriticalPathEnd;
 
   FSMState::reverse_iterator Start = State->rbegin();
 
@@ -130,8 +132,8 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
       unsigned NewStep = A == ClampedAtom ? ClampedALAP : getSTFALAP(A);
       for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
            UI != UE; ++UI) {
-        HWEdge *UseEdge = (*UI)->getEdgeFrom(A);
         const HWAtom *Use = *UI;
+        HWEdge *UseEdge = Use->getEdgeFrom(A);
 
         if (!UseEdge->isBackEdge() || MII) {
           unsigned UseALAP = Use->isScheduled() ?
@@ -391,6 +393,11 @@ void ForceDirectedSchedulingBase::sinkSTF(const HWAtom *A,
   assert(ASAP <= ALAP && "Bad time frame to sink!");
   assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
   AtomToSTF[A] = std::make_pair(ASAP, ALAP);
+  // We may need to reduce critical path.
+  if (A == State->getExitRoot()) {
+    assert(CriticalPathEnd >= ALAP && "Can not sink ExitRoot!");
+    CriticalPathEnd = ALAP;
+  }
 }
 
 void ForceDirectedSchedulingBase::updateSTF() {
@@ -404,3 +411,36 @@ void ForceDirectedSchedulingBase::updateSTF() {
     sinkSTF(A, getASAPStep(A), getALAPStep(A));
   }
 }
+
+
+double ForceDirectedSchedulingBase::trySinkAtom(HWAtom *A,
+                                                TimeFrame &NewTimeFrame) {
+  // Build time frame to get the correct ASAP and ALAP.
+  buildTimeFrame();
+
+  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
+
+  double ASAPForce = computeForce(A, ASAP , ALAP - 1),
+    ALAPForce = computeForce(A, ASAP + 1, ALAP);
+
+  double FMax = std::max(ASAPForce, ALAPForce),
+    FMin = std::min(ASAPForce, ALAPForce);
+
+  double FMinStar = FMin;
+
+  if (ASAP + 1 < ALAP)
+    FMinStar = std::min(FMinStar, 0.0);
+  else
+    assert(ASAP + 1 == ALAP && "Broken time frame!");
+
+  double FGain = FMax - FMinStar;
+
+  // Discard the range with bigger force.
+  if (ASAPForce > ALAPForce)
+    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
+  else
+    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
+
+  return FGain;
+}
+

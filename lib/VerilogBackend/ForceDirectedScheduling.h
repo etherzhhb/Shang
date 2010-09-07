@@ -76,6 +76,7 @@ public:
   /// @name TimeFrame
   //{
   void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
+  double trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame);
   void updateSTF();
 
   void buildTimeFrame(const HWAtom *ClampedAtom = 0,
@@ -193,7 +194,6 @@ public:
     : ForceDirectedSchedulingBase(HAInfo, S) {}
 
   bool scheduleState();
-  double trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame);
   bool findBestSink();
 };
 
