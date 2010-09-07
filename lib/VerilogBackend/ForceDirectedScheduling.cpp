@@ -33,22 +33,28 @@ NoFDSchedule("disable-fd-schedule",
              cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-void ForceDirectedSchedulingBase::buildTimeFrame() {
+void ForceDirectedSchedulingBase::buildTimeFrame(const HWAtom *ClampedAtom,
+                                                 unsigned ClampedASAP,
+                                                 unsigned ClampedALAP) {
+
+  assert((ClampedAtom == 0 
+          || (ClampedASAP >= getSTFASAP(ClampedAtom)
+              && ClampedALAP <= getSTFALAP(ClampedAtom)))
+         && "Bad clamped value!");
   AtomToTF.clear();
   // Build the time frame
   assert(State->isScheduled() && "Entry must be scheduled first!");
-  unsigned FirstStep = State->getSlot();
-  buildASAPStep(State, FirstStep);
-  buildALAPStep(State->getExitRoot(), CriticalPathEnd);
+  buildASAPStep(ClampedAtom, ClampedASAP);
+  buildALAPStep(ClampedAtom, ClampedALAP);
 
   DEBUG(dumpTimeFrame());
 }
 
-void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *Root, unsigned step) {
-  AtomToTF[Root].first = step;
+void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
+                                                unsigned ClampedASAP) {
+  AtomToTF[State].first = State->getSlot();
 
-  FSMState::iterator Start = std::find(State->begin(), State->end(),
-                                       Root);
+  FSMState::iterator Start = State->begin();
 
   bool changed = false;
 
@@ -65,7 +71,7 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *Root, unsigned ste
       DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
             A->dump(););
 
-      unsigned NewStep = getSTFASAP(A);
+      unsigned NewStep = A == ClampedAtom ? ClampedASAP : getSTFASAP(A);
 
       for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
           DI != DE; ++DI) {
@@ -74,7 +80,7 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *Root, unsigned ste
           unsigned DepASAP = Dep->isScheduled() ?
                              Dep->getSlot() : getASAPStep(Dep);
           int Step = DepASAP + Dep->getLatency()
-                          - MII * DI.getEdge()->getItDst();
+                     - MII * DI.getEdge()->getItDst();
           DEBUG(dbgs() << "From ";
                 if (DI.getEdge()->isBackEdge())
                   dbgs() << "BackEdge ";
@@ -99,11 +105,11 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *Root, unsigned ste
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *Root, unsigned step) {
-  AtomToTF[Root].second = step;
+void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
+                                                unsigned ClampedALAP) {
+  AtomToTF[State->getExitRoot()].second = CriticalPathEnd;
 
-  FSMState::reverse_iterator Start = std::find(State->rbegin(), State->rend(),
-                                               Root);
+  FSMState::reverse_iterator Start = State->rbegin();
 
   bool changed = false;
 
@@ -121,8 +127,7 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *Root, unsigned ste
       DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
             A->dump(););
 
-      unsigned NewStep = getSTFALAP(A);
-   
+      unsigned NewStep = A == ClampedAtom ? ClampedALAP : getSTFALAP(A);
       for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
            UI != UE; ++UI) {
         HWEdge *UseEdge = (*UI)->getEdgeFrom(A);
@@ -205,7 +210,7 @@ void ForceDirectedSchedulingBase::buildDGraph() {
 
 
 bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
-  ExtraRresRequirement = 0.0;
+  ExtraResReq = 0.0;
   // No resource in use.
   if (DGraph.empty()) return true;
 
@@ -224,10 +229,10 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
     double e = 0.5 / AvailableSteps;
     DEBUG(dbgs() << AverageDG << '\n');
     if (AverageDG > I->first->getTotalFUs() + e)
-      ExtraRresRequirement += (AverageDG - I->first->getTotalFUs())
-                              /  I->first->getTotalFUs();
+      ExtraResReq += (AverageDG - I->first->getTotalFUs())
+                      /  I->first->getTotalFUs();
   }
-  return ExtraRresRequirement == 0.0;
+  return ExtraResReq == 0.0;
 }
 
 void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {  
@@ -269,13 +274,15 @@ unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-void ForceDirectedSchedulingBase::accDGraphAt(unsigned step, HWFUnit *FU, double d) {
+void ForceDirectedSchedulingBase::accDGraphAt(unsigned step,
+                                              HWFUnit *FU, double d) {
   // Modulo DG for modulo schedule.
   DGraph[FU][computeStepKey(step)] += d;
 }
 
 // Including end.
-double ForceDirectedSchedulingBase::getRangeDG(HWFUnit  *FU, unsigned start, unsigned end) {
+double ForceDirectedSchedulingBase::getRangeDG(HWFUnit *FU,
+                                               unsigned start, unsigned end) {
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
@@ -286,11 +293,10 @@ double ForceDirectedSchedulingBase::getRangeDG(HWFUnit  *FU, unsigned start, uns
 }
 
 double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
-                                       unsigned ASAP, unsigned ALAP) {
-  sinkSTF(A, ASAP, ALAP);
-  buildTimeFrame();
+                                                 unsigned ASAP, unsigned ALAP) {
+  buildTimeFrame(A, ASAP, ALAP);
   // Compute the forces.
-  double SelfForce = computeSelfForce(A);
+  double SelfForce = computeSelfForce(A, ASAP, ALAP);
   // The follow function will invalid the time frame.
   DEBUG(dbgs() << " Self Force: " << SelfForce);
   double OtherForce = computeOtherForce(A);
@@ -300,23 +306,24 @@ double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
   return Force;
 }
 
-double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A) {
+double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A,
+                                                     unsigned start,
+                                                     unsigned end) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
   if (NoFDSchedule && !OpInst->isBinded()) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
-  double Force = getRangeDG(FU, getSTFASAP(A), getSTFASAP(A))
-                 - getAvgDG(OpInst);
+  double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
 
   // Make the atoms taking expensive function unit have bigger force.
   return Force / FU->getTotalFUs();
 }
 
 double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
-                                            unsigned int start,
-                                            unsigned int end) {
+                                                      unsigned int start,
+                                                      unsigned int end) {
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
@@ -361,7 +368,6 @@ unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
     State->resetSchedule(StartStep);
   }
   buildTimeFrame();
-  if (rstSTF) updateSTF();
 
   buildDGraph();
   buildAvgDG();
@@ -380,8 +386,10 @@ void ForceDirectedSchedulingBase::resetSTF() {
     AtomToSTF.insert(std::make_pair(*I, std::make_pair(0, HWAtom::MaxSlot)));
 }
 
-void ForceDirectedSchedulingBase::sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP) {
+void ForceDirectedSchedulingBase::sinkSTF(const HWAtom *A,
+                                          unsigned ASAP, unsigned ALAP) {
   assert(ASAP <= ALAP && "Bad time frame to sink!");
+  assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
   AtomToSTF[A] = std::make_pair(ASAP, ALAP);
 }
 
@@ -389,6 +397,10 @@ void ForceDirectedSchedulingBase::updateSTF() {
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;
+    // Only update the scheduled time frame.
+    if (!isSTFScheduled(A))
+      continue;
+
     sinkSTF(A, getASAPStep(A), getALAPStep(A));
   }
 }

@@ -32,7 +32,7 @@ namespace esyn {;
 class ForceDirectedSchedulingBase {
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
-  double ExtraRresRequirement;
+  double ExtraResReq;
   // Time Frame {asap step, alap step }
 public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
@@ -51,8 +51,10 @@ private:
 
   std::map<const HWAOpFU*, double> AvgDG;
 
-  void buildASAPStep(const HWAtom *Root, unsigned step);
-  void buildALAPStep(const HWAtom *Root, unsigned step);
+  void buildASAPStep(const HWAtom *ClampedAtom = 0,
+                     unsigned ClampedASAP = 0);
+  void buildALAPStep(const HWAtom *ClampedAtom = 0,
+                     unsigned ClampedALAP = 0);
 
   void resetSTF();
 
@@ -63,7 +65,7 @@ protected:
 public:
   ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S)
     : HI(HAInfo), State(S), MII(0), CriticalPathEnd(0),
-    ExtraRresRequirement(0.0) {}
+    ExtraResReq(0.0) {}
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
@@ -76,7 +78,9 @@ public:
   void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
   void updateSTF();
 
-  void buildTimeFrame();
+  void buildTimeFrame(const HWAtom *ClampedAtom = 0,
+                      unsigned ClampedASAP = 0,
+                      unsigned ClampedALAP = 0);
 
   unsigned getASAPStep(const HWAtom *A) const {
     return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToTF[A].first;
@@ -100,6 +104,10 @@ public:
     return getSTFALAP(A) - getSTFASAP(A) + 1;
   }
 
+  bool isSTFScheduled(const HWAtom *A) const {
+    return getScheduleTimeFrame(A) < HWAtom::MaxSlot;
+  }
+
   void printTimeFrame(raw_ostream &OS) const;
   void dumpTimeFrame() const;
   //}
@@ -114,7 +122,7 @@ public:
   /// Check the distribution graphs to see if we could schedule the nodes
   /// without breaking the resource constrain.
   bool isResourceConstraintPreserved();
-  double getExtraResourceRequire() const { return ExtraRresRequirement; }
+  double getExtraResReq() const { return ExtraResReq; }
   //}
 
   /// @name Force computation
@@ -125,7 +133,8 @@ public:
 
   double computeRangeForce(const HWAtom *A,
                            unsigned start, unsigned end/*include*/);
-  double computeSelfForce(const HWAtom *A);
+  double computeSelfForce(const HWAtom *A,
+                          unsigned start, unsigned end/*include*/);
 
   /// If there are recurrences in the graph,
   /// Define "pred tree" and "succ tree" may intersect.

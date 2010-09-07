@@ -97,7 +97,7 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
 
     unsigned step = getASAPStep(A);
     DEBUG(A->print(dbgs()));
-    DEBUG(dbgs() << " asap step: " << step << "\n");
+    DEBUG(dbgs() << " asap step: " << step << " in critical path.\n");
     A->scheduledTo(step);
   }
   return isResourceConstraintPreserved();
@@ -154,7 +154,6 @@ bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
 
   A->scheduledTo(step);
   buildFDInfo(false);
-  updateSTF();
   return scheduleCriticalPath(false);
 }
 
@@ -186,8 +185,11 @@ bool ForceDirectedScheduler::scheduleState() {
     return false;
 
   while (findBestSink()) {
-    if (!scheduleCriticalPath(false))
+    if (!scheduleCriticalPath(false)) {
+      DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
+                   << getExtraResReq() << '\n');
       return false;
+    }
   }
 
   schedulePassiveAtoms();
@@ -252,8 +254,8 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame) {
   else
     NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
 
-  // recover time frame
-  sinkSTF(A, ASAP, ALAP);
+  // Recover time frame.
   buildTimeFrame();
+
   return FGain;
 }
