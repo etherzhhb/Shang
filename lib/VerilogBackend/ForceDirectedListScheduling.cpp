@@ -47,7 +47,6 @@ ForceDirectedListScheduler::fds_sort::operator()(const HWAOpFU* LHS,
 //===----------------------------------------------------------------------===//
 
 bool ForceDirectedListScheduler::scheduleState() {
-  unsigned StartStep = HI->getTotalCycle();
   buildFDInfo(true);
   if (!scheduleCriticalPath(false))
     return false;
@@ -57,8 +56,12 @@ bool ForceDirectedListScheduler::scheduleState() {
 
   fillQueue(AQueue, State->begin(), State->end());
 
-  if (!scheduleQueue(AQueue))
+  if (!scheduleQueue(AQueue)) {
+    DEBUG(dumpDG());
+    DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
+                 << getExtraResReq() << '\n');
     return false;
+  }
 
   schedulePassiveAtoms();
 
@@ -122,20 +125,15 @@ void ForceDirectedListScheduler::fillQueue(AtomQueueType &Queue, It begin, It en
 }
 
 unsigned ForceDirectedListScheduler::findBestStep(HWAtom *A) {
-  std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
-  DEBUG(dbgs() << "\tScan for best step:\n");
-  // For each possible step:
-  for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1;
-      i != e; ++i) {
-    DEBUG(dbgs() << "At Step " << i << "\n");
-    double Force = computeForce(A, i, i);
-    DEBUG(dbgs() << " Force: " << Force);
-    if (Force < BestStep.second)
-      BestStep = std::make_pair(i, Force);
-
-    DEBUG(dbgs() << '\n');
+  while (getTimeFrame(A) != 1) {
+    TimeFrame TF;
+    (void) trySinkAtom(A, TF);
+    sinkSTF(A, TF.first, TF.second);
+    buildFDInfo(false);
+    // Others STF may be affected.
+    updateSTF();
   }
-  return BestStep.first;
+  return getASAPStep(A);
 }
 
 bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
@@ -145,16 +143,10 @@ bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
   if (getTimeFrame(A) > 1) {
     step = findBestStep(A);
     DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
-    // If we can not schedule A.
-    if (step == 0) {
-      DEBUG(dbgs() << " Can not find avaliable step!\n\n");
-      return false;
-    }
   }
-
+  // FDInfo updated in find best step.
   A->scheduledTo(step);
-  buildFDInfo(false);
-  return scheduleCriticalPath(false);
+  return (isResourceConstraintPreserved() && scheduleCriticalPath(false));
 }
 
 bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
@@ -179,13 +171,13 @@ bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
 //===----------------------------------------------------------------------===//
 
 bool ForceDirectedScheduler::scheduleState() {
-  unsigned StartStep = HI->getTotalCycle();
   buildFDInfo(true);
   if (!scheduleCriticalPath(false))
     return false;
 
   while (findBestSink()) {
     if (!scheduleCriticalPath(false)) {
+      DEBUG(dumpDG());
       DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
                    << getExtraResReq() << '\n');
       return false;
@@ -229,33 +221,4 @@ bool ForceDirectedScheduler::findBestSink() {
   updateSTF();
   return true;
 
-}
-
-double ForceDirectedScheduler::trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame) {
-  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
-
-  double ASAPForce = computeForce(A, ASAP, ASAP),
-         ALAPForce = computeForce(A, ALAP, ALAP);
-
-  double FMax = std::max(ASAPForce, ALAPForce),
-         FMin = std::min(ASAPForce, ALAPForce);
-
-  double FMinStar = FMin;
-
-  if (ASAP + 1 < ALAP)
-    FMinStar = std::min(FMinStar, 0.0);
-  else
-    assert(ASAP + 1 == ALAP && "Broken time frame!");
-  
-  double FGain = FMax - FMinStar;
-
-  if (ASAPForce >= ALAPForce)
-    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
-  else
-    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
-
-  // Recover time frame.
-  buildTimeFrame();
-
-  return FGain;
 }
