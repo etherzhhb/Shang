@@ -40,7 +40,6 @@ RegisterPass<HWAtomInfo> X("vbe-hw-atom-info",
                            " on llvm IR");
 
 void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<LiveValues>();
   AU.addRequired<LoopInfo>();
   AU.addRequired<ResourceConfig>();
   AU.addRequired<MemDepInfo>();
@@ -48,7 +47,6 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool HWAtomInfo::runOnFunction(Function &F) {
-  LV = &getAnalysis<LiveValues>();
   LI = &getAnalysis<LoopInfo>();
   RC = &getAnalysis<ResourceConfig>();
   MDA = &getAnalysis<MemDepInfo>();
@@ -184,6 +182,15 @@ void HWAtomInfo::releaseMemory() {
   clear();
 }
 
+static bool usedOutSideBB(Value &V, BasicBlock *BB) {
+  for (Value::use_iterator UI = V.use_begin(), UE = V.use_end();
+      UI != UE; ++UI)
+    if (Instruction *I = dyn_cast<Instruction>(UI))
+      if (I->getParent() != BB)
+        return true;
+
+  return false;
+}
 //===----------------------------------------------------------------------===//
 // Construct atom from LLVM-IR
 // What if the one of the operand is Constant?
@@ -211,7 +218,7 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
     Instruction &Inst = *II;
     HWAtom *A = getAtomFor(Inst);
     
-    if (!LV->isKilledInBlock(&Inst, BB)) {
+    if (usedOutSideBB(Inst, BB)) {
       Deps.push_back(getValDepEdge(A, false, HWValDep::Export));
       continue;
     }
@@ -226,15 +233,10 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
   // Also Export live in value, to simplify the Local LEA based register
   // merging alogrithm.
   for (FSMState::iterator AI = State->begin(), AE = State->end();
-       AI != AE; ++AI) {
-    if (HWALIReg *LI = dyn_cast<HWALIReg>(*AI)) {
-      if (LV->isKilledInBlock(&LI->getValue(), BB))
-        continue;
-
-      // Dirty Hack: Just add as control dependencies first.
-      Deps.push_back(getCtrlDepEdge(LI));
-    }
-  }
+       AI != AE; ++AI)
+    if (HWALIReg *LI = dyn_cast<HWALIReg>(*AI))
+      if (usedOutSideBB(LI->getValue(), BB))
+        Deps.push_back(getCtrlDepEdge(LI));
 
   // Create delay atom for phi node.
   addPhiExportEdges(*BB, Deps);
