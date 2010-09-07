@@ -297,6 +297,7 @@ double ForceDirectedSchedulingBase::getRangeDG(HWFUnit *FU,
 double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
                                                  unsigned ASAP, unsigned ALAP) {
   buildTimeFrame(A, ASAP, ALAP);
+  buildDGraph();
   // Compute the forces.
   double SelfForce = computeSelfForce(A, ASAP, ALAP);
   // The follow function will invalid the time frame.
