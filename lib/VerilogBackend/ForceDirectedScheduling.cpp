@@ -161,11 +161,16 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
         AtomToTF[A].second = NewStep;
         changed = true;
       }
-
-      assert(getALAPStep(A) >= getASAPStep(A)
-             && "Broken time frame!");
     }
   } while (changed);
+
+#ifndef NDEBUG
+  // Verify the time frames.
+  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+    HWAtom *A = *I;
+    assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
+  }
+#endif
 }
 
 void ForceDirectedSchedulingBase::printTimeFrame(raw_ostream &OS) const {
@@ -412,36 +417,3 @@ void ForceDirectedSchedulingBase::updateSTF() {
     sinkSTF(A, getASAPStep(A), getALAPStep(A));
   }
 }
-
-
-double ForceDirectedSchedulingBase::trySinkAtom(HWAtom *A,
-                                                TimeFrame &NewTimeFrame) {
-  // Build time frame to get the correct ASAP and ALAP.
-  buildTimeFrame();
-
-  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
-
-  double ASAPForce = computeForce(A, ASAP , ALAP - 1),
-    ALAPForce = computeForce(A, ASAP + 1, ALAP);
-
-  double FMax = std::max(ASAPForce, ALAPForce),
-    FMin = std::min(ASAPForce, ALAPForce);
-
-  double FMinStar = FMin;
-
-  if (ASAP + 1 < ALAP)
-    FMinStar = std::min(FMinStar, 0.0);
-  else
-    assert(ASAP + 1 == ALAP && "Broken time frame!");
-
-  double FGain = FMax - FMinStar;
-
-  // Discard the range with bigger force.
-  if (ASAPForce > ALAPForce)
-    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
-  else
-    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
-
-  return FGain;
-}
-
