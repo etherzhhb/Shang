@@ -85,8 +85,8 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
         if (VD->getDepType() == HWValDep::PHI)
           continue;
 
-      // Anti dependency occur because new value will write to the original register
-      // before it read.
+      // Anti dependency occur because new value will write to the original
+      // register before it read.
       DEBUG(
         dbgs() << "Src at Slot: " << Src->getSlot() << " ";
         Src->dump();
@@ -97,7 +97,10 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
       // The new value will come at slot II, and we must copy the old value out
       // before this moment, that means we need to emit the copy at
       // II - latancy of register assignment in FSM slot.
-      if (Dst->getSlot() - Src->getSlot() >= II) {
+      // Dst->getSlot() - Src->getSlot() > II or
+      // Dst->getSlot() - Src->getSlot() == II and  Exit->getOperand(0) != Src
+      if (Dst->getSlot() - Src->getSlot() > II ||
+          Dst->getSlot() - Src->getSlot() == II &&  Exit->getOperand(0) != Src){
         DEBUG(dbgs() << "Anti dependency found:\n");
         if (NewWrReg == 0) {
           unsigned StartSlot = Src->getSlot() + II;
