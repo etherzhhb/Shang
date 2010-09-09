@@ -320,7 +320,7 @@ double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A,
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
-  if (NoFDSchedule && !OpInst->isBinded()) return 0.0;
+  if (NoFDSchedule && !OpInst->isBinded() && MII) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
   double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
@@ -335,7 +335,7 @@ double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
   const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
   if (!OpInst) return 0.0;
 
-  if (NoFDSchedule && !OpInst->isBinded()) return 0.0;
+  if (NoFDSchedule && !OpInst->isBinded() && MII) return 0.0;
 
   HWFUnit *FU = OpInst->getFUnit();
   double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
