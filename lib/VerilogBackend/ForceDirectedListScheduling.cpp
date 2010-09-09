@@ -260,3 +260,90 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
 
   return FGain;
 }
+
+bool IMS::scheduleState() {
+  setCriticalPathLength(State->getNumAtoms());
+  buildFDInfo(true);
+  MRT.clear();
+
+  unsigned CurStep = State->getSlot();
+
+  fds_sort s(*this);
+
+  std::vector<HWAOpFU*> ReadyAtoms;
+  do {
+    // Find all ready atoms.
+    for (FSMState::iterator I = State->begin(), E = State->end();
+        I != E; ++I) {
+      HWAtom *A = *I;
+      if (!A->isScheduled() && isAllPredScheduled(A)) {
+        if (HWAOpFU *OpFU = dyn_cast<HWAOpFU>(A))
+          ReadyAtoms.push_back(OpFU);
+        else
+          A->scheduledTo(CurStep);
+      }
+    }
+    // Sort them.
+    std::sort(ReadyAtoms.begin(), ReadyAtoms.end(), s);
+
+    for (std::vector<HWAOpFU*>::iterator I = ReadyAtoms.begin(),
+         E = ReadyAtoms.end(); I != E; ++I) {
+      HWAOpFU *A = *I;
+      assert(getASAPStep(A) <= CurStep && getALAPStep(A) >= CurStep
+             && "Bad Step!");
+      // We need to avoid resource conflicts
+      if (takeRes(A->getFUnit(), CurStep))
+        A->scheduledTo(CurStep);
+      // The last chance to schedule the atom?
+      else if (CurStep == getALAPStep(A))
+        return false;
+    }
+
+    ++CurStep;
+  } while (!isAllAtomScheduled());
+
+  DEBUG(dumpTimeFrame());
+  DEBUG(dumpDG());
+  return true;
+}
+
+bool IMS::takeRes(HWFUnit *FU, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  // We will always have enough trivial resources.
+  if (FU->getResType() == HWResType::Trivial)
+    return true;
+
+  unsigned ModuloStep = step % getMII();
+  // Do all resource at step been reserve?
+  if (MRT[FU][ModuloStep] >= FU->getTotalFUs())
+    return false;
+
+  ++MRT[FU][ModuloStep];
+  return true;
+}
+
+
+bool IMS::isAllAtomScheduled() {
+  for (FSMState::iterator I = State->begin(), E = State->end();
+      I != E; ++I) {
+    HWAtom *A = *I;
+    if (!A->isScheduled())
+      return false;
+  }
+
+  return true;
+}
+
+bool IMS::isAllPredScheduled(HWAtom *A) {
+  for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
+      DI != DE; ++DI) {
+    if (DI.getEdge()->isBackEdge())
+      continue;
+
+    const HWAtom *Dep = *DI;
+    if (!Dep->isScheduled())
+      return false;
+  }
+
+  return true;
+}

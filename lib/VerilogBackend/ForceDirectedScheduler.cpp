@@ -36,6 +36,12 @@ NoFDLS("disable-fdls",
        cl::desc("vbe - Do not preform force-directed list schedule"),
        cl::Hidden, cl::init(false));
 
+
+static cl::opt<bool>
+NoFDMS("disable-fdms",
+       cl::desc("vbe - Do not preform force-directed modulo schedule"),
+       cl::Hidden, cl::init(false));
+
 namespace {
 struct FDSPass : public BasicBlockPass {
   FSMState *State;
@@ -138,13 +144,14 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
       NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second  + 1));
       if (Scheduler->getCriticalPathLength() >= Scheduler->getMII())
         NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
-      NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
+      if (!NoFDMS)
+        NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
       // Add both by default.
       CurPoint = std::make_pair(CurPoint.first + 1, CurPoint.second  + 1);
     }
 
     Scheduler->setMII(NextPoints.back().first);
-    Scheduler->settCriticalPathLength(NextPoints.back().second);
+    Scheduler->setCriticalPathLength(NextPoints.back().second);
     NextPoints.pop_back();
   }
 
