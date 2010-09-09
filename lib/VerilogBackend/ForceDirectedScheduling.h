@@ -157,7 +157,7 @@ public:
   unsigned getCriticalPathLength() {
     return CriticalPathEnd - State->getSlot();
   }
-  void settCriticalPathLength(unsigned L) {
+  void setCriticalPathLength(unsigned L) {
     CriticalPathEnd = State->getSlot() + L;
   }
 };
@@ -184,10 +184,28 @@ protected:
   bool scheduleQueue(AtomQueueType &Queue);
   //}
 
-  bool scheduleState();
 public:
   ForceDirectedListScheduler(HWAtomInfo *HAInfo, FSMState *S) 
     : ForceDirectedSchedulingBase(HAInfo, S) {}
+
+  bool scheduleState();
+
+};
+
+
+class IMS : public ForceDirectedListScheduler {
+  typedef std::map<unsigned, unsigned> UsageMapType;
+  typedef std::map<HWFUnit*, UsageMapType> MRTType;
+  MRTType MRT;
+
+  bool takeRes(HWFUnit *FU, unsigned step);
+  bool isAllPredScheduled(HWAtom *A);
+  bool isAllAtomScheduled();
+public:
+  IMS(HWAtomInfo *HAInfo, FSMState *S)
+    : ForceDirectedListScheduler(HAInfo, S){}
+
+  bool scheduleState();
 };
 
 class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
