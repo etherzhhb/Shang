@@ -118,6 +118,8 @@ bool RTLWriter::runOnFunction(Function &F) {
   vlang->comment(Out.indent(6)) << "FSM\n";
   vlang->switchCase(Out.indent(6), "NextFSMState");
   Out << ControlBlock.str();
+  // Case default.
+  Out.indent(6) << "default:  NextFSMState <= state_idle;\n";
   vlang->endSwitch(Out.indent(6));
   vlang->alwaysEnd(Out, 2);
 
@@ -495,9 +497,9 @@ void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefi
   std::string OpA = OpPrefix + "_a" + utostr(FUID);
   std::string OpB = OpPrefix + "_b" + utostr(FUID);
 
-  DataPath.indent(6) <<  OpA << " <= "
+  DataPath.indent(6) <<  OpA << " = "
     << getAsOperand(A->getValDep(0)) << ";\n";
-  DataPath.indent(6) <<  OpB << " <= "
+  DataPath.indent(6) <<  OpB << " = "
     << getAsOperand(A->getValDep(1)) << ";\n";
 }
 
@@ -509,9 +511,9 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
   Instruction *Inst = &(A->getInst<Instruction>());
   DataPath.indent(6) << Mode;
   if (Inst->getOpcode() == Instruction::Sub)
-    DataPath << " <= 1'b0;\n";
+    DataPath << " = 1'b0;\n";
   else
-    DataPath << " <= 1'b1;\n";
+    DataPath << " = 1'b1;\n";
 
   emitResourceOpForBinOpRes(A, "addsub");
 }
@@ -544,23 +546,23 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
   unsigned FUID = A->getUnitID();
   Instruction *Inst = &(A->getInst<Instruction>());
   // Enable the memory
-  DataPath.indent(6) << "membus_en" << FUID << " <= 1'b1;\n";
+  DataPath.indent(6) << "membus_en" << FUID << " = 1'b1;\n";
   // Send the address.
-  DataPath.indent(6) << "membus_addr" << FUID << " <= ";
+  DataPath.indent(6) << "membus_addr" << FUID << " = ";
 
   // Emit the operation
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
     DataPath << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_we" << FUID << " <= 1'b0;\n";
+    DataPath.indent(6) << "membus_we" << FUID << " = 1'b0;\n";
     DataPath.indent(6) << "membus_in" << FUID
-      << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+      << " = " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   } else { // It must be a store
     DataPath << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
       << ";\n";
-    DataPath.indent(6) << "membus_we" << FUID << " <= 1'b1;\n";
+    DataPath.indent(6) << "membus_we" << FUID << " = 1'b1;\n";
     DataPath.indent(6) << "membus_in" << FUID
-      << " <= " << getAsOperand(A->getValDep(0)) << ";\n";
+      << " = " << getAsOperand(A->getValDep(0)) << ";\n";
   }
 }
 
@@ -569,9 +571,9 @@ void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string 
   std::string OpA = OpPrefix + "_a" + utostr(FUID);
   std::string OpB = OpPrefix + "_b" + utostr(FUID);
 
-  DataPath.indent(6) << OpA << " <= "
+  DataPath.indent(6) << OpA << " = "
     << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
-  DataPath.indent(6) << OpB << " <= "
+  DataPath.indent(6) << OpB << " = "
     << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
   vlang->end(DataPath.indent(4));
 }
@@ -579,7 +581,7 @@ void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string 
 template<>
 void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
   std::string Mode = "addsub_mode" + utostr(FU->getUnitID());
-  DataPath.indent(6) << Mode << " <= 1'b0;\n";
+  DataPath.indent(6) << Mode << " = 1'b0;\n";
   emitResourceDefaultOpForBinOpRes(FU, "addsub");
 }
 
@@ -609,12 +611,12 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
            AddrWidth = FU->getInputBitwidth(1),
            FUID = FU->getUnitID();
 
-  DataPath.indent(6) << "membus_en" << FUID << " <= 1'b0;\n";
+  DataPath.indent(6) << "membus_en" << FUID << " = 1'b0;\n";
   DataPath.indent(6) << "membus_addr" << FUID
-    << " <= " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  DataPath.indent(6) << "membus_we" << FUID << " <= 1'b0;\n";
+    << " = " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
+  DataPath.indent(6) << "membus_we" << FUID << " = 1'b0;\n";
   DataPath.indent(6) << "membus_in" << FUID
-    << " <= " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+    << " = " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   vlang->end(DataPath.indent(4));
 }
 
@@ -823,6 +825,7 @@ void RTLWriter::visitExtInst(HWAOpFU &A) {
   unsigned ChTyWidth = A.getValDep(0)->getBitWidth();
 
   int DiffBits = TyWidth - ChTyWidth;	
+  assert(DiffBits > 0 && "Bad ext!");
   DataPath << "{{" << DiffBits << "{";
 
   HWEdge &Op = A.getValDep(0);

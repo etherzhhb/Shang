@@ -125,27 +125,33 @@ void ForceDirectedListScheduler::fillQueue(AtomQueueType &Queue, It begin, It en
 }
 
 unsigned ForceDirectedListScheduler::findBestStep(HWAtom *A) {
-  while (getTimeFrame(A) != 1) {
-    TimeFrame TF;
-    (void) trySinkAtom(A, TF);
-    sinkSTF(A, TF.first, TF.second);
-    buildFDInfo(false);
-    // Others STF may be affected.
-    updateSTF();
+  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
+  // Time frame is 1, we do not have other choice.
+  if (ASAP == ALAP) return ASAP;
+
+  std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
+  DEBUG(dbgs() << "\tScan for best step:\n");
+  // For each possible step:
+  for (unsigned i = ASAP, e = ALAP + 1; i != e; ++i) {
+    DEBUG(dbgs() << "At Step " << i << "\n");
+    double Force = computeForce(A, i, i);
+    DEBUG(dbgs() << " Force: " << Force);
+    if (Force < BestStep.second)
+      BestStep = std::make_pair(i, Force);
+
+    DEBUG(dbgs() << '\n');
   }
-  return getASAPStep(A);
+  return BestStep.first;
 }
 
 bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
   assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
-  unsigned step = getASAPStep(A);
-  if (getTimeFrame(A) > 1) {
-    step = findBestStep(A);
-    DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
-  }
-  // FDInfo updated in find best step.
+  unsigned step = findBestStep(A);
+  DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
   A->scheduledTo(step);
+  // Update FDInfo.
+  buildFDInfo(false);
   return (isResourceConstraintPreserved() && scheduleCriticalPath(false));
 }
 
@@ -220,5 +226,37 @@ bool ForceDirectedScheduler::findBestSink() {
   buildFDInfo(false);
   updateSTF();
   return true;
+}
 
+
+
+double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
+                                                TimeFrame &NewTimeFrame) {
+  // Build time frame to get the correct ASAP and ALAP.
+  buildTimeFrame();
+
+  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
+
+  double ASAPForce = computeForce(A, ASAP , ALAP - 1),
+    ALAPForce = computeForce(A, ASAP + 1, ALAP);
+
+  double FMax = std::max(ASAPForce, ALAPForce),
+    FMin = std::min(ASAPForce, ALAPForce);
+
+  double FMinStar = FMin;
+
+  if (ASAP + 1 < ALAP)
+    FMinStar = std::min(FMinStar, 0.0);
+  else
+    assert(ASAP + 1 == ALAP && "Broken time frame!");
+
+  double FGain = FMax - FMinStar;
+
+  // Discard the range with bigger force.
+  if (ASAPForce > ALAPForce)
+    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
+  else
+    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
+
+  return FGain;
 }
