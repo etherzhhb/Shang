@@ -118,6 +118,8 @@ bool RTLWriter::runOnFunction(Function &F) {
   vlang->comment(Out.indent(6)) << "FSM\n";
   vlang->switchCase(Out.indent(6), "NextFSMState");
   Out << ControlBlock.str();
+  // Case default.
+  Out.indent(6) << "default:  NextFSMState <= state_idle;\n";
   vlang->endSwitch(Out.indent(6));
   vlang->alwaysEnd(Out, 2);
 
@@ -823,6 +825,7 @@ void RTLWriter::visitExtInst(HWAOpFU &A) {
   unsigned ChTyWidth = A.getValDep(0)->getBitWidth();
 
   int DiffBits = TyWidth - ChTyWidth;	
+  assert(DiffBits > 0 && "Bad ext!");
   DataPath << "{{" << DiffBits << "{";
 
   HWEdge &Op = A.getValDep(0);
