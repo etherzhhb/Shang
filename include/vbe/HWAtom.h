@@ -267,7 +267,6 @@ protected:
 
   friend class FSMState;
 
-  void resetSchedule() { SchedSlot = 0; }
   void setParent(FSMState *State);
 
 public:
@@ -400,6 +399,7 @@ public:
   unsigned getFinSlot() const { return SchedSlot + Latancy; }
   bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
+  void resetSchedule() { SchedSlot = 0; }
 
   // BitWidth
   inline uint8_t getBitWidth() const { return BitWidth; }

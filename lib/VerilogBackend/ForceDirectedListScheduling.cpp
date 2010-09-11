@@ -246,8 +246,6 @@ bool ForceDirectedScheduler::findBestSink() {
   return true;
 }
 
-
-
 double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
                                                 TimeFrame &NewTimeFrame) {
   // Build time frame to get the correct ASAP and ALAP.
@@ -279,69 +277,106 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
   return FGain;
 }
 
+struct ims_sort {
+  ForceDirectedSchedulingBase &Info;
+  ims_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
+  bool operator() (const HWAtom *LHS, const HWAtom *RHS) const;
+};
+
+bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
+  // Schedule HWOpFU first.
+  if (isa<HWAOpFU>(LHS) && !isa<HWAOpFU>(RHS))
+    return false;
+  if (!isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS))
+    return true;
+  if (isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS)) {
+    HWFUnit *LFU = cast<HWAOpFU>(LHS)->getFUnit(),
+            *RFU = cast<HWAOpFU>(RHS)->getFUnit();
+    unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
+    // Schedule the atom with less available function unit first.
+    if (LTFU > RTFU) return true;
+    if (LTFU < RTFU) return false;
+  }
+  // 
+  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
+  if (LASAP > RASAP) return true;
+  if (LASAP < RASAP) return false;
+  
+  return LHS->getIdx() > RHS->getIdx();
+}
+
 bool IMS::scheduleState() {
-  buildFDInfo(true);
+  State->scheduledTo(HI->getTotalCycle());
+  buildASAPStep();
   MRT.clear();
-  std::map<HWAtom*, std::set<unsigned> > ExecludeSlots;
+  std::map<HWAtom*, std::set<unsigned> > ExcludeSlots;
 
   unsigned CurStep = State->getSlot();
 
-  fds_sort s(*this);
+  ims_sort s(*this);
 
-  std::vector<HWAtom*> ReadyAtoms;
-  do {
-    ReadyAtoms.clear();
-    // Find all ready atoms.
-    for (FSMState::iterator I = State->begin(), E = State->end();
-        I != E; ++I) {
-      HWAtom *A = *I;
-      if (!A->isScheduled()) {
-        if (CurStep > getALAPStep(A)) {
-          return false;
+  while (!isAllAtomScheduled()) {
+    std::vector<HWAtom*> ToSched(++State->begin(), State->end());
+    std::sort(ToSched.begin(), ToSched.end(), s);
+
+    while (!ToSched.empty()) {
+      HWAtom *A = ToSched.back();
+      ToSched.pop_back();
+
+      unsigned EarliestUnTry = 0;
+      bool AllExcluded = true;
+      for (unsigned i = getASAPStep(A), e = getASAPStep(A) + getMII();
+           i != e; ++i) {
+        if (ExcludeSlots[A].count(i))
+          continue;
+        if (EarliestUnTry == 0)        
+          EarliestUnTry = i;
+        HWAOpFU *OF = 0;
+        if (OF = dyn_cast<HWAOpFU>(A)) {
+          if (!isResAvailable(OF->getFUnit(), i))
+            continue;
+          else
+            isResAvailable(OF->getFUnit(), i, true);
         }
-        if (isAllPredScheduled(A)
-            && getASAPStep(A) <= CurStep) // Be careful of Modulo constraint.
-          ReadyAtoms.push_back(A);
+        
+        // This is a available slot.
+        A->scheduledTo(i);
+      }
+
+      if (AllExcluded) {
+        increaseMII();
+        break;
+      } else {
+        HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
+        assert(OF && "A can be schedule only because resource conflict!");
+        HWAOpFU *Blocking = findBlockingAtom(OF->getFUnit(), EarliestUnTry);
+        assert(Blocking && "No one blocking?");
+        Blocking->resetSchedule();
+        ExcludeSlots[Blocking].insert(EarliestUnTry);
+        // Resource table do not need to change.
+        OF->scheduledTo(EarliestUnTry);
       }
     }
-
-    // Sort them.
-    std::sort(ReadyAtoms.begin(), ReadyAtoms.end(), s);
-    // Only schedule one atom at a time.
-    for (std::vector<HWAtom*>::iterator I = ReadyAtoms.begin(),
-         E = ReadyAtoms.end(); I != E; ++I) {
-      HWAtom *A = *I;
-      // All step missed because some other schedule at this step.
-      if (!(getASAPStep(A) <= CurStep && getALAPStep(A) >= CurStep))
-        return false;
-      HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
-
-      if (OF == 0) {
-        A->scheduledTo(CurStep);
-        buildFDInfo(false);
-        continue;
-      }
-
-      // We need to avoid resource conflicts
-      if (takeRes(OF->getFUnit(), CurStep)) {
-        A->scheduledTo(CurStep);
-        buildFDInfo(false);
-        continue;
-      } // The last chance to schedule the atom?
-      else if (CurStep == getALAPStep(A)) {
-        return false;
-      }
-    }
-
-    ++CurStep;
-  } while (!isAllAtomScheduled());
+  }
 
   DEBUG(dumpTimeFrame());
   DEBUG(dumpDG());
   return true;
 }
 
-bool IMS::takeRes(HWFUnit *FU, unsigned step) {
+
+HWAOpFU *IMS::findBlockingAtom(HWFUnit *FU, unsigned step) {
+  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+    HWAOpFU *OF = dyn_cast<HWAOpFU>(*I);
+    if (OF == 0 || !OF->isScheduled() || OF->getFUnit() != FU)
+      continue;
+    if (OF->getSlot() == step) return OF; 
+  }
+
+  return 0;
+}
+
+bool IMS::isResAvailable(HWFUnit *FU, unsigned step, bool take) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   // We will always have enough trivial resources.
   if (FU->getResType() == HWResType::Trivial)
@@ -352,7 +387,8 @@ bool IMS::takeRes(HWFUnit *FU, unsigned step) {
   if (MRT[FU][ModuloStep] >= FU->getTotalFUs())
     return false;
 
-  ++MRT[FU][ModuloStep];
+  if (take) ++MRT[FU][ModuloStep];
+  
   return true;
 }
 
@@ -362,20 +398,6 @@ bool IMS::isAllAtomScheduled() {
       I != E; ++I) {
     HWAtom *A = *I;
     if (!A->isScheduled())
-      return false;
-  }
-
-  return true;
-}
-
-bool IMS::isAllPredScheduled(HWAtom *A) {
-  for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
-      DI != DE; ++DI) {
-    if (DI.getEdge()->isBackEdge())
-      continue;
-
-    const HWAtom *Dep = *DI;
-    if (!Dep->isScheduled())
       return false;
   }
 

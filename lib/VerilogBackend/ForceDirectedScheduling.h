@@ -51,11 +51,6 @@ private:
 
   std::map<const HWAOpFU*, double> AvgDG;
 
-  void buildASAPStep(const HWAtom *ClampedAtom = 0,
-                     unsigned ClampedASAP = 0);
-  void buildALAPStep(const HWAtom *ClampedAtom = 0,
-                     unsigned ClampedALAP = 0);
-
   void resetSTF();
 
 protected:
@@ -78,6 +73,11 @@ public:
   void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
   void updateSTF();
 
+
+  void buildASAPStep(const HWAtom *ClampedAtom = 0,
+    unsigned ClampedASAP = 0);
+  void buildALAPStep(const HWAtom *ClampedAtom = 0,
+    unsigned ClampedALAP = 0);
   void buildTimeFrame(const HWAtom *ClampedAtom = 0,
                       unsigned ClampedASAP = 0,
                       unsigned ClampedALAP = 0);
@@ -198,9 +198,9 @@ class IMS : public ForceDirectedListScheduler {
   typedef std::map<HWFUnit*, UsageMapType> MRTType;
   MRTType MRT;
 
-  bool takeRes(HWFUnit *FU, unsigned step);
-  bool isAllPredScheduled(HWAtom *A);
+  bool isResAvailable(HWFUnit *FU, unsigned step, bool take = false);
   bool isAllAtomScheduled();
+  HWAOpFU *findBlockingAtom(HWFUnit *FU, unsigned step); 
 public:
   IMS(HWAtomInfo *HAInfo, FSMState *S)
     : ForceDirectedListScheduler(HAInfo, S){}
