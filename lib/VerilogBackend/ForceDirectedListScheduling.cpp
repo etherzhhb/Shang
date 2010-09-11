@@ -282,6 +282,7 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
 bool IMS::scheduleState() {
   buildFDInfo(true);
   MRT.clear();
+  std::map<HWAtom*, std::set<unsigned> > ExecludeSlots;
 
   unsigned CurStep = State->getSlot();
 
@@ -295,8 +296,9 @@ bool IMS::scheduleState() {
         I != E; ++I) {
       HWAtom *A = *I;
       if (!A->isScheduled()) {
-        if (CurStep > getALAPStep(A))
+        if (CurStep > getALAPStep(A)) {
           return false;
+        }
         if (isAllPredScheduled(A)
             && getASAPStep(A) <= CurStep) // Be careful of Modulo constraint.
           ReadyAtoms.push_back(A);
@@ -326,8 +328,9 @@ bool IMS::scheduleState() {
         buildFDInfo(false);
         continue;
       } // The last chance to schedule the atom?
-      else if (CurStep == getALAPStep(A))
+      else if (CurStep == getALAPStep(A)) {
         return false;
+      }
     }
 
     ++CurStep;
