@@ -74,7 +74,8 @@ void InstLowering::lowerGEP(GetElementPtrInst *GEP) {
   uint64_t ElemTyAllocSize = TD->getTypeAllocSize(ElemTy);
 
   uint64_t TotalConstOffs = 0;
-  Value *LastIndex = 0;
+  Value *LastIndex = ConstantInt::get(TD->getIntPtrType(BaseTy->getContext()),
+                                      0);
 
   IRBuilder<> Builder(GEP->getParent(), GEP);
 
@@ -111,10 +112,7 @@ void InstLowering::lowerGEP(GetElementPtrInst *GEP) {
       }
     }
 
-    if (LastIndex == 0)
-      LastIndex = Idx;
-    else
-      LastIndex = Builder.CreateAdd(LastIndex, Idx);
+    LastIndex = Builder.CreateAdd(LastIndex, Idx);
   }
   // Add the constant to the offset
   if (TotalConstOffs) {
