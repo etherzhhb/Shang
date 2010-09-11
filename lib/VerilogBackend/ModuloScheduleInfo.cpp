@@ -192,7 +192,7 @@ void HWSubGraph::unblock(SubGraphNode *N) {
 
 void HWSubGraph::addRecurrence() {
   DEBUG(dbgs() << "\nRecurrence:\n");
-  std::vector<HWAtom*> Recurrence;
+  //std::vector<HWAtom*> Recurrence;
   unsigned TotalLatency = 0;
   unsigned TotalDistance = 0;
   const HWAtom *LastAtom = stack.back()->getAtom();
@@ -213,11 +213,11 @@ void HWSubGraph::addRecurrence() {
     DEBUG(N->dump());
     LastAtom = A;
     // Dirty Hack.
-    Recurrence.push_back(const_cast<HWAtom*>(A));
+    //Recurrence.push_back(const_cast<HWAtom*>(A));
   }
 
   unsigned RecII = TotalLatency / TotalDistance;
-  MSInfo->addRecurrence(RecII, Recurrence);
+  //MSInfo->addRecurrence(RecII, Recurrence);
   RecMII = std::max(RecMII, RecII);
   DEBUG(dbgs() << "RecII: " << RecII << '\n');
 }

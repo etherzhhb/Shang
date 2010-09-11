@@ -114,12 +114,15 @@ void FDSPass::scheduleACyclicCodeRegion() {
 
   // Set the Initial Interval to the total slot, so we can generate the correct
   // control logic for loop if MS is disable.
-  if (State->haveSelfLoop())
+  if (State->haveSelfLoop()) {
     State->setNoOverlapII();
+    dbgs() << "Latency: " << State->getTotalSlot() << '\n';
+  }
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
 void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
+  dbgs() << "MII: " << II << "...";
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->lengthenCriticalPath();
@@ -158,6 +161,7 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
     Scheduler->setCriticalPathLength(NextPoints.back().second);
     NextPoints.pop_back();
   }
+  dbgs() << "SchedII: " << Scheduler->getMII() << '\n';
 
   //Scheduler->getCriticalPathLength() < Scheduler->getMII())
   State->setII(Scheduler->getMII());
