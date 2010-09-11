@@ -306,47 +306,45 @@ bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
 }
 
 bool IMS::scheduleState() {
-  State->scheduledTo(HI->getTotalCycle());
-  buildASAPStep();
-  MRT.clear();
   std::map<HWAtom*, std::set<unsigned> > ExcludeSlots;
-
+  setCriticalPathLength(HWAtom::MaxSlot);
   unsigned CurStep = State->getSlot();
 
-  ims_sort s(*this);
+  fds_sort s(*this);
 
   while (!isAllAtomScheduled()) {
-    std::vector<HWAtom*> ToSched(++State->begin(), State->end());
-    std::sort(ToSched.begin(), ToSched.end(), s);
+    State->resetSchedule(HI->getTotalCycle());
+    buildTimeFrame();
+    // Reset exclude slots and resource table.
+    MRT.clear();
 
+    typedef PriorityQueue<HWAtom*, std::vector<HWAtom*>, fds_sort> IMSQueueType;
+    IMSQueueType ToSched(++State->begin(), State->end(), s);
     while (!ToSched.empty()) {
-      HWAtom *A = ToSched.back();
-      ToSched.pop_back();
+      HWAtom *A = ToSched.top();
+      ToSched.pop();
 
       unsigned EarliestUnTry = 0;
-      bool AllExcluded = true;
-      for (unsigned i = getASAPStep(A), e = getASAPStep(A) + getMII();
-           i != e; ++i) {
+      for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
         if (ExcludeSlots[A].count(i))
           continue;
         if (EarliestUnTry == 0)        
           EarliestUnTry = i;
         HWAOpFU *OF = 0;
         if (OF = dyn_cast<HWAOpFU>(A)) {
-          if (!isResAvailable(OF->getFUnit(), i))
+          if (!isResAvailable(OF->getFUnit(), i, true))
             continue;
-          else
-            isResAvailable(OF->getFUnit(), i, true);
         }
         
         // This is a available slot.
         A->scheduledTo(i);
+        break;
       }
 
-      if (AllExcluded) {
+      if (EarliestUnTry == 0) {
         increaseMII();
         break;
-      } else {
+      } else if(!A->isScheduled()) {
         HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
         assert(OF && "A can be schedule only because resource conflict!");
         HWAOpFU *Blocking = findBlockingAtom(OF->getFUnit(), EarliestUnTry);
@@ -355,10 +353,14 @@ bool IMS::scheduleState() {
         ExcludeSlots[Blocking].insert(EarliestUnTry);
         // Resource table do not need to change.
         OF->scheduledTo(EarliestUnTry);
+        ToSched.push(Blocking);
       }
+
+      buildTimeFrame();
+      ToSched.reheapify();
     }
   }
-
+  DEBUG(buildTimeFrame());
   DEBUG(dumpTimeFrame());
   DEBUG(dumpDG());
   return true;
