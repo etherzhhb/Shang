@@ -84,6 +84,7 @@ bool ScalarStreamization::runOnBasicBlock(BasicBlock &BB) {
       else if (HWValDep *VD = dyn_cast<HWValDep>(E))
         if (VD->getDepType() == HWValDep::PHI)
           continue;
+      assert(Dst->getSlot() >= Src->getSlot() && "Bad schedule!");
 
       // Anti dependency occur because new value will write to the original
       // register before it read.
