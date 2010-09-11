@@ -27,19 +27,37 @@ using namespace esyn;
 
 //===----------------------------------------------------------------------===//
 bool
-ForceDirectedListScheduler::fds_sort::operator()(const HWAOpFU* LHS,
-                                                 const HWAOpFU* RHS) const {
-  HWFUnit *LFU = LHS->getFUnit(), *RFU = RHS->getFUnit();
-  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
-  // Schedule the atom with less available function unit first.
-  if (LTFU > RTFU) return true;
-  if (LTFU < RTFU) return false;
+ForceDirectedListScheduler::fds_sort::operator()(const HWAtom* LHS,
+                                                 const HWAtom* RHS) const {
+  // Schedule HWOpFU first.
+  if (isa<HWAOpFU>(LHS) && !isa<HWAOpFU>(RHS))
+    return false;
+  if (!isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS))
+    return true;
+  if (isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS)) {
+    HWFUnit *LFU = cast<HWAOpFU>(LHS)->getFUnit(),
+            *RFU = cast<HWAOpFU>(RHS)->getFUnit();
+    unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
+    // Schedule the atom with less available function unit first.
+    if (LTFU > RTFU) return true;
+    if (LTFU < RTFU) return false;
+  }
 
   unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
   // Schedule the low mobility nodes first.
   if (LTF > RTF) return true; // Place RHS first.
   if (LTF < RTF) return false;
 
+  unsigned LALAP = Info.getALAPStep(LHS), RALAP = Info.getALAPStep(RHS);
+  if (LALAP > RALAP) return true;
+  if (LALAP < RALAP) return false;
+
+  // 
+  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
+  if (LASAP > RASAP) return true;
+  if (LASAP < RASAP) return false;
+
+  
   return LHS->getIdx() > RHS->getIdx();
 }
 
@@ -262,7 +280,6 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
 }
 
 bool IMS::scheduleState() {
-  setCriticalPathLength(State->getNumAtoms());
   buildFDInfo(true);
   MRT.clear();
 
@@ -270,31 +287,45 @@ bool IMS::scheduleState() {
 
   fds_sort s(*this);
 
-  std::vector<HWAOpFU*> ReadyAtoms;
+  std::vector<HWAtom*> ReadyAtoms;
   do {
+    ReadyAtoms.clear();
     // Find all ready atoms.
     for (FSMState::iterator I = State->begin(), E = State->end();
         I != E; ++I) {
       HWAtom *A = *I;
-      if (!A->isScheduled() && isAllPredScheduled(A)) {
-        if (HWAOpFU *OpFU = dyn_cast<HWAOpFU>(A))
-          ReadyAtoms.push_back(OpFU);
-        else
-          A->scheduledTo(CurStep);
+      if (!A->isScheduled()) {
+        if (CurStep > getALAPStep(A))
+          return false;
+        if (isAllPredScheduled(A)
+            && getASAPStep(A) <= CurStep) // Be careful of Modulo constraint.
+          ReadyAtoms.push_back(A);
       }
     }
+
     // Sort them.
     std::sort(ReadyAtoms.begin(), ReadyAtoms.end(), s);
-
-    for (std::vector<HWAOpFU*>::iterator I = ReadyAtoms.begin(),
+    // Only schedule one atom at a time.
+    for (std::vector<HWAtom*>::iterator I = ReadyAtoms.begin(),
          E = ReadyAtoms.end(); I != E; ++I) {
-      HWAOpFU *A = *I;
-      assert(getASAPStep(A) <= CurStep && getALAPStep(A) >= CurStep
-             && "Bad Step!");
-      // We need to avoid resource conflicts
-      if (takeRes(A->getFUnit(), CurStep))
+      HWAtom *A = *I;
+      // All step missed because some other schedule at this step.
+      if (!(getASAPStep(A) <= CurStep && getALAPStep(A) >= CurStep))
+        return false;
+      HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
+
+      if (OF == 0) {
         A->scheduledTo(CurStep);
-      // The last chance to schedule the atom?
+        buildFDInfo(false);
+        continue;
+      }
+
+      // We need to avoid resource conflicts
+      if (takeRes(OF->getFUnit(), CurStep)) {
+        A->scheduledTo(CurStep);
+        buildFDInfo(false);
+        continue;
+      } // The last chance to schedule the atom?
       else if (CurStep == getALAPStep(A))
         return false;
     }

@@ -169,7 +169,7 @@ protected:
   struct fds_sort {
     ForceDirectedSchedulingBase &Info;
     fds_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
-    bool operator() (const HWAOpFU *LHS, const HWAOpFU *RHS) const;
+    bool operator() (const HWAtom *LHS, const HWAtom *RHS) const;
   };
 
   typedef PriorityQueue<HWAOpFU*, std::vector<HWAOpFU*>, fds_sort> AtomQueueType;

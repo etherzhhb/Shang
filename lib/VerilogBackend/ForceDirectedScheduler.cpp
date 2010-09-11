@@ -84,9 +84,14 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   else
     Scheduler = new ForceDirectedListScheduler(HI, State);
 
-  if (MSInfo.isModuloSchedulable())
+  if (MSInfo.isModuloSchedulable()) {
+    if (NoFDMS) {
+      delete Scheduler;
+      Scheduler = new IMS(HI, State);
+    }
+    
     scheduleCyclicCodeRegion(MSInfo.computeMII());
-  else
+  } else
     scheduleACyclicCodeRegion();
 
   HI->setTotalCycle(State->getEndSlot() + 1);
@@ -144,8 +149,7 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
       NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second  + 1));
       if (Scheduler->getCriticalPathLength() >= Scheduler->getMII())
         NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
-      if (!NoFDMS)
-        NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
+      NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
       // Add both by default.
       CurPoint = std::make_pair(CurPoint.first + 1, CurPoint.second  + 1);
     }
