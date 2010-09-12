@@ -116,7 +116,7 @@ void FDSPass::scheduleACyclicCodeRegion() {
   // control logic for loop if MS is disable.
   if (State->haveSelfLoop()) {
     State->setNoOverlapII();
-    dbgs() << "Latency: " << State->getTotalSlot() << '\n';
+    DEBUG(dbgs() << "Latency: " << State->getTotalSlot() << '\n');
   }
   DEBUG(Scheduler->dumpTimeFrame());
 }
@@ -161,7 +161,8 @@ void FDSPass::scheduleCyclicCodeRegion(unsigned II) {
     Scheduler->setCriticalPathLength(NextPoints.back().second);
     NextPoints.pop_back();
   }
-  dbgs() << "SchedII: " << Scheduler->getMII() << '\n';
+  DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
+               << " Latency: " << State->getTotalSlot() << '\n');
 
   //Scheduler->getCriticalPathLength() < Scheduler->getMII())
   State->setII(Scheduler->getMII());
