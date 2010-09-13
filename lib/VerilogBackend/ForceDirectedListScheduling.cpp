@@ -306,7 +306,7 @@ bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
 }
 
 bool IMS::scheduleState() {
-  std::map<HWAtom*, std::set<unsigned> > ExcludeSlots;
+  ExcludeSlots.clear();
   setCriticalPathLength(HWAtom::MaxSlot);
   unsigned CurStep = State->getSlot();
 
@@ -324,35 +324,36 @@ bool IMS::scheduleState() {
       HWAtom *A = ToSched.top();
       ToSched.pop();
 
-      unsigned EarliestUnTry = 0;
+      unsigned EarliestUntry = 0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-        if (ExcludeSlots[A].count(i))
-          continue;
-        if (EarliestUnTry == 0)        
-          EarliestUnTry = i;
-        HWAOpFU *OF = 0;
-        if (OF = dyn_cast<HWAOpFU>(A)) {
-          if (!isResAvailable(OF->getFUnit(), i, true))
-            continue;
-        }
+        HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
         
+        if (isStepExcluded(OF, i))
+          continue;
+        
+        if (EarliestUntry == 0)
+          EarliestUntry = i;
+        
+        if (OF && !isResAvailable(OF->getFUnit(), i))
+          continue;
+
         // This is a available slot.
         A->scheduledTo(i);
         break;
       }
 
-      if (EarliestUnTry == 0) {
+      if (EarliestUntry == 0) {
         increaseMII();
         break;
       } else if(!A->isScheduled()) {
         HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
         assert(OF && "A can be schedule only because resource conflict!");
-        HWAOpFU *Blocking = findBlockingAtom(OF->getFUnit(), EarliestUnTry);
+        HWAOpFU *Blocking = findBlockingAtom(OF->getFUnit(), EarliestUntry);
         assert(Blocking && "No one blocking?");
         Blocking->resetSchedule();
-        ExcludeSlots[Blocking].insert(EarliestUnTry);
+        excludeStep(Blocking, EarliestUntry);
         // Resource table do not need to change.
-        OF->scheduledTo(EarliestUnTry);
+        OF->scheduledTo(EarliestUntry);
         ToSched.push(Blocking);
       }
 
@@ -366,6 +367,17 @@ bool IMS::scheduleState() {
   return true;
 }
 
+bool IMS::isStepExcluded(HWAOpFU *A, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  unsigned ModuloStep = step % getMII();
+  return ExcludeSlots[A].count(ModuloStep);
+}
+
+void IMS::excludeStep(HWAOpFU *A, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  unsigned ModuloStep = step % getMII();
+  ExcludeSlots[A].insert(ModuloStep);
+}
 
 HWAOpFU *IMS::findBlockingAtom(HWFUnit *FU, unsigned step) {
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
@@ -378,7 +390,7 @@ HWAOpFU *IMS::findBlockingAtom(HWFUnit *FU, unsigned step) {
   return 0;
 }
 
-bool IMS::isResAvailable(HWFUnit *FU, unsigned step, bool take) {
+bool IMS::isResAvailable(HWFUnit *FU, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   // We will always have enough trivial resources.
   if (FU->getResType() == HWResType::Trivial)
@@ -389,7 +401,7 @@ bool IMS::isResAvailable(HWFUnit *FU, unsigned step, bool take) {
   if (MRT[FU][ModuloStep] >= FU->getTotalFUs())
     return false;
 
-  if (take) ++MRT[FU][ModuloStep];
+  ++MRT[FU][ModuloStep];
   
   return true;
 }

@@ -197,8 +197,11 @@ class IMS : public ForceDirectedListScheduler {
   typedef std::map<unsigned, unsigned> UsageMapType;
   typedef std::map<HWFUnit*, UsageMapType> MRTType;
   MRTType MRT;
+  std::map<HWAtom*, std::set<unsigned> > ExcludeSlots;
 
-  bool isResAvailable(HWFUnit *FU, unsigned step, bool take = false);
+  bool isResAvailable(HWFUnit *FU, unsigned step);
+  void excludeStep(HWAOpFU *A, unsigned step);
+  bool isStepExcluded(HWAOpFU *A, unsigned step);
   bool isAllAtomScheduled();
   HWAOpFU *findBlockingAtom(HWFUnit *FU, unsigned step); 
 public:
