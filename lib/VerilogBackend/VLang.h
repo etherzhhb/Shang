@@ -33,6 +33,82 @@ using namespace llvm;
 
 namespace esyn {
 
+// The class that represent Verilog modulo.
+class VModule {
+  // Dirty Hack:
+  // Buffers
+  raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
+    ControlBlock, ResetBlock, SeqCompute;
+
+public:
+  VModule() : ModDecl(*(new std::string())),
+    StateDecl(*(new std::string())),
+    SignalDecl(*(new std::string())),
+    DataPath(*(new std::string())),
+    ControlBlock(*(new std::string())),
+    ResetBlock(*(new std::string())),
+    SeqCompute(*(new std::string())) {}
+
+  ~VModule();
+  void clear();
+
+  raw_ostream &getModDeclBuffer(unsigned ind = 4) {
+    return ModDecl.indent(ind);
+  }
+
+  std::string &getModDeclStr() {
+    return ModDecl.str();
+  }
+
+  raw_ostream &getStateDeclBuffer(unsigned ind = 2) {
+    return StateDecl.indent(ind);
+  }
+
+  std::string &getStateDeclStr() {
+    return StateDecl.str();
+  }
+
+  raw_ostream &getSignalDeclBuffer(unsigned ind = 2) {
+    return SignalDecl.indent(ind);
+  }
+
+  std::string &getSignalDeclStr() {
+    return SignalDecl.str();
+  }
+
+  raw_ostream &getResetBlockBuffer(unsigned ind = 6) {
+    return ResetBlock.indent(ind);
+  }
+
+  std::string &getResetBlockStr() {
+    return ResetBlock.str();
+  }
+
+  raw_ostream &getSeqComputeBuffer(unsigned ind = 0) {
+    return SeqCompute.indent(ind);
+  }
+
+  std::string &getSeqComputeStr() {
+    return SeqCompute.str();
+  }
+
+  raw_ostream &getControlBlockBuffer(unsigned ind = 0) {
+    return ControlBlock.indent(ind);
+  }
+
+  std::string &getControlBlockStr() {
+    return ControlBlock.str();
+  }
+
+  raw_ostream &getDataPathBuffer(unsigned ind = 0) {
+    return DataPath.indent(ind);
+  }
+
+  std::string &getDataPathStr() {
+    return DataPath.str();
+  }
+};
+
 class VLang : public ImmutablePass {
   const TargetData* TD;
   Mangler *Mang;

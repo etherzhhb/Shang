@@ -51,9 +51,8 @@ class RTLWriter : public FunctionPass {
   VLang *vlang;
   HWAtomInfo *HI;
   ResourceConfig *RC;
-  // Buffers
-  raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
-    ControlBlock, ResetBlock, SeqCompute;
+
+  VModule VM;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
 
@@ -104,22 +103,6 @@ class RTLWriter : public FunctionPass {
   std::string getAsOperand(HWAtom *A);
   std::string getAsOperand(const HWRegister *R);
   static std::string getRegPrefix(HWResType::Types T);
-
-  raw_ostream &getStateDeclBuffer() {
-    return StateDecl.indent(2);
-  }
-
-  raw_ostream &getModDeclBuffer() {
-    return ModDecl.indent(4);
-  }
-
-  raw_ostream &getSignalDeclBuffer() {
-    return SignalDecl.indent(2);
-  }
-
-  raw_ostream &getResetBlockBuffer() {
-    return ResetBlock.indent(6);
-  }
 
   // Create the enable registers for mirco states.
   std::string getMircoStateEnableName(FSMState *State, bool InFSMBlock);
@@ -214,13 +197,6 @@ public:
   static char ID;
   explicit RTLWriter(raw_ostream &O)
     : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0), RC(0),
-    ModDecl(*(new std::string())),
-    StateDecl(*(new std::string())),
-    SignalDecl(*(new std::string())),
-    DataPath(*(new std::string())),
-    ControlBlock(*(new std::string())),
-    ResetBlock(*(new std::string())),
-    SeqCompute(*(new std::string())),
     TotalFSMStatesBit(0), CurFSMStateNum(0) {
   }
   ~RTLWriter();

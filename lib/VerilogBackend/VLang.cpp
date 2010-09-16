@@ -276,3 +276,23 @@ raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
   ss << Term <<'\n';
   return ss;
 }
+
+VModule::~VModule() {
+  delete &(ModDecl.str());
+  delete &(StateDecl.str());
+  delete &(SignalDecl.str());
+  delete &(DataPath.str());
+  delete &(ControlBlock.str());
+  delete &(ResetBlock.str());
+}
+
+void VModule::clear() {
+  // Clear buffers
+  ModDecl.str().clear();
+  StateDecl.str().clear();
+  SignalDecl.str().clear();
+  DataPath.str().clear();
+  ControlBlock.str().clear();
+  ResetBlock.str().clear();
+  SeqCompute.str().clear();
+}
