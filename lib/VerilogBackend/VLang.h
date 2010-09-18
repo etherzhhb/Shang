@@ -26,22 +26,94 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Format.h"
+
 
 using namespace llvm;
 
 namespace esyn {
 
-// The class that represent Verilog modulo.
-class VModule {
-  // Dirty Hack:
-  // Buffers
-  raw_string_ostream  ModDecl, StateDecl, SignalDecl, DataPath,
-    ControlBlock, ResetBlock, SeqCompute;
+// Leaf node type of Verilog AST.
+enum VASTTypes {
+  vastPort,
+  vastSignal,
+  vastParameter,
+  vastFirstDeclType = vastPort,
+  vastLastDeclType = vastParameter,
+
+  vastModule
+};
+
+class VASTNode {
+  std::string Name;
+  std::string Comment;
+  const unsigned short T;
+  unsigned short SubclassData;
+protected:
+  VASTNode(VASTTypes NodeT, const std::string &name, unsigned short subclassData,
+           const std::string &comment)
+    : T(NodeT), Name(name), Comment(comment), SubclassData(subclassData) {}
+
+  unsigned short getSubClassData() const { return SubclassData; }
 
 public:
-  VModule() : ModDecl(*(new std::string())),
+  unsigned getASTType() const { return T; }
+
+  const std::string &getName() const { return Name; } 
+  
+  virtual void print(raw_ostream &OS) const = 0;
+};
+
+class VASTDecl : public VASTNode {
+  bool IsReg;
+  unsigned InitVal;
+protected:
+  VASTDecl(VASTTypes DeclType, const std::string &Name, unsigned BitWidth, bool isReg,
+           unsigned initVal, const std::string &Comment)
+    : VASTNode(DeclType, Name, BitWidth, Comment), IsReg(isReg), InitVal(initVal)
+  {
+    assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
+           && "Bad DeclType!");
+  }
+public:
+
+  unsigned short getBitWidth() const { return getSubClassData(); }
+  bool isRegister() const { return IsReg; }
+};
+
+class VASTPort : public VASTDecl {
+  bool IsInput;
+public:
+  VASTPort(const std::string &Name, unsigned BitWidth, bool isInput, bool isReg,
+           const std::string &Comment)
+    : VASTDecl(vastPort, Name, BitWidth, isReg, 0, Comment), IsInput(isInput)
+  {
+    assert(!(isInput && isRegister()) && "Bad port decl!");
+  }
+  
+  bool isInput() const { return IsInput; }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTPort *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastPort;
+  }
+
+  virtual void print(raw_ostream &OS) const;
+};
+
+// The class that represent Verilog modulo.
+class VModule : public VASTNode {
+  // Dirty Hack:
+  // Buffers
+  raw_string_ostream StateDecl, SignalDecl, DataPath,
+    ControlBlock, ResetBlock, SeqCompute;
+  typedef SmallVector<VASTPort*, 8> PortVector;
+  PortVector Ports;
+public:
+  VModule(const std::string &Name) : VASTNode(vastModule, Name, 0, ""),
     StateDecl(*(new std::string())),
     SignalDecl(*(new std::string())),
     DataPath(*(new std::string())),
@@ -52,13 +124,24 @@ public:
   ~VModule();
   void clear();
 
-  raw_ostream &getModDeclBuffer(unsigned ind = 4) {
-    return ModDecl.indent(ind);
+  // Allow user to add ports.
+  VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
+                         const std::string &Comment = "") {
+    VASTPort *Port = new VASTPort(Name, BitWidth, true, false, Comment);
+    Ports.push_back(Port);
+    return Port;
   }
 
-  std::string &getModDeclStr() {
-    return ModDecl.str();
+  VASTPort *addOutputPort(const std::string &Name, unsigned BitWidth,
+                          const std::string &Comment = "") {
+    VASTPort *Port = new VASTPort(Name, BitWidth, false, true, Comment);
+    Ports.push_back(Port);
+    return Port;
   }
+
+  void printModuleDecl(raw_ostream &OS) const;
+
+  void print(raw_ostream &OS) const;
 
   raw_ostream &getStateDeclBuffer(unsigned ind = 2) {
     return StateDecl.indent(ind);

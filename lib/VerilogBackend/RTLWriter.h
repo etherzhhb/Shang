@@ -52,7 +52,7 @@ class RTLWriter : public FunctionPass {
   HWAtomInfo *HI;
   ResourceConfig *RC;
 
-  VModule VM;
+  VModule *VM;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
 
@@ -196,7 +196,7 @@ public:
   //{
   static char ID;
   explicit RTLWriter(raw_ostream &O)
-    : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0), RC(0),
+    : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0), RC(0), VM(0),
     TotalFSMStatesBit(0), CurFSMStateNum(0) {
   }
   ~RTLWriter();

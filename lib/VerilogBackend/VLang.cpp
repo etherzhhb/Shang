@@ -22,10 +22,12 @@
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
 #include "llvm/DerivedTypes.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#include <algorithm>
 #include <sstream>
 
 using namespace llvm;
@@ -164,11 +166,6 @@ raw_ostream &VLang::comment(raw_ostream &ss) const {
   return ss;
 }
 
-raw_ostream &VLang::moduleBegin(raw_ostream &ss, std::string &ModuleName) {
-  ss << "module " << ModuleName << "(\n";
-  return ss;
-}
-
 raw_ostream &VLang::endModuleDecl(raw_ostream &ss) {
   ss <<  ");\n";
   return ss;
@@ -278,7 +275,10 @@ raw_ostream &VLang::declSignal(raw_ostream &ss, const std::string &Name,
 }
 
 VModule::~VModule() {
-  delete &(ModDecl.str());
+  // Release all ports.
+  std::for_each(Ports.begin(), Ports.end(), deleter<VASTPort>);
+  Ports.clear();
+
   delete &(StateDecl.str());
   delete &(SignalDecl.str());
   delete &(DataPath.str());
@@ -288,11 +288,39 @@ VModule::~VModule() {
 
 void VModule::clear() {
   // Clear buffers
-  ModDecl.str().clear();
   StateDecl.str().clear();
   SignalDecl.str().clear();
   DataPath.str().clear();
   ControlBlock.str().clear();
   ResetBlock.str().clear();
   SeqCompute.str().clear();
+}
+
+void VModule::printModuleDecl(raw_ostream &OS) const {
+  OS << "module " << getName() << "(\n";
+  Ports.front()->print(OS.indent(4));
+  for (PortVector::const_iterator I = Ports.begin() + 1, E = Ports.end();
+       I != E; ++I) {
+    OS << ",\n";
+    (*I)->print(OS.indent(4));
+  }
+  OS << ");\n";
+}
+
+void VModule::print(raw_ostream &OS) const {
+  // Print the verilog module?
+}
+
+void VASTPort::print(raw_ostream &OS) const {
+  if (isInput())
+    OS << "input ";
+  else
+    OS << "output ";
+
+  if (isRegister())
+    OS << "reg ";
+  else
+    OS << "wire ";
+  
+  OS << "[" << (getBitWidth() - 1) << ":0] " << getName(); 
 }

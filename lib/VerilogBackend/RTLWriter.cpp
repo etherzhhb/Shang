@@ -44,31 +44,36 @@ bool RTLWriter::runOnFunction(Function &F) {
   HI = &getAnalysis<HWAtomInfo>();
   RC = &getAnalysis<ResourceConfig>();
 
+  if (DesignName.empty())
+    DesignName = F.getNameStr();
+
+  VM = new VModule(DesignName);
+
   // Emit control register and idle state
   unsigned totalFSMStates = F.size() + 1;
   TotalFSMStatesBit = Log2_32_Ceil(totalFSMStates);
 
-  vlang->declSignal(VM.getSignalDeclBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
-  vlang->resetRegister(VM.getResetBlockBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
+  vlang->declSignal(VM->getSignalDeclBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
+  vlang->resetRegister(VM->getResetBlockBuffer(), "NextFSMState", TotalFSMStatesBit, 0);
   
   // Idle state
-  vlang->param(VM.getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  vlang->matchCase(VM.getControlBlockBuffer(6), "state_idle");
+  vlang->param(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
+  vlang->matchCase(VM->getControlBlockBuffer(6), "state_idle");
   // Idle state is always ready.
-  VM.getControlBlockBuffer(8) << "fin <= 1'h0;\n";
-  vlang->ifBegin(VM.getControlBlockBuffer(8), "start");
+  VM->getControlBlockBuffer(8) << "fin <= 1'h0;\n";
+  vlang->ifBegin(VM->getControlBlockBuffer(8), "start");
   // The module is busy now
-  emitNextFSMState(VM.getControlBlockBuffer(10), F.getEntryBlock());
-  emitNextMicroState(VM.getControlBlockBuffer(10), F.getEntryBlock(), "1'b1");
+  emitNextFSMState(VM->getControlBlockBuffer(10), F.getEntryBlock());
+  emitNextMicroState(VM->getControlBlockBuffer(10), F.getEntryBlock(), "1'b1");
   
   // Remember the parameters
   emitFunctionSignature(F);
 
   //
-  vlang->ifElse(VM.getControlBlockBuffer(8));
-  VM.getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
-  vlang->end(VM.getControlBlockBuffer(8));
-  vlang->end(VM.getControlBlockBuffer(6));
+  vlang->ifElse(VM->getControlBlockBuffer(8));
+  VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
+  vlang->end(VM->getControlBlockBuffer(8));
+  vlang->end(VM->getControlBlockBuffer(6));
 
   // Emit basicblocks
   for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
@@ -85,39 +90,35 @@ bool RTLWriter::runOnFunction(Function &F) {
   // emit misc
   emitCommonPort();
 
-  if (DesignName.empty())
-    DesignName = F.getNameStr();
-
   // Write buffers to output
-  vlang->moduleBegin(Out, DesignName);
-  Out << VM.getModDeclStr();
+  VM->printModuleDecl(Out);
   vlang->endModuleDecl(Out);
   Out << "\n\n";
   // States
   vlang->comment(Out.indent(2)) << "States\n";
-  Out << VM.getStateDeclStr();
+  Out << VM->getStateDeclStr();
   Out << "\n\n";
   // Reg and wire
   vlang->comment(Out.indent(2)) << "Reg and wire decl\n";
-  Out << VM.getSignalDeclStr();
+  Out << VM->getSignalDeclStr();
   Out << "\n\n";
 
   // Datapath
   vlang->comment(Out.indent(2)) << "Datapath\n";
-  Out << VM.getDataPathStr();
+  Out << VM->getDataPathStr();
 
   Out << "\n\n";
   vlang->comment(Out.indent(2)) << "Always Block\n";
   vlang->alwaysBegin(Out, 2);
-  Out << VM.getResetBlockStr();
+  Out << VM->getResetBlockStr();
   vlang->ifElse(Out.indent(4));
 
   vlang->comment(Out.indent(6)) << "SeqCompute:\n";
-  Out << VM.getSeqComputeStr();
+  Out << VM->getSeqComputeStr();
 
   vlang->comment(Out.indent(6)) << "FSM\n";
   vlang->switchCase(Out.indent(6), "NextFSMState");
-  Out << VM.getControlBlockStr();
+  Out << VM->getControlBlockStr();
   // Case default.
   Out.indent(6) << "default:  NextFSMState <= state_idle;\n";
   vlang->endSwitch(Out.indent(6));
@@ -129,7 +130,7 @@ bool RTLWriter::runOnFunction(Function &F) {
 }
 
 void RTLWriter::clear() {
-  VM.clear();
+  delete VM;
   // Clear resource map
   UsedRegs.clear();
   ResourceMap.clear();
@@ -158,13 +159,12 @@ void RTLWriter::emitFunctionSignature(Function &F) {
 
     std::string Name = vlang->GetValueName(Arg), 
                 RegName = getAsOperand(ArgReg);
-    //
-    vlang->declSignal((VM.getModDeclBuffer() << "input "),
-      Name, BitWidth, 0, false, PAL.paramHasAttr(Idx, Attribute::SExt), ",");
+    // Add port declaration.
+    VM->addInputPort(Name, BitWidth);
 
     UsedRegs.insert(std::make_pair(ArgReg->getRegNum(), ArgReg));
     // Assign the register
-    VM.getControlBlockBuffer(10) << RegName << " <= " << Name << ";\n";
+    VM->getControlBlockBuffer(10) << RegName << " <= " << Name << ";\n";
     ++Idx;
   }
 
@@ -174,10 +174,9 @@ void RTLWriter::emitFunctionSignature(Function &F) {
     //vlang->indent(ModDecl) << "/*return void*/";
   } else {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    vlang->declSignal((VM.getModDeclBuffer() << "output "), "return_value",
-      cast<IntegerType>(RetTy)->getBitWidth(), 0, true, false, ",");
+    VM->addOutputPort("return_value", cast<IntegerType>(RetTy)->getBitWidth());
     // reset the register
-    vlang->resetRegister(VM.getResetBlockBuffer(), "return_value",
+    vlang->resetRegister(VM->getResetBlockBuffer(), "return_value",
                          cast<IntegerType>(RetTy)->getBitWidth());
   }
 }
@@ -188,12 +187,12 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
 
   unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
 
-  vlang->comment(VM.getStateDeclBuffer()) << "State for " << StateName << '\n';
-  vlang->param(VM.getStateDeclBuffer(), StateName, TotalFSMStatesBit,
+  vlang->comment(VM->getStateDeclBuffer()) << "State for " << StateName << '\n';
+  vlang->param(VM->getStateDeclBuffer(), StateName, TotalFSMStatesBit,
                ++CurFSMStateNum);
 
   // State information.
-  vlang->comment(VM.getControlBlockBuffer(6)) << StateName 
+  vlang->comment(VM->getControlBlockBuffer(6)) << StateName 
     << " Total Slot: " << State->getTotalSlot()
     << " II: " << State->getII() <<  '\n';
   // Mirco state enable.
@@ -205,39 +204,37 @@ void RTLWriter::emitBasicBlock(BasicBlock &BB) {
   State->getScheduleMap(Atoms);
 
   // Case begin
-  vlang->matchCase(VM.getControlBlockBuffer(6), StateName);
+  vlang->matchCase(VM->getControlBlockBuffer(6), StateName);
 
   for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-    vlang->ifBegin(VM.getControlBlockBuffer(8), getMircoStateEnable(State, i, true));
+    vlang->ifBegin(VM->getControlBlockBuffer(8), getMircoStateEnable(State, i, true));
     // Emit all atoms at cycle i
 
-    vlang->comment(VM.getDataPathBuffer(2)) << "at cycle: " << i << '\n';
+    vlang->comment(VM->getDataPathBuffer(2)) << "at cycle: " << i << '\n';
     for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
         CI != CE; ++CI)
       emitAtom(CI->second);
-    vlang->end(VM.getControlBlockBuffer(8));
+    vlang->end(VM->getControlBlockBuffer(8));
   }// end for
 
   // Emit Self Loop logic.
   if (State->haveSelfLoop()) {
-    vlang->comment(VM.getControlBlockBuffer(8)) << "For self loop:\n";
+    vlang->comment(VM->getControlBlockBuffer(8)) << "For self loop:\n";
     std::string SelfLoopEnable = computeSelfLoopEnable(State);
-    emitNextMicroState(VM.getControlBlockBuffer(8), BB, SelfLoopEnable);
+    emitNextMicroState(VM->getControlBlockBuffer(8), BB, SelfLoopEnable);
   } else
-    emitNextMicroState(VM.getControlBlockBuffer(8), BB, "1'b0");
+    emitNextMicroState(VM->getControlBlockBuffer(8), BB, "1'b0");
   // Case end
-  vlang->end(VM.getControlBlockBuffer(6));
+  vlang->end(VM->getControlBlockBuffer(6));
 }
 
 void RTLWriter::emitCommonPort() {
-  VM.getModDeclBuffer() << '\n';
-  vlang->comment(VM.getModDeclBuffer()) << "Common ports\n";
-  VM.getModDeclBuffer() << "input wire " << "clk" << ",\n";
-  VM.getModDeclBuffer() << "input wire " << "rstN" << ",\n";
-  VM.getModDeclBuffer() << "input wire " << "start" << ",\n";
-  VM.getModDeclBuffer() << "output reg " << "fin";
+  VM->addInputPort("clk", 1);
+  VM->addInputPort("rstN", 1);
+  VM->addInputPort("start", 1);
+  VM->addOutputPort("fin", 1);
   // Reset fin
-  vlang->resetRegister(VM.getResetBlockBuffer(), "fin", 1);
+  vlang->resetRegister(VM->getResetBlockBuffer(), "fin", 1);
 }
 
 RTLWriter::~RTLWriter() {}
@@ -295,7 +292,7 @@ void RTLWriter::emitAtom(HWAtom *A) {
   switch (A->getHWAtomType()) {
       case atomOpFU:
         // Emit the origin IR as comment.
-        vlang->comment(VM.getControlBlockBuffer(10)) << "Emit: "
+        vlang->comment(VM->getControlBlockBuffer(10)) << "Emit: "
           << A->getValue() << '\n';
         emitOpFU(cast<HWAOpFU>(A));
         break;
@@ -303,14 +300,14 @@ void RTLWriter::emitAtom(HWAtom *A) {
         emitWrReg(cast<HWAWrReg>(A));
         break;
       case atomLIReg:
-        vlang->comment(VM.getControlBlockBuffer(10)) << "Import:"
+        vlang->comment(VM->getControlBlockBuffer(10)) << "Import:"
           << A->getValue() << '\n';
         emitLIReg(cast<HWALIReg>(A));
         break;
       case atomDelay:
-        vlang->comment(VM.getControlBlockBuffer(10));
-        A->print(VM.getControlBlockBuffer());
-        VM.getControlBlockBuffer() << '\n';
+        vlang->comment(VM->getControlBlockBuffer(10));
+        A->print(VM->getControlBlockBuffer());
+        VM->getControlBlockBuffer() << '\n';
         break;
       // Do nothing.
       case atomVRoot:
@@ -330,11 +327,11 @@ void RTLWriter::emitWrReg(HWAWrReg *DR) {
   UsedRegs.insert(std::make_pair(R->getRegNum(), R));
   HWEdge &E = DR->getDep(0);
   if (!isa<HWConst>(E))
-    vlang->comment(VM.getControlBlockBuffer(10)) << "Read:"
+    vlang->comment(VM->getControlBlockBuffer(10)) << "Read:"
     << DR->getValue() << '\n';
 
   std::string Name = getAsOperand(DR);
-  VM.getControlBlockBuffer(10) << Name << " <= " << getAsOperand(E) << ";\n";
+  VM->getControlBlockBuffer(10) << Name << " <= " << getAsOperand(E) << ";\n";
 }
 
 void RTLWriter::emitLIReg(HWALIReg *LIR) {
@@ -352,8 +349,8 @@ void RTLWriter::emitAllRegisters() {
     unsigned BitWidth = R->getBitWidth();
     std::string Name = getAsOperand(R);
 
-    vlang->declSignal(VM.getSignalDeclBuffer(), Name, BitWidth, 0);
-    vlang->resetRegister(VM.getResetBlockBuffer(), Name, BitWidth, 0);
+    vlang->declSignal(VM->getSignalDeclBuffer(), Name, BitWidth, 0);
+    vlang->resetRegister(VM->getResetBlockBuffer(), Name, BitWidth, 0);
   } 
 }
 
@@ -370,10 +367,10 @@ void RTLWriter::emitOpFU(HWAOpFU *OF) {
     // And do not emit data path for phi node.
     if (!Inst.getType()->isVoidTy()) {
       // Declare the signal
-      vlang->declSignal(VM.getSignalDeclBuffer(), Name, OF->getBitWidth(), 0, false);
-      vlang->comment(VM.getDataPathBuffer(2)) << OF->getValue() << '\n';
+      vlang->declSignal(VM->getSignalDeclBuffer(), Name, OF->getBitWidth(), 0, false);
+      vlang->comment(VM->getDataPathBuffer(2)) << OF->getValue() << '\n';
       // Emit data path
-      VM.getDataPathBuffer(2) << "assign " << Name << " = ";
+      VM->getDataPathBuffer(2) << "assign " << Name << " = ";
     }
     // Emit the data path
     visit(*OF);
@@ -403,14 +400,14 @@ void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
   std::string OpB = OpPrefix + "_b" + utostr(FUID);
   std::string Res = getRegPrefix(FU->getResType()) + utostr(FUID);
 
-  vlang->declSignal(VM.getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
-  vlang->declSignal(VM.getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-  vlang->declSignal(VM.getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0, false);
+  vlang->declSignal(VM->getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
+  vlang->declSignal(VM->getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
+  vlang->declSignal(VM->getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0, false);
 
   // vlang->alwaysBegin(DataPath, 2);
   // vlang->resetRegister(DataPath.indent(6), Res, FU->getOutputBitwidth());
   // vlang->ifElse(DataPath.indent(4));
-  VM.getDataPathBuffer(2) << "assign "<< Res << " = " << OpA << Operator << OpB << ";\n";
+  VM->getDataPathBuffer(2) << "assign "<< Res << " = " << OpA << Operator << OpB << ";\n";
   // vlang->alwaysEnd(DataPath, 2);
 }
 
@@ -422,19 +419,19 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
   std::string Mode = "addsub_mode" + utostr(FUID);
   std::string Res = getRegPrefix(FU->getResType()) + utostr(FUID);
 
-  vlang->declSignal(VM.getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
-  vlang->declSignal(VM.getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
-  vlang->declSignal(VM.getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0, false);
-  vlang->declSignal(VM.getSignalDeclBuffer(), Mode, 1, 0);
+  vlang->declSignal(VM->getSignalDeclBuffer(), OpA, FU->getInputBitwidth(0), 0);
+  vlang->declSignal(VM->getSignalDeclBuffer(), OpB, FU->getInputBitwidth(1), 0);
+  vlang->declSignal(VM->getSignalDeclBuffer(), Res, FU->getOutputBitwidth(), 0, false);
+  vlang->declSignal(VM->getSignalDeclBuffer(), Mode, 1, 0);
 
-  vlang->comment(VM.getDataPathBuffer(2)) << "Add/Sub Unit: " << FUID << '\n';
+  vlang->comment(VM->getDataPathBuffer(2)) << "Add/Sub Unit: " << FUID << '\n';
   // vlang->alwaysBegin(DataPath, 2);
-  // vlang->resetRegister(VM.getDataPathBuffer(6), Res, FU->getOutputBitwidth());
-  // vlang->ifElse(VM.getDataPathBuffer(4));
-  VM.getDataPathBuffer(2) << "assign " << Res << " = " << Mode << " ? ";
-  VM.getDataPathBuffer()           << "(" << OpA << " + " << OpB << ") : ";
-  VM.getDataPathBuffer()           << "(" << OpA << " - " << OpB << ");\n";
-  // vlang->alwaysEnd(VM.getDataPathBuffer(), 2);
+  // vlang->resetRegister(VM->getDataPathBuffer(6), Res, FU->getOutputBitwidth());
+  // vlang->ifElse(VM->getDataPathBuffer(4));
+  VM->getDataPathBuffer(2) << "assign " << Res << " = " << Mode << " ? ";
+  VM->getDataPathBuffer()           << "(" << OpA << " + " << OpB << ") : ";
+  VM->getDataPathBuffer()           << "(" << OpA << " - " << OpB << ");\n";
+  // vlang->alwaysEnd(VM->getDataPathBuffer(), 2);
 }
 
 template<>
@@ -464,17 +461,12 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU) {
            FUID = FU->getUnitID();
 
   // Emit the ports;
-  VM.getModDeclBuffer() << '\n';
-  vlang->comment(VM.getModDeclBuffer()) << "Memory bus " << FUID << '\n';
-  VM.getModDeclBuffer() << "input wire [" << (DataWidth-1) << ":0] membus_out"
-    << FUID <<",\n";
-  VM.getModDeclBuffer() << "output reg [" << (DataWidth - 1) << ":0] membus_in"
-    << FUID << ",\n";
-  VM.getModDeclBuffer() << "output reg [" << (AddrWidth - 1) <<":0] membus_addr"
-    << FUID << ",\n";
-
-  VM.getModDeclBuffer() << "output reg membus_we" << FUID << ",\n";
-  VM.getModDeclBuffer() << "output reg membus_en" << FUID << ",\n";
+  //vlang->comment(VM->getModDeclBuffer()) << "Memory bus " << FUID << '\n';
+  VM->addInputPort("membus_out" + utostr(FUID), DataWidth);
+  VM->addOutputPort("membus_in" + utostr(FUID), DataWidth);
+  VM->addOutputPort("membus_addr" + utostr(FUID), DataWidth);
+  VM->addOutputPort("membus_we" + utostr(FUID), 1);
+  VM->addOutputPort("membus_en" + utostr(FUID), 1);
 }
 
 void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefix) {
@@ -482,9 +474,9 @@ void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefi
   std::string OpA = OpPrefix + "_a" + utostr(FUID);
   std::string OpB = OpPrefix + "_b" + utostr(FUID);
 
-  VM.getDataPathBuffer(6) <<  OpA << " = "
+  VM->getDataPathBuffer(6) <<  OpA << " = "
     << getAsOperand(A->getValDep(0)) << ";\n";
-  VM.getDataPathBuffer(6) <<  OpB << " = "
+  VM->getDataPathBuffer(6) <<  OpB << " = "
     << getAsOperand(A->getValDep(1)) << ";\n";
 }
 
@@ -494,11 +486,11 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
   std::string Mode = "addsub_mode" + utostr(FUID);
 
   Instruction *Inst = &(A->getInst<Instruction>());
-  VM.getDataPathBuffer(6) << Mode;
+  VM->getDataPathBuffer(6) << Mode;
   if (Inst->getOpcode() == Instruction::Sub)
-    VM.getDataPathBuffer() << " = 1'b0;\n";
+    VM->getDataPathBuffer() << " = 1'b0;\n";
   else
-    VM.getDataPathBuffer() << " = 1'b1;\n";
+    VM->getDataPathBuffer() << " = 1'b1;\n";
 
   emitResourceOpForBinOpRes(A, "addsub");
 }
@@ -531,22 +523,22 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
   unsigned FUID = A->getUnitID();
   Instruction *Inst = &(A->getInst<Instruction>());
   // Enable the memory
-  VM.getDataPathBuffer(6) << "membus_en" << FUID << " = 1'b1;\n";
+  VM->getDataPathBuffer(6) << "membus_en" << FUID << " = 1'b1;\n";
   // Send the address.
-  VM.getDataPathBuffer(6) << "membus_addr" << FUID << " = ";
+  VM->getDataPathBuffer(6) << "membus_addr" << FUID << " = ";
 
   // Emit the operation
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
-    VM.getDataPathBuffer() << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
+    VM->getDataPathBuffer() << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
       << ";\n";
-    VM.getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b0;\n";
-    VM.getDataPathBuffer(6) << "membus_in" << FUID
+    VM->getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b0;\n";
+    VM->getDataPathBuffer(6) << "membus_in" << FUID
       << " = " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
   } else { // It must be a store
-    VM.getDataPathBuffer() << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
+    VM->getDataPathBuffer() << getAsOperand(A->getValDep(StoreInst::getPointerOperandIndex()))
       << ";\n";
-    VM.getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b1;\n";
-    VM.getDataPathBuffer(6) << "membus_in" << FUID
+    VM->getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b1;\n";
+    VM->getDataPathBuffer(6) << "membus_in" << FUID
       << " = " << getAsOperand(A->getValDep(0)) << ";\n";
   }
 }
@@ -556,17 +548,17 @@ void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string 
   std::string OpA = OpPrefix + "_a" + utostr(FUID);
   std::string OpB = OpPrefix + "_b" + utostr(FUID);
 
-  VM.getDataPathBuffer(6) << OpA << " = "
+  VM->getDataPathBuffer(6) << OpA << " = "
     << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
-  VM.getDataPathBuffer(6) << OpB << " = "
+  VM->getDataPathBuffer(6) << OpB << " = "
     << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
-  vlang->end(VM.getDataPathBuffer(4));
+  vlang->end(VM->getDataPathBuffer(4));
 }
 
 template<>
 void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
   std::string Mode = "addsub_mode" + utostr(FU->getUnitID());
-  VM.getDataPathBuffer(6) << Mode << " = 1'b0;\n";
+  VM->getDataPathBuffer(6) << Mode << " = 1'b0;\n";
   emitResourceDefaultOpForBinOpRes(FU, "addsub");
 }
 
@@ -596,13 +588,13 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
            AddrWidth = FU->getInputBitwidth(1),
            FUID = FU->getUnitID();
 
-  VM.getDataPathBuffer(6) << "membus_en" << FUID << " = 1'b0;\n";
-  VM.getDataPathBuffer(6) << "membus_addr" << FUID
+  VM->getDataPathBuffer(6) << "membus_en" << FUID << " = 1'b0;\n";
+  VM->getDataPathBuffer(6) << "membus_addr" << FUID
     << " = " << vlang->printConstantInt(0, AddrWidth, false) << ";\n";
-  VM.getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b0;\n";
-  VM.getDataPathBuffer(6) << "membus_in" << FUID
+  VM->getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b0;\n";
+  VM->getDataPathBuffer(6) << "membus_in" << FUID
     << " = " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
-  vlang->end(VM.getDataPathBuffer(4));
+  vlang->end(VM->getDataPathBuffer(4));
 }
 
 template<class ResType>
@@ -613,13 +605,13 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
 
   std::string SelName = ResType::getTypeName() + utostr(FUID) + "Mux";
   unsigned SelBitWidth = Atoms.size();
-  vlang->declSignal(VM.getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
+  vlang->declSignal(VM->getSignalDeclBuffer(), SelName, SelBitWidth, 0, false);
 
   emitResourceDecl<ResType>(FU);
-  VM.getDataPathBuffer(2) << "always @(*)\n";
+  VM->getDataPathBuffer(2) << "always @(*)\n";
 
   unsigned AtomCounter = SelBitWidth;
-  vlang->switchCase(VM.getDataPathBuffer(4), SelName);
+  vlang->switchCase(VM->getDataPathBuffer(4), SelName);
   raw_string_ostream SelEval(SelName);
   SelEval << " = { ";
 
@@ -631,26 +623,26 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
     BasicBlock *BB = Inst->getParent();
     std::string SelCase = vlang->printConstantInt(1 << (--AtomCounter),
                                                   SelBitWidth, false);
-    vlang->matchCase(VM.getDataPathBuffer(4), SelCase);
+    vlang->matchCase(VM->getDataPathBuffer(4), SelCase);
 
-    vlang->comment(VM.getDataPathBuffer(6)) << *Inst << '\n';
+    vlang->comment(VM->getDataPathBuffer(6)) << *Inst << '\n';
 
     SelEval << getMircoStateEnable(A->getParent(), A->getSlot(), false);
 
     emitResourceOp<ResType>(A);
   
     // Else for other atoms
-    vlang->end(VM.getDataPathBuffer(4));
+    vlang->end(VM->getDataPathBuffer(4));
     // Next atom
     if (AtomCounter > 0)
       SelEval << ", ";
   }
-  VM.getDataPathBuffer(4) << "default: begin\n";
+  VM->getDataPathBuffer(4) << "default: begin\n";
   // Else for Resource is idle
   emitResourceDefaultOp<ResType>(FU);
-  vlang->endSwitch(VM.getDataPathBuffer(4));
+  vlang->endSwitch(VM->getDataPathBuffer(4));
   //
-  VM.getDataPathBuffer(2) << "assign " << SelEval.str() << " };\n";
+  VM->getDataPathBuffer(2) << "assign " << SelEval.str() << " };\n";
 }
 
 void RTLWriter::emitResources() {
@@ -693,18 +685,18 @@ void RTLWriter::createMircoStateEnable(FSMState *State) {
   unsigned totalSlot = State->getTotalSlot();
 
   // Next state
-  vlang->declSignal(VM.getSignalDeclBuffer(),
+  vlang->declSignal(VM->getSignalDeclBuffer(),
     "next_" + StateName + "_enable", totalSlot + 1, 0);
-  vlang->resetRegister(VM.getResetBlockBuffer(),
+  vlang->resetRegister(VM->getResetBlockBuffer(),
     "next_" + StateName + "_enable", totalSlot + 1, 0);
 
     // current state
-  vlang->declSignal(VM.getSignalDeclBuffer(),
+  vlang->declSignal(VM->getSignalDeclBuffer(),
     "cur_" + StateName + "_enable", totalSlot + 1, 0);
-  vlang->resetRegister(VM.getResetBlockBuffer(),
+  vlang->resetRegister(VM->getResetBlockBuffer(),
     "cur_" + StateName + "_enable", totalSlot + 1, 0);
 
-  VM.getSeqComputeBuffer(6) << "cur_" << StateName << "_enable <= next_"
+  VM->getSeqComputeBuffer(6) << "cur_" << StateName << "_enable <= next_"
                        << StateName << "_enable;\n";
 }
 
@@ -788,21 +780,21 @@ std::string  RTLWriter::computeSelfLoopEnable(FSMState *State) {
 // Emit instructions
 void RTLWriter::visitICmpInst(HWAOpFU &A) {
   ICmpInst &I = A.getInst<ICmpInst>();
-  VM.getDataPathBuffer() << "(" << getAsOperand(A.getValDep(0));
+  VM->getDataPathBuffer() << "(" << getAsOperand(A.getValDep(0));
   switch (I.getPredicate()) {
-      case ICmpInst::ICMP_EQ:  VM.getDataPathBuffer() << " == "; break;
-      case ICmpInst::ICMP_NE:  VM.getDataPathBuffer() << " != "; break;
+      case ICmpInst::ICMP_EQ:  VM->getDataPathBuffer() << " == "; break;
+      case ICmpInst::ICMP_NE:  VM->getDataPathBuffer() << " != "; break;
       case ICmpInst::ICMP_ULE:
-      case ICmpInst::ICMP_SLE: VM.getDataPathBuffer() << " <= "; break;
+      case ICmpInst::ICMP_SLE: VM->getDataPathBuffer() << " <= "; break;
       case ICmpInst::ICMP_UGE:
-      case ICmpInst::ICMP_SGE: VM.getDataPathBuffer() << " >= "; break;
+      case ICmpInst::ICMP_SGE: VM->getDataPathBuffer() << " >= "; break;
       case ICmpInst::ICMP_ULT:
-      case ICmpInst::ICMP_SLT: VM.getDataPathBuffer() << " < "; break;
+      case ICmpInst::ICMP_SLT: VM->getDataPathBuffer() << " < "; break;
       case ICmpInst::ICMP_UGT:
-      case ICmpInst::ICMP_SGT: VM.getDataPathBuffer() << " > "; break;
-      default: VM.getDataPathBuffer() << "Unknown icmppredicate";
+      case ICmpInst::ICMP_SGT: VM->getDataPathBuffer() << " > "; break;
+      default: VM->getDataPathBuffer() << "Unknown icmppredicate";
   }
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(1)) << ");\n";
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(1)) << ");\n";
 }
 
 void RTLWriter::visitExtInst(HWAOpFU &A) {
@@ -811,29 +803,29 @@ void RTLWriter::visitExtInst(HWAOpFU &A) {
 
   int DiffBits = TyWidth - ChTyWidth;	
   assert(DiffBits > 0 && "Bad ext!");
-  VM.getDataPathBuffer() << "{{" << DiffBits << "{";
+  VM->getDataPathBuffer() << "{{" << DiffBits << "{";
 
   HWEdge &Op = A.getValDep(0);
 
   CastInst &I = A.getInst<CastInst>();
   if(I.getOpcode() == Instruction::ZExt)
-    VM.getDataPathBuffer() << "1'b0";
+    VM->getDataPathBuffer() << "1'b0";
   else
-    VM.getDataPathBuffer() << getAsOperand(Op) << "["<< (ChTyWidth - 1) << "]";
+    VM->getDataPathBuffer() << getAsOperand(Op) << "["<< (ChTyWidth - 1) << "]";
 
-  VM.getDataPathBuffer() <<"}}," << getAsOperand(Op) << "}" <<";\n";   
+  VM->getDataPathBuffer() <<"}}," << getAsOperand(Op) << "}" <<";\n";   
 }
 
 
 void esyn::RTLWriter::visitReturnInst(HWAOpFU &A) {
   // Operation finish.
-  VM.getControlBlockBuffer(10) << "fin <= 1'h1;\n";
-  VM.getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
+  VM->getControlBlockBuffer(10) << "fin <= 1'h1;\n";
+  VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
   // If returing a value
   ReturnInst &Ret = A.getInst<ReturnInst>();
   if (Ret.getNumOperands() != 0)
         // Emit data path
-   VM.getControlBlockBuffer(10) << "return_value" << " <= "
+   VM->getControlBlockBuffer(10) << "return_value" << " <= "
                            << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
@@ -842,45 +834,45 @@ void esyn::RTLWriter::visitGetElementPtrInst(HWAOpFU &A) {
   if (I.getNumIndices() > 1) {
     assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
     // Only emit the pointer.
-    VM.getDataPathBuffer() << getAsOperand(A.getValDep(0)) << ";\n";
+    VM->getDataPathBuffer() << getAsOperand(A.getValDep(0)) << ";\n";
     return;
   }
 
   // InstLowering pass already take care of the element size.
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(0)) << " + "
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(0)) << " + "
            << getAsOperand(A.getValDep(1)) << ";\n";
 }
 
 void esyn::RTLWriter::visitBinaryOperator(HWAOpFU &A) {
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(0));
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(0));
   Instruction &I = A.getInst<Instruction>();
   switch (I.getOpcode()) {
-  case Instruction::Add:  VM.getDataPathBuffer() << " + "; break;
-  case Instruction::Sub:  VM.getDataPathBuffer() << " - "; break;
-  case Instruction::Mul:  VM.getDataPathBuffer() << " * "; break;
-  case Instruction::And:  VM.getDataPathBuffer() << " & "; break;
-  case Instruction::Or:   VM.getDataPathBuffer() << " | "; break;
-  case Instruction::Xor:  VM.getDataPathBuffer() << " ^ "; break;
-  case Instruction::Shl : VM.getDataPathBuffer() << " << "; break;
-  case Instruction::LShr: VM.getDataPathBuffer() << " >> "; break;
-  case Instruction::AShr: VM.getDataPathBuffer() << " >>> ";  break;
-  default: VM.getDataPathBuffer() << " <unsupport> "; break;
+  case Instruction::Add:  VM->getDataPathBuffer() << " + "; break;
+  case Instruction::Sub:  VM->getDataPathBuffer() << " - "; break;
+  case Instruction::Mul:  VM->getDataPathBuffer() << " * "; break;
+  case Instruction::And:  VM->getDataPathBuffer() << " & "; break;
+  case Instruction::Or:   VM->getDataPathBuffer() << " | "; break;
+  case Instruction::Xor:  VM->getDataPathBuffer() << " ^ "; break;
+  case Instruction::Shl : VM->getDataPathBuffer() << " << "; break;
+  case Instruction::LShr: VM->getDataPathBuffer() << " >> "; break;
+  case Instruction::AShr: VM->getDataPathBuffer() << " >>> ";  break;
+  default: VM->getDataPathBuffer() << " <unsupport> "; break;
   }
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(1)) << ";\n";
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(1)) << ";\n";
 }
 
 void esyn::RTLWriter::visitSelectInst(HWAOpFU &A) {
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(0)) << " ? "
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(0)) << " ? "
            << getAsOperand(A.getValDep(1)) << " : "
            << getAsOperand(A.getValDep(2)) << ";\n";
 }
 
 void esyn::RTLWriter::visitIntCastInst(HWAOpFU &A) {
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(0)) << ";\n";
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(0)) << ";\n";
 }
 
 void RTLWriter::visitTruncInst(HWAOpFU &A) {
-  VM.getDataPathBuffer() << getAsOperand(A.getValDep(0))
+  VM->getDataPathBuffer() << getAsOperand(A.getValDep(0))
            << vlang->printBitWitdh(A.getBitWidth(), 0, true) << ";\n";
 }
 
@@ -892,24 +884,24 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
                &NextBB1 = *(I.getSuccessor(1)), 
                &CurBB = *(I.getParent());
     HWEdge &Cnd = A.getValDep(0);
-    vlang->ifBegin(VM.getControlBlockBuffer(10), getAsOperand(Cnd));
+    vlang->ifBegin(VM->getControlBlockBuffer(10), getAsOperand(Cnd));
 
     if (&NextBB0 != &CurBB) {
-      emitNextFSMState(VM.getControlBlockBuffer(12), NextBB0);
-      emitNextMicroState(VM.getControlBlockBuffer(12), NextBB0, "1'b1");
+      emitNextFSMState(VM->getControlBlockBuffer(12), NextBB0);
+      emitNextMicroState(VM->getControlBlockBuffer(12), NextBB0, "1'b1");
     }
 
-    vlang->ifElse(VM.getControlBlockBuffer(10));
+    vlang->ifElse(VM->getControlBlockBuffer(10));
 
     if (&NextBB1 != &CurBB) {
-      emitNextFSMState(VM.getControlBlockBuffer(12), NextBB1);
-      emitNextMicroState(VM.getControlBlockBuffer(12), NextBB1, "1'b1");
+      emitNextFSMState(VM->getControlBlockBuffer(12), NextBB1);
+      emitNextMicroState(VM->getControlBlockBuffer(12), NextBB1, "1'b1");
     }
 
-    vlang->end(VM.getControlBlockBuffer(10));
+    vlang->end(VM->getControlBlockBuffer(10));
   } else {
     BasicBlock &NextBB = *(I.getSuccessor(0)), &CurBB = *(I.getParent());
-    emitNextFSMState(VM.getControlBlockBuffer(10), NextBB);
-    emitNextMicroState(VM.getControlBlockBuffer(10), NextBB, "1'b1");
+    emitNextFSMState(VM->getControlBlockBuffer(10), NextBB);
+    emitNextMicroState(VM->getControlBlockBuffer(10), NextBB, "1'b1");
   }
 }
