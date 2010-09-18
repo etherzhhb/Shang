@@ -66,11 +66,11 @@ public:
   virtual void print(raw_ostream &OS) const = 0;
 };
 
-class VASTDecl : public VASTNode {
+class VASTValue : public VASTNode {
   bool IsReg;
   unsigned InitVal;
 protected:
-  VASTDecl(VASTTypes DeclType, const std::string &Name, unsigned BitWidth, bool isReg,
+  VASTValue(VASTTypes DeclType, const std::string &Name, unsigned BitWidth, bool isReg,
            unsigned initVal, const std::string &Comment)
     : VASTNode(DeclType, Name, BitWidth, Comment), IsReg(isReg), InitVal(initVal)
   {
@@ -83,12 +83,12 @@ public:
   bool isRegister() const { return IsReg; }
 };
 
-class VASTPort : public VASTDecl {
+class VASTPort : public VASTValue {
   bool IsInput;
 public:
   VASTPort(const std::string &Name, unsigned BitWidth, bool isInput, bool isReg,
            const std::string &Comment)
-    : VASTDecl(vastPort, Name, BitWidth, isReg, 0, Comment), IsInput(isInput)
+    : VASTValue(vastPort, Name, BitWidth, isReg, 0, Comment), IsInput(isInput)
   {
     assert(!(isInput && isRegister()) && "Bad port decl!");
   }
