@@ -20,6 +20,7 @@
 #define VBE_HARDWARE_ATOM_PASSES_H
 namespace llvm {
   class Pass;
+  class raw_ostream;
 }
 
 using namespace llvm;
@@ -49,6 +50,9 @@ Pass *createLocalLEAPass();
 
 // Scalar Streamization.
 Pass *createScalarStreamizationPass();
+
+// Testbench writer.
+Pass *createTestBenchWriterPass(raw_ostream &O);
 
 } // end namespace
 
