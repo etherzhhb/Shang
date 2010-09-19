@@ -16,7 +16,6 @@
 
 #include "HWAtomInfo.h"
 #include "RTLWriter.h"
-#include "TestBenchWriter.h"
 #include "HWAtomPasses.h"
 
 #include "vbe/ResourceConfig.h"
@@ -83,6 +82,6 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createScalarStreamizationPass());
     //
     PM.add(new RTLWriter(Out));
-    //PM.add(new TestbenchWriter(Out));
+    PM.add(createTestBenchWriterPass(Out));
     return false;
 }
