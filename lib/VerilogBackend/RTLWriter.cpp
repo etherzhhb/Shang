@@ -21,7 +21,6 @@
 #include "llvm/Instructions.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/CallSite.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/MathExtras.h"
@@ -905,3 +904,5 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
     emitNextMicroState(VM->getControlBlockBuffer(10), NextBB, "1'b1");
   }
 }
+
+RegisterPass<RTLWriter> X("vbe-rtl", "vbe - Write HWAtom as RTL Verilog");

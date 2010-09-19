@@ -30,6 +30,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/CFG.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/Target/Mangler.h"
@@ -195,11 +196,13 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  explicit RTLWriter(raw_ostream &O)
+  explicit RTLWriter(raw_ostream &O = nulls())
     : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0), RC(0), VM(0),
     TotalFSMStatesBit(0), CurFSMStateNum(0) {
   }
   ~RTLWriter();
+
+  VModule *getVerilogModule() const { return VM; }
 
   bool runOnFunction(Function &F);
   void releaseMemory() { clear(); }
