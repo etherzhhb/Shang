@@ -78,9 +78,10 @@ protected:
            && "Bad DeclType!");
   }
 public:
-
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return IsReg; }
+
+  static void print(const VASTValue &V, raw_ostream &OS);
 };
 
 class VASTPort : public VASTValue {
@@ -101,16 +102,19 @@ public:
     return A->getASTType() == vastPort;
   }
 
-  virtual void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
+  void printExternal(raw_ostream &OS) const;
 };
 
 // The class that represent Verilog modulo.
 class VModule : public VASTNode {
+public:
+  typedef SmallVector<VASTPort*, 8> PortVector;
+private:
   // Dirty Hack:
   // Buffers
   raw_string_ostream StateDecl, SignalDecl, DataPath,
     ControlBlock, ResetBlock, SeqCompute;
-  typedef SmallVector<VASTPort*, 8> PortVector;
   PortVector Ports;
 public:
   VModule(const std::string &Name) : VASTNode(vastModule, Name, 0, ""),
@@ -141,7 +145,25 @@ public:
 
   void printModuleDecl(raw_ostream &OS) const;
 
+  const PortVector &getPorts() const { return Ports; }
+
+  typedef PortVector::iterator port_iterator;
+  typedef PortVector::const_iterator const_port_iterator;
+
+  port_iterator ports_begin() { return Ports.begin(); }
+  const_port_iterator ports_begin() const { return Ports.begin(); }
+
+  port_iterator ports_end() { return Ports.end(); }
+  const_port_iterator ports_end() const { return Ports.end(); }
+
   void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VModule *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastModule;
+  }
+
 
   raw_ostream &getStateDeclBuffer(unsigned ind = 2) {
     return StateDecl.indent(ind);

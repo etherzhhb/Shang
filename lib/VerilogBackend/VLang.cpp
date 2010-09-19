@@ -317,10 +317,25 @@ void VASTPort::print(raw_ostream &OS) const {
   else
     OS << "output ";
 
-  if (isRegister())
+  VASTValue::print(*this, OS); 
+}
+
+void VASTPort::printExternal(raw_ostream &OS) const {
+  if (isInput())
+    // We need a reg to drive input port.
+    OS << "reg ";
+  else
+    // We need a wire to accept the output value from dut.
+    OS << "wire ";
+
+  VASTValue::print(*this, OS);
+}
+
+void VASTValue::print(const VASTValue &V, raw_ostream &OS) {
+  if (V.isRegister())
     OS << "reg ";
   else
     OS << "wire ";
-  
-  OS << "[" << (getBitWidth() - 1) << ":0] " << getName(); 
+
+  OS << "[" << (V.getBitWidth() - 1) << ":0] " << V.getName(); 
 }
