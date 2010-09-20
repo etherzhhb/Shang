@@ -185,8 +185,8 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(ID), ControlRoot(0), LI(0), totalCycle(1),
-    InstIdx(0), NumRegs(1), MDA(0) {}
+  HWAtomInfo() : FunctionPass(ID), ControlRoot(0), NumRegs(1), LI(0),
+    totalCycle(1), InstIdx(0), MDA(0) {}
 
   bool runOnFunction(Function &F);
   void releaseMemory();

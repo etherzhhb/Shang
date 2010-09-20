@@ -54,11 +54,13 @@ class VASTNode {
 protected:
   VASTNode(VASTTypes NodeT, const std::string &name, unsigned short subclassData,
            const std::string &comment)
-    : T(NodeT), Name(name), Comment(comment), SubclassData(subclassData) {}
+    : Name(name), Comment(comment), T(NodeT), SubclassData(subclassData) {}
 
   unsigned short getSubClassData() const { return SubclassData; }
 
 public:
+  virtual ~VASTNode() {}
+
   unsigned getASTType() const { return T; }
 
   const std::string &getName() const { return Name; } 
@@ -81,7 +83,7 @@ public:
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return IsReg; }
 
-  static void print(const VASTValue &V, raw_ostream &OS);
+  static void printSignal(const VASTValue &V, raw_ostream &OS);
 };
 
 class VASTPort : public VASTValue {
@@ -299,7 +301,7 @@ public:
 
   virtual void initializePass();
 
-  virtual void getAnalysisUsage(AnalysisUsage &AU) {
+  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<TargetData>();
   }
 };

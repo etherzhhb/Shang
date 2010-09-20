@@ -113,7 +113,7 @@ BinOpResType *HWBinOpResType::createFromXml(XmlNode *Node) {
 /// Resource config implement
 void ResourceConfig::initializePass() {
   ParseConfigFile(ConfigFilename);
-  DEBUG(print(dbgs()));
+  DEBUG(print(dbgs(), 0));
 }
 
 void ResourceConfig::ParseConfigFile(const std::string &Filename) {
@@ -243,7 +243,7 @@ HWFUnit *ResourceConfig::assignIDToFU(HWFUnit *U, unsigned FUID) {
   }
 }
 
-void ResourceConfig::print(raw_ostream &OS) const {
+void ResourceConfig::print(raw_ostream &OS, const Module *) const {
   OS << "-=========================Resource Config=========================-\n";
   for (const_iterator I = begin(), E = end(); I != E; ++I) {
     if (*I != 0) {

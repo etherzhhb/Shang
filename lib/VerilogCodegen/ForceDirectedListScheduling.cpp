@@ -305,10 +305,9 @@ bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
   return LHS->getIdx() > RHS->getIdx();
 }
 
-bool IMS::scheduleState() {
+bool IteractiveModuloScheduling::scheduleState() {
   ExcludeSlots.clear();
   setCriticalPathLength(HWAtom::MaxSlot);
-  unsigned CurStep = State->getSlot();
 
   fds_sort s(*this);
 
@@ -367,19 +366,19 @@ bool IMS::scheduleState() {
   return true;
 }
 
-bool IMS::isStepExcluded(HWAOpFU *A, unsigned step) {
+bool IteractiveModuloScheduling::isStepExcluded(HWAOpFU *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   unsigned ModuloStep = step % getMII();
   return ExcludeSlots[A].count(ModuloStep);
 }
 
-void IMS::excludeStep(HWAOpFU *A, unsigned step) {
+void IteractiveModuloScheduling::excludeStep(HWAOpFU *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   unsigned ModuloStep = step % getMII();
   ExcludeSlots[A].insert(ModuloStep);
 }
 
-HWAOpFU *IMS::findBlockingAtom(HWFUnit *FU, unsigned step) {
+HWAOpFU *IteractiveModuloScheduling::findBlockingAtom(HWFUnit *FU, unsigned step) {
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
     HWAOpFU *OF = dyn_cast<HWAOpFU>(*I);
     if (OF == 0 || !OF->isScheduled() || OF->getFUnit() != FU)
@@ -390,7 +389,7 @@ HWAOpFU *IMS::findBlockingAtom(HWFUnit *FU, unsigned step) {
   return 0;
 }
 
-bool IMS::isResAvailable(HWFUnit *FU, unsigned step) {
+bool IteractiveModuloScheduling::isResAvailable(HWFUnit *FU, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   // We will always have enough trivial resources.
   if (FU->getResType() == HWResType::Trivial)
@@ -407,7 +406,7 @@ bool IMS::isResAvailable(HWFUnit *FU, unsigned step) {
 }
 
 
-bool IMS::isAllAtomScheduled() {
+bool IteractiveModuloScheduling::isAllAtomScheduled() {
   for (FSMState::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
     HWAtom *A = *I;

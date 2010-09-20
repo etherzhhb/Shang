@@ -148,7 +148,6 @@ void RTLWriter::print(raw_ostream &O, const Module *M) const {
 }
 
 void RTLWriter::emitFunctionSignature(Function &F) {
-  const AttrListPtr &PAL = F.getAttributes();
   unsigned Idx = 1;
   for (Function::arg_iterator I = F.arg_begin(), E = F.arg_end();
       I != E; ++I) {
@@ -242,7 +241,7 @@ RTLWriter::~RTLWriter() {}
 //===----------------------------------------------------------------------===//
 // Emit hardware atoms
 std::string RTLWriter::getAsOperand(Value *V, const std::string &postfix) {
-  if (Argument *Arg = dyn_cast<Argument>(V))
+  if (isa<Argument>(V))
     return vlang->GetValueName(V) + "_pr";
 
   return vlang->GetValueName(V) + postfix;
@@ -409,7 +408,7 @@ void RTLWriter::emitResourceDeclForBinOpRes(HWFUnit *FU,
   VM->getDataPathBuffer(2) << "assign "<< Res << " = " << OpA << Operator << OpB << ";\n";
   // vlang->alwaysEnd(DataPath, 2);
 }
-
+namespace esyn {
 template<>
 void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
   unsigned FUID = FU->getUnitID();
@@ -434,27 +433,27 @@ void RTLWriter::emitResourceDecl<HWAddSub>(HWFUnit *FU) {
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWMult>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDecl<HWMult>(HWFUnit *FU) {
   emitResourceDeclForBinOpRes(FU, "mult", " * ");
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWSHL>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDecl<HWSHL>(HWFUnit *FU) {
   emitResourceDeclForBinOpRes(FU, "shl", " * ");
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWASR>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDecl<HWASR>(HWFUnit *FU) {
   emitResourceDeclForBinOpRes(FU, "asr", " * ");
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWLSR>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDecl<HWLSR>(HWFUnit *FU) {
   emitResourceDeclForBinOpRes(FU, "lsr", " * ");
 }
 
 template<>
-void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU) {
   unsigned DataWidth = FU->getInputBitwidth(0),
            AddrWidth = FU->getInputBitwidth(1),
            FUID = FU->getUnitID();
@@ -463,24 +462,13 @@ void RTLWriter::emitResourceDecl<HWMemBus>(HWFUnit *FU) {
   //vlang->comment(VM->getModDeclBuffer()) << "Memory bus " << FUID << '\n';
   VM->addInputPort("membus_out" + utostr(FUID), DataWidth);
   VM->addOutputPort("membus_in" + utostr(FUID), DataWidth);
-  VM->addOutputPort("membus_addr" + utostr(FUID), DataWidth);
+  VM->addOutputPort("membus_addr" + utostr(FUID), AddrWidth);
   VM->addOutputPort("membus_we" + utostr(FUID), 1);
   VM->addOutputPort("membus_en" + utostr(FUID), 1);
 }
 
-void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefix) {
-  unsigned FUID = A->getUnitID();
-  std::string OpA = OpPrefix + "_a" + utostr(FUID);
-  std::string OpB = OpPrefix + "_b" + utostr(FUID);
-
-  VM->getDataPathBuffer(6) <<  OpA << " = "
-    << getAsOperand(A->getValDep(0)) << ";\n";
-  VM->getDataPathBuffer(6) <<  OpB << " = "
-    << getAsOperand(A->getValDep(1)) << ";\n";
-}
-
 template<>
-void RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
+void esyn::RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
   unsigned FUID = A->getUnitID();
   std::string Mode = "addsub_mode" + utostr(FUID);
 
@@ -495,29 +483,28 @@ void RTLWriter::emitResourceOp<HWAddSub>(HWAOpFU *A) {
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWMult>(HWAOpFU *A) {
+void esyn::RTLWriter::emitResourceOp<HWMult>(HWAOpFU *A) {
   emitResourceOpForBinOpRes(A, "mult");
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWSHL>(HWAOpFU *A) {
+void esyn::RTLWriter::emitResourceOp<HWSHL>(HWAOpFU *A) {
   emitResourceOpForBinOpRes(A, "shl");
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWASR>(HWAOpFU *A) {
+void esyn::RTLWriter::emitResourceOp<HWASR>(HWAOpFU *A) {
   emitResourceOpForBinOpRes(A, "asr");
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWLSR>(HWAOpFU *A) {
+void esyn::RTLWriter::emitResourceOp<HWLSR>(HWAOpFU *A) {
   emitResourceOpForBinOpRes(A, "lsr");
 }
 
 template<>
-void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
-  unsigned DataWidth = A->getInputBitwidth(0),
-           AddrWidth = A->getInputBitwidth(1);
+void esyn::RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
+  unsigned DataWidth = A->getInputBitwidth(0);
 
   unsigned FUID = A->getUnitID();
   Instruction *Inst = &(A->getInst<Instruction>());
@@ -527,7 +514,7 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
   VM->getDataPathBuffer(6) << "membus_addr" << FUID << " = ";
 
   // Emit the operation
-  if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
+  if (isa<LoadInst>(Inst)) {
     VM->getDataPathBuffer() << getAsOperand(A->getValDep(LoadInst::getPointerOperandIndex()))
       << ";\n";
     VM->getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b0;\n";
@@ -542,47 +529,35 @@ void RTLWriter::emitResourceOp<HWMemBus>(HWAOpFU *A) {
   }
 }
 
-void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string &OpPrefix) {
-  unsigned FUID = FU->getUnitID();
-  std::string OpA = OpPrefix + "_a" + utostr(FUID);
-  std::string OpB = OpPrefix + "_b" + utostr(FUID);
-
-  VM->getDataPathBuffer(6) << OpA << " = "
-    << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
-  VM->getDataPathBuffer(6) << OpB << " = "
-    << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
-  vlang->end(VM->getDataPathBuffer(4));
-}
-
 template<>
-void RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDefaultOp<HWAddSub>(HWFUnit *FU) {
   std::string Mode = "addsub_mode" + utostr(FU->getUnitID());
   VM->getDataPathBuffer(6) << Mode << " = 1'b0;\n";
   emitResourceDefaultOpForBinOpRes(FU, "addsub");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDefaultOp<HWMult>(HWFUnit *FU) {
   emitResourceDefaultOpForBinOpRes(FU, "mult");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWSHL>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDefaultOp<HWSHL>(HWFUnit *FU) {
   emitResourceDefaultOpForBinOpRes(FU, "shl");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWASR>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDefaultOp<HWASR>(HWFUnit *FU) {
   emitResourceDefaultOpForBinOpRes(FU, "asr");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWLSR>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDefaultOp<HWLSR>(HWFUnit *FU) {
   emitResourceDefaultOpForBinOpRes(FU, "lsr");
 }
 
 template<>
-void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
+void esyn::RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
   unsigned DataWidth = FU->getInputBitwidth(0),
            AddrWidth = FU->getInputBitwidth(1),
            FUID = FU->getUnitID();
@@ -593,6 +568,31 @@ void RTLWriter::emitResourceDefaultOp<HWMemBus>(HWFUnit *FU) {
   VM->getDataPathBuffer(6) << "membus_we" << FUID << " = 1'b0;\n";
   VM->getDataPathBuffer(6) << "membus_in" << FUID
     << " = " << vlang->printConstantInt(0, DataWidth, false) << ";\n";
+  vlang->end(VM->getDataPathBuffer(4));
+}
+
+} // end namespace
+
+void RTLWriter::emitResourceOpForBinOpRes(HWAOpFU *A, const std::string &OpPrefix) {
+  unsigned FUID = A->getUnitID();
+  std::string OpA = OpPrefix + "_a" + utostr(FUID);
+  std::string OpB = OpPrefix + "_b" + utostr(FUID);
+
+  VM->getDataPathBuffer(6) <<  OpA << " = "
+    << getAsOperand(A->getValDep(0)) << ";\n";
+  VM->getDataPathBuffer(6) <<  OpB << " = "
+    << getAsOperand(A->getValDep(1)) << ";\n";
+}
+
+void RTLWriter::emitResourceDefaultOpForBinOpRes(HWFUnit *FU, const std::string &OpPrefix) {
+  unsigned FUID = FU->getUnitID();
+  std::string OpA = OpPrefix + "_a" + utostr(FUID);
+  std::string OpB = OpPrefix + "_b" + utostr(FUID);
+
+  VM->getDataPathBuffer(6) << OpA << " = "
+    << vlang->printConstantInt(0, FU->getInputBitwidth(0), false) << ";\n";
+  VM->getDataPathBuffer(6) << OpB << " = "
+    << vlang->printConstantInt(0, FU->getInputBitwidth(1), false) << ";\n";
   vlang->end(VM->getDataPathBuffer(4));
 }
 
@@ -619,7 +619,6 @@ void RTLWriter::emitResource(HWAPreBindVecTy &Atoms) {
       I != E; ++I) {
     HWAOpFU *A = *I;
     Instruction *Inst = &(A->getInst<Instruction>());
-    BasicBlock *BB = Inst->getParent();
     std::string SelCase = vlang->printConstantInt(1 << (--AtomCounter),
                                                   SelBitWidth, false);
     vlang->matchCase(VM->getDataPathBuffer(4), SelCase);
@@ -899,7 +898,7 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
 
     vlang->end(VM->getControlBlockBuffer(10));
   } else {
-    BasicBlock &NextBB = *(I.getSuccessor(0)), &CurBB = *(I.getParent());
+    BasicBlock &NextBB = *(I.getSuccessor(0));
     emitNextFSMState(VM->getControlBlockBuffer(10), NextBB);
     emitNextMicroState(VM->getControlBlockBuffer(10), NextBB, "1'b1");
   }

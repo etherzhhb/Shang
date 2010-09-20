@@ -42,12 +42,12 @@ namespace esyn {
 template<class DataTy>
 class CompGraphNode {
 public:
-  typedef typename CompGraphNode<DataTy> _Self;
-  typedef typename SmallPtrSetIterator<_Self*> pred_iterator;
-  typedef typename SmallPtrSetIterator<_Self*> const_pred_iterator;
+  typedef CompGraphNode<DataTy> _Self;
+  typedef SmallPtrSetIterator<_Self*> pred_iterator;
+  typedef SmallPtrSetIterator<_Self*> const_pred_iterator;
 
-  typedef typename SmallPtrSetIterator<_Self*> succ_iterator;
-  typedef typename SmallPtrSetIterator<_Self*> const_succ_iterator;
+  typedef SmallPtrSetIterator<_Self*> succ_iterator;
+  typedef SmallPtrSetIterator<_Self*> const_succ_iterator;
 
 private:
   CompGraphNode(const _Self &);             // DO NOT IMPLEMENT
@@ -82,7 +82,7 @@ public:
 
   unsigned getWeightTo(_Self* N) const {
     assert(Succs.count(N) && "Only can get weight to Succs!");
-    std::map<_Self*, unsigned>::const_iterator at = WeightMap.find(N);
+    typename std::map<_Self*, unsigned>::const_iterator at = WeightMap.find(N);
     if (at != WeightMap.end())
       return at->second;
 
@@ -170,8 +170,8 @@ class CompGrapPath {
 public:
   typedef CompGrapPath<DataTy> _Self;
   typedef CompGraphNode<DataTy> _NodeTy;
-  typedef typename SmallPtrSetIterator<_NodeTy*> path_iterator;
-  typedef typename SmallPtrSetIterator<_NodeTy*> const_path_iterator;
+  typedef SmallPtrSetIterator<_NodeTy*> path_iterator;
+  typedef SmallPtrSetIterator<_NodeTy*> const_path_iterator;
 private:
   SmallPtrSet<_NodeTy*, 8> Nodes;
 public:
@@ -193,7 +193,7 @@ public:
     std::map<_NodeTy*, unsigned> LongestPathWeight;
 
     //for each vertex v in topOrder(G) do
-    typedef _NodeTy::succ_iterator ChildIt;
+    typedef typename _NodeTy::succ_iterator ChildIt;
     SmallVector<std::pair<_NodeTy*, ChildIt>, 32> WorkStack;
     std::map<_NodeTy*, unsigned> VisitCount;
 
@@ -463,7 +463,6 @@ void CompPathBinding::bindRegister(HWAOpFU *A, HWRegister *R) {
   DEBUG(dbgs() << "Create FU Register: ");
   DEBUG(WR->dump());
 
-  bool FURegRead = false;
   std::vector<HWAtom *> WorkStack(A->use_begin(), A->use_end());
   while(!WorkStack.empty()) {
     HWAtom *Use = WorkStack.back();

@@ -92,14 +92,14 @@ void HWAOpFU::print(raw_ostream &OS) const {
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
                uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
-  : FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
-  BitWidth(bitWidth), InstIdx(Idx), Parent(0) {}
+  : FastID(ID), HWAtomType(HWAtomTy), Latancy(latancy), BitWidth(bitWidth),
+  SchedSlot(0), InstIdx(Idx), Parent(0), Val(V) {}
 
 
 HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
                HWEdge *Dep0, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
-  : FastID(ID), HWAtomType(HWAtomTy), Val(V), SchedSlot(0), Latancy(latancy),
-  BitWidth(bitWidth), InstIdx(Idx), Parent(0) {
+  : FastID(ID), HWAtomType(HWAtomTy), Latancy(latancy), BitWidth(bitWidth),
+  SchedSlot(0), InstIdx(Idx), Parent(0), Val(V) {
   Deps.push_back(Dep0);
   Dep0->getSrc()->addToUseList(this);
 }

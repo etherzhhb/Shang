@@ -156,7 +156,9 @@ class RTLWriter : public FunctionPass {
   void visitSelectInst(HWAOpFU &A);
   void visitCallInst (HWAOpFU &A){}
   void visitInlineAsm(HWAOpFU &A){}
-  bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee){}
+  bool visitBuiltinCall(CallInst &I, Intrinsic::ID ID, bool &WroteCallee) {
+    return false;
+  }
 
   void visitAllocaInst(HWAOpFU &A) {}
   void visitLoadInst  (HWAOpFU &A){}

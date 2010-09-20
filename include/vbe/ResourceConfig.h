@@ -140,17 +140,17 @@ class HW##Name : public HWBinOpResType { \
   unsigned MaxBitWidth; \
   HW##Name(unsigned latency, unsigned startInt, unsigned totalRes, \
   unsigned maxBitWidth) \
-  : HWBinOpResType(HWResType::##Name, latency, startInt, totalRes, \
+  : HWBinOpResType(Name, latency, startInt, totalRes, \
   maxBitWidth) \
 {} \
   friend class HWBinOpResType; \
 public: \
   static inline bool classof(const HW##Name *A) { return true; } \
   static inline bool classof(const HWResType *A) { \
-  return A->getType() == HWResType::##Name; \
+  return A->getType() == Name; \
 } \
   static std::string getTypeName() { return #Name; } \
-  static Types getType() { return HWResType::##Name; } \
+  static Types getType() { return Name; } \
 };
 
 BINOPRESTYPECLASS(Mult);
@@ -177,7 +177,7 @@ class HWFUnit : public FoldingSetNode {
   inline HWFUnit(const FoldingSetNodeIDRef ID, HWResType::Types type,
                  unsigned totalFUs, unsigned latency, unsigned UID,
                  uint8_t *I, size_t NI, uint8_t OW)
-    : FastID(ID), T(type), TotalFUs(totalFUs), Latency(latency), UnitID(UID),
+    : FastID(ID), T(type), Latency(latency), TotalFUs(totalFUs), UnitID(UID),
     InputBitWidth(I), NumInputs(NI), OutputBitWidth(OW){
     assert(totalFUs && "Unavailable Function Unit?");
     assert((totalFUs == TotalFUs || T == HWResType::Trivial)
@@ -244,7 +244,7 @@ public:
 
   virtual void initializePass();
 
-  void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS, const Module *) const;
 
   template<class ResType>
   ResType *getResType() const {

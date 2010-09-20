@@ -120,7 +120,6 @@ bool RegAllocation::runOnBasicBlock(BasicBlock &BB) {
   for (unsigned i = Exit->getInstNumOps(), e = Exit->getNumDeps(); i != e; ++i) {
     if (HWValDep *VD = dyn_cast<HWValDep>(&Exit->getDep(i))) {
       HWAtom *SrcAtom = VD->getSrc();
-      Value *V = &SrcAtom->getValue();
       if (VD->getDepType() == HWValDep::Export) {
 
         // If we already emit the register, just skip it.

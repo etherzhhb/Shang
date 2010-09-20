@@ -150,8 +150,8 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB) {
       HWAOpFU *Dst = *DstI;
       bool isDstLoad = isa<LoadInst>(Dst->getValue());
 
-      //No self loops
-      if (Src == Dst)
+      //No self loops and RAR dependence.
+      if (Src == Dst || (isSrcLoad && isDstLoad))
         continue;
       
       bool srcBeforeDest = Src->getIdx() < Dst->getIdx();
@@ -228,7 +228,6 @@ HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
       continue;
     }
 
-    Value *V = &A->getValue();
     const Type *Ty =A->getValue().getType();
     if (Ty->isVoidTy() || A->use_empty()) {
       Deps.push_back(getCtrlDepEdge(A));
@@ -546,7 +545,6 @@ HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 
 void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
-  FSMState *State = getStateFor(BB);
   for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
       BasicBlock *SuccBB = *SI;
     for (BasicBlock::iterator II = SuccBB->begin(),

@@ -87,7 +87,7 @@ bool FDSPass::runOnBasicBlock(BasicBlock &BB) {
   if (MSInfo.isModuloSchedulable()) {
     if (NoFDMS) {
       delete Scheduler;
-      Scheduler = new IMS(HI, State);
+      Scheduler = new IteractiveModuloScheduling(HI, State);
     }
     
     scheduleCyclicCodeRegion(MSInfo.computeMII());

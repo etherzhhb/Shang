@@ -135,7 +135,7 @@ class HWRegister {
   HWResType::Types T : 4;
 public:
   HWRegister(unsigned short num, unsigned short BitWidth, HWResType::Types t)
-    : BitWidth(BitWidth), Num(num), T(t) {}
+    : Num(num), BitWidth(BitWidth), T(t) {}
 
   enum HWResType::Types getResType() const { return T; };
   unsigned getBitWidth() const { return BitWidth; }
@@ -269,17 +269,17 @@ protected:
 
   void setParent(FSMState *State);
 
-public:
   template <class It>
   HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
     It depbegin, It depend, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
-    : FastID(ID), HWAtomType(HWAtomTy), Deps(depbegin, depend), Val(V), SchedSlot(0),
-    Latancy(latancy), BitWidth(bitWidth), InstIdx(Idx), Parent(0) {
+    : FastID(ID), HWAtomType(HWAtomTy), Latancy(latancy), BitWidth(bitWidth),
+    SchedSlot(0), InstIdx(Idx), Parent(0), Deps(depbegin, depend), Val(V) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
       //Deps.push_back(*I);
       (*I)->addToUseList(this);
     }
   }
+public:
 
   static const unsigned short MaxSlot = ~0 >> 1;
   unsigned short getIdx() const { return InstIdx; }
@@ -645,7 +645,7 @@ private:
   friend class HWAtomInfo;
 public:
   FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
-    : HWAtom(ID, atomVRoot, BB, 0, 0, Idx) , HaveSelfLoop(false), II(0) {
+    : HWAtom(ID, atomVRoot, BB, 0, 0, Idx), II(0), HaveSelfLoop(false) {
     setParent(this);
     Atoms.push_back(this);
   }

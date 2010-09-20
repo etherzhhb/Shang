@@ -57,10 +57,10 @@ protected:
   HWAtomInfo *HI;
   FSMState *State;
 
-public:
   ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S)
-    : HI(HAInfo), State(S), MII(0), CriticalPathEnd(0),
-    ExtraResReq(0.0) {}
+    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), HI(HAInfo), State(S) {}
+public:
+  virtual ~ForceDirectedSchedulingBase() {}
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
@@ -193,7 +193,7 @@ public:
 };
 
 
-class IMS : public ForceDirectedListScheduler {
+class IteractiveModuloScheduling : public ForceDirectedListScheduler {
   typedef std::map<unsigned, unsigned> UsageMapType;
   typedef std::map<HWFUnit*, UsageMapType> MRTType;
   MRTType MRT;
@@ -205,7 +205,7 @@ class IMS : public ForceDirectedListScheduler {
   bool isAllAtomScheduled();
   HWAOpFU *findBlockingAtom(HWFUnit *FU, unsigned step); 
 public:
-  IMS(HWAtomInfo *HAInfo, FSMState *S)
+  IteractiveModuloScheduling(HWAtomInfo *HAInfo, FSMState *S)
     : ForceDirectedListScheduler(HAInfo, S){}
 
   bool scheduleState();
