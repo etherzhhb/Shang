@@ -113,7 +113,7 @@ add_llvm_target(VerilogBackend
   VBackend.cpp
   )
 
-target_link_libraries (LLVMVerilogBackend LLVMVerilogCodegen LLVMDesignConfig)
+target_link_libraries (LLVMVerilogBackend LLVMVerilog LLVMDesignConfig)
 
 #add_subdirectory(tools)
 #add_subdirectory(test)

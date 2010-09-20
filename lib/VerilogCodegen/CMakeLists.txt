@@ -1,6 +1,6 @@
 set(LLVM_NO_RTTI 1)
 
-add_llvm_target(VerilogCodegen
+add_llvm_target(Verilog
   CompPathBinding.cpp
   ForceDirectedScheduling.cpp
   ForceDirectedListScheduling.cpp
@@ -19,4 +19,4 @@ add_llvm_target(VerilogCodegen
   VLang.cpp
   )
 
-target_link_libraries (LLVMVerilogCodegen LLVMDesignConfig)
+target_link_libraries (LLVMVerilog LLVMAnalysis)
