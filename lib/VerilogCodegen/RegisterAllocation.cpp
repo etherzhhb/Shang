@@ -17,8 +17,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtomPasses.h"
 #include "HWAtomInfo.h"
+#include "vbe/HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-reg-alloca"
 #include "llvm/Support/Debug.h"
@@ -29,7 +29,7 @@ using namespace esyn;
 namespace {
 struct RegAllocation : public BasicBlockPass {
   static char ID;
-  RegAllocation() : BasicBlockPass(&ID) {}
+  RegAllocation() : BasicBlockPass(ID) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void getAnalysisUsage(AnalysisUsage &AU) const;
 };

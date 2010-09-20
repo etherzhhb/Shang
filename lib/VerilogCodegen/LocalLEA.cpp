@@ -18,7 +18,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HWAtomInfo.h"
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Allocator.h"
@@ -76,7 +76,7 @@ struct RegChann {
 
 struct LocalLEA : public BasicBlockPass {
   static char ID;
-  LocalLEA() : BasicBlockPass(&ID) {}
+  LocalLEA() : BasicBlockPass(ID) {}
 
   bool runOnBasicBlock(BasicBlock &BB);
   void getAnalysisUsage(AnalysisUsage &AU) const;

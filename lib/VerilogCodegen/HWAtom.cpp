@@ -18,7 +18,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vbe/HWAtom.h"
+#include "HWAtom.h"
 
 #include "llvm/Support/Debug.h"
 #include "llvm/Analysis/LoopInfo.h"

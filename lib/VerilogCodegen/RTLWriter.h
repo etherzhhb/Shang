@@ -20,6 +20,10 @@
 #ifndef VBE_RTL_WRITER_H
 #define VBE_RTL_WRITER_H
 
+#include "HWAtom.h"
+#include "VLang.h"
+#include "vbe/ResourceConfig.h"
+
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
@@ -34,11 +38,6 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/DerivedTypes.h"
 #include "llvm/Target/Mangler.h"
-
-#include "vbe/ResourceConfig.h"
-#include "vbe/HWAtom.h"
-
-#include "VLang.h"
 
 using namespace llvm;
 
@@ -197,7 +196,7 @@ public:
   //{
   static char ID;
   explicit RTLWriter(raw_ostream &O = nulls())
-    : FunctionPass(&ID), Out(O), TD(0), vlang(0), HI(0), RC(0), VM(0),
+    : FunctionPass(ID), Out(O), TD(0), vlang(0), HI(0), RC(0), VM(0),
     TotalFSMStatesBit(0), CurFSMStateNum(0) {
   }
   ~RTLWriter();

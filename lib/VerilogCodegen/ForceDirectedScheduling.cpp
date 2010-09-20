@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedScheduling.h"
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-fd-info"
 #include "llvm/Support/Debug.h"

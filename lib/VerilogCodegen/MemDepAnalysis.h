@@ -21,7 +21,7 @@
 #ifndef VBE_MEMORY_DEPENDENCIES_ANALYSIS_H
 #define VBE_MEMORY_DEPENDENCIES_ANALYSIS_H
 
-#include "vbe/HWAtom.h"
+#include "HWAtom.h"
 
 
 #include "llvm/Instructions.h"
@@ -77,7 +77,7 @@ private:
 
 public:
   static char ID;
-  MemDepInfo() : FunctionPass(&ID), AA(0), TD(0), SE(0) {}
+  MemDepInfo() : FunctionPass(ID), AA(0), TD(0), SE(0) {}
   virtual bool runOnFunction(Function &F);
 
   // getAnalysisUsage

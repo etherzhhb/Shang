@@ -17,6 +17,10 @@
 // verilog form.
 //
 //===----------------------------------------------------------------------===//
+#include "HWAtomInfo.h"
+#include "RTLWriter.h"
+#include "vbe/HWAtomPasses.h"
+
 #include "llvm/DerivedTypes.h"
 #include "llvm/Instructions.h"
 #include "llvm/ADT/SmallString.h"
@@ -25,10 +29,6 @@
 #include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Debug.h"
-
-#include "HWAtomInfo.h"
-#include "RTLWriter.h"
-
 
 static cl::opt<std::string>
 DesignName("vbe-design-name", cl::desc("Design Name."), cl::init(""));
@@ -905,4 +905,8 @@ void RTLWriter::visitBranchInst(HWAOpFU &A) {
   }
 }
 
-RegisterPass<RTLWriter> X("vbe-rtl", "vbe - Write HWAtom as RTL Verilog");
+static RegisterPass<RTLWriter> X("vbe-rtl", "vbe - Write HWAtom as RTL Verilog");
+
+Pass *esyn::createRTLWriterPass(raw_ostream &O) {
+  return new RTLWriter(O);
+}

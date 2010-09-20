@@ -19,6 +19,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "VLang.h"
+#include "vbe/HWAtomPasses.h"
+
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
 #include "llvm/DerivedTypes.h"
@@ -32,6 +34,10 @@
 
 using namespace llvm;
 using namespace esyn;
+
+Pass *esyn::createVlangPass() {
+  return new VLang();
+}
 
 namespace {
   class VBEMCAsmInfo : public MCAsmInfo {
@@ -48,14 +54,14 @@ static std::string VLangMangle(const std::string &S) {
   std::string Result;
 
   for (unsigned i = 0, e = S.size(); i != e; ++i)
-  if (isalnum(S[i]) || S[i] == '_') {
-  Result += S[i];
-  } else {
-  Result += '_';
-  Result += 'A'+(S[i]&15);
-  Result += 'A'+((S[i]>>4)&15);
-  Result += '_';
-  }
+    if (isalnum(S[i]) || S[i] == '_') {
+      Result += S[i];
+    } else {
+      Result += '_';
+      Result += 'A'+(S[i]&15);
+      Result += 'A'+((S[i]>>4)&15);
+      Result += '_';
+    }
   return Result;
 }
 

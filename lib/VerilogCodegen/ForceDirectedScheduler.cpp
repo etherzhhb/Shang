@@ -20,7 +20,7 @@
 
 #include "ForceDirectedScheduling.h"
 #include "ModuloScheduleInfo.h"
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/ADT/OwningPtr.h"
@@ -49,7 +49,7 @@ struct FDSPass : public BasicBlockPass {
   /// @name Common pass interface
   //{
   static char ID;
-  FDSPass() : BasicBlockPass(&ID), State(0) {}
+  FDSPass() : BasicBlockPass(ID), State(0) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void releaseMemory();
   void scheduleACyclicCodeRegion();

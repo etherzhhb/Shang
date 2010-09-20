@@ -18,7 +18,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/RegionIterator.h"
@@ -36,7 +36,7 @@ struct TopSortBB : public FunctionPass {
   Function *FN;
 
   static char ID;
-  TopSortBB() : FunctionPass(&ID) {}
+  TopSortBB() : FunctionPass(ID) {}
   bool runOnFunction(Function &F);
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void verifyAnalysis() const;

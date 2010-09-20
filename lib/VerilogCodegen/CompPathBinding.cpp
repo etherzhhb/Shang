@@ -18,9 +18,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 #include "HWAtomInfo.h"
-
 #include "vbe/ResourceConfig.h"
 
 #include "llvm/Target/TargetData.h"
@@ -402,7 +401,7 @@ struct CompPathBinding : public BasicBlockPass {
 }
 
 CompPathBinding::CompPathBinding()
-  : BasicBlockPass(&ID), PGEntry(0, 1), PGExit(0, 0), ResCount(0) {
+  : BasicBlockPass(ID), PGEntry(0, 1), PGExit(0, 0), ResCount(0) {
   for (unsigned i = HWResType::FirstResourceType,
       e = HWResType::LastResourceType; i != e; ++i) {
     PostBindNodeType *Entry = new PostBindNodeType(0, 1),

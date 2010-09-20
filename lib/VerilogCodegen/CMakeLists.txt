@@ -1,6 +1,6 @@
 set(LLVM_NO_RTTI 1)
 
-add_llvm_target(VerilogBackend
+add_llvm_target(VerilogCodegen
   CompPathBinding.cpp
   ForceDirectedScheduling.cpp
   ForceDirectedListScheduling.cpp
@@ -16,10 +16,7 @@ add_llvm_target(VerilogBackend
   ScalarStreamization.cpp
   TestbenchWriter.cpp
   TopSortBB.cpp
-  VBackend.cpp
   VLang.cpp
   )
-  
- target_link_libraries (LLVMVerilogBackend LLVMDesignConfig LLVMVerilogBackendInfo)
 
-add_subdirectory(TargetInfo)
+target_link_libraries (LLVMVerilogCodegen LLVMDesignConfig)

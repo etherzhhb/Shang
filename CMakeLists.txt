@@ -10,16 +10,16 @@ if (CMAKE_COMPILER_IS_GNUCXX)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-common -Woverloaded-virtual -Wno-long-long -Wall -W -Wno-unused-parameter -Wwrite-strings")
 endif ()
 
-set(LLVM_TARGETS_TO_BUILD "${LLVM_TARGETS_TO_BUILD};VerilogBackend")
+#set(LLVM_TARGETS_TO_BUILD "${LLVM_TARGETS_TO_BUILD};VerilogBackend")
 
 #Add to taget name
-set(LLVM_ENUM_TARGETS "${LLVM_ENUM_TARGETS}LLVM_TARGET(VerilogBackend)\n")
+#set(LLVM_ENUM_TARGETS "${LLVM_ENUM_TARGETS}LLVM_TARGET(VerilogBackend)\n")
 
 # Produce llvm/Config/Targets.def again
-configure_file(
-  ${LLVM_MAIN_INCLUDE_DIR}/llvm/Config/Targets.def.in
-  ${LLVM_BINARY_DIR}/include/llvm/Config/Targets.def
-  )
+#configure_file(
+#  ${LLVM_MAIN_INCLUDE_DIR}/llvm/Config/Targets.def.in
+#  ${LLVM_BINARY_DIR}/include/llvm/Config/Targets.def
+#  )
   
 #Add path for custom modules
 # set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${VBE_SOURCE_DIR}/cmake")
@@ -63,11 +63,6 @@ macro(add_vbe_library name)
       target_link_libraries( ${name} ${lib} )
     endforeach(lib)
   endif( LLVM_USED_LIBS )
-
-  # target_link_libraries( ${name} ${CLOOG_LIBRARY} ${ISL_LIBRARY} ${GMP_LIBRARY})
-  # if (OPENSCOP_FOUND)
-    # target_link_libraries( ${name} ${OPENSCOP_LIBRARY})
-  # endif(OPENSCOP_FOUND)
 
   if( LLVM_LINK_COMPONENTS )
     llvm_config(${name} ${LLVM_LINK_COMPONENTS})
@@ -113,6 +108,12 @@ add_definitions( -D_GNU_SOURCE )
 
 add_subdirectory(include)
 add_subdirectory(lib)
+
+add_llvm_target(VerilogBackend
+  VBackend.cpp
+  )
+
+target_link_libraries (LLVMVerilogBackend LLVMVerilogCodegen LLVMDesignConfig)
 
 #add_subdirectory(tools)
 #add_subdirectory(test)

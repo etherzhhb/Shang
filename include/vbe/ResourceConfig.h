@@ -235,7 +235,7 @@ class ResourceConfig : public ImmutablePass {
 
 public:
   static char ID;
-  ResourceConfig() : ImmutablePass(&ID) {
+  ResourceConfig() : ImmutablePass(ID) {
     for (size_t i = 0, e = (size_t)HWResType::LastResourceType; i != e; ++i)
       ResSet[i] = 0;
   }

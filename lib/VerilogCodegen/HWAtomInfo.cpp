@@ -20,6 +20,7 @@
 
 #include "HWAtomInfo.h"
 #include "MemDepAnalysis.h"
+#include "vbe/HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LiveValues.h"
@@ -35,9 +36,13 @@ using namespace esyn;
 //===----------------------------------------------------------------------===//
 
 char HWAtomInfo::ID = 0;
-RegisterPass<HWAtomInfo> X("vbe-hw-atom-info",
-                           "vbe - Construct the Hardware atom respresent"
-                           " on llvm IR");
+static RegisterPass<HWAtomInfo> X("vbe-hw-atom-info",
+                                  "vbe - Construct the Hardware atom respresent"
+                                  " on llvm IR");
+
+Pass *esyn::createHWAtonInfoPass() {
+  return new HWAtomInfo();
+}
 
 void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LoopInfo>();
@@ -185,7 +190,7 @@ void HWAtomInfo::releaseMemory() {
 static bool usedOutSideBB(Value &V, BasicBlock *BB) {
   for (Value::use_iterator UI = V.use_begin(), UE = V.use_end();
       UI != UE; ++UI)
-    if (Instruction *I = dyn_cast<Instruction>(UI))
+    if (Instruction *I = dyn_cast<Instruction>(*UI))
       if (I->getParent() != BB)
         return true;
 

@@ -22,7 +22,7 @@
 #ifndef VBE_HARDWARE_ATOMINFO_H
 #define VBE_HARDWARE_ATOMINFO_H
 
-#include "vbe/HWAtom.h"
+#include "HWAtom.h"
 
 #include "llvm/Support/InstVisitor.h"
 #include "llvm/Support/MathExtras.h"
@@ -185,7 +185,7 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo() : FunctionPass(&ID), ControlRoot(0), LI(0), totalCycle(1),
+  HWAtomInfo() : FunctionPass(ID), ControlRoot(0), LI(0), totalCycle(1),
     InstIdx(0), NumRegs(1), MDA(0) {}
 
   bool runOnFunction(Function &F);

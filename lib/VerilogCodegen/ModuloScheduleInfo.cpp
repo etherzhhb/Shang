@@ -20,7 +20,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ModuloScheduleInfo.h"
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/ADT/SCCIterator.h"

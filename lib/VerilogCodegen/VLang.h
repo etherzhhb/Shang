@@ -229,8 +229,7 @@ class VLang : public ImmutablePass {
 
 public:
   static char ID;
-  explicit VLang() 
-    : ImmutablePass(&ID), NextAnonValueNumber(0) {}
+  explicit VLang() : ImmutablePass(ID), NextAnonValueNumber(0) {}
 
   ~VLang() {
     clear();

@@ -14,10 +14,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "HWAtomInfo.h"
-#include "RTLWriter.h"
-#include "HWAtomPasses.h"
-
+#include "vbe/HWAtomPasses.h"
 #include "vbe/ResourceConfig.h"
 
 using namespace llvm;
@@ -43,7 +40,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     ResourceConfig *RC = new ResourceConfig();
     PM.add(RC);
     // Add the language writer.
-    PM.add(new VLang());
+    PM.add(createVlangPass());
     // We can not handle switch now.
     PM.add(createLowerSwitchPass());
 
@@ -68,7 +65,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
     PM.add(createAggressiveDCEPass());
 
     // Memory dependencies analysis
-    PM.add(new HWAtomInfo());
+    PM.add(createHWAtonInfoPass());
     PM.add(createFDLSPass());
     PM.add(createCompPathBindingPass());
     //PM.add(createASAPSchedulePass());
@@ -81,7 +78,7 @@ bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
 
     PM.add(createScalarStreamizationPass());
     //
-    PM.add(new RTLWriter(Out));
+    PM.add(createRTLWriterPass(Out));
     PM.add(createTestBenchWriterPass(Out));
     return false;
 }

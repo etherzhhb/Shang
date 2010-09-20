@@ -51,6 +51,15 @@ Pass *createLocalLEAPass();
 // Scalar Streamization.
 Pass *createScalarStreamizationPass();
 
+// HWAtom
+Pass *createHWAtonInfoPass();
+
+// Vlang
+Pass *createVlangPass();
+
+// RTL writer.
+Pass *createRTLWriterPass(raw_ostream &O);
+
 // Testbench writer.
 Pass *createTestBenchWriterPass(raw_ostream &O);
 

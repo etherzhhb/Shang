@@ -18,9 +18,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-
-#include "HWAtomPasses.h"
 #include "HWAtomInfo.h"
+#include "vbe/HWAtomPasses.h"
 
 #define DEBUG_TYPE "vbe-ss"
 #include "llvm/Support/Debug.h"
@@ -31,7 +30,7 @@ using namespace esyn;
 namespace {
 struct ScalarStreamization : public BasicBlockPass {
   static char ID;
-  ScalarStreamization() : BasicBlockPass(&ID) {}
+  ScalarStreamization() : BasicBlockPass(ID) {}
   bool runOnBasicBlock(BasicBlock &BB);
   void getAnalysisUsage(AnalysisUsage &AU) const;
 };

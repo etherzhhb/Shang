@@ -17,7 +17,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtomPasses.h"
+#include "vbe/HWAtomPasses.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Instructions.h"
@@ -37,7 +37,7 @@ struct InstLowering : public BasicBlockPass {
   TargetData *TD;
 
   static char ID;
-  InstLowering() : BasicBlockPass(&ID) {}
+  InstLowering() : BasicBlockPass(ID) {}
   bool runOnBasicBlock(BasicBlock &BB);
 
   void lowerGEP(GetElementPtrInst *GEP);
