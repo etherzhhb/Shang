@@ -29,11 +29,11 @@ extern "C" void LLVMInitializeVerilogBackendTarget() {
 //                       External Interface declaration
 //===----------------------------------------------------------------------===//
 
-bool VTargetMachine::addPassesToEmitWholeFile(PassManager &PM,
-                                              formatted_raw_ostream &Out,
-                                              CodeGenFileType FileType,
-                                              CodeGenOpt::Level OptLevel,
-                                              bool DisableVerify) {
+bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
+                                         formatted_raw_ostream &Out,
+                                         CodeGenFileType FileType,
+                                         CodeGenOpt::Level OptLevel,
+                                         bool DisableVerify) {
     if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
 
     // Resource config

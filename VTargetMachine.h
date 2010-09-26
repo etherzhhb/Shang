@@ -18,21 +18,12 @@ namespace llvm {
 
 struct VTargetMachine : public TargetMachine {
 
-  VTargetMachine(const Target &T, const std::string &TT
-    , const std::string &FS)
+  VTargetMachine(const Target &T, const std::string &TT, const std::string &FS)
     : TargetMachine(T) {}
 
-  virtual bool WantsWholeFile() const { return true; }
-  virtual bool addPassesToEmitWholeFile(PassManager &PM,
-                                        formatted_raw_ostream &Out,
-                                        CodeGenFileType FileType,
-                                        CodeGenOpt::Level OptLevel,
-                                        bool DisableVerify);
-
-  // This class always works, but shouldn't be the default in most cases.
-  static unsigned getModuleMatchQuality(const Module &M) { return true; }
-  
-  virtual const TargetData *getTargetData() const { return 0; }
+  bool addPassesToEmitFile(PassManagerBase &, formatted_raw_ostream &,
+                           CodeGenFileType, CodeGenOpt::Level,
+                           bool /* = true */);
 };
 extern Target TheVBackendTarget;
 
