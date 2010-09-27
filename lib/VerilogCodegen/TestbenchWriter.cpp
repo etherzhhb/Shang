@@ -81,21 +81,23 @@ bool TestbenchWriter::runOnFunction(Function &F) {
     if (Name == "clk" || Name == "rstN" || Name == "start")
       continue;
 
-    Out.indent(4) << Name << " = $random();\n";
+    Out.indent(6) << Name << " = $random();\n";
   }
 
   Out.indent(4) <<    "@(negedge clk) begin\n";
   Out.indent(6) <<      "start = 1'b1;\n";
-  Out.indent(4) <<      "starttime = $time;\n";
+  Out.indent(6) <<      "starttime = $time;\n";
   Out.indent(4) <<    "end\n";
 
   Out.indent(4) <<    "@(negedge clk) start <= 1'b0;\n";
 
-  Out.indent(4) <<    "while (!fin)\n";
-  Out.indent(6) <<      "if ($time > 10000) $finish();\n";
+  Out.indent(4) <<    "while (!fin) begin\n";
+  Out.indent(6) <<      "#1ns;\n";
+  Out.indent(6) <<      "if ($time > 100000) $finish();\n";
+  Out.indent(4) <<    "end\n";
 
   Out.indent(4) <<    "$display(\"total time: %t\\n\", $time - starttime);\n";
-  Out.indent(4) <<    "$finish();";
+  Out.indent(4) <<    "$finish();\n";
 
   Out.indent(4) <<    "end\n";
   Out.indent(2) << "end\n\n\n";
