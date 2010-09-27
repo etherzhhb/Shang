@@ -91,7 +91,6 @@ bool RTLWriter::runOnFunction(Function &F) {
 
   // Write buffers to output
   VM->printModuleDecl(Out);
-  vlang->endModuleDecl(Out);
   Out << "\n\n";
   // States
   vlang->comment(Out.indent(2)) << "States\n";
