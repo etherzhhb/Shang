@@ -100,6 +100,23 @@ std::string VLang::printConstant(Constant *CPV) {
   return "??Constant??";
 }
 
+std::string writeConstantInt(uint64_t value, unsigned bitwidth, bool isMinValue) {
+  std::stringstream pc;
+  pc <<bitwidth<< "'h";
+  if(isMinValue)
+    pc<<std::hex<<value;
+  else{
+    std::stringstream ss;
+    ss<<std::hex<<value;
+    unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
+    std::string sout=ss.str();
+    if(uselength<sout.length())
+      sout=sout.substr(sout.length()-uselength,uselength);
+    pc<<sout;
+  }
+  return pc.str();
+}
+
 std::string VLang::printConstantInt(uint64_t value, unsigned bitwidth, bool isMinValue) {
   std::stringstream pc;
   pc<<bitwidth<<"'h";
@@ -169,11 +186,6 @@ static RegisterPass<VLang> X("vlang", "vbe - Verilog language writer",
 
 raw_ostream &VLang::comment(raw_ostream &ss) const {
   ss <<  "//  ";
-  return ss;
-}
-
-raw_ostream &VLang::endModuleDecl(raw_ostream &ss) {
-  ss <<  ");\n";
   return ss;
 }
 
@@ -323,25 +335,28 @@ void VASTPort::print(raw_ostream &OS) const {
   else
     OS << "output ";
 
-  VASTValue::printSignal(*this, OS); 
+  if (isRegister())
+    OS << "reg";
+  else
+    OS << "wire";
+  
+  if (getBitWidth() > 1)
+    OS << "[" << (getBitWidth() - 1) << ":0]";
+
+   OS << ' ' << getName();
 }
 
-void VASTPort::printExternal(raw_ostream &OS) const {
+void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
   if (isInput())
     // We need a reg to drive input port.
-    OS << "reg ";
+    OS << "reg";
   else
     // We need a wire to accept the output value from dut.
-    OS << "wire ";
+    OS << "wire";
 
-  VASTValue::printSignal(*this, OS);
-}
+  if (getBitWidth() > 1)
+    OS << "[" << (getBitWidth() - 1) << ":0]";
 
-void VASTValue::printSignal(const VASTValue &V, raw_ostream &OS) {
-  if (V.isRegister())
-    OS << "reg ";
-  else
-    OS << "wire ";
-
-  OS << "[" << (V.getBitWidth() - 1) << ":0] " << V.getName(); 
+  OS << ' ' << getName()
+     << " = " << writeConstantInt(InitVal, getBitWidth(), false) << ';';
 }

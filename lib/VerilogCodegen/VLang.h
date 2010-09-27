@@ -82,8 +82,6 @@ protected:
 public:
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return IsReg; }
-
-  static void printSignal(const VASTValue &V, raw_ostream &OS);
 };
 
 class VASTPort : public VASTValue {
@@ -105,7 +103,7 @@ public:
   }
 
   void print(raw_ostream &OS) const;
-  void printExternal(raw_ostream &OS) const;
+  void printExternalDriver(raw_ostream &OS, uint64_t InitVal = 0) const;
 };
 
 // The class that represent Verilog modulo.
@@ -258,10 +256,6 @@ public:
   //}
 
   raw_ostream &comment(raw_ostream &ss) const;
-  
-  raw_ostream &moduleBegin(raw_ostream &ss, std::string &ModuleName);
-  
-  raw_ostream &endModuleDecl(raw_ostream &ss);
 
   raw_ostream &alwaysBegin(raw_ostream &ss, unsigned ind,
                           const std::string &Clk = "clk",

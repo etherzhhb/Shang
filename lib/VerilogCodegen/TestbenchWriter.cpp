@@ -54,7 +54,7 @@ bool TestbenchWriter::runOnFunction(Function &F) {
   for (VModule::port_iterator I = VM->ports_begin(), E = VM->ports_end();
        I != E; ++I) {
     VASTPort *port = *I;
-    port->printExternal(Out.indent(2));
+    port->printExternalDriver(Out.indent(2));
     Out << '\n';
   }
 
@@ -109,7 +109,7 @@ bool TestbenchWriter::runOnFunction(Function &F) {
        I != E; ++I) {
       VASTPort *port = *I;
       Out << ",\n";
-      Out.indent(6) << port->getName() << '(' << port->getName() << ')';
+      Out.indent(6) << '.' << port->getName() << '(' << port->getName() << ')';
   }
 
   Out << ");\n";
