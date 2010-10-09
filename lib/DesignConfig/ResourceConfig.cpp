@@ -19,29 +19,25 @@
 #define DEBUG_TYPE "vbe-res-config-file"
 #include "llvm/Support/Debug.h"
 
-#define RAPIDXML_NO_EXCEPTIONS
-#include "rapidxml.hpp"
-#include "rapidxml_iterators.hpp"
-#include "rapidxml.hpp"
+// Include the lua headers (the extern "C" is a requirement because we're
+// using C++ and lua has been compiled as C code)
+extern "C" {
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+}
+
+// This is the only header we need to include for LuaBind to work
+#include "luabind/luabind.hpp"
 
 using namespace llvm;
 using namespace esyn;
-using namespace rapidxml;
-
-//
-typedef xml_node<> XmlNode;
-typedef xml_attribute<> XmlAttr;
 
 //===----------------------------------------------------------------------===//
 /// Xml stuff
 static cl::opt<std::string>
-ConfigFilename("vbe-res-config-file",
-               cl::desc("vbe - The resource config file."));
-
-void rapidxml::parse_error_handler(const char *what, void *where) {
-  errs() << "Xml Pase error: " << what << '\n';
-  report_fatal_error("Error parsing resoure config xml");
-}
+ConfigScriptName("vbe-res-config-script",
+                  cl::desc("vbe - The resource config script."));
 
 //===----------------------------------------------------------------------===//
 /// Hardware resource.
@@ -53,121 +49,48 @@ void HWResType::print(raw_ostream &OS) const {
 }
 
 //===----------------------------------------------------------------------===//
-// Resource parsing
-static enum HWResType::Types getResourceType(XmlNode *Node) {
-  XmlAttr *attr = Node->first_attribute("type");
-  if (attr == 0)
-    return HWResType::AddSub;
-  unsigned ret;
-  StringRef val = StringRef(attr->value());
-  if (val.getAsInteger(0, ret) || 
-      (ret > HWResType::LastResourceType || ret < HWResType::FirstResourceType))
-    report_fatal_error("Bad resource type!\n");
-  
-  return (HWResType::Types)ret;
-}
-
-static char *getSubNodeAsString(XmlNode *Node, std::string name) {
-  assert(Node && "Node can not be null!");
-  XmlNode *SubNode = Node->first_node(name.c_str());
-  if (SubNode == 0)
-    report_fatal_error("Can not parse " + name + "!\n");
-
-  return SubNode->value();
-}
-
-static unsigned getSubNodeAsInteger(XmlNode *Node, std::string name) {
-  unsigned ret;
-  StringRef val = StringRef(getSubNodeAsString(Node, name));
-  if (val.getAsInteger(0, ret))
-    report_fatal_error("Not integer node: " + name + "!\n");
-
-  return ret;
-}
-
-HWMemBus *HWMemBus::createFromXml(XmlNode *Node) {
-  assert(Node && "Node can not be null!");
-  if (getSubNodeAsString(Node, "Name") != HWMemBus::getTypeName())
-    report_fatal_error("Bad Resource name, not match " +  getTypeName());
-  return new HWMemBus(getSubNodeAsInteger(Node, "Latency"),
-                      getSubNodeAsInteger(Node, "StartInterval"),
-                      getSubNodeAsInteger(Node, "TotalNum"),
-                      getSubNodeAsInteger(Node, "AddressWidth"),
-                      getSubNodeAsInteger(Node, "DataWidth"));
-}
+/// Resource config implement
 
 template<class BinOpResType>
-BinOpResType *HWBinOpResType::createFromXml(XmlNode *Node) {
-  assert(Node && "Node can not be null!");
-  if (getSubNodeAsString(Node, "Name") != BinOpResType::getTypeName())
-    report_fatal_error("Bad Resource name, not match " + BinOpResType::getTypeName());
-  
-  return new BinOpResType(//,
-    getSubNodeAsInteger(Node, "Latency"),
-    getSubNodeAsInteger(Node, "StartInterval"),
-    getSubNodeAsInteger(Node, "TotalNum"),
-    getSubNodeAsInteger(Node, "MaxBitWidth"));
+void ResourceConfig::setupBinOpRes(unsigned latency, unsigned startInt,
+                                   unsigned totalRes, unsigned maxBitWidth) {
+  ResSet[(unsigned)BinOpResType::getType()
+          - (unsigned)HWResType::FirstResourceType]
+    = new BinOpResType(latency, startInt, totalRes, maxBitWidth);
 }
 
-//===----------------------------------------------------------------------===//
-/// Resource config implement
+
+void ResourceConfig::setupMemBus(unsigned latency, unsigned startInt,
+                                 unsigned totalRes, unsigned addrWidth,
+                                 unsigned dataWidth) {
+  ResSet[(unsigned)HWResType::MemoryBus
+          - (unsigned)HWResType::FirstResourceType]
+    = new HWMemBus(latency, startInt, totalRes, addrWidth, dataWidth);
+}
+
 void ResourceConfig::initializePass() {
-  ParseConfigFile(ConfigFilename);
-  DEBUG(print(dbgs(), 0));
-}
-
-void ResourceConfig::ParseConfigFile(const std::string &Filename) {
   std::string ErrMsg;
-  MemoryBuffer *F = MemoryBuffer::getFile(Filename, &ErrMsg);
-  if (!F)
-    report_fatal_error(Filename + ": Can not open config file!");
 
-  // Get target data
-  memory_pool<> pool;
-  // Create the string, do not forget the null terminator.
-  char *context = pool.allocate_string(F->getBufferStart(),
-                                       F->getBufferSize() + 1);
-  DEBUG(dbgs() << context << '\n');
-  xml_document<> xml;
-  xml.parse<0>(context);
+  lua_State *ScriptState = lua_open();
 
-  XmlNode *ResConfNode = xml.first_node("ResourcesConfiguration");
-  if (!ResConfNode)
-    report_fatal_error("Can not resource configuration!");
+  luabind::open(ScriptState);
 
-  for (XmlNode *ResNode = ResConfNode->first_node("Resource");
-      ResNode != 0; ResNode = ResNode->next_sibling("Resource")) {
-    HWResType *Res = 0;
-    switch (getResourceType(ResNode)) {
-    case HWResType::MemoryBus:
-      Res = HWMemBus::createFromXml(ResNode);
-      break;
-    case HWResType::AddSub:
-      Res = HWBinOpResType::createFromXml<HWAddSub>(ResNode);
-      break;
-    case HWResType::Mult:
-      Res = HWBinOpResType::createFromXml<HWMult>(ResNode);
-      break;
-    case HWResType::SHL:
-      Res = HWBinOpResType::createFromXml<HWSHL>(ResNode);
-      break;
-    case HWResType::ASR:
-      Res = HWBinOpResType::createFromXml<HWASR>(ResNode);
-      break;
-    case HWResType::LSR:
-      Res = HWBinOpResType::createFromXml<HWLSR>(ResNode);
-      break;
-    default:
-      report_fatal_error("Unknow resource type!");
-      break;
-    }
+  luabind::module(ScriptState)[
+    luabind::class_<ResourceConfig>("ResourceConfig")
+      .def("setupMemBus", &ResourceConfig::setupMemBus)
+      .def("setupSHL",    &ResourceConfig::setupBinOpRes<HWSHL>)
+      .def("setupASR",    &ResourceConfig::setupBinOpRes<HWASR>)
+      .def("setupLSR",    &ResourceConfig::setupBinOpRes<HWLSR>)
+      .def("setupAddSub", &ResourceConfig::setupBinOpRes<HWAddSub>)
+      .def("setupMult",   &ResourceConfig::setupBinOpRes<HWMult>)
+  ];
 
-    if (Res != 0) { // Only setup the available resources.
-      unsigned idx = (unsigned)Res->getType()
-                      - (unsigned)HWResType::FirstResourceType;
-      ResSet[idx] = Res;
-    }
-  }
+  luabind::globals(ScriptState)["DesignConfig"] = this;
+
+  luaL_dofile(ScriptState, ConfigScriptName.c_str());
+
+  lua_close(ScriptState);
+  DEBUG(print(dbgs(), 0));
 }
 
 HWFUnit *ResourceConfig::allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,

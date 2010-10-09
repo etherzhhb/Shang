@@ -31,11 +31,6 @@
 
 #include <set>
 #include <map>
-#include <sstream>
-
-namespace rapidxml {
-template<class> class xml_node;
-}
 
 using namespace llvm;
 
@@ -95,6 +90,8 @@ class HWMemBus : public HWResType {
     unsigned addrWidth, unsigned dataWidth)
     : HWResType(HWResType::MemoryBus, latency, startInt, totalRes),
     AddrWidth(addrWidth), DataWidth(dataWidth) {}
+
+  friend class ResourceConfig;
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
   unsigned getDataWidth() const { return DataWidth; }
@@ -105,7 +102,6 @@ public:
     return A->getType() == HWResType::MemoryBus;
   }
 
-  static HWMemBus *createFromXml(rapidxml::xml_node<char> *Node);
   static std::string getTypeName() { return "MemoryBus"; }
   static Types getType() { return HWResType::MemoryBus; }
 };
@@ -130,9 +126,6 @@ public:
       || A->getType() == HWResType::LSR
       || A->getType() == HWResType::Mult;
   }
-
-  template<class BinOpResType>
-  static BinOpResType *createFromXml(rapidxml::xml_node<char> *Node);
 };
 
 #define BINOPRESTYPECLASS(Name) \
@@ -143,7 +136,7 @@ class HW##Name : public HWBinOpResType { \
   : HWBinOpResType(Name, latency, startInt, totalRes, \
   maxBitWidth) \
 {} \
-  friend class HWBinOpResType; \
+  friend class ResourceConfig; \
 public: \
   static inline bool classof(const HW##Name *A) { return true; } \
   static inline bool classof(const HWResType *A) { \
@@ -219,9 +212,7 @@ class ResourceConfig : public ImmutablePass {
   
   /// mapping allocated instences to atom
   HWResType *ResSet[(size_t)HWResType::LastResourceType -
-                     (size_t)HWResType::FirstResourceType + 1];
-
-  void ParseConfigFile(const std::string &Filename);
+                    (size_t)HWResType::FirstResourceType + 1];
 
   HWResType *getResType(enum HWResType::Types T) const {
     unsigned idx = (unsigned)T - (unsigned)HWResType::FirstResourceType;
@@ -243,6 +234,14 @@ public:
   ~ResourceConfig();
 
   virtual void initializePass();
+
+  //
+  void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
+                   unsigned addrWidth, unsigned dataWidth);
+
+  template<class BinOpResType>
+  void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes,
+                     unsigned maxBitWidth);
 
   void print(raw_ostream &OS, const Module *) const;
 
@@ -273,6 +272,7 @@ public:
       (size_t)HWResType::FirstResourceType;
   }
 }; //class
+
 } // namespace
 
 #endif // h guard
