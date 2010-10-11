@@ -27,7 +27,7 @@
 
 using namespace llvm;
 
-namespace esyn {;
+namespace esyn {
 
 class ForceDirectedSchedulingBase {
   // MII in modulo schedule.

@@ -55,7 +55,7 @@ enum HWEdgeTypes {
   edgeConst,
   edgeValDep,
   edgeMemDep,
-  edgeCtrlDep,
+  edgeCtrlDep
 };
 
 class HWAtom;
@@ -167,7 +167,7 @@ public:
 class HWValDep : public HWEdge {
 public:
   enum ValDepTypes{
-    Normal, Import, Export, PHI,
+    Normal, Import, Export, PHI
   };
   HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T);
 

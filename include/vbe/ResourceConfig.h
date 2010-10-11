@@ -144,7 +144,7 @@ public: \
 } \
   static std::string getTypeName() { return #Name; } \
   static Types getType() { return Name; } \
-};
+}
 
 BINOPRESTYPECLASS(Mult);
 BINOPRESTYPECLASS(AddSub);
