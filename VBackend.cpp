@@ -229,6 +229,8 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   if (addPreRegAlloc(PM, OptLevel))
     printAndVerify(PM, "After PreRegAlloc passes");
 
+
+  PM.add(createMachineFunctionPrinterPass(dbgs(), "==========MF============"));
   // TODO: Translate Machine code to HWAtom.
 
   return false;

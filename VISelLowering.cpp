@@ -14,6 +14,7 @@
 
 #include "VISelLowering.h"
 #include "VTargetMachine.h"
+
 #include "llvm/Function.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -80,6 +81,27 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                       const SmallVectorImpl<ISD::InputArg> &Ins,
                                       DebugLoc dl, SelectionDAG &DAG,
                                       SmallVectorImpl<SDValue> &InVals) const {
+  assert(!isVarArg && "VarArg not support yet!");
+
+  typedef const SmallVectorImpl<ISD::InputArg> IAVec;
+  MachineFunction &MF = DAG.getMachineFunction();
+
+  unsigned Idx = 0;
+  for (IAVec::const_iterator I = Ins.begin(), E = Ins.end(); I != E; ++I) {
+    // Get the argument form InArg Node.
+
+    const ISD::InputArg &IA = *I;
+    EVT ArgVT = IA.VT;
+
+    // FIXME: Remember the Argument number.
+    SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl, DAG.getVTList(ArgVT, MVT::Other),
+                                  Chain, DAG.getConstant(Idx++,MVT::i8, false));
+
+    InVals.push_back(SDInArg);
+    // Get the chain from InArg Node.
+    Chain = SDInArg.getValue(1);
+  }
+
   return Chain;
 }
 
@@ -89,7 +111,12 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                              const SmallVectorImpl<ISD::OutputArg> &Outs,
                              const SmallVectorImpl<SDValue> &OutVals,
                              DebugLoc dl, SelectionDAG &DAG) const {
-  return DAG.getNode(VTMISD::FnRet, dl, MVT::Other, Chain);
+  SmallVector<SDValue, 4> RetOps;
+  
+  RetOps.push_back(Chain);
+  RetOps.append(OutVals.begin(), OutVals.end());
+
+  return DAG.getNode(VTMISD::FnRet, dl, MVT::Other, RetOps.data(), RetOps.size());
 }
 
 SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,

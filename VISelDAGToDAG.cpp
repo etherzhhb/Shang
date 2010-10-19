@@ -77,6 +77,14 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
+  //case VTMISD::InArg: {
+  //  SDValue ArgIdx = N->getOperand(1);
+  //  int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();
+  //  ArgIdx = CurDAG->getTargetConstant(Val, ArgIdx.getValueType());
+
+  //  SDValue Ops[] = { ArgIdx, N->getOperand(0) };
+  //  return CurDAG->SelectNodeTo(N, VTM::VTMArgi16t, N->getVTList(), Ops, 2);
+  //}
   }
 
   return SelectCode(N);
