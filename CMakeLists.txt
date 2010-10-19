@@ -106,7 +106,24 @@ add_definitions( -D_GNU_SOURCE )
 add_subdirectory(include)
 add_subdirectory(lib)
 
+set(LLVM_TARGET_DEFINITIONS VTM.td)
+
+tablegen(VGenRegisterInfo.h.inc -gen-register-desc-header)
+tablegen(VGenRegisterNames.inc -gen-register-enums)
+tablegen(VGenRegisterInfo.inc -gen-register-desc)
+tablegen(VGenInstrNames.inc -gen-instr-enums)
+tablegen(VGenInstrInfo.inc -gen-instr-desc)
+tablegen(VGenAsmWriter.inc -gen-asm-writer)
+tablegen(VGenDAGISel.inc -gen-dag-isel)
+
 add_llvm_target(VerilogBackend
+  VInstrInfo.cpp
+  VISelDAGToDAG.cpp
+  VISelLowering.cpp
+  VMCAsmInfo.cpp
+  VRegisterInfo.cpp
+  VSelectionDAGInfo.cpp
+  VSubtarget.cpp
   VBackend.cpp
   )
 

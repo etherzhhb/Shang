@@ -1,42 +1,9 @@
+Change CTV to VTM.
 
+Support Immediate number operands.
 
-Refactor
---------
-Join Multiply/SHL/DIV units and Array interface. The assign part and memory calls 
-should have the same 'module\resource' interface. 
+Support memory operation
 
-Wires
------
-Right now we have to wait a clock cycle after a memory or assign part
-finished it's job. We don't want to wait until it saves it to a register. 
-The solution would be to create a wire. On the finishing cycle the wire will
- take the result from the finishing assign part. On all next cycles it will take it 
-from a register we saved for this purpose.
+-view-dag-combine1-dags -view-isel-dags -march=verilog $(TargetDir)a.ll -vbe-res-config-script=$(TargetDir)Configure.lua -vbe-design-name=dut -o $(TargetDir)a.v -disable-fdms
 
-wire wire_x; assign wire_x = (EIP = state ? out_mul : reg_x);
-
-
-Unroll
-------
-Implement a specialized unroll. Add a post-body.
-Example:
-
-for i in xrange(n):
-    z = i*7 + i*2
-
-BECOMES  -> 
-
-m = n-(n % unroll)
-for i in xrange(0, m-1, unroll):
-    z = i*7 + i*2
-    z = (i+1)*7 + (i+1)*2
-for i in xrange(m,n, 1):
-    z = i*7 + i*2
-
-
-
-
-
-
-
-
+Overall, there is no way to define or match SelectionDAG nodes that define multiple values (e.g. SMUL_LOHI, LOAD, CALL, etc). This is the biggest reason that you currently still have to write custom C++ code for your instruction selector.
