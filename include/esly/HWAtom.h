@@ -22,47 +22,37 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
-#include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
+
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
-#include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/raw_os_ostream.h"
 
-#include "vbe/ResourceConfig.h"
+#include "esly/VSubtarget.h"
 
 #include <list>
 
-using namespace llvm;
+namespace llvm {
+class HWResType;
 
-namespace esyn {
-
-enum HWAtomTypes {
-  atomWrReg,      // Write to local storage, i.e. register.
-  atomLIReg,      // Import local storage form predecessor BB.
-  atomOpFU,       // Operate function unit.
-  atomDelay,      // The delay atom.
-  atomVRoot       // Virtual Root
-};
-
-enum HWEdgeTypes {
-  edgeConst,
-  edgeValDep,
-  edgeMemDep,
-  edgeCtrlDep
-};
 
 class HWAtom;
 class FSMState;
 
 /// @brief Inline operation
 class HWEdge {
+public:
+  enum HWEdgeTypes {
+    edgeValDep,
+    edgeMemDep,
+    edgeCtrlDep
+  };
+private:
   const unsigned short EdgeType;
   HWAtom *Src;
   // Iterate distance.
@@ -96,7 +86,7 @@ public:
 
 template<class IteratorType, class NodeType>
 class HWAtomDepIterator : public std::iterator<std::forward_iterator_tag,
-  NodeType*, ptrdiff_t> {
+                                               NodeType*, ptrdiff_t> {
     IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
     typedef HWAtomDepIterator<IteratorType, NodeType> Self;
 public:
@@ -145,23 +135,6 @@ public:
 
   void print(raw_ostream &OS) const;
 }; 
-
-/// @brief Constant node
-class HWConst : public HWEdge {
-  Constant *C; 
-public:
-  HWConst(FSMState *Src, Constant *Const);
-
-  Constant *getConstant() const { return C; }
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWConst *A) { return true; }
-  static inline bool classof(const HWEdge *A) {
-    return A->getEdgeType() == edgeConst;
-  }
-};
 
 /// @brief Value Dependence Edge.
 class HWValDep : public HWEdge {
@@ -223,15 +196,28 @@ public:
 };
 
 /// @brief Base Class of all hardware atom. 
-class HWAtom : public FoldingSetNode {
-  /// FastID - A reference to an Interned FoldingSetNodeID for this node.
-  /// The ScalarEvolution's BumpPtrAllocator holds the data.
-  FoldingSetNodeIDRef FastID;
+class HWAtom {
+public:
+  enum HWAtomTypes {
+    atomOhters = 0,
+    atomOpFU = 1,       // Operate function unit.
+    atomVRoot = 2,       // Virtual Root
 
+    AtomTypeMask = 0x3,
+    AtomShiftAmount = 0x0,
+
+    atomDelay      // The delay atom.
+  };
+
+static HWAtomTypes getHWAtomType(const MachineInstr *Inst) {
+  return (HWAtomTypes)((Inst->getDesc().TSFlags >> AtomShiftAmount)
+                        & AtomTypeMask);
+}
+
+private:
   // The HWAtom baseclass this node corresponds to
   const unsigned short HWAtomType;
-  const uint8_t Latancy;
-  const uint8_t BitWidth;
+  const unsigned short Latancy;
   // The time slot that this atom scheduled to.
   // TODO: typedef SlotType
   unsigned short SchedSlot;
@@ -261,8 +247,7 @@ class HWAtom : public FoldingSetNode {
   }
 protected:
   // The corresponding LLVM Instruction
-  Value &Val;
-
+  const MachineInstr* MInst;
   virtual ~HWAtom();
 
   friend class FSMState;
@@ -270,10 +255,10 @@ protected:
   void setParent(FSMState *State);
 
   template <class It>
-  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-    It depbegin, It depend, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
-    : FastID(ID), HWAtomType(HWAtomTy), Latancy(latancy), BitWidth(bitWidth),
-    SchedSlot(0), InstIdx(Idx), Parent(0), Deps(depbegin, depend), Val(V) {
+  HWAtom(unsigned HWAtomTy, const MachineInstr *I, It depbegin, It depend,
+    unsigned short latancy, unsigned short Idx)
+    : HWAtomType(HWAtomTy), Latancy(latancy), SchedSlot(0),
+    InstIdx(Idx), Parent(0), Deps(depbegin, depend), MInst(I) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
       //Deps.push_back(*I);
       (*I)->addToUseList(this);
@@ -293,11 +278,11 @@ public:
     Deps.push_back(E);
   }
 
-  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, 
-         uint8_t latancy, uint8_t bitWidth, unsigned short Idx) ;
+  HWAtom(unsigned HWAtomTy, const MachineInstr *I, unsigned short latancy,
+    unsigned short Idx);
 
-  HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V, HWEdge *Dep0,
-         uint8_t latancy, uint8_t bitWidth, unsigned short Idx);
+  HWAtom(unsigned HWAtomTy, const MachineInstr *I, HWEdge *Dep0,
+    unsigned short latancy, unsigned short Idx);
 
   unsigned getHWAtomType() const { return HWAtomType; }
 
@@ -307,10 +292,7 @@ public:
   SmallVectorImpl<HWEdge*>::const_iterator edge_begin() const { return Deps.begin(); }
   SmallVectorImpl<HWEdge*>::const_iterator edge_end() const { return Deps.end(); }
 
-  /// Profile - FoldingSet support.
-  void Profile(FoldingSetNodeID& ID) { ID = FastID; }
-
-  Value &getValue() const { return Val; }
+  const MachineInstr *getMInst() const { return MInst; }
 
   /// @name Operands
   //{
@@ -401,9 +383,6 @@ public:
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
 
-  // BitWidth
-  inline uint8_t getBitWidth() const { return BitWidth; }
-
   // Get the latency of this atom
   unsigned getLatency() const { return Latancy; }
 
@@ -417,13 +396,9 @@ public:
   void dump() const;
 };
 
-}
-
-namespace llvm {
-
-template<> struct GraphTraits<Inverse<esyn::HWAtom*> > {
-  typedef esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::dep_iterator ChildIteratorType;
+template<> struct GraphTraits<Inverse<HWAtom*> > {
+  typedef HWAtom NodeType;
+  typedef HWAtom::dep_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->dep_begin();
@@ -432,9 +407,9 @@ template<> struct GraphTraits<Inverse<esyn::HWAtom*> > {
     return N->dep_end();
   }
 };
-template<> struct GraphTraits<Inverse<const esyn::HWAtom*> > {
-  typedef const esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::const_dep_iterator ChildIteratorType;
+template<> struct GraphTraits<Inverse<const HWAtom*> > {
+  typedef const HWAtom NodeType;
+  typedef HWAtom::const_dep_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->dep_begin();
@@ -443,9 +418,9 @@ template<> struct GraphTraits<Inverse<const esyn::HWAtom*> > {
     return N->dep_end();
   }
 };
-template<> struct GraphTraits<esyn::HWAtom*> {
-  typedef esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::use_iterator ChildIteratorType;
+template<> struct GraphTraits<HWAtom*> {
+  typedef HWAtom NodeType;
+  typedef HWAtom::use_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->use_begin();
@@ -454,9 +429,9 @@ template<> struct GraphTraits<esyn::HWAtom*> {
     return N->use_end();
   }
 };
-template<> struct GraphTraits<const esyn::HWAtom*> {
-  typedef const esyn::HWAtom NodeType;
-  typedef esyn::HWAtom::const_use_iterator ChildIteratorType;
+template<> struct GraphTraits<const HWAtom*> {
+  typedef const HWAtom NodeType;
+  typedef HWAtom::const_use_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
     return N->use_begin();
@@ -465,10 +440,6 @@ template<> struct GraphTraits<const esyn::HWAtom*> {
     return N->use_end();
   }
 };
-}
-
-// FIXME: Move to a seperate header.
-namespace esyn {
 
 // Use tree iterator.
 typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
@@ -483,35 +454,9 @@ typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
 typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
   GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
 
-// Write local storage.
-class HWAWrReg : public HWAtom {
-  HWRegister *Reg;
-public:
-  HWAWrReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge &Edge,
-    HWRegister *reg, unsigned short Slot, unsigned short Idx);
-
-  HWAtom *getSrc() const {
-    if (HWValDep *VD = dyn_cast<HWValDep>(&getDep(0)))
-      return VD->getSrc();
-    
-    return 0;
-  }
-
-  HWRegister *getReg() const { return Reg;  }
-  bool writeFUReg() const;
-
-  static inline bool classof(const HWAWrReg *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomWrReg;
-  }
-
-  void print(raw_ostream &OS) const;
-};
-
 class HWADelay : public HWAtom {
 public:
-  HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge, unsigned Delay,
-           unsigned Idx);
+  HWADelay(HWCtrlDep &Edge, unsigned Delay, unsigned Idx);
 
   HWAtom *getSrc() const { return getDep(0).getSrc(); }
 
@@ -523,94 +468,37 @@ public:
   void print(raw_ostream &OS) const;
 };
 
-// Live in register copy from predecessor basicblock.
-class HWALIReg : public HWAtom {
-public:
-  HWALIReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge *VEdge,
-           uint8_t bitWidth, unsigned short Idx);
-
-  bool isPHINode() const {
-    // Ensure we are defining a PHINode, not importing a PHINode.
-    if (PHINode *PN = dyn_cast<PHINode>(&getValue()))
-      return (PN->getParent() == &getDep(0)->getValue());
-
-    return false;
-  }
-
-  static inline bool classof(const HWALIReg *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomLIReg;
-  }
-
-  void print(raw_ostream &OS) const;
-};
-// Create the ative atom class for register, and operate on instruction
-
 /// @brief The Schedulable Hardware Atom
 class HWAOpFU : public HWAtom {
-  unsigned NumOps;
-  HWFUnit *FU;
-
+  HWResType::Types FUType : 3;
+  unsigned FUID           : 29;
 public:
   template <class It>
-  HWAOpFU(const FoldingSetNodeIDRef ID, Instruction &Inst, HWFUnit *fu,
-    It depbegin, It depend, size_t OpNum, unsigned short Idx)
-    : HWAtom(ID, atomOpFU, Inst, depbegin, depend, fu->getLatency(),
-             fu->getOutputBitwidth(), Idx),
-      NumOps(OpNum), FU(fu) {}
+  HWAOpFU(const MachineInstr *MI, HWResType::Types FUTy, It depbegin, It depend,
+          unsigned Latency, unsigned ID, unsigned short Idx)
+    : HWAtom(atomOpFU, MI, depbegin, depend, Latency, Idx), FUType(FUTy),
+    FUID(ID) {}
 
-  HWFUnit *getFUnit() const { return FU; }
-  void reAssignFUnit(HWFUnit *U) { FU = U; }
+  void reAssignFUnit(unsigned ID) { FUID = ID; }
   // Forward function for FUnit.
 
-  inline HWResType::Types getResType() const { return FU->getResType(); }
-  inline unsigned getUnitID() const { return FU->getUnitID(); }
-  inline uint8_t getInputBitwidth(unsigned idx) const {
-    return FU->getInputBitwidth(idx);
-  }
-  inline unsigned getNumInputs() const { return FU->getNumInputs(); }
+  inline HWResType::Types getResType() const { return FUType; }
+  inline unsigned getUnitID() const { return FUID; }
 
   bool isTrivial() const {
     return getResType() == HWResType::Trivial;
   }
 
-  bool isBinded() const { return FU->getUnitID() != 0; }
-
-  template<class InstTy>
-  InstTy &getInst() { return cast<InstTy>(getValue()); }
-
-  template<class InstTy>
-  const InstTy &getInst() const { return cast<InstTy>(getValue()); }
-
-  Value *getIOperand(unsigned idx) {
-    return getInst<Instruction>().getOperand(idx);
-  }
-
-  Value *getIOperand(unsigned idx) const {
-    return getInst<Instruction>().getOperand(idx);
-  }
-
-  size_t getInstNumOps () const { return NumOps; }
-
-  HWEdge &getValDep(unsigned idx) {
-    assert(idx < NumOps && "index Out of range!");
-    return getDep(idx);
-  }
-
-  HWAtom *getOperand(unsigned idx) const {
-    assert(idx < NumOps && "index Out of range!");
-    //assert(&(getDep(idx)->getSrc()->getValue()) == getInst<Instruction>().getOperand(idx)
-    //  && "HWPostBind operands broken!");
-    return getDep(idx).getSrc();
-  }
+  bool isBinded() const { return FUID != 0; }
 
   // Return the opcode of the instruction.
   unsigned getOpcode() const {
-    return cast<Instruction>(getValue()).getOpcode();
+    assert(getMInst() && "Not presenting a machine inst!");
+    return getMInst()->getOpcode();
   }
 
   void print(raw_ostream &OS) const;
-  
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const HWAOpFU *A) { return true; }
   static inline bool classof(const HWAtom *A) {
@@ -623,6 +511,7 @@ class FSMState  : public HWAtom {
 public:
   typedef std::vector<HWAtom*> AtomVecTy;
 private:
+  const MachineBasicBlock *MBB;
   HWAOpFU *ExitRoot;
   AtomVecTy Atoms;
 
@@ -644,25 +533,24 @@ private:
 
   friend class HWAtomInfo;
 public:
-  FSMState(const FoldingSetNodeIDRef ID, BasicBlock &BB, unsigned short Idx)
-    : HWAtom(ID, atomVRoot, BB, 0, 0, Idx), II(0), HaveSelfLoop(false) {
+  FSMState(const MachineBasicBlock *MachBB, unsigned short Idx)
+    : HWAtom(atomVRoot, 0, 0, Idx), MBB(MachBB), II(0), HaveSelfLoop(false) {
     setParent(this);
     Atoms.push_back(this);
   }
+
   ~FSMState() {
     PHIEdge.clear();
     Atoms.clear();
   }
+
+  const MachineBasicBlock *getMBB() const { return MBB; }
 
   /// @name Roots
   //{
   HWAOpFU *getExitRoot() const { return ExitRoot; }
   HWAOpFU *getExitRoot() { return ExitRoot; }
   //}
-
-  // Return the corresponding basiclbocl of this Execute stage.
-  BasicBlock *getBasicBlock() { return &cast<BasicBlock>(getValue()); }
-  BasicBlock *getBasicBlock() const { return &cast<BasicBlock>(getValue()); }
 
   typedef AtomVecTy::iterator iterator;
   typedef AtomVecTy::const_iterator const_iterator;
@@ -731,10 +619,22 @@ public:
 
   void dump() const;
 
+  void viewGraph();
 
   static inline bool classof(const FSMState *A) { return true; }
   static inline bool classof(const HWAtom *A) {
     return A->getHWAtomType() == atomVRoot;
+  }
+};
+
+
+template <> struct GraphTraits<FSMState*> : public GraphTraits<HWAtom*> {
+  typedef FSMState::iterator nodes_iterator;
+  static nodes_iterator nodes_begin(FSMState *G) {
+    return G->begin();
+  }
+  static nodes_iterator nodes_end(FSMState *G) {
+    return G->end();
   }
 };
 

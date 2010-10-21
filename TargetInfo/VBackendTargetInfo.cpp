@@ -7,12 +7,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VTargetMachine.h"
+//#include "VTargetMachine.h"
+
 #include "llvm/Module.h"
 #include "llvm/Target/TargetRegistry.h"
+
+namespace llvm {
+  //extern Target TheVBackendTarget;
+  Target TheVBackendTarget;
+}
+
 using namespace llvm;
 
-Target llvm::TheVBackendTarget;
 
 extern "C" void LLVMInitializeVerilogBackendTargetInfo() { 
   RegisterTarget<> X(TheVBackendTarget, "verilog", "Verilog backend");

@@ -94,6 +94,9 @@ endmacro(add_vbe_executable)
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_BINARY_DIR}/include
+  ${BOOST_INCLUDE_DIR}
+  ${LUA_INCLUDE_DIR}
+  ${LUABIND_INCLUDE_DIR}
   )
 
 install(DIRECTORY include
@@ -117,6 +120,8 @@ tablegen(VGenAsmWriter.inc -gen-asm-writer)
 tablegen(VGenDAGISel.inc -gen-dag-isel)
 
 add_llvm_target(VerilogBackend
+  HWAtom.cpp
+  HWAtomInfo.cpp
   VInstrInfo.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
@@ -127,7 +132,7 @@ add_llvm_target(VerilogBackend
   VBackend.cpp
   )
 
-target_link_libraries (LLVMVerilogBackend LLVMVerilog LLVMDesignConfig)
+target_link_libraries (LLVMVerilogBackend ${LUA_LIBRARY} ${LUABIND_LIBRARY}) #LLVMVerilog
 
 #add_subdirectory(tools)
 #add_subdirectory(test)

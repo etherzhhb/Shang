@@ -23,8 +23,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "vbe/HWAtomPasses.h"
-#include "vbe/ResourceConfig.h"
+#include "esly/HWAtomPasses.h"
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
@@ -232,6 +231,8 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(createMachineFunctionPrinterPass(dbgs(), "==========MF============"));
   // TODO: Translate Machine code to HWAtom.
+
+  PM.add(createHWAtonInfoPass());
 
   return false;
 }

@@ -5,8 +5,6 @@ add_llvm_target(Verilog
   ForceDirectedScheduling.cpp
   ForceDirectedListScheduling.cpp
   ForceDirectedScheduler.cpp
-  HWAtom.cpp
-  HWAtomInfo.cpp
   InstLowering.cpp
   LocalLEA.cpp
   ModuloScheduleInfo.cpp

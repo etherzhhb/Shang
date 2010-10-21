@@ -18,15 +18,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtom.h"
+#include "esly/HWAtom.h"
 
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Analysis/LoopInfo.h"
 
-#include "vbe/ResourceConfig.h"
-
 using namespace llvm;
-using namespace esyn;
 
 
 HWAtom::~HWAtom() {}
@@ -36,19 +34,8 @@ void HWAtom::dump() const {
   dbgs() << '\n';
 }
 
-
 void HWRegister::print(raw_ostream &OS) const {
   OS << getRegNum() << "(" << getResType() << ")";
-}
-
-void HWAWrReg::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] " << "Write Storage ";
-  Reg->print(OS);
-}
-
-void HWALIReg::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] " << "Live in register for ";
-  WriteAsOperand(OS, &getValue(), false);  
 }
 
 void HWADelay::print(raw_ostream &OS) const {
@@ -62,9 +49,6 @@ void HWMemDep::print(raw_ostream &OS) const {
 void HWCtrlDep::print(raw_ostream &OS) const {
 }
 
-void HWConst::print(raw_ostream &OS) const {
-}
-
 void HWValDep::print(raw_ostream &OS) const {
 }
 
@@ -76,34 +60,28 @@ void FSMState::getScheduleMap(ScheduleMapType &Atoms) const {
 }
 
 void FSMState::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] ";
-  WriteAsOperand(OS, &getValue(), false);
-  OS << " Entry";
+  OS << "[" << getIdx() << "] " << getMBB()->getName()
+     << " Entry";
 }
 
 void HWAOpFU::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] ";
-  if (getValue().getType()->isVoidTy())
-    OS << getValue() << '\n';
-  else
-    WriteAsOperand(OS, &getValue(), false);
-  OS << " Res: " << *getFUnit();
+  OS << "[" << getIdx() << "] " << *getMInst() << '\t'
+     << " Res: " << getResType() << " ID: " << FUID;
 }
 
-HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-               uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
-  : FastID(ID), HWAtomType(HWAtomTy), Latancy(latancy), BitWidth(bitWidth),
-  SchedSlot(0), InstIdx(Idx), Parent(0), Val(V) {}
+HWAtom::HWAtom(unsigned HWAtomTy, const MachineInstr *MI,
+               unsigned short latancy, unsigned short Idx)
+  : HWAtomType(HWAtomTy), Latancy(latancy), SchedSlot(0), InstIdx(Idx),
+  Parent(0), MInst(MI) {}
 
 
-HWAtom::HWAtom(const FoldingSetNodeIDRef ID, unsigned HWAtomTy, Value &V,
-               HWEdge *Dep0, uint8_t latancy, uint8_t bitWidth, unsigned short Idx)
-  : FastID(ID), HWAtomType(HWAtomTy), Latancy(latancy), BitWidth(bitWidth),
-  SchedSlot(0), InstIdx(Idx), Parent(0), Val(V) {
+HWAtom::HWAtom(unsigned HWAtomTy, const MachineInstr *MI, HWEdge *Dep0,
+               unsigned short latancy, unsigned short Idx)
+  : HWAtomType(HWAtomTy), Latancy(latancy), SchedSlot(0), InstIdx(Idx),
+  Parent(0), MInst(MI) {
   Deps.push_back(Dep0);
   Dep0->getSrc()->addToUseList(this);
 }
-
 
 void HWAtom::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
@@ -146,30 +124,35 @@ void HWAtom::setParent(FSMState *State) {
   Parent = State;
 }
 
-bool HWAWrReg::writeFUReg() const {
-  return Reg->isFuReg();
-}
 
-HWADelay::HWADelay(const FoldingSetNodeIDRef ID, HWCtrlDep &Edge,
-                   unsigned Delay, unsigned Idx )
-  : HWAtom(ID, atomDelay, Edge->getValue(), &Edge,Delay, 0, Idx) {
-  Edge->getParent()->addAtom(this);
-}
 
-HWAWrReg::HWAWrReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge &Edge,
-                   HWRegister *reg, unsigned short Slot, unsigned short Idx)
-  : HWAtom(ID, atomWrReg, V, &Edge, 1, Edge->getBitWidth(), Idx),
-  Reg(reg) {
-  if (Slot)
-    scheduledTo(Slot);
-  Edge->getParent()->addAtom(this);
-}
+// DOTWriter for FSMState.
+#include "llvm/Support/GraphWriter.h"
 
-HWALIReg::HWALIReg(const FoldingSetNodeIDRef ID, Value &V, HWEdge *VEdge,
-                   uint8_t bitWidth, unsigned short Idx )
-  : HWAtom(ID, atomLIReg, V, VEdge, 0, bitWidth, Idx) {
-  (*VEdge)->getParent()->addAtom(this);
-}
+template<>
+struct DOTGraphTraits<FSMState*> : public DefaultDOTGraphTraits {
 
-HWConst::HWConst(FSMState *Src, Constant *Const)
-: HWEdge(edgeConst, Src, 0), C(Const) {}
+  DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
+
+  static std::string getGraphName(const FSMState *G) {
+    return G->getMBB()->getName();
+  }
+
+  /// If you want to override the dot attributes printed for a particular
+  /// edge, override this method.
+  static std::string getEdgeAttributes(const HWAtom *Node,
+                                       HWAtom::use_iterator EI) {
+    return "";
+  }
+
+  std::string getNodeLabel(const HWAtom *Node, const FSMState *Graph) {
+    std::string Str;
+    raw_string_ostream ss(Str);
+    Node->print(ss);
+    return ss.str();
+  }
+};
+
+void FSMState::viewGraph() {
+  ViewGraph(this, this->getMBB()->getName());
+}

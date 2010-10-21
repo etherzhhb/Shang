@@ -1,22 +1,27 @@
-/*
-* Copyright: 2008 by Nadav Rotem. all rights reserved.
-* IMPORTANT: This software is supplied to you by Nadav Rotem in consideration
-* of your agreement to the following terms, and your use, installation, 
-* modification or redistribution of this software constitutes acceptance
-* of these terms.  If you do not agree with these terms, please do not use, 
-* install, modify or redistribute this software. You may not redistribute, 
-* install copy or modify this software without written permission from 
-* Nadav Rotem. 
-*/
+//===-------- VSubtarget.h - Define Subtarget for the VTM --------*- C++ -*-====//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file declares the BLACKFIN specific subclass of TargetSubtarget.
+//
+//===----------------------------------------------------------------------===//
 
-#ifndef VBE_RESOURCE_CONFIG_H
-#define VBE_RESOURCE_CONFIG_H
+#ifndef VSUBTARGET_H
+#define VSUBTARGET_H
+
 
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
 #include "llvm/Instructions.h"
 #include "llvm/Constants.h"
 #include "llvm/DerivedTypes.h"
+#include "llvm/Target/TargetSubtarget.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Module.h"
@@ -29,29 +34,37 @@
 #include "llvm/System/DataTypes.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <string>
 #include <set>
 #include <map>
 
-using namespace llvm;
-
-namespace esyn {
+namespace llvm {
 class HWFUnit;
-class ResourceConfig;
+class VSubtarget;
 /// @brief Represent hardware resource
 class HWResType {
 public:
   enum Types {
     MemoryBus = 1,
-    SHL,
-    ASR,
-    LSR,
-    AddSub,
-    Mult,
-    Trivial,
+    SHL = 2,
+    ASR = 3,
+    LSR = 4,
+    AddSub = 5,
+    Mult = 6,
+    Trivial = 7,
+
+    ResTypeMask = 0x7,
+    ResTypeShiftAmount = 0x2,
 
     FirstResourceType = MemoryBus,
     LastResourceType = Trivial
   };
+
+static Types getHWResType(const MachineInstr *Inst) {
+  return (Types)((Inst->getDesc().TSFlags >> ResTypeShiftAmount)
+                  & ResTypeMask);
+}
+
 private:
   // The HWResource baseclass this node corresponds to
   Types ResourceType;
@@ -91,7 +104,7 @@ class HWMemBus : public HWResType {
     : HWResType(HWResType::MemoryBus, latency, startInt, totalRes),
     AddrWidth(addrWidth), DataWidth(dataWidth) {}
 
-  friend class ResourceConfig;
+  friend class VSubtarget;
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
   unsigned getDataWidth() const { return DataWidth; }
@@ -136,7 +149,7 @@ class HW##Name : public HWBinOpResType { \
   : HWBinOpResType(Name, latency, startInt, totalRes, \
   maxBitWidth) \
 {} \
-  friend class ResourceConfig; \
+  friend class VSubtarget; \
 public: \
   static inline bool classof(const HW##Name *A) { return true; } \
   static inline bool classof(const HWResType *A) { \
@@ -177,7 +190,7 @@ class HWFUnit : public FoldingSetNode {
            && latency == Latency && "Data overflow!");
   }
   friend class HWResType;
-  friend class ResourceConfig;
+  friend class VSubtarget;
 public:
   /// Profile - FoldingSet support.
   void Profile(FoldingSetNodeID& ID) { ID = FastID; }
@@ -201,47 +214,34 @@ public:
   }
 };
 
-
-/// Print a RegionNode.
 inline raw_ostream &operator<<(raw_ostream &OS, const HWFUnit &U) {
   OS << U.getResType();
   return OS;
 }
 
-class ResourceConfig : public ImmutablePass {
+class VSubtarget : public TargetSubtarget {
   
   /// mapping allocated instences to atom
   HWResType *ResSet[(size_t)HWResType::LastResourceType -
                     (size_t)HWResType::FirstResourceType + 1];
 
-  HWResType *getResType(enum HWResType::Types T) const {
-    unsigned idx = (unsigned)T - (unsigned)HWResType::FirstResourceType;
-    assert(ResSet[idx] && "Bad resource!");
-    return ResSet[idx];
-  }
-
+  // Dirty Hack:
   // Allocator
-  BumpPtrAllocator HWFUAllocator;
-  FoldingSet<HWFUnit> UniqiueHWFUs;
+  mutable BumpPtrAllocator HWFUAllocator;
+  mutable FoldingSet<HWFUnit> UniqiueHWFUs;
 
 public:
-  static char ID;
-  ResourceConfig() : ImmutablePass(ID) {
-    for (size_t i = 0, e = (size_t)HWResType::LastResourceType; i != e; ++i)
-      ResSet[i] = 0;
-  }
+  VSubtarget(const std::string &TT, const std::string &FS);
+  ~VSubtarget();
 
-  ~ResourceConfig();
+  void initializeTarget();
 
-  virtual void initializePass();
-
-  //
   void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
-                   unsigned addrWidth, unsigned dataWidth);
+    unsigned addrWidth, unsigned dataWidth);
 
   template<class BinOpResType>
   void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes,
-                     unsigned maxBitWidth);
+    unsigned maxBitWidth);
 
   void print(raw_ostream &OS, const Module *) const;
 
@@ -250,12 +250,18 @@ public:
     return cast<ResType>(getResType(ResType::getType()));
   }
 
-  HWFUnit *allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
-                         unsigned UnitID = 0);
-  HWFUnit *allocaMemBusFU(unsigned UnitID);
-  HWFUnit *allocaTrivialFU(unsigned latency, unsigned BitWitdh);
+  HWResType *getResType(enum HWResType::Types T) const {
+    unsigned idx = (unsigned)T - (unsigned)HWResType::FirstResourceType;
+    assert(ResSet[idx] && "Bad resource!");
+    return ResSet[idx];
+  }
 
-  HWFUnit *assignIDToFU(HWFUnit *U, unsigned ID);
+  HWFUnit *allocaBinOpFU(HWResType::Types T, unsigned BitWitdh,
+    unsigned UnitID = 0) const;
+  HWFUnit *allocaMemBusFU(unsigned UnitID) const;
+  HWFUnit *allocaTrivialFU(unsigned latency, unsigned BitWitdh) const;
+
+  HWFUnit *assignIDToFU(HWFUnit *U, unsigned ID) const;
 
   typedef HWResType *const * iterator;
   typedef const HWResType *const * const_iterator;
@@ -267,13 +273,13 @@ public:
     return begin() + (size_t)HWResType::LastResourceType -
       (size_t)HWResType::FirstResourceType;
   }
+
   const_iterator end() const { 
     return begin() + (size_t)HWResType::LastResourceType -
       (size_t)HWResType::FirstResourceType;
   }
-}; //class
+};
 
-} // namespace
+} // end namespace llvm
 
-#endif // h guard
-
+#endif

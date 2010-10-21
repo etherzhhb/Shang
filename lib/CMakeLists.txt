@@ -1,2 +1,1 @@
-add_subdirectory(VerilogCodegen)
-add_subdirectory(DesignConfig)
+#add_subdirectory(VerilogCodegen)

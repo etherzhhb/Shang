@@ -19,14 +19,18 @@ class VTMReg<string n> : Register<n> {
 //  Registers
 //===----------------------------------------------------------------------===//
 
-def DR : VTMReg<"dr">;
+def D1 : VTMReg<"dr1">;
+def D8 : VTMReg<"dr8">;
+def D16 : VTMReg<"dr16">;
+def D32 : VTMReg<"dr32">;
+def D64 : VTMReg<"dr64">;
 def PR : VTMReg<"pr">;
 
-def DR1 : RegisterClass<"VTM", [i1], 1, [DR]>;
-def DR8 : RegisterClass<"VTM", [i8], 8, [DR]>;
-def DR16 : RegisterClass<"VTM", [i16], 16, [DR]>;
-def DR32 : RegisterClass<"VTM", [i32], 32, [DR]>;
-def DR64 : RegisterClass<"VTM", [i64], 64, [DR]>;
+def DR1 : RegisterClass<"VTM", [i1], 1, [D1]>;
+def DR8 : RegisterClass<"VTM", [i8], 8, [D8]>;
+def DR16 : RegisterClass<"VTM", [i16], 16, [D16]>;
+def DR32 : RegisterClass<"VTM", [i32], 32, [D32]>;
+def DR64 : RegisterClass<"VTM", [i64], 64, [D64]>;
 
 // Pointer is default to i64 type.
 def PR64 : RegisterClass<"VTM", [i64], 64, [PR]>;
