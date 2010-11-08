@@ -28,7 +28,7 @@
 #include "VISelLowering.h"
 #include "VSelectionDAGInfo.h"
 
-#include "esly/VSubtarget.h"
+#include "VTMConfig.h"
 // TODO:
 // #include "VIntrinsicInfo.h"
 
@@ -37,10 +37,11 @@ namespace llvm {
 struct VTargetMachine : public LLVMTargetMachine {
   // FIXME
   const TargetData DataLayout;
-  VSubtarget Subtarget;
+  VTMConfig Subtarget;
   VTargetLowering TLInfo;
   VSelectionDAGInfo TSInfo;
   VInstrInfo InstrInfo;
+  InstrItineraryData  InstrItins;
 
   // FIXME
   // TargetFrameInfo FrameInfo;
@@ -51,8 +52,12 @@ struct VTargetMachine : public LLVMTargetMachine {
   virtual const VInstrInfo *getInstrInfo() const { return &InstrInfo; }
   // virtual const TargetFrameInfo *getFrameInfo() const { return &FrameInfo; }
   
-  virtual const VSubtarget *getSubtargetImpl() const {
+  virtual const VTMConfig *getSubtargetImpl() const {
     return &Subtarget;
+  }
+
+  virtual const InstrItineraryData *getInstrItineraryData() const {
+    return &InstrItins;
   }
 
   virtual const VRegisterInfo *getRegisterInfo() const {

@@ -18,20 +18,14 @@
 //===----------------------------------------------------------------------===//
 #ifndef VBE_HARDWARE_ATOM_PASSES_H
 #define VBE_HARDWARE_ATOM_PASSES_H
+
 namespace llvm {
-  class Pass;
-  class raw_ostream;
-}
-
-using namespace llvm;
-
-namespace esyn {
-
+class LLVMContext;
+class Pass;
+class raw_ostream;
+class TargetMachine;
 // Simple As Soon As Possible Scheduler
 Pass *createASAPSchedulePass();
-
-// Force-directed Scheduler
-Pass *createFDLSPass();
 
 // Registers Allocation
 Pass *createRegisterAllocationPass();
@@ -52,7 +46,7 @@ Pass *createLocalLEAPass();
 Pass *createScalarStreamizationPass();
 
 // HWAtom
-Pass *createHWAtonInfoPass();
+Pass *createHWAtonInfoPass(const TargetMachine &TM);
 
 // Vlang
 Pass *createVlangPass();

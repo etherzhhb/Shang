@@ -23,25 +23,24 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-using namespace esyn;
 
 //===----------------------------------------------------------------------===//
 bool
 ForceDirectedListScheduler::fds_sort::operator()(const HWAtom* LHS,
                                                  const HWAtom* RHS) const {
-  // Schedule HWOpFU first.
-  if (isa<HWAOpFU>(LHS) && !isa<HWAOpFU>(RHS))
-    return false;
-  if (!isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS))
-    return true;
-  if (isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS)) {
-    HWFUnit *LFU = cast<HWAOpFU>(LHS)->getFUnit(),
-            *RFU = cast<HWAOpFU>(RHS)->getFUnit();
-    unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
-    // Schedule the atom with less available function unit first.
-    if (LTFU > RTFU) return true;
-    if (LTFU < RTFU) return false;
-  }
+  //// Schedule HWOpFU first.
+  //if (isa<HWAtom>(LHS) && !isa<HWAtom>(RHS))
+  //  return false;
+  //if (!isa<HWAtom>(LHS) && isa<HWAtom>(RHS))
+  //  return true;
+  //if (isa<HWAtom>(LHS) && isa<HWAtom>(RHS)) {
+  //  HWFUnit *LFU = cast<HWAtom>(LHS)->getFUnit(),
+  //          *RFU = cast<HWAtom>(RHS)->getFUnit();
+  //  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
+  //  // Schedule the atom with less available function unit first.
+  //  if (LTFU > RTFU) return true;
+  //  if (LTFU < RTFU) return false;
+  //}
 
   unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
   // Schedule the low mobility nodes first.
@@ -96,7 +95,7 @@ void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
     HWAtom *A = *I;
     if (A->isScheduled())
       continue;
-    assert(!isa<HWAOpFU>(A) && "OpFU not schedule?");
+
     DEBUG(A->print(dbgs()));
     unsigned step = getASAPStep(A);
     A->scheduledTo(step);
@@ -135,8 +134,7 @@ void ForceDirectedListScheduler::fillQueue(AtomQueueType &Queue, It begin, It en
     if (A == FirstNode || A->isScheduled())
       continue;
     
-    if (HWAOpFU *OI = dyn_cast<HWAOpFU>(A))    
-      Queue.push(OI);
+    Queue.push(A);
   }
   //
   Queue.reheapify();
@@ -176,7 +174,7 @@ bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
 bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
-    HWAOpFU *A = Queue.top();
+    HWAtom *A = Queue.top();
     Queue.pop();
 
     if (A->isScheduled())
@@ -285,18 +283,13 @@ struct ims_sort {
 
 bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
   // Schedule HWOpFU first.
-  if (isa<HWAOpFU>(LHS) && !isa<HWAOpFU>(RHS))
-    return false;
-  if (!isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS))
-    return true;
-  if (isa<HWAOpFU>(LHS) && isa<HWAOpFU>(RHS)) {
-    HWFUnit *LFU = cast<HWAOpFU>(LHS)->getFUnit(),
-            *RFU = cast<HWAOpFU>(RHS)->getFUnit();
-    unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
-    // Schedule the atom with less available function unit first.
-    if (LTFU > RTFU) return true;
-    if (LTFU < RTFU) return false;
-  }
+
+  //  HWFUnit *LFU = cast<HWAtom>(LHS)->getFUnit(),
+  //          *RFU = cast<HWAtom>(RHS)->getFUnit();
+  //  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
+  //  // Schedule the atom with less available function unit first.
+  //  if (LTFU > RTFU) return true;
+  //  if (LTFU < RTFU) return false;
   // 
   unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
   if (LASAP > RASAP) return true;
@@ -312,7 +305,7 @@ bool IteractiveModuloScheduling::scheduleState() {
   fds_sort s(*this);
 
   while (!isAllAtomScheduled()) {
-    State->resetSchedule(HI->getTotalCycle());
+    State->resetSchedule();
     buildTimeFrame();
     // Reset exclude slots and resource table.
     MRT.clear();
@@ -325,15 +318,13 @@ bool IteractiveModuloScheduling::scheduleState() {
 
       unsigned EarliestUntry = 0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-        HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
-        
-        if (isStepExcluded(OF, i))
+        if (isStepExcluded(A, i))
           continue;
         
         if (EarliestUntry == 0)
           EarliestUntry = i;
         
-        if (OF && !isResAvailable(OF->getFUnit(), i))
+        if (A && !isResAvailable(A->getFUClass(), i))
           continue;
 
         // This is a available slot.
@@ -345,14 +336,13 @@ bool IteractiveModuloScheduling::scheduleState() {
         increaseMII();
         break;
       } else if(!A->isScheduled()) {
-        HWAOpFU *OF = dyn_cast<HWAOpFU>(A);
-        assert(OF && "A can be schedule only because resource conflict!");
-        HWAOpFU *Blocking = findBlockingAtom(OF->getFUnit(), EarliestUntry);
+        assert(A && "A can be schedule only because resource conflict!");
+        HWAtom *Blocking = findBlockingAtom(A->getFUClass(), EarliestUntry);
         assert(Blocking && "No one blocking?");
         Blocking->resetSchedule();
         excludeStep(Blocking, EarliestUntry);
         // Resource table do not need to change.
-        OF->scheduledTo(EarliestUntry);
+        A->scheduledTo(EarliestUntry);
         ToSched.push(Blocking);
       }
 
@@ -366,41 +356,43 @@ bool IteractiveModuloScheduling::scheduleState() {
   return true;
 }
 
-bool IteractiveModuloScheduling::isStepExcluded(HWAOpFU *A, unsigned step) {
+bool IteractiveModuloScheduling::isStepExcluded(HWAtom *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   unsigned ModuloStep = step % getMII();
   return ExcludeSlots[A].count(ModuloStep);
 }
 
-void IteractiveModuloScheduling::excludeStep(HWAOpFU *A, unsigned step) {
+void IteractiveModuloScheduling::excludeStep(HWAtom *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   unsigned ModuloStep = step % getMII();
   ExcludeSlots[A].insert(ModuloStep);
 }
 
-HWAOpFU *IteractiveModuloScheduling::findBlockingAtom(HWFUnit *FU, unsigned step) {
+HWAtom *IteractiveModuloScheduling::findBlockingAtom(unsigned FUClass,
+                                                      unsigned step) {
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
-    HWAOpFU *OF = dyn_cast<HWAOpFU>(*I);
-    if (OF == 0 || !OF->isScheduled() || OF->getFUnit() != FU)
+    HWAtom *A = *I;
+    if (!A->isScheduled() || A->getFUClass() != FUClass)
       continue;
-    if (OF->getSlot() == step) return OF; 
+    if (A->getSlot() == step) return A; 
   }
 
   return 0;
 }
 
-bool IteractiveModuloScheduling::isResAvailable(HWFUnit *FU, unsigned step) {
-  assert(getMII() && "IMS only work on Modulo scheduling!");
-  // We will always have enough trivial resources.
-  if (FU->getResType() == HWResType::Trivial)
-    return true;
+bool IteractiveModuloScheduling::isResAvailable(unsigned FUClass,
+                                                unsigned step) {
+  //assert(getMII() && "IMS only work on Modulo scheduling!");
+  //// We will always have enough trivial resources.
+  //if (FU->getResType() == HWResType::Trivial)
+  //  return true;
 
-  unsigned ModuloStep = step % getMII();
-  // Do all resource at step been reserve?
-  if (MRT[FU][ModuloStep] >= FU->getTotalFUs())
-    return false;
+  //unsigned ModuloStep = step % getMII();
+  //// Do all resource at step been reserve?
+  //if (MRT[FU][ModuloStep] >= FU->getTotalFUs())
+  //  return false;
 
-  ++MRT[FU][ModuloStep];
+  //++MRT[FU][ModuloStep];
   
   return true;
 }

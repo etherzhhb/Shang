@@ -22,8 +22,6 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
 
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -33,16 +31,18 @@
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/Support/raw_os_ostream.h"
 
-#include "esly/VSubtarget.h"
+#include "VTMConfig.h"
 
 #include <list>
 
 namespace llvm {
 class HWResType;
-
-
+class ForceDirectedSchedulingBase;
 class HWAtom;
 class FSMState;
+
+class MachineBasicBlock;
+class MachineInstr;
 
 /// @brief Inline operation
 class HWEdge {
@@ -119,23 +119,6 @@ public:
   const HWEdge *getEdge() const { return *I; }
 };
 
-class HWRegister {
-  unsigned       Num : 20;
-  unsigned  BitWidth : 8;
-  HWResType::Types T : 4;
-public:
-  HWRegister(unsigned short num, unsigned short BitWidth, HWResType::Types t)
-    : Num(num), BitWidth(BitWidth), T(t) {}
-
-  enum HWResType::Types getResType() const { return T; };
-  unsigned getBitWidth() const { return BitWidth; }
-  unsigned getRegNum() const { return Num; }
-  void setRegNum(unsigned NewNum) { Num = NewNum; }
-  bool isFuReg() const { return T != HWResType::Trivial; }
-
-  void print(raw_ostream &OS) const;
-}; 
-
 /// @brief Value Dependence Edge.
 class HWValDep : public HWEdge {
 public:
@@ -197,32 +180,13 @@ public:
 
 /// @brief Base Class of all hardware atom. 
 class HWAtom {
-public:
-  enum HWAtomTypes {
-    atomOhters = 0,
-    atomOpFU = 1,       // Operate function unit.
-    atomVRoot = 2,       // Virtual Root
-
-    AtomTypeMask = 0x3,
-    AtomShiftAmount = 0x0,
-
-    atomDelay      // The delay atom.
-  };
-
-static HWAtomTypes getHWAtomType(const MachineInstr *Inst) {
-  return (HWAtomTypes)((Inst->getDesc().TSFlags >> AtomShiftAmount)
-                        & AtomTypeMask);
-}
-
 private:
   // The HWAtom baseclass this node corresponds to
-  const unsigned short HWAtomType;
-  const unsigned short Latancy;
+  const unsigned Latancy;
   // The time slot that this atom scheduled to.
   // TODO: typedef SlotType
   unsigned short SchedSlot;
   unsigned short InstIdx;
-  FSMState *Parent;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<HWEdge*, 4> Deps;
@@ -247,30 +211,23 @@ private:
   }
 protected:
   // The corresponding LLVM Instruction
-  const MachineInstr* MInst;
+  MachineInstr* MInst;
   virtual ~HWAtom();
 
-  friend class FSMState;
-
-  void setParent(FSMState *State);
-
-  template <class It>
-  HWAtom(unsigned HWAtomTy, const MachineInstr *I, It depbegin, It depend,
-    unsigned short latancy, unsigned short Idx)
-    : HWAtomType(HWAtomTy), Latancy(latancy), SchedSlot(0),
-    InstIdx(Idx), Parent(0), Deps(depbegin, depend), MInst(I) {
-    for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I) {
-      //Deps.push_back(*I);
-      (*I)->addToUseList(this);
-    }
-  }
 public:
+  template <class It>
+  HWAtom(MachineInstr *I, It depbegin, It depend, unsigned short latancy,
+         unsigned short Idx)
+    : Latancy(latancy), SchedSlot(0), InstIdx(Idx), Deps(depbegin, depend),
+      MInst(I) {
+    for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+      (*I)->addToUseList(this);
+  }
+
+  HWAtom(MachineInstr *I, unsigned short latancy, unsigned short Idx);
 
   static const unsigned short MaxSlot = ~0 >> 1;
   unsigned short getIdx() const { return InstIdx; }
-
-  FSMState *getParent() { return Parent; }
-  FSMState *getParent() const { return Parent; }
 
   // Add a new depencence edge to the atom.
   void addDep(HWEdge *E) {
@@ -278,21 +235,13 @@ public:
     Deps.push_back(E);
   }
 
-  HWAtom(unsigned HWAtomTy, const MachineInstr *I, unsigned short latancy,
-    unsigned short Idx);
-
-  HWAtom(unsigned HWAtomTy, const MachineInstr *I, HWEdge *Dep0,
-    unsigned short latancy, unsigned short Idx);
-
-  unsigned getHWAtomType() const { return HWAtomType; }
-
   SmallVectorImpl<HWEdge*>::iterator edge_begin() { return Deps.begin(); }
   SmallVectorImpl<HWEdge*>::iterator edge_end() { return Deps.end(); }
 
   SmallVectorImpl<HWEdge*>::const_iterator edge_begin() const { return Deps.begin(); }
   SmallVectorImpl<HWEdge*>::const_iterator edge_end() const { return Deps.end(); }
 
-  const MachineInstr *getMInst() const { return MInst; }
+  MachineInstr *getInst() const { return MInst; }
 
   /// @name Operands
   //{
@@ -333,6 +282,7 @@ public:
 
     return dep_end();
   }
+
   dep_iterator getDepIt(const HWAtom *A) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       if ((*I) == A)
@@ -383,13 +333,16 @@ public:
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
 
+  const MachineInstr *getMachineInstr() const { return MInst; }
+  unsigned getFUClass() const;
+
   // Get the latency of this atom
   unsigned getLatency() const { return Latancy; }
 
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
   /// purposes.
-  virtual void print(raw_ostream &OS) const = 0;
+  virtual void print(raw_ostream &OS) const;
 
   /// dump - This method is used for debugging.
   ///
@@ -454,102 +407,35 @@ typedef df_iterator<HWAtom*, SmallPtrSet<HWAtom*, 8>, false,
 typedef df_iterator<const HWAtom*, SmallPtrSet<const HWAtom*, 8>, false,
   GraphTraits<Inverse<const HWAtom*> > > const_deptree_iterator;
 
-class HWADelay : public HWAtom {
-public:
-  HWADelay(HWCtrlDep &Edge, unsigned Delay, unsigned Idx);
-
-  HWAtom *getSrc() const { return getDep(0).getSrc(); }
-
-  static inline bool classof(const HWADelay *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomDelay;
-  }
-
-  void print(raw_ostream &OS) const;
-};
-
-/// @brief The Schedulable Hardware Atom
-class HWAOpFU : public HWAtom {
-  HWResType::Types FUType : 3;
-  unsigned FUID           : 29;
-public:
-  template <class It>
-  HWAOpFU(const MachineInstr *MI, HWResType::Types FUTy, It depbegin, It depend,
-          unsigned Latency, unsigned ID, unsigned short Idx)
-    : HWAtom(atomOpFU, MI, depbegin, depend, Latency, Idx), FUType(FUTy),
-    FUID(ID) {}
-
-  void reAssignFUnit(unsigned ID) { FUID = ID; }
-  // Forward function for FUnit.
-
-  inline HWResType::Types getResType() const { return FUType; }
-  inline unsigned getUnitID() const { return FUID; }
-
-  bool isTrivial() const {
-    return getResType() == HWResType::Trivial;
-  }
-
-  bool isBinded() const { return FUID != 0; }
-
-  // Return the opcode of the instruction.
-  unsigned getOpcode() const {
-    assert(getMInst() && "Not presenting a machine inst!");
-    return getMInst()->getOpcode();
-  }
-
-  void print(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const HWAOpFU *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomOpFU;
-  }
-};
-
 // Virtual Root
-class FSMState  : public HWAtom {
+// FIXME: Do not derived from HWAtom.
+class FSMState {
 public:
   typedef std::vector<HWAtom*> AtomVecTy;
 private:
-  const MachineBasicBlock *MBB;
-  HWAOpFU *ExitRoot;
+  MachineBasicBlock *MBB;
   AtomVecTy Atoms;
-
-  // The registers that store the source value of PHINodes.
-  typedef std::map<const PHINode*, HWValDep*> PHIEdgeMapType;
-  PHIEdgeMapType PHIEdge;
-
-  void addPHIEdge(const PHINode *Phi, HWValDep *Edge) {
-    PHIEdge[Phi] = Edge;
-  }
 
   // Modulo for modulo schedule.
   unsigned short II;
+  const unsigned short startSlot;
   bool HaveSelfLoop;
+  const TargetMachine &TM;
 
-  void setExitRoot(HWAOpFU *Exit);
-
-  void setHaveSelfLoop(bool haveSelfLoop) { HaveSelfLoop = haveSelfLoop; }
-
-  friend class HWAtomInfo;
 public:
-  FSMState(const MachineBasicBlock *MachBB, unsigned short Idx)
-    : HWAtom(atomVRoot, 0, 0, Idx), MBB(MachBB), II(0), HaveSelfLoop(false) {
-    setParent(this);
-    Atoms.push_back(this);
-  }
+  FSMState(const TargetMachine &Target, MachineBasicBlock *MachBB,
+           bool HaveSelfLoop, unsigned short StartSlot, unsigned short Idx)
+    : TM(Target), MBB(MachBB), II(0), startSlot(StartSlot),
+    HaveSelfLoop(HaveSelfLoop) {}
 
-  ~FSMState() {
-    PHIEdge.clear();
-    Atoms.clear();
-  }
+  ~FSMState() { Atoms.clear(); }
 
-  const MachineBasicBlock *getMBB() const { return MBB; }
+  MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
 
   /// @name Roots
   //{
-  HWAOpFU *getExitRoot() const { return ExitRoot; }
-  HWAOpFU *getExitRoot() { return ExitRoot; }
+  HWAtom *getEntryRoot() const { return Atoms.front(); }
+  HWAtom *getExitRoot() const { return Atoms.back(); }
   //}
 
   typedef AtomVecTy::iterator iterator;
@@ -568,39 +454,28 @@ public:
   const_reverse_iterator rbegin() const { return Atoms.rbegin(); }
   const_reverse_iterator rend()   const { return Atoms.rend(); }
 
-  void addAtom(HWAtom *A) {
-    assert(A->getParent() == 0 && "Already have parent!");
-    A->setParent(this);
-    Atoms.push_back(A);
-  }
+  void addAtom(HWAtom *A) { Atoms.push_back(A); }
   void eraseAtom(HWAtom *A) {
     iterator at = std::find(begin(), end(), A);
     assert(at != end() && "Can not find atom!");
     Atoms.erase(at);
 
-    assert((std::find(usetree_iterator::begin(this),
-                      usetree_iterator::end(this), A)
-            == usetree_iterator::end(getParent())) && "Who using dead atom?");
+    assert((std::find(usetree_iterator::begin(getEntryRoot()),
+                      usetree_iterator::end(getEntryRoot()), A)
+            == usetree_iterator::end(getEntryRoot())) && "Who using dead atom?");
   }
 
   size_t getNumAtoms() const { return Atoms.size(); }
 
-  void resetSchedule(unsigned FirstStep) {
+  void resetSchedule() {
     for (iterator I = begin(), E = end(); I != E; ++I)
       (*I)->resetSchedule();
-    this->scheduledTo(FirstStep);
+    getEntryRoot()->scheduledTo(startSlot);
   }
 
-  HWValDep *getPHIEdge(const PHINode *Phi) {
-    PHIEdgeMapType::iterator At = PHIEdge.find(Phi);
-    if (At == PHIEdge.end())
-      return 0;
-
-    return At->second;
-  }
-
+  unsigned getStartSlot() const { return getEntryRoot()->getSlot(); }
   unsigned getEndSlot() const { return getExitRoot()->getSlot(); }
-  unsigned getTotalSlot() const { return getEndSlot() - getSlot(); }
+  unsigned getTotalSlot() const { return getEndSlot() - getStartSlot() + 1; }
 
   // II for Modulo schedule
 
@@ -608,12 +483,8 @@ public:
   void setNoOverlapII() { II = getTotalSlot() + 1; }
   bool isPipelined() const { return II != 0 && II != getTotalSlot() + 1; }
   unsigned getII() const { return II; }
-  unsigned getIISlot() const { return getSlot() + II - 1; }
+  unsigned getIISlot() const { return getStartSlot() + II - 1; }
   bool haveSelfLoop() const { return HaveSelfLoop; }
-
-  typedef std::multimap<unsigned, HWAtom*> ScheduleMapType;
-
-  void getScheduleMap(ScheduleMapType &Atoms) const;
 
   void print(raw_ostream &OS) const;
 
@@ -621,10 +492,14 @@ public:
 
   void viewGraph();
 
-  static inline bool classof(const FSMState *A) { return true; }
-  static inline bool classof(const HWAtom *A) {
-    return A->getHWAtomType() == atomVRoot;
-  }
+  /// @name Scheduling
+  //{
+  void scheduleState();
+  void scheduleACyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler);
+  void scheduleCyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler,
+                                unsigned II);
+  MachineBasicBlock *emitSchedule();
+  //}
 };
 
 

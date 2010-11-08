@@ -18,17 +18,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "esly/HWAtomInfo.h"
+#include "ForceDirectedScheduling.h"
 //#include "MemDepAnalysis.h"
-#include "esly/HWAtomPasses.h"
+#include "HWAtomPasses.h"
+#include "VTMConfig.h"
+#include "VTMFunctionInfo.h"
+
+#include "HWAtom.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/GraphWriter.h"
+#include "llvm/Support/MathExtras.h"
 
 #define DEBUG_TYPE "vbe-hw-atom-info"
 #include "llvm/Support/Debug.h"
@@ -37,13 +44,115 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 
-char HWAtomInfo::ID = 0;
-static RegisterPass<HWAtomInfo> X("vbe-hw-atom-info",
-                                  "vbe - Construct the Hardware atom respresent"
-                                  " on llvm IR");
+namespace {
+  /// @brief Hardware atom construction pass
+///
+struct HWAtomInfo : public MachineFunctionPass {
+  // Allocator
+  BumpPtrAllocator HWAtomAllocator;
+  // The loop Info
+  MachineLoopInfo *LI;
+  LiveVariables *LiveVars;
+  const TargetMachine &VTarget;
+  const VTMConfig &VTC;
+  const TargetInstrInfo &TII;
 
-Pass *esyn::createHWAtonInfoPass() {
-  return new HWAtomInfo();
+  MachineRegisterInfo *MRI;
+
+  VTMFunctionInfo *FuncInfo;
+  // Nodes that detach from the exit node.
+  std::vector<HWAtom*> DetachNodes;
+
+  // Total states
+  unsigned short totalCycle;
+  unsigned short InstIdx;
+
+  HWAtom *getExitRoot(MachineInstr *MI);
+
+  FSMState *buildState(MachineBasicBlock *MBB);
+
+  typedef DenseMap<const MachineInstr*, HWAtom*> AtomMapType;
+  AtomMapType InstToHWAtoms;
+
+  typedef DenseMap<const MachineBasicBlock*, FSMState*> StateMapType;
+  StateMapType MachBBToStates;
+
+  HWValDep *getValDepEdge(HWAtom *Src, bool isSigned = false,
+                          enum HWValDep::ValDepTypes T = HWValDep::Normal) {
+    return new (HWAtomAllocator) HWValDep(Src, isSigned, T);
+  }
+
+  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
+    return new (HWAtomAllocator) HWCtrlDep(Src);
+  }
+
+  HWMemDep *getMemDepEdge(HWAtom *Src, bool isBackEdge,
+                          enum HWMemDep::MemDepTypes DepType,
+                          unsigned Diff);
+
+  void analyzeOperands(const MachineInstr *MI, SmallVectorImpl<HWEdge*> &Deps,
+                       SmallVectorImpl<const MachineOperand*> &Defs);
+
+  void clear();
+
+  void addMemDepEdges(std::vector<HWAtom*> &MemOps, BasicBlock &BB);
+
+  bool haveSelfLoop(const MachineBasicBlock *MBB);
+
+
+  /// @name FunctionPass interface
+  //{
+  static char ID;
+  HWAtomInfo(const TargetMachine &TM);
+
+  ~HWAtomInfo();
+
+  HWAtom *buildExitRoot(MachineInstr *MI);
+  HWAtom *buildAtom(MachineInstr *MI);
+
+  bool runOnMachineFunction(MachineFunction &MF);
+  void releaseMemory();
+  void getAnalysisUsage(AnalysisUsage &AU) const;
+  void print(raw_ostream &O, const Module *M) const;
+  //}
+
+  void scheduleState(FSMState *State);
+
+  HWAtom *getAtomFor(const MachineInstr *MI) const {
+    AtomMapType::const_iterator At = InstToHWAtoms.find(MI);
+
+    if(At != InstToHWAtoms.end())
+      return  At->second;
+
+    return 0;
+  }
+
+  FSMState *getStateFor(const MachineBasicBlock *MBB) const {
+    StateMapType::const_iterator At = MachBBToStates.find(MBB);
+    assert(At != MachBBToStates.end() && "State can not be found!");
+    return At->second;    
+  }
+
+  unsigned getTotalCycle() const {
+    return totalCycle;
+  }
+
+  void setTotalCycle(unsigned Cyc) {
+    totalCycle = Cyc;
+  }
+
+  unsigned getTotalCycleBitWidth() const {
+    return Log2_32_Ceil(totalCycle);
+  }
+
+  void incTotalCycle() { ++totalCycle; }
+};
+}
+
+char HWAtomInfo::ID = 0;
+
+Pass *llvm::createHWAtonInfoPass(const TargetMachine &TM) {
+  return new HWAtomInfo(TM);
 }
 
 void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -56,26 +165,22 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   LiveVars = &getAnalysis<LiveVariables>();
-  VTarget = &(MF.getTarget().getSubtarget<VSubtarget>());
   MRI = &MF.getRegInfo();
+  FuncInfo = MF.getInfo<VTMFunctionInfo>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
-    const MachineBasicBlock &MBB = *I;
+    MachineBasicBlock *MBB = &*I;
+    FSMState *State = buildState(MBB);
+    
+    scheduleState(State);
 
-    FSMState *State = createState(&MBB);
-    MachBBToStates.insert(std::make_pair(&MBB, State));
+    //State->viewGraph();
 
-    for (MachineBasicBlock::const_iterator BI = MBB.begin(), BE = MBB.end();
-        BI != BE; ++BI) {
-      const MachineInstr &MInst = *BI;
-      if (HWAtom *A = buildAtom(&MInst)) {
-        State->addAtom(A);
-        InstToHWAtoms.insert(std::make_pair(&MInst, A));
-      }
-    }
-
-    State->viewGraph();
+    State->emitSchedule();
+    FuncInfo->remeberTotalSlot(MBB, State->getStartSlot(),
+                                    State->getTotalSlot(),
+                                    State->getII());
   }
 
 
@@ -85,7 +190,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   //TD = getAnalysisIfAvailable<TargetData>();
   //assert(TD && "Can not work without TD!");
 
-  //std::vector<HWAOpFU*> MemOps;
+  //std::vector<HWAtom*> MemOps;
 
   //for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
   //  // Setup the state.
@@ -110,7 +215,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   //    ValueToHWAtoms.insert(std::make_pair(&Inst, A));
   //    // Remember the MemOps, we will compute the dependencies about them later.
   //    if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))
-  //      MemOps.push_back(cast<HWAOpFU>(A));
+  //      MemOps.push_back(cast<HWAtom>(A));
   //  }
   //  // preform memory dependencies analysis to add corresponding edges.
   //  addMemDepEdges(MemOps, *BB);
@@ -118,7 +223,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   //  bool selfLoop = haveSelfLoop(BB);
   //  
 
-  //  HWAOpFU *Exit = cast<HWAOpFU>(getControlRoot());
+  //  HWAtom *Exit = cast<HWAtom>(getControlRoot());
   //  State->setExitRoot(Exit);
   //  State->setHaveSelfLoop(selfLoop);
 
@@ -142,36 +247,38 @@ bool HWAtomInfo::haveSelfLoop(const MachineBasicBlock *MBB) {
   return true;
 }
 
-HWADelay *HWAtomInfo::addLoopPredBackEdge(const MachineBasicBlock *MBB) {
-  assert(haveSelfLoop(MBB) && "Loop SCC only exist in self loop!");
-  
-  FSMState *State = getStateFor(MBB);
-  // And get the predicate
-  //BranchInst *Br = cast<BranchInst>(MBB->getTerminator());
-  //ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
-  //HWAOpFU *Pred = cast<HWAOpFU>(getAtomFor(*ICmp));
 
-  //// The Next loop depend on the result of predicate.
-  //// Dirty Hack: The FSM have a delay of 1.
-  //HWADelay *Delay = getDelay(Pred, 1);
-  //HWMemDep *LoopDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
-  //State->addDep(LoopDep);
 
-  // return Delay;
-  return 0;
-}
+//HWADelay *HWAtomInfo::addLoopPredBackEdge(const MachineBasicBlock *MBB) {
+//  assert(haveSelfLoop(MBB) && "Loop SCC only exist in self loop!");
+//  
+//  FSMState *State = getStateFor(MBB);
+//  // And get the predicate
+//  //BranchInst *Br = cast<BranchInst>(MBB->getTerminator());
+//  //ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
+//  //HWAtom *Pred = cast<HWAtom>(getAtomFor(*ICmp));
+//
+//  //// The Next loop depend on the result of predicate.
+//  //// Dirty Hack: The FSM have a delay of 1.
+//  //HWADelay *Delay = getDelay(Pred, 1);
+//  //HWMemDep *LoopDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
+//  //State->addDep(LoopDep);
+//
+//  // return Delay;
+//  return 0;
+//}
 
-void HWAtomInfo::addMemDepEdges(std::vector<HWAOpFU*> &MemOps, BasicBlock &BB) {
-  //typedef std::vector<HWAOpFU*> OpInstVec;
+void HWAtomInfo::addMemDepEdges(std::vector<HWAtom*> &MemOps, BasicBlock &BB) {
+  //typedef std::vector<HWAtom*> OpInstVec;
   //typedef MemDepInfo::DepInfo DepInfoType;
   //for (OpInstVec::iterator SrcI = MemOps.begin(), SrcE = MemOps.end();
   //    SrcI != SrcE; ++SrcI) {
-  //  HWAOpFU *Src = *SrcI;
+  //  HWAtom *Src = *SrcI;
   //  bool isSrcLoad = isa<LoadInst>(Src->getValue());
 
   //  for (OpInstVec::iterator DstI = MemOps.begin(), DstE = MemOps.end();
   //      DstI != DstE; ++DstI) {
-  //    HWAOpFU *Dst = *DstI;
+  //    HWAtom *Dst = *DstI;
   //    bool isDstLoad = isa<LoadInst>(Dst->getValue());
 
   //    //No self loops and RAR dependence.
@@ -210,262 +317,10 @@ void HWAtomInfo::releaseMemory() {
 }
 
 //===----------------------------------------------------------------------===//
-// Construct atom from LLVM-IR
-// What if the one of the operand is Constant?
-//HWAtom *HWAtomInfo::visitTerminatorInst(TerminatorInst &I) {
-//  // State end depand on or others atoms
-//  SmallVector<HWEdge*, 16> Deps;
-//  addOperandDeps(I, Deps);
-//  // We may need to wait until the operation for return value finish.
-//  // FIXME: If we make return port a wire, then we do not need to delay
-//  // the operation.
-//  //if (!Deps.empty() && isa<ReturnInst>(I))
-//  //  if (HWAOpFU *OI = dyn_cast<HWAOpFU>(Deps[0]->getSrc())) {
-//  //    Deps[0]->setSrc(getDelay(OI, 1));
-//  //  }
-//
-//  unsigned OpSize = Deps.size();
-//
-//  std::set<HWEdge*> ExportEdges;
-//  // All node should finish before terminator run.
-//  FSMState *State = getStateFor(*I.getParent());
-//  BasicBlock *BB = I.getParent();
-//
-//  // And export the live values.
-//  for (BasicBlock::iterator II = BB->begin(), IE = --BB->end(); II != IE; ++II) {
-//    Instruction &Inst = *II;
-//    HWAtom *A = getAtomFor(Inst);
-//    
-//    if (usedOutSideBB(Inst, BB)) {
-//      Deps.push_back(getValDepEdge(A, false, HWValDep::Export));
-//      continue;
-//    }
-//
-//    const Type *Ty =A->getValue().getType();
-//    if (Ty->isVoidTy() || A->use_empty()) {
-//      Deps.push_back(getCtrlDepEdge(A));
-//    } 
-//  }
-//
-//  // Also Export live in value, to simplify the Local LEA based register
-//  // merging alogrithm.
-//  for (FSMState::iterator AI = State->begin(), AE = State->end();
-//       AI != AE; ++AI)
-//    if (HWALIReg *LI = dyn_cast<HWALIReg>(*AI))
-//      if (usedOutSideBB(LI->getValue(), BB))
-//        Deps.push_back(getCtrlDepEdge(LI));
-//
-//  // Create delay atom for phi node.
-//  addPhiExportEdges(*BB, Deps);
-//  // handle the situation that a BB that only contains a "ret void".
-//  if (State->getNumUses() == 0)
-//    Deps.push_back(getCtrlDepEdge(State));
-//
-//  // Emit all atom before exit.
-//  if (haveSelfLoop(BB))
-//    Deps.push_back(getCtrlDepEdge(addLoopPredBackEdge(BB)));
-//
-//  assert(!Deps.empty() && "exit root not connect to anything.");
-//  HWFUnit *FU = RC->allocaTrivialFU(0, 0);
-//  HWAOpFU *Atom = getOpFU(I, Deps, OpSize, FU);
-//  // This is a control atom.
-//  SetControlRoot(Atom);
-//
-//  return Atom;
-//}
-//
-//
-//HWAtom *HWAtomInfo::visitPHINode(PHINode &I) {
-//  return getLIReg(getStateFor(*I.getParent()), I);
-//}
-//
-//HWAtom *HWAtomInfo::visitSelectInst(SelectInst &I) {
-//  SmallVector<HWEdge*, 4> Deps;
-//  addOperandDeps(I, Deps);
-//
-//  // FIXME: Read latency from configure file
-//  HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeSizeInBits(I.getType()));
-//  return getOpFU(I, Deps, FU);
-//}
-//
-//HWAtom *HWAtomInfo::visitCastInst(CastInst &I) {
-//  SmallVector<HWEdge*, 1> Deps;
-//  Deps.push_back(getValDepInState(*I.getOperand(0), I.getParent()));
-//  // CastInst do not have any latency
-//  HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeSizeInBits(I.getType()));
-//  return getOpFU(I, Deps, FU);
-//}
-//
-//HWAtom *HWAtomInfo::visitLoadInst(LoadInst &I) {
-//  SmallVector<HWEdge*, 2> Deps;
-//  addOperandDeps(I, Deps);
-//
-//  // Dirty Hack: allocate membus 1 to all load/store at this moment
-//  HWAtom *LoadAtom = getOpFU(I, Deps, RC->allocaMemBusFU(1));
-//
-//  return LoadAtom;
-//}
-//
-//HWAtom *HWAtomInfo::visitStoreInst(StoreInst &I) {
-//  SmallVector<HWEdge*, 2> Deps;
-//  addOperandDeps(I, Deps);
-//
-//  // Dirty Hack: allocate membus 0 to all load/store at this moment
-//  HWAtom *StoreAtom = getOpFU(I, Deps, RC->allocaMemBusFU(1));
-//  // Set as new atom
-//  SetControlRoot(StoreAtom);
-//
-//  return StoreAtom;
-//}
-//
-//HWAtom *HWAtomInfo::visitGetElementPtrInst(GetElementPtrInst &I) {
-//  const Type *Ty = I.getOperand(0)->getType();
-//  assert(isa<SequentialType>(Ty) && "GEP type not support yet!");
-//  if (I.getNumIndices() > 1) {
-//    assert(I.hasAllZeroIndices() && "Too much indices in GEP!");
-//    SmallVector<HWEdge*, 8> Deps;
-//    addOperandDeps(I, Deps);
-//
-//    HWFUnit *FU = RC->allocaTrivialFU(0, TD->getTypeSizeInBits(I.getType()));
-//    return getOpFU(I, Deps, FU);
-//  }
-//
-//  SmallVector<HWEdge*, 2> Deps;
-//  addOperandDeps(I, Deps);
-//  return getOpFU(I, Deps, RC->allocaBinOpFU(HWResType::AddSub,
-//                                                TD->getPointerSizeInBits()));
-//}
-//
-//HWAtom *HWAtomInfo::visitICmpInst(ICmpInst &I) {
-//  // Get the operand;
-//  SmallVector<HWEdge*, 2> Deps;
-//  // LHS
-//  Deps.push_back(getValDepInState(*I.getOperand(0), I.getParent(), I.isSigned()));
-//  // RHS
-//  Deps.push_back(getValDepInState(*I.getOperand(1), I.getParent(), I.isSigned()));
-//
-//  // It is trivial if one of the operand is constant
-//  if (isa<Constant>(I.getOperand(0)) || isa<Constant>(I.getOperand(1))) {
-//    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeSizeInBits(I.getType()));
-//    return getOpFU(I, Deps, FU);
-//  } else {// We need to do a subtraction for the comparison.
-//    HWFUnit *FU = RC->allocaTrivialFU(1, TD->getTypeSizeInBits(I.getType()));
-//    return getOpFU(I, Deps, FU);
-//  }
-//}
-//
-//HWAtom *HWAtomInfo::visitBinaryOperator(Instruction &I) {
-//  // Get the operand;
-//  SmallVector<HWEdge*, 2> Deps;
-//  bool isSigned = false;
-//  bool isOp1Const = isa<Constant>(I.getOperand(1));
-//  unsigned BitWidth = TD->getTypeSizeInBits(I.getType());
-//  HWFUnit *FU;
-//  // Select the resource
-//  switch (I.getOpcode()) {
-//    case Instruction::Add:
-//    case Instruction::Sub:
-//      //T = isTrivial ? HWResource::Trivial : HWResource::AddSub;
-//      FU = RC->allocaBinOpFU(HWResType::AddSub, BitWidth);
-//      break;
-//    case Instruction::Mul:
-//      FU = RC->allocaBinOpFU(HWResType::Mult, BitWidth);
-//      break;
-//    case Instruction::And:
-//    case Instruction::Or:
-//    case Instruction::Xor:
-//      // FIXME: Enable chaining.
-//      FU = RC->allocaTrivialFU(1, BitWidth);
-//      break;
-//    case Instruction::AShr:
-//      // Add the signed prefix for lhs
-//      isSigned = true;
-//      FU = isOp1Const ? RC->allocaTrivialFU(1, BitWidth)
-//                      : RC->allocaBinOpFU(HWResType::ASR, BitWidth);
-//      break;
-//    case Instruction::LShr:
-//      FU = isOp1Const ? RC->allocaTrivialFU(1, BitWidth)
-//                      : RC->allocaBinOpFU(HWResType::LSR, BitWidth);
-//      break;
-//    case Instruction::Shl:
-//      FU = isOp1Const ? RC->allocaTrivialFU(1, BitWidth)
-//                      : RC->allocaBinOpFU(HWResType::SHL, BitWidth);
-//      break;
-//    default: 
-//      llvm_unreachable("Instruction not support yet!");
-//  }
-//  // LHS
-//  Deps.push_back(getValDepInState(*I.getOperand(0), I.getParent(), isSigned));
-//  // RHS
-//  Deps.push_back(getValDepInState(*I.getOperand(1), I.getParent()));
-//  
-//  return getOpFU(I, Deps, FU);
-//}
-
-//===----------------------------------------------------------------------===//
 // Create atom
-
-FSMState *HWAtomInfo::createState(const MachineBasicBlock *MBB) {
-  assert(!MachBBToStates.count(MBB) && "MI exist!");
-
-  FSMState *A =  new (HWAtomAllocator) FSMState(MBB, ++InstIdx);
-  return A;
-}
-
-HWADelay *HWAtomInfo::getDelay(HWAtom *Src, unsigned Delay) {
-  //FoldingSetNodeID FUID;
-  //FUID.AddInteger(atomDelay);
-  //FUID.AddPointer(Src);
-  //FUID.AddInteger(Delay);
-
-  //void *IP = 0;
-  //HWADelay *A =
-  //  static_cast<HWADelay*>(UniqiueHWAtoms.FindNodeOrInsertPos(FUID, IP));
-
-  //if (!A) {
-  //  A = new (HWAtomAllocator) HWADelay(FUID.Intern(HWAtomAllocator),
-  //                                     *getCtrlDepEdge(Src), Delay, ++InstIdx);
-  //  UniqiueHWAtoms.InsertNode(A, IP);
-  //}
-  return 0;
-}
-
-
-HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
-                                    enum HWMemDep::MemDepTypes DepType,
-                                    unsigned Diff) {
-  return new (HWAtomAllocator) HWMemDep(Src, isBackEdge, DepType, Diff);
-}
-
-void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
-
-void HWAtomInfo::addPhiExportEdges(BasicBlock &BB, SmallVectorImpl<HWEdge*> &Deps) {
-  //for (succ_iterator SI = succ_begin(&BB), SE = succ_end(&BB); SI != SE; ++SI){
-  //    BasicBlock *SuccBB = *SI;
-  //  for (BasicBlock::iterator II = SuccBB->begin(),
-  //      IE = SuccBB->getFirstNonPHI(); II != IE; ++II) {
-  //    PHINode *PN = cast<PHINode>(II);
-  //    Value *IV = PN->getIncomingValueForBlock(&BB);
-
-  //    //  continue;
-  //    HWEdge *PHIEdge = getValDepInState(*IV, &BB);
-  //    HWAWrReg *WR = getWrReg(PHIEdge, PN);
-  //    // The source of PHI nodes suppose live untill the state finished. 
-  //    PHIEdge = getValDepEdge(WR, false, HWValDep::PHI);
-  //    Deps.push_back(PHIEdge);
-
-  //    if (&BB == SuccBB) {// Self Loop?
-  //      // The Next loop depend on the result of phi.
-  //      HWMemDep *PHIDep = getMemDepEdge(WR, true, HWMemDep::TrueDep, 1);
-  //      // Create the cycle for PHINode.
-  //      getAtomFor(*PN)->addDep(PHIDep);
-  //    }
-  //  }
-  //}
-}
-
-void HWAtomInfo::addOperandDeps(const MachineInstr *MI,
-                                SmallVectorImpl<HWEdge*> &Deps) {
+void HWAtomInfo::analyzeOperands(const MachineInstr *MI,
+                                 SmallVectorImpl<HWEdge*> &Deps,
+                                 SmallVectorImpl<const MachineOperand*> &Defs) {
   const MachineBasicBlock *MBB = MI->getParent();
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
@@ -480,6 +335,11 @@ void HWAtomInfo::addOperandDeps(const MachineInstr *MI,
     // It seems that sometimes the Register will be 0?
     if (!Reg) continue;
 
+    if (MO.isDef()) {
+      Defs.push_back(&MO);
+      continue;
+    }
+    
     // We are building a dependence graph of a MBB only.
     if (MBB->isLiveIn(Reg)) continue;
 
@@ -488,49 +348,115 @@ void HWAtomInfo::addOperandDeps(const MachineInstr *MI,
   }
 
   // If the atom depend on nothing, make it depend on the entry node.
-  if (Deps.empty())
-    Deps.push_back(getValDepEdge(getStateFor(MBB)));
-}
-
-HWAtom *HWAtomInfo::buildAtom(const MachineInstr *MI) {
-  switch (HWAtom::getHWAtomType(MI)) {
-  default: llvm_unreachable("Can not handle MInst!"); return 0;
-  case HWAtom::atomVRoot:
-    return getExitRoot(MI);
-  case HWAtom::atomOpFU:
-    return createOpFU(MI);
-  case HWAtom::atomOhters:
-    // Ignore the instruction.
-    return 0;
+  if (Deps.empty()) {
+    HWAtom *EntryRoot = getStateFor(MBB)->getEntryRoot();
+    Deps.push_back(getValDepEdge(EntryRoot));
   }
 }
 
-HWAOpFU *HWAtomInfo::createOpFU(const MachineInstr *MI, unsigned ID) {
-  SmallVector<HWEdge*, 4> Deps;
-  addOperandDeps(MI, Deps);
-
-  HWResType::Types ResTy = HWResType::getHWResType(MI);
-  HWResType *ResType = VTarget->getResType(ResTy);
-
+HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   assert(!InstToHWAtoms.count(MI) && "MI exist!");
+
+  VTIDReader VTID(MI->getDesc());
+
+  VInstrInfo::FUTypes ResTy = VTID.getHWResType();
+  
+  if (VTID->isTerminator())
+    return buildExitRoot(MI);    
+
+  SmallVector<HWEdge*, 4> Deps;
+  SmallVector<const MachineOperand*, 4> Defs;
+  analyzeOperands(MI, Deps, Defs);
+
+  unsigned Latency = 0;
+
+  if (ResTy == VInstrInfo::Trivial)
+    Latency = VTID.getTrivialLatency();
+  else
+    Latency = VTC.getResType(ResTy)->getLatency();
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
+  HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
+                                           Latency, ++InstIdx);
+  
+  if (Defs.empty())
+    DetachNodes.push_back(A);
+  else {
+    const MachineBasicBlock *MBB = MI->getParent();
+    for (SmallVector<const MachineOperand*, 4>::iterator I = Defs.begin(),
+         E = Defs.end(); I != E; ++I) {
+      const MachineOperand *Op = *I;
+      if (LiveVars->isLiveOut(Op->getReg(), *MBB)) {
+        // If the node defines any live out register, it may be a detach dode.
+        DetachNodes.push_back(A);
+        break;
+      }
+    }
+  }
+    
 
-  HWAOpFU *A = new (HWAtomAllocator) HWAOpFU(MI, ResTy, Deps.begin(), Deps.end(),
-                                             ResType->getLatency(), ID, ++InstIdx);
   return A;
 }
 
-HWAtom *HWAtomInfo::getExitRoot(const MachineInstr *MI) {
-  SmallVector<HWEdge*, 4> Deps;
-  addOperandDeps(MI, Deps);
+HWAtom *HWAtomInfo::buildExitRoot(MachineInstr *MI) {
+  SmallVector<HWEdge*, 16> Deps;
 
-  // Add the instruction that defining the live out registers
-  // and a chain to the terminator.
+  for (std::vector<HWAtom*>::iterator I = DetachNodes.begin(),
+      E = DetachNodes.end(); I != E; ++I)
+    Deps.push_back(getCtrlDepEdge(*I));
 
-  HWAOpFU *A = new (HWAtomAllocator) HWAOpFU(MI, HWResType::Trivial,
-                                             Deps.begin(), Deps.end(),
-                                             0, 0, ++InstIdx);
+  SmallVector<const MachineOperand*, 1> Defs;
+  analyzeOperands(MI, Deps, Defs);
+
+  HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
+                                           0, ++InstIdx);
   return A;
+}
+
+FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
+  // FIXME: check if MBB have self loop.
+  FSMState *State =  new (HWAtomAllocator) FSMState(VTarget, MBB, false, getTotalCycle(),
+                                                    ++InstIdx);
+
+  MachBBToStates.insert(std::make_pair(MBB, State));
+  DetachNodes.clear();
+
+  // Create a dummy entry node.
+  State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx));
+  
+  for (MachineBasicBlock::iterator BI = MBB->begin(), BE = MBB->end();
+      BI != BE; ++BI) {
+    MachineInstr &MInst = *BI;
+    if (HWAtom *A = buildAtom(&MInst)) {
+      State->addAtom(A);
+      InstToHWAtoms.insert(std::make_pair(&MInst, A));
+    }
+  }
+
+  return State;
+}
+
+HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
+                                    enum HWMemDep::MemDepTypes DepType,
+                                    unsigned Diff) {
+  return new (HWAtomAllocator) HWMemDep(Src, isBackEdge, DepType, Diff);
+}
+
+void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
+
+
+void HWAtomInfo::scheduleState(FSMState *State) {
+  State->scheduleState();
+  setTotalCycle(State->getEndSlot() + 1);
+}
+
+HWAtomInfo::HWAtomInfo(const TargetMachine &TM)
+  : MachineFunctionPass(ID), LI(0), LiveVars(0), VTarget(TM),
+  VTC(VTarget.getSubtarget<VTMConfig>()), MRI(0), TII(*TM.getInstrInfo()),
+  totalCycle(1), InstIdx(0)
+{}
+
+HWAtomInfo::~HWAtomInfo() {
+  clear();
 }

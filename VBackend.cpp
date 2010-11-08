@@ -16,6 +16,7 @@
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Target/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineFunctionAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -23,13 +24,12 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "esly/HWAtomPasses.h"
+#include "HWAtomPasses.h"
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-using namespace esyn;
 
 extern "C" void LLVMInitializeVerilogBackendTarget() { 
   // Register the target.
@@ -51,60 +51,6 @@ bool VTargetMachine::addInstSelector(PassManagerBase &PM,
   PM.add(createVISelDag(*this, OptLevel));
   return false;
 }
-
-//bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
-//                                         formatted_raw_ostream &Out,
-//                                         CodeGenFileType FileType,
-//                                         CodeGenOpt::Level OptLevel,
-//                                         bool DisableVerify) {
-//    if (FileType != TargetMachine::CGFT_AssemblyFile) return true;
-//
-//    // Resource config
-//    ResourceConfig *RC = new ResourceConfig();
-//    PM.add(RC);
-//    // Add the language writer.
-//    PM.add(createVlangPass());
-//    // We can not handle switch now.
-//    PM.add(createLowerSwitchPass());
-//
-//    // Run loop strength reduction before anything else.
-//    //PM.add(createLoopStrengthReducePass(getTargetLowering()));
-//
-//    // Lower the instructions.
-//    PM.add(createInstLoweringPass());
-//    // Combine instructions.
-//    PM.add(createInstructionCombiningPass());
-//
-//    // Run no-load GVN.
-//    PM.add(createGVNPass(/*NoLoads=*/true));
-//    PM.add(createCodeGenPreparePass(getTargetLowering()));
-//    PM.add(createCFGSimplificationPass());
-//
-//    // Topological sort BBs in structural CFG, so we can construct a correct
-//    // live interval for registers.
-//    PM.add(createTopSortBBPass());
-//
-//    // Eliminate dead code.
-//    PM.add(createAggressiveDCEPass());
-//
-//    // Memory dependencies analysis
-//    PM.add(createHWAtonInfoPass());
-//    PM.add(createFDLSPass());
-//    PM.add(createCompPathBindingPass());
-//    //PM.add(createASAPSchedulePass());
-//    // Resource binding
-//    // Region Base global resource binding
-//    PM.add(createRegisterAllocationPass());
-//
-//    // Local register merging.
-//    PM.add(createLocalLEAPass());
-//
-//    PM.add(createScalarStreamizationPass());
-//    //
-//    PM.add(createRTLWriterPass(Out));
-//    PM.add(createTestBenchWriterPass(Out));
-//    return false;
-//}
 
 // DIRTYHACK: Copy form LLVMTargetMachine.cpp
 static void printAndVerify(PassManagerBase &PM,
@@ -232,7 +178,11 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createMachineFunctionPrinterPass(dbgs(), "==========MF============"));
   // TODO: Translate Machine code to HWAtom.
 
-  PM.add(createHWAtonInfoPass());
+  PM.add(new LiveVariables());
+
+  PM.add(createHWAtonInfoPass(*this));
+
+  PM.add(createRTLWriterPass(dbgs()));
 
   return false;
 }

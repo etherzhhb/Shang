@@ -20,16 +20,19 @@
 #ifndef VBE_FORCE_DIRECTED_INFO
 #define VBE_FORCE_DIRECTED_INFO
 
-#include "HWAtomInfo.h"
-#include "ModuloScheduleInfo.h"
+#include "HWAtom.h"
+#include "VTMConfig.h"
+//#include "ModuloScheduleInfo.h"
 
 #include "llvm/ADT/PriorityQueue.h"
 
 using namespace llvm;
 
-namespace esyn {
+namespace llvm {
+class VTMConfig;
 
 class ForceDirectedSchedulingBase {
+  const VTMConfig *VST;
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
   double ExtraResReq;
@@ -44,21 +47,20 @@ private:
   TimeFrameMapType AtomToSTF;
 
   typedef std::map<unsigned, double> DGStepMapType;
-  typedef std::map<HWFUnit*, std::map<unsigned, double> > DGType;
+  typedef std::map<unsigned, std::map<unsigned, double> > DGType;
   DGType DGraph;
 
   unsigned computeStepKey(unsigned step) const;
 
-  std::map<const HWAOpFU*, double> AvgDG;
+  std::map<const HWAtom*, double> AvgDG;
 
   void resetSTF();
 
 protected:
-  HWAtomInfo *HI;
   FSMState *State;
 
-  ForceDirectedSchedulingBase(HWAtomInfo *HAInfo, FSMState *S)
-    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), HI(HAInfo), State(S) {}
+  ForceDirectedSchedulingBase(FSMState *S)
+    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), State(S) {}
 public:
   virtual ~ForceDirectedSchedulingBase() {}
 
@@ -115,8 +117,8 @@ public:
   /// @name Distribution Graphs
   //{
   void buildDGraph();
-  double getDGraphAt(unsigned step, HWFUnit *FU) const;
-  void accDGraphAt(unsigned step, HWFUnit  *FUID, double d);
+  double getDGraphAt(unsigned step, unsigned FUClass) const;
+  void accDGraphAt(unsigned step, unsigned FUClass, double d);
   void printDG(raw_ostream &OS) const;
   void dumpDG() const;
   /// Check the distribution graphs to see if we could schedule the nodes
@@ -128,8 +130,8 @@ public:
   /// @name Force computation
   //{
   void buildAvgDG();
-  double getAvgDG(const HWAOpFU *A) {  return AvgDG[A]; }
-  double getRangeDG(HWFUnit *FU, unsigned start, unsigned end/*included*/);
+  double getAvgDG(const HWAtom *A) {  return AvgDG[A]; }
+  double getRangeDG(unsigned FUClass, unsigned start, unsigned end/*included*/);
 
   double computeRangeForce(const HWAtom *A,
                            unsigned start, unsigned end/*include*/);
@@ -155,10 +157,10 @@ public:
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   void shortenCriticalPath() { --CriticalPathEnd; }
   unsigned getCriticalPathLength() {
-    return CriticalPathEnd - State->getSlot();
+    return CriticalPathEnd - State->getStartSlot();
   }
   void setCriticalPathLength(unsigned L) {
-    CriticalPathEnd = State->getSlot() + L;
+    CriticalPathEnd = State->getStartSlot() + L;
   }
 };
 
@@ -172,7 +174,7 @@ protected:
     bool operator() (const HWAtom *LHS, const HWAtom *RHS) const;
   };
 
-  typedef PriorityQueue<HWAOpFU*, std::vector<HWAOpFU*>, fds_sort> AtomQueueType;
+  typedef PriorityQueue<HWAtom*, std::vector<HWAtom*>, fds_sort> AtomQueueType;
 
   // Fill the priorityQueue, ignore FirstNode.
   template<class It>
@@ -185,8 +187,8 @@ protected:
   //}
 
 public:
-  ForceDirectedListScheduler(HWAtomInfo *HAInfo, FSMState *S) 
-    : ForceDirectedSchedulingBase(HAInfo, S) {}
+  ForceDirectedListScheduler(FSMState *S) 
+    : ForceDirectedSchedulingBase(S) {}
 
   bool scheduleState();
 
@@ -195,26 +197,26 @@ public:
 
 class IteractiveModuloScheduling : public ForceDirectedListScheduler {
   typedef std::map<unsigned, unsigned> UsageMapType;
-  typedef std::map<HWFUnit*, UsageMapType> MRTType;
+  typedef std::map<unsigned, UsageMapType> MRTType;
   MRTType MRT;
   std::map<HWAtom*, std::set<unsigned> > ExcludeSlots;
 
-  bool isResAvailable(HWFUnit *FU, unsigned step);
-  void excludeStep(HWAOpFU *A, unsigned step);
-  bool isStepExcluded(HWAOpFU *A, unsigned step);
+  bool isResAvailable(unsigned FUClass, unsigned step);
+  void excludeStep(HWAtom *A, unsigned step);
+  bool isStepExcluded(HWAtom *A, unsigned step);
   bool isAllAtomScheduled();
-  HWAOpFU *findBlockingAtom(HWFUnit *FU, unsigned step); 
+  HWAtom *findBlockingAtom(unsigned FUClass, unsigned step); 
 public:
-  IteractiveModuloScheduling(HWAtomInfo *HAInfo, FSMState *S)
-    : ForceDirectedListScheduler(HAInfo, S){}
+  IteractiveModuloScheduling(FSMState *S)
+    : ForceDirectedListScheduler(S){}
 
   bool scheduleState();
 };
 
 class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
 public:
-  ForceDirectedScheduler(HWAtomInfo *HAInfo, FSMState *S)
-    : ForceDirectedSchedulingBase(HAInfo, S) {}
+  ForceDirectedScheduler(FSMState *S)
+    : ForceDirectedSchedulingBase(S) {}
 
   bool scheduleState();
   bool findBestSink();

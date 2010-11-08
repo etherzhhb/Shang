@@ -94,7 +94,8 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
     EVT ArgVT = IA.VT;
 
     // FIXME: Remember the Argument number.
-    SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl, DAG.getVTList(ArgVT, MVT::Other),
+    SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl,
+                                  DAG.getVTList(ArgVT, MVT::Other),
                                   Chain, DAG.getConstant(Idx++,MVT::i8, false));
 
     InVals.push_back(SDInArg);
@@ -111,12 +112,26 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                              const SmallVectorImpl<ISD::OutputArg> &Outs,
                              const SmallVectorImpl<SDValue> &OutVals,
                              DebugLoc dl, SelectionDAG &DAG) const {
-  SmallVector<SDValue, 4> RetOps;
-  
-  RetOps.push_back(Chain);
-  RetOps.append(OutVals.begin(), OutVals.end());
+  typedef const SmallVectorImpl<ISD::OutputArg> OAVec;
+  MachineFunction &MF = DAG.getMachineFunction();
 
-  return DAG.getNode(VTMISD::FnRet, dl, MVT::Other, RetOps.data(), RetOps.size());
+  unsigned Idx = 0;
+  for (OAVec::const_iterator I = Outs.begin(), E = Outs.end(); I != E; ++I) {
+    // Get the argument form InArg Node.
+
+    const ISD::OutputArg &OA = *I;
+    EVT ArgVT = OA.VT;
+
+    // FIXME: Remember the Argument number.
+    SDValue SDOutArg = DAG.getNode(VTMISD::RetVal, dl, MVT::Other, Chain,
+                                  OutVals[Idx],
+                                  DAG.getConstant(Idx,MVT::i8, false));
+    ++Idx;
+    // Get the chain from InArg Node.
+    Chain = SDOutArg.getValue(0);
+  }
+
+  return DAG.getNode(VTMISD::FnRet, dl, MVT::Other, Chain);
 }
 
 SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,

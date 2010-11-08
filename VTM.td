@@ -16,19 +16,25 @@
 
 include "llvm/Target/Target.td"
 
+
+def FeatureGeneric : SubtargetFeature<"generic", "vtmattr", "true",
+									  "Feature description">;
+
+include "VSchedule.td"
 //===----------------------------------------------------------------------===//
 // VTM supported processors.
 //===----------------------------------------------------------------------===//
 class Proc<string Name, list<SubtargetFeature> Features>
- : Processor<Name, NoItineraries, Features>;
+ : Processor<Name, VTMItineraries, Features>;
 
-def : Proc<"generic",         []>;
+def : Proc<"generic",         [FeatureGeneric]>;
 
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
 //===----------------------------------------------------------------------===//
 
 include "VRegisterInfo.td"
+
 include "VInstrInfo.td"
 
 def VInstrInfo : InstrInfo {}

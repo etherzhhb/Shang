@@ -13,6 +13,8 @@
 
 #include "VInstrInfo.h"
 #include "VTM.h"
+#include "VTMConfig.h"
+
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -25,3 +27,12 @@ using namespace llvm;
 
 VInstrInfo::VInstrInfo() : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)),
   RI(*this) {}
+
+unsigned VTIDReader::getLatency(const VTMConfig &VTC) const {
+  VInstrInfo::FUTypes ResTy =getHWResType();
+
+  if (ResTy == VInstrInfo::Trivial)
+    return getTrivialLatency();
+
+  return VTC.getResType(ResTy)->getLatency();
+}

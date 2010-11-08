@@ -24,7 +24,8 @@ namespace VTMISD {
   enum {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
     InArg,
-    FnRet
+    FnRet,
+    RetVal
   };
 }
 

@@ -106,9 +106,6 @@ install(DIRECTORY include
 
 add_definitions( -D_GNU_SOURCE )
 
-add_subdirectory(include)
-add_subdirectory(lib)
-
 set(LLVM_TARGET_DEFINITIONS VTM.td)
 
 tablegen(VGenRegisterInfo.h.inc -gen-register-desc-header)
@@ -118,21 +115,27 @@ tablegen(VGenInstrNames.inc -gen-instr-enums)
 tablegen(VGenInstrInfo.inc -gen-instr-desc)
 tablegen(VGenAsmWriter.inc -gen-asm-writer)
 tablegen(VGenDAGISel.inc -gen-dag-isel)
+tablegen(VGenSubtarget.inc -gen-subtarget)
 
 add_llvm_target(VerilogBackend
+  MicroState.cpp
+  ForceDirectedListScheduling.cpp
+  ForceDirectedScheduling.cpp
   HWAtom.cpp
   HWAtomInfo.cpp
-  VInstrInfo.cpp
+  RTLWriter.cpp
+  VBackend.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
+  VInstrInfo.cpp
   VMCAsmInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
-  VSubtarget.cpp
-  VBackend.cpp
+  VTMConfig.cpp
+  VerilogAST.cpp
   )
 
-target_link_libraries (LLVMVerilogBackend ${LUA_LIBRARY} ${LUABIND_LIBRARY}) #LLVMVerilog
+target_link_libraries (LLVMVerilogBackend ${LUA_LIBRARY} ${LUABIND_LIBRARY}) #LLVMVTMWriters 
 
 #add_subdirectory(tools)
 #add_subdirectory(test)

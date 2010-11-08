@@ -10,34 +10,25 @@
 //===----------------------------------------------------------------------===//
 //  Describe CTV instructions format here
 //
-// The corresponding Scheduling Unit type of the instruction.
-class SUType<bits<2> val> {
-  bits<2> Value = val;
-}
-
-def SUOthers	: SUType<0>;
-def SUOpFU		: SUType<1>;
-def SUVRoot		: SUType<2>;
 
 // The corresponding Function Unit type of the instruction.
-class FUType<bits<3> val> {
+class FUType<bits<3> val, InstrItinClass InstItin> {
   bits<3> Value = val;
+  InstrItinClass Itinerary = InstItin;
 }
 
-def FUMemBus	: FUType<1>;
-def FUSHL		: FUType<2>;
-def FUASR		: FUType<3>;
-def FULSR		: FUType<4>;
-def FUAddSub	: FUType<5>;
-def FUMult		: FUType<6>;
-def FUTrivial	: FUType<7>;
+def FUMemBus	: FUType<1, IIC_MemBus>;
+def FUSHL		: FUType<2, IIC_SHL>;
+def FUASR		: FUType<3, IIC_ASR>;
+def FULSR		: FUType<4, IIC_LSR>;
+def FUAddSub	: FUType<5, IIC_AddSub>;
+def FUMult		: FUType<6, IIC_Mult>;
+def FUTrivial	: FUType<7, IIC_Trivial>;
 
 // Pseudo instructions
-class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern,
-              SUType SU, FUType FU>
+class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,
+			  bits<4> latency = 0, bit readAtEmit = 0>
   : Instruction {
-  field bits<32> Inst;
-
   let Namespace = "VTM";
 
   dag OutOperandList = outs;
@@ -45,19 +36,20 @@ class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern,
   let AsmString   = asmstr;
   let Pattern = pattern;
 
-  SUType su = SU;
   FUType fu = FU;
 
-  let TSFlags{1-0} = su.Value;
-  let TSFlags{4-2} = fu.Value;
+  let TSFlags{2-0} = fu.Value;
+  let Itinerary = fu.Itinerary;
+  
+  let TSFlags{3} = readAtEmit;
+  
+  let TSFlags{7-4} = latency;
 }
 
-class InstPassive<dag outs, dag ins, string asmstr, list<dag> pattern>
-	: InstVTM<outs, ins, asmstr, pattern, SUOthers, FUTrivial>;
+class InstPassive<dag outs, dag ins, string asmstr, list<dag> pattern,
+				  bits<4> latency = 0, bit readAtEmit = 0>
+	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, latency, readAtEmit>;
 
-class InstOpFU<dag outs, dag ins, string asmstr, list<dag> pattern,
-               FUType ResType>
-	: InstVTM<outs, ins, asmstr, pattern, SUOpFU, ResType>;
-
-class InstVRoot<dag outs, dag ins, string asmstr, list<dag> pattern>
-	: InstVTM<outs, ins, asmstr, pattern, SUVRoot, FUTrivial>;
+class InstActive<dag outs, dag ins, string asmstr, list<dag> pattern,
+               FUType ResType, bit readAtEmit = 0>
+	: InstVTM<outs, ins, asmstr, pattern, ResType, 0, readAtEmit>;

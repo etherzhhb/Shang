@@ -19,13 +19,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedScheduling.h"
-#include "vbe/HWAtomPasses.h"
+#include "HWAtomPasses.h"
+
+#include "llvm/Support/CommandLine.h"
 
 #define DEBUG_TYPE "vbe-fd-info"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-using namespace esyn;
+using namespace llvm;
 
 static cl::opt<bool>
 NoFDSchedule("disable-fd-schedule",
@@ -42,8 +44,9 @@ void ForceDirectedSchedulingBase::buildTimeFrame(const HWAtom *ClampedAtom,
               && ClampedALAP <= getSTFALAP(ClampedAtom)))
          && "Bad clamped value!");
   AtomToTF.clear();
+  HWAtom *EntryRoot = State->getEntryRoot();
   // Build the time frame
-  assert(State->isScheduled() && "Entry must be scheduled first!");
+  assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
   buildASAPStep(ClampedAtom, ClampedASAP);
   buildALAPStep(ClampedAtom, ClampedALAP);
 
@@ -52,7 +55,8 @@ void ForceDirectedSchedulingBase::buildTimeFrame(const HWAtom *ClampedAtom,
 
 void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
                                                 unsigned ClampedASAP) {
-  AtomToTF[State].first = State->getSlot();
+  HWAtom *Entry = State->getEntryRoot();
+  AtomToTF[Entry].first = Entry->getSlot();
 
   FSMState::iterator Start = State->begin();
 
@@ -102,7 +106,7 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
     }
   } while (changed);
 
-  HWAOpFU *Exit = State->getExitRoot();
+  HWAtom *Exit = State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
@@ -198,19 +202,16 @@ void ForceDirectedSchedulingBase::buildDGraph() {
   DGraph.clear();
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I){
     // We only try to balance the post bind resource.
-    if (HWAOpFU *OpInst = dyn_cast<HWAOpFU>(*I)) {
-      // Ignore the DG for trivial resources.
-      if (OpInst->isTrivial()) continue;
+    // Ignore the DG for trivial resources.
+    // if (A->isTrivial()) continue;
+    HWAtom *A = *I;
+    unsigned TimeFrame = getTimeFrame(A);
+    unsigned ASAPStep = getASAPStep(A), ALAPStep = getALAPStep(A);
 
-      unsigned TimeFrame = getTimeFrame(OpInst);
-      unsigned ASAPStep = getASAPStep(OpInst), ALAPStep = getALAPStep(OpInst);
-
-      HWFUnit *FU = OpInst->getFUnit();
-      double Prob = 1.0 / (double) TimeFrame;
-      // Including ALAPStep.
-      for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
-        accDGraphAt(i, FU, Prob);
-    }
+    double Prob = 1.0 / (double) TimeFrame;
+    // Including ALAPStep.
+    for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
+      accDGraphAt(i, A->getFUClass(), Prob);    
   }
   DEBUG(printDG(dbgs()));
 }
@@ -223,7 +224,8 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
 
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
        I != E; ++I) {
-    DEBUG(dbgs() << "FU " << *I->first << " Average Usage: ");
+    // FIXME: print out the Resource class name.
+    DEBUG(dbgs() << "FU " << I->first << " Average Usage: ");
     double TotalDG = 0;
     unsigned AvailableSteps = 0;
     for (DGStepMapType::const_iterator SI = I->second.begin(),
@@ -235,9 +237,10 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
     // The upper bound of error: Only 0.5 extra functional unit need.
     double e = 0.5 / AvailableSteps;
     DEBUG(dbgs() << AverageDG << '\n');
-    if (AverageDG > I->first->getTotalFUs() + e)
-      ExtraResReq += (AverageDG - I->first->getTotalFUs())
-                      /  I->first->getTotalFUs();
+    // FIXME: Get the totalFU of a specific resource class.
+    //if (AverageDG > I->first->getTotalFUs() + e)
+    //  ExtraResReq += (AverageDG - I->first->getTotalFUs())
+    //                  /  I->first->getTotalFUs();
   }
   return ExtraResReq == 0.0;
 }
@@ -247,7 +250,8 @@ void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {
   // For each FU.
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
        I != E; ++I) {
-    OS << "FU " << *I->first << ":\n";
+    // FIXME: print out the Resource class name.
+    OS << "FU " << I->first << ":\n";
     for (DGStepMapType::const_iterator SI = I->second.begin(),
          SE = I->second.end(); SI != SE; ++SI) {
       OS << "@ " << SI->first << ": " << SI->second << '\n';
@@ -256,9 +260,10 @@ void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {
   }
 }
 
-double ForceDirectedSchedulingBase::getDGraphAt(unsigned step, HWFUnit *FU) const {
+double ForceDirectedSchedulingBase::getDGraphAt(unsigned step,
+                                                unsigned FUClass) const {
   // Modulo DG for modulo schedule.
-  DGType::const_iterator at = DGraph.find(FU);
+  DGType::const_iterator at = DGraph.find(FUClass);
   if (at != DGraph.end()) {
     DGStepMapType::const_iterator SI = at->second.find(computeStepKey(step));
     if (SI != at->second.end())
@@ -271,7 +276,7 @@ double ForceDirectedSchedulingBase::getDGraphAt(unsigned step, HWFUnit *FU) cons
 unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
   if (MII != 0) {
 #ifndef NDEBUG
-    unsigned StartSlot = State->getSlot();
+    unsigned StartSlot = State->getStartSlot();
     step = StartSlot + (step - StartSlot) % MII;
 #else
     step = step % MII;
@@ -281,19 +286,19 @@ unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-void ForceDirectedSchedulingBase::accDGraphAt(unsigned step,
-                                              HWFUnit *FU, double d) {
+void ForceDirectedSchedulingBase::accDGraphAt(unsigned step, unsigned FUClass,
+                                              double d) {
   // Modulo DG for modulo schedule.
-  DGraph[FU][computeStepKey(step)] += d;
+  DGraph[FUClass][computeStepKey(step)] += d;
 }
 
 // Including end.
-double ForceDirectedSchedulingBase::getRangeDG(HWFUnit *FU,
+double ForceDirectedSchedulingBase::getRangeDG(unsigned FUClass,
                                                unsigned start, unsigned end) {
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
-    ret += getDGraphAt(i, FU);
+    ret += getDGraphAt(i, FUClass);
 
   ret /= range;
   return ret;
@@ -317,29 +322,26 @@ double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
 double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A,
                                                      unsigned start,
                                                      unsigned end) {
-  const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
-  if (!OpInst) return 0.0;
+  // FIXME: How should handle the pre-bind MachineInstruction.
+  // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
-  if (NoFDSchedule && !OpInst->isBinded() && MII) return 0.0;
+  unsigned FUClass = A->getFUClass();
+  double Force = getRangeDG(FUClass, start, end) - getAvgDG(A);
 
-  HWFUnit *FU = OpInst->getFUnit();
-  double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
-
-  // Make the atoms taking expensive function unit have bigger force.
-  return Force / FU->getTotalFUs();
+  // FIXME: Make the atoms taking expensive function unit have bigger force.
+  return Force; // / FU->getTotalFUs();
 }
 
 double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
                                                       unsigned int start,
                                                       unsigned int end) {
-  const HWAOpFU *OpInst = dyn_cast<HWAOpFU>(A);
-  if (!OpInst) return 0.0;
+  // FIXME: How should handle the pre-bind MachineInstruction.
+  // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
-  if (NoFDSchedule && !OpInst->isBinded() && MII) return 0.0;
-
-  HWFUnit *FU = OpInst->getFUnit();
-  double Force = getRangeDG(FU, start, end) - getAvgDG(OpInst);
-  return Force / FU->getTotalFUs();
+  unsigned FUClass = A->getFUClass();
+  double Force = getRangeDG(FUClass, start, end) - getAvgDG(A);
+  // FIXME: Make the atoms taking expensive function unit have bigger force.
+  return Force; // / FU->getTotalFUs();
 }
 
 double ForceDirectedSchedulingBase::computeOtherForce(const HWAtom *A) {
@@ -348,8 +350,7 @@ double ForceDirectedSchedulingBase::computeOtherForce(const HWAtom *A) {
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
     if (A == *I) continue;
     
-    if (const HWAOpFU *OI = dyn_cast<HWAOpFU>(*I))
-      ret += computeRangeForce(OI, getASAPStep(OI), getALAPStep(OI));
+    ret += computeRangeForce(A, getASAPStep(A), getALAPStep(A));
   }
   return ret;
 }
@@ -357,23 +358,22 @@ double ForceDirectedSchedulingBase::computeOtherForce(const HWAtom *A) {
 void ForceDirectedSchedulingBase::buildAvgDG() {
   AvgDG.clear();
   for (FSMState::iterator I = State->begin(), E = State->end();
-       I != E; ++I)
+       I != E; ++I) {
     // We only care about the utilization of post bind resource. 
-    if (HWAOpFU *A = dyn_cast<HWAOpFU>(*I)) {
-      double res = 0.0;
-      for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
-        res += getDGraphAt(i, A->getFUnit());
+    HWAtom *A = *I;
+    double res = 0.0;
+    for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
+      res += getDGraphAt(i, A->getFUClass());
 
-      res /= (double) getTimeFrame(A);
-      AvgDG[A] = res;
-    }
+    res /= (double) getTimeFrame(A);
+    AvgDG[A] = res;
+  }
 }
 
 unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
   if (rstSTF) {
     resetSTF();
-    unsigned StartStep = HI->getTotalCycle();
-    State->resetSchedule(StartStep);
+    State->resetSchedule();
   }
   buildTimeFrame();
 

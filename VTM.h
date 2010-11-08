@@ -31,7 +31,6 @@ extern Target TheVBackendTarget;
 // a mapping from register name to register number.
 #include "VGenRegisterNames.inc"
 
-// Defines symbolic names for the Verilog TargetMachineinstructions.
 #include "VGenInstrNames.inc"
 
 #endif
