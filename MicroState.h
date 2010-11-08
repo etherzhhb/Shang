@@ -70,6 +70,12 @@ public:
     assert((isDefWire() || isReadWire() || isDefReg()) && "Bad token type!");
     return getUInt64Field(2);
   }
+
+  std::string getWireName() const {
+    assert((isDefWire() || isReadWire() || isDefReg()) && "Bad token type!");
+    return "wire" + utostr(getWireNum());
+  }
+
   uint64_t getBitWidth() const {
     assert(isDefWire() && "Bad token type!");
     return getUInt64Field(3);

@@ -248,7 +248,10 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     WireDef *WD = *I;
 
     // This operand will delete with its origin instruction.
-    if (WD->isKilled()) continue;
+    if (WD->isKilled()) {
+      // FIXME: Tell someone this register is dead.
+      continue;
+    }
    
     // Export the register.
     Builder.addMetadata(createDefReg(WD->WireNum));
