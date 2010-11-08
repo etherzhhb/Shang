@@ -64,7 +64,7 @@ class RTLWriter : public MachineFunctionPass {
     return MBB->getName().str() + "BB" + itostr(MBB->getNumber());
   }
 
-  inline static std::string getMircoStateEnableName(MachineBasicBlock *MBB) {
+  inline static std::string getucStateEnableName(MachineBasicBlock *MBB) {
     std::string StateName = getStateNameForMachineBB(MBB);
 
     StateName = "cur_" + StateName;
@@ -72,12 +72,11 @@ class RTLWriter : public MachineFunctionPass {
     return StateName + "_enable";
   }
 
-  inline std::string getMircoStateEnable(MachineInstr &MI) {
-    assert(MI.getOpcode() == VTM::VOpBundle && "Bad micro state!");
-    return getMircoStateEnable(MI.getParent(), MI.getOperand(0).getImm());
+  inline std::string getucStateEnable(ucState &State) {
+    return getucStateEnable(State->getParent(), State.getSlot());
   }
-  inline std::string getMircoStateEnable(MachineBasicBlock *MBB, unsigned Slot) {
-    std::string StateName = getMircoStateEnableName(MBB);
+  inline std::string getucStateEnable(MachineBasicBlock *MBB, unsigned Slot) {
+    std::string StateName = getucStateEnableName(MBB);
     raw_string_ostream ss(StateName);
     if (FuncInfo->getTotalSlotFor(MBB) > 1)
       ss << "[" << (Slot - FuncInfo->getStartSlotFor(MBB)) << "]";
@@ -87,7 +86,7 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB);
 
-  void createMircoStateEnable(MachineBasicBlock *MBB);
+  void createucStateEnable(MachineBasicBlock *MBB);
   void emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
     const std::string &NewState);
 
@@ -95,8 +94,8 @@ class RTLWriter : public MachineFunctionPass {
   // jumping to it.
   void emitFirstCtrlState(MachineBasicBlock *MBB);
 
-  void emitCtrlState(MachineInstr &MI);
-  void emitDatapath(MachineInstr &MI);
+  void emitCtrlOp(ucState &State);
+  void emitDatapath(ucState &State);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand, unsigned BitWidth = 0);
 
@@ -264,35 +263,33 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
     << " Total Slot: " << totalSlot
     << " II: " << 0 <<  '\n';
   // Mirco state enable.
-  createMircoStateEnable(&MBB);
+  createucStateEnable(&MBB);
 
   // Case begin
   vlang->matchCase(VM->getControlBlockBuffer(6), StateName);
 
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(), E = prior(MBB.end());
   while (I != E) {
-    MachineInstr &CurInstr = *I;
+    ucState CurState(*I);
     // Emit the datepath of current state.
-    emitDatapath(CurInstr);
+    emitDatapath(CurState);
     
     // Emit next ucOp.
-    MachineInstr &NextInstr = *(++I);
-    vlang->ifBegin(VM->getControlBlockBuffer(8),
-                   getMircoStateEnable(CurInstr));
-    emitCtrlState(NextInstr);
+    ucState NextState(*(++I));
+    vlang->ifBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurState));
+    emitCtrlOp(NextState);
     vlang->end(VM->getControlBlockBuffer(8));
   }
   
   // Emit the control logic of last state.
   // Note: The last state do not expect to have datapath.
-  MachineInstr &LastInstr = *I;
-  vlang->ifBegin(VM->getControlBlockBuffer(8),
-                 getMircoStateEnable(LastInstr));
-  emitCtrlState(LastInstr);
+  ucState LastState(*I);
+  vlang->ifBegin(VM->getControlBlockBuffer(8), getucStateEnable(LastState));
+  emitCtrlOp(LastState);
   vlang->end(VM->getControlBlockBuffer(8));
   
   //for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-  //  vlang->ifBegin(VM->getControlBlockBuffer(8), getMircoStateEnable(State, i, true));
+  //  vlang->ifBegin(VM->getControlBlockBuffer(8), getucStateEnable(State, i, true));
   //  // Emit all atoms at cycle i
 
   //  vlang->comment(VM->getDataPathBuffer(2)) << "at cycle: " << i << '\n';
@@ -328,7 +325,7 @@ RTLWriter::~RTLWriter() {}
 
 
 //===----------------------------------------------------------------------===//
-void RTLWriter::createMircoStateEnable(MachineBasicBlock *MBB)  {
+void RTLWriter::createucStateEnable(MachineBasicBlock *MBB)  {
   std::string StateName = getStateNameForMachineBB(MBB);
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
@@ -341,7 +338,7 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                                    const std::string &NewState) {
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
-  std::string StateName = getMircoStateEnableName(MBB);
+  std::string StateName = getucStateEnableName(MBB);
   ss << StateName << " <= ";
   if (totalSlot > 1) {
     ss << "{ " << StateName << "[";
@@ -357,9 +354,8 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
-void RTLWriter::emitCtrlState(MachineInstr &MI){
-  for (ucOpIterator I = ucOpIterator::begin(MI),
-      E = ucOpIterator::end(MI); I != E; ++I) {
+void RTLWriter::emitCtrlOp(ucState &State) {
+  for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
 
     if (!Op.haveDataPath())
@@ -369,9 +365,9 @@ void RTLWriter::emitCtrlState(MachineInstr &MI){
 
 void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
-  MachineInstr &FirstInstr = MBB->front();
+  ucState FirstState(MBB->front());
   
-  emitCtrlState(FirstInstr);
+  emitCtrlOp(FirstState);
 }
 
 void RTLWriter::emitCtrlOp(ucOp &MOp) {
@@ -409,7 +405,7 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
   ss.indent(10) << "NextFSMState <= " << getStateNameForMachineBB(MBB) << ";\n";
 }
 
-void RTLWriter::emitDatapath(MachineInstr &MI) {
+void RTLWriter::emitDatapath(ucState &State) {
 
 }
 

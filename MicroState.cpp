@@ -45,7 +45,6 @@ bool BundleToken::isReadWire() const {
   return getTag() == BundleToken::tokenReadWire;
 }
 
-
 bool BundleToken::isDefReg() const {
   if (!TokenNode) return false;
 

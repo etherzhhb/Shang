@@ -323,12 +323,13 @@ MachineBasicBlock *FSMState::emitSchedule() {
   dbgs() << "After schedule emitted:\n";
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
       I != E; ++I) {
-    MachineInstr &MI = *I;
+    ucState State(*I);
 
-    dbgs() << "Bundle " << MI.getOperand(0).getImm() << '\n';
-    for (ucOpIterator MOI = ucOpIterator::begin(MI),
-        MOE = ucOpIterator::end(MI); MOI != MOE; ++MOI) {
-      ucOp Op = *MOI;
+    dbgs() << "Bundle " << State.getSlot() << '\n';
+    
+    for (ucState::iterator UOI = State.begin(), UOE = State.end();
+         UOI != UOE; ++UOI) {
+      ucOp Op = *UOI;
       Op.dump();
     }
   }

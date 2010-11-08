@@ -19,11 +19,14 @@
 #include "VTMConfig.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace llvm {
+class ucOpIterator;
+class ucState;
 
 class BundleToken {
 protected:
@@ -86,8 +89,6 @@ public:
   void dump() const;
 };
 
-class  ucOpIterator;
-
 class ucOp {
 public:
   typedef MachineInstr::mop_iterator op_iterator;
@@ -143,6 +144,7 @@ class ucOpIterator : public std::iterator<std::forward_iterator_tag,
     assert(MI.getOperand(0).isImm() && "Bad bundle!");
   }
 
+  friend class ucState;
 public:
   inline bool operator==(const ucOpIterator& x) const {
     return CurIt == x.CurIt;
@@ -178,17 +180,37 @@ public:
     EndIt = I.EndIt;
     return *this;
   }
-
-  static inline ucOpIterator begin(MachineInstr &MI) {
-    return ucOpIterator(MI);
-  }
-
-  static inline ucOpIterator end(MachineInstr &MI) {
-    return ucOpIterator(MI, false);
-  }
 };
 
+// uc State in a FSM state.
+class ucState {
+  const MachineInstr &Instr;
+public:
+  ucState(const MachineInstr &MI) : Instr(MI) {
+    assert(MI.getOpcode() == VTM::VOpBundle && "Bad Instr!");
+  }
 
+  unsigned getSlot() const {
+    return Instr.getOperand(0).getImm();
+  }
+
+  operator MachineInstr *() const {
+    return const_cast<MachineInstr*>(&Instr);
+  }
+  
+  MachineInstr *operator ->() const {
+    return const_cast<MachineInstr*>(&Instr);
+  }
+
+  /// Iterator to iterate over the uc operation in a uc state.
+  typedef ucOpIterator iterator;
+  iterator begin() const {
+    return ucOpIterator(const_cast<MachineInstr&>(Instr));
+  }
+  iterator end() const {
+    return ucOpIterator(const_cast<MachineInstr&>(Instr), false);
+  }
+};
 }
 
 #endif
