@@ -252,10 +252,14 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
       // FIXME: Tell someone this register is dead.
       continue;
     }
-   
+
+    MachineOperand *MO = WD->getOperand();
+
+    // Eliminate the dead register.
+    if (MO->isDead()) continue;
+    
     // Export the register.
     Builder.addMetadata(createDefReg(WD->WireNum));
-    MachineOperand *MO = WD->getOperand();
     // The def operands are written at the same time that the use operands
     // are read.
     MO->setIsEarlyClobber();
