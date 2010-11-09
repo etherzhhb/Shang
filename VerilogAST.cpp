@@ -296,7 +296,7 @@ void VASTModule::printSignalDecl(raw_ostream &OS, unsigned indent /*= 2*/) {
   for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
        I != E; ++I) {
     (*I)->printDecl(OS.indent(indent));
-    OS << ";\n";
+    OS << "\n";
   }
   
 }

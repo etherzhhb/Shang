@@ -480,8 +480,14 @@ void RTLWriter::emitRegClassRegs(const TargetRegisterClass *RC,
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const std::vector<unsigned> &Regs = MRI.getRegClassVirtRegs(RC);
   for (std::vector<unsigned>::const_iterator I = Regs.begin(), E = Regs.end();
-      I != E; ++I)
-    VM->addRegister("reg"+utostr(*I), BitWidth);
+      I != E; ++I) {
+    unsigned RegNum = *I;
+
+    // Do not emit dead registers.
+    if (MRI.use_empty(RegNum)) continue;
+    
+    VM->addRegister("reg" + utostr(RegNum), BitWidth);
+  }
 }
 
 static RegisterPass<RTLWriter> X("vbe-rtl", "vbe - Write HWAtom as RTL Verilog");
