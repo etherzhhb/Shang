@@ -363,23 +363,11 @@ void RTLWriter::emitCtrlOp(ucState &State) {
 
     // Emit the operations.
     switch (Op.getOpCode()) {
-    case VTM::VOpArgi8: case VTM::VOpArgi16: case VTM::VOpArgi32:
-    case VTM::VOpArgi64:
-      emitOpArg(Op);
-      break;
-    case VTM::VOpRetVali8: case VTM::VOpRetVali16: case VTM::VOpRetVali32:
-    case VTM::VOpRetVali64:
-      emitOpRetVal(Op);
-      break;
-    case VTM::VOpRet:
-      emitOpRet(Op);
-      break;
-    case VTM::VOpWriteReg:
-      emitOpWriteReg(Op);
-      break;
-    default:
-      assert(0 && "Unexpect opcode!");
-      break;
+    CASEVOP(Arg):           emitOpArg(Op);        break;
+    CASEVOP(RetVal):        emitOpRetVal(Op);     break;
+    case VTM::VOpRet:       emitOpRet(Op);        break;
+    case VTM::VOpWriteReg:  emitOpWriteReg(Op);   break;
+    default:  assert(0 && "Unexpect opcode!");    break;
     }
   }
 }
@@ -441,6 +429,9 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     
     return;
   }
+  case MachineOperand::MO_Immediate:
+    OS << vlang->printConstantInt(Operand.getImm(), BitWidth, false);
+    return;
   }
 
 }
@@ -460,22 +451,51 @@ void RTLWriter::emitDatapath(ucState &State) {
       continue;
     
     switch (Op.getOpCode()) {
-    case VTM::VOpADD:
-      emitOpAdd(Op);
-      break;
+    CASEVOP(Add):     emitOpAdd(Op);      break;
+    CASEVOP(Xor):     emitOpXor(Op);      break;
+    CASEVOP(LdConst): emitOpLdConst(Op);  break;
     }
   } 
+}
+
+void RTLWriter::emitOpXor(ucOp &OpXor) {
+  raw_ostream &OS = VM->getDataPathBuffer(2);
+  OS << "assign ";
+  emitOperand(OS, OpXor.getOperand(0));
+  OS << " = ";
+  emitOperand(OS, OpXor.getOperand(1));
+  OS << " ^ ";
+  emitOperand(OS, OpXor.getOperand(2));
+  OS << ";\n";
+}
+
+void RTLWriter::emitOpLdConst(ucOp &OpLdConst) {
+  raw_ostream &OS = VM->getDataPathBuffer(2);
+  OS << "assign ";
+  emitOperand(OS, OpLdConst.getOperand(0));
+  OS << " = ";
+  BundleToken Op0(OpLdConst.getOperand(0).getMetadata());
+  emitOperand(OS, OpLdConst.getOperand(1), Op0.getBitWidth());
+  OS << ";\n";
 }
 
 void RTLWriter::emitOpAdd(ucOp &OpAdd) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
 
-  OS << "assign ";
-  emitOperand(OS, OpAdd.getOperand(0));
-  OS << " = ";
+  OS << "assign {";
+  // Carry out.
   emitOperand(OS, OpAdd.getOperand(1));
-  OS << " + ";
+  OS << ", ";
+  // Sum.
+  emitOperand(OS, OpAdd.getOperand(0));
+  OS << "} = ";
+  // Operands.
   emitOperand(OS, OpAdd.getOperand(2));
+  OS << " + ";
+  emitOperand(OS, OpAdd.getOperand(3));
+  OS << " + ";
+  // Carry in.
+  emitOperand(OS, OpAdd.getOperand(4));
   OS << ";\n";
 }
 

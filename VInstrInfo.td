@@ -107,11 +107,25 @@ let isCommutable = 1 in
 defm VOpXor	: ActiveBinOps<"xor", BinOpFrag<(xor node:$LHS, node:$RHS)>,
                            FUTrivial>;
 
+multiclass AddOps {
+  def i1  : InstActive<(outs DR1:$dst, DR1:$co),
+			           (ins DR1:$src1, DR1:$src2, DR1:$ci),
+					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+  def i8  : InstActive<(outs DR8:$dst, DR1:$co),
+			           (ins DR8:$src1, DR8:$src2, DR1:$ci),
+					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+  def i16  : InstActive<(outs DR16:$dst, DR1:$co),
+			           (ins DR16:$src1, DR16:$src2, DR1:$ci),
+					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+  def i32  : InstActive<(outs DR32:$dst, DR1:$co),
+			           (ins DR32:$src1, DR32:$src2, DR1:$ci),
+					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+  def i64  : InstActive<(outs DR64:$dst, DR1:$co),
+			           (ins DR64:$src1, DR64:$src2, DR1:$ci),
+					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+}
 
-// TODO: Implement ADDE for add and sub.
-def VOpADD : InstActive<(outs DR32:$dst, DR1:$co),
-						(ins DR32:$src1, DR32:$src2, DR1:$ci),
-					    "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+defm VOpAdd : AddOps;
 
 let isBarrier    = 1 in
 def VOpBundle : InstPassive<(outs variable_ops), (ins i32imm:$slot, variable_ops),

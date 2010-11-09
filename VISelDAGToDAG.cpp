@@ -73,7 +73,19 @@ void VDAGToDAGISel::PostprocessISelDAG() {
 SDNode *VDAGToDAGISel::SelectADD(SDNode *N) {
   //N->getValueType(0)
   SDValue Ops[] = { N->getOperand(0), N->getOperand(1), N->getOperand(2)};
-  return CurDAG->SelectNodeTo(N, VTM::VOpADD, N->getVTList(), Ops, 3);
+  unsigned OpC = 0;
+  switch (N->getValueType(0).getSizeInBits()) {
+  case 1:   OpC = VTM::VOpAddi1; break;
+  case 8:   OpC = VTM::VOpAddi8; break;
+  case 16:  OpC = VTM::VOpAddi16; break;
+  case 32:  OpC = VTM::VOpAddi32; break;
+  case 64:  OpC = VTM::VOpAddi64; break;
+  default:
+    assert(0 && "Bad value type!");
+    OpC = VTM:: INSTRUCTION_LIST_END; break;
+  }
+  
+  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(), Ops, 3);
 }
 
 SDNode *VDAGToDAGISel::Select(SDNode *N) {

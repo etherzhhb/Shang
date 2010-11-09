@@ -33,4 +33,12 @@ extern Target TheVBackendTarget;
 
 #include "VGenInstrNames.inc"
 
+// Helper macro to switch opcodes.
+#define CASEVOP(OPC)  \
+  case VTM::VOp##OPC##i1:  \
+  case VTM::VOp##OPC##i8:  \
+  case VTM::VOp##OPC##i16: \
+  case VTM::VOp##OPC##i32: \
+  case VTM::VOp##OPC##i64
+
 #endif

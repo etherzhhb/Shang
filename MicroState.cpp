@@ -103,10 +103,8 @@ bool ucOp::haveDataPath() const {
   if (Token.isDefReg()) return false;
   
   switch (Token.getOpcode()) {
-  case VTM::VOpArgi8: case VTM::VOpArgi16: case VTM::VOpArgi32:
-  case VTM::VOpArgi64:
-  case VTM::VOpRetVali8: case VTM::VOpRetVali16: case VTM::VOpRetVali32:
-  case VTM::VOpRetVali64:
+  CASEVOP(Arg):
+  CASEVOP(RetVal):
   case VTM::VOpRet:
   case VTM::VOpWriteReg:
     return false;
