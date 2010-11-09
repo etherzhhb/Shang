@@ -23,9 +23,11 @@ namespace llvm {
 namespace VTMISD {
   enum {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
-    InArg,
-    FnRet,
-    RetVal
+    InArgDAG,
+    RetDAG,
+    RetValDAG,
+    ADDDAG,
+    LdConstDAG
   };
 }
 
@@ -39,7 +41,14 @@ public:
   unsigned getFunctionAlignment(const Function *F) const;
 
 private:
-  SDValue LowerADDE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerADDSUB(SDValue Op, SelectionDAG &DAG, SDValue CarrayIn,
+                      bool isSub = false) const;
+
+  /// ReplaceNodeResults - Replace the results of node with an illegal result
+  /// type with new values built out of custom code.
+  ///
+  virtual void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
+                                  SelectionDAG &DAG) const;
 
   virtual SDValue
     LowerFormalArguments(SDValue Chain,

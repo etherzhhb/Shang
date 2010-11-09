@@ -175,7 +175,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     
     scheduleState(State);
 
-    //State->viewGraph();
+    State->viewGraph();
 
     State->emitSchedule();
     FuncInfo->remeberTotalSlot(MBB, State->getStartSlot(),

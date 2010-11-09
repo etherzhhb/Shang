@@ -48,8 +48,7 @@ public:
 
 private:
   SDNode *Select(SDNode *N);
-  bool SelectADDRspii(SDNode *Op, SDValue Addr,
-                      SDValue &Base, SDValue &Offset);
+  SDNode *SelectADD(SDNode *Node);
 
   // Walk the DAG after instruction selection, fixing register class issues.
   void FixRegisterClasses(SelectionDAG &DAG);
@@ -71,12 +70,20 @@ FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
 void VDAGToDAGISel::PostprocessISelDAG() {
 }
 
+SDNode *VDAGToDAGISel::SelectADD(SDNode *N) {
+  //N->getValueType(0)
+  SDValue Ops[] = { N->getOperand(0), N->getOperand(1), N->getOperand(2)};
+  return CurDAG->SelectNodeTo(N, VTM::VOpADD, N->getVTList(), Ops, 3);
+}
+
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
   if (N->isMachineOpcode())
     return NULL;   // Already selected.
 
   switch (N->getOpcode()) {
   default: break;
+  case VTMISD::ADDDAG:
+    return SelectADD(N);
   //case VTMISD::InArg: {
   //  SDValue ArgIdx = N->getOperand(1);
   //  int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();

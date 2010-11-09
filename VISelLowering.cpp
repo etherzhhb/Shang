@@ -58,6 +58,20 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
   setOperationAction(ISD::JumpTable,     MVT::i32, Custom);
 
+  for (unsigned VT = (unsigned)MVT::FIRST_INTEGER_VALUETYPE;
+      VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
+    // Lower the add/sub operation to full adder operation.
+    setOperationAction(ISD::ADD, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SUB, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::ADDE, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SUBE, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::ADDC, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SUBC, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SADDO, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SSUBO, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
+  }
   // No carry-in operations.
   setOperationAction(ISD::ADDE, MVT::i32, Custom);
   setOperationAction(ISD::SUBE, MVT::i32, Custom);
@@ -65,9 +79,13 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
 const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
-  default: return 0;
-  case VTMISD::InArg: return "VTMISD::InArg";
-  case VTMISD::FnRet: return "VTMISD::FnRet";
+  default:
+    assert(0 && "Unknown SDNode!");
+    return "<???>";
+  case VTMISD::InArgDAG:  return "VTMISD::InArgDAG";
+  case VTMISD::RetDAG:    return "VTMISD::RetDAG";
+  case VTMISD::RetValDAG: return "VTMISD::RetValDAG";
+  case VTMISD::ADDDAG:   return "VTMISD::ADDDAG";
   }
 }
 
@@ -94,7 +112,7 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
     EVT ArgVT = IA.VT;
 
     // FIXME: Remember the Argument number.
-    SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl,
+    SDValue SDInArg = DAG.getNode(VTMISD::InArgDAG, dl,
                                   DAG.getVTList(ArgVT, MVT::Other),
                                   Chain, DAG.getConstant(Idx++,MVT::i8, false));
 
@@ -123,7 +141,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     EVT ArgVT = OA.VT;
 
     // FIXME: Remember the Argument number.
-    SDValue SDOutArg = DAG.getNode(VTMISD::RetVal, dl, MVT::Other, Chain,
+    SDValue SDOutArg = DAG.getNode(VTMISD::RetValDAG, dl, MVT::Other, Chain,
                                   OutVals[Idx],
                                   DAG.getConstant(Idx,MVT::i8, false));
     ++Idx;
@@ -131,7 +149,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     Chain = SDOutArg.getValue(0);
   }
 
-  return DAG.getNode(VTMISD::FnRet, dl, MVT::Other, Chain);
+  return DAG.getNode(VTMISD::RetDAG, dl, MVT::Other, Chain);
 }
 
 SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
@@ -145,26 +163,50 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   return Chain;
 }
 
-// Expansion of ADDE / SUBE. This is a bit involved since blackfin doesn't have
-// add-with-carry instructions.
-SDValue VTargetLowering::LowerADDE(SDValue Op, SelectionDAG &DAG) const {
-  // Operands: lhs, rhs, carry-in
-  // Results: sum, carry-out
-  return Op;
+// Lower add to full adder operation.
+// Operands: lhs, rhs, carry-in
+// Results: sum, carry-out
+// Overflow = [16]^[15];
+SDValue VTargetLowering::LowerADDSUB(SDValue Op, SelectionDAG &DAG,
+                                     SDValue CarrayIn, bool isSub) const {
+  SDValue OpB = Op->getOperand(1);
+  
+  // A + B = A + (-B) = A + (~B) + 1
+  if (isSub) {
+    OpB = DAG.getNOT(OpB.getDebugLoc(), OpB, OpB.getValueType());
+    // FIXME: Is this true for ADDE?
+    // CarrayIn = DAG.getNOT(CarrayIn.getDebugLoc(), CarrayIn, MVT::i1);
+  }
+
+  SDValue Result = DAG.getNode(VTMISD::ADDDAG, Op->getDebugLoc(),
+                               DAG.getVTList(Op.getValueType(), MVT::i1),
+                               Op->getOperand(0), OpB, CarrayIn);
+  return Result;
 }
 
-SDValue VTargetLowering::LowerOperation(SDValue Op,
-                                               SelectionDAG &DAG) const {
+SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
-    Op.getNode()->dump();
     llvm_unreachable("Should not custom lower this!");
-  case ISD::ADDE:
-  case ISD::SUBE:               return LowerADDE(Op, DAG);
+    return SDValue();
+  case ISD::SUB:
+    return LowerADDSUB(Op, DAG, DAG.getConstant(1, MVT::i1), true);
+  case ISD::ADD:
+    return LowerADDSUB(Op, DAG, DAG.getConstant(0, MVT::i1));
+  case ISD::ADDE:   case ISD::SUBE:   case ISD::ADDC:   case ISD::SUBC:
+  case ISD::SADDO:  case ISD::SSUBO:  case ISD::UADDO:  case ISD::USUBO:
+    return SDValue();
   }
 }
 
 /// getFunctionAlignment - Return the Log2 alignment of this function.
 unsigned VTargetLowering::getFunctionAlignment(const Function *F) const {
   return 2;
+}
+
+void VTargetLowering::ReplaceNodeResults(SDNode *N,
+                                         SmallVectorImpl<SDValue>&Results,
+                                         SelectionDAG &DAG ) const {
+  assert(0 && "ReplaceNodeResults not implemented for this target!");
+
 }
