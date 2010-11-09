@@ -363,11 +363,11 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
      << " = " << writeConstantInt(InitVal, getBitWidth(), false) << ';';
 }
 
-void VASTSignal::print( raw_ostream &OS ) const {
+void VASTSignal::print(raw_ostream &OS) const {
 
 }
 
-void VASTSignal::printDecl( raw_ostream &OS ) const {
+void VASTSignal::printDecl(raw_ostream &OS) const {
   if (isRegister())
     OS << "reg";
   else
@@ -376,6 +376,10 @@ void VASTSignal::printDecl( raw_ostream &OS ) const {
   if (getBitWidth() > 1)
     OS << "[" << (getBitWidth() - 1) << ":0]";
 
-  OS << ' ' << getName() << " = "
-     << writeConstantInt(0, getBitWidth(), false) << ";";
+  OS << ' ' << getName();
+
+  if (isRegister())
+    OS << " = " << writeConstantInt(0, getBitWidth(), false);
+
+  OS << ";";
 }
