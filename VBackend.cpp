@@ -22,7 +22,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/FormattedStream.h"
 
 #include "HWAtomPasses.h"
 
@@ -62,10 +62,10 @@ static void printAndVerify(PassManagerBase &PM,
 }
 
 bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
-                                        formatted_raw_ostream &Out,
-                                        CodeGenFileType FileType,
-                                        CodeGenOpt::Level OptLevel,
-                                        bool DisableVerify) {
+                                         formatted_raw_ostream &Out,
+                                         CodeGenFileType FileType,
+                                         CodeGenOpt::Level OptLevel,
+                                         bool DisableVerify) {
   // Standard LLVM-Level Passes.
 
   // Before running any passes, run the verifier to determine if the input
@@ -174,7 +174,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   if (addPreRegAlloc(PM, OptLevel))
     printAndVerify(PM, "After PreRegAlloc passes");
 
-
   PM.add(createMachineFunctionPrinterPass(dbgs(), "==========MF============"));
   // TODO: Translate Machine code to HWAtom.
 
@@ -182,7 +181,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(createHWAtonInfoPass(*this));
 
-  PM.add(createRTLWriterPass(dbgs()));
+  PM.add(createRTLWriterPass(Out));
 
   return false;
 }
