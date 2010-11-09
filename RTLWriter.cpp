@@ -81,7 +81,8 @@ class RTLWriter : public MachineFunctionPass {
   inline std::string getucStateEnable(MachineBasicBlock *MBB, unsigned Slot) {
     std::string StateName = getucStateEnableName(MBB);
     raw_string_ostream ss(StateName);
-    if (FuncInfo->getTotalSlotFor(MBB) > 1)
+    // Ignore the laster slot, we do nothing at that slot.
+    if (FuncInfo->getTotalSlotFor(MBB) - 1 > 1)
       ss << "[" << (Slot - FuncInfo->getStartSlotFor(MBB)) << "]";
 
     return ss.str();
@@ -396,7 +397,7 @@ void RTLWriter::emitOpArg(ucOp &OpArg) {
 
 void RTLWriter::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
-  OS << "fin <= 1'h0;\n";
+  OS << "fin <= 1'h1;\n";
   OS.indent(10) << "NextFSMState <= state_idle;\n";
 }
 
