@@ -108,6 +108,7 @@ bool ucOp::haveDataPath() const {
   case VTM::VOpRetVali8: case VTM::VOpRetVali16: case VTM::VOpRetVali32:
   case VTM::VOpRetVali64:
   case VTM::VOpRet:
+  case VTM::VOpWriteReg:
     return false;
   }
 

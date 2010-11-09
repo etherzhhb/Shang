@@ -99,6 +99,8 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitDatapath(ucState &State);
   void emitOpAdd(ucOp &OpAdd);
+  void emitOpXor(ucOp &OpXor);
+  void emitOpLdConst(ucOp &OpLdConst);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand, unsigned BitWidth = 0);
 
@@ -106,6 +108,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpArg(ucOp &VOpArg);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
+  void emitOpWriteReg(ucOp &OpWriteReg);
 
 public:
   /// @name FunctionPass interface
@@ -371,6 +374,9 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     case VTM::VOpRet:
       emitOpRet(Op);
       break;
+    case VTM::VOpWriteReg:
+      emitOpWriteReg(Op);
+      break;
     default:
       assert(0 && "Unexpect opcode!");
       break;
@@ -383,6 +389,12 @@ void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   ucState FirstState(MBB->front());
   
   emitCtrlOp(FirstState);
+}
+
+void RTLWriter::emitOpWriteReg(ucOp &OpWriteReg) {
+  raw_ostream &OS = VM->getControlBlockBuffer(10);
+  emitOperand(OS, OpWriteReg.getOperand(0));
+  OS << " <= " << OpWriteReg.getOpCodeMD().getWireName() << ";\n";
 }
 
 void RTLWriter::emitOpArg(ucOp &OpArg) {

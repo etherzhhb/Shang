@@ -47,7 +47,7 @@ public:
     // Excute an instruction, instr ResourceType, ResourceID, operands ...
     tokenInstr,
     // Write register, WriteReg register, source value
-    tokenWriteReg = VTM::INSTRUCTION_LIST_END
+    tokenWriteReg = VTM::VOpWriteReg
   };
 
   explicit BundleToken() : TokenNode(0) {}
@@ -124,7 +124,11 @@ public:
   inline unsigned getOpCode() const {
     if (Token.isInstr())
       return Token.getOpcode();
+
+    return VTM::VOpWriteReg;
   }
+
+  const BundleToken &getOpCodeMD() const { return Token; }
 
   bool haveDataPath() const;
 

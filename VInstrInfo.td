@@ -116,3 +116,6 @@ def VOpADD : InstActive<(outs DR32:$dst, DR1:$co),
 let isBarrier    = 1 in
 def VOpBundle : InstPassive<(outs variable_ops), (ins i32imm:$slot, variable_ops),
 							 "bundle;", []>;
+
+// Opcode for micro operation.
+def VOpWriteReg : InstPassive<(outs), (ins), "write register;", []>;
