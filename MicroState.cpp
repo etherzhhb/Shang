@@ -103,8 +103,8 @@ bool ucOp::haveDataPath() const {
   if (Token.isDefReg()) return false;
   
   switch (Token.getOpcode()) {
-  CASEVOP(Arg):
-  CASEVOP(RetVal):
+  case VTM::VOpArg:
+  case VTM::VOpRetVal:
   case VTM::VOpRet:
   case VTM::VOpWriteReg:
     return false;

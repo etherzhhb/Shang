@@ -54,37 +54,14 @@ let isReturn     = 1,
     isBarrier    = 1 in
 def VOpRet : InstPassive<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
-multiclass InArgOps {
-  def i1 : InstPassive<(outs DR1:$arg), (ins i8imm:$arg_no), "arg $arg_no;",
-                    [(set DR1:$arg, (VTMInArg uimm8:$arg_no))], 0, 1>;
-  def i8 : InstPassive<(outs DR8:$arg), (ins i8imm:$arg_no), "arg $arg_no;",
-                    [(set DR8:$arg, (VTMInArg uimm8:$arg_no))], 0, 1>;
-  def i16 : InstPassive<(outs DR16:$arg), (ins i8imm:$arg_no), "arg $arg_no;",
-                    [(set DR16:$arg, (VTMInArg uimm8:$arg_no))], 0, 1>;
-  def i32 : InstPassive<(outs DR32:$arg), (ins i8imm:$arg_no), "arg $arg_no;",
-                    [(set DR32:$arg, (VTMInArg uimm8:$arg_no))], 0, 1>;
-  def i64 : InstPassive<(outs DR64:$arg), (ins i8imm:$arg_no), "arg $arg_no;",
-                    [(set DR64:$arg, (VTMInArg uimm8:$arg_no))], 0, 1>;
-}
-
-defm VOpArg : InArgOps;
-
-multiclass RetValOps {
-  def i1 : InstPassive<(outs), (ins DR1:$var, i8imm:$ret_no), "ret $var at $ret_no;",
-                    [(VTMRetVal DR1:$var, uimm8:$ret_no)], 0, 1>;
-  def i8 : InstPassive<(outs), (ins DR8:$var, i8imm:$ret_no), "ret $var at $ret_no;",
-                    [(VTMRetVal DR8:$var, uimm8:$ret_no)], 0, 1>;
-  def i16 : InstPassive<(outs), (ins DR16:$var, i8imm:$ret_no), "ret $var at $ret_no;",
-                    [(VTMRetVal DR16:$var, uimm8:$ret_no)], 0, 1>;
-  def i32 : InstPassive<(outs), (ins DR32:$var, i8imm:$ret_no), "ret $var at $ret_no;",
-                    [(VTMRetVal DR32:$var, uimm8:$ret_no)], 0, 1>;
-  def i64 : InstPassive<(outs), (ins DR64:$var, i8imm:$ret_no), "ret $var at $ret_no;",
-                    [(VTMRetVal DR64:$var, uimm8:$ret_no)], 0, 1>;
-}
+def VOpArg : InstPassive<(outs dyn_rc:$arg), (ins i8imm:$arg_no),
+		 				"$arg = arg[$arg_no]", [], 0, 1>;
 
 let hasSideEffects	= 1,
     isBarrier		= 1  in
-defm VOpRetVal : RetValOps;
+def VOpRetVal : InstPassive<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
+							 "ret $var at $ret_no;",
+							 [], 0, 1>;
 
 let isCommutable       = 1,
 	isReMaterializable = 1,

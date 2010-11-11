@@ -102,6 +102,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpAdd(ucOp &OpAdd);
   void emitOpXor(ucOp &OpXor);
   void emitOpLdConst(ucOp &OpLdConst);
+  void emitCast(ucOp &OpCast);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand, unsigned BitWidth = 0);
 
@@ -364,8 +365,8 @@ void RTLWriter::emitCtrlOp(ucState &State) {
 
     // Emit the operations.
     switch (Op.getOpCode()) {
-    CASEVOP(Arg):           emitOpArg(Op);        break;
-    CASEVOP(RetVal):        emitOpRetVal(Op);     break;
+    case VTM::VOpArg:       emitOpArg(Op);        break;
+    case VTM::VOpRetVal:    emitOpRetVal(Op);     break;
     case VTM::VOpRet:       emitOpRet(Op);        break;
     case VTM::VOpWriteReg:  emitOpWriteReg(Op);   break;
     default:  assert(0 && "Unexpect opcode!");    break;
@@ -498,6 +499,10 @@ void RTLWriter::emitOpAdd(ucOp &OpAdd) {
   // Carry in.
   emitOperand(OS, OpAdd.getOperand(4));
   OS << ";\n";
+}
+
+void RTLWriter::emitCast(ucOp &OpCast) {
+  raw_ostream &OS = VM->getDataPathBuffer(2);
 }
 
 void RTLWriter::emitAllRegister() {

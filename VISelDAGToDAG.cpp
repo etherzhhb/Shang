@@ -46,8 +46,10 @@ public:
 
 private:
   SDNode *Select(SDNode *N);
-  SDNode *SelectAdd(SDNode *Node);
-  SDNode *SelectCast(SDNode *Node, bool Signed = false);
+  SDNode *SelectInArg(SDNode *N);
+  SDNode *SelectRetVal(SDNode *N);
+  SDNode *SelectAdd(SDNode *N);
+  SDNode *SelectCast(SDNode *N, bool Signed = false);
 
   const VInstrInfo &getInstrInfo() {
     return *static_cast<const VTargetMachine&>(TM).getInstrInfo();
@@ -77,14 +79,37 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
     assert(0 && "Bad value type!");
     OpC = VTM:: INSTRUCTION_LIST_END; break;
   }
-  
-  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(), Ops, array_lengthof(Ops));
+
+  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
+                              Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectCast(SDNode *N, bool Signed) {
-  SDValue Ops[] = { N->getOperand(0), CurDAG->getTargetConstant(Signed, MVT::i1) };
+  SDValue Ops[] = { N->getOperand(0), CurDAG->getTargetConstant(Signed,
+                    MVT::i1) };
   return CurDAG->SelectNodeTo(N, VTM::VOpCast, N->getVTList(),
                               Ops, array_lengthof(Ops));
+}
+
+SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {
+  // Build the target constant.
+  SDValue ArgIdx = N->getOperand(1);
+  int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();
+  ArgIdx = CurDAG->getTargetConstant(Val, ArgIdx.getValueType());
+
+  SDValue Ops[] = { ArgIdx, N->getOperand(0) };
+  return CurDAG->SelectNodeTo(N, VTM::VOpArg, N->getVTList(), Ops,
+                              array_lengthof(Ops));
+}
+
+SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
+  SDValue RetValIdx = N->getOperand(2);
+  int64_t Val = cast<ConstantSDNode>(RetValIdx)->getZExtValue();
+  RetValIdx = CurDAG->getTargetConstant(Val, RetValIdx.getValueType());
+
+  SDValue Ops[] = { N->getOperand(1), RetValIdx, N->getOperand(0) };
+  return CurDAG->SelectNodeTo(N, VTM::VOpRetVal, N->getVTList(), Ops,
+                              array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
@@ -93,6 +118,10 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
+  case VTMISD::RetValDAG:
+    return SelectRetVal(N);
+  case VTMISD::InArgDAG:
+    return SelectInArg(N);
   case VTMISD::ADDDAG:
     return SelectAdd(N);
   case ISD::SIGN_EXTEND:
