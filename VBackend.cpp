@@ -40,7 +40,7 @@ extern "C" void LLVMInitializeVerilogBackendTarget() {
 VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
                                const std::string &FS)
   : LLVMTargetMachine(T, TT),
-  DataLayout("e-p:32:32-i64:32-f64:32-n32"),
+  DataLayout("e-p:64:64-i64:32-f64:32-n1:8:16:32:64"),
   Subtarget(TT, FS),
   TLInfo(*this),
   TSInfo(*this),

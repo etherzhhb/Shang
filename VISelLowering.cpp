@@ -72,9 +72,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
   }
-  // No carry-in operations.
-  setOperationAction(ISD::ADDE, MVT::i32, Custom);
-  setOperationAction(ISD::SUBE, MVT::i32, Custom);
 }
 
 const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {

@@ -55,12 +55,6 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   unsigned getEHHandlerRegister() const;
 
   int getDwarfRegNum(unsigned RegNum, bool isEH) const;
-
-  void loadConstant(MachineBasicBlock &MBB,
-                    MachineBasicBlock::iterator I,
-                    DebugLoc DL,
-                    unsigned Reg,
-                    int value) const;
 };
 
 } // end namespace llvm

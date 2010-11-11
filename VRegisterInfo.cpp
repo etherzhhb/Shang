@@ -54,14 +54,6 @@ void VRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                         RegScavenger *RS /*= NULL*/ ) const {
 }
 
-// Emit instructions to load a constant into D/P register
-void VRegisterInfo::loadConstant(MachineBasicBlock &MBB,
-                                        MachineBasicBlock::iterator I,
-                                        DebugLoc DL,
-                                        unsigned Reg,
-                                        int value) const {
-}
-
 // Emit a prologue that sets up a stack frame.
 // On function entry, R0-R2 and P0 may hold arguments.
 // R3, P1, and P2 may be used as scratch registers
