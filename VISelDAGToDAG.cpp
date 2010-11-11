@@ -37,8 +37,6 @@ public:
   VDAGToDAGISel(VTargetMachine &TM, CodeGenOpt::Level OptLevel)
     : SelectionDAGISel(TM, OptLevel) {}
 
-  virtual void PostprocessISelDAG();
-
   virtual const char *getPassName() const {
     return "VTM DAG->DAG Pattern Instruction Selection";
   }
@@ -48,10 +46,8 @@ public:
 
 private:
   SDNode *Select(SDNode *N);
-  SDNode *SelectADD(SDNode *Node);
-
-  // Walk the DAG after instruction selection, fixing register class issues.
-  void FixRegisterClasses(SelectionDAG &DAG);
+  SDNode *SelectAdd(SDNode *Node);
+  SDNode *SelectCast(SDNode *Node, bool Signed = false);
 
   const VInstrInfo &getInstrInfo() {
     return *static_cast<const VTargetMachine&>(TM).getInstrInfo();
@@ -63,14 +59,11 @@ private:
 }  // end anonymous namespace
 
 FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
-                                          CodeGenOpt::Level OptLevel) {
+                                   CodeGenOpt::Level OptLevel) {
   return new VDAGToDAGISel(TM, OptLevel);
 }
 
-void VDAGToDAGISel::PostprocessISelDAG() {
-}
-
-SDNode *VDAGToDAGISel::SelectADD(SDNode *N) {
+SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   //N->getValueType(0)
   SDValue Ops[] = { N->getOperand(0), N->getOperand(1), N->getOperand(2)};
   unsigned OpC = 0;
@@ -85,7 +78,13 @@ SDNode *VDAGToDAGISel::SelectADD(SDNode *N) {
     OpC = VTM:: INSTRUCTION_LIST_END; break;
   }
   
-  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(), Ops, 3);
+  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(), Ops, array_lengthof(Ops));
+}
+
+SDNode *VDAGToDAGISel::SelectCast(SDNode *N, bool Signed) {
+  SDValue Ops[] = { N->getOperand(0), CurDAG->getTargetConstant(Signed, MVT::i1) };
+  return CurDAG->SelectNodeTo(N, VTM::VOpCast, N->getVTList(),
+                              Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
@@ -95,16 +94,22 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   switch (N->getOpcode()) {
   default: break;
   case VTMISD::ADDDAG:
-    return SelectADD(N);
-  //case VTMISD::InArg: {
-  //  SDValue ArgIdx = N->getOperand(1);
-  //  int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();
-  //  ArgIdx = CurDAG->getTargetConstant(Val, ArgIdx.getValueType());
-
-  //  SDValue Ops[] = { ArgIdx, N->getOperand(0) };
-  //  return CurDAG->SelectNodeTo(N, VTM::VTMArgi16t, N->getVTList(), Ops, 2);
-  //}
+    return SelectAdd(N);
+  case ISD::SIGN_EXTEND:
+    return SelectCast(N, true);
+  case ISD::ANY_EXTEND:
+  case ISD::ZERO_EXTEND:
+  case ISD::TRUNCATE:
+    return SelectCast(N);
   }
 
   return SelectCode(N);
+}
+
+static void UpdateNodeOperand(SelectionDAG &DAG, SDNode *N, unsigned Num,
+                              SDValue Val) {
+  SmallVector<SDValue, 8> ops(N->op_begin(), N->op_end());
+  ops[Num] = Val;
+  SDNode *New = DAG.UpdateNodeOperands(N, ops.data(), ops.size());
+  DAG.ReplaceAllUsesWith(N, New);
 }

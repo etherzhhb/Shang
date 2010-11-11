@@ -54,8 +54,11 @@ class InstActive<dag outs, dag ins, string asmstr, list<dag> pattern,
                FUType ResType, bit readAtEmit = 0>
 	: InstVTM<outs, ins, asmstr, pattern, ResType, 0, readAtEmit>;
 
-multiclass ActiveBinOps<string opc, PatFrag opnode, FUType ResType,
-                        bits<4> latency = 0, bit readAtEmit = 0> {
+
+class BinOpFrag<dag res> : PatFrag<(ops node:$LHS, node:$RHS), res>;
+
+multiclass InstBinOps<string opc, PatFrag opnode, FUType ResType,
+                      bits<4> latency = 0, bit readAtEmit = 0> {
   def i1   : InstVTM<(outs DR1:$dst), (ins DR1:$src0, DR1:$src1),
                      !strconcat(opc, "$dst, $src0, $src1"),
                      [(set DR1:$dst, (opnode DR1:$src0, DR1:$src1))],
@@ -77,3 +80,30 @@ multiclass ActiveBinOps<string opc, PatFrag opnode, FUType ResType,
                      [(set DR64:$dst, (opnode DR64:$src0, DR64:$src1))],
                      ResType, latency, readAtEmit>;
 }
+
+// Shift amount is i8.
+multiclass InstShOps<string opc, PatFrag opnode, FUType ResType,
+                     bits<4> latency = 0, bit readAtEmit = 0> {
+  def i1   : InstVTM<(outs DR1:$dst), (ins DR1:$src0, DR8:$src1),
+                     !strconcat(opc, "$dst, $src0, $src1"),
+                     [(set DR1:$dst, (opnode DR1:$src0, DR8:$src1))],
+                     ResType, latency, readAtEmit>;
+  def i8   : InstVTM<(outs DR8:$dst), (ins DR8:$src0, DR8:$src1),
+                     !strconcat(opc, "$dst, $src0, $src1"),
+                     [(set DR8:$dst, (opnode DR8:$src0, DR8:$src1))],
+                    ResType, latency, readAtEmit>;
+  def i16  : InstVTM<(outs DR16:$dst), (ins DR16:$src0, DR8:$src1),
+                     !strconcat(opc, "$dst, $src0, $src1"),
+                     [(set DR16:$dst, (opnode DR16:$src0, DR8:$src1))],
+                     ResType, latency, readAtEmit>;
+  def i32  : InstVTM<(outs DR32:$dst), (ins DR32:$src0, DR8:$src1),
+                     !strconcat(opc, "$dst, $src0, $src1"),
+                     [(set DR32:$dst, (opnode DR32:$src0, DR8:$src1))],
+                     ResType, latency, readAtEmit>;
+  def i64  : InstVTM<(outs DR64:$dst), (ins DR64:$src0, DR8:$src1),
+                     !strconcat(opc, "$dst, $src0, $src1"),
+                     [(set DR64:$dst, (opnode DR64:$src0, DR8:$src1))],
+                     ResType, latency, readAtEmit>;
+}
+
+class UnOpFrag <dag res> : PatFrag<(ops node:$Src), res>;
