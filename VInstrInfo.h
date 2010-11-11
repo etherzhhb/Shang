@@ -25,16 +25,16 @@ class VInstrInfo : public TargetInstrInfoImpl {
   const VRegisterInfo RI;
 public:
   enum FUTypes {
+    Trivial = 0,
     MemoryBus = 1,
     SHL = 2,
     ASR = 3,
     LSR = 4,
     AddSub = 5,
     Mult = 6,
-    Trivial = 7,
 
-    FirstResourceType = MemoryBus,
-    LastResourceType = Trivial
+    FirstResourceType = Trivial,
+    LastResourceType = Mult
   };
 
 
