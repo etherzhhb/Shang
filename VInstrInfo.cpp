@@ -25,8 +25,9 @@
 
 using namespace llvm;
 
-VInstrInfo::VInstrInfo() : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)),
-  RI(*this) {}
+VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
+  : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
+  {}
 
 unsigned VTIDReader::getLatency(const VTMConfig &VTC) const {
   VInstrInfo::FUTypes ResTy =getHWResType();

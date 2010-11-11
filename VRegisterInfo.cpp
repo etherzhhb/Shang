@@ -21,17 +21,20 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineLocation.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetFrameInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetLowering.h"
 #include "llvm/Type.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 using namespace llvm;
 
-VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii)
-  : VTMGenRegisterInfo(), TII(tii) {}
+VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
+                             const TargetLowering &tli)
+  : VTMGenRegisterInfo(), TII(tii), TD(td), TLI(tli) {}
 
 const unsigned*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -60,7 +63,7 @@ void VRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 void VRegisterInfo::emitPrologue(MachineFunction &MF) const {}
 
 void VRegisterInfo::emitEpilogue(MachineFunction &MF,
-                                        MachineBasicBlock &MBB) const {}
+                                 MachineBasicBlock &MBB) const {}
 
 unsigned VRegisterInfo::getRARegister() const {
   llvm_unreachable("No return address register in VTM");
@@ -89,3 +92,9 @@ int VRegisterInfo::getDwarfRegNum(unsigned RegNum, bool isEH) const {
 }
 
 #include "VGenRegisterInfo.inc"
+
+const TargetRegisterClass *
+VRegisterInfo::getPointerRegClass(unsigned Kind) const {
+  MVT PtrVT = MVT::getIntegerVT(TD.getPointerSizeInBits());
+  return TLI.getRegClassFor(PtrVT);
+}

@@ -44,7 +44,7 @@ VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
   Subtarget(TT, FS),
   TLInfo(*this),
   TSInfo(*this),
-  InstrInfo() {}
+  InstrInfo(DataLayout, TLInfo) {}
 
 bool VTargetMachine::addInstSelector(PassManagerBase &PM,
                                      CodeGenOpt::Level OptLevel) {

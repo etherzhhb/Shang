@@ -22,11 +22,16 @@ namespace llvm {
 
 class TargetInstrInfo;
 class Type;
+class TargetData;
+class TargetLowering;
 
 struct VRegisterInfo : public VTMGenRegisterInfo {
   const TargetInstrInfo &TII;
+  const TargetData &TD;
+  const TargetLowering &TLI;
 
-  VRegisterInfo(const TargetInstrInfo &tii);
+  VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
+                const TargetLowering &tli);
 
   /// Code Generation virtual methods...
   const unsigned *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
@@ -35,9 +40,7 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
 
   // getSubReg implemented by tablegen
 
-  const TargetRegisterClass *getPointerRegClass(unsigned Kind = 0) const {
-    return &VTM::PR64RegClass;
-  }
+  const TargetRegisterClass *getPointerRegClass(unsigned Kind = 0) const;
 
   bool hasFP(const MachineFunction &MF) const;
   

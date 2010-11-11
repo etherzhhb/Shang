@@ -20,6 +20,8 @@
 
 namespace llvm {
 class VTMConfig;
+class TargetData;
+class TargetLowering;
 
 class VInstrInfo : public TargetInstrInfoImpl {
   const VRegisterInfo RI;
@@ -38,7 +40,7 @@ public:
   };
 
 
-  VInstrInfo();
+  VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
