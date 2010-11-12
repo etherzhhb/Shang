@@ -101,7 +101,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitDatapath(ucState &State);
   void emitOpAdd(ucOp &OpAdd);
   void emitOpXor(ucOp &OpXor);
-  void emitOpLdConst(ucOp &OpLdConst);
+  void emitOpLdImm(ucOp &OpLdImm);
   void emitCast(ucOp &OpCast);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand, unsigned BitWidth = 0);
@@ -453,9 +453,9 @@ void RTLWriter::emitDatapath(ucState &State) {
       continue;
     
     switch (Op.getOpCode()) {
-    CASEVOP(Add):     emitOpAdd(Op);      break;
-    CASEVOP(Xor):     emitOpXor(Op);      break;
-    CASEVOP(LdConst): emitOpLdConst(Op);  break;
+    case VTM::VOpAdd:     emitOpAdd(Op);      break;
+    case VTM::VOpXor:     emitOpXor(Op);      break;
+    case VTM::VOpLdImm:   emitOpLdImm(Op);    break;
     }
   } 
 }
@@ -471,13 +471,13 @@ void RTLWriter::emitOpXor(ucOp &OpXor) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpLdConst(ucOp &OpLdConst) {
+void RTLWriter::emitOpLdImm(ucOp &OpLdImm) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
   OS << "assign ";
-  emitOperand(OS, OpLdConst.getOperand(0));
+  emitOperand(OS, OpLdImm.getOperand(0));
   OS << " = ";
-  BundleToken Op0(OpLdConst.getOperand(0).getMetadata());
-  emitOperand(OS, OpLdConst.getOperand(1), Op0.getBitWidth());
+  BundleToken Op0(OpLdImm.getOperand(0).getMetadata());
+  emitOperand(OS, OpLdImm.getOperand(1), Op0.getBitWidth());
   OS << ";\n";
 }
 

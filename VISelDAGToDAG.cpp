@@ -46,10 +46,20 @@ public:
 
 private:
   SDNode *Select(SDNode *N);
+  SDNode *SelectBinary(SDNode *N, unsigned OpC);
+
+  // Function argument and return values.
   SDNode *SelectInArg(SDNode *N);
   SDNode *SelectRetVal(SDNode *N);
+
+  // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
+
+
   SDNode *SelectCast(SDNode *N, bool Signed = false);
+  SDNode *SelectConstant(SDNode *N);
+
+  SDNode *SelectLoad(SDNode *N);
 
   const VInstrInfo &getInstrInfo() {
     return *static_cast<const VTargetMachine&>(TM).getInstrInfo();
@@ -65,22 +75,16 @@ FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
   return new VDAGToDAGISel(TM, OptLevel);
 }
 
+SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC) {
+  SDValue Ops [] = { N->getOperand(0), N->getOperand(1) };
+  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
+    Ops, array_lengthof(Ops));
+}
+
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   //N->getValueType(0)
   SDValue Ops[] = { N->getOperand(0), N->getOperand(1), N->getOperand(2)};
-  unsigned OpC = 0;
-  switch (N->getValueType(0).getSizeInBits()) {
-  case 1:   OpC = VTM::VOpAddi1; break;
-  case 8:   OpC = VTM::VOpAddi8; break;
-  case 16:  OpC = VTM::VOpAddi16; break;
-  case 32:  OpC = VTM::VOpAddi32; break;
-  case 64:  OpC = VTM::VOpAddi64; break;
-  default:
-    assert(0 && "Bad value type!");
-    OpC = VTM:: INSTRUCTION_LIST_END; break;
-  }
-
-  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
+  return CurDAG->SelectNodeTo(N, VTM::VOpAdd, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }
 
@@ -91,6 +95,18 @@ SDNode *VDAGToDAGISel::SelectCast(SDNode *N, bool Signed) {
                               Ops, array_lengthof(Ops));
 }
 
+
+SDNode * VDAGToDAGISel::SelectConstant(SDNode *N) {
+  // Build the target constant.
+  int64_t Val = cast<ConstantSDNode>(N)->getZExtValue();
+  SDValue Const = CurDAG->getTargetConstant(Val, N->getValueType(0));
+
+  SDValue Ops[] = { Const };
+  return CurDAG->SelectNodeTo(N, VTM::VOpLdImm, N->getVTList(),
+                              Ops, array_lengthof(Ops));
+}
+
+
 SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {
   // Build the target constant.
   SDValue ArgIdx = N->getOperand(1);
@@ -98,8 +114,8 @@ SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {
   ArgIdx = CurDAG->getTargetConstant(Val, ArgIdx.getValueType());
 
   SDValue Ops[] = { ArgIdx, N->getOperand(0) };
-  return CurDAG->SelectNodeTo(N, VTM::VOpArg, N->getVTList(), Ops,
-                              array_lengthof(Ops));
+  return CurDAG->SelectNodeTo(N, VTM::VOpArg, N->getVTList(),
+                              Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
@@ -108,8 +124,21 @@ SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
   RetValIdx = CurDAG->getTargetConstant(Val, RetValIdx.getValueType());
 
   SDValue Ops[] = { N->getOperand(1), RetValIdx, N->getOperand(0) };
-  return CurDAG->SelectNodeTo(N, VTM::VOpRetVal, N->getVTList(), Ops,
-                              array_lengthof(Ops));
+  return CurDAG->SelectNodeTo(N, VTM::VOpRetVal, N->getVTList(),
+                              Ops, array_lengthof(Ops));
+}
+
+
+SDNode *VDAGToDAGISel::SelectLoad(SDNode *N) {
+  MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
+  MemOp[0] = cast<MemSDNode>(N)->getMemOperand();
+
+  SDValue Ops[] = { N->getOperand(1), N->getOperand(0) };
+  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpLoad, N->getVTList(),
+                                     Ops, array_lengthof(Ops));
+
+  cast<MachineSDNode>(Ret)->setMemRefs(MemOp, MemOp + 1);
+  return Ret;
 }
 
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
@@ -118,18 +147,22 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
-  case VTMISD::RetValDAG:
-    return SelectRetVal(N);
-  case VTMISD::InArgDAG:
-    return SelectInArg(N);
-  case VTMISD::ADDDAG:
-    return SelectAdd(N);
-  case ISD::SIGN_EXTEND:
-    return SelectCast(N, true);
+  case VTMISD::RetValDAG:     return SelectRetVal(N);
+  case VTMISD::InArgDAG:      return SelectInArg(N);
+
+  case VTMISD::ADDDAG:        return SelectAdd(N);
+
+  case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
+
+  case ISD::SHL:              return SelectBinary(N, VTM::VOpSHL);
+
+  case ISD::SIGN_EXTEND:      return SelectCast(N, true);
   case ISD::ANY_EXTEND:
   case ISD::ZERO_EXTEND:
-  case ISD::TRUNCATE:
-    return SelectCast(N);
+  case ISD::TRUNCATE:         return SelectCast(N);
+  case ISD::Constant:         return SelectConstant(N);
+
+  case ISD::LOAD:             return SelectLoad(N);
   }
 
   return SelectCode(N);

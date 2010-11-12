@@ -54,101 +54,49 @@ let isReturn     = 1,
     isBarrier    = 1 in
 def VOpRet : InstPassive<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
+let neverHasSideEffects = 1 in
 def VOpArg : InstPassive<(outs dyn_rc:$arg), (ins i8imm:$arg_no),
 		 				"$arg = arg[$arg_no]", [], 0, 1>;
 
-let hasSideEffects	= 1,
-    isBarrier		= 1  in
+let isBarrier		= 1  in
 def VOpRetVal : InstPassive<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
 							 "ret $var at $ret_no;",
 							 [], 0, 1>;
 
-let isCommutable       = 1,
-	isReMaterializable = 1,
-    isAsCheapAsAMove   = 1 in {
-defm VOpXor	: InstBinOps<"xor", BinOpFrag<(xor node:$LHS, node:$RHS)>,
-                         FUTrivial>;
+let isReMaterializable = 1,
+    isAsCheapAsAMove   = 1,
+    neverHasSideEffects = 1 in {
+
+let isCommutable       = 1 in
+def VOpXor	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+						   "$dst = xor $src0, $src1", []>;
+
+// Cast value to difference bitwidth.
+def VOpCast	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src, i1imm:$signed),
+						  "$dst = cast $src, $signed", []>;
+
+// Load immediate into registers.
+def VOpLdImm : InstPassive<(outs dyn_rc:$r), (ins i64imm:$c), "$r = $c;", []>;
 
 }
 
 //===----------------------------------------------------------------------===//
 // Computation operations.
-defm VOpSHL	: InstShOps<"shl", BinOpFrag<(shl node:$LHS, node:$RHS)>,
-                         FUSHL>;
+let neverHasSideEffects = 1,
+	isReMaterializable	= 1 in {
+def VOpAdd : InstActive<(outs dyn_rc:$dst, DR1:$co),
+			            (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
+					    "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
 
-multiclass AddOps {
-  def i1  : InstActive<(outs DR1:$dst, DR1:$co),
-			           (ins DR1:$src1, DR1:$src2, DR1:$ci),
-					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
-  def i8  : InstActive<(outs DR8:$dst, DR1:$co),
-			           (ins DR8:$src1, DR8:$src2, DR1:$ci),
-					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
-  def i16  : InstActive<(outs DR16:$dst, DR1:$co),
-			           (ins DR16:$src1, DR16:$src2, DR1:$ci),
-					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
-  def i32  : InstActive<(outs DR32:$dst, DR1:$co),
-			           (ins DR32:$src1, DR32:$src2, DR1:$ci),
-					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
-  def i64  : InstActive<(outs DR64:$dst, DR1:$co),
-			           (ins DR64:$src1, DR64:$src2, DR1:$ci),
-					   "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+def VOpSHL : InstActive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                        "$dst = shl $src0, $src1", [], FUSHL>;
 }
 
-defm VOpAdd : AddOps;
+let canFoldAsLoad = 1,
+	mayLoad		  = 1 in
+def VOpLoad : InstActive<(outs dyn_rc:$dst), (ins ptr_rc:$addr),
+						  "$dst = load $addr", [], FUMemBus, 1>;
 
-
-multiclass LoadOps {
-  def i1    :  InstActive<(outs DR1:$dst), (ins ptr_rc:$addr),
-			     	      "$dst = load $addr",
-						  [(set DR1:$dst, (load ptr_rc:$addr))],
-						  FUMemBus, 1>;
-  def i8    :  InstActive<(outs DR8:$dst), (ins ptr_rc:$addr),
-						  "$dst = load $addr",
-						  [(set DR8:$dst, (load ptr_rc:$addr))],
-						  FUMemBus, 1>;
-  def i16   :  InstActive<(outs DR16:$dst), (ins ptr_rc:$addr),
-						  "$dst = load $addr",
-						  [(set DR16:$dst, (load ptr_rc:$addr))],
-						  FUMemBus, 1>;
-  def i32   :  InstActive<(outs DR32:$dst), (ins ptr_rc:$addr),
-						  "$dst = load $addr",
-						  [(set DR32:$dst, (load ptr_rc:$addr))],
-						  FUMemBus, 1>;
-  def i64   :  InstActive<(outs DR64:$dst), (ins ptr_rc:$addr),
-						  "$dst = load $addr",
-						  [(set DR64:$dst, (load ptr_rc:$addr))],
-						  FUMemBus, 1>;
-}
-
-let canFoldAsLoad      = 1 in
-defm VOpLoad : LoadOps;
-
-//===----------------------------------------------------------------------===//
-// FIXME: Perform bit level optimization on these operations.
-multiclass LdConstOps {
-  def i1  : InstPassive<(outs DR1:$r), (ins i1imm:$c), "$r = $c;",
-                        [(set DR1:$r, imm:$c)]>;
-  def i8  : InstPassive<(outs DR8:$r), (ins i8imm:$c), "$r = $c;",
-                        [(set DR8:$r, imm:$c)]>;
-  def i16 : InstPassive<(outs DR16:$r), (ins i16imm:$c), "$r = $c;",
-                        [(set DR16:$r, imm:$c)]>;
-  def i32 : InstPassive<(outs DR32:$r), (ins i32imm:$c), "$r = $c;",
-                        [(set DR32:$r, imm:$c)]>;
-  def i64 : InstPassive<(outs DR64:$r), (ins i64imm:$c), "$r = $c;",
-                        [(set DR64:$r, imm:$c)]>;
-}
-
-let isReMaterializable = 1,
-    isAsCheapAsAMove   = 1 in 
-defm VOpLdConst : LdConstOps;
-
-//multiclass ExtOps {}
-
-let isReMaterializable = 1,
-    isAsCheapAsAMove   = 1 in {
-def VOpCast : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src, i1imm:$signed),
-						  "$dst = ext $src, $signed", []>;
-}
 
 //===----------------------------------------------------------------------===//
 
