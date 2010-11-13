@@ -395,12 +395,14 @@ unsigned HWAtom::getFUClass() const {
 void HWAtom::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
   
-  if (getInst())
-    OS << *getInst() << '\t' << " Res: " << getInst()->getDesc().SchedClass;
-  else
-    OS << "null inst";
+  if (MachineInstr *Instr = getInst()) {
+    OS << Instr->getDesc().getName() << '\t';
+    OS << " Res: " << VTIDReader(Instr->getDesc()).getHWResType();
+    DEBUG(OS << '\n' << *Instr);
+  } else
+    OS << "null";
 
-  OS << "At slot: " << getSlot();
+  OS << " At slot: " << getSlot();
 }
 
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
