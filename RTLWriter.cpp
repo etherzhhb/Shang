@@ -47,9 +47,10 @@ namespace {
 class RTLWriter : public MachineFunctionPass {
   raw_ostream &Out;
   VLang *vlang;
-  VTMFunctionInfo *FuncInfo;
-  VASTModule *VM;
   MachineFunction *MF;
+  VTMFunctionInfo *FuncInfo;
+  MachineRegisterInfo *MRI;
+  VASTModule *VM;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
   
@@ -99,12 +100,15 @@ class RTLWriter : public MachineFunctionPass {
   void emitFirstCtrlState(MachineBasicBlock *MBB);
 
   void emitDatapath(ucState &State);
+  void emitBinOp(ucOp &BinOp, const std::string &Operator);
+
   void emitOpAdd(ucOp &OpAdd);
-  void emitOpXor(ucOp &OpXor);
   void emitOpLdImm(ucOp &OpLdImm);
+  
   void emitCast(ucOp &OpCast);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand, unsigned BitWidth = 0);
+  unsigned getOperandWitdh(MachineOperand &Operand);
 
   void emitCtrlOp(ucState &State);
   void emitOpArg(ucOp &VOpArg);
@@ -143,6 +147,7 @@ char RTLWriter::ID = 0;
 bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FuncInfo = MF->getInfo<VTMFunctionInfo>();
+  MRI = &MF->getRegInfo();
   vlang = &getAnalysis<VLang>();
 
   if (DesignName.empty())
@@ -411,6 +416,21 @@ void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
   OS << ";\n";
 }
 
+unsigned RTLWriter::getOperandWitdh(MachineOperand &Operand) {
+  switch (Operand.getType()) {
+  case MachineOperand::MO_Register: {
+    const TargetRegisterClass *RC = MRI->getRegClass(Operand.getReg());
+    return RC->vt_begin()->getSizeInBits();
+  }
+  case MachineOperand::MO_Metadata: {
+    BundleToken MetaOp(Operand.getMetadata());
+    return MetaOp.getBitWidth(); 
+  }
+  }
+  assert(0 && "Unknown bitwidth!");
+  return 0;
+}
+
 void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
                             unsigned BitWidth) {
   switch (Operand.getType()) {
@@ -453,31 +473,33 @@ void RTLWriter::emitDatapath(ucState &State) {
       continue;
     
     switch (Op.getOpCode()) {
-    case VTM::VOpAdd:     emitOpAdd(Op);      break;
-    case VTM::VOpXor:     emitOpXor(Op);      break;
-    case VTM::VOpLdImm:   emitOpLdImm(Op);    break;
+    case VTM::VOpAdd:     emitOpAdd(Op);          break;
+    case VTM::VOpXor:     emitBinOp(Op, "^");     break;
+    case VTM::VOpSHL:     emitBinOp(Op, ">>");    break;
+    case VTM::VOpCast:    emitCast(Op);           break;
+    case VTM::VOpLdImm:   emitOpLdImm(Op);        break;
     }
   } 
 }
 
-void RTLWriter::emitOpXor(ucOp &OpXor) {
+void RTLWriter::emitBinOp(ucOp &BinOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
   OS << "assign ";
-  emitOperand(OS, OpXor.getOperand(0));
+  emitOperand(OS, BinOp.getOperand(0));
   OS << " = ";
-  emitOperand(OS, OpXor.getOperand(1));
-  OS << " ^ ";
-  emitOperand(OS, OpXor.getOperand(2));
+  emitOperand(OS, BinOp.getOperand(1));
+  OS << ' ' << Operator << ' ';
+  emitOperand(OS, BinOp.getOperand(2));
   OS << ";\n";
 }
 
 void RTLWriter::emitOpLdImm(ucOp &OpLdImm) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
   OS << "assign ";
+  MachineOperand &Result = OpLdImm.getOperand(0);
   emitOperand(OS, OpLdImm.getOperand(0));
   OS << " = ";
-  BundleToken Op0(OpLdImm.getOperand(0).getMetadata());
-  emitOperand(OS, OpLdImm.getOperand(1), Op0.getBitWidth());
+  emitOperand(OS, OpLdImm.getOperand(1), getOperandWitdh(Result));
   OS << ";\n";
 }
 
@@ -503,6 +525,40 @@ void RTLWriter::emitOpAdd(ucOp &OpAdd) {
 
 void RTLWriter::emitCast(ucOp &OpCast) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
+  MachineOperand &Dst = OpCast.getOperand(0),
+                 &Src = OpCast.getOperand(1);
+
+  unsigned DstSize = getOperandWitdh(Dst),
+           SrcSize = getOperandWitdh(Src);
+  
+  OS << "assign ";
+  emitOperand(OS, Dst);
+  OS << " = ";
+  
+  int DeltaSize = DstSize - SrcSize;
+  assert(DeltaSize != 0 && "Do not perform any cast!");
+
+  // If it is an extent operation.
+  if (DeltaSize > 0) {
+    OS << " = {{" << DeltaSize << "{";
+
+    // If it is a signed extend?
+    if (OpCast.getOperand(2).getImm()) {
+      emitOperand(OS, Src);
+      OS << "["<< (SrcSize - 1) << "]";
+    } else
+      OS << "1'b0";
+
+    OS << "}}, ";
+
+    emitOperand(OS, Src);
+
+    OS << "};\n";
+  } else {
+    DeltaSize = - DeltaSize;
+    // TODO: Print truncate.
+    OS << ";\n";
+  }
 }
 
 void RTLWriter::emitAllRegister() {
