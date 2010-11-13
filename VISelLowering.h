@@ -23,11 +23,12 @@ namespace llvm {
 namespace VTMISD {
   enum {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
-    InArgDAG,
-    RetDAG,
-    RetValDAG,
-    ADDDAG,
-    LdConstDAG
+    InArg,
+    Ret,
+    RetVal,
+    ADD,
+    // Memory operations.
+    MemAccess = ISD::FIRST_TARGET_MEMORY_OPCODE
   };
 }
 
@@ -43,6 +44,8 @@ public:
 private:
   SDValue LowerADDSUB(SDValue Op, SelectionDAG &DAG, SDValue CarrayIn,
                       bool isSub = false) const;
+
+  SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isLoad) const;
 
   /// ReplaceNodeResults - Replace the results of node with an illegal result
   /// type with new values built out of custom code.

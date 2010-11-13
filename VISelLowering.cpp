@@ -71,6 +71,9 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::SSUBO, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
+
+    setOperationAction(ISD::LOAD, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::STORE, (MVT::SimpleValueType)VT, Custom);
   }
 }
 
@@ -79,10 +82,11 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   default:
     assert(0 && "Unknown SDNode!");
     return "<???>";
-  case VTMISD::InArgDAG:  return "VTMISD::InArgDAG";
-  case VTMISD::RetDAG:    return "VTMISD::RetDAG";
-  case VTMISD::RetValDAG: return "VTMISD::RetValDAG";
-  case VTMISD::ADDDAG:   return "VTMISD::ADDDAG";
+  case VTMISD::InArg:      return "VTMISD::InArg";
+  case VTMISD::Ret:        return "VTMISD::Ret";
+  case VTMISD::RetVal:     return "VTMISD::RetVal";
+  case VTMISD::ADD:        return "VTMISD::ADD";
+  case VTMISD::MemAccess:  return "VTMISD::MemAccess";
   }
 }
 
@@ -109,7 +113,7 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
     EVT ArgVT = IA.VT;
 
     // FIXME: Remember the Argument number.
-    SDValue SDInArg = DAG.getNode(VTMISD::InArgDAG, dl,
+    SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl,
                                   DAG.getVTList(ArgVT, MVT::Other),
                                   Chain, DAG.getConstant(Idx++,MVT::i8, false));
 
@@ -138,7 +142,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     EVT ArgVT = OA.VT;
 
     // FIXME: Remember the Argument number.
-    SDValue SDOutArg = DAG.getNode(VTMISD::RetValDAG, dl, MVT::Other, Chain,
+    SDValue SDOutArg = DAG.getNode(VTMISD::RetVal, dl, MVT::Other, Chain,
                                   OutVals[Idx],
                                   DAG.getConstant(Idx,MVT::i8, false));
     ++Idx;
@@ -146,7 +150,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     Chain = SDOutArg.getValue(0);
   }
 
-  return DAG.getNode(VTMISD::RetDAG, dl, MVT::Other, Chain);
+  return DAG.getNode(VTMISD::Ret, dl, MVT::Other, Chain);
 }
 
 SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
@@ -175,10 +179,41 @@ SDValue VTargetLowering::LowerADDSUB(SDValue Op, SelectionDAG &DAG,
     // CarrayIn = DAG.getNOT(CarrayIn.getDebugLoc(), CarrayIn, MVT::i1);
   }
 
-  SDValue Result = DAG.getNode(VTMISD::ADDDAG, Op->getDebugLoc(),
+  SDValue Result = DAG.getNode(VTMISD::ADD, Op->getDebugLoc(),
                                DAG.getVTList(Op.getValueType(), MVT::i1),
                                Op->getOperand(0), OpB, CarrayIn);
   return Result;
+}
+
+SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
+                                        bool isLoad) const {
+  LSBaseSDNode *LSNode = cast<LSBaseSDNode>(Op);
+  // FIXME: Handle the index.
+  assert(LSNode->isUnindexed() && "Indexed load/store is not supported!");
+
+  EVT VT = isLoad ? Op.getValueType()
+                  : cast<StoreSDNode>(Op)->getValue().getValueType();
+  
+  SDValue StoreVal = isLoad ? DAG.getConstant(0, VT)
+                            : cast<StoreSDNode>(Op)->getValue();
+  
+  SDValue SDOps[] = {// The chain.
+                     LSNode->getChain(), 
+                     // The Value to store (if any), and the address.
+                     StoreVal, LSNode->getBasePtr(),
+                     // Is load?
+                     DAG.getConstant(isLoad, MVT::i1) };
+
+  SDValue Result  =
+    DAG.getMemIntrinsicNode(VTMISD::MemAccess, Op.getDebugLoc(),
+                            // Result and the chain.
+                            DAG.getVTList(VT, MVT::Other),
+                            // SDValue operands
+                            SDOps, array_lengthof(SDOps), 
+                            // Memory operands.
+                            LSNode->getMemoryVT(), LSNode->getMemOperand());
+
+  return isLoad ? Result : SDValue(Result.getNode(), 1);
 }
 
 SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
@@ -186,6 +221,10 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
     return SDValue();
+  case ISD::LOAD:
+    return LowerMemAccess(Op, DAG, true);
+  case ISD::STORE:
+    return LowerMemAccess(Op, DAG, false);
   case ISD::SUB:
     return LowerADDSUB(Op, DAG, DAG.getConstant(1, MVT::i1), true);
   case ISD::ADD:

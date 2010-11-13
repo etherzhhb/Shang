@@ -59,7 +59,7 @@ private:
   SDNode *SelectCast(SDNode *N, bool Signed = false);
   SDNode *SelectConstant(SDNode *N);
 
-  SDNode *SelectLoad(SDNode *N);
+  SDNode *SelectMemAccess(SDNode *N);
 
   const VInstrInfo &getInstrInfo() {
     return *static_cast<const VTargetMachine&>(TM).getInstrInfo();
@@ -129,12 +129,13 @@ SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
 }
 
 
-SDNode *VDAGToDAGISel::SelectLoad(SDNode *N) {
+SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
   MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
   MemOp[0] = cast<MemSDNode>(N)->getMemOperand();
 
-  SDValue Ops[] = { N->getOperand(1), N->getOperand(0) };
-  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpLoad, N->getVTList(),
+  SDValue Ops[] = { N->getOperand(1), N->getOperand(2), N->getOperand(3),
+                    N->getOperand(0) };
+  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpMemAccess, N->getVTList(),
                                      Ops, array_lengthof(Ops));
 
   cast<MachineSDNode>(Ret)->setMemRefs(MemOp, MemOp + 1);
@@ -147,10 +148,10 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
-  case VTMISD::RetValDAG:     return SelectRetVal(N);
-  case VTMISD::InArgDAG:      return SelectInArg(N);
+  case VTMISD::RetVal:     return SelectRetVal(N);
+  case VTMISD::InArg:      return SelectInArg(N);
 
-  case VTMISD::ADDDAG:        return SelectAdd(N);
+  case VTMISD::ADD:        return SelectAdd(N);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
 
@@ -162,7 +163,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::TRUNCATE:         return SelectCast(N);
   case ISD::Constant:         return SelectConstant(N);
 
-  case ISD::LOAD:             return SelectLoad(N);
+  case VTMISD::MemAccess:             return SelectMemAccess(N);
   }
 
   return SelectCode(N);

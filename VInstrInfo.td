@@ -22,23 +22,30 @@ include "VInstrFormats.td"
 //  Specific Node Definitions.
 //===----------------------------------------------------------------------===//
 def SDT_InArg : SDTypeProfile<1, 1, [SDTCisVT<1, i8>]>;
-def VTMInArg	:	SDNode<"VTMISD::InArgDAG", SDT_InArg, [SDNPHasChain]>;
+def VTMInArg	:	SDNode<"VTMISD::InArg", SDT_InArg, [SDNPHasChain]>;
 
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
-def VTMRetVal	:	SDNode<"VTMISD::RetValDAG", SDT_RetVal, [SDNPHasChain]>;
+def VTMRetVal	:	SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;
 
 def SDT_FnRet : SDTypeProfile<0, 0, []>;
-def VTMFnRet	:	SDNode<"VTMISD::RetDAG", SDT_FnRet,
+def VTMFnRet	:	SDNode<"VTMISD::Ret", SDT_FnRet,
 							[SDNPVariadic, SDNPHasChain]>;
 
 def SDT_ADDC : SDTypeProfile<2, 3, [
   SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisInt<0>,
   SDTCisVT<1, i1>,  SDTCisVT<4, i1>
 ]>;
-def VTMADD		:	SDNode<"VTMISD::ADDDAG", SDT_ADDC>;
+def VTMADD		:	SDNode<"VTMISD::ADD", SDT_ADDC>;
 
-def SDT_LdConst : SDTypeProfile<1, 1, [SDTCisInt<0>, SDTCisSameAs<0, 1>]>;
-def VTMLdConst	:	SDNode<"VTMISD::LdConst", SDT_LdConst>;
+
+def SDTMemAccess : SDTypeProfile<1, 3, [        
+  SDTCisPtrTy<1>, // Address
+  SDTCisVT<3, i1>, // Is load?
+  // The Store value type must have the same type as the load value.
+  SDTCisSameAs<0, 2>
+]>;
+def VTMMemAccess : SDNode<"VTMISD::MemAccess", SDTMemAccess,
+                    [SDNPHasChain, SDNPMayStore, SDNPMayLoad, SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
 // Immediates
@@ -92,10 +99,12 @@ def VOpSHL : InstActive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
                         "$dst = shl $src0, $src1", [], FUSHL>;
 }
 
-let canFoldAsLoad = 1,
-	mayLoad		  = 1 in
-def VOpLoad : InstActive<(outs dyn_rc:$dst), (ins ptr_rc:$addr),
-						  "$dst = load $addr", [], FUMemBus, 1>;
+let mayLoad		  = 1,
+	mayStore	  = 1 in
+def VOpMemAccess : InstActive<(outs dyn_rc:$dst),
+							  (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
+							  "$dst = memaccess $src, $addr, $isLoad",
+							  [], FUMemBus, 1>;
 
 
 //===----------------------------------------------------------------------===//
