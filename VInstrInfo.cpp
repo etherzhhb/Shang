@@ -30,10 +30,23 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   {}
 
 unsigned VTIDReader::getLatency(const VTMConfig &VTC) const {
-  VInstrInfo::FUTypes ResTy =getHWResType();
+  VFUs::FUTypes ResTy = getFUType();
 
-  if (ResTy == VInstrInfo::Trivial)
+  if (ResTy == VFUs::Trivial)
     return getTrivialLatency();
 
-  return VTC.getResType(ResTy)->getLatency();
+  return VTC.getFUDesc(ResTy)->getLatency();
+}
+
+
+unsigned VTIDReader::getPrebindFUId()  const {
+  // Dirty Hack: Bind all memory access to channel 0 at this moment.
+  if (Instr->getOpcode() == VTM::VOpMemAccess)
+    return 0;
+
+  return TrivialFUId;
+}
+
+bool llvm::VTIDReader::isFUBinded() const {
+  return getPrebindFUId() != TrivialFUId;
 }

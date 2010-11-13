@@ -125,6 +125,7 @@ add_llvm_target(VerilogBackend
   HWAtomInfo.cpp
   RTLWriter.cpp
   VBackend.cpp
+  VFunctionUnit.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
   VInstrInfo.cpp

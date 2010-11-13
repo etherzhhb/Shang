@@ -23,6 +23,8 @@
 #include "HWAtomPasses.h"
 #include "VTMConfig.h"
 #include "VTMFunctionInfo.h"
+#include "VInstrInfo.h"
+#include "VTM.h"
 
 #include "HWAtom.h"
 
@@ -55,7 +57,6 @@ struct HWAtomInfo : public MachineFunctionPass {
   LiveVariables *LiveVars;
   const TargetMachine &VTarget;
   const VTMConfig &VTC;
-  const TargetInstrInfo &TII;
 
   MachineRegisterInfo *MRI;
 
@@ -357,9 +358,9 @@ void HWAtomInfo::analyzeOperands(const MachineInstr *MI,
 HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   assert(!InstToHWAtoms.count(MI) && "MI exist!");
 
-  VTIDReader VTID(MI->getDesc());
+  VTIDReader VTID(MI);
 
-  VInstrInfo::FUTypes ResTy = VTID.getHWResType();
+  VFUs::FUTypes ResTy = VTID.getFUType();
   
   if (VTID->isTerminator())
     return buildExitRoot(MI);    
@@ -370,15 +371,18 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
 
   unsigned Latency = 0;
 
-  if (ResTy == VInstrInfo::Trivial)
+  if (VTID.hasTrivialFU())
     Latency = VTID.getTrivialLatency();
   else
-    Latency = VTC.getResType(ResTy)->getLatency();
+    Latency = VTC.getFUDesc(ResTy)->getLatency();
+
+  unsigned FUId = VTID.getPrebindFUId();
+
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
   HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
-                                           Latency, ++InstIdx);
+                                           Latency, ++InstIdx, FUId);
   
   if (Defs.empty())
     DetachNodes.push_back(A);
@@ -388,13 +392,12 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
          E = Defs.end(); I != E; ++I) {
       const MachineOperand *Op = *I;
       if (LiveVars->isLiveOut(Op->getReg(), *MBB)) {
-        // If the node defines any live out register, it may be a detach dode.
+        // If the node defines any live out register, it may be a detach node.
         DetachNodes.push_back(A);
         break;
       }
     }
   }
-    
 
   return A;
 }
@@ -410,20 +413,22 @@ HWAtom *HWAtomInfo::buildExitRoot(MachineInstr *MI) {
   analyzeOperands(MI, Deps, Defs);
 
   HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
-                                           0, ++InstIdx);
+                                           0, ++InstIdx, VTIDReader::TrivialFUId);
   return A;
 }
 
 FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
   // FIXME: check if MBB have self loop.
-  FSMState *State =  new (HWAtomAllocator) FSMState(VTarget, MBB, false, getTotalCycle(),
+  FSMState *State =  new (HWAtomAllocator) FSMState(VTarget, MBB, false,
+                                                    getTotalCycle(),
                                                     ++InstIdx);
 
   MachBBToStates.insert(std::make_pair(MBB, State));
   DetachNodes.clear();
 
   // Create a dummy entry node.
-  State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx));
+  State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx,
+                 VTIDReader::TrivialFUId));
   
   for (MachineBasicBlock::iterator BI = MBB->begin(), BE = MBB->end();
       BI != BE; ++BI) {
@@ -453,7 +458,7 @@ void HWAtomInfo::scheduleState(FSMState *State) {
 
 HWAtomInfo::HWAtomInfo(const TargetMachine &TM)
   : MachineFunctionPass(ID), LI(0), LiveVars(0), VTarget(TM),
-  VTC(VTarget.getSubtarget<VTMConfig>()), MRI(0), TII(*TM.getInstrInfo()),
+  VTC(VTarget.getSubtarget<VTMConfig>()), MRI(0),
   totalCycle(1), InstIdx(0)
 {}
 

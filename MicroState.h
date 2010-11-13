@@ -28,7 +28,7 @@ namespace llvm {
 class ucOpIterator;
 class ucState;
 
-class BundleToken {
+class MetaToken {
 protected:
   const MDNode *TokenNode;
 
@@ -50,8 +50,8 @@ public:
     tokenWriteReg = VTM::VOpWriteReg
   };
 
-  explicit BundleToken() : TokenNode(0) {}
-  explicit BundleToken(const MDNode *N) : TokenNode(N) {}
+  explicit MetaToken() : TokenNode(0) {}
+  explicit MetaToken(const MDNode *N) : TokenNode(N) {}
 
   bool Verify() const { return TokenNode != 0; }
 
@@ -59,7 +59,10 @@ public:
   MDNode *operator ->() const { return const_cast<MDNode*>(TokenNode); }
 
   unsigned getTag() const {  return getUnsignedField(0); }
-  unsigned getId() const { return getUnsignedField(1); }
+  unsigned getId() const { 
+    assert((isInstr() || isDefReg()) && "Bad token type!");
+    return getUnsignedField(1);
+  }
 
   bool isDefWire() const;
   bool isReadWire() const;
@@ -68,7 +71,10 @@ public:
 
   uint64_t getWireNum() const {
     assert((isDefWire() || isReadWire() || isDefReg()) && "Bad token type!");
-    return getUInt64Field(2);
+    
+    if (isDefReg()) return getUInt64Field(2);
+
+    return getUInt64Field(1);
   }
 
   std::string getWireName() const {
@@ -78,12 +84,12 @@ public:
 
   uint64_t getBitWidth() const {
     assert(isDefWire() && "Bad token type!");
-    return getUInt64Field(3);
+    return getUInt64Field(2);
   }
 
-  VInstrInfo::FUTypes getResType() const {
+  unsigned getFUType() const {
     assert(isInstr() && "Bad token type!");
-    return (VInstrInfo::FUTypes)getUInt64Field(1);
+    return getUInt64Field(2);
   }
 
   unsigned getOpcode() const {
@@ -91,15 +97,32 @@ public:
     return getUInt64Field(3);
   }
 
+  unsigned getFUId() const {
+    assert(isInstr() && "Bad token type!");
+    return getUInt64Field(4);
+  }
+
   void print(raw_ostream &OS) const;
   void dump() const;
+
+  // Helper functions to build meta operand and meta opcode.
+  static MDNode *createDefWire(uint64_t WireNum, unsigned BitWidth,
+                               LLVMContext &Context);
+
+  static MDNode *createReadWire(uint64_t WireNum, LLVMContext &Context);
+
+  static MDNode *createInstr(unsigned OpId, const MachineInstr *Instr,
+                             unsigned FUId, LLVMContext &Context);
+
+  static MDNode *createDefReg(unsigned OpId, uint64_t WireNum,
+                              LLVMContext &Context);
 };
 
 class ucOp {
 public:
   typedef MachineInstr::mop_iterator op_iterator;
 private:
-  BundleToken Token;
+  MetaToken Token;
   // iterator op begin and op end.
   op_iterator rangeBegin, rangeEnd;
 
@@ -128,7 +151,12 @@ public:
     return VTM::VOpWriteReg;
   }
 
-  const BundleToken &getOpCodeMD() const { return Token; }
+  const MetaToken &getOpCodeMD() const { return Token; }
+
+  unsigned getFUId() const {
+    assert(Token.isInstr() && "Bad token type!");
+    return Token.getFUId();
+  }
 
   bool haveDataPath() const;
 

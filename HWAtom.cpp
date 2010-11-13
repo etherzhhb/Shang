@@ -23,7 +23,6 @@
 #include "HWAtom.h"
 #include "VTargetMachine.h"
 
-#include "llvm/Metadata.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -87,52 +86,6 @@ struct MicroStateBuilder {
     }
   }
 
-  Constant *getTagConstant(unsigned TAG) {
-    return ConstantInt::get(Type::getInt8Ty(VMContext), TAG);
-  }
-
-  Constant *getOpId() {
-    return ConstantInt::get(Type::getInt8Ty(VMContext), ++OpId);
-  }
-
-  MDNode *createDefWire(uint64_t WireNum, unsigned BitWidth) {
-    Value *Elts[] = {
-      getTagConstant(BundleToken::tokenDefWire), getOpId(),
-      ConstantInt::get(Type::getInt32Ty(VMContext), WireNum),
-      ConstantInt::get(Type::getInt8Ty(VMContext), BitWidth)
-    };
-
-    return MDNode::get(VMContext, Elts, 4);
-  }
-
-  MDNode *createReadWire(uint64_t WireNum) {
-    Value *Elts[] = {
-      getTagConstant(BundleToken::tokenReadWire), getOpId(),
-      ConstantInt::get(Type::getInt32Ty(VMContext), WireNum)
-    };
-
-    return MDNode::get(VMContext, Elts, 3);
-  }
-
-  MDNode *createInstr(const TargetInstrDesc &TID) {
-    Value *Elts[] = {
-      getTagConstant(BundleToken::tokenInstr), getOpId(),
-      ConstantInt::get(Type::getInt32Ty(VMContext), VTIDReader(TID).getHWResType()),
-      ConstantInt::get(Type::getInt32Ty(VMContext), TID.Opcode)
-    };
-
-    return MDNode::get(VMContext, Elts, 4);
-  }
-
-  MDNode *createDefReg(uint64_t WireNum) {
-    Value *Elts[] = {
-      getTagConstant(BundleToken::tokenWriteReg), getOpId(),
-      ConstantInt::get(Type::getInt32Ty(VMContext), WireNum)
-    };
-
-    return MDNode::get(VMContext, Elts, 3);
-  }
-
   DefVector &getDefsToEmitAt(unsigned Slot) {
     return DefToEmit[Slot - State.getStartSlot()];
   }
@@ -157,11 +110,12 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
        E = Atoms.end(); I !=E; ++I) {
     HWAtom *A = *I;
     MachineInstr *Inst = A->getInst();
-    assert(Inst && "Inst can not be null!");
-    const TargetInstrDesc &TID = Inst->getDesc();
 
-    // Add the opcode metadata.
-    Builder.addMetadata(createInstr(TID));
+    assert(Inst && "Inst can not be null!");
+    VTIDReader VTID(Inst);
+
+    // Add the opcode metadata and the function unit id.
+    Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUId(), VMContext));
     SmallVector<MachineOperand*, 8> Ops(Inst->getNumOperands());
     
     // Remove all operand of Instr.
@@ -173,7 +127,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     }
 
     unsigned EmitSlot = A->getSlot(), WriteSlot = A->getFinSlot(), ReadSlot = EmitSlot;
-    bool isReasAtEmit = VTIDReader(Inst->getDesc()).isReadAtEmit();
+    bool isReasAtEmit = VTID.isReadAtEmit();
 
     // We can not write the value to a register at the same moment we emit it.
     // Unless we read at emit.
@@ -212,7 +166,9 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
         // Do not emit define unless it not killed in the current state.
         // Emit a wire define instead.
         EVT VT = *MRI.getRegClass(RegNo)->vt_begin();
-        Builder.addMetadata(createDefWire(WireNum, VT.getSizeInBits()));
+        Builder.addMetadata(MetaToken::createDefWire(WireNum,
+                                                     VT.getSizeInBits(),
+                                                     VMContext));
         ++WireNum;
         continue;
       }
@@ -237,7 +193,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
       // Now we emit an operation while the value are computing, just read
       // the value from a wire.
       WDef.applyKilled(MO->isKill());
-      Builder.addMetadata(createReadWire(WDef.WireNum));
+      Builder.addMetadata(MetaToken::createReadWire(WDef.WireNum, VMContext));
     }
   }
 
@@ -259,7 +215,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     if (MO->isDead()) continue;
     
     // Export the register.
-    Builder.addMetadata(createDefReg(WD->WireNum));
+    Builder.addMetadata(MetaToken::createDefReg(++OpId, WD->WireNum, VMContext));
     // The def operands are written at the same time that the use operands
     // are read.
     MO->setIsEarlyClobber();
@@ -364,8 +320,9 @@ void HWCtrlDep::print(raw_ostream &OS) const {
 void HWValDep::print(raw_ostream &OS) const {
 }
 
-HWAtom::HWAtom(MachineInstr *MI, unsigned short latancy, unsigned short Idx)
-  : Latancy(latancy), SchedSlot(0), InstIdx(Idx), MInst(MI) {}
+HWAtom::HWAtom(MachineInstr *MI, unsigned short latancy, unsigned short Idx,
+               unsigned fuid)
+  : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUId(fuid), MInst(MI) {}
 
 void HWAtom::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
@@ -386,23 +343,31 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 }
 
 unsigned HWAtom::getFUClass() const {
-  if (MInst)
-    return MInst->getOpcode();
+  if (MachineInstr *Instr = getInst())
+    return VTIDReader(Instr).getFUType();
 
-  return ~0;
+  return VFUs::Trivial;
 }
 
 void HWAtom::print(raw_ostream &OS) const {
+  MachineInstr *Instr = getInst();
+  VTIDReader VTID(Instr);
+
   OS << "[" << getIdx() << "] ";
-  
-  if (MachineInstr *Instr = getInst()) {
+
+  if (Instr) {
     OS << Instr->getDesc().getName() << '\t';
-    OS << " Res: " << VTIDReader(Instr->getDesc()).getHWResType();
+    OS << " Res: " << VTID.getFUType();
     DEBUG(OS << '\n' << *Instr);
   } else
     OS << "null";
 
-  OS << " At slot: " << getSlot();
+  if (Instr && !VTID.hasTrivialFU()
+      && getFUId() != VTIDReader::TrivialFUId)
+    OS << "\nFUId:" << getFUId();
+
+  
+  OS << "\nAt slot: " << getSlot();
 }
 
 HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)

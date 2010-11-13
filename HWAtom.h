@@ -187,6 +187,7 @@ private:
   // TODO: typedef SlotType
   unsigned short SchedSlot;
   unsigned short InstIdx;
+  unsigned FUId;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<HWEdge*, 4> Deps;
@@ -215,18 +216,20 @@ protected:
   virtual ~HWAtom();
 
 public:
+  static const unsigned short MaxSlot = ~0 >> 1;
+
   template <class It>
   HWAtom(MachineInstr *I, It depbegin, It depend, unsigned short latancy,
-         unsigned short Idx)
-    : Latancy(latancy), SchedSlot(0), InstIdx(Idx), Deps(depbegin, depend),
-      MInst(I) {
+         unsigned short Idx, unsigned fuid)
+    : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUId(fuid),
+    Deps(depbegin, depend), MInst(I) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       (*I)->addToUseList(this);
   }
 
-  HWAtom(MachineInstr *I, unsigned short latancy, unsigned short Idx);
+  HWAtom(MachineInstr *I, unsigned short latancy, unsigned short Idx,
+         unsigned fuid);
 
-  static const unsigned short MaxSlot = ~0 >> 1;
   unsigned short getIdx() const { return InstIdx; }
 
   // Add a new depencence edge to the atom.
@@ -335,6 +338,7 @@ public:
 
   const MachineInstr *getMachineInstr() const { return MInst; }
   unsigned getFUClass() const;
+  unsigned getFUId() const { return FUId; }
 
   // Get the latency of this atom
   unsigned getLatency() const { return Latancy; }

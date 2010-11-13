@@ -423,7 +423,7 @@ unsigned RTLWriter::getOperandWitdh(MachineOperand &Operand) {
     return RC->vt_begin()->getSizeInBits();
   }
   case MachineOperand::MO_Metadata: {
-    BundleToken MetaOp(Operand.getMetadata());
+    MetaToken MetaOp(Operand.getMetadata());
     return MetaOp.getBitWidth(); 
   }
   }
@@ -438,7 +438,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     OS << "reg" << Operand.getReg();
     return;
   case MachineOperand::MO_Metadata: {
-    BundleToken MetaOp(Operand.getMetadata());
+    MetaToken MetaOp(Operand.getMetadata());
     assert((MetaOp.isDefWire() || MetaOp.isReadWire()) && "Bad operand!");
     
     std::string WireName = MetaOp.getWireName();

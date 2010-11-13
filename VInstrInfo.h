@@ -15,9 +15,10 @@
 #ifndef VINSTRUCTIONINFO_H
 #define VINSTRUCTIONINFO_H
 
-#include "llvm/Target/TargetInstrInfo.h"
+#include "VFunctionUnit.h"
 #include "VRegisterInfo.h"
 
+#include "llvm/Target/TargetInstrInfo.h"
 namespace llvm {
 class VTMConfig;
 class TargetData;
@@ -26,20 +27,6 @@ class TargetLowering;
 class VInstrInfo : public TargetInstrInfoImpl {
   const VRegisterInfo RI;
 public:
-  enum FUTypes {
-    Trivial = 0,
-    MemoryBus = 1,
-    SHL = 2,
-    ASR = 3,
-    LSR = 4,
-    AddSub = 5,
-    Mult = 6,
-
-    FirstResourceType = Trivial,
-    LastResourceType = Mult
-  };
-
-
   VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
@@ -47,7 +34,6 @@ public:
   /// always be able to get register info as well (through this method).
   virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
 };
-
 
 class VTIDReader {
   enum TSFlagsBitFields {
@@ -61,29 +47,38 @@ class VTIDReader {
     ReadAtEmitShiftAmount = 0x3
   };
 
-  const TargetInstrDesc &TID;
+  const MachineInstr *Instr;
 public:
-  explicit VTIDReader(const TargetInstrDesc &T) : TID(T) {}
+  // Note that passing null to I is allow.
+  explicit VTIDReader(const MachineInstr *I) : Instr(I) {}
 
-  inline VInstrInfo::FUTypes getHWResType() const {
-    return (VInstrInfo::FUTypes)
-      ((TID.TSFlags >> ResTypeShiftAmount) & ResTypeMask);
+  inline VFUs::FUTypes getFUType() const {
+    return (VFUs::FUTypes)
+      ((Instr->getDesc().TSFlags >> ResTypeShiftAmount) & ResTypeMask);
   }
+
+  bool hasTrivialFU() const { return getFUType() == VFUs::Trivial; }
 
   inline unsigned getTrivialLatency() const {
-    assert(getHWResType() == VInstrInfo::Trivial && "Bad resource Type!");
-    return ((TID.TSFlags >> TrivialLatencyShiftAmount) & TrivialLatencyMask);
+    assert(getFUType() == VFUs::Trivial && "Bad resource Type!");
+    return ((Instr->getDesc().TSFlags >> TrivialLatencyShiftAmount)
+             & TrivialLatencyMask);
   }
-  
+
   // Get the latency of a specific type of Instruction.
   unsigned getLatency(const VTMConfig &VTC) const;
 
   inline bool isReadAtEmit() const {
-    return TID.TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount);
+    return Instr->getDesc().TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount);
   }
 
-  const TargetInstrDesc* operator->() const { return &TID; }
+  const TargetInstrDesc* operator->() const { return &Instr->getDesc(); }
 
+  // Function unit id.
+  static const unsigned TrivialFUId = ~0;
+
+  unsigned getPrebindFUId() const;
+  bool isFUBinded() const;
 };
 
 } // end namespace llvm

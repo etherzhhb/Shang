@@ -14,8 +14,12 @@
 #define DEBUG_TYPE "vtmconfig"
 #include "VTMConfig.h"
 
+#include "VFunctionUnit.h"
+
 #define VTMSubtarget VTMConfig
 #include "VGenSubtarget.inc"
+
+#include "VTM.h"
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
@@ -41,14 +45,6 @@ static cl::opt<std::string>
 ConfigScriptName("vbe-res-config-script",
                   cl::desc("vbe - The resource config script."));
 
-//===----------------------------------------------------------------------===//
-/// Hardware resource.
-void HWResType::print(raw_ostream &OS) const {
-  // OS << "Resource: " << Name << '\n';
-  OS.indent(2) << "TotalNum: " << TotalRes << '\n';
-  OS.indent(2) << "Latency: " << Latency << '\n';
-  OS.indent(2) << "StartInterval: " << StartInt << '\n';
-}
 
 //===----------------------------------------------------------------------===//
 /// Resource config implement
@@ -56,8 +52,7 @@ void HWResType::print(raw_ostream &OS) const {
 template<class BinOpResType>
 void VTMConfig::setupBinOpRes(unsigned latency, unsigned startInt,
                                    unsigned totalRes, unsigned maxBitWidth) {
-  ResSet[(unsigned)BinOpResType::getType()
-          - (unsigned)VInstrInfo::FirstResourceType]
+  ResSet[BinOpResType::getType() - VFUs::FirstFUType]
     = new BinOpResType(latency, startInt, totalRes, maxBitWidth);
 }
 
@@ -65,9 +60,8 @@ void VTMConfig::setupBinOpRes(unsigned latency, unsigned startInt,
 void VTMConfig::setupMemBus(unsigned latency, unsigned startInt,
                                  unsigned totalRes, unsigned addrWidth,
                                  unsigned dataWidth) {
-  ResSet[(unsigned)VInstrInfo::MemoryBus
-          - (unsigned)VInstrInfo::FirstResourceType]
-    = new HWMemBus(latency, startInt, totalRes, addrWidth, dataWidth);
+  ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
+    = new VFUMemBus(latency, startInt, totalRes, addrWidth, dataWidth);
 }
 
 void VTMConfig::initializeTarget() {
@@ -80,11 +74,11 @@ void VTMConfig::initializeTarget() {
   luabind::module(ScriptState)[
     luabind::class_<VTMConfig>("VSubtarget")
       .def("setupMemBus", &VTMConfig::setupMemBus)
-      .def("setupSHL",    &VTMConfig::setupBinOpRes<HWSHL>)
-      .def("setupASR",    &VTMConfig::setupBinOpRes<HWASR>)
-      .def("setupLSR",    &VTMConfig::setupBinOpRes<HWLSR>)
-      .def("setupAddSub", &VTMConfig::setupBinOpRes<HWAddSub>)
-      .def("setupMult",   &VTMConfig::setupBinOpRes<HWMult>)
+      .def("setupSHL",    &VTMConfig::setupBinOpRes<VFUSHL>)
+      .def("setupASR",    &VTMConfig::setupBinOpRes<VFUASR>)
+      .def("setupLSR",    &VTMConfig::setupBinOpRes<VFULSR>)
+      .def("setupAddSub", &VTMConfig::setupBinOpRes<VFUAddSub>)
+      .def("setupMult",   &VTMConfig::setupBinOpRes<VFUMult>)
   ];
 
   luabind::globals(ScriptState)["DesignConfig"] = this;
@@ -111,7 +105,7 @@ VTMConfig::VTMConfig(const std::string &TT,
   // Parse features string.
   ParseSubtargetFeatures(FS, CPU);
 
-  for (size_t i = 0, e = (size_t)VInstrInfo::LastResourceType; i != e; ++i)
+  for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
     ResSet[i] = 0;
 
   // TODO: Parse lua script here.
