@@ -360,7 +360,7 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
 
   VTIDReader VTID(MI);
 
-  VFUs::FUTypes ResTy = VTID.getFUType();
+  VFUs::FUTypes FUTy = VTID.getFUType();
   
   if (VTID->isTerminator())
     return buildExitRoot(MI);    
@@ -374,10 +374,12 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   if (VTID.hasTrivialFU())
     Latency = VTID.getTrivialLatency();
   else
-    Latency = VTC.getFUDesc(ResTy)->getLatency();
+    Latency = VTC.getFUDesc(FUTy)->getLatency();
 
   unsigned FUId = VTID.getPrebindFUId();
-
+  // Remember the allocated function unit.
+  if (VTID.isFUBinded())
+    FuncInfo->rememberAllocatedFU(FUTy, FUId);
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.

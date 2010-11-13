@@ -30,7 +30,10 @@ namespace VFUs {
 
     FirstFUType = Trivial,
     LastFUType = Mult,
-    NumFUs = LastFUType - FirstFUType + 1
+    NumFUs = LastFUType - FirstFUType + 1,
+    // Helper enumeration value, just for internal use as a flag to indicate
+    // all kind of function units are selected.
+    AllFUType = LastFUType + 1
   };
 }
 
