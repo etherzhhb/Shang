@@ -53,7 +53,7 @@ public:
   void initializeTarget();
 
   void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
-    unsigned addrWidth, unsigned dataWidth);
+                   unsigned addrWidth, unsigned dataWidth);
 
   template<class BinOpResType>
   void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes,

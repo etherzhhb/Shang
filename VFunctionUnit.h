@@ -14,6 +14,7 @@
 #ifndef VTM_FUNCTION_UNIT_H
 #define VTM_FUNCTION_UNIT_H
 
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -90,7 +91,28 @@ public:
   }
 
   static std::string getTypeName() { return "MemoryBus"; }
-  static unsigned getType() { return VFUs::MemoryBus; }
+  static VFUs::FUTypes getType() { return VFUs::MemoryBus; }
+
+  // Signal names of the function unit.
+  inline static std::string getAddrBusName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "addr";
+  }
+
+  inline static std::string getInDataBusName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "in";
+  }
+
+  inline static std::string getOutDataBusName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "out";
+  }
+
+  inline static std::string getWriteEnableName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "we";
+  }
+
+  inline static std::string getEnableName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "en";
+  }
 };
 
 class VFUBinOpResType : public VFUDesc {
@@ -130,7 +152,7 @@ public: \
   return A->getType() == VFUs::##Name; \
 } \
   static std::string getTypeName() { return #Name; } \
-  static unsigned getType() { return VFUs::##Name; } \
+  static VFUs::FUTypes getType() { return VFUs::##Name; } \
 }
 
 BINOPRESTYPECLASS(Mult);

@@ -181,7 +181,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(createHWAtonInfoPass(*this));
 
-  PM.add(createRTLWriterPass(Out));
+  PM.add(createRTLWriterPass(*this, Out));
 
   return false;
 }

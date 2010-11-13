@@ -24,6 +24,8 @@ class LLVMContext;
 class Pass;
 class raw_ostream;
 class TargetMachine;
+struct VTargetMachine;
+
 // Simple As Soon As Possible Scheduler
 Pass *createASAPSchedulePass();
 
@@ -52,7 +54,7 @@ Pass *createHWAtonInfoPass(const TargetMachine &TM);
 Pass *createVlangPass();
 
 // RTL writer.
-Pass *createRTLWriterPass(raw_ostream &O);
+Pass *createRTLWriterPass(VTargetMachine &TM, raw_ostream &O);
 
 // Testbench writer.
 Pass *createTestBenchWriterPass(raw_ostream &O);

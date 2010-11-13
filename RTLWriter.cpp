@@ -23,6 +23,7 @@
 #include "VerilogAST.h"
 #include "VTargetMachine.h"
 #include "VTMFunctionInfo.h"
+#include "VFunctionUnit.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/StringExtras.h"
@@ -43,11 +44,14 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+
 namespace {
 class RTLWriter : public MachineFunctionPass {
   raw_ostream &Out;
   VLang *vlang;
   MachineFunction *MF;
+  VTargetMachine &VTM;
+  const VTMConfig &VTC;
   VTMFunctionInfo *FuncInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
@@ -58,6 +62,11 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitFunctionSignature();
   void emitCommonPort();
+  
+  /// emitAllocatedFUs - Set up a vector for allocated resources, and
+  /// emit the ports and register, wire and datapath for them.
+  void emitAllocatedFUs();
+
   void emitBasicBlock(MachineBasicBlock &MBB);
   void emitAllRegister();
   void emitRegClassRegs(const TargetRegisterClass *RC, unsigned BitWidth);
@@ -120,8 +129,10 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  explicit RTLWriter(raw_ostream &O = nulls()) : MachineFunctionPass(ID),
+  RTLWriter(VTargetMachine &TM, raw_ostream &O)
+    : MachineFunctionPass(ID), VTM(TM), VTC(TM.getSubtarget<VTMConfig>()),
     Out(O), vlang(0), VM(0), TotalFSMStatesBit(0), CurFSMStateNum(0) {}
+  
   ~RTLWriter();
 
   VASTModule *getVerilogModule() const { return VM; }
@@ -177,13 +188,15 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
   vlang->end(VM->getControlBlockBuffer(8));
   vlang->end(VM->getControlBlockBuffer(6));
+  
+  emitAllRegister();
+  emitAllocatedFUs();
 
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock &BB = *I;
     emitBasicBlock(BB);
   }
 
-  emitAllRegister();
 
 
   // Write buffers to output
@@ -322,6 +335,56 @@ void RTLWriter::emitCommonPort() {
   VM->addInputPort("rstN", 1);
   VM->addInputPort("start", 1);
   VM->addOutputPort("fin", 1);
+}
+
+void RTLWriter::emitAllocatedFUs() {
+  // Dirty Hack: only Memory bus supported at this moment.
+  typedef VTMFunctionInfo::const_id_iterator id_iterator;
+
+  VFUMemBus *MemBus = VTC.getFUDesc<VFUMemBus>();
+
+  for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
+       E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+    // FIXME: In fact, *I return the FUId instead of FUNum. 
+    unsigned FUNum = *I;
+    // Address port.
+    VM->addOutputPort(VFUMemBus::getAddrBusName(FUNum),
+                      MemBus->getAddrWidth());
+
+    // Data ports.
+    VM->addInputPort(VFUMemBus::getInDataBusName(FUNum),
+                     MemBus->getDataWidth());
+    VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
+                      MemBus->getDataWidth());
+
+    // Control ports.
+    VM->addOutputPort(VFUMemBus::getEnableName(FUNum), 1);
+    VM->addOutputPort(VFUMemBus::getWriteEnableName(FUNum), 1);
+  }
+  
+}
+
+void RTLWriter::emitAllRegister() {
+  emitRegClassRegs(VTM::DR1RegisterClass, 1);
+  emitRegClassRegs(VTM::DR8RegisterClass, 8);
+  emitRegClassRegs(VTM::DR16RegisterClass, 16);
+  emitRegClassRegs(VTM::DR32RegisterClass, 32);
+  emitRegClassRegs(VTM::DR64RegisterClass, 64);
+}
+
+void RTLWriter::emitRegClassRegs(const TargetRegisterClass *RC,
+                                 unsigned BitWidth) {
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const std::vector<unsigned> &Regs = MRI.getRegClassVirtRegs(RC);
+  for (std::vector<unsigned>::const_iterator I = Regs.begin(), E = Regs.end();
+      I != E; ++I) {
+    unsigned RegNum = *I;
+
+    // Do not emit dead registers.
+    if (MRI.use_empty(RegNum)) continue;
+    
+    VM->addRegister("reg" + utostr(RegNum), BitWidth);
+  }
 }
 
 RTLWriter::~RTLWriter() {}
@@ -561,31 +624,6 @@ void RTLWriter::emitCast(ucOp &OpCast) {
   }
 }
 
-void RTLWriter::emitAllRegister() {
-  emitRegClassRegs(VTM::DR1RegisterClass, 1);
-  emitRegClassRegs(VTM::DR8RegisterClass, 8);
-  emitRegClassRegs(VTM::DR16RegisterClass, 16);
-  emitRegClassRegs(VTM::DR32RegisterClass, 32);
-  emitRegClassRegs(VTM::DR64RegisterClass, 64);
-}
-
-void RTLWriter::emitRegClassRegs(const TargetRegisterClass *RC,
-                                 unsigned BitWidth) {
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  const std::vector<unsigned> &Regs = MRI.getRegClassVirtRegs(RC);
-  for (std::vector<unsigned>::const_iterator I = Regs.begin(), E = Regs.end();
-      I != E; ++I) {
-    unsigned RegNum = *I;
-
-    // Do not emit dead registers.
-    if (MRI.use_empty(RegNum)) continue;
-    
-    VM->addRegister("reg" + utostr(RegNum), BitWidth);
-  }
-}
-
-static RegisterPass<RTLWriter> X("vbe-rtl", "vbe - Write HWAtom as RTL Verilog");
-
-Pass *llvm::createRTLWriterPass(raw_ostream &O) {
-  return new RTLWriter(O);
+Pass *llvm::createRTLWriterPass(VTargetMachine &TM, raw_ostream &O) {
+  return new RTLWriter(TM, O);
 }
