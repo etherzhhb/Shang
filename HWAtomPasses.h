@@ -48,7 +48,7 @@ Pass *createLocalLEAPass();
 Pass *createScalarStreamizationPass();
 
 // HWAtom
-Pass *createHWAtonInfoPass(const TargetMachine &TM);
+Pass *createHWAtonInfoPass(const VTargetMachine &TM);
 
 // Vlang
 Pass *createVlangPass();

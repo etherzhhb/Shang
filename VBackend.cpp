@@ -23,13 +23,33 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #include "HWAtomPasses.h"
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
+// Include the lua headers (the extern "C" is a requirement because we're
+// using C++ and lua has been compiled as C code)
+extern "C" {
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+}
+
+// This is the only header we need to include for LuaBind to work
+#include "luabind/luabind.hpp"
+
 using namespace llvm;
+
+//===----------------------------------------------------------------------===//
+static cl::opt<std::string>
+ConfigScriptName("vbe-res-config-script",
+                 cl::desc("vbe - The resource config script."));
+
+//===----------------------------------------------------------------------===//
 
 extern "C" void LLVMInitializeVerilogBackendTarget() { 
   // Register the target.
@@ -40,11 +60,18 @@ extern "C" void LLVMInitializeVerilogBackendTarget() {
 VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
                                const std::string &FS)
   : LLVMTargetMachine(T, TT),
+  // FIXME: Allow speicific data layout.
   DataLayout("e-p:64:64-i64:32-f64:32-n1:8:16:32:64"),
   Subtarget(TT, FS),
   TLInfo(*this),
   TSInfo(*this),
-  InstrInfo(DataLayout, TLInfo) {}
+  InstrInfo(DataLayout, TLInfo) {
+
+  for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
+    ResSet[i] = 0;
+  
+  initializeTarget();
+}
 
 bool VTargetMachine::addInstSelector(PassManagerBase &PM,
                                      CodeGenOpt::Level OptLevel) {
@@ -184,4 +211,55 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createRTLWriterPass(*this, Out));
 
   return false;
+}
+
+VTargetMachine::~VTargetMachine() {
+  for (iterator I = begin(), E = end(); I != E; ++I)
+    delete *I;
+}
+
+//===----------------------------------------------------------------------===//
+/// Resource config implement
+
+template<class BinOpResType>
+void VTargetMachine::setupBinOpRes(unsigned latency, unsigned startInt,
+                                   unsigned totalRes) {
+  ResSet[BinOpResType::getType() - VFUs::FirstFUType]
+    = new BinOpResType(latency, startInt, totalRes,
+                       // Dirty Hack.
+                       64);
+}
+
+
+void VTargetMachine::setupMemBus(unsigned latency, unsigned startInt,
+                                 unsigned totalRes) {
+  ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
+    = new VFUMemBus(latency, startInt, totalRes,
+                    DataLayout.getPointerSizeInBits(),
+                    // Dirty Hack.
+                    64);
+}
+
+void VTargetMachine::initializeTarget() {
+  std::string ErrMsg;
+
+  lua_State *ScriptState = lua_open();
+
+  luabind::open(ScriptState);
+
+  luabind::module(ScriptState)[
+    luabind::class_<VTargetMachine>("VTargetMachine")
+      .def("setupMemBus", &VTargetMachine::setupMemBus)
+      .def("setupSHL",    &VTargetMachine::setupBinOpRes<VFUSHL>)
+      .def("setupASR",    &VTargetMachine::setupBinOpRes<VFUASR>)
+      .def("setupLSR",    &VTargetMachine::setupBinOpRes<VFULSR>)
+      .def("setupAddSub", &VTargetMachine::setupBinOpRes<VFUAddSub>)
+      .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>)
+  ];
+
+  luabind::globals(ScriptState)["Config"] = this;
+
+  luaL_dofile(ScriptState, ConfigScriptName.c_str());
+
+  lua_close(ScriptState);
 }

@@ -18,15 +18,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "HWAtom.h"
+
 #include "ForceDirectedScheduling.h"
 //#include "MemDepAnalysis.h"
 #include "HWAtomPasses.h"
-#include "VTMConfig.h"
 #include "VTMFunctionInfo.h"
-#include "VInstrInfo.h"
+#include "VTargetMachine.h"
 #include "VTM.h"
 
-#include "HWAtom.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -55,8 +55,7 @@ struct HWAtomInfo : public MachineFunctionPass {
   // The loop Info
   MachineLoopInfo *LI;
   LiveVariables *LiveVars;
-  const TargetMachine &VTarget;
-  const VTMConfig &VTC;
+  const VTargetMachine &VTarget;
 
   MachineRegisterInfo *MRI;
 
@@ -104,7 +103,7 @@ struct HWAtomInfo : public MachineFunctionPass {
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo(const TargetMachine &TM);
+  HWAtomInfo(const VTargetMachine &TM);
 
   ~HWAtomInfo();
 
@@ -152,7 +151,7 @@ struct HWAtomInfo : public MachineFunctionPass {
 
 char HWAtomInfo::ID = 0;
 
-Pass *llvm::createHWAtonInfoPass(const TargetMachine &TM) {
+Pass *llvm::createHWAtonInfoPass(const VTargetMachine &TM) {
   return new HWAtomInfo(TM);
 }
 
@@ -374,7 +373,7 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   if (VTID.hasTrivialFU())
     Latency = VTID.getTrivialLatency();
   else
-    Latency = VTC.getFUDesc(FUTy)->getLatency();
+    Latency = VTarget.getFUDesc(FUTy)->getLatency();
 
   unsigned FUId = VTID.getPrebindFUId();
   // Remember the allocated function unit.
@@ -458,10 +457,9 @@ void HWAtomInfo::scheduleState(FSMState *State) {
   setTotalCycle(State->getEndSlot() + 1);
 }
 
-HWAtomInfo::HWAtomInfo(const TargetMachine &TM)
+HWAtomInfo::HWAtomInfo(const VTargetMachine &TM)
   : MachineFunctionPass(ID), LI(0), LiveVars(0), VTarget(TM),
-  VTC(VTarget.getSubtarget<VTMConfig>()), MRI(0),
-  totalCycle(1), InstIdx(0)
+  MRI(0), totalCycle(1), InstIdx(0)
 {}
 
 HWAtomInfo::~HWAtomInfo() {

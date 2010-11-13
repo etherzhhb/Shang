@@ -51,7 +51,6 @@ class RTLWriter : public MachineFunctionPass {
   VLang *vlang;
   MachineFunction *MF;
   VTargetMachine &VTM;
-  const VTMConfig &VTC;
   VTMFunctionInfo *FuncInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
@@ -130,8 +129,8 @@ public:
   //{
   static char ID;
   RTLWriter(VTargetMachine &TM, raw_ostream &O)
-    : MachineFunctionPass(ID), VTM(TM), VTC(TM.getSubtarget<VTMConfig>()),
-    Out(O), vlang(0), VM(0), TotalFSMStatesBit(0), CurFSMStateNum(0) {}
+    : MachineFunctionPass(ID), VTM(TM), Out(O), vlang(0), VM(0),
+    TotalFSMStatesBit(0), CurFSMStateNum(0) {}
   
   ~RTLWriter();
 
@@ -341,7 +340,7 @@ void RTLWriter::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VTMFunctionInfo::const_id_iterator id_iterator;
 
-  VFUMemBus *MemBus = VTC.getFUDesc<VFUMemBus>();
+  VFUMemBus *MemBus = VTM.getFUDesc<VFUMemBus>();
 
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {

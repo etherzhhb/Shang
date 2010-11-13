@@ -12,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "VInstrInfo.h"
+#include "VTargetMachine.h"
 #include "VTM.h"
-#include "VTMConfig.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -29,7 +29,7 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
   {}
 
-unsigned VTIDReader::getLatency(const VTMConfig &VTC) const {
+unsigned VTIDReader::getLatency(const VTargetMachine &VTC) const {
   VFUs::FUTypes ResTy = getFUType();
 
   if (ResTy == VFUs::Trivial)

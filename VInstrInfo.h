@@ -20,7 +20,6 @@
 
 #include "llvm/Target/TargetInstrInfo.h"
 namespace llvm {
-class VTMConfig;
 class TargetData;
 class TargetLowering;
 
@@ -66,7 +65,7 @@ public:
   }
 
   // Get the latency of a specific type of Instruction.
-  unsigned getLatency(const VTMConfig &VTC) const;
+  unsigned getLatency(const VTargetMachine &VTC) const;
 
   inline bool isReadAtEmit() const {
     return Instr->getDesc().TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount);

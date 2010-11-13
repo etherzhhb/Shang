@@ -79,7 +79,7 @@ class VFUMemBus : public VFUDesc {
     : VFUDesc(VFUs::MemoryBus, latency, startInt, totalRes),
     AddrWidth(addrWidth), DataWidth(dataWidth) {}
 
-  friend class VTMConfig;
+  friend struct VTargetMachine;
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
   unsigned getDataWidth() const { return DataWidth; }
@@ -145,7 +145,7 @@ class VFU##Name : public VFUBinOpResType { \
   : VFUBinOpResType(VFUs::##Name, latency, startInt, totalRes, \
   maxBitWidth) \
 {} \
-  friend class VTMConfig; \
+  friend struct VTargetMachine; \
 public: \
   static inline bool classof(const VFU##Name *A) { return true; } \
   static inline bool classof(const VFUDesc *A) { \

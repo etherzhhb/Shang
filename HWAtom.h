@@ -22,24 +22,22 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
-
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_os_ostream.h"
-
-#include "VTMConfig.h"
 
 #include <list>
 
 namespace llvm {
-class HWResType;
 class ForceDirectedSchedulingBase;
 class HWAtom;
 class FSMState;
+struct VTargetMachine;
 
 class MachineBasicBlock;
 class MachineInstr;
@@ -424,10 +422,10 @@ private:
   unsigned short II;
   const unsigned short startSlot;
   bool HaveSelfLoop;
-  const TargetMachine &TM;
+  const VTargetMachine &TM;
 
 public:
-  FSMState(const TargetMachine &Target, MachineBasicBlock *MachBB,
+  FSMState(const VTargetMachine &Target, MachineBasicBlock *MachBB,
            bool HaveSelfLoop, unsigned short StartSlot, unsigned short Idx)
     : TM(Target), MBB(MachBB), II(0), startSlot(StartSlot),
     HaveSelfLoop(HaveSelfLoop) {}
