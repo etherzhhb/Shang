@@ -540,7 +540,24 @@ struct DOTGraphTraits<FSMState*> : public DefaultDOTGraphTraits {
   /// edge, override this method.
   static std::string getEdgeAttributes(const HWAtom *Node,
                                        HWAtom::use_iterator EI) {
+    const HWAtom *Use = *EI;
+    HWEdge *UseEdge = Use->getEdgeFrom(Node);
+
+    switch (UseEdge->getEdgeType()) {
+    case HWEdge::edgeValDep:    return "";
+    case HWEdge::edgeMemDep:    return "color=blue,style=dashed";
+    case HWEdge::edgeCtrlDep:   return "color=green,style=dashed";
+    }
+
     return "";
+  }
+
+  static std::string getEdgeSourceLabel(const HWAtom *Node,
+                                        HWAtom::use_iterator EI) {
+    const HWAtom *Use = *EI;
+    HWEdge *UseEdge = Use->getEdgeFrom(Node);
+
+    return utostr(UseEdge->getLatency()) + ',' + utostr(UseEdge->getItDst());
   }
 
   std::string getNodeLabel(const HWAtom *Node, const FSMState *Graph) {
@@ -548,6 +565,11 @@ struct DOTGraphTraits<FSMState*> : public DefaultDOTGraphTraits {
     raw_string_ostream ss(Str);
     Node->print(ss);
     return ss.str();
+  }
+
+  static std::string getNodeAttributes(const HWAtom *Node,
+                                       const FSMState *Graph) {
+    return "shape=Mrecord";
   }
 };
 
