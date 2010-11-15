@@ -64,6 +64,7 @@ struct HWAtomInfo : public MachineFunctionPass {
   std::vector<HWAtom*> DetachNodes;
 
   // Total states
+  // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
   unsigned short InstIdx;
 

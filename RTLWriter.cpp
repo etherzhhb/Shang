@@ -179,6 +179,7 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   vlang->param(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
   vlang->matchCase(VM->getControlBlockBuffer(6), "state_idle");
   // Idle state is always ready.
+  // FIXME: The module may finished at the first cycle.
   VM->getControlBlockBuffer(8) << "fin <= 1'h0;\n";
   vlang->ifBegin(VM->getControlBlockBuffer(8), "start");
   // The module is busy now
@@ -188,6 +189,9 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   //
   vlang->ifElse(VM->getControlBlockBuffer(8));
   VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
+  // Emit function unit control at idle state, simply disable all
+  // function units.
+  emitFUCtrl(0);
   vlang->end(VM->getControlBlockBuffer(8));
   vlang->end(VM->getControlBlockBuffer(6));
   
