@@ -39,14 +39,10 @@ unsigned VTIDReader::getLatency(const VTargetMachine &VTC) const {
 }
 
 
-unsigned VTIDReader::getPrebindFUId()  const {
+FuncUnitId VTIDReader::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (Instr->getOpcode() == VTM::VOpMemAccess)
-    return 0;
+    return FuncUnitId(VFUs::MemoryBus, 0);
 
-  return TrivialFUId;
-}
-
-bool llvm::VTIDReader::isFUBinded() const {
-  return getPrebindFUId() != TrivialFUId;
+  return FuncUnitId();
 }

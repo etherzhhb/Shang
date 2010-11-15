@@ -109,6 +109,7 @@ bool ucOp::haveDataPath() const {
   case VTM::VOpRetVal:
   case VTM::VOpRet:
   case VTM::VOpWriteReg:
+  case VTM::VOpMemAccess:
     return false;
   }
 
@@ -171,6 +172,7 @@ MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr *Instr,
 
 MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum,
                                          LLVMContext &Context) {
+  assert(WireNum != 0 && "Bad wire number!");
   Value *Elts[] = {
     getTagConstant(MetaToken::tokenReadWire, Context),
     ConstantInt::get(Type::getInt32Ty(Context), WireNum)

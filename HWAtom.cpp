@@ -21,6 +21,7 @@
 #include "MicroState.h"
 #include "ForceDirectedScheduling.h"
 #include "HWAtom.h"
+#include "VTMFunctionInfo.h"
 #include "VTargetMachine.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -47,23 +48,41 @@ struct MicroStateBuilder {
   const TargetMachine &Target;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
+  VFunInfo &VFI;
   
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
+
     unsigned WireNum;
+    const char *SymbolName;
     PointerIntPair<MachineOperand*, 1, bool> Op;
     unsigned EmitSlot;
     unsigned WriteSlot;
 
-    WireDef(unsigned wireNum, MachineOperand *op, unsigned emitSlot,
-            unsigned writeSlot)
-      : WireNum(wireNum), Op(op, false), EmitSlot(emitSlot),
+    WireDef(unsigned wireNum, const char *Symbol, MachineOperand *op,
+            unsigned emitSlot, unsigned writeSlot)
+      : WireNum(wireNum), SymbolName(Symbol), Op(op, false), EmitSlot(emitSlot),
       WriteSlot(writeSlot) {}
 
+    bool isSymbol() const { return SymbolName != 0; }
     bool isKilled() const { return Op.getInt(); }
     void applyKilled(bool SetKilled) { Op.setInt(Op.getInt() || SetKilled); }
     MachineOperand *getOperand() const { return Op.getPointer(); }
   };
+
+  inline WireDef createWireDef(unsigned WireNum, HWAtom *A,
+                               MachineOperand *MO, unsigned OpNum,
+                               unsigned emitSlot, unsigned writeSlot){
+    const char *Symbol = 0;
+    if (A->getFUId().isBinded()) {
+      assert(A->getFUType() == VFUs::MemoryBus
+             && "Only support Membus at this moment!");
+      assert(OpNum == 0 && "Bad Operand!");
+      Symbol = VFI.allocateSymbol(VFUMemBus::getInDataBusName(A->getFUNum()));
+    }
+    
+    return WireDef(WireNum, Symbol, MO, emitSlot, writeSlot);
+  }
   
   typedef std::vector<WireDef*> DefVector;
   std::vector<DefVector> DefToEmit;
@@ -77,6 +96,7 @@ struct MicroStateBuilder {
   OpId(S.getMachineBasicBlock()->getNumber() << 24),
   State(S), VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
   MRI(S.getMachineBasicBlock()->getParent()->getRegInfo()),
+  VFI(*S.getMachineBasicBlock()->getParent()->getInfo<VFunInfo>()),
   DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}
 
   ~MicroStateBuilder() {
@@ -115,8 +135,10 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     VTIDReader VTID(Inst);
 
     // Add the opcode metadata and the function unit id.
-    Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUId(), VMContext));
-    SmallVector<MachineOperand*, 8> Ops(Inst->getNumOperands());
+    Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUNum(),
+                                               VMContext));
+    typedef SmallVector<MachineOperand*, 8> OperandVector;
+    OperandVector Ops(Inst->getNumOperands());
     
     // Remove all operand of Instr.
     while (Inst->getNumOperands() != 0) {
@@ -126,7 +148,10 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
       Ops[i] = MO;
     }
 
-    unsigned EmitSlot = A->getSlot(), WriteSlot = A->getFinSlot(), ReadSlot = EmitSlot;
+    unsigned EmitSlot = A->getSlot(),
+             WriteSlot = A->getFinSlot();
+    unsigned ReadSlot = EmitSlot;
+    
     bool isReasAtEmit = VTID.isReadAtEmit();
 
     // We can not write the value to a register at the same moment we emit it.
@@ -140,9 +165,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     DefVector &Defs = getDefsToEmitAt(WriteSlot);
 
 
-    for (SmallVector<MachineOperand*, 8>::iterator OI = Ops.begin(),
-         OE = Ops.end(); OI != OE; ++OI) {
-      MachineOperand *MO = *OI;
+    for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
+      MachineOperand *MO = Ops[i];
       
       if (!MO->isReg() || !MO->getReg()) {
         Builder.addOperand(*MO);
@@ -153,10 +177,11 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
 
       // Remember the defines.
       if (MO->isDef() && EmitSlot != WriteSlot) {
+        ++WireNum;
+        WireDef WDef = createWireDef(WireNum, A, MO, i, EmitSlot, WriteSlot);
+        
         std::pair<SWDMapTy::iterator, bool> result =
-          StateWireDefs.insert(std::make_pair(RegNo, WireDef(WireNum, MO,
-                                                             A->getSlot(),
-                                                             WriteSlot)));
+          StateWireDefs.insert(std::make_pair(RegNo, WDef));
 
         assert(result.second && "Instructions not in SSA form!");
         WireDef *NewDef = &result.first->second;
@@ -169,7 +194,6 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
         Builder.addMetadata(MetaToken::createDefWire(WireNum,
                                                      VT.getSizeInBits(),
                                                      VMContext));
-        ++WireNum;
         continue;
       }
 
@@ -193,7 +217,11 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
       // Now we emit an operation while the value are computing, just read
       // the value from a wire.
       WDef.applyKilled(MO->isKill());
-      Builder.addMetadata(MetaToken::createReadWire(WDef.WireNum, VMContext));
+
+      if (WDef.isSymbol())
+        Builder.addExternalSymbol(WDef.SymbolName);
+      else
+        Builder.addMetadata(MetaToken::createReadWire(WDef.WireNum, VMContext));
     }
   }
 
@@ -250,6 +278,7 @@ MachineBasicBlock *FSMState::emitSchedule() {
   MachineBasicBlock::iterator InsertPos = MBB->end();
   SmallVector<HWAtom*, 8> AtomsToEmit;
   unsigned CurSlot = startSlot;
+  VFunInfo *VFI = MBB->getParent()->getInfo<VFunInfo>();
 
   std::sort(Atoms.begin(), Atoms.end(), top_sort_start);
 
@@ -259,6 +288,15 @@ MachineBasicBlock *FSMState::emitSchedule() {
 
     for (iterator I = begin(), E = end(); I != E; ++I) {
       HWAtom *A = *I;
+
+      FuncUnitId FUId = A->getFUId();
+      // Remember the active slot.
+      if (FUId.isBinded()) {
+        VFI->rememberAllocatedFU(FUId);
+        for (unsigned i = A->getSlot(), e = A->getFinSlot(); i < e; ++i)
+          VFI->remeberActiveSlot(FUId, i);
+      }
+
       if (A->getSlot() != CurSlot) {
         BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
         CurSlot = A->getSlot();
@@ -322,7 +360,7 @@ void HWValDep::print(raw_ostream &OS) const {
 
 HWAtom::HWAtom(MachineInstr *MI, unsigned short latancy, unsigned short Idx,
                unsigned fuid)
-  : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUId(fuid), MInst(MI) {}
+  : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid), Instr(MI) {}
 
 void HWAtom::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
@@ -342,7 +380,7 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
   }
 }
 
-unsigned HWAtom::getFUClass() const {
+VFUs::FUTypes HWAtom::getFUType() const {
   if (MachineInstr *Instr = getInst())
     return VTIDReader(Instr).getFUType();
 
@@ -362,10 +400,7 @@ void HWAtom::print(raw_ostream &OS) const {
   } else
     OS << "null";
 
-  if (Instr && !VTID.hasTrivialFU()
-      && getFUId() != VTIDReader::TrivialFUId)
-    OS << "\nFUId:" << getFUId();
-
+  if (Instr && getFUId().isBinded()) OS << "\nFUId:" << getFUNum();
   
   OS << "\nAt slot: " << getSlot();
 }

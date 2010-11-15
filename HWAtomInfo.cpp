@@ -59,7 +59,7 @@ struct HWAtomInfo : public MachineFunctionPass {
 
   MachineRegisterInfo *MRI;
 
-  VTMFunctionInfo *FuncInfo;
+  VFunInfo *FuncInfo;
   // Nodes that detach from the exit node.
   std::vector<HWAtom*> DetachNodes;
 
@@ -166,7 +166,7 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   LiveVars = &getAnalysis<LiveVariables>();
   MRI = &MF.getRegInfo();
-  FuncInfo = MF.getInfo<VTMFunctionInfo>();
+  FuncInfo = MF.getInfo<VFunInfo>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
@@ -368,22 +368,14 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   SmallVector<const MachineOperand*, 4> Defs;
   analyzeOperands(MI, Deps, Defs);
 
-  unsigned Latency = 0;
+  unsigned Latency = VTID.getLatency(VTarget);
 
-  if (VTID.hasTrivialFU())
-    Latency = VTID.getTrivialLatency();
-  else
-    Latency = VTarget.getFUDesc(FUTy)->getLatency();
-
-  unsigned FUId = VTID.getPrebindFUId();
-  // Remember the allocated function unit.
-  if (VTID.isFUBinded())
-    FuncInfo->rememberAllocatedFU(FUTy, FUId);
+  FuncUnitId Id = VTID.getPrebindFUId();
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
   HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
-                                           Latency, ++InstIdx, FUId);
+                                           Latency, ++InstIdx, Id.getFUNum());
   
   if (Defs.empty())
     DetachNodes.push_back(A);
@@ -414,7 +406,7 @@ HWAtom *HWAtomInfo::buildExitRoot(MachineInstr *MI) {
   analyzeOperands(MI, Deps, Defs);
 
   HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
-                                           0, ++InstIdx, VTIDReader::TrivialFUId);
+                                           0, ++InstIdx);
   return A;
 }
 
@@ -428,8 +420,7 @@ FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
   DetachNodes.clear();
 
   // Create a dummy entry node.
-  State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx,
-                 VTIDReader::TrivialFUId));
+  State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx));
   
   for (MachineBasicBlock::iterator BI = MBB->begin(), BE = MBB->end();
       BI != BE; ++BI) {

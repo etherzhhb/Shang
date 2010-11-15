@@ -51,13 +51,13 @@ class RTLWriter : public MachineFunctionPass {
   VLang *vlang;
   MachineFunction *MF;
   VTargetMachine &VTM;
-  VTMFunctionInfo *FuncInfo;
+  VFunInfo *FuncInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
   
-  SmallVector<const Argument*, 8> Arguments;
+  SmallVector<const Argument*, 8> Arguments; 
 
   void emitFunctionSignature();
   void emitCommonPort();
@@ -123,6 +123,9 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpWriteReg(ucOp &OpWriteReg);
+  void emitOpMemAccess(ucOp &OpMemAccess);
+
+  void emitFUCtrl(unsigned Slot);
 
 public:
   /// @name FunctionPass interface
@@ -156,7 +159,7 @@ char RTLWriter::ID = 0;
 
 bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
-  FuncInfo = MF->getInfo<VTMFunctionInfo>();
+  FuncInfo = MF->getInfo<VFunInfo>();
   MRI = &MF->getRegInfo();
   vlang = &getAnalysis<VLang>();
 
@@ -338,14 +341,14 @@ void RTLWriter::emitCommonPort() {
 
 void RTLWriter::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
-  typedef VTMFunctionInfo::const_id_iterator id_iterator;
+  typedef VFunInfo::const_id_iterator id_iterator;
 
   VFUMemBus *MemBus = VTM.getFUDesc<VFUMemBus>();
 
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     // FIXME: In fact, *I return the FUId instead of FUNum. 
-    unsigned FUNum = *I;
+    unsigned FUNum = (*I).getFUNum();
     // Address port.
     VM->addOutputPort(VFUMemBus::getAddrBusName(FUNum),
                       MemBus->getAddrWidth());
@@ -423,6 +426,23 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
+void RTLWriter::emitFUCtrl(unsigned Slot) {
+  // Membus control operation.
+  for (VFunInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
+       E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+    FuncUnitId Id = *I;
+
+    raw_ostream &OS = VM->getControlBlockBuffer(10);
+    OS << VFUMemBus::getEnableName(Id.getFUNum()) << " <= 1'b";
+    // Enable the membus if it is activated.
+    if (FuncInfo->isFUActiveAt(Id, Slot)) OS << '1';
+    else                                  OS << '0';
+
+    OS << ";\n";
+  }
+  
+}
+
 void RTLWriter::emitCtrlOp(ucState &State) {
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
@@ -436,9 +456,12 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     case VTM::VOpRetVal:    emitOpRetVal(Op);     break;
     case VTM::VOpRet:       emitOpRet(Op);        break;
     case VTM::VOpWriteReg:  emitOpWriteReg(Op);   break;
+    case VTM::VOpMemAccess: emitOpMemAccess(Op);  break;
     default:  assert(0 && "Unexpect opcode!");    break;
     }
   }
+
+  emitFUCtrl(State.getSlot());
 }
 
 void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
@@ -475,6 +498,24 @@ void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
   assert(retChannel == 0 && "Only support Channel 0!");
   OS << "return_value <= ";
   emitOperand(OS, OpRetVal.getOperand(0));
+  OS << ";\n";
+}
+
+void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  unsigned FUNum = OpMemAccess.getFUNum();
+
+  // Assign store data.
+  OS.indent(10) << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
+  emitOperand(OS, OpMemAccess.getOperand(1));
+  OS << ";\n";
+  // Emit Address.
+  OS.indent(10) << VFUMemBus::getAddrBusName(FUNum) << " <= ";
+  emitOperand(OS, OpMemAccess.getOperand(2));
+  OS << ";\n";
+  // And write enable, write is enable if the operation is NOT load.
+  OS.indent(10) << VFUMemBus::getWriteEnableName(FUNum) << " <= ~";
+  emitOperand(OS, OpMemAccess.getOperand(3), 1);
   OS << ";\n";
 }
 
@@ -516,8 +557,10 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   case MachineOperand::MO_Immediate:
     OS << vlang->printConstantInt(Operand.getImm(), BitWidth, false);
     return;
+  case MachineOperand::MO_ExternalSymbol:
+    OS << Operand.getSymbolName();
+    return;
   }
-
 }
 
 void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {

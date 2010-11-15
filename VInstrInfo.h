@@ -73,11 +73,7 @@ public:
 
   const TargetInstrDesc* operator->() const { return &Instr->getDesc(); }
 
-  // Function unit id.
-  static const unsigned TrivialFUId = ~0;
-
-  unsigned getPrebindFUId() const;
-  bool isFUBinded() const;
+  FuncUnitId getPrebindFUId() const;
 };
 
 } // end namespace llvm

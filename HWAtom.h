@@ -22,6 +22,8 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
+#include "VFunctionUnit.h"
+
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -35,12 +37,14 @@
 
 namespace llvm {
 class ForceDirectedSchedulingBase;
+class FuncUnitId;
 class HWAtom;
 class FSMState;
 struct VTargetMachine;
 
 class MachineBasicBlock;
 class MachineInstr;
+class MachineOperand;
 
 /// @brief Inline operation
 class HWEdge {
@@ -185,7 +189,7 @@ private:
   // TODO: typedef SlotType
   unsigned short SchedSlot;
   unsigned short InstIdx;
-  unsigned FUId;
+  unsigned FUNum;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<HWEdge*, 4> Deps;
@@ -210,7 +214,7 @@ private:
   }
 protected:
   // The corresponding LLVM Instruction
-  MachineInstr* MInst;
+  MachineInstr* Instr;
   virtual ~HWAtom();
 
 public:
@@ -218,15 +222,15 @@ public:
 
   template <class It>
   HWAtom(MachineInstr *I, It depbegin, It depend, unsigned short latancy,
-         unsigned short Idx, unsigned fuid)
-    : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUId(fuid),
-    Deps(depbegin, depend), MInst(I) {
+         unsigned short Idx, unsigned fuid = 0)
+    : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
+    Deps(depbegin, depend), Instr(I) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       (*I)->addToUseList(this);
   }
 
   HWAtom(MachineInstr *I, unsigned short latancy, unsigned short Idx,
-         unsigned fuid);
+         unsigned fuid = 0);
 
   unsigned short getIdx() const { return InstIdx; }
 
@@ -242,7 +246,7 @@ public:
   SmallVectorImpl<HWEdge*>::const_iterator edge_begin() const { return Deps.begin(); }
   SmallVectorImpl<HWEdge*>::const_iterator edge_end() const { return Deps.end(); }
 
-  MachineInstr *getInst() const { return MInst; }
+  MachineInstr *getInst() const { return Instr; }
 
   /// @name Operands
   //{
@@ -334,9 +338,13 @@ public:
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
 
-  const MachineInstr *getMachineInstr() const { return MInst; }
-  unsigned getFUClass() const;
-  unsigned getFUId() const { return FUId; }
+  MachineInstr *getInstr() const { return Instr; }
+
+  VFUs::FUTypes getFUType() const;
+  unsigned getFUNum() const { return FUNum; }
+  FuncUnitId getFUId() const {
+    return FuncUnitId(getFUType(), getFUNum());
+  }
 
   // Get the latency of this atom
   unsigned getLatency() const { return Latancy; }

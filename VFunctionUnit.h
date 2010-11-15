@@ -38,6 +38,36 @@ namespace VFUs {
   };
 }
 
+class FuncUnitId {
+  union {
+    struct {
+      VFUs::FUTypes Type  : 4;
+      unsigned  Num : 12;
+    } ID;
+    
+    uint16_t data;
+  } UID;
+
+public:
+  // The general FUId of a given type.
+  inline FuncUnitId(VFUs::FUTypes T = VFUs::Trivial, unsigned N = 0xfff) {
+    UID.ID.Type = T;
+    UID.ID.Num = N;
+  }
+
+  inline VFUs::FUTypes getFUType() const { return UID.ID.Type; }
+  inline unsigned getFUNum() const { return UID.ID.Num; }
+  inline unsigned getData() const { return UID.data; }
+
+  inline bool isTrivial() const { return getFUType() == VFUs::Trivial; }
+  inline bool isBinded() const {
+    return !isTrivial() && getFUNum() != 0xfff;
+  }
+ 
+  inline bool operator==(const FuncUnitId X) const { return UID.data == X.UID.data; }
+  inline bool operator< (const FuncUnitId X) const { return UID.data < X.UID.data; }
+};
+
 /// @brief The description of Verilog target machine function units.
 class VFUDesc {
   // The HWResource baseclass this node corresponds to

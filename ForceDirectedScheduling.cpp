@@ -211,7 +211,7 @@ void ForceDirectedSchedulingBase::buildDGraph() {
     double Prob = 1.0 / (double) TimeFrame;
     // Including ALAPStep.
     for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
-      accDGraphAt(i, A->getFUClass(), Prob);    
+      accDGraphAt(i, A->getFUType(), Prob);    
   }
   DEBUG(printDG(dbgs()));
 }
@@ -325,7 +325,7 @@ double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A,
   // FIXME: How should handle the pre-bind MachineInstruction.
   // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
-  unsigned FUClass = A->getFUClass();
+  unsigned FUClass = A->getFUType();
   double Force = getRangeDG(FUClass, start, end) - getAvgDG(A);
 
   // FIXME: Make the atoms taking expensive function unit have bigger force.
@@ -338,7 +338,7 @@ double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
   // FIXME: How should handle the pre-bind MachineInstruction.
   // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
-  unsigned FUClass = A->getFUClass();
+  unsigned FUClass = A->getFUType();
   double Force = getRangeDG(FUClass, start, end) - getAvgDG(A);
   // FIXME: Make the atoms taking expensive function unit have bigger force.
   return Force; // / FU->getTotalFUs();
@@ -363,7 +363,7 @@ void ForceDirectedSchedulingBase::buildAvgDG() {
     HWAtom *A = *I;
     double res = 0.0;
     for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
-      res += getDGraphAt(i, A->getFUClass());
+      res += getDGraphAt(i, A->getFUType());
 
     res /= (double) getTimeFrame(A);
     AvgDG[A] = res;

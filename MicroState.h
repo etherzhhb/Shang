@@ -153,7 +153,7 @@ public:
 
   const MetaToken &getOpCodeMD() const { return Token; }
 
-  unsigned getFUId() const {
+  unsigned getFUNum() const {
     assert(Token.isInstr() && "Bad token type!");
     return Token.getFUId();
   }

@@ -18,6 +18,7 @@
 #include "VFunctionUnit.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/Support/StringPool.h"
 #include "llvm/ADT/STLExtras.h"
 
 #include <map>
@@ -25,7 +26,7 @@
 namespace llvm {
 class MachineBasicBlock;
 
-class VTMFunctionInfo : public MachineFunctionInfo {
+class VFunInfo : public MachineFunctionInfo {
   // Information about slots.
   struct StateSlots{
     unsigned startSlot : 32;
@@ -41,14 +42,42 @@ class VTMFunctionInfo : public MachineFunctionInfo {
 
   // Helper struct for Id iterator.
   struct IdMapper {
-    typedef FUIdMapTy::mapped_type result_type;
+    typedef FuncUnitId result_type;
     result_type operator()(FUIdMapTy::value_type v) const {
-      return v.second;
+      return FuncUnitId(v.first, v.second);
     } 
   };
 
+  struct FUActiveSlot {
+    union {
+      struct FUSlot {
+        uint16_t Id;
+        uint16_t Slot;
+      } Struct;
+
+      uint32_t data;
+    } Union;
+
+    inline bool operator==(const FUActiveSlot X) const {
+      return Union.data == X.Union.data;
+    }
+    inline bool operator< (const FUActiveSlot X) const {
+      return Union.data < X.Union.data;
+    }
+
+    FUActiveSlot(FuncUnitId Id = FuncUnitId(), unsigned Slot = 0) {
+      Union.Struct.Id = Id.getData();
+      Union.Struct.Slot = Slot;
+    }
+  };
+
+  typedef std::set<FUActiveSlot> FUActiveSlotSetTy;
+  FUActiveSlotSetTy ActiveSlotSet;
+
+  StringPool SymbolPool;
+  std::set<PooledStringPtr> Symbols;
 public:
-  explicit VTMFunctionInfo(MachineFunction &MF) {}
+  explicit VFunInfo(MachineFunction &MF) {}
 
   /// Slots information for machine basicblock.
 
@@ -87,11 +116,13 @@ public:
 
   /// Information for allocated function units.
 
-  void rememberAllocatedFU(VFUs::FUTypes FUType, unsigned Id) {
+  void rememberAllocatedFU(FuncUnitId Id) {
     // Sometimes there are several instructions allocated to the same instruction,
     // and it is ok to try to insert the same FUId more than once.
-    AllocatedFUs.insert(std::make_pair(FUType, Id));
+    AllocatedFUs.insert(std::make_pair(Id.getFUType(), Id.getFUNum()));
   }
+
+  typedef FUIdMapTy::value_type fuid_type;
 
   typedef mapped_iterator<FUIdMapTy::const_iterator, IdMapper> const_id_iterator;
 
@@ -107,6 +138,19 @@ public:
     return const_id_iterator(AllocatedFUs.upper_bound(FUType), IdMapper());
   }
 
+  void remeberActiveSlot(FuncUnitId Id, unsigned Slot) {
+    ActiveSlotSet.insert(FUActiveSlot(Id, Slot));
+  }
+
+  bool isFUActiveAt(FuncUnitId Id, unsigned Slot) {
+    return ActiveSlotSet.count(FUActiveSlot(Id, Slot));
+  }
+  
+  const char *allocateSymbol(const std::string &Str) {
+    PooledStringPtr PSP = SymbolPool.intern(Str.c_str());
+    Symbols.insert(PSP);
+    return *PSP;
+  }
 };
 
 }

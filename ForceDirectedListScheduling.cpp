@@ -324,7 +324,7 @@ bool IteractiveModuloScheduling::scheduleState() {
         if (EarliestUntry == 0)
           EarliestUntry = i;
         
-        if (A && !isResAvailable(A->getFUClass(), i))
+        if (A && !isResAvailable(A->getFUType(), i))
           continue;
 
         // This is a available slot.
@@ -337,7 +337,7 @@ bool IteractiveModuloScheduling::scheduleState() {
         break;
       } else if(!A->isScheduled()) {
         assert(A && "A can be schedule only because resource conflict!");
-        HWAtom *Blocking = findBlockingAtom(A->getFUClass(), EarliestUntry);
+        HWAtom *Blocking = findBlockingAtom(A->getFUType(), EarliestUntry);
         assert(Blocking && "No one blocking?");
         Blocking->resetSchedule();
         excludeStep(Blocking, EarliestUntry);
@@ -372,7 +372,7 @@ HWAtom *IteractiveModuloScheduling::findBlockingAtom(unsigned FUClass,
                                                       unsigned step) {
   for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
     HWAtom *A = *I;
-    if (!A->isScheduled() || A->getFUClass() != FUClass)
+    if (!A->isScheduled() || A->getFUType() != FUClass)
       continue;
     if (A->getSlot() == step) return A; 
   }

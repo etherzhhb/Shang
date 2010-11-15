@@ -56,12 +56,14 @@ def uimm8 : PatLeaf<(imm), [{return isUInt<3>(N->getZExtValue());}]>;
 
 //===----------------------------------------------------------------------===//
 // Communication operations.
+let hasCtrlDep = 1 in {
 let isReturn     = 1,
     isTerminator = 1,
     isBarrier    = 1 in
 def VOpRet : InstPassive<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
-let neverHasSideEffects = 1 in
+// Prevent MachineCSE delete any VOpArg.
+// let neverHasSideEffects = 1 in
 def VOpArg : InstPassive<(outs dyn_rc:$arg), (ins i8imm:$arg_no),
 		 				"$arg = arg[$arg_no]", [], 0, 1>;
 
@@ -69,6 +71,7 @@ let isBarrier		= 1  in
 def VOpRetVal : InstPassive<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
 							 "ret $var at $ret_no;",
 							 [], 0, 1>;
+}
 
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
