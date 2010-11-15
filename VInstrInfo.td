@@ -107,7 +107,7 @@ let mayLoad		  = 1,
 def VOpMemAccess : InstActive<(outs dyn_rc:$dst),
 							  (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
 							  "$dst = memaccess $src, $addr, $isLoad",
-							  [], FUMemBus, 1>;
+							  [], FUMemBus, 1, 1>;
 
 
 //===----------------------------------------------------------------------===//

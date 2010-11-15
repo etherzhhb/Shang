@@ -27,7 +27,8 @@ def FUMult		: FUType<6, IIC_Mult>;
 
 // Pseudo instructions
 class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,
-			  bits<4> latency = 0, bit readAtEmit = 0>
+			  bits<4> latency = 0,
+			  bit readAtEmit = 0, bit writeUntilFinish = 0>
   : Instruction {
   let Namespace = "VTM";
 
@@ -42,17 +43,22 @@ class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,
   let Itinerary = fu.Itinerary;
   
   let TSFlags{3} = readAtEmit;
+  let TSFlags{4} = writeUntilFinish;
   
-  let TSFlags{7-4} = latency;
+  let TSFlags{8-5} = latency;
 }
 
 class InstPassive<dag outs, dag ins, string asmstr, list<dag> pattern,
-				  bits<4> latency = 0, bit readAtEmit = 0>
-	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, latency, readAtEmit>;
+				  bits<4> latency = 0,
+				  bit readAtEmit = 0, bit writeUntilFinish = 0>
+	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, latency,
+			  readAtEmit, writeUntilFinish>;
 
 class InstActive<dag outs, dag ins, string asmstr, list<dag> pattern,
-               FUType ResType, bit readAtEmit = 0>
-	: InstVTM<outs, ins, asmstr, pattern, ResType, 0, readAtEmit>;
+               FUType ResType,
+               bit readAtEmit = 0, bit writeUntilFinish = 0>
+	: InstVTM<outs, ins, asmstr, pattern, ResType, 0,
+			  readAtEmit, writeUntilFinish>;
 
 
 class BinOpFrag<dag res> : PatFrag<(ops node:$LHS, node:$RHS), res>;

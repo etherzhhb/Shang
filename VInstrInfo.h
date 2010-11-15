@@ -40,10 +40,13 @@ class VTIDReader {
     ResTypeShiftAmount = 0x0,
 
     TrivialLatencyMask = 0xf,
-    TrivialLatencyShiftAmount = 0x4,
+    TrivialLatencyShiftAmount = 0x5,
 
     ReadAtEmitMask = 0x1,
-    ReadAtEmitShiftAmount = 0x3
+    ReadAtEmitShiftAmount = 0x3,
+
+    WriteUntilFinishMask = 0x1,
+    WriteUntilFinishShiftAmount = 0x4
   };
 
   const MachineInstr *Instr;
@@ -69,6 +72,11 @@ public:
 
   inline bool isReadAtEmit() const {
     return Instr->getDesc().TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount);
+  }
+
+  inline bool isWriteUntilFinish() const {
+    return Instr->getDesc().TSFlags
+           & (WriteUntilFinishMask << WriteUntilFinishShiftAmount);
   }
 
   const TargetInstrDesc* operator->() const { return &Instr->getDesc(); }
