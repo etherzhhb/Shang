@@ -37,16 +37,7 @@ class VFunInfo : public MachineFunctionInfo {
 
   // Information about allocated function unit.
   // Mapping FUTypes to allocate function unit identity number.
-  typedef std::multimap<VFUs::FUTypes, unsigned> FUIdMapTy;
-  FUIdMapTy AllocatedFUs;
-
-  // Helper struct for Id iterator.
-  struct IdMapper {
-    typedef FuncUnitId result_type;
-    result_type operator()(FUIdMapTy::value_type v) const {
-      return FuncUnitId(v.first, v.second);
-    } 
-  };
+  std::set<FuncUnitId> AllocatedFUs[VFUs::NumFUs];
 
   struct FUActiveSlot {
     union {
@@ -119,23 +110,23 @@ public:
   void rememberAllocatedFU(FuncUnitId Id) {
     // Sometimes there are several instructions allocated to the same instruction,
     // and it is ok to try to insert the same FUId more than once.
-    AllocatedFUs.insert(std::make_pair(Id.getFUType(), Id.getFUNum()));
+    AllocatedFUs[Id.getFUType()].insert(Id);
   }
 
-  typedef FUIdMapTy::value_type fuid_type;
-
-  typedef mapped_iterator<FUIdMapTy::const_iterator, IdMapper> const_id_iterator;
+  typedef std::set<FuncUnitId>::const_iterator const_id_iterator;
 
   const_id_iterator id_begin(VFUs::FUTypes FUType = VFUs::AllFUType) const {
     assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
+    assert(FUType < VFUs::NumFUs && "Bad FUType!");
     
-    return const_id_iterator(AllocatedFUs.lower_bound(FUType), IdMapper());
+    return AllocatedFUs[FUType].begin();
   }
 
   const_id_iterator id_end(VFUs::FUTypes FUType = VFUs::AllFUType) const {
     assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
+    assert(FUType < VFUs::NumFUs && "Bad FUType!");
 
-    return const_id_iterator(AllocatedFUs.upper_bound(FUType), IdMapper());
+    return AllocatedFUs[FUType].end();
   }
 
   void remeberActiveSlot(FuncUnitId Id, unsigned Slot) {
