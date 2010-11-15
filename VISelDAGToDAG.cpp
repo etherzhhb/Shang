@@ -101,9 +101,10 @@ SDNode * VDAGToDAGISel::SelectConstant(SDNode *N) {
   int64_t Val = cast<ConstantSDNode>(N)->getZExtValue();
   SDValue Const = CurDAG->getTargetConstant(Val, N->getValueType(0));
 
-  SDValue Ops[] = { Const };
-  return CurDAG->SelectNodeTo(N, VTM::VOpLdImm, N->getVTList(),
-                              Ops, array_lengthof(Ops));
+  return Const.getNode();
+  //SDValue Ops[] = { Const };
+  //return CurDAG->SelectNodeTo(N, VTM::VOpLdImm, N->getVTList(),
+  //                            Ops, array_lengthof(Ops));
 }
 
 

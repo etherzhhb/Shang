@@ -115,7 +115,7 @@ class RTLWriter : public MachineFunctionPass {
   
   void emitCast(ucOp &OpCast);
 
-  void emitOperand(raw_ostream &OS, MachineOperand &Operand, unsigned BitWidth = 0);
+  void emitOperand(raw_ostream &OS, MachineOperand &Operand);
   unsigned getOperandWitdh(MachineOperand &Operand);
 
   void emitCtrlOp(ucState &State);
@@ -519,7 +519,7 @@ void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
   OS << ";\n";
   // And write enable, write is enable if the operation is NOT load.
   OS.indent(10) << VFUMemBus::getWriteEnableName(FUNum) << " <= ~";
-  emitOperand(OS, OpMemAccess.getOperand(3), 1);
+  emitOperand(OS, OpMemAccess.getOperand(3));
   OS << ";\n";
 }
 
@@ -538,8 +538,7 @@ unsigned RTLWriter::getOperandWitdh(MachineOperand &Operand) {
   return 0;
 }
 
-void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                            unsigned BitWidth) {
+void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand) {
   switch (Operand.getType()) {
   case MachineOperand::MO_Register:
     OS << "reg" << Operand.getReg();
@@ -559,7 +558,8 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     return;
   }
   case MachineOperand::MO_Immediate:
-    OS << vlang->printConstantInt(Operand.getImm(), BitWidth, false);
+    OS << vlang->printConstantInt(Operand.getImm(), Operand.getTargetFlags(),
+                                  false);
     return;
   case MachineOperand::MO_ExternalSymbol:
     OS << Operand.getSymbolName();
@@ -608,7 +608,7 @@ void RTLWriter::emitOpLdImm(ucOp &OpLdImm) {
   MachineOperand &Result = OpLdImm.getOperand(0);
   emitOperand(OS, OpLdImm.getOperand(0));
   OS << " = ";
-  emitOperand(OS, OpLdImm.getOperand(1), getOperandWitdh(Result));
+  emitOperand(OS, OpLdImm.getOperand(1));
   OS << ";\n";
 }
 
