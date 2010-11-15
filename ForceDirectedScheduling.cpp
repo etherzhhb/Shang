@@ -84,7 +84,7 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
         if (!DI.getEdge()->isBackEdge() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
                              Dep->getSlot() : getASAPStep(Dep);
-          int Step = DepASAP + Dep->getLatency()
+          int Step = DepASAP + DI.getEdge()->getLatency()
                      - MII * DI.getEdge()->getItDst();
           DEBUG(dbgs() << "From ";
                 if (DI.getEdge()->isBackEdge())
@@ -147,7 +147,7 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
             UseALAP = HWAtom::MaxSlot;
           }
           
-          unsigned Step = UseALAP - A->getLatency()
+          unsigned Step = UseALAP - UseEdge->getLatency()
                           + MII * UseEdge->getItDst();
           DEBUG(dbgs() << "From ";
                 if (UseEdge->isBackEdge())

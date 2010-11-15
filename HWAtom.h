@@ -57,22 +57,28 @@ public:
 private:
   const unsigned short EdgeType;
   HWAtom *Src;
+  // The latancy of this edge.
+  unsigned Latancy;
   // Iterate distance.
-  unsigned ItDst : 15;
+  unsigned ItDst : 31;
   bool IsBackEdge : 1;
-
+  
   HWEdge(const HWEdge &);            // DO NOT IMPLEMENT
   void operator=(const HWEdge &);    // DO NOT IMPLEMENT
 
   friend class HWAtom;
   void setSrc(HWAtom *NewSrc) { Src = NewSrc; }
 protected:
-  HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned Dst, bool isBackEdge = false)
-    : EdgeType(T), Src(src), ItDst(Dst), IsBackEdge(isBackEdge) {
+  HWEdge(enum HWEdgeTypes T, HWAtom *src, unsigned latancy, unsigned Dst,
+         bool isBackEdge = false)
+    : EdgeType(T), Src(src), Latancy(latancy), ItDst(Dst),
+    IsBackEdge(isBackEdge) {
     assert(!isBackEdge || Dst != 0
            && "Back edge must have a non-zero iterate distance!");
   }
 public:
+  unsigned getLatency() const { return Latancy; }
+
   unsigned getEdgeType() const { return EdgeType; }
 
   // The referenced value.
@@ -127,7 +133,8 @@ public:
   enum ValDepTypes{
     Normal, Import, Export, PHI
   };
-  HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T);
+  HWValDep(HWAtom *Src, unsigned latancy, bool isSigned, enum ValDepTypes T)
+    : HWEdge(edgeValDep, Src, latancy,  0), IsSigned(isSigned), DepType(T) {}
 
   bool isSigned() const { return IsSigned; }
   enum ValDepTypes getDepType() const { return DepType;}
@@ -147,7 +154,8 @@ private:
 
 class HWCtrlDep : public HWEdge {
 public:
-  HWCtrlDep(HWAtom *Src) : HWEdge(edgeCtrlDep, Src, 0) {}
+  HWCtrlDep(HWAtom *Src, unsigned latancy)
+    : HWEdge(edgeCtrlDep, Src, latancy, 0) {}
 
   void print(raw_ostream &OS) const;
 
@@ -166,8 +174,9 @@ public:
 private:
   enum MemDepTypes DepType;
 public:
-  HWMemDep(HWAtom *Src, bool isBackEdge, enum MemDepTypes DT, unsigned Dist)
-    : HWEdge(edgeMemDep, Src, Dist, isBackEdge), DepType(DT) {}
+  HWMemDep(HWAtom *Src, unsigned latancy, bool isBackEdge,
+           enum MemDepTypes DT, unsigned Dist)
+    : HWEdge(edgeMemDep, Src, latancy, Dist, isBackEdge), DepType(DT) {}
 
   enum MemDepTypes getDepType() const { return DepType; }
 
@@ -183,9 +192,8 @@ public:
 /// @brief Base Class of all hardware atom. 
 class HWAtom {
 private:
-  // The HWAtom baseclass this node corresponds to
-  const unsigned Latancy;
   // The time slot that this atom scheduled to.
+  unsigned Latency;
   // TODO: typedef SlotType
   unsigned short SchedSlot;
   unsigned short InstIdx;
@@ -223,7 +231,7 @@ public:
   template <class It>
   HWAtom(MachineInstr *I, It depbegin, It depend, unsigned short latancy,
          unsigned short Idx, unsigned fuid = 0)
-    : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
+    : Latency(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
     Deps(depbegin, depend), Instr(I) {
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       (*I)->addToUseList(this);
@@ -333,7 +341,7 @@ public:
   //}
 
   unsigned getSlot() const { return SchedSlot; }
-  unsigned getFinSlot() const { return SchedSlot + Latancy; }
+  unsigned getFinSlot() const { return SchedSlot + Latency; }
   bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
@@ -345,9 +353,6 @@ public:
   FuncUnitId getFUId() const {
     return FuncUnitId(getFUType(), getFUNum());
   }
-
-  // Get the latency of this atom
-  unsigned getLatency() const { return Latancy; }
 
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging

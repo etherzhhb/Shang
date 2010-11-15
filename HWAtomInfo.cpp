@@ -77,16 +77,35 @@ struct HWAtomInfo : public MachineFunctionPass {
   typedef DenseMap<const MachineBasicBlock*, FSMState*> StateMapType;
   StateMapType MachBBToStates;
 
-  HWValDep *getValDepEdge(HWAtom *Src, bool isSigned = false,
+  unsigned computeLatency(const HWAtom *Src, const MachineInstr *DstInstr) {
+    MachineInstr *SrcInstr = Src->getInstr();
+
+    if (SrcInstr == 0) return 0;
+
+    VTIDReader SrcTID(SrcInstr);
+    unsigned latency = SrcTID.getLatency(VTarget);
+    
+    VTIDReader DstTID(DstInstr);
+
+    if (DstInstr == 0) return latency;
+
+    // We need to wait one more slot to read the result.
+    if (SrcTID.isWriteUntilFinish() && DstTID.isReadAtEmit())
+      return latency + 1;
+    
+    return latency;
+  }
+
+  HWValDep *getValDepEdge(HWAtom *Src, unsigned Latency, bool isSigned = false,
                           enum HWValDep::ValDepTypes T = HWValDep::Normal) {
-    return new (HWAtomAllocator) HWValDep(Src, isSigned, T);
+    return new (HWAtomAllocator) HWValDep(Src, Latency, isSigned, T);
   }
 
-  HWCtrlDep *getCtrlDepEdge(HWAtom *Src) {
-    return new (HWAtomAllocator) HWCtrlDep(Src);
+  HWCtrlDep *getCtrlDepEdge(HWAtom *Src, unsigned Latency) {
+    return new (HWAtomAllocator) HWCtrlDep(Src, Latency);
   }
 
-  HWMemDep *getMemDepEdge(HWAtom *Src, bool isBackEdge,
+  HWMemDep *getMemDepEdge(HWAtom *Src, unsigned Latency, bool isBackEdge,
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
@@ -344,13 +363,13 @@ void HWAtomInfo::analyzeOperands(const MachineInstr *MI,
     if (MBB->isLiveIn(Reg)) continue;
 
     if (HWAtom *Dep = getAtomFor(MRI->getVRegDef(Reg)))
-      Deps.push_back(getValDepEdge(Dep));
+      Deps.push_back(getValDepEdge(Dep, computeLatency(Dep, MI)));
   }
 
   // If the atom depend on nothing, make it depend on the entry node.
   if (Deps.empty()) {
     HWAtom *EntryRoot = getStateFor(MBB)->getEntryRoot();
-    Deps.push_back(getValDepEdge(EntryRoot));
+    Deps.push_back(getValDepEdge(EntryRoot, 0));
   }
 }
 
@@ -400,7 +419,7 @@ HWAtom *HWAtomInfo::buildExitRoot(MachineInstr *MI) {
 
   for (std::vector<HWAtom*>::iterator I = DetachNodes.begin(),
       E = DetachNodes.end(); I != E; ++I)
-    Deps.push_back(getCtrlDepEdge(*I));
+    Deps.push_back(getCtrlDepEdge(*I, computeLatency(*I, MI)));
 
   SmallVector<const MachineOperand*, 1> Defs;
   analyzeOperands(MI, Deps, Defs);
@@ -434,10 +453,11 @@ FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
   return State;
 }
 
-HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, bool isBackEdge,
+HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, unsigned Latency,
+                                    bool isBackEdge,
                                     enum HWMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
-  return new (HWAtomAllocator) HWMemDep(Src, isBackEdge, DepType, Diff);
+  return new (HWAtomAllocator) HWMemDep(Src, Latency, isBackEdge, DepType, Diff);
 }
 
 void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}

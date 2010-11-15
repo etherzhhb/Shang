@@ -111,7 +111,7 @@ struct MicroStateBuilder {
   }
 
   MachineInstr *buildMicroState(unsigned Slot, MachineBasicBlock::iterator InsertPos,
-                            SmallVectorImpl<HWAtom *> &Insts);
+                                SmallVectorImpl<HWAtom *> &Insts);
 };
 }
 
@@ -158,6 +158,10 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     // Unless we read at emit.
     // FIXME: Introduce "Write at emit."
     if (WriteSlot == EmitSlot && !isReasAtEmit) ++WriteSlot;
+    // Write to register operation need to wait one more slot if the result is
+    // written at the moment (clock event) that the atom finish.
+    if (VTID.isWriteUntilFinish()) ++WriteSlot;
+    
 
     // We read the values after we emit it unless the value is read at emit.
     if (!isReasAtEmit) ++ReadSlot;
@@ -299,7 +303,12 @@ MachineBasicBlock *FSMState::emitSchedule() {
 
       if (A->getSlot() != CurSlot) {
         BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
-        CurSlot = A->getSlot();
+        // Some states may not emit any atoms, but it may read the result from
+        // previous atoms.
+        // Note that AtomsToEmit is empty now, so we do not emitting any new
+        // atoms.
+        while (++CurSlot != A->getSlot())
+          BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
       }
       
       if (MachineInstr *Inst = A->getInst()) {
@@ -358,9 +367,9 @@ void HWCtrlDep::print(raw_ostream &OS) const {
 void HWValDep::print(raw_ostream &OS) const {
 }
 
-HWAtom::HWAtom(MachineInstr *MI, unsigned short latancy, unsigned short Idx,
+HWAtom::HWAtom(MachineInstr *MI, unsigned short latency, unsigned short Idx,
                unsigned fuid)
-  : Latancy(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid), Instr(MI) {}
+  : Latency(latency), SchedSlot(0), InstIdx(Idx), FUNum(fuid), Instr(MI) {}
 
 void HWAtom::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
@@ -404,10 +413,6 @@ void HWAtom::print(raw_ostream &OS) const {
   
   OS << "\nAt slot: " << getSlot();
 }
-
-HWValDep::HWValDep(HWAtom *Src, bool isSigned, enum ValDepTypes T)
-: HWEdge(edgeValDep, Src, 0), IsSigned(isSigned), DepType(T) {}
-
 
 void FSMState::print(raw_ostream &OS) const {
 }
