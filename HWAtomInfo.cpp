@@ -397,6 +397,9 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
                                            Latency, ++InstIdx, Id.getFUNum());
   
+  // Assume all def is dead, and try to prove it wrong.
+  bool AllDefDead = true;
+
   if (Defs.empty())
     DetachNodes.push_back(A);
   else {
@@ -409,8 +412,13 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
         DetachNodes.push_back(A);
         break;
       }
+
+      if (!Op->isDead()) AllDefDead = false;
     }
   }
+
+  // If All define dead, this node is detached.
+  if (AllDefDead) DetachNodes.push_back(A);
 
   return A;
 }
