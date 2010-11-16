@@ -586,7 +586,7 @@ void RTLWriter::emitDatapath(ucState &State) {
     switch (Op.getOpCode()) {
     case VTM::VOpAdd:       emitOpAdd(Op);          break;
     case VTM::VOpXor:       emitBinOp(Op, "^");     break;
-    case VTM::VOpSHL:       emitBinOp(Op, ">>");    break;
+    case VTM::VOpSHL:       emitBinOp(Op, "<<");    break;
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;

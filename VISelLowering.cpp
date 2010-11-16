@@ -205,7 +205,8 @@ SDValue VTargetLowering::getBitSlice(SDValue Op, unsigned UB, unsigned LB,
   assert(SizeInBits < computeSizeInBits(Op) && "Bad bit slice bit width!");
   assert(UB <= computeSizeInBits(Op) && "Bad upper bound of bit slice!");
 
-  EVT VT = EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerType(Context);
+  EVT VT =
+    EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerOrBitType(Context);
 
   return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
                      DAG.getConstant(UB, MVT::i8),
@@ -216,7 +217,8 @@ SDValue VTargetLowering::getBitRepeat(SDValue Op, unsigned Times,
                                       SelectionDAG &DAG, DebugLoc dl) const {
   LLVMContext &Context = *DAG.getContext();
   unsigned SizeInBits = computeSizeInBits(Op) * Times;
-  EVT VT = EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerType(Context);
+  EVT VT =
+    EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerOrBitType(Context);
 
   return DAG.getNode(VTMISD::BitRepeat, dl, VT, Op,
                      DAG.getConstant(Times, MVT::i8));
