@@ -40,11 +40,11 @@ public:
   VTargetLowering(TargetMachine &TM);
   virtual MVT::SimpleValueType getSetCCResultType(EVT VT) const;
   virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
+  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   const char *getTargetNodeName(unsigned Opcode) const;
   unsigned getFunctionAlignment(const Function *F) const;
 
-private:
   unsigned computeSizeInBits(SDValue Op) const;
 
   SDValue getBitSlice(SDValue Op, unsigned UB, unsigned LB,
@@ -56,6 +56,7 @@ private:
     unsigned SizeInBit = computeSizeInBits(Op);
     return getBitSlice(Op, SizeInBit, SizeInBit - 1, DAG, dl);
   }
+private:
 
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;

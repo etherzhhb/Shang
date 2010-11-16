@@ -88,6 +88,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setOperationAction(ISD::BR_CC,  MVT::Other, Expand);
   // Just Lower ISD::BR to BR_CC
   setOperationAction(ISD::BR,     MVT::Other, Custom);
+
+  // Try to perform bit level optimization on these nodes:
+  setTargetDAGCombine(ISD::SHL);
+  setTargetDAGCombine(ISD::SRA);
+  setTargetDAGCombine(ISD::SRL);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
@@ -303,10 +308,12 @@ SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
   if (Signed)
     // Fill the high bits with sign bit for signed extend.
     HighBits = getBitRepeat(getSignBit(Operand, DAG, dl), DiffSize, DAG, dl);
-  else
+  else {
+    EVT ConstVT = EVT::getIntegerVT(*DAG.getContext(), DiffSize);
     // Fill the high bits with zeros for signed extend.
-    HighBits = getBitSlice(DAG.getConstant(0, MVT::i64), DiffSize, 0, DAG, dl);
-  
+    HighBits = DAG.getConstant(0, ConstVT, true);
+  }
+
   return DAG.getNode(VTMISD::BitCat, Op.getDebugLoc(), Op.getValueType(),
                      HighBits, Operand);
 }
@@ -359,3 +366,55 @@ void VTargetLowering::ReplaceNodeResults(SDNode *N,
   assert(0 && "ReplaceNodeResults not implemented for this target!");
 
 }
+
+//===----------------------------------------------------------------------===//
+/// Move this to BitLevelOpt.cpp
+static SDValue PerformShiftImmCombine(SDNode *N, SelectionDAG &DAG,
+                                      const VTargetLowering &TLI) {
+  ConstantSDNode *ShAmt = dyn_cast<ConstantSDNode>(N->getOperand(1));
+  // Can only handle shifting a constant amount.
+  if (ShAmt == 0) return SDValue();
+
+  DebugLoc dl = N->getDebugLoc();
+  EVT VT = N->getValueType(0);
+  unsigned PaddingSize = ShAmt->getSExtValue();
+  EVT PaddingVT = EVT::getIntegerVT(*DAG.getContext(), PaddingSize);
+  // Create this padding bits as target constant.
+  SDValue PaddingBits = DAG.getConstant(0, PaddingVT, true);
+
+  SDValue Src = N->getOperand(0);
+  unsigned SrcSize = TLI.computeSizeInBits(Src);
+  
+
+  switch (N->getOpcode()) {
+  case ISD::SHL: {
+    // Discard the higher bits of src.
+    Src = TLI.getBitSlice(Src, SrcSize - PaddingSize, 0, DAG, dl);
+    return DAG.getNode(VTMISD::BitCat, dl, VT, Src, PaddingBits);
+  }
+  case ISD::SRA:
+    PaddingBits = TLI.getSignBit(Src, DAG, dl);
+    // Fall though
+  case ISD::SRL:
+    // Discard the lower bits of src.
+    Src = TLI.getBitSlice(Src, SrcSize, PaddingSize, DAG, dl);
+    return DAG.getNode(VTMISD::BitCat, dl, VT, PaddingBits, Src);
+  default:
+    assert(0 && "Bad opcode!");
+    return SDValue();
+  }
+}
+
+SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
+                                           TargetLowering::DAGCombinerInfo &DCI)
+                                           const {
+  switch (N->getOpcode()) {
+  case ISD::SHL:
+  case ISD::SRA:
+  case ISD::SRL:
+    return PerformShiftImmCombine(N, DCI.DAG, *this);
+  }
+
+  return SDValue();
+}
+
