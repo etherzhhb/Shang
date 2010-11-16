@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-//#include "VTargetMachine.h"
+//#include "vtm/VTargetMachine.h"
 
 #include "llvm/Module.h"
 #include "llvm/Target/TargetRegistry.h"

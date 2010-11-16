@@ -11,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VInstrInfo.h"
-#include "VTargetMachine.h"
-#include "VTM.h"
+#include "vtm/VInstrInfo.h"
+#include "vtm/VTargetMachine.h"
+#include "vtm/VTM.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"

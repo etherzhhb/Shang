@@ -18,8 +18,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VerilogAST.h"
-#include "HWAtomPasses.h"
+#include "vtm/VerilogAST.h"
+#include "vtm/Passes.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"

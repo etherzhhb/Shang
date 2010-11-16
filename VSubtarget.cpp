@@ -12,20 +12,18 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "vtmconfig"
-#include "VTMConfig.h"
+#include "vtm/VSubtarget.h"
 
-#include "VFunctionUnit.h"
-
-#define VTMSubtarget VTMConfig
+#define VTMSubtarget VSubtarget
 #include "VGenSubtarget.inc"
 
-#include "VTM.h"
+#include "vtm/VTM.h"
 
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
-VTMConfig::VTMConfig(const std::string &TT,
+VSubtarget::VSubtarget(const std::string &TT,
                      const std::string &FS) {
   std::string CPU = "generic";
   // Parse features string.

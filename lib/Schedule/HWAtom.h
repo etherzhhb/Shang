@@ -22,7 +22,7 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
-#include "VFunctionUnit.h"
+#include "vtm/FUs.h"
 
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"

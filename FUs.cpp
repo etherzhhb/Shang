@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VFunctionUnit.h"
+#include "vtm/FUs.h"
 
 using namespace llvm;
 

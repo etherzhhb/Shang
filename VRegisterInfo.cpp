@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VTM.h"
-#include "VRegisterInfo.h"
+#include "vtm/VTM.h"
+#include "vtm/VRegisterInfo.h"
 
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"

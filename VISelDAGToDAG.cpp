@@ -11,9 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VTM.h"
-#include "VTargetMachine.h"
-#include "VRegisterInfo.h"
+#include "vtm/VTM.h"
+#include "vtm/VTargetMachine.h"
+#include "vtm/VRegisterInfo.h"
+
 #include "llvm/Intrinsics.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"

@@ -16,7 +16,7 @@
 #define VISELLOWERING_H
 
 #include "llvm/Target/TargetLowering.h"
-#include "VTM.h"
+#include "vtm/VTM.h"
 
 namespace llvm {
 

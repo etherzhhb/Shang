@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedScheduling.h"
-#include "HWAtomPasses.h"
+#include "vtm/Passes.h"
 
 #include "llvm/Support/CommandLine.h"
 

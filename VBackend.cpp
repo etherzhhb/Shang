@@ -8,7 +8,7 @@
 * install copy or modify this software without written permission from 
 * Nadav Rotem. 
 */
-#include "VTargetMachine.h"
+#include "vtm/VTargetMachine.h"
 #include "VMCAsmInfo.h"
 
 #include "llvm/PassManager.h"
@@ -26,7 +26,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include "HWAtomPasses.h"
+#include "vtm/Passes.h"
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"

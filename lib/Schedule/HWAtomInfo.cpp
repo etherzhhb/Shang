@@ -22,10 +22,10 @@
 
 #include "ForceDirectedScheduling.h"
 //#include "MemDepAnalysis.h"
-#include "HWAtomPasses.h"
-#include "VTMFunctionInfo.h"
-#include "VTargetMachine.h"
-#include "VTM.h"
+#include "vtm/Passes.h"
+#include "vtm/VFuncInfo.h"
+#include "vtm/VTargetMachine.h"
+#include "vtm/VTM.h"
 
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -59,7 +59,7 @@ struct HWAtomInfo : public MachineFunctionPass {
 
   MachineRegisterInfo *MRI;
 
-  VFunInfo *FuncInfo;
+  VFuncInfo *FuncInfo;
   // Nodes that detach from the exit node.
   std::vector<HWAtom*> DetachNodes;
 
@@ -186,15 +186,14 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   LiveVars = &getAnalysis<LiveVariables>();
   MRI = &MF.getRegInfo();
-  FuncInfo = MF.getInfo<VFunInfo>();
+  FuncInfo = MF.getInfo<VFuncInfo>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
     FSMState *State = buildState(MBB);
-    
-    scheduleState(State);
 
+    scheduleState(State);
     State->viewGraph();
 
     State->emitSchedule();

@@ -15,8 +15,7 @@
 #ifndef BUNDLE_TOKENS_H
 #define BUNDLE_TOKENS_H
 
-#include "VTM.h"
-#include "VTMConfig.h"
+#include "vtm/VTM.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"

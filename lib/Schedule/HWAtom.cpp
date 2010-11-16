@@ -18,11 +18,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicroState.h"
+#include "vtm/MicroState.h"
 #include "ForceDirectedScheduling.h"
 #include "HWAtom.h"
-#include "VTMFunctionInfo.h"
-#include "VTargetMachine.h"
+#include "vtm/VFuncInfo.h"
+#include "vtm/VTargetMachine.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -48,7 +48,7 @@ struct MicroStateBuilder {
   const TargetMachine &Target;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
-  VFunInfo &VFI;
+  VFuncInfo &VFI;
   
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
@@ -96,7 +96,7 @@ struct MicroStateBuilder {
   OpId(S.getMachineBasicBlock()->getNumber() << 24),
   State(S), VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
   MRI(S.getMachineBasicBlock()->getParent()->getRegInfo()),
-  VFI(*S.getMachineBasicBlock()->getParent()->getInfo<VFunInfo>()),
+  VFI(*S.getMachineBasicBlock()->getParent()->getInfo<VFuncInfo>()),
   DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}
 
   ~MicroStateBuilder() {
@@ -282,7 +282,7 @@ MachineBasicBlock *FSMState::emitSchedule() {
   MachineBasicBlock::iterator InsertPos = MBB->end();
   SmallVector<HWAtom*, 8> AtomsToEmit;
   unsigned CurSlot = startSlot;
-  VFunInfo *VFI = MBB->getParent()->getInfo<VFunInfo>();
+  VFuncInfo *VFI = MBB->getParent()->getInfo<VFuncInfo>();
 
   std::sort(Atoms.begin(), Atoms.end(), top_sort_start);
 

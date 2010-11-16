@@ -15,7 +15,7 @@
 #ifndef VINSTRUCTIONINFO_H
 #define VINSTRUCTIONINFO_H
 
-#include "VFunctionUnit.h"
+#include "vtm/FUs.h"
 #include "VRegisterInfo.h"
 
 #include "llvm/Target/TargetInstrInfo.h"

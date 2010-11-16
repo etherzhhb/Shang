@@ -21,18 +21,14 @@
 #define VBE_FORCE_DIRECTED_INFO
 
 #include "HWAtom.h"
-#include "VTMConfig.h"
-//#include "ModuloScheduleInfo.h"
 
 #include "llvm/ADT/PriorityQueue.h"
-
+#include <map>
 using namespace llvm;
 
 namespace llvm {
-class VTMConfig;
-
+struct VTargetMachine;
 class ForceDirectedSchedulingBase {
-  const VTMConfig *VST;
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
   double ExtraResReq;

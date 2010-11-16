@@ -23,14 +23,14 @@
 namespace llvm {
 class Module;
 
-class VTMConfig : public TargetSubtarget {
+class VSubtarget : public TargetSubtarget {
   /// Selected instruction itineraries (one entry per itinerary class.)
   InstrItineraryData InstrItins;
   // Just some dummy subtarget features.
   bool vtmattr;
 
 public:
-  VTMConfig(const std::string &TT, const std::string &FS);
+  VSubtarget(const std::string &TT, const std::string &FS);
   std::string ParseSubtargetFeatures(const std::string &FS,
                                      const std::string &CPU);
 

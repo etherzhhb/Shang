@@ -11,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MicroState.h"
-#include "VInstrInfo.h"
-#include "VTM.h"
+#include "vtm/MicroState.h"
+#include "vtm/VInstrInfo.h"
+#include "vtm/VTM.h"
 
 #include "llvm/Metadata.h"
 #include "llvm/Type.h"

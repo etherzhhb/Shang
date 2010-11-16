@@ -1,4 +1,4 @@
-//====- VTMFuctionInfo.h - Verilog target machine function info -*- C++ -*-===//
+//====------ VFunInfo.h - Verilog target machine function info --*- C++ -*-===//
 // 
 //                     The LLVM Compiler Infrastructure
 //
@@ -15,7 +15,7 @@
 #ifndef VTM_FUNCTION_INFO_H
 #define VTM_FUNCTION_INFO_H
 
-#include "VFunctionUnit.h"
+#include "vtm/FUs.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/StringPool.h"
@@ -26,7 +26,7 @@
 namespace llvm {
 class MachineBasicBlock;
 
-class VFunInfo : public MachineFunctionInfo {
+class VFuncInfo : public MachineFunctionInfo {
   // Information about slots.
   struct StateSlots{
     unsigned startSlot : 32;
@@ -68,7 +68,7 @@ class VFunInfo : public MachineFunctionInfo {
   StringPool SymbolPool;
   std::set<PooledStringPtr> Symbols;
 public:
-  explicit VFunInfo(MachineFunction &MF) {}
+  explicit VFuncInfo(MachineFunction &MF) {}
 
   /// Slots information for machine basicblock.
 

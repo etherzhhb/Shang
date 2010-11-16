@@ -18,12 +18,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtomPasses.h"
-#include "MicroState.h"
-#include "VerilogAST.h"
-#include "VTargetMachine.h"
-#include "VTMFunctionInfo.h"
-#include "VFunctionUnit.h"
+#include "vtm/Passes.h"
+#include "vtm/MicroState.h"
+#include "vtm/VerilogAST.h"
+#include "vtm/VTargetMachine.h"
+#include "vtm/VFuncInfo.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/StringExtras.h"
@@ -51,7 +50,7 @@ class RTLWriter : public MachineFunctionPass {
   VLang *vlang;
   MachineFunction *MF;
   VTargetMachine &VTM;
-  VFunInfo *FuncInfo;
+  VFuncInfo *FuncInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
 
@@ -160,7 +159,7 @@ char RTLWriter::ID = 0;
 
 bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
-  FuncInfo = MF->getInfo<VFunInfo>();
+  FuncInfo = MF->getInfo<VFuncInfo>();
   MRI = &MF->getRegInfo();
   vlang = &getAnalysis<VLang>();
 
@@ -344,7 +343,7 @@ void RTLWriter::emitCommonPort() {
 
 void RTLWriter::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
-  typedef VFunInfo::const_id_iterator id_iterator;
+  typedef VFuncInfo::const_id_iterator id_iterator;
 
   VFUMemBus *MemBus = VTM.getFUDesc<VFUMemBus>();
 
@@ -438,7 +437,7 @@ void RTLWriter::emitFUCtrl(unsigned Slot) {
     OS.indent(10) << "fin <= 1'b0;\n";
   
   // Membus control operation.
-  for (VFunInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
+  for (VFuncInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
 
