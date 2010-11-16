@@ -179,8 +179,6 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   vlang->param(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
   vlang->matchCase(VM->getControlBlockBuffer(6), "state_idle");
   // Idle state is always ready.
-  // FIXME: The module may finished at the first cycle.
-  VM->getControlBlockBuffer(8) << "fin <= 1'h0;\n";
   vlang->ifBegin(VM->getControlBlockBuffer(8), "start");
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
@@ -431,18 +429,22 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
 }
 
 void RTLWriter::emitFUCtrl(unsigned Slot) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  // The FSM operation.
+  if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, Slot))
+    OS.indent(10) << "fin <= 1'b1;\n";
+  else
+    OS.indent(10) << "fin <= 1'b0;\n";
+  
   // Membus control operation.
   for (VFunInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
 
-    raw_ostream &OS = VM->getControlBlockBuffer(10);
-    OS << VFUMemBus::getEnableName(Id.getFUNum()) << " <= 1'b";
+    OS.indent(10) << VFUMemBus::getEnableName(Id.getFUNum());
     // Enable the membus if it is activated.
-    if (FuncInfo->isFUActiveAt(Id, Slot)) OS << '1';
-    else                                  OS << '0';
-
-    OS << ";\n";
+    if (FuncInfo->isFUActiveAt(Id, Slot)) OS << " <= 1'b1;\n";
+    else                                  OS << " <= 1'b0;\n";
   }
   
 }
@@ -492,7 +494,6 @@ void RTLWriter::emitOpArg(ucOp &OpArg) {
 
 void RTLWriter::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
-  OS << "fin <= 1'h1;\n";
   OS.indent(10) << "NextFSMState <= state_idle;\n";
 }
 

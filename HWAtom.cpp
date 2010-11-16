@@ -295,11 +295,12 @@ MachineBasicBlock *FSMState::emitSchedule() {
 
       FuncUnitId FUId = A->getFUId();
       // Remember the active slot.
-      if (FUId.isBinded()) {
-        VFI->rememberAllocatedFU(FUId);
-        for (unsigned i = A->getSlot(), e = A->getFinSlot(); i < e; ++i)
-          VFI->remeberActiveSlot(FUId, i);
-      }
+      if (FUId.isBinded())
+        VFI->rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot());
+
+      // Special case: Ret instruction use the function unit "FSMFinish".
+      if (A->getOpcode() == VTM::VOpRet)
+        VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
 
       if (A->getSlot() != CurSlot) {
         BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
@@ -370,6 +371,14 @@ void HWValDep::print(raw_ostream &OS) const {
 HWAtom::HWAtom(MachineInstr *MI, unsigned short latency, unsigned short Idx,
                unsigned fuid)
   : Latency(latency), SchedSlot(0), InstIdx(Idx), FUNum(fuid), Instr(MI) {}
+
+unsigned llvm::HWAtom::getOpcode() const
+{
+  if (MachineInstr *I =getInstr())
+    return I->getOpcode();
+
+  return VTM::INSTRUCTION_LIST_END;
+}
 
 void HWAtom::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");

@@ -42,6 +42,7 @@ public:
   unsigned getFunctionAlignment(const Function *F) const;
 
 private:
+  SDValue LowerBR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerADDSUB(SDValue Op, SelectionDAG &DAG, SDValue CarrayIn,
                       bool isSub = false) const;
 

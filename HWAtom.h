@@ -347,6 +347,7 @@ public:
   void resetSchedule() { SchedSlot = 0; }
 
   MachineInstr *getInstr() const { return Instr; }
+  unsigned getOpcode() const;
 
   VFUs::FUTypes getFUType() const;
   unsigned getFUNum() const { return FUNum; }

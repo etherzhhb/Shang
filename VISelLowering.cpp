@@ -44,6 +44,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setShiftAmountType(MVT::i8);
   setBooleanContents(UndefinedBooleanContent);
   setIntDivIsCheap(false);
+  setSchedulingPreference(Sched::ILP);
 
   // Set up the legal register classes.
   addRegisterClass(MVT::i1,   VTM::DR1RegisterClass);
@@ -75,6 +76,17 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::LOAD, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::STORE, (MVT::SimpleValueType)VT, Custom);
   }
+
+
+  // Operations not directly supported by VTM.
+  setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
+  setOperationAction(ISD::BR_CC,  MVT::Other, Expand);
+  // Just Lower ISD::BR to BR_CC
+  setOperationAction(ISD::BR,     MVT::Other, Custom);
+}
+
+MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
+  return MVT::i1;
 }
 
 const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -88,10 +100,6 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::ADD:        return "VTMISD::ADD";
   case VTMISD::MemAccess:  return "VTMISD::MemAccess";
   }
-}
-
-MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
-  return MVT::i1;
 }
 
 SDValue
@@ -164,6 +172,19 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   return Chain;
 }
 
+// Lower br <target> to brcond 1, <target>
+SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
+  SDValue Chain = Op.getOperand(0);
+
+  SDValue Cond = DAG.getConstant(1, MVT::i1);
+
+  if (Chain->getOpcode() == ISD::BRCOND)
+    Cond = DAG.getNOT(Op.getDebugLoc(), Chain->getOperand(1), MVT::i1);
+
+  return DAG.getNode(ISD::BRCOND, Op.getDebugLoc(), MVT::Other, Chain, Cond,
+                     Op.getOperand(1));
+}
+
 // Lower add to full adder operation.
 // Operands: lhs, rhs, carry-in
 // Results: sum, carry-out
@@ -221,6 +242,8 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
     return SDValue();
+  case ISD::BR:
+    return LowerBR(Op, DAG);
   case ISD::LOAD:
     return LowerMemAccess(Op, DAG, true);
   case ISD::STORE:

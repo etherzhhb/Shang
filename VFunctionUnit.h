@@ -30,11 +30,16 @@ namespace VFUs {
     Mult = 6,
 
     FirstFUType = Trivial,
-    LastFUType = Mult,
+    LastCommonFUType = Mult,
+    NumCommonFUs = LastCommonFUType - FirstFUType + 1,
+    // Special function unit.
+    // Finite state machine finish.
+    FSMFinish = 7,
+    LastFUType = FSMFinish,
     NumFUs = LastFUType - FirstFUType + 1,
     // Helper enumeration value, just for internal use as a flag to indicate
     // all kind of function units are selected.
-    AllFUType = LastFUType + 1
+    AllFUType = 0xf
   };
 }
 
@@ -50,9 +55,14 @@ class FuncUnitId {
 
 public:
   // The general FUId of a given type.
-  inline FuncUnitId(VFUs::FUTypes T = VFUs::Trivial, unsigned N = 0xfff) {
+  inline explicit FuncUnitId(VFUs::FUTypes T, unsigned N) {
     UID.ID.Type = T;
     UID.ID.Num = N;
+  }
+
+  /*implicit*/ FuncUnitId(VFUs::FUTypes T = VFUs::Trivial) {
+    UID.ID.Type = T;
+    UID.ID.Num = (T == VFUs::FSMFinish) ? 0 : 0xfff;
   }
 
   inline VFUs::FUTypes getFUType() const { return UID.ID.Type; }

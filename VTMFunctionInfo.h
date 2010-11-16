@@ -107,10 +107,12 @@ public:
 
   /// Information for allocated function units.
 
-  void rememberAllocatedFU(FuncUnitId Id) {
+  void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot) {
     // Sometimes there are several instructions allocated to the same instruction,
     // and it is ok to try to insert the same FUId more than once.
     AllocatedFUs[Id.getFUType()].insert(Id);
+    for (unsigned i = EmitSlot; i < FinshSlot; ++i)
+      remeberActiveSlot(Id, i);
   }
 
   typedef std::set<FuncUnitId>::const_iterator const_id_iterator;

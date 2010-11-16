@@ -44,7 +44,7 @@ struct VTargetMachine : public LLVMTargetMachine {
   InstrItineraryData  InstrItins;
 
   /// mapping allocated instences to atom
-  VFUDesc *ResSet[VFUs::NumFUs];
+  VFUDesc *ResSet[VFUs::NumCommonFUs];
 
   // FIXME
   // TargetFrameInfo FrameInfo;
@@ -111,12 +111,12 @@ struct VTargetMachine : public LLVMTargetMachine {
   const_iterator begin() const { return &ResSet[0]; }
 
   iterator end() { 
-    return begin() + (size_t)VFUs::LastFUType -
+    return begin() + (size_t)VFUs::LastCommonFUType -
       (size_t)VFUs::FirstFUType;
   }
 
   const_iterator end() const { 
-    return begin() + (size_t)VFUs::LastFUType -
+    return begin() + (size_t)VFUs::LastCommonFUType -
       (size_t)VFUs::FirstFUType;
   }
 };
