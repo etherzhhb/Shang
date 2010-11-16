@@ -27,6 +27,9 @@ namespace VTMISD {
     Ret,
     RetVal,
     ADD,
+    BitSlice,
+    BitCat,
+    BitRepeat,
     // Memory operations.
     MemAccess = ISD::FIRST_TARGET_MEMORY_OPCODE
   };
@@ -42,6 +45,20 @@ public:
   unsigned getFunctionAlignment(const Function *F) const;
 
 private:
+  unsigned computeSizeInBits(SDValue Op) const;
+
+  SDValue getBitSlice(SDValue Op, unsigned UB, unsigned LB,
+                      SelectionDAG &DAG, DebugLoc dl) const;
+  SDValue getBitRepeat(SDValue Op, unsigned Times,
+                       SelectionDAG &DAG, DebugLoc dl) const;
+
+  SDValue getSignBit(SDValue Op, SelectionDAG &DAG, DebugLoc dl) const {
+    unsigned SizeInBit = computeSizeInBits(Op);
+    return getBitSlice(Op, SizeInBit, SizeInBit - 1, DAG, dl);
+  }
+
+  SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
+  SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerADDSUB(SDValue Op, SelectionDAG &DAG, SDValue CarrayIn,
                       bool isSub = false) const;

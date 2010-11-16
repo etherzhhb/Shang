@@ -47,6 +47,25 @@ def SDTMemAccess : SDTypeProfile<1, 3, [
 def VTMMemAccess : SDNode<"VTMISD::MemAccess", SDTMemAccess,
                     [SDNPHasChain, SDNPMayStore, SDNPMayLoad, SDNPMemOperand]>;
 
+// Select bit slice, Src operand, upper_bound, lower_bound
+def SDT_BitSlice : SDTypeProfile<1, 3, [
+  SDTCisInt<0>, SDTCisInt<1>, SDTCisOpSmallerThanOp<0, 1>,
+  SDTCisVT<2, i8>, SDTCisVT<3, i8>
+]>;
+def VTMBitSlice : SDNode<"VTMISD::BitSlice", SDT_BitSlice>;
+
+// Bit concat 
+def SDT_BitCat : SDTypeProfile<1, -1, [
+  SDTCisInt<0>
+]>;
+def VTMBitCat : SDNode<"VTMISD::BitCat", SDT_BitCat>;
+
+// Bit repeat, Src operand, repeat times.
+def SDT_BitRepeat : SDTypeProfile<1, 2, [
+  SDTCisInt<0>, SDTCisOpSmallerThanOp<1, 0>, SDTCisVT<3, i8>  
+]>;
+def VTMBitRepeat : SDNode<"VTMISD::BitRepeat", SDT_BitRepeat>;
+
 //===----------------------------------------------------------------------===//
 // Immediates
 //===----------------------------------------------------------------------===//
@@ -76,18 +95,21 @@ def VOpRetVal : InstPassive<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
-
 let isCommutable       = 1 in
 def VOpXor	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
 						   "$dst = xor $src0, $src1", []>;
 
-// Cast value to difference bitwidth.
-def VOpCast	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src, i1imm:$signed),
-						  "$dst = cast $src, $signed", []>;
+// Bitwise operations.
+def VOpBitSlice	 : InstPassive<(outs dyn_rc:$dst),
+                              (ins dyn_rc:$src, DR8:$ub, DR8:$lb),
+							  "$dst = bitslice $src, $ub, $lb", []>;
 
-// Load immediate into registers.
-def VOpLdImm : InstPassive<(outs dyn_rc:$r), (ins i64imm:$c), "$r = $c;", []>;
+def VOpBitRepeat : InstPassive<(outs dyn_rc:$dst),
+                              (ins dyn_rc:$src, DR8:$times),
+							  "$dst = bitrepeat $src, $times", []>;
 
+def VOpBitCat	 : InstPassive<(outs dyn_rc:$dst), (ins variable_ops),
+							  "$dst = bitcat", []>;
 }
 
 //===----------------------------------------------------------------------===//

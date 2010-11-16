@@ -72,9 +72,14 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::SSUBO, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
-
+    // Lower load and store to memory access node.
     setOperationAction(ISD::LOAD, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::STORE, (MVT::SimpleValueType)VT, Custom);
+    // Lower cast node to bit level operation.
+    setOperationAction(ISD::SIGN_EXTEND, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::ZERO_EXTEND, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::ANY_EXTEND, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::TRUNCATE, (MVT::SimpleValueType)VT, Custom);
   }
 
 
@@ -99,6 +104,9 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::RetVal:     return "VTMISD::RetVal";
   case VTMISD::ADD:        return "VTMISD::ADD";
   case VTMISD::MemAccess:  return "VTMISD::MemAccess";
+  case VTMISD::BitSlice:   return "VTMISD::BitSlice";
+  case VTMISD::BitCat:     return "VTMISD::BitCat";
+  case VTMISD::BitRepeat:  return "VTMISD::BitRepeat";
   }
 }
 
@@ -171,6 +179,48 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
                                    SmallVectorImpl<SDValue> &InVals) const {
   return Chain;
 }
+unsigned VTargetLowering::computeSizeInBits(SDValue Op) const {
+  assert(Op.getValueType().isInteger() && "Can not compute size in bit!");
+  switch (Op->getOpcode()) {
+  default: return Op.getValueSizeInBits();
+  case VTMISD::BitSlice:
+    return cast<ConstantSDNode>(Op->getOperand(1))->getZExtValue()
+           - cast<ConstantSDNode>(Op->getOperand(2))->getZExtValue();
+  case VTMISD::BitRepeat:
+    return cast<ConstantSDNode>(Op->getOperand(1))->getZExtValue()
+           * computeSizeInBits(Op->getOperand(0));
+  case VTMISD::BitCat: {
+    unsigned SizeInBit = 0;
+    for (SDNode::op_iterator I = Op->op_begin(), E = Op->op_end(); I != E; ++I)
+      SizeInBit += computeSizeInBits(*I);
+    return SizeInBit;
+  }
+  }
+}
+SDValue VTargetLowering::getBitSlice(SDValue Op, unsigned UB, unsigned LB,
+                                     SelectionDAG &DAG, DebugLoc dl) const {
+  LLVMContext &Context = *DAG.getContext();
+  unsigned SizeInBits = UB - LB;
+  
+  assert(SizeInBits < computeSizeInBits(Op) && "Bad bit slice bit width!");
+  assert(UB <= computeSizeInBits(Op) && "Bad upper bound of bit slice!");
+
+  EVT VT = EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerType(Context);
+
+  return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
+                     DAG.getConstant(UB, MVT::i8),
+                     DAG.getConstant(LB, MVT::i8));
+}
+
+SDValue VTargetLowering::getBitRepeat(SDValue Op, unsigned Times,
+                                      SelectionDAG &DAG, DebugLoc dl) const {
+  LLVMContext &Context = *DAG.getContext();
+  unsigned SizeInBits = computeSizeInBits(Op) * Times;
+  EVT VT = EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerType(Context);
+
+  return DAG.getNode(VTMISD::BitRepeat, dl, VT, Op,
+                     DAG.getConstant(Times, MVT::i8));
+}
 
 // Lower br <target> to brcond 1, <target>
 SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
@@ -237,6 +287,37 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
   return isLoad ? Result : SDValue(Result.getNode(), 1);
 }
 
+SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
+                                     bool Signed) const {
+  SDValue Operand = Op.getOperand(0);
+  DebugLoc dl = Operand.getDebugLoc();
+
+  unsigned SrcSize = computeSizeInBits(Operand),
+           DstSize = Op.getValueSizeInBits();
+
+  unsigned DiffSize = DstSize - SrcSize;
+
+  SDValue HighBits;
+  if (Signed)
+    // Fill the high bits with sign bit for signed extend.
+    HighBits = getBitRepeat(getSignBit(Operand, DAG, dl), DiffSize, DAG, dl);
+  else
+    // Fill the high bits with zeros for signed extend.
+    HighBits = getBitSlice(DAG.getConstant(0, MVT::i64), DiffSize, 0, DAG, dl);
+  
+  return DAG.getNode(VTMISD::BitCat, Op.getDebugLoc(), Op.getValueType(),
+                     HighBits, Operand);
+}
+
+SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
+  SDValue Operand = Op.getOperand(0);
+  unsigned SrcSize = computeSizeInBits(Operand),
+           DstSize = Op.getValueSizeInBits();
+
+  // Select the lower bit slice to truncate values.
+  return getBitSlice(Operand, DstSize, 0, DAG, Op.getDebugLoc());
+}
+
 SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
@@ -255,6 +336,13 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::ADDE:   case ISD::SUBE:   case ISD::ADDC:   case ISD::SUBC:
   case ISD::SADDO:  case ISD::SSUBO:  case ISD::UADDO:  case ISD::USUBO:
     return SDValue();
+  case ISD::SIGN_EXTEND:
+    return LowerExtend(Op, DAG, true);
+  case ISD::ANY_EXTEND:
+  case ISD::ZERO_EXTEND:
+    return LowerExtend(Op, DAG, false);
+  case ISD::TRUNCATE:
+    return LowerTruncate(Op, DAG);
   }
 }
 

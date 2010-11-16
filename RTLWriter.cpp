@@ -111,7 +111,6 @@ class RTLWriter : public MachineFunctionPass {
   void emitBinOp(ucOp &BinOp, const std::string &Operator);
 
   void emitOpAdd(ucOp &OpAdd);
-  void emitOpLdImm(ucOp &OpLdImm);
   
   void emitCast(ucOp &OpCast);
 
@@ -586,8 +585,6 @@ void RTLWriter::emitDatapath(ucState &State) {
     case VTM::VOpAdd:     emitOpAdd(Op);          break;
     case VTM::VOpXor:     emitBinOp(Op, "^");     break;
     case VTM::VOpSHL:     emitBinOp(Op, ">>");    break;
-    case VTM::VOpCast:    emitCast(Op);           break;
-    case VTM::VOpLdImm:   emitOpLdImm(Op);        break;
     }
   } 
 }
@@ -600,16 +597,6 @@ void RTLWriter::emitBinOp(ucOp &BinOp, const std::string &Operator) {
   emitOperand(OS, BinOp.getOperand(1));
   OS << ' ' << Operator << ' ';
   emitOperand(OS, BinOp.getOperand(2));
-  OS << ";\n";
-}
-
-void RTLWriter::emitOpLdImm(ucOp &OpLdImm) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
-  OS << "assign ";
-  MachineOperand &Result = OpLdImm.getOperand(0);
-  emitOperand(OS, OpLdImm.getOperand(0));
-  OS << " = ";
-  emitOperand(OS, OpLdImm.getOperand(1));
   OS << ";\n";
 }
 
