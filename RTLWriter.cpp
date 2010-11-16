@@ -112,7 +112,9 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitOpAdd(ucOp &OpAdd);
   
-  void emitCast(ucOp &OpCast);
+  void emitOpBitCat(ucOp &OpBitCat);
+  void emitOpBitSlice(ucOp &OpBitSlice);
+  void emitOpBitRepeat(ucOp &OpBitRepeat);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand);
   unsigned getOperandWitdh(MachineOperand &Operand);
@@ -582,9 +584,12 @@ void RTLWriter::emitDatapath(ucState &State) {
       continue;
     
     switch (Op.getOpCode()) {
-    case VTM::VOpAdd:     emitOpAdd(Op);          break;
-    case VTM::VOpXor:     emitBinOp(Op, "^");     break;
-    case VTM::VOpSHL:     emitBinOp(Op, ">>");    break;
+    case VTM::VOpAdd:       emitOpAdd(Op);          break;
+    case VTM::VOpXor:       emitBinOp(Op, "^");     break;
+    case VTM::VOpSHL:       emitBinOp(Op, ">>");    break;
+    case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
+    case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
+    case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
     }
   } 
 }
@@ -620,42 +625,54 @@ void RTLWriter::emitOpAdd(ucOp &OpAdd) {
   OS << ";\n";
 }
 
-void RTLWriter::emitCast(ucOp &OpCast) {
+void RTLWriter::emitOpBitSlice(ucOp &OpBitSlice) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
-  MachineOperand &Dst = OpCast.getOperand(0),
-                 &Src = OpCast.getOperand(1);
+  // Get the range of the bit slice, Note that the
+  // bit at upper bound is excluded in VOpBitSlice,
+  // now we are going to get the included upper bound.
+  unsigned UB = OpBitSlice.getOperand(2).getImm() - 1,
+           LB = OpBitSlice.getOperand(3).getImm();
 
-  unsigned DstSize = getOperandWitdh(Dst),
-           SrcSize = getOperandWitdh(Src);
-  
   OS << "assign ";
-  emitOperand(OS, Dst);
+  emitOperand(OS, OpBitSlice.getOperand(0));
   OS << " = ";
+  emitOperand(OS, OpBitSlice.getOperand(1));
+  OS << '[';
+
+  if (UB == LB) OS << UB;
+  else          OS << UB << ':' << LB;
   
-  int DeltaSize = DstSize - SrcSize;
-  assert(DeltaSize != 0 && "Do not perform any cast!");
+  OS << "];\n";
+}
 
-  // If it is an extent operation.
-  if (DeltaSize > 0) {
-    OS << " = {{" << DeltaSize << "{";
+void RTLWriter::emitOpBitCat(ucOp &OpBitCat) {
+  raw_ostream &OS = VM->getDataPathBuffer(2);
+  OS << "assign ";
+  emitOperand(OS, OpBitCat.getOperand(0));
+  OS << " = {";
+  
+  // Skip the dst operand.
 
-    // If it is a signed extend?
-    if (OpCast.getOperand(2).getImm()) {
-      emitOperand(OS, Src);
-      OS << "["<< (SrcSize - 1) << "]";
-    } else
-      OS << "1'b0";
-
-    OS << "}}, ";
-
-    emitOperand(OS, Src);
-
-    OS << "};\n";
-  } else {
-    DeltaSize = - DeltaSize;
-    // TODO: Print truncate.
-    OS << ";\n";
+  ucOp::op_iterator I = OpBitCat.op_begin() + 1;
+  emitOperand(OS, *I);
+  while (++I != OpBitCat.op_end()) {
+    OS << ',';
+    emitOperand(OS, *I);
   }
+
+  OS << "};\n";
+}
+
+void RTLWriter::emitOpBitRepeat(ucOp &OpBitRepeat) {
+  raw_ostream &OS = VM->getDataPathBuffer(2);
+  OS << "assign ";
+  emitOperand(OS, OpBitRepeat.getOperand(0));
+  OS << " = {";
+
+  unsigned Times = OpBitRepeat.getOperand(2).getImm();
+  OS << Times << '{';
+  emitOperand(OS, OpBitRepeat.getOperand(1));
+  OS << "}};\n";
 }
 
 Pass *llvm::createRTLWriterPass(VTargetMachine &TM, raw_ostream &O) {
