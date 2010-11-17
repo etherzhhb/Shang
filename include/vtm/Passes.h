@@ -24,6 +24,8 @@ class LLVMContext;
 class Pass;
 class raw_ostream;
 class TargetMachine;
+class PassRegistry;
+
 struct VTargetMachine;
 
 // Simple As Soon As Possible Scheduler
@@ -62,6 +64,8 @@ Pass *createRTLWriterPass(VTargetMachine &TM, raw_ostream &O);
 // Testbench writer.
 Pass *createTestBenchWriterPass(raw_ostream &O);
 
+//
+void initializeBitLevelInfoPass(PassRegistry &Registry);
 } // end namespace
 
 #endif

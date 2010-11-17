@@ -81,8 +81,9 @@ class BitLevelInfo : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
 public:
   static char ID;
-  BitLevelInfo() : MachineFunctionPass(ID) {}
+  BitLevelInfo();
 
+  void getAnalysisUsage(AnalysisUsage &AU) const;
   bool runOnMachineFunction(MachineFunction &MF);
 
   void verifyAnalysis() const;

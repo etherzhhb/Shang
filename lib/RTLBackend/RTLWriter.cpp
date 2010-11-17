@@ -23,6 +23,7 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/VTargetMachine.h"
 #include "vtm/VFuncInfo.h"
+#include "vtm/BitLevelInfo.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/StringExtras.h"
@@ -52,6 +53,7 @@ class RTLWriter : public MachineFunctionPass {
   VTargetMachine &VTM;
   VFuncInfo *FuncInfo;
   MachineRegisterInfo *MRI;
+  BitLevelInfo *BLI;
   VASTModule *VM;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
@@ -115,7 +117,8 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpBitSlice(ucOp &OpBitSlice);
   void emitOpBitRepeat(ucOp &OpBitRepeat);
 
-  void emitOperand(raw_ostream &OS, MachineOperand &Operand);
+  void emitOperand(raw_ostream &OS, MachineOperand &Operand,
+                   bool PrintBitRange = true);
   unsigned getOperandWitdh(MachineOperand &Operand);
 
   void emitCtrlOp(ucState &State);
@@ -161,6 +164,7 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FuncInfo = MF->getInfo<VFuncInfo>();
   MRI = &MF->getRegInfo();
+  BLI = &getAnalysis<BitLevelInfo>();
   vlang = &getAnalysis<VLang>();
 
   if (DesignName.empty())
@@ -249,6 +253,7 @@ void RTLWriter::clear() {
 
 void RTLWriter::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
+  AU.addRequired<BitLevelInfo>();
   AU.addRequired<VLang>();
   AU.setPreservesAll();
 }
@@ -539,11 +544,22 @@ unsigned RTLWriter::getOperandWitdh(MachineOperand &Operand) {
   return 0;
 }
 
-void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand) {
+void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
+                            bool PrintBitRange) {
   switch (Operand.getType()) {
-  case MachineOperand::MO_Register:
+  case MachineOperand::MO_Register: {
     OS << "reg" << Operand.getReg();
+
+    if (!PrintBitRange)
+      return;
+
+    unsigned BitWidth = BLI->getBitWidth(Operand);  
+    if (BitWidth == 1)
+      OS << "[0]";
+    else
+      OS << '[' << (BitWidth - 1) << ":0]";
     return;
+  }
   case MachineOperand::MO_Metadata: {
     MetaToken MetaOp(Operand.getMetadata());
     assert((MetaOp.isDefWire() || MetaOp.isReadWire()) && "Bad operand!");
@@ -559,7 +575,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand) {
     return;
   }
   case MachineOperand::MO_Immediate:
-    OS << vlang->printConstantInt(Operand.getImm(), Operand.getTargetFlags(),
+    OS << vlang->printConstantInt(Operand.getImm(), BLI->getBitWidth(Operand),
                                   false);
     return;
   case MachineOperand::MO_ExternalSymbol:
@@ -635,7 +651,7 @@ void RTLWriter::emitOpBitSlice(ucOp &OpBitSlice) {
   OS << "assign ";
   emitOperand(OS, OpBitSlice.getOperand(0));
   OS << " = ";
-  emitOperand(OS, OpBitSlice.getOperand(1));
+  emitOperand(OS, OpBitSlice.getOperand(1), false);
   OS << '[';
 
   if (UB == LB) OS << UB;

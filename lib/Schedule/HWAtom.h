@@ -36,6 +36,7 @@
 #include <list>
 
 namespace llvm {
+class BitLevelInfo;
 class ForceDirectedSchedulingBase;
 class FuncUnitId;
 class HWAtom;
@@ -514,7 +515,7 @@ public:
   void scheduleACyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler);
   void scheduleCyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler,
                                 unsigned II);
-  MachineBasicBlock *emitSchedule();
+  MachineBasicBlock *emitSchedule(BitLevelInfo &BLI);
   //}
 };
 

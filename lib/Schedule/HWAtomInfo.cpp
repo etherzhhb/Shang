@@ -19,9 +19,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "HWAtom.h"
-
 #include "ForceDirectedScheduling.h"
 //#include "MemDepAnalysis.h"
+#include "vtm/BitLevelInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/VTargetMachine.h"
@@ -56,10 +56,9 @@ struct HWAtomInfo : public MachineFunctionPass {
   MachineLoopInfo *LI;
   LiveVariables *LiveVars;
   const VTargetMachine &VTarget;
-
   MachineRegisterInfo *MRI;
-
   VFuncInfo *FuncInfo;
+  BitLevelInfo *BLI;
   // Nodes that detach from the exit node.
   std::vector<HWAtom*> DetachNodes;
 
@@ -179,6 +178,7 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<LiveVariables>();
   AU.addRequired<MachineLoopInfo>();
+  AU.addRequired<BitLevelInfo>();
   // AU.addRequired<MemDepInfo>();
   AU.setPreservesAll();
 }
@@ -187,6 +187,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   LiveVars = &getAnalysis<LiveVariables>();
   MRI = &MF.getRegInfo();
   FuncInfo = MF.getInfo<VFuncInfo>();
+  BLI = &getAnalysis<BitLevelInfo>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
@@ -196,7 +197,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     scheduleState(State);
     State->viewGraph();
 
-    State->emitSchedule();
+    State->emitSchedule(*BLI);
     FuncInfo->remeberTotalSlot(MBB, State->getStartSlot(),
                                     State->getTotalSlot(),
                                     State->getII());

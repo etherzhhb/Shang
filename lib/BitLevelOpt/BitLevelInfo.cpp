@@ -14,8 +14,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/Passes.h"
 #include "vtm/BitLevelInfo.h"
+#include "vtm/Passes.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/VTM.h"
 
@@ -24,11 +24,23 @@
 
 using namespace llvm;
 
+INITIALIZE_PASS(BitLevelInfo, "vtm-bli", "Verilog Target Machine - "
+                "Bit Level Information Analysis", false, true);
+
 Pass *llvm::createBitLevelInfoPass() {
   return new BitLevelInfo();
 }
 
 char BitLevelInfo::ID = 0;
+
+BitLevelInfo::BitLevelInfo() : MachineFunctionPass(ID) {
+  initializeBitLevelInfoPass(*PassRegistry::getPassRegistry());
+}
+
+void BitLevelInfo::getAnalysisUsage(AnalysisUsage &AU) const {
+  MachineFunctionPass::getAnalysisUsage(AU);
+  AU.setPreservesAll();
+}
 
 bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
   std::vector<MachineInstr*> WorkStack;

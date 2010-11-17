@@ -18,11 +18,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/MicroState.h"
 #include "ForceDirectedScheduling.h"
 #include "HWAtom.h"
+
+#include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/VTargetMachine.h"
+#include "vtm/BitLevelInfo.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -49,6 +51,7 @@ struct MicroStateBuilder {
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
   VFuncInfo &VFI;
+  BitLevelInfo &BLI;
   
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
@@ -91,13 +94,15 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(FSMState &S, LLVMContext& Context, const TargetMachine &TM)
+  MicroStateBuilder(FSMState &S, LLVMContext& Context, const TargetMachine &TM,
+                    BitLevelInfo &BitInfo)
   : WireNum(S.getMachineBasicBlock()->getNumber() << 24),
   OpId(S.getMachineBasicBlock()->getNumber() << 24),
   State(S), VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
   MRI(S.getMachineBasicBlock()->getParent()->getRegInfo()),
   VFI(*S.getMachineBasicBlock()->getParent()->getInfo<VFuncInfo>()),
-  DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}
+  DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/),
+  BLI(BitInfo) {}
 
   ~MicroStateBuilder() {
     while (!InstsToDel.empty()) {
@@ -191,12 +196,10 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
         WireDef *NewDef = &result.first->second;
         // Remember to emit this wire define if necessary.
         Defs.push_back(NewDef);
-
+        unsigned BitWidth = BLI.getBitWidth(*MO);
         // Do not emit define unless it not killed in the current state.
         // Emit a wire define instead.
-        EVT VT = *MRI.getRegClass(RegNo)->vt_begin();
-        Builder.addMetadata(MetaToken::createDefWire(WireNum,
-                                                     VT.getSizeInBits(),
+        Builder.addMetadata(MetaToken::createDefWire(WireNum, BitWidth,
                                                      VMContext));
         continue;
       }
@@ -277,7 +280,7 @@ static inline bool top_sort_finish(const HWAtom* LHS, const HWAtom* RHS) {
   return LHS->getIdx() < RHS->getIdx();
 }
 
-MachineBasicBlock *FSMState::emitSchedule() {
+MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
   const TargetInstrInfo *TII = TM.getInstrInfo();
   MachineBasicBlock::iterator InsertPos = MBB->end();
   SmallVector<HWAtom*, 8> AtomsToEmit;
@@ -288,7 +291,7 @@ MachineBasicBlock *FSMState::emitSchedule() {
 
   // Build bundle from schedule units.
   {
-    MicroStateBuilder BTB(*this, MBB->getBasicBlock()->getContext(), TM);
+    MicroStateBuilder BTB(*this, MBB->getBasicBlock()->getContext(), TM, BLI);
 
     for (iterator I = begin(), E = end(); I != E; ++I) {
       HWAtom *A = *I;
