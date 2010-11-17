@@ -21,6 +21,7 @@
 #include "llvm/Support/StringPool.h"
 #include "llvm/ADT/STLExtras.h"
 
+#include <set>
 #include <map>
 
 namespace llvm {

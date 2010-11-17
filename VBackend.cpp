@@ -165,6 +165,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Print the instruction selected machine code...
   printAndVerify(PM, "After Instruction Selection");
 
+  // PerformBit level information analyze.
+  PM.add(createBitLevelInfoPass());
+
   // Optimize PHIs before DCE: removing dead PHI cycles may make more
   // instructions dead.
   if (OptLevel != CodeGenOpt::None)

@@ -47,6 +47,9 @@ Pass *createLocalLEAPass();
 // Scalar Streamization.
 Pass *createScalarStreamizationPass();
 
+// Bit level information analysis
+Pass *createBitLevelInfoPass();
+
 // HWAtom
 Pass *createHWAtonInfoPass(const VTargetMachine &TM);
 
