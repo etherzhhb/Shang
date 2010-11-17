@@ -54,15 +54,15 @@ static SDValue PerformShiftImmCombine(SDNode *N, SelectionDAG &DAG,
   switch (N->getOpcode()) {
   case ISD::SHL: {
     // Discard the higher bits of src.
-    Src = TLI.getBitSlice(Src, SrcSize - PaddingSize, 0, DAG, dl);
+    Src = TLI.getBitSlice(DAG, dl, Src, SrcSize - PaddingSize, 0);
     return DAG.getNode(VTMISD::BitCat, dl, VT, Src, PaddingBits);
   }
   case ISD::SRA:
-    PaddingBits = TLI.getSignBit(Src, DAG, dl);
+    PaddingBits = TLI.getSignBit(DAG, dl, Src);
     // Fall though
   case ISD::SRL:
     // Discard the lower bits of src.
-    Src = TLI.getBitSlice(Src, SrcSize, PaddingSize, DAG, dl);
+    Src = TLI.getBitSlice(DAG, dl, Src, SrcSize, PaddingSize);
     return DAG.getNode(VTMISD::BitCat, dl, VT, PaddingBits, Src);
   default:
     assert(0 && "Bad opcode!");

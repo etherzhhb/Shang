@@ -63,7 +63,8 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
       VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
     // Lower the add/sub operation to full adder operation.
     setOperationAction(ISD::ADD, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::SUB, (MVT::SimpleValueType)VT, Custom);
+    // Expend a - b to a + ~b + 1;
+    setOperationAction(ISD::SUB, (MVT::SimpleValueType)VT, Expand);
     setOperationAction(ISD::ADDE, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::SUBE, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::ADDC, (MVT::SimpleValueType)VT, Custom);
@@ -202,8 +203,8 @@ unsigned VTargetLowering::computeSizeInBits(SDValue Op) const {
   }
   }
 }
-SDValue VTargetLowering::getBitSlice(SDValue Op, unsigned UB, unsigned LB,
-                                     SelectionDAG &DAG, DebugLoc dl) const {
+SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
+                                     unsigned UB, unsigned LB) const {
   LLVMContext &Context = *DAG.getContext();
   unsigned SizeInBits = UB - LB;
   
@@ -218,8 +219,8 @@ SDValue VTargetLowering::getBitSlice(SDValue Op, unsigned UB, unsigned LB,
                      DAG.getConstant(LB, MVT::i8));
 }
 
-SDValue VTargetLowering::getBitRepeat(SDValue Op, unsigned Times,
-                                      SelectionDAG &DAG, DebugLoc dl) const {
+SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
+                                      unsigned Times) const {
   LLVMContext &Context = *DAG.getContext();
   unsigned SizeInBits = computeSizeInBits(Op) * Times;
   EVT VT =
@@ -246,21 +247,32 @@ SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
 // Operands: lhs, rhs, carry-in
 // Results: sum, carry-out
 // Overflow = [16]^[15];
-SDValue VTargetLowering::LowerADDSUB(SDValue Op, SelectionDAG &DAG,
-                                     SDValue CarrayIn, bool isSub) const {
-  SDValue OpB = Op->getOperand(1);
-  
-  // A + B = A + (-B) = A + (~B) + 1
-  if (isSub) {
-    OpB = DAG.getNOT(OpB.getDebugLoc(), OpB, OpB.getValueType());
-    // FIXME: Is this true for ADDE?
-    // CarrayIn = DAG.getNOT(CarrayIn.getDebugLoc(), CarrayIn, MVT::i1);
-  }
+SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                                SDValue OpA, SDValue OpB,
+                                SDValue CarryIn) const {  
+  return DAG.getNode(VTMISD::ADD, dl, DAG.getVTList(VT, MVT::i1),
+                     OpA, OpB, CarryIn);
+}
 
-  SDValue Result = DAG.getNode(VTMISD::ADD, Op->getDebugLoc(),
-                               DAG.getVTList(Op.getValueType(), MVT::i1),
-                               Op->getOperand(0), OpB, CarrayIn);
-  return Result;
+SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                                SDValue OpA, SDValue OpB) const {
+  return getAdd(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1));
+}
+
+SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                                SDValue OpA, SDValue OpB) const {
+  return getSub(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1));
+}
+
+SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                                SDValue OpA, SDValue OpB,
+                                SDValue CarryIn) const {
+  // A + B = A + (-B) = A + (~B) + 1
+  OpB = DAG.getNOT(OpB.getDebugLoc(), OpB, OpB.getValueType());
+  // FIXME: Is this correct?
+  CarryIn = DAG.getNOT(CarryIn.getDebugLoc(), CarryIn, CarryIn.getValueType());
+
+  return getAdd(DAG, dl, VT, OpA, OpB, CarryIn);
 }
 
 SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
@@ -307,7 +319,7 @@ SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
   SDValue HighBits;
   if (Signed)
     // Fill the high bits with sign bit for signed extend.
-    HighBits = getBitRepeat(getSignBit(Operand, DAG, dl), DiffSize, DAG, dl);
+    HighBits = getBitRepeat(DAG, dl, getSignBit(DAG, dl, Operand), DiffSize);
   else {
     EVT ConstVT = EVT::getIntegerVT(*DAG.getContext(), DiffSize);
     // Fill the high bits with zeros for signed extend.
@@ -324,7 +336,7 @@ SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
            DstSize = Op.getValueSizeInBits();
 
   // Select the lower bit slice to truncate values.
-  return getBitSlice(Operand, DstSize, 0, DAG, Op.getDebugLoc());
+  return getBitSlice(DAG, Op.getDebugLoc(), Operand, DstSize, 0);
 }
 
 SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
@@ -338,10 +350,9 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerMemAccess(Op, DAG, true);
   case ISD::STORE:
     return LowerMemAccess(Op, DAG, false);
-  case ISD::SUB:
-    return LowerADDSUB(Op, DAG, DAG.getConstant(1, MVT::i1), true);
   case ISD::ADD:
-    return LowerADDSUB(Op, DAG, DAG.getConstant(0, MVT::i1));
+    return getAdd(DAG, Op.getDebugLoc(), Op.getValueType(),
+                  Op->getOperand(0), Op->getOperand(1));
   case ISD::ADDE:   case ISD::SUBE:   case ISD::ADDC:   case ISD::SUBC:
   case ISD::SADDO:  case ISD::SSUBO:  case ISD::UADDO:  case ISD::USUBO:
     return SDValue();

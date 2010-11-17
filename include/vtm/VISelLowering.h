@@ -47,22 +47,32 @@ public:
 
   unsigned computeSizeInBits(SDValue Op) const;
 
-  SDValue getBitSlice(SDValue Op, unsigned UB, unsigned LB,
-                      SelectionDAG &DAG, DebugLoc dl) const;
-  SDValue getBitRepeat(SDValue Op, unsigned Times,
-                       SelectionDAG &DAG, DebugLoc dl) const;
+  SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
+                      unsigned UB, unsigned LB) const;
+  
+  SDValue getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
+                       unsigned Times) const;
 
-  SDValue getSignBit(SDValue Op, SelectionDAG &DAG, DebugLoc dl) const {
+  SDValue getSignBit(SelectionDAG &DAG, DebugLoc dl, SDValue Op) const {
     unsigned SizeInBit = computeSizeInBits(Op);
-    return getBitSlice(Op, SizeInBit, SizeInBit - 1, DAG, dl);
+    return getBitSlice(DAG, dl, Op, SizeInBit, SizeInBit - 1);
   }
+
+  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB, SDValue CarryIn) const;
+  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB) const;
+
+
+  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB, SDValue CarryIn) const;
+  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB) const;
 private:
 
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBR(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerADDSUB(SDValue Op, SelectionDAG &DAG, SDValue CarrayIn,
-                      bool isSub = false) const;
 
   SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isLoad) const;
 
