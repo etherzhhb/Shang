@@ -26,10 +26,16 @@ namespace VTMISD {
     InArg,
     Ret,
     RetVal,
+    // Arithmetic operation.
     ADD,
+    // Bit level operation.  
     BitSlice,
     BitCat,
     BitRepeat,
+    // Reduction logic operation.
+    RAnd,
+    ROr,
+    RXor,
     // Memory operations.
     MemAccess = ISD::FIRST_TARGET_MEMORY_OPCODE
   };
@@ -68,11 +74,16 @@ public:
                  SDValue OpA, SDValue OpB, SDValue CarryIn) const;
   SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                  SDValue OpA, SDValue OpB) const;
+
+  SDValue getReductionOp(SelectionDAG &DAG, unsigned Opc, DebugLoc dl,
+                         SDValue Src) const;
 private:
 
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBR(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isLoad) const;
 

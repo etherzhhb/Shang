@@ -81,8 +81,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::ZERO_EXTEND, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::ANY_EXTEND, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::TRUNCATE, (MVT::SimpleValueType)VT, Custom);
+    // Condition code will not work.
+    setOperationAction(ISD::SELECT_CC, (MVT::SimpleValueType)VT, Expand);
+    // Lower SetCC to more fundamental operation.
+    setOperationAction(ISD::SETCC, (MVT::SimpleValueType)VT, Custom);
   }
-
 
   // Operations not directly supported by VTM.
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
@@ -113,6 +116,9 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::BitSlice:   return "VTMISD::BitSlice";
   case VTMISD::BitCat:     return "VTMISD::BitCat";
   case VTMISD::BitRepeat:  return "VTMISD::BitRepeat";
+  case VTMISD::RAnd:       return "VTMISD::RAnd";
+  case VTMISD::ROr:        return "VTMISD::ROr";
+  case VTMISD::RXor:       return "VTMISD::RXor";
   }
 }
 
@@ -243,6 +249,58 @@ SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
                      Op.getOperand(1));
 }
 
+SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
+  DebugLoc dl = Op.getDebugLoc();
+  SDValue LHS = Op->getOperand(0), RHS = Op->getOperand(1);
+  SDValue Result = getSub(DAG, dl, LHS.getValueType(), LHS, RHS);
+  
+  // Carry (or Unsigned Overflow).
+  SDValue C = SDValue(Result.getNode(), 1);
+  SDValue NC = DAG.getNOT(dl, C, MVT::i1);
+  // Negative.
+  SDValue N = getSignBit(DAG, dl, Result);
+  SDValue NN = DAG.getNOT(dl, N, MVT::i1);
+  // (Signed) Overflow.
+  SDValue V = DAG.getNode(ISD::XOR, dl, MVT::i1, C, N);
+  SDValue NV = DAG.getNOT(dl, V, MVT::i1);
+  // Zero.
+  SDValue NZ = getReductionOp(DAG, VTMISD::ROr, dl, Result);
+  SDValue Z = DAG.getNOT(dl, NZ, MVT::i1);
+
+  // N != V <=> N xor V == 1
+  SDValue NNotEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, N, V);
+  // N == V <=> NN != V <=> NN xor V == 1
+  SDValue NEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, NN, V);
+
+  CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
+
+  switch (Cnd->get()) {
+  default:
+    assert(0 && "Bad condition code!");
+    return SDValue();
+  // Z==0
+  case ISD::SETNE:  return NZ;
+  // Z==1
+  case ISD::SETEQ:  return Z;
+  // (Z==0) && (N==V)
+  case ISD::SETGT:  return DAG.getNode(ISD::AND, dl, MVT::i1, NZ, NEQV);
+  // N==V
+  case ISD::SETGE:  return NEQV;
+  // N!=V
+  case ISD::SETLT:  return NNotEQV;
+  // (Z==1) || (N!=V)
+  case ISD::SETLE:  return DAG.getNode(ISD::OR, dl, MVT::i1, Z, NNotEQV);
+  // (C==1) && (Z==0)
+  case ISD::SETUGT: return DAG.getNode(ISD::AND, dl, MVT::i1, C, NZ);
+  // 	C==1
+  case ISD::SETUGE: return C;
+  // 	C==0
+  case ISD::SETULT: return NC;
+  // (C==0) || (Z==1)
+  case ISD::SETULE: return DAG.getNode(ISD::OR, dl, MVT::i1, NC, Z);
+  }
+}
+
 // Lower add to full adder operation.
 // Operands: lhs, rhs, carry-in
 // Results: sum, carry-out
@@ -273,6 +331,13 @@ SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
   CarryIn = DAG.getNOT(CarryIn.getDebugLoc(), CarryIn, CarryIn.getValueType());
 
   return getAdd(DAG, dl, VT, OpA, OpB, CarryIn);
+}
+
+SDValue VTargetLowering::getReductionOp(SelectionDAG &DAG, unsigned Opc,
+                                        DebugLoc dl, SDValue Src) const {
+  assert((Opc == VTMISD::RAnd || Opc == VTMISD::ROr || Opc == VTMISD::RXor)
+         && "Bad opcode!");
+  return DAG.getNode(Opc, dl, MVT::i1, Src);
 }
 
 SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
@@ -346,6 +411,8 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return SDValue();
   case ISD::BR:
     return LowerBR(Op, DAG);
+  case ISD::SETCC:
+    return LowerSetCC(Op, DAG);
   case ISD::LOAD:
     return LowerMemAccess(Op, DAG, true);
   case ISD::STORE:

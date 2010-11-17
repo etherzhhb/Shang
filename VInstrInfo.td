@@ -66,6 +66,11 @@ def SDT_BitRepeat : SDTypeProfile<1, 2, [
 ]>;
 def VTMBitRepeat : SDNode<"VTMISD::BitRepeat", SDT_BitRepeat>;
 
+def SDT_ReductionOp : SDTypeProfile<1, 1, [SDTCisVT<0, i1>, SDTCisInt<1>]>;
+def VTMReductionAnd : SDNode<"VTMISD::ReductionAnd", SDT_ReductionOp>;
+def VTMReductionOr  : SDNode<"VTMISD::ReductionOr", SDT_ReductionOp>;
+def VTMReductionXor : SDNode<"VTMISD::ReductionXor", SDT_ReductionOp>;
+
 //===----------------------------------------------------------------------===//
 // Immediates
 //===----------------------------------------------------------------------===//
@@ -95,11 +100,22 @@ def VOpRetVal : InstPassive<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
+// Bitwise logic operation.
 let isCommutable       = 1 in
 def VOpXor	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
 						   "$dst = xor $src0, $src1", []>;
 
-// Bitwise operations.
+// Reduction operation.
+def VOpRAnd	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
+						   "$dst = rand $src", []>;
+
+def VOpROr	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
+						   "$dst = ror $src", []>;
+
+def VOpRXor	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
+						   "$dst = rxor $src", []>;
+
+// Bit level operations.
 def VOpBitSlice	 : InstPassive<(outs dyn_rc:$dst),
                               (ins dyn_rc:$src, DR8:$ub, DR8:$lb),
 							  "$dst = bitslice $src, $ub, $lb", []>;
