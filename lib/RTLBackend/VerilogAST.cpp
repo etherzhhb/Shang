@@ -34,20 +34,6 @@
 
 using namespace llvm;
 
-Pass *llvm::createVlangPass() {
-  return new VLang();
-}
-
-namespace {
-  class VBEMCAsmInfo : public MCAsmInfo {
-  public:
-    VBEMCAsmInfo() {
-      GlobalPrefix = "";
-      PrivateGlobalPrefix = "";
-    }
-  };
-}
-
 // Helper functions
 static std::string VLangMangle(const std::string &S) {
   std::string Result;
@@ -67,29 +53,29 @@ static std::string VLangMangle(const std::string &S) {
 //===----------------------------------------------------------------------===//
 // Value and type printing
 
-std::string VLang::printBitWitdh(unsigned BitWidth, int LowestBit,
-                                 bool printOneBit) {
+std::string llvm::verilogBitRange(unsigned UB, int LB, bool printOneBit) {
   std::stringstream bw;
-  if (BitWidth !=1) 
-    bw << "[" << (BitWidth - 1 + LowestBit) << ":" << LowestBit << "] ";
+  --UB;
+  if (UB != LB) 
+    bw << "[" << UB << ":" << LB << "]";
   else if(printOneBit)
-    bw << "[" << LowestBit << "] ";
-  bw << " ";
+    bw << "[" << LB << "]";
+
   return bw.str();
 }
 
-std::string VLang::printConstant(Constant *CPV) {
+std::string llvm::verilogConstToStr(Constant *CPV) {
   if (ConstantInt* CI=dyn_cast<ConstantInt>(CPV)) {
     bool isMinValue=CI->isMinValue(true);
     uint64_t v = isMinValue ? CI->getZExtValue() :
                              (uint64_t)CI->getSExtValue();
-    return printConstantInt(v,CI->getBitWidth(),isMinValue);
+    return verilogConstToStr(v,CI->getBitWidth(),isMinValue);
   } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(CPV)) {
     switch (CE->getOpcode()) {
     case Instruction::PtrToInt:
     case Instruction::IntToPtr:
     case Instruction::BitCast:
-      return printConstant(CE->getOperand(0));
+      return verilogConstToStr(CE->getOperand(0));
     }
     
   }
@@ -97,7 +83,8 @@ std::string VLang::printConstant(Constant *CPV) {
   return "??Constant??";
 }
 
-std::string writeConstantInt(uint64_t value, unsigned bitwidth, bool isMinValue) {
+std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
+                                    bool isMinValue) {
   std::stringstream pc;
   pc <<bitwidth<< "'h";
   if(isMinValue)
@@ -114,83 +101,49 @@ std::string writeConstantInt(uint64_t value, unsigned bitwidth, bool isMinValue)
   return pc.str();
 }
 
-std::string VLang::printConstantInt(uint64_t value, unsigned bitwidth, bool isMinValue) {
-  std::stringstream pc;
-  pc<<bitwidth<<"'h";
-  if(isMinValue)
-    pc<<std::hex<<value;
-  else{
-    std::stringstream ss;
-    ss<<std::hex<<value;
-    unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
-    std::string sout=ss.str();
-    if(uselength<sout.length())
-      sout=sout.substr(sout.length()-uselength,uselength);
-    pc<<sout;
-  }
-  return pc.str();
-}
+//std::string VLang::GetValueName(const Value *Operand) {
+//  // Mangle globals with the standard mangler interface for LLC compatibility.
+//  if (const GlobalValue *GV = dyn_cast<GlobalValue>(Operand)) {
+//    SmallString<128> Str;
+//    Mang->getNameWithPrefix(Str, GV, false);
+//    return VLangMangle(Str.str().str());
+//  }
+//
+//  std::string Name = Operand->getName();
+//
+//  // Constant
+//
+//  if (Name.empty()) { // Assign unique names to local temporaries.
+//    unsigned &No = AnonValueNumbers[Operand];
+//    if (No == 0)
+//      No = ++NextAnonValueNumber;
+//    Name = "tmp__" + utostr(No);
+//  }
+//
+//  std::string VarName;
+//  VarName.reserve(Name.capacity());
+//
+//  for (std::string::iterator I = Name.begin(), E = Name.end();
+//      I != E; ++I) {
+//    char ch = *I;
+//
+//  if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
+//      (ch >= '0' && ch <= '9') || ch == '_')) {
+//    char buffer[5];
+//    sprintf(buffer, "_%x_", ch);
+//    VarName += buffer;
+//  } else
+//    VarName += ch;
+//  }
+//
+//  return "esyn_" + VarName;
+//}
 
-std::string VLang::GetValueName(const Value *Operand) {
-  // Mangle globals with the standard mangler interface for LLC compatibility.
-  if (const GlobalValue *GV = dyn_cast<GlobalValue>(Operand)) {
-    SmallString<128> Str;
-    Mang->getNameWithPrefix(Str, GV, false);
-    return VLangMangle(Str.str().str());
-  }
-
-  std::string Name = Operand->getName();
-
-  // Constant
-
-  if (Name.empty()) { // Assign unique names to local temporaries.
-    unsigned &No = AnonValueNumbers[Operand];
-    if (No == 0)
-      No = ++NextAnonValueNumber;
-    Name = "tmp__" + utostr(No);
-  }
-
-  std::string VarName;
-  VarName.reserve(Name.capacity());
-
-  for (std::string::iterator I = Name.begin(), E = Name.end();
-      I != E; ++I) {
-    char ch = *I;
-
-  if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-      (ch >= '0' && ch <= '9') || ch == '_')) {
-    char buffer[5];
-    sprintf(buffer, "_%x_", ch);
-    VarName += buffer;
-  } else
-    VarName += ch;
-  }
-
-  return "esyn_" + VarName;
-}
-
-void VLang::initializePass() {
-  TD = getAnalysisIfAvailable<TargetData>();
-  TAsm = new VBEMCAsmInfo();
-  TCtx = new MCContext(*TAsm);
-  Mang = new Mangler(*TCtx, *TD);
-}
-
-char VLang::ID = 0;
-
-static RegisterPass<VLang> X("vlang", "vbe - Verilog language writer",
-                             false, true);
-
-raw_ostream &VLang::comment(raw_ostream &ss) const {
-  ss <<  "//  ";
-  return ss;
-}
-
-raw_ostream &VLang::alwaysBegin(raw_ostream &ss, unsigned ind,
-                                const std::string &Clk /*= "clk"*/,
-                                const std::string &ClkEdge /*= "posedge"*/,
-                                const std::string &Rst /*= "rstN"*/,
-                                const std::string &RstEdge /*= "negedge"*/){
+raw_ostream &llvm::verilogAlwaysBegin(raw_ostream &ss, unsigned ind,
+                                      const std::string &Clk /*= "clk"*/,
+                                      const std::string &ClkEdge /*= "posedge"*/,
+                                      const std::string &Rst /*= "rstN"*/,
+                                      const std::string &RstEdge /*= "negedge"*/){
   // TODO: Support Sync reset
   // TODO: SystemVerilog always_ff?
   ss.indent(ind) << "always @("
@@ -208,57 +161,64 @@ raw_ostream &VLang::alwaysBegin(raw_ostream &ss, unsigned ind,
   return ss;
 }
 
-raw_ostream &VLang::endModule(raw_ostream &ss) {
+raw_ostream &llvm::verilogEndModule(raw_ostream &ss) {
   ss << "endmodule\n\n";
   return ss;
 }
 
-raw_ostream &VLang::endSwitch(raw_ostream &ss) {
+raw_ostream &llvm::verilogEndSwitch(raw_ostream &ss) {
   ss << "endcase\n";
   return ss;
 }
 
-raw_ostream &VLang::begin(raw_ostream &ss) {
+raw_ostream &llvm::verilogBegin(raw_ostream &ss) {
   ss << "begin\n";
   return ss;
 }
 
-raw_ostream &VLang::end(raw_ostream &ss) {
+raw_ostream &llvm::verilogEnd(raw_ostream &ss) {
   ss << "end\n";
   return ss;
 }
 
-raw_ostream &VLang::ifElse(raw_ostream &ss, bool Begin) {
+raw_ostream &llvm::verilogIfElse(raw_ostream &ss, bool Begin) {
   ss << "end else" << (Begin ? " begin\n" : "\n");
   return ss;
 }
 
-raw_ostream &VLang::ifBegin(raw_ostream &ss, const std::string &Condition) {
+raw_ostream &llvm::verilogIfBegin(raw_ostream &ss,
+                                  const std::string &Condition) {
   ss << "if (" << Condition << ") begin\n";
   return ss;
 }
 
-raw_ostream &VLang::matchCase(raw_ostream &ss, const std::string &StateName) {
+raw_ostream &llvm::verilogMatchCase(raw_ostream &ss,
+                                    const std::string &StateName) {
   ss << StateName << ": begin\n";
   return ss;
 }
 
-raw_ostream &VLang::switchCase(raw_ostream &ss, const std::string &StateName) {
+raw_ostream &llvm::verilogSwitchCase(raw_ostream &ss,
+                                     const std::string &StateName) {
   ss << "case (" << StateName <<")\n";
   return ss;
 }
 
-raw_ostream &VLang::alwaysEnd(raw_ostream &ss, unsigned ind) {
+raw_ostream &llvm::verilogAlwaysEnd(raw_ostream &ss, unsigned ind) {
   ss.indent(ind + 2) << "end //else reset\n";
   ss.indent(ind) << "end //always @(..)\n\n";
   return ss;
 }
 
-raw_ostream &VLang::param(raw_ostream &ss, const std::string &Name,
-                          unsigned BitWidth, unsigned Val) {
+raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
+                                unsigned BitWidth, unsigned Val) {
   ss << "parameter " << Name
-    << " = " << printConstantInt(Val, BitWidth, false) << ";\n";
+    << " = " << verilogConstToStr(Val, BitWidth, false) << ";\n";
   return ss;
+}
+
+raw_ostream &llvm::verilogCommentBegin(raw_ostream &ss) {
+  return ss << "// ";
 }
 
 VASTModule::~VASTModule() {
@@ -328,7 +288,7 @@ void VASTModule::print(raw_ostream &OS) const {
 
 void VASTValue::printReset( raw_ostream &OS ) const {
   OS << getName()  << " <= " 
-     << writeConstantInt(InitVal, getBitWidth(), false) << ";";
+     << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
 }
 
 void VASTPort::print(raw_ostream &OS) const {
@@ -360,7 +320,7 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
     OS << "[" << (getBitWidth() - 1) << ":0]";
 
   OS << ' ' << getName()
-     << " = " << writeConstantInt(InitVal, getBitWidth(), false) << ';';
+     << " = " << verilogConstToStr(InitVal, getBitWidth(), false) << ';';
 }
 
 void VASTSignal::print(raw_ostream &OS) const {
@@ -379,7 +339,7 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ' ' << getName();
 
   if (isRegister())
-    OS << " = " << writeConstantInt(0, getBitWidth(), false);
+    OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
 }

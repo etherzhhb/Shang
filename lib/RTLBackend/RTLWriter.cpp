@@ -48,7 +48,6 @@ using namespace llvm;
 namespace {
 class RTLWriter : public MachineFunctionPass {
   raw_ostream &Out;
-  VLang *vlang;
   MachineFunction *MF;
   VTargetMachine &VTM;
   VFuncInfo *FuncInfo;
@@ -135,7 +134,7 @@ public:
   //{
   static char ID;
   RTLWriter(VTargetMachine &TM, raw_ostream &O)
-    : MachineFunctionPass(ID), VTM(TM), Out(O), vlang(0), VM(0),
+    : MachineFunctionPass(ID), VTM(TM), Out(O), VM(0),
     TotalFSMStatesBit(0), CurFSMStateNum(0) {}
   
   ~RTLWriter();
@@ -165,7 +164,6 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   FuncInfo = MF->getInfo<VFuncInfo>();
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
-  vlang = &getAnalysis<VLang>();
 
   if (DesignName.empty())
     DesignName = MF->getFunction()->getNameStr();
@@ -180,22 +178,22 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   VM->addRegister("NextFSMState", TotalFSMStatesBit);
   
   // Idle state
-  vlang->param(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  vlang->matchCase(VM->getControlBlockBuffer(6), "state_idle");
+  verilogParam(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
+  verilogMatchCase(VM->getControlBlockBuffer(6), "state_idle");
   // Idle state is always ready.
-  vlang->ifBegin(VM->getControlBlockBuffer(8), "start");
+  verilogIfBegin(VM->getControlBlockBuffer(8), "start");
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   emitNextFSMState(VM->getControlBlockBuffer(), EntryBB);
   emitNextMicroState(VM->getControlBlockBuffer(10), EntryBB, "1'b1");
   //
-  vlang->ifElse(VM->getControlBlockBuffer(8));
+  verilogIfElse(VM->getControlBlockBuffer(8));
   VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
   // Emit function unit control at idle state, simply disable all
   // function units.
   emitFUCtrl(0);
-  vlang->end(VM->getControlBlockBuffer(8));
-  vlang->end(VM->getControlBlockBuffer(6));
+  verilogEnd(VM->getControlBlockBuffer(8));
+  verilogEnd(VM->getControlBlockBuffer(6));
   
   emitAllRegister();
   emitAllocatedFUs();
@@ -211,36 +209,36 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   VM->printModuleDecl(Out);
   Out << "\n\n";
   // States
-  vlang->comment(Out.indent(2)) << "States\n";
+  verilogCommentBegin(Out.indent(2)) << "States\n";
   Out << VM->getStateDeclStr();
   Out << "\n\n";
   // Reg and wire
-  vlang->comment(Out.indent(2)) << "Reg and wire decl\n";
+  verilogCommentBegin(Out.indent(2)) << "Reg and wire decl\n";
   VM->printSignalDecl(Out, 2);
   Out << "\n\n";
 
   // Datapath
-  vlang->comment(Out.indent(2)) << "Datapath\n";
+  verilogCommentBegin(Out.indent(2)) << "Datapath\n";
   Out << VM->getDataPathStr();
 
   Out << "\n\n";
-  vlang->comment(Out.indent(2)) << "Always Block\n";
-  vlang->alwaysBegin(Out, 2);
+  verilogCommentBegin(Out.indent(2)) << "Always Block\n";
+  verilogAlwaysBegin(Out, 2);
   VM->printRegisterReset(Out, 6);
-  vlang->ifElse(Out.indent(4));
+  verilogIfElse(Out.indent(4));
 
-  vlang->comment(Out.indent(6)) << "SeqCompute:\n";
+  verilogCommentBegin(Out.indent(6)) << "SeqCompute:\n";
   Out << VM->getSeqComputeStr();
 
-  vlang->comment(Out.indent(6)) << "FSM\n";
-  vlang->switchCase(Out.indent(6), "NextFSMState");
+  verilogCommentBegin(Out.indent(6)) << "FSM\n";
+  verilogSwitchCase(Out.indent(6), "NextFSMState");
   Out << VM->getControlBlockStr();
   // Case default.
   Out.indent(6) << "default:  NextFSMState <= state_idle;\n";
-  vlang->endSwitch(Out.indent(6));
-  vlang->alwaysEnd(Out, 2);
+  verilogEndSwitch(Out.indent(6));
+  verilogAlwaysEnd(Out, 2);
 
-  vlang->endModule(Out);
+  verilogEndModule(Out);
 
   return false;
 }
@@ -254,7 +252,6 @@ void RTLWriter::clear() {
 void RTLWriter::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<BitLevelInfo>();
-  AU.addRequired<VLang>();
   AU.setPreservesAll();
 }
 
@@ -290,19 +287,19 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
 
   //unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
-  vlang->comment(VM->getStateDeclBuffer()) << "State for " << StateName << '\n';
-  vlang->param(VM->getStateDeclBuffer(), StateName, TotalFSMStatesBit,
+  verilogCommentBegin(VM->getStateDeclBuffer()) << "State for " << StateName << '\n';
+  verilogParam(VM->getStateDeclBuffer(), StateName, TotalFSMStatesBit,
                ++CurFSMStateNum);
 
   // State information.
-  vlang->comment(VM->getControlBlockBuffer(6)) << StateName 
+  verilogCommentBegin(VM->getControlBlockBuffer(6)) << StateName 
     << " Total Slot: " << totalSlot
     << " II: " << 0 <<  '\n';
   // Mirco state enable.
   createucStateEnable(&MBB);
 
   // Case begin
-  vlang->matchCase(VM->getControlBlockBuffer(6), StateName);
+  verilogMatchCase(VM->getControlBlockBuffer(6), StateName);
 
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(), E = prior(MBB.end());
   while (I != E) {
@@ -312,31 +309,31 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
     
     // Emit next ucOp.
     ucState NextState(*(++I));
-    vlang->ifBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurState));
+    verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurState));
     emitCtrlOp(NextState);
-    vlang->end(VM->getControlBlockBuffer(8));
+    verilogEnd(VM->getControlBlockBuffer(8));
   }
   
   //for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-  //  vlang->ifBegin(VM->getControlBlockBuffer(8), getucStateEnable(State, i, true));
+  //  verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(State, i, true));
   //  // Emit all atoms at cycle i
 
-  //  vlang->comment(VM->getDataPathBuffer(2)) << "at cycle: " << i << '\n';
+  //  verilogCommentBegin(VM->getDataPathBuffer(2)) << "at cycle: " << i << '\n';
   //  for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
   //      CI != CE; ++CI)
   //    emitAtom(CI->second);
-  //  vlang->end(VM->getControlBlockBuffer(8));
+  //  verilogEnd(VM->getControlBlockBuffer(8));
   //}// end for
 
   //// Emit Self Loop logic.
   //if (State->haveSelfLoop()) {
-  //  vlang->comment(VM->getControlBlockBuffer(8)) << "For self loop:\n";
+  //  verilogCommentBegin(VM->getControlBlockBuffer(8)) << "For self loop:\n";
   //  std::string SelfLoopEnable = computeSelfLoopEnable(State);
   //  emitNextMicroState(VM->getControlBlockBuffer(8), BB, SelfLoopEnable);
   //} else
     emitNextMicroState(VM->getControlBlockBuffer(8), &MBB, "1'b0");
   // Case end
-  vlang->end(VM->getControlBlockBuffer(6));
+  verilogEnd(VM->getControlBlockBuffer(6));
 }
 
 void RTLWriter::emitCommonPort() {
@@ -419,11 +416,9 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
   std::string StateName = getucStateEnableName(MBB);
   ss << StateName << " <= ";
-  if (totalSlot > 1) {
-    ss << "{ " << StateName << "[";
-    if (totalSlot > 2)  ss << (totalSlot - 2) << ": ";
-    ss << "0], ";
-  }
+
+  if (totalSlot > 1)
+    ss << "{ " << StateName << verilogBitRange(totalSlot - 1) << ", ";
 
   ss << NewState;
 
@@ -550,14 +545,9 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   case MachineOperand::MO_Register: {
     OS << "reg" << Operand.getReg();
 
-    if (!PrintBitRange)
-      return;
+    if (PrintBitRange)
+      OS << verilogBitRange(BLI->getBitWidth(Operand));
 
-    unsigned BitWidth = BLI->getBitWidth(Operand);  
-    if (BitWidth == 1)
-      OS << "[0]";
-    else
-      OS << '[' << (BitWidth - 1) << ":0]";
     return;
   }
   case MachineOperand::MO_Metadata: {
@@ -575,8 +565,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     return;
   }
   case MachineOperand::MO_Immediate:
-    OS << vlang->printConstantInt(Operand.getImm(), BLI->getBitWidth(Operand),
-                                  false);
+    OS << verilogConstToStr(Operand.getImm(), BLI->getBitWidth(Operand), false);
     return;
   case MachineOperand::MO_ExternalSymbol:
     OS << Operand.getSymbolName();
@@ -645,19 +634,14 @@ void RTLWriter::emitOpBitSlice(ucOp &OpBitSlice) {
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
   // now we are going to get the included upper bound.
-  unsigned UB = OpBitSlice.getOperand(2).getImm() - 1,
+  unsigned UB = OpBitSlice.getOperand(2).getImm(),
            LB = OpBitSlice.getOperand(3).getImm();
 
   OS << "assign ";
   emitOperand(OS, OpBitSlice.getOperand(0));
   OS << " = ";
   emitOperand(OS, OpBitSlice.getOperand(1), false);
-  OS << '[';
-
-  if (UB == LB) OS << UB;
-  else          OS << UB << ':' << LB;
-  
-  OS << "];\n";
+  OS << verilogBitRange(UB, LB) << ";\n";
 }
 
 void RTLWriter::emitOpBitCat(ucOp &OpBitCat) {

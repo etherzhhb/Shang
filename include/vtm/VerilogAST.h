@@ -228,83 +228,43 @@ public:
   }
 };
 
-class VLang : public ImmutablePass {
-  const TargetData* TD;
-  Mangler *Mang;
-  const MCAsmInfo* TAsm;
-  MCContext *TCtx;
-  // For unname value
-  DenseMap<const Value*, unsigned> AnonValueNumbers;
-  unsigned NextAnonValueNumber;
+std::string verilogConstToStr(Constant *C);
 
-  void clear() {
-    AnonValueNumbers.clear();
-  }
+std::string verilogConstToStr(uint64_t value,unsigned bitwidth,
+                              bool isMinValue);
 
-public:
-  static char ID;
-  explicit VLang() : ImmutablePass(ID), NextAnonValueNumber(0) {}
+std::string verilogBitRange(unsigned UB, int LB = 0, bool printOneBit = true);
 
-  ~VLang() {
-    clear();
-    delete Mang;
-    delete TAsm;
-    delete TCtx;
-  }
+raw_ostream &verilogCommentBegin(raw_ostream &ss);
 
-  /// @name Value and Type printing
-  //{
-  /// @brief Get the name of Value, if the Value have no name, 
-  ///       just create one for it.
-  ///
-  /// @param Operand The Value to get the name.
-  ///
-  /// @return The unique name of the Value.
-  std::string GetValueName(const Value *Operand); 
+raw_ostream &verilogAlwaysBegin(raw_ostream &ss, unsigned ind,
+                                const std::string &Clk = "clk",
+                                const std::string &ClkEdge = "posedge",
+                                const std::string &Rst = "rstN",
+                                const std::string &RstEdge = "negedge");
 
-  static std::string printConstant(Constant *C);
-  static std::string printConstantInt(uint64_t value,unsigned bitwidth, bool isMinValue);
+raw_ostream &verilogParam(raw_ostream &ss, const std::string &Name,
+                          unsigned BitWidth, unsigned Val);
 
-  static std::string printBitWitdh(unsigned BitWidth, int LowestBit = 0, 
-    bool printOneBit = false);
-  //}
+raw_ostream &verilogAlwaysEnd(raw_ostream &ss, unsigned ind);
 
-  raw_ostream &comment(raw_ostream &ss) const;
+raw_ostream &verilogSwitchCase(raw_ostream &ss, const std::string &StateName);
 
-  raw_ostream &alwaysBegin(raw_ostream &ss, unsigned ind,
-                          const std::string &Clk = "clk",
-                          const std::string &ClkEdge = "posedge",
-                          const std::string &Rst = "rstN",
-                          const std::string &RstEdge = "negedge");
+raw_ostream &verilogMatchCase(raw_ostream &ss, const std::string &StateName);
 
-  
-  raw_ostream &param(raw_ostream &ss, const std::string &Name,
-                    unsigned BitWidth, unsigned Val);
+raw_ostream &verilogIfBegin(raw_ostream &ss, const std::string &Condition);
 
-  raw_ostream &alwaysEnd(raw_ostream &ss, unsigned ind);
-  
-  raw_ostream &switchCase(raw_ostream &ss, const std::string &StateName);
-  
-  raw_ostream &matchCase(raw_ostream &ss, const std::string &StateName);
+raw_ostream &verilogIfElse(raw_ostream &ss, bool Begin = true);
 
-  raw_ostream &ifBegin(raw_ostream &ss, const std::string &Condition);
-  
-  raw_ostream &ifElse(raw_ostream &ss, bool Begin = true);
+raw_ostream &verilogBegin(raw_ostream &ss);
 
-  raw_ostream &begin(raw_ostream &ss);
+raw_ostream &verilogEnd(raw_ostream &ss);
 
-  raw_ostream &end(raw_ostream &ss);
-  
-  raw_ostream &endSwitch(raw_ostream &ss);
-  
-  raw_ostream &endModule(raw_ostream &ss);
+raw_ostream &verilogEndSwitch(raw_ostream &ss);
 
-  virtual void initializePass();
+raw_ostream &verilogEndModule(raw_ostream &ss);
 
-  virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-    AU.addRequired<TargetData>();
-  }
-};
+
 } // end namespace
 
 #endif
