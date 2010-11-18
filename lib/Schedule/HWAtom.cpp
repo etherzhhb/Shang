@@ -320,6 +320,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
         // Ignore some instructions.
         switch (Inst->getOpcode()) {
         case TargetOpcode::PHI:
+        case TargetOpcode::COPY:
           assert(AtomsToEmit.empty() && "Unexpect atom before PHI.");
           MBB->remove(Inst);
           MBB->insert(InsertPos, Inst);
@@ -338,8 +339,13 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
   dbgs() << "After schedule emitted:\n";
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
       I != E; ++I) {
-    ucState State(*I);
+    MachineInstr *Instr = I;
+    if (Instr->getOpcode() != VTM::VOpBundle) {
+      Instr->dump();
+      continue;
+    }
 
+    ucState State(*Instr);
     dbgs() << "Bundle " << State.getSlot() << '\n';
     
     for (ucState::iterator UOI = State.begin(), UOE = State.end();
