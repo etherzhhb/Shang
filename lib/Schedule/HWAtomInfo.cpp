@@ -186,7 +186,8 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<BitLevelInfo>();
   // AU.addRequired<MemDepInfo>();
-  AU.setPreservesAll();
+  AU.setPreservesCFG();
+  AU.addPreserved<BitLevelInfo>();
 }
 
 bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
