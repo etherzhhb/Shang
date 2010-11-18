@@ -59,7 +59,8 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
     return DAG.getNode(VTMISD::BitCat, dl, VT, Src, PaddingBits);
   }
   case ISD::SRA:
-    PaddingBits = TLI.getSignBit(DAG, dl, Src);
+    PaddingBits = TLI.getBitRepeat(DAG, dl, TLI.getSignBit(DAG, dl, Src),
+                                   PaddingSize);
     // Fall though
   case ISD::SRL:
     // Discard the lower bits of src.
