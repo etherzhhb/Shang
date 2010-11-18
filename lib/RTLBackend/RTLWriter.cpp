@@ -469,7 +469,10 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     }
   }
 
-  emitFUCtrl(State.getSlot());
+  MachineBasicBlock *CurBB = State->getParent();
+  unsigned LastSlot = FuncInfo->getStartSlotFor(CurBB) +
+                      FuncInfo->getTotalSlotFor(CurBB) - 1;
+  if (State.getSlot() != LastSlot)  emitFUCtrl(State.getSlot());
 }
 
 void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
@@ -499,7 +502,9 @@ void RTLWriter::emitOpArg(ucOp &OpArg) {
 
 void RTLWriter::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
-  OS.indent(10) << "NextFSMState <= state_idle;\n";
+  OS << "NextFSMState <= state_idle;\n";
+  //
+  OS.indent(10) << "fin <= 1'b1;\n";
 }
 
 void RTLWriter::emitOpToState(ucOp &OpToState) {
@@ -590,6 +595,9 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     return;
   case MachineOperand::MO_ExternalSymbol:
     OS << Operand.getSymbolName();
+    return;
+  case MachineOperand::MO_MachineBasicBlock:
+    OS << getStateNameForMachineBB(Operand.getMBB());
     return;
   }
 }
