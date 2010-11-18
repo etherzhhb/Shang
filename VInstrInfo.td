@@ -71,6 +71,11 @@ def VTMReductionAnd : SDNode<"VTMISD::ReductionAnd", SDT_ReductionOp>;
 def VTMReductionOr  : SDNode<"VTMISD::ReductionOr", SDT_ReductionOp>;
 def VTMReductionXor : SDNode<"VTMISD::ReductionXor", SDT_ReductionOp>;
 
+def SDT_NOT : SDTypeProfile<1, 1, [
+  SDTCisSameAs<0, 1>, SDTCisInt<0>
+]>;
+def VTMNot : SDNode<"VTMISD::Not", SDT_NOT>;
+
 //===----------------------------------------------------------------------===//
 // Immediates
 //===----------------------------------------------------------------------===//

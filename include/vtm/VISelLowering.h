@@ -28,6 +28,8 @@ namespace VTMISD {
     RetVal,
     // Arithmetic operation.
     ADD,
+    //
+    Not,
     // Bit level operation.  
     BitSlice,
     BitCat,
@@ -77,6 +79,8 @@ public:
 
   SDValue getReductionOp(SelectionDAG &DAG, unsigned Opc, DebugLoc dl,
                          SDValue Src) const;
+
+  SDValue getNot(SelectionDAG &DAG, DebugLoc dl, SDValue Operand) const;
 private:
 
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;

@@ -87,6 +87,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::SELECT_CC, (MVT::SimpleValueType)VT, Expand);
     // Lower SetCC to more fundamental operation.
     setOperationAction(ISD::SETCC, (MVT::SimpleValueType)VT, Custom);
+
+    for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC) {
+      setCondCodeAction((ISD::CondCode)CC, (MVT::SimpleValueType)VT, Custom);
+    }
+    
   }
 
   // Operations not directly supported by VTM.
@@ -99,6 +104,8 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::SHL);
   setTargetDAGCombine(ISD::SRA);
   setTargetDAGCombine(ISD::SRL);
+
+  setTargetDAGCombine(ISD::XOR);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
@@ -121,6 +128,7 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::RAnd:       return "VTMISD::RAnd";
   case VTMISD::ROr:        return "VTMISD::ROr";
   case VTMISD::RXor:       return "VTMISD::RXor";
+  case VTMISD::Not:       return "VTMISD::Not";
   }
 }
 
@@ -211,6 +219,19 @@ unsigned VTargetLowering::computeSizeInBits(SDValue Op) const {
   }
   }
 }
+
+
+SDValue VTargetLowering::getNot(SelectionDAG &DAG, DebugLoc dl,
+                                SDValue Operand) const {
+  EVT VT = Operand.getValueType();
+
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Operand))
+    return DAG.getConstant(~C->getAPIntValue(), VT, 
+                           C->getOpcode() == ISD::TargetConstant);
+
+  return DAG.getNode(VTMISD::Not, Operand.getDebugLoc(), VT, Operand);
+}
+
 SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                                      unsigned UB, unsigned LB) const {
   LLVMContext &Context = *DAG.getContext();
@@ -259,7 +280,7 @@ SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
   SDValue Cond = DAG.getConstant(1, MVT::i1);
 
   if (Chain->getOpcode() == ISD::BRCOND)
-    Cond = DAG.getNOT(Op.getDebugLoc(), Chain->getOperand(1), MVT::i1);
+    Cond = getNot(DAG, Op.getDebugLoc(), Chain->getOperand(1));
 
   return DAG.getNode(ISD::BRCOND, Op.getDebugLoc(), MVT::Other, Chain, Cond,
                      Op.getOperand(1));
@@ -272,10 +293,10 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
 
   // Carry (or Unsigned Overflow).
   SDValue C = SDValue(Result.getNode(), 1);
-  SDValue NC = DAG.getNOT(dl, C, MVT::i1);
+  SDValue NC = getNot(DAG, dl, C);
   // Negative.
   SDValue N = getSignBit(DAG, dl, Result);
-  SDValue NN = DAG.getNOT(dl, N, MVT::i1);
+  SDValue NN = getNot(DAG, dl, N);
   SDValue LHSSign = getSignBit(DAG,dl, LHS);
   SDValue RHSSign = getSignBit(DAG,dl, RHS);
   // (Signed) Overflow = Sign(Res) ^ Sign(LHS) ^ Sign(RHS)
@@ -283,15 +304,15 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
                           DAG.getNode(ISD::XOR, dl, MVT::i1,
                                       LHSSign, RHSSign),
                           N);
-  SDValue NV = DAG.getNOT(dl, V, MVT::i1);
+  SDValue NV = getNot(DAG, dl, V);
   // Zero.
   SDValue NZ = getReductionOp(DAG, VTMISD::ROr, dl, Result);
-  SDValue Z = DAG.getNOT(dl, NZ, MVT::i1);
+  SDValue Z = getNot(DAG, dl, NZ);
 
   // N != V <=> N xor V == 1 <==> N xor N xor Sign(LHS) xor Sign(RHS)
   SDValue NNotEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, LHSSign, RHSSign);
   // N == V <=> NN != V <=> NN xor V == 1
-  SDValue NEQV = DAG.getNOT(dl, NNotEQV, MVT::i1);
+  SDValue NEQV = getNot(DAG, dl, NNotEQV);
 
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
 
@@ -347,9 +368,9 @@ SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                                 SDValue OpA, SDValue OpB,
                                 SDValue CarryIn) const {
   // A + B = A + (-B) = A + (~B) + 1
-  OpB = DAG.getNOT(OpB.getDebugLoc(), OpB, OpB.getValueType());
+  OpB = getNot(DAG, OpB.getDebugLoc(), OpB);
   // FIXME: Is this correct?
-  CarryIn = DAG.getNOT(CarryIn.getDebugLoc(), CarryIn, CarryIn.getValueType());
+  CarryIn = getNot(DAG, CarryIn.getDebugLoc(), CarryIn);
 
   return getAdd(DAG, dl, VT, OpA, OpB, CarryIn);
 }

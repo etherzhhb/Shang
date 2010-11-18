@@ -71,9 +71,9 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   }
 }
 
-static SDValue PerformAddImmCombine(SDNode *N, const VTargetLowering &TLI,
-                                    TargetLowering::DAGCombinerInfo &DCI,
-                                    bool ExchangeOperand = false) {
+static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
+                                 TargetLowering::DAGCombinerInfo &DCI,
+                                 bool ExchangeOperand = false) {
   ConstantSDNode *C = dyn_cast<ConstantSDNode>(N->getOperand(2));
   // Can only combinable if carry is known.
   if (C == 0)  return SDValue();
@@ -100,7 +100,35 @@ static SDValue PerformAddImmCombine(SDNode *N, const VTargetLowering &TLI,
 
   // If we not try to exchange the operands, exchange and try again.
   if (!ExchangeOperand)
-    return PerformAddImmCombine(N, TLI, DCI, !ExchangeOperand);
+    return PerformAddCombine(N, TLI, DCI, !ExchangeOperand);
+
+  return SDValue();
+}
+
+static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
+                                  TargetLowering::DAGCombinerInfo &DCI,
+                                  bool ExchangeOperand = false) {
+  SDValue OpA = N->getOperand(0 ^ ExchangeOperand),
+          OpB = N->getOperand(1 ^ ExchangeOperand);
+  SelectionDAG &DAG = DCI.DAG;
+  
+  if (ConstantSDNode *COpB =  dyn_cast<ConstantSDNode>(OpB))
+    if (COpB->isAllOnesValue()) return TLI.getNot(DAG, N->getDebugLoc(), OpA);
+
+  // If we not try to exchange the operands, exchange and try again.
+  if (!ExchangeOperand)
+    return PerformAddCombine(N, TLI, DCI, !ExchangeOperand);
+
+  return SDValue();
+}
+
+static  SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
+                                  TargetLowering::DAGCombinerInfo &DCI) {
+  SDValue Op = N->getOperand(0);
+  SelectionDAG &DAG = DCI.DAG;
+
+  // ~(~A) = A.
+  if (Op->getOpcode() == VTMISD::Not) return Op->getOperand(0);
 
   return SDValue();
 }
@@ -113,8 +141,13 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::SRA:
   case ISD::SRL:
     return PerformShiftImmCombine(N, *this, DCI);
+  case ISD::XOR:
+    return PerformXorCombine(N, *this, DCI);
   case VTMISD::ADD:
-    return PerformAddImmCombine(N, *this, DCI);
+    return PerformAddCombine(N, *this, DCI);
+  case VTMISD::Not:
+    return PerformNotCombine(N, *this, DCI);
+
   }
 
   return SDValue();
