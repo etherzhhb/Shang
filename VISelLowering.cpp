@@ -269,24 +269,29 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   DebugLoc dl = Op.getDebugLoc();
   SDValue LHS = Op->getOperand(0), RHS = Op->getOperand(1);
   SDValue Result = getSub(DAG, dl, LHS.getValueType(), LHS, RHS);
-  
+
   // Carry (or Unsigned Overflow).
   SDValue C = SDValue(Result.getNode(), 1);
   SDValue NC = DAG.getNOT(dl, C, MVT::i1);
   // Negative.
   SDValue N = getSignBit(DAG, dl, Result);
   SDValue NN = DAG.getNOT(dl, N, MVT::i1);
-  // (Signed) Overflow.
-  SDValue V = DAG.getNode(ISD::XOR, dl, MVT::i1, C, N);
+  SDValue LHSSign = getSignBit(DAG,dl, LHS);
+  SDValue RHSSign = getSignBit(DAG,dl, RHS);
+  // (Signed) Overflow = Sign(Res) ^ Sign(LHS) ^ Sign(RHS)
+  SDValue V = DAG.getNode(ISD::XOR, dl, MVT::i1, 
+                          DAG.getNode(ISD::XOR, dl, MVT::i1,
+                                      LHSSign, RHSSign),
+                          N);
   SDValue NV = DAG.getNOT(dl, V, MVT::i1);
   // Zero.
   SDValue NZ = getReductionOp(DAG, VTMISD::ROr, dl, Result);
   SDValue Z = DAG.getNOT(dl, NZ, MVT::i1);
 
-  // N != V <=> N xor V == 1
-  SDValue NNotEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, N, V);
+  // N != V <=> N xor V == 1 <==> N xor N xor Sign(LHS) xor Sign(RHS)
+  SDValue NNotEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, LHSSign, RHSSign);
   // N == V <=> NN != V <=> NN xor V == 1
-  SDValue NEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, NN, V);
+  SDValue NEQV = DAG.getNOT(dl, NNotEQV, MVT::i1);
 
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
 
