@@ -64,7 +64,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // Lower the add/sub operation to full adder operation.
     setOperationAction(ISD::ADD, (MVT::SimpleValueType)VT, Custom);
     // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, (MVT::SimpleValueType)VT, Expand);
+    setOperationAction(ISD::SUB, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::ADDE, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::SUBE, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::ADDC, (MVT::SimpleValueType)VT, Custom);
@@ -419,6 +419,9 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerMemAccess(Op, DAG, false);
   case ISD::ADD:
     return getAdd(DAG, Op.getDebugLoc(), Op.getValueType(),
+                  Op->getOperand(0), Op->getOperand(1));
+  case ISD::SUB:
+    return getSub(DAG, Op.getDebugLoc(), Op.getValueType(),
                   Op->getOperand(0), Op->getOperand(1));
   case ISD::ADDE:   case ISD::SUBE:   case ISD::ADDC:   case ISD::SUBC:
   case ISD::SADDO:  case ISD::SSUBO:  case ISD::UADDO:  case ISD::USUBO:
