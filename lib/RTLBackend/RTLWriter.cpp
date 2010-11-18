@@ -126,6 +126,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpRet(ucOp &OpRet);
   void emitOpWriteReg(ucOp &OpWriteReg);
   void emitOpMemAccess(ucOp &OpMemAccess);
+  void emitOpToState(ucOp &OpToState);
 
   void emitFUCtrl(unsigned Slot);
 
@@ -463,6 +464,7 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     case VTM::VOpRet:       emitOpRet(Op);        break;
     case VTM::COPY:         emitOpWriteReg(Op);   break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);  break;
+    case VTM::VOpToState:   emitOpToState(Op);    break;
     default:  assert(0 && "Unexpect opcode!");    break;
     }
   }
@@ -498,6 +500,21 @@ void RTLWriter::emitOpArg(ucOp &OpArg) {
 void RTLWriter::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
   OS.indent(10) << "NextFSMState <= state_idle;\n";
+}
+
+void RTLWriter::emitOpToState(ucOp &OpToState) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+
+  // Get the condition.
+  std::string s;
+  raw_string_ostream ss(s);
+  emitOperand(ss, OpToState.getOperand(0));
+  verilogIfBegin(OS.indent(10), ss.str());
+  OS.indent(12) << "NextFSMState <= ";
+  emitOperand(OS, OpToState.getOperand(1));
+  OS << ";\n";
+  emitFirstCtrlState(OpToState.getOperand(1).getMBB());
+  verilogEnd(VM->getControlBlockBuffer(10));
 }
 
 void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
