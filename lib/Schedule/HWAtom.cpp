@@ -18,8 +18,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ForceDirectedScheduling.h"
 #include "HWAtom.h"
+#include "ForceDirectedScheduling.h"
+#include "ScheduleDOT.h"
 
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
@@ -535,55 +536,6 @@ void FSMState::scheduleCyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler,
   //Scheduler->getCriticalPathLength() < Scheduler->getMII())
   setII(Scheduler->getMII());
 }
-
-// DOTWriter for FSMState.
-#include "llvm/Support/GraphWriter.h"
-
-template<>
-struct DOTGraphTraits<FSMState*> : public DefaultDOTGraphTraits {
-
-  DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
-
-  static std::string getGraphName(const FSMState *G) {
-    return G->getMachineBasicBlock()->getName();
-  }
-
-  /// If you want to override the dot attributes printed for a particular
-  /// edge, override this method.
-  static std::string getEdgeAttributes(const HWAtom *Node,
-                                       HWAtom::use_iterator EI) {
-    const HWAtom *Use = *EI;
-    HWEdge *UseEdge = Use->getEdgeFrom(Node);
-
-    switch (UseEdge->getEdgeType()) {
-    case HWEdge::edgeValDep:    return "";
-    case HWEdge::edgeMemDep:    return "color=blue,style=dashed";
-    case HWEdge::edgeCtrlDep:   return "color=green,style=dashed";
-    }
-
-    return "";
-  }
-
-  static std::string getEdgeSourceLabel(const HWAtom *Node,
-                                        HWAtom::use_iterator EI) {
-    const HWAtom *Use = *EI;
-    HWEdge *UseEdge = Use->getEdgeFrom(Node);
-
-    return utostr(UseEdge->getLatency()) + ',' + utostr(UseEdge->getItDst());
-  }
-
-  std::string getNodeLabel(const HWAtom *Node, const FSMState *Graph) {
-    std::string Str;
-    raw_string_ostream ss(Str);
-    Node->print(ss);
-    return ss.str();
-  }
-
-  static std::string getNodeAttributes(const HWAtom *Node,
-                                       const FSMState *Graph) {
-    return "shape=Mrecord";
-  }
-};
 
 void FSMState::viewGraph() {
   ViewGraph(this, this->getMachineBasicBlock()->getName());

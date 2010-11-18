@@ -60,6 +60,8 @@ protected:
 public:
   virtual ~ForceDirectedSchedulingBase() {}
 
+  FSMState *getState() const { return State; }
+
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
   // scheduled
@@ -157,6 +159,19 @@ public:
   }
   void setCriticalPathLength(unsigned L) {
     CriticalPathEnd = State->getStartSlot() + L;
+  }
+
+  void viewGraph();
+};
+
+template <> struct GraphTraits<ForceDirectedSchedulingBase*> 
+    : public GraphTraits<FSMState*> {
+  typedef FSMState::iterator nodes_iterator;
+  static nodes_iterator nodes_begin(ForceDirectedSchedulingBase *G) {
+    return G->getState()->begin();
+  }
+  static nodes_iterator nodes_end(ForceDirectedSchedulingBase *G) {
+    return G->getState()->end();
   }
 };
 

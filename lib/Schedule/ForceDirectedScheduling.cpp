@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ForceDirectedScheduling.h"
+#include "ScheduleDOT.h"
 #include "vtm/Passes.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -416,4 +417,8 @@ void ForceDirectedSchedulingBase::updateSTF() {
 
     sinkSTF(A, getASAPStep(A), getALAPStep(A));
   }
+}
+
+void ForceDirectedSchedulingBase::viewGraph() {
+  ViewGraph(this, State->getMachineBasicBlock()->getName());
 }
