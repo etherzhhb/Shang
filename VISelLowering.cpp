@@ -27,6 +27,8 @@
 #include "llvm/ADT/VectorExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -217,8 +219,12 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   assert(SizeInBits < computeSizeInBits(Op) && "Bad bit slice bit width!");
   assert(UB <= computeSizeInBits(Op) && "Bad upper bound of bit slice!");
 
-  EVT VT =
-    EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerOrBitType(Context);
+  EVT VT = EVT::getIntegerVT(Context, SizeInBits);
+
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op))
+    return DAG.getTargetConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
+
+  VT = VT.getRoundIntegerOrBitType(Context);
 
   return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
                      DAG.getConstant(UB, MVT::i8),
@@ -228,10 +234,20 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
 SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                                       unsigned Times) const {
   LLVMContext &Context = *DAG.getContext();
-  unsigned SizeInBits = computeSizeInBits(Op) * Times;
-  EVT VT =
-    EVT::getIntegerVT(Context, SizeInBits).getRoundIntegerOrBitType(Context);
+  unsigned EltBits = computeSizeInBits(Op);
+  unsigned SizeInBits = EltBits * Times;
+  EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+    uint64_t c = GetBitSlice(C->getZExtValue(), EltBits);
+    uint64_t ret = 0;
+    for (unsigned i = 0; i < Times; ++i)
+      ret |= (c << (i * EltBits));
+
+    return DAG.getTargetConstant(ret, VT);
+  }
+
+  VT = VT.getRoundIntegerOrBitType(Context);
   return DAG.getNode(VTMISD::BitRepeat, dl, VT, Op,
                      DAG.getConstant(Times, MVT::i8));
 }
