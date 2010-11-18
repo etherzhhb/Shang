@@ -96,11 +96,11 @@ static SDValue PerformAddImmCombine(SDNode *N, const VTargetLowering &TLI,
     }
   }
 
-  // TODO: Combine with bitmask information.
+  // TODO: Combine with bit mask information.
 
   // If we not try to exchange the operands, exchange and try again.
   if (!ExchangeOperand)
-    return PerformAddImmCombine(N, TLI, DCI, ~ExchangeOperand);
+    return PerformAddImmCombine(N, TLI, DCI, !ExchangeOperand);
 
   return SDValue();
 }
