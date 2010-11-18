@@ -461,7 +461,7 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     case VTM::VOpArg:       emitOpArg(Op);        break;
     case VTM::VOpRetVal:    emitOpRetVal(Op);     break;
     case VTM::VOpRet:       emitOpRet(Op);        break;
-    case VTM::VOpWriteReg:  emitOpWriteReg(Op);   break;
+    case VTM::COPY:         emitOpWriteReg(Op);   break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);  break;
     default:  assert(0 && "Unexpect opcode!");    break;
     }

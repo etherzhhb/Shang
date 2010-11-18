@@ -107,9 +107,11 @@ bool ucOp::haveDataPath() const {
   switch (Token.getOpcode()) {
   case VTM::VOpArg:
   case VTM::VOpRetVal:
+  case VTM::VOpToState:
   case VTM::VOpRet:
-  case VTM::VOpWriteReg:
   case VTM::VOpMemAccess:
+  case VTM::COPY:
+  case VTM::PHI:
     return false;
   }
 

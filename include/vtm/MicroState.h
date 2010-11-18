@@ -46,7 +46,7 @@ public:
     // Excute an instruction, instr ResourceType, ResourceID, operands ...
     tokenInstr,
     // Write register, WriteReg register, source value
-    tokenWriteReg = VTM::VOpWriteReg
+    tokenWriteReg = VTM::COPY
   };
 
   explicit MetaToken() : TokenNode(0) {}
@@ -147,7 +147,7 @@ public:
     if (Token.isInstr())
       return Token.getOpcode();
 
-    return VTM::VOpWriteReg;
+    return VTM::COPY;
   }
 
   const MetaToken &getOpCodeMD() const { return Token; }

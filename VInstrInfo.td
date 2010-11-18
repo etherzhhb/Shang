@@ -97,7 +97,7 @@ let isBranch = 1,
 	isTerminator=1 in
 def VOpToState : InstPassive<(outs), (ins DR1:$cnd, State:$target),
 							 "if ($cnd) state $target;",
-							[(brcond DR1:$cnd, bb:$target)]>;
+							[(brcond DR1:$cnd, bb:$target)], 0, 1>;
 
 // Prevent MachineCSE delete any VOpArg.
 // let neverHasSideEffects = 1 in
@@ -171,6 +171,3 @@ def VOpMemAccess : InstActive<(outs dyn_rc:$dst),
 let isBarrier    = 1 in
 def VOpBundle : InstPassive<(outs variable_ops), (ins i32imm:$slot, variable_ops),
 							 "bundle;", []>;
-
-// Opcode for micro operation.
-def VOpWriteReg : InstPassive<(outs), (ins), "write register;", []>;
