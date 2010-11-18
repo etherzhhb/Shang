@@ -80,14 +80,20 @@ struct HWAtomInfo : public MachineFunctionPass {
   unsigned computeLatency(const HWAtom *Src, const MachineInstr *DstInstr) {
     MachineInstr *SrcInstr = Src->getInstr();
 
-    if (SrcInstr == 0) return 0;
+    if (SrcInstr == 0) {
+      // DirtyHack: There must be at least 1 slot between entry and exit.
+      if (DstInstr && VTIDReader(DstInstr)->isTerminator())
+        return 1;
+
+      return 0;
+    }
 
     VTIDReader SrcTID(SrcInstr);
     unsigned latency = SrcTID.getLatency(VTarget);
-    
-    VTIDReader DstTID(DstInstr);
 
     if (DstInstr == 0) return latency;
+
+    VTIDReader DstTID(DstInstr);
 
     // We need to wait one more slot to read the result.
     if (SrcTID.isWriteUntilFinish() && DstTID.isReadAtEmit())
@@ -194,7 +200,6 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock *MBB = &*I;
     FSMState *State = buildState(MBB);
 
-    State->viewGraph();
     scheduleState(State);
     State->viewGraph();
 
@@ -454,7 +459,8 @@ FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
 
   // Create a dummy entry node.
   State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx));
-  
+  DetachNodes.push_back(State->getEntryRoot());
+
   for (MachineBasicBlock::iterator BI = MBB->begin(), BE = MBB->end();
       BI != BE; ++BI) {
     MachineInstr &MInst = *BI;
