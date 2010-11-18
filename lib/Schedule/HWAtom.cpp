@@ -97,7 +97,7 @@ struct MicroStateBuilder {
 
   MicroStateBuilder(FSMState &S, LLVMContext& Context, const TargetMachine &TM,
                     BitLevelInfo &BitInfo)
-  : WireNum(S.getMachineBasicBlock()->getNumber() << 24),
+  : WireNum(S.getMachineBasicBlock()->getNumber()),
   OpId(S.getMachineBasicBlock()->getNumber() << 24),
   State(S), VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
   MRI(S.getMachineBasicBlock()->getParent()->getRegInfo()),
