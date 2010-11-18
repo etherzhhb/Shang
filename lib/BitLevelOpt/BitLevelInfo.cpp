@@ -70,6 +70,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   switch (Instr->getOpcode()) {
   default:
     assert(0 && "Unknown instruction!");
+  case VTM::VOpToState:
   case VTM::VOpRet:
   case VTM::VOpRetVal:
     // Do nothing for these instructions as they do not define anything.
@@ -94,8 +95,24 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
+  // Operations with Fixed bit width.
+  case VTM::VOpROr:
+  case VTM::VOpRAnd:
+  case VTM::VOpRXor: {
+    MachineOperand &Result = Instr->getOperand(0);
+    if (updateBitWidth(Result, 1))
+      Defs.push_back(&Result);
+    break;
+  }
   // Leaves.
-  case VTM::VOpArg:
+  case VTM::VOpArg: {
+    MachineOperand &Result = Instr->getOperand(0);
+    if (updateBitWidth(Result, computeWidthByRC(Result)))
+      Defs.push_back(&Result);
+    break;
+  }
+  // FIXME: The bit width of result of memory access is deteminated by
+  // constraints.
   case VTM::VOpMemAccess: {
     MachineOperand &Result = Instr->getOperand(0);
     if (updateBitWidth(Result, computeWidthByRC(Result)))
@@ -105,7 +122,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // Other Instructions.
   case VTM::VOpAdd: {
     MachineOperand &Carry = Instr->getOperand(1);
-    if (updateBitWidth(Carry, computeWidthByRC(Carry)))
+    if (updateBitWidth(Carry, 1))
       Defs.push_back(&Carry);
     
     MachineOperand &Result = Instr->getOperand(0);
@@ -115,6 +132,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
+  case VTM::VOpAnd:
   case VTM::VOpXor: {
     MachineOperand &Result = Instr->getOperand(0);
     unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 1,
@@ -123,10 +141,13 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
-  // The bitwidth determinate by one of its operand.
+  // The bitwidth determinate by its first operand.
+  case VTM::COPY:
+  case VTM::VOpNot:
+  case VTM::VOpSRA:
   case VTM::VOpSHL: {
     MachineOperand &Result = Instr->getOperand(0);
-    unsigned Width = computeWidthByRC(Instr->getOperand(1));
+    unsigned Width = getBitWidth(Instr->getOperand(1));
     if (updateBitWidth(Result, Width))
       Defs.push_back(&Result);
     break;

@@ -47,6 +47,7 @@ public:
 
 private:
   SDNode *Select(SDNode *N);
+  SDNode *SelectUnary(SDNode *N, unsigned OpC);
   SDNode *SelectBinary(SDNode *N, unsigned OpC);
   SDNode *SelectSimpleNode(SDNode *N, unsigned OpC);
 
@@ -73,6 +74,12 @@ private:
 FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
                                    CodeGenOpt::Level OptLevel) {
   return new VDAGToDAGISel(TM, OptLevel);
+}
+
+SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
+  SDValue Ops [] = { N->getOperand(0) };
+  return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
+                              Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC) {
@@ -155,12 +162,19 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case VTMISD::ADD:           return SelectAdd(N);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
+  case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
+  case VTMISD::Not:           return SelectUnary(N, VTM::VOpNot);
 
   case ISD::SHL:              return SelectBinary(N, VTM::VOpSHL);
+  case ISD::SRA:              return SelectBinary(N, VTM::VOpSRA);
 
   case VTMISD::BitRepeat:     return SelectBinary(N, VTM::VOpBitRepeat);
   case VTMISD::BitCat:        return SelectSimpleNode(N, VTM::VOpBitCat);
   case VTMISD::BitSlice:      return SelectSimpleNode(N, VTM::VOpBitSlice);
+
+  case VTMISD::ROr:           return SelectUnary(N, VTM::VOpROr);
+  case VTMISD::RAnd:          return SelectUnary(N, VTM::VOpRAnd);
+  case VTMISD::RXor:          return SelectUnary(N, VTM::VOpRXor);
 
   case ISD::Constant:         return SelectConstant(N);
 

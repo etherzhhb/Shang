@@ -83,6 +83,8 @@ def VTMNot : SDNode<"VTMISD::Not", SDT_NOT>;
 def simm8 : PatLeaf<(imm), [{return isInt<3>(N->getSExtValue());}]>;
 def uimm8 : PatLeaf<(imm), [{return isUInt<3>(N->getZExtValue());}]>;
 
+def State : Operand<OtherVT>;
+
 //===----------------------------------------------------------------------===//
 // Communication operations.
 let hasCtrlDep = 1 in {
@@ -90,6 +92,12 @@ let isReturn     = 1,
     isTerminator = 1,
     isBarrier    = 1 in
 def VOpRet : InstPassive<(outs), (ins), "ret;", [(VTMFnRet)]>;
+
+let isBranch = 1,
+	isTerminator=1 in
+def VOpToState : InstPassive<(outs), (ins DR1:$cnd, State:$target),
+							 "if ($cnd) state $target;",
+							[(brcond DR1:$cnd, bb:$target)]>;
 
 // Prevent MachineCSE delete any VOpArg.
 // let neverHasSideEffects = 1 in
@@ -109,14 +117,17 @@ let isReMaterializable = 1,
 let isCommutable       = 1 in
 def VOpXor	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
 						   "$dst = xor $src0, $src1", []>;
+def VOpAnd	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+						   "$dst = and $src0, $src1", []>;
+def VOpNot	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src), 
+						   "$dst = ~ $src", []>;
+
 
 // Reduction operation.
 def VOpRAnd	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
 						   "$dst = rand $src", []>;
-
 def VOpROr	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
 						   "$dst = ror $src", []>;
-
 def VOpRXor	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
 						   "$dst = rxor $src", []>;
 
@@ -124,11 +135,9 @@ def VOpRXor	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src),
 def VOpBitSlice	 : InstPassive<(outs dyn_rc:$dst),
                               (ins dyn_rc:$src, DR8:$ub, DR8:$lb),
 							  "$dst = bitslice $src, $ub, $lb", []>;
-
 def VOpBitRepeat : InstPassive<(outs dyn_rc:$dst),
                               (ins dyn_rc:$src, DR8:$times),
 							  "$dst = bitrepeat $src, $times", []>;
-
 def VOpBitCat	 : InstPassive<(outs dyn_rc:$dst), (ins variable_ops),
 							  "$dst = bitcat", []>;
 }
@@ -137,12 +146,16 @@ def VOpBitCat	 : InstPassive<(outs dyn_rc:$dst), (ins variable_ops),
 // Computation operations.
 let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
+let isCommutable       = 1 in
 def VOpAdd : InstActive<(outs dyn_rc:$dst, DR1:$co),
 			            (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
 					    "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
 
 def VOpSHL : InstActive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
                         "$dst = shl $src0, $src1", [], FUSHL>;
+
+def VOpSRA : InstActive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                        "$dst = sra $src0, $src1", [], FUSHL>;
 }
 
 let mayLoad		  = 1,
