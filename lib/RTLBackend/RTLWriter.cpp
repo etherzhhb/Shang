@@ -479,8 +479,11 @@ void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
 
 void RTLWriter::emitOpWriteReg(ucOp &OpWriteReg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
-  emitOperand(OS, OpWriteReg.getOperand(0));
-  OS << " <= " << OpWriteReg.getOpCodeMD().getWireName() << ";\n";
+  MachineOperand &MO = OpWriteReg.getOperand(0);
+  emitOperand(OS, MO);
+  MachineBasicBlock *MBB = MO.getParent()->getParent();
+  std::string BBName = getStateNameForMachineBB(MBB);
+  OS << " <= " << OpWriteReg.getOpCodeMD().getWireName(BBName) << ";\n";
 }
 
 void RTLWriter::emitOpArg(ucOp &OpArg) {
@@ -553,8 +556,9 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   case MachineOperand::MO_Metadata: {
     MetaToken MetaOp(Operand.getMetadata());
     assert((MetaOp.isDefWire() || MetaOp.isReadWire()) && "Bad operand!");
-    
-    std::string WireName = MetaOp.getWireName();
+
+    MachineBasicBlock *MBB = Operand.getParent()->getParent();
+    std::string WireName = MetaOp.getWireName(getStateNameForMachineBB(MBB));
     OS << WireName;
 
     // Emit the wire here, because it only define once, wires will never

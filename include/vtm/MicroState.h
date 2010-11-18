@@ -76,9 +76,9 @@ public:
     return getUInt64Field(1);
   }
 
-  std::string getWireName() const {
+  std::string getWireName(const std::string &Prefix) const {
     assert((isDefWire() || isReadWire() || isDefReg()) && "Bad token type!");
-    return "wire" + utostr(getWireNum());
+    return Prefix + "_wire" + utostr(getWireNum());
   }
 
   uint64_t getBitWidth() const {
