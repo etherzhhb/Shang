@@ -194,6 +194,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock *MBB = &*I;
     FSMState *State = buildState(MBB);
 
+    State->viewGraph();
     scheduleState(State);
     State->viewGraph();
 
@@ -400,20 +401,21 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   // Assume all def is dead, and try to prove it wrong.
   bool AllDefDead = true;
 
-  if (Defs.empty())
+  if (Defs.empty()) {
     DetachNodes.push_back(A);
-  else {
+    return A;
+  } else {
     const MachineBasicBlock *MBB = MI->getParent();
     for (SmallVector<const MachineOperand*, 4>::iterator I = Defs.begin(),
          E = Defs.end(); I != E; ++I) {
       const MachineOperand *Op = *I;
+      if (!Op->isDead()) AllDefDead = false;
+
       if (LiveVars->isLiveOut(Op->getReg(), *MBB)) {
         // If the node defines any live out register, it may be a detach node.
         DetachNodes.push_back(A);
         break;
       }
-
-      if (!Op->isDead()) AllDefDead = false;
     }
   }
 
@@ -435,6 +437,9 @@ HWAtom *HWAtomInfo::buildExitRoot(MachineInstr *MI) {
 
   HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
                                            0, ++InstIdx);
+  // We may have multiple terminator.
+  DetachNodes.clear();
+  DetachNodes.push_back(A);
   return A;
 }
 
