@@ -108,7 +108,9 @@ class RTLWriter : public MachineFunctionPass {
   void emitFirstCtrlState(MachineBasicBlock *MBB);
 
   void emitDatapath(ucState &State);
-  void emitBinOp(ucOp &BinOp, const std::string &Operator);
+
+  void emitUnaryOp(ucOp &BinOp, const std::string &Operator);
+  void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
   void emitOpAdd(ucOp &OpAdd);
   
@@ -617,17 +619,38 @@ void RTLWriter::emitDatapath(ucState &State) {
       continue;
     
     switch (Op.getOpCode()) {
+    default:  assert(0 && "Unexpect opcode!");      break;
     case VTM::VOpAdd:       emitOpAdd(Op);          break;
-    case VTM::VOpXor:       emitBinOp(Op, "^");     break;
-    case VTM::VOpSHL:       emitBinOp(Op, "<<");    break;
+
+    case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
+    case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
+
+    case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
+    // FIXME: Add signed modifier to the first operand.
+    case VTM::VOpSRA:       emitBinaryOp(Op, ">>>");break;
+
+    case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
+
+    case VTM::VOpROr:       emitUnaryOp(Op, "~");   break;
+    case VTM::VOpRAnd:      emitUnaryOp(Op, "&");   break;
+    case VTM::VOpRXor:      emitUnaryOp(Op, "^");   break;
+
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
     }
   } 
 }
+void RTLWriter::emitUnaryOp(ucOp &BinOp, const std::string &Operator) {
+  raw_ostream &OS = VM->getDataPathBuffer(2);
+  OS << "assign ";
+  emitOperand(OS, BinOp.getOperand(0));
+  OS << " = " << Operator << ' ';
+  emitOperand(OS, BinOp.getOperand(1));
+  OS << ";\n";
+}
 
-void RTLWriter::emitBinOp(ucOp &BinOp, const std::string &Operator) {
+void RTLWriter::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer(2);
   OS << "assign ";
   emitOperand(OS, BinOp.getOperand(0));
