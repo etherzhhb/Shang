@@ -91,23 +91,23 @@ let hasCtrlDep = 1 in {
 let isReturn     = 1,
     isTerminator = 1,
     isBarrier    = 1 in
-def VOpRet : InstPassive<(outs), (ins), "ret;", [(VTMFnRet)]>;
+def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
 let isBranch = 1,
 	isTerminator=1 in
-def VOpToState : InstPassive<(outs), (ins DR1:$cnd, State:$target),
-							 "if ($cnd) state $target;",
-							[(brcond DR1:$cnd, bb:$target)], 0, 1>;
+def VOpToState : CtrlInst<(outs), (ins DR1:$cnd, State:$target),
+						              "if ($cnd) state $target;",
+						              [(brcond DR1:$cnd, bb:$target)], 0, 1>;
 
 // Prevent MachineCSE delete any VOpArg.
 // let neverHasSideEffects = 1 in
-def VOpArg : InstPassive<(outs dyn_rc:$arg), (ins i8imm:$arg_no),
-		 				"$arg = arg[$arg_no]", [], 0, 1>;
+def VOpArg : CtrlInst<(outs dyn_rc:$arg), (ins i8imm:$arg_no),
+		 				          "$arg = arg[$arg_no]", [], 0, 1>;
 
 let isBarrier		= 1  in
-def VOpRetVal : InstPassive<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
-							 "ret $var at $ret_no;",
-							 [], 0, 1>;
+def VOpRetVal : CtrlInst<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
+							           "ret $var at $ret_no;",
+							           [], 0, 1>;
 }
 
 let isReMaterializable = 1,
@@ -115,31 +115,31 @@ let isReMaterializable = 1,
     neverHasSideEffects = 1 in {
 // Bitwise logic operation.
 let isCommutable       = 1 in
-def VOpXor	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
-						   "$dst = xor $src0, $src1", []>;
-def VOpAnd	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
-						   "$dst = and $src0, $src1", []>;
-def VOpNot	 : InstPassive<(outs dyn_rc:$dst), (ins dyn_rc:$src), 
-						   "$dst = ~ $src", []>;
+def VOpXor	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+						              "$dst = xor $src0, $src1", []>;
+def VOpAnd	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+						              "$dst = and $src0, $src1", []>;
+def VOpNot	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src), 
+						              "$dst = ~ $src", []>;
 
 
 // Reduction operation.
-def VOpRAnd	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
-						   "$dst = rand $src", []>;
-def VOpROr	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
-						   "$dst = ror $src", []>;
-def VOpRXor	 : InstPassive<(outs DR1:$dst), (ins dyn_rc:$src), 
-						   "$dst = rxor $src", []>;
+def VOpRAnd	 : DPTvaInst<(outs DR1:$dst), (ins dyn_rc:$src), 
+						              "$dst = rand $src", []>;
+def VOpROr	 : DPTvaInst<(outs DR1:$dst), (ins dyn_rc:$src), 
+						              "$dst = ror $src", []>;
+def VOpRXor	 : DPTvaInst<(outs DR1:$dst), (ins dyn_rc:$src), 
+						              "$dst = rxor $src", []>;
 
 // Bit level operations.
-def VOpBitSlice	 : InstPassive<(outs dyn_rc:$dst),
+def VOpBitSlice	 : DPTvaInst<(outs dyn_rc:$dst),
                               (ins dyn_rc:$src, DR8:$ub, DR8:$lb),
-							  "$dst = bitslice $src, $ub, $lb", []>;
-def VOpBitRepeat : InstPassive<(outs dyn_rc:$dst),
+							                "$dst = bitslice $src, $ub, $lb", []>;
+def VOpBitRepeat : DPTvaInst<(outs dyn_rc:$dst),
                               (ins dyn_rc:$src, DR8:$times),
-							  "$dst = bitrepeat $src, $times", []>;
-def VOpBitCat	 : InstPassive<(outs dyn_rc:$dst), (ins variable_ops),
-							  "$dst = bitcat", []>;
+							                "$dst = bitrepeat $src, $times", []>;
+def VOpBitCat	   : DPTvaInst<(outs dyn_rc:$dst), (ins variable_ops),
+							                "$dst = bitcat", []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -147,27 +147,32 @@ def VOpBitCat	 : InstPassive<(outs dyn_rc:$dst), (ins variable_ops),
 let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
 let isCommutable       = 1 in
-def VOpAdd : InstActive<(outs dyn_rc:$dst, DR1:$co),
-			            (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
-					    "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
+def VOpAdd : DPFUInst<(outs dyn_rc:$dst, DR1:$co),
+			                (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
+					            "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
 
-def VOpSHL : InstActive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
-                        "$dst = shl $src0, $src1", [], FUSHL>;
+def VOpSHL : DPFUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                       "$dst = shl $src0, $src1", [], FUSHL>;
 
-def VOpSRA : InstActive<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
-                        "$dst = sra $src0, $src1", [], FUSHL>;
+def VOpSRA : DPFUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                       "$dst = sra $src0, $src1", [], FUSHL>;
 }
 
 let mayLoad		  = 1,
 	mayStore	  = 1 in
-def VOpMemAccess : InstActive<(outs dyn_rc:$dst),
-							  (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
-							  "$dst = memaccess $src, $addr, $isLoad",
-							  [], FUMemBus, 1, 1>;
+def VOpMemAccess : DPFUInst<(outs dyn_rc:$dst),
+							              (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
+							              "$dst = memaccess $src, $addr, $isLoad",
+							              [], FUMemBus, 1, 1>;
 
 
 //===----------------------------------------------------------------------===//
 
-let isBarrier    = 1 in
-def VOpBundle : InstPassive<(outs variable_ops), (ins i32imm:$slot, variable_ops),
-							 "bundle;", []>;
+let isBarrier    = 1 in {
+def Control	: CtrlInst<(outs variable_ops),
+							         (ins i32imm:$slot, variable_ops),
+							         "bundle;", []>;
+def Datapath : DPTvaInst<(outs variable_ops),
+		     	               (ins i32imm:$slot, variable_ops),
+						             "bundle;", []>;
+}

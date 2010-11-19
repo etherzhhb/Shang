@@ -455,10 +455,6 @@ void RTLWriter::emitFUCtrl(unsigned Slot) {
 void RTLWriter::emitCtrlOp(ucState &State) {
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
-
-    if (Op.haveDataPath())
-      continue;
-
     // Emit the operations.
     switch (Op.getOpCode()) {
     case VTM::VOpArg:       emitOpArg(Op);        break;
@@ -614,10 +610,6 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 void RTLWriter::emitDatapath(ucState &State) {
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
-
-    if (!Op.haveDataPath())
-      continue;
-    
     switch (Op.getOpCode()) {
     default:  assert(0 && "Unexpect opcode!");      break;
     case VTM::VOpAdd:       emitOpAdd(Op);          break;

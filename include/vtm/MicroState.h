@@ -110,7 +110,7 @@ public:
 
   static MDNode *createReadWire(uint64_t WireNum, LLVMContext &Context);
 
-  static MDNode *createInstr(unsigned OpId, const MachineInstr *Instr,
+  static MDNode *createInstr(unsigned OpId, const MachineInstr &Instr,
                              unsigned FUId, LLVMContext &Context);
 
   static MDNode *createDefReg(unsigned OpId, uint64_t WireNum,
@@ -156,8 +156,6 @@ public:
     assert(Token.isInstr() && "Bad token type!");
     return Token.getFUId();
   }
-
-  bool haveDataPath() const;
 
   void print(raw_ostream &OS) const;
   void dump() const;
@@ -224,7 +222,9 @@ class ucState {
   const MachineInstr &Instr;
 public:
   ucState(const MachineInstr &MI) : Instr(MI) {
-    assert(MI.getOpcode() == VTM::VOpBundle && "Bad Instr!");
+    assert((MI.getOpcode() == VTM::Control
+            || MI.getOpcode() == VTM::Datapath)
+           && "Bad Instr!");
   }
 
   unsigned getSlot() const {

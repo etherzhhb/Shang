@@ -82,18 +82,18 @@ struct HWAtomInfo : public MachineFunctionPass {
 
     if (SrcInstr == 0) {
       // DirtyHack: There must be at least 1 slot between entry and exit.
-      if (DstInstr && VTIDReader(DstInstr)->isTerminator())
+      if (DstInstr && VTFInfo(*DstInstr)->isTerminator())
         return 1;
 
       return 0;
     }
 
-    VTIDReader SrcTID(SrcInstr);
+    VTFInfo SrcTID(*SrcInstr);
     unsigned latency = SrcTID.getLatency(VTarget);
 
     if (DstInstr == 0) return latency;
 
-    VTIDReader DstTID(DstInstr);
+    VTFInfo DstTID(*DstInstr);
 
     // We need to wait one more slot to read the result.
     if (SrcTID.isWriteUntilFinish() && DstTID.isReadAtEmit())
@@ -384,7 +384,7 @@ void HWAtomInfo::analyzeOperands(const MachineInstr *MI,
 HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   assert(!InstToHWAtoms.count(MI) && "MI exist!");
 
-  VTIDReader VTID(MI);
+  VTFInfo VTID(*MI);
 
   VFUs::FUTypes FUTy = VTID.getFUType();
   

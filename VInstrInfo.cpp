@@ -29,7 +29,7 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
   {}
 
-unsigned VTIDReader::getLatency(const VTargetMachine &VTC) const {
+unsigned VTFInfo::getLatency(const VTargetMachine &VTC) const {
   VFUs::FUTypes ResTy = getFUType();
 
   if (ResTy == VFUs::Trivial)
@@ -39,9 +39,9 @@ unsigned VTIDReader::getLatency(const VTargetMachine &VTC) const {
 }
 
 
-FuncUnitId VTIDReader::getPrebindFUId()  const {
+FuncUnitId VTFInfo::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
-  if (Instr->getOpcode() == VTM::VOpMemAccess)
+  if (getTID().Opcode == VTM::VOpMemAccess)
     return FuncUnitId(VFUs::MemoryBus, 0);
 
   return FuncUnitId();

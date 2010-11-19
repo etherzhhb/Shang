@@ -117,7 +117,8 @@ struct MicroStateBuilder {
   }
 
   MachineInstr *buildMicroState(unsigned Slot, MachineBasicBlock::iterator InsertPos,
-                                SmallVectorImpl<HWAtom *> &Insts);
+                                SmallVectorImpl<HWAtom *> &Insts,
+                                bool lastSlot = false);
 };
 }
 
@@ -126,31 +127,40 @@ struct MicroStateBuilder {
 MachineInstr*
 MicroStateBuilder::buildMicroState(unsigned Slot,
                                    MachineBasicBlock::iterator InsertPos,
-                                   SmallVectorImpl<HWAtom *> &Atoms) {
-  MachineInstrBuilder Builder = BuildMI(*State.getMachineBasicBlock(),
-                                        InsertPos, DebugLoc(), 
-                                        TII.get(VTM::VOpBundle));
-  Builder.addImm(Slot);
+                                   SmallVectorImpl<HWAtom *> &Atoms,
+                                   bool lastSlot) {
+  MachineInstrBuilder CtrlInst = BuildMI(*State.getMachineBasicBlock(),
+                                         InsertPos, DebugLoc(), 
+                                         TII.get(VTM::Control));
+  CtrlInst.addImm(Slot);
+
+  MachineInstrBuilder DPInst = lastSlot ? MachineInstrBuilder() :
+                                       BuildMI(*State.getMachineBasicBlock(),
+                                       InsertPos, DebugLoc(), 
+                                       TII.get(VTM::Datapath));
+  DPInst.addImm(Slot);
+
 
   for (SmallVectorImpl<HWAtom*>::iterator I = Atoms.begin(),
        E = Atoms.end(); I !=E; ++I) {
     HWAtom *A = *I;
-    MachineInstr *Inst = A->getInst();
+    MachineInstr &Inst = *A->getInst();
 
-    assert(Inst && "Inst can not be null!");
-    VTIDReader VTID(Inst);
+    VTFInfo VTID(Inst);
+    assert(!(lastSlot && VTID.hasDatapath()) && "Unexpect datapath in last slot!");
+    MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
 
     // Add the opcode metadata and the function unit id.
     Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUNum(),
                                                VMContext));
     typedef SmallVector<MachineOperand*, 8> OperandVector;
-    OperandVector Ops(Inst->getNumOperands());
+    OperandVector Ops(Inst.getNumOperands());
     
     // Remove all operand of Instr.
-    while (Inst->getNumOperands() != 0) {
-      unsigned i = Inst->getNumOperands() - 1;
-      MachineOperand *MO = &Inst->getOperand(i);
-      Inst->RemoveOperand(i);
+    while (Inst.getNumOperands() != 0) {
+      unsigned i = Inst.getNumOperands() - 1;
+      MachineOperand *MO = &Inst.getOperand(i);
+      Inst.RemoveOperand(i);
       Ops[i] = MO;
     }
 
@@ -251,11 +261,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     if (MO->isDead()) continue;
     
     // Export the register.
-    Builder.addMetadata(MetaToken::createDefReg(++OpId, WD->WireNum, VMContext));
-    // The def operands are written at the same time that the use operands
-    // are read.
-    MO->setIsEarlyClobber();
-    Builder.addOperand(*MO);
+    CtrlInst.addMetadata(MetaToken::createDefReg(++OpId, WD->WireNum, VMContext));
+    CtrlInst.addOperand(*MO);
   }
 
   // Delete the instructions.
@@ -332,7 +339,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
     }
     // Build last state.
     assert(!AtomsToEmit.empty() && "Expect atoms for last state!");
-    BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
+    BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit, true);
   }
 
   // DEBUG(
@@ -340,13 +347,20 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
       I != E; ++I) {
     MachineInstr *Instr = I;
-    if (Instr->getOpcode() != VTM::VOpBundle) {
+    switch (Instr->getOpcode()) {
+    default:
       Instr->dump();
       continue;
+    case VTM::Control:
+      dbgs() << "Control ";
+      break;
+    case VTM::Datapath:
+      dbgs() << "Datapath ";
+      break;
     }
 
     ucState State(*Instr);
-    dbgs() << "Bundle " << State.getSlot() << '\n';
+    dbgs() << State.getSlot() << '\n';
     
     for (ucState::iterator UOI = State.begin(), UOE = State.end();
          UOI != UOE; ++UOI) {
@@ -410,18 +424,18 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 
 VFUs::FUTypes HWAtom::getFUType() const {
   if (MachineInstr *Instr = getInst())
-    return VTIDReader(Instr).getFUType();
+    return VTFInfo(*Instr).getFUType();
 
   return VFUs::Trivial;
 }
 
 void HWAtom::print(raw_ostream &OS) const {
   MachineInstr *Instr = getInst();
-  VTIDReader VTID(Instr);
 
   OS << "[" << getIdx() << "] ";
 
   if (Instr) {
+    VTFInfo VTID(*Instr);
     OS << Instr->getDesc().getName() << '\t';
     OS << " Res: " << VTID.getFUType();
     DEBUG(OS << '\n' << *Instr);

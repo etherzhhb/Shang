@@ -27,7 +27,7 @@ def FUMult		: FUType<6, IIC_Mult>;
 
 // Pseudo instructions
 class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,
-			  bits<4> latency = 0,
+			  bit datapath = 0, bits<4> latency = 0, 
 			  bit readAtEmit = 0, bit writeUntilFinish = 0>
   : Instruction {
   let Namespace = "VTM";
@@ -44,72 +44,29 @@ class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,
   
   let TSFlags{3} = readAtEmit;
   let TSFlags{4} = writeUntilFinish;
+  let TSFlags{5} = datapath;
   
-  let TSFlags{8-5} = latency;
+  let TSFlags{9-6} = latency;
 }
 
-class InstPassive<dag outs, dag ins, string asmstr, list<dag> pattern,
-				  bits<4> latency = 0,
-				  bit readAtEmit = 0, bit writeUntilFinish = 0>
-	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, latency,
+class CtrlInst<dag outs, dag ins, string asmstr, list<dag> pattern,
+			   bits<4> latency = 0,
+			   bit readAtEmit = 0, bit writeUntilFinish = 0>
+	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 0, latency,
 			  readAtEmit, writeUntilFinish>;
 
-class InstActive<dag outs, dag ins, string asmstr, list<dag> pattern,
-               FUType ResType,
-               bit readAtEmit = 0, bit writeUntilFinish = 0>
-	: InstVTM<outs, ins, asmstr, pattern, ResType, 0,
+class DPFUInst<dag outs, dag ins, string asmstr, list<dag> pattern,
+                FUType ResType,
+                bit readAtEmit = 0, bit writeUntilFinish = 0>
+	: InstVTM<outs, ins, asmstr, pattern, ResType, 1, 0,
 			  readAtEmit, writeUntilFinish>;
 
+class DPTvaInst<dag outs, dag ins, string asmstr, list<dag> pattern,
+		        bits<4> latency = 0,
+			      bit readAtEmit = 0, bit writeUntilFinish = 0>
+	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 1, latency,
+			  readAtEmit, writeUntilFinish>;
 
 class BinOpFrag<dag res> : PatFrag<(ops node:$LHS, node:$RHS), res>;
-
-multiclass InstBinOps<string opc, PatFrag opnode, FUType ResType,
-                      bits<4> latency = 0, bit readAtEmit = 0> {
-  def i1   : InstVTM<(outs DR1:$dst), (ins DR1:$src0, DR1:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR1:$dst, (opnode DR1:$src0, DR1:$src1))],
-                     ResType, latency, readAtEmit>;
-  def i8   : InstVTM<(outs DR8:$dst), (ins DR8:$src0, DR8:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR8:$dst, (opnode DR8:$src0, DR8:$src1))],
-                    ResType, latency, readAtEmit>;
-  def i16  : InstVTM<(outs DR16:$dst), (ins DR16:$src0, DR16:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR16:$dst, (opnode DR16:$src0, DR16:$src1))],
-                     ResType, latency, readAtEmit>;
-  def i32  : InstVTM<(outs DR32:$dst), (ins DR32:$src0, DR32:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR32:$dst, (opnode DR32:$src0, DR32:$src1))],
-                     ResType, latency, readAtEmit>;
-  def i64  : InstVTM<(outs DR64:$dst), (ins DR64:$src0, DR64:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR64:$dst, (opnode DR64:$src0, DR64:$src1))],
-                     ResType, latency, readAtEmit>;
-}
-
-// Shift amount is i8.
-multiclass InstShOps<string opc, PatFrag opnode, FUType ResType,
-                     bits<4> latency = 0, bit readAtEmit = 0> {
-  def i1   : InstVTM<(outs DR1:$dst), (ins DR1:$src0, DR8:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR1:$dst, (opnode DR1:$src0, DR8:$src1))],
-                     ResType, latency, readAtEmit>;
-  def i8   : InstVTM<(outs DR8:$dst), (ins DR8:$src0, DR8:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR8:$dst, (opnode DR8:$src0, DR8:$src1))],
-                    ResType, latency, readAtEmit>;
-  def i16  : InstVTM<(outs DR16:$dst), (ins DR16:$src0, DR8:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR16:$dst, (opnode DR16:$src0, DR8:$src1))],
-                     ResType, latency, readAtEmit>;
-  def i32  : InstVTM<(outs DR32:$dst), (ins DR32:$src0, DR8:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR32:$dst, (opnode DR32:$src0, DR8:$src1))],
-                     ResType, latency, readAtEmit>;
-  def i64  : InstVTM<(outs DR64:$dst), (ins DR64:$src0, DR8:$src1),
-                     !strconcat(opc, "$dst, $src0, $src1"),
-                     [(set DR64:$dst, (opnode DR64:$src0, DR8:$src1))],
-                     ResType, latency, readAtEmit>;
-}
 
 class UnOpFrag <dag res> : PatFrag<(ops node:$Src), res>;

@@ -101,23 +101,6 @@ void ucOp::dump() const {
   dbgs() << '\n';
 }
 
-bool ucOp::haveDataPath() const {
-  if (Token.isDefReg()) return false;
-  
-  switch (Token.getOpcode()) {
-  case VTM::VOpArg:
-  case VTM::VOpRetVal:
-  case VTM::VOpToState:
-  case VTM::VOpRet:
-  case VTM::VOpMemAccess:
-  case VTM::COPY:
-  case VTM::PHI:
-    return false;
-  }
-
-  return true;
-}
-
 MachineInstr::mop_iterator ucOpIterator::getNextIt() const {
   MachineInstr::mop_iterator NextIt = CurIt;
 
@@ -158,9 +141,9 @@ MDNode *MetaToken::createDefReg(unsigned OpId, uint64_t WireNum,
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
 
-MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr *Instr,
+MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
                                unsigned FUId, LLVMContext &Context) {
-  VTIDReader VTID(Instr);
+  VTFInfo VTID(Instr);
 
   Value *Elts[] = {
     getTagConstant(MetaToken::tokenInstr, Context), getOpId(Context, OpId),
