@@ -67,6 +67,7 @@ struct VTargetMachine : public LLVMTargetMachine {
   virtual const VRegisterInfo *getRegisterInfo() const {
     return &InstrInfo.getRegisterInfo();
   }
+
   virtual const VTargetLowering* getTargetLowering() const {
     return &TLInfo;
   }
