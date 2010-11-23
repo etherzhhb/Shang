@@ -119,9 +119,9 @@ tablegen(VGenDAGISel.inc -gen-dag-isel)
 tablegen(VGenSubtarget.inc -gen-subtarget)
 
 add_llvm_target(VerilogBackend
+  FUs.cpp
   MicroState.cpp
   VBackend.cpp
-  FUs.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
   VInstrInfo.cpp
@@ -132,9 +132,9 @@ add_llvm_target(VerilogBackend
   )
 
 target_link_libraries (LLVMVerilogBackend
-  LLVMVTMBitLevelOpt
-  LLVMVTMSchedule
-  LLVMVTMRTLBacnend
+  VTMBitLevelOpt
+  VTMSchedule
+  VTMRTLBackend
   ${LUA_LIBRARY}
   ${LUABIND_LIBRARY}) #LLVMVTMWriters 
 
