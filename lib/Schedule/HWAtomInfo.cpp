@@ -199,6 +199,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
+    InstToHWAtoms.clear();
     FSMState *State = buildState(MBB);
 
     scheduleState(State);
