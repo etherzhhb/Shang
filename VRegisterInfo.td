@@ -58,8 +58,10 @@ class DynRegClass<string namespace, list<ValueType> regTypes, int alignment,
     void clear() { PhyRegs.clear(); }
     void createPhyRegs(unsigned &PhyRegBase, unsigned NumPhyRegs) {
       while(NumPhyRegs-- > 0) {
+        // A physics register number can never be zero.
+        ++PhyRegBase;
         RegSet.insert(PhyRegBase);
-        PhyRegs.push_back(PhyRegBase++);
+        PhyRegs.push_back(PhyRegBase);
       }
     }
   }];  

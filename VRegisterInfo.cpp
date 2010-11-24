@@ -117,12 +117,14 @@ VRegisterInfo::getPointerRegClass(unsigned Kind) const {
   return TLI.getRegClassFor(PtrVT);
 }
 
-// We should not need to publish the initializer as long as no other passes
-// require RAOptimalSSA.
-#if 0 // disable INITIALIZE_PASS
-INITIALIZE_PASS(DynCreatePhyRegs, "dynamic-create-phyregs",
-                "Create the Physics Registers on demand.", false, true);
-#endif // disable INITIALIZE_PASS
+void llvm::VRegisterInfo::resetPhyRegs() {
+  VTM::DR1RegClass.clear();
+  VTM::DR8RegClass.clear();
+  VTM::DR16RegClass.clear();
+  VTM::DR32RegClass.clear();
+  VTM::DR64RegClass.clear();
+  NumRegs = 0;
+}
 
 bool VRegisterInfo::createPhyRegs(MachineRegisterInfo &mri) {
   MRI = &mri;
@@ -134,11 +136,20 @@ bool VRegisterInfo::createPhyRegs(MachineRegisterInfo &mri) {
   createPhyRegs(VTM::DR16RegClass);
   createPhyRegs(VTM::DR32RegClass);
   createPhyRegs(VTM::DR64RegClass);
-
+  // The last register number is NumRegs, so we have NumRegs + 1 registers.
+  ++NumRegs;
   // Notice the MachineRegisterInfo after physics registers changed.
   mri.updatePhyRegsInfo();
   return false;
 }
+
+// We should not need to publish the initializer as long as no other passes
+// require RAOptimalSSA.
+#if 0 // disable INITIALIZE_PASS
+INITIALIZE_PASS(DynCreatePhyRegs, "dynamic-create-phyregs",
+                "Create the Physics Registers on demand.", false, true);
+#endif // disable INITIALIZE_PASS
+
 
 namespace {
 struct DynPhyRegsBuilder : public MachineFunctionPass {

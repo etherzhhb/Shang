@@ -68,15 +68,7 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   /// Create physics registers dynamically.
   bool createPhyRegs(MachineRegisterInfo &mri);
 
-  void resetPhyRegs() {
-    VTM::DR1RegClass.clear();
-    VTM::DR8RegClass.clear();
-    VTM::DR16RegClass.clear();
-    VTM::DR32RegClass.clear();
-    VTM::DR64RegClass.clear();
-    NumRegs = 0;
-  }
-
+  void resetPhyRegs();
 
   template<class RegClass>
   void createPhyRegs(RegClass &RC) {
