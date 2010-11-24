@@ -19,6 +19,7 @@
 #include "VRegisterInfo.h"
 
 #include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetOpcodes.h"
 namespace llvm {
 class TargetData;
 class TargetLowering;
@@ -76,12 +77,24 @@ public:
   unsigned getLatency(const VTargetMachine &VTC) const;
 
   inline bool isReadAtEmit() const {
-    return getTSFlags() & (ReadAtEmitMask << ReadAtEmitShiftAmount);
+    switch (TID.getOpcode()) {
+    default:
+      return getTSFlags() & (ReadAtEmitMask << ReadAtEmitShiftAmount);
+    case TargetOpcode::COPY:
+    case TargetOpcode::PHI:
+      return true;
+    }
   }
 
   inline bool isWriteUntilFinish() const {
-    return getTSFlags()
-           & (WriteUntilFinishMask << WriteUntilFinishShiftAmount);
+    switch (TID.getOpcode()) {
+    default:
+      return getTSFlags()
+             & (WriteUntilFinishMask << WriteUntilFinishShiftAmount);
+    case TargetOpcode::COPY:
+    case TargetOpcode::PHI:
+      return true;
+    }
   }
 
   inline bool hasDatapath() const {
