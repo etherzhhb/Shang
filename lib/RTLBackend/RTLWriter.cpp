@@ -619,6 +619,7 @@ void RTLWriter::emitDatapath(ucState &State) {
 
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
+    case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
 
     case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
     // FIXME: Add signed modifier to the first operand.

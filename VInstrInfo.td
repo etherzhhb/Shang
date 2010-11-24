@@ -119,6 +119,8 @@ def VOpXor	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
 						              "$dst = xor $src0, $src1", []>;
 def VOpAnd	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
 						              "$dst = and $src0, $src1", []>;
+def VOpOr	   : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+						              "$dst = or $src0, $src1", []>;
 def VOpNot	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src), 
 						              "$dst = ~ $src", []>;
 

@@ -137,6 +137,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
+  case VTM::VOpOr:
   case VTM::VOpAnd:
   case VTM::VOpXor: {
     MachineOperand &Result = Instr->getOperand(0);
