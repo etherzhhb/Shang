@@ -48,7 +48,7 @@ struct MicroStateBuilder {
   unsigned OpId;
   FSMState &State;
   LLVMContext &VMContext;
-  const TargetMachine &Target;
+  const VTargetMachine &Target;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
   VFuncInfo &VFI;
@@ -95,7 +95,7 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(FSMState &S, LLVMContext& Context, const TargetMachine &TM,
+  MicroStateBuilder(FSMState &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : WireNum(S.getMachineBasicBlock()->getNumber()),
   OpId(S.getMachineBasicBlock()->getNumber() << 24),
@@ -117,8 +117,29 @@ struct MicroStateBuilder {
   }
 
   MachineInstr *buildMicroState(unsigned Slot, MachineBasicBlock::iterator InsertPos,
-                                SmallVectorImpl<HWAtom *> &Insts,
+                                SmallVectorImpl<HWAtom*> &Insts,
+                                SmallVectorImpl<HWAtom *> &DeferredInsts,
                                 bool IsLastSlot = false);
+
+  unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot,
+                         MachineBasicBlock::iterator InsertPos,
+                         SmallVectorImpl<HWAtom*> &Insts,
+                         SmallVectorImpl<HWAtom *> &DeferredInsts,
+                         bool IsLastSlot = false) {
+    assert(TargetSlot > CurSlot && "Bad target slot!");
+    
+    buildMicroState(CurSlot, InsertPos, Insts, DeferredInsts);
+
+    // Some states may not emit any atoms, but it may read the result from
+    // previous atoms.
+    // Note that AtomsToEmit is empty now, so we do not emitting any new
+    // atoms.
+    while (++CurSlot != TargetSlot && !IsLastSlot)
+      buildMicroState(CurSlot, InsertPos, Insts, DeferredInsts);
+
+    return CurSlot;
+  }
+
 };
 }
 
@@ -128,21 +149,25 @@ MachineInstr*
 MicroStateBuilder::buildMicroState(unsigned Slot,
                                    MachineBasicBlock::iterator InsertPos,
                                    SmallVectorImpl<HWAtom *> &Atoms,
+                                   SmallVectorImpl<HWAtom *> &DeferredInsts,
                                    bool IsLastSlot) {
+  MachineBasicBlock &MBB = *State.getMachineBasicBlock();
+
   const TargetInstrDesc &TID = IsLastSlot ? TII.get(VTM::Terminator)
                                           : TII.get(VTM::Control);
-  MachineInstrBuilder CtrlInst = BuildMI(*State.getMachineBasicBlock(),
-                                         InsertPos, DebugLoc(), 
-                                         TID);
-  CtrlInst.addImm(Slot);
+  MachineInstrBuilder CtrlInst
+    = BuildMI(MBB, InsertPos, DebugLoc(), TID).addImm(Slot);
+
+  // Emit the  deferred atoms before data path need it.
+  while (!DeferredInsts.empty()) {
+    MachineInstr *Instr = DeferredInsts.pop_back_val()->getInstr();
+    MBB.insert(InsertPos, Instr);
+  }
 
   MachineInstrBuilder DPInst;
-  
   if (!IsLastSlot) {
-    DPInst = BuildMI(*State.getMachineBasicBlock(),
-                     InsertPos, DebugLoc(), 
-                     TII.get(VTM::Datapath));
-    DPInst.addImm(Slot);
+    DPInst
+      = BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
   }
 
   for (SmallVectorImpl<HWAtom*>::iterator I = Atoms.begin(),
@@ -150,7 +175,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     HWAtom *A = *I;
     MachineInstr &Inst = *A->getInst();
 
-    VTFInfo VTID(Inst);
+    VTFInfo VTID = Inst.getDesc();
+    // FIXME: Inline datapath is allow in last slot.
     assert(!(IsLastSlot && VTID.hasDatapath())
            && "Unexpect datapath in last slot!");
     MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
@@ -297,6 +323,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
   const TargetInstrInfo *TII = TM.getInstrInfo();
   MachineBasicBlock::iterator InsertPos = MBB->end();
   SmallVector<HWAtom*, 8> AtomsToEmit;
+  SmallVector<HWAtom*, 8> DeferredAtoms;
   unsigned CurSlot = startSlot;
   VFuncInfo *VFI = MBB->getParent()->getInfo<VFuncInfo>();
 
@@ -318,24 +345,21 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
       if (A->getOpcode() == VTM::VOpRet)
         VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
 
-      if (A->getSlot() != CurSlot) {
-        BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
-        // Some states may not emit any atoms, but it may read the result from
-        // previous atoms.
-        // Note that AtomsToEmit is empty now, so we do not emitting any new
-        // atoms.
-        while (++CurSlot != A->getSlot())
-          BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit);
-      }
+      if (A->getSlot() != CurSlot)
+        CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot(),  InsertPos,
+                                    AtomsToEmit, DeferredAtoms);
       
       if (MachineInstr *Inst = A->getInst()) {
         // Ignore some instructions.
         switch (Inst->getOpcode()) {
         case TargetOpcode::PHI:
-        case TargetOpcode::COPY:
           assert(AtomsToEmit.empty() && "Unexpect atom before PHI.");
           MBB->remove(Inst);
           MBB->insert(InsertPos, Inst);
+          continue;
+        case TargetOpcode::COPY:
+          MBB->remove(Inst);
+          DeferredAtoms.push_back(A);
           continue;
         }
 
@@ -344,7 +368,8 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
     }
     // Build last state.
     assert(!AtomsToEmit.empty() && "Expect atoms for last state!");
-    BTB.buildMicroState(CurSlot, InsertPos, AtomsToEmit, true);
+    BTB.advanceToSlot(CurSlot, CurSlot + 1, InsertPos, AtomsToEmit, DeferredAtoms,
+                      true);
   }
 
   // DEBUG(
@@ -443,7 +468,7 @@ void HWAtom::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
   if (Instr) {
-    VTFInfo VTID(*Instr);
+    VTFInfo VTID = Instr->getDesc();
     OS << Instr->getDesc().getName() << '\t';
     OS << " Res: " << VTID.getFUType();
     DEBUG(OS << '\n' << *Instr);
