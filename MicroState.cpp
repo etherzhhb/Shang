@@ -143,7 +143,7 @@ MDNode *MetaToken::createDefReg(unsigned OpId, uint64_t WireNum,
 
 MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
                                unsigned FUId, LLVMContext &Context) {
-  VTFInfo VTID(Instr);
+  VTFInfo VTID = Instr.getDesc();
 
   Value *Elts[] = {
     getTagConstant(MetaToken::tokenInstr, Context), getOpId(Context, OpId),

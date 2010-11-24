@@ -85,15 +85,15 @@ struct HWAtomInfo : public MachineFunctionPass {
       if (DstInstr && VTFInfo(*DstInstr)->isTerminator())
         return 1;
 
+    VTFInfo SrcTID = SrcInstr->getDesc();
       return 0;
     }
 
-    VTFInfo SrcTID(*SrcInstr);
     unsigned latency = SrcTID.getLatency(VTarget);
 
     if (DstInstr == 0) return latency;
 
-    VTFInfo DstTID(*DstInstr);
+    VTFInfo DstTID = DstInstr->getDesc();
 
     // We need to wait one more slot to read the result.
     if (SrcTID.isWriteUntilFinish() && DstTID.isReadAtEmit())
@@ -385,7 +385,7 @@ void HWAtomInfo::analyzeOperands(const MachineInstr *MI,
 HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   assert(!InstToHWAtoms.count(MI) && "MI exist!");
 
-  VTFInfo VTID(*MI);
+  VTFInfo VTID = MI->getDesc();
 
   VFUs::FUTypes FUTy = VTID.getFUType();
   
