@@ -95,9 +95,12 @@ struct HWAtomInfo : public MachineFunctionPass {
 
     VTFInfo DstTID = DstInstr->getDesc();
 
-    // We need to wait one more slot to read the result.
-    if (SrcTID.isWriteUntilFinish() && DstTID.isReadAtEmit())
-      return latency + 1;
+    if (DstTID.isReadAtEmit()) {
+      // We need to wait one more slot to read the result.
+      if (latency == 0) return 1;
+
+      if (SrcTID.isWriteUntilFinish()) return latency + 1;
+    }
     
     return latency;
   }
