@@ -22,11 +22,13 @@
 namespace llvm {
 class LLVMContext;
 class Pass;
+class FunctionPass;
 class raw_ostream;
 class TargetMachine;
 class PassRegistry;
 
 struct VTargetMachine;
+struct VRegisterInfo;
 
 // Simple As Soon As Possible Scheduler
 Pass *createASAPSchedulePass();
@@ -55,17 +57,18 @@ Pass *createBitLevelInfoPass();
 // HWAtom
 Pass *createHWAtonInfoPass(const VTargetMachine &TM);
 
-// Vlang
-Pass *createVlangPass();
+// Register allocation.
+FunctionPass *createOptimalSSARegisterAllocator();
+
+// Register allocation.
+FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
 
 // RTL writer.
 Pass *createRTLWriterPass(VTargetMachine &TM, raw_ostream &O);
 
-// Testbench writer.
-Pass *createTestBenchWriterPass(raw_ostream &O);
-
 //
 void initializeBitLevelInfoPass(PassRegistry &Registry);
+void initializeRAOptimalSSAPass(PassRegistry &Registry);
 } // end namespace
 
 #endif

@@ -210,6 +210,18 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(createHWAtonInfoPass(*this));
 
+  // Create physics register on demand.
+  VRegisterInfo *VRI = const_cast<VRegisterInfo*>(getRegisterInfo());
+  PM.add(createDynPhyRegsBuilderPass(*VRI));
+
+  // Register allocation.
+  // PM.add(createOptimalSSARegisterAllocator());
+  // PM.add(createBasicRegisterAllocator());
+
+  PM.add(createLinearScanRegisterAllocator());
+
+  // PM.add(createFastRegisterAllocator());
+
   PM.add(createRTLWriterPass(*this, Out));
 
   return false;

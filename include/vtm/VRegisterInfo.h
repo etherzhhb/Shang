@@ -16,6 +16,7 @@
 #define VINREGISTERINFO_H
 
 #include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/ADT/SmallVector.h"
 #include "VGenRegisterInfo.h.inc"
 
 namespace llvm {
@@ -29,9 +30,12 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   const TargetInstrInfo &TII;
   const TargetData &TD;
   const TargetLowering &TLI;
+  MachineRegisterInfo *MRI;
 
   VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
                 const TargetLowering &tli);
+
+  virtual const TargetRegisterDesc &operator[](unsigned RegNo) const;
 
   /// Code Generation virtual methods...
   const unsigned *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
@@ -58,6 +62,27 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   unsigned getEHHandlerRegister() const;
 
   int getDwarfRegNum(unsigned RegNum, bool isEH) const;
+
+
+  //===--------------------------------------------------------------------===//
+  /// Create physics registers dynamically.
+  bool createPhyRegs(MachineRegisterInfo &mri);
+
+  void resetPhyRegs() {
+    VTM::DR1RegClass.clear();
+    VTM::DR8RegClass.clear();
+    VTM::DR16RegClass.clear();
+    VTM::DR32RegClass.clear();
+    VTM::DR64RegClass.clear();
+    NumRegs = 0;
+  }
+
+
+  template<class RegClass>
+  void createPhyRegs(RegClass &RC) {
+    unsigned NumVRegs = MRI->getRegClassVirtRegs(&RC).size();
+    RC.createPhyRegs(NumRegs, NumVRegs);
+  }
 };
 
 } // end namespace llvm

@@ -389,15 +389,12 @@ void RTLWriter::emitAllRegister() {
 void RTLWriter::emitRegClassRegs(const TargetRegisterClass *RC,
                                  unsigned BitWidth) {
   MachineRegisterInfo &MRI = MF->getRegInfo();
-  const std::vector<unsigned> &Regs = MRI.getRegClassVirtRegs(RC);
-  for (std::vector<unsigned>::const_iterator I = Regs.begin(), E = Regs.end();
+  for (TargetRegisterClass::iterator I = RC->begin(), E = RC->end();
       I != E; ++I) {
     unsigned RegNum = *I;
 
-    // Do not emit dead registers.
-    if (MRI.use_empty(RegNum)) continue;
-    
-    VM->addRegister("reg" + utostr(RegNum), BitWidth);
+    if (MRI.isPhysRegUsed(RegNum))
+      VM->addRegister("reg" + utostr(RegNum), BitWidth);
   }
 }
 
