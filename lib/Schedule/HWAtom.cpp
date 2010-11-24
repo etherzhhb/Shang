@@ -118,7 +118,7 @@ struct MicroStateBuilder {
 
   MachineInstr *buildMicroState(unsigned Slot, MachineBasicBlock::iterator InsertPos,
                                 SmallVectorImpl<HWAtom *> &Insts,
-                                bool lastSlot = false);
+                                bool IsLastSlot = false);
 };
 }
 
@@ -128,18 +128,22 @@ MachineInstr*
 MicroStateBuilder::buildMicroState(unsigned Slot,
                                    MachineBasicBlock::iterator InsertPos,
                                    SmallVectorImpl<HWAtom *> &Atoms,
-                                   bool lastSlot) {
+                                   bool IsLastSlot) {
+  const TargetInstrDesc &TID = IsLastSlot ? TII.get(VTM::Terminator)
+                                          : TII.get(VTM::Control);
   MachineInstrBuilder CtrlInst = BuildMI(*State.getMachineBasicBlock(),
                                          InsertPos, DebugLoc(), 
-                                         TII.get(VTM::Control));
+                                         TID);
   CtrlInst.addImm(Slot);
 
-  MachineInstrBuilder DPInst = lastSlot ? MachineInstrBuilder() :
-                                       BuildMI(*State.getMachineBasicBlock(),
-                                       InsertPos, DebugLoc(), 
-                                       TII.get(VTM::Datapath));
-  DPInst.addImm(Slot);
-
+  MachineInstrBuilder DPInst;
+  
+  if (!IsLastSlot) {
+    DPInst = BuildMI(*State.getMachineBasicBlock(),
+                     InsertPos, DebugLoc(), 
+                     TII.get(VTM::Datapath));
+    DPInst.addImm(Slot);
+  }
 
   for (SmallVectorImpl<HWAtom*>::iterator I = Atoms.begin(),
        E = Atoms.end(); I !=E; ++I) {
@@ -147,7 +151,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     MachineInstr &Inst = *A->getInst();
 
     VTFInfo VTID(Inst);
-    assert(!(lastSlot && VTID.hasDatapath()) && "Unexpect datapath in last slot!");
+    assert(!(IsLastSlot && VTID.hasDatapath())
+           && "Unexpect datapath in last slot!");
     MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
 
     // Add the opcode metadata and the function unit id.
@@ -168,19 +173,19 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
              WriteSlot = A->getFinSlot();
     unsigned ReadSlot = EmitSlot;
     
-    bool isReasAtEmit = VTID.isReadAtEmit();
+    bool isReadAtEmit = VTID.isReadAtEmit();
 
     // We can not write the value to a register at the same moment we emit it.
     // Unless we read at emit.
     // FIXME: Introduce "Write at emit."
-    if (WriteSlot == EmitSlot && !isReasAtEmit) ++WriteSlot;
+    if (WriteSlot == EmitSlot && !isReadAtEmit) ++WriteSlot;
     // Write to register operation need to wait one more slot if the result is
     // written at the moment (clock event) that the atom finish.
     if (VTID.isWriteUntilFinish()) ++WriteSlot;
     
 
     // We read the values after we emit it unless the value is read at emit.
-    if (!isReasAtEmit) ++ReadSlot;
+    if (!isReadAtEmit) ++ReadSlot;
     
     DefVector &Defs = getDefsToEmitAt(WriteSlot);
 
@@ -357,9 +362,12 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
     case VTM::Datapath:
       dbgs() << "Datapath ";
       break;
+    case VTM::Terminator:
+      dbgs() << "Terminator ";
+      break;
     }
 
-    ucState State(*Instr);
+    ucState State = *Instr;
     dbgs() << State.getSlot() << '\n';
     
     for (ucState::iterator UOI = State.begin(), UOE = State.end();

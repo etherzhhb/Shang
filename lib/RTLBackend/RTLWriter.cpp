@@ -304,16 +304,21 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   // Case begin
   verilogMatchCase(VM->getControlBlockBuffer(6), StateName);
 
-  MachineBasicBlock::iterator I = MBB.getFirstNonPHI(), E = prior(MBB.end());
-  while (I != E) {
-    ucState CurState(*I);
+  MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
+                              E = MBB.getFirstTerminator();
+  // FIXME: Refactor the loop.
+  for(;;) {
+    ++I;
+    ucState CurDatapath = *I;
     // Emit the datepath of current state.
-    emitDatapath(CurState);
-    
+    emitDatapath(CurDatapath);
+
+    if (++I == E) break;
+
     // Emit next ucOp.
-    ucState NextState(*(++I));
-    verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurState));
-    emitCtrlOp(NextState);
+    ucState NextControl = *I;
+    verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurDatapath));
+    emitCtrlOp(NextControl);
     verilogEnd(VM->getControlBlockBuffer(8));
   }
   
@@ -453,6 +458,10 @@ void RTLWriter::emitFUCtrl(unsigned Slot) {
 }
 
 void RTLWriter::emitCtrlOp(ucState &State) {
+  assert((State->getOpcode() == VTM::Control
+          // ToDo: sepreate terminator from control.
+          || State->getOpcode() == VTM::Terminator)
+        && "Bad ucState!");
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     // Emit the operations.
@@ -467,16 +476,12 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     }
   }
 
-  MachineBasicBlock *CurBB = State->getParent();
-  unsigned LastSlot = FuncInfo->getStartSlotFor(CurBB) +
-                      FuncInfo->getTotalSlotFor(CurBB) - 1;
-  if (State.getSlot() != LastSlot)  emitFUCtrl(State.getSlot());
+  if (!State->getDesc().isTerminator())  emitFUCtrl(State.getSlot());
 }
 
 void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
-  ucState FirstState(MBB->front());
-  
+  ucState FirstState = *MBB->getFirstNonPHI();
   emitCtrlOp(FirstState);
 }
 
@@ -608,6 +613,7 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 }
 
 void RTLWriter::emitDatapath(ucState &State) {
+  assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     switch (Op.getOpCode()) {

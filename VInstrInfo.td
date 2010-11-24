@@ -93,8 +93,8 @@ let isReturn     = 1,
     isBarrier    = 1 in
 def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
-let isBranch = 1,
-	isTerminator=1 in
+let isBranch   = 1,
+	isTerminator = 1 in
 def VOpToState : CtrlInst<(outs), (ins DR1:$cnd, State:$target),
 						              "if ($cnd) state $target;",
 						              [(brcond DR1:$cnd, bb:$target)], 0, 1>;
@@ -171,8 +171,12 @@ def VOpMemAccess : DPFUInst<(outs dyn_rc:$dst),
 let isBarrier    = 1 in {
 def Control	: CtrlInst<(outs variable_ops),
 							         (ins i32imm:$slot, variable_ops),
-							         "bundle;", []>;
+							         "control;", []>;
 def Datapath : DPTvaInst<(outs variable_ops),
 		     	               (ins i32imm:$slot, variable_ops),
-						             "bundle;", []>;
+						             "datapath;", []>;
+let	isTerminator = 1 in
+def Terminator : DPTvaInst<(outs variable_ops),
+		     	               (ins i32imm:$slot, variable_ops),
+						             "Terminator;", []>;
 }

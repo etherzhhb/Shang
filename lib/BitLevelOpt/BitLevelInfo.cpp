@@ -70,6 +70,11 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   switch (Instr->getOpcode()) {
   default:
     assert(0 && "Unknown instruction!");
+  // We can not check these instructions at this moment.
+  case VTM::Control:
+  case VTM::Datapath:
+  case VTM::Terminator:
+  // These intructions do not define anything.
   case VTM::VOpToState:
   case VTM::VOpRet:
   case VTM::VOpRetVal:
