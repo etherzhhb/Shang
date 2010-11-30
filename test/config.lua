@@ -1,0 +1,6 @@
+Config:setupMemBus(1, 1, 1)
+Config:setupSHL(1, 1, 4096)
+Config:setupASR(1, 1, 4096)
+Config:setupLSR(1, 1, 4096)
+Config:setupAddSub(1, 1, 4096)
+Config:setupMult(1, 1, 256)

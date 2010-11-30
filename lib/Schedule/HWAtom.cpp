@@ -372,7 +372,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
                       true);
   }
 
-  // DEBUG(
+  DEBUG(
   dbgs() << "After schedule emitted:\n";
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
       I != E; ++I) {
@@ -401,7 +401,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
       Op.dump();
     }
   }
-  // );
+  );
 
   return MBB;
 }

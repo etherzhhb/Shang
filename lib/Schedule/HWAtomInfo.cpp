@@ -205,7 +205,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     FSMState *State = buildState(MBB);
 
     scheduleState(State);
-    State->viewGraph();
+    DEBUG(State->viewGraph());
 
     State->emitSchedule(*BLI);
     FuncInfo->remeberTotalSlot(MBB, State->getStartSlot(),

@@ -46,8 +46,7 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 static cl::opt<std::string>
-ConfigScriptName("vbe-res-config-script",
-                 cl::desc("vbe - The resource config script."));
+ConfigScriptName("vtm-config-script", cl::desc("vbe - The vtm config script."));
 
 //===----------------------------------------------------------------------===//
 
@@ -203,8 +202,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Run pre-ra passes.
   if (addPreRegAlloc(PM, OptLevel))
     printAndVerify(PM, "After PreRegAlloc passes");
-
-  PM.add(createMachineFunctionPrinterPass(dbgs(), "==========MF============"));
 
   PM.add(new LiveVariables());
 
