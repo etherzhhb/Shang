@@ -46,6 +46,8 @@ struct MicroStateBuilder {
   MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
   void operator=(const MicroStateBuilder&); // DO NOT IMPLEMENT
 
+  MachineBasicBlock &MBB;
+  MachineBasicBlock::iterator InsertPos;
   unsigned WireNum;
   unsigned OpId;
   FSMState &State;
@@ -55,6 +57,9 @@ struct MicroStateBuilder {
   MachineRegisterInfo &MRI;
   VFuncInfo &VFI;
   BitLevelInfo &BLI;
+
+  SmallVector<HWAtom*, 8> AtomsToEmit;
+  SmallVector<HWAtom*, 8> DeferredAtoms;
   
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
@@ -99,11 +104,12 @@ struct MicroStateBuilder {
 
   MicroStateBuilder(FSMState &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
-  : WireNum(S.getMachineBasicBlock()->getNumber()),
-  OpId(S.getMachineBasicBlock()->getNumber() << 24),
+  : MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
+  WireNum(MBB.getNumber()),
+  OpId(MBB.getNumber() << 24),
   State(S), VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
-  MRI(S.getMachineBasicBlock()->getParent()->getRegInfo()),
-  VFI(*S.getMachineBasicBlock()->getParent()->getInfo<VFuncInfo>()),
+  MRI(MBB.getParent()->getRegInfo()),
+  VFI(*MBB.getParent()->getInfo<VFuncInfo>()),
   DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/),
   BLI(BitInfo) {}
 
@@ -118,26 +124,41 @@ struct MicroStateBuilder {
     return DefToEmit[Slot - State.getStartSlot()];
   }
 
-  MachineInstr *buildMicroState(unsigned Slot, MachineBasicBlock::iterator InsertPos,
-                                SmallVectorImpl<HWAtom*> &Insts,
-                                SmallVectorImpl<HWAtom *> &DeferredInsts,
-                                bool IsLastSlot = false);
+  MachineBasicBlock::iterator getInsertPos() { return InsertPos; }
+
+  void emitAtom(HWAtom *A) { AtomsToEmit.push_back(A); }
+  bool emitQueueEmpty() const { return AtomsToEmit.empty(); }
+
+  void defereAtom(HWAtom *A) { DeferredAtoms.push_back(A); }
+
+  MachineInstr *buildMicroState(unsigned Slot, bool IsLastSlot = false);
+
+  void emitDeferredInsts() {
+    // Emit the  deferred atoms before data path need it.
+    while (!DeferredAtoms.empty()) {
+      HWAtom *A = DeferredAtoms.pop_back_val();
+      for (HWAtom::instr_iterator I = A->instr_begin(), E = A->instr_end();
+          I != E; ++I)
+        MBB.insert(InsertPos, *I);
+    }
+  }
+
+  void fuseInstr(MachineInstr &Inst, HWAtom *A, bool IsLastSlot,
+                 MachineInstrBuilder &DPInst, MachineInstrBuilder &CtrlInst);
 
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot,
-                         MachineBasicBlock::iterator InsertPos,
-                         SmallVectorImpl<HWAtom*> &Insts,
-                         SmallVectorImpl<HWAtom *> &DeferredInsts,
                          bool IsLastSlot = false) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
     
-    buildMicroState(CurSlot, InsertPos, Insts, DeferredInsts, IsLastSlot);
-
+    buildMicroState(CurSlot, IsLastSlot);
+    AtomsToEmit.clear();
+    
     // Some states may not emit any atoms, but it may read the result from
     // previous atoms.
     // Note that AtomsToEmit is empty now, so we do not emitting any new
     // atoms.
     while (++CurSlot != TargetSlot && !IsLastSlot)
-      buildMicroState(CurSlot, InsertPos, Insts, DeferredInsts);
+      buildMicroState(CurSlot);
 
     return CurSlot;
   }
@@ -148,11 +169,7 @@ struct MicroStateBuilder {
 //===----------------------------------------------------------------------===//
 
 MachineInstr*
-MicroStateBuilder::buildMicroState(unsigned Slot,
-                                   MachineBasicBlock::iterator InsertPos,
-                                   SmallVectorImpl<HWAtom *> &Atoms,
-                                   SmallVectorImpl<HWAtom *> &DeferredInsts,
-                                   bool IsLastSlot) {
+MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
   MachineBasicBlock &MBB = *State.getMachineBasicBlock();
 
   const TargetInstrDesc &TID = IsLastSlot ? TII.get(VTM::Terminator)
@@ -160,11 +177,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
   MachineInstrBuilder CtrlInst
     = BuildMI(MBB, InsertPos, DebugLoc(), TID).addImm(Slot);
 
-  // Emit the  deferred atoms before data path need it.
-  while (!DeferredInsts.empty()) {
-    MachineInstr *Instr = DeferredInsts.pop_back_val()->getInstr();
-    MBB.insert(InsertPos, Instr);
-  }
+  emitDeferredInsts();
+
 
   MachineInstrBuilder DPInst;
   if (!IsLastSlot) {
@@ -172,108 +186,12 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
       = BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
   }
 
-  for (SmallVectorImpl<HWAtom*>::iterator I = Atoms.begin(),
-       E = Atoms.end(); I !=E; ++I) {
+  for (SmallVectorImpl<HWAtom*>::iterator I = AtomsToEmit.begin(),
+       E = AtomsToEmit.end(); I !=E; ++I) {
     HWAtom *A = *I;
-    MachineInstr &Inst = *A->getInstr();
-
-    VTFInfo VTID = Inst.getDesc();
-    // FIXME: Inline datapath is allow in last slot.
-    assert(!(IsLastSlot && VTID.hasDatapath())
-           && "Unexpect datapath in last slot!");
-    MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
-
-    // Add the opcode metadata and the function unit id.
-    Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUNum(),
-                                               VMContext));
-    typedef SmallVector<MachineOperand*, 8> OperandVector;
-    OperandVector Ops(Inst.getNumOperands());
-    
-    // Remove all operand of Instr.
-    while (Inst.getNumOperands() != 0) {
-      unsigned i = Inst.getNumOperands() - 1;
-      MachineOperand *MO = &Inst.getOperand(i);
-      Inst.RemoveOperand(i);
-      Ops[i] = MO;
-    }
-
-    unsigned EmitSlot = A->getSlot(),
-             WriteSlot = A->getFinSlot();
-    unsigned ReadSlot = EmitSlot;
-    
-    bool isReadAtEmit = VTID.isReadAtEmit();
-
-    // We can not write the value to a register at the same moment we emit it.
-    // Unless we read at emit.
-    // FIXME: Introduce "Write at emit."
-    if (WriteSlot == EmitSlot && !isReadAtEmit) ++WriteSlot;
-    // Write to register operation need to wait one more slot if the result is
-    // written at the moment (clock event) that the atom finish.
-    if (VTID.isWriteUntilFinish()) ++WriteSlot;
-    
-
-    // We read the values after we emit it unless the value is read at emit.
-    if (!isReadAtEmit) ++ReadSlot;
-    
-    DefVector &Defs = getDefsToEmitAt(WriteSlot);
-
-
-    for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
-      MachineOperand *MO = Ops[i];
-      
-      if (!MO->isReg() || !MO->getReg()) {
-        Builder.addOperand(*MO);
-        continue;
-      }
-
-      unsigned RegNo = MO->getReg();
-
-      // Remember the defines.
-      if (MO->isDef() && EmitSlot != WriteSlot) {
-        ++WireNum;
-        WireDef WDef = createWireDef(WireNum, A, MO, i, EmitSlot, WriteSlot);
-        
-        std::pair<SWDMapTy::iterator, bool> result =
-          StateWireDefs.insert(std::make_pair(RegNo, WDef));
-
-        assert(result.second && "Instructions not in SSA form!");
-        WireDef *NewDef = &result.first->second;
-        // Remember to emit this wire define if necessary.
-        Defs.push_back(NewDef);
-        unsigned BitWidth = BLI.getBitWidth(*MO);
-        // Do not emit define unless it not killed in the current state.
-        // Emit a wire define instead.
-        Builder.addMetadata(MetaToken::createDefWire(WireNum, BitWidth,
-                                                     VMContext));
-        continue;
-      }
-
-      // Else this is a use.
-      SWDMapTy::iterator at = StateWireDefs.find(RegNo);
-      // Using regster from previous state.
-      if (at == StateWireDefs.end()) {
-        Builder.addOperand(*MO);
-        continue;
-      }
-
-      WireDef &WDef = at->second;
-
-      // We need the value after it is writed to register.
-      if (WDef.WriteSlot < ReadSlot) {
-        Builder.addOperand(*MO);
-        continue;
-      }
-
-      assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
-      // Now we emit an operation while the value are computing, just read
-      // the value from a wire.
-      WDef.applyKilled(MO->isKill());
-
-      if (WDef.isSymbol())
-        Builder.addExternalSymbol(WDef.SymbolName);
-      else
-        Builder.addMetadata(MetaToken::createReadWire(WDef.WireNum, VMContext));
-    }
+    for (HWAtom::instr_iterator II = A->instr_begin(), IE = A->instr_end();
+        II != IE; ++II)
+      fuseInstr(**II, A, IsLastSlot, DPInst, CtrlInst);
   }
 
   DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
@@ -298,11 +216,112 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
     CtrlInst.addOperand(*MO);
   }
 
-  // Delete the instructions.
-  while (!Atoms.empty())
-    InstsToDel.push_back(Atoms.pop_back_val()->getInstr());
-
   return 0;
+}
+
+void MicroStateBuilder::fuseInstr(MachineInstr &Inst, HWAtom *A, bool IsLastSlot,
+                                  MachineInstrBuilder &DPInst,
+                                  MachineInstrBuilder &CtrlInst) {
+  VTFInfo VTID = Inst.getDesc();
+  // FIXME: Inline datapath is allow in last slot.
+  assert(!(IsLastSlot && VTID.hasDatapath())
+    && "Unexpect datapath in last slot!");
+  MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
+
+  // Add the opcode metadata and the function unit id.
+  Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUNum(),
+    VMContext));
+  typedef SmallVector<MachineOperand*, 8> OperandVector;
+  OperandVector Ops(Inst.getNumOperands());
+
+  // Remove all operand of Instr.
+  while (Inst.getNumOperands() != 0) {
+    unsigned i = Inst.getNumOperands() - 1;
+    MachineOperand *MO = &Inst.getOperand(i);
+    Inst.RemoveOperand(i);
+    Ops[i] = MO;
+  }
+
+  unsigned EmitSlot = A->getSlot(),
+    WriteSlot = A->getFinSlot();
+  unsigned ReadSlot = EmitSlot;
+
+  bool isReadAtEmit = VTID.isReadAtEmit();
+
+  // We can not write the value to a register at the same moment we emit it.
+  // Unless we read at emit.
+  // FIXME: Introduce "Write at emit."
+  if (WriteSlot == EmitSlot && !isReadAtEmit) ++WriteSlot;
+  // Write to register operation need to wait one more slot if the result is
+  // written at the moment (clock event) that the atom finish.
+  if (VTID.isWriteUntilFinish()) ++WriteSlot;
+
+
+  // We read the values after we emit it unless the value is read at emit.
+  if (!isReadAtEmit) ++ReadSlot;
+
+  DefVector &Defs = getDefsToEmitAt(WriteSlot);
+
+
+  for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
+    MachineOperand *MO = Ops[i];
+
+    if (!MO->isReg() || !MO->getReg()) {
+      Builder.addOperand(*MO);
+      continue;
+    }
+
+    unsigned RegNo = MO->getReg();
+
+    // Remember the defines.
+    if (MO->isDef() && EmitSlot != WriteSlot) {
+      ++WireNum;
+      WireDef WDef = createWireDef(WireNum, A, MO, i, EmitSlot, WriteSlot);
+
+      std::pair<SWDMapTy::iterator, bool> result =
+        StateWireDefs.insert(std::make_pair(RegNo, WDef));
+
+      assert(result.second && "Instructions not in SSA form!");
+      WireDef *NewDef = &result.first->second;
+      // Remember to emit this wire define if necessary.
+      Defs.push_back(NewDef);
+      unsigned BitWidth = BLI.getBitWidth(*MO);
+      // Do not emit define unless it not killed in the current state.
+      // Emit a wire define instead.
+      Builder.addMetadata(MetaToken::createDefWire(WireNum, BitWidth,
+        VMContext));
+      continue;
+    }
+
+    // Else this is a use.
+    SWDMapTy::iterator at = StateWireDefs.find(RegNo);
+    // Using regster from previous state.
+    if (at == StateWireDefs.end()) {
+      Builder.addOperand(*MO);
+      continue;
+    }
+
+    WireDef &WDef = at->second;
+
+    // We need the value after it is writed to register.
+    if (WDef.WriteSlot < ReadSlot) {
+      Builder.addOperand(*MO);
+      continue;
+    }
+
+    assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
+    // Now we emit an operation while the value are computing, just read
+    // the value from a wire.
+    WDef.applyKilled(MO->isKill());
+
+    if (WDef.isSymbol())
+      Builder.addExternalSymbol(WDef.SymbolName);
+    else
+      Builder.addMetadata(MetaToken::createReadWire(WDef.WireNum, VMContext));
+  }
+
+  // Remove this instruction since they are fused to uc state.
+  InstsToDel.push_back(&Inst);
 }
 
 //===----------------------------------------------------------------------===//
@@ -323,9 +342,6 @@ static inline bool top_sort_finish(const HWAtom* LHS, const HWAtom* RHS) {
 
 MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
   const TargetInstrInfo *TII = TM.getInstrInfo();
-  MachineBasicBlock::iterator InsertPos = MBB->end();
-  SmallVector<HWAtom*, 8> AtomsToEmit;
-  SmallVector<HWAtom*, 8> DeferredAtoms;
   unsigned CurSlot = startSlot;
   VFuncInfo *VFI = MBB->getParent()->getInfo<VFuncInfo>();
 
@@ -348,30 +364,30 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
         VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
 
       if (A->getSlot() != CurSlot)
-        CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot(),  InsertPos,
-                                    AtomsToEmit, DeferredAtoms);
+        CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot());
       
       if (MachineInstr *Inst = A->getInstr()) {
         // Ignore some instructions.
         switch (Inst->getOpcode()) {
         case TargetOpcode::PHI:
-          assert(AtomsToEmit.empty() && "Unexpect atom before PHI.");
+          assert(BTB.emitQueueEmpty() && "Unexpect atom before PHI.");
+          // TODO: move this to MicroStateBuilder.
           MBB->remove(Inst);
-          MBB->insert(InsertPos, Inst);
+          MBB->insert(BTB.getInsertPos(), Inst);
           continue;
         case TargetOpcode::COPY:
+          // TODO: move this to MicroStateBuilder.
           MBB->remove(Inst);
-          DeferredAtoms.push_back(A);
+          BTB.defereAtom(A);
           continue;
         }
 
-        AtomsToEmit.push_back(A);
+        BTB.emitAtom(A);
       }
     }
     // Build last state.
-    assert(!AtomsToEmit.empty() && "Expect atoms for last state!");
-    BTB.advanceToSlot(CurSlot, CurSlot + 1, InsertPos, AtomsToEmit, DeferredAtoms,
-                      true);
+    assert(!BTB.emitQueueEmpty() && "Expect atoms for last state!");
+    BTB.advanceToSlot(CurSlot, CurSlot + 1, true);
   }
 
   DEBUG(
@@ -460,19 +476,21 @@ VFUs::FUTypes HWAtom::getFUType() const {
 }
 
 void HWAtom::print(raw_ostream &OS) const {
-  MachineInstr *Instr = getInstr();
-
   OS << "[" << getIdx() << "] ";
 
-  if (Instr) {
+  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
+    MachineInstr *Instr = *I;
+
     VTFInfo VTID = Instr->getDesc();
     OS << Instr->getDesc().getName() << '\t';
     OS << " Res: " << VTID.getFUType();
     DEBUG(OS << '\n' << *Instr);
-  } else
-    OS << "null";
 
-  if (Instr && getFUId().isBinded()) OS << "\nFUId:" << getFUNum();
+    if (getFUId().isBinded())
+      OS << "\nFUId:" << getFUNum();
+
+    OS << '\n';
+  }
   
   OS << "\nAt slot: " << getSlot();
 }

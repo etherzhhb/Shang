@@ -39,7 +39,7 @@
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/MathExtras.h"
 
-#define DEBUG_TYPE "vbe-hw-atom-info"
+#define DEBUG_TYPE "vtm-sgraph"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -61,6 +61,7 @@ struct HWAtomInfo : public MachineFunctionPass {
   BitLevelInfo *BLI;
   // Nodes that detach from the exit node.
   std::vector<HWAtom*> DetachNodes;
+  SmallVector<MachineInstr*, 4> Terminators;
 
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
@@ -78,15 +79,14 @@ struct HWAtomInfo : public MachineFunctionPass {
   StateMapType MachBBToStates;
 
   unsigned computeLatency(const HWAtom *Src, const MachineInstr *DstInstr) {
-    MachineInstr *SrcInstr = Src->getInstr();
-
-    if (SrcInstr == 0) {
+    if (Src->isEntry()) {
       // DirtyHack: There must be at least 1 slot between entry and exit.
       if (DstInstr && VTFInfo(*DstInstr)->isTerminator()) return 1;
 
       return 0;
     }
-
+    
+    MachineInstr *SrcInstr = Src->getInstr();
     VTFInfo SrcTID = SrcInstr->getDesc();
     unsigned latency = SrcTID.getLatency(VTarget);
 
@@ -117,8 +117,7 @@ struct HWAtomInfo : public MachineFunctionPass {
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
-  void analyzeOperands(const MachineInstr *MI, SmallVectorImpl<HWEdge*> &Deps,
-                       SmallVectorImpl<const MachineOperand*> &Defs);
+  void addValueDeps(HWAtom *A, SmallVectorImpl<const MachineOperand*> &Defs);
 
   void clear();
 
@@ -134,7 +133,7 @@ struct HWAtomInfo : public MachineFunctionPass {
 
   ~HWAtomInfo();
 
-  HWAtom *buildExitRoot(MachineInstr *MI);
+  HWAtom *buildExitRoot();
   HWAtom *buildAtom(MachineInstr *MI);
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -204,6 +203,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     InstToHWAtoms.clear();
     FSMState *State = buildState(MBB);
 
+    DEBUG(State->viewGraph());
     scheduleState(State);
     DEBUG(State->viewGraph());
 
@@ -348,39 +348,44 @@ void HWAtomInfo::releaseMemory() {
 
 //===----------------------------------------------------------------------===//
 // Create atom
-void HWAtomInfo::analyzeOperands(const MachineInstr *MI,
-                                 SmallVectorImpl<HWEdge*> &Deps,
-                                 SmallVectorImpl<const MachineOperand*> &Defs) {
-  const MachineBasicBlock *MBB = MI->getParent();
+void HWAtomInfo::addValueDeps(HWAtom *A,
+                              SmallVectorImpl<const MachineOperand*> &Defs) {
+  const MachineBasicBlock *MBB = A->getInstr()->getParent();
 
-  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = MI->getOperand(i);
-    // Only care about the register dependences.
-    // FIXME: What about chains?
-    if (!MO.isReg()) continue;
+  for (HWAtom::instr_iterator I = A->instr_begin(), E = A->instr_end();
+      I != E; ++I) {
+    const MachineInstr *MI = *I;
+    assert(MI && "Expect Schedule Unit with machine instruction!");
 
-    unsigned Reg = MO.getReg();
-    
-    // TODO: assert Reg can not be physical register.
-    // It seems that sometimes the Register will be 0?
-    if (!Reg) continue;
+    for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+      const MachineOperand &MO = MI->getOperand(i);
+      // Only care about the register dependences.
+      // FIXME: What about chains?
+      if (!MO.isReg()) continue;
 
-    if (MO.isDef()) {
-      Defs.push_back(&MO);
-      continue;
+      unsigned Reg = MO.getReg();
+      
+      // TODO: assert Reg can not be physical register.
+      // It seems that sometimes the Register will be 0?
+      if (!Reg) continue;
+
+      if (MO.isDef()) {
+        Defs.push_back(&MO);
+        continue;
+      }
+      
+      // We are building a dependence graph of a MBB only.
+      if (MBB->isLiveIn(Reg)) continue;
+
+      if (HWAtom *Dep = getAtomFor(MRI->getVRegDef(Reg)))
+        A->addDep(getValDepEdge(Dep, computeLatency(Dep, MI)));
     }
-    
-    // We are building a dependence graph of a MBB only.
-    if (MBB->isLiveIn(Reg)) continue;
-
-    if (HWAtom *Dep = getAtomFor(MRI->getVRegDef(Reg)))
-      Deps.push_back(getValDepEdge(Dep, computeLatency(Dep, MI)));
   }
 
   // If the atom depend on nothing, make it depend on the entry node.
-  if (Deps.empty()) {
+  if (A->dep_empty()) {
     HWAtom *EntryRoot = getStateFor(MBB)->getEntryRoot();
-    Deps.push_back(getValDepEdge(EntryRoot, 0));
+    A->addDep(getValDepEdge(EntryRoot, 0));
   }
 }
 
@@ -391,12 +396,11 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
 
   VFUs::FUTypes FUTy = VTID.getFUType();
   
-  if (VTID->isTerminator())
-    return buildExitRoot(MI);    
-
-  SmallVector<HWEdge*, 4> Deps;
-  SmallVector<const MachineOperand*, 4> Defs;
-  analyzeOperands(MI, Deps, Defs);
+  if (VTID->isTerminator()) {
+    // Build the schedule unit for terminators later. 
+    Terminators.push_back(MI);
+    return 0;
+  }
 
   unsigned Latency = VTID.getLatency(VTarget);
 
@@ -404,8 +408,10 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
-                                           Latency, ++InstIdx, Id.getFUNum());
+  HWAtom *A = new (HWAtomAllocator) HWAtom(&MI, 1, Latency, ++InstIdx,
+                                           Id.getFUNum());
+  SmallVector<const MachineOperand*, 4> Defs;
+  addValueDeps(A, Defs);
   
   // Assume all def is dead, and try to prove it wrong.
   bool AllDefDead = true;
@@ -434,21 +440,22 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   return A;
 }
 
-HWAtom *HWAtomInfo::buildExitRoot(MachineInstr *MI) {
-  SmallVector<HWEdge*, 16> Deps;
+HWAtom *HWAtomInfo::buildExitRoot() {
+  HWAtom *A = new (HWAtomAllocator) HWAtom(Terminators.data(),
+                                           Terminators.size(),
+                                           0, ++InstIdx);
+  
+  SmallVector<const MachineOperand*, 2> Defs;
+  addValueDeps(A, Defs);
 
+  // All operation must finished before leaving the state.
   for (std::vector<HWAtom*>::iterator I = DetachNodes.begin(),
       E = DetachNodes.end(); I != E; ++I)
-    Deps.push_back(getCtrlDepEdge(*I, computeLatency(*I, MI)));
+    A->addDep(getCtrlDepEdge(*I, computeLatency(*I, Terminators.front())));
 
-  SmallVector<const MachineOperand*, 1> Defs;
-  analyzeOperands(MI, Deps, Defs);
-
-  HWAtom *A = new (HWAtomAllocator) HWAtom(MI, Deps.begin(), Deps.end(),
-                                           0, ++InstIdx);
   // We may have multiple terminator.
   DetachNodes.clear();
-  DetachNodes.push_back(A);
+  Terminators.clear();
   return A;
 }
 
@@ -459,10 +466,9 @@ FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
                                                     ++InstIdx);
 
   MachBBToStates.insert(std::make_pair(MBB, State));
-  DetachNodes.clear();
 
   // Create a dummy entry node.
-  State->addAtom(new (HWAtomAllocator) HWAtom(0, 0, ++InstIdx));
+  State->addAtom(new (HWAtomAllocator) HWAtom(++InstIdx));
   DetachNodes.push_back(State->getEntryRoot());
 
   for (MachineBasicBlock::iterator BI = MBB->begin(), BE = MBB->end();
@@ -473,6 +479,8 @@ FSMState *HWAtomInfo::buildState(MachineBasicBlock *MBB) {
       InstToHWAtoms.insert(std::make_pair(&MInst, A));
     }
   }
+  // Create the exit node.
+  State->addAtom(buildExitRoot());
 
   return State;
 }

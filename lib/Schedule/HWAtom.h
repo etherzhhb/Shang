@@ -192,7 +192,6 @@ public:
 
 /// @brief Base Class of all hardware atom. 
 class HWAtom {
-private:
   // The time slot that this atom scheduled to.
   unsigned Latency;
   // TODO: typedef SlotType
@@ -214,32 +213,29 @@ private:
   void operator=(const HWAtom &);  // DO NOT IMPLEMENT
 
   void setDep(HWAtomDepIterator<SmallVectorImpl<HWEdge*>::iterator, HWAtom> I,
-    HWAtom *NewDep) {
+              HWAtom *NewDep) {
       assert(I != dep_end() && "I out of range!");
       I->removeFromList(this);
       NewDep->addToUseList(this);
       // Setup the dependence list.
       I.getEdge()->setSrc(NewDep);
   }
-protected:
-  // The corresponding LLVM Instruction
-  MachineInstr* Instr;
+
+  // The corresponding Instructions.
+  SmallVector<MachineInstr*, 2> Instrs;
   virtual ~HWAtom();
 
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
-  template <class It>
-  HWAtom(MachineInstr *I, It depbegin, It depend, unsigned short latancy,
-         unsigned short Idx, unsigned fuid = 0)
-    : Latency(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
-    Deps(depbegin, depend), Instr(I) {
-    for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
-      (*I)->addToUseList(this);
+  // Create the entry node.
+  HWAtom(unsigned short Idx) : Latency(0), SchedSlot(0), InstIdx(Idx), FUNum(0) {
   }
 
-  HWAtom(MachineInstr *I, unsigned short latancy, unsigned short Idx,
-         unsigned fuid = 0);
+  HWAtom(MachineInstr **I, unsigned NumInstrs, unsigned short latancy,
+         unsigned short Idx, unsigned fuid = 0)
+    : Latency(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
+    Instrs(I, I + NumInstrs) {}
 
   unsigned short getIdx() const { return InstIdx; }
 
@@ -270,7 +266,7 @@ public:
   const_dep_iterator dep_end() const { return Deps.end(); }
 
   size_t getNumDeps() const { return Deps.size(); }
-
+  bool dep_empty() const { return Deps.empty(); }
   // If the current atom depend on A?
   bool isDepOn(const HWAtom *A) const { return getDepIt(A) != dep_end(); }
 
@@ -345,7 +341,25 @@ public:
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
 
-  MachineInstr *getInstr() const { return Instr; }
+  // If this Schedule Unit is just the place holder for the Entry node.
+  bool isEntry() const { return Instrs.empty(); }
+
+  // Dirty Hack: Only return the first instruction.
+  MachineInstr *getInstr() const {
+    if (isEntry()) return 0;
+      
+    return Instrs.front();
+  }
+
+  typedef SmallVector<MachineInstr*, 2>::iterator instr_iterator;
+  
+  instr_iterator instr_begin() { return Instrs.begin(); }
+  instr_iterator instr_end()   { return Instrs.end(); }
+
+  typedef SmallVector<MachineInstr*, 2>::const_iterator const_instr_iterator;
+  const_instr_iterator instr_begin() const { return Instrs.begin(); }
+  const_instr_iterator instr_end()   const { return Instrs.end(); }
+
   unsigned getOpcode() const;
 
   VFUs::FUTypes getFUType() const;
