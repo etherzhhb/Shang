@@ -128,7 +128,7 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::RAnd:       return "VTMISD::RAnd";
   case VTMISD::ROr:        return "VTMISD::ROr";
   case VTMISD::RXor:       return "VTMISD::RXor";
-  case VTMISD::Not:       return "VTMISD::Not";
+  case VTMISD::Not:        return "VTMISD::Not";
   }
 }
 

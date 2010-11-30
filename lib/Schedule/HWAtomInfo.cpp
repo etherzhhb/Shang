@@ -82,13 +82,12 @@ struct HWAtomInfo : public MachineFunctionPass {
 
     if (SrcInstr == 0) {
       // DirtyHack: There must be at least 1 slot between entry and exit.
-      if (DstInstr && VTFInfo(*DstInstr)->isTerminator())
-        return 1;
+      if (DstInstr && VTFInfo(*DstInstr)->isTerminator()) return 1;
 
-    VTFInfo SrcTID = SrcInstr->getDesc();
       return 0;
     }
 
+    VTFInfo SrcTID = SrcInstr->getDesc();
     unsigned latency = SrcTID.getLatency(VTarget);
 
     if (DstInstr == 0) return latency;
