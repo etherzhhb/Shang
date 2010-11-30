@@ -33,8 +33,10 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Analysis/LoopInfo.h"
+
+#define DEBUG_TYPE "vtm-sunit"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -128,7 +130,7 @@ struct MicroStateBuilder {
                          bool IsLastSlot = false) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
     
-    buildMicroState(CurSlot, InsertPos, Insts, DeferredInsts);
+    buildMicroState(CurSlot, InsertPos, Insts, DeferredInsts, IsLastSlot);
 
     // Some states may not emit any atoms, but it may read the result from
     // previous atoms.

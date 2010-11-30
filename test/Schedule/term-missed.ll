@@ -1,4 +1,4 @@
-; RUN: %llc-with-config %s -o -
+; RUN: %llc-with-config %s -o - | FileCheck %s
 
 define i32 @f(i32 %a, i32 %b) nounwind readnone {
 entry:
@@ -7,3 +7,5 @@ entry:
   %2 = add nsw i32 %1, %a                         ; <i32> [#uses=1]
   ret i32 %2
 }
+
+; CHECK: fin <= 1'b1;

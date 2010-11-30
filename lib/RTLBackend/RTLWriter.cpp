@@ -307,20 +307,18 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
   // FIXME: Refactor the loop.
-  for(;;) {
+  do {
     ++I;
     ucState CurDatapath = *I;
     // Emit the datepath of current state.
     emitDatapath(CurDatapath);
 
-    if (++I == E) break;
-
     // Emit next ucOp.
-    ucState NextControl = *I;
+    ucState NextControl = *++I;
     verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurDatapath));
     emitCtrlOp(NextControl);
     verilogEnd(VM->getControlBlockBuffer(8));
-  }
+  } while(I != E);
   
   //for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
   //  verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(State, i, true));
