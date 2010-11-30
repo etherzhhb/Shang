@@ -55,8 +55,14 @@ class DynRegClass<string namespace, list<ValueType> regTypes, int alignment,
   
     EVT getVT() const { return *vt_begin(); }
     
-    void clear() { PhyRegs.clear(); }
-    void createPhyRegs(unsigned &PhyRegBase, unsigned NumPhyRegs) {
+    void clear() {
+      PhyRegs.clear();
+      RegSet.clear();
+    }
+    
+    void allocatePhyRegs(unsigned &PhyRegBase, unsigned NumPhyRegs) {
+      assert(PhyRegs.empty() && RegSet.empty()
+             && "Can not allocate phyregs!");
       while(NumPhyRegs-- > 0) {
         // A physics register number can never be zero.
         ++PhyRegBase;
@@ -72,6 +78,3 @@ def DR8   : DynRegClass<"VTM", [i8], 8, [D8]>;
 def DR16  : DynRegClass<"VTM", [i16], 16, [D16]>;
 def DR32  : DynRegClass<"VTM", [i32], 32, [D32]>;
 def DR64  : DynRegClass<"VTM", [i64], 64, [D64]>;
-
-// Pointer is default to i64 type.
-def PR64 : RegisterClass<"VTM", [i64], 64, [PR]>;

@@ -71,9 +71,9 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   void resetPhyRegs();
 
   template<class RegClass>
-  void createPhyRegs(RegClass &RC) {
+  void allocatePhyRegs(RegClass &RC) {
     unsigned NumVRegs = MRI->getRegClassVirtRegs(&RC).size();
-    RC.createPhyRegs(NumRegs, NumVRegs);
+    RC.allocatePhyRegs(NumRegs, NumVRegs);
   }
 };
 

@@ -131,11 +131,11 @@ bool VRegisterInfo::createPhyRegs(MachineRegisterInfo &mri) {
   
   resetPhyRegs();
 
-  createPhyRegs(VTM::DR1RegClass);
-  createPhyRegs(VTM::DR8RegClass);
-  createPhyRegs(VTM::DR16RegClass);
-  createPhyRegs(VTM::DR32RegClass);
-  createPhyRegs(VTM::DR64RegClass);
+  allocatePhyRegs(VTM::DR1RegClass);
+  allocatePhyRegs(VTM::DR8RegClass);
+  allocatePhyRegs(VTM::DR16RegClass);
+  allocatePhyRegs(VTM::DR32RegClass);
+  allocatePhyRegs(VTM::DR64RegClass);
   // The last register number is NumRegs, so we have NumRegs + 1 registers.
   ++NumRegs;
   // Notice the MachineRegisterInfo after physics registers changed.
