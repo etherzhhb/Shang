@@ -255,8 +255,6 @@ public:
   SmallVectorImpl<HWEdge*>::const_iterator edge_begin() const { return Deps.begin(); }
   SmallVectorImpl<HWEdge*>::const_iterator edge_end() const { return Deps.end(); }
 
-  MachineInstr *getInst() const { return Instr; }
-
   /// @name Operands
   //{
   HWEdge &getDep(unsigned i) const { return *Deps[i]; }

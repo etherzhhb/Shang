@@ -175,7 +175,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
   for (SmallVectorImpl<HWAtom*>::iterator I = Atoms.begin(),
        E = Atoms.end(); I !=E; ++I) {
     HWAtom *A = *I;
-    MachineInstr &Inst = *A->getInst();
+    MachineInstr &Inst = *A->getInstr();
 
     VTFInfo VTID = Inst.getDesc();
     // FIXME: Inline datapath is allow in last slot.
@@ -300,7 +300,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot,
 
   // Delete the instructions.
   while (!Atoms.empty())
-    InstsToDel.push_back(Atoms.pop_back_val()->getInst());
+    InstsToDel.push_back(Atoms.pop_back_val()->getInstr());
 
   return 0;
 }
@@ -351,7 +351,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
         CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot(),  InsertPos,
                                     AtomsToEmit, DeferredAtoms);
       
-      if (MachineInstr *Inst = A->getInst()) {
+      if (MachineInstr *Inst = A->getInstr()) {
         // Ignore some instructions.
         switch (Inst->getOpcode()) {
         case TargetOpcode::PHI:
@@ -427,12 +427,7 @@ void HWCtrlDep::print(raw_ostream &OS) const {
 void HWValDep::print(raw_ostream &OS) const {
 }
 
-HWAtom::HWAtom(MachineInstr *MI, unsigned short latency, unsigned short Idx,
-               unsigned fuid)
-  : Latency(latency), SchedSlot(0), InstIdx(Idx), FUNum(fuid), Instr(MI) {}
-
-unsigned llvm::HWAtom::getOpcode() const
-{
+unsigned llvm::HWAtom::getOpcode() const {
   if (MachineInstr *I =getInstr())
     return I->getOpcode();
 
@@ -458,14 +453,14 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 }
 
 VFUs::FUTypes HWAtom::getFUType() const {
-  if (MachineInstr *Instr = getInst())
+  if (MachineInstr *Instr = getInstr())
     return VTFInfo(*Instr).getFUType();
 
   return VFUs::Trivial;
 }
 
 void HWAtom::print(raw_ostream &OS) const {
-  MachineInstr *Instr = getInst();
+  MachineInstr *Instr = getInstr();
 
   OS << "[" << getIdx() << "] ";
 
