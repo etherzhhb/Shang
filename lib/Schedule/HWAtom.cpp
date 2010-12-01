@@ -46,11 +46,12 @@ struct MicroStateBuilder {
   MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
   void operator=(const MicroStateBuilder&); // DO NOT IMPLEMENT
 
+  FSMState &State;
   MachineBasicBlock &MBB;
   MachineBasicBlock::iterator InsertPos;
+
   unsigned WireNum;
   unsigned OpId;
-  FSMState &State;
   LLVMContext &VMContext;
   const VTargetMachine &Target;
   const TargetInstrInfo &TII;
@@ -104,10 +105,10 @@ struct MicroStateBuilder {
 
   MicroStateBuilder(FSMState &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
-  : MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
+  : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
   WireNum(MBB.getNumber()),
   OpId(MBB.getNumber() << 24),
-  State(S), VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
+  VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()),
   DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/),
@@ -243,7 +244,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, HWAtom *A, bool IsLastSlot
   }
 
   unsigned EmitSlot = A->getSlot(),
-    WriteSlot = A->getFinSlot();
+           WriteSlot = A->getFinSlot();
   unsigned ReadSlot = EmitSlot;
 
   bool isReadAtEmit = VTID.isReadAtEmit();
@@ -515,7 +516,7 @@ NoFDMS("disable-fdms",
        cl::desc("vbe - Do not preform force-directed modulo schedule"),
        cl::Hidden, cl::init(false));
 
-void FSMState::scheduleState() {
+void FSMState::schedule() {
   std::sort(Atoms.begin(), Atoms.end(), top_sort_start);
 
   // Create the FDInfo.
@@ -534,7 +535,7 @@ void FSMState::scheduleState() {
   //  
   //  scheduleCyclicCodeRegion(MSInfo.computeMII());
   //} else
-  scheduleACyclicCodeRegion(Scheduler);
+  scheduleLinear(Scheduler);
 
   // Do not forget to schedule the delay atom;
   for (FSMState::iterator I = begin(), E = end(); I != E; ++I) {
@@ -544,7 +545,7 @@ void FSMState::scheduleState() {
 }
 
 
-void FSMState::scheduleACyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler) {
+void FSMState::scheduleLinear(ForceDirectedSchedulingBase *Scheduler) {
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
 
@@ -557,7 +558,7 @@ void FSMState::scheduleACyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler)
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
-void FSMState::scheduleCyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler, 
+void FSMState::scheduleLoop(ForceDirectedSchedulingBase *Scheduler, 
                                         unsigned II) {
   dbgs() << "MII: " << II << "...";
   // Ensure us can schedule the critical path.

@@ -496,7 +496,7 @@ void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
 
 
 void HWAtomInfo::scheduleState(FSMState *State) {
-  State->scheduleState();
+  State->schedule();
   setTotalCycle(State->getEndSlot() + 1);
 }
 

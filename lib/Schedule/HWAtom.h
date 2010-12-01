@@ -221,7 +221,8 @@ class HWAtom {
       I.getEdge()->setSrc(NewDep);
   }
 
-  // The corresponding Instructions.
+  /// The corresponding Instructions - We may store several instruction inside
+  /// the same schedule unit, so we can clamp them in a same slot.
   SmallVector<MachineInstr*, 2> Instrs;
   virtual ~HWAtom();
 
@@ -361,7 +362,6 @@ public:
   const_instr_iterator instr_end()   const { return Instrs.end(); }
 
   unsigned getOpcode() const;
-
   VFUs::FUTypes getFUType() const;
   unsigned getFUNum() const { return FUNum; }
   FuncUnitId getFUId() const {
@@ -451,6 +451,10 @@ private:
   bool HaveSelfLoop;
   const VTargetMachine &TM;
 
+  /// Scheduling implementation.
+  void scheduleLinear(ForceDirectedSchedulingBase *Scheduler);
+  void scheduleLoop(ForceDirectedSchedulingBase *Scheduler,
+                    unsigned II);
 public:
   FSMState(const VTargetMachine &Target, MachineBasicBlock *MachBB,
            bool HaveSelfLoop, unsigned short StartSlot, unsigned short Idx)
@@ -467,19 +471,20 @@ public:
   HWAtom *getExitRoot() const { return Atoms.back(); }
   //}
 
+  /// iterator/begin/end - Iterate over all schedule unit in the graph.
   typedef AtomVecTy::iterator iterator;
-  typedef AtomVecTy::const_iterator const_iterator;
-
   iterator begin()  { return Atoms.begin(); }
   iterator end()    { return Atoms.end(); }
+
+  typedef AtomVecTy::const_iterator const_iterator;
   const_iterator begin() const { return Atoms.begin(); }
   const_iterator end()   const { return Atoms.end(); }
 
   typedef AtomVecTy::reverse_iterator reverse_iterator;
-  typedef AtomVecTy::const_reverse_iterator const_reverse_iterator;
-
   reverse_iterator rbegin()  { return Atoms.rbegin(); }
   reverse_iterator rend()    { return Atoms.rend(); }
+
+  typedef AtomVecTy::const_reverse_iterator const_reverse_iterator;
   const_reverse_iterator rbegin() const { return Atoms.rbegin(); }
   const_reverse_iterator rend()   const { return Atoms.rend(); }
 
@@ -507,7 +512,6 @@ public:
   unsigned getTotalSlot() const { return getEndSlot() - getStartSlot() + 1; }
 
   // II for Modulo schedule
-
   void setII(unsigned ii) { II = ii; }
   void setNoOverlapII() { II = getTotalSlot() + 1; }
   bool isPipelined() const { return II != 0 && II != getTotalSlot() + 1; }
@@ -516,17 +520,12 @@ public:
   bool haveSelfLoop() const { return HaveSelfLoop; }
 
   void print(raw_ostream &OS) const;
-
   void dump() const;
-
   void viewGraph();
 
   /// @name Scheduling
   //{
-  void scheduleState();
-  void scheduleACyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler);
-  void scheduleCyclicCodeRegion(ForceDirectedSchedulingBase *Scheduler,
-                                unsigned II);
+  void schedule();
   MachineBasicBlock *emitSchedule(BitLevelInfo &BLI);
   //}
 };
