@@ -58,7 +58,7 @@ struct HWAtomInfo : public MachineFunctionPass {
   VFuncInfo *FuncInfo;
   BitLevelInfo *BLI;
   // Nodes that detach from the exit node.
-  std::vector<HWAtom*> DetachNodes;
+  SmallVector<MachineInstr*, 16> DetachNodes;
   SmallVector<MachineInstr*, 4> Terminators;
 
   // Total states
@@ -68,17 +68,15 @@ struct HWAtomInfo : public MachineFunctionPass {
 
   void buildState(FSMState &State);
 
-  FSMState *CurState;
-
-  unsigned computeLatency(const HWAtom *Src, const MachineInstr *DstInstr) {
-    if (Src->isEntry()) {
+  unsigned computeLatency(const MachineInstr *SrcInstr,
+                          const MachineInstr *DstInstr) {
+    if (SrcInstr == 0) {
       // DirtyHack: There must be at least 1 slot between entry and exit.
       if (DstInstr && VTFInfo(*DstInstr)->isTerminator()) return 1;
 
       return 0;
     }
-    
-    MachineInstr *SrcInstr = Src->getInstr();
+
     VTFInfo SrcTID = SrcInstr->getDesc();
     unsigned latency = SrcTID.getLatency(VTarget);
 
@@ -109,7 +107,8 @@ struct HWAtomInfo : public MachineFunctionPass {
                           enum HWMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
-  void addValueDeps(HWAtom *A, SmallVectorImpl<const MachineOperand*> &Defs);
+  void addValueDeps(HWAtom *A, FSMState &CurState,
+                    SmallVectorImpl<const MachineOperand*> &Defs);
 
   void clear();
 
@@ -125,8 +124,8 @@ struct HWAtomInfo : public MachineFunctionPass {
 
   ~HWAtomInfo();
 
-  HWAtom *buildExitRoot();
-  HWAtom *buildAtom(MachineInstr *MI);
+  void buildExitRoot(FSMState &CurState);
+  void buildAtom(MachineInstr *MI, FSMState &CurState);
 
   bool runOnMachineFunction(MachineFunction &MF);
   void releaseMemory();
@@ -177,7 +176,6 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock *MBB = &*I;
     
     FSMState State(VTarget, MBB, false, getTotalCycle());
-    CurState = &State;
 
     buildState(State);
     DEBUG(State.viewGraph());
@@ -323,7 +321,7 @@ void HWAtomInfo::releaseMemory() {
 
 //===----------------------------------------------------------------------===//
 // Create atom
-void HWAtomInfo::addValueDeps(HWAtom *A,
+void HWAtomInfo::addValueDeps(HWAtom *A, FSMState &CurState,
                               SmallVectorImpl<const MachineOperand*> &Defs) {
   for (HWAtom::instr_iterator I = A->instr_begin(), E = A->instr_end();
       I != E; ++I) {
@@ -349,19 +347,21 @@ void HWAtomInfo::addValueDeps(HWAtom *A,
         continue;
       }
 
-      if (HWAtom *Dep = CurState->lookupAtom(MRI->getVRegDef(Reg)))
-        A->addDep(getValDepEdge(Dep, computeLatency(Dep, MI)));
+      MachineInstr *DepSrc = MRI->getVRegDef(Reg);
+      /// Only add the dependence if DepSrc is in the same MBB with MI.
+      if (HWAtom *Dep = CurState.lookupAtom(DepSrc))
+        A->addDep(getValDepEdge(Dep, computeLatency(DepSrc, MI)));
     }
   }
 
   // If the atom depend on nothing, make it depend on the entry node.
   if (A->dep_empty()) {
-    HWAtom *EntryRoot = CurState->getEntryRoot();
+    HWAtom *EntryRoot = CurState.getEntryRoot();
     A->addDep(getValDepEdge(EntryRoot, 0));
   }
 }
 
-HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
+void HWAtomInfo::buildAtom(MachineInstr *MI,  FSMState &CurState) {
   VTFInfo VTID = MI->getDesc();
 
   VFUs::FUTypes FUTy = VTID.getFUType();
@@ -369,7 +369,7 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   if (VTID->isTerminator()) {
     // Build the schedule unit for terminators later. 
     Terminators.push_back(MI);
-    return 0;
+    return;
   }
 
   unsigned Latency = VTID.getLatency(VTarget);
@@ -381,15 +381,12 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
   HWAtom *A = new HWAtom(&MI, 1, Latency, ++InstIdx, Id.getFUNum());
   SmallVector<const MachineOperand*, 4> Defs;
 
-  addValueDeps(A, Defs);
+  addValueDeps(A, CurState, Defs);
   
   // Assume all def is dead, and try to prove it wrong.
   bool AllDefDead = true;
 
-  if (Defs.empty()) {
-    DetachNodes.push_back(A);
-    return A;
-  } else {
+  if (!Defs.empty()) {
     const MachineBasicBlock *MBB = MI->getParent();
     for (SmallVector<const MachineOperand*, 4>::iterator I = Defs.begin(),
          E = Defs.end(); I != E; ++I) {
@@ -398,50 +395,57 @@ HWAtom *HWAtomInfo::buildAtom(MachineInstr *MI) {
 
       if (LiveVars->isLiveOut(Op->getReg(), *MBB)) {
         // If the node defines any live out register, it may be a detach node.
-        DetachNodes.push_back(A);
+        DetachNodes.push_back(MI);
         break;
       }
     }
   }
 
   // If All define dead, this node is detached.
-  if (AllDefDead) DetachNodes.push_back(A);
+  if (AllDefDead) DetachNodes.push_back(MI);
 
-  return A;
+  // Add the atom to the state.
+  CurState.addAtom(A);
 }
 
-HWAtom *HWAtomInfo::buildExitRoot() {
+void HWAtomInfo::buildExitRoot(FSMState &CurState) {
   HWAtom *Exit = new HWAtom(Terminators.data(), Terminators.size(), 0,
                             ++InstIdx);
   
   SmallVector<const MachineOperand*, 2> Defs;
-  addValueDeps(Exit, Defs);
+  addValueDeps(Exit, CurState, Defs);
+
+  MachineInstr *FstExit = Terminators.front();
 
   // All operation must finished before leaving the state.
-  for (std::vector<HWAtom*>::iterator I = DetachNodes.begin(),
-      E = DetachNodes.end(); I != E; ++I)
-    Exit->addDep(getCtrlDepEdge(*I, computeLatency(*I, Terminators.front())));
+  while (!DetachNodes.empty()) {
+    MachineInstr *I = DetachNodes.pop_back_val();
+    HWAtom *Dep = CurState.lookupAtom(I);
+    assert(Dep && "Can not find dep!");
+    Exit->addDep(getCtrlDepEdge(Dep, computeLatency(I, FstExit)));
+  }
+
+  // Do not forget the entry root.
+  Exit->addDep(getCtrlDepEdge(CurState.getEntryRoot(),
+                              computeLatency(0, FstExit)));
 
   // We may have multiple terminator.
-  DetachNodes.clear();
   Terminators.clear();
-  return Exit;
+
+  // Add the atom to the state.
+  CurState.addAtom(Exit);
 }
 
 void HWAtomInfo::buildState(FSMState &State) {
   // Create a dummy entry node.
   State.addAtom(new HWAtom(++InstIdx));
-  DetachNodes.push_back(State.getEntryRoot());
 
   for (MachineBasicBlock::iterator BI = State->begin(), BE = State->end();
-      BI != BE; ++BI) {
-    MachineInstr &MInst = *BI;
-    if (HWAtom *A = buildAtom(&MInst))
-      State.addAtom(A);
-  }
+      BI != BE; ++BI)
+    buildAtom(&*BI, State);
 
   // Create the exit node.
-  State.addAtom(buildExitRoot());
+  buildExitRoot(State);
 }
 
 HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, unsigned Latency,

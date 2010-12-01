@@ -225,7 +225,15 @@ class HWAtom {
   /// The corresponding Instructions - We may store several instruction inside
   /// the same schedule unit, so we can clamp them in a same slot.
   SmallVector<MachineInstr*, 2> Instrs;
-  
+
+  // Dirty Hack: Only return the first instruction.
+  MachineInstr *getFirstInstr() const {
+    if (isEntry()) return 0;
+
+    return Instrs.front();
+  }
+
+  friend class FSMState;
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
@@ -348,13 +356,6 @@ public:
 
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return Instrs.empty(); }
-
-  // Dirty Hack: Only return the first instruction.
-  MachineInstr *getInstr() const {
-    if (isEntry()) return 0;
-      
-    return Instrs.front();
-  }
 
   typedef SmallVector<MachineInstr*, 2>::iterator instr_iterator;
   

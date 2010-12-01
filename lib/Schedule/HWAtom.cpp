@@ -367,7 +367,7 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
       if (A->getSlot() != CurSlot)
         CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot());
       
-      if (MachineInstr *Inst = A->getInstr()) {
+      if (MachineInstr *Inst = A->getFirstInstr()) {
         // Ignore some instructions.
         switch (Inst->getOpcode()) {
         case TargetOpcode::PHI:
@@ -443,7 +443,7 @@ void HWValDep::print(raw_ostream &OS) const {
 }
 
 unsigned llvm::HWAtom::getOpcode() const {
-  if (MachineInstr *I =getInstr())
+  if (MachineInstr *I =getFirstInstr())
     return I->getOpcode();
 
   return VTM::INSTRUCTION_LIST_END;
@@ -468,7 +468,7 @@ void HWAtom::replaceAllUseBy(HWAtom *A) {
 }
 
 VFUs::FUTypes HWAtom::getFUType() const {
-  if (MachineInstr *Instr = getInstr())
+  if (MachineInstr *Instr = getFirstInstr())
     return VTFInfo(*Instr).getFUType();
 
   return VFUs::Trivial;
