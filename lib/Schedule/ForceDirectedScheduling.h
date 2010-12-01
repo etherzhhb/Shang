@@ -20,7 +20,7 @@
 #ifndef VBE_FORCE_DIRECTED_INFO
 #define VBE_FORCE_DIRECTED_INFO
 
-#include "HWAtom.h"
+#include "VSUnit.h"
 
 #include "llvm/ADT/PriorityQueue.h"
 #include <map>
@@ -37,10 +37,10 @@ public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
   // Mapping hardware atoms to time frames.
-  typedef std::map<const HWAtom*, TimeFrame> TimeFrameMapType;
+  typedef std::map<const VSUnit*, TimeFrame> TimeFrameMapType;
 
-  TimeFrameMapType AtomToTF;
-  TimeFrameMapType AtomToSTF;
+  TimeFrameMapType SUnitToTF;
+  TimeFrameMapType SUnitToSTF;
 
   typedef std::map<unsigned, double> DGStepMapType;
   typedef std::map<unsigned, std::map<unsigned, double> > DGType;
@@ -48,64 +48,64 @@ private:
 
   unsigned computeStepKey(unsigned step) const;
 
-  std::map<const HWAtom*, double> AvgDG;
+  std::map<const VSUnit*, double> AvgDG;
 
   void resetSTF();
 
 protected:
-  FSMState *State;
+  VSchedGraph *State;
 
-  ForceDirectedSchedulingBase(FSMState *S)
+  ForceDirectedSchedulingBase(VSchedGraph *S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), State(S) {}
 public:
   virtual ~ForceDirectedSchedulingBase() {}
 
-  FSMState *getState() const { return State; }
+  VSchedGraph *getState() const { return State; }
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
   // scheduled
   bool scheduleCriticalPath(bool refreshFDInfo);
-  void schedulePassiveAtoms();
+  void schedulePassiveSUnits();
 
   /// @name TimeFrame
   //{
-  void sinkSTF(const HWAtom *A, unsigned ASAP, unsigned ALAP);
+  void sinkSTF(const VSUnit *A, unsigned ASAP, unsigned ALAP);
   void updateSTF();
 
 
-  void buildASAPStep(const HWAtom *ClampedAtom = 0,
+  void buildASAPStep(const VSUnit *ClampedSUnit = 0,
     unsigned ClampedASAP = 0);
-  void buildALAPStep(const HWAtom *ClampedAtom = 0,
+  void buildALAPStep(const VSUnit *ClampedSUnit = 0,
     unsigned ClampedALAP = 0);
-  void buildTimeFrame(const HWAtom *ClampedAtom = 0,
+  void buildTimeFrame(const VSUnit *ClampedSUnit = 0,
                       unsigned ClampedASAP = 0,
                       unsigned ClampedALAP = 0);
 
-  unsigned getASAPStep(const HWAtom *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToTF[A].first;
+  unsigned getASAPStep(const VSUnit *A) const {
+    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToTF[A].first;
   }
-  unsigned getALAPStep(const HWAtom *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToTF[A].second;
-  }
-
-  unsigned getSTFASAP(const HWAtom *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToSTF[A].first;
-  }
-  unsigned getSTFALAP(const HWAtom *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->AtomToSTF[A].second;
+  unsigned getALAPStep(const VSUnit *A) const {
+    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToTF[A].second;
   }
 
-  unsigned getTimeFrame(const HWAtom *A) const {
+  unsigned getSTFASAP(const VSUnit *A) const {
+    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToSTF[A].first;
+  }
+  unsigned getSTFALAP(const VSUnit *A) const {
+    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToSTF[A].second;
+  }
+
+  unsigned getTimeFrame(const VSUnit *A) const {
     return getALAPStep(A) - getASAPStep(A) + 1;
   }
 
-  unsigned getScheduleTimeFrame(const HWAtom *A) const {
+  unsigned getScheduleTimeFrame(const VSUnit *A) const {
     return getSTFALAP(A) - getSTFASAP(A) + 1;
   }
 
-  bool isSTFScheduled(const HWAtom *A) const {
-    return getScheduleTimeFrame(A) < HWAtom::MaxSlot;
+  bool isSTFScheduled(const VSUnit *A) const {
+    return getScheduleTimeFrame(A) < VSUnit::MaxSlot;
   }
 
   void printTimeFrame(raw_ostream &OS) const;
@@ -128,12 +128,12 @@ public:
   /// @name Force computation
   //{
   void buildAvgDG();
-  double getAvgDG(const HWAtom *A) {  return AvgDG[A]; }
+  double getAvgDG(const VSUnit *A) {  return AvgDG[A]; }
   double getRangeDG(unsigned FUClass, unsigned start, unsigned end/*included*/);
 
-  double computeRangeForce(const HWAtom *A,
+  double computeRangeForce(const VSUnit *A,
                            unsigned start, unsigned end/*include*/);
-  double computeSelfForce(const HWAtom *A,
+  double computeSelfForce(const VSUnit *A,
                           unsigned start, unsigned end/*include*/);
 
   /// If there are recurrences in the graph,
@@ -141,9 +141,9 @@ public:
   /// All we can do is compute "other force", and the time frame of atoms
   /// not in "pred tree" or "succ tree" will not change, and not contribute
   /// to the force.
-  double computeOtherForce(const HWAtom *A);
+  double computeOtherForce(const VSUnit *A);
 
-  double computeForce(const HWAtom *A, unsigned ASAP, unsigned ALAP);
+  double computeForce(const VSUnit *A, unsigned ASAP, unsigned ALAP);
   //}
 
   unsigned buildFDInfo(bool resetSTF);
@@ -165,8 +165,8 @@ public:
 };
 
 template <> struct GraphTraits<ForceDirectedSchedulingBase*> 
-    : public GraphTraits<FSMState*> {
-  typedef FSMState::iterator nodes_iterator;
+    : public GraphTraits<VSchedGraph*> {
+  typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(ForceDirectedSchedulingBase *G) {
     return G->getState()->begin();
   }
@@ -182,23 +182,23 @@ protected:
   struct fds_sort {
     ForceDirectedSchedulingBase &Info;
     fds_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
-    bool operator() (const HWAtom *LHS, const HWAtom *RHS) const;
+    bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
   };
 
-  typedef PriorityQueue<HWAtom*, std::vector<HWAtom*>, fds_sort> AtomQueueType;
+  typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> SUnitQueueType;
 
   // Fill the priorityQueue, ignore FirstNode.
   template<class It>
-  void fillQueue(AtomQueueType &Queue, It begin, It end, HWAtom *FirstNode = 0);
+  void fillQueue(SUnitQueueType &Queue, It begin, It end, VSUnit *FirstNode = 0);
 
-  unsigned findBestStep(HWAtom *A);
+  unsigned findBestStep(VSUnit *A);
 
-  bool scheduleAtom(HWAtom *A);
-  bool scheduleQueue(AtomQueueType &Queue);
+  bool scheduleSUnit(VSUnit *A);
+  bool scheduleQueue(SUnitQueueType &Queue);
   //}
 
 public:
-  ForceDirectedListScheduler(FSMState *S) 
+  ForceDirectedListScheduler(VSchedGraph *S) 
     : ForceDirectedSchedulingBase(S) {}
 
   bool scheduleState();
@@ -210,15 +210,15 @@ class IteractiveModuloScheduling : public ForceDirectedListScheduler {
   typedef std::map<unsigned, unsigned> UsageMapType;
   typedef std::map<unsigned, UsageMapType> MRTType;
   MRTType MRT;
-  std::map<HWAtom*, std::set<unsigned> > ExcludeSlots;
+  std::map<VSUnit*, std::set<unsigned> > ExcludeSlots;
 
   bool isResAvailable(unsigned FUClass, unsigned step);
-  void excludeStep(HWAtom *A, unsigned step);
-  bool isStepExcluded(HWAtom *A, unsigned step);
-  bool isAllAtomScheduled();
-  HWAtom *findBlockingAtom(unsigned FUClass, unsigned step); 
+  void excludeStep(VSUnit *A, unsigned step);
+  bool isStepExcluded(VSUnit *A, unsigned step);
+  bool isAllSUnitScheduled();
+  VSUnit *findBlockingSUnit(unsigned FUClass, unsigned step); 
 public:
-  IteractiveModuloScheduling(FSMState *S)
+  IteractiveModuloScheduling(VSchedGraph *S)
     : ForceDirectedListScheduler(S){}
 
   bool scheduleState();
@@ -226,12 +226,12 @@ public:
 
 class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
 public:
-  ForceDirectedScheduler(FSMState *S)
+  ForceDirectedScheduler(VSchedGraph *S)
     : ForceDirectedSchedulingBase(S) {}
 
   bool scheduleState();
   bool findBestSink();
-  double trySinkAtom(HWAtom *A, TimeFrame &NewTimeFrame);
+  double trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame);
 };
 
 } // End namespace.

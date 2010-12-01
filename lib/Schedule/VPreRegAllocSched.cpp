@@ -1,4 +1,4 @@
-//===------------ HWAtom.cpp - Translate LLVM IR to HWAtom  -----*- C++ -*-===//
+//===------------ VSUnit.cpp - Translate LLVM IR to VSUnit  -----*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,12 +13,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the HWAtomInfo pass, which construct the HWAtom
+// This file implement the VPreRegAllocSched pass, which construct the VSUnit
 // from LLVM IR.
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtom.h"
+#include "VSUnit.h"
 #include "ForceDirectedScheduling.h"
 //#include "MemDepAnalysis.h"
 #include "vtm/BitLevelInfo.h"
@@ -49,7 +49,7 @@ using namespace llvm;
 namespace {
   /// @brief Hardware atom construction pass
 ///
-struct HWAtomInfo : public MachineFunctionPass {
+struct VPreRegAllocSched : public MachineFunctionPass {
   // The loop Info
   MachineLoopInfo *LI;
   LiveVariables *LiveVars;
@@ -66,7 +66,7 @@ struct HWAtomInfo : public MachineFunctionPass {
   unsigned short totalCycle;
   unsigned short InstIdx;
 
-  void buildState(FSMState &State);
+  void buildState(VSchedGraph &State);
 
   unsigned computeLatency(const MachineInstr *SrcInstr,
                           const MachineInstr *DstInstr) {
@@ -94,25 +94,25 @@ struct HWAtomInfo : public MachineFunctionPass {
     return latency;
   }
 
-  HWValDep *getValDepEdge(HWAtom *Src, unsigned Latency, bool isSigned = false,
-                          enum HWValDep::ValDepTypes T = HWValDep::Normal) {
-    return new HWValDep(Src, Latency, isSigned, T);
+  VDValDep *getValDepEdge(VSUnit *Src, unsigned Latency, bool isSigned = false,
+                          enum VDValDep::ValDepTypes T = VDValDep::Normal) {
+    return new VDValDep(Src, Latency, isSigned, T);
   }
 
-  HWCtrlDep *getCtrlDepEdge(HWAtom *Src, unsigned Latency) {
-    return new HWCtrlDep(Src, Latency);
+  VDCtrlDep *getCtrlDepEdge(VSUnit *Src, unsigned Latency) {
+    return new VDCtrlDep(Src, Latency);
   }
 
-  HWMemDep *getMemDepEdge(HWAtom *Src, unsigned Latency, bool isBackEdge,
-                          enum HWMemDep::MemDepTypes DepType,
+  VDMemDep *getMemDepEdge(VSUnit *Src, unsigned Latency, bool isBackEdge,
+                          enum VDMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
-  void addValueDeps(HWAtom *A, FSMState &CurState,
+  void addValueDeps(VSUnit *A, VSchedGraph &CurState,
                     SmallVectorImpl<const MachineOperand*> &Defs);
 
   void clear();
 
-  void addMemDepEdges(std::vector<HWAtom*> &MemOps, BasicBlock &BB);
+  void addMemDepEdges(std::vector<VSUnit*> &MemOps, BasicBlock &BB);
 
   bool haveSelfLoop(const MachineBasicBlock *MBB);
 
@@ -120,12 +120,12 @@ struct HWAtomInfo : public MachineFunctionPass {
   /// @name FunctionPass interface
   //{
   static char ID;
-  HWAtomInfo(const VTargetMachine &TM);
+  VPreRegAllocSched(const VTargetMachine &TM);
 
-  ~HWAtomInfo();
+  ~VPreRegAllocSched();
 
-  void buildExitRoot(FSMState &CurState);
-  void buildAtom(MachineInstr *MI, FSMState &CurState);
+  void buildExitRoot(VSchedGraph &CurState);
+  void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
   bool runOnMachineFunction(MachineFunction &MF);
   void releaseMemory();
@@ -149,13 +149,13 @@ struct HWAtomInfo : public MachineFunctionPass {
 };
 }
 
-char HWAtomInfo::ID = 0;
+char VPreRegAllocSched::ID = 0;
 
-Pass *llvm::createHWAtonInfoPass(const VTargetMachine &TM) {
-  return new HWAtomInfo(TM);
+Pass *llvm::createVPreRegAllocSchedPass(const VTargetMachine &TM) {
+  return new VPreRegAllocSched(TM);
 }
 
-void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
+void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<LiveVariables>();
   AU.addRequired<MachineLoopInfo>();
@@ -165,7 +165,7 @@ void HWAtomInfo::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<BitLevelInfo>();
 }
 
-bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
+bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   LiveVars = &getAnalysis<LiveVariables>();
   MRI = &MF.getRegInfo();
   FuncInfo = MF.getInfo<VFuncInfo>();
@@ -175,7 +175,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
     
-    FSMState State(VTarget, MBB, false, getTotalCycle());
+    VSchedGraph State(VTarget, MBB, false, getTotalCycle());
 
     buildState(State);
     DEBUG(State.viewGraph());
@@ -196,32 +196,32 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   //TD = getAnalysisIfAvailable<TargetData>();
   //assert(TD && "Can not work without TD!");
 
-  //std::vector<HWAtom*> MemOps;
+  //std::vector<VSUnit*> MemOps;
 
   //for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
   //  // Setup the state.
   //  BasicBlock *BB = &*I;
-  //  FSMState *State = getState(BB);
-  //  ValueToHWAtoms[BB] = State;
+  //  VSchedGraph *State = getState(BB);
+  //  ValueToSUnits[BB] = State;
   //  SetControlRoot(State);
   //  DEBUG(dbgs() << "Building atom for BB: " << BB->getName() << '\n');
   //  for (BasicBlock::iterator BI = BB->begin(), BE = BB->end();
   //      BI != BE; ++BI) {
   //    Instruction &Inst = *BI;
-  //    HWAtom *A = visit(Inst);
+  //    VSUnit *A = visit(Inst);
   //    
   //    if (!A) continue;
-  //    // Add the Atom to state.
+  //    // Add the SUnit to state.
   //    // FIXME: Some atom will add them to parent atoms vector automatically,
   //    // but this is not a good idea.
   //    if (!A->getParent())
-  //      State->addAtom(A);
+  //      State->addSUnit(A);
 
   //    // Remember the atom.
-  //    ValueToHWAtoms.insert(std::make_pair(&Inst, A));
+  //    ValueToSUnits.insert(std::make_pair(&Inst, A));
   //    // Remember the MemOps, we will compute the dependencies about them later.
   //    if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))
-  //      MemOps.push_back(cast<HWAtom>(A));
+  //      MemOps.push_back(cast<VSUnit>(A));
   //  }
   //  // preform memory dependencies analysis to add corresponding edges.
   //  addMemDepEdges(MemOps, *BB);
@@ -229,7 +229,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
   //  bool selfLoop = haveSelfLoop(BB);
   //  
 
-  //  HWAtom *Exit = cast<HWAtom>(getControlRoot());
+  //  VSUnit *Exit = cast<VSUnit>(getControlRoot());
   //  State->setExitRoot(Exit);
   //  State->setHaveSelfLoop(selfLoop);
 
@@ -242,7 +242,7 @@ bool HWAtomInfo::runOnMachineFunction(MachineFunction &MF) {
 }
 
 
-bool HWAtomInfo::haveSelfLoop(const MachineBasicBlock *MBB) {
+bool VPreRegAllocSched::haveSelfLoop(const MachineBasicBlock *MBB) {
   //Loop *L = LI->getLoopFor(BB);
 
   //// Not in any loop.
@@ -255,36 +255,36 @@ bool HWAtomInfo::haveSelfLoop(const MachineBasicBlock *MBB) {
 
 
 
-//HWADelay *HWAtomInfo::addLoopPredBackEdge(const MachineBasicBlock *MBB) {
+//HWADelay *VPreRegAllocSched::addLoopPredBackEdge(const MachineBasicBlock *MBB) {
 //  assert(haveSelfLoop(MBB) && "Loop SCC only exist in self loop!");
 //  
-//  FSMState *State = getStateFor(MBB);
+//  VSchedGraph *State = getStateFor(MBB);
 //  // And get the predicate
 //  //BranchInst *Br = cast<BranchInst>(MBB->getTerminator());
 //  //ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
-//  //HWAtom *Pred = cast<HWAtom>(getAtomFor(*ICmp));
+//  //VSUnit *Pred = cast<VSUnit>(getSUnitFor(*ICmp));
 //
 //  //// The Next loop depend on the result of predicate.
 //  //// Dirty Hack: The FSM have a delay of 1.
 //  //HWADelay *Delay = getDelay(Pred, 1);
-//  //HWMemDep *LoopDep = getMemDepEdge(Delay, true, HWMemDep::TrueDep, 1);
+//  //VDMemDep *LoopDep = getMemDepEdge(Delay, true, VDMemDep::TrueDep, 1);
 //  //State->addDep(LoopDep);
 //
 //  // return Delay;
 //  return 0;
 //}
 
-void HWAtomInfo::addMemDepEdges(std::vector<HWAtom*> &MemOps, BasicBlock &BB) {
-  //typedef std::vector<HWAtom*> OpInstVec;
+void VPreRegAllocSched::addMemDepEdges(std::vector<VSUnit*> &MemOps, BasicBlock &BB) {
+  //typedef std::vector<VSUnit*> OpInstVec;
   //typedef MemDepInfo::DepInfo DepInfoType;
   //for (OpInstVec::iterator SrcI = MemOps.begin(), SrcE = MemOps.end();
   //    SrcI != SrcE; ++SrcI) {
-  //  HWAtom *Src = *SrcI;
+  //  VSUnit *Src = *SrcI;
   //  bool isSrcLoad = isa<LoadInst>(Src->getValue());
 
   //  for (OpInstVec::iterator DstI = MemOps.begin(), DstE = MemOps.end();
   //      DstI != DstE; ++DstI) {
-  //    HWAtom *Dst = *DstI;
+  //    VSUnit *Dst = *DstI;
   //    bool isDstLoad = isa<LoadInst>(Dst->getValue());
 
   //    //No self loops and RAR dependence.
@@ -302,28 +302,28 @@ void HWAtomInfo::addMemDepEdges(std::vector<HWAtom*> &MemOps, BasicBlock &BB) {
 
   //    // Add dependencies edges.
   //    // The edge is back edge if destination before source.
-  //    HWMemDep *MemDep = getMemDepEdge(Src, Src->getIdx() > Dst->getIdx(), 
+  //    VDMemDep *MemDep = getMemDepEdge(Src, Src->getIdx() > Dst->getIdx(), 
   //                                     Dep.getDepType(), Dep.getItDst());
   //    Dst->addDep(MemDep);
   //  }
   //}
 }
 
-void HWAtomInfo::clear() {
+void VPreRegAllocSched::clear() {
   // Reset total Cycle
   totalCycle = 1;
   InstIdx = 0;
 }
 
-void HWAtomInfo::releaseMemory() {
+void VPreRegAllocSched::releaseMemory() {
   clear();
 }
 
 //===----------------------------------------------------------------------===//
 // Create atom
-void HWAtomInfo::addValueDeps(HWAtom *A, FSMState &CurState,
+void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
                               SmallVectorImpl<const MachineOperand*> &Defs) {
-  for (HWAtom::instr_iterator I = A->instr_begin(), E = A->instr_end();
+  for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
       I != E; ++I) {
     const MachineInstr *MI = *I;
     assert(MI && "Expect Schedule Unit with machine instruction!");
@@ -349,19 +349,19 @@ void HWAtomInfo::addValueDeps(HWAtom *A, FSMState &CurState,
 
       MachineInstr *DepSrc = MRI->getVRegDef(Reg);
       /// Only add the dependence if DepSrc is in the same MBB with MI.
-      if (HWAtom *Dep = CurState.lookupAtom(DepSrc))
+      if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))
         A->addDep(getValDepEdge(Dep, computeLatency(DepSrc, MI)));
     }
   }
 
   // If the atom depend on nothing, make it depend on the entry node.
   if (A->dep_empty()) {
-    HWAtom *EntryRoot = CurState.getEntryRoot();
+    VSUnit *EntryRoot = CurState.getEntryRoot();
     A->addDep(getValDepEdge(EntryRoot, 0));
   }
 }
 
-void HWAtomInfo::buildAtom(MachineInstr *MI,  FSMState &CurState) {
+void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   VTFInfo VTID = MI->getDesc();
 
   VFUs::FUTypes FUTy = VTID.getFUType();
@@ -378,7 +378,7 @@ void HWAtomInfo::buildAtom(MachineInstr *MI,  FSMState &CurState) {
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  HWAtom *A = new HWAtom(&MI, 1, Latency, ++InstIdx, Id.getFUNum());
+  VSUnit *A = new VSUnit(&MI, 1, Latency, ++InstIdx, Id.getFUNum());
   SmallVector<const MachineOperand*, 4> Defs;
 
   addValueDeps(A, CurState, Defs);
@@ -405,11 +405,11 @@ void HWAtomInfo::buildAtom(MachineInstr *MI,  FSMState &CurState) {
   if (AllDefDead) DetachNodes.push_back(MI);
 
   // Add the atom to the state.
-  CurState.addAtom(A);
+  CurState.addSUnit(A);
 }
 
-void HWAtomInfo::buildExitRoot(FSMState &CurState) {
-  HWAtom *Exit = new HWAtom(Terminators.data(), Terminators.size(), 0,
+void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
+  VSUnit *Exit = new VSUnit(Terminators.data(), Terminators.size(), 0,
                             ++InstIdx);
   
   SmallVector<const MachineOperand*, 2> Defs;
@@ -420,7 +420,7 @@ void HWAtomInfo::buildExitRoot(FSMState &CurState) {
   // All operation must finished before leaving the state.
   while (!DetachNodes.empty()) {
     MachineInstr *I = DetachNodes.pop_back_val();
-    HWAtom *Dep = CurState.lookupAtom(I);
+    VSUnit *Dep = CurState.lookupSUnit(I);
     assert(Dep && "Can not find dep!");
     Exit->addDep(getCtrlDepEdge(Dep, computeLatency(I, FstExit)));
   }
@@ -433,35 +433,35 @@ void HWAtomInfo::buildExitRoot(FSMState &CurState) {
   Terminators.clear();
 
   // Add the atom to the state.
-  CurState.addAtom(Exit);
+  CurState.addSUnit(Exit);
 }
 
-void HWAtomInfo::buildState(FSMState &State) {
+void VPreRegAllocSched::buildState(VSchedGraph &State) {
   // Create a dummy entry node.
-  State.addAtom(new HWAtom(++InstIdx));
+  State.addSUnit(new VSUnit(++InstIdx));
 
   for (MachineBasicBlock::iterator BI = State->begin(), BE = State->end();
       BI != BE; ++BI)
-    buildAtom(&*BI, State);
+    buildSUnit(&*BI, State);
 
   // Create the exit node.
   buildExitRoot(State);
 }
 
-HWMemDep *HWAtomInfo::getMemDepEdge(HWAtom *Src, unsigned Latency,
+VDMemDep *VPreRegAllocSched::getMemDepEdge(VSUnit *Src, unsigned Latency,
                                     bool isBackEdge,
-                                    enum HWMemDep::MemDepTypes DepType,
+                                    enum VDMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
-  return new HWMemDep(Src, Latency, isBackEdge, DepType, Diff);
+  return new VDMemDep(Src, Latency, isBackEdge, DepType, Diff);
 }
 
-void HWAtomInfo::print(raw_ostream &O, const Module *M) const {}
+void VPreRegAllocSched::print(raw_ostream &O, const Module *M) const {}
 
-HWAtomInfo::HWAtomInfo(const VTargetMachine &TM)
+VPreRegAllocSched::VPreRegAllocSched(const VTargetMachine &TM)
   : MachineFunctionPass(ID), LI(0), LiveVars(0), VTarget(TM),
   MRI(0), totalCycle(1), InstIdx(0)
 {}
 
-HWAtomInfo::~HWAtomInfo() {
+VPreRegAllocSched::~VPreRegAllocSched() {
   clear();
 }

@@ -36,51 +36,51 @@ NoFDSchedule("disable-fd-schedule",
              cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-void ForceDirectedSchedulingBase::buildTimeFrame(const HWAtom *ClampedAtom,
+void ForceDirectedSchedulingBase::buildTimeFrame(const VSUnit *ClampedSUnit,
                                                  unsigned ClampedASAP,
                                                  unsigned ClampedALAP) {
 
-  assert((ClampedAtom == 0 
-          || (ClampedASAP >= getSTFASAP(ClampedAtom)
-              && ClampedALAP <= getSTFALAP(ClampedAtom)))
+  assert((ClampedSUnit == 0 
+          || (ClampedASAP >= getSTFASAP(ClampedSUnit)
+              && ClampedALAP <= getSTFALAP(ClampedSUnit)))
          && "Bad clamped value!");
-  AtomToTF.clear();
-  HWAtom *EntryRoot = State->getEntryRoot();
+  SUnitToTF.clear();
+  VSUnit *EntryRoot = State->getEntryRoot();
   // Build the time frame
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
-  buildASAPStep(ClampedAtom, ClampedASAP);
-  buildALAPStep(ClampedAtom, ClampedALAP);
+  buildASAPStep(ClampedSUnit, ClampedASAP);
+  buildALAPStep(ClampedSUnit, ClampedALAP);
 
   DEBUG(dumpTimeFrame());
 }
 
-void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
+void ForceDirectedSchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit,
                                                 unsigned ClampedASAP) {
-  HWAtom *Entry = State->getEntryRoot();
-  AtomToTF[Entry].first = Entry->getSlot();
+  VSUnit *Entry = State->getEntryRoot();
+  SUnitToTF[Entry].first = Entry->getSlot();
 
-  FSMState::iterator Start = State->begin();
+  VSchedGraph::iterator Start = State->begin();
 
   bool changed = false;
 
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (FSMState::iterator I = ++Start, E = State->end(); I != E; ++I) {
-      HWAtom *A = *I;
+    for (VSchedGraph::iterator I = ++Start, E = State->end(); I != E; ++I) {
+      VSUnit *A = *I;
       if (A->isScheduled()) {
-        AtomToTF[A].first = A->getSlot();
+        SUnitToTF[A].first = A->getSlot();
         continue;
       }
 
       DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
             A->dump(););
 
-      unsigned NewStep = A == ClampedAtom ? ClampedASAP : getSTFASAP(A);
+      unsigned NewStep = A == ClampedSUnit ? ClampedASAP : getSTFASAP(A);
 
-      for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
+      for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
           DI != DE; ++DI) {
-        const HWAtom *Dep = *DI;
+        const VSUnit *Dep = *DI;
         
         if (!DI.getEdge()->isBackEdge() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
@@ -100,52 +100,52 @@ void ForceDirectedSchedulingBase::buildASAPStep(const HWAtom *ClampedAtom,
       DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
       A->dump();
       dbgs() << "\n\n";);
-      if (AtomToTF[A].first != NewStep) {
-        AtomToTF[A].first = NewStep;
+      if (SUnitToTF[A].first != NewStep) {
+        SUnitToTF[A].first = NewStep;
         changed |= true;
       }
     }
   } while (changed);
 
-  HWAtom *Exit = State->getExitRoot();
+  VSUnit *Exit = State->getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
+void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
                                                 unsigned ClampedALAP) {
-  HWAtom *Exit = State->getExitRoot();
-  AtomToTF[Exit].second = Exit == ClampedAtom ? ClampedALAP : CriticalPathEnd;
+  VSUnit *Exit = State->getExitRoot();
+  SUnitToTF[Exit].second = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
 
-  FSMState::reverse_iterator Start = State->rbegin();
+  VSchedGraph::reverse_iterator Start = State->rbegin();
 
   bool changed = false;
 
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (FSMState::reverse_iterator I = ++Start, E = State->rend();
+    for (VSchedGraph::reverse_iterator I = ++Start, E = State->rend();
          I != E; ++I) {
-      HWAtom *A = *I;
+      VSUnit *A = *I;
       if (A->isScheduled()) {
-        AtomToTF[A].second = A->getSlot();
+        SUnitToTF[A].second = A->getSlot();
         continue;
       }
 
       DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
             A->dump(););
 
-      unsigned NewStep = A == ClampedAtom ? ClampedALAP : getSTFALAP(A);
-      for (HWAtom::use_iterator UI = A->use_begin(), UE = A->use_end();
+      unsigned NewStep = A == ClampedSUnit ? ClampedALAP : getSTFALAP(A);
+      for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
            UI != UE; ++UI) {
-        const HWAtom *Use = *UI;
-        HWEdge *UseEdge = Use->getEdgeFrom(A);
+        const VSUnit *Use = *UI;
+        VDEdge *UseEdge = Use->getEdgeFrom(A);
 
         if (!UseEdge->isBackEdge() || MII) {
           unsigned UseALAP = Use->isScheduled() ?
                              Use->getSlot() : getALAPStep(Use);
           if (UseALAP == 0) {
             assert(UseEdge->isBackEdge() && "Broken time frame!");
-            UseALAP = HWAtom::MaxSlot;
+            UseALAP = VSUnit::MaxSlot;
           }
           
           unsigned Step = UseALAP - UseEdge->getLatency()
@@ -162,8 +162,8 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
       DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
             A->dump();
             dbgs() << "\n\n";);
-      if (AtomToTF[A].second != NewStep) {
-        AtomToTF[A].second = NewStep;
+      if (SUnitToTF[A].second != NewStep) {
+        SUnitToTF[A].second = NewStep;
         changed = true;
       }
     }
@@ -171,8 +171,8 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
 
 #ifndef NDEBUG
   // Verify the time frames.
-  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
-    HWAtom *A = *I;
+  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+    VSUnit *A = *I;
     assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
   }
 #endif
@@ -180,14 +180,14 @@ void ForceDirectedSchedulingBase::buildALAPStep(const HWAtom *ClampedAtom,
 
 void ForceDirectedSchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  for (FSMState::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
       << "} " <<  getTimeFrame(A);
 
-    for (HWAtom::dep_iterator DI = A->dep_begin(), DE = A->dep_end(); DI != DE;
+    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end(); DI != DE;
         ++DI)
       OS << " [" << DI->getIdx() << "]"; 
     
@@ -201,11 +201,11 @@ void ForceDirectedSchedulingBase::dumpTimeFrame() const {
 
 void ForceDirectedSchedulingBase::buildDGraph() {
   DGraph.clear();
-  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I){
+  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I){
     // We only try to balance the post bind resource.
     // Ignore the DG for trivial resources.
     // if (A->isTrivial()) continue;
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     unsigned TimeFrame = getTimeFrame(A);
     unsigned ASAPStep = getASAPStep(A), ALAPStep = getALAPStep(A);
 
@@ -305,7 +305,7 @@ double ForceDirectedSchedulingBase::getRangeDG(unsigned FUClass,
   return ret;
 }
 
-double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
+double ForceDirectedSchedulingBase::computeForce(const VSUnit *A,
                                                  unsigned ASAP, unsigned ALAP) {
   buildTimeFrame(A, ASAP, ALAP);
   buildDGraph();
@@ -320,7 +320,7 @@ double ForceDirectedSchedulingBase::computeForce(const HWAtom *A,
   return Force;
 }
 
-double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A,
+double ForceDirectedSchedulingBase::computeSelfForce(const VSUnit *A,
                                                      unsigned start,
                                                      unsigned end) {
   // FIXME: How should handle the pre-bind MachineInstruction.
@@ -333,7 +333,7 @@ double ForceDirectedSchedulingBase::computeSelfForce(const HWAtom *A,
   return Force; // / FU->getTotalFUs();
 }
 
-double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
+double ForceDirectedSchedulingBase::computeRangeForce(const VSUnit *A,
                                                       unsigned int start,
                                                       unsigned int end) {
   // FIXME: How should handle the pre-bind MachineInstruction.
@@ -345,10 +345,10 @@ double ForceDirectedSchedulingBase::computeRangeForce(const HWAtom *A,
   return Force; // / FU->getTotalFUs();
 }
 
-double ForceDirectedSchedulingBase::computeOtherForce(const HWAtom *A) {
+double ForceDirectedSchedulingBase::computeOtherForce(const VSUnit *A) {
   double ret = 0.0;
 
-  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
     if (A == *I) continue;
     
     ret += computeRangeForce(A, getASAPStep(A), getALAPStep(A));
@@ -358,10 +358,10 @@ double ForceDirectedSchedulingBase::computeOtherForce(const HWAtom *A) {
 
 void ForceDirectedSchedulingBase::buildAvgDG() {
   AvgDG.clear();
-  for (FSMState::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
        I != E; ++I) {
     // We only care about the utilization of post bind resource. 
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     double res = 0.0;
     for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
       res += getDGraphAt(i, A->getFUType());
@@ -389,17 +389,17 @@ void ForceDirectedSchedulingBase::dumpDG() const {
 }
 
 void ForceDirectedSchedulingBase::resetSTF() {
-  AtomToSTF.clear();
-  for (FSMState::iterator I = State->begin(), E = State->end();
+  SUnitToSTF.clear();
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
        I != E; ++I)
-    AtomToSTF.insert(std::make_pair(*I, std::make_pair(0, HWAtom::MaxSlot)));
+    SUnitToSTF.insert(std::make_pair(*I, std::make_pair(0, VSUnit::MaxSlot)));
 }
 
-void ForceDirectedSchedulingBase::sinkSTF(const HWAtom *A,
+void ForceDirectedSchedulingBase::sinkSTF(const VSUnit *A,
                                           unsigned ASAP, unsigned ALAP) {
   assert(ASAP <= ALAP && "Bad time frame to sink!");
   assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
-  AtomToSTF[A] = std::make_pair(ASAP, ALAP);
+  SUnitToSTF[A] = std::make_pair(ASAP, ALAP);
   // We may need to reduce critical path.
   if (A == State->getExitRoot()) {
     assert(CriticalPathEnd >= ALAP && "Can not sink ExitRoot!");
@@ -408,9 +408,9 @@ void ForceDirectedSchedulingBase::sinkSTF(const HWAtom *A,
 }
 
 void ForceDirectedSchedulingBase::updateSTF() {
-  for (FSMState::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     // Only update the scheduled time frame.
     if (!isSTFScheduled(A))
       continue;

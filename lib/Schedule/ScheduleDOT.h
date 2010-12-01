@@ -20,7 +20,7 @@
 
 #ifndef VTM_SCHEDULE_DOT
 #define VTM_SCHEDULE_DOT
-#include "HWAtom.h"
+#include "VSUnit.h"
 #include "ForceDirectedScheduling.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -29,62 +29,62 @@
 namespace llvm {
 
 template<>
-struct DOTGraphTraits<FSMState*> : public DefaultDOTGraphTraits {
+struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
-  static std::string getGraphName(const FSMState *G) {
+  static std::string getGraphName(const VSchedGraph *G) {
     return G->getMachineBasicBlock()->getName();
   }
 
   /// If you want to override the dot attributes printed for a particular
   /// edge, override this method.
-  static std::string getEdgeAttributes(const HWAtom *Node,
-                                       HWAtom::use_iterator EI) {
-    const HWAtom *Use = *EI;
-    HWEdge *UseEdge = Use->getEdgeFrom(Node);
+  static std::string getEdgeAttributes(const VSUnit *Node,
+                                       VSUnit::use_iterator EI) {
+    const VSUnit *Use = *EI;
+    VDEdge *UseEdge = Use->getEdgeFrom(Node);
 
     switch (UseEdge->getEdgeType()) {
-    case HWEdge::edgeValDep:    return "";
-    case HWEdge::edgeMemDep:    return "color=blue,style=dashed";
-    case HWEdge::edgeCtrlDep:   return "color=green,style=dashed";
+    case VDEdge::edgeValDep:    return "";
+    case VDEdge::edgeMemDep:    return "color=blue,style=dashed";
+    case VDEdge::edgeCtrlDep:   return "color=green,style=dashed";
     }
 
     return "";
   }
 
-  static std::string getEdgeSourceLabel(const HWAtom *Node,
-                                        HWAtom::use_iterator EI) {
-    const HWAtom *Use = *EI;
-    HWEdge *UseEdge = Use->getEdgeFrom(Node);
+  static std::string getEdgeSourceLabel(const VSUnit *Node,
+                                        VSUnit::use_iterator EI) {
+    const VSUnit *Use = *EI;
+    VDEdge *UseEdge = Use->getEdgeFrom(Node);
 
     return utostr(UseEdge->getLatency()) + ',' + utostr(UseEdge->getItDst());
   }
 
-  std::string getNodeLabel(const HWAtom *Node, const FSMState *Graph) {
+  std::string getNodeLabel(const VSUnit *Node, const VSchedGraph *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
     Node->print(ss);
     return ss.str();
   }
 
-  static std::string getNodeAttributes(const HWAtom *Node,
-                                       const FSMState *Graph) {
+  static std::string getNodeAttributes(const VSUnit *Node,
+                                       const VSchedGraph *Graph) {
     return "shape=Mrecord";
   }
 };
 
 template<>
 struct DOTGraphTraits<ForceDirectedSchedulingBase*>
-  : public DOTGraphTraits<FSMState*> {
+  : public DOTGraphTraits<VSchedGraph*> {
 
-  DOTGraphTraits(bool isSimple = false) : DOTGraphTraits<FSMState*>(isSimple) {}
+  DOTGraphTraits(bool isSimple = false) : DOTGraphTraits<VSchedGraph*>(isSimple) {}
 
   static std::string getGraphName(const ForceDirectedSchedulingBase *G) {
-    return  DOTGraphTraits<FSMState*>::getGraphName(G->getState());
+    return  DOTGraphTraits<VSchedGraph*>::getGraphName(G->getState());
   }
 
-  std::string getNodeLabel(const HWAtom *Node,
+  std::string getNodeLabel(const VSUnit *Node,
                            const ForceDirectedSchedulingBase *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
@@ -94,7 +94,7 @@ struct DOTGraphTraits<ForceDirectedSchedulingBase*>
     return ss.str();
   }
 
-  static std::string getNodeAttributes(const HWAtom *Node,
+  static std::string getNodeAttributes(const VSUnit *Node,
                                        const ForceDirectedSchedulingBase *Graph)
   {
     return "shape=Mrecord";

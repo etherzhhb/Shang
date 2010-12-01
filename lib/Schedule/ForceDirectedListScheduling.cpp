@@ -26,16 +26,16 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 bool
-ForceDirectedListScheduler::fds_sort::operator()(const HWAtom* LHS,
-                                                 const HWAtom* RHS) const {
+ForceDirectedListScheduler::fds_sort::operator()(const VSUnit* LHS,
+                                                 const VSUnit* RHS) const {
   //// Schedule HWOpFU first.
-  //if (isa<HWAtom>(LHS) && !isa<HWAtom>(RHS))
+  //if (isa<VSUnit>(LHS) && !isa<VSUnit>(RHS))
   //  return false;
-  //if (!isa<HWAtom>(LHS) && isa<HWAtom>(RHS))
+  //if (!isa<VSUnit>(LHS) && isa<VSUnit>(RHS))
   //  return true;
-  //if (isa<HWAtom>(LHS) && isa<HWAtom>(RHS)) {
-  //  HWFUnit *LFU = cast<HWAtom>(LHS)->getFUnit(),
-  //          *RFU = cast<HWAtom>(RHS)->getFUnit();
+  //if (isa<VSUnit>(LHS) && isa<VSUnit>(RHS)) {
+  //  HWFUnit *LFU = cast<VSUnit>(LHS)->getFUnit(),
+  //          *RFU = cast<VSUnit>(RHS)->getFUnit();
   //  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
   //  // Schedule the atom with less available function unit first.
   //  if (LTFU > RTFU) return true;
@@ -69,7 +69,7 @@ bool ForceDirectedListScheduler::scheduleState() {
     return false;
 
   fds_sort s(*this);
-  AtomQueueType AQueue(s);
+  SUnitQueueType AQueue(s);
 
   fillQueue(AQueue, State->begin(), State->end());
 
@@ -80,7 +80,7 @@ bool ForceDirectedListScheduler::scheduleState() {
     return false;
   }
 
-  schedulePassiveAtoms();
+  schedulePassiveSUnits();
 
   DEBUG(dumpTimeFrame());
   DEBUG(dumpDG());
@@ -89,10 +89,10 @@ bool ForceDirectedListScheduler::scheduleState() {
 
 //===----------------------------------------------------------------------===//
 
-void ForceDirectedSchedulingBase::schedulePassiveAtoms() {
-  for (FSMState::iterator I = State->begin(), E = State->end();
+void ForceDirectedSchedulingBase::schedulePassiveSUnits() {
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     if (A->isScheduled())
       continue;
 
@@ -108,9 +108,9 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
   if (refreshFDInfo)
     buildFDInfo(true);
 
-  for (FSMState::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
   
     if (A->isScheduled() || getTimeFrame(A) != 1)
       continue;
@@ -125,10 +125,10 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
 //===----------------------------------------------------------------------===//
 
 template<class It>
-void ForceDirectedListScheduler::fillQueue(AtomQueueType &Queue, It begin, It end,
-                        HWAtom *FirstNode) {
+void ForceDirectedListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It end,
+                        VSUnit *FirstNode) {
   for (It I = begin, E = end; I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
 
     // Do not push the FirstNode into the queue.
     if (A == FirstNode || A->isScheduled())
@@ -140,7 +140,7 @@ void ForceDirectedListScheduler::fillQueue(AtomQueueType &Queue, It begin, It en
   Queue.reheapify();
 }
 
-unsigned ForceDirectedListScheduler::findBestStep(HWAtom *A) {
+unsigned ForceDirectedListScheduler::findBestStep(VSUnit *A) {
   unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
   // Time frame is 1, we do not have other choice.
   if (ASAP == ALAP) return ASAP;
@@ -160,7 +160,7 @@ unsigned ForceDirectedListScheduler::findBestStep(HWAtom *A) {
   return BestStep.first;
 }
 
-bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
+bool ForceDirectedListScheduler::scheduleSUnit(VSUnit *A) {
   assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
   unsigned step = findBestStep(A);
@@ -171,17 +171,17 @@ bool ForceDirectedListScheduler::scheduleAtom(HWAtom *A) {
   return (isResourceConstraintPreserved() && scheduleCriticalPath(false));
 }
 
-bool ForceDirectedListScheduler::scheduleQueue(AtomQueueType &Queue) {
+bool ForceDirectedListScheduler::scheduleQueue(SUnitQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
-    HWAtom *A = Queue.top();
+    VSUnit *A = Queue.top();
     Queue.pop();
 
     if (A->isScheduled())
       continue;
 
     DEBUG(dbgs() << " Schedule Node:-------------------\n");
-    if (!scheduleAtom(A))
+    if (!scheduleSUnit(A))
       return false;
 
     Queue.reheapify();
@@ -206,7 +206,7 @@ bool ForceDirectedScheduler::scheduleState() {
     }
   }
 
-  schedulePassiveAtoms();
+  schedulePassiveSUnits();
 
   DEBUG(dumpTimeFrame());
   DEBUG(dumpDG());
@@ -215,36 +215,36 @@ bool ForceDirectedScheduler::scheduleState() {
 
 bool ForceDirectedScheduler::findBestSink() {
   TimeFrame BestSink;
-  HWAtom *BestSinkAtom = 0;
+  VSUnit *BestSinkSUnit = 0;
   double BestGain = -1.0;
 
-  for (FSMState::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     if (A->isScheduled())
       continue;
     
     TimeFrame CurSink;
 
-    double CurGain = trySinkAtom(A, CurSink);
+    double CurGain = trySinkSUnit(A, CurSink);
     if (CurGain > BestGain) {
-      BestSinkAtom = A;
+      BestSinkSUnit = A;
       BestSink = CurSink;
       BestGain = CurGain;
     }
   }
 
-  if (!BestSinkAtom) return false;
+  if (!BestSinkSUnit) return false;
   
-  sinkSTF(BestSinkAtom, BestSink.first, BestSink.second);
-  if (getScheduleTimeFrame(BestSinkAtom) == 1)
-    BestSinkAtom->scheduledTo(BestSink.first);
+  sinkSTF(BestSinkSUnit, BestSink.first, BestSink.second);
+  if (getScheduleTimeFrame(BestSinkSUnit) == 1)
+    BestSinkSUnit->scheduledTo(BestSink.first);
   buildFDInfo(false);
   updateSTF();
   return true;
 }
 
-double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
+double ForceDirectedScheduler::trySinkSUnit(VSUnit *A,
                                                 TimeFrame &NewTimeFrame) {
   // Build time frame to get the correct ASAP and ALAP.
   buildTimeFrame();
@@ -278,14 +278,14 @@ double ForceDirectedScheduler::trySinkAtom(HWAtom *A,
 struct ims_sort {
   ForceDirectedSchedulingBase &Info;
   ims_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
-  bool operator() (const HWAtom *LHS, const HWAtom *RHS) const;
+  bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
 };
 
-bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
+bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   // Schedule HWOpFU first.
 
-  //  HWFUnit *LFU = cast<HWAtom>(LHS)->getFUnit(),
-  //          *RFU = cast<HWAtom>(RHS)->getFUnit();
+  //  HWFUnit *LFU = cast<VSUnit>(LHS)->getFUnit(),
+  //          *RFU = cast<VSUnit>(RHS)->getFUnit();
   //  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
   //  // Schedule the atom with less available function unit first.
   //  if (LTFU > RTFU) return true;
@@ -300,20 +300,20 @@ bool ims_sort::operator()(const HWAtom* LHS, const HWAtom* RHS) const {
 
 bool IteractiveModuloScheduling::scheduleState() {
   ExcludeSlots.clear();
-  setCriticalPathLength(HWAtom::MaxSlot);
+  setCriticalPathLength(VSUnit::MaxSlot);
 
   fds_sort s(*this);
 
-  while (!isAllAtomScheduled()) {
+  while (!isAllSUnitScheduled()) {
     State->resetSchedule();
     buildTimeFrame();
     // Reset exclude slots and resource table.
     MRT.clear();
 
-    typedef PriorityQueue<HWAtom*, std::vector<HWAtom*>, fds_sort> IMSQueueType;
+    typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> IMSQueueType;
     IMSQueueType ToSched(++State->begin(), State->end(), s);
     while (!ToSched.empty()) {
-      HWAtom *A = ToSched.top();
+      VSUnit *A = ToSched.top();
       ToSched.pop();
 
       unsigned EarliestUntry = 0;
@@ -337,7 +337,7 @@ bool IteractiveModuloScheduling::scheduleState() {
         break;
       } else if(!A->isScheduled()) {
         assert(A && "A can be schedule only because resource conflict!");
-        HWAtom *Blocking = findBlockingAtom(A->getFUType(), EarliestUntry);
+        VSUnit *Blocking = findBlockingSUnit(A->getFUType(), EarliestUntry);
         assert(Blocking && "No one blocking?");
         Blocking->resetSchedule();
         excludeStep(Blocking, EarliestUntry);
@@ -356,22 +356,22 @@ bool IteractiveModuloScheduling::scheduleState() {
   return true;
 }
 
-bool IteractiveModuloScheduling::isStepExcluded(HWAtom *A, unsigned step) {
+bool IteractiveModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   unsigned ModuloStep = step % getMII();
   return ExcludeSlots[A].count(ModuloStep);
 }
 
-void IteractiveModuloScheduling::excludeStep(HWAtom *A, unsigned step) {
+void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   unsigned ModuloStep = step % getMII();
   ExcludeSlots[A].insert(ModuloStep);
 }
 
-HWAtom *IteractiveModuloScheduling::findBlockingAtom(unsigned FUClass,
+VSUnit *IteractiveModuloScheduling::findBlockingSUnit(unsigned FUClass,
                                                       unsigned step) {
-  for (FSMState::iterator I = State->begin(), E = State->end(); I != E; ++I) {
-    HWAtom *A = *I;
+  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+    VSUnit *A = *I;
     if (!A->isScheduled() || A->getFUType() != FUClass)
       continue;
     if (A->getSlot() == step) return A; 
@@ -398,10 +398,10 @@ bool IteractiveModuloScheduling::isResAvailable(unsigned FUClass,
 }
 
 
-bool IteractiveModuloScheduling::isAllAtomScheduled() {
-  for (FSMState::iterator I = State->begin(), E = State->end();
+bool IteractiveModuloScheduling::isAllSUnitScheduled() {
+  for (VSchedGraph::iterator I = State->begin(), E = State->end();
       I != E; ++I) {
-    HWAtom *A = *I;
+    VSUnit *A = *I;
     if (!A->isScheduled())
       return false;
   }

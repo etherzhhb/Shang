@@ -1,4 +1,4 @@
-//===----------- RTLWriter.cpp - HWAtom to RTL verilog  ---------*- C++ -*-===//
+//===- Writer.cpp - VTM machine instructions to RTL verilog  ----*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,8 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the RTLWriter pass, which write out HWAtom into RTL
-// verilog form.
+// This file implement the RTLWriter pass, which write VTM machine instructions
+// in form of RTL verilog code.
 //
 //===----------------------------------------------------------------------===//
 
@@ -319,17 +319,6 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
     emitCtrlOp(NextControl);
     verilogEnd(VM->getControlBlockBuffer(8));
   } while(I != E);
-  
-  //for (unsigned i = StartSlot, e = EndSlot + 1; i != e; ++i) {
-  //  verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(State, i, true));
-  //  // Emit all atoms at cycle i
-
-  //  verilogCommentBegin(VM->getDataPathBuffer(2)) << "at cycle: " << i << '\n';
-  //  for (cycle_iterator CI = Atoms.lower_bound(i), CE = Atoms.upper_bound(i);
-  //      CI != CE; ++CI)
-  //    emitAtom(CI->second);
-  //  verilogEnd(VM->getControlBlockBuffer(8));
-  //}// end for
 
   //// Emit Self Loop logic.
   //if (State->haveSelfLoop()) {

@@ -1,4 +1,4 @@
-//===------------- HWAtomPasses.h - Passes run on HWAtoms --------*- C++ -*-===//
+//===--------- Passes.h - Passes for Verilog target machine -----*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// HWAtoms optimization passes
+// SUnits optimization passes
 //
 //===----------------------------------------------------------------------===//
 #ifndef VBE_HARDWARE_ATOM_PASSES_H
@@ -30,32 +30,11 @@ class PassRegistry;
 struct VTargetMachine;
 struct VRegisterInfo;
 
-// Simple As Soon As Possible Scheduler
-Pass *createASAPSchedulePass();
-
-// Registers Allocation
-Pass *createRegisterAllocationPass();
-
-// Compatibility Path Based Binding
-Pass *createCompPathBindingPass();
-
-// Topological sort BBs in structural CFG
-Pass *createTopSortBBPass();
-
-// Instruction lowering pass.
-Pass *createInstLoweringPass();
-
-// Local LEA based register merging pass.
-Pass *createLocalLEAPass();
-
-// Scalar Streamization.
-Pass *createScalarStreamizationPass();
-
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 
-// HWAtom
-Pass *createHWAtonInfoPass(const VTargetMachine &TM);
+// Scheduling pass.
+Pass *createVPreRegAllocSchedPass(const VTargetMachine &TM);
 
 // Register allocation.
 FunctionPass *createOptimalSSARegisterAllocator();

@@ -10,8 +10,9 @@
 // This file declares the Verilog TargetMachine, we can leverage existing llvm
 // low level optimization with Verilog TargetMachine by:
 //   Translate LLVM IR to Verilog TargetMachine Code, perform low level
-//     optimization
-//   Translate Verilog TargetMachine Code to HWAtom.
+//     optimization.
+//   Translate Verilog TargetMachine code to schedule units and perform schedule.
+//   Perform register allocation with existing register allocation passes.
 //
 //===----------------------------------------------------------------------===//
 #ifndef VTARGETMACHINE_H

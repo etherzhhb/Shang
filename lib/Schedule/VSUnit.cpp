@@ -1,4 +1,4 @@
-//===------------ HWAtom.cpp - Translate LLVM IR to HWAtom  -----*- C++ -*-===//
+//===------------ VSUnit.cpp - Translate LLVM IR to VSUnit  -----*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,12 +13,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the HWAtom class, which represent the basic atom
+// This file implement the VSUnit class, which represent the basic atom
 // operation in hardware.
 //
 //===----------------------------------------------------------------------===//
 
-#include "HWAtom.h"
+#include "VSUnit.h"
 #include "ForceDirectedScheduling.h"
 #include "ScheduleDOT.h"
 
@@ -46,7 +46,7 @@ struct MicroStateBuilder {
   MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
   void operator=(const MicroStateBuilder&); // DO NOT IMPLEMENT
 
-  FSMState &State;
+  VSchedGraph &State;
   MachineBasicBlock &MBB;
   MachineBasicBlock::iterator InsertPos;
 
@@ -59,8 +59,8 @@ struct MicroStateBuilder {
   VFuncInfo &VFI;
   BitLevelInfo &BLI;
 
-  SmallVector<HWAtom*, 8> AtomsToEmit;
-  SmallVector<HWAtom*, 8> DeferredAtoms;
+  SmallVector<VSUnit*, 8> SUnitsToEmit;
+  SmallVector<VSUnit*, 8> DeferredSUnits;
   
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
@@ -82,7 +82,7 @@ struct MicroStateBuilder {
     MachineOperand *getOperand() const { return Op.getPointer(); }
   };
 
-  inline WireDef createWireDef(unsigned WireNum, HWAtom *A,
+  inline WireDef createWireDef(unsigned WireNum, VSUnit *A,
                                MachineOperand *MO, unsigned OpNum,
                                unsigned emitSlot, unsigned writeSlot){
     const char *Symbol = 0;
@@ -103,7 +103,7 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(FSMState &S, LLVMContext& Context, const VTargetMachine &TM,
+  MicroStateBuilder(VSchedGraph &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
   WireNum(MBB.getNumber()),
@@ -127,24 +127,24 @@ struct MicroStateBuilder {
 
   MachineBasicBlock::iterator getInsertPos() { return InsertPos; }
 
-  void emitAtom(HWAtom *A) { AtomsToEmit.push_back(A); }
-  bool emitQueueEmpty() const { return AtomsToEmit.empty(); }
+  void emitSUnit(VSUnit *A) { SUnitsToEmit.push_back(A); }
+  bool emitQueueEmpty() const { return SUnitsToEmit.empty(); }
 
-  void defereAtom(HWAtom *A) { DeferredAtoms.push_back(A); }
+  void defereSUnit(VSUnit *A) { DeferredSUnits.push_back(A); }
 
   MachineInstr *buildMicroState(unsigned Slot, bool IsLastSlot = false);
 
   void emitDeferredInsts() {
     // Emit the  deferred atoms before data path need it.
-    while (!DeferredAtoms.empty()) {
-      HWAtom *A = DeferredAtoms.pop_back_val();
-      for (HWAtom::instr_iterator I = A->instr_begin(), E = A->instr_end();
+    while (!DeferredSUnits.empty()) {
+      VSUnit *A = DeferredSUnits.pop_back_val();
+      for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
           I != E; ++I)
         MBB.insert(InsertPos, *I);
     }
   }
 
-  void fuseInstr(MachineInstr &Inst, HWAtom *A, bool IsLastSlot,
+  void fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot,
                  MachineInstrBuilder &DPInst, MachineInstrBuilder &CtrlInst);
 
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot,
@@ -152,11 +152,11 @@ struct MicroStateBuilder {
     assert(TargetSlot > CurSlot && "Bad target slot!");
     
     buildMicroState(CurSlot, IsLastSlot);
-    AtomsToEmit.clear();
+    SUnitsToEmit.clear();
     
     // Some states may not emit any atoms, but it may read the result from
     // previous atoms.
-    // Note that AtomsToEmit is empty now, so we do not emitting any new
+    // Note that SUnitsToEmit is empty now, so we do not emitting any new
     // atoms.
     while (++CurSlot != TargetSlot && !IsLastSlot)
       buildMicroState(CurSlot);
@@ -187,10 +187,10 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
       = BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
   }
 
-  for (SmallVectorImpl<HWAtom*>::iterator I = AtomsToEmit.begin(),
-       E = AtomsToEmit.end(); I !=E; ++I) {
-    HWAtom *A = *I;
-    for (HWAtom::instr_iterator II = A->instr_begin(), IE = A->instr_end();
+  for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
+       E = SUnitsToEmit.end(); I !=E; ++I) {
+    VSUnit *A = *I;
+    for (VSUnit::instr_iterator II = A->instr_begin(), IE = A->instr_end();
         II != IE; ++II)
       fuseInstr(**II, A, IsLastSlot, DPInst, CtrlInst);
   }
@@ -220,7 +220,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
   return 0;
 }
 
-void MicroStateBuilder::fuseInstr(MachineInstr &Inst, HWAtom *A, bool IsLastSlot,
+void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot,
                                   MachineInstrBuilder &DPInst,
                                   MachineInstrBuilder &CtrlInst) {
   VTFInfo VTID = Inst.getDesc();
@@ -327,33 +327,33 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, HWAtom *A, bool IsLastSlot
 
 //===----------------------------------------------------------------------===//
 
-static inline bool top_sort_start(const HWAtom* LHS, const HWAtom* RHS) {
+static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->getSlot() != RHS->getSlot())
     return LHS->getSlot() < RHS->getSlot();
 
   return LHS->getIdx() < RHS->getIdx();
 }
 
-static inline bool top_sort_finish(const HWAtom* LHS, const HWAtom* RHS) {
+static inline bool top_sort_finish(const VSUnit* LHS, const VSUnit* RHS) {
   if (LHS->getFinSlot() != RHS->getFinSlot())
     return LHS->getFinSlot() < RHS->getFinSlot();
 
   return LHS->getIdx() < RHS->getIdx();
 }
 
-MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
+MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   const TargetInstrInfo *TII = TM.getInstrInfo();
   unsigned CurSlot = startSlot;
   VFuncInfo *VFI = MBB->getParent()->getInfo<VFuncInfo>();
 
-  std::sort(Atoms.begin(), Atoms.end(), top_sort_start);
+  std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 
   // Build bundle from schedule units.
   {
     MicroStateBuilder BTB(*this, MBB->getBasicBlock()->getContext(), TM, BLI);
 
     for (iterator I = begin(), E = end(); I != E; ++I) {
-      HWAtom *A = *I;
+      VSUnit *A = *I;
 
       FuncUnitId FUId = A->getFUId();
       // Remember the active slot.
@@ -379,11 +379,11 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
         case TargetOpcode::COPY:
           // TODO: move this to MicroStateBuilder.
           MBB->remove(Inst);
-          BTB.defereAtom(A);
+          BTB.defereSUnit(A);
           continue;
         }
 
-        BTB.emitAtom(A);
+        BTB.emitSUnit(A);
       }
     }
     // Build last state.
@@ -427,54 +427,54 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
 
 //===----------------------------------------------------------------------===//
 
-void HWAtom::dump() const {
+void VSUnit::dump() const {
   print(dbgs());
   dbgs() << '\n';
 }
 
-void HWMemDep::print(raw_ostream &OS) const {
+void VDMemDep::print(raw_ostream &OS) const {
 
 }
 
-void HWCtrlDep::print(raw_ostream &OS) const {
+void VDCtrlDep::print(raw_ostream &OS) const {
 }
 
-void HWValDep::print(raw_ostream &OS) const {
+void VDValDep::print(raw_ostream &OS) const {
 }
 
-unsigned llvm::HWAtom::getOpcode() const {
+unsigned llvm::VSUnit::getOpcode() const {
   if (MachineInstr *I =getFirstInstr())
     return I->getOpcode();
 
   return VTM::INSTRUCTION_LIST_END;
 }
 
-void HWAtom::scheduledTo(unsigned slot) {
+void VSUnit::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
   SchedSlot = slot;
 }
 
-void HWAtom::dropAllReferences() {
+void VSUnit::dropAllReferences() {
   for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
     I->removeFromList(this);
 }
 
-void HWAtom::replaceAllUseBy(HWAtom *A) {
+void VSUnit::replaceAllUseBy(VSUnit *A) {
   while (!use_empty()) {
-    HWAtom *U = use_back();
+    VSUnit *U = use_back();
 
     U->setDep(U->getDepIt(this), A);
   }
 }
 
-VFUs::FUTypes HWAtom::getFUType() const {
+VFUs::FUTypes VSUnit::getFUType() const {
   if (MachineInstr *Instr = getFirstInstr())
     return VTFInfo(*Instr).getFUType();
 
   return VFUs::Trivial;
 }
 
-void HWAtom::print(raw_ostream &OS) const {
+void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
   for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
@@ -494,10 +494,10 @@ void HWAtom::print(raw_ostream &OS) const {
   OS << "\nAt slot: " << getSlot();
 }
 
-void FSMState::print(raw_ostream &OS) const {
+void VSchedGraph::print(raw_ostream &OS) const {
 }
 
-void FSMState::dump() const {
+void VSchedGraph::dump() const {
   print(dbgs());
 }
 
@@ -514,8 +514,8 @@ NoFDMS("disable-fdms",
        cl::desc("vbe - Do not preform force-directed modulo schedule"),
        cl::Hidden, cl::init(false));
 
-void FSMState::schedule() {
-  std::sort(Atoms.begin(), Atoms.end(), top_sort_start);
+void VSchedGraph::schedule() {
+  std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 
   // Create the FDInfo.
   //ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
@@ -536,14 +536,14 @@ void FSMState::schedule() {
   scheduleLinear(Scheduler);
 
   // Do not forget to schedule the delay atom;
-  for (FSMState::iterator I = begin(), E = end(); I != E; ++I) {
-    HWAtom *A = *I;
+  for (VSchedGraph::iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *A = *I;
     assert(A->isScheduled() && "Schedule incomplete!");
   }
 }
 
 
-void FSMState::scheduleLinear(ForceDirectedSchedulingBase *Scheduler) {
+void VSchedGraph::scheduleLinear(ForceDirectedSchedulingBase *Scheduler) {
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
 
@@ -556,7 +556,7 @@ void FSMState::scheduleLinear(ForceDirectedSchedulingBase *Scheduler) {
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
-void FSMState::scheduleLoop(ForceDirectedSchedulingBase *Scheduler, 
+void VSchedGraph::scheduleLoop(ForceDirectedSchedulingBase *Scheduler, 
                                         unsigned II) {
   dbgs() << "MII: " << II << "...";
   // Ensure us can schedule the critical path.
@@ -604,6 +604,6 @@ void FSMState::scheduleLoop(ForceDirectedSchedulingBase *Scheduler,
   setII(Scheduler->getMII());
 }
 
-void FSMState::viewGraph() {
+void VSchedGraph::viewGraph() {
   ViewGraph(this, this->getMachineBasicBlock()->getName());
 }

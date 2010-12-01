@@ -205,7 +205,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(new LiveVariables());
 
-  PM.add(createHWAtonInfoPass(*this));
+  PM.add(createVPreRegAllocSchedPass(*this));
 
   // Create physics register on demand.
   VRegisterInfo *VRI = const_cast<VRegisterInfo*>(getRegisterInfo());
