@@ -427,8 +427,6 @@ MachineBasicBlock *FSMState::emitSchedule(BitLevelInfo &BLI) {
 
 //===----------------------------------------------------------------------===//
 
-HWAtom::~HWAtom() {}
-
 void HWAtom::dump() const {
   print(dbgs());
   dbgs() << '\n';

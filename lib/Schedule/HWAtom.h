@@ -31,6 +31,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_os_ostream.h"
 
 #include <list>
@@ -224,8 +225,7 @@ class HWAtom {
   /// The corresponding Instructions - We may store several instruction inside
   /// the same schedule unit, so we can clamp them in a same slot.
   SmallVector<MachineInstr*, 2> Instrs;
-  virtual ~HWAtom();
-
+  
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
@@ -237,6 +237,10 @@ public:
          unsigned short Idx, unsigned fuid = 0)
     : Latency(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
     Instrs(I, I + NumInstrs) {}
+
+  ~HWAtom() {
+    std::for_each(Deps.begin(), Deps.end(), deleter<HWEdge>);
+  }
 
   unsigned short getIdx() const { return InstIdx; }
 
@@ -455,15 +459,29 @@ private:
   void scheduleLinear(ForceDirectedSchedulingBase *Scheduler);
   void scheduleLoop(ForceDirectedSchedulingBase *Scheduler,
                     unsigned II);
+
+  typedef DenseMap<const MachineInstr*, HWAtom*> AtomMapType;
+  AtomMapType InstToHWAtoms;
 public:
   FSMState(const VTargetMachine &Target, MachineBasicBlock *MachBB,
-           bool HaveSelfLoop, unsigned short StartSlot, unsigned short Idx)
+           bool HaveSelfLoop, unsigned short StartSlot)
     : TM(Target), MBB(MachBB), II(0), startSlot(StartSlot),
     HaveSelfLoop(HaveSelfLoop) {}
 
-  ~FSMState() { Atoms.clear(); }
+  ~FSMState() {
+    std::for_each(Atoms.begin(), Atoms.end(), deleter<HWAtom>);
+  }
 
   MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
+  MachineBasicBlock *operator->() const { return getMachineBasicBlock(); }
+
+  /// Mapping machine instruction to schedule unit, this will help us build the
+  /// the dependences between schedule unit based on dependences between machine
+  /// instructions.
+  HWAtom *lookupAtom(const MachineInstr *MI) const {
+    AtomMapType::const_iterator At = InstToHWAtoms.find(MI);
+    return At != InstToHWAtoms.end() ? At->second : 0;
+  }
 
   /// @name Roots
   //{
@@ -488,7 +506,18 @@ public:
   const_reverse_iterator rbegin() const { return Atoms.rbegin(); }
   const_reverse_iterator rend()   const { return Atoms.rend(); }
 
-  void addAtom(HWAtom *A) { Atoms.push_back(A); }
+  void addAtom(HWAtom *A) {
+    Atoms.push_back(A);
+    for (HWAtom::instr_iterator I = A->instr_begin(), E = A->instr_end();
+        I != E; ++I) {
+      AtomMapType::iterator where;
+      bool inserted;
+      tie(where, inserted) = InstToHWAtoms.insert(std::make_pair(*I, A));
+      assert(inserted && "Mapping from I already exist!");
+    }
+    
+  }
+
   void eraseAtom(HWAtom *A) {
     iterator at = std::find(begin(), end(), A);
     assert(at != end() && "Can not find atom!");
