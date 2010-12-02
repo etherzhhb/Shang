@@ -598,6 +598,9 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 
 void RTLWriter::emitDatapath(ucState &State) {
   assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
+  verilogCommentBegin(VM->getDataPathBuffer(2)) << "Issue data path for "
+    "operation at slot " << State.getSlot() << '\n';
+
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     switch (Op.getOpCode()) {
