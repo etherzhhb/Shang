@@ -110,6 +110,9 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // Leaves.
+  // FIXME: PHI nodes are not leaves, implement the computation logic.
+  // some iterative approach may need.
+  case VTM::PHI:
   case VTM::VOpArg: {
     MachineOperand &Result = Instr->getOperand(0);
     if (updateBitWidth(Result, computeWidthByRC(Result)))
