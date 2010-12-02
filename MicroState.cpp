@@ -166,7 +166,7 @@ MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum,
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
 
-MDNode * llvm::MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
+MDNode *MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
                                         LLVMContext &Context) {
   Value *Elts[] = {
     getTagConstant(MetaToken::tokenDefWire, Context),
@@ -175,4 +175,31 @@ MDNode * llvm::MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
   };
 
   return MDNode::get(Context, Elts, array_lengthof(Elts));
+}
+
+void ucState::print(raw_ostream &OS) const {
+  switch (Instr.getOpcode()) {
+  case VTM::Control:
+    OS << "Control ";
+    break;
+  case VTM::Datapath:
+    OS << "Datapath ";
+    break;
+  case VTM::Terminator:
+    OS << "Terminator ";
+    break;
+  default:
+    assert(0 && "Bad opcode!");
+    return;
+  }
+
+  OS << '@' << getSlot() << '\n';
+  for (ucState::iterator I = begin(), E = end(); I != E; ++I) {
+    (*I).print(OS);
+    OS << '\n';
+  }
+}
+
+void ucState::dump() const {
+  print(dbgs());
 }

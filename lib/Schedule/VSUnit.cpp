@@ -395,27 +395,14 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
       I != E; ++I) {
     MachineInstr *Instr = I;
     switch (Instr->getOpcode()) {
+    case VTM::Control:
+    case VTM::Datapath:
+    case VTM::Terminator:
+      ucState(*Instr).dump();
+      break;
     default:
       Instr->dump();
-      continue;
-    case VTM::Control:
-      dbgs() << "Control ";
       break;
-    case VTM::Datapath:
-      dbgs() << "Datapath ";
-      break;
-    case VTM::Terminator:
-      dbgs() << "Terminator ";
-      break;
-    }
-
-    ucState State = *Instr;
-    dbgs() << State.getSlot() << '\n';
-    
-    for (ucState::iterator UOI = State.begin(), UOE = State.end();
-         UOI != UOE; ++UOI) {
-      ucOp Op = *UOI;
-      Op.dump();
     }
   }
   );

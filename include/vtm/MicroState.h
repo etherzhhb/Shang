@@ -252,6 +252,9 @@ public:
   iterator end() const {
     return ucOpIterator(const_cast<MachineInstr&>(Instr), false);
   }
+
+  void print(raw_ostream &OS) const;
+  void dump() const;
 };
 }
 
