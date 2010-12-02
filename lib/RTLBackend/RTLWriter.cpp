@@ -475,7 +475,7 @@ void RTLWriter::emitOpLatchVal(ucOp &OpLatchVal) {
   emitOperand(OS, MO);
   MachineBasicBlock *MBB = MO.getParent()->getParent();
   std::string BBName = getStateNameForMachineBB(MBB);
-  OS << " <= " << OpLatchVal.getOpCodeMD().getWireName(BBName) << ";\n";
+  OS << " <= " << OpLatchVal.getSrcWireName(BBName) << ";\n";
 }
 
 void RTLWriter::emitOpArg(ucOp &OpArg) {

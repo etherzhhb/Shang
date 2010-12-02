@@ -146,11 +146,15 @@ public:
   inline unsigned getOpCode() const {
     if (Token.isInstr())
       return Token.getOpcode();
-
+    // Since the Token must be an instr token or DefReg token, if we reach
+    // here, it must be a DefReg token.
     return VTM::COPY;
   }
 
-  const MetaToken &getOpCodeMD() const { return Token; }
+  std::string getSrcWireName(const std::string &Prefix) const {
+    assert(Token.isDefReg() && "Bad token type");
+    return Token.getWireName(Prefix);
+  }
 
   unsigned getFUNum() const {
     assert(Token.isInstr() && "Bad token type!");
