@@ -149,23 +149,23 @@ def VOpBitCat	   : DPTvaInst<(outs dyn_rc:$dst), (ins variable_ops),
 let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
 let isCommutable       = 1 in
-def VOpAdd : DPFUInst<(outs dyn_rc:$dst, DR1:$co),
-			                (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
+def VOpAdd : FUInst<(outs dyn_rc:$dst, DR1:$co),
+			               (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
 					            "{$dst, $co} = $src1 + $src2 + $ci;", [], FUAddSub>;
 
-def VOpSHL : DPFUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
-                       "$dst = shl $src0, $src1", [], FUSHL>;
+def VOpSHL : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                     "$dst = shl $src0, $src1", [], FUSHL>;
 
-def VOpSRA : DPFUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
-                       "$dst = sra $src0, $src1", [], FUSHL>;
+def VOpSRA : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                     "$dst = sra $src0, $src1", [], FUSHL>;
 }
 
 let mayLoad		  = 1,
 	mayStore	  = 1 in
-def VOpMemAccess : DPFUInst<(outs dyn_rc:$dst),
-							              (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
-							              "$dst = memaccess $src, $addr, $isLoad",
-							              [], FUMemBus, 1, 1>;
+def VOpMemAccess : FUInst<(outs dyn_rc:$dst),
+							             (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
+							             "$dst = memaccess $src, $addr, $isLoad",
+							             [], FUMemBus, 1, 1, 0>;
 
 
 //===----------------------------------------------------------------------===//

@@ -55,10 +55,11 @@ class CtrlInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 0, latency,
 			  readAtEmit, writeUntilFinish>;
 
-class DPFUInst<dag outs, dag ins, string asmstr, list<dag> pattern,
+class FUInst<dag outs, dag ins, string asmstr, list<dag> pattern,
                 FUType ResType,
-                bit readAtEmit = 0, bit writeUntilFinish = 0>
-	: InstVTM<outs, ins, asmstr, pattern, ResType, 1, 0,
+                bit readAtEmit = 0, bit writeUntilFinish = 0,
+                bit datapath = 1>
+	: InstVTM<outs, ins, asmstr, pattern, ResType, datapath, 0,
 			  readAtEmit, writeUntilFinish>;
 
 class DPTvaInst<dag outs, dag ins, string asmstr, list<dag> pattern,
