@@ -31,6 +31,7 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
@@ -412,6 +413,17 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   for (MachineBasicBlock::iterator BI = State->begin(), BE = State->end();
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
+
+  // We need at an explicit terminator to transfer the control flow explicitly.
+  if (Terminators.empty()) {
+    MachineBasicBlock *MBB = State.getMachineBasicBlock();
+    assert(MBB->succ_size() == 1 && "Expect fall through block!");
+    // Create "VOpToState 1/*means always true*/, target mbb"
+    MachineInstr &Term = *BuildMI(MBB, DebugLoc(), 
+                                  VTarget.getInstrInfo()->get(VTM::VOpToState))
+      .addImm(1, 1).addMBB(*MBB->succ_begin());
+    Terminators.push_back(&Term);
+  }
 
   // Create the exit node.
   buildExitRoot(State);
