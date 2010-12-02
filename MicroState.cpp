@@ -50,7 +50,7 @@ bool MetaToken::isReadWire() const {
 bool MetaToken::isDefReg() const {
   if (!TokenNode) return false;
 
-  return getTag() == MetaToken::tokenWriteReg;
+  return getTag() == MetaToken::tokenLatchVal;
 }
 
 bool MetaToken::isInstr() const {
@@ -67,7 +67,7 @@ void MetaToken::print(raw_ostream &OS) const {
   case MetaToken::tokenReadWire:
     OS << "wire" << getWireNum();
     break;
-  case MetaToken::tokenWriteReg:
+  case MetaToken::tokenLatchVal:
     OS << "wire" << getWireNum() << " ->";
     break;
   case MetaToken::tokenInstr:
@@ -134,7 +134,7 @@ static Constant *getTagConstant(unsigned TAG, LLVMContext &Context) {
 MDNode *MetaToken::createDefReg(unsigned OpId, uint64_t WireNum, 
                                 LLVMContext &Context) {
   Value *Elts[] = {
-    getTagConstant(MetaToken::tokenWriteReg, Context), getOpId(Context, OpId),
+    getTagConstant(MetaToken::tokenLatchVal, Context), getOpId(Context, OpId),
     ConstantInt::get(Type::getInt32Ty(Context), WireNum)
   };
 

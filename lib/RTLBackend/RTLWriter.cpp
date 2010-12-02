@@ -126,7 +126,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpArg(ucOp &VOpArg);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
-  void emitOpWriteReg(ucOp &OpWriteReg);
+  void emitOpLatchVal(ucOp &OpLatchVal);
   void emitOpMemAccess(ucOp &OpMemAccess);
   void emitOpToState(ucOp &OpToState);
 
@@ -453,7 +453,7 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     case VTM::VOpArg:       emitOpArg(Op);        break;
     case VTM::VOpRetVal:    emitOpRetVal(Op);     break;
     case VTM::VOpRet:       emitOpRet(Op);        break;
-    case VTM::COPY:         emitOpWriteReg(Op);   break;
+    case VTM::COPY:         emitOpLatchVal(Op);   break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);  break;
     case VTM::VOpToState:   emitOpToState(Op);    break;
     default:  assert(0 && "Unexpect opcode!");    break;
@@ -469,13 +469,13 @@ void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   emitCtrlOp(FirstState);
 }
 
-void RTLWriter::emitOpWriteReg(ucOp &OpWriteReg) {
+void RTLWriter::emitOpLatchVal(ucOp &OpLatchVal) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
-  MachineOperand &MO = OpWriteReg.getOperand(0);
+  MachineOperand &MO = OpLatchVal.getOperand(0);
   emitOperand(OS, MO);
   MachineBasicBlock *MBB = MO.getParent()->getParent();
   std::string BBName = getStateNameForMachineBB(MBB);
-  OS << " <= " << OpWriteReg.getOpCodeMD().getWireName(BBName) << ";\n";
+  OS << " <= " << OpLatchVal.getOpCodeMD().getWireName(BBName) << ";\n";
 }
 
 void RTLWriter::emitOpArg(ucOp &OpArg) {
@@ -598,8 +598,8 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 
 void RTLWriter::emitDatapath(ucState &State) {
   assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
-  verilogCommentBegin(VM->getDataPathBuffer(2)) << "Issue data path for "
-    "operation at slot " << State.getSlot() << '\n';
+  verilogCommentBegin(VM->getDataPathBuffer(2)) << "Issue datapath for "
+    "operations at slot " << State.getSlot() << '\n';
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;

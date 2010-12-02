@@ -45,8 +45,8 @@ public:
     tokenReadWire,
     // Excute an instruction, instr ResourceType, ResourceID, operands ...
     tokenInstr,
-    // Write register, WriteReg register, source value
-    tokenWriteReg = VTM::COPY
+    // Write register, LatchVal register, source value
+    tokenLatchVal = VTM::COPY
   };
 
   explicit MetaToken() : TokenNode(0) {}
