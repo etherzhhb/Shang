@@ -57,8 +57,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VFuncInfo *FuncInfo;
   BitLevelInfo *BLI;
-  // Nodes that detach from the exit node.
-  SmallVector<MachineInstr*, 16> DetachNodes;
   SmallVector<MachineInstr*, 4> Terminators;
 
   // Total states
@@ -107,8 +105,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
                           enum VDMemDep::MemDepTypes DepType,
                           unsigned Diff);
 
-  void addValueDeps(VSUnit *A, VSchedGraph &CurState,
-                    SmallVectorImpl<const MachineOperand*> &Defs);
+  void addValueDeps(VSUnit *A, VSchedGraph &CurState);
 
   void clear();
 
@@ -321,8 +318,7 @@ void VPreRegAllocSched::releaseMemory() {
 
 //===----------------------------------------------------------------------===//
 // Create atom
-void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
-                              SmallVectorImpl<const MachineOperand*> &Defs) {
+void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
   for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
       I != E; ++I) {
     const MachineInstr *MI = *I;
@@ -341,11 +337,6 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
       if (!Reg) continue;
       assert(TargetRegisterInfo::isVirtualRegister(Reg)
              && "Unexpected physics register!");
-
-      if (MO.isDef()) {
-        Defs.push_back(&MO);
-        continue;
-      }
 
       MachineInstr *DepSrc = MRI->getVRegDef(Reg);
       /// Only add the dependence if DepSrc is in the same MBB with MI.
@@ -379,30 +370,8 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
   VSUnit *A = new VSUnit(&MI, 1, Latency, ++InstIdx, Id.getFUNum());
-  SmallVector<const MachineOperand*, 4> Defs;
 
-  addValueDeps(A, CurState, Defs);
-  
-  // Assume all def is dead, and try to prove it wrong.
-  bool AllDefDead = true;
-
-  if (!Defs.empty()) {
-    const MachineBasicBlock *MBB = MI->getParent();
-    for (SmallVector<const MachineOperand*, 4>::iterator I = Defs.begin(),
-         E = Defs.end(); I != E; ++I) {
-      const MachineOperand *Op = *I;
-      if (!Op->isDead()) AllDefDead = false;
-
-      if (LiveVars->isLiveOut(Op->getReg(), *MBB)) {
-        // If the node defines any live out register, it may be a detach node.
-        DetachNodes.push_back(MI);
-        break;
-      }
-    }
-  }
-
-  // If All define dead, this node is detached.
-  if (AllDefDead) DetachNodes.push_back(MI);
+  addValueDeps(A, CurState);
 
   // Add the atom to the state.
   CurState.addSUnit(A);
@@ -411,18 +380,18 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   VSUnit *Exit = new VSUnit(Terminators.data(), Terminators.size(), 0,
                             ++InstIdx);
-  
-  SmallVector<const MachineOperand*, 2> Defs;
-  addValueDeps(Exit, CurState, Defs);
+  addValueDeps(Exit, CurState);
 
   MachineInstr *FstExit = Terminators.front();
 
-  // All operation must finished before leaving the state.
-  while (!DetachNodes.empty()) {
-    MachineInstr *I = DetachNodes.pop_back_val();
-    VSUnit *Dep = CurState.lookupSUnit(I);
-    assert(Dep && "Can not find dep!");
-    Exit->addDep(getCtrlDepEdge(Dep, computeLatency(I, FstExit)));
+  for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end();
+      I != E; ++I) {
+    VSUnit *VSU = *I;
+    if (VSU->getNumUses() == 0 && !VSU->isEntry()) {
+      // Dirty Hack.
+      MachineInstr *Instr = *VSU->instr_begin();
+      Exit->addDep(getCtrlDepEdge(VSU, computeLatency(Instr, FstExit)));
+    }
   }
 
   // Do not forget the entry root.
