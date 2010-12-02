@@ -371,10 +371,8 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
         // Ignore some instructions.
         switch (Inst->getOpcode()) {
         case TargetOpcode::PHI:
-          assert(BTB.emitQueueEmpty() && "Unexpect atom before PHI.");
-          // TODO: move this to MicroStateBuilder.
-          MBB->remove(Inst);
-          MBB->insert(BTB.getInsertPos(), Inst);
+          assert(BTB.emitQueueEmpty() && "Unexpected atom before PHI.");
+          // Do not touch the PHIs, leave them at the beginning of the BB.
           continue;
         case TargetOpcode::COPY:
           // TODO: move this to MicroStateBuilder.
