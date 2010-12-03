@@ -135,8 +135,9 @@ target_link_libraries (LLVMVerilogBackend
   VTMBitLevelOpt
   VTMSchedule
   VTMRTLBackend
+  VTMIFBackend
   ${LUA_LIBRARY}
-  ${LUABIND_LIBRARY}) #LLVMVTMWriters 
+  ${LUABIND_LIBRARY})
 
 add_subdirectory(include)
 add_subdirectory(lib)

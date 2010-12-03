@@ -219,8 +219,10 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // PM.add(createFastRegisterAllocator());
 
-  PM.add(createRTLWriterPass(*this, Out));
+  PM.add(createRTLInfoPass(*this, Out));
 
+  // TODO: Select difference interface writer pass based on user's choice.
+  PM.add(createVLTIfWriterPass());
   return false;
 }
 
@@ -266,6 +268,7 @@ void VTargetMachine::initializeTarget() {
       .def("setupLSR",    &VTargetMachine::setupBinOpRes<VFULSR>)
       .def("setupAddSub", &VTargetMachine::setupBinOpRes<VFUAddSub>)
       .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>)
+      .def_readwrite("outfilesdir", &VTargetMachine::OutFilesDir)
   ];
 
   luabind::globals(ScriptState)["Config"] = this;

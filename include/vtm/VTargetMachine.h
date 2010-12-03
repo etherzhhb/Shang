@@ -43,6 +43,8 @@ struct VTargetMachine : public LLVMTargetMachine {
   VInstrInfo InstrInfo;
   InstrItineraryData  InstrItins;
 
+  std::string OutFilesDir;
+
   /// mapping allocated instences to atom
   VFUDesc *ResSet[VFUs::NumCommonFUs];
 
@@ -89,10 +91,16 @@ struct VTargetMachine : public LLVMTargetMachine {
 
   void initializeTarget();
 
+  // Configuration function.
   void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes);
 
   template<class BinOpResType>
   void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes);
+
+  // Configuration accessor.
+  const std::string &getOutFilesDir() const {
+    return OutFilesDir;
+  } 
 
   template<class ResType>
   ResType *getFUDesc() const {
