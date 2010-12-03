@@ -46,7 +46,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 char RTLInfo::ID = 0;
 
-Pass *llvm::createRTLWriterPass(VTargetMachine &TM, raw_ostream &O) {
+Pass *llvm::createRTLInfoPass(VTargetMachine &TM, raw_ostream &O) {
   return new RTLInfo(TM, O);
 }
 
@@ -385,7 +385,7 @@ void RTLInfo::emitOpArg(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
   emitOperand(OS, OpArg.getOperand(0));
   // FIXME: Use getInputPort instead;
-  OS << " <= " << VM->getInputPort(OpArg.getOperand(1).getImm()).getName()
+  OS << " <= " << VM->getCommonInPort(OpArg.getOperand(1).getImm()).getName()
      << ";\n";
 }
 

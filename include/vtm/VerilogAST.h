@@ -189,6 +189,11 @@ public:
     return *Ports[i];
   }
 
+  const VASTPort &getCommonInPort(unsigned i) const {
+    // FIXME: Check if out of range.
+    return *Ports[i + VASTModule::SpecialOutPortEnd];
+  }
+
   typedef PortVector::iterator port_iterator;
   typedef PortVector::const_iterator const_port_iterator;
 
