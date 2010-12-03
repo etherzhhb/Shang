@@ -47,6 +47,8 @@ Pass *createRTLWriterPass(VTargetMachine &TM, raw_ostream &O);
 
 //
 void initializeBitLevelInfoPass(PassRegistry &Registry);
+void initializeRTLInfoPass(PassRegistry &Registry);
+
 void initializeRAOptimalSSAPass(PassRegistry &Registry);
 } // end namespace
 
