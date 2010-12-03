@@ -16,7 +16,7 @@
 using namespace llvm;
 
 VMCAsmInfo::VMCAsmInfo(const Target &T, StringRef TT) {
-  GlobalPrefix = "_";
   CommentString = "//";
+  AllowPeriodsInName = false;
   HasSetDirective = false;
 }

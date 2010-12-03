@@ -25,18 +25,21 @@
 #include "vtm/VFuncInfo.h"
 #include "vtm/BitLevelInfo.h"
 
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/FormattedStream.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/DerivedTypes.h"
+#include "llvm/Type.h"
+
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
+
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/CFG.h"
-#include "llvm/Support/ErrorHandling.h"
+
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/CommandLine.h"
@@ -54,6 +57,7 @@ class RTLWriter : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   BitLevelInfo *BLI;
   VASTModule *VM;
+  Mangler *Mang;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
   
@@ -72,12 +76,16 @@ class RTLWriter : public MachineFunctionPass {
 
   void clear();
   
-  inline static std::string getStateNameForMachineBB(MachineBasicBlock *MBB) {
-    return MBB->getName().str() + "BB" + itostr(MBB->getNumber());
+  inline std::string getStateName(MachineBasicBlock *MBB) {
+    SmallVector<char, 16> Name;
+    // Use mangler to handle escaped characters.
+    Mang->getNameWithPrefix(Name, MBB->getName().str() + "BB"
+                                  + itostr(MBB->getNumber()));
+    return std::string(Name.data(), Name.size());
   }
 
-  inline static std::string getucStateEnableName(MachineBasicBlock *MBB) {
-    std::string StateName = getStateNameForMachineBB(MBB);
+  inline std::string getucStateEnableName(MachineBasicBlock *MBB) {
+    std::string StateName = getStateName(MBB);
 
     StateName = "cur_" + StateName;
 
@@ -138,11 +146,23 @@ public:
   static char ID;
   RTLWriter(VTargetMachine &TM, raw_ostream &O)
     : MachineFunctionPass(ID), VTM(TM), Out(O), VM(0),
-    TotalFSMStatesBit(0), CurFSMStateNum(0) {}
+    TotalFSMStatesBit(0), CurFSMStateNum(0), Mang(0) {}
   
   ~RTLWriter();
 
   VASTModule *getVerilogModule() const { return VM; }
+
+  bool doInitialization(Module &M) {
+    MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
+    assert(MMI && " MachineModuleInfo will always available in a machine function pass!");
+    Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
+    return false;
+  }
+
+  bool doFinalization(Module &M) {
+    delete Mang;
+    return false;
+  }
 
   bool runOnMachineFunction(MachineFunction &MF);
   void releaseMemory() { clear(); }
@@ -206,7 +226,10 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
-
+  // Dirty Hack: Disable the "Warning-WIDTH" from verilator.
+  // FIXME: We should only generate this when we are going to simulate the
+  // module with verilator.
+  Out << "/* verilator lint_off WIDTH */\n";
 
   // Write buffers to output
   VM->printModuleDecl(Out);
@@ -286,7 +309,7 @@ void RTLWriter::emitFunctionSignature() {
 }
 
 void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
-  std::string StateName = getStateNameForMachineBB(&MBB);
+  std::string StateName = getStateName(&MBB);
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
 
   //unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
@@ -394,7 +417,7 @@ RTLWriter::~RTLWriter() {}
 
 //===----------------------------------------------------------------------===//
 void RTLWriter::createucStateEnable(MachineBasicBlock *MBB)  {
-  std::string StateName = getStateNameForMachineBB(MBB);
+  std::string StateName = getStateName(MBB);
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
 
@@ -474,7 +497,7 @@ void RTLWriter::emitOpLatchVal(ucOp &OpLatchVal) {
   MachineOperand &MO = OpLatchVal.getOperand(0);
   emitOperand(OS, MO);
   MachineBasicBlock *MBB = MO.getParent()->getParent();
-  std::string BBName = getStateNameForMachineBB(MBB);
+  std::string BBName = getStateName(MBB);
   OS << " <= " << OpLatchVal.getSrcWireName(BBName) << ";\n";
 }
 
@@ -557,8 +580,11 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   case MachineOperand::MO_Register: {
     OS << "reg" << Operand.getReg();
 
-    if (PrintBitRange)
-      OS << verilogBitRange(BLI->getBitWidth(Operand));
+    unsigned BitWidth = BLI->getBitWidth(Operand);
+    // Do not print out reg[0] if register has only one bit.
+    if (PrintBitRange && BitWidth != 1) {
+      OS << verilogBitRange(BitWidth);
+    }
 
     return;
   }
@@ -567,7 +593,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     assert((MetaOp.isDefWire() || MetaOp.isReadWire()) && "Bad operand!");
 
     MachineBasicBlock *MBB = Operand.getParent()->getParent();
-    std::string WireName = MetaOp.getWireName(getStateNameForMachineBB(MBB));
+    std::string WireName = MetaOp.getWireName(getStateName(MBB));
     OS << WireName;
 
     // Emit the wire here, because it only define once, wires will never
@@ -584,7 +610,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     OS << Operand.getSymbolName();
     return;
   case MachineOperand::MO_MachineBasicBlock:
-    OS << getStateNameForMachineBB(Operand.getMBB());
+    OS << getStateName(Operand.getMBB());
     return;
   }
 }
@@ -593,7 +619,7 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
   // Emit the first micro state of the target state.
   emitFirstCtrlState(MBB);
 
-  ss.indent(10) << "NextFSMState <= " << getStateNameForMachineBB(MBB) << ";\n";
+  ss.indent(10) << "NextFSMState <= " << getStateName(MBB) << ";\n";
 }
 
 void RTLWriter::emitDatapath(ucState &State) {
