@@ -238,11 +238,11 @@ void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
   verilogEnd(VM->getControlBlockBuffer(6));
 }
 
-void RTLWriter::emitCommonPort() {
-  VM->addInputPort("clk", 1);
-  VM->addInputPort("rstN", 1);
-  VM->addInputPort("start", 1);
-  VM->addOutputPort("fin", 1);
+void RTLInfo::emitCommonPort() {
+  VM->addInputPort("clk", 1, VASTModule::Clk);
+  VM->addInputPort("rstN", 1, VASTModule::RST);
+  VM->addInputPort("start", 1, VASTModule::Start);
+  VM->addOutputPort("fin", 1, VASTModule::Finish);
 }
 
 void RTLInfo::emitAllocatedFUs() {

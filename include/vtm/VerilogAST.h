@@ -119,8 +119,8 @@ public:
 // The class that represent Verilog modulo.
 class VASTModule : public VASTNode {
 public:
-  typedef SmallVector<VASTPort*, 8> PortVector;
-  typedef SmallVector<VASTSignal*, 8> SignalVector;
+  typedef SmallVector<VASTPort*, 16> PortVector;
+  typedef SmallVector<VASTSignal*, 128> SignalVector;
 private:
   // Dirty Hack:
   // Buffers
@@ -128,26 +128,55 @@ private:
   PortVector Ports;
   SignalVector Signals;
 public:
+  enum PortTypes {
+    Clk = 0,
+    RST,
+    Start,
+    SpecialInPortEnd,
+    Finish = SpecialInPortEnd,
+    SpecialOutPortEnd,
+    NumSpecialPort = SpecialOutPortEnd,
+    Others
+  };
+
   VASTModule(const std::string &Name) : VASTNode(vastModule, Name, 0, ""),
     StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
-    SeqCompute(*(new std::string())) {}
+    SeqCompute(*(new std::string())) {
+    Ports.append(NumSpecialPort, 0);
+  }
 
   ~VASTModule();
   void clear();
 
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
+                         PortTypes T = Others,
                          const std::string &Comment = "") {
     VASTPort *Port = new VASTPort(Name, BitWidth, true, false, Comment);
+    if (T < SpecialInPortEnd) {
+      assert(Ports[T] == 0 && "Special port exist!");
+      Ports[T] = Port;
+      return Port;
+    }
+
+    assert(T == Others && "Wrong port type!");
     Ports.push_back(Port);
     return Port;
   }
 
   VASTPort *addOutputPort(const std::string &Name, unsigned BitWidth,
+                          PortTypes T = Others,
                           const std::string &Comment = "") {
     VASTPort *Port = new VASTPort(Name, BitWidth, false, true, Comment);
+    if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
+      assert(Ports[T] == 0 && "Special port exist!");
+      Ports[T] = Port;
+      return Port;
+    }
+
+    assert(T == Others && "Wrong port type!");
     Ports.push_back(Port);
     return Port;
   }
