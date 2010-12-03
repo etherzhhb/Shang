@@ -139,7 +139,7 @@ public:
 
   ~RTLInfo();
 
-  VASTModule *getVerilogModule() const { return VM; }
+  VASTModule *getRTLModule() const { return VM; }
 
   bool doInitialization(Module &M) {
     MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
