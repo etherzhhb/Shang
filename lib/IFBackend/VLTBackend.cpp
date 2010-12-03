@@ -431,7 +431,8 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
               "// And the header file of the generated module.\n"
               "#include \"" << VLTClassName << ".h\"\n\n\n"
               "// Instantiation of module\n"
-              "static " << VLTClassName << " " << VLTModInstName <<";\n\n\n"
+              "static " << VLTClassName << " "
+                        << VLTModInstName << "(\"" << FuncName <<"\");\n\n\n"
               "// Current simulation time\n"
               "static long sim_time = 0;\n\n\n"
               "// Called by $time in Verilog\n"
@@ -451,8 +452,6 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
-  IfStream << "  // Remember the start time.\n"
-              "  long start_time = sim_time;\n";
 
   IfStream << "  // Reset the module if we first time invoke the module.\n";
   IfStream << "  if (sim_time == 0) \n";
@@ -477,14 +476,18 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
        I != E; ++I) {
     std::string ArgName = GetValueName(I);
     IfStream.indent(2) << VLTModInstName << '.' << ArgName
-                       << "=" << ArgName << ";\n";
+                       << " = " << ArgName << ";\n";
   }
 
   IfStream << '\n';
-  IfStream<< "  // Start the module.\n";
+  IfStream << "  // Start the module.\n";
   assignInPort(VASTModule::Start, 1);
+
+  IfStream << "  // Remember the start time.\n"
+              "  long start_time = sim_time;\n";
+
   IfStream<< "  // Commit the signals.\n";
-  evalHalfCycle(4);
+  evalHalfCycle(2);
 
   IfStream << "\n\n\n"
               "  // The main evalation loop.\n"
@@ -494,24 +497,30 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   IfStream << '\n';
   IfStream << "    // Check if the module finish its job at last.\n";
   IfStream << "    if (" << getPortVal(VASTModule::Finish) << ") {\n";
+  // TODO: Print the totoal spent cycle number if necessary.
+
+  IfStream << "      return";
+
   // If the function return something?
   if (!retty->isVoidTy()) {
-    IfStream << "      return (";
+    IfStream << " (";
     // Cast the return value, and we only support simple type as return type now.
     printSimpleType(IfStream, retty, false);
     // FIXME: Find the correct name for the return value port.
     IfStream << ")" << VLTModInstName << ".return_value;\n";  
-  }
+  } else
+    IfStream << ";\n";
   
   IfStream << "    }\n";
 
   IfStream << '\n';
 
   evalHalfCycle(4);
-  assignInPort(VASTModule::Start, 0);
+  assignInPort(VASTModule::Start, 0, 4);
 
   IfStream << " } while(!Verilated::gotFinish()"
               // TODO: allow user to custom the maximum simulation time.
+              // FIXME: The result is wrong if sim_time just overflow.
               " && (sim_time - start_time) < 0x1000);\n";
 
   IfStream << '\n';
