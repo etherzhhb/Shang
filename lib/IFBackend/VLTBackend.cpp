@@ -439,6 +439,10 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
               "  return sim_time;\n"
               "}\n\n\n";
 
+  IfStream << "// Dirty Hack: Only C function is supported now.\n"
+              "#ifdef __cplusplus\n"
+              "extern \"C\" {\n"
+              "#endif\n\n";
    
   // Print the interface function.
   const Type *retty = printFunctionSignature(IfStream, F);
@@ -519,6 +523,11 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   }
   // End function body.
   IfStream << "}\n";
+
+  IfStream << "// Dirty Hack: Only C function is supported now.\n"
+              "#ifdef __cplusplus\n"
+              "}\n"
+              "#endif\n";
 
   Fout.keep();
   // IfStream.flush();
