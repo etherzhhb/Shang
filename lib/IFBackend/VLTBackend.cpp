@@ -28,7 +28,6 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/OwningPtr.h"
 
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -351,7 +350,7 @@ namespace {
 struct VLTIfWriter : public MachineFunctionPass {
   static char ID;
 
-  OwningPtr<tool_output_file> FOut;
+  tool_output_file *FOut;
   formatted_raw_ostream Stream;
   VTargetMachine &VTM;
 
@@ -401,7 +400,7 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
-    FOut.reset(VTM.getOutFile("cpp"));
+    FOut = VTM.getOutFile("cpp");
 
     Stream.setStream(FOut->os());
 
@@ -430,6 +429,7 @@ struct VLTIfWriter : public MachineFunctionPass {
               "#ifdef __cplusplus\n"
               "extern \"C\" {\n"
               "#endif\n\n";
+    Stream.flush();
 
     return false;
   }
@@ -439,6 +439,7 @@ struct VLTIfWriter : public MachineFunctionPass {
               "#ifdef __cplusplus\n"
               "}\n"
               "#endif\n";
+    Stream.flush();
     FOut->keep();
     return false;
   }
@@ -457,6 +458,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
 
   RTLMod = getAnalysis<RTLInfo>().getRTLModule();
+
 
   // Print the interface function.
   const Type *retty = printFunctionSignature(Stream, F);
@@ -545,6 +547,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   }
   // End function body.
   Stream << "}\n\n";
+  Stream.flush();
 
   return false;
 }

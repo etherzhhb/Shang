@@ -1,13 +1,6 @@
-/*
-* Copyright: 2008 by Nadav Rotem. all rights reserved.
-* IMPORTANT: This software is supplied to you by Nadav Rotem in consideration
-* of your agreement to the following terms, and your use, installation, 
-* modification or redistribution of this software constitutes acceptance
-* of these terms.  If you do not agree with these terms, please do not use, 
-* install, modify or redistribute this software. You may not redistribute, 
-* install copy or modify this software without written permission from 
-* Nadav Rotem. 
-*/
+
+//===----------------------------------------------------------------------===//
+
 
 #include "vtm/Passes.h"
 #include "vtm/VTargetMachine.h"
@@ -25,12 +18,14 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
 
+#include "llvm/ADT/STLExtras.h"
+
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include "llvm/System/Path.h"
+#include "llvm/Support/Path.h"
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
@@ -50,7 +45,7 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 static cl::opt<std::string>
-ConfigScriptName("vtm-config-script", cl::desc("vbe - The vtm config script."));
+ConfigScriptName("vtm-config-script", cl::desc("vtm - The vtm config script."));
 
 //===----------------------------------------------------------------------===//
 
@@ -68,7 +63,7 @@ VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
   Subtarget(TT, FS),
   TLInfo(*this),
   TSInfo(*this),
-  InstrInfo(DataLayout, TLInfo) {
+  InstrInfo(DataLayout, TLInfo), WriteAllToStdOut(false) {
 
   for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
     ResSet[i] = 0;
@@ -232,7 +227,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
 VTargetMachine::~VTargetMachine() {
   for (iterator I = begin(), E = end(); I != E; ++I)
-    delete *I;
+    if(*I) delete *I;
+
+  DeleteContainerPointers(OpenedFiles);
 }
 
 //===----------------------------------------------------------------------===//
@@ -275,6 +272,7 @@ void VTargetMachine::initializeTarget() {
       .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>)
       .def_readwrite("OutFilesDir", &VTargetMachine::OutFilesDir)
       .def_readwrite("HWSubSysName", &VTargetMachine::HWSubSysName)
+      .def_readwrite("WriteAllToStdOut", &VTargetMachine::WriteAllToStdOut)
   ];
 
   luabind::globals(ScriptState)["Config"] = this;
@@ -286,10 +284,15 @@ void VTargetMachine::initializeTarget() {
   sys::Path OFDir(OutFilesDir);
   if (!OFDir.isEmpty() && !OFDir.isDirectory())
     report_fatal_error("Bad output file directory: " + OutFilesDir);
+
+  if (HWSubSysName.empty())
+    WriteAllToStdOut = true;
 }
 
 std::string VTargetMachine::getOutFilePath(const std::string &Name,
                                            const std::string &Suffix) const {
+  if (WriteAllToStdOut) return "-";
+
   sys::Path OFDir(OutFilesDir);
   OFDir.appendComponent(Name);
   OFDir.appendSuffix(Suffix);
@@ -297,7 +300,13 @@ std::string VTargetMachine::getOutFilePath(const std::string &Name,
   return std::string(OFDir.c_str());
 } 
 
-tool_output_file *VTargetMachine::getOutFile(const std::string &Suffix) const {
+tool_output_file *VTargetMachine::getOutFile(const std::string &Suffix) {
+  // Do not open stdout twice.
+  if (WriteAllToStdOut && !OpenedFiles.empty()) {
+    assert(OpenedFiles.size() == 1 && "Unexpected opened files number!");
+    return OpenedFiles.front();
+  }
+  
   std::string FileName = getOutFilePath(HWSubSysName, Suffix);
   std::string error;
 
@@ -307,6 +316,7 @@ tool_output_file *VTargetMachine::getOutFile(const std::string &Suffix) const {
     return 0;
   }
 
+  OpenedFiles.push_back(File);
   return File;
 }
 

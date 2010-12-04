@@ -150,6 +150,7 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   verilogAlwaysEnd(Out, 2);
 
   verilogEndModule(Out);
+  Out.flush();
 
   return false;
 }

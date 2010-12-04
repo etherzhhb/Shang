@@ -26,7 +26,6 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/OwningPtr.h"
 
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -44,7 +43,7 @@ class TargetRegisterClass;
 
 
 class RTLInfo : public MachineFunctionPass {
-  OwningPtr<tool_output_file> FOut;
+  tool_output_file *FOut;
   formatted_raw_ostream Out;
   VTargetMachine &VTM;
 
@@ -153,12 +152,13 @@ public:
                   " in a machine function pass!");
     Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
 
-    FOut.reset(VTM.getOutFile("v"));
+    FOut = VTM.getOutFile("v");
     Out.setStream(FOut->os());
     return false;
   }
 
   bool doFinalization(Module &M) {
+    Out.flush();
     FOut->keep();
     delete Mang;
     return false;

@@ -1,4 +1,4 @@
-; RUN: %llc-with-config %s -o - 
+; RUN: %llc-with-config %s
 
 define void @loop(i32* nocapture %a, i32 %n) nounwind {
 entry:

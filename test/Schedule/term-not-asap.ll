@@ -1,4 +1,4 @@
-; RUN: %llc-with-config %s -o - | FileCheck %s
+; RUN: %llc-with-config %s | FileCheck %s
 
 define i32 @f(i32 %x, i32 %y) nounwind readnone {
 entry:

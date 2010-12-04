@@ -1,4 +1,4 @@
-; RUN: %llc-with-config %s -o -  | FileCheck %s
+; RUN: %llc-with-config %s | FileCheck %s
 ; XFAIL: *
 
 define void @f(i32* nocapture %a) nounwind {
