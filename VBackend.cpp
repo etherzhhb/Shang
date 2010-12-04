@@ -8,6 +8,8 @@
 * install copy or modify this software without written permission from 
 * Nadav Rotem. 
 */
+
+#include "vtm/Passes.h"
 #include "vtm/VTargetMachine.h"
 #include "VMCAsmInfo.h"
 
@@ -22,11 +24,13 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
+
+#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#include "vtm/Passes.h"
+#include "llvm/System/Path.h"
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
@@ -219,10 +223,10 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // PM.add(createFastRegisterAllocator());
 
-  PM.add(createRTLInfoPass(*this, Out));
+  PM.add(createRTLInfoPass(*this));
 
   // TODO: Select difference interface writer pass based on user's choice.
-  PM.add(createVLTIfWriterPass());
+  PM.add(createVLTIfWriterPass(*this));
   return false;
 }
 
@@ -255,6 +259,7 @@ void VTargetMachine::setupMemBus(unsigned latency, unsigned startInt,
 
 void VTargetMachine::initializeTarget() {
   std::string ErrMsg;
+  std::string OutFilesDir;
 
   lua_State *ScriptState = lua_open();
 
@@ -268,7 +273,8 @@ void VTargetMachine::initializeTarget() {
       .def("setupLSR",    &VTargetMachine::setupBinOpRes<VFULSR>)
       .def("setupAddSub", &VTargetMachine::setupBinOpRes<VFUAddSub>)
       .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>)
-      .def_readwrite("outfilesdir", &VTargetMachine::OutFilesDir)
+      .def_readwrite("OutFilesDir", &VTargetMachine::OutFilesDir)
+      .def_readwrite("HWSubSysName", &VTargetMachine::HWSubSysName)
   ];
 
   luabind::globals(ScriptState)["Config"] = this;
@@ -276,4 +282,31 @@ void VTargetMachine::initializeTarget() {
   luaL_dofile(ScriptState, ConfigScriptName.c_str());
 
   lua_close(ScriptState);
+
+  sys::Path OFDir(OutFilesDir);
+  if (!OFDir.isEmpty() && !OFDir.isDirectory())
+    report_fatal_error("Bad output file directory: " + OutFilesDir);
 }
+
+std::string VTargetMachine::getOutFilePath(const std::string &Name,
+                                           const std::string &Suffix) const {
+  sys::Path OFDir(OutFilesDir);
+  OFDir.appendComponent(Name);
+  OFDir.appendSuffix(Suffix);
+
+  return std::string(OFDir.c_str());
+} 
+
+tool_output_file *VTargetMachine::getOutFile(const std::string &Suffix) const {
+  std::string FileName = getOutFilePath(HWSubSysName, Suffix);
+  std::string error;
+
+  tool_output_file *File = new tool_output_file(FileName.c_str(), error);
+  if (!error.empty()) {
+    report_fatal_error("Can not open file " + FileName + ": " + error);
+    return 0;
+  }
+
+  return File;
+}
+

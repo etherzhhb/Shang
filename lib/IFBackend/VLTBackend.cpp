@@ -28,10 +28,13 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/OwningPtr.h"
 
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/ErrorHandling.h"
+
+#include "llvm/Support/Debug.h"
 
 #include <map>
 
@@ -348,16 +351,23 @@ namespace {
 struct VLTIfWriter : public MachineFunctionPass {
   static char ID;
 
-  formatted_raw_ostream *Stream;
+  OwningPtr<tool_output_file> FOut;
+  formatted_raw_ostream Stream;
+  VTargetMachine &VTM;
+
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
 
-  VLTIfWriter() : MachineFunctionPass(ID) {}
+  VLTIfWriter() : MachineFunctionPass(ID),
+    VTM((VTargetMachine&)TheVBackendTarget), Stream() {}
+
+  VLTIfWriter(VTargetMachine &TM) : MachineFunctionPass(ID),
+    VTM(TM), Stream() {}
 
   void assignInPort(VASTModule::PortTypes T, const std::string &Val,
                     unsigned ind = 2) {
     // TODO: Assert the port must be an input port.
-    Stream->indent(ind) << VLTModInstName << '.'
+    Stream.indent(ind) << VLTModInstName << '.'
       << RTLMod->getInputPort(T).getName()
       << " = (" << Val << ");\n";
   }
@@ -376,11 +386,11 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   void evalHalfCycle(unsigned ind = 2) {
-    Stream->indent(ind) << "//Increase clk by half cycle.\n";
+    Stream.indent(ind) << "//Increase clk by half cycle.\n";
     assignInPort(VASTModule::Clk, "sim_time++ & 0x1", ind);
 
-    Stream->indent(ind) << "// Evaluate model.\n";
-    Stream->indent(ind) << VLTModInstName << ".eval();\n";
+    Stream.indent(ind) << "// Evaluate model.\n";
+    Stream.indent(ind) << VLTModInstName << ".eval();\n";
   }
 
 
@@ -390,12 +400,55 @@ struct VLTIfWriter : public MachineFunctionPass {
     AU.setPreservesAll();
   }
 
+  bool doInitialization(Module &M) {
+    FOut.reset(VTM.getOutFile("cpp"));
+
+    Stream.setStream(FOut->os());
+
+    std::string HWSubSysName = VTM.getHWSubSysName();
+
+    // Setup the Name of the module in verilator.
+    VLTClassName = "V" + HWSubSysName;
+    // And the name of the intance of this class.
+    VLTModInstName = VLTClassName + "_Inst";
+
+    Stream << "// Include the verilator header.\n"
+              "#include \"verilated.h\"\n"
+              "// And the header file of the generated module.\n"
+              "#include \"" << VLTClassName << ".h\"\n\n\n"
+              "// Instantiation of module\n"
+              "static " << VLTClassName << " "
+                        << VLTModInstName << "(\"" << HWSubSysName <<"\");\n\n\n"
+              "// Current simulation time\n"
+              "static long sim_time = 0;\n\n\n"
+              "// Called by $time in Verilog\n"
+              "double sc_time_stamp () {\n"
+              "  return sim_time;\n"
+              "}\n\n\n";
+      
+    Stream << "// Dirty Hack: Only C function is supported now.\n"
+              "#ifdef __cplusplus\n"
+              "extern \"C\" {\n"
+              "#endif\n\n";
+
+    return false;
+  }
+
+  bool doFinalization(Module &M) {
+    Stream << "// Dirty Hack: Only C function is supported now.\n"
+              "#ifdef __cplusplus\n"
+              "}\n"
+              "#endif\n";
+    FOut->keep();
+    return false;
+  }
+
   bool runOnMachineFunction(MachineFunction &MF);
 };
 } //end anonymous namespace
 
-Pass *llvm::createVLTIfWriterPass() {
-  return new VLTIfWriter();
+Pass *llvm::createVLTIfWriterPass(VTargetMachine &TM) {
+  return new VLTIfWriter(TM);
 }
 
 char VLTIfWriter::ID = 0;
@@ -405,140 +458,93 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
   RTLMod = getAnalysis<RTLInfo>().getRTLModule();
 
-  const VTargetMachine &VTM = (const VTargetMachine&)MF.getTarget();
-  // Open the file to write the interface.
-  std::string FuncName = RTLMod->getName();
-  std::string IfFileName = VTM.getOutFilesDir() + FuncName + ".cpp";
-  std::string error;
-
-  tool_output_file Fout(IfFileName.c_str(), error);
-  if (!error.empty()) {
-    report_fatal_error("Can not write interface file for verilator: " + error);
-    return 0;
-  }
-
-  formatted_raw_ostream IfStream(Fout.os());
-  Stream = &IfStream;
-
-  // Setup the Name of the module in verilator.
-  VLTClassName = "V" + FuncName;
-  // And the name of the intance of this class.
-  VLTModInstName = VLTClassName + "_Inst";
-
-  
-  IfStream << "// Include the verilator header.\n"
-              "#include \"verilated.h\"\n"
-              "// And the header file of the generated module.\n"
-              "#include \"" << VLTClassName << ".h\"\n\n\n"
-              "// Instantiation of module\n"
-              "static " << VLTClassName << " "
-                        << VLTModInstName << "(\"" << FuncName <<"\");\n\n\n"
-              "// Current simulation time\n"
-              "static long sim_time = 0;\n\n\n"
-              "// Called by $time in Verilog\n"
-              "double sc_time_stamp () {\n"
-              "  return sim_time;\n"
-              "}\n\n\n";
-
-  IfStream << "// Dirty Hack: Only C function is supported now.\n"
-              "#ifdef __cplusplus\n"
-              "extern \"C\" {\n"
-              "#endif\n\n";
-   
   // Print the interface function.
-  const Type *retty = printFunctionSignature(IfStream, F);
+  const Type *retty = printFunctionSignature(Stream, F);
   // And the function body.
-  IfStream << "{\n";
+  Stream << "{\n";
 
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
 
-  IfStream << "  // Reset the module if we first time invoke the module.\n";
-  IfStream << "  if (sim_time == 0) \n";
+  Stream << "  // Reset the module if we first time invoke the module.\n";
+  Stream << "  if (sim_time == 0) \n";
   assignInPort(VASTModule::RST, 0, 4);
 
   // Run several cycles.
-  IfStream << '\n';
+  Stream << '\n';
   evalHalfCycle();
-  IfStream << "  // Deassert reset\n";
+  Stream << "  // Deassert reset\n";
   assignInPort(VASTModule::RST, 1);
   evalHalfCycle();
 
-  IfStream << '\n';
+  Stream << '\n';
   evalHalfCycle();
   evalHalfCycle();
-  IfStream << "  assert(!" << getPortVal(VASTModule::Finish)
+  Stream << "  assert(!" << getPortVal(VASTModule::Finish)
            << "&& \"Module finished before start!\");\n";
 
-  IfStream << '\n';
-  IfStream<< "  // Setup the parameters.\n";
+  Stream << '\n';
+  Stream<< "  // Setup the parameters.\n";
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
        I != E; ++I) {
     std::string ArgName = GetValueName(I);
-    IfStream.indent(2) << VLTModInstName << '.' << ArgName
+    Stream.indent(2) << VLTModInstName << '.' << ArgName
                        << " = " << ArgName << ";\n";
   }
 
-  IfStream << '\n';
-  IfStream << "  // Start the module.\n";
+  Stream << '\n';
+  Stream << "  // Start the module.\n";
   assignInPort(VASTModule::Start, 1);
 
-  IfStream << "  // Remember the start time.\n"
-              "  long start_time = sim_time;\n";
+  Stream << "  // Remember the start time.\n"
+            "  long start_time = sim_time;\n";
 
-  IfStream<< "  // Commit the signals.\n";
+  Stream<< "  // Commit the signals.\n";
   evalHalfCycle(2);
 
-  IfStream << "\n\n\n"
-              "  // The main evalation loop.\n"
-              "  do {\n";
+  Stream << "\n\n\n"
+            "  // The main evalation loop.\n"
+            "  do {\n";
   // TODO: Check system bus.
 
-  IfStream << '\n';
-  IfStream << "    // Check if the module finish its job at last.\n";
-  IfStream << "    if (" << getPortVal(VASTModule::Finish) << ") {\n";
+  Stream << '\n';
+  Stream << "    // Check if the module finish its job at last.\n";
+  Stream << "    if (" << getPortVal(VASTModule::Finish) << ") {\n";
   // TODO: Print the totoal spent cycle number if necessary.
 
-  IfStream << "      return";
+  Stream << "      return";
 
   // If the function return something?
   if (!retty->isVoidTy()) {
-    IfStream << " (";
+    Stream << " (";
     // Cast the return value, and we only support simple type as return type now.
-    printSimpleType(IfStream, retty, false);
+    printSimpleType(Stream, retty, false);
     // FIXME: Find the correct name for the return value port.
-    IfStream << ")" << VLTModInstName << ".return_value;\n";  
+    Stream << ")" << VLTModInstName << ".return_value;\n";  
   } else
-    IfStream << ";\n";
+    Stream << ";\n";
   
-  IfStream << "    }\n";
+  Stream << "    }\n";
 
-  IfStream << '\n';
+  Stream << '\n';
 
   evalHalfCycle(4);
   assignInPort(VASTModule::Start, 0, 4);
 
-  IfStream << " } while(!Verilated::gotFinish()"
+  Stream << " } while(!Verilated::gotFinish()"
               // TODO: allow user to custom the maximum simulation time.
               // FIXME: The result is wrong if sim_time just overflow.
               " && (sim_time - start_time) < 0x1000);\n";
 
-  IfStream << '\n';
+  Stream << '\n';
   // TODO: Allow user to custom the error handling.
-  IfStream << "  assert(0 "
+  Stream << "  assert(0 "
               "&& \"Something went wrong during the simulation!\");\n";
   if (!retty->isVoidTy()) {
-    IfStream << "  return 0;\n";
+    Stream << "  return 0;\n";
   }
   // End function body.
-  IfStream << "}\n";
+  Stream << "}\n\n";
 
-  IfStream << "// Dirty Hack: Only C function is supported now.\n"
-              "#ifdef __cplusplus\n"
-              "}\n"
-              "#endif\n";
-
-  Fout.keep();
-  // IfStream.flush();
   return false;
 }

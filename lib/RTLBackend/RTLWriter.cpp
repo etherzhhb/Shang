@@ -46,8 +46,8 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 char RTLInfo::ID = 0;
 
-Pass *llvm::createRTLInfoPass(VTargetMachine &TM, raw_ostream &O) {
-  return new RTLInfo(TM, O);
+Pass *llvm::createRTLInfoPass(VTargetMachine &TM) {
+  return new RTLInfo(TM);
 }
 
 INITIALIZE_PASS_BEGIN(RTLInfo, "vtm-rtl-info",
@@ -59,11 +59,11 @@ INITIALIZE_PASS_END(RTLInfo, "vtm-rtl-info",
                     false, true)
 
 RTLInfo::RTLInfo() : MachineFunctionPass(ID),
-  VTM((VTargetMachine&)TheVBackendTarget), Out(fouts()) {
+  VTM((VTargetMachine&)TheVBackendTarget), Out() {
   initializeRTLInfoPass(*PassRegistry::getPassRegistry());
 }
-RTLInfo::RTLInfo(VTargetMachine &TM, raw_ostream &O) 
-  : MachineFunctionPass(ID), VTM(TM), Out(O), VM(0), 
+RTLInfo::RTLInfo(VTargetMachine &TM) 
+  : MachineFunctionPass(ID), VTM(TM), Out(), VM(0), 
     TotalFSMStatesBit(0), CurFSMStateNum(0), Mang(0) {
   initializeRTLInfoPass(*PassRegistry::getPassRegistry());
 }
@@ -75,7 +75,8 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   BLI = &getAnalysis<BitLevelInfo>();
 
   // FIXME: Demangle the c++ name.
-  VM = new VASTModule(MF->getFunction()->getNameStr());
+  // Dirty Hack: Force the module have the name of the hw subsystem.
+  VM = new VASTModule(VTM.getHWSubSysName());
   emitFunctionSignature();
 
   // Emit control register and idle state

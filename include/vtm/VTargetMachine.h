@@ -18,13 +18,6 @@
 #ifndef VTARGETMACHINE_H
 #define VTARGETMACHINE_H
 
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetData.h"
-
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetData.h"
-#include "llvm/Target/TargetFrameInfo.h"
-
 #include "vtm/VInstrInfo.h"
 #include "vtm/VISelLowering.h"
 #include "vtm/VSelectionDAGInfo.h"
@@ -32,7 +25,16 @@
 // TODO:
 // #include "VIntrinsicInfo.h"
 
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetData.h"
+
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetData.h"
+#include "llvm/Target/TargetFrameInfo.h"
+
+
 namespace llvm {
+class tool_output_file;
 
 struct VTargetMachine : public LLVMTargetMachine {
   // FIXME
@@ -43,7 +45,21 @@ struct VTargetMachine : public LLVMTargetMachine {
   VInstrInfo InstrInfo;
   InstrItineraryData  InstrItins;
 
+  // The directory for output files. 
   std::string OutFilesDir;
+
+  // The The name of the hardware sub system. 
+  std::string HWSubSysName;
+
+  // Configuration accessor.
+  std::string getOutFilePath(const std::string &Name,
+                             const std::string &Suffix) const;
+
+  const std::string &getHWSubSysName() const {
+    return HWSubSysName;
+  }
+
+  tool_output_file *getOutFile(const std::string &Suffix) const;
 
   /// mapping allocated instences to atom
   VFUDesc *ResSet[VFUs::NumCommonFUs];
@@ -96,11 +112,6 @@ struct VTargetMachine : public LLVMTargetMachine {
 
   template<class BinOpResType>
   void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes);
-
-  // Configuration accessor.
-  const std::string &getOutFilesDir() const {
-    return OutFilesDir;
-  } 
 
   template<class ResType>
   ResType *getFUDesc() const {

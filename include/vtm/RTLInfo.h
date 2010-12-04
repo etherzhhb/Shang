@@ -26,6 +26,10 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/OwningPtr.h"
+
+#include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 namespace llvm {
 class VFuncInfo;
@@ -40,9 +44,11 @@ class TargetRegisterClass;
 
 
 class RTLInfo : public MachineFunctionPass {
-  raw_ostream &Out;
-  MachineFunction *MF;
+  OwningPtr<tool_output_file> FOut;
+  formatted_raw_ostream Out;
   VTargetMachine &VTM;
+
+  MachineFunction *MF;
   VFuncInfo *FuncInfo;
   MachineRegisterInfo *MRI;
   BitLevelInfo *BLI;
@@ -134,7 +140,7 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  RTLInfo(VTargetMachine &TM, raw_ostream &O);
+  RTLInfo(VTargetMachine &TM);
   RTLInfo();
 
   ~RTLInfo();
@@ -143,12 +149,17 @@ public:
 
   bool doInitialization(Module &M) {
     MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
-    assert(MMI && " MachineModuleInfo will always available in a machine function pass!");
+    assert(MMI && "MachineModuleInfo will always available"
+                  " in a machine function pass!");
     Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
+
+    FOut.reset(VTM.getOutFile("v"));
+    Out.setStream(FOut->os());
     return false;
   }
 
   bool doFinalization(Module &M) {
+    FOut->keep();
     delete Mang;
     return false;
   }
