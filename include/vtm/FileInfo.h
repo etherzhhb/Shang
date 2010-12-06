@@ -23,6 +23,11 @@ struct VTargetMachine;
 class tool_output_file;
 
 class FileInfo{
+  // DO NOT IMPLEMENT
+  FileInfo(const FileInfo&);
+  // DO NOT IMPLEMENT
+  const FileInfo &operator=(const FileInfo&);
+
   // Write all contents to stdout, for debug use.
   bool WriteAllToStdOut;
 
