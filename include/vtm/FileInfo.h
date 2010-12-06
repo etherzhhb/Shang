@@ -58,7 +58,7 @@ public:
     return HWSubSysName;
   }
 
-  tool_output_file *getOutFile(const std::string &Suffix);
+  tool_output_file *getOutFile(const std::string &Suffix, unsigned Flags = 0);
 };
 
 FileInfo &vtmfiles();

@@ -5,6 +5,7 @@
 #include "vtm/VTargetMachine.h"
 
 #include "vtm/FileInfo.h"
+#include "vtm/PartitionInfo.h"
 
 #include "VMCAsmInfo.h"
 
@@ -93,6 +94,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                          CodeGenFileType FileType,
                                          CodeGenOpt::Level OptLevel,
                                          bool DisableVerify) {
+  // Perform software/hardware partition.
+  PM.add(createFunctionFilterPass());
+  
   // Standard LLVM-Level Passes.
 
   // Before running any passes, run the verifier to determine if the input
@@ -275,11 +279,15 @@ void VTargetMachine::initializeTarget() {
       .property("OutFilesDir", &FileInfo::getOutFilesDir,
                                &FileInfo::setOutFilesDir)
       .def_readwrite("HWSubSysName", &FileInfo::HWSubSysName)
-      .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut)
+      .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
+
+    luabind::class_<PartitionInfo>("PartitionInfo")
+      .def("setHardware", &PartitionInfo::setHardware)
   ];
 
   luabind::globals(ScriptState)["Config"] = this;
   luabind::globals(ScriptState)["Paths"] = &vtmfiles();
+  luabind::globals(ScriptState)["Partition"] = &partition();
 
   luaL_dofile(ScriptState, ConfigScriptName.c_str());
 
