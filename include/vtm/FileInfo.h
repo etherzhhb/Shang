@@ -35,7 +35,7 @@ class FileInfo{
   std::string OutFilesDir;
 
   // The The name of the hardware sub system. 
-  std::string HWSubSysName;
+  std::string SystemName;
 
   SmallVector<tool_output_file*, 2> OpenedFiles;
 
@@ -43,9 +43,12 @@ class FileInfo{
   std::string getOutFilePath(const std::string &Name,
                              const std::string &Suffix) const;
 
+  tool_output_file *getOutFile(const std::string &Name,
+                               const std::string &Suffix,
+                               unsigned Flags = 0);
 
   bool writeAllToStdOut() const {
-    return HWSubSysName.empty() || WriteAllToStdOut;
+    return SystemName.empty() || WriteAllToStdOut;
   }
 
   void setOutFilesDir(const std::string &Val);
@@ -59,11 +62,15 @@ public:
   FileInfo() : WriteAllToStdOut(false) {}
   ~FileInfo();
 
-  const std::string &getHWSubSysName() const {
-    return HWSubSysName;
+  const std::string &getSystemName() const {
+    return SystemName;
   }
 
-  tool_output_file *getOutFile(const std::string &Suffix, unsigned Flags = 0);
+  tool_output_file *getRTLOut() { return getOutFile("_RTL", "v"); }
+
+  tool_output_file *getIFDvrOut() { return getOutFile("_IF", "cpp"); }
+
+  tool_output_file *getSWOut() { return getOutFile("_SW", "ll"); }
 };
 
 FileInfo &vtmfiles();

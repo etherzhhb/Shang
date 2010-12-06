@@ -75,7 +75,7 @@ bool RTLInfo::doInitialization(Module &M) {
     " in a machine function pass!");
   Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
 
-  FOut = vtmfiles().getOutFile("v");
+  FOut = vtmfiles().getRTLOut();
   Out.setStream(FOut->os());
   return false;
 }
@@ -88,7 +88,7 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
-  VM = new VASTModule(vtmfiles().getHWSubSysName());
+  VM = new VASTModule(vtmfiles().getSystemName());
   emitFunctionSignature();
 
   // Emit control register and idle state

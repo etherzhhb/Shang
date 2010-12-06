@@ -32,7 +32,8 @@ void FileInfo::setOutFilesDir(const std::string &Val) {
     report_fatal_error("Bad output file directory: " + OutFilesDir);
 }
 
-tool_output_file *FileInfo::getOutFile(const std::string &Suffix,
+tool_output_file *FileInfo::getOutFile(const std::string &Name,
+                                       const std::string &Suffix,
                                        unsigned Flags) {
   // Do not open stdout twice.
   if (writeAllToStdOut() && !OpenedFiles.empty()) {
@@ -40,7 +41,7 @@ tool_output_file *FileInfo::getOutFile(const std::string &Suffix,
     return OpenedFiles.front();
   }
 
-  std::string FileName = getOutFilePath(HWSubSysName, Suffix);
+  std::string FileName = getOutFilePath(SystemName + Name, Suffix);
   std::string error;
 
   tool_output_file *File = new tool_output_file(FileName.c_str(), error, Flags);

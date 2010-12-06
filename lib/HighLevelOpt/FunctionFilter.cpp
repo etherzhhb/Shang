@@ -70,7 +70,7 @@ bool FunctionFilter::runOnModule(Module &M) {
 
   // TODO: We may rename the entry function, too.
 
-  tool_output_file *Out(vtmfiles().getOutFile("ll"));
+  tool_output_file *Out(vtmfiles().getSWOut());
   OwningPtr<AssemblyAnnotationWriter> Annotator;
 
   SoftMod->print(Out->os(), Annotator.get());

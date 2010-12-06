@@ -278,7 +278,7 @@ void VTargetMachine::initializeTarget() {
     luabind::class_<FileInfo>("FileInfo")
       .property("OutFilesDir", &FileInfo::getOutFilesDir,
                                &FileInfo::setOutFilesDir)
-      .def_readwrite("HWSubSysName", &FileInfo::HWSubSysName)
+      .def_readwrite("SystemName", &FileInfo::SystemName)
       .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
 
     luabind::class_<PartitionInfo>("PartitionInfo")

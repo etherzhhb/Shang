@@ -401,11 +401,11 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
-    FOut = vtmfiles().getOutFile("cpp");
+    FOut = vtmfiles().getIFDvrOut();
 
     Stream.setStream(FOut->os());
 
-    std::string HWSubSysName = vtmfiles().getHWSubSysName();
+    std::string HWSubSysName = vtmfiles().getSystemName();
 
     // Setup the Name of the module in verilator.
     VLTClassName = "V" + HWSubSysName;
