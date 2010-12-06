@@ -1,9 +1,11 @@
 
 //===----------------------------------------------------------------------===//
 
-
 #include "vtm/Passes.h"
 #include "vtm/VTargetMachine.h"
+
+#include "vtm/FileInfo.h"
+
 #include "VMCAsmInfo.h"
 
 #include "llvm/PassManager.h"
@@ -63,7 +65,7 @@ VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
   Subtarget(TT, FS),
   TLInfo(*this),
   TSInfo(*this),
-  InstrInfo(DataLayout, TLInfo), WriteAllToStdOut(false) {
+  InstrInfo(DataLayout, TLInfo) {
 
   for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
     ResSet[i] = 0;
@@ -229,7 +231,6 @@ VTargetMachine::~VTargetMachine() {
   for (iterator I = begin(), E = end(); I != E; ++I)
     if(*I) delete *I;
 
-  DeleteContainerPointers(OpenedFiles);
 }
 
 //===----------------------------------------------------------------------===//
@@ -256,7 +257,6 @@ void VTargetMachine::setupMemBus(unsigned latency, unsigned startInt,
 
 void VTargetMachine::initializeTarget() {
   std::string ErrMsg;
-  std::string OutFilesDir;
 
   lua_State *ScriptState = lua_open();
 
@@ -269,54 +269,19 @@ void VTargetMachine::initializeTarget() {
       .def("setupASR",    &VTargetMachine::setupBinOpRes<VFUASR>)
       .def("setupLSR",    &VTargetMachine::setupBinOpRes<VFULSR>)
       .def("setupAddSub", &VTargetMachine::setupBinOpRes<VFUAddSub>)
-      .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>)
-      .def_readwrite("OutFilesDir", &VTargetMachine::OutFilesDir)
-      .def_readwrite("HWSubSysName", &VTargetMachine::HWSubSysName)
-      .def_readwrite("WriteAllToStdOut", &VTargetMachine::WriteAllToStdOut)
+      .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>),
+
+    luabind::class_<FileInfo>("FileInfo")
+      .property("OutFilesDir", &FileInfo::getOutFilesDir,
+                               &FileInfo::setOutFilesDir)
+      .def_readwrite("HWSubSysName", &FileInfo::HWSubSysName)
+      .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut)
   ];
 
   luabind::globals(ScriptState)["Config"] = this;
+  luabind::globals(ScriptState)["Paths"] = &vtmfiles();
 
   luaL_dofile(ScriptState, ConfigScriptName.c_str());
 
   lua_close(ScriptState);
-
-  sys::Path OFDir(OutFilesDir);
-  if (!OFDir.isEmpty() && !OFDir.isDirectory())
-    report_fatal_error("Bad output file directory: " + OutFilesDir);
-
-  if (HWSubSysName.empty())
-    WriteAllToStdOut = true;
 }
-
-std::string VTargetMachine::getOutFilePath(const std::string &Name,
-                                           const std::string &Suffix) const {
-  if (WriteAllToStdOut) return "-";
-
-  sys::Path OFDir(OutFilesDir);
-  OFDir.appendComponent(Name);
-  OFDir.appendSuffix(Suffix);
-
-  return std::string(OFDir.c_str());
-} 
-
-tool_output_file *VTargetMachine::getOutFile(const std::string &Suffix) {
-  // Do not open stdout twice.
-  if (WriteAllToStdOut && !OpenedFiles.empty()) {
-    assert(OpenedFiles.size() == 1 && "Unexpected opened files number!");
-    return OpenedFiles.front();
-  }
-  
-  std::string FileName = getOutFilePath(HWSubSysName, Suffix);
-  std::string error;
-
-  tool_output_file *File = new tool_output_file(FileName.c_str(), error);
-  if (!error.empty()) {
-    report_fatal_error("Can not open file " + FileName + ": " + error);
-    return 0;
-  }
-
-  OpenedFiles.push_back(File);
-  return File;
-}
-

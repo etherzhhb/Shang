@@ -136,6 +136,7 @@ target_link_libraries (LLVMVerilogBackend
   VTMSchedule
   VTMRTLBackend
   VTMIFBackend
+  VTMConfigs
   ${LUA_LIBRARY}
   ${LUABIND_LIBRARY})
 

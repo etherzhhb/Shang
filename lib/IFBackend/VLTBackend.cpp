@@ -20,6 +20,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/RTLInfo.h"
+#include "vtm/FileInfo.h"
 
 #include "llvm/Function.h"
 #include "llvm/DerivedTypes.h"
@@ -400,11 +401,11 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
-    FOut = VTM.getOutFile("cpp");
+    FOut = vtmfiles().getOutFile("cpp");
 
     Stream.setStream(FOut->os());
 
-    std::string HWSubSysName = VTM.getHWSubSysName();
+    std::string HWSubSysName = vtmfiles().getHWSubSysName();
 
     // Setup the Name of the module in verilator.
     VLTClassName = "V" + HWSubSysName;

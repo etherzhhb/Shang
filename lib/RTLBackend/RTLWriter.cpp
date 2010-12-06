@@ -21,6 +21,7 @@
 #include "vtm/Passes.h"
 #include "vtm/RTLInfo.h"
 #include "vtm/BitLevelInfo.h"
+#include "vtm/FileInfo.h"
 
 #include "llvm/Type.h"
 
@@ -68,6 +69,17 @@ RTLInfo::RTLInfo(VTargetMachine &TM)
   initializeRTLInfoPass(*PassRegistry::getPassRegistry());
 }
 
+bool RTLInfo::doInitialization(Module &M) {
+  MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
+  assert(MMI && "MachineModuleInfo will always available"
+    " in a machine function pass!");
+  Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
+
+  FOut = vtmfiles().getOutFile("v");
+  Out.setStream(FOut->os());
+  return false;
+}
+
 bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FuncInfo = MF->getInfo<VFuncInfo>();
@@ -76,7 +88,7 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
-  VM = new VASTModule(VTM.getHWSubSysName());
+  VM = new VASTModule(vtmfiles().getHWSubSysName());
   emitFunctionSignature();
 
   // Emit control register and idle state

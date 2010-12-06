@@ -45,27 +45,6 @@ struct VTargetMachine : public LLVMTargetMachine {
   VInstrInfo InstrInfo;
   InstrItineraryData  InstrItins;
 
-  // Write all contents to stdout, for debug use.
-  bool WriteAllToStdOut;
-
-  // The directory for output files. 
-  std::string OutFilesDir;
-
-  // The The name of the hardware sub system. 
-  std::string HWSubSysName;
-
-  SmallVector<tool_output_file*, 2> OpenedFiles;
-
-  // Configuration accessor.
-  std::string getOutFilePath(const std::string &Name,
-                             const std::string &Suffix) const;
-
-  const std::string &getHWSubSysName() const {
-    return HWSubSysName;
-  }
-
-  tool_output_file *getOutFile(const std::string &Suffix);
-
   /// mapping allocated instences to atom
   VFUDesc *ResSet[VFUs::NumCommonFUs];
 

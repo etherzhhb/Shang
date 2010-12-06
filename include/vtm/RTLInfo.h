@@ -146,16 +146,7 @@ public:
 
   VASTModule *getRTLModule() const { return VM; }
 
-  bool doInitialization(Module &M) {
-    MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
-    assert(MMI && "MachineModuleInfo will always available"
-                  " in a machine function pass!");
-    Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
-
-    FOut = VTM.getOutFile("v");
-    Out.setStream(FOut->os());
-    return false;
-  }
+  bool doInitialization(Module &M);
 
   bool doFinalization(Module &M) {
     Out.flush();
