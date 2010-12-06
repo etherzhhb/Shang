@@ -133,6 +133,7 @@ add_llvm_target(VerilogBackend
 
 target_link_libraries (LLVMVerilogBackend
   VTMBitLevelOpt
+  VTMHighLevelOpt
   VTMSchedule
   VTMRTLBackend
   VTMIFBackend

@@ -30,6 +30,8 @@ class PassRegistry;
 struct VTargetMachine;
 struct VRegisterInfo;
 
+Pass *createFunctionFilterPass();
+
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 
