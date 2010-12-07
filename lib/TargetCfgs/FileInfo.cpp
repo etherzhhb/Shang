@@ -57,7 +57,7 @@ tool_output_file *FileInfo::getOutFile(const std::string &Name,
 
 std::string FileInfo::getOutFilePath(const std::string &Name,
                                      const std::string &Suffix) const {
-  if (WriteAllToStdOut) return "-";
+  if (writeAllToStdOut()) return "-";
 
   sys::Path OFDir(OutFilesDir);
   OFDir.appendComponent(Name);
