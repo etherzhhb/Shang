@@ -119,7 +119,7 @@ static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
 
   // If we not try to exchange the operands, exchange and try again.
   if (!ExchangeOperand)
-    return PerformAddCombine(N, TLI, DCI, !ExchangeOperand);
+    return PerformXorCombine(N, TLI, DCI, !ExchangeOperand);
 
   return SDValue();
 }
