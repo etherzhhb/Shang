@@ -66,6 +66,10 @@ public:
     return SystemName;
   }
 
+  std::string getHWSubSysName() const {
+    return SystemName + "_RTL";
+  }
+
   tool_output_file *getRTLOut() { return getOutFile("_RTL", "v"); }
 
   tool_output_file *getIFDvrOut() { return getOutFile("_IF", "cpp"); }

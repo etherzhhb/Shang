@@ -405,7 +405,7 @@ struct VLTIfWriter : public MachineFunctionPass {
 
     Stream.setStream(FOut->os());
 
-    std::string HWSubSysName = vtmfiles().getSystemName();
+    std::string HWSubSysName = vtmfiles().getHWSubSysName();
 
     // Setup the Name of the module in verilator.
     VLTClassName = "V" + HWSubSysName;
