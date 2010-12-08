@@ -99,7 +99,6 @@ tablegen(VGenSubtarget.inc -gen-subtarget)
 
 
 add_llvm_target(VerilogBackend
-  MicroState.cpp
   VBackend.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
@@ -107,7 +106,9 @@ add_llvm_target(VerilogBackend
   VMCAsmInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
-  VSubtarget.cpp)
+  VSubtarget.cpp
+#  lib/HighLevelOpt/FunctionFilter.cpp
+)
 
 target_link_libraries (LLVMVerilogBackend
   VTMBitLevelOpt
@@ -115,10 +116,8 @@ target_link_libraries (LLVMVerilogBackend
   VTMSchedule
   VTMRTLBackend
   VTMIFBackend
-  VTMTargetCfgs
-  ${LUA_LIBRARY}
-  ${LUABIND_LIBRARY})
-
+  VTMTargetCfgs)
+  
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(test)

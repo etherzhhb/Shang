@@ -162,7 +162,6 @@ template<enum VFUs::FUTypes T>
 class VFUBinOpFUDesc : public VFUDesc {
   unsigned MaxBitWidth;
 
-protected:
   VFUBinOpFUDesc(unsigned latency, unsigned startInt, unsigned totalRes,
                  unsigned maxBitWidth)
     : VFUDesc(T, latency, startInt, totalRes), MaxBitWidth(maxBitWidth) {}
@@ -184,15 +183,10 @@ public:
   static VFUs::FUTypes getType() { return T; };
 };
 
-EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::Mult>);
 typedef VFUBinOpFUDesc<VFUs::Mult>    VFUMult;
-EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::AddSub>);
 typedef VFUBinOpFUDesc<VFUs::AddSub>  VFUAddSub;
-EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::SHL>);
 typedef VFUBinOpFUDesc<VFUs::SHL>     VFUSHL;
-EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::ASR>);
 typedef VFUBinOpFUDesc<VFUs::ASR>     VFUASR;
-EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::LSR>);
 typedef VFUBinOpFUDesc<VFUs::LSR>     VFULSR;
 
 class FUInfo {
@@ -214,10 +208,10 @@ class FUInfo {
                       64);
   }
 
-  template<class BinOpResType>
+  template<enum VFUs::FUTypes T>
   void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes) {
-    ResSet[BinOpResType::getType() - VFUs::FirstFUType]
-      = new BinOpResType(latency, startInt, totalRes,
+    ResSet[T - VFUs::FirstFUType]
+      = new VFUBinOpFUDesc<T>(latency, startInt, totalRes,
                           // Dirty Hack.
                           64);
   }

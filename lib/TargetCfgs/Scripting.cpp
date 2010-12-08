@@ -54,11 +54,11 @@ struct LuaConstraints {
     luabind::module(State)[
       luabind::class_<FUInfo>("FUInfo")
         .def("setupMemBus", &FUInfo::setupMemBus)
-        .def("setupSHL",    &FUInfo::setupBinOpRes<VFUSHL>)
-        .def("setupASR",    &FUInfo::setupBinOpRes<VFUASR>)
-        .def("setupLSR",    &FUInfo::setupBinOpRes<VFULSR>)
-        .def("setupAddSub", &FUInfo::setupBinOpRes<VFUAddSub>)
-        .def("setupMult",   &FUInfo::setupBinOpRes<VFUMult>),
+        .def("setupSHL",    &FUInfo::setupBinOpRes<VFUs::SHL>)
+        .def("setupASR",    &FUInfo::setupBinOpRes<VFUs::ASR>)
+        .def("setupLSR",    &FUInfo::setupBinOpRes<VFUs::LSR>)
+        .def("setupAddSub", &FUInfo::setupBinOpRes<VFUs::AddSub>)
+        .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>),
 
       luabind::class_<FileInfo>("FileInfo")
         .property("OutFilesDir", &FileInfo::getOutFilesDir,

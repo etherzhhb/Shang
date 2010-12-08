@@ -14,4 +14,10 @@ add_llvm_library(VTMTargetCfgs
   Scripting.cpp
 )
 
+target_link_libraries (
+  VTMTargetCfgs
+  ${LUA_LIBRARY}
+  ${LUABIND_LIBRARY}
+)
+
 add_dependencies(VTMTargetCfgs VerilogBackendTable_gen)
