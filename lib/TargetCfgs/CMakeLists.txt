@@ -14,6 +14,8 @@ add_llvm_library(VTMTargetCfgs
   Scripting.cpp
 )
 
+llvm_config(VTMTargetCfgs support)
+
 target_link_libraries (
   VTMTargetCfgs
   ${LUA_LIBRARY}
