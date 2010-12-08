@@ -14,9 +14,3 @@
 #include "vtm/PartitionInfo.h"
 
 using namespace llvm;
-
-PartitionInfo &llvm::partition() {
-  static PartitionInfo Info;
-
-  return Info;
-}

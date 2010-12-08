@@ -77,7 +77,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     }
 
     VTFInfo SrcTID = SrcInstr->getDesc();
-    unsigned latency = SrcTID.getLatency(VTarget);
+    unsigned latency = SrcTID.getLatency();
 
     if (DstInstr == 0) return latency;
 
@@ -355,8 +355,6 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   VTFInfo VTID = MI->getDesc();
-
-  VFUs::FUTypes FUTy = VTID.getFUType();
   
   if (VTID->isTerminator()) {
     // Build the schedule unit for terminators later. 
@@ -364,7 +362,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     return;
   }
 
-  unsigned Latency = VTID.getLatency(VTarget);
+  unsigned Latency = VTID.getLatency();
 
   FuncUnitId Id = VTID.getPrebindFUId();
 

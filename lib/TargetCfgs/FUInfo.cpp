@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/FUs.h"
+#include "vtm/FUInfo.h"
+
+#include "llvm/ADT/STLExtras.h"
 
 using namespace llvm;
 
@@ -25,3 +27,13 @@ void VFUDesc::print(raw_ostream &OS) const {
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
 }
 
+
+FUInfo::FUInfo() {
+  for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
+    ResSet[i] = 0;
+}
+
+FUInfo::~FUInfo() {
+  for (iterator I = begin(), E = end(); I != E; ++I)
+    if(*I) delete *I;
+}

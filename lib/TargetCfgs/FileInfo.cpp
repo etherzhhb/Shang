@@ -65,9 +65,3 @@ std::string FileInfo::getOutFilePath(const std::string &Name,
 
   return std::string(OFDir.c_str());
 }
-
-FileInfo &llvm::vtmfiles() {
-  static FileInfo Files;
-
-  return Files;
-}

@@ -27,7 +27,7 @@
 using namespace llvm;
 
 namespace llvm {
-struct VTargetMachine;
+class VTargetMachine;
 class ForceDirectedSchedulingBase {
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;

@@ -34,9 +34,8 @@
 
 
 namespace llvm {
-class tool_output_file;
 
-struct VTargetMachine : public LLVMTargetMachine {
+class VTargetMachine : public LLVMTargetMachine {
   // FIXME
   const TargetData DataLayout;
   VSubtarget Subtarget;
@@ -45,16 +44,11 @@ struct VTargetMachine : public LLVMTargetMachine {
   VInstrInfo InstrInfo;
   InstrItineraryData  InstrItins;
 
-  /// mapping allocated instences to atom
-  VFUDesc *ResSet[VFUs::NumCommonFUs];
-
   // FIXME
   // TargetFrameInfo FrameInfo;
   // VIntrinsicInfo IntrinsicInfo;
-
+public:
   VTargetMachine(const Target &T, const std::string &TT, const std::string &FS);
-
-  ~VTargetMachine();
 
   virtual const VInstrInfo *getInstrInfo() const { return &InstrInfo; }
   // virtual const TargetFrameInfo *getFrameInfo() const { return &FrameInfo; }
@@ -88,41 +82,6 @@ struct VTargetMachine : public LLVMTargetMachine {
   bool addPassesToEmitFile(PassManagerBase &, formatted_raw_ostream &,
                            CodeGenFileType, CodeGenOpt::Level,
                            bool /* = true */);
-
-  void initializeTarget();
-
-  // Configuration function.
-  void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes);
-
-  template<class BinOpResType>
-  void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes);
-
-  template<class ResType>
-  ResType *getFUDesc() const {
-    return cast<ResType>(getFUDesc(ResType::getType()));
-  }
-
-  VFUDesc *getFUDesc(enum VFUs::FUTypes T) const {
-    unsigned idx = (unsigned)T - (unsigned)VFUs::FirstFUType;
-    assert(ResSet[idx] && "Bad resource!");
-    return ResSet[idx];
-  }
-
-  typedef VFUDesc *const * iterator;
-  typedef const VFUDesc *const * const_iterator;
-
-  iterator begin() { return &ResSet[0]; }
-  const_iterator begin() const { return &ResSet[0]; }
-
-  iterator end() { 
-    return begin() + (size_t)VFUs::LastCommonFUType -
-      (size_t)VFUs::FirstFUType;
-  }
-
-  const_iterator end() const { 
-    return begin() + (size_t)VFUs::LastCommonFUType -
-      (size_t)VFUs::FirstFUType;
-  }
 };
 extern Target TheVBackendTarget;
 

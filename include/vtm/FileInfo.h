@@ -19,7 +19,7 @@
 #include <string>
 
 namespace llvm {
-struct VTargetMachine;
+class VTargetMachine;
 class tool_output_file;
 
 class FileInfo{
@@ -57,7 +57,7 @@ class FileInfo{
     return OutFilesDir;
   }
 
-  friend struct VTargetMachine;
+  friend struct ConstraintsParser;
 public:
   FileInfo() : WriteAllToStdOut(false) {}
   ~FileInfo();

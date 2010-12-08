@@ -127,7 +127,6 @@ static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
 static  SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
                                   TargetLowering::DAGCombinerInfo &DCI) {
   SDValue Op = N->getOperand(0);
-  SelectionDAG &DAG = DCI.DAG;
 
   // ~(~A) = A.
   if (Op->getOpcode() == VTMISD::Not) return Op->getOperand(0);

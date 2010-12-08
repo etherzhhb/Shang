@@ -13,8 +13,9 @@
 
 #ifndef VTM_FUNCTION_UNIT_H
 #define VTM_FUNCTION_UNIT_H
-
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
@@ -119,7 +120,7 @@ class VFUMemBus : public VFUDesc {
     : VFUDesc(VFUs::MemoryBus, latency, startInt, totalRes),
     AddrWidth(addrWidth), DataWidth(dataWidth) {}
 
-  friend struct VTargetMachine;
+  friend class FUInfo;
 public:
   unsigned getAddrWidth() const { return AddrWidth; }
   unsigned getDataWidth() const { return DataWidth; }
@@ -155,51 +156,110 @@ public:
   }
 };
 
-class VFUBinOpResType : public VFUDesc {
+
+
+template<enum VFUs::FUTypes T>
+class VFUBinOpFUDesc : public VFUDesc {
   unsigned MaxBitWidth;
 
 protected:
-  VFUBinOpResType(VFUs::FUTypes T, unsigned latency, unsigned startInt,
-    unsigned totalRes, unsigned maxBitWidth)
+  VFUBinOpFUDesc(unsigned latency, unsigned startInt, unsigned totalRes,
+                 unsigned maxBitWidth)
     : VFUDesc(T, latency, startInt, totalRes), MaxBitWidth(maxBitWidth) {}
-
+    
+  friend class FUInfo;
 public:
   unsigned getMaxBitWidth() const { return MaxBitWidth; }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VFUBinOpResType *A) { return true; }
+  template<enum VFUs::FUTypes OtherT>
+  static inline bool classof(const VFUBinOpFUDesc<OtherT> *A) {
+    return T == OtherT;
+  }
   static inline bool classof(const VFUDesc *A) {
-    return A->getType() == VFUs::AddSub
-      || A->getType() == VFUs::SHL
-      || A->getType() == VFUs::ASR
-      || A->getType() == VFUs::LSR
-      || A->getType() == VFUs::Mult;
+    return A->getType() == T;
+  }
+  static std::string getTypeName() { return "TODO"; }
+
+  static VFUs::FUTypes getType() { return T; };
+};
+
+EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::Mult>);
+typedef VFUBinOpFUDesc<VFUs::Mult>    VFUMult;
+EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::AddSub>);
+typedef VFUBinOpFUDesc<VFUs::AddSub>  VFUAddSub;
+EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::SHL>);
+typedef VFUBinOpFUDesc<VFUs::SHL>     VFUSHL;
+EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::ASR>);
+typedef VFUBinOpFUDesc<VFUs::ASR>     VFUASR;
+EXTERN_TEMPLATE_INSTANTIATION(class VFUBinOpFUDesc<VFUs::LSR>);
+typedef VFUBinOpFUDesc<VFUs::LSR>     VFULSR;
+
+class FUInfo {
+  // DO NOT IMPLEMENT
+  FUInfo(const FUInfo&);
+  // DO NOT IMPLEMENT
+  const FUInfo &operator=(const FUInfo&);
+
+  /// mapping allocated instences to atom
+  VFUDesc *ResSet[VFUs::NumCommonFUs];
+
+  // Configuration function.
+  void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes) {
+    ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
+      = new VFUMemBus(latency, startInt, totalRes,
+                      64,
+                      //DataLayout.getPointerSizeInBits(),
+                      // Dirty Hack.
+                      64);
+  }
+
+  template<class BinOpResType>
+  void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes) {
+    ResSet[BinOpResType::getType() - VFUs::FirstFUType]
+      = new BinOpResType(latency, startInt, totalRes,
+                          // Dirty Hack.
+                          64);
+  }
+
+  friend struct ConstraintsParser;
+public:
+  
+  FUInfo();
+
+  ~FUInfo();
+
+  template<class ResType>
+  ResType *getFUDesc() const {
+    return cast<ResType>(getFUDesc(ResType::getType()));
+  }
+
+  VFUDesc *getFUDesc(enum VFUs::FUTypes T) const {
+    unsigned idx = (unsigned)T - (unsigned)VFUs::FirstFUType;
+    assert(ResSet[idx] && "Bad resource!");
+    return ResSet[idx];
+  }
+
+  typedef VFUDesc *const * iterator;
+  typedef const VFUDesc *const * const_iterator;
+
+  iterator begin() { return &ResSet[0]; }
+  const_iterator begin() const { return &ResSet[0]; }
+
+  iterator end() { 
+    return begin() + (size_t)VFUs::LastCommonFUType -
+      (size_t)VFUs::FirstFUType;
+  }
+
+  const_iterator end() const { 
+    return begin() + (size_t)VFUs::LastCommonFUType -
+      (size_t)VFUs::FirstFUType;
   }
 };
 
-#define BINOPRESTYPECLASS(Name) \
-class VFU##Name : public VFUBinOpResType { \
-  unsigned MaxBitWidth; \
-  VFU##Name(unsigned latency, unsigned startInt, unsigned totalRes, \
-  unsigned maxBitWidth) \
-  : VFUBinOpResType(VFUs::##Name, latency, startInt, totalRes, \
-  maxBitWidth) \
-{} \
-  friend struct VTargetMachine; \
-public: \
-  static inline bool classof(const VFU##Name *A) { return true; } \
-  static inline bool classof(const VFUDesc *A) { \
-  return A->getType() == VFUs::##Name; \
-} \
-  static std::string getTypeName() { return #Name; } \
-  static VFUs::FUTypes getType() { return VFUs::##Name; } \
-}
 
-BINOPRESTYPECLASS(Mult);
-BINOPRESTYPECLASS(AddSub);
-BINOPRESTYPECLASS(SHL);
-BINOPRESTYPECLASS(ASR);
-BINOPRESTYPECLASS(LSR);
+FUInfo &vtmfus();
+
 }
 
 #endif

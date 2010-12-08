@@ -20,7 +20,7 @@
 
 
 namespace llvm {
-struct VTargetMachine;
+class VTargetMachine;
 
 class PartitionInfo {
 
@@ -35,7 +35,7 @@ class PartitionInfo {
     HWFunctions.insert(S);
   }
 
-  friend struct VTargetMachine;
+  friend struct ConstraintsParser;
 public:
   PartitionInfo() {}
 

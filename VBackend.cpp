@@ -33,16 +33,6 @@
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
-// Include the lua headers (the extern "C" is a requirement because we're
-// using C++ and lua has been compiled as C code)
-extern "C" {
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
-}
-
-// This is the only header we need to include for LuaBind to work
-#include "luabind/luabind.hpp"
 
 using namespace llvm;
 
@@ -67,11 +57,6 @@ VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
   TLInfo(*this),
   TSInfo(*this),
   InstrInfo(DataLayout, TLInfo) {
-
-  for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
-    ResSet[i] = 0;
-  
-  initializeTarget();
 }
 
 bool VTargetMachine::addInstSelector(PassManagerBase &PM,
@@ -229,67 +214,4 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // TODO: Select difference interface writer pass based on user's choice.
   PM.add(createVLTIfWriterPass(*this));
   return false;
-}
-
-VTargetMachine::~VTargetMachine() {
-  for (iterator I = begin(), E = end(); I != E; ++I)
-    if(*I) delete *I;
-
-}
-
-//===----------------------------------------------------------------------===//
-/// Resource config implement
-
-template<class BinOpResType>
-void VTargetMachine::setupBinOpRes(unsigned latency, unsigned startInt,
-                                   unsigned totalRes) {
-  ResSet[BinOpResType::getType() - VFUs::FirstFUType]
-    = new BinOpResType(latency, startInt, totalRes,
-                       // Dirty Hack.
-                       64);
-}
-
-
-void VTargetMachine::setupMemBus(unsigned latency, unsigned startInt,
-                                 unsigned totalRes) {
-  ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
-    = new VFUMemBus(latency, startInt, totalRes,
-                    DataLayout.getPointerSizeInBits(),
-                    // Dirty Hack.
-                    64);
-}
-
-void VTargetMachine::initializeTarget() {
-  std::string ErrMsg;
-
-  lua_State *ScriptState = lua_open();
-
-  luabind::open(ScriptState);
-
-  luabind::module(ScriptState)[
-    luabind::class_<VTargetMachine>("VTargetMachine")
-      .def("setupMemBus", &VTargetMachine::setupMemBus)
-      .def("setupSHL",    &VTargetMachine::setupBinOpRes<VFUSHL>)
-      .def("setupASR",    &VTargetMachine::setupBinOpRes<VFUASR>)
-      .def("setupLSR",    &VTargetMachine::setupBinOpRes<VFULSR>)
-      .def("setupAddSub", &VTargetMachine::setupBinOpRes<VFUAddSub>)
-      .def("setupMult",   &VTargetMachine::setupBinOpRes<VFUMult>),
-
-    luabind::class_<FileInfo>("FileInfo")
-      .property("OutFilesDir", &FileInfo::getOutFilesDir,
-                               &FileInfo::setOutFilesDir)
-      .def_readwrite("SystemName", &FileInfo::SystemName)
-      .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
-
-    luabind::class_<PartitionInfo>("PartitionInfo")
-      .def("setHardware", &PartitionInfo::setHardware)
-  ];
-
-  luabind::globals(ScriptState)["Config"] = this;
-  luabind::globals(ScriptState)["Paths"] = &vtmfiles();
-  luabind::globals(ScriptState)["Partition"] = &partition();
-
-  luaL_dofile(ScriptState, ConfigScriptName.c_str());
-
-  lua_close(ScriptState);
 }

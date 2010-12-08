@@ -19,7 +19,7 @@
 
 namespace llvm {
 class FunctionPass;
-struct VTargetMachine;
+class VTargetMachine;
 
 FunctionPass *createVISelDag(VTargetMachine &TM, CodeGenOpt::Level OptLevel);
 

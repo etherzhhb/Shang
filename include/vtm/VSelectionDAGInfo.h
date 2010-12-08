@@ -18,7 +18,7 @@
 
 namespace llvm {
 
-struct VTargetMachine;
+class VTargetMachine;
 
 class VSelectionDAGInfo : public TargetSelectionDAGInfo {
 public:

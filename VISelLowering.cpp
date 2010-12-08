@@ -116,7 +116,7 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
   default:
     assert(0 && "Unknown SDNode!");
-    return "<???>";
+    return "???";
   case VTMISD::InArg:      return "VTMISD::InArg";
   case VTMISD::Ret:        return "VTMISD::Ret";
   case VTMISD::RetVal:     return "VTMISD::RetVal";
@@ -141,7 +141,6 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
   assert(!isVarArg && "VarArg not support yet!");
 
   typedef const SmallVectorImpl<ISD::InputArg> IAVec;
-  MachineFunction &MF = DAG.getMachineFunction();
 
   unsigned Idx = 0;
   for (IAVec::const_iterator I = Ins.begin(), E = Ins.end(); I != E; ++I) {
@@ -170,9 +169,8 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                              const SmallVectorImpl<SDValue> &OutVals,
                              DebugLoc dl, SelectionDAG &DAG) const {
   typedef const SmallVectorImpl<ISD::OutputArg> OAVec;
-  MachineFunction &MF = DAG.getMachineFunction();
-
   unsigned Idx = 0;
+
   for (OAVec::const_iterator I = Outs.begin(), E = Outs.end(); I != E; ++I) {
     // Get the argument form InArg Node.
 
@@ -439,8 +437,7 @@ SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
 
 SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
   SDValue Operand = Op.getOperand(0);
-  unsigned SrcSize = computeSizeInBits(Operand),
-           DstSize = Op.getValueSizeInBits();
+  unsigned DstSize = Op.getValueSizeInBits();
 
   // Select the lower bit slice to truncate values.
   return getBitSlice(DAG, Op.getDebugLoc(), Operand, DstSize, 0);

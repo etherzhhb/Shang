@@ -27,7 +27,7 @@ class raw_ostream;
 class TargetMachine;
 class PassRegistry;
 
-struct VTargetMachine;
+class VTargetMachine;
 struct VRegisterInfo;
 
 Pass *createFunctionFilterPass();

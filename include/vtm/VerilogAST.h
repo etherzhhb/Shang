@@ -267,7 +267,7 @@ std::string verilogConstToStr(Constant *C);
 std::string verilogConstToStr(uint64_t value,unsigned bitwidth,
                               bool isMinValue);
 
-std::string verilogBitRange(unsigned UB, int LB = 0, bool printOneBit = true);
+std::string verilogBitRange(unsigned UB, unsigned LB = 0, bool printOneBit = true);
 
 raw_ostream &verilogCommentBegin(raw_ostream &ss);
 

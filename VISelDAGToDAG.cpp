@@ -184,11 +184,3 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   return SelectCode(N);
 }
-
-static void UpdateNodeOperand(SelectionDAG &DAG, SDNode *N, unsigned Num,
-                              SDValue Val) {
-  SmallVector<SDValue, 8> ops(N->op_begin(), N->op_end());
-  ops[Num] = Val;
-  SDNode *New = DAG.UpdateNodeOperands(N, ops.data(), ops.size());
-  DAG.ReplaceAllUsesWith(N, New);
-}

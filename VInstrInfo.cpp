@@ -29,16 +29,6 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
   {}
 
-unsigned VTFInfo::getLatency(const VTargetMachine &VTC) const {
-  VFUs::FUTypes ResTy = getFUType();
-
-  if (ResTy == VFUs::Trivial)
-    return getTrivialLatency();
-
-  return VTC.getFUDesc(ResTy)->getLatency();
-}
-
-
 FuncUnitId VTFInfo::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemAccess)

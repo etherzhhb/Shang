@@ -59,13 +59,13 @@ INITIALIZE_PASS_END(RTLInfo, "vtm-rtl-info",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-RTLInfo::RTLInfo() : MachineFunctionPass(ID),
-  VTM((VTargetMachine&)TheVBackendTarget), Out() {
+RTLInfo::RTLInfo() : MachineFunctionPass(ID), Out() ,
+  VTM((VTargetMachine&)TheVBackendTarget) {
   initializeRTLInfoPass(*PassRegistry::getPassRegistry());
 }
 RTLInfo::RTLInfo(VTargetMachine &TM) 
-  : MachineFunctionPass(ID), VTM(TM), Out(), VM(0), 
-    TotalFSMStatesBit(0), CurFSMStateNum(0), Mang(0) {
+  : MachineFunctionPass(ID), Out(), VTM(TM), VM(0), Mang(0), 
+    TotalFSMStatesBit(0), CurFSMStateNum(0) {
   initializeRTLInfoPass(*PassRegistry::getPassRegistry());
 }
 
@@ -263,7 +263,7 @@ void RTLInfo::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VFuncInfo::const_id_iterator id_iterator;
 
-  VFUMemBus *MemBus = VTM.getFUDesc<VFUMemBus>();
+  VFUMemBus *MemBus = vtmfus().getFUDesc<VFUMemBus>();
 
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
@@ -462,8 +462,9 @@ unsigned RTLInfo::getOperandWitdh(MachineOperand &Operand) {
     MetaToken MetaOp(Operand.getMetadata());
     return MetaOp.getBitWidth(); 
   }
+  default:
+    assert(0 && "Unknown bitwidth!");
   }
-  assert(0 && "Unknown bitwidth!");
   return 0;
 }
 
@@ -505,6 +506,8 @@ void RTLInfo::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   case MachineOperand::MO_MachineBasicBlock:
     OS << getStateName(Operand.getMBB());
     return;
+  default:
+    assert(0 && "Unknown Operand type!");
   }
 }
 

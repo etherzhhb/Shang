@@ -372,7 +372,7 @@ VSUnit *IteractiveModuloScheduling::findBlockingSUnit(unsigned FUClass,
                                                       unsigned step) {
   for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
     VSUnit *A = *I;
-    if (!A->isScheduled() || A->getFUType() != FUClass)
+    if (!A->isScheduled() || A->getFUType() != (VFUs::FUTypes)FUClass)
       continue;
     if (A->getSlot() == step) return A; 
   }

@@ -25,7 +25,7 @@
 using namespace llvm;
 
 INITIALIZE_PASS(BitLevelInfo, "vtm-bli", "Verilog Target Machine - "
-                "Bit Level Information Analysis", false, true);
+                "Bit Level Information Analysis", false, true)
 
 Pass *llvm::createBitLevelInfoPass() {
   return new BitLevelInfo();

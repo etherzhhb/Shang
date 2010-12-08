@@ -236,7 +236,7 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
     }
     double AverageDG = TotalDG / AvailableSteps;
     // The upper bound of error: Only 0.5 extra functional unit need.
-    double e = 0.5 / AvailableSteps;
+    // double e = 0.5 / AvailableSteps;
     DEBUG(dbgs() << AverageDG << '\n');
     // FIXME: Get the totalFU of a specific resource class.
     //if (AverageDG > I->first->getTotalFUs() + e)

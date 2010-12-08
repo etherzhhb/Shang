@@ -22,7 +22,7 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
-#include "vtm/FUs.h"
+#include "vtm/FUInfo.h"
 
 #include "llvm/Assembly/Writer.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -42,7 +42,7 @@ class ForceDirectedSchedulingBase;
 class FuncUnitId;
 class VSUnit;
 class VSchedGraph;
-struct VTargetMachine;
+class VTargetMachine;
 
 class MachineBasicBlock;
 class MachineInstr;
@@ -75,7 +75,7 @@ protected:
          bool isBackEdge = false)
     : EdgeType(T), Src(src), Latancy(latancy), ItDst(Dst),
     IsBackEdge(isBackEdge) {
-    assert(!isBackEdge || Dst != 0
+    assert((!isBackEdge || Dst != 0)
            && "Back edge must have a non-zero iterate distance!");
   }
 public:
@@ -376,7 +376,7 @@ public:
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
   /// purposes.
-  virtual void print(raw_ostream &OS) const;
+  void print(raw_ostream &OS) const;
 
   /// dump - This method is used for debugging.
   ///
@@ -446,6 +446,7 @@ class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
 private:
+  const VTargetMachine &TM;
   MachineBasicBlock *MBB;
   SUnitVecTy SUnits;
 
@@ -453,7 +454,6 @@ private:
   unsigned short II;
   const unsigned short startSlot;
   bool HaveSelfLoop;
-  const VTargetMachine &TM;
 
   /// Scheduling implementation.
   void scheduleLinear(ForceDirectedSchedulingBase *Scheduler);

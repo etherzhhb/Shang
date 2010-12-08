@@ -15,7 +15,7 @@
 #ifndef VTM_FUNCTION_INFO_H
 #define VTM_FUNCTION_INFO_H
 
-#include "vtm/FUs.h"
+#include "vtm/FUInfo.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/StringPool.h"

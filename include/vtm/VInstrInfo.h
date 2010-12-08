@@ -15,8 +15,8 @@
 #ifndef VINSTRUCTIONINFO_H
 #define VINSTRUCTIONINFO_H
 
-#include "vtm/FUs.h"
-#include "VRegisterInfo.h"
+#include "vtm/FUInfo.h"
+#include "vtm/VRegisterInfo.h"
 
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetOpcodes.h"
@@ -74,7 +74,14 @@ public:
   }
 
   // Get the latency of a specific type of Instruction.
-  unsigned getLatency(const VTargetMachine &VTC) const;
+  unsigned getLatency() const {
+    VFUs::FUTypes ResTy = getFUType();
+
+    if (ResTy == VFUs::Trivial)
+      return getTrivialLatency();
+
+    return vtmfus().getFUDesc(ResTy)->getLatency();
+  }
 
   inline bool isReadAtEmit() const {
     switch (TID.getOpcode()) {

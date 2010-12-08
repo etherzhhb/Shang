@@ -106,13 +106,11 @@ struct MicroStateBuilder {
   MicroStateBuilder(VSchedGraph &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  WireNum(MBB.getNumber()),
-  OpId(MBB.getNumber() << 24),
+  WireNum(MBB.getNumber()), OpId(MBB.getNumber() << 24),
   VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
-  VFI(*MBB.getParent()->getInfo<VFuncInfo>()),
-  DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/),
-  BLI(BitInfo) {}
+  VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
+  DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}
 
   ~MicroStateBuilder() {
     while (!InstsToDel.empty()) {
@@ -342,7 +340,6 @@ static inline bool top_sort_finish(const VSUnit* LHS, const VSUnit* RHS) {
 }
 
 MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
-  const TargetInstrInfo *TII = TM.getInstrInfo();
   unsigned CurSlot = startSlot;
   VFuncInfo *VFI = MBB->getParent()->getInfo<VFuncInfo>();
 

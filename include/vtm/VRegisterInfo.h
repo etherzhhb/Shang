@@ -16,6 +16,8 @@
 #define VINREGISTERINFO_H
 
 #include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+
 #include "llvm/ADT/SmallVector.h"
 #include "VGenRegisterInfo.h.inc"
 

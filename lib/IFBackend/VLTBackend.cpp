@@ -358,11 +358,11 @@ struct VLTIfWriter : public MachineFunctionPass {
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
 
-  VLTIfWriter() : MachineFunctionPass(ID),
-    VTM((VTargetMachine&)TheVBackendTarget), Stream() {}
+  VLTIfWriter() : MachineFunctionPass(ID), FOut(0), Stream(),
+    VTM((VTargetMachine&)TheVBackendTarget), RTLMod(0) {}
 
-  VLTIfWriter(VTargetMachine &TM) : MachineFunctionPass(ID),
-    VTM(TM), Stream() {}
+  VLTIfWriter(VTargetMachine &TM) : MachineFunctionPass(ID), FOut(0),
+    Stream(), VTM(TM), RTLMod(0) {}
 
   void assignInPort(VASTModule::PortTypes T, const std::string &Val,
                     unsigned ind = 2) {

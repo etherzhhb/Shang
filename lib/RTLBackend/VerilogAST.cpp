@@ -34,26 +34,10 @@
 
 using namespace llvm;
 
-// Helper functions
-static std::string VLangMangle(const std::string &S) {
-  std::string Result;
-
-  for (unsigned i = 0, e = S.size(); i != e; ++i)
-    if (isalnum(S[i]) || S[i] == '_') {
-      Result += S[i];
-    } else {
-      Result += '_';
-      Result += 'A'+(S[i]&15);
-      Result += 'A'+((S[i]>>4)&15);
-      Result += '_';
-    }
-  return Result;
-}
-
 //===----------------------------------------------------------------------===//
 // Value and type printing
 
-std::string llvm::verilogBitRange(unsigned UB, int LB, bool printOneBit) {
+std::string llvm::verilogBitRange(unsigned UB, unsigned LB, bool printOneBit) {
   std::stringstream bw;
   --UB;
   if (UB != LB) 
