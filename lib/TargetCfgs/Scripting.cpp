@@ -15,6 +15,7 @@
 #include "vtm/PartitionInfo.h"
 
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ManagedStatic.h"
 
 // This is the only header we need to include for LuaBind to work
 #include "luabind/luabind.hpp"
@@ -29,6 +30,10 @@ extern "C" {
 }
 
 using namespace llvm;
+
+static cl::opt<std::string>
+ConstraintsFile("vtm-constraint",
+                cl::desc("The constraints script for the synthesis target."));
 
 namespace llvm {
 struct LuaConstraints {
@@ -45,66 +50,51 @@ struct LuaConstraints {
   
   LuaConstraints() : State(lua_open()) {
     luabind::open(State);
+
+    luabind::module(State)[
+      luabind::class_<FUInfo>("FUInfo")
+        .def("setupMemBus", &FUInfo::setupMemBus)
+        .def("setupSHL",    &FUInfo::setupBinOpRes<VFUSHL>)
+        .def("setupASR",    &FUInfo::setupBinOpRes<VFUASR>)
+        .def("setupLSR",    &FUInfo::setupBinOpRes<VFULSR>)
+        .def("setupAddSub", &FUInfo::setupBinOpRes<VFUAddSub>)
+        .def("setupMult",   &FUInfo::setupBinOpRes<VFUMult>),
+
+      luabind::class_<FileInfo>("FileInfo")
+        .property("OutFilesDir", &FileInfo::getOutFilesDir,
+        &FileInfo::setOutFilesDir)
+        .def_readwrite("SystemName", &FileInfo::SystemName)
+        .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
+
+      luabind::class_<PartitionInfo>("PartitionInfo")
+        .def("setHardware", &PartitionInfo::setHardware)
+    ];
+
+    luabind::globals(State)["FUs"] = &FUI;
+    luabind::globals(State)["Paths"] = &FileI;
+    luabind::globals(State)["Partition"] = &PartitionI;
+
+    luaL_dofile(State, ConstraintsFile.c_str());
+
   }
 
   ~LuaConstraints() {
     lua_close(State);
   }
 };
-
-struct ConstraintsParser : public cl::basic_parser<LuaConstraints> {
-  // parse - Return true on error.
-  bool parse(cl::Option &O, StringRef ArgName, const std::string &ArgValue,
-             LuaConstraints &Val);
-};
 }
 
-bool ConstraintsParser::parse(cl::Option &O, StringRef ArgName,
-                              const std::string &ArgValue, LuaConstraints &Val) {
-  lua_State *ScriptState = Val.State;
-
-  luabind::module(ScriptState)[
-    luabind::class_<FUInfo>("FUInfo")
-      .def("setupMemBus", &FUInfo::setupMemBus)
-      .def("setupSHL",    &FUInfo::setupBinOpRes<VFUSHL>)
-      .def("setupASR",    &FUInfo::setupBinOpRes<VFUASR>)
-      .def("setupLSR",    &FUInfo::setupBinOpRes<VFULSR>)
-      .def("setupAddSub", &FUInfo::setupBinOpRes<VFUAddSub>)
-      .def("setupMult",   &FUInfo::setupBinOpRes<VFUMult>),
-
-      luabind::class_<FileInfo>("FileInfo")
-        .property("OutFilesDir", &FileInfo::getOutFilesDir,
-                  &FileInfo::setOutFilesDir)
-        .def_readwrite("SystemName", &FileInfo::SystemName)
-        .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
-
-      luabind::class_<PartitionInfo>("PartitionInfo")
-        .def("setHardware", &PartitionInfo::setHardware)
-  ];
-
-  luabind::globals(ScriptState)["FUs"] = &Val.FUI;
-  luabind::globals(ScriptState)["Paths"] = &Val.FileI;
-  luabind::globals(ScriptState)["Partition"] = &Val.PartitionI;
-
-  luaL_dofile(ScriptState, ArgValue.c_str());
-
-  return false;
-}
-
-
-static cl::opt<LuaConstraints, false, ConstraintsParser>
-DesignConstraints("vtm-constraint",
-                 cl::desc("The constraints script for the synthesis target."));
+static ManagedStatic<LuaConstraints> Constraints;
 
 
 FUInfo &llvm::vtmfus() {
-  return DesignConstraints.getValue().FUI;
+  return Constraints->FUI;
 }
 
 FileInfo &llvm::vtmfiles() {
-  return DesignConstraints.getValue().FileI;
+  return Constraints->FileI;
 }
 
 PartitionInfo &llvm::partition() {
-  return DesignConstraints.getValue().PartitionI;
+  return Constraints->PartitionI;
 }

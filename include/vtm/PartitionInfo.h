@@ -35,7 +35,7 @@ class PartitionInfo {
     HWFunctions.insert(S);
   }
 
-  friend struct ConstraintsParser;
+  friend struct LuaConstraints;
 public:
   PartitionInfo() {}
 

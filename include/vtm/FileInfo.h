@@ -57,7 +57,7 @@ class FileInfo{
     return OutFilesDir;
   }
 
-  friend struct ConstraintsParser;
+  friend struct LuaConstraints;
 public:
   FileInfo() : WriteAllToStdOut(false) {}
   ~FileInfo();

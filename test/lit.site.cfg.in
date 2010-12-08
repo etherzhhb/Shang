@@ -21,7 +21,7 @@ except KeyError,e:
 config.substitutions.append(('%llc-with-config',
                             os.path.join(config.llvm_tools_dir, 'llc')
                             + ' -march=verilog'
-                            + ' -vtm-config-script='
+                            + ' -vtm-constraint='
                               + os.path.join(config.vtm_src_root, 'test', 'config.lua')))
 
 # Let the main config do the real work.

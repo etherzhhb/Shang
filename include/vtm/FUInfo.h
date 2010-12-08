@@ -222,7 +222,7 @@ class FUInfo {
                           64);
   }
 
-  friend struct ConstraintsParser;
+  friend struct LuaConstraints;
 public:
   
   FUInfo();
