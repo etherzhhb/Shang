@@ -97,8 +97,6 @@ tablegen(VGenAsmWriter.inc -gen-asm-writer)
 tablegen(VGenDAGISel.inc -gen-dag-isel)
 tablegen(VGenSubtarget.inc -gen-subtarget)
 
-set(LLVM_REQUIRES_RTTI 1)
-set(LLVM_REQUIRES_EH 1)
 
 add_llvm_target(VerilogBackend
   MicroState.cpp

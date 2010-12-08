@@ -8,3 +8,5 @@ add_llvm_library(VTMSchedule
   VPreRegAllocSched.cpp
   RegAllocOptimalSSA.cpp
 )
+
+add_dependencies(VTMSchedule VerilogBackendTable_gen)
