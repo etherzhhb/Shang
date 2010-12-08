@@ -1,13 +1,10 @@
 
 //===----------------------------------------------------------------------===//
+#include "VMCAsmInfo.h"
 
 #include "vtm/Passes.h"
 #include "vtm/VTargetMachine.h"
 
-#include "vtm/FileInfo.h"
-#include "vtm/PartitionInfo.h"
-
-#include "VMCAsmInfo.h"
 
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
@@ -21,24 +18,11 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
 
-#include "llvm/ADT/STLExtras.h"
-
-#include "llvm/Support/ToolOutputFile.h"
-#include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ErrorHandling.h"
-
-#include "llvm/Support/Path.h"
-
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
 
 using namespace llvm;
-
-//===----------------------------------------------------------------------===//
-static cl::opt<std::string>
-ConfigScriptName("vtm-config-script", cl::desc("vtm - The vtm config script."));
 
 //===----------------------------------------------------------------------===//
 
