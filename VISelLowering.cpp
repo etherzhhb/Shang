@@ -295,29 +295,29 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   // Negative.
   SDValue N = getSignBit(DAG, dl, Result);
   SDValue NN = getNot(DAG, dl, N);
+
+  //   Sub:
+  //   Overflow -> (LHSSign != RHSSign) && (LHSSign != SumSign)
   SDValue LHSSign = getSignBit(DAG,dl, LHS);
   SDValue RHSSign = getSignBit(DAG,dl, RHS);
-  // (Signed) Overflow = Sign(Res) ^ Sign(LHS) ^ Sign(RHS)
-  SDValue V = DAG.getNode(ISD::XOR, dl, MVT::i1, 
+  SDValue V = DAG.getNode(ISD::AND, dl, MVT::i1,
                           DAG.getNode(ISD::XOR, dl, MVT::i1,
                                       LHSSign, RHSSign),
-                          N);
+                          DAG.getNode(ISD::XOR, dl, MVT::i1,
+                                      LHSSign, N));
   SDValue NV = getNot(DAG, dl, V);
   // Zero.
   SDValue NZ = getReductionOp(DAG, VTMISD::ROr, dl, Result);
   SDValue Z = getNot(DAG, dl, NZ);
 
   // N != V <=> N xor V == 1 <==> N xor N xor Sign(LHS) xor Sign(RHS)
-  SDValue NNotEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, LHSSign, RHSSign);
+  SDValue NNotEQV = DAG.getNode(ISD::XOR, dl, MVT::i1, N, V);
   // N == V <=> NN != V <=> NN xor V == 1
   SDValue NEQV = getNot(DAG, dl, NNotEQV);
 
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
 
   switch (Cnd->get()) {
-  default:
-    assert(0 && "Bad condition code!");
-    return SDValue();
   // Z==0
   case ISD::SETNE:  return NZ;
   // Z==1
@@ -338,6 +338,9 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   case ISD::SETULT: return NC;
   // (C==0) || (Z==1)
   case ISD::SETULE: return DAG.getNode(ISD::OR, dl, MVT::i1, NC, Z);
+  default:
+    assert(0 && "Bad condition code!");
+    return SDValue();
   }
 }
 
@@ -399,8 +402,8 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                      StoreVal, LSNode->getBasePtr(),
                      // Is load?
                      DAG.getConstant(isLoad, MVT::i1),
-                     // SizeInfo.
-                     DAG.getConstant(VT.getSimpleVT().getSizeInBits(),
+                     // Size in byte.
+                     DAG.getConstant(VT.getStoreSize(),
                                      MVT::i8) };
 
   unsigned DataBusWidth = vtmfus().getFUDesc<VFUMemBus>()->getDataWidth();
