@@ -47,8 +47,8 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 char RTLInfo::ID = 0;
 
-Pass *llvm::createRTLInfoPass(VTargetMachine &TM) {
-  return new RTLInfo(TM);
+Pass *llvm::createRTLInfoPass() {
+  return new RTLInfo();
 }
 
 INITIALIZE_PASS_BEGIN(RTLInfo, "vtm-rtl-info",
@@ -59,21 +59,17 @@ INITIALIZE_PASS_END(RTLInfo, "vtm-rtl-info",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-RTLInfo::RTLInfo() : MachineFunctionPass(ID), Out() ,
-  VTM((VTargetMachine&)TheVBackendTarget) {
-  initializeRTLInfoPass(*PassRegistry::getPassRegistry());
-}
-RTLInfo::RTLInfo(VTargetMachine &TM) 
-  : MachineFunctionPass(ID), Out(), VTM(TM), VM(0), Mang(0), 
-    TotalFSMStatesBit(0), CurFSMStateNum(0) {
+RTLInfo::RTLInfo() : MachineFunctionPass(ID), Out() {
   initializeRTLInfoPass(*PassRegistry::getPassRegistry());
 }
 
 bool RTLInfo::doInitialization(Module &M) {
   MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
-  assert(MMI && "MachineModuleInfo will always available"
+  TargetData *TD = getAnalysisIfAvailable<TargetData>();
+
+  assert(MMI && TD && "MachineModuleInfo and TargetData will always available"
     " in a machine function pass!");
-  Mang = new Mangler(MMI->getContext(), *VTM.getTargetData());
+  Mang = new Mangler(MMI->getContext(), *TD);
 
   FOut = vtmfiles().getRTLOut();
   Out.setStream(FOut->os());

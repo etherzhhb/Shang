@@ -19,7 +19,6 @@
 #include <string>
 
 namespace llvm {
-class VTargetMachine;
 class tool_output_file;
 
 class FileInfo{

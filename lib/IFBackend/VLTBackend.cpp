@@ -353,16 +353,12 @@ struct VLTIfWriter : public MachineFunctionPass {
 
   tool_output_file *FOut;
   formatted_raw_ostream Stream;
-  VTargetMachine &VTM;
 
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
 
   VLTIfWriter() : MachineFunctionPass(ID), FOut(0), Stream(),
-    VTM((VTargetMachine&)TheVBackendTarget), RTLMod(0) {}
-
-  VLTIfWriter(VTargetMachine &TM) : MachineFunctionPass(ID), FOut(0),
-    Stream(), VTM(TM), RTLMod(0) {}
+    RTLMod(0) {}
 
   void assignInPort(VASTModule::PortTypes T, const std::string &Val,
                     unsigned ind = 2) {
@@ -449,8 +445,8 @@ struct VLTIfWriter : public MachineFunctionPass {
 };
 } //end anonymous namespace
 
-Pass *llvm::createVLTIfWriterPass(VTargetMachine &TM) {
-  return new VLTIfWriter(TM);
+Pass *llvm::createVLTIfWriterPass() {
+  return new VLTIfWriter();
 }
 
 char VLTIfWriter::ID = 0;

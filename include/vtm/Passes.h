@@ -45,10 +45,10 @@ FunctionPass *createOptimalSSARegisterAllocator();
 FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
 
 // RTL writer.
-Pass *createRTLInfoPass(VTargetMachine &TM);
+Pass *createRTLInfoPass();
 
 // Verilator interface writer.
-Pass *createVLTIfWriterPass(VTargetMachine &TM);
+Pass *createVLTIfWriterPass();
 
 //
 void initializeBitLevelInfoPass(PassRegistry &Registry);

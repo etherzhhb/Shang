@@ -45,7 +45,6 @@ class TargetRegisterClass;
 class RTLInfo : public MachineFunctionPass {
   tool_output_file *FOut;
   formatted_raw_ostream Out;
-  VTargetMachine &VTM;
 
   MachineFunction *MF;
   VFuncInfo *FuncInfo;
@@ -139,7 +138,6 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  RTLInfo(VTargetMachine &TM);
   RTLInfo();
 
   ~RTLInfo();

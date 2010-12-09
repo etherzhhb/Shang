@@ -20,7 +20,6 @@
 
 
 namespace llvm {
-class VTargetMachine;
 
 class PartitionInfo {
 

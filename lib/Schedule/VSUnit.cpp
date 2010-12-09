@@ -53,7 +53,6 @@ struct MicroStateBuilder {
   unsigned WireNum;
   unsigned OpId;
   LLVMContext &VMContext;
-  const VTargetMachine &Target;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
   VFuncInfo &VFI;
@@ -107,7 +106,7 @@ struct MicroStateBuilder {
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
   WireNum(MBB.getNumber()), OpId(MBB.getNumber() << 24),
-  VMContext(Context), Target(TM), TII(*TM.getInstrInfo()),
+  VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
   DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}

@@ -1,7 +1,23 @@
 
 //===----------------------------------------------------------------------===//
 #include "VMCAsmInfo.h"
-
+//===- VerilogTargetMachine.h - TargetMachine for Verilog Backend -*- C++ -*-===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file implement the Verilog TargetMachine, we can leverage existing llvm
+// low level optimization with Verilog TargetMachine by:
+//   Translate LLVM IR to Verilog TargetMachine Code, perform low level
+//     optimization.
+//   Translate Verilog TargetMachine code to schedule units and perform schedule.
+//   Perform register allocation with existing register allocation passes.
+//
+//===----------------------------------------------------------------------===//
 #include "vtm/Passes.h"
 #include "vtm/VTargetMachine.h"
 
@@ -193,9 +209,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // PM.add(createFastRegisterAllocator());
 
-  PM.add(createRTLInfoPass(*this));
+  PM.add(createRTLInfoPass());
 
   // TODO: Select difference interface writer pass based on user's choice.
-  PM.add(createVLTIfWriterPass(*this));
+  PM.add(createVLTIfWriterPass());
   return false;
 }
