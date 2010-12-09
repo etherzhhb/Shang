@@ -7,4 +7,4 @@ entry:
 }
 
 ; CHECK:   assign entryBB0_wire1 = ~ reg2[31:0];
-; CHECK:   assign {entryBB0_wire3, entryBB0_wire2} = reg3[31:0] + entryBB0_wire1 + 1'hf;
+; CHECK:   assign {entryBB0_wire3, entryBB0_wire2} = reg3[31:0] + entryBB0_wire1 + 1'h1;

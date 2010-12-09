@@ -71,17 +71,24 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
                                     bool isMinValue) {
   std::stringstream pc;
   pc <<bitwidth<< "'h";
-  if(isMinValue)
+  // Mask the value that small than 4 bit to prevent printing something
+  // like 1'hf out.
+  if (bitwidth < 4)
+    value &= (1 << bitwidth) - 1;
+
+  if(isMinValue) {
     pc<<std::hex<<value;
-  else{
-    std::stringstream ss;
-    ss<<std::hex<<value;
-    unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
-    std::string sout=ss.str();
-    if(uselength<sout.length())
-      sout=sout.substr(sout.length()-uselength,uselength);
-    pc<<sout;
+    return pc.str();
   }
+
+  std::stringstream ss;
+  ss<<std::hex<<value;
+  unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
+  std::string sout = ss.str();
+  if(uselength < sout.length())
+    sout=sout.substr(sout.length()-uselength,uselength);
+  pc<<sout;
+
   return pc.str();
 }
 
