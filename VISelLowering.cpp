@@ -388,27 +388,47 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
 
   EVT VT = isLoad ? Op.getValueType()
                   : cast<StoreSDNode>(Op)->getValue().getValueType();
-  
+  unsigned VTSize = VT.getSizeInBits();
+
   SDValue StoreVal = isLoad ? DAG.getConstant(0, VT)
                             : cast<StoreSDNode>(Op)->getValue();
-  
+
   SDValue SDOps[] = {// The chain.
                      LSNode->getChain(), 
                      // The Value to store (if any), and the address.
                      StoreVal, LSNode->getBasePtr(),
                      // Is load?
-                     DAG.getConstant(isLoad, MVT::i1) };
+                     DAG.getConstant(isLoad, MVT::i1),
+                     // SizeInfo.
+                     DAG.getConstant(VT.getSimpleVT().getSizeInBits(),
+                                     MVT::i8) };
 
+  unsigned DataBusWidth = vtmfus().getFUDesc<VFUMemBus>()->getDataWidth();
+  assert(DataBusWidth >= VTSize && "Unexpect large data!");
+
+  MVT DataBusVT =
+    EVT::getIntegerVT(*DAG.getContext(), DataBusWidth).getSimpleVT();  
+
+  DebugLoc dl =  Op.getDebugLoc();
   SDValue Result  =
-    DAG.getMemIntrinsicNode(VTMISD::MemAccess, Op.getDebugLoc(),
+    DAG.getMemIntrinsicNode(VTMISD::MemAccess, dl,
                             // Result and the chain.
-                            DAG.getVTList(VT, MVT::Other),
+                            DAG.getVTList(DataBusVT, MVT::Other),
                             // SDValue operands
                             SDOps, array_lengthof(SDOps), 
                             // Memory operands.
                             LSNode->getMemoryVT(), LSNode->getMemOperand());
+  if (isLoad) {
+    // Truncate the data bus, the system bus should place the valid data start
+    // from LSM.
+    if (DataBusWidth > VTSize) {
+      SDValue TrunVal = getBitSlice(DAG, dl, Result, VTSize, 0);
+      DAG.ReplaceAllUsesOfValueWith(Op, TrunVal);
+    }
 
-  return isLoad ? Result : SDValue(Result.getNode(), 1);
+    return Result;
+  } else
+    return SDValue(Result.getNode(), 1);
 }
 
 SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,

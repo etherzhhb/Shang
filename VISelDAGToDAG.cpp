@@ -142,7 +142,7 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
   MemOp[0] = cast<MemSDNode>(N)->getMemOperand();
 
   SDValue Ops[] = { N->getOperand(1), N->getOperand(2), N->getOperand(3),
-                    N->getOperand(0) };
+                    N->getOperand(4), N->getOperand(0) };
   SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpMemAccess, N->getVTList(),
                                      Ops, array_lengthof(Ops));
 

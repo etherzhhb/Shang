@@ -38,9 +38,12 @@ def SDT_ADDC : SDTypeProfile<2, 3, [
 def VTMADD		:	SDNode<"VTMISD::ADD", SDT_ADDC>;
 
 
-def SDTMemAccess : SDTypeProfile<1, 3, [        
+def SDTMemAccess : SDTypeProfile<1, 4, [        
   SDTCisPtrTy<1>, // Address
   SDTCisVT<3, i1>, // Is load?
+  // Size Info, the rtl backend should interpret this according the bus
+  // standard.
+  SDTCisVT<4, i8>,
   // The Store value type must have the same type as the load value.
   SDTCisSameAs<0, 2>
 ]>;
@@ -163,8 +166,9 @@ def VOpSRA : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
 let mayLoad		  = 1,
 	mayStore	  = 1 in
 def VOpMemAccess : FUInst<(outs dyn_rc:$dst),
-							             (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad),
-							             "$dst = memaccess $src, $addr, $isLoad",
+							             (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad,
+							              DR8:$sizeInfo),
+							             "$dst = memaccess $src, $addr, $isLoad, $sizeInfo",
 							             [], FUMemBus, 1, 1, 0>;
 
 
