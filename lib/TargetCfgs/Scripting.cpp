@@ -16,6 +16,7 @@
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/ErrorHandling.h"
 
 // This is the only header we need to include for LuaBind to work
 #include "luabind/luabind.hpp"
@@ -51,6 +52,7 @@ struct LuaConstraints {
   LuaConstraints() : State(lua_open()) {
     luabind::open(State);
 
+    // Bind the C++ classes.
     luabind::module(State)[
       luabind::class_<FUInfo>("FUInfo")
         .def("setupMemBus", &FUInfo::setupMemBus)
@@ -62,7 +64,7 @@ struct LuaConstraints {
 
       luabind::class_<FileInfo>("FileInfo")
         .property("OutFilesDir", &FileInfo::getOutFilesDir,
-        &FileInfo::setOutFilesDir)
+                  &FileInfo::setOutFilesDir)
         .def_readwrite("SystemName", &FileInfo::SystemName)
         .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
 
@@ -70,11 +72,16 @@ struct LuaConstraints {
         .def("setHardware", &PartitionInfo::setHardware)
     ];
 
+    // Bind the object.
     luabind::globals(State)["FUs"] = &FUI;
     luabind::globals(State)["Paths"] = &FileI;
     luabind::globals(State)["Partition"] = &PartitionI;
 
-    luaL_dofile(State, ConstraintsFile.c_str());
+    // Run the script.
+    if (luaL_dofile(State, ConstraintsFile.c_str())) {
+      report_fatal_error("Error running constraint script:\n"
+                         + std::string(lua_tostring(State, -1)));
+    }
 
   }
 
