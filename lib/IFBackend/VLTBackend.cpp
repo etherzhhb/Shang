@@ -455,7 +455,8 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
 
   RTLMod = getAnalysis<RTLInfo>().getRTLModule();
-
+  TargetData *TD = getAnalysisIfAvailable<TargetData>();
+  assert(TD && "Where is TD?");
 
   // Print the interface function.
   const Type *retty = printFunctionSignature(Stream, F);
@@ -465,6 +466,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
 
+  // Reset if necessary.
   Stream << "  // Reset the module if we first time invoke the module.\n";
   Stream << "  if (sim_time == 0) \n";
   assignInPort(VASTModule::RST, 0, 4);
@@ -482,13 +484,23 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   Stream << "  assert(!" << getPortVal(VASTModule::Finish)
            << "&& \"Module finished before start!\");\n";
 
+  // Setup the parameters.
   Stream << '\n';
   Stream<< "  // Setup the parameters.\n";
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
        I != E; ++I) {
     std::string ArgName = GetValueName(I);
     Stream.indent(2) << VLTModInstName << '.' << ArgName
-                       << " = " << ArgName << ";\n";
+                     << " = ";
+    // Cast the argument to integer type if necessary.
+    const Type *ArgTy = I->getType();
+    if (ArgTy->isPointerTy()) {
+      Stream << '(';
+      printType(Stream, TD->getIntPtrType(F->getContext()));
+      Stream << ')';
+    }
+
+    Stream << ArgName << ";\n";
   }
 
   Stream << '\n';
