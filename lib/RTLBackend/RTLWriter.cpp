@@ -535,7 +535,7 @@ void RTLInfo::emitDatapath(ucState &State) {
 
     case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
 
-    case VTM::VOpROr:       emitUnaryOp(Op, "~");   break;
+    case VTM::VOpROr:       emitUnaryOp(Op, "|");   break;
     case VTM::VOpRAnd:      emitUnaryOp(Op, "&");   break;
     case VTM::VOpRXor:      emitUnaryOp(Op, "^");   break;
 
