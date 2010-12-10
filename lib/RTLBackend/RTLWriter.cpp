@@ -281,9 +281,9 @@ void RTLInfo::emitAllocatedFUs() {
                      MemBus->getDataWidth());
     VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
                       MemBus->getDataWidth());
-    
+    // Data size, in bytes.
     VM->addOutputPort(VFUMemBus::getDataSizeName(FUNum),
-                      Log2_32_Ceil(MemBus->getDataWidth()));
+                      Log2_32_Ceil(MemBus->getDataWidth() / 8));
   }
   
 }
