@@ -356,9 +356,10 @@ struct VLTIfWriter : public MachineFunctionPass {
 
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
+  const VFuncInfo *FuncInfo;
 
   VLTIfWriter() : MachineFunctionPass(ID), FOut(0), Stream(),
-    RTLMod(0) {}
+    RTLMod(0), FuncInfo(0) {}
 
   void assignInPort(VASTModule::PortTypes T, const std::string &Val,
                     unsigned ind = 2) {
@@ -373,11 +374,11 @@ struct VLTIfWriter : public MachineFunctionPass {
     assignInPort(T, utostr(Val, isNeg), ind);
   }
 
-  std::string getModMember(const std::string &MemberName) {
+  std::string getModMember(const std::string &MemberName) const {
     return "(" + VLTModInstName + "." + MemberName + ")";
   }
 
-  std::string getPortVal(VASTModule::PortTypes T) {
+  std::string getPortVal(unsigned T) const {
     return getModMember(RTLMod->getInputPort(T).getName());
   }
 
@@ -389,6 +390,27 @@ struct VLTIfWriter : public MachineFunctionPass {
     Stream.indent(ind) << VLTModInstName << ".eval();\n";
   }
 
+  std::string getCurClk() const {
+    // We can simply read the clk value from sim_time, but the sim_time
+    // is half cycle faster than the current clock.
+    return "( (~sim_time) & 0x1)";
+  }
+
+  void isClkEdgeBegin(bool posedge, unsigned ind = 2) {
+    Stream.indent(ind) << "// Check for if the clk "
+                       << (posedge ? "rising" : "falling")
+                       << '\n';
+
+    Stream.indent(ind) << "if (" << getCurClk() << " == "
+                       << (posedge ? '1' : '0') << ") {\n";
+
+  }
+
+  void isClkEdgeEnd(bool posedge, unsigned ind = 2) {
+    Stream.indent(ind) << "} // end clk "
+                         << (posedge ? "rising" : "falling")
+                         << '\n';
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
@@ -453,6 +475,7 @@ char VLTIfWriter::ID = 0;
 
 bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
+  FuncInfo = MF.getInfo<VFuncInfo>();
 
   RTLMod = getAnalysis<RTLInfo>().getRTLModule();
   TargetData *TD = getAnalysisIfAvailable<TargetData>();
@@ -513,15 +536,40 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   Stream<< "  // Commit the signals.\n";
   evalHalfCycle(2);
 
+  // The main evaluation loop.
   Stream << "\n\n\n"
-            "  // The main evalation loop.\n"
+            "  // The main evaluation loop.\n"
             "  do {\n";
-  // TODO: Check system bus.
+  // TODO: Allow the user to custom the clock edge.
+  isClkEdgeBegin(true, 4);
+  // Check membuses.
+  typedef VFuncInfo::const_id_iterator id_iterator;
+  for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
+       E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+    FuncUnitId ID = *I;
+    unsigned FUNum = ID.getFUNum();
+
+    unsigned Enable = RTLMod->getFUPortOff(ID);
+    Stream.indent(8) << "if (" << getPortVal(Enable)
+                     << ") { // If membus" << FUNum << " active\n";
+    
+    unsigned WriteEnable = Enable + 1;
+    Stream.indent(10) << "if (" << getPortVal(WriteEnable)
+                      << ") { // This is a write\n";
+    // Simulate the write operation on memory bus.
+    Stream.indent(10) << "} else { // This is a read\n";
+    // Simulate the read operation on memory bus.
+
+    Stream.indent(10) << "} // end read/write\n";
+    Stream.indent(8) << "} // end membus" << FUNum << '\n';
+  }
+
+  isClkEdgeEnd(true, 4);
 
   Stream << '\n';
   Stream << "    // Check if the module finish its job at last.\n";
   Stream << "    if (" << getPortVal(VASTModule::Finish) << ") {\n";
-  // TODO: Print the totoal spent cycle number if necessary.
+  // TODO: Print the total spent cycle number if necessary.
 
   Stream << "      return";
 
@@ -534,7 +582,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     Stream << ")" << VLTModInstName << ".return_value;\n";  
   } else
     Stream << ";\n";
-  
+
   Stream << "    }\n";
 
   Stream << '\n';
