@@ -364,21 +364,27 @@ void RTLInfo::emitCtrlOp(ucState &State) {
           // ToDo: sepreate terminator from control.
           || State->getOpcode() == VTM::Terminator)
         && "Bad ucState!");
+  bool IsRet = false;
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     // Emit the operations.
     switch (Op.getOpCode()) {
-    case VTM::VOpArg:       emitOpArg(Op);        break;
-    case VTM::VOpRetVal:    emitOpRetVal(Op);     break;
-    case VTM::VOpRet:       emitOpRet(Op);        break;
-    case VTM::COPY:         emitOpLatchVal(Op);   break;
-    case VTM::VOpMemAccess: emitOpMemAccess(Op);  break;
-    case VTM::VOpToState:   emitOpToState(Op);    break;
-    default:  assert(0 && "Unexpect opcode!");    break;
+    case VTM::VOpArg:       emitOpArg(Op);                break;
+    case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
+    case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
+    case VTM::COPY:         emitOpLatchVal(Op);           break;
+    case VTM::VOpMemAccess: emitOpMemAccess(Op);          break;
+    case VTM::VOpToState:   emitOpToState(Op);            break;
+    default:  assert(0 && "Unexpect opcode!");            break;
     }
   }
 
-  if (!State->getDesc().isTerminator())  emitFUCtrl(State.getSlot());
+  // Do not emit function unit when we are transferring to a new state, because
+  // the first micro operation of the new state will be emitted immediately.
+  // But if the terminator state is a return, we need to emit control logic
+  // because there are no succeeding state.
+  if (!State->getDesc().isTerminator() || IsRet)
+    emitFUCtrl(State.getSlot());
 }
 
 void RTLInfo::emitFirstCtrlState(MachineBasicBlock *MBB) {
@@ -408,8 +414,6 @@ void RTLInfo::emitOpArg(ucOp &OpArg) {
 void RTLInfo::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer(10);
   OS << "NextFSMState <= state_idle;\n";
-  //
-  OS.indent(10) << "fin <= 1'b1;\n";
 }
 
 void RTLInfo::emitOpToState(ucOp &OpToState) {

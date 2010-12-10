@@ -577,6 +577,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     // Simulate the read operation on memory bus.
     Stream.indent(12) << "switch(" << getPortVal(DataSize) << ") {\n";
 
+    // FIXME: Stop at the data bus size.
     for (unsigned Size = 1; Size < (8 << 1); Size <<= 1) {
       Stream.indent(12) << "case " << Size << ": "
                         // Cast the pointer and dereference it.
