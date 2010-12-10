@@ -46,11 +46,20 @@ namespace VTMISD {
 class VTargetLowering : public TargetLowering {
 public:
   VTargetLowering(TargetMachine &TM);
+  
+  // TODO:
+  virtual bool allowsUnalignedMemoryAccesses(EVT VT) const {
+    return false;
+  }
+
   virtual MVT::SimpleValueType getSetCCResultType(EVT VT) const;
+
   virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
+
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   const char *getTargetNodeName(unsigned Opcode) const;
+
   unsigned getFunctionAlignment(const Function *F) const;
 
   unsigned computeSizeInBits(SDValue Op) const;
@@ -65,6 +74,14 @@ public:
     unsigned SizeInBit = computeSizeInBits(Op);
     return getBitSlice(DAG, dl, Op, SizeInBit, SizeInBit - 1);
   }
+
+  SDValue getTruncate(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
+                      unsigned DstSize) const {
+    return getBitSlice(DAG, dl, SrcOp, DstSize, 0);
+  }
+
+  SDValue getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
+                    unsigned DstSize, bool Signed) const;
 
   SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                  SDValue OpA, SDValue OpB, SDValue CarryIn) const;

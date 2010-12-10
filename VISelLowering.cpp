@@ -78,6 +78,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // Lower load and store to memory access node.
     setOperationAction(ISD::LOAD, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::STORE, (MVT::SimpleValueType)VT, Custom);
+    // Just break down the extend load
+    setLoadExtAction(ISD::EXTLOAD, (MVT::SimpleValueType)VT, Custom);
+    setLoadExtAction(ISD::SEXTLOAD, (MVT::SimpleValueType)VT, Custom);
+    setLoadExtAction(ISD::ZEXTLOAD, (MVT::SimpleValueType)VT, Custom);
+    
     // Lower cast node to bit level operation.
     setOperationAction(ISD::SIGN_EXTEND, (MVT::SimpleValueType)VT, Custom);
     setOperationAction(ISD::ZERO_EXTEND, (MVT::SimpleValueType)VT, Custom);
@@ -250,8 +255,32 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                      DAG.getConstant(LB, MVT::i8));
 }
 
+
+SDValue VTargetLowering::getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
+                                   unsigned DstSize, bool Signed ) const {
+  unsigned SrcSize = computeSizeInBits(SrcOp);
+
+  assert(DstSize > SrcSize && "Bad extend operation!");
+  unsigned DiffSize = DstSize - SrcSize;
+
+  SDValue HighBits;
+  if (Signed)
+    // Fill the high bits with sign bit for signed extend.
+    HighBits = getBitRepeat(DAG, dl, getSignBit(DAG, dl, SrcOp), DiffSize);
+  else {
+    EVT ConstVT = EVT::getIntegerVT(*DAG.getContext(), DiffSize);
+    // Fill the high bits with zeros for zero extend.
+    HighBits = DAG.getConstant(0, ConstVT, true);
+  }
+
+  EVT DstVT = EVT::getIntegerVT(*DAG.getContext(), DstSize);
+  return DAG.getNode(VTMISD::BitCat, dl, DstVT, HighBits, SrcOp);
+}
+
 SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                                       unsigned Times) const {
+  assert(Times > 1 && "Nothing to repeat!");
+
   LLVMContext &Context = *DAG.getContext();
   unsigned EltBits = computeSizeInBits(Op);
   unsigned SizeInBits = EltBits * Times;
@@ -389,8 +418,8 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
   // FIXME: Handle the index.
   assert(LSNode->isUnindexed() && "Indexed load/store is not supported!");
 
-  EVT VT = isLoad ? Op.getValueType()
-                  : cast<StoreSDNode>(Op)->getValue().getValueType();
+  EVT VT = LSNode->getMemoryVT();
+
   unsigned VTSize = VT.getSizeInBits();
 
   SDValue StoreVal = isLoad ? DAG.getConstant(0, VT)
@@ -421,17 +450,29 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                             SDOps, array_lengthof(SDOps), 
                             // Memory operands.
                             LSNode->getMemoryVT(), LSNode->getMemOperand());
-  if (isLoad) {
-    // Truncate the data bus, the system bus should place the valid data start
-    // from LSM.
-    if (DataBusWidth > VTSize) {
-      SDValue TrunVal = getBitSlice(DAG, dl, Result, VTSize, 0);
-      DAG.ReplaceAllUsesOfValueWith(Op, TrunVal);
-    }
-
-    return Result;
-  } else
+  if (!isLoad)
     return SDValue(Result.getNode(), 1);
+
+  SDValue Val = Result;
+  // Truncate the data bus, the system bus should place the valid data start
+  // from LSM.
+  if (DataBusWidth > VTSize)
+    Val = getTruncate(DAG, dl, Result, VTSize); 
+
+  // Check if this an extend load.
+  LoadSDNode *LD = cast<LoadSDNode>(Op);
+  ISD::LoadExtType ExtType = LD->getExtensionType();
+  if (ExtType != ISD::NON_EXTLOAD) {
+    unsigned DstSize = Op.getValueSizeInBits();
+    Val = getExtend(DAG, dl, Val, DstSize, ExtType == ISD::SEXTLOAD);
+  }
+
+  // Do we need to replace the result of the load operation?
+  if (Result.getNode() != Val.getNode())
+    DAG.ReplaceAllUsesOfValueWith(Op, Val);
+
+  return Result;
+
 }
 
 SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
@@ -439,23 +480,9 @@ SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
   SDValue Operand = Op.getOperand(0);
   DebugLoc dl = Operand.getDebugLoc();
 
-  unsigned SrcSize = computeSizeInBits(Operand),
-           DstSize = Op.getValueSizeInBits();
+  unsigned DstSize = Op.getValueSizeInBits();
 
-  unsigned DiffSize = DstSize - SrcSize;
-
-  SDValue HighBits;
-  if (Signed)
-    // Fill the high bits with sign bit for signed extend.
-    HighBits = getBitRepeat(DAG, dl, getSignBit(DAG, dl, Operand), DiffSize);
-  else {
-    EVT ConstVT = EVT::getIntegerVT(*DAG.getContext(), DiffSize);
-    // Fill the high bits with zeros for signed extend.
-    HighBits = DAG.getConstant(0, ConstVT, true);
-  }
-
-  return DAG.getNode(VTMISD::BitCat, Op.getDebugLoc(), Op.getValueType(),
-                     HighBits, Operand);
+  return getExtend(DAG, dl, Operand, DstSize, Signed);
 }
 
 SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
@@ -463,7 +490,7 @@ SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
   unsigned DstSize = Op.getValueSizeInBits();
 
   // Select the lower bit slice to truncate values.
-  return getBitSlice(DAG, Op.getDebugLoc(), Operand, DstSize, 0);
+  return getTruncate(DAG, Op.getDebugLoc(), Operand, DstSize);
 }
 
 SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
