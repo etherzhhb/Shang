@@ -524,6 +524,9 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     }
 
     Stream << ArgName << ";\n";
+
+    DEBUG(Stream.indent(2) << "printf(\"Passing " << ArgName << "->%x\\n\", "
+                           << ArgName << ");\n"); 
   }
 
   Stream << '\n';
@@ -553,12 +556,37 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     Stream.indent(8) << "if (" << getPortVal(Enable)
                      << ") { // If membus" << FUNum << " active\n";
     
+    unsigned Address = Enable + 2;
+    unsigned DataSize = Enable + 5;
+
+    // Read the address
+    printType(Stream.indent(10), TD->getIntPtrType(F->getContext()),
+              false, "Addr");
+    Stream << " = " << getPortVal(Address) << ";\n";
+
+    DEBUG(Stream.indent(10) << "printf(\"Bus active with address %x\\n\","
+                               " Addr);\n");
+
     unsigned WriteEnable = Enable + 1;
     Stream.indent(10) << "if (" << getPortVal(WriteEnable)
                       << ") { // This is a write\n";
     // Simulate the write operation on memory bus.
+
     Stream.indent(10) << "} else { // This is a read\n";
+    unsigned InData = Enable + 3;
     // Simulate the read operation on memory bus.
+    Stream.indent(12) << "switch(" << getPortVal(DataSize) << ") {\n";
+
+    for (unsigned Size = 1; Size < (8 << 1); Size <<= 1) {
+      Stream.indent(12) << "case " << Size << ": "
+                        // Cast the pointer and dereference it.
+                        << getPortVal(InData) << " = *((";
+      // The size is in bytes, convert it to bits.
+      printSimpleType(Stream, Type::getIntNTy(F->getContext(), Size * 8), false);
+      Stream << "*)Addr); break;\n"; 
+    }
+
+    Stream.indent(12) << "}\n";
 
     Stream.indent(10) << "} // end read/write\n";
     Stream.indent(8) << "} // end membus" << FUNum << '\n';

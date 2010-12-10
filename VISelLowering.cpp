@@ -457,7 +457,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
   // Truncate the data bus, the system bus should place the valid data start
   // from LSM.
   if (DataBusWidth > VTSize)
-    Val = getTruncate(DAG, dl, Result, VTSize); 
+    Val = getTruncate(DAG, dl, Result, VTSize);
 
   // Check if this an extend load.
   LoadSDNode *LD = cast<LoadSDNode>(Op);

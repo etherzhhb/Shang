@@ -281,7 +281,9 @@ void RTLInfo::emitAllocatedFUs() {
                      MemBus->getDataWidth());
     VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
                       MemBus->getDataWidth());
-
+    
+    VM->addOutputPort(VFUMemBus::getDataSizeName(FUNum),
+                      Log2_32_Ceil(MemBus->getDataWidth()));
   }
   
 }
@@ -449,6 +451,11 @@ void RTLInfo::emitOpMemAccess(ucOp &OpMemAccess) {
   // And write enable, write is enable if the operation is NOT load.
   OS.indent(10) << VFUMemBus::getWriteEnableName(FUNum) << " <= ~";
   emitOperand(OS, OpMemAccess.getOperand(3));
+  OS << ";\n";
+  // The byte enable.
+  // FIXME: This is the data size instead of the byte enable.
+  OS.indent(10) << VFUMemBus::getDataSizeName(FUNum) << " <= ";
+  emitOperand(OS, OpMemAccess.getOperand(4));
   OS << ";\n";
 }
 
