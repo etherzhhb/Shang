@@ -19,6 +19,8 @@
 #ifndef VBE_VLANG_H
 #define VBE_VLANG_H
 
+#include "vtm/FUInfo.h"
+
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
 #include "llvm/Target/Mangler.h"
@@ -27,8 +29,10 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Format.h"
+
+#include <map>
 
 namespace llvm {
 class MachineBasicBlock;
@@ -120,6 +124,9 @@ public:
 class VASTModule : public VASTNode {
 public:
   typedef SmallVector<VASTPort*, 16> PortVector;
+  typedef PortVector::iterator port_iterator;
+  typedef PortVector::const_iterator const_port_iterator;
+
   typedef SmallVector<VASTSignal*, 128> SignalVector;
 private:
   // Dirty Hack:
@@ -127,6 +134,10 @@ private:
   raw_string_ostream StateDecl, DataPath, ControlBlock, SeqCompute;
   PortVector Ports;
   SignalVector Signals;
+
+  // The port starting offset of a specific function unit.
+  SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
+
 public:
   enum PortTypes {
     Clk = 0,
@@ -143,7 +154,7 @@ public:
     StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
-    SeqCompute(*(new std::string())) {
+    SeqCompute(*(new std::string())), FUPortOffsets(VFUs::NumCommonFUs) {
     Ports.append(NumSpecialPort, 0);
   }
 
@@ -181,9 +192,34 @@ public:
     return Port;
   }
 
+  void setFUPortBegin(FuncUnitId ID) {
+    unsigned offset = Ports.size();
+    std::pair<unsigned, unsigned> mapping
+      = std::make_pair(ID.getFUNum(), offset);
+    std::map<unsigned, unsigned> &Map = FUPortOffsets[ID.getFUType()];
+    assert(!Map.count(mapping.first) && "Port begin mapping existed!");
+    FUPortOffsets[ID.getFUType()].insert(mapping);
+  }
+
+  unsigned getFUPortOff(FuncUnitId ID) const {
+    typedef std::map<unsigned, unsigned> MapTy;
+    MapTy Map = FUPortOffsets[ID.getFUType()];
+    MapTy::const_iterator at = Map.find(ID.getFUNum());
+    assert(at != Map.end() && "FU do not existed!");
+    return at->second;
+  }
+
+  const_port_iterator getFUPortItBegin(FuncUnitId ID) const {
+    unsigned PortBegin = getFUPortOff(ID);
+    return Ports.begin() + PortBegin;
+  }
+
   void printModuleDecl(raw_ostream &OS) const;
 
+  // Get all ports of this moudle.
   const PortVector &getPorts() const { return Ports; }
+  unsigned getNumPorts() const { return Ports.size(); }
+
   const VASTPort &getInputPort(unsigned i) const {
     // FIXME: Check if out of range.
     return *Ports[i];
@@ -193,9 +229,6 @@ public:
     // FIXME: Check if out of range.
     return *Ports[i + VASTModule::SpecialOutPortEnd];
   }
-
-  typedef PortVector::iterator port_iterator;
-  typedef PortVector::const_iterator const_port_iterator;
 
   port_iterator ports_begin() { return Ports.begin(); }
   const_port_iterator ports_begin() const { return Ports.begin(); }

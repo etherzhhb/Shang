@@ -264,7 +264,14 @@ void RTLInfo::emitAllocatedFUs() {
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     // FIXME: In fact, *I return the FUId instead of FUNum. 
-    unsigned FUNum = (*I).getFUNum();
+    FuncUnitId ID = *I;
+    unsigned FUNum = ID.getFUNum();
+
+    VM->setFUPortBegin(ID);
+    // Control ports.
+    VM->addOutputPort(VFUMemBus::getEnableName(FUNum), 1);
+    VM->addOutputPort(VFUMemBus::getWriteEnableName(FUNum), 1);
+
     // Address port.
     VM->addOutputPort(VFUMemBus::getAddrBusName(FUNum),
                       MemBus->getAddrWidth());
@@ -275,9 +282,6 @@ void RTLInfo::emitAllocatedFUs() {
     VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
                       MemBus->getDataWidth());
 
-    // Control ports.
-    VM->addOutputPort(VFUMemBus::getEnableName(FUNum), 1);
-    VM->addOutputPort(VFUMemBus::getWriteEnableName(FUNum), 1);
   }
   
 }
