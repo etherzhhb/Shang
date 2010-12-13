@@ -220,7 +220,7 @@ public:
   const PortVector &getPorts() const { return Ports; }
   unsigned getNumPorts() const { return Ports.size(); }
 
-  const VASTPort &getInputPort(unsigned i) const {
+  const VASTPort &getPort(unsigned i) const {
     // FIXME: Check if out of range.
     return *Ports[i];
   }

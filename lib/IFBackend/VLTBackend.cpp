@@ -365,8 +365,8 @@ struct VLTIfWriter : public MachineFunctionPass {
                     unsigned ind = 2) {
     // TODO: Assert the port must be an input port.
     Stream.indent(ind) << VLTModInstName << '.'
-      << RTLMod->getInputPort(T).getName()
-      << " = (" << Val << ");\n";
+           << RTLMod->getPort(T).getName()
+           << " = (" << Val << ");\n";
   }
 
   void assignInPort(VASTModule::PortTypes T, uint64_t Val,
