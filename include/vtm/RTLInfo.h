@@ -103,7 +103,7 @@ class RTLInfo : public MachineFunctionPass {
 
   void createucStateEnable(MachineBasicBlock *MBB);
   void emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-    const std::string &NewState);
+                          const std::string &NewState);
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.

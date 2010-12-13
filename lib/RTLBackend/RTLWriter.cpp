@@ -101,7 +101,6 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   emitNextFSMState(VM->getControlBlockBuffer(), EntryBB);
-  emitNextMicroState(VM->getControlBlockBuffer(10), EntryBB, "1'b1");
   //
   verilogIfElse(VM->getControlBlockBuffer(8));
   VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
@@ -321,7 +320,7 @@ void RTLInfo::createucStateEnable(MachineBasicBlock *MBB)  {
 }
 
 void RTLInfo::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-                                   const std::string &NewState) {
+                                 const std::string &NewState) {
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
   std::string StateName = getucStateEnableName(MBB);
@@ -424,10 +423,7 @@ void RTLInfo::emitOpToState(ucOp &OpToState) {
   raw_string_ostream ss(s);
   emitOperand(ss, OpToState.getOperand(0));
   verilogIfBegin(OS.indent(10), ss.str());
-  OS.indent(12) << "NextFSMState <= ";
-  emitOperand(OS, OpToState.getOperand(1));
-  OS << ";\n";
-  emitFirstCtrlState(OpToState.getOperand(1).getMBB());
+  emitNextFSMState(OS, OpToState.getOperand(1).getMBB());
   verilogEnd(VM->getControlBlockBuffer(10));
 }
 
@@ -527,6 +523,7 @@ void RTLInfo::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
   emitFirstCtrlState(MBB);
 
   ss.indent(10) << "NextFSMState <= " << getStateName(MBB) << ";\n";
+  emitNextMicroState(VM->getControlBlockBuffer(10), MBB, "1'b1");
 }
 
 void RTLInfo::emitDatapath(ucState &State) {
