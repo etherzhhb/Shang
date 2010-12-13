@@ -99,12 +99,11 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
   }
 
   // TODO: Combine with bit mask information.
+  if (ExchangeOperand) return SDValue();
 
   // If we not try to exchange the operands, exchange and try again.
-  if (!ExchangeOperand)
-    return PerformAddCombine(N, TLI, DCI, !ExchangeOperand);
+  return PerformAddCombine(N, TLI, DCI, !ExchangeOperand);
 
-  return SDValue();
 }
 
 static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
@@ -117,11 +116,10 @@ static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
   if (ConstantSDNode *COpB =  dyn_cast<ConstantSDNode>(OpB))
     if (COpB->isAllOnesValue()) return TLI.getNot(DAG, N->getDebugLoc(), OpA);
 
-  // If we not try to exchange the operands, exchange and try again.
-  if (!ExchangeOperand)
-    return PerformXorCombine(N, TLI, DCI, !ExchangeOperand);
+  if (ExchangeOperand) return SDValue();
 
-  return SDValue();
+  // If we not try to exchange the operands, exchange and try again.
+  return PerformXorCombine(N, TLI, DCI, !ExchangeOperand);
 }
 
 static  SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
