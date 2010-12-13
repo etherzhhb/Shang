@@ -62,47 +62,94 @@ public:
 
   unsigned getFunctionAlignment(const Function *F) const;
 
-  unsigned computeSizeInBits(SDValue Op) const;
 
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture bit level SDNodes.
-  SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
-                      unsigned UB, unsigned LB) const;
-  
-  SDValue getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
-                       unsigned Times) const;
+  static unsigned computeSizeInBits(SDValue Op);
 
-  SDValue getSignBit(SelectionDAG &DAG, DebugLoc dl, SDValue Op) const {
+  static SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
+                             unsigned UB, unsigned LB);
+  
+  static SDValue getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
+                              unsigned Times);
+
+  static SDValue getSignBit(SelectionDAG &DAG, DebugLoc dl, SDValue Op) {
     unsigned SizeInBit = computeSizeInBits(Op);
     return getBitSlice(DAG, dl, Op, SizeInBit, SizeInBit - 1);
   }
 
-  SDValue getTruncate(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
-                      unsigned DstSize) const {
+  static SDValue getTruncate(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
+                      unsigned DstSize) {
     return getBitSlice(DAG, dl, SrcOp, DstSize, 0);
   }
 
-  SDValue getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
-                    unsigned DstSize, bool Signed) const;
+  static SDValue getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
+                           unsigned DstSize, bool Signed);
 
-  SDValue getReductionOp(SelectionDAG &DAG, unsigned Opc, DebugLoc dl,
-                         SDValue Src) const;
+  static SDValue getReductionOp(SelectionDAG &DAG, unsigned Opc, DebugLoc dl,
+                                SDValue Src);
 
-  SDValue getNot(SelectionDAG &DAG, DebugLoc dl, SDValue Operand) const;
+  static SDValue getNot(SelectionDAG &DAG, DebugLoc dl, SDValue Operand);
 
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture arithmetic SDNodes.
-  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB, SDValue CarryIn,
-                 bool dontCreate = false) const;
-  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB, bool dontCreate = false) const;
+  static SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                        SDValue OpA, SDValue OpB, SDValue CarryIn,
+                        bool dontCreate = false);
+  static SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                        SDValue OpA, SDValue OpB,
+                        bool dontCreate = false);
 
-  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB, SDValue CarryIn,
-                 bool dontCreate = false) const;
-  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB, bool dontCreate = false) const;
+  static SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                        SDValue OpA, SDValue OpB, SDValue CarryIn,
+                        bool dontCreate = false);
+  static SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                        SDValue OpA, SDValue OpB,
+                        bool dontCreate = false);
+
+  //===--------------------------------------------------------------------===//
+  // Helper function for comparison lowering.
+  static SDValue getCmpResult(SelectionDAG &DAG, SDValue SetCC, bool dontSub);
+
+  // Not Zero.
+  static SDValue getNZFlag(SelectionDAG &DAG, SDValue SetCC,
+                           bool dontSub = false){
+    DebugLoc dl = SetCC.getDebugLoc();               
+    return getReductionOp(DAG, VTMISD::ROr, dl,
+                          getCmpResult(DAG, SetCC, dontSub));
+  }
+
+  // The zero flag.
+  static SDValue getZFlag(SelectionDAG &DAG, SDValue SetCC,
+                          bool dontSub = false) {
+    DebugLoc dl = SetCC.getDebugLoc();
+    return getNot(DAG, dl, getNZFlag(DAG, SetCC, dontSub));
+  }
+
+  template<class Func>
+  static SDValue getNotFlag(SelectionDAG &DAG, SDValue SetCC, Func F) {  
+    DebugLoc dl = SetCC.getDebugLoc();               
+    return getNot(DAG, dl, F(DAG, SetCC));
+  }
+
+  // Carry (or Unsigned Overflow).
+  static SDValue getCFlag(SelectionDAG &DAG, SDValue SetCC) {
+    SDValue Result = getCmpResult(DAG, SetCC, false);
+    return SDValue(Result.getNode(), 1);
+  }
+
+  // The negative flag.
+  static SDValue getNFlag(SelectionDAG &DAG, SDValue SetCC) {
+    DebugLoc dl = SetCC.getDebugLoc();
+    SDValue Result = getCmpResult(DAG, SetCC, false);
+    return getSignBit(DAG, dl, Result);
+  }
+
+  // The signed overflow flag.
+  static SDValue getVFlag(SelectionDAG &DAG, SDValue SetCC);
+
+  // Negative not equal signed overflow.
+  static SDValue getNNotEQVFlag(SelectionDAG &DAG, SDValue SetCC);
 
 private:
 
