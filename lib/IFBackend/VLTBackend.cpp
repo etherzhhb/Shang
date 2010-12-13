@@ -346,11 +346,88 @@ static void printFunctionSignature(raw_ostream &Out, const Function *F) {
 //===----------------------------------------------------------------------===//
 // Verilator interface writer.
 namespace {
+class lang_raw_ostream : public formatted_raw_ostream {
+  // Current block indent.
+  unsigned Indent;
+  // We are start form a new line?
+  bool newline;
+  
+  static bool isPrepProcChar(char C) {
+    return C == '#';
+  }
+
+  static bool isNewLine(const char *Ptr) {
+    return *Ptr == '\n' || *Ptr == '\r';
+  }
+
+  // 
+  size_t line_length(const char *Ptr, size_t Size) {
+    size_t Scanned = 0;
+    const char *End = Ptr + Size;
+    for (; Ptr != End; ++Ptr) {
+      ++Scanned;
+      if (isNewLine(Ptr)) return Scanned;
+    }
+
+    return Size;
+  }
+
+  virtual void write_impl(const char *Ptr, size_t Size) {
+    assert(Size > 0 && "Unexpected writing zero char!");
+
+    //Do not indent the preprocessor directive.
+    if (newline && !(isPrepProcChar(*Ptr)))
+      TheStream->indent(Indent);
+
+    size_t line_len = line_length(Ptr, Size);
+    const char *NewLineStart = Ptr + line_len;
+
+    newline = isNewLine(NewLineStart - 1);
+
+    // Write current line.
+    TheStream->write(Ptr, line_len);
+
+    // Write the rest lines.
+    if (size_t SizeLeft = Size - line_len)
+      write_impl(NewLineStart, SizeLeft);
+    else // Compute the column for last line.
+      ComputeColumn(Ptr, Size);
+  }
+
+public:
+  lang_raw_ostream() : formatted_raw_ostream(), Indent(0), newline(true) {}
+
+  lang_raw_ostream &block_begin(bool newline = true) {
+    // flush the buffer.
+    flush();
+    // Increase the indent.
+    Indent += 2;
+    
+    // Write the block begin character.
+    write("{\n", (newline ? 2 : 1));
+    return *this;
+  }
+
+  lang_raw_ostream &block_end(bool newline = true) {
+    // flush the buffer.
+    flush();
+
+    assert(Indent >= 2 && "Un match block_begin and block_end!");
+    // Decrease the indent.
+    Indent -= 2;
+
+    // Write the block begin character.
+    write("}\n", (newline ? 2 : 1));
+    return *this;
+  }
+
+};
+
 struct VLTIfWriter : public MachineFunctionPass {
   static char ID;
 
   tool_output_file *FOut;
-  formatted_raw_ostream Stream;
+  lang_raw_ostream Stream;
 
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
@@ -359,17 +436,15 @@ struct VLTIfWriter : public MachineFunctionPass {
   VLTIfWriter() : MachineFunctionPass(ID), FOut(0), Stream(),
     RTLMod(0), FuncInfo(0) {}
 
-  void assignInPort(VASTModule::PortTypes T, const std::string &Val,
-                    unsigned ind = 2) {
+  void assignInPort(VASTModule::PortTypes T, const std::string &Val) {
     // TODO: Assert the port must be an input port.
-    Stream.indent(ind) << VLTModInstName << '.'
+    Stream << VLTModInstName << '.'
            << RTLMod->getPort(T).getName()
            << " = (" << Val << ");\n";
   }
 
-  void assignInPort(VASTModule::PortTypes T, uint64_t Val,
-                    unsigned ind = 2, bool  isNeg = false) {
-    assignInPort(T, utostr(Val, isNeg), ind);
+  void assignInPort(VASTModule::PortTypes T, uint64_t Val, bool isNeg = false) {
+    assignInPort(T, utostr(Val, isNeg));
   }
 
   std::string getModMember(const std::string &MemberName) const {
@@ -377,37 +452,36 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   std::string getPortVal(unsigned T) const {
-    return getModMember(RTLMod->getInputPort(T).getName());
+    return getModMember(RTLMod->getPort(T).getName());
   }
 
-  void evalHalfCycle(unsigned ind = 2) {
-    Stream.indent(ind) << "//Increase clk by half cycle.\n";
-    assignInPort(VASTModule::Clk, "sim_time++ & 0x1", ind);
+  void evalHalfCycle() {
+    Stream << "//Increase clk by half cycle.\n";
+    assignInPort(VASTModule::Clk, "sim_time++ & 0x1");
 
-    Stream.indent(ind) << "// Evaluate model.\n";
-    Stream.indent(ind) << VLTModInstName << ".eval();\n";
+    Stream << "// Evaluate model.\n";
+    Stream << VLTModInstName << ".eval();\n";
   }
 
-  std::string getCurClk() const {
+  const char *getCurClk() const {
     // We can simply read the clk value from sim_time, but the sim_time
     // is half cycle faster than the current clock.
     return "( (~sim_time) & 0x1)";
   }
 
-  void isClkEdgeBegin(bool posedge, unsigned ind = 2) {
-    Stream.indent(ind) << "// Check for if the clk "
-                       << (posedge ? "rising" : "falling")
-                       << '\n';
+  void isClkEdgeBegin(bool posedge) {
+    Stream << "// Check for if the clk "
+           << (posedge ? "rising" : "falling")
+           << '\n';
 
-    Stream.indent(ind) << "if (" << getCurClk() << " == "
-                       << (posedge ? '1' : '0') << ") {\n";
+    Stream << "if (" << getCurClk() << " == " << (posedge ? '1' : '0') << ")";
+    Stream.block_begin();
 
   }
 
-  void isClkEdgeEnd(bool posedge, unsigned ind = 2) {
-    Stream.indent(ind) << "} // end clk "
-                         << (posedge ? "rising" : "falling")
-                         << '\n';
+  void isClkEdgeEnd(bool posedge) {
+    Stream.block_end(false) << "// end clk " << (posedge ? "rising" : "falling")
+                            << '\n';
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -433,16 +507,15 @@ struct VLTIfWriter : public MachineFunctionPass {
               "// And the header file of the generated module.\n"
               "#include \"" << VLTClassName << ".h\"\n\n\n"
               "// Instantiation of module\n"
-              "static " << VLTClassName << " "
-                        << VLTModInstName << "(\"" << HWSubSysName <<"\");\n\n\n"
+              "static " << VLTClassName << " " << VLTModInstName
+           << "(\"" << HWSubSysName << "\");\n\n\n"
               "// Current simulation time\n"
               "static long sim_time = 0;\n\n\n"
               "// Called by $time in Verilog\n"
               "double sc_time_stamp () {\n"
               "  return sim_time;\n"
-              "}\n\n\n";
-      
-    Stream << "// Dirty Hack: Only C function is supported now.\n"
+              "}\n\n\n"
+              "// Dirty Hack: Only C function is supported now.\n"
               "#ifdef __cplusplus\n"
               "extern \"C\" {\n"
               "#endif\n\n";
@@ -484,15 +557,15 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   
   printFunctionSignature(Stream, F);
   // And the function body.
-  Stream << "{\n";
+  Stream.block_begin();
 
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
 
   // Reset if necessary.
-  Stream << "  // Reset the module if we first time invoke the module.\n";
-  Stream << "  if (sim_time == 0) \n";
-  assignInPort(VASTModule::RST, 0, 4);
+  Stream << "// Reset the module if we first time invoke the module.\n";
+  Stream << "if (sim_time == 0) \n";
+  assignInPort(VASTModule::RST, 0);
 
   // Run several cycles.
   Stream << '\n';
@@ -504,17 +577,16 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   Stream << '\n';
   evalHalfCycle();
   evalHalfCycle();
-  Stream << "  assert(!" << getPortVal(VASTModule::Finish)
-           << "&& \"Module finished before start!\");\n";
+  Stream << "assert(!" << getPortVal(VASTModule::Finish)
+         << "&& \"Module finished before start!\");\n";
 
   // Setup the parameters.
   Stream << '\n';
-  Stream<< "  // Setup the parameters.\n";
+  Stream<< "// Setup the parameters.\n";
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
        I != E; ++I) {
     std::string ArgName = GetValueName(I);
-    Stream.indent(2) << VLTModInstName << '.' << ArgName
-                     << " = ";
+    Stream << VLTModInstName << '.' << ArgName << " = ";
     // Cast the argument to integer type if necessary.
     const Type *ArgTy = I->getType();
     if (ArgTy->isPointerTy()) {
@@ -524,27 +596,30 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     }
 
     Stream << ArgName << ";\n";
-
-    DEBUG(Stream.indent(2) << "printf(\"Passing " << ArgName << "->%x\\n\", "
-                           << ArgName << ");\n"); 
+      
+    Stream << "#ifdef __DEBUG_IF\n"
+              "printf(\"Passing " << ArgName << "->%x\\n\", " << ArgName << ");\n"
+              "#endif\n";
   }
 
   Stream << '\n';
-  Stream << "  // Start the module.\n";
+  Stream << "// Start the module.\n";
   assignInPort(VASTModule::Start, 1);
 
-  Stream << "  // Remember the start time.\n"
-            "  long start_time = sim_time;\n";
+  Stream << "// Remember the start time.\n"
+            "long start_time = sim_time;\n";
 
-  Stream<< "  // Commit the signals.\n";
-  evalHalfCycle(2);
+  Stream<< "// Commit the signals.\n";
+  evalHalfCycle();
 
   // The main evaluation loop.
   Stream << "\n\n\n"
-            "  // The main evaluation loop.\n"
-            "  do {\n";
+            "// The main evaluation loop.\n"
+            "do";
+  Stream.block_begin();
+
   // TODO: Allow the user to custom the clock edge.
-  isClkEdgeBegin(true, 4);
+  isClkEdgeBegin(true);
   // Check membuses.
   typedef VFuncInfo::const_id_iterator id_iterator;
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
@@ -553,33 +628,35 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     unsigned FUNum = ID.getFUNum();
 
     unsigned Enable = RTLMod->getFUPortOff(ID);
-    Stream.indent(8) << "if (" << getPortVal(Enable)
-                     << ") { // If membus" << FUNum << " active\n";
-    
+    Stream << "if (" << getPortVal(Enable) << ")";
+    Stream.block_begin(false) << "// If membus" << FUNum << " active\n";
+
     unsigned Address = Enable + 2;
     unsigned DataSize = Enable + 5;
 
     // Read the address
-    printType(Stream.indent(10), TD->getIntPtrType(F->getContext()),
-              false, "Addr");
+    printType(Stream, TD->getIntPtrType(F->getContext()), false, "Addr");
     Stream << " = " << getPortVal(Address) << ";\n";
 
-    DEBUG(Stream.indent(10) << "printf(\"Bus active with address %x\\n\","
-                               " Addr);\n");
+    Stream << "#ifdef __DEBUG_IF\n"
+              "printf(\"Bus active with address %x\\n\", Addr);\n"
+              "#endif\n";
 
     unsigned WriteEnable = Enable + 1;
-    Stream.indent(10) << "if (" << getPortVal(WriteEnable)
-                      << ") { // This is a write\n";
+    Stream << "if (" << getPortVal(WriteEnable) << ")";
+    Stream.block_begin(false) << "// This is a write\n";
     // Simulate the write operation on memory bus.
 
-    Stream.indent(10) << "} else { // This is a read\n";
+    Stream.block_end(false) << "else";
+    Stream.block_begin(false) << "// This is a read\n";
     unsigned InData = Enable + 3;
     // Simulate the read operation on memory bus.
-    Stream.indent(12) << "switch(" << getPortVal(DataSize) << ") {\n";
+    Stream << "switch(" << getPortVal(DataSize) << ")";
+    Stream.block_begin();
 
     // FIXME: Stop at the data bus size.
     for (unsigned Size = 1; Size < (8 << 1); Size <<= 1) {
-      Stream.indent(12) << "case " << Size << ": "
+      Stream << "case " << Size << ": "
                         // Cast the pointer and dereference it.
                         << getPortVal(InData) << " = *((";
       // The size is in bytes, convert it to bits.
@@ -587,20 +664,20 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
       Stream << "*)Addr); break;\n"; 
     }
 
-    Stream.indent(12) << "}\n";
-
-    Stream.indent(10) << "} // end read/write\n";
-    Stream.indent(8) << "} // end membus" << FUNum << '\n';
+    Stream.block_end();
+    Stream.block_end(false) << "// end read/write\n";
+    Stream.block_end(false) << "// end membus" << FUNum << '\n';
   }
 
-  isClkEdgeEnd(true, 4);
+  isClkEdgeEnd(true);
 
-  Stream << '\n';
-  Stream << "    // Check if the module finish its job at last.\n";
-  Stream << "    if (" << getPortVal(VASTModule::Finish) << ") {\n";
+  Stream << "\n"
+            "// Check if the module finish its job at last.\n";
+  Stream << "if (" << getPortVal(VASTModule::Finish) << ")";
+  Stream.block_begin();
   // TODO: Print the total spent cycle number if necessary.
 
-  Stream << "      return";
+  Stream << "return";
 
   // If the function return something?
   if (!retty->isVoidTy()) {
@@ -608,31 +685,30 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     // Cast the return value, and we only support simple type as return type now.
     printSimpleType(Stream, retty, false);
     // FIXME: Find the correct name for the return value port.
-    Stream << ")" << VLTModInstName << ".return_value;\n";  
+    Stream << ")" << getModMember("return_value") << ";\n";  
   } else
     Stream << ";\n";
 
-  Stream << "    }\n";
+  Stream.block_end();
 
   Stream << '\n';
 
-  evalHalfCycle(4);
-  assignInPort(VASTModule::Start, 0, 4);
+  evalHalfCycle();
+  assignInPort(VASTModule::Start, 0);
 
-  Stream << " } while(!Verilated::gotFinish()"
-              // TODO: allow user to custom the maximum simulation time.
-              // FIXME: The result is wrong if sim_time just overflow.
-              " && (sim_time - start_time) < 0x1000);\n";
+  // TODO: allow user to custom the maximum simulation time.
+  // FIXME: The result is wrong if sim_time just overflow.
+  Stream.block_end(false) << "while(!Verilated::gotFinish()"
+                             " && (sim_time - start_time) < 0x1000);\n";
 
   Stream << '\n';
   // TODO: Allow user to custom the error handling.
-  Stream << "  assert(0 "
-              "&& \"Something went wrong during the simulation!\");\n";
+  Stream << "assert(0 && \"Something went wrong during the simulation!\");\n";
   if (!retty->isVoidTy()) {
-    Stream << "  return 0;\n";
+    Stream << "return 0;\n";
   }
   // End function body.
-  Stream << "}\n\n";
+  Stream.block_end() << "\n";
   Stream.flush();
 
   return false;
