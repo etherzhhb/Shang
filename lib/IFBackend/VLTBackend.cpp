@@ -536,9 +536,11 @@ struct VLTIfWriter : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  void simulateMemRead(unsigned MemPortStartIdx, LLVMContext &Context) {
+  template<bool SimRead>
+  void simulateMemBusImpl(unsigned MemPortStartIdx, LLVMContext &Context) {
     unsigned Address  = MemPortStartIdx + 2;
     unsigned InData   = MemPortStartIdx + 3;
+    unsigned OutData  = MemPortStartIdx + 4;
     unsigned DataSize = MemPortStartIdx + 5;
 
     // Compute the membus data size (in bytes).
@@ -552,15 +554,36 @@ struct VLTIfWriter : public MachineFunctionPass {
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
          Size < EndSize; Size *= 2) {
-      Stream << "case " << Size << ": "
-             // Cast the pointer and dereference it.
-             << getPortVal(InData) << " = *((";
+      Stream << "case " << Size << ": ";
+      // Write the value to input port from memory if this is a read.
+      if (SimRead)
+        Stream << getPortVal(InData) << " = ";
+      
+      // Cast the pointer and dereference it.
       // The size is in bytes, convert it to bits.
+      Stream << "*((";
       printSimpleType(Stream, Type::getIntNTy(Context, Size * 8), false);
-      Stream << "*)" << getPortVal(Address) << "); break;\n";
+      Stream << "*)" << getPortVal(Address) << ")";
+
+      // Other Write the value from output port to memory.
+      if (!SimRead) {
+        Stream << " = ((";
+        printSimpleType(Stream, Type::getIntNTy(Context, Size * 8), false);
+        Stream << ") " << getPortVal(OutData) << ")";
+      }
+
+      Stream << "; break;\n";
     }
 
     Stream.block_end();
+  }
+
+  inline void simulateMemRead(unsigned MemPortStartIdx, LLVMContext &Context) {
+    simulateMemBusImpl<true>(MemPortStartIdx, Context);
+  }
+
+  inline void simulateMemWrite(unsigned MemPortStartIdx, LLVMContext &Context) {
+    simulateMemBusImpl<false>(MemPortStartIdx, Context);
   }
 };
 } //end anonymous namespace
@@ -673,8 +696,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     unsigned WriteEnable = Enable + 1;
     Stream << "if (" << getPortVal(WriteEnable) << ")";
     Stream.block_begin(false) << "// This is a write\n";
-    // Simulate the write operation on memory bus.
-
+    simulateMemWrite(Enable, Context);
     Stream.block_end(false) << "else";
     Stream.block_begin(false) << "// This is a read\n";
     simulateMemRead(Enable, Context);
