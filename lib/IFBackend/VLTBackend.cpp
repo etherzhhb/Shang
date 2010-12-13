@@ -21,6 +21,7 @@
 #include "vtm/Passes.h"
 #include "vtm/RTLInfo.h"
 #include "vtm/FileInfo.h"
+#include "vtm/LangSteam.h"
 
 #include "llvm/Function.h"
 #include "llvm/DerivedTypes.h"
@@ -346,88 +347,11 @@ static void printFunctionSignature(raw_ostream &Out, const Function *F) {
 //===----------------------------------------------------------------------===//
 // Verilator interface writer.
 namespace {
-class lang_raw_ostream : public formatted_raw_ostream {
-  // Current block indent.
-  unsigned Indent;
-  // We are start form a new line?
-  bool newline;
-  
-  static bool isPrepProcChar(char C) {
-    return C == '#';
-  }
-
-  static bool isNewLine(const char *Ptr) {
-    return *Ptr == '\n' || *Ptr == '\r';
-  }
-
-  // 
-  size_t line_length(const char *Ptr, size_t Size) {
-    size_t Scanned = 0;
-    const char *End = Ptr + Size;
-    for (; Ptr != End; ++Ptr) {
-      ++Scanned;
-      if (isNewLine(Ptr)) return Scanned;
-    }
-
-    return Size;
-  }
-
-  virtual void write_impl(const char *Ptr, size_t Size) {
-    assert(Size > 0 && "Unexpected writing zero char!");
-
-    //Do not indent the preprocessor directive.
-    if (newline && !(isPrepProcChar(*Ptr)))
-      TheStream->indent(Indent);
-
-    size_t line_len = line_length(Ptr, Size);
-    const char *NewLineStart = Ptr + line_len;
-
-    newline = isNewLine(NewLineStart - 1);
-
-    // Write current line.
-    TheStream->write(Ptr, line_len);
-
-    // Write the rest lines.
-    if (size_t SizeLeft = Size - line_len)
-      write_impl(NewLineStart, SizeLeft);
-    else // Compute the column for last line.
-      ComputeColumn(Ptr, Size);
-  }
-
-public:
-  lang_raw_ostream() : formatted_raw_ostream(), Indent(0), newline(true) {}
-
-  lang_raw_ostream &block_begin(bool newline = true) {
-    // flush the buffer.
-    flush();
-    // Increase the indent.
-    Indent += 2;
-    
-    // Write the block begin character.
-    write("{\n", (newline ? 2 : 1));
-    return *this;
-  }
-
-  lang_raw_ostream &block_end(bool newline = true) {
-    // flush the buffer.
-    flush();
-
-    assert(Indent >= 2 && "Un match block_begin and block_end!");
-    // Decrease the indent.
-    Indent -= 2;
-
-    // Write the block begin character.
-    write("}\n", (newline ? 2 : 1));
-    return *this;
-  }
-
-};
-
 struct VLTIfWriter : public MachineFunctionPass {
   static char ID;
 
   tool_output_file *FOut;
-  lang_raw_ostream Stream;
+  lang_raw_ostream<CppTraits> Stream;
 
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
@@ -475,12 +399,12 @@ struct VLTIfWriter : public MachineFunctionPass {
            << '\n';
 
     Stream << "if (" << getCurClk() << " == " << (posedge ? '1' : '0') << ")";
-    Stream.block_begin();
+    Stream.enter_block();
 
   }
 
   void isClkEdgeEnd(bool posedge) {
-    Stream.block_end(false) << "// end clk " << (posedge ? "rising" : "falling")
+    Stream.exit_block(false) << "// end clk " << (posedge ? "rising" : "falling")
                             << '\n';
   }
 
@@ -550,7 +474,7 @@ struct VLTIfWriter : public MachineFunctionPass {
 
     // Simulate the read operation on memory bus.
     Stream << "switch(" << getPortVal(DataSize) << ")";
-    Stream.block_begin();
+    Stream.enter_block();
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
          Size < EndSize; Size *= 2) {
@@ -575,7 +499,7 @@ struct VLTIfWriter : public MachineFunctionPass {
       Stream << "; break;\n";
     }
 
-    Stream.block_end();
+    Stream.exit_block();
   }
 
   inline void simulateMemRead(unsigned MemPortStartIdx, LLVMContext &Context) {
@@ -608,7 +532,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   
   printFunctionSignature(Stream, F);
   // And the function body.
-  Stream.block_begin();
+  Stream.enter_block();
 
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
@@ -667,7 +591,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   Stream << "\n\n\n"
             "// The main evaluation loop.\n"
             "do";
-  Stream.block_begin();
+  Stream.enter_block();
 
   // TODO: Allow the user to custom the clock edge.
   isClkEdgeBegin(true);
@@ -681,7 +605,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
     unsigned Enable = RTLMod->getFUPortOff(ID);
     Stream << "if (" << getPortVal(Enable) << ")";
-    Stream.block_begin(false) << "// If membus" << FUNum << " active\n";
+    Stream.enter_block(false) << "// If membus" << FUNum << " active\n";
 
     unsigned Address = Enable + 2;
 
@@ -694,13 +618,13 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
     unsigned WriteEnable = Enable + 1;
     Stream << "if (" << getPortVal(WriteEnable) << ")";
-    Stream.block_begin(false) << "// This is a write\n";
+    Stream.enter_block(false) << "// This is a write\n";
     simulateMemWrite(Enable, Context);
-    Stream.block_end(false) << "else";
-    Stream.block_begin(false) << "// This is a read\n";
+    Stream.exit_block(false) << "else";
+    Stream.enter_block(false) << "// This is a read\n";
     simulateMemRead(Enable, Context);
-    Stream.block_end(false) << "// end read/write\n";
-    Stream.block_end(false) << "// end membus" << FUNum << '\n';
+    Stream.exit_block(false) << "// end read/write\n";
+    Stream.exit_block(false) << "// end membus" << FUNum << '\n';
   }
 
   isClkEdgeEnd(true);
@@ -708,7 +632,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   Stream << "\n"
             "// Check if the module finish its job at last.\n";
   Stream << "if (" << getPortVal(VASTModule::Finish) << ")";
-  Stream.block_begin();
+  Stream.enter_block();
   // TODO: Print the total spent cycle number if necessary.
 
   Stream << "return";
@@ -723,7 +647,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   } else
     Stream << ";\n";
 
-  Stream.block_end();
+  Stream.exit_block();
 
   Stream << '\n';
 
@@ -732,7 +656,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
   // TODO: allow user to custom the maximum simulation time.
   // FIXME: The result is wrong if sim_time just overflow.
-  Stream.block_end(false) << "while(!Verilated::gotFinish()"
+  Stream.exit_block(false) << "while(!Verilated::gotFinish()"
                              " && (sim_time - start_time) < 0x1000);\n";
 
   Stream << '\n';
@@ -742,7 +666,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     Stream << "return 0;\n";
   }
   // End function body.
-  Stream.block_end() << "\n";
+  Stream.exit_block() << "\n";
   Stream.flush();
 
   return false;
