@@ -685,11 +685,10 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
     unsigned Address = Enable + 2;
 
+    Stream << "#ifdef __DEBUG_IF\n";
     // Read the address
     printType(Stream, TD->getIntPtrType(Context), false, "Addr");
-    Stream << " = " << getPortVal(Address) << ";\n";
-
-    Stream << "#ifdef __DEBUG_IF\n"
+    Stream << " = " << getPortVal(Address) << ";\n"
               "printf(\"Bus active with address %x\\n\", Addr);\n"
               "#endif\n";
 
