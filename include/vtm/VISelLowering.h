@@ -64,6 +64,8 @@ public:
 
   unsigned computeSizeInBits(SDValue Op) const;
 
+  //===--------------------------------------------------------------------===//
+  // heterogeneous accelerator architecture bit level SDNodes.
   SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                       unsigned UB, unsigned LB) const;
   
@@ -83,21 +85,25 @@ public:
   SDValue getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp,
                     unsigned DstSize, bool Signed) const;
 
-  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB, SDValue CarryIn) const;
-  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB) const;
-
-
-  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB, SDValue CarryIn) const;
-  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                 SDValue OpA, SDValue OpB) const;
-
   SDValue getReductionOp(SelectionDAG &DAG, unsigned Opc, DebugLoc dl,
                          SDValue Src) const;
 
   SDValue getNot(SelectionDAG &DAG, DebugLoc dl, SDValue Operand) const;
+
+  //===--------------------------------------------------------------------===//
+  // heterogeneous accelerator architecture arithmetic SDNodes.
+  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB, SDValue CarryIn,
+                 bool dontCreate = false) const;
+  SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB, bool dontCreate = false) const;
+
+  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB, SDValue CarryIn,
+                 bool dontCreate = false) const;
+  SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                 SDValue OpA, SDValue OpB, bool dontCreate = false) const;
+
 private:
 
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;

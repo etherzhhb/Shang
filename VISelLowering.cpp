@@ -379,30 +379,48 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
 // Overflow = [16]^[15];
 SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                                 SDValue OpA, SDValue OpB,
-                                SDValue CarryIn) const {  
-  return DAG.getNode(VTMISD::ADD, dl, DAG.getVTList(VT, MVT::i1),
-                     OpA, OpB, CarryIn);
+                                SDValue CarryIn, bool dontCreate) const {
+  SDVTList VTs = DAG.getVTList(VT, MVT::i1);
+  // TODO: Try to fold constant arithmetic.
+  // NOTE: We need to perform the arithmetic at the bit width of VT + 1.
+  //ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(OpA.getNode());
+  //ConstantSDNode *N2C = dyn_cast<ConstantSDNode>(OpB.getNode());
+  //ConstantSDNode *CC = dyn_cast<ConstantSDNode>(CarryIn.getNode());
+
+  // Should us create the node?
+  SDValue Ops[] = { OpA, OpB, CarryIn };
+  if (dontCreate) {
+    if (SDNode *N = DAG.getNodeIfExists(VTMISD::ADD, VTs,
+                                        Ops, array_lengthof(Ops)))
+      return SDValue(N, 0);
+
+    return SDValue();
+  }
+
+  return DAG.getNode(VTMISD::ADD, dl, VTs, Ops, array_lengthof(Ops));
 }
 
 SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                                SDValue OpA, SDValue OpB) const {
-  return getAdd(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1));
-}
-
-SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                                SDValue OpA, SDValue OpB) const {
-  return getSub(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1));
+                                SDValue OpA, SDValue OpB,
+                                bool dontCreate) const {
+  return getAdd(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1), dontCreate);
 }
 
 SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                                 SDValue OpA, SDValue OpB,
-                                SDValue CarryIn) const {
+                                bool dontCreate) const {
+  return getSub(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1), dontCreate);
+}
+
+SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
+                                SDValue OpA, SDValue OpB,
+                                SDValue CarryIn, bool dontCreate) const {
   // A + B = A + (-B) = A + (~B) + 1
   OpB = getNot(DAG, OpB.getDebugLoc(), OpB);
   // FIXME: Is this correct?
   CarryIn = getNot(DAG, CarryIn.getDebugLoc(), CarryIn);
 
-  return getAdd(DAG, dl, VT, OpA, OpB, CarryIn);
+  return getAdd(DAG, dl, VT, OpA, OpB, CarryIn, dontCreate);
 }
 
 SDValue VTargetLowering::getReductionOp(SelectionDAG &DAG, unsigned Opc,
