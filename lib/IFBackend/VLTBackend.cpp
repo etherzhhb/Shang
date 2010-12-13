@@ -535,6 +535,33 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
+
+  void simulateMemRead(unsigned MemPortStartIdx, LLVMContext &Context) {
+    unsigned Address  = MemPortStartIdx + 2;
+    unsigned InData   = MemPortStartIdx + 3;
+    unsigned DataSize = MemPortStartIdx + 5;
+
+    // Compute the membus data size (in bytes).
+    // FIXME: Every membus may have different data size.
+    VFUMemBus *MemBusDesc = vtmfus().getFUDesc<VFUMemBus>();
+    unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
+
+    // Simulate the read operation on memory bus.
+    Stream << "switch(" << getPortVal(DataSize) << ")";
+    Stream.block_begin();
+
+    for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
+         Size < EndSize; Size *= 2) {
+      Stream << "case " << Size << ": "
+             // Cast the pointer and dereference it.
+             << getPortVal(InData) << " = *((";
+      // The size is in bytes, convert it to bits.
+      printSimpleType(Stream, Type::getIntNTy(Context, Size * 8), false);
+      Stream << "*)" << getPortVal(Address) << "); break;\n";
+    }
+
+    Stream.block_end();
+  }
 };
 } //end anonymous namespace
 
@@ -551,6 +578,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   RTLMod = getAnalysis<RTLInfo>().getRTLModule();
   TargetData *TD = getAnalysisIfAvailable<TargetData>();
   assert(TD && "Where is TD?");
+  LLVMContext &Context = F->getContext();
 
   // Print the interface function.
   const Type *retty = F->getReturnType();
@@ -591,7 +619,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     const Type *ArgTy = I->getType();
     if (ArgTy->isPointerTy()) {
       Stream << '(';
-      printType(Stream, TD->getIntPtrType(F->getContext()));
+      printType(Stream, TD->getIntPtrType(Context));
       Stream << ')';
     }
 
@@ -621,6 +649,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   // TODO: Allow the user to custom the clock edge.
   isClkEdgeBegin(true);
   // Check membuses.
+
   typedef VFuncInfo::const_id_iterator id_iterator;
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
@@ -632,10 +661,9 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     Stream.block_begin(false) << "// If membus" << FUNum << " active\n";
 
     unsigned Address = Enable + 2;
-    unsigned DataSize = Enable + 5;
 
     // Read the address
-    printType(Stream, TD->getIntPtrType(F->getContext()), false, "Addr");
+    printType(Stream, TD->getIntPtrType(Context), false, "Addr");
     Stream << " = " << getPortVal(Address) << ";\n";
 
     Stream << "#ifdef __DEBUG_IF\n"
@@ -649,22 +677,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
     Stream.block_end(false) << "else";
     Stream.block_begin(false) << "// This is a read\n";
-    unsigned InData = Enable + 3;
-    // Simulate the read operation on memory bus.
-    Stream << "switch(" << getPortVal(DataSize) << ")";
-    Stream.block_begin();
-
-    // FIXME: Stop at the data bus size.
-    for (unsigned Size = 1; Size < (8 << 1); Size <<= 1) {
-      Stream << "case " << Size << ": "
-                        // Cast the pointer and dereference it.
-                        << getPortVal(InData) << " = *((";
-      // The size is in bytes, convert it to bits.
-      printSimpleType(Stream, Type::getIntNTy(F->getContext(), Size * 8), false);
-      Stream << "*)Addr); break;\n"; 
-    }
-
-    Stream.block_end();
+    simulateMemRead(Enable, Context);
     Stream.block_end(false) << "// end read/write\n";
     Stream.block_end(false) << "// end membus" << FUNum << '\n';
   }
