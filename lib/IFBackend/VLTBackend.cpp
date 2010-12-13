@@ -223,7 +223,7 @@ static raw_ostream &printType(raw_ostream &Out, const Type *Ty,
   return Out;
 }
 
-static const Type *printFunctionSignature(raw_ostream &Out, const Function *F) {
+static void printFunctionSignature(raw_ostream &Out, const Function *F) {
   /// isStructReturn - Should this function actually return a struct by-value?
   bool isStructReturn = F->hasStructRetAttr();
 
@@ -341,8 +341,6 @@ static const Type *printFunctionSignature(raw_ostream &Out, const Function *F) {
   printType(Out, RetTy,
     /*isSigned=*/PAL.paramHasAttr(0, Attribute::SExt),
     FunctionInnards.str());
-  
-  return RetTy;
 }
 
 //===----------------------------------------------------------------------===//
@@ -482,7 +480,9 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   assert(TD && "Where is TD?");
 
   // Print the interface function.
-  const Type *retty = printFunctionSignature(Stream, F);
+  const Type *retty = F->getReturnType();
+  
+  printFunctionSignature(Stream, F);
   // And the function body.
   Stream << "{\n";
 
