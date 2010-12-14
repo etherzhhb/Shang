@@ -119,6 +119,29 @@ public:
   lang_raw_ostream &exit_block(const char *Posfix = "\n") {
     return exit_block<const char*>(Posfix);
   }
+
+  template<typename CndT, typename PosfixT>
+  lang_raw_ostream &if_begin(CndT Cnd, PosfixT Posfix) {
+    *this <<"if (" << Cnd << ") ";
+    enter_block<PosfixT>(Posfix);
+    return *this;
+  }
+
+  template<typename CndT>
+  lang_raw_ostream &if_begin(CndT Cnd, const char* Posfix = "\n") {
+    return if_begin<CndT, const char*>(Cnd, Posfix);
+  }
+
+  template<typename PosfixT>
+  lang_raw_ostream &else_begin(PosfixT Posfix) {
+    exit_block("else ");
+    enter_block<PosfixT>(Posfix);
+    return *this;
+  }
+
+  lang_raw_ostream &else_begin(const char *Posfix = "\n") {
+    return else_begin<const char*>(Posfix);
+  }
 };
 
 struct CppTraits {
@@ -202,19 +225,6 @@ public:
     flush();
     Indent += 2;
     exit_block("\n", "endcase");
-    return *this;
-  }
-
-  template<typename CndT>
-  vlang_raw_ostream &if_begin(CndT Cnd) {
-    *this <<"if (" << Cnd << ") ";
-    enter_block();
-    return *this;
-  }
-
-  vlang_raw_ostream &else_begin() {
-    exit_block("else ");
-    enter_block();
     return *this;
   }
 

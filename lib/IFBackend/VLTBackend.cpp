@@ -399,9 +399,7 @@ struct VLTIfWriter : public MachineFunctionPass {
            << (posedge ? "rising" : "falling")
            << '\n';
 
-    Stream << "if (" << getCurClk() << " == " << (posedge ? '1' : '0') << ")";
-    Stream.enter_block();
-
+    Stream.if_begin(format("%s == %c", getCurClk(), '0' + posedge));
   }
 
   void isClkEdgeEnd(bool posedge) {
@@ -476,7 +474,7 @@ struct VLTIfWriter : public MachineFunctionPass {
     unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
 
     // Simulate the read operation on memory bus.
-    Stream << "switch(" << getPortVal(DataSize) << ")";
+    Stream << "switch (" << getPortVal(DataSize) << ")";
     Stream.enter_block();
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
@@ -542,8 +540,9 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
   // Reset if necessary.
   Stream << "// Reset the module if we first time invoke the module.\n";
-  Stream << "if (sim_time == 0) \n";
+  Stream.if_begin("sim_time == 0");
   assignInPort(VASTModule::RST, 0);
+  Stream.exit_block();
 
   // Run several cycles.
   Stream << '\n';
@@ -623,7 +622,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     Stream << "if (" << getPortVal(WriteEnable) << ")";
     Stream.enter_block("// This is a write\n");
     simulateMemWrite(Enable, Context);
-    Stream.exit_block("else").enter_block("// This is a read\n");
+    Stream.else_begin("// This is a read\n");
     simulateMemRead(Enable, Context);
     Stream.exit_block("// end read/write\n");
     Stream.exit_block(format("// end membus%d\n", FUNum));
@@ -633,8 +632,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
   Stream << "\n"
             "// Check if the module finish its job at last.\n";
-  Stream << "if (" << getPortVal(VASTModule::Finish) << ")";
-  Stream.enter_block();
+  Stream.if_begin(getPortVal(VASTModule::Finish));
   // TODO: Print the total spent cycle number if necessary.
 
   Stream << "return";
