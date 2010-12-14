@@ -491,9 +491,11 @@ NoFDMS("disable-fdms",
        cl::desc("vbe - Do not preform force-directed modulo schedule"),
        cl::Hidden, cl::init(false));
 
-void VSchedGraph::schedule() {
+void VSchedGraph::preSchedTopSort() {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
+}
 
+void VSchedGraph::schedule() {
   // Create the FDInfo.
   //ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
   ForceDirectedSchedulingBase *Scheduler = 0;

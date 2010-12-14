@@ -560,7 +560,11 @@ public:
 
   /// @name Scheduling
   //{
+  // Sort the schedule units base on the order of underlying instruction.
+  void preSchedTopSort();
+
   void schedule();
+  
   MachineBasicBlock *emitSchedule(BitLevelInfo &BLI);
   //}
 };

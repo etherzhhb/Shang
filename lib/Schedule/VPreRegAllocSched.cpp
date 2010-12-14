@@ -27,6 +27,7 @@
 #include "vtm/VTargetMachine.h"
 #include "vtm/VTM.h"
 
+#include "llvm/Analysis/AliasAnalysis.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -35,6 +36,8 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
+#include "llvm/CodeGen/PseudoSourceValue.h"
+
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/GraphWriter.h"
@@ -58,6 +61,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VFuncInfo *FuncInfo;
   BitLevelInfo *BLI;
+  AliasAnalysis *AA;
+  TargetData *TD;
 
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
@@ -109,7 +114,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void clear();
 
-  void addMemDepEdges(std::vector<VSUnit*> &MemOps, BasicBlock &BB);
+  void buildMemDepEdges(VSchedGraph &CurState);
 
   bool haveSelfLoop(const MachineBasicBlock *MBB);
 
@@ -125,6 +130,13 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
   bool runOnMachineFunction(MachineFunction &MF);
+
+  bool doInitialization(Module &M) {
+    TD = getAnalysisIfAvailable<TargetData>();
+    assert(TD && "TargetData will always available in a machine function pass!");
+    return false;
+  }
+
   void releaseMemory();
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void print(raw_ostream &O, const Module *M) const;
@@ -157,6 +169,7 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LiveVariables>();
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<BitLevelInfo>();
+  AU.addRequired<AliasAnalysis>();
   // AU.addRequired<MemDepInfo>();
   AU.setPreservesCFG();
   AU.addPreserved<BitLevelInfo>();
@@ -167,6 +180,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   FuncInfo = MF.getInfo<VFuncInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
+  AA = &getAnalysis<AliasAnalysis>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
@@ -221,7 +235,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   //      MemOps.push_back(cast<VSUnit>(A));
   //  }
   //  // preform memory dependencies analysis to add corresponding edges.
-  //  addMemDepEdges(MemOps, *BB);
+  //  buildMemDepEdges(MemOps, *BB);
 
   //  bool selfLoop = haveSelfLoop(BB);
   //  
@@ -271,39 +285,65 @@ bool VPreRegAllocSched::haveSelfLoop(const MachineBasicBlock *MBB) {
 //  return 0;
 //}
 
-void VPreRegAllocSched::addMemDepEdges(std::vector<VSUnit*> &MemOps, BasicBlock &BB) {
-  //typedef std::vector<VSUnit*> OpInstVec;
-  //typedef MemDepInfo::DepInfo DepInfoType;
-  //for (OpInstVec::iterator SrcI = MemOps.begin(), SrcE = MemOps.end();
-  //    SrcI != SrcE; ++SrcI) {
-  //  VSUnit *Src = *SrcI;
-  //  bool isSrcLoad = isa<LoadInst>(Src->getValue());
+void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
+  CurState.preSchedTopSort();
+  // The schedule unit and the corresponding memory operand.
+  typedef std::multimap<const Value*, VSUnit*> MemOpMapTy;
+  MemOpMapTy VisitedMemOps;
 
-  //  for (OpInstVec::iterator DstI = MemOps.begin(), DstE = MemOps.end();
-  //      DstI != DstE; ++DstI) {
-  //    VSUnit *Dst = *DstI;
-  //    bool isDstLoad = isa<LoadInst>(Dst->getValue());
+  for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end(); I != E;
+       ++I) {
+    VSUnit *DstU = *I;
+    MachineInstr *DstMI = DstU->getFirstInstr();
+    // Skip the non-memory operation.
+    if (!DstMI || DstMI->memoperands_empty())
+      continue;
 
-  //    //No self loops and RAR dependence.
-  //    if (Src == Dst || (isSrcLoad && isDstLoad))
-  //      continue;
-  //    
-  //    bool srcBeforeDest = Src->getIdx() < Dst->getIdx();
+    // FIXME:
+    assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem operand!");
+    assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile operation!");
 
-  //    // Get dependencies information.
-  //    DepInfoType Dep = MDA->getDepInfo(Src->getInst<Instruction>(),
-  //                                       Dst->getInst<Instruction>(),
-  //                                       BB, srcBeforeDest);
-  //    if (!Dep.hasDep())
-  //      continue;
+    const Value *DstMO = (*DstMI->memoperands_begin())->getValue();
+    const Type *DstElemTy = cast<SequentialType>(DstMO->getType())->getElementType();
+    size_t DstSize = TD->getTypeStoreSize(DstElemTy);
 
-  //    // Add dependencies edges.
-  //    // The edge is back edge if destination before source.
-  //    VDMemDep *MemDep = getMemDepEdge(Src, Src->getIdx() > Dst->getIdx(), 
-  //                                     Dep.getDepType(), Dep.getItDst());
-  //    Dst->addDep(MemDep);
-  //  }
-  //}
+    VTFInfo DstInfo = *DstMI;
+    bool isDstLoad = DstInfo.mayLoad();
+
+    if (DstMO == 0) continue;
+
+    assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
+
+    for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
+         I != E; ++I) {
+      const Value *SrcMO = I->first;
+      const Type *SrcElemTy = cast<SequentialType>(SrcMO->getType())->getElementType();
+      size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
+      
+      VSUnit *SrcU = I->second;
+      MachineInstr *SrcMI = SrcU->getFirstInstr();
+      VTFInfo SrcInfo = *SrcMI;
+      bool isSrcLoad = SrcInfo.mayLoad();
+      
+      // Ignore RAR dependence.
+      if (isDstLoad && isSrcLoad) continue;
+
+      // Ignore the No-Alias pointers.
+      // FIXME: We may employ more advance AA.
+      if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
+
+      // Compute the memory dependence.
+      // TODO: Compute iterater distance for loops.
+      VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
+                                       VDMemDep::TrueDep, 0);
+      DstU->addDep(MemDep);
+    }
+
+    // Check for self dependence in loop.
+
+    // Add the schedule unit to visited map.
+    VisitedMemOps.insert(std::make_pair(DstMO, DstU));
+  }
 }
 
 void VPreRegAllocSched::clear() {
@@ -424,7 +464,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   buildExitRoot(State);
 
   // Build the memory edges.
-  State.preSchedTopSort();
+  buildMemDepEdges(State);
 
 }
 
