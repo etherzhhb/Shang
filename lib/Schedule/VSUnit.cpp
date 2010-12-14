@@ -63,27 +63,25 @@ struct MicroStateBuilder {
   
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
-
     unsigned WireNum;
     const char *SymbolName;
-    PointerIntPair<MachineOperand*, 1, bool> Op;
+    MachineOperand *Op;
     unsigned EmitSlot;
     unsigned WriteSlot;
 
     WireDef(unsigned wireNum, const char *Symbol, MachineOperand *op,
             unsigned emitSlot, unsigned writeSlot)
-      : WireNum(wireNum), SymbolName(Symbol), Op(op, false), EmitSlot(emitSlot),
+      : WireNum(wireNum), SymbolName(Symbol), Op(op), EmitSlot(emitSlot),
       WriteSlot(writeSlot) {}
 
     bool isSymbol() const { return SymbolName != 0; }
-    bool isKilled() const { return Op.getInt(); }
-    void applyKilled(bool SetKilled) { Op.setInt(Op.getInt() || SetKilled); }
-    MachineOperand *getOperand() const { return Op.getPointer(); }
+    
+    MachineOperand *getOperand() const { return Op; }
   };
 
-  inline WireDef createWireDef(unsigned WireNum, VSUnit *A,
-                               MachineOperand *MO, unsigned OpNum,
-                               unsigned emitSlot, unsigned writeSlot){
+  inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand *MO,
+                               unsigned OpNum, unsigned emitSlot,
+                               unsigned writeSlot){
     const char *Symbol = 0;
     if (A->getFUId().isBinded()) {
       assert(A->getFUType() == VFUs::MemoryBus
@@ -198,17 +196,12 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
        I != E; ++I) {
     WireDef *WD = *I;
 
-    // This operand will delete with its origin instruction.
-    if (WD->isKilled()) {
-      // FIXME: Tell someone this register is dead.
-      continue;
-    }
-
     MachineOperand *MO = WD->getOperand();
 
+    // This operand will delete with its origin instruction.
     // Eliminate the dead register.
-    if (MO->isDead()) continue;
-    
+    if (MRI.use_empty(MO->getReg())) continue;
+
     // Export the register.
     CtrlInst.addMetadata(MetaToken::createDefReg(++OpId, WD->WireNum, VMContext));
     CtrlInst.addOperand(*MO);
@@ -313,9 +306,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot
     }
 
     assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
-    // Now we emit an operation while the value are computing, just read
-    // the value from a wire.
-    WDef.applyKilled(MO->isKill());
 
     if (WDef.isSymbol())
       Builder.addExternalSymbol(WDef.SymbolName);
