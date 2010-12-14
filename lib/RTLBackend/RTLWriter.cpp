@@ -435,9 +435,16 @@ void RTLInfo::emitOpRetVal(ucOp &OpRetVal) {
 }
 
 void RTLInfo::emitOpMemAccess(ucOp &OpMemAccess) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
   unsigned FUNum = OpMemAccess.getFUNum();
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  DPS << "// Dirty Hack: Emit the wire define by this operation\n"
+         "// some register copying operation may need this wire.\n";
+  DPS << "assign ";
+  emitOperand(DPS, OpMemAccess.getOperand(0));
+  DPS << " = " << VFUMemBus::getInDataBusName(FUNum) << ";\n";
 
+  // Emit the control logic.
+  raw_ostream &OS = VM->getControlBlockBuffer();
   // Assign store data.
   OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(1));

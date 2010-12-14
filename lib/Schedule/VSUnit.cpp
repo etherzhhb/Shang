@@ -276,18 +276,23 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot
       ++WireNum;
       WireDef WDef = createWireDef(WireNum, A, MO, i, EmitSlot, WriteSlot);
 
-      std::pair<SWDMapTy::iterator, bool> result =
-        StateWireDefs.insert(std::make_pair(RegNo, WDef));
+      SWDMapTy::iterator mapIt;
+      bool inserted;
+      tie(mapIt, inserted) = StateWireDefs.insert(std::make_pair(RegNo, WDef));
 
-      assert(result.second && "Instructions not in SSA form!");
-      WireDef *NewDef = &result.first->second;
-      // Remember to emit this wire define if necessary.
-      Defs.push_back(NewDef);
+      assert(inserted && "Instructions not in SSA form!");
+      WireDef *NewDef = &mapIt->second;
+
       unsigned BitWidth = BLI.getBitWidth(*MO);
-      // Do not emit define unless it not killed in the current state.
-      // Emit a wire define instead.
-      Builder.addMetadata(MetaToken::createDefWire(WireNum, BitWidth,
-        VMContext));
+
+      // Do not emit write to register unless it not killed in the current state.
+      // FIXME: Emit the wire only if the value is not read in a function unit port.
+      // if (!NewDef->isSymbol()) {
+        MDNode *WireDefOp = MetaToken::createDefWire(WireNum, BitWidth, VMContext);
+        Builder.addMetadata(WireDefOp);
+        // Remember to emit this wire define if necessary.
+        Defs.push_back(NewDef);
+      // }
       continue;
     }
 
