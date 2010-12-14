@@ -95,14 +95,14 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   
   // Idle state
   verilogParam(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  verilogMatchCase(VM->getControlBlockBuffer(), "state_idle");
+  VM->getControlBlockBuffer().match_case("state_idle");
   // Idle state is always ready.
-  verilogIfBegin(VM->getControlBlockBuffer(), "start");
+  VM->getControlBlockBuffer().if_begin("start");
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   emitNextFSMState(VM->getControlBlockBuffer(), EntryBB);
   //
-  verilogIfElse(VM->getControlBlockBuffer());
+  VM->getControlBlockBuffer().else_begin();
   VM->getControlBlockBuffer() << "NextFSMState <= state_idle;\n";
   // Emit function unit control at idle state, simply disable all
   // function units.
@@ -125,6 +125,7 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
 
   // Write buffers to output
   VM->printModuleDecl(Out);
+  Out.module_begin();
   Out << "\n\n";
   // States
   Out << "// States\n";
@@ -132,7 +133,7 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   Out << "\n\n";
   // Reg and wire
   Out << "// Reg and wire decl\n";
-  VM->printSignalDecl(Out, 2);
+  VM->printSignalDecl(Out);
   Out << "\n\n";
 
   // Datapath
@@ -141,19 +142,19 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
 
   Out << "\n\n";
   Out << "// Always Block\n";
-  verilogAlwaysBegin(Out);
-  VM->printRegisterReset(Out, 6);
-  verilogIfElse(Out);
+  Out.always_ff_begin();
+  VM->printRegisterReset(Out);
+  Out.else_begin();
 
   Out << "// FSM\n";
-  verilogSwitchCase(Out, "NextFSMState");
+  Out.switch_begin("NextFSMState");
   Out << VM->getControlBlockStr();
   // Case default.
   Out << "default:  NextFSMState <= state_idle;\n";
-  verilogEndSwitch(Out);
-  verilogAlwaysEnd(Out);
+  Out.switch_end();
+  Out.always_ff_end();
 
-  verilogEndModule(Out);
+  Out.module_end();
   Out.flush();
 
   return false;
@@ -215,7 +216,7 @@ void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
   createucStateEnable(&MBB);
 
   // Case begin
-  verilogMatchCase(VM->getControlBlockBuffer(), StateName);
+  VM->getControlBlockBuffer().match_case(StateName);
 
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
@@ -228,7 +229,7 @@ void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    verilogIfBegin(VM->getControlBlockBuffer(), getucStateEnable(CurDatapath));
+    VM->getControlBlockBuffer().if_begin(getucStateEnable(CurDatapath));
     emitCtrlOp(NextControl);
     VM->getControlBlockBuffer().exit_block();
   } while(I != E);
@@ -419,7 +420,7 @@ void RTLInfo::emitOpToState(ucOp &OpToState) {
   std::string s;
   raw_string_ostream ss(s);
   emitOperand(ss, OpToState.getOperand(0));
-  verilogIfBegin(OS, ss.str());
+  OS.if_begin(ss.str());
   emitNextFSMState(OS, OpToState.getOperand(1).getMBB());
   VM->getControlBlockBuffer().exit_block();
 }

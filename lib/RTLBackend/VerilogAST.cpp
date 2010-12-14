@@ -130,66 +130,6 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
 //  return "esyn_" + VarName;
 //}
 
-vlang_raw_ostream &llvm::verilogAlwaysBegin(vlang_raw_ostream &ss,
-                                            const std::string &Clk,
-                                            const std::string &ClkEdge,
-                                            const std::string &Rst,
-                                            const std::string &RstEdge) {
-  // TODO: Support Sync reset
-  // TODO: SystemVerilog always_ff?
-  ss << "always @("
-     << ClkEdge << " "<< Clk <<", "
-     << RstEdge << " " << Rst <<")";
-  ss.enter_block();
-  ss << "if (";
-  // negative edge reset?
-  if (RstEdge == "negedge")
-    ss << "!";
-  ss << Rst << ")";
-  ss.enter_block();
-  ss << "// reset registers\n";
-  return ss;
-}
-
-vlang_raw_ostream &llvm::verilogEndModule(vlang_raw_ostream &ss) {
-  ss << "endmodule\n\n";
-  return ss;
-}
-
-vlang_raw_ostream &llvm::verilogEndSwitch(vlang_raw_ostream &ss) {
-  ss << "endcase\n";
-  return ss;
-}
-
-vlang_raw_ostream &llvm::verilogIfElse(vlang_raw_ostream &ss) {
-  ss << "end else begin\n";
-  return ss;
-}
-
-vlang_raw_ostream &llvm::verilogIfBegin(vlang_raw_ostream &ss,
-                                  const std::string &Condition) {
-  ss << "if (" << Condition << ")";
-  return ss.enter_block();
-}
-
-vlang_raw_ostream &llvm::verilogMatchCase(vlang_raw_ostream &ss,
-                                    const std::string &StateName) {
-  ss << StateName << ":";
-  return ss.enter_block();
-}
-
-vlang_raw_ostream &llvm::verilogSwitchCase(vlang_raw_ostream &ss,
-                                     const std::string &StateName) {
-  ss << "case (" << StateName <<")\n";
-  return ss;
-}
-
-vlang_raw_ostream &llvm::verilogAlwaysEnd(vlang_raw_ostream &ss) {
-  ss.exit_block("//else reset\n");
-  ss.exit_block("//always @(..)\n\n");
-  return ss;
-}
-
 raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
                                 unsigned BitWidth, unsigned Val) {
   ss << "parameter " << Name
@@ -227,22 +167,22 @@ void VASTModule::printModuleDecl(raw_ostream &OS) const {
   OS << ");\n";
 }
 
-void VASTModule::printSignalDecl(raw_ostream &OS, unsigned indent /*= 2*/) {
+void VASTModule::printSignalDecl(raw_ostream &OS) {
   for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
        I != E; ++I) {
-    (*I)->printDecl(OS.indent(indent));
+    (*I)->printDecl(OS);
     OS << "\n";
   }
   
 }
 
-void VASTModule::printRegisterReset(raw_ostream &OS, unsigned indent /*= 6*/) {
+void VASTModule::printRegisterReset(raw_ostream &OS) {
   // Reset output registers.
   for (PortVector::const_iterator I = Ports.begin(), E = Ports.end();
        I != E; ++I) {
     VASTPort *port = *I;
     if (port->isRegister()) {
-      port->printReset(OS.indent(indent));
+      port->printReset(OS);
       OS << "\n";
     }
   }
@@ -251,7 +191,7 @@ void VASTModule::printRegisterReset(raw_ostream &OS, unsigned indent /*= 6*/) {
        I != E; ++I) {
     VASTSignal *signal = *I;
     if (signal->isRegister()) {
-      signal->printReset(OS.indent(indent));
+      signal->printReset(OS);
       OS << "\n";
     }
   }

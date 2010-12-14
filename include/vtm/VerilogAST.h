@@ -254,8 +254,8 @@ public:
     return Signal;
   }
 
-  void printSignalDecl(raw_ostream &OS, unsigned indent = 2);
-  void printRegisterReset(raw_ostream &OS, unsigned indent = 6);
+  void printSignalDecl(raw_ostream &OS);
+  void printRegisterReset(raw_ostream &OS);
 
   void print(raw_ostream &OS) const;
 
@@ -299,32 +299,8 @@ std::string verilogConstToStr(uint64_t value,unsigned bitwidth,
 
 std::string verilogBitRange(unsigned UB, unsigned LB = 0, bool printOneBit = true);
 
-vlang_raw_ostream &verilogAlwaysBegin(vlang_raw_ostream &ss,
-                                const std::string &Clk = "clk",
-                                const std::string &ClkEdge = "posedge",
-                                const std::string &Rst = "rstN",
-                                const std::string &RstEdge = "negedge");
-
 raw_ostream &verilogParam(raw_ostream &ss, const std::string &Name,
                           unsigned BitWidth, unsigned Val);
-
-vlang_raw_ostream &verilogAlwaysEnd(vlang_raw_ostream &ss);
-
-vlang_raw_ostream &verilogSwitchCase(vlang_raw_ostream &ss,
-                                     const std::string &StateName);
-
-vlang_raw_ostream &verilogMatchCase(vlang_raw_ostream &ss,
-                                    const std::string &StateName);
-
-vlang_raw_ostream &verilogIfBegin(vlang_raw_ostream &ss,
-                                  const std::string &Condition);
-
-vlang_raw_ostream &verilogIfElse(vlang_raw_ostream &ss);
-
-vlang_raw_ostream &verilogEndSwitch(vlang_raw_ostream &ss);
-
-vlang_raw_ostream &verilogEndModule(vlang_raw_ostream &ss);
-
 
 } // end namespace
 

@@ -22,6 +22,7 @@
 namespace llvm {
 template<class LangTraits>
 class lang_raw_ostream : public formatted_raw_ostream {
+protected:
   // Current block indent.
   unsigned Indent;
   // We are start form a new line?
@@ -150,7 +151,84 @@ struct VerilogTraits {
   }
 };
 
-typedef lang_raw_ostream<VerilogTraits> vlang_raw_ostream;
+class vlang_raw_ostream : public lang_raw_ostream<VerilogTraits> {
+public:
+  explicit vlang_raw_ostream(unsigned Ind = 0)
+    : lang_raw_ostream<VerilogTraits>(Ind) {}
+
+  explicit vlang_raw_ostream(raw_ostream &Stream, bool Delete = false,
+    unsigned Ind = 0)
+    : lang_raw_ostream<VerilogTraits>(Stream, Delete) {}
+
+  vlang_raw_ostream &always_ff_begin(const std::string &Clk = "clk",
+                                     const std::string &ClkEdge = "posedge",
+                                     const std::string &Rst = "rstN",
+                                     const std::string &RstEdge = "negedge") {
+    *this << "always @(" << ClkEdge << " "<< Clk <<", " 
+                         << RstEdge << " " << Rst <<")";
+    enter_block();
+    *this << "if (";
+    // negative edge reset?
+    if (RstEdge == "negedge")
+      *this  << "!";
+    *this  << Rst << ")";
+    enter_block("// reset registers\n");
+    return *this;
+  }
+
+  vlang_raw_ostream &always_ff_end() {
+    exit_block("//else reset\n");
+    exit_block("//always @(..)\n\n");
+    return *this;
+  }
+
+  template<typename CaseT>
+  vlang_raw_ostream &switch_begin(CaseT Case) {
+    *this << "case (" << Case << ") ";
+    enter_block("\n", "");
+    Indent -= 2;
+    return *this;
+  }
+
+  template<typename CaseT>
+  vlang_raw_ostream &match_case(CaseT Case) {
+    *this << Case << ":";
+    enter_block();
+    return *this;
+  }
+
+  vlang_raw_ostream &switch_end() {
+    // Flush the content before change the indent.
+    flush();
+    Indent += 2;
+    exit_block("\n", "endcase");
+    return *this;
+  }
+
+  template<typename CndT>
+  vlang_raw_ostream &if_begin(CndT Cnd) {
+    *this <<"if (" << Cnd << ") ";
+    enter_block();
+    return *this;
+  }
+
+  vlang_raw_ostream &else_begin() {
+    exit_block("else ");
+    enter_block();
+    return *this;
+  }
+
+  vlang_raw_ostream &module_begin() {
+    enter_block("\n", "");
+    return *this;
+  }
+
+  vlang_raw_ostream &module_end() {
+    exit_block("\n", "endmodule");
+    return *this;
+  }
+};
+
 
 }
 
