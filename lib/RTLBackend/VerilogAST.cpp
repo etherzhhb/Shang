@@ -130,74 +130,63 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
 //  return "esyn_" + VarName;
 //}
 
-raw_ostream &llvm::verilogAlwaysBegin(raw_ostream &ss, unsigned ind,
-                                      const std::string &Clk /*= "clk"*/,
-                                      const std::string &ClkEdge /*= "posedge"*/,
-                                      const std::string &Rst /*= "rstN"*/,
-                                      const std::string &RstEdge /*= "negedge"*/){
+vlang_raw_ostream &llvm::verilogAlwaysBegin(vlang_raw_ostream &ss,
+                                            const std::string &Clk,
+                                            const std::string &ClkEdge,
+                                            const std::string &Rst,
+                                            const std::string &RstEdge) {
   // TODO: Support Sync reset
   // TODO: SystemVerilog always_ff?
-  ss.indent(ind) << "always @("
-    << ClkEdge << " "<< Clk <<", "
-    << RstEdge << " " << Rst
-    <<") begin\n";
-  ind += 2;
-  ss.indent(ind) << "if (";
+  ss << "always @("
+     << ClkEdge << " "<< Clk <<", "
+     << RstEdge << " " << Rst <<")";
+  ss.enter_block();
+  ss << "if (";
   // negative edge reset?
   if (RstEdge == "negedge")
     ss << "!";
-  ss << Rst << ") begin\n";
-  ind += 2;
-  ss.indent(ind) << "// reset registers\n";
+  ss << Rst << ")";
+  ss.enter_block();
+  ss << "// reset registers\n";
   return ss;
 }
 
-raw_ostream &llvm::verilogEndModule(raw_ostream &ss) {
+vlang_raw_ostream &llvm::verilogEndModule(vlang_raw_ostream &ss) {
   ss << "endmodule\n\n";
   return ss;
 }
 
-raw_ostream &llvm::verilogEndSwitch(raw_ostream &ss) {
+vlang_raw_ostream &llvm::verilogEndSwitch(vlang_raw_ostream &ss) {
   ss << "endcase\n";
   return ss;
 }
 
-raw_ostream &llvm::verilogBegin(raw_ostream &ss) {
-  ss << "begin\n";
+vlang_raw_ostream &llvm::verilogIfElse(vlang_raw_ostream &ss) {
+  ss << "end else begin\n";
   return ss;
 }
 
-raw_ostream &llvm::verilogEnd(raw_ostream &ss) {
-  ss << "end\n";
-  return ss;
-}
-
-raw_ostream &llvm::verilogIfElse(raw_ostream &ss, bool Begin) {
-  ss << "end else" << (Begin ? " begin\n" : "\n");
-  return ss;
-}
-
-raw_ostream &llvm::verilogIfBegin(raw_ostream &ss,
+vlang_raw_ostream &llvm::verilogIfBegin(vlang_raw_ostream &ss,
                                   const std::string &Condition) {
-  ss << "if (" << Condition << ") begin\n";
-  return ss;
+  ss << "if (" << Condition << ")";
+  return ss.enter_block();
 }
 
-raw_ostream &llvm::verilogMatchCase(raw_ostream &ss,
+vlang_raw_ostream &llvm::verilogMatchCase(vlang_raw_ostream &ss,
                                     const std::string &StateName) {
-  ss << StateName << ": begin\n";
-  return ss;
+  ss << StateName << ":";
+  return ss.enter_block();
 }
 
-raw_ostream &llvm::verilogSwitchCase(raw_ostream &ss,
+vlang_raw_ostream &llvm::verilogSwitchCase(vlang_raw_ostream &ss,
                                      const std::string &StateName) {
   ss << "case (" << StateName <<")\n";
   return ss;
 }
 
-raw_ostream &llvm::verilogAlwaysEnd(raw_ostream &ss, unsigned ind) {
-  ss.indent(ind + 2) << "end //else reset\n";
-  ss.indent(ind) << "end //always @(..)\n\n";
+vlang_raw_ostream &llvm::verilogAlwaysEnd(vlang_raw_ostream &ss) {
+  ss.exit_block(false) << "//else reset\n";
+  ss.exit_block(false) << "//always @(..)\n\n";
   return ss;
 }
 
@@ -206,10 +195,6 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
   ss << "parameter " << Name
     << " = " << verilogConstToStr(Val, BitWidth, false) << ";\n";
   return ss;
-}
-
-raw_ostream &llvm::verilogCommentBegin(raw_ostream &ss) {
-  return ss << "// ";
 }
 
 VASTModule::~VASTModule() {
@@ -229,7 +214,6 @@ void VASTModule::clear() {
   StateDecl.str().clear();
   DataPath.str().clear();
   ControlBlock.str().clear();
-  SeqCompute.str().clear();
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {

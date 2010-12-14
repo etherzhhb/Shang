@@ -68,7 +68,7 @@ bool RTLInfo::doInitialization(Module &M) {
   TargetData *TD = getAnalysisIfAvailable<TargetData>();
 
   assert(MMI && TD && "MachineModuleInfo and TargetData will always available"
-    " in a machine function pass!");
+                      " in a machine function pass!");
   Mang = new Mangler(MMI->getContext(), *TD);
 
   FOut = vtmfiles().getRTLOut();
@@ -95,20 +95,20 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   
   // Idle state
   verilogParam(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  verilogMatchCase(VM->getControlBlockBuffer(6), "state_idle");
+  verilogMatchCase(VM->getControlBlockBuffer(), "state_idle");
   // Idle state is always ready.
-  verilogIfBegin(VM->getControlBlockBuffer(8), "start");
+  verilogIfBegin(VM->getControlBlockBuffer(), "start");
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   emitNextFSMState(VM->getControlBlockBuffer(), EntryBB);
   //
-  verilogIfElse(VM->getControlBlockBuffer(8));
-  VM->getControlBlockBuffer(10) << "NextFSMState <= state_idle;\n";
+  verilogIfElse(VM->getControlBlockBuffer());
+  VM->getControlBlockBuffer() << "NextFSMState <= state_idle;\n";
   // Emit function unit control at idle state, simply disable all
   // function units.
   emitFUCtrl(0);
-  verilogEnd(VM->getControlBlockBuffer(8));
-  verilogEnd(VM->getControlBlockBuffer(6));
+  VM->getControlBlockBuffer().exit_block();
+  VM->getControlBlockBuffer().exit_block();
   
   emitAllRegister();
   emitAllocatedFUs();
@@ -127,34 +127,31 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   VM->printModuleDecl(Out);
   Out << "\n\n";
   // States
-  verilogCommentBegin(Out.indent(2)) << "States\n";
+  Out << "// States\n";
   Out << VM->getStateDeclStr();
   Out << "\n\n";
   // Reg and wire
-  verilogCommentBegin(Out.indent(2)) << "Reg and wire decl\n";
+  Out << "// Reg and wire decl\n";
   VM->printSignalDecl(Out, 2);
   Out << "\n\n";
 
   // Datapath
-  verilogCommentBegin(Out.indent(2)) << "Datapath\n";
+  Out << "// Datapath\n";
   Out << VM->getDataPathStr();
 
   Out << "\n\n";
-  verilogCommentBegin(Out.indent(2)) << "Always Block\n";
-  verilogAlwaysBegin(Out, 2);
+  Out << "// Always Block\n";
+  verilogAlwaysBegin(Out);
   VM->printRegisterReset(Out, 6);
-  verilogIfElse(Out.indent(4));
+  verilogIfElse(Out);
 
-  verilogCommentBegin(Out.indent(6)) << "SeqCompute:\n";
-  Out << VM->getSeqComputeStr();
-
-  verilogCommentBegin(Out.indent(6)) << "FSM\n";
-  verilogSwitchCase(Out.indent(6), "NextFSMState");
+  Out << "// FSM\n";
+  verilogSwitchCase(Out, "NextFSMState");
   Out << VM->getControlBlockStr();
   // Case default.
-  Out.indent(6) << "default:  NextFSMState <= state_idle;\n";
-  verilogEndSwitch(Out.indent(6));
-  verilogAlwaysEnd(Out, 2);
+  Out << "default:  NextFSMState <= state_idle;\n";
+  verilogEndSwitch(Out);
+  verilogAlwaysEnd(Out);
 
   verilogEndModule(Out);
   Out.flush();
@@ -206,19 +203,19 @@ void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
 
   //unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
-  verilogCommentBegin(VM->getStateDeclBuffer()) << "State for " << StateName << '\n';
+  VM->getStateDeclBuffer() << "// State for " << StateName << '\n';
   verilogParam(VM->getStateDeclBuffer(), StateName, TotalFSMStatesBit,
                ++CurFSMStateNum);
 
   // State information.
-  verilogCommentBegin(VM->getControlBlockBuffer(6)) << StateName 
-    << " Total Slot: " << totalSlot
-    << " II: " << 0 <<  '\n';
+  VM->getControlBlockBuffer() << "// " << StateName 
+                              << " Total Slot: " << totalSlot
+                              << " II: " << 0 <<  '\n';
   // Mirco state enable.
   createucStateEnable(&MBB);
 
   // Case begin
-  verilogMatchCase(VM->getControlBlockBuffer(6), StateName);
+  verilogMatchCase(VM->getControlBlockBuffer(), StateName);
 
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
@@ -231,20 +228,20 @@ void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    verilogIfBegin(VM->getControlBlockBuffer(8), getucStateEnable(CurDatapath));
+    verilogIfBegin(VM->getControlBlockBuffer(), getucStateEnable(CurDatapath));
     emitCtrlOp(NextControl);
-    verilogEnd(VM->getControlBlockBuffer(8));
+    VM->getControlBlockBuffer().exit_block();
   } while(I != E);
 
   //// Emit Self Loop logic.
   //if (State->haveSelfLoop()) {
-  //  verilogCommentBegin(VM->getControlBlockBuffer(8)) << "For self loop:\n";
+  //  VM->getControlBlockBuffer() << "// For self loop:\n";
   //  std::string SelfLoopEnable = computeSelfLoopEnable(State);
-  //  emitNextMicroState(VM->getControlBlockBuffer(8), BB, SelfLoopEnable);
+  //  emitNextMicroState(VM->getControlBlockBuffer(), BB, SelfLoopEnable);
   //} else
-    emitNextMicroState(VM->getControlBlockBuffer(8), &MBB, "1'b0");
+    emitNextMicroState(VM->getControlBlockBuffer(), &MBB, "1'b0");
   // Case end
-  verilogEnd(VM->getControlBlockBuffer(6));
+  VM->getControlBlockBuffer().exit_block();
 }
 
 void RTLInfo::emitCommonPort() {
@@ -341,16 +338,16 @@ void RTLInfo::emitFUCtrl(unsigned Slot) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   // The FSM operation.
   if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, Slot))
-    OS.indent(10) << "fin <= 1'b1;\n";
+    OS << "fin <= 1'b1;\n";
   else
-    OS.indent(10) << "fin <= 1'b0;\n";
+    OS << "fin <= 1'b0;\n";
   
   // Membus control operation.
   for (VFuncInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
 
-    OS.indent(10) << VFUMemBus::getEnableName(Id.getFUNum());
+    OS << VFUMemBus::getEnableName(Id.getFUNum());
     // Enable the membus if it is activated.
     if (FuncInfo->isFUActiveAt(Id, Slot)) OS << " <= 1'b1;\n";
     else                                  OS << " <= 1'b0;\n";
@@ -393,7 +390,7 @@ void RTLInfo::emitFirstCtrlState(MachineBasicBlock *MBB) {
 }
 
 void RTLInfo::emitOpLatchVal(ucOp &OpLatchVal) {
-  raw_ostream &OS = VM->getControlBlockBuffer(10);
+  raw_ostream &OS = VM->getControlBlockBuffer();
   MachineOperand &MO = OpLatchVal.getOperand(0);
   emitOperand(OS, MO);
   MachineBasicBlock *MBB = MO.getParent()->getParent();
@@ -403,7 +400,7 @@ void RTLInfo::emitOpLatchVal(ucOp &OpLatchVal) {
 
 void RTLInfo::emitOpArg(ucOp &OpArg) {
   // Assign input port to some register.
-  raw_ostream &OS = VM->getControlBlockBuffer(10);
+  raw_ostream &OS = VM->getControlBlockBuffer();
   emitOperand(OS, OpArg.getOperand(0));
   // FIXME: Use getInputPort instead;
   OS << " <= " << VM->getCommonInPort(OpArg.getOperand(1).getImm()).getName()
@@ -411,24 +408,24 @@ void RTLInfo::emitOpArg(ucOp &OpArg) {
 }
 
 void RTLInfo::emitOpRet(ucOp &OpArg) {
-  raw_ostream &OS = VM->getControlBlockBuffer(10);
+  raw_ostream &OS = VM->getControlBlockBuffer();
   OS << "NextFSMState <= state_idle;\n";
 }
 
 void RTLInfo::emitOpToState(ucOp &OpToState) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
+  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
 
   // Get the condition.
   std::string s;
   raw_string_ostream ss(s);
   emitOperand(ss, OpToState.getOperand(0));
-  verilogIfBegin(OS.indent(10), ss.str());
+  verilogIfBegin(OS, ss.str());
   emitNextFSMState(OS, OpToState.getOperand(1).getMBB());
-  verilogEnd(VM->getControlBlockBuffer(10));
+  VM->getControlBlockBuffer().exit_block();
 }
 
 void RTLInfo::emitOpRetVal(ucOp &OpRetVal) {
-  raw_ostream &OS = VM->getControlBlockBuffer(10);
+  raw_ostream &OS = VM->getControlBlockBuffer();
   unsigned retChannel = OpRetVal.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
   OS << "return_value <= ";
@@ -441,20 +438,20 @@ void RTLInfo::emitOpMemAccess(ucOp &OpMemAccess) {
   unsigned FUNum = OpMemAccess.getFUNum();
 
   // Assign store data.
-  OS.indent(10) << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
+  OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(1));
   OS << ";\n";
   // Emit Address.
-  OS.indent(10) << VFUMemBus::getAddrBusName(FUNum) << " <= ";
+  OS << VFUMemBus::getAddrBusName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(2));
   OS << ";\n";
   // And write enable, write is enable if the operation is NOT load.
-  OS.indent(10) << VFUMemBus::getWriteEnableName(FUNum) << " <= ~";
+  OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ~";
   emitOperand(OS, OpMemAccess.getOperand(3));
   OS << ";\n";
   // The byte enable.
   // FIXME: This is the data size instead of the byte enable.
-  OS.indent(10) << VFUMemBus::getDataSizeName(FUNum) << " <= ";
+  OS << VFUMemBus::getDataSizeName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(4));
   OS << ";\n";
 }
@@ -522,13 +519,13 @@ void RTLInfo::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
   // Emit the first micro state of the target state.
   emitFirstCtrlState(MBB);
 
-  ss.indent(10) << "NextFSMState <= " << getStateName(MBB) << ";\n";
-  emitNextMicroState(VM->getControlBlockBuffer(10), MBB, "1'b1");
+  ss << "NextFSMState <= " << getStateName(MBB) << ";\n";
+  emitNextMicroState(VM->getControlBlockBuffer(), MBB, "1'b1");
 }
 
 void RTLInfo::emitDatapath(ucState &State) {
   assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
-  verilogCommentBegin(VM->getDataPathBuffer(2)) << "Issue datapath for "
+  VM->getDataPathBuffer() << "// Issue datapath for "
     "operations at slot " << State.getSlot() << '\n';
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
@@ -558,7 +555,7 @@ void RTLInfo::emitDatapath(ucState &State) {
   } 
 }
 void RTLInfo::emitUnaryOp(ucOp &BinOp, const std::string &Operator) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, BinOp.getOperand(0));
   OS << " = " << Operator << ' ';
@@ -567,7 +564,7 @@ void RTLInfo::emitUnaryOp(ucOp &BinOp, const std::string &Operator) {
 }
 
 void RTLInfo::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, BinOp.getOperand(0));
   OS << " = ";
@@ -578,7 +575,7 @@ void RTLInfo::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
 }
 
 void RTLInfo::emitOpAdd(ucOp &OpAdd) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
+  raw_ostream &OS = VM->getDataPathBuffer();
 
   OS << "assign {";
   // Carry out.
@@ -598,7 +595,7 @@ void RTLInfo::emitOpAdd(ucOp &OpAdd) {
 }
 
 void RTLInfo::emitOpBitSlice(ucOp &OpBitSlice) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
+  raw_ostream &OS = VM->getDataPathBuffer();
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
   // now we are going to get the included upper bound.
@@ -613,7 +610,7 @@ void RTLInfo::emitOpBitSlice(ucOp &OpBitSlice) {
 }
 
 void RTLInfo::emitOpBitCat(ucOp &OpBitCat) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, OpBitCat.getOperand(0));
   OS << " = {";
@@ -631,7 +628,7 @@ void RTLInfo::emitOpBitCat(ucOp &OpBitCat) {
 }
 
 void RTLInfo::emitOpBitRepeat(ucOp &OpBitRepeat) {
-  raw_ostream &OS = VM->getDataPathBuffer(2);
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, OpBitRepeat.getOperand(0));
   OS << " = {";

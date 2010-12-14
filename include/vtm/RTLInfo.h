@@ -20,6 +20,7 @@
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/VTargetMachine.h"
+#include "vtm/LangSteam.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -44,7 +45,7 @@ class TargetRegisterClass;
 
 class RTLInfo : public MachineFunctionPass {
   tool_output_file *FOut;
-  formatted_raw_ostream Out;
+  vlang_raw_ostream Out;
 
   MachineFunction *MF;
   VFuncInfo *FuncInfo;
@@ -74,7 +75,7 @@ class RTLInfo : public MachineFunctionPass {
     SmallVector<char, 16> Name;
     // Use mangler to handle escaped characters.
     Mang->getNameWithPrefix(Name, MBB->getName().str() + "BB"
-      + itostr(MBB->getNumber()));
+                            + itostr(MBB->getNumber()));
     return std::string(Name.data(), Name.size());
   }
 

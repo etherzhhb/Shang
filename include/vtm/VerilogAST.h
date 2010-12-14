@@ -20,6 +20,7 @@
 #define VBE_VLANG_H
 
 #include "vtm/FUInfo.h"
+#include "vtm/LangSteam.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
@@ -128,10 +129,12 @@ public:
   typedef PortVector::const_iterator const_port_iterator;
 
   typedef SmallVector<VASTSignal*, 128> SignalVector;
+
 private:
   // Dirty Hack:
   // Buffers
-  raw_string_ostream StateDecl, DataPath, ControlBlock, SeqCompute;
+  raw_string_ostream StateDecl, DataPath, ControlBlock;
+  vlang_raw_ostream LangControlBlock;
   PortVector Ports;
   SignalVector Signals;
 
@@ -154,7 +157,8 @@ public:
     StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
-    SeqCompute(*(new std::string())), FUPortOffsets(VFUs::NumCommonFUs) {
+    LangControlBlock(ControlBlock),
+    FUPortOffsets(VFUs::NumCommonFUs) {
     Ports.append(NumSpecialPort, 0);
   }
 
@@ -262,32 +266,25 @@ public:
   }
 
 
-  raw_ostream &getStateDeclBuffer(unsigned ind = 2) {
-    return StateDecl.indent(ind);
+  raw_ostream &getStateDeclBuffer() {
+    return StateDecl;
   }
 
   std::string &getStateDeclStr() {
     return StateDecl.str();
   }
 
-  raw_ostream &getSeqComputeBuffer(unsigned ind = 0) {
-    return SeqCompute.indent(ind);
-  }
-
-  std::string &getSeqComputeStr() {
-    return SeqCompute.str();
-  }
-
-  raw_ostream &getControlBlockBuffer(unsigned ind = 0) {
-    return ControlBlock.indent(ind);
+  vlang_raw_ostream &getControlBlockBuffer() {
+    return LangControlBlock;
   }
 
   std::string &getControlBlockStr() {
+    LangControlBlock.flush();
     return ControlBlock.str();
   }
 
-  raw_ostream &getDataPathBuffer(unsigned ind = 0) {
-    return DataPath.indent(ind);
+  raw_ostream &getDataPathBuffer() {
+    return DataPath;
   }
 
   std::string &getDataPathStr() {
@@ -302,9 +299,7 @@ std::string verilogConstToStr(uint64_t value,unsigned bitwidth,
 
 std::string verilogBitRange(unsigned UB, unsigned LB = 0, bool printOneBit = true);
 
-raw_ostream &verilogCommentBegin(raw_ostream &ss);
-
-raw_ostream &verilogAlwaysBegin(raw_ostream &ss, unsigned ind,
+vlang_raw_ostream &verilogAlwaysBegin(vlang_raw_ostream &ss,
                                 const std::string &Clk = "clk",
                                 const std::string &ClkEdge = "posedge",
                                 const std::string &Rst = "rstN",
@@ -313,23 +308,22 @@ raw_ostream &verilogAlwaysBegin(raw_ostream &ss, unsigned ind,
 raw_ostream &verilogParam(raw_ostream &ss, const std::string &Name,
                           unsigned BitWidth, unsigned Val);
 
-raw_ostream &verilogAlwaysEnd(raw_ostream &ss, unsigned ind);
+vlang_raw_ostream &verilogAlwaysEnd(vlang_raw_ostream &ss);
 
-raw_ostream &verilogSwitchCase(raw_ostream &ss, const std::string &StateName);
+vlang_raw_ostream &verilogSwitchCase(vlang_raw_ostream &ss,
+                                     const std::string &StateName);
 
-raw_ostream &verilogMatchCase(raw_ostream &ss, const std::string &StateName);
+vlang_raw_ostream &verilogMatchCase(vlang_raw_ostream &ss,
+                                    const std::string &StateName);
 
-raw_ostream &verilogIfBegin(raw_ostream &ss, const std::string &Condition);
+vlang_raw_ostream &verilogIfBegin(vlang_raw_ostream &ss,
+                                  const std::string &Condition);
 
-raw_ostream &verilogIfElse(raw_ostream &ss, bool Begin = true);
+vlang_raw_ostream &verilogIfElse(vlang_raw_ostream &ss);
 
-raw_ostream &verilogBegin(raw_ostream &ss);
+vlang_raw_ostream &verilogEndSwitch(vlang_raw_ostream &ss);
 
-raw_ostream &verilogEnd(raw_ostream &ss);
-
-raw_ostream &verilogEndSwitch(raw_ostream &ss);
-
-raw_ostream &verilogEndModule(raw_ostream &ss);
+vlang_raw_ostream &verilogEndModule(vlang_raw_ostream &ss);
 
 
 } // end namespace

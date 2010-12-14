@@ -51,7 +51,7 @@ class lang_raw_ostream : public formatted_raw_ostream {
     assert(Size > 0 && "Unexpected writing zero char!");
 
     //Do not indent the preprocessor directive.
-    if (newline && !(isPrepProcChar(*Ptr)))
+    if (newline && !(isPrepProcChar(*Ptr)) && Indent)
       TheStream->indent(Indent);
 
     size_t line_len = line_length(Ptr, Size);
@@ -103,7 +103,6 @@ public:
     if (newline) write('\n');
     return *this;
   }
-
 };
 
 struct CppTraits {
@@ -119,6 +118,24 @@ struct CppTraits {
     return S;
   }
 };
+
+typedef lang_raw_ostream<CppTraits> clang_raw_ostream;
+
+struct VerilogTraits {
+  static const char PrepProcChar = '`';
+
+  static const char *getBlockBegin() {
+    static const char *S = "begin";
+    return S;
+  }
+
+  static const char *getBlockEnd() {
+    static const char *S = "end";
+    return S;
+  }
+};
+
+typedef lang_raw_ostream<VerilogTraits> vlang_raw_ostream;
 
 }
 
