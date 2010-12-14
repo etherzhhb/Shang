@@ -185,8 +185,8 @@ vlang_raw_ostream &llvm::verilogSwitchCase(vlang_raw_ostream &ss,
 }
 
 vlang_raw_ostream &llvm::verilogAlwaysEnd(vlang_raw_ostream &ss) {
-  ss.exit_block(false) << "//else reset\n";
-  ss.exit_block(false) << "//always @(..)\n\n";
+  ss.exit_block("//else reset\n");
+  ss.exit_block("//always @(..)\n\n");
   return ss;
 }
 

@@ -31,6 +31,7 @@
 
 #include "llvm/ADT/StringExtras.h"
 
+#include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -404,8 +405,10 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   void isClkEdgeEnd(bool posedge) {
-    Stream.exit_block(false) << "// end clk " << (posedge ? "rising" : "falling")
-                            << '\n';
+    if (posedge)
+      Stream.exit_block("// end clk rising\n");
+    else
+      Stream.exit_block("// end clk falling\n");
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -605,7 +608,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
     unsigned Enable = RTLMod->getFUPortOff(ID);
     Stream << "if (" << getPortVal(Enable) << ")";
-    Stream.enter_block(false) << "// If membus" << FUNum << " active\n";
+    Stream.enter_block(format("// If membus%d active\n", FUNum));
 
     unsigned Address = Enable + 2;
 
@@ -618,13 +621,12 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
     unsigned WriteEnable = Enable + 1;
     Stream << "if (" << getPortVal(WriteEnable) << ")";
-    Stream.enter_block(false) << "// This is a write\n";
+    Stream.enter_block("// This is a write\n");
     simulateMemWrite(Enable, Context);
-    Stream.exit_block(false) << "else";
-    Stream.enter_block(false) << "// This is a read\n";
+    Stream.exit_block("else").enter_block("// This is a read\n");
     simulateMemRead(Enable, Context);
-    Stream.exit_block(false) << "// end read/write\n";
-    Stream.exit_block(false) << "// end membus" << FUNum << '\n';
+    Stream.exit_block("// end read/write\n");
+    Stream.exit_block(format("// end membus%d\n", FUNum));
   }
 
   isClkEdgeEnd(true);
@@ -656,8 +658,8 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
 
   // TODO: allow user to custom the maximum simulation time.
   // FIXME: The result is wrong if sim_time just overflow.
-  Stream.exit_block(false) << "while(!Verilated::gotFinish()"
-                             " && (sim_time - start_time) < 0x1000);\n";
+  Stream.exit_block("while(!Verilated::gotFinish()"
+                    " && (sim_time - start_time) < 0x1000);\n");
 
   Stream << '\n';
   // TODO: Allow user to custom the error handling.

@@ -77,20 +77,30 @@ public:
                             unsigned Ind = 0)
     : formatted_raw_ostream(Stream, Delete), Indent(Ind), newline(true) {}
 
-  lang_raw_ostream &enter_block(bool newline = true) {
+  template<typename PosfixT>
+  lang_raw_ostream &enter_block(PosfixT Posfix,
+                                const char *Begin = LangTraits::getBlockBegin())
+  {
     // flush the buffer.
     flush();
     // Increase the indent.
     Indent += 2;
 
     // Write the block begin character.
-    operator<<(LangTraits::getBlockBegin());
-    if (newline) write('\n');
+    operator<<(Begin);
+    write(' ');
+    operator<<(Posfix);
     
     return *this;
   }
 
-  lang_raw_ostream &exit_block(bool newline = true) {
+  lang_raw_ostream &enter_block(const char *Posfix = "\n") {
+    return enter_block<const char*>(Posfix);
+  }
+
+  template<typename PosfixT>
+  lang_raw_ostream &exit_block(PosfixT Posfix,
+                               const char *End = LangTraits::getBlockEnd()) {
     // flush the buffer.
     flush();
 
@@ -99,9 +109,14 @@ public:
     Indent -= 2;
 
     // Write the block begin character.
-    operator<<(LangTraits::getBlockEnd());
-    if (newline) write('\n');
+    operator<<(End);
+    write(' ');
+    operator<<(Posfix);
     return *this;
+  }
+
+  lang_raw_ostream &exit_block(const char *Posfix = "\n") {
+    return exit_block<const char*>(Posfix);
   }
 };
 
