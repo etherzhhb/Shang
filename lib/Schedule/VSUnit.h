@@ -22,6 +22,7 @@
 #ifndef VBE_HARDWARE_ATOM_H
 #define VBE_HARDWARE_ATOM_H
 
+#include "vtm/VInstrInfo.h"
 #include "vtm/FUInfo.h"
 
 #include "llvm/Assembly/Writer.h"
@@ -193,8 +194,6 @@ public:
 
 /// @brief Base Class of all hardware atom. 
 class VSUnit {
-  // The time slot that this atom scheduled to.
-  unsigned Latency;
   // TODO: typedef SlotType
   unsigned short SchedSlot;
   unsigned short InstIdx;
@@ -231,12 +230,12 @@ public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
   // Create the entry node.
-  VSUnit(unsigned short Idx) : Latency(0), SchedSlot(0), InstIdx(Idx), FUNum(0) {
+  VSUnit(unsigned short Idx) :SchedSlot(0), InstIdx(Idx), FUNum(0) {
   }
 
-  VSUnit(MachineInstr **I, unsigned NumInstrs, unsigned short latancy,
-         unsigned short Idx, unsigned fuid = 0)
-    : Latency(latancy), SchedSlot(0), InstIdx(Idx), FUNum(fuid),
+  VSUnit(MachineInstr **I, unsigned NumInstrs, unsigned short Idx,
+         unsigned fuid = 0)
+    : SchedSlot(0), InstIdx(Idx), FUNum(fuid),
     Instrs(I, I + NumInstrs) {}
 
   ~VSUnit() {
@@ -313,7 +312,6 @@ public:
     assert(isDepOn(A) && "Current atom not depend on A!");
     return getDepIt(A).getEdge();
   }
-
   //}
 
   /// @name Use
@@ -341,12 +339,6 @@ public:
   size_t getNumUses() const { return UseList.size(); }
   //}
 
-  unsigned getSlot() const { return SchedSlot; }
-  unsigned getFinSlot() const { return SchedSlot + Latency; }
-  bool isScheduled() const { return SchedSlot != 0; }
-  void scheduledTo(unsigned slot);
-  void resetSchedule() { SchedSlot = 0; }
-  
   // Dirty Hack: Only return the first instruction.
   MachineInstr *getFirstInstr() const {
     if (isEntry()) return 0;
@@ -356,6 +348,19 @@ public:
 
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return Instrs.empty(); }
+
+  unsigned getLatency() const {
+    if (isEntry()) return 0;
+  
+    VTFInfo Info = *getFirstInstr();
+    return Info.getLatency();
+  }
+
+  unsigned getSlot() const { return SchedSlot; }
+  unsigned getFinSlot() const { return SchedSlot + getLatency(); }
+  bool isScheduled() const { return SchedSlot != 0; }
+  void scheduledTo(unsigned slot);
+  void resetSchedule() { SchedSlot = 0; }
 
   typedef SmallVector<MachineInstr*, 2>::iterator instr_iterator;
   

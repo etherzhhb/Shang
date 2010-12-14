@@ -401,13 +401,11 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     return;
   }
 
-  unsigned Latency = VTID.getLatency();
-
   FuncUnitId Id = VTID.getPrebindFUId();
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *A = new VSUnit(&MI, 1, Latency, ++InstIdx, Id.getFUNum());
+  VSUnit *A = new VSUnit(&MI, 1, ++InstIdx, Id.getFUNum());
 
   addValueDeps(A, CurState);
 
@@ -418,7 +416,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   SmallVectorImpl<MachineInstr*> &Terms = CurState.getTerms();
 
-  VSUnit *Exit = new VSUnit(Terms.data(), Terms.size(), 0, ++InstIdx);
+  VSUnit *Exit = new VSUnit(Terms.data(), Terms.size(), ++InstIdx);
   addValueDeps(Exit, CurState);
 
   MachineInstr *FstExit = Terms.front();
