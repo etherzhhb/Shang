@@ -109,13 +109,6 @@ struct MicroStateBuilder {
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
   DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}
 
-  ~MicroStateBuilder() {
-    while (!InstsToDel.empty()) {
-      InstsToDel.back()->eraseFromParent();
-      InstsToDel.pop_back();
-    }
-  }
-
   DefVector &getDefsToEmitAt(unsigned Slot) {
     return DefToEmit[Slot - State.getStartSlot()];
   }
@@ -157,6 +150,14 @@ struct MicroStateBuilder {
       buildMicroState(CurSlot);
 
     return CurSlot;
+  }
+
+  // Clean up the basic block by remove all unused instructions.
+  void clearUp() {
+    while (!InstsToDel.empty()) {
+      InstsToDel.back()->eraseFromParent();
+      InstsToDel.pop_back();
+    }
   }
 
 };
@@ -340,45 +341,45 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 
   // Build bundle from schedule units.
-  {
-    MicroStateBuilder BTB(*this, MBB->getBasicBlock()->getContext(), TM, BLI);
+  MicroStateBuilder BTB(*this, MBB->getBasicBlock()->getContext(), TM, BLI);
 
-    for (iterator I = begin(), E = end(); I != E; ++I) {
-      VSUnit *A = *I;
+  for (iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *A = *I;
 
-      FuncUnitId FUId = A->getFUId();
-      // Remember the active slot.
-      if (FUId.isBinded())
-        VFI->rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot());
+    FuncUnitId FUId = A->getFUId();
+    // Remember the active slot.
+    if (FUId.isBinded())
+      VFI->rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot());
 
-      // Special case: Ret instruction use the function unit "FSMFinish".
-      if (A->getOpcode() == VTM::VOpRet)
-        VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
+    // Special case: Ret instruction use the function unit "FSMFinish".
+    if (A->getOpcode() == VTM::VOpRet)
+      VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
 
-      if (A->getSlot() != CurSlot)
-        CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot());
-      
-      if (MachineInstr *Inst = A->getFirstInstr()) {
-        // Ignore some instructions.
-        switch (Inst->getOpcode()) {
-        case TargetOpcode::PHI:
-          assert(BTB.emitQueueEmpty() && "Unexpected atom before PHI.");
-          // Do not touch the PHIs, leave them at the beginning of the BB.
-          continue;
-        case TargetOpcode::COPY:
-          // TODO: move this to MicroStateBuilder.
-          MBB->remove(Inst);
-          BTB.defereSUnit(A);
-          continue;
-        }
-
-        BTB.emitSUnit(A);
+    if (A->getSlot() != CurSlot)
+      CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot());
+    
+    if (MachineInstr *Inst = A->getFirstInstr()) {
+      // Ignore some instructions.
+      switch (Inst->getOpcode()) {
+      case TargetOpcode::PHI:
+        assert(BTB.emitQueueEmpty() && "Unexpected atom before PHI.");
+        // Do not touch the PHIs, leave them at the beginning of the BB.
+        continue;
+      case TargetOpcode::COPY:
+        // TODO: move this to MicroStateBuilder.
+        MBB->remove(Inst);
+        BTB.defereSUnit(A);
+        continue;
       }
+
+      BTB.emitSUnit(A);
     }
-    // Build last state.
-    assert(!BTB.emitQueueEmpty() && "Expect atoms for last state!");
-    BTB.advanceToSlot(CurSlot, CurSlot + 1, true);
   }
+  // Build last state.
+  assert(!BTB.emitQueueEmpty() && "Expect atoms for last state!");
+  BTB.advanceToSlot(CurSlot, CurSlot + 1, true);
+  // Remove all unused instructions.
+  BTB.clearUp();
 
   DEBUG(
   dbgs() << "After schedule emitted:\n";
