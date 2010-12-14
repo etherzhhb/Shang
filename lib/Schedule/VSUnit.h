@@ -226,13 +226,6 @@ class VSUnit {
   /// the same schedule unit, so we can clamp them in a same slot.
   SmallVector<MachineInstr*, 2> Instrs;
 
-  // Dirty Hack: Only return the first instruction.
-  MachineInstr *getFirstInstr() const {
-    if (isEntry()) return 0;
-
-    return Instrs.front();
-  }
-
   friend class VSchedGraph;
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
@@ -353,6 +346,13 @@ public:
   bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
+  
+  // Dirty Hack: Only return the first instruction.
+  MachineInstr *getFirstInstr() const {
+    if (isEntry()) return 0;
+
+    return Instrs.front();
+  }
 
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return Instrs.empty(); }
@@ -455,6 +455,8 @@ private:
   const unsigned short startSlot;
   bool HaveSelfLoop;
 
+  SmallVector<MachineInstr*, 4> Terms;
+
   /// Scheduling implementation.
   void scheduleLinear(ForceDirectedSchedulingBase *Scheduler);
   void scheduleLoop(ForceDirectedSchedulingBase *Scheduler,
@@ -471,6 +473,10 @@ public:
   ~VSchedGraph() {
     std::for_each(SUnits.begin(), SUnits.end(), deleter<VSUnit>);
   }
+
+  void addTerm(MachineInstr *Term) { Terms.push_back(Term); }
+
+  SmallVectorImpl<MachineInstr*> &getTerms() { return Terms; }
 
   MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
   MachineBasicBlock *operator->() const { return getMachineBasicBlock(); }

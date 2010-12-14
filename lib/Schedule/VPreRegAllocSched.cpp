@@ -48,7 +48,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 
 namespace {
-  /// @brief Hardware atom construction pass
+/// @brief Schedule the operations.
 ///
 struct VPreRegAllocSched : public MachineFunctionPass {
   // The loop Info
@@ -58,7 +58,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VFuncInfo *FuncInfo;
   BitLevelInfo *BLI;
-  SmallVector<MachineInstr*, 4> Terminators;
 
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
@@ -358,7 +357,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   
   if (VTID->isTerminator()) {
     // Build the schedule unit for terminators later. 
-    Terminators.push_back(MI);
+    CurState.addTerm(MI);
     return;
   }
 
@@ -377,11 +376,12 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
-  VSUnit *Exit = new VSUnit(Terminators.data(), Terminators.size(), 0,
-                            ++InstIdx);
+  SmallVectorImpl<MachineInstr*> &Terms = CurState.getTerms();
+
+  VSUnit *Exit = new VSUnit(Terms.data(), Terms.size(), 0, ++InstIdx);
   addValueDeps(Exit, CurState);
 
-  MachineInstr *FstExit = Terminators.front();
+  MachineInstr *FstExit = Terms.front();
 
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end();
       I != E; ++I) {
@@ -397,9 +397,6 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   Exit->addDep(getCtrlDepEdge(CurState.getEntryRoot(),
                               computeLatency(0, FstExit)));
 
-  // We may have multiple terminator.
-  Terminators.clear();
-
   // Add the atom to the state.
   CurState.addSUnit(Exit);
 }
@@ -413,18 +410,22 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
     buildSUnit(&*BI, State);
 
   // We need at an explicit terminator to transfer the control flow explicitly.
-  if (Terminators.empty()) {
+  if (State.getTerms().empty()) {
     MachineBasicBlock *MBB = State.getMachineBasicBlock();
     assert(MBB->succ_size() == 1 && "Expect fall through block!");
     // Create "VOpToState 1/*means always true*/, target mbb"
     MachineInstr &Term = *BuildMI(MBB, DebugLoc(), 
                                   VTarget.getInstrInfo()->get(VTM::VOpToState))
       .addImm(1, 1).addMBB(*MBB->succ_begin());
-    Terminators.push_back(&Term);
+    State.addTerm(&Term);
   }
 
   // Create the exit node.
   buildExitRoot(State);
+
+  // Build the memory edges.
+  State.preSchedTopSort();
+
 }
 
 VDMemDep *VPreRegAllocSched::getMemDepEdge(VSUnit *Src, unsigned Latency,
