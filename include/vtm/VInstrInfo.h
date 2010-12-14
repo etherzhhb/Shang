@@ -53,12 +53,11 @@ class VTFInfo {
     DatapathShiftAmount = 0x5
   };
   
-  const TargetInstrDesc &TID;
-  const TargetInstrDesc &getTID() const { return TID; }
+  const MachineInstr &I;
+  const TargetInstrDesc &getTID() const { return I.getDesc(); }
   uint64_t getTSFlags() const { return getTID().TSFlags; }
 public:
-  /*implicit*/ VTFInfo(const MachineInstr &I) : TID(I.getDesc()) {}
-  /*implicit*/ VTFInfo(const TargetInstrDesc &tid) : TID(tid) {}
+  /*implicit*/ VTFInfo(const MachineInstr &MI) : I(MI) {}
 
   inline VFUs::FUTypes getFUType() const {
     return (VFUs::FUTypes)
@@ -84,7 +83,7 @@ public:
   }
 
   inline bool isReadAtEmit() const {
-    switch (TID.getOpcode()) {
+    switch (getTID().getOpcode()) {
     default:
       return getTSFlags() & (ReadAtEmitMask << ReadAtEmitShiftAmount);
     case TargetOpcode::COPY:
@@ -93,8 +92,11 @@ public:
     }
   }
 
+  bool mayLoad() const;
+  bool mayStore() const;
+
   inline bool isWriteUntilFinish() const {
-    switch (TID.getOpcode()) {
+    switch (getTID().getOpcode()) {
     default:
       return getTSFlags()
              & (WriteUntilFinishMask << WriteUntilFinishShiftAmount);

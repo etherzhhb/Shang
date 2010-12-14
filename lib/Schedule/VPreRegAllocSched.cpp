@@ -75,12 +75,12 @@ struct VPreRegAllocSched : public MachineFunctionPass {
       return 0;
     }
 
-    VTFInfo SrcTID = SrcInstr->getDesc();
+    VTFInfo SrcTID = *SrcInstr;
     unsigned latency = SrcTID.getLatency();
 
     if (DstInstr == 0) return latency;
 
-    VTFInfo DstTID = DstInstr->getDesc();
+    VTFInfo DstTID = *DstInstr;
 
     if (DstTID.isReadAtEmit()) {
       // We need to wait one more slot to read the result.
@@ -353,7 +353,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
 }
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
-  VTFInfo VTID = MI->getDesc();
+  VTFInfo VTID = *MI;
   
   if (VTID->isTerminator()) {
     // Build the schedule unit for terminators later. 

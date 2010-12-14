@@ -214,7 +214,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot,
                                   MachineInstrBuilder &DPInst,
                                   MachineInstrBuilder &CtrlInst) {
-  VTFInfo VTID = Inst.getDesc();
+  VTFInfo VTID = Inst;
   // FIXME: Inline datapath is allow in last slot.
   assert(!(IsLastSlot && VTID.hasDatapath())
     && "Unexpect datapath in last slot!");
@@ -457,7 +457,7 @@ void VSUnit::print(raw_ostream &OS) const {
   for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
     MachineInstr *Instr = *I;
 
-    VTFInfo VTID = Instr->getDesc();
+    VTFInfo VTID = *Instr;
     OS << Instr->getDesc().getName() << '\t';
     OS << " Res: " << VTID.getFUType();
     DEBUG(OS << '\n' << *Instr);

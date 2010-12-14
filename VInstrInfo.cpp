@@ -36,3 +36,19 @@ FuncUnitId VTFInfo::getPrebindFUId()  const {
 
   return FuncUnitId();
 }
+
+bool VTFInfo::mayLoad() const {
+  switch (getTID().Opcode) {
+  default: return false;
+  // There is a "isLoad" flag in memory access operation.
+  case VTM::VOpMemAccess: return I.getOperand(3).getImm();
+  }
+}
+
+bool VTFInfo::mayStore() const {
+  switch (getTID().Opcode) {
+  default: return false;
+    // There is a "isLoad" flag in memory access operation.
+  case VTM::VOpMemAccess: return !I.getOperand(3).getImm();
+  }
+}
