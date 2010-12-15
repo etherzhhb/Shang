@@ -39,6 +39,15 @@ FUInfo::~FUInfo() {
     if(*I) delete *I;
 }
 
+unsigned FuncUnitId::getTotalFUs() const {
+  // If the function unit is binded, there is only one function unit with
+  // the specific function unit id available.
+  if (isBinded()) return 1;
+
+  // Else we can just choose a function unit from all available function units.
+  return vtmfus().getFUDesc(getFUType())->getTotalRes();
+}
+
 void FuncUnitId::print(raw_ostream &OS) const {
   OS << VFUs::VFUNames[getFUType()];
   // Print the function unit id if necessary.
@@ -48,4 +57,3 @@ void FuncUnitId::print(raw_ostream &OS) const {
 void FuncUnitId::dump() const {
   print(dbgs());
 }
-

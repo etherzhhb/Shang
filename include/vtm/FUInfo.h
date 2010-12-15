@@ -79,12 +79,20 @@ public:
     return !isTrivial() && getFUNum() != 0xfff;
   }
  
+  // Get the total avaliable number of this kind of function unit.
+  unsigned getTotalFUs() const;
+
   inline bool operator==(const FuncUnitId X) const { return UID.data == X.UID.data; }
   inline bool operator< (const FuncUnitId X) const { return UID.data < X.UID.data; }
 
   void print(raw_ostream &OS) const;
   void dump() const;
 };
+
+inline static raw_ostream &operator<<(raw_ostream &O, const FuncUnitId &ID) {
+  ID.print(O);
+  return O;
+}
 
 /// @brief The description of Verilog target machine function units.
 class VFUDesc {
