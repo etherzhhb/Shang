@@ -372,6 +372,9 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
       // FIXME: What about chains?
       if (!MO.isReg()) continue;
 
+      // The instruction do not depend the register defined by itself.
+      if (MO.isDef()) continue;
+
       unsigned Reg = MO.getReg();
       
       // TODO: assert Reg can not be physical register.
