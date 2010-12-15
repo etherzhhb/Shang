@@ -43,9 +43,7 @@ namespace VFUs {
     AllFUType = 0xf
   };
 
-  const char *VFUNames[] = {
-    "Trivial", "MemoryBus", "SHL", "ASR", "LSR", "AddSub", "Mult", "FSMFinish"
-  };
+  extern const char *VFUNames[];
 }
 
 class FuncUnitId {
@@ -83,6 +81,7 @@ public:
   unsigned getTotalFUs() const;
 
   inline bool operator==(const FuncUnitId X) const { return UID.data == X.UID.data; }
+  inline bool operator!=(const FuncUnitId X) const { return !operator==(X); }
   inline bool operator< (const FuncUnitId X) const { return UID.data < X.UID.data; }
 
   void print(raw_ostream &OS) const;

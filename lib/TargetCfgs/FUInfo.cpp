@@ -28,6 +28,13 @@ void VFUDesc::print(raw_ostream &OS) const {
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
 }
 
+namespace llvm {
+  namespace VFUs {
+   const char *VFUNames[] = {
+      "Trivial", "MemoryBus", "SHL", "ASR", "LSR", "AddSub", "Mult", "FSMFinish"
+    };
+  }
+}
 
 FUInfo::FUInfo() {
   for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
