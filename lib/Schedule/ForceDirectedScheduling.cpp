@@ -199,18 +199,20 @@ void FDSBase::dumpTimeFrame() const {
 
 void FDSBase::buildDGraph() {
   DGraph.clear();
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I){
-    // We only try to balance the post bind resource.
-    // Ignore the DG for trivial resources.
-    // if (A->isTrivial()) continue;
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
+    // We only try to balance the post bind resource.
+    // if (A->getFUId().isBinded()) continue;
+    // Ignore the DG for trivial resources.
+    if (A->getFUId().isTrivial()) continue;
+    
     unsigned TimeFrame = getTimeFrame(A);
     unsigned ASAPStep = getASAPStep(A), ALAPStep = getALAPStep(A);
 
     double Prob = 1.0 / (double) TimeFrame;
     // Including ALAPStep.
     for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
-      accDGraphAt(i, A->getFUType(), Prob);    
+      accDGraphAt(i, A->getFUId(), Prob);    
   }
   DEBUG(printDG(dbgs()));
 }
@@ -221,10 +223,11 @@ bool FDSBase::isResourceConstraintPreserved() {
   // No resource in use.
   if (DGraph.empty()) return true;
 
+  // For each function unit.
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
        I != E; ++I) {
-    // FIXME: print out the Resource class name.
-    DEBUG(dbgs() << "FU " << I->first << " Average Usage: ");
+    FuncUnitId ID = I->first;
+    DEBUG(dbgs() << "FU " << ID << " Average Usage: ");
     double TotalDG = 0;
     unsigned AvailableSteps = 0;
     for (DGStepMapType::const_iterator SI = I->second.begin(),
@@ -234,12 +237,12 @@ bool FDSBase::isResourceConstraintPreserved() {
     }
     double AverageDG = TotalDG / AvailableSteps;
     // The upper bound of error: Only 0.5 extra functional unit need.
-    // double e = 0.5 / AvailableSteps;
+    double e = 0.5 / AvailableSteps;
     DEBUG(dbgs() << AverageDG << '\n');
-    // FIXME: Get the totalFU of a specific resource class.
-    //if (AverageDG > I->first->getTotalFUs() + e)
-    //  ExtraResReq += (AverageDG - I->first->getTotalFUs())
-    //                  /  I->first->getTotalFUs();
+    
+    // Accumulate the extra require function unit amount.
+    if (AverageDG > ID.getTotalFUs() + e)
+      ExtraResReq += (AverageDG - ID.getTotalFUs()) /  ID.getTotalFUs();
   }
   return ExtraResReq == 0.0;
 }
@@ -249,7 +252,6 @@ void FDSBase::printDG(raw_ostream &OS) const {
   // For each FU.
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
        I != E; ++I) {
-    // FIXME: print out the Resource class name.
     OS << "FU " << I->first << ":\n";
     for (DGStepMapType::const_iterator SI = I->second.begin(),
          SE = I->second.end(); SI != SE; ++SI) {
@@ -259,7 +261,7 @@ void FDSBase::printDG(raw_ostream &OS) const {
   }
 }
 
-double FDSBase::getDGraphAt(unsigned step, unsigned FUClass) const {
+double FDSBase::getDGraphAt(unsigned step, FuncUnitId FUClass) const {
   // Modulo DG for modulo schedule.
   DGType::const_iterator at = DGraph.find(FUClass);
   if (at != DGraph.end()) {
@@ -284,13 +286,13 @@ unsigned FDSBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-void FDSBase::accDGraphAt(unsigned step, unsigned FUClass, double d) {
+void FDSBase::accDGraphAt(unsigned step, FuncUnitId FUClass, double d) {
   // Modulo DG for modulo schedule.
   DGraph[FUClass][computeStepKey(step)] += d;
 }
 
 // Including end.
-double FDSBase::getRangeDG(unsigned FUClass, unsigned start, unsigned end) {
+double FDSBase::getRangeDG(FuncUnitId FUClass, unsigned start, unsigned end) {
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
@@ -317,14 +319,18 @@ double FDSBase::computeForce(const VSUnit *A, unsigned ASAP, unsigned ALAP) {
 double FDSBase::computeSelfForce(const VSUnit *A,
                                  unsigned start,
                                  unsigned end) {
+  FuncUnitId FU = A->getFUId();
+
+  // The trivial function unit do not contribute any force.
+  if (FU.isTrivial()) return 0.0;
+  
   // FIXME: How should handle the pre-bind MachineInstruction.
   // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
-  unsigned FUClass = A->getFUType();
-  double Force = getRangeDG(FUClass, start, end) - getAvgDG(A);
+  double Force = getRangeDG(FU, start, end) - getAvgDG(A);
 
   // FIXME: Make the atoms taking expensive function unit have bigger force.
-  return Force; // / FU->getTotalFUs();
+  return Force / FU.getTotalFUs();
 }
 
 double FDSBase::computeRangeForce(const VSUnit *A,
@@ -333,10 +339,14 @@ double FDSBase::computeRangeForce(const VSUnit *A,
   // FIXME: How should handle the pre-bind MachineInstruction.
   // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
-  unsigned FUClass = A->getFUType();
-  double Force = getRangeDG(FUClass, start, end) - getAvgDG(A);
+  FuncUnitId FU = A->getFUId();
+
+  // The trivial function unit do not contribute any force.
+  if (FU.isTrivial()) return 0.0;
+
+  double Force = getRangeDG(FU, start, end) - getAvgDG(A);
   // FIXME: Make the atoms taking expensive function unit have bigger force.
-  return Force; // / FU->getTotalFUs();
+  return Force / FU.getTotalFUs();
 }
 
 double FDSBase::computeOtherForce(const VSUnit *A) {
@@ -344,7 +354,10 @@ double FDSBase::computeOtherForce(const VSUnit *A) {
 
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     if (A == *I) continue;
-    
+
+    // The trivial function unit do not contribute any force.
+    if (A->getFUId().isTrivial()) continue;
+
     ret += computeRangeForce(A, getASAPStep(A), getALAPStep(A));
   }
   return ret;
@@ -352,12 +365,16 @@ double FDSBase::computeOtherForce(const VSUnit *A) {
 
 void FDSBase::buildAvgDG() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
-       I != E; ++I) {
-    // We only care about the utilization of post bind resource. 
+       I != E; ++I) { 
     VSUnit *A = *I;
+    // We only care about the no trivial resource.
+    if (A->getFUId().isTrivial()) continue;
+    // We only care about the utilization of post bind resource.
+    // if (A->getFUId().isBinded()) continue;
+    
     double res = 0.0;
     for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
-      res += getDGraphAt(i, A->getFUType());
+      res += getDGraphAt(i, A->getFUId());
 
     res /= (double) getTimeFrame(A);
     AvgDG[A->getIdx()] = res;

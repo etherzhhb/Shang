@@ -27,20 +27,19 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 bool
 FDListScheduler::fds_sort::operator()(const VSUnit* LHS,
-                                                 const VSUnit* RHS) const {
-  //// Schedule HWOpFU first.
-  //if (isa<VSUnit>(LHS) && !isa<VSUnit>(RHS))
-  //  return false;
-  //if (!isa<VSUnit>(LHS) && isa<VSUnit>(RHS))
-  //  return true;
-  //if (isa<VSUnit>(LHS) && isa<VSUnit>(RHS)) {
-  //  HWFUnit *LFU = cast<VSUnit>(LHS)->getFUnit(),
-  //          *RFU = cast<VSUnit>(RHS)->getFUnit();
-  //  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
-  //  // Schedule the atom with less available function unit first.
-  //  if (LTFU > RTFU) return true;
-  //  if (LTFU < RTFU) return false;
-  //}
+                                      const VSUnit* RHS) const {
+  // Schedule the sunit that taking non-trivial function unit first.
+  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
+  if (!LHSID.isTrivial() && RHSID.isTrivial())
+    return false;
+  if (LHSID.isTrivial() && !RHSID.isTrivial())
+    return true;
+  if (!LHSID.isTrivial() && !RHSID.isTrivial()) {
+    unsigned LTFUs = LHSID.getTotalFUs(), RTFUs = RHSID.getTotalFUs();
+    // Schedule the schedule unit with less available function unit first.
+    if (LTFUs > RTFUs) return true;
+    if (LTFUs < RTFUs) return false;
+  }
 
   unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
   // Schedule the low mobility nodes first.
@@ -96,6 +95,9 @@ void FDSBase::schedulePassiveSUnits() {
     if (A->isScheduled())
       continue;
 
+    assert(A->getFUId().isTrivial()
+           && "SUnit that taking non-trivial not scheduled?");
+
     DEBUG(A->print(dbgs()));
     unsigned step = getASAPStep(A);
     A->scheduledTo(step);
@@ -126,12 +128,16 @@ bool FDSBase::scheduleCriticalPath(bool refreshFDInfo) {
 
 template<class It>
 void FDListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It end,
-                        VSUnit *FirstNode) {
+                                VSUnit *FirstNode) {
   for (It I = begin, E = end; I != E; ++I) {
     VSUnit *A = *I;
 
     // Do not push the FirstNode into the queue.
     if (A == FirstNode || A->isScheduled())
+      continue;
+    
+    // Do not push the SUnit that taking trivial function unit.
+    if (A->getFUId().isTrivial())
       continue;
     
     Queue.push(A);
@@ -173,7 +179,7 @@ bool FDListScheduler::scheduleSUnit(VSUnit *A) {
 
 bool FDListScheduler::scheduleQueue(SUnitQueueType &Queue) {
   while (!Queue.empty()) {
-    // TODO: Short the list
+    // TODO: Shor the list
     VSUnit *A = Queue.top();
     Queue.pop();
 
@@ -281,15 +287,19 @@ struct ims_sort {
 };
 
 bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
-  // Schedule HWOpFU first.
+  // Schedule the sunit that taking non-trivial function unit first.
+  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
+  if (!LHSID.isTrivial() && RHSID.isTrivial())
+    return false;
+  if (LHSID.isTrivial() && !RHSID.isTrivial())
+    return true;
+  if (!LHSID.isTrivial() && !RHSID.isTrivial()) {
+    unsigned LTFUs = LHSID.getTotalFUs(), RTFUs = RHSID.getTotalFUs();
+    // Schedule the schedule unit with less available function unit first.
+    if (LTFUs > RTFUs) return true;
+    if (LTFUs < RTFUs) return false;
+  }
 
-  //  HWFUnit *LFU = cast<VSUnit>(LHS)->getFUnit(),
-  //          *RFU = cast<VSUnit>(RHS)->getFUnit();
-  //  unsigned LTFU = LFU->getTotalFUs(), RTFU = RFU->getTotalFUs();
-  //  // Schedule the atom with less available function unit first.
-  //  if (LTFU > RTFU) return true;
-  //  if (LTFU < RTFU) return false;
-  // 
   unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
   if (LASAP > RASAP) return true;
   if (LASAP < RASAP) return false;
@@ -298,7 +308,7 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IteractiveModuloScheduling::scheduleState() {
-  ExcludeSlots.clear();
+  ExcludeSlots.assign(State.getNumSUnits(), std::set<unsigned>());
   setCriticalPathLength(VSUnit::MaxSlot);
 
   fds_sort s(*this);
@@ -317,13 +327,13 @@ bool IteractiveModuloScheduling::scheduleState() {
 
       unsigned EarliestUntry = 0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-        if (isStepExcluded(A, i))
+        if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
           continue;
         
         if (EarliestUntry == 0)
           EarliestUntry = i;
         
-        if (A && !isResAvailable(A->getFUType(), i))
+        if (!A->getFUId().isTrivial() && !isResAvailable(A->getFUId(), i))
           continue;
 
         // This is a available slot.
@@ -335,8 +345,9 @@ bool IteractiveModuloScheduling::scheduleState() {
         increaseMII();
         break;
       } else if(!A->isScheduled()) {
-        assert(A && "A can be schedule only because resource conflict!");
-        VSUnit *Blocking = findBlockingSUnit(A->getFUType(), EarliestUntry);
+        assert(!A->getFUId().isTrivial()
+               && "SUnit can be schedule only because resource conflict!");
+        VSUnit *Blocking = findBlockingSUnit(A->getFUId(), EarliestUntry);
         assert(Blocking && "No one blocking?");
         Blocking->resetSchedule();
         excludeStep(Blocking, EarliestUntry);
@@ -357,21 +368,24 @@ bool IteractiveModuloScheduling::scheduleState() {
 
 bool IteractiveModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
+  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
+
   unsigned ModuloStep = step % getMII();
-  return ExcludeSlots[A].count(ModuloStep);
+  return ExcludeSlots[A->getIdx()].count(ModuloStep);
 }
 
 void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
+  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
+
   unsigned ModuloStep = step % getMII();
-  ExcludeSlots[A].insert(ModuloStep);
+  ExcludeSlots[A->getIdx()].insert(ModuloStep);
 }
 
-VSUnit *IteractiveModuloScheduling::findBlockingSUnit(unsigned FUClass,
-                                                      unsigned step) {
+VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned step) {
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
-    if (!A->isScheduled() || A->getFUType() != (VFUs::FUTypes)FUClass)
+    if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
       continue;
     if (A->getSlot() == step) return A; 
   }
@@ -379,19 +393,17 @@ VSUnit *IteractiveModuloScheduling::findBlockingSUnit(unsigned FUClass,
   return 0;
 }
 
-bool IteractiveModuloScheduling::isResAvailable(unsigned FUClass,
-                                                unsigned step) {
-  //assert(getMII() && "IMS only work on Modulo scheduling!");
-  //// We will always have enough trivial resources.
-  //if (FU->getResType() == HWResType::Trivial)
-  //  return true;
+bool IteractiveModuloScheduling::isResAvailable(FuncUnitId FU, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  // We will always have enough trivial resources.
+  if (FU.isTrivial()) return true;
 
-  //unsigned ModuloStep = step % getMII();
-  //// Do all resource at step been reserve?
-  //if (MRT[FU][ModuloStep] >= FU->getTotalFUs())
-  //  return false;
+  unsigned ModuloStep = step % getMII();
+  // Do all resource at step been reserve?
+  if (MRT[FU][ModuloStep] >= FU.getTotalFUs())
+    return false;
 
-  //++MRT[FU][ModuloStep];
+  ++MRT[FU][ModuloStep];
   
   return true;
 }

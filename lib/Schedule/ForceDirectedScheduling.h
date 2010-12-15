@@ -35,11 +35,17 @@ class FDSBase {
 public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
+  // Time frames for each schedule unit.
   SmallVector<TimeFrame, 256> SUnitToTF;
+  // Schedule time frames for each schedule unit.
+  // The scheduling is accomplish by sink the width of time frames to 1.
   SmallVector<TimeFrame, 256> SUnitToSTF;
-
+  // Resource requirement distribution of a specific resource
+  // at each step.
+  // step -> distribution
   typedef std::map<unsigned, double> DGStepMapType;
-  typedef std::map<unsigned, DGStepMapType> DGType;
+  // DG for every kind of function unit.
+  typedef std::map<FuncUnitId, DGStepMapType> DGType;
   DGType DGraph;
 
   unsigned computeStepKey(unsigned step) const;
@@ -73,10 +79,8 @@ public:
   void updateSTF();
 
 
-  void buildASAPStep(const VSUnit *ClampedSUnit = 0,
-    unsigned ClampedASAP = 0);
-  void buildALAPStep(const VSUnit *ClampedSUnit = 0,
-    unsigned ClampedALAP = 0);
+  void buildASAPStep(const VSUnit *ClampedSUnit = 0, unsigned ClampedASAP = 0);
+  void buildALAPStep(const VSUnit *ClampedSUnit = 0, unsigned ClampedALAP = 0);
   void buildTimeFrame(const VSUnit *ClampedSUnit = 0,
                       unsigned ClampedASAP = 0,
                       unsigned ClampedALAP = 0);
@@ -114,8 +118,8 @@ public:
   /// @name Distribution Graphs
   //{
   void buildDGraph();
-  double getDGraphAt(unsigned step, unsigned FUClass) const;
-  void accDGraphAt(unsigned step, unsigned FUClass, double d);
+  double getDGraphAt(unsigned step, FuncUnitId FUClass) const;
+  void accDGraphAt(unsigned step, FuncUnitId FUClass, double d);
   void printDG(raw_ostream &OS) const;
   void dumpDG() const;
   /// Check the distribution graphs to see if we could schedule the nodes
@@ -128,7 +132,7 @@ public:
   //{
   void buildAvgDG();
   double getAvgDG(const VSUnit *A) {  return AvgDG[A->getIdx()]; }
-  double getRangeDG(unsigned FUClass, unsigned start, unsigned end/*included*/);
+  double getRangeDG(FuncUnitId FUClass, unsigned start, unsigned end/*included*/);
 
   double computeRangeForce(const VSUnit *A,
                            unsigned start, unsigned end/*include*/);
@@ -206,19 +210,21 @@ public:
 
 
 class IteractiveModuloScheduling : public FDListScheduler {
+  // Step -> resource require number.
   typedef std::map<unsigned, unsigned> UsageMapType;
-  typedef std::map<unsigned, UsageMapType> MRTType;
+  // Resource -> resource usage at each step.
+  typedef std::map<FuncUnitId, UsageMapType> MRTType;
   MRTType MRT;
-  std::map<VSUnit*, std::set<unsigned> > ExcludeSlots;
+  SmallVector<std::set<unsigned>, 256> ExcludeSlots;
 
-  bool isResAvailable(unsigned FUClass, unsigned step);
+  bool isResAvailable(FuncUnitId FU, unsigned step);
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
   bool isAllSUnitScheduled();
-  VSUnit *findBlockingSUnit(unsigned FUClass, unsigned step); 
+  VSUnit *findBlockingSUnit(FuncUnitId FU, unsigned step); 
 public:
   IteractiveModuloScheduling(VSchedGraph &S)
-    : FDListScheduler(S){}
+    : FDListScheduler(S), ExcludeSlots(S.getNumSUnits()){}
 
   bool scheduleState();
 };
