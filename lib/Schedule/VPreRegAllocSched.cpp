@@ -424,7 +424,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end();
       I != E; ++I) {
     VSUnit *VSU = *I;
-    if (VSU->getNumUses() == 0 && !VSU->isEntry()) {
+    if (VSU->getNumUses() == 0 && !VSU->isEntry()
+      // Since the exit root already added to state sunit list, skip the
+      // exit itself.
+      && VSU != Exit) {
       // Dirty Hack.
       MachineInstr *Instr = *VSU->instr_begin();
       Exit->addDep(getCtrlDepEdge(VSU, computeLatency(Instr, FstExit)));
