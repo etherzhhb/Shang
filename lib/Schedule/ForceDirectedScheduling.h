@@ -44,7 +44,7 @@ private:
 
   unsigned computeStepKey(unsigned step) const;
 
-  std::map<const VSUnit*, double> AvgDG;
+  SmallVector<double, 256> AvgDG;
 
   void resetSTF();
 
@@ -54,7 +54,7 @@ protected:
   ForceDirectedSchedulingBase(VSchedGraph &S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
     SUnitToTF(S.getNumSUnits()), SUnitToSTF(S.getNumSUnits()),
-    State(S) {}
+    AvgDG(S.getNumSUnits()), State(S) {}
 
 public:
   virtual ~ForceDirectedSchedulingBase() {}
@@ -127,7 +127,7 @@ public:
   /// @name Force computation
   //{
   void buildAvgDG();
-  double getAvgDG(const VSUnit *A) {  return AvgDG[A]; }
+  double getAvgDG(const VSUnit *A) {  return AvgDG[A->getIdx()]; }
   double getRangeDG(unsigned FUClass, unsigned start, unsigned end/*included*/);
 
   double computeRangeForce(const VSUnit *A,

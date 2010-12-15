@@ -356,7 +356,6 @@ double ForceDirectedSchedulingBase::computeOtherForce(const VSUnit *A) {
 }
 
 void ForceDirectedSchedulingBase::buildAvgDG() {
-  AvgDG.clear();
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
        I != E; ++I) {
     // We only care about the utilization of post bind resource. 
@@ -366,7 +365,7 @@ void ForceDirectedSchedulingBase::buildAvgDG() {
       res += getDGraphAt(i, A->getFUType());
 
     res /= (double) getTimeFrame(A);
-    AvgDG[A] = res;
+    AvgDG[A->getIdx()] = res;
   }
 }
 
