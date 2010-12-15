@@ -62,6 +62,9 @@ private:
 
   SDNode *SelectMemAccess(SDNode *N);
 
+  virtual void PostprocessISelDAG();
+  void FixCopyConst(SelectionDAG &DAG, SDNode *N);
+
   const VInstrInfo &getInstrInfo() {
     return *static_cast<const VTargetMachine&>(TM).getInstrInfo();
   }
@@ -113,7 +116,6 @@ SDNode *VDAGToDAGISel::SelectConstant(SDNode *N) {
   //return CurDAG->SelectNodeTo(N, VTM::VOpLdImm, N->getVTList(),
   //                            Ops, array_lengthof(Ops));
 }
-
 
 SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {
   // Build the target constant.
@@ -183,4 +185,34 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   }
 
   return SelectCode(N);
+}
+static void UpdateNodeOperand(SelectionDAG &DAG,  SDNode *N, unsigned Num,
+                              SDValue Val) {
+  SmallVector<SDValue, 8> ops(N->op_begin(), N->op_end());
+  ops[Num] = Val;
+  SDNode *New = DAG.UpdateNodeOperands(N, ops.data(), ops.size());
+  DAG.ReplaceAllUsesWith(N, New);
+}
+
+void VDAGToDAGISel::FixCopyConst(SelectionDAG &DAG, SDNode *Copy) {
+  ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(Copy->getOperand(2));
+  // Only handle assign a constant value to register.
+  if (!CSD) return;
+
+  MachineSDNode *SetRI =
+    CurDAG->getMachineNode(VTM::VOpSetRI, Copy->getDebugLoc(),
+                           CSD->getValueType(0), SDValue(CSD, 0));
+  UpdateNodeOperand(DAG, Copy, 2, SDValue(SetRI, 0));
+}
+
+void VDAGToDAGISel::PostprocessISelDAG() {
+  CurDAG->AssignTopologicalOrder();
+  HandleSDNode Dummy(CurDAG->getRoot());
+
+  for (SelectionDAG::allnodes_iterator NI = CurDAG->allnodes_begin();
+       NI != CurDAG->allnodes_end(); ++NI) {
+    if (NI->getOpcode() == ISD::CopyToReg)
+      FixCopyConst(*CurDAG, NI);
+  }
+  CurDAG->setRoot(Dummy.getValue());
 }

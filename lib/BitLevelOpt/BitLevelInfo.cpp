@@ -153,6 +153,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // The bitwidth determinate by its first operand.
+  case VTM::VOpSetRI:
   case VTM::COPY:
   case VTM::VOpNot:
   case VTM::VOpSRA:

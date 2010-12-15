@@ -112,7 +112,9 @@ class RTLInfo : public MachineFunctionPass {
 
   void emitDatapath(ucState &State);
 
-  void emitUnaryOp(ucOp &BinOp, const std::string &Operator);
+  void emitOpSetRI(ucOp &OpSetRI);
+
+  void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
   void emitOpAdd(ucOp &OpAdd);
@@ -120,6 +122,8 @@ class RTLInfo : public MachineFunctionPass {
   void emitOpBitCat(ucOp &OpBitCat);
   void emitOpBitSlice(ucOp &OpBitSlice);
   void emitOpBitRepeat(ucOp &OpBitRepeat);
+
+  void emitImplicitDef(ucOp &ImpDef);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand,
                    bool PrintBitRange = true);
@@ -132,8 +136,6 @@ class RTLInfo : public MachineFunctionPass {
   void emitOpLatchVal(ucOp &OpLatchVal);
   void emitOpMemAccess(ucOp &OpMemAccess);
   void emitOpToState(ucOp &OpToState);
-
-  void emitImplicitDef(ucOp &ImpDef);
 
   void emitFUCtrl(unsigned Slot);
 
