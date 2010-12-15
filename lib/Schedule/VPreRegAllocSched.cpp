@@ -67,7 +67,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
-  unsigned short InstIdx;
 
   void buildState(VSchedGraph &State);
 
@@ -351,7 +350,6 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 void VPreRegAllocSched::clear() {
   // Reset total Cycle
   totalCycle = 1;
-  InstIdx = 0;
 }
 
 void VPreRegAllocSched::releaseMemory() {
@@ -383,6 +381,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
       assert(TargetRegisterInfo::isVirtualRegister(Reg)
              && "Unexpected physics register!");
 
+
       MachineInstr *DepSrc = MRI->getVRegDef(Reg);
       /// Only add the dependence if DepSrc is in the same MBB with MI.
       if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))
@@ -410,18 +409,14 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *A = new VSUnit(&MI, 1, ++InstIdx, Id.getFUNum());
-
+  VSUnit *A = CurState.createVSUnit(&MI, 1, Id.getFUNum());
   addValueDeps(A, CurState);
-
-  // Add the atom to the state.
-  CurState.addSUnit(A);
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   SmallVectorImpl<MachineInstr*> &Terms = CurState.getTerms();
 
-  VSUnit *Exit = new VSUnit(Terms.data(), Terms.size(), ++InstIdx);
+  VSUnit *Exit = CurState.createVSUnit(Terms.data(), Terms.size());
   addValueDeps(Exit, CurState);
 
   MachineInstr *FstExit = Terms.front();
@@ -439,15 +434,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   // Do not forget the entry root.
   Exit->addDep(getCtrlDepEdge(CurState.getEntryRoot(),
                               computeLatency(0, FstExit)));
-
-  // Add the atom to the state.
-  CurState.addSUnit(Exit);
 }
 
 void VPreRegAllocSched::buildState(VSchedGraph &State) {
-  // Create a dummy entry node.
-  State.addSUnit(new VSUnit(++InstIdx));
-
   for (MachineBasicBlock::iterator BI = State->begin(), BE = State->end();
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
@@ -482,8 +471,7 @@ void VPreRegAllocSched::print(raw_ostream &O, const Module *M) const {}
 
 VPreRegAllocSched::VPreRegAllocSched(const VTargetMachine &TM)
   : MachineFunctionPass(ID), LI(0), LiveVars(0), VTarget(TM),
-  MRI(0), totalCycle(1), InstIdx(0)
-{}
+  MRI(0), totalCycle(1) {}
 
 VPreRegAllocSched::~VPreRegAllocSched() {
   clear();

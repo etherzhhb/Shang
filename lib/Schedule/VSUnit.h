@@ -226,17 +226,18 @@ class VSUnit {
   SmallVector<MachineInstr*, 2> Instrs;
 
   friend class VSchedGraph;
-public:
-  static const unsigned short MaxSlot = ~0 >> 1;
 
   // Create the entry node.
-  VSUnit(unsigned short Idx) :SchedSlot(0), InstIdx(Idx), FUNum(0) {
-  }
+  VSUnit(unsigned short Idx) :SchedSlot(0), InstIdx(Idx), FUNum(0) {}
 
   VSUnit(MachineInstr **I, unsigned NumInstrs, unsigned short Idx,
          unsigned fuid = 0)
     : SchedSlot(0), InstIdx(Idx), FUNum(fuid),
     Instrs(I, I + NumInstrs) {}
+
+public:
+  static const unsigned short MaxSlot = ~0 >> 1;
+
 
   ~VSUnit() {
     std::for_each(Deps.begin(), Deps.end(), deleter<VDEdge>);
@@ -454,6 +455,8 @@ private:
   const VTargetMachine &TM;
   MachineBasicBlock *MBB;
   SUnitVecTy SUnits;
+  // The number of schedule unit.
+  unsigned SUCount;
 
   // Modulo for modulo schedule.
   unsigned short II;
@@ -469,14 +472,45 @@ private:
 
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
+
+  void addSUnit(VSUnit *SU) {
+    SUnits.push_back(SU);
+    for (VSUnit::instr_iterator I = SU->instr_begin(), E = SU->instr_end();
+      I != E; ++I) {
+        SUnitMapType::iterator where;
+        bool inserted;
+        tie(where, inserted) = InstToSUnits.insert(std::make_pair(*I, SU));
+        assert(inserted && "Mapping from I already exist!");
+    }
+  }
+
+  VSUnit *createEntry() {
+    VSUnit *Entry = new VSUnit(SUCount);
+    ++SUCount;
+
+    addSUnit(Entry);
+    return Entry;
+  }
+
 public:
   VSchedGraph(const VTargetMachine &Target, MachineBasicBlock *MachBB,
            bool HaveSelfLoop, unsigned short StartSlot)
-    : TM(Target), MBB(MachBB), II(0), startSlot(StartSlot),
-    HaveSelfLoop(HaveSelfLoop) {}
+    : TM(Target), MBB(MachBB), SUCount(0), II(0), startSlot(StartSlot),
+      HaveSelfLoop(HaveSelfLoop) {
+    // Create a dummy entry node.
+    (void) createEntry();
+  }
 
   ~VSchedGraph() {
     std::for_each(SUnits.begin(), SUnits.end(), deleter<VSUnit>);
+  }
+
+  VSUnit *createVSUnit(MachineInstr **I, unsigned NumInsts, unsigned fuid = 0) {
+    VSUnit *SU = new VSUnit(I, NumInsts, SUCount, fuid);
+    ++SUCount;
+
+    addSUnit(SU);
+    return SU;
   }
 
   void addTerm(MachineInstr *Term) { Terms.push_back(Term); }
@@ -516,18 +550,6 @@ public:
   typedef SUnitVecTy::const_reverse_iterator const_reverse_iterator;
   const_reverse_iterator rbegin() const { return SUnits.rbegin(); }
   const_reverse_iterator rend()   const { return SUnits.rend(); }
-
-  void addSUnit(VSUnit *A) {
-    SUnits.push_back(A);
-    for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
-        I != E; ++I) {
-      SUnitMapType::iterator where;
-      bool inserted;
-      tie(where, inserted) = InstToSUnits.insert(std::make_pair(*I, A));
-      assert(inserted && "Mapping from I already exist!");
-    }
-    
-  }
 
   void eraseSUnit(VSUnit *A) {
     iterator at = std::find(begin(), end(), A);
