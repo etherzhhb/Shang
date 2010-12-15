@@ -500,9 +500,9 @@ void VSchedGraph::schedule() {
   //ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
   ForceDirectedSchedulingBase *Scheduler = 0;
   if (NoFDLS)
-    Scheduler = new ForceDirectedScheduler(this);
+    Scheduler = new ForceDirectedScheduler(*this);
   else
-    Scheduler = new ForceDirectedListScheduler(this);
+    Scheduler = new ForceDirectedListScheduler(*this);
 
   //if (MSInfo.isModuloSchedulable()) {
   //  if (NoFDMS) {

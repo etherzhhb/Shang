@@ -44,8 +44,7 @@ void ForceDirectedSchedulingBase::buildTimeFrame(const VSUnit *ClampedSUnit,
           || (ClampedASAP >= getSTFASAP(ClampedSUnit)
               && ClampedALAP <= getSTFALAP(ClampedSUnit)))
          && "Bad clamped value!");
-  SUnitToTF.clear();
-  VSUnit *EntryRoot = State->getEntryRoot();
+  VSUnit *EntryRoot = State.getEntryRoot();
   // Build the time frame
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
   buildASAPStep(ClampedSUnit, ClampedASAP);
@@ -56,20 +55,20 @@ void ForceDirectedSchedulingBase::buildTimeFrame(const VSUnit *ClampedSUnit,
 
 void ForceDirectedSchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit,
                                                 unsigned ClampedASAP) {
-  VSUnit *Entry = State->getEntryRoot();
-  SUnitToTF[Entry].first = Entry->getSlot();
+  VSUnit *Entry = State.getEntryRoot();
+  SUnitToTF[Entry->getIdx()].first = Entry->getSlot();
 
-  VSchedGraph::iterator Start = State->begin();
+  VSchedGraph::iterator Start = State.begin();
 
   bool changed = false;
 
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::iterator I = ++Start, E = State->end(); I != E; ++I) {
+    for (VSchedGraph::iterator I = ++Start, E = State.end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
-        SUnitToTF[A].first = A->getSlot();
+        SUnitToTF[A->getIdx()].first = A->getSlot();
         continue;
       }
 
@@ -100,34 +99,34 @@ void ForceDirectedSchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit,
       DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
       A->dump();
       dbgs() << "\n\n";);
-      if (SUnitToTF[A].first != NewStep) {
-        SUnitToTF[A].first = NewStep;
+      if (SUnitToTF[A->getIdx()].first != NewStep) {
+        SUnitToTF[A->getIdx()].first = NewStep;
         changed |= true;
       }
     }
   } while (changed);
 
-  VSUnit *Exit = State->getExitRoot();
+  VSUnit *Exit = State.getExitRoot();
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
 void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
                                                 unsigned ClampedALAP) {
-  VSUnit *Exit = State->getExitRoot();
-  SUnitToTF[Exit].second = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
+  VSUnit *Exit = State.getExitRoot();
+  SUnitToTF[Exit->getIdx()].second = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
 
-  VSchedGraph::reverse_iterator Start = State->rbegin();
+  VSchedGraph::reverse_iterator Start = State.rbegin();
 
   bool changed = false;
 
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::reverse_iterator I = ++Start, E = State->rend();
+    for (VSchedGraph::reverse_iterator I = ++Start, E = State.rend();
          I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
-        SUnitToTF[A].second = A->getSlot();
+        SUnitToTF[A->getIdx()].second = A->getSlot();
         continue;
       }
 
@@ -162,8 +161,8 @@ void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
       DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
             A->dump();
             dbgs() << "\n\n";);
-      if (SUnitToTF[A].second != NewStep) {
-        SUnitToTF[A].second = NewStep;
+      if (SUnitToTF[A->getIdx()].second != NewStep) {
+        SUnitToTF[A->getIdx()].second = NewStep;
         changed = true;
       }
     }
@@ -171,7 +170,7 @@ void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
 
 #ifndef NDEBUG
   // Verify the time frames.
-  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
     assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
   }
@@ -180,7 +179,7 @@ void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
 
 void ForceDirectedSchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
     A->print(OS);
@@ -201,7 +200,7 @@ void ForceDirectedSchedulingBase::dumpTimeFrame() const {
 
 void ForceDirectedSchedulingBase::buildDGraph() {
   DGraph.clear();
-  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I){
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I){
     // We only try to balance the post bind resource.
     // Ignore the DG for trivial resources.
     // if (A->isTrivial()) continue;
@@ -277,7 +276,7 @@ double ForceDirectedSchedulingBase::getDGraphAt(unsigned step,
 unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
   if (MII != 0) {
 #ifndef NDEBUG
-    unsigned StartSlot = State->getStartSlot();
+    unsigned StartSlot = State.getStartSlot();
     step = StartSlot + (step - StartSlot) % MII;
 #else
     step = step % MII;
@@ -348,7 +347,7 @@ double ForceDirectedSchedulingBase::computeRangeForce(const VSUnit *A,
 double ForceDirectedSchedulingBase::computeOtherForce(const VSUnit *A) {
   double ret = 0.0;
 
-  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     if (A == *I) continue;
     
     ret += computeRangeForce(A, getASAPStep(A), getALAPStep(A));
@@ -358,7 +357,7 @@ double ForceDirectedSchedulingBase::computeOtherForce(const VSUnit *A) {
 
 void ForceDirectedSchedulingBase::buildAvgDG() {
   AvgDG.clear();
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
        I != E; ++I) {
     // We only care about the utilization of post bind resource. 
     VSUnit *A = *I;
@@ -374,7 +373,7 @@ void ForceDirectedSchedulingBase::buildAvgDG() {
 unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
   if (rstSTF) {
     resetSTF();
-    State->resetSchedule();
+    State.resetSchedule();
   }
   buildTimeFrame();
 
@@ -389,26 +388,27 @@ void ForceDirectedSchedulingBase::dumpDG() const {
 }
 
 void ForceDirectedSchedulingBase::resetSTF() {
-  SUnitToSTF.clear();
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
-       I != E; ++I)
-    SUnitToSTF.insert(std::make_pair(*I, std::make_pair(0, VSUnit::MaxSlot)));
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+       I != E; ++I) {
+    VSUnit *SU = *I;
+    SUnitToSTF[SU->getIdx()] = std::make_pair(0, VSUnit::MaxSlot);
+  }
 }
 
 void ForceDirectedSchedulingBase::sinkSTF(const VSUnit *A,
                                           unsigned ASAP, unsigned ALAP) {
   assert(ASAP <= ALAP && "Bad time frame to sink!");
   assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
-  SUnitToSTF[A] = std::make_pair(ASAP, ALAP);
+  SUnitToSTF[A->getIdx()] = std::make_pair(ASAP, ALAP);
   // We may need to reduce critical path.
-  if (A == State->getExitRoot()) {
+  if (A == State.getExitRoot()) {
     assert(CriticalPathEnd >= ALAP && "Can not sink ExitRoot!");
     CriticalPathEnd = ALAP;
   }
 }
 
 void ForceDirectedSchedulingBase::updateSTF() {
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
     // Only update the scheduled time frame.
@@ -420,5 +420,5 @@ void ForceDirectedSchedulingBase::updateSTF() {
 }
 
 void ForceDirectedSchedulingBase::viewGraph() {
-  ViewGraph(this, State->getMachineBasicBlock()->getName());
+  ViewGraph(this, State.getMachineBasicBlock()->getName());
 }

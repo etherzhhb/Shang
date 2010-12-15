@@ -35,11 +35,8 @@ class ForceDirectedSchedulingBase {
 public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
-  // Mapping hardware atoms to time frames.
-  typedef std::map<const VSUnit*, TimeFrame> TimeFrameMapType;
-
-  TimeFrameMapType SUnitToTF;
-  TimeFrameMapType SUnitToSTF;
+  SmallVector<TimeFrame, 256> SUnitToTF;
+  SmallVector<TimeFrame, 256> SUnitToSTF;
 
   typedef std::map<unsigned, double> DGStepMapType;
   typedef std::map<unsigned, std::map<unsigned, double> > DGType;
@@ -52,14 +49,17 @@ private:
   void resetSTF();
 
 protected:
-  VSchedGraph *State;
+  VSchedGraph &State;
 
-  ForceDirectedSchedulingBase(VSchedGraph *S)
-    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), State(S) {}
+  ForceDirectedSchedulingBase(VSchedGraph &S)
+    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
+    SUnitToTF(S.getNumSUnits()), SUnitToSTF(S.getNumSUnits()),
+    State(S) {}
+
 public:
   virtual ~ForceDirectedSchedulingBase() {}
 
-  VSchedGraph *getState() const { return State; }
+  VSchedGraph &getState() const { return State; }
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
@@ -82,17 +82,17 @@ public:
                       unsigned ClampedALAP = 0);
 
   unsigned getASAPStep(const VSUnit *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToTF[A].first;
+    return SUnitToTF[A->getIdx()].first;
   }
   unsigned getALAPStep(const VSUnit *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToTF[A].second;
+    return SUnitToTF[A->getIdx()].second;
   }
 
   unsigned getSTFASAP(const VSUnit *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToSTF[A].first;
+    return /*const_cast<ForceDirectedSchedulingBase*>(this)->*/SUnitToSTF[A->getIdx()].first;
   }
   unsigned getSTFALAP(const VSUnit *A) const {
-    return const_cast<ForceDirectedSchedulingBase*>(this)->SUnitToSTF[A].second;
+    return SUnitToSTF[A->getIdx()].second;
   }
 
   unsigned getTimeFrame(const VSUnit *A) const {
@@ -154,10 +154,10 @@ public:
   void lengthenCriticalPath() { ++CriticalPathEnd; }
   void shortenCriticalPath() { --CriticalPathEnd; }
   unsigned getCriticalPathLength() {
-    return CriticalPathEnd - State->getStartSlot();
+    return CriticalPathEnd - State.getStartSlot();
   }
   void setCriticalPathLength(unsigned L) {
-    CriticalPathEnd = State->getStartSlot() + L;
+    CriticalPathEnd = State.getStartSlot() + L;
   }
 
   void viewGraph();
@@ -167,10 +167,10 @@ template <> struct GraphTraits<ForceDirectedSchedulingBase*>
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(ForceDirectedSchedulingBase *G) {
-    return G->getState()->begin();
+    return G->getState().begin();
   }
   static nodes_iterator nodes_end(ForceDirectedSchedulingBase *G) {
-    return G->getState()->end();
+    return G->getState().end();
   }
 };
 
@@ -197,7 +197,7 @@ protected:
   //}
 
 public:
-  ForceDirectedListScheduler(VSchedGraph *S) 
+  ForceDirectedListScheduler(VSchedGraph &S)
     : ForceDirectedSchedulingBase(S) {}
 
   bool scheduleState();
@@ -217,7 +217,7 @@ class IteractiveModuloScheduling : public ForceDirectedListScheduler {
   bool isAllSUnitScheduled();
   VSUnit *findBlockingSUnit(unsigned FUClass, unsigned step); 
 public:
-  IteractiveModuloScheduling(VSchedGraph *S)
+  IteractiveModuloScheduling(VSchedGraph &S)
     : ForceDirectedListScheduler(S){}
 
   bool scheduleState();
@@ -225,7 +225,7 @@ public:
 
 class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
 public:
-  ForceDirectedScheduler(VSchedGraph *S)
+  ForceDirectedScheduler(VSchedGraph &S)
     : ForceDirectedSchedulingBase(S) {}
 
   bool scheduleState();

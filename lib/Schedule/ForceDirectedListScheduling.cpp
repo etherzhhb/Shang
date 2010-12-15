@@ -71,7 +71,7 @@ bool ForceDirectedListScheduler::scheduleState() {
   fds_sort s(*this);
   SUnitQueueType AQueue(s);
 
-  fillQueue(AQueue, State->begin(), State->end());
+  fillQueue(AQueue, State.begin(), State.end());
 
   if (!scheduleQueue(AQueue)) {
     DEBUG(dumpDG());
@@ -90,7 +90,7 @@ bool ForceDirectedListScheduler::scheduleState() {
 //===----------------------------------------------------------------------===//
 
 void ForceDirectedSchedulingBase::schedulePassiveSUnits() {
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
     if (A->isScheduled())
@@ -108,7 +108,7 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
   if (refreshFDInfo)
     buildFDInfo(true);
 
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
   
@@ -218,7 +218,7 @@ bool ForceDirectedScheduler::findBestSink() {
   VSUnit *BestSinkSUnit = 0;
   double BestGain = -1.0;
 
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
     if (A->isScheduled())
@@ -305,13 +305,13 @@ bool IteractiveModuloScheduling::scheduleState() {
   fds_sort s(*this);
 
   while (!isAllSUnitScheduled()) {
-    State->resetSchedule();
+    State.resetSchedule();
     buildTimeFrame();
     // Reset exclude slots and resource table.
     MRT.clear();
 
     typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> IMSQueueType;
-    IMSQueueType ToSched(++State->begin(), State->end(), s);
+    IMSQueueType ToSched(++State.begin(), State.end(), s);
     while (!ToSched.empty()) {
       VSUnit *A = ToSched.top();
       ToSched.pop();
@@ -370,7 +370,7 @@ void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
 
 VSUnit *IteractiveModuloScheduling::findBlockingSUnit(unsigned FUClass,
                                                       unsigned step) {
-  for (VSchedGraph::iterator I = State->begin(), E = State->end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled() || A->getFUType() != (VFUs::FUTypes)FUClass)
       continue;
@@ -399,7 +399,7 @@ bool IteractiveModuloScheduling::isResAvailable(unsigned FUClass,
 
 
 bool IteractiveModuloScheduling::isAllSUnitScheduled() {
-  for (VSchedGraph::iterator I = State->begin(), E = State->end();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled())

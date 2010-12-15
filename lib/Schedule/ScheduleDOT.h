@@ -81,7 +81,7 @@ struct DOTGraphTraits<ForceDirectedSchedulingBase*>
   DOTGraphTraits(bool isSimple = false) : DOTGraphTraits<VSchedGraph*>(isSimple) {}
 
   static std::string getGraphName(const ForceDirectedSchedulingBase *G) {
-    return  DOTGraphTraits<VSchedGraph*>::getGraphName(G->getState());
+    return  DOTGraphTraits<VSchedGraph*>::getGraphName(&G->getState());
   }
 
   std::string getNodeLabel(const VSUnit *Node,
