@@ -36,7 +36,7 @@ NoFDSchedule("disable-fd-schedule",
              cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-void ForceDirectedSchedulingBase::buildTimeFrame(const VSUnit *ClampedSUnit,
+void FDSBase::buildTimeFrame(const VSUnit *ClampedSUnit,
                                                  unsigned ClampedASAP,
                                                  unsigned ClampedALAP) {
 
@@ -53,8 +53,7 @@ void ForceDirectedSchedulingBase::buildTimeFrame(const VSUnit *ClampedSUnit,
   DEBUG(dumpTimeFrame());
 }
 
-void ForceDirectedSchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit,
-                                                unsigned ClampedASAP) {
+void FDSBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedASAP) {
   VSUnit *Entry = State.getEntryRoot();
   SUnitToTF[Entry->getIdx()].first = Entry->getSlot();
 
@@ -110,7 +109,7 @@ void ForceDirectedSchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit,
   CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
 }
 
-void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
+void FDSBase::buildALAPStep(const VSUnit *ClampedSUnit,
                                                 unsigned ClampedALAP) {
   VSUnit *Exit = State.getExitRoot();
   SUnitToTF[Exit->getIdx()].second = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
@@ -177,7 +176,7 @@ void ForceDirectedSchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
 #endif
 }
 
-void ForceDirectedSchedulingBase::printTimeFrame(raw_ostream &OS) const {
+void FDSBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
@@ -194,11 +193,11 @@ void ForceDirectedSchedulingBase::printTimeFrame(raw_ostream &OS) const {
   }
 }
 
-void ForceDirectedSchedulingBase::dumpTimeFrame() const {
+void FDSBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-void ForceDirectedSchedulingBase::buildDGraph() {
+void FDSBase::buildDGraph() {
   DGraph.clear();
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I){
     // We only try to balance the post bind resource.
@@ -217,7 +216,7 @@ void ForceDirectedSchedulingBase::buildDGraph() {
 }
 
 
-bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
+bool FDSBase::isResourceConstraintPreserved() {
   ExtraResReq = 0.0;
   // No resource in use.
   if (DGraph.empty()) return true;
@@ -245,7 +244,7 @@ bool ForceDirectedSchedulingBase::isResourceConstraintPreserved() {
   return ExtraResReq == 0.0;
 }
 
-void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {  
+void FDSBase::printDG(raw_ostream &OS) const {  
   // For each step
   // For each FU.
   for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
@@ -260,8 +259,7 @@ void ForceDirectedSchedulingBase::printDG(raw_ostream &OS) const {
   }
 }
 
-double ForceDirectedSchedulingBase::getDGraphAt(unsigned step,
-                                                unsigned FUClass) const {
+double FDSBase::getDGraphAt(unsigned step, unsigned FUClass) const {
   // Modulo DG for modulo schedule.
   DGType::const_iterator at = DGraph.find(FUClass);
   if (at != DGraph.end()) {
@@ -273,7 +271,7 @@ double ForceDirectedSchedulingBase::getDGraphAt(unsigned step,
   return 0.0;
 }
 
-unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
+unsigned FDSBase::computeStepKey(unsigned step) const {
   if (MII != 0) {
 #ifndef NDEBUG
     unsigned StartSlot = State.getStartSlot();
@@ -286,15 +284,13 @@ unsigned ForceDirectedSchedulingBase::computeStepKey(unsigned step) const {
   return step;
 }
 
-void ForceDirectedSchedulingBase::accDGraphAt(unsigned step, unsigned FUClass,
-                                              double d) {
+void FDSBase::accDGraphAt(unsigned step, unsigned FUClass, double d) {
   // Modulo DG for modulo schedule.
   DGraph[FUClass][computeStepKey(step)] += d;
 }
 
 // Including end.
-double ForceDirectedSchedulingBase::getRangeDG(unsigned FUClass,
-                                               unsigned start, unsigned end) {
+double FDSBase::getRangeDG(unsigned FUClass, unsigned start, unsigned end) {
   double range = end - start + 1;
   double ret = 0.0;
   for (unsigned i = start, e = end + 1; i != e; ++i)
@@ -304,8 +300,7 @@ double ForceDirectedSchedulingBase::getRangeDG(unsigned FUClass,
   return ret;
 }
 
-double ForceDirectedSchedulingBase::computeForce(const VSUnit *A,
-                                                 unsigned ASAP, unsigned ALAP) {
+double FDSBase::computeForce(const VSUnit *A, unsigned ASAP, unsigned ALAP) {
   buildTimeFrame(A, ASAP, ALAP);
   buildDGraph();
   // Compute the forces.
@@ -319,9 +314,9 @@ double ForceDirectedSchedulingBase::computeForce(const VSUnit *A,
   return Force;
 }
 
-double ForceDirectedSchedulingBase::computeSelfForce(const VSUnit *A,
-                                                     unsigned start,
-                                                     unsigned end) {
+double FDSBase::computeSelfForce(const VSUnit *A,
+                                 unsigned start,
+                                 unsigned end) {
   // FIXME: How should handle the pre-bind MachineInstruction.
   // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
@@ -332,9 +327,9 @@ double ForceDirectedSchedulingBase::computeSelfForce(const VSUnit *A,
   return Force; // / FU->getTotalFUs();
 }
 
-double ForceDirectedSchedulingBase::computeRangeForce(const VSUnit *A,
-                                                      unsigned int start,
-                                                      unsigned int end) {
+double FDSBase::computeRangeForce(const VSUnit *A,
+                                  unsigned int start,
+                                  unsigned int end) {
   // FIXME: How should handle the pre-bind MachineInstruction.
   // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
 
@@ -344,7 +339,7 @@ double ForceDirectedSchedulingBase::computeRangeForce(const VSUnit *A,
   return Force; // / FU->getTotalFUs();
 }
 
-double ForceDirectedSchedulingBase::computeOtherForce(const VSUnit *A) {
+double FDSBase::computeOtherForce(const VSUnit *A) {
   double ret = 0.0;
 
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
@@ -355,7 +350,7 @@ double ForceDirectedSchedulingBase::computeOtherForce(const VSUnit *A) {
   return ret;
 }
 
-void ForceDirectedSchedulingBase::buildAvgDG() {
+void FDSBase::buildAvgDG() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
        I != E; ++I) {
     // We only care about the utilization of post bind resource. 
@@ -369,7 +364,7 @@ void ForceDirectedSchedulingBase::buildAvgDG() {
   }
 }
 
-unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
+unsigned FDSBase::buildFDInfo(bool rstSTF) {
   if (rstSTF) {
     resetSTF();
     State.resetSchedule();
@@ -382,11 +377,11 @@ unsigned ForceDirectedSchedulingBase::buildFDInfo(bool rstSTF) {
   return CriticalPathEnd;
 }
 
-void ForceDirectedSchedulingBase::dumpDG() const {
+void FDSBase::dumpDG() const {
   printDG(dbgs());
 }
 
-void ForceDirectedSchedulingBase::resetSTF() {
+void FDSBase::resetSTF() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
        I != E; ++I) {
     VSUnit *SU = *I;
@@ -394,8 +389,7 @@ void ForceDirectedSchedulingBase::resetSTF() {
   }
 }
 
-void ForceDirectedSchedulingBase::sinkSTF(const VSUnit *A,
-                                          unsigned ASAP, unsigned ALAP) {
+void FDSBase::sinkSTF(const VSUnit *A, unsigned ASAP, unsigned ALAP) {
   assert(ASAP <= ALAP && "Bad time frame to sink!");
   assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
   SUnitToSTF[A->getIdx()] = std::make_pair(ASAP, ALAP);
@@ -406,7 +400,7 @@ void ForceDirectedSchedulingBase::sinkSTF(const VSUnit *A,
   }
 }
 
-void ForceDirectedSchedulingBase::updateSTF() {
+void FDSBase::updateSTF() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
@@ -418,6 +412,6 @@ void ForceDirectedSchedulingBase::updateSTF() {
   }
 }
 
-void ForceDirectedSchedulingBase::viewGraph() {
+void FDSBase::viewGraph() {
   ViewGraph(this, State.getMachineBasicBlock()->getName());
 }

@@ -39,7 +39,7 @@
 
 namespace llvm {
 class BitLevelInfo;
-class ForceDirectedSchedulingBase;
+class FDSBase;
 class FuncUnitId;
 class VSUnit;
 class VSchedGraph;
@@ -466,8 +466,8 @@ private:
   SmallVector<MachineInstr*, 4> Terms;
 
   /// Scheduling implementation.
-  void scheduleLinear(ForceDirectedSchedulingBase *Scheduler);
-  void scheduleLoop(ForceDirectedSchedulingBase *Scheduler,
+  void scheduleLinear(FDSBase *Scheduler);
+  void scheduleLoop(FDSBase *Scheduler,
                     unsigned II);
 
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;

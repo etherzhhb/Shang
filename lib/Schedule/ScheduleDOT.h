@@ -75,17 +75,17 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
 };
 
 template<>
-struct DOTGraphTraits<ForceDirectedSchedulingBase*>
+struct DOTGraphTraits<FDSBase*>
   : public DOTGraphTraits<VSchedGraph*> {
 
   DOTGraphTraits(bool isSimple = false) : DOTGraphTraits<VSchedGraph*>(isSimple) {}
 
-  static std::string getGraphName(const ForceDirectedSchedulingBase *G) {
+  static std::string getGraphName(const FDSBase *G) {
     return  DOTGraphTraits<VSchedGraph*>::getGraphName(&G->getState());
   }
 
   std::string getNodeLabel(const VSUnit *Node,
-                           const ForceDirectedSchedulingBase *Graph) {
+                           const FDSBase *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
     Node->print(ss);
@@ -95,7 +95,7 @@ struct DOTGraphTraits<ForceDirectedSchedulingBase*>
   }
 
   static std::string getNodeAttributes(const VSUnit *Node,
-                                       const ForceDirectedSchedulingBase *Graph)
+                                       const FDSBase *Graph)
   {
     return "shape=Mrecord";
   }

@@ -26,7 +26,7 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 bool
-ForceDirectedListScheduler::fds_sort::operator()(const VSUnit* LHS,
+FDListScheduler::fds_sort::operator()(const VSUnit* LHS,
                                                  const VSUnit* RHS) const {
   //// Schedule HWOpFU first.
   //if (isa<VSUnit>(LHS) && !isa<VSUnit>(RHS))
@@ -63,7 +63,7 @@ ForceDirectedListScheduler::fds_sort::operator()(const VSUnit* LHS,
 
 //===----------------------------------------------------------------------===//
 
-bool ForceDirectedListScheduler::scheduleState() {
+bool FDListScheduler::scheduleState() {
   buildFDInfo(true);
   if (!scheduleCriticalPath(false))
     return false;
@@ -89,7 +89,7 @@ bool ForceDirectedListScheduler::scheduleState() {
 
 //===----------------------------------------------------------------------===//
 
-void ForceDirectedSchedulingBase::schedulePassiveSUnits() {
+void FDSBase::schedulePassiveSUnits() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
@@ -104,7 +104,7 @@ void ForceDirectedSchedulingBase::schedulePassiveSUnits() {
   }
 }
 
-bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
+bool FDSBase::scheduleCriticalPath(bool refreshFDInfo) {
   if (refreshFDInfo)
     buildFDInfo(true);
 
@@ -125,7 +125,7 @@ bool ForceDirectedSchedulingBase::scheduleCriticalPath(bool refreshFDInfo) {
 //===----------------------------------------------------------------------===//
 
 template<class It>
-void ForceDirectedListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It end,
+void FDListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It end,
                         VSUnit *FirstNode) {
   for (It I = begin, E = end; I != E; ++I) {
     VSUnit *A = *I;
@@ -140,7 +140,7 @@ void ForceDirectedListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It e
   Queue.reheapify();
 }
 
-unsigned ForceDirectedListScheduler::findBestStep(VSUnit *A) {
+unsigned FDListScheduler::findBestStep(VSUnit *A) {
   unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
   // Time frame is 1, we do not have other choice.
   if (ASAP == ALAP) return ASAP;
@@ -160,7 +160,7 @@ unsigned ForceDirectedListScheduler::findBestStep(VSUnit *A) {
   return BestStep.first;
 }
 
-bool ForceDirectedListScheduler::scheduleSUnit(VSUnit *A) {
+bool FDListScheduler::scheduleSUnit(VSUnit *A) {
   assert(!A->isScheduled() && "A already scheduled!");
   DEBUG(A->print(dbgs()));
   unsigned step = findBestStep(A);
@@ -171,7 +171,7 @@ bool ForceDirectedListScheduler::scheduleSUnit(VSUnit *A) {
   return (isResourceConstraintPreserved() && scheduleCriticalPath(false));
 }
 
-bool ForceDirectedListScheduler::scheduleQueue(SUnitQueueType &Queue) {
+bool FDListScheduler::scheduleQueue(SUnitQueueType &Queue) {
   while (!Queue.empty()) {
     // TODO: Short the list
     VSUnit *A = Queue.top();
@@ -192,7 +192,7 @@ bool ForceDirectedListScheduler::scheduleQueue(SUnitQueueType &Queue) {
 
 //===----------------------------------------------------------------------===//
 
-bool ForceDirectedScheduler::scheduleState() {
+bool FDScheduler::scheduleState() {
   buildFDInfo(true);
   if (!scheduleCriticalPath(false))
     return false;
@@ -213,7 +213,7 @@ bool ForceDirectedScheduler::scheduleState() {
   return true;
 }
 
-bool ForceDirectedScheduler::findBestSink() {
+bool FDScheduler::findBestSink() {
   TimeFrame BestSink;
   VSUnit *BestSinkSUnit = 0;
   double BestGain = -1.0;
@@ -244,8 +244,7 @@ bool ForceDirectedScheduler::findBestSink() {
   return true;
 }
 
-double ForceDirectedScheduler::trySinkSUnit(VSUnit *A,
-                                                TimeFrame &NewTimeFrame) {
+double FDScheduler::trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame) {
   // Build time frame to get the correct ASAP and ALAP.
   buildTimeFrame();
 
@@ -276,8 +275,8 @@ double ForceDirectedScheduler::trySinkSUnit(VSUnit *A,
 }
 
 struct ims_sort {
-  ForceDirectedSchedulingBase &Info;
-  ims_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
+  FDSBase &Info;
+  ims_sort(FDSBase &s) : Info(s) {}
   bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
 };
 

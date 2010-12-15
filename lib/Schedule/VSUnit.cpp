@@ -498,11 +498,11 @@ void VSchedGraph::preSchedTopSort() {
 void VSchedGraph::schedule() {
   // Create the FDInfo.
   //ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
-  ForceDirectedSchedulingBase *Scheduler = 0;
+  FDSBase *Scheduler = 0;
   if (NoFDLS)
-    Scheduler = new ForceDirectedScheduler(*this);
+    Scheduler = new FDScheduler(*this);
   else
-    Scheduler = new ForceDirectedListScheduler(*this);
+    Scheduler = new FDListScheduler(*this);
 
   //if (MSInfo.isModuloSchedulable()) {
   //  if (NoFDMS) {
@@ -522,7 +522,7 @@ void VSchedGraph::schedule() {
 }
 
 
-void VSchedGraph::scheduleLinear(ForceDirectedSchedulingBase *Scheduler) {
+void VSchedGraph::scheduleLinear(FDSBase *Scheduler) {
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
 
@@ -535,7 +535,7 @@ void VSchedGraph::scheduleLinear(ForceDirectedSchedulingBase *Scheduler) {
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
-void VSchedGraph::scheduleLoop(ForceDirectedSchedulingBase *Scheduler, 
+void VSchedGraph::scheduleLoop(FDSBase *Scheduler, 
                                         unsigned II) {
   dbgs() << "MII: " << II << "...";
   // Ensure us can schedule the critical path.

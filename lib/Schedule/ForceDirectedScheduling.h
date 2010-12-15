@@ -27,7 +27,7 @@
 using namespace llvm;
 
 namespace llvm {
-class ForceDirectedSchedulingBase {
+class FDSBase {
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
   double ExtraResReq;
@@ -39,7 +39,7 @@ private:
   SmallVector<TimeFrame, 256> SUnitToSTF;
 
   typedef std::map<unsigned, double> DGStepMapType;
-  typedef std::map<unsigned, std::map<unsigned, double> > DGType;
+  typedef std::map<unsigned, DGStepMapType> DGType;
   DGType DGraph;
 
   unsigned computeStepKey(unsigned step) const;
@@ -51,13 +51,13 @@ private:
 protected:
   VSchedGraph &State;
 
-  ForceDirectedSchedulingBase(VSchedGraph &S)
+  FDSBase(VSchedGraph &S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
     SUnitToTF(S.getNumSUnits()), SUnitToSTF(S.getNumSUnits()),
     AvgDG(S.getNumSUnits()), State(S) {}
 
 public:
-  virtual ~ForceDirectedSchedulingBase() {}
+  virtual ~FDSBase() {}
 
   VSchedGraph &getState() const { return State; }
 
@@ -89,7 +89,7 @@ public:
   }
 
   unsigned getSTFASAP(const VSUnit *A) const {
-    return /*const_cast<ForceDirectedSchedulingBase*>(this)->*/SUnitToSTF[A->getIdx()].first;
+    return SUnitToSTF[A->getIdx()].first;
   }
   unsigned getSTFALAP(const VSUnit *A) const {
     return SUnitToSTF[A->getIdx()].second;
@@ -163,24 +163,24 @@ public:
   void viewGraph();
 };
 
-template <> struct GraphTraits<ForceDirectedSchedulingBase*> 
+template <> struct GraphTraits<FDSBase*> 
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::iterator nodes_iterator;
-  static nodes_iterator nodes_begin(ForceDirectedSchedulingBase *G) {
+  static nodes_iterator nodes_begin(FDSBase *G) {
     return G->getState().begin();
   }
-  static nodes_iterator nodes_end(ForceDirectedSchedulingBase *G) {
+  static nodes_iterator nodes_end(FDSBase *G) {
     return G->getState().end();
   }
 };
 
-class ForceDirectedListScheduler : public ForceDirectedSchedulingBase {
+class FDListScheduler : public FDSBase {
 protected:
   /// @name PriorityQueue
   //{
   struct fds_sort {
-    ForceDirectedSchedulingBase &Info;
-    fds_sort(ForceDirectedSchedulingBase &s) : Info(s) {}
+    FDSBase &Info;
+    fds_sort(FDSBase &s) : Info(s) {}
     bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
   };
 
@@ -197,15 +197,15 @@ protected:
   //}
 
 public:
-  ForceDirectedListScheduler(VSchedGraph &S)
-    : ForceDirectedSchedulingBase(S) {}
+  FDListScheduler(VSchedGraph &S)
+    : FDSBase(S) {}
 
   bool scheduleState();
 
 };
 
 
-class IteractiveModuloScheduling : public ForceDirectedListScheduler {
+class IteractiveModuloScheduling : public FDListScheduler {
   typedef std::map<unsigned, unsigned> UsageMapType;
   typedef std::map<unsigned, UsageMapType> MRTType;
   MRTType MRT;
@@ -218,15 +218,15 @@ class IteractiveModuloScheduling : public ForceDirectedListScheduler {
   VSUnit *findBlockingSUnit(unsigned FUClass, unsigned step); 
 public:
   IteractiveModuloScheduling(VSchedGraph &S)
-    : ForceDirectedListScheduler(S){}
+    : FDListScheduler(S){}
 
   bool scheduleState();
 };
 
-class ForceDirectedScheduler : public ForceDirectedSchedulingBase {
+class FDScheduler : public FDSBase {
 public:
-  ForceDirectedScheduler(VSchedGraph &S)
-    : ForceDirectedSchedulingBase(S) {}
+  FDScheduler(VSchedGraph &S)
+    : FDSBase(S) {}
 
   bool scheduleState();
   bool findBestSink();
