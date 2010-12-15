@@ -15,6 +15,7 @@
 #include "vtm/FUInfo.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -37,3 +38,14 @@ FUInfo::~FUInfo() {
   for (iterator I = begin(), E = end(); I != E; ++I)
     if(*I) delete *I;
 }
+
+void FuncUnitId::print(raw_ostream &OS) const {
+  OS << VFUs::VFUNames[getFUType()];
+  // Print the function unit id if necessary.
+  if (isBinded()) OS << "Binded to " << getFUNum();
+}
+
+void FuncUnitId::dump() const {
+  print(dbgs());
+}
+

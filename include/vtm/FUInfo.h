@@ -42,6 +42,10 @@ namespace VFUs {
     // all kind of function units are selected.
     AllFUType = 0xf
   };
+
+  const char *VFUNames[] = {
+    "Trivial", "MemoryBus", "SHL", "ASR", "LSR", "AddSub", "Mult", "FSMFinish"
+  };
 }
 
 class FuncUnitId {
@@ -77,6 +81,9 @@ public:
  
   inline bool operator==(const FuncUnitId X) const { return UID.data == X.UID.data; }
   inline bool operator< (const FuncUnitId X) const { return UID.data < X.UID.data; }
+
+  void print(raw_ostream &OS) const;
+  void dump() const;
 };
 
 /// @brief The description of Verilog target machine function units.
@@ -103,6 +110,7 @@ protected:
     TotalRes(totalRes) {}
 public:
   unsigned getType() const { return ResourceType; }
+  const char *getTypeName() { return VFUs::VFUNames[getType()]; }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
@@ -131,8 +139,8 @@ public:
     return A->getType() == VFUs::MemoryBus;
   }
 
-  static std::string getTypeName() { return "MemoryBus"; }
   static VFUs::FUTypes getType() { return VFUs::MemoryBus; }
+  static const char *getTypeName() { return VFUs::VFUNames[getType()]; }
 
   // Signal names of the function unit.
   inline static std::string getAddrBusName(unsigned FUNum) {
@@ -183,9 +191,9 @@ public:
   static inline bool classof(const VFUDesc *A) {
     return A->getType() == T;
   }
-  static std::string getTypeName() { return "TODO"; }
 
   static VFUs::FUTypes getType() { return T; };
+  static const char *getTypeName() { return VFUs::VFUNames[getType()]; }
 };
 
 typedef VFUBinOpFUDesc<VFUs::Mult>    VFUMult;
