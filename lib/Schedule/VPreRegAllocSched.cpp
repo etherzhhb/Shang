@@ -447,20 +447,29 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   // We need at an explicit terminator to transfer the control flow explicitly.
   if (State.getTerms().empty()) {
     MachineBasicBlock *MBB = State.getMachineBasicBlock();
-    assert(MBB->succ_size() == 1 && "Expect fall through block!");
-    // Create "VOpToState 1/*means always true*/, target mbb"
-    MachineInstr &Term = *BuildMI(MBB, DebugLoc(), 
-                                  VTarget.getInstrInfo()->get(VTM::VOpToState))
-      .addImm(1, 1).addMBB(*MBB->succ_begin());
-    State.addTerm(&Term);
+    if (MBB->succ_size() == 0) { // We may meet an unreachable.
+      MachineInstr &Term = *BuildMI(MBB, DebugLoc(),
+                                    VTarget.getInstrInfo()->get(VTM::VOpRet));
+      State.addTerm(&Term);
+    } else {
+      assert(MBB->succ_size() == 1 && "Expect fall through block!");
+      // Create "VOpToState 1/*means always true*/, target mbb"
+      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), 
+                                    VTarget.getInstrInfo()->get(VTM::VOpToState))
+        .addImm(1, 1).addMBB(*MBB->succ_begin());
+      State.addTerm(&Term);
+    }
   }
 
   // Create the exit node.
   buildExitRoot(State);
 
+  // Build loop edges if necessary.
+  buildSelfLoopDepEdges(State);
+  
+
   // Build the memory edges.
   buildMemDepEdges(State);
-
 }
 
 VDMemDep *VPreRegAllocSched::getMemDepEdge(VSUnit *Src, unsigned Latency,

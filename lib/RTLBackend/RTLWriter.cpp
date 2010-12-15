@@ -372,6 +372,7 @@ void RTLInfo::emitCtrlOp(ucState &State) {
     case VTM::COPY:         emitOpLatchVal(Op);           break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);          break;
     case VTM::VOpToState:   emitOpToState(Op);            break;
+    case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
     default:  assert(0 && "Unexpect opcode!");            break;
     }
   }
@@ -387,7 +388,13 @@ void RTLInfo::emitCtrlOp(ucState &State) {
 void RTLInfo::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *MBB->getFirstNonPHI();
+  assert(FuncInfo->getStartSlotFor(MBB) == FirstState.getSlot());
   emitCtrlOp(FirstState);
+}
+
+void RTLInfo::emitImplicitDef(ucOp &ImpDef) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  OS << "/*IMPLICIT_DEF " << ImpDef << "*/\n";
 }
 
 void RTLInfo::emitOpLatchVal(ucOp &OpLatchVal) {
@@ -421,7 +428,8 @@ void RTLInfo::emitOpToState(ucOp &OpToState) {
   raw_string_ostream ss(s);
   emitOperand(ss, OpToState.getOperand(0));
   OS.if_begin(ss.str());
-  emitNextFSMState(OS, OpToState.getOperand(1).getMBB());
+  MachineBasicBlock *TargetBB = OpToState.getOperand(1).getMBB();
+  emitNextFSMState(OS, TargetBB);
   VM->getControlBlockBuffer().exit_block();
 }
 

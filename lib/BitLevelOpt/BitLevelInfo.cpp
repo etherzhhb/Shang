@@ -110,6 +110,8 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // Leaves.
+  // Dirty Hack: this appear in bugpoint.
+  case VTM::IMPLICIT_DEF:
   // FIXME: PHI nodes are not leaves, implement the computation logic.
   // some iterative approach may need.
   case VTM::PHI:

@@ -165,6 +165,12 @@ public:
   void dump() const;
 };
 
+
+static inline raw_ostream &operator<<(raw_ostream &O, const ucOp &Op) {
+  Op.print(O);
+  return O;
+}
+
 class ucOpIterator : public std::iterator<std::forward_iterator_tag,
                                              ucOp, ptrdiff_t> {
   MachineInstr::mop_iterator CurIt, EndIt;

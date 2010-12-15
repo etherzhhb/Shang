@@ -133,6 +133,8 @@ class RTLInfo : public MachineFunctionPass {
   void emitOpMemAccess(ucOp &OpMemAccess);
   void emitOpToState(ucOp &OpToState);
 
+  void emitImplicitDef(ucOp &ImpDef);
+
   void emitFUCtrl(unsigned Slot);
 
 public:
