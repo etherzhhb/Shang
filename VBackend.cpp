@@ -24,6 +24,7 @@
 
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Target/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
@@ -147,6 +148,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
       (OptLevel == CodeGenOpt::None && false/*EnableFastISelOption != cl::BOU_FALSE*/))
     EnableFastISel = true;
 
+  // Provide BasicAA for target independent codegen backend.
+  PM.add(createBasicAliasAnalysisPass());
+
   // Ask the target for an isel.
   if (addInstSelector(PM, OptLevel))
     return true;
@@ -195,6 +199,10 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(new LiveVariables());
 
+  // Run the SCEVAA pass to compute more accurate alias information.
+  PM.add(createScalarEvolutionAliasAnalysisPass());
+
+  // Schedule
   PM.add(createVPreRegAllocSchedPass(*this));
 
   // Create physics register on demand.

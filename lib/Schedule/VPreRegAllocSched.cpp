@@ -332,11 +332,13 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // FIXME: We may employ more advance AA.
       if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
-      // Compute the memory dependence.
-      // TODO: Compute iterater distance for loops.
-      VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
-                                       VDMemDep::TrueDep, 0);
-      DstU->addDep(MemDep);
+      if (CurState.haveSelfLoop()) {
+        // Compute the iterate distance.
+      } else {
+        VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
+                                         VDMemDep::TrueDep, 0);
+        DstU->addDep(MemDep);
+      }
     }
 
     // Check for self dependence in loop.
