@@ -28,6 +28,9 @@
 #include "vtm/VTM.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -54,20 +57,61 @@ namespace {
 /// @brief Schedule the operations.
 ///
 struct VPreRegAllocSched : public MachineFunctionPass {
-  // The loop Info
-  MachineLoopInfo *LI;
-  LiveVariables *LiveVars;
   const VTargetMachine &VTarget;
+  // The loop Info
   MachineRegisterInfo *MRI;
   VFuncInfo *FuncInfo;
   BitLevelInfo *BLI;
-  AliasAnalysis *AA;
+
   TargetData *TD;
+
+  MachineLoopInfo *LI;
+  LoopInfo *IRLI;
+  AliasAnalysis *AA;
+  ScalarEvolution *SE;
 
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
 
+
+  VPreRegAllocSched(const VTargetMachine &TM)
+    : MachineFunctionPass(ID), VTarget(TM), totalCycle(1) {}
+
+  //===--------------------------------------------------------------------===//
+  // Loop memory dependence information.
+  struct LoopDep {
+    unsigned Dep    : 2;
+    unsigned ItDst  : 30;
+
+    LoopDep(VDMemDep::MemDepTypes dep, unsigned itDst)
+      : Dep(dep), ItDst(itDst) {}
+
+    LoopDep() : Dep(VDMemDep::NoDep), ItDst(0) {}
+
+    bool hasDep() const {
+      return Dep != VDMemDep::NoDep ;
+    }
+
+    unsigned getItDst() const { return ItDst; }
+
+    VDMemDep::MemDepTypes getDepType() const {
+      return (VDMemDep::MemDepTypes)Dep;
+    }
+  };
+
+  LoopDep analyzeLoopDep(Value *SrcAddr, Value *DstAddr, bool SrcLoad,
+                         bool DstLoad, Loop &L, bool SrcBeforeDest);
+
+
+  LoopDep advancedLoopDepsAnalysis(Value *SrcAddr, Value *DstAddr,
+                                   bool SrcLoad, bool DstLoad, Loop &L,
+                                   bool SrcBeforeDest, unsigned ElSizeInByte);
+
+  LoopDep createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
+                        int Diff = 0);
+
+  //===--------------------------------------------------------------------===//
   unsigned computeLatency(const MachineInstr *SrcInstr,
                           const MachineInstr *DstInstr) {
     if (SrcInstr == 0) {
@@ -122,7 +166,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   /// @name FunctionPass interface
   //{
   static char ID;
-  VPreRegAllocSched(const VTargetMachine &TM);
 
   ~VPreRegAllocSched();
   bool runOnMachineFunction(MachineFunction &MF);
@@ -154,6 +197,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 };
 }
 
+//===----------------------------------------------------------------------===//
 char VPreRegAllocSched::ID = 0;
 
 Pass *llvm::createVPreRegAllocSchedPass(const VTargetMachine &TM) {
@@ -162,7 +206,8 @@ Pass *llvm::createVPreRegAllocSchedPass(const VTargetMachine &TM) {
 
 void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
-  AU.addRequired<LiveVariables>();
+  AU.addRequired<LoopInfo>();
+  AU.addRequired<ScalarEvolution>();
   AU.addRequired<MachineLoopInfo>();
   AU.addRequired<BitLevelInfo>();
   AU.addRequired<AliasAnalysis>();
@@ -172,12 +217,13 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
-  LiveVars = &getAnalysis<LiveVariables>();
   MRI = &MF.getRegInfo();
   FuncInfo = MF.getInfo<VFuncInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
   AA = &getAnalysis<AliasAnalysis>();
   LI = &getAnalysis<MachineLoopInfo>();
+  IRLI = &getAnalysis<LoopInfo>();
+  SE = &getAnalysis<ScalarEvolution>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
@@ -201,21 +247,117 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 }
 
 
-bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
-  MachineLoop *L = LI->getLoopFor(MBB);
-  // Not in any loop.
-  if (!L) return false;
-  // Dirty Hack: Only support one block loop at this moment.
-  if (L->getBlocks().size() != 1) return false;
+void VPreRegAllocSched::clear() {
+  // Reset total Cycle
+  totalCycle = 1;
+}
 
-  return FuncInfo->getConstraints().enablePipeLine();
+void VPreRegAllocSched::releaseMemory() {
+  clear();
+}
+
+
+void VPreRegAllocSched::print(raw_ostream &O, const Module *M) const {}
+
+VPreRegAllocSched::~VPreRegAllocSched() {
+  clear();
+}
+
+//===----------------------------------------------------------------------===//
+
+VPreRegAllocSched::LoopDep
+VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
+                                  bool SrcLoad, bool DstLoad,
+                                  Loop &L, bool SrcBeforeDest) {
+  uint64_t SrcSize = AliasAnalysis::UnknownSize;
+  const Type *SrcElTy = cast<PointerType>(SrcAddr->getType())->getElementType();
+  if (SrcElTy->isSized()) SrcSize = AA->getTypeStoreSize(SrcElTy);
+
+  uint64_t DstSize = AliasAnalysis::UnknownSize;
+  const Type *DstElTy = cast<PointerType>(DstAddr->getType())->getElementType();
+  if (DstElTy->isSized()) DstSize = AA->getTypeStoreSize(DstElTy);
+
+  if (L.isLoopInvariant(SrcAddr) && L.isLoopInvariant(DstAddr)) {
+    // FIXME: What about nested loops?
+    // Loop Invariant, let AA decide.
+    if (!AA->isNoAlias(SrcAddr, SrcSize, DstAddr, DstSize))
+      return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
+    else
+      return LoopDep();
+  }
+
+  // TODO: Use "getUnderlyingObject" implmeneted in ScheduleInstrs?
+  // Get the underlying object directly, SCEV will take care of the
+  // the offsets.
+  Value *SGPtr = SrcAddr->getUnderlyingObject(),
+        *DGPtr = DstAddr->getUnderlyingObject();
+
+  switch(AA->alias(SGPtr, SrcSize, DGPtr, DstSize)) {
+  case AliasAnalysis::MustAlias:
+    // We can only handle two access have the same element size.
+    if (SrcSize == DstSize)
+      return advancedLoopDepsAnalysis(SrcAddr, DstAddr, SrcLoad, DstLoad,
+                                      L, SrcBeforeDest, SrcSize);
+    // FIXME: Handle pointers with difference size.
+    // Fall thoungh.
+  case AliasAnalysis::MayAlias:
+    return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
+  default:  break;
+  }
+
+  return LoopDep();
+}
+
+VPreRegAllocSched::LoopDep
+VPreRegAllocSched::advancedLoopDepsAnalysis(Value *SrcAddr, Value *DstAddr,
+                                            bool SrcLoad, bool DstLoad,
+                                            Loop &L, bool SrcBeforeDest,
+                                            unsigned ElSizeInByte) {
+  const SCEV *SSAddr = SE->getSCEVAtScope(SrcAddr, &L),
+             *SDAddr = SE->getSCEVAtScope(DstAddr, &L);
+  DEBUG(dbgs() << *SSAddr << " and " << *SDAddr << '\n');
+  // Use SCEV to compute the dependencies distance.
+  const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
+  // TODO: Get range.
+  if (const SCEVConstant *C = dyn_cast<SCEVConstant>(Distance)) {
+    int ItDistance = C->getValue()->getSExtValue();
+    if (ItDistance >= 0)
+      // The pointer distance is in Byte, but we need to get the distance in
+      // Iteration.
+      return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest,
+                           ItDistance / ElSizeInByte);
+    else
+      return LoopDep();
+  }
+
+  return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
+}
+
+VPreRegAllocSched::LoopDep
+VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
+                                 int Diff) {
+   if (!SrcBeforeDest && (Diff == 0))
+     Diff = 1;
+   
+   assert(Diff >= 0 && "Do not create a dependence with diff small than 0!");
+   assert(!(SrcLoad && DstLoad) && "Do not create a RAR dep!");
+
+   // WAW
+   if (!SrcLoad && !DstLoad )
+     return LoopDep(VDMemDep::OutputDep, Diff);
+
+   if (!SrcLoad && DstLoad)
+     SrcBeforeDest = !SrcBeforeDest;
+
+   return LoopDep(SrcBeforeDest ? VDMemDep::AntiDep : VDMemDep::TrueDep, Diff);
 }
 
 void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   CurState.preSchedTopSort();
   // The schedule unit and the corresponding memory operand.
-  typedef std::multimap<const Value*, VSUnit*> MemOpMapTy;
+  typedef std::multimap<Value*, VSUnit*> MemOpMapTy;
   MemOpMapTy VisitedMemOps;
+  Loop *IRL = IRLI->getLoopFor(CurState.getMachineBasicBlock()->getBasicBlock());
 
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end(); I != E;
        ++I) {
@@ -229,7 +371,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
     assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem operand!");
     assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile operation!");
 
-    const Value *DstMO = (*DstMI->memoperands_begin())->getValue();
+    // Dirty Hack: Is the const_cast safe?
+    Value *DstMO = const_cast<Value*>((*DstMI->memoperands_begin())->getValue());
     const Type *DstElemTy = cast<SequentialType>(DstMO->getType())->getElementType();
     size_t DstSize = TD->getTypeStoreSize(DstElemTy);
 
@@ -242,7 +385,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
     for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
          I != E; ++I) {
-      const Value *SrcMO = I->first;
+      Value *SrcMO = I->first;
       const Type *SrcElemTy = cast<SequentialType>(SrcMO->getType())->getElementType();
       size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
       
@@ -255,7 +398,25 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       if (isDstLoad && isSrcLoad) continue;
 
       if (CurState.enablePipeLine()) {
+        assert(IRL && "Can not handle machine loop without IR loop!");
         // Compute the iterate distance.
+        LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
+
+        if (LD.hasDep()) {
+          VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
+                                           LD.getDepType(), LD.getItDst());
+          DstU->addDep(MemDep);
+        }
+
+        // We need to compute if Src depend on Dst even if Dst not depend on Src.
+        // Because dependence depends on execute order.
+        LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
+
+        if (LD.hasDep()) {
+          VDMemDep *MemDep = getMemDepEdge(DstU, SrcInfo.getLatency(), true,
+                                           LD.getDepType(), LD.getItDst());
+          SrcU->addDep(MemDep);
+        }
       } else {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
@@ -271,17 +432,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   }
 }
 
-void VPreRegAllocSched::clear() {
-  // Reset total Cycle
-  totalCycle = 1;
-}
-
-void VPreRegAllocSched::releaseMemory() {
-  clear();
-}
-
 //===----------------------------------------------------------------------===//
-// Create atom
+
 void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
   for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
       I != E; ++I) {
@@ -318,6 +470,16 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
     VSUnit *EntryRoot = CurState.getEntryRoot();
     A->addDep(getValDepEdge(EntryRoot, 0));
   }
+}
+
+bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
+  MachineLoop *L = LI->getLoopFor(MBB);
+  // Not in any loop.
+  if (!L) return false;
+  // Dirty Hack: Only support one block loop at this moment.
+  if (L->getBlocks().size() != 1) return false;
+
+  return FuncInfo->getConstraints().enablePipeLine();
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
@@ -436,14 +598,4 @@ VDMemDep *VPreRegAllocSched::getMemDepEdge(VSUnit *Src, unsigned Latency,
                                     enum VDMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
   return new VDMemDep(Src, Latency, isBackEdge, DepType, Diff);
-}
-
-void VPreRegAllocSched::print(raw_ostream &O, const Module *M) const {}
-
-VPreRegAllocSched::VPreRegAllocSched(const VTargetMachine &TM)
-  : MachineFunctionPass(ID), LI(0), LiveVars(0), VTarget(TM),
-  MRI(0), totalCycle(1) {}
-
-VPreRegAllocSched::~VPreRegAllocSched() {
-  clear();
 }
