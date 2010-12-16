@@ -495,6 +495,18 @@ void VSchedGraph::preSchedTopSort() {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 }
 
+bool llvm::VSchedGraph::trySetSelfEnable(VTFInfo &VTID) {
+  assert(VTID->isTerminator() && "Bad instruction!");
+
+  if (VTID->getOpcode() != VTM::VOpToState) return false;
+
+  if (VTID.get().getOperand(1).getMBB() != MBB) return false;
+
+  // Ok, rememeber this instruction as self eanble.
+  selfEnable.setPointer(&VTID.get());
+  return true;
+}
+
 void VSchedGraph::schedule() {
   // Create the FDInfo.
   //ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);

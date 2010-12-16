@@ -196,7 +196,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     State.emitSchedule(*BLI);
     FuncInfo->remeberTotalSlot(MBB, State.getStartSlot(),
                                     State.getTotalSlot(),
-                                    State.getII());
+                                    State.getIISlot());
   }
 
 
@@ -331,7 +331,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // FIXME: We may employ more advance AA.
       if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
-      if (CurState.haveSelfLoop()) {
+      if (CurState.enablePipeLine()) {
         // Compute the iterate distance.
       } else {
         VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
@@ -396,21 +396,57 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
   }
 }
 
+void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
+  // Only work on loops.
+  if (!State.enablePipeLine()) return;
+  
+  VSUnit *SelfEnable = State.getSelfEnable();
+  assert(SelfEnable && "Not in loop?");
+
+  MachineBasicBlock *CurBB = State.getMachineBasicBlock();
+  // For each phinode
+  for (MachineBasicBlock::iterator I = CurBB->begin(), E = CurBB->getFirstNonPHI();
+       I != E; ++I) {
+    MachineInstr &PN = *I;
+    assert(PN.isPHI() && "IsSingleValuePHICycle expects a PHI instruction");
+    unsigned DstReg = PN.getOperand(0).getReg();
+
+    // Scan the PHI operands.
+    for (unsigned i = 1; i != PN.getNumOperands(); i += 2) {
+      MachineBasicBlock *SrcBB = PN.getOperand(i + 1).getMBB();
+      // Only handle the self loop edge.
+      if (SrcBB != CurBB) continue;
+
+      unsigned SrcReg = PN.getOperand(i).getReg();
+      MachineInstr *SrcMI = MRI->getVRegDef(SrcReg);
+      assert(!SrcMI->isPHI() && "PHI chain not supported yet!");
+      VSUnit *InSU = State.lookupSUnit(SrcMI);
+      assert(InSU && "Where's the incoming value of the phi?");
+
+      // Transfer the dependence to the Users of this PHI node.
+      for (MachineRegisterInfo::use_iterator UI = MRI->use_begin(DstReg),
+           UE = MRI->use_end(); UI != UE; ++UI) {
+        MachineInstr &UseMI = *UI;
+        VSUnit *UseSU = State.lookupSUnit(&UseMI);
+        assert(UseSU && "Where's the use of the phi?");
+        UseSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &UseMI),
+                                    true, VDMemDep::AntiDep, 1));
+      }
+    }
+  }
+}
+
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   VTFInfo VTID = *MI;
-  
-  if (VTID->isTerminator()) {
-    // Build the schedule unit for terminators later. 
-    CurState.addTerm(MI);
-    return;
-  }
+  // If the current instruction was eaten by as terminator?
+  if (CurState.eatTerminator(VTID)) return;
 
   FuncUnitId Id = VTID.getPrebindFUId();
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *A = CurState.createVSUnit(&MI, 1, Id.getFUNum());
-  addValueDeps(A, CurState);
+  VSUnit *SU = CurState.createVSUnit(&MI, 1, Id.getFUNum());
+  addValueDeps(SU, CurState);
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
@@ -450,14 +486,14 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
     if (MBB->succ_size() == 0) { // We may meet an unreachable.
       MachineInstr &Term = *BuildMI(MBB, DebugLoc(),
                                     VTarget.getInstrInfo()->get(VTM::VOpRet));
-      State.addTerm(&Term);
+      State.eatTerminator(VTFInfo(Term));
     } else {
       assert(MBB->succ_size() == 1 && "Expect fall through block!");
       // Create "VOpToState 1/*means always true*/, target mbb"
       MachineInstr &Term = *BuildMI(MBB, DebugLoc(), 
                                     VTarget.getInstrInfo()->get(VTM::VOpToState))
         .addImm(1, 1).addMBB(*MBB->succ_begin());
-      State.addTerm(&Term);
+      State.eatTerminator(VTFInfo(Term));
     }
   }
 
@@ -465,7 +501,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   buildExitRoot(State);
 
   // Build loop edges if necessary.
-  buildSelfLoopDepEdges(State);
+  buildPipeLineDepEdges(State);
   
 
   // Build the memory edges.

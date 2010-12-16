@@ -472,14 +472,17 @@ private:
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
 
+  bool trySetSelfEnable(VTFInfo &VTID);
+
   void addSUnit(VSUnit *SU) {
     SUnits.push_back(SU);
     for (VSUnit::instr_iterator I = SU->instr_begin(), E = SU->instr_end();
-      I != E; ++I) {
-        SUnitMapType::iterator where;
-        bool inserted;
-        tie(where, inserted) = InstToSUnits.insert(std::make_pair(*I, SU));
-        assert(inserted && "Mapping from I already exist!");
+         I != E; ++I) {
+      MachineInstr *MI = *I;
+      SUnitMapType::iterator where;
+      bool inserted;
+      tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));
+      assert(inserted && "Mapping from I already exist!");
     }
   }
 
@@ -494,8 +497,8 @@ private:
 public:
   VSchedGraph(const VTargetMachine &Target, MachineBasicBlock *MachBB,
            bool HaveSelfLoop, unsigned short StartSlot)
-    : TM(Target), MBB(MachBB), SUCount(0), II(0), startSlot(StartSlot),
-      HaveSelfLoop(HaveSelfLoop) {
+    : TM(Target), MBB(MachBB), SUCount(0), startSlot(StartSlot),
+      selfEnable(0, HaveSelfLoop) {
     // Create a dummy entry node.
     (void) createEntry();
   }
@@ -508,11 +511,24 @@ public:
     VSUnit *SU = new VSUnit(I, NumInsts, SUCount, fuid);
     ++SUCount;
 
+    // If pipeline is not enable, we need to detected self enable for exit
+    // roots.
     addSUnit(SU);
     return SU;
   }
 
-  void addTerm(MachineInstr *Term) { Terms.push_back(Term); }
+  bool eatTerminator(VTFInfo VTID) {
+    if (!VTID->isTerminator())
+      return false;
+
+    // Do not eat the current instruction as terminator if it is jumping back
+    // to the current state and we want to pipeline the state.
+    if (trySetSelfEnable(VTID) && enablePipeLine())
+      return false;
+    
+    Terms.push_back(&VTID.get());
+    return true;
+  }
 
   SmallVectorImpl<MachineInstr*> &getTerms() { return Terms; }
 
