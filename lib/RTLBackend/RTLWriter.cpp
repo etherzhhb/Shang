@@ -82,6 +82,9 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
+  // Reset the current fsm state number.
+  CurFSMStateNum = 0;
+
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
   VM = new VASTModule(vtmfiles().getSystemName());
