@@ -68,8 +68,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
 
-  void buildState(VSchedGraph &State);
-
   unsigned computeLatency(const MachineInstr *SrcInstr,
                           const MachineInstr *DstInstr) {
     if (SrcInstr == 0) {
@@ -116,7 +114,10 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildMemDepEdges(VSchedGraph &CurState);
 
   bool haveSelfLoop(const MachineBasicBlock *MBB);
-
+  void buildPipeLineDepEdges(VSchedGraph &State);
+  void buildState(VSchedGraph &State);
+  void buildExitRoot(VSchedGraph &CurState);
+  void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
   /// @name FunctionPass interface
   //{
@@ -124,10 +125,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   VPreRegAllocSched(const VTargetMachine &TM);
 
   ~VPreRegAllocSched();
-
-  void buildExitRoot(VSchedGraph &CurState);
-  void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
-
   bool runOnMachineFunction(MachineFunction &MF);
 
   bool doInitialization(Module &M) {
@@ -180,12 +177,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   FuncInfo = MF.getInfo<VFuncInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
   AA = &getAnalysis<AliasAnalysis>();
+  LI = &getAnalysis<MachineLoopInfo>();
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
-    
-    VSchedGraph State(VTarget, MBB, false, getTotalCycle());
+
+    VSchedGraph State(VTarget, MBB, haveSelfLoop(MBB), getTotalCycle());
 
     buildState(State);
     DEBUG(State.viewGraph());
@@ -253,14 +251,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
 
 bool VPreRegAllocSched::haveSelfLoop(const MachineBasicBlock *MBB) {
-  //Loop *L = LI->getLoopFor(BB);
-
+  return false;
+  //MachineLoop *L = LI->getLoopFor(MBB);
   //// Not in any loop.
   //if (!L) return false;
   //// Dirty Hack: Only support one block loop at this moment.
   //if (L->getBlocks().size() != 1) return false;
-
-  return true;
+  //return true;
 }
 
 
