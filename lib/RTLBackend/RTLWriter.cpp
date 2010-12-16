@@ -141,13 +141,15 @@ class RTLWriter : public MachineFunctionPass {
                    bool PrintBitRange = true);
   unsigned getOperandWitdh(MachineOperand &Operand);
 
-  void emitCtrlOp(ucState &State);
+  // Return true if the control operation loop back to the entry of the state
+  // this can detect the loop boundary of the pipelined loop.
+  bool emitCtrlOp(ucState &State, std::string &LoopPred);
+
   void emitOpArg(ucOp &VOpArg);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpLatchVal(ucOp &OpLatchVal);
   void emitOpMemAccess(ucOp &OpMemAccess);
-  void emitOpToState(ucOp &OpToState);
 
   void emitFUCtrl(unsigned Slot);
 
@@ -345,6 +347,8 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   std::string StateName = getStateName(&MBB);
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
   unsigned IISlot = FuncInfo->getIISlotFor(&MBB);
+  
+  std::string NewMicroStatePred = "1'b0";
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
@@ -372,18 +376,18 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    CtrlS.if_begin(getucStateEnable(CurDatapath));
-    emitCtrlOp(NextControl);
+    std::string StateEnable = getucStateEnable(CurDatapath);
+    CtrlS.if_begin(StateEnable);
+    if (emitCtrlOp(NextControl, NewMicroStatePred)) {
+      // The predicate is only valid at the correct slot.
+      NewMicroStatePred += " & " + StateEnable;
+      // TODO: Tell the writer the loop boundary reached and do not emit
+      // function unit control logic anymore.
+    }
     CtrlS.exit_block();
   } while(I != E);
 
-  if (IISlot != 0)
-    // Dirty hack: Control logic need to emit 1 slot earlier.
-    CtrlS.if_begin("~" + getucStateEnable(&MBB, IISlot - 1));
-
-  emitNextMicroState(CtrlS, &MBB, "1'b0");
-
-  if (IISlot != 0) CtrlS.exit_block();
+  emitNextMicroState(CtrlS, &MBB, NewMicroStatePred);
 
   // Case end
   CtrlS.exit_block();
@@ -509,12 +513,13 @@ void RTLWriter::emitFUCtrl(unsigned Slot) {
   
 }
 
-void RTLWriter::emitCtrlOp(ucState &State) {
+bool RTLWriter::emitCtrlOp(ucState &State, std::string &LoopPred) {
   assert((State->getOpcode() == VTM::Control
           // ToDo: sepreate terminator from control.
           || State->getOpcode() == VTM::Terminator)
         && "Bad ucState!");
   bool IsRet = false;
+  bool loopToEntry = false;
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     // Emit the operations.
@@ -524,8 +529,28 @@ void RTLWriter::emitCtrlOp(ucState &State) {
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
     case VTM::COPY:         emitOpLatchVal(Op);           break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);          break;
-    case VTM::VOpToState:   emitOpToState(Op);            break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
+    case VTM::VOpToState:{
+      MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
+      vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
+      std::string Pred;
+      raw_string_ostream ss(Pred);
+      emitOperand(ss, Op.getOperand(0));
+      ss.flush();
+      CtrlS.if_begin(Pred);
+
+      if (TargetBB == State->getParent()) { // Self loop detected.
+        CtrlS << "// Issue first state.\n";
+        emitFirstCtrlState(TargetBB);
+        // Set up the self loop predicate.
+        LoopPred = Pred;
+        loopToEntry = true;
+      } else // Transfer to other state.
+        emitNextFSMState(CtrlS, TargetBB);
+
+      CtrlS.exit_block();
+      break;
+    }
     default:  assert(0 && "Unexpect opcode!");            break;
     }
   }
@@ -536,13 +561,17 @@ void RTLWriter::emitCtrlOp(ucState &State) {
   // because there are no succeeding state.
   if (!State->getDesc().isTerminator() || IsRet)
     emitFUCtrl(State.getSlot());
+
+  return loopToEntry;
 }
 
 void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *MBB->getFirstNonPHI();
   assert(FuncInfo->getStartSlotFor(MBB) == FirstState.getSlot());
-  emitCtrlOp(FirstState);
+  std::string dummy;
+  emitCtrlOp(FirstState, dummy);
+  assert(dummy.empty() && "Can not loop back at first state!");
 }
 
 void RTLWriter::emitImplicitDef(ucOp &ImpDef) {
@@ -571,19 +600,6 @@ void RTLWriter::emitOpArg(ucOp &OpArg) {
 void RTLWriter::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   OS << "NextFSMState <= state_idle;\n";
-}
-
-void RTLWriter::emitOpToState(ucOp &OpToState) {
-  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
-
-  // Get the condition.
-  std::string s;
-  raw_string_ostream ss(s);
-  emitOperand(ss, OpToState.getOperand(0));
-  OS.if_begin(ss.str());
-  MachineBasicBlock *TargetBB = OpToState.getOperand(1).getMBB();
-  emitNextFSMState(OS, TargetBB);
-  VM->getControlBlockBuffer().exit_block();
 }
 
 void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
