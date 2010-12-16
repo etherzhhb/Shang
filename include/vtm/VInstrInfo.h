@@ -59,6 +59,8 @@ class VTFInfo {
 public:
   /*implicit*/ VTFInfo(const MachineInstr &MI) : I(MI) {}
 
+  MachineInstr &get() const { return const_cast<MachineInstr&>(I); }
+
   inline VFUs::FUTypes getFUType() const {
     return (VFUs::FUTypes)
       ((getTSFlags() >> ResTypeShiftAmount) & ResTypeMask);
