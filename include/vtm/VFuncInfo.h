@@ -75,7 +75,7 @@ class VFuncInfo : public MachineFunctionInfo {
   ConstraintsInfo Info;
 public:
   explicit VFuncInfo(MachineFunction &MF)
-    : Info(partition().getFunctionConstraints(MF.getFunction()->getName())){}
+    : Info(partition().getConstraints(MF.getFunction()->getName())){}
 
   const ConstraintsInfo &getConstraints() const { return Info; }
 

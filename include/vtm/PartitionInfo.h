@@ -65,8 +65,8 @@ class PartitionInfo {
 public:
   PartitionInfo() {}
 
-  ConstraintsInfo getFunctionConstraints(const std::string &S) {
-    return FunctionsInfos.lookup(S);
+  ConstraintsInfo &getConstraints(const std::string &S) {
+    return FunctionsInfos.GetOrCreateValue(S).getValue();
   }
 
   bool isHardware(const Function &F) const {
