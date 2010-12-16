@@ -68,8 +68,6 @@ unsigned BitLevelInfo::computeWidthByRC(MachineOperand &MO) {
 void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   SmallVector<MachineOperand*, 2> Defs;
   switch (Instr->getOpcode()) {
-  default:
-    assert(0 && "Unknown instruction!");
   // We can not check these instructions at this moment.
   case VTM::Control:
   case VTM::Datapath:
@@ -164,6 +162,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
+  default: assert(0 && "Unknown instruction!");
   }
 
   // Update bitwidths.

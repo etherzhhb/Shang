@@ -176,7 +176,6 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
 
   emitDeferredInsts();
 
-
   MachineInstrBuilder DPInst;
   if (!IsLastSlot) {
     DPInst
@@ -222,7 +221,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot
 
   // Add the opcode metadata and the function unit id.
   Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUNum(),
-    VMContext));
+                                             VMContext));
   typedef SmallVector<MachineOperand*, 8> OperandVector;
   OperandVector Ops(Inst.getNumOperands());
 
@@ -300,7 +299,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot
 
     WireDef &WDef = at->second;
 
-    // We need the value after it is writed to register.
+    // We need the value after it is written to register.
     if (WDef.WriteSlot < ReadSlot) {
       Builder.addOperand(*MO);
       continue;

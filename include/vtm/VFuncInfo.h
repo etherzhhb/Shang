@@ -132,6 +132,7 @@ public:
     return AllocatedFUs[FUType].end();
   }
 
+  // FIXME: Consider pipelined loop.
   void remeberActiveSlot(FuncUnitId Id, unsigned Slot) {
     ActiveSlotSet.insert(FUActiveSlot(Id, Slot));
   }

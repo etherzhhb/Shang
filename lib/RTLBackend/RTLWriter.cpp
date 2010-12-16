@@ -324,6 +324,15 @@ void RTLInfo::createucStateEnable(MachineBasicBlock *MBB)  {
   VM->addRegister("cur_" + StateName + "_enable", totalSlot);
 }
 
+void RTLInfo::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
+  // Emit the first micro state of the target state.
+  emitFirstCtrlState(MBB);
+
+  // Only jump to other state if target MBB is not current MBB.
+  ss << "NextFSMState <= " << getStateName(MBB) << ";\n";
+  emitNextMicroState(VM->getControlBlockBuffer(), MBB, "1'b1");
+}
+
 void RTLInfo::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                                  const std::string &NewState) {
   // We do not need the last state.
@@ -496,7 +505,7 @@ unsigned RTLInfo::getOperandWitdh(MachineOperand &Operand) {
 }
 
 void RTLInfo::emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                            bool PrintBitRange) {
+                          bool PrintBitRange) {
   switch (Operand.getType()) {
   case MachineOperand::MO_Register: {
     OS << "reg" << Operand.getReg();
@@ -536,14 +545,6 @@ void RTLInfo::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   default:
     assert(0 && "Unknown Operand type!");
   }
-}
-
-void RTLInfo::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
-  // Emit the first micro state of the target state.
-  emitFirstCtrlState(MBB);
-
-  ss << "NextFSMState <= " << getStateName(MBB) << ";\n";
-  emitNextMicroState(VM->getControlBlockBuffer(), MBB, "1'b1");
 }
 
 void RTLInfo::emitDatapath(ucState &State) {
