@@ -16,17 +16,18 @@
 #define VTM_FUNCTION_INFO_H
 
 #include "vtm/FUInfo.h"
+#include "vtm/VerilogAST.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/StringPool.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/OwningPtr.h"
 
 #include <set>
 #include <map>
 
 namespace llvm {
 class MachineBasicBlock;
-
 class VFuncInfo : public MachineFunctionInfo {
   // Information about slots.
   struct StateSlots{
@@ -68,8 +69,16 @@ class VFuncInfo : public MachineFunctionInfo {
 
   StringPool SymbolPool;
   std::set<PooledStringPtr> Symbols;
+  OwningPtr<VASTModule> Mod;
 public:
   explicit VFuncInfo(MachineFunction &MF) {}
+
+  /// Verilog module for the machine function.
+  VASTModule *createRtlMod(const std::string &Name) {
+    Mod.reset(new VASTModule(Name));
+    return Mod.get();
+  }
+  VASTModule *getRtlMod() const { return Mod.get(); }
 
   /// Slots information for machine basicblock.
 

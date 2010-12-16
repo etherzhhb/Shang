@@ -45,14 +45,14 @@ FunctionPass *createOptimalSSARegisterAllocator();
 FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
 
 // RTL writer.
-Pass *createRTLInfoPass();
+Pass *createRTLWriterPass();
 
 // Verilator interface writer.
 Pass *createVLTIfWriterPass();
 
 //
 void initializeBitLevelInfoPass(PassRegistry &Registry);
-void initializeRTLInfoPass(PassRegistry &Registry);
+void initializeRTLWriterPass(PassRegistry &Registry);
 
 void initializeRAOptimalSSAPass(PassRegistry &Registry);
 } // end namespace

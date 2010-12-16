@@ -19,7 +19,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/Passes.h"
-#include "vtm/RTLInfo.h"
+#include "vtm/VerilogAST.h"
+#include "vtm/VFuncInfo.h"
 #include "vtm/FileInfo.h"
 #include "vtm/LangSteam.h"
 
@@ -411,7 +412,6 @@ struct VLTIfWriter : public MachineFunctionPass {
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
-    AU.addRequired<RTLInfo>();
     AU.setPreservesAll();
   }
 
@@ -523,7 +523,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
   FuncInfo = MF.getInfo<VFuncInfo>();
 
-  RTLMod = getAnalysis<RTLInfo>().getRTLModule();
+  RTLMod = FuncInfo->getRtlMod();
   TargetData *TD = getAnalysisIfAvailable<TargetData>();
   assert(TD && "Where is TD?");
   LLVMContext &Context = F->getContext();
