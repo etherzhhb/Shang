@@ -139,6 +139,8 @@ class RTLInfo : public MachineFunctionPass {
 
   void emitFUCtrl(unsigned Slot);
 
+  void emitTestBench();
+
 public:
   /// @name FunctionPass interface
   //{

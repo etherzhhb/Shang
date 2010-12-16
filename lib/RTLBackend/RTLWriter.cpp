@@ -158,6 +158,10 @@ bool RTLInfo::runOnMachineFunction(MachineFunction &F) {
   Out.always_ff_end();
 
   Out.module_end();
+
+  // TODO: Emit testbench only user wants to.
+  DEBUG_WITH_TYPE("tb-for-rtl", emitTestBench());
+
   Out.flush();
 
   return false;
@@ -668,4 +672,80 @@ void RTLInfo::emitOpBitRepeat(ucOp &OpBitRepeat) {
   OS << Times << '{';
   emitOperand(OS, OpBitRepeat.getOperand(1));
   OS << "}};\n";
+}
+
+void RTLInfo::emitTestBench() {
+  Out << "\n\n";
+  Out << "module tb_" << VM->getName() << ";\n\n";
+  Out.module_begin();
+  // Emit signal to drive the ports of DUT.
+  Out << "// DUT port driver.\n";
+  for (VASTModule::port_iterator I = VM->ports_begin(), E = VM->ports_end();
+       I != E; ++I) {
+    VASTPort *port = *I;
+    port->printExternalDriver(Out);
+    Out << '\n';
+  }
+
+  // Create the clock logic.
+  Out << "\n\n";
+  Out << "always ";
+  Out.enter_block("// Clock\n");
+  Out << "#5ns clk = ~clk;\n";
+  Out.exit_block();
+  Out << "\n\n";
+
+  // And the initialize block.
+  Out << "initial ";
+  Out.enter_block();
+  Out << "integer starttime = 0;\n";
+  Out << "#6ns rstN = 1'b1;\n";
+  Out << "#5ns;\n";
+  Out << "forever ";
+  Out.enter_block();
+
+  for (VASTModule::port_iterator I = VM->common_ports_begin(),
+       E = VM->ports_end(); I != E; ++I) {
+    VASTPort *port = *I;
+    if (!port->isInput())
+      continue;
+
+    const std::string &Name = port->getName();
+    Out << Name << " = $random();\n";
+  }
+
+  Out << "@(negedge clk)";
+  Out.enter_block();
+  Out << "start = 1'b1;\n";
+  Out << "starttime = $time;\n";
+  Out.exit_block();
+
+  Out <<  "@(negedge clk) start <= 1'b0;\n";
+
+  Out <<  "while (!fin)";
+  Out.enter_block();
+  Out <<  "#1ns;\n";
+  Out <<  "if ($time > 100000) $finish();\n";
+  Out.exit_block();
+
+  Out << "$display(\"total time: %t\\n\", $time - starttime);\n";
+  Out << "$finish();\n";
+
+  Out.exit_block("// end forever\n");
+  Out.exit_block("// end initialize block\n");
+  Out << "\n\n";
+  
+  // Design instance.
+  Out << "// Design instance\n";
+  Out  << VM->getName() << " dut_" << VM->getName() << "(\n";
+  Out.indent(4) << "." << VM->getPortName(0) << '('
+                << VM->getPortName(0) << ')';
+  for (unsigned I = 1, E = VM->getNumPorts(); I != E; ++I) {
+    Out << ",\n";
+    Out.indent(4) << '.' << VM->getPortName(I)
+                  << '(' << VM->getPortName(I) << ')';
+  }
+  Out << ");\n\n";
+  
+  Out.module_end();
 }
