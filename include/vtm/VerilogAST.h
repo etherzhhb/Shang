@@ -229,9 +229,8 @@ public:
     return *Ports[i];
   }
 
-  const VASTPort &getCommonInPort(unsigned i) const {
-    // FIXME: Check if out of range.
-    return *Ports[i + VASTModule::SpecialOutPortEnd];
+  const std::string &getPortName(unsigned i) const {
+    return getPort(i).getName();
   }
 
   port_iterator ports_begin() { return Ports.begin(); }
@@ -239,6 +238,20 @@ public:
 
   port_iterator ports_end() { return Ports.end(); }
   const_port_iterator ports_end() const { return Ports.end(); }
+
+  unsigned getNumCommonPortPorts() const {
+    return getNumPorts() - VASTModule::SpecialOutPortEnd;
+  }
+  const VASTPort &getCommonPort(unsigned i) const {
+    // FIXME: Check if out of range.
+    return *Ports[i + VASTModule::SpecialOutPortEnd];
+  }
+  port_iterator common_ports_begin() {
+    return Ports.begin() + VASTModule::SpecialOutPortEnd;
+  }
+  const_port_iterator common_ports_begin() const {
+    return Ports.begin() + VASTModule::SpecialOutPortEnd;
+  }
 
   VASTSignal *addRegister(const std::string &Name, unsigned BitWidth,
                           const std::string &Comment = "") {

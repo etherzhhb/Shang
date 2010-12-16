@@ -364,7 +364,7 @@ struct VLTIfWriter : public MachineFunctionPass {
   void assignInPort(VASTModule::PortTypes T, const std::string &Val) {
     // TODO: Assert the port must be an input port.
     Stream << VLTModInstName << '.'
-           << RTLMod->getPort(T).getName()
+           << RTLMod->getPortName(T)
            << " = (" << Val << ");\n";
   }
 
@@ -377,7 +377,7 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   std::string getPortVal(unsigned T) const {
-    return getModMember(RTLMod->getPort(T).getName());
+    return getModMember(RTLMod->getPortName(T));
   }
 
   void evalHalfCycle() {
