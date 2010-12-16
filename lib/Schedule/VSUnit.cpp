@@ -33,8 +33,10 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Target/TargetInstrInfo.h"
+
+#include "llvm/ADT/SCCIterator.h"
+
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/LoopInfo.h"
 
 #define DEBUG_TYPE "vtm-sunit"
 #include "llvm/Support/Debug.h"
@@ -403,72 +405,360 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
 }
 
 //===----------------------------------------------------------------------===//
+namespace {
+class SubGraph;
 
-void VSUnit::dump() const {
-  print(dbgs());
-  dbgs() << '\n';
-}
+struct SubGraphNode {
+  unsigned FirstNode;
+  const VSUnit *U;
+  SubGraph *subGraph;
 
-void VDMemDep::print(raw_ostream &OS) const {
+  SubGraphNode(unsigned First, const VSUnit *SU, SubGraph *SG)
+    : FirstNode(First), U(SU), subGraph(SG) {}
 
-}
+  SubGraphNode(const SubGraphNode &O)
+    : FirstNode(O.FirstNode), U(O.U), subGraph(O.subGraph) {}
 
-void VDCtrlDep::print(raw_ostream &OS) const {
-}
+  const SubGraphNode &operator=(const SubGraphNode &RHS);
 
-void VDValDep::print(raw_ostream &OS) const {
-}
+  const VSUnit *getSUnit() const { return U; }
+  unsigned getIdx() const { return U->getIdx(); }
 
-unsigned llvm::VSUnit::getOpcode() const {
-  if (MachineInstr *I =getFirstInstr())
-    return I->getOpcode();
+  typedef SubGraphNode *result_type;
+  result_type operator()(const VSUnit *U) const;
 
-  return VTM::INSTRUCTION_LIST_END;
-}
+  typedef mapped_iterator<VSUnit::const_dep_iterator, SubGraphNode> ChildIt;
 
-void VSUnit::scheduledTo(unsigned slot) {
-  assert(slot && "Can not schedule to slot 0!");
-  SchedSlot = slot;
-}
+  ChildIt child_begin() const;
+  ChildIt child_end() const;
 
-void VSUnit::dropAllReferences() {
-  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
-    I->removeFromList(this);
-}
+  void dump() const {
+    if (U) {
+      dbgs() << U->getIdx() << " {";
 
-void VSUnit::replaceAllUseBy(VSUnit *A) {
-  while (!use_empty()) {
-    VSUnit *U = use_back();
+      for (VSUnit::const_dep_iterator DI = U->dep_begin(), DE = U->dep_end();
+           DI != DE;++DI)
+        dbgs() << " [" << DI->getIdx() << "]";
 
-    U->setDep(U->getDepIt(this), A);
+      dbgs() << "}\n";
+    } else
+      dbgs() << "dummy\n";
   }
-}
+};
 
-VFUs::FUTypes VSUnit::getFUType() const {
-  if (MachineInstr *Instr = getFirstInstr())
-    return VTFInfo(*Instr).getFUType();
+class SubGraph {
+  typedef std::vector<SubGraphNode*> SubGrapNodeVec;
+  typedef std::set<SubGraphNode*> SubGrapNodeSet;
 
-  return VFUs::Trivial;
-}
+  const VSchedGraph *G;
+  const VSUnit *GraphEntry;
+  // ModuloScheduleInfo *MSInfo;
 
-void VSUnit::print(raw_ostream &OS) const {
-  OS << "[" << getIdx() << "] ";
+  //Set of blocked nodes
+  SubGrapNodeSet blocked;
+  //Stack holding current circuit
+  SubGrapNodeVec stack;
+  //Map for B Lists
+  std::map<SubGraphNode*, SubGrapNodeSet> B;
+  //
+  SubGrapNodeSet Visited;
+  // SCC with least vertex.
+  SubGrapNodeVec Vk;
 
-  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
-    MachineInstr *Instr = *I;
-
-    VTFInfo VTID = *Instr;
-    OS << Instr->getDesc().getName() << '\t';
-    OS << " Res: " << VTID.getFUType();
-    DEBUG(OS << '\n' << *Instr);
-
-    if (getFUId().isBinded())
-      OS << "\nFUId:" << getFUNum();
-
-    OS << '\n';
-  }
+  // SubGraph stuff
+  typedef std::map<const VSUnit*, SubGraphNode*> CacheTy;
+  CacheTy ExtCache;
   
-  OS << "\nAt slot: " << getSlot();
+  unsigned CurIdx;
+  unsigned RecMII;
+public:
+  SubGraph(VSchedGraph *SG)
+    : G(SG), GraphEntry(SG->getEntryRoot()), CurIdx(G->getEntryRoot()->getIdx()),
+    RecMII(0) {}
+
+  unsigned getRecMII() const { return RecMII; }
+
+  ~SubGraph() { releaseCache(); }
+
+  VSUnit::const_dep_iterator dummy_end() const { return GraphEntry->dep_end(); }
+
+  // Create or loop up a node.
+  SubGraphNode *getNode(const VSUnit *SU) {
+    CacheTy::iterator at = ExtCache.find(SU);
+    if (at != ExtCache.end())
+      return at->second;
+
+    SubGraphNode *NewNode = new SubGraphNode(CurIdx, SU, this);
+
+    ExtCache.insert(std::make_pair(SU, NewNode));
+    return NewNode;
+  }
+
+  void releaseCache() {
+    // Release the temporary nodes in subgraphs.
+    for (CacheTy::iterator I = ExtCache.begin(),
+      E = ExtCache.end(); I != E; ++I) {
+        delete I->second;
+    }
+    ExtCache.clear();
+  }
+
+  // Iterate over the subgraph start from idx.
+  // Node: The atom list of FSMState already sort by getIdx.
+  typedef mapped_iterator<VSchedGraph::const_iterator, SubGraphNode>
+    nodes_iterator;
+
+  nodes_iterator sub_graph_begin() {
+    VSchedGraph::const_iterator I = G->begin();
+    while ((*I)->getIdx() < CurIdx && I != G->end())
+      ++I;
+
+    return nodes_iterator(I, *getNode(*I));
+  }
+  nodes_iterator sub_graph_end() {
+    return nodes_iterator(G->end(), *getNode(0));
+  }
+
+  void findAllCircuits();
+  bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex);
+  void addRecurrence();
+  void unblock(SubGraphNode *N);
+};
+}
+
+// GraphTraits
+namespace llvm {
+  template<> struct GraphTraits<SubGraphNode*> {
+    typedef SubGraphNode NodeType;
+    typedef SubGraphNode::ChildIt ChildIteratorType;
+    static NodeType *getEntryNode(NodeType* N) { return N; }
+    static inline ChildIteratorType child_begin(NodeType *N) {
+      return N->child_begin();
+    }
+    static inline ChildIteratorType child_end(NodeType *N) {
+      return N->child_end();
+    }
+  };
+}
+
+typedef GraphTraits<SubGraphNode*> VSUSccGT;
+
+typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
+
+void SubGraph::unblock(SubGraphNode *N) {
+  blocked.erase(N);
+
+  while (!B[N].empty()) {
+    SubGraphNode *W = *B[N].begin();
+    B[N].erase(W);
+    if(blocked.count(W))
+      unblock(W);
+  }
+}
+
+void SubGraph::addRecurrence() {
+  DEBUG(dbgs() << "\nRecurrence:\n");
+  //std::vector<VSUnit*> Recurrence;
+  unsigned TotalLatency = 0;
+  unsigned TotalDistance = 0;
+  const VSUnit *LastAtom = stack.back()->getSUnit();
+  
+  for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I) {
+    SubGraphNode *N = *I;
+
+    const VSUnit *A = N->getSUnit();
+    TotalLatency += A->getLatency();
+    
+    VDEdge *Edge = LastAtom->getEdgeFrom(A);
+    if (Edge->isBackEdge()) {
+      //  assert(TotalDistance == 0 && "Multiple back edge?"); 
+      DEBUG(dbgs() << "Backedge --> ");
+    }
+    TotalDistance += Edge->getItDst();
+  
+    DEBUG(N->dump());
+    LastAtom = A;
+    // Dirty Hack.
+    //Recurrence.push_back(const_cast<VSUnit*>(A));
+  }
+
+  unsigned RecII = TotalLatency / TotalDistance;
+  //MSInfo->addRecurrence(RecII, Recurrence);
+  RecMII = std::max(RecMII, RecII);
+  DEBUG(dbgs() << "RecII: " << RecII << '\n');
+}
+
+bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
+  bool ret = false;
+
+  stack.push_back(CurNode);
+  blocked.insert(CurNode);
+
+  SubGrapNodeSet AkV;
+  for (SubGraphNode::ChildIt I = CurNode->child_begin(),
+       E = CurNode->child_end(); I != E; ++I) {
+    SubGraphNode *N = *I;
+    if (std::find(Vk.begin(), Vk.end(), N) != Vk.end())
+      AkV.insert(N);
+  }
+
+  for (SubGrapNodeSet::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+    SubGraphNode *N = *I;
+    if (N == LeastVertex) {
+      //We have a circuit, so add it to recurrent list.
+      addRecurrence();
+      ret = true;
+    } else if (!blocked.count(N) && circuit(N, LeastVertex))
+      ret = true;
+  }
+
+  if (ret)
+    unblock(CurNode);
+  else
+    for (SubGrapNodeSet::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+      SubGraphNode *N = *I;
+      B[N].insert(CurNode);
+    }
+  
+  // Pop current node.
+  stack.pop_back();
+
+  return ret;
+}
+
+void SubGraph::findAllCircuits() {
+  VSUnit *ExitRoot = G->getExitRoot();
+  unsigned ExitIdx = ExitRoot->getIdx();
+
+  // While the subgraph not empty.
+  while (CurIdx < ExitIdx) {
+    DEBUG(dbgs() << "Current Idx: " << CurIdx << '\n');
+    // Initialize the subgraph induced by {CurIdx, ...., ExitIdx}
+    SubGraphNode *RootNode = getNode(ExitRoot);
+
+    //Iterate over all the SCCs in the graph
+    Visited.clear();
+    Vk.clear();
+    // least vertex in Vk
+    SubGraphNode *LeastVertex = 0;
+
+    //Find scc with the least vertex
+    for (nodes_iterator I = sub_graph_begin(), E = sub_graph_end();
+        I != E; ++I) {
+      SubGraphNode *Node = *I;
+      // If the Node visited.
+      if (!Visited.insert(Node).second)
+        continue;
+
+      for (dep_scc_iterator SCCI = dep_scc_iterator::begin(RootNode),
+           SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
+        SubGrapNodeVec &nextSCC = *SCCI;  
+        SubGraphNode *FirstNode = nextSCC.front();
+        // If FirstNode visited.
+        if (!Visited.insert(FirstNode).second)
+          continue;
+        
+        if (nextSCC.size() == 1) {
+          assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
+          continue;
+        }
+
+        // The entire SCC visited.
+        Visited.insert(nextSCC.begin() + 1, nextSCC.end());
+        // Find the lest vetex
+        SubGraphNode *OldLeastVertex = LeastVertex;
+        for (SubGrapNodeVec::iterator I = (*SCCI).begin(),
+             E = (*SCCI).end();I != E; ++I) {
+          SubGraphNode *CurNode = *I;
+          if (!LeastVertex || CurNode->getIdx() < LeastVertex->getIdx())
+            LeastVertex = CurNode;
+        }
+        // Update Vk if leastVe
+        if (OldLeastVertex != LeastVertex)
+          Vk = nextSCC; 
+      }
+    }
+
+    // No SCC?
+    if (Vk.empty())
+      break;
+    
+    // Now we have the SCC with the least vertex.
+    CurIdx = LeastVertex->getIdx();
+    // Do some clear up.
+    for (SubGrapNodeVec::iterator I = Vk.begin(), E = Vk.end(); I != E; ++I) {
+      SubGraphNode *N = *I;
+      blocked.erase(N);
+      B[N].clear();
+    }
+    // Find the circuit.
+    circuit(LeastVertex, LeastVertex);
+
+    // Move forward.
+    ++CurIdx;
+    
+    //
+    releaseCache();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+SubGraphNode::result_type SubGraphNode::operator()(const VSUnit *U) const {
+  return U->getIdx() < FirstNode ? subGraph->getNode(0) 
+                                 : subGraph->getNode(U); 
+}
+
+const SubGraphNode &SubGraphNode::operator=(const SubGraphNode &RHS) {
+  FirstNode = RHS.FirstNode;
+  U = RHS.U;
+  subGraph = RHS.subGraph;
+  return *this;
+}
+
+SubGraphNode::ChildIt SubGraphNode::child_begin() const {
+  if (U) return ChildIt(U->dep_begin(), *this);
+  // The node outside the subgraph.
+  return ChildIt(subGraph->dummy_end(), *this);
+}
+
+SubGraphNode::ChildIt SubGraphNode::child_end() const {
+  if (U) return ChildIt(U->dep_end(), *this);
+
+  // The node outside the subgraph.
+  return ChildIt(subGraph->dummy_end(), *this);
+}
+//===----------------------------------------------------------------------===//
+unsigned VSchedGraph::computeRecMII() {
+  //// Find all recurrents with Johnson's algorithm.
+  SubGraph SG(this);
+  SG.findAllCircuits();
+  unsigned MaxRecII = SG.getRecMII();
+  DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
+  return MaxRecII;
+}
+unsigned VSchedGraph::computeResMII() {
+  std::map<FuncUnitId, unsigned> TotalResUsage;
+  for (VSchedGraph::iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *SU = *I;
+    if (SU->getFUId().isTrivial()) continue;
+    
+    ++TotalResUsage[SU->getFUId()];
+  }
+
+  unsigned MaxResII = 0;
+  typedef std::map<FuncUnitId, unsigned>::iterator UsageIt;
+  for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
+      MaxResII = std::max(MaxResII,
+                          I->second / I->first.getTotalFUs());
+  }
+  DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
+  return MaxResII;
+}
+
+unsigned VSchedGraph::computeMII() {
+  unsigned RecMII = computeRecMII();
+  unsigned ResMII = computeResMII();
+  return std::max(RecMII, ResMII);
 }
 
 void VSchedGraph::print(raw_ostream &OS) const {
@@ -478,13 +768,11 @@ void VSchedGraph::dump() const {
   print(dbgs());
 }
 
-#include "llvm/Support/CommandLine.h"
-
 void VSchedGraph::preSchedTopSort() {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 }
 
-bool llvm::VSchedGraph::trySetSelfEnable(VTFInfo &VTID) {
+bool llvm::VSchedGraph::trySetLoopOp(VTFInfo &VTID) {
   assert(VTID->isTerminator() && "Bad instruction!");
 
   if (VTID->getOpcode() != VTM::VOpToState) return false;
@@ -536,9 +824,9 @@ void VSchedGraph::scheduleLinear() {
 
 void VSchedGraph::scheduleLoop() {
   OwningPtr<FDSBase> Scheduler(createLoopScheduler(*this));
-  unsigned II = 0;
+  unsigned II = computeMII();
 
-  dbgs() << "MII: " << II << "...";
+  DEBUG(dbgs() << "MII: " << II << "...");
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->lengthenCriticalPath();
@@ -583,4 +871,73 @@ void VSchedGraph::scheduleLoop() {
 
 void VSchedGraph::viewGraph() {
   ViewGraph(this, this->getMachineBasicBlock()->getName());
+}
+
+//===----------------------------------------------------------------------===//
+
+void VSUnit::dump() const {
+  print(dbgs());
+  dbgs() << '\n';
+}
+
+void VDMemDep::print(raw_ostream &OS) const {
+
+}
+
+void VDCtrlDep::print(raw_ostream &OS) const {
+}
+
+void VDValDep::print(raw_ostream &OS) const {
+}
+
+unsigned VSUnit::getOpcode() const {
+  if (MachineInstr *I =getFirstInstr())
+    return I->getOpcode();
+
+  return VTM::INSTRUCTION_LIST_END;
+}
+
+void VSUnit::scheduledTo(unsigned slot) {
+  assert(slot && "Can not schedule to slot 0!");
+  SchedSlot = slot;
+}
+
+void VSUnit::dropAllReferences() {
+  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
+    I->removeFromList(this);
+}
+
+void VSUnit::replaceAllUseBy(VSUnit *A) {
+  while (!use_empty()) {
+    VSUnit *U = use_back();
+
+    U->setDep(U->getDepIt(this), A);
+  }
+}
+
+VFUs::FUTypes VSUnit::getFUType() const {
+  if (MachineInstr *Instr = getFirstInstr())
+    return VTFInfo(*Instr).getFUType();
+
+  return VFUs::Trivial;
+}
+
+void VSUnit::print(raw_ostream &OS) const {
+  OS << "[" << getIdx() << "] ";
+
+  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
+    MachineInstr *Instr = *I;
+
+    VTFInfo VTID = *Instr;
+    OS << Instr->getDesc().getName() << '\t';
+    OS << " Res: " << VTID.getFUType();
+    DEBUG(OS << '\n' << *Instr);
+
+    if (getFUId().isBinded())
+      OS << "\nFUId:" << getFUNum();
+
+    OS << '\n';
+  }
+  
+  OS << "\nAt slot: " << getSlot();
 }

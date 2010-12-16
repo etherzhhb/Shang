@@ -471,7 +471,11 @@ private:
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
 
-  bool trySetSelfEnable(VTFInfo &VTID);
+  bool trySetLoopOp(VTFInfo &VTID);
+
+  unsigned computeRecMII();
+  unsigned computeResMII();
+  unsigned computeMII();
 
   void addSUnit(VSUnit *SU) {
     SUnits.push_back(SU);
@@ -522,7 +526,7 @@ public:
 
     // Do not eat the current instruction as terminator if it is jumping back
     // to the current state and we want to pipeline the state.
-    if (trySetSelfEnable(VTID) && enablePipeLine())
+    if (trySetLoopOp(VTID) && enablePipeLine())
       return false;
     
     Terms.push_back(&VTID.get());
