@@ -209,6 +209,9 @@ void RTLInfo::emitFunctionSignature() {
 void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
   std::string StateName = getStateName(&MBB);
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
+  unsigned IISlot = FuncInfo->getIISlotFor(&MBB);
+
+  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
   //unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
   VM->getStateDeclBuffer() << "// State for " << StateName << '\n';
@@ -216,40 +219,39 @@ void RTLInfo::emitBasicBlock(MachineBasicBlock &MBB) {
                ++CurFSMStateNum);
 
   // State information.
-  VM->getControlBlockBuffer() << "// " << StateName 
-                              << " Total Slot: " << totalSlot
-                              << " II: " << 0 <<  '\n';
+  CtrlS << "// " << StateName << " Total Slot: " << totalSlot
+                 << " IISlot: " << IISlot <<  '\n';
   // Mirco state enable.
   createucStateEnable(&MBB);
 
   // Case begin
-  VM->getControlBlockBuffer().match_case(StateName);
+  CtrlS.match_case(StateName);
 
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
   // FIXME: Refactor the loop.
   do {
-    ++I;
-    ucState CurDatapath = *I;
+    ucState CurDatapath = *++I;
     // Emit the datepath of current state.
     emitDatapath(CurDatapath);
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    VM->getControlBlockBuffer().if_begin(getucStateEnable(CurDatapath));
+    CtrlS.if_begin(getucStateEnable(CurDatapath));
     emitCtrlOp(NextControl);
-    VM->getControlBlockBuffer().exit_block();
+    CtrlS.exit_block();
   } while(I != E);
 
-  //// Emit Self Loop logic.
-  //if (State->haveSelfLoop()) {
-  //  VM->getControlBlockBuffer() << "// For self loop:\n";
-  //  std::string SelfLoopEnable = computeSelfLoopEnable(State);
-  //  emitNextMicroState(VM->getControlBlockBuffer(), BB, SelfLoopEnable);
-  //} else
-    emitNextMicroState(VM->getControlBlockBuffer(), &MBB, "1'b0");
+  if (IISlot != 0)
+    // Dirty hack: Control logic need to emit 1 slot earlier.
+    CtrlS.if_begin("~" + getucStateEnable(&MBB, IISlot - 1));
+
+  emitNextMicroState(CtrlS, &MBB, "1'b0");
+
+  if (IISlot != 0) CtrlS.exit_block();
+
   // Case end
-  VM->getControlBlockBuffer().exit_block();
+  CtrlS.exit_block();
 }
 
 void RTLInfo::emitCommonPort() {
