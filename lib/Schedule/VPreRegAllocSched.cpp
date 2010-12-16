@@ -113,7 +113,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void buildMemDepEdges(VSchedGraph &CurState);
 
-  bool haveSelfLoop(const MachineBasicBlock *MBB);
+  bool couldBePipelined(const MachineBasicBlock *MBB);
   void buildPipeLineDepEdges(VSchedGraph &State);
   void buildState(VSchedGraph &State);
   void buildExitRoot(VSchedGraph &CurState);
@@ -183,7 +183,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
 
-    VSchedGraph State(VTarget, MBB, haveSelfLoop(MBB), getTotalCycle());
+    VSchedGraph State(VTarget, MBB, couldBePipelined(MBB), getTotalCycle());
 
     buildState(State);
     DEBUG(State.viewGraph());
@@ -197,89 +197,19 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
                                     State.getIISlot());
   }
 
-
-  //LI = &getAnalysis<LoopInfo>();
-  //RC = &getAnalysis<ResourceConfig>();
-  //// MDA = &getAnalysis<MemDepInfo>();
-  //TD = getAnalysisIfAvailable<TargetData>();
-  //assert(TD && "Can not work without TD!");
-
-  //std::vector<VSUnit*> MemOps;
-
-  //for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I) {
-  //  // Setup the state.
-  //  BasicBlock *BB = &*I;
-  //  VSchedGraph *State = getState(BB);
-  //  ValueToSUnits[BB] = State;
-  //  SetControlRoot(State);
-  //  DEBUG(dbgs() << "Building atom for BB: " << BB->getName() << '\n');
-  //  for (BasicBlock::iterator BI = BB->begin(), BE = BB->end();
-  //      BI != BE; ++BI) {
-  //    Instruction &Inst = *BI;
-  //    VSUnit *A = visit(Inst);
-  //    
-  //    if (!A) continue;
-  //    // Add the SUnit to state.
-  //    // FIXME: Some atom will add them to parent atoms vector automatically,
-  //    // but this is not a good idea.
-  //    if (!A->getParent())
-  //      State->addSUnit(A);
-
-  //    // Remember the atom.
-  //    ValueToSUnits.insert(std::make_pair(&Inst, A));
-  //    // Remember the MemOps, we will compute the dependencies about them later.
-  //    if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))
-  //      MemOps.push_back(cast<VSUnit>(A));
-  //  }
-  //  // preform memory dependencies analysis to add corresponding edges.
-  //  buildMemDepEdges(MemOps, *BB);
-
-  //  bool selfLoop = haveSelfLoop(BB);
-  //  
-
-  //  VSUnit *Exit = cast<VSUnit>(getControlRoot());
-  //  State->setExitRoot(Exit);
-  //  State->setHaveSelfLoop(selfLoop);
-
-  //  MemOps.clear();
-  //}
-
-  //DEBUG(print(dbgs(), 0));
-
   return false;
 }
 
 
-bool VPreRegAllocSched::haveSelfLoop(const MachineBasicBlock *MBB) {
-  return false;
-  //MachineLoop *L = LI->getLoopFor(MBB);
-  //// Not in any loop.
-  //if (!L) return false;
-  //// Dirty Hack: Only support one block loop at this moment.
-  //if (L->getBlocks().size() != 1) return false;
-  //return true;
+bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
+  MachineLoop *L = LI->getLoopFor(MBB);
+  // Not in any loop.
+  if (!L) return false;
+  // Dirty Hack: Only support one block loop at this moment.
+  if (L->getBlocks().size() != 1) return false;
+
+  return FuncInfo->getConstraints().enablePipeLine();
 }
-
-
-
-//HWADelay *VPreRegAllocSched::addLoopPredBackEdge(const MachineBasicBlock *MBB) {
-//  assert(haveSelfLoop(MBB) && "Loop SCC only exist in self loop!");
-//  
-//  VSchedGraph *State = getStateFor(MBB);
-//  // And get the predicate
-//  //BranchInst *Br = cast<BranchInst>(MBB->getTerminator());
-//  //ICmpInst *ICmp = cast<ICmpInst>(Br->getCondition());
-//  //VSUnit *Pred = cast<VSUnit>(getSUnitFor(*ICmp));
-//
-//  //// The Next loop depend on the result of predicate.
-//  //// Dirty Hack: The FSM have a delay of 1.
-//  //HWADelay *Delay = getDelay(Pred, 1);
-//  //VDMemDep *LoopDep = getMemDepEdge(Delay, true, VDMemDep::TrueDep, 1);
-//  //State->addDep(LoopDep);
-//
-//  // return Delay;
-//  return 0;
-//}
 
 void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   CurState.preSchedTopSort();
@@ -324,20 +254,17 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // Ignore RAR dependence.
       if (isDstLoad && isSrcLoad) continue;
 
-      // Ignore the No-Alias pointers.
-      // FIXME: We may employ more advance AA.
-      if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
-
       if (CurState.enablePipeLine()) {
         // Compute the iterate distance.
       } else {
+        if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
+
+      // Ignore the No-Alias pointers.
         VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
                                          VDMemDep::TrueDep, 0);
         DstU->addDep(MemDep);
       }
     }
-
-    // Check for self dependence in loop.
 
     // Add the schedule unit to visited map.
     VisitedMemOps.insert(std::make_pair(DstMO, DstU));
@@ -394,10 +321,10 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
-  // Only work on loops.
+  // Only work on pipelined loops.
   if (!State.enablePipeLine()) return;
-  
-  VSUnit *SelfEnable = State.getSelfEnable();
+
+  VSUnit *SelfEnable = State.getLoopOp();
   assert(SelfEnable && "Not in loop?");
 
   MachineBasicBlock *CurBB = State.getMachineBasicBlock();
@@ -499,7 +426,6 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
 
   // Build loop edges if necessary.
   buildPipeLineDepEdges(State);
-  
 
   // Build the memory edges.
   buildMemDepEdges(State);

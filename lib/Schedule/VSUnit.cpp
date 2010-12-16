@@ -22,6 +22,7 @@
 #include "ForceDirectedScheduling.h"
 #include "ScheduleDOT.h"
 
+#include "vtm/PartitionInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/VTargetMachine.h"
@@ -479,17 +480,6 @@ void VSchedGraph::dump() const {
 
 #include "llvm/Support/CommandLine.h"
 
-static cl::opt<bool>
-NoFDLS("disable-fdls",
-       cl::desc("vbe - Do not preform force-directed list schedule"),
-       cl::Hidden, cl::init(false));
-
-
-static cl::opt<bool>
-NoFDMS("disable-fdms",
-       cl::desc("vbe - Do not preform force-directed modulo schedule"),
-       cl::Hidden, cl::init(false));
-
 void VSchedGraph::preSchedTopSort() {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 }
@@ -502,45 +492,52 @@ bool llvm::VSchedGraph::trySetSelfEnable(VTFInfo &VTID) {
   if (VTID.get().getOperand(1).getMBB() != MBB) return false;
 
   // Ok, rememeber this instruction as self eanble.
-  selfEnable.setPointer(&VTID.get());
+  LoopOp.setPointer(&VTID.get());
   return true;
 }
 
-void VSchedGraph::schedule() {
-  // Create the FDInfo.
-  //ModuloScheduleInfo MSInfo(HI, &getAnalysis<LoopInfo>(), State);
-  FDSBase *Scheduler = 0;
-  if (NoFDLS)
-    Scheduler = new FDScheduler(*this);
-  else
-    Scheduler = new FDListScheduler(*this);
+static FDSBase *createLinearScheduler(VSchedGraph &G) {
+  MachineFunction *F = G.getMachineBasicBlock()->getParent();
+  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getConstraints();
 
-  //if (MSInfo.isModuloSchedulable()) {
-  //  if (NoFDMS) {
-  //    delete Scheduler;
-  //    Scheduler = new IteractiveModuloScheduling(HI, State);
-  //  }
-  //  
-  //  scheduleCyclicCodeRegion(MSInfo.computeMII());
-  //} else
-  scheduleLinear(Scheduler);
-
-  // Do not forget to schedule the delay atom;
-  for (VSchedGraph::iterator I = begin(), E = end(); I != E; ++I) {
-    VSUnit *A = *I;
-    assert(A->isScheduled() && "Schedule incomplete!");
+  switch (I.getScheduleAlgorithm()) {
+  case ConstraintsInfo::FDS:   return new FDScheduler(G);
+  case ConstraintsInfo::FDLS:  return new FDListScheduler(G);
   }
+  return 0;
+}
+
+static FDSBase *createLoopScheduler(VSchedGraph &G) {
+  MachineFunction *F = G.getMachineBasicBlock()->getParent();
+  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getConstraints();
+  if (I.getPipeLineAlgorithm() == ConstraintsInfo::IMS)
+    return new IteractiveModuloScheduling(G);
+  
+  return createLinearScheduler(G);
 }
 
 
-void VSchedGraph::scheduleLinear(FDSBase *Scheduler) {
+void VSchedGraph::schedule() {
+  if (enablePipeLine())
+    scheduleLoop();
+  else
+    scheduleLinear();
+}
+
+
+void VSchedGraph::scheduleLinear() {
+  OwningPtr<FDSBase> Scheduler(createLinearScheduler(*this));
+
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
 
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
-void VSchedGraph::scheduleLoop(FDSBase *Scheduler, unsigned II) {
+void VSchedGraph::scheduleLoop() {
+  OwningPtr<FDSBase> Scheduler(createLoopScheduler(*this));
+  unsigned II = 0;
+
   dbgs() << "MII: " << II << "...";
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))

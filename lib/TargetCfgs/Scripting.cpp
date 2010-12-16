@@ -68,8 +68,22 @@ struct LuaConstraints {
         .def_readwrite("SystemName", &FileInfo::SystemName)
         .def_readwrite("WriteAllToStdOut", &FileInfo::WriteAllToStdOut),
 
+      luabind::class_<ConstraintsInfo>("ConstraintsInfo")
+        .enum_("PipeLineAlgorithm")[
+          luabind::value("IMS", ConstraintsInfo::IMS),
+          luabind::value("FDMS", ConstraintsInfo::FDMS),
+          luabind::value("DontPipeline", ConstraintsInfo::DontPipeline)
+        ]
+        .enum_("ScheduleAlgorithm")[
+          luabind::value("FDS", ConstraintsInfo::FDS),
+          luabind::value("FDLS", ConstraintsInfo::FDLS)          
+        ]
+        .def_readwrite("PipeLine", &ConstraintsInfo::PipeAlg)
+        .def_readwrite("Schedule", &ConstraintsInfo::SchedAlg),
+
       luabind::class_<PartitionInfo>("PartitionInfo")
         .def("setHardware", &PartitionInfo::setHardware)
+        .def("getFunctionConstraints", &PartitionInfo::getFunctionConstraints)
     ];
 
     // Bind the object.

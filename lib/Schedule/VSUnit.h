@@ -460,14 +460,13 @@ private:
 
   const unsigned startSlot;
   // The schedule unit that jump back to current fsm state.
-  PointerIntPair<MachineInstr*, 1, bool> selfEnable;
+  PointerIntPair<MachineInstr*, 1, bool> LoopOp;
 
   SmallVector<MachineInstr*, 4> Terms;
 
   /// Scheduling implementation.
-  void scheduleLinear(FDSBase *Scheduler);
-  void scheduleLoop(FDSBase *Scheduler,
-                    unsigned II);
+  void scheduleLinear();
+  void scheduleLoop();
 
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
@@ -496,9 +495,9 @@ private:
 
 public:
   VSchedGraph(const VTargetMachine &Target, MachineBasicBlock *MachBB,
-           bool HaveSelfLoop, unsigned short StartSlot)
+              bool HaveLoopOp, unsigned short StartSlot)
     : TM(Target), MBB(MachBB), SUCount(0), startSlot(StartSlot),
-      selfEnable(0, HaveSelfLoop) {
+      LoopOp(0, HaveLoopOp) {
     // Create a dummy entry node.
     (void) createEntry();
   }
@@ -594,16 +593,20 @@ public:
   }
 
   unsigned getIISlot() const {
-    if (VSUnit *SE = getSelfEnable())
+    if (VSUnit *SE = getLoopOp())
       return SE->getSlot();
     
     return 0;
   }
   unsigned getII() const { return getIISlot() - getStartSlot() + 1; }
 
-  bool enablePipeLine() const { return selfEnable.getInt(); }
-  VSUnit *getSelfEnable() const {
-    return lookupSUnit(selfEnable.getPointer());
+  bool enablePipeLine() const {
+    return LoopOp.getInt();
+  }
+
+  bool hasLoopOp() const { return LoopOp.getPointer() != 0; }
+  VSUnit *getLoopOp() const {
+    return lookupSUnit(LoopOp.getPointer());
   }
 
   void print(raw_ostream &OS) const;

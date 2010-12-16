@@ -15,6 +15,7 @@
 #ifndef VTM_FUNCTION_INFO_H
 #define VTM_FUNCTION_INFO_H
 
+#include "vtm/PartitionInfo.h"
 #include "vtm/FUInfo.h"
 #include "vtm/VerilogAST.h"
 
@@ -69,9 +70,14 @@ class VFuncInfo : public MachineFunctionInfo {
 
   StringPool SymbolPool;
   std::set<PooledStringPtr> Symbols;
+  // Rtl module.
   OwningPtr<VASTModule> Mod;
+  ConstraintsInfo Info;
 public:
-  explicit VFuncInfo(MachineFunction &MF) {}
+  explicit VFuncInfo(MachineFunction &MF)
+    : Info(partition().getFunctionConstraints(MF.getFunction()->getName())){}
+
+  const ConstraintsInfo &getConstraints() const { return Info; }
 
   /// Verilog module for the machine function.
   VASTModule *createRtlMod(const std::string &Name) {
