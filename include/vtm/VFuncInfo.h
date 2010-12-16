@@ -32,7 +32,7 @@ class VFuncInfo : public MachineFunctionInfo {
   struct StateSlots{
     unsigned startSlot : 32;
     unsigned totalSlot : 16;
-    unsigned II        : 16;
+    unsigned IISlot        : 16;
   };
   std::map<const MachineBasicBlock*, StateSlots> StateSlotMap;
 
@@ -89,20 +89,20 @@ public:
     return at->second.startSlot;
   }
 
-  inline unsigned getIIFor(const MachineBasicBlock* MBB) const {
+  inline unsigned getIISlotFor(const MachineBasicBlock* MBB) const {
     std::map<const MachineBasicBlock*, StateSlots>::const_iterator
       at = StateSlotMap.find(MBB);
 
     assert(at != StateSlotMap.end() && "State not found!");
-    return at->second.II;
+    return at->second.IISlot;
   }
 
   void remeberTotalSlot(const MachineBasicBlock* MBB,
-                        unsigned startSlot, unsigned totalSlot, unsigned II) {
+                        unsigned startSlot, unsigned totalSlot, unsigned IISlot) {
     StateSlots SS;
     SS.startSlot = startSlot;
     SS.totalSlot = totalSlot;
-    SS.II = II;
+    SS.IISlot = IISlot;
     StateSlotMap.insert(std::make_pair(MBB, SS));
   }
 

@@ -458,10 +458,9 @@ private:
   // The number of schedule unit.
   unsigned SUCount;
 
-  // Modulo for modulo schedule.
-  unsigned short II;
-  const unsigned short startSlot;
-  bool HaveSelfLoop;
+  const unsigned startSlot;
+  // The schedule unit that jump back to current fsm state.
+  PointerIntPair<MachineInstr*, 1, bool> selfEnable;
 
   SmallVector<MachineInstr*, 4> Terms;
 
@@ -574,12 +573,22 @@ public:
   unsigned getTotalSlot() const { return getEndSlot() - getStartSlot() + 1; }
 
   // II for Modulo schedule
-  void setII(unsigned ii) { II = ii; }
-  void setNoOverlapII() { II = getTotalSlot() + 1; }
-  bool isPipelined() const { return II != 0 && II != getTotalSlot() + 1; }
-  unsigned getII() const { return II; }
-  unsigned getIISlot() const { return getStartSlot() + II - 1; }
-  bool haveSelfLoop() const { return HaveSelfLoop; }
+  bool isPipelined() const {
+    return getII() != 0 && getII() != getTotalSlot() + 1;
+  }
+
+  unsigned getIISlot() const {
+    if (VSUnit *SE = getSelfEnable())
+      return SE->getSlot();
+    
+    return 0;
+  }
+  unsigned getII() const { return getIISlot() - getStartSlot() + 1; }
+
+  bool enablePipeLine() const { return selfEnable.getInt(); }
+  VSUnit *getSelfEnable() const {
+    return lookupSUnit(selfEnable.getPointer());
+  }
 
   void print(raw_ostream &OS) const;
   void dump() const;

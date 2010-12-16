@@ -526,17 +526,10 @@ void VSchedGraph::scheduleLinear(FDSBase *Scheduler) {
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
 
-  // Set the Initial Interval to the total slot, so we can generate the correct
-  // control logic for loop if MS is disable.
-  if (haveSelfLoop()) {
-    setNoOverlapII();
-    DEBUG(dbgs() << "Latency: " << getTotalSlot() << '\n');
-  }
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
-void VSchedGraph::scheduleLoop(FDSBase *Scheduler, 
-                                        unsigned II) {
+void VSchedGraph::scheduleLoop(FDSBase *Scheduler, unsigned II) {
   dbgs() << "MII: " << II << "...";
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
@@ -577,10 +570,7 @@ void VSchedGraph::scheduleLoop(FDSBase *Scheduler,
     NextPoints.pop_back();
   }
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
-    << " Latency: " << getTotalSlot() << '\n');
-
-  //Scheduler->getCriticalPathLength() < Scheduler->getMII())
-  setII(Scheduler->getMII());
+               << " Latency: " << getTotalSlot() << '\n');
 }
 
 void VSchedGraph::viewGraph() {
