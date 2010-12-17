@@ -514,6 +514,9 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
            UE = MRI->use_end(); UI != UE; ++UI) {
         MachineInstr &UseMI = *UI;
         VSUnit *UseSU = State.lookupSUnit(&UseMI);
+        // Ignore self loop.
+        if (UseSU == InSU) continue;
+        
         assert(UseSU && "Where's the use of the phi?");
         UseSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &UseMI),
                                     true, VDMemDep::AntiDep, 1));
