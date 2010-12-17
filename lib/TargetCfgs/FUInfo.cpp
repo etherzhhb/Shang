@@ -58,7 +58,7 @@ unsigned FuncUnitId::getTotalFUs() const {
 void FuncUnitId::print(raw_ostream &OS) const {
   OS << VFUs::VFUNames[getFUType()];
   // Print the function unit id if necessary.
-  if (isBinded()) OS << "Binded to " << getFUNum();
+  if (isBinded()) OS << " Binded to " << getFUNum();
 }
 
 void FuncUnitId::dump() const {

@@ -867,6 +867,16 @@ void VSchedGraph::scheduleLoop() {
   }
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
                << " Latency: " << getTotalSlot() << '\n');
+  unsigned FinalII = Scheduler->getMII();
+  VSUnit *LoopOp = getLoopOp();
+  assert(LoopOp && "Where is Loop op?");
+  // Get finish slot?
+  assert(LoopOp->getSlot() < getStartSlot() + FinalII
+         && "Loop can not restart in time!");
+
+  // Ditry Hack: Fix the schedule of loop op.
+  LoopOp->resetSchedule();
+  LoopOp->scheduledTo(getStartSlot() + FinalII);
 }
 
 void VSchedGraph::viewGraph() {

@@ -29,6 +29,14 @@ class VInstrInfo : public TargetInstrInfoImpl {
 public:
   VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
 
+  virtual bool AnalyzeBranch(MachineBasicBlock &MBB,
+                             MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
+                             SmallVectorImpl<MachineOperand> &Cond,
+                             bool AllowModify /* = false */) {
+    // TODO: Write code for this function.
+    return true;
+  }
+
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).

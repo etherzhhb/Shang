@@ -593,16 +593,16 @@ public:
 
   // II for Modulo schedule
   bool isPipelined() const {
-    return getII() != 0 && getII() != getTotalSlot() + 1;
+    return getII() != getTotalSlot() + 1;
   }
 
-  unsigned getIISlot() const {
+  unsigned getLoopOpSlot() const {
     if (VSUnit *SE = getLoopOp())
       return SE->getSlot();
     
-    return 0;
+    return getEndSlot();
   }
-  unsigned getII() const { return getIISlot() - getStartSlot() + 1; }
+  unsigned getII() const { return getLoopOpSlot() - getStartSlot(); }
 
   bool enablePipeLine() const {
     return LoopOp.getInt();

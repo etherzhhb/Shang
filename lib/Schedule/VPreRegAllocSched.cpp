@@ -240,7 +240,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     State.emitSchedule(*BLI);
     FuncInfo->remeberTotalSlot(MBB, State.getStartSlot(),
                                     State.getTotalSlot(),
-                                    State.getIISlot());
+                                    State.getLoopOpSlot());
   }
 
   return false;
