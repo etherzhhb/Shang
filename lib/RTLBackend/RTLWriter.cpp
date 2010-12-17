@@ -68,7 +68,10 @@ class RTLWriter : public MachineFunctionPass {
 
   unsigned TotalFSMStatesBit, CurFSMStateNum;
 
-  SmallVector<const Argument*, 8> Arguments; 
+  SmallVector<const Argument*, 8> Arguments;
+
+  // Mapping success fsm state to their predicate in current state.
+  typedef std::map<MachineBasicBlock*, std::string> PredMapTy;
 
   void emitFunctionSignature();
   void emitCommonPort();
@@ -77,7 +80,10 @@ class RTLWriter : public MachineFunctionPass {
   /// emit the ports and register, wire and datapath for them.
   void emitAllocatedFUs();
 
+  void emitIdleState();
+
   void emitBasicBlock(MachineBasicBlock &MBB);
+
   void emitAllRegister();
   void emitRegClassRegs(const TargetRegisterClass *RC, unsigned BitWidth);
 
@@ -141,9 +147,9 @@ class RTLWriter : public MachineFunctionPass {
                    bool PrintBitRange = true);
   unsigned getOperandWitdh(MachineOperand &Operand);
 
-  // Return true if the control operation loop back to the entry of the state
-  // this can detect the loop boundary of the pipelined loop.
-  bool emitCtrlOp(ucState &State, std::string &LoopPred);
+  // Return true if the control operation contains a return operation.
+  bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
+                  const std::string &ucStatePred);
 
   void emitOpArg(ucOp &VOpArg);
   void emitOpRetVal(ucOp &OpRetVal);
@@ -151,7 +157,8 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpLatchVal(ucOp &OpLatchVal);
   void emitOpMemAccess(ucOp &OpMemAccess);
 
-  void emitFUCtrl(unsigned Slot);
+  void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
+                          const PredMapTy &NextStatePred);
 
   void emitTestBench();
 
@@ -173,6 +180,7 @@ public:
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
+
   void releaseMemory() { clear(); }
   void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const;
@@ -232,23 +240,9 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   TotalFSMStatesBit = Log2_32_Ceil(totalFSMStates);
 
   VM->addRegister("NextFSMState", TotalFSMStatesBit);
-  
-  // Idle state
-  verilogParam(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  VM->getControlBlockBuffer().match_case("state_idle");
-  // Idle state is always ready.
-  VM->getControlBlockBuffer().if_begin("start");
-  // The module is busy now
-  MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
-  emitNextFSMState(VM->getControlBlockBuffer(), EntryBB);
-  //
-  VM->getControlBlockBuffer().else_begin();
-  VM->getControlBlockBuffer() << "NextFSMState <= state_idle;\n";
-  // Emit function unit control at idle state, simply disable all
-  // function units.
-  emitFUCtrl(0);
-  VM->getControlBlockBuffer().exit_block();
-  VM->getControlBlockBuffer().exit_block();
+
+  emitIdleState();
+
   
   emitAllRegister();
   emitAllocatedFUs();
@@ -343,12 +337,36 @@ void RTLWriter::emitFunctionSignature() {
   emitCommonPort();
 }
 
+void RTLWriter::emitIdleState() {
+  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
+
+  // Idle state
+  verilogParam(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
+  CtrlS.match_case("state_idle");
+  // Idle state is always ready.
+  CtrlS.if_begin("start");
+  // The module is busy now
+  MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
+  emitNextFSMState(CtrlS, EntryBB);
+  //
+  CtrlS.else_begin();
+  CtrlS << "NextFSMState <= state_idle;\n";
+  // End if-else
+  CtrlS.exit_block();
+  // Emit function unit control.
+  PredMapTy IdleNextStatePred;
+  IdleNextStatePred.insert(std::make_pair(EntryBB, "start"));
+  emitFUCtrlForState(CtrlS, 0, IdleNextStatePred);
+  // End case.
+  CtrlS.exit_block();
+}
+
 void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   std::string StateName = getStateName(&MBB);
+  unsigned startSlot = FuncInfo->getStartSlotFor(&MBB);
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
   unsigned IISlot = FuncInfo->getIISlotFor(&MBB);
-  
-  std::string NewMicroStatePred = "1'b0";
+  PredMapTy NextStatePred;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
@@ -359,7 +377,7 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
 
   // State information.
   CtrlS << "// " << StateName << " Total Slot: " << totalSlot
-                 << " IISlot: " << IISlot <<  '\n';
+                 << " II: " << (IISlot - startSlot) <<  '\n';
   // Mirco state enable.
   createucStateEnable(&MBB);
 
@@ -378,16 +396,18 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
     ucState NextControl = *++I;
     std::string StateEnable = getucStateEnable(CurDatapath);
     CtrlS.if_begin(StateEnable);
-    if (emitCtrlOp(NextControl, NewMicroStatePred)) {
-      // The predicate is only valid at the correct slot.
-      NewMicroStatePred += " & " + StateEnable;
-      // TODO: Tell the writer the loop boundary reached and do not emit
-      // function unit control logic anymore.
-    }
+    emitCtrlOp(NextControl, NextStatePred, StateEnable);
     CtrlS.exit_block();
   } while(I != E);
 
-  emitNextMicroState(CtrlS, &MBB, NewMicroStatePred);
+  CtrlS << "// Next micro state.\n";
+  PredMapTy::iterator at = NextStatePred.find(&MBB);
+  if (at != NextStatePred.end())
+    emitNextMicroState(CtrlS, &MBB, at->second);
+  else
+    emitNextMicroState(CtrlS, &MBB, "1'b0");
+
+  emitFUCtrlForState(CtrlS, &MBB, NextStatePred);
 
   // Case end
   CtrlS.exit_block();
@@ -475,7 +495,7 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 }
 
 void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-                                 const std::string &NewState) {
+                                   const std::string &NewState) {
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
   std::string StateName = getucStateEnableName(MBB);
@@ -492,34 +512,58 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
-void RTLWriter::emitFUCtrl(unsigned Slot) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  // The FSM operation.
-  if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, Slot))
-    OS << "fin <= 1'b1;\n";
-  else
-    OS << "fin <= 1'b0;\n";
-  
+void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
+                                   MachineBasicBlock *CurBB,
+                                   const PredMapTy &NextStatePred) {
+  unsigned startSlot = 0, totalSlot = 0;
+  // Get the slot information for no-idle state.
+  if (CurBB) {
+    startSlot = FuncInfo->getStartSlotFor(CurBB);
+    totalSlot = FuncInfo->getTotalSlotFor(CurBB);
+  }
+
+  // Emit function unit control.
   // Membus control operation.
   for (VFuncInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
-       E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+      E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
+    CtrlS << "// " << Id << " control for next micro state.\n";
+    CtrlS << VFUMemBus::getEnableName(Id.getFUNum()) << " <= 1'b0";
+    // Resource control operation when in the current state.
+    for (unsigned i = startSlot + 1, e = startSlot + totalSlot; i < e; ++i) {
+      if (FuncInfo->isFUActiveAt(Id, i))
+        CtrlS << " | " << getucStateEnable(CurBB, i - 1);
+    }
 
-    OS << VFUMemBus::getEnableName(Id.getFUNum());
-    // Enable the membus if it is activated.
-    if (FuncInfo->isFUActiveAt(Id, Slot)) OS << " <= 1'b1;\n";
-    else                                  OS << " <= 1'b0;\n";
+    // Resource control operation when we are transferring fsm state.
+    for (PredMapTy::const_iterator NI = NextStatePred.begin(),
+        NE = NextStatePred.end(); NI != NE; ++NI) {
+      MachineBasicBlock *NextBB = NI->first;
+      unsigned FirstSlot = FuncInfo->getStartSlotFor(NextBB);
+      if (FuncInfo->isFUActiveAt(Id, FirstSlot))
+        CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
+              << " & " << NI->second << ") ";
+    }
+
+    CtrlS << ";\n";
   }
-  
+
+  // Control the finish port
+  CtrlS << "// Finish port control\n";
+  CtrlS << "fin <= 1'b0";
+  if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, startSlot + totalSlot - 1))
+    CtrlS << " | " << getucStateEnable(CurBB, startSlot + totalSlot - 1 - 1);
+
+  CtrlS << ";\n";
 }
 
-bool RTLWriter::emitCtrlOp(ucState &State, std::string &LoopPred) {
+bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap,
+                           const std::string &ucStatePred) {
   assert((State->getOpcode() == VTM::Control
           // ToDo: sepreate terminator from control.
           || State->getOpcode() == VTM::Terminator)
         && "Bad ucState!");
   bool IsRet = false;
-  bool loopToEntry = false;
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     // Emit the operations.
@@ -537,40 +581,32 @@ bool RTLWriter::emitCtrlOp(ucState &State, std::string &LoopPred) {
       raw_string_ostream ss(Pred);
       emitOperand(ss, Op.getOperand(0));
       ss.flush();
+      // Emit control operation for next state.
       CtrlS.if_begin(Pred);
-
       if (TargetBB == State->getParent()) { // Self loop detected.
-        CtrlS << "// Issue first state.\n";
+        CtrlS << "// Loop back to entry.\n";
         emitFirstCtrlState(TargetBB);
-        // Set up the self loop predicate.
-        LoopPred = Pred;
-        loopToEntry = true;
       } else // Transfer to other state.
         emitNextFSMState(CtrlS, TargetBB);
 
       CtrlS.exit_block();
+      // Remember the predicate
+      Pred += " & " + ucStatePred;
+      PredMap.insert(std::make_pair(TargetBB, Pred));
       break;
     }
-    default:  assert(0 && "Unexpect opcode!");            break;
+    default:  assert(0 && "Unexpected opcode!");          break;
     }
   }
-
-  // Do not emit function unit when we are transferring to a new state, because
-  // the first micro operation of the new state will be emitted immediately.
-  // But if the terminator state is a return, we need to emit control logic
-  // because there are no succeeding state.
-  if (!State->getDesc().isTerminator() || IsRet)
-    emitFUCtrl(State.getSlot());
-
-  return loopToEntry;
+  return IsRet;
 }
 
 void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *MBB->getFirstNonPHI();
   assert(FuncInfo->getStartSlotFor(MBB) == FirstState.getSlot());
-  std::string dummy;
-  emitCtrlOp(FirstState, dummy);
+  PredMapTy dummy;
+  emitCtrlOp(FirstState, dummy, "bad-pred");
   assert(dummy.empty() && "Can not loop back at first state!");
 }
 
