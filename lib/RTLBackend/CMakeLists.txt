@@ -1,4 +1,5 @@
 add_llvm_library(VTMRTLBackend
+  FixCopyInstrs.cpp
   VerilogAST.cpp
   RTLWriter.cpp
 )

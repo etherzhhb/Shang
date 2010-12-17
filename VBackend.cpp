@@ -217,6 +217,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // PM.add(createFastRegisterAllocator());
 
+  // Fix the copy instruction introduced by register allocation.
+  PM.add(createFixCopyPass());
+
   PM.add(createRTLWriterPass());
 
   // TODO: Select difference interface writer pass based on user's choice.

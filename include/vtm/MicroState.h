@@ -46,7 +46,7 @@ public:
     // Excute an instruction, instr ResourceType, ResourceID, operands ...
     tokenInstr,
     // Write register, LatchVal register, source value
-    tokenLatchVal = VTM::COPY
+    tokenLatchWire
   };
 
   explicit MetaToken() : TokenNode(0) {}
@@ -148,13 +148,15 @@ public:
       return Token.getOpcode();
     // Since the Token must be an instr token or DefReg token, if we reach
     // here, it must be a DefReg token.
-    return VTM::COPY;
+    return MetaToken::tokenLatchWire;
   }
 
   std::string getSrcWireName(const std::string &Prefix) const {
     assert(Token.isDefReg() && "Bad token type");
     return Token.getWireName(Prefix);
   }
+
+  const MetaToken *operator->() const { return &Token; }
 
   unsigned getFUNum() const {
     assert(Token.isInstr() && "Bad token type!");

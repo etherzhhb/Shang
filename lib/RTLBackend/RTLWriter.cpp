@@ -154,7 +154,8 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpArg(ucOp &VOpArg);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
-  void emitOpLatchVal(ucOp &OpLatchVal);
+  void emitOpLatchWire(ucOp &OpLatchVal);
+  void emitOpCopy(ucOp &OpCopy);
   void emitOpMemAccess(ucOp &OpMemAccess);
 
   void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
@@ -572,9 +573,12 @@ bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpArg:       emitOpArg(Op);                break;
     case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
-    case VTM::COPY:         emitOpLatchVal(Op);           break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);          break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
+    case VTM::COPY:         emitOpCopy(Op);               break;
+    case MetaToken::tokenLatchWire:
+      emitOpLatchWire(Op);
+      break;
     case VTM::VOpToState:{
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
@@ -616,13 +620,21 @@ void RTLWriter::emitImplicitDef(ucOp &ImpDef) {
   OS << "/*IMPLICIT_DEF " << ImpDef << "*/\n";
 }
 
-void RTLWriter::emitOpLatchVal(ucOp &OpLatchVal) {
+void RTLWriter::emitOpLatchWire(ucOp &OpLatchVal) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   MachineOperand &MO = OpLatchVal.getOperand(0);
   emitOperand(OS, MO);
   MachineBasicBlock *MBB = MO.getParent()->getParent();
   std::string BBName = getStateName(MBB);
   OS << " <= " << OpLatchVal.getSrcWireName(BBName) << ";\n";
+}
+
+void RTLWriter::emitOpCopy(ucOp &OpCopy) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  emitOperand(OS, OpCopy.getOperand(0));
+  OS << " <= ";
+  emitOperand(OS, OpCopy.getOperand(1));
+  OS << ";\n";
 }
 
 void RTLWriter::emitOpArg(ucOp &OpArg) {

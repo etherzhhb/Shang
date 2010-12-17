@@ -44,6 +44,9 @@ FunctionPass *createOptimalSSARegisterAllocator();
 // Register allocation.
 FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
 
+// Fix copy instruction after register allocation
+Pass *createFixCopyPass();
+
 // RTL writer.
 Pass *createRTLWriterPass();
 
