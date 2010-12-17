@@ -18,6 +18,7 @@
 #include "vtm/Passes.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/VTM.h"
+#include "vtm/VRegisterInfo.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -46,6 +47,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
   std::vector<MachineInstr*> WorkStack;
 
   VFI = MF.getInfo<VFuncInfo>();
+  TRI = static_cast<const VRegisterInfo*>(MF.getTarget().getRegisterInfo());
   MRI = &MF.getRegInfo();
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();
@@ -62,6 +64,14 @@ unsigned BitLevelInfo::computeWidthByRC(MachineOperand &MO) {
 
   const TargetRegisterClass *RC = MRI->getRegClass(Reg);
   // Just return the register bitwidth.
+  return RC->vt_begin()->getSizeInBits();
+}
+
+unsigned BitLevelInfo::computeWidthForPhyReg(MachineOperand &MO) {
+  unsigned Reg = MO.getReg();
+
+  const TargetRegisterClass *RC = TRI->getPhyRegClass(Reg);
+
   return RC->vt_begin()->getSizeInBits();
 }
 
@@ -152,12 +162,28 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   }
   // The bitwidth determinate by its first operand.
   case VTM::VOpSetRI:
-  case VTM::COPY:
   case VTM::VOpNot:
   case VTM::VOpSRA:
   case VTM::VOpSHL: {
     MachineOperand &Result = Instr->getOperand(0);
     unsigned Width = getBitWidth(Instr->getOperand(1));
+    if (updateBitWidth(Result, Width))
+      Defs.push_back(&Result);
+    break;
+  }
+  // Copy instruction may inserted during register allocation, in this case
+  // its operand will not come with any bitwidth information.
+  case VTM::COPY: {
+    MachineOperand &Result = Instr->getOperand(0),
+                   &Operand = Instr->getOperand(1);
+    unsigned Width = getBitWidthInternal(Operand);
+    if (Width == 0) {// Compute its bitwidth by the register class information.
+      // We implicit the register is a physics register.
+      Width = computeWidthForPhyReg(Operand);
+      // Remember the bitwidth for operand.
+      updateBitWidth(Operand, Width);
+    }
+
     if (updateBitWidth(Result, Width))
       Defs.push_back(&Result);
     break;

@@ -12,7 +12,10 @@
 // and immediate base on the register width, and the result of bitwise operation
 // such as bitslice selection.
 //
-// TODO: Support analysis the bit width of ucOp.
+// TODO:
+//  1. Support analysis the bit width of ucOp.
+//  2. Use list driven bitwidth computation algorithm to allow bitwidth
+//     information propagates through the use-def chain.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,6 +27,7 @@
 
 namespace llvm {
 class VFuncInfo;
+struct VRegisterInfo;
 
 class BitLevelInfo : public MachineFunctionPass {
   unsigned getBitWidthInternal(MachineOperand &MO) const {
@@ -66,6 +70,8 @@ class BitLevelInfo : public MachineFunctionPass {
       return BitWidth;
   }
 
+  unsigned computeWidthForPhyReg(MachineOperand &MO);
+
   unsigned computeWidthByRC(MachineOperand &MO);
   unsigned computeByOpWithSameWidth(MachineInstr::mop_iterator I,
                                     MachineInstr::mop_iterator E) {
@@ -78,6 +84,7 @@ class BitLevelInfo : public MachineFunctionPass {
   }
 
   VFuncInfo *VFI;
+  const VRegisterInfo *TRI;
   MachineRegisterInfo *MRI;
 public:
   static char ID;

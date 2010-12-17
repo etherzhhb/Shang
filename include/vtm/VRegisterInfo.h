@@ -39,6 +39,8 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
 
   virtual const TargetRegisterDesc &operator[](unsigned RegNo) const;
 
+  const TargetRegisterClass *getPhyRegClass(unsigned RegNo) const;
+
   /// Code Generation virtual methods...
   const unsigned *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
 

@@ -57,6 +57,28 @@ const TargetRegisterDesc &VRegisterInfo::operator[](unsigned RegNo) const {
   return Desc[RegNo];
 }
 
+const TargetRegisterClass *VRegisterInfo::getPhyRegClass(unsigned RegNo) const {
+  assert(RegNo < NumRegs &&
+    "Attempting to access record for invalid register number!");
+  if (VTM::DR1RegClass.count(RegNo))
+    return &VTM::DR1RegClass;
+
+  if (VTM::DR8RegClass.count(RegNo))
+    return &VTM::DR8RegClass;
+
+  if (VTM::DR16RegClass.count(RegNo))
+    return &VTM::DR16RegClass;
+
+  if (VTM::DR32RegClass.count(RegNo))
+    return &VTM::DR32RegClass;
+
+  if (VTM::DR64RegClass.count(RegNo))
+    return &VTM::DR64RegClass;
+
+  assert(0 && "Bad register!");
+  return 0;
+}
+
 const unsigned*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   static const unsigned CalleeSavedRegs[] = {0};
