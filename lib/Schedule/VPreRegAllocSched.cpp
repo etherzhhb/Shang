@@ -286,7 +286,7 @@ VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
       return LoopDep();
   }
 
-  // TODO: Use "getUnderlyingObject" implmeneted in ScheduleInstrs?
+  // TODO: Use "getUnderlyingObject" implemented in ScheduleInstrs?
   // Get the underlying object directly, SCEV will take care of the
   // the offsets.
   Value *SGPtr = SrcAddr->getUnderlyingObject(),
@@ -299,7 +299,7 @@ VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
       return advancedLoopDepsAnalysis(SrcAddr, DstAddr, SrcLoad, DstLoad,
                                       L, SrcBeforeDest, SrcSize);
     // FIXME: Handle pointers with difference size.
-    // Fall thoungh.
+    // Fall though.
   case AliasAnalysis::MayAlias:
     return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
   default:  break;
