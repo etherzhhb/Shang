@@ -196,18 +196,23 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
   DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
   // Emit the exported registers at current slot.
   for (DefVector::iterator I = DefsAtSlot.begin(), E = DefsAtSlot.end();
-       I != E; ++I) {
+       I != E;) {
     WireDef *WD = *I;
 
     MachineOperand *MO = WD->getOperand();
 
     // This operand will delete with its origin instruction.
     // Eliminate the dead register.
-    if (MRI.use_empty(MO->getReg())) continue;
+    if (MRI.use_empty(MO->getReg())) {
+      I = DefsAtSlot.erase(I);
+      E = DefsAtSlot.end();
+      continue;
+    }
 
     // Export the register.
     CtrlInst.addMetadata(MetaToken::createDefReg(++OpId, WD->WireNum, VMContext));
     CtrlInst.addOperand(*MO);
+    ++I;
   }
 
   return 0;
