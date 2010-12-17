@@ -939,15 +939,9 @@ void VSUnit::print(raw_ostream &OS) const {
     MachineInstr *Instr = *I;
 
     VTFInfo VTID = *Instr;
-    OS << Instr->getDesc().getName() << '\t';
-    OS << " Res: " << VTID.getFUType();
-    DEBUG(OS << '\n' << *Instr);
-
-    if (getFUId().isBinded())
-      OS << "\nFUId:" << getFUNum();
-
-    OS << '\n';
+    OS << Instr->getDesc().getName() << '\n';
+    DEBUG(OS << *Instr << '\n');
   }
-  
-  OS << "\nAt slot: " << getSlot();
+
+  OS << getFUId() << "\nAt slot: " << getSlot();
 }
