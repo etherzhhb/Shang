@@ -871,7 +871,7 @@ void VSchedGraph::scheduleLoop() {
   VSUnit *LoopOp = getLoopOp();
   assert(LoopOp && "Where is Loop op?");
   // Get finish slot?
-  assert(LoopOp->getSlot() < getStartSlot() + FinalII
+  assert(LoopOp->getSlot() <= getStartSlot() + FinalII
          && "Loop can not restart in time!");
 
   // Ditry Hack: Fix the schedule of loop op.
