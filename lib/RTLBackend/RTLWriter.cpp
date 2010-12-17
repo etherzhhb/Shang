@@ -112,7 +112,7 @@ class RTLWriter : public MachineFunctionPass {
     std::string StateName = getucStateEnableName(MBB);
     raw_string_ostream ss(StateName);
     // Ignore the laster slot, we do nothing at that slot.
-    if (FuncInfo->getTotalSlotFor(MBB) - 1 > 1)
+    if (FuncInfo->getTotalSlotFor(MBB) > 1)
       ss << "[" << (Slot - FuncInfo->getStartSlotFor(MBB)) << "]";
 
     return ss.str();
@@ -479,7 +479,7 @@ RTLWriter::~RTLWriter() {}
 void RTLWriter::createucStateEnable(MachineBasicBlock *MBB)  {
   std::string StateName = getStateName(MBB);
   // We do not need the last state.
-  unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
+  unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB);
 
   // current state
   VM->addRegister("cur_" + StateName + "_enable", totalSlot);
@@ -497,7 +497,7 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                                    const std::string &NewState) {
   // We do not need the last state.
-  unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB) - 1;
+  unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB);
   std::string StateName = getucStateEnableName(MBB);
   ss << StateName << " <= ";
 
@@ -551,8 +551,9 @@ void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   // Control the finish port
   CtrlS << "// Finish port control\n";
   CtrlS << "fin <= 1'b0";
-  if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, startSlot + totalSlot - 1))
-    CtrlS << " | " << getucStateEnable(CurBB, startSlot + totalSlot - 1 - 1);
+  unsigned LastSlot = startSlot + totalSlot;
+  if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, LastSlot))
+    CtrlS << " | " << getucStateEnable(CurBB, LastSlot - 1);
 
   CtrlS << ";\n";
 }

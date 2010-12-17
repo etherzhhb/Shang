@@ -110,7 +110,7 @@ struct MicroStateBuilder {
   VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
-  DefToEmit(State.getTotalSlot() + 1 /*Dirty hack: The last slot never use!*/) {}
+  DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/) {}
 
   DefVector &getDefsToEmitAt(unsigned Slot) {
     return DefToEmit[Slot - State.getStartSlot()];

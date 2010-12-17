@@ -589,11 +589,11 @@ public:
 
   unsigned getStartSlot() const { return getEntryRoot()->getSlot(); }
   unsigned getEndSlot() const { return getExitRoot()->getSlot(); }
-  unsigned getTotalSlot() const { return getEndSlot() - getStartSlot() + 1; }
+  unsigned getTotalSlot() const { return getEndSlot() - getStartSlot(); }
 
   // II for Modulo schedule
   bool isPipelined() const {
-    return getII() != getTotalSlot() + 1;
+    return getII() < getTotalSlot();
   }
 
   unsigned getLoopOpSlot() const {
