@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -34,6 +35,7 @@ namespace {
 struct FixCopy : public MachineFunctionPass{
   static char ID;
   BitLevelInfo *BLI;
+  const TargetInstrInfo *TII;
 
   FixCopy() : MachineFunctionPass(ID) {}
 
@@ -51,6 +53,7 @@ struct FixCopy : public MachineFunctionPass{
 
   bool runOnMachineFunction(MachineFunction &MF) {
     BLI = &getAnalysis<BitLevelInfo>();
+    TII = MF.getTarget().getInstrInfo();
 
     LLVMContext &Context = MF.getFunction()->getContext();
 
@@ -133,7 +136,8 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
   Copy.RemoveOperand(0);
   MachineInstrBuilder MIB(&*Ctrl);
   // Diry hack: Temporary use the slot of the micro state.
-  MDNode *OpCode = MetaToken::createInstr(Ctrl.getSlot(), VTM::COPY, Context);
+  MDNode *OpCode
+    = MetaToken::createInstr(Ctrl.getSlot(), TII->get(VTM::COPY), Context);
   MIB.addMetadata(OpCode).addOperand(DstOp);
   if (SrcWire)
     MIB.addMetadata(MetaToken::createReadWire(SrcWire, Context));

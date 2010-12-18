@@ -35,6 +35,17 @@ uint64_t MetaToken::getUInt64Field(unsigned Elt) const {
   return 0;
 }
 
+StringRef MetaToken::getStringField(unsigned Elt) const {
+  if (TokenNode  == 0)
+    return StringRef();
+
+  if (Elt < TokenNode ->getNumOperands())
+    if (MDString *MDS = dyn_cast_or_null<MDString>(TokenNode->getOperand(Elt)))
+      return MDS->getString();
+
+  return StringRef();
+}
+
 bool MetaToken::isDefWire() const {
   if (!TokenNode) return false;
 
@@ -62,7 +73,8 @@ void MetaToken::print(raw_ostream &OS) const {
     OS << "wire" << getWireNum();
     break;
   case MetaToken::tokenInstr:
-    OS << "Instr" << getOpcode() << "{" << getFUType() << "}";
+    OS << getInstrName() << "{" << getFUId() << "}"
+       << "@" << getPredSlot();
     break;
   }
 }
@@ -120,29 +132,14 @@ static Constant *createTagConstant(unsigned TAG, LLVMContext &Context) {
   return ConstantInt::get(Type::getInt8Ty(Context), TAG);
 }
 
-MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
-                               unsigned FUId, LLVMContext &Context) {
-  VTFInfo VTID = Instr;
-
-  Value *Elts[] = {
-    createTagConstant(MetaToken::tokenInstr, Context),
-    createPredSlot(Context, OpId),
-    ConstantInt::get(Type::getInt32Ty(Context), VTID.getFUType()),
-    ConstantInt::get(Type::getInt32Ty(Context), VTID->getOpcode()),
-    ConstantInt::get(Type::getInt32Ty(Context), FUId)
-  };
-
-  return MDNode::get(Context, Elts, array_lengthof(Elts));
-}
-
-MDNode *MetaToken::createInstr(unsigned PredSlot, unsigned OpCode,
-                               LLVMContext &Context) {
+MDNode *MetaToken::createInstr(unsigned PredSlot, const TargetInstrDesc &TID,
+                               LLVMContext &Context, FuncUnitId FUId) {
   Value *Elts[] = {
     createTagConstant(MetaToken::tokenInstr, Context),
     createPredSlot(Context, PredSlot),
-    ConstantInt::get(Type::getInt32Ty(Context), VFUs::Trivial),
-    ConstantInt::get(Type::getInt32Ty(Context), OpCode),
-    ConstantInt::get(Type::getInt32Ty(Context), VFUs::Trivial)
+    ConstantInt::get(Type::getInt32Ty(Context), FUId.getData()),
+    ConstantInt::get(Type::getInt32Ty(Context), TID.getOpcode()),
+    MDString::get(Context, TID.getName())
   };
 
   return MDNode::get(Context, Elts, array_lengthof(Elts));

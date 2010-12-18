@@ -658,7 +658,7 @@ void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
 }
 
 void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
-  unsigned FUNum = OpMemAccess.getFUNum();
+  unsigned FUNum = OpMemAccess->getFUId().getFUNum();
   raw_ostream &DPS = VM->getDataPathBuffer();
   DPS << "// Dirty Hack: Emit the wire define by this operation\n"
          "// some register copying operation may need this wire.\n";

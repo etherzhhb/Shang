@@ -16,6 +16,7 @@
 #define BUNDLE_TOKENS_H
 
 #include "vtm/VTM.h"
+#include "vtm/FUInfo.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -75,11 +76,6 @@ public:
     return getUInt64Field(2);
   }
 
-  unsigned getFUType() const {
-    assert(isInstr() && "Bad token type!");
-    return getUInt64Field(2);
-  }
-
   unsigned getOpcode() const {
     assert(isInstr() && "Bad token type!");
     return getUInt64Field(3);
@@ -89,9 +85,13 @@ public:
     return getUnsignedField(1);
   }
 
-  unsigned getFUId() const {
+  FuncUnitId getFUId() const {
     assert(isInstr() && "Bad token type!");
-    return getUInt64Field(4);
+    return FuncUnitId(getUInt64Field(2));
+  }
+
+  StringRef getInstrName() const {
+    return getStringField(4);
   }
 
   void print(raw_ostream &OS) const;
@@ -104,10 +104,13 @@ public:
   static MDNode *createReadWire(uint64_t WireNum, LLVMContext &Context);
 
   static MDNode *createInstr(unsigned PredSlot, const MachineInstr &Instr,
-                             unsigned FUId, LLVMContext &Context);
+                             FuncUnitId FUId, LLVMContext &Context) {
+    return createInstr(PredSlot, Instr.getDesc(), Context, FUId);
+  }
 
-  static MDNode *createInstr(unsigned PredSlot, unsigned OpCode,
-                             LLVMContext &Context);
+  static MDNode *createInstr(unsigned PredSlot, const TargetInstrDesc &TID,
+                             LLVMContext &Context,
+                             FuncUnitId FUId = VFUs::Trivial);
 };
 
 class ucOp {
@@ -142,7 +145,7 @@ public:
 
   const MetaToken *operator->() const { return &Token; }
 
-  unsigned getFUNum() const {
+  FuncUnitId getFUId() const {
     assert(Token.isInstr() && "Bad token type!");
     return Token.getFUId();
   }

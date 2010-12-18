@@ -238,7 +238,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot) {
     }
 
     // Export the register.
-    CtrlInst.addMetadata(MetaToken::createInstr(Slot, VTM::COPY, VMContext));
+    CtrlInst.addMetadata(MetaToken::createInstr(Slot, TII.get(VTM::COPY),
+                                                VMContext));
     CtrlInst.addOperand(*MO);
     CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum, VMContext));
     ++I;
@@ -257,7 +258,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     Builder = MachineInstrBuilder(&getStateCtrlAt(A->getSlot()));
 
   // Add the opcode metadata and the function unit id.
-  Builder.addMetadata(MetaToken::createInstr(A->getSlot(), Inst, A->getFUNum(),
+  Builder.addMetadata(MetaToken::createInstr(A->getSlot(), Inst, A->getFUId(),
                                              VMContext));
   typedef SmallVector<MachineOperand*, 8> OperandVector;
   OperandVector Ops(Inst.getNumOperands());

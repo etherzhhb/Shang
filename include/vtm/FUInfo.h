@@ -68,6 +68,10 @@ public:
     UID.ID.Num = (T == VFUs::FSMFinish) ? 0 : 0xfff;
   }
 
+  explicit FuncUnitId(uint16_t Data) {
+    UID.data = Data;
+  }
+
   inline VFUs::FUTypes getFUType() const { return UID.ID.Type; }
   inline unsigned getFUNum() const { return UID.ID.Num; }
   inline unsigned getData() const { return UID.data; }
