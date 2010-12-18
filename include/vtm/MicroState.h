@@ -56,10 +56,6 @@ public:
   MDNode *operator ->() const { return const_cast<MDNode*>(TokenNode); }
 
   unsigned getTag() const {  return getUnsignedField(0); }
-  unsigned getId() const { 
-    assert(isInstr() && "Bad token type!");
-    return getUnsignedField(1);
-  }
 
   bool isDefWire() const;
   bool isReadWire() const;
@@ -71,7 +67,6 @@ public:
   }
 
   std::string getWireName(const std::string &Prefix) const {
-    assert((isDefWire() || isReadWire()) && "Bad token type!");
     return Prefix + "_wire" + utostr(getWireNum());
   }
 
@@ -89,6 +84,10 @@ public:
     assert(isInstr() && "Bad token type!");
     return getUInt64Field(3);
   }
+  unsigned getPredSlot() const { 
+    assert(isInstr() && "Bad token type!");
+    return getUnsignedField(1);
+  }
 
   unsigned getFUId() const {
     assert(isInstr() && "Bad token type!");
@@ -104,10 +103,10 @@ public:
 
   static MDNode *createReadWire(uint64_t WireNum, LLVMContext &Context);
 
-  static MDNode *createInstr(unsigned OpId, const MachineInstr &Instr,
+  static MDNode *createInstr(unsigned PredSlot, const MachineInstr &Instr,
                              unsigned FUId, LLVMContext &Context);
 
-  static MDNode *createInstr(unsigned OpId, unsigned OpCode,
+  static MDNode *createInstr(unsigned PredSlot, unsigned OpCode,
                              LLVMContext &Context);
 };
 

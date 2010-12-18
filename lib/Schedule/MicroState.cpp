@@ -112,12 +112,11 @@ MachineInstr::mop_iterator ucOpIterator::getNextIt() const {
   return NextIt;
 }
 
-
-static Constant *getOpId(LLVMContext &Context, unsigned OpId) {
-  return ConstantInt::get(Type::getInt8Ty(Context), OpId);
+static Constant *createPredSlot(LLVMContext &Context, unsigned PredSlot) {
+  return ConstantInt::get(Type::getInt8Ty(Context), PredSlot);
 }
 
-static Constant *getTagConstant(unsigned TAG, LLVMContext &Context) {
+static Constant *createTagConstant(unsigned TAG, LLVMContext &Context) {
   return ConstantInt::get(Type::getInt8Ty(Context), TAG);
 }
 
@@ -126,7 +125,8 @@ MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
   VTFInfo VTID = Instr;
 
   Value *Elts[] = {
-    getTagConstant(MetaToken::tokenInstr, Context), getOpId(Context, OpId),
+    createTagConstant(MetaToken::tokenInstr, Context),
+    createPredSlot(Context, OpId),
     ConstantInt::get(Type::getInt32Ty(Context), VTID.getFUType()),
     ConstantInt::get(Type::getInt32Ty(Context), VTID->getOpcode()),
     ConstantInt::get(Type::getInt32Ty(Context), FUId)
@@ -135,10 +135,11 @@ MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
 
-MDNode *MetaToken::createInstr(unsigned OpId, unsigned OpCode,
+MDNode *MetaToken::createInstr(unsigned PredSlot, unsigned OpCode,
                                LLVMContext &Context) {
   Value *Elts[] = {
-    getTagConstant(MetaToken::tokenInstr, Context), getOpId(Context, OpId),
+    createTagConstant(MetaToken::tokenInstr, Context),
+    createPredSlot(Context, PredSlot),
     ConstantInt::get(Type::getInt32Ty(Context), VFUs::Trivial),
     ConstantInt::get(Type::getInt32Ty(Context), OpCode),
     ConstantInt::get(Type::getInt32Ty(Context), VFUs::Trivial)
@@ -151,7 +152,7 @@ MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum,
                                          LLVMContext &Context) {
   assert(WireNum != 0 && "Bad wire number!");
   Value *Elts[] = {
-    getTagConstant(MetaToken::tokenReadWire, Context),
+    createTagConstant(MetaToken::tokenReadWire, Context),
     ConstantInt::get(Type::getInt32Ty(Context), WireNum)
   };
 
@@ -161,7 +162,7 @@ MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum,
 MDNode *MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
                                         LLVMContext &Context) {
   Value *Elts[] = {
-    getTagConstant(MetaToken::tokenDefWire, Context),
+    createTagConstant(MetaToken::tokenDefWire, Context),
     ConstantInt::get(Type::getInt32Ty(Context), WireNum),
     ConstantInt::get(Type::getInt8Ty(Context), BitWidth)
   };
