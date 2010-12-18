@@ -40,14 +40,6 @@ class BitLevelInfo : public MachineFunctionPass {
 
   void computeBitWidth(MachineInstr *Instr);
   void updateUsesBitwidth(MachineOperand &MO);
-
-  bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
-    unsigned char OldBitWidth = getBitWidthInternal(MO);
-    assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
-           && "Bit width not convergent!");
-      MO.setTargetFlags(BitWidth);
-    return OldBitWidth != BitWidth;
-  }
   
   unsigned computeBitSliceWidth(MachineInstr *BitSlice) {
     unsigned UB = BitSlice->getOperand(2).getImm(),
@@ -99,6 +91,14 @@ public:
     unsigned BitWidth = getBitWidthInternal(MO);
     assert(BitWidth && "Bit width information not available!");
     return BitWidth;
+  }
+
+  bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
+    unsigned char OldBitWidth = getBitWidthInternal(MO);
+    assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
+      && "Bit width not convergent!");
+    MO.setTargetFlags(BitWidth);
+    return OldBitWidth != BitWidth;
   }
 };
 }
