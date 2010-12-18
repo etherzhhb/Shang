@@ -114,13 +114,13 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
   Copy.RemoveOperand(1);
   Copy.RemoveOperand(0);
   MachineInstrBuilder MIB(&*Ctrl);
-  if (SrcWire) {
-    MDNode *OpCode = MetaToken::createDefReg(0, SrcWire, Context);
-    MIB.addMetadata(OpCode).addOperand(DstOp);
-  } else {
-    MDNode *OpCode = MetaToken::createInstr(0, Copy, FuncUnitId().getData(), Context);
-    MIB.addMetadata(OpCode).addOperand(DstOp).addOperand(SrcOp);
-  }
+  MDNode *OpCode = MetaToken::createInstr(0, Copy, FuncUnitId().getData(), Context);
+  MIB.addMetadata(OpCode).addOperand(DstOp);
+  if (SrcWire)
+    MIB.addMetadata(MetaToken::createReadWire(SrcWire, Context));
+  else
+    MIB.addOperand(SrcOp);
+
   // Discard the operand.
   Copy.eraseFromParent();
 }

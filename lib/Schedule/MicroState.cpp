@@ -47,12 +47,6 @@ bool MetaToken::isReadWire() const {
   return getTag() == MetaToken::tokenReadWire;
 }
 
-bool MetaToken::isDefReg() const {
-  if (!TokenNode) return false;
-
-  return getTag() == MetaToken::tokenLatchWire;
-}
-
 bool MetaToken::isInstr() const {
   if (!TokenNode) return false;
 
@@ -66,9 +60,6 @@ void MetaToken::print(raw_ostream &OS) const {
     break;
   case MetaToken::tokenReadWire:
     OS << "wire" << getWireNum();
-    break;
-  case MetaToken::tokenLatchWire:
-    OS << "wire" << getWireNum() << " ->";
     break;
   case MetaToken::tokenInstr:
     OS << "Instr" << getOpcode() << "{" << getFUType() << "}";
@@ -104,8 +95,7 @@ void ucOp::dump() const {
 MachineInstr::mop_iterator ucOpIterator::getNextIt() const {
   MachineInstr::mop_iterator NextIt = CurIt;
 
-  assert((MetaToken((*NextIt).getMetadata()).isDefReg()
-          || MetaToken((*NextIt).getMetadata()).isInstr())
+  assert(MetaToken((*NextIt).getMetadata()).isInstr()
          && "Bad leading token");
 
   while (++NextIt != EndIt) {
@@ -116,7 +106,7 @@ MachineInstr::mop_iterator ucOpIterator::getNextIt() const {
     MetaToken Token(TokenOp.getMetadata());
 
     // We found the begin of next range.
-    if (Token.isDefReg() || Token.isInstr()) break;
+    if (Token.isInstr()) break;
   }
 
   return NextIt;
@@ -131,16 +121,6 @@ static Constant *getTagConstant(unsigned TAG, LLVMContext &Context) {
   return ConstantInt::get(Type::getInt8Ty(Context), TAG);
 }
 
-MDNode *MetaToken::createDefReg(unsigned OpId, uint64_t WireNum, 
-                                LLVMContext &Context) {
-  Value *Elts[] = {
-    getTagConstant(MetaToken::tokenLatchWire, Context), getOpId(Context, OpId),
-    ConstantInt::get(Type::getInt32Ty(Context), WireNum)
-  };
-
-  return MDNode::get(Context, Elts, array_lengthof(Elts));
-}
-
 MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
                                unsigned FUId, LLVMContext &Context) {
   VTFInfo VTID = Instr;
@@ -150,6 +130,18 @@ MDNode *MetaToken::createInstr(unsigned OpId, const MachineInstr &Instr,
     ConstantInt::get(Type::getInt32Ty(Context), VTID.getFUType()),
     ConstantInt::get(Type::getInt32Ty(Context), VTID->getOpcode()),
     ConstantInt::get(Type::getInt32Ty(Context), FUId)
+  };
+
+  return MDNode::get(Context, Elts, array_lengthof(Elts));
+}
+
+MDNode *MetaToken::createInstr(unsigned OpId, unsigned OpCode,
+                               LLVMContext &Context) {
+  Value *Elts[] = {
+    getTagConstant(MetaToken::tokenInstr, Context), getOpId(Context, OpId),
+    ConstantInt::get(Type::getInt32Ty(Context), VFUs::Trivial),
+    ConstantInt::get(Type::getInt32Ty(Context), OpCode),
+    ConstantInt::get(Type::getInt32Ty(Context), VFUs::Trivial)
   };
 
   return MDNode::get(Context, Elts, array_lengthof(Elts));

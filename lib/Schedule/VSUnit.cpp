@@ -210,8 +210,9 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
     }
 
     // Export the register.
-    CtrlInst.addMetadata(MetaToken::createDefReg(++OpId, WD->WireNum, VMContext));
+    CtrlInst.addMetadata(MetaToken::createInstr(++OpId, VTM::COPY, VMContext));
     CtrlInst.addOperand(*MO);
+    CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum, VMContext));
     ++I;
   }
 

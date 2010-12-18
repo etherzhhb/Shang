@@ -44,9 +44,7 @@ public:
     // Read a wire, readwire wire_num
     tokenReadWire,
     // Excute an instruction, instr ResourceType, ResourceID, operands ...
-    tokenInstr,
-    // Write register, LatchVal register, source value
-    tokenLatchWire
+    tokenInstr
   };
 
   explicit MetaToken() : TokenNode(0) {}
@@ -59,25 +57,21 @@ public:
 
   unsigned getTag() const {  return getUnsignedField(0); }
   unsigned getId() const { 
-    assert((isInstr() || isDefReg()) && "Bad token type!");
+    assert(isInstr() && "Bad token type!");
     return getUnsignedField(1);
   }
 
   bool isDefWire() const;
   bool isReadWire() const;
   bool isInstr() const;
-  bool isDefReg() const;
 
   uint64_t getWireNum() const {
-    assert((isDefWire() || isReadWire() || isDefReg()) && "Bad token type!");
-    
-    if (isDefReg()) return getUInt64Field(2);
-
+    assert((isDefWire() || isReadWire()) && "Bad token type!");
     return getUInt64Field(1);
   }
 
   std::string getWireName(const std::string &Prefix) const {
-    assert((isDefWire() || isReadWire() || isDefReg()) && "Bad token type!");
+    assert((isDefWire() || isReadWire()) && "Bad token type!");
     return Prefix + "_wire" + utostr(getWireNum());
   }
 
@@ -113,8 +107,8 @@ public:
   static MDNode *createInstr(unsigned OpId, const MachineInstr &Instr,
                              unsigned FUId, LLVMContext &Context);
 
-  static MDNode *createDefReg(unsigned OpId, uint64_t WireNum,
-                              LLVMContext &Context);
+  static MDNode *createInstr(unsigned OpId, unsigned OpCode,
+                             LLVMContext &Context);
 };
 
 class ucOp {
@@ -129,7 +123,7 @@ private:
   ucOp(op_iterator range_begin, op_iterator range_end)
     : Token((*range_begin).getMetadata()), 
     rangeBegin(range_begin + 1), rangeEnd(range_end) {
-      assert((Token.isInstr() || Token.isDefReg()) && "Bad leading token!");
+      assert((Token.isInstr()) && "Bad leading token!");
   }
   
   friend class ucOpIterator;
@@ -144,16 +138,7 @@ public:
   }
 
   inline unsigned getOpCode() const {
-    if (Token.isInstr())
-      return Token.getOpcode();
-    // Since the Token must be an instr token or DefReg token, if we reach
-    // here, it must be a DefReg token.
-    return MetaToken::tokenLatchWire;
-  }
-
-  std::string getSrcWireName(const std::string &Prefix) const {
-    assert(Token.isDefReg() && "Bad token type");
-    return Token.getWireName(Prefix);
+    return Token.getOpcode();
   }
 
   const MetaToken *operator->() const { return &Token; }
