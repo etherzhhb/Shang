@@ -157,8 +157,7 @@ struct MicroStateBuilder {
     }
   }
 
-  void fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot,
-                 MachineInstrBuilder &DPInst, MachineInstrBuilder &CtrlInst);
+  void fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot);
 
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot,
                          bool IsLastSlot = false) {
@@ -192,20 +191,18 @@ struct MicroStateBuilder {
 
 MachineInstr*
 MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
+  // Try to force create the state control and data path instruction, and
+  // insert the instructions between them.
   MachineInstrBuilder CtrlInst(&getStateCtrlAt(Slot));
-
   emitDeferredInsts();
-
-  MachineInstrBuilder DPInst;
-  if (!IsLastSlot)
-    DPInst = MachineInstrBuilder(&getStateDatapathAt(Slot));
+  if (!IsLastSlot)  (void) getStateDatapathAt(Slot);
 
   for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
        E = SUnitsToEmit.end(); I !=E; ++I) {
     VSUnit *A = *I;
     for (VSUnit::instr_iterator II = A->instr_begin(), IE = A->instr_end();
         II != IE; ++II)
-      fuseInstr(**II, A, IsLastSlot, DPInst, CtrlInst);
+      fuseInstr(**II, A, IsLastSlot);
   }
 
   DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
@@ -234,14 +231,14 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
   return 0;
 }
 
-void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot,
-                                  MachineInstrBuilder &DPInst,
-                                  MachineInstrBuilder &CtrlInst) {
+void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot) {
   VTFInfo VTID = Inst;
-  // FIXME: Inline datapath is allow in last slot.
-  assert(!(IsLastSlot && VTID.hasDatapath())
-    && "Unexpected datapath in last slot!");
-  MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
+  MachineInstrBuilder Builder;
+
+  if (VTID.hasDatapath())
+    Builder = MachineInstrBuilder(&getStateDatapathAt(A->getSlot()));
+  else
+    Builder = MachineInstrBuilder(&getStateCtrlAt(A->getSlot()));
 
   // Add the opcode metadata and the function unit id.
   Builder.addMetadata(MetaToken::createInstr(A->getSlot(), Inst, A->getFUNum(),
