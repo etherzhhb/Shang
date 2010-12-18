@@ -117,11 +117,13 @@ struct MicroStateBuilder {
 
   MachineBasicBlock::iterator getInsertPos() { return InsertPos; }
 
+  // Builder interface.
   void emitSUnit(VSUnit *A) { SUnitsToEmit.push_back(A); }
   bool emitQueueEmpty() const { return SUnitsToEmit.empty(); }
 
   void defereSUnit(VSUnit *A) { DeferredSUnits.push_back(A); }
 
+  // Main state building function.
   MachineInstr *buildMicroState(unsigned Slot, bool IsLastSlot = false);
 
   void emitDeferredInsts() {
@@ -224,7 +226,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot
   VTFInfo VTID = Inst;
   // FIXME: Inline datapath is allow in last slot.
   assert(!(IsLastSlot && VTID.hasDatapath())
-    && "Unexpect datapath in last slot!");
+    && "Unexpected datapath in last slot!");
   MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
 
   // Add the opcode metadata and the function unit id.
