@@ -390,23 +390,8 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   // Remove all unused instructions.
   BTB.clearUp();
 
-  DEBUG(
-  dbgs() << "After schedule emitted:\n";
-  for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
-      I != E; ++I) {
-    MachineInstr *Instr = I;
-    switch (Instr->getOpcode()) {
-    case VTM::Control:
-    case VTM::Datapath:
-    case VTM::Terminator:
-      ucState(*Instr).dump();
-      break;
-    default:
-      Instr->dump();
-      break;
-    }
-  }
-  );
+  DEBUG(dbgs() << "After schedule emitted:\n");
+  DEBUG(dump());
 
   return MBB;
 }
@@ -769,6 +754,22 @@ unsigned VSchedGraph::computeMII() {
 }
 
 void VSchedGraph::print(raw_ostream &OS) const {
+  OS << "ScheduleGraph of " << MBB->getName() << '\n';
+  for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
+      I != E; ++I) {
+    MachineInstr *Instr = I;
+    switch (Instr->getOpcode()) {
+    case VTM::Control:
+    case VTM::Datapath:
+    case VTM::Terminator:
+      ucState(*Instr).print(OS);
+      break;
+    default:
+      OS << "Machine Instr: ";
+      Instr->print(OS);
+      break;
+    }
+  }
 }
 
 void VSchedGraph::dump() const {
