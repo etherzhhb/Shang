@@ -54,7 +54,6 @@ struct MicroStateBuilder {
   MachineBasicBlock::iterator InsertPos;
 
   unsigned WireNum;
-  unsigned OpId;
   LLVMContext &VMContext;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
@@ -106,7 +105,7 @@ struct MicroStateBuilder {
   MicroStateBuilder(VSchedGraph &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  WireNum(MBB.getNumber()), OpId(MBB.getNumber() << 24),
+  WireNum(MBB.getNumber()),
   VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
@@ -210,7 +209,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
     }
 
     // Export the register.
-    CtrlInst.addMetadata(MetaToken::createInstr(++OpId, VTM::COPY, VMContext));
+    CtrlInst.addMetadata(MetaToken::createInstr(Slot, VTM::COPY, VMContext));
     CtrlInst.addOperand(*MO);
     CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum, VMContext));
     ++I;
@@ -229,7 +228,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot
   MachineInstrBuilder &Builder = VTID.hasDatapath() ? DPInst : CtrlInst;
 
   // Add the opcode metadata and the function unit id.
-  Builder.addMetadata(MetaToken::createInstr(++OpId, Inst, A->getFUNum(),
+  Builder.addMetadata(MetaToken::createInstr(A->getSlot(), Inst, A->getFUNum(),
                                              VMContext));
   typedef SmallVector<MachineOperand*, 8> OperandVector;
   OperandVector Ops(Inst.getNumOperands());
