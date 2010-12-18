@@ -96,8 +96,11 @@ struct MicroStateBuilder {
   }
   
   typedef std::vector<WireDef*> DefVector;
-  std::vector<DefVector> DefToEmit;
+  SmallVector<DefVector, 32> DefToEmit;
   
+  typedef SmallVector<MachineInstr*, 32> MIVector;
+  MIVector StateCtrls, StateDatapaths;
+
   // register number -> wire define.
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
@@ -109,10 +112,41 @@ struct MicroStateBuilder {
   VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
-  DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/) {}
+  DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
+  StateCtrls(State.getTotalSlot() + 1), StateDatapaths(State.getTotalSlot()) {}
 
   DefVector &getDefsToEmitAt(unsigned Slot) {
     return DefToEmit[Slot - State.getStartSlot()];
+  }
+
+  unsigned computeStateIdx(unsigned Slot) {
+    return Slot -  State.getStartSlot();
+  }
+
+  MachineInstr &getStateCtrlAt(unsigned Slot) {
+    unsigned Idx = computeStateIdx(Slot);
+    // Retrieve the instruction at specific slot. 
+    MachineInstr *&Ret = StateCtrls[Idx];
+    if (Ret) return *Ret;
+    // Create the instruction if it is not created yet.
+    const TargetInstrDesc &TID = (Idx == State.getTotalSlot()) ?
+                                  TII.get(VTM::Terminator)
+                                : TII.get(VTM::Control);
+
+    Ret = (MachineInstr*)BuildMI(MBB, InsertPos, DebugLoc(), TID).addImm(Slot);
+    return *Ret;
+  }
+
+  MachineInstr &getStateDatapathAt(unsigned Slot) {
+    unsigned Idx = computeStateIdx(Slot);
+    // Retrieve the instruction at specific slot.
+    MachineInstr *&Ret = StateDatapaths[Idx];
+    if (Ret) return *Ret;
+    // Create the instruction if it is not created yet.
+    Ret = (MachineInstr*)
+      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
+
+    return *Ret;
   }
 
   MachineBasicBlock::iterator getInsertPos() { return InsertPos; }
@@ -171,20 +205,13 @@ struct MicroStateBuilder {
 
 MachineInstr*
 MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
-  MachineBasicBlock &MBB = *State.getMachineBasicBlock();
-
-  const TargetInstrDesc &TID = IsLastSlot ? TII.get(VTM::Terminator)
-                                          : TII.get(VTM::Control);
-  MachineInstrBuilder CtrlInst
-    = BuildMI(MBB, InsertPos, DebugLoc(), TID).addImm(Slot);
+  MachineInstrBuilder CtrlInst(&getStateCtrlAt(Slot));
 
   emitDeferredInsts();
 
   MachineInstrBuilder DPInst;
-  if (!IsLastSlot) {
-    DPInst
-      = BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
-  }
+  if (!IsLastSlot)
+    DPInst = MachineInstrBuilder(&getStateDatapathAt(Slot));
 
   for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
        E = SUnitsToEmit.end(); I !=E; ++I) {
