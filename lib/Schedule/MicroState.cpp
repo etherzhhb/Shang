@@ -185,7 +185,7 @@ void ucState::print(raw_ostream &OS) const {
 
   OS << '@' << getSlot() << '\n';
   for (ucState::iterator I = begin(), E = end(); I != E; ++I) {
-    (*I).print(OS);
+    (*I).print(OS.indent(2));
     OS << '\n';
   }
 }

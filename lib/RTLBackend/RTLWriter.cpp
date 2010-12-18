@@ -391,6 +391,7 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
+    CtrlS << "// Slot " << NextControl.getSlot() << '\n';
     emitCtrlOp(NextControl, NextStatePred);
   } while(I != E);
 
