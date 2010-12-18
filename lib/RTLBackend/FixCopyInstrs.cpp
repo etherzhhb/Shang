@@ -105,8 +105,26 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
       assert((!MO.isUse() || MO.getReg() != DstReg)
               && "Can not fuse instruction!");
       // Forward the wire value if necessary.
-      if (MO.isDef() && MO.getReg() == SrcReg)
-        SrcWire =Op->getWireNum();
+      if (MO.isDef() && MO.getReg() == SrcReg) {
+        MachineOperand &SrcOperand = Op.getOperand(1);
+        switch (SrcOperand.getType()) {
+        case MachineOperand::MO_Metadata: {
+          MetaToken ReadWire(SrcOperand.getMetadata());
+          assert(ReadWire.isReadWire() && "Bad operand!");
+          SrcWire = ReadWire.getWireNum();
+          break;
+        }
+        case MachineOperand::MO_Register: {
+          // TODO: Copy the operand.
+          assert(0 && "Forwarding register value not support yet!");
+          break;
+        }
+        // TODO: Immediate for SetI operation.
+        default:
+          assert(0 && "Unknown Operand type!");
+          break;
+        }
+      }
     }
   }
 
@@ -114,7 +132,8 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
   Copy.RemoveOperand(1);
   Copy.RemoveOperand(0);
   MachineInstrBuilder MIB(&*Ctrl);
-  MDNode *OpCode = MetaToken::createInstr(0, Copy, FuncUnitId().getData(), Context);
+  // Diry hack: Temporary use the slot of the micro state.
+  MDNode *OpCode = MetaToken::createInstr(Ctrl.getSlot(), VTM::COPY, Context);
   MIB.addMetadata(OpCode).addOperand(DstOp);
   if (SrcWire)
     MIB.addMetadata(MetaToken::createReadWire(SrcWire, Context));
