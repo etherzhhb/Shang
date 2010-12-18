@@ -146,8 +146,7 @@ class RTLWriter : public MachineFunctionPass {
   unsigned getOperandWitdh(MachineOperand &Operand);
 
   // Return true if the control operation contains a return operation.
-  bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
-                  const std::string &ucStatePred);
+  bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
 
   void emitOpArg(ucOp &VOpArg);
   void emitOpRetVal(ucOp &OpRetVal);
@@ -392,10 +391,7 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    std::string StateEnable = getucStateEnable(CurDatapath);
-    CtrlS.if_begin(StateEnable);
-    emitCtrlOp(NextControl, NextStatePred, StateEnable);
-    CtrlS.exit_block();
+    emitCtrlOp(NextControl, NextStatePred);
   } while(I != E);
 
   CtrlS << "// Next micro state.\n";
@@ -556,15 +552,49 @@ void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   CtrlS << ";\n";
 }
 
-bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap,
-                           const std::string &ucStatePred) {
+bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert((State->getOpcode() == VTM::Control
           // ToDo: sepreate terminator from control.
           || State->getOpcode() == VTM::Terminator)
         && "Bad ucState!");
   bool IsRet = false;
+  MachineBasicBlock *CurBB = State->getParent();
+  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
+
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
+    unsigned Slot = Op->getPredSlot();
+    bool isFirstSlot = (Slot == FuncInfo->getStartSlotFor(CurBB));
+    // Emit the control operation at the rising edge of the clock.
+    std::string SlotPred = getucStateEnable(CurBB, Slot - 1);
+
+    // Special case for state transferring operation.
+    if (Op.getOpCode() == VTM::VOpToState) {
+      assert(!isFirstSlot && "Can not transfer to other state at first slot!");
+      MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
+      raw_string_ostream ss(SlotPred);
+      ss << " & ";
+      emitOperand(ss, Op.getOperand(0));
+      ss.flush();
+      // Emit control operation for next state.
+      CtrlS.if_begin(SlotPred);
+      if (TargetBB == CurBB) { // Self loop detected.
+        CtrlS << "// Loop back to entry.\n";
+        emitFirstCtrlState(TargetBB);
+      } else // Transfer to other state.
+        emitNextFSMState(CtrlS, TargetBB);
+
+      CtrlS.exit_block();
+      PredMap.insert(std::make_pair(TargetBB, SlotPred));
+      continue;
+    }
+
+    // Predicate the control logic by slot predicate.
+    // First slot is always predicated by state transferring condition,
+    // so we do not need to predicate it again.
+    if (!isFirstSlot)
+      CtrlS.if_begin(SlotPred);
+
     // Emit the operations.
     switch (Op.getOpCode()) {
     case VTM::VOpArg:       emitOpArg(Op);                break;
@@ -574,29 +604,10 @@ bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
     case VTM::VOpSetRI:
     case VTM::COPY:         emitOpCopy(Op);               break;
-    case VTM::VOpToState:{
-      MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
-      vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-      std::string Pred;
-      raw_string_ostream ss(Pred);
-      emitOperand(ss, Op.getOperand(0));
-      ss.flush();
-      // Emit control operation for next state.
-      CtrlS.if_begin(Pred);
-      if (TargetBB == State->getParent()) { // Self loop detected.
-        CtrlS << "// Loop back to entry.\n";
-        emitFirstCtrlState(TargetBB);
-      } else // Transfer to other state.
-        emitNextFSMState(CtrlS, TargetBB);
-
-      CtrlS.exit_block();
-      // Remember the predicate
-      Pred += " & " + ucStatePred;
-      PredMap.insert(std::make_pair(TargetBB, Pred));
-      break;
-    }
     default:  assert(0 && "Unexpected opcode!");          break;
     }
+
+    if(!isFirstSlot)  CtrlS.exit_block();
   }
   return IsRet;
 }
@@ -606,7 +617,7 @@ void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   ucState FirstState = *MBB->getFirstNonPHI();
   assert(FuncInfo->getStartSlotFor(MBB) == FirstState.getSlot());
   PredMapTy dummy;
-  emitCtrlOp(FirstState, dummy, "bad-pred");
+  emitCtrlOp(FirstState, dummy);
   assert(dummy.empty() && "Can not loop back at first state!");
 }
 
