@@ -116,9 +116,9 @@ def VOpRetVal : CtrlInst<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
-// Set the value of a register.
-def VOpSetRI : DPTvaInst<(outs dyn_rc:$dst), (ins i64imm:$src),
-						              "$dst <= $src", []>;
+// Assign a constant value to a register.
+def VOpSetRI : CtrlInst<(outs dyn_rc:$dst), (ins i64imm:$src),
+						             "$dst <= $src", [], 0, 1>;
 
 // Bitwise logic operation.
 let isCommutable       = 1 in

@@ -130,8 +130,6 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitDatapath(ucState &State);
 
-  void emitOpSetRI(ucOp &OpSetRI);
-
   void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
@@ -575,6 +573,7 @@ bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemAccess: emitOpMemAccess(Op);          break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
+    case VTM::VOpSetRI:
     case VTM::COPY:         emitOpCopy(Op);               break;
     case MetaToken::tokenLatchWire:
       emitOpLatchWire(Op);
@@ -761,7 +760,6 @@ void RTLWriter::emitDatapath(ucState &State) {
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
 
-    case VTM::VOpSetRI:     emitOpSetRI(Op);        break;
     case VTM::VOpAdd:       emitOpAdd(Op);          break;
 
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
@@ -781,15 +779,6 @@ void RTLWriter::emitDatapath(ucState &State) {
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   } 
-}
-
-void RTLWriter::emitOpSetRI(ucOp &OpSetRI) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  emitOperand(OS, OpSetRI.getOperand(0));
-  OS << " = ";
-  emitOperand(OS, OpSetRI.getOperand(1));
-  OS << ";\n";
 }
 
 void RTLWriter::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
