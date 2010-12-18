@@ -36,7 +36,7 @@ struct MicroStateBuilder {
   MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
   void operator=(const MicroStateBuilder&); // DO NOT IMPLEMENT
 
-  VSchedGraph &State;
+  const VSchedGraph &State;
   MachineBasicBlock &MBB;
   MachineBasicBlock::iterator InsertPos;
 
@@ -107,18 +107,32 @@ struct MicroStateBuilder {
   }
 
   unsigned computeStateIdx(unsigned Slot) {
-    return Slot -  State.getStartSlot();
+    // FIXME: perform the modulo only if the BB is pipelined.
+    return (Slot -  State.getStartSlot()) % State.getII();
   }
 
   MachineInstr &getStateCtrlAt(unsigned Slot) {
     unsigned Idx = computeStateIdx(Slot);
+    bool IsTerm = false;
+    // Move the entry of non-first stage to the last slot, so
+    // Stage 0: Entry,    state1,        ... state(II - 1),
+    // Stage 1: stateII,  state(II + 1), ... state(2II - 1),
+    // Stage 2: state2II,  state(2II + 1), ... state(3II - 1),
+    // become:
+    // Stage 0: Entry,    state1,        ... state(II - 1),   stateII,
+    // Stage 1:           state(II + 1), ... state(2II - 1),  state2II,
+    // Stage 2:           state(2II + 1), ... state(3II - 1),
+    if (Idx == 0 && Slot >= State.getLoopOpSlot()) {
+      Idx = State.getII();
+      IsTerm = true;
+    }
+
     // Retrieve the instruction at specific slot. 
     MachineInstr *&Ret = StateCtrls[Idx];
     if (Ret) return *Ret;
     // Create the instruction if it is not created yet.
-    const TargetInstrDesc &TID = (Idx == State.getII()) ?
-                                  TII.get(VTM::Terminator)
-                                : TII.get(VTM::Control);
+    const TargetInstrDesc &TID = IsTerm ? TII.get(VTM::Terminator)
+                                        : TII.get(VTM::Control);
 
     Ret = (MachineInstr*)BuildMI(MBB, InsertPos, DebugLoc(), TID).addImm(Slot);
     return *Ret;
