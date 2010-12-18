@@ -100,7 +100,7 @@ struct MicroStateBuilder {
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
   DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
-  StateCtrls(State.getTotalSlot() + 1), StateDatapaths(State.getTotalSlot()) {}
+  StateCtrls(State.getII() + 1), StateDatapaths(State.getII()) {}
 
   DefVector &getDefsToEmitAt(unsigned Slot) {
     return DefToEmit[Slot - State.getStartSlot()];
@@ -116,7 +116,7 @@ struct MicroStateBuilder {
     MachineInstr *&Ret = StateCtrls[Idx];
     if (Ret) return *Ret;
     // Create the instruction if it is not created yet.
-    const TargetInstrDesc &TID = (Idx == State.getTotalSlot()) ?
+    const TargetInstrDesc &TID = (Idx == State.getII()) ?
                                   TII.get(VTM::Terminator)
                                 : TII.get(VTM::Control);
 
@@ -145,7 +145,7 @@ struct MicroStateBuilder {
   void defereSUnit(VSUnit *A) { DeferredSUnits.push_back(A); }
 
   // Main state building function.
-  MachineInstr *buildMicroState(unsigned Slot, bool IsLastSlot = false);
+  MachineInstr *buildMicroState(unsigned Slot);
 
   void emitDeferredInsts() {
     // Emit the  deferred atoms before data path need it.
@@ -157,21 +157,23 @@ struct MicroStateBuilder {
     }
   }
 
-  void fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot);
+  void fuseInstr(MachineInstr &Inst, VSUnit *A);
 
-  unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot,
-                         bool IsLastSlot = false) {
+  unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
+    assert(CurSlot <= State.getLoopOpSlot() && "Slot exceed the maximum slot!");
     
-    buildMicroState(CurSlot, IsLastSlot);
+    buildMicroState(CurSlot);
     SUnitsToEmit.clear();
-    
+    // Advance current slot.
+    ++CurSlot;
+
     // Some states may not emit any atoms, but it may read the result from
     // previous atoms.
     // Note that SUnitsToEmit is empty now, so we do not emitting any new
     // atoms.
-    while (++CurSlot != TargetSlot && !IsLastSlot)
-      buildMicroState(CurSlot);
+    while (CurSlot < TargetSlot && CurSlot < State.getLoopOpSlot())
+      buildMicroState(CurSlot++);
 
     return CurSlot;
   }
@@ -190,19 +192,19 @@ struct MicroStateBuilder {
 //===----------------------------------------------------------------------===//
 
 MachineInstr*
-MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
+MicroStateBuilder::buildMicroState(unsigned Slot) {
   // Try to force create the state control and data path instruction, and
   // insert the instructions between them.
   MachineInstrBuilder CtrlInst(&getStateCtrlAt(Slot));
   emitDeferredInsts();
-  if (!IsLastSlot)  (void) getStateDatapathAt(Slot);
+  if (Slot < State.getLoopOpSlot())  (void) getStateDatapathAt(Slot);
 
   for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
        E = SUnitsToEmit.end(); I !=E; ++I) {
     VSUnit *A = *I;
     for (VSUnit::instr_iterator II = A->instr_begin(), IE = A->instr_end();
         II != IE; ++II)
-      fuseInstr(**II, A, IsLastSlot);
+      fuseInstr(**II, A);
   }
 
   DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
@@ -231,7 +233,7 @@ MicroStateBuilder::buildMicroState(unsigned Slot, bool IsLastSlot) {
   return 0;
 }
 
-void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A, bool IsLastSlot) {
+void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   VTFInfo VTID = Inst;
   MachineInstrBuilder Builder;
 
@@ -392,7 +394,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   }
   // Build last state.
   assert(!BTB.emitQueueEmpty() && "Expect atoms for last state!");
-  BTB.advanceToSlot(CurSlot, CurSlot + 1, true);
+  BTB.advanceToSlot(CurSlot, CurSlot + 1);
   // Remove all unused instructions.
   BTB.clearUp();
 
