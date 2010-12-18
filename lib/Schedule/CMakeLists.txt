@@ -6,6 +6,8 @@ add_llvm_library(VTMSchedule
   ForceDirectedScheduling.cpp
   MicroState.cpp
   VSUnit.cpp
+  ScheduleEmitter.cpp
+  RecurrenceFinder.cpp
   VPreRegAllocSched.cpp
   RegAllocOptimalSSA.cpp
 )
