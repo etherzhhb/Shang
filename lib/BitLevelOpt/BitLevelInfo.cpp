@@ -81,8 +81,8 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // We can not check these instructions at this moment.
   case VTM::Control:
   case VTM::Datapath:
-  case VTM::Terminator:
   // These intructions do not define anything.
+  case VTM::EndState:
   case VTM::VOpToState:
   case VTM::VOpRet:
   case VTM::VOpRetVal:

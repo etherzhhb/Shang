@@ -73,22 +73,23 @@ Pass *llvm::createFixCopyPass() {
   return new FixCopy();
 }
 
-static MachineInstr &findNextControl(MachineInstr &I) {
+static MachineInstr &findPrevControl(MachineInstr &I) {
   MachineBasicBlock *MBB = I.getParent();
   MachineBasicBlock::iterator It = I;
-  while (It != MBB->end()) {
-    ++It;
-    if (It->getOpcode() == VTM::Control
-        || It->getOpcode() ==VTM::Terminator)
+  assert(I.getPrevNode()->getOpcode() == VTM::EndState
+         && "Can not handle copy in the middle of the block!");
+  do {
+    --It;
+    if (It->getOpcode() == VTM::Control)
       return *It;
-  }
+  } while (It != MBB->begin());
 
   assert(0 && "Can not find next control!");
   return I;
 }
 
 void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
-  ucState Ctrl(findNextControl(Copy));
+  ucState Ctrl(findPrevControl(Copy));
 
   MachineOperand &SrcOp = Copy.getOperand(1),
                  &DstOp = Copy.getOperand(0);
@@ -158,12 +159,13 @@ void FixCopy::runOnMachineBasicBlock(MachineBasicBlock &MBB,
     switch (Instr->getOpcode()) {
     case VTM::Control:
     case VTM::Datapath:
-    case VTM::Terminator:
       DEBUG(ucState(*Instr).dump());
       break;
     case VTM::COPY:
-      DEBUG(Instr->dump());
       Copys.push_back(Instr);
+      // fall through
+    case VTM::EndState:
+      DEBUG(Instr->dump());
       break;
     default:
       DEBUG(Instr->dump());
@@ -183,11 +185,13 @@ void FixCopy::runOnMachineBasicBlock(MachineBasicBlock &MBB,
       switch (Instr->getOpcode()) {
     case VTM::Control:
     case VTM::Datapath:
-    case VTM::Terminator:
       ucState(*Instr).dump();
       break;
+    case VTM::EndState:
+      Instr->dump();
+      break;
     default:
-      DEBUG(Instr->dump());
+      Instr->dump();
       assert(0 && "Unexpected instruction!");
       break;
       }

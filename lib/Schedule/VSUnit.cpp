@@ -56,11 +56,10 @@ void VSchedGraph::print(raw_ostream &OS) const {
     switch (Instr->getOpcode()) {
     case VTM::Control:
     case VTM::Datapath:
-    case VTM::Terminator:
       ucState(*Instr).print(OS);
       break;
     default:
-      OS << "Machine Instr: ";
+      OS << "MI: ";
       Instr->print(OS);
       break;
     }

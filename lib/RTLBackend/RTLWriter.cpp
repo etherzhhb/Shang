@@ -381,11 +381,11 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   // Case begin
   CtrlS.match_case(StateName);
 
-  MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
+  MachineBasicBlock::iterator I = next(MBB.getFirstNonPHI()),
                               E = MBB.getFirstTerminator();
   // FIXME: Refactor the loop.
   do {
-    ucState CurDatapath = *++I;
+    ucState CurDatapath = *I;
     // Emit the datepath of current state.
     emitDatapath(CurDatapath);
 
@@ -393,7 +393,7 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
     ucState NextControl = *++I;
     CtrlS << "// Slot " << NextControl.getSlot() << '\n';
     emitCtrlOp(NextControl, NextStatePred);
-  } while(I != E);
+  } while(++I != E);
 
   CtrlS << "// Next micro state.\n";
   PredMapTy::iterator at = NextStatePred.find(&MBB);
@@ -554,10 +554,7 @@ void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
 }
 
 bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
-  assert((State->getOpcode() == VTM::Control
-          // ToDo: sepreate terminator from control.
-          || State->getOpcode() == VTM::Terminator)
-        && "Bad ucState!");
+  assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();

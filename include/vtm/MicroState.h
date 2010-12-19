@@ -222,8 +222,7 @@ class ucState {
 public:
   /*implicit*/ ucState(const MachineInstr &MI) : Instr(MI) {
     assert((MI.getOpcode() == VTM::Control
-            || MI.getOpcode() == VTM::Datapath
-            || MI.getOpcode() == VTM::Terminator)
+            || MI.getOpcode() == VTM::Datapath)
            && "Bad Instr!");
   }
 

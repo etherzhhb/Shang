@@ -186,7 +186,5 @@ def Datapath : DPTvaInst<(outs variable_ops),
 		     	               (ins i32imm:$slot, variable_ops),
 						             "datapath;", []>;
 let	isTerminator = 1 in
-def Terminator : DPTvaInst<(outs variable_ops),
-		     	               (ins i32imm:$slot, variable_ops),
-						             "Terminator;", []>;
+def EndState : DPTvaInst<(outs),(ins), "End state;", []>;
 }

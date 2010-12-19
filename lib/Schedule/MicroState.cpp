@@ -169,18 +169,9 @@ MDNode *MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
 
 void ucState::print(raw_ostream &OS) const {
   switch (Instr.getOpcode()) {
-  case VTM::Control:
-    OS << "Control ";
-    break;
-  case VTM::Datapath:
-    OS << "Datapath ";
-    break;
-  case VTM::Terminator:
-    OS << "Terminator ";
-    break;
-  default:
-    assert(0 && "Bad opcode!");
-    return;
+  case VTM::Control:  OS << "Control ";   break;
+  case VTM::Datapath: OS << "Datapath ";  break;
+  default:  assert(0 && "Bad opcode!");   break;
   }
 
   OS << '@' << getSlot() << '\n';

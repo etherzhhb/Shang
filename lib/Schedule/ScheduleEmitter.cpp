@@ -25,6 +25,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineSSAUpdater.h"
 #include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #define DEBUG_TYPE "vtm-schedule-emitter"
 #include "llvm/Support/Debug.h"
@@ -126,15 +127,12 @@ struct MicroStateBuilder {
 
   MachineInstr &getStateCtrlAt(unsigned Slot) {
     unsigned Idx = getModuloSlot(Slot, true);
-    bool IsTerm = (Idx == State.getII());
     // Retrieve the instruction at specific slot. 
     MachineInstr *&Ret = StateCtrls[Idx];
     if (Ret) return *Ret;
     // Create the instruction if it is not created yet.
-    const TargetInstrDesc &TID = IsTerm ? TII.get(VTM::Terminator)
-                                        : TII.get(VTM::Control);
-
-    Ret = (MachineInstr*)BuildMI(MBB, InsertPos, DebugLoc(), TID).addImm(Slot);
+    Ret = (MachineInstr*)
+      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control)).addImm(Slot);
     return *Ret;
   }
 
@@ -200,7 +198,6 @@ struct MicroStateBuilder {
       InstsToDel.pop_back();
     }
   }
-
 };
 }
 
@@ -258,7 +255,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   MDNode *OpCode = MetaToken::createInstr(A->getSlot(), Inst, A->getFUId(),
                                           VMContext);
   MachineOperand OpCMD = MachineOperand::CreateMetadata(OpCode);   
-  OperandVector Ops(Inst.getNumOperands(), OpCMD);
+  OperandVector Ops(Inst.getNumOperands() + 1, OpCMD);
 
   // Remove all operand of Instr.
   while (Inst.getNumOperands() != 0) {
@@ -299,7 +296,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     // Remember the defines.
     if (MO.isDef() && EmitSlot != WriteSlot) {
       ++WireNum;
-      WireDef WDef = createWireDef(WireNum, A, MO, i, EmitSlot, WriteSlot);
+      WireDef WDef = createWireDef(WireNum, A, MO, i - 1, EmitSlot, WriteSlot);
 
       SWDMapTy::iterator mapIt;
       bool inserted;
@@ -406,13 +403,14 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       // The register to hold initialize value.
       unsigned InitReg = MRI.createVirtualRegister(RC);
       // Get the insert position.
-      MachineInstr *PredTerm = PredBB->getFirstTerminator();
-      assert(PredTerm->getOpcode() == VTM::Terminator
+      MachineInstr *PredCtrl = prior(PredBB->getFirstTerminator());
+      assert(PredCtrl->getOpcode() == VTM::Control
              && "Predblock not scheduled yet!");
-      MachineInstrBuilder SetIBuilder(PredBB->getFirstTerminator());
+      MachineInstrBuilder SetIBuilder(PredCtrl);
 
       // Compute the corresponding slot predicate.
-      unsigned EndSlot = VFI.getStartSlotFor(PredBB) + VFI.getTotalSlotFor(PredBB);
+      unsigned EndSlot = VFI.getStartSlotFor(PredBB)
+                         + VFI.getTotalSlotFor(PredBB);
       // Add the instruction token.
       MDNode *InstrNode
         = MetaToken::createInstr(EndSlot, TII.get(VTM::VOpSetRI), VMContext);
@@ -492,6 +490,8 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   BTB.advanceToSlot(CurSlot, CurSlot + 1);
   // Remove all unused instructions.
   BTB.clearUp();
+  // Build the dummy terminator.
+  BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState));
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());
