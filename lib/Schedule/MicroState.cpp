@@ -125,7 +125,7 @@ MachineInstr::mop_iterator ucOpIterator::getNextIt() const {
 }
 
 static Constant *createPredSlot(LLVMContext &Context, unsigned PredSlot) {
-  return ConstantInt::get(Type::getInt8Ty(Context), PredSlot);
+  return ConstantInt::get(Type::getInt32Ty(Context), PredSlot);
 }
 
 static Constant *createTagConstant(unsigned TAG, LLVMContext &Context) {

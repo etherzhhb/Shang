@@ -137,8 +137,8 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
   Copy.RemoveOperand(0);
   MachineInstrBuilder MIB(&*Ctrl);
   // Diry hack: Temporary use the slot of the micro state.
-  MDNode *OpCode
-    = MetaToken::createInstr(Ctrl.getSlot(), TII->get(VTM::COPY), Context);
+  MDNode *OpCode = MetaToken::createInstr(MetaToken::GeneralSlot,
+                                          TII->get(VTM::COPY), Context);
   MIB.addMetadata(OpCode).addOperand(DstOp);
   if (SrcWire)
     MIB.addMetadata(MetaToken::createReadWire(SrcWire, Context));

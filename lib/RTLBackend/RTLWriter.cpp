@@ -557,14 +557,30 @@ bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
+  unsigned startSlot = FuncInfo->getStartSlotFor(CurBB),
+           totalSlot = FuncInfo->getTotalSlotFor(CurBB),
+           IISlot    = FuncInfo->getIISlotFor(CurBB);
+  unsigned endSlot = startSlot + totalSlot,
+           II = IISlot - startSlot;
+
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  std::string GenSlotPred = "1'b0";
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     unsigned Slot = Op->getPredSlot();
-    bool isFirstSlot = (Slot == FuncInfo->getStartSlotFor(CurBB));
+    bool isFirstSlot = (Slot == startSlot);
     // Emit the control operation at the rising edge of the clock.
-    std::string SlotPred = getucStateEnable(CurBB, Slot - 1);
+    std::string SlotPred;
+    if (Slot == MetaToken::GeneralSlot) {
+      if (GenSlotPred.length() == 4) { // Build the general slot if necessary.
+        for (unsigned i = State.getSlot(), e = endSlot; i <= e; i += II)
+          GenSlotPred += " | " + getucStateEnable(CurBB, i - 1);
+        GenSlotPred += " /*General Slot*/";
+      }
+      SlotPred = GenSlotPred;
+    } else
+      SlotPred = getucStateEnable(CurBB, Slot - 1);
 
     // Special case for state transferring operation.
     if (Op.getOpCode() == VTM::VOpToState) {

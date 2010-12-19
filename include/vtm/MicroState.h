@@ -108,6 +108,7 @@ public:
     return createInstr(PredSlot, Instr.getDesc(), Context, FUId);
   }
 
+  static const unsigned GeneralSlot = 0;
   static MDNode *createInstr(unsigned PredSlot, const TargetInstrDesc &TID,
                              LLVMContext &Context,
                              FuncUnitId FUId = VFUs::Trivial);
