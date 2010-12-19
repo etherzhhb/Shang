@@ -395,8 +395,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     SSAUpdate.AddAvailableValue(&MBB, RegNo);
 
     // 1. add an initialize value.
-    for (MachineBasicBlock::pred_iterator I = MBB.pred_begin(), E = MBB.pred_end();
-        I != E; ++I) {
+    for (MachineBasicBlock::pred_iterator I = MBB.pred_begin(),
+        E = MBB.pred_end();I != E; ++I) {
       MachineBasicBlock *PredBB = *I;
       if (PredBB == &MBB) continue;
 
@@ -412,14 +412,13 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       unsigned EndSlot = VFI.getStartSlotFor(PredBB)
                          + VFI.getTotalSlotFor(PredBB);
       // Add the instruction token.
-      MDNode *InstrNode
-        = MetaToken::createInstr(EndSlot, TII.get(VTM::VOpSetRI), VMContext);
+      MDNode *InstrNode =
+        MetaToken::createInstr(EndSlot, TII.get(VTM::IMPLICIT_DEF), VMContext);
       SetIBuilder.addMetadata(InstrNode);
       // Build the register operand.
       MachineOperand DstReg = MachineOperand::CreateReg(InitReg, true);
       BLI.updateBitWidth(DstReg, SizeInBits);
       SetIBuilder.addOperand(DstReg);
-      SetIBuilder.addImm(0, SizeInBits);
       SSAUpdate.AddAvailableValue(PredBB, InitReg);
     }
 
