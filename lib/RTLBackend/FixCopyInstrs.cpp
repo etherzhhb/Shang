@@ -76,7 +76,7 @@ Pass *llvm::createFixCopyPass() {
 static MachineInstr &findPrevControl(MachineInstr &I) {
   MachineBasicBlock *MBB = I.getParent();
   MachineBasicBlock::iterator It = I;
-  assert(I.getPrevNode()->getOpcode() == VTM::EndState
+  assert(I.getNextNode()->getOpcode() == VTM::EndState
          && "Can not handle copy in the middle of the block!");
   do {
     --It;
@@ -84,7 +84,7 @@ static MachineInstr &findPrevControl(MachineInstr &I) {
       return *It;
   } while (It != MBB->begin());
 
-  assert(0 && "Can not find next control!");
+  assert(0 && "Can not find prior control!");
   return I;
 }
 
