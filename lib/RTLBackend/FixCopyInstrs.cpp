@@ -106,7 +106,7 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
       MachineOperand &MO = *MI;
       if (!MO.isReg()) continue;
       // TODO: Overcome this!
-      assert((!MO.isUse() || MO.getReg() != DstReg)
+      assert((!MO.isUse() || MO.getReg() != DstReg || MO.isKill())
               && "Can not fuse instruction!");
       // Forward the wire value if necessary.
       if (MO.isDef() && MO.getReg() == SrcReg) {
