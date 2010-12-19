@@ -234,8 +234,12 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
   if (getBitWidth() > 1)
     OS << "[" << (getBitWidth() - 1) << ":0]";
 
-  OS << ' ' << getName()
-     << " = " << verilogConstToStr(InitVal, getBitWidth(), false) << ';';
+  OS << ' ' << getName();
+
+  if (isInput())  
+    OS << " = " << verilogConstToStr(InitVal, getBitWidth(), false);
+  
+  OS << ';';
 }
 
 void VASTSignal::print(raw_ostream &OS) const {
