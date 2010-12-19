@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineSSAUpdater.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Support/raw_ostream.h"
 #define DEBUG_TYPE "vtm-schedule-emitter"
@@ -54,21 +55,21 @@ struct MicroStateBuilder {
   struct WireDef {
     unsigned WireNum;
     const char *SymbolName;
-    MachineOperand *Op;
+    MachineOperand Op;
     unsigned EmitSlot;
     unsigned WriteSlot;
 
-    WireDef(unsigned wireNum, const char *Symbol, MachineOperand *op,
+    WireDef(unsigned wireNum, const char *Symbol, MachineOperand op,
             unsigned emitSlot, unsigned writeSlot)
       : WireNum(wireNum), SymbolName(Symbol), Op(op), EmitSlot(emitSlot),
       WriteSlot(writeSlot) {}
 
     bool isSymbol() const { return SymbolName != 0; }
     
-    MachineOperand *getOperand() const { return Op; }
+    MachineOperand getOperand() const { return Op; }
   };
 
-  inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand *MO,
+  inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand MO,
                                unsigned OpNum, unsigned emitSlot,
                                unsigned writeSlot){
     const char *Symbol = 0;
@@ -95,7 +96,7 @@ struct MicroStateBuilder {
   MicroStateBuilder(VSchedGraph &S, LLVMContext& Context, const VTargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  WireNum(MBB.getNumber()),
+  WireNum(0),
   VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
@@ -106,14 +107,9 @@ struct MicroStateBuilder {
     return DefToEmit[Slot - State.getStartSlot()];
   }
 
-  unsigned computeStateIdx(unsigned Slot) {
+  unsigned getModuloSlot(unsigned Slot, bool IsControl) {
     // FIXME: perform the modulo only if the BB is pipelined.
-    return (Slot -  State.getStartSlot()) % State.getII();
-  }
-
-  MachineInstr &getStateCtrlAt(unsigned Slot) {
-    unsigned Idx = computeStateIdx(Slot);
-    bool IsTerm = false;
+    unsigned Idx = (Slot -  State.getStartSlot()) % State.getII();
     // Move the entry of non-first stage to the last slot, so
     // Stage 0: Entry,    state1,        ... state(II - 1),
     // Stage 1: stateII,  state(II + 1), ... state(2II - 1),
@@ -122,11 +118,15 @@ struct MicroStateBuilder {
     // Stage 0: Entry,    state1,        ... state(II - 1),   stateII,
     // Stage 1:           state(II + 1), ... state(2II - 1),  state2II,
     // Stage 2:           state(2II + 1), ... state(3II - 1),
-    if (Idx == 0 && Slot >= State.getLoopOpSlot()) {
+    if (IsControl && Idx == 0 && Slot >= State.getLoopOpSlot())
       Idx = State.getII();
-      IsTerm = true;
-    }
 
+    return Idx;
+  }
+
+  MachineInstr &getStateCtrlAt(unsigned Slot) {
+    unsigned Idx = getModuloSlot(Slot, true);
+    bool IsTerm = (Idx == State.getII());
     // Retrieve the instruction at specific slot. 
     MachineInstr *&Ret = StateCtrls[Idx];
     if (Ret) return *Ret;
@@ -139,7 +139,7 @@ struct MicroStateBuilder {
   }
 
   MachineInstr &getStateDatapathAt(unsigned Slot) {
-    unsigned Idx = computeStateIdx(Slot);
+    unsigned Idx = getModuloSlot(Slot, false);
     // Retrieve the instruction at specific slot.
     MachineInstr *&Ret = StateDatapaths[Idx];
     if (Ret) return *Ret;
@@ -173,10 +173,11 @@ struct MicroStateBuilder {
 
   void fuseInstr(MachineInstr &Inst, VSUnit *A);
 
+  MachineOperand getRegUseOperand(WireDef &WD, unsigned EmitSlot, bool IsCtrl,
+                                  MachineOperand MO);
+
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
-    assert(CurSlot <= State.getLoopOpSlot() && "Slot exceed the maximum slot!");
-    
     buildMicroState(CurSlot);
     SUnitsToEmit.clear();
     // Advance current slot.
@@ -186,7 +187,7 @@ struct MicroStateBuilder {
     // previous atoms.
     // Note that SUnitsToEmit is empty now, so we do not emitting any new
     // atoms.
-    while (CurSlot < TargetSlot && CurSlot < State.getLoopOpSlot())
+    while (CurSlot < TargetSlot && CurSlot < State.getEndSlot())
       buildMicroState(CurSlot++);
 
     return CurSlot;
@@ -205,8 +206,7 @@ struct MicroStateBuilder {
 
 //===----------------------------------------------------------------------===//
 
-MachineInstr*
-MicroStateBuilder::buildMicroState(unsigned Slot) {
+MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
   // Try to force create the state control and data path instruction, and
   // insert the instructions between them.
   MachineInstrBuilder CtrlInst(&getStateCtrlAt(Slot));
@@ -227,11 +227,11 @@ MicroStateBuilder::buildMicroState(unsigned Slot) {
        I != E;) {
     WireDef *WD = *I;
 
-    MachineOperand *MO = WD->getOperand();
+    MachineOperand MO = WD->getOperand();
 
     // This operand will delete with its origin instruction.
     // Eliminate the dead register.
-    if (MRI.use_empty(MO->getReg())) {
+    if (MRI.use_empty(MO.getReg())) {
       I = DefsAtSlot.erase(I);
       E = DefsAtSlot.end();
       continue;
@@ -240,7 +240,8 @@ MicroStateBuilder::buildMicroState(unsigned Slot) {
     // Export the register.
     CtrlInst.addMetadata(MetaToken::createInstr(Slot, TII.get(VTM::COPY),
                                                 VMContext));
-    CtrlInst.addOperand(*MO);
+    MO.setIsDef();
+    CtrlInst.addOperand(MO);
     CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum, VMContext));
     ++I;
   }
@@ -250,25 +251,21 @@ MicroStateBuilder::buildMicroState(unsigned Slot) {
 
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   VTFInfo VTID = Inst;
-  MachineInstrBuilder Builder;
+  bool IsCtrl = !VTID.hasDatapath();
 
-  if (VTID.hasDatapath())
-    Builder = MachineInstrBuilder(&getStateDatapathAt(A->getSlot()));
-  else
-    Builder = MachineInstrBuilder(&getStateCtrlAt(A->getSlot()));
-
+  typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
-  Builder.addMetadata(MetaToken::createInstr(A->getSlot(), Inst, A->getFUId(),
-                                             VMContext));
-  typedef SmallVector<MachineOperand*, 8> OperandVector;
-  OperandVector Ops(Inst.getNumOperands());
+  MDNode *OpCode = MetaToken::createInstr(A->getSlot(), Inst, A->getFUId(),
+                                          VMContext);
+  MachineOperand OpCMD = MachineOperand::CreateMetadata(OpCode);   
+  OperandVector Ops(Inst.getNumOperands(), OpCMD);
 
   // Remove all operand of Instr.
   while (Inst.getNumOperands() != 0) {
     unsigned i = Inst.getNumOperands() - 1;
-    MachineOperand *MO = &Inst.getOperand(i);
+    MachineOperand &MO = Inst.getOperand(i);
     Inst.RemoveOperand(i);
-    Ops[i] = MO;
+    Ops[i + 1] = MO;
   }
 
   unsigned EmitSlot = A->getSlot(),
@@ -291,19 +288,16 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
   DefVector &Defs = getDefsToEmitAt(WriteSlot);
 
+  for (unsigned i = 1, e = Ops.size(); i != e; ++i) {
+    MachineOperand &MO = Ops[i];
 
-  for (unsigned i = 0, e = Ops.size(); i != e; ++i) {
-    MachineOperand *MO = Ops[i];
-
-    if (!MO->isReg() || !MO->getReg()) {
-      Builder.addOperand(*MO);
+    if (!MO.isReg() || !MO.getReg())
       continue;
-    }
 
-    unsigned RegNo = MO->getReg();
+    unsigned RegNo = MO.getReg();
 
     // Remember the defines.
-    if (MO->isDef() && EmitSlot != WriteSlot) {
+    if (MO.isDef() && EmitSlot != WriteSlot) {
       ++WireNum;
       WireDef WDef = createWireDef(WireNum, A, MO, i, EmitSlot, WriteSlot);
 
@@ -314,13 +308,13 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       assert(inserted && "Instructions not in SSA form!");
       WireDef *NewDef = &mapIt->second;
 
-      unsigned BitWidth = BLI.getBitWidth(*MO);
+      unsigned BitWidth = BLI.getBitWidth(MO);
 
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
       // if (!NewDef->isSymbol()) {
         MDNode *WireDefOp = MetaToken::createDefWire(WireNum, BitWidth, VMContext);
-        Builder.addMetadata(WireDefOp);
+        Ops[i] = MachineOperand::CreateMetadata(WireDefOp);
         // Remember to emit this wire define if necessary.
         Defs.push_back(NewDef);
       // }
@@ -329,9 +323,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     // Else this is a use.
     SWDMapTy::iterator at = StateWireDefs.find(RegNo);
-    // Using regster from previous state.
+    // Using register from previous state.
     if (at == StateWireDefs.end()) {
-      Builder.addOperand(*MO);
+      // Do not need to worry about if the new loop overwrite the the loop
+      // invariants.
       continue;
     }
 
@@ -339,20 +334,105 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     // We need the value after it is written to register.
     if (WDef.WriteSlot < ReadSlot) {
-      Builder.addOperand(*MO);
+      assert((VTID.hasDatapath() && ReadSlot == EmitSlot + 1)
+              || (!VTID.hasDatapath() && ReadSlot == EmitSlot)
+              && "Assumption of Slots broken!");
+      Ops[i] = getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
       continue;
     }
 
     assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
 
     if (WDef.isSymbol())
-      Builder.addExternalSymbol(WDef.SymbolName);
-    else
-      Builder.addMetadata(MetaToken::createReadWire(WDef.WireNum, VMContext));
+      Ops[i] = MachineOperand::CreateES(WDef.SymbolName);
+    else {
+      MDNode *ReadWire = MetaToken::createReadWire(WDef.WireNum, VMContext);
+      Ops[i] = MachineOperand::CreateMetadata(ReadWire);
+    }
   }
+
+  MachineInstrBuilder Builder;
+
+  if (IsCtrl)
+    Builder = MachineInstrBuilder(&getStateCtrlAt(A->getSlot()));
+  else
+    Builder = MachineInstrBuilder(&getStateDatapathAt(A->getSlot()));
+
+  for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
+    Builder.addOperand(*I);
 
   // Remove this instruction since they are fused to uc state.
   InstsToDel.push_back(&Inst);
+}
+
+MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlot,
+                                                   bool IsCtrl, MachineOperand MO) {
+  unsigned RegNo = WD.getOperand().getReg();
+  unsigned SizeInBits = BLI.getBitWidth(MO);
+  const TargetRegisterClass *RC = MRI.getRegClass(RegNo);
+
+  // Move the value to a new register otherwise the it will be overwritten.
+  while (EmitSlot - WD.WriteSlot > State.getII()) {
+    MachineInstr &Ctrl = getStateCtrlAt(WD.WriteSlot);
+    MachineInstrBuilder CopyBuilder(&Ctrl);
+    WD.WriteSlot += State.getII();
+    unsigned PipedReg = MRI.createVirtualRegister(RC);
+    MachineOperand Dst = MachineOperand::CreateReg(PipedReg, true);
+    BLI.updateBitWidth(Dst, SizeInBits);
+    MachineOperand Src = MachineOperand::CreateReg(RegNo, false);
+    BLI.updateBitWidth(Src, SizeInBits);
+    MDNode *InstrNode
+      = MetaToken::createInstr(WD.WriteSlot, TII.get(VTM::COPY), VMContext);
+    CopyBuilder.addMetadata(InstrNode).addOperand(Dst).addOperand(Src);
+    // Update the register.
+    RegNo = PipedReg;
+    WD.Op = MO = Dst;
+  }
+
+  // If read before write in machine code, insert a phi node.
+  if (getModuloSlot(EmitSlot, IsCtrl) < getModuloSlot(WD.WriteSlot, true)) {
+    // PHI node needed.
+    // TODO: Move to constructor?
+    MachineSSAUpdater SSAUpdate(*MBB.getParent());
+    SSAUpdate.Initialize(RegNo);
+    SSAUpdate.AddAvailableValue(&MBB, RegNo);
+
+    // 1. add an initialize value.
+    for (MachineBasicBlock::pred_iterator I = MBB.pred_begin(), E = MBB.pred_end();
+        I != E; ++I) {
+      MachineBasicBlock *PredBB = *I;
+      if (PredBB == &MBB) continue;
+
+      // The register to hold initialize value.
+      unsigned InitReg = MRI.createVirtualRegister(RC);
+      // Get the insert position.
+      MachineInstr *PredTerm = PredBB->getFirstTerminator();
+      assert(PredTerm->getOpcode() == VTM::Terminator
+             && "Predblock not scheduled yet!");
+      MachineInstrBuilder SetIBuilder(PredBB->getFirstTerminator());
+
+      // Compute the corresponding slot predicate.
+      unsigned EndSlot = VFI.getStartSlotFor(PredBB) + VFI.getTotalSlotFor(PredBB);
+      // Add the instruction token.
+      MDNode *InstrNode
+        = MetaToken::createInstr(EndSlot, TII.get(VTM::VOpSetRI), VMContext);
+      SetIBuilder.addMetadata(InstrNode);
+      // Build the register operand.
+      MachineOperand DstReg = MachineOperand::CreateReg(InitReg, true);
+      BLI.updateBitWidth(DstReg, SizeInBits);
+      SetIBuilder.addOperand(DstReg);
+      SetIBuilder.addImm(0, SizeInBits);
+      SSAUpdate.AddAvailableValue(PredBB, InitReg);
+    }
+
+    unsigned NewReg = SSAUpdate.GetValueInMiddleOfBlock(&MBB);
+    
+    MO = MachineOperand::CreateReg(NewReg, false);
+    BLI.updateBitWidth(MO, SizeInBits);
+  }
+
+  MO.setIsUse();
+  return MO;
 }
 
 static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
@@ -415,6 +495,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());
+  DEBUG(dbgs() << '\n');
 
   return MBB;
 }
