@@ -66,7 +66,7 @@ class RTLWriter : public MachineFunctionPass {
   VASTModule *VM;
   Mangler *Mang;
 
-  unsigned TotalFSMStatesBit, CurFSMStateNum;
+  unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
   SmallVector<const Argument*, 8> Arguments;
 
@@ -132,6 +132,11 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
+
+  // Emit a signal with "signed" modifier and return the name of signed signal.
+  std::string emitSignedOperand(MachineOperand &Op);
+
+  void emitOpSRA(ucOp &OpSRA);
 
   void emitOpAdd(ucOp &OpAdd);
 
@@ -224,6 +229,7 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
+  SignedWireNum = 0;
   // Reset the current fsm state number.
   CurFSMStateNum = 0;
 
@@ -780,7 +786,7 @@ void RTLWriter::emitDatapath(ucState &State) {
 
     case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
     // FIXME: Add signed modifier to the first operand.
-    case VTM::VOpSRA:       emitBinaryOp(Op, ">>>");break;
+    case VTM::VOpSRA:       emitOpSRA(Op);break;
 
     case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
 
@@ -810,6 +816,43 @@ void RTLWriter::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   emitOperand(OS, BinOp.getOperand(1));
   OS << ' ' << Operator << ' ';
   emitOperand(OS, BinOp.getOperand(2));
+  OS << ";\n";
+}
+
+std::string RTLWriter::emitSignedOperand(MachineOperand &Op) {
+  unsigned BitWidth = 0;
+  switch (Op.getType()) {
+  case MachineOperand::MO_Immediate:
+  case MachineOperand::MO_Register:
+    BitWidth = BLI->getBitWidth(Op);
+    break;
+  case MachineOperand::MO_Metadata: {
+    MetaToken MDOp(Op.getMetadata());
+    BitWidth = MDOp.getBitWidth();
+    break;
+  }
+  default:
+    assert(0 && "Can not compute bitwidth!");
+    break;
+  }
+  raw_ostream &OS = VM->getDataPathBuffer();
+  std::string WireName = "SignedWire" + utostr(SignedWireNum);
+  OS << "wire signed" << verilogBitRange(BitWidth) << ' ' << WireName << " = ";
+  emitOperand(OS, Op);
+  OS << ";\n";
+
+  ++SignedWireNum;
+  return WireName;
+}
+
+void RTLWriter::emitOpSRA(ucOp &OpSRA) {
+  std::string Op0 = emitSignedOperand(OpSRA.getOperand(1));
+
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  emitOperand(OS, OpSRA.getOperand(0));
+  OS << " = " << Op0 << " >>> ";
+  emitOperand(OS, OpSRA.getOperand(2));
   OS << ";\n";
 }
 
