@@ -145,12 +145,13 @@ MDNode *MetaToken::createInstr(unsigned PredSlot, const TargetInstrDesc &TID,
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
 
-MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum,
+MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum, unsigned BitWidth, 
                                          LLVMContext &Context) {
   assert(WireNum != 0 && "Bad wire number!");
   Value *Elts[] = {
     createTagConstant(MetaToken::tokenReadWire, Context),
-    ConstantInt::get(Type::getInt32Ty(Context), WireNum)
+    ConstantInt::get(Type::getInt32Ty(Context), WireNum),
+    ConstantInt::get(Type::getInt8Ty(Context), BitWidth)
   };
 
   return MDNode::get(Context, Elts, array_lengthof(Elts));

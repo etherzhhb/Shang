@@ -141,7 +141,8 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
                                           TII->get(VTM::COPY), Context);
   MIB.addMetadata(OpCode).addOperand(DstOp);
   if (SrcWire)
-    MIB.addMetadata(MetaToken::createReadWire(SrcWire, Context));
+    MIB.addMetadata(MetaToken::createReadWire(SrcWire, BLI->getBitWidth(SrcOp),
+                                              Context));
   else
     MIB.addOperand(SrcOp);
 

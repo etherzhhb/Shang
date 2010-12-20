@@ -72,7 +72,7 @@ public:
   }
 
   uint64_t getBitWidth() const {
-    assert(isDefWire() && "Bad token type!");
+    assert((isDefWire() || isReadWire()) && "Bad token type!");
     return getUInt64Field(2);
   }
 
@@ -101,7 +101,8 @@ public:
   static MDNode *createDefWire(uint64_t WireNum, unsigned BitWidth,
                                LLVMContext &Context);
 
-  static MDNode *createReadWire(uint64_t WireNum, LLVMContext &Context);
+  static MDNode *createReadWire(uint64_t WireNum, unsigned BitWidth,
+                                LLVMContext &Context);
 
   static MDNode *createInstr(unsigned PredSlot, const MachineInstr &Instr,
                              FuncUnitId FUId, LLVMContext &Context) {

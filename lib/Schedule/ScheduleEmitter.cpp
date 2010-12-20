@@ -239,7 +239,9 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
                                                 VMContext));
     MO.setIsDef();
     CtrlInst.addOperand(MO);
-    CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum, VMContext));
+    CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum,
+                                                   BLI.getBitWidth(MO),
+                                                   VMContext));
     ++I;
   }
 
@@ -343,7 +345,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     if (WDef.isSymbol())
       Ops[i] = MachineOperand::CreateES(WDef.SymbolName);
     else {
-      MDNode *ReadWire = MetaToken::createReadWire(WDef.WireNum, VMContext);
+      MDNode *ReadWire = MetaToken::createReadWire(WDef.WireNum, BLI.getBitWidth(MO),
+                                                   VMContext);
       Ops[i] = MachineOperand::CreateMetadata(ReadWire);
     }
   }
