@@ -19,11 +19,9 @@ class FUType<bits<3> val, InstrItinClass InstItin> {
 
 def FUTrivial	: FUType<0, IIC_Trivial>;
 def FUMemBus	: FUType<1, IIC_MemBus>;
-def FUSHL		: FUType<2, IIC_SHL>;
-def FUASR		: FUType<3, IIC_ASR>;
-def FULSR		: FUType<4, IIC_LSR>;
-def FUAddSub	: FUType<5, IIC_AddSub>;
-def FUMult		: FUType<6, IIC_Mult>;
+def FUSHIFT		: FUType<2, IIC_SHIFT>;
+def FUAddSub	: FUType<3, IIC_AddSub>;
+def FUMult		: FUType<4, IIC_Mult>;
 
 // Pseudo instructions
 class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,

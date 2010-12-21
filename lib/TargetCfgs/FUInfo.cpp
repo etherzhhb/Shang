@@ -31,7 +31,7 @@ void VFUDesc::print(raw_ostream &OS) const {
 namespace llvm {
   namespace VFUs {
    const char *VFUNames[] = {
-      "Trivial", "MemoryBus", "SHL", "ASR", "LSR", "AddSub", "Mult", "FSMFinish"
+      "Trivial", "MemoryBus", "Shift", "AddSub", "Mult", "FSMFinish"
     };
   }
 }

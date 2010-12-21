@@ -24,11 +24,9 @@ namespace VFUs {
   enum FUTypes {
     Trivial = 0,
     MemoryBus = 1,
-    SHL = 2,
-    ASR = 3,
-    LSR = 4,
-    AddSub = 5,
-    Mult = 6,
+    Shift = 2,
+    AddSub = 3,
+    Mult = 4,
 
     FirstFUType = Trivial,
     LastCommonFUType = Mult,
@@ -209,10 +207,7 @@ public:
 
 typedef VFUBinOpFUDesc<VFUs::Mult>    VFUMult;
 typedef VFUBinOpFUDesc<VFUs::AddSub>  VFUAddSub;
-typedef VFUBinOpFUDesc<VFUs::SHL>     VFUSHL;
-typedef VFUBinOpFUDesc<VFUs::ASR>     VFUASR;
-typedef VFUBinOpFUDesc<VFUs::LSR>     VFULSR;
-
+typedef VFUBinOpFUDesc<VFUs::Shift> VFUShift;
 class FUInfo {
   // DO NOT IMPLEMENT
   FUInfo(const FUInfo&);
