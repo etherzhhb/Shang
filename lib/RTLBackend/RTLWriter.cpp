@@ -387,7 +387,7 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   // Case begin
   CtrlS.match_case(StateName);
 
-  MachineBasicBlock::iterator I = next(MBB.getFirstNonPHI()),
+  MachineBasicBlock::iterator I = ++MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
   // FIXME: Refactor the loop.
   do {
