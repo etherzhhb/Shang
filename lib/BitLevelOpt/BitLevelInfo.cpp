@@ -164,6 +164,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   case VTM::VOpSetRI:
   case VTM::VOpNot:
   case VTM::VOpSRA:
+  case VTM::VOpSRL:
   case VTM::VOpSHL: {
     MachineOperand &Result = Instr->getOperand(0);
     unsigned Width = getBitWidth(Instr->getOperand(1));

@@ -162,6 +162,8 @@ def VOpAdd : FUInst<(outs dyn_rc:$dst, DR1:$co),
 
 def VOpSHL : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
                      "$dst = shl $src0, $src1", [], FUSHL>;
+def VOpSRL : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+                     "$dst = lsr $src0, $src1", [], FULSR>;
 
 def VOpSRA : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
                      "$dst = sra $src0, $src1", [], FUSHL>;
