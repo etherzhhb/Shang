@@ -356,5 +356,6 @@ unsigned VSchedGraph::computeRecMII() {
   SG.findAllCircuits();
   unsigned MaxRecII = SG.getRecMII();
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
-  return MaxRecII;
+  // Dirty Hack: RecII must bigger than zero.
+  return std::max(MaxRecII, 1u);
 }
