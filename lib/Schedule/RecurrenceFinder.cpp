@@ -188,9 +188,9 @@ void SubGraph::addRecurrence() {
     SubGraphNode *N = *I;
 
     const VSUnit *A = N->getSUnit();
-    TotalLatency += A->getLatency();
-    
     VDEdge *Edge = LastAtom->getEdgeFrom(A);
+
+    TotalLatency += Edge->getLatency();
     if (Edge->isBackEdge()) {
       //  assert(TotalDistance == 0 && "Multiple back edge?"); 
       DEBUG(dbgs() << "Backedge --> ");
