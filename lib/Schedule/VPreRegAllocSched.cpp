@@ -492,8 +492,9 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
   for (MachineBasicBlock::iterator I = CurBB->begin(), E = CurBB->getFirstNonPHI();
        I != E; ++I) {
     MachineInstr &PN = *I;
-    assert(PN.isPHI() && "IsSingleValuePHICycle expects a PHI instruction");
-    unsigned DstReg = PN.getOperand(0).getReg();
+    VSUnit *PhiSU = State.lookupSUnit(&PN);
+    assert(PN.isPHI() && "IsSingleValuePHICycle expects a PHI instruction!");
+    assert(PhiSU && "Can not find SUnit for PHI!");
 
     // Scan the PHI operands.
     for (unsigned i = 1; i != PN.getNumOperands(); i += 2) {
@@ -507,18 +508,9 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
       VSUnit *InSU = State.lookupSUnit(SrcMI);
       assert(InSU && "Where's the incoming value of the phi?");
 
-      // Transfer the dependence to the Users of this PHI node.
-      for (MachineRegisterInfo::use_iterator UI = MRI->use_begin(DstReg),
-           UE = MRI->use_end(); UI != UE; ++UI) {
-        MachineInstr &UseMI = *UI;
-        VSUnit *UseSU = State.lookupSUnit(&UseMI);
-        // Ignore self loop.
-        if (UseSU == InSU) continue;
-        
-        assert(UseSU && "Where's the use of the phi?");
-        UseSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &UseMI),
-                                    true, VDMemDep::AntiDep, 1));
-      }
+      // Insert anti-dependence edge.
+      PhiSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &PN),
+                                  true, VDMemDep::AntiDep, 1));
     }
   }
 }
