@@ -20,7 +20,6 @@
 
 #include "VSUnit.h"
 #include "ForceDirectedScheduling.h"
-//#include "MemDepAnalysis.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/VFuncInfo.h"
@@ -451,8 +450,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
 
       unsigned Reg = MO.getReg();
       
-      // TODO: assert Reg can not be physical register.
-      // It seems that sometimes the Register will be 0?
+     // It seems that sometimes the Register will be 0?
       if (!Reg) continue;
       assert(TargetRegisterInfo::isVirtualRegister(Reg)
              && "Unexpected physics register!");
