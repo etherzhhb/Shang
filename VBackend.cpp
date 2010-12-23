@@ -21,13 +21,13 @@
 #include "vtm/Passes.h"
 #include "vtm/VTargetMachine.h"
 
-
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Target/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetAsmInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineFunctionAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -137,7 +137,8 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Install a MachineModuleInfo class, which is an immutable pass that holds
   // all the per-module stuff we're generating, including MCContext.
-  MachineModuleInfo *MMI = new MachineModuleInfo(*getMCAsmInfo());
+  TargetAsmInfo *TAI = new TargetAsmInfo(*this);
+  MachineModuleInfo *MMI = new MachineModuleInfo(*getMCAsmInfo(), TAI);
   PM.add(MMI);
 
   // Set up a MachineFunction for the rest of CodeGen to work on.

@@ -30,6 +30,7 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/ValueTracking.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -288,8 +289,8 @@ VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
   // TODO: Use "getUnderlyingObject" implemented in ScheduleInstrs?
   // Get the underlying object directly, SCEV will take care of the
   // the offsets.
-  Value *SGPtr = SrcAddr->getUnderlyingObject(),
-        *DGPtr = DstAddr->getUnderlyingObject();
+  Value *SGPtr = GetUnderlyingObject(SrcAddr),
+        *DGPtr = GetUnderlyingObject(DstAddr);
 
   switch(AA->alias(SGPtr, SrcSize, DGPtr, DstSize)) {
   case AliasAnalysis::MustAlias:
@@ -486,6 +487,10 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
   VSUnit *SelfEnable = State.getLoopOp();
   assert(SelfEnable && "Not in loop?");
+  assert(SelfEnable != State.getExitRoot() && "Pipeline not enable!");
+  // Insert the dependences between successive iterations.
+  //VSUnit *Entry = State.getEntryRoot();
+  //Entry->addDep(getMemDepEdge(SelfEnable, 0, true, VDMemDep::AntiDep, 1));
 
   MachineBasicBlock *CurBB = State.getMachineBasicBlock();
   // For each phinode
