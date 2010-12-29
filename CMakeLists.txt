@@ -100,6 +100,7 @@ tablegen(VGenSubtarget.inc -gen-subtarget)
 
 add_llvm_target(VerilogBackend
   VBackend.cpp
+  VFrameInfo.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
   VInstrInfo.cpp
