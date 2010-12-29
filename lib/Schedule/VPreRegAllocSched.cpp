@@ -20,10 +20,10 @@
 
 #include "VSUnit.h"
 #include "ForceDirectedScheduling.h"
+
 #include "vtm/BitLevelInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/VFuncInfo.h"
-#include "vtm/VTargetMachine.h"
 #include "vtm/VTM.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -32,6 +32,7 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
 
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -57,7 +58,7 @@ namespace {
 /// @brief Schedule the operations.
 ///
 struct VPreRegAllocSched : public MachineFunctionPass {
-  const VTargetMachine &VTarget;
+  const TargetInstrInfo *TII;
   // The loop Info
   MachineRegisterInfo *MRI;
   VFuncInfo *FuncInfo;
@@ -74,9 +75,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
 
-
-  VPreRegAllocSched(const VTargetMachine &TM)
-    : MachineFunctionPass(ID), VTarget(TM), totalCycle(1) {}
+  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {}
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
@@ -200,8 +199,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 //===----------------------------------------------------------------------===//
 char VPreRegAllocSched::ID = 0;
 
-Pass *llvm::createVPreRegAllocSchedPass(const VTargetMachine &TM) {
-  return new VPreRegAllocSched(TM);
+Pass *llvm::createVPreRegAllocSchedPass() {
+  return new VPreRegAllocSched();
 }
 
 void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
@@ -217,6 +216,8 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
+  const TargetMachine &TM = MF.getTarget();
+  TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   FuncInfo = MF.getInfo<VFuncInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
@@ -229,7 +230,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
 
-    VSchedGraph State(VTarget, MBB, couldBePipelined(MBB), getTotalCycle());
+    VSchedGraph State(TM, MBB, couldBePipelined(MBB), getTotalCycle());
 
     buildState(State);
     DEBUG(State.viewGraph());
@@ -568,14 +569,12 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   if (State.getTerms().empty()) {
     MachineBasicBlock *MBB = State.getMachineBasicBlock();
     if (MBB->succ_size() == 0) { // We may meet an unreachable.
-      MachineInstr &Term = *BuildMI(MBB, DebugLoc(),
-                                    VTarget.getInstrInfo()->get(VTM::VOpRet));
+      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpRet));
       State.eatTerminator(VTFInfo(Term));
     } else {
       assert(MBB->succ_size() == 1 && "Expect fall through block!");
       // Create "VOpToState 1/*means always true*/, target mbb"
-      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), 
-                                    VTarget.getInstrInfo()->get(VTM::VOpToState))
+      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
         .addImm(1, 1).addMBB(*MBB->succ_begin());
       State.eatTerminator(VTFInfo(Term));
     }

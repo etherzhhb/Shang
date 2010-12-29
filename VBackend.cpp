@@ -18,8 +18,10 @@
 //   Perform register allocation with existing register allocation passes.
 //
 //===----------------------------------------------------------------------===//
+#include "VFrameInfo.h"
+#include "VTargetMachine.h"
+
 #include "vtm/Passes.h"
-#include "vtm/VTargetMachine.h"
 
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
@@ -57,8 +59,8 @@ VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
   Subtarget(TT, FS),
   TLInfo(*this),
   TSInfo(*this),
-  InstrInfo(DataLayout, TLInfo) {
-}
+  InstrInfo(DataLayout, TLInfo),
+  FrameInfo(Subtarget) {}
 
 bool VTargetMachine::addInstSelector(PassManagerBase &PM,
                                      CodeGenOpt::Level OptLevel) {
@@ -204,7 +206,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createScalarEvolutionAliasAnalysisPass());
 
   // Schedule
-  PM.add(createVPreRegAllocSchedPass(*this));
+  PM.add(createVPreRegAllocSchedPass());
 
   // Create physics register on demand.
   VRegisterInfo *VRI = const_cast<VRegisterInfo*>(getRegisterInfo());

@@ -25,7 +25,6 @@
 #include "vtm/PartitionInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
-#include "vtm/VTargetMachine.h"
 #include "vtm/BitLevelInfo.h"
 
 

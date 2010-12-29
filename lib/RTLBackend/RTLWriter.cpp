@@ -22,10 +22,10 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
-#include "vtm/VTargetMachine.h"
 #include "vtm/LangSteam.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/FileInfo.h"
+#include "vtm/VRegisterInfo.h"
 
 #include "llvm/Type.h"
 

@@ -16,7 +16,6 @@
 
 #include "vtm/VFuncInfo.h"
 #include "vtm/MicroState.h"
-#include "vtm/VTargetMachine.h"
 #include "vtm/BitLevelInfo.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -94,7 +93,8 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(VSchedGraph &S, LLVMContext& Context, const VTargetMachine &TM,
+  MicroStateBuilder(VSchedGraph &S, LLVMContext& Context,
+                    const TargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
   WireNum(0),

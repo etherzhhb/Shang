@@ -27,7 +27,6 @@ class raw_ostream;
 class TargetMachine;
 class PassRegistry;
 
-class VTargetMachine;
 struct VRegisterInfo;
 
 Pass *createFunctionFilterPass();
@@ -36,7 +35,7 @@ Pass *createFunctionFilterPass();
 Pass *createBitLevelInfoPass();
 
 // Scheduling pass.
-Pass *createVPreRegAllocSchedPass(const VTargetMachine &TM);
+Pass *createVPreRegAllocSchedPass();
 
 // Register allocation.
 FunctionPass *createOptimalSSARegisterAllocator();

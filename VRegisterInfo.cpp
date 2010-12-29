@@ -91,10 +91,6 @@ VRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-bool VRegisterInfo::hasFP(const MachineFunction &MF) const {
-  return false;
-}
-
 void VRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                         int SPAdj,
                                         RegScavenger *RS /*= NULL*/ ) const {

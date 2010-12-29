@@ -11,10 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/VTM.h"
-#include "vtm/VTargetMachine.h"
-#include "vtm/VRegisterInfo.h"
-
+#include "VTargetMachine.h"
 #include "llvm/Intrinsics.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -154,7 +151,7 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
 
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
   if (N->isMachineOpcode())
-    return NULL;   // Already selected.
+    return 0;   // Already selected.
 
   switch (N->getOpcode()) {
   default: break;

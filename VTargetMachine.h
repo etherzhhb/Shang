@@ -18,10 +18,12 @@
 #ifndef VTARGETMACHINE_H
 #define VTARGETMACHINE_H
 
+#include "VSelectionDAGInfo.h"
+#include "VSubtarget.h"
+#include "VFrameInfo.h"
+
 #include "vtm/VInstrInfo.h"
 #include "vtm/VISelLowering.h"
-#include "vtm/VSelectionDAGInfo.h"
-#include "vtm/VSubtarget.h"
 // TODO:
 // #include "VIntrinsicInfo.h"
 
@@ -34,6 +36,7 @@
 
 
 namespace llvm {
+class VFrameInfo;
 
 class VTargetMachine : public LLVMTargetMachine {
   // FIXME
@@ -43,9 +46,8 @@ class VTargetMachine : public LLVMTargetMachine {
   VSelectionDAGInfo TSInfo;
   VInstrInfo InstrInfo;
   InstrItineraryData  InstrItins;
-
+  VFrameInfo FrameInfo;
   // FIXME
-  // TargetFrameInfo FrameInfo;
   // VIntrinsicInfo IntrinsicInfo;
 public:
   VTargetMachine(const Target &T, const std::string &TT, const std::string &FS);
@@ -71,6 +73,11 @@ public:
   virtual const VSelectionDAGInfo* getSelectionDAGInfo() const {
     return &TSInfo;
   }
+
+  virtual const TargetFrameInfo *getFrameInfo() const {
+    return &FrameInfo;
+  }
+
   virtual const TargetData *getTargetData() const { return &DataLayout; }
 
   virtual bool addInstSelector(PassManagerBase &PM, CodeGenOpt::Level OptLevel);

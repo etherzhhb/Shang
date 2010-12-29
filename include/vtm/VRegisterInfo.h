@@ -49,8 +49,6 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   // getSubReg implemented by tablegen
 
   const TargetRegisterClass *getPointerRegClass(unsigned Kind = 0) const;
-
-  bool hasFP(const MachineFunction &MF) const;
   
   void eliminateFrameIndex(MachineBasicBlock::iterator II,
     int SPAdj, RegScavenger *RS = NULL) const;

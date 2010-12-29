@@ -43,7 +43,6 @@ class FDSBase;
 class FuncUnitId;
 class VSUnit;
 class VSchedGraph;
-class VTargetMachine;
 
 class MachineBasicBlock;
 class MachineInstr;
@@ -452,7 +451,7 @@ class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
 private:
-  const VTargetMachine &TM;
+  const TargetMachine &TM;
   MachineBasicBlock *MBB;
   SUnitVecTy SUnits;
   // The number of schedule unit.
@@ -498,7 +497,7 @@ private:
   }
 
 public:
-  VSchedGraph(const VTargetMachine &Target, MachineBasicBlock *MachBB,
+  VSchedGraph(const TargetMachine &Target, MachineBasicBlock *MachBB,
               bool HaveLoopOp, unsigned short StartSlot)
     : TM(Target), MBB(MachBB), SUCount(0), startSlot(StartSlot),
       LoopOp(0, HaveLoopOp) {

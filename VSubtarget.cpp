@@ -11,15 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "vtmconfig"
-#include "vtm/VSubtarget.h"
-
+#include "VSubtarget.h"
 #define VTMSubtarget VSubtarget
 #include "VGenSubtarget.inc"
-
 #include "vtm/VTM.h"
-
-#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 

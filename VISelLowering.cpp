@@ -12,9 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "VTargetMachine.h"
 #include "vtm/VISelLowering.h"
-#include "vtm/VTargetMachine.h"
-
 #include "llvm/Function.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
