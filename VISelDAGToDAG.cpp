@@ -104,14 +104,18 @@ SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
 }
 
 SDNode *VDAGToDAGISel::SelectConstant(SDNode *N) {
+  ConstantSDNode *CSD = cast<ConstantSDNode>(N);
+  // Do not need to select target constant.
+  if (CSD->getOpcode() == ISD::TargetConstant)
+    return 0;
+  
   // Build the target constant.
-  int64_t Val = cast<ConstantSDNode>(N)->getZExtValue();
+  int64_t Val = CSD->getZExtValue();
   SDValue Const = CurDAG->getTargetConstant(Val, N->getValueType(0));
 
-  return Const.getNode();
-  //SDValue Ops[] = { Const };
-  //return CurDAG->SelectNodeTo(N, VTM::VOpLdImm, N->getVTList(),
-  //                            Ops, array_lengthof(Ops));
+  SDValue Ops[] = { Const };
+  return CurDAG->SelectNodeTo(N, VTM::VOpSetRI, N->getVTList(),
+                              Ops, array_lengthof(Ops));
 }
 
 SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {

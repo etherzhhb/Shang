@@ -250,8 +250,8 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   VT = VT.getRoundIntegerOrBitType(Context);
 
   return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
-                     DAG.getConstant(UB, MVT::i8),
-                     DAG.getConstant(LB, MVT::i8));
+                     DAG.getConstant(UB, MVT::i8, true),
+                     DAG.getConstant(LB, MVT::i8, true));
 }
 
 
@@ -296,7 +296,7 @@ SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op
 
   VT = VT.getRoundIntegerOrBitType(Context);
   return DAG.getNode(VTMISD::BitRepeat, dl, VT, Op,
-                     DAG.getConstant(Times, MVT::i8));
+                     DAG.getConstant(Times, MVT::i8, true));
 }
 
 // Lower br <target> to brcond 1, <target>
