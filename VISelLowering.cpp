@@ -156,7 +156,7 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
     // FIXME: Remember the Argument number.
     SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl,
                                   DAG.getVTList(ArgVT, MVT::Other),
-                                  Chain, DAG.getConstant(Idx++,MVT::i8, false));
+                                  Chain, DAG.getConstant(Idx++,MVT::i8, true));
 
     InVals.push_back(SDInArg);
     // Get the chain from InArg Node.
@@ -184,7 +184,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     // FIXME: Remember the Argument number.
     SDValue SDOutArg = DAG.getNode(VTMISD::RetVal, dl, MVT::Other, Chain,
                                   OutVals[Idx],
-                                  DAG.getConstant(Idx,MVT::i8, false));
+                                  DAG.getConstant(Idx,MVT::i8, true));
     ++Idx;
     // Get the chain from InArg Node.
     Chain = SDOutArg.getValue(0);
@@ -303,7 +303,7 @@ SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op
 SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
   SDValue Chain = Op.getOperand(0);
 
-  SDValue Cond = DAG.getConstant(1, MVT::i1);
+  SDValue Cond = DAG.getConstant(1, MVT::i1, true);
 
   if (Chain->getOpcode() == ISD::BRCOND)
     Cond = getNot(DAG, Op.getDebugLoc(), Chain->getOperand(1));
@@ -424,13 +424,15 @@ SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
 SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                                 SDValue OpA, SDValue OpB,
                                 bool dontCreate) {
-  return getAdd(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1), dontCreate);
+  return getAdd(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1, true),
+                dontCreate);
 }
 
 SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
                                 SDValue OpA, SDValue OpB,
                                 bool dontCreate) {
-  return getSub(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1), dontCreate);
+  return getSub(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1, true),
+                dontCreate);
 }
 
 SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
@@ -461,7 +463,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
 
   unsigned VTSize = VT.getSizeInBits();
 
-  SDValue StoreVal = isLoad ? DAG.getConstant(0, VT)
+  SDValue StoreVal = isLoad ? DAG.getConstant(0, VT, true)
                             : cast<StoreSDNode>(Op)->getValue();
 
   SDValue SDOps[] = {// The chain.
@@ -469,10 +471,9 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                      // The Value to store (if any), and the address.
                      StoreVal, LSNode->getBasePtr(),
                      // Is load?
-                     DAG.getConstant(isLoad, MVT::i1),
+                     DAG.getConstant(isLoad, MVT::i1, true),
                      // Size in byte.
-                     DAG.getConstant(VT.getStoreSize(),
-                                     MVT::i8) };
+                     DAG.getConstant(VT.getStoreSize(), MVT::i8, true) };
 
   unsigned DataBusWidth = vtmfus().getFUDesc<VFUMemBus>()->getDataWidth();
   assert(DataBusWidth >= VTSize && "Unexpect large data!");

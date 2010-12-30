@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "vtm-selectiondag-info"
-#include "vtm/VTargetMachine.h"
+#include "VTargetMachine.h"
 using namespace llvm;
 
 VSelectionDAGInfo::VSelectionDAGInfo(const VTargetMachine &TM)
