@@ -1,4 +1,4 @@
-//===- ForceDirectedSchedulingBase.cpp - ForceDirected information analyze --*- C++ -*-===//
+//===-- ForceDirectedScheduling.cpp - ForceDirected Scheduler ---*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,422 +13,409 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the Force Direct information computation pass describe in
-// Force-Directed Scheduling for the Behavioral Synthesis of ASIC's
+// This file implement the Force Direct Schedulers
 //
 //===----------------------------------------------------------------------===//
 
-#include "ForceDirectedScheduling.h"
-#include "ScheduleDOT.h"
-#include "vtm/Passes.h"
+#include "SchedulingBase.h"
 
-#include "llvm/Support/CommandLine.h"
-
-#define DEBUG_TYPE "vbe-fd-info"
+#define DEBUG_TYPE "vbe-fdls"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-using namespace llvm;
-
-static cl::opt<bool>
-NoFDSchedule("disable-fd-schedule",
-             cl::desc("vbe - Do not preform force-directed schedule"),
-             cl::Hidden, cl::init(false));
 
 //===----------------------------------------------------------------------===//
-void FDSBase::buildTimeFrame(const VSUnit *ClampedSUnit,
-                                                 unsigned ClampedASAP,
-                                                 unsigned ClampedALAP) {
+bool
+FDListScheduler::fds_sort::operator()(const VSUnit* LHS,
+                                      const VSUnit* RHS) const {
+  // Schedule the sunit that taking non-trivial function unit first.
+  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
+  if (!LHSID.isTrivial() && RHSID.isTrivial())
+    return false;
+  if (LHSID.isTrivial() && !RHSID.isTrivial())
+    return true;
+  if (!LHSID.isTrivial() && !RHSID.isTrivial()) {
+    unsigned LTFUs = LHSID.getTotalFUs(), RTFUs = RHSID.getTotalFUs();
+    // Schedule the schedule unit with less available function unit first.
+    if (LTFUs > RTFUs) return true;
+    if (LTFUs < RTFUs) return false;
+  }
 
-  assert((ClampedSUnit == 0 
-          || (ClampedASAP >= getSTFASAP(ClampedSUnit)
-              && ClampedALAP <= getSTFALAP(ClampedSUnit)))
-         && "Bad clamped value!");
-  VSUnit *EntryRoot = State.getEntryRoot();
-  // Build the time frame
-  assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
-  buildASAPStep(ClampedSUnit, ClampedASAP);
-  buildALAPStep(ClampedSUnit, ClampedALAP);
+  unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
+  // Schedule the low mobility nodes first.
+  if (LTF > RTF) return true; // Place RHS first.
+  if (LTF < RTF) return false;
+
+  unsigned LALAP = Info.getALAPStep(LHS), RALAP = Info.getALAPStep(RHS);
+  if (LALAP > RALAP) return true;
+  if (LALAP < RALAP) return false;
+
+  // 
+  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
+  if (LASAP > RASAP) return true;
+  if (LASAP < RASAP) return false;
+
+  
+  return LHS->getIdx() > RHS->getIdx();
+}
+
+
+//===----------------------------------------------------------------------===//
+
+bool FDListScheduler::scheduleState() {
+  buildFDepHD(true);
+  if (!scheduleCriticalPath(false))
+    return false;
+
+  fds_sort s(*this);
+  SUnitQueueType AQueue(s);
+
+  fillQueue(AQueue, State.begin(), State.end());
+
+  if (!scheduleQueue(AQueue)) {
+    DEBUG(dumpDG());
+    DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
+                 << getExtraResReq() << '\n');
+    return false;
+  }
+
+  schedulePassiveSUnits();
 
   DEBUG(dumpTimeFrame());
+  DEBUG(dumpDG());
+  return true;
 }
 
-void FDSBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedASAP) {
-  VSUnit *Entry = State.getEntryRoot();
-  SUnitToTF[Entry->getIdx()].first = Entry->getSlot();
+//===----------------------------------------------------------------------===//
 
-  VSchedGraph::iterator Start = State.begin();
-
-  bool changed = false;
-
-  // Build the time frame iteratively.
-  do {
-    changed = false;
-    for (VSchedGraph::iterator I = ++Start, E = State.end(); I != E; ++I) {
-      VSUnit *A = *I;
-      if (A->isScheduled()) {
-        SUnitToTF[A->getIdx()].first = A->getSlot();
-        continue;
-      }
-
-      DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
-            A->dump(););
-
-      unsigned NewStep = A == ClampedSUnit ? ClampedASAP : getSTFASAP(A);
-
-      for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
-          DI != DE; ++DI) {
-        const VSUnit *Dep = *DI;
-        
-        if (!DI.getEdge()->isBackEdge() || MII) {
-          unsigned DepASAP = Dep->isScheduled() ?
-                             Dep->getSlot() : getASAPStep(Dep);
-          int Step = DepASAP + DI.getEdge()->getLatency()
-                     - MII * DI.getEdge()->getItDst();
-          DEBUG(dbgs() << "From ";
-                if (DI.getEdge()->isBackEdge())
-                  dbgs() << "BackEdge ";
-                Dep->print(dbgs());
-                dbgs() << " Step " << Step << '\n');
-          unsigned UStep = std::max(0, Step);
-          NewStep = std::max(UStep, NewStep);
-        }
-      }
-
-      DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
-      A->dump();
-      dbgs() << "\n\n";);
-      if (SUnitToTF[A->getIdx()].first != NewStep) {
-        SUnitToTF[A->getIdx()].first = NewStep;
-        changed |= true;
-      }
-    }
-  } while (changed);
-
-  VSUnit *Exit = State.getExitRoot();
-  CriticalPathEnd = std::max(CriticalPathEnd, getASAPStep(Exit));
-}
-
-void FDSBase::buildALAPStep(const VSUnit *ClampedSUnit,
-                                                unsigned ClampedALAP) {
-  VSUnit *Exit = State.getExitRoot();
-  SUnitToTF[Exit->getIdx()].second = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
-
-  VSchedGraph::reverse_iterator Start = State.rbegin();
-
-  bool changed = false;
-
-  // Build the time frame iteratively.
-  do {
-    changed = false;
-    for (VSchedGraph::reverse_iterator I = ++Start, E = State.rend();
-         I != E; ++I) {
-      VSUnit *A = *I;
-      if (A->isScheduled()) {
-        SUnitToTF[A->getIdx()].second = A->getSlot();
-        continue;
-      }
-
-      DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
-            A->dump(););
-
-      unsigned NewStep = A == ClampedSUnit ? ClampedALAP : getSTFALAP(A);
-      for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
-           UI != UE; ++UI) {
-        const VSUnit *Use = *UI;
-        VDEdge *UseEdge = Use->getEdgeFrom(A);
-
-        if (!UseEdge->isBackEdge() || MII) {
-          unsigned UseALAP = Use->isScheduled() ?
-                             Use->getSlot() : getALAPStep(Use);
-          if (UseALAP == 0) {
-            assert(UseEdge->isBackEdge() && "Broken time frame!");
-            UseALAP = VSUnit::MaxSlot;
-          }
-          
-          unsigned Step = UseALAP - UseEdge->getLatency()
-                          + MII * UseEdge->getItDst();
-          DEBUG(dbgs() << "From ";
-                if (UseEdge->isBackEdge())
-                  dbgs() << "BackEdge ";
-                Use->print(dbgs());
-                dbgs() << " Step " << Step << '\n');
-          NewStep = std::min(Step, NewStep);
-        }
-      }
-
-      DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
-            A->dump();
-            dbgs() << "\n\n";);
-      if (SUnitToTF[A->getIdx()].second != NewStep) {
-        SUnitToTF[A->getIdx()].second = NewStep;
-        changed = true;
-      }
-    }
-  } while (changed);
-
-#ifndef NDEBUG
-  // Verify the time frames.
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
-    VSUnit *A = *I;
-    assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
-  }
-#endif
-}
-
-void FDSBase::printTimeFrame(raw_ostream &OS) const {
-  OS << "Time frame:\n";
+void SchedulingBase::schedulePassiveSUnits() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
       I != E; ++I) {
     VSUnit *A = *I;
-    A->print(OS);
-    OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
-      << "} " <<  getTimeFrame(A);
-
-    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end(); DI != DE;
-        ++DI)
-      OS << " [" << DI->getIdx() << "]"; 
-    
-    OS << '\n';
-  }
-}
-
-void FDSBase::dumpTimeFrame() const {
-  printTimeFrame(dbgs());
-}
-
-void FDSBase::buildDGraph() {
-  DGraph.clear();
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
-    VSUnit *A = *I;
-    // We only try to balance the post bind resource.
-    // if (A->getFUId().isBinded()) continue;
-    // Ignore the DG for trivial resources.
-    if (A->getFUId().isTrivial()) continue;
-    
-    unsigned TimeFrame = getTimeFrame(A);
-    unsigned ASAPStep = getASAPStep(A), ALAPStep = getALAPStep(A);
-
-    double Prob = 1.0 / (double) TimeFrame;
-    // Including ALAPStep.
-    for (unsigned i = ASAPStep, e = ALAPStep + 1; i != e; ++i)
-      accDGraphAt(i, A->getFUId(), Prob);    
-  }
-  DEBUG(printDG(dbgs()));
-}
-
-
-bool FDSBase::isResourceConstraintPreserved() {
-  ExtraResReq = 0.0;
-  // No resource in use.
-  if (DGraph.empty()) return true;
-
-  // For each function unit.
-  for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
-       I != E; ++I) {
-    FuncUnitId ID = I->first;
-    DEBUG(dbgs() << "FU " << ID << " Average Usage: ");
-    double TotalDG = 0;
-    unsigned AvailableSteps = 0;
-    for (DGStepMapType::const_iterator SI = I->second.begin(),
-         SE = I->second.end(); SI != SE; ++SI) {
-      ++AvailableSteps;
-      TotalDG += SI->second;
-    }
-    double AverageDG = TotalDG / AvailableSteps;
-    // The upper bound of error: Only 0.5 extra functional unit need.
-    double e = 0.5 / AvailableSteps;
-    DEBUG(dbgs() << AverageDG << '\n');
-    
-    // Accumulate the extra require function unit amount.
-    if (AverageDG > ID.getTotalFUs() + e)
-      ExtraResReq += (AverageDG - ID.getTotalFUs()) /  ID.getTotalFUs();
-  }
-  return ExtraResReq == 0.0;
-}
-
-void FDSBase::printDG(raw_ostream &OS) const {  
-  // For each step
-  // For each FU.
-  for (DGType::const_iterator I = DGraph.begin(), E = DGraph.end();
-       I != E; ++I) {
-    OS << "FU " << I->first << ":\n";
-    for (DGStepMapType::const_iterator SI = I->second.begin(),
-         SE = I->second.end(); SI != SE; ++SI) {
-      OS << "@ " << SI->first << ": " << SI->second << '\n';
-    }
-    OS << '\n';
-  }
-}
-
-double FDSBase::getDGraphAt(unsigned step, FuncUnitId FUClass) const {
-  // Modulo DG for modulo schedule.
-  DGType::const_iterator at = DGraph.find(FUClass);
-  if (at != DGraph.end()) {
-    DGStepMapType::const_iterator SI = at->second.find(computeStepKey(step));
-    if (SI != at->second.end())
-      return SI->second;
-  }
-
-  return 0.0;
-}
-
-unsigned FDSBase::computeStepKey(unsigned step) const {
-  if (MII != 0) {
-#ifndef NDEBUG
-    unsigned StartSlot = State.getStartSlot();
-    step = StartSlot + (step - StartSlot) % MII;
-#else
-    step = step % MII;
-#endif
-  }
-
-  return step;
-}
-
-void FDSBase::accDGraphAt(unsigned step, FuncUnitId FUClass, double d) {
-  // Modulo DG for modulo schedule.
-  DGraph[FUClass][computeStepKey(step)] += d;
-}
-
-// Including end.
-double FDSBase::getRangeDG(FuncUnitId FUClass, unsigned start, unsigned end) {
-  double range = end - start + 1;
-  double ret = 0.0;
-  for (unsigned i = start, e = end + 1; i != e; ++i)
-    ret += getDGraphAt(i, FUClass);
-
-  ret /= range;
-  return ret;
-}
-
-double FDSBase::computeForce(const VSUnit *A, unsigned ASAP, unsigned ALAP) {
-  buildTimeFrame(A, ASAP, ALAP);
-  buildDGraph();
-  // Compute the forces.
-  double SelfForce = computeSelfForce(A, ASAP, ALAP);
-  // The follow function will invalid the time frame.
-  DEBUG(dbgs() << " Self Force: " << SelfForce);
-  double OtherForce = computeOtherForce(A);
-  DEBUG(dbgs() << " Other Force: " << OtherForce);
-  double Force = SelfForce + OtherForce;
-  DEBUG(dbgs() << " Force: " << Force);
-  return Force;
-}
-
-double FDSBase::computeSelfForce(const VSUnit *A,
-                                 unsigned start,
-                                 unsigned end) {
-  FuncUnitId FU = A->getFUId();
-
-  // The trivial function unit do not contribute any force.
-  if (FU.isTrivial()) return 0.0;
-  
-  // FIXME: How should handle the pre-bind MachineInstruction.
-  // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
-
-  double Force = getRangeDG(FU, start, end) - getAvgDG(A);
-
-  // FIXME: Make the atoms taking expensive function unit have bigger force.
-  return Force / FU.getTotalFUs();
-}
-
-double FDSBase::computeRangeForce(const VSUnit *A,
-                                  unsigned int start,
-                                  unsigned int end) {
-  // FIXME: How should handle the pre-bind MachineInstruction.
-  // if (NoFDSchedule && !A->isBinded() && MII) return 0.0;
-
-  FuncUnitId FU = A->getFUId();
-
-  // The trivial function unit do not contribute any force.
-  if (FU.isTrivial()) return 0.0;
-
-  double Force = getRangeDG(FU, start, end) - getAvgDG(A);
-  // FIXME: Make the atoms taking expensive function unit have bigger force.
-  return Force / FU.getTotalFUs();
-}
-
-double FDSBase::computeOtherForce(const VSUnit *A) {
-  double ret = 0.0;
-
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
-    if (A == *I) continue;
-
-    // The trivial function unit do not contribute any force.
-    if (A->getFUId().isTrivial()) continue;
-
-    ret += computeRangeForce(A, getASAPStep(A), getALAPStep(A));
-  }
-  return ret;
-}
-
-void FDSBase::buildAvgDG() {
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
-       I != E; ++I) { 
-    VSUnit *A = *I;
-    // We only care about the no trivial resource.
-    if (A->getFUId().isTrivial()) continue;
-    // We only care about the utilization of post bind resource.
-    // if (A->getFUId().isBinded()) continue;
-    
-    double res = 0.0;
-    for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i)
-      res += getDGraphAt(i, A->getFUId());
-
-    res /= (double) getTimeFrame(A);
-    AvgDG[A->getIdx()] = res;
-  }
-}
-
-unsigned FDSBase::buildFDInfo(bool rstSTF) {
-  if (rstSTF) {
-    resetSTF();
-    State.resetSchedule();
-  }
-  buildTimeFrame();
-
-  buildDGraph();
-  buildAvgDG();
-
-  return CriticalPathEnd;
-}
-
-void FDSBase::dumpDG() const {
-  printDG(dbgs());
-}
-
-void FDSBase::resetSTF() {
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
-       I != E; ++I) {
-    VSUnit *SU = *I;
-    SUnitToSTF[SU->getIdx()] = std::make_pair(0, VSUnit::MaxSlot);
-  }
-}
-
-void FDSBase::sinkSTF(const VSUnit *A, unsigned ASAP, unsigned ALAP) {
-  assert(ASAP <= ALAP && "Bad time frame to sink!");
-  assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
-  SUnitToSTF[A->getIdx()] = std::make_pair(ASAP, ALAP);
-  // We may need to reduce critical path.
-  if (A == State.getExitRoot()) {
-    assert(CriticalPathEnd >= ALAP && "Can not sink ExitRoot!");
-    CriticalPathEnd = ALAP;
-  }
-}
-
-void FDSBase::updateSTF() {
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
-      I != E; ++I) {
-    VSUnit *A = *I;
-    // Only update the scheduled time frame.
-    if (!isSTFScheduled(A))
+    if (A->isScheduled())
       continue;
 
-    sinkSTF(A, getASAPStep(A), getALAPStep(A));
+    assert(A->getFUId().isTrivial()
+           && "SUnit that taking non-trivial not scheduled?");
+
+    DEBUG(A->print(dbgs()));
+    unsigned step = getASAPStep(A);
+    A->scheduledTo(step);
+    buildFDepHD(false);
+    updateSTF();
   }
 }
 
-void FDSBase::viewGraph() {
-  ViewGraph(this, State.getMachineBasicBlock()->getName());
+bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
+  if (refreshFDepHD)
+    buildFDepHD(true);
+
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+      I != E; ++I) {
+    VSUnit *A = *I;
+  
+    if (A->isScheduled() || getTimeFrame(A) != 1)
+      continue;
+
+    unsigned step = getASAPStep(A);
+    DEBUG(A->print(dbgs()));
+    DEBUG(dbgs() << " asap step: " << step << " in critical path.\n");
+    A->scheduledTo(step);
+  }
+  return isResourceConstraintPreserved();
+}
+//===----------------------------------------------------------------------===//
+
+template<class It>
+void FDListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It end,
+                                VSUnit *FirstNode) {
+  for (It I = begin, E = end; I != E; ++I) {
+    VSUnit *A = *I;
+
+    // Do not push the FirstNode into the queue.
+    if (A == FirstNode || A->isScheduled())
+      continue;
+    
+    // Do not push the SUnit that taking trivial function unit.
+    if (A->getFUId().isTrivial())
+      continue;
+    
+    Queue.push(A);
+  }
+  //
+  Queue.reheapify();
+}
+
+unsigned FDListScheduler::findBestStep(VSUnit *A) {
+  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
+  // Time frame is 1, we do not have other choice.
+  if (ASAP == ALAP) return ASAP;
+
+  std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
+  DEBUG(dbgs() << "\tScan for best step:\n");
+  // For each possible step:
+  for (unsigned i = ASAP, e = ALAP + 1; i != e; ++i) {
+    DEBUG(dbgs() << "At Step " << i << "\n");
+    double Force = computeForce(A, i, i);
+    DEBUG(dbgs() << " Force: " << Force);
+    if (Force < BestStep.second)
+      BestStep = std::make_pair(i, Force);
+
+    DEBUG(dbgs() << '\n');
+  }
+  return BestStep.first;
+}
+
+bool FDListScheduler::scheduleSUnit(VSUnit *A) {
+  assert(!A->isScheduled() && "A already scheduled!");
+  DEBUG(A->print(dbgs()));
+  unsigned step = findBestStep(A);
+  DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
+  A->scheduledTo(step);
+  // Update FDepHD.
+  buildFDepHD(false);
+  return (isResourceConstraintPreserved() && scheduleCriticalPath(false));
+}
+
+bool FDListScheduler::scheduleQueue(SUnitQueueType &Queue) {
+  while (!Queue.empty()) {
+    // TODO: Shor the list
+    VSUnit *A = Queue.top();
+    Queue.pop();
+
+    if (A->isScheduled())
+      continue;
+
+    DEBUG(dbgs() << " Schedule Node:-------------------\n");
+    if (!scheduleSUnit(A))
+      return false;
+
+    Queue.reheapify();
+  }
+
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
+
+bool FDScheduler::scheduleState() {
+  buildFDepHD(true);
+  if (!scheduleCriticalPath(false))
+    return false;
+
+  while (findBestSink()) {
+    if (!scheduleCriticalPath(false)) {
+      DEBUG(dumpDG());
+      DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
+                   << getExtraResReq() << '\n');
+      return false;
+    }
+  }
+
+  schedulePassiveSUnits();
+
+  DEBUG(dumpTimeFrame());
+  DEBUG(dumpDG());
+  return true;
+}
+
+bool FDScheduler::findBestSink() {
+  TimeFrame BestSink;
+  VSUnit *BestSinkSUnit = 0;
+  double BestGain = -1.0;
+
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+      I != E; ++I) {
+    VSUnit *A = *I;
+    if (A->isScheduled())
+      continue;
+    
+    TimeFrame CurSink;
+
+    double CurGain = trySinkSUnit(A, CurSink);
+    if (CurGain > BestGain) {
+      BestSinkSUnit = A;
+      BestSink = CurSink;
+      BestGain = CurGain;
+    }
+  }
+
+  if (!BestSinkSUnit) return false;
+  
+  sinkSTF(BestSinkSUnit, BestSink.first, BestSink.second);
+  if (getScheduleTimeFrame(BestSinkSUnit) == 1)
+    BestSinkSUnit->scheduledTo(BestSink.first);
+  buildFDepHD(false);
+  updateSTF();
+  return true;
+}
+
+double FDScheduler::trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame) {
+  // Build time frame to get the correct ASAP and ALAP.
+  buildTimeFrame();
+
+  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
+
+  double ASAPForce = computeForce(A, ASAP , ALAP - 1),
+    ALAPForce = computeForce(A, ASAP + 1, ALAP);
+
+  double FMax = std::max(ASAPForce, ALAPForce),
+    FMin = std::min(ASAPForce, ALAPForce);
+
+  double FMinStar = FMin;
+
+  if (ASAP + 1 < ALAP)
+    FMinStar = std::min(FMinStar, 0.0);
+  else
+    assert(ASAP + 1 == ALAP && "Broken time frame!");
+
+  double FGain = FMax - FMinStar;
+
+  // Discard the range with bigger force.
+  if (ASAPForce > ALAPForce)
+    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
+  else
+    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
+
+  return FGain;
+}
+
+struct ims_sort {
+  SchedulingBase &Info;
+  ims_sort(SchedulingBase &s) : Info(s) {}
+  bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
+};
+
+bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
+  // Schedule the sunit that taking non-trivial function unit first.
+  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
+  if (!LHSID.isTrivial() && RHSID.isTrivial())
+    return false;
+  if (LHSID.isTrivial() && !RHSID.isTrivial())
+    return true;
+  if (!LHSID.isTrivial() && !RHSID.isTrivial()) {
+    unsigned LTFUs = LHSID.getTotalFUs(), RTFUs = RHSID.getTotalFUs();
+    // Schedule the schedule unit with less available function unit first.
+    if (LTFUs > RTFUs) return true;
+    if (LTFUs < RTFUs) return false;
+  }
+
+  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
+  if (LASAP > RASAP) return true;
+  if (LASAP < RASAP) return false;
+  
+  return LHS->getIdx() > RHS->getIdx();
+}
+
+bool IteractiveModuloScheduling::scheduleState() {
+  ExcludeSlots.assign(State.getNumSUnits(), std::set<unsigned>());
+  setCriticalPathLength(VSUnit::MaxSlot);
+
+  fds_sort s(*this);
+
+  while (!isAllSUnitScheduled()) {
+    State.resetSchedule();
+    buildTimeFrame();
+    // Reset exclude slots and resource table.
+    MRT.clear();
+
+    typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> IMSQueueType;
+    IMSQueueType ToSched(++State.begin(), State.end(), s);
+    while (!ToSched.empty()) {
+      VSUnit *A = ToSched.top();
+      ToSched.pop();
+
+      unsigned EarliestUntry = 0;
+      for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
+        if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
+          continue;
+        
+        if (EarliestUntry == 0)
+          EarliestUntry = i;
+        
+        if (!A->getFUId().isTrivial() && !isResAvailable(A->getFUId(), i))
+          continue;
+
+        // This is a available slot.
+        A->scheduledTo(i);
+        break;
+      }
+
+      if (EarliestUntry == 0) {
+        increaseMII();
+        break;
+      } else if(!A->isScheduled()) {
+        assert(!A->getFUId().isTrivial()
+               && "SUnit can be schedule only because resource conflict!");
+        VSUnit *Blocking = findBlockingSUnit(A->getFUId(), EarliestUntry);
+        assert(Blocking && "No one blocking?");
+        Blocking->resetSchedule();
+        excludeStep(Blocking, EarliestUntry);
+        // Resource table do not need to change.
+        A->scheduledTo(EarliestUntry);
+        ToSched.push(Blocking);
+      }
+
+      buildTimeFrame();
+      ToSched.reheapify();
+    }
+  }
+  DEBUG(buildTimeFrame());
+  DEBUG(dumpTimeFrame());
+  DEBUG(dumpDG());
+  return true;
+}
+
+bool IteractiveModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
+
+  unsigned ModuloStep = step % getMII();
+  return ExcludeSlots[A->getIdx()].count(ModuloStep);
+}
+
+void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
+
+  unsigned ModuloStep = step % getMII();
+  ExcludeSlots[A->getIdx()].insert(ModuloStep);
+}
+
+VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned step) {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+    VSUnit *A = *I;
+    if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
+      continue;
+    if (A->getSlot() == step) return A; 
+  }
+
+  return 0;
+}
+
+bool IteractiveModuloScheduling::isResAvailable(FuncUnitId FU, unsigned step) {
+  assert(getMII() && "IMS only work on Modulo scheduling!");
+  // We will always have enough trivial resources.
+  if (FU.isTrivial()) return true;
+
+  unsigned ModuloStep = step % getMII();
+  // Do all resource at step been reserve?
+  if (MRT[FU][ModuloStep] >= FU.getTotalFUs())
+    return false;
+
+  ++MRT[FU][ModuloStep];
+  
+  return true;
+}
+
+
+bool IteractiveModuloScheduling::isAllSUnitScheduled() {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+      I != E; ++I) {
+    VSUnit *A = *I;
+    if (!A->isScheduled())
+      return false;
+  }
+
+  return true;
 }

@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "VSUnit.h"
-#include "ForceDirectedScheduling.h"
+#include "SchedulingBase.h"
 
 #include "vtm/BitLevelInfo.h"
 #include "vtm/Passes.h"

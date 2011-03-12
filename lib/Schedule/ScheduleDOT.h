@@ -21,7 +21,7 @@
 #ifndef VTM_SCHEDULE_DOT
 #define VTM_SCHEDULE_DOT
 #include "VSUnit.h"
-#include "ForceDirectedScheduling.h"
+#include "SchedulingBase.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/Support/GraphWriter.h"
@@ -75,17 +75,17 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
 };
 
 template<>
-struct DOTGraphTraits<FDSBase*>
+struct DOTGraphTraits<SchedulingBase*>
   : public DOTGraphTraits<VSchedGraph*> {
 
   DOTGraphTraits(bool isSimple = false) : DOTGraphTraits<VSchedGraph*>(isSimple) {}
 
-  static std::string getGraphName(const FDSBase *G) {
+  static std::string getGraphName(const SchedulingBase *G) {
     return  DOTGraphTraits<VSchedGraph*>::getGraphName(&G->getState());
   }
 
   std::string getNodeLabel(const VSUnit *Node,
-                           const FDSBase *Graph) {
+                           const SchedulingBase *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
     Node->print(ss);
@@ -95,7 +95,7 @@ struct DOTGraphTraits<FDSBase*>
   }
 
   static std::string getNodeAttributes(const VSUnit *Node,
-                                       const FDSBase *Graph)
+                                       const SchedulingBase *Graph)
   {
     return "shape=Mrecord";
   }

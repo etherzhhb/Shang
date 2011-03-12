@@ -2,8 +2,8 @@
 include_directories(${LLVM_MAIN_SRC_DIR}/lib/CodeGen)
 
 add_llvm_library(VTMSchedule
-  ForceDirectedListScheduling.cpp
   ForceDirectedScheduling.cpp
+  SchedulingBase.cpp
   MicroState.cpp
   VSUnit.cpp
   ScheduleEmitter.cpp

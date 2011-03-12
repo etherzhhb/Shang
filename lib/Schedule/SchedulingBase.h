@@ -27,7 +27,7 @@
 using namespace llvm;
 
 namespace llvm {
-class FDSBase {
+class SchedulingBase {
   // MII in modulo schedule.
   unsigned MII, CriticalPathEnd;
   double ExtraResReq;
@@ -57,20 +57,20 @@ private:
 protected:
   VSchedGraph &State;
 
-  FDSBase(VSchedGraph &S)
+  SchedulingBase(VSchedGraph &S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
     SUnitToTF(S.getNumSUnits()), SUnitToSTF(S.getNumSUnits()),
     AvgDG(S.getNumSUnits()), State(S) {}
 
 public:
-  virtual ~FDSBase() {}
+  virtual ~SchedulingBase() {}
 
   VSchedGraph &getState() const { return State; }
 
   virtual bool scheduleState() = 0;
   // Return true when resource constraints preserved after citical path
   // scheduled
-  bool scheduleCriticalPath(bool refreshFDInfo);
+  bool scheduleCriticalPath(bool refreshFDepHD);
   void schedulePassiveSUnits();
 
   /// @name TimeFrame
@@ -149,7 +149,7 @@ public:
   double computeForce(const VSUnit *A, unsigned ASAP, unsigned ALAP);
   //}
 
-  unsigned buildFDInfo(bool resetSTF);
+  unsigned buildFDepHD(bool resetSTF);
 
   void setMII(unsigned II) { MII = II; }
   unsigned getMII() const { return MII; }
@@ -167,24 +167,24 @@ public:
   void viewGraph();
 };
 
-template <> struct GraphTraits<FDSBase*> 
+template <> struct GraphTraits<SchedulingBase*> 
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::iterator nodes_iterator;
-  static nodes_iterator nodes_begin(FDSBase *G) {
+  static nodes_iterator nodes_begin(SchedulingBase *G) {
     return G->getState().begin();
   }
-  static nodes_iterator nodes_end(FDSBase *G) {
+  static nodes_iterator nodes_end(SchedulingBase *G) {
     return G->getState().end();
   }
 };
 
-class FDListScheduler : public FDSBase {
+class FDListScheduler : public SchedulingBase {
 protected:
   /// @name PriorityQueue
   //{
   struct fds_sort {
-    FDSBase &Info;
-    fds_sort(FDSBase &s) : Info(s) {}
+    SchedulingBase &Info;
+    fds_sort(SchedulingBase &s) : Info(s) {}
     bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
   };
 
@@ -202,7 +202,7 @@ protected:
 
 public:
   FDListScheduler(VSchedGraph &S)
-    : FDSBase(S) {}
+    : SchedulingBase(S) {}
 
   bool scheduleState();
 
@@ -229,10 +229,10 @@ public:
   bool scheduleState();
 };
 
-class FDScheduler : public FDSBase {
+class FDScheduler : public SchedulingBase {
 public:
   FDScheduler(VSchedGraph &S)
-    : FDSBase(S) {}
+    : SchedulingBase(S) {}
 
   bool scheduleState();
   bool findBestSink();

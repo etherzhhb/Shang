@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "VSUnit.h"
-#include "ForceDirectedScheduling.h"
+#include "SchedulingBase.h"
 #include "ScheduleDOT.h"
 
 #include "vtm/PartitionInfo.h"
@@ -82,7 +82,7 @@ bool llvm::VSchedGraph::trySetLoopOp(VTFInfo &VTID) {
   return true;
 }
 
-static FDSBase *createLinearScheduler(VSchedGraph &G) {
+static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
   const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getConstraints();
 
@@ -93,7 +93,7 @@ static FDSBase *createLinearScheduler(VSchedGraph &G) {
   return 0;
 }
 
-static FDSBase *createLoopScheduler(VSchedGraph &G) {
+static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
   const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getConstraints();
   if (I.getPipeLineAlgorithm() == ConstraintsInfo::IMS)
@@ -112,7 +112,7 @@ void VSchedGraph::schedule() {
 
 
 void VSchedGraph::scheduleLinear() {
-  OwningPtr<FDSBase> Scheduler(createLinearScheduler(*this));
+  OwningPtr<SchedulingBase> Scheduler(createLinearScheduler(*this));
 
   while (!Scheduler->scheduleState())
     Scheduler->lengthenCriticalPath();
@@ -146,7 +146,7 @@ unsigned VSchedGraph::computeMII() {
 }
 
 void VSchedGraph::scheduleLoop() {
-  OwningPtr<FDSBase> Scheduler(createLoopScheduler(*this));
+  OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this));
   unsigned II = computeMII();
 
   DEBUG(dbgs() << "MII: " << II << "...");

@@ -39,7 +39,7 @@
 
 namespace llvm {
 class BitLevelInfo;
-class FDSBase;
+class SchedulingBase;
 class FuncUnitId;
 class VSUnit;
 class VSchedGraph;
