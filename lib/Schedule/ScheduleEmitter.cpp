@@ -73,7 +73,7 @@ struct MicroStateBuilder {
                                unsigned OpNum, unsigned emitSlot,
                                unsigned writeSlot){
     const char *Symbol = 0;
-    if (A->getFUId().isBinded()) {
+    if (A->getFUId().isBound()) {
       assert(A->getFUType() == VFUs::MemoryBus
              && "Only support Membus at this moment!");
       assert(OpNum == 0 && "Bad Operand!");
@@ -460,7 +460,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
 
     FuncUnitId FUId = A->getFUId();
     // Remember the active slot.
-    if (FUId.isBinded())
+    if (FUId.isBound())
       VFI->rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot());
 
     // Special case: Ret instruction use the function unit "FSMFinish".

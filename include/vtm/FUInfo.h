@@ -75,7 +75,7 @@ public:
   inline unsigned getData() const { return UID.data; }
 
   inline bool isTrivial() const { return getFUType() == VFUs::Trivial; }
-  inline bool isBinded() const {
+  inline bool isBound() const {
     return !isTrivial() && getFUNum() != 0xfff;
   }
  
