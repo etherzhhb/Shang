@@ -208,7 +208,6 @@ public:
 
 };
 
-
 class IteractiveModuloScheduling : public FDListScheduler {
   // Step -> resource require number.
   typedef std::map<unsigned, unsigned> UsageMapType;
@@ -237,6 +236,14 @@ public:
   bool scheduleState();
   bool findBestSink();
   double trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame);
+};
+
+class IPLScheduler : public SchedulingBase {
+public:
+  IPLScheduler(VSchedGraph &S)
+    : SchedulingBase(S) {}
+
+  bool scheduleState();
 };
 
 } // End namespace.

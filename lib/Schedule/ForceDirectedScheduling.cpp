@@ -19,7 +19,7 @@
 
 #include "SchedulingBase.h"
 
-#define DEBUG_TYPE "vbe-fdls"
+#define DEBUG_TYPE "vbe-fds"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
