@@ -74,7 +74,8 @@ struct LuaConstraints {
         ]
         .enum_("Schedule")[
           luabind::value("FDS", ConstraintsInfo::FDS),
-          luabind::value("FDLS", ConstraintsInfo::FDLS)          
+          luabind::value("FDLS", ConstraintsInfo::FDLS),
+          luabind::value("ILP", ConstraintsInfo::ILP)
         ]
         .def_readwrite("PipeLine", &ConstraintsInfo::PipeAlg)
         .def_readwrite("Schedule", &ConstraintsInfo::SchedAlg),

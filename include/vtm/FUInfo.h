@@ -118,8 +118,14 @@ protected:
     : ResourceType(type), Latency(latency), StartInt(startInt),
     TotalRes(totalRes) {}
 public:
+  static const char *getTypeName(VFUs::FUTypes FU) {
+    return VFUs::VFUNames[FU];
+  }
+
   unsigned getType() const { return ResourceType; }
-  const char *getTypeName() { return VFUs::VFUNames[getType()]; }
+  const char *getTypeName() const {
+    return getTypeName((VFUs::FUTypes)getType());
+  }
   
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }

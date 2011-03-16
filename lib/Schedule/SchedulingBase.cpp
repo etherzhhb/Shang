@@ -388,6 +388,8 @@ unsigned SchedulingBase::buildFDepHD(bool rstSTF) {
   }
   buildTimeFrame();
 
+  // FIXME: This is not necessary in ILP scheduler after we can compute ASAP and
+  // ALAP with function unit information.
   buildDGraph();
   buildAvgDG();
 

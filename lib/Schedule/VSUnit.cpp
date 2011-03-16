@@ -77,7 +77,7 @@ bool llvm::VSchedGraph::trySetLoopOp(VTFInfo &VTID) {
 
   if (VTID.get().getOperand(1).getMBB() != MBB) return false;
 
-  // Ok, rememeber this instruction as self eanble.
+  // Ok, remember this instruction as self enable.
   LoopOp.setPointer(&VTID.get());
   return true;
 }
@@ -89,6 +89,7 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   switch (I.getScheduleAlgorithm()) {
   case ConstraintsInfo::FDS:   return new FDScheduler(G);
   case ConstraintsInfo::FDLS:  return new FDListScheduler(G);
+  case ConstraintsInfo::ILP:   return new ILPScheduler(G);
   }
   return 0;
 }

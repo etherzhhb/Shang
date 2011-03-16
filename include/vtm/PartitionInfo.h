@@ -28,7 +28,7 @@ public:
   };
 
   enum ScheduleAlgorithm {
-    FDS, FDLS
+    FDS, FDLS, ILP
   };
 
 private:
