@@ -39,8 +39,10 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
 
   /// If you want to override the dot attributes printed for a particular
   /// edge, override this method.
+  template<typename GraphType>
   static std::string getEdgeAttributes(const VSUnit *Node,
-                                       VSUnit::use_iterator EI) {
+                                       VSUnit::use_iterator EI,
+                                       const GraphType &Grap) {
     const VSUnit *Use = *EI;
     VDEdge *UseEdge = Use->getEdgeFrom(Node);
 

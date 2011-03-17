@@ -42,7 +42,6 @@ using namespace llvm;
 
 VTargetLowering::VTargetLowering(TargetMachine &TM)
   : TargetLowering(TM, new TargetLoweringObjectFileELF()) {
-  setShiftAmountType(MVT::i8);
   setBooleanContents(UndefinedBooleanContent);
   setIntDivIsCheap(false);
   setSchedulingPreference(Sched::ILP);

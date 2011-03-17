@@ -62,6 +62,7 @@ public:
 
   unsigned getFunctionAlignment(const Function *F) const;
 
+  virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i8; }
 
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture bit level SDNodes.

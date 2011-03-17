@@ -285,10 +285,11 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
     }
 
     // Update the max function unit count.
-    MaxFUCounts[0] = /*std::*/max(MaxFUCounts[0], CurFUCounts[0]);
-    MaxFUCounts[1] = /*std::*/max(MaxFUCounts[1], CurFUCounts[1]);
-    MaxFUCounts[2] = /*std::*/max(MaxFUCounts[2], CurFUCounts[2]);
-    
+    // Use std::max<unsigned> to avoid C2589 in MSVC
+    MaxFUCounts[0] = std::max<unsigned>(MaxFUCounts[0], CurFUCounts[0]);
+    MaxFUCounts[1] = std::max<unsigned>(MaxFUCounts[1], CurFUCounts[1]);
+    MaxFUCounts[2] = std::max<unsigned>(MaxFUCounts[2], CurFUCounts[2]);
+
     // Build the constraint for function units.
     for (FU2SUMap::const_iterator I = FSMap.begin(), E = FSMap.end();
          I != E; ++I) {
@@ -406,6 +407,7 @@ bool ILPScheduler::scheduleState() {
 
   setUpVariables(lp);
 
+  // Build the constraints.
   buildOneActiveStepConstraints(lp);
   buildPrecedenceConstraints(lp);
   buildFUConstraints(lp);

@@ -15,18 +15,18 @@
 #define VTM_FRAMEINFO_H
 #include "VSubtarget.h"
 #include "vtm/VTM.h"
-#include "llvm/Target/TargetFrameInfo.h"
+#include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
 class VSubtarget;
 
-class VFrameInfo : public TargetFrameInfo {
+class VFrameInfo : public TargetFrameLowering {
 protected:
   const VSubtarget &STI;
 
 public:
   explicit VFrameInfo(const VSubtarget &sti)
-    : TargetFrameInfo(TargetFrameInfo::StackGrowsDown, 2, -2), STI(sti) {
+    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, 2, -2), STI(sti) {
   }
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into

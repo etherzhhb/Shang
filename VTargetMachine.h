@@ -20,7 +20,7 @@
 
 #include "VSelectionDAGInfo.h"
 #include "VSubtarget.h"
-#include "VFrameInfo.h"
+#include "VFrameLowering.h"
 
 #include "vtm/VInstrInfo.h"
 #include "vtm/VISelLowering.h"
@@ -32,7 +32,6 @@
 
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetData.h"
-#include "llvm/Target/TargetFrameInfo.h"
 
 
 namespace llvm {
@@ -74,7 +73,7 @@ public:
     return &TSInfo;
   }
 
-  virtual const TargetFrameInfo *getFrameInfo() const {
+  virtual const TargetFrameLowering *getFrameLowering() const {
     return &FrameInfo;
   }
 

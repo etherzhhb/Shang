@@ -18,7 +18,7 @@
 //   Perform register allocation with existing register allocation passes.
 //
 //===----------------------------------------------------------------------===//
-#include "VFrameInfo.h"
+#include "VFrameLowering.h"
 #include "VTargetMachine.h"
 
 #include "vtm/Passes.h"
@@ -94,7 +94,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Optionally, tun split-GEPs and no-load GVN.
   if (true/*EnableSplitGEPGVN*/) {
-    PM.add(createGEPSplitterPass());
+    //PM.add(createGEPSplitterPass());
     PM.add(createGVNPass(/*NoLoads=*/true));
   }
 

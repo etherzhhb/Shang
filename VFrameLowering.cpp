@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VFrameInfo.h"
+#include "VFrameLowering.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
 using namespace llvm;

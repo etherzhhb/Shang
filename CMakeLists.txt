@@ -101,7 +101,7 @@ tablegen(VGenSubtarget.inc -gen-subtarget)
 
 add_llvm_target(VerilogBackend
   VBackend.cpp
-  VFrameInfo.cpp
+  VFrameLowering.cpp
   VISelDAGToDAG.cpp
   VISelLowering.cpp
   VInstrInfo.cpp
@@ -123,5 +123,6 @@ target_link_libraries (LLVMVerilogBackend
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(test)
+add_subdirectory(TargetInfo)
 
 # TODO: docs.
