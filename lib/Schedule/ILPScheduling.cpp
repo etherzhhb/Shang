@@ -424,6 +424,13 @@ bool ILPScheduler::scheduleState() {
   DEBUG(write_lp(lp, "log.lp"));
 
   TotalRows = get_Nrows(lp);
+  DEBUG(dbgs() << "The model has " << TotalVariables
+               << "x" << TotalRows << '\n');
+  // TODO: Allow set the timeout with constraint.
+
+  set_timeout(lp, 300);
+  
+  DEBUG(dbgs() << "Timeout is set to " << get_timeout(lp) << "secs.\n");
 
   int result = solve(lp);
 
