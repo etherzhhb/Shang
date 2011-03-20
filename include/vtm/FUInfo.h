@@ -227,9 +227,9 @@ class FUInfo {
   void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes) {
     ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
       = new VFUMemBus(latency, startInt, totalRes,
-                      64,
                       //DataLayout.getPointerSizeInBits(),
                       // Dirty Hack.
+                      64,
                       64);
   }
 
