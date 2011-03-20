@@ -87,7 +87,7 @@ raw_ostream &printSimpleType(raw_ostream &Out, const Type *Ty, bool isSigned,
     else if (NumBits <= 32)
       return Out << (isSigned?"signed":"unsigned") << " int " << NameSoFar;
     else if (NumBits <= 64)
-      return Out << (isSigned?"signed":"unsigned") << " long "<< NameSoFar;
+      return Out << (isSigned?"signed":"unsigned") << " long long "<< NameSoFar;
     else {
       assert(NumBits <= 128 && "Bit widths > 128 not implemented yet");
       return Out << (isSigned?"llvmInt128":"llvmUInt128") << " " << NameSoFar;
@@ -474,7 +474,7 @@ struct VLTIfWriter : public MachineFunctionPass {
     unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
 
     // Simulate the read operation on memory bus.
-    Stream << "switch (" << getPortVal(DataSize) << ")";
+    Stream << "switch (" << getPortVal(DataSize) << " & 0xf)";
     Stream.enter_block();
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
@@ -499,7 +499,7 @@ struct VLTIfWriter : public MachineFunctionPass {
 
       Stream << "; break;\n";
     }
-
+    Stream << "default: assert(0 && \"Unsupported size!\"); break;\n";
     Stream.exit_block();
   }
 
