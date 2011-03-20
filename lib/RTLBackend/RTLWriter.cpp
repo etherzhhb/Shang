@@ -449,7 +449,7 @@ void RTLWriter::emitAllocatedFUs() {
                       MemBus->getDataWidth());
     // Data size, in bytes.
     VM->addOutputPort(VFUMemBus::getDataSizeName(FUNum),
-                      Log2_32_Ceil(MemBus->getDataWidth() / 8));
+                      Log2_32_Ceil(MemBus->getDataWidth() / 8) + 1);
   }
   
 }
