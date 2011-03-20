@@ -205,7 +205,7 @@ public:
     FUPortOffsets[ID.getFUType()].insert(mapping);
   }
 
-  unsigned getFUPortOff(FuncUnitId ID) const {
+  unsigned getFUPortOf(FuncUnitId ID) const {
     typedef std::map<unsigned, unsigned> MapTy;
     MapTy Map = FUPortOffsets[ID.getFUType()];
     MapTy::const_iterator at = Map.find(ID.getFUNum());
@@ -214,7 +214,7 @@ public:
   }
 
   const_port_iterator getFUPortItBegin(FuncUnitId ID) const {
-    unsigned PortBegin = getFUPortOff(ID);
+    unsigned PortBegin = getFUPortOf(ID);
     return Ports.begin() + PortBegin;
   }
 
