@@ -333,8 +333,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     // We need the value after it is written to register.
     if (WDef.WriteSlot < ReadSlot) {
-      assert((VTID.hasDatapath() && ReadSlot == EmitSlot + 1)
-              || (!VTID.hasDatapath() && ReadSlot == EmitSlot)
+      assert(((VTID.hasDatapath() && ReadSlot == EmitSlot + 1)
+              || (!VTID.hasDatapath() && ReadSlot == EmitSlot))
               && "Assumption of Slots broken!");
       Ops[i] = getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
       continue;

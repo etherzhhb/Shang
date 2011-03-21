@@ -416,6 +416,7 @@ bool ILPScheduler::scheduleState() {
 
   buildObject(lp);
 
+  set_verbose(lp, CRITICAL);
   DEBUG(set_verbose(lp, FULL));
 
   set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_COLS | PRESOLVE_LINDEP,
