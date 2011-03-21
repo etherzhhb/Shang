@@ -139,6 +139,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpSRA(ucOp &OpSRA);
 
   void emitOpAdd(ucOp &OpAdd);
+  void emitOpMult(ucOp &OpMult);
 
   void emitOpBitCat(ucOp &OpBitCat);
   void emitOpBitSlice(ucOp &OpBitSlice);
@@ -779,6 +780,7 @@ void RTLWriter::emitDatapath(ucState &State) {
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
 
     case VTM::VOpAdd:       emitOpAdd(Op);          break;
+    case VTM::VOpMult:      emitOpMult(Op);         break;
 
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
@@ -873,6 +875,19 @@ void RTLWriter::emitOpAdd(ucOp &OpAdd) {
   OS << " + ";
   // Carry in.
   emitOperand(OS, OpAdd.getOperand(4));
+  OS << ";\n";
+}
+
+void RTLWriter::emitOpMult(ucOp &OpMult) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+
+  OS << "assign ";
+  emitOperand(OS, OpMult.getOperand(0));
+  OS << " = ";
+
+  emitOperand(OS, OpMult.getOperand(1));
+  OS << " * ";
+  emitOperand(OS, OpMult.getOperand(2));
   OS << ";\n";
 }
 

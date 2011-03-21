@@ -163,10 +163,12 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case VTMISD::InArg:         return SelectInArg(N);
 
   case VTMISD::ADD:           return SelectAdd(N);
+  // DirtyHack: Is binary instruction enough?
+  case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
   case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
-  case ISD::OR:              return SelectBinary(N, VTM::VOpOr);
+  case ISD::OR:               return SelectBinary(N, VTM::VOpOr);
   case VTMISD::Not:           return SelectUnary(N, VTM::VOpNot);
 
   case ISD::SHL:              return SelectBinary(N, VTM::VOpSHL);
