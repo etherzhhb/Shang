@@ -39,7 +39,7 @@ private:
   friend class PartitionInfo;
 
 public:
-  ConstraintsInfo() : PipeAlg(DontPipeline), SchedAlg(FDLS) {}
+  ConstraintsInfo() : PipeAlg(DontPipeline), SchedAlg(ILP) {}
 
   PipeLineAlgorithm getPipeLineAlgorithm() const { return PipeAlg; }
 
