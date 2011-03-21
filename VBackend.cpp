@@ -221,6 +221,8 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // PM.add(createFastRegisterAllocator());
 
   // Fix the copy instruction introduced by register allocation.
+  // We need this even we have our own register allocator, because copies will
+  // be generated when eliminating PHIs.
   PM.add(createFixCopyPass());
 
   PM.add(createRTLWriterPass());
