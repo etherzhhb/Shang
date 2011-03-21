@@ -407,8 +407,14 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       unsigned InitReg = MRI.createVirtualRegister(RC);
       // Get the insert position.
       MachineInstr *PredCtrl = prior(PredBB->getFirstTerminator());
-      assert(PredCtrl->getOpcode() == VTM::Control
-             && "Predblock not scheduled yet!");
+      // Sometimes there are copies between endstate and the real terminator,
+      // we need to skip them.
+      while (PredCtrl->getOpcode() != VTM::Control) {
+        assert(PredCtrl->getOpcode() == TargetOpcode::COPY
+               && "Unexpected instruction when finding Terminator!");
+        PredCtrl = prior(MachineBasicBlock::iterator(PredCtrl));
+      }
+      
       MachineInstrBuilder SetIBuilder(PredCtrl);
 
       // Compute the corresponding slot predicate.
