@@ -203,7 +203,7 @@ void SubGraph::addRecurrence() {
     //Recurrence.push_back(const_cast<VSUnit*>(A));
   }
 
-  unsigned RecII = TotalLatency / TotalDistance;
+  unsigned RecII = ceil((double)TotalLatency / TotalDistance);
   //MSInfo->addRecurrence(RecII, Recurrence);
   RecMII = std::max(RecMII, RecII);
   DEBUG(dbgs() << "RecII: " << RecII << '\n');
