@@ -114,8 +114,13 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   unsigned computeLatency(const MachineInstr *SrcInstr,
                           const MachineInstr *DstInstr) {
     if (SrcInstr == 0) {
-      // DirtyHack: There must be at least 1 slot between entry and exit.
-      if (DstInstr && VTFInfo(*DstInstr)->isTerminator()) return 1;
+      // Set latency of Control operation and entry root to 1, so we can prevent
+      // scheduling control operation to the first slot.
+      if (DstInstr && (!VTFInfo(*DstInstr).hasDatapath()
+      // Do not worry about PHI Nodes, their will be eliminated at the register
+      // allocation pass.
+                        && DstInstr->getOpcode() != VTM::PHI))
+        return 1;
 
       return 0;
     }
@@ -468,7 +473,8 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
   // If the atom depend on nothing, make it depend on the entry node.
   if (A->dep_empty()) {
     VSUnit *EntryRoot = CurState.getEntryRoot();
-    A->addDep(getValDepEdge(EntryRoot, 0));
+    unsigned Latency = computeLatency(0, A->getFirstInstr());
+    A->addDep(getValDepEdge(EntryRoot, Latency));
   }
 }
 
