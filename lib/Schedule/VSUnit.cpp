@@ -70,7 +70,7 @@ void VSchedGraph::dump() const {
 }
 
 
-bool llvm::VSchedGraph::trySetLoopOp(VTFInfo &VTID) {
+bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
   assert(VTID->isTerminator() && "Bad instruction!");
 
   if (VTID->getOpcode() != VTM::VOpToState) return false;
@@ -251,7 +251,7 @@ void VSUnit::replaceAllUseBy(VSUnit *A) {
 
 VFUs::FUTypes VSUnit::getFUType() const {
   if (MachineInstr *Instr = getFirstInstr())
-    return VTFInfo(*Instr).getFUType();
+    return VInstr(*Instr).getFUType();
 
   return VFUs::Trivial;
 }
@@ -262,7 +262,7 @@ void VSUnit::print(raw_ostream &OS) const {
   for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
     MachineInstr *Instr = *I;
 
-    VTFInfo VTID = *Instr;
+    VInstr VTID = *Instr;
     OS << Instr->getDesc().getName() << '\n';
     DEBUG(OS << *Instr << '\n');
   }

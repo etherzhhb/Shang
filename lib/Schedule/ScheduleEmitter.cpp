@@ -249,7 +249,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 }
 
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
-  VTFInfo VTID = Inst;
+  VInstr VTID = Inst;
   bool IsCtrl = !VTID.hasDatapath();
 
   typedef SmallVector<MachineOperand, 8> OperandVector;

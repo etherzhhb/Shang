@@ -43,7 +43,7 @@ public:
   virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
 };
 
-class VTFInfo {
+class VInstr {
   enum TSFlagsBitFields {
     ResTypeMask = 0x7,
     ResTypeShiftAmount = 0x0,
@@ -65,9 +65,11 @@ class VTFInfo {
   const TargetInstrDesc &getTID() const { return I.getDesc(); }
   uint64_t getTSFlags() const { return getTID().TSFlags; }
 public:
-  /*implicit*/ VTFInfo(const MachineInstr &MI) : I(MI) {}
+  /*implicit*/ VInstr(const MachineInstr &MI) : I(MI) {}
 
   MachineInstr &get() const { return const_cast<MachineInstr&>(I); }
+
+  // TODO: Add method to help users manipulate the bit width flag.
 
   inline VFUs::FUTypes getFUType() const {
     return (VFUs::FUTypes)

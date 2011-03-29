@@ -352,7 +352,7 @@ public:
   unsigned getLatency() const {
     if (isEntry()) return 0;
   
-    VTFInfo Info = *getFirstInstr();
+    VInstr Info = *getFirstInstr();
     return Info.getLatency();
   }
 
@@ -470,7 +470,7 @@ private:
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
 
-  bool trySetLoopOp(VTFInfo &VTID);
+  bool trySetLoopOp(VInstr &VTID);
 
   unsigned computeRecMII();
   unsigned computeResMII();
@@ -519,7 +519,7 @@ public:
     return SU;
   }
 
-  bool eatTerminator(VTFInfo VTID) {
+  bool eatTerminator(VInstr VTID) {
     if (!VTID->isTerminator())
       return false;
 

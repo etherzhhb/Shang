@@ -28,7 +28,7 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
   {}
 
-FuncUnitId VTFInfo::getPrebindFUId()  const {
+FuncUnitId VInstr::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemAccess)
     return FuncUnitId(VFUs::MemoryBus, 0);
@@ -36,7 +36,7 @@ FuncUnitId VTFInfo::getPrebindFUId()  const {
   return FuncUnitId();
 }
 
-bool VTFInfo::mayLoad() const {
+bool VInstr::mayLoad() const {
   switch (getTID().Opcode) {
   default: return false;
   // There is a "isLoad" flag in memory access operation.
@@ -44,7 +44,7 @@ bool VTFInfo::mayLoad() const {
   }
 }
 
-bool VTFInfo::mayStore() const {
+bool VInstr::mayStore() const {
   switch (getTID().Opcode) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
