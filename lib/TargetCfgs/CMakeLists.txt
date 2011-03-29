@@ -10,7 +10,7 @@ include_directories(
 
 add_llvm_library(VTMTargetCfgs
   FileInfo.cpp
-  PartitionInfo.cpp
+  SystemInfo.cpp
   FUInfo.cpp
   Scripting.cpp
 )

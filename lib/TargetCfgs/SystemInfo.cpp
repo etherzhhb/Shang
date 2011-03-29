@@ -1,4 +1,4 @@
-//===----------- PartitionInfo.cpp - SW/HW parition infomation ------------===//
+//===----------- SystemInfo.cpp - SW/HW parition infomation ------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,10 +7,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file inplement the PartitionInfo class, which provide the information
+// This file inplement the SystemInfo class, which provide the information
 // about software/hardware partition.
 //
 //===----------------------------------------------------------------------===//
-#include "vtm/PartitionInfo.h"
+#include "vtm/SystemInfo.h"
 
 using namespace llvm;

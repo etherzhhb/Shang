@@ -1,4 +1,4 @@
-//===--------- vtm/PartitionInfo.h - SW/HW parition infomation ------------===//
+//===--------- vtm/SystemInfo.h - SW/HW parition infomation ------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,13 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file define the PartitionInfo class, which provide the information about
-// software/hardware partition.
+// This file define the SystemInfo class, which provide the information about
+// software/hardware sysinfo.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef VTM_PARTITION_INFO_H
-#define VTM_PARTITION_INFO_H
+#ifndef VTM_SYSTEM_INFO_H
+#define VTM_SYSTEM_INFO_H
 
 #include "llvm/Function.h"
 #include "llvm/ADT/StringMap.h"
@@ -36,7 +36,7 @@ private:
   ScheduleAlgorithm SchedAlg;
   
   friend struct LuaConstraints;
-  friend class PartitionInfo;
+  friend class SystemInfo;
 
 public:
   ConstraintsInfo() : PipeAlg(DontPipeline), SchedAlg(ILP) {}
@@ -48,12 +48,19 @@ public:
   ScheduleAlgorithm getScheduleAlgorithm() const { return SchedAlg; }
 };
 
-class PartitionInfo {
+class SystemInfo {
+public:
+  enum Interfaces {
+    DisableIf, Verilator
+  };
+private:
 
   // DO NOT IMPLEMENT
-  PartitionInfo(const PartitionInfo&);
+  SystemInfo(const SystemInfo&);
   // DO NOT IMPLEMENT
-  const PartitionInfo &operator=(const PartitionInfo&);
+  const SystemInfo &operator=(const SystemInfo&);
+
+  enum Interfaces IfType;
 
   StringMap<ConstraintsInfo> FunctionsInfos;
 
@@ -63,14 +70,14 @@ class PartitionInfo {
 
   friend struct LuaConstraints;
 public:
-  PartitionInfo() {}
+  SystemInfo() : IfType(DisableIf) {}
 
   ConstraintsInfo &getConstraints(const std::string &S) {
     return FunctionsInfos.GetOrCreateValue(S).getValue();
   }
 
   bool isHardware(const Function &F) const {
-    // If no explicit partition available, all function are synthesis to
+    // If no explicit sysinfo available, all function are synthesis to
     //  hardware by default.
     if (FunctionsInfos.empty())
       return true;
@@ -79,9 +86,11 @@ public:
   }
 
   bool empty() const { return FunctionsInfos.empty(); }
+
+  enum SystemInfo::Interfaces getIfType() const { return IfType; }
 };
 
-PartitionInfo &partition();
+SystemInfo &sysinfo();
 
 }
 

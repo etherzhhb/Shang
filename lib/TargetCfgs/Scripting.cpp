@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 #include "vtm/FileInfo.h"
 #include "vtm/FUInfo.h"
-#include "vtm/PartitionInfo.h"
+#include "vtm/SystemInfo.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -47,7 +47,7 @@ struct LuaConstraints {
   
   FUInfo FUI;
   FileInfo FileI;
-  PartitionInfo PartitionI;
+  SystemInfo SystemI;
   
   LuaConstraints() : State(lua_open()) {
     luabind::open(State);
@@ -80,15 +80,20 @@ struct LuaConstraints {
         .def_readwrite("PipeLine", &ConstraintsInfo::PipeAlg)
         .def_readwrite("Schedule", &ConstraintsInfo::SchedAlg),
 
-      luabind::class_<PartitionInfo>("PartitionInfo")
-        .def("setHardware", &PartitionInfo::setHardware)
-        .def("getConstraints", &PartitionInfo::getConstraints)
+      luabind::class_<SystemInfo>("SystemInfo")
+        .enum_("Interfaces")[
+          luabind::value("DisableIf", SystemInfo::DisableIf),
+          luabind::value("Verilator", SystemInfo::Verilator)
+        ]
+        .def("setHardware", &SystemInfo::setHardware)
+        .def("getConstraints", &SystemInfo::getConstraints)
+        .def_readwrite("IfType", &SystemInfo::IfType)
     ];
 
     // Bind the object.
     luabind::globals(State)["FUs"] = &FUI;
     luabind::globals(State)["Paths"] = &FileI;
-    luabind::globals(State)["Partition"] = &PartitionI;
+    luabind::globals(State)["System"] = &SystemI;
 
     // Run the script.
     if (luaL_dofile(State, ConstraintsFile.c_str())) {
@@ -115,6 +120,6 @@ FileInfo &llvm::vtmfiles() {
   return Constraints->FileI;
 }
 
-PartitionInfo &llvm::partition() {
-  return Constraints->PartitionI;
+SystemInfo &llvm::sysinfo() {
+  return Constraints->SystemI;
 }

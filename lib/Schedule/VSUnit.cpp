@@ -22,7 +22,7 @@
 #include "SchedulingBase.h"
 #include "ScheduleDOT.h"
 
-#include "vtm/PartitionInfo.h"
+#include "vtm/SystemInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/BitLevelInfo.h"

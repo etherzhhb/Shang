@@ -7,14 +7,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass perform the software/hardware partition by simply move the SW part
+// This pass perform the software/hardware sysinfo by simply move the SW part
 // to another llvm module.
 //
 //===----------------------------------------------------------------------===//
 
 #include "vtm/Passes.h"
 #include "vtm/FileInfo.h"
-#include "vtm/PartitionInfo.h"
+#include "vtm/SystemInfo.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
@@ -32,9 +32,9 @@ namespace {
 struct FunctionFilter : public ModulePass {
   
   static char ID;
-  PartitionInfo &Partition;
+  SystemInfo &Partition;
 
-  FunctionFilter() : ModulePass(ID), Partition(partition()) {}
+  FunctionFilter() : ModulePass(ID), Partition(sysinfo()) {}
 
 
   bool runOnModule(Module &M);
@@ -43,7 +43,7 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
-  // No need to perform any partition.
+  // No need to perform any sysinfo.
   if (Partition.empty()) return false;
   
   OwningPtr<Module> SoftMod(CloneModule(&M));

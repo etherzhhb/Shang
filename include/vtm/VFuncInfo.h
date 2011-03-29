@@ -15,7 +15,7 @@
 #ifndef VTM_FUNCTION_INFO_H
 #define VTM_FUNCTION_INFO_H
 
-#include "vtm/PartitionInfo.h"
+#include "vtm/SystemInfo.h"
 #include "vtm/FUInfo.h"
 #include "vtm/VerilogAST.h"
 
@@ -75,7 +75,7 @@ class VFuncInfo : public MachineFunctionInfo {
   ConstraintsInfo Info;
 public:
   explicit VFuncInfo(MachineFunction &MF)
-    : Info(partition().getConstraints(MF.getFunction()->getName())){}
+    : Info(sysinfo().getConstraints(MF.getFunction()->getName())){}
 
   const ConstraintsInfo &getConstraints() const { return Info; }
 

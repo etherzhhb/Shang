@@ -22,6 +22,7 @@
 #include "VTargetMachine.h"
 
 #include "vtm/Passes.h"
+#include "vtm/SystemInfo.h"
 
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
@@ -227,7 +228,14 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(createRTLWriterPass());
 
-  // TODO: Select difference interface writer pass based on user's choice.
-  PM.add(createVLTIfWriterPass());
+  // Add interface writer pass.
+  switch (sysinfo().getIfType()) {
+  default:
+    break;
+  case SystemInfo::Verilator:
+    PM.add(createVLTIfWriterPass());
+    break;
+  }
+  
   return false;
 }
