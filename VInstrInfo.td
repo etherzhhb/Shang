@@ -147,8 +147,8 @@ def VOpBitSlice	 : DPTvaInst<(outs DR:$dst),
 def VOpBitRepeat : DPTvaInst<(outs DR:$dst),
                               (ins DR:$src, DR8:$times),
 							                "$dst = bitrepeat $src, $times", []>;
-def VOpBitCat	   : DPTvaInst<(outs DR:$dst), (ins variable_ops),
-							                "$dst = bitcat", []>;
+def VOpBitCat	   : DPTvaInst<(outs DR:$dst), (ins DR:$lhs, DR:$rhs),
+							                "$dst = bitcat $lhs, $rhs", []>;
 }
 
 //===----------------------------------------------------------------------===//

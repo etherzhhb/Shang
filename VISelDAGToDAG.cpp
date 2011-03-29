@@ -176,7 +176,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::SRA:              return SelectBinary(N, VTM::VOpSRA);
 
   case VTMISD::BitRepeat:     return SelectBinary(N, VTM::VOpBitRepeat);
-  case VTMISD::BitCat:        return SelectSimpleNode(N, VTM::VOpBitCat);
+  case VTMISD::BitCat:        return SelectBinary(N, VTM::VOpBitCat);
   case VTMISD::BitSlice:      return SelectSimpleNode(N, VTM::VOpBitSlice);
 
   case VTMISD::ROr:           return SelectUnary(N, VTM::VOpROr);

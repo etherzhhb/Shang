@@ -911,16 +911,10 @@ void RTLWriter::emitOpBitCat(ucOp &OpBitCat) {
   OS << "assign ";
   emitOperand(OS, OpBitCat.getOperand(0));
   OS << " = {";
-  
-  // Skip the dst operand.
-
-  ucOp::op_iterator I = OpBitCat.op_begin() + 1;
-  emitOperand(OS, *I);
-  while (++I != OpBitCat.op_end()) {
-    OS << ',';
-    emitOperand(OS, *I);
-  }
-
+  // BitCat is a binary instruction now.
+  emitOperand(OS, OpBitCat.getOperand(1));
+  OS << ',';
+  emitOperand(OS, OpBitCat.getOperand(2));
   OS << "};\n";
 }
 
