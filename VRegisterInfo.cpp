@@ -30,54 +30,7 @@ using namespace llvm;
 VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
                              const TargetLowering &tli)
   : VTMGenRegisterInfo(), TII(tii), TD(td), TLI(tli),
-    MRI(0) {
-  // Dirty Hack.
-  NumRegs = 0;
-}
-
-const TargetRegisterDesc &VRegisterInfo::operator[](unsigned RegNo) const {
-  assert(RegNo < NumRegs &&
-    "Attempting to access record for invalid register number!");
-  if (VTM::DR1RegClass.count(RegNo))
-    return Desc[VTM::D1];
-  
-  if (VTM::DR8RegClass.count(RegNo))
-    return Desc[VTM::D8];
-
-  if (VTM::DR16RegClass.count(RegNo))
-    return Desc[VTM::D16];
-
-  if (VTM::DR32RegClass.count(RegNo))
-    return Desc[VTM::D32];
-
-  if (VTM::DR64RegClass.count(RegNo))
-    return Desc[VTM::D64];
-
-  assert(0 && "Bad register!");
-  return Desc[RegNo];
-}
-
-const TargetRegisterClass *VRegisterInfo::getPhyRegClass(unsigned RegNo) const {
-  assert(RegNo < NumRegs &&
-    "Attempting to access record for invalid register number!");
-  if (VTM::DR1RegClass.count(RegNo))
-    return &VTM::DR1RegClass;
-
-  if (VTM::DR8RegClass.count(RegNo))
-    return &VTM::DR8RegClass;
-
-  if (VTM::DR16RegClass.count(RegNo))
-    return &VTM::DR16RegClass;
-
-  if (VTM::DR32RegClass.count(RegNo))
-    return &VTM::DR32RegClass;
-
-  if (VTM::DR64RegClass.count(RegNo))
-    return &VTM::DR64RegClass;
-
-  assert(0 && "Bad register!");
-  return 0;
-}
+    MRI(0) {}
 
 const unsigned*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -133,62 +86,4 @@ const TargetRegisterClass *
 VRegisterInfo::getPointerRegClass(unsigned Kind) const {
   MVT PtrVT = MVT::getIntegerVT(TD.getPointerSizeInBits());
   return TLI.getRegClassFor(PtrVT);
-}
-
-void llvm::VRegisterInfo::resetPhyRegs() {
-  VTM::DR1RegClass.clear();
-  VTM::DR8RegClass.clear();
-  VTM::DR16RegClass.clear();
-  VTM::DR32RegClass.clear();
-  VTM::DR64RegClass.clear();
-  NumRegs = 0;
-}
-
-bool VRegisterInfo::createPhyRegs(MachineRegisterInfo &mri) {
-  MRI = &mri;
-  
-  resetPhyRegs();
-
-  allocatePhyRegs(VTM::DR1RegClass);
-  allocatePhyRegs(VTM::DR8RegClass);
-  allocatePhyRegs(VTM::DR16RegClass);
-  allocatePhyRegs(VTM::DR32RegClass);
-  allocatePhyRegs(VTM::DR64RegClass);
-  // The last register number is NumRegs, so we have NumRegs + 1 registers.
-  ++NumRegs;
-  // Notice the MachineRegisterInfo after physics registers changed.
-  mri.updatePhyRegsInfo();
-  return false;
-}
-
-// We should not need to publish the initializer as long as no other passes
-// require RAOptimalSSA.
-#if 0 // disable INITIALIZE_PASS
-INITIALIZE_PASS(DynCreatePhyRegs, "dynamic-create-phyregs",
-                "Create the Physics Registers on demand.", false, true);
-#endif // disable INITIALIZE_PASS
-
-
-namespace {
-struct DynPhyRegsBuilder : public MachineFunctionPass {
-  static char ID;
-  VRegisterInfo &VRI;
-  DynPhyRegsBuilder(VRegisterInfo &vri) : MachineFunctionPass(ID), VRI(vri) {}
-
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    AU.setPreservesAll();
-  }
-
-  bool runOnMachineFunction(MachineFunction &MF) {
-    VRI.createPhyRegs(MF.getRegInfo());
-    return false;
-  }
-};
-}
-
-char DynPhyRegsBuilder::ID = 0;
-
-FunctionPass *llvm::createDynPhyRegsBuilderPass(VRegisterInfo &VRI) {
-  return new DynPhyRegsBuilder(VRI);
 }

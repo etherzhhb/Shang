@@ -37,10 +37,6 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
                 const TargetLowering &tli);
 
-  virtual const TargetRegisterDesc &operator[](unsigned RegNo) const;
-
-  const TargetRegisterClass *getPhyRegClass(unsigned RegNo) const;
-
   /// Code Generation virtual methods...
   const unsigned *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
 
@@ -64,19 +60,6 @@ struct VRegisterInfo : public VTMGenRegisterInfo {
   unsigned getEHHandlerRegister() const;
 
   int getDwarfRegNum(unsigned RegNum, bool isEH) const;
-
-
-  //===--------------------------------------------------------------------===//
-  /// Create physics registers dynamically.
-  bool createPhyRegs(MachineRegisterInfo &mri);
-
-  void resetPhyRegs();
-
-  template<class RegClass>
-  void allocatePhyRegs(RegClass &RC) {
-    unsigned NumVRegs = MRI->getRegClassVirtRegs(&RC).size();
-    RC.allocatePhyRegs(NumRegs, NumVRegs);
-  }
 };
 
 } // end namespace llvm

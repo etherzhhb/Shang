@@ -63,16 +63,13 @@ unsigned BitLevelInfo::computeWidthByRC(MachineOperand &MO) {
   unsigned Reg = MO.getReg();
 
   const TargetRegisterClass *RC = MRI->getRegClass(Reg);
-  // Just return the register bitwidth.
+  // Just return the register bit width.
   return RC->vt_begin()->getSizeInBits();
 }
 
 unsigned BitLevelInfo::computeWidthForPhyReg(MachineOperand &MO) {
-  unsigned Reg = MO.getReg();
-
-  const TargetRegisterClass *RC = TRI->getPhyRegClass(Reg);
-
-  return RC->vt_begin()->getSizeInBits();
+  assert(0 && "Not supported yet!");
+  return 0;
 }
 
 void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {

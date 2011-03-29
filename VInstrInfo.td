@@ -104,11 +104,11 @@ def VOpToState : CtrlInst<(outs), (ins DR1:$cnd, State:$target),
 
 // Prevent MachineCSE delete any VOpArg.
 // let neverHasSideEffects = 1 in
-def VOpArg : CtrlInst<(outs dyn_rc:$arg), (ins i8imm:$arg_no),
+def VOpArg : CtrlInst<(outs DR:$arg), (ins i8imm:$arg_no),
 		 				          "$arg = arg[$arg_no]", [], 0, 1>;
 
 let isBarrier		= 1  in
-def VOpRetVal : CtrlInst<(outs), (ins dyn_rc:$var, i8imm:$ret_no),
+def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
 							           "ret $var at $ret_no;",
 							           [], 0, 1>;
 }
@@ -117,37 +117,37 @@ let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
 // Assign a constant value to a register.
-def VOpSetRI : CtrlInst<(outs dyn_rc:$dst), (ins i64imm:$src),
+def VOpSetRI : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
 						             "$dst <= $src", [], 0, 1>;
 
 // Bitwise logic operation.
 let isCommutable       = 1 in
-def VOpXor	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+def VOpXor	 : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 						              "$dst = xor $src0, $src1", []>;
-def VOpAnd	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+def VOpAnd	 : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 						              "$dst = and $src0, $src1", []>;
-def VOpOr	   : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+def VOpOr	   : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 						              "$dst = or $src0, $src1", []>;
-def VOpNot	 : DPTvaInst<(outs dyn_rc:$dst), (ins dyn_rc:$src), 
+def VOpNot	 : DPTvaInst<(outs DR:$dst), (ins DR:$src), 
 						              "$dst = ~ $src", []>;
 
 
 // Reduction operation.
-def VOpRAnd	 : DPTvaInst<(outs DR1:$dst), (ins dyn_rc:$src), 
+def VOpRAnd	 : DPTvaInst<(outs DR1:$dst), (ins DR:$src), 
 						              "$dst = rand $src", []>;
-def VOpROr	 : DPTvaInst<(outs DR1:$dst), (ins dyn_rc:$src), 
+def VOpROr	 : DPTvaInst<(outs DR1:$dst), (ins DR:$src), 
 						              "$dst = ror $src", []>;
-def VOpRXor	 : DPTvaInst<(outs DR1:$dst), (ins dyn_rc:$src), 
+def VOpRXor	 : DPTvaInst<(outs DR1:$dst), (ins DR:$src), 
 						              "$dst = rxor $src", []>;
 
 // Bit level operations.
-def VOpBitSlice	 : DPTvaInst<(outs dyn_rc:$dst),
-                              (ins dyn_rc:$src, DR8:$ub, DR8:$lb),
+def VOpBitSlice	 : DPTvaInst<(outs DR:$dst),
+                              (ins DR:$src, DR8:$ub, DR8:$lb),
 							                "$dst = bitslice $src, $ub, $lb", []>;
-def VOpBitRepeat : DPTvaInst<(outs dyn_rc:$dst),
-                              (ins dyn_rc:$src, DR8:$times),
+def VOpBitRepeat : DPTvaInst<(outs DR:$dst),
+                              (ins DR:$src, DR8:$times),
 							                "$dst = bitrepeat $src, $times", []>;
-def VOpBitCat	   : DPTvaInst<(outs dyn_rc:$dst), (ins variable_ops),
+def VOpBitCat	   : DPTvaInst<(outs DR:$dst), (ins variable_ops),
 							                "$dst = bitcat", []>;
 }
 
@@ -156,28 +156,28 @@ def VOpBitCat	   : DPTvaInst<(outs dyn_rc:$dst), (ins variable_ops),
 let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
 let isCommutable       = 1 in
-def VOpAdd : FUInst<(outs dyn_rc:$dst, DR1:$co),
-			        (ins dyn_rc:$src1, dyn_rc:$src2, DR1:$ci),
+def VOpAdd : FUInst<(outs DR:$dst, DR1:$co),
+			        (ins DR:$src1, DR:$src2, DR1:$ci),
 					            "{$dst, $co} = $src1 + $src2 + $ci;",
 								 [], FUAddSub>;
-def VOpMult : FUInst<(outs dyn_rc:$dst),
-			         (ins dyn_rc:$src1, dyn_rc:$src2),
+def VOpMult : FUInst<(outs DR:$dst),
+			         (ins DR:$src1, DR:$src2),
 					            "$dst = $src1 * $src2;",
 								 [], FUMult>;
 
-def VOpSHL : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = shl $src0, $src1", [], FUSHIFT>;
-def VOpSRL : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+def VOpSRL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = lsr $src0, $src1", [], FUSHIFT>;
 
-def VOpSRA : FUInst<(outs dyn_rc:$dst), (ins dyn_rc:$src0, dyn_rc:$src1),
+def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = sra $src0, $src1", [], FUSHIFT>;
 }
 
 let mayLoad		  = 1,
 	mayStore	  = 1 in
-def VOpMemAccess : FUInst<(outs dyn_rc:$dst),
-							             (ins dyn_rc:$src, ptr_rc:$addr, DR1:$isLoad,
+def VOpMemAccess : FUInst<(outs DR:$dst),
+							             (ins DR:$src, ptr_rc:$addr, DR1:$isLoad,
 							              DR8:$sizeInfo),
 							             "$dst = memaccess $src, $addr, $isLoad, $sizeInfo",
 							             [], FUMemBus, 1, 1, 0>;

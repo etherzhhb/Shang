@@ -23,15 +23,21 @@ def FUSHIFT		: FUType<2, IIC_SHIFT>;
 def FUAddSub	: FUType<3, IIC_AddSub>;
 def FUMult		: FUType<4, IIC_Mult>;
 
+// Bit-width information operand.
+// Dirty Hack: This is not a Predicate Operand.
+def bitwidth : PredicateOperand<i64, (ops i64imm), (ops (i64 0))> {} 
+
 // Pseudo instructions
-class InstVTM<dag outs, dag ins, string asmstr, list<dag> pattern, FUType FU,
+class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
 			  bit datapath = 0, bits<4> latency = 0, 
 			  bit readAtEmit = 0, bit writeUntilFinish = 0>
   : Instruction {
   let Namespace = "VTM";
 
-  dag OutOperandList = outs;
-  dag InOperandList = ins;
+  dag OutOperandList = oops;
+  // Append the bit-width flag.
+  // TODO: We need predicate as well.
+  dag InOperandList = !con(iops, (ins bitwidth:$bwi));
   let AsmString   = asmstr;
   let Pattern = pattern;
 

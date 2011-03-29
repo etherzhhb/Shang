@@ -209,17 +209,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Schedule
   PM.add(createVPreRegAllocSchedPass());
 
-  // Create physics register on demand.
-  VRegisterInfo *VRI = const_cast<VRegisterInfo*>(getRegisterInfo());
-  PM.add(createDynPhyRegsBuilderPass(*VRI));
-
-  // Register allocation.
-  // PM.add(createOptimalSSARegisterAllocator());
-  // PM.add(createBasicRegisterAllocator());
-
-  PM.add(createLinearScanRegisterAllocator());
-
-  // PM.add(createFastRegisterAllocator());
+  // TODO: Register allocation.
 
   // Fix the copy instruction introduced by register allocation.
   // We need this even we have our own register allocator, because copies will
