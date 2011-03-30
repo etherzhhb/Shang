@@ -15,13 +15,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/BitLevelInfo.h"
+#include "vtm/VInstrInfo.h"
 #include "vtm/Passes.h"
-#include "vtm/VFuncInfo.h"
 #include "vtm/VTM.h"
-#include "vtm/VRegisterInfo.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#define DEBUG_TYPE "vtm-bli"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -44,40 +45,74 @@ void BitLevelInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
-  std::vector<MachineInstr*> WorkStack;
-
-  VFI = MF.getInfo<VFuncInfo>();
-  TRI = static_cast<const VRegisterInfo*>(MF.getTarget().getRegisterInfo());
   MRI = &MF.getRegInfo();
 
+  // Anotate the bit width information to target flag.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();
        BI != BE; ++BI)
     for (MachineBasicBlock::iterator I = BI->begin(), E =  BI->end();
-         I != E; ++I)
-      computeBitWidth(I);
+         I != E; ++I) {
+      MachineInstr &Instr = *I;
+      switch (Instr.getOpcode()) {
+      default: break;
+      // Dirty Hack: Fix the bit width information of the instruction.
+      case VTM::VOpToState: {
+        BitWidthOperand BWO(1);
+        BWO.updateBitWidth(Instr);
+        break;
+      }
+      case VTM::COPY:     case VTM::PHI:
+        // Fall through
+      case VTM::Control:  case VTM::Datapath:
+        continue;
+      }
 
+      BitWidthOperand BWO(Instr);
+      for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
+        MachineOperand &MO = Instr.getOperand(i);
+        if (!MO.isReg() && !MO.isImm()) continue;
+
+        bool Changed = updateBitWidth(MO, BWO.getBitWidth(i));
+        if (MO.isReg() && MO.isDef() && Changed)
+          propagateBitWidth(MO);
+      }
+    }
+
+  DEBUG(dbgs() << "---------- After bit width annotation.\n");
+  DEBUG(MF.dump());
   return false;
-}
-
-unsigned BitLevelInfo::computeWidthByRC(MachineOperand &MO) {
-  unsigned Reg = MO.getReg();
-
-  const TargetRegisterClass *RC = MRI->getRegClass(Reg);
-  // Just return the register bit width.
-  return RC->vt_begin()->getSizeInBits();
-}
-
-unsigned BitLevelInfo::computeWidthForPhyReg(MachineOperand &MO) {
-  assert(0 && "Not supported yet!");
-  return 0;
 }
 
 void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   SmallVector<MachineOperand*, 2> Defs;
   switch (Instr->getOpcode()) {
+  // Copy instruction may inserted during register allocation, in this case
+  // its operand will not come with any bit width information.
+  case VTM::COPY: {
+    MachineOperand &Result = Instr->getOperand(0),
+                   &Operand = Instr->getOperand(1);
+    assert (Operand.isReg()
+            && TargetRegisterInfo::isVirtualRegister(Operand.getReg())
+            && "Not support Physics register yet!");
+    
+    unsigned Width = getBitWidthInternal(Operand);
+
+    if (updateBitWidth(Result, Width))
+      Defs.push_back(&Result);
+    break;
+  }
+  case VTM::PHI: {
+    MachineOperand &Result = Instr->getOperand(0);
+    if (updateBitWidth(Result, computePHI(Instr)))
+      Defs.push_back(&Result);
+    break;
+  }
   // We can not check these instructions at this moment.
   case VTM::Control:
   case VTM::Datapath:
+  // Not necessary to compute the bitwitdh information of these instructions.
+  case VTM::VOpArg:
+  case VTM::VOpMemAccess:
   // These intructions do not define anything.
   case VTM::EndState:
   case VTM::VOpToState:
@@ -87,24 +122,19 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     return;
   // Bit level instructions, the most importance instructions
   // for bit level information.
-  case VTM::VOpBitSlice: {
-    MachineOperand &Result = Instr->getOperand(0);
-    if (updateBitWidth(Result, computeBitSliceWidth(Instr)))
-      Defs.push_back(&Result);
-    break;
-  }
-  case VTM::VOpBitRepeat: {
-    MachineOperand &Result = Instr->getOperand(0);
-    if (updateBitWidth(Result, computeBitRepeatWidth(Instr)))
-      Defs.push_back(&Result);
-    break;
-  }
-  case VTM::VOpBitCat: {
-    MachineOperand &Result = Instr->getOperand(0);
-    if (updateBitWidth(Result, computeBitCatWidth(Instr)))
-      Defs.push_back(&Result);
-    break;
-  }
+  case VTM::VOpBitSlice:
+    // BitSlice's width never change.
+    //assert(!updateBitWidth(Instr->getOperand(0), computeBitSliceWidth(Instr))
+    //       && "BitSlice's width changed!");
+    return;
+  case VTM::VOpBitRepeat:
+    assert(!updateBitWidth(Instr->getOperand(0), computeBitRepeatWidth(Instr))
+           && "BitRepeat's width changed!");
+    return;
+  case VTM::VOpBitCat:
+    assert(!updateBitWidth(Instr->getOperand(0), computeBitCatWidth(Instr))
+           && "BitCat's width changed!");
+    return;
   // Operations with Fixed bit width.
   case VTM::VOpROr:
   case VTM::VOpRAnd:
@@ -115,25 +145,9 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // Leaves.
+  // FIXME
   // Dirty Hack: this appear in bugpoint.
-  case VTM::IMPLICIT_DEF:
-  // FIXME: PHI nodes are not leaves, implement the computation logic.
-  // some iterative approach may need.
-  case VTM::PHI:
-  case VTM::VOpArg: {
-    MachineOperand &Result = Instr->getOperand(0);
-    if (updateBitWidth(Result, computeWidthByRC(Result)))
-      Defs.push_back(&Result);
-    break;
-  }
-  // FIXME: The bit width of result of memory access is deteminated by
-  // constraints.
-  case VTM::VOpMemAccess: {
-    MachineOperand &Result = Instr->getOperand(0);
-    if (updateBitWidth(Result, computeWidthByRC(Result)))
-      Defs.push_back(&Result);
-    break;
-  }
+  // case VTM::IMPLICIT_DEF:
   // Other Instructions.
   case VTM::VOpAdd: {
     MachineOperand &Carry = Instr->getOperand(1);
@@ -170,43 +184,32 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
-  // Copy instruction may inserted during register allocation, in this case
-  // its operand will not come with any bitwidth information.
-  case VTM::COPY: {
-    MachineOperand &Result = Instr->getOperand(0),
-                   &Operand = Instr->getOperand(1);
-    unsigned Width = getBitWidthInternal(Operand);
-    if (Width == 0) {// Compute its bitwidth by the register class information.
-      // We implicit the register is a physics register.
-      Width = computeWidthForPhyReg(Operand);
-      // Remember the bitwidth for operand.
-      updateBitWidth(Operand, Width);
-    }
-
-    if (updateBitWidth(Result, Width))
-      Defs.push_back(&Result);
-    break;
-  }
   default: assert(0 && "Unknown instruction!");
   }
 
-  // Update bitwidths.
+  // FIXME: Implement a iterative bit witdh update approach.
+  // Update bit widths.
   while (!Defs.empty())
-    updateUsesBitwidth(*Defs.pop_back_val());
+    propagateBitWidth(*Defs.pop_back_val());
 }
 
-void BitLevelInfo::updateUsesBitwidth(MachineOperand &MO) {
+void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
   assert(MO.isReg() && "Wrong operand type!");
 
   unsigned char BitWidth = getBitWidth(MO);
   assert(BitWidth && "Bit width not available!");
 
   for (MachineRegisterInfo::reg_iterator I = MRI->reg_begin(MO.getReg()),
-       E = MRI->reg_end(); I != E; ++I)
-    updateBitWidth(I.getOperand(), BitWidth);
+       E = MRI->reg_end(); I != E; ++I) {
+    MachineOperand &MO = I.getOperand();
+
+    // Propagate bit width information through the def-use chain.
+    if (updateBitWidth(MO, BitWidth) && (I->isCopy() || I->isPHI()))
+      computeBitWidth(&*I);
+  }
 }
 
-// TODO: Verify the bitwidth information.
+// TODO: Verify the bit width information.
 void BitLevelInfo::verifyAnalysis() const {
 
 }

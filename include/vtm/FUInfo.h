@@ -184,8 +184,6 @@ public:
   }
 };
 
-
-
 template<enum VFUs::FUTypes T>
 class VFUBinOpFUDesc : public VFUDesc {
   unsigned MaxBitWidth;

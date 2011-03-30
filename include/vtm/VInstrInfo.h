@@ -43,6 +43,35 @@ public:
   virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
 };
 
+// Helper class for manipulating bit width operand.
+class BitWidthOperand {
+  uint64_t Op;
+
+public:
+  explicit BitWidthOperand(uint64_t O = 0) : Op(O) {}
+  explicit BitWidthOperand(const MachineInstr &MI);
+
+  uint64_t get() const { return Op; }
+
+  BitWidthOperand setBitWidth(uint8_t width, unsigned Idx) {
+    assert(Idx < sizeof(uint64_t) && "Index out of range!");
+    uint64_t w = width;
+    // Clear the corresponding bit slice.
+    Op &= ~((uint64_t)0xff << (Idx * 8));
+    // Assign the value to the bit slice.
+    Op |= w << (Idx * 8);
+    return *this;
+  }
+
+  uint8_t getBitWidth(unsigned Idx) const {
+    assert(Idx < sizeof(uint64_t) && "Index out of range!");
+    uint64_t w = Op;
+    return w >> (Idx * 8);
+  }
+
+  void updateBitWidth(MachineInstr &MI);
+};
+
 class VInstr {
   enum TSFlagsBitFields {
     ResTypeMask = 0x7,

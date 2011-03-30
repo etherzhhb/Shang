@@ -203,7 +203,8 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   return Chain;
 }
 unsigned VTargetLowering::computeSizeInBits(SDValue Op) {
-  assert(Op.getValueType().isInteger() && "Can not compute size in bit!");
+  assert(Op.getValueType().isInteger() && "Bad SDValue type!");
+
   switch (Op->getOpcode()) {
   default: return Op.getValueSizeInBits();
   case VTMISD::BitSlice:

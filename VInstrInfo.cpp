@@ -36,6 +36,14 @@ FuncUnitId VInstr::getPrebindFUId()  const {
   return FuncUnitId();
 }
 
+
+BitWidthOperand::BitWidthOperand(const MachineInstr &MI)
+  : Op(MI.getOperand(MI.getNumOperands() - 1).getImm()) {}
+
+void BitWidthOperand::updateBitWidth(MachineInstr &MI) {
+  MI.getOperand(MI.getNumOperands() - 1).setImm(Op);
+}
+
 bool VInstr::mayLoad() const {
   switch (getTID().Opcode) {
   default: return false;

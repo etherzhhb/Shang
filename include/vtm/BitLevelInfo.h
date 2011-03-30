@@ -26,8 +26,6 @@
 #include "llvm/CodeGen/MachineInstr.h"
 
 namespace llvm {
-class VFuncInfo;
-struct VRegisterInfo;
 
 class BitLevelInfo : public MachineFunctionPass {
   unsigned getBitWidthInternal(MachineOperand &MO) const {
@@ -35,11 +33,8 @@ class BitLevelInfo : public MachineFunctionPass {
     return MO.getTargetFlags();
   }
 
-  bool propagateBitWidth(MachineInstr *Instr,
-                         std::vector<MachineInstr*> &WorkList);
-
   void computeBitWidth(MachineInstr *Instr);
-  void updateUsesBitwidth(MachineOperand &MO);
+  void propagateBitWidth(MachineOperand &MO);
   
   unsigned computeBitSliceWidth(MachineInstr *BitSlice) {
     unsigned UB = BitSlice->getOperand(2).getImm(),
@@ -62,21 +57,34 @@ class BitLevelInfo : public MachineFunctionPass {
       return BitWidth;
   }
 
-  unsigned computeWidthForPhyReg(MachineOperand &MO);
-
-  unsigned computeWidthByRC(MachineOperand &MO);
   unsigned computeByOpWithSameWidth(MachineInstr::mop_iterator I,
                                     MachineInstr::mop_iterator E) {
     assert(I != E && "The range is empty!");
-    unsigned BitWidth = getBitWidth(*I);
+    unsigned BitWidth = getBitWidthInternal(*I);
     while (++I != E)
-      assert(getBitWidth(*I) == BitWidth && "Bit width not match!");
-    
+      if (unsigned Width = getBitWidthInternal(*I)) {
+        assert ((BitWidth == 0 || BitWidth == Width)
+                 && "Bit width of PHINode not match!");
+        BitWidth = Width;
+      }
+
     return BitWidth;
   }
 
-  VFuncInfo *VFI;
-  const VRegisterInfo *TRI;
+  unsigned computePHI(MachineInstr *PN) {
+    assert(PN->isPHI() && "Wrong Instruction type!");
+    unsigned BitWidth = 0;
+    
+    for (unsigned i = 1; i != PN->getNumOperands(); i += 2)
+      if (unsigned Width = getBitWidthInternal(PN->getOperand(i))) {
+        assert ((BitWidth == 0 || BitWidth == Width)
+                 && "Bit width of PHINode not match!");
+        BitWidth = Width;
+      }
+
+    return BitWidth;
+  }
+
   MachineRegisterInfo *MRI;
 public:
   static char ID;
@@ -96,7 +104,8 @@ public:
   bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
     unsigned char OldBitWidth = getBitWidthInternal(MO);
     assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
-      && "Bit width not convergent!");
+            && "Bit width not convergent!");
+    assert(BitWidth && "Invalid bit width!");
     MO.setTargetFlags(BitWidth);
     return OldBitWidth != BitWidth;
   }
