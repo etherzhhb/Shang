@@ -16,6 +16,7 @@
 
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/VFuncInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/VTM.h"
 
@@ -55,12 +56,10 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr &Instr = *I;
       switch (Instr.getOpcode()) {
       default: break;
-      // Dirty Hack: Fix the bit width information of the instruction.
-      case VTM::VOpToState: {
-        BitWidthOperand BWO(1);
-        BWO.updateBitWidth(Instr);
-        break;
-      }
+      // Always fix the bit width of VOpToState.
+      case VTM::VOpToState:
+        updateBitWidth(Instr.getOperand(0), 1);
+        // Fall through
       case VTM::COPY:     case VTM::PHI:
         // Fall through
       case VTM::Control:  case VTM::Datapath:
@@ -114,8 +113,8 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   case VTM::VOpArg:
   case VTM::VOpMemAccess:
   // These intructions do not define anything.
-  case VTM::EndState:
   case VTM::VOpToState:
+  case VTM::EndState:
   case VTM::VOpRet:
   case VTM::VOpRetVal:
     // Do nothing for these instructions as they do not define anything.
@@ -212,4 +211,26 @@ void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
 // TODO: Verify the bit width information.
 void BitLevelInfo::verifyAnalysis() const {
 
+}
+
+unsigned BitLevelInfo::getBitWidth(MachineOperand &MO) const  {
+  unsigned BitWidth = getBitWidthInternal(MO);
+  assert(BitWidth && "Bit width information not available!");
+  return BitWidth;
+}
+
+unsigned BitLevelInfo::getBitWidth(unsigned R) const {
+  unsigned Size = 0;
+  for (MachineRegisterInfo::def_iterator I = MRI->def_begin(R),
+       E = MRI->def_end(); I != E; ++I) {
+    unsigned S = getBitWidthInternal(I.getOperand());
+    if (S == 0) { // Get the bit width from source operand.
+      assert(I->isCopy() && "Can not get register bit width!");
+      S = getBitWidth(I->getOperand(1).getReg());
+    }
+
+    Size = std::max(Size, S);
+  }
+
+  return Size;
 }

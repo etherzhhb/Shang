@@ -86,6 +86,7 @@ class BitLevelInfo : public MachineFunctionPass {
   }
 
   MachineRegisterInfo *MRI;
+
 public:
   static char ID;
   BitLevelInfo();
@@ -95,11 +96,9 @@ public:
 
   void verifyAnalysis() const;
 
-  unsigned getBitWidth(MachineOperand &MO) const {
-    unsigned BitWidth = getBitWidthInternal(MO);
-    assert(BitWidth && "Bit width information not available!");
-    return BitWidth;
-  }
+  unsigned getBitWidth(unsigned R) const;
+
+  unsigned getBitWidth(MachineOperand &MO) const;
 
   bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
     unsigned char OldBitWidth = getBitWidthInternal(MO);
@@ -107,6 +106,7 @@ public:
             && "Bit width not convergent!");
     assert(BitWidth && "Invalid bit width!");
     MO.setTargetFlags(BitWidth);
+
     return OldBitWidth != BitWidth;
   }
 };
