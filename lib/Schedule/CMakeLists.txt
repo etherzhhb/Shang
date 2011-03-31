@@ -14,7 +14,7 @@ add_llvm_library(VTMSchedule
   ScheduleEmitter.cpp
   RecurrenceFinder.cpp
   VPreRegAllocSched.cpp
-  RegAllocOptimalSSA.cpp
+  VRegAllocSimple.cpp
 )
 
 target_link_libraries (

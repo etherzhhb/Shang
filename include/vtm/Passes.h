@@ -38,7 +38,7 @@ Pass *createBitLevelInfoPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Register allocation.
-FunctionPass *createOptimalSSARegisterAllocator();
+FunctionPass *createSimpleRegisterAllocator();
 
 // Register allocation.
 FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
@@ -56,7 +56,7 @@ Pass *createVLTIfWriterPass();
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeRTLWriterPass(PassRegistry &Registry);
 
-void initializeRAOptimalSSAPass(PassRegistry &Registry);
+void initializeRAPass(PassRegistry &Registry);
 } // end namespace
 
 #endif

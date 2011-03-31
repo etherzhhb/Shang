@@ -210,6 +210,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createVPreRegAllocSchedPass());
 
   // TODO: Register allocation.
+  PM.add(createSimpleRegisterAllocator());
 
   // Fix the copy instruction introduced by register allocation.
   // We need this even we have our own register allocator, because copies will
