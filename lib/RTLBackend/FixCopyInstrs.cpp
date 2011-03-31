@@ -99,6 +99,10 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
   unsigned SrcReg = SrcOp.getReg(),
            DstReg = DstOp.getReg();
 
+  // Try to set the bit width for new instert copy instruction.
+  BLI->updateBitWidth(SrcOp, BLI->getBitWidth(SrcReg));
+  BLI->updateBitWidth(DstOp, BLI->getBitWidth(SrcReg));
+
   for (ucState::iterator I = Ctrl.begin(), E = Ctrl.end(); I != E; ++I) {
     ucOp Op = *I;
     for (ucOp::op_iterator MI = Op.op_begin(), ME = Op.op_end();

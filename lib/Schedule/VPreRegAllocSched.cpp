@@ -582,7 +582,9 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       // Create "VOpToState 1/*means always true*/, target mbb"
       // FIXME: Setup the bit-width flag.
       MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
-        .addImm(1).addMBB(*MBB->succ_begin());
+        .addImm(1).addMBB(*MBB->succ_begin()).addImm(1);
+      BLI->updateBitWidth(Term.getOperand(0), 1);
+
       State.eatTerminator(VInstr(Term));
     }
   }

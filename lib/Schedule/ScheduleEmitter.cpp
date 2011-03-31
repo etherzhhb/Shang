@@ -499,7 +499,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   // Remove all unused instructions.
   BTB.clearUp();
   // Build the dummy terminator.
-  BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState));
+  BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState)).addImm(0);
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());

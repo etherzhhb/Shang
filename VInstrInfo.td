@@ -186,11 +186,10 @@ def VOpMemAccess : FUInst<(outs DR:$dst),
 //===----------------------------------------------------------------------===//
 
 let isBarrier    = 1 in {
-def Control	: CtrlInst<(outs variable_ops),
-							         (ins i32imm:$slot, variable_ops),
+// These instruction use the bitwidth operand as slot operand.
+def Control	: CtrlInst<(outs variable_ops), (ins variable_ops),
 							         "control;", []>;
-def Datapath : DPTvaInst<(outs variable_ops),
-		     	               (ins i32imm:$slot, variable_ops),
+def Datapath : DPTvaInst<(outs variable_ops), (ins variable_ops),
 						             "datapath;", []>;
 let	isTerminator = 1 in
 def EndState : DPTvaInst<(outs),(ins), "End state;", []>;
