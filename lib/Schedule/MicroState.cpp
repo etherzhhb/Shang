@@ -15,6 +15,7 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/VTM.h"
 
+#include "llvm/Function.h"
 #include "llvm/Metadata.h"
 #include "llvm/Type.h"
 #include "llvm/Constants.h"
@@ -184,4 +185,34 @@ void ucState::print(raw_ostream &OS) const {
 
 void ucState::dump() const {
   print(dbgs());
+}
+
+raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
+  OS << "Scheduled MBB: " << MBB.getName() << '\n';
+  for (MachineBasicBlock::const_iterator I = MBB.begin(), E = MBB.end();
+       I != E; ++I) {
+    const MachineInstr *Instr = I;
+    switch (Instr->getOpcode()) {
+    case VTM::Control:
+    case VTM::Datapath:
+      ucState(*Instr).print(OS);
+      break;
+    default:
+      OS << "MI: ";
+      Instr->print(OS);
+      break;
+    }
+  }
+  OS << '\n';
+  return OS;
+}
+
+raw_ostream &llvm::printVMF(raw_ostream &OS, const MachineFunction &MF) {
+  OS << "Scheduled MF: " << MF.getFunction()->getName() << '\n';
+
+  for (MachineFunction::const_iterator I = MF.begin(), E = MF.end();
+       I != E; ++I)
+    printVMBB(OS, *I);
+
+  return OS;
 }

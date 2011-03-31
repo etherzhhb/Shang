@@ -19,15 +19,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "VSUnit.h"
-#include "SchedulingBase.h"
 #include "ScheduleDOT.h"
 
 #include "vtm/SystemInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFuncInfo.h"
 #include "vtm/BitLevelInfo.h"
-
-
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -46,23 +43,8 @@ static inline bool top_sort_finish(const VSUnit* LHS, const VSUnit* RHS) {
   return LHS->getIdx() < RHS->getIdx();
 }
 
-
 void VSchedGraph::print(raw_ostream &OS) const {
-  OS << "ScheduleGraph of " << MBB->getName() << '\n';
-  for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
-      I != E; ++I) {
-    MachineInstr *Instr = I;
-    switch (Instr->getOpcode()) {
-    case VTM::Control:
-    case VTM::Datapath:
-      ucState(*Instr).print(OS);
-      break;
-    default:
-      OS << "MI: ";
-      Instr->print(OS);
-      break;
-    }
-  }
+  printVMBB(OS, *MBB);
 }
 
 void VSchedGraph::dump() const {

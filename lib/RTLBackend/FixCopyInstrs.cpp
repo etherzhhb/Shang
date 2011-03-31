@@ -182,23 +182,7 @@ void FixCopy::runOnMachineBasicBlock(MachineBasicBlock &MBB,
   while (!Copys.empty())
     FuseCopyInstr(*Copys.pop_back_val(), Context);
 
-  DEBUG(
-  dbgs() << MBB.getName() << " After copy fixed:\n";
-  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
-    I != E; ++I) {
-      MachineInstr *Instr = I;
-      switch (Instr->getOpcode()) {
-    case VTM::Control:
-    case VTM::Datapath:
-      ucState(*Instr).dump();
-      break;
-    case VTM::EndState:
-      Instr->dump();
-      break;
-    default:
-      Instr->dump();
-      assert(0 && "Unexpected instruction!");
-      break;
-      }
-  });
+  DEBUG(dbgs() << MBB.getName() << " After copy fixed:\n";
+        printVMBB(dbgs(), MBB);
+  );
 }

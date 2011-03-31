@@ -252,6 +252,12 @@ public:
   void print(raw_ostream &OS) const;
   void dump() const;
 };
+
+// Print the scheduled machine code of verilog target machine, which only
+// contains VTM::Control and VTM::Datapath.
+raw_ostream &printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB);
+raw_ostream &printVMF(raw_ostream &OS, const MachineFunction &MF);
+
 }
 
 #endif

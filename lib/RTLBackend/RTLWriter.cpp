@@ -230,6 +230,10 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
+  DEBUG(dbgs() << "Function for RTL Codegen:\n";
+        printVMF(dbgs(), F);
+  ); 
+
   SignedWireNum = 0;
   // Reset the current fsm state number.
   CurFSMStateNum = 0;
