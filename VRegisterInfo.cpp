@@ -27,11 +27,6 @@
 #include "llvm/ADT/STLExtras.h"
 using namespace llvm;
 
-VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
-                             const TargetLowering &tli)
-  : VTMGenRegisterInfo(), TII(tii), TD(td), TLI(tli),
-    MRI(0) {}
-
 const unsigned*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   static const unsigned CalleeSavedRegs[] = {0};
@@ -81,6 +76,16 @@ int VRegisterInfo::getDwarfRegNum(unsigned RegNum, bool isEH) const {
 }
 
 #include "VGenRegisterInfo.inc"
+
+VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
+                             const TargetLowering &tli)
+  : TargetRegisterInfo(RegisterDescriptors, 4096, 
+                       RegisterClasses, RegisterClasses+6,
+                       SubRegIndexTable,
+                       -1, -1,
+                       SubregHashTable, SubregHashTableSize,
+                       AliasesHashTable, AliasesHashTableSize),
+    TII(tii), TD(td), TLI(tli) {}
 
 const TargetRegisterClass *
 VRegisterInfo::getPointerRegClass(unsigned Kind) const {
