@@ -735,10 +735,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     OS << "reg" << Operand.getReg();
 
     unsigned BitWidth = BLI->getBitWidth(Operand);
-    // Do not print out reg[0] if register has only one bit.
-    if (PrintBitRange && BitWidth != 1) {
-      OS << verilogBitRange(BitWidth);
-    }
+    if (PrintBitRange) OS << verilogBitRange(BitWidth);
 
     return;
   }
