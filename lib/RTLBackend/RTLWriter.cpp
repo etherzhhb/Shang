@@ -647,8 +647,7 @@ void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
 }
 
 void RTLWriter::emitImplicitDef(ucOp &ImpDef) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  OS << "/*IMPLICIT_DEF " << ImpDef << "*/\n";
+  DEBUG(VM->getControlBlockBuffer() << "/*IMPLICIT_DEF " << ImpDef << "*/\n");
 }
 
 void RTLWriter::emitOpCopy(ucOp &OpCopy) {
