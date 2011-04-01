@@ -85,7 +85,6 @@ class RTLWriter : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllRegister();
-  void emitRegClassRegs(const TargetRegisterClass *RC, unsigned BitWidth);
 
   void clear();
 
@@ -460,23 +459,10 @@ void RTLWriter::emitAllocatedFUs() {
 }
 
 void RTLWriter::emitAllRegister() {
-  emitRegClassRegs(VTM::DR1RegisterClass, 1);
-  emitRegClassRegs(VTM::DR8RegisterClass, 8);
-  emitRegClassRegs(VTM::DR16RegisterClass, 16);
-  emitRegClassRegs(VTM::DR32RegisterClass, 32);
-  emitRegClassRegs(VTM::DR64RegisterClass, 64);
-}
-
-void RTLWriter::emitRegClassRegs(const TargetRegisterClass *RC,
-                                 unsigned BitWidth) {
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  for (TargetRegisterClass::iterator I = RC->begin(), E = RC->end();
-      I != E; ++I) {
-    unsigned RegNum = *I;
-
-    if (MRI.isPhysRegUsed(RegNum))
-      VM->addRegister("reg" + utostr(RegNum), BitWidth);
-  }
+  // DIRTY HACK.
+  for (VFuncInfo::phyreg_iterator I = FuncInfo->phyreg_begin(1),
+       E = FuncInfo->phyreg_end(1); I < E; ++I)
+    VM->addRegister("reg" + utostr(*I), 64);
 }
 
 RTLWriter::~RTLWriter() {}
