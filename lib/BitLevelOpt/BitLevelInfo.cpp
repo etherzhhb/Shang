@@ -56,9 +56,6 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr &Instr = *I;
       switch (Instr.getOpcode()) {
       default: break;
-      // Always fix the bit width of VOpToState.
-      case VTM::VOpToState:
-        updateBitWidth(Instr.getOperand(0), 1);
         // Fall through
       case VTM::COPY:     case VTM::PHI:
         // Fall through

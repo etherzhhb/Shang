@@ -98,9 +98,9 @@ def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
 let isBranch   = 1,
 	isTerminator = 1 in
-def VOpToState : CtrlInst<(outs), (ins DR1:$cnd, State:$target),
+def VOpToState : CtrlInst<(outs), (ins DR:$cnd, State:$target),
 						              "if ($cnd) state $target;",
-						              [(brcond DR1:$cnd, bb:$target)], 0, 1>;
+						              [], 0, 1>;
 
 // Prevent MachineCSE delete any VOpArg.
 // let neverHasSideEffects = 1 in
@@ -133,11 +133,11 @@ def VOpNot	 : DPTvaInst<(outs DR:$dst), (ins DR:$src),
 
 
 // Reduction operation.
-def VOpRAnd	 : DPTvaInst<(outs DR1:$dst), (ins DR:$src), 
+def VOpRAnd	 : DPTvaInst<(outs DR:$dst), (ins DR:$src), 
 						              "$dst = rand $src", []>;
-def VOpROr	 : DPTvaInst<(outs DR1:$dst), (ins DR:$src), 
+def VOpROr	 : DPTvaInst<(outs DR:$dst), (ins DR:$src), 
 						              "$dst = ror $src", []>;
-def VOpRXor	 : DPTvaInst<(outs DR1:$dst), (ins DR:$src), 
+def VOpRXor	 : DPTvaInst<(outs DR:$dst), (ins DR:$src), 
 						              "$dst = rxor $src", []>;
 
 // Bit level operations.
@@ -156,8 +156,8 @@ def VOpBitCat	   : DPTvaInst<(outs DR:$dst), (ins DR:$lhs, DR:$rhs),
 let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
 let isCommutable       = 1 in
-def VOpAdd : FUInst<(outs DR:$dst, DR1:$co),
-			        (ins DR:$src1, DR:$src2, DR1:$ci),
+def VOpAdd : FUInst<(outs DR:$dst, DR:$co),
+			        (ins DR:$src1, DR:$src2, DR:$ci),
 					            "{$dst, $co} = $src1 + $src2 + $ci;",
 								 [], FUAddSub>;
 def VOpMult : FUInst<(outs DR:$dst),
@@ -177,8 +177,8 @@ def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 let mayLoad		  = 1,
 	mayStore	  = 1 in
 def VOpMemAccess : FUInst<(outs DR:$dst),
-							             (ins DR:$src, ptr_rc:$addr, DR1:$isLoad,
-							              DR8:$sizeInfo),
+							             (ins DR:$src, ptr_rc:$addr, DR:$isLoad,
+							              DR:$sizeInfo),
 							             "$dst = memaccess $src, $addr, $isLoad, $sizeInfo",
 							             [], FUMemBus, 1, 1, 0>;
 

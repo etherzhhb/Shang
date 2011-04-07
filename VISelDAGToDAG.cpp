@@ -60,6 +60,7 @@ private:
   // Function argument and return values.
   SDNode *SelectInArg(SDNode *N);
   SDNode *SelectRetVal(SDNode *N);
+  SDNode *SelectBrcnd(SDNode *N);
 
   // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
@@ -101,9 +102,12 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
   }
 
   // Set up the operand widths.
-  for (unsigned i = 0; i < NumOps -1; ++i)
+  for (unsigned i = 0; i < NumOps -1; ++i) {
+    if (Ops[i].getValueType() == MVT::Other) continue;
+    
     bwo.setBitWidth(VTargetLowering::computeSizeInBits(Ops[i]),
                     i + NumDefs); // Skip the chains.
+  }
   
   // FIXME: Build the bit width information.
   Ops[NumOps -1] = CurDAG->getTargetConstant(bwo.get(), MVT::i64);
@@ -173,7 +177,7 @@ SDNode *VDAGToDAGISel::SelectConstant(SDNode *N) {
                               Ops, array_lengthof(Ops));
 }
 
-SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {
+SDNode *VDAGToDAGISel::SelectInArg(SDNode *N) {
   // Build the target constant.
   SDValue ArgIdx = N->getOperand(1);
   int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();
@@ -185,6 +189,16 @@ SDNode * VDAGToDAGISel::SelectInArg(SDNode *N) {
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
 
   return CurDAG->SelectNodeTo(N, VTM::VOpArg, N->getVTList(),
+                              Ops, array_lengthof(Ops));
+}
+
+SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
+  SDValue Ops[] = {N->getOperand(1), N->getOperand(2),
+                   SDValue()/*The dummy bit width operand*/,
+                   N->getOperand(0) };
+  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1/*Skip the ch*/);
+
+  return CurDAG->MorphNodeTo(N, ~VTM::VOpToState, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }
 
@@ -229,6 +243,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   default: break;
   case VTMISD::RetVal:        return SelectRetVal(N);
   case VTMISD::InArg:         return SelectInArg(N);
+  case ISD::BRCOND:           return SelectBrcnd(N);
 
   case VTMISD::ADD:           return SelectAdd(N);
   // DirtyHack: Is binary instruction enough?

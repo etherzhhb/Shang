@@ -47,11 +47,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setSchedulingPreference(Sched::ILP);
 
   // Set up the legal register classes.
-  addRegisterClass(MVT::i1,   VTM::DR1RegisterClass);
-  addRegisterClass(MVT::i8,   VTM::DR8RegisterClass);
-  addRegisterClass(MVT::i16,  VTM::DR16RegisterClass);
-  addRegisterClass(MVT::i32,  VTM::DR32RegisterClass);
-  addRegisterClass(MVT::i64,  VTM::DR64RegisterClass);
+  addRegisterClass(MVT::i1,   VTM::DRRegisterClass);
+  addRegisterClass(MVT::i8,   VTM::DRRegisterClass);
+  addRegisterClass(MVT::i16,  VTM::DRRegisterClass);
+  addRegisterClass(MVT::i32,  VTM::DRRegisterClass);
+  addRegisterClass(MVT::i64,  VTM::DRRegisterClass);
 
   computeRegisterProperties();
 

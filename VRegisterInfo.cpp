@@ -80,7 +80,7 @@ int VRegisterInfo::getDwarfRegNum(unsigned RegNum, bool isEH) const {
 VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
                              const TargetLowering &tli)
   : TargetRegisterInfo(RegisterDescriptors, 4096, 
-                       RegisterClasses, RegisterClasses+6,
+                       RegisterClasses, RegisterClasses+1,
                        SubRegIndexTable,
                        -1, -1,
                        SubregHashTable, SubregHashTableSize,
