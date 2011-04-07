@@ -524,6 +524,12 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
       PhiSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &PN),
                                   true, VDMemDep::AntiDep, 1));
     }
+
+    // Next loop can not start before loop operation issued.
+    VSUnit *LoopOp = State.getLoopOp();
+    PhiSU->addDep(getMemDepEdge(LoopOp,
+                                computeLatency(LoopOp->getFirstInstr(), &PN),
+                                true, VDMemDep::AntiDep, 1));
   }
 }
 
