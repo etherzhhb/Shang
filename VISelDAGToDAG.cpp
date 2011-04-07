@@ -106,15 +106,15 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
                     i + NumDefs); // Skip the chains.
   
   // FIXME: Build the bit width information.
-  Ops[NumOps -1] = CurDAG->getConstant(bwo.get(), MVT::i64, true);
+  Ops[NumOps -1] = CurDAG->getTargetConstant(bwo.get(), MVT::i64);
 }
 
 SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
   SDValue Ops [] = { N->getOperand(0),
                      SDValue()/*The dummy bit width operand*/ };
-  
+
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
-  
+
   return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }

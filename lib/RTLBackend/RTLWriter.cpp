@@ -148,7 +148,6 @@ class RTLWriter : public MachineFunctionPass {
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand,
                    bool PrintBitRange = true);
-  unsigned getOperandWitdh(MachineOperand &Operand);
 
   // Return true if the control operation contains a return operation.
   bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
@@ -695,22 +694,6 @@ void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
   OS << VFUMemBus::getDataSizeName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(4));
   OS << ";\n";
-}
-
-unsigned RTLWriter::getOperandWitdh(MachineOperand &Operand) {
-  switch (Operand.getType()) {
-  case MachineOperand::MO_Register: {
-    const TargetRegisterClass *RC = MRI->getRegClass(Operand.getReg());
-    return RC->vt_begin()->getSizeInBits();
-  }
-  case MachineOperand::MO_Metadata: {
-    MetaToken MetaOp(Operand.getMetadata());
-    return MetaOp.getBitWidth(); 
-  }
-  default:
-    assert(0 && "Unknown bitwidth!");
-  }
-  return 0;
 }
 
 void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
