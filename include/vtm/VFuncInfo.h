@@ -73,7 +73,7 @@ class VFuncInfo : public MachineFunctionInfo {
   // TODO: we need to perform per-BasicBlock register allocation to reduce
   // the length of interconnection.
   unsigned TotalRegs;
-  static const unsigned fistPhyReg = 0;
+  static const unsigned fistPhyReg = 8;
 
   StringPool SymbolPool;
   std::set<PooledStringPtr> Symbols;
@@ -173,10 +173,10 @@ public:
 
   // Allocate a Physics register, its sizeInBytes can be 1/2/3/4
   unsigned allocatePhyReg(unsigned SizeInBytes) {
-    unsigned ret = TotalRegs;
+    unsigned ret = RoundUpToAlignment(TotalRegs, SizeInBytes);
     // The register should always align.
-    TotalRegs = RoundUpToAlignment(TotalRegs + 1, SizeInBytes);
-    return ret + 1;
+    TotalRegs = ret + SizeInBytes;
+    return ret;
   }
 
   class phyreg_iterator : public std::iterator<std::forward_iterator_tag,
@@ -202,7 +202,7 @@ public:
       return i < RHS.i;
     }
 
-    inline unsigned operator*() const { return i + 1; }
+    inline unsigned operator*() const { return i; }
 
     inline phyreg_iterator &operator++() {
       i += sizeInBytes;
