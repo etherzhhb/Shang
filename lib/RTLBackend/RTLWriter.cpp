@@ -703,7 +703,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   case MachineOperand::MO_Register: {
     unsigned Reg = Operand.getReg();
     // Get the one of the 64 bit registers.
-    OS << "reg" << (Reg & ~0x7);
+    OS << "/*reg" << Reg <<"*/ reg" << (Reg & ~0x7);
     // Select the sub register
     unsigned Offset = (Reg & 0x7) * 8;
     UB = std::min(BLI->getBitWidth(Operand), UB);
