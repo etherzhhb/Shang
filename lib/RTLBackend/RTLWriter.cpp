@@ -147,7 +147,8 @@ class RTLWriter : public MachineFunctionPass {
   void emitImplicitDef(ucOp &ImpDef);
 
   void emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                   bool PrintBitRange = true);
+                   /*FIXME: Get the value from the max word length*/
+                   unsigned UB = 64, unsigned LB = 0);
 
   // Return true if the control operation contains a return operation.
   bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
@@ -458,9 +459,9 @@ void RTLWriter::emitAllocatedFUs() {
 }
 
 void RTLWriter::emitAllRegister() {
-  // DIRTY HACK.
-  for (VFuncInfo::phyreg_iterator I = FuncInfo->phyreg_begin(1),
-       E = FuncInfo->phyreg_end(1); I < E; ++I)
+  // Emit the register with max word length.
+  for (VFuncInfo::phyreg_iterator I = FuncInfo->phyreg_begin(8),
+       E = FuncInfo->phyreg_end(8); I < E; ++I)
     VM->addRegister("reg" + utostr(*I), 64);
 }
 
@@ -697,13 +698,16 @@ void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
 }
 
 void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                          bool PrintBitRange) {
+                            unsigned UB, unsigned LB) {
   switch (Operand.getType()) {
   case MachineOperand::MO_Register: {
-    OS << "reg" << Operand.getReg();
-
-    unsigned BitWidth = BLI->getBitWidth(Operand);
-    if (PrintBitRange) OS << verilogBitRange(BitWidth);
+    unsigned Reg = Operand.getReg();
+    // Get the one of the 64 bit registers.
+    OS << "reg" << (Reg & ~0x7);
+    // Select the sub register
+    unsigned Offset = (Reg & 0x7) * 8;
+    UB = std::min(BLI->getBitWidth(Operand), UB);
+    OS << verilogBitRange(UB + Offset, LB + Offset);
 
     return;
   }
@@ -871,8 +875,8 @@ void RTLWriter::emitOpBitSlice(ucOp &OpBitSlice) {
   OS << "assign ";
   emitOperand(OS, OpBitSlice.getOperand(0));
   OS << " = ";
-  emitOperand(OS, OpBitSlice.getOperand(1), false);
-  OS << verilogBitRange(UB, LB) << ";\n";
+  emitOperand(OS, OpBitSlice.getOperand(1), UB, LB);
+  OS << ";\n";
 }
 
 void RTLWriter::emitOpBitCat(ucOp &OpBitCat) {
