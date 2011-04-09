@@ -195,8 +195,8 @@ void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
   unsigned char BitWidth = getBitWidth(MO);
   assert(BitWidth && "Bit width not available!");
 
-  for (MachineRegisterInfo::reg_iterator I = MRI->reg_begin(MO.getReg()),
-       E = MRI->reg_end(); I != E; ++I) {
+  for (MachineRegisterInfo::use_iterator I = MRI->use_begin(MO.getReg()),
+       E = MRI->use_end(); I != E; ++I) {
     MachineOperand &MO = I.getOperand();
 
     // Propagate bit width information through the def-use chain.
