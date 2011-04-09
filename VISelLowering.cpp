@@ -14,6 +14,8 @@
 
 #include "VTargetMachine.h"
 #include "vtm/VISelLowering.h"
+#include "vtm/Utilities.h"
+
 #include "llvm/Function.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -221,7 +223,6 @@ unsigned VTargetLowering::computeSizeInBits(SDValue Op) {
   }
   }
 }
-
 
 SDValue VTargetLowering::getNot(SelectionDAG &DAG, DebugLoc dl,
                                 SDValue Operand) {
@@ -472,11 +473,13 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                      StoreVal, LSNode->getBasePtr(),
                      // Is load?
                      DAG.getConstant(isLoad, MVT::i1, true),
-                     // Size in byte.
-                     DAG.getConstant(VT.getStoreSize(), MVT::i8, true) };
+                     // Byte enable.
+                     DAG.getConstant(getByteEnable(VT.getStoreSize()), MVT::i8,
+                                     true)
+                    };
 
   unsigned DataBusWidth = vtmfus().getFUDesc<VFUMemBus>()->getDataWidth();
-  assert(DataBusWidth >= VTSize && "Unexpect large data!");
+  assert(DataBusWidth >= VTSize && "Unexpected large data!");
 
   MVT DataBusVT =
     EVT::getIntegerVT(*DAG.getContext(), DataBusWidth).getSimpleVT();  

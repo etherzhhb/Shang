@@ -451,9 +451,9 @@ void RTLWriter::emitAllocatedFUs() {
                      MemBus->getDataWidth());
     VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
                       MemBus->getDataWidth());
-    // Data size, in bytes.
-    VM->addOutputPort(VFUMemBus::getDataSizeName(FUNum),
-                      Log2_32_Ceil(MemBus->getDataWidth() / 8) + 1);
+    // Byte enable.
+    VM->addOutputPort(VFUMemBus::getByteEnableName(FUNum),
+                      MemBus->getDataWidth() / 8);
   }
   
 }
@@ -700,7 +700,7 @@ void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
   OS << ";\n";
   // The byte enable.
   // FIXME: This is the data size instead of the byte enable.
-  OS << VFUMemBus::getDataSizeName(FUNum) << " <= ";
+  OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(4));
   OS << ";\n";
 }

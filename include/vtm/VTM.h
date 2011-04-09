@@ -1,4 +1,4 @@
-//===-- VBackend.h - Top-level interface for Verilog backend -----*- C++ -*-===//
+//===-- VBackend.h - Top-level interface for Verilog backend ----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //

@@ -171,8 +171,8 @@ public:
   }
 
   // Dirty Hack: This should be byte enable.
-  inline static std::string getDataSizeName(unsigned FUNum) {
-    return "mem" + utostr(FUNum) + "datasize";
+  inline static std::string getByteEnableName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "be";
   }
 
   inline static std::string getWriteEnableName(unsigned FUNum) {

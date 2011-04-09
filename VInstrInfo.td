@@ -178,8 +178,8 @@ let mayLoad		  = 1,
 	mayStore	  = 1 in
 def VOpMemAccess : FUInst<(outs DR:$dst),
 							             (ins DR:$src, ptr_rc:$addr, DR:$isLoad,
-							              DR:$sizeInfo),
-							             "$dst = memaccess $src, $addr, $isLoad, $sizeInfo",
+							              DR:$byteenable),
+							             "$dst = memaccess $src, $addr, $isLoad, $byteenable",
 							             [], FUMemBus, 1, 1, 0>;
 
 

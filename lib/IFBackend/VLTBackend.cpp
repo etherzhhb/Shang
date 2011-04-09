@@ -23,6 +23,7 @@
 #include "vtm/VFuncInfo.h"
 #include "vtm/FileInfo.h"
 #include "vtm/LangSteam.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Function.h"
 #include "llvm/DerivedTypes.h"
@@ -466,7 +467,7 @@ struct VLTIfWriter : public MachineFunctionPass {
     unsigned Address  = MemPortStartIdx + 2;
     unsigned InData   = MemPortStartIdx + 3;
     unsigned OutData  = MemPortStartIdx + 4;
-    unsigned DataSize = MemPortStartIdx + 5;
+    unsigned ByteEnable = MemPortStartIdx + 5;
 
     // Compute the membus data size (in bytes).
     // FIXME: Every membus may have different data size.
@@ -474,12 +475,12 @@ struct VLTIfWriter : public MachineFunctionPass {
     unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
 
     // Simulate the read operation on memory bus.
-    Stream << "switch (" << getPortVal(DataSize) << " & 0xf)";
+    Stream << "switch (" << getPortVal(ByteEnable) << " & 0xf)";
     Stream.enter_block();
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
          Size < EndSize; Size *= 2) {
-      Stream << "case " << Size << ": ";
+      Stream << "case " << getByteEnable(Size) << ": ";
       // Write the value to input port from memory if this is a read.
       if (SimRead)
         Stream << getPortVal(InData) << " = ";
