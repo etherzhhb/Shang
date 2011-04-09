@@ -206,7 +206,10 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Run the SCEVAA pass to compute more accurate alias information.
   PM.add(createScalarEvolutionAliasAnalysisPass());
 
-  // Schedule
+  // Eliminate the VOpSetRI instructions.
+  PM.add(createElimSetRIPass());
+
+  // Schedule.
   PM.add(createVPreRegAllocSchedPass());
 
   // TODO: Register allocation.

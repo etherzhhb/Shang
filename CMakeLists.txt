@@ -109,6 +109,7 @@ add_llvm_target(VerilogBackend
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
   VSubtarget.cpp
+  EliminateSetRI.cpp
 #  lib/HighLevelOpt/FunctionFilter.cpp
 )
 

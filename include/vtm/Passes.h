@@ -34,6 +34,9 @@ Pass *createFunctionFilterPass();
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 
+// Eliminate the VOpSetRI instructions.
+Pass *createElimSetRIPass();
+
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();
 
