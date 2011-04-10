@@ -108,7 +108,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   case VTM::Datapath:
   // Not necessary to compute the bitwitdh information of these instructions.
   case VTM::VOpArg:
-  case VTM::VOpMemAccess:
+  case VTM::VOpMemTrans:
   // These intructions do not define anything.
   case VTM::VOpToState:
   case VTM::EndState:

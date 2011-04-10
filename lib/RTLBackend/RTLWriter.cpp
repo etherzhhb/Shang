@@ -157,7 +157,7 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpCopy(ucOp &OpCopy);
-  void emitOpMemAccess(ucOp &OpMemAccess);
+  void emitOpMemTrans(ucOp &OpMemAccess);
 
   void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
                           const PredMapTy &NextStatePred);
@@ -619,7 +619,7 @@ bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpArg:       emitOpArg(Op);                break;
     case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
-    case VTM::VOpMemAccess: emitOpMemAccess(Op);          break;
+    case VTM::VOpMemTrans:  emitOpMemTrans(Op);           break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
     case VTM::VOpSetRI:
     case VTM::COPY:         emitOpCopy(Op);               break;
@@ -675,7 +675,7 @@ void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpMemAccess(ucOp &OpMemAccess) {
+void RTLWriter::emitOpMemTrans(ucOp &OpMemAccess) {
   unsigned FUNum = OpMemAccess->getFUId().getFUNum();
   raw_ostream &DPS = VM->getDataPathBuffer();
   DPS << "// Dirty Hack: Emit the wire define by this operation\n"

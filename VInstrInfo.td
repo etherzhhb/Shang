@@ -38,7 +38,7 @@ def SDT_ADDC : SDTypeProfile<2, 3, [
 def VTMADD		:	SDNode<"VTMISD::ADD", SDT_ADDC>;
 
 
-def SDTMemAccess : SDTypeProfile<1, 4, [        
+def SDTMemTrans : SDTypeProfile<1, 4, [        
   SDTCisPtrTy<1>, // Address
   SDTCisVT<3, i1>, // Is load?
   // Size Info, the rtl backend should interpret this according the bus
@@ -47,7 +47,7 @@ def SDTMemAccess : SDTypeProfile<1, 4, [
   // The Store value type must have the same type as the load value.
   SDTCisSameAs<0, 2>
 ]>;
-def VTMMemAccess : SDNode<"VTMISD::MemAccess", SDTMemAccess,
+def VTMMemTrans : SDNode<"VTMISD::MemTrans", SDTMemTrans,
                     [SDNPHasChain, SDNPMayStore, SDNPMayLoad, SDNPMemOperand]>;
 
 // Select bit slice, Src operand, upper_bound, lower_bound
@@ -174,13 +174,13 @@ def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = sra $src0, $src1", [], FUSHIFT>;
 }
 
+// Memory transaction.
 let mayLoad		  = 1,
-	mayStore	  = 1 in
-def VOpMemAccess : FUInst<(outs DR:$dst),
-							             (ins DR:$src, ptr_rc:$addr, DR:$isLoad,
-							              DR:$byteenable),
-							             "$dst = memaccess $src, $addr, $isLoad, $byteenable",
-							             [], FUMemBus, 1, 1, 0>;
+	  mayStore	  = 1 in
+def VOpMemTrans : FUInst<(outs DR:$dst),
+							           (ins DR:$src, ptr_rc:$addr, DR:$isLoad, DR:$byteenable),
+							            "$dst = memaccess $src, $addr, $isLoad, $byteenable",
+							            [], FUMemBus, 1, 1, 0>;
 
 
 //===----------------------------------------------------------------------===//
