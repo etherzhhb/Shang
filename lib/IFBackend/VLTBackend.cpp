@@ -475,7 +475,7 @@ struct VLTIfWriter : public MachineFunctionPass {
     unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
 
     // Simulate the read operation on memory bus.
-    Stream << "switch (" << getPortVal(ByteEnable) << " & 0xf)";
+    Stream << "switch (" << getPortVal(ByteEnable) << " & 0xff)";
     Stream.enter_block();
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
