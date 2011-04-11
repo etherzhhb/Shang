@@ -735,7 +735,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
 }
 
 void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                            unsigned UB, unsigned LB) {
+                             unsigned UB, unsigned LB) {
   switch (Operand.getType()) {
   case MachineOperand::MO_Register: {
     unsigned Reg = Operand.getReg();
@@ -754,7 +754,7 @@ void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,
 
     MachineBasicBlock *MBB = Operand.getParent()->getParent();
     std::string WireName = MetaOp.getWireName(getStateName(MBB));
-    OS << WireName;
+    OS << WireName << verilogBitRange(MetaOp.getBitWidth(), 0, false);
 
     // Emit the wire here, because it only define once, wires will never
     // be emitted more than once.

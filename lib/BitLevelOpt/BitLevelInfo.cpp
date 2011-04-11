@@ -48,12 +48,13 @@ void BitLevelInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
 
-  // Anotate the bit width information to target flag.
+  // Annotate the bit width information to target flag.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();
        BI != BE; ++BI)
     for (MachineBasicBlock::iterator I = BI->begin(), E =  BI->end();
          I != E; ++I) {
       MachineInstr &Instr = *I;
+      bool isShifts = false;
       switch (Instr.getOpcode()) {
       default: break;
         // Fall through
@@ -61,9 +62,20 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         // Fall through
       case VTM::Control:  case VTM::Datapath:
         continue;
+      case VTM::VOpSRA:
+      case VTM::VOpSRL:
+      case VTM::VOpSHL:
+        isShifts = true;
+        break;
       }
 
       BitWidthOperand BWO(Instr);
+      // Fix the RHS operand.
+      if (isShifts) {
+        BWO.setBitWidth(Log2_32_Ceil(BWO.getBitWidth(1)), 2);
+        BWO.updateBitWidth(Instr);
+      }
+
       for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
         MachineOperand &MO = Instr.getOperand(i);
         if (!MO.isReg() && !MO.isImm()) continue;
