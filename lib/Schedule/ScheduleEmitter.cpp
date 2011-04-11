@@ -257,7 +257,15 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   MDNode *OpCode = MetaToken::createInstr(A->getSlot(), Inst, A->getFUId(),
                                           VMContext);
   MachineOperand OpCMD = MachineOperand::CreateMetadata(OpCode);   
-  OperandVector Ops(Inst.getNumOperands() + 1, OpCMD);
+  unsigned NumOperands = Inst.getNumOperands();
+
+  // Drop the bit witdh operand.
+  if (Inst.getDesc().OpInfo[NumOperands-1].isPredicate()) {
+    --NumOperands;
+    Inst.RemoveOperand(NumOperands);
+  }
+  
+  OperandVector Ops(NumOperands + 1, OpCMD);
 
   // Remove all operand of Instr.
   while (Inst.getNumOperands() != 0) {
