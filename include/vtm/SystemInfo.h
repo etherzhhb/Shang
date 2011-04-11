@@ -54,8 +54,6 @@ class SystemInfo {
   // DO NOT IMPLEMENT
   const SystemInfo &operator=(const SystemInfo&);
 
-  enum Interfaces IfType;
-
   StringMap<ConstraintsInfo> FunctionsInfos;
 
   void setHardware(const std::string &S) {
