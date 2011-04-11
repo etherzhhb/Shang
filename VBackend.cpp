@@ -223,13 +223,11 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createRTLCodegenPass());
 
   // Add interface writer pass.
-  switch (sysinfo().getIfType()) {
-  default:
-    break;
-  case SystemInfo::Verilator:
+  if (sysinfo().isVLTEnable())
     PM.add(createVLTIfCodegenPass());
-    break;
-  }
   
+  if (sysinfo().isPLBEnable())
+    PM.add(createPLBIfCodegenPass());
+
   return false;
 }

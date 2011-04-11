@@ -49,12 +49,6 @@ public:
 };
 
 class SystemInfo {
-public:
-  enum Interfaces {
-    DisableIf, Verilator
-  };
-private:
-
   // DO NOT IMPLEMENT
   SystemInfo(const SystemInfo&);
   // DO NOT IMPLEMENT
@@ -68,9 +62,12 @@ private:
     FunctionsInfos.GetOrCreateValue(S);
   }
 
+  // Interfaces.
+  bool enableVLT, enablePLB;
+
   friend struct LuaConstraints;
 public:
-  SystemInfo() : IfType(DisableIf) {}
+  SystemInfo() : enableVLT(false), enablePLB(false) {}
 
   ConstraintsInfo &getConstraints(const std::string &S) {
     return FunctionsInfos.GetOrCreateValue(S).getValue();
@@ -87,7 +84,8 @@ public:
 
   bool empty() const { return FunctionsInfos.empty(); }
 
-  enum SystemInfo::Interfaces getIfType() const { return IfType; }
+  bool isVLTEnable() const { return enableVLT; }
+  bool isPLBEnable() const { return enablePLB; }
 };
 
 SystemInfo &sysinfo();

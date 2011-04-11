@@ -417,7 +417,7 @@ struct VLTIfCodegen : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
-    FOut = vtmfiles().getIFDvrOut("cpp");
+    FOut = vtmfiles().getIFDvrOut("vlt.cpp");
 
     Stream.setStream(FOut->os());
 

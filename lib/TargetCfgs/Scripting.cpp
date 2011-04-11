@@ -81,13 +81,10 @@ struct LuaConstraints {
         .def_readwrite("Schedule", &ConstraintsInfo::SchedAlg),
 
       luabind::class_<SystemInfo>("SystemInfo")
-        .enum_("Interfaces")[
-          luabind::value("DisableIf", SystemInfo::DisableIf),
-          luabind::value("Verilator", SystemInfo::Verilator)
-        ]
         .def("setHardware", &SystemInfo::setHardware)
         .def("getConstraints", &SystemInfo::getConstraints)
-        .def_readwrite("IfType", &SystemInfo::IfType)
+        .def_readwrite("EnableVLT", &SystemInfo::enableVLT)
+        .def_readwrite("EnablePLB", &SystemInfo::enablePLB)
     ];
 
     // Bind the object.

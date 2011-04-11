@@ -39,5 +39,52 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-// Verilator interface writer.
+namespace {
+struct PLBIfCodegen : public MachineFunctionPass {
+  static char ID;
+
+  // Streams
+  tool_output_file *FOut;
+  vlang_raw_ostream Stream;
+
+  VASTModule *RTLMod;
+  const VFuncInfo *FuncInfo;
+
+  PLBIfCodegen() : MachineFunctionPass(ID), FOut(0), Stream(),
+    RTLMod(0), FuncInfo(0) {}
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    MachineFunctionPass::getAnalysisUsage(AU);
+    AU.setPreservesAll();
+  }
+
+  bool doInitialization(Module &M) {
+    // Setup the streams.
+    FOut = vtmfiles().getIFDvrOut("plb.v");
+    Stream.setStream(FOut->os());
+
+    return false;
+  }
+
+  bool doFinalization(Module &M) {
+    Stream.flush();
+    FOut->keep();
+    return false;
+  }
+
+  bool runOnMachineFunction(MachineFunction &MF);
+};
+}
+
+char PLBIfCodegen::ID = 0;
+
+Pass *llvm::createPLBIfCodegenPass() {
+  return new PLBIfCodegen();
+}
+
+bool PLBIfCodegen::runOnMachineFunction(MachineFunction &MF) {
+  Stream << "// IPIF User Logic for PLB.\n";
+  return false;
+}
+
 
