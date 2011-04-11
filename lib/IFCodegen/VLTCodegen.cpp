@@ -630,7 +630,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
     // FIXME: Use a random ready time.
     Stream << "// Update the ready time of membus.\n"
            // Note: Simulate advance half clock cycle when sim_time increased.
-              "ready_time = sime_time + " << MemBusLatency * 2
+              "ready_time = sim_time + " << MemBusLatency * 2
            <<";\n";
 
     Stream.exit_block(format("// end membus%d\n", FUNum));
@@ -638,7 +638,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
     // Dirty hack: All membus share a ready_time.
     Stream << "// Simulate the ready port of the membus.\n";
     unsigned BusRdy = Enable + 6;
-    assignInPort(BusRdy, "(sim_time >= ready_time)");
+    assignInPort(BusRdy, "(sim_tim >= ready_time)");
   }
 
   isClkEdgeEnd(true);
