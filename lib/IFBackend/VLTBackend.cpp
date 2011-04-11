@@ -585,7 +585,8 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   assignInPort(VASTModule::Start, 1);
 
   Stream << "// Remember the start time.\n"
-            "long start_time = sim_time;\n";
+            "long start_time = sim_time;\n"
+            "long ready_time = sim_time;\n";
 
   Stream<< "// Commit the signals.\n";
   evalHalfCycle();
@@ -599,7 +600,7 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
   // TODO: Allow the user to custom the clock edge.
   isClkEdgeBegin(true);
   // Check membuses.
-
+  unsigned MemBusLatency = vtmfus().getFUDesc<VFUMemBus>()->getLatency();
   typedef VFuncInfo::const_id_iterator id_iterator;
   for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
        E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
@@ -626,7 +627,18 @@ bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
     Stream.else_begin("// This is a read\n");
     simulateMemRead(Enable, Context);
     Stream.exit_block("// end read/write\n");
+    // FIXME: Use a random ready time.
+    Stream << "// Update the ready time of membus.\n"
+           // Note: Simulate advance half clock cycle when sim_time increased.
+              "ready_time = sime_time + " << MemBusLatency * 2
+           <<";\n";
+
     Stream.exit_block(format("// end membus%d\n", FUNum));
+
+    // Dirty hack: All membus share a ready_time.
+    Stream << "// Simulate the ready port of the membus.\n";
+    unsigned BusRdy = Enable + 6;
+    assignInPort(BusRdy, "(sim_time >= ready_time)");
   }
 
   isClkEdgeEnd(true);

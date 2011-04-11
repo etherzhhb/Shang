@@ -182,6 +182,10 @@ public:
   inline static std::string getEnableName(unsigned FUNum) {
     return "mem" + utostr(FUNum) + "en";
   }
+
+  inline static std::string getReadyName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "rdy";
+  }
 };
 
 template<enum VFUs::FUTypes T>

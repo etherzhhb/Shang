@@ -73,6 +73,12 @@ class RTLWriter : public MachineFunctionPass {
   // Mapping success fsm state to their predicate in current state.
   typedef std::map<MachineBasicBlock*, std::string> PredMapTy;
 
+  // If the FSM ready to move to next state?
+  std::string ReadyPred;
+  void addReadyPred(std::string &Pred) {
+    ReadyPred += " & (" + Pred + ")";
+  }
+
   void emitFunctionSignature();
   void emitCommonPort();
 
@@ -159,7 +165,10 @@ class RTLWriter : public MachineFunctionPass {
   void emitOpCopy(ucOp &OpCopy);
   void emitOpMemTrans(ucOp &OpMemAccess);
 
-  void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
+  // Return the FSM ready predicate.
+  // The FSM only move to next micro-state if the predicate become true.
+  void emitFUCtrlForState(vlang_raw_ostream &CtrlS,
+                          MachineBasicBlock *CurBB,
                           const PredMapTy &NextStatePred);
 
   void emitTestBench();
@@ -236,6 +245,8 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   SignedWireNum = 0;
   // Reset the current fsm state number.
   CurFSMStateNum = 0;
+  // The FSM is always ready by default.
+  ReadyPred = "1'b1";
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
@@ -285,7 +296,7 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   Out << "// Always Block\n";
   Out.always_ff_begin();
   VM->printRegisterReset(Out);
-  Out.else_begin();
+  Out.else_begin().if_begin(ReadyPred, "// if all resources ready?\n");
 
   Out << "// FSM\n";
   Out.switch_begin("NextFSMState");
@@ -293,6 +304,7 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   // Case default.
   Out << "default:  NextFSMState <= state_idle;\n";
   Out.switch_end();
+  Out.exit_block("// end ready\n");
   Out.always_ff_end();
 
   Out.module_end();
@@ -454,6 +466,9 @@ void RTLWriter::emitAllocatedFUs() {
     // Byte enable.
     VM->addOutputPort(VFUMemBus::getByteEnableName(FUNum),
                       MemBus->getDataWidth() / 8);
+
+    // Bus ready.
+    VM->addInputPort(VFUMemBus::getReadyName(FUNum), 1);
   }
   
 }
@@ -522,6 +537,9 @@ void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
     totalSlot = FuncInfo->getTotalSlotFor(CurBB);
   }
 
+  unsigned endSlot = startSlot + totalSlot;
+  unsigned MemBusLatency = vtmfus().getFUDesc<VFUMemBus>()->getLatency();
+
   // Emit function unit control.
   // Membus control operation.
   for (VFuncInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
@@ -530,20 +548,31 @@ void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
     CtrlS << "// " << Id << " control for next micro state.\n";
     CtrlS << VFUMemBus::getEnableName(Id.getFUNum()) << " <= 1'b0";
     // Resource control operation when in the current state.
-    for (unsigned i = startSlot + 1, e = startSlot + totalSlot; i < e; ++i) {
+    for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
       if (FuncInfo->isFUActiveAt(Id, i))
         CtrlS << " | " << getucStateEnable(CurBB, i - 1);
     }
 
     // Resource control operation when we are transferring fsm state.
     for (PredMapTy::const_iterator NI = NextStatePred.begin(),
-        NE = NextStatePred.end(); NI != NE; ++NI) {
+         NE = NextStatePred.end(); NI != NE; ++NI) {
       MachineBasicBlock *NextBB = NI->first;
       unsigned FirstSlot = FuncInfo->getStartSlotFor(NextBB);
       if (FuncInfo->isFUActiveAt(Id, FirstSlot))
         CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
               << " & " << NI->second << ") ";
     }
+
+    // Build the ready predicate for waiting membus ready.
+    // We expect all operation will finish before the FSM jump to another state,
+    // so we do not need to worry about if we need to wait the memory operation
+    // issused from the previous state.
+    for (unsigned i = startSlot + MemBusLatency, e = endSlot + 1; i != e; ++i)
+      if (FuncInfo->isFUActiveAt(Id, i - MemBusLatency)) {
+        std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
+                            + "|" + VFUMemBus::getReadyName(Id.getFUNum());
+        addReadyPred(Pred);
+      }
 
     CtrlS << ";\n";
   }
