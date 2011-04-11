@@ -220,14 +220,14 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // be generated when eliminating PHIs.
   PM.add(createFixCopyPass());
 
-  PM.add(createRTLWriterPass());
+  PM.add(createRTLCodegenPass());
 
   // Add interface writer pass.
   switch (sysinfo().getIfType()) {
   default:
     break;
   case SystemInfo::Verilator:
-    PM.add(createVLTIfWriterPass());
+    PM.add(createVLTIfCodegenPass());
     break;
   }
   

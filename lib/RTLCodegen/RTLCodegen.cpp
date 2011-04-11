@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the RTLWriter pass, which write VTM machine instructions
+// This file implement the RTLCodegen pass, which write VTM machine instructions
 // in form of RTL verilog code.
 //
 //===----------------------------------------------------------------------===//
@@ -55,7 +55,7 @@
 
 using namespace llvm;
 namespace {
-class RTLWriter : public MachineFunctionPass {
+class RTLCodegen : public MachineFunctionPass {
   tool_output_file *FOut;
   vlang_raw_ostream Out;
 
@@ -177,9 +177,9 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  RTLWriter();
+  RTLCodegen();
 
-  ~RTLWriter();
+  ~RTLCodegen();
 
   bool doInitialization(Module &M);
 
@@ -201,25 +201,25 @@ public:
 }
 
 //===----------------------------------------------------------------------===//
-char RTLWriter::ID = 0;
+char RTLCodegen::ID = 0;
 
-Pass *llvm::createRTLWriterPass() {
-  return new RTLWriter();
+Pass *llvm::createRTLCodegenPass() {
+  return new RTLCodegen();
 }
 
-INITIALIZE_PASS_BEGIN(RTLWriter, "vtm-rtl-info",
+INITIALIZE_PASS_BEGIN(RTLCodegen, "vtm-rtl-info",
                       "Build RTL Verilog module for synthesised function.",
                       false, true)
 INITIALIZE_PASS_DEPENDENCY(BitLevelInfo);
-INITIALIZE_PASS_END(RTLWriter, "vtm-rtl-info",
+INITIALIZE_PASS_END(RTLCodegen, "vtm-rtl-info",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-RTLWriter::RTLWriter() : MachineFunctionPass(ID), Out() {
-  initializeRTLWriterPass(*PassRegistry::getPassRegistry());
+RTLCodegen::RTLCodegen() : MachineFunctionPass(ID), Out() {
+  initializeRTLCodegenPass(*PassRegistry::getPassRegistry());
 }
 
-bool RTLWriter::doInitialization(Module &M) {
+bool RTLCodegen::doInitialization(Module &M) {
   MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
   TargetData *TD = getAnalysisIfAvailable<TargetData>();
 
@@ -232,7 +232,7 @@ bool RTLWriter::doInitialization(Module &M) {
   return false;
 }
 
-bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
+bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FuncInfo = MF->getInfo<VFuncInfo>();
   MRI = &MF->getRegInfo();
@@ -317,23 +317,23 @@ bool RTLWriter::runOnMachineFunction(MachineFunction &F) {
   return false;
 }
 
-void RTLWriter::clear() {
+void RTLCodegen::clear() {
   Arguments.clear();
 
   VM = 0;
 }
 
-void RTLWriter::getAnalysisUsage(AnalysisUsage &AU) const {
+void RTLCodegen::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<BitLevelInfo>();
   AU.setPreservesAll();
 }
 
-void RTLWriter::print(raw_ostream &O, const Module *M) const {
+void RTLCodegen::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void RTLWriter::emitFunctionSignature() {
+void RTLCodegen::emitFunctionSignature() {
   const Function *F = MF->getFunction();
   const TargetData *TD = MF->getTarget().getTargetData();
 
@@ -356,7 +356,7 @@ void RTLWriter::emitFunctionSignature() {
   emitCommonPort();
 }
 
-void RTLWriter::emitIdleState() {
+void RTLCodegen::emitIdleState() {
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
   // Idle state
@@ -380,7 +380,7 @@ void RTLWriter::emitIdleState() {
   CtrlS.exit_block();
 }
 
-void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
+void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   std::string StateName = getStateName(&MBB);
   unsigned startSlot = FuncInfo->getStartSlotFor(&MBB);
   unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
@@ -430,14 +430,14 @@ void RTLWriter::emitBasicBlock(MachineBasicBlock &MBB) {
   CtrlS.exit_block();
 }
 
-void RTLWriter::emitCommonPort() {
+void RTLCodegen::emitCommonPort() {
   VM->addInputPort("clk", 1, VASTModule::Clk);
   VM->addInputPort("rstN", 1, VASTModule::RST);
   VM->addInputPort("start", 1, VASTModule::Start);
   VM->addOutputPort("fin", 1, VASTModule::Finish);
 }
 
-void RTLWriter::emitAllocatedFUs() {
+void RTLCodegen::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VFuncInfo::const_id_iterator id_iterator;
 
@@ -473,7 +473,7 @@ void RTLWriter::emitAllocatedFUs() {
   
 }
 
-void RTLWriter::emitAllRegister() {
+void RTLCodegen::emitAllRegister() {
   // We organize the registers in a module like 64 bits width ram, and we treat
   // the register number as the address of the register in the 'ram'. The
   // address of the register is always aligned with the register's size in byte,
@@ -488,10 +488,10 @@ void RTLWriter::emitAllRegister() {
     VM->addRegister("reg" + utostr(*I), 64);
 }
 
-RTLWriter::~RTLWriter() {}
+RTLCodegen::~RTLCodegen() {}
 
 //===----------------------------------------------------------------------===//
-void RTLWriter::createucStateEnable(MachineBasicBlock *MBB)  {
+void RTLCodegen::createucStateEnable(MachineBasicBlock *MBB)  {
   std::string StateName = getStateName(MBB);
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB);
@@ -500,7 +500,7 @@ void RTLWriter::createucStateEnable(MachineBasicBlock *MBB)  {
   VM->addRegister("cur_" + StateName + "_enable", totalSlot);
 }
 
-void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
+void RTLCodegen::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
   // Emit the first micro state of the target state.
   emitFirstCtrlState(MBB);
 
@@ -509,7 +509,7 @@ void RTLWriter::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
   emitNextMicroState(VM->getControlBlockBuffer(), MBB, "1'b1");
 }
 
-void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
+void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                                    const std::string &NewState) {
   // We do not need the last state.
   unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB);
@@ -527,7 +527,7 @@ void RTLWriter::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
-void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
+void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
                                    MachineBasicBlock *CurBB,
                                    const PredMapTy &NextStatePred) {
   unsigned startSlot = 0, totalSlot = 0;
@@ -587,7 +587,7 @@ void RTLWriter::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   CtrlS << ";\n";
 }
 
-bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
+bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
@@ -660,7 +660,7 @@ bool RTLWriter::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   return IsRet;
 }
 
-void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
+void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *MBB->getFirstNonPHI();
   assert(FuncInfo->getStartSlotFor(MBB) == FirstState.getSlot());
@@ -669,11 +669,11 @@ void RTLWriter::emitFirstCtrlState(MachineBasicBlock *MBB) {
   assert(dummy.empty() && "Can not loop back at first state!");
 }
 
-void RTLWriter::emitImplicitDef(ucOp &ImpDef) {
+void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   DEBUG(VM->getControlBlockBuffer() << "/*IMPLICIT_DEF " << ImpDef << "*/\n");
 }
 
-void RTLWriter::emitOpCopy(ucOp &OpCopy) {
+void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   emitOperand(OS, OpCopy.getOperand(0));
   OS << " <= ";
@@ -681,7 +681,7 @@ void RTLWriter::emitOpCopy(ucOp &OpCopy) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpArg(ucOp &OpArg) {
+void RTLCodegen::emitOpArg(ucOp &OpArg) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
   emitOperand(OS, OpArg.getOperand(0));
@@ -690,12 +690,12 @@ void RTLWriter::emitOpArg(ucOp &OpArg) {
      << ";\n";
 }
 
-void RTLWriter::emitOpRet(ucOp &OpArg) {
+void RTLCodegen::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   OS << "NextFSMState <= state_idle;\n";
 }
 
-void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
+void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   unsigned retChannel = OpRetVal.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
@@ -704,7 +704,7 @@ void RTLWriter::emitOpRetVal(ucOp &OpRetVal) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpMemTrans(ucOp &OpMemAccess) {
+void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   unsigned FUNum = OpMemAccess->getFUId().getFUNum();
   raw_ostream &DPS = VM->getDataPathBuffer();
   DPS << "// Dirty Hack: Emit the wire define by this operation\n"
@@ -734,7 +734,7 @@ void RTLWriter::emitOpMemTrans(ucOp &OpMemAccess) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
+void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,
                             unsigned UB, unsigned LB) {
   switch (Operand.getType()) {
   case MachineOperand::MO_Register: {
@@ -777,7 +777,7 @@ void RTLWriter::emitOperand(raw_ostream &OS, MachineOperand &Operand,
   }
 }
 
-void RTLWriter::emitDatapath(ucState &State) {
+void RTLCodegen::emitDatapath(ucState &State) {
   assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
   VM->getDataPathBuffer() << "// Issue datapath for "
     "operations at slot " << State.getSlot() << '\n';
@@ -811,7 +811,7 @@ void RTLWriter::emitDatapath(ucState &State) {
   } 
 }
 
-void RTLWriter::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
+void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, UnaOp.getOperand(0));
@@ -820,7 +820,7 @@ void RTLWriter::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
   OS << ";\n";
 }
 
-void RTLWriter::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
+void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, BinOp.getOperand(0));
@@ -831,7 +831,7 @@ void RTLWriter::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   OS << ";\n";
 }
 
-std::string RTLWriter::emitSignedOperand(MachineOperand &Op) {
+std::string RTLCodegen::emitSignedOperand(MachineOperand &Op) {
   unsigned BitWidth = 0;
   switch (Op.getType()) {
   case MachineOperand::MO_Immediate:
@@ -857,7 +857,7 @@ std::string RTLWriter::emitSignedOperand(MachineOperand &Op) {
   return WireName;
 }
 
-void RTLWriter::emitOpSRA(ucOp &OpSRA) {
+void RTLCodegen::emitOpSRA(ucOp &OpSRA) {
   std::string Op0 = emitSignedOperand(OpSRA.getOperand(1));
 
   raw_ostream &OS = VM->getDataPathBuffer();
@@ -868,7 +868,7 @@ void RTLWriter::emitOpSRA(ucOp &OpSRA) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpAdd(ucOp &OpAdd) {
+void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   raw_ostream &OS = VM->getDataPathBuffer();
 
   OS << "assign {";
@@ -888,7 +888,7 @@ void RTLWriter::emitOpAdd(ucOp &OpAdd) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpMult(ucOp &OpMult) {
+void RTLCodegen::emitOpMult(ucOp &OpMult) {
   raw_ostream &OS = VM->getDataPathBuffer();
 
   OS << "assign ";
@@ -901,7 +901,7 @@ void RTLWriter::emitOpMult(ucOp &OpMult) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpBitSlice(ucOp &OpBitSlice) {
+void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   raw_ostream &OS = VM->getDataPathBuffer();
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
@@ -916,7 +916,7 @@ void RTLWriter::emitOpBitSlice(ucOp &OpBitSlice) {
   OS << ";\n";
 }
 
-void RTLWriter::emitOpBitCat(ucOp &OpBitCat) {
+void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, OpBitCat.getOperand(0));
@@ -928,7 +928,7 @@ void RTLWriter::emitOpBitCat(ucOp &OpBitCat) {
   OS << "};\n";
 }
 
-void RTLWriter::emitOpBitRepeat(ucOp &OpBitRepeat) {
+void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   emitOperand(OS, OpBitRepeat.getOperand(0));
@@ -940,7 +940,7 @@ void RTLWriter::emitOpBitRepeat(ucOp &OpBitRepeat) {
   OS << "}};\n";
 }
 
-void RTLWriter::emitTestBench() {
+void RTLCodegen::emitTestBench() {
   Out << "\n\n";
   Out << "module tb_" << VM->getName() << ";\n\n";
   Out.module_begin();

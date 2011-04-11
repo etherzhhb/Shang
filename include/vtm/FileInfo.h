@@ -71,7 +71,9 @@ public:
 
   tool_output_file *getRTLOut() { return getOutFile("_RTL", "v"); }
 
-  tool_output_file *getIFDvrOut() { return getOutFile("_IF", "cpp"); }
+  tool_output_file *getIFDvrOut(const char *posfix) {
+    return getOutFile("_IF", posfix);
+  }
 
   tool_output_file *getSWOut() { return getOutFile("_SW", "ll"); }
 };

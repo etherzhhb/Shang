@@ -49,15 +49,18 @@ FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
 // Fix copy instruction after register allocation
 Pass *createFixCopyPass();
 
-// RTL writer.
-Pass *createRTLWriterPass();
+// RTL code generation.
+Pass *createRTLCodegenPass();
 
-// Verilator interface writer.
-Pass *createVLTIfWriterPass();
+// Verilator interface code generation.
+Pass *createVLTIfCodegenPass();
+
+// PLB interface code generation.
+Pass *createPLBIfCodegenPass();
 
 //
 void initializeBitLevelInfoPass(PassRegistry &Registry);
-void initializeRTLWriterPass(PassRegistry &Registry);
+void initializeRTLCodegenPass(PassRegistry &Registry);
 
 void initializeRAPass(PassRegistry &Registry);
 } // end namespace

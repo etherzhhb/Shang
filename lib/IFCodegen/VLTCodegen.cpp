@@ -1,4 +1,4 @@
-//===----- VLTBackend.cpp - Interface generation for Verilator --*- C++ -*-===//
+//===----- VLTCodegen.cpp - Interface generation for Verilator --*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -45,7 +45,7 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-// Helper functions Copy from CBackend.cpp to help printing functions.
+// Helper functions Copy from CCodegen.cpp to help printing functions.
 static std::string GetValueName(const Value *Operand) {
   std::string Name = Operand->getName();
 
@@ -350,7 +350,7 @@ static void printFunctionSignature(raw_ostream &Out, const Function *F) {
 //===----------------------------------------------------------------------===//
 // Verilator interface writer.
 namespace {
-struct VLTIfWriter : public MachineFunctionPass {
+struct VLTIfCodegen : public MachineFunctionPass {
   static char ID;
 
   tool_output_file *FOut;
@@ -360,7 +360,7 @@ struct VLTIfWriter : public MachineFunctionPass {
   VASTModule *RTLMod;
   const VFuncInfo *FuncInfo;
 
-  VLTIfWriter() : MachineFunctionPass(ID), FOut(0), Stream(),
+  VLTIfCodegen() : MachineFunctionPass(ID), FOut(0), Stream(),
     RTLMod(0), FuncInfo(0) {}
 
   void assignInPort(unsigned T, const std::string &Val) {
@@ -417,7 +417,7 @@ struct VLTIfWriter : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
-    FOut = vtmfiles().getIFDvrOut();
+    FOut = vtmfiles().getIFDvrOut("cpp");
 
     Stream.setStream(FOut->os());
 
@@ -514,13 +514,13 @@ struct VLTIfWriter : public MachineFunctionPass {
 };
 } //end anonymous namespace
 
-Pass *llvm::createVLTIfWriterPass() {
-  return new VLTIfWriter();
+Pass *llvm::createVLTIfCodegenPass() {
+  return new VLTIfCodegen();
 }
 
-char VLTIfWriter::ID = 0;
+char VLTIfCodegen::ID = 0;
 
-bool VLTIfWriter::runOnMachineFunction(MachineFunction &MF) {
+bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
   FuncInfo = MF.getInfo<VFuncInfo>();
 
