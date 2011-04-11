@@ -363,14 +363,14 @@ struct VLTIfWriter : public MachineFunctionPass {
   VLTIfWriter() : MachineFunctionPass(ID), FOut(0), Stream(),
     RTLMod(0), FuncInfo(0) {}
 
-  void assignInPort(VASTModule::PortTypes T, const std::string &Val) {
+  void assignInPort(unsigned T, const std::string &Val) {
     // TODO: Assert the port must be an input port.
     Stream << VLTModInstName << '.'
            << RTLMod->getPortName(T)
            << " = (" << Val << ");\n";
   }
 
-  void assignInPort(VASTModule::PortTypes T, uint64_t Val, bool isNeg = false) {
+  void assignInPort(unsigned T, uint64_t Val, bool isNeg = false) {
     assignInPort(T, utostr(Val, isNeg));
   }
 
