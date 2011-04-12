@@ -18,10 +18,10 @@ class FUType<bits<3> val, InstrItinClass InstItin> {
 }
 
 def FUTrivial	: FUType<0, IIC_Trivial>;
-def FUMemBus	: FUType<1, IIC_MemBus>;
+def FUAddSub	: FUType<1, IIC_AddSub>;
 def FUSHIFT		: FUType<2, IIC_SHIFT>;
-def FUAddSub	: FUType<3, IIC_AddSub>;
-def FUMult		: FUType<4, IIC_Mult>;
+def FUMult		: FUType<3, IIC_Mult>;
+def FUMemBus	: FUType<4, IIC_MemBus>;
 
 // Bit-width information operand.
 // Dirty Hack: This is not a Predicate Operand.

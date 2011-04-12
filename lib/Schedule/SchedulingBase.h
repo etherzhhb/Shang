@@ -279,7 +279,7 @@ class ILPScheduler : public SchedulingBase {
   void buildPrecedenceConstraints(lprec *lp);
 
   unsigned getIdxOf(VFUs::FUTypes FU) {
-    return NumStepVars + FU - VFUs::Shift;
+    return NumStepVars + FU - VFUs::FirstNonTrivialFUType;
   }
 
   // Avoid the resources conflict for the function units. 

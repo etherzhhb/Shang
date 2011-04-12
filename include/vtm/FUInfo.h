@@ -23,14 +23,18 @@ namespace llvm {
 namespace VFUs {
   enum FUTypes {
     Trivial = 0,
-    MemoryBus = 1,
+    AddSub = 1,
     Shift = 2,
-    AddSub = 3,
-    Mult = 4,
+    Mult = 3,
+    MemoryBus = 4,
 
     FirstFUType = Trivial,
     LastCommonFUType = Mult,
+    FirstNonTrivialFUType = AddSub,
+    LastPostBindFUType = Mult,
+    NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
+    NumNonTrivialCommonFUs = LastCommonFUType - FirstNonTrivialFUType + 1,
     // Special function unit.
     // Finite state machine finish.
     FSMFinish = 7,

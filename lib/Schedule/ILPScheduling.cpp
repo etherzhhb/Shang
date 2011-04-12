@@ -108,8 +108,8 @@ void ILPScheduler::setUpVariables(lprec *lp) {
   }
 
   // Set up the function unit variables.
-  for (VFUs::FUTypes fu = VFUs::Shift; fu <= VFUs::LastCommonFUType;
-       fu = (VFUs::FUTypes)(fu + 1u)) {
+  for (VFUs::FUTypes fu = VFUs::FirstNonTrivialFUType;
+       fu <= VFUs::LastPostBindFUType; fu = (VFUs::FUTypes)(fu + 1u)) {
     char *Name = const_cast<char*>(VFUDesc::getTypeName(fu));
 #ifndef NDEBUG
     if (!set_col_name(lp, getIdxOf(fu) + 1, Name))
@@ -258,7 +258,8 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
 
   // Numbers of Unbound function units.
   unsigned zero = 0;
-  SmallVector<unsigned, 4> MaxFUCounts(3, zero), CurFUCounts;
+  SmallVector<unsigned, 8> MaxFUCounts(VFUs::NumPostBindFUs, zero),
+                           CurFUCounts;
 
   SmallVector<REAL, 128> Row;
   SmallVector<int, 128> ColIdx;
@@ -266,7 +267,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
   for (unsigned i = getASAPStep(EntryU), e = getALAPStep(ExitU); i != e; ++i){
     ActiveSUVec &SUs = ActiveSUs[i];
     // Clear the function unit counts.
-    CurFUCounts.assign(3, 0);
+    CurFUCounts.assign(VFUs::NumNonTrivialCommonFUs, 0);
 
     // Classify the active schedule units by its function unit id. 
     for (ActiveSUVec::const_iterator I = SUs.begin(), E = SUs.end();
@@ -274,22 +275,24 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
       const VSUnit *U = *I;
 
       if (U->getFUType() > VFUs::LastCommonFUType
-          || U->getFUType() == VFUs::Trivial)
+          || U->getFUType() < VFUs::FirstNonTrivialFUType)
         continue;
 
       // Count the unbound function units in current step.
       if (!U->getFUId().isBound())
-        ++CurFUCounts[U->getFUType() - VFUs::Shift];
+        ++CurFUCounts[U->getFUType() - VFUs::FirstNonTrivialFUType];
       
       FSMap[U->getFUId()].push_back(U);
     }
 
     // Update the max function unit count.
     // Use std::max<unsigned> to avoid C2589 in MSVC
-    MaxFUCounts[0] = std::max<unsigned>(MaxFUCounts[0], CurFUCounts[0]);
-    MaxFUCounts[1] = std::max<unsigned>(MaxFUCounts[1], CurFUCounts[1]);
-    MaxFUCounts[2] = std::max<unsigned>(MaxFUCounts[2], CurFUCounts[2]);
-
+    for (VFUs::FUTypes fu = VFUs::FirstNonTrivialFUType;
+         fu <= VFUs::LastPostBindFUType; fu = (VFUs::FUTypes)(fu + 1u)) {
+      unsigned Idx = fu - VFUs::FirstNonTrivialFUType;
+      MaxFUCounts[Idx] = std::max<unsigned>(MaxFUCounts[Idx], CurFUCounts[Idx]);
+    }
+      
     // Build the constraint for function units.
     for (FU2SUMap::const_iterator I = FSMap.begin(), E = FSMap.end();
          I != E; ++I) {
@@ -325,9 +328,10 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
     }
 
     // Set up the bounds for function unit count variable.
-    for (VFUs::FUTypes fu = VFUs::Shift; fu <= VFUs::LastCommonFUType;
-         fu = (VFUs::FUTypes)(fu + 1u))
-      if (!set_bounds(lp, getIdxOf(fu) + 1, 0.0, MaxFUCounts[fu - VFUs::Shift]))
+    for (VFUs::FUTypes fu = VFUs::FirstNonTrivialFUType;
+         fu <= VFUs::LastPostBindFUType; fu = (VFUs::FUTypes)(fu + 1u))
+      if (!set_bounds(lp, getIdxOf(fu) + 1, 0.0,
+                      MaxFUCounts[fu - VFUs::FirstNonTrivialFUType]))
           report_fatal_error("ILPScheduler: Can NOT add FU bounds for FU "
                              + std::string(VFUDesc::getTypeName(fu)));
 
@@ -340,8 +344,8 @@ void ILPScheduler::buildObject(lprec *lp) {
   SmallVector<REAL, 128> Row;
   SmallVector<int, 128> ColIdx;
 
-  for (VFUs::FUTypes fu = VFUs::Shift; fu <= VFUs::LastCommonFUType;
-       fu = (VFUs::FUTypes)(fu + 1u)) {
+  for (VFUs::FUTypes fu = VFUs::FirstNonTrivialFUType;
+       fu <= VFUs::LastPostBindFUType; fu = (VFUs::FUTypes)(fu + 1u)) {
     // FIXME: Push back the cost factor for function unit and cost factor for
     // area optimization here.
     Row.push_back(1.0);
