@@ -27,12 +27,13 @@ namespace VFUs {
     Shift = 2,
     Mult = 3,
     MemoryBus = 4,
+    BRam = 5,
 
     FirstFUType = Trivial,
-    LastCommonFUType = Mult,
     FirstNonTrivialFUType = AddSub,
     LastPostBindFUType = Mult,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
+    LastCommonFUType = BRam,
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
     NumNonTrivialCommonFUs = LastCommonFUType - FirstNonTrivialFUType + 1,
     // Special function unit.
