@@ -178,8 +178,8 @@ def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 let mayLoad		  = 1,
 	  mayStore	  = 1 in
 def VOpMemTrans : FUInst<(outs DR:$dst),
-							           (ins DR:$src, ptr_rc:$addr, DR:$isLoad, DR:$byteenable),
-							            "$dst = memaccess $src, $addr, $isLoad, $byteenable",
+							           (ins DR:$src, ptr_rc:$addr, DR:$isStore, DR:$byteenable),
+							            "$dst = memaccess $src, $addr, $isStore, $byteenable",
 							            [], FUMemBus, 1, 1, 0>;
 
 

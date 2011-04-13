@@ -160,7 +160,7 @@ private:
 
   SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isLoad) const;
+  SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isStore) const;
 
   /// ReplaceNodeResults - Replace the results of node with an illegal result
   /// type with new values built out of custom code.

@@ -475,7 +475,7 @@ SDValue VTargetLowering::getReductionOp(SelectionDAG &DAG, unsigned Opc,
 }
 
 SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
-                                        bool isLoad) const {
+                                        bool isStore) const {
   LSBaseSDNode *LSNode = cast<LSBaseSDNode>(Op);
   // FIXME: Handle the index.
   assert(LSNode->isUnindexed() && "Indexed load/store is not supported!");
@@ -484,18 +484,18 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
 
   unsigned VTSize = VT.getSizeInBits();
 
-  SDValue StoreVal = isLoad ? DAG.getConstant(0, VT, true)
-                            : cast<StoreSDNode>(Op)->getValue();
+  SDValue StoreVal = isStore ? cast<StoreSDNode>(Op)->getValue()
+                             : DAG.getTargetConstant(0, VT);
 
   SDValue SDOps[] = {// The chain.
                      LSNode->getChain(), 
                      // The Value to store (if any), and the address.
                      StoreVal, LSNode->getBasePtr(),
                      // Is load?
-                     DAG.getConstant(isLoad, MVT::i1, true),
+                     DAG.getTargetConstant(isStore, MVT::i1),
                      // Byte enable.
-                     DAG.getConstant(getByteEnable(VT.getStoreSize()), MVT::i8,
-                                     true)
+                     DAG.getTargetConstant(getByteEnable(VT.getStoreSize()),
+                                           MVT::i8)
                     };
 
   unsigned DataBusWidth = vtmfus().getFUDesc<VFUMemBus>()->getDataWidth();
@@ -513,7 +513,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                             SDOps, array_lengthof(SDOps), 
                             // Memory operands.
                             LSNode->getMemoryVT(), LSNode->getMemOperand());
-  if (!isLoad)
+  if (isStore)
     return SDValue(Result.getNode(), 1);
 
   SDValue Val = Result;
@@ -566,9 +566,9 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::SETCC:
     return LowerSetCC(Op, DAG);
   case ISD::LOAD:
-    return LowerMemAccess(Op, DAG, true);
-  case ISD::STORE:
     return LowerMemAccess(Op, DAG, false);
+  case ISD::STORE:
+    return LowerMemAccess(Op, DAG, true);
   case ISD::ADD:
     return getAdd(DAG, Op.getDebugLoc(), Op.getValueType(),
                   Op->getOperand(0), Op->getOperand(1));

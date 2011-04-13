@@ -724,7 +724,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   emitOperand(OS, OpMemAccess.getOperand(2));
   OS << ";\n";
   // And write enable, write is enable if the operation is NOT load.
-  OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ~";
+  OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(3));
   OS << ";\n";
   // The byte enable.

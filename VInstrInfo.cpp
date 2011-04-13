@@ -48,7 +48,7 @@ bool VInstr::mayLoad() const {
   switch (getTID().Opcode) {
   default: return false;
   // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return I.getOperand(3).getImm();
+  case VTM::VOpMemTrans: return !I.getOperand(3).getImm();
   }
 }
 
@@ -56,6 +56,6 @@ bool VInstr::mayStore() const {
   switch (getTID().Opcode) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return !I.getOperand(3).getImm();
+  case VTM::VOpMemTrans: return I.getOperand(3).getImm();
   }
 }
