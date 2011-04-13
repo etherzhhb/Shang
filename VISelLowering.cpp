@@ -31,7 +31,26 @@
 #include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
+//===----------------------------------------------------------------------===//
+// Helper functions
+//===----------------------------------------------------------------------===//
+/// GetBits - Retrieve bits between [LB, UB).
+static inline uint64_t GetBitSlice(uint64_t x, unsigned UB, unsigned LB = 0) {
+  return (x >> LB) & ((1 << (UB - LB)) - 1);
+}
 
+/// getRoundIntegerOrBitType - Rounds the bit-width of the given integer EVT
+/// up to the nearest power of two (one bit otherwise at least eight bits),
+/// and returns the integer EVT with that number of bits.
+static EVT getRoundIntegerOrBitType(EVT &VT, LLVMContext &Context) {
+  assert(VT.isInteger() && !VT.isVector() && "Invalid integer type!");
+  unsigned BitWidth = VT.getSizeInBits();
+  if (BitWidth == 1)
+    return MVT::i1;
+  if (BitWidth <= 8 )
+    return EVT(MVT::i8);
+  return EVT::getIntegerVT(Context, 1 << Log2_32_Ceil(BitWidth));
+}
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation
 //===----------------------------------------------------------------------===//
@@ -204,6 +223,7 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
                                    SmallVectorImpl<SDValue> &InVals) const {
   return Chain;
 }
+
 unsigned VTargetLowering::computeSizeInBits(SDValue Op) {
   assert(Op.getValueType().isInteger() && "Bad SDValue type!");
 
@@ -248,7 +268,7 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op))
     return DAG.getTargetConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
 
-  VT = VT.getRoundIntegerOrBitType(Context);
+  VT = getRoundIntegerOrBitType(VT, Context);
 
   return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
                      DAG.getConstant(UB, MVT::i8, true),
@@ -295,7 +315,7 @@ SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op
     return DAG.getTargetConstant(ret, VT);
   }
 
-  VT = VT.getRoundIntegerOrBitType(Context);
+  VT = getRoundIntegerOrBitType(VT, Context);
   return DAG.getNode(VTMISD::BitRepeat, dl, VT, Op,
                      DAG.getConstant(Times, MVT::i8, true));
 }

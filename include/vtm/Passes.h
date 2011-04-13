@@ -27,7 +27,6 @@ class raw_ostream;
 class TargetMachine;
 class PassRegistry;
 
-struct VRegisterInfo;
 
 Pass *createFunctionFilterPass();
 
@@ -42,9 +41,6 @@ Pass *createVPreRegAllocSchedPass();
 
 // Register allocation.
 FunctionPass *createSimpleRegisterAllocator();
-
-// Register allocation.
-FunctionPass *createDynPhyRegsBuilderPass(VRegisterInfo &VRI);
 
 // Fix copy instruction after register allocation
 Pass *createFixCopyPass();
