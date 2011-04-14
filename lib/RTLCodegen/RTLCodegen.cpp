@@ -715,15 +715,15 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
-  // Assign store data.
-  OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
-  emitOperand(OS, OpMemAccess.getOperand(1));
-  OS << ";\n";
   // Emit Address.
   OS << VFUMemBus::getAddrBusName(FUNum) << " <= ";
+  emitOperand(OS, OpMemAccess.getOperand(1));
+  OS << ";\n";
+  // Assign store data.
+  OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(2));
   OS << ";\n";
-  // And write enable, write is enable if the operation is NOT load.
+  // And write enable.
   OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(3));
   OS << ";\n";

@@ -490,7 +490,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
   SDValue SDOps[] = {// The chain.
                      LSNode->getChain(), 
                      // The Value to store (if any), and the address.
-                     StoreVal, LSNode->getBasePtr(),
+                     LSNode->getBasePtr(), StoreVal,
                      // Is load?
                      DAG.getTargetConstant(isStore, MVT::i1),
                      // Byte enable.
