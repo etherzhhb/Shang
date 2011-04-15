@@ -38,7 +38,7 @@ def SDT_ADDC : SDTypeProfile<2, 3, [
 def VTMADD		:	SDNode<"VTMISD::ADD", SDT_ADDC>;
 
 
-def SDTMemTrans : SDTypeProfile<1, 4, [        
+def SDT_MemTrans : SDTypeProfile<1, 4, [        
   SDTCisPtrTy<1>, // Address
   // The Store value type must have the same type as the load value.
   SDTCisSameAs<0, 2>,
@@ -47,7 +47,7 @@ def SDTMemTrans : SDTypeProfile<1, 4, [
   // standard.
   SDTCisVT<4, i8>
 ]>;
-def VTMMemTrans : SDNode<"VTMISD::MemTrans", SDTMemTrans,
+def VTMMemTrans : SDNode<"VTMISD::MemTrans", SDT_MemTrans,
                     [SDNPHasChain, SDNPMayStore, SDNPMayLoad, SDNPMemOperand]>;
 
 // Select bit slice, Src operand, upper_bound, lower_bound

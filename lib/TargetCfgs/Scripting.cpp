@@ -56,8 +56,8 @@ struct LuaConstraints {
     luabind::module(State)[
       luabind::class_<FUInfo>("FUInfo")
         .def("setupMemBus", &FUInfo::setupMemBus)
-        .def("setupShift",  &FUInfo::setupBinOpRes<VFUs::Shift>)
         .def("setupAddSub", &FUInfo::setupBinOpRes<VFUs::AddSub>)
+        .def("setupShift",  &FUInfo::setupBinOpRes<VFUs::Shift>)
         .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>),
 
       luabind::class_<FileInfo>("FileInfo")

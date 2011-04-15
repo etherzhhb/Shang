@@ -194,10 +194,10 @@ public:
 };
 
 template<enum VFUs::FUTypes T>
-class VFUBinOpFUDesc : public VFUDesc {
+class VSimpleFUDesc : public VFUDesc {
   unsigned MaxBitWidth;
 
-  VFUBinOpFUDesc(unsigned latency, unsigned startInt, unsigned totalRes,
+  VSimpleFUDesc(unsigned latency, unsigned startInt, unsigned totalRes,
                  unsigned maxBitWidth)
     : VFUDesc(T, latency, startInt, totalRes), MaxBitWidth(maxBitWidth) {}
     
@@ -207,7 +207,7 @@ public:
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   template<enum VFUs::FUTypes OtherT>
-  static inline bool classof(const VFUBinOpFUDesc<OtherT> *A) {
+  static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
     return T == OtherT;
   }
   static inline bool classof(const VFUDesc *A) {
@@ -218,9 +218,10 @@ public:
   static const char *getTypeName() { return VFUs::VFUNames[getType()]; }
 };
 
-typedef VFUBinOpFUDesc<VFUs::Mult>    VFUMult;
-typedef VFUBinOpFUDesc<VFUs::AddSub>  VFUAddSub;
-typedef VFUBinOpFUDesc<VFUs::Shift> VFUShift;
+typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
+typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
+typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
+
 class FUInfo {
   // DO NOT IMPLEMENT
   FUInfo(const FUInfo&);
@@ -243,7 +244,7 @@ class FUInfo {
   template<enum VFUs::FUTypes T>
   void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes) {
     ResSet[T - VFUs::FirstFUType]
-      = new VFUBinOpFUDesc<T>(latency, startInt, totalRes,
+      = new VSimpleFUDesc<T>(latency, startInt, totalRes,
                           // Dirty Hack.
                           64);
   }
