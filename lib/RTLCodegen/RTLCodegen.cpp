@@ -292,7 +292,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out << "// Always Block\n";
   Out.always_ff_begin();
   VM->printRegisterReset(Out);
-  Out.else_begin().if_begin(ReadyPred, "// if all resources ready?\n");
+  Out.else_begin().if_begin(ReadyPred, "// are all resources ready?\n");
 
   Out << "// FSM\n";
   Out.switch_begin("NextFSMState");
