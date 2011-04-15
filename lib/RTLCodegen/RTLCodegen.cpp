@@ -24,7 +24,6 @@
 #include "vtm/VFuncInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/BitLevelInfo.h"
-#include "vtm/FileInfo.h"
 #include "vtm/VRegisterInfo.h"
 
 #include "llvm/Type.h"
@@ -43,7 +42,6 @@
 #include "llvm/ADT/StringExtras.h"
 
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/ToolOutputFile.h"
 
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
@@ -56,7 +54,6 @@
 using namespace llvm;
 namespace {
 class RTLCodegen : public MachineFunctionPass {
-  tool_output_file *FOut;
   vlang_raw_ostream Out;
 
   MachineFunction *MF;
@@ -177,15 +174,16 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  RTLCodegen();
+  RTLCodegen(raw_ostream &O);
+  RTLCodegen() : MachineFunctionPass(ID) {
+    assert( 0 && "Cannot construct the class without the raw_stream!");
+  }
 
   ~RTLCodegen();
 
   bool doInitialization(Module &M);
 
   bool doFinalization(Module &M) {
-    Out.flush();
-    FOut->keep();
     delete Mang;
     return false;
   }
@@ -203,8 +201,8 @@ public:
 //===----------------------------------------------------------------------===//
 char RTLCodegen::ID = 0;
 
-Pass *llvm::createRTLCodegenPass() {
-  return new RTLCodegen();
+Pass *llvm::createRTLCodegenPass(raw_ostream &O) {
+  return new RTLCodegen(O);
 }
 
 INITIALIZE_PASS_BEGIN(RTLCodegen, "vtm-rtl-info",
@@ -215,7 +213,7 @@ INITIALIZE_PASS_END(RTLCodegen, "vtm-rtl-info",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-RTLCodegen::RTLCodegen() : MachineFunctionPass(ID), Out() {
+RTLCodegen::RTLCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O) {
   initializeRTLCodegenPass(*PassRegistry::getPassRegistry());
 }
 
@@ -227,8 +225,6 @@ bool RTLCodegen::doInitialization(Module &M) {
                       " in a machine function pass!");
   Mang = new Mangler(MMI->getContext(), *TD);
 
-  FOut = vtmfiles().getRTLOut();
-  Out.setStream(FOut->os());
   return false;
 }
 
@@ -250,7 +246,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
-  VM = FuncInfo->createRtlMod(vtmfiles().getSystemName());
+  VM = FuncInfo->createRtlMod(sysinfo().getHwModName());
   emitFunctionSignature();
 
   // Emit control register and idle state

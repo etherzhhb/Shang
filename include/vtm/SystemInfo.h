@@ -35,7 +35,7 @@ private:
   PipeLineAlgorithm PipeAlg;
   ScheduleAlgorithm SchedAlg;
   
-  friend struct LuaConstraints;
+  friend class LuaScript;
   friend class SystemInfo;
 
 public:
@@ -54,21 +54,25 @@ class SystemInfo {
   // DO NOT IMPLEMENT
   const SystemInfo &operator=(const SystemInfo&);
 
-  StringMap<ConstraintsInfo> FunctionsInfos;
+  mutable StringMap<ConstraintsInfo> FunctionsInfos;
 
   void setHardware(const std::string &S) {
     FunctionsInfos.GetOrCreateValue(S);
   }
 
   // Interfaces.
-  bool enableVLT, enablePLB;
+  std::string hwModName;
 
-  friend struct LuaConstraints;
+  friend class LuaScript;
 public:
-  SystemInfo() : enableVLT(false), enablePLB(false) {}
+  SystemInfo() {}
 
-  ConstraintsInfo &getConstraints(const std::string &S) {
+  ConstraintsInfo &getInfo(const std::string &S) const {
     return FunctionsInfos.GetOrCreateValue(S).getValue();
+  }
+
+  const std::string &getHwModName() const {
+    return hwModName;
   }
 
   bool isHardware(const Function &F) const {
@@ -81,12 +85,9 @@ public:
   }
 
   bool empty() const { return FunctionsInfos.empty(); }
-
-  bool isVLTEnable() const { return enableVLT; }
-  bool isPLBEnable() const { return enablePLB; }
 };
 
-SystemInfo &sysinfo();
+const SystemInfo &sysinfo();
 
 }
 

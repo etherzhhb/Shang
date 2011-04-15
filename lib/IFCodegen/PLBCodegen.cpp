@@ -15,7 +15,6 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogAST.h"
 #include "vtm/VFuncInfo.h"
-#include "vtm/FileInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/Utilities.h"
 
@@ -29,7 +28,6 @@
 
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include "llvm/Support/Debug.h"
@@ -44,32 +42,17 @@ struct PLBIfCodegen : public MachineFunctionPass {
   static char ID;
 
   // Streams
-  tool_output_file *FOut;
-  vlang_raw_ostream Stream;
+  vlang_raw_ostream Out;
 
   VASTModule *RTLMod;
   const VFuncInfo *FuncInfo;
 
-  PLBIfCodegen() : MachineFunctionPass(ID), FOut(0), Stream(),
+  PLBIfCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O),
     RTLMod(0), FuncInfo(0) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.setPreservesAll();
-  }
-
-  bool doInitialization(Module &M) {
-    // Setup the streams.
-    FOut = vtmfiles().getIFDvrOut("plb.v");
-    Stream.setStream(FOut->os());
-
-    return false;
-  }
-
-  bool doFinalization(Module &M) {
-    Stream.flush();
-    FOut->keep();
-    return false;
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -78,12 +61,12 @@ struct PLBIfCodegen : public MachineFunctionPass {
 
 char PLBIfCodegen::ID = 0;
 
-Pass *llvm::createPLBIfCodegenPass() {
-  return new PLBIfCodegen();
+Pass *llvm::createPLBIfCodegenPass(raw_ostream &O) {
+  return new PLBIfCodegen(O);
 }
 
 bool PLBIfCodegen::runOnMachineFunction(MachineFunction &MF) {
-  Stream << "// IPIF User Logic for PLB.\n";
+  Out << "// IPIF User Logic for PLB.\n";
   return false;
 }
 

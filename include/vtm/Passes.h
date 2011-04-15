@@ -28,7 +28,7 @@ class TargetMachine;
 class PassRegistry;
 
 
-Pass *createFunctionFilterPass();
+Pass *createFunctionFilterPass(raw_ostream &O);
 
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
@@ -46,13 +46,13 @@ FunctionPass *createSimpleRegisterAllocator();
 Pass *createFixCopyPass();
 
 // RTL code generation.
-Pass *createRTLCodegenPass();
+Pass *createRTLCodegenPass(raw_ostream &O);
 
 // Verilator interface code generation.
-Pass *createVLTIfCodegenPass();
+Pass *createVLTIfCodegenPass(raw_ostream &O);
 
 // PLB interface code generation.
-Pass *createPLBIfCodegenPass();
+Pass *createPLBIfCodegenPass(raw_ostream &O);
 
 //
 void initializeBitLevelInfoPass(PassRegistry &Registry);

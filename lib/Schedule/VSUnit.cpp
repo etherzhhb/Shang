@@ -66,7 +66,7 @@ bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
-  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getConstraints();
+  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getInfo();
 
   switch (I.getScheduleAlgorithm()) {
   case ConstraintsInfo::FDS:   return new FDScheduler(G);
@@ -78,7 +78,7 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
 
 static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
-  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getConstraints();
+  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getInfo();
   if (I.getPipeLineAlgorithm() == ConstraintsInfo::IMS)
     return new IteractiveModuloScheduling(G);
   

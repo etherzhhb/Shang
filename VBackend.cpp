@@ -82,10 +82,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                          formatted_raw_ostream &Out,
                                          CodeGenFileType FileType,
                                          CodeGenOpt::Level OptLevel,
-                                         bool DisableVerify) {
-  // Perform software/hardware partition.
-  PM.add(createFunctionFilterPass());
-  
+                                         bool DisableVerify) {  
   // Standard LLVM-Level Passes.
 
   // Before running any passes, run the verifier to determine if the input
@@ -219,15 +216,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // We need this even we have our own register allocator, because copies will
   // be generated when eliminating PHIs.
   PM.add(createFixCopyPass());
-
-  PM.add(createRTLCodegenPass());
-
-  // Add interface writer pass.
-  if (sysinfo().isVLTEnable())
-    PM.add(createVLTIfCodegenPass());
-  
-  if (sysinfo().isPLBEnable())
-    PM.add(createPLBIfCodegenPass());
 
   return false;
 }

@@ -249,7 +249,7 @@ class FUInfo {
                           64);
   }
 
-  friend struct LuaConstraints;
+  friend class LuaScript;
 public:
   
   FUInfo();
@@ -285,7 +285,7 @@ public:
 };
 
 
-FUInfo &vtmfus();
+const FUInfo &vtmfus();
 
 }
 

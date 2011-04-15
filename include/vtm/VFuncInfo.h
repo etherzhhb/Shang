@@ -83,10 +83,10 @@ class VFuncInfo : public MachineFunctionInfo {
 public:
   explicit VFuncInfo(MachineFunction &MF)
     : TotalRegs(fistPhyReg),
-      Info(sysinfo().getConstraints(MF.getFunction()->getName()))
+      Info(sysinfo().getInfo(MF.getFunction()->getName()))
   {}
 
-  const ConstraintsInfo &getConstraints() const { return Info; }
+  const ConstraintsInfo &getInfo() const { return Info; }
 
   /// Verilog module for the machine function.
   VASTModule *createRtlMod(const std::string &Name) {

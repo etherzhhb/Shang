@@ -8,19 +8,17 @@ include_directories(
   ${LUABIND_INCLUDE_DIR}/luabind
 )
 
-add_llvm_library(VTMTargetCfgs
-  FileInfo.cpp
-  SystemInfo.cpp
+add_llvm_library(VTMScripting
   FUInfo.cpp
-  Scripting.cpp
+  LuaScript.cpp
 )
 
-llvm_config(VTMTargetCfgs support)
+llvm_config(VTMScripting support)
 
 target_link_libraries (
-  VTMTargetCfgs
+  VTMScripting
   ${LUA_LIBRARY}
   ${LUABIND_LIBRARY}
 )
 
-add_dependencies(VTMTargetCfgs VerilogBackendTable_gen)
+add_dependencies(VTMScripting VerilogBackendTable_gen)

@@ -21,7 +21,6 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogAST.h"
 #include "vtm/VFuncInfo.h"
-#include "vtm/FileInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/Utilities.h"
 
@@ -35,7 +34,6 @@
 
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
-#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include "llvm/Support/Debug.h"
@@ -353,19 +351,18 @@ namespace {
 struct VLTIfCodegen : public MachineFunctionPass {
   static char ID;
 
-  tool_output_file *FOut;
-  lang_raw_ostream<CppTraits> Stream;
+  lang_raw_ostream<CppTraits> Out;
 
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
   const VFuncInfo *FuncInfo;
 
-  VLTIfCodegen() : MachineFunctionPass(ID), FOut(0), Stream(),
+  VLTIfCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O),
     RTLMod(0), FuncInfo(0) {}
 
   void assignInPort(unsigned T, const std::string &Val) {
     // TODO: Assert the port must be an input port.
-    Stream << VLTModInstName << '.'
+    Out << VLTModInstName << '.'
            << RTLMod->getPortName(T)
            << " = (" << Val << ");\n";
   }
@@ -383,11 +380,11 @@ struct VLTIfCodegen : public MachineFunctionPass {
   }
 
   void evalHalfCycle() {
-    Stream << "//Increase clk by half cycle.\n";
+    Out << "//Increase clk by half cycle.\n";
     assignInPort(VASTModule::Clk, "sim_time++ & 0x1");
 
-    Stream << "// Evaluate model.\n";
-    Stream << VLTModInstName << ".eval();\n";
+    Out << "// Evaluate model.\n";
+    Out << VLTModInstName << ".eval();\n";
   }
 
   const char *getCurClk() const {
@@ -397,18 +394,18 @@ struct VLTIfCodegen : public MachineFunctionPass {
   }
 
   void isClkEdgeBegin(bool posedge) {
-    Stream << "// Check for if the clk "
+    Out << "// Check for if the clk "
            << (posedge ? "rising" : "falling")
            << '\n';
 
-    Stream.if_begin(format("%s == %c", getCurClk(), '0' + posedge));
+    Out.if_begin(format("%s == %c", getCurClk(), '0' + posedge));
   }
 
   void isClkEdgeEnd(bool posedge) {
     if (posedge)
-      Stream.exit_block("// end clk rising\n");
+      Out.exit_block("// end clk rising\n");
     else
-      Stream.exit_block("// end clk falling\n");
+      Out.exit_block("// end clk falling\n");
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -417,18 +414,15 @@ struct VLTIfCodegen : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
-    FOut = vtmfiles().getIFDvrOut("vlt.cpp");
 
-    Stream.setStream(FOut->os());
-
-    std::string HWSubSysName = vtmfiles().getHWSubSysName();
+    std::string HWSubSysName = sysinfo().getHwModName();
 
     // Setup the Name of the module in verilator.
     VLTClassName = "V" + HWSubSysName;
     // And the name of the intance of this class.
     VLTModInstName = VLTClassName + "_Inst";
 
-    Stream << "// Include the verilator header.\n"
+    Out << "// Include the verilator header.\n"
               "#include \"verilated.h\"\n"
               "// And the header file of the generated module.\n"
               "#include \"" << VLTClassName << ".h\"\n\n\n"
@@ -445,18 +439,16 @@ struct VLTIfCodegen : public MachineFunctionPass {
               "#ifdef __cplusplus\n"
               "extern \"C\" {\n"
               "#endif\n\n";
-    Stream.flush();
+    Out.flush();
 
     return false;
   }
 
   bool doFinalization(Module &M) {
-    Stream << "// Dirty Hack: Only C function is supported now.\n"
+    Out << "// Dirty Hack: Only C function is supported now.\n"
               "#ifdef __cplusplus\n"
               "}\n"
               "#endif\n";
-    Stream.flush();
-    FOut->keep();
     return false;
   }
 
@@ -475,33 +467,33 @@ struct VLTIfCodegen : public MachineFunctionPass {
     unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
 
     // Simulate the read operation on memory bus.
-    Stream << "switch (" << getPortVal(ByteEnable) << " & 0xff)";
-    Stream.enter_block();
+    Out << "switch (" << getPortVal(ByteEnable) << " & 0xff)";
+    Out.enter_block();
 
     for (unsigned Size = 1, EndSize = (DataPortBytes * 2);
          Size < EndSize; Size *= 2) {
-      Stream << "case " << getByteEnable(Size) << ": ";
+      Out << "case " << getByteEnable(Size) << ": ";
       // Write the value to input port from memory if this is a read.
       if (SimRead)
-        Stream << getPortVal(InData) << " = ";
+        Out << getPortVal(InData) << " = ";
       
       // Cast the pointer and dereference it.
       // The size is in bytes, convert it to bits.
-      Stream << "*((";
-      printSimpleType(Stream, Type::getIntNTy(Context, Size * 8), false);
-      Stream << "*)" << getPortVal(Address) << ")";
+      Out << "*((";
+      printSimpleType(Out, Type::getIntNTy(Context, Size * 8), false);
+      Out << "*)" << getPortVal(Address) << ")";
 
       // Other Write the value from output port to memory.
       if (!SimRead) {
-        Stream << " = ((";
-        printSimpleType(Stream, Type::getIntNTy(Context, Size * 8), false);
-        Stream << ") " << getPortVal(OutData) << ")";
+        Out << " = ((";
+        printSimpleType(Out, Type::getIntNTy(Context, Size * 8), false);
+        Out << ") " << getPortVal(OutData) << ")";
       }
 
-      Stream << "; break;\n";
+      Out << "; break;\n";
     }
-    Stream << "default: assert(0 && \"Unsupported size!\"); break;\n";
-    Stream.exit_block();
+    Out << "default: assert(0 && \"Unsupported size!\"); break;\n";
+    Out.exit_block();
   }
 
   inline void simulateMemRead(unsigned MemPortStartIdx, LLVMContext &Context) {
@@ -514,8 +506,8 @@ struct VLTIfCodegen : public MachineFunctionPass {
 };
 } //end anonymous namespace
 
-Pass *llvm::createVLTIfCodegenPass() {
-  return new VLTIfCodegen();
+Pass *llvm::createVLTIfCodegenPass(raw_ostream &O) {
+  return new VLTIfCodegen(O);
 }
 
 char VLTIfCodegen::ID = 0;
@@ -532,70 +524,70 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   // Print the interface function.
   const Type *retty = F->getReturnType();
   
-  printFunctionSignature(Stream, F);
+  printFunctionSignature(Out, F);
   // And the function body.
-  Stream.enter_block();
+  Out.enter_block();
 
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
 
   // Reset if necessary.
-  Stream << "// Reset the module if we first time invoke the module.\n";
-  Stream.if_begin("sim_time == 0");
+  Out << "// Reset the module if we first time invoke the module.\n";
+  Out.if_begin("sim_time == 0");
   assignInPort(VASTModule::RST, 0);
-  Stream.exit_block();
+  Out.exit_block();
 
   // Run several cycles.
-  Stream << '\n';
+  Out << '\n';
   evalHalfCycle();
-  Stream << "  // Deassert reset\n";
+  Out << "  // Deassert reset\n";
   assignInPort(VASTModule::RST, 1);
   evalHalfCycle();
 
-  Stream << '\n';
+  Out << '\n';
   evalHalfCycle();
   evalHalfCycle();
-  Stream << "assert(!" << getPortVal(VASTModule::Finish)
+  Out << "assert(!" << getPortVal(VASTModule::Finish)
          << "&& \"Module finished before start!\");\n";
 
   // Setup the parameters.
-  Stream << '\n';
-  Stream<< "// Setup the parameters.\n";
+  Out << '\n';
+  Out<< "// Setup the parameters.\n";
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
        I != E; ++I) {
     std::string ArgName = GetValueName(I);
-    Stream << VLTModInstName << '.' << ArgName << " = ";
+    Out << VLTModInstName << '.' << ArgName << " = ";
     // Cast the argument to integer type if necessary.
     const Type *ArgTy = I->getType();
     if (ArgTy->isPointerTy()) {
-      Stream << '(';
-      printType(Stream, TD->getIntPtrType(Context));
-      Stream << ')';
+      Out << '(';
+      printType(Out, TD->getIntPtrType(Context));
+      Out << ')';
     }
 
-    Stream << ArgName << ";\n";
+    Out << ArgName << ";\n";
       
-    Stream << "#ifdef __DEBUG_IF\n"
+    Out << "#ifdef __DEBUG_IF\n"
               "printf(\"Passing " << ArgName << "->%x\\n\", " << ArgName << ");\n"
               "#endif\n";
   }
 
-  Stream << '\n';
-  Stream << "// Start the module.\n";
+  Out << '\n';
+  Out << "// Start the module.\n";
   assignInPort(VASTModule::Start, 1);
 
-  Stream << "// Remember the start time.\n"
+  Out << "// Remember the start time.\n"
             "long start_time = sim_time;\n"
             "long ready_time = sim_time;\n";
 
-  Stream<< "// Commit the signals.\n";
+  Out<< "// Commit the signals.\n";
   evalHalfCycle();
 
   // The main evaluation loop.
-  Stream << "\n\n\n"
+  Out << "\n\n\n"
             "// The main evaluation loop.\n"
             "do";
-  Stream.enter_block();
+  Out.enter_block();
 
   // TODO: Allow the user to custom the clock edge.
   isClkEdgeBegin(true);
@@ -608,79 +600,79 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
     unsigned FUNum = ID.getFUNum();
 
     unsigned Enable = RTLMod->getFUPortOf(ID);
-    Stream << "if (" << getPortVal(Enable) << ")";
-    Stream.enter_block(format("// If membus%d active\n", FUNum));
+    Out << "if (" << getPortVal(Enable) << ")";
+    Out.enter_block(format("// If membus%d active\n", FUNum));
 
     unsigned Address = Enable + 2;
 
-    Stream << "#ifdef __DEBUG_IF\n";
+    Out << "#ifdef __DEBUG_IF\n";
     // Read the address
-    printType(Stream, TD->getIntPtrType(Context), false, "Addr");
-    Stream << " = " << getPortVal(Address) << ";\n"
+    printType(Out, TD->getIntPtrType(Context), false, "Addr");
+    Out << " = " << getPortVal(Address) << ";\n"
               "printf(\"Bus active with address %x\\n\", Addr);\n"
               "#endif\n";
 
     unsigned WriteEnable = Enable + 1;
-    Stream << "if (" << getPortVal(WriteEnable) << ")";
-    Stream.enter_block("// This is a write\n");
+    Out << "if (" << getPortVal(WriteEnable) << ")";
+    Out.enter_block("// This is a write\n");
     simulateMemWrite(Enable, Context);
-    Stream.else_begin("// This is a read\n");
+    Out.else_begin("// This is a read\n");
     simulateMemRead(Enable, Context);
-    Stream.exit_block("// end read/write\n");
+    Out.exit_block("// end read/write\n");
     // FIXME: Use a random ready time.
-    Stream << "// Update the ready time of membus.\n"
+    Out << "// Update the ready time of membus.\n"
            // Note: Simulate advance half clock cycle when sim_time increased.
               "ready_time = sim_time + " << MemBusLatency * 2
            <<";\n";
 
-    Stream.exit_block(format("// end membus%d\n", FUNum));
+    Out.exit_block(format("// end membus%d\n", FUNum));
 
     // Dirty hack: All membus share a ready_time.
-    Stream << "// Simulate the ready port of the membus.\n";
+    Out << "// Simulate the ready port of the membus.\n";
     unsigned BusRdy = Enable + 6;
     assignInPort(BusRdy, "(sim_tim >= ready_time)");
   }
 
   isClkEdgeEnd(true);
 
-  Stream << "\n"
+  Out << "\n"
             "// Check if the module finish its job at last.\n";
-  Stream.if_begin(getPortVal(VASTModule::Finish));
+  Out.if_begin(getPortVal(VASTModule::Finish));
   // TODO: Print the total spent cycle number if necessary.
 
-  Stream << "return";
+  Out << "return";
 
   // If the function return something?
   if (!retty->isVoidTy()) {
-    Stream << " (";
+    Out << " (";
     // Cast the return value, and we only support simple type as return type now.
-    printSimpleType(Stream, retty, false);
+    printSimpleType(Out, retty, false);
     // FIXME: Find the correct name for the return value port.
-    Stream << ")" << getModMember("return_value") << ";\n";  
+    Out << ")" << getModMember("return_value") << ";\n";  
   } else
-    Stream << ";\n";
+    Out << ";\n";
 
-  Stream.exit_block();
+  Out.exit_block();
 
-  Stream << '\n';
+  Out << '\n';
 
   evalHalfCycle();
   assignInPort(VASTModule::Start, 0);
 
   // TODO: allow user to custom the maximum simulation time.
   // FIXME: The result is wrong if sim_time just overflow.
-  Stream.exit_block("while(!Verilated::gotFinish()"
+  Out.exit_block("while(!Verilated::gotFinish()"
                     " && (sim_time - start_time) < 0x1000);\n");
 
-  Stream << '\n';
+  Out << '\n';
   // TODO: Allow user to custom the error handling.
-  Stream << "assert(0 && \"Something went wrong during the simulation!\");\n";
+  Out << "assert(0 && \"Something went wrong during the simulation!\");\n";
   if (!retty->isVoidTy()) {
-    Stream << "return 0;\n";
+    Out << "return 0;\n";
   }
   // End function body.
-  Stream.exit_block() << "\n";
-  Stream.flush();
+  Out.exit_block() << "\n";
+  Out.flush();
 
   return false;
 }

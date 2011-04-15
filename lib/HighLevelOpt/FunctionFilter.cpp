@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/Passes.h"
-#include "vtm/FileInfo.h"
 #include "vtm/SystemInfo.h"
 
 #include "llvm/Pass.h"
@@ -24,17 +23,19 @@
 
 #include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
 namespace {
 struct FunctionFilter : public ModulePass {
-  
   static char ID;
-  SystemInfo &Partition;
+  const SystemInfo &Partition;
+  // The output stream for software part.
+  raw_ostream &SwOut;
 
-  FunctionFilter() : ModulePass(ID), Partition(sysinfo()) {}
+  FunctionFilter(raw_ostream &O)
+    : ModulePass(ID), Partition(sysinfo()), SwOut(O) {}
 
 
   bool runOnModule(Module &M);
@@ -69,20 +70,15 @@ bool FunctionFilter::runOnModule(Module &M) {
   }
 
   // TODO: We may rename the entry function, too.
-
-  tool_output_file *Out(vtmfiles().getSWOut());
   OwningPtr<AssemblyAnnotationWriter> Annotator;
 
-  SoftMod->print(Out->os(), Annotator.get());
-
-  if (!Out->os().has_error())
-    Out->keep();
+  SoftMod->print(SwOut, Annotator.get());
 
   return true;
 }
 
 char FunctionFilter::ID = 0;
 
-Pass *llvm::createFunctionFilterPass() {
-  return new FunctionFilter();
+Pass *llvm::createFunctionFilterPass(raw_ostream &O) {
+  return new FunctionFilter(O);
 }

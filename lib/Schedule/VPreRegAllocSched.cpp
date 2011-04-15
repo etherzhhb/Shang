@@ -485,7 +485,7 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
   // Dirty Hack: Only support one block loop at this moment.
   if (L->getBlocks().size() != 1) return false;
 
-  return FuncInfo->getConstraints().enablePipeLine();
+  return FuncInfo->getInfo().enablePipeLine();
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
