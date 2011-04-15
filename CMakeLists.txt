@@ -110,7 +110,6 @@ add_llvm_target(VerilogBackend
   VSelectionDAGInfo.cpp
   VSubtarget.cpp
   EliminateSetRI.cpp
-#  lib/HighLevelOpt/FunctionFilter.cpp
 )
 
 target_link_libraries (LLVMVerilogBackend
@@ -123,7 +122,8 @@ target_link_libraries (LLVMVerilogBackend
   
 add_subdirectory(include)
 add_subdirectory(lib)
-add_subdirectory(test)
 add_subdirectory(TargetInfo)
+add_subdirectory(test)
+add_subdirectory(tools)
 
 # TODO: docs.

@@ -7,13 +7,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-//#include "vtm/VTargetMachine.h"
-
 #include "llvm/Module.h"
 #include "llvm/Target/TargetRegistry.h"
 
 namespace llvm {
-  //extern Target TheVBackendTarget;
   Target TheVBackendTarget;
 }
 
