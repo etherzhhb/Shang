@@ -14,6 +14,7 @@
 #include "vtm/SystemInfo.h"
 #include "vtm/LuaScript.h"
 
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -103,6 +104,27 @@ raw_ostream &LuaScript::getOutputStream(const std::string &Name) {
   Files.insert(std::make_pair(Path, NewFile));
 
   return NewFile->os();
+}
+
+std::string LuaScript::getTargetDataStr() const {
+  std::string ret;
+  raw_string_ostream s(ret);
+
+  // FIXME: Set the correct endian.
+  s << 'e';
+
+  s << '-';
+
+  // Setup the address width (pointer width).
+  unsigned PtrSize = FUI.getFUDesc<VFUMemBus>()->getAddrWidth();
+  s << "p:" << PtrSize << ':' << PtrSize << ':' << PtrSize << '-';
+
+  // FIXME: Setup the correct integer layout.
+  s << "i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-";
+  s << "n8:16:32:64";
+
+  s.flush();
+  return s.str();
 }
 
 ManagedStatic<LuaScript> Script;

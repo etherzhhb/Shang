@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
   PassManager PM;
 
   // TODO: Create the target data from constraints.
-  PM.add(new TargetData(&mod));
+  PM.add(new TargetData(Script->getTargetDataStr()));
 
   // Perform Software/Hardware partition.
   PM.add(createFunctionFilterPass(Script->getOutputStream("SoftwareIROutput")));

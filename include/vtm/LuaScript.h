@@ -72,6 +72,9 @@ public:
     return getValue<std::string>(Name);
   }
 
+  // Get the LLVM TargetData string from the constraints.
+  std::string getTargetDataStr() const;
+
   raw_ostream &getOutputStream(const std::string &Name);
 
   void keepAllFiles();

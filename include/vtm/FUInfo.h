@@ -232,21 +232,17 @@ class FUInfo {
   VFUDesc *ResSet[VFUs::NumCommonFUs];
 
   // Configuration function.
-  void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes) {
+  void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
+                   unsigned dataWidth, unsigned addressWidth) {
     ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
-      = new VFUMemBus(latency, startInt, totalRes,
-                      //DataLayout.getPointerSizeInBits(),
-                      // Dirty Hack.
-                      64,
-                      64);
+      = new VFUMemBus(latency, startInt, totalRes, addressWidth, dataWidth);
   }
 
   template<enum VFUs::FUTypes T>
-  void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes) {
+  void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes,
+                     unsigned maxWidth) {
     ResSet[T - VFUs::FirstFUType]
-      = new VSimpleFUDesc<T>(latency, startInt, totalRes,
-                          // Dirty Hack.
-                          64);
+      = new VSimpleFUDesc<T>(latency, startInt, totalRes, maxWidth);
   }
 
   friend class LuaScript;
