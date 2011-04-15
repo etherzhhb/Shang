@@ -600,6 +600,10 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
     unsigned FUNum = ID.getFUNum();
 
     unsigned Enable = RTLMod->getFUPortOf(ID);
+
+    unsigned BusRdy = Enable + 6;
+    assignInPort(BusRdy, "(sim_time >= ready_time)");
+
     Out << "if (" << getPortVal(Enable) << ")";
     Out.enter_block(format("// If membus%d active\n", FUNum));
 
@@ -625,12 +629,14 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
               "ready_time = sim_time + " << MemBusLatency * 2
            <<";\n";
 
-    Out.exit_block(format("// end membus%d\n", FUNum));
+    Out << "#ifdef __DEBUG_IF\n"
+           "printf(\"Memory Active at %x going to ready at %x\\n\","
+           " sim_time, ready_time);\n"
+           "#endif\n";
 
+    Out.exit_block(format("// end membus%d\n", FUNum));
     // Dirty hack: All membus share a ready_time.
     Out << "// Simulate the ready port of the membus.\n";
-    unsigned BusRdy = Enable + 6;
-    assignInPort(BusRdy, "(sim_tim >= ready_time)");
   }
 
   isClkEdgeEnd(true);
