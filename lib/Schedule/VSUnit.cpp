@@ -23,7 +23,7 @@
 
 #include "vtm/SystemInfo.h"
 #include "vtm/MicroState.h"
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/BitLevelInfo.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -66,7 +66,7 @@ bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
-  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getInfo();
+  const ConstraintsInfo &I = F->getInfo<VFInfo>()->getInfo();
 
   switch (I.getScheduleAlgorithm()) {
   case ConstraintsInfo::FDS:   return new FDScheduler(G);
@@ -78,7 +78,7 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
 
 static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
-  const ConstraintsInfo &I = F->getInfo<VFuncInfo>()->getInfo();
+  const ConstraintsInfo &I = F->getInfo<VFInfo>()->getInfo();
   if (I.getPipeLineAlgorithm() == ConstraintsInfo::IMS)
     return new IteractiveModuloScheduling(G);
   

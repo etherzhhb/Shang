@@ -21,7 +21,7 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VRegisterInfo.h"
@@ -57,7 +57,7 @@ class RTLCodegen : public MachineFunctionPass {
   vlang_raw_ostream Out;
 
   MachineFunction *MF;
-  VFuncInfo *FuncInfo;
+  VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   BitLevelInfo *BLI;
   VASTModule *VM;
@@ -114,8 +114,8 @@ class RTLCodegen : public MachineFunctionPass {
     std::string StateName = getucStateEnableName(MBB);
     raw_string_ostream ss(StateName);
     // Ignore the laster slot, we do nothing at that slot.
-    if (FuncInfo->getTotalSlotFor(MBB) > 1)
-      ss << "[" << (Slot - FuncInfo->getStartSlotFor(MBB)) << "]";
+    if (FInfo->getTotalSlotFor(MBB) > 1)
+      ss << "[" << (Slot - FInfo->getStartSlotFor(MBB)) << "]";
 
     return ss.str();
   }
@@ -230,7 +230,7 @@ bool RTLCodegen::doInitialization(Module &M) {
 
 bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
-  FuncInfo = MF->getInfo<VFuncInfo>();
+  FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
@@ -246,7 +246,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
-  VM = FuncInfo->createRtlMod(sysinfo().getHwModName());
+  VM = FInfo->createRtlMod(sysinfo().getHwModName());
   emitFunctionSignature();
 
   // Emit control register and idle state
@@ -378,9 +378,9 @@ void RTLCodegen::emitIdleState() {
 
 void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   std::string StateName = getStateName(&MBB);
-  unsigned startSlot = FuncInfo->getStartSlotFor(&MBB);
-  unsigned totalSlot = FuncInfo->getTotalSlotFor(&MBB);
-  unsigned IISlot = FuncInfo->getIISlotFor(&MBB);
+  unsigned startSlot = FInfo->getStartSlotFor(&MBB);
+  unsigned totalSlot = FInfo->getTotalSlotFor(&MBB);
+  unsigned IISlot = FInfo->getIISlotFor(&MBB);
   PredMapTy NextStatePred;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
@@ -435,12 +435,12 @@ void RTLCodegen::emitCommonPort() {
 
 void RTLCodegen::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
-  typedef VFuncInfo::const_id_iterator id_iterator;
+  typedef VFInfo::const_id_iterator id_iterator;
 
   VFUMemBus *MemBus = vtmfus().getFUDesc<VFUMemBus>();
 
-  for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
-       E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+  for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
+       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     // FIXME: In fact, *I return the FUId instead of FUNum. 
     FuncUnitId ID = *I;
     unsigned FUNum = ID.getFUNum();
@@ -479,8 +479,8 @@ void RTLCodegen::emitAllRegister() {
   // high part of the 2th 64 bits physics register.
 
   // Emit the register with max word length.
-  for (VFuncInfo::phyreg_iterator I = FuncInfo->phyreg_begin(8),
-       E = FuncInfo->phyreg_end(8); I < E; ++I)
+  for (VFInfo::phyreg_iterator I = FInfo->phyreg_begin(8),
+       E = FInfo->phyreg_end(8); I < E; ++I)
     VM->addRegister("reg" + utostr(*I), 64);
 }
 
@@ -490,7 +490,7 @@ RTLCodegen::~RTLCodegen() {}
 void RTLCodegen::createucStateEnable(MachineBasicBlock *MBB)  {
   std::string StateName = getStateName(MBB);
   // We do not need the last state.
-  unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB);
+  unsigned totalSlot = FInfo->getTotalSlotFor(MBB);
 
   // current state
   VM->addRegister("cur_" + StateName + "_enable", totalSlot);
@@ -508,7 +508,7 @@ void RTLCodegen::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
 void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                                    const std::string &NewState) {
   // We do not need the last state.
-  unsigned totalSlot = FuncInfo->getTotalSlotFor(MBB);
+  unsigned totalSlot = FInfo->getTotalSlotFor(MBB);
   std::string StateName = getucStateEnableName(MBB);
   ss << StateName << " <= ";
 
@@ -529,8 +529,8 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   unsigned startSlot = 0, totalSlot = 0;
   // Get the slot information for no-idle state.
   if (CurBB) {
-    startSlot = FuncInfo->getStartSlotFor(CurBB);
-    totalSlot = FuncInfo->getTotalSlotFor(CurBB);
+    startSlot = FInfo->getStartSlotFor(CurBB);
+    totalSlot = FInfo->getTotalSlotFor(CurBB);
   }
 
   unsigned endSlot = startSlot + totalSlot;
@@ -538,14 +538,14 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
 
   // Emit function unit control.
   // Membus control operation.
-  for (VFuncInfo::const_id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
-      E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+  for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
+      E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
     CtrlS << "// " << Id << " control for next micro state.\n";
     CtrlS << VFUMemBus::getEnableName(Id.getFUNum()) << " <= 1'b0";
     // Resource control operation when in the current state.
     for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
-      if (FuncInfo->isFUActiveAt(Id, i))
+      if (FInfo->isFUActiveAt(Id, i))
         CtrlS << " | " << getucStateEnable(CurBB, i - 1);
     }
 
@@ -553,8 +553,8 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
     for (PredMapTy::const_iterator NI = NextStatePred.begin(),
          NE = NextStatePred.end(); NI != NE; ++NI) {
       MachineBasicBlock *NextBB = NI->first;
-      unsigned FirstSlot = FuncInfo->getStartSlotFor(NextBB);
-      if (FuncInfo->isFUActiveAt(Id, FirstSlot))
+      unsigned FirstSlot = FInfo->getStartSlotFor(NextBB);
+      if (FInfo->isFUActiveAt(Id, FirstSlot))
         CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
               << " & " << NI->second << ") ";
     }
@@ -564,7 +564,7 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
     // so we do not need to worry about if we need to wait the memory operation
     // issused from the previous state.
     for (unsigned i = startSlot + MemBusLatency, e = endSlot + 1; i != e; ++i)
-      if (FuncInfo->isFUActiveAt(Id, i - MemBusLatency)) {
+      if (FInfo->isFUActiveAt(Id, i - MemBusLatency)) {
         std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
                             + "|" + VFUMemBus::getReadyName(Id.getFUNum());
         addReadyPred(Pred);
@@ -577,7 +577,7 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   CtrlS << "// Finish port control\n";
   CtrlS << "fin <= 1'b0";
   unsigned LastSlot = startSlot + totalSlot;
-  if (FuncInfo->isFUActiveAt(VFUs::FSMFinish, LastSlot))
+  if (FInfo->isFUActiveAt(VFUs::FSMFinish, LastSlot))
     CtrlS << " | " << getucStateEnable(CurBB, LastSlot - 1);
 
   CtrlS << ";\n";
@@ -587,9 +587,9 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
-  unsigned startSlot = FuncInfo->getStartSlotFor(CurBB),
-           totalSlot = FuncInfo->getTotalSlotFor(CurBB),
-           IISlot    = FuncInfo->getIISlotFor(CurBB);
+  unsigned startSlot = FInfo->getStartSlotFor(CurBB),
+           totalSlot = FInfo->getTotalSlotFor(CurBB),
+           IISlot    = FInfo->getIISlotFor(CurBB);
   unsigned endSlot = startSlot + totalSlot,
            II = IISlot - startSlot;
 
@@ -659,7 +659,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *MBB) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *MBB->getFirstNonPHI();
-  assert(FuncInfo->getStartSlotFor(MBB) == FirstState.getSlot());
+  assert(FInfo->getStartSlotFor(MBB) == FirstState.getSlot());
   PredMapTy dummy;
   emitCtrlOp(FirstState, dummy);
   assert(dummy.empty() && "Can not loop back at first state!");

@@ -16,7 +16,7 @@
 
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/VTM.h"
 

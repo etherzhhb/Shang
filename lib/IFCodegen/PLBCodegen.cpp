@@ -14,7 +14,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/VerilogAST.h"
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/Utilities.h"
 
@@ -45,10 +45,10 @@ struct PLBIfCodegen : public MachineFunctionPass {
   vlang_raw_ostream Out;
 
   VASTModule *RTLMod;
-  const VFuncInfo *FuncInfo;
+  const VFInfo *FInfo;
 
   PLBIfCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O),
-    RTLMod(0), FuncInfo(0) {}
+    RTLMod(0), FInfo(0) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);

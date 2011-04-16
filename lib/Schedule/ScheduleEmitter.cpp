@@ -14,7 +14,7 @@
 
 #include "VSUnit.h"
 
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/BitLevelInfo.h"
 
@@ -45,7 +45,7 @@ struct MicroStateBuilder {
   LLVMContext &VMContext;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
-  VFuncInfo &VFI;
+  VFInfo &VFI;
   BitLevelInfo &BLI;
 
   SmallVector<VSUnit*, 8> SUnitsToEmit;
@@ -100,7 +100,7 @@ struct MicroStateBuilder {
   WireNum(0),
   VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
-  VFI(*MBB.getParent()->getInfo<VFuncInfo>()), BLI(BitInfo),
+  VFI(*MBB.getParent()->getInfo<VFInfo>()), BLI(BitInfo),
   DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
   StateCtrls(State.getII() + 1), StateDatapaths(State.getII()) {}
 
@@ -462,7 +462,7 @@ void VSchedGraph::preSchedTopSort() {
 
 MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   unsigned CurSlot = startSlot;
-  VFuncInfo *VFI = MBB->getParent()->getInfo<VFuncInfo>();
+  VFInfo *VFI = MBB->getParent()->getInfo<VFInfo>();
 
   preSchedTopSort();
 

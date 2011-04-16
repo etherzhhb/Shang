@@ -23,7 +23,7 @@
 
 #include "vtm/BitLevelInfo.h"
 #include "vtm/Passes.h"
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/VTM.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -61,7 +61,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   const TargetInstrInfo *TII;
   // The loop Info
   MachineRegisterInfo *MRI;
-  VFuncInfo *FuncInfo;
+  VFInfo *FInfo;
   BitLevelInfo *BLI;
 
   TargetData *TD;
@@ -224,7 +224,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   const TargetMachine &TM = MF.getTarget();
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
-  FuncInfo = MF.getInfo<VFuncInfo>();
+  FInfo = MF.getInfo<VFInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
   AA = &getAnalysis<AliasAnalysis>();
   LI = &getAnalysis<MachineLoopInfo>();
@@ -244,7 +244,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     DEBUG(State.viewGraph());
 
     State.emitSchedule(*BLI);
-    FuncInfo->remeberTotalSlot(MBB, State.getStartSlot(),
+    FInfo->remeberTotalSlot(MBB, State.getStartSlot(),
                                     State.getTotalSlot(),
                                     State.getLoopOpSlot());
   }
@@ -485,7 +485,7 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
   // Dirty Hack: Only support one block loop at this moment.
   if (L->getBlocks().size() != 1) return false;
 
-  return FuncInfo->getInfo().enablePipeLine();
+  return FInfo->getInfo().enablePipeLine();
 }
 
 void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {

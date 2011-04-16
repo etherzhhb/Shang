@@ -30,7 +30,7 @@
 
 namespace llvm {
 class MachineBasicBlock;
-class VFuncInfo : public MachineFunctionInfo {
+class VFInfo : public MachineFunctionInfo {
   // Information about slots.
   struct StateSlots{
     unsigned startSlot : 32;
@@ -81,7 +81,7 @@ class VFuncInfo : public MachineFunctionInfo {
   OwningPtr<VASTModule> Mod;
   ConstraintsInfo Info;
 public:
-  explicit VFuncInfo(MachineFunction &MF)
+  explicit VFInfo(MachineFunction &MF)
     : TotalRegs(fistPhyReg),
       Info(sysinfo().getInfo(MF.getFunction()->getName()))
   {}

@@ -18,7 +18,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/Passes.h"
@@ -73,7 +73,7 @@ class VRASimple : public MachineFunctionPass,
   LiveIntervalUnion::Allocator UnionAllocator;
   // Context.
   MachineFunction *MF;
-  VFuncInfo *VFI;
+  VFInfo *VFI;
 
   // Analysis
   LiveStacks *LS;
@@ -182,7 +182,7 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
 
 bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
-  VFI = F.getInfo<VFuncInfo>();
+  VFI = F.getInfo<VFInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
 
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());

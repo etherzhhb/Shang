@@ -20,7 +20,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/VerilogAST.h"
-#include "vtm/VFuncInfo.h"
+#include "vtm/VFInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/Utilities.h"
 
@@ -355,10 +355,10 @@ struct VLTIfCodegen : public MachineFunctionPass {
 
   std::string VLTClassName, VLTModInstName;
   VASTModule *RTLMod;
-  const VFuncInfo *FuncInfo;
+  const VFInfo *FInfo;
 
   VLTIfCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O),
-    RTLMod(0), FuncInfo(0) {}
+    RTLMod(0), FInfo(0) {}
 
   void assignInPort(unsigned T, const std::string &Val) {
     // TODO: Assert the port must be an input port.
@@ -514,9 +514,9 @@ char VLTIfCodegen::ID = 0;
 
 bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
-  FuncInfo = MF.getInfo<VFuncInfo>();
+  FInfo = MF.getInfo<VFInfo>();
 
-  RTLMod = FuncInfo->getRtlMod();
+  RTLMod = FInfo->getRtlMod();
   TargetData *TD = getAnalysisIfAvailable<TargetData>();
   assert(TD && "Where is TD?");
   LLVMContext &Context = F->getContext();
@@ -593,9 +593,9 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   isClkEdgeBegin(true);
   // Check membuses.
   unsigned MemBusLatency = vtmfus().getFUDesc<VFUMemBus>()->getLatency();
-  typedef VFuncInfo::const_id_iterator id_iterator;
-  for (id_iterator I = FuncInfo->id_begin(VFUs::MemoryBus),
-       E = FuncInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+  typedef VFInfo::const_id_iterator id_iterator;
+  for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
+       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId ID = *I;
     unsigned FUNum = ID.getFUNum();
 
