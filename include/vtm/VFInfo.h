@@ -75,6 +75,17 @@ class VFInfo : public MachineFunctionInfo {
   unsigned TotalRegs;
   static const unsigned fistPhyReg = 8;
 
+  // The data structure to describe the block ram.
+  struct BRamInfo {
+    unsigned NumElem, ElemSizeInBytes;
+
+    BRamInfo(unsigned numElem, unsigned elemSizeInBytes)
+      : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes) {}
+  };
+
+  typedef std::map<uint16_t, BRamInfo> BRamMapTy;
+  BRamMapTy BRams;
+
   StringPool SymbolPool;
   std::set<PooledStringPtr> Symbols;
   // Rtl module.
@@ -89,56 +100,24 @@ public:
   const ConstraintsInfo &getInfo() const { return Info; }
 
   /// Verilog module for the machine function.
-  VASTModule *createRtlMod(const std::string &Name) {
-    Mod.reset(new VASTModule(Name));
-    return Mod.get();
-  }
+  VASTModule *createRtlMod(const std::string &Name);
   VASTModule *getRtlMod() const { return Mod.get(); }
 
   /// Slots information for machine basicblock.
-
-  inline unsigned getTotalSlotFor(const MachineBasicBlock* MBB) const {
-    std::map<const MachineBasicBlock*, StateSlots>::const_iterator
-      at = StateSlotMap.find(MBB);
-
-    assert(at != StateSlotMap.end() && "State not found!");
-    return at->second.totalSlot;
-  }
-
-  inline unsigned getStartSlotFor(const MachineBasicBlock* MBB) const {
-    std::map<const MachineBasicBlock*, StateSlots>::const_iterator
-      at = StateSlotMap.find(MBB);
-
-    assert(at != StateSlotMap.end() && "State not found!");
-    return at->second.startSlot;
-  }
-
-  inline unsigned getIISlotFor(const MachineBasicBlock* MBB) const {
-    std::map<const MachineBasicBlock*, StateSlots>::const_iterator
-      at = StateSlotMap.find(MBB);
-
-    assert(at != StateSlotMap.end() && "State not found!");
-    return at->second.IISlot;
-  }
-
+  unsigned getTotalSlotFor(const MachineBasicBlock* MBB) const;
+  
+  unsigned getStartSlotFor(const MachineBasicBlock* MBB) const;
+  
+  unsigned getIISlotFor(const MachineBasicBlock* MBB) const;
+  
   void remeberTotalSlot(const MachineBasicBlock* MBB,
-                        unsigned startSlot, unsigned totalSlot, unsigned IISlot) {
-    StateSlots SS;
-    SS.startSlot = startSlot;
-    SS.totalSlot = totalSlot;
-    SS.IISlot = IISlot;
-    StateSlotMap.insert(std::make_pair(MBB, SS));
-  }
+                        unsigned startSlot,
+                        unsigned totalSlot,
+                        unsigned IISlot);
 
   /// Information for allocated function units.
 
-  void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot) {
-    // Sometimes there are several instructions allocated to the same instruction,
-    // and it is ok to try to insert the same FUId more than once.
-    AllocatedFUs[Id.getFUType()].insert(Id);
-    for (unsigned i = EmitSlot; i < FinshSlot; ++i)
-      remeberActiveSlot(Id, i);
-  }
+  void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot);
 
   typedef std::set<FuncUnitId>::const_iterator const_id_iterator;
 
@@ -170,6 +149,9 @@ public:
     Symbols.insert(PSP);
     return *PSP;
   }
+
+  // Block Ram management.
+  void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes);
 
   // Allocate a Physics register, its sizeInBytes can be 1/2/3/4
   unsigned allocatePhyReg(unsigned SizeInBytes) {

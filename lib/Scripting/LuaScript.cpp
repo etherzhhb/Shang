@@ -52,7 +52,8 @@ bool LuaScript::runScript(const std::string &ScriptPath, SMDiagnostic &Err) {
       .def("setupMemBus", &FUInfo::setupMemBus)
       .def("setupAddSub", &FUInfo::setupBinOpRes<VFUs::AddSub>)
       .def("setupShift",  &FUInfo::setupBinOpRes<VFUs::Shift>)
-      .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>),
+      .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>)
+      .def("setupBRam",  &FUInfo::setupBinOpRes<VFUs::BRam>),
 
       luabind::class_<ConstraintsInfo>("ConstraintsInfo")
       .enum_("PipeLine")[

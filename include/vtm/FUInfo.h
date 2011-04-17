@@ -221,6 +221,7 @@ public:
 typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
 typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
+typedef VSimpleFUDesc<VFUs::BRam>    VFUBRam; 
 
 class FUInfo {
   // DO NOT IMPLEMENT
