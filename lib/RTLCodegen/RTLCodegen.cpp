@@ -161,6 +161,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpRet(ucOp &OpRet);
   void emitOpCopy(ucOp &OpCopy);
   void emitOpMemTrans(ucOp &OpMemAccess);
+  void emitOpBRam(ucOp &OpBRam);
 
   // Return the FSM ready predicate.
   // The FSM only move to next micro-state if the predicate become true.
@@ -524,8 +525,8 @@ void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
 }
 
 void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
-                                   MachineBasicBlock *CurBB,
-                                   const PredMapTy &NextStatePred) {
+                                    MachineBasicBlock *CurBB,
+                                    const PredMapTy &NextStatePred) {
   unsigned startSlot = 0, totalSlot = 0;
   // Get the slot information for no-idle state.
   if (CurBB) {
@@ -645,6 +646,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemTrans:  emitOpMemTrans(Op);           break;
+    case VTM::VOpBRam:      emitOpBRam(Op);           break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
     case VTM::VOpSetRI:
     case VTM::COPY:         emitOpCopy(Op);               break;
@@ -724,10 +726,38 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   emitOperand(OS, OpMemAccess.getOperand(3));
   OS << ";\n";
   // The byte enable.
-  // FIXME: This is the data size instead of the byte enable.
   OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
   emitOperand(OS, OpMemAccess.getOperand(4));
   OS << ";\n";
+}
+
+void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
+  unsigned FUNum = OpBRam->getFUId().getFUNum();
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  DPS << "// Dirty Hack: Emit the wire define by this operation\n"
+    "// some register copying operation may need this wire.\n";
+  DPS << "assign ";
+  emitOperand(DPS, OpBRam.getOperand(0));
+  DPS << " = " << VFUBRam::getInDataBusName(FUNum) << ";\n";
+
+  // Emit the control logic.
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  // Emit Address.
+  OS << VFUBRam::getAddrBusName(FUNum) << " <= ";
+  emitOperand(OS, OpBRam.getOperand(1));
+  OS << ";\n";
+  // Assign store data.
+  OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
+  emitOperand(OS, OpBRam.getOperand(2));
+  OS << ";\n";
+  // And write enable.
+  OS << VFUBRam::getWriteEnableName(FUNum) << " <= ";
+  emitOperand(OS, OpBRam.getOperand(3));
+  OS << ";\n";
+  // The byte enable.
+  // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
+  //emitOperand(OS, OpBRam.getOperand(4));
+  // OS << ";\n";
 }
 
 void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,

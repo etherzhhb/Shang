@@ -74,12 +74,20 @@ struct MicroStateBuilder {
                                unsigned writeSlot){
     const char *Symbol = 0;
     if (A->getFUId().isBound()) {
-      assert(A->getFUType() == VFUs::MemoryBus
-             && "Only support Membus at this moment!");
-      assert(OpNum == 0 && "Bad Operand!");
-      Symbol = VFI.allocateSymbol(VFUMemBus::getInDataBusName(A->getFUNum()));
+      assert((A->getFUType() != VFUs::MemoryBus || OpNum == 0)
+             && "Bad Operand!");
+      switch (A->getFUType()) {
+      case VFUs::MemoryBus:
+        Symbol = VFI.allocateSymbol(VFUMemBus::getInDataBusName(A->getFUNum()));
+        break;
+      case VFUs::BRam:
+        Symbol = VFI.allocateSymbol(VFUBRam::getInDataBusName(A->getFUNum()));
+        break;
+      default:
+        assert(0 && "Unexpected FU Type.");
+      }
     }
-    
+
     return WireDef(WireNum, Symbol, MO, emitSlot, writeSlot);
   }
   

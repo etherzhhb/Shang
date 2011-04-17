@@ -12,12 +12,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "VTargetMachine.h"
+
 #include "vtm/VInstrInfo.h"
 #include "vtm/VTM.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
+
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include "VGenInstrInfo.inc"
@@ -32,6 +35,11 @@ FuncUnitId VInstr::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemTrans)
     return FuncUnitId(VFUs::MemoryBus, 0);
+
+  if (getTID().Opcode == VTM::VOpBRam) {
+    unsigned Id = (*I.memoperands_begin())->getPointerInfo().getAddrSpace();
+    return FuncUnitId(VFUs::BRam, Id);
+  }
 
   return FuncUnitId();
 }

@@ -195,6 +195,7 @@ public:
 
 template<enum VFUs::FUTypes T>
 class VSimpleFUDesc : public VFUDesc {
+protected:
   unsigned MaxBitWidth;
 
   VSimpleFUDesc(unsigned latency, unsigned startInt, unsigned totalRes,
@@ -221,7 +222,55 @@ public:
 typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
 typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
-typedef VSimpleFUDesc<VFUs::BRam>    VFUBRam; 
+class VFUBRam : public VSimpleFUDesc<VFUs::BRam> {
+  VFUBRam(unsigned latency, unsigned startInt, unsigned totalRes,
+          unsigned maxBitWidth)
+    : VSimpleFUDesc<VFUs::BRam>(latency, startInt, totalRes, maxBitWidth) {}
+
+  static inline bool classof(const VFUBRam *A) {
+    return true;
+  }
+
+  friend class FUInfo;
+public:
+  template<enum VFUs::FUTypes OtherT>
+  static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
+    return getType() == OtherT;
+  }
+
+  static inline bool classof(const VFUDesc *A) {
+    return A->getType() == VFUs::BRam;
+  }
+
+  static VFUs::FUTypes getType() { return VFUs::BRam; };
+  static const char *getTypeName() { return VFUs::VFUNames[getType()]; }
+
+  // Signal names of the function unit.
+  inline static std::string getAddrBusName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "addr";
+  }
+
+  inline static std::string getInDataBusName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "in";
+  }
+
+  inline static std::string getOutDataBusName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "out";
+  }
+
+  // Dirty Hack: This should be byte enable.
+  inline static std::string getByteEnableName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "be";
+  }
+
+  inline static std::string getWriteEnableName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "we";
+  }
+
+  inline static std::string getEnableName(unsigned FUNum) {
+    return "bram" + utostr(FUNum) + "en";
+  }
+};
 
 class FUInfo {
   // DO NOT IMPLEMENT
