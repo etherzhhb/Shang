@@ -34,7 +34,7 @@ def : Proc<"generic",         [FeatureGeneric]>;
 //===----------------------------------------------------------------------===//
 
 include "VRegisterInfo.td"
-
+include "VIntrinsics.td"
 include "VInstrInfo.td"
 
 def VInstrInfo : InstrInfo {}

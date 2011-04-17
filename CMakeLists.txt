@@ -97,6 +97,7 @@ tablegen(VGenInstrInfo.inc -gen-instr-desc)
 tablegen(VGenAsmWriter.inc -gen-asm-writer)
 tablegen(VGenDAGISel.inc -gen-dag-isel)
 tablegen(VGenSubtarget.inc -gen-subtarget)
+tablegen(VGenIntrinsics.inc -gen-tgt-intrinsic)
 
 
 add_llvm_target(VerilogBackend
@@ -106,6 +107,7 @@ add_llvm_target(VerilogBackend
   VISelDAGToDAG.cpp
   VISelLowering.cpp
   VInstrInfo.cpp
+  VIntrinsicsInfo.cpp
   VMCAsmInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp

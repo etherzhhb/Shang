@@ -21,6 +21,7 @@
 #include "VSelectionDAGInfo.h"
 #include "VSubtarget.h"
 #include "VFrameLowering.h"
+#include "VIntrinsicsInfo.h"
 
 #include "vtm/VInstrInfo.h"
 #include "vtm/VISelLowering.h"
@@ -44,6 +45,7 @@ class VTargetMachine : public LLVMTargetMachine {
   VTargetLowering TLInfo;
   VSelectionDAGInfo TSInfo;
   VInstrInfo InstrInfo;
+  VIntrinsicInfo IntrinsicInfo;
   InstrItineraryData  InstrItins;
   VFrameInfo FrameInfo;
   // FIXME
@@ -69,12 +71,17 @@ public:
   virtual const VTargetLowering* getTargetLowering() const {
     return &TLInfo;
   }
+
   virtual const VSelectionDAGInfo* getSelectionDAGInfo() const {
     return &TSInfo;
   }
 
   virtual const TargetFrameLowering *getFrameLowering() const {
     return &FrameInfo;
+  }
+
+  virtual const TargetIntrinsicInfo *getIntrinsicInfo() const {
+    return &IntrinsicInfo;
   }
 
   virtual const TargetData *getTargetData() const { return &DataLayout; }
