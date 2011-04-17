@@ -17,10 +17,11 @@
 #include "llvm/Function.h"
 #include "llvm/Module.h"
 #include "llvm/Type.h"
-#include "llvm/CodeGen/ValueTypes.h "
+#include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include <cstring>
 
 namespace llvm {
@@ -32,7 +33,20 @@ namespace llvm {
 }
 
 using namespace llvm;
+//===----------------------------------------------------------------------===//
+static inline unsigned lookupNameHelper(const char *Name, unsigned Len) {
+    if (Len < 5 || Name[4] != '.' || Name[0] != 'l' || Name[1] != 'l'
+        || Name[2] != 'v' || Name[3] != 'm')
+      return 0;  // All intrinsics start with 'llvm.'
 
+#define GET_FUNCTION_RECOGNIZER
+#include "VGenIntrinsics.inc"
+#undef GET_FUNCTION_RECOGNIZER
+    return 0;
+}
+
+//===----------------------------------------------------------------------===//
+// IntrinsicInfo Implementation.
 std::string VIntrinsicInfo::getName(unsigned IntrID, const Type **Tys,
                                     unsigned numTys) const {
     static const char *const names[] = {
@@ -61,18 +75,10 @@ std::string VIntrinsicInfo::getName(unsigned IntrID, const Type **Tys,
 }
 
 unsigned VIntrinsicInfo::lookupName(const char *Name, unsigned Len) const {
-    if (Len < 5 || Name[4] != '.' || Name[0] != 'l' || Name[1] != 'l'
-      || Name[2] != 'v' || Name[3] != 'm')
-      return 0;  // All intrinsics start with 'llvm.'
-
-#define GET_FUNCTION_RECOGNIZER
-#include "VGenIntrinsics.inc"
-#undef GET_FUNCTION_RECOGNIZER
-    return 0;
+  return lookupNameHelper(Name, Len);
 }
 
-unsigned VIntrinsicInfo::
-  lookupGCCName(const char *Name) const {
+unsigned VIntrinsicInfo::lookupGCCName(const char *Name) const {
     return vtmIntrinsic::getIntrinsicForGCCBuiltin("vtm",Name);
 }
 
@@ -116,3 +122,62 @@ Function *VIntrinsicInfo::getDeclaration(Module *M, unsigned IntrID,
                            getType(M->getContext(), IntrID, Tys, numTys),
                            AList));
 }
+
+
+//===----------------------------------------------------------------------===//
+static unsigned getIntVal(const Value *V) {
+  return cast<ConstantInt>(V)->getZExtValue();
+}
+
+//===----------------------------------------------------------------------===//
+// Intrinsic Instructions Implementation.
+vtmIntrinsic::ID VIntrinsicInst::getIntrinsicID() const {
+  if (const Function *CF = getCalledFunction())
+    if (const ValueName *ValName = CF->getValueName())
+      return (vtmIntrinsic::ID)lookupNameHelper(ValName->getKeyData(),
+                                              ValName->getKeyLength());
+
+  return (vtmIntrinsic::ID)0;
+}
+
+bool VIntrinsicInst::classof(const CallInst *I) {
+  if (const Function *CF = I->getCalledFunction())
+    if (const ValueName *ValName = CF->getValueName())
+      return
+        lookupNameHelper(ValName->getKeyData(), ValName->getKeyLength()) != 0;
+
+  return false;
+}
+
+unsigned VAllocaBRamInst::getNumElement() const {
+  return getIntVal(getArgOperand(0));
+}
+
+unsigned VAllocaBRamInst::getElementSizeInBytes() const {
+  return  getIntVal(getArgOperand(1));
+}
+
+unsigned VAllocaBRamInst::getBRamId() const {
+  return cast<PointerType>(getType())->getAddressSpace();
+}
+
+Value *VAccessBRamInst::getPointerOperand() const {
+  return getArgOperand(0);
+}
+
+Value *VAccessBRamInst::getValueOperand() const {
+  return getArgOperand(1);
+}
+
+bool VAccessBRamInst::isStore() const {
+  return getIntVal(getArgOperand(2));
+}
+
+unsigned VAccessBRamInst::getAlignment() const {
+  return getIntVal(getArgOperand(3));
+}
+
+bool VAccessBRamInst::isVolatile() const {
+  return getIntVal(getArgOperand(4));
+}
+
