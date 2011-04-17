@@ -13,10 +13,3 @@ include_directories(
 add_llvm_tool(sync
   sync.cpp
  )
-
-target_link_libraries (
-  sync
-  ${LUA_LIBRARY}
-  ${LUABIND_LIBRARY}
-)
- 
