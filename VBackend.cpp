@@ -83,6 +83,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                          CodeGenFileType FileType,
                                          CodeGenOpt::Level OptLevel,
                                          bool DisableVerify) {  
+  // Dirty Hack: Map all frame stuffs to bram 1.
+  PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
+
   // Standard LLVM-Level Passes.
 
   // Before running any passes, run the verifier to determine if the input

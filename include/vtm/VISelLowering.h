@@ -162,33 +162,36 @@ private:
 
   SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isStore) const;
 
+  SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   /// ReplaceNodeResults - Replace the results of node with an illegal result
   /// type with new values built out of custom code.
   ///
   virtual void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue>&Results,
                                   SelectionDAG &DAG) const;
 
-  virtual SDValue
-    LowerFormalArguments(SDValue Chain,
-    CallingConv::ID CallConv, bool isVarArg,
-    const SmallVectorImpl<ISD::InputArg> &Ins,
-    DebugLoc dl, SelectionDAG &DAG,
-    SmallVectorImpl<SDValue> &InVals) const;
-  virtual SDValue
-    LowerCall(SDValue Chain, SDValue Callee,
-    CallingConv::ID CallConv, bool isVarArg, bool &isTailCall,
-    const SmallVectorImpl<ISD::OutputArg> &Outs,
-    const SmallVectorImpl<SDValue> &OutVals,
-    const SmallVectorImpl<ISD::InputArg> &Ins,
-    DebugLoc dl, SelectionDAG &DAG,
-    SmallVectorImpl<SDValue> &InVals) const;
+  virtual SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
+                                       bool isVarArg,
+                                       const SmallVectorImpl<ISD::InputArg> &Ins,
+                                       DebugLoc dl, SelectionDAG &DAG,
+                                       SmallVectorImpl<SDValue> &InVals) const;
+  virtual SDValue LowerCall(SDValue Chain, SDValue Callee,
+                            CallingConv::ID CallConv, bool isVarArg,
+                            bool &isTailCall,
+                            const SmallVectorImpl<ISD::OutputArg> &Outs,
+                            const SmallVectorImpl<SDValue> &OutVals,
+                            const SmallVectorImpl<ISD::InputArg> &Ins,
+                            DebugLoc dl, SelectionDAG &DAG,
+                            SmallVectorImpl<SDValue> &InVals) const;
 
-  virtual SDValue
-    LowerReturn(SDValue Chain,
-    CallingConv::ID CallConv, bool isVarArg,
-    const SmallVectorImpl<ISD::OutputArg> &Outs,
-    const SmallVectorImpl<SDValue> &OutVals,
-    DebugLoc dl, SelectionDAG &DAG) const;
+  virtual SDValue LowerReturn(SDValue Chain, CallingConv::ID CallConv,
+                              bool isVarArg,
+                              const SmallVectorImpl<ISD::OutputArg> &Outs,
+                              const SmallVectorImpl<SDValue> &OutVals,
+                              DebugLoc dl, SelectionDAG &DAG) const;
+
+  virtual bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
+                                  unsigned Intrinsic) const;
 };
 } // end namespace llvm
 

@@ -13,10 +13,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "VTargetMachine.h"
+#include "vtm/VFInfo.h"
 #include "vtm/VISelLowering.h"
 #include "vtm/Utilities.h"
 
 #include "llvm/Function.h"
+#include "llvm/Instructions.h"
+#include "llvm/Intrinsics.h"
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -79,6 +82,12 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
   setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
   setOperationAction(ISD::JumpTable,     MVT::i32, Custom);
+
+  // Set the intrinsic_wo_chain to be illegal in MVT::Other means it is
+  // illegal in all types.
+  setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
 
   for (unsigned VT = (unsigned)MVT::FIRST_INTEGER_VALUETYPE;
       VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
@@ -556,6 +565,34 @@ SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
   return getTruncate(DAG, Op.getDebugLoc(), Operand, DstSize);
 }
 
+SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  SDValue Chain = Op.getOperand(0);
+  unsigned IntNo = Op.getConstantOperandVal(1);
+  DebugLoc dl = Op.getDebugLoc();
+  switch (IntNo) {
+  default: return SDValue();    // Don't custom lower most intrinsics.
+  case vtmIntrinsic::vtm_alloca_bram: {
+    unsigned NumElem = Op.getConstantOperandVal(2),
+             ElemSizeInBytes = Op.getConstantOperandVal(3);
+    
+    MemIntrinsicSDNode *N = cast<MemIntrinsicSDNode>(Op);
+    
+    VFInfo *Info = DAG.getMachineFunction().getInfo<VFInfo>();
+    // We use the address space to identify the block ram.
+    Info->allocateBRam(N->getPointerInfo().getAddrSpace(),
+                       NumElem, ElemSizeInBytes);
+
+    // Replace the results.
+    // The base address inside a block ram is always 0.
+    DAG.ReplaceAllUsesOfValueWith(Op, DAG.getTargetConstant(0, getPointerTy()));
+    DAG.ReplaceAllUsesOfValueWith(Op.getValue(1), Chain);
+
+    return SDValue();
+  }
+  }
+}
+
 SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
@@ -585,12 +622,35 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerExtend(Op, DAG, false);
   case ISD::TRUNCATE:
     return LowerTruncate(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN:
+    return LowerINTRINSIC_W_CHAIN(Op, DAG);
   }
 }
 
 /// getFunctionAlignment - Return the Log2 alignment of this function.
 unsigned VTargetLowering::getFunctionAlignment(const Function *F) const {
   return 2;
+}
+
+bool VTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
+                                         unsigned Intrinsic) const {
+  switch (Intrinsic) {
+  default: break;
+  case vtmIntrinsic::vtm_alloca_bram: {
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = getPointerTy();
+    Info.ptrVal = &I; // Pass the allocated base address as pointer value.
+    Info.offset = 0;
+    // Align by block ram cell size.
+    Info.align = cast<ConstantInt>(I.getArgOperand(1))->getZExtValue();
+    Info.vol = false;
+    Info.readMem = true;
+    Info.writeMem = false;
+    return true;
+  }
+  }
+  
+  return false;
 }
 
 void VTargetLowering::ReplaceNodeResults(SDNode *N,

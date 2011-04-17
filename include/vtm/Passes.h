@@ -26,7 +26,9 @@ class FunctionPass;
 class raw_ostream;
 class TargetMachine;
 class PassRegistry;
+class TargetIntrinsicInfo;
 
+Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
 Pass *createFunctionFilterPass(raw_ostream &O);
 
