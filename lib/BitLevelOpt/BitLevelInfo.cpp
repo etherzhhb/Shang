@@ -57,6 +57,9 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       bool isShifts = false;
       switch (Instr.getOpcode()) {
       default: break;
+      case VTM::IMPLICIT_DEF:
+        // DirtyHack: Set the bit width of implicit define value to 64.
+        Instr.getOperand(0).setTargetFlags(64);
         // Fall through
       case VTM::COPY:     case VTM::PHI:
         // Fall through
