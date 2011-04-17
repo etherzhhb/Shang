@@ -642,10 +642,23 @@ bool VTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
     Info.ptrVal = &I; // Pass the allocated base address as pointer value.
     Info.offset = 0;
     // Align by block ram cell size.
-    Info.align = cast<ConstantInt>(I.getArgOperand(1))->getZExtValue();
+    Info.align = cast<VAllocaBRamInst>(I).getElementSizeInBytes();
     Info.vol = false;
     Info.readMem = true;
     Info.writeMem = false;
+    return true;
+  }
+  case vtmIntrinsic::vtm_access_bram: {
+    VAccessBRamInst &Inst = cast<VAccessBRamInst>(I);
+
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = getPointerTy();
+    Info.ptrVal = Inst.getPointerOperand();
+    Info.offset = 0;
+    Info.align = Inst.getAlignment();
+    Info.vol = Inst.isVolatile();
+    Info.readMem = !Inst.isStore();
+    Info.writeMem = Inst.isStore();
     return true;
   }
   }

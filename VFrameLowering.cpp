@@ -15,13 +15,11 @@
 #include "VFrameLowering.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
-
 #include "vtm/Passes.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
 #include "llvm/Instructions.h"
-#include "llvm/Intrinsics.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -45,10 +43,11 @@ void VFrameInfo::emitEpilogue(MachineFunction &MF,
 namespace {
 struct LowerFrameInstrs : public FunctionPass {
   static char ID;
+  Module *M;
 
   const TargetIntrinsicInfo &IntrinsicInfo;
   LowerFrameInstrs(const TargetIntrinsicInfo &II)
-    : FunctionPass(ID), IntrinsicInfo(II) {}
+    : FunctionPass(ID), M(0), IntrinsicInfo(II) {}
 
   //template<class InstTy, class OpIt>
   //InstTy *CreateInst(InstTy *OldInst, OpIt OpBegin, OpIt OpEnd)
@@ -86,18 +85,45 @@ void LowerFrameInstrs::ReplaceUseTree(Instruction *From, Instruction *To) {
     case Instruction::Store:{
       StoreInst *OldST = cast<StoreInst>(Instr);
       assert(From == OldST->getPointerOperand() && "What are we replacing?");
-      StoreInst *NewST = new StoreInst(OldST->getValueOperand(), To,
-                                       OldST->isVolatile(),
-                                       OldST->getAlignment(),
-                                       OldST);
+
+      // We use address space
+      const Type *ValTys[] = { OldST->getValueOperand()->getType(),
+                              To->getType() };
+      Function *TheStoreBRamFn
+        = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_access_bram,
+                                       ValTys, array_lengthof(ValTys));
+      const Type *Int32Ty = Type::getInt32Ty(M->getContext()),
+                 *Int1Ty = Type::getInt1Ty(M->getContext());
+
+      Value *Args[] = { To, OldST->getValueOperand(),
+                        ConstantInt::get(Int1Ty, 1),
+                        ConstantInt::get(Int32Ty, OldST->getAlignment()),
+                        ConstantInt::get(Int1Ty, OldST->isVolatile()) };
+
+      (void) CallInst::Create(TheStoreBRamFn, Args, array_endof(Args),
+                              "store_bram", OldST);
       // The old store is not use anymore.
       OldST->eraseFromParent();
     }  break;
     case Instruction::Load: {
       LoadInst *OldLD = cast<LoadInst>(Instr);
       assert(From == OldLD->getPointerOperand() && "What are we replacing?");
-      LoadInst *NewLD = new LoadInst(To, OldLD->getName(), OldLD->isVolatile(),
-                                     OldLD->getAlignment(), OldLD);
+
+            // We use address space 
+      const Type *ValTys[] = { OldLD->getType(), To->getType() };
+      Function *TheLoadBRamFn
+        = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_access_bram,
+                                       ValTys, array_lengthof(ValTys));
+      const Type *Int32Ty = Type::getInt32Ty(M->getContext()),
+                 *Int1Ty = Type::getInt1Ty(M->getContext());
+
+      Value *Args[] = { To, UndefValue::get(ValTys[0]),
+                        ConstantInt::get(Int1Ty, 0),
+                        ConstantInt::get(Int32Ty, OldLD->getAlignment()),
+                        ConstantInt::get(Int1Ty, OldLD->isVolatile()) };
+
+      CallInst *NewLD = CallInst::Create(TheLoadBRamFn, Args, array_endof(Args),
+                                         OldLD->getName(), OldLD);
       OldLD->replaceAllUsesWith(NewLD);
       OldLD->eraseFromParent();
     } break;
@@ -130,7 +156,7 @@ void LowerFrameInstrs::ReplaceUseTree(Instruction *From, Instruction *To) {
 }
 
 unsigned LowerFrameInstrs::LowerAlloca(AllocaInst *AI, unsigned allocatedBRams){
-  Module *M = AI->getParent()->getParent()->getParent();
+  M = AI->getParent()->getParent()->getParent();
   LLVMContext &Context = M->getContext();
 
   assert(AI->isStaticAlloca() && "Cannot support dynamic alloca yet!");
