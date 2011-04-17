@@ -176,13 +176,17 @@ def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 
 // Memory transaction.
 let mayLoad		  = 1,
-	  mayStore	  = 1 in
+	  mayStore	  = 1 in {
 def VOpMemTrans : FUInst<(outs DR:$dst),
 							           (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
-							            "$dst = memaccess $src, $addr, $isStore, $byteenable",
+							            "$dst = memtrans $src, $addr, $isStore, $byteenable",
 							            [], FUMemBus, 1, 1, 0>;
 
-
+def VOpBRam : FUInst<(outs DR:$dst),
+							       (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
+							       "$dst = bram $src, $addr, $isStore, $byteenable",
+							       [], FUBRam, 1, 1, 0>;
+}
 //===----------------------------------------------------------------------===//
 
 let isBarrier    = 1 in {

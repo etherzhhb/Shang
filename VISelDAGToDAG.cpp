@@ -68,6 +68,9 @@ private:
   SDNode *SelectConstant(SDNode *N);
 
   SDNode *SelectMemAccess(SDNode *N);
+  SDNode *SelectBRamAccess(SDNode *N);
+  
+  SDNode *SelectINTRINSIC_W_CHAIN(SDNode *N);
 
   virtual void PostprocessISelDAG();
   void FixCopyConst(SelectionDAG &DAG, SDNode *N);
@@ -235,6 +238,39 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
   return Ret;
 }
 
+SDNode *VDAGToDAGISel::SelectBRamAccess(SDNode *N) {
+  MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
+  MemOp[0] = cast<MemIntrinsicSDNode>(N)->getMemOperand();
+
+  unsigned ArgIdx = 2;
+
+  SDValue Ops[] = { N->getOperand(ArgIdx), N->getOperand(ArgIdx + 1),
+                    N->getOperand(ArgIdx + 2),
+                    // FIXME: Set the correct byte enable.
+                    CurDAG->getTargetConstant(0, MVT::i32),
+                    SDValue()/*The dummy bit width operand*/,
+                    N->getOperand(0) };
+
+  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
+
+  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpBRam, N->getVTList(),
+                                     Ops, array_lengthof(Ops));
+
+  cast<MachineSDNode>(Ret)->setMemRefs(MemOp, MemOp + 1);
+  return Ret;
+}
+
+SDNode *VDAGToDAGISel::SelectINTRINSIC_W_CHAIN(SDNode *N) {
+  unsigned IntNo = N->getConstantOperandVal(1);
+  
+  switch (IntNo) {
+  default: break;case vtmIntrinsic::vtm_access_bram:
+    return SelectBRamAccess(N);
+  }
+
+  return 0;
+}
+
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
   if (N->isMachineOpcode())
     return 0;   // Already selected.
@@ -269,6 +305,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::Constant:         return SelectConstant(N);
 
   case VTMISD::MemAccess:     return SelectMemAccess(N);
+  case ISD::INTRINSIC_W_CHAIN: return SelectINTRINSIC_W_CHAIN(N);
   }
 
   return SelectCode(N);
