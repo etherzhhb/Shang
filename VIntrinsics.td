@@ -30,5 +30,5 @@ let TargetPrefix = "vtm", isTarget = 1 in {
                                       [llvm_anyptr_ty,
                                        LLVMMatchType<0>, llvm_i1_ty,
                                        llvm_i32_ty, llvm_i1_ty],
-                                      [IntrReadWriteArgMem, NoCapture<1>]>;
+                                      [IntrReadWriteArgMem, NoCapture<0>]>;
 }
