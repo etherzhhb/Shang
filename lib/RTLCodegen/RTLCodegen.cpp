@@ -168,6 +168,11 @@ class RTLCodegen : public MachineFunctionPass {
   void emitFUCtrlForState(vlang_raw_ostream &CtrlS,
                           MachineBasicBlock *CurBB,
                           const PredMapTy &NextStatePred);
+  template<class FUTy>
+  void emitFUEnableForState(vlang_raw_ostream &CtrlS,
+                            unsigned startSlot, unsigned endSlot,
+                            MachineBasicBlock *CurBB,
+                            const PredMapTy &NextStatePred );
 
   void emitTestBench();
 
@@ -524,6 +529,40 @@ void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
+template<class FUTy>
+void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
+                                      unsigned startSlot, unsigned endSlot,
+                                      MachineBasicBlock *CurBB,
+                                      const PredMapTy &NextStatePred) {
+  VFUs::FUTypes Ty = FUTy::getType();
+
+  // Emit function unit control.
+  // Membus control operation.
+  for (VFInfo::const_id_iterator I = FInfo->id_begin(Ty), E = FInfo->id_end(Ty);
+       I != E; ++I) {
+    FuncUnitId Id = *I;
+    CtrlS << "// " << Id << " control for next micro state.\n";
+    CtrlS << FUTy::getEnableName(Id.getFUNum()) << " <= 1'b0";
+    // Resource control operation when in the current state.
+    for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
+      if (FInfo->isFUActiveAt(Id, i))
+        CtrlS << " | " << getucStateEnable(CurBB, i - 1);
+    }
+
+    // Resource control operation when we are transferring fsm state.
+    for (PredMapTy::const_iterator NI = NextStatePred.begin(),
+      NE = NextStatePred.end(); NI != NE; ++NI) {
+        MachineBasicBlock *NextBB = NI->first;
+        unsigned FirstSlot = FInfo->getStartSlotFor(NextBB);
+        if (FInfo->isFUActiveAt(Id, FirstSlot))
+          CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
+          << " & " << NI->second << ") ";
+    }
+
+    CtrlS << ";\n";
+  }
+}
+
 void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
                                     MachineBasicBlock *CurBB,
                                     const PredMapTy &NextStatePred) {
@@ -535,43 +574,25 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   }
 
   unsigned endSlot = startSlot + totalSlot;
+  emitFUEnableForState<VFUMemBus>(CtrlS, startSlot, endSlot,
+                                  CurBB, NextStatePred);
+  emitFUEnableForState<VFUBRam>(CtrlS, startSlot, endSlot,
+                                CurBB, NextStatePred);
+
   unsigned MemBusLatency = vtmfus().getFUDesc<VFUMemBus>()->getLatency();
-
-  // Emit function unit control.
-  // Membus control operation.
   for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-      E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+         E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
-    CtrlS << "// " << Id << " control for next micro state.\n";
-    CtrlS << VFUMemBus::getEnableName(Id.getFUNum()) << " <= 1'b0";
-    // Resource control operation when in the current state.
-    for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
-      if (FInfo->isFUActiveAt(Id, i))
-        CtrlS << " | " << getucStateEnable(CurBB, i - 1);
-    }
-
-    // Resource control operation when we are transferring fsm state.
-    for (PredMapTy::const_iterator NI = NextStatePred.begin(),
-         NE = NextStatePred.end(); NI != NE; ++NI) {
-      MachineBasicBlock *NextBB = NI->first;
-      unsigned FirstSlot = FInfo->getStartSlotFor(NextBB);
-      if (FInfo->isFUActiveAt(Id, FirstSlot))
-        CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
-              << " & " << NI->second << ") ";
-    }
-
     // Build the ready predicate for waiting membus ready.
     // We expect all operation will finish before the FSM jump to another state,
     // so we do not need to worry about if we need to wait the memory operation
-    // issused from the previous state.
+    // issued from the previous state.
     for (unsigned i = startSlot + MemBusLatency, e = endSlot + 1; i != e; ++i)
       if (FInfo->isFUActiveAt(Id, i - MemBusLatency)) {
         std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
                             + "|" + VFUMemBus::getReadyName(Id.getFUNum());
         addReadyPred(Pred);
       }
-
-    CtrlS << ";\n";
   }
 
   // Control the finish port
