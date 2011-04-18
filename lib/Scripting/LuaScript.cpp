@@ -31,6 +31,10 @@ extern "C" {
 
 using namespace llvm;
 
+static void openLuapp(lua_State *L) {
+#include "luapp.inc"
+}
+
 LuaScript::LuaScript() : State(lua_open()) {}
 
 LuaScript::~LuaScript() {
@@ -45,9 +49,9 @@ void LuaScript::keepAllFiles() {
 
 void LuaScript::init() {
   // Open lua libraries.
-  luaopen_base(State);
-  luaopen_table(State);
-  //luaopen_package(State);
+  luaL_openlibs(State);
+
+  openLuapp(State);
 
   // Bind our class.
   luabind::open(State);
