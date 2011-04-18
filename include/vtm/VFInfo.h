@@ -75,6 +75,7 @@ class VFInfo : public MachineFunctionInfo {
   unsigned TotalRegs;
   static const unsigned fistPhyReg = 8;
 
+public:
   // The data structure to describe the block ram.
   struct BRamInfo {
     unsigned NumElem, ElemSizeInBytes;
@@ -83,6 +84,7 @@ class VFInfo : public MachineFunctionInfo {
       : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes) {}
   };
 
+private:
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
   BRamMapTy BRams;
 
@@ -152,6 +154,12 @@ public:
 
   // Block Ram management.
   void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes);
+
+  const BRamInfo &getBRamInfo(uint16_t ID) const {
+    BRamMapTy::const_iterator at = BRams.find(ID);
+    assert(at != BRams.end() && "BRam not exists!");
+    return at->second;
+  }
 
   // Allocate a Physics register, its sizeInBytes can be 1/2/3/4
   unsigned allocatePhyReg(unsigned SizeInBytes) {
