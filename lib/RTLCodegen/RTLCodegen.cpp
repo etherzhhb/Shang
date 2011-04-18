@@ -472,7 +472,21 @@ void RTLCodegen::emitAllocatedFUs() {
     // Bus ready.
     VM->addInputPort(VFUMemBus::getReadyName(FUNum), 1);
   }
-  
+ 
+  raw_ostream &S = VM->getDataPathBuffer();
+  VFUBRam *BlockRam = vtmfus().getFUDesc<VFUBRam>();
+
+  for (id_iterator I = FInfo->id_begin(VFUs::BRam),
+       E = FInfo->id_end(VFUs::BRam); I != E; ++I) {
+    FuncUnitId ID = *I;
+    const VFInfo::BRamInfo &Info = FInfo->getBRamInfo(ID.getFUNum());
+
+    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), ID.getFUNum(),
+                                Info.ElemSizeInBytes * 8,
+                                Log2_32_Ceil(Info.NumElem))
+      << '\n';
+  }
+
 }
 
 void RTLCodegen::emitAllRegister() {

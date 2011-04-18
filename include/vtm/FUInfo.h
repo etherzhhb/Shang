@@ -223,16 +223,21 @@ typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
 typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
 class VFUBRam : public VSimpleFUDesc<VFUs::BRam> {
+  std::string Template; // Template for inferring block ram.
   VFUBRam(unsigned latency, unsigned startInt, unsigned totalRes,
-          unsigned maxBitWidth)
-    : VSimpleFUDesc<VFUs::BRam>(latency, startInt, totalRes, maxBitWidth) {}
+          unsigned maxBitWidth, const std::string &tmp)
+    : VSimpleFUDesc<VFUs::BRam>(latency, startInt, totalRes, maxBitWidth),
+      Template(tmp) {}
+
+  friend class FUInfo;
+public:
+  std::string generateCode(const std::string &Clk, unsigned Num,
+                           unsigned DataWidth, unsigned AddrWidth) const;
 
   static inline bool classof(const VFUBRam *A) {
     return true;
   }
 
-  friend class FUInfo;
-public:
   template<enum VFUs::FUTypes OtherT>
   static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
     return getType() == OtherT;
@@ -286,6 +291,12 @@ class FUInfo {
                    unsigned dataWidth, unsigned addressWidth) {
     ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
       = new VFUMemBus(latency, startInt, totalRes, addressWidth, dataWidth);
+  }
+
+  void setupBRam(unsigned latency, unsigned startInt, unsigned totalRes,
+      unsigned maxWidth, const std::string &Template) {
+    ResSet[VFUs::BRam - VFUs::FirstFUType]
+      = new VFUBRam(latency, startInt, totalRes, maxWidth, Template);
   }
 
   template<enum VFUs::FUTypes T>

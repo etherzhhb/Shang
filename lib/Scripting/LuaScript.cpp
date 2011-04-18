@@ -63,7 +63,7 @@ void LuaScript::init() {
       .def("setupAddSub", &FUInfo::setupBinOpRes<VFUs::AddSub>)
       .def("setupShift",  &FUInfo::setupBinOpRes<VFUs::Shift>)
       .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>)
-      .def("setupBRam",  &FUInfo::setupBinOpRes<VFUs::BRam>),
+      .def("setupBRam",   &FUInfo::setupBRam),
 
       luabind::class_<ConstraintsInfo>("ConstraintsInfo")
       .enum_("PipeLine")[
