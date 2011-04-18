@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
   Script->init();
 
   // Run the lua script.
-  if (!Script->runScript(InputFilename, Err)){
+  if (!Script->runScriptFile(InputFilename, Err)){
     Err.Print(argv[0], errs());
     return 1;
   }

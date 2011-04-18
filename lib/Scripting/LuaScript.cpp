@@ -90,8 +90,17 @@ void LuaScript::init() {
   luabind::globals(State)["System"] = &SystemI;
 }
 
-bool LuaScript::runScript(const std::string &ScriptPath, SMDiagnostic &Err) {
+bool LuaScript::runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
+  // Run the script.
+  if (luaL_dostring(State, ScriptStr.c_str())) {
+    Err = SMDiagnostic(ScriptStr, lua_tostring(State, -1));
+    return false;
+  }
 
+  return true;
+}
+
+bool LuaScript::runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) {
   // Run the script.
   if (luaL_dofile(State, ScriptPath.c_str())) {
     Err = SMDiagnostic(ScriptPath, lua_tostring(State, -1));

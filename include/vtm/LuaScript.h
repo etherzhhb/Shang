@@ -81,7 +81,8 @@ public:
 
   void init();
 
-  bool runScript(const std::string &ScriptPath, SMDiagnostic &Err);
+  bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
+  bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
 
 };
 
