@@ -43,7 +43,13 @@ void LuaScript::keepAllFiles() {
     I->second->keep();
 }
 
-bool LuaScript::runScript(const std::string &ScriptPath, SMDiagnostic &Err) {
+void LuaScript::init() {
+  // Open lua libraries.
+  luaopen_base(State);
+  luaopen_table(State);
+  //luaopen_package(State);
+
+  // Bind our class.
   luabind::open(State);
 
   // Bind the C++ classes.
@@ -78,6 +84,9 @@ bool LuaScript::runScript(const std::string &ScriptPath, SMDiagnostic &Err) {
   // Bind the object.
   luabind::globals(State)["FUs"] = &FUI;
   luabind::globals(State)["System"] = &SystemI;
+}
+
+bool LuaScript::runScript(const std::string &ScriptPath, SMDiagnostic &Err) {
 
   // Run the script.
   if (luaL_dofile(State, ScriptPath.c_str())) {

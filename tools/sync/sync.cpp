@@ -85,6 +85,7 @@ int main(int argc, char **argv) {
   SMDiagnostic Err;
 
   LuaScript *Script = &getScript();
+  Script->init();
 
   // Run the lua script.
   if (!Script->runScript(InputFilename, Err)){

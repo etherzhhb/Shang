@@ -79,6 +79,8 @@ public:
 
   void keepAllFiles();
 
+  void init();
+
   bool runScript(const std::string &ScriptPath, SMDiagnostic &Err);
 
 };
