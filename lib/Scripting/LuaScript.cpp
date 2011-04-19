@@ -7,12 +7,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// 
+// This file implements the LuaScript class, which allow users pass some
+// information into the program with lua script. 
 //
 //===----------------------------------------------------------------------===//
 #include "vtm/FUInfo.h"
 #include "vtm/SystemInfo.h"
 #include "vtm/LuaScript.h"
+#include "vtm/VerilogAST.h"
 
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -65,24 +67,27 @@ void LuaScript::init() {
       .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>)
       .def("setupBRam",   &FUInfo::setupBRam),
 
-      luabind::class_<ConstraintsInfo>("ConstraintsInfo")
+    luabind::class_<ConstraintsInfo>("ConstraintsInfo")
       .enum_("PipeLine")[
         luabind::value("IMS", ConstraintsInfo::IMS),
           luabind::value("FDMS", ConstraintsInfo::FDMS),
           luabind::value("DontPipeline", ConstraintsInfo::DontPipeline)
       ]
-    .enum_("Schedule")[
-      luabind::value("FDS", ConstraintsInfo::FDS),
+      .enum_("Schedule")[
+        luabind::value("FDS", ConstraintsInfo::FDS),
         luabind::value("FDLS", ConstraintsInfo::FDLS),
         luabind::value("ILP", ConstraintsInfo::ILP)
-    ]
-    .def_readwrite("PipeLine", &ConstraintsInfo::PipeAlg)
+      ]
+      .def_readwrite("PipeLine", &ConstraintsInfo::PipeAlg)
       .def_readwrite("Schedule", &ConstraintsInfo::SchedAlg),
 
-      luabind::class_<SystemInfo>("SystemInfo")
+    luabind::class_<SystemInfo>("SystemInfo")
       .def("setHardware", &SystemInfo::setHardware)
       .def("getInfo", &SystemInfo::getInfo)
-      .def_readwrite("HwModName", &SystemInfo::hwModName)
+      .def_readwrite("HwModName", &SystemInfo::hwModName),
+
+    VASTPort::bindClass(VASTPort::class_("VASTPort")),
+    VASTModule::bindClass(VASTModule::class_("VASTModule"))
   ];
 
   // Bind the object.

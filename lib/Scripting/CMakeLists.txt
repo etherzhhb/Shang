@@ -11,6 +11,7 @@ include_directories(
 add_llvm_library(VTMScripting
   FUInfo.cpp
   LuaScript.cpp
+  VerilogAST.cpp
 )
 macro(luamodule luasrc)
   source_group("lua sources" FILES ${luasrc}.lua)

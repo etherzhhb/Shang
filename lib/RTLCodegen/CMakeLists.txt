@@ -1,6 +1,5 @@
 add_llvm_library(VTMRTLCodegen
   FixCopyInstrs.cpp
-  VerilogAST.cpp
   RTLCodegen.cpp
 )
 

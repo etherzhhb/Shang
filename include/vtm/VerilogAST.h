@@ -35,6 +35,14 @@
 
 #include <map>
 
+// Forward declarations.
+namespace luabind {
+  namespace detail {
+    struct unspecified;
+  }
+template<class T, class X1, class X2, class X3> struct class_;
+}
+
 namespace llvm {
 class MachineBasicBlock;
 
@@ -109,6 +117,15 @@ public:
 
   void print(raw_ostream &OS) const;
   void printExternalDriver(raw_ostream &OS, uint64_t InitVal = 0) const;
+
+  
+  // Bind this class to Lua.
+  // FIXME: Implement this as traits?
+  typedef luabind::class_<VASTPort,
+                          luabind::detail::unspecified,
+                          luabind::detail::unspecified,
+                          luabind::detail::unspecified> class_;
+  static VASTPort::class_ &bindClass(VASTPort::class_ &C);
 };
 
 class VASTSignal : public VASTValue {
@@ -257,6 +274,11 @@ public:
   const_port_iterator ports_end() const { return Ports.end(); }
 
   // Argument ports and return port.
+  const VASTPort &getArgPort(unsigned i) const {
+    // FIXME: Check if out of range.
+    return getPort(i + VASTModule::SpecialOutPortEnd);
+  }
+
   unsigned getNumArgPorts() const { return NumArgPorts; }
   unsigned getRetPortIdx() const { return RetPortIdx; }
   const VASTPort &getRetPort() const {
@@ -267,10 +289,12 @@ public:
   unsigned getNumCommonPortPorts() const {
     return getNumPorts() - VASTModule::SpecialOutPortEnd;
   }
+
   const VASTPort &getCommonPort(unsigned i) const {
     // FIXME: Check if out of range.
-    return *Ports[i + VASTModule::SpecialOutPortEnd];
+    return getPort(i + VASTModule::SpecialOutPortEnd);
   }
+
   port_iterator common_ports_begin() {
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
@@ -328,6 +352,14 @@ public:
   std::string &getDataPathStr() {
     return DataPath.str();
   }
+
+  // Bind this class to Lua.
+  // FIXME: Implement this as traits?
+  typedef luabind::class_<VASTModule,
+                          luabind::detail::unspecified,
+                          luabind::detail::unspecified,
+                          luabind::detail::unspecified> class_;
+  static VASTModule::class_ &bindClass(VASTModule::class_ &C);
 };
 
 std::string verilogConstToStr(Constant *C);

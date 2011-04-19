@@ -32,6 +32,15 @@
 #include <algorithm>
 #include <sstream>
 
+#include "luabind/luabind.hpp"
+// Include the lua headers (the extern "C" is a requirement because we're
+// using C++ and lua has been compiled as C code)
+extern "C" {
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+}
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -242,6 +251,12 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
   OS << ';';
 }
 
+VASTPort::class_ &VASTPort::bindClass(VASTPort::class_ &C) {
+  C.def("getName", &VASTPort::getName);
+  C.def("isInput", &VASTPort::isInput);
+  return C;
+}
+
 void VASTSignal::print(raw_ostream &OS) const {
 
 }
@@ -261,4 +276,32 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
     OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
+}
+
+VASTModule::class_ &VASTModule::bindClass(VASTModule::class_ &C) {
+  // Bind PortTypes enum.
+  C.enum_("PortTypes")[
+    luabind::value("Clk",               VASTModule::Clk),
+    luabind::value("RST",               VASTModule::RST),
+    luabind::value("Start",             VASTModule::Start),
+    luabind::value("SpecialInPortEnd",  VASTModule::Clk),
+    luabind::value("Finish",            VASTModule::Finish),
+    luabind::value("SpecialOutPortEnd", VASTModule::SpecialOutPortEnd),
+    luabind::value("NumSpecialPort",    VASTModule::NumSpecialPort),
+    luabind::value("ArgPort",           VASTModule::ArgPort),
+    luabind::value("Others",            VASTModule::Others),
+    luabind::value("RetPort",           VASTModule::RetPort)
+  ];
+
+  // Bind functions.
+  C.def("getName",                &VASTModule::getName);
+
+  C.def("getNumPorts",            &VASTModule::getNumPorts);
+  C.def("getNumCommonPortPorts",  &VASTModule::getNumCommonPortPorts);
+  C.def("getArgPort",             &VASTModule::getArgPort);
+  C.def("getNumArgPorts",         &VASTModule::getNumArgPorts);
+
+  C.def("getPortName",            &VASTModule::getPortName);
+
+  return C;
 }
