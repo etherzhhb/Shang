@@ -65,8 +65,6 @@ class RTLCodegen : public MachineFunctionPass {
 
   unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
-  SmallVector<const Argument*, 8> Arguments;
-
   // Mapping success fsm state to their predicate in current state.
   typedef std::map<MachineBasicBlock*, std::string> PredMapTy;
 
@@ -320,8 +318,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 }
 
 void RTLCodegen::clear() {
-  Arguments.clear();
-
   VM = 0;
 }
 
@@ -345,14 +341,14 @@ void RTLCodegen::emitFunctionSignature() {
     std::string Name = Arg->getNameStr();
     unsigned BitWidth = TD->getTypeSizeInBits(Arg->getType());
     // Add port declaration.
-    VM->addInputPort(Name, BitWidth);
-    Arguments.push_back(Arg);
+    VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
   }
 
   const Type *RetTy = F->getReturnType();
   if (!RetTy->isVoidTy()) {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    VM->addOutputPort("return_value", TD->getTypeSizeInBits(RetTy));
+    VM->addOutputPort("return_value", TD->getTypeSizeInBits(RetTy),
+                      VASTModule::RetPort);
   }
 
   emitCommonPort();

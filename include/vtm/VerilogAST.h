@@ -140,7 +140,7 @@ private:
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
-
+  unsigned NumArgPorts, RetPortIdx;
 public:
   enum PortTypes {
     Clk = 0,
@@ -150,7 +150,9 @@ public:
     Finish = SpecialInPortEnd,
     SpecialOutPortEnd,
     NumSpecialPort = SpecialOutPortEnd,
-    Others
+    ArgPort, // Ports for function arguments.
+    Others,   // Likely ports for function unit.
+    RetPort // Port for function return value.
   };
 
   VASTModule(const std::string &Name) : VASTNode(vastModule, Name, 0, ""),
@@ -158,7 +160,8 @@ public:
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     LangControlBlock(ControlBlock),
-    FUPortOffsets(VFUs::NumCommonFUs) {
+    FUPortOffsets(VFUs::NumCommonFUs),
+    NumArgPorts(0) {
     Ports.append(NumSpecialPort, 0);
   }
 
@@ -176,7 +179,14 @@ public:
       return Port;
     }
 
-    assert(T == Others && "Wrong port type!");
+    // Return port is a output port.
+    assert(T < RetPort && "Wrong port type!");
+    if (T == ArgPort) {
+      assert(NumArgPorts == Ports.size() - NumSpecialPort
+             && "Unexpected port added before arg port!");
+      ++NumArgPorts;
+    }
+    
     Ports.push_back(Port);
     return Port;
   }
@@ -191,7 +201,13 @@ public:
       return Port;
     }
 
-    assert(T == Others && "Wrong port type!");
+    assert(T <= RetPort && "Wrong port type!");
+    if (T == RetPort) {
+      RetPortIdx = Ports.size();
+      assert(RetPortIdx == NumArgPorts + NumSpecialPort
+             && "Unexpected port added before return port!");
+    }
+    
     Ports.push_back(Port);
     return Port;
   }
@@ -202,6 +218,7 @@ public:
       = std::make_pair(ID.getFUNum(), offset);
     std::map<unsigned, unsigned> &Map = FUPortOffsets[ID.getFUType()];
     assert(!Map.count(mapping.first) && "Port begin mapping existed!");
+    assert(NumArgPorts != 0 && "Add FUPorts before Add ArgPorts?");
     FUPortOffsets[ID.getFUType()].insert(mapping);
   }
 
@@ -238,6 +255,14 @@ public:
 
   port_iterator ports_end() { return Ports.end(); }
   const_port_iterator ports_end() const { return Ports.end(); }
+
+  // Argument ports and return port.
+  unsigned getNumArgPorts() const { return NumArgPorts; }
+  unsigned getRetPortIdx() const { return RetPortIdx; }
+  const VASTPort &getRetPort() const {
+    assert(getRetPortIdx() && "No return port in this module!");
+    return getPort(getRetPortIdx());
+  }
 
   unsigned getNumCommonPortPorts() const {
     return getNumPorts() - VASTModule::SpecialOutPortEnd;
