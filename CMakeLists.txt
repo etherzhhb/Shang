@@ -3,6 +3,9 @@
 set(VBE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(VBE_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
+if(MSVC) # Work around for the fucking msvc bug on rtti.
+  set(LLVM_REQUIRES_RTTI 1) 
+endif (MSVC)
 # Add appropriate flags for GCC
 # if (CMAKE_COMPILER_IS_GNUCXX)
   # FIXME: Turn off exceptions, RTTI:
