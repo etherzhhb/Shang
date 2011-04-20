@@ -1,3 +1,4 @@
+#include "object.hpp"
 //===----- Scripting.cpp - Scripting engine for verilog backend --*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
@@ -11,10 +12,9 @@
 // information into the program with lua script. 
 //
 //===----------------------------------------------------------------------===//
-#include "vtm/FUInfo.h"
-#include "vtm/SystemInfo.h"
+#include "BindingTraits.h"
+
 #include "vtm/LuaScript.h"
-#include "vtm/VerilogAST.h"
 
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -33,6 +33,7 @@ extern "C" {
 
 using namespace llvm;
 
+// The text template processing lua module
 static void openLuapp(lua_State *L) {
 #include "luapp.inc"
 }
@@ -86,13 +87,16 @@ void LuaScript::init() {
       .def("getInfo", &SystemInfo::getInfo)
       .def_readwrite("HwModName", &SystemInfo::hwModName),
 
-    VASTPort::bindClass(VASTPort::class_("VASTPort")),
-    VASTModule::bindClass(VASTModule::class_("VASTModule"))
+    BindingTraits<VASTPort>::register_("VASTPort"),
+
+    BindingTraits<VASTModule>::register_("VASTModule")
   ];
 
   // Bind the object.
   luabind::globals(State)["FUs"] = &FUI;
   luabind::globals(State)["System"] = &SystemI;
+  // The scripting pass table.
+  luabind::globals(State)["Passes"] = luabind::newtable(State);
 }
 
 bool LuaScript::runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
@@ -165,6 +169,24 @@ const SystemInfo &llvm::sysinfo() {
   return Script->SystemI;
 }
 
-LuaScript &llvm::getScript() {
+LuaScript &llvm::scriptEngin() {
   return *Script;
+}
+
+// Out of line virtual function to provide home for the class.
+void LuaScript::anchor() {}
+
+// Dirty Hack: anchor from SystemInfo.h
+void ConstraintsInfo::anchor() {}
+
+void SystemInfo::anchor() {}
+
+// Dirty Hack: Allow we invoke some scripting function in the libraries
+// compiled with no-rtti
+void bindToScriptEngine(const char *name, VASTModule *M) {
+  Script->bindToGlobals(name, M);
+}
+
+bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) {
+  return Script->runScriptFile(ScriptPath, Err);
 }

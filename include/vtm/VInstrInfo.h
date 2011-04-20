@@ -32,10 +32,7 @@ public:
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB,
                              MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
                              SmallVectorImpl<MachineOperand> &Cond,
-                             bool AllowModify /* = false */) {
-    // TODO: Write code for this function.
-    return true;
-  }
+                             bool AllowModify /* = false */);
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
@@ -70,6 +67,9 @@ public:
   }
 
   void updateBitWidth(MachineInstr &MI);
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 class VInstr {
@@ -154,6 +154,9 @@ public:
   const TargetInstrDesc* operator->() const { return &getTID(); }
 
   FuncUnitId getPrebindFUId() const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 } // end namespace llvm

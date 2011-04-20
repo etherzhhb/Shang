@@ -32,7 +32,6 @@
 #include <algorithm>
 #include <sstream>
 
-#include "luabind/luabind.hpp"
 // Include the lua headers (the extern "C" is a requirement because we're
 // using C++ and lua has been compiled as C code)
 extern "C" {
@@ -210,10 +209,16 @@ void VASTModule::print(raw_ostream &OS) const {
   // Print the verilog module?
 }
 
+// Out of line virtual function to provide home for the class.
+void VASTModule::anchor() {}
+
 void VASTValue::printReset( raw_ostream &OS ) const {
   OS << getName()  << " <= " 
-     << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
+    << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
 }
+
+// Out of line virtual function to provide home for the class.
+void VASTValue::anchor() {}
 
 void VASTPort::print(raw_ostream &OS) const {
   if (isInput())
@@ -251,11 +256,16 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
   OS << ';';
 }
 
-VASTPort::class_ &VASTPort::bindClass(VASTPort::class_ &C) {
-  C.def("getName", &VASTPort::getName);
-  C.def("isInput", &VASTPort::isInput);
-  return C;
+std::string VASTPort::getExternalDriverStr(unsigned InitVal) const {
+  std::string ret;
+  raw_string_ostream ss(ret);
+  printExternalDriver(ss, InitVal);
+  ss.flush();
+  return ret;
 }
+
+// Out of line virtual function to provide home for the class.
+void VASTPort::anchor() {}
 
 void VASTSignal::print(raw_ostream &OS) const {
 
@@ -278,30 +288,6 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
-VASTModule::class_ &VASTModule::bindClass(VASTModule::class_ &C) {
-  // Bind PortTypes enum.
-  C.enum_("PortTypes")[
-    luabind::value("Clk",               VASTModule::Clk),
-    luabind::value("RST",               VASTModule::RST),
-    luabind::value("Start",             VASTModule::Start),
-    luabind::value("SpecialInPortEnd",  VASTModule::Clk),
-    luabind::value("Finish",            VASTModule::Finish),
-    luabind::value("SpecialOutPortEnd", VASTModule::SpecialOutPortEnd),
-    luabind::value("NumSpecialPort",    VASTModule::NumSpecialPort),
-    luabind::value("ArgPort",           VASTModule::ArgPort),
-    luabind::value("Others",            VASTModule::Others),
-    luabind::value("RetPort",           VASTModule::RetPort)
-  ];
 
-  // Bind functions.
-  C.def("getName",                &VASTModule::getName);
-
-  C.def("getNumPorts",            &VASTModule::getNumPorts);
-  C.def("getNumCommonPortPorts",  &VASTModule::getNumCommonPortPorts);
-  C.def("getArgPort",             &VASTModule::getArgPort);
-  C.def("getNumArgPorts",         &VASTModule::getNumArgPorts);
-
-  C.def("getPortName",            &VASTModule::getPortName);
-
-  return C;
-}
+// Out of line virtual function to provide home for the class.
+void VASTSignal::anchor() {}

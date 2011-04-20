@@ -75,6 +75,16 @@ int VRegisterInfo::getDwarfRegNum(unsigned RegNum, bool isEH) const {
   return -1;
 }
 
+int VRegisterInfo::getDwarfRegNumFull(unsigned RegNum, unsigned Flavour) const {
+  assert(0 && "Unknown DWARF flavour");
+  return -1;
+}
+
+bool VRegisterInfo::needsStackRealignment(const MachineFunction &) const {
+  return false;
+}
+
+
 #include "VGenRegisterInfo.inc"
 
 VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,

@@ -35,14 +35,6 @@
 
 #include <map>
 
-// Forward declarations.
-namespace luabind {
-  namespace detail {
-    struct unspecified;
-  }
-template<class T, class X1, class X2, class X3> struct class_;
-}
-
 namespace llvm {
 class MachineBasicBlock;
 
@@ -96,6 +88,9 @@ public:
 
 
   void printReset(raw_ostream &OS) const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 class VASTPort : public VASTValue {
@@ -117,15 +112,10 @@ public:
 
   void print(raw_ostream &OS) const;
   void printExternalDriver(raw_ostream &OS, uint64_t InitVal = 0) const;
+  std::string getExternalDriverStr(unsigned InitVal = 0) const;
 
-  
-  // Bind this class to Lua.
-  // FIXME: Implement this as traits?
-  typedef luabind::class_<VASTPort,
-                          luabind::detail::unspecified,
-                          luabind::detail::unspecified,
-                          luabind::detail::unspecified> class_;
-  static VASTPort::class_ &bindClass(VASTPort::class_ &C);
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 class VASTSignal : public VASTValue {
@@ -136,6 +126,9 @@ public:
 
   void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 // The class that represent Verilog modulo.
@@ -286,7 +279,7 @@ public:
     return getPort(getRetPortIdx());
   }
 
-  unsigned getNumCommonPortPorts() const {
+  unsigned getNumCommonPorts() const {
     return getNumPorts() - VASTModule::SpecialOutPortEnd;
   }
 
@@ -353,13 +346,8 @@ public:
     return DataPath.str();
   }
 
-  // Bind this class to Lua.
-  // FIXME: Implement this as traits?
-  typedef luabind::class_<VASTModule,
-                          luabind::detail::unspecified,
-                          luabind::detail::unspecified,
-                          luabind::detail::unspecified> class_;
-  static VASTModule::class_ &bindClass(VASTModule::class_ &C);
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 std::string verilogConstToStr(Constant *C);

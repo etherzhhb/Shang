@@ -46,6 +46,9 @@ public:
   bool enablePipeLine() const { return getPipeLineAlgorithm() != DontPipeline; }
 
   ScheduleAlgorithm getScheduleAlgorithm() const { return SchedAlg; }
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 class SystemInfo {
@@ -85,6 +88,9 @@ public:
   }
 
   bool empty() const { return FunctionsInfos.empty(); }
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 const SystemInfo &sysinfo();

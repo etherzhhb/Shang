@@ -222,6 +222,9 @@ public:
     Overlaps[0] = R & ~(~1 << 6);
     return Overlaps;
   }
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 }

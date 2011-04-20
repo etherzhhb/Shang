@@ -74,3 +74,6 @@ void VFInfo::allocateBRam(uint16_t ID, unsigned NumElem,
 
   assert(Inserted && "BRam already existed!");
 }
+
+// Out of line virtual function to provide home for the class.
+void VFInfo::anchor() {}

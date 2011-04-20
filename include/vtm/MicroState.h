@@ -97,6 +97,9 @@ public:
   void print(raw_ostream &OS) const;
   void dump() const;
 
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
+
   // Helper functions to build meta operand and meta opcode.
   static MDNode *createDefWire(uint64_t WireNum, unsigned BitWidth,
                                LLVMContext &Context);
@@ -154,6 +157,9 @@ public:
 
   void print(raw_ostream &OS) const;
   void dump() const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 
@@ -216,6 +222,9 @@ public:
     EndIt = I.EndIt;
     return *this;
   }
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 // uc State in a FSM state.
@@ -251,6 +260,9 @@ public:
 
   void print(raw_ostream &OS) const;
   void dump() const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
 // Print the scheduled machine code of verilog target machine, which only

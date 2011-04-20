@@ -84,11 +84,11 @@ int main(int argc, char **argv) {
   
   SMDiagnostic Err;
 
-  LuaScript *Script = &getScript();
-  Script->init();
+  LuaScript *S = &scriptEngin();
+  S->init();
 
   // Run the lua script.
-  if (!Script->runScriptFile(InputFilename, Err)){
+  if (!S->runScriptFile(InputFilename, Err)){
     Err.Print(argv[0], errs());
     return 1;
   }
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
   // Load the module to be compiled...
   std::auto_ptr<Module> M;
 
-  M.reset(ParseIRFile(Script->getValue<std::string>("InputFile"),
+  M.reset(ParseIRFile(S->getValue<std::string>("InputFile"),
                       Err, Context));
   if (M.get() == 0) {
     Err.Print(argv[0], errs());
@@ -114,10 +114,10 @@ int main(int argc, char **argv) {
   PassManager PM;
 
   // TODO: Create the target data from constraints.
-  PM.add(new TargetData(Script->getTargetDataStr()));
+  PM.add(new TargetData(S->getTargetDataStr()));
 
   // Perform Software/Hardware partition.
-  PM.add(createFunctionFilterPass(Script->getOutputStream("SoftwareIROutput")));
+  PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
 
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());
@@ -128,21 +128,28 @@ int main(int argc, char **argv) {
                               false/*NoVerify*/);
 
   // Generate the code.
-  PM.add(createRTLCodegenPass(Script->getOutputStream("RTLOutput")));
+  PM.add(createRTLCodegenPass(S->getOutputStream("RTLOutput")));
+
+  // Add the user defined passes to run.
+  for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
+       I != E; ++I)
+    PM.add(createScriptingPass(luabind::object_cast<std::string>(I.key()).c_str(),
+                               luabind::object_cast<std::string>(*I).c_str()));
+  
 
   // Add interface writer pass.
 
-  if (Script->getValue<bool>("EnableVLT"))
-    PM.add(createVLTIfCodegenPass(Script->getOutputStream("VLTOutput")));
+  if (S->getValue<bool>("EnableVLT"))
+    PM.add(createVLTIfCodegenPass(S->getOutputStream("VLTOutput")));
 
-  if (Script->getValue<bool>("EnablePLB"))
-    PM.add(createPLBIfCodegenPass(Script->getOutputStream("PLBOutput")));
+  if (S->getValue<bool>("EnablePLB"))
+    PM.add(createPLBIfCodegenPass(S->getOutputStream("PLBOutput")));
 
   // Run the passes.
   PM.run(mod);
 
   // If no error occur, keep the files.
-  Script->keepAllFiles();
+  S->keepAllFiles();
 
   return 0;
 }

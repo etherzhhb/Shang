@@ -113,6 +113,7 @@ add_llvm_target(VerilogBackend
   VSelectionDAGInfo.cpp
   VSubtarget.cpp
   EliminateSetRI.cpp
+  ScriptingPass.cpp
 )
 
 target_link_libraries (LLVMVerilogBackend

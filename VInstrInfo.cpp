@@ -31,6 +31,14 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
   {}
 
+bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
+                               MachineBasicBlock *&FBB,
+                               SmallVectorImpl<MachineOperand> &Cond,
+                               bool AllowModify /* = false */) {
+  // TODO: Write code for this function.
+  return true;
+}
+
 FuncUnitId VInstr::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemTrans)
@@ -52,6 +60,10 @@ void BitWidthOperand::updateBitWidth(MachineInstr &MI) {
   MI.getOperand(MI.getNumOperands() - 1).setImm(Op);
 }
 
+
+// Out of line virtual function to provide home for the class.
+void BitWidthOperand::anchor() {}
+
 bool VInstr::mayLoad() const {
   switch (getTID().Opcode) {
   default: return false;
@@ -67,3 +79,6 @@ bool VInstr::mayStore() const {
   case VTM::VOpMemTrans: return I.getOperand(3).getImm();
   }
 }
+
+// Out of line virtual function to provide home for the class.
+void VInstr::anchor() {}

@@ -158,6 +158,11 @@ MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum, unsigned BitWidth,
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
 
+
+// Out of line virtual function to provide home for the class.
+void MetaToken::anchor() {}
+
+
 MDNode *MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
                                         LLVMContext &Context) {
   Value *Elts[] = {
@@ -168,6 +173,13 @@ MDNode *MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
 
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
+
+
+// Out of line virtual function to provide home for the class.
+void ucOp::anchor() {}
+
+// Out of line virtual function to provide home for the class.
+void ucOpIterator::anchor() {}
 
 void ucState::print(raw_ostream &OS) const {
   switch (Instr.getOpcode()) {
@@ -186,6 +198,9 @@ void ucState::print(raw_ostream &OS) const {
 void ucState::dump() const {
   print(dbgs());
 }
+
+// Out of line virtual function to provide home for the class.
+void ucState::anchor() {}
 
 raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
   OS << "Scheduled MBB: " << MBB.getName() << '\n';

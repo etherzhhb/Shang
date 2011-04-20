@@ -50,6 +50,8 @@ Pass *createFixCopyPass();
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
 
+Pass *createScriptingPass(const char *Name, const char *Script);
+
 // Verilator interface code generation.
 Pass *createVLTIfCodegenPass(raw_ostream &O);
 

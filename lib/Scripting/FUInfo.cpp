@@ -96,10 +96,10 @@ std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num,
   DEBUG(dbgs() << "Going to execute:\n" << Script);
 
   SMDiagnostic Err;
-  if (!getScript().runScriptStr(Script, Err))
+  if (!scriptEngin().runScriptStr(Script, Err))
     report_fatal_error("Block Ram code generation:" + Err.getMessage());
 
-  return getScript().getValueStr(ResultName);
+  return scriptEngin().getValueStr(ResultName);
 }
 
 

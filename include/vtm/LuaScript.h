@@ -34,6 +34,7 @@ namespace llvm {
 class tool_output_file;
 class raw_ostream;
 class SMDiagnostic;
+class PassManager;
 
 // Lua scripting support.
 class LuaScript {
@@ -58,6 +59,11 @@ public:
   ~LuaScript();
 
   template<class T>
+  void bindToGlobals(const char *Name, T *O) {
+    luabind::globals(State)[Name] = O;
+  }
+
+  template<class T>
   T getValue(const std::string &Name) const {
     boost::optional<T> Res =
       luabind::object_cast_nothrow<T>(luabind::globals(State)[Name]);
@@ -72,6 +78,17 @@ public:
     return getValue<std::string>(Name);
   }
 
+  // Iterator to iterate over all user scripting pass from the constraint script.
+  typedef luabind::iterator scriptpass_it;
+
+  scriptpass_it passes_begin() const {
+    return scriptpass_it(luabind::globals(State)["Passes"]);
+  }
+
+  scriptpass_it passes_end() const {
+    return scriptpass_it();
+  }
+
   // Get the LLVM TargetData string from the constraints.
   std::string getTargetDataStr() const;
 
@@ -84,9 +101,11 @@ public:
   bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
   bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
 
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
 };
 
-LuaScript &getScript();
+LuaScript &scriptEngin();
 
 }
 
