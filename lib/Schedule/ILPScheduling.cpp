@@ -104,6 +104,9 @@ void ILPScheduler::setUpVariables(lprec *lp) {
 
       // Build the active map.
       ActiveSUs[CurStep].push_back(U);
+      // If the SUnit actived at several cstep, add it to the active map at the rest steps.
+      for (unsigned i = CurStep + 1, e = CurStep + U->getLatency(); i < e; ++i)
+			   ActiveSUs[i].push_back(U);
     }
   }
 
