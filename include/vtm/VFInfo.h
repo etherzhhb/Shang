@@ -137,6 +137,14 @@ public:
     return AllocatedFUs[FUType].end();
   }
 
+  // Get the number of used function units in the current MachineFunction.
+  bool getNumFUs(VFUs::FUTypes FUType = VFUs::AllFUType) const {
+    assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
+    assert(FUType < VFUs::NumFUs && "Bad FUType!");
+
+    return AllocatedFUs[FUType].size();
+  }
+
   // FIXME: Consider pipelined loop.
   void remeberActiveSlot(FuncUnitId Id, unsigned Slot) {
     ActiveSlotSet.insert(FUActiveSlot(Id, Slot));
