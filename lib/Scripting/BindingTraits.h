@@ -32,48 +32,76 @@ template<class T> struct BindingTraits {
   typedef typename T::UnknownLuaTypeError NodeType;
 };
 
-template<> struct BindingTraits<VASTPort> {
-  static inline luabind::class_<VASTPort> register_(const char *Name) {
-    luabind::class_<VASTPort> C(Name);
-    C.def("getName", &VASTPort::getName);
-    C.def("isInput", &VASTPort::isInput);
-    C.def("getExternalDriverStr", &VASTPort::getExternalDriverStr);
+template<> struct BindingTraits<VASTNode> {
+  template<class CurClass>
+  static inline luabind::class_<CurClass> register_(const char *Name) {
+    luabind::class_<CurClass> C(Name);
+    C.def("getName", &CurClass::getName);
     return C;
   }
 };
 
+template<> struct BindingTraits<VASTValue> {
+  template<class CurClass>
+  static inline luabind::class_<CurClass> register_(const char *Name) {
+    luabind::class_<CurClass> C =
+      BindingTraits<VASTNode>::register_<CurClass>(Name);
+    C.def("getBitWidth", &CurClass::getBitWidth);
+    C.def("isRegister", &CurClass::isRegister);
+    return C;
+  }
+};
+
+template<> struct BindingTraits<VASTPort> {
+  template<class CurClass>
+  static inline luabind::class_<CurClass> register_(const char *Name) {
+    luabind::class_<CurClass> C =
+      BindingTraits<VASTValue>::register_<CurClass>(Name);
+    C.def("isInput", &CurClass::isInput);
+    C.def("getExternalDriverStr", &CurClass::getExternalDriverStr);
+    return C;
+  }
+
+  static inline luabind::class_<VASTPort> register_(const char *Name) {
+    return register_<VASTPort>(Name);
+  }
+};
+
 template<> struct BindingTraits<VASTModule> {
-  static inline luabind::class_<VASTModule> register_(const char *Name) {
-    luabind::class_<VASTModule> C(Name);
+  template<class CurClass>
+  static inline luabind::class_<CurClass> register_(const char *Name) {
+    luabind::class_<CurClass> C =
+      BindingTraits<VASTNode>::register_<CurClass>(Name);
 
     C.enum_("PortTypes")[
-      luabind::value("Clk",               VASTModule::Clk),
-        luabind::value("RST",               VASTModule::RST),
-        luabind::value("Start",             VASTModule::Start),
-        luabind::value("SpecialInPortEnd",  VASTModule::Clk),
-        luabind::value("Finish",            VASTModule::Finish),
-        luabind::value("SpecialOutPortEnd", VASTModule::SpecialOutPortEnd),
-        luabind::value("NumSpecialPort",    VASTModule::NumSpecialPort),
-        luabind::value("ArgPort",           VASTModule::ArgPort),
-        luabind::value("Others",            VASTModule::Others),
-        luabind::value("RetPort",           VASTModule::RetPort)
+      luabind::value("Clk",               CurClass::Clk),
+        luabind::value("RST",               CurClass::RST),
+        luabind::value("Start",             CurClass::Start),
+        luabind::value("SpecialInPortEnd",  CurClass::Clk),
+        luabind::value("Finish",            CurClass::Finish),
+        luabind::value("SpecialOutPortEnd", CurClass::SpecialOutPortEnd),
+        luabind::value("NumSpecialPort",    CurClass::NumSpecialPort),
+        luabind::value("ArgPort",           CurClass::ArgPort),
+        luabind::value("Others",            CurClass::Others),
+        luabind::value("RetPort",           CurClass::RetPort)
     ];
-
-    // Bind functions.
-    C.def("getName",                &VASTModule::getName);
     // All ports.
-    C.def("getPort",                &VASTModule::getPort);
-    C.def("getNumPorts",            &VASTModule::getNumPorts);
+    C.def("getPort",                &CurClass::getPort);
+    C.def("getNumPorts",            &CurClass::getNumPorts);
+    // Common ports
+    C.def("getCommonPort",          &CurClass::getCommonPort);
+    C.def("getNumCommonPorts",      &CurClass::getNumCommonPorts);
+    // ArgPorts
+    C.def("getArgPort",             &CurClass::getArgPort);
+    C.def("getNumArgPorts",         &CurClass::getNumArgPorts);
 
-    C.def("getCommonPort",          &VASTModule::getCommonPort);
-    C.def("getNumCommonPorts",      &VASTModule::getNumCommonPorts);
-
-    C.def("getArgPort",             &VASTModule::getArgPort);
-    C.def("getNumArgPorts",         &VASTModule::getNumArgPorts);
-
-    C.def("getPortName",            &VASTModule::getPortName);
+    C.def("getPortName",            &CurClass::getPortName);
 
     return C;
+  }
+
+  static inline luabind::class_<VASTModule> register_(const char *Name) {
+    return register_<VASTModule>(Name);
   }
 };
 } // end namespace llvm
