@@ -150,15 +150,15 @@ bool VIntrinsicInst::classof(const CallInst *I) {
 }
 
 unsigned VAllocaBRamInst::getNumElement() const {
-  return getIntVal(getArgOperand(0));
+  return getIntVal(getArgOperand(1));
 }
 
 unsigned VAllocaBRamInst::getElementSizeInBytes() const {
-  return  getIntVal(getArgOperand(1));
+  return  getIntVal(getArgOperand(2));
 }
 
 unsigned VAllocaBRamInst::getBRamId() const {
-  return cast<PointerType>(getType())->getAddressSpace();
+  return getIntVal(getArgOperand(0));
 }
 
 Value *VAccessBRamInst::getPointerOperand() const {
@@ -181,3 +181,6 @@ bool VAccessBRamInst::isVolatile() const {
   return getIntVal(getArgOperand(4));
 }
 
+unsigned VAccessBRamInst::getBRamId() const {
+  return getIntVal(getArgOperand(5));
+}

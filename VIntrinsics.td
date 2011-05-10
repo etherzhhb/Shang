@@ -17,18 +17,18 @@
 
 let TargetPrefix = "vtm", isTarget = 1 in {
   // Return the base address of the allocated block ram.
-  // Arguments: NumElement, ElemSizeInBytes
+  // Arguments: BRamNum NumElement, ElemSizeInBytes
   def int_vtm_alloca_bram  : Intrinsic<[llvm_anyptr_ty],
-                                       [llvm_i32_ty, llvm_i32_ty],
+                                       [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                                        [IntrReadMem]>;
   
   // Read or Write the block ram.
   // Return the read value.
   // Arguments: Address to Read/Write, the value to write, isStore, align,
-  // isVolatile
+  // isVolatile, BRamNum
   def int_vtm_access_bram : Intrinsic<[llvm_anyint_ty],
                                       [llvm_anyptr_ty,
                                        LLVMMatchType<0>, llvm_i1_ty,
-                                       llvm_i32_ty, llvm_i1_ty],
+                                       llvm_i32_ty, llvm_i1_ty, llvm_i32_ty],
                                       [IntrReadWriteArgMem, NoCapture<0>]>;
 }

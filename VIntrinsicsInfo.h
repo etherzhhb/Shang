@@ -80,6 +80,7 @@ namespace llvm {
       return isa<VIntrinsicInst>(V) && classof(cast<VIntrinsicInst>(V));
     }
 
+    unsigned getBRamId() const;
     Value *getPointerOperand() const;
     Value *getValueOperand() const;
     bool isStore() const;
