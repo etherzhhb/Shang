@@ -573,15 +573,14 @@ SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   case vtmIntrinsic::vtm_alloca_bram: {
-    unsigned NumElem = Op.getConstantOperandVal(2),
-             ElemSizeInBytes = Op.getConstantOperandVal(3);
-    
-    MemIntrinsicSDNode *N = cast<MemIntrinsicSDNode>(Op);
+    // FIXME: Provide some uniform method to access the operand of the intrinsics!
+    unsigned BRamNum = Op->getConstantOperandVal(2),
+             NumElem = Op.getConstantOperandVal(3),
+             ElemSizeInBytes = Op.getConstantOperandVal(4);
     
     VFInfo *Info = DAG.getMachineFunction().getInfo<VFInfo>();
-    // We use the address space to identify the block ram.
-    Info->allocateBRam(N->getPointerInfo().getAddrSpace(),
-                       NumElem, ElemSizeInBytes);
+
+    Info->allocateBRam(BRamNum, NumElem, ElemSizeInBytes);
 
     // Replace the results.
     // The base address inside a block ram is always 0.

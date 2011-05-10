@@ -243,11 +243,13 @@ SDNode *VDAGToDAGISel::SelectBRamAccess(SDNode *N) {
   MemOp[0] = cast<MemIntrinsicSDNode>(N)->getMemOperand();
 
   unsigned ArgIdx = 2;
+  unsigned BRamNum = N->getConstantOperandVal(ArgIdx + 5);
 
   SDValue Ops[] = { N->getOperand(ArgIdx), N->getOperand(ArgIdx + 1),
                     N->getOperand(ArgIdx + 2),
                     // FIXME: Set the correct byte enable.
                     CurDAG->getTargetConstant(0, MVT::i32),
+                    CurDAG->getTargetConstant(BRamNum, MVT::i32),
                     SDValue()/*The dummy bit width operand*/,
                     N->getOperand(0) };
 
@@ -264,7 +266,8 @@ SDNode *VDAGToDAGISel::SelectINTRINSIC_W_CHAIN(SDNode *N) {
   unsigned IntNo = N->getConstantOperandVal(1);
   
   switch (IntNo) {
-  default: break;case vtmIntrinsic::vtm_access_bram:
+  default: break;
+  case vtmIntrinsic::vtm_access_bram:
     return SelectBRamAccess(N);
   }
 

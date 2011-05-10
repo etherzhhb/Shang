@@ -45,7 +45,7 @@ FuncUnitId VInstr::getPrebindFUId()  const {
     return FuncUnitId(VFUs::MemoryBus, 0);
 
   if (getTID().Opcode == VTM::VOpBRam) {
-    unsigned Id = (*I.memoperands_begin())->getPointerInfo().getAddrSpace();
+    unsigned Id = I.getOperand(5).getImm();
     return FuncUnitId(VFUs::BRam, Id);
   }
 

@@ -183,8 +183,9 @@ def VOpMemTrans : FUInst<(outs DR:$dst),
 							            [], FUMemBus, 1, 1, 0>;
 
 def VOpBRam : FUInst<(outs DR:$dst),
-							       (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
-							       "$dst = bram $src, $addr, $isStore, $byteenable",
+							       (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable,
+                      i8imm:$bramnum),
+							       "$dst = bram $src, $addr, $isStore, $byteenable, $bramnum",
 							       [], FUBRam, 1, 1, 0>;
 }
 //===----------------------------------------------------------------------===//
