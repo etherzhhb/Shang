@@ -89,8 +89,8 @@ public:
     return scriptpass_it();
   }
 
-  // Get the LLVM TargetData string from the constraints.
-  std::string getTargetDataStr() const;
+  // Update the status of script engine after script run.
+  void updateStatus();
 
   raw_ostream &getOutputStream(const std::string &Name);
 

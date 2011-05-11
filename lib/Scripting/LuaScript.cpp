@@ -138,9 +138,9 @@ raw_ostream &LuaScript::getOutputStream(const std::string &Name) {
   return NewFile->os();
 }
 
-std::string LuaScript::getTargetDataStr() const {
-  std::string ret;
-  raw_string_ostream s(ret);
+void LuaScript::updateStatus() {
+  std::string DataLayout;
+  raw_string_ostream s(DataLayout);
 
   // FIXME: Set the correct endian.
   s << 'e';
@@ -156,7 +156,8 @@ std::string LuaScript::getTargetDataStr() const {
   s << "n8:16:32:64";
 
   s.flush();
-  return s.str();
+ 
+  SystemI.DataLayout = DataLayout;
 }
 
 ManagedStatic<LuaScript> Script;

@@ -65,6 +65,7 @@ class SystemInfo {
 
   // Interfaces.
   std::string hwModName;
+  std::string DataLayout;
 
   friend class LuaScript;
 public:
@@ -88,6 +89,8 @@ public:
   }
 
   bool empty() const { return FunctionsInfos.empty(); }
+
+  const std::string &getDataLayout() const { return DataLayout; }
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();

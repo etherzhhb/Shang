@@ -93,6 +93,8 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  S->updateStatus();
+
   // Load the module to be compiled...
   std::auto_ptr<Module> M;
 
@@ -114,7 +116,7 @@ int main(int argc, char **argv) {
   PassManager PM;
 
   // TODO: Create the target data from constraints.
-  PM.add(new TargetData(S->getTargetDataStr()));
+  PM.add(new TargetData(*target->getTargetData()));
 
   // Perform Software/Hardware partition.
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
