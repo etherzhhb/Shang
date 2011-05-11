@@ -623,20 +623,27 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
     Out.else_begin("// This is a read\n");
     simulateMemRead(Enable, Context);
     Out.exit_block("// end read/write\n");
-    // FIXME: Use a random ready time.
-    Out << "// Update the ready time of membus.\n"
-           // Note: Simulate advance half clock cycle when sim_time increased.
-              "ready_time = sim_time + " << MemBusLatency * 2
-           <<";\n";
-
-    Out << "#ifdef __DEBUG_IF\n"
-           "printf(\"Memory Active at %x going to ready at %x\\n\","
-           " sim_time, ready_time);\n"
-           "#endif\n";
-
     Out.exit_block(format("// end membus%d\n", FUNum));
+
     // Dirty hack: All membus share a ready_time.
     Out << "// Simulate the ready port of the membus.\n";
+    // FIXME: Use a random ready time.
+    Out << "if (" << getPortVal(BusRdy) << " && " << getPortVal(Enable) << ")";
+    Out.enter_block(format("// If membus%d ready for next transaction\n",FUNum));
+
+    // FIXME: use a random uncertain delay.
+    unsigned TransactionUncertain = 3;
+
+    Out << "// Update the ready time of membus.\n"
+      // Note: Simulate advance half clock cycle when sim_time increased.
+      "ready_time = sim_time + " << MemBusLatency * 2
+        << " + " << TransactionUncertain <<";\n";
+
+    Out << "#ifdef __DEBUG_IF\n"
+      "printf(\"Memory Active at %x going to ready at %x\\n\","
+      " sim_time, ready_time);\n"
+      "#endif\n";
+    Out.exit_block(format("// end next transaction membus%d\n", FUNum));
   }
 
   isClkEdgeEnd(true);
