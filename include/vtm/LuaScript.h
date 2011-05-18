@@ -50,6 +50,7 @@ class LuaScript {
   FileMapTy Files;
 
   IndexedMap<VFUDesc*, CommonFUIdentityFunctor> FUSet;
+  std::string DataLayout;
 
   SystemInfo SystemI;
 
@@ -104,6 +105,8 @@ public:
 
   bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
   bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
+
+  const std::string &getDataLayout() const { return DataLayout; }
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();

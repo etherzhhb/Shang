@@ -56,8 +56,8 @@ VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
                                const std::string &FS)
   : LLVMTargetMachine(T, TT),
   // FIXME: Allow speicific data layout.
-  DataLayout(sysinfo().getDataLayout()),
-  Subtarget(TT, FS),
+  DataLayout(FS),
+  Subtarget(TT, ""),
   TLInfo(*this),
   TSInfo(*this),
   InstrInfo(DataLayout, TLInfo),

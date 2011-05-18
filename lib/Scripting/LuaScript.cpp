@@ -150,7 +150,7 @@ void LuaScript::updateStatus() {
   initSimpleFU(VFUs::Shift, FUs);
   initSimpleFU(VFUs::Mult, FUs);
 
-  std::string DataLayout;
+  // Build the data layout.
   raw_string_ostream s(DataLayout);
 
   // FIXME: Set the correct endian.
@@ -167,8 +167,6 @@ void LuaScript::updateStatus() {
   s << "n8:16:32:64";
 
   s.flush();
- 
-  SystemI.DataLayout = DataLayout;
 }
 
 ManagedStatic<LuaScript> Script;

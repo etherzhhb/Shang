@@ -110,12 +110,12 @@ int main(int argc, char **argv) {
   Triple TheTriple(mod.getTargetTriple());
 
   std::auto_ptr<TargetMachine>
-    target(TheVBackendTarget.createTargetMachine(TheTriple.getTriple(), ""));
+    target(TheVBackendTarget.createTargetMachine(TheTriple.getTriple(),
+           S->getDataLayout())); // DiryHack: Use features as datalayout.
 
   // Build up all of the passes that we want to do to the module.
   PassManager PM;
 
-  // TODO: Create the target data from constraints.
   PM.add(new TargetData(*target->getTargetData()));
 
   // Perform Software/Hardware partition.
