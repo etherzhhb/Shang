@@ -439,7 +439,7 @@ void RTLCodegen::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VFInfo::const_id_iterator id_iterator;
 
-  VFUMemBus *MemBus = vtmfus().getFUDesc<VFUMemBus>();
+  VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
 
   for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
        E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
@@ -470,7 +470,7 @@ void RTLCodegen::emitAllocatedFUs() {
   }
  
   raw_ostream &S = VM->getDataPathBuffer();
-  VFUBRam *BlockRam = vtmfus().getFUDesc<VFUBRam>();
+  VFUBRam *BlockRam = getFUDesc<VFUBRam>();
 
   for (id_iterator I = FInfo->id_begin(VFUs::BRam),
        E = FInfo->id_end(VFUs::BRam); I != E; ++I) {
@@ -589,7 +589,7 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   emitFUEnableForState<VFUBRam>(CtrlS, startSlot, endSlot,
                                 CurBB, NextStatePred);
 
-  unsigned MemBusLatency = vtmfus().getFUDesc<VFUMemBus>()->getLatency();
+  unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
   for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
          E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;

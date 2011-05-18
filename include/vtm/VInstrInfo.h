@@ -120,7 +120,7 @@ public:
     if (ResTy == VFUs::Trivial)
       return getTrivialLatency();
 
-    return vtmfus().getFUDesc(ResTy)->getLatency();
+    return getFUDesc(ResTy)->getLatency();
   }
 
   inline bool isReadAtEmit() const {

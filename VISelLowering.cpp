@@ -507,7 +507,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                                            MVT::i8)
                     };
 
-  unsigned DataBusWidth = vtmfus().getFUDesc<VFUMemBus>()->getDataWidth();
+  unsigned DataBusWidth = getFUDesc<VFUMemBus>()->getDataWidth();
   assert(DataBusWidth >= VTSize && "Unexpected large data!");
 
   MVT DataBusVT =

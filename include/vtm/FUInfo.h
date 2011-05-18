@@ -18,8 +18,14 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
-namespace llvm {
+namespace luabind {
+  namespace adl {
+    class object;
+  }
+  using adl::object;
+}
 
+namespace llvm {
 namespace VFUs {
   enum FUTypes {
     Trivial = 0,
@@ -102,27 +108,27 @@ inline static raw_ostream &operator<<(raw_ostream &O, const FuncUnitId &ID) {
 
 /// @brief The description of Verilog target machine function units.
 class VFUDesc {
+  VFUDesc(const VFUDesc &);            // DO NOT IMPLEMENT
+  void operator=(const VFUDesc &);  // DO NOT IMPLEMENT
+protected:
   // The HWResource baseclass this node corresponds to
-  unsigned ResourceType;
+  const unsigned ResourceType;
   // How many cycles to finish?
   const unsigned Latency;
   // Start interval
   const unsigned StartInt;
   // How many resources available?
   const unsigned TotalRes;
+  // The MaxBitWidth of the function unit.
+  const unsigned MaxBitWidth;
 
-  //// Use a map mapping instance to count?
-  //typedef std::vector<unsigned> UsingCountVec;
-  //UsingCountVec UsingCount;
-
-  VFUDesc(const VFUDesc &);            // DO NOT IMPLEMENT
-  void operator=(const VFUDesc &);  // DO NOT IMPLEMENT
-protected:
   VFUDesc(VFUs::FUTypes type, unsigned latency, unsigned startInt,
-          unsigned totalRes)
+          unsigned totalRes, unsigned maxBitWidth)
     : ResourceType(type), Latency(latency), StartInt(startInt),
-    TotalRes(totalRes) {}
+    TotalRes(totalRes), MaxBitWidth(maxBitWidth) {}
 public:
+  VFUDesc(VFUs::FUTypes type, luabind::object FUTable);
+
   static const char *getTypeName(VFUs::FUTypes FU) {
     return VFUs::VFUNames[FU];
   }
@@ -135,23 +141,19 @@ public:
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
   unsigned getStartInt() const { return StartInt; }
+  unsigned getMaxBitWidth() const { return MaxBitWidth; }
 
   virtual void print(raw_ostream &OS) const;
 }; 
 
 class VFUMemBus : public VFUDesc {
   unsigned AddrWidth;
-  unsigned DataWidth;
 
-  VFUMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
-    unsigned addrWidth, unsigned dataWidth)
-    : VFUDesc(VFUs::MemoryBus, latency, startInt, totalRes),
-    AddrWidth(addrWidth), DataWidth(dataWidth) {}
-
-  friend class FUInfo;
 public:
+  VFUMemBus(luabind::object FUTable);
+
   unsigned getAddrWidth() const { return AddrWidth; }
-  unsigned getDataWidth() const { return DataWidth; }
+  unsigned getDataWidth() const { return getMaxBitWidth(); }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VFUMemBus *A) { return true; }
@@ -195,17 +197,6 @@ public:
 
 template<enum VFUs::FUTypes T>
 class VSimpleFUDesc : public VFUDesc {
-protected:
-  unsigned MaxBitWidth;
-
-  VSimpleFUDesc(unsigned latency, unsigned startInt, unsigned totalRes,
-                 unsigned maxBitWidth)
-    : VFUDesc(T, latency, startInt, totalRes), MaxBitWidth(maxBitWidth) {}
-    
-  friend class FUInfo;
-public:
-  unsigned getMaxBitWidth() const { return MaxBitWidth; }
-
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   template<enum VFUs::FUTypes OtherT>
   static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
@@ -222,15 +213,12 @@ public:
 typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
 typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
-class VFUBRam : public VSimpleFUDesc<VFUs::BRam> {
-  std::string Template; // Template for inferring block ram.
-  VFUBRam(unsigned latency, unsigned startInt, unsigned totalRes,
-          unsigned maxBitWidth, const std::string &tmp)
-    : VSimpleFUDesc<VFUs::BRam>(latency, startInt, totalRes, maxBitWidth),
-      Template(tmp) {}
 
-  friend class FUInfo;
+class VFUBRam : public  VFUDesc {
+  std::string Template; // Template for inferring block ram.
 public:
+  VFUBRam(luabind::object FUTable);
+
   std::string generateCode(const std::string &Clk, unsigned Num,
                            unsigned DataWidth, unsigned AddrWidth) const;
 
@@ -277,73 +265,20 @@ public:
   }
 };
 
-class FUInfo {
-  // DO NOT IMPLEMENT
-  FUInfo(const FUInfo&);
-  // DO NOT IMPLEMENT
-  const FUInfo &operator=(const FUInfo&);
-
-  /// mapping allocated instences to atom
-  VFUDesc *ResSet[VFUs::NumCommonFUs];
-
-  // Configuration function.
-  void setupMemBus(unsigned latency, unsigned startInt, unsigned totalRes,
-                   unsigned dataWidth, unsigned addressWidth) {
-    ResSet[VFUs::MemoryBus - VFUs::FirstFUType]
-      = new VFUMemBus(latency, startInt, totalRes, addressWidth, dataWidth);
-  }
-
-  void setupBRam(unsigned latency, unsigned startInt, unsigned totalRes,
-      unsigned maxWidth, const std::string &Template) {
-    ResSet[VFUs::BRam - VFUs::FirstFUType]
-      = new VFUBRam(latency, startInt, totalRes, maxWidth, Template);
-  }
-
-  template<enum VFUs::FUTypes T>
-  void setupBinOpRes(unsigned latency, unsigned startInt, unsigned totalRes,
-                     unsigned maxWidth) {
-    ResSet[T - VFUs::FirstFUType]
-      = new VSimpleFUDesc<T>(latency, startInt, totalRes, maxWidth);
-  }
-
-  friend class LuaScript;
-public:
+struct CommonFUIdentityFunctor
+  : public std::unary_function<enum VFUs::FUTypes, unsigned>{
   
-  FUInfo();
-
-  ~FUInfo();
-
-  template<class ResType>
-  ResType *getFUDesc() const {
-    return cast<ResType>(getFUDesc(ResType::getType()));
-  }
-
-  VFUDesc *getFUDesc(enum VFUs::FUTypes T) const {
-    unsigned idx = (unsigned)T - (unsigned)VFUs::FirstFUType;
-    assert(ResSet[idx] && "Bad resource!");
-    return ResSet[idx];
-  }
-
-  typedef VFUDesc *const * iterator;
-  typedef const VFUDesc *const * const_iterator;
-
-  iterator begin() { return &ResSet[0]; }
-  const_iterator begin() const { return &ResSet[0]; }
-
-  iterator end() { 
-    return begin() + (size_t)VFUs::LastCommonFUType -
-      (size_t)VFUs::FirstFUType;
-  }
-
-  const_iterator end() const { 
-    return begin() + (size_t)VFUs::LastCommonFUType -
-      (size_t)VFUs::FirstFUType;
+  unsigned operator()(enum VFUs::FUTypes T) const {
+    return (unsigned)T - (unsigned)VFUs::FirstFUType;
   }
 };
 
+VFUDesc *getFUDesc(enum VFUs::FUTypes T);
 
-const FUInfo &vtmfus();
-
+template<class ResType>
+ResType *getFUDesc() {
+  return cast<ResType>(getFUDesc(ResType::getType()));
+}
 }
 
 #endif

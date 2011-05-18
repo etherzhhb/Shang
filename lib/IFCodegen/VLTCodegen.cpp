@@ -463,7 +463,7 @@ struct VLTIfCodegen : public MachineFunctionPass {
 
     // Compute the membus data size (in bytes).
     // FIXME: Every membus may have different data size.
-    VFUMemBus *MemBusDesc = vtmfus().getFUDesc<VFUMemBus>();
+    VFUMemBus *MemBusDesc = getFUDesc<VFUMemBus>();
     unsigned DataPortBytes = MemBusDesc->getDataWidth() / 8;
 
     // Simulate the read operation on memory bus.
@@ -592,7 +592,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   // TODO: Allow the user to custom the clock edge.
   isClkEdgeBegin(true);
   // Check membuses.
-  unsigned MemBusLatency = vtmfus().getFUDesc<VFUMemBus>()->getLatency();
+  unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
   typedef VFInfo::const_id_iterator id_iterator;
   for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
        E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {

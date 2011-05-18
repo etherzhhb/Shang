@@ -20,6 +20,7 @@
 
 #include "llvm/Function.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/IndexedMap.h"
 
 // This is the only header we need to include for LuaBind to work
 #include "luabind/luabind.hpp"
@@ -48,11 +49,15 @@ class LuaScript {
   typedef std::map<std::string, tool_output_file*> FileMapTy;
   FileMapTy Files;
 
-  FUInfo FUI;
+  IndexedMap<VFUDesc*, CommonFUIdentityFunctor> FUSet;
+
   SystemInfo SystemI;
 
   friend const SystemInfo &sysinfo(void);
-  friend const FUInfo &vtmfus(void);
+  friend VFUDesc *getFUDesc(enum VFUs::FUTypes T);
+
+  void initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs);
+
 public:
 
   LuaScript();
@@ -89,14 +94,13 @@ public:
     return scriptpass_it();
   }
 
-  // Update the status of script engine after script run.
-  void updateStatus();
-
   raw_ostream &getOutputStream(const std::string &Name);
 
   void keepAllFiles();
 
   void init();
+  // Update the status of script engine after script run.
+  void updateStatus();
 
   bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
   bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);

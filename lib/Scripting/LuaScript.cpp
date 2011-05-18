@@ -1,4 +1,3 @@
-#include "object.hpp"
 //===----- Scripting.cpp - Scripting engine for verilog backend --*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
@@ -38,9 +37,15 @@ static void openLuapp(lua_State *L) {
 #include "luapp.inc"
 }
 
-LuaScript::LuaScript() : State(lua_open()) {}
+LuaScript::LuaScript() : State(lua_open()) {
+  FUSet.grow(VFUs::LastCommonFUType);
+}
 
 LuaScript::~LuaScript() {
+  // FIXME: Release the function unit descriptors.
+  //for (size_t i = 0, e = array_lengthof(FUSet); i != e; ++i)
+  //  if(VFUDesc *Desc = FUSet[i]) delete Desc;
+
   DeleteContainerSeconds(Files);
   lua_close(State);
 }
@@ -61,13 +66,6 @@ void LuaScript::init() {
 
   // Bind the C++ classes.
   luabind::module(State)[
-    luabind::class_<FUInfo>("FUInfo")
-      .def("setupMemBus", &FUInfo::setupMemBus)
-      .def("setupAddSub", &FUInfo::setupBinOpRes<VFUs::AddSub>)
-      .def("setupShift",  &FUInfo::setupBinOpRes<VFUs::Shift>)
-      .def("setupMult",   &FUInfo::setupBinOpRes<VFUs::Mult>)
-      .def("setupBRam",   &FUInfo::setupBRam),
-
     luabind::class_<ConstraintsInfo>("ConstraintsInfo")
       .enum_("PipeLine")[
         luabind::value("IMS", ConstraintsInfo::IMS),
@@ -93,7 +91,7 @@ void LuaScript::init() {
   ];
 
   // Bind the object.
-  luabind::globals(State)["FUs"] = &FUI;
+  luabind::globals(State)["FUs"] = luabind::newtable(State);
   luabind::globals(State)["System"] = &SystemI;
   // The scripting pass table.
   luabind::globals(State)["Passes"] = luabind::newtable(State);
@@ -138,7 +136,20 @@ raw_ostream &LuaScript::getOutputStream(const std::string &Name) {
   return NewFile->os();
 }
 
+void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs) {
+  FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)]);
+}
+
 void LuaScript::updateStatus() {
+  luabind::object FUs = luabind::globals(State)["FUs"];
+  FUSet[VFUs::MemoryBus]
+    = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
+  FUSet[VFUs::BRam] = new VFUBRam(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
+
+  initSimpleFU(VFUs::AddSub, FUs);
+  initSimpleFU(VFUs::Shift, FUs);
+  initSimpleFU(VFUs::Mult, FUs);
+
   std::string DataLayout;
   raw_string_ostream s(DataLayout);
 
@@ -148,7 +159,7 @@ void LuaScript::updateStatus() {
   s << '-';
 
   // Setup the address width (pointer width).
-  unsigned PtrSize = FUI.getFUDesc<VFUMemBus>()->getAddrWidth();
+  unsigned PtrSize = getFUDesc<VFUMemBus>()->getAddrWidth();
   s << "p:" << PtrSize << ':' << PtrSize << ':' << PtrSize << '-';
 
   // FIXME: Setup the correct integer layout.
@@ -162,8 +173,8 @@ void LuaScript::updateStatus() {
 
 ManagedStatic<LuaScript> Script;
 
-const FUInfo &llvm::vtmfus() {
-  return Script->FUI;
+VFUDesc *llvm::getFUDesc(enum VFUs::FUTypes T) {
+  return Script->FUSet[T];
 }
 
 const SystemInfo &llvm::sysinfo() {

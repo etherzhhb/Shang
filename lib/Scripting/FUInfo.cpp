@@ -40,15 +40,49 @@ namespace llvm {
   }
 }
 
-FUInfo::FUInfo() {
-  for (size_t i = 0, e = array_lengthof(ResSet); i != e; ++i)
-    ResSet[i] = 0;
+//===----------------------------------------------------------------------===//
+// Helper functions for reading function unit table from script.
+template<class PropType>
+static PropType getFUProperty(luabind::object &FUTable,
+                              const std::string &PropName) {
+  //luabind::object FUTable =
+  //  Script->getRawObject("FU" + std::string(FUType::getTypeName()));
+
+  if (luabind::type(FUTable) != LUA_TTABLE) return PropType();
+
+  boost::optional<PropType> Result =
+    luabind::object_cast_nothrow<PropType>(FUTable[PropName]);
+
+  if (!Result) return PropType();
+
+  return Result.get();
 }
 
-FUInfo::~FUInfo() {
-  for (iterator I = begin(), E = end(); I != E; ++I)
-    if(*I) delete *I;
-}
+VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable)
+  : ResourceType(type),
+    Latency(getFUProperty<unsigned>(FUTable, "Latency")),
+    StartInt(getFUProperty<unsigned>(FUTable, "StartInterval")),
+    TotalRes(getFUProperty<unsigned>(FUTable, "TotalNumber")),
+    MaxBitWidth(getFUProperty<unsigned>(FUTable, "OperandWidth")){}
+
+VFUMemBus::VFUMemBus(luabind::object FUTable)
+  : VFUDesc(VFUs::MemoryBus,
+            getFUProperty<unsigned>(FUTable, "Latency"),
+            getFUProperty<unsigned>(FUTable, "StartInterval"),
+            getFUProperty<unsigned>(FUTable, "TotalNumber"),
+            getFUProperty<unsigned>(FUTable, "DataWidth")),
+    AddrWidth(getFUProperty<unsigned>(FUTable, "AddressWidth")) {}
+
+
+VFUBRam::VFUBRam(luabind::object FUTable)
+  : VFUDesc(VFUs::BRam,
+            getFUProperty<unsigned>(FUTable, "Latency"),
+            getFUProperty<unsigned>(FUTable, "StartInterval"),
+            getFUProperty<unsigned>(FUTable, "TotalNumber"),
+            getFUProperty<unsigned>(FUTable, "DataWidth")),
+  Template(getFUProperty<std::string>(FUTable, "Template")) {}
+
+
 
 unsigned FuncUnitId::getTotalFUs() const {
   // If the function unit is binded, there is only one function unit with
@@ -56,7 +90,7 @@ unsigned FuncUnitId::getTotalFUs() const {
   if (isBound()) return 1;
 
   // Else we can just choose a function unit from all available function units.
-  return vtmfus().getFUDesc(getFUType())->getTotalRes();
+  return getFUDesc(getFUType())->getTotalRes();
 }
 
 void FuncUnitId::print(raw_ostream &OS) const {
@@ -68,7 +102,6 @@ void FuncUnitId::print(raw_ostream &OS) const {
 void FuncUnitId::dump() const {
   print(dbgs());
 }
-
 
 std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num,
                                   unsigned DataWidth, unsigned AddrWidth) const {
