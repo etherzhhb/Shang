@@ -22,7 +22,7 @@
 #include "VTargetMachine.h"
 
 #include "vtm/Passes.h"
-#include "vtm/SystemInfo.h"
+#include "vtm/SynSettings.h"
 
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"

@@ -15,7 +15,7 @@
 #ifndef VTM_FUNCTION_INFO_H
 #define VTM_FUNCTION_INFO_H
 
-#include "vtm/SystemInfo.h"
+#include "vtm/SynSettings.h"
 #include "vtm/FUInfo.h"
 #include "vtm/VerilogAST.h"
 
@@ -90,20 +90,20 @@ private:
 
   StringPool SymbolPool;
   std::set<PooledStringPtr> Symbols;
+  const SynSettings *Info;
   // Rtl module.
-  OwningPtr<VASTModule> Mod;
-  ConstraintsInfo Info;
+  VASTModule Mod;
 public:
   explicit VFInfo(MachineFunction &MF)
     : TotalRegs(fistPhyReg),
-      Info(sysinfo().getInfo(MF.getFunction()->getName()))
+      Info(getSynSetting(MF.getFunction()->getName())),
+      Mod(Info->getModName())
   {}
 
-  const ConstraintsInfo &getInfo() const { return Info; }
+  const SynSettings &getInfo() const { return *Info; }
 
   /// Verilog module for the machine function.
-  VASTModule *createRtlMod(const std::string &Name);
-  VASTModule *getRtlMod() const { return Mod.get(); }
+  VASTModule *getRtlMod() const { return const_cast<VASTModule*>(&Mod); }
 
   /// Slots information for machine basicblock.
   unsigned getTotalSlotFor(const MachineBasicBlock* MBB) const;

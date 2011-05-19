@@ -250,7 +250,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
-  VM = FInfo->createRtlMod(sysinfo().getHwModName());
+  VM = FInfo->getRtlMod();
   emitFunctionSignature();
 
   // Emit control register and idle state

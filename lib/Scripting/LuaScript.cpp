@@ -42,7 +42,7 @@ LuaScript::LuaScript() : State(lua_open()) {
 }
 
 LuaScript::~LuaScript() {
-  // FIXME: Release the function unit descriptors.
+  // FIXME: Release the function unit descriptors and function settings.
   //for (size_t i = 0, e = array_lengthof(FUSet); i != e; ++i)
   //  if(VFUDesc *Desc = FUSet[i]) delete Desc;
 
@@ -66,24 +66,17 @@ void LuaScript::init() {
 
   // Bind the C++ classes.
   luabind::module(State)[
-    luabind::class_<ConstraintsInfo>("ConstraintsInfo")
+    luabind::class_<SynSettings>("SynSettings")
       .enum_("PipeLine")[
-        luabind::value("IMS", ConstraintsInfo::IMS),
-          luabind::value("FDMS", ConstraintsInfo::FDMS),
-          luabind::value("DontPipeline", ConstraintsInfo::DontPipeline)
+        luabind::value("IMS", SynSettings::IMS),
+          luabind::value("FDMS", SynSettings::FDMS),
+          luabind::value("DontPipeline", SynSettings::DontPipeline)
       ]
       .enum_("Schedule")[
-        luabind::value("FDS", ConstraintsInfo::FDS),
-        luabind::value("FDLS", ConstraintsInfo::FDLS),
-        luabind::value("ILP", ConstraintsInfo::ILP)
-      ]
-      .def_readwrite("PipeLine", &ConstraintsInfo::PipeAlg)
-      .def_readwrite("Schedule", &ConstraintsInfo::SchedAlg),
-
-    luabind::class_<SystemInfo>("SystemInfo")
-      .def("setHardware", &SystemInfo::setHardware)
-      .def("getInfo", &SystemInfo::getInfo)
-      .def_readwrite("HwModName", &SystemInfo::hwModName),
+        luabind::value("FDS", SynSettings::FDS),
+        luabind::value("FDLS", SynSettings::FDLS),
+        luabind::value("ILP", SynSettings::ILP)
+      ],
 
     BindingTraits<VASTPort>::register_("VASTPort"),
 
@@ -92,7 +85,7 @@ void LuaScript::init() {
 
   // Bind the object.
   luabind::globals(State)["FUs"] = luabind::newtable(State);
-  luabind::globals(State)["System"] = &SystemI;
+  luabind::globals(State)["Functions"] = luabind::newtable(State);
   // The scripting pass table.
   luabind::globals(State)["Passes"] = luabind::newtable(State);
 }
@@ -150,6 +143,14 @@ void LuaScript::updateStatus() {
   initSimpleFU(VFUs::Shift, FUs);
   initSimpleFU(VFUs::Mult, FUs);
 
+  typedef luabind::iterator tab_it;
+  for (tab_it I = tab_it(luabind::globals(State)["Functions"]), E = tab_it();
+       I != E; ++I) {
+    FunctionSettings.GetOrCreateValue(
+      luabind::object_cast<std::string>(I.key()).c_str(),
+      new SynSettings(*I));
+  }
+
   // Build the data layout.
   raw_string_ostream s(DataLayout);
 
@@ -175,21 +176,13 @@ VFUDesc *llvm::getFUDesc(enum VFUs::FUTypes T) {
   return Script->FUSet[T];
 }
 
-const SystemInfo &llvm::sysinfo() {
-  return Script->SystemI;
+SynSettings *llvm::getSynSetting(StringRef Name) {
+  return Script->FunctionSettings.lookup(Name);
 }
 
 LuaScript &llvm::scriptEngin() {
   return *Script;
 }
-
-// Out of line virtual function to provide home for the class.
-void LuaScript::anchor() {}
-
-// Dirty Hack: anchor from SystemInfo.h
-void ConstraintsInfo::anchor() {}
-
-void SystemInfo::anchor() {}
 
 // Dirty Hack: Allow we invoke some scripting function in the libraries
 // compiled with no-rtti

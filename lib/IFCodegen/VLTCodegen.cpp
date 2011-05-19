@@ -25,6 +25,7 @@
 #include "vtm/Utilities.h"
 
 #include "llvm/Function.h"
+#include "llvm/Module.h"
 #include "llvm/DerivedTypes.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
@@ -414,22 +415,29 @@ struct VLTIfCodegen : public MachineFunctionPass {
   }
 
   bool doInitialization(Module &M) {
+    for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
+      if (I->empty()) continue;
 
-    std::string HWSubSysName = sysinfo().getHwModName();
+      SynSettings *Settings = getSynSetting(I->getName());
+      assert(Settings
+        && "Synthesis settings of a hardware function not available!");
+      std::string RTLModName = Settings->getModName();
 
-    // Setup the Name of the module in verilator.
-    VLTClassName = "V" + HWSubSysName;
-    // And the name of the intance of this class.
-    VLTModInstName = VLTClassName + "_Inst";
+      // Setup the Name of the module in verilator.
+      VLTClassName = "V" + RTLModName;
+      // And the name of the intance of this class.
+      VLTModInstName = VLTClassName + "_Inst";
 
-    Out << "// Include the verilator header.\n"
-              "#include \"verilated.h\"\n"
-              "// And the header file of the generated module.\n"
-              "#include \"" << VLTClassName << ".h\"\n\n\n"
-              "// Instantiation of module\n"
-              "static " << VLTClassName << " " << VLTModInstName
-           << "(\"" << HWSubSysName << "\");\n\n\n"
-              "// Current simulation time\n"
+      Out << "// Include the verilator header.\n"
+            "#include \"verilated.h\"\n"
+            "// And the header file of the generated module.\n"
+            "#include \"" << VLTClassName << ".h\"\n\n\n"
+            "// Instantiation of module\n"
+            "static " << VLTClassName << " " << VLTModInstName
+            << "(\"" << RTLModName << "\");\n\n\n";
+    }
+
+    Out << "// Current simulation time\n"
               "static long sim_time = 0;\n\n\n"
               "// Called by $time in Verilog\n"
               "double sc_time_stamp () {\n"

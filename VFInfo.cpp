@@ -17,11 +17,6 @@
 
 using namespace llvm;
 
-VASTModule *VFInfo::createRtlMod(const std::string &Name) {
-  Mod.reset(new VASTModule(Name));
-  return Mod.get();
-}
-
 unsigned VFInfo::getTotalSlotFor(const MachineBasicBlock* MBB) const {
   std::map<const MachineBasicBlock*, StateSlots>::const_iterator
     at = StateSlotMap.find(MBB);

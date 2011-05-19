@@ -16,7 +16,7 @@
 #define VTM_LUA_SCRIPT_H
 
 #include "vtm/FUInfo.h"
-#include "vtm/SystemInfo.h"
+#include "vtm/SynSettings.h"
 
 #include "llvm/Function.h"
 #include "llvm/ADT/StringMap.h"
@@ -52,9 +52,9 @@ class LuaScript {
   IndexedMap<VFUDesc*, CommonFUIdentityFunctor> FUSet;
   std::string DataLayout;
 
-  SystemInfo SystemI;
+  StringMap<SynSettings*> FunctionSettings;
 
-  friend const SystemInfo &sysinfo(void);
+  friend SynSettings *getSynSetting(StringRef Name);
   friend VFUDesc *getFUDesc(enum VFUs::FUTypes T);
 
   void initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs);
@@ -107,9 +107,6 @@ public:
   bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
 
   const std::string &getDataLayout() const { return DataLayout; }
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
 };
 
 LuaScript &scriptEngin();

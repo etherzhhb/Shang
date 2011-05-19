@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/FUInfo.h"
+#include "vtm/SynSettings.h" // DiryHack: Also implement the SynSetting class.
 #include "vtm/LuaScript.h"
 
 #include "llvm/ADT/STLExtras.h"
@@ -83,6 +84,29 @@ VFUBRam::VFUBRam(luabind::object FUTable)
   Template(getFUProperty<std::string>(FUTable, "Template")) {}
 
 
+// Dirty Hack: anchor from SynSettings.h
+SynSettings::SynSettings(luabind::object SettingTable)
+  : PipeAlg(SynSettings::DontPipeline),
+    SchedAlg(SynSettings::ILP) /*ModName(""), HierPrefix("")*/ {
+  if (luabind::type(SettingTable) != LUA_TTABLE)
+    return;
+
+  if (boost::optional<std::string> Result =
+      luabind::object_cast_nothrow<std::string>(SettingTable["ModName"]))
+    ModName = Result.get();
+
+  if (boost::optional<std::string> Result =
+      luabind::object_cast_nothrow<std::string>(SettingTable["HierPrefix"]))
+    HierPrefix = Result.get();
+
+  if (boost::optional<ScheduleAlgorithm> Result =
+    luabind::object_cast_nothrow<ScheduleAlgorithm>(SettingTable["Scheduling"]))
+    SchedAlg = Result.get();
+
+  if (boost::optional<PipeLineAlgorithm> Result =
+    luabind::object_cast_nothrow<PipeLineAlgorithm>(SettingTable["Pipeline"]))
+    PipeAlg = Result.get();
+}
 
 unsigned FuncUnitId::getTotalFUs() const {
   // If the function unit is binded, there is only one function unit with

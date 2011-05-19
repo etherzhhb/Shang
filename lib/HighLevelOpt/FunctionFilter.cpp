@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/Passes.h"
-#include "vtm/SystemInfo.h"
+#include "vtm/SynSettings.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
@@ -30,12 +30,11 @@ using namespace llvm;
 namespace {
 struct FunctionFilter : public ModulePass {
   static char ID;
-  const SystemInfo &Partition;
   // The output stream for software part.
   raw_ostream &SwOut;
 
   FunctionFilter(raw_ostream &O)
-    : ModulePass(ID), Partition(sysinfo()), SwOut(O) {}
+    : ModulePass(ID), SwOut(O) {}
 
 
   bool runOnModule(Module &M);
@@ -44,8 +43,6 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
-  // No need to perform any sysinfo.
-  if (Partition.empty()) return false;
   
   OwningPtr<Module> SoftMod(CloneModule(&M));
   SoftMod->setModuleIdentifier(M.getModuleIdentifier() + ".sw");
@@ -54,7 +51,7 @@ bool FunctionFilter::runOnModule(Module &M) {
   std::vector<Function*> Functions;
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
     Function &F = *I;
-    if (!Partition.isHardware(F)) {
+    if (!getSynSetting(F.getName())) {
       F.dropAllReferences();
       F.getBasicBlockList().clear();
     }
@@ -63,7 +60,7 @@ bool FunctionFilter::runOnModule(Module &M) {
   // Remove hardware functions in software module and leave the declaretion only.
   for (Module::iterator I = SoftMod->begin(), E = SoftMod->end(); I != E; ++I) {
     Function &F = *I;
-    if (Partition.isHardware(F)) {
+    if (getSynSetting(F.getName())) {
       F.dropAllReferences();
       F.getBasicBlockList().clear();
     }

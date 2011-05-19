@@ -14,7 +14,7 @@
 #define VTM_BINDING_TRAITS_H
 
 #include "vtm/FUInfo.h"
-#include "vtm/SystemInfo.h"
+#include "vtm/SynSettings.h"
 #include "vtm/VerilogAST.h"
 
 #include "luabind/luabind.hpp"

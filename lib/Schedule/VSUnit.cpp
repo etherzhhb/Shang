@@ -21,7 +21,7 @@
 #include "VSUnit.h"
 #include "ScheduleDOT.h"
 
-#include "vtm/SystemInfo.h"
+#include "vtm/SynSettings.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"
 #include "vtm/BitLevelInfo.h"
@@ -66,20 +66,20 @@ bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
-  const ConstraintsInfo &I = F->getInfo<VFInfo>()->getInfo();
+  const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
 
   switch (I.getScheduleAlgorithm()) {
-  case ConstraintsInfo::FDS:   return new FDScheduler(G);
-  case ConstraintsInfo::FDLS:  return new FDListScheduler(G);
-  case ConstraintsInfo::ILP:   return new ILPScheduler(G);
+  case SynSettings::FDS:   return new FDScheduler(G);
+  case SynSettings::FDLS:  return new FDListScheduler(G);
+  case SynSettings::ILP:   return new ILPScheduler(G);
   }
   return 0;
 }
 
 static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
-  const ConstraintsInfo &I = F->getInfo<VFInfo>()->getInfo();
-  if (I.getPipeLineAlgorithm() == ConstraintsInfo::IMS)
+  const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
+  if (I.getPipeLineAlgorithm() == SynSettings::IMS)
     return new IteractiveModuloScheduling(G);
   
   return createLinearScheduler(G);

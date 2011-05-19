@@ -92,7 +92,7 @@ local function parse_hash_lines(chunk, name)
 
     is = ie + 1
   end
- 
+
   local code = table.concat(pieces, ' ')
 
   -- Attempt to compile.
@@ -282,9 +282,9 @@ end
 
 -- TEST SUITE
 function testsuite()
-  
+
   local preprocess = require "luapp" . preprocess
-  
+
   local check = {}
   check['='] = function(a, b, message)
     message = message or ''
@@ -304,7 +304,7 @@ function testsuite()
       error(string.format('FAIL: raised ' .. message), 2)
     end
   end
-  
+
   check['='](preprocess'', '')
   check['='](preprocess'$', '$')
   check['='](preprocess'$("$")', '$')
@@ -318,34 +318,34 @@ function testsuite()
   check['='](preprocess'$(_put(1,2))', '12')
   --check.fail(function() preprocess'$(' end)
   --check.fail(function() preprocess'$(()' end)
-  
+
   check['='](preprocess'$(1+2)', '3')
   check['='](preprocess'$((1+2)*2)', '6')
   check['='](preprocess'a$(1)$(2)b$(3)c', 'a12b3c')
-  
+
   check['='](preprocess'$(local x=2)$(x)$(local x=3)$(x)', '23')
   check['='](preprocess'$(for n=1,3 do _put(n) end)', '123')
   check['='](preprocess'$(local function test(x) return x+1 end)$(test(2))', '3')
-  
+
   check['='](preprocess'$("$")', '$')
-  
+
   check['='](preprocess'#', '')
   check['='](preprocess'#_put(2)', '2')
   check['='](preprocess'#x=2\n$(x)', '2')
   check['='](preprocess'#for x=1,2 do\n$(x)\n#end', '1\n2\n')
   check['='](preprocess'$("#")', '#')
-  
+
   local t = {a=5}
   check['=']('5', preprocess {input='$(a)', lookup=t})
   check['=']('nil', preprocess {input='$(b)', lookup=t, strict=false})
   check.fail(function() assert(preprocess {input='$(b)', lookup=t}) end)
-  
-  
-  
+
+
+
   -- preprocess {input = {'input.txt'}, output = io.stdout, lookup = _G}
-  
+
   check['='](preprocess[[$(local x=5)$("$(x)")]], '$(x)')
-  
+
   check['=']([[
 testfalsenil16
   1
@@ -417,13 +417,13 @@ x and y are now $(x) and $(y)
   assert(message:find(":2:"))
   local _,message = preprocess"$(x=1 --)$(\nx = 3)\n#x= ="
   assert(message:find(":3:"))
-  
+
   -- test of input/output methods
   -- should output "1+2=3" twice
   preprocess {input='1+2=$(1+2)\n', output=io.stdout}
   preprocess {input='1+2=$("$")(1+2)\n', output={'tmp.txt'}}
   preprocess {input={'tmp.txt'}, output=io.stdout}
-  
+
   print 'done'
 
   return true
