@@ -40,7 +40,7 @@ class BitLevelInfo : public MachineFunctionPass {
   }
 
   unsigned computeBitRepeatWidth(MachineInstr *BitRepeat) const {
-      unsigned EltWidth = ucOperand(BitRepeat->getOperand(1)).getBitWidth(),
+      unsigned EltWidth = cast<ucOperand>(BitRepeat->getOperand(1)).getBitWidth(),
                           Times = BitRepeat->getOperand(2).getImm();
       return EltWidth * Times;
   }
@@ -49,7 +49,7 @@ class BitLevelInfo : public MachineFunctionPass {
       unsigned BitWidth = 0;
       for (MachineInstr::mop_iterator I = BitCat->operands_begin() + 1,
         E = BitCat->operands_end(); I != E; ++I)
-        BitWidth += ucOperand(*I).getBitWidth();
+        BitWidth += cast<ucOperand>(*I).getBitWidth();
 
       return BitWidth;
   }
@@ -57,9 +57,9 @@ class BitLevelInfo : public MachineFunctionPass {
   unsigned computeByOpWithSameWidth(MachineInstr::mop_iterator I,
                                     MachineInstr::mop_iterator E) {
     assert(I != E && "The range is empty!");
-    unsigned BitWidth = ucOperand(*I).getBitWidth();
+    unsigned BitWidth = cast<ucOperand>(*I).getBitWidth();
     while (++I != E)
-      if (unsigned Width = ucOperand(*I).getBitWidth()) {
+      if (unsigned Width = cast<ucOperand>(*I).getBitWidth()) {
         assert ((BitWidth == 0 || BitWidth == Width)
                  && "Bit width of PHINode not match!");
         BitWidth = Width;
@@ -73,7 +73,7 @@ class BitLevelInfo : public MachineFunctionPass {
     unsigned BitWidth = 0;
     
     for (unsigned i = 1; i != PN->getNumOperands(); i += 2)
-      if (unsigned Width = ucOperand(PN->getOperand(i)).getBitWidthOrZero()) {
+      if (unsigned Width = cast<ucOperand>(PN->getOperand(i)).getBitWidthOrZero()) {
         assert ((BitWidth == 0 || BitWidth == Width)
                  && "Bit width of PHINode not match!");
         BitWidth = Width;
@@ -96,11 +96,11 @@ public:
   unsigned getBitWidth(unsigned R) const;
 
   bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
-    unsigned char OldBitWidth = ucOperand(MO).getBitWidthOrZero();
+    unsigned char OldBitWidth = cast<ucOperand>(MO).getBitWidthOrZero();
     assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
             && "Bit width not convergent!");
     assert(BitWidth && "Invalid bit width!");
-    ucOperand(MO).setBitWidth(BitWidth);
+    cast<ucOperand>(MO).setBitWidth(BitWidth);
 
     return OldBitWidth != BitWidth;
   }

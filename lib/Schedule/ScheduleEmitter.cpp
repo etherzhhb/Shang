@@ -41,7 +41,6 @@ struct MicroStateBuilder {
   MachineBasicBlock &MBB;
   MachineBasicBlock::iterator InsertPos;
 
-  unsigned WireNum;
   LLVMContext &VMContext;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
@@ -105,7 +104,6 @@ struct MicroStateBuilder {
                     const TargetMachine &TM,
                     BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  WireNum(0),
   VMContext(Context), TII(*TM.getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFInfo>()), BLI(BitInfo),
@@ -247,9 +245,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
                                                 VMContext));
     MO.setIsDef();
     CtrlInst.addOperand(MO);
-    CtrlInst.addMetadata(MetaToken::createReadWire(WD->WireNum,
-                                                   ucOperand(MO).getBitWidth(),
-                                                   VMContext));
+    CtrlInst.addOperand(ucOperand::CreateWireRead(WD->WireNum,
+                                                  cast<ucOperand>(MO).getBitWidth()));
     ++I;
   }
 
@@ -313,7 +310,12 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     // Remember the defines.
     if (MO.isDef() && EmitSlot != WriteSlot) {
-      ++WireNum;
+      unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
+      // Do not emit write to register unless it not killed in the current state.
+      // FIXME: Emit the wire only if the value is not read in a function unit port.
+      // if (!NewDef->isSymbol()) {
+      ucOperand NewOp = ucOperand::CreateWireDefine(MRI, BitWidth);
+      unsigned WireNum = NewOp.getReg();
       WireDef WDef = createWireDef(WireNum, A, MO, i - 1, EmitSlot, WriteSlot);
 
       SWDMapTy::iterator mapIt;
@@ -322,16 +324,11 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
       assert(inserted && "Instructions not in SSA form!");
       WireDef *NewDef = &mapIt->second;
+      // Remember to emit this wire define if necessary.
+      Defs.push_back(NewDef);
 
-      unsigned BitWidth = ucOperand(MO).getBitWidth();
-
-      // Do not emit write to register unless it not killed in the current state.
-      // FIXME: Emit the wire only if the value is not read in a function unit port.
-      // if (!NewDef->isSymbol()) {
-        MDNode *WireDefOp = MetaToken::createDefWire(WireNum, BitWidth, VMContext);
-        Ops[i] = MachineOperand::CreateMetadata(WireDefOp);
-        // Remember to emit this wire define if necessary.
-        Defs.push_back(NewDef);
+      // Update the operand.
+      Ops[i] = NewOp;
       // }
       continue;
     }
@@ -360,12 +357,9 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     if (WDef.isSymbol())
       Ops[i] = MachineOperand::CreateES(WDef.SymbolName);
-    else {
-      MDNode *ReadWire = MetaToken::createReadWire(WDef.WireNum,
-                                                   ucOperand(MO).getBitWidth(),
-                                                   VMContext);
-      Ops[i] = MachineOperand::CreateMetadata(ReadWire);
-    }
+    else
+      Ops[i] = ucOperand::CreateWireRead(WDef.WireNum,
+                                         cast<ucOperand>(MO).getBitWidth());
   }
 
   MachineInstrBuilder Builder;
@@ -385,7 +379,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlot,
                                                    bool IsCtrl, MachineOperand MO) {
   unsigned RegNo = WD.getOperand().getReg();
-  unsigned SizeInBits = ucOperand(MO).getBitWidth();
+  unsigned SizeInBits = cast<ucOperand>(MO).getBitWidth();
   const TargetRegisterClass *RC = MRI.getRegClass(RegNo);
 
   // Move the value to a new register otherwise the it will be overwritten.

@@ -12,13 +12,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/MicroState.h"
+#include "vtm/VerilogAST.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/VRegisterInfo.h"
 #include "vtm/VTM.h"
 
 #include "llvm/Function.h"
 #include "llvm/Metadata.h"
 #include "llvm/Type.h"
 #include "llvm/Constants.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
@@ -47,18 +50,6 @@ StringRef MetaToken::getStringField(unsigned Elt) const {
   return StringRef();
 }
 
-bool MetaToken::isDefWire() const {
-  if (!TokenNode) return false;
-
-  return getTag() == MetaToken::tokenDefWire;
-}
-
-bool MetaToken::isReadWire() const {
-  if (!TokenNode) return false;
-
-  return getTag() == MetaToken::tokenReadWire;
-}
-
 bool MetaToken::isInstr() const {
   if (!TokenNode) return false;
 
@@ -67,12 +58,6 @@ bool MetaToken::isInstr() const {
 
 void MetaToken::print(raw_ostream &OS) const {
   switch (getTag()) {
-  case MetaToken::tokenDefWire:
-    OS << "wire" << getWireNum() << "[" << getBitWidth() <<"]";
-    break;
-  case MetaToken::tokenReadWire:
-    OS << "wire" << getWireNum();
-    break;
   case MetaToken::tokenInstr:
     OS << getInstrName() << "{" << getFUId() << "}"
        << "@" << getPredSlot();
@@ -146,33 +131,8 @@ MDNode *MetaToken::createInstr(unsigned PredSlot, const TargetInstrDesc &TID,
   return MDNode::get(Context, Elts, array_lengthof(Elts));
 }
 
-MDNode * llvm::MetaToken::createReadWire(uint64_t WireNum, unsigned BitWidth, 
-                                         LLVMContext &Context) {
-  assert(WireNum != 0 && "Bad wire number!");
-  Value *Elts[] = {
-    createTagConstant(MetaToken::tokenReadWire, Context),
-    ConstantInt::get(Type::getInt32Ty(Context), WireNum),
-    ConstantInt::get(Type::getInt8Ty(Context), BitWidth)
-  };
-
-  return MDNode::get(Context, Elts, array_lengthof(Elts));
-}
-
-
 // Out of line virtual function to provide home for the class.
 void MetaToken::anchor() {}
-
-
-MDNode *MetaToken::createDefWire(uint64_t WireNum, unsigned BitWidth,
-                                        LLVMContext &Context) {
-  Value *Elts[] = {
-    createTagConstant(MetaToken::tokenDefWire, Context),
-    ConstantInt::get(Type::getInt32Ty(Context), WireNum),
-    ConstantInt::get(Type::getInt8Ty(Context), BitWidth)
-  };
-
-  return MDNode::get(Context, Elts, array_lengthof(Elts));
-}
 
 
 // Out of line virtual function to provide home for the class.
@@ -201,6 +161,54 @@ void ucState::dump() const {
 
 // Out of line virtual function to provide home for the class.
 void ucState::anchor() {}
+
+ucOperand ucOperand::CreateWireDefine(MachineRegisterInfo &MRI,
+                                      unsigned BitWidth) {
+  unsigned WireNum = MRI.createVirtualRegister(VTM::WireRegisterClass);
+  ucOperand MO = cast<ucOperand>(MachineOperand::CreateReg(WireNum, true));
+  MO.setBitWidth(BitWidth, true);
+  MO.setIsEarlyClobber();
+  return MO;
+}
+
+ucOperand ucOperand::CreateWireRead(unsigned WireNum, unsigned BitWidth) {
+  ucOperand MO = cast<ucOperand>(MachineOperand::CreateReg(WireNum, false));
+  MO.setBitWidth(BitWidth, true);
+  return MO;
+}
+
+void ucOperand::print(raw_ostream &OS,
+                      unsigned UB /* = 64 */, unsigned LB /* = 0 */) {
+  switch (getType()) {
+  case MachineOperand::MO_Register: {
+    unsigned Reg = getReg();
+    UB = std::min(getBitWidth(), UB);
+    unsigned Offset = 0;
+    if (isWire()) {
+      OS << "wire" << TargetRegisterInfo::virtReg2Index(Reg);
+    } else {
+      assert(TargetRegisterInfo::isPhysicalRegister(Reg)
+             && "Unexpected virtual register!");
+      // Get the one of the 64 bit registers.
+      OS << "/*reg" << Reg <<"*/ reg" << (Reg & ~0x7);
+      // Select the sub register
+      Offset = (Reg & 0x7) * 8;
+    }
+    // If the operand is a wire and has only 1 bit, do not print the bit
+    // range.
+    OS << verilogBitRange(UB + Offset, LB + Offset, !isWire());
+    return;
+  }
+  case MachineOperand::MO_Immediate:
+    OS << verilogConstToStr(getImm(), getBitWidth(), false);
+    return;
+  case MachineOperand::MO_ExternalSymbol:
+    OS << getSymbolName();
+    return;
+  default:
+    assert(0 && "Unknown Operand type!");
+  }
+}
 
 raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
   OS << "Scheduled MBB: " << MBB.getName() << '\n';

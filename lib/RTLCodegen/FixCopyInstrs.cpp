@@ -89,6 +89,8 @@ static MachineInstr &findPrevControl(MachineInstr &I) {
 }
 
 void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
+  assert(0 && "Copy not supported yet!");
+
   ucState Ctrl(findPrevControl(Copy));
 
   MachineOperand &SrcOp = Copy.getOperand(1),
@@ -118,8 +120,8 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
         switch (SrcOperand.getType()) {
         case MachineOperand::MO_Metadata: {
           MetaToken ReadWire(SrcOperand.getMetadata());
-          assert(ReadWire.isReadWire() && "Bad operand!");
-          SrcWire = ReadWire.getWireNum();
+          //assert(ReadWire.isReadWire() && "Bad operand!");
+          // SrcWire = ReadWire.getWireNum();
           break;
         }
         case MachineOperand::MO_Register: {
@@ -145,9 +147,8 @@ void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
                                           TII->get(VTM::COPY), Context);
   MIB.addMetadata(OpCode).addOperand(DstOp);
   if (SrcWire)
-    MIB.addMetadata(MetaToken::createReadWire(SrcWire,
-                                              ucOperand(SrcOp).getBitWidth(),
-                                              Context));
+    MIB.addOperand(ucOperand::CreateWireRead(SrcWire,
+                                             cast<ucOperand>(SrcOp).getBitWidth()));
   else
     MIB.addOperand(SrcOp);
 

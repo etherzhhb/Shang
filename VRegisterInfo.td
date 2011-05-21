@@ -20,9 +20,11 @@ class VTMReg<string n> : Register<n> {
 //===----------------------------------------------------------------------===//
 
 def R : VTMReg<"r">;
+def W : VTMReg<"w">;
 
 class VRegClass<string namespace, list<ValueType> regTypes, int alignment,
                     list<Register> regList>
   : RegisterClass<namespace, regTypes, alignment, regList> {}
   
 def DR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [R]>;
+def Wire  : VRegClass<"VTM", [i64], 64, [W]>;

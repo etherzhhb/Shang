@@ -46,8 +46,6 @@ private:
   std::string HierPrefix;
 
   friend class LuaScript;
-  friend class SynSettings;
-
 public:
   SynSettings(luabind::object SettingTable);
 

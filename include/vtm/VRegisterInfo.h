@@ -29,6 +29,8 @@ class TargetData;
 class TargetLowering;
 
 struct VRegisterInfo : public TargetRegisterInfo {
+  static const unsigned MaxPhyRegs = 4096;
+
   const TargetInstrInfo &TII;
   const TargetData &TD;
   const TargetLowering &TLI;

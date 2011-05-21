@@ -640,7 +640,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
     Out.enter_block(format("// If membus%d ready for next transaction\n",FUNum));
 
     // FIXME: use a random uncertain delay.
-    unsigned TransactionUncertain = 3;
+    unsigned TransactionUncertain = 5;
 
     Out << "// Update the ready time of membus.\n"
       // Note: Simulate advance half clock cycle when sim_time increased.

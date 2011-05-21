@@ -23,8 +23,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/STLExtras.h"
 
 namespace llvm {
+class MachineRegisterInfo;
 class ucOpIterator;
 class ucState;
 
@@ -40,10 +42,6 @@ protected:
 
 public:
   enum TokenType {
-    // Define a wire, defwire wire_num, source_value_token
-    tokenDefWire,
-    // Read a wire, readwire wire_num
-    tokenReadWire,
     // Excute an instruction, instr ResourceType, ResourceID, operands ...
     tokenInstr
   };
@@ -58,23 +56,7 @@ public:
 
   unsigned getTag() const {  return getUnsignedField(0); }
 
-  bool isDefWire() const;
-  bool isReadWire() const;
   bool isInstr() const;
-
-  uint64_t getWireNum() const {
-    assert((isDefWire() || isReadWire()) && "Bad token type!");
-    return getUInt64Field(1);
-  }
-
-  std::string getWireName(const std::string &Prefix) const {
-    return Prefix + "_wire" + utostr(getWireNum());
-  }
-
-  uint64_t getBitWidth() const {
-    assert((isDefWire() || isReadWire()) && "Bad token type!");
-    return getUInt64Field(2);
-  }
 
   unsigned getOpcode() const {
     assert(isInstr() && "Bad token type!");
@@ -100,13 +82,6 @@ public:
   // Out of line virtual function to provide home for the class.
   virtual void anchor();
 
-  // Helper functions to build meta operand and meta opcode.
-  static MDNode *createDefWire(uint64_t WireNum, unsigned BitWidth,
-                               LLVMContext &Context);
-
-  static MDNode *createReadWire(uint64_t WireNum, unsigned BitWidth,
-                                LLVMContext &Context);
-
   static MDNode *createInstr(unsigned PredSlot, const MachineInstr &Instr,
                              FuncUnitId FUId, LLVMContext &Context) {
     return createInstr(PredSlot, Instr.getDesc(), Context, FUId);
@@ -118,27 +93,77 @@ public:
                              FuncUnitId FUId = VFUs::Trivial);
 };
 
-class ucOp {
+//uc Operand
+class ucOperand : public MachineOperand {
+  static const unsigned BitwidthMask = 0x7f;
+  static const unsigned IsWireFlag = 0x80;
+
 public:
-  typedef MachineInstr::mop_iterator op_iterator;
+  ///*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
+
+  static bool classof(const MachineOperand *) { return true; }
+
+  bool isWire() const { return isReg() && (IsWireFlag & getTargetFlags()); }
+
+  unsigned getBitWidthOrZero() const {
+    assert((isImm() || isReg())
+      && "Unsupported operand type!");
+    return getTargetFlags() & BitwidthMask;
+  }
+
+  unsigned getBitWidth() const {
+    unsigned BitWidth = getBitWidthOrZero();
+    assert(BitWidth && "Bit width information not available!");
+    return BitWidth;
+  }
+
+  void setBitWidth(unsigned BitWidth, bool isWire = false) {
+    assert((isImm() || isReg()) && "Unsupported operand type!");
+    unsigned TF = BitWidth & BitwidthMask;
+    if (isWire) TF |= IsWireFlag;
+    setTargetFlags(TF);
+    assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
+  }
+
+  static ucOperand CreateWireDefine(MachineRegisterInfo &MRI, unsigned BitWidth);
+  static ucOperand CreateWireRead(unsigned WireNum, unsigned BitWidth);
+  /*FIXME: Get the value from the max word length*/
+  void print(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0);
+};
+
+class ucOp {
+  struct OperandMapper {
+    typedef ucOperand &result_type;
+
+    ucOperand &operator()(MachineOperand &Op) const {
+      return cast<ucOperand>(Op);
+    }
+  };
+
+public:
+  typedef mapped_iterator<MachineInstr::mop_iterator, OperandMapper>
+          op_iterator;
 private:
   MetaToken Token;
   // iterator op begin and op end.
   op_iterator rangeBegin, rangeEnd;
 
   // op begin and op end
-  ucOp(op_iterator range_begin, op_iterator range_end)
+  ucOp(MachineInstr::mop_iterator range_begin,
+       MachineInstr::mop_iterator range_end)
     : Token((*range_begin).getMetadata()), 
-    rangeBegin(range_begin + 1), rangeEnd(range_end) {
+    rangeBegin(range_begin + 1, OperandMapper()),
+    rangeEnd(range_end, OperandMapper()) {
       assert((Token.isInstr()) && "Bad leading token!");
   }
   
   friend class ucOpIterator;
 public:
   op_iterator op_begin() const { return rangeBegin; }
+
   op_iterator op_end() const { return rangeEnd; }
 
-  MachineOperand &getOperand(unsigned i) const {
+  ucOperand &getOperand(unsigned i) const {
     op_iterator I = op_begin() + i;
     assert(I < rangeEnd && "index out of range!");
     return *I;
@@ -263,46 +288,6 @@ public:
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();
-};
-
-//uc Operand
-class ucOperand {
-  MachineOperand &MOperand;
-
-  static const unsigned BitwidthMask = 0x7f;
-
-public:
-  /*implicit*/ ucOperand(MachineOperand &O) : MOperand(O) {}
-
-  operator MachineOperand *() const {
-    return const_cast<MachineOperand*>(&MOperand);
-  }
-
-  MachineOperand *operator ->() const {
-    return const_cast<MachineOperand*>(&MOperand);
-  }
-
-  unsigned getBitWidthOrZero() const {
-    assert((MOperand.isImm() || MOperand.isReg())
-           && "Unsupported operand type!");
-    return MOperand.getTargetFlags() & BitwidthMask;
-  }
-
-  unsigned getBitWidth() const {
-    unsigned BitWidth = getBitWidthOrZero();
-    assert(BitWidth && "Bit width information not available!");
-    return BitWidth;
-  }
-
-  void setBitWidth(unsigned BitWidth) {
-    assert((MOperand.isImm() || MOperand.isReg())
-           && "Unsupported operand type!");
-    MOperand.setTargetFlags(BitWidth & BitwidthMask);
-    assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
-  }
-
-  /*FIXME: Get the value from the max word length*/
-  void emitOperand(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0);
 };
 
 // Print the scheduled machine code of verilog target machine, which only

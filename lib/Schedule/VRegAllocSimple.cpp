@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/VFInfo.h"
+#include "vtm/VRegisterInfo.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/Passes.h"
@@ -101,6 +102,12 @@ public:
   virtual float getPriority(LiveInterval *LI) { return LI->weight; }
 
   virtual void enqueue(LiveInterval *LI) {
+    unsigned Reg = LI->reg;
+
+    // Preserves SSA From for wires.
+    if (MRI->getRegClass(Reg) == VTM::WireRegisterClass)
+      return;
+
     Queue.push(LI);
   }
 
@@ -190,7 +197,6 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   DEBUG(dbgs() << "Before simple register allocation:\n";
         printVMF(dbgs(), F);
   ); 
-
 
   allocatePhysRegs();
 

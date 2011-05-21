@@ -106,7 +106,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
             && TargetRegisterInfo::isVirtualRegister(Operand.getReg())
             && "Not support Physics register yet!");
     
-    unsigned Width = ucOperand(Operand).getBitWidthOrZero();
+    unsigned Width = cast<ucOperand>(Operand).getBitWidthOrZero();
 
     if (updateBitWidth(Result, Width))
       Defs.push_back(&Result);
@@ -190,7 +190,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   case VTM::VOpSRL:
   case VTM::VOpSHL: {
     MachineOperand &Result = Instr->getOperand(0);
-    unsigned Width = ucOperand(Instr->getOperand(1)).getBitWidth();
+    unsigned Width = cast<ucOperand>(Instr->getOperand(1)).getBitWidth();
     if (updateBitWidth(Result, Width))
       Defs.push_back(&Result);
     break;
@@ -207,7 +207,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
 void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
   assert(MO.isReg() && "Wrong operand type!");
 
-  unsigned char BitWidth = ucOperand(MO).getBitWidth();
+  unsigned char BitWidth = cast<ucOperand>(MO).getBitWidth();
   assert(BitWidth && "Bit width not available!");
 
   for (MachineRegisterInfo::use_iterator I = MRI->use_begin(MO.getReg()),
@@ -229,7 +229,7 @@ unsigned BitLevelInfo::getBitWidth(unsigned R) const {
   unsigned Size = 0;
   for (MachineRegisterInfo::def_iterator I = MRI->def_begin(R),
        E = MRI->def_end(); I != E; ++I) {
-    unsigned S = ucOperand(I.getOperand()).getBitWidthOrZero();
+    unsigned S = cast<ucOperand>(I.getOperand()).getBitWidthOrZero();
     if (S == 0) { // Get the bit width from source operand.
       assert(I->isCopy() && "Can not get register bit width!");
       S = getBitWidth(I->getOperand(1).getReg());

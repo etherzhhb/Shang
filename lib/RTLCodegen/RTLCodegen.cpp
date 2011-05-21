@@ -85,7 +85,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitBasicBlock(MachineBasicBlock &MBB);
 
-  void emitAllRegister();
+  void emitAllSignals();
 
   void clear();
 
@@ -134,7 +134,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
   // Emit a signal with "signed" modifier and return the name of signed signal.
-  std::string emitSignedOperand(MachineOperand &Op);
+  std::string emitSignedOperand(ucOperand &Op);
 
   void emitOpSRA(ucOp &OpSRA);
 
@@ -146,10 +146,6 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpBitRepeat(ucOp &OpBitRepeat);
 
   void emitImplicitDef(ucOp &ImpDef);
-
-  void emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                   /*FIXME: Get the value from the max word length*/
-                   unsigned UB = 64, unsigned LB = 0);
 
   // Return true if the control operation contains a return operation.
   bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
@@ -171,8 +167,6 @@ class RTLCodegen : public MachineFunctionPass {
                             unsigned startSlot, unsigned endSlot,
                             MachineBasicBlock *CurBB,
                             const PredMapTy &NextStatePred );
-
-  void emitTestBench();
 
 public:
   /// @name FunctionPass interface
@@ -262,7 +256,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   emitIdleState();
 
   
-  emitAllRegister();
+  emitAllSignals();
   emitAllocatedFUs();
 
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
@@ -308,10 +302,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out.always_ff_end();
 
   Out.module_end();
-
-  // TODO: Emit testbench only user wants to.
-  DEBUG_WITH_TYPE("tb-for-rtl", emitTestBench());
-
   Out.flush();
 
   return false;
@@ -485,7 +475,7 @@ void RTLCodegen::emitAllocatedFUs() {
 
 }
 
-void RTLCodegen::emitAllRegister() {
+void RTLCodegen::emitAllSignals() {
   // We organize the registers in a module like 64 bits width ram, and we treat
   // the register number as the address of the register in the 'ram'. The
   // address of the register is always aligned with the register's size in byte,
@@ -498,6 +488,20 @@ void RTLCodegen::emitAllRegister() {
   for (VFInfo::phyreg_iterator I = FInfo->phyreg_begin(8),
        E = FInfo->phyreg_end(8); I < E; ++I)
     VM->addRegister("reg" + utostr(*I), 64);
+
+  // And Emit the wires defined in this module.
+  const std::vector<unsigned>& Wires =
+    MRI->getRegClassVirtRegs(VTM::WireRegisterClass);
+
+  for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
+       I != E; ++I) {
+    unsigned WireNum = *I;
+    const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(WireNum));
+    assert(Op && "Wire define not found!");
+    WireNum = TargetRegisterInfo::virtReg2Index(WireNum);
+    VM->addWire("wire" + utostr(WireNum), Op->getBitWidth());
+  }
+  
 }
 
 RTLCodegen::~RTLCodegen() {}
@@ -650,7 +654,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       raw_string_ostream ss(SlotPred);
       ss << " & ";
-      emitOperand(ss, Op.getOperand(0));
+      Op.getOperand(0).print(ss);
       ss.flush();
       // Emit control operation for next state.
       CtrlS.if_begin(SlotPred);
@@ -704,16 +708,16 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
 
 void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   raw_ostream &OS = VM->getControlBlockBuffer();
-  emitOperand(OS, OpCopy.getOperand(0));
+  OpCopy.getOperand(0).print(OS);
   OS << " <= ";
-  emitOperand(OS, OpCopy.getOperand(1));
+  OpCopy.getOperand(1).print(OS);
   OS << ";\n";
 }
 
 void RTLCodegen::emitOpArg(ucOp &OpArg) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
-  emitOperand(OS, OpArg.getOperand(0));
+  OpArg.getOperand(0).print(OS);
   // FIXME: Use getInputPort instead;
   OS << " <= " << VM->getCommonPort(OpArg.getOperand(1).getImm()).getName()
      << ";\n";
@@ -729,7 +733,7 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
   unsigned retChannel = OpRetVal.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
   OS << "return_value <= ";
-  emitOperand(OS, OpRetVal.getOperand(0));
+  OpRetVal.getOperand(0).print(OS);
   OS << ";\n";
 }
 
@@ -739,26 +743,26 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   DPS << "// Dirty Hack: Emit the wire define by this operation\n"
          "// some register copying operation may need this wire.\n";
   DPS << "assign ";
-  emitOperand(DPS, OpMemAccess.getOperand(0));
+  OpMemAccess.getOperand(0).print(DPS);
   DPS << " = " << VFUMemBus::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   OS << VFUMemBus::getAddrBusName(FUNum) << " <= ";
-  emitOperand(OS, OpMemAccess.getOperand(1));
+  OpMemAccess.getOperand(1).print(OS);
   OS << ";\n";
   // Assign store data.
   OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
-  emitOperand(OS, OpMemAccess.getOperand(2));
+  OpMemAccess.getOperand(2).print(OS);
   OS << ";\n";
   // And write enable.
   OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ";
-  emitOperand(OS, OpMemAccess.getOperand(3));
+  OpMemAccess.getOperand(3).print(OS);
   OS << ";\n";
   // The byte enable.
   OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
-  emitOperand(OS, OpMemAccess.getOperand(4));
+  OpMemAccess.getOperand(4).print(OS);
   OS << ";\n";
 }
 
@@ -768,72 +772,27 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   DPS << "// Dirty Hack: Emit the wire define by this operation\n"
     "// some register copying operation may need this wire.\n";
   DPS << "assign ";
-  emitOperand(DPS, OpBRam.getOperand(0));
+  OpBRam.getOperand(0).print(DPS);
   DPS << " = " << VFUBRam::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   OS << VFUBRam::getAddrBusName(FUNum) << " <= ";
-  emitOperand(OS, OpBRam.getOperand(1));
+  OpBRam.getOperand(1).print(OS);
   OS << ";\n";
   // Assign store data.
   OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
-  emitOperand(OS, OpBRam.getOperand(2));
+  OpBRam.getOperand(2).print(OS);
   OS << ";\n";
   // And write enable.
   OS << VFUBRam::getWriteEnableName(FUNum) << " <= ";
-  emitOperand(OS, OpBRam.getOperand(3));
+  OpBRam.getOperand(3).print(OS);
   OS << ";\n";
   // The byte enable.
   // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
-  //emitOperand(OS, OpBRam.getOperand(4));
+  // OpBRam.getOperand(4).print(OS);
   // OS << ";\n";
-}
-
-void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,
-                             unsigned UB, unsigned LB) {
-  switch (Operand.getType()) {
-  case MachineOperand::MO_Register: {
-    unsigned Reg = Operand.getReg();
-    // Get the one of the 64 bit registers.
-    OS << "/*reg" << Reg <<"*/ reg" << (Reg & ~0x7);
-    // Select the sub register
-    unsigned Offset = (Reg & 0x7) * 8;
-    UB = std::min(ucOperand(Operand).getBitWidth(), UB);
-    OS << verilogBitRange(UB + Offset, LB + Offset);
-
-    return;
-  }
-  case MachineOperand::MO_Metadata: {
-    MetaToken MetaOp(Operand.getMetadata());
-    assert((MetaOp.isDefWire() || MetaOp.isReadWire()) && "Bad operand!");
-
-    MachineBasicBlock *MBB = Operand.getParent()->getParent();
-    std::string WireName = MetaOp.getWireName(getStateName(MBB));
-    OS << WireName << verilogBitRange(MetaOp.getBitWidth(), 0, false);
-
-    // Emit the wire here, because it only define once, wires will never
-    // be emitted more than once.
-    if (MetaOp.isDefWire())
-      VM->addWire(WireName, MetaOp.getBitWidth());
-    
-    return;
-  }
-  case MachineOperand::MO_Immediate:
-    OS << verilogConstToStr(Operand.getImm(),
-                            ucOperand(Operand).getBitWidth(),
-                            false);
-    return;
-  case MachineOperand::MO_ExternalSymbol:
-    OS << Operand.getSymbolName();
-    return;
-  case MachineOperand::MO_MachineBasicBlock:
-    OS << getStateName(Operand.getMBB());
-    return;
-  default:
-    assert(0 && "Unknown Operand type!");
-  }
 }
 
 void RTLCodegen::emitDatapath(ucState &State) {
@@ -873,35 +832,30 @@ void RTLCodegen::emitDatapath(ucState &State) {
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
-  emitOperand(OS, UnaOp.getOperand(0));
+  UnaOp.getOperand(0).print(OS);
   OS << " = " << Operator << ' ';
-  emitOperand(OS, UnaOp.getOperand(1));
+  UnaOp.getOperand(1).print(OS);
   OS << ";\n";
 }
 
 void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
-  emitOperand(OS, BinOp.getOperand(0));
+  BinOp.getOperand(0).print(OS);
   OS << " = ";
-  emitOperand(OS, BinOp.getOperand(1));
+  BinOp.getOperand(1).print(OS);
   OS << ' ' << Operator << ' ';
-  emitOperand(OS, BinOp.getOperand(2));
+  BinOp.getOperand(2).print(OS);
   OS << ";\n";
 }
 
-std::string RTLCodegen::emitSignedOperand(MachineOperand &Op) {
+std::string RTLCodegen::emitSignedOperand(ucOperand &Op) {
   unsigned BitWidth = 0;
   switch (Op.getType()) {
   case MachineOperand::MO_Immediate:
   case MachineOperand::MO_Register:
-    BitWidth = ucOperand(Op).getBitWidth();
+    BitWidth = cast<ucOperand>(Op).getBitWidth();
     break;
-  case MachineOperand::MO_Metadata: {
-    MetaToken MDOp(Op.getMetadata());
-    BitWidth = MDOp.getBitWidth();
-    break;
-  }
   default:
     assert(0 && "Can not compute bitwidth!");
     break;
@@ -909,7 +863,7 @@ std::string RTLCodegen::emitSignedOperand(MachineOperand &Op) {
   raw_ostream &OS = VM->getDataPathBuffer();
   std::string WireName = "SignedWire" + utostr(SignedWireNum);
   OS << "wire signed" << verilogBitRange(BitWidth) << ' ' << WireName << " = ";
-  emitOperand(OS, Op);
+  Op.print(OS);
   OS << ";\n";
 
   ++SignedWireNum;
@@ -921,9 +875,9 @@ void RTLCodegen::emitOpSRA(ucOp &OpSRA) {
 
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
-  emitOperand(OS, OpSRA.getOperand(0));
+  OpSRA.getOperand(0).print(OS);
   OS << " = " << Op0 << " >>> ";
-  emitOperand(OS, OpSRA.getOperand(2));
+  OpSRA.getOperand(2).print(OS);
   OS << ";\n";
 }
 
@@ -932,18 +886,18 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
 
   OS << "assign {";
   // Carry out.
-  emitOperand(OS, OpAdd.getOperand(1));
+  OpAdd.getOperand(1).print(OS);
   OS << ", ";
   // Sum.
-  emitOperand(OS, OpAdd.getOperand(0));
+  OpAdd.getOperand(0).print(OS);
   OS << "} = ";
   // Operands.
-  emitOperand(OS, OpAdd.getOperand(2));
+  OpAdd.getOperand(2).print(OS);
   OS << " + ";
-  emitOperand(OS, OpAdd.getOperand(3));
+  OpAdd.getOperand(3).print(OS);
   OS << " + ";
   // Carry in.
-  emitOperand(OS, OpAdd.getOperand(4));
+  OpAdd.getOperand(4).print(OS);
   OS << ";\n";
 }
 
@@ -951,12 +905,12 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
   raw_ostream &OS = VM->getDataPathBuffer();
 
   OS << "assign ";
-  emitOperand(OS, OpMult.getOperand(0));
+  OpMult.getOperand(0).print(OS);
   OS << " = ";
 
-  emitOperand(OS, OpMult.getOperand(1));
+  OpMult.getOperand(1).print(OS);
   OS << " * ";
-  emitOperand(OS, OpMult.getOperand(2));
+  OpMult.getOperand(2).print(OS);
   OS << ";\n";
 }
 
@@ -969,108 +923,32 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
            LB = OpBitSlice.getOperand(3).getImm();
 
   OS << "assign ";
-  emitOperand(OS, OpBitSlice.getOperand(0));
+  OpBitSlice.getOperand(0).print(OS);
   OS << " = ";
-  emitOperand(OS, OpBitSlice.getOperand(1), UB, LB);
+  OpBitSlice.getOperand(1).print(OS, UB, LB);
   OS << ";\n";
 }
 
 void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
-  emitOperand(OS, OpBitCat.getOperand(0));
+  OpBitCat.getOperand(0).print(OS);
   OS << " = {";
   // BitCat is a binary instruction now.
-  emitOperand(OS, OpBitCat.getOperand(1));
+  OpBitCat.getOperand(1).print(OS);
   OS << ',';
-  emitOperand(OS, OpBitCat.getOperand(2));
+  OpBitCat.getOperand(2).print(OS);
   OS << "};\n";
 }
 
 void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
-  emitOperand(OS, OpBitRepeat.getOperand(0));
+  OpBitRepeat.getOperand(0).print(OS);
   OS << " = {";
 
   unsigned Times = OpBitRepeat.getOperand(2).getImm();
   OS << Times << '{';
-  emitOperand(OS, OpBitRepeat.getOperand(1));
+  OpBitRepeat.getOperand(1).print(OS);
   OS << "}};\n";
-}
-
-void RTLCodegen::emitTestBench() {
-  Out << "\n\n";
-  Out << "module tb_" << VM->getName() << ";\n\n";
-  Out.module_begin();
-  // Emit signal to drive the ports of DUT.
-  Out << "// DUT port driver.\n";
-  for (VASTModule::port_iterator I = VM->ports_begin(), E = VM->ports_end();
-       I != E; ++I) {
-    VASTPort *port = *I;
-    port->printExternalDriver(Out);
-    Out << '\n';
-  }
-
-  // Create the clock logic.
-  Out << "\n\n";
-  Out << "always ";
-  Out.enter_block("// Clock\n");
-  Out << "#5ns clk = ~clk;\n";
-  Out.exit_block();
-  Out << "\n\n";
-
-  // And the initialize block.
-  Out << "initial ";
-  Out.enter_block();
-  Out << "integer starttime = 0;\n";
-  Out << "#6ns rstN = 1'b1;\n";
-  Out << "#5ns;\n";
-  Out << "forever ";
-  Out.enter_block();
-
-  for (VASTModule::port_iterator I = VM->common_ports_begin(),
-       E = VM->ports_end(); I != E; ++I) {
-    VASTPort *port = *I;
-    if (!port->isInput())
-      continue;
-
-    const std::string &Name = port->getName();
-    Out << Name << " = $random();\n";
-  }
-
-  Out << "@(negedge clk)";
-  Out.enter_block();
-  Out << "start = 1'b1;\n";
-  Out << "starttime = $time;\n";
-  Out.exit_block();
-
-  Out <<  "@(negedge clk) start <= 1'b0;\n";
-
-  Out <<  "while (!fin)";
-  Out.enter_block();
-  Out <<  "#1ns;\n";
-  Out <<  "if ($time > 100000) $finish();\n";
-  Out.exit_block();
-
-  Out << "$display(\"total time: %t\\n\", $time - starttime);\n";
-  Out << "$finish();\n";
-
-  Out.exit_block("// end forever\n");
-  Out.exit_block("// end initialize block\n");
-  Out << "\n\n";
-  
-  // Design instance.
-  Out << "// Design instance\n";
-  Out  << VM->getName() << " dut_" << VM->getName() << "(\n";
-  Out.indent(4) << "." << VM->getPortName(0) << '('
-                << VM->getPortName(0) << ')';
-  for (unsigned I = 1, E = VM->getNumPorts(); I != E; ++I) {
-    Out << ",\n";
-    Out.indent(4) << '.' << VM->getPortName(I)
-                  << '(' << VM->getPortName(I) << ')';
-  }
-  Out << ");\n\n";
-  
-  Out.module_end();
 }
