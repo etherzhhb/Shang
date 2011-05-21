@@ -778,9 +778,11 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
-  OS << VFUBRam::getAddrBusName(FUNum) << " <= ";
+  OS << VFUBRam::getAddrBusName(FUNum) << " <= (";
   OpBRam.getOperand(1).print(OS);
-  OS << ";\n";
+  unsigned SizeInBits
+    = FInfo->getBRamInfo(OpBRam->getFUId().getFUNum()).ElemSizeInBytes;
+  OS << " >> " << Log2_32_Ceil(SizeInBits) << ");\n";
   // Assign store data.
   OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
   OpBRam.getOperand(2).print(OS);
