@@ -703,7 +703,10 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *MBB) {
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
-  DEBUG(VM->getControlBlockBuffer() << "/*IMPLICIT_DEF " << ImpDef << "*/\n");
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "// IMPLICIT_DEF ";
+  ImpDef.getOperand(0).print(OS);
+  OS << "\n";
 }
 
 void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
