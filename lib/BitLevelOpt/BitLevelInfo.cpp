@@ -72,18 +72,18 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         break;
       }
 
-      BitWidthOperand BWO(Instr);
+      BitWidthAnnotator Annotator(Instr);
       // Fix the RHS operand.
       if (isShifts) {
-        BWO.setBitWidth(Log2_32_Ceil(BWO.getBitWidth(1)), 2);
-        BWO.updateBitWidth(Instr);
+        Annotator.setBitWidth(Log2_32_Ceil(Annotator.getBitWidth(1)), 2);
+        Annotator.updateBitWidth(Instr);
       }
 
       for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
         MachineOperand &MO = Instr.getOperand(i);
         if (!MO.isReg() && !MO.isImm()) continue;
 
-        bool Changed = updateBitWidth(MO, BWO.getBitWidth(i));
+        bool Changed = updateBitWidth(MO, Annotator.getBitWidth(i));
         if (MO.isReg() && MO.isDef() && Changed)
           propagateBitWidth(MO);
       }

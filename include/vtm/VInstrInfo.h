@@ -41,16 +41,16 @@ public:
 };
 
 // Helper class for manipulating bit width operand.
-class BitWidthOperand {
+class BitWidthAnnotator {
   uint64_t Op;
 
 public:
-  explicit BitWidthOperand(uint64_t O = 0) : Op(O) {}
-  explicit BitWidthOperand(const MachineInstr &MI);
+  explicit BitWidthAnnotator(uint64_t O = 0) : Op(O) {}
+  explicit BitWidthAnnotator(const MachineInstr &MI);
 
   uint64_t get() const { return Op; }
 
-  BitWidthOperand setBitWidth(uint8_t width, unsigned Idx) {
+  BitWidthAnnotator setBitWidth(uint8_t width, unsigned Idx) {
     assert(Idx < sizeof(uint64_t) && "Index out of range!");
     uint64_t w = width;
     // Clear the corresponding bit slice.

@@ -91,7 +91,7 @@ FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
 
 void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
                                             size_t NumOps) {
-  BitWidthOperand bwo;
+  BitWidthAnnotator Annotator;
   unsigned NumDefs = 0;
 
   for (unsigned i = 0; i < N->getNumValues(); ++i) {
@@ -100,7 +100,7 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
     if (N->getValueType(i) == MVT::Other)
       continue;
 
-    bwo.setBitWidth(VTargetLowering::computeSizeInBits(SDValue(N, i)), NumDefs);
+    Annotator.setBitWidth(VTargetLowering::computeSizeInBits(SDValue(N, i)), NumDefs);
     ++NumDefs;
   }
 
@@ -108,12 +108,12 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
   for (unsigned i = 0; i < NumOps -1; ++i) {
     if (Ops[i].getValueType() == MVT::Other) continue;
     
-    bwo.setBitWidth(VTargetLowering::computeSizeInBits(Ops[i]),
+    Annotator.setBitWidth(VTargetLowering::computeSizeInBits(Ops[i]),
                     i + NumDefs); // Skip the chains.
   }
   
   // FIXME: Build the bit width information.
-  Ops[NumOps -1] = CurDAG->getTargetConstant(bwo.get(), MVT::i64);
+  Ops[NumOps -1] = CurDAG->getTargetConstant(Annotator.get(), MVT::i64);
 }
 
 SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
