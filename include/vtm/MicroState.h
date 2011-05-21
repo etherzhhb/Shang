@@ -265,6 +265,46 @@ public:
   virtual void anchor();
 };
 
+//uc Operand
+class ucOperand {
+  MachineOperand &MOperand;
+
+  static const unsigned BitwidthMask = 0x7f;
+
+public:
+  /*implicit*/ ucOperand(MachineOperand &O) : MOperand(O) {}
+
+  operator MachineOperand *() const {
+    return const_cast<MachineOperand*>(&MOperand);
+  }
+
+  MachineOperand *operator ->() const {
+    return const_cast<MachineOperand*>(&MOperand);
+  }
+
+  unsigned getBitWidthOrZero() const {
+    assert((MOperand.isImm() || MOperand.isReg())
+           && "Unsupported operand type!");
+    return MOperand.getTargetFlags() & BitwidthMask;
+  }
+
+  unsigned getBitWidth() const {
+    unsigned BitWidth = getBitWidthOrZero();
+    assert(BitWidth && "Bit width information not available!");
+    return BitWidth;
+  }
+
+  void setBitWidth(unsigned BitWidth) {
+    assert((MOperand.isImm() || MOperand.isReg())
+           && "Unsupported operand type!");
+    MOperand.setTargetFlags(BitWidth & BitwidthMask);
+    assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
+  }
+
+  /*FIXME: Get the value from the max word length*/
+  void emitOperand(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0);
+};
+
 // Print the scheduled machine code of verilog target machine, which only
 // contains VTM::Control and VTM::Datapath.
 raw_ostream &printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB);

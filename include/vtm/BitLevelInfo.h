@@ -22,17 +22,14 @@
 #ifndef VTM_BIT_LEVEL_INFO
 #define VTM_BIT_LEVEL_INFO
 
+#include "vtm/MicroState.h"
+
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
 
 namespace llvm {
 
 class BitLevelInfo : public MachineFunctionPass {
-  unsigned getBitWidthInternal(MachineOperand &MO) const {
-    assert((MO.isImm() || MO.isReg()) && "Unsupported operand type!");
-    return MO.getTargetFlags();
-  }
-
   void computeBitWidth(MachineInstr *Instr);
   void propagateBitWidth(MachineOperand &MO);
   
@@ -43,8 +40,8 @@ class BitLevelInfo : public MachineFunctionPass {
   }
 
   unsigned computeBitRepeatWidth(MachineInstr *BitRepeat) const {
-      unsigned EltWidth = getBitWidth(BitRepeat->getOperand(1)),
-        Times = BitRepeat->getOperand(2).getImm();
+      unsigned EltWidth = ucOperand(BitRepeat->getOperand(1)).getBitWidth(),
+                          Times = BitRepeat->getOperand(2).getImm();
       return EltWidth * Times;
   }
 
@@ -52,7 +49,7 @@ class BitLevelInfo : public MachineFunctionPass {
       unsigned BitWidth = 0;
       for (MachineInstr::mop_iterator I = BitCat->operands_begin() + 1,
         E = BitCat->operands_end(); I != E; ++I)
-        BitWidth += getBitWidth(*I);
+        BitWidth += ucOperand(*I).getBitWidth();
 
       return BitWidth;
   }
@@ -60,9 +57,9 @@ class BitLevelInfo : public MachineFunctionPass {
   unsigned computeByOpWithSameWidth(MachineInstr::mop_iterator I,
                                     MachineInstr::mop_iterator E) {
     assert(I != E && "The range is empty!");
-    unsigned BitWidth = getBitWidthInternal(*I);
+    unsigned BitWidth = ucOperand(*I).getBitWidth();
     while (++I != E)
-      if (unsigned Width = getBitWidthInternal(*I)) {
+      if (unsigned Width = ucOperand(*I).getBitWidth()) {
         assert ((BitWidth == 0 || BitWidth == Width)
                  && "Bit width of PHINode not match!");
         BitWidth = Width;
@@ -76,7 +73,7 @@ class BitLevelInfo : public MachineFunctionPass {
     unsigned BitWidth = 0;
     
     for (unsigned i = 1; i != PN->getNumOperands(); i += 2)
-      if (unsigned Width = getBitWidthInternal(PN->getOperand(i))) {
+      if (unsigned Width = ucOperand(PN->getOperand(i)).getBitWidthOrZero()) {
         assert ((BitWidth == 0 || BitWidth == Width)
                  && "Bit width of PHINode not match!");
         BitWidth = Width;
@@ -98,14 +95,12 @@ public:
 
   unsigned getBitWidth(unsigned R) const;
 
-  unsigned getBitWidth(MachineOperand &MO) const;
-
   bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
-    unsigned char OldBitWidth = getBitWidthInternal(MO);
+    unsigned char OldBitWidth = ucOperand(MO).getBitWidthOrZero();
     assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
             && "Bit width not convergent!");
     assert(BitWidth && "Invalid bit width!");
-    MO.setTargetFlags(BitWidth);
+    ucOperand(MO).setBitWidth(BitWidth);
 
     return OldBitWidth != BitWidth;
   }

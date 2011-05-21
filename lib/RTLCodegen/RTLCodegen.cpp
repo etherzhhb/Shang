@@ -800,7 +800,7 @@ void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     OS << "/*reg" << Reg <<"*/ reg" << (Reg & ~0x7);
     // Select the sub register
     unsigned Offset = (Reg & 0x7) * 8;
-    UB = std::min(BLI->getBitWidth(Operand), UB);
+    UB = std::min(ucOperand(Operand).getBitWidth(), UB);
     OS << verilogBitRange(UB + Offset, LB + Offset);
 
     return;
@@ -821,7 +821,9 @@ void RTLCodegen::emitOperand(raw_ostream &OS, MachineOperand &Operand,
     return;
   }
   case MachineOperand::MO_Immediate:
-    OS << verilogConstToStr(Operand.getImm(), BLI->getBitWidth(Operand), false);
+    OS << verilogConstToStr(Operand.getImm(),
+                            ucOperand(Operand).getBitWidth(),
+                            false);
     return;
   case MachineOperand::MO_ExternalSymbol:
     OS << Operand.getSymbolName();
@@ -893,7 +895,7 @@ std::string RTLCodegen::emitSignedOperand(MachineOperand &Op) {
   switch (Op.getType()) {
   case MachineOperand::MO_Immediate:
   case MachineOperand::MO_Register:
-    BitWidth = BLI->getBitWidth(Op);
+    BitWidth = ucOperand(Op).getBitWidth();
     break;
   case MachineOperand::MO_Metadata: {
     MetaToken MDOp(Op.getMetadata());
