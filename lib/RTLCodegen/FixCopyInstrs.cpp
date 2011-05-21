@@ -91,69 +91,69 @@ static MachineInstr &findPrevControl(MachineInstr &I) {
 void FixCopy::FuseCopyInstr(MachineInstr &Copy, LLVMContext &Context) {
   assert(0 && "Copy not supported yet!");
 
-  ucState Ctrl(findPrevControl(Copy));
+  //ucState Ctrl(findPrevControl(Copy));
 
-  MachineOperand &SrcOp = Copy.getOperand(1),
-                 &DstOp = Copy.getOperand(0);
+  //MachineOperand &SrcOp = Copy.getOperand(1),
+  //               &DstOp = Copy.getOperand(0);
 
-  unsigned SrcWire = 0;
+  //unsigned SrcWire = 0;
 
-  unsigned SrcReg = SrcOp.getReg(),
-           DstReg = DstOp.getReg();
+  //unsigned SrcReg = SrcOp.getReg(),
+  //         DstReg = DstOp.getReg();
 
-  // Try to set the bit width for new instert copy instruction.
-  BLI->updateBitWidth(SrcOp, BLI->getBitWidth(SrcReg));
-  BLI->updateBitWidth(DstOp, BLI->getBitWidth(SrcReg));
+  //// Try to set the bit width for new instert copy instruction.
+  //BLI->updateBitWidth(SrcOp, BLI->getBitWidth(SrcReg));
+  //BLI->updateBitWidth(DstOp, BLI->getBitWidth(SrcReg));
 
-  for (ucState::iterator I = Ctrl.begin(), E = Ctrl.end(); I != E; ++I) {
-    ucOp Op = *I;
-    for (ucOp::op_iterator MI = Op.op_begin(), ME = Op.op_end();
-         MI != ME; ++MI) {
-      MachineOperand &MO = *MI;
-      if (!MO.isReg()) continue;
-      // TODO: Overcome this!
-      assert((!MO.isUse() || MO.getReg() != DstReg || MO.isKill())
-              && "Can not fuse instruction!");
-      // Forward the wire value if necessary.
-      if (MO.isDef() && MO.getReg() == SrcReg) {
-        MachineOperand &SrcOperand = Op.getOperand(1);
-        switch (SrcOperand.getType()) {
-        case MachineOperand::MO_Metadata: {
-          MetaToken ReadWire(SrcOperand.getMetadata());
-          //assert(ReadWire.isReadWire() && "Bad operand!");
-          // SrcWire = ReadWire.getWireNum();
-          break;
-        }
-        case MachineOperand::MO_Register: {
-          // TODO: Copy the operand.
-          assert(0 && "Forwarding register value not support yet!");
-          break;
-        }
-        // TODO: Immediate for SetI operation.
-        default:
-          assert(0 && "Unknown Operand type!");
-          break;
-        }
-      }
-    }
-  }
+  //for (ucState::iterator I = Ctrl.begin(), E = Ctrl.end(); I != E; ++I) {
+  //  ucOp Op = *I;
+  //  for (ucOp::op_iterator MI = Op.op_begin(), ME = Op.op_end();
+  //       MI != ME; ++MI) {
+  //    MachineOperand &MO = *MI;
+  //    if (!MO.isReg()) continue;
+  //    // TODO: Overcome this!
+  //    assert((!MO.isUse() || MO.getReg() != DstReg || MO.isKill())
+  //            && "Can not fuse instruction!");
+  //    // Forward the wire value if necessary.
+  //    if (MO.isDef() && MO.getReg() == SrcReg) {
+  //      MachineOperand &SrcOperand = Op.getOperand(1);
+  //      switch (SrcOperand.getType()) {
+  //      case MachineOperand::MO_Metadata: {
+  //        MetaToken ReadWire(SrcOperand.getMetadata());
+  //        //assert(ReadWire.isReadWire() && "Bad operand!");
+  //        // SrcWire = ReadWire.getWireNum();
+  //        break;
+  //      }
+  //      case MachineOperand::MO_Register: {
+  //        // TODO: Copy the operand.
+  //        assert(0 && "Forwarding register value not support yet!");
+  //        break;
+  //      }
+  //      // TODO: Immediate for SetI operation.
+  //      default:
+  //        assert(0 && "Unknown Operand type!");
+  //        break;
+  //      }
+  //    }
+  //  }
+  //}
 
-  // Transfer the operands.
-  Copy.RemoveOperand(1);
-  Copy.RemoveOperand(0);
-  MachineInstrBuilder MIB(&*Ctrl);
-  // Diry hack: Temporary use the slot of the micro state.
-  MDNode *OpCode = MetaToken::createInstr(MetaToken::GeneralSlot,
-                                          TII->get(VTM::COPY), Context);
-  MIB.addMetadata(OpCode).addOperand(DstOp);
-  if (SrcWire)
-    MIB.addOperand(ucOperand::CreateWireRead(SrcWire,
-                                             cast<ucOperand>(SrcOp).getBitWidth()));
-  else
-    MIB.addOperand(SrcOp);
+  //// Transfer the operands.
+  //Copy.RemoveOperand(1);
+  //Copy.RemoveOperand(0);
+  //MachineInstrBuilder MIB(&*Ctrl);
+  //// Diry hack: Temporary use the slot of the micro state.
+  //MDNode *OpCode = MetaToken::createInstr(MetaToken::GeneralSlot,
+  //                                        TII->get(VTM::COPY), Context);
+  //MIB.addMetadata(OpCode).addOperand(DstOp);
+  //if (SrcWire)
+  //  MIB.addOperand(ucOperand::CreateWireRead(SrcWire,
+  //                                           cast<ucOperand>(SrcOp).getBitWidth()));
+  //else
+  //  MIB.addOperand(SrcOp);
 
-  // Discard the operand.
-  Copy.eraseFromParent();
+  //// Discard the operand.
+  //Copy.eraseFromParent();
 }
 
 void FixCopy::runOnMachineBasicBlock(MachineBasicBlock &MBB,

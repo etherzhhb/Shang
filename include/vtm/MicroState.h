@@ -30,78 +30,42 @@ class MachineRegisterInfo;
 class ucOpIterator;
 class ucState;
 
-class MetaToken {
-protected:
-  const MDNode *TokenNode;
-
-  StringRef getStringField(unsigned Elt) const;
-  unsigned getUnsignedField(unsigned Elt) const {
-    return (unsigned)getUInt64Field(Elt);
-  }
-  uint64_t getUInt64Field(unsigned Elt) const;
-
-public:
-  enum TokenType {
-    // Excute an instruction, instr ResourceType, ResourceID, operands ...
-    tokenInstr
-  };
-
-  explicit MetaToken() : TokenNode(0) {}
-  explicit MetaToken(const MDNode *N) : TokenNode(N) {}
-
-  bool Verify() const { return TokenNode != 0; }
-
-  operator MDNode *() const { return const_cast<MDNode*>(TokenNode); }
-  MDNode *operator ->() const { return const_cast<MDNode*>(TokenNode); }
-
-  unsigned getTag() const {  return getUnsignedField(0); }
-
-  bool isInstr() const;
-
-  unsigned getOpcode() const {
-    assert(isInstr() && "Bad token type!");
-    return getUInt64Field(3);
-  }
-  unsigned getPredSlot() const { 
-    assert(isInstr() && "Bad token type!");
-    return getUnsignedField(1);
-  }
-
-  FuncUnitId getFUId() const {
-    assert(isInstr() && "Bad token type!");
-    return FuncUnitId(getUInt64Field(2));
-  }
-
-  StringRef getInstrName() const {
-    return getStringField(4);
-  }
-
-  void print(raw_ostream &OS) const;
-  void dump() const;
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
-
-  static MDNode *createInstr(unsigned PredSlot, const MachineInstr &Instr,
-                             FuncUnitId FUId, LLVMContext &Context) {
-    return createInstr(PredSlot, Instr.getDesc(), Context, FUId);
-  }
-
-  static const unsigned GeneralSlot = 0;
-  static MDNode *createInstr(unsigned PredSlot, const TargetInstrDesc &TID,
-                             LLVMContext &Context,
-                             FuncUnitId FUId = VFUs::Trivial);
-};
-
 //uc Operand
 class ucOperand : public MachineOperand {
   static const unsigned BitwidthMask = 0x7f;
   static const unsigned IsWireFlag = 0x80;
 
+  static const unsigned IsOpcode = 0x80;
+  static const unsigned FUIDMask = 0xffff;
+  static const unsigned FUIDShiftAmount = 0x0;
+  static const unsigned PredSlotMask = 0xffff;
+  static const unsigned PredSlotShiftAmount = 0x10;
+  static const unsigned OpcodeMask = 0xffff;
+  static const unsigned OpcodeShiftAmount = 0x20;
 public:
   ///*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
 
   static bool classof(const MachineOperand *) { return true; }
+
+  bool isOpcode() const { return isImm() && (IsOpcode & getTargetFlags()); }
+  static const unsigned GeneralSlot = 0;
+  unsigned getPredSlot() const {
+    assert(isOpcode() && "Bad Operand type!");
+    uint64_t Context = getImm();
+    return (Context >> PredSlotShiftAmount) & PredSlotMask;
+  }
+
+  unsigned getOpcode() const {
+    assert(isOpcode() && "Bad Operand type!");
+    uint64_t Context = getImm();
+    return (Context >> OpcodeShiftAmount) & OpcodeMask;
+  }
+
+  FuncUnitId getFUId() const {
+    assert(isOpcode() && "Bad Operand type!");
+    uint64_t Context = getImm();
+    return FuncUnitId((Context >> FUIDShiftAmount) & FUIDMask);
+  }
 
   bool isWire() const { return isReg() && (IsWireFlag & getTargetFlags()); }
 
@@ -125,36 +89,37 @@ public:
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }
 
+  static ucOperand CreateOpcode(unsigned Opcode, unsigned PredSlot,
+                                FuncUnitId FUId = VFUs::Trivial);
   static ucOperand CreateWireDefine(MachineRegisterInfo &MRI, unsigned BitWidth);
   static ucOperand CreateWireRead(unsigned WireNum, unsigned BitWidth);
+
   /*FIXME: Get the value from the max word length*/
   void print(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0);
-};
 
-class ucOp {
-  struct OperandMapper {
+  struct Mapper {
     typedef ucOperand &result_type;
 
     ucOperand &operator()(MachineOperand &Op) const {
       return cast<ucOperand>(Op);
     }
   };
+};
 
+class ucOp {
 public:
-  typedef mapped_iterator<MachineInstr::mop_iterator, OperandMapper>
+  typedef mapped_iterator<MachineInstr::mop_iterator, ucOperand::Mapper>
           op_iterator;
 private:
-  MetaToken Token;
+  ucOperand &OpCode;
   // iterator op begin and op end.
   op_iterator rangeBegin, rangeEnd;
 
   // op begin and op end
-  ucOp(MachineInstr::mop_iterator range_begin,
-       MachineInstr::mop_iterator range_end)
-    : Token((*range_begin).getMetadata()), 
-    rangeBegin(range_begin + 1, OperandMapper()),
-    rangeEnd(range_end, OperandMapper()) {
-      assert((Token.isInstr()) && "Bad leading token!");
+  ucOp(op_iterator range_begin, op_iterator range_end)
+    : OpCode(cast<ucOperand>(*range_begin)),
+      rangeBegin(range_begin + 1), rangeEnd(range_end) {
+      assert(OpCode.isOpcode() && "Bad leading token!");
   }
   
   friend class ucOpIterator;
@@ -169,16 +134,7 @@ public:
     return *I;
   }
 
-  inline unsigned getOpCode() const {
-    return Token.getOpcode();
-  }
-
-  const MetaToken *operator->() const { return &Token; }
-
-  FuncUnitId getFUId() const {
-    assert(Token.isInstr() && "Bad token type!");
-    return Token.getFUId();
-  }
+  const ucOperand *operator->() const { return &OpCode; }
 
   void print(raw_ostream &OS) const;
   void dump() const;
@@ -194,20 +150,22 @@ static inline raw_ostream &operator<<(raw_ostream &O, const ucOp &Op) {
 }
 
 class ucOpIterator : public std::iterator<std::forward_iterator_tag,
-                                             ucOp, ptrdiff_t> {
-  MachineInstr::mop_iterator CurIt, EndIt;
+                                          ucOp, ptrdiff_t> {
+  ucOp::op_iterator CurIt, EndIt;
 
-  MachineInstr::mop_iterator getNextIt() const;
+  ucOp::op_iterator getNextIt() const;
 
   /// Create the begin iterator from a machine instruction.
   inline ucOpIterator(MachineInstr &MI)
-    : CurIt(MI.operands_begin() + 1), EndIt(MI.operands_end()){
+    : CurIt(MI.operands_begin() + 1, ucOperand::Mapper()),
+      EndIt(MI.operands_end(), ucOperand::Mapper()){
     assert(MI.getOperand(0).isImm() && "Bad bundle!");
   }
 
   /// Create the begin iterator from a machine instruction.
-  inline ucOpIterator(MachineInstr &MI, bool) : CurIt(MI.operands_end()),
-    EndIt(MI.operands_end()) {
+  inline ucOpIterator(MachineInstr &MI, bool)
+    : CurIt(MI.operands_end(), ucOperand::Mapper()),
+      EndIt(MI.operands_end(), ucOperand::Mapper()) {
     assert(MI.getOperand(0).isImm() && "Bad bundle!");
   }
 

@@ -638,7 +638,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     bool isFirstSlot = (Slot == startSlot);
     // Emit the control operation at the rising edge of the clock.
     std::string SlotPred;
-    if (Slot == MetaToken::GeneralSlot) {
+    if (Slot == ucOperand::GeneralSlot) {
       if (GenSlotPred.length() == 4) { // Build the general slot if necessary.
         for (unsigned i = State.getSlot(), e = endSlot; i <= e; i += II)
           GenSlotPred += " | " + getucStateEnable(CurBB, i - 1);
@@ -649,7 +649,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       SlotPred = getucStateEnable(CurBB, Slot - 1);
 
     // Special case for state transferring operation.
-    if (Op.getOpCode() == VTM::VOpToState) {
+    if (Op->getOpcode() == VTM::VOpToState) {
       assert(!isFirstSlot && "Can not transfer to other state at first slot!");
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       raw_string_ostream ss(SlotPred);
@@ -676,7 +676,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       CtrlS.if_begin(SlotPred);
 
     // Emit the operations.
-    switch (Op.getOpCode()) {
+    switch (Op->getOpcode()) {
     case VTM::VOpArg:       emitOpArg(Op);                break;
     case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
@@ -802,7 +802,7 @@ void RTLCodegen::emitDatapath(ucState &State) {
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
-    switch (Op.getOpCode()) {
+    switch (Op->getOpcode()) {
     case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;

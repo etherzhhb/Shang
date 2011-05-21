@@ -41,7 +41,6 @@ struct MicroStateBuilder {
   MachineBasicBlock &MBB;
   MachineBasicBlock::iterator InsertPos;
 
-  LLVMContext &VMContext;
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
   VFInfo &VFI;
@@ -100,11 +99,9 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(VSchedGraph &S, LLVMContext& Context,
-                    const TargetMachine &TM,
-                    BitLevelInfo &BitInfo)
+  MicroStateBuilder(VSchedGraph &S, BitLevelInfo &BitInfo)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  VMContext(Context), TII(*TM.getInstrInfo()),
+  TII(*MBB.getParent()->getTarget().getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
   VFI(*MBB.getParent()->getInfo<VFInfo>()), BLI(BitInfo),
   DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
@@ -241,8 +238,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     }
 
     // Export the register.
-    CtrlInst.addMetadata(MetaToken::createInstr(Slot, TII.get(VTM::COPY),
-                                                VMContext));
+    CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
     MO.setIsDef();
     CtrlInst.addOperand(MO);
     CtrlInst.addOperand(ucOperand::CreateWireRead(WD->WireNum,
@@ -259,9 +255,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
   typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
-  MDNode *OpCode = MetaToken::createInstr(A->getSlot(), Inst, A->getFUId(),
-                                          VMContext);
-  MachineOperand OpCMD = MachineOperand::CreateMetadata(OpCode);   
+  MachineOperand OpCMD = ucOperand::CreateOpcode(Inst.getOpcode(),
+                                                 A->getSlot(), A->getFUId());
   unsigned NumOperands = Inst.getNumOperands();
 
   // Drop the bit witdh operand.
@@ -392,9 +387,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     BLI.updateBitWidth(Dst, SizeInBits);
     MachineOperand Src = MachineOperand::CreateReg(RegNo, false);
     BLI.updateBitWidth(Src, SizeInBits);
-    MDNode *InstrNode
-      = MetaToken::createInstr(WD.WriteSlot, TII.get(VTM::COPY), VMContext);
-    CopyBuilder.addMetadata(InstrNode).addOperand(Dst).addOperand(Src);
+    CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
+    CopyBuilder.addOperand(Dst).addOperand(Src);
     // Update the register.
     RegNo = PipedReg;
     WD.Op = MO = Dst;
@@ -432,9 +426,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       unsigned EndSlot = VFI.getStartSlotFor(PredBB)
                          + VFI.getTotalSlotFor(PredBB);
       // Add the instruction token.
-      MDNode *InstrNode =
-        MetaToken::createInstr(EndSlot, TII.get(VTM::IMPLICIT_DEF), VMContext);
-      SetIBuilder.addMetadata(InstrNode);
+      SetIBuilder.addOperand(ucOperand::CreateOpcode(VTM::IMPLICIT_DEF,
+                                                     EndSlot));
       // Build the register operand.
       MachineOperand DstReg = MachineOperand::CreateReg(InitReg, true);
       BLI.updateBitWidth(DstReg, SizeInBits);
@@ -470,7 +463,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   preSchedTopSort();
 
   // Build bundle from schedule units.
-  MicroStateBuilder BTB(*this, MBB->getBasicBlock()->getContext(), TM, BLI);
+  MicroStateBuilder BTB(*this, BLI);
 
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *A = *I;
