@@ -292,6 +292,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
   case ISD::OR:               return SelectBinary(N, VTM::VOpOr);
   case VTMISD::Not:           return SelectUnary(N, VTM::VOpNot);
+  case ISD::SELECT:           return SelectSimpleNode(N, VTM::VOpSel);
 
   case ISD::SHL:              return SelectBinary(N, VTM::VOpSHL);
   case ISD::SRL:              return SelectBinary(N, VTM::VOpSRL);

@@ -183,6 +183,17 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
+  case VTM::VOpSel: {
+    MachineOperand &Cnd = Instr->getOperand(1);
+    updateBitWidth(Cnd, 1);
+
+    MachineOperand &Result = Instr->getOperand(0);
+    unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 2,
+      Instr->operands_begin() + 4);
+    if (updateBitWidth(Result, Width))
+      Defs.push_back(&Result);
+    break;
+  }
   // The bitwidth determinate by its first operand.
   case VTM::VOpSetRI:
   case VTM::VOpNot:

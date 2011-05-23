@@ -138,6 +138,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpSRA(ucOp &OpSRA);
 
+  void emitVOpSel(ucOp &OpSel);
+
   void emitOpAdd(ucOp &OpAdd);
   void emitOpMult(ucOp &OpMult);
 
@@ -818,6 +820,7 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
     case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
+    case VTM::VOpSel:       emitVOpSel(Op);         break;
 
     case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
     case VTM::VOpSRL:       emitBinaryOp(Op, ">>"); break;
@@ -884,6 +887,20 @@ void RTLCodegen::emitOpSRA(ucOp &OpSRA) {
   OS << " = " << Op0 << " >>> ";
   OpSRA.getOperand(2).print(OS);
   OS << ";\n";
+}
+
+void RTLCodegen::emitVOpSel(ucOp &OpSel) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  OpSel.getOperand(0).print(OS);
+  OS << " = ";
+  OpSel.getOperand(1).print(OS);
+  OS << " ? ";
+  OpSel.getOperand(2).print(OS);
+  OS << " : ";
+  OpSel.getOperand(3).print(OS);
+  OS << ";\n";
+
 }
 
 void RTLCodegen::emitOpAdd(ucOp &OpAdd) {

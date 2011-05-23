@@ -131,6 +131,8 @@ def VOpOr	   : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
 def VOpNot	 : DPTvaInst<(outs DR:$dst), (ins DR:$src), 
 						              "$dst = ~ $src", []>;
 
+def VOpSel	 : DPTvaInst<(outs DR:$dst), (ins DR:$cnd, DR:$src0, DR:$src1),
+						              "$dst = $cnd?$src0:$src1", []>;
 
 // Reduction operation.
 def VOpRAnd	 : DPTvaInst<(outs DR:$dst), (ins DR:$src), 
