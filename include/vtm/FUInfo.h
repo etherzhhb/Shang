@@ -197,6 +197,7 @@ public:
 
 template<enum VFUs::FUTypes T>
 class VSimpleFUDesc : public VFUDesc {
+public:
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   template<enum VFUs::FUTypes OtherT>
   static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
