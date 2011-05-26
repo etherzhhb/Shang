@@ -45,7 +45,7 @@ Pass *createVPreRegAllocSchedPass();
 FunctionPass *createSimpleRegisterAllocator();
 
 // Fix copy instruction after register allocation
-Pass *createFixCopyPass();
+Pass *createCopyEliminationPass();
 
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
