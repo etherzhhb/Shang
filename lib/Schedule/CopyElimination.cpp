@@ -51,7 +51,7 @@ struct CopyElimination : public MachineFunctionPass{
 
   void EliminateCopy(MachineInstr &Copy);
 
-  bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
+  bool runOnMachineBasicBlock(MachineBasicBlock &MBB, MachineFunction &MF);
 
   bool runOnMachineFunction(MachineFunction &MF) {
     bool Changed = false;
@@ -61,7 +61,7 @@ struct CopyElimination : public MachineFunctionPass{
 
     for (MachineFunction::iterator I = MF.begin(), E = MF.end();
          I != E; ++I)
-      Changed |= runOnMachineBasicBlock(*I);
+      Changed |= runOnMachineBasicBlock(*I, MF);
 
     return Changed;
   }
@@ -138,9 +138,11 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
   Copy.eraseFromParent();
 }
 
-bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
+bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB,
+                                             MachineFunction &MF) {
   DEBUG(dbgs() << MBB.getName() << " After register allocation:\n");
-  SmallVector<MachineInstr*, 8> Copys;
+  typedef SmallVector<MachineInstr*, 16> IListTy;
+  IListTy Worklist;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
       I != E; ++I) {
     MachineInstr *Instr = I;
@@ -150,7 +152,7 @@ bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
       DEBUG(ucState(*Instr).dump());
       break;
     case VTM::COPY:
-      Copys.push_back(Instr);
+      Worklist.push_back(Instr);
       // fall through to dump the instruction.
     case VTM::EndState:
       DEBUG(Instr->dump());
@@ -162,9 +164,26 @@ bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
     }
   }
 
-  bool Changed = !Copys.empty();
-  while (!Copys.empty())
-    EliminateCopy(*Copys.pop_back_val());
+  bool Changed = !Worklist.empty();
+  for (IListTy::iterator I = Worklist.begin(), E = Worklist.end(); I != E; ++I){
+    MachineInstr *Copy = *I;
+    if (Copy != MBB.begin()) {
+      EliminateCopy(*Copy);
+      continue;
+    }
+
+    // Move the copy at the beginning of the block to the end of the
+    // predecessors of the current block.
+    typedef MachineBasicBlock::pred_iterator pred_it;
+    for (pred_it PI = MBB.pred_begin(), PE = MBB.pred_end(); PI != PE; ++PI) {
+      MachineBasicBlock *PredBB = *PI;
+      MachineInstr *NewCopy = MF.CloneMachineInstr(Copy);
+      PredBB->insert(PredBB->getFirstTerminator(), NewCopy);
+      EliminateCopy(*NewCopy);
+    }
+
+    Copy->eraseFromParent();
+  }
 
   DEBUG(dbgs() << MBB.getName() << " After copy fixed:\n";
         printVMBB(dbgs(), MBB);
