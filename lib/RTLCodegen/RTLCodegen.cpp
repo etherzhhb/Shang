@@ -300,9 +300,13 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   // Case default.
   Out << "default:  NextFSMState <= state_idle;\n";
   Out.switch_end();
-  Out.exit_block("// end ready\n");
-  Out.always_ff_end();
+  Out.else_begin("// else disable all resources\n");
+  for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
+       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I)
+    Out << VFUMemBus::getEnableName(I->getFUNum()) << " <= 1'b0;\n";
 
+  Out.exit_block("// end control block\n");
+  Out.always_ff_end();
   Out.module_end();
   Out.flush();
 
@@ -597,7 +601,7 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
 
   unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
   for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-         E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
     FuncUnitId Id = *I;
     // Build the ready predicate for waiting membus ready.
     // We expect all operation will finish before the FSM jump to another state,

@@ -182,7 +182,7 @@ let mayLoad		  = 1,
 def VOpMemTrans : FUInst<(outs DR:$dst),
 							           (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
 							            "$dst = memtrans $src, $addr, $isStore, $byteenable",
-							            [], FUMemBus, 1, 1, 0>;
+							            [], FUMemBus, 1, 0, 0>;
 
 def VOpBRam : FUInst<(outs DR:$dst),
 							       (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable,
