@@ -44,7 +44,7 @@ class ucOperand : public MachineOperand {
   static const unsigned OpcodeMask = 0xffff;
   static const unsigned OpcodeShiftAmount = 0x20;
 public:
-  ///*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
+  /*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
 
   static bool classof(const MachineOperand *) { return true; }
 

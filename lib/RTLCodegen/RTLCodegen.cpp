@@ -748,12 +748,6 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
 
 void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   unsigned FUNum = OpMemAccess->getFUId().getFUNum();
-  raw_ostream &DPS = VM->getDataPathBuffer();
-  DPS << "// Dirty Hack: Emit the wire define by this operation\n"
-         "// some register copying operation may need this wire.\n";
-  DPS << "assign ";
-  OpMemAccess.getOperand(0).print(DPS);
-  DPS << " = " << VFUMemBus::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
@@ -777,12 +771,6 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
 
 void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   unsigned FUNum = OpBRam->getFUId().getFUNum();
-  raw_ostream &DPS = VM->getDataPathBuffer();
-  DPS << "// Dirty Hack: Emit the wire define by this operation\n"
-    "// some register copying operation may need this wire.\n";
-  DPS << "assign ";
-  OpBRam.getOperand(0).print(DPS);
-  DPS << " = " << VFUBRam::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();

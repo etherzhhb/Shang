@@ -53,11 +53,11 @@ struct MicroStateBuilder {
   struct WireDef {
     unsigned WireNum;
     const char *SymbolName;
-    MachineOperand Op;
+    ucOperand Op;
     unsigned EmitSlot;
     unsigned WriteSlot;
 
-    WireDef(unsigned wireNum, const char *Symbol, MachineOperand op,
+    WireDef(unsigned wireNum, const char *Symbol, ucOperand op,
             unsigned emitSlot, unsigned writeSlot)
       : WireNum(wireNum), SymbolName(Symbol), Op(op), EmitSlot(emitSlot),
       WriteSlot(writeSlot) {}
@@ -65,6 +65,12 @@ struct MicroStateBuilder {
     bool isSymbol() const { return SymbolName != 0; }
     
     MachineOperand getOperand() const { return Op; }
+
+    MachineOperand createOperand() const {
+      if (isSymbol()) return MachineOperand::CreateES(SymbolName);
+
+      return ucOperand::CreateWireRead(WireNum, Op.getBitWidth());
+    }
   };
 
   inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand MO,
@@ -240,9 +246,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     // Export the register.
     CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
     MO.setIsDef();
-    CtrlInst.addOperand(MO);
-    CtrlInst.addOperand(ucOperand::CreateWireRead(WD->WireNum,
-                                                  cast<ucOperand>(MO).getBitWidth()));
+    CtrlInst.addOperand(MO).addOperand(WD->createOperand());
     ++I;
   }
 
@@ -352,11 +356,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
 
-    if (WDef.isSymbol())
-      Ops[i] = MachineOperand::CreateES(WDef.SymbolName);
-    else
-      Ops[i] = ucOperand::CreateWireRead(WDef.WireNum,
-                                         cast<ucOperand>(MO).getBitWidth());
+    Ops[i] = WDef.createOperand();
   }
 
   MachineInstrBuilder Builder;
