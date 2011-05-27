@@ -105,6 +105,9 @@ public:
       ((getTSFlags() >> ResTypeShiftAmount) & ResTypeMask);
   }
 
+  // Can the copy be fused into control block?
+  bool canCopyBeFused() const;
+
   bool hasTrivialFU() const { return getFUType() == VFUs::Trivial; }
 
   inline unsigned getTrivialLatency() const {

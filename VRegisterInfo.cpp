@@ -90,7 +90,7 @@ bool VRegisterInfo::needsStackRealignment(const MachineFunction &) const {
 VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
                              const TargetLowering &tli)
   : TargetRegisterInfo(RegisterDescriptors, MaxPhyRegs, 
-                       RegisterClasses, RegisterClasses+2,
+                       RegisterClasses, array_endof(RegisterClasses),
                        SubRegIndexTable,
                        -1, -1,
                        SubregHashTable, SubregHashTableSize,

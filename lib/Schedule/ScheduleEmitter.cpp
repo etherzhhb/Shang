@@ -304,7 +304,9 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     unsigned RegNo = MO.getReg();
 
     // Remember the defines.
-    if (MO.isDef() && EmitSlot != WriteSlot) {
+    // DiryHack: Do not emit write define for copy since copy is write at
+    // control block.
+    if (MO.isDef() && EmitSlot != WriteSlot && !Inst.isCopy()) {
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
@@ -458,8 +460,8 @@ void VSchedGraph::preSchedTopSort() {
 
 MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
   unsigned CurSlot = startSlot;
-  VFInfo *VFI = MBB->getParent()->getInfo<VFInfo>();
-
+  MachineFunction *MF = MBB->getParent();
+  VFInfo *VFI = MF->getInfo<VFInfo>();
   preSchedTopSort();
 
   // Build bundle from schedule units.
@@ -482,12 +484,12 @@ MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
 
     if (MachineInstr *Inst = A->getFirstInstr()) {
       // Ignore some instructions.
-      switch (Inst->getOpcode()) {
-      case TargetOpcode::PHI:
+      if (Inst->isPHI()) {
         assert(BTB.emitQueueEmpty() && "Unexpected atom before PHI.");
-        // Do not touch the PHIs, leave them at the beginning of the BB.
         continue;
-      case TargetOpcode::COPY:
+      }
+
+      if (Inst->isCopy() && !VInstr(*Inst).canCopyBeFused()) {
         // TODO: move this to MicroStateBuilder.
         MBB->remove(Inst);
         BTB.defereSUnit(A);

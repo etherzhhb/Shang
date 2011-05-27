@@ -159,20 +159,20 @@ let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
 let isCommutable       = 1 in
 def VOpAdd : FUInst<(outs DR:$dst, DR:$co),
-			        (ins DR:$src1, DR:$src2, DR:$ci),
+			        (ins RADD:$src1, RADD:$src2, RADD:$ci),
 					            "{$dst, $co} = $src1 + $src2 + $ci;",
 								 [], FUAddSub>;
 def VOpMult : FUInst<(outs DR:$dst),
-			         (ins DR:$src1, DR:$src2),
+			         (ins RMUL:$src1, RMUL:$src2),
 					            "$dst = $src1 * $src2;",
 								 [], FUMult>;
 
-def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+def VOpSHL : FUInst<(outs DR:$dst), (ins RSHT:$src0, RSHT:$src1),
                      "$dst = shl $src0, $src1", [], FUSHIFT>;
-def VOpSRL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+def VOpSRL : FUInst<(outs DR:$dst), (ins RSHT:$src0, RSHT:$src1),
                      "$dst = lsr $src0, $src1", [], FUSHIFT>;
 
-def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+def VOpSRA : FUInst<(outs DR:$dst), (ins RSHT:$src0, RSHT:$src1),
                      "$dst = sra $src0, $src1", [], FUSHIFT>;
 }
 

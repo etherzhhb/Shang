@@ -80,5 +80,18 @@ bool VInstr::mayStore() const {
   }
 }
 
+bool VInstr::canCopyBeFused() const {
+  assert(I.isCopy() && "canCopyBeFused called on the wrong instruction!");
+  if (I.getOperand(1).isImm()) return true;
+
+  assert(I.getParent() && "Expected instruction embedded in machine function!");
+  const MachineRegisterInfo &MRI = I.getParent()->getParent()->getRegInfo();
+  unsigned DstReg = I.getOperand(0).getReg(),
+           SrcReg = I.getOperand(1).getReg();
+
+  // Later pass can not eliminate the non-trivial copy, so it should be fused.
+  return MRI.getRegClass(DstReg) != MRI.getRegClass(SrcReg);
+}
+
 // Out of line virtual function to provide home for the class.
 void VInstr::anchor() {}

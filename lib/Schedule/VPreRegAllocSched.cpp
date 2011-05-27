@@ -249,7 +249,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
                                     State.getLoopOpSlot());
   }
 
-  return false;
+  return true;
 }
 
 
