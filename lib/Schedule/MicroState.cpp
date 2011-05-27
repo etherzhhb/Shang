@@ -25,6 +25,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
 
@@ -89,6 +90,30 @@ void ucState::dump() const {
 // Out of line virtual function to provide home for the class.
 void ucState::anchor() {}
 
+ucOp ucOperand::getucParent() {
+  MachineInstr *MI = getParent();
+
+  bool OpLocated = false;
+  MachineInstr::mop_iterator IStart = MI->operands_begin(),
+                             IEnd = MI->operands_end();
+  for (MachineInstr::mop_iterator I = MI->operands_begin(),
+       E = MI->operands_end(); I != E; ++I) {
+    ucOperand &Op = cast<ucOperand>(*I);
+    if (Op.isOpcode()) {
+      if (!OpLocated) IStart = I;
+      else {
+        IEnd = I;
+        break;
+      }
+    } else
+      OpLocated = (&Op == this);
+  }
+
+  assert(OpLocated && "Broken MI found!");
+  return ucOp(ucOp::op_iterator(IStart, ucOperand::Mapper()),
+              ucOp::op_iterator(IEnd, ucOperand::Mapper()));
+}
+
 ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                   FuncUnitId FUId /*= VFUs::Trivial*/) {
   uint64_t Context = 0x0;
@@ -107,7 +132,7 @@ ucOperand ucOperand::CreateWireDefine(MachineRegisterInfo &MRI,
   unsigned WireNum = MRI.createVirtualRegister(VTM::WireRegisterClass);
   ucOperand MO = cast<ucOperand>(MachineOperand::CreateReg(WireNum, true));
   MO.setBitWidth(BitWidth, true);
-  MO.setIsEarlyClobber();
+  //MO.setIsEarlyClobber();
   return MO;
 }
 
@@ -124,8 +149,17 @@ void ucOperand::print(raw_ostream &OS,
     unsigned Reg = getReg();
     UB = std::min(getBitWidth(), UB);
     unsigned Offset = 0;
-    if (isWire()) {
-      OS << "wire" << TargetRegisterInfo::virtReg2Index(Reg);
+    if (TargetRegisterInfo::isVirtualRegister(Reg)) {
+      if (isWire()) OS << "wire";
+      else {
+        MachineRegisterInfo &MRI
+          = getParent()->getParent()->getParent()->getRegInfo();
+        const TargetRegisterClass *RC = MRI.getRegClass(Reg);
+        OS << "/*" << RC->getName() << "*/ ";
+        OS << "reg";
+      }
+      OS << TargetRegisterInfo::virtReg2Index(Reg);
+      OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     } else {
       //assert(TargetRegisterInfo::isPhysicalRegister(Reg)
       //       && "Unexpected virtual register!");
@@ -133,10 +167,8 @@ void ucOperand::print(raw_ostream &OS,
       OS << "/*reg" << Reg <<"*/ reg" << (Reg & ~0x7);
       // Select the sub register
       Offset = (Reg & 0x7) * 8;
+      OS << verilogBitRange(UB + Offset, LB + Offset, true);
     }
-    // If the operand is a wire and has only 1 bit, do not print the bit
-    // range.
-    OS << verilogBitRange(UB + Offset, LB + Offset, !isWire());
     return;
   }
   case MachineOperand::MO_Immediate:
@@ -161,7 +193,7 @@ raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
       ucState(*Instr).print(OS);
       break;
     default:
-      OS << "MI: ";
+      OS << "OI: ";
       Instr->print(OS);
       break;
     }

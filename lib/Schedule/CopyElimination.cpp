@@ -115,12 +115,8 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
       // Forward the wire value if necessary.
       if (MO.isDef() && MO.getReg() == SrcReg) {
         assert(Op->getOpcode() == VTM::COPY && "Can only forward copy!");
-        ucOperand &FwdOp = Op.getOperand(1);
-        if (FwdOp.isWire()) {
-          SrcOp = ucOperand::CreateWireRead(FwdOp.getReg(), FwdOp.getBitWidth());
-          continue;
-        }
-        assert(0 && "Verilog backend do not know how to handle this!");
+        SrcOp = Op.getOperand(1);
+        continue;
       }
     }
   }
@@ -144,23 +140,13 @@ bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB,
   typedef SmallVector<MachineInstr*, 16> IListTy;
   IListTy Worklist;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
-      I != E; ++I) {
+       I != E; ++I) {
     MachineInstr *Instr = I;
-    switch (Instr->getOpcode()) {
-    case VTM::Control:
-    case VTM::Datapath:
-      DEBUG(ucState(*Instr).dump());
-      break;
-    case VTM::COPY:
+
+    DEBUG(ucState(*Instr).dump());
+
+    if (Instr->isCopy()) {
       Worklist.push_back(Instr);
-      // fall through to dump the instruction.
-    case VTM::EndState:
-      DEBUG(Instr->dump());
-      break;
-    default:
-      DEBUG(Instr->dump());
-      assert(0 && "Unexpected instruction!");
-      break;
     }
   }
 

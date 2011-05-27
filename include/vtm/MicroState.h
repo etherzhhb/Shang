@@ -29,6 +29,7 @@ namespace llvm {
 class MachineRegisterInfo;
 class ucOpIterator;
 class ucState;
+class ucOp;
 
 //uc Operand
 class ucOperand : public MachineOperand {
@@ -89,6 +90,8 @@ public:
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }
 
+  ucOp getucParent();
+
   static ucOperand CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                 FuncUnitId FUId = VFUs::Trivial);
   static ucOperand CreateWireDefine(MachineRegisterInfo &MRI, unsigned BitWidth);
@@ -123,6 +126,7 @@ private:
   }
   
   friend class ucOpIterator;
+  friend class ucOperand;
 public:
   op_iterator op_begin() const { return rangeBegin; }
 
@@ -170,6 +174,7 @@ class ucOpIterator : public std::iterator<std::forward_iterator_tag,
   }
 
   friend class ucState;
+  friend class ucOperand;
 public:
   inline bool operator==(const ucOpIterator& x) const {
     return CurIt == x.CurIt;
