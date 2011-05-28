@@ -48,6 +48,11 @@ void BitLevelInfo::getAnalysisUsage(AnalysisUsage &AU) const {
 bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
 
+  VFInfo *VFI = MF.getInfo<VFInfo>();
+  // No need to run the pass if bitwidth information not available anymore.
+  if (!VFI->isBitWidthAnnotated())
+    return false;
+
   // Annotate the bit width information to target flag.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();
        BI != BE; ++BI)
@@ -59,12 +64,14 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       default: break;
       case VTM::IMPLICIT_DEF: {
         // DirtyHack: Set the bit width of implicit define value to 64.
-        ucOperand Op = Instr.getOperand(0);
+        ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
         Op.setBitWidth(64);
       } // Fall through
       case VTM::COPY:     case VTM::PHI:
         // Fall through
       case VTM::Control:  case VTM::Datapath:
+      // No need to compute bitwidth for return void instruction.
+      case VTM::VOpRet:
         continue;
       case VTM::VOpSRA:
       case VTM::VOpSRL:
@@ -74,6 +81,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       }
 
       BitWidthAnnotator Annotator(Instr);
+
       // Fix the RHS operand.
       if (isShifts) {
         Annotator.setBitWidth(Log2_32_Ceil(Annotator.getBitWidth(1)), 2);
@@ -88,10 +96,16 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         if (MO.isReg() && MO.isDef() && Changed)
           propagateBitWidth(MO);
       }
+
+      Annotator.changeToDefaultPred();
     }
 
   DEBUG(dbgs() << "---------- After bit width annotation.\n");
   DEBUG(MF.dump());
+
+  // Tell the MachineFunctionInfo that we had changed all annotators to default
+  // predicate operand.
+  VFI->removeBitWidthAnnotators();
   return false;
 }
 

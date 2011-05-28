@@ -93,12 +93,20 @@ private:
   const SynSettings *Info;
   // Rtl module.
   VASTModule Mod;
+  // If bit width information annotated to the annotator?
+  bool BitWidthAnnotated;
 public:
   explicit VFInfo(MachineFunction &MF)
     : TotalRegs(fistPhyReg),
       Info(getSynSetting(MF.getFunction()->getName())),
-      Mod(Info->getModName())
+      Mod(Info->getModName()), BitWidthAnnotated(true)
   {}
+
+  bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
+  void removeBitWidthAnnotators() {
+    assert(isBitWidthAnnotated() && "Annotators arealy removed!");
+    BitWidthAnnotated = false;
+  }
 
   const SynSettings &getInfo() const { return *Info; }
 

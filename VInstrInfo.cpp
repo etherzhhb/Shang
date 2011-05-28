@@ -54,22 +54,23 @@ FuncUnitId VInstr::getPrebindFUId()  const {
 
 
 BitWidthAnnotator::BitWidthAnnotator(MachineInstr &MI)
-  : MO(&MI.getOperand(MI.getNumOperands() - 1)), BitWidths(MO->getImm()) {
-  assert(hasBitWidthInfo() && "BitWidthAnnotator not available anymore!");
+  : MO(&MI.getOperand(MI.getNumOperands() - 1)) {
+  assert(hasBitWidthInfo() && "Bitwidth not available!");
+  BitWidths = MO->getImm();
 }
 
 void BitWidthAnnotator::updateBitWidth() {
-  assert(MO && "Cannot update bit width!");
+  assert(MO && hasBitWidthInfo() && "Cannot update bit width!");
   MO->setImm(BitWidths);
 }
 
 bool BitWidthAnnotator::hasBitWidthInfo() const {
-  assert(MO && "MachineOperand not available");
-  return MO->getTargetFlags() == 0;
+  assert(MO && "MachineOperand not available!");
+  return MO->isImm();
 }
 
 void BitWidthAnnotator::changeToDefaultPred() {
-
+  MO->ChangeToRegister(0, false);
 }
 
 bool VInstr::mayLoad() const {
