@@ -78,7 +78,8 @@ Pass *llvm::createCopyEliminationPass() {
 static MachineInstr &findPrevControl(MachineInstr &I) {
   MachineBasicBlock *MBB = I.getParent();
   MachineBasicBlock::iterator It = I;
-  assert(I.getNextNode()->getOpcode() == VTM::EndState
+  assert(I.getNextNode()->getOpcode() != VTM::Datapath
+         && I.getNextNode()->getOpcode() != VTM::Control
          && "Can not handle copy in the middle of the block!");
   do {
     --It;
