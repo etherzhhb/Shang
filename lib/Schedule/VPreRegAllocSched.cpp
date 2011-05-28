@@ -21,9 +21,9 @@
 #include "VSUnit.h"
 #include "SchedulingBase.h"
 
-#include "vtm/BitLevelInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
+#include "vtm/BitLevelInfo.h"
 #include "vtm/VTM.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -62,7 +62,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // The loop Info
   MachineRegisterInfo *MRI;
   VFInfo *FInfo;
-  BitLevelInfo *BLI;
 
   TargetData *TD;
 
@@ -211,11 +210,12 @@ Pass *llvm::createVPreRegAllocSchedPass() {
 void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<LoopInfo>();
+  AU.addPreserved<LoopInfo>();
   AU.addRequired<ScalarEvolution>();
+  AU.addPreserved<ScalarEvolution>();
   AU.addRequired<MachineLoopInfo>();
-  AU.addRequired<BitLevelInfo>();
   AU.addRequired<AliasAnalysis>();
-  // AU.addRequired<MemDepInfo>();
+  AU.addPreserved<AliasAnalysis>();
   AU.setPreservesCFG();
   AU.addPreserved<BitLevelInfo>();
 }
@@ -225,7 +225,6 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   FInfo = MF.getInfo<VFInfo>();
-  BLI = &getAnalysis<BitLevelInfo>();
   AA = &getAnalysis<AliasAnalysis>();
   LI = &getAnalysis<MachineLoopInfo>();
   IRLI = &getAnalysis<LoopInfo>();
@@ -243,7 +242,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     setTotalCycle(State.getEndSlot() + 1);
     DEBUG(State.viewGraph());
 
-    State.emitSchedule(*BLI);
+    State.emitSchedule();
     FInfo->remeberTotalSlot(MBB, State.getStartSlot(),
                                     State.getTotalSlot(),
                                     State.getLoopOpSlot());
@@ -589,7 +588,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       // FIXME: Setup the bit-width flag.
       MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
         .addImm(1).addMBB(*MBB->succ_begin()).addReg(0);
-      BLI->updateBitWidth(Term.getOperand(0), 1);
+      cast<ucOperand>(Term.getOperand(0)).setBitWidth(1);
 
       State.eatTerminator(VInstr(Term));
     }

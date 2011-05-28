@@ -623,7 +623,7 @@ public:
 
   void schedule();
   
-  MachineBasicBlock *emitSchedule(BitLevelInfo &BLI);
+  MachineBasicBlock *emitSchedule();
   //}
 };
 

@@ -44,7 +44,6 @@ struct MicroStateBuilder {
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
   VFInfo &VFI;
-  BitLevelInfo &BLI;
 
   SmallVector<VSUnit*, 8> SUnitsToEmit;
   SmallVector<VSUnit*, 8> DeferredSUnits;
@@ -104,11 +103,11 @@ struct MicroStateBuilder {
   typedef std::map<unsigned, WireDef> SWDMapTy;
   SWDMapTy StateWireDefs;
 
-  MicroStateBuilder(VSchedGraph &S, BitLevelInfo &BitInfo)
+  MicroStateBuilder(VSchedGraph &S)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
   TII(*MBB.getParent()->getTarget().getInstrInfo()),
   MRI(MBB.getParent()->getRegInfo()),
-  VFI(*MBB.getParent()->getInfo<VFInfo>()), BLI(BitInfo),
+  VFI(*MBB.getParent()->getInfo<VFInfo>()),
   DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
   StateCtrls(State.getII() + 1), StateDatapaths(State.getII()) {}
 
@@ -180,7 +179,7 @@ struct MicroStateBuilder {
   void fuseInstr(MachineInstr &Inst, VSUnit *A);
 
   MachineOperand getRegUseOperand(WireDef &WD, unsigned EmitSlot, bool IsCtrl,
-                                  MachineOperand MO);
+                                  ucOperand MO);
 
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
@@ -383,9 +382,9 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 }
 
 MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlot,
-                                                   bool IsCtrl, MachineOperand MO) {
+                                                   bool IsCtrl, ucOperand MO) {
   unsigned RegNo = WD.getOperand().getReg();
-  unsigned SizeInBits = cast<ucOperand>(MO).getBitWidth();
+  unsigned SizeInBits = MO.getBitWidth();
   const TargetRegisterClass *RC = MRI.getRegClass(RegNo);
 
   // Move the value to a new register otherwise the it will be overwritten.
@@ -394,10 +393,10 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     MachineInstrBuilder CopyBuilder(&Ctrl);
     WD.WriteSlot += State.getII();
     unsigned PipedReg = MRI.createVirtualRegister(RC);
-    MachineOperand Dst = MachineOperand::CreateReg(PipedReg, true);
-    BLI.updateBitWidth(Dst, SizeInBits);
-    MachineOperand Src = MachineOperand::CreateReg(RegNo, false);
-    BLI.updateBitWidth(Src, SizeInBits);
+    ucOperand Dst = MachineOperand::CreateReg(PipedReg, true);
+    Dst.setBitWidth(SizeInBits);
+    ucOperand Src = MachineOperand::CreateReg(RegNo, false);
+    Src.setBitWidth(SizeInBits);
     CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
     CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.PredReg));
     CopyBuilder.addOperand(Dst).addOperand(Src);
@@ -442,8 +441,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
                                                      EndSlot));
       SetIBuilder.addOperand(ucOperand::CreatePredicate());
       // Build the register operand.
-      MachineOperand DstReg = MachineOperand::CreateReg(InitReg, true);
-      BLI.updateBitWidth(DstReg, SizeInBits);
+      ucOperand DstReg = MachineOperand::CreateReg(InitReg, true);
+      DstReg.setBitWidth(SizeInBits);
       SetIBuilder.addOperand(DstReg);
       SSAUpdate.AddAvailableValue(PredBB, InitReg);
     }
@@ -451,7 +450,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     unsigned NewReg = SSAUpdate.GetValueInMiddleOfBlock(&MBB);
     
     MO = MachineOperand::CreateReg(NewReg, false);
-    BLI.updateBitWidth(MO, SizeInBits);
+    MO.setBitWidth(SizeInBits);
   }
 
   MO.setIsUse();
@@ -469,14 +468,14 @@ void VSchedGraph::preSchedTopSort() {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 }
 
-MachineBasicBlock *VSchedGraph::emitSchedule(BitLevelInfo &BLI) {
+MachineBasicBlock *VSchedGraph::emitSchedule() {
   unsigned CurSlot = startSlot;
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
   preSchedTopSort();
 
   // Build bundle from schedule units.
-  MicroStateBuilder BTB(*this, BLI);
+  MicroStateBuilder BTB(*this);
 
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *A = *I;
