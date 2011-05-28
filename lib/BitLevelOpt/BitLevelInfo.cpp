@@ -57,10 +57,11 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       bool isShifts = false;
       switch (Instr.getOpcode()) {
       default: break;
-      case VTM::IMPLICIT_DEF:
+      case VTM::IMPLICIT_DEF: {
         // DirtyHack: Set the bit width of implicit define value to 64.
-        Instr.getOperand(0).setTargetFlags(64);
-        // Fall through
+        ucOperand Op = Instr.getOperand(0);
+        Op.setBitWidth(64);
+      } // Fall through
       case VTM::COPY:     case VTM::PHI:
         // Fall through
       case VTM::Control:  case VTM::Datapath:
@@ -76,7 +77,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       // Fix the RHS operand.
       if (isShifts) {
         Annotator.setBitWidth(Log2_32_Ceil(Annotator.getBitWidth(1)), 2);
-        Annotator.updateBitWidth(Instr);
+        Annotator.updateBitWidth();
       }
 
       for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {

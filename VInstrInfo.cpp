@@ -53,16 +53,24 @@ FuncUnitId VInstr::getPrebindFUId()  const {
 }
 
 
-BitWidthAnnotator::BitWidthAnnotator(const MachineInstr &MI)
-  : Op(MI.getOperand(MI.getNumOperands() - 1).getImm()) {}
-
-void BitWidthAnnotator::updateBitWidth(MachineInstr &MI) {
-  MI.getOperand(MI.getNumOperands() - 1).setImm(Op);
+BitWidthAnnotator::BitWidthAnnotator(MachineInstr &MI)
+  : MO(&MI.getOperand(MI.getNumOperands() - 1)), BitWidths(MO->getImm()) {
+  assert(hasBitWidthInfo() && "BitWidthAnnotator not available anymore!");
 }
 
+void BitWidthAnnotator::updateBitWidth() {
+  assert(MO && "Cannot update bit width!");
+  MO->setImm(BitWidths);
+}
 
-// Out of line virtual function to provide home for the class.
-void BitWidthAnnotator::anchor() {}
+bool BitWidthAnnotator::hasBitWidthInfo() const {
+  assert(MO && "MachineOperand not available");
+  return MO->getTargetFlags() == 0;
+}
+
+void BitWidthAnnotator::changeToDefaultPred() {
+
+}
 
 bool VInstr::mayLoad() const {
   switch (getTID().Opcode) {

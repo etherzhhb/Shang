@@ -42,34 +42,37 @@ public:
 
 // Helper class for manipulating bit width operand.
 class BitWidthAnnotator {
-  uint64_t Op;
-
+  MachineOperand *MO;
+  uint64_t BitWidths;
 public:
-  explicit BitWidthAnnotator(uint64_t O = 0) : Op(O) {}
-  explicit BitWidthAnnotator(const MachineInstr &MI);
+  explicit BitWidthAnnotator(uint64_t O = 0) : MO(0), BitWidths(O){}
+  explicit BitWidthAnnotator(MachineInstr &MI);
 
-  uint64_t get() const { return Op; }
+  uint64_t get() const { return BitWidths; }
 
   BitWidthAnnotator setBitWidth(uint8_t width, unsigned Idx) {
     assert(Idx < sizeof(uint64_t) && "Index out of range!");
     uint64_t w = width;
     // Clear the corresponding bit slice.
-    Op &= ~((uint64_t)0xff << (Idx * 8));
+    BitWidths &= ~((uint64_t)0xff << (Idx * 8));
     // Assign the value to the bit slice.
-    Op |= w << (Idx * 8);
+    BitWidths |= w << (Idx * 8);
     return *this;
   }
 
   uint8_t getBitWidth(unsigned Idx) const {
     assert(Idx < sizeof(uint64_t) && "Index out of range!");
-    uint64_t w = Op;
+    uint64_t w = BitWidths;
     return w >> (Idx * 8);
   }
 
-  void updateBitWidth(MachineInstr &MI);
+  void updateBitWidth();
 
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
+  bool hasBitWidthInfo() const;
+
+  // The BitWidthAnnotator is defined as predicate operand in fact, after we
+  // read the bitwidth information, change it back to predicate operand.
+  void changeToDefaultPred();
 };
 
 class VInstr {
