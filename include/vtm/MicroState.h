@@ -97,6 +97,8 @@ public:
   static ucOperand CreateWireDefine(MachineRegisterInfo &MRI, unsigned BitWidth);
   static ucOperand CreateWireRead(unsigned WireNum, unsigned BitWidth);
 
+  static ucOperand CreatePredicate(unsigned Reg = 0);
+
   /*FIXME: Get the value from the max word length*/
   void print(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0);
 
@@ -123,11 +125,15 @@ private:
     : OpCode(cast<ucOperand>(*range_begin)),
       rangeBegin(range_begin + 1), rangeEnd(range_end) {
       assert(OpCode.isOpcode() && "Bad leading token!");
+    // Skip the predicate operand.
+    if (isControl()) ++rangeBegin;
   }
   
   friend class ucOpIterator;
   friend class ucOperand;
 public:
+  bool isControl() const;
+
   op_iterator op_begin() const { return rangeBegin; }
 
   op_iterator op_end() const { return rangeEnd; }
@@ -136,6 +142,11 @@ public:
     op_iterator I = op_begin() + i;
     assert(I < rangeEnd && "index out of range!");
     return *I;
+  }
+
+  ucOperand &getPredicate() const {
+    assert(isControl() && "Data path do not have predicate operand!");
+    return *(op_begin() - 1);
   }
 
   const ucOperand *operator->() const { return &OpCode; }

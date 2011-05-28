@@ -128,6 +128,7 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
   MachineInstrBuilder MIB(&*Ctrl);
   // Diry hack: Temporary use the slot of the micro state.
   MIB.addOperand(ucOperand::CreateOpcode(VTM::COPY, ucOperand::GeneralSlot));
+  MIB.addOperand(ucOperand::CreatePredicate());
   MIB.addOperand(DstOp);
   MIB.addOperand(SrcOp);
 

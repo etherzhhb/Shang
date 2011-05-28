@@ -29,12 +29,22 @@
 
 using namespace llvm;
 
+bool ucOp::isControl() const {
+  return OpCode.getParent()->getOpcode() == VTM::Control;
+}
+
 void ucOp::print(raw_ostream &OS) const {
   const TargetMachine &TM =
     OpCode.getParent()->getParent()->getParent()->getTarget();
 
-  OS << TM.getInstrInfo()->get(OpCode.getOpcode()).getName()
-     << "{" << OpCode.getFUId() << "}"
+  OS << TM.getInstrInfo()->get(OpCode.getOpcode()).getName();
+  if (isControl()) {
+    OS << "pred:[";
+    getPredicate().print(OS);
+    OS << ']';
+  }
+
+  OS << "{" << OpCode.getFUId() << "}"
      << "@" << OpCode.getPredSlot();
   OS << ' ';
   // Print the operands;
@@ -120,7 +130,7 @@ ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
   Context |= (uint64_t(Opcode & OpcodeMask) << OpcodeShiftAmount);
   Context |= (uint64_t(PredSlot & PredSlotMask) << PredSlotShiftAmount);
   Context |= (uint64_t(FUId.getData() & FUIDMask) << FUIDShiftAmount);
-  ucOperand MO = cast<ucOperand>(MachineOperand::CreateImm(Context));
+  ucOperand MO = MachineOperand::CreateImm(Context);
   MO.setTargetFlags(IsOpcode);
   assert((MO.getOpcode() == Opcode && MO.getPredSlot() == PredSlot
           && MO.getFUId() == FUId) && "Data overflow!");
@@ -130,15 +140,29 @@ ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
 ucOperand ucOperand::CreateWireDefine(MachineRegisterInfo &MRI,
                                       unsigned BitWidth) {
   unsigned WireNum = MRI.createVirtualRegister(VTM::WireRegisterClass);
-  ucOperand MO = cast<ucOperand>(MachineOperand::CreateReg(WireNum, true));
+  ucOperand MO = MachineOperand::CreateReg(WireNum, true);
   MO.setBitWidth(BitWidth, true);
   //MO.setIsEarlyClobber();
   return MO;
 }
 
 ucOperand ucOperand::CreateWireRead(unsigned WireNum, unsigned BitWidth) {
-  ucOperand MO = cast<ucOperand>(MachineOperand::CreateReg(WireNum, false));
+  ucOperand MO = MachineOperand::CreateReg(WireNum, false);
   MO.setBitWidth(BitWidth, true);
+  return MO;
+}
+
+ucOperand ucOperand::CreatePredicate(unsigned Reg) {
+  // Read reg0 means always execute.
+  if (Reg == 0) {
+    // Create the default predicate operand, which means always execute.
+    ucOperand MO = MachineOperand::CreateImm(1);
+    MO.setBitWidth(1);
+    return MO;
+  }
+
+  ucOperand MO = MachineOperand::CreateReg(Reg, false);
+  MO.setBitWidth(1);
   return MO;
 }
 
