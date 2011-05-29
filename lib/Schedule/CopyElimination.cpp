@@ -48,8 +48,7 @@ struct CopyElimination : public MachineFunctionPass{
     AU.addPreserved<BitLevelInfo>();
   }
 
-
-  void EliminateCopy(MachineInstr &Copy);
+  void EliminateCopy(MachineInstr &Copy, MachineBasicBlock *TargetBB = 0);
 
   bool runOnMachineBasicBlock(MachineBasicBlock &MBB, MachineFunction &MF);
 
@@ -65,7 +64,6 @@ struct CopyElimination : public MachineFunctionPass{
 
     return Changed;
   }
-
 };
 }
 
@@ -91,11 +89,13 @@ static MachineInstr &findPrevControl(MachineInstr &I) {
   return I;
 }
 
-void CopyElimination::EliminateCopy(MachineInstr &Copy) {
+void CopyElimination::EliminateCopy(MachineInstr &Copy,
+                                    MachineBasicBlock *TargetBB) {
   ucState Ctrl(findPrevControl(Copy));
 
-  MachineOperand SrcOp = Copy.getOperand(1),
-                 DstOp = Copy.getOperand(0);
+  ucOperand SrcOp = Copy.getOperand(1),
+            DstOp = Copy.getOperand(0),
+            PredOp = ucOperand::CreatePredicate();
 
   unsigned SrcReg = SrcOp.getReg(),
            DstReg = DstOp.getReg();
@@ -106,13 +106,10 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
 
   for (ucState::iterator I = Ctrl.begin(), E = Ctrl.end(); I != E; ++I) {
     ucOp Op = *I;
-    for (ucOp::op_iterator MI = Op.op_begin(), ME = Op.op_end();
-         MI != ME; ++MI) {
-      MachineOperand &MO = *MI;
-      if (!MO.isReg()) continue;
-      // TODO: Overcome this!
+    if (Op->getOpcode() == VTM::COPY) {
+      ucOperand &MO = Op.getOperand(0);
       assert((!MO.isUse() || MO.getReg() != DstReg || MO.isKill())
-              && "Can not fuse instruction!");
+             && "Can not fuse instruction!");
       // Forward the wire value if necessary.
       if (MO.isDef() && MO.getReg() == SrcReg) {
         assert(Op->getOpcode() == VTM::COPY && "Can only forward copy!");
@@ -120,6 +117,10 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
         continue;
       }
     }
+
+    if (TargetBB && Op->getOpcode() == VTM::VOpToState
+        && Op.getOperand(0).getMBB() == TargetBB)
+      PredOp = Op.getPredicate();
   }
 
   // Transfer the operands.
@@ -127,10 +128,8 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
   Copy.RemoveOperand(0);
   MachineInstrBuilder MIB(&*Ctrl);
   // Diry hack: Temporary use the slot of the micro state.
-  MIB.addOperand(ucOperand::CreateOpcode(VTM::COPY, ucOperand::GeneralSlot));
-  MIB.addOperand(ucOperand::CreatePredicate());
-  MIB.addOperand(DstOp);
-  MIB.addOperand(SrcOp);
+  MIB.addOperand(ucOperand::CreateOpcode(VTM::COPY, Ctrl.getSlot()));
+  MIB.addOperand(PredOp).addOperand(DstOp).addOperand(SrcOp);
 
   // Discard the operand.
   Copy.eraseFromParent();
@@ -138,21 +137,20 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy) {
 
 bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB,
                                              MachineFunction &MF) {
-  DEBUG(dbgs() << MBB.getName() << " After register allocation:\n");
+  DEBUG(dbgs() << MBB.getName() << " After register allocation:\n";
+        printVMBB(dbgs(), MBB));
   typedef SmallVector<MachineInstr*, 16> IListTy;
   IListTy Worklist;
+
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
        I != E; ++I) {
     MachineInstr *Instr = I;
 
-    DEBUG(ucState(*Instr).dump());
-
-    if (Instr->isCopy()) {
-      Worklist.push_back(Instr);
-    }
+    if (Instr->isCopy()) Worklist.push_back(Instr);
   }
 
-  bool Changed = !Worklist.empty();
+  if (Worklist.empty()) return false;
+
   for (IListTy::iterator I = Worklist.begin(), E = Worklist.end(); I != E; ++I){
     MachineInstr *Copy = *I;
     if (Copy != MBB.begin()) {
@@ -167,14 +165,13 @@ bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB,
       MachineBasicBlock *PredBB = *PI;
       MachineInstr *NewCopy = MF.CloneMachineInstr(Copy);
       PredBB->insert(PredBB->getFirstTerminator(), NewCopy);
-      EliminateCopy(*NewCopy);
+      EliminateCopy(*NewCopy, &MBB);
     }
 
     Copy->eraseFromParent();
   }
 
   DEBUG(dbgs() << MBB.getName() << " After copy fixed:\n";
-        printVMBB(dbgs(), MBB);
-  );
-  return Changed;
+        printVMBB(dbgs(), MBB));
+  return true;
 }

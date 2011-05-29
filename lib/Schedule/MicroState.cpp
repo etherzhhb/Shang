@@ -39,7 +39,7 @@ void ucOp::print(raw_ostream &OS) const {
 
   OS << TM.getInstrInfo()->get(OpCode.getOpcode()).getName();
   if (isControl()) {
-    OS << "pred:[";
+    OS << " pred:[";
     getPredicate().print(OS);
     OS << ']';
   }
