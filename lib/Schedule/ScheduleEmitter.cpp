@@ -268,7 +268,12 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   // Handle the predicate operand.
   if (Inst.getDesc().OpInfo[NumOperands-1].isPredicate()) {
     --NumOperands;
-    PredR = Inst.getOperand(NumOperands).getReg();
+    MachineOperand &PredOp = Inst.getOperand(NumOperands);
+    assert((PredOp.isReg() || (PredOp.getImm() & 0x1))
+           && "Cannot handle predicate operand!");
+    if (PredOp.isReg())
+      PredR = Inst.getOperand(NumOperands).getReg();
+
     Inst.RemoveOperand(NumOperands);
   }
   
@@ -307,7 +312,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
   DefVector &Defs = getDefsToEmitAt(WriteSlot);
 
-  for (unsigned i = OpStart , e = Ops.size(); i != e; ++i) {
+  for (unsigned i = 1 , e = Ops.size(); i != e; ++i) {
     MachineOperand &MO = Ops[i];
 
     if (!MO.isReg() || !MO.getReg())

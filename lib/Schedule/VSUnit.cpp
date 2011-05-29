@@ -57,7 +57,7 @@ bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
 
   if (VTID->getOpcode() != VTM::VOpToState) return false;
 
-  if (VTID.get().getOperand(1).getMBB() != MBB) return false;
+  if (VTID.get().getOperand(0).getMBB() != MBB) return false;
 
   // Ok, remember this instruction as self enable.
   LoopOp.setPointer(&VTID.get());

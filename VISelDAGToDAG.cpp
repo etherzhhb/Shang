@@ -196,13 +196,12 @@ SDNode *VDAGToDAGISel::SelectInArg(SDNode *N) {
 }
 
 SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
-  SDValue Ops[] = {N->getOperand(1), N->getOperand(2),
-                   SDValue()/*The dummy bit width operand*/,
+  SDValue Ops[] = {N->getOperand(2), // Target BB
+                   N->getOperand(1), // condition (predicate operand).
                    N->getOperand(0) };
-  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1/*Skip the ch*/);
 
   return CurDAG->MorphNodeTo(N, ~VTM::VOpToState, N->getVTList(),
-                              Ops, array_lengthof(Ops));
+                             Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {

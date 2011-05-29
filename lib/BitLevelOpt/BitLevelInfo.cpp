@@ -66,7 +66,14 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         // DirtyHack: Set the bit width of implicit define value to 64.
         ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
         Op.setBitWidth(64);
-      } // Fall through
+        continue;
+      }
+      case VTM::VOpToState: {
+        // Setup the bit width for predicate operand.
+        ucOperand &Op = cast<ucOperand>(Instr.getOperand(1));
+        Op.setBitWidth(1);
+        continue;
+      }
       case VTM::COPY:     case VTM::PHI:
         // Fall through
       case VTM::Control:  case VTM::Datapath:

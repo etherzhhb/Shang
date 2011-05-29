@@ -98,8 +98,8 @@ def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
 let isBranch   = 1,
 	isTerminator = 1 in
-def VOpToState : CtrlInst<(outs), (ins DR:$cnd, State:$target),
-						              "if ($cnd) state $target;",
+def VOpToState : CtrlInst<(outs), (ins State:$target),
+						              "to $target;",
 						              [], 0, 1>;
 
 // Prevent MachineCSE delete any VOpArg.

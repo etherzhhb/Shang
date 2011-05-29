@@ -657,10 +657,10 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     // Special case for state transferring operation.
     if (Op->getOpcode() == VTM::VOpToState) {
       assert(!isFirstSlot && "Can not transfer to other state at first slot!");
-      MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
+      MachineBasicBlock *TargetBB = Op.getOperand(0).getMBB();
       raw_string_ostream ss(SlotPred);
       ss << " & ";
-      Op.getOperand(0).print(ss);
+      Op.getPredicate().print(ss);
       ss.flush();
       // Emit control operation for next state.
       CtrlS.if_begin(SlotPred);
