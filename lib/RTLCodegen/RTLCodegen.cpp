@@ -637,31 +637,39 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
   std::string GenSlotPred = "1'b0";
+  raw_string_ostream GenSlotPredSS(GenSlotPred);
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     unsigned Slot = Op->getPredSlot();
     bool isFirstSlot = (Slot == startSlot);
     // Emit the control operation at the rising edge of the clock.
-    std::string SlotPred;
+    std::string SlotPred = "(";
+    raw_string_ostream SlotPredSS(SlotPred);
+
     if (Slot == ucOperand::GeneralSlot) {
       if (GenSlotPred.length() == 4) { // Build the general slot if necessary.
         for (unsigned i = State.getSlot(), e = endSlot; i <= e; i += II)
-          GenSlotPred += " | " + getucStateEnable(CurBB, i - 1);
-        GenSlotPred += " /*General Slot*/";
+          GenSlotPredSS << " | " << getucStateEnable(CurBB, i - 1);
+        GenSlotPredSS << " /*General Slot*/";
+        GenSlotPredSS.flush();
       }
-      SlotPred = GenSlotPred;
+      SlotPredSS << GenSlotPred;
     } else
-      SlotPred = getucStateEnable(CurBB, Slot - 1);
+      SlotPredSS << getucStateEnable(CurBB, Slot - 1);
+
+    SlotPredSS << ')';
+
+    // Emit the predicate operand.
+    SlotPredSS << " & ";
+    Op.getPredicate().print(SlotPredSS);
+    SlotPredSS.flush();
 
     // Special case for state transferring operation.
     if (Op->getOpcode() == VTM::VOpToState) {
       assert(!isFirstSlot && "Can not transfer to other state at first slot!");
       MachineBasicBlock *TargetBB = Op.getOperand(0).getMBB();
-      raw_string_ostream ss(SlotPred);
-      ss << " & ";
-      Op.getPredicate().print(ss);
-      ss.flush();
+
       // Emit control operation for next state.
       CtrlS.if_begin(SlotPred);
       if (TargetBB == CurBB) { // Self loop detected.
