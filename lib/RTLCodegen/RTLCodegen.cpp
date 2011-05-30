@@ -965,8 +965,7 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice, raw_ostream &OS, bool Lazy)
-{
+void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice, raw_ostream &OS, bool Lazy) {
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
   // now we are going to get the included upper bound.

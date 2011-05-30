@@ -39,7 +39,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 /// GetBits - Retrieve bits between [LB, UB).
 static inline uint64_t GetBitSlice(uint64_t x, unsigned UB, unsigned LB = 0) {
-  return (x >> LB) & ((1 << (UB - LB)) - 1);
+  return (x >> LB) & ((uint64_t(1) << (UB - LB)) - 1);
 }
 
 /// getRoundIntegerOrBitType - Rounds the bit-width of the given integer EVT
