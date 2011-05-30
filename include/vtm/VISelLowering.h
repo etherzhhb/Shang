@@ -68,6 +68,7 @@ public:
   // heterogeneous accelerator architecture bit level SDNodes.
   static unsigned computeSizeInBits(SDValue Op);
 
+  // Get the bit slice in range (UB, LB].
   static SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                              unsigned UB, unsigned LB);
   
@@ -108,6 +109,14 @@ public:
                         SDValue OpA, SDValue OpB,
                         bool dontCreate = false);
 
+  static SDValue getCarry(SDValue Sum) {
+    if (Sum->getOpcode() == VTMISD::ADD)
+      return Sum.getValue(1);
+
+    assert(Sum->getOpcode() == VTMISD::BitCat && "Get carry on a wrong node!");
+    return getCarry(Sum->getOperand(0));
+  }
+
   //===--------------------------------------------------------------------===//
   // Helper function for comparison lowering.
   static SDValue getCmpResult(SelectionDAG &DAG, SDValue SetCC, bool dontSub);
@@ -136,7 +145,7 @@ public:
   // Carry (or Unsigned Overflow).
   static SDValue getCFlag(SelectionDAG &DAG, SDValue SetCC) {
     SDValue Result = getCmpResult(DAG, SetCC, false);
-    return SDValue(Result.getNode(), 1);
+    return getCarry(Result);
   }
 
   // The negative flag.

@@ -90,39 +90,42 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
 
   for (unsigned VT = (unsigned)MVT::FIRST_INTEGER_VALUETYPE;
-      VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
+       VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
+    MVT::SimpleValueType SimpleVT = (MVT::SimpleValueType)VT;
+
     // Lower the add/sub operation to full adder operation.
-    setOperationAction(ISD::ADD, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::ADD, SimpleVT, Custom);
     // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::ADDE, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::SUBE, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::ADDC, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::SUBC, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::SADDO, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::SSUBO, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::UADDO, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SUB, SimpleVT, Custom);
+    setOperationAction(ISD::ADDE, SimpleVT, Custom);
+    setOperationAction(ISD::SUBE, SimpleVT, Custom);
+    setOperationAction(ISD::ADDC, SimpleVT, Custom);
+    setOperationAction(ISD::SUBC, SimpleVT, Custom);
+    setOperationAction(ISD::SADDO, SimpleVT, Custom);
+    setOperationAction(ISD::SSUBO, SimpleVT, Custom);
+    setOperationAction(ISD::UADDO, SimpleVT, Custom);
+    setOperationAction(ISD::UADDO, SimpleVT, Custom);
+
     // Lower load and store to memory access node.
-    setOperationAction(ISD::LOAD, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::STORE, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::LOAD, SimpleVT, Custom);
+    setOperationAction(ISD::STORE, SimpleVT, Custom);
     // Just break down the extend load
-    setLoadExtAction(ISD::EXTLOAD, (MVT::SimpleValueType)VT, Custom);
-    setLoadExtAction(ISD::SEXTLOAD, (MVT::SimpleValueType)VT, Custom);
-    setLoadExtAction(ISD::ZEXTLOAD, (MVT::SimpleValueType)VT, Custom);
+    setLoadExtAction(ISD::EXTLOAD, SimpleVT, Custom);
+    setLoadExtAction(ISD::SEXTLOAD, SimpleVT, Custom);
+    setLoadExtAction(ISD::ZEXTLOAD, SimpleVT, Custom);
     
     // Lower cast node to bit level operation.
-    setOperationAction(ISD::SIGN_EXTEND, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::ZERO_EXTEND, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::ANY_EXTEND, (MVT::SimpleValueType)VT, Custom);
-    setOperationAction(ISD::TRUNCATE, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SIGN_EXTEND, SimpleVT, Custom);
+    setOperationAction(ISD::ZERO_EXTEND, SimpleVT, Custom);
+    setOperationAction(ISD::ANY_EXTEND, SimpleVT, Custom);
+    setOperationAction(ISD::TRUNCATE, SimpleVT, Custom);
     // Condition code will not work.
-    setOperationAction(ISD::SELECT_CC, (MVT::SimpleValueType)VT, Expand);
+    setOperationAction(ISD::SELECT_CC, SimpleVT, Expand);
     // Lower SetCC to more fundamental operation.
-    setOperationAction(ISD::SETCC, (MVT::SimpleValueType)VT, Custom);
+    setOperationAction(ISD::SETCC, SimpleVT, Custom);
 
     for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC) {
-      setCondCodeAction((ISD::CondCode)CC, (MVT::SimpleValueType)VT, Custom);
+      setCondCodeAction((ISD::CondCode)CC, SimpleVT, Custom);
     }
     
   }
@@ -446,6 +449,28 @@ SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
       return SDValue(N, 0);
 
     return SDValue();
+  }
+  
+  // Split the operands if the cannot fit into the function unit.
+  unsigned MaxSize = getFUDesc<VFUAddSub>()->getMaxBitWidth(),
+           VTSize = VT.getSizeInBits();
+
+  if (VTSize > MaxSize) {
+    unsigned HaflVTSize = VTSize / 2;
+    EVT HalfVT = MVT::getIntegerVT(HaflVTSize);
+    assert(HalfVT.isSimple() && "Expected HalfVT is also a simple VT!");
+
+    SDValue SumL = getAdd(DAG, dl, HalfVT,
+                          getBitSlice(DAG, dl, OpA, HaflVTSize, 0),
+                          getBitSlice(DAG, dl, OpB, HaflVTSize, 0),
+                          CarryIn, dontCreate);
+    SDValue HalfCarry = getCarry(SumL);
+    SDValue SumH = getAdd(DAG, dl, HalfVT,
+                          getBitSlice(DAG, dl, OpA, VTSize, HaflVTSize),
+                          getBitSlice(DAG, dl, OpB, VTSize, HaflVTSize),
+                          HalfCarry, dontCreate);
+    // TODO: Handle the carry.
+    return DAG.getNode(VTMISD::BitCat, dl, VT, SumH, SumL);
   }
 
   return DAG.getNode(VTMISD::ADD, dl, VTs, Ops, array_lengthof(Ops));
