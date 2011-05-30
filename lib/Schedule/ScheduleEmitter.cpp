@@ -482,7 +482,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
   preSchedTopSort();
 
   // Build bundle from schedule units.
-  MicroStateBuilder BTB(*this);
+  MicroStateBuilder StateBuilder(*this);
 
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *A = *I;
@@ -497,34 +497,36 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
       VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
 
     if (A->getSlot() != CurSlot)
-      CurSlot = BTB.advanceToSlot(CurSlot, A->getSlot());
+      CurSlot = StateBuilder.advanceToSlot(CurSlot, A->getSlot());
 
     if (MachineInstr *Inst = A->getFirstInstr()) {
       // Ignore some instructions.
       if (Inst->isPHI()) {
-        assert(BTB.emitQueueEmpty() && "Unexpected atom before PHI.");
+        assert(StateBuilder.emitQueueEmpty() && "Unexpected atom before PHI.");
         continue;
       }
 
       if (Inst->isCopy() && !VInstr(*Inst).canCopyBeFused()) {
         // TODO: move this to MicroStateBuilder.
         MBB->remove(Inst);
-        BTB.defereSUnit(A);
+        StateBuilder.defereSUnit(A);
         continue;
       }
 
-      BTB.emitSUnit(A);
+      StateBuilder.emitSUnit(A);
     }
   }
   // Build last state.
-  assert(!BTB.emitQueueEmpty() && "Expect atoms for last state!");
-  BTB.advanceToSlot(CurSlot, CurSlot + 1);
+  assert(!StateBuilder.emitQueueEmpty() && "Expect atoms for last state!");
+  StateBuilder.advanceToSlot(CurSlot, CurSlot + 1);
   // Remove all unused instructions.
-  BTB.clearUp();
+  StateBuilder.clearUp();
   // Build the dummy terminator.
   BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState)).addImm(0);
 
-  // Set the BrFlag for instruction that branching to other MachineBB.
+  // Set the hasTerm flag for instruction that branching to other MachineBB.
+  StateBuilder.getStateCtrlAt(getEndSlot())
+    .setFlag((MachineInstr::MIFlag)ucState::hasTerm);
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());

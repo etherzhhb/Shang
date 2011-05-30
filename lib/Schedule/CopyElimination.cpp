@@ -26,9 +26,11 @@
 #include "llvm/Target/TargetInstrInfo.h"
 
 #include "llvm/Support/raw_ostream.h"
-
+#include "llvm/Support/ErrorHandling.h"
 #define DEBUG_TYPE "eliminate-regietsr-copy"
 #include "llvm/Support/Debug.h"
+
+#include <map>
 
 using namespace llvm;
 
@@ -39,6 +41,31 @@ struct CopyElimination : public MachineFunctionPass{
   MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
 
+  // Remember the instruction containing the VOpToState branching to others.
+  // For normal BB, it should be the last control instruction.
+  // For pipelined BB, it maybe located in the middle of the BB.
+  std::map<MachineBasicBlock*, MachineInstr*> BrCtrlMap;
+  MachineInstr *getBrCrl(MachineBasicBlock *MBB) {
+    std::map<MachineBasicBlock*, MachineInstr*>::iterator at
+      = BrCtrlMap.find(MBB);
+
+    if (at != BrCtrlMap.end()) return at->second;
+
+    // Otherwise, find the br now.
+    for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
+         I != E; ++I) {
+      MachineInstr &MI = *I;
+
+      if (MI.getFlag((MachineInstr::MIFlag)ucState::hasTerm)) {
+        BrCtrlMap.insert(std::make_pair(MBB, &MI));
+        return &MI;
+      }
+    }
+
+    llvm_unreachable("Cannot find br control in a MachineBasicBlock!");
+    return 0;
+  }
+
   CopyElimination() : MachineFunctionPass(ID) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -47,6 +74,8 @@ struct CopyElimination : public MachineFunctionPass{
     AU.addRequired<BitLevelInfo>();
     AU.addPreserved<BitLevelInfo>();
   }
+
+  MachineInstr *getBrInst();
 
   void EliminateCopy(MachineInstr &Copy, MachineBasicBlock *TargetBB = 0);
 
@@ -64,6 +93,8 @@ struct CopyElimination : public MachineFunctionPass{
 
     return Changed;
   }
+
+  void releaseMemory() { BrCtrlMap.clear(); }
 };
 }
 
@@ -73,25 +104,20 @@ Pass *llvm::createCopyEliminationPass() {
   return new CopyElimination();
 }
 
-static MachineInstr &findPrevControl(MachineInstr &I) {
-  MachineBasicBlock *MBB = I.getParent();
-  MachineBasicBlock::iterator It = I;
-  assert(I.getNextNode()->getOpcode() != VTM::Datapath
-         && I.getNextNode()->getOpcode() != VTM::Control
-         && "Can not handle copy in the middle of the block!");
-  do {
-    --It;
-    if (It->getOpcode() == VTM::Control)
-      return *It;
-  } while (It != MBB->begin());
-
-  assert(0 && "Can not find prior control!");
-  return I;
-}
-
 void CopyElimination::EliminateCopy(MachineInstr &Copy,
                                     MachineBasicBlock *TargetBB) {
-  ucState Ctrl(findPrevControl(Copy));
+  MachineBasicBlock *CurBB = Copy.getParent();
+  assert(CurBB != TargetBB && "Copy should be eliminated by former passes!");
+
+  // Insert the copy to the control instruction in *execution sequence*, for a
+  // normal BB, the appearance sequence and execution sequence of instructions
+  // are the same, but in a pipelined BB, it is not true.
+  // In a pipelined BB, we should insert the copy to the last control
+  // instruction in the execution sequence, which is also the last control
+  // instruction in the appearance sequence of the *kernel*. Becasue the copy
+  // instruction is coping register value from previous iteration to next
+  // iteration of the *kenerl*.
+  ucState Ctrl(*getBrCrl(CurBB));
 
   ucOperand SrcOp = Copy.getOperand(1),
             DstOp = Copy.getOperand(0),
@@ -99,6 +125,8 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy,
 
   unsigned SrcReg = SrcOp.getReg(),
            DstReg = DstOp.getReg();
+
+  unsigned Slot = 0;
 
   // Try to set the bit width for new instert copy instruction.
   BLI->updateBitWidth(SrcOp, BLI->getBitWidth(SrcReg));
@@ -116,11 +144,13 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy,
         SrcOp = Op.getOperand(1);
         continue;
       }
-    }
+    } else if (Op->getOpcode() == VTM::VOpToState
+               && Op.getOperand(0).getMBB() != CurBB) {
+      Slot = Op->getPredSlot();
 
-    if (TargetBB && Op->getOpcode() == VTM::VOpToState
-        && Op.getOperand(0).getMBB() == TargetBB)
-      PredOp = Op.getPredicate();
+      if (TargetBB && Op.getOperand(0).getMBB() == TargetBB)
+        PredOp = Op.getPredicate();
+    }
   }
 
   // Transfer the operands.
@@ -128,7 +158,8 @@ void CopyElimination::EliminateCopy(MachineInstr &Copy,
   Copy.RemoveOperand(0);
   MachineInstrBuilder MIB(&*Ctrl);
   // Diry hack: Temporary use the slot of the micro state.
-  MIB.addOperand(ucOperand::CreateOpcode(VTM::COPY, Ctrl.getSlot()));
+  assert(Slot && "VOpToState not found!");
+  MIB.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
   MIB.addOperand(PredOp).addOperand(DstOp).addOperand(SrcOp);
 
   // Discard the operand.
@@ -145,6 +176,9 @@ bool CopyElimination::runOnMachineBasicBlock(MachineBasicBlock &MBB,
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
        I != E; ++I) {
     MachineInstr *Instr = I;
+
+    if (Instr->getFlag((MachineInstr::MIFlag)ucState::hasTerm))
+      BrCtrlMap.insert(std::make_pair(&MBB, Instr));
 
     if (Instr->isCopy()) Worklist.push_back(Instr);
   }

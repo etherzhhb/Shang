@@ -629,15 +629,9 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
-  unsigned startSlot = FInfo->getStartSlotFor(CurBB),
-           totalSlot = FInfo->getTotalSlotFor(CurBB),
-           IISlot    = FInfo->getIISlotFor(CurBB);
-  unsigned endSlot = startSlot + totalSlot,
-           II = IISlot - startSlot;
+  unsigned startSlot = FInfo->getStartSlotFor(CurBB);
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  std::string GenSlotPred = "1'b0";
-  raw_string_ostream GenSlotPredSS(GenSlotPred);
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
@@ -647,18 +641,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     std::string SlotPred = "(";
     raw_string_ostream SlotPredSS(SlotPred);
 
-    if (Slot == ucOperand::GeneralSlot) {
-      if (GenSlotPred.length() == 4) { // Build the general slot if necessary.
-        for (unsigned i = State.getSlot(), e = endSlot; i <= e; i += II)
-          GenSlotPredSS << " | " << getucStateEnable(CurBB, i - 1);
-        GenSlotPredSS << " /*General Slot*/";
-        GenSlotPredSS.flush();
-      }
-      SlotPredSS << GenSlotPred;
-    } else
-      SlotPredSS << getucStateEnable(CurBB, Slot - 1);
-
-    SlotPredSS << ')';
+    SlotPredSS << getucStateEnable(CurBB, Slot - 1) << ')';
 
     // Emit the predicate operand.
     SlotPredSS << " & ";
