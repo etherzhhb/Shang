@@ -145,15 +145,12 @@ def VOpRXor	 : DPTvaInst<(outs DR:$dst), (ins DR:$src),
 // Bit level operations.
 def VOpBitSlice	 : DPTvaInst<(outs DR:$dst),
                               (ins DR:$src, i8imm:$ub, i8imm:$lb),
-							                "$dst = bitslice $src, $ub, $lb", [],
-                              1/*lazy*/>;
+							                "$dst = bitslice $src, $ub, $lb", []>;
 def VOpBitRepeat : DPTvaInst<(outs DR:$dst),
                               (ins DR:$src, i8imm:$times),
-							                "$dst = bitrepeat $src, $times", [],
-                              1/*lazy*/>;
+							                "$dst = bitrepeat $src, $times", []>;
 def VOpBitCat	   : DPTvaInst<(outs DR:$dst), (ins DR:$lhs, DR:$rhs),
-							                "$dst = bitcat $lhs, $rhs", [],
-                              1/*lazy*/>;
+							                "$dst = bitcat $lhs, $rhs", []>;
 }
 
 //===----------------------------------------------------------------------===//

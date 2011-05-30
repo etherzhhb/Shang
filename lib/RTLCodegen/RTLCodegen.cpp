@@ -25,7 +25,6 @@
 #include "vtm/LangSteam.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VRegisterInfo.h"
-#include "vtm/VInstrInfo.h"
 
 #include "llvm/Type.h"
 
@@ -73,36 +72,6 @@ class RTLCodegen : public MachineFunctionPass {
   std::string ReadyPred;
   void addReadyPred(std::string &Pred) {
     ReadyPred += " & (" + Pred + ")";
-  }
-
-  typedef std::map<unsigned, ucOp> LazyOpMapTy;
-  LazyOpMapTy LazyOps;
-
-  void addLazyOp(unsigned Wire, ucOp &Op) {
-    LazyOps.insert(std::make_pair(Wire, Op));
-  }
-
-  void flushLazyOps() {
-    for (LazyOpMapTy::iterator I = LazyOps.begin(), E = LazyOps.end();
-         I != E;++I)
-      emitLazyOp(I->second, VM->getDataPathBuffer(), false);
-
-    LazyOps.clear();
-  }
-
-  void emitOperand(ucOperand &Op, raw_ostream &OS, bool Lazy = true,
-                   unsigned UB = 64, unsigned LB = 0) {
-    if (Op.isWire() && Lazy) {
-      LazyOpMapTy::iterator at = LazyOps.find(Op.getReg());
-      if (at != LazyOps.end()) {
-        OS << '(';
-        emitLazyOp(at->second, OS);
-        OS << ')';
-        return;
-      }
-    }
-
-    Op.print(OS, UB,LB);
   }
 
   void emitFunctionSignature();
@@ -160,7 +129,6 @@ class RTLCodegen : public MachineFunctionPass {
   void emitFirstCtrlState(MachineBasicBlock *MBB);
 
   void emitDatapath(ucState &State);
-  void emitLazyOp(ucOp &Op, raw_ostream &OS, bool Lazy = true);
 
   void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
@@ -175,9 +143,9 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpAdd(ucOp &OpAdd);
   void emitOpMult(ucOp &OpMult);
 
-  void emitOpBitCat(ucOp &OpBitCat, raw_ostream &OS, bool Lazy = true);
-  void emitOpBitSlice(ucOp &OpBitSlice, raw_ostream &OS, bool Lazy = true);
-  void emitOpBitRepeat(ucOp &OpBitRepeat, raw_ostream &OS, bool Lazy = true);
+  void emitOpBitCat(ucOp &OpBitCat);
+  void emitOpBitSlice(ucOp &OpBitSlice);
+  void emitOpBitRepeat(ucOp &OpBitRepeat);
 
   void emitImplicitDef(ucOp &ImpDef);
 
@@ -441,9 +409,6 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
     ucState NextControl = *++I;
     CtrlS << "// Slot " << NextControl.getSlot() << '\n';
     emitCtrlOp(NextControl, NextStatePred);
-
-    // Flush all laze operations.
-    flushLazyOps();
   } while(++I != E);
 
   CtrlS << "// Next micro state.\n";
@@ -745,7 +710,7 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   OpCopy.getOperand(0).print(OS);
   OS << " <= ";
-  emitOperand(OpCopy.getOperand(1), OS);
+  OpCopy.getOperand(1).print(OS);
   OS << ";\n";
 }
 
@@ -768,7 +733,7 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
   unsigned retChannel = OpRetVal.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
   OS << "return_value <= ";
-  emitOperand(OpRetVal.getOperand(0), OS);
+  OpRetVal.getOperand(0).print(OS);
   OS << ";\n";
 }
 
@@ -779,19 +744,19 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   OS << VFUMemBus::getAddrBusName(FUNum) << " <= ";
-  emitOperand(OpMemAccess.getOperand(1), OS);
+  OpMemAccess.getOperand(1).print(OS);
   OS << ";\n";
   // Assign store data.
   OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
-  emitOperand(OpMemAccess.getOperand(2), OS);
+  OpMemAccess.getOperand(2).print(OS);
   OS << ";\n";
   // And write enable.
   OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ";
-  emitOperand(OpMemAccess.getOperand(3), OS);
+  OpMemAccess.getOperand(3).print(OS);
   OS << ";\n";
   // The byte enable.
   OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
-  emitOperand(OpMemAccess.getOperand(4), OS);
+  OpMemAccess.getOperand(4).print(OS);
   OS << ";\n";
 }
 
@@ -802,17 +767,17 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   OS << VFUBRam::getAddrBusName(FUNum) << " <= (";
-  emitOperand(OpBRam.getOperand(1), OS);
+  OpBRam.getOperand(1).print(OS);
   unsigned SizeInBits
     = FInfo->getBRamInfo(OpBRam->getFUId().getFUNum()).ElemSizeInBytes;
   OS << " >> " << Log2_32_Ceil(SizeInBits) << ");\n";
   // Assign store data.
   OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
-  emitOperand(OpBRam.getOperand(2), OS);
+  OpBRam.getOperand(2).print(OS);
   OS << ";\n";
   // And write enable.
   OS << VFUBRam::getWriteEnableName(FUNum) << " <= ";
-  emitOperand(OpBRam.getOperand(3), OS);
+  OpBRam.getOperand(3).print(OS);
   OS << ";\n";
   // The byte enable.
   // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
@@ -827,13 +792,11 @@ void RTLCodegen::emitDatapath(ucState &State) {
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
-
-    if (VInstr(Op->getDesc()).isLazyEmit()) {
-      addLazyOp(Op.getOperand(0).getReg(), Op);
-      continue;
-    }
-
     switch (Op->getOpcode()) {
+    case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
+    case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
+    case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
+
     case VTM::VOpAdd:       emitOpAdd(Op);          break;
     case VTM::VOpMult:      emitOpMult(Op);         break;
 
@@ -857,21 +820,12 @@ void RTLCodegen::emitDatapath(ucState &State) {
   }
 }
 
-void RTLCodegen::emitLazyOp(ucOp &Op, raw_ostream &OS, bool Lazy) {
-  switch (Op->getOpcode()) {
-  case VTM::VOpBitSlice:  emitOpBitSlice(Op, OS, Lazy);     break;
-  case VTM::VOpBitCat:    emitOpBitCat(Op, OS, Lazy);       break;
-  case VTM::VOpBitRepeat: emitOpBitRepeat(Op, OS, Lazy);    break;
-  default:  assert(0 && "Unexpected opcode!");              break;
-  }
-}
-
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   UnaOp.getOperand(0).print(OS);
   OS << " = " << Operator << ' ';
-  emitOperand(UnaOp.getOperand(1), OS);
+  UnaOp.getOperand(1).print(OS);
   OS << ";\n";
 }
 
@@ -923,11 +877,11 @@ void RTLCodegen::emitVOpSel(ucOp &OpSel) {
   OS << "assign ";
   OpSel.getOperand(0).print(OS);
   OS << " = ";
-  emitOperand(OpSel.getOperand(1), OS);
+  OpSel.getOperand(1).print(OS);
   OS << " ? ";
-  emitOperand(OpSel.getOperand(2), OS);
+  OpSel.getOperand(2).print(OS);
   OS << " : ";
-  emitOperand(OpSel.getOperand(3), OS);
+  OpSel.getOperand(3).print(OS);
   OS << ";\n";
 
 }
@@ -965,52 +919,41 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice, raw_ostream &OS, bool Lazy) {
+void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
+  raw_ostream &OS = VM->getDataPathBuffer();
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
   // now we are going to get the included upper bound.
   unsigned UB = OpBitSlice.getOperand(2).getImm(),
            LB = OpBitSlice.getOperand(3).getImm();
-  if (!Lazy) {
-    OS << "assign ";
-    OpBitSlice.getOperand(0).print(OS);
-    OS << " = ";
-  }
 
-  emitOperand(OpBitSlice.getOperand(1), OS, true, UB, LB);
-
-  if (!Lazy) OS << ";\n";
+  OS << "assign ";
+  OpBitSlice.getOperand(0).print(OS);
+  OS << " = ";
+  OpBitSlice.getOperand(1).print(OS, UB, LB);
+  OS << ";\n";
 }
 
-void RTLCodegen::emitOpBitCat(ucOp &OpBitCat, raw_ostream &OS, bool Lazy) {
-  if (!Lazy) {
-    OS << "assign ";
-    OpBitCat.getOperand(0).print(OS);
-    OS << " = ";
-  }
-
-  OS << '{';
+void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  OpBitCat.getOperand(0).print(OS);
+  OS << " = {";
   // BitCat is a binary instruction now.
-  emitOperand(OpBitCat.getOperand(1), OS);
+  OpBitCat.getOperand(1).print(OS);
   OS << ',';
-  emitOperand(OpBitCat.getOperand(2), OS);
-  OS << '}';
-
-  if (!Lazy) OS << ";\n";
+  OpBitCat.getOperand(2).print(OS);
+  OS << "};\n";
 }
 
-void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat, raw_ostream &OS, bool Lazy){
-  if (!Lazy) {
-    OS << "assign ";
-    OpBitRepeat.getOperand(0).print(OS);
-    OS << " = ";
-  }
+void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  OpBitRepeat.getOperand(0).print(OS);
+  OS << " = {";
 
-  OS << '{';
   unsigned Times = OpBitRepeat.getOperand(2).getImm();
   OS << Times << '{';
-  emitOperand(OpBitRepeat.getOperand(1), OS);
-  OS << "}}";
-
-  if (!Lazy) OS << ";\n";
+  OpBitRepeat.getOperand(1).print(OS);
+  OS << "}};\n";
 }

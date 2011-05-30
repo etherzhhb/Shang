@@ -31,7 +31,7 @@ def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))> {}
 // Pseudo instructions
 class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
 			  bit datapath = 0, bits<4> latency = 0, 
-			  bit readAtEmit = 0, bit writeUntilFinish = 0, bit lazyEmit = 0>
+			  bit readAtEmit = 0, bit writeUntilFinish = 0>
   : Instruction {
   let Namespace = "VTM";
 
@@ -52,7 +52,6 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
   let TSFlags{5} = datapath;
   
   let TSFlags{9-6} = latency;
-  let TSFlags{10} = lazyEmit;
 }
 
 class CtrlInst<dag outs, dag ins, string asmstr, list<dag> pattern,
@@ -69,10 +68,10 @@ class FUInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 			  readAtEmit, writeUntilFinish>;
 
 class DPTvaInst<dag outs, dag ins, string asmstr, list<dag> pattern,
-		        bit lazyEmit = 0, bits<4> latency = 0,
+		        bits<4> latency = 0,
 			      bit readAtEmit = 0, bit writeUntilFinish = 0>
 	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 1, latency,
-			  readAtEmit, writeUntilFinish, lazyEmit>;
+			  readAtEmit, writeUntilFinish>;
 
 class BinOpFrag<dag res> : PatFrag<(ops node:$LHS, node:$RHS), res>;
 
