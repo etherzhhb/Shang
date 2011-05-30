@@ -106,9 +106,9 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
 
 }
 
-static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
-                                  TargetLowering::DAGCombinerInfo &DCI,
-                                  bool ExchangeOperand = false) {
+static SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
+                                 TargetLowering::DAGCombinerInfo &DCI,
+                                 bool ExchangeOperand = false) {
   SDValue OpA = N->getOperand(0 ^ ExchangeOperand),
           OpB = N->getOperand(1 ^ ExchangeOperand);
   SelectionDAG &DAG = DCI.DAG;
@@ -122,8 +122,8 @@ static  SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
   return PerformXorCombine(N, TLI, DCI, !ExchangeOperand);
 }
 
-static  SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
-                                  TargetLowering::DAGCombinerInfo &DCI) {
+static SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
+                                 TargetLowering::DAGCombinerInfo &DCI) {
   SDValue Op = N->getOperand(0);
 
   // ~(~A) = A.
@@ -132,18 +132,75 @@ static  SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
   return SDValue();
 }
 
+static SDValue PerformBitCatCombine(SDNode *N, const VTargetLowering &TLI,
+                                    TargetLowering::DAGCombinerInfo &DCI) {
+
+  SDValue OpA = N->getOperand(0),
+          OpB = N->getOperand(1);
+
+  // Dose the node looks like {a[UB-1, M], a[M-1, LB]}? If so, combine it to
+  // a[UB-1, LB]
+  if (OpA->getOpcode() == VTMISD::BitSlice
+      && OpB->getOpcode() == VTMISD::BitSlice) {
+    SDValue SrcOp = OpA->getOperand(0);
+
+    if (SrcOp.getNode() == OpB->getOperand(0).getNode()
+        && OpA->getConstantOperandVal(2) == OpB->getConstantOperandVal(1))
+      return VTargetLowering::getBitSlice(DCI.DAG, SrcOp->getDebugLoc(),
+                                          SrcOp,
+                                          OpA->getConstantOperandVal(1),
+                                          OpB->getConstantOperandVal(2));
+  }
+
+  return SDValue();
+}
+
+static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
+                                      TargetLowering::DAGCombinerInfo &DCI) {
+  SDValue Op = N->getOperand(0);
+  unsigned UB = N->getConstantOperandVal(1),
+           LB = N->getConstantOperandVal(2);
+  // Try to flatten the bitslice tree.
+  if (Op->getOpcode() == VTMISD::BitSlice) {
+    SDValue SrcOp = Op->getOperand(0);
+    unsigned Offset = Op->getConstantOperandVal(2);
+    return VTargetLowering::getBitSlice(DCI.DAG, SrcOp->getDebugLoc(),
+                                        SrcOp, UB + Offset, LB + Offset);
+  }
+
+  // If the big range fall into the bit range of one of the BitCat operand,
+  // return bitslice of that operand.
+  if (Op->getOpcode() == VTMISD::BitCat) {
+    SDValue HiOp = Op->getOperand(0), LoOp = Op->getOperand(1);
+    unsigned SplitBit = TLI.computeSizeInBits(LoOp);
+    if (UB <= SplitBit)
+      return VTargetLowering::getBitSlice(DCI.DAG, LoOp->getDebugLoc(),
+                                          LoOp, UB, LB);
+
+    if (LB >= SplitBit)
+      return VTargetLowering::getBitSlice(DCI.DAG, HiOp->getDebugLoc(),
+                                          HiOp, UB - SplitBit, LB - SplitBit);
+  }
+
+  return SDValue();
+}
+
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            TargetLowering::DAGCombinerInfo &DCI)
                                            const {
   switch (N->getOpcode()) {
+  case VTMISD::BitCat:
+    return PerformBitCatCombine(N, *this, DCI);
+  case VTMISD::BitSlice:
+    return PerformBitSliceCombine(N, *this, DCI);
+  case VTMISD::ADD:
+    return PerformAddCombine(N, *this, DCI);
   case ISD::SHL:
   case ISD::SRA:
   case ISD::SRL:
     return PerformShiftImmCombine(N, *this, DCI);
   case ISD::XOR:
     return PerformXorCombine(N, *this, DCI);
-  case VTMISD::ADD:
-    return PerformAddCombine(N, *this, DCI);
   case VTMISD::Not:
     return PerformNotCombine(N, *this, DCI);
 
