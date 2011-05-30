@@ -16,7 +16,6 @@
 
 #include "vtm/VFInfo.h"
 #include "vtm/MicroState.h"
-#include "vtm/BitLevelInfo.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -116,18 +115,21 @@ struct MicroStateBuilder {
   }
 
   unsigned getModuloSlot(unsigned Slot, bool IsControl) {
-    // FIXME: perform the modulo only if the BB is pipelined.
-    unsigned Idx = (Slot -  State.getStartSlot()) % State.getII();
-    // Move the entry of non-first stage to the last slot, so
-    // Stage 0: Entry,    state1,        ... state(II - 1),
-    // Stage 1: stateII,  state(II + 1), ... state(2II - 1),
-    // Stage 2: state2II,  state(2II + 1), ... state(3II - 1),
-    // become:
-    // Stage 0: Entry,    state1,        ... state(II - 1),   stateII,
-    // Stage 1:           state(II + 1), ... state(2II - 1),  state2II,
-    // Stage 2:           state(2II + 1), ... state(3II - 1),
-    if (IsControl && Idx == 0 && Slot >= State.getLoopOpSlot())
-      Idx = State.getII();
+    unsigned Idx = Slot -  State.getStartSlot();
+    if (State.isPipelined()) {
+      unsigned II = State.getII();
+      Idx %= II;
+      // Move the entry of non-first stage to the last slot, so
+      // Stage 0: Entry,    state1,        ... state(II - 1),
+      // Stage 1: stateII,  state(II + 1), ... state(2II - 1),
+      // Stage 2: state2II,  state(2II + 1), ... state(3II - 1),
+      // become:
+      // Stage 0: Entry,    state1,        ... state(II - 1),   stateII,
+      // Stage 1:           state(II + 1), ... state(2II - 1),  state2II,
+      // Stage 2:           state(2II + 1), ... state(3II - 1),
+      if (IsControl && Idx == 0 && Slot >= State.getLoopOpSlot())
+        Idx = II;
+    }
 
     return Idx;
   }
@@ -521,6 +523,8 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
   BTB.clearUp();
   // Build the dummy terminator.
   BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState)).addImm(0);
+
+  // Set the BrFlag for instruction that branching to other MachineBB.
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());
