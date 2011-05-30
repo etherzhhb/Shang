@@ -182,11 +182,11 @@ static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
       return VTargetLowering::getBitSlice(DCI.DAG, dl,
                                           HiOp, UB - SplitBit, LB - SplitBit);
 
-    return DCI.DAG.getNode(VTMISD::BitCat, dl, N->getVTList(),
-                           VTargetLowering::getBitSlice(DCI.DAG, dl,
-                                                        HiOp, UB - SplitBit, 0),
-                           VTargetLowering::getBitSlice(DCI.DAG, dl,
-                                                        LoOp, SplitBit, LB));
+    HiOp = VTargetLowering::getBitSlice(DCI.DAG, dl, HiOp, UB - SplitBit, 0);
+    DCI.AddToWorklist(HiOp.getNode());
+    LoOp = VTargetLowering::getBitSlice(DCI.DAG, dl, LoOp, SplitBit, LB);
+    DCI.AddToWorklist(LoOp.getNode());
+    return DCI.DAG.getNode(VTMISD::BitCat, dl, N->getVTList(), HiOp, LoOp);
   }
 
   return SDValue();
