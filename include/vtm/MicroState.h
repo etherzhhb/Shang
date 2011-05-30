@@ -26,6 +26,7 @@
 #include "llvm/ADT/STLExtras.h"
 
 namespace llvm {
+class TargetInstrDesc;
 class MachineRegisterInfo;
 class ucOpIterator;
 class ucState;
@@ -60,6 +61,8 @@ public:
     uint64_t Context = getImm();
     return (Context >> OpcodeShiftAmount) & OpcodeMask;
   }
+
+  const TargetInstrDesc &getDesc() const;
 
   FuncUnitId getFUId() const {
     assert(isOpcode() && "Bad Operand type!");

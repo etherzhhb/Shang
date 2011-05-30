@@ -160,11 +160,13 @@ static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
   SDValue Op = N->getOperand(0);
   unsigned UB = N->getConstantOperandVal(1),
            LB = N->getConstantOperandVal(2);
+  DebugLoc dl = N->getDebugLoc();
+
   // Try to flatten the bitslice tree.
   if (Op->getOpcode() == VTMISD::BitSlice) {
     SDValue SrcOp = Op->getOperand(0);
     unsigned Offset = Op->getConstantOperandVal(2);
-    return VTargetLowering::getBitSlice(DCI.DAG, SrcOp->getDebugLoc(),
+    return VTargetLowering::getBitSlice(DCI.DAG, dl,
                                         SrcOp, UB + Offset, LB + Offset);
   }
 
@@ -174,12 +176,17 @@ static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
     SDValue HiOp = Op->getOperand(0), LoOp = Op->getOperand(1);
     unsigned SplitBit = TLI.computeSizeInBits(LoOp);
     if (UB <= SplitBit)
-      return VTargetLowering::getBitSlice(DCI.DAG, LoOp->getDebugLoc(),
-                                          LoOp, UB, LB);
+      return VTargetLowering::getBitSlice(DCI.DAG, dl, LoOp, UB, LB);
 
     if (LB >= SplitBit)
-      return VTargetLowering::getBitSlice(DCI.DAG, HiOp->getDebugLoc(),
+      return VTargetLowering::getBitSlice(DCI.DAG, dl,
                                           HiOp, UB - SplitBit, LB - SplitBit);
+
+    return DCI.DAG.getNode(VTMISD::BitCat, dl, N->getVTList(),
+                           VTargetLowering::getBitSlice(DCI.DAG, dl,
+                                                        HiOp, UB - SplitBit, 0),
+                           VTargetLowering::getBitSlice(DCI.DAG, dl,
+                                                        LoOp, SplitBit, LB));
   }
 
   return SDValue();

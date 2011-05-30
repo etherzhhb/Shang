@@ -270,15 +270,19 @@ SDValue VTargetLowering::getNot(SelectionDAG &DAG, DebugLoc dl,
 SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                                      unsigned UB, unsigned LB) {
   LLVMContext &Context = *DAG.getContext();
-  unsigned SizeInBits = UB - LB;
-  
-  assert(SizeInBits < computeSizeInBits(Op) && "Bad bit slice bit width!");
-  assert(UB <= computeSizeInBits(Op) && "Bad upper bound of bit slice!");
+  unsigned SizeInBits = UB - LB, OpSize = computeSizeInBits(Op);
+
+  assert(SizeInBits <= OpSize && "Bad bit slice bit width!");
+  assert(UB <= OpSize && "Bad upper bound of bit slice!");
+
+  // If the range contains all bits of the source operand, simple return the
+  // source operand.
+  if (SizeInBits == OpSize) return Op;
 
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op))
-    return DAG.getTargetConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
+    return DAG.getConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
 
   VT = getRoundIntegerOrBitType(VT, Context);
 

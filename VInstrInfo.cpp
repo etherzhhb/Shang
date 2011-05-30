@@ -45,7 +45,7 @@ FuncUnitId VInstr::getPrebindFUId()  const {
     return FuncUnitId(VFUs::MemoryBus, 0);
 
   if (getTID().Opcode == VTM::VOpBRam) {
-    unsigned Id = I.getOperand(5).getImm();
+    unsigned Id = get().getOperand(5).getImm();
     return FuncUnitId(VFUs::BRam, Id);
   }
 
@@ -77,7 +77,7 @@ bool VInstr::mayLoad() const {
   switch (getTID().Opcode) {
   default: return false;
   // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return !I.getOperand(3).getImm();
+  case VTM::VOpMemTrans: return !get().getOperand(3).getImm();
   }
 }
 
@@ -85,11 +85,12 @@ bool VInstr::mayStore() const {
   switch (getTID().Opcode) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return I.getOperand(3).getImm();
+  case VTM::VOpMemTrans: return get().getOperand(3).getImm();
   }
 }
 
 bool VInstr::canCopyBeFused() const {
+  const MachineInstr &I = get();
   assert(I.isCopy() && "canCopyBeFused called on the wrong instruction!");
   if (I.getOperand(1).isImm()) return true;
 

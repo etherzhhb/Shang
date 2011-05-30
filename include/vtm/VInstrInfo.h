@@ -20,6 +20,8 @@
 
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetOpcodes.h"
+#include "llvm/ADT/PointerUnion.h"
+
 namespace llvm {
 class TargetData;
 class TargetLowering;
@@ -90,16 +92,27 @@ class VInstr {
     WriteUntilFinishShiftAmount = 0x4,
 
     DatapathMask = 0x1,
-    DatapathShiftAmount = 0x5
+    DatapathShiftAmount = 0x5,
+
+    LazyEmitMask = 0x1,
+    LazyEmitShiftAmount = 0xa
   };
   
-  const MachineInstr &I;
-  const TargetInstrDesc &getTID() const { return I.getDesc(); }
+  PointerUnion<const MachineInstr*, const TargetInstrDesc*> Data;
+  const TargetInstrDesc &getTID() const {
+    if (const MachineInstr *MI = Data.dyn_cast<const MachineInstr*>())
+      return MI->getDesc();
+    
+    return *Data.get<const TargetInstrDesc*>();
+  }
   uint64_t getTSFlags() const { return getTID().TSFlags; }
 public:
-  /*implicit*/ VInstr(const MachineInstr &MI) : I(MI) {}
+  /*implicit*/ VInstr(const MachineInstr &MI) : Data(&MI) {}
+  /*implicit*/ VInstr(const TargetInstrDesc &TID) : Data(&TID) {}
 
-  MachineInstr &get() const { return const_cast<MachineInstr&>(I); }
+  MachineInstr &get() const {
+    return *const_cast<MachineInstr*>(Data.get<const MachineInstr*>());
+  }
 
   // TODO: Add method to help users manipulate the bit width flag.
 
@@ -155,6 +168,10 @@ public:
 
   inline bool hasDatapath() const {
     return getTSFlags() & (DatapathMask << DatapathShiftAmount);
+  }
+
+  inline bool isLazyEmit() const {
+    return getTSFlags() & (LazyEmitMask << LazyEmitShiftAmount);
   }
 
   const TargetInstrDesc* operator->() const { return &getTID(); }

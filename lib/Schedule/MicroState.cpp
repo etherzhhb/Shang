@@ -34,10 +34,8 @@ bool ucOp::isControl() const {
 }
 
 void ucOp::print(raw_ostream &OS) const {
-  const TargetMachine &TM =
-    OpCode.getParent()->getParent()->getParent()->getTarget();
+  OS << OpCode.getDesc().getName();
 
-  OS << TM.getInstrInfo()->get(OpCode.getOpcode()).getName();
   if (isControl()) {
     OS << " pred:[";
     getPredicate().print(OS);
@@ -99,6 +97,13 @@ void ucState::dump() const {
 
 // Out of line virtual function to provide home for the class.
 void ucState::anchor() {}
+
+
+const TargetInstrDesc &ucOperand::getDesc() const {
+  assert(isOpcode() && "getDesc on a wrong operand type!");
+  const TargetMachine &TM = getParent()->getParent()->getParent()->getTarget();
+  return TM.getInstrInfo()->get(getOpcode());
+}
 
 ucOp ucOperand::getucParent() {
   MachineInstr *MI = getParent();
