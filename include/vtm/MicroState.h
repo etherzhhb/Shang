@@ -140,6 +140,8 @@ public:
 
   op_iterator op_end() const { return rangeEnd; }
 
+  size_t getNumOperands() const { return rangeEnd - rangeBegin; }
+
   ucOperand &getOperand(unsigned i) const {
     op_iterator I = op_begin() + i;
     assert(I < rangeEnd && "index out of range!");
@@ -151,7 +153,7 @@ public:
     return *(op_begin() - 1);
   }
 
-  const ucOperand *operator->() const { return &OpCode; }
+  ucOperand *operator->() const { return &OpCode; }
 
   void print(raw_ostream &OS) const;
   void dump() const;

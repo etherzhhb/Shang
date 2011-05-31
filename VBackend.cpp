@@ -211,6 +211,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());
+  PM.add(createPHIEliminationPass());
 
   // TODO: Register allocation.
   PM.add(createSimpleRegisterAllocator());
@@ -218,7 +219,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Fix the copy instruction introduced by register allocation.
   // We need this even we have our own register allocator, because copies will
   // be generated when eliminating PHIs.
-  PM.add(createCopyEliminationPass());
+  // PM.add(createCopyEliminationPass());
 
   return false;
 }

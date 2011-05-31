@@ -106,6 +106,7 @@ Pass *llvm::createCopyEliminationPass() {
 
 void CopyElimination::EliminateCopy(MachineInstr &Copy,
                                     MachineBasicBlock *TargetBB) {
+  assert(0 && "Unexpected copy!");
   MachineBasicBlock *CurBB = Copy.getParent();
   assert(CurBB != TargetBB && "Copy should be eliminated by former passes!");
 

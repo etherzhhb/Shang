@@ -118,15 +118,16 @@ class RTLCodegen : public MachineFunctionPass {
     return ss.str();
   }
 
-  void emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB);
-
+  void emitNextFSMState(raw_ostream &ss, MachineBasicBlock *SrcBB,
+                        MachineBasicBlock *DstBB);
   void createucStateEnable(MachineBasicBlock *MBB);
   void emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                           const std::string &NewState);
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
-  void emitFirstCtrlState(MachineBasicBlock *MBB);
+  void emitFirstCtrlState(MachineBasicBlock *SrcBB,
+                          MachineBasicBlock *DstBB);
 
   void emitDatapath(ucState &State);
 
@@ -150,9 +151,12 @@ class RTLCodegen : public MachineFunctionPass {
   void emitImplicitDef(ucOp &ImpDef);
 
   // Return true if the control operation contains a return operation.
-  bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
+  bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
+                  MachineBasicBlock *SrcBB = 0);
 
-  void emitOpArg(ucOp &VOpArg);
+  void emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB);
+
+  void emitOpArg(ucOp &OpArg);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpCopy(ucOp &OpCopy);
@@ -360,7 +364,7 @@ void RTLCodegen::emitIdleState() {
   CtrlS.if_begin("start");
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
-  emitNextFSMState(CtrlS, EntryBB);
+  emitNextFSMState(CtrlS, 0, EntryBB);
   //
   CtrlS.else_begin();
   CtrlS << "NextFSMState <= state_idle;\n";
@@ -522,13 +526,14 @@ void RTLCodegen::createucStateEnable(MachineBasicBlock *MBB)  {
   VM->addRegister("cur_" + StateName + "_enable", totalSlot);
 }
 
-void RTLCodegen::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *MBB) {
+void RTLCodegen::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *SrcBB,
+                                  MachineBasicBlock *DstBB) {
   // Emit the first micro state of the target state.
-  emitFirstCtrlState(MBB);
+  emitFirstCtrlState(SrcBB, DstBB);
 
   // Only jump to other state if target MBB is not current MBB.
-  ss << "NextFSMState <= " << getStateName(MBB) << ";\n";
-  emitNextMicroState(VM->getControlBlockBuffer(), MBB, "1'b1");
+  ss << "NextFSMState <= " << getStateName(DstBB) << ";\n";
+  emitNextMicroState(VM->getControlBlockBuffer(), DstBB, "1'b1");
 }
 
 void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
@@ -625,7 +630,8 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   CtrlS << ";\n";
 }
 
-bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
+bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
+                            MachineBasicBlock *SrcBB) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
@@ -636,7 +642,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     unsigned Slot = Op->getPredSlot();
-    bool isFirstSlot = (Slot == startSlot);
+    assert(Slot != startSlot && "Unexpected first slot!");
     // Emit the control operation at the rising edge of the clock.
     std::string SlotPred = "(";
     raw_string_ostream SlotPredSS(SlotPred);
@@ -650,27 +656,22 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
     // Special case for state transferring operation.
     if (Op->getOpcode() == VTM::VOpToState) {
-      assert(!isFirstSlot && "Can not transfer to other state at first slot!");
       MachineBasicBlock *TargetBB = Op.getOperand(0).getMBB();
 
       // Emit control operation for next state.
       CtrlS.if_begin(SlotPred);
       if (TargetBB == CurBB) { // Self loop detected.
         CtrlS << "// Loop back to entry.\n";
-        emitFirstCtrlState(TargetBB);
+        emitFirstCtrlState(CurBB, TargetBB);
       } else // Transfer to other state.
-        emitNextFSMState(CtrlS, TargetBB);
+        emitNextFSMState(CtrlS, CurBB, TargetBB);
 
       CtrlS.exit_block();
       PredMap.insert(std::make_pair(TargetBB, SlotPred));
       continue;
     }
 
-    // Predicate the control logic by slot predicate.
-    // First slot is always predicated by state transferring condition,
-    // so we do not need to predicate it again.
-    if (!isFirstSlot)
-      CtrlS.if_begin(SlotPred);
+    CtrlS.if_begin(SlotPred);
 
     // Emit the operations.
     switch (Op->getOpcode()) {
@@ -678,25 +679,82 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
     case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemTrans:  emitOpMemTrans(Op);           break;
-    case VTM::VOpBRam:      emitOpBRam(Op);           break;
+    case VTM::VOpBRam:      emitOpBRam(Op);               break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
     case VTM::VOpSetRI:
     case VTM::COPY:         emitOpCopy(Op);               break;
     default:  assert(0 && "Unexpected opcode!");          break;
     }
 
-    if(!isFirstSlot)  CtrlS.exit_block();
+    CtrlS.exit_block();
   }
   return IsRet;
 }
 
-void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *MBB) {
+void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
+                                    MachineBasicBlock *DstBB) {
   // TODO: Emit PHINodes if necessary.
-  ucState FirstState = *MBB->getFirstNonPHI();
-  assert(FInfo->getStartSlotFor(MBB) == FirstState.getSlot());
-  PredMapTy dummy;
-  emitCtrlOp(FirstState, dummy);
-  assert(dummy.empty() && "Can not loop back at first state!");
+  ucState FirstState = *DstBB->getFirstNonPHI();
+  assert(FInfo->getStartSlotFor(DstBB) == FirstState.getSlot()
+         && "Broken Slot!");
+
+  unsigned StateSlot = FirstState.getSlot();
+  for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
+       I != E; ++I) {
+    ucOp PN = *I;
+    assert(PN->getOpcode() == VTM::PHI && "Unexpected ucOp type!");
+    // Ignore the Pipeline PHIs first.
+    if (PN->getPredSlot() != StateSlot) continue;
+
+    emitOpPHI(PN, SrcBB);
+  }
+
+  // Emit the pipelined PHIs.
+  if (SrcBB != DstBB) return;
+  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  CtrlS.exit_block("// End normal PHIs\n");
+
+  for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
+       I != E; ++I) {
+      ucOp PN = *I;
+    // Ignore the Pipeline PHIs first.
+    unsigned Slot = PN->getPredSlot();
+
+    if (Slot == StateSlot) continue;
+
+    std::string SlotPred = "(";
+    raw_string_ostream SlotPredSS(SlotPred);
+
+    SlotPredSS << getucStateEnable(DstBB, Slot - 1) << ')';
+
+    // Emit the predicate operand.
+    SlotPredSS << " & ";
+    PN.getPredicate().print(SlotPredSS);
+    SlotPredSS.flush();
+
+    CtrlS.if_begin(SlotPred);
+    emitOpPHI(PN, SrcBB);
+    CtrlS.exit_block("// End pipeline register\n");
+  }
+
+  // DirtyHack: match the block of the loop predicate.
+  CtrlS.if_begin("1'b1");
+}
+
+void RTLCodegen::emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB) {
+  assert(SrcBB && "Cannot emit PHI without SrcBB!");
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  OpPHI.getOperand(0).print(OS);
+  OS << " <= ";
+  // Find the source value from match MBB.
+  for (unsigned i = 1, e = OpPHI.getNumOperands(); i != e; i +=2)
+    if (OpPHI.getOperand(i + 1).getMBB() == SrcBB) {
+      OpPHI.getOperand(i).print(OS);
+      OS << ";\n";
+      return;
+    }
+
+  llvm_unreachable("No matching MBB found!");
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {

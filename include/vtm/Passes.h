@@ -41,6 +41,8 @@ Pass *createElimSetRIPass();
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();
 
+Pass *createPHIEliminationPass();
+
 // Register allocation.
 FunctionPass *createSimpleRegisterAllocator();
 

@@ -414,9 +414,11 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
 
   // If read before write in machine code, insert a phi node.
   if (getModuloSlot(EmitSlot, IsCtrl) < getModuloSlot(WD.WriteSlot, true)) {
+    SmallVector<MachineInstr*, 4> InsertedPHIs;
+
     // PHI node needed.
     // TODO: Move to constructor?
-    MachineSSAUpdater SSAUpdate(*MBB.getParent());
+    MachineSSAUpdater SSAUpdate(*MBB.getParent(), &InsertedPHIs);
     SSAUpdate.Initialize(RegNo);
     SSAUpdate.AddAvailableValue(&MBB, RegNo);
 
@@ -455,6 +457,25 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     }
 
     unsigned NewReg = SSAUpdate.GetValueInMiddleOfBlock(&MBB);
+
+    // Update the bitwidth for newly inserted PHIs, insert it into the
+    // First ucSate.
+    unsigned StartSlot = State.getStartSlot();
+    unsigned II = State.getII();
+    unsigned NumII = RoundUpToAlignment(WD.WriteSlot - StartSlot, II) / II;
+
+    while (!InsertedPHIs.empty()) {
+      MachineInstr *PN = InsertedPHIs.pop_back_val();
+      PN->setFlags(NumII);
+      assert(PN->getFlags() == NumII && "NumII overflow!");
+      ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
+      Op.setBitWidth(SizeInBits);
+
+      for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
+        ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
+        SrcOp.setBitWidth(SizeInBits);
+      }
+    }
     
     MO = MachineOperand::CreateReg(NewReg, false);
     MO.setBitWidth(SizeInBits);
@@ -506,12 +527,8 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
         continue;
       }
 
-      if (Inst->isCopy() && !VInstr(*Inst).canCopyBeFused()) {
-        // TODO: move this to MicroStateBuilder.
-        MBB->remove(Inst);
-        StateBuilder.defereSUnit(A);
-        continue;
-      }
+      assert((!Inst->isCopy() || VInstr(*Inst).canCopyBeFused())
+             && "Cannot handle copy!");
 
       StateBuilder.emitSUnit(A);
     }
@@ -526,6 +543,8 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
 
   // Set the hasTerm flag for instruction that branching to other MachineBB.
   StateBuilder.getStateCtrlAt(getEndSlot())
+    .setFlag((MachineInstr::MIFlag)ucState::hasTerm);
+  StateBuilder.getStateCtrlAt(getLoopOpSlot())
     .setFlag((MachineInstr::MIFlag)ucState::hasTerm);
 
   DEBUG(dbgs() << "After schedule emitted:\n");
