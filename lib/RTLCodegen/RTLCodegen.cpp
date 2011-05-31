@@ -710,9 +710,9 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
   }
 
   // Emit the pipelined PHIs.
-  if (SrcBB != DstBB) return;
+  bool IsInSameBB = (SrcBB == DstBB);
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  CtrlS.exit_block("// End normal PHIs\n");
+  if (IsInSameBB) CtrlS.exit_block("// End normal PHIs\n");
 
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
@@ -721,24 +721,28 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
     unsigned Slot = PN->getPredSlot();
 
     if (Slot == StateSlot) continue;
+    if (IsInSameBB) {
+      std::string SlotPred = "(";
+      raw_string_ostream SlotPredSS(SlotPred);
 
-    std::string SlotPred = "(";
-    raw_string_ostream SlotPredSS(SlotPred);
+      SlotPredSS << getucStateEnable(DstBB, Slot - 1) << ')';
 
-    SlotPredSS << getucStateEnable(DstBB, Slot - 1) << ')';
+      // Emit the predicate operand.
+      SlotPredSS << " & ";
+      PN.getPredicate().print(SlotPredSS);
+      SlotPredSS.flush();
 
-    // Emit the predicate operand.
-    SlotPredSS << " & ";
-    PN.getPredicate().print(SlotPredSS);
-    SlotPredSS.flush();
+      CtrlS.if_begin(SlotPred);
 
-    CtrlS.if_begin(SlotPred);
+    }
+
     emitOpPHI(PN, SrcBB);
-    CtrlS.exit_block("// End pipeline register\n");
+
+    if (IsInSameBB) CtrlS.exit_block("// End pipeline register\n");
   }
 
   // DirtyHack: match the block of the loop predicate.
-  CtrlS.if_begin("1'b1");
+  if (IsInSameBB) CtrlS.if_begin("1'b1");
 }
 
 void RTLCodegen::emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB) {

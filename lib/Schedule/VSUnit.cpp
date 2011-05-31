@@ -52,7 +52,7 @@ void VSchedGraph::dump() const {
 }
 
 
-bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
+bool VSchedGraph::trySetLoopOp(VInstr &VTID) {
   assert(VTID->isTerminator() && "Bad instruction!");
 
   if (VTID->getOpcode() != VTM::VOpToState) return false;
@@ -63,6 +63,15 @@ bool llvm::VSchedGraph::trySetLoopOp(VInstr &VTID) {
   LoopOp.setPointer(&VTID.get());
   return true;
 }
+
+void VSchedGraph::resetSchedule() {
+  for (iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *U = *I;
+    U->resetSchedule();
+  }
+  getEntryRoot()->scheduledTo(startSlot);
+}
+
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();

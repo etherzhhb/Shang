@@ -580,11 +580,7 @@ public:
 
   size_t getNumSUnits() const { return SUnits.size(); }
 
-  void resetSchedule() {
-    for (iterator I = begin(), E = end(); I != E; ++I)
-      (*I)->resetSchedule();
-    getEntryRoot()->scheduledTo(startSlot);
-  }
+  void resetSchedule();
 
   unsigned getStartSlot() const { return getEntryRoot()->getSlot(); }
   unsigned getEndSlot() const { return getExitRoot()->getSlot(); }

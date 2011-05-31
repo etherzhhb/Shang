@@ -37,6 +37,7 @@ namespace {
 struct PHIElimination : public MachineFunctionPass{
   static char ID;
   VFInfo *VFI;
+  MachineRegisterInfo *MRI;
 
   std::map<uint64_t, MachineInstr*> BrCtrlMap;
   MachineInstr *getBrCrl(MachineBasicBlock *SrcMBB, MachineBasicBlock *DstMBB){
@@ -82,6 +83,7 @@ struct PHIElimination : public MachineFunctionPass{
   bool runOnMachineFunction(MachineFunction &MF) {
     bool Changed = false;
     VFI = MF.getInfo<VFInfo>();
+    MRI = &MF.getRegInfo();
 
     for (MachineFunction::iterator I = MF.begin(), E = MF.end();
          I != E; ++I)
@@ -110,12 +112,8 @@ void PHIElimination::EliminatePHI(MachineInstr *PN) {
   MachineInstrBuilder MIB(&*FirstCtrl);
 
   unsigned startSlot = FirstCtrl.getSlot();
-  unsigned Slot = PN->getFlags();
-  if (Slot) { // We have a pipeline PHI.
-    unsigned IISlot = VFI->getIISlotFor(CurBB);
-    Slot *= IISlot - startSlot;
-  }
-  Slot += startSlot;
+  unsigned II = VFI->getIISlotFor(CurBB) - startSlot;
+  unsigned Slot = startSlot + PN->getFlags();
 
   MIB.addOperand(ucOperand::CreateOpcode(VTM::PHI, Slot));
   MIB.addOperand(ucOperand::CreatePredicate());
@@ -127,29 +125,40 @@ void PHIElimination::EliminatePHI(MachineInstr *PN) {
     unsigned SrcReg = SrcOp.getReg();
     MachineOperand SrcBBOp = PN->getOperand(i + 1);
     MachineBasicBlock *SrcBB = SrcBBOp.getMBB();
-    ucState Ctrl(*getBrCrl(SrcBB, CurBB));
 
-    // Try to forward the values.
-    for (ucState::iterator I = Ctrl.begin(), E = Ctrl.end(); I != E; ++I) {
-      ucOp Op = *I;
-      // We need match the slot for pipeline register, otherwise the end control
-      // state of source BB and the first control state of current BB is overlap
-      if (Slot != startSlot && Op->getPredSlot() != Slot)
-        continue;
+    // Find the opcode of the ucOp defining the register.
+    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
+    assert (++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
+    MachineInstr &DefInst = *DI;
+    MachineInstr::mop_iterator OI = DefInst.operands_begin() + DI.getOperandNo();
+    MachineInstr::mop_iterator OpcodeI = OI;
+    while (!cast<ucOperand>(*(--OpcodeI)).isOpcode())
+      assert(OI != DefInst.operands_begin() && "Broken ucState!");
 
-      ucOperand &DefOp = Op.getOperand(0);
-      if (!DefOp.isReg() || !DefOp.isDef() || DefOp.getReg() != SrcReg)
-        continue;
+    ucOperand &Opcode = cast<ucOperand>(*OpcodeI);
+    // If the source value not defined in source BB, no need to try to forward
+    // the value.
+    if (Opcode.getParent()->getParent() == SrcBB) {
+      unsigned DefSlot = Opcode.getPredSlot();
+      unsigned EndSlot = VFI->getStartSlotFor(SrcBB)
+                         + VFI->getTotalSlotFor(SrcBB);
 
-      if (Op->getOpcode() == VTM::COPY) {
-        // Forward the wire value if necessary.
-        SrcOp = Op.getOperand(1);
-        break;
-      } else if (Op->getOpcode() == VTM::IMPLICIT_DEF) {
-        SrcOp.ChangeToImmediate(0);
-        break;
+      // If we reading a value from others BB, make sure we are reading the last
+      // value from the predecessor.
+      // Or if we are reading a value frome the same BB, We need match the slot
+      // for pipeline register, otherwise the end control state of source BB and
+      // the first control state of current BB is overlap Because the PHIs read
+      // values from previous iteration, adjust the write slot.
+      if ((SrcBB == CurBB && DefSlot == Slot)
+          || (SrcBB != CurBB && DefSlot == EndSlot)) {
+        if (Opcode.getOpcode() == VTM::COPY)
+          // Forward the wire value if necessary.
+          SrcOp = *(OI + 1);
+        else if (Opcode.getOpcode()  == VTM::IMPLICIT_DEF)
+          SrcOp.ChangeToImmediate(0);
+        else
+          llvm_unreachable("Unexpected ucOp type!");
       }
-      llvm_unreachable("Unexpected ucOp type!");
     }
 
     MIB.addOperand(SrcOp).addOperand(SrcBBOp);
