@@ -66,6 +66,11 @@ static EVT getRoundIntegerOrBitType(EVT &VT, LLVMContext &Context) {
 
 VTargetLowering::VTargetLowering(TargetMachine &TM)
   : TargetLowering(TM, new TargetLoweringObjectFileELF()) {
+  // Bitwidth information of function units.
+  MaxMultBits = getFUDesc<VFUMult>()->getMaxBitWidth();
+  MaxAddSubBits = getFUDesc<VFUAddSub>()->getMaxBitWidth();
+  MaxShiftBits = getFUDesc<VFUShift>()->getMaxBitWidth();
+
   setBooleanContents(UndefinedBooleanContent);
   setIntDivIsCheap(false);
   setSchedulingPreference(Sched::ILP);
@@ -79,7 +84,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
   computeRegisterProperties();
 
-
   setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
   setOperationAction(ISD::JumpTable,     MVT::i32, Custom);
 
@@ -91,41 +95,52 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
   for (unsigned VT = (unsigned)MVT::FIRST_INTEGER_VALUETYPE;
        VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
-    MVT::SimpleValueType SimpleVT = (MVT::SimpleValueType)VT;
+    MVT CurVT = MVT((MVT::SimpleValueType)VT);
 
     // Lower the add/sub operation to full adder operation.
-    setOperationAction(ISD::ADD, SimpleVT, Custom);
+    setOperationAction(ISD::ADD, CurVT, Custom);
     // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, SimpleVT, Custom);
-    setOperationAction(ISD::ADDE, SimpleVT, Custom);
-    setOperationAction(ISD::SUBE, SimpleVT, Custom);
-    setOperationAction(ISD::ADDC, SimpleVT, Custom);
-    setOperationAction(ISD::SUBC, SimpleVT, Custom);
-    setOperationAction(ISD::SADDO, SimpleVT, Custom);
-    setOperationAction(ISD::SSUBO, SimpleVT, Custom);
-    setOperationAction(ISD::UADDO, SimpleVT, Custom);
-    setOperationAction(ISD::UADDO, SimpleVT, Custom);
+    setOperationAction(ISD::SUB, CurVT, Custom);
+    setOperationAction(ISD::ADDE, CurVT, Custom);
+    setOperationAction(ISD::SUBE, CurVT, Custom);
+    setOperationAction(ISD::ADDC, CurVT, Custom);
+    setOperationAction(ISD::SUBC, CurVT, Custom);
+    setOperationAction(ISD::SADDO, CurVT, Custom);
+    setOperationAction(ISD::SSUBO, CurVT, Custom);
+    setOperationAction(ISD::UADDO, CurVT, Custom);
+    setOperationAction(ISD::UADDO, CurVT, Custom);
+
+    // We don't have MUL_LOHI
+    setOperationAction(ISD::MULHS, CurVT, Expand);
+    setOperationAction(ISD::MULHU, CurVT, Expand);/*
+    setOperationAction(ISD::SMUL_LOHI, CurVT, Expand);
+    setOperationAction(ISD::UMUL_LOHI, CurVT, Expand);*/
+
+    //if (MVT(CurVT).getSizeInBits() > MaxMultBits) {
+    //  // Expand the  multiply;
+    //  setOperationAction(ISD::MUL, CurVT, Expand);
+    //}
 
     // Lower load and store to memory access node.
-    setOperationAction(ISD::LOAD, SimpleVT, Custom);
-    setOperationAction(ISD::STORE, SimpleVT, Custom);
+    setOperationAction(ISD::LOAD, CurVT, Custom);
+    setOperationAction(ISD::STORE, CurVT, Custom);
     // Just break down the extend load
-    setLoadExtAction(ISD::EXTLOAD, SimpleVT, Custom);
-    setLoadExtAction(ISD::SEXTLOAD, SimpleVT, Custom);
-    setLoadExtAction(ISD::ZEXTLOAD, SimpleVT, Custom);
+    setLoadExtAction(ISD::EXTLOAD, CurVT, Custom);
+    setLoadExtAction(ISD::SEXTLOAD, CurVT, Custom);
+    setLoadExtAction(ISD::ZEXTLOAD, CurVT, Custom);
     
     // Lower cast node to bit level operation.
-    setOperationAction(ISD::SIGN_EXTEND, SimpleVT, Custom);
-    setOperationAction(ISD::ZERO_EXTEND, SimpleVT, Custom);
-    setOperationAction(ISD::ANY_EXTEND, SimpleVT, Custom);
-    setOperationAction(ISD::TRUNCATE, SimpleVT, Custom);
+    setOperationAction(ISD::SIGN_EXTEND, CurVT, Custom);
+    setOperationAction(ISD::ZERO_EXTEND, CurVT, Custom);
+    setOperationAction(ISD::ANY_EXTEND, CurVT, Custom);
+    setOperationAction(ISD::TRUNCATE, CurVT, Custom);
     // Condition code will not work.
-    setOperationAction(ISD::SELECT_CC, SimpleVT, Expand);
+    setOperationAction(ISD::SELECT_CC, CurVT, Expand);
     // Lower SetCC to more fundamental operation.
-    setOperationAction(ISD::SETCC, SimpleVT, Custom);
+    setOperationAction(ISD::SETCC, CurVT, Custom);
 
     for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC) {
-      setCondCodeAction((ISD::CondCode)CC, SimpleVT, Custom);
+      setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
     }
     
   }
@@ -242,11 +257,9 @@ unsigned VTargetLowering::computeSizeInBits(SDValue Op) {
   switch (Op->getOpcode()) {
   default: return Op.getValueSizeInBits();
   case VTMISD::BitSlice:
-    return cast<ConstantSDNode>(Op->getOperand(1))->getZExtValue()
-           - cast<ConstantSDNode>(Op->getOperand(2))->getZExtValue();
+    return Op->getConstantOperandVal(1) - Op->getConstantOperandVal(2);
   case VTMISD::BitRepeat:
-    return cast<ConstantSDNode>(Op->getOperand(1))->getZExtValue()
-           * computeSizeInBits(Op->getOperand(0));
+    return Op->getConstantOperandVal(1) * computeSizeInBits(Op->getOperand(0));
   case VTMISD::BitCat: {
     unsigned SizeInBit = 0;
     for (SDNode::op_iterator I = Op->op_begin(), E = Op->op_end(); I != E; ++I)

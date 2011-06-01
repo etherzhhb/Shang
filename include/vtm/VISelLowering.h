@@ -44,6 +44,7 @@ namespace VTMISD {
 }
 
 class VTargetLowering : public TargetLowering {
+  unsigned MaxAddSubBits, MaxMultBits, MaxShiftBits;
 public:
   VTargetLowering(TargetMachine &TM);
   
