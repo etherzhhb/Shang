@@ -293,11 +293,11 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   if (SizeInBits == OpSize) return Op;
 
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
-  VT = getRoundIntegerOrBitType(VT, Context);
 
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op))
-    return DAG.getConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
+    return DAG.getTargetConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
 
+  VT = getRoundIntegerOrBitType(VT, Context);
 
   return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
                      DAG.getConstant(UB, MVT::i8, true),
