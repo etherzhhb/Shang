@@ -68,19 +68,7 @@ class BitLevelInfo : public MachineFunctionPass {
     return BitWidth;
   }
 
-  unsigned computePHI(MachineInstr *PN) {
-    assert(PN->isPHI() && "Wrong Instruction type!");
-    unsigned BitWidth = 0;
-    
-    for (unsigned i = 1; i != PN->getNumOperands(); i += 2)
-      if (unsigned Width = cast<ucOperand>(PN->getOperand(i)).getBitWidthOrZero()) {
-        assert ((BitWidth == 0 || BitWidth == Width)
-                 && "Bit width of PHINode not match!");
-        BitWidth = Width;
-      }
-
-    return BitWidth;
-  }
+  unsigned computePHI(MachineInstr *PN);
 
   MachineRegisterInfo *MRI;
 

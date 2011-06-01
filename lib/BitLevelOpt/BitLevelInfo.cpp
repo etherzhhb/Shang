@@ -237,6 +237,20 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     propagateBitWidth(*Defs.pop_back_val());
 }
 
+unsigned BitLevelInfo::computePHI( MachineInstr *PN ) {
+  assert(PN->isPHI() && "Wrong Instruction type!");
+  unsigned BitWidth = 0;
+
+  for (unsigned i = 1; i != PN->getNumOperands(); i += 2)
+    if (unsigned Width = cast<ucOperand>(PN->getOperand(i)).getBitWidthOrZero()) {
+      //assert ((BitWidth == 0 || BitWidth == Width)
+      //  && "Bit width of PHINode not match!");
+      BitWidth = std::max(BitWidth, Width);
+    }
+
+  return BitWidth;
+}
+
 void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
   assert(MO.isReg() && "Wrong operand type!");
 
