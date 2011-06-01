@@ -112,7 +112,6 @@ void PHIElimination::EliminatePHI(MachineInstr *PN) {
   MachineInstrBuilder MIB(&*FirstCtrl);
 
   unsigned startSlot = FirstCtrl.getSlot();
-  unsigned II = VFI->getIISlotFor(CurBB) - startSlot;
   unsigned Slot = startSlot + PN->getFlags();
 
   MIB.addOperand(ucOperand::CreateOpcode(VTM::PHI, Slot));

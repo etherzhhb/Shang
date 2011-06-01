@@ -461,8 +461,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     // Update the bitwidth for newly inserted PHIs, insert it into the
     // First ucSate.
     unsigned StartSlot = State.getStartSlot();
-    unsigned II = State.getII();
-    unsigned InsertSlot = RoundUpToAlignment(WD.WriteSlot - StartSlot, II);
+    unsigned InsertSlot = WD.WriteSlot - StartSlot;
 
     while (!InsertedPHIs.empty()) {
       MachineInstr *PN = InsertedPHIs.pop_back_val();
