@@ -150,13 +150,19 @@ void PHIElimination::EliminatePHI(MachineInstr *PN) {
       // values from previous iteration, adjust the write slot.
       if ((SrcBB == CurBB && DefSlot == Slot)
           || (SrcBB != CurBB && DefSlot == EndSlot)) {
-        if (Opcode.getOpcode() == VTM::COPY)
+        switch(Opcode.getOpcode()) {
           // Forward the wire value if necessary.
+        case VTM::COPY:
           SrcOp = *(OI + 1);
-        else if (Opcode.getOpcode()  == VTM::IMPLICIT_DEF)
+          break;
+        case VTM::IMPLICIT_DEF:
           SrcOp.ChangeToImmediate(0);
-        else
+          break;
+        case VTM::PHI: // Do not forward the PHI value.
+          break;
+        default:
           llvm_unreachable("Unexpected ucOp type!");
+        }
       }
     }
 
