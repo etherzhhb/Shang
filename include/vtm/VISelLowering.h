@@ -72,6 +72,10 @@ public:
   // Get the bit slice in range (UB, LB].
   /// GetBits - Retrieve bits between [LB, UB).
   static inline uint64_t getBitSlice(uint64_t x, unsigned UB, unsigned LB = 0) {
+    assert(UB - LB <= 64 && UB <= 64 && "Cannot extract bit slice!");
+    // If the bit slice contains the whole 64-bit variable, simply return it.
+    if (UB == 64 && LB == 0) return x;
+
     return (x >> LB) & ((uint64_t(1) << (UB - LB)) - 1);
   }
 
