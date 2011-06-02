@@ -254,6 +254,8 @@ unsigned VTargetLowering::computeSizeInBits(SDValue Op) {
 
   switch (Op->getOpcode()) {
   default: return Op.getValueSizeInBits();
+  case VTMISD::Not:
+    return computeSizeInBits(Op->getOperand(0));
   case VTMISD::BitSlice:
     return Op->getConstantOperandVal(1) - Op->getConstantOperandVal(2);
   case VTMISD::BitRepeat:

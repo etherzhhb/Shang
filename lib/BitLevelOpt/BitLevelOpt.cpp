@@ -34,7 +34,7 @@
 
 using namespace llvm;
 
-template<class Func>
+template<typename Func>
 inline static SDValue commuteAndTryAgain(SDNode *N, const VTargetLowering &TLI,
                                          TargetLowering::DAGCombinerInfo &DCI,
                                          bool ExchangeOperand, Func F) {
@@ -129,7 +129,7 @@ static SDValue PerformXorCombine(SDNode *N, const VTargetLowering &TLI,
   return commuteAndTryAgain(N, TLI, DCI, ExchangeOperand, PerformXorCombine);
 }
 
-static bool extractBitMaskInfo(int64_t Val, unsigned SizeInBits,
+static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
                                unsigned &UB, unsigned &LB) {
   if (isShiftedMask_64(Val) || isMask_64(Val)) {
     LB = CountTrailingZeros_64(Val);
@@ -140,87 +140,150 @@ static bool extractBitMaskInfo(int64_t Val, unsigned SizeInBits,
   return false;
 }
 
+static SDValue ExtractEnabledBitsAnd(TargetLowering::DAGCombinerInfo &DCI,
+                                     SDValue Op, unsigned UB, unsigned LB) {
+  // A & 1 = A
+  SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
+                                           Op, UB, LB);
+  DCI.AddToWorklist(V.getNode());
+  return V;
+}
+
+static SDValue ExtractDisabledBitsAnd(TargetLowering::DAGCombinerInfo &DCI,
+                                      SDValue Op, unsigned UB, unsigned LB) {
+  EVT HiVT = EVT::getIntegerVT(*DCI.DAG.getContext(), UB - LB);
+  // A & 0 = 0
+  return DCI.DAG.getTargetConstant(0, HiVT);
+}
+
+
+static SDValue ExtractEnabledBitsOr(TargetLowering::DAGCombinerInfo &DCI,
+                                    SDValue Op,  unsigned UB, unsigned LB) {
+  EVT VT = EVT::getIntegerVT(*DCI.DAG.getContext(), UB - LB);
+  // A | 1 = 1
+  return DCI.DAG.getTargetConstant(~uint64_t(0), VT);
+}
+
+static SDValue ExtractDisabledBitsOr(TargetLowering::DAGCombinerInfo &DCI,
+                                     SDValue Op, unsigned UB, unsigned LB) {
+  // A | 0 = A
+  SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
+                                           Op, UB, LB);
+  DCI.AddToWorklist(V.getNode());
+  return V;
+}
+
+static SDValue ExtractEnabledBitsXOr(TargetLowering::DAGCombinerInfo &DCI,
+                                     SDValue Op, unsigned UB, unsigned LB) {
+  // A ^ 1 = ~A
+  SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
+                                           Op, UB, LB);
+  DCI.AddToWorklist(V.getNode());
+  V = VTargetLowering::getNot(DCI.DAG, Op->getDebugLoc(), V);
+  DCI.AddToWorklist(V.getNode());
+  return V;
+}
+
+static SDValue ExtractDisabledBitsXOr(TargetLowering::DAGCombinerInfo &DCI,
+                                      SDValue Op, unsigned UB, unsigned LB) {
+  // A ^ 0 = A
+  SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
+                                           Op, UB, LB);
+  DCI.AddToWorklist(V.getNode());
+  return V;
+}
+
+
+template<typename ExtractBitsFunc>
+static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
+                           TargetLowering::DAGCombinerInfo &DCI,
+                           ExtractBitsFunc ExtractEnabledBits,
+                           ExtractBitsFunc ExtractDisabledBits,
+                           bool flipped = false) {
+
+  DebugLoc dl = Op->getDebugLoc();
+  SelectionDAG &DAG = DCI.DAG;
+  EVT VT = Op.getValueType();
+  unsigned SizeInBits = Op.getValueSizeInBits();
+
+  unsigned UB, LB;
+  if (ExtractBitMaskInfo(Mask, SizeInBits, UB, LB)) {
+    // All disabled?
+    if (UB - LB == SizeInBits)
+      return ExtractEnabledBits(DCI, Op, SizeInBits, 0);
+
+    // Handle and with a bit mask like A & 0xf0, simply extract the
+    // corresponding bits.
+    // Handle or with a bit mask like A | 0xf0, simply set the corresponding
+    // bits to 1.
+
+    SDValue MidBits = ExtractEnabledBits(DCI, Op, UB, LB);
+    DCI.AddToWorklist(MidBits.getNode());
+
+    SDValue HiBits;
+    if (SizeInBits != UB) {
+      HiBits = ExtractDisabledBits(DCI, Op, SizeInBits, UB);
+      DCI.AddToWorklist(HiBits.getNode());
+    }
+
+    if(LB == 0) {
+      assert(SizeInBits != UB && "Unexpected all one value!");
+      SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, MidBits);
+      assert(TLI.computeSizeInBits(Result) == SizeInBits
+        && "Bit widht not match!");
+      return Result;
+    }
+
+    // Build the lower part.
+    SDValue LoBits = ExtractDisabledBits(DCI, Op, LB, 0);
+    DCI.AddToWorklist(LoBits.getNode());
+
+    SDValue Lo = DAG.getNode(VTMISD::BitCat, dl, VT, MidBits, LoBits);
+    if (UB == SizeInBits) {
+      assert(TLI.computeSizeInBits(Lo) == SizeInBits
+             && "Bit widht not match!");
+      return Lo;
+    }
+
+    DCI.AddToWorklist(Lo.getNode());
+    SDValue Result = DAG.getNode(VTMISD::BitCat, Op->getDebugLoc(), VT, HiBits, Lo);
+    assert(TLI.computeSizeInBits(Result) == SizeInBits
+           && "Bit widht not match!");
+    return Result;
+  }
+
+  if (flipped) return SDValue();
+
+  // Flip the mask and try again.
+  return ExtractBits(Op, ~Mask, TLI, DCI,
+                     ExtractDisabledBits, ExtractEnabledBits, true);
+}
+
 static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    bool ExchangeOperand = false) {
   SDValue OpA = N->getOperand(0 ^ ExchangeOperand),
           OpB = N->getOperand(1 ^ ExchangeOperand);
-  DebugLoc dl = N->getDebugLoc();
-  bool isAnd = (N->getOpcode() == ISD::AND);
 
   if (ConstantSDNode *COpB =  dyn_cast<ConstantSDNode>(OpB)) {
-    // A & 1 = A, A | 1 = 1
-    if (COpB->isAllOnesValue()) return isAnd ? OpA : OpB;
-    // A & 0 = 0, A | 0 = a
-    if (COpB->isNullValue()) return isAnd ? OpB : OpA;
-
-    EVT VT = OpA.getValueType();
-    unsigned SizeInBits = OpB.getValueSizeInBits();
     int64_t Val = COpB->getSExtValue();
-    unsigned UB, LB;
 
-
-    if (extractBitMaskInfo(Val, SizeInBits, UB, LB)) {
-      LLVMContext &Context = *DCI.DAG.getContext();
-      SelectionDAG &DAG = DCI.DAG;
-      // Handle and with a bit mask like A & 0xf0, simply extract the
-      // corresponding bits.
-      // Handle or with a bit mask like A | 0xf0, simply set the corresponding
-      // bits to 1.
-
-      EVT MidVT = EVT::getIntegerVT(Context, UB - LB);
-      SDValue MidBits;
-      if (isAnd) { // A & 1 = A
-        MidBits = VTargetLowering::getBitSlice(DAG, dl, OpA, UB, LB);
-        DCI.AddToWorklist(MidBits.getNode());
-      } else // A | 1 = 1
-        MidBits = DAG.getTargetConstant(~uint64_t(0), MidVT);
-
-      EVT HiVT;
-      SDValue HiBits;
-      if (SizeInBits != UB) {
-        HiVT = EVT::getIntegerVT(Context, SizeInBits - UB);
-        if (isAnd)  // A & 0 = 0
-          HiBits = DAG.getTargetConstant(0, HiVT);
-        else { // A | 0 = A
-          HiBits = VTargetLowering::getBitSlice(DAG, dl, OpA, SizeInBits, UB);
-          DCI.AddToWorklist(HiBits.getNode());
-        }
-      }
-
-      if(LB == 0) {
-        assert(SizeInBits != UB && "Unexpected all one value!");
-        SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, MidBits);
-        assert(TLI.computeSizeInBits(Result) == SizeInBits
-               && "Bit widht not match!");
-        return Result;
-      }
-
-      // Build the lower part.
-      EVT LoVT = EVT::getIntegerVT(Context, LB);
-      SDValue LoBits;
-
-      if (isAnd) // A & 0 = 0
-        LoBits = DAG.getTargetConstant(0, LoVT);
-      else { // A | 0 = A
-        LoBits = VTargetLowering::getBitSlice(DAG, dl, OpA, LB, 0);
-        DCI.AddToWorklist(LoBits.getNode());
-      }
-
-      SDValue Lo = DAG.getNode(VTMISD::BitCat, dl, VT, MidBits, LoBits);
-      if (UB == SizeInBits) {
-        assert(TLI.computeSizeInBits(Lo) == SizeInBits
-               && "Bit widht not match!");
-        return Lo;
-      }
-
-      DCI.AddToWorklist(Lo.getNode());
-      SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, Lo);
-      assert(TLI.computeSizeInBits(Result) == SizeInBits
-             && "Bit widht not match!");
-      return Result;
+    switch(N->getOpcode()) {
+    case ISD::AND:
+      return ExtractBits(OpA, Val, TLI, DCI,
+                         ExtractEnabledBitsAnd,
+                         ExtractDisabledBitsAnd);
+    case ISD::OR:
+      return ExtractBits(OpA, Val, TLI, DCI,
+                         ExtractEnabledBitsOr,
+                         ExtractDisabledBitsOr);
+    case ISD::XOR:
+      return ExtractBits(OpA, Val, TLI, DCI,
+                         ExtractEnabledBitsXOr,
+                         ExtractDisabledBitsXOr);
+    default:
+      llvm_unreachable("Unexpected Logic Node!");
     }
-
   }
 
   return commuteAndTryAgain(N, TLI, DCI, ExchangeOperand, PerformLogicCombine);
@@ -326,9 +389,8 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
     return PerformShiftImmCombine(N, *this, DCI);
   case ISD::AND:
   case ISD::OR:
-    return PerformLogicCombine(N, *this, DCI);
   case ISD::XOR:
-    return PerformXorCombine(N, *this, DCI);
+    return PerformLogicCombine(N, *this, DCI);
   case VTMISD::Not:
     return PerformNotCombine(N, *this, DCI);
   case VTMISD::RAnd:
