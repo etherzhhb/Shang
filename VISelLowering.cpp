@@ -289,8 +289,9 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   assert(SizeInBits <= OpSize && "Bad bit slice bit width!");
   assert(UB <= OpSize && "Bad upper bound of bit slice!");
   // If the range contains all bits of the source operand, simple return the
-  // source operand.
-  if (SizeInBits == OpSize) return Op;
+  // source operand, also try to match the result width if necessary.
+  if (SizeInBits == OpSize && (ResultWidth == 0 || SizeInBits == ResultWidth))
+    return Op;
 
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
