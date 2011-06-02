@@ -56,8 +56,9 @@ inline static bool isNullValue(uint64_t Val, unsigned SizeInBits) {
 
 inline static unsigned ExtractConstant(SDValue V, uint64_t &Val) {
   if (ConstantSDNode *CSD =dyn_cast<ConstantSDNode>(V)) {
-    Val = CSD->getZExtValue();
-    return V.getValueSizeInBits();
+    unsigned SizeInBits = V.getValueSizeInBits();
+    Val = VTargetLowering::getBitSlice(CSD->getZExtValue(), SizeInBits);
+    return SizeInBits;
   }
 
   if (V.getOpcode() == VTMISD::BitSlice)
