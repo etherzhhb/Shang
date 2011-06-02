@@ -70,8 +70,14 @@ public:
   static unsigned computeSizeInBits(SDValue Op);
 
   // Get the bit slice in range (UB, LB].
+  /// GetBits - Retrieve bits between [LB, UB).
+  static inline uint64_t getBitSlice(uint64_t x, unsigned UB, unsigned LB = 0) {
+    return (x >> LB) & ((uint64_t(1) << (UB - LB)) - 1);
+  }
+
   static SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
-                             unsigned UB, unsigned LB);
+                             unsigned UB, unsigned LB,
+                             unsigned ResultWidth = 0);
   
   static SDValue getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                               unsigned Times);

@@ -37,10 +37,6 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 // Helper functions
 //===----------------------------------------------------------------------===//
-/// GetBits - Retrieve bits between [LB, UB).
-static inline uint64_t GetBitSlice(uint64_t x, unsigned UB, unsigned LB = 0) {
-  return (x >> LB) & ((uint64_t(1) << (UB - LB)) - 1);
-}
 
 /// getRoundIntegerOrBitType - Rounds the bit-width of the given integer EVT
 /// up to the nearest power of two (one bit otherwise at least eight bits),
@@ -336,7 +332,7 @@ SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-    uint64_t c = GetBitSlice(C->getZExtValue(), EltBits);
+    uint64_t c = getBitSlice(C->getZExtValue(), EltBits);
     uint64_t ret = 0;
     for (unsigned i = 0; i < Times; ++i)
       ret |= (c << (i * EltBits));
