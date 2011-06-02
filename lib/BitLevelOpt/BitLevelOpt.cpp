@@ -160,41 +160,28 @@ static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
   return false;
 }
 
-static SDValue ExtractEnabledBitsAnd(TargetLowering::DAGCombinerInfo &DCI,
-                                     SDValue Op, unsigned UB, unsigned LB) {
-  // A & 1 = A
+static SDValue ExtractBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                               SDValue Op, unsigned UB, unsigned LB) {
   SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
                                            Op, UB, LB);
   DCI.AddToWorklist(V.getNode());
   return V;
 }
 
-static SDValue ExtractDisabledBitsAnd(TargetLowering::DAGCombinerInfo &DCI,
-                                      SDValue Op, unsigned UB, unsigned LB) {
+static SDValue GetZerosBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                SDValue Op, unsigned UB, unsigned LB) {
   EVT HiVT = EVT::getIntegerVT(*DCI.DAG.getContext(), UB - LB);
-  // A & 0 = 0
   return DCI.DAG.getTargetConstant(0, HiVT);
 }
 
-static SDValue ExtractEnabledBitsOr(TargetLowering::DAGCombinerInfo &DCI,
-                                    SDValue Op,  unsigned UB, unsigned LB) {
+static SDValue GetOnesBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                               SDValue Op,  unsigned UB, unsigned LB) {
   EVT VT = EVT::getIntegerVT(*DCI.DAG.getContext(), UB - LB);
-  // A | 1 = 1
   return DCI.DAG.getTargetConstant(~uint64_t(0), VT);
 }
 
-static SDValue ExtractDisabledBitsOr(TargetLowering::DAGCombinerInfo &DCI,
-                                     SDValue Op, unsigned UB, unsigned LB) {
-  // A | 0 = A
-  SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
-                                           Op, UB, LB);
-  DCI.AddToWorklist(V.getNode());
-  return V;
-}
-
-static SDValue ExtractEnabledBitsXOr(TargetLowering::DAGCombinerInfo &DCI,
-                                     SDValue Op, unsigned UB, unsigned LB) {
-  // A ^ 1 = ~A
+static SDValue FlipBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                            SDValue Op, unsigned UB, unsigned LB) {
   SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
                                            Op, UB, LB);
   DCI.AddToWorklist(V.getNode());
@@ -202,16 +189,6 @@ static SDValue ExtractEnabledBitsXOr(TargetLowering::DAGCombinerInfo &DCI,
   DCI.AddToWorklist(V.getNode());
   return V;
 }
-
-static SDValue ExtractDisabledBitsXOr(TargetLowering::DAGCombinerInfo &DCI,
-                                      SDValue Op, unsigned UB, unsigned LB) {
-  // A ^ 0 = A
-  SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
-                                           Op, UB, LB);
-  DCI.AddToWorklist(V.getNode());
-  return V;
-}
-
 
 template<typename ExtractBitsFunc>
 static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
@@ -284,24 +261,18 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
 static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    bool ExchangeOperand = false) {
-  SDValue OpA = N->getOperand(0 ^ ExchangeOperand),
-          OpB = N->getOperand(1 ^ ExchangeOperand);
+  SDValue Op = N->getOperand(0 ^ ExchangeOperand),
+          OpMask = N->getOperand(1 ^ ExchangeOperand);
 
   uint64_t Mask = 0;
-  if (ExtractConstant(OpB, Mask)) {
+  if (ExtractConstant(OpMask, Mask)) {
     switch(N->getOpcode()) {
     case ISD::AND:
-      return ExtractBits(OpA, Mask, TLI, DCI,
-                         ExtractEnabledBitsAnd,
-                         ExtractDisabledBitsAnd);
+      return ExtractBits(Op, Mask, TLI, DCI, ExtractBitSlice, GetZerosBitSlice);
     case ISD::OR:
-      return ExtractBits(OpA, Mask, TLI, DCI,
-                         ExtractEnabledBitsOr,
-                         ExtractDisabledBitsOr);
+      return ExtractBits(Op, Mask, TLI, DCI, GetOnesBitSlice, ExtractBitSlice);
     case ISD::XOR:
-      return ExtractBits(OpA, Mask, TLI, DCI,
-                         ExtractEnabledBitsXOr,
-                         ExtractDisabledBitsXOr);
+      return ExtractBits(Op, Mask, TLI, DCI, FlipBitSlice, ExtractBitSlice);
     default:
       llvm_unreachable("Unexpected Logic Node!");
     }
