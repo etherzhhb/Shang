@@ -82,6 +82,9 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   if (!ExtractConstant(N->getOperand(1), ShiftVal))
     return SDValue();
 
+  // If we not shift at all, simply return the operand.
+  if (ShiftVal == 0) return N->getOperand(0);
+
   DebugLoc dl = N->getDebugLoc();
   EVT VT = N->getValueType(0);
   unsigned PaddingSize = ShiftVal;
