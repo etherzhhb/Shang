@@ -306,7 +306,7 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
 
 static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
                                    TargetLowering::DAGCombinerInfo &DCI,
-                                   bool ExchangeOperand = false) {
+                                   bool Commuted = false) {
   SDValue LHS = N->getOperand(0 ^ Commuted),
           RHS = N->getOperand(1 ^ Commuted);
 
@@ -452,6 +452,34 @@ static SDValue PerformReduceCombine(SDNode *N, const VTargetLowering &TLI,
   if (TLI.computeSizeInBits(Op) == 1) return Op;
 
   SelectionDAG &DAG = DCI.DAG;
+
+  // Try to fold the reduction
+  uint64_t Val = 0;
+  if (unsigned SizeInBits = ExtractConstant(Op, Val)) {
+    switch (N->getOpcode()) {
+    case VTMISD::ROr:
+      // Only reduce to 0 if all bits are 0.
+      if (isNullValue(Val, SizeInBits))
+        return DAG.getTargetConstant(0, MVT::i1);
+      else
+        return DAG.getTargetConstant(1, MVT::i1);
+    case VTMISD::RAnd:
+      // Only reduce to 1 if all bits are 1.
+      if (isAllOnesValue(Val, SizeInBits))
+        return DAG.getTargetConstant(1, MVT::i1);
+      else
+        return DAG.getTargetConstant(0, MVT::i1);
+    case VTMISD::RXor:
+      // Only reduce to 1 if there are odd 1s.
+      if (CountPopulation_64(Val) & 0x1)
+        return DAG.getTargetConstant(1, MVT::i1);
+      else
+        return DAG.getTargetConstant(0, MVT::i1);
+      break; // FIXME: Who knows how to evaluate this?
+    default:  llvm_unreachable("Unexpected Reduction Node!");
+    }
+  }
+
   DebugLoc dl = N->getDebugLoc();
   // Reduce high part and low part respectively.
   if (Op->getOpcode() == VTMISD::BitCat) {
