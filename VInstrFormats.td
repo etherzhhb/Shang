@@ -26,7 +26,8 @@ def FUBRam	  : FUType<5, IIC_BRam>;
 
 // Bit-width information operand.
 // Dirty Hack: This is not a Predicate Operand.
-def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))> {}
+def BitWidthAnnotator : PredicateOperand<i64, (ops PredR), (ops (i64 zero_reg))>
+ {}
 
 // Pseudo instructions
 class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,

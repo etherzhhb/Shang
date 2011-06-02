@@ -31,6 +31,7 @@ class VRegClass<string namespace, list<ValueType> regTypes, int alignment,
   : RegisterClass<namespace, regTypes, alignment, regList> {}
   
 def DR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [R]>;
+def PredR : VRegClass<"VTM", [i1], 64, [R]>; // Register for predicate
 def Wire  : VRegClass<"VTM", [i64], 64, [W]>;
 
 // Result register classes of function units.
