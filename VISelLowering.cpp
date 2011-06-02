@@ -277,27 +277,31 @@ SDValue VTargetLowering::getNot(SelectionDAG &DAG, DebugLoc dl,
 }
 
 SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
-                                     unsigned UB, unsigned LB) {
+                                     unsigned UB, unsigned LB,
+                                     unsigned ResultWidth){
   LLVMContext &Context = *DAG.getContext();
   unsigned SizeInBits = UB - LB, OpSize = computeSizeInBits(Op);
 
   assert(SizeInBits <= OpSize && "Bad bit slice bit width!");
   assert(UB <= OpSize && "Bad upper bound of bit slice!");
-
   // If the range contains all bits of the source operand, simple return the
   // source operand.
   if (SizeInBits == OpSize) return Op;
 
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
-  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op))
-    return DAG.getTargetConstant(GetBitSlice(C->getZExtValue(), UB, LB), VT);
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+    // This may change the value type, which is undesirable during DAG combine.
+    if (ResultWidth == SizeInBits)
+      return DAG.getTargetConstant(getBitSlice(C->getZExtValue(), UB, LB), VT);
+  }
 
-  VT = getRoundIntegerOrBitType(VT, Context);
+  if (ResultWidth) VT =  EVT::getIntegerVT(Context, ResultWidth);
+  else             VT = getRoundIntegerOrBitType(VT, Context);
 
-  return DAG.getNode(VTMISD::BitSlice, dl, VT, Op,
-                     DAG.getConstant(UB, MVT::i8, true),
-                     DAG.getConstant(LB, MVT::i8, true));
+  return DAG.getNode(VTMISD::BitSlice, dl, VT , Op,
+                     DAG.getTargetConstant(UB, MVT::i8),
+                     DAG.getTargetConstant(LB, MVT::i8));
 }
 
 

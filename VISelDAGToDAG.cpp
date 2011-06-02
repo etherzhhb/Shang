@@ -13,8 +13,6 @@
 
 #include "VTargetMachine.h"
 
-#include "vtm/VInstrInfo.h"
-
 #include "llvm/Intrinsics.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
@@ -56,6 +54,9 @@ private:
   SDValue CopyToFUOp(SDValue Operand);
 
   SDNode *Select(SDNode *N);
+
+  SDNode *SelectBitSlice(SDNode *N);
+
   SDNode *SelectUnary(SDNode *N, unsigned OpC);
   // If we need to copy the operand to register explicitly, set CopyOp to true.
   SDNode *SelectBinary(SDNode *N, unsigned OpC, bool CopyOp = false);
@@ -155,7 +156,7 @@ SDValue VDAGToDAGISel::CopyToFUOp(SDValue Operand) {
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   //N->getValueType(0)
   SDValue Ops[] = { CopyToFUOp(N->getOperand(0)), CopyToFUOp(N->getOperand(1)),
-                    CopyToFUOp(N->getOperand(2)),
+                    N->getOperand(2),
                     SDValue()/*The dummy bit width operand*/ };
   
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
@@ -174,6 +175,25 @@ SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
   computeOperandsBitWidth(N, Ops.data(), Ops.size());
   
   return CurDAG->SelectNodeTo(N, Opc, N->getVTList(), Ops.data(), Ops.size());
+}
+
+SDNode *VDAGToDAGISel::SelectBitSlice(SDNode * N) {
+  // Emit the constant bit slice to constant directly if possible.
+  if (ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(N->getOperand(0))) {
+    int64_t val = CSD->getSExtValue();
+    unsigned UB = N->getConstantOperandVal(1);
+    unsigned LB = N->getConstantOperandVal(2);
+    val = VTargetLowering::getBitSlice(val, UB, LB);
+    EVT VT = EVT::getIntegerVT(*CurDAG->getContext(), UB - LB);
+    SDValue C = CurDAG->getTargetConstant(val, VT);
+    // Copy the constant explicit since the value may use by some function unit.
+    SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
+    computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
+    return CurDAG->SelectNodeTo(N, VTM::VOpSetRI, N->getValueType(0),
+                                Ops, array_lengthof(Ops));
+  }
+
+  return SelectSimpleNode(N, VTM::VOpBitSlice);
 }
 
 SDNode *VDAGToDAGISel::SelectConstant(SDNode *N, bool CopyToFUReg) {
@@ -320,7 +340,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   case VTMISD::BitRepeat:     return SelectBinary(N, VTM::VOpBitRepeat);
   case VTMISD::BitCat:        return SelectBinary(N, VTM::VOpBitCat);
-  case VTMISD::BitSlice:      return SelectSimpleNode(N, VTM::VOpBitSlice);
+  case VTMISD::BitSlice:      return SelectBitSlice(N);
 
   case VTMISD::ROr:           return SelectUnary(N, VTM::VOpROr);
   case VTMISD::RAnd:          return SelectUnary(N, VTM::VOpRAnd);
