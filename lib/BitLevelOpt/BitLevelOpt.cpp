@@ -332,17 +332,26 @@ static SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
   return SDValue();
 }
 
-static SDValue CombineConstants(SelectionDAG &DAG, SDValue &Hi, SDValue &Lo) {
-  unsigned LoSizeInBits = Lo.getValueSizeInBits();
-  unsigned HiSizeInBits = Hi.getValueSizeInBits();
+static SDValue CombineConstants(SelectionDAG &DAG, SDValue &Hi, SDValue &Lo,
+                                unsigned ResultWidth) {
+  uint64_t LoVal = 0;
+  unsigned LoSizeInBits = ExtractConstant(Lo, LoVal);
+  if (!LoSizeInBits) return SDValue();
+  assert(LoSizeInBits <= 64 && "Lower part of constant too large!");
+
+  uint64_t HiVal = 0;
+  unsigned HiSizeInBits = ExtractConstant(Hi, HiVal);
+  if (!HiSizeInBits) return SDValue();
+
   unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
   assert(SizeInBits <= 64 && "Constant too large!");
-  uint64_t Val = cast<ConstantSDNode>(Lo)->getZExtValue();
-  Val = VTargetLowering::getBitSlice(Val, LoSizeInBits);
-  uint64_t HiVal = cast<ConstantSDNode>(Hi)->getZExtValue();
-  Val |= VTargetLowering::getBitSlice(HiVal, HiSizeInBits) << LoSizeInBits;
+  uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
+
   EVT VT =  EVT::getIntegerVT(*DAG.getContext(), SizeInBits);
-  return DAG.getTargetConstant(Val, VT);
+  // Use BitSlice to match the type if necessary.
+  return VTargetLowering::getBitSlice(DAG, Hi.getDebugLoc(),
+                                      DAG.getTargetConstant(Val, VT),
+                                      SizeInBits, 0, ResultWidth);
 }
 
 
@@ -366,16 +375,10 @@ static SDValue PerformBitCatCombine(SDNode *N, const VTargetLowering &TLI,
                                           Lo->getConstantOperandVal(2),
                                           N->getValueSizeInBits(0));
 
-    SDValue LoSrc = Lo.getOperand(0);
-    if (isa<ConstantSDNode>(HiSrc) && isa<ConstantSDNode>(LoSrc))
-      return CombineConstants(DAG, HiSrc, LoSrc);
   }
 
-  // Merge the constants.
-  if (isa<ConstantSDNode>(Hi) && isa<ConstantSDNode>(Lo))
-    return CombineConstants(DAG, Hi, Lo);
-
-  return SDValue();
+  // Try to merge the constants.
+  return CombineConstants(DAG, Hi, Lo, N->getValueSizeInBits(0));
 }
 
 static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
