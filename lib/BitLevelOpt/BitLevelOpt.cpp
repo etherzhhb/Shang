@@ -160,28 +160,39 @@ static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
   return false;
 }
 
-static SDValue ExtractBitSlice(TargetLowering::DAGCombinerInfo &DCI,
-                               SDValue Op, unsigned UB, unsigned LB) {
+//===--------------------------------------------------------------------===//
+// Bit level manipulate function for the BitSlice/BitCat based bit level
+// optimization framework.
+
+// Simply concat higher part and lower part.
+inline static SDValue ConcatBits(TargetLowering::DAGCombinerInfo &DCI,
+                                 SDNode *N, SDValue Hi, SDValue Lo) {
+  return DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(), N->getVTList(),
+                         Hi, Lo);
+}
+
+inline static SDValue ExtractBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                      SDValue Op, unsigned UB, unsigned LB) {
   SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
                                            Op, UB, LB);
   DCI.AddToWorklist(V.getNode());
   return V;
 }
 
-static SDValue GetZerosBitSlice(TargetLowering::DAGCombinerInfo &DCI,
-                                SDValue Op, unsigned UB, unsigned LB) {
+inline static SDValue GetZerosBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                       SDValue Op, unsigned UB, unsigned LB) {
   EVT HiVT = EVT::getIntegerVT(*DCI.DAG.getContext(), UB - LB);
   return DCI.DAG.getTargetConstant(0, HiVT);
 }
 
-static SDValue GetOnesBitSlice(TargetLowering::DAGCombinerInfo &DCI,
-                               SDValue Op,  unsigned UB, unsigned LB) {
+inline static SDValue GetOnesBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                      SDValue Op,  unsigned UB, unsigned LB) {
   EVT VT = EVT::getIntegerVT(*DCI.DAG.getContext(), UB - LB);
   return DCI.DAG.getTargetConstant(~uint64_t(0), VT);
 }
 
-static SDValue FlipBitSlice(TargetLowering::DAGCombinerInfo &DCI,
-                            SDValue Op, unsigned UB, unsigned LB) {
+inline static SDValue FlipBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                   SDValue Op, unsigned UB, unsigned LB) {
   SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
                                            Op, UB, LB);
   DCI.AddToWorklist(V.getNode());
@@ -190,6 +201,7 @@ static SDValue FlipBitSlice(TargetLowering::DAGCombinerInfo &DCI,
   return V;
 }
 
+// FIXME: Allow custom bit concation.
 template<typename ExtractBitsFunc>
 static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
                            TargetLowering::DAGCombinerInfo &DCI,
@@ -229,7 +241,7 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
       assert(SizeInBits != UB && "Unexpected all one value!");
       SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, MidBits);
       assert(TLI.computeSizeInBits(Result) == SizeInBits
-        && "Bit widht not match!");
+             && "Bit widht not match!");
       return Result;
     }
 
@@ -245,7 +257,7 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
     }
 
     DCI.AddToWorklist(Lo.getNode());
-    SDValue Result = DAG.getNode(VTMISD::BitCat, Op->getDebugLoc(), VT, HiBits, Lo);
+    SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, Lo);
     assert(TLI.computeSizeInBits(Result) == SizeInBits
            && "Bit widht not match!");
     return Result;
@@ -258,24 +270,64 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
                      ExtractDisabledBits, ExtractEnabledBits, !flipped);
 }
 
+// Promote bitcat in dag, like {a , b} & {c, d} => {a & c, b &d } or something.
+template<typename ConcatBitsFunc>
+static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
+                                  TargetLowering::DAGCombinerInfo &DCI,
+                                  ConcatBitsFunc ConcatBits) {
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+
+  if (LHS.getOpcode() != VTMISD::BitCat || RHS.getOpcode() != VTMISD::BitCat)
+    return SDValue();
+
+  // Split point must agree.
+  // FIXME: We can also find the most common part if there is constant.
+  SDValue LHSLo = LHS.getOperand(1), RHSLo = RHS.getOperand(1);
+  unsigned LHSSplit = VTargetLowering::computeSizeInBits(LHSLo);
+  unsigned RHSSplit = VTargetLowering::computeSizeInBits(RHSLo);
+  if (LHSSplit != RHSSplit) return SDValue();
+
+  SDValue LHSHi = LHS.getOperand(0), RHSHi = RHS.getOperand(0);
+  assert(VTargetLowering::computeSizeInBits(LHSHi) ==
+         VTargetLowering::computeSizeInBits(LHSHi) && "Hi size do not match!");
+
+  SelectionDAG &DAG = DCI.DAG;
+  DebugLoc dl = N->getDebugLoc();
+  SDValue Hi = DAG.getNode(N->getOpcode(), dl, LHSHi.getValueType(),
+                           LHSHi, RHSHi);
+  DCI.AddToWorklist(Hi.getNode());
+  SDValue Lo = DAG.getNode(N->getOpcode(), dl, LHSLo.getValueType(),
+                           LHSLo, RHSLo);
+  DCI.AddToWorklist(Lo.getNode());
+
+  // FIXME: Allow custom concation.
+  return ConcatBits(DCI, N, Hi, Lo);
+}
+
 static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    bool ExchangeOperand = false) {
-  SDValue Op = N->getOperand(0 ^ ExchangeOperand),
-          OpMask = N->getOperand(1 ^ ExchangeOperand);
+  SDValue LHS = N->getOperand(0 ^ ExchangeOperand),
+          RHS = N->getOperand(1 ^ ExchangeOperand);
 
   uint64_t Mask = 0;
-  if (ExtractConstant(OpMask, Mask)) {
+  if (ExtractConstant(RHS, Mask)) {
     switch(N->getOpcode()) {
     case ISD::AND:
-      return ExtractBits(Op, Mask, TLI, DCI, ExtractBitSlice, GetZerosBitSlice);
+      return ExtractBits(LHS, Mask, TLI, DCI, ExtractBitSlice, GetZerosBitSlice);
     case ISD::OR:
-      return ExtractBits(Op, Mask, TLI, DCI, GetOnesBitSlice, ExtractBitSlice);
+      return ExtractBits(LHS, Mask, TLI, DCI, GetOnesBitSlice, ExtractBitSlice);
     case ISD::XOR:
-      return ExtractBits(Op, Mask, TLI, DCI, FlipBitSlice, ExtractBitSlice);
+      return ExtractBits(LHS, Mask, TLI, DCI, FlipBitSlice, ExtractBitSlice);
     default:
       llvm_unreachable("Unexpected Logic Node!");
     }
+  }
+
+  // Try to promote the bitcat after operand commuted.
+  if (ExchangeOperand) {
+    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits);
+    if (RV.getNode()) return RV;
   }
 
   return commuteAndTryAgain(N, TLI, DCI, ExchangeOperand, PerformLogicCombine);
