@@ -153,6 +153,8 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::SRL);
 
   setTargetDAGCombine(ISD::XOR);
+  setTargetDAGCombine(ISD::OR);;
+  setTargetDAGCombine(ISD::AND);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
