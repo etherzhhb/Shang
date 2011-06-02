@@ -106,6 +106,8 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                          &dbgs())));
   }
 
+  PM.add(createCFGSimplificationPass());
+
   PM.add(createGCLoweringPass());
 
   // Make sure that no unreachable blocks are instruction selected.
