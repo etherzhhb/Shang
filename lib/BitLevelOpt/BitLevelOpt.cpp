@@ -37,12 +37,12 @@ using namespace llvm;
 template<typename Func>
 inline static SDValue commuteAndTryAgain(SDNode *N, const VTargetLowering &TLI,
                                          TargetLowering::DAGCombinerInfo &DCI,
-                                         bool ExchangeOperand, Func F) {
+                                         bool Commuted, Func F) {
 
-  if (ExchangeOperand) return SDValue();
+  if (Commuted) return SDValue();
 
   // If we not try to exchange the operands, exchange and try again.
-  return F(N, TLI, DCI, !ExchangeOperand);
+  return F(N, TLI, DCI, !Commuted);
 }
 
 inline static bool isAllOnesValue(uint64_t Val, unsigned SizeInBits) {
@@ -119,14 +119,14 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
 
 static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
                                  TargetLowering::DAGCombinerInfo &DCI,
-                                 bool ExchangeOperand = false) {
+                                 bool Commuted = false) {
 
   uint64_t CVal = 0;
   // Can only combinable if carry is known.
   if (!ExtractConstant(N->getOperand(2), CVal))  return SDValue();
 
-  SDValue OpA = N->getOperand(0 ^ ExchangeOperand),
-          OpB = N->getOperand(1 ^ ExchangeOperand);
+  SDValue OpA = N->getOperand(0 ^ Commuted),
+          OpB = N->getOperand(1 ^ Commuted);
   
   uint64_t OpBVal = 0;
   if (unsigned OpBSize = ExtractConstant(OpB, OpBVal)) {
@@ -146,7 +146,7 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
   }
 
   // TODO: Combine with bit mask information.
-  return commuteAndTryAgain(N, TLI, DCI, ExchangeOperand, PerformAddCombine);
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
 }
 
 static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
@@ -307,8 +307,8 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
 static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    bool ExchangeOperand = false) {
-  SDValue LHS = N->getOperand(0 ^ ExchangeOperand),
-          RHS = N->getOperand(1 ^ ExchangeOperand);
+  SDValue LHS = N->getOperand(0 ^ Commuted),
+          RHS = N->getOperand(1 ^ Commuted);
 
   uint64_t Mask = 0;
   if (ExtractConstant(RHS, Mask)) {
@@ -325,12 +325,12 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
   }
 
   // Try to promote the bitcat after operand commuted.
-  if (ExchangeOperand) {
+  if (Commuted) {
     SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits);
     if (RV.getNode()) return RV;
   }
 
-  return commuteAndTryAgain(N, TLI, DCI, ExchangeOperand, PerformLogicCombine);
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformLogicCombine);
 }
 
 static SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
