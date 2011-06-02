@@ -240,7 +240,9 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   unsigned VReg = VirtReg.reg;
   unsigned Size = BLI->getBitWidth(VReg);
   if (Size < 8) Size = 8;
-  
+  // Since we are allocating register with witdh of 2^N, round up the size.
+  Size = NextPowerOf2(Size - 1);
+
   unsigned Reg =  VFI->allocatePhyReg(Size / 8);
   return Reg;
 }
