@@ -176,7 +176,7 @@ public:
       assert(OI != DefInst.operands_begin() && "Broken ucState!");
 
     MachineInstr::mop_iterator NextOpcodeI = OI, OE = DefInst.operands_end();
-    while (!cast<ucOperand>(*NextOpcodeI).isOpcode() && NextOpcodeI != OE)
+    while (NextOpcodeI != OE && !cast<ucOperand>(*NextOpcodeI).isOpcode())
       ++NextOpcodeI;
 
     return ucOp(ucOp::op_iterator(OpcodeI, ucOperand::Mapper()),
