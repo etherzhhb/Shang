@@ -124,6 +124,10 @@ public:
                          SmallVectorImpl<LiveInterval*> &splitLVRs);
 
   bool runOnMachineFunction(MachineFunction &F);
+
+  const char *getPassName() const {
+    return "Verilog Backend Resource Binding Pass";
+  }
 };
 
 char VRASimple::ID = 0;
