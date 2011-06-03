@@ -36,6 +36,8 @@ public:
                              SmallVectorImpl<MachineOperand> &Cond,
                              bool AllowModify /* = false */) const;
 
+  virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
+                                                 AliasAnalysis *AA) const;
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).

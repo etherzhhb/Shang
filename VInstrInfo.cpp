@@ -31,6 +31,12 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
   : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
   {}
 
+
+bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
+                                                   AliasAnalysis *AA) const {
+  return VIDesc(MI->getDesc()).hasTrivialFU();
+}
+
 bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                                MachineBasicBlock *&FBB,
                                SmallVectorImpl<MachineOperand> &Cond,
