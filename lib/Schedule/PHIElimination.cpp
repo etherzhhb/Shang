@@ -128,17 +128,12 @@ void PHIElimination::EliminatePHI(MachineInstr *PN) {
     // Find the opcode of the ucOp defining the register.
     MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
     assert (++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
-    MachineInstr &DefInst = *DI;
-    MachineInstr::mop_iterator OI = DefInst.operands_begin() + DI.getOperandNo();
-    MachineInstr::mop_iterator OpcodeI = OI;
-    while (!cast<ucOperand>(*(--OpcodeI)).isOpcode())
-      assert(OI != DefInst.operands_begin() && "Broken ucState!");
+    ucOp DefOp = ucOp::getParent(DI);
 
-    ucOperand &Opcode = cast<ucOperand>(*OpcodeI);
     // If the source value not defined in source BB, no need to try to forward
     // the value.
-    if (Opcode.getParent()->getParent() == SrcBB) {
-      unsigned DefSlot = Opcode.getPredSlot();
+    if (DefOp->getParent()->getParent() == SrcBB) {
+      unsigned DefSlot = DefOp->getPredSlot();
       unsigned EndSlot = VFI->getStartSlotFor(SrcBB)
                          + VFI->getTotalSlotFor(SrcBB);
 
@@ -150,10 +145,10 @@ void PHIElimination::EliminatePHI(MachineInstr *PN) {
       // values from previous iteration, adjust the write slot.
       if ((SrcBB == CurBB && DefSlot == Slot)
           || (SrcBB != CurBB && DefSlot == EndSlot)) {
-        switch(Opcode.getOpcode()) {
+        switch(DefOp->getOpcode()) {
           // Forward the wire value if necessary.
         case VTM::COPY:
-          SrcOp = *(OI + 1);
+          SrcOp = DefOp.getOperand(1);
           break;
         case VTM::IMPLICIT_DEF:
           SrcOp.ChangeToImmediate(0);

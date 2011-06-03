@@ -20,6 +20,7 @@
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
@@ -27,7 +28,6 @@
 
 namespace llvm {
 class TargetInstrDesc;
-class MachineRegisterInfo;
 class ucOpIterator;
 class ucState;
 class ucOp;
@@ -164,6 +164,24 @@ public:
   }
 
   ucOperand *operator->() const { return &OpCode; }
+
+  template<typename def_use_it>
+  static ucOp getParent(def_use_it DI) {
+    MachineInstr &DefInst = *DI;
+    MachineInstr::mop_iterator OI = DefInst.operands_begin() + DI.getOperandNo();
+    assert(!cast<ucOperand>(*OI).isOpcode() && "Not an operand!");
+
+    MachineInstr::mop_iterator OpcodeI = OI;
+    while (!cast<ucOperand>(*(--OpcodeI)).isOpcode())
+      assert(OI != DefInst.operands_begin() && "Broken ucState!");
+
+    MachineInstr::mop_iterator NextOpcodeI = OI, OE = DefInst.operands_end();
+    while (!cast<ucOperand>(*NextOpcodeI).isOpcode() && NextOpcodeI != OE)
+      ++NextOpcodeI;
+
+    return ucOp(ucOp::op_iterator(OpcodeI, ucOperand::Mapper()),
+                ucOp::op_iterator(NextOpcodeI, ucOperand::Mapper()));
+  }
 
   void print(raw_ostream &OS) const;
   void dump() const;

@@ -21,7 +21,6 @@
 #include "llvm/Metadata.h"
 #include "llvm/Type.h"
 #include "llvm/Constants.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
