@@ -105,7 +105,8 @@ public:
     unsigned Reg = LI->reg;
 
     // Preserves SSA From for wires.
-    if (MRI->getRegClass(Reg) == VTM::WireRegisterClass)
+    // if (MRI->getRegClass(Reg) == VTM::WireRegisterClass)
+    if (VRegisterInfo::IsWire(Reg, MRI))
       return;
 
     Queue.push(LI);

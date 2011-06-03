@@ -102,3 +102,14 @@ VRegisterInfo::getPointerRegClass(unsigned Kind) const {
   MVT PtrVT = MVT::getIntegerVT(TD.getPointerSizeInBits());
   return TLI.getRegClassFor(PtrVT);
 }
+
+bool VRegisterInfo::IsWire(unsigned RegNo, MachineRegisterInfo *MRI) {
+  assert(TargetRegisterInfo::isVirtualRegister(RegNo)
+         && "Expect virtual register!");
+
+  const TargetRegisterClass *RC = MRI->getRegClass(RegNo);
+  return RC == VTM::WireRegisterClass
+         || RC == VTM::RADDRegisterClass
+         || RC == VTM::RMULRegisterClass
+         || RC == VTM::RSHTRegisterClass;
+}

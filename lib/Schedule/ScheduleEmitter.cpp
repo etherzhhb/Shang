@@ -62,7 +62,9 @@ struct MicroStateBuilder {
       EmitSlot(emitSlot), WriteSlot(writeSlot) {}
 
     bool isSymbol() const { return SymbolName != 0; }
-    
+    // Do not define a register twice by copying it self.
+    bool shouldBeCopied() const { return !Op.isReg() || WireNum != Op.getReg(); }
+
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
@@ -243,11 +245,13 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       continue;
     }
 
-    // Export the register.
-    CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
-    CtrlInst.addOperand(ucOperand::CreatePredicate(WD->PredReg));
-    MO.setIsDef();
-    CtrlInst.addOperand(MO).addOperand(WD->createOperand());
+    if (WD->shouldBeCopied()) {
+      // Export the register.
+      CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
+      CtrlInst.addOperand(ucOperand::CreatePredicate(WD->PredReg));
+      MO.setIsDef();
+      CtrlInst.addOperand(MO).addOperand(WD->createOperand());
+    }
     ++I;
   }
 
@@ -330,7 +334,15 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
       // if (!NewDef->isSymbol()) {
-      ucOperand NewOp = ucOperand::CreateWireDefine(MRI, BitWidth);
+      ucOperand NewOp = MO;
+
+      // Define wire for trivial operation, otherwise, the result of function
+      // unit should be wire, and there must be a copy follow up.
+      if (VRegisterInfo::IsWire(RegNo, &MRI))
+        NewOp.setIsWire();
+      else
+        NewOp = ucOperand::CreateWireDefine(MRI, BitWidth);
+
       unsigned WireNum = NewOp.getReg();
       WireDef WDef = createWireDef(WireNum, A, MO, PredR, EmitSlot, WriteSlot);
 

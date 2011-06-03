@@ -27,6 +27,7 @@ class TargetInstrInfo;
 class Type;
 class TargetData;
 class TargetLowering;
+class MachineRegisterInfo;
 
 struct VRegisterInfo : public TargetRegisterInfo {
   static const unsigned MaxPhyRegs = 4096;
@@ -70,6 +71,8 @@ struct VRegisterInfo : public TargetRegisterInfo {
   unsigned getEHHandlerRegister() const;
 
   int getDwarfRegNum(unsigned RegNum, bool isEH) const;
+
+  static bool IsWire(unsigned RegNo, MachineRegisterInfo *MRI);
 };
 
 } // end namespace llvm

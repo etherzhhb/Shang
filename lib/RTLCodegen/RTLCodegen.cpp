@@ -86,6 +86,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
+  void emitWires(const TargetRegisterClass *RC);
 
   void clear();
 
@@ -499,20 +500,29 @@ void RTLCodegen::emitAllSignals() {
        E = FInfo->phyreg_end(8); I < E; ++I)
     VM->addRegister("reg" + utostr(*I), 64);
 
+  emitWires(VTM::WireRegisterClass);
+  // FIXME: There are function units.
+  emitWires(VTM::RADDRegisterClass);
+  emitWires(VTM::RMULRegisterClass);
+  emitWires(VTM::RSHTRegisterClass);
+}
+
+void RTLCodegen::emitWires(const TargetRegisterClass *RC) {
   // And Emit the wires defined in this module.
-  const std::vector<unsigned>& Wires =
-    MRI->getRegClassVirtRegs(VTM::WireRegisterClass);
+  const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
 
   for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
-       I != E; ++I) {
-    unsigned WireNum = *I;
-    const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(WireNum));
-    assert(Op && "Wire define not found!");
-    WireNum = TargetRegisterInfo::virtReg2Index(WireNum);
-    VM->addWire("wire" + utostr(WireNum), Op->getBitWidth());
+    I != E; ++I) {
+      unsigned WireNum = *I;
+      const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(WireNum));
+      // assert(Op && "Wire define not found!");
+      if (!Op) continue;
+
+      WireNum = TargetRegisterInfo::virtReg2Index(WireNum);
+      VM->addWire("wire" + utostr(WireNum), Op->getBitWidth(), RC->getName());
   }
-  
 }
+
 
 RTLCodegen::~RTLCodegen() {}
 

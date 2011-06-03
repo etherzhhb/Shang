@@ -181,14 +181,16 @@ void ucOperand::print(raw_ostream &OS,
     UB = std::min(getBitWidth(), UB);
     unsigned Offset = 0;
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
-      if (isWire()) OS << "wire";
-      else {
+      DEBUG(
         MachineRegisterInfo &MRI
           = getParent()->getParent()->getParent()->getRegInfo();
         const TargetRegisterClass *RC = MRI.getRegClass(Reg);
         OS << "/*" << RC->getName() << "*/ ";
-        OS << "reg";
-      }
+      );
+
+      if (isWire()) OS << "wire";
+      else          OS << "reg";
+
       OS << TargetRegisterInfo::virtReg2Index(Reg);
       OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     } else {
