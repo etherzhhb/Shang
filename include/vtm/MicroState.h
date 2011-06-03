@@ -46,6 +46,9 @@ class ucOperand : public MachineOperand {
   static const unsigned OpcodeShiftAmount = 0x20;
 
 public:
+  // Symbol flags.
+  static const unsigned IsInternalSymbol = 0x8;
+
   /*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
 
   static bool classof(const MachineOperand *) { return true; }
@@ -74,7 +77,7 @@ public:
   bool isWire() const;
 
   unsigned getBitWidthOrZero() const {
-    assert((isImm() || isReg())
+    assert((isImm() || isReg() || isSymbol())
       && "Unsupported operand type!");
     return getTargetFlags() & BitwidthMask;
   }
@@ -92,8 +95,9 @@ public:
   }
 
   void setBitWidth(unsigned BitWidth) {
-    assert((isImm() || isReg()) && "Unsupported operand type!");
-    unsigned TF = BitWidth & BitwidthMask;
+    unsigned TF = getTargetFlags();
+    TF &= ~BitwidthMask;
+    TF |= BitWidth & BitwidthMask;
     setTargetFlags(TF);
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }

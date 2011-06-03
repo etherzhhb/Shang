@@ -14,6 +14,7 @@
 
 #include "VTargetMachine.h"
 #include "vtm/VFInfo.h"
+#include "vtm/MicroState.h"
 #include "vtm/VISelLowering.h"
 #include "vtm/Utilities.h"
 
@@ -188,21 +189,19 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                       DebugLoc dl, SelectionDAG &DAG,
                                       SmallVectorImpl<SDValue> &InVals) const {
   assert(!isVarArg && "VarArg not support yet!");
+  const Function *F = DAG.getMachineFunction().getFunction();
+  Function::const_arg_iterator AI = F->arg_begin();
+  assert(Ins.size() == F->arg_size() && "Argument size do not match!");
+
   for (unsigned I = 0, E = Ins.size(); I != E; ++I) {
     // Get the argument form ExtractVal Node.
     const ISD::InputArg &IA = Ins[I];
     EVT ArgVT = IA.VT;
 
-    // FIXME: Remember the argument name with ExternalSymbolSDNode instead of
-    // Argument number.
-    SDValue SDInArg = DAG.getNode(VTMISD::ExtractVal, dl,
-                                  DAG.getVTList(ArgVT, MVT::Other),
-                                  Chain,
-                                  DAG.getTargetConstant(I,MVT::i8));
-
+    const Argument *Arg = AI++;
+    const char *ArgName = Arg->getValueName()->getKeyData();
+    SDValue SDInArg = DAG.getTargetExternalSymbol(ArgName, ArgVT);
     InVals.push_back(SDInArg);
-    // Get the chain from ExtractVal Node.
-    Chain = SDInArg.getValue(1);
   }
 
   return Chain;

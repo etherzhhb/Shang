@@ -68,7 +68,8 @@ struct MicroStateBuilder {
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
-      if (isSymbol()) return MachineOperand::CreateES(SymbolName);
+      if (isSymbol())
+        return MachineOperand::CreateES(SymbolName, Op.getBitWidth());
 
       return ucOperand::CreateWireRead(WireNum, Op.getBitWidth());
     }

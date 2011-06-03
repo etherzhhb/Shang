@@ -21,8 +21,8 @@ include "VInstrFormats.td"
 
 //  Specific Node Definitions.
 //===----------------------------------------------------------------------===//
-def SDT_ExtractVal : SDTypeProfile<1, 1, [SDTCisVT<1, i8>]>;
-def VTMExtractVal	:	SDNode<"VTMISD::ExtractVal", SDT_ExtractVal, [SDNPHasChain]>;
+def SDT_ExtractVal : SDTypeProfile<1, 0, []>;
+def VTMExtractVal	:	SDNode<"VTMISD::ExtractVal", SDT_ExtractVal, []>;
 
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
 def VTMRetVal	:	SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;
@@ -123,7 +123,7 @@ let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
 // Assign a constant value to a register.
-def VOpSetRI : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
+def VOpMvImm : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
 						             "$dst <= $src", [], 0, 1>;
 
 // Bitwise logic operation.

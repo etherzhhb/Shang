@@ -51,7 +51,10 @@ private:
   void computeOperandsBitWidth(SDNode *N, SDValue Ops[], size_t NumOps);
 
   // Copy constant to function unit operand register explicitly
-  SDValue CopyToFUOp(SDValue Operand);
+  bool shouldMoveToReg(SDNode *N) {
+    return isa<ConstantSDNode>(N) || isa<ExternalSymbolSDNode>(N);
+  }
+  SDValue MoveToReg(SDValue Operand, bool Force = false);
 
   SDNode *Select(SDNode *N);
 
@@ -59,7 +62,7 @@ private:
 
   SDNode *SelectUnary(SDNode *N, unsigned OpC);
   // If we need to copy the operand to register explicitly, set CopyOp to true.
-  SDNode *SelectBinary(SDNode *N, unsigned OpC, bool CopyOp = false);
+  SDNode *SelectBinary(SDNode *N, unsigned OpC, bool ForceMove = false);
   SDNode *SelectSimpleNode(SDNode *N, unsigned OpC);
 
   // Function argument and return values.
@@ -70,7 +73,7 @@ private:
   // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
 
-  SDNode *SelectConstant(SDNode *N, bool CopyToFUReg = false);
+  SDNode *SelectImmediate(SDNode *N, bool ForceMove = false);
 
   SDNode *SelectMemAccess(SDNode *N);
   SDNode *SelectBRamAccess(SDNode *N);
@@ -78,7 +81,7 @@ private:
   SDNode *SelectINTRINSIC_W_CHAIN(SDNode *N);
 
   virtual void PostprocessISelDAG();
-  void FixCopyConst(SelectionDAG &DAG, SDNode *N);
+  void CopyToReg(SelectionDAG &DAG, SDNode *N);
 
   const VInstrInfo &getInstrInfo() {
     return *static_cast<const VTargetMachine&>(TM).getInstrInfo();
@@ -131,13 +134,11 @@ SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
                               Ops, array_lengthof(Ops));
 }
 
-SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC, bool CopyOp) {
-  SDValue Ops [] = { N->getOperand(0), N->getOperand(1),
+SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC, bool ForceMove) {
+  // Copy immediate to register if necessary.
+  SDValue Ops [] = { MoveToReg(N->getOperand(0), ForceMove),
+                     MoveToReg(N->getOperand(1), ForceMove),
                      SDValue()/*The dummy bit width operand*/ };
-  if (CopyOp) { // Copy immediate to register if necessary.
-    Ops[0] = CopyToFUOp(Ops[0]);
-    Ops[1] = CopyToFUOp(Ops[1]);
-  }
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
@@ -145,17 +146,18 @@ SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC, bool CopyOp) {
                               Ops, array_lengthof(Ops));
 }
 
-SDValue VDAGToDAGISel::CopyToFUOp(SDValue Operand) {
-  ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(Operand);
-  // Do not need to copy non-constant value.
-  if (!CSD) return Operand;
-
-  return SDValue(SelectConstant(CSD, true), 0);
+SDValue VDAGToDAGISel::MoveToReg(SDValue Operand, bool Force) {
+  SDNode *N = Operand.getNode();
+  if (!Force || !shouldMoveToReg(N))
+    return Operand;
+  
+  return SDValue(SelectImmediate(N, true), 0);
 }
 
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   //N->getValueType(0)
-  SDValue Ops[] = { CopyToFUOp(N->getOperand(0)), CopyToFUOp(N->getOperand(1)),
+  SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
+                    MoveToReg(N->getOperand(1), true),
                     N->getOperand(2),
                     SDValue()/*The dummy bit width operand*/ };
   
@@ -189,35 +191,39 @@ SDNode *VDAGToDAGISel::SelectBitSlice(SDNode * N) {
     // Copy the constant explicit since the value may use by some function unit.
     SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
     computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
-    return CurDAG->SelectNodeTo(N, VTM::VOpSetRI, N->getValueType(0),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getValueType(0),
                                 Ops, array_lengthof(Ops));
   }
 
   return SelectSimpleNode(N, VTM::VOpBitSlice);
 }
 
-SDNode *VDAGToDAGISel::SelectConstant(SDNode *N, bool CopyToFUReg) {
-  ConstantSDNode *CSD = cast<ConstantSDNode>(N);
-  // Do not need to select target constant.
-  if (CSD->getOpcode() == ISD::TargetConstant && !CopyToFUReg)
-    return 0;
-  
-  // FIXME: We do not need this since we have the bit width operand to hold
-  // the bit width of a constant.
-  // Build the target constant.
-  int64_t Val = CSD->getZExtValue();
-  SDValue Const = CurDAG->getTargetConstant(Val, N->getValueType(0));
+SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
+  SDValue Imm = SDValue(N, 0);
 
-  SDValue Ops[] = { Const,
-                    SDValue()/*The dummy bit width operand*/ };
+  if (ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(N)) {
+    // Do not need to select target constant.
+    if (CSD->getOpcode() == ISD::TargetConstant && !ForceMove)
+      return 0;
+
+    // FIXME: We do not need this since we have the bit width operand to hold
+    // the bit width of a constant.
+    // Build the target constant.
+    int64_t Val = CSD->getZExtValue();
+    Imm = CurDAG->getTargetConstant(Val, N->getValueType(0));
+  } else if (ExternalSymbolSDNode *ES = dyn_cast<ExternalSymbolSDNode>(N))
+    Imm = CurDAG->getTargetExternalSymbol(ES->getSymbol(), Imm.getValueType());
+
+  SDValue Ops[] = { Imm, SDValue()/*The dummy bit width operand*/ };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
-  if (CopyToFUReg)
-    return CurDAG->getMachineNode(VTM::VOpSetRI, N->getDebugLoc(),
+  // Do not create cycle.
+  if (ForceMove)
+    return CurDAG->getMachineNode(VTM::VOpMvImm, N->getDebugLoc(),
                                   N->getVTList(), Ops, array_lengthof(Ops));
   else
-    return CurDAG->SelectNodeTo(N, VTM::VOpSetRI, N->getVTList(),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getVTList(),
                                 Ops, array_lengthof(Ops));
 }
 
@@ -321,16 +327,15 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   switch (N->getOpcode()) {
   default: break;
   case VTMISD::RetVal:        return SelectRetVal(N);
-  case VTMISD::ExtractVal:    return SelectExtractVal(N);
   case ISD::BRCOND:           return SelectBrcnd(N);
 
   case VTMISD::ADD:           return SelectAdd(N);
   // DirtyHack: Is binary instruction enough?
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult, true);
 
-  case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
-  case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
-  case ISD::OR:               return SelectBinary(N, VTM::VOpOr);
+  case ISD::XOR:              return SelectBinary(N, VTM::VOpXor, true);
+  case ISD::AND:              return SelectBinary(N, VTM::VOpAnd, true);
+  case ISD::OR:               return SelectBinary(N, VTM::VOpOr, true);
   case VTMISD::Not:           return SelectUnary(N, VTM::VOpNot);
   case ISD::SELECT:           return SelectSimpleNode(N, VTM::VOpSel);
 
@@ -345,8 +350,9 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case VTMISD::ROr:           return SelectUnary(N, VTM::VOpROr);
   case VTMISD::RAnd:          return SelectUnary(N, VTM::VOpRAnd);
   case VTMISD::RXor:          return SelectUnary(N, VTM::VOpRXor);
-
-  case ISD::Constant:         return SelectConstant(N);
+  
+  case ISD::ExternalSymbol:
+  case ISD::Constant:         return SelectImmediate(N);
 
   case VTMISD::MemAccess:     return SelectMemAccess(N);
   case ISD::INTRINSIC_W_CHAIN: return SelectINTRINSIC_W_CHAIN(N);
@@ -362,15 +368,12 @@ static void UpdateNodeOperand(SelectionDAG &DAG,  SDNode *N, unsigned Num,
   DAG.ReplaceAllUsesWith(N, New);
 }
 
-void VDAGToDAGISel::FixCopyConst(SelectionDAG &DAG, SDNode *Copy) {
-  ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(Copy->getOperand(2));
-  // Only handle assign a constant value to register.
-  if (!CSD) return;
+void VDAGToDAGISel::CopyToReg(SelectionDAG &DAG, SDNode *Copy) {
+  SDNode *SrcNode = Copy->getOperand(2).getNode();
+  if (!shouldMoveToReg(SrcNode)) return;
 
-  MachineSDNode *SetRI =
-    CurDAG->getMachineNode(VTM::VOpSetRI, Copy->getDebugLoc(),
-                           CSD->getValueType(0), SDValue(CSD, 0));
-  UpdateNodeOperand(DAG, Copy, 2, SDValue(SetRI, 0));
+  SDNode *MvImm = SelectImmediate(SrcNode, true);
+  UpdateNodeOperand(DAG, Copy, 2, SDValue(MvImm, 0));
 }
 
 void VDAGToDAGISel::PostprocessISelDAG() {
@@ -380,7 +383,7 @@ void VDAGToDAGISel::PostprocessISelDAG() {
   for (SelectionDAG::allnodes_iterator NI = CurDAG->allnodes_begin();
        NI != CurDAG->allnodes_end(); ++NI) {
     if (NI->getOpcode() == ISD::CopyToReg)
-      FixCopyConst(*CurDAG, NI);
+      CopyToReg(*CurDAG, NI);
   }
   CurDAG->setRoot(Dummy.getValue());
 }

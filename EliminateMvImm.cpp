@@ -1,4 +1,4 @@
-//===- EliminateSetRI.cpp - Eliminate the redundant SetRIs ------*- C++ -*-===//
+//===- EliminateMvImm.cpp - Eliminate the redundant MvImms ------*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement a pass that eliminate the redundant SetRI instruction
+// This file implement a pass that eliminate the redundant MvImm instruction
 // that only copy a constant to a register used in a same block.
 //
 //===----------------------------------------------------------------------===//
@@ -35,10 +35,10 @@
 using namespace llvm;
 
 namespace {
-struct ElimSetRI : public MachineFunctionPass {
+struct ElimMvImm : public MachineFunctionPass {
   static char ID;
 
-  ElimSetRI() : MachineFunctionPass(ID) {}
+  ElimMvImm() : MachineFunctionPass(ID) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
@@ -50,22 +50,23 @@ struct ElimSetRI : public MachineFunctionPass {
 };
 }
 
-char ElimSetRI::ID = 0;
+char ElimMvImm::ID = 0;
 
-bool ElimSetRI::runOnMachineFunction(MachineFunction &MF) {
+bool ElimMvImm::runOnMachineFunction(MachineFunction &MF) {
   bool Changed = false;
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
   std::vector<MachineInstr*> Worklist;
 
-   // Find out all VOpSetRI.
+   // Find out all VOpMvImm.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end(); BI != BE; ++BI)
     for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
          II != IE; ++II)
-      if (II->getOpcode() == VTM::VOpSetRI)
+      // Only replace constant.
+      if (II->getOpcode() == VTM::VOpMvImm && II->getOperand(1).isImm())
         Worklist.push_back(II);
 
-  // Try to replace the register operand with the constant for users of VOpSetRI.
+  // Try to replace the register operand with the constant for users of VOpMvImm.
   while (!Worklist.empty()) {
     MachineInstr *MI = Worklist.back();
     Worklist.pop_back();
@@ -101,6 +102,6 @@ bool ElimSetRI::runOnMachineFunction(MachineFunction &MF) {
   return Changed;
 }
 
-Pass *llvm::createElimSetRIPass() {
-  return new ElimSetRI();
+Pass *llvm::createElimMvImmPass() {
+  return new ElimMvImm();
 }

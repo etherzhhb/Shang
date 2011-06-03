@@ -35,8 +35,8 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 
-// Eliminate the VOpSetRI instructions.
-Pass *createElimSetRIPass();
+// Eliminate the VOpMvImm instructions.
+Pass *createElimMvImmPass();
 
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();

@@ -212,7 +212,9 @@ void ucOperand::print(raw_ostream &OS,
     OS << verilogConstToStr(getImm(), getBitWidth(), false);
     return;
   case MachineOperand::MO_ExternalSymbol:
+    UB = std::min(getBitWidth(), UB);
     OS << getSymbolName();
+    OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     return;
   default:
     MachineOperand::print(OS);

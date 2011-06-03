@@ -691,7 +691,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMemTrans:  emitOpMemTrans(Op);           break;
     case VTM::VOpBRam:      emitOpBRam(Op);               break;
     case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
-    case VTM::VOpSetRI:
+    case VTM::VOpMvImm:
     case VTM::COPY:         emitOpCopy(Op);               break;
     default:  assert(0 && "Unexpected opcode!");          break;
     }
@@ -913,16 +913,8 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
 }
 
 std::string RTLCodegen::emitSignedOperand(ucOperand &Op) {
-  unsigned BitWidth = 0;
-  switch (Op.getType()) {
-  case MachineOperand::MO_Immediate:
-  case MachineOperand::MO_Register:
-    BitWidth = cast<ucOperand>(Op).getBitWidth();
-    break;
-  default:
-    assert(0 && "Can not compute bitwidth!");
-    break;
-  }
+  unsigned BitWidth = cast<ucOperand>(Op).getBitWidth();
+
   raw_ostream &OS = VM->getDataPathBuffer();
   std::string WireName = "SignedWire" + utostr(SignedWireNum);
   OS << "wire signed" << verilogBitRange(BitWidth) << ' ' << WireName << " = ";

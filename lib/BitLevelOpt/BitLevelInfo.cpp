@@ -97,7 +97,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
 
       for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
         MachineOperand &MO = Instr.getOperand(i);
-        if (!MO.isReg() && !MO.isImm()) continue;
+        if (!MO.isReg() && !MO.isImm() && !MO.isSymbol()) continue;
 
         bool Changed = updateBitWidth(MO, Annotator.getBitWidth(i));
         if (MO.isReg() && MO.isDef() && Changed)
@@ -217,7 +217,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // The bitwidth determinate by its first operand.
-  case VTM::VOpSetRI:
+  case VTM::VOpMvImm:
   case VTM::VOpNot:
   case VTM::VOpSRA:
   case VTM::VOpSRL:
