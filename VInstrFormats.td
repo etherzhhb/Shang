@@ -40,6 +40,7 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
   // Append the bit-width flag.
   // TODO: We need predicate as well.
   dag InOperandList = !con(iops, (ins BitWidthAnnotator:$Annotator));
+  let isPredicable = 1;
   let AsmString   = asmstr;
   let Pattern = pattern;
 
