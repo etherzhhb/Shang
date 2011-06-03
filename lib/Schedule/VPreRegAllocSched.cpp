@@ -115,7 +115,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     if (SrcInstr == 0) {
       // Set latency of Control operation and entry root to 1, so we can prevent
       // scheduling control operation to the first slot.
-      if (DstInstr && (!VInstr(*DstInstr).hasDatapath()
+      if (DstInstr && (!VIDesc(*DstInstr).hasDatapath()
       // Do not worry about PHI Nodes, their will be eliminated at the register
       // allocation pass.
                         && DstInstr->getOpcode() != VTM::PHI))
@@ -124,12 +124,12 @@ struct VPreRegAllocSched : public MachineFunctionPass {
       return 0;
     }
 
-    VInstr SrcTID = *SrcInstr;
+    VIDesc SrcTID = *SrcInstr;
     unsigned latency = SrcTID.getLatency();
 
     if (DstInstr == 0) return latency;
 
-    VInstr DstTID = *DstInstr;
+    VIDesc DstTID = *DstInstr;
 
     if (DstTID.isReadAtEmit()) {
       // We need to wait one more slot to read the result.
@@ -381,7 +381,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
     const Type *DstElemTy = cast<SequentialType>(DstMO->getType())->getElementType();
     size_t DstSize = TD->getTypeStoreSize(DstElemTy);
 
-    VInstr DstInfo = *DstMI;
+    VIDesc DstInfo = *DstMI;
     bool isDstLoad = DstInfo.mayLoad();
 
     if (DstMO == 0) continue;
@@ -396,7 +396,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       
       VSUnit *SrcU = I->second;
       MachineInstr *SrcMI = SrcU->getFirstInstr();
-      VInstr SrcInfo = *SrcMI;
+      VIDesc SrcInfo = *SrcMI;
       bool isSrcLoad = SrcInfo.mayLoad();
       
       // Ignore RAR dependence.
@@ -533,7 +533,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 }
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
-  VInstr VTID = *MI;
+  VIDesc VTID = *MI;
   // If the current instruction was eaten by as terminator?
   if (CurState.eatTerminator(VTID)) return;
 
@@ -581,7 +581,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
     MachineBasicBlock *MBB = State.getMachineBasicBlock();
     if (MBB->succ_size() == 0) { // We may meet an unreachable.
       MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpRet));
-      State.eatTerminator(VInstr(Term));
+      State.eatTerminator(VIDesc(Term));
     } else {
       assert(MBB->succ_size() == 1 && "Expect fall through block!");
       // Create "VOpToState 1/*means always true*/, target mbb"
@@ -589,7 +589,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
         .addMBB(*MBB->succ_begin()).addOperand(ucOperand::CreatePredicate());
 
-      State.eatTerminator(VInstr(Term));
+      State.eatTerminator(VIDesc(Term));
     }
   }
 

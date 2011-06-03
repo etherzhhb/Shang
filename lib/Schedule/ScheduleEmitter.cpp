@@ -260,7 +260,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 }
 
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
-  VInstr VTID = Inst;
+  VIDesc VTID = Inst;
   bool IsCtrl = !VTID.hasDatapath();
 
   typedef SmallVector<MachineOperand, 8> OperandVector;
@@ -546,7 +546,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
         continue;
       }
 
-      assert((!Inst->isCopy() || VInstr(*Inst).canCopyBeFused())
+      assert((!Inst->isCopy() || VIDesc(*Inst).canCopyBeFused())
              && "Cannot handle copy!");
 
       StateBuilder.emitSUnit(A);

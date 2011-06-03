@@ -77,7 +77,7 @@ public:
   void changeToDefaultPred();
 };
 
-class VInstr {
+class VIDesc {
   enum TSFlagsBitFields {
     ResTypeMask = 0x7,
     ResTypeShiftAmount = 0x0,
@@ -107,8 +107,8 @@ class VInstr {
   }
   uint64_t getTSFlags() const { return getTID().TSFlags; }
 public:
-  /*implicit*/ VInstr(const MachineInstr &MI) : Data(&MI) {}
-  /*implicit*/ VInstr(const TargetInstrDesc &TID) : Data(&TID) {}
+  /*implicit*/ VIDesc(const MachineInstr &MI) : Data(&MI) {}
+  /*implicit*/ VIDesc(const TargetInstrDesc &TID) : Data(&TID) {}
 
   MachineInstr &get() const {
     return *const_cast<MachineInstr*>(Data.get<const MachineInstr*>());

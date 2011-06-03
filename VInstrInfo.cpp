@@ -39,7 +39,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   return true;
 }
 
-FuncUnitId VInstr::getPrebindFUId()  const {
+FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemTrans)
     return FuncUnitId(VFUs::MemoryBus, 0);
@@ -73,7 +73,7 @@ void BitWidthAnnotator::changeToDefaultPred() {
   MO->ChangeToRegister(0, false);
 }
 
-bool VInstr::mayLoad() const {
+bool VIDesc::mayLoad() const {
   switch (getTID().Opcode) {
   default: return false;
   // There is a "isLoad" flag in memory access operation.
@@ -81,7 +81,7 @@ bool VInstr::mayLoad() const {
   }
 }
 
-bool VInstr::mayStore() const {
+bool VIDesc::mayStore() const {
   switch (getTID().Opcode) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
@@ -89,7 +89,7 @@ bool VInstr::mayStore() const {
   }
 }
 
-bool VInstr::canCopyBeFused() const {
+bool VIDesc::canCopyBeFused() const {
   const MachineInstr &I = get();
   assert(I.isCopy() && "canCopyBeFused called on the wrong instruction!");
   if (I.getOperand(1).isImm()) return true;
@@ -104,4 +104,4 @@ bool VInstr::canCopyBeFused() const {
 }
 
 // Out of line virtual function to provide home for the class.
-void VInstr::anchor() {}
+void VIDesc::anchor() {}
