@@ -31,6 +31,12 @@ def SDT_FnRet : SDTypeProfile<0, 0, []>;
 def VTMFnRet	:	SDNode<"VTMISD::Ret", SDT_FnRet,
 							[SDNPVariadic, SDNPHasChain]>;
 
+// 'Calling' internal module, which instantiated inside the current module.
+// Return the result token.
+def SDT_InternalCall : SDTypeProfile<1, -1, []>;
+def VTMInternalCall	:	SDNode<"VTMISD::InternalCall", SDT_InternalCall,
+                             [SDNPHasChain]>;
+
 def SDT_ADDC : SDTypeProfile<2, 3, [
   SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisInt<0>,
   SDTCisVT<1, i1>,  SDTCisVT<4, i1>
@@ -158,21 +164,21 @@ def VOpBitCat	   : DPTvaInst<(outs DR:$dst), (ins DR:$lhs, DR:$rhs),
 let neverHasSideEffects = 1,
 	isReMaterializable	= 1 in {
 let isCommutable       = 1 in
-def VOpAdd : FUInst<(outs DR:$dst, DR:$co),
-			        (ins RADD:$src1, RADD:$src2, RADD:$ci),
+def VOpAdd : FUInst<(outs RADD:$dst, DR:$co),
+			        (ins DR:$src1, DR:$src2, DR:$ci),
 					            "{$dst, $co} = $src1 + $src2 + $ci;",
 								 [], FUAddSub>;
-def VOpMult : FUInst<(outs DR:$dst),
-			         (ins RMUL:$src1, RMUL:$src2),
+def VOpMult : FUInst<(outs RMUL:$dst),
+			         (ins DR:$src1, DR:$src2),
 					            "$dst = $src1 * $src2;",
 								 [], FUMult>;
 
-def VOpSHL : FUInst<(outs DR:$dst), (ins RSHT:$src0, RSHT:$src1),
+def VOpSHL : FUInst<(outs RSHT:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = shl $src0, $src1", [], FUSHIFT>;
-def VOpSRL : FUInst<(outs DR:$dst), (ins RSHT:$src0, RSHT:$src1),
+def VOpSRL : FUInst<(outs RSHT:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = lsr $src0, $src1", [], FUSHIFT>;
 
-def VOpSRA : FUInst<(outs DR:$dst), (ins RSHT:$src0, RSHT:$src1),
+def VOpSRA : FUInst<(outs RSHT:$dst), (ins DR:$src0, DR:$src1),
                      "$dst = sra $src0, $src1", [], FUSHIFT>;
 }
 
