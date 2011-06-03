@@ -173,6 +173,10 @@ ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   return MO;
 }
 
+bool ucOperand::isWire() const {
+  return isReg() && (IsWireFlag & getTargetFlags());
+}
+
 void ucOperand::print(raw_ostream &OS,
                       unsigned UB /* = 64 */, unsigned LB /* = 0 */) {
   switch (getType()) {

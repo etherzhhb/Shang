@@ -59,7 +59,7 @@ struct MicroStateBuilder {
     WireDef(unsigned wireNum, const char *Symbol, unsigned predReg,
             ucOperand op, unsigned emitSlot, unsigned writeSlot)
       : WireNum(wireNum), SymbolName(Symbol), PredReg(predReg), Op(op),
-      EmitSlot(emitSlot), WriteSlot(writeSlot) {}
+        EmitSlot(emitSlot), WriteSlot(writeSlot) {}
 
     bool isSymbol() const { return SymbolName != 0; }
     // Do not define a register twice by copying it self.
@@ -326,6 +326,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
     unsigned RegNo = MO.getReg();
 
+    // Set the wire flag now.
+    if (VRegisterInfo::IsWire(RegNo, &MRI))
+      cast<ucOperand>(MO).setIsWire();
+
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
@@ -338,9 +342,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
       // Define wire for trivial operation, otherwise, the result of function
       // unit should be wire, and there must be a copy follow up.
-      if (VRegisterInfo::IsWire(RegNo, &MRI))
-        NewOp.setIsWire();
-      else
+      if (!NewOp.isWire())
         NewOp = ucOperand::CreateWireDefine(MRI, BitWidth);
 
       unsigned WireNum = NewOp.getReg();

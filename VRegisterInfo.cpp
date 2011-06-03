@@ -103,7 +103,7 @@ VRegisterInfo::getPointerRegClass(unsigned Kind) const {
   return TLI.getRegClassFor(PtrVT);
 }
 
-bool VRegisterInfo::IsWire(unsigned RegNo, MachineRegisterInfo *MRI) {
+bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {
   assert(TargetRegisterInfo::isVirtualRegister(RegNo)
          && "Expect virtual register!");
 

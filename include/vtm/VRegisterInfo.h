@@ -72,7 +72,7 @@ struct VRegisterInfo : public TargetRegisterInfo {
 
   int getDwarfRegNum(unsigned RegNum, bool isEH) const;
 
-  static bool IsWire(unsigned RegNo, MachineRegisterInfo *MRI);
+  static bool IsWire(unsigned RegNo, const MachineRegisterInfo *MRI);
 };
 
 } // end namespace llvm

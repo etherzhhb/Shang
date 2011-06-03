@@ -44,6 +44,7 @@ class ucOperand : public MachineOperand {
   static const unsigned PredSlotShiftAmount = 0x10;
   static const unsigned OpcodeMask = 0xffff;
   static const unsigned OpcodeShiftAmount = 0x20;
+
 public:
   /*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
 
@@ -70,7 +71,7 @@ public:
     return FuncUnitId((Context >> FUIDShiftAmount) & FUIDMask);
   }
 
-  bool isWire() const { return isReg() && (IsWireFlag & getTargetFlags()); }
+  bool isWire() const;
 
   unsigned getBitWidthOrZero() const {
     assert((isImm() || isReg())
