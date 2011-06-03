@@ -84,10 +84,15 @@ public:
     return BitWidth;
   }
 
-  void setBitWidth(unsigned BitWidth, bool isWire = false) {
+  void setIsWire(bool isWire = true) {
+    unsigned char TF = getTargetFlags();
+    TF = isWire ? (TF | IsWireFlag) : (TF & ~IsWireFlag);
+    setTargetFlags(TF);
+  }
+
+  void setBitWidth(unsigned BitWidth) {
     assert((isImm() || isReg()) && "Unsupported operand type!");
     unsigned TF = BitWidth & BitwidthMask;
-    if (isWire) TF |= IsWireFlag;
     setTargetFlags(TF);
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }

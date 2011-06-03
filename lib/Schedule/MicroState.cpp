@@ -146,14 +146,16 @@ ucOperand ucOperand::CreateWireDefine(MachineRegisterInfo &MRI,
                                       unsigned BitWidth) {
   unsigned WireNum = MRI.createVirtualRegister(VTM::WireRegisterClass);
   ucOperand MO = MachineOperand::CreateReg(WireNum, true);
-  MO.setBitWidth(BitWidth, true);
+  MO.setBitWidth(BitWidth);
+  MO.setIsWire();
   //MO.setIsEarlyClobber();
   return MO;
 }
 
 ucOperand ucOperand::CreateWireRead(unsigned WireNum, unsigned BitWidth) {
   ucOperand MO = MachineOperand::CreateReg(WireNum, false);
-  MO.setBitWidth(BitWidth, true);
+  MO.setBitWidth(BitWidth);
+  MO.setIsWire();
   return MO;
 }
 
