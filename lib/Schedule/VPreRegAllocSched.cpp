@@ -46,13 +46,15 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/MathExtras.h"
-
+#include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-sgraph"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
+STATISTIC(MeregedRegisterBits,
+          "Number of registers merged after schedule emitted");
 
 namespace {
 /// @brief Schedule the operations.
@@ -173,6 +175,11 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   ~VPreRegAllocSched();
   bool runOnMachineFunction(MachineFunction &MF);
 
+  // Remove redundant code after schedule emitted.
+  void cleanUpSchedule();
+  void cleanUpRegisterClass(const TargetRegisterClass *RC);
+  void cleanUpRegister(unsigned Reg);
+
   bool doInitialization(Module &M) {
     TD = getAnalysisIfAvailable<TargetData>();
     assert(TD && "TargetData will always available in a machine function pass!");
@@ -244,9 +251,11 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 
     State.emitSchedule();
     FInfo->remeberTotalSlot(MBB, State.getStartSlot(),
-                                    State.getTotalSlot(),
-                                    State.getLoopOpSlot());
+                                 State.getTotalSlot(),
+                                 State.getLoopOpSlot());
   }
+
+  cleanUpSchedule();
 
   return true;
 }
@@ -608,4 +617,56 @@ VDMemDep *VPreRegAllocSched::getMemDepEdge(VSUnit *Src, unsigned Latency,
                                     enum VDMemDep::MemDepTypes DepType,
                                     unsigned Diff) {
   return new VDMemDep(Src, Latency, isBackEdge, DepType, Diff);
+}
+
+void VPreRegAllocSched::cleanUpSchedule() {
+  cleanUpRegisterClass(VTM::WireRegisterClass);
+  // FIXME: There are function units.
+  cleanUpRegisterClass(VTM::RADDRegisterClass);
+  cleanUpRegisterClass(VTM::RMULRegisterClass);
+  cleanUpRegisterClass(VTM::RSHTRegisterClass);
+}
+
+void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
+  // And Emit the wires defined in this module.
+  const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
+
+  for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
+       I != E; ++I) {
+    unsigned SrcReg = *I;
+    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
+
+    if (MRI->def_empty(SrcReg)) continue;
+    assert (++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
+    cleanUpRegister(SrcReg);
+  }
+}
+
+void VPreRegAllocSched::cleanUpRegister(unsigned Reg) {
+  // If a same wire copied to different registers, merge them.
+  typedef MachineRegisterInfo::use_iterator use_it;
+
+  SmallVector<ucOp, 8> DstRegs;
+  for (use_it UI = MRI->use_begin(Reg), UE = MRI->use_end(); UI != UE; ++UI) {
+    ucOp Op = ucOp::getParent(UI);
+    if (Op->getOpcode() == VTM::COPY) {
+      DstRegs.push_back(Op);
+    }
+  }
+
+  if (DstRegs.size() <= 1) return;
+
+  // Pick one dest register, and replace others by this one.
+  unsigned FstDstReg = DstRegs.pop_back_val().getOperand(0).getReg();
+
+  while (!DstRegs.empty()) {
+    ucOp OpToMerge = DstRegs.pop_back_val();
+    ucOperand &DefOperand = OpToMerge.getOperand(0);
+    unsigned RegToMerge = DefOperand.getReg();
+    MRI->replaceRegWith(RegToMerge, FstDstReg);
+    // DiryHack: Disable the copy.
+    MeregedRegisterBits += DefOperand.getBitWidth();
+    DefOperand.setReg(0);
+    OpToMerge->changeOpcode(VTM::IMPLICIT_DEF, OpToMerge->getPredSlot());
+  }
 }
