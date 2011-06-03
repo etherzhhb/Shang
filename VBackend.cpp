@@ -169,35 +169,29 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Optimize PHIs before DCE: removing dead PHI cycles may make more
   // instructions dead.
-  if (OptLevel != CodeGenOpt::None)
-    PM.add(createOptimizePHIsPass());
+  PM.add(createOptimizePHIsPass());
 
   // If the target requests it, assign local variables to stack slots relative
   // to one another and simplify frame index references where possible.
   PM.add(createLocalStackSlotAllocationPass());
 
-  if (OptLevel != CodeGenOpt::None) {
-    // With optimization, dead code should already be eliminated. However
-    // there is one known exception: lowered code for arguments that are only
-    // used by tail calls, where the tail calls reuse the incoming stack
-    // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
-    PM.add(createDeadMachineInstructionElimPass());
-    printAndVerify(PM, "After codegen DCE pass");
+  // With optimization, dead code should already be eliminated. However
+  // there is one known exception: lowered code for arguments that are only
+  // used by tail calls, where the tail calls reuse the incoming stack
+  // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
+  PM.add(createDeadMachineInstructionElimPass());
+  printAndVerify(PM, "After codegen DCE pass");
 
-    PM.add(createPeepholeOptimizerPass());
-    if (!false/*DisableMachineLICM*/)
-      PM.add(createMachineLICMPass());
-    PM.add(createMachineCSEPass());
-    if (!false/*DisableMachineSink*/)
-      PM.add(createMachineSinkingPass());
-    printAndVerify(PM, "After Machine LICM, CSE and Sinking passes");
-  }
+  PM.add(createPeepholeOptimizerPass());
+
+  PM.add(createMachineLICMPass());
+  PM.add(createMachineCSEPass());
+  PM.add(createMachineSinkingPass());
+  printAndVerify(PM, "After Machine LICM, CSE and Sinking passes");
 
   // Pre-ra tail duplication.
-  if (OptLevel != CodeGenOpt::None && !false/*DisableEarlyTailDup*/) {
-    PM.add(createTailDuplicatePass(true));
-    printAndVerify(PM, "After Pre-RegAlloc TailDuplicate");
-  }
+  //PM.add(createTailDuplicatePass(true));
+  //printAndVerify(PM, "After Pre-RegAlloc TailDuplicate");
 
   // Run pre-ra passes.
   if (addPreRegAlloc(PM, OptLevel))
@@ -210,6 +204,10 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Eliminate the VOpSetRI instructions.
   PM.add(createElimSetRIPass());
+
+  // Perform if conversion before schedule, so we have more parallelism
+  // available.
+  PM.add(createIfConverterPass());
 
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());

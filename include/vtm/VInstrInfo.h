@@ -34,7 +34,7 @@ public:
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB,
                              MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
                              SmallVectorImpl<MachineOperand> &Cond,
-                             bool AllowModify /* = false */);
+                             bool AllowModify /* = false */) const;
 
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should

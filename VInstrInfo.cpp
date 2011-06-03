@@ -34,7 +34,7 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
 bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                                MachineBasicBlock *&FBB,
                                SmallVectorImpl<MachineOperand> &Cond,
-                               bool AllowModify /* = false */) {
+                               bool AllowModify /* = false */) const {
   // TODO: Write code for this function.
   return true;
 }
