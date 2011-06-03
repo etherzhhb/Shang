@@ -66,6 +66,9 @@ public:
     return (Context >> OpcodeShiftAmount) & OpcodeMask;
   }
 
+  void changeOpcode(unsigned Opcode, unsigned PredSlot,
+                    FuncUnitId FUId = VFUs::Trivial);
+
   const TargetInstrDesc &getDesc() const;
 
   FuncUnitId getFUId() const {

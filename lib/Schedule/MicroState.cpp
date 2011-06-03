@@ -128,14 +128,20 @@ ucOp ucOperand::getucParent() {
               ucOp::op_iterator(IEnd, ucOperand::Mapper()));
 }
 
-ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
-                                  FuncUnitId FUId /*= VFUs::Trivial*/) {
+void ucOperand::changeOpcode(unsigned Opcode, unsigned PredSlot,
+                             FuncUnitId FUId /* = VFUs::Trivial */) {
   uint64_t Context = 0x0;
   Context |= (uint64_t(Opcode & OpcodeMask) << OpcodeShiftAmount);
   Context |= (uint64_t(PredSlot & PredSlotMask) << PredSlotShiftAmount);
   Context |= (uint64_t(FUId.getData() & FUIDMask) << FUIDShiftAmount);
-  ucOperand MO = MachineOperand::CreateImm(Context);
-  MO.setTargetFlags(IsOpcode);
+  setImm(Context);
+  setTargetFlags(IsOpcode);
+}
+
+ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
+                                  FuncUnitId FUId /*= VFUs::Trivial*/) {
+  ucOperand MO = MachineOperand::CreateImm(0);
+  MO.changeOpcode(Opcode, PredSlot, FUId);
   assert((MO.getOpcode() == Opcode && MO.getPredSlot() == PredSlot
           && MO.getFUId() == FUId) && "Data overflow!");
   return MO;
