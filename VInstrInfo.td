@@ -21,8 +21,8 @@ include "VInstrFormats.td"
 
 //  Specific Node Definitions.
 //===----------------------------------------------------------------------===//
-def SDT_InArg : SDTypeProfile<1, 1, [SDTCisVT<1, i8>]>;
-def VTMInArg	:	SDNode<"VTMISD::InArg", SDT_InArg, [SDNPHasChain]>;
+def SDT_ExtractVal : SDTypeProfile<1, 1, [SDTCisVT<1, i8>]>;
+def VTMExtractVal	:	SDNode<"VTMISD::ExtractVal", SDT_ExtractVal, [SDNPHasChain]>;
 
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
 def VTMRetVal	:	SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;

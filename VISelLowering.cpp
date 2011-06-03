@@ -166,7 +166,7 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   default:
     assert(0 && "Unknown SDNode!");
     return "???";
-  case VTMISD::InArg:      return "VTMISD::InArg";
+  case VTMISD::ExtractVal: return "VTMISD::ExtractVal";
   case VTMISD::Ret:        return "VTMISD::Ret";
   case VTMISD::RetVal:     return "VTMISD::RetVal";
   case VTMISD::ADD:        return "VTMISD::ADD";
@@ -188,23 +188,20 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                       DebugLoc dl, SelectionDAG &DAG,
                                       SmallVectorImpl<SDValue> &InVals) const {
   assert(!isVarArg && "VarArg not support yet!");
-
-  typedef const SmallVectorImpl<ISD::InputArg> IAVec;
-
-  unsigned Idx = 0;
-  for (IAVec::const_iterator I = Ins.begin(), E = Ins.end(); I != E; ++I) {
-    // Get the argument form InArg Node.
-
-    const ISD::InputArg &IA = *I;
+  for (unsigned I = 0, E = Ins.size(); I != E; ++I) {
+    // Get the argument form ExtractVal Node.
+    const ISD::InputArg &IA = Ins[I];
     EVT ArgVT = IA.VT;
 
-    // FIXME: Remember the Argument number.
-    SDValue SDInArg = DAG.getNode(VTMISD::InArg, dl,
+    // FIXME: Remember the argument name with ExternalSymbolSDNode instead of
+    // Argument number.
+    SDValue SDInArg = DAG.getNode(VTMISD::ExtractVal, dl,
                                   DAG.getVTList(ArgVT, MVT::Other),
-                                  Chain, DAG.getConstant(Idx++,MVT::i8, true));
+                                  Chain,
+                                  DAG.getTargetConstant(I,MVT::i8));
 
     InVals.push_back(SDInArg);
-    // Get the chain from InArg Node.
+    // Get the chain from ExtractVal Node.
     Chain = SDInArg.getValue(1);
   }
 
@@ -217,21 +214,17 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                              const SmallVectorImpl<ISD::OutputArg> &Outs,
                              const SmallVectorImpl<SDValue> &OutVals,
                              DebugLoc dl, SelectionDAG &DAG) const {
-  typedef const SmallVectorImpl<ISD::OutputArg> OAVec;
-  unsigned Idx = 0;
-
-  for (OAVec::const_iterator I = Outs.begin(), E = Outs.end(); I != E; ++I) {
-    // Get the argument form InArg Node.
-
-    const ISD::OutputArg &OA = *I;
+  for (unsigned I = 0, E = OutVals.size(); I != E; ++I) {
+    // Get the argument form ExtractVal Node.
+    const ISD::OutputArg &OA = Outs[I];
     EVT ArgVT = OA.VT;
 
     // FIXME: Remember the Argument number.
     SDValue SDOutArg = DAG.getNode(VTMISD::RetVal, dl, MVT::Other, Chain,
-                                  OutVals[Idx],
-                                  DAG.getConstant(Idx,MVT::i8, true));
-    ++Idx;
-    // Get the chain from InArg Node.
+                                  OutVals[I],
+                                  DAG.getTargetConstant(I,MVT::i8));
+    //++Idx;
+    // Get the chain from ExtractVal Node.
     Chain = SDOutArg.getValue(0);
   }
 

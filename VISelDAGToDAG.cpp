@@ -63,7 +63,7 @@ private:
   SDNode *SelectSimpleNode(SDNode *N, unsigned OpC);
 
   // Function argument and return values.
-  SDNode *SelectInArg(SDNode *N);
+  SDNode *SelectExtractVal(SDNode *N);
   SDNode *SelectRetVal(SDNode *N);
   SDNode *SelectBrcnd(SDNode *N);
 
@@ -221,7 +221,7 @@ SDNode *VDAGToDAGISel::SelectConstant(SDNode *N, bool CopyToFUReg) {
                                 Ops, array_lengthof(Ops));
 }
 
-SDNode *VDAGToDAGISel::SelectInArg(SDNode *N) {
+SDNode *VDAGToDAGISel::SelectExtractVal(SDNode *N) {
   // Build the target constant.
   SDValue ArgIdx = N->getOperand(1);
   int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();
@@ -321,7 +321,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   switch (N->getOpcode()) {
   default: break;
   case VTMISD::RetVal:        return SelectRetVal(N);
-  case VTMISD::InArg:         return SelectInArg(N);
+  case VTMISD::ExtractVal:    return SelectExtractVal(N);
   case ISD::BRCOND:           return SelectBrcnd(N);
 
   case VTMISD::ADD:           return SelectAdd(N);
