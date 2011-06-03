@@ -164,21 +164,22 @@ MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
 
 const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
+  case VTMISD::InternalCall:    return "VTMISD::InternalCall";
+  case VTMISD::ReadSymbol:      return "VTMISD::ReadSymbol";
+  case VTMISD::Ret:             return "VTMISD::Ret";
+  case VTMISD::RetVal:          return "VTMISD::RetVal";
+  case VTMISD::ADD:             return "VTMISD::ADD";
+  case VTMISD::MemAccess:       return "VTMISD::MemAccess";
+  case VTMISD::BitSlice:        return "VTMISD::BitSlice";
+  case VTMISD::BitCat:          return "VTMISD::BitCat";
+  case VTMISD::BitRepeat:       return "VTMISD::BitRepeat";
+  case VTMISD::RAnd:            return "VTMISD::RAnd";
+  case VTMISD::ROr:             return "VTMISD::ROr";
+  case VTMISD::RXor:            return "VTMISD::RXor";
+  case VTMISD::Not:             return "VTMISD::Not";
   default:
     assert(0 && "Unknown SDNode!");
     return "???";
-  case VTMISD::ExtractVal: return "VTMISD::ExtractVal";
-  case VTMISD::Ret:        return "VTMISD::Ret";
-  case VTMISD::RetVal:     return "VTMISD::RetVal";
-  case VTMISD::ADD:        return "VTMISD::ADD";
-  case VTMISD::MemAccess:  return "VTMISD::MemAccess";
-  case VTMISD::BitSlice:   return "VTMISD::BitSlice";
-  case VTMISD::BitCat:     return "VTMISD::BitCat";
-  case VTMISD::BitRepeat:  return "VTMISD::BitRepeat";
-  case VTMISD::RAnd:       return "VTMISD::RAnd";
-  case VTMISD::ROr:        return "VTMISD::ROr";
-  case VTMISD::RXor:       return "VTMISD::RXor";
-  case VTMISD::Not:        return "VTMISD::Not";
   }
 }
 
@@ -194,7 +195,7 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
   assert(Ins.size() == F->arg_size() && "Argument size do not match!");
 
   for (unsigned I = 0, E = Ins.size(); I != E; ++I) {
-    // Get the argument form ExtractVal Node.
+    // Get the argument form ReadSymbol Node.
     const ISD::InputArg &IA = Ins[I];
     EVT ArgVT = IA.VT;
 
@@ -214,7 +215,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                              const SmallVectorImpl<SDValue> &OutVals,
                              DebugLoc dl, SelectionDAG &DAG) const {
   for (unsigned I = 0, E = OutVals.size(); I != E; ++I) {
-    // Get the argument form ExtractVal Node.
+    // Get the argument form ReadSymbol Node.
     const ISD::OutputArg &OA = Outs[I];
     EVT ArgVT = OA.VT;
 
@@ -223,7 +224,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                                   OutVals[I],
                                   DAG.getTargetConstant(I,MVT::i8));
     //++Idx;
-    // Get the chain from ExtractVal Node.
+    // Get the chain from ReadSymbol Node.
     Chain = SDOutArg.getValue(0);
   }
 
@@ -238,7 +239,47 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
                                    const SmallVectorImpl<ISD::InputArg> &Ins,
                                    DebugLoc dl, SelectionDAG &DAG,
                                    SmallVectorImpl<SDValue> &InVals) const {
-  return Chain;
+  // Do not mess with tail call.
+  isTailCall = false;
+  assert(!isVarArg && "VarArg not support yet!");
+
+  // TODO: Handle calling conversions.
+  // There are internal call, which means the hardware module corresponding to
+  // the callee function should be instantiated inside the current module.
+  // And also external call, which means the hardware module corresponding to
+  // the callee function is attached to the system bus, and we should send data
+  // to it with memory bus.
+
+  SmallVector<SDValue, 8> Ops;
+  // Reserve space for the chain and the function name.
+  Ops.push_back(Chain);
+
+  GlobalAddressSDNode *CalleeNode = cast<GlobalAddressSDNode>(Callee);
+  const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
+  assert(OutVals.size() == CalleeFN->arg_size()
+         && "Argument size do not match!");
+  //const char *CalleeName = CalleeFN->getValueName()->getKeyData();
+  //Ops.push_back(DAG.getTargetExternalSymbol(CalleeName, MVT::Other));
+  Ops.push_back(DAG.getTargetGlobalAddress(CalleeFN, dl, MVT::Other));
+
+  for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
+    Ops.push_back(OutVals[I]);
+
+  // The call node return a i1 value as token to keep the dependence between
+  // the call and the follow up extract value.
+  SDValue CallNode = DAG.getNode(VTMISD::InternalCall, dl,
+                                 DAG.getVTList(MVT::i1, MVT::Other),
+                                 Ops.data(), Ops.size());
+
+  // Read the return value from return port.
+  assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");
+  EVT RetVT = Ins[0].VT;
+  SDValue RetPortName = DAG.getTargetExternalSymbol("return_value", RetVT);
+  SDValue RetValue = DAG.getNode(VTMISD::ReadSymbol, dl, RetVT,
+                                 RetPortName, CallNode);
+  InVals.push_back(RetValue);
+
+  return SDValue(CallNode.getNode(), 1);
 }
 
 unsigned VTargetLowering::computeSizeInBits(SDValue Op) {

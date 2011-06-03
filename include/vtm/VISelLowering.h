@@ -23,7 +23,7 @@ namespace llvm {
 namespace VTMISD {
   enum {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
-    ExtractVal, // Extract value from a chain.
+    ReadSymbol, // Extract value from a chain.
     Ret,
     RetVal,
     InternalCall,

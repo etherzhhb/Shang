@@ -66,7 +66,7 @@ private:
   SDNode *SelectSimpleNode(SDNode *N, unsigned OpC);
 
   // Function argument and return values.
-  SDNode *SelectExtractVal(SDNode *N);
+  SDNode *SelectInternalCall(SDNode *N);
   SDNode *SelectRetVal(SDNode *N);
   SDNode *SelectBrcnd(SDNode *N);
 
@@ -200,6 +200,7 @@ SDNode *VDAGToDAGISel::SelectBitSlice(SDNode * N) {
 
 SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
   SDValue Imm = SDValue(N, 0);
+  DebugLoc dl = Imm.getDebugLoc();
 
   if (ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(N)) {
     // Do not need to select target constant.
@@ -213,6 +214,8 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
     Imm = CurDAG->getTargetConstant(Val, N->getValueType(0));
   } else if (ExternalSymbolSDNode *ES = dyn_cast<ExternalSymbolSDNode>(N))
     Imm = CurDAG->getTargetExternalSymbol(ES->getSymbol(), Imm.getValueType());
+  else if(GlobalAddressSDNode *GA = dyn_cast<GlobalAddressSDNode>(N))
+    Imm = CurDAG->getTargetGlobalAddress(GA->getGlobal(), dl, Imm.getValueType());
 
   SDValue Ops[] = { Imm, SDValue()/*The dummy bit width operand*/ };
 
@@ -220,26 +223,11 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
 
   // Do not create cycle.
   if (ForceMove)
-    return CurDAG->getMachineNode(VTM::VOpMvImm, N->getDebugLoc(),
-                                  N->getVTList(), Ops, array_lengthof(Ops));
+    return CurDAG->getMachineNode(VTM::VOpMvImm, dl, N->getVTList(),
+                                  Ops, array_lengthof(Ops));
   else
     return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getVTList(),
                                 Ops, array_lengthof(Ops));
-}
-
-SDNode *VDAGToDAGISel::SelectExtractVal(SDNode *N) {
-  // Build the target constant.
-  SDValue ArgIdx = N->getOperand(1);
-  int64_t Val = cast<ConstantSDNode>(ArgIdx)->getZExtValue();
-  ArgIdx = CurDAG->getTargetConstant(Val, ArgIdx.getValueType());
-
-  SDValue Ops[] = { ArgIdx, SDValue()/*The dummy bit width operand*/,
-                    N->getOperand(0) };
-
-  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
-
-  return CurDAG->SelectNodeTo(N, VTM::VOpArg, N->getVTList(),
-                              Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
@@ -247,8 +235,24 @@ SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
                    N->getOperand(1), // condition (predicate operand).
                    N->getOperand(0) };
 
-  return CurDAG->MorphNodeTo(N, ~VTM::VOpToState, N->getVTList(),
-                             Ops, array_lengthof(Ops));
+  return CurDAG->SelectNodeTo(N, VTM::VOpToState, N->getVTList(),
+                              Ops, array_lengthof(Ops));
+}
+
+SDNode *VDAGToDAGISel::SelectInternalCall(SDNode *N) {
+  SmallVector<SDValue, 8> Ops;
+
+  for (unsigned I = 1, E = N->getNumOperands(); I != E; ++I)
+    Ops.push_back(N->getOperand(I));
+  // The bit width annotator.
+  Ops.push_back(SDValue());
+  // And the chain.
+  Ops.push_back(N->getOperand(0));
+
+  computeOperandsBitWidth(N, Ops.data(), Ops.size() -1/*Skip the chain*/);
+  
+  return CurDAG->SelectNodeTo(N, VTM::VOpInternalCall, N->getVTList(),
+                              Ops.data(), Ops.size());
 }
 
 SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
@@ -326,6 +330,8 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
+  case VTMISD::ReadSymbol:    return SelectSimpleNode(N, VTM::VOpReadSymbol);
+  case VTMISD::InternalCall:  return SelectInternalCall(N);
   case VTMISD::RetVal:        return SelectRetVal(N);
   case ISD::BRCOND:           return SelectBrcnd(N);
 
@@ -350,7 +356,8 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case VTMISD::ROr:           return SelectUnary(N, VTM::VOpROr);
   case VTMISD::RAnd:          return SelectUnary(N, VTM::VOpRAnd);
   case VTMISD::RXor:          return SelectUnary(N, VTM::VOpRXor);
-  
+
+  case ISD::GlobalAddress:
   case ISD::ExternalSymbol:
   case ISD::Constant:         return SelectImmediate(N);
 

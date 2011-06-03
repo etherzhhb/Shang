@@ -21,8 +21,8 @@ include "VInstrFormats.td"
 
 //  Specific Node Definitions.
 //===----------------------------------------------------------------------===//
-def SDT_ExtractVal : SDTypeProfile<1, 0, []>;
-def VTMExtractVal  :  SDNode<"VTMISD::ExtractVal", SDT_ExtractVal, []>;
+def SDT_ReadSymbol : SDTypeProfile<1, 2, []>;
+def VTMReadSymbol  :  SDNode<"VTMISD::ReadSymbol", SDT_ReadSymbol, []>;
 
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
 def VTMRetVal  :  SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;
@@ -97,26 +97,30 @@ def State : Operand<OtherVT>;
 //===----------------------------------------------------------------------===//
 // Communication operations.
 let hasCtrlDep = 1 in {
-  let isReturn     = 1,
-      isTerminator = 1,
-      isBarrier    = 1 in
-  def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
+  let isBarrier    = 1 in {
+    let isReturn     = 1,
+        isTerminator = 1 in
+    def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
 
+    def VOpReadSymbol : CtrlInst<(outs DR:$val), (ins DR:$symbol, DR:$token),
+                               "$val = arg[$symbol]", [],
+                               0 /*Latency*/, 1 /*ReadAtEmit*/>;
+    
+    def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
+                             "ret $var at $ret_no;",
+                             [], 0, 1>;
+    let isCall = 1 in {
+      def VOpInternalCall : CtrlInst<(outs DR:$token), (ins variable_ops),
+                                     "call internal;", [],
+                                     1 /*Latency*/, 1 /*ReadAtEmit*/>;
+    }
+  }
+  
   let isBranch   = 1,
     isTerminator = 1 in
   def VOpToState : CtrlInst<(outs), (ins State:$target),
                             "to $target;",
                             [], 0, 1>;
-
-  // Prevent MachineCSE delete any VOpArg.
-  // let neverHasSideEffects = 1 in
-  def VOpArg : CtrlInst<(outs DR:$arg), (ins i8imm:$arg_no),
-                        "$arg = arg[$arg_no]", [], 0, 1>;
-
-  let isBarrier    = 1  in
-  def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
-                           "ret $var at $ret_no;",
-                           [], 0, 1>;
 }
 
 let isReMaterializable = 1,

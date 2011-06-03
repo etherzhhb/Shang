@@ -157,7 +157,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB);
 
-  void emitOpArg(ucOp &OpArg);
+  void emitOpInternalCall(ucOp &OpInternalCall);
+  void emitOpReadSymbol(ucOp &OpReadSymbol);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpCopy(ucOp &OpCopy);
@@ -685,15 +686,16 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
     // Emit the operations.
     switch (Op->getOpcode()) {
-    case VTM::VOpArg:       emitOpArg(Op);                break;
-    case VTM::VOpRetVal:    emitOpRetVal(Op);             break;
-    case VTM::VOpRet:       emitOpRet(Op); IsRet = true;  break;
-    case VTM::VOpMemTrans:  emitOpMemTrans(Op);           break;
-    case VTM::VOpBRam:      emitOpBRam(Op);               break;
-    case VTM::IMPLICIT_DEF: emitImplicitDef(Op);          break;
+    case VTM::VOpInternalCall:  emitOpInternalCall(Op);       break;
+    case VTM::VOpReadSymbol:    emitOpReadSymbol(Op);         break;
+    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
+    case VTM::VOpRet:           emitOpRet(Op); IsRet = true;  break;
+    case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
+    case VTM::VOpBRam:          emitOpBRam(Op);               break;
+    case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMvImm:
-    case VTM::COPY:         emitOpCopy(Op);               break;
-    default:  assert(0 && "Unexpected opcode!");          break;
+    case VTM::COPY:             emitOpCopy(Op);               break;
+    default:  assert(0 && "Unexpected opcode!");              break;
     }
 
     CtrlS.exit_block();
@@ -786,12 +788,21 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpArg(ucOp &OpArg) {
+void RTLCodegen::emitOpReadSymbol(ucOp &OpReadSymbol) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
-  OpArg.getOperand(0).print(OS);
+  OpReadSymbol.getOperand(0).print(OS);
   // FIXME: Use getInputPort instead;
-  OS << " <= " << VM->getCommonPort(OpArg.getOperand(1).getImm()).getName()
+  OS << " <= ";
+  //OpReadSymbol.getOperand(1).print(OS);
+  OS << ";\n";
+}
+
+void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
+  // Assign input port to some register.
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  OS << "// Calling function: "
+     << OpInternalCall.getOperand(1).getGlobal()->getName()
      << ";\n";
 }
 
