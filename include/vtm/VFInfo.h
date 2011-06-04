@@ -128,12 +128,12 @@ public:
     return getIISlotFor(MBB) - getStartSlotFor(MBB);
   }
 
-  void remeberTotalSlot(const MachineBasicBlock* MBB,
+  void rememberTotalSlot(const MachineBasicBlock* MBB,
                         unsigned startSlot,
                         unsigned totalSlot,
                         unsigned IISlot);
 
-  void remeberCopySlot(unsigned SrcReg, unsigned DstReg, unsigned Slot) {
+  void rememberCopySlot(unsigned SrcReg, unsigned DstReg, unsigned Slot) {
     std::pair<unsigned, unsigned> Key(SrcReg, DstReg);
     assert(!CopySlots.count(Key) && "CopySlot already exist!");
     CopySlots.insert(std::make_pair(Key, Slot));
