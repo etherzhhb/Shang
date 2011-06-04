@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "vtm/VFInfo.h"
+#include "vtm/VInstrInfo.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
@@ -49,6 +50,14 @@ void VFInfo::rememberTotalSlot(const MachineBasicBlock* MBB, unsigned startSlot,
   SS.totalSlot = totalSlot;
   SS.IISlot = IISlot;
   StateSlotMap.insert(std::make_pair(MBB, SS));
+}
+
+unsigned VFInfo::lookupPHISlot(const MachineInstr *PN) const {
+  PhiSlotMapTy::const_iterator At = PHISlots.find(PN);
+
+  if (At == PHISlots.end()) return 0;
+
+  return At->second;
 }
 
 void VFInfo::rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot,

@@ -32,6 +32,7 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
 
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -76,7 +77,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
 
-  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {}
+  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {
+    initializeVPreRegAllocSchedPass(*PassRegistry::getPassRegistry());
+  }
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
@@ -205,26 +208,38 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void incTotalCycle() { ++totalCycle; }
 
-  const char *getPassName() const { return "Verilog Backend Scheduling Pass"; }
+  const char *getPassName() const {
+    return "Schedule Hardware Operations for Verilog Backend";
+  }
 };
 }
 
 //===----------------------------------------------------------------------===//
 char VPreRegAllocSched::ID = 0;
+char &llvm::VPreRegAllocSchedID = VPreRegAllocSched::ID;
 
 Pass *llvm::createVPreRegAllocSchedPass() {
   return new VPreRegAllocSched();
 }
-
+INITIALIZE_PASS_BEGIN(VPreRegAllocSched, "vtm-pre-regalloc-sched",
+                      "Schedule Hardware Operations for Verilog Backend",
+                      false, false)
+INITIALIZE_PASS_DEPENDENCY(LoopInfo)
+INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
+INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
+INITIALIZE_PASS_END(VPreRegAllocSched, "vtm-pre-regalloc-sched",
+                    "Schedule Hardware Operations for Verilog Backend",
+                    false, false)
 void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<LoopInfo>();
   AU.addPreserved<LoopInfo>();
   AU.addRequired<ScalarEvolution>();
   AU.addPreserved<ScalarEvolution>();
-  AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
+  AU.addRequired<MachineLoopInfo>();
+  AU.addPreservedID(UnreachableMachineBlockElimID);
   AU.setPreservesCFG();
   AU.addPreserved<BitLevelInfo>();
 }

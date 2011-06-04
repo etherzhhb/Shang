@@ -34,6 +34,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Function.h"
 #include "llvm/PassAnalysisSupport.h"
+
 #include "llvm/CodeGen/CalcSpillWeights.h"
 #include "llvm/CodeGen/EdgeBundles.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
@@ -143,6 +144,7 @@ FunctionPass *llvm::createSimpleRegisterAllocator() {
 }
 
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
+  initializeCopyEliminationPass(*PassRegistry::getPassRegistry());
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
   initializeStrongPHIEliminationPass(*PassRegistry::getPassRegistry());
@@ -161,9 +163,10 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<AliasAnalysis>();
   AU.addRequired<LiveIntervals>();
   AU.addPreserved<SlotIndexes>();
+  //AU.addRequiredID(CopyEliminationID);
   //if (StrongPHIElim)
-    AU.addRequiredID(StrongPHIEliminationID);
-  AU.addRequiredTransitive<RegisterCoalescer>();
+  //  AU.addRequiredID(StrongPHIEliminationID);
+ // AU.addRequiredTransitive<RegisterCoalescer>();
   AU.addRequired<CalculateSpillWeights>();
   AU.addRequired<LiveStacks>();
   AU.addPreserved<LiveStacks>();

@@ -475,16 +475,12 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
 
     // Update the bitwidth for newly inserted PHIs, insert it into the
     // First ucSate.
-    unsigned StartSlot = State.getStartSlot();
-    unsigned InsertSlot = WD.WriteSlot - StartSlot;
-
     while (!InsertedPHIs.empty()) {
       MachineInstr *PN = InsertedPHIs.pop_back_val();
-      PN->setFlags(InsertSlot);
-      assert(PN->getFlags() == InsertSlot && "NumII overflow!");
       ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
       Op.setBitWidth(SizeInBits);
 
+      VFI.rememberPHISlot(PN, WD.WriteSlot);
       for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
         ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
         SrcOp.setBitWidth(SizeInBits);
@@ -540,9 +536,7 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
         // For a loop, the PHI is copying the value from previous iteration, so
         // we need to issue after first iteration is done.
         unsigned PHISlot = A->getSlot() + getII();
-        Inst->setFlags(PHISlot - getStartSlot());
-        assert(Inst->getFlags() == (PHISlot - getStartSlot())
-               && "PHI Slot overflow!");
+        VFI->rememberPHISlot(Inst, PHISlot);
         continue;
       }
 

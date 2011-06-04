@@ -42,6 +42,20 @@ public:
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
   virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
+
+  virtual MachineInstr *insertImpDefForPhi(MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator InsertPos,
+    MachineInstr *PN) const;
+  virtual MachineInstr *insertIcomingCopyForPhi(MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator InsertPos,
+    MachineInstr *PN,
+    unsigned IncomingReg) const;
+
+  virtual MachineInstr *insertCopySrcRegForPhi(MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator InsertPos,
+    MachineInstr *PN, unsigned IncomingReg,
+    unsigned SrcReg,
+    unsigned SrcSubReg) const;
 };
 
 // Helper class for manipulating bit width operand.

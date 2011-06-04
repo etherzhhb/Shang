@@ -45,6 +45,30 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   // TODO: Write code for this function.
   return true;
 }
+typedef MachineBasicBlock::iterator mbb_it;
+MachineInstr *VInstrInfo::insertImpDefForPhi(MachineBasicBlock &MBB,
+                                              mbb_it InsertPos,
+                                              MachineInstr *PN) const {
+  return TargetInstrInfo::insertImpDefForPhi(MBB, InsertPos, PN);
+}
+
+MachineInstr *VInstrInfo::insertIcomingCopyForPhi(MachineBasicBlock &MBB,
+                                                  mbb_it InsertPos,
+                                                  MachineInstr *PN,
+                                                  unsigned IncomingReg) const {
+  return TargetInstrInfo::insertIcomingCopyForPhi(MBB, InsertPos, PN,
+                                                  IncomingReg);
+}
+
+MachineInstr *VInstrInfo::insertCopySrcRegForPhi(MachineBasicBlock &MBB,
+                                                 mbb_it InsertPos,
+                                                 MachineInstr *PN, unsigned IncomingReg,
+                                                 unsigned SrcReg,
+                                                 unsigned SrcSubReg) const {
+  return TargetInstrInfo::insertCopySrcRegForPhi(MBB, InsertPos, PN,
+                                                 IncomingReg,
+                                                 SrcReg, SrcSubReg);
+}
 
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.

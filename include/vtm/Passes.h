@@ -40,6 +40,7 @@ Pass *createElimMvImmPass();
 
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();
+extern char &VPreRegAllocSchedID;
 
 Pass *createPHIEliminationPass();
 
@@ -48,6 +49,7 @@ FunctionPass *createSimpleRegisterAllocator();
 
 // Fix copy instruction after register allocation
 Pass *createCopyEliminationPass();
+extern char &CopyEliminationID;
 
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
@@ -61,6 +63,8 @@ Pass *createVLTIfCodegenPass(raw_ostream &O);
 Pass *createPLBIfCodegenPass(raw_ostream &O);
 
 //
+void initializeVPreRegAllocSchedPass(PassRegistry &Registry);
+void initializeCopyEliminationPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeRTLCodegenPass(PassRegistry &Registry);
 
