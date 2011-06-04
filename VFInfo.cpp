@@ -42,7 +42,7 @@ unsigned VFInfo::getIISlotFor(const MachineBasicBlock* MBB) const {
   return at->second.IISlot;
 }
 
-void VFInfo::remeberTotalSlot(const MachineBasicBlock* MBB, unsigned startSlot,
+void VFInfo::rememberTotalSlot(const MachineBasicBlock* MBB, unsigned startSlot,
                               unsigned totalSlot, unsigned IISlot) {
   StateSlots SS;
   SS.startSlot = startSlot;
