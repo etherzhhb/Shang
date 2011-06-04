@@ -51,10 +51,14 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
 
 #include <queue>
 
 using namespace llvm;
+
+cl::opt<bool> EanbleSimpleRegisterSharing("vtm-enable-simple-register-sharing",
+                                          cl::init(false), cl::Hidden);
 
 static RegisterRegAlloc VSimpleRegalloc("vsimple",
                                         "vtm-simple register allocator",
@@ -246,8 +250,27 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   unsigned Size = BLI->getBitWidth(VReg);
   if (Size < 8) Size = 8;
   // Since we are allocating register with witdh of 2^N, round up the size.
-  Size = NextPowerOf2(Size - 1);
+  Size = NextPowerOf2(Size - 1) / 8;
 
-  unsigned Reg =  VFI->allocatePhyReg(Size / 8);
+  if (EanbleSimpleRegisterSharing) {
+    unsigned Overlaps[16];
+
+    typedef VFInfo::phyreg_iterator reg_it;
+    for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
+         I < E; ++I) {
+      unsigned PhyReg = *I;
+      bool Overlaped = false;
+      for (unsigned i = 0, e = VFI->getOverlaps(PhyReg, Overlaps); i < e; ++i)
+        if (query(VirtReg, Overlaps[i]).checkInterference()) {
+          Overlaped = true;
+          break;
+        }
+
+      if (!Overlaped)
+        return PhyReg;
+    }
+  }
+
+  unsigned Reg =  VFI->allocatePhyReg(Size);
   return Reg;
 }
