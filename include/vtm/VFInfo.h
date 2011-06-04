@@ -230,14 +230,7 @@ public:
     return phyreg_iterator(TotalRegs,  sizeInByte);
   }
 
-  unsigned *getOverlaps(unsigned R, unsigned Overlaps[5]) const {
-    Overlaps[4] = R;
-    Overlaps[3] = R & ~(~1 << 3);
-    Overlaps[2] = R & ~(~1 << 4);
-    Overlaps[1] = R & ~(~1 << 5);
-    Overlaps[0] = R & ~(~1 << 6);
-    return Overlaps;
-  }
+  unsigned getOverlaps(unsigned R, unsigned Overlaps[5]) const;
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();

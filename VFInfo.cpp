@@ -14,6 +14,7 @@
 #include "vtm/VFInfo.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace llvm;
 
@@ -72,3 +73,20 @@ void VFInfo::allocateBRam(uint16_t ID, unsigned NumElem,
 
 // Out of line virtual function to provide home for the class.
 void VFInfo::anchor() {}
+
+unsigned VFInfo::getOverlaps(unsigned R, unsigned Overlaps[5]) const {
+  //unsigned TrailingZeros = CountTrailingZeros_32(R);
+  //unsigned Idx = 0;
+  //for (unsigned i = TrailingZeros + 1; i < 4; ++i)
+  //  Overlaps[Idx++] = R & (~0 << i);
+
+  //// We have at most 8 bytes register.
+  //unsigned NumSubRegs = std::min(1 << TrailingZeros, 8);
+  //for (unsigned i = 0; i < NumSubRegs; ++i)
+  //  Overlaps[Idx++] = R + i;
+
+  Overlaps[0] = R;
+  Overlaps[1] = R & (~0 << 3);
+
+  return 2;
+}
