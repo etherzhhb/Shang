@@ -84,7 +84,6 @@ class VRASimple : public MachineFunctionPass,
   LiveStacks *LS;
   const BitLevelInfo *BLI;
 
-
   std::priority_queue<LiveInterval*, std::vector<LiveInterval*>,
                       CompSpillWeight> Queue;
 
@@ -124,6 +123,7 @@ public:
     return LI;
   }
 
+  unsigned checkPhysRegInterference(LiveInterval &VirtReg, unsigned PhysReg);
   unsigned selectOrSplit(LiveInterval &VirtReg,
                          SmallVectorImpl<LiveInterval*> &splitLVRs);
 
@@ -243,7 +243,16 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   return true;
 }
+unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
+                                             unsigned PhysReg) {
+  unsigned Overlaps[16];
 
+  for (unsigned i = 0, e = VFI->getOverlaps(PhysReg, Overlaps); i < e; ++i)
+    if (query(VirtReg, Overlaps[i]).checkInterference())
+      return Overlaps[i];
+
+  return 0;
+}
 unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
                                   SmallVectorImpl<LiveInterval*> &splitLVRs) {
   unsigned VReg = VirtReg.reg;
@@ -252,25 +261,19 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   // Since we are allocating register with witdh of 2^N, round up the size.
   Size = NextPowerOf2(Size - 1) / 8;
 
-  if (EanbleSimpleRegisterSharing) {
-    unsigned Overlaps[16];
-
-    typedef VFInfo::phyreg_iterator reg_it;
+  typedef VFInfo::phyreg_iterator reg_it;
+  if (EanbleSimpleRegisterSharing)
     for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
          I < E; ++I) {
-      unsigned PhyReg = *I;
-      bool Overlaped = false;
-      for (unsigned i = 0, e = VFI->getOverlaps(PhyReg, Overlaps); i < e; ++i)
-        if (query(VirtReg, Overlaps[i]).checkInterference()) {
-          Overlaped = true;
-          break;
-        }
-
-      if (!Overlaped)
-        return PhyReg;
+      unsigned PhysReg = *I;
+      if (checkPhysRegInterference(VirtReg, PhysReg) == 0)
+        return PhysReg;
     }
-  }
 
   unsigned Reg =  VFI->allocatePhyReg(Size);
+
+  while (checkPhysRegInterference(VirtReg, Reg) != 0)
+    Reg =  VFI->allocatePhyReg(Size);
+
   return Reg;
 }

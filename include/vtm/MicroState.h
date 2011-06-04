@@ -146,6 +146,8 @@ private:
   
   friend class ucOpIterator;
   friend class ucOperand;
+
+  void printOpcode(raw_ostream &OS) const;
 public:
   bool isControl() const;
 

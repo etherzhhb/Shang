@@ -31,8 +31,7 @@ using namespace llvm;
 bool ucOp::isControl() const {
   return OpCode.getParent()->getOpcode() == VTM::Control;
 }
-
-void ucOp::print(raw_ostream &OS) const {
+void ucOp::printOpcode(raw_ostream &OS) const {
   OS << OpCode.getDesc().getName();
 
   if (isControl()) {
@@ -42,14 +41,25 @@ void ucOp::print(raw_ostream &OS) const {
   }
 
   OS << "{" << OpCode.getFUId() << "}"
-     << "@" << OpCode.getPredSlot();
+    << "@" << OpCode.getPredSlot();
   OS << ' ';
+}
+void ucOp::print(raw_ostream &OS) const {
+  bool isFirstUse = true;
   // Print the operands;
   for (op_iterator I = op_begin(), E = op_end(); I != E; ++I) {
     ucOperand &MOP = *I;
+    if ((!MOP.isReg() || !MOP.isDef()) && isFirstUse) {
+      if (I != op_begin()) OS << " = ";
+      printOpcode(OS);
+      isFirstUse = false;
+    }
+
     MOP.print(OS);
     OS << ", ";
   }
+
+  if (isFirstUse) printOpcode(OS);
 }
 
 void ucOp::dump() const {
@@ -187,28 +197,36 @@ void ucOperand::print(raw_ostream &OS,
   switch (getType()) {
   case MachineOperand::MO_Register: {
     unsigned Reg = getReg();
-    UB = std::min(getBitWidth(), UB);
+    UB = std::min(getBitWidthOrZero(), UB);
     unsigned Offset = 0;
+
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
       DEBUG(
         MachineRegisterInfo &MRI
-          = getParent()->getParent()->getParent()->getRegInfo();
-        const TargetRegisterClass *RC = MRI.getRegClass(Reg);
-        OS << "/*" << RC->getName() << "*/ ";
+        = getParent()->getParent()->getParent()->getRegInfo();
+      const TargetRegisterClass *RC = MRI.getRegClass(Reg);
+      OS << "/*" << RC->getName() << "*/ ";
       );
+      Reg = TargetRegisterInfo::virtReg2Index(Reg);
+    } else { // Compute the offset of physics register.
+      Offset = (Reg & 0x7) * 8;
+    }
 
-      if (isWire()) OS << "wire";
-      else          OS << "reg";
-
-      OS << TargetRegisterInfo::virtReg2Index(Reg);
-      OS << verilogBitRange(UB, LB, getBitWidth() != 1);
+    if (isWire()) {
+      OS << "wire" << Reg << verilogBitRange(UB, LB, getBitWidth() != 1);
     } else {
       //assert(TargetRegisterInfo::isPhysicalRegister(Reg)
       //       && "Unexpected virtual register!");
       // Get the one of the 64 bit registers.
-      OS << "/*reg" << Reg <<"*/ reg" << (Reg & ~0x7);
+      OS << "/*";
+      if (isDef())
+        OS << "def_";
+      else {
+        OS << "use_";
+        if (isKill()) OS << "kill_";
+      }
+      OS << "reg" << Reg <<"*/ reg" << (Reg & ~0x7);
       // Select the sub register
-      Offset = (Reg & 0x7) * 8;
       OS << verilogBitRange(UB + Offset, LB + Offset, true);
     }
     return;

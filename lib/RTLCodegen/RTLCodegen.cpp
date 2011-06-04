@@ -240,9 +240,9 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
-  DEBUG(dbgs() << "Function for RTL Codegen:\n";
-        printVMF(dbgs(), F);
-  ); 
+  Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
+  printVMF(Out, F);
+  Out << "`endif\n";
 
   SignedWireNum = 0;
   // Reset the current fsm state number.
