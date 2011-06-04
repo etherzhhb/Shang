@@ -242,19 +242,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
-
     VSchedGraph State(TM, MBB, couldBePipelined(MBB), getTotalCycle());
-
     buildState(State);
     DEBUG(State.viewGraph());
     State.schedule();
     setTotalCycle(State.getEndSlot() + 1);
     DEBUG(State.viewGraph());
-
     State.emitSchedule();
-    FInfo->remeberTotalSlot(MBB, State.getStartSlot(),
-                                 State.getTotalSlot(),
-                                 State.getLoopOpSlot());
   }
 
   cleanUpSchedule();

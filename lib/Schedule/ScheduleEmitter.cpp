@@ -570,6 +570,9 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
   DEBUG(dump());
   DEBUG(dbgs() << '\n');
 
+  // Remember the schedule information.
+
+  VFI->remeberTotalSlot(MBB, getStartSlot(), getTotalSlot(), getLoopOpSlot());
   return MBB;
 }
 

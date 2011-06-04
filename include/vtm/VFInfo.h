@@ -69,6 +69,10 @@ class VFInfo : public MachineFunctionInfo {
   typedef std::set<FUActiveSlot> FUActiveSlotSetTy;
   FUActiveSlotSetTy ActiveSlotSet;
 
+  // Remember the scheduled slot of PHI nodes, it will lose after PHIElemination.
+  typedef std::map<std::pair<unsigned, unsigned>, unsigned> CopySlotMapTy;
+  CopySlotMapTy CopySlots;
+
   // Allocated physics registers in a MachineFunction/RTL module.
   // TODO: we need to perform per-BasicBlock register allocation to reduce
   // the length of interconnection.
@@ -114,17 +118,36 @@ public:
   VASTModule *getRtlMod() const { return const_cast<VASTModule*>(&Mod); }
 
   /// Slots information for machine basicblock.
-  unsigned getTotalSlotFor(const MachineBasicBlock* MBB) const;
-  
   unsigned getStartSlotFor(const MachineBasicBlock* MBB) const;
-  
+  unsigned getTotalSlotFor(const MachineBasicBlock *MBB) const;
+  unsigned getEndSlotFor(const MachineBasicBlock *MBB) const {
+    return getStartSlotFor(MBB) + getTotalSlotFor(MBB);
+  }
   unsigned getIISlotFor(const MachineBasicBlock* MBB) const;
-  
+  unsigned getIIFor(const MachineBasicBlock *MBB) const {
+    return getIISlotFor(MBB) - getStartSlotFor(MBB);
+  }
+
   void remeberTotalSlot(const MachineBasicBlock* MBB,
                         unsigned startSlot,
                         unsigned totalSlot,
                         unsigned IISlot);
 
+  void remeberCopySlot(unsigned SrcReg, unsigned DstReg, unsigned Slot) {
+    std::pair<unsigned, unsigned> Key(SrcReg, DstReg);
+    assert(!CopySlots.count(Key) && "CopySlot already exist!");
+    CopySlots.insert(std::make_pair(Key, Slot));
+  }
+
+  unsigned lookupCopySlot(unsigned SrcReg, unsigned DstReg) const {
+    CopySlotMapTy::const_iterator At =
+      CopySlots.find(std::make_pair(SrcReg, DstReg));
+    
+    if (At == CopySlots.end())
+      return 0;
+    
+    return At->second;
+  }
   /// Information for allocated function units.
 
   void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot);

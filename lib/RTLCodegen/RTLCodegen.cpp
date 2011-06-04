@@ -382,9 +382,8 @@ void RTLCodegen::emitIdleState() {
 
 void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   std::string StateName = getStateName(&MBB);
-  unsigned startSlot = FInfo->getStartSlotFor(&MBB);
   unsigned totalSlot = FInfo->getTotalSlotFor(&MBB);
-  unsigned IISlot = FInfo->getIISlotFor(&MBB);
+  unsigned II = FInfo->getIIFor(&MBB);
   PredMapTy NextStatePred;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
@@ -396,7 +395,7 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
 
   // State information.
   CtrlS << "// " << StateName << " Total Slot: " << totalSlot
-                 << " II: " << (IISlot - startSlot) <<  '\n';
+                 << " II: " << II <<  '\n';
   // Mirco state enable.
   createucStateEnable(&MBB);
 
@@ -602,14 +601,13 @@ void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
 void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
                                     MachineBasicBlock *CurBB,
                                     const PredMapTy &NextStatePred) {
-  unsigned startSlot = 0, totalSlot = 0;
+  unsigned startSlot = 0, endSlot = 0;
   // Get the slot information for no-idle state.
   if (CurBB) {
     startSlot = FInfo->getStartSlotFor(CurBB);
-    totalSlot = FInfo->getTotalSlotFor(CurBB);
+    endSlot = FInfo->getEndSlotFor(CurBB);
   }
 
-  unsigned endSlot = startSlot + totalSlot;
   emitFUEnableForState<VFUMemBus>(CtrlS, startSlot, endSlot,
                                   CurBB, NextStatePred);
   emitFUEnableForState<VFUBRam>(CtrlS, startSlot, endSlot,
@@ -634,9 +632,8 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   // Control the finish port
   CtrlS << "// Finish port control\n";
   CtrlS << "fin <= 1'b0";
-  unsigned LastSlot = startSlot + totalSlot;
-  if (FInfo->isFUActiveAt(VFUs::FSMFinish, LastSlot))
-    CtrlS << " | " << getucStateEnable(CurBB, LastSlot - 1);
+  if (FInfo->isFUActiveAt(VFUs::FSMFinish, endSlot))
+    CtrlS << " | " << getucStateEnable(CurBB, endSlot - 1);
 
   CtrlS << ";\n";
 }
