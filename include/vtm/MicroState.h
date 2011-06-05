@@ -276,6 +276,11 @@ public:
             || MI.getOpcode() == VTM::Datapath)
            && "Bad Instr!");
   }
+  /*implicit*/ ucState(MachineBasicBlock::iterator I) : Instr(*I) {
+    assert((I->getOpcode() == VTM::Control
+      || I->getOpcode() == VTM::Datapath)
+      && "Bad Instr!");
+  }
 
   unsigned getSlot() const {
     return Instr.getOperand(0).getImm();
