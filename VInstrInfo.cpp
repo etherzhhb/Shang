@@ -48,7 +48,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   return true;
 }
 
-unsigned VInstrInfo::createIncomingRegForPhi(unsigned DestReg,
+unsigned VInstrInfo::createPHIIncomingReg(unsigned DestReg,
                                              MachineRegisterInfo *MRI) const {
   const TargetRegisterClass *PHIRC = VTM::PHIRRegisterClass;
   return MRI->createVirtualRegister(PHIRC);
@@ -56,16 +56,16 @@ unsigned VInstrInfo::createIncomingRegForPhi(unsigned DestReg,
 
 typedef MachineBasicBlock::iterator mbb_it;
 
-MachineInstr *VInstrInfo::insertImpDefForPhi(MachineBasicBlock &MBB,
-                                              mbb_it InsertPos,
-                                              MachineInstr *PN) const {
-  return TargetInstrInfo::insertImpDefForPhi(MBB, InsertPos, PN);
+MachineInstr *VInstrInfo::insertPHIImpDef(MachineBasicBlock &MBB,
+                                          mbb_it InsertPos,
+                                          MachineInstr *PN) const {
+  return TargetInstrInfo::insertPHIImpDef(MBB, InsertPos, PN);
 }
 
-MachineInstr *VInstrInfo::insertIcomingCopyForPhi(MachineBasicBlock &MBB,
-                                                  mbb_it InsertPos,
-                                                  MachineInstr *PN,
-                                                  unsigned IncomingReg) const {
+MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
+                                               mbb_it InsertPos,
+                                               MachineInstr *PN,
+                                               unsigned IncomingReg) const {
   ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
   ucState Ctrl(InsertPos);
   assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
@@ -82,11 +82,11 @@ MachineInstr *VInstrInfo::insertIcomingCopyForPhi(MachineBasicBlock &MBB,
   return &*Builder;
 }
 
-MachineInstr *VInstrInfo::insertCopySrcRegForPhi(MachineBasicBlock &MBB,
-                                                 mbb_it InsertPos,
-                                                 MachineInstr *PN, unsigned IncomingReg,
-                                                 unsigned SrcReg,
-                                                 unsigned SrcSubReg) const {
+MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
+                                           mbb_it InsertPos, MachineInstr *PN,
+                                           unsigned IncomingReg,
+                                           unsigned SrcReg, unsigned SrcSubReg)
+                                           const {
   ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
   // Get the last slot.
   InsertPos = prior(InsertPos);

@@ -6,8 +6,6 @@ include_directories(
 )
 
 add_llvm_library(VTMSchedule
-  CopyElimination.cpp
-  PHIElimination.cpp
   ForceDirectedScheduling.cpp
   ILPScheduling.cpp
   SchedulingBase.cpp

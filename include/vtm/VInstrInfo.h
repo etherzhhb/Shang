@@ -43,17 +43,17 @@ public:
   /// always be able to get register info as well (through this method).
   virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
 
-  virtual unsigned createIncomingRegForPhi(unsigned DestReg,
+  virtual unsigned createPHIIncomingReg(unsigned DestReg,
                                            MachineRegisterInfo *MRI) const;
-  virtual MachineInstr *insertImpDefForPhi(MachineBasicBlock &MBB,
+  virtual MachineInstr *insertPHIImpDef(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator InsertPos,
     MachineInstr *PN) const;
-  virtual MachineInstr *insertIcomingCopyForPhi(MachineBasicBlock &MBB,
+  virtual MachineInstr *insertPHIIcomingCopy(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator InsertPos,
     MachineInstr *PN,
     unsigned IncomingReg) const;
 
-  virtual MachineInstr *insertCopySrcRegForPhi(MachineBasicBlock &MBB,
+  virtual MachineInstr *insertPHICopySrc(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator InsertPos,
     MachineInstr *PN, unsigned IncomingReg,
     unsigned SrcReg,
