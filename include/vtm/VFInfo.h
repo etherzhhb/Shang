@@ -30,6 +30,7 @@
 
 namespace llvm {
 class MachineBasicBlock;
+class MachineInstr;
 class VFInfo : public MachineFunctionInfo {
   // Information about slots.
   struct StateSlots{
@@ -70,8 +71,8 @@ class VFInfo : public MachineFunctionInfo {
   FUActiveSlotSetTy ActiveSlotSet;
 
   // Remember the scheduled slot of PHI nodes, it will lose after PHIElemination.
-  typedef std::map<std::pair<unsigned, unsigned>, unsigned> CopySlotMapTy;
-  CopySlotMapTy CopySlots;
+  typedef std::map<const MachineInstr*, unsigned> PhiSlotMapTy;
+  PhiSlotMapTy PHISlots;
 
   // Allocated physics registers in a MachineFunction/RTL module.
   // TODO: we need to perform per-BasicBlock register allocation to reduce
@@ -133,21 +134,13 @@ public:
                         unsigned totalSlot,
                         unsigned IISlot);
 
-  void rememberCopySlot(unsigned SrcReg, unsigned DstReg, unsigned Slot) {
-    std::pair<unsigned, unsigned> Key(SrcReg, DstReg);
-    assert(!CopySlots.count(Key) && "CopySlot already exist!");
-    CopySlots.insert(std::make_pair(Key, Slot));
+  void rememberPHISlot(const MachineInstr *PN, unsigned Slot) {
+    bool success = PHISlots.insert(std::make_pair(PN, Slot)).second;
+    assert(success && "Insert the same phinode twice?");
+    (void) success;
   }
 
-  unsigned lookupCopySlot(unsigned SrcReg, unsigned DstReg) const {
-    CopySlotMapTy::const_iterator At =
-      CopySlots.find(std::make_pair(SrcReg, DstReg));
-
-    if (At == CopySlots.end())
-      return 0;
-
-    return At->second;
-  }
+  unsigned lookupPHISlot(const MachineInstr *PN) const;
   /// Information for allocated function units.
 
   void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot);
