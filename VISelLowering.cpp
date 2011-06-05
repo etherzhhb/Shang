@@ -94,6 +94,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
        VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
     MVT CurVT = MVT((MVT::SimpleValueType)VT);
 
+    // FIXME: Use the ISD::ADD and let llvm do the job.
     // Lower the add/sub operation to full adder operation.
     setOperationAction(ISD::ADD, CurVT, Custom);
     // Expend a - b to a + ~b + 1;
@@ -104,7 +105,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::SUBC, CurVT, Custom);
     setOperationAction(ISD::SADDO, CurVT, Custom);
     setOperationAction(ISD::SSUBO, CurVT, Custom);
-    setOperationAction(ISD::UADDO, CurVT, Custom);
     setOperationAction(ISD::UADDO, CurVT, Custom);
 
     // We don't have MUL_LOHI

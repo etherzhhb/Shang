@@ -161,8 +161,6 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<AliasAnalysis>();
   AU.addRequired<LiveIntervals>();
   AU.addPreserved<SlotIndexes>();
-  //if (StrongPHIElim)
-    AU.addRequiredID(StrongPHIEliminationID);
   AU.addRequiredTransitive<RegisterCoalescer>();
   AU.addRequired<CalculateSpillWeights>();
   AU.addRequired<LiveStacks>();

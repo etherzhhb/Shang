@@ -198,12 +198,12 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Run the SCEVAA pass to compute more accurate alias information.
   PM.add(createScalarEvolutionAliasAnalysisPass());
 
-  // Eliminate the VOpMvImm instructions.
-  PM.add(createFixMachineCodePass());
-
   // Perform if conversion before schedule, so we have more parallelism
   // available.
   PM.add(createIfConverterPass());
+  // Eliminate the VOpMvImm instructions.
+  PM.add(createFixMachineCodePass());
+
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());
 

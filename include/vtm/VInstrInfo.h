@@ -31,10 +31,27 @@ class VInstrInfo : public TargetInstrInfoImpl {
 public:
   VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
 
+
+  virtual bool isPredicable(MachineInstr *MI) const;
+  virtual bool isPredicated(const MachineInstr *MI) const;
+
+  virtual bool isUnpredicatedTerminator(const MachineInstr *MI) const;
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB,
                              MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
                              SmallVectorImpl<MachineOperand> &Cond,
                              bool AllowModify /* = false */) const;
+  virtual bool DefinesPredicate(MachineInstr *MI,
+                                std::vector<MachineOperand> &Pred) const;
+  virtual bool PredicateInstruction(MachineInstr *MI,
+                                    const SmallVectorImpl<MachineOperand> &Pred)
+                                    const;
+  virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const;
+  virtual unsigned InsertBranch(MachineBasicBlock &MBB,
+                                MachineBasicBlock *TBB, MachineBasicBlock *FBB,
+                                const SmallVectorImpl<MachineOperand> &Cond,
+                                DebugLoc DL) const;
+  virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
+    const;
 
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
