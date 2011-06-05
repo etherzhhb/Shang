@@ -205,7 +205,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void incTotalCycle() { ++totalCycle; }
 
-  const char *getPassName() const { return "Verilog Backend Scheduling Pass"; }
+  const char *getPassName() const {
+    return "Schedule Hardware Operations for Verilog Backend";
+  }
 };
 }
 
