@@ -130,6 +130,11 @@ let isReMaterializable = 1,
   def VOpMvImm : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
                            "$dst <= $src", [], 0, 1>;
 
+  def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
+                           "$dst <= $src", [], 0, 1>;
+  def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
+                           "$dst <= $src", [], 0, 1>;
+
   // Bitwise logic operation.
   let isCommutable       = 1 in {
     def VOpXor   : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),

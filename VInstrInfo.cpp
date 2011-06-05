@@ -13,8 +13,10 @@
 
 #include "VTargetMachine.h"
 
+#include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/VTM.h"
+#include "vtm/MicroState.h"
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -44,6 +46,96 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                                bool AllowModify /* = false */) const {
   // TODO: Write code for this function.
   return true;
+}
+
+unsigned VInstrInfo::createIncomingRegForPhi(unsigned DestReg,
+                                             MachineRegisterInfo *MRI) const {
+  const TargetRegisterClass *PHIRC = VTM::PHIRRegisterClass;
+  return MRI->createVirtualRegister(PHIRC);
+}
+
+typedef MachineBasicBlock::iterator mbb_it;
+
+MachineInstr *VInstrInfo::insertImpDefForPhi(MachineBasicBlock &MBB,
+                                              mbb_it InsertPos,
+                                              MachineInstr *PN) const {
+  return TargetInstrInfo::insertImpDefForPhi(MBB, InsertPos, PN);
+}
+
+MachineInstr *VInstrInfo::insertIcomingCopyForPhi(MachineBasicBlock &MBB,
+                                                  mbb_it InsertPos,
+                                                  MachineInstr *PN,
+                                                  unsigned IncomingReg) const {
+  ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
+  ucState Ctrl(InsertPos);
+  assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
+  // Simply build the copy in the first control slot.
+  MachineInstrBuilder Builder(InsertPos);
+  Builder.addOperand(ucOperand::CreateOpcode(VTM::VOpDefPhi, Ctrl.getSlot()));
+  Builder.addOperand(ucOperand::CreatePredicate());
+  ucOperand Dst = MachineOperand::CreateReg(DefOp.getReg(), true);
+  Dst.setBitWidth(DefOp.getBitWidth());
+  Builder.addOperand(Dst);
+  ucOperand Src = MachineOperand::CreateReg(IncomingReg, false);
+  Src.setBitWidth(DefOp.getBitWidth());
+  Builder.addOperand(Src);
+  return &*Builder;
+}
+
+MachineInstr *VInstrInfo::insertCopySrcRegForPhi(MachineBasicBlock &MBB,
+                                                 mbb_it InsertPos,
+                                                 MachineInstr *PN, unsigned IncomingReg,
+                                                 unsigned SrcReg,
+                                                 unsigned SrcSubReg) const {
+  ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
+  // Get the last slot.
+  InsertPos = prior(InsertPos);
+
+  VFInfo *VFI = MBB.getParent()->getInfo<VFInfo>();
+  unsigned Slot = VFI->lookupPHISlot(PN);
+  unsigned StartSlot = VFI->getStartSlotFor(&MBB);
+  // If the phi scheduled into this MBB, insert the copy to the right control
+  // slot.
+  if (Slot > StartSlot && Slot <= VFI->getEndSlotFor(&MBB)) {
+    unsigned II = VFI->getIIFor(&MBB);
+    unsigned ModuloSlot = (Slot - StartSlot) % II + StartSlot;
+    // If modulo slot is 0, insert the copy in the last control slot.
+    // Otherwise, iterate over the BB to find the match slot.
+    if (ModuloSlot != StartSlot) {
+      while(ucState(InsertPos).getSlot() != ModuloSlot) {
+        --InsertPos; // Skip the current control slot.
+        --InsertPos; // Skip the current datapath slot.
+      }
+    }
+  }
+
+  ucState Ctrl(InsertPos);
+  assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
+
+  MachineInstrBuilder Builder(InsertPos);
+  Builder.addOperand(ucOperand::CreateOpcode(VTM::VOpMvPhi, Slot));
+  Builder.addOperand(ucOperand::CreatePredicate());
+  ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
+  Dst.setBitWidth(DefOp.getBitWidth());
+  Builder.addOperand(Dst);
+
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+  MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
+  assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
+  ucOp WriteOp = ucOp::getParent(DI);
+  // We need to forward the wire copy if the source register is written
+  // in the same slot, otherwise we will read a out of date value.
+  if (WriteOp->getParent() == &*Ctrl) {
+    if (WriteOp->getOpcode() == VTM::COPY)
+      Builder.addOperand(MachineOperand(WriteOp.getOperand(1)));
+    // FIXME: Handle others case.
+  }
+
+  ucOperand Src = MachineOperand::CreateReg(SrcReg, false);
+  Src.setSubReg(SrcSubReg);
+  Src.setBitWidth(DefOp.getBitWidth());
+  Builder.addOperand(Src);
+  return &*Builder;
 }
 
 FuncUnitId VIDesc::getPrebindFUId()  const {
