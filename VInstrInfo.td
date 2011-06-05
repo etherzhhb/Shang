@@ -117,10 +117,13 @@ let hasCtrlDep = 1 in {
   }
   
   let isBranch   = 1,
-    isTerminator = 1 in
-  def VOpToState : CtrlInst<(outs), (ins State:$target),
-                            "to $target;",
-                            [], 0, 1>;
+    isTerminator = 1 in {
+    def VOpToState : CtrlInst<(outs), (ins State:$target),
+                              "to $target;",
+                              [], 0, 1>;
+
+    def VOpUnreachable : CtrlInst<(outs), (ins), "unreachable;", [], 0, 1>;
+  }
 }
 
 let isReMaterializable = 1,
