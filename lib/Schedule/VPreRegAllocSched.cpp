@@ -583,23 +583,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
 
-  // We need at an explicit terminator to transfer the control flow explicitly.
-  if (State.getTerms().empty()) {
-    MachineBasicBlock *MBB = State.getMachineBasicBlock();
-    if (MBB->succ_size() == 0) { // We may meet an unreachable.
-      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpRet));
-      State.eatTerminator(VIDesc(Term));
-    } else {
-      assert(MBB->succ_size() == 1 && "Expect fall through block!");
-      // Create "VOpToState 1/*means always true*/, target mbb"
-      // FIXME: Setup the bit-width flag.
-      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
-        .addMBB(*MBB->succ_begin()).addOperand(ucOperand::CreatePredicate());
-
-      State.eatTerminator(VIDesc(Term));
-    }
-  }
-
+  assert(!State.getTerms().empty() && "Can not found any terminator!");
   // Create the exit node.
   buildExitRoot(State);
 

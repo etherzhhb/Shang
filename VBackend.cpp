@@ -199,7 +199,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createScalarEvolutionAliasAnalysisPass());
 
   // Eliminate the VOpMvImm instructions.
-  PM.add(createElimMvImmPass());
+  PM.add(createFixMachineCodePass());
 
   // Perform if conversion before schedule, so we have more parallelism
   // available.
