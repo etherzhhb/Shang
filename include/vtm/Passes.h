@@ -35,19 +35,14 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 
-// Eliminate the VOpMvImm instructions.
-Pass *createElimMvImmPass();
+Pass *createFixMachineCodePass();
 
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();
 
-Pass *createPHIEliminationPass();
 
 // Register allocation.
 FunctionPass *createSimpleRegisterAllocator();
-
-// Fix copy instruction after register allocation
-Pass *createCopyEliminationPass();
 
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
