@@ -51,6 +51,7 @@ Pass *createCopyEliminationPass();
 
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
+Pass *createRTLCodegenPreparePass();
 
 Pass *createScriptingPass(const char *Name, const char *Script);
 

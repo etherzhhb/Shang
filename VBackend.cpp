@@ -1,7 +1,4 @@
-
-//===----------------------------------------------------------------------===//
-#include "VMCAsmInfo.h"
-//===- VerilogTargetMachine.h - TargetMachine for Verilog Backend -*- C++ -*-===//
+//===- VerilogTargetMachine.h - TargetMachine for Verilog Backend -*- C++ -*-=//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -20,6 +17,7 @@
 //===----------------------------------------------------------------------===//
 #include "VFrameLowering.h"
 #include "VTargetMachine.h"
+#include "VMCAsmInfo.h"
 
 #include "vtm/Passes.h"
 #include "vtm/SynSettings.h"
@@ -197,8 +195,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   if (addPreRegAlloc(PM, OptLevel))
     printAndVerify(PM, "After PreRegAlloc passes");
 
-  PM.add(new LiveVariables());
-
   // Run the SCEVAA pass to compute more accurate alias information.
   PM.add(createScalarEvolutionAliasAnalysisPass());
 
@@ -208,18 +204,11 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Perform if conversion before schedule, so we have more parallelism
   // available.
   PM.add(createIfConverterPass());
-
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());
-  PM.add(createPHIEliminationPass());
 
-  // TODO: Register allocation.
   PM.add(createSimpleRegisterAllocator());
-
-  // Fix the copy instruction introduced by register allocation.
-  // We need this even we have our own register allocator, because copies will
-  // be generated when eliminating PHIs.
-  // PM.add(createCopyEliminationPass());
+  PM.add(createRTLCodegenPreparePass());
 
   return false;
 }

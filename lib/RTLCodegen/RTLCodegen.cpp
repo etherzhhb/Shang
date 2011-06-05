@@ -710,48 +710,9 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
   unsigned StateSlot = FirstState.getSlot();
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
-    ucOp PN = *I;
-    assert(PN->getOpcode() == VTM::PHI && "Unexpected ucOp type!");
-    // Ignore the Pipeline PHIs first.
-    if (PN->getPredSlot() != StateSlot) continue;
-
-    emitOpPHI(PN, SrcBB);
+    ucOp Op = *I;
+    assert(Op->getOpcode() == VTM::IMPLICIT_DEF && "Unexpected operation!");
   }
-
-  // Emit the pipelined PHIs.
-  bool IsInSameBB = (SrcBB == DstBB);
-  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  if (IsInSameBB) CtrlS.exit_block("// End normal PHIs\n");
-
-  for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
-       I != E; ++I) {
-      ucOp PN = *I;
-    // Ignore the Pipeline PHIs first.
-    unsigned Slot = PN->getPredSlot();
-
-    if (Slot == StateSlot) continue;
-    if (IsInSameBB) {
-      std::string SlotPred = "(";
-      raw_string_ostream SlotPredSS(SlotPred);
-
-      SlotPredSS << getucStateEnable(DstBB, Slot - 1) << ')';
-
-      // Emit the predicate operand.
-      SlotPredSS << " & ";
-      PN.getPredicate().print(SlotPredSS);
-      SlotPredSS.flush();
-
-      CtrlS.if_begin(SlotPred);
-
-    }
-
-    emitOpPHI(PN, SrcBB);
-
-    if (IsInSameBB) CtrlS.exit_block("// End pipeline register\n");
-  }
-
-  // DirtyHack: match the block of the loop predicate.
-  if (IsInSameBB) CtrlS.if_begin("1'b1");
 }
 
 void RTLCodegen::emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB) {
