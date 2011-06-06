@@ -631,7 +631,12 @@ void VPreRegAllocSched::cleanUpRegister(unsigned Reg) {
   SmallVector<ucOp, 8> DstRegs;
   for (use_it UI = MRI->use_begin(Reg), UE = MRI->use_end(); UI != UE; ++UI) {
     ucOp Op = ucOp::getParent(UI);
-    if (Op->getOpcode() == VTM::COPY) {
+    // The wire may used by a predicate operand, do not merge this, we only want
+    // to eliminate the registers that hold the same value from a wire, this
+    // means the wire should be the source operand of the copy instead of the
+    // predicate operand.
+    if (VInstrInfo::isCopyLike(Op->getOpcode(), false)
+        && Op.getOperand(1).getReg() == Reg) {
       DstRegs.push_back(Op);
     }
   }

@@ -399,10 +399,10 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 
-bool VInstrInfo::isCopyLike(unsigned Opcode) {
+bool VInstrInfo::isCopyLike(unsigned Opcode, bool IncludeMoveImm) {
   return Opcode == VTM::COPY
          || Opcode == VTM::VOpMove_ra
-         || Opcode == VTM::VOpMove_ri
+         || (Opcode == VTM::VOpMove_ri && IncludeMoveImm)
          || Opcode == VTM::VOpMove_rm
          || Opcode == VTM::VOpMove_rp
          || Opcode == VTM::VOpMove_rs

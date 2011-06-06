@@ -104,7 +104,7 @@ public:
                         const SmallVectorImpl<MachineOperand> &Pred,
                         MachineOperand IfTrueVal, const TargetInstrInfo *TII);
 
-  static bool isCopyLike(unsigned Opcode);
+  static bool isCopyLike(unsigned Opcode, bool IncludeMoveImm = true);
 };
 
 // Helper class for manipulating bit width operand.
