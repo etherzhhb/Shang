@@ -103,6 +103,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
         .addOperand(ucOperand::CreatePredicate());
     }
+    MissedSuccs.clear();
   }
 
   // Try to replace the register operand with the constant for users of VOpMvImm.
