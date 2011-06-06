@@ -200,7 +200,8 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Perform if conversion before schedule, so we have more parallelism
   // available.
-  PM.add(createIfConverterPass());
+  PM.add(createVIfConverterPass());
+  printAndVerify(PM, "After VTM ifconversion pass");
   // Eliminate the VOpMvImm instructions.
   PM.add(createFixMachineCodePass());
 

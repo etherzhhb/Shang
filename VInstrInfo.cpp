@@ -41,12 +41,17 @@ static const unsigned MoveOpcodes[] = {
 static const MachineOperand *getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
-  const MachineOperand &MO = MI->getOperand(MI->getNumOperands() - 1);
+  const MachineOperand &MO = MI->getOperand(MI->getNumExplicitOperands() - 1);
   return &MO;
 }
+
+static MachineOperand *getPredOperand(MachineInstr *MI) {
+  return const_cast<MachineOperand*>(getPredOperand((const MachineInstr*)MI));
+}
+
 VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
-  : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI)
-  {}
+  : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI){
+}
 
 
 bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
@@ -63,8 +68,10 @@ bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
   // Pseudo machine instruction are never predicated.
   if (!isPredicable(const_cast<MachineInstr*>(MI))) return false;
 
-  const MachineOperand *Pred = getPredOperand(MI);
-  return (Pred->isReg() && Pred->getReg() != 0);
+  if (const MachineOperand *Pred = getPredOperand(MI))
+    return (Pred->isReg() && Pred->getReg() != 0);
+
+  return false;
 }
 
 bool VInstrInfo::isUnpredicatedTerminator(const MachineInstr *MI) const{
@@ -78,15 +85,18 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                                MachineBasicBlock *&FBB,
                                SmallVectorImpl<MachineOperand> &Cond,
                                bool AllowModify /* = false */) const {
+  if (MBB.empty()) return false;
+
   // Do not mess with the scheduled code.
   if (MBB.back().getOpcode() == VTM::EndState)
     return true;
 
-  // Just a fall through edge, return false and leaving TBB/FBB null.
-  if (MBB.getFirstTerminator() == MBB.end()) return true;
+  /// 1. If this block ends with no branches (it just falls through to its succ)
+  ///    just return false, leaving TBB/FBB null.
+  if (MBB.getFirstTerminator() == MBB.end()) return false;
 
   SmallVector<MachineInstr*, 4> Terms;
-  for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(), E = MBB.end();
+  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
        I != E; ++I) {
     MachineInstr *Inst = I;
     if (!Inst->getDesc().isTerminator()) continue;
@@ -96,27 +106,33 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   }
 
   // Mixing branches and return?
-  if (Terms.size() != MBB.succ_size() || Terms.empty()) return true;
-
-  // So many terminators!
-  if (Terms.size() > 2) return true;
+  if (Terms.empty() || Terms.size() > 2) return true;
 
   MachineInstr *FstTerm = Terms[0];
 
+  /// 2. If this block ends with only an unconditional branch, it sets TBB to be
+  ///    the destination block.
   if (isUnpredicatedTerminator(FstTerm)) {
     TBB = FstTerm->getOperand(1).getMBB();
     assert(Terms.size() == 1 && "Expect single fall through edge!");
     return false;
   }
 
-  assert(Terms.size() > 1 && "Unexpected terminator count!");
-
-  TBB = FstTerm->getOperand(1).getMBB();
-  MachineInstr *SndTerm = Terms[1];
-  FBB = SndTerm->getOperand(1).getMBB();
   Cond.push_back(*getPredOperand(FstTerm));
-  // Also add the invert condition operand flag.
-  Cond.push_back(MachineOperand::CreateImm(0));
+  TBB = FstTerm->getOperand(0).getMBB();
+  /// 3. If this block ends with a conditional branch and it falls through to a
+  ///    successor block, it sets TBB to be the branch destination block and a
+  ///    list of operands that evaluate the condition. These operands can be
+  ///    passed to other TargetInstrInfo methods to create new branches.
+  if (Terms.size() == 1) return false;
+
+  /// 4. If this block ends with a conditional branch followed by an
+  ///    unconditional branch, it returns the 'true' destination in TBB, the
+  ///    'false' destination in FBB, and a list of operands that evaluate the
+  ///    condition.  These operands can be passed to other TargetInstrInfo
+  ///    methods to create new branches.
+  MachineInstr *SndTerm = Terms[1];
+  FBB = SndTerm->getOperand(0).getMBB();
   return false;
 }
 
@@ -130,7 +146,7 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
 
   // Collect the branches and remove them.
   SmallVector<MachineInstr*, 4> Terms;
-  for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(), E = MBB.end();
+  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
     I != E; ++I) {
       MachineInstr *Inst = I;
       if (!Inst->getDesc().isTerminator()) continue;
@@ -148,12 +164,17 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   return RemovedBranches;
 }
 
+void VInstrInfo::ReversePredicateCondition(MachineOperand &Cond) const {
+  assert(Cond.isReg() && "Broken predicate condition!");
+  Cond.setTargetFlags(Cond.getTargetFlags() ^ VInstrInfo::PredInvertFlag);
+}
+
 bool
-VInstrInfo::ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const {
-  assert(Cond.size() == 2 && "Wrong condition count!");
+VInstrInfo::ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const{
   // Invert the invert condition flag.
-  Cond[1] = MachineOperand::CreateImm(!Cond[1].getImm());
-  return true;
+  for(unsigned i = 0, e = Cond.size(); i < e; ++i)
+    ReversePredicateCondition(Cond[i]);
+  return false;
 }
 
 unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
@@ -161,14 +182,12 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
                                   MachineBasicBlock *FBB,
                                   const SmallVectorImpl<MachineOperand> &Cond,
                                   DebugLoc DL) const {
-  assert((Cond.size() == 0 || Cond.size() == 2) && "Too much conditions!");
+  assert((Cond.size() <= 1) && "Too much conditions!");
   MachineOperand PredOp = Cond.empty() ?
                           ucOperand::CreatePredicate() : Cond[0];
-  unsigned InvertCnd = Cond.empty() ? 0 : Cond[1].getImm();
 
   if (FBB == 0) {
-    BuildMI(&MBB, DL, get(VTM::VOpToState))
-      .addImm(InvertCnd).addMBB(TBB).addOperand(PredOp);
+    BuildMI(&MBB, DL, get(VTM::VOpToState)).addMBB(TBB).addOperand(PredOp);
     return 1;
   }
 
@@ -176,24 +195,67 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   assert(PredOp.isReg() && PredOp.getReg() != 0
          && "Uncondtional predicate with true BB and false BB?");
   // Branch to true BB.
-  BuildMI(&MBB, DL, get(VTM::VOpToState))
-      .addImm(InvertCnd).addMBB(TBB).addOperand(PredOp);
+  BuildMI(&MBB, DL, get(VTM::VOpToState)).addMBB(TBB).addOperand(PredOp);
   // Branch the false BB.
+  ReversePredicateCondition(PredOp);
   BuildMI(&MBB, DL, get(VTM::VOpToState))
-      .addImm(!InvertCnd).addMBB(TBB).addOperand(PredOp);
+      .addMBB(TBB).addOperand(PredOp);
    return 2;
 }
 
 bool VInstrInfo::DefinesPredicate(MachineInstr *MI,
                                   std::vector<MachineOperand> &Pred) const {
-  MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
+  //MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
+  //for (unsigned i = 0, e = MI->getNumOperands(); i < e; ++i) {
+  //  MachineOperand &MO =MI->getOperand(i);
+  //  if (!MO.isReg() || !MO.isDef()) continue;
+
+  //  if (MRI.getRegClass(MO.getReg()) == VTM::PredRRegisterClass)
+  //    Pred.push_back(MO);
+  //}
+
+  //return !Pred.empty();
+  return false;
 }
 
-bool
-VInstrInfo::PredicateInstruction(MachineInstr *MI,
-                                 const SmallVectorImpl<MachineOperand> &Pred)
-                                 const {
-  return false;
+bool VInstrInfo::isProfitableToIfCvt(MachineBasicBlock &TMBB,
+                                     unsigned NumTCycles,
+                                     unsigned ExtraTCycles,
+                                     MachineBasicBlock &FMBB,
+                                     unsigned NumFCycles,
+                                     unsigned ExtraFCycles,
+                                     float Probability, float Confidence) const{
+  return true; // DirtyHack: Everything is profitable.
+}
+
+bool VInstrInfo::isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCyles,
+                                     unsigned ExtraPredCycles,
+                                     float Probability, float Confidence) const{
+  return true;
+}
+
+bool VInstrInfo::isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
+                                           unsigned NumCyles,
+                                           float Probability,
+                                           float Confidence) const {
+  return true; // DirtyHack: Everything is profitable.
+}
+
+bool VInstrInfo::PredicateInstruction(MachineInstr *MI,
+                                    const SmallVectorImpl<MachineOperand> &Pred)
+                                    const {
+  assert(Pred.size() == 1 && "Too much conditions!");
+  // Can only have 1 predicate at the moment.
+  if (!isPredicable(MI) || isPredicated(MI)) return false;
+
+  // Can we get the predicate operand?
+  MachineOperand *PredOp = getPredOperand(MI);
+  if (PredOp == 0) return false;
+
+  const MachineOperand &NewPred = Pred[0];
+  PredOp->setReg(NewPred.getReg());
+  PredOp->setTargetFlags(NewPred.getTargetFlags());
+  return true;
 }
 
 unsigned VInstrInfo::createPHIIncomingReg(unsigned DestReg,
@@ -277,6 +339,8 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     if (WriteOp->getOpcode() == VTM::COPY)
       Builder.addOperand(MachineOperand(WriteOp.getOperand(1)));
     // FIXME: Handle others case.
+    assert(WriteOp.getPredicate().getReg() == 0
+           && "Can not handle predicated ucop!");
   }
 
   ucOperand Src = MachineOperand::CreateReg(SrcReg, false);

@@ -14,6 +14,9 @@
 
 #define DEBUG_TYPE "vifcvt"
 #include "vtm/Passes.h"
+#include "vtm/VTM.h"
+#include "vtm/VInstrInfo.h"
+
 #include "llvm/../../lib/CodeGen/BranchFolding.h"
 
 #include "llvm/Function.h"
@@ -21,6 +24,8 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetInstrItineraries.h"
 #include "llvm/Target/TargetLowering.h"
@@ -197,6 +202,7 @@ namespace {
     void RemoveExtraEdges(BBInfo &BBI);
     bool IfConvertSimple(BBInfo &BBI, IfcvtKind Kind);
     bool IfConvertTriangle(BBInfo &BBI, IfcvtKind Kind);
+
     bool IfConvertDiamond(BBInfo &BBI, IfcvtKind Kind,
                           unsigned NumDups1, unsigned NumDups2);
     void PredicateBlock(BBInfo &BBI,
@@ -672,7 +678,8 @@ void VIfConverter::ScanInstructions(BBInfo &BBI) {
       BBI.CannotBeCopied = true;
 
     bool isPredicated = TII->isPredicated(I);
-    bool isCondBr = BBI.IsBrAnalyzable && TID.isConditionalBranch();
+    bool isCondBr = BBI.IsBrAnalyzable &&
+      TID.getOpcode() == VTM::VOpToState;/*TID.isConditionalBranch()*/;
 
     if (!isCondBr) {
       if (!isPredicated) {
@@ -712,7 +719,12 @@ void VIfConverter::ScanInstructions(BBInfo &BBI) {
     if (TII->DefinesPredicate(I, PredDefs))
       BBI.ClobbersPred = true;
 
-    if (!TII->isPredicable(I)) {
+    // We can translate copy to conditional move and also PHI.
+    if (!TII->isPredicable(I)
+        && TID.getOpcode() != TargetOpcode::COPY
+        // Do not mess up with PHI at the moment.
+        // && TID.getOpcode() != TargetOpcode::PHI
+        && TID.getOpcode() != TargetOpcode::IMPLICIT_DEF) {
       BBI.IsUnpredicable = true;
       return;
     }
@@ -1017,28 +1029,9 @@ static void UpdatePredRedefs(MachineInstr *MI, SmallSet<unsigned,4> &Redefs,
     if (!MO.isReg())
       continue;
     unsigned Reg = MO.getReg();
-    if (!Reg)
+    if (!Reg || !TargetRegisterInfo::isPhysicalRegister(Reg))
       continue;
-    if (MO.isDef())
-      Defs.push_back(Reg);
-    else if (MO.isKill()) {
-      Redefs.erase(Reg);
-      for (const unsigned *SR = TRI->getSubRegisters(Reg); *SR; ++SR)
-        Redefs.erase(*SR);
-    }
-  }
-  for (unsigned i = 0, e = Defs.size(); i != e; ++i) {
-    unsigned Reg = Defs[i];
-    if (Redefs.count(Reg)) {
-      if (AddImpUse)
-        // Treat predicated update as read + write.
-        MI->addOperand(MachineOperand::CreateReg(Reg, false/*IsDef*/,
-                                                true/*IsImp*/,false/*IsKill*/));
-    } else {
-      Redefs.insert(Reg);
-      for (const unsigned *SR = TRI->getSubRegisters(Reg); *SR; ++SR)
-        Redefs.insert(*SR);
-    }
+   llvm_unreachable("Cannot handle Physical register!");
   }
 }
 
@@ -1049,6 +1042,60 @@ static void UpdatePredRedefs(MachineBasicBlock::iterator I,
   while (I != E) {
     UpdatePredRedefs(I, Redefs, TRI);
     ++I;
+  }
+}
+
+static MachineBasicBlock::iterator
+PredicatePseudoInstruction(MachineInstr *MI, const TargetInstrInfo *TII,
+                           const SmallVectorImpl<MachineOperand> &Pred) {
+    if (MI->getOpcode() != VTM::COPY) return 0;
+
+  SmallVector<MachineOperand, 2> Ops;
+  while (MI->getNumOperands()) {
+    unsigned LastOp = MI->getNumOperands() - 1;
+    Ops.push_back(MI->getOperand(LastOp));
+    MI->RemoveOperand(LastOp);
+  }
+
+  MachineBasicBlock::iterator InsertPos = MI;
+  InsertPos = VInstrInfo::BuildConditionnalMove(*MI->getParent(), InsertPos,
+                                                Ops[1], Pred, Ops[0], TII);
+  MI->eraseFromParent();
+
+  return InsertPos;
+}
+
+
+static void UpdatePHIs(MachineBasicBlock *EntryBB, MachineBasicBlock *CvtBB,
+                       MachineBasicBlock *NextBB, const TargetInstrInfo *TII,
+                       const SmallVectorImpl<MachineOperand> &Pred) {
+  // Source values that not from neither EntryBB and CvtBB
+  SmallVector<MachineOperand, 4> OthersOps;
+  MachineBasicBlock::iterator PhiIt = NextBB->begin();
+  while (PhiIt != NextBB->getFirstNonPHI()){
+    MachineOperand *FromCvt = 0, *FromEntry = 0;
+    MachineInstr *PN = PhiIt;
+    for (unsigned i = 1, e = PN->getNumOperands(); i != e; i +=2) {
+      MachineOperand *SrcValue = &PN->getOperand(i);
+      MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
+      if (SrcBB == EntryBB)     FromEntry = SrcValue;
+      else if (SrcBB == CvtBB)  FromCvt = SrcValue;
+      else {
+        OthersOps.push_back(*SrcValue);
+        OthersOps.push_back(PN->getOperand(i + 1));
+      }
+    }
+
+    assert(FromEntry && FromCvt && OthersOps.empty()
+           && "IfCvt Cannot handle yet!");
+
+    MachineOperand IfTrueVal(*FromCvt), IfFalseVal(*FromEntry),
+                   Result(PN->getOperand(0));
+    // if (OtherOps.empty())
+    // Unlink the PHINode.
+    ++PhiIt;
+    PN->eraseFromParent();
+    VInstrInfo::BuildSelect(EntryBB, Result, Pred, IfTrueVal, IfFalseVal, TII);
   }
 }
 
@@ -1187,6 +1234,12 @@ bool VIfConverter::IfConvertTriangle(BBInfo &BBI, IfcvtKind Kind) {
     // Now merge the entry of the triangle with the true block.
     BBI.NonPredSize -= TII->RemoveBranch(*BBI.BB);
     MergeBlocks(BBI, *CvtBBI, false);
+
+    // Handle the PHIs in NextBB.
+    MachineBasicBlock *EntryBB = BBI.BB;
+    MachineBasicBlock *CvtBB = CvtBBI->BB;
+    MachineBasicBlock *NextBB = NextBBI->BB;
+    UpdatePHIs(EntryBB, CvtBB, NextBB, TII, Cond);
   }
 
   // If 'true' block has a 'false' successor, add an exit branch to it.
@@ -1404,7 +1457,19 @@ void VIfConverter::PredicateBlock(BBInfo &BBI,
   for (MachineBasicBlock::iterator I = BBI.BB->begin(); I != E; ++I) {
     if (I->isDebugValue() || TII->isPredicated(I))
       continue;
-    if (!TII->PredicateInstruction(I, Cond)) {
+
+    if (I->getOpcode() <= TargetOpcode::COPY) {
+      MachineInstr *PseudoInst = I;
+      ++I;
+      PseudoInst = PredicatePseudoInstruction(PseudoInst, TII, Cond);
+      if (!PseudoInst) {
+#ifndef NDEBUG
+        dbgs() << "Unable to predicate " << *I << "!\n";
+#endif
+        llvm_unreachable(0);
+      }
+      I = PseudoInst;
+    } else if (!TII->PredicateInstruction(I, Cond)) {
 #ifndef NDEBUG
       dbgs() << "Unable to predicate " << *I << "!\n";
 #endif

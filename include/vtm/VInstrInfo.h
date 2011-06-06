@@ -50,8 +50,22 @@ public:
                                 MachineBasicBlock *TBB, MachineBasicBlock *FBB,
                                 const SmallVectorImpl<MachineOperand> &Cond,
                                 DebugLoc DL) const;
+  void ReversePredicateCondition(MachineOperand &Cond) const;
   virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
     const;
+  virtual bool isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
+                                         unsigned NumCyles, float Probability,
+                                         float Confidence) const;
+  virtual bool isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCyles,
+                                   unsigned ExtraPredCycles,
+                                    float Probability, float Confidence) const;
+  virtual bool isProfitableToIfCvt(MachineBasicBlock &TMBB,
+                                   unsigned NumTCycles,
+                                   unsigned ExtraTCycles,
+                                   MachineBasicBlock &FMBB,
+                                   unsigned NumFCycles,
+                                   unsigned ExtraFCycles,
+                                   float Probability, float Confidence) const;
 
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
