@@ -36,10 +36,11 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 Pass *createBitLevelInfoPass();
 
 Pass *createFixMachineCodePass();
+FunctionPass *createVIfConverterPass();
+Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();
-
 
 // Register allocation.
 FunctionPass *createSimpleRegisterAllocator();
@@ -57,10 +58,9 @@ Pass *createVLTIfCodegenPass(raw_ostream &O);
 Pass *createPLBIfCodegenPass(raw_ostream &O);
 
 //
+void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeRTLCodegenPass(PassRegistry &Registry);
-
-void initializeRAPass(PassRegistry &Registry);
 } // end namespace
 
 #endif

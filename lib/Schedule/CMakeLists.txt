@@ -13,6 +13,7 @@ add_llvm_library(VTMSchedule
   VSUnit.cpp
   ScheduleEmitter.cpp
   RecurrenceFinder.cpp
+  VIfConversion.cpp
   VPreRegAllocSched.cpp
   VRegAllocSimple.cpp
 )
