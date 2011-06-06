@@ -235,7 +235,7 @@ SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
                    N->getOperand(1), // condition (predicate operand).
                    N->getOperand(0) };
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpToState, N->getVTList(),
+  return CurDAG->SelectNodeTo(N, VTM::VOpToStateb, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }
 

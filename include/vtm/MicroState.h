@@ -269,7 +269,7 @@ public:
 class ucState {
   const MachineInstr &Instr;
 public:
-  // This flag indicate that the current ucState contains the VOpToState that
+  // This flag indicate that the current ucState contains the VOpToStateb that
   // branching to other MachineBB.
   static const unsigned char hasTerm = 0x80;
 

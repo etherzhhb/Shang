@@ -105,6 +105,7 @@ public:
                         MachineOperand IfTrueVal, const TargetInstrInfo *TII);
 
   static bool isCopyLike(unsigned Opcode, bool IncludeMoveImm = true);
+  static bool isBrCndLike(unsigned Opcode);
 };
 
 // Helper class for manipulating bit width operand.
@@ -184,6 +185,14 @@ public:
   inline VFUs::FUTypes getFUType() const {
     return (VFUs::FUTypes)
       ((getTSFlags() >> ResTypeShiftAmount) & ResTypeMask);
+  }
+
+  bool isCopyLike(bool IncludeMoveImm = true) const {
+    return VInstrInfo::isCopyLike(getTID().getOpcode());
+  }
+
+  bool isBrCndLike() const {
+    return VInstrInfo::isBrCndLike(getTID().getOpcode());
   }
 
   // Can the copy be fused into control block?

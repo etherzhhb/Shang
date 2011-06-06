@@ -678,8 +678,8 @@ void VIfConverter::ScanInstructions(BBInfo &BBI) {
       BBI.CannotBeCopied = true;
 
     bool isPredicated = TII->isPredicated(I);
-    bool isCondBr = BBI.IsBrAnalyzable &&
-      TID.getOpcode() == VTM::VOpToState;/*TID.isConditionalBranch()*/;
+    bool isCondBr = BBI.IsBrAnalyzable
+      && VInstrInfo::isBrCndLike(TID.getOpcode());/*TID.isConditionalBranch()*/;
 
     if (!isCondBr) {
       if (!isPredicated) {

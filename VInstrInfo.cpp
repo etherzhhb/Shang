@@ -101,7 +101,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
     MachineInstr *Inst = I;
     if (!Inst->getDesc().isTerminator()) continue;
 
-    if (I->getOpcode() == VTM::VOpToState)
+    if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
       Terms.push_back(Inst);
   }
 
@@ -151,7 +151,7 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
       MachineInstr *Inst = I;
       if (!Inst->getDesc().isTerminator()) continue;
 
-      if (I->getOpcode() == VTM::VOpToState)
+      if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
         Terms.push_back(Inst);
   }
 
@@ -187,18 +187,20 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
                           ucOperand::CreatePredicate() : Cond[0];
 
   if (FBB == 0) {
-    BuildMI(&MBB, DL, get(VTM::VOpToState)).addMBB(TBB).addOperand(PredOp);
+    // Use no-barrier branch for fall through.
+    unsigned Opc = MBB.canFallThrough() ? VTM::VOpToState : VTM::VOpToStateb;
+    BuildMI(&MBB, DL, get(Opc)).addMBB(TBB).addOperand(PredOp);
     return 1;
   }
 
   // Two-way conditional branch.
   assert(PredOp.isReg() && PredOp.getReg() != 0
          && "Uncondtional predicate with true BB and false BB?");
-  // Branch to true BB.
+  // Branch to true BB, with the no-barrier version.
   BuildMI(&MBB, DL, get(VTM::VOpToState)).addMBB(TBB).addOperand(PredOp);
   // Branch the false BB.
   ReversePredicateCondition(PredOp);
-  BuildMI(&MBB, DL, get(VTM::VOpToState))
+  BuildMI(&MBB, DL, get(VTM::VOpToStateb))
       .addMBB(TBB).addOperand(PredOp);
    return 2;
 }
@@ -407,6 +409,11 @@ bool VInstrInfo::isCopyLike(unsigned Opcode, bool IncludeMoveImm) {
          || Opcode == VTM::VOpMove_rp
          || Opcode == VTM::VOpMove_rs
          || Opcode == VTM::VOpMove_rw;
+}
+
+bool VInstrInfo::isBrCndLike(unsigned Opcode) {
+  return Opcode == VTM::VOpToState
+         || Opcode == VTM::VOpToStateb;
 }
 
 FuncUnitId VIDesc::getPrebindFUId()  const {

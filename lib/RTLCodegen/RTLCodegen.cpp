@@ -25,6 +25,7 @@
 #include "vtm/LangSteam.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VRegisterInfo.h"
+#include "vtm/VInstrInfo.h"
 
 #include "llvm/Type.h"
 
@@ -672,7 +673,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     SlotPredSS.flush();
 
     // Special case for state transferring operation.
-    if (Op->getOpcode() == VTM::VOpToState) {
+    if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
       MachineBasicBlock *TargetBB = Op.getOperand(0).getMBB();
 
       // Emit control operation for next state.

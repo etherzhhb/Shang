@@ -68,7 +68,8 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         Op.setBitWidth(64);
         continue;
       }
-      case VTM::VOpToState: {
+      case VTM::VOpToState:
+      case VTM::VOpToStateb: {
         // Setup the bit width for predicate operand.
         ucOperand &Op = cast<ucOperand>(Instr.getOperand(1));
         Op.setBitWidth(1);
@@ -151,8 +152,9 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // Not necessary to compute the bitwitdh information of these instructions.
   //case VTM::VOpArg:
   case VTM::VOpMemTrans:
-  // These intructions do not define anything.
+    // These intructions do not define anything.
   case VTM::VOpToState:
+  case VTM::VOpToStateb:
   case VTM::EndState:
   case VTM::VOpRet:
   case VTM::VOpRetVal:

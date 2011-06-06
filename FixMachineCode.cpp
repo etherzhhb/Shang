@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 #include "vtm/Passes.h"
 #include "vtm/VTM.h"
+#include "vtm/VInstrInfo.h"
 #include "vtm/MicroState.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -85,7 +86,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         Imms.push_back(Inst);
 
       // Remove the explicit successors from the missed successors set.
-      if (Inst->getOpcode() == VTM::VOpToState)
+      if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
         MissedSuccs.erase(Inst->getOperand(0).getMBB());
     }
 
@@ -94,7 +95,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       assert(MissedSuccs.size() == 1 && "Fall through to multiple blocks?");
       ++UnconditionalBranches;
 
-      BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
+      BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
         .addMBB(*MissedSuccs.begin()).addOperand(ucOperand::CreatePredicate());
     }
 
