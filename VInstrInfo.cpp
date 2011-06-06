@@ -276,6 +276,51 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   return &*Builder;
 }
 
+MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB, MachineOperand &Result,
+                                      const SmallVectorImpl<MachineOperand> &Pred,
+                                      MachineOperand IfTrueVal,
+                                      MachineOperand IfFalseVal,
+                                      const TargetInstrInfo *TII){
+    // create the result register if necessary.
+    if (!Result.getReg()) {
+      MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
+      const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
+      assert(MRI.getRegClass(IfFalseVal.getReg()) == RC
+        && "Register class dose not match!");
+      Result.setReg(MRI.createVirtualRegister(RC));
+    }
+
+    MachineOperand ResDef(Result);
+    ResDef.setIsDef();
+
+    // Build and insert the select instruction at the end of the BB.
+    assert(Pred.size() == 1 && "Cannot select value!");
+    return *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpSel))
+              .addOperand(ResDef).addOperand(Pred[0])
+              .addOperand(IfTrueVal).addOperand(IfFalseVal)
+              .addOperand(ucOperand::CreatePredicate());
+}
+
+MachineInstr &
+VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator IP,
+                                  MachineOperand &Res,
+                                  const SmallVectorImpl<MachineOperand> &Pred,
+                                  MachineOperand IfTrueVal,
+                                  const TargetInstrInfo *TII) {
+  if (!Res.getReg()) {
+    MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+    const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
+    Res.setReg(MRI.createVirtualRegister(RC));
+  }
+
+  MachineOperand ResDef(Res);
+  ResDef.setIsDef();
+
+  return *BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpMove))
+            .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
+}
+
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemTrans)

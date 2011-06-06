@@ -75,6 +75,20 @@ public:
     MachineInstr *PN, unsigned IncomingReg,
     unsigned SrcReg,
     unsigned SrcSubReg) const;
+
+  // Build machine instructions for a = Pred ? IfTrueVal : IfFalseVal in MBB,
+  // and return the register that holding this value.
+  static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
+                                   const SmallVectorImpl<MachineOperand> &Pred,
+                                   MachineOperand IfTrueVal,
+                                   MachineOperand IfFalseVal,
+                                   const TargetInstrInfo *TII);
+
+  static MachineInstr&
+  BuildConditionnalMove(MachineBasicBlock &MBB, MachineBasicBlock::iterator IP,
+                        MachineOperand &Res,
+                        const SmallVectorImpl<MachineOperand> &Pred,
+                        MachineOperand IfTrueVal, const TargetInstrInfo *TII);
 };
 
 // Helper class for manipulating bit width operand.

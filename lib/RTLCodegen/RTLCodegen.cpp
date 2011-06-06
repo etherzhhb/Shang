@@ -699,6 +699,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
     case VTM::VOpBRam:          emitOpBRam(Op);               break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
+    case VTM::VOpMove:
     case VTM::VOpMvImm:
     case VTM::COPY:             emitOpCopy(Op);               break;
     default:  assert(0 && "Unexpected opcode!");              break;

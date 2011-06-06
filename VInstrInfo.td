@@ -133,7 +133,8 @@ let isReMaterializable = 1,
   // Assign a constant value to a register.
   def VOpMvImm : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
                            "$dst <= $src", [], 0, 1>;
-
+  def VOpMove  : CtrlInst<(outs variable_ops), (ins variable_ops),
+                           "move", [], 0, 1>;
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
                            "$dst <= $src", [], 0, 1>;
   def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
