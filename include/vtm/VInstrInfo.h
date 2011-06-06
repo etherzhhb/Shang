@@ -31,7 +31,7 @@ class VInstrInfo : public TargetInstrInfoImpl {
 public:
   VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
 
-
+  static const unsigned PredInvertFlag = 0x2;
   virtual bool isPredicable(MachineInstr *MI) const;
   virtual bool isPredicated(const MachineInstr *MI) const;
 

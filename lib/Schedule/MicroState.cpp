@@ -148,6 +148,10 @@ void ucOperand::changeOpcode(unsigned Opcode, unsigned PredSlot,
   setTargetFlags(IsOpcode);
 }
 
+bool ucOperand::isPredicateInverted() const {
+  return getTargetFlags() & VInstrInfo::PredInvertFlag;
+}
+
 ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                   FuncUnitId FUId /*= VFUs::Trivial*/) {
   ucOperand MO = MachineOperand::CreateImm(0);
@@ -176,13 +180,6 @@ ucOperand ucOperand::CreateWireRead(unsigned WireNum, unsigned BitWidth) {
 
 ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   // Read reg0 means always execute.
-  if (Reg == 0) {
-    // Create the default predicate operand, which means always execute.
-    ucOperand MO = MachineOperand::CreateImm(1);
-    MO.setBitWidth(1);
-    return MO;
-  }
-
   ucOperand MO = MachineOperand::CreateReg(Reg, false);
   MO.setBitWidth(1);
   return MO;

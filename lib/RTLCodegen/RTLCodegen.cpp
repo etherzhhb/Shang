@@ -659,7 +659,16 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
     // Emit the predicate operand.
     SlotPredSS << " & ";
-    Op.getPredicate().print(SlotPredSS);
+    if (Op.getPredicate().getReg()) {
+      SlotPredSS << '(';
+      ucOperand &PredOp = Op.getPredicate();
+      PredOp.print(SlotPredSS, 1);
+      SlotPredSS << ' ^ '
+                 << (PredOp.isPredicateInverted() ? "1'b1" : "1'b0")
+                 << ')';
+    } else
+      SlotPredSS << "1'b1";
+
     SlotPredSS.flush();
 
     // Special case for state transferring operation.

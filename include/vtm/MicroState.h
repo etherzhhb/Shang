@@ -105,6 +105,8 @@ public:
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }
 
+  bool isPredicateInverted() const;
+
   ucOp getucParent();
 
   static ucOperand CreateOpcode(unsigned Opcode, unsigned PredSlot,
