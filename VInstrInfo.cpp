@@ -441,6 +441,7 @@ bool BitWidthAnnotator::hasBitWidthInfo() const {
 
 void BitWidthAnnotator::changeToDefaultPred() {
   MO->ChangeToRegister(0, false);
+  MO->setTargetFlags(1);
 }
 
 bool VIDesc::mayLoad() const {
