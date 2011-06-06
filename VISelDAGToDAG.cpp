@@ -191,7 +191,7 @@ SDNode *VDAGToDAGISel::SelectBitSlice(SDNode * N) {
     // Copy the constant explicit since the value may use by some function unit.
     SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
     computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
-    return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getValueType(0),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getValueType(0),
                                 Ops, array_lengthof(Ops));
   }
 
@@ -223,10 +223,10 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
 
   // Do not create cycle.
   if (ForceMove)
-    return CurDAG->getMachineNode(VTM::VOpMvImm, dl, N->getVTList(),
+    return CurDAG->getMachineNode(VTM::VOpMove_ri, dl, N->getVTList(),
                                   Ops, array_lengthof(Ops));
   else
-    return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getVTList(),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getVTList(),
                                 Ops, array_lengthof(Ops));
 }
 

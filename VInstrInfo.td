@@ -130,11 +130,17 @@ let hasCtrlDep = 1 in {
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
-  // Assign a constant value to a register.
-  def VOpMvImm : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
-                           "$dst <= $src", [], 0, 1>;
-  def VOpMove  : CtrlInst<(outs variable_ops), (ins variable_ops),
-                           "move", [], 0, 1>;
+  multiclass MoveInst {
+    def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [], 0, 1>;
+    def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
+    def _ra : CtrlInst<(outs DR:$dst), (ins RADD:$src), "$dst=$src", [], 0, 1>;
+    def _rm : CtrlInst<(outs DR:$dst), (ins RMUL:$src), "$dst=$src", [], 0, 1>;
+    def _rs : CtrlInst<(outs DR:$dst), (ins RSHT:$src), "$dst=$src", [], 0, 1>;
+    def _rp : CtrlInst<(outs DR:$dst), (ins PredR:$src), "$dst=$src", [], 0, 1>;
+  }
+
+  defm VOpMove  : MoveInst;
+
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
                            "$dst <= $src", [], 0, 1>;
   def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),

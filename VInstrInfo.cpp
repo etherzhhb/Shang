@@ -26,8 +26,18 @@
 #include "llvm/Support/ErrorHandling.h"
 
 #include "VGenInstrInfo.inc"
-
 using namespace llvm;
+
+static const unsigned MoveOpcodes[] = {
+    0, //DRRegClassID = 0,
+    0, //PHIRRegClassID = 1,
+    VTM::VOpMove_rp, //PredRRegClassID = 2,
+    VTM::VOpMove_ra, //RADDRegClassID = 3,
+    VTM::VOpMove_rm, //RMULRegClassID = 4,
+    VTM::VOpMove_rs, //RSHTRegClassID = 5,
+    VTM::VOpMove_rw, //WireRegClassID = 6
+};
+
 static const MachineOperand *getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
@@ -308,6 +318,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
                                   const SmallVectorImpl<MachineOperand> &Pred,
                                   MachineOperand IfTrueVal,
                                   const TargetInstrInfo *TII) {
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   if (!Res.getReg()) {
     MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
     const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
@@ -317,7 +328,10 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   MachineOperand ResDef(Res);
   ResDef.setIsDef();
 
-  return *BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpMove))
+  unsigned Opcode = MoveOpcodes[MRI.getRegClass(IfTrueVal.getReg())->getID()];
+  assert(Opcode && "Unsupport move!");
+
+  return *BuildMI(MBB, IP, DebugLoc(), TII->get(Opcode))
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 

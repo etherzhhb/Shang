@@ -72,7 +72,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
   std::vector<MachineInstr*> Imms;
   std::set<MachineBasicBlock*> MissedSuccs;
-   // Find out all VOpMvImm.
+   // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
     MissedSuccs.insert(MBB->succ_begin(), MBB->succ_end());
@@ -81,7 +81,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
          II != IE; ++II) {
       MachineInstr *Inst = II;
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMvImm && Inst->getOperand(1).isImm())
+      if (Inst->getOpcode() == VTM::VOpMove_ri && Inst->getOperand(1).isImm())
         Imms.push_back(Inst);
 
       // Remove the explicit successors from the missed successors set.

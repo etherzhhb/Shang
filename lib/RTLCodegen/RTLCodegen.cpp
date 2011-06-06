@@ -663,7 +663,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       SlotPredSS << '(';
       ucOperand &PredOp = Op.getPredicate();
       PredOp.print(SlotPredSS, 1);
-      SlotPredSS << ' ^ '
+      SlotPredSS << '^'
                  << (PredOp.isPredicateInverted() ? "1'b1" : "1'b0")
                  << ')';
     } else
@@ -699,8 +699,12 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
     case VTM::VOpBRam:          emitOpBRam(Op);               break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
-    case VTM::VOpMove:
-    case VTM::VOpMvImm:
+    case VTM::VOpMove_ra:
+    case VTM::VOpMove_ri:
+    case VTM::VOpMove_rm:
+    case VTM::VOpMove_rp:
+    case VTM::VOpMove_rs:
+    case VTM::VOpMove_rw:
     case VTM::COPY:             emitOpCopy(Op);               break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
