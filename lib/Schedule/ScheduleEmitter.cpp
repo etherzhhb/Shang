@@ -262,6 +262,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   VIDesc VTID = Inst;
   bool IsCtrl = !VTID.hasDatapath();
+  bool isCopyLike = VInstrInfo::isCopyLike(Inst.getOpcode());
 
   typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
@@ -334,7 +335,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
-    if (MO.isDef() && EmitSlot != WriteSlot && !Inst.isCopy()) {
+    if (MO.isDef() && EmitSlot != WriteSlot && !isCopyLike) {
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.

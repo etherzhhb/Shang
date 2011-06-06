@@ -399,6 +399,16 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 
+bool VInstrInfo::isCopyLike(unsigned Opcode) {
+  return Opcode == VTM::COPY
+         || Opcode == VTM::VOpMove_ra
+         || Opcode == VTM::VOpMove_ri
+         || Opcode == VTM::VOpMove_rm
+         || Opcode == VTM::VOpMove_rp
+         || Opcode == VTM::VOpMove_rs
+         || Opcode == VTM::VOpMove_rw;
+}
+
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   if (getTID().Opcode == VTM::VOpMemTrans)
