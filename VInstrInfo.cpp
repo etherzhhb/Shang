@@ -113,7 +113,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   /// 2. If this block ends with only an unconditional branch, it sets TBB to be
   ///    the destination block.
   if (isUnpredicatedTerminator(FstTerm)) {
-    TBB = FstTerm->getOperand(1).getMBB();
+    TBB = FstTerm->getOperand(0).getMBB();
     assert(Terms.size() == 1 && "Expect single fall through edge!");
     return false;
   }
