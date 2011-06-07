@@ -86,8 +86,12 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         Imms.push_back(Inst);
 
       // Remove the explicit successors from the missed successors set.
-      if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
+      if (VInstrInfo::isBrCndLike(Inst->getOpcode())) {
+        MachineOperand &Pred = Inst->getOperand(1);
+        // Use reg0 for always true.
+        if (Pred.isImm() && Pred.getImm()) Pred.ChangeToRegister(0, false);
         MissedSuccs.erase(Inst->getOperand(0).getMBB());
+      }
     }
 
     // Make sure each basic block have a terminator.
