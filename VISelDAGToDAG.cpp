@@ -231,9 +231,13 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
 }
 
 SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
-  SDValue Ops[] = {N->getOperand(2), // Target BB
-                   N->getOperand(1), // condition (predicate operand).
-                   N->getOperand(0) };
+  SDValue TargetBB = N->getOpcode() == ISD::BR ? N->getOperand(1)
+                                               : N->getOperand(2);
+  SDValue Cnd = N->getOpcode() == ISD::BR ? CurDAG->getTargetConstant(1,MVT::i1)
+                                          : N->getOperand(1);
+  SDValue Ops[] = {TargetBB, // Target BB
+                   Cnd, // condition (predicate operand).
+                   N->getOperand(0) }; // Chain
 
   return CurDAG->SelectNodeTo(N, VTM::VOpToStateb, N->getVTList(),
                               Ops, array_lengthof(Ops));
@@ -333,6 +337,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case VTMISD::ReadSymbol:    return SelectSimpleNode(N, VTM::VOpReadSymbol);
   case VTMISD::InternalCall:  return SelectInternalCall(N);
   case VTMISD::RetVal:        return SelectRetVal(N);
+  case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
   case VTMISD::ADD:           return SelectAdd(N);
