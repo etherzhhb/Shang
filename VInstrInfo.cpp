@@ -184,12 +184,13 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
                                   const SmallVectorImpl<MachineOperand> &Cond,
                                   DebugLoc DL) const {
   assert((Cond.size() <= 1) && "Too much conditions!");
-  MachineOperand PredOp = Cond.empty() ?
+  bool isUnconditional = Cond.empty();
+  MachineOperand PredOp = isUnconditional ?
                           ucOperand::CreatePredicate() : Cond[0];
 
   if (FBB == 0) {
-    // Use no-barrier branch for fall through.
-    unsigned Opc = MBB.canFallThrough() ? VTM::VOpToState : VTM::VOpToStateb;
+    // Insert barrier branch for unconditional branch.
+    unsigned Opc = isUnconditional ? VTM::VOpToStateb : VTM::VOpToState;
     BuildMI(&MBB, DL, get(Opc)).addMBB(TBB).addOperand(PredOp);
     return 1;
   }
