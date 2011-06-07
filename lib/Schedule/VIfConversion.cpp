@@ -213,7 +213,9 @@ namespace {
                                SmallVectorImpl<MachineOperand> &Cond,
                                SmallSet<unsigned, 4> &Redefs,
                                bool IgnoreBr = false);
-    void MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI, bool AddEdges = true);
+    void MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI,
+                     const SmallVectorImpl<MachineOperand> &FromBBCnd,
+                     bool AddEdges = true);
 
     bool MeetIfcvtSizeLimit(MachineBasicBlock &BB,
                             unsigned Cycle, unsigned Extra,
@@ -1121,7 +1123,7 @@ bool VIfConverter::IfConvertSimple(BBInfo &BBI, IfcvtKind Kind) {
 
     // Merge converted block into entry block.
     BBI.NonPredSize -= TII->RemoveBranch(*BBI.BB);
-    MergeBlocks(BBI, *CvtBBI);
+    MergeBlocks(BBI, *CvtBBI, Cond);
   }
 
   bool IterIfcvt = true;
@@ -1215,7 +1217,7 @@ bool VIfConverter::IfConvertTriangle(BBInfo &BBI, IfcvtKind Kind) {
 
     // Now merge the entry of the triangle with the true block.
     BBI.NonPredSize -= TII->RemoveBranch(*BBI.BB);
-    MergeBlocks(BBI, *CvtBBI, false);
+    MergeBlocks(BBI, *CvtBBI, Cond, false);
   }
 
   // If 'true' block has a 'false' successor, add an exit branch to it.
@@ -1239,7 +1241,7 @@ bool VIfConverter::IfConvertTriangle(BBInfo &BBI, IfcvtKind Kind) {
     // ifcvt the blocks.
     if (!HasEarlyExit &&
         NextBBI->BB->pred_size() == 1 && !NextBBI->HasFallThrough) {
-      MergeBlocks(BBI, *NextBBI);
+      MergeBlocks(BBI, *NextBBI, SmallVector<MachineOperand, 0>());
       FalseBBDead = true;
     } else {
       InsertUncondBranch(BBI.BB, NextBBI->BB, TII);
@@ -1379,8 +1381,8 @@ bool VIfConverter::IfConvertDiamond(BBInfo &BBI, IfcvtKind Kind,
   PredicateBlock(*BBI2, DI2, *Cond2, Redefs);
 
   // Merge the true block into the entry of the diamond.
-  MergeBlocks(BBI, *BBI1, TailBB == 0);
-  MergeBlocks(BBI, *BBI2, TailBB == 0);
+  MergeBlocks(BBI, *BBI1, *Cond1, TailBB == 0);
+  MergeBlocks(BBI, *BBI2, *Cond1, TailBB == 0);
 
   // If the if-converted block falls through or unconditionally branches into
   // the tail block, and the tail block does not have other predecessors, then
@@ -1400,7 +1402,7 @@ bool VIfConverter::IfConvertDiamond(BBInfo &BBI, IfcvtKind Kind,
         CanMergeTail = false;
     }
     if (CanMergeTail) {
-      MergeBlocks(BBI, TailBBI);
+      MergeBlocks(BBI, TailBBI, SmallVector<MachineOperand, 0>());
       TailBBI.IsDone = true;
     } else {
       BBI.BB->addSuccessor(TailBB);
@@ -1533,7 +1535,9 @@ void VIfConverter::CopyAndPredicateBlock(BBInfo &ToBBI, BBInfo &FromBBI,
 /// successor edges except for the fall-through edge.  If AddEdges is true,
 /// i.e., when FromBBI's branch is being moved, add those successor edges to
 /// ToBBI.
-void VIfConverter::MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI, bool AddEdges) {
+void VIfConverter::MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI,
+                               const SmallVectorImpl<MachineOperand> &FromBBCnd,
+                               bool AddEdges) {
   ToBBI.BB->splice(ToBBI.BB->end(),
                    FromBBI.BB, FromBBI.BB->begin(), FromBBI.BB->end());
 
@@ -1543,7 +1547,7 @@ void VIfConverter::MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI, bool AddEdges) {
   MachineBasicBlock *FallThrough = FromBBI.HasFallThrough ? NBB : NULL;
 
   MachineRegisterInfo &MRI = ToBBI.BB->getParent()->getRegInfo();
-  SmallVector<MachineOperand, 2> SrcVals;
+  SmallVector<std::pair<MachineOperand, MachineBasicBlock*>, 2> SrcVals;
   SmallVector<MachineInstr*, 8> PHIs;
 
   for (unsigned i = 0, e = Succs.size(); i != e; ++i) {
@@ -1563,41 +1567,40 @@ void VIfConverter::MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI, bool AddEdges) {
           continue;
         }
         // Take the operand away.
-        SrcVals.push_back(MI->getOperand(Idx));
+        SrcVals.push_back(std::make_pair(MI->getOperand(Idx), SrcBB));
         MI->RemoveOperand(Idx);
         MI->RemoveOperand(Idx);
       }
 
       // If only 1 value comes from BB, re-add it to the PHI.
       if (SrcVals.size() == 1) {
-        AddSrcValToPHI(SrcVals.pop_back_val(), ToBBI.BB, MI, MRI);
+        AddSrcValToPHI(SrcVals.pop_back_val().first, ToBBI.BB, MI, MRI);
         continue;
       }
 
       assert(SrcVals.size() == 2 && "Too many edges!");
 
       // Read the same register?
-      if (SrcVals[0].getReg() == SrcVals[1].getReg()) {
+      if (SrcVals[0].first.getReg() == SrcVals[1].first.getReg()) {
         SrcVals.pop_back();
-        AddSrcValToPHI(SrcVals.pop_back_val(), ToBBI.BB, MI, MRI);
+        AddSrcValToPHI(SrcVals.pop_back_val().first, ToBBI.BB, MI, MRI);
         continue;
       }
 
-      // Retrive the select condition.
-      MachineInstr *ValDef = MRI.getVRegDef(SrcVals[1].getReg());
-      if (!TII->isPredicated(ValDef)) {
-        ValDef = MRI.getVRegDef(SrcVals[0].getReg());
-        // Make sure SrcVals[1] is predicated.
+      // Make sure value from FromBB in SrcVals[1].
+      if (SrcVals.back().second != FromBBI.BB)
         std::swap(SrcVals[0], SrcVals[1]);
-      }
 
-      assert(TII->isPredicated(ValDef) && "Cannot find predicate condition!");
+      assert(SrcVals.back().second == FromBBI.BB
+             && "Cannot build select for value!");
+      assert(!FromBBCnd.empty()
+             && "Do not know how to select without condition!");
       // Merge the value with select instruction.
       MachineOperand Result = MachineOperand::CreateReg(0, false);
       Result.setTargetFlags(MI->getOperand(0).getTargetFlags());
-      MachineOperand Pred = *VInstrInfo::getPredOperand(ValDef);
-      VInstrInfo::BuildSelect(ToBBI.BB, Result, Pred,
-                              SrcVals.pop_back_val(), SrcVals.pop_back_val(),
+      VInstrInfo::BuildSelect(ToBBI.BB, Result, FromBBCnd,
+                              SrcVals.pop_back_val().first, // Value from FromBB
+                              SrcVals.pop_back_val().first, // Value from ToBB
                               TII);
       AddSrcValToPHI(Result, ToBBI.BB, MI, MRI);
     }

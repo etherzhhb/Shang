@@ -97,14 +97,13 @@ def State : Operand<OtherVT>;
 //===----------------------------------------------------------------------===//
 // Communication operations.
 let hasCtrlDep = 1 in {
+  def VOpReadSymbol : CtrlInst<(outs DR:$val), (ins DR:$symbol, DR:$token),
+                               "$val = arg[$symbol]", [],
+                               0 /*Latency*/, 1 /*ReadAtEmit*/>;
   let isBarrier    = 1 in {
     let isReturn     = 1,
         isTerminator = 1 in
     def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
-
-    def VOpReadSymbol : CtrlInst<(outs DR:$val), (ins DR:$symbol, DR:$token),
-                               "$val = arg[$symbol]", [],
-                               0 /*Latency*/, 1 /*ReadAtEmit*/>;
     
     def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
                              "ret $var at $ret_no;",
