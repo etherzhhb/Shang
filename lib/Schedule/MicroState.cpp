@@ -34,17 +34,17 @@ bool ucOp::isControl() const {
 void ucOp::printOpcode(raw_ostream &OS) const {
   OS << OpCode.getDesc().getName();
 
-  if (isControl()) {
-    OS << " pred:[";
-    getPredicate().print(OS);
-    OS << ']';
-  }
-
-  OS << "{" << OpCode.getFUId() << "}"
-    << "@" << OpCode.getPredSlot();
-  OS << ' ';
+  OS << "{" << OpCode.getFUId() << "} ";
 }
 void ucOp::print(raw_ostream &OS) const {
+  if (isControl()) {
+    OS << "@" << OpCode.getPredSlot() << " ";
+    if (getPredicate().isPredicateInverted())
+      OS << "~";
+    getPredicate().print(OS, 1);
+    OS << "? ";
+  }
+
   bool isFirstUse = true;
   // Print the operands;
   for (op_iterator I = op_begin(), E = op_end(); I != E; ++I) {
