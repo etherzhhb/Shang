@@ -90,10 +90,18 @@ public:
     unsigned SrcReg,
     unsigned SrcSubReg) const;
 
+  static const MachineOperand *getPredOperand(const MachineInstr *MI);
+  static MachineOperand *getPredOperand(MachineInstr *MI);
+
   // Build machine instructions for a = Pred ? IfTrueVal : IfFalseVal in MBB,
   // and return the register that holding this value.
   static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
                                    const SmallVectorImpl<MachineOperand> &Pred,
+                                   MachineOperand IfTrueVal,
+                                   MachineOperand IfFalseVal,
+                                   const TargetInstrInfo *TII);
+  static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
+                                   MachineOperand Pred,
                                    MachineOperand IfTrueVal,
                                    MachineOperand IfFalseVal,
                                    const TargetInstrInfo *TII);

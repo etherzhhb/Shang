@@ -38,14 +38,15 @@ static const unsigned MoveOpcodes[] = {
     VTM::VOpMove_rw, //WireRegClassID = 6
 };
 
-static const MachineOperand *getPredOperand(const MachineInstr *MI) {
+const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
-  const MachineOperand &MO = MI->getOperand(MI->getNumExplicitOperands() - 1);
-  return &MO;
+  unsigned Idx = MI->getNumExplicitOperands() - 1;
+  assert(MI->getDesc().OpInfo[Idx].isPredicate() && "Cannot get PredOperand!");
+  return &MI->getOperand(Idx);
 }
 
-static MachineOperand *getPredOperand(MachineInstr *MI) {
+MachineOperand *VInstrInfo::getPredOperand(MachineInstr *MI) {
   return const_cast<MachineOperand*>(getPredOperand((const MachineInstr*)MI));
 }
 
@@ -338,7 +339,7 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   // We need to forward the wire copy if the source register is written
   // in the same slot, otherwise we will read a out of date value.
   if (WriteOp->getParent() == &*Ctrl) {
-    if (WriteOp->getOpcode() == VTM::COPY)
+    if (isCopyLike(WriteOp->getOpcode()))
       Builder.addOperand(MachineOperand(WriteOp.getOperand(1)));
     // FIXME: Handle others case.
     assert(WriteOp.getPredicate().getReg() == 0
@@ -352,29 +353,39 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   return &*Builder;
 }
 
+MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
+                                      MachineOperand &Result,
+                                      MachineOperand Pred,
+                                      MachineOperand IfTrueVal,
+                                      MachineOperand IfFalseVal,
+                                      const TargetInstrInfo *TII) {
+  // create the result register if necessary.
+  if (!Result.getReg()) {
+    MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
+    const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
+    assert(MRI.getRegClass(IfFalseVal.getReg()) == RC
+      && "Register class dose not match!");
+    Result.setReg(MRI.createVirtualRegister(RC));
+  }
+
+  MachineOperand ResDef(Result);
+  ResDef.setIsDef();
+
+  // Build and insert the select instruction at the end of the BB.
+  return *BuildMI(*MBB, MBB->getFirstTerminator(), DebugLoc(),
+                  TII->get(VTM::VOpSel))
+            .addOperand(ResDef).addOperand(Pred)
+            .addOperand(IfTrueVal).addOperand(IfFalseVal)
+            .addOperand(ucOperand::CreatePredicate());
+}
 MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB, MachineOperand &Result,
                                       const SmallVectorImpl<MachineOperand> &Pred,
                                       MachineOperand IfTrueVal,
                                       MachineOperand IfFalseVal,
                                       const TargetInstrInfo *TII){
-    // create the result register if necessary.
-    if (!Result.getReg()) {
-      MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
-      const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
-      assert(MRI.getRegClass(IfFalseVal.getReg()) == RC
-        && "Register class dose not match!");
-      Result.setReg(MRI.createVirtualRegister(RC));
-    }
-
-    MachineOperand ResDef(Result);
-    ResDef.setIsDef();
-
-    // Build and insert the select instruction at the end of the BB.
-    assert(Pred.size() == 1 && "Cannot select value!");
-    return *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpSel))
-              .addOperand(ResDef).addOperand(Pred[0])
-              .addOperand(IfTrueVal).addOperand(IfFalseVal)
-              .addOperand(ucOperand::CreatePredicate());
+  // Build and insert the select instruction at the end of the BB.
+  assert(Pred.size() == 1 && "Cannot select value!");
+  return BuildSelect(MBB, Result, Pred[0], IfTrueVal, IfFalseVal, TII);
 }
 
 MachineInstr &
