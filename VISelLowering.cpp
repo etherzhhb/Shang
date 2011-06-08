@@ -94,18 +94,20 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
        VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
     MVT CurVT = MVT((MVT::SimpleValueType)VT);
 
-    // FIXME: Use the ISD::ADD and let llvm do the job.
+
     // Lower the add/sub operation to full adder operation.
     setOperationAction(ISD::ADD, CurVT, Custom);
-    // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, CurVT, Custom);
-    setOperationAction(ISD::ADDE, CurVT, Custom);
-    setOperationAction(ISD::SUBE, CurVT, Custom);
     setOperationAction(ISD::ADDC, CurVT, Custom);
+    // Expend a - b to a + ~b + 1;
+    setOperationAction(ISD::SUB, CurVT, Expand);
+    setOperationAction(ISD::SUBE, CurVT, Expand);
+    //setOperationAction(ISD::ADDC, CurVT, Expand);
     setOperationAction(ISD::SUBC, CurVT, Custom);
-    setOperationAction(ISD::SADDO, CurVT, Custom);
-    setOperationAction(ISD::SSUBO, CurVT, Custom);
-    setOperationAction(ISD::UADDO, CurVT, Custom);
+    // Expand overflow aware operations
+    setOperationAction(ISD::SADDO, CurVT, Expand);
+    setOperationAction(ISD::SSUBO, CurVT, Expand);
+    setOperationAction(ISD::UADDO, CurVT, Expand);
+    setOperationAction(ISD::USUBO, CurVT, Expand);
 
     // We don't have MUL_LOHI
     setOperationAction(ISD::MULHS, CurVT, Expand);
@@ -152,6 +154,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::XOR);
   setTargetDAGCombine(ISD::OR);;
   setTargetDAGCombine(ISD::AND);
+  setTargetDAGCombine(ISD::ADDE);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
@@ -164,7 +167,6 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::ReadSymbol:      return "VTMISD::ReadSymbol";
   case VTMISD::Ret:             return "VTMISD::Ret";
   case VTMISD::RetVal:          return "VTMISD::RetVal";
-  case VTMISD::ADD:             return "VTMISD::ADD";
   case VTMISD::MemAccess:       return "VTMISD::MemAccess";
   case VTMISD::BitSlice:        return "VTMISD::BitSlice";
   case VTMISD::BitCat:          return "VTMISD::BitCat";
@@ -387,15 +389,20 @@ SDValue VTargetLowering::getCmpResult(SelectionDAG &DAG, SDValue SetCC,
                                       bool dontSub) {
   DebugLoc dl = SetCC.getDebugLoc();
   SDValue LHS = SetCC->getOperand(0), RHS = SetCC->getOperand(1);
+  SDValue Ops[] = { LHS, RHS };
   EVT VT = LHS.getValueType();
 
-  SDValue Result = getSub(DAG, dl, VT, LHS, RHS, dontSub);
+  SDNode *ExistsNode = DAG.getNodeIfExists(ISD::SUBC,
+                                           DAG.getVTList(VT, MVT::i1),
+                                           Ops, array_lengthof(Ops));
+
+  if (ExistsNode) return SDValue(ExistsNode, 0);
+
   // If the user do not want to compute the result from a subtraction,
   // just give them an xor.
-  if (!Result.getNode())
-    Result = DAG.getNode(ISD::XOR, dl, VT, LHS, RHS);
+  if (dontSub) return DAG.getNode(ISD::XOR, dl, VT, LHS, RHS);
 
-  return Result;
+  return DAG.getNode(ISD::SUBC, dl, DAG.getVTList(VT, MVT::i1), LHS, RHS);
 }
 
 SDValue VTargetLowering::getNNotEQVFlag(SelectionDAG &DAG, SDValue SetCC) {
@@ -464,79 +471,27 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
-
-// Lower add to full adder operation.
-// Operands: lhs, rhs, carry-in
-// Results: sum, carry-out
-// Overflow = [16]^[15];
-SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                                SDValue OpA, SDValue OpB,
-                                SDValue CarryIn, bool dontCreate) {
-  SDVTList VTs = DAG.getVTList(VT, MVT::i1);
-  // TODO: Try to fold constant arithmetic.
-  // NOTE: We need to perform the arithmetic at the bit width of VT + 1.
-  //ConstantSDNode *N1C = dyn_cast<ConstantSDNode>(OpA.getNode());
-  //ConstantSDNode *N2C = dyn_cast<ConstantSDNode>(OpB.getNode());
-  //ConstantSDNode *CC = dyn_cast<ConstantSDNode>(CarryIn.getNode());
-
-  // Should us create the node?
-  SDValue Ops[] = { OpA, OpB, CarryIn };
-  if (dontCreate) {
-    if (SDNode *N = DAG.getNodeIfExists(VTMISD::ADD, VTs,
-                                        Ops, array_lengthof(Ops)))
-      return SDValue(N, 0);
-
-    return SDValue();
-  }
-  
-  // Split the operands if the cannot fit into the function unit.
-  unsigned MaxSize = getFUDesc<VFUAddSub>()->getMaxBitWidth(),
-           VTSize = VT.getSizeInBits();
-
-  if (VTSize > MaxSize) {
-    unsigned HaflVTSize = VTSize / 2;
-    EVT HalfVT = MVT::getIntegerVT(HaflVTSize);
-    assert(HalfVT.isSimple() && "Expected HalfVT is also a simple VT!");
-
-    SDValue SumL = getAdd(DAG, dl, HalfVT,
-                          getBitSlice(DAG, dl, OpA, HaflVTSize, 0),
-                          getBitSlice(DAG, dl, OpB, HaflVTSize, 0),
-                          CarryIn, dontCreate);
-    SDValue HalfCarry = getCarry(SumL);
-    SDValue SumH = getAdd(DAG, dl, HalfVT,
-                          getBitSlice(DAG, dl, OpA, VTSize, HaflVTSize),
-                          getBitSlice(DAG, dl, OpB, VTSize, HaflVTSize),
-                          HalfCarry, dontCreate);
-    // TODO: Handle the carry.
-    return DAG.getNode(VTMISD::BitCat, dl, VT, SumH, SumL);
-  }
-
-  return DAG.getNode(VTMISD::ADD, dl, VTs, Ops, array_lengthof(Ops));
+SDValue VTargetLowering::LowerSubC(SDValue Op, SelectionDAG &DAG) const {
+  // A - B = A + (-B) = A + (~B) + 1
+  SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
+  RHS = getNot(DAG, Op.getDebugLoc(), RHS);
+  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
+                     DAG.getVTList(Op.getValueType(), MVT::i1),
+                     LHS, RHS, DAG.getTargetConstant(1, MVT::i1));
 }
 
-SDValue VTargetLowering::getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                                SDValue OpA, SDValue OpB,
-                                bool dontCreate) {
-  return getAdd(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1, true),
-                dontCreate);
+SDValue VTargetLowering::LowerAdd(SDValue Op, SelectionDAG &DAG) const {
+  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
+                     DAG.getVTList(Op.getValueType(), MVT::i1),
+                     Op.getOperand(0), Op.getOperand(1),
+                     DAG.getTargetConstant(0, MVT::i1));
 }
 
-SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                                SDValue OpA, SDValue OpB,
-                                bool dontCreate) {
-  return getSub(DAG, dl, VT, OpA, OpB, DAG.getConstant(0, MVT::i1, true),
-                dontCreate);
-}
-
-SDValue VTargetLowering::getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                                SDValue OpA, SDValue OpB,
-                                SDValue CarryIn, bool dontCreate) {
-  // A + B = A + (-B) = A + (~B) + 1
-  OpB = getNot(DAG, OpB.getDebugLoc(), OpB);
-  // FIXME: Is this correct?
-  CarryIn = getNot(DAG, CarryIn.getDebugLoc(), CarryIn);
-
-  return getAdd(DAG, dl, VT, OpA, OpB, CarryIn, dontCreate);
+SDValue VTargetLowering::LowerAddC(SDValue Op, SelectionDAG &DAG) const {
+  SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
+  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
+                     DAG.getVTList(Op.getValueType(), MVT::i1),
+                     Op.getOperand(0), Op.getOperand(1), Op->getOperand(2));
 }
 
 SDValue VTargetLowering::getReductionOp(SelectionDAG &DAG, unsigned Opc,
@@ -660,21 +615,18 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
     return SDValue();
+  case ISD::ADD:
+    return LowerAdd(Op, DAG);
+  case ISD::ADDC:
+    return LowerAddC(Op, DAG);
+  case ISD::SUBC:
+    return LowerSubC(Op, DAG);
   case ISD::SETCC:
     return LowerSetCC(Op, DAG);
   case ISD::LOAD:
     return LowerMemAccess(Op, DAG, false);
   case ISD::STORE:
     return LowerMemAccess(Op, DAG, true);
-  case ISD::ADD:
-    return getAdd(DAG, Op.getDebugLoc(), Op.getValueType(),
-                  Op->getOperand(0), Op->getOperand(1));
-  case ISD::SUB:
-    return getSub(DAG, Op.getDebugLoc(), Op.getValueType(),
-                  Op->getOperand(0), Op->getOperand(1));
-  case ISD::ADDE:   case ISD::SUBE:   case ISD::ADDC:   case ISD::SUBC:
-  case ISD::SADDO:  case ISD::SSUBO:  case ISD::UADDO:  case ISD::USUBO:
-    return SDValue();
   case ISD::SIGN_EXTEND:
     return LowerExtend(Op, DAG, true);
   case ISD::ANY_EXTEND:

@@ -528,7 +528,7 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
     return PerformBitCatCombine(N, *this, DCI);
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, *this, DCI);
-  case VTMISD::ADD:
+  case ISD::ADDE:
     return PerformAddCombine(N, *this, DCI);
   case ISD::SHL:
   case ISD::SRA:

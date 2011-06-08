@@ -155,7 +155,6 @@ SDValue VDAGToDAGISel::MoveToReg(SDValue Operand, bool Force) {
 }
 
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
-  //N->getValueType(0)
   SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
                     MoveToReg(N->getOperand(1), true),
                     N->getOperand(2),
@@ -340,7 +339,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
-  case VTMISD::ADD:           return SelectAdd(N);
+  case ISD::ADDE:             return SelectAdd(N);
   // DirtyHack: Is binary instruction enough?
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult, true);
 

@@ -28,7 +28,6 @@ namespace VTMISD {
     RetVal,
     InternalCall,
     // Arithmetic operation.
-    ADD,
     //
     Not,
     // Bit level operation.  
@@ -106,30 +105,6 @@ public:
   static SDValue getNot(SelectionDAG &DAG, DebugLoc dl, SDValue Operand);
 
   //===--------------------------------------------------------------------===//
-  // heterogeneous accelerator architecture arithmetic SDNodes.
-  static SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB, SDValue CarryIn,
-                        bool dontCreate = false);
-  static SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB,
-                        bool dontCreate = false);
-
-  static SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB, SDValue CarryIn,
-                        bool dontCreate = false);
-  static SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB,
-                        bool dontCreate = false);
-
-  static SDValue getCarry(SDValue Sum) {
-    if (Sum->getOpcode() == VTMISD::ADD)
-      return Sum.getValue(1);
-
-    assert(Sum->getOpcode() == VTMISD::BitCat && "Get carry on a wrong node!");
-    return getCarry(Sum->getOperand(0));
-  }
-
-  //===--------------------------------------------------------------------===//
   // Helper function for comparison lowering.
   static SDValue getCmpResult(SelectionDAG &DAG, SDValue SetCC, bool dontSub);
 
@@ -157,7 +132,7 @@ public:
   // Carry (or Unsigned Overflow).
   static SDValue getCFlag(SelectionDAG &DAG, SDValue SetCC) {
     SDValue Result = getCmpResult(DAG, SetCC, false);
-    return getCarry(Result);
+    return Result.getValue(1);
   }
 
   // The negative flag.
@@ -174,7 +149,9 @@ public:
   static SDValue getNNotEQVFlag(SelectionDAG &DAG, SDValue SetCC);
 
 private:
-
+  SDValue LowerAdd(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerAddC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSubC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
 

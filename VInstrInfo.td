@@ -37,13 +37,6 @@ def SDT_InternalCall : SDTypeProfile<1, -1, []>;
 def VTMInternalCall  :  SDNode<"VTMISD::InternalCall", SDT_InternalCall,
                              [SDNPHasChain]>;
 
-def SDT_ADDC : SDTypeProfile<2, 3, [
-  SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisInt<0>,
-  SDTCisVT<1, i1>,  SDTCisVT<4, i1>
-]>;
-def VTMADD    :  SDNode<"VTMISD::ADD", SDT_ADDC>;
-
-
 def SDT_MemTrans : SDTypeProfile<1, 4, [
   SDTCisPtrTy<1>, // Address
   // The Store value type must have the same type as the load value.
