@@ -159,7 +159,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB);
 
   void emitOpInternalCall(ucOp &OpInternalCall);
-  void emitOpReadSymbol(ucOp &OpReadSymbol);
+  void emitOpReadReturn(ucOp &OpReadSymbol);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpCopy(ucOp &OpCopy);
@@ -693,7 +693,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     // Emit the operations.
     switch (Op->getOpcode()) {
     case VTM::VOpInternalCall:  emitOpInternalCall(Op);       break;
-    case VTM::VOpReadSymbol:    emitOpReadSymbol(Op);         break;
+    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
     case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
     case VTM::VOpRet:           emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
@@ -760,13 +760,12 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpReadSymbol(ucOp &OpReadSymbol) {
+void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
   OpReadSymbol.getOperand(0).print(OS);
-  // FIXME: Use getInputPort instead;
-  OS << " <= ";
-  //OpReadSymbol.getOperand(1).print(OS);
+  OS << " <= " << OpReadSymbol.getOperand(2).getGlobal()->getName() << '_';
+  OpReadSymbol.getOperand(1).print(OS);
   OS << ";\n";
 }
 

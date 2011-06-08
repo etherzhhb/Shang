@@ -21,8 +21,9 @@ include "VInstrFormats.td"
 
 //  Specific Node Definitions.
 //===----------------------------------------------------------------------===//
-def SDT_ReadSymbol : SDTypeProfile<1, 2, []>;
-def VTMReadSymbol  :  SDNode<"VTMISD::ReadSymbol", SDT_ReadSymbol, []>;
+// take port name, Function address, and dependence token as parameter
+def SDT_ReadReturn : SDTypeProfile<1, 3, []>;
+def VTMReadReturn  :  SDNode<"VTMISD::ReadReturn", SDT_ReadReturn, []>;
 
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
 def VTMRetVal  :  SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;
@@ -90,8 +91,9 @@ def State : Operand<OtherVT>;
 //===----------------------------------------------------------------------===//
 // Communication operations.
 let hasCtrlDep = 1 in {
-  def VOpReadSymbol : CtrlInst<(outs DR:$val), (ins DR:$symbol, DR:$token),
-                               "$val = arg[$symbol]", [],
+  def VOpReadReturn : CtrlInst<(outs DR:$val),
+                               (ins DR:$symbol, DR:$callee, DR:$token),
+                               "$val = $callee[$symbol]", [],
                                0 /*Latency*/, 1 /*ReadAtEmit*/>;
   let isBarrier    = 1 in {
     let isReturn     = 1,

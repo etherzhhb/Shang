@@ -253,7 +253,7 @@ SDNode *VDAGToDAGISel::SelectInternalCall(SDNode *N) {
   Ops.push_back(N->getOperand(0));
 
   computeOperandsBitWidth(N, Ops.data(), Ops.size() -1/*Skip the chain*/);
-  
+
   return CurDAG->SelectNodeTo(N, VTM::VOpInternalCall, N->getVTList(),
                               Ops.data(), Ops.size());
 }
@@ -333,7 +333,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
-  case VTMISD::ReadSymbol:    return SelectSimpleNode(N, VTM::VOpReadSymbol);
+  case VTMISD::ReadReturn:    return SelectSimpleNode(N, VTM::VOpReadReturn);
   case VTMISD::InternalCall:  return SelectInternalCall(N);
   case VTMISD::RetVal:        return SelectRetVal(N);
   case ISD::BR:
