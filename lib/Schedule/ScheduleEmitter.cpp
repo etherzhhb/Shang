@@ -201,12 +201,16 @@ struct MicroStateBuilder {
       assert(((!IsCtrl && ReadSlot == EmitSlot + 1)
               || (IsCtrl && ReadSlot == EmitSlot))
               && "Assumption of Slots broken!");
-      return getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
+      ucOperand Ret = getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
+      Ret.setBitWidth(MO.getBitWidth());
+      return Ret;
     }
 
     assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
 
-    return WDef.createOperand();
+    ucOperand Ret = WDef.createOperand();
+    Ret.setBitWidth(MO.getBitWidth());
+    return Ret;
   }
 
 
