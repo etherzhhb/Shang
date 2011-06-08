@@ -177,7 +177,6 @@ private:
 
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBR(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
 

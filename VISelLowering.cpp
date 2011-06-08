@@ -136,17 +136,13 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // Lower SetCC to more fundamental operation.
     setOperationAction(ISD::SETCC, CurVT, Custom);
 
-    for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC) {
+    for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
       setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
-    }
-    
   }
 
   // Operations not directly supported by VTM.
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
   setOperationAction(ISD::BR_CC,  MVT::Other, Expand);
-  // Just Lower ISD::BR to BR_CC
-  setOperationAction(ISD::BR,     MVT::Other, Custom);
 
   // Try to perform bit level optimization on these nodes:
   setTargetDAGCombine(ISD::SHL);
@@ -385,19 +381,6 @@ SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op
   VT = getRoundIntegerOrBitType(VT, Context);
   return DAG.getNode(VTMISD::BitRepeat, dl, VT, Op,
                      DAG.getConstant(Times, MVT::i8, true));
-}
-
-// Lower br <target> to brcond 1, <target>
-SDValue VTargetLowering::LowerBR(SDValue Op, SelectionDAG &DAG) const {
-  SDValue Chain = Op.getOperand(0);
-
-  SDValue Cond = DAG.getConstant(1, MVT::i1, true);
-
-  if (Chain->getOpcode() == ISD::BRCOND)
-    Cond = getNot(DAG, Op.getDebugLoc(), Chain->getOperand(1));
-
-  return DAG.getNode(ISD::BRCOND, Op.getDebugLoc(), MVT::Other, Chain, Cond,
-                     Op.getOperand(1));
 }
 
 SDValue VTargetLowering::getCmpResult(SelectionDAG &DAG, SDValue SetCC,
@@ -677,8 +660,6 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
     return SDValue();
-  case ISD::BR:
-    return LowerBR(Op, DAG);
   case ISD::SETCC:
     return LowerSetCC(Op, DAG);
   case ISD::LOAD:

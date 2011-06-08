@@ -72,7 +72,8 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
 
   std::vector<MachineInstr*> Imms;
-  std::set<MachineBasicBlock*> MissedSuccs;
+  SmallPtrSet<MachineBasicBlock*, 2> MissedSuccs;
+  MachineInstr *FirstTerminator = 0;
    // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
@@ -90,6 +91,18 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         MachineOperand &Pred = Inst->getOperand(1);
         // Use reg0 for always true.
         if (Pred.isImm() && Pred.getImm()) Pred.ChangeToRegister(0, false);
+        // Change the unconditional branch after conditional branch to
+        // conditional branch.
+        if (FirstTerminator && !TII->isPredicated(Inst)) {
+          MachineOperand *TrueCnd = VInstrInfo::getPredOperand(FirstTerminator);
+          MachineOperand *FalseCnd = VInstrInfo::getPredOperand(Inst);
+          FalseCnd->setReg(TrueCnd->getReg());
+          FalseCnd->setTargetFlags(TrueCnd->getTargetFlags());
+          VInstrInfo::ReversePredicateCondition(*FalseCnd);
+        }
+
+        FirstTerminator = Inst;
+
         MissedSuccs.erase(Inst->getOperand(0).getMBB());
       }
     }
@@ -108,7 +121,9 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
         .addOperand(ucOperand::CreatePredicate());
     }
+
     MissedSuccs.clear();
+    FirstTerminator = 0;
   }
 
   // Try to replace the register operand with the constant for users of VOpMvImm.
