@@ -167,7 +167,7 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   return RemovedBranches;
 }
 
-void VInstrInfo::ReversePredicateCondition(MachineOperand &Cond) const {
+void VInstrInfo::ReversePredicateCondition(MachineOperand &Cond) {
   assert(Cond.isReg() && "Broken predicate condition!");
   Cond.setTargetFlags(Cond.getTargetFlags() ^ VInstrInfo::PredInvertFlag);
 }

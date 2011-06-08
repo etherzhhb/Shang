@@ -50,7 +50,7 @@ public:
                                 MachineBasicBlock *TBB, MachineBasicBlock *FBB,
                                 const SmallVectorImpl<MachineOperand> &Cond,
                                 DebugLoc DL) const;
-  void ReversePredicateCondition(MachineOperand &Cond) const;
+  static void ReversePredicateCondition(MachineOperand &Cond);
   virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
     const;
   virtual bool isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
