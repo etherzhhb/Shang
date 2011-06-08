@@ -87,8 +87,10 @@ struct MicroStateBuilder {
       case VFUs::BRam:
         Symbol = VFI.allocateSymbol(VFUBRam::getInDataBusName(A->getFUNum()));
         break;
+      case VFUs::CalleeFN:
+        break;
       default:
-        assert(0 && "Unexpected FU Type.");
+         assert(0 && "Unexpected FU Type.");
       }
     }
 

@@ -23,6 +23,7 @@ def FUSHIFT		: FUType<2, IIC_SHIFT>;
 def FUMult		: FUType<3, IIC_Mult>;
 def FUMemBus	: FUType<4, IIC_MemBus>;
 def FUBRam	  : FUType<5, IIC_BRam>;
+def FUCalleeFN: FUType<6, IIC_CalleeFN>;
 
 // Bit-width information operand.
 // Dirty Hack: This is not a Predicate Operand.

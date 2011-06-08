@@ -221,6 +221,9 @@ public:
     if (ResTy == VFUs::Trivial)
       return getTrivialLatency();
 
+    // DiryHack: Latency of CalleeFN is 1.
+    if (ResTy == VFUs::CalleeFN) return 1;
+
     return getFUDesc(ResTy)->getLatency();
   }
 

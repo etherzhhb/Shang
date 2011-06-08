@@ -444,15 +444,20 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
 
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
-  if (getTID().Opcode == VTM::VOpMemTrans)
+  switch(getTID().Opcode) {
+  case VTM::VOpMemTrans:
     return FuncUnitId(VFUs::MemoryBus, 0);
-
-  if (getTID().Opcode == VTM::VOpBRam) {
+  case VTM::VOpBRam: {
     unsigned Id = get().getOperand(5).getImm();
     return FuncUnitId(VFUs::BRam, Id);
   }
-
-  return FuncUnitId();
+  case VTM::VOpInternalCall: {
+    unsigned Id = get().getOperand(1).getImm();
+    return FuncUnitId(VFUs::CalleeFN, Id);
+  }
+  default:
+    return FuncUnitId();
+  }
 }
 
 

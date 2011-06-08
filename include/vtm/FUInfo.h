@@ -43,6 +43,9 @@ namespace VFUs {
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
     NumNonTrivialCommonFUs = LastCommonFUType - FirstNonTrivialFUType + 1,
     // Special function unit.
+    // RTL module corresponding to callee functions of function corresponding to
+    // current RTL module.
+    CalleeFN = 6,
     // Finite state machine finish.
     FSMFinish = 7,
     LastFUType = FSMFinish,

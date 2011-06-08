@@ -102,9 +102,13 @@ let hasCtrlDep = 1 in {
                              "ret $var at $ret_no;",
                              [], 0, 1>;
     let isCall = 1 in {
-      def VOpInternalCall : CtrlInst<(outs DR:$token), (ins variable_ops),
-                                     "call internal;", [],
-                                     1 /*Latency*/, 1 /*ReadAtEmit*/>;
+      def VOpInternalCall : FUInst<(outs DR:$token),
+                                   (ins i8imm:$CalleeNum, variable_ops),
+                                   "call internal;", [],
+                                   FUCalleeFN,
+                                   1/*ReadAtEmit*/,
+                                   0/*WriteUntilFinish*/,
+                                   0/*DATAPATH*/>;
     }
   }
   
