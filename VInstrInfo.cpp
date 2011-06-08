@@ -42,7 +42,7 @@ static const unsigned MoveOpcodes[] = {
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
-  unsigned Idx = MI->getNumExplicitOperands() - 1;
+  unsigned Idx = MI->getDesc().NumOperands - 1;
   assert(MI->getDesc().OpInfo[Idx].isPredicate() && "Cannot get PredOperand!");
   return &MI->getOperand(Idx);
 }
@@ -473,6 +473,27 @@ bool BitWidthAnnotator::hasBitWidthInfo() const {
 }
 
 void BitWidthAnnotator::changeToDefaultPred() {
+  MachineInstr *Parent = MO->getParent();
+  unsigned MOIdx = MO - &Parent->getOperand(0);
+  unsigned PredIdx = Parent->getDesc().NumOperands - 1;
+  if (MOIdx != PredIdx) {
+    MachineOperand PredMO = *MO;
+    Parent->RemoveOperand(MOIdx);
+
+    SmallVector<MachineOperand, 8> Ops;
+    while(--MOIdx != 0) {
+      Ops.push_back(Parent->getOperand(MOIdx));
+      Parent->RemoveOperand(MOIdx);
+    }
+
+    // Insert the predicate operand to the operand list.
+    Ops.insert(Ops.begin() + (Ops.size() - PredIdx) + 1, PredMO);
+
+    while (!Ops.empty())
+      Parent->addOperand(Ops.pop_back_val());
+    MO = &Parent->getOperand(PredIdx);
+  }
+
   MO->ChangeToRegister(0, false);
   MO->setTargetFlags(1);
 }

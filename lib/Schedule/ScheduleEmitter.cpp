@@ -300,21 +300,20 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   // Add the opcode metadata and the function unit id.
   MachineOperand OpCMD = ucOperand::CreateOpcode(Inst.getOpcode(),
                                                  A->getSlot(), A->getFUId());
-  unsigned NumOperands = Inst.getNumOperands();
 
   // Create the default predicate operand, which means always execute.
   MachineOperand Pred = ucOperand::CreatePredicate();
 
   // Handle the predicate operand.
-  if (Inst.getDesc().OpInfo[NumOperands-1].isPredicate()) {
-    --NumOperands;
-    MachineOperand &PredOp = Inst.getOperand(NumOperands);
-    assert(PredOp.isReg() && "Cannot handle predicate operand!");
-    Pred = PredOp;
+  if (MachineOperand *PredOp = VInstrInfo::getPredOperand(&Inst)) {
+    assert(PredOp->isReg() && "Cannot handle predicate operand!");
+    Pred = *PredOp;
 
-    Inst.RemoveOperand(NumOperands);
+    unsigned PredIdx = PredOp - &Inst.getOperand(0);
+    Inst.RemoveOperand(PredIdx);
   }
-  
+
+  unsigned NumOperands = Inst.getNumOperands();
   // FIXME: Use pointer operand.
   OperandVector Ops(NumOperands + 1 + IsCtrl, OpCMD);
   Ops[0] = OpCMD;
