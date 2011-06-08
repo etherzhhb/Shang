@@ -24,6 +24,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Debug.h"
 
 #include "VGenInstrInfo.inc"
 using namespace llvm;
@@ -339,16 +340,25 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
 
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
+
+  DEBUG(dbgs() << "Copying " << TargetRegisterInfo::virtReg2Index(SrcReg)
+               << " in\n";
+    ucState(*DI).dump();
+  );
+
   assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
   ucOp WriteOp = ucOp::getParent(DI);
   // We need to forward the wire copy if the source register is written
   // in the same slot, otherwise we will read a out of date value.
   if (WriteOp->getParent() == &*Ctrl) {
-    if (isCopyLike(WriteOp->getOpcode()))
-      Builder.addOperand(MachineOperand(WriteOp.getOperand(1)));
     // FIXME: Handle others case.
     assert(WriteOp.getPredicate().getReg() == 0
            && "Can not handle predicated ucop!");
+
+    if (isCopyLike(WriteOp->getOpcode())) {
+      MachineOperand ForwardedVal = WriteOp.getOperand(1);
+      Builder.addOperand(ForwardedVal);
+    }
   }
 
   ucOperand Src = MachineOperand::CreateReg(SrcReg, false);
