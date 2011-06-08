@@ -924,7 +924,9 @@ void RTLCodegen::emitVOpSel(ucOp &OpSel) {
   OS << "assign ";
   OpSel.getOperand(0).print(OS);
   OS << " = ";
-  OpSel.getOperand(1).print(OS);
+  if (OpSel.getOperand(1).isPredicateInverted())
+    OS << "~";
+  OpSel.getOperand(1).print(OS, 1);
   OS << " ? ";
   OpSel.getOperand(2).print(OS);
   OS << " : ";
