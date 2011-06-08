@@ -120,6 +120,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   }
 
   Cond.push_back(*getPredOperand(FstTerm));
+  Cond.back().setIsKill(false);
   TBB = FstTerm->getOperand(0).getMBB();
   /// 3. If this block ends with a conditional branch and it falls through to a
   ///    successor block, it sets TBB to be the branch destination block and a
@@ -187,6 +188,7 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   bool isUnconditional = Cond.empty();
   MachineOperand PredOp = isUnconditional ?
                           ucOperand::CreatePredicate() : Cond[0];
+  PredOp.setIsKill(false);
 
   if (FBB == 0) {
     // Insert barrier branch for unconditional branch.
