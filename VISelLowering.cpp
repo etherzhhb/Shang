@@ -412,6 +412,10 @@ SDValue VTargetLowering::getNNotEQVFlag(SelectionDAG &DAG, SDValue SetCC) {
   return DAG.getNode(ISD::XOR, dl, MVT::i1, N, V);
 }
 
+// Lower add to full adder operation.
+// Operands: lhs, rhs, carry-in
+// Results: sum, carry-out
+// Overflow = [16]^[15];
 SDValue VTargetLowering::getVFlag(SelectionDAG &DAG, SDValue SetCC) {
   DebugLoc dl = SetCC.getDebugLoc();
   SDValue LHS = SetCC->getOperand(0), RHS = SetCC->getOperand(1);
@@ -441,9 +445,13 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   // Z==1
   case ISD::SETEQ:  return getZFlag(DAG, Op, true);
   // (Z==0) && (N==V)
-  case ISD::SETGT:  return DAG.getNode(ISD::AND, dl, MVT::i1,
-                                       getNZFlag(DAG, Op),
-                                       getNotFlag(DAG, Op, getNNotEQVFlag));
+  case ISD::SETGT:  {
+    // Create N==V flag, this may create a subtraction.
+    SDValue NEQVFlag = getNotFlag(DAG, Op, getNNotEQVFlag);
+    // Create Z == 0, we can reuse the previously created subtraction.
+    SDValue NZFlag = getNZFlag(DAG, Op);
+    return DAG.getNode(ISD::AND, dl, MVT::i1, NZFlag, NEQVFlag);
+  }
   // N==V
   case ISD::SETGE:  return getNotFlag(DAG, Op, getNNotEQVFlag);
   // N!=V
@@ -454,17 +462,25 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
                                        getNNotEQVFlag(DAG, Op));
 
   // (C==1) && (Z==0)
-  case ISD::SETUGT: return DAG.getNode(ISD::AND, dl, MVT::i1,
-                                       getCFlag(DAG, Op),
-                                       getNZFlag(DAG, Op));
+  case ISD::SETUGT: {
+    // Create C==1 flag, this may create a subtraction.
+    SDValue CFlag = getCFlag(DAG, Op);
+    // Create Z == 0, we can reuse the previously created subtraction.
+    SDValue NZFlag = getNZFlag(DAG, Op);
+    return DAG.getNode(ISD::AND, dl, MVT::i1, CFlag, NZFlag);
+  }
   // 	C==1
   case ISD::SETUGE: return getCFlag(DAG, Op);
   // 	C==0
   case ISD::SETULT: return getNotFlag(DAG, Op, getCFlag);
   // (C==0) || (Z==1)
-  case ISD::SETULE: return DAG.getNode(ISD::OR, dl, MVT::i1,
-                                       getNotFlag(DAG, Op, getCFlag),
-                                       getZFlag(DAG, Op));
+  case ISD::SETULE: {
+    // Create C==0 flag, this may create a subtraction.
+    SDValue NCFlag = getNotFlag(DAG, Op, getCFlag);
+    // Create Z == 1, we can reuse the previously created subtraction.
+    SDValue ZFlag = getZFlag(DAG, Op);
+    return DAG.getNode(ISD::OR, dl, MVT::i1, NCFlag, ZFlag);
+  }
   default:
     assert(0 && "Bad condition code!");
     return SDValue();
