@@ -78,6 +78,137 @@ class RTLCodegen : public MachineFunctionPass {
   void emitFunctionSignature(int FNNum);
   void emitCommonPort(int FNNum);
 
+  struct MuxBuilder {
+    std::string MuxLogic;
+    vlang_raw_ostream MuxLogicS;
+    std::string MuxWiresDecl;
+    vlang_raw_ostream MuxWiresDeclS;
+
+    MuxBuilder()
+      : MuxLogic("//Mux\n"),
+        MuxLogicS(*new raw_string_ostream(MuxLogic), true, 2),
+        MuxWiresDecl("// Mux\n"),
+        MuxWiresDeclS(*new raw_string_ostream(MuxWiresDecl), true, 2) {
+      MuxLogicS << "always @(*)";
+      MuxLogicS.enter_block(" // begin mux logic\n");
+      MuxLogicS.switch_begin("1'b1");
+    }
+
+    void addOutput(const std::string &OutputName, unsigned Bitwidth) {
+      MuxWiresDeclS << "reg ";
+      if (Bitwidth > 1) MuxWiresDeclS << verilogBitRange(Bitwidth, 0, false);
+      MuxWiresDeclS  << OutputName << "_mux_wire;\n";
+      MuxWiresDeclS << "assign " << OutputName << " = " << OutputName
+                    << "_mux_wire;\n";
+    }
+
+    void assignValueInCase(const std::string &Dst, const std::string &Src) {
+      MuxLogicS << Dst << "_mux_wire = " << Src << ";\n";
+    }
+
+    void writeToStream(raw_ostream &S) {
+      MuxWiresDeclS.flush();
+      S << MuxWiresDecl << "\n";
+
+      MuxLogicS.exit_block();
+      MuxLogicS.switch_end();
+      MuxLogicS.exit_block(" // end mux logic\n\n\n\n");
+      MuxLogicS.flush();
+      S << MuxLogic;
+    }
+  };
+
+  struct MemBusBuilder {
+    VASTModule *VM;
+    VFUMemBus *Bus;
+    unsigned BusNum;
+    std::string EnableLogic;
+    vlang_raw_ostream EnableLogicS;
+    MuxBuilder BusMux;
+
+    void createOutputPort(const std::string &PortName, unsigned BitWidth,
+                          bool isEn = false) {
+      // We need to create multiplexer to allow current module and its submodules
+      // share the bus.
+      std::string PortReg = PortName + "_r";
+      VM->addRegister(PortReg, BitWidth);
+      VM->addOutputPort(PortName, BitWidth, VASTModule::Others, false);
+      if (isEn) {
+        EnableLogicS << "assign " << PortName << " = " << PortReg;
+        BusMux.MuxLogicS.match_case(PortReg);
+      } else {
+        BusMux.addOutput(PortName, BitWidth);
+        BusMux.assignValueInCase(PortName, PortReg);
+      }
+    }
+
+    std::string addSubModulePort(std::string &PortName, unsigned BitWidth,
+                                 std::string &SubModuleName, bool isOut = true,
+                                 bool isEn = false){
+      std::string ConnectedWire = PortName;
+      if (isOut) { // Create extra wire for bus mux.
+        ConnectedWire = SubModuleName + "_" + ConnectedWire;
+        VM->addWire(ConnectedWire, BitWidth);
+        if (isEn) {
+          EnableLogicS << " | " << ConnectedWire ;
+          BusMux.MuxLogicS.exit_block();
+          BusMux.MuxLogicS.match_case(ConnectedWire);
+        } else
+          BusMux.assignValueInCase(PortName, ConnectedWire);
+      }
+
+      return "." + PortName + "(" +  ConnectedWire + "),\n\t";
+    }
+
+    void addSubModule(std::string &SubModuleName, raw_ostream &S) {
+      S << addSubModulePort(VFUMemBus::getEnableName(BusNum), 1, SubModuleName,
+                            true, true);
+      S << addSubModulePort(VFUMemBus::getWriteEnableName(BusNum), 1,
+                            SubModuleName);
+      S << addSubModulePort(VFUMemBus::getAddrBusName(BusNum),
+                            Bus->getAddrWidth(), SubModuleName);
+      S << addSubModulePort(VFUMemBus::getInDataBusName(BusNum),
+                            Bus->getDataWidth(), SubModuleName, false);
+      S << addSubModulePort(VFUMemBus::getOutDataBusName(BusNum),
+                            Bus->getDataWidth(), SubModuleName);
+      S << addSubModulePort(VFUMemBus::getByteEnableName(BusNum),
+                            Bus->getDataWidth()/8, SubModuleName);
+      S << addSubModulePort(VFUMemBus::getReadyName(BusNum), 1, SubModuleName,
+                            false);
+    }
+
+    MemBusBuilder(VASTModule *M, unsigned N)
+      : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N),
+      EnableLogic("  // Membus enables\n"),
+      EnableLogicS(*new raw_string_ostream(EnableLogic), true, 2) {
+      // Build the ports for current module.
+      FuncUnitId ID(VFUs::MemoryBus, BusNum);
+      // We need to create multiplexer to allow current module and its submodules
+      // share the memory bus.
+
+      VM->setFUPortBegin(ID);
+      // Control ports.
+      createOutputPort(VFUMemBus::getEnableName(BusNum), 1, true);
+      createOutputPort(VFUMemBus::getWriteEnableName(BusNum), 1);
+
+      // Address port.
+      createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth());
+      // Data ports.
+      VM->addInputPort(VFUMemBus::getInDataBusName(BusNum), Bus->getDataWidth());
+      createOutputPort(VFUMemBus::getOutDataBusName(BusNum), Bus->getDataWidth());
+      // Byte enable.
+      createOutputPort(VFUMemBus::getByteEnableName(BusNum), Bus->getDataWidth() / 8);
+      // Bus ready.
+      VM->addInputPort(VFUMemBus::getReadyName(BusNum), 1);
+    }
+
+    void writeToStream(raw_ostream &S) {
+      EnableLogicS.flush();
+      S << EnableLogic << ";\n";
+      BusMux.writeToStream(S);
+    }
+  };
+
   /// emitAllocatedFUs - Set up a vector for allocated resources, and
   /// emit the ports and register, wire and datapath for them.
   void emitAllocatedFUs();
@@ -358,11 +489,9 @@ void RTLCodegen::emitFunctionSignature(int FNNum) {
   raw_ostream &S = VM->getDataPathBuffer();
 
   const Function *F;
-  if (FNNum != -1) {
+  if (FNNum != -1)
     F = FInfo->getCalleeFN(FNNum);
-    S << getSynSetting(F->getName())->getModName()
-      << " " << F->getName() << "_inst(\n\t";
-  } else
+  else
     F = MF->getFunction();
 
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
@@ -393,9 +522,7 @@ void RTLCodegen::emitFunctionSignature(int FNNum) {
     }
   }
 
-  if (FNNum != -1) S.flush();
   emitCommonPort(FNNum);
-  if (FNNum != -1) S << ");\n";
 }
 
 void RTLCodegen::emitIdleState() {
@@ -468,6 +595,14 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   CtrlS.exit_block();
 }
 
+static raw_ostream &ConnectPort(raw_ostream &OS, const std::string &PortName,
+                                bool LastPort = false,
+                                const std::string &SignalPrefix = "") {
+  OS << "." << PortName << '(' << SignalPrefix << PortName << ')';
+  if (!LastPort) OS << ",\n\t";
+  return OS;
+}
+
 void RTLCodegen::emitCommonPort(int FNNum) {
   if (FNNum == -1) { // If F is current function.
     VM->addInputPort("clk", 1, VASTModule::Clk);
@@ -483,9 +618,7 @@ void RTLCodegen::emitCommonPort(int FNNum) {
     raw_ostream &S = VM->getDataPathBuffer();
     S << ".clk(clk),\n\t.rstN(rstN),\n\t";
     S << ".start(" << StartPortName << "),\n\t";
-    S << ".fin(" <<FinPortName << ")"; // The last port do not need ","
-    // TODO: memory bus.
-    S.flush();
+    S << ".fin(" <<FinPortName << ")";
   }
 }
 
@@ -493,35 +626,15 @@ void RTLCodegen::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VFInfo::const_id_iterator id_iterator;
 
-  VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
+  VFUMemBus *Bus = getFUDesc<VFUMemBus>();
 
-  for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
-    // FIXME: In fact, *I return the FUId instead of FUNum. 
-    FuncUnitId ID = *I;
-    unsigned FUNum = ID.getFUNum();
+  //for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
+  //     E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+  // FIXME: In fact, *I return the FUId instead of FUNum.
+  // DIRTYHACK: Every module use memory bus 0, connect the bus.
+  MemBusBuilder MBBuilder(VM, 0);
 
-    VM->setFUPortBegin(ID);
-    // Control ports.
-    VM->addOutputPort(VFUMemBus::getEnableName(FUNum), 1);
-    VM->addOutputPort(VFUMemBus::getWriteEnableName(FUNum), 1);
-
-    // Address port.
-    VM->addOutputPort(VFUMemBus::getAddrBusName(FUNum),
-                      MemBus->getAddrWidth());
-
-    // Data ports.
-    VM->addInputPort(VFUMemBus::getInDataBusName(FUNum),
-                     MemBus->getDataWidth());
-    VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
-                      MemBus->getDataWidth());
-    // Byte enable.
-    VM->addOutputPort(VFUMemBus::getByteEnableName(FUNum),
-                      MemBus->getDataWidth() / 8);
-
-    // Bus ready.
-    VM->addInputPort(VFUMemBus::getReadyName(FUNum), 1);
-  }
+  //}
  
   raw_ostream &S = VM->getDataPathBuffer();
   VFUBRam *BlockRam = getFUDesc<VFUBRam>();
@@ -540,8 +653,17 @@ void RTLCodegen::emitAllocatedFUs() {
   for (id_iterator I = FInfo->id_begin(VFUs::CalleeFN),
        E = FInfo->id_end(VFUs::CalleeFN); I != E; ++I) {
     FuncUnitId ID = *I;
+    const Function *Callee = FInfo->getCalleeFN(ID.getFUNum());
+    S << getSynSetting(Callee->getName())->getModName() << ' '
+      << getSubModulePortName(ID.getFUNum(), "_inst")
+      << "(\n\t";
+    MBBuilder.addSubModule(getSubModulePortName(ID.getFUNum(), "_inst"), S);
     emitFunctionSignature(ID.getFUNum());
+    S << ");\n";
   }
+
+  // Write the memory bus mux.
+  MBBuilder.writeToStream(S);
 }
 
 void RTLCodegen::emitAllSignals() {
@@ -664,6 +786,10 @@ void RTLCodegen::emitWaitFUReadyForState(MachineBasicBlock *CurBB,
   }
 }
 
+static std::string GetMemBusEnableName(unsigned FUNum) {
+  return VFUMemBus::getEnableName(FUNum) + "_r";
+}
+
 void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
                                     MachineBasicBlock *CurBB) {
   unsigned startSlot = 0, endSlot = 0;
@@ -674,7 +800,7 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   }
 
   emitFUEnableForState<VFUs::MemoryBus>(CtrlS, CurBB, startSlot, endSlot,
-                                        VFUMemBus::getEnableName);
+                                        GetMemBusEnableName);
   emitFUEnableForState<VFUs::BRam>(CtrlS, CurBB, startSlot, endSlot,
                                    VFUBRam::getEnableName);
   emitFUEnableForState<VFUs::CalleeFN>(CtrlS, CurBB, startSlot, endSlot,
@@ -849,19 +975,19 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
-  OS << VFUMemBus::getAddrBusName(FUNum) << " <= ";
+  OS << VFUMemBus::getAddrBusName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(1).print(OS);
   OS << ";\n";
   // Assign store data.
-  OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
+  OS << VFUMemBus::getOutDataBusName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(2).print(OS);
   OS << ";\n";
   // And write enable.
-  OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ";
+  OS << VFUMemBus::getWriteEnableName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(3).print(OS);
   OS << ";\n";
   // The byte enable.
-  OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
+  OS << VFUMemBus::getByteEnableName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(4).print(OS);
   OS << ";\n";
 }
