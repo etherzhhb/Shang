@@ -208,6 +208,7 @@ void ucOperand::print(raw_ostream &OS,
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
     } else { // Compute the offset of physics register.
       Offset = (Reg & 0x7) * 8;
+      Reg = (Reg & ~0x7);
     }
 
     if (isWire()) {
@@ -224,7 +225,7 @@ void ucOperand::print(raw_ostream &OS,
         OS << "use_";
         if (isKill()) OS << "kill_";
       }
-      OS << "reg" << Reg <<"*/ reg" << (Reg & ~0x7);
+      OS << "reg" << Reg <<"*/ reg" << Reg;
       // Select the sub register
       OS << verilogBitRange(UB + Offset, LB + Offset, true);
     }
