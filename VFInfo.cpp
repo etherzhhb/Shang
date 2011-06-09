@@ -99,3 +99,10 @@ unsigned VFInfo::getOverlaps(unsigned R, unsigned Overlaps[5]) const {
 
   return Idx;
 }
+
+VFInfo::VFInfo(MachineFunction &MF) : TotalRegs(fistPhyReg),
+  Info(getSynSetting(MF.getFunction()->getName())),
+  Mod(Info->getModName()), BitWidthAnnotated(true) {
+  // DirtyHack: Every Module use Memory bus 0.
+  rememberAllocatedFU(FuncUnitId(VFUs::MemoryBus, 0), 0, 0);
+}

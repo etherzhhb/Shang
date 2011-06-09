@@ -105,11 +105,7 @@ private:
   // If bit width information annotated to the annotator?
   bool BitWidthAnnotated;
 public:
-  explicit VFInfo(MachineFunction &MF)
-    : TotalRegs(fistPhyReg),
-      Info(getSynSetting(MF.getFunction()->getName())),
-      Mod(Info->getModName()), BitWidthAnnotated(true)
-  {}
+  explicit VFInfo(MachineFunction &MF);
 
   bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
   void removeBitWidthAnnotators() {
