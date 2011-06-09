@@ -468,7 +468,6 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
       assert(TargetRegisterInfo::isVirtualRegister(Reg)
              && "Unexpected physics register!");
 
-
       MachineInstr *DepSrc = MRI->getVRegDef(Reg);
       /// Only add the dependence if DepSrc is in the same MBB with MI.
       if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))

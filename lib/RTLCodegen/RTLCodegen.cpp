@@ -141,7 +141,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpSRA(ucOp &OpSRA);
 
-  void emitVOpSel(ucOp &OpSel);
+  void emitOpSel(ucOp &OpSel);
 
   void emitOpAdd(ucOp &OpAdd);
   void emitOpMult(ucOp &OpMult);
@@ -155,8 +155,6 @@ class RTLCodegen : public MachineFunctionPass {
   // Return true if the control operation contains a return operation.
   bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
                   MachineBasicBlock *SrcBB = 0);
-
-  void emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB);
 
   void emitOpInternalCall(ucOp &OpInternalCall);
   void emitOpReadReturn(ucOp &OpReadSymbol);
@@ -585,16 +583,6 @@ void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
         CtrlS << " | " << getucStateEnable(CurBB, i - 1);
     }
 
-    // Resource control operation when we are transferring fsm state.
-    for (PredMapTy::const_iterator NI = NextStatePred.begin(),
-      NE = NextStatePred.end(); NI != NE; ++NI) {
-        MachineBasicBlock *NextBB = NI->first;
-        unsigned FirstSlot = FInfo->getStartSlotFor(NextBB);
-        if (FInfo->isFUActiveAt(Id, FirstSlot))
-          CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
-          << " & " << NI->second << ") ";
-    }
-
     CtrlS << ";\n";
   }
 }
@@ -729,22 +717,6 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
   }
 }
 
-void RTLCodegen::emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB) {
-  assert(SrcBB && "Cannot emit PHI without SrcBB!");
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  OpPHI.getOperand(0).print(OS);
-  OS << " <= ";
-  // Find the source value from match MBB.
-  for (unsigned i = 1, e = OpPHI.getNumOperands(); i != e; i +=2)
-    if (OpPHI.getOperand(i + 1).getMBB() == SrcBB) {
-      OpPHI.getOperand(i).print(OS);
-      OS << ";\n";
-      return;
-    }
-
-  llvm_unreachable("No matching MBB found!");
-}
-
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "// IMPLICIT_DEF ";
@@ -772,9 +744,17 @@ void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
 void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
-  OS << "// Calling function: "
-     << OpInternalCall.getOperand(1).getGlobal()->getName()
-     << ";\n";
+  unsigned FNNum = OpInternalCall.getOperand(1).getImm();
+  const Function *FN = FInfo->getCalleeFN(FNNum);
+  StringRef CalleeName = FN->getName();
+  OS << "// Calling function: " << CalleeName << ";\n";
+  Function::const_arg_iterator ArgIt = FN->arg_begin();
+  for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
+    OS << CalleeName << '_' << ArgIt->getName() << " <= ";
+    OpInternalCall.getOperand(2 + i).print(OS);
+    OS << ";\n";
+    ++ArgIt;
+  }
 }
 
 void RTLCodegen::emitOpRet(ucOp &OpArg) {
@@ -857,7 +837,7 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
     case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
-    case VTM::VOpSel:       emitVOpSel(Op);         break;
+    case VTM::VOpSel:       emitOpSel(Op);         break;
 
     case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
     case VTM::VOpSRL:       emitBinaryOp(Op, ">>"); break;
@@ -918,7 +898,7 @@ void RTLCodegen::emitOpSRA(ucOp &OpSRA) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitVOpSel(ucOp &OpSel) {
+void RTLCodegen::emitOpSel(ucOp &OpSel) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   OpSel.getOperand(0).print(OS);

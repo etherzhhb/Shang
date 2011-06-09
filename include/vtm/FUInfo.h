@@ -87,6 +87,7 @@ public:
   inline VFUs::FUTypes getFUType() const { return UID.ID.Type; }
   inline unsigned getFUNum() const { return UID.ID.Num; }
   inline unsigned getData() const { return UID.data; }
+  inline bool isUnknownInstance() const { return getFUNum() == 0xfff; }
 
   inline bool isTrivial() const { return getFUType() == VFUs::Trivial; }
   inline bool isBound() const {
