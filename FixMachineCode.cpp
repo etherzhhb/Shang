@@ -111,9 +111,15 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     if (!MissedSuccs.empty()) {
       assert(MissedSuccs.size() == 1 && "Fall through to multiple blocks?");
       ++UnconditionalBranches;
-
+      MachineOperand Predicate = ucOperand::CreatePredicate();
+      if (FirstTerminator) {
+        MachineOperand *TrueCnd = VInstrInfo::getPredOperand(FirstTerminator);
+        assert(TrueCnd->getReg() != 0 && "Two unconditional branch?");
+        Predicate = *TrueCnd;
+        VInstrInfo::ReversePredicateCondition(Predicate);
+      }
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
-        .addMBB(*MissedSuccs.begin()).addOperand(ucOperand::CreatePredicate());
+        .addMBB(*MissedSuccs.begin()).addOperand(Predicate);
     }
 
     if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
