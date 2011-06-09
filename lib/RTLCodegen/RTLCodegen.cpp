@@ -49,7 +49,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
-
+#define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -395,9 +395,11 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
-  Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
-  printVMF(Out, F);
-  Out << "`endif\n";
+  DEBUG(
+    Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
+    printVMF(Out, F);
+    Out << "`endif\n";
+  );
 
   SignedWireNum = 0;
   // Reset the current fsm state number.
