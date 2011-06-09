@@ -98,7 +98,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   if (MBB.getFirstTerminator() == MBB.end()) return false;
 
   SmallVector<MachineInstr*, 4> Terms;
-  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
+  for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(), E = MBB.end();
        I != E; ++I) {
     MachineInstr *Inst = I;
     if (!Inst->getDesc().isTerminator()) continue;
@@ -149,7 +149,7 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
 
   // Collect the branches and remove them.
   SmallVector<MachineInstr*, 4> Terms;
-  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
+  for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(), E = MBB.end();
     I != E; ++I) {
       MachineInstr *Inst = I;
       if (!Inst->getDesc().isTerminator()) continue;
