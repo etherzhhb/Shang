@@ -75,8 +75,8 @@ class RTLCodegen : public MachineFunctionPass {
     ReadyPred += " & (" + Pred + ")";
   }
 
-  void emitFunctionSignature();
-  void emitCommonPort();
+  void emitFunctionSignature(int FNNum);
+  void emitCommonPort(int FNNum);
 
   /// emitAllocatedFUs - Set up a vector for allocated resources, and
   /// emit the ports and register, wire and datapath for them.
@@ -164,16 +164,41 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpMemTrans(ucOp &OpMemAccess);
   void emitOpBRam(ucOp &OpBRam);
 
+  std::string getSubModulePortName(unsigned FNNum,
+                                   const std::string PortName) const {
+    const Function *F = FInfo->getCalleeFN(FNNum);
+    return F->getNameStr() + "_" + PortName;
+  }
+
+  struct GetCalleeFNEnableNameFtor {
+    RTLCodegen *CG;
+    GetCalleeFNEnableNameFtor(RTLCodegen *cg) : CG(cg) {}
+    std::string operator() (unsigned FNNum) const {
+      return CG->getSubModulePortName(FNNum, "start");
+    }
+  };
+
+  struct GetCalleeFNReadyNameFtor {
+    RTLCodegen *CG;
+    GetCalleeFNReadyNameFtor(RTLCodegen *cg) : CG(cg) {}
+    std::string operator() (unsigned FNNum) const {
+      return CG->getSubModulePortName(FNNum, "fin");
+    }
+  };
+
   // Return the FSM ready predicate.
   // The FSM only move to next micro-state if the predicate become true.
-  void emitFUCtrlForState(vlang_raw_ostream &CtrlS,
-                          MachineBasicBlock *CurBB,
-                          const PredMapTy &NextStatePred);
-  template<class FUTy>
-  void emitFUEnableForState(vlang_raw_ostream &CtrlS,
+  void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB);
+
+  template<enum VFUs::FUTypes T, typename GetReadyNameFunc>
+  void emitWaitFUReadyForState(MachineBasicBlock *CurBB, unsigned Latency,
+                               unsigned startSlot, unsigned endSlot,
+                               GetReadyNameFunc GetReadyName);
+
+  template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
+  void emitFUEnableForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
                             unsigned startSlot, unsigned endSlot,
-                            MachineBasicBlock *CurBB,
-                            const PredMapTy &NextStatePred );
+                            GetEnableNameFunc GetEnableName);
 
 public:
   /// @name FunctionPass interface
@@ -252,7 +277,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
   VM = FInfo->getRtlMod();
-  emitFunctionSignature();
+  emitFunctionSignature(-1);
 
   // Emit control register and idle state
   unsigned totalFSMStates = MF->size() + 1;
@@ -261,7 +286,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   VM->addRegister("NextFSMState", TotalFSMStatesBit);
 
   emitIdleState();
-
   
   emitAllSignals();
   emitAllocatedFUs();
@@ -306,10 +330,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out << "default:  NextFSMState <= state_idle;\n";
   Out.switch_end();
   Out.else_begin("// else disable all resources\n");
-  for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I)
-    Out << VFUMemBus::getEnableName(I->getFUNum()) << " <= 1'b0;\n";
-
+  emitFUCtrlForState(Out, 0);
   Out.exit_block("// end control block\n");
   Out.always_ff_end();
   Out.module_end();
@@ -332,9 +353,17 @@ void RTLCodegen::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void RTLCodegen::emitFunctionSignature() {
-  const Function *F = MF->getFunction();
+void RTLCodegen::emitFunctionSignature(int FNNum) {
   const TargetData *TD = MF->getTarget().getTargetData();
+  raw_ostream &S = VM->getDataPathBuffer();
+
+  const Function *F;
+  if (FNNum != -1) {
+    F = FInfo->getCalleeFN(FNNum);
+    S << getSynSetting(F->getName())->getModName()
+      << " " << F->getName() << "_inst(\n\t";
+  } else
+    F = MF->getFunction();
 
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
       I != E; ++I) {
@@ -342,17 +371,31 @@ void RTLCodegen::emitFunctionSignature() {
     std::string Name = Arg->getNameStr();
     unsigned BitWidth = TD->getTypeSizeInBits(Arg->getType());
     // Add port declaration.
-    VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
+    if (FNNum == -1)
+      VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
+    else {
+      std::string RegName = getSubModulePortName(FNNum, Name);
+      VM->addRegister(RegName, BitWidth);
+      S << "." << Name << '(' << RegName << "),\n\t";
+    }
   }
 
   const Type *RetTy = F->getReturnType();
   if (!RetTy->isVoidTy()) {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    VM->addOutputPort("return_value", TD->getTypeSizeInBits(RetTy),
-                      VASTModule::RetPort);
+    unsigned BitWidth = TD->getTypeSizeInBits(RetTy);
+    if (FNNum == -1)
+      VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
+    else {
+      std::string WireName = getSubModulePortName(FNNum, "return_value");
+      VM->addWire(WireName, BitWidth);
+      S << ".return_value(" << WireName << "),\n\t";
+    }
   }
 
-  emitCommonPort();
+  if (FNNum != -1) S.flush();
+  emitCommonPort(FNNum);
+  if (FNNum != -1) S << ");\n";
 }
 
 void RTLCodegen::emitIdleState() {
@@ -371,10 +414,7 @@ void RTLCodegen::emitIdleState() {
   CtrlS << "NextFSMState <= state_idle;\n";
   // End if-else
   CtrlS.exit_block();
-  // Emit function unit control.
-  PredMapTy IdleNextStatePred;
-  IdleNextStatePred.insert(std::make_pair(EntryBB, "start"));
-  emitFUCtrlForState(CtrlS, 0, IdleNextStatePred);
+  emitFUCtrlForState(CtrlS, 0);
   // End case.
   CtrlS.exit_block();
 }
@@ -422,17 +462,31 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   else
     emitNextMicroState(CtrlS, &MBB, "1'b0");
 
-  emitFUCtrlForState(CtrlS, &MBB, NextStatePred);
+  emitFUCtrlForState(CtrlS, &MBB);
 
   // Case end
   CtrlS.exit_block();
 }
 
-void RTLCodegen::emitCommonPort() {
-  VM->addInputPort("clk", 1, VASTModule::Clk);
-  VM->addInputPort("rstN", 1, VASTModule::RST);
-  VM->addInputPort("start", 1, VASTModule::Start);
-  VM->addOutputPort("fin", 1, VASTModule::Finish);
+void RTLCodegen::emitCommonPort(int FNNum) {
+  if (FNNum == -1) { // If F is current function.
+    VM->addInputPort("clk", 1, VASTModule::Clk);
+    VM->addInputPort("rstN", 1, VASTModule::RST);
+    VM->addInputPort("start", 1, VASTModule::Start);
+    VM->addOutputPort("fin", 1, VASTModule::Finish);
+  } else { // It is a callee function, emit the signal for the sub module.
+    std::string StartPortName = getSubModulePortName(FNNum, "start");
+    std::string FinPortName = getSubModulePortName(FNNum, "fin");
+    VM->addRegister(StartPortName, 1);
+    VM->addWire(FinPortName, 1);
+    // Connect to the ports
+    raw_ostream &S = VM->getDataPathBuffer();
+    S << ".clk(clk),\n\t.rstN(rstN),\n\t";
+    S << ".start(" << StartPortName << "),\n\t";
+    S << ".fin(" <<FinPortName << ")"; // The last port do not need ","
+    // TODO: memory bus.
+    S.flush();
+  }
 }
 
 void RTLCodegen::emitAllocatedFUs() {
@@ -483,6 +537,11 @@ void RTLCodegen::emitAllocatedFUs() {
       << '\n';
   }
 
+  for (id_iterator I = FInfo->id_begin(VFUs::CalleeFN),
+       E = FInfo->id_end(VFUs::CalleeFN); I != E; ++I) {
+    FuncUnitId ID = *I;
+    emitFunctionSignature(ID.getFUNum());
+  }
 }
 
 void RTLCodegen::emitAllSignals() {
@@ -563,20 +622,17 @@ void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
-template<class FUTy>
+template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
 void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
-                                      unsigned startSlot, unsigned endSlot,
                                       MachineBasicBlock *CurBB,
-                                      const PredMapTy &NextStatePred) {
-  VFUs::FUTypes Ty = FUTy::getType();
-
+                                      unsigned startSlot, unsigned endSlot,
+                                      GetEnableNameFunc GetEnableName) {
   // Emit function unit control.
-  // Membus control operation.
   for (VFInfo::const_id_iterator I = FInfo->id_begin(Ty), E = FInfo->id_end(Ty);
        I != E; ++I) {
     FuncUnitId Id = *I;
     CtrlS << "// " << Id << " control for next micro state.\n";
-    CtrlS << FUTy::getEnableName(Id.getFUNum()) << " <= 1'b0";
+    CtrlS << GetEnableName(Id.getFUNum()) << " <= 1'b0";
     // Resource control operation when in the current state.
     for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
       if (FInfo->isFUActiveAt(Id, i))
@@ -587,9 +643,29 @@ void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
   }
 }
 
+template<enum VFUs::FUTypes T, typename GetReadyNameFunc>
+void RTLCodegen::emitWaitFUReadyForState(MachineBasicBlock *CurBB,
+                                         unsigned Latency,
+                                         unsigned startSlot, unsigned endSlot,
+                                         GetReadyNameFunc GetReadyName) {
+  for (VFInfo::const_id_iterator I = FInfo->id_begin(T), E = FInfo->id_end(T);
+       I != E; ++I) {
+     FuncUnitId Id = *I;
+    // Build the ready predicate for waiting membus ready.
+    // We expect all operation will finish before the FSM jump to another state,
+    // so we do not need to worry about if we need to wait the memory operation
+    // issued from the previous state.
+    for (unsigned i = startSlot + Latency, e = endSlot + 1; i != e; ++i)
+      if (FInfo->isFUActiveAt(Id, i - Latency)) {
+        std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
+          + "|" + GetReadyName(Id.getFUNum());
+        addReadyPred(Pred);
+      }
+  }
+}
+
 void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
-                                    MachineBasicBlock *CurBB,
-                                    const PredMapTy &NextStatePred) {
+                                    MachineBasicBlock *CurBB) {
   unsigned startSlot = 0, endSlot = 0;
   // Get the slot information for no-idle state.
   if (CurBB) {
@@ -597,26 +673,21 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
     endSlot = FInfo->getEndSlotFor(CurBB);
   }
 
-  emitFUEnableForState<VFUMemBus>(CtrlS, startSlot, endSlot,
-                                  CurBB, NextStatePred);
-  emitFUEnableForState<VFUBRam>(CtrlS, startSlot, endSlot,
-                                CurBB, NextStatePred);
+  emitFUEnableForState<VFUs::MemoryBus>(CtrlS, CurBB, startSlot, endSlot,
+                                        VFUMemBus::getEnableName);
+  emitFUEnableForState<VFUs::BRam>(CtrlS, CurBB, startSlot, endSlot,
+                                   VFUBRam::getEnableName);
+  emitFUEnableForState<VFUs::CalleeFN>(CtrlS, CurBB, startSlot, endSlot,
+                                       GetCalleeFNEnableNameFtor(this));
 
   unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
-  for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
-    FuncUnitId Id = *I;
-    // Build the ready predicate for waiting membus ready.
-    // We expect all operation will finish before the FSM jump to another state,
-    // so we do not need to worry about if we need to wait the memory operation
-    // issued from the previous state.
-    for (unsigned i = startSlot + MemBusLatency, e = endSlot + 1; i != e; ++i)
-      if (FInfo->isFUActiveAt(Id, i - MemBusLatency)) {
-        std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
-                            + "|" + VFUMemBus::getReadyName(Id.getFUNum());
-        addReadyPred(Pred);
-      }
-  }
+  emitWaitFUReadyForState<VFUs::MemoryBus>(CurBB, MemBusLatency,
+                                           startSlot, endSlot,
+                                           VFUMemBus::getReadyName);
+
+  // DirtyHack: Set the callee function latency to 1.
+  emitWaitFUReadyForState<VFUs::CalleeFN>(CurBB, 1, startSlot, endSlot,
+                                          GetCalleeFNReadyNameFtor(this));
 
   // Control the finish port
   CtrlS << "// Finish port control\n";
@@ -736,8 +807,9 @@ void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
   OpReadSymbol.getOperand(0).print(OS);
-  OS << " <= " << OpReadSymbol.getOperand(2).getGlobal()->getName() << '_';
-  OpReadSymbol.getOperand(1).print(OS);
+  OS << " <= "
+     << getSubModulePortName(OpReadSymbol.getOperand(2).getImm(),
+                             OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
 }
 
@@ -750,7 +822,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   OS << "// Calling function: " << CalleeName << ";\n";
   Function::const_arg_iterator ArgIt = FN->arg_begin();
   for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
-    OS << CalleeName << '_' << ArgIt->getName() << " <= ";
+    OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
     OpInternalCall.getOperand(2 + i).print(OS);
     OS << ";\n";
     ++ArgIt;

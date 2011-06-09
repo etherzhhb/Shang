@@ -252,11 +252,11 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
   assert(OutVals.size() == CalleeFN->arg_size()
          && "Argument size do not match!");
-  SDValue CalleeValue = DAG.getTargetGlobalAddress(CalleeFN, dl, MVT::Other);
   // Get the Id for the internal module.
   unsigned Id
     = DAG.getMachineFunction().getInfo<VFInfo>()->getOrCreateCalleeFN(CalleeFN);
-  Ops.push_back(DAG.getTargetConstant(Id, MVT::i32));
+  SDValue CalleeFUId = DAG.getTargetConstant(Id, MVT::i32);
+  Ops.push_back(CalleeFUId);
 
   for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
     Ops.push_back(OutVals[I]);
@@ -272,7 +272,7 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   EVT RetVT = Ins[0].VT;
   SDValue RetPortName = DAG.getTargetExternalSymbol("return_value", RetVT);
   SDValue RetValue = DAG.getNode(VTMISD::ReadReturn, dl, RetVT,
-                                 RetPortName, CalleeValue, CallNode);
+                                 RetPortName, CalleeFUId, CallNode);
   InVals.push_back(RetValue);
 
   return SDValue(CallNode.getNode(), 1);
