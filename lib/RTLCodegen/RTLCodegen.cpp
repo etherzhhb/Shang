@@ -723,7 +723,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       SlotPredSS << '(';
       ucOperand &PredOp = Op.getPredicate();
       if (PredOp.isPredicateInverted()) SlotPredSS << '~';
-      PredOp.print(SlotPredSS, 1);
+      PredOp.print(SlotPredSS, 1, 0, true);
       SlotPredSS << ')';
     } else
       SlotPredSS << "1'b1";

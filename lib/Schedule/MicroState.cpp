@@ -190,7 +190,8 @@ bool ucOperand::isWire() const {
 }
 
 void ucOperand::print(raw_ostream &OS,
-                      unsigned UB /* = 64 */, unsigned LB /* = 0 */) {
+                      unsigned UB /* = 64 */, unsigned LB /* = 0 */,
+                      bool isPredicate /* = false */) {
   switch (getType()) {
   case MachineOperand::MO_Register: {
     unsigned Reg = getReg();
@@ -200,9 +201,9 @@ void ucOperand::print(raw_ostream &OS,
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
       DEBUG(
         MachineRegisterInfo &MRI
-        = getParent()->getParent()->getParent()->getRegInfo();
-      const TargetRegisterClass *RC = MRI.getRegClass(Reg);
-      OS << "/*" << RC->getName() << "*/ ";
+          = getParent()->getParent()->getParent()->getRegInfo();
+        const TargetRegisterClass *RC = MRI.getRegClass(Reg);
+        OS << "/*" << RC->getName() << "*/ ";
       );
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
     } else { // Compute the offset of physics register.
@@ -210,7 +211,8 @@ void ucOperand::print(raw_ostream &OS,
     }
 
     if (isWire()) {
-      OS << "wire" << Reg << verilogBitRange(UB, LB, getBitWidth() != 1);
+      OS << "wire" << Reg;
+      if (!isPredicate) OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     } else {
       //assert(TargetRegisterInfo::isPhysicalRegister(Reg)
       //       && "Unexpected virtual register!");
