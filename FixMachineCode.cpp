@@ -83,7 +83,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
          II != IE; ++II) {
       MachineInstr *Inst = II;
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri && Inst->getOperand(1).isImm())
+      if (Inst->getOpcode() == VTM::VOpMove_ri)
         Imms.push_back(Inst);
 
       // Remove the explicit successors from the missed successors set.
@@ -143,30 +143,46 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
 void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
                                     MachineRegisterInfo &MRI) {
-  while (!Worklist.empty()) {
+    SmallVector<MachineOperand, 8> Ops;
+    // Find all replaceable operand.
+    std::vector<std::pair<MachineInstr*, unsigned> > ImmUsers;
+
+    while (!Worklist.empty()) {
     MachineInstr *MI = Worklist.back();
     Worklist.pop_back();
 
     unsigned DstReg = MI->getOperand(0).getReg();
 
-    // Find all replaceable operand.
-    std::vector<MachineOperand*> ImmUsers;
     for (MachineRegisterInfo::use_iterator I = MRI.use_begin(DstReg),
-      E = MRI.use_end(); I != E; ++I) {
-        MachineOperand &MO = I.getOperand();
+         E = MRI.use_end(); I != E; ++I) {
+      // Only replace if user is not a PHINode.
+      if (I->getOpcode() == VTM::PHI) continue;
 
-        // Only replace if user is not a PHINode.
-        if (I->getOpcode() == VTM::PHI) continue;
-
-        ImmUsers.push_back(&MO);
+      ImmUsers.push_back(std::make_pair(&*I, I.getOperandNo()));
     }
 
     // Perform the replacement.
-    int64_t Imm = MI->getOperand(1).getImm();
+    MachineOperand Imm = MI->getOperand(1);
+    Imm.clearParent();
 
     while (!ImmUsers.empty()) {
-      ImmUsers.back()->ChangeToImmediate(Imm);
+      MachineInstr *User = ImmUsers.back().first;
+      unsigned Idx = ImmUsers.back().second;
       ImmUsers.pop_back();
+
+      unsigned NumOps = User->getNumOperands();
+      while (NumOps > 0) {
+        --NumOps;
+        if (NumOps == Idx)
+          Ops.push_back(Imm);
+        else
+          Ops.push_back(User->getOperand(NumOps));
+
+        User->RemoveOperand(NumOps);
+      }
+
+      while (!Ops.empty())
+        User->addOperand(Ops.pop_back_val());
     }
 
     // Eliminate the instruction if it dead.
