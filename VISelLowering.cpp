@@ -698,3 +698,114 @@ void VTargetLowering::ReplaceNodeResults(SDNode *N,
   assert(0 && "ReplaceNodeResults not implemented for this target!");
 
 }
+
+void VTargetLowering::computeMaskedBitsForTargetNode(const SDValue Op,
+                                                     const APInt &Mask,
+                                                     APInt &KnownZero,
+                                                     APInt &KnownOne,
+                                                     const SelectionDAG &DAG,
+                                                     unsigned Depth /* = 0 */)
+                                                     const {
+  unsigned Opc = Op.getOpcode();
+  assert((Opc >= ISD::BUILTIN_OP_END ||
+          Opc == ISD::INTRINSIC_WO_CHAIN ||
+          Opc == ISD::INTRINSIC_W_CHAIN ||
+          Opc == ISD::INTRINSIC_VOID) &&
+         "Should use MaskedValueIsZero if you don't know whether Op"
+         " is a target node!");
+
+  KnownZero = KnownOne = APInt(Mask.getBitWidth(), 0);   // Don't know anything.
+  switch (Opc) {
+  default: break;
+  case VTMISD::Not: {
+    SDValue Src = Op->getOperand(0);
+    // Swap knownOne and KnownZero and compute compute the mask for the "Not".
+    DAG.ComputeMaskedBits(Src, Mask, KnownOne, KnownZero, Depth + 1);
+    return;
+  }
+  case VTMISD::RAnd:
+  case VTMISD::ROr: {
+    SDValue Src = Op->getOperand(0);
+    APInt SrcMask = APInt::getAllOnesValue(Src.getValueSizeInBits());
+    APInt SrcZero, SrcOne;
+    ComputeSignificantBitMask(Src, SrcMask, SrcZero, SrcOne, DAG, Depth + 1);
+    if (Opc == VTMISD::ROr) {
+      // Reduce Or return 1 if any bit of its operand is 1, otherwise if all
+      // bits is 0, it returns 0.
+      if (!SrcOne.isMinValue())      KnownOne.setAllBits();
+      else if (SrcZero.isMaxValue()) KnownZero.setAllBits();
+    } else {
+      // Reduce And return 0 if any bit of its operand is 0, otherwise if all
+      // bits is 1, it returns 1.
+      if (!SrcZero.isMinValue())     KnownZero.setAllBits();
+      else if (SrcOne.isMaxValue())  KnownOne.setAllBits();
+    }
+    return;
+  }
+  case VTMISD::BitSlice: {
+    SDValue Src = Op->getOperand(0);
+    unsigned UB = Op->getConstantOperandVal(1),
+             LB = Op->getConstantOperandVal(2);
+    unsigned SrcBitWidth = Src.getValueSizeInBits();
+    APInt SrcMask = APInt::getBitsSet(SrcBitWidth, LB, UB)
+                    & Mask.zextOrTrunc(SrcBitWidth).shl(LB);
+    APInt SrcKnownZero, SrcKnownOne;
+    DAG.ComputeMaskedBits(Src, SrcMask, SrcKnownZero, SrcKnownOne, Depth + 1);
+    unsigned BitWidth = Op.getValueSizeInBits();
+    // Return the bitslice of the source masks.
+    KnownOne = SrcKnownOne.lshr(LB).zextOrTrunc(BitWidth);
+    // The unused bits of BitSlice is 0.
+    KnownZero = SrcKnownZero.lshr(LB).zextOrTrunc(BitWidth);
+    return;
+  }
+  case VTMISD::BitCat:{
+    unsigned BitWidth = Op.getValueSizeInBits();
+    SDValue HiOp = Op->getOperand(0);
+    SDValue LoOp = Op->getOperand(1);
+    unsigned SplitBit = computeSizeInBits(LoOp);
+
+    APInt HiMask = Mask.lshr(SplitBit).zextOrTrunc(HiOp.getValueSizeInBits());
+    APInt HiZero, HiOne;
+    ComputeSignificantBitMask(HiOp, HiMask, HiZero, HiOne, DAG, Depth + 1);
+    HiZero = HiZero.zext(BitWidth);
+    HiOne = HiOne.zext(BitWidth);
+
+    APInt LoMask = Mask.getLoBits(SplitBit).zextOrTrunc(LoOp.getValueSizeInBits());
+    APInt LoZero, LoOne;
+    ComputeSignificantBitMask(LoOp, LoMask, LoZero, LoOne, DAG, Depth + 1);
+    LoZero = LoZero.zext(BitWidth);
+    LoOne = LoOne.zext(BitWidth);
+
+    KnownZero = LoZero | HiZero.shl(SplitBit);
+    KnownOne = LoOne | HiOne.shl(SplitBit);
+    return;
+  }
+  case VTMISD::BitRepeat:{
+    SDValue Src = Op->getOperand(0);
+    unsigned SrcBitWidth = Src.getValueSizeInBits();
+    assert(SrcBitWidth == 1 && "Cannot handle complex bit pattern!");
+    APInt SrcMaks = APInt::getAllOnesValue(SrcBitWidth);
+    APInt SrcZero, SrcOne;
+    DAG.ComputeMaskedBits(Src, SrcMaks, SrcZero, SrcOne, Depth + 1);
+
+    unsigned Repeat = Op->getConstantOperandVal(1);
+    if (SrcOne.isAllOnesValue())
+      KnownOne = APInt::getLowBitsSet(KnownOne.getBitWidth(), Repeat);
+    if (SrcZero.isAllOnesValue())
+      KnownZero = APInt::getLowBitsSet(KnownZero.getBitWidth(), Repeat);    
+    return;
+  }
+  }
+}
+
+void VTargetLowering::ComputeSignificantBitMask(SDValue Op, const APInt &Mask,
+                                                APInt &KnownZero, APInt &KnownOne,
+                                                const SelectionDAG &DAG,
+                                                unsigned Depth) {
+  unsigned SignificantBitWidth = computeSizeInBits(Op);
+  unsigned BitWidth = Op.getValueSizeInBits();
+  APInt SrcMask = APInt::getLowBitsSet(BitWidth, SignificantBitWidth) & Mask;
+  DAG.ComputeMaskedBits(Op, SrcMask, KnownZero, KnownOne, Depth);
+  KnownZero = KnownZero.zextOrTrunc(SignificantBitWidth);
+  KnownOne = KnownOne.zextOrTrunc(SignificantBitWidth);
+}

@@ -65,6 +65,10 @@ public:
 
   virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i8; }
 
+  virtual void computeMaskedBitsForTargetNode(const SDValue Op, const APInt &Mask,
+                                              APInt &KnownZero, APInt &KnownOne,
+                                              const SelectionDAG &DAG,
+                                              unsigned Depth = 0) const;
   // Narrowing is always profitable.
   virtual bool isNarrowingProfitable(EVT VT1, EVT VT2) const { return true; }
   virtual bool isTruncateFree(EVT VT1, EVT VT2) const { return true; }
@@ -79,6 +83,9 @@ public:
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture bit level SDNodes.
   static unsigned computeSizeInBits(SDValue Op);
+  static void ComputeSignificantBitMask(SDValue Op, const APInt &Mask,
+                                        APInt &KnownZero, APInt &KnownOne,
+                                        const SelectionDAG &DAG, unsigned Depth);
 
   // Get the bit slice in range (UB, LB].
   /// GetBits - Retrieve bits between [LB, UB).
