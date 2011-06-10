@@ -96,7 +96,8 @@ class RTLCodegen : public MachineFunctionPass {
     void addOutput(const std::string &OutputName, unsigned Bitwidth) {
       MuxWiresDeclS << "reg ";
       if (Bitwidth > 1) MuxWiresDeclS << verilogBitRange(Bitwidth, 0, false);
-      MuxWiresDeclS  << OutputName << "_mux_wire;\n";
+      MuxWiresDeclS  << OutputName << "_mux_wire = "
+                     << verilogConstToStr(0, Bitwidth, false)<< ";\n";
       MuxWiresDeclS << "assign " << OutputName << " = " << OutputName
                     << "_mux_wire;\n";
     }
@@ -134,7 +135,8 @@ class RTLCodegen : public MachineFunctionPass {
       VM->addOutputPort(PortName, BitWidth, VASTModule::Others, false);
       if (isEn) {
         EnableLogicS << "assign " << PortName << " = " << PortReg;
-        BusMux.MuxLogicS.match_case(PortReg);
+        // The top level module control the memory bus by default.
+        BusMux.MuxLogicS.match_case("default");
       } else {
         BusMux.addOutput(PortName, BitWidth);
         BusMux.assignValueInCase(PortName, PortReg);
