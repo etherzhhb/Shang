@@ -38,9 +38,13 @@
 
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
-
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
+cl::opt<bool> EnableSimpleRegisterAllocate("vtm-enable-simple-allocate",
+                                           cl::init(false), cl::Hidden);
+cl::opt<bool> EnableIfConversion("vtm-enable-if-conversion",
+                                 cl::init(true), cl::Hidden);
 
 //===----------------------------------------------------------------------===//
 
@@ -200,15 +204,19 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Perform if conversion before schedule, so we have more parallelism
   // available.
-  PM.add(createVIfConverterPass());
-  printAndVerify(PM, "After VTM ifconversion pass");
+  if (EnableIfConversion) {
+    PM.add(createVIfConverterPass());
+    printAndVerify(PM, "After VTM ifconversion pass");
+  }
+
   // Eliminate the VOpMvImm instructions.
   PM.add(createFixMachineCodePass());
 
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());
 
-  PM.add(createSimpleRegisterAllocator());
+  if (EnableSimpleRegisterAllocate) PM.add(createSimpleRegisterAllocator());
+  
   PM.add(createRTLCodegenPreparePass());
 
   return false;

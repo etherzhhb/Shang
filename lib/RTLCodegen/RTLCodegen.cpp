@@ -39,11 +39,8 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallString.h"
-
 #include "llvm/ADT/StringExtras.h"
-
-#include "llvm/Support/FormattedStream.h"
-
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/MathExtras.h"
@@ -53,6 +50,8 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+STATISTIC(TotalRegisterBits,
+          "Number of total register bits in synthesised modules");
 namespace {
 class RTLCodegen : public MachineFunctionPass {
   vlang_raw_ostream Out;
@@ -218,7 +217,8 @@ class RTLCodegen : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
-  void emitWires(const TargetRegisterClass *RC);
+  void emitSignals(const TargetRegisterClass *RC,
+                   const std::string &Prefix);
 
   void clear();
 
@@ -682,26 +682,36 @@ void RTLCodegen::emitAllSignals() {
        E = FInfo->phyreg_end(8); I < E; ++I)
     VM->addRegister("reg" + utostr(*I), 64);
 
-  emitWires(VTM::WireRegisterClass);
+  emitSignals(VTM::DRRegisterClass, "reg");
+
+  emitSignals(VTM::WireRegisterClass, "wire");
   // FIXME: There are function units.
-  emitWires(VTM::RADDRegisterClass);
-  emitWires(VTM::RMULRegisterClass);
-  emitWires(VTM::RSHTRegisterClass);
+  emitSignals(VTM::RADDRegisterClass, "wire");
+  emitSignals(VTM::RMULRegisterClass, "wire");
+  emitSignals(VTM::RSHTRegisterClass, "wire");
 }
 
-void RTLCodegen::emitWires(const TargetRegisterClass *RC) {
+void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
+                             const std::string &Prefix) {
   // And Emit the wires defined in this module.
   const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
 
   for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
     I != E; ++I) {
-      unsigned WireNum = *I;
-      const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(WireNum));
+      unsigned SignalNum = *I;
+      const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(SignalNum));
       // assert(Op && "Wire define not found!");
       if (!Op) continue;
 
-      WireNum = TargetRegisterInfo::virtReg2Index(WireNum);
-      VM->addWire("wire" + utostr(WireNum), Op->getBitWidth(), RC->getName());
+      SignalNum = TargetRegisterInfo::virtReg2Index(SignalNum);
+      if (Prefix[0] == 'w')
+        VM->addWire(Prefix + utostr(SignalNum), Op->getBitWidth(),
+                    RC->getName());
+      else {
+        unsigned Bitwidth = Op->getBitWidth();
+        VM->addRegister(Prefix + utostr(SignalNum), Bitwidth, RC->getName());
+        TotalRegisterBits += Bitwidth;
+      }
   }
 }
 

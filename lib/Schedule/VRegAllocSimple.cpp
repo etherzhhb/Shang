@@ -57,7 +57,7 @@
 
 using namespace llvm;
 
-cl::opt<bool> EanbleSimpleRegisterSharing("vtm-enable-simple-register-sharing",
+cl::opt<bool> EnableSimpleRegisterSharing("vtm-enable-simple-register-sharing",
                                           cl::init(false), cl::Hidden);
 
 static RegisterRegAlloc VSimpleRegalloc("vsimple",
@@ -260,7 +260,7 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   Size = NextPowerOf2(Size - 1) / 8;
 
   typedef VFInfo::phyreg_iterator reg_it;
-  if (EanbleSimpleRegisterSharing)
+  if (EnableSimpleRegisterSharing)
     for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
          I < E; ++I) {
       unsigned PhysReg = *I;

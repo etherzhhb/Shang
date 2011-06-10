@@ -196,7 +196,7 @@ void ucOperand::print(raw_ostream &OS,
   case MachineOperand::MO_Register: {
     unsigned Reg = getReg();
     UB = std::min(getBitWidthOrZero(), UB);
-    unsigned Offset = 0;
+    std::string BitRange = "";
 
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
       DEBUG(
@@ -206,14 +206,15 @@ void ucOperand::print(raw_ostream &OS,
         OS << "/*" << RC->getName() << "*/ ";
       );
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
+      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
     } else { // Compute the offset of physics register.
-      Offset = (Reg & 0x7) * 8;
+      unsigned Offset = (Reg & 0x7) * 8;
       Reg = (Reg & ~0x7);
+      BitRange = verilogBitRange(UB + Offset, LB + Offset, true);
     }
 
     if (isWire()) {
-      OS << "wire" << Reg;
-      if (!isPredicate) OS << verilogBitRange(UB, LB, getBitWidth() != 1);
+      OS << "wire" << Reg << BitRange;
     } else {
       //assert(TargetRegisterInfo::isPhysicalRegister(Reg)
       //       && "Unexpected virtual register!");
@@ -225,9 +226,7 @@ void ucOperand::print(raw_ostream &OS,
         OS << "use_";
         if (isKill()) OS << "kill_";
       }
-      OS << "reg" << Reg <<"*/ reg" << Reg;
-      // Select the sub register
-      OS << verilogBitRange(UB + Offset, LB + Offset, true);
+      OS << "reg" << Reg <<"*/ reg" << Reg << BitRange;
     }
     return;
   }
