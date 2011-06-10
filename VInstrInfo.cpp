@@ -150,12 +150,12 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   // Collect the branches and remove them.
   SmallVector<MachineInstr*, 4> Terms;
   for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(), E = MBB.end();
-    I != E; ++I) {
-      MachineInstr *Inst = I;
-      if (!Inst->getDesc().isTerminator()) continue;
+       I != E; ++I) {
+    MachineInstr *Inst = I;
+    if (!Inst->getDesc().isTerminator()) continue;
 
-      if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
-        Terms.push_back(Inst);
+    if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
+      Terms.push_back(Inst);
   }
 
   unsigned RemovedBranches = 0;
