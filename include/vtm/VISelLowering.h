@@ -64,6 +64,8 @@ public:
   unsigned getFunctionAlignment(const Function *F) const;
 
   virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i8; }
+  virtual const TargetRegisterClass *getRepRegClassFor(EVT VT) const;
+  virtual uint8_t getRepRegClassCostFor(EVT VT) const;
 
   virtual void computeMaskedBitsForTargetNode(const SDValue Op, const APInt &Mask,
                                               APInt &KnownZero, APInt &KnownOne,

@@ -161,6 +161,14 @@ MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
   return MVT::i1;
 }
 
+const TargetRegisterClass *VTargetLowering::getRepRegClassFor(EVT VT) const {
+  return VTM::DRRegisterClass;
+}
+
+uint8_t VTargetLowering::getRepRegClassCostFor(EVT VT) const {
+  return 0;
+}
+
 const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
   case VTMISD::InternalCall:    return "VTMISD::InternalCall";
