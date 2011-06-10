@@ -81,11 +81,11 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   uint64_t ShiftVal = 0;
   DebugLoc dl = N->getDebugLoc();
 
-  // Can only handle shifting a constant amount.
+  // Limit the shift amount.
   if (!ExtractConstant(ShiftAmt, ShiftVal)) {
     unsigned MaxShiftAmtSize = Log2_32_Ceil(TLI.computeSizeInBits(Op));
     unsigned ShiftAmtSize = TLI.computeSizeInBits(ShiftAmt);
-    // Limit the shift amount to the the witdh of operand.
+    // Limit the shift amount to the the width of operand.
     if (ShiftAmtSize > MaxShiftAmtSize) {
       ShiftAmt = VTargetLowering::getBitSlice(DAG, dl, ShiftAmt,
                                               MaxShiftAmtSize, 0,
@@ -423,8 +423,7 @@ static SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
   if (Op->getOpcode() == VTMISD::Not) return Op->getOperand(0);
 
   if (Op->getOpcode() == VTMISD::BitCat) {
-    SDValue Hi = Op->getOperand(0),
-            Lo = Op->getOperand(1);
+    SDValue Hi = Op->getOperand(0), Lo = Op->getOperand(1);
 
     Hi = VTargetLowering::getNot(DCI.DAG, N->getDebugLoc(), Hi);
     DCI.AddToWorklist(Hi.getNode());
@@ -462,8 +461,7 @@ static SDValue CombineConstants(SelectionDAG &DAG, SDValue &Hi, SDValue &Lo,
 
 static SDValue PerformBitCatCombine(SDNode *N, const VTargetLowering &TLI,
                                     TargetLowering::DAGCombinerInfo &DCI) {
-  SDValue Hi = N->getOperand(0),
-          Lo = N->getOperand(1);
+  SDValue Hi = N->getOperand(0), Lo = N->getOperand(1);
   SelectionDAG &DAG = DCI.DAG;
 
   // Dose the node looks like {a[UB-1, M], a[M-1, LB]}? If so, combine it to
