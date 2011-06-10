@@ -65,6 +65,17 @@ public:
 
   virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i8; }
 
+  // Narrowing is always profitable.
+  virtual bool isNarrowingProfitable(EVT VT1, EVT VT2) const { return true; }
+  virtual bool isTruncateFree(EVT VT1, EVT VT2) const { return true; }
+  virtual bool isTruncateFree(const Type *Ty1, const Type *Ty2) const {
+    return true;
+  }
+  virtual bool isZExtFree(EVT VT1, EVT VT2) const { return true; }
+  virtual bool isZExtFree(const Type *Ty1, const Type *Ty2) const {
+    return true;
+  }
+
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture bit level SDNodes.
   static unsigned computeSizeInBits(SDValue Op);
