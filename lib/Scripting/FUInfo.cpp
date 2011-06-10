@@ -86,6 +86,10 @@ VFUBRam::VFUBRam(luabind::object FUTable)
 
 
 // Dirty Hack: anchor from SynSettings.h
+SynSettings::SynSettings(StringRef Name)
+  : PipeAlg(SynSettings::DontPipeline), SchedAlg(SynSettings::ILP),
+  ModName(Name), HierPrefix("") {}
+
 SynSettings::SynSettings(luabind::object SettingTable)
   : PipeAlg(SynSettings::DontPipeline),
     SchedAlg(SynSettings::ILP) /*ModName(""), HierPrefix("")*/ {
