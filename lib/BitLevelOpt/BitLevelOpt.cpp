@@ -230,6 +230,23 @@ inline static SDValue ConcatBits(TargetLowering::DAGCombinerInfo &DCI,
                          Hi, Lo);
 }
 
+inline static SDValue LogicOpBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
+                                          SDNode *N, SDValue LHS, SDValue RHS) {
+  SDValue Lo = DCI.DAG.getNode(N->getOpcode(), N->getDebugLoc(),
+                               LHS.getValueType(), LHS, RHS);
+  DCI.AddToWorklist(Lo.getNode());
+  return Lo;
+}
+
+inline static SDValue LogicOpBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
+                                           SDNode *N, SDValue LHS, SDValue RHS,
+                                           SDValue Lo) {
+  SDValue Hi = DCI.DAG.getNode(N->getOpcode(), N->getDebugLoc(),
+                               LHS.getValueType(), LHS, RHS);
+  DCI.AddToWorklist(Hi.getNode());
+  return Hi;
+}
+
 inline static SDValue ExtractBitSlice(TargetLowering::DAGCombinerInfo &DCI,
                                       SDValue Op, unsigned UB, unsigned LB) {
   SDValue V = VTargetLowering::getBitSlice(DCI.DAG, Op->getDebugLoc(),
@@ -330,10 +347,14 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
 }
 
 // Promote bitcat in dag, like {a , b} & {c, d} => {a & c, b &d } or something.
-template<typename ConcatBitsFunc>
+template<typename ConcatBitsFunc,
+         typename BuildLowPartFunc,
+         typename BuildHighPartFunc>
 static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
                                   TargetLowering::DAGCombinerInfo &DCI,
-                                  ConcatBitsFunc ConcatBits) {
+                                  ConcatBitsFunc ConcatBits,
+                                  BuildLowPartFunc BuildLowPart,
+                                  BuildHighPartFunc BuildHighPart) {
   SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
 
   if (LHS.getOpcode() != VTMISD::BitCat || RHS.getOpcode() != VTMISD::BitCat)
@@ -342,22 +363,22 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
   // Split point must agree.
   // FIXME: We can also find the most common part if there is constant.
   SDValue LHSLo = LHS.getOperand(1), RHSLo = RHS.getOperand(1);
-  unsigned LHSSplit = VTargetLowering::computeSizeInBits(LHSLo);
-  unsigned RHSSplit = VTargetLowering::computeSizeInBits(RHSLo);
-  if (LHSSplit != RHSSplit) return SDValue();
+  unsigned LoBitWidth = VTargetLowering::computeSizeInBits(LHSLo);
+  if (LoBitWidth != VTargetLowering::computeSizeInBits(RHSLo))
+    return SDValue();
 
   SDValue LHSHi = LHS.getOperand(0), RHSHi = RHS.getOperand(0);
-  assert(VTargetLowering::computeSizeInBits(LHSHi) ==
-         VTargetLowering::computeSizeInBits(LHSHi) && "Hi size do not match!");
+  unsigned HiBitWidth = VTargetLowering::computeSizeInBits(LHSHi);
+  assert(HiBitWidth == VTargetLowering::computeSizeInBits(RHSHi)
+         && "Hi size do not match!");
 
   SelectionDAG &DAG = DCI.DAG;
   DebugLoc dl = N->getDebugLoc();
-  SDValue Hi = DAG.getNode(N->getOpcode(), dl, LHSHi.getValueType(),
-                           LHSHi, RHSHi);
-  DCI.AddToWorklist(Hi.getNode());
-  SDValue Lo = DAG.getNode(N->getOpcode(), dl, LHSLo.getValueType(),
-                           LHSLo, RHSLo);
-  DCI.AddToWorklist(Lo.getNode());
+
+  SDValue Lo = BuildLowPart(DCI, N, LHSLo, RHSLo);
+  Lo = VTargetLowering::getBitSlice(DAG, dl, Lo, LoBitWidth, 0);
+  SDValue Hi = BuildHighPart(DCI, N, LHSHi, RHSHi, Lo);
+  Hi = VTargetLowering::getBitSlice(DAG, dl, Hi, HiBitWidth, 0);
 
   // FIXME: Allow custom concation.
   return ConcatBits(DCI, N, Hi, Lo);
@@ -385,7 +406,9 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
 
   // Try to promote the bitcat after operand commuted.
   if (Commuted) {
-    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits);
+    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits,
+                                    LogicOpBuildLowPart,
+                                    LogicOpBuildHighPart);
     if (RV.getNode()) return RV;
   }
 
