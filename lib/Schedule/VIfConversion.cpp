@@ -282,12 +282,15 @@ bool VIfConverter::runOnMachineFunction(MachineFunction &MF) {
   InstrItins = MF.getTarget().getInstrItineraryData();
   if (!TII) return false;
 
+  DEBUG(MF.verify(this));
+
   // Tail merge tend to expose more if-conversion opportunities.
   BranchFolder BF(true);
   bool BFChange = BF.OptimizeFunction(MF, TII,
                                    MF.getTarget().getRegisterInfo(),
                                    getAnalysisIfAvailable<MachineModuleInfo>());
 
+  DEBUG(MF.verify(this));
   DEBUG(dbgs() << "\nIfcvt: function (" << ++FnNum <<  ") \'"
                << MF.getFunction()->getName() << "\'");
 
@@ -421,7 +424,6 @@ bool VIfConverter::runOnMachineFunction(MachineFunction &MF) {
   Tokens.clear();
   Roots.clear();
   BBAnalysis.clear();
-
   if (MadeChange && IfCvtBranchFold) {
     BranchFolder BF(false);
     BF.OptimizeFunction(MF, TII,
@@ -429,6 +431,7 @@ bool VIfConverter::runOnMachineFunction(MachineFunction &MF) {
                         getAnalysisIfAvailable<MachineModuleInfo>());
   }
 
+  DEBUG(MF.verify(this));
   MadeChange |= BFChange;
   return MadeChange;
 }
