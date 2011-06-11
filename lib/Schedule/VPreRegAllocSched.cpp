@@ -567,7 +567,17 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
       && VSU != Exit) {
       // Dirty Hack.
       MachineInstr *Instr = *VSU->instr_begin();
-      Exit->addDep(getCtrlDepEdge(VSU, computeLatency(Instr, FstExit)));
+      unsigned Latency = computeLatency(Instr, FstExit);
+      // We do not need to wait the trivial operation finish before exiting the
+      // state, because the first control slot of next state will only contains
+      // PHI copies, and the PHIElimination Hook will take care of the data
+      // dependence and try to forward the wire value in last control slot
+      // if possible, so they can take the time of the last control slot.
+      VIDesc VID(*Instr);
+      if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
+        --Latency;
+
+      Exit->addDep(getCtrlDepEdge(VSU,  Latency));
     }
   }
 
