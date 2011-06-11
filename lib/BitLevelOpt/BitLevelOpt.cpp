@@ -661,6 +661,39 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
   return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
 }
 
+static void ExpandOperand(TargetLowering::DAGCombinerInfo &DCI, SDValue Op,
+                          SDValue &HiOp, SDValue &LoOp) {
+  unsigned BitWidth = Op.getValueSizeInBits();
+  assert(isPowerOf2_32(BitWidth) && "Cannot handle irregular bitwidth!");
+  unsigned SplitBit = BitWidth / 2;
+  assert(VTargetLowering::computeSizeInBits(Op) > SplitBit
+         && "Cannot expand operand!");
+  HiOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
+                                      BitWidth, SplitBit);
+  DCI.AddToWorklist(HiOp.getNode());
+  LoOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
+                                      SplitBit, 0);
+  DCI.AddToWorklist(LoOp.getNode());
+}
+
+template<typename ConcatBitsFunc,
+         typename BuildLowPartFunc,
+         typename BuildHighPartFunc>
+static SDValue ExpandArithmeticOp(TargetLowering::DAGCombinerInfo &DCI,
+                                  const VTargetLowering &TLI, SDNode *N,
+                                  ConcatBitsFunc ConcatBits,
+                                  BuildLowPartFunc BuildLowPart,
+                                  BuildHighPartFunc BuildHighPart) {
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+  SDValue LHSLo, LHSHi;
+  ExpandOperand(DCI, LHS, LHSHi, LHSLo);
+  SDValue RHSLo, RHSHi;
+  ExpandOperand(DCI, RHS, RHSHi, RHSLo);
+  SDValue ADDELo = BuildLowPart(DCI, N, LHSLo, RHSLo);
+  SDValue ADDEHi = BuildHighPart(DCI, N, LHSHi, RHSHi, ADDELo);
+  return ConcatBits(DCI, N, ADDEHi, ADDELo);
+}
+
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            TargetLowering::DAGCombinerInfo &DCI)
                                            const {
@@ -669,8 +702,14 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
     return PerformBitCatCombine(N, *this, DCI);
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, *this, DCI);
-  case ISD::ADDE:
+  case ISD::ADDE: {
+    //Expand the operation if the ADDE cannot fit into the FU.
+    if (N->getValueSizeInBits(0) > MaxAddSubBits)
+      return ExpandArithmeticOp(DCI, *this, N, ConcatADDEs,
+                                ADDEBuildLowPart, ADDEBuildHighPart);
+
     return PerformAddCombine(N, *this, DCI);
+  }
   case ISD::SHL:
   case ISD::SRA:
   case ISD::SRL:
