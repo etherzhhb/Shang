@@ -511,7 +511,9 @@ static SDValue PerformReduceCombine(SDNode *N, const VTargetLowering &TLI,
   return SDValue();
 }
 
-// Arthmitc operatons.
+//===--------------------------------------------------------------------===//
+// Arithmetic operations.
+// Add
 static bool isAddEOpBOneBit(SDValue Op, bool Commuted) {
   SDValue OpB = Op->getOperand(1 ^ Commuted);
   uint64_t OpBVal = 0;
@@ -521,25 +523,31 @@ static bool isAddEOpBOneBit(SDValue Op, bool Commuted) {
   return OpBVal == 0 || OpBVal == 1;
 }
 
+static SDValue ExtractCarryFromBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                        SDValue BitSlice) {
+  if (BitSlice.getOpcode() != ISD::ADDE) {
+    assert(BitSlice.getOpcode() == VTMISD::BitSlice
+           && "Expect bitslice in high part");
+    unsigned SliceWidth = VTargetLowering::computeSizeInBits(BitSlice);
+    SDValue ADDE = BitSlice->getOperand(0);
+    assert(SliceWidth < ADDE.getValueSizeInBits() && "Unnecessary bitslice?");
+    assert(ADDE.getOpcode() == ISD::ADDE
+            &&"Expect adde as the operand of bitslice");
+    // Carry bit is in the result of adde.
+    SDValue C = VTargetLowering::getBitSlice(DCI.DAG, BitSlice->getDebugLoc(),
+                                             ADDE, SliceWidth + 1, SliceWidth);
+    DCI.AddToWorklist(C.getNode());
+    return C;
+  }
+  // Simply return the carry of ADDE.
+  return BitSlice.getValue(1);
+}
+
 inline static SDValue ConcatADDEs(TargetLowering::DAGCombinerInfo &DCI,
                                   SDNode *N, SDValue Hi, SDValue Lo) {
   SDValue NewOp = DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
                                   N->getValueType(0), Hi, Lo);
-  SDValue C;
-  // If the higher part is a bitslice, read the the carry bit from the adder
-  // result.
-  if (Hi.getOpcode() != ISD::ADDE) {
-    assert(Hi.getOpcode() == VTMISD::BitSlice
-           && "Expect bitslice in high part");
-    unsigned BitSliceWidth = VTargetLowering::computeSizeInBits(Hi);
-    Hi = Hi->getOperand(0);
-    assert(Hi.getOpcode() == ISD::ADDE
-            &&"Expect adde as the operand of bitslice");
-    C = VTargetLowering::getBitSlice(DCI.DAG, N->getDebugLoc(), Lo,
-                                     BitSliceWidth + 1, BitSliceWidth);
-  } else
-    C = Hi.getValue(1);
-
+  SDValue C = ExtractCarryFromBitSlice(DCI, Hi);
   // Combine the result now.
   DCI.CombineTo(N, NewOp, C);
   return SDValue(N, 0);
@@ -557,20 +565,7 @@ inline static SDValue ADDEBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
 inline static SDValue ADDEBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
                                         SDNode *N, SDValue LHS, SDValue RHS,
                                         SDValue Lo) {
-  SDValue LoC;
-  // If the lower part is a bitslice, read the the carry bit from the adder
-  // result.
-  if (Lo.getOpcode() != ISD::ADDE) {
-    assert(Lo.getOpcode() == VTMISD::BitSlice
-           && "Expect bitslice in low part");
-    unsigned BitSliceWidth = VTargetLowering::computeSizeInBits(Lo);
-    Lo = Lo->getOperand(0);
-    assert(Lo.getOpcode()==ISD::ADDE
-           && "Expect adde as the operand of bitslice");
-    LoC = VTargetLowering::getBitSlice(DCI.DAG, N->getDebugLoc(), Lo,
-                                       BitSliceWidth + 1, BitSliceWidth);
-  } else
-    LoC = Lo.getValue(1);
+  SDValue LoC = ExtractCarryFromBitSlice(DCI, Lo);
 
   SDValue Hi = DCI.DAG.getNode(ISD::ADDE, N->getDebugLoc(),
                                DCI.DAG.getVTList(LHS.getValueType(), MVT::i1),
