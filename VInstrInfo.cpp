@@ -32,11 +32,10 @@ using namespace llvm;
 static const unsigned MoveOpcodes[] = {
     0, //DRRegClassID = 0,
     0, //PHIRRegClassID = 1,
-    VTM::VOpMove_rp, //PredRRegClassID = 2,
-    VTM::VOpMove_ra, //RADDRegClassID = 3,
-    VTM::VOpMove_rm, //RMULRegClassID = 4,
-    VTM::VOpMove_rs, //RSHTRegClassID = 5,
-    VTM::VOpMove_rw, //WireRegClassID = 6
+    VTM::VOpMove_ra, //RADDRegClassID = 2,
+    VTM::VOpMove_rm, //RMULRegClassID = 3,
+    VTM::VOpMove_rs, //RSHTRegClassID = 4,
+    VTM::VOpMove_rw, //WireRegClassID = 5
 };
 
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
@@ -432,7 +431,6 @@ bool VInstrInfo::isCopyLike(unsigned Opcode, bool IncludeMoveImm) {
          || Opcode == VTM::VOpMove_ra
          || (Opcode == VTM::VOpMove_ri && IncludeMoveImm)
          || Opcode == VTM::VOpMove_rm
-         || Opcode == VTM::VOpMove_rp
          || Opcode == VTM::VOpMove_rs
          || Opcode == VTM::VOpMove_rw;
 }

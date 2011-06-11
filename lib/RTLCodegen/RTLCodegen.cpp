@@ -899,7 +899,6 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
     case VTM::VOpMove_rm:
-    case VTM::VOpMove_rp:
     case VTM::VOpMove_rs:
     case VTM::VOpMove_rw:
     case VTM::COPY:             emitOpCopy(Op);               break;

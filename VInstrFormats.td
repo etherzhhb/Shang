@@ -27,7 +27,7 @@ def FUCalleeFN: FUType<6, IIC_CalleeFN>;
 
 // Bit-width information operand.
 // Dirty Hack: This is not a Predicate Operand.
-def BitWidthAnnotator : PredicateOperand<i64, (ops PredR), (ops (i64 zero_reg))>
+def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))>
  {}
 
 // Pseudo instructions
