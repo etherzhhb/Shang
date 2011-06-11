@@ -31,12 +31,10 @@
 
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
-
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"

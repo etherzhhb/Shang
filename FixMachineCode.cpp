@@ -143,18 +143,18 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
 void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
                                     MachineRegisterInfo &MRI) {
-    SmallVector<MachineOperand, 8> Ops;
-    // Find all replaceable operand.
-    std::vector<std::pair<MachineInstr*, unsigned> > ImmUsers;
+  SmallVector<MachineOperand, 8> Ops;
+  // Find all replaceable operand.
+  std::vector<std::pair<MachineInstr*, unsigned> > ImmUsers;
 
-    while (!Worklist.empty()) {
+  while (!Worklist.empty()) {
     MachineInstr *MI = Worklist.back();
     Worklist.pop_back();
 
     unsigned DstReg = MI->getOperand(0).getReg();
 
     for (MachineRegisterInfo::use_iterator I = MRI.use_begin(DstReg),
-         E = MRI.use_end(); I != E; ++I) {
+          E = MRI.use_end(); I != E; ++I) {
       // Only replace if user is not a PHINode.
       if (I->getOpcode() == VTM::PHI) continue;
 

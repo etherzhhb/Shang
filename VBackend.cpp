@@ -215,7 +215,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createVPreRegAllocSchedPass());
 
   if (EnableSimpleRegisterAllocate) PM.add(createSimpleRegisterAllocator());
-  
+
   PM.add(createRTLCodegenPreparePass());
 
   return false;

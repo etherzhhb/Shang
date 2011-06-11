@@ -421,7 +421,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   ResDef.setIsDef();
 
   unsigned Opcode = MoveOpcodes[MRI.getRegClass(IfTrueVal.getReg())->getID()];
-  assert(Opcode && "Unsupport move!");
+  assert(Opcode && "Unsupported move!");
 
   return *BuildMI(MBB, IP, DebugLoc(), TII->get(Opcode))
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
