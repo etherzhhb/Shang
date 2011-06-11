@@ -111,7 +111,7 @@ public:
 
   static ucOperand CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                 FuncUnitId FUId = VFUs::Trivial);
-  static ucOperand CreateWireDefine(MachineRegisterInfo &MRI, unsigned BitWidth);
+  static ucOperand CreateWireDefine(unsigned WireNum, unsigned BitWidth);
   static ucOperand CreateWireRead(unsigned WireNum, unsigned BitWidth);
 
   static ucOperand CreatePredicate(unsigned Reg = 0);

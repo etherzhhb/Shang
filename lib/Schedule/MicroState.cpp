@@ -161,9 +161,7 @@ ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
   return MO;
 }
 
-ucOperand ucOperand::CreateWireDefine(MachineRegisterInfo &MRI,
-                                      unsigned BitWidth) {
-  unsigned WireNum = MRI.createVirtualRegister(VTM::WireRegisterClass);
+ucOperand ucOperand::CreateWireDefine(unsigned WireNum, unsigned BitWidth) {
   ucOperand MO = MachineOperand::CreateReg(WireNum, true);
   MO.setBitWidth(BitWidth);
   MO.setIsWire();

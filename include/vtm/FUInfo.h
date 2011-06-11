@@ -26,6 +26,8 @@ namespace luabind {
 }
 
 namespace llvm {
+class TargetRegisterClass;
+
 namespace VFUs {
   enum FUTypes {
     Trivial = 0,
@@ -56,6 +58,7 @@ namespace VFUs {
   };
 
   extern const char *VFUNames[];
+  const TargetRegisterClass *getRepRegisterClass(enum FUTypes T);
 }
 
 class FuncUnitId {
