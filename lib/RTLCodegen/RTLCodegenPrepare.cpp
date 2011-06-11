@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/Passes.h"
 
 using namespace llvm;
 namespace {
@@ -31,13 +32,26 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
   std::map<unsigned, unsigned> PHIsMap;
   static char ID;
 
-  RTLCodegenPreapare() : MachineFunctionPass(ID) {}
+  RTLCodegenPreapare() : MachineFunctionPass(ID) {
+    initializePHIEliminationPass(*PassRegistry::getPassRegistry());
+  }
+
   bool runOnMachineFunction(MachineFunction &MF) {
     EliminatePseudoPHIs(MF.getRegInfo());
     return true;
   }
 
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    MachineFunctionPass::getAnalysisUsage(AU);
+    AU.addRequiredID(PHIEliminationID);
+    AU.setPreservesAll();
+  }
+
   void EliminatePseudoPHIs(MachineRegisterInfo &MRI);
+
+  const char *getPassName() const {
+    return "RTL Code Generation Preparation Pass";
+  }
 };
 }
 
