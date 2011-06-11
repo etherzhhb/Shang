@@ -523,16 +523,23 @@ inline static SDValue ConcatADDEs(TargetLowering::DAGCombinerInfo &DCI,
                                   SDNode *N, SDValue Hi, SDValue Lo) {
   SDValue NewOp = DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
                                   N->getValueType(0), Hi, Lo);
+  SDValue C;
+  // If the higher part is a bitslice, read the the carry bit from the adder
+  // result.
   if (Hi.getOpcode() != ISD::ADDE) {
     assert(Hi.getOpcode() == VTMISD::BitSlice
            && "Expect bitslice in high part");
+    unsigned BitSliceWidth = VTargetLowering::computeSizeInBits(Hi);
     Hi = Hi->getOperand(0);
     assert(Hi.getOpcode() == ISD::ADDE
             &&"Expect adde as the operand of bitslice");
-  }
+    C = VTargetLowering::getBitSlice(DCI.DAG, N->getDebugLoc(), Lo,
+                                     BitSliceWidth + 1, BitSliceWidth);
+  } else
+    C = Hi.getValue(1);
 
   // Combine the result now.
-  DCI.CombineTo(N, NewOp, Hi.getValue(1));
+  DCI.CombineTo(N, NewOp, C);
   return SDValue(N, 0);
 }
 
@@ -548,17 +555,24 @@ inline static SDValue ADDEBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
 inline static SDValue ADDEBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
                                         SDNode *N, SDValue LHS, SDValue RHS,
                                         SDValue Lo) {
+  SDValue LoC;
+  // If the lower part is a bitslice, read the the carry bit from the adder
+  // result.
   if (Lo.getOpcode() != ISD::ADDE) {
     assert(Lo.getOpcode() == VTMISD::BitSlice
            && "Expect bitslice in low part");
+    unsigned BitSliceWidth = VTargetLowering::computeSizeInBits(Lo);
     Lo = Lo->getOperand(0);
     assert(Lo.getOpcode()==ISD::ADDE
            && "Expect adde as the operand of bitslice");
-  }
+    LoC = VTargetLowering::getBitSlice(DCI.DAG, N->getDebugLoc(), Lo,
+                                       BitSliceWidth + 1, BitSliceWidth);
+  } else
+    LoC = Lo.getValue(1);
 
   SDValue Hi = DCI.DAG.getNode(ISD::ADDE, N->getDebugLoc(),
                                DCI.DAG.getVTList(LHS.getValueType(), MVT::i1),
-                               LHS, RHS, Lo.getValue(1));
+                               LHS, RHS, LoC);
   DCI.AddToWorklist(Hi.getNode());
   return Hi;
 }
