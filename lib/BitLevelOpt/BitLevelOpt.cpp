@@ -304,8 +304,10 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
 
   SDValue Lo = BuildLowPart(DCI, N, LHSLo, RHSLo);
   Lo = VTargetLowering::getBitSlice(DAG, dl, Lo, LoBitWidth, 0);
+  DCI.AddToWorklist(Lo.getNode());
   SDValue Hi = BuildHighPart(DCI, N, LHSHi, RHSHi, Lo);
   Hi = VTargetLowering::getBitSlice(DAG, dl, Hi, HiBitWidth, 0);
+  DCI.AddToWorklist(Hi.getNode());
 
   // FIXME: Allow custom concation.
   return ConcatBits(DCI, N, Hi, Lo);
