@@ -267,10 +267,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
-  // Emit a signal with "signed" modifier and return the name of signed signal.
-  std::string emitSignedOperand(ucOperand &Op);
-
-  void emitOpSRA(ucOp &OpSRA);
+  void emitOpShift(ucOp &OpSHT, const std::string &Operator);
 
   void emitOpSel(ucOp &OpSel);
 
@@ -895,6 +892,11 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpRet:           emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
     case VTM::VOpBRam:          emitOpBRam(Op);               break;
+    case VTM::VOpAdd:           emitOpAdd(Op);                break;
+    case VTM::VOpMult:          emitOpMult(Op);               break;
+    case VTM::VOpSHL:           emitOpShift(Op, "<<");       break;
+    case VTM::VOpSRL:           emitOpShift(Op, ">>");       break;
+    case VTM::VOpSRA:           emitOpShift(Op, ">>>");       break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
@@ -923,6 +925,106 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
     ucOp Op = *I;
     assert(Op->getOpcode() == VTM::IMPLICIT_DEF && "Unexpected operation!");
   }
+}
+
+void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  // Allocate the function unit register.
+  // FIXME: Move these to emitAllocatedFUs
+  ucOperand &Sum = OpAdd.getOperand(0);
+  unsigned FUWidth = Sum.getBitWidth();
+  unsigned AddNum = TargetRegisterInfo::virtReg2Index(Sum.getReg());
+  std::string SumName = "addsub" + utostr_32(AddNum);
+  std::string OpAName = SumName + "_a";
+  std::string OpBName = SumName + "_b";
+  std::string OpCName = SumName + "_c";
+  VM->addRegister(OpAName, FUWidth);
+  VM->addRegister(OpBName, FUWidth);
+  VM->addRegister(OpCName, 1);
+  // Assign the value to function unit.
+  CtrlS << OpAName << " <= ";
+  OpAdd.getOperand(2).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpBName << " <= ";
+  OpAdd.getOperand(3).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpCName << " <= ";
+  OpAdd.getOperand(4).print(CtrlS);
+  CtrlS << ";\n";
+  // Write the datapath for function unit.
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  // FIXME: Move these to emitAllocatedFUs
+  DPS << "assign {";
+  // Carry out.
+  OpAdd.getOperand(1).print(DPS);
+  DPS << ", ";
+  // Sum.
+  OpAdd.getOperand(0).print(DPS);
+  DPS << "} = " << OpAName << " + " << OpBName << " + " << OpCName << ";\n";
+}
+
+void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  // Allocate the function unit register.
+  // FIXME: Move these to emitAllocatedFUs
+  ucOperand &Result = OpSHT.getOperand(0);
+  unsigned FUWidth = Result.getBitWidth();
+  unsigned ShiftNum = TargetRegisterInfo::virtReg2Index(Result.getReg());
+  std::string SumName = "shift" + utostr_32(ShiftNum);
+  std::string OpAName = SumName + "_a";
+  std::string OpBName = SumName + "_b";
+  VM->addRegister(OpAName, FUWidth);
+  VM->addRegister(OpBName, FUWidth);
+  // Assign the value to function unit.
+  CtrlS << OpAName << " <= ";
+  OpSHT.getOperand(1).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpBName << " <= ";
+  OpSHT.getOperand(2).print(CtrlS);
+  CtrlS << ";\n";
+
+  // Write the datapath for function unit.
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  // Create the signed operand.
+  if (OpSHT->getOpcode() == VTM::VOpSRA) {
+    std::string NewOpAName = OpAName + "_signed";
+    DPS << "wire signed" << verilogBitRange(FUWidth) << ' '
+        << NewOpAName << " = " << OpAName << ";\n";
+    OpAName = NewOpAName;
+  }
+
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  OpSHT.getOperand(0).print(OS);
+  OS << " = " << OpAName << Operator << OpBName << ";\n";
+}
+
+void RTLCodegen::emitOpMult(ucOp &OpMult) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  // Allocate the function unit register.
+  // FIXME: Move these to emitAllocatedFUs
+  ucOperand &Product = OpMult.getOperand(0);
+  unsigned FUWidth = Product.getBitWidth();
+  unsigned MultNum = TargetRegisterInfo::virtReg2Index(Product.getReg());
+  std::string SumName = "mult" + utostr_32(MultNum);
+  std::string OpAName = SumName + "_a";
+  std::string OpBName = SumName + "_b";
+  VM->addRegister(OpAName, FUWidth);
+  VM->addRegister(OpBName, FUWidth);
+  // Assign the value to function unit.
+  CtrlS << OpAName << " <= ";
+  OpMult.getOperand(1).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpBName << " <= ";
+  OpMult.getOperand(2).print(CtrlS);
+  CtrlS << ";\n";
+  // Write the datapath for function unit.
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  // FIXME: Move these to emitAllocatedFUs
+  DPS << "assign ";
+  // Sum.
+  OpMult.getOperand(0).print(DPS);
+  DPS << " = " << OpAName << " * " << OpBName << ";\n";
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
@@ -1040,17 +1142,11 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
 
-    case VTM::VOpAdd:       emitOpAdd(Op);          break;
-    case VTM::VOpMult:      emitOpMult(Op);         break;
-
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
     case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
     case VTM::VOpSel:       emitOpSel(Op);         break;
 
-    case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
-    case VTM::VOpSRL:       emitBinaryOp(Op, ">>"); break;
-    case VTM::VOpSRA:       emitOpSRA(Op);break;
 
     case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
 
@@ -1083,30 +1179,6 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   OS << ";\n";
 }
 
-std::string RTLCodegen::emitSignedOperand(ucOperand &Op) {
-  unsigned BitWidth = cast<ucOperand>(Op).getBitWidth();
-
-  raw_ostream &OS = VM->getDataPathBuffer();
-  std::string WireName = "SignedWire" + utostr(SignedWireNum);
-  OS << "wire signed" << verilogBitRange(BitWidth) << ' ' << WireName << " = ";
-  Op.print(OS);
-  OS << ";\n";
-
-  ++SignedWireNum;
-  return WireName;
-}
-
-void RTLCodegen::emitOpSRA(ucOp &OpSRA) {
-  std::string Op0 = emitSignedOperand(OpSRA.getOperand(1));
-
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  OpSRA.getOperand(0).print(OS);
-  OS << " = " << Op0 << " >>> ";
-  OpSRA.getOperand(2).print(OS);
-  OS << ";\n";
-}
-
 void RTLCodegen::emitOpSel(ucOp &OpSel) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
@@ -1121,39 +1193,6 @@ void RTLCodegen::emitOpSel(ucOp &OpSel) {
   OpSel.getOperand(3).print(OS);
   OS << ";\n";
 
-}
-
-void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-
-  OS << "assign {";
-  // Carry out.
-  OpAdd.getOperand(1).print(OS);
-  OS << ", ";
-  // Sum.
-  OpAdd.getOperand(0).print(OS);
-  OS << "} = ";
-  // Operands.
-  OpAdd.getOperand(2).print(OS);
-  OS << " + ";
-  OpAdd.getOperand(3).print(OS);
-  OS << " + ";
-  // Carry in.
-  OpAdd.getOperand(4).print(OS);
-  OS << ";\n";
-}
-
-void RTLCodegen::emitOpMult(ucOp &OpMult) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-
-  OS << "assign ";
-  OpMult.getOperand(0).print(OS);
-  OS << " = ";
-
-  OpMult.getOperand(1).print(OS);
-  OS << " * ";
-  OpMult.getOperand(2).print(OS);
-  OS << ";\n";
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {

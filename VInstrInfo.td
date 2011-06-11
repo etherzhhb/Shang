@@ -188,19 +188,22 @@ let isReMaterializable = 1,
   let isCommutable        = 1 in {
     def VOpAdd : FUInst<(outs DR:$dst, DR:$co),(ins DR:$src1, DR:$src2, DR:$ci),
                          "{$dst, $co} = $src1 + $src2 + $ci;",
-                         [], FUAddSub>;
+                         [], FUAddSub, 1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
     def VOpMult : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
                          "$dst = $src1 * $src2;",
-                         [], FUMult>;
+                         [], FUMult, 1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
   }
 
   def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
-                       "$dst = shl $src0, $src1", [], FUSHIFT>;
+                       "$dst = shl $src0, $src1", [], FUSHIFT,
+                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
   def VOpSRL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
-                       "$dst = lsr $src0, $src1", [], FUSHIFT>;
+                       "$dst = lsr $src0, $src1", [], FUSHIFT,
+                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
 
   def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
-                       "$dst = sra $src0, $src1", [], FUSHIFT>;
+                       "$dst = sra $src0, $src1", [], FUSHIFT,
+                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
 }
 
 // Memory transaction.
