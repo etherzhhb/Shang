@@ -419,7 +419,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlot,
                                                    bool IsCtrl, ucOperand MO) {
   unsigned RegNo = WD.getOperand().getReg();
-  unsigned SizeInBits = MO.getBitWidth();
+  unsigned SizeInBits = WD.Op.getBitWidth();
   const TargetRegisterClass *RC = MRI.getRegClass(RegNo);
 
   // Move the value to a new register otherwise the it will be overwritten.
