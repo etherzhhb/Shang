@@ -141,9 +141,9 @@ class RTLCodegen : public MachineFunctionPass {
       }
     }
 
-    std::string addSubModulePort(std::string &PortName, unsigned BitWidth,
-                                 std::string &SubModuleName, bool isOut = true,
-                                 bool isEn = false){
+    std::string addSubModulePort(const std::string &PortName, unsigned BitWidth,
+                                 const std::string &SubModuleName,
+                                 bool isOut = true, bool isEn = false){
       std::string ConnectedWire = PortName;
       if (isOut) { // Create extra wire for bus mux.
         ConnectedWire = SubModuleName + "_" + ConnectedWire;
@@ -159,7 +159,7 @@ class RTLCodegen : public MachineFunctionPass {
       return "." + PortName + "(" +  ConnectedWire + "),\n\t";
     }
 
-    void addSubModule(std::string &SubModuleName, raw_ostream &S) {
+    void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
       S << addSubModulePort(VFUMemBus::getEnableName(BusNum), 1, SubModuleName,
                             true, true);
       S << addSubModulePort(VFUMemBus::getWriteEnableName(BusNum), 1,
@@ -594,14 +594,6 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   CtrlS.exit_block();
 }
 
-static raw_ostream &ConnectPort(raw_ostream &OS, const std::string &PortName,
-                                bool LastPort = false,
-                                const std::string &SignalPrefix = "") {
-  OS << "." << PortName << '(' << SignalPrefix << PortName << ')';
-  if (!LastPort) OS << ",\n\t";
-  return OS;
-}
-
 void RTLCodegen::emitCommonPort(int FNNum) {
   if (FNNum == -1) { // If F is current function.
     VM->addInputPort("clk", 1, VASTModule::Clk);
@@ -624,8 +616,6 @@ void RTLCodegen::emitCommonPort(int FNNum) {
 void RTLCodegen::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VFInfo::const_id_iterator id_iterator;
-
-  VFUMemBus *Bus = getFUDesc<VFUMemBus>();
 
   //for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
   //     E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
@@ -919,7 +909,6 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
   assert(FInfo->getStartSlotFor(DstBB) == FirstState.getSlot()
          && "Broken Slot!");
 
-  unsigned StateSlot = FirstState.getSlot();
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
     ucOp Op = *I;
