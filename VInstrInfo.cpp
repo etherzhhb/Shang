@@ -440,6 +440,12 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
          || Opcode == VTM::VOpToStateb;
 }
 
+bool VInstrInfo::isWireOp(unsigned Opcode) {
+  return Opcode == VTM::VOpBitCat
+         || Opcode == VTM::VOpBitRepeat
+         || Opcode == VTM::VOpBitSlice;
+}
+
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(getTID().Opcode) {

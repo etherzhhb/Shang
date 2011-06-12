@@ -358,6 +358,9 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       continue;
 
     unsigned RegNo = MO.getReg();
+    // Set the wire flag now.
+    if (VRegisterInfo::IsWire(RegNo, &MRI))
+      cast<ucOperand>(MO).setIsWire();
 
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
@@ -368,11 +371,17 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       // FIXME: Emit the wire only if the value is not read in a function unit port.
       // if (!NewDef->isSymbol()) {
       // Define wire for operations.
-      assert(!cast<ucOperand>(MO).isWire()
-             && "Unexpected wire in pre-schedule code!");
-      unsigned WireNum =
-        MRI.createVirtualRegister(VFUs::getRepRegisterClass(VTID.getFUType()));
-      ucOperand NewOp = ucOperand::CreateWireDefine(WireNum, BitWidth);
+      ucOperand NewOp = MO;
+      unsigned WireNum = NewOp.getReg();
+
+      // Define wire for trivial operation, otherwise, the result of function
+      // unit should be wire, and there must be a copy follow up.
+      if (!NewOp.isWire()) {
+        WireNum =
+          MRI.createVirtualRegister(VFUs::getRepRegisterClass(VTID.getFUType()));
+        NewOp = ucOperand::CreateWireDefine(WireNum, BitWidth);
+      }
+
       WireDef WDef = createWireDef(WireNum, A, MO, Pred, EmitSlot, WriteSlot);
 
       SWDMapTy::iterator mapIt;

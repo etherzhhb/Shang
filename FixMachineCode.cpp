@@ -28,13 +28,16 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Statistic.h"
-#define DEBUG_TYPE "elim-set-ri"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
+#define DEBUG_TYPE "vtm-fix-machine-code"
 #include "llvm/Support/Debug.h"
 #include <set>
 
 using namespace llvm;
+cl::opt<bool> CopyWireOps("vtm-copy-wire-ops-to-register",
+                           cl::init(true), cl::Hidden);
 STATISTIC(UnconditionalBranches,
           "Number of unconditionnal branches inserted for fall through edges");
 STATISTIC(Unreachables,
@@ -85,6 +88,13 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       // Try to eliminate unnecessary moves.
       if (Inst->getOpcode() == VTM::VOpMove_ri)
         Imms.push_back(Inst);
+
+      // BitSlice, BitCat and BitRepeat are wires.
+      if (VInstrInfo::isWireOp(Inst->getOpcode()) && !CopyWireOps) {
+        unsigned OriginalReg = Inst->getOperand(0).getReg();
+        unsigned NewWireReg = MRI.createVirtualRegister(VTM::WireRegisterClass);
+        MRI.replaceRegWith(OriginalReg, NewWireReg);
+      }
 
       // Remove the explicit successors from the missed successors set.
       if (VInstrInfo::isBrCndLike(Inst->getOpcode())) {

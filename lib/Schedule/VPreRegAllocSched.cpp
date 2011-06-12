@@ -638,6 +638,8 @@ void VPreRegAllocSched::cleanUpRegister(unsigned Reg) {
 
   SmallVector<ucOp, 8> DstRegs;
   for (use_it UI = MRI->use_begin(Reg), UE = MRI->use_end(); UI != UE; ++UI) {
+    if (UI->getOpcode() == VTM::PHI) continue;
+    
     ucOp Op = ucOp::getParent(UI);
     // The wire may used by a predicate operand, do not merge this, we only want
     // to eliminate the registers that hold the same value from a wire, this
