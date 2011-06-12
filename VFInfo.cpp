@@ -62,9 +62,9 @@ unsigned VFInfo::lookupPHISlot(const MachineInstr *PN) const {
 
 void VFInfo::rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot,
                                  unsigned FinshSlot) {
-  // Sometimes there are several instructions allocated to the same instruction,
+  // Sometimes there are several to allocated to the same instruction,
   // and it is ok to try to insert the same FUId more than once.
-  AllocatedFUs[Id.getFUType()].insert(Id);
+  AllocatedFUs[Id.getFUType() & 0xf].insert(Id);
   for (unsigned i = EmitSlot; i < FinshSlot; ++i)
     remeberActiveSlot(Id, i);
 }
@@ -98,4 +98,11 @@ unsigned VFInfo::getOverlaps(unsigned R, unsigned Overlaps[5]) const {
   //if (Overlaps[0] != R) Overlaps[++Idx] = R;
 
   return Idx;
+}
+
+VFInfo::VFInfo(MachineFunction &MF) : TotalRegs(fistPhyReg),
+  Info(getSynSetting(MF.getFunction()->getName())),
+  Mod(Info->getModName()), BitWidthAnnotated(true) {
+  // DirtyHack: Every Module use Memory bus 0.
+  rememberAllocatedFU(FuncUnitId(VFUs::MemoryBus, 0), 0, 0);
 }

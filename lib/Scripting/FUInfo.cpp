@@ -15,6 +15,7 @@
 #include "vtm/FUInfo.h"
 #include "vtm/SynSettings.h" // DiryHack: Also implement the SynSetting class.
 #include "vtm/LuaScript.h"
+#include "vtm/VRegisterInfo.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -36,8 +37,23 @@ void VFUDesc::print(raw_ostream &OS) const {
 namespace llvm {
   namespace VFUs {
    const char *VFUNames[] = {
-      "Trivial", "AddSub", "Shift", "Mult", "MemoryBus", "BRam", "FSMFinish"
+      "Trivial", "AddSub", "Shift", "Mult", "MemoryBus", "BRam",
+      "CalleeFN", "FSMFinish"
     };
+
+    const TargetRegisterClass *getRepRegisterClass(enum FUTypes T) {
+      static const TargetRegisterClass *RepRCTable[] = {
+        VTM::WireRegisterClass, //Trivial = 0,
+        VTM::RADDRegisterClass, //AddSub = 1,
+        VTM::RSHTRegisterClass, //Shift = 2,
+        VTM::RMULRegisterClass, //Mult = 3,
+        VTM::WireRegisterClass, //MemoryBus = 4,
+        VTM::WireRegisterClass, //BRam = 5,
+        VTM::WireRegisterClass, //CalleeFN = 6,
+        VTM::WireRegisterClass  //FSMFinish = 7,
+      };
+      return RepRCTable[T];
+    }
   }
 }
 
@@ -85,6 +101,10 @@ VFUBRam::VFUBRam(luabind::object FUTable)
 
 
 // Dirty Hack: anchor from SynSettings.h
+SynSettings::SynSettings(StringRef Name)
+  : PipeAlg(SynSettings::DontPipeline), SchedAlg(SynSettings::ILP),
+  ModName(Name), HierPrefix("") {}
+
 SynSettings::SynSettings(luabind::object SettingTable)
   : PipeAlg(SynSettings::DontPipeline),
     SchedAlg(SynSettings::ILP) /*ModName(""), HierPrefix("")*/ {

@@ -81,11 +81,11 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   uint64_t ShiftVal = 0;
   DebugLoc dl = N->getDebugLoc();
 
-  // Can only handle shifting a constant amount.
+  // Limit the shift amount.
   if (!ExtractConstant(ShiftAmt, ShiftVal)) {
     unsigned MaxShiftAmtSize = Log2_32_Ceil(TLI.computeSizeInBits(Op));
     unsigned ShiftAmtSize = TLI.computeSizeInBits(ShiftAmt);
-    // Limit the shift amount to the the witdh of operand.
+    // Limit the shift amount to the the width of operand.
     if (ShiftAmtSize > MaxShiftAmtSize) {
       ShiftAmt = VTargetLowering::getBitSlice(DAG, dl, ShiftAmt,
                                               MaxShiftAmtSize, 0,
@@ -135,38 +135,6 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   }
 }
 
-static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
-                                 TargetLowering::DAGCombinerInfo &DCI,
-                                 bool Commuted = false) {
-
-  uint64_t CVal = 0;
-  // Can only combinable if carry is known.
-  if (!ExtractConstant(N->getOperand(2), CVal))  return SDValue();
-
-  SDValue OpA = N->getOperand(0 ^ Commuted),
-          OpB = N->getOperand(1 ^ Commuted);
-  
-  uint64_t OpBVal = 0;
-  if (unsigned OpBSize = ExtractConstant(OpB, OpBVal)) {
-    SelectionDAG &DAG = DCI.DAG;
-
-    // A + ~0 + 1 => A - 0 => {1, A}
-    if (isAllOnesValue(CVal, 1) && isAllOnesValue(OpBVal, OpBSize)) {
-      DCI.CombineTo(N, OpA, DAG.getTargetConstant(1, MVT::i1));
-      return SDValue(N, 0);
-    }
-
-    // A + 0 + 0 => {0, A}
-    if (isNullValue(CVal, 1) && isNullValue(OpBVal, OpBSize)){
-      DCI.CombineTo(N, OpA, DAG.getTargetConstant(0, MVT::i1));
-      return SDValue(N, 0);
-    }
-  }
-
-  // TODO: Combine with bit mask information.
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
-}
-
 static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
                                unsigned &UB, unsigned &LB) {
   if (isShiftedMask_64(Val) || isMask_64(Val)) {
@@ -187,6 +155,23 @@ inline static SDValue ConcatBits(TargetLowering::DAGCombinerInfo &DCI,
                                  SDNode *N, SDValue Hi, SDValue Lo) {
   return DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(), N->getVTList(),
                          Hi, Lo);
+}
+
+inline static SDValue LogicOpBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
+                                          SDNode *N, SDValue LHS, SDValue RHS) {
+  SDValue Lo = DCI.DAG.getNode(N->getOpcode(), N->getDebugLoc(),
+                               LHS.getValueType(), LHS, RHS);
+  DCI.AddToWorklist(Lo.getNode());
+  return Lo;
+}
+
+inline static SDValue LogicOpBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
+                                           SDNode *N, SDValue LHS, SDValue RHS,
+                                           SDValue Lo) {
+  SDValue Hi = DCI.DAG.getNode(N->getOpcode(), N->getDebugLoc(),
+                               LHS.getValueType(), LHS, RHS);
+  DCI.AddToWorklist(Hi.getNode());
+  return Hi;
 }
 
 inline static SDValue ExtractBitSlice(TargetLowering::DAGCombinerInfo &DCI,
@@ -289,10 +274,14 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
 }
 
 // Promote bitcat in dag, like {a , b} & {c, d} => {a & c, b &d } or something.
-template<typename ConcatBitsFunc>
+template<typename ConcatBitsFunc,
+         typename BuildLowPartFunc,
+         typename BuildHighPartFunc>
 static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
                                   TargetLowering::DAGCombinerInfo &DCI,
-                                  ConcatBitsFunc ConcatBits) {
+                                  ConcatBitsFunc ConcatBits,
+                                  BuildLowPartFunc BuildLowPart,
+                                  BuildHighPartFunc BuildHighPart) {
   SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
 
   if (LHS.getOpcode() != VTMISD::BitCat || RHS.getOpcode() != VTMISD::BitCat)
@@ -301,22 +290,24 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
   // Split point must agree.
   // FIXME: We can also find the most common part if there is constant.
   SDValue LHSLo = LHS.getOperand(1), RHSLo = RHS.getOperand(1);
-  unsigned LHSSplit = VTargetLowering::computeSizeInBits(LHSLo);
-  unsigned RHSSplit = VTargetLowering::computeSizeInBits(RHSLo);
-  if (LHSSplit != RHSSplit) return SDValue();
+  unsigned LoBitWidth = VTargetLowering::computeSizeInBits(LHSLo);
+  if (LoBitWidth != VTargetLowering::computeSizeInBits(RHSLo))
+    return SDValue();
 
   SDValue LHSHi = LHS.getOperand(0), RHSHi = RHS.getOperand(0);
-  assert(VTargetLowering::computeSizeInBits(LHSHi) ==
-         VTargetLowering::computeSizeInBits(LHSHi) && "Hi size do not match!");
+  unsigned HiBitWidth = VTargetLowering::computeSizeInBits(LHSHi);
+  assert(HiBitWidth == VTargetLowering::computeSizeInBits(RHSHi)
+         && "Hi size do not match!");
 
   SelectionDAG &DAG = DCI.DAG;
   DebugLoc dl = N->getDebugLoc();
-  SDValue Hi = DAG.getNode(N->getOpcode(), dl, LHSHi.getValueType(),
-                           LHSHi, RHSHi);
-  DCI.AddToWorklist(Hi.getNode());
-  SDValue Lo = DAG.getNode(N->getOpcode(), dl, LHSLo.getValueType(),
-                           LHSLo, RHSLo);
+
+  SDValue Lo = BuildLowPart(DCI, N, LHSLo, RHSLo);
+  Lo = VTargetLowering::getBitSlice(DAG, dl, Lo, LoBitWidth, 0);
   DCI.AddToWorklist(Lo.getNode());
+  SDValue Hi = BuildHighPart(DCI, N, LHSHi, RHSHi, Lo);
+  Hi = VTargetLowering::getBitSlice(DAG, dl, Hi, HiBitWidth, 0);
+  DCI.AddToWorklist(Hi.getNode());
 
   // FIXME: Allow custom concation.
   return ConcatBits(DCI, N, Hi, Lo);
@@ -344,7 +335,9 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
 
   // Try to promote the bitcat after operand commuted.
   if (Commuted) {
-    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits);
+    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits,
+                                    LogicOpBuildLowPart,
+                                    LogicOpBuildHighPart);
     if (RV.getNode()) return RV;
   }
 
@@ -359,8 +352,7 @@ static SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
   if (Op->getOpcode() == VTMISD::Not) return Op->getOperand(0);
 
   if (Op->getOpcode() == VTMISD::BitCat) {
-    SDValue Hi = Op->getOperand(0),
-            Lo = Op->getOperand(1);
+    SDValue Hi = Op->getOperand(0), Lo = Op->getOperand(1);
 
     Hi = VTargetLowering::getNot(DCI.DAG, N->getDebugLoc(), Hi);
     DCI.AddToWorklist(Hi.getNode());
@@ -398,8 +390,7 @@ static SDValue CombineConstants(SelectionDAG &DAG, SDValue &Hi, SDValue &Lo,
 
 static SDValue PerformBitCatCombine(SDNode *N, const VTargetLowering &TLI,
                                     TargetLowering::DAGCombinerInfo &DCI) {
-  SDValue Hi = N->getOperand(0),
-          Lo = N->getOperand(1);
+  SDValue Hi = N->getOperand(0), Lo = N->getOperand(1);
   SelectionDAG &DAG = DCI.DAG;
 
   // Dose the node looks like {a[UB-1, M], a[M-1, LB]}? If so, combine it to
@@ -520,6 +511,189 @@ static SDValue PerformReduceCombine(SDNode *N, const VTargetLowering &TLI,
   return SDValue();
 }
 
+//===--------------------------------------------------------------------===//
+// Arithmetic operations.
+// Add
+static bool isAddEOpBOneBit(SDValue Op, bool Commuted) {
+  SDValue OpB = Op->getOperand(1 ^ Commuted);
+  uint64_t OpBVal = 0;
+  if (!ExtractConstant(OpB, OpBVal)) return false;
+
+  // FIXME: Use Bit mask information.
+  return OpBVal == 0 || OpBVal == 1;
+}
+
+static SDValue ExtractCarryFromBitSlice(TargetLowering::DAGCombinerInfo &DCI,
+                                        SDValue BitSlice) {
+  if (BitSlice.getOpcode() != ISD::ADDE) {
+    assert(BitSlice.getOpcode() == VTMISD::BitSlice
+           && "Expect bitslice in high part");
+    unsigned SliceWidth = VTargetLowering::computeSizeInBits(BitSlice);
+    SDValue ADDE = BitSlice->getOperand(0);
+    assert(SliceWidth < ADDE.getValueSizeInBits() && "Unnecessary bitslice?");
+    assert(ADDE.getOpcode() == ISD::ADDE
+            &&"Expect adde as the operand of bitslice");
+    // Carry bit is in the result of adde.
+    SDValue C = VTargetLowering::getBitSlice(DCI.DAG, BitSlice->getDebugLoc(),
+                                             ADDE, SliceWidth + 1, SliceWidth);
+    DCI.AddToWorklist(C.getNode());
+    return C;
+  }
+  // Simply return the carry of ADDE.
+  return BitSlice.getValue(1);
+}
+
+inline static SDValue ConcatADDEs(TargetLowering::DAGCombinerInfo &DCI,
+                                  SDNode *N, SDValue Hi, SDValue Lo) {
+  SDValue NewOp = DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
+                                  N->getValueType(0), Hi, Lo);
+  SDValue C = ExtractCarryFromBitSlice(DCI, Hi);
+  // Combine the result now.
+  DCI.CombineTo(N, NewOp, C);
+  return SDValue(N, 0);
+}
+
+inline static SDValue ADDEBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
+                                       SDNode *N, SDValue LHS, SDValue RHS) {
+  SDValue Lo = DCI.DAG.getNode(ISD::ADDE, N->getDebugLoc(),
+                               DCI.DAG.getVTList(LHS.getValueType(), MVT::i1),
+                               LHS, RHS, N->getOperand(2));
+  DCI.AddToWorklist(Lo.getNode());
+  return Lo;
+}
+
+inline static SDValue ADDEBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
+                                        SDNode *N, SDValue LHS, SDValue RHS,
+                                        SDValue Lo) {
+  SDValue LoC = ExtractCarryFromBitSlice(DCI, Lo);
+
+  SDValue Hi = DCI.DAG.getNode(ISD::ADDE, N->getDebugLoc(),
+                               DCI.DAG.getVTList(LHS.getValueType(), MVT::i1),
+                               LHS, RHS, LoC);
+  DCI.AddToWorklist(Hi.getNode());
+  return Hi;
+}
+
+static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
+                                 TargetLowering::DAGCombinerInfo &DCI,
+                                 bool Commuted = false) {
+  DebugLoc dl = N->getDebugLoc();
+  SelectionDAG &DAG = DCI.DAG;
+
+  uint64_t CVal = 0;
+
+  SDValue OpA = N->getOperand(0 ^ Commuted), OpB = N->getOperand(1 ^ Commuted);
+  SDValue C = N->getOperand(2);
+  // Can only combinable if carry is known.
+  if (!ExtractConstant(C, CVal)) {
+    uint64_t OpAVal = 0, OpBVal = 0;
+    // Fold the constant.
+    if (unsigned OpASize = ExtractConstant(OpA, OpAVal)) {
+      if (unsigned OpBSize = ExtractConstant(OpB, OpBVal)) {
+        // 0 + ~0 + carry = {carry, 0}
+        if (isNullValue(OpAVal, OpASize) && isAllOnesValue(OpBVal, OpBSize)) {
+          DCI.CombineTo(N, DAG.getTargetConstant(0, N->getValueType(0)), C);
+          return SDValue(N, 0);
+        }
+        // TODO: Fold the constant addition.
+      }
+    }
+    return SDValue();
+  }
+
+
+  // A + (B + 1 bit value + 0) + 0 -> A + B + 1'bit value
+  if (CVal == 0 && OpB->getOpcode() == ISD::ADDE) {
+    uint64_t OpBCVal = 0;
+    if (ExtractConstant(OpB->getOperand(2), OpBCVal) && OpBCVal == 0) {
+      bool CommuteOpB = false;
+      bool isOpBOneBitOnly = false;
+      if (!(isOpBOneBitOnly = /*ASSIGNMENT*/ isAddEOpBOneBit(OpB, CommuteOpB))){
+        CommuteOpB = true; // Commute and try again.
+        isOpBOneBitOnly = isAddEOpBOneBit(OpB, CommuteOpB);
+      }
+
+      if (isOpBOneBitOnly) {
+        SDValue OpBOpA = OpB->getOperand(0 ^ CommuteOpB),
+                OpBOpB = OpB->getOperand(1 ^ CommuteOpB);
+        OpBOpB = VTargetLowering::getBitSlice(DAG, dl, OpBOpB, 1, 0);
+        return DAG.getNode(ISD::ADDE, dl, N->getVTList(), OpA, OpBOpA, OpBOpB);
+      }
+    }
+  }
+
+  uint64_t OpBVal = 0;
+  if (unsigned OpBSize = ExtractConstant(OpB, OpBVal)) {
+    // A + ~0 + 1 => A - 0 => {1, A}
+    if (isAllOnesValue(CVal, 1) && isAllOnesValue(OpBVal, OpBSize)) {
+      DCI.CombineTo(N, OpA, DAG.getTargetConstant(1, MVT::i1));
+      return SDValue(N, 0);
+    }
+
+    // A + 0 + 0 => {0, A}
+    if (isNullValue(CVal, 1) && isNullValue(OpBVal, OpBSize)){
+      DCI.CombineTo(N, OpA, DAG.getTargetConstant(0, MVT::i1));
+      return SDValue(N, 0);
+    }
+
+    if (CVal) {
+      // Fold the constant carry to RHS.
+      assert((VTargetLowering::getBitSlice(OpBVal, OpBSize) + 1 ==
+          VTargetLowering::getBitSlice(OpBVal + 1, std::min(64u, OpBSize + 1)))
+             && "Unexpected overflow!");
+      OpBVal += 1;
+      return DAG.getNode(ISD::ADDE, dl, N->getVTList(),
+                         OpA,
+                         DAG.getTargetConstant(OpBVal, OpB.getValueType()),
+                         DAG.getTargetConstant(0, MVT::i1));
+    }
+  }
+
+    // Try to promote the bitcat after operand commuted.
+  if (Commuted) {
+    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatADDEs,
+                                    ADDEBuildLowPart,
+                                    ADDEBuildHighPart);
+    if (RV.getNode()) return RV;
+  }
+
+  // TODO: Combine with bit mask information.
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
+}
+
+static void ExpandOperand(TargetLowering::DAGCombinerInfo &DCI, SDValue Op,
+                          SDValue &HiOp, SDValue &LoOp) {
+  unsigned BitWidth = Op.getValueSizeInBits();
+  assert(isPowerOf2_32(BitWidth) && "Cannot handle irregular bitwidth!");
+  unsigned SplitBit = BitWidth / 2;
+  assert(VTargetLowering::computeSizeInBits(Op) > SplitBit
+         && "Cannot expand operand!");
+  HiOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
+                                      BitWidth, SplitBit);
+  DCI.AddToWorklist(HiOp.getNode());
+  LoOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
+                                      SplitBit, 0);
+  DCI.AddToWorklist(LoOp.getNode());
+}
+
+template<typename ConcatBitsFunc,
+         typename BuildLowPartFunc,
+         typename BuildHighPartFunc>
+static SDValue ExpandArithmeticOp(TargetLowering::DAGCombinerInfo &DCI,
+                                  const VTargetLowering &TLI, SDNode *N,
+                                  ConcatBitsFunc ConcatBits,
+                                  BuildLowPartFunc BuildLowPart,
+                                  BuildHighPartFunc BuildHighPart) {
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+  SDValue LHSLo, LHSHi;
+  ExpandOperand(DCI, LHS, LHSHi, LHSLo);
+  SDValue RHSLo, RHSHi;
+  ExpandOperand(DCI, RHS, RHSHi, RHSLo);
+  SDValue ADDELo = BuildLowPart(DCI, N, LHSLo, RHSLo);
+  SDValue ADDEHi = BuildHighPart(DCI, N, LHSHi, RHSHi, ADDELo);
+  return ConcatBits(DCI, N, ADDEHi, ADDELo);
+}
+
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            TargetLowering::DAGCombinerInfo &DCI)
                                            const {
@@ -528,8 +702,14 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
     return PerformBitCatCombine(N, *this, DCI);
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, *this, DCI);
-  case VTMISD::ADD:
+  case ISD::ADDE: {
+    //Expand the operation if the ADDE cannot fit into the FU.
+    if (N->getValueSizeInBits(0) > MaxAddSubBits)
+      return ExpandArithmeticOp(DCI, *this, N, ConcatADDEs,
+                                ADDEBuildLowPart, ADDEBuildHighPart);
+
     return PerformAddCombine(N, *this, DCI);
+  }
   case ISD::SHL:
   case ISD::SRA:
   case ISD::SRL:

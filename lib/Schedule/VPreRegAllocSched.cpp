@@ -32,7 +32,6 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
 
-#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -42,12 +41,11 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
-
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-sgraph"
 #include "llvm/Support/Debug.h"
 
@@ -77,9 +75,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
 
-  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {
-    initializeVPreRegAllocSchedPass(*PassRegistry::getPassRegistry());
-  }
+  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {}
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
@@ -216,30 +212,20 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
 //===----------------------------------------------------------------------===//
 char VPreRegAllocSched::ID = 0;
-char &llvm::VPreRegAllocSchedID = VPreRegAllocSched::ID;
 
 Pass *llvm::createVPreRegAllocSchedPass() {
   return new VPreRegAllocSched();
 }
-INITIALIZE_PASS_BEGIN(VPreRegAllocSched, "vtm-pre-regalloc-sched",
-                      "Schedule Hardware Operations for Verilog Backend",
-                      false, false)
-INITIALIZE_PASS_DEPENDENCY(LoopInfo)
-INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
-INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
-INITIALIZE_PASS_END(VPreRegAllocSched, "vtm-pre-regalloc-sched",
-                    "Schedule Hardware Operations for Verilog Backend",
-                    false, false)
+
 void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.addRequired<LoopInfo>();
   AU.addPreserved<LoopInfo>();
   AU.addRequired<ScalarEvolution>();
   AU.addPreserved<ScalarEvolution>();
+  AU.addRequired<MachineLoopInfo>();
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
-  AU.addRequired<MachineLoopInfo>();
-  AU.addPreservedID(UnreachableMachineBlockElimID);
   AU.setPreservesCFG();
   AU.addPreserved<BitLevelInfo>();
 }
@@ -481,7 +467,6 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
       assert(TargetRegisterInfo::isVirtualRegister(Reg)
              && "Unexpected physics register!");
 
-
       MachineInstr *DepSrc = MRI->getVRegDef(Reg);
       /// Only add the dependence if DepSrc is in the same MBB with MI.
       if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))
@@ -582,7 +567,17 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
       && VSU != Exit) {
       // Dirty Hack.
       MachineInstr *Instr = *VSU->instr_begin();
-      Exit->addDep(getCtrlDepEdge(VSU, computeLatency(Instr, FstExit)));
+      unsigned Latency = computeLatency(Instr, FstExit);
+      // We do not need to wait the trivial operation finish before exiting the
+      // state, because the first control slot of next state will only contains
+      // PHI copies, and the PHIElimination Hook will take care of the data
+      // dependence and try to forward the wire value in last control slot
+      // if possible, so they can take the time of the last control slot.
+      VIDesc VID(*Instr);
+      if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
+        --Latency;
+
+      Exit->addDep(getCtrlDepEdge(VSU,  Latency));
     }
   }
 
@@ -596,23 +591,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
 
-  // We need at an explicit terminator to transfer the control flow explicitly.
-  if (State.getTerms().empty()) {
-    MachineBasicBlock *MBB = State.getMachineBasicBlock();
-    if (MBB->succ_size() == 0) { // We may meet an unreachable.
-      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpRet));
-      State.eatTerminator(VIDesc(Term));
-    } else {
-      assert(MBB->succ_size() == 1 && "Expect fall through block!");
-      // Create "VOpToState 1/*means always true*/, target mbb"
-      // FIXME: Setup the bit-width flag.
-      MachineInstr &Term = *BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToState))
-        .addMBB(*MBB->succ_begin()).addOperand(ucOperand::CreatePredicate());
-
-      State.eatTerminator(VIDesc(Term));
-    }
-  }
-
+  assert(!State.getTerms().empty() && "Can not found any terminator!");
   // Create the exit node.
   buildExitRoot(State);
 
@@ -659,8 +638,15 @@ void VPreRegAllocSched::cleanUpRegister(unsigned Reg) {
 
   SmallVector<ucOp, 8> DstRegs;
   for (use_it UI = MRI->use_begin(Reg), UE = MRI->use_end(); UI != UE; ++UI) {
+    if (UI->getOpcode() == VTM::PHI) continue;
+    
     ucOp Op = ucOp::getParent(UI);
-    if (Op->getOpcode() == VTM::COPY) {
+    // The wire may used by a predicate operand, do not merge this, we only want
+    // to eliminate the registers that hold the same value from a wire, this
+    // means the wire should be the source operand of the copy instead of the
+    // predicate operand.
+    if (VInstrInfo::isCopyLike(Op->getOpcode(), false)
+        && Op.getOperand(1).getReg() == Reg) {
       DstRegs.push_back(Op);
     }
   }

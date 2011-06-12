@@ -21,8 +21,9 @@ include "VInstrFormats.td"
 
 //  Specific Node Definitions.
 //===----------------------------------------------------------------------===//
-def SDT_ReadSymbol : SDTypeProfile<1, 2, []>;
-def VTMReadSymbol  :  SDNode<"VTMISD::ReadSymbol", SDT_ReadSymbol, []>;
+// take port name, Function address, and dependence token as parameter
+def SDT_ReadReturn : SDTypeProfile<1, 3, []>;
+def VTMReadReturn  :  SDNode<"VTMISD::ReadReturn", SDT_ReadReturn, []>;
 
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
 def VTMRetVal  :  SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;
@@ -36,13 +37,6 @@ def VTMFnRet  :  SDNode<"VTMISD::Ret", SDT_FnRet,
 def SDT_InternalCall : SDTypeProfile<1, -1, []>;
 def VTMInternalCall  :  SDNode<"VTMISD::InternalCall", SDT_InternalCall,
                              [SDNPHasChain]>;
-
-def SDT_ADDC : SDTypeProfile<2, 3, [
-  SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisInt<0>,
-  SDTCisVT<1, i1>,  SDTCisVT<4, i1>
-]>;
-def VTMADD    :  SDNode<"VTMISD::ADD", SDT_ADDC>;
-
 
 def SDT_MemTrans : SDTypeProfile<1, 4, [
   SDTCisPtrTy<1>, // Address
@@ -97,37 +91,60 @@ def State : Operand<OtherVT>;
 //===----------------------------------------------------------------------===//
 // Communication operations.
 let hasCtrlDep = 1 in {
+  def VOpReadReturn : CtrlInst<(outs DR:$val),
+                               (ins DR:$symbol, DR:$callee, DR:$token),
+                               "$val = $callee[$symbol]", [],
+                               0 /*Latency*/, 1 /*ReadAtEmit*/>;
   let isBarrier    = 1 in {
     let isReturn     = 1,
         isTerminator = 1 in
     def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
-
-    def VOpReadSymbol : CtrlInst<(outs DR:$val), (ins DR:$symbol, DR:$token),
-                               "$val = arg[$symbol]", [],
-                               0 /*Latency*/, 1 /*ReadAtEmit*/>;
     
     def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
                              "ret $var at $ret_no;",
                              [], 0, 1>;
     let isCall = 1 in {
-      def VOpInternalCall : CtrlInst<(outs DR:$token), (ins variable_ops),
-                                     "call internal;", [],
-                                     1 /*Latency*/, 1 /*ReadAtEmit*/>;
+      def VOpInternalCall : FUInst<(outs DR:$token),
+                                   (ins i8imm:$CalleeNum, variable_ops),
+                                   "call internal;", [],
+                                   FUCalleeFN,
+                                   1/*ReadAtEmit*/,
+                                   0/*WriteUntilFinish*/,
+                                   0/*DATAPATH*/>;
     }
   }
   
   let isBranch   = 1,
-    isTerminator = 1 in
-  def VOpToState : CtrlInst<(outs), (ins State:$target),
-                            "to $target;",
-                            [], 0, 1>;
+      isBarrier  = 1,
+    isTerminator = 1 in {
+    def VOpToStateb : CtrlInst<(outs), (ins State:$target),
+                              "to $target;",
+                              [], 0, 1>;
+  let isBarrier = 0 in
+    def VOpToState : CtrlInst<(outs), (ins State:$target),
+                              "to $target;",
+                              [], 0, 1>;
+
+    def VOpUnreachable : CtrlInst<(outs), (ins), "unreachable;", [], 0, 1>;
+  }
 }
 
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
-  // Assign a constant value to a register.
-  def VOpMvImm : CtrlInst<(outs DR:$dst), (ins i64imm:$src),
+  multiclass MoveInst {
+    def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [], 0, 1>;
+    def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
+    def _ra : CtrlInst<(outs DR:$dst), (ins RADD:$src), "$dst=$src", [], 0, 1>;
+    def _rm : CtrlInst<(outs DR:$dst), (ins RMUL:$src), "$dst=$src", [], 0, 1>;
+    def _rs : CtrlInst<(outs DR:$dst), (ins RSHT:$src), "$dst=$src", [], 0, 1>;
+  }
+
+  defm VOpMove  : MoveInst;
+
+  def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
+                           "$dst <= $src", [], 0, 1>;
+  def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
                            "$dst <= $src", [], 0, 1>;
 
   // Bitwise logic operation.
@@ -169,23 +186,24 @@ let isReMaterializable = 1,
 let isReMaterializable = 1,
     neverHasSideEffects = 1 in {
   let isCommutable        = 1 in {
-    def VOpAdd : FUInst<(outs RADD:$dst, DR:$co),
-                  (ins DR:$src1, DR:$src2, DR:$ci),
-                          "{$dst, $co} = $src1 + $src2 + $ci;",
-                     [], FUAddSub>;
-    def VOpMult : FUInst<(outs RMUL:$dst),
-                   (ins DR:$src1, DR:$src2),
-                          "$dst = $src1 * $src2;",
-                     [], FUMult>;
+    def VOpAdd : FUInst<(outs DR:$dst, DR:$co),(ins DR:$src1, DR:$src2, DR:$ci),
+                         "{$dst, $co} = $src1 + $src2 + $ci;",
+                         [], FUAddSub, 1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+    def VOpMult : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
+                         "$dst = $src1 * $src2;",
+                         [], FUMult, 1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
   }
 
-  def VOpSHL : FUInst<(outs RSHT:$dst), (ins DR:$src0, DR:$src1),
-                       "$dst = shl $src0, $src1", [], FUSHIFT>;
-  def VOpSRL : FUInst<(outs RSHT:$dst), (ins DR:$src0, DR:$src1),
-                       "$dst = lsr $src0, $src1", [], FUSHIFT>;
+  def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+                       "$dst = shl $src0, $src1", [], FUSHIFT,
+                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+  def VOpSRL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+                       "$dst = lsr $src0, $src1", [], FUSHIFT,
+                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
 
-  def VOpSRA : FUInst<(outs RSHT:$dst), (ins DR:$src0, DR:$src1),
-                       "$dst = sra $src0, $src1", [], FUSHIFT>;
+  def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+                       "$dst = sra $src0, $src1", [], FUSHIFT,
+                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
 }
 
 // Memory transaction.

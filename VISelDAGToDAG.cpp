@@ -155,7 +155,6 @@ SDValue VDAGToDAGISel::MoveToReg(SDValue Operand, bool Force) {
 }
 
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
-  //N->getValueType(0)
   SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
                     MoveToReg(N->getOperand(1), true),
                     N->getOperand(2),
@@ -191,7 +190,7 @@ SDNode *VDAGToDAGISel::SelectBitSlice(SDNode * N) {
     // Copy the constant explicit since the value may use by some function unit.
     SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
     computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
-    return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getValueType(0),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getValueType(0),
                                 Ops, array_lengthof(Ops));
   }
 
@@ -223,19 +222,23 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
 
   // Do not create cycle.
   if (ForceMove)
-    return CurDAG->getMachineNode(VTM::VOpMvImm, dl, N->getVTList(),
+    return CurDAG->getMachineNode(VTM::VOpMove_ri, dl, N->getVTList(),
                                   Ops, array_lengthof(Ops));
   else
-    return CurDAG->SelectNodeTo(N, VTM::VOpMvImm, N->getVTList(),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getVTList(),
                                 Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
-  SDValue Ops[] = {N->getOperand(2), // Target BB
-                   N->getOperand(1), // condition (predicate operand).
-                   N->getOperand(0) };
+  SDValue TargetBB = N->getOpcode() == ISD::BR ? N->getOperand(1)
+                                               : N->getOperand(2);
+  SDValue Cnd = N->getOpcode() == ISD::BR ? CurDAG->getTargetConstant(1,MVT::i1)
+                                          : N->getOperand(1);
+  SDValue Ops[] = {TargetBB, // Target BB
+                   Cnd, // condition (predicate operand).
+                   N->getOperand(0) }; // Chain
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpToState, N->getVTList(),
+  return CurDAG->SelectNodeTo(N, VTM::VOpToStateb, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }
 
@@ -250,7 +253,7 @@ SDNode *VDAGToDAGISel::SelectInternalCall(SDNode *N) {
   Ops.push_back(N->getOperand(0));
 
   computeOperandsBitWidth(N, Ops.data(), Ops.size() -1/*Skip the chain*/);
-  
+
   return CurDAG->SelectNodeTo(N, VTM::VOpInternalCall, N->getVTList(),
                               Ops.data(), Ops.size());
 }
@@ -330,12 +333,13 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   switch (N->getOpcode()) {
   default: break;
-  case VTMISD::ReadSymbol:    return SelectSimpleNode(N, VTM::VOpReadSymbol);
+  case VTMISD::ReadReturn:    return SelectSimpleNode(N, VTM::VOpReadReturn);
   case VTMISD::InternalCall:  return SelectInternalCall(N);
   case VTMISD::RetVal:        return SelectRetVal(N);
+  case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
-  case VTMISD::ADD:           return SelectAdd(N);
+  case ISD::ADDE:             return SelectAdd(N);
   // DirtyHack: Is binary instruction enough?
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult, true);
 

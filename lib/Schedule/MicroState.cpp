@@ -34,17 +34,17 @@ bool ucOp::isControl() const {
 void ucOp::printOpcode(raw_ostream &OS) const {
   OS << OpCode.getDesc().getName();
 
-  if (isControl()) {
-    OS << " pred:[";
-    getPredicate().print(OS);
-    OS << ']';
-  }
-
-  OS << "{" << OpCode.getFUId() << "}"
-    << "@" << OpCode.getPredSlot();
-  OS << ' ';
+  OS << "{" << OpCode.getFUId() << "} ";
 }
 void ucOp::print(raw_ostream &OS) const {
+  if (isControl()) {
+    OS << "@" << OpCode.getPredSlot() << " ";
+    if (getPredicate().isPredicateInverted())
+      OS << "~";
+    getPredicate().print(OS, 1);
+    OS << "? ";
+  }
+
   bool isFirstUse = true;
   // Print the operands;
   for (op_iterator I = op_begin(), E = op_end(); I != E; ++I) {
@@ -148,6 +148,10 @@ void ucOperand::changeOpcode(unsigned Opcode, unsigned PredSlot,
   setTargetFlags(IsOpcode);
 }
 
+bool ucOperand::isPredicateInverted() const {
+  return getTargetFlags() & VInstrInfo::PredInvertFlag;
+}
+
 ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                   FuncUnitId FUId /*= VFUs::Trivial*/) {
   ucOperand MO = MachineOperand::CreateImm(0);
@@ -157,9 +161,7 @@ ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
   return MO;
 }
 
-ucOperand ucOperand::CreateWireDefine(MachineRegisterInfo &MRI,
-                                      unsigned BitWidth) {
-  unsigned WireNum = MRI.createVirtualRegister(VTM::WireRegisterClass);
+ucOperand ucOperand::CreateWireDefine(unsigned WireNum, unsigned BitWidth) {
   ucOperand MO = MachineOperand::CreateReg(WireNum, true);
   MO.setBitWidth(BitWidth);
   MO.setIsWire();
@@ -176,13 +178,6 @@ ucOperand ucOperand::CreateWireRead(unsigned WireNum, unsigned BitWidth) {
 
 ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   // Read reg0 means always execute.
-  if (Reg == 0) {
-    // Create the default predicate operand, which means always execute.
-    ucOperand MO = MachineOperand::CreateImm(1);
-    MO.setBitWidth(1);
-    return MO;
-  }
-
   ucOperand MO = MachineOperand::CreateReg(Reg, false);
   MO.setBitWidth(1);
   return MO;
@@ -193,27 +188,31 @@ bool ucOperand::isWire() const {
 }
 
 void ucOperand::print(raw_ostream &OS,
-                      unsigned UB /* = 64 */, unsigned LB /* = 0 */) {
+                      unsigned UB /* = 64 */, unsigned LB /* = 0 */,
+                      bool isPredicate /* = false */) {
   switch (getType()) {
   case MachineOperand::MO_Register: {
     unsigned Reg = getReg();
     UB = std::min(getBitWidthOrZero(), UB);
-    unsigned Offset = 0;
+    std::string BitRange = "";
 
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
       DEBUG(
         MachineRegisterInfo &MRI
-        = getParent()->getParent()->getParent()->getRegInfo();
-      const TargetRegisterClass *RC = MRI.getRegClass(Reg);
-      OS << "/*" << RC->getName() << "*/ ";
+          = getParent()->getParent()->getParent()->getRegInfo();
+        const TargetRegisterClass *RC = MRI.getRegClass(Reg);
+        OS << "/*" << RC->getName() << "*/ ";
       );
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
+      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
     } else { // Compute the offset of physics register.
-      Offset = (Reg & 0x7) * 8;
+      unsigned Offset = (Reg & 0x7) * 8;
+      Reg = (Reg & ~0x7);
+      BitRange = verilogBitRange(UB + Offset, LB + Offset, true);
     }
 
     if (isWire()) {
-      OS << "wire" << Reg << verilogBitRange(UB, LB, getBitWidth() != 1);
+      OS << "wire" << Reg << BitRange;
     } else {
       //assert(TargetRegisterInfo::isPhysicalRegister(Reg)
       //       && "Unexpected virtual register!");
@@ -225,9 +224,7 @@ void ucOperand::print(raw_ostream &OS,
         OS << "use_";
         if (isKill()) OS << "kill_";
       }
-      OS << "reg" << Reg <<"*/ reg" << (Reg & ~0x7);
-      // Select the sub register
-      OS << verilogBitRange(UB + Offset, LB + Offset, true);
+      OS << "reg" << Reg <<"*/ reg" << Reg << BitRange;
     }
     return;
   }

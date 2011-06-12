@@ -51,14 +51,14 @@ struct MicroStateBuilder {
   struct WireDef {
     unsigned WireNum;
     const char *SymbolName;
-    unsigned PredReg;
+    ucOperand Pred;
     ucOperand Op;
     unsigned EmitSlot;
     unsigned WriteSlot;
 
-    WireDef(unsigned wireNum, const char *Symbol, unsigned predReg,
-            ucOperand op, unsigned emitSlot, unsigned writeSlot)
-      : WireNum(wireNum), SymbolName(Symbol), PredReg(predReg), Op(op),
+    WireDef(unsigned wireNum, const char *Symbol, MachineOperand &pred,
+            MachineOperand &op, unsigned emitSlot, unsigned writeSlot)
+      : WireNum(wireNum), SymbolName(Symbol), Pred(pred), Op(op),
         EmitSlot(emitSlot), WriteSlot(writeSlot) {}
 
     bool isSymbol() const { return SymbolName != 0; }
@@ -75,8 +75,8 @@ struct MicroStateBuilder {
     }
   };
 
-  inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand MO,
-                               unsigned PredReg, unsigned emitSlot,
+  inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand &MO,
+                               MachineOperand &Pred, unsigned emitSlot,
                                unsigned writeSlot){
     const char *Symbol = 0;
     if (A->getFUId().isBound()) {
@@ -87,12 +87,14 @@ struct MicroStateBuilder {
       case VFUs::BRam:
         Symbol = VFI.allocateSymbol(VFUBRam::getInDataBusName(A->getFUNum()));
         break;
+      case VFUs::CalleeFN:
+        break;
       default:
-        assert(0 && "Unexpected FU Type.");
+         assert(0 && "Unexpected FU Type.");
       }
     }
 
-    return WireDef(WireNum, Symbol, PredReg, MO, emitSlot, writeSlot);
+    return WireDef(WireNum, Symbol, Pred, MO, emitSlot, writeSlot);
   }
   
   typedef std::vector<WireDef*> DefVector;
@@ -183,6 +185,37 @@ struct MicroStateBuilder {
 
   void fuseInstr(MachineInstr &Inst, VSUnit *A);
 
+  MachineOperand getRegUseOperand(ucOperand MO, bool IsCtrl, unsigned ReadSlot,
+                                  unsigned EmitSlot) {
+    // Else this is a use.
+    SWDMapTy::iterator at = StateWireDefs.find(MO.getReg());
+    // Using register from previous state.
+    if (at == StateWireDefs.end()) {
+      // Do not need to worry about if the new loop overwrite the the loop
+      // invariants.
+      return MO;
+    }
+
+    WireDef &WDef = at->second;
+
+    // We need the value after it is written to register.
+    if (WDef.WriteSlot < ReadSlot) {
+      assert(((!IsCtrl && ReadSlot == EmitSlot + 1)
+              || (IsCtrl && ReadSlot == EmitSlot))
+              && "Assumption of Slots broken!");
+      ucOperand Ret = getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
+      Ret.setBitWidth(MO.getBitWidth());
+      return Ret;
+    }
+
+    assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
+
+    ucOperand Ret = WDef.createOperand();
+    Ret.setBitWidth(MO.getBitWidth());
+    return Ret;
+  }
+
+
   MachineOperand getRegUseOperand(WireDef &WD, unsigned EmitSlot, bool IsCtrl,
                                   ucOperand MO);
 
@@ -249,7 +282,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     if (WD->shouldBeCopied()) {
       // Export the register.
       CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
-      CtrlInst.addOperand(ucOperand::CreatePredicate(WD->PredReg));
+      // Get the operand at current slot.
+      CtrlInst.addOperand(getRegUseOperand(WD->Pred, true, Slot, Slot));
       MO.setIsDef();
       CtrlInst.addOperand(MO).addOperand(WD->createOperand());
     }
@@ -262,32 +296,30 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   VIDesc VTID = Inst;
   bool IsCtrl = !VTID.hasDatapath();
+  bool isCopyLike = VInstrInfo::isCopyLike(Inst.getOpcode());
 
   typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
   MachineOperand OpCMD = ucOperand::CreateOpcode(Inst.getOpcode(),
                                                  A->getSlot(), A->getFUId());
-  unsigned NumOperands = Inst.getNumOperands();
 
   // Create the default predicate operand, which means always execute.
-  unsigned PredR = 0;
+  MachineOperand Pred = ucOperand::CreatePredicate();
 
   // Handle the predicate operand.
-  if (Inst.getDesc().OpInfo[NumOperands-1].isPredicate()) {
-    --NumOperands;
-    MachineOperand &PredOp = Inst.getOperand(NumOperands);
-    assert((PredOp.isReg() || (PredOp.getImm() & 0x1))
-           && "Cannot handle predicate operand!");
-    if (PredOp.isReg())
-      PredR = Inst.getOperand(NumOperands).getReg();
+  if (MachineOperand *PredOp = VInstrInfo::getPredOperand(&Inst)) {
+    assert(PredOp->isReg() && "Cannot handle predicate operand!");
+    Pred = *PredOp;
 
-    Inst.RemoveOperand(NumOperands);
+    unsigned PredIdx = PredOp - &Inst.getOperand(0);
+    Inst.RemoveOperand(PredIdx);
   }
-  
+
+  unsigned NumOperands = Inst.getNumOperands();
   // FIXME: Use pointer operand.
   OperandVector Ops(NumOperands + 1 + IsCtrl, OpCMD);
   Ops[0] = OpCMD;
-  if (IsCtrl) Ops[1] = ucOperand::CreatePredicate(PredR);
+  if (IsCtrl) Ops[1] = Pred;
 
   unsigned OpStart = IsCtrl ? 2 : 1;
 
@@ -326,7 +358,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       continue;
 
     unsigned RegNo = MO.getReg();
-
     // Set the wire flag now.
     if (VRegisterInfo::IsWire(RegNo, &MRI))
       cast<ucOperand>(MO).setIsWire();
@@ -334,20 +365,24 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
-    if (MO.isDef() && EmitSlot != WriteSlot && !Inst.isCopy()) {
+    if (MO.isDef() && EmitSlot != WriteSlot && !isCopyLike) {
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
       // if (!NewDef->isSymbol()) {
+      // Define wire for operations.
       ucOperand NewOp = MO;
+      unsigned WireNum = NewOp.getReg();
 
       // Define wire for trivial operation, otherwise, the result of function
       // unit should be wire, and there must be a copy follow up.
-      if (!NewOp.isWire())
-        NewOp = ucOperand::CreateWireDefine(MRI, BitWidth);
+      if (!NewOp.isWire()) {
+        WireNum =
+          MRI.createVirtualRegister(VFUs::getRepRegisterClass(VTID.getFUType()));
+        NewOp = ucOperand::CreateWireDefine(WireNum, BitWidth);
+      }
 
-      unsigned WireNum = NewOp.getReg();
-      WireDef WDef = createWireDef(WireNum, A, MO, PredR, EmitSlot, WriteSlot);
+      WireDef WDef = createWireDef(WireNum, A, MO, Pred, EmitSlot, WriteSlot);
 
       SWDMapTy::iterator mapIt;
       bool inserted;
@@ -364,29 +399,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       continue;
     }
 
-    // Else this is a use.
-    SWDMapTy::iterator at = StateWireDefs.find(RegNo);
-    // Using register from previous state.
-    if (at == StateWireDefs.end()) {
-      // Do not need to worry about if the new loop overwrite the the loop
-      // invariants.
-      continue;
-    }
-
-    WireDef &WDef = at->second;
-
-    // We need the value after it is written to register.
-    if (WDef.WriteSlot < ReadSlot) {
-      assert(((VTID.hasDatapath() && ReadSlot == EmitSlot + 1)
-              || (!VTID.hasDatapath() && ReadSlot == EmitSlot))
-              && "Assumption of Slots broken!");
-      Ops[i] = getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
-      continue;
-    }
-
-    assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
-
-    Ops[i] = WDef.createOperand();
+    Ops[i] = getRegUseOperand(MO, IsCtrl, ReadSlot, EmitSlot);
   }
 
   MachineInstrBuilder Builder;
@@ -419,8 +432,11 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     Dst.setBitWidth(SizeInBits);
     ucOperand Src = MachineOperand::CreateReg(RegNo, false);
     Src.setBitWidth(SizeInBits);
+    // FIXME: Use PHINode instead of Copy, so we can compute a right
+    // liveinterval for the register.
     CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
-    CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.PredReg));
+    assert(WD.Pred.getReg() == 0 && "Cannot pipeline predicate!");
+    CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.Pred.getReg()));
     CopyBuilder.addOperand(Dst).addOperand(Src);
     // Update the register.
     RegNo = PipedReg;

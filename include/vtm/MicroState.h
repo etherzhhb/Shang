@@ -105,17 +105,20 @@ public:
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }
 
+  bool isPredicateInverted() const;
+
   ucOp getucParent();
 
   static ucOperand CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                 FuncUnitId FUId = VFUs::Trivial);
-  static ucOperand CreateWireDefine(MachineRegisterInfo &MRI, unsigned BitWidth);
+  static ucOperand CreateWireDefine(unsigned WireNum, unsigned BitWidth);
   static ucOperand CreateWireRead(unsigned WireNum, unsigned BitWidth);
 
   static ucOperand CreatePredicate(unsigned Reg = 0);
 
   /*FIXME: Get the value from the max word length*/
-  void print(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0);
+  void print(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0,
+             bool isPredicate = false);
 
   struct Mapper {
     typedef ucOperand &result_type;
@@ -267,7 +270,7 @@ public:
 class ucState {
   const MachineInstr &Instr;
 public:
-  // This flag indicate that the current ucState contains the VOpToState that
+  // This flag indicate that the current ucState contains the VOpToStateb that
   // branching to other MachineBB.
   static const unsigned char hasTerm = 0x80;
 
@@ -275,6 +278,11 @@ public:
     assert((MI.getOpcode() == VTM::Control
             || MI.getOpcode() == VTM::Datapath)
            && "Bad Instr!");
+  }
+  /*implicit*/ ucState(MachineBasicBlock::iterator I) : Instr(*I) {
+    assert((I->getOpcode() == VTM::Control
+      || I->getOpcode() == VTM::Datapath)
+      && "Bad Instr!");
   }
 
   unsigned getSlot() const {

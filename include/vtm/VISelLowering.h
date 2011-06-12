@@ -23,12 +23,11 @@ namespace llvm {
 namespace VTMISD {
   enum {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
-    ReadSymbol, // Extract value from a chain.
+    ReadReturn, // Extract value from a chain.
     Ret,
     RetVal,
     InternalCall,
     // Arithmetic operation.
-    ADD,
     //
     Not,
     // Bit level operation.  
@@ -65,10 +64,30 @@ public:
   unsigned getFunctionAlignment(const Function *F) const;
 
   virtual MVT getShiftAmountTy(EVT LHSTy) const { return MVT::i8; }
+  virtual const TargetRegisterClass *getRepRegClassFor(EVT VT) const;
+  virtual uint8_t getRepRegClassCostFor(EVT VT) const;
+
+  virtual void computeMaskedBitsForTargetNode(const SDValue Op, const APInt &Mask,
+                                              APInt &KnownZero, APInt &KnownOne,
+                                              const SelectionDAG &DAG,
+                                              unsigned Depth = 0) const;
+  // Narrowing is always profitable.
+  virtual bool isNarrowingProfitable(EVT VT1, EVT VT2) const { return true; }
+  virtual bool isTruncateFree(EVT VT1, EVT VT2) const { return true; }
+  virtual bool isTruncateFree(const Type *Ty1, const Type *Ty2) const {
+    return true;
+  }
+  virtual bool isZExtFree(EVT VT1, EVT VT2) const { return true; }
+  virtual bool isZExtFree(const Type *Ty1, const Type *Ty2) const {
+    return true;
+  }
 
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture bit level SDNodes.
   static unsigned computeSizeInBits(SDValue Op);
+  static void ComputeSignificantBitMask(SDValue Op, const APInt &Mask,
+                                        APInt &KnownZero, APInt &KnownOne,
+                                        const SelectionDAG &DAG, unsigned Depth);
 
   // Get the bit slice in range (UB, LB].
   /// GetBits - Retrieve bits between [LB, UB).
@@ -106,30 +125,6 @@ public:
   static SDValue getNot(SelectionDAG &DAG, DebugLoc dl, SDValue Operand);
 
   //===--------------------------------------------------------------------===//
-  // heterogeneous accelerator architecture arithmetic SDNodes.
-  static SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB, SDValue CarryIn,
-                        bool dontCreate = false);
-  static SDValue getAdd(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB,
-                        bool dontCreate = false);
-
-  static SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB, SDValue CarryIn,
-                        bool dontCreate = false);
-  static SDValue getSub(SelectionDAG &DAG, DebugLoc dl, EVT VT,
-                        SDValue OpA, SDValue OpB,
-                        bool dontCreate = false);
-
-  static SDValue getCarry(SDValue Sum) {
-    if (Sum->getOpcode() == VTMISD::ADD)
-      return Sum.getValue(1);
-
-    assert(Sum->getOpcode() == VTMISD::BitCat && "Get carry on a wrong node!");
-    return getCarry(Sum->getOperand(0));
-  }
-
-  //===--------------------------------------------------------------------===//
   // Helper function for comparison lowering.
   static SDValue getCmpResult(SelectionDAG &DAG, SDValue SetCC, bool dontSub);
 
@@ -157,7 +152,7 @@ public:
   // Carry (or Unsigned Overflow).
   static SDValue getCFlag(SelectionDAG &DAG, SDValue SetCC) {
     SDValue Result = getCmpResult(DAG, SetCC, false);
-    return getCarry(Result);
+    return Result.getValue(1);
   }
 
   // The negative flag.
@@ -174,10 +169,11 @@ public:
   static SDValue getNNotEQVFlag(SelectionDAG &DAG, SDValue SetCC);
 
 private:
-
+  SDValue LowerAdd(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerAddC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSubC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBR(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
 

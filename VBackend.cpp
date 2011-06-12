@@ -35,12 +35,15 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
-
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
-
 using namespace llvm;
+cl::opt<bool> EnableSimpleRegisterAllocate("vtm-enable-simple-allocate",
+                                           cl::init(false), cl::Hidden);
+cl::opt<bool> EnableIfConversion("vtm-enable-if-conversion",
+                                 cl::init(true), cl::Hidden);
 
 //===----------------------------------------------------------------------===//
 
@@ -198,17 +201,22 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Run the SCEVAA pass to compute more accurate alias information.
   PM.add(createScalarEvolutionAliasAnalysisPass());
 
-  // Eliminate the VOpMvImm instructions.
-  PM.add(createElimMvImmPass());
-
   // Perform if conversion before schedule, so we have more parallelism
   // available.
-  PM.add(createIfConverterPass());
+  if (EnableIfConversion) {
+    PM.add(createVIfConverterPass());
+    printAndVerify(PM, "After VTM ifconversion pass");
+  }
+
+  // Eliminate the VOpMvImm instructions.
+  PM.add(createFixMachineCodePass());
+
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());
 
-  // TODO: Register allocation.
-  PM.add(createSimpleRegisterAllocator());
+  if (EnableSimpleRegisterAllocate) PM.add(createSimpleRegisterAllocator());
+
+  PM.add(createRTLCodegenPreparePass());
 
   return false;
 }

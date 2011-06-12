@@ -68,7 +68,14 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         Op.setBitWidth(64);
         continue;
       }
-      case VTM::VOpToState: {
+      case VTM::VOpRet: {
+        // Setup the bit width for predicate operand.
+        ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
+        Op.setBitWidth(1);
+        continue;
+      }
+      case VTM::VOpToState:
+      case VTM::VOpToStateb: {
         // Setup the bit width for predicate operand.
         ucOperand &Op = cast<ucOperand>(Instr.getOperand(1));
         Op.setBitWidth(1);
@@ -77,8 +84,6 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       case VTM::COPY:     case VTM::PHI:
         // Fall through
       case VTM::Control:  case VTM::Datapath:
-      // No need to compute bitwidth for return void instruction.
-      case VTM::VOpRet:
         continue;
       case VTM::VOpSRA:
       case VTM::VOpSRL:
@@ -121,6 +126,10 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   switch (Instr->getOpcode()) {
   // Copy instruction may inserted during register allocation, in this case
   // its operand will not come with any bit width information.
+  case VTM::VOpMove_ra:
+  case VTM::VOpMove_rm:
+  case VTM::VOpMove_rs:
+  case VTM::VOpMove_rw:
   case VTM::COPY: {
     MachineOperand &Result = Instr->getOperand(0),
                    &Operand = Instr->getOperand(1);
@@ -146,8 +155,9 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // Not necessary to compute the bitwitdh information of these instructions.
   //case VTM::VOpArg:
   case VTM::VOpMemTrans:
-  // These intructions do not define anything.
+    // These intructions do not define anything.
   case VTM::VOpToState:
+  case VTM::VOpToStateb:
   case VTM::EndState:
   case VTM::VOpRet:
   case VTM::VOpRetVal:
@@ -217,7 +227,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // The bitwidth determinate by its first operand.
-  case VTM::VOpMvImm:
+  case VTM::VOpMove_ri:
   case VTM::VOpNot:
   case VTM::VOpSRA:
   case VTM::VOpSRL:

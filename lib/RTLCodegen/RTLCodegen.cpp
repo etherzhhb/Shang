@@ -25,33 +25,31 @@
 #include "vtm/LangSteam.h"
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VRegisterInfo.h"
+#include "vtm/VInstrInfo.h"
 
 #include "llvm/Type.h"
 
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
-
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallString.h"
-
 #include "llvm/ADT/StringExtras.h"
-
-#include "llvm/Support/FormattedStream.h"
-
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
-
+#define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+STATISTIC(TotalRegisterBits,
+          "Number of total register bits in synthesised modules");
 namespace {
 class RTLCodegen : public MachineFunctionPass {
   vlang_raw_ostream Out;
@@ -74,8 +72,141 @@ class RTLCodegen : public MachineFunctionPass {
     ReadyPred += " & (" + Pred + ")";
   }
 
-  void emitFunctionSignature();
-  void emitCommonPort();
+  void emitFunctionSignature(int FNNum);
+  void emitCommonPort(int FNNum);
+
+  struct MuxBuilder {
+    std::string MuxLogic;
+    vlang_raw_ostream MuxLogicS;
+    std::string MuxWiresDecl;
+    vlang_raw_ostream MuxWiresDeclS;
+
+    MuxBuilder()
+      : MuxLogic("//Mux\n"),
+        MuxLogicS(*new raw_string_ostream(MuxLogic), true, 2),
+        MuxWiresDecl("// Mux\n"),
+        MuxWiresDeclS(*new raw_string_ostream(MuxWiresDecl), true, 2) {
+      MuxLogicS << "always @(*)";
+      MuxLogicS.enter_block(" // begin mux logic\n");
+      MuxLogicS.switch_begin("1'b1");
+    }
+
+    void addOutput(const std::string &OutputName, unsigned Bitwidth) {
+      MuxWiresDeclS << "reg ";
+      if (Bitwidth > 1) MuxWiresDeclS << verilogBitRange(Bitwidth, 0, false);
+      MuxWiresDeclS  << OutputName << "_mux_wire = "
+                     << verilogConstToStr(0, Bitwidth, false)<< ";\n";
+      MuxWiresDeclS << "assign " << OutputName << " = " << OutputName
+                    << "_mux_wire;\n";
+    }
+
+    void assignValueInCase(const std::string &Dst, const std::string &Src) {
+      MuxLogicS << Dst << "_mux_wire = " << Src << ";\n";
+    }
+
+    void writeToStream(raw_ostream &S) {
+      MuxWiresDeclS.flush();
+      S << MuxWiresDecl << "\n";
+
+      MuxLogicS.exit_block();
+      MuxLogicS.switch_end();
+      MuxLogicS.exit_block(" // end mux logic\n\n\n\n");
+      MuxLogicS.flush();
+      S << MuxLogic;
+    }
+  };
+
+  struct MemBusBuilder {
+    VASTModule *VM;
+    VFUMemBus *Bus;
+    unsigned BusNum;
+    std::string EnableLogic;
+    vlang_raw_ostream EnableLogicS;
+    MuxBuilder BusMux;
+
+    void createOutputPort(const std::string &PortName, unsigned BitWidth,
+                          bool isEn = false) {
+      // We need to create multiplexer to allow current module and its submodules
+      // share the bus.
+      std::string PortReg = PortName + "_r";
+      VM->addRegister(PortReg, BitWidth);
+      VM->addOutputPort(PortName, BitWidth, VASTModule::Others, false);
+      if (isEn) {
+        EnableLogicS << "assign " << PortName << " = " << PortReg;
+        // The top level module control the memory bus by default.
+        BusMux.MuxLogicS.match_case("default");
+      } else {
+        BusMux.addOutput(PortName, BitWidth);
+        BusMux.assignValueInCase(PortName, PortReg);
+      }
+    }
+
+    std::string addSubModulePort(std::string &PortName, unsigned BitWidth,
+                                 std::string &SubModuleName, bool isOut = true,
+                                 bool isEn = false){
+      std::string ConnectedWire = PortName;
+      if (isOut) { // Create extra wire for bus mux.
+        ConnectedWire = SubModuleName + "_" + ConnectedWire;
+        VM->addWire(ConnectedWire, BitWidth);
+        if (isEn) {
+          EnableLogicS << " | " << ConnectedWire ;
+          BusMux.MuxLogicS.exit_block();
+          BusMux.MuxLogicS.match_case(ConnectedWire);
+        } else
+          BusMux.assignValueInCase(PortName, ConnectedWire);
+      }
+
+      return "." + PortName + "(" +  ConnectedWire + "),\n\t";
+    }
+
+    void addSubModule(std::string &SubModuleName, raw_ostream &S) {
+      S << addSubModulePort(VFUMemBus::getEnableName(BusNum), 1, SubModuleName,
+                            true, true);
+      S << addSubModulePort(VFUMemBus::getWriteEnableName(BusNum), 1,
+                            SubModuleName);
+      S << addSubModulePort(VFUMemBus::getAddrBusName(BusNum),
+                            Bus->getAddrWidth(), SubModuleName);
+      S << addSubModulePort(VFUMemBus::getInDataBusName(BusNum),
+                            Bus->getDataWidth(), SubModuleName, false);
+      S << addSubModulePort(VFUMemBus::getOutDataBusName(BusNum),
+                            Bus->getDataWidth(), SubModuleName);
+      S << addSubModulePort(VFUMemBus::getByteEnableName(BusNum),
+                            Bus->getDataWidth()/8, SubModuleName);
+      S << addSubModulePort(VFUMemBus::getReadyName(BusNum), 1, SubModuleName,
+                            false);
+    }
+
+    MemBusBuilder(VASTModule *M, unsigned N)
+      : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N),
+      EnableLogic("  // Membus enables\n"),
+      EnableLogicS(*new raw_string_ostream(EnableLogic), true, 2) {
+      // Build the ports for current module.
+      FuncUnitId ID(VFUs::MemoryBus, BusNum);
+      // We need to create multiplexer to allow current module and its submodules
+      // share the memory bus.
+
+      VM->setFUPortBegin(ID);
+      // Control ports.
+      createOutputPort(VFUMemBus::getEnableName(BusNum), 1, true);
+      createOutputPort(VFUMemBus::getWriteEnableName(BusNum), 1);
+
+      // Address port.
+      createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth());
+      // Data ports.
+      VM->addInputPort(VFUMemBus::getInDataBusName(BusNum), Bus->getDataWidth());
+      createOutputPort(VFUMemBus::getOutDataBusName(BusNum), Bus->getDataWidth());
+      // Byte enable.
+      createOutputPort(VFUMemBus::getByteEnableName(BusNum), Bus->getDataWidth() / 8);
+      // Bus ready.
+      VM->addInputPort(VFUMemBus::getReadyName(BusNum), 1);
+    }
+
+    void writeToStream(raw_ostream &S) {
+      EnableLogicS.flush();
+      S << EnableLogic << ";\n";
+      BusMux.writeToStream(S);
+    }
+  };
 
   /// emitAllocatedFUs - Set up a vector for allocated resources, and
   /// emit the ports and register, wire and datapath for them.
@@ -86,7 +217,8 @@ class RTLCodegen : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
-  void emitWires(const TargetRegisterClass *RC);
+  void emitSignals(const TargetRegisterClass *RC,
+                   const std::string &Prefix);
 
   void clear();
 
@@ -135,12 +267,9 @@ class RTLCodegen : public MachineFunctionPass {
   void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
-  // Emit a signal with "signed" modifier and return the name of signed signal.
-  std::string emitSignedOperand(ucOperand &Op);
+  void emitOpShift(ucOp &OpSHT, const std::string &Operator);
 
-  void emitOpSRA(ucOp &OpSRA);
-
-  void emitVOpSel(ucOp &OpSel);
+  void emitOpSel(ucOp &OpSel);
 
   void emitOpAdd(ucOp &OpAdd);
   void emitOpMult(ucOp &OpMult);
@@ -155,26 +284,49 @@ class RTLCodegen : public MachineFunctionPass {
   bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
                   MachineBasicBlock *SrcBB = 0);
 
-  void emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB);
-
   void emitOpInternalCall(ucOp &OpInternalCall);
-  void emitOpReadSymbol(ucOp &OpReadSymbol);
+  void emitOpReadReturn(ucOp &OpReadSymbol);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
   void emitOpCopy(ucOp &OpCopy);
   void emitOpMemTrans(ucOp &OpMemAccess);
   void emitOpBRam(ucOp &OpBRam);
 
+  std::string getSubModulePortName(unsigned FNNum,
+                                   const std::string PortName) const {
+    const Function *F = FInfo->getCalleeFN(FNNum);
+    return F->getNameStr() + "_" + PortName;
+  }
+
+  struct GetCalleeFNEnableNameFtor {
+    RTLCodegen *CG;
+    GetCalleeFNEnableNameFtor(RTLCodegen *cg) : CG(cg) {}
+    std::string operator() (unsigned FNNum) const {
+      return CG->getSubModulePortName(FNNum, "start");
+    }
+  };
+
+  struct GetCalleeFNReadyNameFtor {
+    RTLCodegen *CG;
+    GetCalleeFNReadyNameFtor(RTLCodegen *cg) : CG(cg) {}
+    std::string operator() (unsigned FNNum) const {
+      return CG->getSubModulePortName(FNNum, "fin");
+    }
+  };
+
   // Return the FSM ready predicate.
   // The FSM only move to next micro-state if the predicate become true.
-  void emitFUCtrlForState(vlang_raw_ostream &CtrlS,
-                          MachineBasicBlock *CurBB,
-                          const PredMapTy &NextStatePred);
-  template<class FUTy>
-  void emitFUEnableForState(vlang_raw_ostream &CtrlS,
+  void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB);
+
+  template<enum VFUs::FUTypes T, typename GetReadyNameFunc>
+  void emitWaitFUReadyForState(MachineBasicBlock *CurBB, unsigned Latency,
+                               unsigned startSlot, unsigned endSlot,
+                               GetReadyNameFunc GetReadyName);
+
+  template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
+  void emitFUEnableForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
                             unsigned startSlot, unsigned endSlot,
-                            MachineBasicBlock *CurBB,
-                            const PredMapTy &NextStatePred );
+                            GetEnableNameFunc GetEnableName);
 
 public:
   /// @name FunctionPass interface
@@ -240,9 +392,11 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MRI = &MF->getRegInfo();
   BLI = &getAnalysis<BitLevelInfo>();
 
-  Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
-  printVMF(Out, F);
-  Out << "`endif\n";
+  DEBUG(
+    Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
+    printVMF(Out, F);
+    Out << "`endif\n";
+  );
 
   SignedWireNum = 0;
   // Reset the current fsm state number.
@@ -253,7 +407,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
   VM = FInfo->getRtlMod();
-  emitFunctionSignature();
+  emitFunctionSignature(-1);
 
   // Emit control register and idle state
   unsigned totalFSMStates = MF->size() + 1;
@@ -262,7 +416,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   VM->addRegister("NextFSMState", TotalFSMStatesBit);
 
   emitIdleState();
-
   
   emitAllSignals();
   emitAllocatedFUs();
@@ -307,10 +460,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out << "default:  NextFSMState <= state_idle;\n";
   Out.switch_end();
   Out.else_begin("// else disable all resources\n");
-  for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I)
-    Out << VFUMemBus::getEnableName(I->getFUNum()) << " <= 1'b0;\n";
-
+  emitFUCtrlForState(Out, 0);
   Out.exit_block("// end control block\n");
   Out.always_ff_end();
   Out.module_end();
@@ -333,9 +483,15 @@ void RTLCodegen::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void RTLCodegen::emitFunctionSignature() {
-  const Function *F = MF->getFunction();
+void RTLCodegen::emitFunctionSignature(int FNNum) {
   const TargetData *TD = MF->getTarget().getTargetData();
+  raw_ostream &S = VM->getDataPathBuffer();
+
+  const Function *F;
+  if (FNNum != -1)
+    F = FInfo->getCalleeFN(FNNum);
+  else
+    F = MF->getFunction();
 
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
       I != E; ++I) {
@@ -343,17 +499,29 @@ void RTLCodegen::emitFunctionSignature() {
     std::string Name = Arg->getNameStr();
     unsigned BitWidth = TD->getTypeSizeInBits(Arg->getType());
     // Add port declaration.
-    VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
+    if (FNNum == -1)
+      VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
+    else {
+      std::string RegName = getSubModulePortName(FNNum, Name);
+      VM->addRegister(RegName, BitWidth);
+      S << "." << Name << '(' << RegName << "),\n\t";
+    }
   }
 
   const Type *RetTy = F->getReturnType();
   if (!RetTy->isVoidTy()) {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
-    VM->addOutputPort("return_value", TD->getTypeSizeInBits(RetTy),
-                      VASTModule::RetPort);
+    unsigned BitWidth = TD->getTypeSizeInBits(RetTy);
+    if (FNNum == -1)
+      VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
+    else {
+      std::string WireName = getSubModulePortName(FNNum, "return_value");
+      VM->addWire(WireName, BitWidth);
+      S << ".return_value(" << WireName << "),\n\t";
+    }
   }
 
-  emitCommonPort();
+  emitCommonPort(FNNum);
 }
 
 void RTLCodegen::emitIdleState() {
@@ -372,10 +540,7 @@ void RTLCodegen::emitIdleState() {
   CtrlS << "NextFSMState <= state_idle;\n";
   // End if-else
   CtrlS.exit_block();
-  // Emit function unit control.
-  PredMapTy IdleNextStatePred;
-  IdleNextStatePred.insert(std::make_pair(EntryBB, "start"));
-  emitFUCtrlForState(CtrlS, 0, IdleNextStatePred);
+  emitFUCtrlForState(CtrlS, 0);
   // End case.
   CtrlS.exit_block();
 }
@@ -423,52 +588,52 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   else
     emitNextMicroState(CtrlS, &MBB, "1'b0");
 
-  emitFUCtrlForState(CtrlS, &MBB, NextStatePred);
+  emitFUCtrlForState(CtrlS, &MBB);
 
   // Case end
   CtrlS.exit_block();
 }
 
-void RTLCodegen::emitCommonPort() {
-  VM->addInputPort("clk", 1, VASTModule::Clk);
-  VM->addInputPort("rstN", 1, VASTModule::RST);
-  VM->addInputPort("start", 1, VASTModule::Start);
-  VM->addOutputPort("fin", 1, VASTModule::Finish);
+static raw_ostream &ConnectPort(raw_ostream &OS, const std::string &PortName,
+                                bool LastPort = false,
+                                const std::string &SignalPrefix = "") {
+  OS << "." << PortName << '(' << SignalPrefix << PortName << ')';
+  if (!LastPort) OS << ",\n\t";
+  return OS;
+}
+
+void RTLCodegen::emitCommonPort(int FNNum) {
+  if (FNNum == -1) { // If F is current function.
+    VM->addInputPort("clk", 1, VASTModule::Clk);
+    VM->addInputPort("rstN", 1, VASTModule::RST);
+    VM->addInputPort("start", 1, VASTModule::Start);
+    VM->addOutputPort("fin", 1, VASTModule::Finish);
+  } else { // It is a callee function, emit the signal for the sub module.
+    std::string StartPortName = getSubModulePortName(FNNum, "start");
+    std::string FinPortName = getSubModulePortName(FNNum, "fin");
+    VM->addRegister(StartPortName, 1);
+    VM->addWire(FinPortName, 1);
+    // Connect to the ports
+    raw_ostream &S = VM->getDataPathBuffer();
+    S << ".clk(clk),\n\t.rstN(rstN),\n\t";
+    S << ".start(" << StartPortName << "),\n\t";
+    S << ".fin(" <<FinPortName << ")";
+  }
 }
 
 void RTLCodegen::emitAllocatedFUs() {
   // Dirty Hack: only Memory bus supported at this moment.
   typedef VFInfo::const_id_iterator id_iterator;
 
-  VFUMemBus *MemBus = getFUDesc<VFUMemBus>();
+  VFUMemBus *Bus = getFUDesc<VFUMemBus>();
 
-  for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
-    // FIXME: In fact, *I return the FUId instead of FUNum. 
-    FuncUnitId ID = *I;
-    unsigned FUNum = ID.getFUNum();
+  //for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
+  //     E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
+  // FIXME: In fact, *I return the FUId instead of FUNum.
+  // DIRTYHACK: Every module use memory bus 0, connect the bus.
+  MemBusBuilder MBBuilder(VM, 0);
 
-    VM->setFUPortBegin(ID);
-    // Control ports.
-    VM->addOutputPort(VFUMemBus::getEnableName(FUNum), 1);
-    VM->addOutputPort(VFUMemBus::getWriteEnableName(FUNum), 1);
-
-    // Address port.
-    VM->addOutputPort(VFUMemBus::getAddrBusName(FUNum),
-                      MemBus->getAddrWidth());
-
-    // Data ports.
-    VM->addInputPort(VFUMemBus::getInDataBusName(FUNum),
-                     MemBus->getDataWidth());
-    VM->addOutputPort(VFUMemBus::getOutDataBusName(FUNum),
-                      MemBus->getDataWidth());
-    // Byte enable.
-    VM->addOutputPort(VFUMemBus::getByteEnableName(FUNum),
-                      MemBus->getDataWidth() / 8);
-
-    // Bus ready.
-    VM->addInputPort(VFUMemBus::getReadyName(FUNum), 1);
-  }
+  //}
  
   raw_ostream &S = VM->getDataPathBuffer();
   VFUBRam *BlockRam = getFUDesc<VFUBRam>();
@@ -484,6 +649,20 @@ void RTLCodegen::emitAllocatedFUs() {
       << '\n';
   }
 
+  for (id_iterator I = FInfo->id_begin(VFUs::CalleeFN),
+       E = FInfo->id_end(VFUs::CalleeFN); I != E; ++I) {
+    FuncUnitId ID = *I;
+    const Function *Callee = FInfo->getCalleeFN(ID.getFUNum());
+    S << getSynSetting(Callee->getName())->getModName() << ' '
+      << getSubModulePortName(ID.getFUNum(), "_inst")
+      << "(\n\t";
+    MBBuilder.addSubModule(getSubModulePortName(ID.getFUNum(), "_inst"), S);
+    emitFunctionSignature(ID.getFUNum());
+    S << ");\n";
+  }
+
+  // Write the memory bus mux.
+  MBBuilder.writeToStream(S);
 }
 
 void RTLCodegen::emitAllSignals() {
@@ -500,26 +679,36 @@ void RTLCodegen::emitAllSignals() {
        E = FInfo->phyreg_end(8); I < E; ++I)
     VM->addRegister("reg" + utostr(*I), 64);
 
-  emitWires(VTM::WireRegisterClass);
+  emitSignals(VTM::DRRegisterClass, "reg");
+
+  emitSignals(VTM::WireRegisterClass, "wire");
   // FIXME: There are function units.
-  emitWires(VTM::RADDRegisterClass);
-  emitWires(VTM::RMULRegisterClass);
-  emitWires(VTM::RSHTRegisterClass);
+  emitSignals(VTM::RADDRegisterClass, "wire");
+  emitSignals(VTM::RMULRegisterClass, "wire");
+  emitSignals(VTM::RSHTRegisterClass, "wire");
 }
 
-void RTLCodegen::emitWires(const TargetRegisterClass *RC) {
+void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
+                             const std::string &Prefix) {
   // And Emit the wires defined in this module.
   const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
 
   for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
     I != E; ++I) {
-      unsigned WireNum = *I;
-      const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(WireNum));
+      unsigned SignalNum = *I;
+      const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(SignalNum));
       // assert(Op && "Wire define not found!");
       if (!Op) continue;
 
-      WireNum = TargetRegisterInfo::virtReg2Index(WireNum);
-      VM->addWire("wire" + utostr(WireNum), Op->getBitWidth(), RC->getName());
+      SignalNum = TargetRegisterInfo::virtReg2Index(SignalNum);
+      if (Prefix[0] == 'w')
+        VM->addWire(Prefix + utostr(SignalNum), Op->getBitWidth(),
+                    RC->getName());
+      else {
+        unsigned Bitwidth = Op->getBitWidth();
+        VM->addRegister(Prefix + utostr(SignalNum), Bitwidth, RC->getName());
+        TotalRegisterBits += Bitwidth;
+      }
   }
 }
 
@@ -564,43 +753,54 @@ void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
   ss << ";\n";
 }
 
-template<class FUTy>
+template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
 void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
-                                      unsigned startSlot, unsigned endSlot,
                                       MachineBasicBlock *CurBB,
-                                      const PredMapTy &NextStatePred) {
-  VFUs::FUTypes Ty = FUTy::getType();
-
+                                      unsigned startSlot, unsigned endSlot,
+                                      GetEnableNameFunc GetEnableName) {
   // Emit function unit control.
-  // Membus control operation.
   for (VFInfo::const_id_iterator I = FInfo->id_begin(Ty), E = FInfo->id_end(Ty);
        I != E; ++I) {
     FuncUnitId Id = *I;
     CtrlS << "// " << Id << " control for next micro state.\n";
-    CtrlS << FUTy::getEnableName(Id.getFUNum()) << " <= 1'b0";
+    CtrlS << GetEnableName(Id.getFUNum()) << " <= 1'b0";
     // Resource control operation when in the current state.
     for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
       if (FInfo->isFUActiveAt(Id, i))
         CtrlS << " | " << getucStateEnable(CurBB, i - 1);
     }
 
-    // Resource control operation when we are transferring fsm state.
-    for (PredMapTy::const_iterator NI = NextStatePred.begin(),
-      NE = NextStatePred.end(); NI != NE; ++NI) {
-        MachineBasicBlock *NextBB = NI->first;
-        unsigned FirstSlot = FInfo->getStartSlotFor(NextBB);
-        if (FInfo->isFUActiveAt(Id, FirstSlot))
-          CtrlS << " | (" << getucStateEnable(NextBB, FirstSlot)
-          << " & " << NI->second << ") ";
-    }
-
     CtrlS << ";\n";
   }
 }
 
+template<enum VFUs::FUTypes T, typename GetReadyNameFunc>
+void RTLCodegen::emitWaitFUReadyForState(MachineBasicBlock *CurBB,
+                                         unsigned Latency,
+                                         unsigned startSlot, unsigned endSlot,
+                                         GetReadyNameFunc GetReadyName) {
+  for (VFInfo::const_id_iterator I = FInfo->id_begin(T), E = FInfo->id_end(T);
+       I != E; ++I) {
+     FuncUnitId Id = *I;
+    // Build the ready predicate for waiting membus ready.
+    // We expect all operation will finish before the FSM jump to another state,
+    // so we do not need to worry about if we need to wait the memory operation
+    // issued from the previous state.
+    for (unsigned i = startSlot + Latency, e = endSlot + 1; i != e; ++i)
+      if (FInfo->isFUActiveAt(Id, i - Latency)) {
+        std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
+          + "|" + GetReadyName(Id.getFUNum());
+        addReadyPred(Pred);
+      }
+  }
+}
+
+static std::string GetMemBusEnableName(unsigned FUNum) {
+  return VFUMemBus::getEnableName(FUNum) + "_r";
+}
+
 void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
-                                    MachineBasicBlock *CurBB,
-                                    const PredMapTy &NextStatePred) {
+                                    MachineBasicBlock *CurBB) {
   unsigned startSlot = 0, endSlot = 0;
   // Get the slot information for no-idle state.
   if (CurBB) {
@@ -608,26 +808,21 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
     endSlot = FInfo->getEndSlotFor(CurBB);
   }
 
-  emitFUEnableForState<VFUMemBus>(CtrlS, startSlot, endSlot,
-                                  CurBB, NextStatePred);
-  emitFUEnableForState<VFUBRam>(CtrlS, startSlot, endSlot,
-                                CurBB, NextStatePred);
+  emitFUEnableForState<VFUs::MemoryBus>(CtrlS, CurBB, startSlot, endSlot,
+                                        GetMemBusEnableName);
+  emitFUEnableForState<VFUs::BRam>(CtrlS, CurBB, startSlot, endSlot,
+                                   VFUBRam::getEnableName);
+  emitFUEnableForState<VFUs::CalleeFN>(CtrlS, CurBB, startSlot, endSlot,
+                                       GetCalleeFNEnableNameFtor(this));
 
   unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
-  for (VFInfo::const_id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
-    FuncUnitId Id = *I;
-    // Build the ready predicate for waiting membus ready.
-    // We expect all operation will finish before the FSM jump to another state,
-    // so we do not need to worry about if we need to wait the memory operation
-    // issued from the previous state.
-    for (unsigned i = startSlot + MemBusLatency, e = endSlot + 1; i != e; ++i)
-      if (FInfo->isFUActiveAt(Id, i - MemBusLatency)) {
-        std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
-                            + "|" + VFUMemBus::getReadyName(Id.getFUNum());
-        addReadyPred(Pred);
-      }
-  }
+  emitWaitFUReadyForState<VFUs::MemoryBus>(CurBB, MemBusLatency,
+                                           startSlot, endSlot,
+                                           VFUMemBus::getReadyName);
+
+  // DirtyHack: Set the callee function latency to 1.
+  emitWaitFUReadyForState<VFUs::CalleeFN>(CurBB, 1, startSlot, endSlot,
+                                          GetCalleeFNReadyNameFtor(this));
 
   // Control the finish port
   CtrlS << "// Finish port control\n";
@@ -659,11 +854,19 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
     // Emit the predicate operand.
     SlotPredSS << " & ";
-    Op.getPredicate().print(SlotPredSS);
+    if (Op.getPredicate().getReg()) {
+      SlotPredSS << '(';
+      ucOperand &PredOp = Op.getPredicate();
+      if (PredOp.isPredicateInverted()) SlotPredSS << '~';
+      PredOp.print(SlotPredSS, 1, 0, true);
+      SlotPredSS << ')';
+    } else
+      SlotPredSS << "1'b1";
+
     SlotPredSS.flush();
 
     // Special case for state transferring operation.
-    if (Op->getOpcode() == VTM::VOpToState) {
+    if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
       MachineBasicBlock *TargetBB = Op.getOperand(0).getMBB();
 
       // Emit control operation for next state.
@@ -684,13 +887,22 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     // Emit the operations.
     switch (Op->getOpcode()) {
     case VTM::VOpInternalCall:  emitOpInternalCall(Op);       break;
-    case VTM::VOpReadSymbol:    emitOpReadSymbol(Op);         break;
+    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
     case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
     case VTM::VOpRet:           emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
     case VTM::VOpBRam:          emitOpBRam(Op);               break;
+    case VTM::VOpAdd:           emitOpAdd(Op);                break;
+    case VTM::VOpMult:          emitOpMult(Op);               break;
+    case VTM::VOpSHL:           emitOpShift(Op, "<<");       break;
+    case VTM::VOpSRL:           emitOpShift(Op, ">>");       break;
+    case VTM::VOpSRA:           emitOpShift(Op, ">>>");       break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
-    case VTM::VOpMvImm:
+    case VTM::VOpMove_ra:
+    case VTM::VOpMove_ri:
+    case VTM::VOpMove_rm:
+    case VTM::VOpMove_rs:
+    case VTM::VOpMove_rw:
     case VTM::COPY:             emitOpCopy(Op);               break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
@@ -710,64 +922,109 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
   unsigned StateSlot = FirstState.getSlot();
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
-    ucOp PN = *I;
-    assert(PN->getOpcode() == VTM::PHI && "Unexpected ucOp type!");
-    // Ignore the Pipeline PHIs first.
-    if (PN->getPredSlot() != StateSlot) continue;
-
-    emitOpPHI(PN, SrcBB);
+    ucOp Op = *I;
+    assert(Op->getOpcode() == VTM::IMPLICIT_DEF && "Unexpected operation!");
   }
-
-  // Emit the pipelined PHIs.
-  bool IsInSameBB = (SrcBB == DstBB);
-  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  if (IsInSameBB) CtrlS.exit_block("// End normal PHIs\n");
-
-  for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
-       I != E; ++I) {
-      ucOp PN = *I;
-    // Ignore the Pipeline PHIs first.
-    unsigned Slot = PN->getPredSlot();
-
-    if (Slot == StateSlot) continue;
-    if (IsInSameBB) {
-      std::string SlotPred = "(";
-      raw_string_ostream SlotPredSS(SlotPred);
-
-      SlotPredSS << getucStateEnable(DstBB, Slot - 1) << ')';
-
-      // Emit the predicate operand.
-      SlotPredSS << " & ";
-      PN.getPredicate().print(SlotPredSS);
-      SlotPredSS.flush();
-
-      CtrlS.if_begin(SlotPred);
-
-    }
-
-    emitOpPHI(PN, SrcBB);
-
-    if (IsInSameBB) CtrlS.exit_block("// End pipeline register\n");
-  }
-
-  // DirtyHack: match the block of the loop predicate.
-  if (IsInSameBB) CtrlS.if_begin("1'b1");
 }
 
-void RTLCodegen::emitOpPHI(ucOp &OpPHI, MachineBasicBlock *SrcBB) {
-  assert(SrcBB && "Cannot emit PHI without SrcBB!");
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  OpPHI.getOperand(0).print(OS);
-  OS << " <= ";
-  // Find the source value from match MBB.
-  for (unsigned i = 1, e = OpPHI.getNumOperands(); i != e; i +=2)
-    if (OpPHI.getOperand(i + 1).getMBB() == SrcBB) {
-      OpPHI.getOperand(i).print(OS);
-      OS << ";\n";
-      return;
-    }
+void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  // Allocate the function unit register.
+  // FIXME: Move these to emitAllocatedFUs
+  ucOperand &Sum = OpAdd.getOperand(0);
+  unsigned FUWidth = Sum.getBitWidth();
+  unsigned AddNum = TargetRegisterInfo::virtReg2Index(Sum.getReg());
+  std::string SumName = "addsub" + utostr_32(AddNum);
+  std::string OpAName = SumName + "_a";
+  std::string OpBName = SumName + "_b";
+  std::string OpCName = SumName + "_c";
+  VM->addRegister(OpAName, FUWidth);
+  VM->addRegister(OpBName, FUWidth);
+  VM->addRegister(OpCName, 1);
+  // Assign the value to function unit.
+  CtrlS << OpAName << " <= ";
+  OpAdd.getOperand(2).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpBName << " <= ";
+  OpAdd.getOperand(3).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpCName << " <= ";
+  OpAdd.getOperand(4).print(CtrlS);
+  CtrlS << ";\n";
+  // Write the datapath for function unit.
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  // FIXME: Move these to emitAllocatedFUs
+  DPS << "assign {";
+  // Carry out.
+  OpAdd.getOperand(1).print(DPS);
+  DPS << ", ";
+  // Sum.
+  OpAdd.getOperand(0).print(DPS);
+  DPS << "} = " << OpAName << " + " << OpBName << " + " << OpCName << ";\n";
+}
 
-  llvm_unreachable("No matching MBB found!");
+void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  // Allocate the function unit register.
+  // FIXME: Move these to emitAllocatedFUs
+  ucOperand &Result = OpSHT.getOperand(0);
+  unsigned FUWidth = Result.getBitWidth();
+  unsigned ShiftNum = TargetRegisterInfo::virtReg2Index(Result.getReg());
+  std::string SumName = "shift" + utostr_32(ShiftNum);
+  std::string OpAName = SumName + "_a";
+  std::string OpBName = SumName + "_b";
+  VM->addRegister(OpAName, FUWidth);
+  VM->addRegister(OpBName, FUWidth);
+  // Assign the value to function unit.
+  CtrlS << OpAName << " <= ";
+  OpSHT.getOperand(1).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpBName << " <= ";
+  OpSHT.getOperand(2).print(CtrlS);
+  CtrlS << ";\n";
+
+  // Write the datapath for function unit.
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  // Create the signed operand.
+  if (OpSHT->getOpcode() == VTM::VOpSRA) {
+    std::string NewOpAName = OpAName + "_signed";
+    DPS << "wire signed" << verilogBitRange(FUWidth) << ' '
+        << NewOpAName << " = " << OpAName << ";\n";
+    OpAName = NewOpAName;
+  }
+
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  OpSHT.getOperand(0).print(OS);
+  OS << " = " << OpAName << Operator << OpBName << ";\n";
+}
+
+void RTLCodegen::emitOpMult(ucOp &OpMult) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  // Allocate the function unit register.
+  // FIXME: Move these to emitAllocatedFUs
+  ucOperand &Product = OpMult.getOperand(0);
+  unsigned FUWidth = Product.getBitWidth();
+  unsigned MultNum = TargetRegisterInfo::virtReg2Index(Product.getReg());
+  std::string SumName = "mult" + utostr_32(MultNum);
+  std::string OpAName = SumName + "_a";
+  std::string OpBName = SumName + "_b";
+  VM->addRegister(OpAName, FUWidth);
+  VM->addRegister(OpBName, FUWidth);
+  // Assign the value to function unit.
+  CtrlS << OpAName << " <= ";
+  OpMult.getOperand(1).print(CtrlS);
+  CtrlS << ";\n";
+  CtrlS << OpBName << " <= ";
+  OpMult.getOperand(2).print(CtrlS);
+  CtrlS << ";\n";
+  // Write the datapath for function unit.
+  raw_ostream &DPS = VM->getDataPathBuffer();
+  // FIXME: Move these to emitAllocatedFUs
+  DPS << "assign ";
+  // Sum.
+  OpMult.getOperand(0).print(DPS);
+  DPS << " = " << OpAName << " * " << OpBName << ";\n";
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
@@ -785,22 +1042,30 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpReadSymbol(ucOp &OpReadSymbol) {
+void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
   OpReadSymbol.getOperand(0).print(OS);
-  // FIXME: Use getInputPort instead;
-  OS << " <= ";
-  //OpReadSymbol.getOperand(1).print(OS);
+  OS << " <= "
+     << getSubModulePortName(OpReadSymbol.getOperand(2).getImm(),
+                             OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
 }
 
 void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
-  OS << "// Calling function: "
-     << OpInternalCall.getOperand(1).getGlobal()->getName()
-     << ";\n";
+  unsigned FNNum = OpInternalCall.getOperand(1).getImm();
+  const Function *FN = FInfo->getCalleeFN(FNNum);
+  StringRef CalleeName = FN->getName();
+  OS << "// Calling function: " << CalleeName << ";\n";
+  Function::const_arg_iterator ArgIt = FN->arg_begin();
+  for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
+    OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
+    OpInternalCall.getOperand(2 + i).print(OS);
+    OS << ";\n";
+    ++ArgIt;
+  }
 }
 
 void RTLCodegen::emitOpRet(ucOp &OpArg) {
@@ -823,19 +1088,19 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
-  OS << VFUMemBus::getAddrBusName(FUNum) << " <= ";
+  OS << VFUMemBus::getAddrBusName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(1).print(OS);
   OS << ";\n";
   // Assign store data.
-  OS << VFUMemBus::getOutDataBusName(FUNum) << " <= ";
+  OS << VFUMemBus::getOutDataBusName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(2).print(OS);
   OS << ";\n";
   // And write enable.
-  OS << VFUMemBus::getWriteEnableName(FUNum) << " <= ";
+  OS << VFUMemBus::getWriteEnableName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(3).print(OS);
   OS << ";\n";
   // The byte enable.
-  OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
+  OS << VFUMemBus::getByteEnableName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(4).print(OS);
   OS << ";\n";
 }
@@ -877,17 +1142,11 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
 
-    case VTM::VOpAdd:       emitOpAdd(Op);          break;
-    case VTM::VOpMult:      emitOpMult(Op);         break;
-
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
     case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
-    case VTM::VOpSel:       emitVOpSel(Op);         break;
+    case VTM::VOpSel:       emitOpSel(Op);         break;
 
-    case VTM::VOpSHL:       emitBinaryOp(Op, "<<"); break;
-    case VTM::VOpSRL:       emitBinaryOp(Op, ">>"); break;
-    case VTM::VOpSRA:       emitOpSRA(Op);break;
 
     case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
 
@@ -920,75 +1179,20 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   OS << ";\n";
 }
 
-std::string RTLCodegen::emitSignedOperand(ucOperand &Op) {
-  unsigned BitWidth = cast<ucOperand>(Op).getBitWidth();
-
-  raw_ostream &OS = VM->getDataPathBuffer();
-  std::string WireName = "SignedWire" + utostr(SignedWireNum);
-  OS << "wire signed" << verilogBitRange(BitWidth) << ' ' << WireName << " = ";
-  Op.print(OS);
-  OS << ";\n";
-
-  ++SignedWireNum;
-  return WireName;
-}
-
-void RTLCodegen::emitOpSRA(ucOp &OpSRA) {
-  std::string Op0 = emitSignedOperand(OpSRA.getOperand(1));
-
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  OpSRA.getOperand(0).print(OS);
-  OS << " = " << Op0 << " >>> ";
-  OpSRA.getOperand(2).print(OS);
-  OS << ";\n";
-}
-
-void RTLCodegen::emitVOpSel(ucOp &OpSel) {
+void RTLCodegen::emitOpSel(ucOp &OpSel) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   OpSel.getOperand(0).print(OS);
   OS << " = ";
-  OpSel.getOperand(1).print(OS);
+  if (OpSel.getOperand(1).isPredicateInverted())
+    OS << "~";
+  OpSel.getOperand(1).print(OS, 1, 0, true);
   OS << " ? ";
   OpSel.getOperand(2).print(OS);
   OS << " : ";
   OpSel.getOperand(3).print(OS);
   OS << ";\n";
 
-}
-
-void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-
-  OS << "assign {";
-  // Carry out.
-  OpAdd.getOperand(1).print(OS);
-  OS << ", ";
-  // Sum.
-  OpAdd.getOperand(0).print(OS);
-  OS << "} = ";
-  // Operands.
-  OpAdd.getOperand(2).print(OS);
-  OS << " + ";
-  OpAdd.getOperand(3).print(OS);
-  OS << " + ";
-  // Carry in.
-  OpAdd.getOperand(4).print(OS);
-  OS << ";\n";
-}
-
-void RTLCodegen::emitOpMult(ucOp &OpMult) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-
-  OS << "assign ";
-  OpMult.getOperand(0).print(OS);
-  OS << " = ";
-
-  OpMult.getOperand(1).print(OS);
-  OS << " * ";
-  OpMult.getOperand(2).print(OS);
-  OS << ";\n";
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {

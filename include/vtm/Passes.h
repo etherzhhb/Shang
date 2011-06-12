@@ -35,24 +35,19 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 
-// Eliminate the VOpMvImm instructions.
-Pass *createElimMvImmPass();
+Pass *createFixMachineCodePass();
+FunctionPass *createVIfConverterPass();
+Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
 Pass *createVPreRegAllocSchedPass();
-extern char &VPreRegAllocSchedID;
-
-Pass *createPHIEliminationPass();
 
 // Register allocation.
 FunctionPass *createSimpleRegisterAllocator();
 
-// Fix copy instruction after register allocation
-Pass *createCopyEliminationPass();
-extern char &CopyEliminationID;
-
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
+Pass *createRTLCodegenPreparePass();
 
 Pass *createScriptingPass(const char *Name, const char *Script);
 
@@ -63,12 +58,9 @@ Pass *createVLTIfCodegenPass(raw_ostream &O);
 Pass *createPLBIfCodegenPass(raw_ostream &O);
 
 //
-void initializeVPreRegAllocSchedPass(PassRegistry &Registry);
-void initializeCopyEliminationPass(PassRegistry &Registry);
+void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeRTLCodegenPass(PassRegistry &Registry);
-
-void initializeRAPass(PassRegistry &Registry);
 } // end namespace
 
 #endif

@@ -48,7 +48,7 @@ private:
   friend class LuaScript;
 public:
   SynSettings(luabind::object SettingTable);
-
+  SynSettings(StringRef Name);
   PipeLineAlgorithm getPipeLineAlgorithm() const { return PipeAlg; }
 
   bool enablePipeLine() const { return getPipeLineAlgorithm() != DontPipeline; }

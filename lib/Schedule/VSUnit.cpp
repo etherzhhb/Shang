@@ -55,7 +55,7 @@ void VSchedGraph::dump() const {
 bool VSchedGraph::trySetLoopOp(VIDesc &VTID) {
   assert(VTID->isTerminator() && "Bad instruction!");
 
-  if (VTID->getOpcode() != VTM::VOpToState) return false;
+  if (!VTID.isBrCndLike()) return false;
 
   if (VTID.get().getOperand(0).getMBB() != MBB) return false;
 

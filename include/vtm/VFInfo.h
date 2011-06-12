@@ -22,6 +22,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/StringPool.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/ADT/OwningPtr.h"
 
@@ -67,6 +68,9 @@ class VFInfo : public MachineFunctionInfo {
     }
   };
 
+  // Mapping Function unit number to callee function name.
+  SmallVector<const Function*, 8> UsedFNs;
+
   typedef std::set<FUActiveSlot> FUActiveSlotSetTy;
   FUActiveSlotSetTy ActiveSlotSet;
 
@@ -101,11 +105,7 @@ private:
   // If bit width information annotated to the annotator?
   bool BitWidthAnnotated;
 public:
-  explicit VFInfo(MachineFunction &MF)
-    : TotalRegs(fistPhyReg),
-      Info(getSynSetting(MF.getFunction()->getName())),
-      Mod(Info->getModName()), BitWidthAnnotated(true)
-  {}
+  explicit VFInfo(MachineFunction &MF);
 
   bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
   void removeBitWidthAnnotators() {
@@ -138,6 +138,21 @@ public:
     bool success = PHISlots.insert(std::make_pair(PN, Slot)).second;
     assert(success && "Insert the same phinode twice?");
     (void) success;
+  }
+
+  unsigned getOrCreateCalleeFN(const Function *FN) {
+    typedef SmallVectorImpl<const Function*>::const_iterator it;
+    it at = std::find(UsedFNs.begin(), UsedFNs.end(), FN);
+    if (at != UsedFNs.end()) return at - UsedFNs.begin();
+
+    unsigned CalleeFNNum = UsedFNs.size();
+    UsedFNs.push_back(FN);
+    return CalleeFNNum;
+  }
+
+  const Function *getCalleeFN(unsigned FNNum) const {
+    assert(FNNum < UsedFNs.size() && "Invalid FNNum!");
+    return UsedFNs[FNNum];
   }
 
   unsigned lookupPHISlot(const MachineInstr *PN) const;

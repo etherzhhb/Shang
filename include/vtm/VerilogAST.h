@@ -202,9 +202,9 @@ public:
   }
 
   VASTPort *addOutputPort(const std::string &Name, unsigned BitWidth,
-                          PortTypes T = Others,
+                          PortTypes T = Others, bool isReg = true,
                           const std::string &Comment = "") {
-    VASTPort *Port = new VASTPort(Name, BitWidth, false, true, Comment);
+    VASTPort *Port = new VASTPort(Name, BitWidth, false, isReg, Comment);
     if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
       assert(Ports[T] == 0 && "Special port exist!");
       Ports[T] = Port;

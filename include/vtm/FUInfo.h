@@ -26,6 +26,8 @@ namespace luabind {
 }
 
 namespace llvm {
+class TargetRegisterClass;
+
 namespace VFUs {
   enum FUTypes {
     Trivial = 0,
@@ -43,6 +45,9 @@ namespace VFUs {
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
     NumNonTrivialCommonFUs = LastCommonFUType - FirstNonTrivialFUType + 1,
     // Special function unit.
+    // RTL module corresponding to callee functions of function corresponding to
+    // current RTL module.
+    CalleeFN = 6,
     // Finite state machine finish.
     FSMFinish = 7,
     LastFUType = FSMFinish,
@@ -53,6 +58,7 @@ namespace VFUs {
   };
 
   extern const char *VFUNames[];
+  const TargetRegisterClass *getRepRegisterClass(enum FUTypes T);
 }
 
 class FuncUnitId {
@@ -84,6 +90,7 @@ public:
   inline VFUs::FUTypes getFUType() const { return UID.ID.Type; }
   inline unsigned getFUNum() const { return UID.ID.Num; }
   inline unsigned getData() const { return UID.data; }
+  inline bool isUnknownInstance() const { return getFUNum() == 0xfff; }
 
   inline bool isTrivial() const { return getFUType() == VFUs::Trivial; }
   inline bool isBound() const {

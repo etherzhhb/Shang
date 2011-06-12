@@ -31,10 +31,41 @@ class VInstrInfo : public TargetInstrInfoImpl {
 public:
   VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
 
+  static const unsigned PredInvertFlag = 0x2;
+  virtual bool isPredicable(MachineInstr *MI) const;
+  virtual bool isPredicated(const MachineInstr *MI) const;
+
+  virtual bool isUnpredicatedTerminator(const MachineInstr *MI) const;
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB,
                              MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
                              SmallVectorImpl<MachineOperand> &Cond,
                              bool AllowModify /* = false */) const;
+  virtual bool DefinesPredicate(MachineInstr *MI,
+                                std::vector<MachineOperand> &Pred) const;
+  virtual bool PredicateInstruction(MachineInstr *MI,
+                                    const SmallVectorImpl<MachineOperand> &Pred)
+                                    const;
+  virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const;
+  virtual unsigned InsertBranch(MachineBasicBlock &MBB,
+                                MachineBasicBlock *TBB, MachineBasicBlock *FBB,
+                                const SmallVectorImpl<MachineOperand> &Cond,
+                                DebugLoc DL) const;
+  static void ReversePredicateCondition(MachineOperand &Cond);
+  virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
+    const;
+  virtual bool isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
+                                         unsigned NumCyles, float Probability,
+                                         float Confidence) const;
+  virtual bool isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCyles,
+                                   unsigned ExtraPredCycles,
+                                    float Probability, float Confidence) const;
+  virtual bool isProfitableToIfCvt(MachineBasicBlock &TMBB,
+                                   unsigned NumTCycles,
+                                   unsigned ExtraTCycles,
+                                   MachineBasicBlock &FMBB,
+                                   unsigned NumFCycles,
+                                   unsigned ExtraFCycles,
+                                   float Probability, float Confidence) const;
 
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
@@ -43,19 +74,47 @@ public:
   /// always be able to get register info as well (through this method).
   virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
 
-  virtual MachineInstr *insertImpDefForPhi(MachineBasicBlock &MBB,
+  virtual unsigned createPHIIncomingReg(unsigned DestReg,
+                                           MachineRegisterInfo *MRI) const;
+  virtual MachineInstr *insertPHIImpDef(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator InsertPos,
     MachineInstr *PN) const;
-  virtual MachineInstr *insertIcomingCopyForPhi(MachineBasicBlock &MBB,
+  virtual MachineInstr *insertPHIIcomingCopy(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator InsertPos,
     MachineInstr *PN,
     unsigned IncomingReg) const;
 
-  virtual MachineInstr *insertCopySrcRegForPhi(MachineBasicBlock &MBB,
+  virtual MachineInstr *insertPHICopySrc(MachineBasicBlock &MBB,
     MachineBasicBlock::iterator InsertPos,
     MachineInstr *PN, unsigned IncomingReg,
     unsigned SrcReg,
     unsigned SrcSubReg) const;
+
+  static const MachineOperand *getPredOperand(const MachineInstr *MI);
+  static MachineOperand *getPredOperand(MachineInstr *MI);
+
+  // Build machine instructions for a = Pred ? IfTrueVal : IfFalseVal in MBB,
+  // and return the register that holding this value.
+  static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
+                                   const SmallVectorImpl<MachineOperand> &Pred,
+                                   MachineOperand IfTrueVal,
+                                   MachineOperand IfFalseVal,
+                                   const TargetInstrInfo *TII);
+  static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
+                                   MachineOperand Pred,
+                                   MachineOperand IfTrueVal,
+                                   MachineOperand IfFalseVal,
+                                   const TargetInstrInfo *TII);
+
+  static MachineInstr&
+  BuildConditionnalMove(MachineBasicBlock &MBB, MachineBasicBlock::iterator IP,
+                        MachineOperand &Res,
+                        const SmallVectorImpl<MachineOperand> &Pred,
+                        MachineOperand IfTrueVal, const TargetInstrInfo *TII);
+
+  static bool isCopyLike(unsigned Opcode, bool IncludeMoveImm = true);
+  static bool isBrCndLike(unsigned Opcode);
+  static bool isWireOp(unsigned Opcode);
 };
 
 // Helper class for manipulating bit width operand.
@@ -137,6 +196,14 @@ public:
       ((getTSFlags() >> ResTypeShiftAmount) & ResTypeMask);
   }
 
+  bool isCopyLike(bool IncludeMoveImm = true) const {
+    return VInstrInfo::isCopyLike(getTID().getOpcode());
+  }
+
+  bool isBrCndLike() const {
+    return VInstrInfo::isBrCndLike(getTID().getOpcode());
+  }
+
   // Can the copy be fused into control block?
   bool canCopyBeFused() const;
 
@@ -154,6 +221,9 @@ public:
 
     if (ResTy == VFUs::Trivial)
       return getTrivialLatency();
+
+    // DiryHack: Latency of CalleeFN is 1.
+    if (ResTy == VFUs::CalleeFN) return 1;
 
     return getFUDesc(ResTy)->getLatency();
   }

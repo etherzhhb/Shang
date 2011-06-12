@@ -34,7 +34,6 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Function.h"
 #include "llvm/PassAnalysisSupport.h"
-
 #include "llvm/CodeGen/CalcSpillWeights.h"
 #include "llvm/CodeGen/EdgeBundles.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
@@ -58,7 +57,7 @@
 
 using namespace llvm;
 
-cl::opt<bool> EanbleSimpleRegisterSharing("vtm-enable-simple-register-sharing",
+cl::opt<bool> EnableSimpleRegisterSharing("vtm-enable-simple-register-sharing",
                                           cl::init(false), cl::Hidden);
 
 static RegisterRegAlloc VSimpleRegalloc("vsimple",
@@ -144,7 +143,6 @@ FunctionPass *llvm::createSimpleRegisterAllocator() {
 }
 
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
-  initializeCopyEliminationPass(*PassRegistry::getPassRegistry());
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
   initializeStrongPHIEliminationPass(*PassRegistry::getPassRegistry());
@@ -163,10 +161,7 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<AliasAnalysis>();
   AU.addRequired<LiveIntervals>();
   AU.addPreserved<SlotIndexes>();
-  //AU.addRequiredID(CopyEliminationID);
-  //if (StrongPHIElim)
-  //  AU.addRequiredID(StrongPHIEliminationID);
- // AU.addRequiredTransitive<RegisterCoalescer>();
+  AU.addRequiredTransitive<RegisterCoalescer>();
   AU.addRequired<CalculateSpillWeights>();
   AU.addRequired<LiveStacks>();
   AU.addPreserved<LiveStacks>();
@@ -265,7 +260,7 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   Size = NextPowerOf2(Size - 1) / 8;
 
   typedef VFInfo::phyreg_iterator reg_it;
-  if (EanbleSimpleRegisterSharing)
+  if (EnableSimpleRegisterSharing)
     for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
          I < E; ++I) {
       unsigned PhysReg = *I;
