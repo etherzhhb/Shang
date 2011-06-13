@@ -50,27 +50,25 @@ struct MicroStateBuilder {
   std::vector<MachineInstr*> InstsToDel;
   struct WireDef {
     unsigned WireNum;
-    const char *SymbolName;
     ucOperand Pred;
     ucOperand Op;
     unsigned EmitSlot;
     unsigned WriteSlot;
+    unsigned PHISlot;
 
-    WireDef(unsigned wireNum, const char *Symbol, MachineOperand &pred,
-            MachineOperand &op, unsigned emitSlot, unsigned writeSlot)
-      : WireNum(wireNum), SymbolName(Symbol), Pred(pred), Op(op),
-        EmitSlot(emitSlot), WriteSlot(writeSlot) {}
+    WireDef(unsigned wireNum, MachineOperand &pred, MachineOperand &op,
+            unsigned emitSlot, unsigned writeSlot)
+      : WireNum(wireNum), Pred(pred), Op(op), EmitSlot(emitSlot),
+      WriteSlot(writeSlot), PHISlot(0) {}
 
-    bool isSymbol() const { return SymbolName != 0; }
     // Do not define a register twice by copying it self.
-    bool shouldBeCopied() const { return !Op.isReg() || WireNum != Op.getReg(); }
+    bool shouldBeCopied() const {
+      return (!Op.isReg() || WireNum != Op.getReg());
+    }
 
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
-      if (isSymbol())
-        return MachineOperand::CreateES(SymbolName, Op.getBitWidth());
-
       return ucOperand::CreateWireRead(WireNum, Op.getBitWidth());
     }
   };
@@ -78,23 +76,7 @@ struct MicroStateBuilder {
   inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand &MO,
                                MachineOperand &Pred, unsigned emitSlot,
                                unsigned writeSlot){
-    const char *Symbol = 0;
-    if (A->getFUId().isBound()) {
-      switch (A->getFUType()) {
-      case VFUs::MemoryBus:
-        Symbol = VFI.allocateSymbol(VFUMemBus::getInDataBusName(A->getFUNum()));
-        break;
-      case VFUs::BRam:
-        Symbol = VFI.allocateSymbol(VFUBRam::getInDataBusName(A->getFUNum()));
-        break;
-      case VFUs::CalleeFN:
-        break;
-      default:
-         assert(0 && "Unexpected FU Type.");
-      }
-    }
-
-    return WireDef(WireNum, Symbol, Pred, MO, emitSlot, writeSlot);
+    return WireDef(WireNum, Pred, MO, emitSlot, writeSlot);
   }
   
   typedef std::vector<WireDef*> DefVector;
@@ -119,7 +101,7 @@ struct MicroStateBuilder {
     return DefToEmit[Slot - State.getStartSlot()];
   }
 
-  unsigned getModuloSlot(unsigned Slot, bool IsControl) {
+  unsigned getModuloSlot(unsigned Slot, bool IsControl) const {
     unsigned Idx = Slot -  State.getStartSlot();
     if (State.isPipelined()) {
       unsigned II = State.getII();
@@ -137,6 +119,13 @@ struct MicroStateBuilder {
     }
 
     return Idx;
+  }
+
+  bool isReadWrapAround(unsigned ReadSlot, bool IsReadAtControl,
+                       WireDef &WD) const {
+    return (WD.PHISlot < ReadSlot)
+            && (getModuloSlot(ReadSlot, IsReadAtControl)
+                < getModuloSlot(WD.WriteSlot, true));
   }
 
   MachineInstr &getStateCtrlAt(unsigned Slot) {
@@ -219,6 +208,49 @@ struct MicroStateBuilder {
   MachineOperand getRegUseOperand(WireDef &WD, unsigned EmitSlot, bool IsCtrl,
                                   ucOperand MO);
 
+  unsigned createPHI(unsigned RegNo, unsigned SizeInBits, unsigned WriteSlot) {
+    SmallVector<MachineInstr*, 4> InsertedPHIs;
+
+    // PHI node needed.
+    // TODO: Move to constructor?
+    MachineSSAUpdater SSAUpdate(*MBB.getParent(), &InsertedPHIs);
+    SSAUpdate.Initialize(RegNo);
+    SSAUpdate.AddAvailableValue(&MBB, RegNo);
+
+    // 1. add an initialize value.
+    for (MachineBasicBlock::pred_iterator I = MBB.pred_begin(),
+         E = MBB.pred_end();I != E; ++I) {
+      MachineBasicBlock *PredBB = *I;
+      if (PredBB == &MBB) continue;
+
+      // The register to hold initialize value.
+      unsigned InitReg = MRI.createVirtualRegister(MRI.getRegClass(RegNo));
+
+      BuildMI(*PredBB, PredBB->getFirstTerminator(), DebugLoc(),
+        TII.get(VTM::IMPLICIT_DEF), InitReg);
+      SSAUpdate.AddAvailableValue(PredBB, InitReg);
+    }
+
+    unsigned NewReg = SSAUpdate.GetValueInMiddleOfBlock(&MBB);
+
+    // Update the bitwidth for newly inserted PHIs, insert it into the
+    // First ucSate.
+    while (!InsertedPHIs.empty()) {
+      MachineInstr *PN = InsertedPHIs.pop_back_val();
+      ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
+      Op.setBitWidth(SizeInBits);
+
+      VFI.rememberPHISlot(PN, WriteSlot);
+      for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
+        ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
+        SrcOp.setBitWidth(SizeInBits);
+      }
+    }
+
+    return NewReg;
+  }
+
+
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
     buildMicroState(CurSlot);
@@ -255,14 +287,6 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
   emitDeferredInsts();
   if (Slot < State.getLoopOpSlot())  (void) getStateDatapathAt(Slot);
 
-  for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
-       E = SUnitsToEmit.end(); I !=E; ++I) {
-    VSUnit *A = *I;
-    for (VSUnit::instr_iterator II = A->instr_begin(), IE = A->instr_end();
-        II != IE; ++II)
-      fuseInstr(**II, A);
-  }
-
   DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
   // Emit the exported registers at current slot.
   for (DefVector::iterator I = DefsAtSlot.begin(), E = DefsAtSlot.end();
@@ -285,9 +309,18 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       // Get the operand at current slot.
       CtrlInst.addOperand(getRegUseOperand(WD->Pred, true, Slot, Slot));
       MO.setIsDef();
-      CtrlInst.addOperand(MO).addOperand(WD->createOperand());
+      MachineOperand Src = WD->createOperand();
+      CtrlInst.addOperand(MO).addOperand(Src);
     }
     ++I;
+  }
+
+  for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
+       E = SUnitsToEmit.end(); I !=E; ++I) {
+    VSUnit *A = *I;
+    for (VSUnit::instr_iterator II = A->instr_begin(), IE = A->instr_end();
+        II != IE; ++II)
+      fuseInstr(**II, A);
   }
 
   return 0;
@@ -382,6 +415,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
         NewOp = ucOperand::CreateWireDefine(WireNum, BitWidth);
       }
 
+      // If the wire define and the copy wrap around?
+      if (getModuloSlot(EmitSlot, IsCtrl) > getModuloSlot(WriteSlot, true))
+        WireNum = createPHI(WireNum, BitWidth, EmitSlot);
+
       WireDef WDef = createWireDef(WireNum, A, MO, Pred, EmitSlot, WriteSlot);
 
       SWDMapTy::iterator mapIt;
@@ -423,73 +460,40 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
   const TargetRegisterClass *RC = VTM::DRRegisterClass;
   bool IsWireIncoming = VRegisterInfo::IsWire(RegNo, &MRI);
   // Move the value to a new register otherwise the it will be overwritten.
-  while (EmitSlot - WD.WriteSlot > State.getII() || IsWireIncoming) {
-    MachineInstr &Ctrl = getStateCtrlAt(WD.WriteSlot);
-    MachineInstrBuilder CopyBuilder(&Ctrl);
-    if (!VRegisterInfo::IsWire(RegNo, &MRI))
-      WD.WriteSlot += State.getII();
-
-    unsigned PipedReg = MRI.createVirtualRegister(RC);
-    ucOperand Dst = MachineOperand::CreateReg(PipedReg, true);
-    Dst.setBitWidth(SizeInBits);
-    ucOperand Src = MachineOperand::CreateReg(RegNo, false);
-    Src.setBitWidth(SizeInBits);
-    Src.setIsWire(IsWireIncoming);
-    // FIXME: Use PHINode instead of Copy, so we can compute a right
-    // liveinterval for the register.
-    CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
-    assert(WD.Pred.getReg() == 0 && "Cannot pipeline predicate!");
-    CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.Pred.getReg()));
-    CopyBuilder.addOperand(Dst).addOperand(Src);
-    // Update the register.
-    RegNo = PipedReg;
-    WD.Op = MO = Dst;
-    // Not wire anymore.
-    IsWireIncoming = false;
-  }
 
   // If read before write in machine code, insert a phi node.
-  if (getModuloSlot(EmitSlot, IsCtrl) < getModuloSlot(WD.WriteSlot, true)) {
-    SmallVector<MachineInstr*, 4> InsertedPHIs;
-
-    // PHI node needed.
-    // TODO: Move to constructor?
-    MachineSSAUpdater SSAUpdate(*MBB.getParent(), &InsertedPHIs);
-    SSAUpdate.Initialize(RegNo);
-    SSAUpdate.AddAvailableValue(&MBB, RegNo);
-
-    // 1. add an initialize value.
-    for (MachineBasicBlock::pred_iterator I = MBB.pred_begin(),
-        E = MBB.pred_end();I != E; ++I) {
-      MachineBasicBlock *PredBB = *I;
-      if (PredBB == &MBB) continue;
-
-      // The register to hold initialize value.
-      unsigned InitReg = MRI.createVirtualRegister(RC);
-
-      BuildMI(*PredBB, PredBB->getFirstTerminator(), DebugLoc(),
-              TII.get(VTM::IMPLICIT_DEF), InitReg);
-      SSAUpdate.AddAvailableValue(PredBB, InitReg);
+  while (EmitSlot - WD.WriteSlot > State.getII()
+         || isReadWrapAround(EmitSlot, IsCtrl, WD)) {
+    if (IsWireIncoming) {
+      MachineInstr &Ctrl = getStateCtrlAt(WD.WriteSlot);
+      MachineInstrBuilder CopyBuilder(&Ctrl);
+      unsigned PipedReg = MRI.createVirtualRegister(RC);
+      ucOperand Dst = MachineOperand::CreateReg(PipedReg, true);
+      Dst.setBitWidth(SizeInBits);
+      ucOperand Src = MachineOperand::CreateReg(RegNo, false);
+      Src.setBitWidth(SizeInBits);
+      Src.setIsWire(IsWireIncoming);
+      // FIXME: Use PHINode instead of Copy, so we can compute a right
+      // liveinterval for the register.
+      CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
+      assert(WD.Pred.getReg() == 0 && "Cannot pipeline predicate!");
+      CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.Pred.getReg()));
+      CopyBuilder.addOperand(Dst).addOperand(Src);
+      // Update the register.
+      RegNo = PipedReg;
+      WD.Op = MO = Dst;
+      // Not wire anymore.
+      IsWireIncoming = false;
     }
 
-    unsigned NewReg = SSAUpdate.GetValueInMiddleOfBlock(&MBB);
-
-    // Update the bitwidth for newly inserted PHIs, insert it into the
-    // First ucSate.
-    while (!InsertedPHIs.empty()) {
-      MachineInstr *PN = InsertedPHIs.pop_back_val();
-      ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
-      Op.setBitWidth(SizeInBits);
-
-      VFI.rememberPHISlot(PN, WD.WriteSlot);
-      for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
-        ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
-        SrcOp.setBitWidth(SizeInBits);
-      }
-    }
-    
+    unsigned NewReg = createPHI(RegNo, SizeInBits, WD.WriteSlot);
     MO = MachineOperand::CreateReg(NewReg, false);
     MO.setBitWidth(SizeInBits);
+
+    // Update the register.
+    WD.PHISlot = WD.WriteSlot = std::min(WD.WriteSlot + State.getII(), EmitSlot);
+    RegNo = NewReg;
+    WD.Op = MO;
   }
 
   MO.setIsUse();
