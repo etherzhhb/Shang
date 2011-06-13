@@ -1385,7 +1385,7 @@ bool VIfConverter::IfConvertDiamond(BBInfo &BBI, IfcvtKind Kind,
 
   // Merge the true block into the entry of the diamond.
   MergeBlocks(BBI, *BBI1, *Cond1, TailBB == 0);
-  MergeBlocks(BBI, *BBI2, *Cond1, TailBB == 0);
+  MergeBlocks(BBI, *BBI2, *Cond2, TailBB == 0);
 
   // If the if-converted block falls through or unconditionally branches into
   // the tail block, and the tail block does not have other predecessors, then
@@ -1601,9 +1601,11 @@ void VIfConverter::MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI,
       // Merge the value with select instruction.
       MachineOperand Result = MachineOperand::CreateReg(0, false);
       Result.setTargetFlags(MI->getOperand(0).getTargetFlags());
+      MachineOperand FromBBIncomingVal = SrcVals.pop_back_val().first;
+      MachineOperand ToBBIncomingVal = SrcVals.pop_back_val().first;
       VInstrInfo::BuildSelect(ToBBI.BB, Result, FromBBCnd,
-                              SrcVals.pop_back_val().first, // Value from FromBB
-                              SrcVals.pop_back_val().first, // Value from ToBB
+                              FromBBIncomingVal, // Value from FromBB
+                              ToBBIncomingVal, // Value from ToBB
                               TII);
       AddSrcValToPHI(Result, ToBBI.BB, MI, MRI);
     }

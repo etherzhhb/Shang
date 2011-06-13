@@ -62,7 +62,7 @@ bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
 }
 
 bool VInstrInfo::isPredicable(MachineInstr *MI) const {
-  return MI->getOpcode() > VTM::COPY;
+  return MI->getOpcode() > VTM::COPY && MI->getOpcode() != VTM::VOpRet;
 }
 
 bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
