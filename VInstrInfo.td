@@ -138,6 +138,7 @@ let isReMaterializable = 1,
     def _ra : CtrlInst<(outs DR:$dst), (ins RADD:$src), "$dst=$src", [], 0, 1>;
     def _rm : CtrlInst<(outs DR:$dst), (ins RMUL:$src), "$dst=$src", [], 0, 1>;
     def _rs : CtrlInst<(outs DR:$dst), (ins RSHT:$src), "$dst=$src", [], 0, 1>;
+    def _ww : CtrlInst<(outs Wire:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
   }
 
   defm VOpMove  : MoveInst;

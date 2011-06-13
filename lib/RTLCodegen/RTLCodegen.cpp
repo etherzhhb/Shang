@@ -288,6 +288,8 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpReadReturn(ucOp &OpReadSymbol);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet);
+  // Special ucop for connecting wires.
+  void emitOpConnectWire(ucOp &Op);
   void emitOpCopy(ucOp &OpCopy);
   void emitOpMemTrans(ucOp &OpMemAccess);
   void emitOpBRam(ucOp &OpBRam);
@@ -894,6 +896,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMove_rs:
     case VTM::VOpMove_rw:
     case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
@@ -1028,6 +1031,15 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   OpCopy.getOperand(0).print(OS);
   OS << " <= ";
   OpCopy.getOperand(1).print(OS);
+  OS << ";\n";
+}
+
+void RTLCodegen::emitOpConnectWire(ucOp &Op) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  Op.getOperand(0).print(OS);
+  OS << " = ";
+  Op.getOperand(1).print(OS);
   OS << ";\n";
 }
 
