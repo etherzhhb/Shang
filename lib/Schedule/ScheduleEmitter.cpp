@@ -420,18 +420,21 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
                                                    bool IsCtrl, ucOperand MO) {
   unsigned RegNo = WD.getOperand().getReg();
   unsigned SizeInBits = WD.Op.getBitWidth();
-  const TargetRegisterClass *RC = MRI.getRegClass(RegNo);
-
+  const TargetRegisterClass *RC = VTM::DRRegisterClass;
+  bool IsWireIncoming = VRegisterInfo::IsWire(RegNo, &MRI);
   // Move the value to a new register otherwise the it will be overwritten.
-  while (EmitSlot - WD.WriteSlot > State.getII()) {
+  while (EmitSlot - WD.WriteSlot > State.getII() || IsWireIncoming) {
     MachineInstr &Ctrl = getStateCtrlAt(WD.WriteSlot);
     MachineInstrBuilder CopyBuilder(&Ctrl);
-    WD.WriteSlot += State.getII();
+    if (!VRegisterInfo::IsWire(RegNo, &MRI))
+      WD.WriteSlot += State.getII();
+
     unsigned PipedReg = MRI.createVirtualRegister(RC);
     ucOperand Dst = MachineOperand::CreateReg(PipedReg, true);
     Dst.setBitWidth(SizeInBits);
     ucOperand Src = MachineOperand::CreateReg(RegNo, false);
     Src.setBitWidth(SizeInBits);
+    Src.setIsWire(IsWireIncoming);
     // FIXME: Use PHINode instead of Copy, so we can compute a right
     // liveinterval for the register.
     CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
@@ -441,6 +444,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     // Update the register.
     RegNo = PipedReg;
     WD.Op = MO = Dst;
+    // Not wire anymore.
+    IsWireIncoming = false;
   }
 
   // If read before write in machine code, insert a phi node.

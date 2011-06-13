@@ -294,6 +294,8 @@ MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
   Builder.addOperand(Dst);
   ucOperand Src = MachineOperand::CreateReg(IncomingReg, false);
   Src.setBitWidth(DefOp.getBitWidth());
+  if (VRegisterInfo::IsWire(IncomingReg, &MBB.getParent()->getRegInfo()))
+    Src.setIsWire();
   Builder.addOperand(Src);
   return &*Builder;
 }
@@ -363,6 +365,8 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   ucOperand Src = MachineOperand::CreateReg(SrcReg, false);
   Src.setSubReg(SrcSubReg);
   Src.setBitWidth(DefOp.getBitWidth());
+  if (VRegisterInfo::IsWire(SrcReg, &MRI))
+    Src.setIsWire();
   Builder.addOperand(Src);
   return &*Builder;
 }

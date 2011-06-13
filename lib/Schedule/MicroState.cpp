@@ -197,12 +197,12 @@ void ucOperand::print(raw_ostream &OS,
     std::string BitRange = "";
 
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
-      DEBUG(
+      //DEBUG(
         MachineRegisterInfo &MRI
           = getParent()->getParent()->getParent()->getRegInfo();
         const TargetRegisterClass *RC = MRI.getRegClass(Reg);
         OS << "/*" << RC->getName() << "*/ ";
-      );
+      //);
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
       if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
     } else { // Compute the offset of physics register.
