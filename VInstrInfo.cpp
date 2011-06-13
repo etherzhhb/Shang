@@ -333,14 +333,16 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   ucState Ctrl(InsertPos);
   assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
 
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   MachineInstrBuilder Builder(InsertPos);
   Builder.addOperand(ucOperand::CreateOpcode(VTM::VOpMvPhi, Slot));
   Builder.addOperand(ucOperand::CreatePredicate());
   ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
   Dst.setBitWidth(DefOp.getBitWidth());
+  if (VRegisterInfo::IsWire(DefOp.getReg(), &MRI))
+    Dst.setIsWire();
   Builder.addOperand(Dst);
 
-  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
 
   DEBUG(dbgs() << "Copying " << TargetRegisterInfo::virtReg2Index(SrcReg)
