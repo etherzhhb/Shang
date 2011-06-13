@@ -307,7 +307,8 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
                                            const {
   ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
   // Get the last slot.
-  InsertPos = prior(InsertPos);
+  while ((--InsertPos)->getOpcode() == VTM::IMPLICIT_DEF)
+    ;
 
   VFInfo *VFI = MBB.getParent()->getInfo<VFInfo>();
   unsigned Slot = VFI->lookupPHISlot(PN);

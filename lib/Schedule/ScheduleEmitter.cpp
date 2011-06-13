@@ -466,29 +466,9 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
 
       // The register to hold initialize value.
       unsigned InitReg = MRI.createVirtualRegister(RC);
-      // Get the insert position.
-      MachineInstr *PredCtrl = prior(PredBB->getFirstTerminator());
-      // Sometimes there are copies between endstate and the real terminator,
-      // we need to skip them.
-      while (PredCtrl->getOpcode() != VTM::Control) {
-        assert(PredCtrl->getOpcode() == TargetOpcode::COPY
-               && "Unexpected instruction when finding Terminator!");
-        PredCtrl = prior(MachineBasicBlock::iterator(PredCtrl));
-      }
-      
-      MachineInstrBuilder SetIBuilder(PredCtrl);
 
-      // Compute the corresponding slot predicate.
-      unsigned EndSlot = VFI.getStartSlotFor(PredBB)
-                         + VFI.getTotalSlotFor(PredBB);
-      // Add the instruction token.
-      SetIBuilder.addOperand(ucOperand::CreateOpcode(VTM::IMPLICIT_DEF,
-                                                     EndSlot));
-      SetIBuilder.addOperand(ucOperand::CreatePredicate());
-      // Build the register operand.
-      ucOperand DstReg = MachineOperand::CreateReg(InitReg, true);
-      DstReg.setBitWidth(SizeInBits);
-      SetIBuilder.addOperand(DstReg);
+      BuildMI(*PredBB, PredBB->getFirstTerminator(), DebugLoc(),
+              TII.get(VTM::IMPLICIT_DEF), InitReg);
       SSAUpdate.AddAvailableValue(PredBB, InitReg);
     }
 
