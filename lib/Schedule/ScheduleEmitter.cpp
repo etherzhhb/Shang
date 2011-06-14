@@ -24,6 +24,7 @@
 #include "llvm/CodeGen/MachineSSAUpdater.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #define DEBUG_TYPE "vtm-schedule-emitter"
 #include "llvm/Support/Debug.h"
@@ -123,7 +124,7 @@ struct MicroStateBuilder {
 
   bool isReadWrapAround(unsigned ReadSlot, bool IsReadAtControl,
                        WireDef &WD) const {
-    return (WD.PHISlot < ReadSlot)
+    return (WD.PHISlot + State.getII() < ReadSlot)
             && (getModuloSlot(ReadSlot, IsReadAtControl)
                 < getModuloSlot(WD.WriteSlot, true));
   }
@@ -486,12 +487,22 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       IsWireIncoming = false;
     }
 
-    unsigned NewReg = createPHI(RegNo, SizeInBits, WD.WriteSlot);
+    unsigned WriteSlot = WD.WriteSlot;
+    unsigned II = State.getII();
+    // Not trivial wrap around.
+    if (EmitSlot - WriteSlot > II) {
+      WriteSlot -= State.getStartSlot();
+      WriteSlot = ((WriteSlot + II) / II) * II;
+      WriteSlot += State.getStartSlot();
+    }
+
+    unsigned NewReg = createPHI(RegNo, SizeInBits, WriteSlot);
     MO = MachineOperand::CreateReg(NewReg, false);
     MO.setBitWidth(SizeInBits);
 
     // Update the register.
-    WD.PHISlot = WD.WriteSlot = std::min(WD.WriteSlot + State.getII(), EmitSlot);
+    assert(WriteSlot <= EmitSlot && "Broken PHI Slot!");
+    WD.PHISlot = WD.WriteSlot = WriteSlot;
     RegNo = NewReg;
     WD.Op = MO;
   }
