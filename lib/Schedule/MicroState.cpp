@@ -36,9 +36,10 @@ void ucOp::printOpcode(raw_ostream &OS) const {
 
   OS << "{" << OpCode.getFUId() << "} ";
 }
+
 void ucOp::print(raw_ostream &OS) const {
+  OS << "@" << OpCode.getPredSlot() << " ";
   if (isControl()) {
-    OS << "@" << OpCode.getPredSlot() << " ";
     if (getPredicate().isPredicateInverted())
       OS << "~";
     getPredicate().print(OS, 1);
