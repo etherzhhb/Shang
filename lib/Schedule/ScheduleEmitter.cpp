@@ -49,18 +49,88 @@ struct MicroStateBuilder {
   SmallVector<VSUnit*, 8> DeferredSUnits;
   
   std::vector<MachineInstr*> InstsToDel;
+
+  class OpSlot {
+    unsigned SlotNum;
+    OpSlot(unsigned S) : SlotNum(S) {}
+  public:
+    enum SlotType { Control, Datapath};
+    OpSlot(unsigned Slot, bool isCtrl) {
+      SlotType T = isCtrl ? Control : Datapath;
+      SlotNum = (Slot << 0x1) | (0x1 & T);
+    }
+
+    SlotType getSlotType() const {
+      return (SlotType)(SlotNum & 0x1);
+    }
+
+    bool isControl() const {
+      return getSlotType() == OpSlot::Control;
+    }
+
+    bool isDatapath() const {
+      return getSlotType() == OpSlot::Datapath;
+    }
+
+    unsigned getSlot() const { return SlotNum >> 0x1; }
+
+    inline bool operator==(OpSlot S) const {
+      return SlotNum == S.SlotNum;
+    }
+
+    inline bool operator!=(OpSlot S) const {
+      return SlotNum != S.SlotNum;
+    }
+
+    inline bool operator<(OpSlot S) const {
+      return SlotNum < S.SlotNum;
+    }
+
+    inline bool operator<=(OpSlot S) const {
+      return SlotNum <= S.SlotNum;
+    }
+
+    inline bool operator>(OpSlot S) const {
+      return SlotNum > S.SlotNum;
+    }
+    inline bool operator>=(OpSlot S) const {
+      return SlotNum >= S.SlotNum;
+    }
+
+    inline OpSlot operator+(unsigned RHS) const {
+      return OpSlot(getSlot() + RHS, getSlotType());
+    }
+
+    inline OpSlot operator++() {
+      SlotNum += 2;
+      return *this;
+    }
+
+    inline OpSlot operator++(int) {
+      OpSlot Temp = *this;
+      SlotNum += 2;
+      return Temp;
+    }
+
+    //inline OpSlot operator-(unsigned RHS) const {
+    //  return OpSlot(getSlot() - RHS, getSlotType());
+    //}
+
+    OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
+  };
+
   struct WireDef {
     unsigned WireNum;
     ucOperand Pred;
     ucOperand Op;
-    unsigned EmitSlot;
-    unsigned WriteSlot;
-    unsigned PHISlot;
+    OpSlot DefSlot;
+    OpSlot CopySlot;
+    OpSlot PHISlot;
 
     WireDef(unsigned wireNum, MachineOperand &pred, MachineOperand &op,
-            unsigned emitSlot, unsigned writeSlot)
-      : WireNum(wireNum), Pred(pred), Op(op), EmitSlot(emitSlot),
-      WriteSlot(writeSlot), PHISlot(0) {}
+            OpSlot defSlot, OpSlot copySlot)
+      : WireNum(wireNum), Pred(pred), Op(op), DefSlot(defSlot),
+      CopySlot(copySlot), PHISlot(0, true) {}
 
     // Do not define a register twice by copying it self.
     bool shouldBeCopied() const {
@@ -75,9 +145,9 @@ struct MicroStateBuilder {
   };
 
   inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand &MO,
-                               MachineOperand &Pred, unsigned emitSlot,
-                               unsigned writeSlot){
-    return WireDef(WireNum, Pred, MO, emitSlot, writeSlot);
+                               MachineOperand &Pred, OpSlot defSlot,
+                               OpSlot copySlot){
+    return WireDef(WireNum, Pred, MO, defSlot, copySlot);
   }
   
   typedef std::vector<WireDef*> DefVector;
@@ -102,7 +172,10 @@ struct MicroStateBuilder {
     return DefToEmit[Slot - State.getStartSlot()];
   }
 
-  unsigned getModuloSlot(unsigned Slot, bool IsControl) const {
+  unsigned getModuloSlot(OpSlot S) const {
+    unsigned Slot = S.getSlot();
+    bool IsControl = S.isControl();
+
     unsigned Idx = Slot -  State.getStartSlot();
     if (State.isPipelined()) {
       unsigned II = State.getII();
@@ -122,15 +195,14 @@ struct MicroStateBuilder {
     return Idx;
   }
 
-  bool isReadWrapAround(unsigned ReadSlot, bool IsReadAtControl,
-                       WireDef &WD) const {
+  bool isReadWrapAround(OpSlot ReadSlot, WireDef &WD) const {
     return (WD.PHISlot + State.getII() < ReadSlot)
-            && (getModuloSlot(ReadSlot, IsReadAtControl)
-                < getModuloSlot(WD.WriteSlot, true));
+            && (getModuloSlot(ReadSlot) < getModuloSlot(WD.CopySlot));
   }
 
-  MachineInstr &getStateCtrlAt(unsigned Slot) {
-    unsigned Idx = getModuloSlot(Slot, true);
+  MachineInstr &getStateCtrlAt(OpSlot CtrlSlot) {
+    unsigned Slot = CtrlSlot.getSlot();
+    unsigned Idx = getModuloSlot(CtrlSlot);
     // Retrieve the instruction at specific slot. 
     MachineInstr *&Ret = StateCtrls[Idx];
     if (Ret) return *Ret;
@@ -140,8 +212,9 @@ struct MicroStateBuilder {
     return *Ret;
   }
 
-  MachineInstr &getStateDatapathAt(unsigned Slot) {
-    unsigned Idx = getModuloSlot(Slot, false);
+  MachineInstr &getStateDatapathAt(OpSlot DatapathSlot) {
+    unsigned Slot = DatapathSlot.getSlot();
+    unsigned Idx = getModuloSlot(DatapathSlot);
     // Retrieve the instruction at specific slot.
     MachineInstr *&Ret = StateDatapaths[Idx];
     if (Ret) return *Ret;
@@ -150,6 +223,11 @@ struct MicroStateBuilder {
       BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
 
     return *Ret;
+  }
+
+  MachineInstr &getMIAt(OpSlot Slot) {
+    if (Slot.isControl()) return getStateCtrlAt(Slot);
+    else                  return getStateDatapathAt(Slot);
   }
 
   MachineBasicBlock::iterator getInsertPos() { return InsertPos; }
@@ -175,8 +253,7 @@ struct MicroStateBuilder {
 
   void fuseInstr(MachineInstr &Inst, VSUnit *A);
 
-  MachineOperand getRegUseOperand(ucOperand MO, bool IsCtrl, unsigned ReadSlot,
-                                  unsigned EmitSlot) {
+  MachineOperand getRegUseOperand(ucOperand MO, OpSlot ReadSlot) {
     // Else this is a use.
     SWDMapTy::iterator at = StateWireDefs.find(MO.getReg());
     // Using register from previous state.
@@ -189,16 +266,16 @@ struct MicroStateBuilder {
     WireDef &WDef = at->second;
 
     // We need the value after it is written to register.
-    if (WDef.WriteSlot < ReadSlot) {
-      assert(((!IsCtrl && ReadSlot == EmitSlot + 1)
-              || (IsCtrl && ReadSlot == EmitSlot))
-              && "Assumption of Slots broken!");
-      ucOperand Ret = getRegUseOperand(WDef, EmitSlot, IsCtrl, MO);
+    if (WDef.CopySlot < ReadSlot) {
+      //assert(((!IsCtrl && ReadSlot == EmitSlot + 1)
+      //        || (IsCtrl && ReadSlot == EmitSlot))
+      //        && "Assumption of Slots broken!");
+      ucOperand Ret = getRegUseOperand(WDef, ReadSlot, MO);
       Ret.setBitWidth(MO.getBitWidth());
       return Ret;
     }
 
-    assert(WDef.EmitSlot <= ReadSlot && "Dependencies broken!");
+    assert(WDef.DefSlot <= ReadSlot && "Dependencies broken!");
 
     ucOperand Ret = WDef.createOperand();
     Ret.setBitWidth(MO.getBitWidth());
@@ -206,8 +283,7 @@ struct MicroStateBuilder {
   }
 
 
-  MachineOperand getRegUseOperand(WireDef &WD, unsigned EmitSlot, bool IsCtrl,
-                                  ucOperand MO);
+  MachineOperand getRegUseOperand(WireDef &WD, OpSlot ReadSlot, ucOperand MO);
 
   unsigned createPHI(unsigned RegNo, unsigned SizeInBits, unsigned WriteSlot) {
     SmallVector<MachineInstr*, 4> InsertedPHIs;
@@ -284,11 +360,14 @@ struct MicroStateBuilder {
 MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
   // Try to force create the state control and data path instruction, and
   // insert the instructions between them.
-  MachineInstrBuilder CtrlInst(&getStateCtrlAt(Slot));
+  MachineInstrBuilder CtrlInst(&getStateCtrlAt(OpSlot(Slot, true)));
   emitDeferredInsts();
-  if (Slot < State.getLoopOpSlot())  (void) getStateDatapathAt(Slot);
+  if (Slot < State.getLoopOpSlot())
+    (void) getStateDatapathAt(OpSlot(Slot, false));
 
   DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
+  OpSlot CopySlot(Slot, true);
+
   // Emit the exported registers at current slot.
   for (DefVector::iterator I = DefsAtSlot.begin(), E = DefsAtSlot.end();
        I != E;) {
@@ -308,7 +387,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       // Export the register.
       CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
       // Get the operand at current slot.
-      CtrlInst.addOperand(getRegUseOperand(WD->Pred, true, Slot, Slot));
+      CtrlInst.addOperand(getRegUseOperand(WD->Pred, CopySlot));
       MO.setIsDef();
       MachineOperand Src = WD->createOperand();
       CtrlInst.addOperand(MO).addOperand(Src);
@@ -365,25 +444,23 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     Ops[i + OpStart] = MO;
   }
 
-  unsigned EmitSlot = A->getSlot(),
-           WriteSlot = A->getFinSlot();
-  unsigned ReadSlot = EmitSlot;
+  //bool isReadAtEmit = VTID.isReadAtEmit();
+  OpSlot DefSlot(A->getSlot(), IsCtrl);
+  OpSlot ReadSlot = DefSlot;
+  //if (!isReadAtEmit) ReadSlot = EmitSlot.getNextSlot();
 
-  bool isReadAtEmit = VTID.isReadAtEmit();
-
+  OpSlot CopySlot(A->getFinSlot(), true);
   // We can not write the value to a register at the same moment we emit it.
   // Unless we read at emit.
   // FIXME: Introduce "Write at emit."
-  if (WriteSlot == EmitSlot && !isReadAtEmit) ++WriteSlot;
+  if (CopySlot < DefSlot)
+    ++CopySlot;
   // Write to register operation need to wait one more slot if the result is
   // written at the moment (clock event) that the atom finish.
-  if (VTID.isWriteUntilFinish()) ++WriteSlot;
+ if (VTID.isWriteUntilFinish()) ++CopySlot;
 
 
-  // We read the values after we emit it unless the value is read at emit.
-  if (!isReadAtEmit) ++ReadSlot;
-
-  DefVector &Defs = getDefsToEmitAt(WriteSlot);
+  DefVector &Defs = getDefsToEmitAt(CopySlot.getSlot());
 
   for (unsigned i = 1 , e = Ops.size(); i != e; ++i) {
     MachineOperand &MO = Ops[i];
@@ -399,7 +476,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
-    if (MO.isDef() && EmitSlot != WriteSlot && !isCopyLike) {
+    if (MO.isDef() && DefSlot != CopySlot && !isCopyLike) {
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
@@ -417,10 +494,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       }
 
       // If the wire define and the copy wrap around?
-      if (getModuloSlot(EmitSlot, IsCtrl) > getModuloSlot(WriteSlot, true))
-        WireNum = createPHI(WireNum, BitWidth, EmitSlot);
+      if (getModuloSlot(DefSlot) > getModuloSlot(CopySlot))
+        WireNum = createPHI(WireNum, BitWidth, DefSlot.getSlot());
 
-      WireDef WDef = createWireDef(WireNum, A, MO, Pred, EmitSlot, WriteSlot);
+      WireDef WDef = createWireDef(WireNum, A, MO, Pred, DefSlot, CopySlot);
 
       SWDMapTy::iterator mapIt;
       bool inserted;
@@ -437,15 +514,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       continue;
     }
 
-    Ops[i] = getRegUseOperand(MO, IsCtrl, ReadSlot, EmitSlot);
+    Ops[i] = getRegUseOperand(MO, ReadSlot);
   }
 
-  MachineInstrBuilder Builder;
-
-  if (IsCtrl)
-    Builder = MachineInstrBuilder(&getStateCtrlAt(A->getSlot()));
-  else
-    Builder = MachineInstrBuilder(&getStateDatapathAt(A->getSlot()));
+  MachineInstrBuilder Builder(&getMIAt(OpSlot(A->getSlot(), IsCtrl)));
 
   for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
     Builder.addOperand(*I);
@@ -454,8 +526,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   InstsToDel.push_back(&Inst);
 }
 
-MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlot,
-                                                   bool IsCtrl, ucOperand MO) {
+MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
+                                                   ucOperand MO) {
   unsigned RegNo = WD.getOperand().getReg();
   unsigned SizeInBits = WD.Op.getBitWidth();
   const TargetRegisterClass *RC = VTM::DRRegisterClass;
@@ -463,10 +535,10 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
   // Move the value to a new register otherwise the it will be overwritten.
 
   // If read before write in machine code, insert a phi node.
-  while (EmitSlot - WD.WriteSlot > State.getII()
-         || isReadWrapAround(EmitSlot, IsCtrl, WD)) {
+  while (ReadSlot > WD.CopySlot + State.getII()
+         || isReadWrapAround(ReadSlot, WD)) {
     if (IsWireIncoming) {
-      MachineInstr &Ctrl = getStateCtrlAt(WD.WriteSlot);
+      MachineInstr &Ctrl = getStateCtrlAt(WD.CopySlot);
       MachineInstrBuilder CopyBuilder(&Ctrl);
       unsigned PipedReg = MRI.createVirtualRegister(RC);
       ucOperand Dst = MachineOperand::CreateReg(PipedReg, true);
@@ -476,7 +548,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       Src.setIsWire(IsWireIncoming);
       // FIXME: Use PHINode instead of Copy, so we can compute a right
       // liveinterval for the register.
-      CopyBuilder.addOperand(ucOperand::CreateOpcode(VTM::COPY, WD.WriteSlot));
+      MachineOperand Opc = ucOperand::CreateOpcode(VTM::COPY, WD.CopySlot.getSlot());
+      CopyBuilder.addOperand(Opc);
       assert(WD.Pred.getReg() == 0 && "Cannot pipeline predicate!");
       CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.Pred.getReg()));
       CopyBuilder.addOperand(Dst).addOperand(Src);
@@ -487,10 +560,10 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
       IsWireIncoming = false;
     }
 
-    unsigned WriteSlot = WD.WriteSlot;
+    unsigned WriteSlot = WD.CopySlot.getSlot();
     unsigned II = State.getII();
     // Not trivial wrap around.
-    if (EmitSlot - WriteSlot > II) {
+    if (ReadSlot > WD.CopySlot + II) {
       WriteSlot -= State.getStartSlot();
       WriteSlot = ((WriteSlot + II) / II) * II;
       WriteSlot += State.getStartSlot();
@@ -501,8 +574,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, unsigned EmitSlo
     MO.setBitWidth(SizeInBits);
 
     // Update the register.
-    assert(WriteSlot <= EmitSlot && "Broken PHI Slot!");
-    WD.PHISlot = WD.WriteSlot = WriteSlot;
+    WD.PHISlot = WD.CopySlot = OpSlot(WriteSlot, true);
+    assert(WD.CopySlot <= ReadSlot && "Broken PHI Slot!");
     RegNo = NewReg;
     WD.Op = MO;
   }
@@ -569,12 +642,6 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
   StateBuilder.clearUp();
   // Build the dummy terminator.
   BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState)).addImm(0);
-
-  // Set the hasTerm flag for instruction that branching to other MachineBB.
-  StateBuilder.getStateCtrlAt(getEndSlot())
-    .setFlag((MachineInstr::MIFlag)ucState::hasTerm);
-  StateBuilder.getStateCtrlAt(getLoopOpSlot())
-    .setFlag((MachineInstr::MIFlag)ucState::hasTerm);
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());

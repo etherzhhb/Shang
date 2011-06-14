@@ -270,9 +270,6 @@ public:
 class ucState {
   const MachineInstr &Instr;
 public:
-  // This flag indicate that the current ucState contains the VOpToStateb that
-  // branching to other MachineBB.
-  static const unsigned char hasTerm = 0x80;
 
   /*implicit*/ ucState(const MachineInstr &MI) : Instr(MI) {
     assert((MI.getOpcode() == VTM::Control
