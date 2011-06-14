@@ -350,18 +350,21 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     ucState(*DI).dump();
   );
 
-  assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
-  ucOp WriteOp = ucOp::getParent(DI);
-  // We need to forward the wire copy if the source register is written
-  // in the same slot, otherwise we will read a out of date value.
-  if (WriteOp->getParent() == &*Ctrl) {
-    // FIXME: Handle others case.
-    assert(WriteOp.getPredicate().getReg() == 0
-           && "Can not handle predicated ucop!");
+  // Try to forward the source value.
+  if (DI->getOpcode() != VTM::PHI) {
+    assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
+    ucOp WriteOp = ucOp::getParent(DI);
+    // We need to forward the wire copy if the source register is written
+    // in the same slot, otherwise we will read a out of date value.
+    if (WriteOp->getParent() == &*Ctrl && WriteOp->getPredSlot() == Slot) {
+      // FIXME: Handle others case.
+      assert(WriteOp.getPredicate().getReg() == 0
+             && "Can not handle predicated ucop!");
 
-    if (isCopyLike(WriteOp->getOpcode())) {
-      MachineOperand ForwardedVal = WriteOp.getOperand(1);
-      Builder.addOperand(ForwardedVal);
+      if (isCopyLike(WriteOp->getOpcode())) {
+        MachineOperand ForwardedVal = WriteOp.getOperand(1);
+        Builder.addOperand(ForwardedVal);
+      }
     }
   }
 
