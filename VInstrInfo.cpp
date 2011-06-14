@@ -316,19 +316,21 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   unsigned EndSlot = VFI->getEndSlotFor(&MBB);
   // If the phi scheduled into this MBB, insert the copy to the right control
   // slot.
-  if (Slot > StartSlot && Slot <= EndSlot) {
-    unsigned II = VFI->getIIFor(&MBB);
-    unsigned ModuloSlot = (Slot - StartSlot) % II + StartSlot;
-    // If modulo slot is 0, insert the copy in the last control slot.
-    // Otherwise, iterate over the BB to find the match slot.
-    if (ModuloSlot != StartSlot) {
-      while(ucState(InsertPos).getSlot() != ModuloSlot) {
-        --InsertPos; // Skip the current control slot.
-        --InsertPos; // Skip the current datapath slot.
-      }
-    }
-  } else // Else we are issueing the copy at the end of the BB.
+  //if (Slot > StartSlot && Slot <= EndSlot) {
+  if (Slot <= StartSlot || Slot > EndSlot)
+    // Else we are issuing the copy at the end of the BB.
     Slot = EndSlot;
+
+  unsigned II = VFI->getIIFor(&MBB);
+  unsigned ModuloSlot = (Slot - StartSlot) % II + StartSlot;
+  // If modulo slot is 0, insert the copy in the last control slot.
+  // Otherwise, iterate over the BB to find the match slot.
+  if (ModuloSlot != StartSlot) {
+    while(ucState(InsertPos).getSlot() != ModuloSlot) {
+      --InsertPos; // Skip the current control slot.
+      --InsertPos; // Skip the current datapath slot.
+    }
+  }
 
   ucState Ctrl(InsertPos);
   assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
