@@ -53,8 +53,8 @@ struct MicroStateBuilder {
   class OpSlot {
     unsigned SlotNum;
     OpSlot(unsigned S) : SlotNum(S) {}
-  public:
     enum SlotType { Control, Datapath};
+  public:
     OpSlot(unsigned Slot, bool isCtrl) {
       SlotType T = isCtrl ? Control : Datapath;
       SlotNum = (Slot << 0x1) | (0x1 & T);
@@ -72,7 +72,7 @@ struct MicroStateBuilder {
       return getSlotType() == OpSlot::Datapath;
     }
 
-    unsigned getSlot() const { return SlotNum >> 0x1; }
+    unsigned getSlot() const { return SlotNum / 2; }
 
     inline bool operator==(OpSlot S) const {
       return SlotNum == S.SlotNum;
@@ -98,23 +98,21 @@ struct MicroStateBuilder {
     }
 
     inline OpSlot operator+(unsigned RHS) const {
-      return OpSlot(getSlot() + RHS, getSlotType());
+      return OpSlot(getSlot() + RHS, isControl());
     }
 
-    inline OpSlot operator++() {
-      SlotNum += 2;
+    inline OpSlot &operator+=(unsigned RHS) {
+      SlotNum += RHS * 2;
       return *this;
     }
+
+    inline OpSlot &operator++() { return operator+=(1); }
 
     inline OpSlot operator++(int) {
       OpSlot Temp = *this;
       SlotNum += 2;
       return Temp;
     }
-
-    //inline OpSlot operator-(unsigned RHS) const {
-    //  return OpSlot(getSlot() - RHS, getSlotType());
-    //}
 
     OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
   };
@@ -125,12 +123,12 @@ struct MicroStateBuilder {
     ucOperand Op;
     OpSlot DefSlot;
     OpSlot CopySlot;
-    OpSlot PHISlot;
+    OpSlot LoopBoundary;
 
     WireDef(unsigned wireNum, MachineOperand &pred, MachineOperand &op,
-            OpSlot defSlot, OpSlot copySlot)
+            OpSlot defSlot, OpSlot copySlot, OpSlot loopBoundary)
       : WireNum(wireNum), Pred(pred), Op(op), DefSlot(defSlot),
-      CopySlot(copySlot), PHISlot(0, true) {}
+      CopySlot(copySlot), LoopBoundary(loopBoundary) {}
 
     // Do not define a register twice by copying it self.
     bool shouldBeCopied() const {
@@ -147,7 +145,13 @@ struct MicroStateBuilder {
   inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand &MO,
                                MachineOperand &Pred, OpSlot defSlot,
                                OpSlot copySlot){
-    return WireDef(WireNum, Pred, MO, defSlot, copySlot);
+    assert(copySlot.isControl() && "Can only copy at control!");
+    unsigned Slot = copySlot.getSlot();
+    unsigned II = State.getII();
+    Slot -= State.getStartSlot();
+    Slot = RoundUpToAlignment(Slot, II);
+    Slot += State.getStartSlot();
+    return WireDef(WireNum, Pred, MO, defSlot, copySlot, OpSlot(Slot, true));
   }
   
   typedef std::vector<WireDef*> DefVector;
@@ -196,8 +200,7 @@ struct MicroStateBuilder {
   }
 
   bool isReadWrapAround(OpSlot ReadSlot, WireDef &WD) const {
-    return (WD.PHISlot + State.getII() < ReadSlot)
-            && (getModuloSlot(ReadSlot) < getModuloSlot(WD.CopySlot));
+    return (WD.LoopBoundary < ReadSlot);
   }
 
   MachineInstr &getStateCtrlAt(OpSlot CtrlSlot) {
@@ -535,8 +538,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   // Move the value to a new register otherwise the it will be overwritten.
 
   // If read before write in machine code, insert a phi node.
-  while (ReadSlot > WD.CopySlot + State.getII()
-         || isReadWrapAround(ReadSlot, WD)) {
+  while (isReadWrapAround(ReadSlot, WD)) {
     if (IsWireIncoming) {
       MachineInstr &Ctrl = getStateCtrlAt(WD.CopySlot);
       MachineInstrBuilder CopyBuilder(&Ctrl);
@@ -560,21 +562,14 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
       IsWireIncoming = false;
     }
 
-    unsigned WriteSlot = WD.CopySlot.getSlot();
-    unsigned II = State.getII();
-    // Not trivial wrap around.
-    if (ReadSlot > WD.CopySlot + II) {
-      WriteSlot -= State.getStartSlot();
-      WriteSlot = ((WriteSlot + II) / II) * II;
-      WriteSlot += State.getStartSlot();
-    }
-
-    unsigned NewReg = createPHI(RegNo, SizeInBits, WriteSlot);
+    // Emit the PHI at loop boundary
+    unsigned NewReg = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot());
     MO = MachineOperand::CreateReg(NewReg, false);
     MO.setBitWidth(SizeInBits);
 
     // Update the register.
-    WD.PHISlot = WD.CopySlot = OpSlot(WriteSlot, true);
+    WD.CopySlot = WD.LoopBoundary;
+    WD.LoopBoundary += State.getII();
     assert(WD.CopySlot <= ReadSlot && "Broken PHI Slot!");
     RegNo = NewReg;
     WD.Op = MO;
