@@ -46,9 +46,6 @@ class ucOperand : public MachineOperand {
   static const unsigned OpcodeShiftAmount = 0x20;
 
 public:
-  // Symbol flags.
-  static const unsigned IsInternalSymbol = 0x8;
-
   /*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
 
   static bool classof(const MachineOperand *) { return true; }
