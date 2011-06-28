@@ -575,6 +575,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
     WD.Op = MO;
   }
 
+  // Return the up to date machine operand
+  MO = WD.Op;
   MO.setIsUse();
   return MO;
 }
