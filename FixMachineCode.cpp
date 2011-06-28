@@ -36,8 +36,6 @@
 #include <set>
 
 using namespace llvm;
-cl::opt<bool> CopyWireOps("vtm-copy-wire-ops-to-register",
-                           cl::init(true), cl::Hidden);
 STATISTIC(UnconditionalBranches,
           "Number of unconditionnal branches inserted for fall through edges");
 STATISTIC(Unreachables,
@@ -56,6 +54,9 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
+  void handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
+                     const TargetInstrInfo *TII);
+
   void eliminateMVImm(std::vector<MachineInstr*> &Worklist,
                       MachineRegisterInfo &MRI);
 
@@ -66,6 +67,41 @@ struct FixMachineCode : public MachineFunctionPass {
 }
 
 char FixMachineCode::ID = 0;
+
+void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
+                                   const TargetInstrInfo *TII) {
+  if (!VInstrInfo::isWireOp(Inst->getOpcode())) return;
+
+  bool needCopy = false;
+  unsigned OriginalReg = Inst->getOperand(0).getReg();
+  unsigned NewWireReg = MRI.createVirtualRegister(VTM::WireRegisterClass);
+
+  typedef MachineRegisterInfo::reg_iterator reg_it;
+  for (reg_it I = MRI.reg_begin(OriginalReg),E = MRI.reg_end();I != E;/*++I*/) {
+    MachineOperand &O = I.getOperand();
+    MachineInstr &MI = *I;
+    ++I;
+    // PHIs need all operands have the same register class.
+    if (MI.isPHI()) {
+      needCopy = true;
+      continue;
+    }
+
+    O.setReg(NewWireReg);
+  }
+
+  if (needCopy) {
+    MachineBasicBlock &MBB = *Inst->getParent();
+    DebugLoc dl = Inst->getDebugLoc();
+    unsigned BitWidth = cast<ucOperand>(Inst->getOperand(0)).getBitWidth();
+    MachineBasicBlock::iterator IP = Inst;
+    ++IP;
+    BuildMI(MBB, IP, dl, TII->get(VTM::VOpMove_rw))
+      .addOperand(ucOperand::CreateReg(OriginalReg, BitWidth, true))
+      .addOperand(ucOperand::CreateReg(NewWireReg, BitWidth))
+      .addOperand(*VInstrInfo::getPredOperand(Inst));
+  }
+}
 
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -87,11 +123,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         Imms.push_back(Inst);
 
       // BitSlice, BitCat and BitRepeat are wires.
-      if (VInstrInfo::isWireOp(Inst->getOpcode()) && !CopyWireOps) {
-        unsigned OriginalReg = Inst->getOperand(0).getReg();
-        unsigned NewWireReg = MRI.createVirtualRegister(VTM::WireRegisterClass);
-        MRI.replaceRegWith(OriginalReg, NewWireReg);
-      }
+      handleWireOps(Inst, MRI, TII);
 
       // Remove the explicit successors from the missed successors set.
       if (VInstrInfo::isBrCndLike(Inst->getOpcode())) {
