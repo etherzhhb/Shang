@@ -544,6 +544,11 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   // Move the value to a new register otherwise the it will be overwritten.
   // If read before write in machine code, insert a phi node.
   while (isReadWrapAround(ReadSlot, WD)) {
+    // Because the result of wireops will be copied to register at loop boundary
+    // only extend the live interval of its operand to the first loop boundary.
+    if (isImplicit && ReadSlot >= WD.DefSlot + State.getII() * 2)
+      break;
+
     //assert(!isImplicit && "Unexpected implicit operand!");
     if (IsWireIncoming) {
       MachineInstr &Ctrl = getStateCtrlAt(WD.CopySlot);
