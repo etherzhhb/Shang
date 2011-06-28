@@ -138,7 +138,7 @@ struct MicroStateBuilder {
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
-      return ucOperand::CreateWireRead(WireNum, Op.getBitWidth());
+      return ucOperand::CreateWire(WireNum, Op.getBitWidth());
     }
   };
 
@@ -493,7 +493,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       if (!NewOp.isWire()) {
         WireNum =
           MRI.createVirtualRegister(VFUs::getRepRegisterClass(VTID.getFUType()));
-        NewOp = ucOperand::CreateWireDefine(WireNum, BitWidth);
+        NewOp = ucOperand::CreateWire(WireNum, BitWidth, true);
       }
 
       // If the wire define and the copy wrap around?

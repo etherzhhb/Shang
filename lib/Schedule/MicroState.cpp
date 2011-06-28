@@ -162,16 +162,9 @@ ucOperand ucOperand::CreateOpcode(unsigned Opcode, unsigned PredSlot,
   return MO;
 }
 
-ucOperand ucOperand::CreateWireDefine(unsigned WireNum, unsigned BitWidth) {
-  ucOperand MO = MachineOperand::CreateReg(WireNum, true);
-  MO.setBitWidth(BitWidth);
-  MO.setIsWire();
-  //MO.setIsEarlyClobber();
-  return MO;
-}
-
-ucOperand ucOperand::CreateWireRead(unsigned WireNum, unsigned BitWidth) {
-  ucOperand MO = MachineOperand::CreateReg(WireNum, false);
+ucOperand ucOperand::CreateWire(unsigned WireNum, unsigned BitWidth,
+                                bool IsDef /* = false */) {
+  ucOperand MO = MachineOperand::CreateReg(WireNum, IsDef);
   MO.setBitWidth(BitWidth);
   MO.setIsWire();
   return MO;

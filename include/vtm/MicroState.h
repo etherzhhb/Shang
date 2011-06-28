@@ -108,8 +108,9 @@ public:
 
   static ucOperand CreateOpcode(unsigned Opcode, unsigned PredSlot,
                                 FuncUnitId FUId = VFUs::Trivial);
-  static ucOperand CreateWireDefine(unsigned WireNum, unsigned BitWidth);
-  static ucOperand CreateWireRead(unsigned WireNum, unsigned BitWidth);
+
+  static ucOperand CreateWire(unsigned WireNum, unsigned BitWidth,
+                              bool IsDef = false);
 
   static ucOperand CreatePredicate(unsigned Reg = 0);
 
