@@ -274,11 +274,15 @@ struct MicroStateBuilder {
       //        || (IsCtrl && ReadSlot == EmitSlot))
       //        && "Assumption of Slots broken!");
       ucOperand Ret = getRegUseOperand(WDef, ReadSlot, MO);
-      Ret.setBitWidth(MO.getBitWidth());
+      if (!MO.isImplicit()) Ret.setBitWidth(MO.getBitWidth());
       return Ret;
     }
 
     assert(WDef.DefSlot <= ReadSlot && "Dependencies broken!");
+    // No need a implicit use, because the implicit operand is used explicitly
+    // at the same slot.
+    // Dirty Hack: Just return something meaningless.
+    if (MO.isImplicit()) return MachineOperand::CreateReg(0, false);
 
     ucOperand Ret = WDef.createOperand();
     Ret.setBitWidth(MO.getBitWidth());
@@ -531,14 +535,16 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
 MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
                                                    ucOperand MO) {
+  bool isImplicit = MO.isImplicit();
   unsigned RegNo = WD.getOperand().getReg();
   unsigned SizeInBits = WD.Op.getBitWidth();
   const TargetRegisterClass *RC = VTM::DRRegisterClass;
   bool IsWireIncoming = VRegisterInfo::IsWire(RegNo, &MRI);
-  // Move the value to a new register otherwise the it will be overwritten.
 
+  // Move the value to a new register otherwise the it will be overwritten.
   // If read before write in machine code, insert a phi node.
   while (isReadWrapAround(ReadSlot, WD)) {
+    //assert(!isImplicit && "Unexpected implicit operand!");
     if (IsWireIncoming) {
       MachineInstr &Ctrl = getStateCtrlAt(WD.CopySlot);
       MachineInstrBuilder CopyBuilder(&Ctrl);
@@ -578,6 +584,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   // Return the up to date machine operand
   MO = WD.Op;
   MO.setIsUse();
+  MO.setImplicit(isImplicit);
   return MO;
 }
 

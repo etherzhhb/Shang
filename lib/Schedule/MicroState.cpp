@@ -193,6 +193,8 @@ void ucOperand::print(raw_ostream &OS,
                       bool isPredicate /* = false */) {
   switch (getType()) {
   case MachineOperand::MO_Register: {
+    if (isImplicit() || getReg() == 0) break;
+
     unsigned Reg = getReg();
     UB = std::min(getBitWidthOrZero(), UB);
     std::string BitRange = "";

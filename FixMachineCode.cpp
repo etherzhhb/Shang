@@ -36,6 +36,7 @@
 #include <set>
 
 using namespace llvm;
+
 STATISTIC(UnconditionalBranches,
           "Number of unconditionnal branches inserted for fall through edges");
 STATISTIC(Unreachables,
@@ -173,6 +174,41 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
   // Try to replace the register operand with the constant for users of VOpMvImm.
   if (!Imms.empty()) eliminateMVImm(Imms, MRI);
+
+  // Forward the use operand of wireops so we can compute a correct live
+  // interval for the use operands of wireops. for example if we have:
+  // a = bitslice b, ...
+  // ...
+  // ... = a ...
+  // and we will add the operand of wireops to the instructions that using its
+  // results as implicit use:
+  // a = bitslice b, ...
+  // ...
+  // ... = a ..., imp use b
+  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
+    for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
+         II != IE; ++II) {
+      MachineInstr *Inst = II;
+      if (VInstrInfo::isWireOp(Inst->getOpcode())) continue;
+
+      for (unsigned i = 0; i < Inst->getNumOperands(); ++i) {
+        MachineOperand &MO = Inst->getOperand(i);
+        if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
+
+        MachineInstr *DefInst = MRI.getVRegDef(MO.getReg());
+        assert(DefInst && "Define instruction not exist!");
+        if (!VInstrInfo::isWireOp(DefInst->getOpcode())) continue;
+
+        // Add the use operand of wireops
+        if (DefInst->getOperand(1).isReg())
+          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(1).getReg(),
+                                           RegState::Implicit);
+        if (DefInst->getOpcode() == VTM::VOpBitCat
+            && DefInst->getOperand(2).isReg())
+          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(2).getReg(),
+                                           RegState::Implicit);
+      }
+    }
 
   return true;
 }
