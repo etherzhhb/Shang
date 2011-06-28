@@ -404,6 +404,7 @@ MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
             .addOperand(IfTrueVal).addOperand(IfFalseVal)
             .addOperand(ucOperand::CreatePredicate());
 }
+
 MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB, MachineOperand &Result,
                                       const SmallVectorImpl<MachineOperand> &Pred,
                                       MachineOperand IfTrueVal,

@@ -54,8 +54,6 @@ struct FixMachineCode : public MachineFunctionPass {
     // AU.setPreservesAll();
   }
 
-  void insertUnconditionalBranch(MachineBasicBlock &MBB);
-
   bool runOnMachineFunction(MachineFunction &MF);
 
   void eliminateMVImm(std::vector<MachineInstr*> &Worklist,

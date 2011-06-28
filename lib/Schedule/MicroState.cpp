@@ -230,9 +230,10 @@ void ucOperand::print(raw_ostream &OS,
     OS << getSymbolName();
     OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     return;
-  default:
-    MachineOperand::print(OS);
+  default: break;
   }
+
+  MachineOperand::print(OS);
 }
 
 raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
