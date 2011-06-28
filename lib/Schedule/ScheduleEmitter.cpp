@@ -551,16 +551,11 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
 
     //assert(!isImplicit && "Unexpected implicit operand!");
     if (IsWireIncoming) {
+      unsigned PipedReg = MRI.createVirtualRegister(RC);
       MachineInstr &Ctrl = getStateCtrlAt(WD.CopySlot);
       MachineInstrBuilder CopyBuilder(&Ctrl);
-      unsigned PipedReg = MRI.createVirtualRegister(RC);
-      ucOperand Dst = MachineOperand::CreateReg(PipedReg, true);
-      Dst.setBitWidth(SizeInBits);
-      ucOperand Src = MachineOperand::CreateReg(RegNo, false);
-      Src.setBitWidth(SizeInBits);
-      Src.setIsWire(IsWireIncoming);
-      // FIXME: Use PHINode instead of Copy, so we can compute a right
-      // liveinterval for the register.
+      ucOperand Dst = ucOperand::CreateReg(PipedReg, SizeInBits, true);
+      ucOperand Src = ucOperand::CreateWire(RegNo, SizeInBits);
       MachineOperand Opc = ucOperand::CreateOpcode(VTM::COPY, WD.CopySlot.getSlot());
       CopyBuilder.addOperand(Opc);
       assert(WD.Pred.getReg() == 0 && "Cannot pipeline predicate!");
