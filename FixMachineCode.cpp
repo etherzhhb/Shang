@@ -68,7 +68,6 @@ struct FixMachineCode : public MachineFunctionPass {
 char FixMachineCode::ID = 0;
 
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
-  bool Changed = false;
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
 
@@ -141,12 +140,9 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   }
 
   // Try to replace the register operand with the constant for users of VOpMvImm.
-  if (!Imms.empty()) {
-    eliminateMVImm(Imms, MRI);
-    Changed = true;
-  }
+  if (!Imms.empty()) eliminateMVImm(Imms, MRI);
 
-  return Changed;
+  return true;
 }
 
 void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
