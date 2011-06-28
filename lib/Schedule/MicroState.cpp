@@ -177,6 +177,13 @@ ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   return MO;
 }
 
+ucOperand ucOperand::CreateReg(unsigned RegNum, unsigned BitWidth,
+                               bool IsDef /* = false */) {
+  ucOperand MO = MachineOperand::CreateReg(RegNum, IsDef);
+  MO.setBitWidth(BitWidth);
+  return MO;
+}
+
 bool ucOperand::isWire() const {
   return isReg() && (IsWireFlag & getTargetFlags());
 }

@@ -111,6 +111,8 @@ public:
 
   static ucOperand CreateWire(unsigned WireNum, unsigned BitWidth,
                               bool IsDef = false);
+  static ucOperand CreateReg(unsigned RegNum, unsigned BitWidth,
+                             bool IsDef = false);
 
   static ucOperand CreatePredicate(unsigned Reg = 0);
 
