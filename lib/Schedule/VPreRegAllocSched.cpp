@@ -366,7 +366,7 @@ VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
 void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   CurState.preSchedTopSort();
   // The schedule unit and the corresponding memory operand.
-  typedef std::multimap<Value*, VSUnit*> MemOpMapTy;
+  typedef std::vector<std::pair<Value*, VSUnit*> > MemOpMapTy;
   MemOpMapTy VisitedMemOps;
   Loop *IRL = IRLI->getLoopFor(CurState.getMachineBasicBlock()->getBasicBlock());
 
@@ -431,7 +431,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       } else {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
-      // Ignore the No-Alias pointers.
+        // Ignore the No-Alias pointers.
         VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
                                          VDMemDep::TrueDep, 0);
         DstU->addDep(MemDep);
@@ -439,7 +439,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
     }
 
     // Add the schedule unit to visited map.
-    VisitedMemOps.insert(std::make_pair(DstMO, DstU));
+    VisitedMemOps.push_back(std::make_pair(DstMO, DstU));
   }
 }
 
