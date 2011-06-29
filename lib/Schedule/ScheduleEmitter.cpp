@@ -546,7 +546,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   while (isReadWrapAround(ReadSlot, WD)) {
     // Because the result of wireops will be copied to register at loop boundary
     // only extend the live interval of its operand to the first loop boundary.
-    if (isImplicit && ReadSlot >= WD.DefSlot + State.getII() * 2)
+    if (isImplicit && WD.LoopBoundary > WD.DefSlot + State.getII())
       break;
 
     //assert(!isImplicit && "Unexpected implicit operand!");
