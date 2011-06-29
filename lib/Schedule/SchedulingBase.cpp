@@ -80,13 +80,13 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
           DI != DE; ++DI) {
         const VSUnit *Dep = *DI;
         
-        if (!DI.getEdge()->isBackEdge() || MII) {
+        if (!DI.getEdge()->isLoopCarried() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
                              Dep->getSlot() : getASAPStep(Dep);
           int Step = DepASAP + DI.getEdge()->getLatency()
                      - MII * DI.getEdge()->getItDst();
           DEBUG(dbgs() << "From ";
-                if (DI.getEdge()->isBackEdge())
+                if (DI.getEdge()->isLoopCarried())
                   dbgs() << "BackEdge ";
                 Dep->print(dbgs());
                 dbgs() << " Step " << Step << '\n');
@@ -138,18 +138,18 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
         const VSUnit *Use = *UI;
         VDEdge *UseEdge = Use->getEdgeFrom(A);
 
-        if (!UseEdge->isBackEdge() || MII) {
+        if (!UseEdge->isLoopCarried() || MII) {
           unsigned UseALAP = Use->isScheduled() ?
                              Use->getSlot() : getALAPStep(Use);
           if (UseALAP == 0) {
-            assert(UseEdge->isBackEdge() && "Broken time frame!");
+            assert(UseEdge->isLoopCarried() && "Broken time frame!");
             UseALAP = VSUnit::MaxSlot;
           }
           
           unsigned Step = UseALAP - UseEdge->getLatency()
                           + MII * UseEdge->getItDst();
           DEBUG(dbgs() << "From ";
-                if (UseEdge->isBackEdge())
+                if (UseEdge->isLoopCarried())
                   dbgs() << "BackEdge ";
                 Use->print(dbgs());
                 dbgs() << " Step " << Step << '\n');

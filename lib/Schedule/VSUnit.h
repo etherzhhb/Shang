@@ -71,13 +71,8 @@ private:
   friend class VSUnit;
   void setSrc(VSUnit *NewSrc) { Src = NewSrc; }
 protected:
-  VDEdge(enum VDEdgeTypes T, VSUnit *src, unsigned latancy, unsigned Dst,
-         bool isBackEdge = false)
-    : EdgeType(T), Src(src), Latancy(latancy), ItDst(Dst),
-    IsBackEdge(isBackEdge) {
-    assert((!isBackEdge || Dst != 0)
-           && "Back edge must have a non-zero iterate distance!");
-  }
+  VDEdge(enum VDEdgeTypes T, VSUnit *src, unsigned latancy, unsigned Dst)
+    : EdgeType(T), Src(src), Latancy(latancy), ItDst(Dst) {}
 public:
   unsigned getLatency() const { return Latancy; }
 
@@ -89,7 +84,7 @@ public:
   //VSUnit* operator*() const { return getSrc(); }
 
   unsigned getItDst() const { return ItDst; }
-  bool isBackEdge() const { return IsBackEdge; }
+  bool isLoopCarried() const { return getItDst() > 0; }
 
   virtual void print(raw_ostream &OS) const = 0;
 };
@@ -176,9 +171,8 @@ public:
 private:
   enum MemDepTypes DepType;
 public:
-  VDMemDep(VSUnit *Src, unsigned latancy, bool isBackEdge,
-           enum MemDepTypes DT, unsigned Dist)
-    : VDEdge(edgeMemDep, Src, latancy, Dist, isBackEdge), DepType(DT) {}
+  VDMemDep(VSUnit *Src, unsigned latancy, enum MemDepTypes DT, unsigned Dist)
+    : VDEdge(edgeMemDep, Src, latancy, Dist), DepType(DT) {}
 
   enum MemDepTypes getDepType() const { return DepType; }
 

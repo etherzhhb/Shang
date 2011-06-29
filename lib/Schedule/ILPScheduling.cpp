@@ -223,7 +223,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       VDEdge *UseEdge = DstU->getEdgeFrom(SrcU);
 
       // FIXME: Also consider back-edge for Modulo Scheduling.
-      if (UseEdge->isBackEdge()) continue;
+      if (UseEdge->isLoopCarried()) continue;
 
       unsigned DstFstIdx = getFstSVIdxOf(DstU),
                DstNumSVs = getTimeFrame(DstU),

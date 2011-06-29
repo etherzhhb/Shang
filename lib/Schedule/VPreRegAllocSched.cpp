@@ -151,9 +151,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return new VDCtrlDep(Src, Latency);
   }
 
-  VDMemDep *getMemDepEdge(VSUnit *Src, unsigned Latency, bool isBackEdge,
-                          enum VDMemDep::MemDepTypes DepType,
-                          unsigned Diff);
+  VDMemDep *getMemDepEdge(VSUnit *Src, unsigned Latency, unsigned Diff,
+                          enum VDMemDep::MemDepTypes DepType);
 
   void addValueDeps(VSUnit *A, VSchedGraph &CurState);
 
@@ -414,8 +413,9 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
 
         if (LD.hasDep()) {
-          VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
-                                           LD.getDepType(), LD.getItDst());
+          VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(),
+                                           LD.getItDst(),
+                                           LD.getDepType());
           DstU->addDep(MemDep);
         }
 
@@ -424,16 +424,17 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
 
         if (LD.hasDep()) {
-          VDMemDep *MemDep = getMemDepEdge(DstU, SrcInfo.getLatency(), true,
-                                           LD.getDepType(), LD.getItDst());
+          VDMemDep *MemDep = getMemDepEdge(DstU, SrcInfo.getLatency(),
+                                           LD.getItDst(),
+                                           LD.getDepType());
           SrcU->addDep(MemDep);
         }
       } else {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
         // Ignore the No-Alias pointers.
-        VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), false,
-                                         VDMemDep::TrueDep, 0);
+        VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), 0,
+                                         VDMemDep::TrueDep);
         DstU->addDep(MemDep);
       }
     }
@@ -526,14 +527,14 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
       // Insert anti-dependence edge.
       PhiSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &PN),
-                                  true, VDMemDep::AntiDep, 1));
+                                  1, VDMemDep::AntiDep));
     }
 
     // Next loop can not start before loop operation issued.
     VSUnit *LoopOp = State.getLoopOp();
     PhiSU->addDep(getMemDepEdge(LoopOp,
                                 computeLatency(LoopOp->getFirstInstr(), &PN),
-                                true, VDMemDep::AntiDep, 1));
+                                1, VDMemDep::AntiDep));
   }
 }
 
@@ -603,10 +604,9 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
 }
 
 VDMemDep *VPreRegAllocSched::getMemDepEdge(VSUnit *Src, unsigned Latency,
-                                    bool isBackEdge,
-                                    enum VDMemDep::MemDepTypes DepType,
-                                    unsigned Diff) {
-  return new VDMemDep(Src, Latency, isBackEdge, DepType, Diff);
+                                    unsigned Diff,
+                                    enum VDMemDep::MemDepTypes DepType) {
+  return new VDMemDep(Src, Latency, DepType, Diff);
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
