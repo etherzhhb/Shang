@@ -70,6 +70,7 @@ void LuaScript::init() {
       .enum_("PipeLine")[
         luabind::value("IMS", SynSettings::IMS),
           luabind::value("FDMS", SynSettings::FDMS),
+          luabind::value("ILPMS", SynSettings::ILPMS),
           luabind::value("DontPipeline", SynSettings::DontPipeline)
       ]
       .enum_("Schedule")[

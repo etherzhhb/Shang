@@ -30,7 +30,7 @@ namespace llvm {
 class SynSettings {
 public:
   enum PipeLineAlgorithm {
-    IMS, FDMS, DontPipeline
+    IMS, FDMS, ILPMS, DontPipeline
   };
 
   enum ScheduleAlgorithm {
