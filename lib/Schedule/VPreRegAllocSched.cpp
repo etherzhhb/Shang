@@ -513,6 +513,21 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
     assert(PN.isPHI() && "IsSingleValuePHICycle expects a PHI instruction!");
     assert(PhiSU && "Can not find SUnit for PHI!");
 
+    // Add a anti-dependence edge from users of PHI to PHI because we must
+    // have:
+    // PHI -(RAW dep)-> PHI user -(WAR dep)-> PHI at next iteration.
+    unsigned PHIReg = PN.getOperand(0).getReg();
+    typedef MachineRegisterInfo::use_iterator use_it;
+    for (use_it I = MRI->use_begin(PHIReg), E = MRI->use_end(); I != E; ++I) {
+      MachineInstr *UserMI = &*I;
+      if (UserMI->getParent() != CurBB) continue;
+
+      VSUnit *UserSU = State.lookupSUnit(UserMI);
+      assert(UserSU && "Cannot found UserSU!");
+      PhiSU->addDep(getMemDepEdge(UserSU, computeLatency(UserMI, &PN), 1,
+                                  VDMemDep::AntiDep));
+    }
+
     // Scan the PHI operands.
     for (unsigned i = 1; i != PN.getNumOperands(); i += 2) {
       MachineBasicBlock *SrcBB = PN.getOperand(i + 1).getMBB();
