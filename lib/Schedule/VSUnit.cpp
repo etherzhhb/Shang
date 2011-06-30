@@ -205,15 +205,7 @@ void VSUnit::dump() const {
   dbgs() << '\n';
 }
 
-void VDMemDep::print(raw_ostream &OS) const {
-
-}
-
-void VDCtrlDep::print(raw_ostream &OS) const {
-}
-
-void VDValDep::print(raw_ostream &OS) const {
-}
+void VDEdge::print(raw_ostream &OS) const {}
 
 unsigned VSUnit::getOpcode() const {
   if (MachineInstr *I =getFirstInstr())
@@ -225,19 +217,6 @@ unsigned VSUnit::getOpcode() const {
 void VSUnit::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
   SchedSlot = slot;
-}
-
-void VSUnit::dropAllReferences() {
-  for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
-    I->removeFromList(this);
-}
-
-void VSUnit::replaceAllUseBy(VSUnit *A) {
-  while (!use_empty()) {
-    VSUnit *U = use_back();
-
-    U->setDep(U->getDepIt(this), A);
-  }
 }
 
 VFUs::FUTypes VSUnit::getFUType() const {

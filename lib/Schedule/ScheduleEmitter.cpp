@@ -599,7 +599,7 @@ void VSchedGraph::preSchedTopSort() {
   std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
 }
 
-MachineBasicBlock *VSchedGraph::emitSchedule() {
+void VSchedGraph::emitSchedule() {
   unsigned CurSlot = startSlot;
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
@@ -654,6 +654,5 @@ MachineBasicBlock *VSchedGraph::emitSchedule() {
   // Remember the schedule information.
 
   VFI->rememberTotalSlot(MBB, getStartSlot(), getTotalSlot(), getLoopOpSlot());
-  return MBB;
 }
 

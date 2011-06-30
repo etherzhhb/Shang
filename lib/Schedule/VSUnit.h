@@ -57,36 +57,28 @@ public:
     edgeCtrlDep
   };
 private:
-  const unsigned short EdgeType;
-  VSUnit *Src;
-  // The latancy of this edge.
-  unsigned Latancy;
+  PointerIntPair<VSUnit*, 2, VDEdgeTypes> Src;
   // Iterate distance.
-  unsigned ItDst : 31;
-  bool IsBackEdge : 1;
+  const unsigned short ItDst;
+  // The latancy of this edge.
+  const unsigned short Latancy;
   
   VDEdge(const VDEdge &);            // DO NOT IMPLEMENT
   void operator=(const VDEdge &);    // DO NOT IMPLEMENT
-
-  friend class VSUnit;
-  void setSrc(VSUnit *NewSrc) { Src = NewSrc; }
 protected:
   VDEdge(enum VDEdgeTypes T, VSUnit *src, unsigned latancy, unsigned Dst)
-    : EdgeType(T), Src(src), Latancy(latancy), ItDst(Dst) {}
+    : Src(src, T), ItDst(Dst), Latancy(latancy) {}
 public:
-  unsigned getLatency() const { return Latancy; }
-
-  unsigned getEdgeType() const { return EdgeType; }
-
   // The referenced value.
-  VSUnit *getSrc() const { return Src; }
+  VSUnit *getSrc() const { return Src.getPointer(); }
   VSUnit* operator->() const { return getSrc(); }
   //VSUnit* operator*() const { return getSrc(); }
-
+  unsigned getEdgeType() const { return Src.getInt(); }
+  unsigned getLatency() const { return Latancy; }
   unsigned getItDst() const { return ItDst; }
   bool isLoopCarried() const { return getItDst() > 0; }
 
-  virtual void print(raw_ostream &OS) const = 0;
+  void print(raw_ostream &OS) const;
 };
 
 template<class IteratorType, class NodeType>
@@ -127,34 +119,20 @@ public:
 /// @brief Value Dependence Edge.
 class VDValDep : public VDEdge {
 public:
-  enum ValDepTypes{
-    Normal, Import, Export, PHI
-  };
-  VDValDep(VSUnit *Src, unsigned latancy, bool isSigned, enum ValDepTypes T)
-    : VDEdge(edgeValDep, Src, latancy,  0), IsSigned(isSigned), DepType(T) {}
-
-  bool isSigned() const { return IsSigned; }
-  enum ValDepTypes getDepType() const { return DepType;}
-
-  void print(raw_ostream &OS) const;
+  VDValDep(VSUnit *Src, unsigned latancy)
+    : VDEdge(edgeValDep, Src, latancy,  0) {}
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VDValDep *A) { return true; }
   static inline bool classof(const VDEdge *A) {
     return A->getEdgeType() == edgeValDep;
   }
-
-private:
-  bool IsSigned;
-  enum ValDepTypes DepType;
 };
 
 class VDCtrlDep : public VDEdge {
 public:
   VDCtrlDep(VSUnit *Src, unsigned latancy)
     : VDEdge(edgeCtrlDep, Src, latancy, 0) {}
-
-  void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VDCtrlDep *A) { return true; }
@@ -165,18 +143,8 @@ public:
 
 class VDMemDep : public VDEdge {
 public:
-  enum MemDepTypes {
-    TrueDep, AntiDep, OutputDep, NoDep
-  };
-private:
-  enum MemDepTypes DepType;
-public:
-  VDMemDep(VSUnit *Src, unsigned latancy, enum MemDepTypes DT, unsigned Dist)
-    : VDEdge(edgeMemDep, Src, latancy, Dist), DepType(DT) {}
-
-  enum MemDepTypes getDepType() const { return DepType; }
-
-  void print(raw_ostream &OS) const;
+  VDMemDep(VSUnit *Src, unsigned latancy, unsigned Dist)
+    : VDEdge(edgeMemDep, Src, latancy, Dist) {}
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VDCtrlDep *A) { return true; }
@@ -202,17 +170,8 @@ class VSUnit {
     UseList.push_back(User);
   }
 
-  VSUnit(const VSUnit&);            // DO NOT IMPLEMENT
+  VSUnit(const VSUnit&);          // DO NOT IMPLEMENT
   void operator=(const VSUnit&);  // DO NOT IMPLEMENT
-
-  void setDep(VSUnitDepIterator<SmallVectorImpl<VDEdge*>::iterator, VSUnit> I,
-              VSUnit *NewDep) {
-      assert(I != dep_end() && "I out of range!");
-      I->removeFromList(this);
-      NewDep->addToUseList(this);
-      // Setup the dependence list.
-      I.getEdge()->setSrc(NewDep);
-  }
 
   /// The corresponding Instructions - We may store several instruction inside
   /// the same schedule unit, so we can clamp them in a same slot.
@@ -231,7 +190,6 @@ class VSUnit {
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
-
   ~VSUnit() {
     std::for_each(Deps.begin(), Deps.end(), deleter<VDEdge>);
   }
@@ -244,11 +202,13 @@ public:
     Deps.push_back(E);
   }
 
-  SmallVectorImpl<VDEdge*>::iterator edge_begin() { return Deps.begin(); }
-  SmallVectorImpl<VDEdge*>::iterator edge_end() { return Deps.end(); }
+  typedef SmallVectorImpl<VDEdge*>::iterator edge_iterator;
+  edge_iterator edge_begin() { return Deps.begin(); }
+  edge_iterator edge_end() { return Deps.end(); }
 
-  SmallVectorImpl<VDEdge*>::const_iterator edge_begin() const { return Deps.begin(); }
-  SmallVectorImpl<VDEdge*>::const_iterator edge_end() const { return Deps.end(); }
+  typedef SmallVectorImpl<VDEdge*>::const_iterator const_edge_iterator;
+  const_edge_iterator edge_begin() const { return Deps.begin(); }
+  const_edge_iterator edge_end() const { return Deps.end(); }
 
   /// @name Operands
   //{
@@ -268,18 +228,6 @@ public:
   bool dep_empty() const { return Deps.empty(); }
   // If the current atom depend on A?
   bool isDepOn(const VSUnit *A) const { return getDepIt(A) != dep_end(); }
-
-  void replaceDep(VSUnit *From, VSUnit *To) {
-    setDep(getDepIt(From), To);
-  }
-
-  void setDep(unsigned idx, VSUnit *NewDep) {
-    // Update use list
-    Deps[idx]->getSrc()->removeFromList(this);
-    NewDep->addToUseList(this);
-    // Setup the dependence list.
-    Deps[idx]->setSrc(NewDep);
-  }
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
   const_dep_iterator getDepIt(const VSUnit *A) const {
@@ -319,15 +267,6 @@ public:
 
   VSUnit *use_back() { return UseList.back(); }
   VSUnit *use_back() const { return UseList.back(); }
-
-  void removeFromList(VSUnit *User) {
-    std::list<VSUnit*>::iterator at = std::find(UseList.begin(), UseList.end(),
-      User);
-    assert(at != UseList.end() && "Not in use list!");
-    UseList.erase(at);
-  }
-  void dropAllReferences();
-  void replaceAllUseBy(VSUnit *A);
 
   bool use_empty() { return UseList.empty(); }
   size_t getNumUses() const { return UseList.size(); }
@@ -562,16 +501,6 @@ public:
   const_reverse_iterator rbegin() const { return SUnits.rbegin(); }
   const_reverse_iterator rend()   const { return SUnits.rend(); }
 
-  void eraseSUnit(VSUnit *A) {
-    iterator at = std::find(begin(), end(), A);
-    assert(at != end() && "Can not find atom!");
-    SUnits.erase(at);
-
-    assert((std::find(usetree_iterator::begin(getEntryRoot()),
-                      usetree_iterator::end(getEntryRoot()), A)
-            == usetree_iterator::end(getEntryRoot())) && "Who using dead atom?");
-  }
-
   size_t getNumSUnits() const { return SUnits.size(); }
 
   void resetSchedule();
@@ -610,10 +539,8 @@ public:
   //{
   // Sort the schedule units base on the order of underlying instruction.
   void preSchedTopSort();
-
   void schedule();
-  
-  MachineBasicBlock *emitSchedule();
+  void emitSchedule();
   //}
 };
 
