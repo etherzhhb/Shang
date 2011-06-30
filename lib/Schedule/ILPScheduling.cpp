@@ -4,12 +4,12 @@
 //
 // Copyright: 2010 by Hongbin Zheng. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
-// of your agreement to the following terms, and your use, installation, 
+// of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
-// of these terms.  If you do not agree with these terms, please do not use, 
-// install, modify or redistribute this software. You may not redistribute, 
-// install copy or modify this software without written permission from 
-// Hongbin Zheng. 
+// of these terms.  If you do not agree with these terms, please do not use,
+// install, modify or redistribute this software. You may not redistribute,
+// install copy or modify this software without written permission from
+// Hongbin Zheng.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -58,7 +58,7 @@ static const char *transSolveResult(int result) {
   return ResultTable[result];
 }
 
-ILPScheduler::ILPScheduler(VSchedGraph &S) 
+ILPScheduler::ILPScheduler(VSchedGraph &S)
   : SchedulingBase(S), SUnitToSV(S.getNumSUnits()), NumStepVars(0) {
 }
 
@@ -68,7 +68,7 @@ unsigned ILPScheduler::buildSVIdx() {
        I != E; ++I) {
     VSUnit *U = *I;
     SUnitToSV[U->getIdx()] = totalSV;
-    totalSV += getTimeFrame(U);    
+    totalSV += getTimeFrame(U);
   }
 
   return totalSV;
@@ -189,64 +189,64 @@ void ILPScheduler::buildOneActiveStepConstraints(lprec *lp) {
 }
 
 void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
-  SmallVector<REAL, 128> Row;
-  SmallVector<int, 128> ColIdx;
+  SmallVector<REAL, 32> DstRow;
+  SmallVector<int, 32> DstColIdx;
+  SmallVector<REAL, 64> Row;
+  SmallVector<int, 64> ColIdx;
 
   for (VSchedGraph::const_iterator I = State.begin(), E = State.end();
        I != E; ++I) {
-    const VSUnit *SrcU = *I;
+    const VSUnit *DstU = *I;
 
-    // Get the index of first step variable of U.
-    unsigned SrcFstIdx = getFstSVIdxOf(SrcU),
-    // And the total step variable count of U.
-             SrcNumSVs = getTimeFrame(SrcU),
-             SrcASAP = getASAPStep(SrcU);
+    unsigned DstFstIdx = getFstSVIdxOf(DstU),
+             DstNumSVs = getTimeFrame(DstU),
+             DstASAP = getASAPStep(DstU);
 
-    // Resize the row and corresponding indexes
-    Row.reserve(SrcNumSVs);
-    Row.set_size(SrcNumSVs);
-    ColIdx.reserve(SrcNumSVs);
-    ColIdx.set_size(SrcNumSVs);
-
-    // Build the constraint for Dst_SU_Step - Src_SU_Step >= Src_Latency 
+    // Build the constraint for Dst_SU_Step - Src_SU_Step >= Src_Latency
     // NOTE: add_constraintex will sort the row according column indexes!
-    // Construct the step of Src schedule unit.
-    for (unsigned i = 0; i < SrcNumSVs; ++i) {
-      Row[i] = -(REAL)(SrcASAP + i);
-      // The column index is started from 1 in lp_slove.
-      ColIdx[i] = SrcFstIdx + i + 1;
+    // Construct the step of Dst schedule unit.
+    DstRow.clear();
+    DstColIdx.clear();
+
+    // Construct the step of Dst schedule unit.
+    for (unsigned i = 0; i < DstNumSVs; ++i) {
+      DstRow.push_back(DstASAP + i);
+      DstColIdx.push_back(DstFstIdx + i + 1);
     }
 
-    for (VSUnit::const_use_iterator DI = SrcU->use_begin(),
-         DE = SrcU->use_end(); DI != DE;++DI) {
-      const VSUnit *DstU = *DI;
-      VDEdge *UseEdge = DstU->getEdgeFrom(SrcU);
+    for (VSUnit::const_dep_iterator DI = DstU->edge_begin(),
+         DE = DstU->dep_end(); DI != DE;++DI) {
+      const VSUnit *SrcU = *DI;
+      VDEdge *Edge = DI.getEdge();
 
       // FIXME: Also consider back-edge for Modulo Scheduling.
-      if (UseEdge->isLoopCarried()) continue;
+      if (Edge->isLoopCarried()) continue;
 
-      unsigned DstFstIdx = getFstSVIdxOf(DstU),
-               DstNumSVs = getTimeFrame(DstU),
-               DstASAP = getASAPStep(DstU);
+      // Get the index of first step variable of U.
+      unsigned SrcFstIdx = getFstSVIdxOf(SrcU),
+               // And the total step variable count of U.
+               SrcNumSVs = getTimeFrame(SrcU),
+               SrcASAP = getASAPStep(SrcU);
 
-      // Construct the step of Dst schedule unit.
-      for (unsigned i = 0; i < DstNumSVs; ++i) {
-        Row.push_back(DstASAP + i);
-        ColIdx.push_back(DstFstIdx + i + 1);
+      Row.append(DstRow.begin(), DstRow.end());
+      ColIdx.append(DstColIdx.begin(), DstColIdx.end());
+
+      for (unsigned i = 0; i < SrcNumSVs; ++i) {
+        Row.push_back(-(REAL)(SrcASAP + i));
+        // The column index is started from 1 in lp_slove.
+        ColIdx.push_back(SrcFstIdx + i + 1);
       }
 
       // Add the constraints to the model.
       if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
-                            GE, UseEdge->getLatency()))
+                            GE, Edge->getLatency()))
         report_fatal_error("ILPScheduler: Can NOT add Precedence constraints"
-        " of schedule unit " + utostr_32(DstU->getIdx()) +
-        " to " + utostr_32(SrcU->getIdx()));
-
-      // Resize the row and corresponding indexes
-      Row.reserve(SrcNumSVs);
-      Row.set_size(SrcNumSVs);
-      ColIdx.reserve(SrcNumSVs);
-      ColIdx.set_size(SrcNumSVs);
+                           " of schedule unit " + utostr_32(DstU->getIdx()) +
+                           " to " + utostr_32(SrcU->getIdx()));
+      // Since add_constraintex sort Row and ColIdx, we have to clear them and
+      // re-add new data to them.
+      Row.clear();
+      ColIdx.clear();
     }
   }
 }
@@ -272,7 +272,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
     // Clear the function unit counts.
     CurFUCounts.assign(VFUs::NumNonTrivialCommonFUs, 0);
 
-    // Classify the active schedule units by its function unit id. 
+    // Classify the active schedule units by its function unit id.
     for (ActiveSUVec::const_iterator I = SUs.begin(), E = SUs.end();
          I != E; ++I) {
       const VSUnit *U = *I;
@@ -284,7 +284,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
       // Count the unbound function units in current step.
       if (!U->getFUId().isBound())
         ++CurFUCounts[U->getFUType() - VFUs::FirstNonTrivialFUType];
-      
+
       FSMap[U->getFUId()].push_back(U);
     }
 
@@ -295,12 +295,12 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
       unsigned Idx = fu - VFUs::FirstNonTrivialFUType;
       MaxFUCounts[Idx] = std::max<unsigned>(MaxFUCounts[Idx], CurFUCounts[Idx]);
     }
-      
+
     // Build the constraint for function units.
     for (FU2SUMap::const_iterator I = FSMap.begin(), E = FSMap.end();
          I != E; ++I) {
       FuncUnitId Id = I->first;
-      for (BoundSUVec::const_iterator UI = I->second.begin(), 
+      for (BoundSUVec::const_iterator UI = I->second.begin(),
            UE = I->second.end(); UI != UE; ++UI) {
         const VSUnit *U = *UI;
 
@@ -325,7 +325,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
                              " for FU "
                              + std::string(VFUDesc::getTypeName(Id.getFUType())));
       }
-      
+
       Row.clear();
       ColIdx.clear();
     }
@@ -361,7 +361,7 @@ void ILPScheduler::buildObject(lprec *lp) {
 
   if (!set_obj_fnex(lp, Row.size(), Row.data(), ColIdx.data()))
     report_fatal_error("ILPScheduler: Can NOT set objective!");
- 
+
   set_minim(lp);
 }
 
@@ -395,7 +395,7 @@ void ILPScheduler::buildSchedule(lprec *lp) {
 
 bool ILPScheduler::scheduleState() {
   buildFDepHD(true);
-  
+
   // Ensure there is no resource conflict in critical path.
   // FIXME: We can consider resource conflict in build FDepHD.
   if (!scheduleCriticalPath(false))
@@ -437,7 +437,7 @@ bool ILPScheduler::scheduleState() {
   // TODO: Allow set the timeout with constraint.
 
   set_timeout(lp, 300);
-  
+
   DEBUG(dbgs() << "Timeout is set to " << get_timeout(lp) << "secs.\n");
 
   int result = solve(lp);
@@ -452,7 +452,7 @@ bool ILPScheduler::scheduleState() {
   default:
     report_fatal_error("ILPScheduler: Schedule fail!");
   }
-  
+
   // Finally, Schedule the state with the ILP result.
   buildSchedule(lp);
 
