@@ -61,6 +61,7 @@ Pass *createPLBIfCodegenPass(raw_ostream &O);
 void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeRTLCodegenPass(PassRegistry &Registry);
+void initializeFunctionFilterPass(PassRegistry &Registry);
 } // end namespace
 
 #endif
