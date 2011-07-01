@@ -90,6 +90,7 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
       ShiftAmt = VTargetLowering::getBitSlice(DAG, dl, ShiftAmt,
                                               MaxShiftAmtSize, 0,
                                               ShiftAmt.getValueSizeInBits());
+      DCI.AddToWorklist(ShiftAmt.getNode());
       SDValue NewNode = DAG.getNode(N->getOpcode(), dl, N->getVTList(),
                                     Op, ShiftAmt);
       // Replace N by a new value shifted by the right amount, and do not try
@@ -617,6 +618,7 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
         SDValue OpBOpA = OpB->getOperand(0 ^ CommuteOpB),
                 OpBOpB = OpB->getOperand(1 ^ CommuteOpB);
         OpBOpB = VTargetLowering::getBitSlice(DAG, dl, OpBOpB, 1, 0);
+        DCI.AddToWorklist(OpBOpB.getNode());
         return DAG.getNode(ISD::ADDE, dl, N->getVTList(), OpA, OpBOpA, OpBOpB);
       }
     }
