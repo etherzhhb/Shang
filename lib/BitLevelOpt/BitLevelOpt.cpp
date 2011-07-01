@@ -705,12 +705,14 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, *this, DCI);
   case ISD::ADDE: {
+    SDValue RV = PerformAddCombine(N, *this, DCI);
+    if (RV.getNode()) return RV;
+
     //Expand the operation if the ADDE cannot fit into the FU.
     if (N->getValueSizeInBits(0) > MaxAddSubBits)
       return ExpandArithmeticOp(DCI, *this, N, ConcatADDEs,
                                 ADDEBuildLowPart, ADDEBuildHighPart);
-
-    return PerformAddCombine(N, *this, DCI);
+    break;
   }
   case ISD::SHL:
   case ISD::SRA:
