@@ -234,6 +234,8 @@ void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
 
 void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
                                            MachineRegisterInfo &MRI) {
+  SmallVector<unsigned, 8> WireOperands;
+  SmallPtrSet<MachineInstr*, 8> VisitedInsts;
   // Forward the use operand of wireops so we can compute a correct live
   // interval for the use operands of wireops. for example if we have:
   // a = bitslice b, ...
@@ -250,24 +252,42 @@ void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
       MachineInstr *Inst = II;
       if (VInstrInfo::isWireOp(Inst->getOpcode())) continue;
 
-      for (unsigned i = 0; i < Inst->getNumOperands(); ++i) {
+      for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
         MachineOperand &MO = Inst->getOperand(i);
         if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
 
-        MachineInstr *DefInst = MRI.getVRegDef(MO.getReg());
-        assert(DefInst && "Define instruction not exist!");
-        if (!VInstrInfo::isWireOp(DefInst->getOpcode())) continue;
-
-        // Add the use operand of wireops
-        if (DefInst->getOperand(1).isReg())
-          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(1).getReg(),
-          RegState::Implicit);
-        if (DefInst->getOpcode() == VTM::VOpBitCat
-          && DefInst->getOperand(2).isReg())
-          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(2).getReg(),
-          RegState::Implicit);
+        unsigned Reg = MO.getReg();
+        if (VRegisterInfo::IsWire(Reg, &MRI))
+          WireOperands.push_back(Reg);
       }
-  }
+
+      while (!WireOperands.empty()) {
+        unsigned Reg = WireOperands.pop_back_val();
+
+        MachineInstr *DefInst = MRI.getVRegDef(Reg);
+        assert(DefInst && "Define instruction not exist!");
+        if (!VisitedInsts.insert(DefInst)) continue;
+
+        for (unsigned i = 0, e = DefInst->getNumOperands(); i != e; ++i) {
+          MachineOperand &MO = DefInst->getOperand(i);
+
+          if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
+          if (DefInst->getDesc().OpInfo[i].isPredicate()) continue;
+          assert(!DefInst->isPHI() && "PHI should not define PHI!");
+
+          unsigned Reg = MO.getReg();
+          if (VRegisterInfo::IsWire(Reg, &MRI)) {
+            WireOperands.push_back(Reg);
+            continue;
+          }
+          // Forward the operand of wireop to its user by add them as implicit
+          // use register operand.
+          MachineInstrBuilder(Inst).addReg(Reg, RegState::Implicit);
+        }
+      }
+
+      VisitedInsts.clear();
+    }
 }
 
 Pass *llvm::createFixMachineCodePass() {
