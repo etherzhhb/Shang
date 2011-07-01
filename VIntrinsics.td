@@ -21,7 +21,7 @@ let TargetPrefix = "vtm", isTarget = 1 in {
   def int_vtm_alloca_bram  : Intrinsic<[llvm_anyptr_ty],
                                        [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                                        [IntrReadMem]>;
-  
+
   // Read or Write the block ram.
   // Return the read value.
   // Arguments: Address to Read/Write, the value to write, isStore, align,

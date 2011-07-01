@@ -172,12 +172,12 @@ class VIDesc {
     LazyEmitMask = 0x1,
     LazyEmitShiftAmount = 0xa
   };
-  
+
   PointerUnion<const MachineInstr*, const TargetInstrDesc*> Data;
   const TargetInstrDesc &getTID() const {
     if (const MachineInstr *MI = Data.dyn_cast<const MachineInstr*>())
       return MI->getDesc();
-    
+
     return *Data.get<const TargetInstrDesc*>();
   }
   uint64_t getTSFlags() const { return getTID().TSFlags; }

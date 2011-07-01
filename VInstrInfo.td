@@ -99,7 +99,7 @@ let hasCtrlDep = 1 in {
     let isReturn     = 1,
         isTerminator = 1 in
     def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
-    
+
     def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
                              "ret $var at $ret_no;",
                              [], 0, 1>;
@@ -113,7 +113,7 @@ let hasCtrlDep = 1 in {
                                    0/*DATAPATH*/>;
     }
   }
-  
+
   let isBranch   = 1,
       isBarrier  = 1,
     isTerminator = 1 in {

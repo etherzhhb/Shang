@@ -1,10 +1,10 @@
 //====--- BitLevelInfo.h - Verilog target machine bit level info -*- C++ -*-===//
-// 
+//
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
-// 
+//
 //===----------------------------------------------------------------------===//
 //
 // This file declares Verilog target machine-specific bit level information
@@ -32,7 +32,7 @@ namespace llvm {
 class BitLevelInfo : public MachineFunctionPass {
   void computeBitWidth(MachineInstr *Instr);
   void propagateBitWidth(MachineOperand &MO);
-  
+
   unsigned computeBitSliceWidth(MachineInstr *BitSlice) {
     unsigned UB = BitSlice->getOperand(2).getImm(),
       LB = BitSlice->getOperand(3).getImm();

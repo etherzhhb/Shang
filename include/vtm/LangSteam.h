@@ -36,7 +36,7 @@ protected:
     return *Ptr == '\n' || *Ptr == '\r';
   }
 
-  // 
+  //
   size_t line_length(const char *Ptr, size_t Size) {
     size_t Scanned = 0;
     const char *End = Ptr + Size;
@@ -91,7 +91,7 @@ public:
     operator<<(Begin);
     write(' ');
     operator<<(Posfix);
-    
+
     return *this;
   }
 
@@ -187,7 +187,7 @@ public:
                                      const std::string &ClkEdge = "posedge",
                                      const std::string &Rst = "rstN",
                                      const std::string &RstEdge = "negedge") {
-    *this << "always @(" << ClkEdge << " "<< Clk <<", " 
+    *this << "always @(" << ClkEdge << " "<< Clk <<", "
                          << RstEdge << " " << Rst <<")";
     enter_block();
     *this << "if (";

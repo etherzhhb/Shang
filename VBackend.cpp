@@ -47,7 +47,7 @@ cl::opt<bool> EnableIfConversion("vtm-enable-if-conversion",
 
 //===----------------------------------------------------------------------===//
 
-extern "C" void LLVMInitializeVerilogBackendTarget() { 
+extern "C" void LLVMInitializeVerilogBackendTarget() {
   // Register the target.
   RegisterTargetMachine<VTargetMachine> X(TheVBackendTarget);
   RegisterAsmInfo<VMCAsmInfo> Y(TheVBackendTarget);
@@ -83,7 +83,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                          formatted_raw_ostream &Out,
                                          CodeGenFileType FileType,
                                          CodeGenOpt::Level OptLevel,
-                                         bool DisableVerify) {  
+                                         bool DisableVerify) {
   // Dirty Hack: Map all frame stuffs to bram 1.
   PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
 

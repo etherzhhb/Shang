@@ -78,7 +78,7 @@ private:
 
   SDNode *SelectMemAccess(SDNode *N);
   SDNode *SelectBRamAccess(SDNode *N);
-  
+
   SDNode *SelectINTRINSIC_W_CHAIN(SDNode *N);
 
   virtual void PostprocessISelDAG();
@@ -116,11 +116,11 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
   // Set up the operand widths.
   for (unsigned i = 0; i < NumOps -1; ++i) {
     if (Ops[i].getValueType() == MVT::Other) continue;
-    
+
     Annotator.setBitWidth(VTargetLowering::computeSizeInBits(Ops[i]),
                     i + NumDefs); // Skip the chains.
   }
-  
+
   // FIXME: Build the bit width information.
   Ops[NumOps -1] = CurDAG->getTargetConstant(Annotator.get(), MVT::i64);
 }
@@ -151,7 +151,7 @@ SDValue VDAGToDAGISel::MoveToReg(SDValue Operand, bool Force) {
   SDNode *N = Operand.getNode();
   if (!Force || !shouldMoveToReg(N))
     return Operand;
-  
+
   return SDValue(SelectImmediate(N, true), 0);
 }
 
@@ -160,7 +160,7 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
                     MoveToReg(N->getOperand(1), true),
                     N->getOperand(2),
                     SDValue()/*The dummy bit width operand*/ };
-  
+
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
   return CurDAG->SelectNodeTo(N, VTM::VOpAdd, N->getVTList(),
@@ -175,7 +175,7 @@ SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
   Ops.push_back(SDValue());//The dummy bit width operand
 
   computeOperandsBitWidth(N, Ops.data(), Ops.size());
-  
+
   return CurDAG->SelectNodeTo(N, Opc, N->getVTList(), Ops.data(), Ops.size());
 }
 
@@ -327,7 +327,7 @@ SDNode *VDAGToDAGISel::SelectBRamAccess(SDNode *N) {
 
 SDNode *VDAGToDAGISel::SelectINTRINSIC_W_CHAIN(SDNode *N) {
   unsigned IntNo = N->getConstantOperandVal(1);
-  
+
   switch (IntNo) {
   default: break;
   case vtmIntrinsic::vtm_access_bram:

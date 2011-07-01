@@ -146,7 +146,7 @@ private:
     // Skip the predicate operand.
     if (isControl()) ++rangeBegin;
   }
-  
+
   friend class ucOpIterator;
   friend class ucOperand;
 
@@ -234,7 +234,7 @@ public:
   inline bool operator!=(const ucOpIterator& x) const {
     return !operator==(x);
   }
-  
+
   inline ucOp operator*() const {
     assert(CurIt != EndIt && "Iterator out of range!");
     return ucOp(CurIt, getNextIt());
@@ -289,7 +289,7 @@ public:
   operator MachineInstr *() const {
     return const_cast<MachineInstr*>(&Instr);
   }
-  
+
   MachineInstr *operator ->() const {
     return const_cast<MachineInstr*>(&Instr);
   }

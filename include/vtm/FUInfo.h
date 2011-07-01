@@ -67,7 +67,7 @@ class FuncUnitId {
       VFUs::FUTypes Type  : 4;
       unsigned  Num : 12;
     } ID;
-    
+
     uint16_t data;
   } UID;
 
@@ -96,7 +96,7 @@ public:
   inline bool isBound() const {
     return !isTrivial() && getFUNum() != 0xfff;
   }
- 
+
   // Get the total avaliable number of this kind of function unit.
   unsigned getTotalFUs() const;
 
@@ -144,14 +144,14 @@ public:
   const char *getTypeName() const {
     return getTypeName((VFUs::FUTypes)getType());
   }
-  
+
   unsigned getLatency() const { return Latency; }
   unsigned getTotalRes() const { return TotalRes; }
   unsigned getStartInt() const { return StartInt; }
   unsigned getMaxBitWidth() const { return MaxBitWidth; }
 
   virtual void print(raw_ostream &OS) const;
-}; 
+};
 
 class VFUMemBus : public VFUDesc {
   unsigned AddrWidth;
@@ -275,7 +275,7 @@ public:
 
 struct CommonFUIdentityFunctor
   : public std::unary_function<enum VFUs::FUTypes, unsigned>{
-  
+
   unsigned operator()(enum VFUs::FUTypes T) const {
     return (unsigned)T - (unsigned)VFUs::FirstFUType;
   }

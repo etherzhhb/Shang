@@ -55,7 +55,7 @@ public:
 
   virtual const VInstrInfo *getInstrInfo() const { return &InstrInfo; }
   // virtual const TargetFrameInfo *getFrameInfo() const { return &FrameInfo; }
-  
+
   virtual const VSubtarget *getSubtargetImpl() const {
     return &Subtarget;
   }

@@ -2,7 +2,7 @@
 //
 //                     The LLVM Compiler Infrastructure
 //
-// This file is distributed under the University of Illinois Open Source 
+// This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
@@ -30,7 +30,7 @@ def W : VTMReg<"w">;
 class VRegClass<string namespace, list<ValueType> regTypes, int alignment,
                     list<Register> regList>
   : RegisterClass<namespace, regTypes, alignment, regList> {}
-  
+
 def DR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [R]>;
 def Wire  : VRegClass<"VTM", [i64], 64, [W]>;
 // Symbol for phi join.

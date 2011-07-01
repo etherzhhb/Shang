@@ -30,7 +30,7 @@ namespace llvm {
 
   /// VIntrinsicInst - A useful wrapper class for inspecting calls to intrinsic
   /// functions.  This allows the standard isa/dyncast/cast functionality to
-  /// work with calls to intrinsic functions.  
+  /// work with calls to intrinsic functions.
   class VIntrinsicInst : public CallInst {
     VIntrinsicInst();                      // DO NOT IMPLEMENT
     VIntrinsicInst(const VIntrinsicInst&);  // DO NOT IMPLEMENT
@@ -96,9 +96,9 @@ namespace llvm {
     unsigned lookupName(const char *Name, unsigned Len) const;
 
     unsigned lookupGCCName(const char *Name) const;
-  
+
     bool isOverloaded(unsigned IID) const;
-  
+
     Function *getDeclaration(Module *M, unsigned ID, const Type **Tys = 0,
                              unsigned numTys = 0) const;
   };

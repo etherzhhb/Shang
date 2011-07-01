@@ -4,7 +4,7 @@ set(VBE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(VBE_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 if(MSVC) # Work around for the fucking msvc bug on rtti.
-  set(LLVM_REQUIRES_RTTI 1) 
+  set(LLVM_REQUIRES_RTTI 1)
 endif (MSVC)
 # Add appropriate flags for GCC
 # if (CMAKE_COMPILER_IS_GNUCXX)
@@ -12,7 +12,7 @@ endif (MSVC)
   # -fno-exceptions -fno-rtti
   # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-common -Woverloaded-virtual -Wno-long-long -Wall -W -Wno-unused-parameter -Wwrite-strings")
 # endif ()
-  
+
 #Add path for custom modules
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${VBE_SOURCE_DIR}/cmake")
 
@@ -28,7 +28,7 @@ macro(add_vbe_library name)
     set(srcs ${srcs} ${headers})
     string( REGEX MATCHALL "/[^/]+" split_path ${CMAKE_CURRENT_SOURCE_DIR})
     list( GET split_path -1 dir)
-    file( GLOB_RECURSE headers 
+    file( GLOB_RECURSE headers
       ../../include/vbe${dir}/*.h)
     set(srcs ${srcs} ${headers})
   endif(MSVC_IDE OR XCODE)
@@ -54,7 +54,7 @@ macro(add_vbe_library name)
   if( llvm_system_libs )
     target_link_libraries(${name} ${llvm_system_libs})
   endif( llvm_system_libs )
-  
+
   if(MSVC)
     get_target_property(cflag ${name} COMPILE_FLAGS)
     if(NOT cflag)
@@ -126,7 +126,7 @@ target_link_libraries (LLVMVerilogBackend
   VTMRTLCodegen
   VTMIFCodegen
   VTMScripting)
-  
+
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(TargetInfo)

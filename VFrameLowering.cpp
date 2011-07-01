@@ -159,7 +159,7 @@ unsigned LowerFrameInstrs::lowerAlloca(AllocaInst *AI, unsigned allocatedBRams){
 
   assert(AI->isStaticAlloca() && "Cannot support dynamic alloca yet!");
   unsigned NumElems = cast<ConstantInt>(AI->getArraySize())->getZExtValue();
-  
+
   assert(isa<ArrayType>(AI->getAllocatedType()) && "Only support Array now!");
   const ArrayType *AT = cast<ArrayType>(AI->getAllocatedType());
   const Type *ET = AT->getElementType();
@@ -167,7 +167,7 @@ unsigned LowerFrameInstrs::lowerAlloca(AllocaInst *AI, unsigned allocatedBRams){
   assert(ElemSizeInBytes && "Non-primitive type are not supported!");
   NumElems *= AT->getNumElements();
 
-  // We use address space 
+  // We use address space
   unsigned AllocaAddrSpace = AI->getType()->getAddressSpace();
   const Type *NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
   Function *TheAllocaBRamFn
@@ -178,7 +178,7 @@ unsigned LowerFrameInstrs::lowerAlloca(AllocaInst *AI, unsigned allocatedBRams){
   Value *Args[] = { ConstantInt::get(Int32Ty, allocatedBRams),
                     ConstantInt::get(Int32Ty, NumElems),
                     ConstantInt::get(Int32Ty, ElemSizeInBytes) };
-  
+
   Instruction *AllocaBRam = CallInst::Create(TheAllocaBRamFn,
                                              Args, array_endof(Args),
                                              AI->getName(), AI);

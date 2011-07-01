@@ -1,10 +1,10 @@
 //====------ VFunInfo.h - Verilog target machine function info --*- C++ -*-===//
-// 
+//
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
-// 
+//
 //===----------------------------------------------------------------------===//
 //
 // This file declares Verilog target machine-specific per-machine-function
@@ -165,7 +165,7 @@ public:
   const_id_iterator id_begin(VFUs::FUTypes FUType = VFUs::AllFUType) const {
     assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
     assert(FUType < VFUs::NumFUs && "Bad FUType!");
-    
+
     return AllocatedFUs[FUType].begin();
   }
 
@@ -192,7 +192,7 @@ public:
   bool isFUActiveAt(FuncUnitId Id, unsigned Slot) {
     return ActiveSlotSet.count(FUActiveSlot(Id, Slot));
   }
-  
+
   const char *allocateSymbol(const std::string &Str) {
     PooledStringPtr PSP = SymbolPool.intern(Str.c_str());
     Symbols.insert(PSP);

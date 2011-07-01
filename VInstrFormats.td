@@ -2,7 +2,7 @@
 //
 //                     The LLVM Compiler Infrastructure
 //
-// This file is distributed under the University of Illinois Open Source 
+// This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
@@ -32,7 +32,7 @@ def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))>
 
 // Pseudo instructions
 class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
-			  bit datapath = 0, bits<4> latency = 0, 
+			  bit datapath = 0, bits<4> latency = 0,
 			  bit readAtEmit = 0, bit writeUntilFinish = 0>
   : Instruction {
   let Namespace = "VTM";
@@ -49,11 +49,11 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
 
   let TSFlags{2-0} = fu.Value;
   let Itinerary = fu.Itinerary;
-  
+
   let TSFlags{3} = readAtEmit;
   let TSFlags{4} = writeUntilFinish;
   let TSFlags{5} = datapath;
-  
+
   let TSFlags{9-6} = latency;
 }
 

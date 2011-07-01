@@ -4,12 +4,12 @@
 //
 // Copyright: 2010 by Hongbin Zheng. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
-// of your agreement to the following terms, and your use, installation, 
+// of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
-// of these terms.  If you do not agree with these terms, please do not use, 
-// install, modify or redistribute this software. You may not redistribute, 
-// install copy or modify this software without written permission from 
-// Hongbin Zheng. 
+// of these terms.  If you do not agree with these terms, please do not use,
+// install, modify or redistribute this software. You may not redistribute,
+// install copy or modify this software without written permission from
+// Hongbin Zheng.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -66,8 +66,8 @@ public:
 
   unsigned getASTType() const { return T; }
 
-  const std::string &getName() const { return Name; } 
-  
+  const std::string &getName() const { return Name; }
+
   virtual void print(raw_ostream &OS) const = 0;
 };
 
@@ -101,7 +101,7 @@ public:
     : VASTValue(vastPort, Name, BitWidth, isReg, 0, Comment), IsInput(isInput) {
     assert(!(isInput && isRegister()) && "Bad port decl!");
   }
-  
+
   bool isInput() const { return IsInput; }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -196,7 +196,7 @@ public:
              && "Unexpected port added before arg port!");
       ++NumArgPorts;
     }
-    
+
     Ports.push_back(Port);
     return Port;
   }
@@ -217,7 +217,7 @@ public:
       assert(RetPortIdx == NumArgPorts + NumSpecialPort
              && "Unexpected port added before return port!");
     }
-    
+
     Ports.push_back(Port);
     return Port;
   }
