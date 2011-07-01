@@ -58,6 +58,7 @@ private:
 
   SDNode *Select(SDNode *N);
 
+  SDNode *SelectConstBitSlice(ConstantSDNode *CSD, SDNode *N);
   SDNode *SelectBitSlice(SDNode *N);
 
   SDNode *SelectUnary(SDNode *N, unsigned OpC);
@@ -178,21 +179,30 @@ SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
   return CurDAG->SelectNodeTo(N, Opc, N->getVTList(), Ops.data(), Ops.size());
 }
 
-SDNode *VDAGToDAGISel::SelectBitSlice(SDNode * N) {
+SDNode *VDAGToDAGISel::SelectConstBitSlice(ConstantSDNode *CSD, SDNode *N) {
+  int64_t val = CSD->getSExtValue();
+  unsigned UB = N->getConstantOperandVal(1);
+  unsigned LB = N->getConstantOperandVal(2);
+  val = VTargetLowering::getBitSlice(val, UB, LB);
+  EVT VT = EVT::getIntegerVT(*CurDAG->getContext(), UB - LB);
+  SDValue C = CurDAG->getTargetConstant(val, VT);
+  // Copy the constant explicit since the value may use by some function unit.
+  SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
+  computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
+  return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getValueType(0),
+                              Ops, array_lengthof(Ops));
+}
+
+SDNode *VDAGToDAGISel::SelectBitSlice(SDNode *N) {
+  SDNode *Op = N->getOperand(0).getNode();
   // Emit the constant bit slice to constant directly if possible.
-  if (ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(N->getOperand(0))) {
-    int64_t val = CSD->getSExtValue();
-    unsigned UB = N->getConstantOperandVal(1);
-    unsigned LB = N->getConstantOperandVal(2);
-    val = VTargetLowering::getBitSlice(val, UB, LB);
-    EVT VT = EVT::getIntegerVT(*CurDAG->getContext(), UB - LB);
-    SDValue C = CurDAG->getTargetConstant(val, VT);
-    // Copy the constant explicit since the value may use by some function unit.
-    SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
-    computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
-    return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getValueType(0),
-                                Ops, array_lengthof(Ops));
-  }
+  if (ConstantSDNode *CSD = dyn_cast<ConstantSDNode>(Op))
+    return SelectConstBitSlice(CSD, N);
+
+  assert(Op->getOpcode() != VTMISD::BitSlice
+         && (!Op->isMachineOpcode()
+             || Op->getMachineOpcode() != VTM::VOpBitSlice)
+         && "DAGCombine should handle this!");
 
   return SelectSimpleNode(N, VTM::VOpBitSlice);
 }

@@ -55,6 +55,9 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
+  void forwardWireOpOperands(MachineFunction &MF, MachineRegisterInfo &MRI);
+
+
   void handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
                      const TargetInstrInfo *TII);
 
@@ -172,49 +175,16 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     FirstTerminator = 0;
   }
 
-  // Try to replace the register operand with the constant for users of VOpMvImm.
-  if (!Imms.empty()) eliminateMVImm(Imms, MRI);
-
-  // Forward the use operand of wireops so we can compute a correct live
-  // interval for the use operands of wireops. for example if we have:
-  // a = bitslice b, ...
-  // ...
-  // ... = a ...
-  // and we will add the operand of wireops to the instructions that using its
-  // results as implicit use:
-  // a = bitslice b, ...
-  // ...
-  // ... = a ..., imp use b
-  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
-    for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
-         II != IE; ++II) {
-      MachineInstr *Inst = II;
-      if (VInstrInfo::isWireOp(Inst->getOpcode())) continue;
-
-      for (unsigned i = 0; i < Inst->getNumOperands(); ++i) {
-        MachineOperand &MO = Inst->getOperand(i);
-        if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
-
-        MachineInstr *DefInst = MRI.getVRegDef(MO.getReg());
-        assert(DefInst && "Define instruction not exist!");
-        if (!VInstrInfo::isWireOp(DefInst->getOpcode())) continue;
-
-        // Add the use operand of wireops
-        if (DefInst->getOperand(1).isReg())
-          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(1).getReg(),
-                                           RegState::Implicit);
-        if (DefInst->getOpcode() == VTM::VOpBitCat
-            && DefInst->getOperand(2).isReg())
-          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(2).getReg(),
-                                           RegState::Implicit);
-      }
-    }
+  eliminateMVImm(Imms, MRI);
+  forwardWireOpOperands(MF, MRI);
 
   return true;
 }
 
 void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
                                     MachineRegisterInfo &MRI) {
+  if (Worklist.empty()) return;
+
   SmallVector<MachineOperand, 8> Ops;
   // Find all replaceable operand.
   std::vector<std::pair<MachineInstr*, unsigned> > ImmUsers;
@@ -262,6 +232,43 @@ void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
   }
 }
 
+void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
+                                           MachineRegisterInfo &MRI) {
+  // Forward the use operand of wireops so we can compute a correct live
+  // interval for the use operands of wireops. for example if we have:
+  // a = bitslice b, ...
+  // ...
+  // ... = a ...
+  // and we will add the operand of wireops to the instructions that using its
+  // results as implicit use:
+  // a = bitslice b, ...
+  // ...
+  // ... = a ..., imp use b
+  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
+    for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
+         II != IE; ++II) {
+      MachineInstr *Inst = II;
+      if (VInstrInfo::isWireOp(Inst->getOpcode())) continue;
+
+      for (unsigned i = 0; i < Inst->getNumOperands(); ++i) {
+        MachineOperand &MO = Inst->getOperand(i);
+        if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
+
+        MachineInstr *DefInst = MRI.getVRegDef(MO.getReg());
+        assert(DefInst && "Define instruction not exist!");
+        if (!VInstrInfo::isWireOp(DefInst->getOpcode())) continue;
+
+        // Add the use operand of wireops
+        if (DefInst->getOperand(1).isReg())
+          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(1).getReg(),
+          RegState::Implicit);
+        if (DefInst->getOpcode() == VTM::VOpBitCat
+          && DefInst->getOperand(2).isReg())
+          MachineInstrBuilder(Inst).addReg(DefInst->getOperand(2).getReg(),
+          RegState::Implicit);
+      }
+  }
+}
 
 Pass *llvm::createFixMachineCodePass() {
   return new FixMachineCode();
