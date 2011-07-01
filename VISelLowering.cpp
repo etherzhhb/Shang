@@ -99,7 +99,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::ADD, CurVT, Custom);
     setOperationAction(ISD::ADDC, CurVT, Custom);
     // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, CurVT, Expand);
+    setOperationAction(ISD::SUB, CurVT, Custom);
     setOperationAction(ISD::SUBE, CurVT, Expand);
     //setOperationAction(ISD::ADDC, CurVT, Expand);
     setOperationAction(ISD::SUBC, CurVT, Custom);
@@ -127,7 +127,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setLoadExtAction(ISD::EXTLOAD, CurVT, Custom);
     setLoadExtAction(ISD::SEXTLOAD, CurVT, Custom);
     setLoadExtAction(ISD::ZEXTLOAD, CurVT, Custom);
-    
+
     // Lower cast node to bit level operation.
     setOperationAction(ISD::SIGN_EXTEND, CurVT, Custom);
     setOperationAction(ISD::ZERO_EXTEND, CurVT, Custom);
@@ -311,7 +311,7 @@ SDValue VTargetLowering::getNot(SelectionDAG &DAG, DebugLoc dl,
   EVT VT = Operand.getValueType();
 
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Operand))
-    return DAG.getConstant(~C->getAPIntValue(), VT, 
+    return DAG.getConstant(~C->getAPIntValue(), VT,
                            C->getOpcode() == ISD::TargetConstant);
 
   return DAG.getNode(VTMISD::Not, Operand.getDebugLoc(), VT, Operand);
@@ -493,8 +493,16 @@ SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
+// A - B = A + (-B) = A + (~B) + 1
+SDValue VTargetLowering::LowerSub(SDValue Op, SelectionDAG &DAG) const {
+  SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
+  RHS = getNot(DAG, Op.getDebugLoc(), RHS);
+  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
+                     DAG.getVTList(Op.getValueType(), MVT::i1),
+                     LHS, RHS, DAG.getTargetConstant(1, MVT::i1));
+}
+
 SDValue VTargetLowering::LowerSubC(SDValue Op, SelectionDAG &DAG) const {
-  // A - B = A + (-B) = A + (~B) + 1
   SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
   RHS = getNot(DAG, Op.getDebugLoc(), RHS);
   return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
@@ -537,7 +545,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                              : DAG.getTargetConstant(0, VT);
 
   SDValue SDOps[] = {// The chain.
-                     LSNode->getChain(), 
+                     LSNode->getChain(),
                      // The Value to store (if any), and the address.
                      LSNode->getBasePtr(), StoreVal,
                      // Is load?
@@ -551,7 +559,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
   assert(DataBusWidth >= VTSize && "Unexpected large data!");
 
   MVT DataBusVT =
-    EVT::getIntegerVT(*DAG.getContext(), DataBusWidth).getSimpleVT();  
+    EVT::getIntegerVT(*DAG.getContext(), DataBusWidth).getSimpleVT();
 
   DebugLoc dl =  Op.getDebugLoc();
   SDValue Result  =
@@ -559,7 +567,7 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
                             // Result and the chain.
                             DAG.getVTList(DataBusVT, MVT::Other),
                             // SDValue operands
-                            SDOps, array_lengthof(SDOps), 
+                            SDOps, array_lengthof(SDOps),
                             // Memory operands.
                             LSNode->getMemoryVT(), LSNode->getMemOperand());
   if (isStore)
@@ -617,7 +625,7 @@ SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     unsigned BRamNum = Op->getConstantOperandVal(2),
              NumElem = Op.getConstantOperandVal(3),
              ElemSizeInBytes = Op.getConstantOperandVal(4);
-    
+
     VFInfo *Info = DAG.getMachineFunction().getInfo<VFInfo>();
 
     Info->allocateBRam(BRamNum, NumElem, ElemSizeInBytes);
@@ -641,6 +649,8 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerAdd(Op, DAG);
   case ISD::ADDC:
     return LowerAddC(Op, DAG);
+  case ISD::SUB:
+    return LowerSub(Op, DAG);
   case ISD::SUBC:
     return LowerSubC(Op, DAG);
   case ISD::SETCC:
@@ -696,7 +706,7 @@ bool VTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
     return true;
   }
   }
-  
+
   return false;
 }
 
@@ -800,7 +810,7 @@ void VTargetLowering::computeMaskedBitsForTargetNode(const SDValue Op,
     if (SrcOne.isAllOnesValue())
       KnownOne = APInt::getLowBitsSet(KnownOne.getBitWidth(), Repeat);
     if (SrcZero.isAllOnesValue())
-      KnownZero = APInt::getLowBitsSet(KnownZero.getBitWidth(), Repeat);    
+      KnownZero = APInt::getLowBitsSet(KnownZero.getBitWidth(), Repeat);
     return;
   }
   }

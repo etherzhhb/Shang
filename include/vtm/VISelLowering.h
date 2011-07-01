@@ -30,7 +30,7 @@ namespace VTMISD {
     // Arithmetic operation.
     //
     Not,
-    // Bit level operation.  
+    // Bit level operation.
     BitSlice,
     BitCat,
     BitRepeat,
@@ -47,7 +47,7 @@ class VTargetLowering : public TargetLowering {
   unsigned MaxAddSubBits, MaxMultBits, MaxShiftBits;
 public:
   VTargetLowering(TargetMachine &TM);
-  
+
   // TODO:
   virtual bool allowsUnalignedMemoryAccesses(EVT VT) const {
     return false;
@@ -102,7 +102,7 @@ public:
   static SDValue getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                              unsigned UB, unsigned LB,
                              unsigned ResultWidth = 0);
-  
+
   static SDValue getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                               unsigned Times);
 
@@ -131,7 +131,7 @@ public:
   // Not Zero.
   static SDValue getNZFlag(SelectionDAG &DAG, SDValue SetCC,
                            bool dontSub = false){
-    DebugLoc dl = SetCC.getDebugLoc();               
+    DebugLoc dl = SetCC.getDebugLoc();
     return getReductionOp(DAG, VTMISD::ROr, dl,
                           getCmpResult(DAG, SetCC, dontSub));
   }
@@ -144,8 +144,8 @@ public:
   }
 
   template<class Func>
-  static SDValue getNotFlag(SelectionDAG &DAG, SDValue SetCC, Func F) {  
-    DebugLoc dl = SetCC.getDebugLoc();               
+  static SDValue getNotFlag(SelectionDAG &DAG, SDValue SetCC, Func F) {
+    DebugLoc dl = SetCC.getDebugLoc();
     return getNot(DAG, dl, F(DAG, SetCC));
   }
 
@@ -171,6 +171,7 @@ public:
 private:
   SDValue LowerAdd(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerAddC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSub(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSubC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
   SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
