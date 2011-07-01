@@ -74,7 +74,7 @@ char FixMachineCode::ID = 0;
 
 void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
                                    const TargetInstrInfo *TII) {
-  if (!VInstrInfo::isWireOp(Inst->getOpcode())) return;
+  if (!VInstrInfo::isWireOp(Inst->getDesc())) return;
 
   bool needCopy = false;
   unsigned OriginalReg = Inst->getOperand(0).getReg();
@@ -250,7 +250,7 @@ void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
     for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
          II != IE; ++II) {
       MachineInstr *Inst = II;
-      if (VInstrInfo::isWireOp(Inst->getOpcode())) continue;
+      if (VInstrInfo::isWireOp(Inst->getDesc())) continue;
 
       for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
         MachineOperand &MO = Inst->getOperand(i);

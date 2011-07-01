@@ -453,10 +453,14 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
          || Opcode == VTM::VOpToStateb;
 }
 
-bool VInstrInfo::isWireOp(unsigned Opcode) {
-  return Opcode == VTM::VOpBitCat
-         || Opcode == VTM::VOpBitRepeat
-         || Opcode == VTM::VOpBitSlice;
+bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
+  VIDesc VID(TID);
+
+  // When a instruction has datapath and only has trivial FU, they will not
+  // share the FU with others instructions, and its result will only be written
+  // once, this means we can simply put the value to a wire and do not need to
+  // register the value.
+  return VID.hasDatapath() && VID.hasTrivialFU();
 }
 
 FuncUnitId VIDesc::getPrebindFUId()  const {
