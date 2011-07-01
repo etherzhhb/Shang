@@ -191,9 +191,9 @@ bool ucOperand::isWire() const {
 void ucOperand::print(raw_ostream &OS,
                       unsigned UB /* = 64 */, unsigned LB /* = 0 */,
                       bool isPredicate /* = false */) {
-  UB = std::min(getBitWidthOrZero(), UB);
   switch (getType()) {
   case MachineOperand::MO_Register: {
+    UB = std::min(getBitWidthOrZero(), UB);
     if (isImplicit() || getReg() == 0) break;
 
     unsigned Reg = getReg();
@@ -232,6 +232,7 @@ void ucOperand::print(raw_ostream &OS,
     return;
   }
   case MachineOperand::MO_Immediate:
+    UB = std::min(getBitWidthOrZero(), UB);
     assert(UB == getBitWidth() && LB == 0 && "Get BitSlice of constant!");
     OS << verilogConstToStr(getImm(), getBitWidth(), false);
     return;
