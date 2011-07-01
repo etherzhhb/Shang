@@ -54,7 +54,7 @@ class LuaScript {
 
   StringMap<SynSettings*> FunctionSettings;
 
-  friend SynSettings *getSynSetting(StringRef Name);
+  friend SynSettings *getSynSetting(StringRef Name, SynSettings *ParentSetting);
   friend VFUDesc *getFUDesc(enum VFUs::FUTypes T);
 
   void initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs);

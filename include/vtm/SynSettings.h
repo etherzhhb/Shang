@@ -44,13 +44,16 @@ private:
   std::string ModName;
   // Hierarchy prefix
   std::string HierPrefix;
+  bool IsTopLevelModule;
 
   friend class LuaScript;
 public:
   SynSettings(luabind::object SettingTable);
-  SynSettings(StringRef Name);
+  SynSettings(StringRef Name, SynSettings &From);
   PipeLineAlgorithm getPipeLineAlgorithm() const { return PipeAlg; }
 
+  bool isTopLevelModule() const { return IsTopLevelModule; }
+  void setTopLevelModule(bool isTop) { IsTopLevelModule = isTop; }
   bool enablePipeLine() const { return getPipeLineAlgorithm() != DontPipeline; }
 
   ScheduleAlgorithm getScheduleAlgorithm() const { return SchedAlg; }
@@ -59,7 +62,7 @@ public:
   const std::string &getHierPrefix() const { return HierPrefix; }
 };
 
-SynSettings *getSynSetting(StringRef Name);
+SynSettings *getSynSetting(StringRef Name, SynSettings *ParentSetting = 0);
 }
 
 #endif

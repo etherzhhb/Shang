@@ -421,6 +421,9 @@ struct VLTIfCodegen : public MachineFunctionPass {
       SynSettings *Settings = getSynSetting(I->getName());
       assert(Settings
         && "Synthesis settings of a hardware function not available!");
+      // Ignore submodules.
+      if (!Settings->isTopLevelModule()) continue;
+
       std::string RTLModName = Settings->getModName();
 
       // Setup the Name of the module in verilator.
@@ -522,6 +525,10 @@ char VLTIfCodegen::ID = 0;
 
 bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   const Function *F = MF.getFunction();
+  // Only Generate the interface for top level modules.
+  if (!getSynSetting(F->getName())->isTopLevelModule())
+    return false;
+
   FInfo = MF.getInfo<VFInfo>();
 
   RTLMod = FInfo->getRtlMod();

@@ -74,12 +74,17 @@ bool FunctionFilter::runOnModule(Module &M) {
     if (!F || F->isDeclaration())
       continue;
     DEBUG(dbgs() << "*************Function name: " << F->getName() << "\n");
-    if (getSynSetting(F->getName())){
+    if (SynSettings *TopSetting = getSynSetting(F->getName())){
       HWFunctions.insert(F);
       for (df_iterator<CallGraphNode*> ICGN = df_begin(CGN),
            ECGN = df_end(CGN); ICGN != ECGN; ++ICGN){
-        const CallGraphNode *CGN2 = *ICGN;
-        HWFunctions.insert(CGN2->getFunction());
+        const CallGraphNode *SubCGN = *ICGN;
+        Function *SubF = SubCGN->getFunction();
+        // Create the synthesis setting for subfunctions.
+        if (SubF != F)
+          getSynSetting(SubF->getName(), TopSetting)->setTopLevelModule(false);
+
+        HWFunctions.insert(SubF);
       }
     }
   }

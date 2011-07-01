@@ -177,8 +177,20 @@ VFUDesc *llvm::getFUDesc(enum VFUs::FUTypes T) {
   return Script->FUSet[T];
 }
 
-SynSettings *llvm::getSynSetting(StringRef Name) {
-  return Script->FunctionSettings.lookup(Name);
+SynSettings *llvm::getSynSetting(StringRef Name, SynSettings *ParentSetting) {
+  StringMap<SynSettings*> *SynSettingMap = &Script->FunctionSettings;
+  if (SynSettings *S = SynSettingMap->lookup(Name))
+    return S;
+
+  if (!ParentSetting) return 0;
+
+  // Create a new synthesis setting by copying ParentSetting.
+  SynSettings *S = new SynSettings(Name, *ParentSetting);
+  StringMapEntry<SynSettings*> *Entry =
+    StringMapEntry<SynSettings*>::Create(Name.begin(), Name.end(),
+                                         SynSettingMap->getAllocator(), S);
+  SynSettingMap->insert(Entry);
+  return S;
 }
 
 LuaScript &llvm::scriptEngin() {

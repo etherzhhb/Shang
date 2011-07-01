@@ -101,13 +101,13 @@ VFUBRam::VFUBRam(luabind::object FUTable)
 
 
 // Dirty Hack: anchor from SynSettings.h
-SynSettings::SynSettings(StringRef Name)
-  : PipeAlg(SynSettings::DontPipeline), SchedAlg(SynSettings::ILP),
-  ModName(Name), HierPrefix("") {}
+SynSettings::SynSettings(StringRef Name, SynSettings &From)
+  : PipeAlg(From.PipeAlg), SchedAlg(From.SchedAlg),
+  ModName(Name), HierPrefix(""), IsTopLevelModule(false) {}
 
 SynSettings::SynSettings(luabind::object SettingTable)
   : PipeAlg(SynSettings::DontPipeline),
-    SchedAlg(SynSettings::ILP) /*ModName(""), HierPrefix("")*/ {
+    SchedAlg(SynSettings::ILP), IsTopLevelModule(true) {
   if (luabind::type(SettingTable) != LUA_TTABLE)
     return;
 
@@ -126,6 +126,10 @@ SynSettings::SynSettings(luabind::object SettingTable)
   if (boost::optional<PipeLineAlgorithm> Result =
     luabind::object_cast_nothrow<PipeLineAlgorithm>(SettingTable["Pipeline"]))
     PipeAlg = Result.get();
+
+  if (boost::optional<bool> Result =
+    luabind::object_cast_nothrow<bool>(SettingTable["isTopMod"]))
+    IsTopLevelModule = Result.get();
 }
 
 unsigned FuncUnitId::getTotalFUs() const {
