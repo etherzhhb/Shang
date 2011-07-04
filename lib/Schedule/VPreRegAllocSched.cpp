@@ -52,9 +52,6 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-STATISTIC(MeregedRegisterBits,
-          "Number of registers merged after schedule emitted");
-
 namespace {
 /// @brief Schedule the operations.
 ///
@@ -180,7 +177,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   void cleanUpRegisterClass(const TargetRegisterClass *RC);
-  void cleanUpRegister(unsigned Reg);
 
   bool doInitialization(Module &M) {
     TD = getAnalysisIfAvailable<TargetData>();
@@ -618,11 +614,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
-  cleanUpRegisterClass(VTM::WireRegisterClass);
-  // FIXME: There are function units.
-  cleanUpRegisterClass(VTM::RADDRegisterClass);
-  cleanUpRegisterClass(VTM::RMULRegisterClass);
-  cleanUpRegisterClass(VTM::RSHTRegisterClass);
+  cleanUpRegisterClass(VTM::DRRegisterClass);
 }
 
 void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
@@ -634,44 +626,18 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
     unsigned SrcReg = *I;
     MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
 
-    if (MRI->def_empty(SrcReg)) continue;
-    assert (++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
-    cleanUpRegister(SrcReg);
-  }
-}
+    if (DI == MRI->def_end() || DI->isPHI() || !MRI->use_empty(SrcReg))
+      continue;
 
-void VPreRegAllocSched::cleanUpRegister(unsigned Reg) {
-  // If a same wire copied to different registers, merge them.
-  typedef MachineRegisterInfo::use_iterator use_it;
+    assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
 
-  SmallVector<ucOp, 8> DstRegs;
-  for (use_it UI = MRI->use_begin(Reg), UE = MRI->use_end(); UI != UE; ++UI) {
-    if (UI->getOpcode() == VTM::PHI) continue;
-    
-    ucOp Op = ucOp::getParent(UI);
-    // The wire may used by a predicate operand, do not merge this, we only want
-    // to eliminate the registers that hold the same value from a wire, this
-    // means the wire should be the source operand of the copy instead of the
-    // predicate operand.
-    if (VInstrInfo::isCopyLike(Op->getOpcode(), false)
-        && Op.getOperand(1).getReg() == Reg) {
-      DstRegs.push_back(Op);
-    }
-  }
-
-  if (DstRegs.size() <= 1) return;
-
-  // Pick one dest register, and replace others by this one.
-  unsigned FstDstReg = DstRegs.pop_back_val().getOperand(0).getReg();
-
-  while (!DstRegs.empty()) {
-    ucOp OpToMerge = DstRegs.pop_back_val();
-    ucOperand &DefOperand = OpToMerge.getOperand(0);
-    unsigned RegToMerge = DefOperand.getReg();
-    MRI->replaceRegWith(RegToMerge, FstDstReg);
-    // DiryHack: Disable the copy.
-    MeregedRegisterBits += DefOperand.getBitWidth();
-    DefOperand.setReg(0);
-    OpToMerge->changeOpcode(VTM::IMPLICIT_DEF, OpToMerge->getPredSlot());
+    MachineInstr *DefMI = &*DI;
+    ucOp Op = ucOp::getParent(DI);
+    assert(Op->getOpcode() == VTM::COPY && "Unexpected opcode!");
+    unsigned OpStart = DI.getOperandNo() - 2;
+    // FIXME: Unlink the instruction from parent before remove the operand.
+    for (unsigned i = 0, e = TII->get(VTM::COPY).getNumOperands() + 2;
+         i != e; ++i)
+      DefMI->RemoveOperand(OpStart);
   }
 }
