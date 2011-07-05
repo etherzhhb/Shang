@@ -1,5 +1,5 @@
 //====- BitLevelInfo.cpp - Verilog target machine bit level info -*- C++ -*-===//
-// 
+//
 //                     The LLVM Compiler Infrastructure
 //
 // This file is distributed under the University of Illinois Open Source

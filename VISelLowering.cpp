@@ -324,7 +324,8 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   unsigned SizeInBits = UB - LB, OpSize = computeSizeInBits(Op);
 
   assert(SizeInBits <= OpSize && "Bad bit slice bit width!");
-  assert(UB <= OpSize && "Bad upper bound of bit slice!");
+  assert(UB <= OpSize && LB < OpSize && "Bad bounds of bit slice!");
+  assert(SizeInBits && "BitSlice not contains anything!");
   // If the range contains all bits of the source operand, simple return the
   // source operand, also try to match the result width if necessary.
   if (SizeInBits == OpSize && (ResultWidth == 0 || SizeInBits == ResultWidth))
