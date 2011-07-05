@@ -274,31 +274,50 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
                      ExtractDisabledBits, ExtractEnabledBits, !flipped);
 }
 
+unsigned GetDefaultSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                            SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                            SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
+  if (LHS->getOpcode() != VTMISD::BitCat || RHS->getOpcode() != VTMISD::BitCat)
+    return 0;
+
+  unsigned LHSLoBits = VTargetLowering::computeSizeInBits(LHS->getOperand(1));
+  unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
+  if (LHSLoBits != RHSLoBits) return 0;
+
+  unsigned LHSHiBits = VTargetLowering::computeSizeInBits(LHS->getOperand(0));
+  unsigned RHSHiBits = VTargetLowering::computeSizeInBits(RHS->getOperand(0));
+  assert(LHSHiBits == RHSHiBits && "Hi size do not match!");
+
+  LHSHi = LHS.getOperand(0);
+  LHSLo = LHS.getOperand(1);
+  RHSHi = RHS.getOperand(0);
+  RHSLo = RHS.getOperand(1);
+
+  return LHSLoBits;
+}
+
+
 // Promote bitcat in dag, like {a , b} & {c, d} => {a & c, b &d } or something.
 template<typename ConcatBitsFunc,
          typename BuildLowPartFunc,
-         typename BuildHighPartFunc>
+         typename BuildHighPartFunc,
+         typename GetSplitBitFunc>
 static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
                                   TargetLowering::DAGCombinerInfo &DCI,
                                   ConcatBitsFunc ConcatBits,
                                   BuildLowPartFunc BuildLowPart,
-                                  BuildHighPartFunc BuildHighPart) {
+                                  BuildHighPartFunc BuildHighPart,
+                                  GetSplitBitFunc GetSplitBit) {
   SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
 
-  if (LHS.getOpcode() != VTMISD::BitCat || RHS.getOpcode() != VTMISD::BitCat)
-    return SDValue();
+  unsigned SizeInBit = VTargetLowering::computeSizeInBits(SDValue(N, 0));
+  SDValue LHSLo, RHSLo, LHSHi, RHSHi;
+  unsigned LoBitWidth = GetSplitBit(N, DCI,
+                                    LHS, LHSLo, LHSHi,
+                                    RHS, RHSLo, RHSHi);
+  if (LoBitWidth == 0) return SDValue();
 
-  // Split point must agree.
-  // FIXME: We can also find the most common part if there is constant.
-  SDValue LHSLo = LHS.getOperand(1), RHSLo = RHS.getOperand(1);
-  unsigned LoBitWidth = VTargetLowering::computeSizeInBits(LHSLo);
-  if (LoBitWidth != VTargetLowering::computeSizeInBits(RHSLo))
-    return SDValue();
-
-  SDValue LHSHi = LHS.getOperand(0), RHSHi = RHS.getOperand(0);
-  unsigned HiBitWidth = VTargetLowering::computeSizeInBits(LHSHi);
-  assert(HiBitWidth == VTargetLowering::computeSizeInBits(RHSHi)
-         && "Hi size do not match!");
+  unsigned HiBitWidth = SizeInBit - LoBitWidth;
 
   SelectionDAG &DAG = DCI.DAG;
   DebugLoc dl = N->getDebugLoc();
@@ -310,7 +329,6 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
   Hi = VTargetLowering::getBitSlice(DAG, dl, Hi, HiBitWidth, 0);
   DCI.AddToWorklist(Hi.getNode());
 
-  // FIXME: Allow custom concation.
   return ConcatBits(DCI, N, Hi, Lo);
 }
 
@@ -338,7 +356,8 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
   if (Commuted) {
     SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits,
                                     LogicOpBuildLowPart,
-                                    LogicOpBuildHighPart);
+                                    LogicOpBuildHighPart,
+                                    GetDefaultSplitBit);
     if (RV.getNode()) return RV;
   }
 
@@ -651,13 +670,11 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
     }
   }
 
-    // Try to promote the bitcat after operand commuted.
-  if (Commuted) {
-    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatADDEs,
-                                    ADDEBuildLowPart,
-                                    ADDEBuildHighPart);
-    if (RV.getNode()) return RV;
-  }
+  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatADDEs,
+                                  ADDEBuildLowPart,
+                                  ADDEBuildHighPart,
+                                  GetDefaultSplitBit);
+  if (RV.getNode()) return RV;
 
   // TODO: Combine with bit mask information.
   return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
