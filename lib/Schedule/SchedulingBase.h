@@ -52,15 +52,13 @@ private:
   typedef std::map<FuncUnitId, DGStepMapType> DGType;
   DGType DGraph;
 
-  unsigned computeStepKey(unsigned step) const;
-
   SmallVector<double, 256> AvgDG;
 
   void resetSTF();
 
 protected:
   VSchedGraph &State;
-
+  unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
     SUnitToTF(S.getNumSUnits()), SUnitToSTF(S.getNumSUnits()),
@@ -268,7 +266,8 @@ class ILPScheduler : public SchedulingBase {
     return SUnitToSV[U->getIdx()];
   }
 
-  typedef SmallVector<const VSUnit*, 64> ActiveSUVec;
+  typedef std::pair<const VSUnit*, unsigned> SUToIdx;
+  typedef SmallVector<SUToIdx, 64> ActiveSUVec;
   typedef std::map<unsigned, ActiveSUVec> ActiveSUMap;
   ActiveSUMap ActiveSUs;
 

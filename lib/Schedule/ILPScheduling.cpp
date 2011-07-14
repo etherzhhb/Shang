@@ -102,11 +102,17 @@ void ILPScheduler::setUpVariables(lprec *lp) {
         report_fatal_error("ILPScheduler: Can NOT set step variable: "
                            + SVName + " as binary variable!");
 
-      // Build the active map.
-      ActiveSUs[CurStep].push_back(U);
-      // If the SUnit actived at several cstep, add it to the active map at the rest steps.
+      // Build the active map. Use the pair structure in order to get the VSUnits
+      // and the index.
+      // EP: If step 4 contains the VSUnit named sv12 and the sv12 will run
+      //     two steps, then the index of sv12 in step 5 will be sv12_4
+      //     instead of sv12_5.
+      SUToIdx SUToIdxPair = std::make_pair(U,CurIdx);
+      ActiveSUs[CurStep].push_back(SUToIdxPair);
+      // If the SUnit actived at several cstep, add it to the active map at the
+      // rest steps.
       for (unsigned i = CurStep + 1, e = CurStep + U->getLatency(); i < e; ++i)
-			   ActiveSUs[i].push_back(U);
+		    ActiveSUs[i].push_back(SUToIdxPair);
     }
   }
 
@@ -255,7 +261,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
   VSUnit *EntryU = State.getEntryRoot(), *ExitU = State.getExitRoot();
 
   // Remember the bound schedule unit and corresponding function unit.
-  typedef SmallVector<const VSUnit*, 16> BoundSUVec;
+  typedef SmallVector<SUToIdx, 16> BoundSUVec;
   typedef std::map<FuncUnitId, BoundSUVec> FU2SUMap;
   FU2SUMap FSMap;
 
@@ -275,7 +281,8 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
     // Classify the active schedule units by its function unit id.
     for (ActiveSUVec::const_iterator I = SUs.begin(), E = SUs.end();
          I != E; ++I) {
-      const VSUnit *U = *I;
+      SUToIdx SUI  = *I;
+      const VSUnit* U = SUI.first;
 
       if (U->getFUType() > VFUs::LastCommonFUType
           || U->getFUType() < VFUs::FirstNonTrivialFUType)
@@ -285,7 +292,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
       if (!U->getFUId().isBound())
         ++CurFUCounts[U->getFUType() - VFUs::FirstNonTrivialFUType];
 
-      FSMap[U->getFUId()].push_back(U);
+      FSMap[U->getFUId()].push_back(SUI);
     }
 
     // Update the max function unit count.
@@ -302,10 +309,10 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
       FuncUnitId Id = I->first;
       for (BoundSUVec::const_iterator UI = I->second.begin(),
            UE = I->second.end(); UI != UE; ++UI) {
-        const VSUnit *U = *UI;
+        SUToIdx SI  = *UI;
 
         Row.push_back(1.0);
-        ColIdx.push_back(i - getASAPStep(U) + getFstSVIdxOf(U) + 1);
+        ColIdx.push_back(SI.second);
       }
 
       if (Id.isBound()) {
