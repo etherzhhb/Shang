@@ -108,13 +108,14 @@ void ILPScheduler::setUpVariables(lprec *lp) {
       //     two steps, then the index of sv12 in step 5 will be sv12_4
       //     instead of sv12_5.
       SUToIdx SUToIdxPair = std::make_pair(U,CurIdx);
-      ActiveSUs[CurStep].push_back(SUToIdxPair);
+      ActiveSUs[computeStepKey(CurStep)].push_back(SUToIdxPair);
       // If the SUnit actived at several cstep, add it to the active map at the
       // rest steps.
       for (unsigned i = CurStep + 1, e = CurStep + U->getLatency(); i < e; ++i)
-		    ActiveSUs[i].push_back(SUToIdxPair);
+		    ActiveSUs[computeStepKey(i)].push_back(SUToIdxPair);
     }
   }
+
 
   // Set up the function unit variables.
   for (VFUs::FUTypes fu = VFUs::FirstNonTrivialFUType;
@@ -225,9 +226,6 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       const VSUnit *SrcU = *DI;
       VDEdge *Edge = DI.getEdge();
 
-      // FIXME: Also consider back-edge for Modulo Scheduling.
-      if (Edge->isLoopCarried()) continue;
-
       // Get the index of first step variable of U.
       unsigned SrcFstIdx = getFstSVIdxOf(SrcU),
                // And the total step variable count of U.
@@ -245,7 +243,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
 
       // Add the constraints to the model.
       if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
-                            GE, Edge->getLatency()))
+                            GE, int(Edge->getLatency()) - int(getMII() *  Edge->getItDst())))
         report_fatal_error("ILPScheduler: Can NOT add Precedence constraints"
                            " of schedule unit " + utostr_32(DstU->getIdx()) +
                            " to " + utostr_32(SrcU->getIdx()));
@@ -258,8 +256,6 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
 }
 
 void ILPScheduler::buildFUConstraints(lprec *lp) {
-  VSUnit *EntryU = State.getEntryRoot(), *ExitU = State.getExitRoot();
-
   // Remember the bound schedule unit and corresponding function unit.
   typedef SmallVector<SUToIdx, 16> BoundSUVec;
   typedef std::map<FuncUnitId, BoundSUVec> FU2SUMap;
@@ -273,8 +269,10 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
   SmallVector<REAL, 128> Row;
   SmallVector<int, 128> ColIdx;
 
-  for (unsigned i = getASAPStep(EntryU), e = getALAPStep(ExitU); i != e; ++i){
-    ActiveSUVec &SUs = ActiveSUs[i];
+  for (ActiveSUMap::const_iterator AI = ActiveSUs.begin(), AE =ActiveSUs.end();
+       AI  != AE;  ++AI) {
+    unsigned CurStep = AI->first;
+    ActiveSUVec SUs = AI->second;
     // Clear the function unit counts.
     CurFUCounts.assign(VFUs::NumNonTrivialCommonFUs, 0);
 
@@ -319,7 +317,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
         if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
                               LE, 1))
           report_fatal_error("ILPScheduler: Can NOT add FU constraints"
-                             " at step " + utostr_32(i) +
+                             " at step " + utostr_32(CurStep) +
                              " for FU "
                              + std::string(VFUDesc::getTypeName(Id.getFUType())));
       } else {
@@ -328,7 +326,7 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
         if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
                               LE, 0))
           report_fatal_error("ILPScheduler: Can NOT add FU constraints"
-                             " at step " + utostr_32(i) +
+                             " at step " + utostr_32(CurStep) +
                              " for FU "
                              + std::string(VFUDesc::getTypeName(Id.getFUType())));
       }
