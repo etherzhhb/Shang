@@ -36,6 +36,9 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetRegistry.h"
 #include "llvm/Target/TargetSelect.h"
+#include "llvm/Assembly/PrintModulePass.h"
+#include "llvm/Transforms/IPO.h"
+
 #include <memory>
 
 // This is the only header we need to include for LuaBind to work
@@ -48,6 +51,7 @@ extern "C" {
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+#include "llvm/Assembly/PrintModulePass.h"
 }
 
 using namespace llvm;
@@ -118,8 +122,19 @@ int main(int argc, char **argv) {
 
   PM.add(new TargetData(*target->getTargetData()));
 
+  // Do Globalvariable promotion.
+  PM.add(createGVPromotionPass());
+
   // Perform Software/Hardware partition.
+  // PM.add(createFunctionFilterCGPass(S->getOutputStream("SoftwareIROutput")));
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
+
+  // Print out the IR
+  std::string Path = "D:\\cygwin\\home\\Eric\\work\\debug\\HWIR.ll";
+  std::string error;
+  raw_fd_ostream OS(Path.c_str(), error);
+  // PM.add(createPrintFunctionPass("",&OS));
+  PM.add(createPrintModulePass(&OS));
 
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());

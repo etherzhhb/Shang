@@ -33,6 +33,8 @@ Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
 
 
+// Promote all the GVs to arguments
+Pass *createGVPromotionPass();
 
 
 Pass *createHWPartitionInfoPass();
@@ -77,6 +79,8 @@ void initializeRAPass(PassRegistry &Registry);
 
 
 
+// Add the initialize implementation of GVPromotion.cpp.
+void initializeGVPromotionPass(PassRegistry &Registry);
 
 
 void initializeHWPartitionInfoPass(PassRegistry &Registry);
