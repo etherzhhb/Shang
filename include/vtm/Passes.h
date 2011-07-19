@@ -30,7 +30,15 @@ class TargetIntrinsicInfo;
 
 Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
+
+
+
+
+
+Pass *createHWPartitionInfoPass();
+
 Pass *createFunctionFilterPass(raw_ostream &O);
+
 
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
@@ -60,8 +68,19 @@ Pass *createPLBIfCodegenPass(raw_ostream &O);
 //
 void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
+
 void initializeRTLCodegenPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry);
+
+void initializeRAPass(PassRegistry &Registry);
+
+
+
+
+
+
+void initializeHWPartitionInfoPass(PassRegistry &Registry);
 } // end namespace
+
 
 #endif
