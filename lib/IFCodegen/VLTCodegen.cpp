@@ -193,9 +193,9 @@ static raw_ostream &printType(raw_ostream &Out, const Type *Ty,
     const PointerType *PTy = cast<PointerType>(Ty);
     std::string ptrName = "*" + NameSoFar;
 
-    if (PTy->getElementType()->isArrayTy() ||
-        PTy->getElementType()->isVectorTy())
-      ptrName = "(" + ptrName + ")";
+    //if (PTy->getElementType()->isArrayTy() ||
+     //   PTy->getElementType()->isVectorTy())
+      //ptrName = "(" + ptrName + ")";
 
     if (!PAL.isEmpty())
       // Must be a function ptr cast!
@@ -209,10 +209,10 @@ static raw_ostream &printType(raw_ostream &Out, const Type *Ty,
     if (NumElements == 0) NumElements = 1;
     // Arrays are wrapped in structs to allow them to have normal
     // value semantics (avoiding the array "decay").
-    Out << NameSoFar << " { ";
+    //Out << NameSoFar << " { ";
     printType(Out, ATy->getElementType(), false,
-              "array[" + utostr(NumElements) + "]");
-    return Out << "; }";
+              NameSoFar+"[" + utostr(NumElements) + "]");
+    return Out;// << "; }";
   }
 
   case Type::OpaqueTyID: {
