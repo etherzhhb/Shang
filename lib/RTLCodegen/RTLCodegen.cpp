@@ -879,7 +879,6 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     // Emit the operations.
     switch (Op->getOpcode()) {
     case VTM::VOpInternalCall:  emitOpInternalCall(Op);       break;
-    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
     case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
     case VTM::VOpRet:           emitOpRet(Op); IsRet = true;  break;
     case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
@@ -1043,16 +1042,6 @@ void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
-  // Assign input port to some register.
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  OpReadSymbol.getOperand(0).print(OS);
-  OS << " <= "
-     << getSubModulePortName(OpReadSymbol.getOperand(2).getImm(),
-                             OpReadSymbol.getOperand(1).getSymbolName());
-  OS << ";\n";
-}
-
 void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
@@ -1163,6 +1152,8 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpRAnd:      emitUnaryOp(Op, "&");   break;
     case VTM::VOpRXor:      emitUnaryOp(Op, "^");   break;
 
+    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
+
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   }
@@ -1185,6 +1176,16 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   BinOp.getOperand(1).print(OS);
   OS << ' ' << Operator << ' ';
   BinOp.getOperand(2).print(OS);
+  OS << ";\n";
+}
+
+void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+  OS << "assign ";
+  OpReadSymbol.getOperand(0).print(OS);
+  OS << " = "
+     << getSubModulePortName(OpReadSymbol.getOperand(2).getImm(),
+                             OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
 }
 

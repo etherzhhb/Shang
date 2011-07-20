@@ -460,7 +460,8 @@ bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
   // share the FU with others instructions, and its result will only be written
   // once, this means we can simply put the value to a wire and do not need to
   // register the value.
-  return VID.hasDatapath() && VID.hasTrivialFU();
+  return VID->getOpcode() != VTM::VOpReadReturn
+         && VID.hasDatapath() && VID.hasTrivialFU();
 }
 
 FuncUnitId VIDesc::getPrebindFUId()  const {
