@@ -220,7 +220,7 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
   DebugLoc dl = Op->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
   EVT VT = Op.getValueType();
-  unsigned SizeInBits = Op.getValueSizeInBits();
+  unsigned SizeInBits = VTargetLowering::computeSizeInBits(Op);
 
   // DirtyHack: ExtractBitMaskInfo cannot handle 0.
   if (Mask == 0)
