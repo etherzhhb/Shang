@@ -965,7 +965,7 @@ void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
   std::string OpAName = SumName + "_a";
   std::string OpBName = SumName + "_b";
   VM->addRegister(OpAName, FUWidth);
-  VM->addRegister(OpBName, FUWidth);
+  VM->addRegister(OpBName, Log2_32_Ceil(FUWidth));
   // Assign the value to function unit.
   CtrlS << OpAName << " <= ";
   OpSHT.getOperand(1).print(CtrlS);
