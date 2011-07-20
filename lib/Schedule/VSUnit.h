@@ -153,10 +153,89 @@ public:
   }
 };
 
+class OpSlot {
+  unsigned SlotNum;
+  OpSlot(unsigned S) : SlotNum(S) {}
+  enum SlotType { Control, Datapath};
+public:
+  OpSlot() : SlotNum(0) {}
+  OpSlot(unsigned Slot, bool isCtrl) {
+    SlotType T = isCtrl ? Control : Datapath;
+    SlotNum = (Slot << 0x1) | (0x1 & T);
+  }
+
+  SlotType getSlotType() const {
+    return (SlotType)(SlotNum & 0x1);
+  }
+
+  bool isControl() const {
+    return getSlotType() == OpSlot::Control;
+  }
+
+  bool isDatapath() const {
+    return getSlotType() == OpSlot::Datapath;
+  }
+
+  unsigned getSlot() const { return SlotNum / 2; }
+
+  inline bool operator==(OpSlot S) const {
+    return SlotNum == S.SlotNum;
+  }
+
+  inline bool operator!=(OpSlot S) const {
+    return SlotNum != S.SlotNum;
+  }
+
+  inline bool operator<(OpSlot S) const {
+    return SlotNum < S.SlotNum;
+  }
+
+  inline bool operator<=(OpSlot S) const {
+    return SlotNum <= S.SlotNum;
+  }
+
+  inline bool operator>(OpSlot S) const {
+    return SlotNum > S.SlotNum;
+  }
+  inline bool operator>=(OpSlot S) const {
+    return SlotNum >= S.SlotNum;
+  }
+
+  inline OpSlot &operator=(unsigned RHS) {
+    unsigned T = SlotNum & 0x1;
+    SlotNum = (RHS << 0x1) | T;
+    return *this;
+  }
+
+  void setType(bool isCtrl) {
+    SlotType T = isCtrl ? Control : Datapath;
+    SlotNum = (getSlot() << 0x1) | (0x1 & T);
+  }
+
+  inline OpSlot operator+(unsigned RHS) const {
+    return OpSlot(getSlot() + RHS, isControl());
+  }
+
+  inline OpSlot &operator+=(unsigned RHS) {
+    SlotNum += RHS * 2;
+    return *this;
+  }
+
+  inline OpSlot &operator++() { return operator+=(1); }
+
+  inline OpSlot operator++(int) {
+    OpSlot Temp = *this;
+    SlotNum += 2;
+    return Temp;
+  }
+
+  OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
+};
+
 /// @brief Base Class of all hardware atom. 
 class VSUnit {
   // TODO: typedef SlotType
-  unsigned short SchedSlot;
+  OpSlot SchedSlot;
   unsigned short InstIdx;
   unsigned FUNum;
 
@@ -180,12 +259,14 @@ class VSUnit {
   friend class VSchedGraph;
 
   // Create the entry node.
-  VSUnit(unsigned short Idx) :SchedSlot(0), InstIdx(Idx), FUNum(0) {}
+  VSUnit(unsigned short Idx) : InstIdx(Idx), FUNum(0) {
+    SchedSlot.setType(!hasDatapath());
+  }
 
   VSUnit(MachineInstr **I, unsigned NumInstrs, unsigned short Idx,
-         unsigned fuid = 0)
-    : SchedSlot(0), InstIdx(Idx), FUNum(fuid),
-    Instrs(I, I + NumInstrs) {}
+         unsigned fuid = 0) : InstIdx(Idx), FUNum(fuid), Instrs(I,I+NumInstrs) {
+    SchedSlot.setType(!hasDatapath());
+  }
 
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
@@ -289,9 +370,9 @@ public:
     return Info.getLatency();
   }
 
-  unsigned getSlot() const { return SchedSlot; }
-  unsigned getFinSlot() const { return SchedSlot + getLatency(); }
-  bool isScheduled() const { return SchedSlot != 0; }
+  unsigned getSlot() const { return SchedSlot.getSlot(); }
+  unsigned getFinSlot() const { return SchedSlot.getSlot() + getLatency(); }
+  bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot = 0; }
 
@@ -306,6 +387,8 @@ public:
 
   unsigned getOpcode() const;
   VFUs::FUTypes getFUType() const;
+  bool hasDatapath() const;
+
   unsigned getFUNum() const { return FUNum; }
   FuncUnitId getFUId() const {
     return FuncUnitId(getFUType(), getFUNum());

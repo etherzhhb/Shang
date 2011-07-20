@@ -226,6 +226,13 @@ VFUs::FUTypes VSUnit::getFUType() const {
   return VFUs::Trivial;
 }
 
+bool VSUnit::hasDatapath() const {
+  if (MachineInstr *Instr = getFirstInstr())
+    return VIDesc(*Instr).hasDatapath();
+
+  return false;
+}
+
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
