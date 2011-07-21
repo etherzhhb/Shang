@@ -201,10 +201,11 @@ void ucOperand::print(raw_ostream &OS,
 
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
       //DEBUG(
-        MachineRegisterInfo &MRI
-          = getParent()->getParent()->getParent()->getRegInfo();
-        const TargetRegisterClass *RC = MRI.getRegClass(Reg);
-        OS << "/*" << RC->getName() << "*/ ";
+        if (MachineInstr *MI = getParent()) {
+          MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
+          const TargetRegisterClass *RC = MRI.getRegClass(Reg);
+          OS << "/*" << RC->getName() << "*/ ";
+        }
       //);
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
       if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);

@@ -71,8 +71,12 @@ class VFInfo : public MachineFunctionInfo {
   // Mapping Function unit number to callee function name.
   SmallVector<const Function*, 8> UsedFNs;
 
-  typedef std::set<FUActiveSlot> FUActiveSlotSetTy;
-  FUActiveSlotSetTy ActiveSlotSet;
+  typedef std::map<FUActiveSlot, MachineOperand> FUActiveSlotMapTy;
+  FUActiveSlotMapTy ActiveSlotMap;
+  // FIXME: Consider pipelined loop.
+  void remeberActiveSlot(FuncUnitId Id, unsigned Slot, MachineOperand Pred) {
+    ActiveSlotMap.insert(std::make_pair(FUActiveSlot(Id, Slot), Pred));
+  }
 
   // Remember the scheduled slot of PHI nodes, it will lose after PHIElemination.
   typedef std::map<const MachineInstr*, unsigned> PhiSlotMapTy;
@@ -158,7 +162,8 @@ public:
   unsigned lookupPHISlot(const MachineInstr *PN) const;
   /// Information for allocated function units.
 
-  void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot);
+  void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot,
+                           MachineOperand Pred);
 
   typedef std::set<FuncUnitId>::const_iterator const_id_iterator;
 
@@ -184,13 +189,10 @@ public:
     return AllocatedFUs[FUType].size();
   }
 
-  // FIXME: Consider pipelined loop.
-  void remeberActiveSlot(FuncUnitId Id, unsigned Slot) {
-    ActiveSlotSet.insert(FUActiveSlot(Id, Slot));
-  }
 
-  bool isFUActiveAt(FuncUnitId Id, unsigned Slot) {
-    return ActiveSlotSet.count(FUActiveSlot(Id, Slot));
+  MachineOperand *getFUPredAt(FuncUnitId Id, unsigned Slot) {
+    FUActiveSlotMapTy::iterator at = ActiveSlotMap.find(FUActiveSlot(Id, Slot));
+    return at == ActiveSlotMap.end() ? 0 : &at->second;
   }
 
   const char *allocateSymbol(const std::string &Str) {

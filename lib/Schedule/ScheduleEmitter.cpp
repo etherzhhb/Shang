@@ -457,6 +457,16 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     Ops[i] = getRegUseOperand(MO, ReadSlot);
   }
 
+  // Remember the predicate of the function unit enable signal.
+  if (IsCtrl) {
+    FuncUnitId FUId = A->getFUId();
+    // FIXME: Iterate over the live time of the FU and get the right predicate
+    // operand with getRegUseOperand.
+    // Remember the active slot.
+    if (FUId.isBound())
+      VFI.rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot(), Ops[1]);
+  }
+
   MachineInstrBuilder Builder(&getMIAt(OpSlot(A->getSlot(), IsCtrl)));
 
   for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
@@ -543,15 +553,10 @@ void VSchedGraph::emitSchedule() {
 
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *A = *I;
-
-    FuncUnitId FUId = A->getFUId();
-    // Remember the active slot.
-    if (FUId.isBound())
-      VFI->rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot());
-
     // Special case: Ret instruction use the function unit "FSMFinish".
     if (A->getOpcode() == VTM::VOpRet)
-      VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1);
+      VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1,
+                               ucOperand::CreatePredicate());
 
     if (A->getSlot() != CurSlot)
       CurSlot = StateBuilder.advanceToSlot(CurSlot, A->getSlot());

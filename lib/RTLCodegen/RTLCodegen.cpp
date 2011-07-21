@@ -284,6 +284,17 @@ class RTLCodegen : public MachineFunctionPass {
   bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
                   MachineBasicBlock *SrcBB = 0);
 
+  static void printPredicate(ucOperand &Pred, raw_ostream &SS) {
+    if (Pred.getReg()) {
+      SS << '(';
+      if (Pred.isPredicateInverted()) SS << '~';
+      Pred.print(SS, 1, 0, true);
+      SS << ')';
+    } else
+      SS << "1'b1";
+  }
+
+
   void emitOpInternalCall(ucOp &OpInternalCall);
   void emitOpReadReturn(ucOp &OpReadSymbol);
   void emitOpRetVal(ucOp &OpRetVal);
@@ -758,8 +769,11 @@ void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
     CtrlS << GetEnableName(Id.getFUNum()) << " <= 1'b0";
     // Resource control operation when in the current state.
     for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
-      if (FInfo->isFUActiveAt(Id, i))
-        CtrlS << " | " << getucStateEnable(CurBB, i - 1);
+      if (ucOperand *Pred = (ucOperand*)FInfo->getFUPredAt(Id, i)) {
+        CtrlS << " | (";
+        printPredicate(*Pred, CtrlS);
+        CtrlS  << " & " << getucStateEnable(CurBB, i - 1) << ')';
+      }
     }
 
     CtrlS << ";\n";
@@ -779,10 +793,14 @@ void RTLCodegen::emitWaitFUReadyForState(MachineBasicBlock *CurBB,
     // so we do not need to worry about if we need to wait the memory operation
     // issued from the previous state.
     for (unsigned i = startSlot + Latency, e = endSlot + 1; i != e; ++i)
-      if (FInfo->isFUActiveAt(Id, i - Latency)) {
-        std::string Pred = "~" +getucStateEnable(CurBB, i - 1)
-          + "|" + GetReadyName(Id.getFUNum());
-        addReadyPred(Pred);
+      if (ucOperand *Pred = (ucOperand*)FInfo->getFUPredAt(Id, i - Latency)){
+        std::string PredS = "~ (";
+        raw_string_ostream SS(PredS);
+        SS << getucStateEnable(CurBB, i - 1) << " & ";
+        printPredicate(*Pred, SS);
+        SS <<  ") | " << GetReadyName(Id.getFUNum());
+        SS.flush();
+        addReadyPred(PredS);
       }
   }
 }
@@ -819,7 +837,8 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   // Control the finish port
   CtrlS << "// Finish port control\n";
   CtrlS << "fin <= 1'b0";
-  if (FInfo->isFUActiveAt(VFUs::FSMFinish, endSlot))
+  // The return instruction is not predicatable.
+  if (FInfo->getFUPredAt(VFUs::FSMFinish, endSlot))
     CtrlS << " | " << getucStateEnable(CurBB, endSlot - 1);
 
   CtrlS << ";\n";
@@ -846,15 +865,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
     // Emit the predicate operand.
     SlotPredSS << " & ";
-    if (Op.getPredicate().getReg()) {
-      SlotPredSS << '(';
-      ucOperand &PredOp = Op.getPredicate();
-      if (PredOp.isPredicateInverted()) SlotPredSS << '~';
-      PredOp.print(SlotPredSS, 1, 0, true);
-      SlotPredSS << ')';
-    } else
-      SlotPredSS << "1'b1";
-
+    printPredicate(Op.getPredicate(), SlotPredSS);
     SlotPredSS.flush();
 
     // Special case for state transferring operation.
