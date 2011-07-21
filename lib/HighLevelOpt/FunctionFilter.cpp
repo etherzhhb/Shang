@@ -97,12 +97,15 @@ bool FunctionFilter::runOnModule(Module &M) {
     // The function is s software function, delete it from the hardware module.
     if (!HWFunctions.count(FHW)) {
       FHW->dropAllReferences();
-      FHW->getBasicBlockList().clear();
+      FHW->getBasicBlockList().clear();      
     } else {
       // Remove hardware functions in software module and leave the declaretion 
       // only.
-      FSW->dropAllReferences();
-      FSW->getBasicBlockList().clear();
+      if (getSynSetting(FSW->getName())->isTopLevelModule()) {
+        FSW->dropAllReferences();
+        FSW->getBasicBlockList().clear();
+      }
+      
     }
   }
 
