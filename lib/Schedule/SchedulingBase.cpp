@@ -55,7 +55,7 @@ void SchedulingBase::buildTimeFrame(const VSUnit *ClampedSUnit,
 
 void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedASAP) {
   VSUnit *Entry = State.getEntryRoot();
-  SUnitToTF[Entry->getIdx()].first = Entry->getSlot();
+  SUnitToTF[Entry->getIdx()].first = OpSlot(Entry->getSlot(), !Entry->hasDatapath());
 
   VSchedGraph::iterator Start = State.begin();
 
@@ -67,24 +67,23 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
     for (VSchedGraph::iterator I = ++Start, E = State.end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
-        SUnitToTF[A->getIdx()].first = A->getSlot();
+        SUnitToTF[A->getIdx()].first =OpSlot(A->getSlot(), !A->hasDatapath()) ;
         continue;
       }
 
       DEBUG(dbgs() << "\n\nCalculating ASAP step for \n";
             A->dump(););
 
-      unsigned NewStep = A == ClampedSUnit ? ClampedASAP : getSTFASAP(A);
-
+      unsigned NewStep = A == ClampedSUnit ? ClampedASAP : getSTFDetailASAP(A);
       for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
           DI != DE; ++DI) {
         const VSUnit *Dep = *DI;
         
         if (!DI.getEdge()->isLoopCarried() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
-                             Dep->getSlot() : getASAPStep(Dep);
-          int Step = DepASAP + DI.getEdge()->getLatency()
-                     - MII * DI.getEdge()->getItDst();
+                             Dep->getDetailSlot() : getASAPDetailStep(Dep);
+          int Step = DepASAP + (DI.getEdge()->getLatency()
+                     - MII * DI.getEdge()->getItDst()) * 2;
           DEBUG(dbgs() << "From ";
                 if (DI.getEdge()->isLoopCarried())
                   dbgs() << "BackEdge ";
@@ -98,8 +97,8 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
       DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
       A->dump();
       dbgs() << "\n\n";);
-      if (SUnitToTF[A->getIdx()].first != NewStep) {
-        SUnitToTF[A->getIdx()].first = NewStep;
+      if (SUnitToTF[A->getIdx()].first != OpSlot(NewStep/2, !A->hasDatapath())) {
+        SUnitToTF[A->getIdx()].first =OpSlot(NewStep/2, !A->hasDatapath());
         changed |= true;
       }
     }
@@ -112,7 +111,8 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
 void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
                                                 unsigned ClampedALAP) {
   VSUnit *Exit = State.getExitRoot();
-  SUnitToTF[Exit->getIdx()].second = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
+  int LastSlot = Exit == ClampedSUnit ? ClampedALAP : CriticalPathEnd;
+  SUnitToTF[Exit->getIdx()].second = OpSlot(LastSlot , !Exit->hasDatapath());
 
   VSchedGraph::reverse_iterator Start = State.rbegin();
 
@@ -125,14 +125,14 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
          I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
-        SUnitToTF[A->getIdx()].second = A->getSlot();
+        SUnitToTF[A->getIdx()].second = OpSlot(A->getSlot(), !A->hasDatapath());
         continue;
       }
 
       DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
             A->dump(););
 
-      unsigned NewStep = A == ClampedSUnit ? ClampedALAP : getSTFALAP(A);
+      unsigned NewStep = A == ClampedSUnit ? ClampedALAP : getSTFDetailALAP(A);
       for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
            UI != UE; ++UI) {
         const VSUnit *Use = *UI;
@@ -140,14 +140,14 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
 
         if (!UseEdge->isLoopCarried() || MII) {
           unsigned UseALAP = Use->isScheduled() ?
-                             Use->getSlot() : getALAPStep(Use);
+                             Use->getDetailSlot() : getALAPDetailStep(Use);
           if (UseALAP == 0) {
             assert(UseEdge->isLoopCarried() && "Broken time frame!");
             UseALAP = VSUnit::MaxSlot;
           }
           
-          unsigned Step = UseALAP - UseEdge->getLatency()
-                          + MII * UseEdge->getItDst();
+        unsigned Step = UseALAP - (UseEdge->getLatency()
+                          - MII * UseEdge->getItDst()) * 2;
           DEBUG(dbgs() << "From ";
                 if (UseEdge->isLoopCarried())
                   dbgs() << "BackEdge ";
@@ -160,8 +160,8 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
       DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
             A->dump();
             dbgs() << "\n\n";);
-      if (SUnitToTF[A->getIdx()].second != NewStep) {
-        SUnitToTF[A->getIdx()].second = NewStep;
+      if (SUnitToTF[A->getIdx()].second != OpSlot(NewStep/2, !A->hasDatapath())) {
+        SUnitToTF[A->getIdx()].second = OpSlot(NewStep/2, !A->hasDatapath());
         changed = true;
       }
     }
@@ -404,14 +404,16 @@ void SchedulingBase::resetSTF() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
        I != E; ++I) {
     VSUnit *SU = *I;
-    SUnitToSTF[SU->getIdx()] = std::make_pair(0, VSUnit::MaxSlot);
+    SUnitToSTF[SU->getIdx()] = std::make_pair(OpSlot(0,true),
+                                              OpSlot(VSUnit::MaxSlot,true));
   }
 }
 
 void SchedulingBase::sinkSTF(const VSUnit *A, unsigned ASAP, unsigned ALAP) {
   assert(ASAP <= ALAP && "Bad time frame to sink!");
   assert(ASAP >= getSTFASAP(A) && ALAP <= getSTFALAP(A) && "Can not Sink!");
-  SUnitToSTF[A->getIdx()] = std::make_pair(ASAP, ALAP);
+  SUnitToSTF[A->getIdx()] = std::make_pair(OpSlot(ASAP, !A->hasDatapath()),
+                                           OpSlot(ALAP, !A->hasDatapath()));
   // We may need to reduce critical path.
   if (A == State.getExitRoot()) {
     assert(CriticalPathEnd >= ALAP && "Can not sink ExitRoot!");

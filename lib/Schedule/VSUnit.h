@@ -154,12 +154,12 @@ public:
 };
 
 class OpSlot {
-  unsigned SlotNum;
-  OpSlot(unsigned S) : SlotNum(S) {}
-  enum SlotType { Control, Datapath};
+  int SlotNum;
+  OpSlot(int S) : SlotNum(S) {}
+  enum SlotType {Control, Datapath};
 public:
   OpSlot() : SlotNum(0) {}
-  OpSlot(unsigned Slot, bool isCtrl) {
+  OpSlot(int Slot, bool isCtrl) {
     SlotType T = isCtrl ? Control : Datapath;
     SlotNum = (Slot << 0x1) | (0x1 & T);
   }
@@ -176,7 +176,7 @@ public:
     return getSlotType() == OpSlot::Datapath;
   }
 
-  unsigned getSlot() const { return SlotNum / 2; }
+  int getSlot() const { return SlotNum / 2; }
 
   inline bool operator==(OpSlot S) const {
     return SlotNum == S.SlotNum;
@@ -230,6 +230,8 @@ public:
   }
 
   OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
+
+  int getDetailSlot() const {return SlotNum;}
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -371,6 +373,7 @@ public:
   }
 
   unsigned getSlot() const { return SchedSlot.getSlot(); }
+  unsigned getDetailSlot() const {return SchedSlot.getDetailSlot(); }
   unsigned getFinSlot() const { return SchedSlot.getSlot() + getLatency(); }
   bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);

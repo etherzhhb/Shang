@@ -37,7 +37,7 @@ class SchedulingBase {
   double ExtraResReq;
   // Time Frame {asap step, alap step }
 public:
-  typedef std::pair<unsigned, unsigned> TimeFrame;
+  typedef std::pair<OpSlot, OpSlot> TimeFrame;
 private:
   // Time frames for each schedule unit.
   SmallVector<TimeFrame, 256> SUnitToTF;
@@ -88,17 +88,31 @@ public:
                       unsigned ClampedALAP = 0);
 
   unsigned getASAPStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].first;
+    return SUnitToTF[A->getIdx()].first.getSlot();
   }
   unsigned getALAPStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].second;
+    return SUnitToTF[A->getIdx()].second.getSlot();
   }
 
   unsigned getSTFASAP(const VSUnit *A) const {
-    return SUnitToSTF[A->getIdx()].first;
+    return SUnitToSTF[A->getIdx()].first.getSlot();
   }
   unsigned getSTFALAP(const VSUnit *A) const {
-    return SUnitToSTF[A->getIdx()].second;
+    return SUnitToSTF[A->getIdx()].second.getSlot();
+  }
+
+  unsigned getASAPDetailStep(const VSUnit *A) const {
+    return SUnitToTF[A->getIdx()].first.getDetailSlot();
+  }
+  unsigned getALAPDetailStep(const VSUnit *A) const {
+    return SUnitToTF[A->getIdx()].second.getDetailSlot();
+  }
+
+  unsigned getSTFDetailASAP(const VSUnit *A) const {
+    return SUnitToSTF[A->getIdx()].first.getDetailSlot();
+  }
+  unsigned getSTFDetailALAP(const VSUnit *A) const {
+    return SUnitToSTF[A->getIdx()].second.getDetailSlot();
   }
 
   unsigned getTimeFrame(const VSUnit *A) const {

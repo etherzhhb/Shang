@@ -202,9 +202,9 @@ bool FDScheduler::findBestSink() {
 
   if (!BestSinkSUnit) return false;
   
-  sinkSTF(BestSinkSUnit, BestSink.first, BestSink.second);
+  sinkSTF(BestSinkSUnit, BestSink.first.getSlot(), BestSink.second.getSlot());
   if (getScheduleTimeFrame(BestSinkSUnit) == 1)
-    BestSinkSUnit->scheduledTo(BestSink.first);
+    BestSinkSUnit->scheduledTo(BestSink.first.getSlot());
   buildFDepHD(false);
   updateSTF();
   return true;
@@ -233,9 +233,11 @@ double FDScheduler::trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame) {
 
   // Discard the range with bigger force.
   if (ASAPForce > ALAPForce)
-    NewTimeFrame = std::make_pair(ASAP + 1, ALAP);
+    NewTimeFrame = std::make_pair(OpSlot(ASAP + 1, !A->hasDatapath()),
+                                  OpSlot(ALAP, !A->hasDatapath()));
   else
-    NewTimeFrame = std::make_pair(ASAP, ALAP - 1);
+    NewTimeFrame = std::make_pair(OpSlot(ASAP + 1,!A->hasDatapath()),
+                                  OpSlot(ALAP - 1,!A->hasDatapath()));
 
   return FGain;
 }
