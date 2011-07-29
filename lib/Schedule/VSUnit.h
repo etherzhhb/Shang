@@ -74,7 +74,8 @@ public:
   VSUnit* operator->() const { return getSrc(); }
   //VSUnit* operator*() const { return getSrc(); }
   unsigned getEdgeType() const { return Src.getInt(); }
-  unsigned getLatency() const { return Latancy; }
+  unsigned getLatency() const { return (Latancy + 1) / 2; }
+  unsigned getDetailLatency() const { return Latancy; }
   unsigned getItDst() const { return ItDst; }
   bool isLoopCarried() const { return getItDst() > 0; }
 
