@@ -119,11 +119,11 @@ let hasCtrlDep = 1 in {
     isTerminator = 1 in {
     def VOpToStateb : CtrlInst<(outs), (ins State:$target),
                               "to $target;",
-                              [], 0, 1>;
+                              [], 0, 1, 1>;
   let isBarrier = 0 in
     def VOpToState : CtrlInst<(outs), (ins State:$target),
                               "to $target;",
-                              [], 0, 1>;
+                              [], 0, 1, 1>;
 
     def VOpUnreachable : CtrlInst<(outs), (ins), "unreachable;", [], 0, 1>;
   }
