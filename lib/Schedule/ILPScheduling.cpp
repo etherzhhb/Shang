@@ -205,6 +205,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
        I != E; ++I) {
     const VSUnit *DstU = *I;
 
+    unsigned DstType = DstU->hasDatapath() ? 1 :0 ;
     unsigned DstFstIdx = getFstSVIdxOf(DstU),
              DstNumSVs = getTimeFrame(DstU),
              DstASAP = getASAPStep(DstU);
@@ -217,7 +218,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
 
     // Construct the step of Dst schedule unit.
     for (unsigned i = 0; i < DstNumSVs; ++i) {
-      DstRow.push_back(DstASAP + i);
+      DstRow.push_back((DstASAP + i) * 2 + DstType);
       DstColIdx.push_back(DstFstIdx + i + 1);
     }
 
@@ -226,6 +227,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       const VSUnit *SrcU = *DI;
       VDEdge *Edge = DI.getEdge();
 
+      unsigned SrcType = SrcU->hasDatapath() ? 1 :0 ;
       // Get the index of first step variable of U.
       unsigned SrcFstIdx = getFstSVIdxOf(SrcU),
                // And the total step variable count of U.
@@ -236,14 +238,14 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       ColIdx.append(DstColIdx.begin(), DstColIdx.end());
 
       for (unsigned i = 0; i < SrcNumSVs; ++i) {
-        Row.push_back(-(REAL)(SrcASAP + i));
+        Row.push_back(-((REAL)((SrcASAP + i) * 2 + SrcType)));
         // The column index is started from 1 in lp_slove.
         ColIdx.push_back(SrcFstIdx + i + 1);
       }
 
       // Add the constraints to the model.
       if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
-                            GE, int(Edge->getLatency()) - int(getMII() *  Edge->getItDst())))
+                            GE, int(Edge->getDetailLatency()) - int((getMII() *  Edge->getItDst()) * 2)))
         report_fatal_error("ILPScheduler: Can NOT add Precedence constraints"
                            " of schedule unit " + utostr_32(DstU->getIdx()) +
                            " to " + utostr_32(SrcU->getIdx()));
