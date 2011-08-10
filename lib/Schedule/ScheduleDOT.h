@@ -60,7 +60,7 @@ struct DOTGraphTraits<VSchedGraph*> : public DefaultDOTGraphTraits {
     const VSUnit *Use = *EI;
     VDEdge *UseEdge = Use->getEdgeFrom(Node);
 
-    return utostr(UseEdge->getLatency()) + ',' + utostr(UseEdge->getItDst());
+    return utostr(UseEdge->getDetailLatency()) + ',' + utostr(UseEdge->getItDst());
   }
 
   std::string getNodeLabel(const VSUnit *Node, const VSchedGraph *Graph) {
@@ -91,7 +91,8 @@ struct DOTGraphTraits<SchedulingBase*>
     std::string Str;
     raw_string_ostream ss(Str);
     Node->print(ss);
-    ss << '[' << Graph->getASAPStep(Node) << ", " << Graph->getALAPStep(Node)
+    ss << '[' << Graph->getASAPDetailStep(Node) << ", "
+       << Graph->getALAPDetailStep(Node)
        << ']';
     return ss.str();
   }
