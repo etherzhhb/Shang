@@ -244,5 +244,5 @@ void VSUnit::print(raw_ostream &OS) const {
     DEBUG(OS << *Instr << '\n');
   }
 
-  OS << getFUId() << "\nAt slot: " << getSlot();
+  OS << getFUId() << "\nAt slot: " << getDetailSlot();
 }
