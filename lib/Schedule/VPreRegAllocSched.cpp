@@ -127,19 +127,20 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     }
 
     VIDesc SrcTID = *SrcInstr;
-    unsigned latency = SrcTID.getLatency();
+    // Compute the latency correspond to detail slot.
+    unsigned latency = SrcTID.getLatency() * 2;
+
+    if(latency > 0)
+      latency = latency - 1;
 
     if (DstInstr == 0) return latency;
 
     VIDesc DstTID = *DstInstr;
 
-    if (DstTID.isReadAtEmit()) {
-      // We need to wait one more slot to read the result.
-      if (latency == 0) return 1;
+    // If the edge is reg->reg, increase the latency by 1.
+    if (DstTID.isReadAtEmit() && SrcTID.isWriteUntilFinish())
+      return latency + 1;
 
-      if (SrcTID.isWriteUntilFinish()) return latency + 1;
-    }
-    
     return latency;
   }
 
@@ -413,7 +414,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
 
         if (LD.hasDep()) {
-          VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(),
+          VDMemDep *MemDep = getMemDepEdge(SrcU, computeLatency(SrcMI, DstMI),
                                            LD.getItDst());
           DstU->addDep(MemDep);
         }
@@ -423,7 +424,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
 
         if (LD.hasDep()) {
-          VDMemDep *MemDep = getMemDepEdge(DstU, SrcInfo.getLatency(),
+          VDMemDep *MemDep = getMemDepEdge(DstU, computeLatency(DstMI, SrcMI),
                                            LD.getItDst());
           SrcU->addDep(MemDep);
         }
@@ -431,7 +432,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
         // Ignore the No-Alias pointers.
-        VDMemDep *MemDep = getMemDepEdge(SrcU, SrcInfo.getLatency(), 0);
+        VDMemDep *MemDep = getMemDepEdge(SrcU, computeLatency(SrcMI, DstMI), 0);
         DstU->addDep(MemDep);
       }
     }
@@ -584,9 +585,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
       // PHI copies, and the PHIElimination Hook will take care of the data
       // dependence and try to forward the wire value in last control slot
       // if possible, so they can take the time of the last control slot.
-      VIDesc VID(*Instr);
-      if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
-        --Latency;
+      //VIDesc VID(*Instr);
+      //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
+      //  --Latency;
 
       Exit->addDep(getCtrlDepEdge(VSU,  Latency));
     }
