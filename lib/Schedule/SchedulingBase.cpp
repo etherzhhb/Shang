@@ -78,12 +78,11 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
       for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
           DI != DE; ++DI) {
         const VSUnit *Dep = *DI;
-        
         if (!DI.getEdge()->isLoopCarried() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
                              Dep->getDetailSlot() : getASAPDetailStep(Dep);
-          int Step = DepASAP + (DI.getEdge()->getLatency()
-                     - MII * DI.getEdge()->getItDst()) * 2;
+          int Step = DepASAP + DI.getEdge()->getDetailLatency()
+                     - (MII * DI.getEdge()->getItDst()) * 2;
           DEBUG(dbgs() << "From ";
                 if (DI.getEdge()->isLoopCarried())
                   dbgs() << "BackEdge ";
@@ -97,8 +96,13 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
       DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
       A->dump();
       dbgs() << "\n\n";);
-      if (SUnitToTF[A->getIdx()].first != OpSlot(NewStep/2, !A->hasDatapath())) {
-        SUnitToTF[A->getIdx()].first =OpSlot(NewStep/2, !A->hasDatapath());
+      // Align the slot to the right slot type.
+      unsigned step = (NewStep + 1) / 2;
+      if(A->hasDatapath())
+        step = NewStep / 2;
+      OpSlot NewSlot = OpSlot(step, !A->hasDatapath());
+      if (SUnitToTF[A->getIdx()].first != NewSlot) {
+        SUnitToTF[A->getIdx()].first = NewSlot;
         changed |= true;
       }
     }
@@ -143,9 +147,8 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
             assert(UseEdge->isLoopCarried() && "Broken time frame!");
             UseALAP = VSUnit::MaxSlot;
           }
-          
-        unsigned Step = UseALAP - (UseEdge->getLatency()
-                          - MII * UseEdge->getItDst()) * 2;
+          unsigned Step = UseALAP - UseEdge->getDetailLatency()
+                          + (MII * UseEdge->getItDst()) * 2;
           DEBUG(dbgs() << "From ";
                 if (UseEdge->isLoopCarried())
                   dbgs() << "BackEdge ";
@@ -158,8 +161,12 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
       DEBUG(dbgs() << "Update ALAP step to: " << NewStep << " for \n";
             A->dump();
             dbgs() << "\n\n";);
-      if (SUnitToTF[A->getIdx()].second != OpSlot(NewStep/2, !A->hasDatapath())) {
-        SUnitToTF[A->getIdx()].second = OpSlot(NewStep/2, !A->hasDatapath());
+
+      // FIXME: Add a method to OpSlot to align the slot.
+      // Align the slot to the right slot type.
+      OpSlot NewSlot = OpSlot(NewStep /2, !A->hasDatapath());
+      if (SUnitToTF[A->getIdx()].second != NewSlot) {
+        SUnitToTF[A->getIdx()].second = NewSlot;
         changed = true;
       }
     }
