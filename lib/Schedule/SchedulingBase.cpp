@@ -64,7 +64,7 @@ void SchedulingBase::buildASAPStep(const VSUnit *ClampedSUnit, unsigned ClampedA
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::iterator I = ++Start, E = State.end(); I != E; ++I) {
+    for (VSchedGraph::iterator I = Start + 1, E = State.end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A->getIdx()].first =OpSlot(A->getSlot(), !A->hasDatapath()) ;
@@ -117,11 +117,10 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
   VSchedGraph::reverse_iterator Start = State.rbegin();
 
   bool changed = false;
-
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::reverse_iterator I = ++Start, E = State.rend();
+    for (VSchedGraph::reverse_iterator I = Start + 1, E = State.rend();
          I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
@@ -131,7 +130,6 @@ void SchedulingBase::buildALAPStep(const VSUnit *ClampedSUnit,
 
       DEBUG(dbgs() << "\n\nCalculating ALAP step for \n";
             A->dump(););
-
       unsigned NewStep = A == ClampedSUnit ? ClampedALAP : getSTFDetailALAP(A);
       for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
            UI != UE; ++UI) {
