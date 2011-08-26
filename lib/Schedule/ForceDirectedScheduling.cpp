@@ -25,9 +25,8 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-bool
-FDListScheduler::fds_sort::operator()(const VSUnit* LHS,
-                                      const VSUnit* RHS) const {
+bool SchedulingBase::fds_sort::operator()(const VSUnit* LHS,
+                                          const VSUnit* RHS) const {
   // Schedule the sunit that taking non-trivial function unit first.
   FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
   if (!LHSID.isTrivial() && RHSID.isTrivial())

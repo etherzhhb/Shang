@@ -57,6 +57,14 @@ private:
   void resetSTF();
 
 protected:
+  /// @name PriorityQueue
+  //{
+  struct fds_sort {
+    SchedulingBase &Info;
+    fds_sort(SchedulingBase &s) : Info(s) {}
+    bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
+  };
+
   VSchedGraph &State;
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
@@ -196,14 +204,6 @@ template <> struct GraphTraits<SchedulingBase*>
 
 class FDListScheduler : public SchedulingBase {
 protected:
-  /// @name PriorityQueue
-  //{
-  struct fds_sort {
-    SchedulingBase &Info;
-    fds_sort(SchedulingBase &s) : Info(s) {}
-    bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
-  };
-
   typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> SUnitQueueType;
 
   // Fill the priorityQueue, ignore FirstNode.
@@ -224,7 +224,7 @@ public:
 
 };
 
-class IteractiveModuloScheduling : public FDListScheduler {
+class IteractiveModuloScheduling : public SchedulingBase {
   // Step -> resource require number.
   typedef std::map<unsigned, unsigned> UsageMapType;
   // Resource -> resource usage at each step.
@@ -239,7 +239,7 @@ class IteractiveModuloScheduling : public FDListScheduler {
   VSUnit *findBlockingSUnit(FuncUnitId FU, unsigned step); 
 public:
   IteractiveModuloScheduling(VSchedGraph &S)
-    : FDListScheduler(S), ExcludeSlots(S.getNumSUnits()){}
+    : SchedulingBase(S), ExcludeSlots(S.getNumSUnits()){}
 
   bool scheduleState();
 };
