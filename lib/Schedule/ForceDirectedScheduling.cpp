@@ -58,189 +58,6 @@ bool SchedulingBase::fds_sort::operator()(const VSUnit* LHS,
   return LHS->getIdx() > RHS->getIdx();
 }
 
-
-//===----------------------------------------------------------------------===//
-
-bool FDListScheduler::scheduleState() {
-  buildFDepHD(true);
-  if (!scheduleCriticalPath(false))
-    return false;
-
-  fds_sort s(*this);
-  SUnitQueueType AQueue(s);
-
-  fillQueue(AQueue, State.begin(), State.end());
-
-  if (!scheduleQueue(AQueue)) {
-    DEBUG(dumpDG());
-    DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
-                 << getExtraResReq() << '\n');
-    return false;
-  }
-
-  schedulePassiveSUnits();
-
-  DEBUG(dumpTimeFrame());
-  DEBUG(dumpDG());
-  return true;
-}
-
-template<class It>
-void FDListScheduler::fillQueue(SUnitQueueType &Queue, It begin, It end,
-                                VSUnit *FirstNode) {
-  for (It I = begin, E = end; I != E; ++I) {
-    VSUnit *A = *I;
-
-    // Do not push the FirstNode into the queue.
-    if (A == FirstNode || A->isScheduled())
-      continue;
-    
-    // Do not push the SUnit that taking trivial function unit.
-    if (A->getFUId().isTrivial())
-      continue;
-    
-    Queue.push(A);
-  }
-  //
-  Queue.reheapify();
-}
-
-unsigned FDListScheduler::findBestStep(VSUnit *A) {
-  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
-  // Time frame is 1, we do not have other choice.
-  if (ASAP == ALAP) return ASAP;
-
-  std::pair<unsigned, double> BestStep = std::make_pair(0, 1e32);
-  DEBUG(dbgs() << "\tScan for best step:\n");
-  // For each possible step:
-  for (unsigned i = ASAP, e = ALAP + 1; i != e; ++i) {
-    DEBUG(dbgs() << "At Step " << i << "\n");
-    double Force = computeForce(A, i, i);
-    DEBUG(dbgs() << " Force: " << Force);
-    if (Force < BestStep.second)
-      BestStep = std::make_pair(i, Force);
-
-    DEBUG(dbgs() << '\n');
-  }
-  return BestStep.first;
-}
-
-bool FDListScheduler::scheduleSUnit(VSUnit *A) {
-  assert(!A->isScheduled() && "A already scheduled!");
-  DEBUG(A->print(dbgs()));
-  unsigned step = findBestStep(A);
-  DEBUG(dbgs() << "\n\nbest step: " << step << "\n");
-  A->scheduledTo(step);
-  // Update FDepHD.
-  buildFDepHD(false);
-  return (isResourceConstraintPreserved() && scheduleCriticalPath(false));
-}
-
-bool FDListScheduler::scheduleQueue(SUnitQueueType &Queue) {
-  while (!Queue.empty()) {
-    // TODO: Shor the list
-    VSUnit *A = Queue.top();
-    Queue.pop();
-
-    if (A->isScheduled())
-      continue;
-
-    DEBUG(dbgs() << " Schedule Node:-------------------\n");
-    if (!scheduleSUnit(A))
-      return false;
-
-    Queue.reheapify();
-  }
-
-  return true;
-}
-
-//===----------------------------------------------------------------------===//
-
-bool FDScheduler::scheduleState() {
-  buildFDepHD(true);
-  if (!scheduleCriticalPath(false))
-    return false;
-
-  while (findBestSink()) {
-    if (!scheduleCriticalPath(false)) {
-      DEBUG(dumpDG());
-      DEBUG(dbgs() << "Schedule fail! ExtraResReq: "
-                   << getExtraResReq() << '\n');
-      return false;
-    }
-  }
-
-  schedulePassiveSUnits();
-
-  DEBUG(dumpTimeFrame());
-  DEBUG(dumpDG());
-  return true;
-}
-
-bool FDScheduler::findBestSink() {
-  TimeFrame BestSink;
-  VSUnit *BestSinkSUnit = 0;
-  double BestGain = -1.0;
-
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
-      I != E; ++I) {
-    VSUnit *A = *I;
-    if (A->isScheduled())
-      continue;
-    
-    TimeFrame CurSink;
-
-    double CurGain = trySinkSUnit(A, CurSink);
-    if (CurGain > BestGain) {
-      BestSinkSUnit = A;
-      BestSink = CurSink;
-      BestGain = CurGain;
-    }
-  }
-
-  if (!BestSinkSUnit) return false;
-  
-  sinkSTF(BestSinkSUnit, BestSink.first.getSlot(), BestSink.second.getSlot());
-  if (getScheduleTimeFrame(BestSinkSUnit) == 1)
-    BestSinkSUnit->scheduledTo(BestSink.first.getSlot());
-  buildFDepHD(false);
-  updateSTF();
-  return true;
-}
-
-double FDScheduler::trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame) {
-  // Build time frame to get the correct ASAP and ALAP.
-  buildTimeFrame();
-
-  unsigned ASAP = getASAPStep(A), ALAP = getALAPStep(A);
-
-  double ASAPForce = computeForce(A, ASAP , ALAP - 1),
-    ALAPForce = computeForce(A, ASAP + 1, ALAP);
-
-  double FMax = std::max(ASAPForce, ALAPForce),
-    FMin = std::min(ASAPForce, ALAPForce);
-
-  double FMinStar = FMin;
-
-  if (ASAP + 1 < ALAP)
-    FMinStar = std::min(FMinStar, 0.0);
-  else
-    assert(ASAP + 1 == ALAP && "Broken time frame!");
-
-  double FGain = FMax - FMinStar;
-
-  // Discard the range with bigger force.
-  if (ASAPForce > ALAPForce)
-    NewTimeFrame = std::make_pair(OpSlot(ASAP + 1, !A->hasDatapath()),
-                                  OpSlot(ALAP, !A->hasDatapath()));
-  else
-    NewTimeFrame = std::make_pair(OpSlot(ASAP + 1,!A->hasDatapath()),
-                                  OpSlot(ALAP - 1,!A->hasDatapath()));
-
-  return FGain;
-}
-
 struct ims_sort {
   SchedulingBase &Info;
   ims_sort(SchedulingBase &s) : Info(s) {}
@@ -278,7 +95,7 @@ bool IteractiveModuloScheduling::scheduleState() {
     State.resetSchedule();
     buildTimeFrame();
     // Reset exclude slots and resource table.
-    MRT.clear();
+    resetRT();
 
     typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> IMSQueueType;
     IMSQueueType ToSched(++State.begin(), State.end(), s);
@@ -294,7 +111,7 @@ bool IteractiveModuloScheduling::scheduleState() {
         if (EarliestUntry == 0)
           EarliestUntry = i;
         
-        if (!A->getFUId().isTrivial() && !isResAvailable(A->getFUId(), i))
+        if (!A->getFUId().isTrivial() && !tryTakeResAtStep(A, i))
           continue;
 
         // This is a available slot.
@@ -323,7 +140,6 @@ bool IteractiveModuloScheduling::scheduleState() {
   }
   DEBUG(buildTimeFrame());
   DEBUG(dumpTimeFrame());
-  DEBUG(dumpDG());
   return true;
 }
 
@@ -353,22 +169,6 @@ VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned st
 
   return 0;
 }
-
-bool IteractiveModuloScheduling::isResAvailable(FuncUnitId FU, unsigned step) {
-  assert(getMII() && "IMS only work on Modulo scheduling!");
-  // We will always have enough trivial resources.
-  if (FU.isTrivial()) return true;
-
-  unsigned ModuloStep = step % getMII();
-  // Do all resource at step been reserve?
-  if (MRT[FU][ModuloStep] >= FU.getTotalFUs())
-    return false;
-
-  ++MRT[FU][ModuloStep];
-  
-  return true;
-}
-
 
 bool IteractiveModuloScheduling::isAllSUnitScheduled() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();

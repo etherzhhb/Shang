@@ -41,20 +41,12 @@ public:
 private:
   // Time frames for each schedule unit.
   SmallVector<TimeFrame, 256> SUnitToTF;
-  // Schedule time frames for each schedule unit.
-  // The scheduling is accomplish by sink the width of time frames to 1.
-  SmallVector<TimeFrame, 256> SUnitToSTF;
-  // Resource requirement distribution of a specific resource
-  // at each step.
-  // step -> distribution
-  typedef std::map<unsigned, double> DGStepMapType;
-  // DG for every kind of function unit.
-  typedef std::map<FuncUnitId, DGStepMapType> DGType;
-  DGType DGraph;
 
-  SmallVector<double, 256> AvgDG;
-
-  void resetSTF();
+  // Step -> resource require number.
+  typedef std::map<unsigned, unsigned> UsageMapType;
+  // Resource -> resource usage at each step.
+  typedef std::map<FuncUnitId, UsageMapType> RTType;
+  RTType RT;
 
 protected:
   /// @name PriorityQueue
@@ -69,8 +61,7 @@ protected:
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
-    SUnitToTF(S.getNumSUnits()), SUnitToSTF(S.getNumSUnits()),
-    AvgDG(S.getNumSUnits()), State(S) {}
+    SUnitToTF(S.getNumSUnits()), State(S) {}
 
 public:
   virtual ~SchedulingBase() {}
@@ -85,28 +76,15 @@ public:
 
   /// @name TimeFrame
   //{
-  void sinkSTF(const VSUnit *A, unsigned ASAP, unsigned ALAP);
-  void updateSTF();
-
-
-  void buildASAPStep(const VSUnit *ClampedSUnit = 0, unsigned ClampedASAP = 0);
-  void buildALAPStep(const VSUnit *ClampedSUnit = 0, unsigned ClampedALAP = 0);
-  void buildTimeFrame(const VSUnit *ClampedSUnit = 0,
-                      unsigned ClampedASAP = 0,
-                      unsigned ClampedALAP = 0);
+  void buildASAPStep();
+  void buildALAPStep();
+  void buildTimeFrame();
 
   unsigned getASAPStep(const VSUnit *A) const {
     return SUnitToTF[A->getIdx()].first.getSlot();
   }
   unsigned getALAPStep(const VSUnit *A) const {
     return SUnitToTF[A->getIdx()].second.getSlot();
-  }
-
-  unsigned getSTFASAP(const VSUnit *A) const {
-    return SUnitToSTF[A->getIdx()].first.getSlot();
-  }
-  unsigned getSTFALAP(const VSUnit *A) const {
-    return SUnitToSTF[A->getIdx()].second.getSlot();
   }
 
   unsigned getASAPDetailStep(const VSUnit *A) const {
@@ -116,62 +94,25 @@ public:
     return SUnitToTF[A->getIdx()].second.getDetailSlot();
   }
 
-  unsigned getSTFDetailASAP(const VSUnit *A) const {
-    return SUnitToSTF[A->getIdx()].first.getDetailSlot();
-  }
-  unsigned getSTFDetailALAP(const VSUnit *A) const {
-    return SUnitToSTF[A->getIdx()].second.getDetailSlot();
-  }
-
   unsigned getTimeFrame(const VSUnit *A) const {
     return getALAPStep(A) - getASAPStep(A) + 1;
-  }
-
-  unsigned getScheduleTimeFrame(const VSUnit *A) const {
-    return getSTFALAP(A) - getSTFASAP(A) + 1;
-  }
-
-  bool isSTFScheduled(const VSUnit *A) const {
-    return getScheduleTimeFrame(A) < VSUnit::MaxSlot;
   }
 
   void printTimeFrame(raw_ostream &OS) const;
   void dumpTimeFrame() const;
   //}
 
-  /// @name Distribution Graphs
-  //{
-  void buildDGraph();
-  double getDGraphAt(unsigned step, FuncUnitId FUClass) const;
-  void accDGraphAt(unsigned step, FuncUnitId FUClass, double d);
-  void printDG(raw_ostream &OS) const;
-  void dumpDG() const;
   /// Check the distribution graphs to see if we could schedule the nodes
   /// without breaking the resource constrain.
+  void resetRT() {
+    // FIXME: Do not clear the RT but set the function unit count in the
+    // table to 0.
+    RT.clear();
+  }
+
+  bool tryTakeResAtStep(VSUnit *U, unsigned step);
   bool isResourceConstraintPreserved();
   double getExtraResReq() const { return ExtraResReq; }
-  //}
-
-  /// @name Force computation
-  //{
-  void buildAvgDG();
-  double getAvgDG(const VSUnit *A) {  return AvgDG[A->getIdx()]; }
-  double getRangeDG(FuncUnitId FUClass, unsigned start, unsigned end/*included*/);
-
-  double computeRangeForce(const VSUnit *A,
-                           unsigned start, unsigned end/*include*/);
-  double computeSelfForce(const VSUnit *A,
-                          unsigned start, unsigned end/*include*/);
-
-  /// If there are recurrences in the graph,
-  /// Define "pred tree" and "succ tree" may intersect.
-  /// All we can do is compute "other force", and the time frame of atoms
-  /// not in "pred tree" or "succ tree" will not change, and not contribute
-  /// to the force.
-  double computeOtherForce(const VSUnit *A);
-
-  double computeForce(const VSUnit *A, unsigned ASAP, unsigned ALAP);
-  //}
 
   unsigned buildFDepHD(bool resetSTF);
 
@@ -202,37 +143,9 @@ template <> struct GraphTraits<SchedulingBase*>
   }
 };
 
-class FDListScheduler : public SchedulingBase {
-protected:
-  typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> SUnitQueueType;
-
-  // Fill the priorityQueue, ignore FirstNode.
-  template<class It>
-  void fillQueue(SUnitQueueType &Queue, It begin, It end, VSUnit *FirstNode = 0);
-
-  unsigned findBestStep(VSUnit *A);
-
-  bool scheduleSUnit(VSUnit *A);
-  bool scheduleQueue(SUnitQueueType &Queue);
-  //}
-
-public:
-  FDListScheduler(VSchedGraph &S)
-    : SchedulingBase(S) {}
-
-  bool scheduleState();
-
-};
-
 class IteractiveModuloScheduling : public SchedulingBase {
-  // Step -> resource require number.
-  typedef std::map<unsigned, unsigned> UsageMapType;
-  // Resource -> resource usage at each step.
-  typedef std::map<FuncUnitId, UsageMapType> MRTType;
-  MRTType MRT;
   SmallVector<std::set<unsigned>, 256> ExcludeSlots;
 
-  bool isResAvailable(FuncUnitId FU, unsigned step);
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
   bool isAllSUnitScheduled();
@@ -242,16 +155,6 @@ public:
     : SchedulingBase(S), ExcludeSlots(S.getNumSUnits()){}
 
   bool scheduleState();
-};
-
-class FDScheduler : public SchedulingBase {
-public:
-  FDScheduler(VSchedGraph &S)
-    : SchedulingBase(S) {}
-
-  bool scheduleState();
-  bool findBestSink();
-  double trySinkSUnit(VSUnit *A, TimeFrame &NewTimeFrame);
 };
 
 class ILPScheduler : public SchedulingBase {

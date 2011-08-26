@@ -78,8 +78,10 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
 
   switch (I.getScheduleAlgorithm()) {
-  case SynSettings::FDS:   return new FDScheduler(G);
-  case SynSettings::FDLS:  return new FDListScheduler(G);
+  case SynSettings::FDS:
+  case SynSettings::FDLS:
+    errs() << "Force-directed scheduler was temporary removed!\n"
+              "Going to use ILP scheduler.\n";
   case SynSettings::ILP:   return new ILPScheduler(G);
   }
   return 0;
