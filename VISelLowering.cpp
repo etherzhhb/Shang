@@ -127,6 +127,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setLoadExtAction(ISD::EXTLOAD, CurVT, Custom);
     setLoadExtAction(ISD::SEXTLOAD, CurVT, Custom);
     setLoadExtAction(ISD::ZEXTLOAD, CurVT, Custom);
+    for (unsigned DVT = (unsigned)MVT::FIRST_INTEGER_VALUETYPE;
+         DVT <= VT; ++DVT) {
+      MVT DstVT = MVT((MVT::SimpleValueType)DVT);
+      setTruncStoreAction(CurVT, DstVT, Custom);
+    }
 
     // Lower cast node to bit level operation.
     setOperationAction(ISD::SIGN_EXTEND, CurVT, Custom);
