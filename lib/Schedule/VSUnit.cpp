@@ -72,7 +72,6 @@ void VSchedGraph::resetSchedule() {
   getEntryRoot()->scheduledTo(startSlot);
 }
 
-
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
@@ -96,14 +95,12 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   return createLinearScheduler(G);
 }
 
-
 void VSchedGraph::schedule() {
   if (enablePipeLine())
     scheduleLoop();
   else
     scheduleLinear();
 }
-
 
 void VSchedGraph::scheduleLinear() {
   OwningPtr<SchedulingBase> Scheduler(createLinearScheduler(*this));
@@ -247,4 +244,30 @@ void VSUnit::print(raw_ostream &OS) const {
   }
 
   OS << getFUId() << "\nAt slot: " << getDetailSlot();
+}
+
+OpSlot OpSlot::detailSlotCeil(int S, bool isDatapath) {
+  //OpSlot s(S);
+
+  //// If the type not match, get the next slot.
+  //if (s.isControl() != isCtrl)
+  //  return s.getNextSlot();
+
+  //return s;
+  bool SIsDataPath = S & 0x1;
+  bool TypeNotMatch = SIsDataPath != isDatapath;
+  return OpSlot(S + TypeNotMatch);
+}
+
+OpSlot OpSlot::detailSlotFloor(int S, bool isDatapath) {
+  //OpSlot s(S);
+
+  //// If the type not match, get the next slot.
+  //if (s.isControl() != isCtrl)
+  //  return s.getPrevSlot();
+
+  //return s;
+  bool SIsDataPath = S & 0x1;
+  bool TypeNotMatch = SIsDataPath != isDatapath;
+  return OpSlot(S - TypeNotMatch);
 }

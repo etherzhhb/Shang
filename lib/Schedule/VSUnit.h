@@ -231,8 +231,12 @@ public:
   }
 
   OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
+  OpSlot getPrevSlot() const { return OpSlot(SlotNum - 1); }
 
   int getDetailSlot() const { return SlotNum; }
+
+  static OpSlot detailSlotCeil(int S, bool isDatapath);
+  static OpSlot detailSlotFloor(int S, bool isDatapath);
 };
 
 /// @brief Base Class of all hardware atom. 

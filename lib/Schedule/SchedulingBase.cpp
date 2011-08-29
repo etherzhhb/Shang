@@ -89,11 +89,8 @@ void SchedulingBase::buildASAPStep() {
       DEBUG(dbgs() << "Update ASAP step to: " << NewStep << " for \n";
       A->dump();
       dbgs() << "\n\n";);
-      // Align the slot to the right slot type.
-      unsigned step = (NewStep + 1) / 2;
-      if(A->hasDatapath())
-        step = NewStep / 2;
-      OpSlot NewSlot = OpSlot(step, !A->hasDatapath());
+
+      OpSlot NewSlot = OpSlot::detailSlotCeil(NewStep, A->hasDatapath());
       if (SUnitToTF[A->getIdx()].first != NewSlot) {
         SUnitToTF[A->getIdx()].first = NewSlot;
         changed |= true;
@@ -154,9 +151,7 @@ void SchedulingBase::buildALAPStep() {
             A->dump();
             dbgs() << "\n\n";);
 
-      // FIXME: Add a method to OpSlot to align the slot.
-      // Align the slot to the right slot type.
-      OpSlot NewSlot = OpSlot(NewStep /2, !A->hasDatapath());
+      OpSlot NewSlot = OpSlot::detailSlotFloor(NewStep, A->hasDatapath());
       if (SUnitToTF[A->getIdx()].second != NewSlot) {
         SUnitToTF[A->getIdx()].second = NewSlot;
         changed = true;
