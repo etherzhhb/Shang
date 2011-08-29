@@ -130,15 +130,28 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     // Compute the latency correspond to detail slot.
     unsigned latency = SrcTID.getLatency() * 2;
 
-    if(latency > 0)
-      latency = latency - 1;
-
-    if (DstInstr == 0) return latency;
-
+    assert(DstInstr && "DstInstr should not be null!");
     VIDesc DstTID = *DstInstr;
 
-    // If the edge is reg->reg, increase the latency by 1.
-    if (DstTID.isReadAtEmit() && SrcTID.isWriteUntilFinish())
+    if (DstTID.isReadAtEmit()) {
+      // If the edge is reg->reg, increase the latency by 1, because the result
+      // is ready after the clock edge.
+      if (SrcTID.isWriteUntilFinish())
+        return latency + 1;
+
+      // Else if the edge is wire->reg, decrease the latency by 1, becaue the
+      // result is ready before the clock edge and let the register can
+      // capture the result.
+      if(latency > 0)
+        latency -= 1;
+
+      return latency;
+    }
+
+    // When DstInst dose not read at emit, it hopefully a datapath operation.
+    // If the Src and Dst have difference slot type, it needs 1 extra slot to
+    // adjust the slot type.
+    if (DstTID.hasDatapath() && !SrcTID.hasDatapath())
       return latency + 1;
 
     return latency;
