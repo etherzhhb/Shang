@@ -202,7 +202,7 @@ public:
     return SlotNum >= S.SlotNum;
   }
 
-  inline OpSlot &operator=(unsigned RHS) {
+  inline OpSlot &setSlot(unsigned RHS) {
     unsigned T = SlotNum & 0x1;
     SlotNum = (RHS << 0x1) | T;
     return *this;
@@ -232,7 +232,7 @@ public:
 
   OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
 
-  int getDetailSlot() const {return SlotNum;}
+  int getDetailSlot() const { return SlotNum; }
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -378,7 +378,7 @@ public:
   unsigned getFinSlot() const { return SchedSlot.getSlot() + getLatency(); }
   bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);
-  void resetSchedule() { SchedSlot = 0; }
+  void resetSchedule() { SchedSlot.setSlot(0); }
 
   typedef SmallVector<MachineInstr*, 2>::iterator instr_iterator;
   

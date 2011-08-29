@@ -218,7 +218,7 @@ unsigned VSUnit::getOpcode() const {
 
 void VSUnit::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
-  SchedSlot = slot;
+  SchedSlot.setSlot(slot);
 }
 
 VFUs::FUTypes VSUnit::getFUType() const {
