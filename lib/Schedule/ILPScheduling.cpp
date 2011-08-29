@@ -37,7 +37,7 @@ using namespace llvm;
 // Helper function
 static const char *transSolveResult(int result) {
   if (result == -2) return "NOMEMORY";
-  else if (result > 13) return "Unkwon result!";
+  else if (result > 13) return "Unknown result!";
 
   static const char *ResultTable[] = {
     "OPTIMAL",
