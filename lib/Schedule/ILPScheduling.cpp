@@ -26,6 +26,7 @@
 #include "SchedulingBase.h"
 
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
 #define DEBUG_TYPE "vbe-ilps"
 #include "llvm/Support/Debug.h"
@@ -450,6 +451,8 @@ bool ILPScheduler::scheduleState() {
   int result = solve(lp);
 
   DEBUG(dbgs() << "ILP result is: "<< transSolveResult(result) << "\n");
+  DEBUG(dbgs() << "Time elapsed: " << time_elapsed(lp) << "\n");
+
   switch (result) {
   case SUBOPTIMAL:
     DEBUG(dbgs() << "Note: suboptimal schedule found!\n");
@@ -457,7 +460,8 @@ bool ILPScheduler::scheduleState() {
   case PRESOLVED:
     break;
   default:
-    report_fatal_error("ILPScheduler: Schedule fail!");
+    report_fatal_error(Twine("ILPScheduler Schedule fail: ")
+                       + Twine(transSolveResult(result)));
   }
 
   // Finally, Schedule the state with the ILP result.

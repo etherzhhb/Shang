@@ -459,7 +459,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
 void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
   for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
-      I != E; ++I) {
+       I != E; ++I) {
     const MachineInstr *MI = *I;
     assert(MI && "Expect Schedule Unit with machine instruction!");
 

@@ -267,18 +267,18 @@ unsigned SchedulingBase::buildFDepHD(bool rstSTF) {
 //===----------------------------------------------------------------------===//
 void SchedulingBase::schedulePassiveSUnits() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end();
-    I != E; ++I) {
-      VSUnit *A = *I;
-      if (A->isScheduled())
-        continue;
+       I != E; ++I) {
+    VSUnit *A = *I;
+    if (A->isScheduled())
+      continue;
 
-      assert(A->getFUId().isTrivial()
-        && "SUnit that taking non-trivial not scheduled?");
+    assert(A->getFUId().isTrivial()
+      && "SUnit that taking non-trivial not scheduled?");
 
-      DEBUG(A->print(dbgs()));
-      unsigned step = getASAPStep(A);
-      A->scheduledTo(step);
-      buildFDepHD(false);
+    DEBUG(A->print(dbgs()));
+    unsigned step = getASAPStep(A);
+    A->scheduledTo(step);
+    buildFDepHD(false);
   }
 }
 
@@ -298,6 +298,7 @@ bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
       DEBUG(dbgs() << " asap step: " << step << " in critical path.\n");
       A->scheduledTo(step);
   }
+
   return isResourceConstraintPreserved();
 }
 
