@@ -434,7 +434,12 @@ bool ILPScheduler::scheduleState() {
   set_verbose(lp, CRITICAL);
   DEBUG(set_verbose(lp, FULL));
 
-  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_COLS | PRESOLVE_LINDEP,
+  set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_COLS | PRESOLVE_LINDEP
+                   | PRESOLVE_IMPLIEDFREE | PRESOLVE_REDUCEGCD
+                   | PRESOLVE_PROBEFIX | PRESOLVE_PROBEREDUCE
+                   | PRESOLVE_ROWDOMINATE /*| PRESOLVE_COLDOMINATE lpsolve bug*/
+                   | PRESOLVE_MERGEROWS
+                   | PRESOLVE_BOUNDS,
                get_presolveloops(lp));
 
   DEBUG(write_lp(lp, "log.lp"));
