@@ -125,6 +125,9 @@ int main(int argc, char **argv) {
   // Do Globalvariable promotion.
   PM.add(createGVPromotionPass());
 
+  // Inline functions.
+  // PM.add(createAlwaysInlineFunctionPass());
+
   // Perform Software/Hardware partition.
   // PM.add(createFunctionFilterCGPass(S->getOutputStream("SoftwareIROutput")));
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
@@ -134,7 +137,6 @@ int main(int argc, char **argv) {
   // std::string error;
   // raw_fd_ostream OS(Path.c_str(), error);
   // PM.add(createPrintModulePass(&OS));
-
 
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());
