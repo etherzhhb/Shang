@@ -135,6 +135,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
     // Lower cast node to bit level operation.
     setOperationAction(ISD::SIGN_EXTEND, CurVT, Custom);
+    setOperationAction(ISD::SIGN_EXTEND_INREG, CurVT, Expand);
     setOperationAction(ISD::ZERO_EXTEND, CurVT, Custom);
     setOperationAction(ISD::ANY_EXTEND, CurVT, Custom);
     setOperationAction(ISD::TRUNCATE, CurVT, Custom);
