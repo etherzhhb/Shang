@@ -243,10 +243,10 @@ void VSUnit::print(raw_ostream &OS) const {
     DEBUG(OS << *Instr << '\n');
   }
 
-  OS << getFUId() << "\nAt slot: " << getDetailSlot();
+  OS << getFUId() << "\nAt slot: " << getDetailStep();
 }
 
-OpSlot OpSlot::detailSlotCeil(int S, bool isDatapath) {
+OpSlot OpSlot::detailStepCeil(int S, bool isDatapath) {
   //OpSlot s(S);
 
   //// If the type not match, get the next slot.
@@ -259,7 +259,7 @@ OpSlot OpSlot::detailSlotCeil(int S, bool isDatapath) {
   return OpSlot(S + TypeNotMatch);
 }
 
-OpSlot OpSlot::detailSlotFloor(int S, bool isDatapath) {
+OpSlot OpSlot::detailStepFloor(int S, bool isDatapath) {
   //OpSlot s(S);
 
   //// If the type not match, get the next slot.

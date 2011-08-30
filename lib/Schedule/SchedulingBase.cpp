@@ -73,7 +73,7 @@ void SchedulingBase::buildASAPStep() {
         const VSUnit *Dep = *DI;
         if (!DI.getEdge()->isLoopCarried() || MII) {
           unsigned DepASAP = Dep->isScheduled() ?
-                             Dep->getDetailSlot() : getASAPDetailStep(Dep);
+                             Dep->getDetailStep() : getASAPDetailStep(Dep);
           int Step = DepASAP + DI.getEdge()->getDetailLatency()
                      - (MII * DI.getEdge()->getItDst()) * 2;
           DEBUG(dbgs() << "From ";
@@ -90,7 +90,7 @@ void SchedulingBase::buildASAPStep() {
       A->dump();
       dbgs() << "\n\n";);
 
-      OpSlot NewSlot = OpSlot::detailSlotCeil(NewStep, A->hasDatapath());
+      OpSlot NewSlot = OpSlot::detailStepCeil(NewStep, A->hasDatapath());
       if (SUnitToTF[A->getIdx()].first != NewSlot) {
         SUnitToTF[A->getIdx()].first = NewSlot;
         changed |= true;
@@ -131,7 +131,7 @@ void SchedulingBase::buildALAPStep() {
 
         if (!UseEdge->isLoopCarried() || MII) {
           unsigned UseALAP = Use->isScheduled() ?
-                             Use->getDetailSlot() : getALAPDetailStep(Use);
+                             Use->getDetailStep() : getALAPDetailStep(Use);
           if (UseALAP == 0) {
             assert(UseEdge->isLoopCarried() && "Broken time frame!");
             UseALAP = VSUnit::MaxSlot;
@@ -151,7 +151,7 @@ void SchedulingBase::buildALAPStep() {
             A->dump();
             dbgs() << "\n\n";);
 
-      OpSlot NewSlot = OpSlot::detailSlotFloor(NewStep, A->hasDatapath());
+      OpSlot NewSlot = OpSlot::detailStepFloor(NewStep, A->hasDatapath());
       if (SUnitToTF[A->getIdx()].second != NewSlot) {
         SUnitToTF[A->getIdx()].second = NewSlot;
         changed = true;

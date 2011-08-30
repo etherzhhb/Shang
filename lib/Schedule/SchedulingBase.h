@@ -88,10 +88,10 @@ public:
   }
 
   unsigned getASAPDetailStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].first.getDetailSlot();
+    return SUnitToTF[A->getIdx()].first.getDetailStep();
   }
   unsigned getALAPDetailStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].second.getDetailSlot();
+    return SUnitToTF[A->getIdx()].second.getDetailStep();
   }
 
   unsigned getTimeFrame(const VSUnit *A) const {

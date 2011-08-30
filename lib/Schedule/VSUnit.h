@@ -233,10 +233,10 @@ public:
   OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
   OpSlot getPrevSlot() const { return OpSlot(SlotNum - 1); }
 
-  int getDetailSlot() const { return SlotNum; }
+  int getDetailStep() const { return SlotNum; }
 
-  static OpSlot detailSlotCeil(int S, bool isDatapath);
-  static OpSlot detailSlotFloor(int S, bool isDatapath);
+  static OpSlot detailStepCeil(int S, bool isDatapath);
+  static OpSlot detailStepFloor(int S, bool isDatapath);
 };
 
 /// @brief Base Class of all hardware atom. 
@@ -383,7 +383,7 @@ public:
   }
 
   unsigned getSlot() const { return SchedSlot.getSlot(); }
-  unsigned getDetailSlot() const {return SchedSlot.getDetailSlot(); }
+  unsigned getDetailStep() const {return SchedSlot.getDetailStep(); }
   unsigned getFinSlot() const { return SchedSlot.getSlot() + getLatency(); }
   bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);
