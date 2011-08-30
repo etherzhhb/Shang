@@ -130,11 +130,11 @@ int main(int argc, char **argv) {
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
 
   // Print out the IR
-  std::string Path = "D:\\cygwin\\home\\Eric\\work\\debug\\HWIR.ll";
-  std::string error;
-  raw_fd_ostream OS(Path.c_str(), error);
-  // PM.add(createPrintFunctionPass("",&OS));
-  PM.add(createPrintModulePass(&OS));
+  // std::string Path = "HWIR.ll";
+  // std::string error;
+  // raw_fd_ostream OS(Path.c_str(), error);
+  // PM.add(createPrintModulePass(&OS));
+
 
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());

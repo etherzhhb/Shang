@@ -188,12 +188,13 @@ Function *GVPromotion::cloneFunction(Function *F) {
     AttributesVec.push_back(AttributeWithIndex::get(0, attrs));
 
   // Then add the attributes of the arguments.
-  unsigned ArgIndex = 1;
+  // Here we don't need the attributes of the arguments, so do nothing.
+  /*unsigned ArgIndex = 1;
   for (Function::arg_iterator I = F->arg_begin(), E = F->arg_end(); I != E;
        ++I, ++ArgIndex) {
     if (Attributes attrs = PAL.getParamAttributes(ArgIndex))
       AttributesVec.push_back(AttributeWithIndex::get(Args_Ty.size(), attrs));
-}
+}*/
 
   // Finally add any function attributes.
   if (Attributes attrs = PAL.getFnAttributes())
