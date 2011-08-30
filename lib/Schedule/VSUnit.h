@@ -270,8 +270,9 @@ class VSUnit {
     SchedSlot.setType(!hasDatapath());
   }
 
-  VSUnit(MachineInstr **I, unsigned NumInstrs, unsigned short Idx,
-         unsigned fuid = 0) : InstIdx(Idx), FUNum(fuid), Instrs(I,I+NumInstrs) {
+  VSUnit(MachineInstr *I, unsigned short Idx,
+         unsigned fuid = 0) : InstIdx(Idx), FUNum(fuid) {
+    Instrs.push_back(I);
     SchedSlot.setType(!hasDatapath());
   }
 
@@ -283,6 +284,10 @@ public:
   }
 
   unsigned short getIdx() const { return InstIdx; }
+  //
+  void addInstr(MachineInstr *I) {
+    Instrs.push_back(I);
+  }
 
   // Add a new depencence edge to the atom.
   void addDep(VDEdge *E) {
@@ -485,8 +490,6 @@ private:
   // The schedule unit that jump back to current fsm state.
   PointerIntPair<MachineInstr*, 1, bool> LoopOp;
 
-  SmallVector<MachineInstr*, 4> Terms;
-
   /// Scheduling implementation.
   void scheduleLinear();
   void scheduleLoop();
@@ -494,29 +497,16 @@ private:
   typedef DenseMap<const MachineInstr*, VSUnit*> SUnitMapType;
   SUnitMapType InstToSUnits;
 
-  bool trySetLoopOp(VIDesc &VTID);
+  bool trySetLoopOp(MachineInstr *MI);
 
   unsigned computeRecMII();
   unsigned computeResMII();
   unsigned computeMII();
 
-  void addSUnit(VSUnit *SU) {
-    SUnits.push_back(SU);
-    for (VSUnit::instr_iterator I = SU->instr_begin(), E = SU->instr_end();
-         I != E; ++I) {
-      MachineInstr *MI = *I;
-      SUnitMapType::iterator where;
-      bool inserted;
-      tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));
-      assert(inserted && "Mapping from I already exist!");
-    }
-  }
-
   VSUnit *createEntry() {
     VSUnit *Entry = new VSUnit(SUCount);
     ++SUCount;
-
-    addSUnit(Entry);
+    SUnits.push_back(Entry);
     return Entry;
   }
 
@@ -533,30 +523,33 @@ public:
     std::for_each(SUnits.begin(), SUnits.end(), deleter<VSUnit>);
   }
 
-  VSUnit *createVSUnit(MachineInstr **I, unsigned NumInsts, unsigned fuid = 0) {
-    VSUnit *SU = new VSUnit(I, NumInsts, SUCount, fuid);
+  void mapSUnit(MachineInstr *MI, VSUnit *SU) {
+    SUnitMapType::iterator where;
+    bool inserted;
+    tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));
+    assert(inserted && "Mapping from I already exist!");
+  }
+
+  VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0) {
+    VSUnit *SU = new VSUnit(I, SUCount, fuid);
     ++SUCount;
 
-    // If pipeline is not enable, we need to detected self enable for exit
-    // roots.
-    addSUnit(SU);
+    SUnits.push_back(SU);
+    mapSUnit(I, SU);
     return SU;
   }
 
-  bool eatTerminator(VIDesc VTID) {
-    if (!VTID->isTerminator())
+  bool eatTerminator(MachineInstr *MI) {
+    if (!MI->getDesc().isTerminator())
       return false;
 
     // Do not eat the current instruction as terminator if it is jumping back
     // to the current state and we want to pipeline the state.
-    if (trySetLoopOp(VTID) && enablePipeLine())
+    if (trySetLoopOp(MI) && enablePipeLine())
       return false;
-    
-    Terms.push_back(&VTID.get());
+
     return true;
   }
-
-  SmallVectorImpl<MachineInstr*> &getTerms() { return Terms; }
 
   MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
   MachineBasicBlock *operator->() const { return getMachineBasicBlock(); }

@@ -52,15 +52,15 @@ void VSchedGraph::dump() const {
 }
 
 
-bool VSchedGraph::trySetLoopOp(VIDesc &VTID) {
-  assert(VTID->isTerminator() && "Bad instruction!");
+bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
+  assert(MI->getDesc().isTerminator() && "Bad instruction!");
 
-  if (!VTID.isBrCndLike()) return false;
+  if (!VInstrInfo::isBrCndLike(MI->getOpcode())) return false;
 
-  if (VTID.get().getOperand(0).getMBB() != MBB) return false;
+  if (MI->getOperand(0).getMBB() != MBB) return false;
 
   // Ok, remember this instruction as self enable.
-  LoopOp.setPointer(&VTID.get());
+  LoopOp.setPointer(MI);
   return true;
 }
 

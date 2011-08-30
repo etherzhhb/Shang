@@ -72,6 +72,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
 
+  // Terminators in a MBB.
+  SmallVector<MachineInstr*, 2> Terms;
+
   VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {}
 
   //===--------------------------------------------------------------------===//
@@ -169,7 +172,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return new VDMemDep(Src, Latency, Diff);
   }
 
-  void addValueDeps(VSUnit *A, VSchedGraph &CurState);
+  void addValueDeps(const MachineInstr *MI, VSUnit *A, VSchedGraph &CurState);
 
   void clear();
 
@@ -457,40 +460,30 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
 //===----------------------------------------------------------------------===//
 
-void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
-  for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
-       I != E; ++I) {
-    const MachineInstr *MI = *I;
-    assert(MI && "Expect Schedule Unit with machine instruction!");
+void VPreRegAllocSched::addValueDeps(const MachineInstr *MI, VSUnit *A,
+                                     VSchedGraph &CurState) {
+  assert(MI && "Expect Schedule Unit with machine instruction!");
 
-    for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-      const MachineOperand &MO = MI->getOperand(i);
-      // Only care about the register dependences.
-      // FIXME: What about chains?
-      if (!MO.isReg()) continue;
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
+    // Only care about the register dependences.
+    // FIXME: What about chains?
+    if (!MO.isReg()) continue;
 
-      // The instruction do not depend the register defined by itself.
-      if (MO.isDef()) continue;
+    // The instruction do not depend the register defined by itself.
+    if (MO.isDef()) continue;
 
-      unsigned Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
       
-     // It seems that sometimes the Register will be 0?
-      if (!Reg) continue;
-      assert(TargetRegisterInfo::isVirtualRegister(Reg)
-             && "Unexpected physics register!");
+    // It seems that sometimes the Register will be 0?
+    if (!Reg) continue;
+    assert(TargetRegisterInfo::isVirtualRegister(Reg)
+            && "Unexpected physics register!");
 
-      MachineInstr *DepSrc = MRI->getVRegDef(Reg);
-      /// Only add the dependence if DepSrc is in the same MBB with MI.
-      if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))
-        A->addDep(getValDepEdge(Dep, computeLatency(DepSrc, MI)));
-    }
-  }
-
-  // If the atom depend on nothing, make it depend on the entry node.
-  if (A->dep_empty()) {
-    VSUnit *EntryRoot = CurState.getEntryRoot();
-    unsigned Latency = computeLatency(0, A->getFirstInstr());
-    A->addDep(getValDepEdge(EntryRoot, Latency));
+    MachineInstr *DepSrc = MRI->getVRegDef(Reg);
+    /// Only add the dependence if DepSrc is in the same MBB with MI.
+    if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))
+      A->addDep(getValDepEdge(Dep, computeLatency(DepSrc, MI)));
   }
 }
 
@@ -563,25 +556,35 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 }
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
-  VIDesc VTID = *MI;
   // If the current instruction was eaten by as terminator?
-  if (CurState.eatTerminator(VTID)) return;
+  if (CurState.eatTerminator(MI)) {
+    Terms.push_back(MI);
+    return;
+  }
+
+  VIDesc VTID = *MI;
 
   FuncUnitId Id = VTID.getPrebindFUId();
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *SU = CurState.createVSUnit(&MI, 1, Id.getFUNum());
-  addValueDeps(SU, CurState);
+  VSUnit *SU = CurState.createVSUnit(MI, Id.getFUNum());
+  addValueDeps(MI, SU, CurState);
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
-  SmallVectorImpl<MachineInstr*> &Terms = CurState.getTerms();
-
-  VSUnit *Exit = CurState.createVSUnit(Terms.data(), Terms.size());
-  addValueDeps(Exit, CurState);
-
   MachineInstr *FstExit = Terms.front();
+  VSUnit *Exit = CurState.createVSUnit(FstExit);
+  addValueDeps(FstExit, Exit, CurState);
+
+  // Add others terminator to the exit node.
+  while (Terms.size() != 1) {
+    MachineInstr *Term = Terms.pop_back_val();
+    Exit->addInstr(Term);
+    CurState.mapSUnit(Term, Exit);
+    addValueDeps(Term, Exit, CurState);
+  }
+  Terms.clear();
 
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end();
       I != E; ++I) {
@@ -616,7 +619,18 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
 
-  assert(!State.getTerms().empty() && "Can not found any terminator!");
+  // Make sure every VSUnit have a dependence edge.
+  VSUnit *EntryRoot = State.getEntryRoot();
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+    VSUnit *A = *I;
+    // If the atom depend on nothing, make it depend on the entry node.
+    if (A->dep_empty()) {
+      unsigned Latency = computeLatency(0, A->getFirstInstr());
+      A->addDep(getValDepEdge(EntryRoot, Latency));
+    }
+  }
+
+  assert(!Terms.empty() && "Can not found any terminator!");
   // Create the exit node.
   buildExitRoot(State);
 
