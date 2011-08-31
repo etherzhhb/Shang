@@ -99,11 +99,21 @@ struct MicroStateBuilder {
 
   MicroStateBuilder(VSchedGraph &S)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  TII(*MBB.getParent()->getTarget().getInstrInfo()),
-  MRI(MBB.getParent()->getRegInfo()),
-  VFI(*MBB.getParent()->getInfo<VFInfo>()),
   DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
-  StateCtrls(State.getII() + 1), StateDatapaths(State.getII()) {}
+    TII(*MBB.getParent()->getTarget().getInstrInfo()),
+    MRI(MBB.getParent()->getRegInfo()),
+    VFI(*MBB.getParent()->getInfo<VFInfo>())
+  {
+    // Build the instructions for mirco-states.
+    unsigned EndSlot = State.getStartSlot()+ State.getII();
+    for (unsigned i = State.getStartSlot(), e = EndSlot; i != e; ++i) {
+      MachineInstr *Ctrl =
+        BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control)).addImm(i);
+      StateCtrls.push_back(Ctrl);
+      MachineInstr *DP =
+        BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(i);
+      StateDatapaths.push_back(DP);
+    }
 
   DefVector &getDefsToEmitAt(unsigned Slot) {
     return DefToEmit[Slot - State.getStartSlot()];
@@ -140,11 +150,8 @@ struct MicroStateBuilder {
     unsigned Slot = CtrlSlot.getSlot();
     unsigned Idx = getModuloSlot(CtrlSlot);
     // Retrieve the instruction at specific slot. 
-    MachineInstr *&Ret = StateCtrls[Idx];
-    if (Ret) return *Ret;
-    // Create the instruction if it is not created yet.
-    Ret = (MachineInstr*)
-      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control)).addImm(Slot);
+    MachineInstr *Ret = StateCtrls[Idx];
+    assert(Ret && "Unexpected NULL instruction!");
     return *Ret;
   }
 
@@ -152,12 +159,8 @@ struct MicroStateBuilder {
     unsigned Slot = DatapathSlot.getSlot();
     unsigned Idx = getModuloSlot(DatapathSlot);
     // Retrieve the instruction at specific slot.
-    MachineInstr *&Ret = StateDatapaths[Idx];
-    if (Ret) return *Ret;
-    // Create the instruction if it is not created yet.
-    Ret = (MachineInstr*)
-      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(Slot);
-
+    MachineInstr *Ret = StateDatapaths[Idx];
+    assert(Ret && "Unexpected NULL instruction!");
     return *Ret;
   }
 
