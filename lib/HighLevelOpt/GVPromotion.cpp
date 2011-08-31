@@ -189,12 +189,6 @@ Function *GVPromotion::cloneFunction(Function *F) {
 
   // Then add the attributes of the arguments.
   // Here we don't need the attributes of the arguments, so do nothing.
-  /*unsigned ArgIndex = 1;
-  for (Function::arg_iterator I = F->arg_begin(), E = F->arg_end(); I != E;
-       ++I, ++ArgIndex) {
-    if (Attributes attrs = PAL.getParamAttributes(ArgIndex))
-      AttributesVec.push_back(AttributeWithIndex::get(Args_Ty.size(), attrs));
-}*/
 
   // Finally add any function attributes.
   if (Attributes attrs = PAL.getFnAttributes())
@@ -287,14 +281,8 @@ CallGraphNode *GVPromotion::updateAllCallSites(Function *F, Function *NF,
     if (Attributes attrs = CallPAL.getRetAttributes())
       AttributesVec.push_back(AttributeWithIndex::get(0, attrs));
 
-    //// (2) Argument attribute.    
-    //unsigned ArgIndex = 1;
-    //for (Function::arg_iterator I = F->arg_begin(), E = F->arg_end();
-    //     I != E; ++I) {
-    //  if (Attributes Attrs = CallPAL.getParamAttributes(ArgIndex))
-    //    AttributesVec.push_back(AttributeWithIndex::get(ArgIndex, Attrs));
-    //  ++ArgIndex;
-    //}
+    // (2) Argument attribute.    
+    // Do nothing.
 
     // (3) Add any function attributes.
     if (Attributes attrs = CallPAL.getFnAttributes())

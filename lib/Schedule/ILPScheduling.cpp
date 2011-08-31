@@ -471,7 +471,6 @@ bool ILPScheduler::scheduleState() {
 
   // Finally, Schedule the state with the ILP result.
   buildSchedule(lp);
-  //viewGraph();
   delete_lp(lp);
 
   return true;
