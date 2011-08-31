@@ -544,6 +544,15 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
       addValueDeps(MI, SrcSU, CurState);
       return;
     }
+
+    if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
+      if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
+        CurState.mapSUnit(MI, SrcSU);
+        addValueDeps(MI, SrcSU, CurState);
+        return;
+      }
+    }
+
     break;
   }
 
