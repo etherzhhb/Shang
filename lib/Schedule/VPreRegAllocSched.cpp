@@ -160,6 +160,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildExitRoot(VSchedGraph &CurState);
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
+  bool mergeUnaryOp(MachineInstr *MI, unsigned OpIdx, VSchedGraph &CurState);
+
   /// @name FunctionPass interface
   //{
   static char ID;
@@ -527,6 +529,27 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
   }
 }
 
+bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
+                                     VSchedGraph &CurState) {
+  MachineInstr *SrcMI;
+  (void) SrcMI;
+  if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
+    CurState.mapSUnit(MI, SrcSU);
+    addValueDeps(MI, SrcSU, CurState);
+    return true;
+  }
+
+  if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
+    if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
+      CurState.mapSUnit(MI, SrcSU);
+      addValueDeps(MI, SrcSU, CurState);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   // If the current instruction was eaten by as terminator?
   if (CurState.eatTerminator(MI)) {
@@ -537,21 +560,8 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   switch (MI->getOpcode()) {
   default: break;
   case VTM::VOpBitSlice:
-    MachineInstr *SrcMI;
-    (void) SrcMI;
-    if (VSUnit *SrcSU = getDefSU(MI->getOperand(1), CurState, SrcMI)) {
-      CurState.mapSUnit(MI, SrcSU);
-      addValueDeps(MI, SrcSU, CurState);
+    if (mergeUnaryOp(MI, 1, CurState))
       return;
-    }
-
-    if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
-      if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
-        CurState.mapSUnit(MI, SrcSU);
-        addValueDeps(MI, SrcSU, CurState);
-        return;
-      }
-    }
 
     break;
   }
