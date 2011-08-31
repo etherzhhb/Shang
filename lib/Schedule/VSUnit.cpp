@@ -64,6 +64,15 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
   return true;
 }
 
+VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
+  VSUnit *SU = new VSUnit(VIDesc(*I).hasDatapath(), SUCount, fuid);
+  ++SUCount;
+
+  SUnits.push_back(SU);
+  mapSUnit(I, SU);
+  return SU;
+}
+
 void VSchedGraph::resetSchedule() {
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *U = *I;

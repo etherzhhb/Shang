@@ -270,10 +270,10 @@ class VSUnit {
     SchedSlot.setType(!hasDatapath());
   }
 
-  VSUnit(MachineInstr *I, unsigned short Idx,
-         unsigned fuid = 0) : InstIdx(Idx), FUNum(fuid) {
-    Instrs.push_back(I);
-    SchedSlot.setType(!hasDatapath());
+  VSUnit(bool datapath, unsigned short Idx, unsigned fuid)
+    : InstIdx(Idx), FUNum(fuid)
+  {
+    SchedSlot.setType(!datapath);
   }
 
 public:
@@ -530,14 +530,7 @@ public:
     assert(inserted && "Mapping from I already exist!");
   }
 
-  VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0) {
-    VSUnit *SU = new VSUnit(I, SUCount, fuid);
-    ++SUCount;
-
-    SUnits.push_back(SU);
-    mapSUnit(I, SU);
-    return SU;
-  }
+  VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
 
   bool eatTerminator(MachineInstr *MI) {
     if (!MI->getDesc().isTerminator())
