@@ -115,6 +115,9 @@ public:
   static bool isCopyLike(unsigned Opcode, bool IncludeMoveImm = true);
   static bool isBrCndLike(unsigned Opcode);
   static bool isWireOp(const TargetInstrDesc &TID);
+
+  static unsigned computeLatency(const MachineInstr *SrcInstr,
+                                 const MachineInstr *DstInstr);
 };
 
 // Helper class for manipulating bit width operand.

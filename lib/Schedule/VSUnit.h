@@ -366,7 +366,7 @@ public:
   //}
 
   // Dirty Hack: Only return the first instruction.
-  MachineInstr *getFirstInstr() const {
+  MachineInstr *getRepresentativeInst() const {
     if (isEntry()) return 0;
 
     return Instrs.front();
@@ -378,7 +378,7 @@ public:
   unsigned getLatency() const {
     if (isEntry()) return 0;
   
-    VIDesc Info = *getFirstInstr();
+    VIDesc Info = *getRepresentativeInst();
     return Info.getLatency();
   }
 

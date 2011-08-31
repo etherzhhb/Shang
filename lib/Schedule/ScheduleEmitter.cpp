@@ -561,7 +561,7 @@ void VSchedGraph::emitSchedule() {
     if (A->getSlot() != CurSlot)
       CurSlot = StateBuilder.advanceToSlot(CurSlot, A->getSlot());
 
-    if (MachineInstr *Inst = A->getFirstInstr()) {
+    if (MachineInstr *Inst = A->getRepresentativeInst()) {
       // Ignore some instructions.
       if (Inst->isPHI()) {
         // For a loop, the PHI is copying the value from previous iteration, so
@@ -593,4 +593,3 @@ void VSchedGraph::emitSchedule() {
 
   VFI->rememberTotalSlot(MBB, getStartSlot(), getTotalSlot(), getLoopOpSlot());
 }
-

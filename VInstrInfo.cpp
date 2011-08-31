@@ -464,6 +464,52 @@ bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
          && VID.hasDatapath() && VID.hasTrivialFU();
 }
 
+unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
+                                    const MachineInstr *DstInstr) {
+  assert(DstInstr && "DstInstr should not be null!");
+  if (SrcInstr == DstInstr) return 0;
+
+  if (SrcInstr == 0) {
+    // Set latency of Control operation and entry root to 1, so we can prevent
+    // scheduling control operation to the first slot.
+    // Do not worry about PHI Nodes, their will be eliminated at the register
+    // allocation pass.
+    if (!VIDesc(*DstInstr).hasDatapath() && DstInstr->getOpcode() != VTM::PHI)
+      return 1;
+
+    return 0;
+  }
+
+  VIDesc SrcTID = *SrcInstr;
+  // Compute the latency correspond to detail slot.
+  unsigned latency = SrcTID.getLatency() * 2;
+
+  VIDesc DstTID = *DstInstr;
+
+  if (DstTID.isReadAtEmit()) {
+    // If the edge is reg->reg, increase the latency by 1, because the result
+    // is ready after the clock edge.
+    if (SrcTID.isWriteUntilFinish())
+      return latency + 1;
+
+    // Else if the edge is wire->reg, decrease the latency by 1, becaue the
+    // result is ready before the clock edge and let the register can
+    // capture the result.
+    if(latency > 0)
+      latency -= 1;
+
+    return latency;
+  }
+
+  // When DstInst dose not read at emit, it hopefully a datapath operation.
+  // If the Src and Dst have difference slot type, it needs 1 extra slot to
+  // adjust the slot type.
+  if (DstTID.hasDatapath() && !SrcTID.hasDatapath())
+    return latency + 1;
+
+  return latency;
+}
+
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(getTID().Opcode) {

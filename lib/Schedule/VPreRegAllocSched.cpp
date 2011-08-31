@@ -114,52 +114,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   LoopDep createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
                         int Diff = 0);
 
-  //===--------------------------------------------------------------------===//
-  unsigned computeLatency(const MachineInstr *SrcInstr,
-                          const MachineInstr *DstInstr) {
-    if (SrcInstr == 0) {
-      // Set latency of Control operation and entry root to 1, so we can prevent
-      // scheduling control operation to the first slot.
-      if (DstInstr && (!VIDesc(*DstInstr).hasDatapath()
-      // Do not worry about PHI Nodes, their will be eliminated at the register
-      // allocation pass.
-                        && DstInstr->getOpcode() != VTM::PHI))
-        return 1;
-
-      return 0;
-    }
-
-    VIDesc SrcTID = *SrcInstr;
-    // Compute the latency correspond to detail slot.
-    unsigned latency = SrcTID.getLatency() * 2;
-
-    assert(DstInstr && "DstInstr should not be null!");
-    VIDesc DstTID = *DstInstr;
-
-    if (DstTID.isReadAtEmit()) {
-      // If the edge is reg->reg, increase the latency by 1, because the result
-      // is ready after the clock edge.
-      if (SrcTID.isWriteUntilFinish())
-        return latency + 1;
-
-      // Else if the edge is wire->reg, decrease the latency by 1, becaue the
-      // result is ready before the clock edge and let the register can
-      // capture the result.
-      if(latency > 0)
-        latency -= 1;
-
-      return latency;
-    }
-
-    // When DstInst dose not read at emit, it hopefully a datapath operation.
-    // If the Src and Dst have difference slot type, it needs 1 extra slot to
-    // adjust the slot type.
-    if (DstTID.hasDatapath() && !SrcTID.hasDatapath())
-      return latency + 1;
-
-    return latency;
-  }
-
   VDValDep *getValDepEdge(VSUnit *Src, unsigned Latency) {
     return new VDValDep(Src, Latency);
   }
@@ -173,6 +127,28 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   }
 
   void addValueDeps(const MachineInstr *MI, VSUnit *A, VSchedGraph &CurState);
+
+  VSUnit *getDefSU(const MachineOperand &MO, VSchedGraph &CurState,
+                   MachineInstr *&DepSrc) {
+    // Only care about the register dependences.
+    // FIXME: What about chains?
+    if (!MO.isReg()) return 0;
+
+    // The instruction do not depend the register defined by itself.
+    if (MO.isDef()) return 0;
+
+    unsigned Reg = MO.getReg();
+
+    // It seems that sometimes the Register will be 0?
+    if (!Reg) return 0;
+    assert(TargetRegisterInfo::isVirtualRegister(Reg)
+           && "Unexpected physics register!");
+
+    DepSrc = MRI->getVRegDef(Reg);
+    /// Only add the dependence if DepSrc is in the same MBB with MI.
+    return CurState.lookupSUnit(DepSrc);
+  }
+
 
   void clear();
 
@@ -389,7 +365,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end(); I != E;
        ++I) {
     VSUnit *DstU = *I;
-    MachineInstr *DstMI = DstU->getFirstInstr();
+    MachineInstr *DstMI = DstU->getRepresentativeInst();
     // Skip the non-memory operation.
     if (!DstMI || DstMI->memoperands_empty())
       continue;
@@ -417,7 +393,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
       
       VSUnit *SrcU = I->second;
-      MachineInstr *SrcMI = SrcU->getFirstInstr();
+      MachineInstr *SrcMI = SrcU->getRepresentativeInst();
       VIDesc SrcInfo = *SrcMI;
       bool isSrcLoad = SrcInfo.mayLoad();
       
@@ -430,8 +406,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
 
         if (LD.hasDep()) {
-          VDMemDep *MemDep = getMemDepEdge(SrcU, computeLatency(SrcMI, DstMI),
-                                           LD.getItDst());
+          unsigned Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+          VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, LD.getItDst());
           DstU->addDep(MemDep);
         }
 
@@ -440,15 +416,16 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
 
         if (LD.hasDep()) {
-          VDMemDep *MemDep = getMemDepEdge(DstU, computeLatency(DstMI, SrcMI),
-                                           LD.getItDst());
+          unsigned Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+          VDMemDep *MemDep = getMemDepEdge(DstU, Latency, LD.getItDst());
           SrcU->addDep(MemDep);
         }
       } else {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
         // Ignore the No-Alias pointers.
-        VDMemDep *MemDep = getMemDepEdge(SrcU, computeLatency(SrcMI, DstMI), 0);
+        unsigned Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+        VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, 0);
         DstU->addDep(MemDep);
       }
     }
@@ -465,25 +442,15 @@ void VPreRegAllocSched::addValueDeps(const MachineInstr *MI, VSUnit *A,
   assert(MI && "Expect Schedule Unit with machine instruction!");
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    const MachineOperand &MO = MI->getOperand(i);
-    // Only care about the register dependences.
-    // FIXME: What about chains?
-    if (!MO.isReg()) continue;
+    MachineInstr *DepSrc;
+    VSUnit *Dep = getDefSU(MI->getOperand(i), CurState, DepSrc);
+    // Self-dependence may exist when DepSrc and MI were merged into the same
+    // VSUnit.
+    if (Dep == 0 || Dep == A) continue;
 
-    // The instruction do not depend the register defined by itself.
-    if (MO.isDef()) continue;
-
-    unsigned Reg = MO.getReg();
-      
-    // It seems that sometimes the Register will be 0?
-    if (!Reg) continue;
-    assert(TargetRegisterInfo::isVirtualRegister(Reg)
-            && "Unexpected physics register!");
-
-    MachineInstr *DepSrc = MRI->getVRegDef(Reg);
-    /// Only add the dependence if DepSrc is in the same MBB with MI.
-    if (VSUnit *Dep = CurState.lookupSUnit(DepSrc))
-      A->addDep(getValDepEdge(Dep, computeLatency(DepSrc, MI)));
+    unsigned Latency = VInstrInfo::computeLatency(Dep->getRepresentativeInst(),
+                                                  MI);
+    A->addDep(getValDepEdge(Dep, Latency));
   }
 }
 
@@ -528,7 +495,8 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
       VSUnit *UserSU = State.lookupSUnit(UserMI);
       assert(UserSU && "Cannot found UserSU!");
-      PhiSU->addDep(getMemDepEdge(UserSU, computeLatency(UserMI, &PN), 1));
+      unsigned Latency = VInstrInfo::computeLatency(UserMI, &PN);
+      PhiSU->addDep(getMemDepEdge(UserSU, Latency, 1));
     }
 
     // Scan the PHI operands.
@@ -544,14 +512,15 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
       assert(InSU && "Where's the incoming value of the phi?");
 
       // Insert anti-dependence edge.
-      PhiSU->addDep(getMemDepEdge(InSU, computeLatency(SrcMI, &PN), 1));
+      unsigned Latency = VInstrInfo::computeLatency(SrcMI, &PN);
+      PhiSU->addDep(getMemDepEdge(InSU, Latency, 1));
     }
 
     // Next loop can not start before loop operation issued.
     VSUnit *LoopOp = State.getLoopOp();
-    PhiSU->addDep(getMemDepEdge(LoopOp,
-                                computeLatency(LoopOp->getFirstInstr(), &PN),
-                                1));
+    unsigned Latency =
+      VInstrInfo::computeLatency(LoopOp->getRepresentativeInst(), &PN);
+    PhiSU->addDep(getMemDepEdge(LoopOp, Latency, 1));
   }
 }
 
@@ -595,7 +564,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
       && VSU != Exit) {
       // Dirty Hack.
       MachineInstr *Instr = *VSU->instr_begin();
-      unsigned Latency = computeLatency(Instr, FstExit);
+      unsigned Latency = VInstrInfo::computeLatency(Instr, FstExit);
       // We do not need to wait the trivial operation finish before exiting the
       // state, because the first control slot of next state will only contains
       // PHI copies, and the PHIElimination Hook will take care of the data
@@ -611,7 +580,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
 
   // Do not forget the entry root.
   Exit->addDep(getCtrlDepEdge(CurState.getEntryRoot(),
-                              computeLatency(0, FstExit)));
+                              VInstrInfo::computeLatency(0, FstExit)));
 }
 
 void VPreRegAllocSched::buildState(VSchedGraph &State) {
@@ -619,13 +588,14 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
 
-  // Make sure every VSUnit have a dependence edge.
+  // Make sure every VSUnit have a dependence edge except EntryRoot.
   VSUnit *EntryRoot = State.getEntryRoot();
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = ++State.begin(), E = State.end(); I != E; ++I){
     VSUnit *A = *I;
     // If the atom depend on nothing, make it depend on the entry node.
     if (A->dep_empty()) {
-      unsigned Latency = computeLatency(0, A->getFirstInstr());
+      unsigned Latency =
+        VInstrInfo::computeLatency(0, A->getRepresentativeInst());
       A->addDep(getValDepEdge(EntryRoot, Latency));
     }
   }

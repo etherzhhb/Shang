@@ -207,7 +207,7 @@ void VSUnit::dump() const {
 void VDEdge::print(raw_ostream &OS) const {}
 
 unsigned VSUnit::getOpcode() const {
-  if (MachineInstr *I =getFirstInstr())
+  if (MachineInstr *I = getRepresentativeInst())
     return I->getOpcode();
 
   return VTM::INSTRUCTION_LIST_END;
@@ -219,14 +219,14 @@ void VSUnit::scheduledTo(unsigned slot) {
 }
 
 VFUs::FUTypes VSUnit::getFUType() const {
-  if (MachineInstr *Instr = getFirstInstr())
+  if (MachineInstr *Instr = getRepresentativeInst())
     return VIDesc(*Instr).getFUType();
 
   return VFUs::Trivial;
 }
 
 bool VSUnit::hasDatapath() const {
-  if (MachineInstr *Instr = getFirstInstr())
+  if (MachineInstr *Instr = getRepresentativeInst())
     return VIDesc(*Instr).hasDatapath();
 
   return false;
