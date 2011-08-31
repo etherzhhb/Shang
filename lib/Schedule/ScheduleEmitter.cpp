@@ -145,7 +145,6 @@ struct MicroStateBuilder {
   }
 
   MachineInstr &getStateCtrlAt(OpSlot CtrlSlot) {
-    unsigned Slot = CtrlSlot.getSlot();
     unsigned Idx = getModuloSlot(CtrlSlot);
     // Retrieve the instruction at specific slot. 
     MachineInstr *Ret = StateCtrls[Idx];
@@ -154,7 +153,6 @@ struct MicroStateBuilder {
   }
 
   MachineInstr &getStateDatapathAt(OpSlot DatapathSlot) {
-    unsigned Slot = DatapathSlot.getSlot();
     unsigned Idx = getModuloSlot(DatapathSlot);
     // Retrieve the instruction at specific slot.
     MachineInstr *Ret = StateDatapaths[Idx];
