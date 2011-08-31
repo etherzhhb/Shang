@@ -559,7 +559,14 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
   switch (MI->getOpcode()) {
   default: break;
+  case VTM::VOpMove_ra:
+  case VTM::VOpMove_ri:
+  case VTM::VOpMove_rm:
+  case VTM::VOpMove_rs:
+  case VTM::VOpMove_rw:
+
   case VTM::VOpBitSlice:
+  case VTM::VOpBitRepeat:
     if (mergeUnaryOp(MI, 1, CurState))
       return;
 
