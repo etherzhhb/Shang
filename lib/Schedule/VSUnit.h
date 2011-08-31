@@ -276,6 +276,9 @@ class VSUnit {
     SchedSlot.setType(!datapath);
   }
 
+  void addInstr(MachineInstr *I) {
+    Instrs.push_back(I);
+  }
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
@@ -284,10 +287,6 @@ public:
   }
 
   unsigned short getIdx() const { return InstIdx; }
-  //
-  void addInstr(MachineInstr *I) {
-    Instrs.push_back(I);
-  }
 
   // Add a new depencence edge to the atom.
   void addDep(VDEdge *E) {
@@ -524,6 +523,7 @@ public:
   }
 
   void mapSUnit(MachineInstr *MI, VSUnit *SU) {
+    SU->addInstr(MI);
     SUnitMapType::iterator where;
     bool inserted;
     tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));

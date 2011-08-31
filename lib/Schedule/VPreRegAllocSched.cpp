@@ -549,7 +549,6 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   // Add others terminator to the exit node.
   while (Terms.size() != 1) {
     MachineInstr *Term = Terms.pop_back_val();
-    Exit->addInstr(Term);
     CurState.mapSUnit(Term, Exit);
     addValueDeps(Term, Exit, CurState);
   }
