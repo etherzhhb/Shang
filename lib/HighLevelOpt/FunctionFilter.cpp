@@ -80,6 +80,8 @@ bool FunctionFilter::runOnModule(Module &M) {
            ECGN = df_end(CGN); ICGN != ECGN; ++ICGN){
         const CallGraphNode *SubCGN = *ICGN;
         Function *SubF = SubCGN->getFunction();
+        if (!SubF || SubF->isDeclaration())
+          continue;
         // Create the synthesis setting for subfunctions.
         if (SubF != F)
           getSynSetting(SubF->getName(), TopSetting)->setTopLevelModule(false);
