@@ -451,8 +451,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
 
         MachineInstr *RepInst = Dep->getRepresentativeInst();
         unsigned Latency = VInstrInfo::computeLatency(DepSrc, MI);
-        if (RepInst != DepSrc)
-          Latency += VInstrInfo::computeLatency(RepInst, DepSrc);
+        if (RepInst != DepSrc) Latency += Dep->getLatencyFor(DepSrc);
 
         A->addDep(getValDepEdge(Dep, Latency));
       }
@@ -539,23 +538,27 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
                                      VSchedGraph &CurState) {
   MachineInstr *SrcMI;
-  (void) SrcMI;
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
-    CurState.mapSUnit(MI, SrcSU);
+    unsigned Latency = SrcSU->getLatencyFor(SrcMI)
+                       + VInstrInfo::computeLatency(SrcMI, MI);
+    CurState.mapSUnit(MI, SrcSU, Latency);
     return true;
   }
 
   // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
     if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
-      CurState.mapSUnit(MI, SrcSU);
+      unsigned Latency = SrcSU->getLatencyFor(SrcMI)
+                         + VInstrInfo::computeLatency(SrcMI, MI);
+      CurState.mapSUnit(MI, SrcSU, Latency);
       return true;
     }
   }
 
   // Merge it into the EntryRoot.
-  CurState.mapSUnit(MI, CurState.getEntryRoot());
+  CurState.mapSUnit(MI, CurState.getEntryRoot(),
+                    VInstrInfo::computeLatency(0, MI));
   return true;
 }
 
@@ -597,7 +600,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   // Add others terminator to the exit node.
   while (Terms.size() != 1) {
     MachineInstr *Term = Terms.pop_back_val();
-    CurState.mapSUnit(Term, Exit);
+    CurState.mapSUnit(Term, Exit, 0);
   }
   Terms.clear();
 

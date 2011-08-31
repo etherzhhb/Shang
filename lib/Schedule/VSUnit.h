@@ -261,13 +261,15 @@ class VSUnit {
 
   /// The corresponding Instructions - We may store several instruction inside
   /// the same schedule unit, so we can clamp them in a same slot.
-  SmallVector<MachineInstr*, 2> Instrs;
+  SmallVector<MachineInstr*, 8> Instrs;
+  // Latency from representative instruction.
+  SmallVector<int8_t, 8> latencies;
 
   friend class VSchedGraph;
 
   // Create the entry node.
   VSUnit(unsigned short Idx) : InstIdx(Idx), FUNum(0) {
-    Instrs.push_back(0);
+    addInstr(0, 0);
     SchedSlot.setType(!hasDatapath());
   }
 
@@ -277,8 +279,9 @@ class VSUnit {
     SchedSlot.setType(!datapath);
   }
 
-  void addInstr(MachineInstr *I) {
+  void addInstr(MachineInstr *I, int8_t Latency) {
     Instrs.push_back(I);
+    latencies.push_back(Latency);
   }
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
@@ -370,6 +373,23 @@ public:
     return Instrs.front();
   }
 
+  size_t num_instrs() const { return Instrs.size(); }
+
+  // Get the latency from RepresentativeInst to MI.
+  int8_t getLatencyFor(MachineInstr *MI) const;
+  int8_t getLatencyAt(unsigned Idx) const {
+    return latencies[Idx];
+  }
+
+  typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;
+
+  instr_iterator instr_begin() { return Instrs.begin(); }
+  instr_iterator instr_end()   { return Instrs.end(); }
+
+  typedef SmallVectorImpl<MachineInstr*>::const_iterator const_instr_iterator;
+  const_instr_iterator instr_begin() const { return Instrs.begin(); }
+  const_instr_iterator instr_end()   const { return Instrs.end(); }
+
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return getRepresentativeInst() == 0; }
 
@@ -386,15 +406,6 @@ public:
   bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot.setSlot(0); }
-
-  typedef SmallVector<MachineInstr*, 2>::iterator instr_iterator;
-  
-  instr_iterator instr_begin() { return Instrs.begin(); }
-  instr_iterator instr_end()   { return Instrs.end(); }
-
-  typedef SmallVector<MachineInstr*, 2>::const_iterator const_instr_iterator;
-  const_instr_iterator instr_begin() const { return Instrs.begin(); }
-  const_instr_iterator instr_end()   const { return Instrs.end(); }
 
   unsigned getOpcode() const;
   VFUs::FUTypes getFUType() const;
@@ -521,8 +532,8 @@ public:
     std::for_each(SUnits.begin(), SUnits.end(), deleter<VSUnit>);
   }
 
-  void mapSUnit(MachineInstr *MI, VSUnit *SU) {
-    SU->addInstr(MI);
+  void mapSUnit(MachineInstr *MI, VSUnit *SU, int8_t latency) {
+    SU->addInstr(MI, latency);
     SUnitMapType::iterator where;
     bool inserted;
     tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));

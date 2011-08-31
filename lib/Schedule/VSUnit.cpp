@@ -60,7 +60,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   ++SUCount;
 
   SUnits.push_back(SU);
-  mapSUnit(I, SU);
+  mapSUnit(I, SU, 0);
   return SU;
 }
 
@@ -230,6 +230,12 @@ bool VSUnit::hasDatapath() const {
     return VIDesc(*Instr).hasDatapath();
 
   return false;
+}
+
+int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
+  const_instr_iterator at = std::find(instr_begin(), instr_end(), MI);
+  assert(at != instr_end() && "Instruction not exist!");
+  return latencies[at - instr_begin()];
 }
 
 void VSUnit::print(raw_ostream &OS) const {
