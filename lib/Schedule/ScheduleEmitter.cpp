@@ -87,7 +87,6 @@ struct MicroStateBuilder {
   }
   
   typedef std::vector<WireDef*> DefVector;
-  SmallVector<DefVector, 32> DefToEmit;
   
   typedef SmallVector<MachineInstr*, 32> MIVector;
   MIVector StateCtrls, StateDatapaths;
@@ -98,7 +97,6 @@ struct MicroStateBuilder {
 
   MicroStateBuilder(VSchedGraph &S)
   : State(S), MBB(*S.getMachineBasicBlock()), InsertPos(MBB.end()),
-  DefToEmit(State.getTotalSlot() + 2 /*Dirty hack: The last slot never use!*/),
     TII(*MBB.getParent()->getTarget().getInstrInfo()),
     MRI(MBB.getParent()->getRegInfo()),
     VFI(*MBB.getParent()->getInfo<VFInfo>())
@@ -114,8 +112,9 @@ struct MicroStateBuilder {
       StateDatapaths.push_back(DP);
     }
 
-  DefVector &getDefsToEmitAt(unsigned Slot) {
-    return DefToEmit[Slot - State.getStartSlot()];
+    MachineInstr *TermCtrl =
+      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control)).addImm(EndSlot);
+    StateCtrls.push_back(TermCtrl);
   }
 
   unsigned getModuloSlot(OpSlot S) const {
@@ -288,42 +287,6 @@ struct MicroStateBuilder {
 //===----------------------------------------------------------------------===//
 
 MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
-  // Try to force create the state control and data path instruction, and
-  // insert the instructions between them.
-  MachineInstrBuilder CtrlInst(&getStateCtrlAt(OpSlot(Slot, true)));
-  if (Slot < State.getLoopOpSlot())
-    (void) getStateDatapathAt(OpSlot(Slot, false));
-
-  DefVector &DefsAtSlot = getDefsToEmitAt(Slot);
-  OpSlot CopySlot(Slot, true);
-
-  // Emit the exported registers at current slot.
-  for (DefVector::iterator I = DefsAtSlot.begin(), E = DefsAtSlot.end();
-       I != E;) {
-    WireDef *WD = *I;
-
-    MachineOperand MO = WD->getOperand();
-
-    // This operand will delete with its origin instruction.
-    // Eliminate the dead register.
-    if (MRI.use_empty(MO.getReg())) {
-      I = DefsAtSlot.erase(I);
-      E = DefsAtSlot.end();
-      continue;
-    }
-
-    if (WD->shouldBeCopied()) {
-      // Export the register.
-      CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, Slot));
-      // Get the operand at current slot.
-      CtrlInst.addOperand(getRegUseOperand(WD->Pred, CopySlot));
-      MO.setIsDef();
-      MachineOperand Src = WD->createOperand();
-      CtrlInst.addOperand(MO).addOperand(Src);
-    }
-    ++I;
-  }
-
   for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
        E = SUnitsToEmit.end(); I !=E; ++I) {
     VSUnit *A = *I;
@@ -388,8 +351,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   // written at the moment (clock event) that the atom finish.
  if (VTID.isWriteUntilFinish()) ++CopySlot;
 
-
-  DefVector &Defs = getDefsToEmitAt(CopySlot.getSlot());
+  DefVector Defs;
 
   for (unsigned i = 1 , e = Ops.size(); i != e; ++i) {
     MachineOperand &MO = Ops[i];
@@ -460,6 +422,31 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
   for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
     Builder.addOperand(*I);
+
+  // Emit the exported registers at current slot.
+  while (!Defs.empty()) {
+    WireDef *WD = Defs.back();
+    Defs.pop_back();
+
+    MachineOperand MO = WD->getOperand();
+
+    // FIXME: Do we need this?
+    // This operand will delete with its origin instruction.
+    // Eliminate the dead register.
+    //if (MRI.use_empty(MO.getReg()))
+    //  continue;
+
+    MachineInstrBuilder CtrlInst(&getStateCtrlAt(CopySlot));
+    if (WD->shouldBeCopied()) {
+      // Export the register.
+      CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, CopySlot.getSlot()));
+      // Get the operand at current slot.
+      CtrlInst.addOperand(getRegUseOperand(WD->Pred, CopySlot));
+      MO.setIsDef();
+      MachineOperand Src = WD->createOperand();
+      CtrlInst.addOperand(MO).addOperand(Src);
+    }
+  }
 
   // Remove this instruction since they are fused to uc state.
   InstsToDel.push_back(&Inst);
