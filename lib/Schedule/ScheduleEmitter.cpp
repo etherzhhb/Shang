@@ -75,7 +75,7 @@ struct MicroStateBuilder {
     }
   };
 
-  inline WireDef createWireDef(unsigned WireNum, VSUnit *A, MachineOperand &MO,
+  inline WireDef createWireDef(unsigned WireNum, MachineOperand &MO,
                                MachineOperand &Pred, OpSlot defSlot,
                                OpSlot copySlot){
     assert(copySlot.isControl() && "Can only copy at control!");
@@ -437,7 +437,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       if (getModuloSlot(DefSlot) > getModuloSlot(CopySlot))
         WireNum = createPHI(WireNum, BitWidth, DefSlot.getSlot());
 
-      WireDef WDef = createWireDef(WireNum, A, MO, Pred, DefSlot, CopySlot);
+      WireDef WDef = createWireDef(WireNum, MO, Pred, SchedSlot, CopySlot);
 
       SWDMapTy::iterator mapIt;
       bool inserted;
