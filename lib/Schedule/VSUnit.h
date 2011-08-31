@@ -383,7 +383,7 @@ public:
 
   unsigned getSlot() const { return SchedSlot.getSlot(); }
   unsigned getDetailStep() const {return SchedSlot.getDetailStep(); }
-  unsigned getFinSlot() const { return SchedSlot.getSlot() + getLatency(); }
+
   bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);
   void resetSchedule() { SchedSlot.setSlot(0); }

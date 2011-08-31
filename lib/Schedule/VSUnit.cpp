@@ -35,14 +35,6 @@ using namespace llvm;
 
 
 //===----------------------------------------------------------------------===//
-
-static inline bool top_sort_finish(const VSUnit* LHS, const VSUnit* RHS) {
-  if (LHS->getFinSlot() != RHS->getFinSlot())
-    return LHS->getFinSlot() < RHS->getFinSlot();
-
-  return LHS->getIdx() < RHS->getIdx();
-}
-
 void VSchedGraph::print(raw_ostream &OS) const {
   printVMBB(OS, *MBB);
 }
@@ -50,7 +42,6 @@ void VSchedGraph::print(raw_ostream &OS) const {
 void VSchedGraph::dump() const {
   print(dbgs());
 }
-
 
 bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
   assert(MI->getDesc().isTerminator() && "Bad instruction!");
