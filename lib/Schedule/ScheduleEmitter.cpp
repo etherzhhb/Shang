@@ -290,10 +290,10 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     VSUnit *A = *I;
     OpSlot Slot(A->getSlot(), !A->hasDatapath());
 
-    MachineInstr &RepInst = *A->getRepresentativeInst();
+    MachineInstr *RepInst = A->getRepresentativeInst();
     // Handle representative instruction of the VSUnit.
-    if (!RepInst.isPHI())
-      fuseInstr(RepInst, Slot, A->getFUId());
+    if (RepInst != 0 && !RepInst->isPHI())
+      fuseInstr(*RepInst, Slot, A->getFUId());
 
     // And other trivially merged instructions.
     for (VSUnit::instr_iterator II = A->instr_begin() + 1, IE = A->instr_end();
@@ -304,7 +304,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       unsigned DetailStep = Slot.getDetailStep();
       // The instructions in Exit Root are parallel.
       if (State.getExitRoot() != A)
-        DetailStep += VInstrInfo::computeLatency(&RepInst, &Inst);
+        DetailStep += VInstrInfo::computeLatency(RepInst, &Inst);
 
       OpSlot S = OpSlot::detailStepCeil(DetailStep, VTID.hasDatapath());
       // FIXME: Assert the instruction have trivial function unit.
@@ -568,9 +568,9 @@ void VSchedGraph::emitSchedule() {
 
       assert((!Inst->isCopy() || VIDesc(*Inst).canCopyBeFused())
              && "Cannot handle copy!");
-
-      StateBuilder.emitSUnit(A);
     }
+
+    StateBuilder.emitSUnit(A);
   }
   // Build last state.
   assert(!StateBuilder.emitQueueEmpty() && "Expect atoms for last state!");

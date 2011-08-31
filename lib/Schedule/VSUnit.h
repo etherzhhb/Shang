@@ -267,6 +267,7 @@ class VSUnit {
 
   // Create the entry node.
   VSUnit(unsigned short Idx) : InstIdx(Idx), FUNum(0) {
+    Instrs.push_back(0);
     SchedSlot.setType(!hasDatapath());
   }
 
@@ -366,13 +367,11 @@ public:
 
   // Dirty Hack: Only return the first instruction.
   MachineInstr *getRepresentativeInst() const {
-    if (isEntry()) return 0;
-
     return Instrs.front();
   }
 
   // If this Schedule Unit is just the place holder for the Entry node.
-  bool isEntry() const { return Instrs.empty(); }
+  bool isEntry() const { return getRepresentativeInst() == 0; }
 
   unsigned getLatency() const {
     if (isEntry()) return 0;
