@@ -470,14 +470,14 @@ unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
   if (SrcInstr == DstInstr) return 0;
 
   if (SrcInstr == 0) {
-    // Set latency of Control operation and entry root to 1, so we can prevent
-    // scheduling control operation to the first slot.
-    // Do not worry about PHI Nodes, their will be eliminated at the register
-    // allocation pass.
-    if (!VIDesc(*DstInstr).hasDatapath() && DstInstr->getOpcode() != VTM::PHI)
-      return 1;
+    //// Set latency of Control operation and entry root to 1, so we can prevent
+    //// scheduling control operation to the first slot.
+    //// Do not worry about PHI Nodes, their will be eliminated at the register
+    //// allocation pass.
+    if (DstInstr->getOpcode() == VTM::PHI)
+      return 0;
 
-    return 0;
+    return 1;
   }
 
   VIDesc SrcTID = *SrcInstr;

@@ -126,7 +126,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return new VDMemDep(Src, Latency, Diff);
   }
 
-  void addValueDeps(const MachineInstr *MI, VSUnit *A, VSchedGraph &CurState);
+  void addValueDeps(VSUnit *A, VSchedGraph &CurState);
 
   VSUnit *getDefSU(const MachineOperand &MO, VSchedGraph &CurState,
                    MachineInstr *&DepSrc) {
@@ -439,23 +439,30 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
 //===----------------------------------------------------------------------===//
 
-void VPreRegAllocSched::addValueDeps(const MachineInstr *MI, VSUnit *A,
-                                     VSchedGraph &CurState) {
-  assert(MI && "Expect Schedule Unit with machine instruction!");
+void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
+  for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
+       I != E; ++I)
+    if (MachineInstr *MI = *I) {
+      for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+        MachineInstr *DepSrc;
+        VSUnit *Dep = getDefSU(MI->getOperand(i), CurState, DepSrc);
+        // Avoid back-edge and self-edge
+        if (Dep == 0 || Dep->getIdx() >= A->getIdx()) continue;
 
-  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    MachineInstr *DepSrc;
-    VSUnit *Dep = getDefSU(MI->getOperand(i), CurState, DepSrc);
-    // Self-dependence may exist when DepSrc and MI were merged into the same
-    // VSUnit.
-    if (Dep == 0 || Dep == A) continue;
+        MachineInstr *RepInst = Dep->getRepresentativeInst();
+        unsigned Latency = VInstrInfo::computeLatency(DepSrc, MI);
+        if (RepInst != DepSrc)
+          Latency += VInstrInfo::computeLatency(RepInst, DepSrc);
 
-    MachineInstr *RepInst = Dep->getRepresentativeInst();
-    unsigned Latency = VInstrInfo::computeLatency(DepSrc, MI);
-    if (RepInst != DepSrc)
-      Latency += VInstrInfo::computeLatency(RepInst, DepSrc);
+        A->addDep(getValDepEdge(Dep, Latency));
+      }
+    }
 
-    A->addDep(getValDepEdge(Dep, Latency));
+  // If the atom depend on nothing, make it depend on the entry node.
+  if (A->dep_empty()) {
+    unsigned Latency =
+      VInstrInfo::computeLatency(0, A->getRepresentativeInst());
+    A->addDep(getValDepEdge(CurState.getEntryRoot(), Latency));
   }
 }
 
@@ -536,7 +543,6 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
     CurState.mapSUnit(MI, SrcSU);
-    addValueDeps(MI, SrcSU, CurState);
     return true;
   }
 
@@ -544,14 +550,12 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
     if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
       CurState.mapSUnit(MI, SrcSU);
-      addValueDeps(MI, SrcSU, CurState);
       return true;
     }
   }
 
   // Merge it into the EntryRoot.
   CurState.mapSUnit(MI, CurState.getEntryRoot());
-  addValueDeps(MI, CurState.getEntryRoot(), CurState);
   return true;
 }
 
@@ -583,32 +587,30 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *SU = CurState.createVSUnit(MI, Id.getFUNum());
-  addValueDeps(MI, SU, CurState);
+  CurState.createVSUnit(MI, Id.getFUNum());
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   MachineInstr *FstExit = Terms.front();
   VSUnit *Exit = CurState.createVSUnit(FstExit);
-  addValueDeps(FstExit, Exit, CurState);
 
   // Add others terminator to the exit node.
   while (Terms.size() != 1) {
     MachineInstr *Term = Terms.pop_back_val();
     CurState.mapSUnit(Term, Exit);
-    addValueDeps(Term, Exit, CurState);
   }
   Terms.clear();
 
+  addValueDeps(Exit, CurState);
+
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end();
-      I != E; ++I) {
+       I != E; ++I) {
     VSUnit *VSU = *I;
-    if (VSU->getNumUses() == 0 && !VSU->isEntry()
       // Since the exit root already added to state sunit list, skip the
       // exit itself.
-      && VSU != Exit) {
+    if (VSU->getNumUses() == 0 && !VSU->isEntry() && VSU != Exit) {
       // Dirty Hack.
-      MachineInstr *Instr = *VSU->instr_begin();
+      MachineInstr *Instr = VSU->getRepresentativeInst();
       unsigned Latency = VInstrInfo::computeLatency(Instr, FstExit);
       // We do not need to wait the trivial operation finish before exiting the
       // state, because the first control slot of next state will only contains
@@ -634,16 +636,8 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
     buildSUnit(&*BI, State);
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
-  VSUnit *EntryRoot = State.getEntryRoot();
-  for (VSchedGraph::iterator I = ++State.begin(), E = State.end(); I != E; ++I){
-    VSUnit *A = *I;
-    // If the atom depend on nothing, make it depend on the entry node.
-    if (A->dep_empty()) {
-      unsigned Latency =
-        VInstrInfo::computeLatency(0, A->getRepresentativeInst());
-      A->addDep(getValDepEdge(EntryRoot, Latency));
-    }
-  }
+  for (VSchedGraph::iterator I = ++State.begin(), E = State.end(); I != E; ++I)
+    addValueDeps(*I, State);
 
   assert(!Terms.empty() && "Can not found any terminator!");
   // Create the exit node.
