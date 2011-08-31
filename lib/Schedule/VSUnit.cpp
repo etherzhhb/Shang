@@ -235,13 +235,12 @@ bool VSUnit::hasDatapath() const {
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
-  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I) {
-    MachineInstr *Instr = *I;
-
-    VIDesc VTID = *Instr;
-    OS << Instr->getDesc().getName() << '\n';
-    DEBUG(OS << *Instr << '\n');
-  }
+  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
+    if (MachineInstr *Instr = *I) {
+      VIDesc VTID = *Instr;
+      OS << Instr->getDesc().getName() << '\n';
+      DEBUG(OS << *Instr << '\n');
+    }
 
   OS << getFUId() << "\nAt slot: " << getDetailStep();
 }
