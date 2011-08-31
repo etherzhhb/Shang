@@ -448,8 +448,11 @@ void VPreRegAllocSched::addValueDeps(const MachineInstr *MI, VSUnit *A,
     // VSUnit.
     if (Dep == 0 || Dep == A) continue;
 
-    unsigned Latency = VInstrInfo::computeLatency(Dep->getRepresentativeInst(),
-                                                  MI);
+    MachineInstr *RepInst = Dep->getRepresentativeInst();
+    unsigned Latency = VInstrInfo::computeLatency(DepSrc, MI);
+    if (RepInst != DepSrc)
+      Latency += VInstrInfo::computeLatency(RepInst, DepSrc);
+
     A->addDep(getValDepEdge(Dep, Latency));
   }
 }
