@@ -46,7 +46,6 @@ struct MicroStateBuilder {
   VFInfo &VFI;
 
   SmallVector<VSUnit*, 8> SUnitsToEmit;
-  SmallVector<VSUnit*, 8> DeferredSUnits;
   
   std::vector<MachineInstr*> InstsToDel;
 
@@ -175,20 +174,8 @@ struct MicroStateBuilder {
   void emitSUnit(VSUnit *A) { SUnitsToEmit.push_back(A); }
   bool emitQueueEmpty() const { return SUnitsToEmit.empty(); }
 
-  void defereSUnit(VSUnit *A) { DeferredSUnits.push_back(A); }
-
   // Main state building function.
   MachineInstr *buildMicroState(unsigned Slot);
-
-  void emitDeferredInsts() {
-    // Emit the  deferred atoms before data path need it.
-    while (!DeferredSUnits.empty()) {
-      VSUnit *A = DeferredSUnits.pop_back_val();
-      for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
-          I != E; ++I)
-        MBB.insert(InsertPos, *I);
-    }
-  }
 
   void fuseInstr(MachineInstr &Inst, VSUnit *A);
 
@@ -304,7 +291,6 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
   // Try to force create the state control and data path instruction, and
   // insert the instructions between them.
   MachineInstrBuilder CtrlInst(&getStateCtrlAt(OpSlot(Slot, true)));
-  emitDeferredInsts();
   if (Slot < State.getLoopOpSlot())
     (void) getStateDatapathAt(OpSlot(Slot, false));
 
