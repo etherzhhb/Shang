@@ -176,7 +176,7 @@ struct MicroStateBuilder {
   // Main state building function.
   MachineInstr *buildMicroState(unsigned Slot);
 
-  void fuseInstr(MachineInstr &Inst, VSUnit *A);
+  void fuseInstr(MachineInstr &Inst, OpSlot SchedSlot, FuncUnitId FUId);
 
   MachineOperand getRegUseOperand(ucOperand MO, OpSlot ReadSlot) {
     // Else this is a use.
@@ -290,23 +290,45 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
   for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
        E = SUnitsToEmit.end(); I !=E; ++I) {
     VSUnit *A = *I;
-    for (VSUnit::instr_iterator II = A->instr_begin(), IE = A->instr_end();
-        II != IE; ++II)
-      fuseInstr(**II, A);
+    OpSlot Slot(A->getSlot(), !A->hasDatapath());
+
+    MachineInstr &RepInst = *A->getRepresentativeInst();
+    // Handle representative instruction of the VSUnit.
+    if (!RepInst.isPHI())
+      fuseInstr(RepInst, Slot, A->getFUId());
+
+    // And other trivially merged instructions.
+    for (VSUnit::instr_iterator II = A->instr_begin() + 1, IE = A->instr_end();
+          II != IE; ++II) {
+      MachineInstr &Inst = **II;
+      VIDesc VTID = Inst;
+
+      unsigned DetailStep = Slot.getDetailStep();
+      // The instructions in Exit Root are parallel.
+      if (State.getExitRoot() != A)
+        DetailStep += VInstrInfo::computeLatency(&RepInst, &Inst);
+
+      OpSlot S = OpSlot::detailStepCeil(DetailStep, VTID.hasDatapath());
+      // FIXME: Assert the instruction have trivial function unit.
+      fuseInstr(Inst, S, FuncUnitId());
+    }
   }
 
   return 0;
 }
 
-void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
+void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
+                                  FuncUnitId FUId) {
   VIDesc VTID = Inst;
   bool IsCtrl = !VTID.hasDatapath();
+  bool IsCtrlSlot = SchedSlot.isControl();
+  assert(IsCtrlSlot == IsCtrl && "Wrong slot type.");
   bool isCopyLike = VInstrInfo::isCopyLike(Inst.getOpcode());
 
   typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
   MachineOperand OpCMD = ucOperand::CreateOpcode(Inst.getOpcode(),
-                                                 A->getSlot(), A->getFUId());
+                                                 SchedSlot.getSlot(), FUId);
 
   // Create the default predicate operand, which means always execute.
   MachineOperand Pred = ucOperand::CreatePredicate();
@@ -322,11 +344,11 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
   unsigned NumOperands = Inst.getNumOperands();
   // FIXME: Use pointer operand.
-  OperandVector Ops(NumOperands + 1 + IsCtrl, OpCMD);
+  OperandVector Ops(NumOperands + 1 + IsCtrlSlot, OpCMD);
   Ops[0] = OpCMD;
-  if (IsCtrl) Ops[1] = Pred;
+  if (IsCtrlSlot) Ops[1] = Pred;
 
-  unsigned OpStart = IsCtrl ? 2 : 1;
+  unsigned OpStart = IsCtrlSlot ? 2 : 1;
 
   // Remove all operand of Instr.
   while (Inst.getNumOperands() != 0) {
@@ -337,15 +359,16 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
   }
 
   //bool isReadAtEmit = VTID.isReadAtEmit();
-  OpSlot DefSlot(A->getSlot(), IsCtrl);
-  OpSlot ReadSlot = DefSlot;
+  //OpSlot DefSlot(A->getSlot(), IsCtrl);
+  OpSlot ReadSlot = SchedSlot;
   //if (!isReadAtEmit) ReadSlot = EmitSlot.getNextSlot();
 
-  OpSlot CopySlot(A->getFinSlot(), true);
+  unsigned FinSlot = SchedSlot.getSlot() + VTID.getLatency();
+  OpSlot CopySlot(FinSlot, true);
   // We can not write the value to a register at the same moment we emit it.
   // Unless we read at emit.
   // FIXME: Introduce "Write at emit."
-  if (CopySlot < DefSlot)
+  if (CopySlot < SchedSlot)
     ++CopySlot;
   // Write to register operation need to wait one more slot if the result is
   // written at the moment (clock event) that the atom finish.
@@ -367,7 +390,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
-    if (MO.isDef() && DefSlot != CopySlot && !isCopyLike) {
+    if (MO.isDef() && SchedSlot != CopySlot && !isCopyLike) {
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
@@ -385,8 +408,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
       }
 
       // If the wire define and the copy wrap around?
-      if (getModuloSlot(DefSlot) > getModuloSlot(CopySlot))
-        WireNum = createPHI(WireNum, BitWidth, DefSlot.getSlot());
+      if (getModuloSlot(SchedSlot) > getModuloSlot(CopySlot))
+        WireNum = createPHI(WireNum, BitWidth, SchedSlot.getSlot());
 
       WireDef WDef = createWireDef(WireNum, MO, Pred, SchedSlot, CopySlot);
 
@@ -410,15 +433,14 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, VSUnit *A) {
 
   // Remember the predicate of the function unit enable signal.
   if (IsCtrl) {
-    FuncUnitId FUId = A->getFUId();
     // FIXME: Iterate over the live time of the FU and get the right predicate
     // operand with getRegUseOperand.
     // Remember the active slot.
     if (FUId.isBound())
-      VFI.rememberAllocatedFU(FUId, A->getSlot(), A->getFinSlot(), Ops[1]);
+      VFI.rememberAllocatedFU(FUId, SchedSlot.getSlot(), FinSlot, Ops[1]);
   }
 
-  MachineInstrBuilder Builder(&getMIAt(OpSlot(A->getSlot(), IsCtrl)));
+  MachineInstrBuilder Builder(&getMIAt(SchedSlot));
 
   for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
     Builder.addOperand(*I);
@@ -544,7 +566,6 @@ void VSchedGraph::emitSchedule() {
         // we need to issue after first iteration is done.
         unsigned PHISlot = A->getSlot() + getII();
         VFI->rememberPHISlot(Inst, PHISlot);
-        continue;
       }
 
       assert((!Inst->isCopy() || VIDesc(*Inst).canCopyBeFused())

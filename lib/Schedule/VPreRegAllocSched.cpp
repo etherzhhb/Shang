@@ -531,8 +531,20 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     return;
   }
 
-  VIDesc VTID = *MI;
+  switch (MI->getOpcode()) {
+  default: break;
+  case VTM::VOpBitSlice:
+    MachineInstr *SrcMI;
+    (void) SrcMI;
+    if (VSUnit *SrcSU = getDefSU(MI->getOperand(1), CurState, SrcMI)) {
+      CurState.mapSUnit(MI, SrcSU);
+      addValueDeps(MI, SrcSU, CurState);
+      return;
+    }
+    break;
+  }
 
+  VIDesc VTID = *MI;
   FuncUnitId Id = VTID.getPrebindFUId();
 
   // TODO: Remember the register that live out this MBB.
