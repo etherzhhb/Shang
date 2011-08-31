@@ -533,12 +533,14 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
                                      VSchedGraph &CurState) {
   MachineInstr *SrcMI;
   (void) SrcMI;
+  // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
     CurState.mapSUnit(MI, SrcSU);
     addValueDeps(MI, SrcSU, CurState);
     return true;
   }
 
+  // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
     if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
       CurState.mapSUnit(MI, SrcSU);
@@ -547,7 +549,10 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
     }
   }
 
-  return false;
+  // Merge it into the EntryRoot.
+  CurState.mapSUnit(MI, CurState.getEntryRoot());
+  addValueDeps(MI, CurState.getEntryRoot(), CurState);
+  return true;
 }
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
