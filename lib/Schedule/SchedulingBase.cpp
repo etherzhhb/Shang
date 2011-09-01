@@ -282,6 +282,16 @@ void SchedulingBase::schedulePassiveSUnits() {
   }
 }
 
+bool SchedulingBase::allNodesSchedued() const {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+       I != E; ++I) {
+    VSUnit *A = *I;
+    if (!A->isScheduled()) return false;
+  }
+
+  return true;
+}
+
 bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
   if (refreshFDepHD)
     buildFDepHD(true);

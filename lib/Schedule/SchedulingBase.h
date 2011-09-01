@@ -73,6 +73,7 @@ public:
   // scheduled
   bool scheduleCriticalPath(bool refreshFDepHD);
   void schedulePassiveSUnits();
+  bool allNodesSchedued() const;
 
   /// @name TimeFrame
   //{

@@ -409,6 +409,8 @@ bool ILPScheduler::scheduleState() {
   if (!scheduleCriticalPath(false))
     return false;
 
+  if (allNodesSchedued()) return true;
+
   NumStepVars = buildSVIdx();
 
   // Set up the variable indexes.
