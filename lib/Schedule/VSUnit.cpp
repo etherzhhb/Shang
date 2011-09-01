@@ -238,6 +238,16 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
   return latencies[at - instr_begin()];
 }
 
+unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
+  int Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+  if (SrcMI != getRepresentativeInst()) {
+    Latency += getLatencyFor(SrcMI);
+    assert(Latency >= 0 && "Unexpected negative latency!");
+  }
+
+  return Latency;
+}
+
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 

@@ -451,9 +451,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
         // Avoid back-edge and self-edge
         if (Dep == 0 || Dep->getIdx() >= A->getIdx()) continue;
 
-        MachineInstr *RepInst = Dep->getRepresentativeInst();
-        unsigned Latency = VInstrInfo::computeLatency(DepSrc, MI);
-        if (RepInst != DepSrc) Latency += Dep->getLatencyFor(DepSrc);
+        unsigned Latency = Dep->getLatencyTo(DepSrc, MI);
 
         unsigned &DepLatency = Edges[Dep];
         DepLatency = std::max(DepLatency, Latency);
@@ -548,18 +546,14 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   MachineInstr *SrcMI;
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
-    unsigned Latency = SrcSU->getLatencyFor(SrcMI)
-                       + VInstrInfo::computeLatency(SrcMI, MI);
-    CurState.mapSUnit(MI, SrcSU, Latency);
+    CurState.mapSUnit(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
     return true;
   }
 
   // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
     if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
-      unsigned Latency = SrcSU->getLatencyFor(SrcMI)
-                         + VInstrInfo::computeLatency(SrcMI, MI);
-      CurState.mapSUnit(MI, SrcSU, Latency);
+      CurState.mapSUnit(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
       return true;
     }
   }

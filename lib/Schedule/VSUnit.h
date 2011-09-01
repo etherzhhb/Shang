@@ -381,6 +381,9 @@ public:
     return latencies[Idx];
   }
 
+  // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
+  unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
+
   typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;
 
   instr_iterator instr_begin() { return Instrs.begin(); }
