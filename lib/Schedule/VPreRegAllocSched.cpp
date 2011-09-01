@@ -440,6 +440,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 //===----------------------------------------------------------------------===//
 
 void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
+  std::map<VSUnit*, unsigned> Edges;
+  // Collect the dependence information.
   for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
        I != E; ++I)
     if (MachineInstr *MI = *I) {
@@ -453,9 +455,15 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
         unsigned Latency = VInstrInfo::computeLatency(DepSrc, MI);
         if (RepInst != DepSrc) Latency += Dep->getLatencyFor(DepSrc);
 
-        A->addDep(getValDepEdge(Dep, Latency));
+        unsigned &DepLatency = Edges[Dep];
+        DepLatency = std::max(DepLatency, Latency);
       }
     }
+
+  // Build the dependence edge.
+  for (std::map<VSUnit*, unsigned>::iterator I = Edges.begin(), E = Edges.end();
+       I != E; ++I)
+    A->addDep(getValDepEdge(I->first, I->second));
 
   // If the atom depend on nothing, make it depend on the entry node.
   if (A->dep_empty()) {
