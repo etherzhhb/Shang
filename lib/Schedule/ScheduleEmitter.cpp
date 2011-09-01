@@ -296,14 +296,15 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       fuseInstr(*RepInst, SchedSlot, A->getFUId());
 
     // And other trivially merged instructions.
-    for (VSUnit::instr_iterator II = A->instr_begin() + 1, IE = A->instr_end();
-          II != IE; ++II) {
+    const VSUnit::instr_iterator InstrBase = A->instr_begin();
+    for (VSUnit::instr_iterator II = InstrBase + 1, IE = A->instr_end();
+         II != IE; ++II) {
       MachineInstr &Inst = **II;
       VIDesc VTID = Inst;
 
       // The instructions in Exit Root are parallel.
       unsigned DetailStep = SchedSlot.getDetailStep();
-      DetailStep += A->getLatencyAt(II - A->instr_begin());
+      DetailStep += A->getLatencyAt(II - InstrBase);
 
       OpSlot S = OpSlot::detailStepCeil(DetailStep, VTID.hasDatapath());
       // FIXME: Assert the instruction have trivial function unit.

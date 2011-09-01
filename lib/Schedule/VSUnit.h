@@ -244,7 +244,7 @@ class VSUnit {
   // TODO: typedef SlotType
   OpSlot SchedSlot;
   unsigned short InstIdx;
-  unsigned FUNum;
+  unsigned short FUNum;
 
   /// First of all, we schedule all atom base on dependence
   SmallVector<VDEdge*, 4> Deps;
@@ -283,6 +283,12 @@ class VSUnit {
     Instrs.push_back(I);
     latencies.push_back(Latency);
   }
+
+  VSUnit *updateIdx(unsigned short Idx) {
+    InstIdx = Idx;
+    return this;
+  }
+
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
@@ -547,7 +553,9 @@ public:
     assert(inserted && "Mapping from I already exist!");
   }
 
-  void remapInstr();
+  // Merge Src into Dst with a given latency.
+  void mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency);
+  void removeDeadSU();
 
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
 

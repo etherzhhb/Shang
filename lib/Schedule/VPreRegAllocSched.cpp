@@ -446,7 +446,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
        I != E; ++I)
     if (MachineInstr *MI = *I) {
       for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-        MachineInstr *DepSrc;
+        MachineInstr *DepSrc = 0;
         VSUnit *Dep = getDefSU(MI->getOperand(i), CurState, DepSrc);
         // Avoid back-edge and self-edge
         if (Dep == 0 || Dep->getIdx() >= A->getIdx()) continue;
@@ -543,7 +543,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
 bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
                                      VSchedGraph &CurState) {
-  MachineInstr *SrcMI;
+  MachineInstr *SrcMI = 0;
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
     CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
@@ -573,17 +573,15 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
   switch (MI->getOpcode()) {
   default: break;
+  case VTM::VOpBitSlice:
+  case VTM::VOpBitRepeat:
   case VTM::VOpMove_ra:
   case VTM::VOpMove_ri:
   case VTM::VOpMove_rm:
   case VTM::VOpMove_rs:
   case VTM::VOpMove_rw:
-
-  case VTM::VOpBitSlice:
-  case VTM::VOpBitRepeat:
     if (mergeUnaryOp(MI, 1, CurState))
       return;
-
     break;
   }
 
