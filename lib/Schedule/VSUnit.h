@@ -373,6 +373,10 @@ public:
     return Instrs.front();
   }
 
+  bool isRepresentativeInst(MachineInstr *MI) const {
+    return MI == getRepresentativeInst();
+  }
+
   size_t num_instrs() const { return Instrs.size(); }
 
   // Get the latency from RepresentativeInst to MI.
@@ -535,13 +539,15 @@ public:
     std::for_each(SUnits.begin(), SUnits.end(), deleter<VSUnit>);
   }
 
-  void mapSUnit(MachineInstr *MI, VSUnit *SU, int8_t latency) {
+  void mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
     SU->addInstr(MI, latency);
     SUnitMapType::iterator where;
     bool inserted;
     tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));
     assert(inserted && "Mapping from I already exist!");
   }
+
+  void remapInstr();
 
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
 

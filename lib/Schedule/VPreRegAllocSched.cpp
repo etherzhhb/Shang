@@ -546,20 +546,20 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   MachineInstr *SrcMI;
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
-    CurState.mapSUnit(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
+    CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
     return true;
   }
 
   // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
     if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
-      CurState.mapSUnit(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
+      CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
       return true;
     }
   }
 
   // Merge it into the EntryRoot.
-  CurState.mapSUnit(MI, CurState.getEntryRoot(),
+  CurState.mapMI2SU(MI, CurState.getEntryRoot(),
                     VInstrInfo::computeLatency(0, MI));
   return true;
 }
@@ -602,7 +602,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   // Add others terminator to the exit node.
   while (Terms.size() != 1) {
     MachineInstr *Term = Terms.pop_back_val();
-    CurState.mapSUnit(Term, Exit, 0);
+    CurState.mapMI2SU(Term, Exit, 0);
   }
   Terms.clear();
 

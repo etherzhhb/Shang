@@ -60,7 +60,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   ++SUCount;
 
   SUnits.push_back(SU);
-  mapSUnit(I, SU, 0);
+  mapMI2SU(I, SU, 0);
   return SU;
 }
 
