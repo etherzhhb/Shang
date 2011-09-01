@@ -158,6 +158,10 @@ void ILPScheduler::buildOneActiveStepConstraints(lprec *lp) {
     // And the total step variable count of U.
     unsigned NumSVs = getTimeFrame(U);
 
+#ifdef LPSOLVE_SOS
+    REAL ASAP = getASAPStep(U);
+#endif
+
     // Resize the row and corresponding indexes
     Row.reserve(NumSVs);
     Row.set_size(NumSVs);
@@ -165,13 +169,24 @@ void ILPScheduler::buildOneActiveStepConstraints(lprec *lp) {
     ColIdx.set_size(NumSVs);
 
     for (unsigned i = 0; i < NumSVs; ++i) {
+#ifdef LPSOLVE_SOS
+      Row[i] = ASAP + i;
+#else
       Row[i] = 1.0;
+#endif
       // The column index is started from 1 in lp_slove.
       ColIdx[i] = FstIdx + i + 1;
     }
 
+#ifdef LPSOLVE_SOS
+    std::string SOSName = "sv" + utostr_32(U->getIdx());
+    int SOSIdx = add_SOS(lp, const_cast<char*>(SOSName.c_str()), SOS1, 1,
+                         ColIdx.size(), ColIdx.data(), Row.data());
+    if (!SOSIdx)
+#else
     // Add the constraints to the model.
     if (!add_constraintex(lp, NumSVs, Row.data(), ColIdx.data(), EQ, 1.0))
+#endif
       report_fatal_error("ILPScheduler: Can NOT add step variable constraints"
                          " of schedule unit " + utostr_32(U->getIdx()));
   }
@@ -437,6 +452,9 @@ bool ILPScheduler::scheduleState() {
   DEBUG(set_verbose(lp, FULL));
 
   set_presolve(lp, PRESOLVE_ROWS | PRESOLVE_COLS | PRESOLVE_LINDEP
+#ifdef LPSOLVE_SOS
+                   | PRESOLVE_SOS
+#endif
                    | PRESOLVE_IMPLIEDFREE | PRESOLVE_REDUCEGCD
                    | PRESOLVE_PROBEFIX | PRESOLVE_PROBEREDUCE
                    | PRESOLVE_ROWDOMINATE /*| PRESOLVE_COLDOMINATE lpsolve bug*/
