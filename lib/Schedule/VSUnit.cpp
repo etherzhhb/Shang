@@ -64,6 +64,37 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   return SU;
 }
 
+void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
+  assert(!Src->isEntry() && "Cannot replace entry!");
+
+  const VSUnit::instr_iterator InstrBase = Src->instr_begin();
+  for (VSUnit::instr_iterator I = InstrBase, E = Src->instr_end();
+       I != E; ++I) {
+    MachineInstr *MI = *I;
+    Dst->addInstr(MI, Latency + Src->getLatencyAt(I - InstrBase));
+    InstToSUnits[MI] = Dst;
+  }
+
+  // Delete source and mark it as dead.
+ iterator I = std::find(begin(), end(), Src);
+ delete *I;
+ *I = 0;
+}
+
+void VSchedGraph::removeDeadSU() {
+  unsigned Idx = 0;
+  for (unsigned i = 0, e = SUnits.size(); i != e; ++i) {
+    if (SUnits[i]) {
+      // Also update InstIdx.
+      SUnits[Idx] = SUnits[i]->updateIdx(Idx);
+      ++Idx;
+    }
+  }
+
+  SUnits.resize(Idx);
+  SUCount = Idx;
+}
+
 void VSchedGraph::resetSchedule() {
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *U = *I;

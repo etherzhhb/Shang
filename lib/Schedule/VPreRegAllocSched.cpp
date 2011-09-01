@@ -149,7 +149,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return CurState.lookupSUnit(DepSrc);
   }
 
-
   void clear();
 
   void buildMemDepEdges(VSchedGraph &CurState);
@@ -161,6 +160,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
   bool mergeUnaryOp(MachineInstr *MI, unsigned OpIdx, VSchedGraph &CurState);
+
+  bool mergeBitCat(MachineInstr *MI, VSchedGraph &CurState);
+  bool canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU) const;
 
   /// @name FunctionPass interface
   //{
@@ -564,6 +566,70 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   return true;
 }
 
+bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{
+  if (!SrcSU->isRepresentativeInst(SrcMI)) return false;
+
+  if (SrcMI->getOpcode() != VTM::VOpBitCat) return false;
+
+  // Becareful of such graph:
+  //     bitcat
+  //      |  \
+  //      |   Op
+  //      |  /
+  //     bitcat
+  //
+  // In this case, the two bitcat cannot merge.
+  if (!MRI->hasOneNonDBGUse(SrcMI->getOperand(0).getReg())) return false;
+
+  return true;
+}
+
+bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
+  MachineInstr *LHSMI = 0, *RHSMI = 0;
+  VSUnit *LHSSU = getDefSU(MI->getOperand(1), CurState, LHSMI),
+         *RHSSU = getDefSU(MI->getOperand(2), CurState, RHSMI);
+
+  // Sources are merged?
+  if (LHSSU == RHSSU) {
+    // Concatting two symbol?
+    if (LHSSU == 0) LHSSU = RHSSU = CurState.getEntryRoot();
+
+    unsigned Latency = std::max(LHSSU->getLatencyTo(LHSMI, MI),
+                                RHSSU->getLatencyTo(RHSMI, MI));
+    CurState.mapMI2SU(MI, LHSSU, Latency);
+    return true;
+  }
+
+  // Only have 1 valid source?
+  if (LHSSU == 0) {
+    std::swap(LHSSU, RHSSU);
+    std::swap(LHSMI, RHSMI);
+  }
+
+  if (RHSSU == 0) {
+    CurState.mapMI2SU(MI, LHSSU, LHSSU->getLatencyTo(LHSMI, MI));
+    return true;
+  }
+
+  bool LHSMerged = false;
+  if (canMergeBitCat(LHSMI, LHSSU)) {
+    CurState.mapMI2SU(MI, LHSSU, LHSSU->getLatencyTo(LHSMI, MI));
+    LHSMerged = true;
+  }
+
+  if (canMergeBitCat(RHSMI, RHSSU)) {
+    if (!LHSMerged) {
+      CurState.mapMI2SU(MI, RHSSU, RHSSU->getLatencyTo(RHSMI, MI));
+      return true;
+    }
+
+    CurState.mergeSU(RHSSU, LHSSU, 0);
+    return true;
+  }
+
+  return false;
+}
+
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   // If the current instruction was eaten by as terminator?
   if (CurState.eatTerminator(MI)) {
@@ -581,6 +647,10 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   case VTM::VOpMove_rs:
   case VTM::VOpMove_rw:
     if (mergeUnaryOp(MI, 1, CurState))
+      return;
+    break;
+  case VTM::VOpBitCat:
+    if (mergeBitCat(MI, CurState))
       return;
     break;
   }
@@ -637,6 +707,8 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   for (MachineBasicBlock::iterator BI = State->begin(), BE = State->end();
       BI != BE; ++BI)
     buildSUnit(&*BI, State);
+
+  State.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
   for (VSchedGraph::iterator I = ++State.begin(), E = State.end(); I != E; ++I)
