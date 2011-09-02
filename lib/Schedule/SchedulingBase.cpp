@@ -30,11 +30,6 @@
 using namespace llvm;
 using namespace llvm;
 
-static cl::opt<bool>
-NoFDSchedule("disable-fd-schedule",
-             cl::desc("vbe - Do not preform force-directed schedule"),
-             cl::Hidden, cl::init(false));
-
 //===----------------------------------------------------------------------===//
 void SchedulingBase::buildTimeFrame() {
   VSUnit *EntryRoot = State.getEntryRoot();
