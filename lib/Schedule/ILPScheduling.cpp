@@ -28,12 +28,18 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vbe-ilps"
 #include "llvm/Support/Debug.h"
 
 #include "lp_solve/lp_lib.h"
 
 using namespace llvm;
+static cl::opt<bool>
+StopAtFirst("ilp-schedule-stop-at-first",
+            cl::desc("vtm - Find the feasible but not optimal schedule"
+                     " with ilp scheduler"),
+            cl::Hidden, cl::init(false));
 
 // Helper function
 static const char *transSolveResult(int result) {
@@ -467,9 +473,11 @@ bool ILPScheduler::scheduleState() {
   TotalRows = get_Nrows(lp);
   DEBUG(dbgs() << "The model has " << TotalVariables
                << "x" << TotalRows << '\n');
-  // TODO: Allow set the timeout with constraint.
 
+  // TODO: Allow set the timeout with constraint.
   set_timeout(lp, 300);
+
+  if (StopAtFirst) set_break_at_first(lp, TRUE);
 
   DEBUG(dbgs() << "Timeout is set to " << get_timeout(lp) << "secs.\n");
 
