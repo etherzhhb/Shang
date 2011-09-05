@@ -592,7 +592,10 @@ bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
   // Sources are merged?
   if (LHSSU == RHSSU) {
     // Concatting two symbol?
-    if (LHSSU == 0) LHSSU = RHSSU = CurState.getEntryRoot();
+    if (LHSSU == 0) {
+      LHSSU = RHSSU = CurState.getEntryRoot();
+      LHSMI = RHSMI = 0;
+    }
 
     unsigned Latency = std::max(LHSSU->getLatencyTo(LHSMI, MI),
                                 RHSSU->getLatencyTo(RHSMI, MI));
@@ -687,8 +690,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
       // exit itself.
     if (VSU->getNumUses() == 0 && !VSU->isEntry() && VSU != Exit) {
       // Dirty Hack.
-      MachineInstr *Instr = VSU->getRepresentativeInst();
-      unsigned Latency = VInstrInfo::computeLatency(Instr, FstExit);
+      unsigned Latency = VSU->getMaxLatencyTo(FstExit);
       // We do not need to wait the trivial operation finish before exiting the
       // state, because the first control slot of next state will only contains
       // PHI copies, and the PHIElimination Hook will take care of the data

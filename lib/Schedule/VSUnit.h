@@ -393,6 +393,15 @@ public:
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
   unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
+  
+  // Get the maximum latency from RepresentativeInst to DstMI.
+  unsigned getMaxLatencyTo(MachineInstr *DstMI) const {
+    unsigned latency = 0;
+    for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
+      latency = std::max(getLatencyTo(*I, DstMI), latency);
+    
+    return latency;
+  }
 
   typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;
 
