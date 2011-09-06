@@ -118,7 +118,7 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
     if (Ops[i].getValueType() == MVT::Other) continue;
 
     Annotator.setBitWidth(VTargetLowering::computeSizeInBits(Ops[i]),
-                    i + NumDefs); // Skip the chains.
+                          i + NumDefs); // Skip the chains.
   }
 
   // FIXME: Build the bit width information.

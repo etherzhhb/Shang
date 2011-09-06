@@ -111,10 +111,9 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
     // We don't have MUL_LOHI
     setOperationAction(ISD::MULHS, CurVT, Expand);
-    setOperationAction(ISD::MULHU, CurVT, Expand);/*
-    setOperationAction(ISD::SMUL_LOHI, CurVT, Expand);
-    setOperationAction(ISD::UMUL_LOHI, CurVT, Expand);*/
-
+    setOperationAction(ISD::MULHU, CurVT, Expand);
+    //setOperationAction(ISD::SMUL_LOHI, CurVT, Expand);
+    //setOperationAction(ISD::UMUL_LOHI, CurVT, Expand);
     //if (MVT(CurVT).getSizeInBits() > MaxMultBits) {
     //  // Expand the  multiply;
     //  setOperationAction(ISD::MUL, CurVT, Expand);

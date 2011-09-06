@@ -55,9 +55,9 @@ class RTLCodegen : public MachineFunctionPass {
   vlang_raw_ostream Out;
 
   MachineFunction *MF;
+  TargetData *TD;
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
-  BitLevelInfo *BLI;
   VASTModule *VM;
   Mangler *Mang;
 
@@ -362,7 +362,6 @@ public:
   bool runOnMachineFunction(MachineFunction &MF);
 
   void releaseMemory() { clear(); }
-  void getAnalysisUsage(AnalysisUsage &AU) const;
   virtual void print(raw_ostream &O, const Module *M) const;
   //}
 };
@@ -379,7 +378,6 @@ Pass *llvm::createRTLCodegenPass(raw_ostream &O) {
 INITIALIZE_PASS_BEGIN(RTLCodegen, "vtm-rtl-info",
                       "Build RTL Verilog module for synthesised function.",
                       false, true)
-INITIALIZE_PASS_DEPENDENCY(BitLevelInfo);
 INITIALIZE_PASS_END(RTLCodegen, "vtm-rtl-info",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
@@ -403,7 +401,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
-  BLI = &getAnalysis<BitLevelInfo>();
 
   DEBUG(
     Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
@@ -486,18 +483,11 @@ void RTLCodegen::clear() {
   VM = 0;
 }
 
-void RTLCodegen::getAnalysisUsage(AnalysisUsage &AU) const {
-  MachineFunctionPass::getAnalysisUsage(AU);
-  AU.addRequired<BitLevelInfo>();
-  AU.setPreservesAll();
-}
-
 void RTLCodegen::print(raw_ostream &O, const Module *M) const {
 
 }
 
 void RTLCodegen::emitFunctionSignature(int FNNum) {
-  const TargetData *TD = MF->getTarget().getTargetData();
   raw_ostream &S = VM->getDataPathBuffer();
 
   const Function *F;
