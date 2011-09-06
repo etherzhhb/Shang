@@ -648,7 +648,20 @@ void RTLCodegen::emitAllocatedFUs() {
       continue;
     }
 
+    unsigned FNNum = I->second;
+    std::string Ports[5] = {
+      VM->getPortName(VASTModule::Clk),
+      VM->getPortName(VASTModule::RST),
+      getSubModulePortName(FNNum, "start"),
+      getSubModulePortName(FNNum, "fin"),
+      getSubModulePortName(FNNum, "return_value")
+    };
+    // Add the finsh signal to the signal list.
+    VM->addRegister(Ports[2], 1);
+
     // Else ask the constraint about how to instantiates this submodule.
+    S << "// External module: " << I->getKey() << '\n';
+    S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
   }
 
   // Write the memory bus mux.
@@ -1059,6 +1072,18 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   }
 
   // Else ask the constraint about how to handle this call.
+  SmallVector<std::string, 8> InPorts;
+  std::string s;
+  raw_string_ostream SS(s);
+  for (unsigned i = 2, e = OpInternalCall.getNumOperands(); i != e; ++i) {
+    OpInternalCall.getOperand(i).print(SS);
+    SS.flush();
+    InPorts.push_back(SS.str());
+    s.clear();
+  }
+
+  std::string Name = CalleeName;
+  OS << VFUs::startModule(Name, FInfo->getCalleeFNNum(CalleeName), InPorts);
 }
 
 void RTLCodegen::emitOpRet(ucOp &OpArg) {

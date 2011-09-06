@@ -276,9 +276,8 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   Ops.push_back(Chain);
 
   VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
-  SDValue CallNode;
-  unsigned Id;
 
+  unsigned Id;
   if (GlobalAddressSDNode *CalleeNode = dyn_cast<GlobalAddressSDNode>(Callee)) {
     const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
     assert(OutVals.size() == CalleeFN->arg_size()
@@ -289,16 +288,22 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
       = DAG.getTargetExternalSymbol(CalleeFN->getValueName()->getKeyData(),
                                     MVT::i64, Id);
     Ops.push_back(CalleeFNName);
-
-    for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
-      Ops.push_back(OutVals[I]);
-
-    // The call node return a i1 value as token to keep the dependence between
-    // the call and the follow up extract value.
-    CallNode = DAG.getNode(VTMISD::InternalCall, dl,
-                           DAG.getVTList(MVT::i1, MVT::Other),
-                           Ops.data(), Ops.size());
+  } else {
+    ExternalSymbolSDNode *CalleeName = cast<ExternalSymbolSDNode>(Callee);
+    Id = VFI->getOrCreateCalleeFN(CalleeName->getSymbol());
+    Ops.push_back(DAG.getTargetExternalSymbol(CalleeName->getSymbol(),
+                                              MVT::i64, Id));
   }
+
+  // Push others arguments.
+  for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
+    Ops.push_back(OutVals[I]);
+
+  // The call node return a i1 value as token to keep the dependence between
+  // the call and the follow up extract value.
+  SDValue CallNode = DAG.getNode(VTMISD::InternalCall, dl,
+                                 DAG.getVTList(MVT::i1, MVT::Other),
+                                 Ops.data(), Ops.size());
 
   // Read the return value from return port.
   assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");

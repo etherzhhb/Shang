@@ -60,7 +60,7 @@ namespace llvm {
 //===----------------------------------------------------------------------===//
 // Helper functions for reading function unit table from script.
 template<class PropType>
-static PropType getFUProperty(luabind::object &FUTable,
+static PropType getProperty(luabind::object &FUTable,
                               const std::string &PropName) {
   //luabind::object FUTable =
   //  Script->getRawObject("FU" + std::string(FUType::getTypeName()));
@@ -77,27 +77,27 @@ static PropType getFUProperty(luabind::object &FUTable,
 
 VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable)
   : ResourceType(type),
-    Latency(getFUProperty<unsigned>(FUTable, "Latency")),
-    StartInt(getFUProperty<unsigned>(FUTable, "StartInterval")),
-    TotalRes(getFUProperty<unsigned>(FUTable, "TotalNumber")),
-    MaxBitWidth(getFUProperty<unsigned>(FUTable, "OperandWidth")){}
+    Latency(getProperty<unsigned>(FUTable, "Latency")),
+    StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
+    TotalRes(getProperty<unsigned>(FUTable, "TotalNumber")),
+    MaxBitWidth(getProperty<unsigned>(FUTable, "OperandWidth")){}
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)
   : VFUDesc(VFUs::MemoryBus,
-            getFUProperty<unsigned>(FUTable, "Latency"),
-            getFUProperty<unsigned>(FUTable, "StartInterval"),
-            getFUProperty<unsigned>(FUTable, "TotalNumber"),
-            getFUProperty<unsigned>(FUTable, "DataWidth")),
-    AddrWidth(getFUProperty<unsigned>(FUTable, "AddressWidth")) {}
+            getProperty<unsigned>(FUTable, "Latency"),
+            getProperty<unsigned>(FUTable, "StartInterval"),
+            getProperty<unsigned>(FUTable, "TotalNumber"),
+            getProperty<unsigned>(FUTable, "DataWidth")),
+    AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")) {}
 
 
 VFUBRam::VFUBRam(luabind::object FUTable)
   : VFUDesc(VFUs::BRam,
-            getFUProperty<unsigned>(FUTable, "Latency"),
-            getFUProperty<unsigned>(FUTable, "StartInterval"),
-            getFUProperty<unsigned>(FUTable, "TotalNumber"),
-            getFUProperty<unsigned>(FUTable, "DataWidth")),
-  Template(getFUProperty<std::string>(FUTable, "Template")) {}
+            getProperty<unsigned>(FUTable, "Latency"),
+            getProperty<unsigned>(FUTable, "StartInterval"),
+            getProperty<unsigned>(FUTable, "TotalNumber"),
+            getProperty<unsigned>(FUTable, "DataWidth")),
+  Template(getProperty<std::string>(FUTable, "Template")) {}
 
 
 // Dirty Hack: anchor from SynSettings.h
@@ -183,4 +183,76 @@ std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num,
   return scriptEngin().getValueStr(ResultName);
 }
 
+std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum,
+                                     ArrayRef<std::string> Ports) {
+  std::string Script;
+  raw_string_ostream ScriptBuilder(Script);
 
+  luabind::object ModTemplate =
+    scriptEngin().getValue<luabind::object>("FUs")["Modules"][ModName];
+
+  std::string ResultName = ModName + utostr_32(ModNum) + "_inst";
+  // FIXME: Use LUA api directly?
+  // Call the preprocess function.
+  ScriptBuilder <<
+    /*"local " <<*/ ResultName << ", message = require \"luapp\" . preprocess {"
+  // The inpute template.
+                << "input=[=["
+                << getProperty<std::string>(ModTemplate, "InstTmplt") <<"]=],"
+  // And the look up.
+                << "lookup={ num=" << ModNum << ", clk='" << Ports[0]
+                << "', rst = '" <<  Ports[1] << "', en = '" <<  Ports[2]
+                << "', fin = '" <<  Ports[3];
+  // The output ports.
+  for (unsigned i = 4, e = Ports.size(); i < e; ++i)
+    ScriptBuilder << "', out" << (i - 4) << " = '" <<  Ports[i];
+
+  // End the look up and the function call.
+  ScriptBuilder << "'}}\n";
+  DEBUG(ScriptBuilder << "print(" << ResultName << ")\n");
+  DEBUG(ScriptBuilder << "print(message)\n");
+  ScriptBuilder.flush();
+  DEBUG(dbgs() << "Going to execute:\n" << Script);
+
+  SMDiagnostic Err;
+  if (!scriptEngin().runScriptStr(Script, Err))
+    report_fatal_error("Block Ram code generation:" + Err.getMessage());
+
+  return scriptEngin().getValueStr(ResultName);
+}
+
+std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
+                              ArrayRef<std::string> InPorts) {
+  std::string Script;
+  raw_string_ostream ScriptBuilder(Script);
+
+  luabind::object ModTemplate =
+    scriptEngin().getValue<luabind::object>("FUs")["Modules"][ModName];
+
+  std::string ResultName = ModName + utostr_32(ModNum) + "_start";
+  // FIXME: Use LUA api directly?
+  // Call the preprocess function.
+  ScriptBuilder <<
+    /*"local " <<*/ ResultName << ", message = require \"luapp\" . preprocess {"
+  // The inpute template.
+                << "input=[=["
+                << getProperty<std::string>(ModTemplate, "StartTmplt") <<"]=],"
+  // And the look up.
+                << "lookup={ num=" << ModNum;
+  // The input ports.
+  for (unsigned i = 0, e = InPorts.size(); i < e; ++i)
+    ScriptBuilder << ", in" << i << " = '" <<  InPorts[i] << '\'';
+
+  // End the look up and the function call.
+  ScriptBuilder << "}}\n";
+  DEBUG(ScriptBuilder << "print(" << ResultName << ")\n");
+  DEBUG(ScriptBuilder << "print(message)\n");
+  ScriptBuilder.flush();
+  DEBUG(dbgs() << "Going to execute:\n" << Script);
+
+  SMDiagnostic Err;
+  if (!scriptEngin().runScriptStr(Script, Err))
+    report_fatal_error("Block Ram code generation:" + Err.getMessage());
+
+  return scriptEngin().getValueStr(ResultName);
+}

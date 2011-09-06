@@ -14,6 +14,7 @@
 #ifndef VTM_FUNCTION_UNIT_H
 #define VTM_FUNCTION_UNIT_H
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
@@ -59,6 +60,12 @@ namespace VFUs {
 
   extern const char *VFUNames[];
   const TargetRegisterClass *getRepRegisterClass(enum FUTypes T);
+
+  // Ports layout: Clk, Rst, En, Fin, ouput0, output1 ...
+  std::string instantiatesModule(const std::string &ModName, unsigned ModNum,
+                                 ArrayRef<std::string> Ports);
+  std::string startModule(const std::string &ModName, unsigned ModNum,
+                          ArrayRef<std::string> InPorts);
 }
 
 class FuncUnitId {
