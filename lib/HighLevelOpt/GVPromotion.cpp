@@ -82,7 +82,7 @@ namespace {
 
     // Promote functions that directly use Global Variables into functions that 
     //use pointers of GVs as arguments.
-    CallGraphNode *PromoteReturn(CallGraphNode *CGN);
+    bool PromoteReturn(CallGraphNode *CGN);
 
     // Clone the old function to the new function.
     Function *cloneFunction(Function *F);
@@ -122,7 +122,7 @@ bool GVPromotion::runOnSCC(CallGraphSCC &SCC) {
     CallGraphNode *CGN = *I;
     Function *F = CGN->getFunction();
     if (HWInfo->isHW(F)) {
-      if (CallGraphNode *NewNode = PromoteReturn(*I)) 
+      if (PromoteReturn(*I)) 
         PromotionChanged = true;
     }
   }
@@ -130,11 +130,10 @@ bool GVPromotion::runOnSCC(CallGraphSCC &SCC) {
   return PromotionChanged;
 }
 
-CallGraphNode *GVPromotion::PromoteReturn(CallGraphNode *CGN) {
-  CallGraph &CG = getAnalysis<CallGraph>();
+bool GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   Function *F = CGN->getFunction();
   if (!F || F->isDeclaration())
-    return 0;
+    return false;
 
   DEBUG(dbgs() << "GVPromotion: Looking at function " 
     << F->getName() << "\n");
@@ -144,7 +143,7 @@ CallGraphNode *GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   SmallVector<Instruction*, 16> Inst_Promo;
   getInstWithGV(F, Inst_Promo);
   if (Inst_Promo.empty())
-    return 0;
+    return false;
   
   // When the function has instructions needed to promote, use a map to store 
   // relationship of newly generated arguments and GVs.
@@ -160,7 +159,7 @@ CallGraphNode *GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   // Update all call sites to use new function and update the callgraph.
   CallGraphNode *NF_CGN = updateAllCallSites(F, NF, CGN, GVMapArg);
 
-  return NF_CGN;
+  return true;
 
 }
 
