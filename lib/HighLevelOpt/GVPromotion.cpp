@@ -88,7 +88,7 @@ namespace {
     Function *cloneFunction(Function *F);
 
     // Update all callsites that call F to use NF and reflash the CallGraph.
-    CallGraphNode *updateAllCallSites(Function *F, Function *NF,
+    bool updateAllCallSites(Function *F, Function *NF,
                                       CallGraphNode *CGN,
                                       std::map<GlobalVariable*, Argument*> &GVMapArg);
 
@@ -157,9 +157,10 @@ bool GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   Function *NF = cloneFunction(F);
 
   // Update all call sites to use new function and update the callgraph.
-  CallGraphNode *NF_CGN = updateAllCallSites(F, NF, CGN, GVMapArg);
-
-  return true;
+  if (updateAllCallSites(F, NF, CGN, GVMapArg))
+    return true;
+  else
+    return false;
 
 }
 
@@ -222,7 +223,7 @@ Function *GVPromotion::cloneFunction(Function *F) {
   return NF;
 }
 
-CallGraphNode *GVPromotion::updateAllCallSites(Function *F, Function *NF, 
+bool GVPromotion::updateAllCallSites(Function *F, Function *NF, 
                                                CallGraphNode *CGN,
                                                std::map<GlobalVariable*, Argument*> &GVMapArg) {
   CallGraph &CG = getAnalysis<CallGraph>();
@@ -322,7 +323,7 @@ CallGraphNode *GVPromotion::updateAllCallSites(Function *F, Function *NF,
 
   // Update the callgraph.
   F->eraseFromParent();
-  return NF_CGN;    
+  return true;    
 
 }
 
