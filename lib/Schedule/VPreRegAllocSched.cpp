@@ -650,7 +650,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
       return;
     break;
   case VTM::VOpReadReturn:
-    if (mergeUnaryOp(MI, 3, CurState))
+    if (mergeUnaryOp(MI, 2, CurState))
       return;
     break;
   case VTM::VOpBitCat:

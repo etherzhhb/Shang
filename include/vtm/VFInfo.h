@@ -68,9 +68,6 @@ class VFInfo : public MachineFunctionInfo {
     }
   };
 
-  // Mapping Function unit number to callee function name.
-  SmallVector<const Function*, 8> UsedFNs;
-
   typedef std::map<FUActiveSlot, MachineOperand> FUActiveSlotMapTy;
   FUActiveSlotMapTy ActiveSlotMap;
   // FIXME: Consider pipelined loop.
@@ -101,8 +98,11 @@ private:
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
   BRamMapTy BRams;
 
-  StringPool SymbolPool;
-  std::set<PooledStringPtr> Symbols;
+
+  // Mapping Function unit number to callee function name.
+  typedef StringMap<unsigned> FNMapTy;
+  typedef StringMapEntry<unsigned> FNEntryTy;
+  FNMapTy UsedFNs;
   const SynSettings *Info;
   // Rtl module.
   VASTModule Mod;
@@ -144,20 +144,30 @@ public:
     (void) success;
   }
 
-  unsigned getOrCreateCalleeFN(const Function *FN) {
-    typedef SmallVectorImpl<const Function*>::const_iterator it;
-    it at = std::find(UsedFNs.begin(), UsedFNs.end(), FN);
-    if (at != UsedFNs.end()) return at - UsedFNs.begin();
 
-    unsigned CalleeFNNum = UsedFNs.size();
-    UsedFNs.push_back(FN);
+  typedef FNMapTy::const_iterator const_fn_iterator;
+  const_fn_iterator fn_begin() const { return UsedFNs.begin(); }
+  const_fn_iterator fn_end() const { return UsedFNs.end(); }
+
+  unsigned getOrCreateCalleeFN(StringRef FNName) {
+    FNMapTy::iterator at = UsedFNs.find(FNName);
+    if (at != UsedFNs.end()) return at->second;
+
+    unsigned CalleeFNNum = UsedFNs.size() + 1;
+    FNEntryTy *FN = FNEntryTy::Create(FNName.begin(), FNName.end());
+    FN->second = CalleeFNNum;
+    UsedFNs.insert(FN);
     return CalleeFNNum;
   }
 
-  const Function *getCalleeFN(unsigned FNNum) const {
-    assert(FNNum < UsedFNs.size() && "Invalid FNNum!");
-    return UsedFNs[FNNum];
+  unsigned getCalleeFNNum(StringRef FNName) const {
+    return UsedFNs.lookup(FNName);
   }
+
+  //const Function *getCalleeFN(unsigned FNNum) const {
+  //  assert(FNNum < UsedFNs.size() && "Invalid FNNum!");
+  //  return UsedFNs[FNNum];
+  //}
 
   unsigned lookupPHISlot(const MachineInstr *PN) const;
   /// Information for allocated function units.
@@ -189,17 +199,16 @@ public:
     return AllocatedFUs[FUType].size();
   }
 
-
   MachineOperand *getFUPredAt(FuncUnitId Id, unsigned Slot) {
     FUActiveSlotMapTy::iterator at = ActiveSlotMap.find(FUActiveSlot(Id, Slot));
     return at == ActiveSlotMap.end() ? 0 : &at->second;
   }
 
-  const char *allocateSymbol(const std::string &Str) {
-    PooledStringPtr PSP = SymbolPool.intern(Str.c_str());
-    Symbols.insert(PSP);
-    return *PSP;
-  }
+  //const char *allocateSymbol(const std::string &Str) {
+  //  PooledStringPtr PSP = SymbolPool.intern(Str.c_str());
+  //  Symbols.insert(PSP);
+  //  return *PSP;
+  //}
 
   // Block Ram management.
   void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes);

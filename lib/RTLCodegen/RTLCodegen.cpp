@@ -28,7 +28,7 @@
 #include "vtm/VInstrInfo.h"
 
 #include "llvm/Type.h"
-
+#include "llvm/Module.h"
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -54,6 +54,7 @@ namespace {
 class RTLCodegen : public MachineFunctionPass {
   vlang_raw_ostream Out;
 
+  const Module *M;
   MachineFunction *MF;
   TargetData *TD;
   VFInfo *FInfo;
@@ -72,8 +73,8 @@ class RTLCodegen : public MachineFunctionPass {
     ReadyPred += " & (" + Pred + ")";
   }
 
-  void emitFunctionSignature(int FNNum);
-  void emitCommonPort(int FNNum);
+  void emitFunctionSignature(const Function *F);
+  void emitCommonPort(unsigned FNNum);
 
   struct MuxBuilder {
     std::string MuxLogic;
@@ -307,8 +308,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
-    const Function *F = FInfo->getCalleeFN(FNNum);
-    return F->getNameStr() + "_" + PortName;
+    return "SubMod" + utostr(FNNum) + "_" + PortName;
   }
 
   struct GetCalleeFNEnableNameFtor {
@@ -386,14 +386,14 @@ RTLCodegen::RTLCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O) {
   initializeRTLCodegenPass(*PassRegistry::getPassRegistry());
 }
 
-bool RTLCodegen::doInitialization(Module &M) {
+bool RTLCodegen::doInitialization(Module &Mod) {
   MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
-  TargetData *TD = getAnalysisIfAvailable<TargetData>();
+  TD = getAnalysisIfAvailable<TargetData>();
 
   assert(MMI && TD && "MachineModuleInfo and TargetData will always available"
                       " in a machine function pass!");
   Mang = new Mangler(MMI->getContext(), *TD);
-
+  M = &Mod;
   return false;
 }
 
@@ -417,7 +417,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
   VM = FInfo->getRtlMod();
-  emitFunctionSignature(-1);
+  emitFunctionSignature(F.getFunction());
 
   // Emit control register and idle state
   unsigned totalFSMStates = MF->size() + 1;
@@ -487,22 +487,16 @@ void RTLCodegen::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void RTLCodegen::emitFunctionSignature(int FNNum) {
+void RTLCodegen::emitFunctionSignature(const Function *F) {
   raw_ostream &S = VM->getDataPathBuffer();
-
-  const Function *F;
-  if (FNNum != -1)
-    F = FInfo->getCalleeFN(FNNum);
-  else
-    F = MF->getFunction();
-
+  unsigned FNNum = FInfo->getCalleeFNNum(F->getName());
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
       I != E; ++I) {
     const Argument *Arg = I;
     std::string Name = Arg->getNameStr();
     unsigned BitWidth = TD->getTypeSizeInBits(Arg->getType());
     // Add port declaration.
-    if (FNNum == -1)
+    if (FNNum == 0)
       VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
     else {
       std::string RegName = getSubModulePortName(FNNum, Name);
@@ -515,7 +509,7 @@ void RTLCodegen::emitFunctionSignature(int FNNum) {
   if (!RetTy->isVoidTy()) {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
     unsigned BitWidth = TD->getTypeSizeInBits(RetTy);
-    if (FNNum == -1)
+    if (FNNum == 0)
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
@@ -597,8 +591,8 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   CtrlS.exit_block();
 }
 
-void RTLCodegen::emitCommonPort(int FNNum) {
-  if (FNNum == -1) { // If F is current function.
+void RTLCodegen::emitCommonPort(unsigned FNNum) {
+  if (FNNum == 0) { // If F is current function.
     VM->addInputPort("clk", 1, VASTModule::Clk);
     VM->addInputPort("rstN", 1, VASTModule::RST);
     VM->addInputPort("start", 1, VASTModule::Start);
@@ -642,16 +636,19 @@ void RTLCodegen::emitAllocatedFUs() {
       << '\n';
   }
 
-  for (id_iterator I = FInfo->id_begin(VFUs::CalleeFN),
-       E = FInfo->id_end(VFUs::CalleeFN); I != E; ++I) {
-    FuncUnitId ID = *I;
-    const Function *Callee = FInfo->getCalleeFN(ID.getFUNum());
-    S << getSynSetting(Callee->getName())->getModName() << ' '
-      << getSubModulePortName(ID.getFUNum(), "_inst")
-      << "(\n\t";
-    MBBuilder.addSubModule(getSubModulePortName(ID.getFUNum(), "_inst"), S);
-    emitFunctionSignature(ID.getFUNum());
-    S << ");\n";
+  typedef VFInfo::const_fn_iterator fn_iterator;
+  for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I) {
+    if (const Function *Callee = M->getFunction(I->getKey())) {
+      S << getSynSetting(Callee->getName())->getModName() << ' '
+        << getSubModulePortName(I->second, "_inst")
+        << "(\n\t";
+      MBBuilder.addSubModule(getSubModulePortName(I->second, "_inst"), S);
+      emitFunctionSignature(Callee);
+      S << ");\n";
+      continue;
+    }
+
+    // Else ask the constraint about how to instantiates this submodule.
   }
 
   // Write the memory bus mux.
@@ -1046,17 +1043,22 @@ void RTLCodegen::emitOpConnectWire(ucOp &Op) {
 void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
-  unsigned FNNum = OpInternalCall.getOperand(1).getImm();
-  const Function *FN = FInfo->getCalleeFN(FNNum);
-  StringRef CalleeName = FN->getName();
+  const char *CalleeName = OpInternalCall.getOperand(1).getSymbolName();
+  // The FNNum is encoded into the target flags field of the MachineOperand.
+  unsigned FNNum = OpInternalCall.getOperand(1).getTargetFlags();
   OS << "// Calling function: " << CalleeName << ";\n";
-  Function::const_arg_iterator ArgIt = FN->arg_begin();
-  for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
-    OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
-    OpInternalCall.getOperand(2 + i).print(OS);
-    OS << ";\n";
-    ++ArgIt;
+  if (const Function *FN = M->getFunction(CalleeName)) {
+    Function::const_arg_iterator ArgIt = FN->arg_begin();
+    for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
+      OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
+      OpInternalCall.getOperand(2 + i).print(OS);
+      OS << ";\n";
+      ++ArgIt;
+    }
+    return;
   }
+
+  // Else ask the constraint about how to handle this call.
 }
 
 void RTLCodegen::emitOpRet(ucOp &OpArg) {
@@ -1184,8 +1186,9 @@ void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
   raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   OpReadSymbol.getOperand(0).print(OS);
+  // The FNNum is encoded into the target flags field of the MachineOperand.
   OS << " = "
-     << getSubModulePortName(OpReadSymbol.getOperand(2).getImm(),
+     << getSubModulePortName(OpReadSymbol.getOperand(1).getTargetFlags(),
                              OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
 }

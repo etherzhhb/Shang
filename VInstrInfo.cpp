@@ -520,7 +520,7 @@ FuncUnitId VIDesc::getPrebindFUId()  const {
     return FuncUnitId(VFUs::BRam, Id);
   }
   case VTM::VOpInternalCall: {
-    unsigned Id = get().getOperand(1).getImm();
+    unsigned Id = get().getOperand(1).getTargetFlags();
     return FuncUnitId(VFUs::CalleeFN, Id);
   }
   default:

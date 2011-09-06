@@ -103,6 +103,8 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
         MachineOperand &MO = Instr.getOperand(i);
         if (!MO.isReg() && !MO.isImm() && !MO.isSymbol()) continue;
+        // Do not disturb the original target flags.
+        if (MO.getTargetFlags() != 0) continue;
 
         bool Changed = updateBitWidth(MO, Annotator.getBitWidth(i));
         if (MO.isReg() && MO.isDef() && Changed)

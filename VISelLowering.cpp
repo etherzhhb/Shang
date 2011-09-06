@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
+#include "llvm/CodeGen/RuntimeLibcalls.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/ADT/VectorExtras.h"
@@ -114,6 +115,12 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::MULHU, CurVT, Expand);
     //setOperationAction(ISD::SMUL_LOHI, CurVT, Expand);
     //setOperationAction(ISD::UMUL_LOHI, CurVT, Expand);
+
+    // We don't have DIV
+    setOperationAction(ISD::SDIV, CurVT, Expand);
+    setOperationAction(ISD::SDIVREM, CurVT, Expand);
+    setOperationAction(ISD::UDIV, CurVT, Expand);
+    setOperationAction(ISD::UDIVREM, CurVT, Expand);
     //if (MVT(CurVT).getSizeInBits() > MaxMultBits) {
     //  // Expand the  multiply;
     //  setOperationAction(ISD::MUL, CurVT, Expand);
@@ -146,6 +153,13 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
       setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
   }
+
+  setLibcallName(RTLIB::UDIV_I8, "__ip_udiv_i8");
+  setLibcallName(RTLIB::UDIV_I16, "__ip_udiv_i16");
+  setLibcallName(RTLIB::UDIV_I32, "__ip_udiv_i32");
+  setLibcallName(RTLIB::UDIV_I64, "__ip_udiv_i64");
+  //setLibcallName(RTLIB::UDIV_I128, "__ip_udiv_i128");
+  // TODO: SDIV
 
   // Operations not directly supported by VTM.
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
@@ -261,31 +275,37 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   // Reserve space for the chain and the function name.
   Ops.push_back(Chain);
 
-  GlobalAddressSDNode *CalleeNode = cast<GlobalAddressSDNode>(Callee);
-  const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
-  assert(OutVals.size() == CalleeFN->arg_size()
-         && "Argument size do not match!");
-  // Get the Id for the internal module.
-  unsigned Id
-    = DAG.getMachineFunction().getInfo<VFInfo>()->getOrCreateCalleeFN(CalleeFN);
-  SDValue CalleeFUId = DAG.getTargetConstant(Id, MVT::i32);
-  Ops.push_back(CalleeFUId);
+  VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
+  SDValue CallNode;
+  unsigned Id;
 
-  for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
-    Ops.push_back(OutVals[I]);
+  if (GlobalAddressSDNode *CalleeNode = dyn_cast<GlobalAddressSDNode>(Callee)) {
+    const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
+    assert(OutVals.size() == CalleeFN->arg_size()
+           && "Argument size do not match!");
+    // Get the Id for the internal module.
+    Id = VFI->getOrCreateCalleeFN(CalleeFN->getName());
+    SDValue CalleeFNName
+      = DAG.getTargetExternalSymbol(CalleeFN->getValueName()->getKeyData(),
+                                    MVT::i64, Id);
+    Ops.push_back(CalleeFNName);
 
-  // The call node return a i1 value as token to keep the dependence between
-  // the call and the follow up extract value.
-  SDValue CallNode = DAG.getNode(VTMISD::InternalCall, dl,
-                                 DAG.getVTList(MVT::i1, MVT::Other),
-                                 Ops.data(), Ops.size());
+    for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
+      Ops.push_back(OutVals[I]);
+
+    // The call node return a i1 value as token to keep the dependence between
+    // the call and the follow up extract value.
+    CallNode = DAG.getNode(VTMISD::InternalCall, dl,
+                           DAG.getVTList(MVT::i1, MVT::Other),
+                           Ops.data(), Ops.size());
+  }
 
   // Read the return value from return port.
   assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");
   EVT RetVT = Ins[0].VT;
-  SDValue RetPortName = DAG.getTargetExternalSymbol("return_value", RetVT);
+  SDValue RetPortName = DAG.getTargetExternalSymbol("return_value", RetVT, Id);
   SDValue RetValue = DAG.getNode(VTMISD::ReadReturn, dl, RetVT,
-                                 RetPortName, CalleeFUId, CallNode);
+                                 RetPortName, CallNode);
   InVals.push_back(RetValue);
 
   return SDValue(CallNode.getNode(), 1);
