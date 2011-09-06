@@ -294,9 +294,16 @@ unsigned GetDefaultSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   assert(LHSHiBits == RHSHiBits && "Hi size do not match!");
 
   LHSHi = LHS.getOperand(0);
-  LHSLo = LHS.getOperand(1);
   RHSHi = RHS.getOperand(0);
+  // TODO: Force they have the same type!
+  if (LHSHi.getValueType() != RHSHi.getValueType())
+    return 0;
+  
+  LHSLo = LHS.getOperand(1);
   RHSLo = RHS.getOperand(1);
+  // TODO: Force they have the same type!
+  if (LHSLo.getValueType() != RHSLo.getValueType())
+    return 0;
 
   return LHSLoBits;
 }
