@@ -630,7 +630,7 @@ bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
     return true;
   }
 
-  return false;
+  return LHSMerged;
 }
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
