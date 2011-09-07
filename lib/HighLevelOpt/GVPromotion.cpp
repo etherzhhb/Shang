@@ -122,8 +122,7 @@ bool GVPromotion::runOnSCC(CallGraphSCC &SCC) {
     CallGraphNode *CGN = *I;
     Function *F = CGN->getFunction();
     if (HWInfo->isHW(F)) {
-      if (PromoteReturn(*I)) 
-        PromotionChanged = true;
+      PromotionChanged |= PromoteReturn(*I);
     }
   }
 
@@ -157,10 +156,8 @@ bool GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   Function *NF = cloneFunction(F);
 
   // Update all call sites to use new function and update the callgraph.
-  if (updateAllCallSites(F, NF, CGN, GVMapArg))
-    return true;
-  else
-    return false;
+  return updateAllCallSites(F, NF, CGN, GVMapArg);
+
 
 }
 
