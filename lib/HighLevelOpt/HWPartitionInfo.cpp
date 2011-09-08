@@ -31,10 +31,11 @@
 
 using namespace llvm;
 
-  INITIALIZE_PASS_BEGIN(HWPartitionInfo, "HWPartitionInfo",
-    "HW Partition Information", true, true)
-  INITIALIZE_PASS_END(HWPartitionInfo, "HWPartitionInfo",
+INITIALIZE_PASS_BEGIN(HWPartitionInfo, "HWPartitionInfo",
   "HW Partition Information", true, true)
+  INITIALIZE_AG_DEPENDENCY(CallGraph)
+INITIALIZE_PASS_END(HWPartitionInfo, "HWPartitionInfo",
+"HW Partition Information", true, true)
 char HWPartitionInfo::ID = 0;
 
 Pass *llvm::createHWPartitionInfoPass(){
