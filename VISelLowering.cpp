@@ -82,9 +82,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
   computeRegisterProperties();
 
-  setOperationAction(ISD::GlobalAddress, MVT::i32, Custom);
-  setOperationAction(ISD::JumpTable,     MVT::i32, Custom);
-
   // Set the intrinsic_wo_chain to be illegal in MVT::Other means it is
   // illegal in all types.
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
@@ -150,6 +147,8 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // Lower SetCC to more fundamental operation.
     setOperationAction(ISD::SETCC, CurVT, Custom);
 
+    setOperationAction(ISD::JumpTable, CurVT, Custom);
+
     for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
       setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
   }
@@ -163,6 +162,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
   // Operations not directly supported by VTM.
   setOperationAction(ISD::BR_JT,  MVT::Other, Expand);
+  setOperationAction(ISD::BRIND,  MVT::Other, Expand);
   setOperationAction(ISD::BR_CC,  MVT::Other, Expand);
 
   // Try to perform bit level optimization on these nodes:
