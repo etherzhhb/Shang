@@ -190,6 +190,7 @@ std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum
 
   luabind::object ModTemplate =
     scriptEngin().getValue<luabind::object>("FUs")["Modules"][ModName];
+  std::string Template = getProperty<std::string>(ModTemplate, "InstTmplt");
 
   std::string ResultName = ModName + utostr_32(ModNum) + "_inst";
   // FIXME: Use LUA api directly?
@@ -197,10 +198,16 @@ std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum
   ScriptBuilder <<
     /*"local " <<*/ ResultName << ", message = require \"luapp\" . preprocess {"
   // The inpute template.
-                << "input=[=["
-                << getProperty<std::string>(ModTemplate, "InstTmplt") <<"]=],"
+                << "input=[=[";
+  if (Template.empty()) {
+    ScriptBuilder << "// " << ModName << " not available!\n";
+    errs() << "Instantiation template for external module :" << ModName
+           << " not available!\n";
+  } else
+    ScriptBuilder << Template;
+  ScriptBuilder <<"]=],"
   // And the look up.
-                << "lookup={ num=" << ModNum << ", clk='" << Ports[0]
+                   "lookup={ num=" << ModNum << ", clk='" << Ports[0]
                 << "', rst = '" <<  Ports[1] << "', en = '" <<  Ports[2]
                 << "', fin = '" <<  Ports[3];
   // The output ports.
@@ -216,7 +223,7 @@ std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum
 
   SMDiagnostic Err;
   if (!scriptEngin().runScriptStr(Script, Err))
-    report_fatal_error("Block Ram code generation:" + Err.getMessage());
+    report_fatal_error("External module instantiation:" + Err.getMessage());
 
   return scriptEngin().getValueStr(ResultName);
 }
@@ -228,6 +235,7 @@ std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
 
   luabind::object ModTemplate =
     scriptEngin().getValue<luabind::object>("FUs")["Modules"][ModName];
+  std::string Template = getProperty<std::string>(ModTemplate, "StartTmplt");
 
   std::string ResultName = ModName + utostr_32(ModNum) + "_start";
   // FIXME: Use LUA api directly?
@@ -235,13 +243,19 @@ std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
   ScriptBuilder <<
     /*"local " <<*/ ResultName << ", message = require \"luapp\" . preprocess {"
   // The inpute template.
-                << "input=[=["
-                << getProperty<std::string>(ModTemplate, "StartTmplt") <<"]=],"
+                   "input=[=[";
+  if (Template.empty()) {
+    ScriptBuilder << "// " << ModName << " not available!\n";
+    errs() << "Start template for external Module :" << ModName
+           << " not available!\n";
+  } else
+    ScriptBuilder << Template;
+  ScriptBuilder << "]=],"
   // And the look up.
-                << "lookup={ num=" << ModNum;
+                   "lookup={ num=" << ModNum;
   // The input ports.
   for (unsigned i = 0, e = InPorts.size(); i < e; ++i)
-    ScriptBuilder << ", in" << i << " = '" <<  InPorts[i] << '\'';
+    ScriptBuilder << ", in" << i << " = [=[" <<  InPorts[i] << "]=]";
 
   // End the look up and the function call.
   ScriptBuilder << "}}\n";
@@ -252,7 +266,7 @@ std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
 
   SMDiagnostic Err;
   if (!scriptEngin().runScriptStr(Script, Err))
-    report_fatal_error("Block Ram code generation:" + Err.getMessage());
+    report_fatal_error("External module starting:" + Err.getMessage());
 
   return scriptEngin().getValueStr(ResultName);
 }
