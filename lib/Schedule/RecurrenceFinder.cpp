@@ -15,9 +15,8 @@
 #include "VSUnit.h"
 
 #include "llvm/ADT/SCCIterator.h"
-
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
-
 #define DEBUG_TYPE "vtm-rec-finder"
 #include "llvm/Support/Debug.h"
 
@@ -81,15 +80,14 @@ class SubGraph {
   SubGrapNodeVec stack;
   //Map for B Lists
   std::map<SubGraphNode*, SubGrapNodeSet> B;
-  //
-  SubGrapNodeSet Visited;
+
   // SCC with least vertex.
   SubGrapNodeVec Vk;
 
   // SubGraph stuff
   typedef std::map<const VSUnit*, SubGraphNode*> CacheTy;
   CacheTy ExtCache;
-  
+
   unsigned CurIdx;
   unsigned RecMII;
 public:
@@ -105,23 +103,16 @@ public:
 
   // Create or loop up a node.
   SubGraphNode *getNode(const VSUnit *SU) {
-    CacheTy::iterator at = ExtCache.find(SU);
-    if (at != ExtCache.end())
-      return at->second;
+    SubGraphNode *&N = ExtCache[SU];
 
-    SubGraphNode *NewNode = new SubGraphNode(CurIdx, SU, this);
+    if (!N) N = new SubGraphNode(CurIdx, SU, this);
 
-    ExtCache.insert(std::make_pair(SU, NewNode));
-    return NewNode;
+    return N;
   }
 
   void releaseCache() {
     // Release the temporary nodes in subgraphs.
-    for (CacheTy::iterator I = ExtCache.begin(),
-      E = ExtCache.end(); I != E; ++I) {
-        delete I->second;
-    }
-    ExtCache.clear();
+    DeleteContainerSeconds(ExtCache);
   }
 
   // Iterate over the subgraph start from idx.
@@ -183,7 +174,7 @@ void SubGraph::addRecurrence() {
   unsigned TotalLatency = 0;
   unsigned TotalDistance = 0;
   const VSUnit *LastAtom = stack.back()->getSUnit();
-  
+
   for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I) {
     SubGraphNode *N = *I;
 
@@ -238,7 +229,7 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
       SubGraphNode *N = *I;
       B[N].insert(CurNode);
     }
-  
+
   // Pop current node.
   stack.pop_back();
 
@@ -248,6 +239,9 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
 void SubGraph::findAllCircuits() {
   VSUnit *ExitRoot = G->getExitRoot();
   unsigned ExitIdx = ExitRoot->getIdx();
+  DEBUG(dbgs() << "-------------------------------------\nFind all circuits in "
+               << G->getMachineBasicBlock()->getName()
+               << '\n');
 
   // While the subgraph not empty.
   while (CurIdx < ExitIdx) {
@@ -255,53 +249,38 @@ void SubGraph::findAllCircuits() {
     // Initialize the subgraph induced by {CurIdx, ...., ExitIdx}
     SubGraphNode *RootNode = getNode(ExitRoot);
 
-    //Iterate over all the SCCs in the graph
-    Visited.clear();
     Vk.clear();
     // least vertex in Vk
     SubGraphNode *LeastVertex = 0;
 
-    //Find scc with the least vertex
-    for (nodes_iterator I = sub_graph_begin(), E = sub_graph_end();
-        I != E; ++I) {
-      SubGraphNode *Node = *I;
-      // If the Node visited.
-      if (!Visited.insert(Node).second)
+    // Iterate over all the SCCs in the graph to find the scc with the least
+    // vertex
+    for (dep_scc_iterator SCCI = dep_scc_iterator::begin(RootNode),
+          SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
+      SubGrapNodeVec &nextSCC = *SCCI;
+
+      if (nextSCC.size() == 1) {
+        assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
         continue;
-
-      for (dep_scc_iterator SCCI = dep_scc_iterator::begin(RootNode),
-           SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
-        SubGrapNodeVec &nextSCC = *SCCI;  
-        SubGraphNode *FirstNode = nextSCC.front();
-        // If FirstNode visited.
-        if (!Visited.insert(FirstNode).second)
-          continue;
-        
-        if (nextSCC.size() == 1) {
-          assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
-          continue;
-        }
-
-        // The entire SCC visited.
-        Visited.insert(nextSCC.begin() + 1, nextSCC.end());
-        // Find the lest vetex
-        SubGraphNode *OldLeastVertex = LeastVertex;
-        for (SubGrapNodeVec::iterator I = (*SCCI).begin(),
-             E = (*SCCI).end();I != E; ++I) {
-          SubGraphNode *CurNode = *I;
-          if (!LeastVertex || CurNode->getIdx() < LeastVertex->getIdx())
-            LeastVertex = CurNode;
-        }
-        // Update Vk if leastVe
-        if (OldLeastVertex != LeastVertex)
-          Vk = nextSCC; 
       }
+
+      // Find the lest vetex
+      SubGraphNode *OldLeastVertex = LeastVertex;
+      for (SubGrapNodeVec::iterator I = nextSCC.begin(), E = nextSCC.end();
+           I != E; ++I) {
+        SubGraphNode *CurNode = *I;
+        if (!LeastVertex || CurNode->getIdx() < LeastVertex->getIdx())
+          LeastVertex = CurNode;
+      }
+      // Update Vk if leastVe
+      if (OldLeastVertex != LeastVertex)
+        Vk = nextSCC;
     }
 
     // No SCC?
     if (Vk.empty())
       break;
-    
+
     // Now we have the SCC with the least vertex.
     CurIdx = LeastVertex->getIdx();
     // Do some clear up.
@@ -310,12 +289,12 @@ void SubGraph::findAllCircuits() {
       blocked.erase(N);
       B[N].clear();
     }
-    // Find the circuit.
+    // Find the circuits.
     circuit(LeastVertex, LeastVertex);
 
     // Move forward.
     ++CurIdx;
-    
+
     //
     releaseCache();
   }
@@ -323,8 +302,8 @@ void SubGraph::findAllCircuits() {
 
 //===----------------------------------------------------------------------===//
 SubGraphNode::result_type SubGraphNode::operator()(const VSUnit *U) const {
-  return U->getIdx() < FirstNode ? subGraph->getNode(0) 
-                                 : subGraph->getNode(U); 
+  return U->getIdx() < FirstNode ? subGraph->getNode(0)
+                                 : subGraph->getNode(U);
 }
 
 const SubGraphNode &SubGraphNode::operator=(const SubGraphNode &RHS) {
