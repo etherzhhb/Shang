@@ -564,10 +564,10 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   // Case begin
   CtrlS.match_case(StateName);
 
-  MachineBasicBlock::iterator I = ++MBB.getFirstNonPHI(),
+  MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
   // FIXME: Refactor the loop.
-  do {
+  while(++I != E) {
     ucState CurDatapath = *I;
     // Emit the datepath of current state.
     emitDatapath(CurDatapath);
@@ -576,7 +576,7 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
     ucState NextControl = *++I;
     CtrlS << "// Slot " << NextControl.getSlot() << '\n';
     emitCtrlOp(NextControl, NextStatePred);
-  } while(++I != E);
+  };
 
   CtrlS << "// Next micro state.\n";
   PredMapTy::iterator at = NextStatePred.find(&MBB);
