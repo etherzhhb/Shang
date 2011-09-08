@@ -306,12 +306,14 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
                                  Ops.data(), Ops.size());
 
   // Read the return value from return port.
-  assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");
-  EVT RetVT = Ins[0].VT;
-  SDValue RetPortName = DAG.getTargetExternalSymbol("return_value", RetVT, Id);
-  SDValue RetValue = DAG.getNode(VTMISD::ReadReturn, dl, RetVT,
-                                 RetPortName, CallNode);
-  InVals.push_back(RetValue);
+  if (!Ins.empty()) {
+    assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");
+    EVT RetVT = Ins[0].VT;
+    SDValue RetPortName = DAG.getTargetExternalSymbol("return_value", RetVT, Id);
+    SDValue RetValue = DAG.getNode(VTMISD::ReadReturn, dl, RetVT,
+                                   RetPortName, CallNode);
+    InVals.push_back(RetValue);
+  }
 
   return SDValue(CallNode.getNode(), 1);
 }
