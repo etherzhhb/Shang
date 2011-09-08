@@ -29,15 +29,14 @@ namespace {
 class SubGraph;
 
 struct SubGraphNode {
-  unsigned FirstNode;
   const VSUnit *U;
   SubGraph *subGraph;
 
-  SubGraphNode(unsigned First, const VSUnit *SU, SubGraph *SG)
-    : FirstNode(First), U(SU), subGraph(SG) {}
+  SubGraphNode(const VSUnit *SU, SubGraph *SG)
+    : U(SU), subGraph(SG) {}
 
   SubGraphNode(const SubGraphNode &O)
-    : FirstNode(O.FirstNode), U(O.U), subGraph(O.subGraph) {}
+    : U(O.U), subGraph(O.subGraph) {}
 
   const SubGraphNode &operator=(const SubGraphNode &RHS);
 
@@ -85,34 +84,36 @@ class SubGraph {
   SubGrapNodeVec Vk;
 
   // SubGraph stuff
-  typedef std::map<const VSUnit*, SubGraphNode*> CacheTy;
-  CacheTy ExtCache;
-
-  unsigned CurIdx;
-  unsigned RecMII;
+  typedef std::vector<SubGraphNode*> NodeVecTy;
+  NodeVecTy Nodes;
+  SubGraphNode DummyNode;
 public:
+  unsigned CurIdx, NumNodes;
+  unsigned RecMII;
+
   SubGraph(VSchedGraph *SG)
-    : G(SG), GraphEntry(SG->getEntryRoot()), CurIdx(G->getEntryRoot()->getIdx()),
-    RecMII(0) {}
+    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this),
+      CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->getNumSUnits()),
+      RecMII(0) {
+    // Add the Create the nodes, node that we will address the Nodes by the
+    // the InstIdx of the VSUnit and this only works if they are sorted in
+    // the VSUnits vector of SG.
+    for (VSchedGraph::const_iterator I = SG->begin(), E = SG->end(); I != E; ++I)
+      Nodes.push_back(new SubGraphNode(*I, this));
+  }
 
   unsigned getRecMII() const { return RecMII; }
 
-  ~SubGraph() { releaseCache(); }
+  ~SubGraph() { DeleteContainerPointers(Nodes); }
 
   VSUnit::const_dep_iterator dummy_end() const { return GraphEntry->dep_end(); }
 
   // Create or loop up a node.
   SubGraphNode *getNode(const VSUnit *SU) {
-    SubGraphNode *&N = ExtCache[SU];
+    assert(SU && "SU should not be NULL!");
+    if (SU->getIdx() < CurIdx) return &DummyNode;
 
-    if (!N) N = new SubGraphNode(CurIdx, SU, this);
-
-    return N;
-  }
-
-  void releaseCache() {
-    // Release the temporary nodes in subgraphs.
-    DeleteContainerSeconds(ExtCache);
+    return Nodes[SU->getIdx()];
   }
 
   // Iterate over the subgraph start from idx.
@@ -128,7 +129,7 @@ public:
     return nodes_iterator(I, *getNode(*I));
   }
   nodes_iterator sub_graph_end() {
-    return nodes_iterator(G->end(), *getNode(0));
+    return nodes_iterator(G->end(), DummyNode);
   }
 
   void findAllCircuits();
@@ -294,20 +295,15 @@ void SubGraph::findAllCircuits() {
 
     // Move forward.
     ++CurIdx;
-
-    //
-    releaseCache();
   }
 }
 
 //===----------------------------------------------------------------------===//
 SubGraphNode::result_type SubGraphNode::operator()(const VSUnit *U) const {
-  return U->getIdx() < FirstNode ? subGraph->getNode(0)
-                                 : subGraph->getNode(U);
+  return subGraph->getNode(U);
 }
 
 const SubGraphNode &SubGraphNode::operator=(const SubGraphNode &RHS) {
-  FirstNode = RHS.FirstNode;
   U = RHS.U;
   subGraph = RHS.subGraph;
   return *this;
