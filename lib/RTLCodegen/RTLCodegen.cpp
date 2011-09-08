@@ -256,7 +256,7 @@ class RTLCodegen : public MachineFunctionPass {
                         MachineBasicBlock *DstBB);
   void createucStateEnable(MachineBasicBlock *MBB);
   void emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-                          const std::string &NewState);
+                          const std::string &NewState, bool clearState);
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
@@ -581,9 +581,9 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   CtrlS << "// Next micro state.\n";
   PredMapTy::iterator at = NextStatePred.find(&MBB);
   if (at != NextStatePred.end())
-    emitNextMicroState(CtrlS, &MBB, at->second);
+    emitNextMicroState(CtrlS, &MBB, at->second, false);
   else
-    emitNextMicroState(CtrlS, &MBB, "1'b0");
+    emitNextMicroState(CtrlS, &MBB, "1'b0", false);
 
   emitFUCtrlForState(CtrlS, &MBB);
 
@@ -735,18 +735,26 @@ void RTLCodegen::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *SrcBB,
 
   // Only jump to other state if target MBB is not current MBB.
   ss << "NextFSMState <= " << getStateName(DstBB) << ";\n";
-  emitNextMicroState(VM->getControlBlockBuffer(), DstBB, "1'b1");
+  emitNextMicroState(VM->getControlBlockBuffer(), DstBB, "1'b1", true);
 }
 
 void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-                                   const std::string &NewState) {
+                                    const std::string &NewState,
+                                    bool clearState) {
   // We do not need the last state.
   unsigned totalSlot = FInfo->getTotalSlotFor(MBB);
   std::string StateName = getucStateEnableName(MBB);
   ss << StateName << " <= ";
 
-  if (totalSlot > 1)
-    ss << "{ " << StateName << verilogBitRange(totalSlot - 1) << ", ";
+  if (totalSlot > 1) {
+    ss << "{ ";
+    if (clearState) // Disable all micro state.
+      ss << (totalSlot - 1) << "'b0";
+    else // Keep the old micro state.
+      ss << StateName << verilogBitRange(totalSlot - 1);
+
+    ss << ", ";
+  }
 
   ss << NewState;
 
