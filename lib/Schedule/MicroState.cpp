@@ -249,7 +249,16 @@ void ucOperand::print(raw_ostream &OS,
 }
 
 raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
-  OS << "Scheduled MBB: " << MBB.getName() << '\n';
+  OS << "Scheduled BB#" << MBB.getNumber() << ": " << MBB.getName() << '\n';
+
+  if (!MBB.pred_empty()) {
+    OS << "    Predecessors according to CFG:";
+    for (MachineBasicBlock::const_pred_iterator PI = MBB.pred_begin(),
+         E = MBB.pred_end(); PI != E; ++PI)
+      OS << " BB#" << (*PI)->getNumber();
+    OS << '\n';
+  }
+
   for (MachineBasicBlock::const_iterator I = MBB.begin(), E = MBB.end();
        I != E; ++I) {
     const MachineInstr *Instr = I;
@@ -264,7 +273,18 @@ raw_ostream &llvm::printVMBB(raw_ostream &OS, const MachineBasicBlock &MBB) {
       break;
     }
   }
+
+  // Print the successors of this block according to the CFG.
+  if (!MBB.succ_empty()) {
+    OS << "    Successors according to CFG:";
+    for (MachineBasicBlock::const_succ_iterator SI = MBB.succ_begin(),
+         E = MBB.succ_end(); SI != E; ++SI)
+      OS << " BB#" << (*SI)->getNumber();
+    OS << '\n';
+  }
+
   OS << '\n';
+
   return OS;
 }
 
