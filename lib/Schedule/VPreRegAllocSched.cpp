@@ -688,7 +688,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
     VSUnit *VSU = *I;
       // Since the exit root already added to state sunit list, skip the
       // exit itself.
-    if (VSU->getNumUses() == 0 && !VSU->isEntry() && VSU != Exit) {
+    if (VSU->getNumUses() == 0 && VSU != Exit) {
       // Dirty Hack.
       unsigned Latency = VSU->getMaxLatencyTo(FstExit);
       // We do not need to wait the trivial operation finish before exiting the
@@ -703,10 +703,6 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
       Exit->addDep(getCtrlDepEdge(VSU,  Latency));
     }
   }
-
-  // Do not forget the entry root.
-  Exit->addDep(getCtrlDepEdge(CurState.getEntryRoot(),
-                              VInstrInfo::computeLatency(0, FstExit)));
 }
 
 void VPreRegAllocSched::buildState(VSchedGraph &State) {
