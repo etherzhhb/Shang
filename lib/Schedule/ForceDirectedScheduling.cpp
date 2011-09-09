@@ -171,11 +171,41 @@ VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned st
 }
 
 bool IteractiveModuloScheduling::isAllSUnitScheduled() {
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
-      I != E; ++I) {
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled())
       return false;
+  }
+
+  return true;
+}
+
+bool ASAPScheduler::scheduleState() {
+  State.getEntryRoot()->scheduledTo(State.getStartSlot());
+
+  for (VSchedGraph::iterator I = State.begin() + 1, E = State.end(); I != E;
+       ++I) {
+    VSUnit *A = *I;
+    unsigned NewStep = 0;
+
+    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
+         DI != DE; ++DI) {
+      // Ignore the loop carried edges.
+      if (DI.getEdge()->isLoopCarried()) continue;
+
+      const VSUnit *Dep = *DI;
+
+      assert(Dep->isScheduled() && "Dependence SU not scheduled!");
+      unsigned Step = Dep->getDetailStep() + DI.getEdge()->getDetailLatency();
+
+      NewStep = std::max(Step, NewStep);
+    }
+
+    NewStep = OpSlot::detailStepCeil(NewStep, A->hasDatapath()).getSlot();
+    while (!tryTakeResAtStep(A, NewStep))
+      ++NewStep;
+
+    A->scheduledTo(NewStep);
   }
 
   return true;

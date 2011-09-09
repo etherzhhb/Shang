@@ -618,7 +618,7 @@ public:
 
   void resetSchedule();
 
-  unsigned getStartSlot() const { return getEntryRoot()->getSlot(); }
+  unsigned getStartSlot() const { return startSlot; }
   unsigned getEndSlot() const { return getExitRoot()->getSlot(); }
   unsigned getTotalSlot() const { return getEndSlot() - getStartSlot(); }
 

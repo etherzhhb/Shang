@@ -113,6 +113,7 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
     errs() << "Force-directed scheduler was temporary removed!\n"
               "Going to use ILP scheduler.\n";
   case SynSettings::ILP:   return new ILPScheduler(G);
+  case SynSettings::ASAP:  return new ASAPScheduler(G);
   }
   return 0;
 }

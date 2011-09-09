@@ -76,7 +76,8 @@ void LuaScript::init() {
       .enum_("Schedule")[
         luabind::value("FDS", SynSettings::FDS),
         luabind::value("FDLS", SynSettings::FDLS),
-        luabind::value("ILP", SynSettings::ILP)
+        luabind::value("ILP", SynSettings::ILP),
+        luabind::value("ASAP", SynSettings::ASAP)
       ],
 
     BindingTraits<VASTPort>::register_("VASTPort"),

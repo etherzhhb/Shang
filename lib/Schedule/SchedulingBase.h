@@ -158,6 +158,12 @@ public:
   bool scheduleState();
 };
 
+struct ASAPScheduler : public SchedulingBase {
+  ASAPScheduler(VSchedGraph &S) : SchedulingBase(S) {}
+
+  bool scheduleState();
+};
+
 class ILPScheduler : public SchedulingBase {
   // The index of first step variable of the schedule unit.
   // For a given schedule unit with index i, who's time frame is N, then there
