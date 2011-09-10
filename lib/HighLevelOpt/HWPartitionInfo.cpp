@@ -73,6 +73,8 @@ bool HWPartitionInfo::runOnModule(Module &M){
         const CallGraphNode *SubCGN = *ICGN;
         Function *SubF = SubCGN->getFunction();
         // Create the synthesis setting for subfunctions.
+        if (!SubF || SubF->isDeclaration())
+          continue;
         if (SubF != F)
           getSynSetting(SubF->getName(), TopSetting)->setTopLevelModule(false);
         HWFunctions.insert(SubF);
