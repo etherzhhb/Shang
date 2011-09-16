@@ -51,6 +51,7 @@ public:
                                 const SmallVectorImpl<MachineOperand> &Cond,
                                 DebugLoc DL) const;
   static void ReversePredicateCondition(MachineOperand &Cond);
+  static bool isUnConditionalBranch(MachineInstr *MI);
   virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
     const;
   virtual bool isProfitableToDupForIfCvt(MachineBasicBlock &MBB,

@@ -77,9 +77,13 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       case VTM::VOpToState:
       case VTM::VOpToStateb: {
         // Setup the bit width for predicate operand.
-        ucOperand &Op = cast<ucOperand>(Instr.getOperand(1));
-        Op.setBitWidth(1);
-        continue;
+        ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
+        if (Op.isImm()) {
+          assert(Op.getImm() && "Unexpected 'never' in unconditional branch!");
+          Op.ChangeToRegister(0, false);
+          Op.setBitWidth(1);
+          continue;
+        }
       }
       case VTM::COPY:     case VTM::PHI:
         // Fall through

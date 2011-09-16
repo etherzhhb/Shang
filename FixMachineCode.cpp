@@ -131,22 +131,22 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
       // Remove the explicit successors from the missed successors set.
       if (VInstrInfo::isBrCndLike(Inst->getOpcode())) {
-        MachineOperand &Pred = Inst->getOperand(1);
+        MachineOperand &Cnd = Inst->getOperand(1);
         // Use reg0 for always true.
-        if (Pred.isImm() && Pred.getImm()) Pred.ChangeToRegister(0, false);
+        if (Cnd.isImm() && Cnd.getImm()) Cnd.ChangeToRegister(0, false);
         // Change the unconditional branch after conditional branch to
         // conditional branch.
-        if (FirstTerminator && !TII->isPredicated(Inst)) {
-          MachineOperand *TrueCnd = VInstrInfo::getPredOperand(FirstTerminator);
-          MachineOperand *FalseCnd = VInstrInfo::getPredOperand(Inst);
-          FalseCnd->setReg(TrueCnd->getReg());
-          FalseCnd->setTargetFlags(TrueCnd->getTargetFlags());
-          VInstrInfo::ReversePredicateCondition(*FalseCnd);
+        if (FirstTerminator && ! VInstrInfo::isUnConditionalBranch(Inst)) {
+          MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
+          MachineOperand &FalseCnd = FirstTerminator->getOperand(0);
+          FalseCnd.setReg(TrueCnd.getReg());
+          FalseCnd.setTargetFlags(TrueCnd.getTargetFlags());
+          VInstrInfo::ReversePredicateCondition(FalseCnd);
         }
 
         FirstTerminator = Inst;
 
-        MissedSuccs.erase(Inst->getOperand(0).getMBB());
+        MissedSuccs.erase(Inst->getOperand(1).getMBB());
       }
     }
 
@@ -154,15 +154,16 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     if (!MissedSuccs.empty()) {
       assert(MissedSuccs.size() == 1 && "Fall through to multiple blocks?");
       ++UnconditionalBranches;
-      MachineOperand Predicate = ucOperand::CreatePredicate();
+      MachineOperand Cnd = ucOperand::CreatePredicate();
       if (FirstTerminator) {
-        MachineOperand *TrueCnd = VInstrInfo::getPredOperand(FirstTerminator);
-        assert(TrueCnd->getReg() != 0 && "Two unconditional branch?");
-        Predicate = *TrueCnd;
-        VInstrInfo::ReversePredicateCondition(Predicate);
+        MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
+        assert(TrueCnd.getReg() != 0 && "Two unconditional branch?");
+        Cnd = TrueCnd;
+        VInstrInfo::ReversePredicateCondition(Cnd);
       }
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
-        .addMBB(*MissedSuccs.begin()).addOperand(Predicate);
+        .addOperand(Cnd).addMBB(*MissedSuccs.begin())
+        .addOperand(ucOperand::CreatePredicate());
     }
 
     if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {

@@ -82,6 +82,13 @@ bool VInstrInfo::isUnpredicatedTerminator(const MachineInstr *MI) const{
   return !isPredicated(MI);
 }
 
+bool VInstrInfo::isUnConditionalBranch(MachineInstr *MI) {
+  if (!VInstrInfo::isBrCndLike(MI->getOpcode())) return false;
+
+  MachineOperand &Cnd = MI->getOperand(0);
+  return (Cnd.isReg() && Cnd.getReg() == 0) || Cnd.isImm();
+}
+
 bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                                MachineBasicBlock *&FBB,
                                SmallVectorImpl<MachineOperand> &Cond,
@@ -113,15 +120,15 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
 
   /// 2. If this block ends with only an unconditional branch, it sets TBB to be
   ///    the destination block.
-  if (isUnpredicatedTerminator(FstTerm)) {
-    TBB = FstTerm->getOperand(0).getMBB();
+  if (isUnConditionalBranch(FstTerm)) {
+    TBB = FstTerm->getOperand(1).getMBB();
     assert(Terms.size() == 1 && "Expect single fall through edge!");
     return false;
   }
 
-  Cond.push_back(*getPredOperand(FstTerm));
+  Cond.push_back(FstTerm->getOperand(0));
   Cond.back().setIsKill(false);
-  TBB = FstTerm->getOperand(0).getMBB();
+  TBB = FstTerm->getOperand(1).getMBB();
   /// 3. If this block ends with a conditional branch and it falls through to a
   ///    successor block, it sets TBB to be the branch destination block and a
   ///    list of operands that evaluate the condition. These operands can be
@@ -134,7 +141,7 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   ///    condition.  These operands can be passed to other TargetInstrInfo
   ///    methods to create new branches.
   MachineInstr *SndTerm = Terms[1];
-  FBB = SndTerm->getOperand(0).getMBB();
+  FBB = SndTerm->getOperand(1).getMBB();
   return false;
 }
 
@@ -193,7 +200,8 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   if (FBB == 0) {
     // Insert barrier branch for unconditional branch.
     unsigned Opc = isUnconditional ? VTM::VOpToStateb : VTM::VOpToState;
-    BuildMI(&MBB, DL, get(Opc)).addMBB(TBB).addOperand(PredOp);
+    BuildMI(&MBB, DL, get(Opc)).addOperand(PredOp).addMBB(TBB)
+      .addOperand(ucOperand::CreatePredicate());
     return 1;
   }
 
@@ -201,11 +209,12 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   assert(PredOp.isReg() && PredOp.getReg() != 0
          && "Uncondtional predicate with true BB and false BB?");
   // Branch to true BB, with the no-barrier version.
-  BuildMI(&MBB, DL, get(VTM::VOpToState)).addMBB(TBB).addOperand(PredOp);
+  BuildMI(&MBB, DL, get(VTM::VOpToState)).addOperand(PredOp).addMBB(TBB)
+    .addOperand(ucOperand::CreatePredicate());
   // Branch the false BB.
   ReversePredicateCondition(PredOp);
-  BuildMI(&MBB, DL, get(VTM::VOpToStateb))
-      .addMBB(TBB).addOperand(PredOp);
+  BuildMI(&MBB, DL, get(VTM::VOpToStateb)).addOperand(PredOp).addMBB(TBB)
+    .addOperand(ucOperand::CreatePredicate());
    return 2;
 }
 

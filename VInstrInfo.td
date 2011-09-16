@@ -117,11 +117,11 @@ let hasCtrlDep = 1 in {
   let isBranch   = 1,
       isBarrier  = 1,
     isTerminator = 1 in {
-    def VOpToStateb : CtrlInst<(outs), (ins State:$target),
+    def VOpToStateb : CtrlInst<(outs), (ins DR:$cnd, State:$target),
                               "to $target;",
                               [], 0, 1, 1>;
   let isBarrier = 0 in
-    def VOpToState : CtrlInst<(outs), (ins State:$target),
+    def VOpToState : CtrlInst<(outs), (ins DR:$cnd, State:$target),
                               "to $target;",
                               [], 0, 1, 1>;
 

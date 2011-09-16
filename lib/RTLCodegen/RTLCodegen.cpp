@@ -874,13 +874,15 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     // Emit the predicate operand.
     SlotPredSS << " & ";
     printPredicate(Op.getPredicate(), SlotPredSS);
-    SlotPredSS.flush();
 
     // Special case for state transferring operation.
     if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
-      MachineBasicBlock *TargetBB = Op.getOperand(0).getMBB();
+      printPredicate(Op.getOperand(0), SlotPredSS);
+      SlotPredSS.flush();
+      MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
 
       // Emit control operation for next state.
+      SlotPredSS.flush();
       CtrlS.if_begin(SlotPred);
       if (TargetBB == CurBB) { // Self loop detected.
         CtrlS << "// Loop back to entry.\n";
@@ -893,6 +895,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       continue;
     }
 
+    SlotPredSS.flush();
     CtrlS.if_begin(SlotPred);
 
     // Emit the operations.

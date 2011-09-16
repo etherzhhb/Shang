@@ -244,9 +244,12 @@ SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
                                                : N->getOperand(2);
   SDValue Cnd = N->getOpcode() == ISD::BR ? CurDAG->getTargetConstant(1,MVT::i1)
                                           : N->getOperand(1);
-  SDValue Ops[] = {TargetBB, // Target BB
-                   Cnd, // condition (predicate operand).
-                   N->getOperand(0) }; // Chain
+  SDValue Ops[] = { Cnd, // Condition
+                    TargetBB, // Target BB
+                    SDValue(),
+                    N->getOperand(0) }; // Chain
+
+  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) - 1);
 
   return CurDAG->SelectNodeTo(N, VTM::VOpToStateb, N->getVTList(),
                               Ops, array_lengthof(Ops));
