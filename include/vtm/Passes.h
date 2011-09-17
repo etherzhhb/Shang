@@ -46,7 +46,8 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 Pass *createBitLevelInfoPass();
 
 Pass *createFixMachineCodePass();
-FunctionPass *createVIfConverterPass();
+Pass *createFixTerminatorsPass();
+Pass *createVIfConverterPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.

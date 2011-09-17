@@ -37,10 +37,6 @@
 
 using namespace llvm;
 
-STATISTIC(UnconditionalBranches,
-          "Number of unconditionnal branches inserted for fall through edges");
-STATISTIC(Unreachables,
-     "Number of Unreachable inserted for machine basic block without sucessor");
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
@@ -112,12 +108,9 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
 
   std::vector<MachineInstr*> Imms;
-  SmallPtrSet<MachineBasicBlock*, 2> MissedSuccs;
-  MachineInstr *FirstTerminator = 0;
    // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
-    MissedSuccs.insert(MBB->succ_begin(), MBB->succ_end());
 
     for (MachineBasicBlock::iterator II = MBB->begin(), IE = MBB->end();
          II != IE; ++II) {
@@ -128,52 +121,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
       // BitSlice, BitCat and BitRepeat are wires.
       handleWireOps(Inst, MRI, TII);
-
-      // Remove the explicit successors from the missed successors set.
-      if (VInstrInfo::isBrCndLike(Inst->getOpcode())) {
-        MachineOperand &Cnd = Inst->getOperand(1);
-        // Use reg0 for always true.
-        if (Cnd.isImm() && Cnd.getImm()) Cnd.ChangeToRegister(0, false);
-        // Change the unconditional branch after conditional branch to
-        // conditional branch.
-        if (FirstTerminator && ! VInstrInfo::isUnConditionalBranch(Inst)) {
-          MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
-          MachineOperand &FalseCnd = FirstTerminator->getOperand(0);
-          FalseCnd.setReg(TrueCnd.getReg());
-          FalseCnd.setTargetFlags(TrueCnd.getTargetFlags());
-          VInstrInfo::ReversePredicateCondition(FalseCnd);
-        }
-
-        FirstTerminator = Inst;
-
-        MissedSuccs.erase(Inst->getOperand(1).getMBB());
-      }
     }
-
-    // Make sure each basic block have a terminator.
-    if (!MissedSuccs.empty()) {
-      assert(MissedSuccs.size() == 1 && "Fall through to multiple blocks?");
-      ++UnconditionalBranches;
-      MachineOperand Cnd = ucOperand::CreatePredicate();
-      if (FirstTerminator) {
-        MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
-        assert(TrueCnd.getReg() != 0 && "Two unconditional branch?");
-        Cnd = TrueCnd;
-        VInstrInfo::ReversePredicateCondition(Cnd);
-      }
-      BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
-        .addOperand(Cnd).addMBB(*MissedSuccs.begin())
-        .addOperand(ucOperand::CreatePredicate());
-    }
-
-    if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
-      ++Unreachables;
-      BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
-        .addOperand(ucOperand::CreatePredicate());
-    }
-
-    MissedSuccs.clear();
-    FirstTerminator = 0;
   }
 
   eliminateMVImm(Imms, MRI);

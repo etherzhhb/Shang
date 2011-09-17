@@ -116,6 +116,7 @@ add_llvm_target(VerilogBackend
   VSelectionDAGInfo.cpp
   VSubtarget.cpp
   FixMachineCode.cpp
+  FixTerminators.cpp
   ScriptingPass.cpp
 )
 

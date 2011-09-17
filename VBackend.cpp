@@ -208,6 +208,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
     printAndVerify(PM, "After VTM ifconversion pass");
   }
 
+  // Make sure we have a branch instruction for every success block.
+  PM.add(createFixTerminatorsPass());
+
   // Eliminate the VOpMvImm instructions.
   PM.add(createFixMachineCodePass());
 
