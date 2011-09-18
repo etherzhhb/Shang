@@ -63,6 +63,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
     for (MachineBasicBlock::iterator II = MBB->getFirstTerminator(),
          IE = MBB->end(); II != IE; ++II) {
       MachineInstr *Inst = II;
+      if (!VInstrInfo::isBrCndLike(Inst->getOpcode())) continue;
 
       MachineOperand &Cnd = Inst->getOperand(1);
       // Use reg0 for always true.

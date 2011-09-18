@@ -272,7 +272,7 @@ INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
 INITIALIZE_PASS_END(VIfConverter,
                     "vtm-if-converter", "If Converter", false, false)
 
-FunctionPass *llvm::createVIfConverterPass() { return new VIfConverter(); }
+Pass *llvm::createVIfConverterPass() { return new VIfConverter(); }
 
 bool VIfConverter::runOnMachineFunction(MachineFunction &MF) {
   TLI = MF.getTarget().getTargetLowering();

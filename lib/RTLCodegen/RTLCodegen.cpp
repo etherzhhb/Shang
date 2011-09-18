@@ -877,6 +877,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
     // Special case for state transferring operation.
     if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
+      SlotPredSS << " & ";
       printPredicate(Op.getOperand(0), SlotPredSS);
       SlotPredSS.flush();
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
