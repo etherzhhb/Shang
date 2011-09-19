@@ -109,8 +109,11 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
     MachineInstr *Inst = I;
     if (!Inst->getDesc().isTerminator()) continue;
 
-    if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
+    if (VInstrInfo::isBrCndLike(Inst->getOpcode())) {
+      if (!isUnpredicatedTerminator(Inst)) return true;
+
       Terms.push_back(Inst);
+    }
   }
 
   // Mixing branches and return?
