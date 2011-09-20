@@ -39,7 +39,7 @@ public:
   virtual bool AnalyzeBranch(MachineBasicBlock &MBB,
                              MachineBasicBlock *&TBB, MachineBasicBlock *&FBB,
                              SmallVectorImpl<MachineOperand> &Cond,
-                             bool AllowModify /* = false */) const;
+                             bool AllowModify = false) const;
   virtual bool DefinesPredicate(MachineInstr *MI,
                                 std::vector<MachineOperand> &Pred) const;
   virtual bool PredicateInstruction(MachineInstr *MI,
@@ -95,6 +95,11 @@ public:
     unsigned SrcReg,
     unsigned SrcSubReg) const;
 
+
+  static void mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
+                          MachineBasicBlock *ToBB, MachineRegisterInfo &MRI,
+                          const SmallVectorImpl<MachineOperand> &FromBBCnd);
+
   static const MachineOperand *getPredOperand(const MachineInstr *MI);
   static MachineOperand *getPredOperand(MachineInstr *MI);
 
@@ -103,13 +108,11 @@ public:
   static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
                                    const SmallVectorImpl<MachineOperand> &Pred,
                                    MachineOperand IfTrueVal,
-                                   MachineOperand IfFalseVal,
-                                   const TargetInstrInfo *TII);
+                                   MachineOperand IfFalseVal);
   static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
                                    MachineOperand Pred,
                                    MachineOperand IfTrueVal,
-                                   MachineOperand IfFalseVal,
-                                   const TargetInstrInfo *TII);
+                                   MachineOperand IfFalseVal);
 
   static MachineInstr&
   BuildConditionnalMove(MachineBasicBlock &MBB, MachineBasicBlock::iterator IP,

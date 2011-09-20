@@ -1050,22 +1050,6 @@ static void UpdatePredRedefs(MachineBasicBlock::iterator I,
   }
 }
 
-// Add Source to PHINode, if PHINod only have 1 source value, replace the PHI by
-// a copy, adjust and return true
-static bool AddSrcValToPHI(MachineOperand SrcVal, MachineBasicBlock *SrcBB,
-                           MachineInstr *PN, MachineRegisterInfo &MRI) {
-  if (PN->getNumOperands() != 1) {
-    PN->addOperand(SrcVal);
-    PN->addOperand(MachineOperand::CreateMBB(SrcBB));
-    return false;
-  }
-
-  // A redundant PHI have only 1 incoming value after SrcVal added.
-  MRI.replaceRegWith(PN->getOperand(0).getReg(), SrcVal.getReg());
-  PN->eraseFromParent();
-  return true;
-}
-
 /// IfConvertSimple - If convert a simple (split, no rejoin) sub-CFG.
 ///
 bool VIfConverter::IfConvertSimple(BBInfo &BBI, IfcvtKind Kind) {
@@ -1530,65 +1514,12 @@ void VIfConverter::MergeBlocks(BBInfo &ToBBI, BBInfo &FromBBI,
   MachineBasicBlock *FallThrough = FromBBI.HasFallThrough ? NBB : NULL;
 
   MachineRegisterInfo &MRI = ToBBI.BB->getParent()->getRegInfo();
-  SmallVector<std::pair<MachineOperand, MachineBasicBlock*>, 2> SrcVals;
-  SmallVector<MachineInstr*, 8> PHIs;
+  MachineBasicBlock *FromBB = FromBBI.BB, *ToBB = ToBBI.BB;
 
   for (unsigned i = 0, e = Succs.size(); i != e; ++i) {
     MachineBasicBlock *Succ = Succs[i];
-    // Fix up any PHI nodes in the successor.
-    for (MachineBasicBlock::iterator MI = Succ->begin(), ME = Succ->end();
-         MI != ME && MI->isPHI(); ++MI)
-      PHIs.push_back(MI);
 
-    while (!PHIs.empty()) {
-      MachineInstr *MI = PHIs.pop_back_val();
-      unsigned Idx = 1;
-      while (Idx < MI->getNumOperands()) {
-        MachineBasicBlock *SrcBB = MI->getOperand(Idx + 1).getMBB();
-        if (SrcBB != FromBBI.BB && SrcBB != ToBBI.BB ) {
-          Idx += 2;
-          continue;
-        }
-        // Take the operand away.
-        SrcVals.push_back(std::make_pair(MI->getOperand(Idx), SrcBB));
-        MI->RemoveOperand(Idx);
-        MI->RemoveOperand(Idx);
-      }
-
-      // If only 1 value comes from BB, re-add it to the PHI.
-      if (SrcVals.size() == 1) {
-        AddSrcValToPHI(SrcVals.pop_back_val().first, ToBBI.BB, MI, MRI);
-        continue;
-      }
-
-      assert(SrcVals.size() == 2 && "Too many edges!");
-
-      // Read the same register?
-      if (SrcVals[0].first.getReg() == SrcVals[1].first.getReg()) {
-        SrcVals.pop_back();
-        AddSrcValToPHI(SrcVals.pop_back_val().first, ToBBI.BB, MI, MRI);
-        continue;
-      }
-
-      // Make sure value from FromBB in SrcVals[1].
-      if (SrcVals.back().second != FromBBI.BB)
-        std::swap(SrcVals[0], SrcVals[1]);
-
-      assert(SrcVals.back().second == FromBBI.BB
-             && "Cannot build select for value!");
-      assert(!FromBBCnd.empty()
-             && "Do not know how to select without condition!");
-      // Merge the value with select instruction.
-      MachineOperand Result = MachineOperand::CreateReg(0, false);
-      Result.setTargetFlags(MI->getOperand(0).getTargetFlags());
-      MachineOperand FromBBIncomingVal = SrcVals.pop_back_val().first;
-      MachineOperand ToBBIncomingVal = SrcVals.pop_back_val().first;
-      VInstrInfo::BuildSelect(ToBBI.BB, Result, FromBBCnd,
-                              FromBBIncomingVal, // Value from FromBB
-                              ToBBIncomingVal, // Value from ToBB
-                              TII);
-      AddSrcValToPHI(Result, ToBBI.BB, MI, MRI);
-    }
+    VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, MRI, FromBBCnd);
 
     // Update edges.
     // Fallthrough edge can't be transferred.
