@@ -1050,26 +1050,6 @@ static void UpdatePredRedefs(MachineBasicBlock::iterator I,
   }
 }
 
-static MachineBasicBlock::iterator
-PredicatePseudoInstruction(MachineInstr *MI, const TargetInstrInfo *TII,
-                           const SmallVectorImpl<MachineOperand> &Pred) {
-    if (MI->getOpcode() != VTM::COPY) return 0;
-
-  SmallVector<MachineOperand, 2> Ops;
-  while (MI->getNumOperands()) {
-    unsigned LastOp = MI->getNumOperands() - 1;
-    Ops.push_back(MI->getOperand(LastOp));
-    MI->RemoveOperand(LastOp);
-  }
-
-  MachineBasicBlock::iterator InsertPos = MI;
-  InsertPos = VInstrInfo::BuildConditionnalMove(*MI->getParent(), InsertPos,
-                                                Ops[1], Pred, Ops[0], TII);
-  MI->eraseFromParent();
-
-  return InsertPos;
-}
-
 // Add Source to PHINode, if PHINod only have 1 source value, replace the PHI by
 // a copy, adjust and return true
 static bool AddSrcValToPHI(MachineOperand SrcVal, MachineBasicBlock *SrcBB,
@@ -1442,7 +1422,7 @@ void VIfConverter::PredicateBlock(BBInfo &BBI,
     if (I->getOpcode() <= TargetOpcode::COPY) {
       MachineInstr *PseudoInst = I;
       ++I;
-      PseudoInst = PredicatePseudoInstruction(PseudoInst, TII, Cond);
+      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, TII, Cond);
       if (!PseudoInst) {
 #ifndef NDEBUG
         dbgs() << "Unable to predicate " << *I << "!\n";

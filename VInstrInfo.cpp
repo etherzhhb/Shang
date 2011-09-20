@@ -259,6 +259,26 @@ bool VInstrInfo::isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
   return true; // DirtyHack: Everything is profitable.
 }
 
+MachineInstr *VInstrInfo::PredicatePseudoInstruction(MachineInstr *MI,
+                                                     const TargetInstrInfo *TII,
+                                                     const SmallVectorImpl<MachineOperand> &Pred) {
+  if (MI->getOpcode() != VTM::COPY) return 0;
+
+  SmallVector<MachineOperand, 2> Ops;
+  while (MI->getNumOperands()) {
+    unsigned LastOp = MI->getNumOperands() - 1;
+    Ops.push_back(MI->getOperand(LastOp));
+    MI->RemoveOperand(LastOp);
+  }
+
+  MachineBasicBlock::iterator InsertPos = MI;
+  InsertPos = VInstrInfo::BuildConditionnalMove(*MI->getParent(), InsertPos,
+                                                Ops[1], Pred, Ops[0], TII);
+  MI->eraseFromParent();
+
+  return InsertPos;
+}
+
 bool VInstrInfo::PredicateInstruction(MachineInstr *MI,
                                     const SmallVectorImpl<MachineOperand> &Pred)
                                     const {

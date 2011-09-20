@@ -45,6 +45,10 @@ public:
   virtual bool PredicateInstruction(MachineInstr *MI,
                                     const SmallVectorImpl<MachineOperand> &Pred)
                                     const;
+  static MachineInstr *
+  PredicatePseudoInstruction(MachineInstr *MI, const TargetInstrInfo *TII,
+                             const SmallVectorImpl<MachineOperand> &Pred);
+
   virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const;
   virtual unsigned InsertBranch(MachineBasicBlock &MBB,
                                 MachineBasicBlock *TBB, MachineBasicBlock *FBB,
