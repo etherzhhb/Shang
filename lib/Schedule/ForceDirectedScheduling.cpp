@@ -4,12 +4,12 @@
 //
 // Copyright: 2010 by Hongbin Zheng. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
-// of your agreement to the following terms, and your use, installation, 
+// of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
-// of these terms.  If you do not agree with these terms, please do not use, 
-// install, modify or redistribute this software. You may not redistribute, 
-// install copy or modify this software without written permission from 
-// Hongbin Zheng. 
+// of these terms.  If you do not agree with these terms, please do not use,
+// install, modify or redistribute this software. You may not redistribute,
+// install copy or modify this software without written permission from
+// Hongbin Zheng.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -49,12 +49,12 @@ bool SchedulingBase::fds_sort::operator()(const VSUnit* LHS,
   if (LALAP > RALAP) return true;
   if (LALAP < RALAP) return false;
 
-  // 
+  //
   unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
   if (LASAP > RASAP) return true;
   if (LASAP < RASAP) return false;
 
-  
+
   return LHS->getIdx() > RHS->getIdx();
 }
 
@@ -81,7 +81,7 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
   if (LASAP > RASAP) return true;
   if (LASAP < RASAP) return false;
-  
+
   return LHS->getIdx() > RHS->getIdx();
 }
 
@@ -107,10 +107,10 @@ bool IteractiveModuloScheduling::scheduleState() {
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
         if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
           continue;
-        
+
         if (EarliestUntry == 0)
           EarliestUntry = i;
-        
+
         if (!A->getFUId().isTrivial() && !tryTakeResAtStep(A, i))
           continue;
 
@@ -164,7 +164,7 @@ VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned st
     VSUnit *A = *I;
     if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
       continue;
-    if (A->getSlot() == step) return A; 
+    if (A->getSlot() == step) return A;
   }
 
   return 0;

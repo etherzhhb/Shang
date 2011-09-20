@@ -4,12 +4,12 @@
 //
 // Copyright: 2010 by Hongbin Zheng. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
-// of your agreement to the following terms, and your use, installation, 
+// of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
-// of these terms.  If you do not agree with these terms, please do not use, 
-// install, modify or redistribute this software. You may not redistribute, 
-// install copy or modify this software without written permission from 
-// Hongbin Zheng. 
+// of these terms.  If you do not agree with these terms, please do not use,
+// install, modify or redistribute this software. You may not redistribute,
+// install copy or modify this software without written permission from
+// Hongbin Zheng.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -123,7 +123,7 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
   if (I.getPipeLineAlgorithm() == SynSettings::IMS)
     return new IteractiveModuloScheduling(G);
-  
+
   return createLinearScheduler(G);
 }
 

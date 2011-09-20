@@ -1,4 +1,4 @@
-//===---------- FixMachineCode.cpp - Fix The Machine Code  ------*- C++ -*-===//
+//===- FixMachineCode.cpp - Fix The Terminators in Machine Code -*- C++ -*-===//
 //
 //                            The Verilog Backend
 //

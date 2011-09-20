@@ -4,12 +4,12 @@
 //
 // Copyright: 2010 by Hongbin Zheng. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
-// of your agreement to the following terms, and your use, installation, 
+// of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
-// of these terms.  If you do not agree with these terms, please do not use, 
-// install, modify or redistribute this software. You may not redistribute, 
-// install copy or modify this software without written permission from 
-// Hongbin Zheng. 
+// of these terms.  If you do not agree with these terms, please do not use,
+// install, modify or redistribute this software. You may not redistribute,
+// install copy or modify this software without written permission from
+// Hongbin Zheng.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -62,7 +62,7 @@ private:
   const unsigned short ItDst;
   // The latancy of this edge.
   const unsigned short Latancy;
-  
+
   VDEdge(const VDEdge &);            // DO NOT IMPLEMENT
   void operator=(const VDEdge &);    // DO NOT IMPLEMENT
 protected:
@@ -110,7 +110,7 @@ public:
   VSUnitDepIterator operator++(int) { // Postincrement
     VSUnitDepIterator tmp = *this;
     ++*this;
-    return tmp; 
+    return tmp;
   }
 
   VDEdge *getEdge() { return *I; }
@@ -239,7 +239,7 @@ public:
   static OpSlot detailStepFloor(int S, bool isDatapath);
 };
 
-/// @brief Base Class of all hardware atom. 
+/// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
   OpSlot SchedSlot;
@@ -344,7 +344,7 @@ public:
     for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
       if ((*I) == A)
         return I;
-    
+
     return dep_end();
   }
 
@@ -393,13 +393,13 @@ public:
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
   unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
-  
+
   // Get the maximum latency from RepresentativeInst to DstMI.
   unsigned getMaxLatencyTo(MachineInstr *DstMI) const {
     unsigned latency = 0;
     for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
       latency = std::max(getLatencyTo(*I, DstMI), latency);
-    
+
     return latency;
   }
 
@@ -417,7 +417,7 @@ public:
 
   unsigned getLatency() const {
     if (isEntry()) return 0;
-  
+
     VIDesc Info = *getRepresentativeInst();
     return Info.getLatency();
   }
@@ -630,7 +630,7 @@ public:
   unsigned getLoopOpSlot() const {
     if (VSUnit *SE = getLoopOp())
       return SE->getSlot();
-    
+
     return getEndSlot();
   }
   unsigned getII() const { return getLoopOpSlot() - getStartSlot(); }
