@@ -366,16 +366,17 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
 
   ucState Ctrl(InsertPos);
   assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
-
+  SmallVector<MachineOperand, 8> Ops;
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
-  MachineInstrBuilder Builder(InsertPos);
-  Builder.addOperand(ucOperand::CreateOpcode(VTM::VOpMvPhi, Slot));
-  Builder.addOperand(ucOperand::CreatePredicate());
+
+  Ops.push_back(ucOperand::CreateOpcode(VTM::VOpMvPhi, Slot));
+  Ops.push_back(ucOperand::CreatePredicate());
+  MachineOperand &Pred = Ops.back();
   ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
   Dst.setBitWidth(DefOp.getBitWidth());
   if (VRegisterInfo::IsWire(DefOp.getReg(), &MRI))
     Dst.setIsWire();
-  Builder.addOperand(Dst);
+  Ops.push_back(Dst);
 
   MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
 
@@ -391,13 +392,15 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     // We need to forward the wire copy if the source register is written
     // in the same slot, otherwise we will read a out of date value.
     if (WriteOp->getParent() == &*Ctrl && WriteOp->getPredSlot() == Slot) {
-      // FIXME: Handle others case.
-      assert(WriteOp.getPredicate().getReg() == 0
-             && "Can not handle predicated ucop!");
+      // Copy the predicate operand.
+      MachineOperand &WritePred = WriteOp.getPredicate();
+      Pred.ChangeToRegister(WritePred.getReg(), false);
+      Pred.setTargetFlags(WritePred.getTargetFlags());
 
+      // FIXME: Handle others case.
       if (isCopyLike(WriteOp->getOpcode())) {
         MachineOperand ForwardedVal = WriteOp.getOperand(1);
-        Builder.addOperand(ForwardedVal);
+        Ops.push_back(ForwardedVal);
       }
     }
   }
@@ -407,7 +410,13 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   Src.setBitWidth(DefOp.getBitWidth());
   if (VRegisterInfo::IsWire(SrcReg, &MRI))
     Src.setIsWire();
-  Builder.addOperand(Src);
+  Ops.push_back(Src);
+
+  MachineInstrBuilder Builder(InsertPos);
+  for (SmallVectorImpl<MachineOperand>::iterator I = Ops.begin(), E = Ops.end();
+       I != E; ++I)
+    Builder.addOperand(*I);
+
   return &*Builder;
 }
 
