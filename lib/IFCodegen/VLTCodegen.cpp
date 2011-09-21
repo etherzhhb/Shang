@@ -450,6 +450,17 @@ struct VLTIfCodegen : public MachineFunctionPass {
               "#ifdef __cplusplus\n"
               "extern \"C\" {\n"
               "#endif\n\n";
+
+    GlobalVariable *BRam = M.getGlobalVariable("BlockRamBase", true);
+    const PointerType *Ty = cast<PointerType>(BRam->getType());
+
+    Out << "long long __get_GV_BlockRamBase () {\n"
+           "  static ";
+    printType(Out, Ty->getElementType(), false, BRam->getName()) << ";\n";
+    // TODO: The initializer.
+    Out << "  return (long long)BlockRamBase;\n"
+           "}\n\n\n";
+
     Out.flush();
 
     return false;

@@ -394,6 +394,13 @@ bool RTLCodegen::doInitialization(Module &Mod) {
                       " in a machine function pass!");
   Mang = new Mangler(MMI->getContext(), *TD);
   M = &Mod;
+
+  // Define the blockram base address.
+  Out << "\n\n\n`ifdef __VERILATOR_SIM\n"
+         "import \"DPI-C\" function longint __get_GV_BlockRamBase();\n"
+         "`define BlockRamBase getBlockRamBase()\n"
+         "`endif\n\n\n";
+
   return false;
 }
 
