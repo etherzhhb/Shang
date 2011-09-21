@@ -32,6 +32,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "vtm/HWPartitionInfo.h"
 #include "llvm/PassAnalysisSupport.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
 
 
 using namespace llvm;
@@ -59,7 +60,7 @@ namespace {
 
     // It will be used later in the member function.
     CallGraph *CG;
-    llvm::HWPartitionInfo *HWInfo;
+    HWPartitionInfo *HWInfo;
 
   private:
 
@@ -92,7 +93,14 @@ namespace {
                                       CallGraphNode *CGN,
                                       std::map<GlobalVariable*, Argument*> &GVMapArg);
 
+    // Promote the ConstExprs with GVs in instructions of HW Function.
+    void promoteConstExpr(Function *F);
 
+    // Promote BitCast ConstExpr.
+    void promoteBitCastConstExpr(Instruction *Inst, ConstantExpr *CExpr, unsigned Index);
+
+    // Promote GEP ConstExpr
+    void promoteGEPConstExpr(Instruction *Inst, ConstantExpr *CExpr, unsigned Index);
   };
 }
 
@@ -120,10 +128,8 @@ bool GVPromotion::runOnSCC(CallGraphSCC &SCC) {
   bool PromotionChanged = false;
   for (CallGraphSCC::iterator I = SCC.begin(), E = SCC.end(); I != E; ++I) {
     CallGraphNode *CGN = *I;
-    Function *F = CGN->getFunction();
-    if (HWInfo->isHW(F)) {
-      PromotionChanged |= PromoteReturn(*I);
-    }
+    PromotionChanged |= PromoteReturn(CGN);
+
   }
 
   return PromotionChanged;
@@ -131,11 +137,13 @@ bool GVPromotion::runOnSCC(CallGraphSCC &SCC) {
 
 bool GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   Function *F = CGN->getFunction();
-  if (!F || F->isDeclaration())
+  if (!F || F->isDeclaration() || !HWInfo->isHW(F))
     return false;
 
-  DEBUG(dbgs() << "GVPromotion: Looking at function " 
-    << F->getName() << "\n");
+  DEBUG(dbgs() << "GVPromotion: Looking at function " << F->getName() << "\n");
+    
+  // Promote the ConstExprs with GVs in HW Function.
+  promoteConstExpr(F);
 
   // Find out all the instructions that are needed to promote in the function,
   // which is to say that these instrucions use GVs.
@@ -155,6 +163,7 @@ bool GVPromotion::PromoteReturn(CallGraphNode *CGN) {
   // Create the new function body and insert it into the module.
   Function *NF = cloneFunction(F);
 
+
   // Update all call sites to use new function and update the callgraph.
   return updateAllCallSites(F, NF, CGN, GVMapArg);
 
@@ -167,15 +176,17 @@ Function *GVPromotion::cloneFunction(Function *F) {
   std::vector<Value*> Args;
 
   // (1) Get the argument types.
+  unsigned i = 1;
+  DEBUG(dbgs() << "Clone Function " << F->getNameStr() << ":\n" );
   for (Function::arg_iterator I = F->arg_begin(), E = F->arg_end();
-       I != E; ) {
+       I != E; i++) {
     Args_Ty.push_back(I->getType());
     Argument *Arg_Temp = I;
-    DEBUG(dbgs() << Arg_Temp->getName() << "\n");      
+    DEBUG(dbgs() << i << ": " << Arg_Temp->getName() << "   ###   \n");      
     Args.push_back(I);
     I++;
   }
-
+  DEBUG(dbgs() << "\n\n");
   // (2) Copy the attributes from the old function to the new function.
   SmallVector<AttributeWithIndex, 8> AttributesVec;
   const AttrListPtr &PAL = F->getAttributes();
@@ -210,12 +221,12 @@ Function *GVPromotion::cloneFunction(Function *F) {
 
   // Cut and paste the old function body and tell the body to use new 
   // arguments in new function.
-  NF->getBasicBlockList().splice(NF->begin(), F->getBasicBlockList());
   for (Function::arg_iterator IOld = F->arg_begin(), EOld = F->arg_end(),
        INew = NF->arg_begin(); IOld != EOld; ++IOld, ++INew) {
     INew->takeName(IOld);
     IOld->replaceAllUsesWith(INew);     
   }
+  NF->getBasicBlockList().splice(NF->begin(), F->getBasicBlockList());
 
   return NF;
 }
@@ -242,7 +253,7 @@ bool GVPromotion::updateAllCallSites(Function *F, Function *NF,
     // Get the callsite.
     CallSite CS(F->use_back());
     Instruction *Call = CS.getInstruction();
-
+    DEBUG(dbgs() << "!!!  " << Call->getParent()->getParent()->getNameStr() << "\n");
     // [1] Create a new argument vector for the new instruction.
     // (1) Get the old arguments from the old instruction.       
     Function::arg_iterator IOld = F->arg_begin();
@@ -255,8 +266,8 @@ bool GVPromotion::updateAllCallSites(Function *F, Function *NF,
     for (Function::arg_iterator EOld = F->arg_end(); IOld != EOld; 
          ++IOld) {         
       for (std::map<GlobalVariable*, Argument*>::iterator 
-            IMap = GVMapArg.begin(), EMap = GVMapArg.end(); 
-            IMap != EMap; ++IMap) {
+           IMap = GVMapArg.begin(), EMap = GVMapArg.end(); 
+           IMap != EMap; ++IMap) {
         Argument *GVArg = IOld;
         Argument *MapArg = IMap->second;
         if (GVArg == MapArg) {
@@ -384,12 +395,136 @@ void GVPromotion::promoteInst(SmallVectorImpl<Instruction*> &Inst_Promo,
          E = Inst->op_end(); I != E; ++I) {   
       if(!isa<GlobalVariable>(*I)) continue;           
       GlobalVariable *GV = dyn_cast<GlobalVariable>(I);
-
       // Now begin to do the promotion of the GV in the instruction of 
-      // the function.
-              
+      // the function.           
       // One way is to directly replace the operand with the new one.
       I->set(GVMapArg[GV]);
     }
   }
 }
+
+void GVPromotion::promoteConstExpr(Function *F){
+  for (Function::iterator IF = F->begin(),EF = F->end();
+       IF != EF; ++IF) {
+    for(BasicBlock::iterator IBB = IF->begin(), EBB = IF->end();
+        IBB != EBB; ++IBB) {
+      // Iterate all instructions.
+      Instruction *Inst_CE = IBB;
+      unsigned Index = 0;
+      switch (Inst_CE->getOpcode()) {
+        // Call instruction.
+        case Instruction::Call: {         
+          CallSite CS(Inst_CE);
+          // Don't touch printf.
+          if (CS.getCalledFunction()->getNameStr() == "printf")
+            break; 
+          for (CallSite::arg_iterator ICS = CS.arg_begin(), ECS = CS.arg_end(); 
+               ICS != ECS; ++ICS, Index++) {
+            ConstantExpr *CExpr = dyn_cast<ConstantExpr>(ICS);
+            // We only want to get ConstExprs.
+            if (!CExpr)
+              continue;
+            DEBUG(dbgs() << "The instruction before promotion :\n");
+            DEBUG(Inst_CE->dump());
+            DEBUG(dbgs() << "\n**\n" 
+                         << "And the function it belongs to is " 
+                         << F->getNameStr() 
+                         << ".\n##############################\n");
+            // Deal with different ConstExpr types.
+            // Now only support BitCast and GetElementPtr ConstExpr 
+            // in Call instructions.
+            switch (CExpr->getOpcode()) {
+            case Instruction::BitCast:
+              promoteBitCastConstExpr(Inst_CE, CExpr, Index);
+              break;
+            case Instruction::GetElementPtr:
+              promoteGEPConstExpr(Inst_CE, CExpr, Index);
+              break;
+            default:
+              assert(0 && "Now only support bitcast and GEP ConstantExpression in call instuction.");
+              break;
+            }
+          }     
+          break;
+        }
+        // Load and Store instruction.                     
+        case Instruction::Load:
+        case Instruction::Store: {       
+          for (Instruction::op_iterator I = IBB->op_begin(), 
+               E = IBB->op_end(); I != E; ++I, Index++) {
+            ConstantExpr *CExpr = dyn_cast<ConstantExpr>(I);
+            if (!CExpr)
+              continue;
+            DEBUG(dbgs() << "The instruction before promotion :\n");
+            DEBUG(Inst_CE->dump());
+            DEBUG(dbgs() << "\n**\n" 
+                         << "And the function it belongs to is " 
+                         << F->getNameStr() 
+                         << ".\n****************************\n");
+            // Now only support GEP ConstExpr in Load and Store instructions.
+            switch (CExpr->getOpcode()) {
+            case Instruction::GetElementPtr:
+              promoteGEPConstExpr(Inst_CE, CExpr, Index);
+              break;
+            default:
+              assert(0 && "Now only support GEP ConstantExpression in load or store instuction.");
+              break;
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }       
+    }
+  }
+}
+
+void GVPromotion::promoteBitCastConstExpr(Instruction *Inst_CE, 
+                                      ConstantExpr *CExpr, unsigned Index) {
+  // Get the type and the value of the ConstantExpression, then create a new 
+  // bitcast instruction in front of the intrinsic call.
+  // Use this new instruction to replace the ConstantExpression.
+  const Type *Ty = CExpr->getType();  
+  for (ConstantExpr::op_iterator ICE = CExpr->op_begin(), ECE = CExpr->op_end();
+       ICE != ECE; ++ICE) {                  
+    if (isa<GlobalVariable>(*ICE)) {
+      // Get the GV and create the new bitcast instruction, put it 
+      // in front of the call instruction.
+      GlobalVariable *GV = dyn_cast<GlobalVariable>(ICE);
+      Instruction *BitCast = new BitCastInst(GV, Ty,
+                                        GV->getName()+"_bc", Inst_CE);
+      // Replace the ConstantExpression.
+      Inst_CE->setOperand(Index, BitCast);
+      DEBUG(dbgs() << "The BasicBlock after promotion :\n");
+      DEBUG(Inst_CE->getParent()->dump());
+      DEBUG(dbgs() << "\n@@@@@@@@@@@PromoteBitCastCExpr Done!!@@@@@@@@@@\n");
+    }
+  }    
+}
+
+void GVPromotion::promoteGEPConstExpr(Instruction *Inst_CE,
+                                  ConstantExpr *CExpr, unsigned Index) {
+  // Get the pointer and the indices of the GEP ConstExpr, 
+  // then generate a new GEP instrucion to replace the ConstExpr.
+  GlobalVariable *GV;
+  SmallVector<Value*, 4> Indices;
+  for (ConstantExpr::op_iterator ICE = CExpr->op_begin(), ECE = CExpr->op_end();
+       ICE != ECE; ++ICE) {          
+    if (isa<GlobalVariable>(*ICE)) {
+      GV = dyn_cast<GlobalVariable>(ICE);
+    }
+    else {
+      Indices.push_back(*ICE);           
+    }
+  }
+  Instruction *GEP = GetElementPtrInst::CreateInBounds(GV, Indices.begin(), 
+                                                       Indices.end(), 
+                                                       GV->getName()+"_GEP");
+  GEP->insertBefore(Inst_CE);
+  Inst_CE->setOperand(Index, GEP);
+  DEBUG(dbgs() << "The BasicBlock after promotion :\n");
+  DEBUG(Inst_CE->getParent()->dump());
+  DEBUG(dbgs() << "\n$$$$$$$$$$$$$$$$PromoteGEPCExpr Done!!$$$$$$$$$$$$$$$$\n");
+}
+
