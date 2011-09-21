@@ -214,9 +214,9 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   // Branch to true BB, with the no-barrier version.
   BuildMI(&MBB, DL, get(VTM::VOpToState)).addOperand(PredOp).addMBB(TBB)
     .addOperand(ucOperand::CreatePredicate());
-  // Branch the false BB.
+  // Branch to the false BB.
   ReversePredicateCondition(PredOp);
-  BuildMI(&MBB, DL, get(VTM::VOpToStateb)).addOperand(PredOp).addMBB(TBB)
+  BuildMI(&MBB, DL, get(VTM::VOpToStateb)).addOperand(PredOp).addMBB(FBB)
     .addOperand(ucOperand::CreatePredicate());
    return 2;
 }
