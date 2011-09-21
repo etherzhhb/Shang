@@ -426,7 +426,7 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
       for (ucOp::op_iterator I = WriteOp.op_begin(), E = WriteOp.op_end(); I != E;
         ++I) {
           MachineOperand &Op = *I;
-          if (Op.isImplicit()) Ops.push_back(Op);
+          if (Op.isReg() && Op.isImplicit()) Ops.push_back(Op);
       }
 
     return addOperandsToMI(InsertPos, Ops);

@@ -919,6 +919,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMove_rw:
     case VTM::COPY:             emitOpCopy(Op);               break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
+    case VTM::VOpSel:           emitOpSel(Op);                break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
@@ -1046,6 +1047,21 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   OS << "// IMPLICIT_DEF ";
   ImpDef.getOperand(0).print(OS);
   OS << "\n";
+}
+
+void RTLCodegen::emitOpSel(ucOp &OpSel) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  OpSel.getOperand(0).print(OS);
+  OS << " = ";
+  if (OpSel.getOperand(1).isPredicateInverted())
+    OS << "~";
+  OpSel.getOperand(1).print(OS, 1, 0, true);
+  OS << " ? ";
+  OpSel.getOperand(2).print(OS);
+  OS << " : ";
+  OpSel.getOperand(3).print(OS);
+  OS << ";\n";
+
 }
 
 void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
@@ -1183,8 +1199,6 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
     case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
-    case VTM::VOpSel:       emitOpSel(Op);         break;
-
 
     case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
 
@@ -1228,22 +1242,6 @@ void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
      << getSubModulePortName(OpReadSymbol.getOperand(1).getTargetFlags(),
                              OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
-}
-
-void RTLCodegen::emitOpSel(ucOp &OpSel) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  OpSel.getOperand(0).print(OS);
-  OS << " = ";
-  if (OpSel.getOperand(1).isPredicateInverted())
-    OS << "~";
-  OpSel.getOperand(1).print(OS, 1, 0, true);
-  OS << " ? ";
-  OpSel.getOperand(2).print(OS);
-  OS << " : ";
-  OpSel.getOperand(3).print(OS);
-  OS << ";\n";
-
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
