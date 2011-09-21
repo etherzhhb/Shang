@@ -82,6 +82,11 @@ public:
     return true;
   }
 
+  // Dirty Hack: Always fold offset.
+  virtual bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
+    return true;
+  }
+
   //===--------------------------------------------------------------------===//
   // heterogeneous accelerator architecture bit level SDNodes.
   static unsigned computeSizeInBits(SDValue Op);

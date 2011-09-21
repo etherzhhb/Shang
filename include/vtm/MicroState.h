@@ -77,7 +77,7 @@ public:
   bool isWire() const;
 
   unsigned getBitWidthOrZero() const {
-    assert((isImm() || isReg() || isSymbol())
+    assert((isImm() || isReg() || isSymbol() || isGlobal())
       && "Unsupported operand type!");
     return getTargetFlags() & BitwidthMask;
   }

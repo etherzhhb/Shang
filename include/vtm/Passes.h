@@ -36,6 +36,8 @@ Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 // Promote all the GVs to arguments
 Pass *createGVPromotionPass();
 
+//Convert the AllocaInst to GlobalVariable.
+Pass *createStackToGlobalPass();
 
 Pass *createHWPartitionInfoPass();
 
@@ -72,6 +74,8 @@ Pass *createPLBIfCodegenPass(raw_ostream &O);
 //
 void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
+//Add the initialization implementation of StackToGlobal.cpp.
+void initializeStackToGlobalPass(PassRegistry &Registry);
 
 void initializeRTLCodegenPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry);

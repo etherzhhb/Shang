@@ -84,8 +84,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                          CodeGenFileType FileType,
                                          CodeGenOpt::Level OptLevel,
                                          bool DisableVerify) {
-  // Dirty Hack: Map all frame stuffs to bram 1.
-  PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
+
+  // add the pass which will convert the AllocaInst to GlobalVariable.
+  PM.add(createStackToGlobalPass());
 
   // Standard LLVM-Level Passes.
 

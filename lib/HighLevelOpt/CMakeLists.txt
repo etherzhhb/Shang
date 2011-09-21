@@ -2,6 +2,7 @@ add_llvm_library(VTMHighLevelOpt
   FunctionFilter.cpp
   GVPromotion.cpp
   HWPartitionInfo.cpp
+  StackToGlobal.cpp
   )
 
 llvm_config(VTMHighLevelOpt transformutils ipo)

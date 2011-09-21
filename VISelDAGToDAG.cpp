@@ -22,6 +22,11 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "llvm/Module.h"
+#include "llvm/GlobalVariable.h"
+
+#include "llvm/Target/TargetData.h"
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -33,6 +38,9 @@ using namespace llvm;
 /// SelectionDAG operations.
 namespace {
 class VDAGToDAGISel : public SelectionDAGISel {
+  typedef std::map<const GlobalValue*, int64_t> GVMapTy;
+  GVMapTy GVMap;
+  GlobalVariable *BRamBase;
 public:
   VDAGToDAGISel(VTargetMachine &TM, CodeGenOpt::Level OptLevel)
     : SelectionDAGISel(TM, OptLevel) {}
@@ -90,8 +98,37 @@ private:
   const VRegisterInfo *getRegisterInfo() {
     return static_cast<const VTargetMachine&>(TM).getRegisterInfo();
   }
+
+  virtual bool doInitialization(Module &M);
 };
 }  // end anonymous namespace
+
+//definition of the doInitialization of VDAGToDAGISel
+bool VDAGToDAGISel::doInitialization(Module &M){
+  TargetData *TD = getAnalysisIfAvailable<TargetData>();
+  int64_t BlockRamAddr = 0;
+
+  for (Module::global_iterator GI = M.global_begin(), E = M.global_end();
+       GI != E; ++GI){
+    GlobalVariable *GV = GI;
+    GVMap[GV] = BlockRamAddr;
+    const PointerType *Ty = cast<PointerType>(GV->getType());
+    BlockRamAddr = BlockRamAddr +
+                   TD->getTypeAllocSize(Ty->getElementType());
+  }
+
+  const Type *Ty = ArrayType::get(Type::getInt8Ty(M.getContext()), BlockRamAddr);
+  BRamBase = new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
+                                  Constant::getNullValue(Ty), "BlockRamBase");
+   //iterate the map to print out result.
+  DEBUG(
+    GVMapTy::const_iterator map_I = GVMap.begin();
+    for (GVMapTy::const_iterator I = GVMap.begin(), E = GVMap.end(); I != E; ++I)
+    dbgs() << "GV: "<< *I->first << "  BramAddr: " << I->second << "\n";
+  );
+
+  return true;
+}
 
 FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
                                    CodeGenOpt::Level OptLevel) {
@@ -222,9 +259,21 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
     int64_t Val = CSD->getZExtValue();
     Imm = CurDAG->getTargetConstant(Val, N->getValueType(0));
   } else if (ExternalSymbolSDNode *ES = dyn_cast<ExternalSymbolSDNode>(N))
-    Imm = CurDAG->getTargetExternalSymbol(ES->getSymbol(), Imm.getValueType());
-  else if(GlobalAddressSDNode *GA = dyn_cast<GlobalAddressSDNode>(N))
-    Imm = CurDAG->getTargetGlobalAddress(GA->getGlobal(), dl, Imm.getValueType());
+    Imm = CurDAG->getTargetExternalSymbol(ES->getSymbol(), Imm.getValueType(),
+                                          Imm.getValueSizeInBits());
+  else {
+    GlobalAddressSDNode *GA = cast<GlobalAddressSDNode>(N);
+    GVMapTy::iterator I = GVMap.find(GA->getGlobal());
+    if (I != GVMap.end()) {
+      int64_t Offset = I->second + GA->getOffset();
+      Imm = CurDAG->getTargetGlobalAddress(BRamBase, GA->getDebugLoc(),
+                                           Imm.getValueType(), Offset,
+                                           Imm.getValueSizeInBits());
+    } else
+      Imm = CurDAG->getTargetGlobalAddress(GA->getGlobal(), dl,
+                                           Imm.getValueType(), GA->getOffset(),
+                                           Imm.getValueSizeInBits());
+  }
 
   SDValue Ops[] = { Imm, SDValue()/*The dummy bit width operand*/ };
 
