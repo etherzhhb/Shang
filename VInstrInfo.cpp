@@ -332,6 +332,15 @@ MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
   return &*Builder;
 }
 
+static MachineInstr *addOperandsToMI(MachineInstr *MI,
+                                     SmallVectorImpl<MachineOperand> &Ops) {
+  for (SmallVectorImpl<MachineOperand>::iterator I = Ops.begin(), E = Ops.end();
+    I != E; ++I)
+    MI->addOperand(*I);
+
+  return MI;
+}
+
 MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
                                            mbb_it InsertPos, MachineInstr *PN,
                                            unsigned IncomingReg,
@@ -385,6 +394,12 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     ucState(*DI).dump();
   );
 
+  ucOperand Src = MachineOperand::CreateReg(SrcReg, false);
+  Src.setSubReg(SrcSubReg);
+  Src.setBitWidth(DefOp.getBitWidth());
+  if (VRegisterInfo::IsWire(SrcReg, &MRI))
+    Src.setIsWire();
+
   // Try to forward the source value.
   if (DI->getOpcode() != VTM::PHI) {
     assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
@@ -401,23 +416,25 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
       if (isCopyLike(WriteOp->getOpcode())) {
         MachineOperand ForwardedVal = WriteOp.getOperand(1);
         Ops.push_back(ForwardedVal);
+        return addOperandsToMI(InsertPos, Ops);
       }
     }
+
+    Ops.push_back(Src);
+    // Try to forward the imp-uses.
+    if (Src.isWire())
+      for (ucOp::op_iterator I = WriteOp.op_begin(), E = WriteOp.op_end(); I != E;
+        ++I) {
+          MachineOperand &Op = *I;
+          if (Op.isImplicit()) Ops.push_back(Op);
+      }
+
+    return addOperandsToMI(InsertPos, Ops);
   }
 
-  ucOperand Src = MachineOperand::CreateReg(SrcReg, false);
-  Src.setSubReg(SrcSubReg);
-  Src.setBitWidth(DefOp.getBitWidth());
-  if (VRegisterInfo::IsWire(SrcReg, &MRI))
-    Src.setIsWire();
+  // Trivial case, just copy src to dst.
   Ops.push_back(Src);
-
-  MachineInstrBuilder Builder(InsertPos);
-  for (SmallVectorImpl<MachineOperand>::iterator I = Ops.begin(), E = Ops.end();
-       I != E; ++I)
-    Builder.addOperand(*I);
-
-  return &*Builder;
+  return addOperandsToMI(InsertPos, Ops);
 }
 
 MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
