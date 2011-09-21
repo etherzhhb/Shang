@@ -144,6 +144,15 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   ///    condition.  These operands can be passed to other TargetInstrInfo
   ///    methods to create new branches.
   MachineInstr *SndTerm = Terms[1];
+
+  // Avoid strange branches.
+  MachineOperand &SndPred = SndTerm->getOperand(0);
+  if (SndPred.isReg()) {
+    unsigned Reg = SndTerm->getOperand(0).getReg();
+    if (Reg != 0 && Reg != Cond.front().getReg())
+      return true;
+  }
+
   FBB = SndTerm->getOperand(1).getMBB();
   return false;
 }
