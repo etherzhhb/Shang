@@ -47,6 +47,7 @@ Pass *createBitLevelInfoPass();
 
 Pass *createFixMachineCodePass();
 Pass *createFixTerminatorsPass();
+Pass *createMergeFallThroughBlocksPass();
 Pass *createVIfConverterPass();
 Pass *createVPreRegAllocSchedPass();
 
