@@ -447,7 +447,9 @@ void GVPromotion::promoteConstExpr(Function *F){
           }     
           break;
         }
-        // Load and Store instruction.                     
+        // ICmp, PHI, Load and Store instruction.
+        case Instruction::ICmp:
+        case Instruction::PHI:
         case Instruction::Load:
         case Instruction::Store: {       
           for (Instruction::op_iterator I = IBB->op_begin(), 
@@ -472,7 +474,7 @@ void GVPromotion::promoteConstExpr(Function *F){
             }
           }
           break;
-        }
+        }      
         default:
           break;
       }       
@@ -521,7 +523,19 @@ void GVPromotion::promoteGEPConstExpr(Instruction *Inst_CE,
   Instruction *GEP = GetElementPtrInst::CreateInBounds(GV, Indices.begin(), 
                                                        Indices.end(), 
                                                        GV->getName()+"_GEP");
-  GEP->insertBefore(Inst_CE);
+  if (Inst_CE->getOpcode() != Instruction::PHI)
+    GEP->insertBefore(Inst_CE);
+  else {
+    // Special treatment of PHI instruction.
+    Function *F = Inst_CE->getParent()->getParent();
+    BasicBlock &BB_Entry = *(F->begin());
+    Instruction *Terminator = BB_Entry.getTerminator();
+    if (Terminator)
+      GEP->insertBefore(Terminator);
+    else
+      assert("wrong!!!");
+  }
+
   Inst_CE->setOperand(Index, GEP);
   DEBUG(dbgs() << "The BasicBlock after promotion :\n");
   DEBUG(Inst_CE->getParent()->dump());
