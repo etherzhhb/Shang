@@ -397,8 +397,8 @@ bool RTLCodegen::doInitialization(Module &Mod) {
 
   // Define the blockram base address.
   Out << "\n\n\n`ifdef __VERILATOR_SIM\n"
-         "import \"DPI-C\" function longint __get_GV_BlockRamBase();\n"
-         "`define BlockRamBase getBlockRamBase()\n"
+         "import \"DPI-C\" function longint verilator_get_GV_BlockRamBase();\n"
+         "`define BlockRamBase verilator_get_GV_BlockRamBase()\n"
          "`endif\n\n\n";
 
   return false;
