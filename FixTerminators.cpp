@@ -70,7 +70,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       if (Cnd.isImm() && Cnd.getImm()) Cnd.ChangeToRegister(0, false);
       // Change the unconditional branch after conditional branch to
       // conditional branch.
-      if (FirstTerminator && ! VInstrInfo::isUnConditionalBranch(Inst)){
+      if (FirstTerminator && VInstrInfo::isUnConditionalBranch(Inst)){
         MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
         MachineOperand &FalseCnd = FirstTerminator->getOperand(0);
         FalseCnd.setReg(TrueCnd.getReg());
