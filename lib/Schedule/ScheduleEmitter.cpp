@@ -329,12 +329,15 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
                                                  SchedSlot.getSlot(), FUId);
 
   // Create the default predicate operand, which means always execute.
-  MachineOperand Pred = ucOperand::CreatePredicate();
+  ucOperand Pred = ucOperand::CreatePredicate();
 
   // Handle the predicate operand.
   if (MachineOperand *PredOp = VInstrInfo::getPredOperand(&Inst)) {
     assert(PredOp->isReg() && "Cannot handle predicate operand!");
     Pred = *PredOp;
+
+    if (Pred.getReg() && VRegisterInfo::IsWire(Pred.getReg(), &MRI))
+      Pred.setIsWire();
 
     unsigned PredIdx = PredOp - &Inst.getOperand(0);
     Inst.RemoveOperand(PredIdx);
