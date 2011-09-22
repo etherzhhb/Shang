@@ -120,6 +120,10 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   unsigned SrcSize = TLI.computeSizeInBits(Op);
 
   switch (N->getOpcode()) {
+  case ISD::ROTL:
+    PaddingBits = TLI.getBitSlice(DAG, dl, Op, SrcSize, SrcSize - PaddingSize);
+    DCI.AddToWorklist(PaddingBits.getNode());
+    // Fall though
   case ISD::SHL: {
     // Discard the higher bits of src.
     Op = TLI.getBitSlice(DAG, dl, Op, SrcSize - PaddingSize, 0);
@@ -820,6 +824,8 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                 ADDEBuildLowPart, ADDEBuildHighPart);
     break;
   }
+  case ISD::ROTL:
+  case ISD::ROTR:
   case ISD::SHL:
   case ISD::SRA:
   case ISD::SRL:

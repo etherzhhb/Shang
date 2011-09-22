@@ -169,6 +169,8 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::SHL);
   setTargetDAGCombine(ISD::SRA);
   setTargetDAGCombine(ISD::SRL);
+  setTargetDAGCombine(ISD::ROTL);
+  setTargetDAGCombine(ISD::ROTR);
 
   setTargetDAGCombine(ISD::XOR);
   setTargetDAGCombine(ISD::OR);;
