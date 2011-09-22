@@ -30,7 +30,7 @@
 using namespace llvm;
 
 static const unsigned MoveOpcodes[] = {
-    0, //DRRegClassID = 0,
+    VTM::VOpMove_rr, //DRRegClassID = 0,
     0, //PHIRRegClassID = 1,
     VTM::VOpMove_ra, //RADDRegClassID = 2,
     VTM::VOpMove_rm, //RMULRegClassID = 3,

@@ -136,6 +136,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   case VTM::VOpMove_rm:
   case VTM::VOpMove_rs:
   case VTM::VOpMove_rw:
+  case VTM::VOpMove_rr:
   case VTM::COPY: {
     MachineOperand &Result = Instr->getOperand(0),
                    &Operand = Instr->getOperand(1);

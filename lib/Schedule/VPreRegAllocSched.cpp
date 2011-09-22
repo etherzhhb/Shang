@@ -649,6 +649,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   case VTM::VOpMove_rm:
   case VTM::VOpMove_rs:
   case VTM::VOpMove_rw:
+  case VTM::VOpMove_rr:
     if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
