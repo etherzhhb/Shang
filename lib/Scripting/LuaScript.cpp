@@ -88,6 +88,7 @@ void LuaScript::init() {
   // Bind the object.
   luabind::globals(State)["FUs"] = luabind::newtable(State);
   luabind::globals(State)["Functions"] = luabind::newtable(State);
+  luabind::globals(State)["Modules"] = luabind::newtable(State);
   // The scripting pass table.
   luabind::globals(State)["Passes"] = luabind::newtable(State);
 }

@@ -80,6 +80,10 @@ public:
     return Res.get();
   }
 
+  luabind::object getModTemplate(const std::string &Name) const {
+    return luabind::globals(State)["Modules"][Name];
+  }
+
   std::string getValueStr(const std::string &Name) const {
     return getValue<std::string>(Name);
   }

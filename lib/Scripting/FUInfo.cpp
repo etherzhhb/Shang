@@ -188,8 +188,7 @@ std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum
   std::string Script;
   raw_string_ostream ScriptBuilder(Script);
 
-  luabind::object ModTemplate =
-    scriptEngin().getValue<luabind::object>("FUs")["Modules"][ModName];
+  luabind::object ModTemplate = scriptEngin().getModTemplate(ModName);
   std::string Template = getProperty<std::string>(ModTemplate, "InstTmplt");
 
   std::string ResultName = ModName + utostr_32(ModNum) + "_inst";
@@ -235,8 +234,7 @@ std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
   std::string Script;
   raw_string_ostream ScriptBuilder(Script);
 
-  luabind::object ModTemplate =
-    scriptEngin().getValue<luabind::object>("FUs")["Modules"][ModName];
+  luabind::object ModTemplate = scriptEngin().getModTemplate(ModName);
   std::string Template = getProperty<std::string>(ModTemplate, "StartTmplt");
 
   std::string ResultName = ModName + utostr_32(ModNum) + "_start";
