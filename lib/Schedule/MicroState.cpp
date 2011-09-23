@@ -16,6 +16,7 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VTM.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Function.h"
 #include "llvm/Metadata.h"
@@ -243,7 +244,7 @@ void ucOperand::print(raw_ostream &OS,
     OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     return;
   case MachineOperand::MO_GlobalAddress:
-    OS << "(`" << getGlobal()->getName() << " + "
+    OS << "(`gv" << VBEMangle(getGlobal()->getNameStr()) << " + "
        << verilogConstToStr(getOffset(), getBitWidth(), false) << ')';
     return;
   default: break;

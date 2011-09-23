@@ -26,6 +26,7 @@
 #include "vtm/BitLevelInfo.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Type.h"
 #include "llvm/Module.h"
@@ -396,10 +397,17 @@ bool RTLCodegen::doInitialization(Module &Mod) {
   M = &Mod;
 
   // Define the blockram base address.
-  Out << "\n\n\n`ifdef __VERILATOR_SIM\n"
-         "import \"DPI-C\" function longint verilator_get_GV_BlockRamBase();\n"
-         "`define BlockRamBase verilator_get_GV_BlockRamBase()\n"
-         "`endif\n\n\n";
+  Out << "`ifdef __VERILATOR_SIM\n";
+  for(Module::global_iterator GI = Mod.global_begin(), E = Mod.global_end();
+      GI != E; ++GI){
+      Out << "import \"DPI-C\" function longint verilator_get_gv"
+          << VBEMangle(GI->getNameStr()) << "();\n";
+
+      Out << "`define gv" << VBEMangle(GI->getNameStr())
+          << " verilator_get_gv" << VBEMangle(GI->getNameStr()) << "()\n";
+  }
+
+  Out << "`endif\n\n\n";
 
   return false;
 }

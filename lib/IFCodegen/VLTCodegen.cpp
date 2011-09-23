@@ -451,15 +451,25 @@ struct VLTIfCodegen : public MachineFunctionPass {
               "extern \"C\" {\n"
               "#endif\n\n";
 
-    GlobalVariable *BRam = M.getGlobalVariable("BlockRamBase", true);
-    const PointerType *Ty = cast<PointerType>(BRam->getType());
+    for (Module::global_iterator GI = M.global_begin(), E = M.global_end();
+         GI != E; ++GI ){
+      GlobalVariable *GV = GI;
+      const PointerType *Ty = cast<PointerType>(GV->getType());
 
-    Out << "long long verilator_get_GV_BlockRamBase () {\n"
-           "  static ";
-    printType(Out, Ty->getElementType(), false, BRam->getName()) << ";\n";
-    // TODO: The initializer.
-    Out << "  return (long long)BlockRamBase;\n"
-           "}\n\n\n";
+      Out << "long long verilator_get_gv"
+          << VBEMangle(GV->getNameStr())<<"() {\n";
+
+      if (GV->hasLocalLinkage())
+        Out << "static ";
+      else
+        Out << "extern ";
+
+      printType(Out, Ty->getElementType(), false, VBEMangle(GV->getName()));
+      Out << ";\n";
+      // TODO: The initializer.
+      Out << "  return (long long)"<< VBEMangle(GV->getNameStr())<<";\n"
+             "}\n\n\n";
+    }
 
     Out.flush();
 

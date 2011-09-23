@@ -57,9 +57,6 @@ struct FunctionFilter : public ModulePass {
   }
 
   bool runOnModule(Module &M);
-
-  // Set all the GVs' attributes and initializer in HW IR.
-  bool setGVAttr(Module &M);
 };
 } // end anonymous.
 
@@ -113,25 +110,41 @@ bool FunctionFilter::runOnModule(Module &M) {
     }
   }
 
-  bool GV = setGVAttr(M);
-  if (GV)
-    DEBUG(dbgs() << "\nSet all the GVs in HW IR to be external and remove any existing initializer.\n");
+  std::vector<GlobalVariable*> DeadGVs;
+
+  for (Module::global_iterator I = M.global_begin(), E = M.global_end();
+       I != E; ++I) {
+    GlobalVariable *GV = I;
+
+    bool UseEmpty = true;
+    for (Value::use_iterator I = GV->use_begin(), E = GV->use_end();I != E;++I){
+      if (ConstantExpr *E = dyn_cast<ConstantExpr>(*I))
+        if (E->use_empty())
+          continue;
+
+      UseEmpty = false;
+      break;
+    }    
+
+    if (UseEmpty){
+      DeadGVs.push_back(GV);
+      continue;
+    }
+
+    // Not use empty, put them to the software side.
+    GV->setLinkage(GlobalValue::ExternalLinkage);
+    GV->setInitializer(NULL);
+  }
+
+  while (!DeadGVs.empty()) {
+    DeadGVs.back()->eraseFromParent();
+    DeadGVs.pop_back();
+  }
+
   // TODO: We may rename the entry function, too.
   OwningPtr<AssemblyAnnotationWriter> Annotator;
   SoftMod->print(SwOut, Annotator.get());
 
-  return true;
-}
-
-bool FunctionFilter::setGVAttr(Module &M) {
-  if (M.global_empty())
-    return false;
-  for (Module::global_iterator IGV = M.global_begin(), EGV = M.global_end();
-    IGV != EGV; ++IGV) {
-    GlobalVariable *GV = IGV;
-    GV->setLinkage(GlobalValue::ExternalLinkage);
-    GV->setInitializer(NULL);
-  }
   return true;
 }
 
