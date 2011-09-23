@@ -116,8 +116,10 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // We don't have DIV
     setOperationAction(ISD::SDIV, CurVT, Expand);
     setOperationAction(ISD::SDIVREM, CurVT, Expand);
+    setOperationAction(ISD::SREM, CurVT, Expand);
     setOperationAction(ISD::UDIV, CurVT, Expand);
     setOperationAction(ISD::UDIVREM, CurVT, Expand);
+    setOperationAction(ISD::UREM, CurVT, Expand);
     //if (MVT(CurVT).getSizeInBits() > MaxMultBits) {
     //  // Expand the  multiply;
     //  setOperationAction(ISD::MUL, CurVT, Expand);
