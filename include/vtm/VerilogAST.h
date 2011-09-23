@@ -228,7 +228,6 @@ public:
       = std::make_pair(ID.getFUNum(), offset);
     std::map<unsigned, unsigned> &Map = FUPortOffsets[ID.getFUType()];
     assert(!Map.count(mapping.first) && "Port begin mapping existed!");
-    assert(NumArgPorts != 0 && "Add FUPorts before Add ArgPorts?");
     FUPortOffsets[ID.getFUType()].insert(mapping);
   }
 

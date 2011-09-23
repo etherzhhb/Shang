@@ -112,6 +112,13 @@ bool FunctionFilter::runOnModule(Module &M) {
     I->setInitializer(0);
   }
 
+  // Dirty Hack: Make all global variable in software side visiable in hardware
+  // side.
+  // FIXME: Move them to Hardware module.
+  for (Module::global_iterator I = SoftMod->global_begin(),
+       E = SoftMod->global_end(); I != E; ++I)
+    I->setLinkage(GlobalVariable::LinkOnceAnyLinkage);
+
   // TODO: We may rename the entry function, too.
   OwningPtr<AssemblyAnnotationWriter> Annotator;
   SoftMod->print(SwOut, Annotator.get());

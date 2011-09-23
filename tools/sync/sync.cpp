@@ -122,9 +122,6 @@ int main(int argc, char **argv) {
 
   PM.add(new TargetData(*target->getTargetData()));
 
-  // Do Globalvariable promotion.
-  PM.add(createGVPromotionPass());
-
   // Perform Software/Hardware partition.
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
   PM.add(createGlobalDCEPass());

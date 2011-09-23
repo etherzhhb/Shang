@@ -455,18 +455,16 @@ struct VLTIfCodegen : public MachineFunctionPass {
          GI != E; ++GI ){
       GlobalVariable *GV = GI;
       const Type *Ty = cast<PointerType>(GV->getType())->getElementType();
-
-      Out << "long long verilator_get_gv"
-          << VBEMangle(GV->getNameStr())<<"() {\n";
-
       if (GV->hasLocalLinkage())
         Out << "static ";
       else
         Out << "extern ";
 
-      printType(Out, Ty, false, VBEMangle(GV->getName()));
-      Out << ";\n";
+      printType(Out, Ty, false, VBEMangle(GV->getName())) << ";\n";
       // TODO: The initializer.
+
+      Out << "long long verilator_get_gv"
+          << VBEMangle(GV->getNameStr())<<"() {\n";
       Out << "  return (long long)";
       // Take the address for non-array type.
       if (!Ty->isArrayTy()) Out << '&';
