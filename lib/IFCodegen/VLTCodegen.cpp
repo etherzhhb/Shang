@@ -463,9 +463,9 @@ struct VLTIfCodegen : public MachineFunctionPass {
       printType(Out, Ty, false, VBEMangle(GV->getName())) << ";\n";
       // TODO: The initializer.
 
-      Out << "long long verilator_get_gv"
+      Out << "void *verilator_get_gv"
           << VBEMangle(GV->getNameStr())<<"() {\n";
-      Out << "  return (long long)";
+      Out << "  return (void *)";
       // Take the address for non-array type.
       if (!Ty->isArrayTy()) Out << '&';
       Out << VBEMangle(GV->getNameStr())<<";\n"
