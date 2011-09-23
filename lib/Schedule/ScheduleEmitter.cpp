@@ -212,6 +212,20 @@ struct MicroStateBuilder {
 
   MachineOperand getRegUseOperand(WireDef &WD, OpSlot ReadSlot, ucOperand MO);
 
+  ucOperand buildCopy(OpSlot CopySlot, unsigned SizeInBits, unsigned RegNo,
+                     MachineOperand Pred) {
+    unsigned PipedReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
+    MachineInstr &Ctrl = getStateCtrlAt(CopySlot);
+    MachineInstrBuilder CopyBuilder(&Ctrl);
+    ucOperand Dst = ucOperand::CreateReg(PipedReg, SizeInBits, true);
+    ucOperand Src = ucOperand::CreateWire(RegNo, SizeInBits);
+    MachineOperand Opc =
+      ucOperand::CreateOpcode(VTM::VOpMove_rw, CopySlot.getSlot());
+    CopyBuilder.addOperand(Opc).addOperand(Pred).addOperand(Dst).addOperand(Src);
+    return Dst;
+  }
+
+
   unsigned createPHI(unsigned RegNo, unsigned SizeInBits, unsigned WriteSlot) {
     SmallVector<MachineInstr*, 4> InsertedPHIs;
 
@@ -479,8 +493,8 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
                                                    ucOperand MO) {
   bool isImplicit = MO.isImplicit();
   unsigned RegNo = WD.getOperand().getReg();
+  unsigned PredReg = WD.Pred.getReg();
   unsigned SizeInBits = WD.Op.getBitWidth();
-  const TargetRegisterClass *RC = VTM::DRRegisterClass;
   bool IsWireIncoming = VRegisterInfo::IsWire(RegNo, &MRI);
 
   // Move the value to a new register otherwise the it will be overwritten.
@@ -493,34 +507,34 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
 
     //assert(!isImplicit && "Unexpected implicit operand!");
     if (IsWireIncoming) {
-      unsigned PipedReg = MRI.createVirtualRegister(RC);
-      MachineInstr &Ctrl = getStateCtrlAt(WD.CopySlot);
-      MachineInstrBuilder CopyBuilder(&Ctrl);
-      ucOperand Dst = ucOperand::CreateReg(PipedReg, SizeInBits, true);
-      ucOperand Src = ucOperand::CreateWire(RegNo, SizeInBits);
-      MachineOperand Opc = ucOperand::CreateOpcode(VTM::COPY, WD.CopySlot.getSlot());
-      CopyBuilder.addOperand(Opc);
-      assert(WD.Pred.getReg() == 0 && "Cannot pipeline predicate!");
-      CopyBuilder.addOperand(ucOperand::CreatePredicate(WD.Pred.getReg()));
-      CopyBuilder.addOperand(Dst).addOperand(Src);
-      // Update the register.
-      RegNo = PipedReg;
-      WD.Op = MO = Dst;
+      WD.Op = MO = buildCopy(WD.CopySlot, SizeInBits, RegNo, WD.Pred);
+      RegNo = MO.getReg();
+
+      if (PredReg) {
+        WD.Pred = buildCopy(WD.CopySlot, 1, PredReg,
+                            ucOperand::CreatePredicate());
+        PredReg = WD.Pred.getReg();
+      }
+
       // Not wire anymore.
       IsWireIncoming = false;
     }
 
     // Emit the PHI at loop boundary
-    unsigned NewReg = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot());
-    MO = MachineOperand::CreateReg(NewReg, false);
+    RegNo = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot());
+    MO = MachineOperand::CreateReg(RegNo, false);
     MO.setBitWidth(SizeInBits);
+    WD.Op = MO;
+
+    if (PredReg) {
+      PredReg = createPHI(PredReg, 1, WD.LoopBoundary.getSlot());
+      WD.Pred = ucOperand::CreatePredicate(PredReg);
+    }
 
     // Update the register.
     WD.CopySlot = WD.LoopBoundary;
     WD.LoopBoundary += State.getII();
     assert(WD.CopySlot <= ReadSlot && "Broken PHI Slot!");
-    RegNo = NewReg;
-    WD.Op = MO;
   }
 
   // Return the up to date machine operand
