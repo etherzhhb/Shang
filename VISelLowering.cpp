@@ -407,7 +407,8 @@ SDValue VTargetLowering::getExtend(SelectionDAG &DAG, DebugLoc dl, SDValue SrcOp
 
 SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                                       unsigned Times) {
-  assert(Times > 1 && "Nothing to repeat!");
+  // Handle the trivial case trivially.
+  if (Times == 1) return Op;
 
   LLVMContext &Context = *DAG.getContext();
   unsigned EltBits = computeSizeInBits(Op);
