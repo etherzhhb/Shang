@@ -472,6 +472,16 @@ struct VLTIfCodegen : public MachineFunctionPass {
              "}\n\n\n";
     }
 
+    Out << "void *verilator_memset(void *src, int v, long long num) {\n"
+           "  return memset(src, v, num);\n"
+           "}\n\n"
+           "void *verilator_memcpy(void *dst, void *src, long long num) {\n"
+           "  return memcpy(dst, src, num);\n"
+           "}\n\n"
+           "void *verilator_memmove(void *dst, void *src, long long num) {\n"
+           "  return memmove(dst, src, num);\n"
+           "}\n\n";
+
     Out.flush();
 
     return false;
