@@ -72,7 +72,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       // conditional branch.
       if (FirstTerminator && VInstrInfo::isUnConditionalBranch(Inst)){
         MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
-        MachineOperand &FalseCnd = FirstTerminator->getOperand(0);
+        MachineOperand &FalseCnd = Inst->getOperand(0);
         FalseCnd.setReg(TrueCnd.getReg());
         FalseCnd.setTargetFlags(TrueCnd.getTargetFlags());
         VInstrInfo::ReversePredicateCondition(FalseCnd);
