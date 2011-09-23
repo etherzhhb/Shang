@@ -127,6 +127,7 @@ int main(int argc, char **argv) {
 
   // Perform Software/Hardware partition.
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
+  PM.add(createGlobalDCEPass());
 
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());

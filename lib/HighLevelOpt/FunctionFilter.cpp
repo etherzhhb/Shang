@@ -97,48 +97,19 @@ bool FunctionFilter::runOnModule(Module &M) {
     Function *FSW = ISW;
 
     // The function is s software function, delete it from the hardware module.
-    if (!HWFunctions.count(FHW)) {
-      FHW->dropAllReferences();
-      FHW->getBasicBlockList().clear();      
-    } else {
+    if (!HWFunctions.count(FHW))
+      FHW->deleteBody();
+    else if (getSynSetting(FSW->getName())->isTopLevelModule())
       // Remove hardware functions in software module and leave the declaretion 
       // only.
-      if (getSynSetting(FSW->getName())->isTopLevelModule()) {
-        FSW->dropAllReferences();
-        FSW->getBasicBlockList().clear();
-      }    
-    }
+      FSW->deleteBody();
   }
 
-  std::vector<GlobalVariable*> DeadGVs;
-
+  std::vector<GlobalVariable*> GVs;
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I) {
-    GlobalVariable *GV = I;
-
-    bool UseEmpty = true;
-    for (Value::use_iterator I = GV->use_begin(), E = GV->use_end();I != E;++I){
-      if (ConstantExpr *E = dyn_cast<ConstantExpr>(*I))
-        if (E->use_empty())
-          continue;
-
-      UseEmpty = false;
-      break;
-    }    
-
-    if (UseEmpty){
-      DeadGVs.push_back(GV);
-      continue;
-    }
-
-    // Not use empty, put them to the software side.
-    GV->setLinkage(GlobalValue::ExternalLinkage);
-    GV->setInitializer(NULL);
-  }
-
-  while (!DeadGVs.empty()) {
-    DeadGVs.back()->eraseFromParent();
-    DeadGVs.pop_back();
+    I->setLinkage(GlobalValue::ExternalLinkage);
+    I->setInitializer(0);
   }
 
   // TODO: We may rename the entry function, too.
