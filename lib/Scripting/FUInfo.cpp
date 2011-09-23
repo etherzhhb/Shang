@@ -203,6 +203,8 @@ std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum
     ScriptBuilder << "// " << ModName << " not available!\n";
     errs() << "Instantiation template for external module :" << ModName
            << " not available!\n";
+    // Dirty Hack: create the finish signal.
+    return "reg " + Ports[3] + ";";
   } else
     ScriptBuilder << Template;
   ScriptBuilder <<"]=],"
