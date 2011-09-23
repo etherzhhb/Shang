@@ -159,6 +159,16 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setLibcallName(RTLIB::UDIV_I16, "__ip_udiv_i16");
   setLibcallName(RTLIB::UDIV_I32, "__ip_udiv_i32");
   setLibcallName(RTLIB::UDIV_I64, "__ip_udiv_i64");
+
+  setLibcallName(RTLIB::SDIV_I8, "__ip_sdiv_i8");
+  setLibcallName(RTLIB::SDIV_I16, "__ip_sdiv_i16");
+  setLibcallName(RTLIB::SDIV_I32, "__ip_sdiv_i32");
+  setLibcallName(RTLIB::SDIV_I64, "__ip_sdiv_i64");
+
+  setLibcallName(RTLIB::SREM_I8, "__ip_srem_i8");
+  setLibcallName(RTLIB::SREM_I16, "__ip_srem_i16");
+  setLibcallName(RTLIB::SREM_I32, "__ip_srem_i32");
+  setLibcallName(RTLIB::SREM_I64, "__ip_srem_i64");
   //setLibcallName(RTLIB::UDIV_I128, "__ip_udiv_i128");
   // TODO: SDIV
 
