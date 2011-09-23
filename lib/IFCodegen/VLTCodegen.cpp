@@ -454,7 +454,7 @@ struct VLTIfCodegen : public MachineFunctionPass {
     for (Module::global_iterator GI = M.global_begin(), E = M.global_end();
          GI != E; ++GI ){
       GlobalVariable *GV = GI;
-      const PointerType *Ty = cast<PointerType>(GV->getType());
+      const Type *Ty = cast<PointerType>(GV->getType())->getElementType();
 
       Out << "long long verilator_get_gv"
           << VBEMangle(GV->getNameStr())<<"() {\n";
@@ -464,10 +464,13 @@ struct VLTIfCodegen : public MachineFunctionPass {
       else
         Out << "extern ";
 
-      printType(Out, Ty->getElementType(), false, VBEMangle(GV->getName()));
+      printType(Out, Ty, false, VBEMangle(GV->getName()));
       Out << ";\n";
       // TODO: The initializer.
-      Out << "  return (long long)"<< VBEMangle(GV->getNameStr())<<";\n"
+      Out << "  return (long long)";
+      // Take the address for non-array type.
+      if (!Ty->isArrayTy()) Out << '&';
+      Out << VBEMangle(GV->getNameStr())<<";\n"
              "}\n\n\n";
     }
 
