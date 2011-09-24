@@ -1121,14 +1121,16 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
         "$display(\"" << "Calling function: " << CalleeName << "\\n\");\n"
         "`endif\n";
   if (const Function *FN = M->getFunction(CalleeName)) {
-    Function::const_arg_iterator ArgIt = FN->arg_begin();
-    for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
-      OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
-      OpInternalCall.getOperand(2 + i).print(OS);
-      OS << ";\n";
-      ++ArgIt;
+    if (!FN->isDeclaration()) {
+      Function::const_arg_iterator ArgIt = FN->arg_begin();
+      for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
+        OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
+        OpInternalCall.getOperand(2 + i).print(OS);
+        OS << ";\n";
+        ++ArgIt;
+      }
+      return;
     }
-    return;
   }
 
   // Else ask the constraint about how to handle this call.
