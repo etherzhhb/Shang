@@ -62,7 +62,6 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
-
   //Mangle the name of globalvariables so we can refer them in C source files.
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I){
