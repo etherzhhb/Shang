@@ -477,7 +477,10 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out.always_ff_begin();
   VM->printRegisterReset(Out);
   Out.else_begin().if_begin(ReadyPred, "// are all resources ready?\n");
-
+  Out << "`ifdef __VERILATOR_SIM_DEBUG\n"
+         "$display(\"Module active " << MF->getFunction()->getName()
+      << "\\n\");\n"
+         "`endif\n";
   Out << "// FSM\n";
   Out.switch_begin("NextFSMState");
   Out << VM->getControlBlockStr();
@@ -486,6 +489,10 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out.switch_end();
   Out.else_begin("// else disable all resources\n");
   emitFUCtrlForState(Out, 0);
+  Out << "`ifdef __VERILATOR_SIM_DEBUG\n"
+         "$display(\"Module dis-active " << MF->getFunction()->getName()
+      << "\\n\");\n"
+         "`endif\n";
   Out.exit_block("// end control block\n");
   Out.always_ff_end();
   Out.module_end();
@@ -544,6 +551,10 @@ void RTLCodegen::emitIdleState() {
   CtrlS.match_case("state_idle");
   // Idle state is always ready.
   CtrlS.if_begin("start");
+  CtrlS << "`ifdef __VERILATOR_SIM_DEBUG\n"
+           "$display(\"Module start " << MF->getFunction()->getName()
+        << "\\n\");\n"
+           "`endif\n";
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   emitNextFSMState(CtrlS, 0, EntryBB);
@@ -1104,6 +1115,9 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   // The FNNum is encoded into the target flags field of the MachineOperand.
   unsigned FNNum = OpInternalCall.getOperand(1).getTargetFlags();
   OS << "// Calling function: " << CalleeName << ";\n";
+  OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
+        "$display(\"" << "Calling function: " << CalleeName << "\\n\");\n"
+        "`endif\n";
   if (const Function *FN = M->getFunction(CalleeName)) {
     Function::const_arg_iterator ArgIt = FN->arg_begin();
     for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
@@ -1132,6 +1146,10 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
 
 void RTLCodegen::emitOpRet(ucOp &OpArg) {
   raw_ostream &OS = VM->getControlBlockBuffer();
+  OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
+        "$display(\"Module finish " << MF->getFunction()->getName()
+     << "\\n\");\n"
+        "`endif\n";
   OS << "NextFSMState <= state_idle;\n";
 }
 
@@ -1142,6 +1160,12 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
   OS << "return_value <= ";
   OpRetVal.getOperand(0).print(OS);
   OS << ";\n";
+  OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
+        "$display(\"Module " << MF->getFunction()->getName()
+     << " return %x\\n\", ";
+  OpRetVal.getOperand(0).print(OS);
+  OS << ");\n"
+        "`endif\n";
 }
 
 void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
