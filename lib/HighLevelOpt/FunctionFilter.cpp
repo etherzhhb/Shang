@@ -35,6 +35,7 @@
 #include <utility>
 #include "../Schedule/VSUnit.h"
 #include "llvm/Support/Debug.h"
+#include "vtm/Utilities.h"
 
 using namespace llvm;
 
@@ -61,6 +62,14 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
+
+  //Mangle the name of globalvariables so we can refer them in C source files.
+  for (Module::global_iterator I = M.global_begin(), E = M.global_end();
+       I != E; ++I){
+    GlobalVariable *GV = I;
+    GV->setName(VBEMangle(GV->getNameStr()));
+  }
+
   OwningPtr<Module> SoftMod(CloneModule(&M));
   SoftMod->setModuleIdentifier(M.getModuleIdentifier() + ".sw");
 
