@@ -665,13 +665,17 @@ void RTLCodegen::emitAllocatedFUs() {
   typedef VFInfo::const_fn_iterator fn_iterator;
   for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I) {
     if (const Function *Callee = M->getFunction(I->getKey())) {
-      S << getSynSetting(Callee->getName())->getModName() << ' '
-        << getSubModulePortName(I->second, "_inst")
-        << "(\n\t";
-      MBBuilder.addSubModule(getSubModulePortName(I->second, "_inst"), S);
-      emitFunctionSignature(Callee);
-      S << ");\n";
-      continue;
+      if (!Callee->isDeclaration()) {
+        S << getSynSetting(Callee->getName())->getModName() << ' ';
+        dbgs() << "1\n";
+        S  << getSubModulePortName(I->second, "_inst");
+        dbgs() << "1\n";
+        S  << "(\n\t";
+        MBBuilder.addSubModule(getSubModulePortName(I->second, "_inst"), S);
+        emitFunctionSignature(Callee);
+        S << ");\n";
+        continue;
+      }
     }
 
     unsigned FNNum = I->second;
