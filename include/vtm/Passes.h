@@ -36,6 +36,9 @@ Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 // Promote all the GVs to arguments
 Pass *createGVPromotionPass();
 
+// Always inline function.
+Pass *createAlwaysInlineFunctionPass();
+
 //Convert the AllocaInst to GlobalVariable.
 Pass *createStackToGlobalPass();
 
@@ -88,6 +91,7 @@ void initializeRAPass(PassRegistry &Registry);
 // Add the initialize implementation of GVPromotion.cpp.
 void initializeGVPromotionPass(PassRegistry &Registry);
 
+void initializeAlwaysInlineFunctionPass(PassRegistry &Registry);
 
 void initializeHWPartitionInfoPass(PassRegistry &Registry);
 } // end namespace

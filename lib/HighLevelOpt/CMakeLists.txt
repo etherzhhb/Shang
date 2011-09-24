@@ -3,6 +3,7 @@ add_llvm_library(VTMHighLevelOpt
   GVPromotion.cpp
   HWPartitionInfo.cpp
   StackToGlobal.cpp
+  AlwaysInlineFunction.cpp
   )
 
 llvm_config(VTMHighLevelOpt transformutils ipo)
