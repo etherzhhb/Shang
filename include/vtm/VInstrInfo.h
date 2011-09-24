@@ -138,8 +138,10 @@ public:
 
   uint64_t get() const { return BitWidths; }
 
+  static unsigned size() { return sizeof(uint64_t); }
+
   BitWidthAnnotator setBitWidth(uint8_t width, unsigned Idx) {
-    assert(Idx < sizeof(uint64_t) && "Index out of range!");
+    assert(Idx < size() && "Index out of range!");
     uint64_t w = width;
     // Clear the corresponding bit slice.
     BitWidths &= ~((uint64_t)0xff << (Idx * 8));
@@ -149,9 +151,15 @@ public:
   }
 
   uint8_t getBitWidth(unsigned Idx) const {
-    assert(Idx < sizeof(uint64_t) && "Index out of range!");
+    assert(Idx < size() && "Index out of range!");
     uint64_t w = BitWidths;
     return w >> (Idx * 8);
+  }
+
+  uint8_t getBitWidthOrZero(unsigned Idx) const {
+    if (Idx < sizeof(uint64_t)) return getBitWidth(Idx);
+
+    return 0;
   }
 
   void updateBitWidth();

@@ -66,6 +66,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         // DirtyHack: Set the bit width of implicit define value to 64.
         ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
         Op.setBitWidth(64);
+        propagateBitWidth(Op);
         continue;
       }
       case VTM::VOpRet: {
@@ -114,10 +115,21 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
         MachineOperand &MO = Instr.getOperand(i);
         if (!MO.isReg() && !MO.isImm() && !MO.isSymbol()) continue;
-        // Do not disturb the original target flags.
-        if (MO.getTargetFlags() != 0) continue;
 
-        bool Changed = updateBitWidth(MO, Annotator.getBitWidth(i));
+        // Do not disturb the original target flags.
+        if (MO.isSymbol() && MO.getTargetFlags() != 0) continue;
+
+        unsigned BitWidth = Annotator.getBitWidthOrZero(i);
+        if (BitWidth == 0) {
+          // Already have bitwidth information.
+          if (MO.getTargetFlags()) continue;
+
+          assert(Instr.getOpcode() == VTM::VOpInternalCall && MO.isImm()
+                 && "Bitwidth info not available!");
+          BitWidth = 64;
+        }
+
+        bool Changed = updateBitWidth(MO, BitWidth);
         if (MO.isReg() && MO.isDef() && Changed)
           propagateBitWidth(MO);
       }
@@ -278,10 +290,11 @@ unsigned BitLevelInfo::computePHI( MachineInstr *PN ) {
 void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
   assert(MO.isReg() && "Wrong operand type!");
 
+  unsigned RegNo = MO.getReg();
   unsigned char BitWidth = cast<ucOperand>(MO).getBitWidth();
   assert(BitWidth && "Bit width not available!");
 
-  for (MachineRegisterInfo::use_iterator I = MRI->use_begin(MO.getReg()),
+  for (MachineRegisterInfo::use_iterator I = MRI->use_begin(RegNo),
        E = MRI->use_end(); I != E; ++I) {
     MachineOperand &MO = I.getOperand();
 

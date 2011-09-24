@@ -116,7 +116,8 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
   }
 
   // Set up the operand widths.
-  for (unsigned i = 0; i < NumOps -1; ++i) {
+  unsigned MaxOps = std::min(NumOps - 1, BitWidthAnnotator::size() - NumDefs);
+  for (unsigned i = 0; i < MaxOps; ++i) {
     if (Ops[i].getValueType() == MVT::Other) continue;
 
     Annotator.setBitWidth(VTargetLowering::computeSizeInBits(Ops[i]),
