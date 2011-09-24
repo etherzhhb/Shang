@@ -82,8 +82,15 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
           assert(Op.getImm() && "Unexpected 'never' in unconditional branch!");
           Op.ChangeToRegister(0, false);
           Op.setBitWidth(1);
-          continue;
         }
+
+        ucOperand &Pred = cast<ucOperand>(Instr.getOperand(2));
+        if (Pred.isImm()) {
+          assert(Pred.getImm() && "Unexpected 'never' in unconditional branch!");
+          Pred.ChangeToRegister(0, false);
+          Pred.setBitWidth(1);
+        }
+        continue;
       }
       case VTM::COPY:     case VTM::PHI:
         // Fall through

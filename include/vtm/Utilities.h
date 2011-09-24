@@ -27,9 +27,9 @@ static std::string VBEMangle(const std::string &S) {
       Result += S[i];
     } else {
       Result += '_';
-      //Result += 'A'+(S[i]&15);
-      //Result += 'A'+((S[i]>>4)&15);
-      //Result += '_';
+      Result += 'A'+(S[i]&15);
+      Result += 'A'+((S[i]>>4)&15);
+      Result += '_';
     }
     return Result;
 }
