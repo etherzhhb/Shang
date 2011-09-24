@@ -265,7 +265,7 @@ bool VInstrInfo::isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
                                            unsigned NumCyles,
                                            float Probability,
                                            float Confidence) const {
-  return true; // DirtyHack: Everything is profitable.
+  return false; // DirtyHack: Duplicate the BB will break SSA from.
 }
 
 MachineInstr *VInstrInfo::PredicatePseudoInstruction(MachineInstr *MI,
