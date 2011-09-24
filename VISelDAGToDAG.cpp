@@ -50,7 +50,7 @@ private:
   // The last operand of all VTM machine instructions is the bit width operand,
   // which hold the bit width information of all others operands. This operand
   // is a 64 bit immediate.
-  void computeOperandsBitWidth(SDNode *N, SDValue Ops[], size_t NumOps);
+  void computeOperandsBitWidth(SDNode *N, SDValue Ops[], unsigned NumOps);
 
   // Copy constant to function unit operand register explicitly
   bool shouldMoveToReg(SDNode *N) {
@@ -101,7 +101,7 @@ FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
 }
 
 void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
-                                            size_t NumOps) {
+                                            unsigned NumOps) {
   BitWidthAnnotator Annotator;
   unsigned NumDefs = 0;
 
