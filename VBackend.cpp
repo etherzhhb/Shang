@@ -89,7 +89,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createStackToGlobalPass());
 
   // Always inline function.
-  PM.add(createAlwaysInlineFunctionPass());
+  // PM.add(createAlwaysInlineFunctionPass());
 
   // Standard LLVM-Level Passes.
 
