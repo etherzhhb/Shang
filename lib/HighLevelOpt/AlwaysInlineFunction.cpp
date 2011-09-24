@@ -6,9 +6,9 @@
 // License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+//
 // This passs adds "AlwaysInline" attribute to the functions those don't have 
 // "NoInline" attribute. And then inline the functions.
-// 
 //
 //===----------------------------------------------------------------------===//
 
@@ -71,8 +71,7 @@ INITIALIZE_AG_DEPENDENCY(CallGraph)
 INITIALIZE_PASS_END(AlwaysInlineFunction, "always-inline",
                 "Inliner for always_inline functions", false, false)
 
-Pass *llvm::createAlwaysInlineFunctionPass() 
-{ 
+Pass *llvm::createAlwaysInlineFunctionPass() {
   return new AlwaysInlineFunction(); 
 }
 
@@ -80,18 +79,19 @@ Pass *llvm::createAlwaysInlineFunctionPass()
 // been annotated with the "always inline" attribute.
 bool AlwaysInlineFunction::doInitialization(CallGraph &CG) {
   Module &M = CG.getModule();
-  bool Flag = false;
+  bool Changed = false;
   
   for (Module::iterator I = M.begin(), E = M.end();
-       I != E; ++I)
-  {
-    if (!I->hasFnAttr(Attribute::NoInline))
-    {
-      I->addAttribute(~0, Attribute::AlwaysInline);
-      Flag = true;
+       I != E; ++I) {
+    Function *F = I;
+    if (!F->hasFnAttr(Attribute::NoInline) && !F->isIntrinsic()) {
+      F->addAttribute(~0, Attribute::AlwaysInline);
+      Changed = true;
     }
-    if (!I->isDeclaration() && !I->hasFnAttr(Attribute::AlwaysInline))
-      NeverInline.insert(I);
+
+    if (!F->isDeclaration() && !F->hasFnAttr(Attribute::AlwaysInline))
+      NeverInline.insert(F);
   }
-  return Flag;
+
+  return Changed;
 }
