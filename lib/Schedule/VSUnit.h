@@ -438,6 +438,14 @@ public:
     return FuncUnitId(getFUType(), getFUNum());
   }
 
+  FuncUnitId getRepresentativeFUId() const {
+    // CalleeFN access memory bus.
+    if (getFUType() == VFUs::CalleeFN)
+      return FuncUnitId(VFUs::MemoryBus, 0);
+
+    return getFUId();
+  }
+
   /// print - Print out the internal representation of this atom to the
   /// specified stream.  This should really only be used for debugging
   /// purposes.

@@ -28,7 +28,7 @@ using namespace llvm;
 bool SchedulingBase::fds_sort::operator()(const VSUnit* LHS,
                                           const VSUnit* RHS) const {
   // Schedule the sunit that taking non-trivial function unit first.
-  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
+  FuncUnitId LHSID = LHS->getRepresentativeFUId(), RHSID = RHS->getRepresentativeFUId();
   if (!LHSID.isTrivial() && RHSID.isTrivial())
     return false;
   if (LHSID.isTrivial() && !RHSID.isTrivial())
@@ -66,7 +66,7 @@ struct ims_sort {
 
 bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   // Schedule the sunit that taking non-trivial function unit first.
-  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
+  FuncUnitId LHSID = LHS->getRepresentativeFUId(), RHSID = RHS->getRepresentativeFUId();
   if (!LHSID.isTrivial() && RHSID.isTrivial())
     return false;
   if (LHSID.isTrivial() && !RHSID.isTrivial())
@@ -105,13 +105,13 @@ bool IteractiveModuloScheduling::scheduleState() {
 
       unsigned EarliestUntry = 0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-        if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
+        if (!A->getRepresentativeFUId().isTrivial() && isStepExcluded(A, i))
           continue;
 
         if (EarliestUntry == 0)
           EarliestUntry = i;
 
-        if (!A->getFUId().isTrivial() && !tryTakeResAtStep(A, i))
+        if (!A->getRepresentativeFUId().isTrivial() && !tryTakeResAtStep(A, i))
           continue;
 
         // This is a available slot.
@@ -123,9 +123,9 @@ bool IteractiveModuloScheduling::scheduleState() {
         increaseMII();
         break;
       } else if(!A->isScheduled()) {
-        assert(!A->getFUId().isTrivial()
+        assert(!A->getRepresentativeFUId().isTrivial()
                && "SUnit can be schedule only because resource conflict!");
-        VSUnit *Blocking = findBlockingSUnit(A->getFUId(), EarliestUntry);
+        VSUnit *Blocking = findBlockingSUnit(A->getRepresentativeFUId(), EarliestUntry);
         assert(Blocking && "No one blocking?");
         Blocking->resetSchedule();
         excludeStep(Blocking, EarliestUntry);
@@ -145,7 +145,7 @@ bool IteractiveModuloScheduling::scheduleState() {
 
 bool IteractiveModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
-  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
+  assert(!A->getRepresentativeFUId().isTrivial() && "Unexpected trivial sunit!");
 
   unsigned ModuloStep = step % getMII();
   return ExcludeSlots[A->getIdx()].count(ModuloStep);
@@ -153,7 +153,7 @@ bool IteractiveModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
 
 void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
-  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
+  assert(!A->getRepresentativeFUId().isTrivial() && "Unexpected trivial sunit!");
 
   unsigned ModuloStep = step % getMII();
   ExcludeSlots[A->getIdx()].insert(ModuloStep);
@@ -162,7 +162,7 @@ void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
 VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned step) {
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
-    if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
+    if (A->getRepresentativeFUId().isTrivial() || !A->isScheduled() || A->getRepresentativeFUId() != FU)
       continue;
     if (A->getSlot() == step) return A;
   }

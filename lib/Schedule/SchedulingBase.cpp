@@ -185,7 +185,7 @@ void SchedulingBase::dumpTimeFrame() const {
 }
 
 bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
-  FuncUnitId FU = U->getFUId();
+  FuncUnitId FU = U->getRepresentativeFUId();
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return true;
 
@@ -212,7 +212,7 @@ bool SchedulingBase::isResourceConstraintPreserved() {
 
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
-    FuncUnitId FU = A->getFUId();
+    FuncUnitId FU = A->getRepresentativeFUId();
     // We only try to balance the post bind resource.
     // if (A->getFUId().isBinded()) continue;
     // Ignore the DG for trivial resources.
@@ -267,7 +267,7 @@ void SchedulingBase::schedulePassiveSUnits() {
     if (A->isScheduled())
       continue;
 
-    assert(A->getFUId().isTrivial()
+    assert(A->getRepresentativeFUId().isTrivial()
       && "SUnit that taking non-trivial not scheduled?");
 
     DEBUG(A->print(dbgs()));

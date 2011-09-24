@@ -147,9 +147,9 @@ unsigned VSchedGraph::computeResMII() {
   std::map<FuncUnitId, unsigned> TotalResUsage;
   for (VSchedGraph::iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *SU = *I;
-    if (SU->getFUId().isTrivial()) continue;
+    if (SU->getRepresentativeFUId().isTrivial()) continue;
 
-    ++TotalResUsage[SU->getFUId()];
+    ++TotalResUsage[SU->getRepresentativeFUId()];
   }
 
   unsigned MaxResII = 0;

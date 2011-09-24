@@ -311,10 +311,10 @@ void ILPScheduler::buildFUConstraints(lprec *lp) {
         continue;
 
       // Count the unbound function units in current step.
-      if (!U->getFUId().isBound())
+      if (!U->getRepresentativeFUId().isBound())
         ++CurFUCounts[U->getFUType() - VFUs::FirstNonTrivialFUType];
 
-      FSMap[U->getFUId()].push_back(SUI);
+      FSMap[U->getRepresentativeFUId()].push_back(SUI);
     }
 
     // Update the max function unit count.
