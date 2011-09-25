@@ -1144,28 +1144,37 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
       }
       return;
     } else {
-      std::string PrintfHeader;
-      raw_string_ostream SS(PrintfHeader);
-      SS << FN->getName() << "(\"";// Begin format string.
-      const GlobalVariable *Str =
-        cast<GlobalVariable>(OpInternalCall.getOperand(2).getGlobal());
-      const ConstantArray *FmtStr = cast<ConstantArray>(Str->getInitializer());
-
-      PrintEscapedString(FmtStr->getAsString(), SS);
-      SS << '"';// End format string.
-      SS.flush();
-
-      OS << "$c(\"";
-      PrintEscapedString(PrintfHeader, OS);
-      OS << '"';
-      for (unsigned i = 3, e = OpInternalCall.getNumOperands(); i != e; ++i) {
+      // Dirty Hack.
+      // TODO: Extract these to some special instruction?
+      OS << "$c(\"" << FN->getName() << "(\",";
+      for (unsigned i = 2, e = OpInternalCall.getNumOperands(); i != e; ++i) {
         ucOperand &Op = OpInternalCall.getOperand(i);
-
         if (Op.isReg() && (Op.getReg() == 0 || Op.isImplicit())) continue;
 
-        OS << ", \",\",";
+        if (i != 2) OS << ",\",\", ";
+
+        if (Op.isGlobal()) // It is the format string?
+          if (const GlobalVariable *Str = cast<GlobalVariable>(Op.getGlobal())){
+            const Constant *Initialer = Str->getInitializer();
+            if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)) {
+               if (Fmt->isCString()) {
+                 std::string FmtStr;
+                 raw_string_ostream SS(FmtStr);
+                 SS << '"';
+                 PrintEscapedString(Fmt->getAsString(), SS);
+                 SS << '"';
+                 SS.flush();
+                 OS << '"';
+                 PrintEscapedString(FmtStr, OS);
+                 OS << '"';
+                 continue;
+               }
+            }
+          }
+
         Op.print(OS);
       }
+
       OS << ", \");\""; // Enclose the c function call.
       OS << ");\n";
       return;
