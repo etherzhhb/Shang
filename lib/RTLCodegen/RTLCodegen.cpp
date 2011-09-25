@@ -1132,22 +1132,30 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
         ++ArgIt;
       }
       return;
-    } else if (FN->getName() == "printf") {
-      OS << "$display(\"";
+    } else {
+      std::string PrintfHeader;
+      raw_string_ostream SS(PrintfHeader);
+      SS << FN->getName() << "(\"";// Begin format string.
       const GlobalVariable *Str =
         cast<GlobalVariable>(OpInternalCall.getOperand(2).getGlobal());
       const ConstantArray *FmtStr = cast<ConstantArray>(Str->getInitializer());
 
-      PrintEscapedString(FmtStr->getAsString(), OS);
+      PrintEscapedString(FmtStr->getAsString(), SS);
+      SS << '"';// End format string.
+      SS.flush();
+
+      OS << "$c(\"";
+      PrintEscapedString(PrintfHeader, OS);
       OS << '"';
       for (unsigned i = 3, e = OpInternalCall.getNumOperands(); i != e; ++i) {
         ucOperand &Op = OpInternalCall.getOperand(i);
 
-        if (Op.isReg() && Op.isImplicit()) continue;
+        if (Op.isReg() && (Op.getReg() == 0 || Op.isImplicit())) continue;
 
-        OS << ", ";
+        OS << ", \",\",";
         Op.print(OS);
       }
+      OS << ", \");\""; // Enclose the c function call.
       OS << ");\n";
       return;
     }
