@@ -34,6 +34,30 @@ static std::string VBEMangle(const std::string &S) {
     return Result;
 }
 
+// PrintEscapedString - Print each character of the specified string, escaping
+// it if it is not printable or if it is an escape char.
+static inline void PrintEscapedString(const char *Str, unsigned Length,
+                                      raw_ostream &Out) {
+    for (unsigned i = 0; i != Length; ++i) {
+      unsigned char C = Str[i];
+      if (isprint(C) && C != '\\' && C != '"')
+        Out << C;
+      else if (C == '\\')
+        Out << "\\\\";
+      else if (C == '\"')
+        Out << "\\\"";
+      else if (C == '\t')
+        Out << "\\t";
+      else
+        Out << "\\x" << hexdigit(C >> 4) << hexdigit(C & 0x0F);
+    }
+}
+
+// PrintEscapedString - Print each character of the specified string, escaping
+// it if it is not printable or if it is an escape char.
+static inline void PrintEscapedString(const std::string &Str, raw_ostream &Out) {
+  PrintEscapedString(Str.c_str(), Str.size(), Out);
+}
 }
 
 #endif

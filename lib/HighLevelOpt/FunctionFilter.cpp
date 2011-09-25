@@ -116,6 +116,10 @@ bool FunctionFilter::runOnModule(Module &M) {
   std::vector<GlobalVariable*> GVs;
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I) {
+    if (ConstantArray *Str = dyn_cast<ConstantArray>(I->getInitializer())) {
+      if (Str->isCString()) continue;
+    }
+
     I->setLinkage(GlobalValue::ExternalLinkage);
     I->setInitializer(0);
   }

@@ -276,7 +276,7 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
                                    SmallVectorImpl<SDValue> &InVals) const {
   // Do not mess with tail call.
   isTailCall = false;
-  assert(!isVarArg && "VarArg not support yet!");
+  // assert(!isVarArg && "VarArg not support yet!");
 
   // TODO: Handle calling conversions.
   // There are internal call, which means the hardware module corresponding to
@@ -294,7 +294,7 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
   unsigned Id;
   if (GlobalAddressSDNode *CalleeNode = dyn_cast<GlobalAddressSDNode>(Callee)) {
     const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
-    assert(OutVals.size() == CalleeFN->arg_size()
+    assert((OutVals.size() == CalleeFN->arg_size() || isVarArg)
            && "Argument size do not match!");
     // Get the Id for the internal module.
     Id = VFI->getOrCreateCalleeFN(CalleeFN->getName());

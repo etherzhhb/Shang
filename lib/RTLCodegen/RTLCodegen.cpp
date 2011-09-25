@@ -28,6 +28,8 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
 
+#include "llvm/Constants.h"
+#include "llvm/GlobalVariable.h"
 #include "llvm/Type.h"
 #include "llvm/Module.h"
 #include "llvm/Target/Mangler.h"
@@ -1129,6 +1131,24 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
         OS << ";\n";
         ++ArgIt;
       }
+      return;
+    } else if (FN->getName() == "printf") {
+      OS << "$display(\"";
+      const GlobalVariable *Str =
+        cast<GlobalVariable>(OpInternalCall.getOperand(2).getGlobal());
+      const ConstantArray *FmtStr = cast<ConstantArray>(Str->getInitializer());
+
+      PrintEscapedString(FmtStr->getAsString(), OS);
+      OS << '"';
+      for (unsigned i = 3, e = OpInternalCall.getNumOperands(); i != e; ++i) {
+        ucOperand &Op = OpInternalCall.getOperand(i);
+
+        if (Op.isReg() && Op.isImplicit()) continue;
+
+        OS << ", ";
+        Op.print(OS);
+      }
+      OS << ");\n";
       return;
     }
   }
