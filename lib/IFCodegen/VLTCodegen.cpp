@@ -722,7 +722,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   // TODO: allow user to custom the maximum simulation time.
   // FIXME: The result is wrong if sim_time just overflow.
   Out.exit_block("while(!Verilated::gotFinish()"
-                    " && (sim_time - start_time) < 0x1000);\n");
+                    " && (sim_time - start_time) < 0x100000000);\n");
 
   Out << '\n';
   // TODO: Allow user to custom the error handling.
