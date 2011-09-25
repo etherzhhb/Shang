@@ -951,6 +951,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::COPY:             emitOpCopy(Op);               break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
+    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
@@ -1109,6 +1110,16 @@ void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   Op.getOperand(0).print(OS);
   OS << " = ";
   Op.getOperand(1).print(OS);
+  OS << ";\n";
+}
+
+void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
+  raw_ostream &OS = VM->getControlBlockBuffer();
+  OpReadSymbol.getOperand(0).print(OS);
+  // The FNNum is encoded into the target flags field of the MachineOperand.
+  OS << " <= "
+    << getSubModulePortName(OpReadSymbol.getOperand(1).getTargetFlags(),
+    OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
 }
 
@@ -1278,8 +1289,6 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpRAnd:      emitUnaryOp(Op, "&");   break;
     case VTM::VOpRXor:      emitUnaryOp(Op, "^");   break;
 
-    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
-
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   }
@@ -1302,17 +1311,6 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   BinOp.getOperand(1).print(OS);
   OS << ' ' << Operator << ' ';
   BinOp.getOperand(2).print(OS);
-  OS << ";\n";
-}
-
-void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  OpReadSymbol.getOperand(0).print(OS);
-  // The FNNum is encoded into the target flags field of the MachineOperand.
-  OS << " = "
-     << getSubModulePortName(OpReadSymbol.getOperand(1).getTargetFlags(),
-                             OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
 }
 

@@ -91,10 +91,10 @@ def State : Operand<OtherVT>;
 //===----------------------------------------------------------------------===//
 // Communication operations.
 let hasCtrlDep = 1 in {
-  def VOpReadReturn : DPTvaInst<(outs DR:$val),
+  def VOpReadReturn : CtrlInst<(outs DR:$val),
                                 (ins DR:$symbol, DR:$token),
                                 "$val = $token[$symbol]", [],
-                                0 /*Latency*/>;
+                                0 /*Latency*/, 1, 1>;
   let isBarrier    = 1 in {
     let isReturn     = 1,
         isTerminator = 1 in
