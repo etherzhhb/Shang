@@ -100,7 +100,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
 
     if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
       ++Unreachables;
-      BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
+      BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpRet))
         .addOperand(ucOperand::CreatePredicate());
     }
 
