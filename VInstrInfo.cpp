@@ -332,6 +332,7 @@ MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
   Builder.addOperand(ucOperand::CreatePredicate());
   ucOperand Dst = MachineOperand::CreateReg(DefOp.getReg(), true);
   Dst.setBitWidth(DefOp.getBitWidth());
+  Dst.setIsWire(DefOp.isWire());
   Builder.addOperand(Dst);
   ucOperand Src = MachineOperand::CreateReg(IncomingReg, false);
   Src.setBitWidth(DefOp.getBitWidth());
@@ -361,7 +362,10 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     ;
 
   VFInfo *VFI = MBB.getParent()->getInfo<VFInfo>();
-  unsigned Slot = VFI->lookupPHISlot(PN);
+  int SSlot = VFI->lookupPHISlot(PN);
+  bool isPipeline = SSlot < 0;
+  unsigned Slot = isPipeline ? -SSlot : SSlot;
+
   unsigned StartSlot = VFI->getStartSlotFor(&MBB);
   unsigned EndSlot = VFI->getEndSlotFor(&MBB);
   // If the phi scheduled into this MBB, insert the copy to the right control
@@ -387,13 +391,14 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   SmallVector<MachineOperand, 8> Ops;
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
 
-  Ops.push_back(ucOperand::CreateOpcode(VTM::VOpMvPhi, Slot));
+  unsigned Opc = isPipeline ? VTM::VOpMvPipe : VTM::VOpMvPhi;
+  Ops.push_back(ucOperand::CreateOpcode(Opc, Slot));
   Ops.push_back(ucOperand::CreatePredicate());
   MachineOperand &Pred = Ops.back();
   ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
   Dst.setBitWidth(DefOp.getBitWidth());
-  // IncomingReg is special registers that treat as wire.
-  Dst.setIsWire();
+  if (VRegisterInfo::IsWire(IncomingReg, &MRI))
+    Dst.setIsWire();
   Ops.push_back(Dst);
 
   MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
@@ -433,7 +438,7 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     // Try to forward the imp-uses.
     if (Src.isWire())
       for (ucOp::op_iterator I = WriteOp.op_begin(), E = WriteOp.op_end(); I != E;
-        ++I) {
+           ++I) {
           MachineOperand &Op = *I;
           if (Op.isReg() && Op.isImplicit()) Ops.push_back(Op);
       }

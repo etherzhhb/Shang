@@ -70,6 +70,9 @@ class RTLCodegen : public MachineFunctionPass {
   // Mapping success fsm state to their predicate in current state.
   typedef std::map<MachineBasicBlock*, std::string> PredMapTy;
 
+  // PHI source register forward map.
+  typedef std::map<unsigned, ucOperand*> PHIFwdMapTy;
+
   // If the FSM ready to move to next state?
   std::string ReadyPred;
   void addReadyPred(std::string &Pred) {
@@ -255,16 +258,14 @@ class RTLCodegen : public MachineFunctionPass {
     return ss.str();
   }
 
-  void emitNextFSMState(raw_ostream &ss, MachineBasicBlock *SrcBB,
-                        MachineBasicBlock *DstBB);
+  void emitNextFSMState(raw_ostream &ss, MachineBasicBlock *DstBB);
   void createucStateEnable(MachineBasicBlock *MBB);
   void emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
                           const std::string &NewState, bool clearState);
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
-  void emitFirstCtrlState(MachineBasicBlock *SrcBB,
-                          MachineBasicBlock *DstBB);
+  void emitFirstCtrlState(MachineBasicBlock *DstBB, PHIFwdMapTy &PHIMoves);
 
   void emitDatapath(ucState &State);
 
@@ -285,8 +286,9 @@ class RTLCodegen : public MachineFunctionPass {
   void emitImplicitDef(ucOp &ImpDef);
 
   // Return true if the control operation contains a return operation.
-  bool emitCtrlOp(ucState &State, PredMapTy &PredMap,
-                  MachineBasicBlock *SrcBB = 0);
+  bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
+
+  void buildPHIFwdMap(ucState &State, PHIFwdMapTy &PHIFwdMap, unsigned Slot);
 
   static void printPredicate(ucOperand &Pred, raw_ostream &SS) {
     if (Pred.getReg()) {
@@ -309,7 +311,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpMemTrans(ucOp &OpMemAccess);
   void emitOpBRam(ucOp &OpBRam);
 
-  void emitPHIDef(ucOp &OpPHI, MachineBasicBlock *SrcBB);
+  void emitPHIDef(ucOp &OpPHI, PHIFwdMapTy &PHIMoves);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -486,6 +488,11 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
       << "\\n\");\n"
          "`endif\n";
   Out << "// FSM\n";
+
+  Out << "`ifdef __VERILATOR_SIM_DEBUG\n"
+         "$display(\"NextFSMState: %x\", NextFSMState);\n"
+         "`endif\n";
+
   Out.switch_begin("NextFSMState");
   Out << VM->getControlBlockStr();
   // Case default.
@@ -499,6 +506,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
          "`endif\n";
   Out.exit_block("// end control block\n");
   Out.always_ff_end();
+
   Out.module_end();
   Out.flush();
 
@@ -561,7 +569,7 @@ void RTLCodegen::emitIdleState() {
            "`endif\n";
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
-  emitNextFSMState(CtrlS, 0, EntryBB);
+  emitNextFSMState(CtrlS, EntryBB);
   //
   CtrlS.else_begin();
   CtrlS << "NextFSMState <= state_idle;\n";
@@ -715,6 +723,7 @@ void RTLCodegen::emitAllSignals() {
     VM->addRegister("reg" + utostr(*I), 64);
 
   emitSignals(VTM::DRRegisterClass, "reg");
+  emitSignals(VTM::PHIRRegisterClass, "reg");
 
   emitSignals(VTM::WireRegisterClass, "wire");
   // FIXME: There are function units.
@@ -760,14 +769,14 @@ void RTLCodegen::createucStateEnable(MachineBasicBlock *MBB)  {
   VM->addRegister("cur_" + StateName + "_enable", totalSlot);
 }
 
-void RTLCodegen::emitNextFSMState(raw_ostream &ss, MachineBasicBlock *SrcBB,
-                                  MachineBasicBlock *DstBB) {
-  // Emit the first micro state of the target state.
-  emitFirstCtrlState(SrcBB, DstBB);
-
+void RTLCodegen::emitNextFSMState(raw_ostream &ss,  MachineBasicBlock *DstBB) {
   // Only jump to other state if target MBB is not current MBB.
   ss << "NextFSMState <= " << getStateName(DstBB) << ";\n";
   emitNextMicroState(VM->getControlBlockBuffer(), DstBB, "1'b1", true);
+
+  ss << "`ifdef __VERILATOR_SIM_DEBUG\n"
+        "$display(\"NextState: %x\", " << getStateName(DstBB) <<");\n"
+        "`endif\n";
 }
 
 void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
@@ -794,6 +803,10 @@ void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
     ss << " }";
 
   ss << ";\n";
+
+  ss << "`ifdef __VERILATOR_SIM_DEBUG\n"
+        "$display(\"" << StateName << ": %x\", " << StateName <<");\n"
+        "`endif\n";
 }
 
 template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
@@ -884,14 +897,30 @@ void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
   CtrlS << ";\n";
 }
 
-bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
-                            MachineBasicBlock *SrcBB) {
+
+void RTLCodegen::buildPHIFwdMap(ucState &State, PHIFwdMapTy &PHIFwdMap,
+                                unsigned Slot) {
+  for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+    ucOp Op = *I;
+
+    if (Op->getOpcode() != VTM::VOpMvPhi || Op->getPredSlot() != Slot)
+      continue;
+
+    PHIFwdMap.insert(std::make_pair(Op.getOperand(0).getReg(),
+                                    &Op.getOperand(1)));
+  }
+}
+
+
+bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
   unsigned startSlot = FInfo->getStartSlotFor(CurBB);
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
+
+  PHIFwdMapTy PHIFwdMap;
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
@@ -911,18 +940,21 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
       SlotPredSS << " & ";
       printPredicate(Op.getOperand(0), SlotPredSS);
-      SlotPredSS.flush();
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
+      // Find all PHI moves that need to forward.
+      buildPHIFwdMap(State, PHIFwdMap, Slot);
 
       // Emit control operation for next state.
       SlotPredSS.flush();
       CtrlS.if_begin(SlotPred);
-      if (TargetBB == CurBB) { // Self loop detected.
+      if (TargetBB == CurBB) // Self loop detected.
         CtrlS << "// Loop back to entry.\n";
-        emitFirstCtrlState(CurBB, TargetBB);
+      else
+        // Transfer to other state.
+        emitNextFSMState(CtrlS, TargetBB);
 
-      } else // Transfer to other state.
-        emitNextFSMState(CtrlS, CurBB, TargetBB);
+      // Emit the first micro state of the target state.
+      emitFirstCtrlState(TargetBB, PHIFwdMap);
 
       CtrlS.exit_block();
       PredMap.insert(std::make_pair(TargetBB, SlotPred));
@@ -951,14 +983,11 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMove_rs:
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
+    case VTM::VOpMvPhi:
     case VTM::COPY:             emitOpCopy(Op);               break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
-    case VTM::VOpMvPhi:
-      // Nothing to do at the moment.
-      // TODO: Collect these instructions and pass to emitFirstCtrlOp.
-      break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
@@ -967,34 +996,26 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
   return IsRet;
 }
 
-void RTLCodegen::emitPHIDef(ucOp &OpPHI, MachineBasicBlock *SrcBB) {
-  
-  unsigned PHINum = OpPHI.getOperand(1).getReg();
+void RTLCodegen::emitPHIDef(ucOp &OpPHI, PHIFwdMapTy &PHIMoves) {
+   raw_ostream &OS = VM->getControlBlockBuffer();
+   OpPHI.getOperand(0).print(OS);
+   OS << " <= ";
 
-  // FIXME: Build the map for incomming register in emitCtrlOp so we do not need
-  // to search the defines.
-  for (MachineRegisterInfo::def_iterator I = MRI->def_begin(PHINum),
-       E = MRI->def_end(); I != E; ++I) {
-    if (I->getOpcode() == VTM::IMPLICIT_DEF || I->getParent() != SrcBB)
-      continue;
-    
-    ucOp PHIDef = ucOp::getParent(I);
-    // Nothing to do with IMPLICIT_DEF.
-    if (PHIDef->getOpcode() == VTM::IMPLICIT_DEF) continue;
+   ucOperand &Src = OpPHI.getOperand(1);
+   PHIFwdMapTy::iterator at = PHIMoves.find(Src.getReg());
 
-    assert(PHIDef->getOpcode() == VTM::VOpMvPhi && "Unexpected PHI def!");
-    
-    raw_ostream &OS = VM->getControlBlockBuffer();
-    OpPHI.getOperand(0).print(OS);
-    OS << " <= ";
-    PHIDef.getOperand(1).print(OS);
-    OS << ";\n";
-    break;
-  }
+   // Forward the source operand if necessary.
+   if (at != PHIMoves.end()) {
+     at->second->print(OS);
+     OS << "; // ";
+   }
+
+   Src.print(OS);
+   OS << ";\n";
 }
 
-void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
-                                    MachineBasicBlock *DstBB) {
+void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB,
+                                    PHIFwdMapTy &PHIMoves) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *DstBB->getFirstNonPHI();
   assert(FInfo->getStartSlotFor(DstBB) == FirstState.getSlot()
@@ -1004,8 +1025,8 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
        I != E; ++I) {
     ucOp Op = *I;
     switch(Op->getOpcode()) {
-    case VTM::VOpDefPhi:    emitPHIDef(Op, SrcBB); break;
-    case VTM::IMPLICIT_DEF:                 break;
+    case VTM::VOpDefPhi:    emitPHIDef(Op, PHIMoves); break;
+    case VTM::IMPLICIT_DEF:                           break;
     default:
       assert(0 && "Unexpected operation!");
       break;

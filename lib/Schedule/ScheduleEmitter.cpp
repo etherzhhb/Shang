@@ -258,7 +258,7 @@ struct MicroStateBuilder {
       ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
       Op.setBitWidth(SizeInBits);
 
-      VFI.rememberPHISlot(PN, WriteSlot);
+      VFI.rememberPHISlot(PN, WriteSlot, true);
       for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
         ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
         SrcOp.setBitWidth(SizeInBits);

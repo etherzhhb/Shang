@@ -152,6 +152,9 @@ let isReMaterializable = 1,
   // we may need to forward the source register.
   def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
                            "$dst <= $src", [], 0, 1>;
+  // Move the pipeline, this is unconditional.
+  def VOpMvPipe : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
+                            "$dst <= $src", [], 0, 1>;
 
   // Bitwise logic operation.
   let isCommutable       = 1 in {
