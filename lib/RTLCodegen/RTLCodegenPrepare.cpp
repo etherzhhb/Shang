@@ -80,20 +80,25 @@ void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
     unsigned NumDef = 0;
     typedef MachineRegisterInfo::def_iterator def_it;
     while (!MRI.def_empty(PHINum)){
-      ucOp PHIUse = ucOp::getParent(MRI.def_begin(PHINum));
+      def_it DI = MRI.def_begin(PHINum);
+      ucOp PHIUse = ucOp::getParent(DI);
 
-      //if (!isWire && PHIUse->getOpcode() != VTM::VOpMvPipe)
-      //  return;
+      if (isWire)
+        PHIUse->changeOpcode(VTM::VOpMove_ww, PHIUse->getPredSlot());
+      else if (PHIUse->getOpcode() == VTM::VOpMvPipe
+               || DI->getParent() != UI->getParent())
+        PHIUse->changeOpcode(VTM::VOpMove_rw, PHIUse->getPredSlot());
 
-      unsigned Opc = isWire ? VTM::VOpMove_ww : VTM::VOpMove_rw;
-      PHIUse->changeOpcode(Opc, PHIUse->getPredSlot());
+      // The opcode will be keep if the move is in side a loop, which need
+      // extra predicate.
+
       PHIUse.getOperand(0).setReg(PHIDst);
       PHIUse.getOperand(0).setIsWire(isWire);
       ++NumDef;
     }
 
     PHIDef->changeOpcode(VTM::IMPLICIT_DEF, PHIDef->getPredSlot());
-    //assert(NumDef == 1 && "Broken PHINode for wire!");
+    assert((!isWire || NumDef == 1) && "Broken PHINode for wire!");
     (void) NumDef;
   }
 }
