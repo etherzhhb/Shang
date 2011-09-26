@@ -309,6 +309,8 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpMemTrans(ucOp &OpMemAccess);
   void emitOpBRam(ucOp &OpBRam);
 
+  void emitPHIDef(ucOp &OpPHI, MachineBasicBlock *SrcBB);
+
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
     return "SubMod" + utostr(FNNum) + "_" + PortName;
@@ -918,6 +920,7 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       if (TargetBB == CurBB) { // Self loop detected.
         CtrlS << "// Loop back to entry.\n";
         emitFirstCtrlState(CurBB, TargetBB);
+
       } else // Transfer to other state.
         emitNextFSMState(CtrlS, CurBB, TargetBB);
 
@@ -952,12 +955,42 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
+    case VTM::VOpMvPhi:
+      // Nothing to do at the moment.
+      // TODO: Collect these instructions and pass to emitFirstCtrlOp.
+      break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
     CtrlS.exit_block();
   }
   return IsRet;
+}
+
+void RTLCodegen::emitPHIDef(ucOp &OpPHI, MachineBasicBlock *SrcBB) {
+  
+  unsigned PHINum = OpPHI.getOperand(1).getReg();
+
+  // FIXME: Build the map for incomming register in emitCtrlOp so we do not need
+  // to search the defines.
+  for (MachineRegisterInfo::def_iterator I = MRI->def_begin(PHINum),
+       E = MRI->def_end(); I != E; ++I) {
+    if (I->getOpcode() == VTM::IMPLICIT_DEF || I->getParent() != SrcBB)
+      continue;
+    
+    ucOp PHIDef = ucOp::getParent(I);
+    // Nothing to do with IMPLICIT_DEF.
+    if (PHIDef->getOpcode() == VTM::IMPLICIT_DEF) continue;
+
+    assert(PHIDef->getOpcode() == VTM::VOpMvPhi && "Unexpected PHI def!");
+    
+    raw_ostream &OS = VM->getControlBlockBuffer();
+    OpPHI.getOperand(0).print(OS);
+    OS << " <= ";
+    PHIDef.getOperand(1).print(OS);
+    OS << ";\n";
+    break;
+  }
 }
 
 void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
@@ -970,7 +1003,13 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *SrcBB,
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
     ucOp Op = *I;
-    assert(Op->getOpcode() == VTM::IMPLICIT_DEF && "Unexpected operation!");
+    switch(Op->getOpcode()) {
+    case VTM::VOpDefPhi:    emitPHIDef(Op, SrcBB); break;
+    case VTM::IMPLICIT_DEF:                 break;
+    default:
+      assert(0 && "Unexpected operation!");
+      break;
+    }
   }
 }
 

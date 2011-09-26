@@ -148,6 +148,8 @@ let isReMaterializable = 1,
 
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
                            "$dst <= $src", [], 0, 1>;
+  // Special instruction for copy source register to phi incomming register,
+  // we may need to forward the source register.
   def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
                            "$dst <= $src", [], 0, 1>;
 

@@ -392,8 +392,8 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   MachineOperand &Pred = Ops.back();
   ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
   Dst.setBitWidth(DefOp.getBitWidth());
-  if (VRegisterInfo::IsWire(DefOp.getReg(), &MRI))
-    Dst.setIsWire();
+  // IncomingReg is special registers that treat as wire.
+  Dst.setIsWire();
   Ops.push_back(Dst);
 
   MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
