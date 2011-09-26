@@ -1155,20 +1155,22 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
 
         if (Op.isGlobal()) // It is the format string?
           if (const GlobalVariable *Str = cast<GlobalVariable>(Op.getGlobal())){
-            const Constant *Initialer = Str->getInitializer();
-            if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)) {
-               if (Fmt->isCString()) {
-                 std::string FmtStr;
-                 raw_string_ostream SS(FmtStr);
-                 SS << '"';
-                 PrintEscapedString(Fmt->getAsString(), SS);
-                 SS << '"';
-                 SS.flush();
-                 OS << '"';
-                 PrintEscapedString(FmtStr, OS);
-                 OS << '"';
-                 continue;
-               }
+            if (Str->hasInitializer()) {
+              const Constant *Initialer = Str->getInitializer();
+              if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)){
+                 if (Fmt->isCString()) {
+                   std::string FmtStr;
+                   raw_string_ostream SS(FmtStr);
+                   SS << '"';
+                   PrintEscapedString(Fmt->getAsString(), SS);
+                   SS << '"';
+                   SS.flush();
+                   OS << '"';
+                   PrintEscapedString(FmtStr, OS);
+                   OS << '"';
+                   continue;
+                 }
+              }
             }
           }
 
