@@ -359,6 +359,10 @@ VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
    return LoopDep(SrcBeforeDest ? LoopDep::AntiDep : LoopDep::TrueDep, Diff);
 }
 
+static inline bool mayAccessMemory(const TargetInstrDesc &TID) {
+  return TID.mayLoad() || TID.mayStore() || TID.isCall();
+}
+
 void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   CurState.preSchedTopSort();
   // The schedule unit and the corresponding memory operand.
@@ -370,37 +374,54 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
        ++I) {
     VSUnit *DstU = *I;
     MachineInstr *DstMI = DstU->getRepresentativeInst();
-    // Skip the non-memory operation.
-    if (!DstMI || DstMI->memoperands_empty())
-      continue;
+    // Skip the non-memory operation and non-call operation.
+    if (DstMI == 0) continue;
 
-    // FIXME:
-    assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem operand!");
-    assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile operation!");
-
-    // Dirty Hack: Is the const_cast safe?
-    Value *DstMO = const_cast<Value*>((*DstMI->memoperands_begin())->getValue());
-    const Type *DstElemTy = cast<SequentialType>(DstMO->getType())->getElementType();
-    size_t DstSize = TD->getTypeStoreSize(DstElemTy);
+    if (!mayAccessMemory(DstMI->getDesc())) continue;
 
     VIDesc DstInfo = *DstMI;
     bool isDstLoad = DstInfo.mayLoad();
 
-    if (DstMO == 0) continue;
+    // Dirty Hack: Is the const_cast safe?
+    Value *DstMO = 0;
+    uint64_t DstSize = AliasAnalysis::UnknownSize;
+    // TODO: Also try to get the address information for call instruction.
+    if (!DstMI->memoperands_empty() && !DstMI->hasVolatileMemoryRef()) {
+      assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem ops!");
+      assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile op!");
 
-    assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
+      DstMO = const_cast<Value*>((*DstMI->memoperands_begin())->getValue());
+      const Type *DstElemTy
+        = cast<SequentialType>(DstMO->getType())->getElementType();
+      DstSize = TD->getTypeStoreSize(DstElemTy);
+      assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
+    }
 
     for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
          I != E; ++I) {
       Value *SrcMO = I->first;
-      const Type *SrcElemTy = cast<SequentialType>(SrcMO->getType())->getElementType();
-      size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
-      
       VSUnit *SrcU = I->second;
+
       MachineInstr *SrcMI = SrcU->getRepresentativeInst();
+
+      // Handle unanalyzable memory access.
+      if (DstMO == 0 || SrcMO == 0) {
+        // Build the Src -> Dst dependence.
+        unsigned Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+        DstU->addDep(getMemDepEdge(SrcU, Latency, 0));
+
+        // Build the Dst -> Src (in next iteration) dependence.
+        if (CurState.enablePipeLine()) {
+          Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+          SrcU->addDep(getMemDepEdge(DstU, Latency, 1));
+        }
+        // Go on handle next visited SUnit.
+        continue;
+      }
+
       VIDesc SrcInfo = *SrcMI;
       bool isSrcLoad = SrcInfo.mayLoad();
-      
+
       // Ignore RAR dependence.
       if (isDstLoad && isSrcLoad) continue;
 
@@ -425,6 +446,10 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
           SrcU->addDep(MemDep);
         }
       } else {
+        const Type *SrcElemTy
+          = cast<SequentialType>(SrcMO->getType())->getElementType();
+        size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
+
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
         // Ignore the No-Alias pointers.
