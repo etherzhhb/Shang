@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/Statistic.h"
@@ -44,8 +45,14 @@ struct MergeFallThroughBlocks : public MachineFunctionPass {
 
   const TargetInstrInfo *TII;
   MachineRegisterInfo *MRI;
+  MachineLoopInfo *LI;
 
   MergeFallThroughBlocks() : MachineFunctionPass(ID), TII(0), MRI(0) {}
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    MachineFunctionPass::getAnalysisUsage(AU);
+    AU.addRequired<MachineLoopInfo>();
+  }
 
   bool runOnMachineFunction(MachineFunction &MF);
   bool canMerge(MachineBasicBlock *MBB);
@@ -63,6 +70,7 @@ char MergeFallThroughBlocks::ID = 0;
 bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
+  LI = &getAnalysis<MachineLoopInfo>();
 
   typedef MachineFunction::reverse_iterator rev_it;
   for (rev_it I = MF.rbegin(), E = MF.rend(); I != E; ++I) {
@@ -94,6 +102,9 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
 
   if (TII->AnalyzeBranch(*MBB, TBB, FBB, Cnd)) return false;
 
+  // Do not change the parent loop of MBB.
+  if (LI->getLoopFor(MBB) != LI->getLoopFor(Pred)) return false;
+
   // Make sure the MBB and TBB are the same block.
   if (PredTBB != MBB)
     std::swap(PredTBB, PredFBB);
@@ -110,7 +121,9 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
     if (!TII->isPredicable(MI))
       return false;
   }
-
+  //static int count = 0;
+  //++count;
+  //return (count < 2);
   return true;
 }
 
