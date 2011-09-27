@@ -214,7 +214,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   PM.add(createFixTerminatorsPass());
   PM.add(createMergeFallThroughBlocksPass());
-  printAndVerify(PM, "After VTM ifconversion pass");
+  printAndVerify(PM, "After merge fall through pass");
 
   // Make sure we have a branch instruction for every success block.
   PM.add(createFixTerminatorsPass());
