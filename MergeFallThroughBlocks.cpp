@@ -121,9 +121,7 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
     if (!TII->isPredicable(MI))
       return false;
   }
-  //static int count = 0;
-  //++count;
-  //return (count < 2);
+
   return true;
 }
 
