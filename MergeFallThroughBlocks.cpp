@@ -158,7 +158,8 @@ void MergeFallThroughBlocks::mergeBranches(MachineBasicBlock *PredFBB,
 }
 
 static ucOperand removeInvertFlag(ucOperand Op, MachineRegisterInfo *MRI,
-                                  MachineBasicBlock *MBB,
+                                  MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator IP,
                                   const TargetInstrInfo *TII)  {
   if (Op.isPredicateInverted()) {
     Op.clearParent();
@@ -168,7 +169,7 @@ static ucOperand removeInvertFlag(ucOperand Op, MachineRegisterInfo *MRI,
     unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
     ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
     Dst.setBitWidth(1);
-    BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpNot))
+    BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
       .addOperand(Dst).addOperand(Op)
       .addOperand(ucOperand::CreatePredicate());
     Dst.setIsDef(false);
@@ -179,23 +180,25 @@ static ucOperand removeInvertFlag(ucOperand Op, MachineRegisterInfo *MRI,
 }
 
 static ucOperand mergePred(ucOperand OldCnd, ucOperand NewCnd,
-                           MachineBasicBlock *MBB, MachineRegisterInfo *MRI,
+                           MachineBasicBlock &MBB,
+                           MachineBasicBlock::iterator IP,
+                           MachineRegisterInfo *MRI,
                            const TargetInstrInfo *TII) {
-  OldCnd = removeInvertFlag(OldCnd, MRI, MBB, TII);
-  NewCnd = removeInvertFlag(NewCnd, MRI, MBB, TII);
+  OldCnd = removeInvertFlag(OldCnd, MRI, MBB, IP, TII);
+  NewCnd = removeInvertFlag(NewCnd, MRI, MBB, IP, TII);
 
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
   ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
   Dst.setBitWidth(1);
 
-  BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpAnd))
+  BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpAnd))
     .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
     .addOperand(ucOperand::CreatePredicate());
   Dst.setIsDef(false);
   return Dst;
 }
 
-static void buildCondition(MachineBasicBlock *MBB,
+static void buildCondition(MachineBasicBlock &MBB,
                            SmallVectorImpl<MachineOperand> &Cnd,
                            MachineRegisterInfo *MRI,
                            const TargetInstrInfo *TII) {
@@ -204,7 +207,7 @@ static void buildCondition(MachineBasicBlock *MBB,
     ucOperand LHS = cast<ucOperand>(Cnd.pop_back_val());
     ucOperand RHS = cast<ucOperand>(Cnd.pop_back_val());
 
-    Cnd.push_back(mergePred(LHS, RHS, MBB, MRI, TII));
+    Cnd.push_back(mergePred(LHS, RHS, MBB, MBB.end(), MRI, TII));
   }
 }
 
@@ -235,7 +238,8 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
 
   if (!FromBBCnd.empty()) {
     // Predicate the Block.
-    for (MachineBasicBlock::iterator I = FromBB->begin(), E = FromBB->end(); I != E; ++I) {
+    for (MachineBasicBlock::iterator I = FromBB->begin(), E = FromBB->end();
+         I != E; ++I) {
       if (I->isDebugValue())
         continue;
 
@@ -244,14 +248,14 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
         unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
         unsigned &Reg = PredMap[k];
         if (!Reg) {
-          Reg = mergePred(*MO, FromBBCnd.front(), FromBB, MRI, TII).getReg();
+          Reg = mergePred(*MO, FromBBCnd.front(), *FromBB, I, MRI, TII).getReg();
         }
 
         MO->ChangeToRegister(Reg, false);
         MO->setTargetFlags(1);
       } else if (I->getOpcode() <= TargetOpcode::COPY) {
         MachineInstr *PseudoInst = I;
-        ++I;
+        ++I; // Skip current instruction, we may change it.
         PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, TII, FromBBCnd);
         if (!PseudoInst) {
 #ifndef NDEBUG
@@ -289,7 +293,7 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   }
 
   mergeBranches(ToFBB, FromBBCnd, FromTBB, FromFBB, Cond);
-  buildCondition(ToBB, Cond, MRI, TII);
+  buildCondition(*ToBB, Cond, MRI, TII);
 
   TII->InsertBranch(*ToBB, FromTBB, FromFBB, Cond, DebugLoc());
   ++NumFallThroughMerged;
