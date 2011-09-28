@@ -101,7 +101,7 @@ public:
   unsigned RecMII;
 
   SubGraph(VSchedGraph *SG)
-    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this), blocked(false),
+    : G(SG), GraphEntry(SG->getEntryRoot()), blocked(false), DummyNode(0, this),
       CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->getNumSUnits()),
       RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
@@ -297,19 +297,19 @@ bool SubGraph::findAllCircuits() {
 
     // Now we have the SCC with the least vertex.
     CurIdx = LeastVertex->getIdx();
-
-    unsigned complexity = 1;
+    uint64_t complexity = 1;
 
     // Do some clear up.
     for (SubGrapNodeSet::iterator I = Vk.begin(), E = Vk.end(); I != E; ++I) {
       SubGraphNode *N = *I;
-
-      complexity *= N->getSUnit()->getNumUses();
+      unsigned ChildNums = std::distance(N->child_begin(), N->child_end());
+      complexity *= ChildNums;
 
       blocked[N] = false;
       B[N].clear();
     }
 
+    assert(complexity != 0 && "Complexity (uint64_t) overflow?");
     // FIXME: Read the threshold from user script.
     if (complexity > 0x10000000) {
       MachineBasicBlock *MBB = G->getMachineBasicBlock();
