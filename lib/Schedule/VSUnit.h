@@ -553,10 +553,6 @@ private:
 
   bool trySetLoopOp(MachineInstr *MI);
 
-  unsigned computeRecMII();
-  unsigned computeResMII();
-  unsigned computeMII();
-
   VSUnit *createEntry() {
     VSUnit *Entry = new VSUnit(SUCount);
     ++SUCount;

@@ -117,6 +117,10 @@ public:
 
   unsigned buildFDepHD(bool resetSTF);
 
+  unsigned computeRecMII();
+  unsigned computeResMII();
+  void computeMII();
+
   void setMII(unsigned II) { MII = II; }
   unsigned getMII() const { return MII; }
   void increaseMII() { ++MII; }

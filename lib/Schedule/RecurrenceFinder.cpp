@@ -9,13 +9,20 @@
 //
 // This file implement the recurrence finder which find recurrences in schedule
 // graph by johnson's alogrithm.
+// The algorithm of Johnson is based on the search for strong connected
+// components in a graph. For a description of this part see:<br>
+// Robert Tarjan: Depth-first search and linear graph algorithms. In: SIAM
+// Journal on Computing. Volume 1, Nr. 2 (1972), pp. 146-160.<br>
 //
 //===----------------------------------------------------------------------===//
 
 #include "VSUnit.h"
+#include "SchedulingBase.h"
 
+#include "llvm/Function.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/IndexedMap.h"
 #include "llvm/Support/raw_ostream.h"
 #define DEBUG_TYPE "vtm-rec-finder"
 #include "llvm/Support/Debug.h"
@@ -66,22 +73,24 @@ struct SubGraphNode {
 };
 
 class SubGraph {
-  typedef std::vector<SubGraphNode*> SubGrapNodeVec;
-  typedef std::set<SubGraphNode*> SubGrapNodeSet;
+  typedef SmallVector<SubGraphNode*, 32> SubGrapNodeVec;
+  typedef SmallPtrSet<SubGraphNode*, 64> SubGrapNodeSet;
 
   const VSchedGraph *G;
   const VSUnit *GraphEntry;
   // ModuloScheduleInfo *MSInfo;
 
   //Set of blocked nodes
-  SubGrapNodeSet blocked;
+  typedef IndexedMap<bool, VSUnit::IdxFunctor<SubGraphNode> > SubGrapNodeFlags;
+  SubGrapNodeFlags blocked;
   //Stack holding current circuit
   SubGrapNodeVec stack;
   //Map for B Lists
-  std::map<SubGraphNode*, SubGrapNodeSet> B;
+  typedef IndexedMap<SubGrapNodeSet, VSUnit::IdxFunctor<SubGraphNode> > BMapTy;
+  BMapTy B;
 
   // SCC with least vertex.
-  SubGrapNodeVec Vk;
+  SubGrapNodeSet Vk;
 
   // SubGraph stuff
   typedef std::vector<SubGraphNode*> NodeVecTy;
@@ -92,7 +101,7 @@ public:
   unsigned RecMII;
 
   SubGraph(VSchedGraph *SG)
-    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this),
+    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this), blocked(false),
       CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->getNumSUnits()),
       RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
@@ -100,6 +109,9 @@ public:
     // the VSUnits vector of SG.
     for (VSchedGraph::const_iterator I = SG->begin(), E = SG->end(); I != E; ++I)
       Nodes.push_back(new SubGraphNode(*I, this));
+
+    blocked.resize(NumNodes);
+    B.resize(NumNodes);
   }
 
   unsigned getRecMII() const { return RecMII; }
@@ -132,7 +144,7 @@ public:
     return nodes_iterator(G->end(), DummyNode);
   }
 
-  void findAllCircuits();
+  bool findAllCircuits();
   bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex);
   void addRecurrence();
   void unblock(SubGraphNode *N);
@@ -159,13 +171,12 @@ typedef GraphTraits<SubGraphNode*> VSUSccGT;
 typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
 
 void SubGraph::unblock(SubGraphNode *N) {
-  blocked.erase(N);
+  blocked[N] = false;
 
   while (!B[N].empty()) {
     SubGraphNode *W = *B[N].begin();
     B[N].erase(W);
-    if(blocked.count(W))
-      unblock(W);
+    if(blocked[W]) unblock(W);
   }
 }
 
@@ -200,33 +211,32 @@ void SubGraph::addRecurrence() {
 }
 
 bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
-  bool ret = false;
+  bool f = false;
 
   stack.push_back(CurNode);
-  blocked.insert(CurNode);
+  blocked[CurNode] = true;
 
-  SubGrapNodeSet AkV;
+  SubGrapNodeVec AkV;
   for (SubGraphNode::ChildIt I = CurNode->child_begin(),
        E = CurNode->child_end(); I != E; ++I) {
     SubGraphNode *N = *I;
-    if (std::find(Vk.begin(), Vk.end(), N) != Vk.end())
-      AkV.insert(N);
+    if (Vk.count(N)) AkV.push_back(N);
   }
 
-  for (SubGrapNodeSet::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+  for (SubGrapNodeVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
     SubGraphNode *N = *I;
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.
       addRecurrence();
-      ret = true;
-    } else if (!blocked.count(N) && circuit(N, LeastVertex))
-      ret = true;
+      f = true;
+    } else if (!blocked[N] && circuit(N, LeastVertex))
+      f = true;
   }
 
-  if (ret)
+  if (f)
     unblock(CurNode);
   else
-    for (SubGrapNodeSet::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+    for (SubGrapNodeVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
       SubGraphNode *N = *I;
       B[N].insert(CurNode);
     }
@@ -234,10 +244,10 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
   // Pop current node.
   stack.pop_back();
 
-  return ret;
+  return f;
 }
 
-void SubGraph::findAllCircuits() {
+bool SubGraph::findAllCircuits() {
   VSUnit *ExitRoot = G->getExitRoot();
   unsigned ExitIdx = ExitRoot->getIdx();
   DEBUG(dbgs() << "-------------------------------------\nFind all circuits in "
@@ -258,7 +268,8 @@ void SubGraph::findAllCircuits() {
     // vertex
     for (dep_scc_iterator SCCI = dep_scc_iterator::begin(RootNode),
           SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
-      SubGrapNodeVec &nextSCC = *SCCI;
+      typedef std::vector<SubGraphNode*> SCCTy;
+      SCCTy &nextSCC = *SCCI;
 
       if (nextSCC.size() == 1) {
         assert(!SCCI.hasLoop() && "No self loop expect in DDG!");
@@ -267,15 +278,17 @@ void SubGraph::findAllCircuits() {
 
       // Find the lest vetex
       SubGraphNode *OldLeastVertex = LeastVertex;
-      for (SubGrapNodeVec::iterator I = nextSCC.begin(), E = nextSCC.end();
+      for (SCCTy::iterator I = nextSCC.begin(), E = nextSCC.end();
            I != E; ++I) {
         SubGraphNode *CurNode = *I;
         if (!LeastVertex || CurNode->getIdx() < LeastVertex->getIdx())
           LeastVertex = CurNode;
       }
       // Update Vk if leastVe
-      if (OldLeastVertex != LeastVertex)
-        Vk = nextSCC;
+      if (OldLeastVertex != LeastVertex) {
+        Vk.clear();
+        Vk.insert(nextSCC.begin(), nextSCC.end());
+      }
     }
 
     // No SCC?
@@ -284,18 +297,37 @@ void SubGraph::findAllCircuits() {
 
     // Now we have the SCC with the least vertex.
     CurIdx = LeastVertex->getIdx();
+
+    unsigned complexity = 1;
+
     // Do some clear up.
-    for (SubGrapNodeVec::iterator I = Vk.begin(), E = Vk.end(); I != E; ++I) {
+    for (SubGrapNodeSet::iterator I = Vk.begin(), E = Vk.end(); I != E; ++I) {
       SubGraphNode *N = *I;
-      blocked.erase(N);
+
+      complexity *= N->getSUnit()->getNumUses();
+
+      blocked[N] = false;
       B[N].clear();
     }
+
+    // FIXME: Read the threshold from user script.
+    if (complexity > 0x10000000) {
+      MachineBasicBlock *MBB = G->getMachineBasicBlock();
+      errs() << "Cannot analysis RecII with complexity " << complexity
+             << " in BB " << MBB->getName()
+             << " in Function " << MBB->getParent()->getFunction()->getName()
+             << "!\n";
+      return false;
+    }
+
     // Find the circuits.
     circuit(LeastVertex, LeastVertex);
 
     // Move forward.
     ++CurIdx;
   }
+
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -323,10 +355,13 @@ SubGraphNode::ChildIt SubGraphNode::child_end() const {
 }
 
 //===----------------------------------------------------------------------===//
-unsigned VSchedGraph::computeRecMII() {
+unsigned SchedulingBase::computeRecMII() {
   //// Find all recurrences with Johnson's algorithm.
-  SubGraph SG(this);
-  SG.findAllCircuits();
+  SubGraph SG(&State);
+
+  // Do not pipeline if we cannot compute RecMII.
+  if (!SG.findAllCircuits()) return this->getCriticalPathLength();
+
   unsigned MaxRecII = SG.getRecMII();
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');
   // Dirty Hack: RecII must bigger than zero.

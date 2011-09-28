@@ -180,6 +180,31 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
   }
 }
 
+unsigned SchedulingBase::computeResMII() {
+  std::map<FuncUnitId, unsigned> TotalResUsage;
+  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+    VSUnit *SU = *I;
+    if (SU->getRepresentativeFUId().isTrivial()) continue;
+
+    ++TotalResUsage[SU->getRepresentativeFUId()];
+  }
+
+  unsigned MaxResII = 0;
+  typedef std::map<FuncUnitId, unsigned>::iterator UsageIt;
+  for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
+    MaxResII = std::max(MaxResII,
+      I->second / I->first.getTotalFUs());
+  }
+  DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
+  return MaxResII;
+}
+
+void SchedulingBase::computeMII() {
+  unsigned RecMII = computeRecMII();
+  unsigned ResMII = computeResMII();
+  MII = std::max(RecMII, ResMII);
+}
+
 void SchedulingBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }

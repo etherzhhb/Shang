@@ -143,41 +143,16 @@ void VSchedGraph::scheduleLinear() {
   DEBUG(Scheduler->dumpTimeFrame());
 }
 
-unsigned VSchedGraph::computeResMII() {
-  std::map<FuncUnitId, unsigned> TotalResUsage;
-  for (VSchedGraph::iterator I = begin(), E = end(); I != E; ++I) {
-    VSUnit *SU = *I;
-    if (SU->getRepresentativeFUId().isTrivial()) continue;
-
-    ++TotalResUsage[SU->getRepresentativeFUId()];
-  }
-
-  unsigned MaxResII = 0;
-  typedef std::map<FuncUnitId, unsigned>::iterator UsageIt;
-  for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
-    MaxResII = std::max(MaxResII,
-      I->second / I->first.getTotalFUs());
-  }
-  DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
-  return MaxResII;
-}
-
-unsigned VSchedGraph::computeMII() {
-  unsigned RecMII = computeRecMII();
-  unsigned ResMII = computeResMII();
-  return std::max(RecMII, ResMII);
-}
-
 void VSchedGraph::scheduleLoop() {
   OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this));
-  unsigned II = computeMII();
-
-  DEBUG(dbgs() << "MII: " << II << "...");
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->lengthenCriticalPath();
 
-  Scheduler->setMII(II);
+  // computeMII may return a very big II if we cannot compute the RecII.
+  Scheduler->computeMII();
+
+  DEBUG(dbgs() << "MII: " << Scheduler->getMII() << "...");
   while (!Scheduler->scheduleCriticalPath(true))
     Scheduler->increaseMII();
 
