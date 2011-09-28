@@ -418,6 +418,11 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   if (DI->getOpcode() != VTM::PHI) {
     assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
     ucOp WriteOp = ucOp::getParent(DI);
+
+    // Do not copy the implicit define.
+    if (WriteOp->getOpcode() == VTM::IMPLICIT_DEF)
+      return InsertPos;
+
     // We need to forward the wire copy if the source register is written
     // in the same slot, otherwise we will read a out of date value.
     if (WriteOp->getParent() == &*Ctrl && WriteOp->getPredSlot() == Slot) {
