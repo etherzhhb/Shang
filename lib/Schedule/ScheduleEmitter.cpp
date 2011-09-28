@@ -243,9 +243,12 @@ struct MicroStateBuilder {
 
       // The register to hold initialize value.
       unsigned InitReg = MRI.createVirtualRegister(MRI.getRegClass(RegNo));
+      ucOperand InitOp = MachineOperand::CreateReg(InitReg, true);
+      InitOp.setBitWidth(SizeInBits);
 
       BuildMI(*PredBB, PredBB->getFirstTerminator(), DebugLoc(),
-        TII.get(VTM::IMPLICIT_DEF), InitReg);
+        TII.get(VTM::IMPLICIT_DEF)).addOperand(InitOp);
+
       SSAUpdate.AddAvailableValue(PredBB, InitReg);
     }
 
