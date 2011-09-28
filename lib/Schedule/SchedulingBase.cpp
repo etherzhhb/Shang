@@ -231,7 +231,21 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   return true;
 }
 
-void SchedulingBase::unschedule(VSUnit *U) {
+void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
+  U->scheduledTo(step);
+
+  FuncUnitId FU = U->getFUId();
+  // We will always have enough trivial resources.
+  if (FU.isTrivial()) return;
+
+  unsigned Latency = U->getLatency();
+  for (unsigned i = step, e = step + Latency; i != e; ++i) {
+    unsigned s = computeStepKey(i);
+    --RT[FU][s];
+  }
+}
+
+void SchedulingBase::unscheduleSU(VSUnit *U) {
   unsigned step = U->getSlot();
   U->resetSchedule();
 

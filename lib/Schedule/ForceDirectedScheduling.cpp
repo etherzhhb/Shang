@@ -127,10 +127,11 @@ bool IterativeModuloScheduling::scheduleState() {
                && "SUnit can be schedule only because resource conflict!");
         VSUnit *Blocking = findBlockingSUnit(A, EarliestUntry);
         assert(Blocking && "No one blocking?");
-        unschedule(Blocking);
         excludeStep(Blocking, EarliestUntry);
-        // Resource table do not need to change.
-        A->scheduledTo(EarliestUntry);
+
+        unscheduleSU(Blocking);
+        scheduleSU(A, EarliestUntry);
+
         ToSched.push(Blocking);
       }
 
@@ -140,6 +141,9 @@ bool IterativeModuloScheduling::scheduleState() {
   }
   DEBUG(buildTimeFrame());
   DEBUG(dumpTimeFrame());
+
+  assert(isResourceConstraintPreserved()
+         && "Resource constraints not preserved!");
   return true;
 }
 

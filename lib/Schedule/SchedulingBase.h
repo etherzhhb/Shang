@@ -112,7 +112,8 @@ public:
   }
 
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
-  void unschedule(VSUnit *U);
+  void scheduleSU(VSUnit *U, unsigned step);
+  void unscheduleSU(VSUnit *U);
 
   bool isResourceConstraintPreserved();
   double getExtraResReq() const { return ExtraResReq; }
