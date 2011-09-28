@@ -122,7 +122,7 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
   if (I.getPipeLineAlgorithm() == SynSettings::IMS)
-    return new IteractiveModuloScheduling(G);
+    return new IterativeModuloScheduling(G);
 
   return createLinearScheduler(G);
 }

@@ -184,9 +184,9 @@ unsigned SchedulingBase::computeResMII() {
   std::map<FuncUnitId, unsigned> TotalResUsage;
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *SU = *I;
-    if (SU->getRepresentativeFUId().isTrivial()) continue;
+    if (SU->getFUId().isTrivial()) continue;
 
-    ++TotalResUsage[SU->getRepresentativeFUId()];
+    ++TotalResUsage[SU->getFUId()];
   }
 
   unsigned MaxResII = 0;
@@ -210,7 +210,7 @@ void SchedulingBase::dumpTimeFrame() const {
 }
 
 bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
-  FuncUnitId FU = U->getRepresentativeFUId();
+  FuncUnitId FU = U->getFUId();
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return true;
 
@@ -231,13 +231,29 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   return true;
 }
 
+void SchedulingBase::unschedule(VSUnit *U) {
+  unsigned step = U->getSlot();
+  U->resetSchedule();
+
+  FuncUnitId FU = U->getFUId();
+  // We will always have enough trivial resources.
+  if (FU.isTrivial()) return;
+
+  unsigned Latency = U->getLatency();
+
+  for (unsigned i = step, e = step + Latency; i != e; ++i) {
+    unsigned s = computeStepKey(i);
+    --RT[FU][s];
+  }
+}
+
 bool SchedulingBase::isResourceConstraintPreserved() {
   ExtraResReq = 0.0;
   resetRT();
 
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
-    FuncUnitId FU = A->getRepresentativeFUId();
+    FuncUnitId FU = A->getFUId();
     // We only try to balance the post bind resource.
     // if (A->getFUId().isBinded()) continue;
     // Ignore the DG for trivial resources.
@@ -292,7 +308,7 @@ void SchedulingBase::schedulePassiveSUnits() {
     if (A->isScheduled())
       continue;
 
-    assert(A->getRepresentativeFUId().isTrivial()
+    assert(A->getFUId().isTrivial()
       && "SUnit that taking non-trivial not scheduled?");
 
     DEBUG(A->print(dbgs()));

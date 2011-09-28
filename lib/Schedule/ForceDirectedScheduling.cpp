@@ -28,7 +28,7 @@ using namespace llvm;
 bool SchedulingBase::fds_sort::operator()(const VSUnit* LHS,
                                           const VSUnit* RHS) const {
   // Schedule the sunit that taking non-trivial function unit first.
-  FuncUnitId LHSID = LHS->getRepresentativeFUId(), RHSID = RHS->getRepresentativeFUId();
+  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
   if (!LHSID.isTrivial() && RHSID.isTrivial())
     return false;
   if (LHSID.isTrivial() && !RHSID.isTrivial())
@@ -66,7 +66,7 @@ struct ims_sort {
 
 bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   // Schedule the sunit that taking non-trivial function unit first.
-  FuncUnitId LHSID = LHS->getRepresentativeFUId(), RHSID = RHS->getRepresentativeFUId();
+  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
   if (!LHSID.isTrivial() && RHSID.isTrivial())
     return false;
   if (LHSID.isTrivial() && !RHSID.isTrivial())
@@ -85,7 +85,7 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   return LHS->getIdx() > RHS->getIdx();
 }
 
-bool IteractiveModuloScheduling::scheduleState() {
+bool IterativeModuloScheduling::scheduleState() {
   ExcludeSlots.assign(State.getNumSUnits(), std::set<unsigned>());
   setCriticalPathLength(VSUnit::MaxSlot);
 
@@ -105,13 +105,13 @@ bool IteractiveModuloScheduling::scheduleState() {
 
       unsigned EarliestUntry = 0;
       for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-        if (!A->getRepresentativeFUId().isTrivial() && isStepExcluded(A, i))
+        if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
           continue;
 
         if (EarliestUntry == 0)
           EarliestUntry = i;
 
-        if (!A->getRepresentativeFUId().isTrivial() && !tryTakeResAtStep(A, i))
+        if (!A->getFUId().isTrivial() && !tryTakeResAtStep(A, i))
           continue;
 
         // This is a available slot.
@@ -123,11 +123,11 @@ bool IteractiveModuloScheduling::scheduleState() {
         increaseMII();
         break;
       } else if(!A->isScheduled()) {
-        assert(!A->getRepresentativeFUId().isTrivial()
+        assert(!A->getFUId().isTrivial()
                && "SUnit can be schedule only because resource conflict!");
-        VSUnit *Blocking = findBlockingSUnit(A->getRepresentativeFUId(), EarliestUntry);
+        VSUnit *Blocking = findBlockingSUnit(A, EarliestUntry);
         assert(Blocking && "No one blocking?");
-        Blocking->resetSchedule();
+        unschedule(Blocking);
         excludeStep(Blocking, EarliestUntry);
         // Resource table do not need to change.
         A->scheduledTo(EarliestUntry);
@@ -143,34 +143,42 @@ bool IteractiveModuloScheduling::scheduleState() {
   return true;
 }
 
-bool IteractiveModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
+bool IterativeModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
-  assert(!A->getRepresentativeFUId().isTrivial() && "Unexpected trivial sunit!");
+  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
 
   unsigned ModuloStep = step % getMII();
   return ExcludeSlots[A->getIdx()].count(ModuloStep);
 }
 
-void IteractiveModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
+void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
-  assert(!A->getRepresentativeFUId().isTrivial() && "Unexpected trivial sunit!");
+  assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
 
   unsigned ModuloStep = step % getMII();
   ExcludeSlots[A->getIdx()].insert(ModuloStep);
 }
 
-VSUnit *IteractiveModuloScheduling::findBlockingSUnit(FuncUnitId FU, unsigned step) {
+VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
+  FuncUnitId FU = U->getFUId();
+  unsigned Latency = U->getLatency();
+
+  step = computeStepKey(step);
+
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
-    if (A->getRepresentativeFUId().isTrivial() || !A->isScheduled() || A->getRepresentativeFUId() != FU)
+    if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
       continue;
-    if (A->getSlot() == step) return A;
+
+    unsigned CurStep = computeStepKey(A->getSlot());
+    if (CurStep <= step && CurStep + Latency > step)
+      return A;
   }
 
   return 0;
 }
 
-bool IteractiveModuloScheduling::isAllSUnitScheduled() {
+bool IterativeModuloScheduling::isAllSUnitScheduled() {
   for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled())

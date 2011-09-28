@@ -112,6 +112,8 @@ public:
   }
 
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
+  void unschedule(VSUnit *U);
+
   bool isResourceConstraintPreserved();
   double getExtraResReq() const { return ExtraResReq; }
 
@@ -148,15 +150,15 @@ template <> struct GraphTraits<SchedulingBase*>
   }
 };
 
-class IteractiveModuloScheduling : public SchedulingBase {
+class IterativeModuloScheduling : public SchedulingBase {
   SmallVector<std::set<unsigned>, 256> ExcludeSlots;
 
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
   bool isAllSUnitScheduled();
-  VSUnit *findBlockingSUnit(FuncUnitId FU, unsigned step); 
+  VSUnit *findBlockingSUnit(VSUnit *U, unsigned step);
 public:
-  IteractiveModuloScheduling(VSchedGraph &S)
+  IterativeModuloScheduling(VSchedGraph &S)
     : SchedulingBase(S), ExcludeSlots(S.getNumSUnits()){}
 
   bool scheduleState();

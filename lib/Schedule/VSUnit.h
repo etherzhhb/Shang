@@ -441,16 +441,9 @@ public:
   bool hasDatapath() const;
 
   unsigned getFUNum() const { return FUNum; }
+
   FuncUnitId getFUId() const {
     return FuncUnitId(getFUType(), getFUNum());
-  }
-
-  FuncUnitId getRepresentativeFUId() const {
-    // CalleeFN access memory bus.
-    if (getFUType() == VFUs::CalleeFN)
-      return FuncUnitId(VFUs::MemoryBus, 0);
-
-    return getFUId();
   }
 
   /// print - Print out the internal representation of this atom to the
