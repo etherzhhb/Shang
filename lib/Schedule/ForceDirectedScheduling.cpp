@@ -151,7 +151,7 @@ bool IterativeModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
 
-  unsigned ModuloStep = step % getMII();
+  unsigned ModuloStep = computeStepKey(step);
   return ExcludeSlots[A->getIdx()].count(ModuloStep);
 }
 
@@ -159,7 +159,7 @@ void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
   assert(getMII() && "IMS only work on Modulo scheduling!");
   assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
 
-  unsigned ModuloStep = step % getMII();
+  unsigned ModuloStep = computeStepKey(step);
   ExcludeSlots[A->getIdx()].insert(ModuloStep);
 }
 
