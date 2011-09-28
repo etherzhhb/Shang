@@ -241,7 +241,7 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   unsigned Latency = U->getLatency();
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    --RT[FU][s];
+    ++RT[FU][s];
   }
 }
 
