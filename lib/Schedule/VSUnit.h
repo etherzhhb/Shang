@@ -298,12 +298,6 @@ public:
 
   unsigned short getIdx() const { return InstIdx; }
 
-  // Add a new depencence edge to the atom.
-  void addDep(VDEdge *E) {
-    E->getSrc()->addToUseList(this);
-    Deps.push_back(E);
-  }
-
   typedef SmallVectorImpl<VDEdge*>::iterator edge_iterator;
   edge_iterator edge_begin() { return Deps.begin(); }
   edge_iterator edge_end() { return Deps.end(); }
@@ -314,6 +308,27 @@ public:
 
   /// @name Operands
   //{
+  // Add a new depencence edge to the atom.
+  void addDep(VDEdge *NewE) {
+    VSUnit *Src = NewE->getSrc();
+    for (edge_iterator I = edge_begin(), E = edge_end(); I != E; ++I) {
+      VDEdge *CurE = *I;
+      if (CurE->getSrc() == Src) {
+        // If the new dependency constraint tighter?
+        if (NewE->getItDst() <= CurE->getItDst()
+            && NewE->getDetailLatency() > CurE->getDetailLatency()) {
+          delete CurE;
+          *I = NewE;
+        }
+
+        return;
+      }
+    }
+
+    Src->addToUseList(this);
+    Deps.push_back(NewE);
+  }
+
   VDEdge &getDep(unsigned i) const { return *Deps[i]; }
 
   typedef VSUnitDepIterator<SmallVectorImpl<VDEdge*>::iterator, VSUnit>
@@ -333,19 +348,11 @@ public:
 
   // If this Depend on A? return the position if found, return dep_end otherwise.
   const_dep_iterator getDepIt(const VSUnit *A) const {
-    for (const_dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
-      if ((*I) == A)
-        return I;
-
-    return dep_end();
+    return std::find(dep_begin(), dep_end(), A);
   }
 
   dep_iterator getDepIt(const VSUnit *A) {
-    for (dep_iterator I = dep_begin(), E = dep_end(); I != E; ++I)
-      if ((*I) == A)
-        return I;
-
-    return dep_end();
+    return std::find(dep_begin(), dep_end(), A);
   }
 
   VDEdge *getEdgeFrom(const VSUnit *A) {
@@ -454,6 +461,14 @@ public:
   /// dump - This method is used for debugging.
   ///
   void dump() const;
+
+  // Index functor for VSUnit.
+  template<typename T>
+  struct IdxFunctor : public std::unary_function<const T*, unsigned> {
+    unsigned operator()(const T *U) const {
+      return U->getIdx();
+    }
+  };
 };
 
 template<> struct GraphTraits<Inverse<VSUnit*> > {
