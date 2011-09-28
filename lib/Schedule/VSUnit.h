@@ -648,7 +648,7 @@ public:
   unsigned getII() const { return getLoopOpSlot() - getStartSlot(); }
 
   bool enablePipeLine() const {
-    return LoopOp.getInt() && getNumSUnits() < 64;
+    return LoopOp.getInt();
   }
 
   bool hasLoopOp() const { return LoopOp.getPointer() != 0; }
