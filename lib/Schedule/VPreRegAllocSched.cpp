@@ -540,6 +540,10 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
       VSUnit *UserSU = State.lookupSUnit(UserMI);
       assert(UserSU && "Cannot found UserSU!");
+      // The users may be merged into the PHI Node,
+      // do not make self dependence edge.
+      if (UserSU == PhiSU) continue;
+
       unsigned Latency = VInstrInfo::computeLatency(UserMI, &PN);
       PhiSU->addDep(getMemDepEdge(UserSU, Latency, 1));
     }
@@ -552,8 +556,10 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
       MachineInstr *SrcMI = 0;
       VSUnit *InSU = getDefSU(PN.getOperand(i), State, SrcMI);
-      //assert(!SrcMI->isPHI() && "PHI chain not supported yet!");
       assert(InSU && "Where's the incoming value of the phi?");
+      // The users may be merged into the PHI Node,
+      // do not make self dependence edge.
+      if (InSU == PhiSU) continue;
 
       // Insert anti-dependence edge.
       unsigned Latency = VInstrInfo::computeLatency(SrcMI, &PN);
