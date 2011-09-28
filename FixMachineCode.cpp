@@ -214,6 +214,11 @@ void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
         unsigned Reg = WireOperands.pop_back_val();
 
         MachineInstr *DefInst = MRI.getVRegDef(Reg);
+
+        // The implicit use of wire operands break the instructions that read
+        // at emit.
+        if (VIDesc(*DefInst).isReadAtEmit()) continue;
+
         assert(DefInst && "Define instruction not exist!");
         if (!VisitedInsts.insert(DefInst)) continue;
 
