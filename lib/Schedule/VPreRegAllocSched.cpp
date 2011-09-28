@@ -145,6 +145,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
            && "Unexpected physics register!");
 
     DepSrc = MRI->getVRegDef(Reg);
+    assert(DepSrc && "Register use without define?");
     /// Only add the dependence if DepSrc is in the same MBB with MI.
     return CurState.lookupSUnit(DepSrc);
   }
@@ -549,10 +550,9 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
       // Only handle the self loop edge.
       if (SrcBB != CurBB) continue;
 
-      unsigned SrcReg = PN.getOperand(i).getReg();
-      MachineInstr *SrcMI = MRI->getVRegDef(SrcReg);
-      assert(!SrcMI->isPHI() && "PHI chain not supported yet!");
-      VSUnit *InSU = State.lookupSUnit(SrcMI);
+      MachineInstr *SrcMI = 0;
+      VSUnit *InSU = getDefSU(PN.getOperand(i), State, SrcMI);
+      //assert(!SrcMI->isPHI() && "PHI chain not supported yet!");
       assert(InSU && "Where's the incoming value of the phi?");
 
       // Insert anti-dependence edge.
