@@ -305,19 +305,18 @@ bool SubGraph::findAllCircuits() {
       unsigned ChildNums = std::distance(N->child_begin(), N->child_end());
       complexity *= ChildNums;
 
+      // FIXME: Read the threshold from user script.
+      if (complexity > 0x10000000) {
+        MachineBasicBlock *MBB = G->getMachineBasicBlock();
+        errs() << "Cannot analysis RecII with complexity " << complexity
+               << " in BB " << MBB->getName()
+               << " in Function " << MBB->getParent()->getFunction()->getName()
+               << "!\n";
+        return false;
+      }
+
       blocked[N] = false;
       B[N].clear();
-    }
-
-    assert(complexity != 0 && "Complexity (uint64_t) overflow?");
-    // FIXME: Read the threshold from user script.
-    if (complexity > 0x10000000) {
-      MachineBasicBlock *MBB = G->getMachineBasicBlock();
-      errs() << "Cannot analysis RecII with complexity " << complexity
-             << " in BB " << MBB->getName()
-             << " in Function " << MBB->getParent()->getFunction()->getName()
-             << "!\n";
-      return false;
     }
 
     // Find the circuits.
