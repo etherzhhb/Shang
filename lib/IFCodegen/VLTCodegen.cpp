@@ -27,6 +27,7 @@
 #include "llvm/Function.h"
 #include "llvm/Module.h"
 #include "llvm/DerivedTypes.h"
+#include "llvm/Constants.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -45,6 +46,8 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 // Helper functions Copy from CCodegen.cpp to help printing functions.
+static void printConstantArray(raw_ostream &O, ConstantArray *CPA, bool Static);
+
 static std::string GetValueName(const Value *Operand) {
   std::string Name = Operand->getName();
 
@@ -346,6 +349,146 @@ static void printFunctionSignature(raw_ostream &Out, const Function *F) {
     FunctionInnards.str());
 }
 
+// printConstant - The LLVM Constant to C Constant converter.
+void printConstant(raw_ostream &Out, Constant *CPV, bool Static) {
+
+  if (isa<UndefValue>(CPV) && CPV->getType()->isSingleValueType()) {
+    Out << "((";
+    printType(Out, CPV->getType()); // sign doesn't matter
+    Out << ")/*UNDEF*/";
+    if (!CPV->getType()->isVectorTy()) {
+      Out << "0)";
+    } else {
+      Out << "{})";
+    }
+    return;
+  }
+
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(CPV)) {
+    const Type* Ty = CI->getType();
+    if (Ty == Type::getInt1Ty(CPV->getContext()))
+      Out << (CI->getZExtValue() ? '1' : '0');
+    else if (Ty == Type::getInt32Ty(CPV->getContext()))
+      Out << CI->getZExtValue() << 'u';
+    else if (Ty->getPrimitiveSizeInBits() > 32)
+      Out << CI->getZExtValue() << "ull";
+    else {
+      Out << "((";
+      printSimpleType(Out, Ty, false) << ')';
+      if (CI->isMinValue(true))
+        Out << CI->getZExtValue() << 'u';
+      else
+        Out << CI->getSExtValue();
+      Out << ')';
+    }
+    return;
+  }
+
+  switch (CPV->getType()->getTypeID()) {
+  case Type::ArrayTyID:
+    // Use C99 compound expression literal initializer syntax.
+    if (!Static) {
+      Out << "(";
+      printType(Out, CPV->getType());
+      Out << ")";
+    }
+    //Out << "{ "; // Arrays are wrapped in struct types.
+    if (ConstantArray *CA = dyn_cast<ConstantArray>(CPV)) {
+      printConstantArray(Out, CA, Static);
+    } else {
+      assert(isa<ConstantAggregateZero>(CPV) || isa<UndefValue>(CPV));
+      const ArrayType *AT = cast<ArrayType>(CPV->getType());
+      Out << '{';
+      if (AT->getNumElements()) {
+        Out << ' ';
+        Constant *CZ = Constant::getNullValue(AT->getElementType());
+        printConstant(Out, CZ, Static);
+        for (unsigned i = 1, e = AT->getNumElements(); i != e; ++i) {
+          Out << ", ";
+          printConstant(Out, CZ, Static);
+        }
+      }
+      Out << " }";
+    }
+    // Out << " }"; // Arrays are wrapped in struct types.
+    break;
+  default:
+#ifndef NDEBUG
+    errs() << "Unknown constant type: " << *CPV << "\n";
+#endif
+    llvm_unreachable(0);
+  }
+}
+
+static void printConstantArray(raw_ostream &Out, ConstantArray *CPA,
+                               bool Static) {
+  // As a special case, print the array as a string if it is an array of
+  // ubytes or an array of sbytes with positive values.
+  //
+  const Type *ETy = CPA->getType()->getElementType();
+  bool isString = (ETy == Type::getInt8Ty(CPA->getContext()) ||
+    ETy == Type::getInt8Ty(CPA->getContext()));
+
+  // Make sure the last character is a null char, as automatically added by C
+  if (isString && (CPA->getNumOperands() == 0 ||
+    !cast<Constant>(*(CPA->op_end()-1))->isNullValue()))
+    isString = false;
+
+  if (isString) {
+    Out << '\"';
+    // Keep track of whether the last number was a hexadecimal escape
+    bool LastWasHex = false;
+
+    // Do not include the last character, which we know is null
+    for (unsigned i = 0, e = CPA->getNumOperands()-1; i != e; ++i) {
+      unsigned char C = cast<ConstantInt>(CPA->getOperand(i))->getZExtValue();
+
+      // Print it out literally if it is a printable character.  The only thing
+      // to be careful about is when the last letter output was a hex escape
+      // code, in which case we have to be careful not to print out hex digits
+      // explicitly (the C compiler thinks it is a continuation of the previous
+      // character, sheesh...)
+      //
+      if (isprint(C) && (!LastWasHex || !isxdigit(C))) {
+        LastWasHex = false;
+        if (C == '"' || C == '\\')
+          Out << "\\" << (char)C;
+        else
+          Out << (char)C;
+      } else {
+        LastWasHex = false;
+        switch (C) {
+        case '\n': Out << "\\n"; break;
+        case '\t': Out << "\\t"; break;
+        case '\r': Out << "\\r"; break;
+        case '\v': Out << "\\v"; break;
+        case '\a': Out << "\\a"; break;
+        case '\"': Out << "\\\""; break;
+        case '\'': Out << "\\\'"; break;
+        default:
+          Out << "\\x";
+          Out << (char)(( C/16  < 10) ? ( C/16 +'0') : ( C/16 -10+'A'));
+          Out << (char)(((C&15) < 10) ? ((C&15)+'0') : ((C&15)-10+'A'));
+          LastWasHex = true;
+          break;
+        }
+      }
+    }
+    Out << '\"';
+  } else {
+    Out << '{';
+    if (CPA->getNumOperands()) {
+      Out << ' ';
+      printConstant(Out, cast<Constant>(CPA->getOperand(0)), Static);
+      for (unsigned i = 1, e = CPA->getNumOperands(); i != e; ++i) {
+        Out << ", ";
+        printConstant(Out, cast<Constant>(CPA->getOperand(i)), Static);
+      }
+    }
+    Out << " }";
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Verilator interface writer.
 namespace {
@@ -460,8 +603,15 @@ struct VLTIfCodegen : public MachineFunctionPass {
       else
         Out << "extern ";
 
-      printType(Out, Ty, false, VBEMangle(GV->getName())) << ";\n";
+      printType(Out, Ty, false, VBEMangle(GV->getName()));
       // TODO: The initializer.
+      if (GV->hasInitializer())
+        if (Constant *C = GV->getInitializer())
+          if (!C->isNullValue()){
+            Out << " = ";
+            printConstant(Out, C, true);
+          }
+      Out << ";\n";
 
       Out << "void *verilator_get_gv"
           << VBEMangle(GV->getNameStr())<<"() {\n";
