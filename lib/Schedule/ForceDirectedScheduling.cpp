@@ -62,11 +62,6 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IterativeModuloScheduling::scheduleState() {
-  ExcludeSlots.assign(State.getNumSUnits(), std::set<unsigned>());
-  setCriticalPathLength(VSUnit::MaxSlot);
-
-
-  while (!isAllSUnitScheduled()) {
     State.resetSchedule();
     buildTimeFrame();
     // Reset exclude slots and resource table.
@@ -94,15 +89,18 @@ bool IterativeModuloScheduling::scheduleState() {
         break;
       }
 
+      // We had run out of slots
       if (EarliestUntry == 0) {
-        increaseMII();
-        break;
-      } else if(!A->isScheduled()) {
+        return false;
+      }
+
+      // If a cannot be schedule but have some untry slot.
+      if(!A->isScheduled()) {
         assert(!A->getFUId().isTrivial()
                && "SUnit can be schedule only because resource conflict!");
         VSUnit *Blocking = findBlockingSUnit(A, EarliestUntry);
         assert(Blocking && "No one blocking?");
-        excludeStep(Blocking, EarliestUntry);
+        excludeStep(Blocking, Blocking->getSlot());
 
         unscheduleSU(Blocking);
         scheduleSU(A, EarliestUntry);
@@ -113,7 +111,6 @@ bool IterativeModuloScheduling::scheduleState() {
       buildTimeFrame();
       ToSched.reheapify();
     }
-  }
   DEBUG(buildTimeFrame());
   DEBUG(dumpTimeFrame());
 
