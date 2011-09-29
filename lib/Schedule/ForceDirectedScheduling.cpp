@@ -25,39 +25,6 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-bool SchedulingBase::fds_sort::operator()(const VSUnit* LHS,
-                                          const VSUnit* RHS) const {
-  // Schedule the sunit that taking non-trivial function unit first.
-  FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
-  if (!LHSID.isTrivial() && RHSID.isTrivial())
-    return false;
-  if (LHSID.isTrivial() && !RHSID.isTrivial())
-    return true;
-  if (!LHSID.isTrivial() && !RHSID.isTrivial()) {
-    unsigned LTFUs = LHSID.getTotalFUs(), RTFUs = RHSID.getTotalFUs();
-    // Schedule the schedule unit with less available function unit first.
-    if (LTFUs > RTFUs) return true;
-    if (LTFUs < RTFUs) return false;
-  }
-
-  unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
-  // Schedule the low mobility nodes first.
-  if (LTF > RTF) return true; // Place RHS first.
-  if (LTF < RTF) return false;
-
-  unsigned LALAP = Info.getALAPStep(LHS), RALAP = Info.getALAPStep(RHS);
-  if (LALAP > RALAP) return true;
-  if (LALAP < RALAP) return false;
-
-  //
-  unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
-  if (LASAP > RASAP) return true;
-  if (LASAP < RASAP) return false;
-
-
-  return LHS->getIdx() > RHS->getIdx();
-}
-
 struct ims_sort {
   SchedulingBase &Info;
   ims_sort(SchedulingBase &s) : Info(s) {}
@@ -82,6 +49,15 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   if (LASAP > RASAP) return true;
   if (LASAP < RASAP) return false;
 
+  unsigned LTF = Info.getTimeFrame(LHS), RTF = Info.getTimeFrame(RHS);
+  // Schedule the low mobility nodes first.
+  if (LTF > RTF) return true; // Place RHS first.
+  if (LTF < RTF) return false;
+
+  unsigned LALAP = Info.getALAPStep(LHS), RALAP = Info.getALAPStep(RHS);
+  if (LALAP > RALAP) return true;
+  if (LALAP < RALAP) return false;
+
   return LHS->getIdx() > RHS->getIdx();
 }
 
@@ -89,7 +65,6 @@ bool IterativeModuloScheduling::scheduleState() {
   ExcludeSlots.assign(State.getNumSUnits(), std::set<unsigned>());
   setCriticalPathLength(VSUnit::MaxSlot);
 
-  fds_sort s(*this);
 
   while (!isAllSUnitScheduled()) {
     State.resetSchedule();
@@ -97,8 +72,8 @@ bool IterativeModuloScheduling::scheduleState() {
     // Reset exclude slots and resource table.
     resetRT();
 
-    typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, fds_sort> IMSQueueType;
-    IMSQueueType ToSched(++State.begin(), State.end(), s);
+    typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
+    IMSQueueType ToSched(++State.begin(), State.end(), ims_sort(*this));
     while (!ToSched.empty()) {
       VSUnit *A = ToSched.top();
       ToSched.pop();

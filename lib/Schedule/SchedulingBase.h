@@ -51,11 +51,6 @@ private:
 protected:
   /// @name PriorityQueue
   //{
-  struct fds_sort {
-    SchedulingBase &Info;
-    fds_sort(SchedulingBase &s) : Info(s) {}
-    bool operator() (const VSUnit *LHS, const VSUnit *RHS) const;
-  };
 
   VSchedGraph &State;
   unsigned computeStepKey(unsigned step) const;
