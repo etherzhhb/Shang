@@ -1115,7 +1115,7 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
 void RTLCodegen::emitOpSel(ucOp &OpSel) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   OpSel.getOperand(0).print(OS);
-  OS << " = ";
+  OS << " <= ";
   if (OpSel.getOperand(1).isPredicateInverted())
     OS << "~";
   OpSel.getOperand(1).print(OS, 1, 0, true);
