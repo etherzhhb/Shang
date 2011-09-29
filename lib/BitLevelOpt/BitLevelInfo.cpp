@@ -112,7 +112,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         Annotator.updateBitWidth();
       }
 
-      for (unsigned i = 0, e = Instr.getNumOperands() - 1; i < e; ++i) {
+      for (unsigned i = 0, e = Instr.getNumOperands() - 2; i < e; ++i) {
         MachineOperand &MO = Instr.getOperand(i);
         if (!MO.isReg() && !MO.isImm() && !MO.isSymbol()) continue;
 

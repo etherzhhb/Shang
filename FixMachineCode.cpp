@@ -96,10 +96,12 @@ void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
     unsigned BitWidth = cast<ucOperand>(Inst->getOperand(0)).getBitWidth();
     MachineBasicBlock::iterator IP = Inst;
     ++IP;
+    MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
     BuildMI(MBB, IP, dl, TII->get(VTM::VOpMove_rw))
       .addOperand(ucOperand::CreateReg(OriginalReg, BitWidth, true))
       .addOperand(ucOperand::CreateReg(NewWireReg, BitWidth))
-      .addOperand(*VInstrInfo::getPredOperand(Inst));
+      // Add the predicate and the trace number.
+      .addOperand(PredMO[0]).addOperand(PredMO[1]);
   }
 }
 

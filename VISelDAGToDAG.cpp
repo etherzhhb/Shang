@@ -104,6 +104,8 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
                                             unsigned NumOps) {
   BitWidthAnnotator Annotator;
   unsigned NumDefs = 0;
+  // Skip the trace number.
+  NumOps -= 1;
 
   for (unsigned i = 0; i < N->getNumValues(); ++i) {
     // Since chains will not appear in the machine instructions, we need to skip
@@ -130,7 +132,9 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
 
 SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
   SDValue Ops [] = { N->getOperand(0),
-                     SDValue()/*The dummy bit width operand*/ };
+                     SDValue()/*The dummy bit width operand*/,
+                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+                   };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
@@ -142,7 +146,9 @@ SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC, bool ForceMove) {
   // Copy immediate to register if necessary.
   SDValue Ops [] = { MoveToReg(N->getOperand(0), ForceMove),
                      MoveToReg(N->getOperand(1), ForceMove),
-                     SDValue()/*The dummy bit width operand*/ };
+                     SDValue()/*The dummy bit width operand*/,
+                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+                   };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
@@ -162,7 +168,9 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
                     MoveToReg(N->getOperand(1), true),
                     N->getOperand(2),
-                    SDValue()/*The dummy bit width operand*/ };
+                    SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+                  };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
@@ -176,6 +184,7 @@ SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
     Ops.push_back(*I);
 
   Ops.push_back(SDValue());//The dummy bit width operand
+  Ops.push_back(CurDAG->getTargetConstant(0, MVT::i64)); /*and trace number*/
 
   computeOperandsBitWidth(N, Ops.data(), Ops.size());
 
@@ -190,7 +199,9 @@ SDNode *VDAGToDAGISel::SelectConstBitSlice(ConstantSDNode *CSD, SDNode *N) {
   EVT VT = EVT::getIntegerVT(*CurDAG->getContext(), UB - LB);
   SDValue C = CurDAG->getTargetConstant(val, VT);
   // Copy the constant explicit since the value may use by some function unit.
-  SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/ };
+  SDValue Ops[] = { C, SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+                  };
   computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
   return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getValueType(0),
                               Ops, array_lengthof(Ops));
@@ -234,7 +245,9 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
                                           Imm.getValueSizeInBits());
   }
 
-  SDValue Ops[] = { Imm, SDValue()/*The dummy bit width operand*/ };
+  SDValue Ops[] = { Imm, SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+                  };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
 
@@ -255,6 +268,7 @@ SDNode *VDAGToDAGISel::SelectBrcnd(SDNode *N) {
   SDValue Ops[] = { Cnd, // Condition
                     TargetBB, // Target BB
                     SDValue(),
+                    CurDAG->getTargetConstant(0, MVT::i64), /*and trace number*/
                     N->getOperand(0) }; // Chain
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) - 1);
@@ -268,8 +282,8 @@ SDNode *VDAGToDAGISel::SelectInternalCall(SDNode *N) {
 
   for (unsigned I = 1, E = N->getNumOperands(); I != E; ++I)
     Ops.push_back(N->getOperand(I));
-  // The bit width annotator.
-  Ops.push_back(SDValue());
+  Ops.push_back(SDValue()); // The bit width annotator.
+  Ops.push_back(CurDAG->getTargetConstant(0, MVT::i64)); /*and trace number*/
   // And the chain.
   Ops.push_back(N->getOperand(0));
 
@@ -286,6 +300,7 @@ SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
 
   SDValue Ops[] = { N->getOperand(1), RetValIdx,
                     SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/,
                     N->getOperand(0) };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
@@ -301,6 +316,7 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
 
   SDValue Ops[] = { N->getOperand(1), N->getOperand(2), N->getOperand(3),
                     N->getOperand(4), SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/,
                     N->getOperand(0) };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
@@ -325,6 +341,7 @@ SDNode *VDAGToDAGISel::SelectBRamAccess(SDNode *N) {
                     CurDAG->getTargetConstant(0, MVT::i32),
                     CurDAG->getTargetConstant(BRamNum, MVT::i32),
                     SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/,
                     N->getOperand(0) };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);

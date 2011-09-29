@@ -41,7 +41,7 @@ static const unsigned MoveOpcodes[] = {
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
-  unsigned Idx = MI->getDesc().NumOperands - 1;
+  unsigned Idx = MI->getDesc().NumOperands - 2;
   assert(MI->getDesc().OpInfo[Idx].isPredicate() && "Cannot get PredOperand!");
   return &MI->getOperand(Idx);
 }
@@ -213,7 +213,8 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
     // Insert barrier branch for unconditional branch.
     unsigned Opc = isUnconditional ? VTM::VOpToStateb : VTM::VOpToState;
     BuildMI(&MBB, DL, get(Opc)).addOperand(PredOp).addMBB(TBB)
-      .addOperand(ucOperand::CreatePredicate());
+      .addOperand(ucOperand::CreatePredicate())
+      .addOperand(ucOperand::CreateTrace(&MBB));
     return 1;
   }
 
@@ -222,11 +223,13 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
          && "Uncondtional predicate with true BB and false BB?");
   // Branch to true BB, with the no-barrier version.
   BuildMI(&MBB, DL, get(VTM::VOpToState)).addOperand(PredOp).addMBB(TBB)
-    .addOperand(ucOperand::CreatePredicate());
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(&MBB));
   // Branch to the false BB.
   ReversePredicateCondition(PredOp);
   BuildMI(&MBB, DL, get(VTM::VOpToStateb)).addOperand(PredOp).addMBB(FBB)
-    .addOperand(ucOperand::CreatePredicate());
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(&MBB));
    return 2;
 }
 
@@ -330,6 +333,8 @@ MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
   MachineInstrBuilder Builder(InsertPos);
   Builder.addOperand(ucOperand::CreateOpcode(VTM::VOpDefPhi, Ctrl.getSlot()));
   Builder.addOperand(ucOperand::CreatePredicate());
+  // Not need to insert trace for scheduled MBB.
+  // Builder.addOperand(ucOperand::CreateTrace(&MBB));
   ucOperand Dst = MachineOperand::CreateReg(DefOp.getReg(), true);
   Dst.setBitWidth(DefOp.getBitWidth());
   Dst.setIsWire(DefOp.isWire());
@@ -394,6 +399,8 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   unsigned Opc = isPipeline ? VTM::VOpMvPipe : VTM::VOpMvPhi;
   Ops.push_back(ucOperand::CreateOpcode(Opc, Slot));
   Ops.push_back(ucOperand::CreatePredicate());
+  // Not need to insert trace for scheduled MBB.
+  // Builder.addOperand(ucOperand::CreateTrace(&MBB));
   MachineOperand &Pred = Ops.back();
   ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
   Dst.setBitWidth(DefOp.getBitWidth());
@@ -478,7 +485,8 @@ MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
                   VTMInsts[VTM::VOpSel])
             .addOperand(ResDef).addOperand(Pred)
             .addOperand(IfTrueVal).addOperand(IfFalseVal)
-            .addOperand(ucOperand::CreatePredicate());
+            .addOperand(ucOperand::CreatePredicate())
+            .addOperand(ucOperand::CreateTrace(MBB));
 }
 
 MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB, MachineOperand &Result,
@@ -684,7 +692,7 @@ FuncUnitId VIDesc::getPrebindFUId()  const {
 
 
 BitWidthAnnotator::BitWidthAnnotator(MachineInstr &MI)
-  : MO(&MI.getOperand(MI.getNumOperands() - 1)) {
+  : MO(&MI.getOperand(MI.getNumOperands() - 2)) {
   assert(hasBitWidthInfo() && "Bitwidth not available!");
   BitWidths = MO->getImm();
 }
@@ -702,9 +710,10 @@ bool BitWidthAnnotator::hasBitWidthInfo() const {
 void BitWidthAnnotator::changeToDefaultPred() {
   MachineInstr *Parent = MO->getParent();
   unsigned MOIdx = MO - &Parent->getOperand(0);
-  unsigned PredIdx = Parent->getDesc().NumOperands - 1;
+  unsigned PredIdx = Parent->getDesc().NumOperands - 2;
   if (MOIdx != PredIdx) {
-    MachineOperand PredMO = *MO;
+    MachineOperand PredMO[2] = {*(MO + 1), *MO};
+    Parent->RemoveOperand(MOIdx);
     Parent->RemoveOperand(MOIdx);
 
     SmallVector<MachineOperand, 8> Ops;
@@ -714,7 +723,8 @@ void BitWidthAnnotator::changeToDefaultPred() {
     }
 
     // Insert the predicate operand to the operand list.
-    Ops.insert(Ops.begin() + (Ops.size() - PredIdx) + 1, PredMO);
+    Ops.insert(Ops.begin() + (Ops.size() - PredIdx) + 1,
+               PredMO, array_endof(PredMO));
 
     while (!Ops.empty())
       Parent->addOperand(Ops.pop_back_val());
@@ -723,6 +733,9 @@ void BitWidthAnnotator::changeToDefaultPred() {
 
   MO->ChangeToRegister(0, false);
   MO->setTargetFlags(1);
+  // Dirty Hack: Also fix the trace number.
+  ++MO;
+  MO->setTargetFlags(4);
 }
 
 bool VIDesc::mayLoad() const {

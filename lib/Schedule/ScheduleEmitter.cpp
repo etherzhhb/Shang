@@ -358,6 +358,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
     unsigned PredIdx = PredOp - &Inst.getOperand(0);
     Inst.RemoveOperand(PredIdx);
+    // And remove the trace number, too.
+    Inst.RemoveOperand(PredIdx);
   }
 
   unsigned NumOperands = Inst.getNumOperands();

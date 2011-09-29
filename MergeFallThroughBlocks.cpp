@@ -182,7 +182,8 @@ static ucOperand removeInvertFlag(ucOperand Op, MachineRegisterInfo *MRI,
     Dst.setBitWidth(1);
     BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
       .addOperand(Dst).addOperand(Op)
-      .addOperand(ucOperand::CreatePredicate());
+      .addOperand(ucOperand::CreatePredicate())
+      .addOperand(ucOperand::CreateTrace(&MBB));
     Dst.setIsDef(false);
     return Dst;
   }
@@ -204,7 +205,8 @@ static ucOperand mergePred(ucOperand OldCnd, ucOperand NewCnd,
 
   BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpAnd))
     .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
-    .addOperand(ucOperand::CreatePredicate());
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(&MBB));;
   Dst.setIsDef(false);
   return Dst;
 }

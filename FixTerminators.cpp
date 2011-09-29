@@ -95,13 +95,15 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       }
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
         .addOperand(Cnd).addMBB(*MissedSuccs.begin())
-        .addOperand(ucOperand::CreatePredicate());
+        .addOperand(ucOperand::CreatePredicate())
+        .addOperand(ucOperand::CreateTrace(MBB));
     }
 
     if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
       ++Unreachables;
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpRet))
-        .addOperand(ucOperand::CreatePredicate());
+        .addOperand(ucOperand::CreatePredicate())
+        .addOperand(ucOperand::CreateTrace(MBB));
     }
 
     MissedSuccs.clear();

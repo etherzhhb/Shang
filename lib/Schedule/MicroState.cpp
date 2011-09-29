@@ -178,6 +178,12 @@ ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   return MO;
 }
 
+MachineOperand ucOperand::CreateTrace(MachineBasicBlock *MBB) {
+  MachineOperand MO = MachineOperand::CreateImm(MBB->getNumber());
+  MO.setTargetFlags(4);
+  return MO;
+}
+
 ucOperand ucOperand::CreateReg(unsigned RegNum, unsigned BitWidth,
                                bool IsDef /* = false */) {
   ucOperand MO = MachineOperand::CreateReg(RegNum, IsDef);

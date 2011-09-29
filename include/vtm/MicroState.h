@@ -116,6 +116,8 @@ public:
 
   static ucOperand CreatePredicate(unsigned Reg = 0);
 
+  static MachineOperand CreateTrace(MachineBasicBlock *MBB);
+
   /*FIXME: Get the value from the max word length*/
   void print(raw_ostream &OS, unsigned UB = 64, unsigned LB = 0,
              bool isPredicate = false);

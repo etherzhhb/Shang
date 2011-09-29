@@ -26,9 +26,11 @@ def FUBRam	  : FUType<5, IIC_BRam>;
 def FUCalleeFN: FUType<6, IIC_CalleeFN>;
 
 // Bit-width information operand.
-// Dirty Hack: This is not a Predicate Operand.
 def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))>
  {}
+
+// Trace information operand.
+def TraceNum : PredicateOperand<i64, (ops DR), (ops (i64 0))> {}
 
 // Pseudo instructions
 class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
@@ -40,7 +42,8 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
   dag OutOperandList = oops;
   // Append the bit-width flag.
   // TODO: We need predicate as well.
-  dag InOperandList = !con(iops, (ins BitWidthAnnotator:$Annotator));
+  dag InOperandList = !con(iops, (ins BitWidthAnnotator:$Annotator,
+									  TraceNum:$Trace));
   let isPredicable = 1;
   let AsmString   = asmstr;
   let Pattern = pattern;
