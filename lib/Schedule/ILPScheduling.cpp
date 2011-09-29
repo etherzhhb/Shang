@@ -487,6 +487,9 @@ bool ILPScheduler::scheduleState() {
   DEBUG(dbgs() << "Time elapsed: " << time_elapsed(lp) << "\n");
 
   switch (result) {
+  case INFEASIBLE:
+    delete_lp(lp);
+    return false;
   case SUBOPTIMAL:
     DEBUG(dbgs() << "Note: suboptimal schedule found!\n");
   case OPTIMAL:
