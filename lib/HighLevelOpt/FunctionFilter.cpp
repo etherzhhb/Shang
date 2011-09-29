@@ -19,6 +19,7 @@
 
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Assembly/AssemblyAnnotationWriter.h"
@@ -113,23 +114,21 @@ bool FunctionFilter::runOnModule(Module &M) {
       FSW->deleteBody();
   }
 
-  std::vector<GlobalVariable*> GVs;
-  for (Module::global_iterator I = M.global_begin(), E = M.global_end();
-       I != E; ++I) {
-    if (ConstantArray *Str = dyn_cast<ConstantArray>(I->getInitializer())) {
-      if (Str->isCString()) continue;
-    }
+  OwningPtr<ModulePass> GlobalDEC(createGlobalDCEPass());
+  GlobalDEC->runOnModule(*SoftMod);
 
-    I->setLinkage(GlobalValue::ExternalLinkage);
-    I->setInitializer(0);
-  }
-
-  // Dirty Hack: Make all global variable in software side visiable in hardware
-  // side.
-  // FIXME: Move them to Hardware module.
+  // If a global variable present in software module, set the linkage of
+  // corresponding one in hardware module to external.
   for (Module::global_iterator I = SoftMod->global_begin(),
-       E = SoftMod->global_end(); I != E; ++I)
+       E = SoftMod->global_end(); I != E; ++I) {
+    // Make sure we can link against the global variables in software module.
     I->setLinkage(GlobalVariable::LinkOnceAnyLinkage);
+
+    if (GlobalVariable *GV = M.getGlobalVariable(I->getName(), true)) {
+      GV->setLinkage(GlobalValue::ExternalLinkage);
+      GV->setInitializer(0);
+    }
+  }
 
   // TODO: We may rename the entry function, too.
   OwningPtr<AssemblyAnnotationWriter> Annotator;
