@@ -62,55 +62,55 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IterativeModuloScheduling::scheduleState() {
-    State.resetSchedule();
-    buildTimeFrame();
-    // Reset exclude slots and resource table.
-    resetRT();
+  State.resetSchedule();
+  buildTimeFrame();
+  // Reset exclude slots and resource table.
+  resetRT();
 
-    typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
-    IMSQueueType ToSched(++State.begin(), State.end(), ims_sort(*this));
-    while (!ToSched.empty()) {
-      VSUnit *A = ToSched.top();
-      ToSched.pop();
+  typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
+  IMSQueueType ToSched(++State.begin(), State.end(), ims_sort(*this));
+  while (!ToSched.empty()) {
+    VSUnit *A = ToSched.top();
+    ToSched.pop();
 
-      unsigned EarliestUntry = 0;
-      for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-        if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
-          continue;
+    unsigned EarliestUntry = 0;
+    for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
+      if (!A->getFUId().isTrivial() && isStepExcluded(A, i))
+        continue;
 
-        if (EarliestUntry == 0)
-          EarliestUntry = i;
+      if (EarliestUntry == 0)
+        EarliestUntry = i;
 
-        if (!A->getFUId().isTrivial() && !tryTakeResAtStep(A, i))
-          continue;
+      if (!A->getFUId().isTrivial() && !tryTakeResAtStep(A, i))
+        continue;
 
-        // This is a available slot.
-        A->scheduledTo(i);
-        break;
-      }
-
-      // We had run out of slots
-      if (EarliestUntry == 0) {
-        return false;
-      }
-
-      // If a cannot be schedule but have some untry slot.
-      if(!A->isScheduled()) {
-        assert(!A->getFUId().isTrivial()
-               && "SUnit can be schedule only because resource conflict!");
-        VSUnit *Blocking = findBlockingSUnit(A, EarliestUntry);
-        assert(Blocking && "No one blocking?");
-        excludeStep(Blocking, Blocking->getSlot());
-
-        unscheduleSU(Blocking);
-        scheduleSU(A, EarliestUntry);
-
-        ToSched.push(Blocking);
-      }
-
-      buildTimeFrame();
-      ToSched.reheapify();
+      // This is a available slot.
+      A->scheduledTo(i);
+      break;
     }
+
+    // We had run out of slots
+    if (EarliestUntry == 0) {
+      return false;
+    }
+
+    // If a cannot be schedule but have some untry slot.
+    if(!A->isScheduled()) {
+      assert(!A->getFUId().isTrivial()
+              && "SUnit can be schedule only because resource conflict!");
+      VSUnit *Blocking = findBlockingSUnit(A, EarliestUntry);
+      assert(Blocking && "No one blocking?");
+      excludeStep(Blocking, Blocking->getSlot());
+
+      unscheduleSU(Blocking);
+      scheduleSU(A, EarliestUntry);
+
+      ToSched.push(Blocking);
+    }
+
+    buildTimeFrame();
+    ToSched.reheapify();
+  }
   DEBUG(buildTimeFrame());
   DEBUG(dumpTimeFrame());
 
