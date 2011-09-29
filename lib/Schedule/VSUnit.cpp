@@ -121,10 +121,14 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
 static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   MachineFunction *F = G.getMachineBasicBlock()->getParent();
   const SynSettings &I = F->getInfo<VFInfo>()->getInfo();
-  if (I.getPipeLineAlgorithm() == SynSettings::IMS)
+  switch (I.getPipeLineAlgorithm()) {
+  case SynSettings::IMS:
     return new IterativeModuloScheduling(G);
-
-  return createLinearScheduler(G);
+  case SynSettings::ILPMS:
+    return new ILPScheduler(G);
+  default:
+    return createLinearScheduler(G);
+  }
 }
 
 void VSchedGraph::schedule() {
