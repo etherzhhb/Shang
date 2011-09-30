@@ -327,6 +327,10 @@ MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
                                                MachineInstr *PN,
                                                unsigned IncomingReg) const {
   ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
+  // Skip all implicit defines at the beginning of the MBB.
+  while (InsertPos->isImplicitDef())
+    ++InsertPos;
+
   ucState Ctrl(InsertPos);
   assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
   // Simply build the copy in the first control slot.

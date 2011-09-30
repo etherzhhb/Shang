@@ -732,16 +732,16 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
   for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
     I != E; ++I) {
       unsigned SignalNum = *I;
-      const ucOperand *Op = cast<ucOperand>(MRI->getRegUseDefListHead(SignalNum));
-      // assert(Op && "Wire define not found!");
-      if (!Op) continue;
+      MachineRegisterInfo::def_iterator DI = MRI->def_begin(SignalNum);
+      if (DI == MRI->def_end()) continue;
+
+      const ucOperand &Op = cast<ucOperand>(DI.getOperand());
+      unsigned Bitwidth = Op.getBitWidth();
 
       SignalNum = TargetRegisterInfo::virtReg2Index(SignalNum);
       if (Prefix[0] == 'w')
-        VM->addWire(Prefix + utostr(SignalNum), Op->getBitWidth(),
-                    RC->getName());
+        VM->addWire(Prefix + utostr(SignalNum), Bitwidth, RC->getName());
       else {
-        unsigned Bitwidth = Op->getBitWidth();
         VM->addRegister(Prefix + utostr(SignalNum), Bitwidth, RC->getName());
         TotalRegisterBits += Bitwidth;
       }

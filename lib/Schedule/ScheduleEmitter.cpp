@@ -312,7 +312,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     OpSlot SchedSlot(A->getSlot(), !A->hasDatapath());
     MachineInstr *RepInst = A->getRepresentativeInst();
     // Handle representative instruction of the VSUnit.
-    if (RepInst != 0 && !RepInst->isPHI())
+    if (RepInst != 0 && !RepInst->isPHI() && !RepInst->isImplicitDef())
       fuseInstr(*RepInst, SchedSlot, A->getFUId());
 
     // And other trivially merged instructions.
