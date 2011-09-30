@@ -74,34 +74,7 @@ void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
   if (!VInstrInfo::isWireOp(Inst->getDesc())) return;
 
   unsigned OldReg = Inst->getOperand(0).getReg();
-  unsigned NewReg = 0;
-
-  const TargetRegisterClass *RC = MRI.getRegClass(OldReg);
   MRI.setRegClass(OldReg, VTM::WireRegisterClass);
-
-  typedef MachineRegisterInfo::reg_iterator reg_it;
-  for (reg_it I = MRI.reg_begin(OldReg),E = MRI.reg_end();I != E;/*++I*/) {
-    MachineInstr &MI = *I;
-    MachineOperand *MO = &I.getOperand();
-    ++I;
-    // PHIs need all operands have the same register class.
-    if (MI.isPHI())  {
-      if (NewReg == 0) {
-        MachineBasicBlock &MBB = *Inst->getParent();
-        DebugLoc dl = Inst->getDebugLoc();
-        unsigned BitWidth = cast<ucOperand>(Inst->getOperand(0)).getBitWidth();
-        MachineBasicBlock::iterator IP = Inst;
-        MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
-        NewReg = MRI.createVirtualRegister(RC);
-        BuildMI(MBB, llvm::next(IP), dl, TII->get(VTM::VOpMove_rw))
-          .addOperand(ucOperand::CreateReg(NewReg, BitWidth, true))
-          .addOperand(ucOperand::CreateReg(OldReg, BitWidth))
-          // Add the predicate and the trace number.
-          .addOperand(PredMO[0]).addOperand(PredMO[1]);
-      }
-      MO->setReg(NewReg);
-    }
-  }
 }
 
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
@@ -197,7 +170,7 @@ void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
   // ...
   // ... = a ..., imp use b
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
-    for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
+    for (MachineBasicBlock::iterator II = BI->getFirstNonPHI(), IE = BI->end();
          II != IE; ++II) {
       MachineInstr *Inst = II;
       if (VInstrInfo::isWireOp(Inst->getDesc())) continue;
