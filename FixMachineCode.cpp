@@ -28,6 +28,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
@@ -72,36 +73,34 @@ void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
                                    const TargetInstrInfo *TII) {
   if (!VInstrInfo::isWireOp(Inst->getDesc())) return;
 
-  bool needCopy = false;
-  unsigned OriginalReg = Inst->getOperand(0).getReg();
-  unsigned NewWireReg = MRI.createVirtualRegister(VTM::WireRegisterClass);
+  unsigned OldReg = Inst->getOperand(0).getReg();
+  unsigned NewReg = 0;
+
+  const TargetRegisterClass *RC = MRI.getRegClass(OldReg);
+  MRI.setRegClass(OldReg, VTM::WireRegisterClass);
 
   typedef MachineRegisterInfo::reg_iterator reg_it;
-  for (reg_it I = MRI.reg_begin(OriginalReg),E = MRI.reg_end();I != E;/*++I*/) {
-    MachineOperand &O = I.getOperand();
+  for (reg_it I = MRI.reg_begin(OldReg),E = MRI.reg_end();I != E;/*++I*/) {
     MachineInstr &MI = *I;
+    MachineOperand *MO = &I.getOperand();
     ++I;
     // PHIs need all operands have the same register class.
-    if (MI.isPHI()) {
-      needCopy = true;
-      continue;
+    if (MI.isPHI())  {
+      if (NewReg == 0) {
+        MachineBasicBlock &MBB = *Inst->getParent();
+        DebugLoc dl = Inst->getDebugLoc();
+        unsigned BitWidth = cast<ucOperand>(Inst->getOperand(0)).getBitWidth();
+        MachineBasicBlock::iterator IP = Inst;
+        MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
+        NewReg = MRI.createVirtualRegister(RC);
+        BuildMI(MBB, llvm::next(IP), dl, TII->get(VTM::VOpMove_rw))
+          .addOperand(ucOperand::CreateReg(NewReg, BitWidth, true))
+          .addOperand(ucOperand::CreateReg(OldReg, BitWidth))
+          // Add the predicate and the trace number.
+          .addOperand(PredMO[0]).addOperand(PredMO[1]);
+      }
+      MO->setReg(NewReg);
     }
-
-    O.setReg(NewWireReg);
-  }
-
-  if (needCopy) {
-    MachineBasicBlock &MBB = *Inst->getParent();
-    DebugLoc dl = Inst->getDebugLoc();
-    unsigned BitWidth = cast<ucOperand>(Inst->getOperand(0)).getBitWidth();
-    MachineBasicBlock::iterator IP = Inst;
-    ++IP;
-    MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
-    BuildMI(MBB, IP, dl, TII->get(VTM::VOpMove_rw))
-      .addOperand(ucOperand::CreateReg(OriginalReg, BitWidth, true))
-      .addOperand(ucOperand::CreateReg(NewWireReg, BitWidth))
-      // Add the predicate and the trace number.
-      .addOperand(PredMO[0]).addOperand(PredMO[1]);
   }
 }
 
