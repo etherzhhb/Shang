@@ -158,17 +158,29 @@ void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
     Worklist.pop_back();
 
     unsigned DstReg = MI->getOperand(0).getReg();
+    // Perform the replacement.
+    MachineOperand Imm = MI->getOperand(1);
 
     for (MachineRegisterInfo::use_iterator I = MRI.use_begin(DstReg),
-          E = MRI.use_end(); I != E; ++I) {
-      // Only replace if user is not a PHINode.
-      if (I->getOpcode() == VTM::PHI) continue;
+          E = MRI.use_end(); I != E; /*++I*/) {
+      MachineInstr &MI = *I;
+      unsigned OpNo = I.getOperandNo();
+      MachineOperand &MO = I.getOperand();
+      ++I;
 
-      ImmUsers.push_back(std::make_pair(&*I, I.getOperandNo()));
+      // Only replace if user is not a PHINode.
+      if (MI.getOpcode() == VTM::PHI) continue;
+
+      if (Imm.isImm()) {
+        MO.ChangeToImmediate(Imm.getImm());
+        MO.setTargetFlags(Imm.getTargetFlags());
+        continue;
+      }
+
+      ImmUsers.push_back(std::make_pair(&MI, OpNo));
     }
 
     // Perform the replacement.
-    MachineOperand Imm = MI->getOperand(1);
     Imm.clearParent();
 
     while (!ImmUsers.empty()) {
