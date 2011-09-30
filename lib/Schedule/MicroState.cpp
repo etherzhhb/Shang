@@ -49,7 +49,7 @@ void ucOp::print(raw_ostream &OS) const {
   }
 
   if (OpCode.getOpcode() == VTM::IMPLICIT_DEF) {
-    OS << "Implicit_def " << PrintReg((*op_begin()).getReg());
+    OS << "Implicit_def " << *op_begin();
     return;
   }
 
