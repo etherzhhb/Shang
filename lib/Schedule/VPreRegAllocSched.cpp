@@ -772,18 +772,26 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
     unsigned SrcReg = *I;
     MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
 
-    if (DI == MRI->def_end() || DI->isPHI() || !MRI->use_empty(SrcReg))
+    if (DI == MRI->def_end() || !MRI->use_empty(SrcReg))
       continue;
 
+    MachineInstr &DefMI = *DI;
+    if (DefMI.isPHI()) {
+      // The instruction is dead.
+      DefMI.removeFromParent();
+      continue;
+    }
     assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
 
-    MachineInstr *DefMI = &*DI;
+    // Do not remove the operand, just change it to implicit define.
     ucOp Op = ucOp::getParent(DI);
-    assert(Op->getOpcode() == VTM::COPY && "Unexpected opcode!");
-    unsigned OpStart = DI.getOperandNo() - 2;
-    // FIXME: Unlink the instruction from parent before remove the operand.
-    for (unsigned i = 0, e = TII->get(VTM::COPY).getNumOperands() + 2;
-         i != e; ++i)
-      DefMI->RemoveOperand(OpStart);
+    Op->changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
+    DI.getOperand().ChangeToRegister(0, false);
+    for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
+      // Change the operand to some rubbish value.
+      MachineOperand &MO = *OI;
+      MO.ChangeToImmediate(0x01234567);
+      MO.setTargetFlags(64);
+    }
   }
 }
