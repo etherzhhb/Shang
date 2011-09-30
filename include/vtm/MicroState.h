@@ -214,7 +214,7 @@ class ucOpIterator : public std::iterator<std::forward_iterator_tag,
 
   /// Create the begin iterator from a machine instruction.
   inline ucOpIterator(MachineInstr &MI)
-    : CurIt(MI.operands_begin() + 1, ucOperand::Mapper()),
+    : CurIt(MI.operands_begin() + 2, ucOperand::Mapper()),
       EndIt(MI.operands_end(), ucOperand::Mapper()){
     assert(MI.getOperand(0).isImm() && "Bad bundle!");
   }

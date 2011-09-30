@@ -105,15 +105,18 @@ struct MicroStateBuilder {
     unsigned EndSlot = State.getStartSlot()+ State.getII();
     for (unsigned i = State.getStartSlot(), e = EndSlot; i != e; ++i) {
       MachineInstr *Ctrl =
-        BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control)).addImm(i);
+        BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control))
+        .addImm(i).addImm(0);
       StateCtrls.push_back(Ctrl);
       MachineInstr *DP =
-        BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath)).addImm(i);
+        BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath))
+        .addImm(i).addImm(0);
       StateDatapaths.push_back(DP);
     }
 
     MachineInstr *TermCtrl =
-      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control)).addImm(EndSlot);
+      BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Control))
+      .addImm(EndSlot).addImm(0);
     StateCtrls.push_back(TermCtrl);
   }
 
@@ -600,7 +603,8 @@ void VSchedGraph::emitSchedule() {
   // Remove all unused instructions.
   StateBuilder.clearUp();
   // Build the dummy terminator.
-  BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState)).addImm(0);
+  BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState))
+    .addImm(0).addImm(0);
 
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());
