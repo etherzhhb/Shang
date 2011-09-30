@@ -22,6 +22,7 @@
 #include "llvm/Metadata.h"
 #include "llvm/Type.h"
 #include "llvm/Constants.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
@@ -45,6 +46,11 @@ void ucOp::print(raw_ostream &OS) const {
       OS << "~";
     getPredicate().print(OS, 1);
     OS << "? ";
+  }
+
+  if (OpCode.getOpcode() == VTM::IMPLICIT_DEF) {
+    OS << "Implicit_def " << PrintReg((*op_begin()).getReg());
+    return;
   }
 
   bool isFirstUse = true;

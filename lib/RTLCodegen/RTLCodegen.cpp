@@ -1107,8 +1107,8 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "// IMPLICIT_DEF ";
-  ImpDef.getOperand(0).print(OS);
+  OS << "// ";
+  ImpDef.print(OS);
   OS << "\n";
 }
 

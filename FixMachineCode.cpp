@@ -41,8 +41,11 @@ using namespace llvm;
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
+  // The common implicit defined register for current module.
+  unsigned ImplicitDefReg;
 
   FixMachineCode() : MachineFunctionPass(ID) {}
+
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
@@ -54,6 +57,8 @@ struct FixMachineCode : public MachineFunctionPass {
 
   void forwardWireOpOperands(MachineFunction &MF, MachineRegisterInfo &MRI);
 
+  bool handleImplicitDefs(MachineInstr *MI, MachineRegisterInfo &MRI,
+                          const TargetInstrInfo *TII);
 
   void handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
                      const TargetInstrInfo *TII);
@@ -80,6 +85,7 @@ void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
+  ImplicitDefReg = 0;
 
   std::vector<MachineInstr*> Imms;
    // Find out all VOpMove_mi.
@@ -87,11 +93,17 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock *MBB = BI;
 
     for (MachineBasicBlock::iterator II = MBB->begin(), IE = MBB->end();
-         II != IE; ++II) {
+         II != IE; /*++II*/) {
       MachineInstr *Inst = II;
+      ++II; // We may delete the current instruction.
+
+      if (handleImplicitDefs(Inst, MRI, TII)) continue;
+
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri)
+      if (Inst->getOpcode() == VTM::VOpMove_ri) {
         Imms.push_back(Inst);
+        continue;
+      }
 
       // BitSlice, BitCat and BitRepeat are wires.
       handleWireOps(Inst, MRI, TII);
@@ -102,6 +114,35 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   forwardWireOpOperands(MF, MRI);
 
   return true;
+}
+
+bool FixMachineCode::handleImplicitDefs(MachineInstr *MI,
+                                        MachineRegisterInfo &MRI,
+                                        const TargetInstrInfo *TII) {
+  if (!MI->isImplicitDef()) return false;
+
+  unsigned Reg = MI->getOperand(0).getReg();
+  bool use_empty = true;
+
+  typedef MachineRegisterInfo::use_iterator use_it;
+  for (use_it I = MRI.use_begin(Reg), E = MRI.use_end(); I != E; /*++I*/) {
+    ucOperand *MO = cast<ucOperand>(&I.getOperand());
+    MachineInstr &UserMI = *I;
+    ++I;
+    // Implicit value always have 64 bit.
+    MO->setBitWidth(64);
+
+    if (UserMI.isPHI()) {
+      use_empty = false;
+      continue;
+    }
+
+    // Just set the implicit defined register to some strange value.
+    MO->ChangeToImmediate(0x0123456701234567);
+  }
+
+  if (use_empty) MI->removeFromParent();
+  return false;
 }
 
 void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
