@@ -37,7 +37,31 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
   }
 
   bool runOnMachineFunction(MachineFunction &MF) {
-    EliminatePseudoPHIs(MF.getRegInfo());
+    MachineRegisterInfo &MRI = MF.getRegInfo();
+    EliminatePseudoPHIs(MRI);
+
+    for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
+      for (MachineBasicBlock::iterator II = I->begin(), IE = I->end(); II != IE;
+           /*++II*/) {
+        MachineInstr *MI = II;
+        ++II;
+
+        if (!MI->isImplicitDef()) continue;
+
+        unsigned Reg = MI->getOperand(0).getReg();
+
+        typedef MachineRegisterInfo::use_iterator use_it;
+        for (use_it I = MRI.use_begin(Reg), E = MRI.use_end(); I != E; ++I) {
+          ucOperand *MO = cast<ucOperand>(&I.getOperand());
+          // Implicit value always have 64 bit.
+          MO->setBitWidth(64);
+          // Just set the implicit defined register to some strange value.
+          MO->ChangeToImmediate(0x0123456701234567);
+        }
+
+        MI->removeFromParent();
+      }
+
     return true;
   }
 
