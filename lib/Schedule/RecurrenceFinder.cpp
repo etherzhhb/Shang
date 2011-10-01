@@ -359,7 +359,7 @@ unsigned SchedulingBase::computeRecMII() {
   SubGraph SG(&State);
 
   // Do not pipeline if we cannot compute RecMII.
-  if (!SG.findAllCircuits()) return this->getCriticalPathLength();
+  if (!SG.findAllCircuits()) return 0;
 
   unsigned MaxRecII = SG.getRecMII();
   DEBUG(dbgs() << "RecMII: " << MaxRecII << '\n');

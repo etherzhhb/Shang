@@ -154,7 +154,10 @@ void VSchedGraph::scheduleLoop() {
     Scheduler->lengthenCriticalPath();
 
   // computeMII may return a very big II if we cannot compute the RecII.
-  Scheduler->computeMII();
+  bool IIFound = Scheduler->computeMII();
+  DEBUG(dbgs() << "Pipelining BB# " << MBB->getNumber()
+               << " in function " << MBB->getParent()->getFunction()->getName()
+               << " #" << MBB->getParent()->getFunctionNumber() << '\n');
 
   DEBUG(dbgs() << "MII: " << Scheduler->getMII() << "...");
   while (!Scheduler->scheduleCriticalPath(true))
@@ -179,9 +182,13 @@ void VSchedGraph::scheduleLoop() {
 
     if (NextPoints.empty()) {
       NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second  + 1));
-      if (Scheduler->getCriticalPathLength() >= Scheduler->getMII())
-        NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
-      NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
+      // Do not try to pipeline the loop if we cannot find MII.
+      // FIXME: Just schedule the loop with linear scheduler.
+      if (IIFound) {
+        if (Scheduler->getCriticalPathLength() >= Scheduler->getMII())
+          NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
+        NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
+      }
       // Add both by default.
       CurPoint = std::make_pair(CurPoint.first + 1, CurPoint.second  + 1);
     }
@@ -192,7 +199,10 @@ void VSchedGraph::scheduleLoop() {
   }
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
                << " Latency: " << getTotalSlot() << '\n');
-  unsigned FinalII = Scheduler->getMII();
+  unsigned FinalII = Scheduler->getCriticalPathLength();
+  assert((IIFound || Scheduler->getMII() == Scheduler->getCriticalPathLength())
+          && "II not found but MII != Critical path length!");
+
   VSUnit *LoopOp = getLoopOp();
   assert(LoopOp && "Where is Loop op?");
   // Get finish slot?

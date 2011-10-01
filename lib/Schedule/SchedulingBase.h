@@ -117,7 +117,7 @@ public:
 
   unsigned computeRecMII();
   unsigned computeResMII();
-  void computeMII();
+  bool computeMII();
 
   void setMII(unsigned II) { MII = II; }
   unsigned getMII() const { return MII; }

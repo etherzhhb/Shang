@@ -199,10 +199,16 @@ unsigned SchedulingBase::computeResMII() {
   return MaxResII;
 }
 
-void SchedulingBase::computeMII() {
+bool SchedulingBase::computeMII() {
   unsigned RecMII = computeRecMII();
+  if (RecMII == 0) {
+    MII = this->getCriticalPathLength();
+    return false;
+  }
+
   unsigned ResMII = computeResMII();
   MII = std::max(RecMII, ResMII);
+  return true;
 }
 
 void SchedulingBase::dumpTimeFrame() const {
