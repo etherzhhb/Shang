@@ -13,6 +13,9 @@
 #ifndef VTM_UTILITIES_H
 #define VTM_UTILITIES_H
 
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/raw_ostream.h"
+
 namespace llvm {
 static inline unsigned getByteEnable(unsigned SizeInBytes) {
   return (0x1 << SizeInBytes) - 1;
