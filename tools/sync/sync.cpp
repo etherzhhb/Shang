@@ -31,6 +31,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Signals.h"
+#include "llvm/Support/StandardPasses.h"
 #include "llvm/Target/SubtargetFeature.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetMachine.h"
@@ -125,6 +126,14 @@ int main(int argc, char **argv) {
   // Perform Software/Hardware partition.
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
   PM.add(createGlobalDCEPass());
+
+  // Always inline function.
+  // PM.add(createAlwaysInlineFunctionPass());
+  createStandardFunctionPasses(&PM, 3);
+  createStandardModulePasses(&PM, 3, true, true, false, true, false,
+                             createFunctionInliningPass(64));
+  createStandardLTOPasses(&PM, true, false, false);
+  //PM.add(createPrintModulePass(&dbgs()));
 
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());
