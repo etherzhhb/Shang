@@ -16,6 +16,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/SynSettings.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
@@ -33,11 +34,9 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/ADT/DepthFirstIterator.h"
-#include <utility>
-#include "../Schedule/VSUnit.h"
 #include "llvm/Support/Debug.h"
-#include "vtm/Utilities.h"
 
+#include <utility>
 using namespace llvm;
 
 namespace {
@@ -112,6 +111,10 @@ bool FunctionFilter::runOnModule(Module &M) {
       // Remove hardware functions in software module and leave the declaretion 
       // only.
       FSW->deleteBody();
+    else if (FHW->getName() != "main" && !FHW->isDeclaration()) {
+      FHW->setLinkage(GlobalValue::PrivateLinkage);
+      FSW->setLinkage(GlobalValue::PrivateLinkage);
+    }
   }
 
   OwningPtr<ModulePass> GlobalDEC(createGlobalDCEPass());
@@ -127,6 +130,21 @@ bool FunctionFilter::runOnModule(Module &M) {
     if (GlobalVariable *GV = M.getGlobalVariable(I->getName(), true)) {
       GV->setLinkage(GlobalValue::ExternalLinkage);
       GV->setInitializer(0);
+    }
+  }
+
+  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
+    // Do not inline the functions that called by software module.
+    if (SoftMod->getFunction(I->getName())) {
+      I->removeAttribute(~0, Attribute::AlwaysInline);
+      I->addAttribute(~0, Attribute::NoInline);
+      DEBUG(dbgs() << "No inline -- " << I->getName() << '\n');
+    } else if (!I->isDeclaration()) {
+      I->setLinkage(GlobalValue::PrivateLinkage);
+      // The function only used in the hardware module
+      //if (!I->hasFnAttr(Attribute::NoInline))
+      //  I->addAttribute(~0, Attribute::AlwaysInline);
+      DEBUG(dbgs() << "Always inline " << I->getName() << '\n');
     }
   }
 
