@@ -399,7 +399,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
   DefVector Defs;
 
-  for (unsigned i = 1 , e = Ops.size(); i != e; ++i) {
+  for (unsigned i = OpStart , e = Ops.size(); i != e; ++i) {
     MachineOperand &MO = Ops[i];
 
     if (!MO.isReg() || !MO.getReg())
