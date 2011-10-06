@@ -87,16 +87,6 @@ class VRASimple : public MachineFunctionPass,
   std::priority_queue<LiveInterval*, std::vector<LiveInterval*>,
                       CompSpillWeight> Queue;
 
-  typedef SmallVector<const LiveInterval*, 16> LiveSet;
-  typedef std::map<unsigned,LiveSet> LiveMap;
-  LiveMap LiveIntervalMap;
-
-  typedef SmallVector<unsigned, 128> VirRegSet;
-  typedef SmallVector<VirRegSet, 128> FUSet;
-  typedef std::map<unsigned,FUSet> FUMap;
-  FUMap physFU;
-
-
 public:
   VRASimple();
   void init(VirtRegMap &vrm, LiveIntervals &lis);
@@ -106,7 +96,6 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void releaseMemory();
 
-  void collectLiveInterval(MachineRegisterInfo &MRI);
 
   Spiller &spiller() {
     llvm_unreachable("VRegAllocSimple - Never spill!");
@@ -209,15 +198,12 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   VFI = F.getInfo<VFInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
-  MachineRegisterInfo &MRI =F.getRegInfo();
 
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
   DEBUG(dbgs() << "Before simple register allocation:\n";
         printVMF(dbgs(), F);
-  );
-
-  collectLiveInterval(MRI);
+  ); 
 
   allocatePhysRegs();
 
@@ -248,7 +234,6 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   VRM->rewrite(LIS->getSlotIndexes());
 
   releaseMemory();
-  LiveIntervalMap.clear();
 
   DEBUG(dbgs() << "After simple register allocation:\n";
         printVMF(dbgs(), F);
@@ -256,70 +241,6 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   return true;
 }
-
-void VRASimple::collectLiveInterval(MachineRegisterInfo &MRI){
-  unsigned a[4][128][10];
-  unsigned FUtype;
-  unsigned specificFU = 0;
-  unsigned VirRegCounter = 0;
-
-  //collect all liveintervals and put them in the map respectively according to the
-  //different types.
-  for (LiveIntervals::iterator I = LIS->begin(), E = LIS->end(); I != E; ++I) {
-    unsigned RegNum = I->first;
-    LiveInterval *VirtReg = I->second;
-    const TargetRegisterClass *RC = MRI.getRegClass(RegNum);
-    if(RC->getID() != VTM::WireRegClassID)
-      LiveIntervalMap[RC->getID()].push_back(VirtReg);  
-  }
-
-  //print the content in map for testing
-  for (LiveMap::iterator I = LiveIntervalMap.begin(), E = LiveIntervalMap.end();
-    I != E; ++I) {
-      unsigned Id = I->first;
-      dbgs() << "reg type is " << Id <<"\n";
-      for (LiveSet::iterator UI = I->second.begin(),
-        UE = I->second.end(); UI != UE; ++UI) {
-        const LiveInterval *SI  = *UI;
-        unsigned RegNum = SI->reg;
-        dbgs() << "include following reg:"<<RegNum<<"\n";
-
-      }
-  }
-
-  // bind the virReg to the specific FU 
-  for (LiveMap::iterator I = LiveIntervalMap.begin(), E = LiveIntervalMap.end();
-    I != E; ++I) {
-      FUtype = I->first;
-      VirRegCounter = 0;
-      for (LiveSet::iterator UI = I->second.begin(),
-        UE = I->second.end(); UI != UE; ++UI) {
-          LiveInterval LI = **UI;
-          unsigned interfReg = checkPhysRegInterference(LI, specificFU);
-          if(interfReg == 0){
-            a[FUtype][specificFU][VirRegCounter] = LI.reg;
-            VirRegCounter++;
-          }
-          else{
-            specificFU++;
-            VirRegCounter = 0;
-            return;
-          }
-      }
-  }
-
-  //check the VirReg to FU array
-  for(int i = 0 ; i< 5 ; i++){
-    dbgs()<<"the FUtype is"<<""<<i<<"\n";
-    for(int j =0 ; j<2; j++){     
-      dbgs()<<"the binding FU is"<<""<<j<<"\n";
-      for(int k =0;k<4; k++)
-        dbgs()<<"contains virReg is"<<""<<a[i][j][k]<<"\n";
-    }
-  }
-          
-}
-//liveset.resize(unsigned N) {
 unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
                                              unsigned PhysReg) {
   unsigned Overlaps[16];
