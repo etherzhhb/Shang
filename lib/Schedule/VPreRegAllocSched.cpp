@@ -677,12 +677,19 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   default: break;
   case VTM::VOpBitSlice:
   case VTM::VOpBitRepeat:
+
   case VTM::VOpMove_ra:
   case VTM::VOpMove_ri:
   case VTM::VOpMove_rm:
   case VTM::VOpMove_rs:
   case VTM::VOpMove_rw:
   case VTM::VOpMove_rr:
+
+  case VTM::VOpNot:
+
+  case VTM::VOpRAnd:
+  case VTM::VOpROr:
+  case VTM::VOpRXor:
     if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
