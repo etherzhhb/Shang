@@ -646,8 +646,19 @@ unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
     if (DstInstr->getOpcode() == VTM::PHI)
       return 0;
 
-    // There is 1 extra slot from entry root to a control operation.
-    return DstTID.hasDatapath() ? 1 : 2;
+    // 1 slot from control to datapath.
+    if (DstTID.hasDatapath()) return 1;
+
+    // Now DstInstr is control.
+    if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
+        // Dirty Hack: Also do not schedule return value to the entry slot of
+        // the state.
+        && DstTID->getOpcode() != VTM::VOpRetVal)
+      return 0;
+
+    // Do not schedule function unit operation to the first state at the moment
+    // there may be potential resource conflict.
+    return 2;
   }
 
   VIDesc SrcTID = *SrcInstr;

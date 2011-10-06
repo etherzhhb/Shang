@@ -555,12 +555,14 @@ void RTLCodegen::emitIdleState() {
   CtrlS.match_case("state_idle");
   // Idle state is always ready.
   CtrlS.if_begin("start");
+
   CtrlS << "`ifdef __VERILATOR_SIM_DEBUG\n"
            "$display(\"Module start " << MF->getFunction()->getName()
         << "\\n\");\n"
            "`endif\n";
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
+  emitFirstCtrlState(EntryBB);
   emitNextFSMState(CtrlS, EntryBB);
   //
   CtrlS.else_begin();
@@ -996,11 +998,20 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
     ucOp Op = *I;
-    switch(Op->getOpcode()) {
-    case VTM::IMPLICIT_DEF:                           break;
-    default:
-      assert(0 && "Unexpected operation!");
-      break;
+    switch (Op->getOpcode()) {
+    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
+    case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
+    case VTM::VOpMove_ra:
+    case VTM::VOpMove_ri:
+    case VTM::VOpMove_rm:
+    case VTM::VOpMove_rs:
+    case VTM::VOpMove_rw:
+    case VTM::VOpMove_rr:
+    case VTM::VOpMvPhi:
+    case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
+    case VTM::VOpSel:           emitOpSel(Op);                break;
+    default:  assert(0 && "Unexpected opcode!");              break;
     }
   }
 }
