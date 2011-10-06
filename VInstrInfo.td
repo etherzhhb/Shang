@@ -25,6 +25,10 @@ include "VInstrFormats.td"
 def SDT_ReadReturn : SDTypeProfile<1, 2, []>;
 def VTMReadReturn  :  SDNode<"VTMISD::ReadReturn", SDT_ReadReturn, []>;
 
+def SDT_LoadArgument : SDTypeProfile<1, 1, [SDTCisInt<1>]>;
+def VTMLoadLoadArgument	:	SDNode<"VTMISD::LoadArg", SDT_LoadArgument,
+								   [SDNPHasChain]>;
+
 def SDT_RetVal : SDTypeProfile<0, 2, [SDTCisVT<1, i8>]>;
 def VTMRetVal  :  SDNode<"VTMISD::RetVal", SDT_RetVal, [SDNPHasChain]>;
 

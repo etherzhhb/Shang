@@ -23,6 +23,7 @@ namespace llvm {
 namespace VTMISD {
   enum {
     FIRST_NUMBER = ISD::BUILTIN_OP_END,
+    LoadArgument,
     ReadReturn, // Extract value from a chain.
     Ret,
     RetVal,

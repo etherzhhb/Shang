@@ -204,6 +204,7 @@ uint8_t VTargetLowering::getRepRegClassCostFor(EVT VT) const {
 
 const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch (Opcode) {
+  case VTMISD::LoadArgument:    return "VTMISD::LoadArgumnet";
   case VTMISD::InternalCall:    return "VTMISD::InternalCall";
   case VTMISD::ReadReturn:      return "VTMISD::ReadReturn";
   case VTMISD::Ret:             return "VTMISD::Ret";
@@ -239,8 +240,12 @@ VTargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
 
     const Argument *Arg = AI++;
     const char *ArgName = Arg->getValueName()->getKeyData();
-    SDValue SDInArg = DAG.getTargetExternalSymbol(ArgName, ArgVT);
-    InVals.push_back(SDInArg);
+    SDValue Name = DAG.getTargetExternalSymbol(ArgName, ArgVT,
+                                               ArgVT.getSizeInBits());
+    SDValue LdArg = DAG.getNode(VTMISD::LoadArgument, dl,
+                                DAG.getVTList(ArgVT, MVT::Other), Chain, Name);
+    InVals.push_back(LdArg);
+    Chain = LdArg.getValue(1);
   }
 
   return Chain;

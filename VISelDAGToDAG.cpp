@@ -70,6 +70,7 @@ private:
 
   // Function argument and return values.
   SDNode *SelectInternalCall(SDNode *N);
+  SDNode *SelectLoadArgument(SDNode *N);
   SDNode *SelectRetVal(SDNode *N);
   SDNode *SelectBrcnd(SDNode *N);
 
@@ -293,6 +294,18 @@ SDNode *VDAGToDAGISel::SelectInternalCall(SDNode *N) {
                               Ops.data(), Ops.size());
 }
 
+SDNode *VDAGToDAGISel::SelectLoadArgument(SDNode *N) {
+  SDValue Ops[] = { N->getOperand(1),
+                    SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/,
+                    N->getOperand(0) };
+
+  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
+
+  return CurDAG->SelectNodeTo(N, VTM::VOpMove_rw, N->getVTList(),
+                              Ops, array_lengthof(Ops));
+}
+
 SDNode *VDAGToDAGISel::SelectRetVal(SDNode *N) {
   SDValue RetValIdx = N->getOperand(2);
   int64_t Val = cast<ConstantSDNode>(RetValIdx)->getZExtValue();
@@ -373,6 +386,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   default: break;
   case VTMISD::ReadReturn:    return SelectSimpleNode(N, VTM::VOpReadReturn);
   case VTMISD::InternalCall:  return SelectInternalCall(N);
+  case VTMISD::LoadArgument:  return SelectLoadArgument(N);
   case VTMISD::RetVal:        return SelectRetVal(N);
   case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
