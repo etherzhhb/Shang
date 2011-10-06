@@ -126,7 +126,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return new VDMemDep(Src, Latency, Diff);
   }
 
-  void addValueDeps(VSUnit *A, VSchedGraph &CurState);
+  void addValueDeps(VSUnit *A, VSchedGraph &CurState, bool AllowDepEmpty = false);
 
   VSUnit *getDefSU(const MachineOperand &MO, VSchedGraph &CurState,
                    MachineInstr *&DepSrc) {
@@ -467,7 +467,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
 //===----------------------------------------------------------------------===//
 
-void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
+void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
+                                     bool AllowDepEmpty) {
   std::map<VSUnit*, unsigned> Edges;
   // Collect the dependence information.
   for (VSUnit::instr_iterator I = A->instr_begin(), E = A->instr_end();
@@ -491,8 +492,9 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState) {
        I != E; ++I)
     A->addDep(getValDepEdge(I->first, I->second));
 
-  // If the atom depend on nothing, make it depend on the entry node.
-  if (A->dep_empty()) {
+  // If the atom depend on nothing and it must has some dependence edge,
+  // make it depend on the entry node.
+  if (A->dep_empty() && !AllowDepEmpty) {
     unsigned Latency =
       VInstrInfo::computeLatency(0, A->getRepresentativeInst());
     A->addDep(getValDepEdge(CurState.getEntryRoot(), Latency));
@@ -713,7 +715,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
   }
   Terms.clear();
 
-  addValueDeps(Exit, CurState);
+  // Do not try to add the entry root as the dependence source of the exit root
+  // we will add it our self later.
+  addValueDeps(Exit, CurState, true);
 
   for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end();
        I != E; ++I) {
