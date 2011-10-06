@@ -801,7 +801,7 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
     for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
       // Change the operand to some rubbish value.
       MachineOperand &MO = *OI;
-      MO.ChangeToImmediate(0x01234567);
+      MO.ChangeToImmediate(TargetRegisterInfo::virtReg2Index(SrcReg));
       MO.setTargetFlags(64);
     }
   }

@@ -56,7 +56,7 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
           // Implicit value always have 64 bit.
           MO->setBitWidth(64);
           // Just set the implicit defined register to some strange value.
-          MO->ChangeToImmediate(0x0123456701234567);
+          MO->ChangeToImmediate(TargetRegisterInfo::virtReg2Index(Reg));
         }
 
         MI->removeFromParent();
