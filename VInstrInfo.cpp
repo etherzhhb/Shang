@@ -666,7 +666,9 @@ unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
     if(latency > 0)
       latency -= 1;
 
-    return latency;
+    // If the Src and Dst have difference slot type, it needs 1 extra slot to
+    // adjust the slot type.
+    return latency + 1;
   }
 
   // When DstInst dose not read at emit, it hopefully a datapath operation.
