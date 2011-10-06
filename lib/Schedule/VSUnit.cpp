@@ -272,10 +272,13 @@ unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
-  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
+  const VSUnit::const_instr_iterator InstrBase = instr_begin();
+  for (const_instr_iterator I = InstrBase, E = instr_end(); I != E; ++I)
     if (MachineInstr *Instr = *I) {
       VIDesc VTID = *Instr;
-      OS << Instr->getDesc().getName() << '\n';
+      OS << Instr->getDesc().getName()
+         << '+' << unsigned(getLatencyAt(I - InstrBase))
+         << '\n';
       DEBUG(OS << *Instr << '\n');
     }
 
