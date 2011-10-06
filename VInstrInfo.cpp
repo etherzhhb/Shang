@@ -635,7 +635,8 @@ bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
 unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
                                     const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");
-  if (SrcInstr == DstInstr) return 0;
+  assert(SrcInstr != DstInstr && "Computing latency of self loop?");
+  VIDesc DstTID = *DstInstr;
 
   if (SrcInstr == 0) {
     //// Set latency of Control operation and entry root to 1, so we can prevent
@@ -645,14 +646,13 @@ unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
     if (DstInstr->getOpcode() == VTM::PHI)
       return 0;
 
-    return 1;
+    // There is 1 extra slot from entry root to a control operation.
+    return DstTID.hasDatapath() ? 1 : 2;
   }
 
   VIDesc SrcTID = *SrcInstr;
   // Compute the latency correspond to detail slot.
   unsigned latency = SrcTID.getLatency() * 2;
-
-  VIDesc DstTID = *DstInstr;
 
   if (DstTID.isReadAtEmit()) {
     // If the edge is reg->reg, increase the latency by 1, because the result
