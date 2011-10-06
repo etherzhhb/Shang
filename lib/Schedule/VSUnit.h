@@ -405,6 +405,8 @@ public:
   unsigned getMaxLatencyTo(MachineInstr *DstMI) const {
     unsigned latency = 0;
     for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
+      // Also compute the latency to DstMI even *I (SrcMI) is 0, which means the
+      // source is the entry root of the state.
       latency = std::max(getLatencyTo(*I, DstMI), latency);
 
     return latency;
