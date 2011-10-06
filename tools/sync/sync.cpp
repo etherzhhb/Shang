@@ -128,10 +128,10 @@ int main(int argc, char **argv) {
   PM.add(createGlobalDCEPass());
 
   // Always inline function.
-  // PM.add(createAlwaysInlineFunctionPass());
+  PM.add(createAlwaysInlineFunctionPass());
   createStandardFunctionPasses(&PM, 3);
   createStandardModulePasses(&PM, 3, true, true, false, true, false,
-                             createFunctionInliningPass(64));
+                             createFunctionInliningPass(75));
   createStandardLTOPasses(&PM, true, false, false);
   //PM.add(createPrintModulePass(&dbgs()));
 

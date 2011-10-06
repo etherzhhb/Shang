@@ -135,7 +135,9 @@ bool FunctionFilter::runOnModule(Module &M) {
 
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
     // Do not inline the functions that called by software module.
-    if (SoftMod->getFunction(I->getName())) {
+    if (Function *F = SoftMod->getFunction(I->getName())) {
+      if (!F->isDeclaration()) continue;
+
       I->removeAttribute(~0, Attribute::AlwaysInline);
       I->addAttribute(~0, Attribute::NoInline);
       DEBUG(dbgs() << "No inline -- " << I->getName() << '\n');

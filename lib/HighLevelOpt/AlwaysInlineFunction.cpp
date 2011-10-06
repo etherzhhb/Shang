@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "AlwaysInlineFunction"
-
 #include "vtm/Passes.h"
 #include "llvm/CallingConv.h"
 #include "llvm/Instructions.h"
@@ -26,6 +24,9 @@
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/InlinerPass.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Support/raw_ostream.h"
+#define DEBUG_TYPE "AlwaysInlineFunction"
+#include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
@@ -84,13 +85,19 @@ bool AlwaysInlineFunction::doInitialization(CallGraph &CG) {
   for (Module::iterator I = M.begin(), E = M.end();
        I != E; ++I) {
     Function *F = I;
-    if (!F->hasFnAttr(Attribute::NoInline) && !F->isIntrinsic()) {
-      F->addAttribute(~0, Attribute::AlwaysInline);
-      Changed = true;
+
+    if (!F->isDeclaration() && F->hasFnAttr(Attribute::NoInline)) {
+      NeverInline.insert(F);
+      DEBUG(dbgs() << "No inline " << F->getName() << '\n');
+      continue;
     }
 
-    if (!F->isDeclaration() && !F->hasFnAttr(Attribute::AlwaysInline))
-      NeverInline.insert(F);
+    CallGraphNode *CGN = CG[F];
+
+    // Inlining the functions with only 1 caller will never increase
+    // the module size.
+    if (CGN->getNumReferences() == 1)
+      F->addAttribute(~0, Attribute::AlwaysInline);
   }
 
   return Changed;
