@@ -148,7 +148,8 @@ void VSchedGraph::scheduleLinear() {
 }
 
 void VSchedGraph::scheduleLoop() {
-  dbgs() << "Scheduling " << MBB->getNumber() << '\n';
+  DEBUG(dbgs() << "Try to pipeline MBB#" << MBB->getNumber()
+               << " MF#" << MBB->getParent()->getFunctionNumber() << '\n');
   OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this));
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
