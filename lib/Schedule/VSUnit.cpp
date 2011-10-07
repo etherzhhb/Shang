@@ -168,9 +168,6 @@ void VSchedGraph::scheduleLoop() {
       Scheduler->increaseMII();
     else
       Scheduler->lengthenCriticalPath();
-
-    dbgs() << Scheduler->getMII() << " and critical path length "
-           << Scheduler->getCriticalPathLength() << '\n';
   }
 
   assert(Scheduler->getMII() <= Scheduler->getCriticalPathLength()
