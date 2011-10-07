@@ -95,12 +95,17 @@ void VSchedGraph::removeDeadSU() {
   SUCount = Idx;
 }
 
-void VSchedGraph::resetSchedule() {
+void VSchedGraph::resetSchedule(unsigned MII) {
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }
   getEntryRoot()->scheduledTo(startSlot);
+  // Also schedule the LoopOp to MII step.
+  if (MII) {
+    assert(hasLoopOp() && "MII provided but LoopOp not exist!");
+    getLoopOp()->scheduledTo(startSlot + MII);
+  }
 }
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
@@ -209,26 +214,10 @@ void VSchedGraph::scheduleLoop() {
   }
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
                << " Latency: " << getTotalSlot() << '\n');
-  unsigned FinalII = Scheduler->getMII();
-  assert((IIFound || FinalII == Scheduler->getCriticalPathLength())
-          && "II not found but MII != Critical path length!");
-  assert(FinalII <= Scheduler->getCriticalPathLength()
-         && "FinalII bigger then Critical path length!");
-  VSUnit *LoopOp = getLoopOp();
-  assert(LoopOp && "Where is Loop op?");
-  // Get finish slot?
-  assert(LoopOp->getSlot() <= getStartSlot() + FinalII
-         && "Loop can not restart in time!");
-
-  // Ditry Hack: Fix the schedule of loop op.
-  LoopOp->resetSchedule();
-  LoopOp->scheduledTo(getStartSlot() + FinalII);
-
-  // Dirty Hack: Make sure the critical path is more length than MII.
-  unsigned TotalSlot = getTotalSlot();
-  VSUnit *ExitRoot = getExitRoot();
-  ExitRoot->resetSchedule();
-  ExitRoot->scheduledTo(getStartSlot() + std::max(FinalII, TotalSlot));
+  assert(getII() == Scheduler->getMII()
+         && "LoopOp was not scheduled to the right slot!");
+  assert(getLoopOpSlot() <= getEndSlot()
+         && "Expect MII is not bigger then critical path length!");
 }
 
 void VSchedGraph::viewGraph() {

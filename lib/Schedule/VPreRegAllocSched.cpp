@@ -570,8 +570,9 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
     // Next loop can not start before loop operation issued.
     VSUnit *LoopOp = State.getLoopOp();
-    unsigned Latency =
-      LoopOp->getLatencyTo(LoopOp->getRepresentativeInst(), &PN);
+    // Dirty Hack: We can emit the PHI while looping back to the loop entry.
+    unsigned Latency = 0;
+    //  LoopOp->getLatencyTo(LoopOp->getRepresentativeInst(), &PN);
     PhiSU->addDep(getMemDepEdge(LoopOp, Latency, 1));
   }
 }

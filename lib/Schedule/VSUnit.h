@@ -630,7 +630,7 @@ public:
 
   size_t getNumSUnits() const { return SUnits.size(); }
 
-  void resetSchedule();
+  void resetSchedule(unsigned MII);
 
   unsigned getStartSlot() const { return startSlot; }
   unsigned getEndSlot() const { return getExitRoot()->getSlot(); }

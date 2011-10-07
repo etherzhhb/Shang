@@ -313,9 +313,7 @@ unsigned SchedulingBase::computeStepKey(unsigned step) const {
 }
 
 unsigned SchedulingBase::buildFDepHD(bool rstSTF) {
-  if (rstSTF) {
-    State.resetSchedule();
-  }
+  if (rstSTF) State.resetSchedule(getMII());
 
   buildTimeFrame();
 

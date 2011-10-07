@@ -62,7 +62,7 @@ bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
 }
 
 bool IterativeModuloScheduling::scheduleState() {
-  State.resetSchedule();
+  State.resetSchedule(getMII());
   buildTimeFrame();
   // Reset exclude slots and resource table.
   resetRT();
