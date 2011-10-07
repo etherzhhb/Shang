@@ -446,6 +446,9 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
       if (isCopyLike(WriteOp->getOpcode())) {
         MachineOperand ForwardedVal = WriteOp.getOperand(1);
         Ops.push_back(ForwardedVal);
+        // Make sure the state reads this register, otherwise PHIElimination
+        // will complain about that.
+        Ops.push_back(Src);
         return addOperandsToMI(InsertPos, Ops);
       }
     }
