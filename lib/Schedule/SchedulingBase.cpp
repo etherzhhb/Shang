@@ -208,6 +208,8 @@ bool SchedulingBase::computeMII() {
 
   unsigned ResMII = computeResMII();
   MII = std::max(RecMII, ResMII);
+  // Also adjust the critical path length.
+  setCriticalPathLength(std::max(MII, getCriticalPathLength()));
   return true;
 }
 

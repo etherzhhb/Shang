@@ -148,6 +148,7 @@ void VSchedGraph::scheduleLinear() {
 }
 
 void VSchedGraph::scheduleLoop() {
+  dbgs() << "Scheduling " << MBB->getNumber() << '\n';
   OwningPtr<SchedulingBase> Scheduler(createLoopScheduler(*this));
   // Ensure us can schedule the critical path.
   while (!Scheduler->scheduleCriticalPath(true))
@@ -160,8 +161,19 @@ void VSchedGraph::scheduleLoop() {
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
 
   DEBUG(dbgs() << "MII: " << Scheduler->getMII() << "...");
-  while (!Scheduler->scheduleCriticalPath(true))
-    Scheduler->increaseMII();
+  while (!Scheduler->scheduleCriticalPath(true)) {
+    // Make sure MII smaller than the critical path length.
+    if (Scheduler->getMII() < Scheduler->getCriticalPathLength())
+      Scheduler->increaseMII();
+    else
+      Scheduler->lengthenCriticalPath();
+
+    dbgs() << Scheduler->getMII() << " and critical path length "
+           << Scheduler->getCriticalPathLength() << '\n';
+  }
+
+  assert(Scheduler->getMII() <= Scheduler->getCriticalPathLength()
+         && "MII bigger then Critical path length!");
 
   // The point of current solution.
   typedef std::pair<unsigned, unsigned> SolutionPoint;
@@ -185,7 +197,7 @@ void VSchedGraph::scheduleLoop() {
       // Do not try to pipeline the loop if we cannot find MII.
       // FIXME: Just schedule the loop with linear scheduler.
       if (IIFound) {
-        if (Scheduler->getCriticalPathLength() >= Scheduler->getMII())
+        if (Scheduler->getCriticalPathLength() > Scheduler->getMII())
           NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
         NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
       }
@@ -199,10 +211,11 @@ void VSchedGraph::scheduleLoop() {
   }
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
                << " Latency: " << getTotalSlot() << '\n');
-  unsigned FinalII = Scheduler->getCriticalPathLength();
-  assert((IIFound || Scheduler->getMII() == Scheduler->getCriticalPathLength())
+  unsigned FinalII = Scheduler->getMII();
+  assert((IIFound || FinalII == Scheduler->getCriticalPathLength())
           && "II not found but MII != Critical path length!");
-
+  assert(FinalII <= Scheduler->getCriticalPathLength()
+         && "FinalII bigger then Critical path length!");
   VSUnit *LoopOp = getLoopOp();
   assert(LoopOp && "Where is Loop op?");
   // Get finish slot?
