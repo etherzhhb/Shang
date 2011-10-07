@@ -104,12 +104,13 @@ VRegisterInfo::getPointerRegClass(unsigned Kind) const {
 }
 
 bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {
-  assert(TargetRegisterInfo::isVirtualRegister(RegNo)
-         && "Expect virtual register!");
+  if (!TargetRegisterInfo::isVirtualRegister(RegNo))
+    return false;
 
   const TargetRegisterClass *RC = MRI->getRegClass(RegNo);
   return RC == VTM::WireRegisterClass
          || RC == VTM::RADDRegisterClass
          || RC == VTM::RMULRegisterClass
-         || RC == VTM::RSHTRegisterClass;
+         || RC == VTM::RSHTRegisterClass
+         || RC == VTM::PHIRRegisterClass;
 }
