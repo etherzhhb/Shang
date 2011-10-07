@@ -223,6 +223,12 @@ void VSchedGraph::scheduleLoop() {
   // Ditry Hack: Fix the schedule of loop op.
   LoopOp->resetSchedule();
   LoopOp->scheduledTo(getStartSlot() + FinalII);
+
+  // Dirty Hack: Make sure the critical path is more length than MII.
+  unsigned TotalSlot = getTotalSlot();
+  VSUnit *ExitRoot = getExitRoot();
+  ExitRoot->resetSchedule();
+  ExitRoot->scheduledTo(getStartSlot() + std::max(FinalII, TotalSlot));
 }
 
 void VSchedGraph::viewGraph() {
