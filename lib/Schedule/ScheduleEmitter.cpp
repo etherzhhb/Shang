@@ -468,6 +468,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
     Builder.addOperand(*I);
 
+  Ops.clear();
+
   // Emit the exported registers at current slot.
   while (!Defs.empty()) {
     WireDef *WD = Defs.back();
@@ -481,15 +483,22 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     //if (MRI.use_empty(MO.getReg()))
     //  continue;
 
-    MachineInstrBuilder CtrlInst(&getStateCtrlAt(CopySlot));
     if (WD->shouldBeCopied()) {
       // Export the register.
-      CtrlInst.addOperand(ucOperand::CreateOpcode(VTM::COPY, CopySlot.getSlot()));
+      Ops.push_back(ucOperand::CreateOpcode(VTM::COPY, CopySlot.getSlot()));
       // Get the operand at current slot.
-      CtrlInst.addOperand(getRegUseOperand(WD->Pred, CopySlot));
+      Ops.push_back(getRegUseOperand(WD->Pred, CopySlot));
       MO.setIsDef();
       MachineOperand Src = WD->createOperand();
-      CtrlInst.addOperand(MO).addOperand(Src);
+      Ops.push_back(MO);
+      Ops.push_back(Src);
+
+      // Flush the operand to the control state.
+      MachineInstrBuilder CtrlInst(&getStateCtrlAt(CopySlot));
+      for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
+        CtrlInst.addOperand(*I);
+
+      Ops.clear();
     }
   }
 
