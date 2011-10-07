@@ -713,8 +713,10 @@ void RTLCodegen::emitAllSignals() {
 
   // Emit the register with max word length.
   for (VFInfo::phyreg_iterator I = FInfo->phyreg_begin(8),
-       E = FInfo->phyreg_end(8); I < E; ++I)
-    VM->addRegister("reg" + utostr(*I), 64);
+       E = FInfo->phyreg_end(8); I < E; ++I) {
+    VM->addRegister("phy_reg" + utostr(*I), 64);
+    TotalRegisterBits += 64;
+  }
 
   emitSignals(VTM::DRRegisterClass, "reg");
   emitSignals(VTM::PHIRRegisterClass, "reg");

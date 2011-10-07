@@ -211,6 +211,7 @@ void ucOperand::print(raw_ostream &OS,
 
     unsigned Reg = getReg();
     std::string BitRange = "";
+    std::string Prefix = "reg";
 
     if (TargetRegisterInfo::isVirtualRegister(Reg)) {
       //DEBUG(
@@ -223,6 +224,7 @@ void ucOperand::print(raw_ostream &OS,
       Reg = TargetRegisterInfo::virtReg2Index(Reg);
       if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
     } else { // Compute the offset of physics register.
+      Prefix = "phy_reg";
       unsigned Offset = (Reg & 0x7) * 8;
       Reg = (Reg & ~0x7);
       BitRange = verilogBitRange(UB + Offset, LB + Offset, true);
@@ -241,7 +243,7 @@ void ucOperand::print(raw_ostream &OS,
         OS << "use_";
         if (isKill()) OS << "kill_";
       }
-      OS << "reg" << Reg <<"*/ reg" << Reg << BitRange;
+      OS << "reg" << Reg <<"*/ " << Prefix << Reg << BitRange;
     }
     return;
   }
