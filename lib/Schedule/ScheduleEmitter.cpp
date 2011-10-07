@@ -342,6 +342,18 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   bool IsCtrlSlot = SchedSlot.isControl();
   assert(IsCtrlSlot == IsCtrl && "Wrong slot type.");
   bool isCopyLike = VInstrInfo::isCopyLike(Inst.getOpcode());
+  // Compute the slots.
+  OpSlot ReadSlot = SchedSlot;
+
+  unsigned FinSlot = SchedSlot.getSlot() + VTID.getLatency();
+  OpSlot CopySlot(FinSlot, true);
+  // We can not write the value to a register at the same moment we emit it.
+  // Unless we read at emit.
+  // FIXME: Introduce "Write at emit."
+  if (CopySlot < SchedSlot) ++CopySlot;
+  // Write to register operation need to wait one more slot if the result is
+  // written at the moment (clock event) that the atom finish.
+  if (VTID.isWriteUntilFinish()) ++CopySlot;
 
   typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
@@ -369,7 +381,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // FIXME: Use pointer operand.
   OperandVector Ops(NumOperands + 1 + IsCtrlSlot, OpCMD);
   Ops[0] = OpCMD;
-  if (IsCtrlSlot) Ops[1] = Pred;
+  if (IsCtrlSlot) Ops[1] = getRegUseOperand(Pred, ReadSlot);
 
   unsigned OpStart = IsCtrlSlot ? 2 : 1;
 
@@ -380,22 +392,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     Inst.RemoveOperand(i);
     Ops[i + OpStart] = MO;
   }
-
-  //bool isReadAtEmit = VTID.isReadAtEmit();
-  //OpSlot DefSlot(A->getSlot(), IsCtrl);
-  OpSlot ReadSlot = SchedSlot;
-  //if (!isReadAtEmit) ReadSlot = EmitSlot.getNextSlot();
-
-  unsigned FinSlot = SchedSlot.getSlot() + VTID.getLatency();
-  OpSlot CopySlot(FinSlot, true);
-  // We can not write the value to a register at the same moment we emit it.
-  // Unless we read at emit.
-  // FIXME: Introduce "Write at emit."
-  if (CopySlot < SchedSlot)
-    ++CopySlot;
-  // Write to register operation need to wait one more slot if the result is
-  // written at the moment (clock event) that the atom finish.
- if (VTID.isWriteUntilFinish()) ++CopySlot;
 
   DefVector Defs;
 
