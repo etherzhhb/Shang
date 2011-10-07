@@ -45,7 +45,7 @@ struct MicroStateBuilder {
   MachineRegisterInfo &MRI;
   VFInfo &VFI;
 
-  SmallVector<VSUnit*, 8> SUnitsToEmit;
+  SmallVector<VSUnit*, 8> SUnitsToEmit, PHIs;
   
   std::vector<MachineInstr*> InstsToDel;
 
@@ -292,8 +292,27 @@ struct MicroStateBuilder {
     return CurSlot;
   }
 
+  void handlePHI(VSUnit *A) {
+    MachineInstr *PN = A->getRepresentativeInst();
+    assert(PN->isPHI() && "Unexpected instruction type!");
+    OpSlot PHISlot(A->getSlot() + State.getII() - 1, true);
+
+    for (unsigned i = 1, e = PN->getNumOperands(); i < e; i +=2) {
+      MachineBasicBlock *TargetBB = PN->getOperand(i + 1).getMBB();
+      if (TargetBB != &MBB) continue;
+
+      MachineOperand &MO = PN->getOperand(i);
+      MachineOperand NewMO = getRegUseOperand(MO, PHISlot);
+      if (MO.getReg() != NewMO.getReg())
+        MO.ChangeToRegister(NewMO.getReg(), false);
+    }
+  }
+
   // Clean up the basic block by remove all unused instructions.
   void clearUp() {
+    //while (!PHIs.empty())
+    //  handlePHI(PHIs.pop_back_val());
+
     while (!InstsToDel.empty()) {
       InstsToDel.back()->eraseFromParent();
       InstsToDel.pop_back();
@@ -312,8 +331,12 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     OpSlot SchedSlot(A->getSlot(), !A->hasDatapath());
     MachineInstr *RepInst = A->getRepresentativeInst();
     // Handle representative instruction of the VSUnit.
-    if (RepInst != 0 && !RepInst->isPHI() && !RepInst->isImplicitDef())
-      fuseInstr(*RepInst, SchedSlot, A->getFUId());
+    if (RepInst != 0 && !RepInst->isImplicitDef()) {
+      if (!RepInst->isPHI())
+        fuseInstr(*RepInst, SchedSlot, A->getFUId());
+      else
+        PHIs.push_back(A);
+    }
 
     // And other trivially merged instructions.
     const VSUnit::instr_iterator InstrBase = A->instr_begin();

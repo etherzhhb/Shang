@@ -508,6 +508,17 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
   // Dirty Hack: Only support one block loop at this moment.
   if (L->getBlocks().size() != 1) return false;
 
+  for (MachineBasicBlock::const_iterator I = MBB->begin(), E = MBB->end();
+       I != E && I->isPHI(); ++I) {
+    for (unsigned i = 1, e = I->getNumOperands(); i < e; i +=2) {
+      MachineBasicBlock *TargetBB = I->getOperand(i + 1).getMBB();
+      if (TargetBB != MBB) continue;
+      // Dirty Hack: PHI depends on PHI is not supported at the moment.
+      if (MRI->getVRegDef(I->getOperand(i).getReg())->isPHI())
+        return false;
+    }
+  }
+
   return FInfo->getInfo().enablePipeLine();
 }
 
