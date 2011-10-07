@@ -546,7 +546,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
       // do not make self dependence edge.
       if (UserSU == PhiSU) continue;
 
-      unsigned Latency = VInstrInfo::computeLatency(UserMI, &PN);
+      unsigned Latency = UserSU->getLatencyTo(UserMI, &PN);
       PhiSU->addDep(getMemDepEdge(UserSU, Latency, 1));
     }
 
@@ -564,14 +564,14 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
       if (InSU == PhiSU) continue;
 
       // Insert anti-dependence edge.
-      unsigned Latency = VInstrInfo::computeLatency(SrcMI, &PN);
+      unsigned Latency = InSU->getLatencyTo(SrcMI, &PN);
       PhiSU->addDep(getMemDepEdge(InSU, Latency, 1));
     }
 
     // Next loop can not start before loop operation issued.
     VSUnit *LoopOp = State.getLoopOp();
     unsigned Latency =
-      VInstrInfo::computeLatency(LoopOp->getRepresentativeInst(), &PN);
+      LoopOp->getLatencyTo(LoopOp->getRepresentativeInst(), &PN);
     PhiSU->addDep(getMemDepEdge(LoopOp, Latency, 1));
   }
 }
