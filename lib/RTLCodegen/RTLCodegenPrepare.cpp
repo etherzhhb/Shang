@@ -109,10 +109,11 @@ void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
 
       if (isWire)
         PHIUse->changeOpcode(VTM::VOpMove_ww, PHIUse->getPredSlot());
-      else if (PHIUse->getOpcode() == VTM::VOpMvPipe
-               || DI->getParent() != UI->getParent())
+      else if (PHIUse->getOpcode() == VTM::VOpMvPipe)
         PHIUse->changeOpcode(VTM::VOpMove_rw, PHIUse->getPredSlot());
 
+      assert(PHIUse.getOperand(2).getMBB() == UI->getParent()
+             && "Destination MBB not match!");
       // The opcode will be keep if the move is in side a loop, which need
       // extra predicate.
 

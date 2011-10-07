@@ -944,13 +944,14 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     // slot at previous (.i.e Slot - II) are both enable. Which means we are
     // looping back.
     if (Op->getOpcode() == VTM::VOpMvPhi) {
+      MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
       unsigned CndSlot = Slot - II;
       SlotPredSS << " & (";
-      if (CndSlot > startSlot)
+      if (TargetBB == CurBB && CndSlot > startSlot)
         SlotPredSS << getucStateEnable(CurBB, CndSlot - 1);
       else {
-        assert(PredMap.count(CurBB) && "Loop back predicate not found!");
-        SlotPredSS << PredMap.find(CurBB)->second;
+        assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
+        SlotPredSS << PredMap.find(TargetBB)->second;
       }
 
       SlotPredSS << ')';

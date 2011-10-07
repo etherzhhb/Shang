@@ -371,7 +371,12 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     ;
 
   VFInfo *VFI = MBB.getParent()->getInfo<VFInfo>();
-  int SSlot = VFI->lookupPHISlot(PN);
+
+  // Look up the slot of PHI and the parent MBB of PHI.
+  int SSlot;
+  const MachineBasicBlock *TargetBB;
+  tie(SSlot, TargetBB) = VFI->lookupPHISlot(PN);
+
   bool isPipeline = SSlot < 0;
   unsigned Slot = isPipeline ? -SSlot : SSlot;
 
@@ -400,6 +405,8 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
   SmallVector<MachineOperand, 8> Ops;
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
 
+  // Build the instruction in form of:
+  // IncomingReg = Opc SrcReg, TargetMBB ...
   unsigned Opc = isPipeline ? VTM::VOpMvPipe : VTM::VOpMvPhi;
   Ops.push_back(ucOperand::CreateOpcode(Opc, Slot));
   Ops.push_back(ucOperand::CreatePredicate());
@@ -446,6 +453,9 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
       if (isCopyLike(WriteOp->getOpcode())) {
         MachineOperand ForwardedVal = WriteOp.getOperand(1);
         Ops.push_back(ForwardedVal);
+        MachineOperand TargetBBMO =
+          MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
+        Ops.push_back(TargetBBMO);
         // Make sure the state reads this register, otherwise PHIElimination
         // will complain about that.
         Ops.push_back(Src);
@@ -454,6 +464,10 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
     }
 
     Ops.push_back(Src);
+    MachineOperand TargetBBMO =
+      MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
+    Ops.push_back(TargetBBMO);
+
     // Try to forward the imp-uses.
     if (Src.isWire())
       for (ucOp::op_iterator I = WriteOp.op_begin(), E = WriteOp.op_end(); I != E;
@@ -467,6 +481,10 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
 
   // Trivial case, just copy src to dst.
   Ops.push_back(Src);
+  MachineOperand TargetBBMO =
+    MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
+  Ops.push_back(TargetBBMO);
+
   return addOperandsToMI(InsertPos, Ops);
 }
 

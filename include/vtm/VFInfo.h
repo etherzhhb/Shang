@@ -76,7 +76,9 @@ class VFInfo : public MachineFunctionInfo {
   }
 
   // Remember the scheduled slot of PHI nodes, it will lose after PHIElemination.
-  typedef std::map<const MachineInstr*, int> PhiSlotMapTy;
+  typedef std::map<const MachineInstr*,
+                   std::pair<int, const MachineBasicBlock*> >
+          PhiSlotMapTy;
   PhiSlotMapTy PHISlots;
 
   // Allocated physics registers in a MachineFunction/RTL module.
@@ -141,7 +143,9 @@ public:
   void rememberPHISlot(const MachineInstr *PN, unsigned Slot,
                        bool Pipe = false) {
     int S = Pipe ? - Slot : Slot;
-    bool success = PHISlots.insert(std::make_pair(PN, S)).second;
+    bool success =
+      PHISlots.insert(std::make_pair(PN,
+                                     std::make_pair(S, PN->getParent()))).second;
     assert(success && "Insert the same phinode twice?");
     (void) success;
   }
@@ -171,7 +175,8 @@ public:
   //  return UsedFNs[FNNum];
   //}
 
-  int lookupPHISlot(const MachineInstr *PN) const;
+  std::pair<int, const MachineBasicBlock*>
+    lookupPHISlot(const MachineInstr *PN) const;
   /// Information for allocated function units.
 
   void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot,

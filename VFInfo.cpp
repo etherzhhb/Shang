@@ -52,10 +52,12 @@ void VFInfo::rememberTotalSlot(const MachineBasicBlock* MBB, unsigned startSlot,
   StateSlotMap.insert(std::make_pair(MBB, SS));
 }
 
-int VFInfo::lookupPHISlot(const MachineInstr *PN) const {
+std::pair<int, const MachineBasicBlock*>
+VFInfo::lookupPHISlot(const MachineInstr *PN) const {
   PhiSlotMapTy::const_iterator At = PHISlots.find(PN);
 
-  if (At == PHISlots.end()) return 0;
+  if (At == PHISlots.end())
+    return std::make_pair(0, (const MachineBasicBlock*)0);
 
   return At->second;
 }
