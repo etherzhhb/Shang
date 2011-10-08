@@ -589,7 +589,10 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
 
   // State information.
   CtrlS << "// " << StateName << " Total Slot: " << totalSlot
-                 << " II: " << II <<  '\n';
+                 << " II: " << II;
+  if (II != totalSlot) CtrlS << " pipelined";
+  CtrlS << '\n';
+
   // Mirco state enable.
   createucStateEnable(&MBB);
 
