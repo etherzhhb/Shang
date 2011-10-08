@@ -171,7 +171,7 @@ class VASTConstant : public VASTValue {
 };
 
 class VASTDatapath : public VASTNode {
-  std::vector<VASTValue *> Inputs, Outputs;
+  std::vector<VASTValue*> Inputs, Outputs;
   std::string Code;
 public:
   VASTDatapath() : VASTNode(vastDatapath, 0, ""),
@@ -184,8 +184,6 @@ public:
   builder_stream getCodeBuffer() {
     return raw_string_ostream(Code);
   }
-
-
 
   void addInput (VASTValue *input)   { Inputs.push_back(input); }
   void addOutput(VASTValue *output)  { Outputs.push_back(output); }
