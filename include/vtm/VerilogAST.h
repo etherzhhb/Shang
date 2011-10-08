@@ -42,6 +42,8 @@ class MachineBasicBlock;
 enum VASTTypes {
   vastPort,
   vastSignal,
+  vastWire,
+  vastRegister,
   vastConstant,
   vastDatapath,
   vastParameter,
@@ -132,6 +134,29 @@ public:
   virtual void anchor();
 };
 
+class VASTWire : public VASTSignal {
+public:
+  VASTWire(const std::string &Name, unsigned BitWidth,
+    const std::string &Comment)
+    : VASTSignal(Name, BitWidth, 0, Comment, vastWire) {}
+
+  void print(raw_ostream &OS) const {};
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
+};
+
+class VASTRegister : public VASTSignal {
+public:
+  VASTRegister(const std::string &Name, unsigned BitWidth,
+    const std::string &Comment)
+    : VASTSignal(Name, BitWidth, 1, Comment, vastRegister) {}
+
+  void print(raw_ostream &OS) const {};
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
+};
 
 class VASTConstant : public VASTValue {
   public:
