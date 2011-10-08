@@ -47,6 +47,7 @@ enum VASTTypes {
   vastConstant,
   vastDatapath,
   vastSlot,
+  vastRegAssign,
   vastParameter,
   vastFirstDeclType = vastPort,
   vastLastDeclType = vastParameter,
@@ -214,6 +215,25 @@ public:
       return 0;
     return at->second;
   }
+};
+
+class VASTRegAssign : public VASTNode {
+  VASTSlot *RegAssignSlot;
+  std::vector<VASTValue*> Predicates;
+  VASTValue *Src;
+  VASTValue *Dst;
+public:
+  VASTRegAssign() : VASTNode(vastRegAssign, 0, ""),
+    RegAssignSlot(), Predicates(), Src(), Dst() {}
+
+  void print(raw_ostream &OS) const {};
+
+  void addPredicate(VASTValue *predicate){
+    Predicates.push_back(predicate);
+  }
+
+  VASTValue *getSrc() { return Src; }
+  VASTValue *getDst() { return Dst; }
 };
 
 // The class that represent Verilog modulo.
