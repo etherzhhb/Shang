@@ -210,7 +210,7 @@ private:
 
   std::string Name;
   std::vector<VASTDatapath *> Datapaths;
-
+  std::map<unsigned, VASTValue *> ValueIndex;
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
@@ -251,6 +251,13 @@ public:
   }
 
   void printDatapath(raw_ostream &OS) const;
+
+  VASTValue *getValue(unsigned Index){
+    std::map<unsigned, VASTValue *>::iterator at = ValueIndex.find(Index);
+    if(at == ValueIndex.end())
+      return 0;
+    return at->second;
+  }
 
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
