@@ -56,10 +56,6 @@ struct MergeFallThroughBlocks : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
   bool canMerge(MachineBasicBlock *MBB);
-  void mergeBranches(MachineBasicBlock *PredFBB,
-                     SmallVectorImpl<MachineOperand> &Pred,
-                     MachineBasicBlock *&CndTBB, MachineBasicBlock *&CndFBB,
-                     SmallVectorImpl<MachineOperand> &Cnd);
 
   void mergeFallThroughBlock(MachineBasicBlock *MBB);
 };
@@ -125,105 +121,6 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
   return true;
 }
 
-
-void MergeFallThroughBlocks::mergeBranches(MachineBasicBlock *PredFBB,
-                                           SmallVectorImpl<MachineOperand> &Pred,
-                                           MachineBasicBlock *&CndTBB,
-                                           MachineBasicBlock *&CndFBB,
-                                           SmallVectorImpl<MachineOperand> &Cnd)
-{
-  assert(Pred.size() <= 1 && "Too many predicate operand!");
-  // Nothing to merge, became:
-  // br Cnd, CndTBB, CndFBB.
-  if (PredFBB == 0) {
-    assert(Pred.empty() && "Expected unconditional branch to PredTBB!");
-  } else if (Cnd.empty()) {
-    // Unconditional branch to CndTBB, becomes:
-    // br Pred, CndTBB, PredFBB.
-    assert(CndFBB == 0 && "Expected unconditional branch!");
-    Cnd.push_back(Pred.front());
-    CndFBB = PredFBB;
-  } else {
-    // Now we have:
-    // if (!Pred) br PredFBB,
-    // else if (Pred & Cnd) br CndTBB
-    // else if (Pred & !Cnd) br CndFBB
-    // But PredFBB may equals to CndTBB, otherwise PredFBB equals to CndFBB.
-    // Make sure PredFBB == CndFBB so we have:
-    // br (Pred & Cnd), CndTBB, CndFBB(PredFBB)
-    // Because (Pred & !Cnd) | (!Pred) = !(Pred & Cnd)
-    if (PredFBB != CndFBB) {
-      TII->ReverseBranchCondition(Cnd);
-      std::swap(CndTBB, CndFBB);
-    }
-    assert(PredFBB == CndFBB && "We have 3 difference BB?");
-
-    Cnd.push_back(Pred.front());
-  }
-
-  // Always branch to the same BB.
-  if (CndTBB == CndFBB) {
-    Cnd.clear();
-    CndFBB = 0;
-  }
-}
-
-static ucOperand removeInvertFlag(ucOperand Op, MachineRegisterInfo *MRI,
-                                  MachineBasicBlock &MBB,
-                                  MachineBasicBlock::iterator IP,
-                                  const TargetInstrInfo *TII)  {
-  if (Op.isPredicateInverted()) {
-    Op.clearParent();
-    // Remove the invert flag.
-    Op.setBitWidth(1);
-    // Build the not instruction.
-    unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
-    ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
-    Dst.setBitWidth(1);
-    BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
-      .addOperand(Dst).addOperand(Op)
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&MBB));
-    Dst.setIsDef(false);
-    return Dst;
-  }
-
-  return Op;
-}
-
-static ucOperand mergePred(ucOperand OldCnd, ucOperand NewCnd,
-                           MachineBasicBlock &MBB,
-                           MachineBasicBlock::iterator IP,
-                           MachineRegisterInfo *MRI,
-                           const TargetInstrInfo *TII) {
-  OldCnd = removeInvertFlag(OldCnd, MRI, MBB, IP, TII);
-  NewCnd = removeInvertFlag(NewCnd, MRI, MBB, IP, TII);
-
-  unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
-  ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
-  Dst.setBitWidth(1);
-
-  BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpAnd))
-    .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
-    .addOperand(ucOperand::CreatePredicate())
-    .addOperand(ucOperand::CreateTrace(&MBB));;
-  Dst.setIsDef(false);
-  return Dst;
-}
-
-static void buildCondition(MachineBasicBlock &MBB,
-                           SmallVectorImpl<MachineOperand> &Cnd,
-                           MachineRegisterInfo *MRI,
-                           const TargetInstrInfo *TII) {
-  // And all predicate together.
-  while (Cnd.size() > 1) {
-    ucOperand LHS = cast<ucOperand>(Cnd.pop_back_val());
-    ucOperand RHS = cast<ucOperand>(Cnd.pop_back_val());
-
-    Cnd.push_back(mergePred(LHS, RHS, MBB, MBB.end(), MRI, TII));
-  }
-}
-
 void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   MachineBasicBlock *ToBB = *FromBB->pred_begin(), *ToTBB = 0, *ToFBB = 0,
                     *FromTBB = 0, *FromFBB = 0;
@@ -260,9 +157,8 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
         ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
         unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
         unsigned &Reg = PredMap[k];
-        if (!Reg) {
-          Reg = mergePred(*MO, FromBBCnd.front(), *FromBB, I, MRI, TII).getReg();
-        }
+        if (!Reg)
+          Reg = VInstrInfo::MergePred(*MO, FromBBCnd.front(), *FromBB, I, MRI, TII).getReg();
 
         MO->ChangeToRegister(Reg, false);
         MO->setTargetFlags(1);
@@ -305,8 +201,8 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
     FromBB->removeSuccessor(FromFBB);
   }
 
-  mergeBranches(ToFBB, FromBBCnd, FromTBB, FromFBB, Cond);
-  buildCondition(*ToBB, Cond, MRI, TII);
+  VInstrInfo::MergeBranches(ToFBB, FromBBCnd, FromTBB, FromFBB, Cond, TII);
+  VInstrInfo::BuildCondition(*ToBB, Cond, MRI, TII);
 
   TII->InsertBranch(*ToBB, FromTBB, FromFBB, Cond, DebugLoc());
   ++NumFallThroughMerged;

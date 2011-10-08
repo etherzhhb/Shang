@@ -308,6 +308,107 @@ bool VInstrInfo::PredicateInstruction(MachineInstr *MI,
   return true;
 }
 
+void VInstrInfo::MergeBranches(MachineBasicBlock *PredFBB,
+                               SmallVectorImpl<MachineOperand> &Pred,
+                               MachineBasicBlock *&CndTBB,
+                               MachineBasicBlock *&CndFBB,
+                               SmallVectorImpl<MachineOperand> &Cnd,
+                               const TargetInstrInfo *TII) {
+  assert(Pred.size() <= 1 && "Too many predicate operand!");
+  // Nothing to merge, became:
+  // br Cnd, CndTBB, CndFBB.
+  if (PredFBB == 0) {
+    assert(Pred.empty() && "Expected unconditional branch to PredTBB!");
+  } else if (Cnd.empty()) {
+    // Unconditional branch to CndTBB, becomes:
+    // br Pred, CndTBB, PredFBB.
+    assert(CndFBB == 0 && "Expected unconditional branch!");
+    Cnd.push_back(Pred.front());
+    CndFBB = PredFBB;
+  } else {
+    // Now we have:
+    // if (!Pred) br PredFBB,
+    // else if (Pred & Cnd) br CndTBB
+    // else if (Pred & !Cnd) br CndFBB
+    // But PredFBB may equals to CndTBB, otherwise PredFBB equals to CndFBB.
+    // Make sure PredFBB == CndFBB so we have:
+    // br (Pred & Cnd), CndTBB, CndFBB(PredFBB)
+    // Because (Pred & !Cnd) | (!Pred) = !(Pred & Cnd)
+    if (PredFBB != CndFBB) {
+      TII->ReverseBranchCondition(Cnd);
+      std::swap(CndTBB, CndFBB);
+    }
+    assert(PredFBB == CndFBB && "We have 3 difference BB?");
+
+    Cnd.push_back(Pred.front());
+  }
+
+  // Always branch to the same BB.
+  if (CndTBB == CndFBB) {
+    Cnd.clear();
+    CndFBB = 0;
+  }
+}
+
+MachineOperand VInstrInfo::RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,
+                                            MachineBasicBlock &MBB,
+                                            MachineBasicBlock::iterator IP,
+                                            const TargetInstrInfo *TII) {
+  ucOperand Op(MO);
+
+  if (Op.isPredicateInverted()) {
+    Op.clearParent();
+    // Remove the invert flag.
+    Op.setBitWidth(1);
+    // Build the not instruction.
+    unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
+    ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
+    Dst.setBitWidth(1);
+    BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
+      .addOperand(Dst).addOperand(Op)
+      .addOperand(ucOperand::CreatePredicate())
+      .addOperand(ucOperand::CreateTrace(&MBB));
+    Dst.setIsDef(false);
+    return Dst;
+  }
+
+  return Op;
+}
+
+MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
+                                     MachineOperand NewCnd,
+                                     MachineBasicBlock &MBB,
+                                     MachineBasicBlock::iterator IP,
+                                     MachineRegisterInfo *MRI,
+                                     const TargetInstrInfo *TII) {
+  OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
+  NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
+
+  unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
+  ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
+  Dst.setBitWidth(1);
+
+  BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpAnd))
+    .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(&MBB));;
+  Dst.setIsDef(false);
+  return Dst;
+}
+
+void VInstrInfo::BuildCondition(MachineBasicBlock &MBB,
+                                SmallVectorImpl<MachineOperand> &Cnd,
+                                MachineRegisterInfo *MRI,
+                                const TargetInstrInfo *TII) {
+  // And all predicate together.
+  while (Cnd.size() > 1) {
+    MachineOperand LHS = Cnd.pop_back_val();
+    MachineOperand RHS = Cnd.pop_back_val();
+
+    Cnd.push_back(MergePred(LHS, RHS, MBB, MBB.end(), MRI, TII));
+  }
+}
+
 unsigned VInstrInfo::createPHIIncomingReg(unsigned DestReg,
                                           MachineRegisterInfo *MRI) const {
   const TargetRegisterClass *PHIRC = VTM::PHIRRegisterClass;

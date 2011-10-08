@@ -56,6 +56,31 @@ public:
                                 DebugLoc DL) const;
   static void ReversePredicateCondition(MachineOperand &Cond);
   static bool isUnConditionalBranch(MachineInstr *MI);
+
+  static void MergeBranches(MachineBasicBlock *PredFBB,
+                            SmallVectorImpl<MachineOperand> &Pred,
+                            MachineBasicBlock *&CndTBB,
+                            MachineBasicBlock *&CndFBB,
+                            SmallVectorImpl<MachineOperand> &Cnd,
+                            const TargetInstrInfo *TII);
+
+  static MachineOperand RemoveInvertFlag(MachineOperand MO,
+                                         MachineRegisterInfo *MRI,
+                                         MachineBasicBlock &MBB,
+                                         MachineBasicBlock::iterator IP,
+                                         const TargetInstrInfo *TII);
+  static void BuildCondition(MachineBasicBlock &MBB,
+                             SmallVectorImpl<MachineOperand> &Cnd,
+                             MachineRegisterInfo *MRI,
+                             const TargetInstrInfo *TII);
+
+  static MachineOperand MergePred(MachineOperand OldCndMO,
+                                  MachineOperand NewCndMO,
+                                  MachineBasicBlock &MBB,
+                                  MachineBasicBlock::iterator IP,
+                                  MachineRegisterInfo *MRI,
+                                  const TargetInstrInfo *TII);
+
   virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
     const;
   virtual bool isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
