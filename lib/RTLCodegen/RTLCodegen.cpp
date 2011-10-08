@@ -399,11 +399,11 @@ bool RTLCodegen::doInitialization(Module &Mod) {
   Out << "`ifdef __VERILATOR_SIM\n";
   for(Module::global_iterator GI = Mod.global_begin(), E = Mod.global_end();
       GI != E; ++GI){
-      Out << "import \"DPI-C\" function chandle verilator_get_gv"
+      Out << "import \"DPI-C\" function chandle vlt_"
           << VBEMangle(GI->getNameStr()) << "();\n";
 
       Out << "`define gv" << VBEMangle(GI->getNameStr())
-          << " verilator_get_gv" << VBEMangle(GI->getNameStr()) << "()\n";
+          << " vlt_" << VBEMangle(GI->getNameStr()) << "()\n";
   }
 
   Out << "`endif\n\n\n";

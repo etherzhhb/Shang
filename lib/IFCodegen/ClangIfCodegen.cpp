@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ClangIfCodegen.h"
+#include "vtm/SynSettings.h"
 #include "vtm/VerilogAST.h"
 #include "vtm/Utilities.h"
 
@@ -212,7 +213,7 @@ void ClangIfCodegen::printFunctionSignature(raw_ostream &Out,
   raw_string_ostream FunctionInnards(tstr);
 
   // Print out the name...
-  FunctionInnards << GetValueName(F) << '(';
+  FunctionInnards << GetValueName(F) << SynSettings::getIfPostfix() << '(';
 
   bool PrintedArg = false;
   if (!F->isDeclaration()) {

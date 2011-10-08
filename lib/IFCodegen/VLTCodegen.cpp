@@ -164,7 +164,7 @@ struct VLTIfCodegen : public ClangIfCodegen {
           }
       Out << ";\n";
 
-      Out << "void *verilator_get_gv"
+      Out << "void *vlt_"
           << VBEMangle(GV->getNameStr())<<"() {\n";
       Out << "  return (void *)";
       // Take the address for non-array type.

@@ -60,6 +60,8 @@ public:
 
   const std::string &getModName() const { return ModName; }
   const std::string &getHierPrefix() const { return HierPrefix; }
+
+  static inline const std::string getIfPostfix() { return "_if"; }
 };
 
 SynSettings *getSynSetting(StringRef Name, SynSettings *ParentSetting = 0);

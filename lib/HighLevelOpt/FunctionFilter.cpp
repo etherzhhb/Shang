@@ -62,11 +62,13 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
-  //Mangle the name of globalvariables so we can refer them in C source files.
+  // We had to name the global variable with the counter, otherwise Verilator
+  // will complain about that the variable name is illegal.
+  unsigned gvcounter = 0;
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I){
     GlobalVariable *GV = I;
-    GV->setName(VBEMangle(GV->getNameStr()));
+    GV->setName("gv_" + utostr_32(gvcounter++));
   }
 
   OwningPtr<Module> SoftMod(CloneModule(&M));
@@ -137,6 +139,9 @@ bool FunctionFilter::runOnModule(Module &M) {
     // Do not inline the functions that called by software module.
     if (Function *F = SoftMod->getFunction(I->getName())) {
       if (!F->isDeclaration()) continue;
+      // If F is a cross module reference
+      if (!I->isDeclaration())
+        F->setName(F->getName() + SynSettings::getIfPostfix());
 
       I->removeAttribute(~0, Attribute::AlwaysInline);
       I->addAttribute(~0, Attribute::NoInline);
@@ -146,7 +151,7 @@ bool FunctionFilter::runOnModule(Module &M) {
       // The function only used in the hardware module
       //if (!I->hasFnAttr(Attribute::NoInline))
       //  I->addAttribute(~0, Attribute::AlwaysInline);
-      DEBUG(dbgs() << "Always inline " << I->getName() << '\n');
+      // DEBUG(dbgs() << "Always inline " << I->getName() << '\n');
     }
   }
 
