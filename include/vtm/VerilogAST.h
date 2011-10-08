@@ -46,6 +46,7 @@ enum VASTTypes {
   vastRegister,
   vastConstant,
   vastDatapath,
+  vastSlot,
   vastParameter,
   vastFirstDeclType = vastPort,
   vastLastDeclType = vastParameter,
@@ -187,6 +188,32 @@ public:
 
   void addInput (VASTValue *input)   { Inputs.push_back(input); }
   void addOutput(VASTValue *output)  { Outputs.push_back(output); }
+};
+
+class VASTSlot : public VASTNode {
+  std::vector<VASTValue*> SlotReady;
+  std::vector<VASTValue*> SlotEnable;
+  std::map<unsigned, VASTValue*> NextSlot;
+public:
+  VASTSlot(unsigned slotnumber) : VASTNode(vastSlot, slotnumber, ""),
+    SlotReady(), SlotEnable(), NextSlot() {}
+
+  void print(raw_ostream &OS) const {};
+
+  unsigned getSlotNumber() { return getSubClassData(); }
+
+  void addNextSlot(unsigned number, VASTValue *condition) {
+    bool Inserted = NextSlot.insert(std::pair<unsigned, VASTValue *>(number, condition)).second;
+    assert(Inserted && "NextSlot already existed!");
+    (void) Inserted;
+  }
+
+  VASTValue *getNextSlotCondition (unsigned number){
+    std::map<unsigned, VASTValue *>::iterator at = NextSlot.find(number);
+    if(at == NextSlot.end())
+      return 0;
+    return at->second;
+  }
 };
 
 // The class that represent Verilog modulo.
