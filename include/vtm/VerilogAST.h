@@ -42,6 +42,7 @@ class MachineBasicBlock;
 enum VASTTypes {
   vastPort,
   vastSignal,
+  vastConstant,
   vastDatapath,
   vastParameter,
   vastFirstDeclType = vastPort,
@@ -126,6 +127,19 @@ public:
 
   void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
+};
+
+
+class VASTConstant : public VASTValue {
+  public:
+  VASTConstant(const std::string &Name, unsigned BitWidth,
+    const std::string &Comment)
+    : VASTValue(vastConstant, Name, BitWidth, 0, 0, Comment) {}
+
+  void print(raw_ostream &OS) const {};
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();
