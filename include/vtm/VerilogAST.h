@@ -42,6 +42,7 @@ class MachineBasicBlock;
 enum VASTTypes {
   vastPort,
   vastSignal,
+  vastDatapath,
   vastParameter,
   vastFirstDeclType = vastPort,
   vastLastDeclType = vastParameter,
@@ -131,6 +132,27 @@ public:
   virtual void anchor();
 };
 
+class VASTDatapath : public VASTNode {
+  std::vector<VASTValue *> Inputs, Outputs;
+  std::string Code;
+public:
+  VASTDatapath() : VASTNode(vastDatapath, "fuck", 0, " "),
+                   Inputs(), Outputs(), Code() {}
+
+  void print(raw_ostream &OS) const;
+
+  typedef raw_string_ostream builder_stream;
+
+  builder_stream getCodeBuffer() {
+    return raw_string_ostream(Code);
+  }
+
+
+
+  void addInput (VASTValue *input)   { Inputs.push_back(input); }
+  void addOutput(VASTValue *output)  { Outputs.push_back(output); }
+};
+
 // The class that represent Verilog modulo.
 class VASTModule : public VASTNode {
 public:
@@ -147,6 +169,8 @@ private:
   vlang_raw_ostream LangControlBlock;
   PortVector Ports;
   SignalVector Signals;
+
+  std::vector<VASTDatapath *> Datapaths;
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
@@ -177,6 +201,14 @@ public:
 
   ~VASTModule();
   void clear();
+
+  VASTDatapath *createDatapath(){
+    VASTDatapath *Datapath = new VASTDatapath();
+    Datapaths.push_back(Datapath);
+    return Datapath;
+  }
+
+  void printDatapath(raw_ostream &OS) const;
 
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,

@@ -470,6 +470,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   // Datapath
   Out << "// Datapath\n";
   Out << VM->getDataPathStr();
+  VM->printDatapath(Out);
 
   Out << "\n\n";
   Out << "// Always Block\n";
@@ -1046,8 +1047,10 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   CtrlS << OpCName << " <= ";
   OpAdd.getOperand(4).print(CtrlS);
   CtrlS << ";\n";
+
   // Write the datapath for function unit.
-  raw_ostream &DPS = VM->getDataPathBuffer();
+  VASTDatapath *data =  VM->createDatapath();
+  VASTDatapath::builder_stream DPS = data->getCodeBuffer();
   // FIXME: Move these to emitAllocatedFUs
   DPS << "assign {";
   // Carry out.
@@ -1056,6 +1059,7 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   // Sum.
   OpAdd.getOperand(0).print(DPS);
   DPS << "} = " << OpAName << " + " << OpBName << " + " << OpCName << ";\n";
+
 }
 
 void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
@@ -1079,7 +1083,8 @@ void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
   CtrlS << ";\n";
 
   // Write the datapath for function unit.
-  raw_ostream &DPS = VM->getDataPathBuffer();
+  VASTDatapath *data0 = VM->createDatapath();
+  VASTDatapath::builder_stream DPS = data0->getCodeBuffer();
   // Create the signed operand.
   if (OpSHT->getOpcode() == VTM::VOpSRA) {
     std::string NewOpAName = OpAName + "_signed";
@@ -1088,7 +1093,8 @@ void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
     OpAName = NewOpAName;
   }
 
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data1 = VM->createDatapath();
+  VASTDatapath::builder_stream OS = data1->getCodeBuffer();
   OS << "assign ";
   OpSHT.getOperand(0).print(OS);
   OS << " = " << OpAName << Operator << OpBName << ";\n";
@@ -1114,7 +1120,8 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
   OpMult.getOperand(2).print(CtrlS);
   CtrlS << ";\n";
   // Write the datapath for function unit.
-  raw_ostream &DPS = VM->getDataPathBuffer();
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream DPS = data->getCodeBuffer();
   // FIXME: Move these to emitAllocatedFUs
   DPS << "assign ";
   // Sum.
@@ -1123,9 +1130,10 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "// ";
-  ImpDef.print(OS);
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
+  OS << "// IMPLICIT_DEF ";
+  ImpDef.getOperand(0).print(OS);
   OS << "\n";
 }
 
@@ -1155,7 +1163,8 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
 void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   VM->getControlBlockBuffer() << "// Connect wire in datapath.\n";
   
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
   OS << "assign ";
   Op.getOperand(0).print(OS);
   OS << " = ";
@@ -1274,7 +1283,8 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
 
 void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   unsigned FUNum = OpMemAccess->getFUId().getFUNum();
-  raw_ostream &DPS = VM->getDataPathBuffer();
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream DPS = data->getCodeBuffer();
   DPS << "assign ";
   OpMemAccess.getOperand(0).print(DPS);
   DPS << " = " << VFUMemBus::getInDataBusName(FUNum) << ";\n";
@@ -1301,7 +1311,10 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
 
 void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   unsigned FUNum = OpBRam->getFUId().getFUNum();
-  raw_ostream &DPS = VM->getDataPathBuffer();
+
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream DPS = data->getCodeBuffer();
+
   DPS << "assign ";
   OpBRam.getOperand(0).print(DPS);
   DPS << " = " << VFUBRam::getInDataBusName(FUNum) << ";\n";
@@ -1330,7 +1343,8 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
 
 void RTLCodegen::emitDatapath(ucState &State) {
   assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
-  VM->getDataPathBuffer() << "// Issue datapath for "
+  VASTDatapath *data =  VM->createDatapath();
+  data->getCodeBuffer() << "// Issue datapath for "
     "operations at slot " << State.getSlot() << '\n';
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
@@ -1356,7 +1370,8 @@ void RTLCodegen::emitDatapath(ucState &State) {
 }
 
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data =  VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
   OS << "assign ";
   UnaOp.getOperand(0).print(OS);
   OS << " = " << Operator << ' ';
@@ -1365,7 +1380,8 @@ void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
 }
 
 void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data =  VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
   OS << "assign ";
   BinOp.getOperand(0).print(OS);
   OS << " = ";
@@ -1376,7 +1392,8 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data =  VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
   // now we are going to get the included upper bound.
@@ -1391,7 +1408,8 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
 }
 
 void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data =  VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
   OS << "assign ";
   OpBitCat.getOperand(0).print(OS);
   OS << " = {";
@@ -1403,7 +1421,8 @@ void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
 }
 
 void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
-  raw_ostream &OS = VM->getDataPathBuffer();
+  VASTDatapath *data =  VM->createDatapath();
+  VASTDatapath::builder_stream OS = data->getCodeBuffer();
   OS << "assign ";
   OpBitRepeat.getOperand(0).print(OS);
   OS << " = {";

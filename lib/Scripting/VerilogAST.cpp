@@ -164,6 +164,13 @@ void VASTModule::clear() {
   ControlBlock.str().clear();
 }
 
+void VASTModule::printDatapath(raw_ostream &OS) const{
+  for (std::vector<VASTDatapath *>::const_iterator I = Datapaths.begin(),
+       E = Datapaths.end(); I != E; ++I) {
+   (*I)->print(OS);
+  }
+}
+
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
   OS << "module " << getName() << "(\n";
   Ports.front()->print(OS.indent(4));
@@ -288,6 +295,9 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
+void VASTDatapath::print(raw_ostream &OS) const{
+  OS << Code ;
+}
 
 // Out of line virtual function to provide home for the class.
 void VASTSignal::anchor() {}
