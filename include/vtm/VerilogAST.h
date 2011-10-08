@@ -51,14 +51,13 @@ enum VASTTypes {
 };
 
 class VASTNode {
-  std::string Name;
   std::string Comment;
   const unsigned short T;
   unsigned short SubclassData;
 protected:
-  VASTNode(VASTTypes NodeT, const std::string &name, unsigned short subclassData,
+  VASTNode(VASTTypes NodeT, unsigned short subclassData,
            const std::string &comment)
-    : Name(name), Comment(comment), T(NodeT), SubclassData(subclassData) {}
+    : Comment(comment), T(NodeT), SubclassData(subclassData) {}
 
   unsigned short getSubClassData() const { return SubclassData; }
 
@@ -67,23 +66,23 @@ public:
 
   unsigned getASTType() const { return T; }
 
-  const std::string &getName() const { return Name; }
-
   virtual void print(raw_ostream &OS) const = 0;
 };
 
 class VASTValue : public VASTNode {
+  std::string Name;
   bool IsReg;
   unsigned InitVal;
 protected:
-  VASTValue(VASTTypes DeclType, const std::string &Name, unsigned BitWidth, bool isReg,
+  VASTValue(VASTTypes DeclType, const std::string &name, unsigned BitWidth, bool isReg,
            unsigned initVal, const std::string &Comment)
-    : VASTNode(DeclType, Name, BitWidth, Comment), IsReg(isReg), InitVal(initVal)
+    : VASTNode(DeclType, BitWidth, Comment),Name(name), IsReg(isReg), InitVal(initVal)
   {
     assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
            && "Bad DeclType!");
   }
 public:
+  const std::string &getName() const { return Name; }
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return IsReg; }
 
@@ -122,8 +121,8 @@ public:
 class VASTSignal : public VASTValue {
 public:
   VASTSignal(const std::string &Name, unsigned BitWidth, bool isReg,
-             const std::string &Comment)
-    : VASTValue(vastSignal, Name, BitWidth, isReg, 0, Comment) {}
+             const std::string &Comment, VASTTypes DeclType = vastSignal)
+    : VASTValue(DeclType, Name, BitWidth, isReg, 0, Comment) {}
 
   void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
@@ -136,7 +135,7 @@ class VASTDatapath : public VASTNode {
   std::vector<VASTValue *> Inputs, Outputs;
   std::string Code;
 public:
-  VASTDatapath() : VASTNode(vastDatapath, "fuck", 0, " "),
+  VASTDatapath() : VASTNode(vastDatapath, 0, ""),
                    Inputs(), Outputs(), Code() {}
 
   void print(raw_ostream &OS) const;
@@ -170,6 +169,7 @@ private:
   PortVector Ports;
   SignalVector Signals;
 
+  std::string Name;
   std::vector<VASTDatapath *> Datapaths;
 
   // The port starting offset of a specific function unit.
@@ -189,7 +189,8 @@ public:
     RetPort // Port for function return value.
   };
 
-  VASTModule(const std::string &Name) : VASTNode(vastModule, Name, 0, ""),
+  VASTModule(const std::string &Name) : VASTNode(vastModule, 0, ""),
+    Name(Name),
     StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
@@ -201,6 +202,8 @@ public:
 
   ~VASTModule();
   void clear();
+
+  const std::string &getName() const { return Name; }
 
   VASTDatapath *createDatapath(){
     VASTDatapath *Datapath = new VASTDatapath();
