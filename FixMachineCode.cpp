@@ -172,8 +172,13 @@ void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
       if (MI.getOpcode() == VTM::PHI) continue;
 
       if (Imm.isImm()) {
-        MO.ChangeToImmediate(Imm.getImm());
-        MO.setTargetFlags(Imm.getTargetFlags());
+        // Dirty Hack: Do not eliminate the immediate if the user is
+        // BitSlice operation.
+        if (MI.getOpcode() != VTM::VOpBitSlice) {
+          MO.ChangeToImmediate(Imm.getImm());
+          MO.setTargetFlags(Imm.getTargetFlags());
+        }
+
         continue;
       }
 
