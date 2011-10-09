@@ -279,6 +279,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   // TODO:
   // Verilated::commandArgs(argc, argv); // Remember args
 
+  assignInPort(VASTModule::RST, 1);
   // Reset if necessary.
   Out << "// Reset the module if we first time invoke the module.\n";
   Out.if_begin("sim_time == 0");
