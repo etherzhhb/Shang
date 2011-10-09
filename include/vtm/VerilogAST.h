@@ -173,18 +173,19 @@ class VASTConstant : public VASTValue {
 };
 
 class VASTDatapath : public VASTNode {
+public:
+  typedef raw_string_ostream builder_stream;
+private:
   std::vector<VASTValue*> Inputs, Outputs;
   std::string Code;
+  builder_stream CodeStream;
 public:
-  VASTDatapath() : VASTNode(vastDatapath, 0, ""),
-                   Inputs(), Outputs(), Code() {}
+  VASTDatapath() : VASTNode(vastDatapath, 0, ""), CodeStream(Code) {}
 
   void print(raw_ostream &OS) const;
 
-  typedef raw_string_ostream builder_stream;
-
-  builder_stream getCodeBuffer() {
-    return raw_string_ostream(Code);
+  builder_stream &getCodeBuffer() {
+    return CodeStream;
   }
 
   void addInput (VASTValue *input)   { Inputs.push_back(input); }
@@ -274,11 +275,11 @@ public:
   };
 
   VASTModule(const std::string &Name) : VASTNode(vastModule, 0, ""),
-    Name(Name),
     StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     LangControlBlock(ControlBlock),
+    Name(Name),
     FUPortOffsets(VFUs::NumCommonFUs),
     NumArgPorts(0) {
     Ports.append(NumSpecialPort, 0);

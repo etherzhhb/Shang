@@ -296,6 +296,7 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 }
 
 void VASTDatapath::print(raw_ostream &OS) const{
+  const_cast<VASTDatapath*>(this)->CodeStream.flush();
   OS << Code ;
 }
 
