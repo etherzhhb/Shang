@@ -274,6 +274,9 @@ bool VInstrInfo::isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
 MachineInstr *VInstrInfo::PredicatePseudoInstruction(MachineInstr *MI,
                                                      const TargetInstrInfo *TII,
                                                      const SmallVectorImpl<MachineOperand> &Pred) {
+  // Implicit define do not need to predicate at all.
+  if (MI->isImplicitDef()) return MI;
+
   if (MI->getOpcode() != VTM::COPY) return 0;
 
   SmallVector<MachineOperand, 2> Ops;
