@@ -15,7 +15,6 @@
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
-#include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"

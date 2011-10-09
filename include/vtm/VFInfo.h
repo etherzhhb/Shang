@@ -17,7 +17,6 @@
 
 #include "vtm/SynSettings.h"
 #include "vtm/FUInfo.h"
-#include "vtm/VerilogAST.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/StringPool.h"
@@ -32,6 +31,8 @@
 namespace llvm {
 class MachineBasicBlock;
 class MachineInstr;
+class VASTModule;
+
 class VFInfo : public MachineFunctionInfo {
   // Information about slots.
   struct StateSlots{
@@ -107,11 +108,12 @@ private:
   FNMapTy UsedFNs;
   const SynSettings *Info;
   // Rtl module.
-  VASTModule Mod;
+  VASTModule *Mod;
   // If bit width information annotated to the annotator?
   bool BitWidthAnnotated;
 public:
   explicit VFInfo(MachineFunction &MF);
+  ~VFInfo();
 
   bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
   void removeBitWidthAnnotators() {
@@ -121,8 +123,10 @@ public:
 
   const SynSettings &getInfo() const { return *Info; }
 
+  void setTotalSlots(unsigned Slots);
+
   /// Verilog module for the machine function.
-  VASTModule *getRtlMod() const { return const_cast<VASTModule*>(&Mod); }
+  VASTModule *getRtlMod() const;
 
   /// Slots information for machine basicblock.
   unsigned getStartSlotFor(const MachineBasicBlock* MBB) const;

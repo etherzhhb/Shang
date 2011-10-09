@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 #include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/VerilogAST.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
@@ -105,8 +106,18 @@ unsigned VFInfo::getOverlaps(unsigned R, unsigned Overlaps[5]) const {
 
 VFInfo::VFInfo(MachineFunction &MF) : TotalRegs(fistPhyReg),
   Info(getSynSetting(MF.getFunction()->getName())),
-  Mod(Info->getModName()), BitWidthAnnotated(true) {
+  Mod(new VASTModule(Info->getModName())), BitWidthAnnotated(true) {
   // DirtyHack: Every Module use Memory bus 0.
   rememberAllocatedFU(FuncUnitId(VFUs::MemoryBus, 0), 0, 0,
                       MachineOperand::CreateImm(0));
+}
+
+VFInfo::~VFInfo() { delete Mod; }
+
+void VFInfo::setTotalSlots(unsigned Slots) {
+  Mod->allocaSlots(Slots);
+}
+
+VASTModule *VFInfo::getRtlMod() const {
+  return Mod;
 }
