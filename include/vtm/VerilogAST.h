@@ -235,10 +235,13 @@ private:
   FUCtrlVecTy Disables;
 
   SuccVecTy NextSlots;
+
+  unsigned StartSlot, EndSlot, II;
 public:
   VASTSlot(unsigned slotNum)
     : VASTSignal("Slot" + utostr_32(slotNum), 1, true, "", vastSlot,
-                 slotNum == 0), SlotNum(slotNum) {}
+                 slotNum == 0), SlotNum(slotNum),
+      StartSlot(slotNum), EndSlot(slotNum), II(~0) {}
 
   void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
   void printActive(raw_ostream &OS) const;
@@ -266,6 +269,11 @@ public:
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
   const_fu_ctrl_it disable_end() const { return Disables.end(); }
 
+  void setAliasSlots(unsigned startSlot, unsigned endSlot, unsigned ii) {
+    StartSlot = startSlot;
+    EndSlot = endSlot;
+    II = ii;
+  }
 };
 
 class VASTRegAssign : public VASTNode {

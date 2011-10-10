@@ -204,9 +204,22 @@ void VASTSlot::printActive(raw_ostream &OS) const {
 void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.if_begin(getName());
   std::string SlotReady = getName() + "Ready";
+  bool ReadyPresented = !readyEmpty();
+
+  if (StartSlot != EndSlot) {
+     raw_string_ostream SS(SlotReady);
+     for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
+       if (slot == getSlotNum()) continue;
+
+       if (!Mod.getSlot(slot)->readyEmpty()) {
+         SS << " & ( ~Slot" << slot << " | Slot" << slot << "Ready)";
+         ReadyPresented = true;
+       }
+     }
+  }
 
   // Enable next slot only when resources are ready.
-  if (!readyEmpty())
+  if (ReadyPresented)
     CtrlS.if_begin(SlotReady);
 
   bool hasSelfLoop = false;
@@ -240,7 +253,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS << ";\n";
   }
 
-  if (!readyEmpty()) CtrlS.exit_block("// End resource ready.\n");
+  if (ReadyPresented) CtrlS.exit_block("// End resource ready.\n");
 
   if (!disableEmpty()) {
     CtrlS << "// Disable the resources when the condition is true.\n";
@@ -248,7 +261,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
          I != E; ++I) {
       bool Enabled = isEnabled(I->first);
       if (Enabled) {
-        assert(!readyEmpty() && "Port conflict cannot be resolved!");
+        assert(ReadyPresented && "Port conflict cannot be resolved!");
         CtrlS.if_begin("~" + SlotReady, "// Resolve the conflict\n");
       }
 

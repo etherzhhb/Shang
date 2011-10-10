@@ -683,6 +683,9 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   unsigned IISlot = FInfo->getIISlotFor(CurBB);
   unsigned EndSlot = FInfo->getEndSlotFor(CurBB);
   unsigned II = IISlot - startSlot;
+  // There maybe serveral slots in a single ucState in a pipelined loop.
+  unsigned stateSlot = State.getSlot() - 1;
+  bool MultiSlots = false;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
@@ -691,6 +694,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
     unsigned SlotNum = Op->getPredSlot();
     VASTSlot *CurSlot = VM->getSlot(SlotNum - 1);
+    MultiSlots |= (SlotNum - 1) != stateSlot;
 
     assert(SlotNum != startSlot && "Unexpected first slot!");
     // Emit the control operation at the rising edge of the clock.
@@ -779,6 +783,11 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     }
 
     CtrlS.exit_block();
+  }
+
+  if (MultiSlots) {
+    for (unsigned slot = stateSlot; slot < EndSlot; slot += II)
+      VM->getSlot(slot)->setAliasSlots(stateSlot, EndSlot, II);
   }
 }
 
