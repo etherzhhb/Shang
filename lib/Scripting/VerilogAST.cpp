@@ -187,19 +187,23 @@ void VASTSlot::addDisable(const VASTValue *V, VASTCnd Cnd) {
 }
 
 void VASTSlot::printActive(raw_ostream &OS) const {
-  OS << "wire " << getName() << "Active = " << getName();
+  OS << "wire " << getName() << "Ready = 1'b1";
   for (VASTSlot::const_fu_ctrl_it I = ready_begin(), E = ready_end();
         I != E; ++I) {
-    OS << " & " << I->first->getName() << " & ";
+    // If the condition is true then the signal must be 1 to ready.
+    OS << " & (" << I->first->getName() << " | ~";
     I->second.print(OS);
+    OS << ')';
   }
 
   OS << ";// Are all waiting resources ready?\n";
+  OS << "wire " << getName() << "Active = " << getName() << "Ready & "
+     << getName() << ";\n";
 }
 
 void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.if_begin(getName());
-  std::string SlotReady = getName() + "Active";
+  std::string SlotReady = getName() + "Ready";
 
   // Enable next slot only when resources are ready.
   if (!readyEmpty())
@@ -415,6 +419,13 @@ VASTSignal *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
   Signals.push_back(Reg);
   insertVASTValue(Name, Reg);
   return Reg;
+}
+
+
+void llvm::VASTModule::addVASTValue(unsigned RegNum, VASTValue *V) {
+  bool Inserted = RegsMap.insert(std::make_pair(RegNum, V)).second;
+  assert(Inserted && "ValueIndex already existed!");
+  (void) Inserted;
 }
 
 VASTSignal *VASTModule::addWire(const std::string &Name, unsigned BitWidth,

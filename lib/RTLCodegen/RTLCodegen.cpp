@@ -520,9 +520,9 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
 
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
-  ucState FstCtrl(I);
-  if (FstCtrl.empty())
-    emitSlotsForEmptyState(FstCtrl.getSlot(), EndSlot, II);
+  //ucState FstCtrl(I);
+  //if (FstCtrl.empty())
+  //  emitSlotsForEmptyState(FstCtrl.getSlot(), EndSlot, II);
 
   // FIXME: Refactor the loop.
   while(++I != E) {
@@ -651,21 +651,24 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
   const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
 
   for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
-    I != E; ++I) {
-      unsigned SignalNum = *I;
-      MachineRegisterInfo::def_iterator DI = MRI->def_begin(SignalNum);
-      if (DI == MRI->def_end()) continue;
+       I != E; ++I) {
+    unsigned SignalNum = *I;
+    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SignalNum);
+    if (DI == MRI->def_end()) continue;
 
-      const ucOperand &Op = cast<ucOperand>(DI.getOperand());
-      unsigned Bitwidth = Op.getBitWidth();
+    const ucOperand &Op = cast<ucOperand>(DI.getOperand());
+    unsigned Bitwidth = Op.getBitWidth();
+    VASTValue *V = 0;
+    unsigned RegNum = TargetRegisterInfo::virtReg2Index(SignalNum);
 
-      SignalNum = TargetRegisterInfo::virtReg2Index(SignalNum);
-      if (Prefix[0] == 'w')
-        VM->addWire(Prefix + utostr(SignalNum), Bitwidth, RC->getName());
-      else {
-        VM->addRegister(Prefix + utostr(SignalNum), Bitwidth, RC->getName());
-        TotalRegisterBits += Bitwidth;
-      }
+    if (Prefix[0] == 'w')
+      V = VM->addWire(Prefix + utostr(RegNum), Bitwidth, RC->getName());
+    else {
+      V = VM->addRegister(Prefix + utostr(RegNum), Bitwidth, RC->getName());
+      TotalRegisterBits += Bitwidth;
+    }
+    // Add the signal to register map.
+    VM->addVASTValue(SignalNum, V);
   }
 }
 
@@ -678,6 +681,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   MachineBasicBlock *CurBB = State->getParent();
   unsigned startSlot = FInfo->getStartSlotFor(CurBB);
   unsigned IISlot = FInfo->getIISlotFor(CurBB);
+  unsigned EndSlot = FInfo->getEndSlotFor(CurBB);
   unsigned II = IISlot - startSlot;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
@@ -704,16 +708,19 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       SlotPredSS << " & ";
       ucOperand &CndOp = Op.getOperand(0);
       printPredicate(CndOp, SlotPredSS);
+
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
       assert(Op.getPredicate().getReg() == 0 && "Cannot handle predicated BrCnd");
-      VASTCnd Cnd(VM->getVASTValue(CndOp.getReg()), CndOp.isPredicateInverted());
+      VASTCnd Cnd = VASTCnd::Create(VM, CndOp);
       CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
       SlotPredSS.flush();
       CtrlS.if_begin(SlotPred);
-      if (TargetBB == CurBB) CtrlS << "// Loop back to entry.\n";
+      if (TargetBB == CurBB && IISlot < EndSlot)
+        // The loop op of pipelined loop enable next slot explicitly.
+        CurSlot->addNextSlot(CurSlot->getSlotNum() + 1);
 
       // Emit the first micro state of the target state.
       emitFirstCtrlState(TargetBB);

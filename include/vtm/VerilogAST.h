@@ -363,11 +363,7 @@ public:
   void printSlotActives(raw_ostream &OS) const;
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  void addVASTValue(unsigned RegNum, VASTValue *V) {
-    bool Inserted = RegsMap.insert(std::make_pair(RegNum, V)).second;
-    assert(Inserted && "ValueIndex already existed!");
-    (void) Inserted;
-  }
+  void addVASTValue(unsigned RegNum, VASTValue *V);
 
   VASTValue *getVASTValue(unsigned RegNum) const {
     std::map<unsigned, VASTValue*>::const_iterator at = RegsMap.find(RegNum);
