@@ -31,7 +31,7 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
-
+#include "llvm/Target/TargetData.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -248,6 +248,8 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     DEBUG(State.viewGraph());
     State.emitSchedule();
   }
+
+  FInfo->setTotalSlots(totalCycle);
 
   cleanUpSchedule();
 
@@ -808,7 +810,9 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
 
     // Do not remove the operand, just change it to implicit define.
     ucOp Op = ucOp::getParent(DI);
-    Op->changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
+    // Preserve the read fu information.
+    if (Op->getOpcode() != VTM::VOpReadFU)
+      Op->changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
     DI.getOperand().ChangeToRegister(0, false);
     for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
       // Change the operand to some rubbish value.

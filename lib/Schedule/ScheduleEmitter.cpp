@@ -503,8 +503,9 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     //  continue;
 
     if (WD->shouldBeCopied()) {
+      unsigned Slot = CopySlot.getSlot();
       // Export the register.
-      Ops.push_back(ucOperand::CreateOpcode(VTM::COPY, CopySlot.getSlot()));
+      Ops.push_back(ucOperand::CreateOpcode(VTM::VOpReadFU, Slot, FUId));
       // Get the operand at current slot.
       Ops.push_back(getRegUseOperand(WD->Pred, CopySlot));
       MO.setIsDef();

@@ -175,6 +175,9 @@ let isReMaterializable = 1,
   def VOpSel   : CtrlInst<(outs DR:$dst), (ins DR:$cnd, DR:$src0, DR:$src1),
                           "$dst = $cnd?$src0:$src1", [], 1, 1>;
 
+  def VOpReadFU: CtrlInst<(outs DR:$dst), (ins DR:$src),
+                          "$dst = read fu $src", [], 1, 1>;
+
   // Reduction operation.
   def VOpRAnd   : DPTvaInst<(outs DR:$dst), (ins DR:$src),
                             "$dst = rand $src", []>;
