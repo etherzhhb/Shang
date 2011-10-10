@@ -26,17 +26,21 @@
 #include "llvm/Function.h"
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetData.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <map>
 
 namespace llvm {
 class MachineBasicBlock;
+class ucOperand;
+class VASTModule;
 
 // Leaf node type of Verilog AST.
 enum VASTTypes {
@@ -44,7 +48,7 @@ enum VASTTypes {
   vastSignal,
   vastWire,
   vastRegister,
-  vastConstant,
+  vastSymbol,
   vastDatapath,
   vastSlot,
   vastRegAssign,
@@ -79,7 +83,7 @@ class VASTValue : public VASTNode {
   bool IsReg;
   unsigned InitVal;
 protected:
-  VASTValue(VASTTypes DeclType, const std::string &name, unsigned BitWidth, bool isReg,
+  VASTValue(VASTTypes DeclType, const std::string name, unsigned BitWidth, bool isReg,
            unsigned initVal, const std::string &Comment)
     : VASTNode(DeclType, BitWidth, Comment),Name(name), IsReg(isReg), InitVal(initVal)
   {
@@ -98,10 +102,33 @@ public:
   virtual void anchor();
 };
 
+// The predicate condition, maybe a inverted value.
+class VASTCnd : public PointerIntPair<VASTValue*, 1, bool> {
+  typedef PointerIntPair<VASTValue*, 1, bool> BaseTy;
+public:
+  /*implicit*/ VASTCnd(VASTValue *V = 0, bool Inverted = false)
+    : BaseTy(V, Inverted)
+  {
+    assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
+  }
+
+  /*implicit*/ VASTCnd(bool Cnd) : BaseTy(0, !Cnd) {}
+
+  bool isInverted() const { return getInt(); }
+  VASTValue *getCndVal() const { return getPointer(); }
+
+  // Return the "not" condition of current condition;
+  VASTCnd invert() const { return VASTCnd(getCndVal(), !isInverted()); }
+
+  void print(raw_ostream &OS) const;
+
+  static VASTCnd Create(VASTModule *M, ucOperand &Op);
+};
+
 class VASTPort : public VASTValue {
   bool IsInput;
 public:
-  VASTPort(const std::string &Name, unsigned BitWidth, bool isInput, bool isReg,
+  VASTPort(const std::string Name, unsigned BitWidth, bool isInput, bool isReg,
            const std::string &Comment)
     : VASTValue(vastPort, Name, BitWidth, isReg, 0, Comment), IsInput(isInput) {
     assert(!(isInput && isRegister()) && "Bad port decl!");
@@ -125,11 +152,12 @@ public:
 
 class VASTSignal : public VASTValue {
 public:
-  VASTSignal(const std::string &Name, unsigned BitWidth, bool isReg,
-             const std::string &Comment, VASTTypes DeclType = vastSignal)
-    : VASTValue(DeclType, Name, BitWidth, isReg, 0, Comment) {}
+  VASTSignal(const std::string Name, unsigned BitWidth, bool isReg,
+             const std::string &Comment, VASTTypes DeclType = vastSignal,
+             unsigned InitVal = 0)
+    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal, Comment) {}
 
-  void print(raw_ostream &OS) const;
+  virtual void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
 
   // Out of line virtual function to provide home for the class.
@@ -138,7 +166,7 @@ public:
 
 class VASTWire : public VASTSignal {
 public:
-  VASTWire(const std::string &Name, unsigned BitWidth,
+  VASTWire(const std::string Name, unsigned BitWidth,
     const std::string &Comment)
     : VASTSignal(Name, BitWidth, 0, Comment, vastWire) {}
 
@@ -150,7 +178,7 @@ public:
 
 class VASTRegister : public VASTSignal {
 public:
-  VASTRegister(const std::string &Name, unsigned BitWidth,
+  VASTRegister(const std::string Name, unsigned BitWidth,
     const std::string &Comment)
     : VASTSignal(Name, BitWidth, 1, Comment, vastRegister) {}
 
@@ -160,16 +188,13 @@ public:
   virtual void anchor();
 };
 
-class VASTConstant : public VASTValue {
+class VASTSymbol : public VASTValue {
   public:
-  VASTConstant(const std::string &Name, unsigned BitWidth,
-    const std::string &Comment)
-    : VASTValue(vastConstant, Name, BitWidth, 0, 0, Comment) {}
+  VASTSymbol(const std::string Name, unsigned BitWidth,
+             const std::string &Comment)
+    : VASTValue(vastSymbol, Name, BitWidth, 0, 0, Comment) {}
 
-  void print(raw_ostream &OS) const {};
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
+  void print(raw_ostream &OS) const;
 };
 
 class VASTDatapath : public VASTNode {
@@ -192,30 +217,55 @@ public:
   void addOutput(VASTValue *output)  { Outputs.push_back(output); }
 };
 
-class VASTSlot : public VASTNode {
-  std::vector<VASTValue*> SlotReady;
-  std::vector<VASTValue*> SlotEnable;
-  std::map<unsigned, VASTValue*> NextSlot;
+class VASTSlot : public VASTSignal {
 public:
-  VASTSlot(unsigned slotnumber) : VASTNode(vastSlot, slotnumber, ""),
-    SlotReady(), SlotEnable(), NextSlot() {}
+  typedef std::map<unsigned, VASTCnd> SuccVecTy;
+  typedef SuccVecTy::const_iterator const_succ_iterator;
 
-  void print(raw_ostream &OS) const {};
+  typedef std::map<const VASTValue*, VASTCnd> FUCtrlVecTy;
+  typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
-  unsigned getSlotNumber() { return getSubClassData(); }
+private:
+  unsigned SlotNum;
+  // The ready signals that need to wait before we go to next slot.
+  FUCtrlVecTy Readys;
+  // The function units that enabled at this slot.
+  FUCtrlVecTy Enables;
+  // The function units that need to disable when condition is not satisfy.
+  FUCtrlVecTy Disables;
 
-  void addNextSlot(unsigned number, VASTValue *condition) {
-    bool Inserted = NextSlot.insert(std::pair<unsigned, VASTValue *>(number, condition)).second;
-    assert(Inserted && "NextSlot already existed!");
-    (void) Inserted;
-  }
+  SuccVecTy NextSlots;
+public:
+  VASTSlot(unsigned slotNum)
+    : VASTSignal("Slot" + utostr_32(slotNum), 1, true, "", vastSlot,
+                 slotNum == 0), SlotNum(slotNum) {}
 
-  VASTValue *getNextSlotCondition (unsigned number){
-    std::map<unsigned, VASTValue *>::iterator at = NextSlot.find(number);
-    if(at == NextSlot.end())
-      return 0;
-    return at->second;
-  }
+  void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
+  void printActive(raw_ostream &OS) const;
+
+  unsigned getSlotNum() const { return SlotNum; }
+
+  void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
+  bool hasExplicitNextSlots() const { return !NextSlots.empty(); }
+
+  const_succ_iterator succ_begin() const { return NextSlots.begin(); }
+  const_succ_iterator succ_end() const { return NextSlots.end(); }
+
+  void addEnable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
+  bool isEnabled(const VASTValue *V) const { return Enables.count(V); }
+  const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
+  const_fu_ctrl_it enable_end() const { return Enables.end(); }
+
+  void addReady(const VASTValue *V, VASTCnd Cnd = VASTCnd());
+  bool readyEmpty() const { return Readys.empty(); }
+  const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
+  const_fu_ctrl_it ready_end() const { return Readys.end(); }
+
+  void addDisable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
+  bool disableEmpty() const { return Disables.empty(); }
+  const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
+  const_fu_ctrl_it disable_end() const { return Disables.end(); }
+
 };
 
 class VASTRegAssign : public VASTNode {
@@ -255,11 +305,23 @@ private:
   SignalVector Signals;
 
   std::string Name;
-  std::vector<VASTDatapath *> Datapaths;
-  std::map<unsigned, VASTValue *> ValueIndex;
+  BumpPtrAllocator Allocator;
+  std::vector<VASTDatapath*> Datapaths;
+  std::map<unsigned, VASTValue*> RegsMap;
+  StringMap<VASTValue*> SymbolTable;
+  typedef std::vector<VASTSlot*> SlotVecTy;
+  SlotVecTy Slots;
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
+
+  void insertVASTValue(StringRef Name, VASTValue *V) {
+    StringMapEntry<VASTValue*> *Entry =
+      StringMapEntry<VASTValue*>::Create(Name.begin(), Name.end(),
+                                         SymbolTable.getAllocator(), V);
+    SymbolTable.insert(Entry);
+  }
+
 public:
   enum PortTypes {
     Clk = 0,
@@ -297,57 +359,61 @@ public:
   }
 
   void printDatapath(raw_ostream &OS) const;
+  // Print the slot control flow.
+  void printSlotActives(raw_ostream &OS) const;
+  void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  VASTValue *getValue(unsigned Index){
-    std::map<unsigned, VASTValue *>::iterator at = ValueIndex.find(Index);
-    if(at == ValueIndex.end())
-      return 0;
+  void addVASTValue(unsigned RegNum, VASTValue *V) {
+    bool Inserted = RegsMap.insert(std::make_pair(RegNum, V)).second;
+    assert(Inserted && "ValueIndex already existed!");
+    (void) Inserted;
+  }
+
+  VASTValue *getVASTValue(unsigned RegNum) const {
+    std::map<unsigned, VASTValue*>::const_iterator at = RegsMap.find(RegNum);
+    if(at == RegsMap.end()) return 0;
+
     return at->second;
+  }
+
+  VASTValue *getVASTValue(const std::string &Name) const {
+    return SymbolTable.lookup(Name);
+  }
+
+  VASTValue *getVASTSymbol(const std::string &Name) {
+    VASTValue *&S = SymbolTable[Name];
+    if (!S)
+      S = new (Allocator.Allocate<VASTSymbol>()) VASTSymbol(Name, 1, "");
+
+    return S;
+  }
+
+  void allocaSlots(unsigned TotalSlots) {
+    Slots.assign(TotalSlots, 0);
+  }
+
+  VASTSlot *getSlot(unsigned SlotNum) {
+    VASTSlot *&Slot = Slots[SlotNum];
+    if(Slot == 0)
+      Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum);
+
+    return Slot;
+  }
+
+  VASTSlot *getSlot(unsigned SlotNum) const {
+    VASTSlot *S = Slots[SlotNum];
+    assert(S && "Slot not exist!");
+    return S;
   }
 
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
                          PortTypes T = Others,
-                         const std::string &Comment = "") {
-    VASTPort *Port = new VASTPort(Name, BitWidth, true, false, Comment);
-    if (T < SpecialInPortEnd) {
-      assert(Ports[T] == 0 && "Special port exist!");
-      Ports[T] = Port;
-      return Port;
-    }
-
-    // Return port is a output port.
-    assert(T < RetPort && "Wrong port type!");
-    if (T == ArgPort) {
-      assert(NumArgPorts == Ports.size() - NumSpecialPort
-             && "Unexpected port added before arg port!");
-      ++NumArgPorts;
-    }
-
-    Ports.push_back(Port);
-    return Port;
-  }
+                         const std::string &Comment = "");
 
   VASTPort *addOutputPort(const std::string &Name, unsigned BitWidth,
                           PortTypes T = Others, bool isReg = true,
-                          const std::string &Comment = "") {
-    VASTPort *Port = new VASTPort(Name, BitWidth, false, isReg, Comment);
-    if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
-      assert(Ports[T] == 0 && "Special port exist!");
-      Ports[T] = Port;
-      return Port;
-    }
-
-    assert(T <= RetPort && "Wrong port type!");
-    if (T == RetPort) {
-      RetPortIdx = Ports.size();
-      assert(RetPortIdx == NumArgPorts + NumSpecialPort
-             && "Unexpected port added before return port!");
-    }
-
-    Ports.push_back(Port);
-    return Port;
-  }
+                          const std::string &Comment = "");
 
   void setFUPortBegin(FuncUnitId ID) {
     unsigned offset = Ports.size();
@@ -377,7 +443,7 @@ public:
   const PortVector &getPorts() const { return Ports; }
   unsigned getNumPorts() const { return Ports.size(); }
 
-  const VASTPort &getPort(unsigned i) const {
+  VASTPort &getPort(unsigned i) const {
     // FIXME: Check if out of range.
     return *Ports[i];
   }
@@ -422,18 +488,10 @@ public:
   }
 
   VASTSignal *addRegister(const std::string &Name, unsigned BitWidth,
-                          const std::string &Comment = "") {
-    VASTSignal *Reg = new VASTSignal(Name, BitWidth, true, Comment);
-    Signals.push_back(Reg);
-    return Reg;
-  }
+                          const std::string &Comment = "");
 
   VASTSignal *addWire(const std::string &Name, unsigned BitWidth,
-                      const std::string &Comment = "") {
-    VASTSignal *Signal = new VASTSignal(Name, BitWidth, false, Comment);
-    Signals.push_back(Signal);
-    return Signal;
-  }
+                      const std::string &Comment = "");
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);
@@ -445,7 +503,6 @@ public:
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastModule;
   }
-
 
   raw_ostream &getStateDeclBuffer() {
     return StateDecl;
@@ -474,6 +531,14 @@ public:
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();
+
+  static const std::string GetMemBusEnableName(unsigned FUNum) {
+    return VFUMemBus::getEnableName(FUNum) + "_r";
+  }
+
+  static const std::string GetFinPortName() {
+    return "fin";
+  }
 };
 
 std::string verilogConstToStr(Constant *C);

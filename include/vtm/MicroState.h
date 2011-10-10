@@ -305,6 +305,8 @@ public:
     return ucOpIterator(const_cast<MachineInstr&>(Instr), false);
   }
 
+  bool empty() const { return Instr.getNumOperands() == 2; }
+
   void print(raw_ostream &OS) const;
   void dump() const;
 

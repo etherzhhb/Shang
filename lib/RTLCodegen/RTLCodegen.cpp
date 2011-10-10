@@ -70,12 +70,6 @@ class RTLCodegen : public MachineFunctionPass {
   // Mapping success fsm state to their predicate in current state.
   typedef std::map<MachineBasicBlock*, std::string> PredMapTy;
 
-  // If the FSM ready to move to next state?
-  std::string ReadyPred;
-  void addReadyPred(std::string &Pred) {
-    ReadyPred += " & (" + Pred + ")";
-  }
-
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
 
@@ -217,6 +211,17 @@ class RTLCodegen : public MachineFunctionPass {
   void emitAllocatedFUs();
 
   void emitIdleState();
+  // We need create the slots for the empty slot.
+  void emitSlotsForEmptyState(unsigned Slot, unsigned EndSlot, unsigned II) {
+    // Dirty Hack: When we need is the slot before current slot, we issue the
+    // control operation of current slot there.
+    --Slot;
+
+    while (Slot < EndSlot) {
+      (void) VM->getSlot(Slot);
+      Slot += II;
+    }
+  }
 
   void emitBasicBlock(MachineBasicBlock &MBB);
 
@@ -226,39 +231,13 @@ class RTLCodegen : public MachineFunctionPass {
 
   void clear();
 
-  inline std::string getStateName(MachineBasicBlock *MBB) {
-    SmallVector<char, 16> Name;
-    // Use mangler to handle escaped characters.
-    Mang->getNameWithPrefix(Name, MBB->getName().str() + "BB"
-                            + itostr(MBB->getNumber()));
-    return std::string(Name.data(), Name.size());
-  }
-
-  inline std::string getucStateEnableName(MachineBasicBlock *MBB) {
-    std::string StateName = getStateName(MBB);
-
-    StateName = "cur_" + StateName;
-
-    return StateName + "_enable";
-  }
-
   inline std::string getucStateEnable(ucState &State) {
-    return getucStateEnable(State->getParent(), State.getSlot());
-  }
-  inline std::string getucStateEnable(MachineBasicBlock *MBB, unsigned Slot) {
-    std::string StateName = getucStateEnableName(MBB);
-    raw_string_ostream ss(StateName);
-    // Ignore the laster slot, we do nothing at that slot.
-    if (FInfo->getTotalSlotFor(MBB) > 1)
-      ss << "[" << (Slot - FInfo->getStartSlotFor(MBB)) << "]";
-
-    return ss.str();
+    return getucStateEnable(State.getSlot());
   }
 
-  void emitNextFSMState(raw_ostream &ss, MachineBasicBlock *DstBB);
-  void createucStateEnable(MachineBasicBlock *MBB);
-  void emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-                          const std::string &NewState, bool clearState);
+  inline std::string getucStateEnable(unsigned Slot) {
+    return "Slot" + utostr_32(Slot) + "Active";
+  }
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
@@ -282,8 +261,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitImplicitDef(ucOp &ImpDef);
 
-  // Return true if the control operation contains a return operation.
-  bool emitCtrlOp(ucState &State, PredMapTy &PredMap);
+  void emitCtrlOp(ucState &State, PredMapTy &PredMap);
 
   static void printPredicate(ucOperand &Pred, raw_ostream &SS) {
     if (Pred.getReg()) {
@@ -295,51 +273,21 @@ class RTLCodegen : public MachineFunctionPass {
       SS << "1'b1";
   }
 
-
-  void emitOpInternalCall(ucOp &OpInternalCall);
-  void emitOpReadReturn(ucOp &OpReadSymbol);
+  void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
+  void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);
   void emitOpRetVal(ucOp &OpRetVal);
-  void emitOpRet(ucOp &OpRet);
+  void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
   // Special ucop for connecting wires.
   void emitOpConnectWire(ucOp &Op);
   void emitOpCopy(ucOp &OpCopy);
-  void emitOpMemTrans(ucOp &OpMemAccess);
+  void emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot);
+  void emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot);
   void emitOpBRam(ucOp &OpBRam);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
     return "SubMod" + utostr(FNNum) + "_" + PortName;
   }
-
-  struct GetCalleeFNEnableNameFtor {
-    RTLCodegen *CG;
-    GetCalleeFNEnableNameFtor(RTLCodegen *cg) : CG(cg) {}
-    std::string operator() (unsigned FNNum) const {
-      return CG->getSubModulePortName(FNNum, "start");
-    }
-  };
-
-  struct GetCalleeFNReadyNameFtor {
-    RTLCodegen *CG;
-    GetCalleeFNReadyNameFtor(RTLCodegen *cg) : CG(cg) {}
-    std::string operator() (unsigned FNNum) const {
-      return CG->getSubModulePortName(FNNum, "fin");
-    }
-  };
-
-  // Return the FSM ready predicate.
-  // The FSM only move to next micro-state if the predicate become true.
-  void emitFUCtrlForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB);
-
-  template<enum VFUs::FUTypes T, typename GetReadyNameFunc>
-  void emitWaitFUReadyForState(MachineBasicBlock *CurBB, unsigned Latency,
-                               unsigned startSlot, unsigned endSlot,
-                               GetReadyNameFunc GetReadyName);
-
-  template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
-  void emitFUEnableForState(vlang_raw_ostream &CtrlS, MachineBasicBlock *CurBB,
-                            unsigned startSlot, unsigned endSlot,
-                            GetEnableNameFunc GetEnableName);
 
 public:
   /// @name FunctionPass interface
@@ -425,8 +373,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   SignedWireNum = 0;
   // Reset the current fsm state number.
   CurFSMStateNum = 0;
-  // The FSM is always ready by default.
-  ReadyPred = "1'b1";
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
@@ -466,7 +412,8 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out << "// Reg and wire decl\n";
   VM->printSignalDecl(Out);
   Out << "\n\n";
-
+  // Slot active signals.
+  VM->printSlotActives(Out);
   // Datapath
   Out << "// Datapath\n";
   Out << VM->getDataPathStr();
@@ -475,29 +422,14 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out << "\n\n";
   Out << "// Always Block\n";
   Out.always_ff_begin();
-  VM->printRegisterReset(Out);
-  Out.else_begin().if_begin(ReadyPred, "// are all resources ready?\n");
-  Out << "`ifdef __VERILATOR_SIM_DEBUG\n"
-         "$display(\"Module active " << MF->getFunction()->getName()
-      << "\\n\");\n"
-         "`endif\n";
-  Out << "// FSM\n";
-  Out << "`ifdef __VERILATOR_SIM_DEBUG\n"
-         "$display(\"NextFSMState: %x\", NextFSMState);\n"
-         "`endif\n";
 
-  Out.switch_begin("NextFSMState");
+  VM->printRegisterReset(Out);
+  Out.else_begin();
+  //Out.switch_begin("NextFSMState");
   Out << VM->getControlBlockStr();
-  // Case default.
-  Out << "default:  NextFSMState <= state_idle;\n";
-  Out.switch_end();
-  Out.else_begin("// else disable all resources\n");
-  emitFUCtrlForState(Out, 0);
-  Out << "`ifdef __VERILATOR_SIM_DEBUG\n"
-         "$display(\"Module dis-active " << MF->getFunction()->getName()
-      << "\\n\");\n"
-         "`endif\n";
-  Out.exit_block("// end control block\n");
+
+  VM->printSlotCtrls(Out);
+
   Out.always_ff_end();
 
   Out.module_end();
@@ -551,57 +483,47 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
 void RTLCodegen::emitIdleState() {
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
-  // Idle state
-  verilogParam(VM->getStateDeclBuffer(), "state_idle", TotalFSMStatesBit, 0);
-  CtrlS.match_case("state_idle");
+  CtrlS.if_begin(getucStateEnable(0), "// Idle state\n");
+  //CtrlS.match_case("state_idle");
   // Idle state is always ready.
   CtrlS.if_begin("start");
-
-  CtrlS << "`ifdef __VERILATOR_SIM_DEBUG\n"
-           "$display(\"Module start " << MF->getFunction()->getName()
-        << "\\n\");\n"
-           "`endif\n";
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
+  VASTSlot *IdleSlot = VM->getSlot(0);
+  VASTValue &StartPort = VM->getPort(VASTModule::Start);
+  IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
+                        &StartPort);
+  IdleSlot->addNextSlot(0, VASTCnd(&StartPort, true));
+
+  // Always Disable the finish signal.
+  IdleSlot->addDisable(&VM->getPort(VASTModule::Finish));
   emitFirstCtrlState(EntryBB);
-  emitNextFSMState(CtrlS, EntryBB);
-  //
-  CtrlS.else_begin();
-  CtrlS << "NextFSMState <= state_idle;\n";
   // End if-else
   CtrlS.exit_block();
-  emitFUCtrlForState(CtrlS, 0);
-  // End case.
-  CtrlS.exit_block();
+  // End idle state.
+  CtrlS.exit_block("// End idle state\n");
 }
 
 void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
-  std::string StateName = getStateName(&MBB);
   unsigned totalSlot = FInfo->getTotalSlotFor(&MBB);
   unsigned II = FInfo->getIIFor(&MBB);
+  unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
   PredMapTy NextStatePred;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
-  //unsigned StartSlot = State->getSlot(), EndSlot = State->getEndSlot();
-  VM->getStateDeclBuffer() << "// State for " << StateName << '\n';
-  verilogParam(VM->getStateDeclBuffer(), StateName, TotalFSMStatesBit,
-               ++CurFSMStateNum);
-
   // State information.
-  CtrlS << "// " << StateName << " Total Slot: " << totalSlot
-                 << " II: " << II;
+  CtrlS << "// BB#" << MBB.getNumber() << " Total Slot: " << totalSlot
+        << " II: " << II;
   if (II != totalSlot) CtrlS << " pipelined";
   CtrlS << '\n';
 
-  // Mirco state enable.
-  createucStateEnable(&MBB);
-
-  // Case begin
-  CtrlS.match_case(StateName);
-
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
+  ucState FstCtrl(I);
+  if (FstCtrl.empty())
+    emitSlotsForEmptyState(FstCtrl.getSlot(), EndSlot, II);
+
   // FIXME: Refactor the loop.
   while(++I != E) {
     ucState CurDatapath = *I;
@@ -611,20 +533,11 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
     // Emit next ucOp.
     ucState NextControl = *++I;
     CtrlS << "// Slot " << NextControl.getSlot() << '\n';
+    if (NextControl.empty())
+      emitSlotsForEmptyState(NextControl.getSlot(), EndSlot, II);
+
     emitCtrlOp(NextControl, NextStatePred);
   };
-
-  CtrlS << "// Next micro state.\n";
-  PredMapTy::iterator at = NextStatePred.find(&MBB);
-  if (at != NextStatePred.end())
-    emitNextMicroState(CtrlS, &MBB, at->second, false);
-  else
-    emitNextMicroState(CtrlS, &MBB, "1'b0", false);
-
-  emitFUCtrlForState(CtrlS, &MBB);
-
-  // Case end
-  CtrlS.exit_block();
 }
 
 void RTLCodegen::emitCommonPort(unsigned FNNum) {
@@ -760,146 +673,8 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
 RTLCodegen::~RTLCodegen() {}
 
 //===----------------------------------------------------------------------===//
-void RTLCodegen::createucStateEnable(MachineBasicBlock *MBB)  {
-  std::string StateName = getStateName(MBB);
-  // We do not need the last state.
-  unsigned totalSlot = FInfo->getTotalSlotFor(MBB);
-
-  // current state
-  VM->addRegister("cur_" + StateName + "_enable", totalSlot);
-}
-
-void RTLCodegen::emitNextFSMState(raw_ostream &ss,  MachineBasicBlock *DstBB) {
-  // Only jump to other state if target MBB is not current MBB.
-  ss << "NextFSMState <= " << getStateName(DstBB) << ";\n";
-  emitNextMicroState(VM->getControlBlockBuffer(), DstBB, "1'b1", true);
-
-  ss << "`ifdef __VERILATOR_SIM_DEBUG\n"
-        "$display(\"NextState: %x\", " << getStateName(DstBB) <<");\n"
-        "`endif\n";
-}
-
-void RTLCodegen::emitNextMicroState(raw_ostream &ss, MachineBasicBlock *MBB,
-                                    const std::string &NewState,
-                                    bool clearState) {
-  // We do not need the last state.
-  unsigned totalSlot = FInfo->getTotalSlotFor(MBB);
-  std::string StateName = getucStateEnableName(MBB);
-  ss << StateName << " <= ";
-
-  if (totalSlot > 1) {
-    ss << "{ ";
-    if (clearState) // Disable all micro state.
-      ss << (totalSlot - 1) << "'b0";
-    else // Keep the old micro state.
-      ss << StateName << verilogBitRange(totalSlot - 1);
-
-    ss << ", ";
-  }
-
-  ss << NewState;
-
-  if (totalSlot > 1)
-    ss << " }";
-
-  ss << ";\n";
-
-  ss << "`ifdef __VERILATOR_SIM_DEBUG\n"
-        "$display(\"" << StateName << ": %x\", " << StateName <<");\n"
-        "`endif\n";
-}
-
-template<enum VFUs::FUTypes Ty, typename GetEnableNameFunc>
-void RTLCodegen::emitFUEnableForState(vlang_raw_ostream &CtrlS,
-                                      MachineBasicBlock *CurBB,
-                                      unsigned startSlot, unsigned endSlot,
-                                      GetEnableNameFunc GetEnableName) {
-  // Emit function unit control.
-  for (VFInfo::const_id_iterator I = FInfo->id_begin(Ty), E = FInfo->id_end(Ty);
-       I != E; ++I) {
-    FuncUnitId Id = *I;
-    CtrlS << "// " << Id << " control for next micro state.\n";
-    CtrlS << GetEnableName(Id.getFUNum()) << " <= 1'b0";
-    // Resource control operation when in the current state.
-    for (unsigned i = startSlot + 1, e = endSlot; i < e; ++i) {
-      if (ucOperand *Pred = (ucOperand*)FInfo->getFUPredAt(Id, i)) {
-        CtrlS << " | (";
-        printPredicate(*Pred, CtrlS);
-        CtrlS  << " & " << getucStateEnable(CurBB, i - 1) << ')';
-      }
-    }
-
-    CtrlS << ";\n";
-  }
-}
-
-template<enum VFUs::FUTypes T, typename GetReadyNameFunc>
-void RTLCodegen::emitWaitFUReadyForState(MachineBasicBlock *CurBB,
-                                         unsigned Latency,
-                                         unsigned startSlot, unsigned endSlot,
-                                         GetReadyNameFunc GetReadyName) {
-  for (VFInfo::const_id_iterator I = FInfo->id_begin(T), E = FInfo->id_end(T);
-       I != E; ++I) {
-     FuncUnitId Id = *I;
-    // Build the ready predicate for waiting membus ready.
-    // We expect all operation will finish before the FSM jump to another state,
-    // so we do not need to worry about if we need to wait the memory operation
-    // issued from the previous state.
-    for (unsigned i = startSlot + Latency, e = endSlot + 1; i != e; ++i)
-      if (ucOperand *Pred = (ucOperand*)FInfo->getFUPredAt(Id, i - Latency)){
-        std::string PredS = "~ (";
-        raw_string_ostream SS(PredS);
-        SS << getucStateEnable(CurBB, i - 1) << " & ";
-        printPredicate(*Pred, SS);
-        SS <<  ") | " << GetReadyName(Id.getFUNum());
-        SS.flush();
-        addReadyPred(PredS);
-      }
-  }
-}
-
-static std::string GetMemBusEnableName(unsigned FUNum) {
-  return VFUMemBus::getEnableName(FUNum) + "_r";
-}
-
-void RTLCodegen::emitFUCtrlForState(vlang_raw_ostream &CtrlS,
-                                    MachineBasicBlock *CurBB) {
-  unsigned startSlot = 0, endSlot = 0;
-  // Get the slot information for no-idle state.
-  if (CurBB) {
-    startSlot = FInfo->getStartSlotFor(CurBB);
-    endSlot = FInfo->getEndSlotFor(CurBB);
-  }
-
-  emitFUEnableForState<VFUs::MemoryBus>(CtrlS, CurBB, startSlot, endSlot,
-                                        GetMemBusEnableName);
-  emitFUEnableForState<VFUs::BRam>(CtrlS, CurBB, startSlot, endSlot,
-                                   VFUBRam::getEnableName);
-  emitFUEnableForState<VFUs::CalleeFN>(CtrlS, CurBB, startSlot, endSlot,
-                                       GetCalleeFNEnableNameFtor(this));
-
-  unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
-  emitWaitFUReadyForState<VFUs::MemoryBus>(CurBB, MemBusLatency,
-                                           startSlot, endSlot,
-                                           VFUMemBus::getReadyName);
-
-  // DirtyHack: Set the callee function latency to 1.
-  emitWaitFUReadyForState<VFUs::CalleeFN>(CurBB, 1, startSlot, endSlot,
-                                          GetCalleeFNReadyNameFtor(this));
-
-  // Control the finish port
-  CtrlS << "// Finish port control\n";
-  CtrlS << "fin <= 1'b0";
-  // The return instruction is not predicatable.
-  if (FInfo->getFUPredAt(VFUs::FSMFinish, endSlot))
-    CtrlS << " | " << getucStateEnable(CurBB, endSlot - 1);
-
-  CtrlS << ";\n";
-}
-
-bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
+void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
-  bool IsRet = false;
   MachineBasicBlock *CurBB = State->getParent();
   unsigned startSlot = FInfo->getStartSlotFor(CurBB);
   unsigned IISlot = FInfo->getIISlotFor(CurBB);
@@ -909,13 +684,16 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
-    unsigned Slot = Op->getPredSlot();
-    assert(Slot != startSlot && "Unexpected first slot!");
+
+    unsigned SlotNum = Op->getPredSlot();
+    VASTSlot *CurSlot = VM->getSlot(SlotNum - 1);
+
+    assert(SlotNum != startSlot && "Unexpected first slot!");
     // Emit the control operation at the rising edge of the clock.
     std::string SlotPred = "(";
     raw_string_ostream SlotPredSS(SlotPred);
 
-    SlotPredSS << getucStateEnable(CurBB, Slot - 1) << ')';
+    SlotPredSS << getucStateEnable(SlotNum - 1) << ')';
 
     // Emit the predicate operand.
     SlotPredSS << " & ";
@@ -924,17 +702,18 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     // Special case for state transferring operation.
     if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
       SlotPredSS << " & ";
-      printPredicate(Op.getOperand(0), SlotPredSS);
+      ucOperand &CndOp = Op.getOperand(0);
+      printPredicate(CndOp, SlotPredSS);
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
+      unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
+      assert(Op.getPredicate().getReg() == 0 && "Cannot handle predicated BrCnd");
+      VASTCnd Cnd(VM->getVASTValue(CndOp.getReg()), CndOp.isPredicateInverted());
+      CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
       SlotPredSS.flush();
       CtrlS.if_begin(SlotPred);
-      if (TargetBB == CurBB) // Self loop detected.
-        CtrlS << "// Loop back to entry.\n";
-      else
-        // Transfer to other state.
-        emitNextFSMState(CtrlS, TargetBB);
+      if (TargetBB == CurBB) CtrlS << "// Loop back to entry.\n";
 
       // Emit the first micro state of the target state.
       emitFirstCtrlState(TargetBB);
@@ -949,10 +728,10 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     // looping back.
     if (Op->getOpcode() == VTM::VOpMvPhi) {
       MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
-      unsigned CndSlot = Slot - II;
+      unsigned CndSlot = SlotNum - II;
       SlotPredSS << " & (";
       if (TargetBB == CurBB && CndSlot > startSlot)
-        SlotPredSS << getucStateEnable(CurBB, CndSlot - 1);
+        SlotPredSS << getucStateEnable(CndSlot - 1);
       else {
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
         SlotPredSS << PredMap.find(TargetBB)->second;
@@ -966,16 +745,17 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
     // Emit the operations.
     switch (Op->getOpcode()) {
-    case VTM::VOpInternalCall:  emitOpInternalCall(Op);       break;
+    case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
     case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
-    case VTM::VOpRet:           emitOpRet(Op); IsRet = true;  break;
-    case VTM::VOpMemTrans:      emitOpMemTrans(Op);           break;
+    case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
+    case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
     case VTM::VOpBRam:          emitOpBRam(Op);               break;
     case VTM::VOpAdd:           emitOpAdd(Op);                break;
     case VTM::VOpMult:          emitOpMult(Op);               break;
     case VTM::VOpSHL:           emitOpShift(Op, "<<");       break;
     case VTM::VOpSRL:           emitOpShift(Op, ">>");       break;
     case VTM::VOpSRA:           emitOpShift(Op, ">>>");       break;
+    case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot);    break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
@@ -987,13 +767,12 @@ bool RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::COPY:             emitOpCopy(Op);               break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
-    case VTM::VOpReadReturn:    emitOpReadReturn(Op);         break;
+    case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot);break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
     CtrlS.exit_block();
   }
-  return IsRet;
 }
 
 void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
@@ -1160,6 +939,26 @@ void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   OS << ";\n";
 }
 
+void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
+  FuncUnitId Id = OpRdFU->getFUId();
+  VASTValue *ReadyPort = 0;
+
+  switch (Id.getFUType()) {
+  case VFUs::MemoryBus:
+    ReadyPort = VM->getVASTValue(VFUMemBus::getReadyName(Id.getFUNum()));
+    break;
+  default:
+    break;
+  }
+
+  if (ReadyPort) {
+    CurSlot->addReady(ReadyPort, VASTCnd::Create(VM, OpRdFU.getPredicate()));
+  }
+  // The dst operand of ReadFU change to immediate if it is dead.
+  if (OpRdFU.getOperand(0).isReg())
+    emitOpCopy(OpRdFU);
+}
+
 void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   VM->getControlBlockBuffer() << "// Connect wire in datapath.\n";
 
@@ -1172,26 +971,36 @@ void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   OS << ";\n";
 }
 
-void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol) {
+void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot) {
   raw_ostream &OS = VM->getControlBlockBuffer();
   OpReadSymbol.getOperand(0).print(OS);
+  unsigned FNNum = OpReadSymbol.getOperand(1).getTargetFlags();
   // The FNNum is encoded into the target flags field of the MachineOperand.
   OS << " <= "
-    << getSubModulePortName(OpReadSymbol.getOperand(1).getTargetFlags(),
-    OpReadSymbol.getOperand(1).getSymbolName());
+    << getSubModulePortName(FNNum, OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
+
+  VASTCnd Pred = VASTCnd::Create(VM, OpReadSymbol.getPredicate());
+  std::string FinPortName = getSubModulePortName(FNNum, "fin");
+  VASTValue *FinSignal = VM->getVASTSymbol(FinPortName);
+  CurSlot->addReady(FinSignal, Pred);
 }
 
-void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
+void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
   // Assign input port to some register.
   raw_ostream &OS = VM->getControlBlockBuffer();
   const char *CalleeName = OpInternalCall.getOperand(1).getSymbolName();
   // The FNNum is encoded into the target flags field of the MachineOperand.
   unsigned FNNum = OpInternalCall.getOperand(1).getTargetFlags();
   OS << "// Calling function: " << CalleeName << ";\n";
-  OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
-        "$display(\"" << "Calling function: " << CalleeName << "\\n\");\n"
-        "`endif\n";
+
+  VASTCnd Pred = VASTCnd::Create(VM, OpInternalCall.getPredicate());
+  std::string StartPortName = getSubModulePortName(FNNum, "start");
+  VASTValue *StartSignal = VM->getVASTSymbol(StartPortName);
+  CurSlot->addEnable(StartSignal, Pred);
+  VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
+  NextSlot->addDisable(StartSignal, Pred);
+
   if (const Function *FN = M->getFunction(CalleeName)) {
     if (!FN->isDeclaration()) {
       Function::const_arg_iterator ArgIt = FN->arg_begin();
@@ -1257,13 +1066,10 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall) {
   OS << VFUs::startModule(Name, FInfo->getCalleeFNNum(CalleeName), InPorts);
 }
 
-void RTLCodegen::emitOpRet(ucOp &OpArg) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
-        "$display(\"Module finish " << MF->getFunction()->getName()
-     << "\\n\");\n"
-        "`endif\n";
-  OS << "NextFSMState <= state_idle;\n";
+void RTLCodegen::emitOpRet(ucOp &OpArg, VASTSlot *CurSlot) {
+  // Go back to the idle slot.
+  CurSlot->addNextSlot(0);
+  CurSlot->addEnable(&VM->getPort(VASTModule::Finish));
 }
 
 void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
@@ -1281,7 +1087,7 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
         "`endif\n";
 }
 
-void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
+void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
   unsigned FUNum = OpMemAccess->getFUId().getFUNum();
   VASTDatapath *data = VM->createDatapath();
   VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
@@ -1307,6 +1113,17 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess) {
   OS << VFUMemBus::getByteEnableName(FUNum) << "_r <= ";
   OpMemAccess.getOperand(4).print(OS);
   OS << ";\n";
+
+  // Remember we enabled the memory bus at this slot.
+  std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
+  VASTValue *MemEn = VM->getVASTValue(EnableName);
+  VASTCnd Pred = VASTCnd::Create(VM, OpMemAccess.getPredicate());
+  CurSlot->addEnable(MemEn, Pred);
+
+  // Disable the memory at next slot.
+  // TODO: Assert the control flow is linear.
+  VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
+  NextSlot->addDisable(MemEn, Pred);
 }
 
 void RTLCodegen::emitOpBRam(ucOp &OpBRam) {

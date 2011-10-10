@@ -19,7 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/VerilogAST.h"
-#include "vtm/Passes.h"
+#include "vtm/MicroState.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
@@ -78,7 +78,9 @@ std::string llvm::verilogConstToStr(Constant *CPV) {
 std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
                                     bool isMinValue) {
   std::stringstream pc;
-  pc <<bitwidth<< "'h";
+  pc <<bitwidth<< '\'';
+  if (bitwidth == 1) pc << 'b';
+  else               pc << "h";
   // Mask the value that small than 4 bit to prevent printing something
   // like 1'hf out.
   if (bitwidth < 4)
@@ -145,12 +147,123 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
   return ss;
 }
 
+VASTCnd VASTCnd::Create(VASTModule *M, ucOperand &Op) {
+  VASTCnd Cnd(M->getVASTValue(Op.getReg()), Op.isPredicateInverted());
+  return Cnd;
+}
+
+void VASTSymbol::print(raw_ostream &OS) const {
+
+}
+
+void VASTCnd::print(raw_ostream &OS) const {
+  if (isInverted()) OS << '~';
+  if (VASTValue *V = getCndVal()) OS << V->getName();
+  else                            OS << "1'b1";
+}
+
+void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTCnd Cnd) {
+  bool Inserted = NextSlots.insert(std::make_pair(NextSlotNum, Cnd)).second;
+  assert(Inserted && "NextSlot already existed!");
+  (void) Inserted;
+}
+
+void VASTSlot::addEnable(const VASTValue *V, VASTCnd Cnd) {
+  bool Inserted = Enables.insert(std::make_pair(V, Cnd)).second;
+  assert(Inserted && "NextSlot already existed!");
+  (void) Inserted;
+}
+
+void VASTSlot::addReady(const VASTValue *V, VASTCnd Cnd /* = VASTCnd */) {
+  bool Inserted = Readys.insert(std::make_pair(V, Cnd)).second;
+  assert(Inserted && "NextSlot already existed!");
+  (void) Inserted;
+}
+
+void VASTSlot::addDisable(const VASTValue *V, VASTCnd Cnd) {
+  bool Inserted = Disables.insert(std::make_pair(V, Cnd)).second;
+  assert(Inserted && "NextSlot already existed!");
+  (void) Inserted;
+}
+
+void VASTSlot::printActive(raw_ostream &OS) const {
+  OS << "wire " << getName() << "Active = " << getName();
+  for (VASTSlot::const_fu_ctrl_it I = ready_begin(), E = ready_end();
+        I != E; ++I) {
+    OS << " & " << I->first->getName() << " & ";
+    I->second.print(OS);
+  }
+
+  OS << ";// Are all waiting resources ready?\n";
+}
+
+void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
+  CtrlS.if_begin(getName());
+  std::string SlotReady = getName() + "Active";
+
+  // Enable next slot only when resources are ready.
+  if (!readyEmpty())
+    CtrlS.if_begin(SlotReady);
+
+  bool hasSelfLoop = false;
+  if (hasExplicitNextSlots()) {
+    CtrlS << "// Enable the successor slots.\n";
+    for (VASTSlot::const_succ_iterator I = succ_begin(),E = succ_end();
+         I != E; ++I) {
+      hasSelfLoop |= I->first == getSlotNum();
+      CtrlS << Mod.getSlot(I->first)->getName() << " <= ";
+      I->second.print(CtrlS);
+      CtrlS << ";\n";
+    }
+  } else {
+    CtrlS << "// Enable the default successor slots.\n";
+    CtrlS << Mod.getSlot(getSlotNum() + 1)->getName() << " <= 1'b1;\n";
+  }
+
+  // Do not assign a value to the current slot enable twice.
+  if (!hasSelfLoop) {
+    CtrlS << "// Disable the current slot.\n";
+    CtrlS << getName() << " <= 1'b0;\n";
+  }
+
+  SmallPtrSet<const VASTValue*, 4> EnabledPorts;
+  CtrlS << "// Enable the active FUs.\n";
+  for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
+       I != E; ++I) {
+    // We may try to enable and disable the same port at the same slot.
+    CtrlS << I->first->getName() << " <= ";
+    I->second.print(CtrlS);
+    CtrlS << ";\n";
+  }
+
+  if (!readyEmpty()) CtrlS.exit_block("// End resource ready.\n");
+
+  if (!disableEmpty()) {
+    CtrlS << "// Disable the resources when the condition is true.\n";
+    for (VASTSlot::const_fu_ctrl_it I = disable_begin(), E = disable_end();
+         I != E; ++I) {
+      bool Enabled = isEnabled(I->first);
+      if (Enabled) {
+        assert(!readyEmpty() && "Port conflict cannot be resolved!");
+        CtrlS.if_begin("~" + SlotReady, "// Resolve the conflict\n");
+      }
+
+      CtrlS << I->first->getName() << " <= ~";
+      I->second.print(CtrlS);
+      CtrlS << ";\n";
+      if (Enabled) CtrlS.exit_block();
+    }
+  }
+  CtrlS.exit_block("\n\n");
+}
+
 VASTModule::~VASTModule() {
   // Release all ports.
-  std::for_each(Ports.begin(), Ports.end(), deleter<VASTPort>);
   Ports.clear();
-  std::for_each(Signals.begin(), Signals.end(), deleter<VASTSignal>);
   Signals.clear();
+  Slots.clear();
+  Allocator.Reset();
+  SymbolTable.clear();
 
   delete &(StateDecl.str());
   delete &(DataPath.str());
@@ -171,6 +284,20 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
   }
 }
 
+void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
+  CtrlS << "\n\n// Slot control flow\n";
+
+  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
+    if (VASTSlot *S = *I) S->printCtrl(CtrlS, *this);
+}
+
+void VASTModule::printSlotActives(raw_ostream &OS) const {
+  OS << "\n\n// Slot Active Signal\n";
+
+  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
+    if (VASTSlot *S = *I) S->printActive(OS);
+}
+
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
   OS << "module " << getName() << "(\n";
   Ports.front()->print(OS.indent(4));
@@ -189,6 +316,12 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
     OS << "\n";
   }
   
+  // And Slots
+  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
+    if (VASTSlot *S = *I) {
+      S->printDecl(OS);
+      OS << "\n";
+    }
 }
 
 void VASTModule::printRegisterReset(raw_ostream &OS) {
@@ -210,10 +343,88 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
       OS << "\n";
     }
   }
+
+  // And Slots
+  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
+    if (VASTSlot *S = *I) {
+      S->printReset(OS);
+      OS << "\n";
+    }
 }
 
 void VASTModule::print(raw_ostream &OS) const {
   // Print the verilog module?
+}
+
+
+VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
+                                   PortTypes T /*= Others*/,
+                                   const std::string &Comment /*= ""*/ ) {
+  VASTPort *Port
+    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, true, false,
+                                                    Comment);
+  insertVASTValue(Name, Port);
+  if (T < SpecialInPortEnd) {
+    assert(Ports[T] == 0 && "Special port exist!");
+    Ports[T] = Port;
+    return Port;
+  }
+
+  // Return port is a output port.
+  assert(T < RetPort && "Wrong port type!");
+  if (T == ArgPort) {
+    assert(NumArgPorts == Ports.size() - NumSpecialPort
+      && "Unexpected port added before arg port!");
+    ++NumArgPorts;
+  }
+
+  Ports.push_back(Port);
+  return Port;
+}
+
+
+VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
+                                    PortTypes T /*= Others*/, bool isReg /*= true*/,
+                                    const std::string &Comment /*= ""*/ ) {
+  VASTPort *Port
+    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, false, isReg,
+                                                    Comment);
+  if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
+    assert(Ports[T] == 0 && "Special port exist!");
+    Ports[T] = Port;
+    return Port;
+  }
+
+  assert(T <= RetPort && "Wrong port type!");
+  if (T == RetPort) {
+    RetPortIdx = Ports.size();
+    assert(RetPortIdx == NumArgPorts + NumSpecialPort
+      && "Unexpected port added before return port!");
+  }
+
+  Ports.push_back(Port);
+  insertVASTValue(Name, Port);
+  return Port;
+}
+
+VASTSignal *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
+                                    const std::string &Comment /*= ""*/ ) {
+  VASTSignal *Reg
+    = new (Allocator.Allocate<VASTSignal>()) VASTSignal(Name, BitWidth, true,
+                                                        Comment);
+  Signals.push_back(Reg);
+  insertVASTValue(Name, Reg);
+  return Reg;
+}
+
+VASTSignal *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
+                                const std::string &Comment /*= ""*/ ) {
+  VASTSignal *Signal =
+    new (Allocator.Allocate<VASTSignal>()) VASTSignal(Name, BitWidth, false,
+                                                      Comment);
+  Signals.push_back(Signal);
+  insertVASTValue(Name, Signal);
+  return Signal;
 }
 
 // Out of line virtual function to provide home for the class.
@@ -289,8 +500,8 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 
   OS << ' ' << getName();
 
-  if (isRegister())
-    OS << " = " << verilogConstToStr(0, getBitWidth(), false);
+//  if (isRegister())
+//    OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
 }
