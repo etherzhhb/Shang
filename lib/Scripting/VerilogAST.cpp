@@ -29,6 +29,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/ErrorHandling.h"
 
+#include <set>
 #include <algorithm>
 #include <sstream>
 
@@ -205,18 +206,35 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.if_begin(getName());
   std::string SlotReady = getName() + "Ready";
   bool ReadyPresented = !readyEmpty();
+  // The SlotReady signal for a ready empty slot is just constant 1.
+  if (!ReadyPresented) SlotReady += "/*1'b1*/";
+
+  // DirtyHack: Remember the enabled signals in alias slots, the signal may be
+  // assigned at a alias slot.
+  std::set<const VASTValue*> AliasEnables;
 
   if (StartSlot != EndSlot) {
-     raw_string_ostream SS(SlotReady);
-     for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
-       if (slot == getSlotNum()) continue;
+    raw_string_ostream SS(SlotReady);
+    CtrlS << "// Alias slots: ";
 
-       if (!Mod.getSlot(slot)->readyEmpty()) {
-         SS << " & ( ~Slot" << slot << " | Slot" << slot << "Ready)";
-         ReadyPresented = true;
-       }
-     }
-  }
+    for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
+      CtrlS << slot << ", ";
+      if (slot == getSlotNum()) continue;
+
+      const VASTSlot *AliasSlot = Mod.getSlot(slot);
+
+      for (VASTSlot::const_fu_ctrl_it I = AliasSlot->enable_begin(),
+           E = AliasSlot->enable_end(); I != E; ++I)
+        AliasEnables.insert(I->first);
+
+      if (!Mod.getSlot(slot)->readyEmpty()) {
+        SS << " & ( ~Slot" << slot << " | Slot" << slot << "Ready)";
+        ReadyPresented = true;
+      }
+    }
+
+    CtrlS << '\n';
+  } // SS flushes automatically here.
 
   // Enable next slot only when resources are ready.
   if (ReadyPresented)
@@ -259,7 +277,8 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS << "// Disable the resources when the condition is true.\n";
     for (VASTSlot::const_fu_ctrl_it I = disable_begin(), E = disable_end();
          I != E; ++I) {
-      bool Enabled = isEnabled(I->first);
+      // Look at the current enable set and alias enables set;
+      bool Enabled = isEnabled(I->first) || AliasEnables.count(I->first);
       if (Enabled) {
         assert(ReadyPresented && "Port conflict cannot be resolved!");
         CtrlS.if_begin("~" + SlotReady, "// Resolve the conflict\n");
