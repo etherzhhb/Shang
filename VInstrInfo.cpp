@@ -738,7 +738,8 @@ bool VInstrInfo::isCopyLike(unsigned Opcode, bool IncludeMoveImm) {
          || Opcode == VTM::VOpMove_rs
          || Opcode == VTM::VOpMove_rw
          || Opcode == VTM::VOpSel
-         || Opcode == VTM::VOpReadReturn;
+         || Opcode == VTM::VOpReadReturn
+         || Opcode == VTM::VOpReadFU;
 }
 
 bool VInstrInfo::isBrCndLike(unsigned Opcode) {
