@@ -244,7 +244,8 @@ public:
       StartSlot(slotNum), EndSlot(slotNum), II(~0) {}
 
   void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
-  void printActive(raw_ostream &OS) const;
+  void printActive(raw_ostream &OS, const VASTModule &Mod) const;
+  void printReady(raw_ostream &OS) const;
 
   unsigned getSlotNum() const { return SlotNum; }
 

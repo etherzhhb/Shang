@@ -187,14 +187,33 @@ void VASTSlot::addDisable(const VASTValue *V, VASTCnd Cnd) {
   (void) Inserted;
 }
 
-void VASTSlot::printActive(raw_ostream &OS) const {
-  OS << "wire " << getName() << "Ready = 1'b1";
+void VASTSlot::printReady(raw_ostream &OS) const {
+  OS << "1'b1";
   for (VASTSlot::const_fu_ctrl_it I = ready_begin(), E = ready_end();
         I != E; ++I) {
     // If the condition is true then the signal must be 1 to ready.
     OS << " & (" << I->first->getName() << " | ~";
     I->second.print(OS);
     OS << ')';
+  }
+}
+
+void VASTSlot::printActive(raw_ostream &OS, const VASTModule &Mod) const {
+  OS << "wire " << getName() << "Ready = ";
+  printReady(OS);
+
+  if (StartSlot != EndSlot) {
+    for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
+      if (slot == getSlotNum()) continue;
+
+      const VASTSlot *AliasSlot = Mod.getSlot(slot);
+
+      if (!AliasSlot->readyEmpty()) {
+        OS << " & ( ~Slot" << slot << " | (";
+        AliasSlot->printReady(OS);
+        OS << "))";
+      }
+    }
   }
 
   OS << ";// Are all waiting resources ready?\n";
@@ -206,15 +225,12 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.if_begin(getName());
   std::string SlotReady = getName() + "Ready";
   bool ReadyPresented = !readyEmpty();
-  // The SlotReady signal for a ready empty slot is just constant 1.
-  if (!ReadyPresented) SlotReady += "/*1'b1*/";
 
   // DirtyHack: Remember the enabled signals in alias slots, the signal may be
   // assigned at a alias slot.
   std::set<const VASTValue*> AliasEnables;
 
   if (StartSlot != EndSlot) {
-    raw_string_ostream SS(SlotReady);
     CtrlS << "// Alias slots: ";
 
     for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
@@ -227,10 +243,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
            E = AliasSlot->enable_end(); I != E; ++I)
         AliasEnables.insert(I->first);
 
-      if (!Mod.getSlot(slot)->readyEmpty()) {
-        SS << " & ( ~Slot" << slot << " | Slot" << slot << "Ready)";
-        ReadyPresented = true;
-      }
+      ReadyPresented  |= !AliasSlot->readyEmpty();
     }
 
     CtrlS << '\n';
@@ -331,7 +344,7 @@ void VASTModule::printSlotActives(raw_ostream &OS) const {
   OS << "\n\n// Slot Active Signal\n";
 
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) S->printActive(OS);
+    if (VASTSlot *S = *I) S->printActive(OS, *this);
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
