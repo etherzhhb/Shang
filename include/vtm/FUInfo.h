@@ -71,8 +71,8 @@ namespace VFUs {
 class FuncUnitId {
   union {
     struct {
-      VFUs::FUTypes Type  : 4;
-      unsigned  Num : 12;
+      unsigned Type  : 4;
+      unsigned Num : 12;
     } ID;
 
     uint16_t data;
@@ -94,7 +94,7 @@ public:
     UID.data = Data;
   }
 
-  inline VFUs::FUTypes getFUType() const { return UID.ID.Type; }
+  inline VFUs::FUTypes getFUType() const { return VFUs::FUTypes(UID.ID.Type); }
   inline unsigned getFUNum() const { return UID.ID.Num; }
   inline unsigned getData() const { return UID.data; }
   inline bool isUnknownInstance() const { return getFUNum() == 0xfff; }
