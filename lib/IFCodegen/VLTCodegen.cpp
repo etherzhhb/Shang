@@ -283,6 +283,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   // Reset if necessary.
   Out << "// Reset the module if we first time invoke the module.\n";
   Out.if_begin("sim_time == 0");
+  evalHalfCycle();
   assignInPort(VASTModule::RST, 0);
   Out.exit_block();
 
@@ -294,7 +295,6 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   evalHalfCycle();
 
   Out << '\n';
-  evalHalfCycle();
   evalHalfCycle();
   Out << "assert(!" << getPortVal(VASTModule::Finish)
          << "&& \"Module finished before start!\");\n";
