@@ -806,19 +806,25 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
       DefMI.removeFromParent();
       continue;
     }
-    assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
 
+    assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
     // Do not remove the operand, just change it to implicit define.
     ucOp Op = ucOp::getParent(DI);
-    // Preserve the read fu information.
-    if (Op->getOpcode() != VTM::VOpReadFU)
-      Op->changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
-    DI.getOperand().ChangeToRegister(0, false);
-    for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
-      // Change the operand to some rubbish value.
-      MachineOperand &MO = *OI;
-      MO.ChangeToImmediate(TargetRegisterInfo::virtReg2Index(SrcReg));
+    SrcReg = TargetRegisterInfo::virtReg2Index(SrcReg);
+
+    // Preserve the read fu information, and keep reading the source fu register
+    if (Op->getOpcode() == VTM::VOpReadFU) {
+      MachineOperand &MO = DI.getOperand();
+      MO.ChangeToImmediate(SrcReg);
       MO.setTargetFlags(64);
+    } else {
+      Op->changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
+      for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
+        // Change the operand to some rubbish value.
+        MachineOperand &MO = *OI;
+        MO.ChangeToImmediate(SrcReg);
+        MO.setTargetFlags(64);
+      }
     }
   }
 }
