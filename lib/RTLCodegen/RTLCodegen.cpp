@@ -963,6 +963,9 @@ void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
   case VFUs::MemoryBus:
     ReadyPort = VM->getVASTValue(VFUMemBus::getReadyName(Id.getFUNum()));
     break;
+  case VFUs::CalleeFN:
+    ReadyPort = VM->getVASTSymbol(getSubModulePortName(Id.getFUNum(), "fin"));
+    break;
   default:
     break;
   }
@@ -995,11 +998,6 @@ void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot) {
   OS << " <= "
     << getSubModulePortName(FNNum, OpReadSymbol.getOperand(1).getSymbolName());
   OS << ";\n";
-
-  VASTCnd Pred = VASTCnd::Create(VM, OpReadSymbol.getPredicate());
-  std::string FinPortName = getSubModulePortName(FNNum, "fin");
-  VASTValue *FinSignal = VM->getVASTSymbol(FinPortName);
-  CurSlot->addReady(FinSignal, Pred);
 }
 
 void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
