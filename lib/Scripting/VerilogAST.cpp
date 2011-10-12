@@ -281,9 +281,9 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
        I != E; ++I) {
     // We may try to enable and disable the same port at the same slot.
-    CtrlS << I->first->getName() << " <= ";
+    CtrlS << "if (";
     I->second.print(CtrlS);
-    CtrlS << ";\n";
+    CtrlS << ") " << I->first->getName() << " <= 1'b1;\n";
   }
 
   if (ReadyPresented) CtrlS.exit_block("// End resource ready.\n");
