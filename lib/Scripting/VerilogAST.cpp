@@ -244,8 +244,11 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
       const VASTSlot *AliasSlot = Mod.getSlot(slot);
 
       for (VASTSlot::const_fu_ctrl_it I = AliasSlot->enable_begin(),
-           E = AliasSlot->enable_end(); I != E; ++I)
-        AliasEnables.insert(I->first);
+           E = AliasSlot->enable_end(); I != E; ++I) {
+        bool inserted = AliasEnables.insert(I->first).second;
+        assert(inserted && "The same signal is enabled twice!");
+        (void) inserted;
+      }
 
       ReadyPresented  |= !AliasSlot->readyEmpty();
     }
@@ -283,16 +286,6 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS << getName() << " <= 1'b0;\n";
   }
 
-  SmallPtrSet<const VASTValue*, 4> EnabledPorts;
-  CtrlS << "// Enable the active FUs.\n";
-  for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
-       I != E; ++I) {
-    // We may try to enable and disable the same port at the same slot.
-    CtrlS << "if (";
-    I->second.print(CtrlS);
-    CtrlS << ") " << I->first->getName() << " <= 1'b1;\n";
-  }
-
   if (ReadyPresented) {
     DEBUG(CtrlS.else_begin();
           if (getSlotNum() != 0)
@@ -300,6 +293,19 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
                   <<  " waiting \");\n";
           );
     CtrlS.exit_block("// End resource ready.\n");
+  } else {
+    // DirtyHack: Check if the memory bus is shooted down.
+    DEBUG(CtrlS << "if (mem0en_r) $display(\"" << getName() << " in "
+                << Mod.getName() << " bad mem0en_r %b\\n\", mem0en_r);\n");
+  }
+
+  CtrlS << "// Enable the active FUs.\n";
+  for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
+       I != E; ++I) {
+    // We may try to enable and disable the same port at the same slot.
+    CtrlS << I->first->getName() << " <= " << SlotReady << " & ";
+    I->second.print(CtrlS);
+    CtrlS << ";\n";
   }
 
   if (!disableEmpty()) {
@@ -307,17 +313,38 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     for (VASTSlot::const_fu_ctrl_it I = disable_begin(), E = disable_end();
          I != E; ++I) {
       // Look at the current enable set and alias enables set;
-      bool Enabled = isEnabled(I->first) || AliasEnables.count(I->first);
-      if (Enabled) {
-        assert(ReadyPresented && "Port conflict cannot be resolved!");
-        CtrlS.if_begin("~" + SlotReady, "// Resolve the conflict\n");
+      // The port assigned at the current slot, and it will be disabled if
+      // The slot is not ready or the enable condition is false. And it is
+      // ok that the port is enabled.
+      if (isEnabled(I->first)) continue;
+
+      // If the port enabled in alias slots, disable it only if others slots is
+      // not active.
+      bool AliasEnabled = AliasEnables.count(I->first);
+      if (AliasEnabled) {
+        std::string AliasDisactive = "1'b1";
+        raw_string_ostream SS(AliasDisactive);
+        for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
+          if (slot == getSlotNum()) continue;
+
+          VASTSlot *ASlot = Mod.getSlot(slot);
+          assert(!ASlot->isDiabled(I->first)
+                 && "Same signal disabled in alias slot!");
+          if (ASlot->isEnabled(I->first)) {
+            SS << " & ~" << ASlot->getName();
+            continue;
+          }
+        }
+
+        SS.flush();
+        CtrlS.if_begin(AliasDisactive, "// Resolve the conflict\n");
       }
 
       CtrlS << "if (";
       I->second.print(CtrlS);
       CtrlS << ") "  << I->first->getName() << " <= 1'b0;\n";
 
-      if (Enabled) CtrlS.exit_block();
+      if (AliasEnabled) CtrlS.exit_block();
     }
   }
   CtrlS.exit_block("\n\n");

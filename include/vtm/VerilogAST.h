@@ -266,6 +266,7 @@ public:
   const_fu_ctrl_it ready_end() const { return Readys.end(); }
 
   void addDisable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
+  bool isDiabled(const VASTValue *V) const { return Disables.count(V); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
   const_fu_ctrl_it disable_end() const { return Disables.end(); }
