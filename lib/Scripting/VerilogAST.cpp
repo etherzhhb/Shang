@@ -28,6 +28,8 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/ErrorHandling.h"
+#define DEBUG_TYPE "verilog-ast"
+#include "llvm/Support/Debug.h"
 
 #include <set>
 #include <algorithm>
@@ -252,8 +254,13 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   } // SS flushes automatically here.
 
   // Enable next slot only when resources are ready.
-  if (ReadyPresented)
-    CtrlS.if_begin(SlotReady);
+  if (ReadyPresented) CtrlS.if_begin(SlotReady);
+
+  DEBUG(
+  if (getSlotNum() != 0)
+    CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
+          << " ready\");\n";
+  );
 
   bool hasSelfLoop = false;
   if (hasExplicitNextSlots()) {
@@ -286,7 +293,14 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS << ") " << I->first->getName() << " <= 1'b1;\n";
   }
 
-  if (ReadyPresented) CtrlS.exit_block("// End resource ready.\n");
+  if (ReadyPresented) {
+    DEBUG(CtrlS.else_begin();
+          if (getSlotNum() != 0)
+            CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
+                  <<  " waiting \");\n";
+          );
+    CtrlS.exit_block("// End resource ready.\n");
+  }
 
   if (!disableEmpty()) {
     CtrlS << "// Disable the resources when the condition is true.\n";
