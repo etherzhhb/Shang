@@ -299,9 +299,10 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
         CtrlS.if_begin("~" + SlotReady, "// Resolve the conflict\n");
       }
 
-      CtrlS << I->first->getName() << " <= ~";
+      CtrlS << "if (";
       I->second.print(CtrlS);
-      CtrlS << ";\n";
+      CtrlS << ") "  << I->first->getName() << " <= 1'b0;\n";
+
       if (Enabled) CtrlS.exit_block();
     }
   }
