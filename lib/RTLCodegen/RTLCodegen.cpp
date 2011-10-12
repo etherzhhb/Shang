@@ -275,6 +275,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
   void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);
+  void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
   void emitOpRetVal(ucOp &OpRetVal);
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
   // Special ucop for connecting wires.
@@ -775,6 +776,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot);break;
+    case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot);break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
 
@@ -814,6 +816,13 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
     default:  assert(0 && "Unexpected opcode!");              break;
     }
   }
+}
+
+void RTLCodegen::emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+  CtrlS << "$display(\"BAD BAD BAD BAD! Run to unreachable\");\n";
+  CtrlS << "$finish();\n";
+  CurSlot->addNextSlot(0);
 }
 
 void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
