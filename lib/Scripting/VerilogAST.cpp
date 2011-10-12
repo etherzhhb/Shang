@@ -158,9 +158,11 @@ void VASTSymbol::print(raw_ostream &OS) const {
 }
 
 void VASTCnd::print(raw_ostream &OS) const {
+  OS << '(';
   if (isInverted()) OS << '~';
   if (VASTValue *V = getCndVal()) OS << V->getName();
   else                            OS << "1'b1";
+  OS << ')';
 }
 
 void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTCnd Cnd) {
