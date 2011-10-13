@@ -342,10 +342,10 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
   isClkEdgeBegin(true);
   // Check membuses.
   unsigned MemBusLatency = getFUDesc<VFUMemBus>()->getLatency();
-  typedef VFInfo::const_id_iterator id_iterator;
-  for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-       E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
-    FuncUnitId ID = *I;
+
+  // Begin membus simulation codegen
+  // DirtyHack: Every design has membus 0.
+    FuncUnitId ID(VFUs::MemoryBus, 0);
     unsigned FUNum = ID.getFUNum();
 
     unsigned Enable = RTLMod->getFUPortOf(ID);
@@ -393,7 +393,7 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
       " sim_time, ready_time);\n"
       "#endif\n";
     Out.exit_block(format("// end next transaction membus%d\n", FUNum));
-  }
+  // End membus simulation codegen.
 
   isClkEdgeEnd(true);
 

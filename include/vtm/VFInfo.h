@@ -42,40 +42,6 @@ class VFInfo : public MachineFunctionInfo {
   };
   std::map<const MachineBasicBlock*, StateSlots> StateSlotMap;
 
-  // Information about allocated function unit.
-  // Mapping FUTypes to allocate function unit identity number.
-  std::set<FuncUnitId> AllocatedFUs[VFUs::NumFUs];
-
-  struct FUActiveSlot {
-    union {
-      struct FUSlot {
-        uint16_t Id;
-        uint16_t Slot;
-      } Struct;
-
-      uint32_t data;
-    } Union;
-
-    inline bool operator==(const FUActiveSlot X) const {
-      return Union.data == X.Union.data;
-    }
-    inline bool operator< (const FUActiveSlot X) const {
-      return Union.data < X.Union.data;
-    }
-
-    FUActiveSlot(FuncUnitId Id = FuncUnitId(), unsigned Slot = 0) {
-      Union.Struct.Id = Id.getData();
-      Union.Struct.Slot = Slot;
-    }
-  };
-
-  typedef std::map<FUActiveSlot, MachineOperand> FUActiveSlotMapTy;
-  FUActiveSlotMapTy ActiveSlotMap;
-  // FIXME: Consider pipelined loop.
-  void remeberActiveSlot(FuncUnitId Id, unsigned Slot, MachineOperand Pred) {
-    ActiveSlotMap.insert(std::make_pair(FUActiveSlot(Id, Slot), Pred));
-  }
-
   // Remember the scheduled slot of PHI nodes, it will lose after PHIElemination.
   typedef std::map<const MachineInstr*,
                    std::pair<int, const MachineBasicBlock*> >
@@ -181,39 +147,6 @@ public:
 
   std::pair<int, const MachineBasicBlock*>
     lookupPHISlot(const MachineInstr *PN) const;
-  /// Information for allocated function units.
-
-  void rememberAllocatedFU(FuncUnitId Id, unsigned EmitSlot, unsigned FinshSlot,
-                           MachineOperand Pred);
-
-  typedef std::set<FuncUnitId>::const_iterator const_id_iterator;
-
-  const_id_iterator id_begin(VFUs::FUTypes FUType = VFUs::AllFUType) const {
-    assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
-    assert(FUType < VFUs::NumFUs && "Bad FUType!");
-
-    return AllocatedFUs[FUType].begin();
-  }
-
-  const_id_iterator id_end(VFUs::FUTypes FUType = VFUs::AllFUType) const {
-    assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
-    assert(FUType < VFUs::NumFUs && "Bad FUType!");
-
-    return AllocatedFUs[FUType].end();
-  }
-
-  // Get the number of used function units in the current MachineFunction.
-  bool getNumFUs(VFUs::FUTypes FUType = VFUs::AllFUType) const {
-    assert(FUType != VFUs::AllFUType && "AllFUType not supported now!");
-    assert(FUType < VFUs::NumFUs && "Bad FUType!");
-
-    return AllocatedFUs[FUType].size();
-  }
-
-  MachineOperand *getFUPredAt(FuncUnitId Id, unsigned Slot) {
-    FUActiveSlotMapTy::iterator at = ActiveSlotMap.find(FUActiveSlot(Id, Slot));
-    return at == ActiveSlotMap.end() ? 0 : &at->second;
-  }
 
   //const char *allocateSymbol(const std::string &Str) {
   //  PooledStringPtr PSP = SymbolPool.intern(Str.c_str());

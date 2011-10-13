@@ -473,15 +473,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     Ops[i] = getRegUseOperand(MO, ReadSlot);
   }
 
-  // Remember the predicate of the function unit enable signal.
-  if (IsCtrl) {
-    // FIXME: Iterate over the live time of the FU and get the right predicate
-    // operand with getRegUseOperand.
-    // Remember the active slot.
-    if (FUId.isBound())
-      VFI.rememberAllocatedFU(FUId, SchedSlot.getSlot(), FinSlot, Ops[1]);
-  }
-
   MachineInstrBuilder Builder(&getMIAt(SchedSlot));
 
   for (OperandVector::iterator I = Ops.begin(), E = Ops.end(); I != E; ++I)
@@ -603,10 +594,6 @@ void VSchedGraph::emitSchedule() {
 
   for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *A = *I;
-    // Special case: Ret instruction use the function unit "FSMFinish".
-    if (A->getOpcode() == VTM::VOpRet)
-      VFI->rememberAllocatedFU(VFUs::FSMFinish, A->getSlot(), A->getSlot()+1,
-                               ucOperand::CreatePredicate());
 
     if (A->getSlot() != CurSlot)
       CurSlot = StateBuilder.advanceToSlot(CurSlot, A->getSlot());

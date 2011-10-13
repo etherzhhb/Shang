@@ -561,9 +561,6 @@ void RTLCodegen::emitCommonPort(unsigned FNNum) {
 }
 
 void RTLCodegen::emitAllocatedFUs() {
-  // Dirty Hack: only Memory bus supported at this moment.
-  typedef VFInfo::const_id_iterator id_iterator;
-
   //for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
   //     E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
   // FIXME: In fact, *I return the FUId instead of FUNum.
@@ -573,18 +570,18 @@ void RTLCodegen::emitAllocatedFUs() {
   //}
 
   raw_ostream &S = VM->getDataPathBuffer();
-  VFUBRam *BlockRam = getFUDesc<VFUBRam>();
+  //VFUBRam *BlockRam = getFUDesc<VFUBRam>();
 
-  for (id_iterator I = FInfo->id_begin(VFUs::BRam),
-       E = FInfo->id_end(VFUs::BRam); I != E; ++I) {
-    FuncUnitId ID = *I;
-    const VFInfo::BRamInfo &Info = FInfo->getBRamInfo(ID.getFUNum());
+  //for (id_iterator I = FInfo->id_begin(VFUs::BRam),
+  //     E = FInfo->id_end(VFUs::BRam); I != E; ++I) {
+  //  FuncUnitId ID = *I;
+  //  const VFInfo::BRamInfo &Info = FInfo->getBRamInfo(ID.getFUNum());
 
-    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), ID.getFUNum(),
-                                Info.ElemSizeInBytes * 8,
-                                Log2_32_Ceil(Info.NumElem))
-      << '\n';
-  }
+  //  S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), ID.getFUNum(),
+  //                              Info.ElemSizeInBytes * 8,
+  //                              Log2_32_Ceil(Info.NumElem))
+  //    << '\n';
+  //}
 
   typedef VFInfo::const_fn_iterator fn_iterator;
   for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I) {
