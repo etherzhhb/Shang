@@ -63,10 +63,10 @@ public:
       : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes) {}
   };
 
-private:
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
+  typedef BRamMapTy::const_iterator const_bram_iterator;
+private:
   BRamMapTy BRams;
-
 
   // Mapping Function unit number to callee function name.
   typedef StringMap<unsigned> FNMapTy;
@@ -162,6 +162,9 @@ public:
     assert(at != BRams.end() && "BRam not exists!");
     return at->second;
   }
+
+  const_bram_iterator bram_begin() const { return BRams.begin(); }
+  const_bram_iterator bram_end() const { return BRams.end(); }
 
   // Allocate a Physics register, its sizeInBytes can be 1/2/3/4
   unsigned allocatePhyReg(unsigned SizeInBytes) {
