@@ -570,6 +570,7 @@ void RTLCodegen::emitAllocatedFUs() {
 
   raw_ostream &S = VM->getDataPathBuffer();
 
+  // Generate code for allocated bram.
   VFUBRam *BlockRam = getFUDesc<VFUBRam>();
   for (VFInfo::const_bram_iterator I = FInfo->bram_begin(), E = FInfo->bram_end();
        I != E; ++I) {
@@ -582,6 +583,7 @@ void RTLCodegen::emitAllocatedFUs() {
       << '\n';
   }
 
+  // Generate the code for sub modules/external modules
   typedef VFInfo::const_fn_iterator fn_iterator;
   for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I) {
     if (const Function *Callee = M->getFunction(I->getKey())) {
