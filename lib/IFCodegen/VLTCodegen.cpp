@@ -345,54 +345,54 @@ bool VLTIfCodegen::runOnMachineFunction(MachineFunction &MF) {
 
   // Begin membus simulation codegen
   // DirtyHack: Every design has membus 0.
-    FuncUnitId ID(VFUs::MemoryBus, 0);
-    unsigned FUNum = ID.getFUNum();
+  FuncUnitId ID(VFUs::MemoryBus, 0);
+  unsigned FUNum = ID.getFUNum();
 
-    unsigned Enable = RTLMod->getFUPortOf(ID);
+  unsigned Enable = RTLMod->getFUPortOf(ID);
 
-    unsigned BusRdy = Enable + 6;
-    assignInPort(BusRdy, "(sim_time >= ready_time)");
+  unsigned BusRdy = Enable + 6;
+  assignInPort(BusRdy, "(sim_time >= ready_time)");
 
-    Out << "if (" << getPortVal(Enable) << ")";
-    Out.enter_block(format("// If membus%d active\n", FUNum));
+  Out << "if (" << getPortVal(Enable) << ")";
+  Out.enter_block(format("// If membus%d active\n", FUNum));
 
-    unsigned Address = Enable + 2;
+  unsigned Address = Enable + 2;
 
-    Out << "#ifdef __DEBUG_IF\n";
-    // Read the address
-    printType(Out, TD->getIntPtrType(Context), false, "Addr");
-    Out << " = " << getPortVal(Address) << ";\n"
-              "printf(\"Bus active with address %x\\n\", Addr);\n"
-              "#endif\n";
+  Out << "#ifdef __DEBUG_IF\n";
+  // Read the address
+  printType(Out, TD->getIntPtrType(Context), false, "Addr");
+  Out << " = " << getPortVal(Address) << ";\n"
+            "printf(\"Bus active with address %x\\n\", Addr);\n"
+            "#endif\n";
 
-    unsigned WriteEnable = Enable + 1;
-    Out << "if (" << getPortVal(WriteEnable) << ")";
-    Out.enter_block("// This is a write\n");
-    simulateMemWrite(Enable, Context);
-    Out.else_begin("// This is a read\n");
-    simulateMemRead(Enable, Context);
-    Out.exit_block("// end read/write\n");
-    Out.exit_block(format("// end membus%d\n", FUNum));
+  unsigned WriteEnable = Enable + 1;
+  Out << "if (" << getPortVal(WriteEnable) << ")";
+  Out.enter_block("// This is a write\n");
+  simulateMemWrite(Enable, Context);
+  Out.else_begin("// This is a read\n");
+  simulateMemRead(Enable, Context);
+  Out.exit_block("// end read/write\n");
+  Out.exit_block(format("// end membus%d\n", FUNum));
 
-    // Dirty hack: All membus share a ready_time.
-    Out << "// Simulate the ready port of the membus.\n";
-    // FIXME: Use a random ready time.
-    Out << "if (" << getPortVal(BusRdy) << " && " << getPortVal(Enable) << ")";
-    Out.enter_block(format("// If membus%d ready for next transaction\n",FUNum));
+  // Dirty hack: All membus share a ready_time.
+  Out << "// Simulate the ready port of the membus.\n";
+  // FIXME: Use a random ready time.
+  Out << "if (" << getPortVal(BusRdy) << " && " << getPortVal(Enable) << ")";
+  Out.enter_block(format("// If membus%d ready for next transaction\n",FUNum));
 
-    // FIXME: use a random uncertain delay.
-    unsigned TransactionUncertain = 5;
+  // FIXME: use a random uncertain delay.
+  unsigned TransactionUncertain = 5;
 
-    Out << "// Update the ready time of membus.\n"
-      // Note: Simulate advance half clock cycle when sim_time increased.
-      "ready_time = sim_time + " << MemBusLatency * 2
-        << " + " << TransactionUncertain <<";\n";
+  Out << "// Update the ready time of membus.\n"
+    // Note: Simulate advance half clock cycle when sim_time increased.
+    "ready_time = sim_time + " << MemBusLatency * 2
+      << " + " << TransactionUncertain <<";\n";
 
-    Out << "#ifdef __DEBUG_IF\n"
-      "printf(\"Memory Active at %x going to ready at %x\\n\","
-      " sim_time, ready_time);\n"
-      "#endif\n";
-    Out.exit_block(format("// end next transaction membus%d\n", FUNum));
+  Out << "#ifdef __DEBUG_IF\n"
+    "printf(\"Memory Active at %x going to ready at %x\\n\","
+    " sim_time, ready_time);\n"
+    "#endif\n";
+  Out.exit_block(format("// end next transaction membus%d\n", FUNum));
   // End membus simulation codegen.
 
   isClkEdgeEnd(true);
