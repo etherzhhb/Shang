@@ -117,6 +117,7 @@ add_llvm_target(VerilogBackend
   VSubtarget.cpp
   FixMachineCode.cpp
   FixTerminators.cpp
+  ForwardWireUsers.cpp
   MergeFallThroughBlocks.cpp
   ScriptingPass.cpp
 )

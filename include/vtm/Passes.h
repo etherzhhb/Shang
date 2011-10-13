@@ -52,6 +52,7 @@ Pass *createBitLevelInfoPass();
 
 Pass *createFixMachineCodePass();
 Pass *createFixTerminatorsPass();
+Pass *createForwardWireUsersPass();
 Pass *createMergeFallThroughBlocksPass();
 Pass *createVIfConverterPass();
 Pass *createVPreRegAllocSchedPass();
@@ -77,7 +78,7 @@ Pass *createPLBIfCodegenPass(raw_ostream &O);
 //
 void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
-//Add the initialization implementation of StackToGlobal.cpp.
+
 void initializeStackToGlobalPass(PassRegistry &Registry);
 
 void initializeRTLCodegenPass(PassRegistry &Registry);

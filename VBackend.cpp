@@ -15,7 +15,7 @@
 //   Perform register allocation with existing register allocation passes.
 //
 //===----------------------------------------------------------------------===//
-#include "VFrameLowering.h"
+//#include "VFrameLowering.h"
 #include "VTargetMachine.h"
 #include "VMCAsmInfo.h"
 
@@ -216,8 +216,12 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Make sure we have a branch instruction for every success block.
   PM.add(createFixTerminatorsPass());
 
-  // Eliminate the VOpMvImm instructions.
+  // Fix machine code so we can handle them easier.
   PM.add(createFixMachineCodePass());
+
+  // Forward the register used by wire operations so we can compute live
+  // interval correctly.
+  PM.add(createForwardWireUsersPass());
 
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());

@@ -31,7 +31,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-fix-machine-code"
 #include "llvm/Support/Debug.h"
 #include <set>
@@ -41,27 +40,19 @@ using namespace llvm;
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
-  // The common implicit defined register for current module.
-  unsigned ImplicitDefReg;
 
   FixMachineCode() : MachineFunctionPass(ID) {}
 
-
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    // Is this true?
-    // AU.setPreservesAll();
-  }
+  //void getAnalysisUsage(AnalysisUsage &AU) const {
+  //  MachineFunctionPass::getAnalysisUsage(AU);
+  //  // Is this true?
+  //  // AU.setPreservesAll();
+  //}
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  void forwardWireOpOperands(MachineFunction &MF, MachineRegisterInfo &MRI);
-
   bool handleImplicitDefs(MachineInstr *MI, MachineRegisterInfo &MRI,
                           const TargetInstrInfo *TII);
-
-  void handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
-                     const TargetInstrInfo *TII);
 
   void eliminateMVImm(std::vector<MachineInstr*> &Worklist,
                       MachineRegisterInfo &MRI);
@@ -74,18 +65,9 @@ struct FixMachineCode : public MachineFunctionPass {
 
 char FixMachineCode::ID = 0;
 
-void FixMachineCode::handleWireOps(MachineInstr *Inst, MachineRegisterInfo &MRI,
-                                   const TargetInstrInfo *TII) {
-  if (!VInstrInfo::isWireOp(Inst->getDesc())) return;
-
-  unsigned OldReg = Inst->getOperand(0).getReg();
-  MRI.setRegClass(OldReg, VTM::WireRegisterClass);
-}
-
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
-  ImplicitDefReg = 0;
 
   std::vector<MachineInstr*> Imms;
    // Find out all VOpMove_mi.
@@ -100,18 +82,11 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (handleImplicitDefs(Inst, MRI, TII)) continue;
 
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri) {
-        Imms.push_back(Inst);
-        continue;
-      }
-
-      // BitSlice, BitCat and BitRepeat are wires.
-      handleWireOps(Inst, MRI, TII);
+      if (Inst->getOpcode() == VTM::VOpMove_ri) Imms.push_back(Inst);
     }
   }
 
   eliminateMVImm(Imms, MRI);
-  forwardWireOpOperands(MF, MRI);
 
   return true;
 }
@@ -211,69 +186,6 @@ void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
     // Eliminate the instruction if it dead.
     if (MRI.use_empty(DstReg)) MI->eraseFromParent();
   }
-}
-
-void FixMachineCode::forwardWireOpOperands(MachineFunction &MF,
-                                           MachineRegisterInfo &MRI) {
-  SmallVector<unsigned, 8> WireOperands;
-  SmallPtrSet<MachineInstr*, 8> VisitedInsts;
-  // Forward the use operand of wireops so we can compute a correct live
-  // interval for the use operands of wireops. for example if we have:
-  // a = bitslice b, ...
-  // ...
-  // ... = a ...
-  // and we will add the operand of wireops to the instructions that using its
-  // results as implicit use:
-  // a = bitslice b, ...
-  // ...
-  // ... = a ..., imp use b
-  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
-    for (MachineBasicBlock::iterator II = BI->getFirstNonPHI(), IE = BI->end();
-         II != IE; ++II) {
-      MachineInstr *Inst = II;
-      if (VInstrInfo::isWireOp(Inst->getDesc())) continue;
-
-      for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
-        MachineOperand &MO = Inst->getOperand(i);
-        if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
-
-        unsigned Reg = MO.getReg();
-        if (VRegisterInfo::IsWire(Reg, &MRI))
-          WireOperands.push_back(Reg);
-      }
-
-      while (!WireOperands.empty()) {
-        unsigned Reg = WireOperands.pop_back_val();
-
-        MachineInstr *DefInst = MRI.getVRegDef(Reg);
-
-        // The implicit use of wire operands break the instructions that read
-        // at emit.
-        if (VIDesc(*DefInst).isReadAtEmit()) continue;
-
-        assert(DefInst && "Define instruction not exist!");
-        if (!VisitedInsts.insert(DefInst)) continue;
-
-        for (unsigned i = 0, e = DefInst->getNumOperands(); i != e; ++i) {
-          MachineOperand &MO = DefInst->getOperand(i);
-
-          if (!MO.isReg() || !MO.isUse() || !MO.getReg()) continue;
-          if (DefInst->getDesc().OpInfo[i].isPredicate()) continue;
-          assert(!DefInst->isPHI() && "PHI should not define PHI!");
-
-          unsigned Reg = MO.getReg();
-          if (VRegisterInfo::IsWire(Reg, &MRI)) {
-            WireOperands.push_back(Reg);
-            continue;
-          }
-          // Forward the operand of wireop to its user by add them as implicit
-          // use register operand.
-          MachineInstrBuilder(Inst).addReg(Reg, RegState::Implicit);
-        }
-      }
-
-      VisitedInsts.clear();
-    }
 }
 
 Pass *llvm::createFixMachineCodePass() {
