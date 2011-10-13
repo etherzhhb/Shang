@@ -88,6 +88,17 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
   eliminateMVImm(Imms, MRI);
 
+  // Set the register class of the result of the wire operations to the right
+  // value.
+  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
+    for (MachineBasicBlock::iterator II = BI->getFirstNonPHI(), IE = BI->end();
+         II != IE; ++II) {
+      if (!VInstrInfo::isWireOp(II->getDesc())) continue;
+
+      unsigned Reg = II->getOperand(0).getReg();
+      MRI.setRegClass(Reg, VTM::WireRegisterClass);
+    }
+
   return true;
 }
 

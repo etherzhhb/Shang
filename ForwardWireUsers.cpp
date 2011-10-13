@@ -51,17 +51,6 @@ char ForwardWireUsers::ID = 0;
 bool ForwardWireUsers::runOnMachineFunction(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
-  // Set the register class of the result of the wire operations to the right
-  // value.
-  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
-    for (MachineBasicBlock::iterator II = BI->getFirstNonPHI(), IE = BI->end();
-         II != IE; ++II) {
-      if (!VInstrInfo::isWireOp(II->getDesc())) continue;
-
-      unsigned Reg = II->getOperand(0).getReg();
-      MRI.setRegClass(Reg, VTM::WireRegisterClass);
-    }
-
   // Forward the user of wire operations.
   SmallVector<unsigned, 8> WireOperands;
   SmallPtrSet<MachineInstr*, 8> VisitedInsts;
