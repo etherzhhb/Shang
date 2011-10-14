@@ -47,9 +47,9 @@ namespace llvm {
         VTM::RADDRegisterClass, //AddSub = 1,
         VTM::RSHTRegisterClass, //Shift = 2,
         VTM::RMULRegisterClass, //Mult = 3,
-        VTM::WireRegisterClass, //MemoryBus = 4,
-        VTM::WireRegisterClass, //BRam = 5,
-        VTM::WireRegisterClass, //CalleeFN = 6,
+        VTM::RINFRegisterClass, //MemoryBus = 4,
+        VTM::RBRMRegisterClass, //BRam = 5,
+        VTM::RCFNRegisterClass, //CalleeFN = 6,
         VTM::WireRegisterClass  //FSMFinish = 7,
       };
       return RepRCTable[T];

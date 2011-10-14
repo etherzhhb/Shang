@@ -22,6 +22,9 @@ class VTMReg<string n> : Register<n> {
 def AR : VTMReg<"add">;
 def MR : VTMReg<"mult">;
 def SR : VTMReg<"shift">;
+def IR : VTMReg<"if">;
+def CR : VTMReg<"callee">;
+def BR : VTMReg<"bram">;
 
 def PhiR : VTMReg<"phi">;
 def R : VTMReg<"r">;
@@ -40,3 +43,6 @@ def PHIR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [PhiR]>;
 def RADD    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [AR]>;
 def RMUL    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MR]>;
 def RSHT    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [SR]>;
+def RINF    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [IR]>;
+def RCFN    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [CR]>;
+def RBRM    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [BR]>;

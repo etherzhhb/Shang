@@ -33,9 +33,12 @@ static const unsigned MoveOpcodes[] = {
     VTM::VOpMove_rr, //DRRegClassID = 0,
     0, //PHIRRegClassID = 1,
     VTM::VOpMove_ra, //RADDRegClassID = 2,
-    VTM::VOpMove_rm, //RMULRegClassID = 3,
-    VTM::VOpMove_rs, //RSHTRegClassID = 4,
-    VTM::VOpMove_rw, //WireRegClassID = 5
+    0,               //RBRMRegClassID = 3,
+    0,               //RCFNRegClassID = 4,
+    0,               //RINFRegClassID = 5,
+    VTM::VOpMove_rm, //RMULRegClassID = 6,
+    VTM::VOpMove_rs, //RSHTRegClassID = 7,
+    VTM::VOpMove_rw, //WireRegClassID = 8
 };
 
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {

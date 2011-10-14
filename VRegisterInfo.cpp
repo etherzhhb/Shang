@@ -108,9 +108,5 @@ bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {
     return false;
 
   const TargetRegisterClass *RC = MRI->getRegClass(RegNo);
-  return RC == VTM::WireRegisterClass
-         || RC == VTM::RADDRegisterClass
-         || RC == VTM::RMULRegisterClass
-         || RC == VTM::RSHTRegisterClass
-         || RC == VTM::PHIRRegisterClass;
+  return RC != VTM::DRRegisterClass;
 }

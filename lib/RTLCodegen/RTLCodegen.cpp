@@ -642,6 +642,9 @@ void RTLCodegen::emitAllSignals() {
   emitSignals(VTM::RADDRegisterClass, "wire");
   emitSignals(VTM::RMULRegisterClass, "wire");
   emitSignals(VTM::RSHTRegisterClass, "wire");
+  emitSignals(VTM::RBRMRegisterClass, "wire");
+  emitSignals(VTM::RCFNRegisterClass, "wire");
+  emitSignals(VTM::RINFRegisterClass, "wire");
 }
 
 void RTLCodegen::emitSignals(const TargetRegisterClass *RC,

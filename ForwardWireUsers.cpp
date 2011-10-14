@@ -59,7 +59,7 @@ struct ForwardWireUsers : public MachineFunctionPass {
 
   void addUseToMap(unsigned RegNum, WireUseMapTy &WireUse,
                    SmallVectorImpl<WireMapIt> &WireDefs,
-                   MachineRegisterInfo &MRI, bool IsDatapath);
+                   MachineRegisterInfo &MRI);
 
   void forwardWireUses(MachineFunction &MF, WireUseMapTy &WireUse);
 };
@@ -84,7 +84,8 @@ ForwardWireUsers::buildWireUseMap(MachineFunction &MF, WireUseMapTy &WireUse) {
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
     for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
          II != IE; ++II)
-      buildUseMapForState(II, MRI, WireUse);
+      if (II->getOpcode() == VTM::Datapath)
+        buildUseMapForState(II, MRI, WireUse);
 
   DEBUG(
     for (WireMapIt I = WireUse.begin(), E = WireUse.end(); I != E; ++I) {
@@ -102,19 +103,20 @@ ForwardWireUsers::buildWireUseMap(MachineFunction &MF, WireUseMapTy &WireUse) {
 
 void ForwardWireUsers::addUseToMap(unsigned RegNum, WireUseMapTy &WireUse,
                                    SmallVectorImpl<WireMapIt> &WireDefs,
-                                   MachineRegisterInfo &MRI, bool IsDatapath) {
-  if (!VRegisterInfo::IsWire(RegNum, &MRI)) {
+                                   MachineRegisterInfo &MRI) {
+  if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass) {
     // Remember the wire operand use this register.
     for (SmallVectorImpl<WireMapIt>::iterator WI = WireDefs.begin(),
          WE = WireDefs.end(); WI != WE; ++WI)
       (*WI)->second.insert(RegNum);
-  } else if (IsDatapath) {
+  } else {
     // If a wire operation using a wire, this operation also use the
     // registers used by that wire operation.
     WireMapIt src = WireUse.find(RegNum);
     if (src == WireUse.end()) {
       // Dirty Hack: Build the wire map not if we not visited it yet.
       if (MachineInstr *SrcMI = MRI.getVRegDef(RegNum)) {
+        assert(SrcMI->getOpcode() == VTM::Datapath && "Unexpected opcode!");
         buildUseMapForState(SrcMI, MRI, WireUse);
         src = WireUse.find(RegNum);
       }
@@ -151,7 +153,7 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF, WireUseMapTy &WireUse) {
           if (!MO.isReg() || MO.isDef() || MO.getReg() == 0) continue;
 
           unsigned RegNum = MO.getReg();
-          if (!VRegisterInfo::IsWire(RegNum, &MRI)) {
+          if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass) {
             ExpUse.insert(RegNum);
             continue;
           }
@@ -191,10 +193,6 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF, WireUseMapTy &WireUse) {
 void ForwardWireUsers::buildUseMapForState(MachineInstr *Inst,
                                            MachineRegisterInfo &MRI,
                                            WireUseMapTy &WireUse) {
-  unsigned OpC = Inst->getOpcode();
-  if (OpC != VTM::Datapath && OpC != VTM::Control) return;
-  bool IsDatapath = OpC == VTM::Datapath;
-
   SmallVector<WireMapIt, 2> WireDefs;
   ucState S(Inst);
 
@@ -210,10 +208,8 @@ void ForwardWireUsers::buildUseMapForState(MachineInstr *Inst,
 
       unsigned RegNum = MO.getReg();
       if (MO.isDef()) {
-        if (!VRegisterInfo::IsWire(RegNum, &MRI)) {
-          assert(!IsDatapath && "Datapath defines register?");
-          continue;
-        }
+        assert(MRI.getRegClass(RegNum) == VTM::WireRegisterClass
+               && "Datapath defines register?");
 
         WireMapIt at;
         bool inserted;
@@ -223,12 +219,8 @@ void ForwardWireUsers::buildUseMapForState(MachineInstr *Inst,
         if (!inserted) return;
         // assert(inserted && "Wire already existed!");
       } else {
-        if (WireDefs.empty()) {
-          assert(!IsDatapath && "Datapath dose not defines wire?");
-          continue;;
-        }
-
-        addUseToMap(RegNum, WireUse, WireDefs, MRI, IsDatapath);
+        assert(!WireDefs.empty() && "Datapath dose not defines wire?");
+        addUseToMap(RegNum, WireUse, WireDefs, MRI);
       }
     }
   }
