@@ -692,6 +692,9 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     VASTSlot *CurSlot = VM->getSlot(SlotNum - 1);
 
     assert(SlotNum != startSlot && "Unexpected first slot!");
+    // Skip the marker.
+    if (Op->getOpcode() == VTM::ImpUse) continue;
+
     // Emit the control operation at the rising edge of the clock.
     std::string SlotPred = "(";
     raw_string_ostream SlotPredSS(SlotPred);
@@ -798,9 +801,8 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
   for (ucState::iterator I = FirstState.begin(), E = FirstState.end();
        I != E; ++I) {
     ucOp Op = *I;
+
     switch (Op->getOpcode()) {
-    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
-    case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
     case VTM::VOpMove_rm:
@@ -809,8 +811,11 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
     case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::ImpUse:           /*Not need to handle*/        break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
+    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
+    case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
   }
@@ -1189,6 +1194,8 @@ void RTLCodegen::emitDatapath(ucState &State) {
     case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
     case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
     case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
+
+    case VTM::ImpUse:       /*Not need to handle*/  break;
 
     case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;

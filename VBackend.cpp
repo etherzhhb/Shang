@@ -219,12 +219,12 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Fix machine code so we can handle them easier.
   PM.add(createFixMachineCodePass());
 
+  // Schedule.
+  PM.add(createVPreRegAllocSchedPass());
+
   // Forward the register used by wire operations so we can compute live
   // interval correctly.
   PM.add(createForwardWireUsersPass());
-
-  // Schedule.
-  PM.add(createVPreRegAllocSchedPass());
 
   if (EnableSimpleRegisterAllocate)
     PM.add(createSimpleRegisterAllocator());

@@ -236,6 +236,9 @@ let mayLoad      = 1,
                        "$dst = bram $src, $addr, $isStore, $byteenable, $bramnum",
                        [], FUBRam, 1, 1, 0>;
 }
+
+def ImpUse : InstVTM<(outs), (ins), "imp-use", [], FUTrivial>;
+
 //===----------------------------------------------------------------------===//
 
 let isBarrier    = 1 in {
