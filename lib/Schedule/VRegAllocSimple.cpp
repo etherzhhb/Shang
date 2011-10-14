@@ -263,10 +263,10 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   unsigned Size = BLI->getBitWidth(VReg);
   if (Size < 8) Size = 8;
   // Since we are allocating register with witdh of 2^N, round up the size.
-  Size = NextPowerOf2(Size - 1) / 8;
+  Size = 8; //NextPowerOf2(Size - 1) / 8;
 
   typedef VFInfo::phyreg_iterator reg_it;
-  if (EnableSimpleRegisterSharing)
+  //if (EnableSimpleRegisterSharing)
     for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
          I < E; ++I) {
       unsigned PhysReg = *I;
