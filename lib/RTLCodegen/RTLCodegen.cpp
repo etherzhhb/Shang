@@ -226,8 +226,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
-  void emitSignals(const TargetRegisterClass *RC,
-                   const std::string &Prefix);
+  void emitSignals(const TargetRegisterClass *RC, bool isRegister);
 
   void clear();
 
@@ -634,21 +633,19 @@ void RTLCodegen::emitAllSignals() {
     TotalRegisterBits += 64;
   }
 
-  emitSignals(VTM::DRRegisterClass, "reg");
-  emitSignals(VTM::PHIRRegisterClass, "reg");
+  emitSignals(VTM::DRRegisterClass, true);
 
-  emitSignals(VTM::WireRegisterClass, "wire");
+  emitSignals(VTM::WireRegisterClass, false);
   // FIXME: There are function units.
-  emitSignals(VTM::RADDRegisterClass, "wire");
-  emitSignals(VTM::RMULRegisterClass, "wire");
-  emitSignals(VTM::RSHTRegisterClass, "wire");
-  emitSignals(VTM::RBRMRegisterClass, "wire");
-  emitSignals(VTM::RCFNRegisterClass, "wire");
-  emitSignals(VTM::RINFRegisterClass, "wire");
+  emitSignals(VTM::RADDRegisterClass, false);
+  emitSignals(VTM::RMULRegisterClass, false);
+  emitSignals(VTM::RSHTRegisterClass, false);
+  emitSignals(VTM::RBRMRegisterClass, false);
+  emitSignals(VTM::RCFNRegisterClass, false);
+  emitSignals(VTM::RINFRegisterClass, false);
 }
 
-void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
-                             const std::string &Prefix) {
+void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
   // And Emit the wires defined in this module.
   const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
 
@@ -663,10 +660,10 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC,
     VASTValue *V = 0;
     unsigned RegNum = TargetRegisterInfo::virtReg2Index(SignalNum);
 
-    if (Prefix[0] == 'w')
-      V = VM->addWire(Prefix + utostr(RegNum), Bitwidth, RC->getName());
+    if (!isRegister)
+      V = VM->addWire("wire" + utostr(RegNum), Bitwidth, RC->getName());
     else {
-      V = VM->addRegister(Prefix + utostr(RegNum), Bitwidth, RC->getName());
+      V = VM->addRegister("reg" + utostr(RegNum), Bitwidth, RC->getName());
       TotalRegisterBits += Bitwidth;
     }
     // Add the signal to register map.
