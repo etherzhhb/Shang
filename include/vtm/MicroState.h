@@ -88,6 +88,9 @@ public:
     return BitWidth;
   }
 
+  typedef std::pair<unsigned, unsigned> bit_range;
+  bit_range getBitRange() const;
+
   void setIsWire(bool isWire = true) {
     unsigned char TF = getTargetFlags();
     TF = isWire ? (TF | IsWireFlag) : (TF & ~IsWireFlag);

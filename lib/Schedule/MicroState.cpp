@@ -201,6 +201,16 @@ bool ucOperand::isWire() const {
   return isReg() && (IsWireFlag & getTargetFlags());
 }
 
+ucOperand::bit_range ucOperand::getBitRange() const {
+  unsigned Offset = 0;
+
+  unsigned Reg = getReg();
+  if (TargetRegisterInfo::isPhysicalRegister(Reg))
+    Offset = (Reg & 0x7) * 8;
+
+  return std::make_pair(getBitWidth() + Offset, 0 + Offset);
+}
+
 void ucOperand::print(raw_ostream &OS,
                       unsigned UB /* = 64 */, unsigned LB /* = 0 */,
                       bool isPredicate /* = false */) {

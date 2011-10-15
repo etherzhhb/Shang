@@ -78,44 +78,64 @@ public:
   virtual void print(raw_ostream &OS) const = 0;
 };
 
+// TODO: Change VASTValue to VASTNamedNode
 class VASTValue : public VASTNode {
+  // TODO: Use const char* and use the key value of the symbol table.
   std::string Name;
   bool IsReg;
   unsigned InitVal;
-protected:
+public:
   VASTValue(VASTTypes DeclType, const std::string name, unsigned BitWidth, bool isReg,
-           unsigned initVal, const std::string &Comment)
+    unsigned initVal, const std::string &Comment)
     : VASTNode(DeclType, BitWidth, Comment),Name(name), IsReg(isReg), InitVal(initVal)
   {
     assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
-           && "Bad DeclType!");
+      && "Bad DeclType!");
   }
-public:
+
   const std::string &getName() const { return Name; }
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return IsReg; }
 
+  virtual void print(raw_ostream &OS) const;
 
   void printReset(raw_ostream &OS) const;
+};
 
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
+// TODO: This is the VASTValue.
+class VASTRValue {
+protected:
+  // The ast node or simply the symbol.
+  VASTValue *V;
+  // The bit range of this value.
+  uint8_t UB, LB;
+
+public:
+  VASTRValue(VASTValue *v = 0, uint8_t ub = 0, uint8_t lb = 0)
+    : V(v),UB(ub), LB(lb) {}
+
+  operator bool() const { return V != 0; }
+  // Implicit cast to VASTValue.
+  operator VASTValue *() const { return V; }
+
+  void print(raw_ostream &OS) const;
 };
 
 // The predicate condition, maybe a inverted value.
-class VASTCnd : public PointerIntPair<VASTValue*, 1, bool> {
-  typedef PointerIntPair<VASTValue*, 1, bool> BaseTy;
+class VASTCnd : public VASTRValue {
+  bool Inverted;
 public:
-  /*implicit*/ VASTCnd(VASTValue *V = 0, bool Inverted = false)
-    : BaseTy(V, Inverted)
+  /*implicit*/ VASTCnd(VASTValue *V, bool inverted = false,
+                       unsigned ub = 0, unsigned lb = 0)
+    : VASTRValue(V, ub, lb), Inverted(inverted)
   {
-    assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
+    //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
-  /*implicit*/ VASTCnd(bool Cnd) : BaseTy(0, !Cnd) {}
+  /*implicit*/ VASTCnd(bool Cnd = true) : VASTRValue(), Inverted(!Cnd) {}
 
-  bool isInverted() const { return getInt(); }
-  VASTValue *getCndVal() const { return getPointer(); }
+  bool isInverted() const { return Inverted; }
+  VASTRValue getCndVal() const { return VASTRValue(*this); }
 
   // Return the "not" condition of current condition;
   VASTCnd invert() const { return VASTCnd(getCndVal(), !isInverted()); }
@@ -186,15 +206,6 @@ public:
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();
-};
-
-class VASTSymbol : public VASTValue {
-  public:
-  VASTSymbol(const std::string Name, unsigned BitWidth,
-             const std::string &Comment)
-    : VASTValue(vastSymbol, Name, BitWidth, 0, 0, Comment) {}
-
-  void print(raw_ostream &OS) const;
 };
 
 class VASTDatapath : public VASTNode {
@@ -325,13 +336,7 @@ private:
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
 
-  void insertVASTValue(StringRef Name, VASTValue *V) {
-    StringMapEntry<VASTValue*> *Entry =
-      StringMapEntry<VASTValue*>::Create(Name.begin(), Name.end(),
-                                         SymbolTable.getAllocator(), V);
-    SymbolTable.insert(Entry);
-  }
-
+  VASTValue *indexVASTValue(unsigned RegNum, VASTValue *V);
 public:
   enum PortTypes {
     Clk = 0,
@@ -373,8 +378,6 @@ public:
   void printSlotActives(raw_ostream &OS) const;
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  void addVASTValue(unsigned RegNum, VASTValue *V);
-
   VASTValue *getVASTValue(unsigned RegNum) const {
     std::map<unsigned, VASTValue*>::const_iterator at = RegsMap.find(RegNum);
     if(at == RegsMap.end()) return 0;
@@ -383,15 +386,17 @@ public:
   }
 
   VASTValue *getVASTValue(const std::string &Name) const {
-    return SymbolTable.lookup(Name);
+    StringMap<VASTValue*>::const_iterator at = SymbolTable.find(Name);
+    return VASTRValue(at->second, 0);
   }
 
-  VASTValue *getVASTSymbol(const std::string &Name) {
-    VASTValue *&S = SymbolTable[Name];
-    if (!S)
-      S = new (Allocator.Allocate<VASTSymbol>()) VASTSymbol(Name, 1, "");
+  VASTValue *getVASTValue(const std::string &Name, VASTValue *V = 0) {
+    if (V == 0) {
+      V = Allocator.Allocate<VASTValue>();
+      new (V) VASTValue(vastSymbol, Name, 0, false, 0, "Symbol");
+    }
 
-    return S;
+    return SymbolTable.GetOrCreateValue(Name, V).second;
   }
 
   void allocaSlots(unsigned TotalSlots) {
@@ -493,11 +498,24 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTSignal *addRegister(const std::string &Name, unsigned BitWidth,
+  VASTValue *addSignal(const std::string &Name, unsigned BitWidth, bool isReg,
+                       const std::string &Comment = "");
+
+  VASTValue *addRegister(const std::string &Name, unsigned BitWidth,
+                         const std::string &Comment = "") {
+    return addSignal(Name, BitWidth, true, Comment);
+  }
+
+  VASTValue *addWire(const std::string &Name, unsigned BitWidth,
+                     const std::string &Comment = "") {
+    return addSignal(Name, BitWidth, false, Comment);
+  }
+
+  VASTValue *addRegister(unsigned RegNum, unsigned BitWidth,
                           const std::string &Comment = "");
 
-  VASTSignal *addWire(const std::string &Name, unsigned BitWidth,
-                      const std::string &Comment = "");
+  VASTValue *addWire(unsigned WireNum, unsigned BitWidth,
+    const std::string &Comment = "");
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);

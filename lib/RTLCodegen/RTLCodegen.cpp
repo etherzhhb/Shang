@@ -629,7 +629,7 @@ void RTLCodegen::emitAllSignals() {
   // Emit the register with max word length.
   for (VFInfo::phyreg_iterator I = FInfo->phyreg_begin(8),
        E = FInfo->phyreg_end(8); I < E; ++I) {
-    VM->addRegister("phy_reg" + utostr(*I), 64);
+    VM->addRegister(*I, 64);
     TotalRegisterBits += 64;
   }
 
@@ -657,17 +657,12 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
 
     const ucOperand &Op = cast<ucOperand>(DI.getOperand());
     unsigned Bitwidth = Op.getBitWidth();
-    VASTValue *V = 0;
-    unsigned RegNum = TargetRegisterInfo::virtReg2Index(SignalNum);
-
     if (!isRegister)
-      V = VM->addWire("wire" + utostr(RegNum), Bitwidth, RC->getName());
+      VM->addWire(SignalNum, Bitwidth, RC->getName());
     else {
-      V = VM->addRegister("reg" + utostr(RegNum), Bitwidth, RC->getName());
+      VM->addRegister(SignalNum, Bitwidth, RC->getName());
       TotalRegisterBits += Bitwidth;
     }
-    // Add the signal to register map.
-    VM->addVASTValue(SignalNum, V);
   }
 }
 
@@ -974,15 +969,15 @@ void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
     ReadyPort = VM->getVASTValue(VFUMemBus::getReadyName(Id.getFUNum()));
     break;
   case VFUs::CalleeFN:
-    ReadyPort = VM->getVASTSymbol(getSubModulePortName(Id.getFUNum(), "fin"));
+    ReadyPort = VM->getVASTValue(getSubModulePortName(Id.getFUNum(), "fin"));
     break;
   default:
     break;
   }
 
-  if (ReadyPort) {
+  if (ReadyPort)
     CurSlot->addReady(ReadyPort, VASTCnd::Create(VM, OpRdFU.getPredicate()));
-  }
+
   // The dst operand of ReadFU change to immediate if it is dead.
   if (OpRdFU.getOperand(0).isReg())
     emitOpCopy(OpRdFU);
@@ -1020,7 +1015,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
 
   VASTCnd Pred = VASTCnd::Create(VM, OpInternalCall.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");
-  VASTValue *StartSignal = VM->getVASTSymbol(StartPortName);
+  VASTValue *StartSignal = VM->getVASTValue(StartPortName);
   CurSlot->addEnable(StartSignal, Pred);
   VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
   NextSlot->addDisable(StartSignal, Pred);
