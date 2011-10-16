@@ -284,23 +284,25 @@ void ForwardWireUsers::buildPHIUseMap(MachineInstr *PN, MachineBasicBlock *MBB,
       continue;
 
     MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
-    // A PHI using a wire from other BB, that means the wire will be read
-    // at the end of the src BB.
+
+    unsigned PHISlot = 0;
     if (SrcBB != MBB)
-      PhiUse[VFI->getEndSlotFor(SrcBB)].insert(RegNum);
-    else {
+      // A PHI using a wire from other BB, that means the wire will be read
+      // at the end of the src BB.
+      PHISlot = VFI->getEndSlotFor(SrcBB);
+    else
       // A PHI using a wire from the same BB as the parent of the PHI, we
       // need to get the scheduling information of the PHI.
-      unsigned PHISlot = abs(VFI->lookupPHISlot(PN).first);
-      unsigned StartSlot = VFI->getStartSlotFor(SrcBB),
-               II = VFI->getIIFor(SrcBB);
-      unsigned ModuloSlot = (PHISlot - StartSlot) % II + StartSlot;
-      // Because the copy is run at the next iteration, so translate the slot
-      // to base on the first iteration.
-      if (ModuloSlot == StartSlot) ModuloSlot = StartSlot + II;
+      PHISlot = abs(VFI->lookupPHISlot(PN).first);
 
-      PhiUse[ModuloSlot].insert(RegNum);
-    }
+    unsigned StartSlot = VFI->getStartSlotFor(SrcBB),
+      II = VFI->getIIFor(SrcBB);
+    unsigned ModuloSlot = (PHISlot - StartSlot) % II + StartSlot;
+    // Because the copy is run at the next iteration, so translate the slot
+    // to base on the first iteration.
+    if (ModuloSlot == StartSlot) ModuloSlot = StartSlot + II;
+
+    PhiUse[ModuloSlot].insert(RegNum);
   }
 }
 
