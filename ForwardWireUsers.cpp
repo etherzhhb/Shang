@@ -55,19 +55,13 @@ struct ForwardWireUsers : public MachineFunctionPass {
     return at->second;
   }
 
-  // Mapping the slot number to the wire read at this slot by phis.
-  typedef std::map<unsigned,  RegSet> PHIUseMapTy;
-  typedef PHIUseMapTy::iterator PHIUseMapIt;
-  PHIUseMapTy PhiUse;
-
   ForwardWireUsers() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF);
 
   void buildWireUseMap(MachineFunction &MF);
 
-  void buildPHIUseMap(MachineInstr *PN, MachineBasicBlock *MBB,
-                      MachineRegisterInfo &MRI, VFInfo *VFI);
+  void forwardPHIUse(MachineFunction &MF);
 
   void buildUseMapForState(MachineInstr *Inst, MachineRegisterInfo &MRI);
 
@@ -82,11 +76,12 @@ char ForwardWireUsers::ID = 0;
 
 bool ForwardWireUsers::runOnMachineFunction(MachineFunction &MF) {
   WireUse.clear();
-  PhiUse.clear();
 
   buildWireUseMap(MF);
 
   forwardWireUses(MF);
+
+  forwardPHIUse(MF);
 
   return true;
 }
@@ -94,33 +89,16 @@ bool ForwardWireUsers::runOnMachineFunction(MachineFunction &MF) {
 void
 ForwardWireUsers::buildWireUseMap(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
-  VFInfo *VFI = MF.getInfo<VFInfo>();
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
-    MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
-    while (II->isPHI()) {
-      buildPHIUseMap(II, BI, MRI, VFI);
-      ++II;
-    }
-
-    while (II != IE) {
+    for (MachineBasicBlock::iterator II = BI->getFirstNonPHI(), IE = BI->end();
+         II != IE; ++II) {
       if (II->getOpcode() == VTM::Datapath)
         buildUseMapForState(II, MRI);
-      ++II;
     }
   }
 
   DEBUG(
-    for (PHIUseMapIt I = PhiUse.begin(), E = PhiUse.end(); I != E; ++I) {
-      dbgs() << "Slot" << I->first << " Using ";
-
-      RegSet &RSet = I->second;
-      for (RegSet::iterator SI = RSet.begin(), SE = RSet.end(); SI != SE; ++SI)
-        dbgs() << TargetRegisterInfo::virtReg2Index(*SI) << ", ";
-
-      dbgs() << '\n';
-    }
-
     for (WireMapIt I = WireUse.begin(), E = WireUse.end(); I != E; ++I) {
       dbgs() << "Wire " << TargetRegisterInfo::virtReg2Index(I->first)
              << " Using ";
@@ -165,8 +143,7 @@ void ForwardWireUsers::addUseToMap(unsigned RegNum,
 void
 ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
-  typedef std::set<unsigned> UseSet;
-  UseSet ImpUses, ExpUse;
+  RegSet ImpUses, ExpUse;
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
     for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
@@ -178,20 +155,6 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
       ImpUses.clear();
       ExpUse.clear();
 
-      unsigned PredSlot = ucState(Inst).getSlot();
-
-      if (OpC == VTM::Control) {
-        PHIUseMapIt at = PhiUse.find(PredSlot);
-        if (at != PhiUse.end()) {
-          RegSet &UseWire = at->second;
-          for (RegSet::iterator RI = UseWire.begin(), RE = UseWire.end();
-               RI != RE; ++RI) {
-            unsigned WireNum = *RI;
-            ucState S(MRI.getVRegDef(WireNum));
-            set_union(ImpUses, getRegsUseBy(WireNum));
-          }
-        }
-      }
 
       // Iterate over the machine operands to build the current implicit use
       // set.
@@ -225,13 +188,14 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
 
       // Flush the current implicit use to the machine code.
       MachineInstrBuilder Builder(Inst);
+      unsigned PredSlot = ucState(Inst).getSlot();
       Builder.addOperand(ucOperand::CreateOpcode(VTM::ImpUse, PredSlot));
       // DirtyHack: Add the dummy predicate to the control op.
       // FIXME: Also add predicate operand for implicit use?
       if (OpC == VTM::Control) Builder.addOperand(ucOperand::CreatePredicate());
 
-      for (UseSet::iterator UI = ImpUses.begin(), UE = ImpUses.end();
-        UI != UE; ++UI)
+      for (RegSet::iterator UI = ImpUses.begin(), UE = ImpUses.end();
+           UI != UE; ++UI)
         Builder.addReg(*UI, RegState::Implicit);
     }
 
@@ -275,34 +239,50 @@ void ForwardWireUsers::buildUseMapForState(MachineInstr *Inst,
   }
 }
 
-void ForwardWireUsers::buildPHIUseMap(MachineInstr *PN, MachineBasicBlock *MBB,
-                                      MachineRegisterInfo &MRI, VFInfo *VFI ) {
-  for (unsigned i = 1, e = PN->getNumOperands(); i != e; i += 2) {
-    unsigned RegNum = PN->getOperand(i).getReg();
+void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
+  MachineRegisterInfo &MRI = MF.getRegInfo();
+  RegSet ReadByPhi;
 
-    if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass)
-      continue;
+  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
+    MachineBasicBlock::iterator II = BI->begin();
+    // Collect the registers read by PHI.
+    while (II->isPHI()) {
+      MachineInstr *PN = II;
+      ++II;
 
-    MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
+      for (unsigned i = 1, e = PN->getNumOperands(); i != e; i += 2) {
+        unsigned RegNum = PN->getOperand(i).getReg();
+        MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
+        MachineInstr *LastMI = SrcBB->getFirstTerminator();
+        assert(LastMI->getOpcode() == VTM::EndState && "Unexpected terminator!");
 
-    unsigned PHISlot = 0;
-    if (SrcBB != MBB)
-      // A PHI using a wire from other BB, that means the wire will be read
-      // at the end of the src BB.
-      PHISlot = VFI->getEndSlotFor(SrcBB);
-    else
-      // A PHI using a wire from the same BB as the parent of the PHI, we
-      // need to get the scheduling information of the PHI.
-      PHISlot = abs(VFI->lookupPHISlot(PN).first);
+        if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass)
+          ReadByPhi.insert(RegNum);
+        else
+          set_union(ReadByPhi, getRegsUseBy(RegNum));
+      }
+    }
 
-    unsigned StartSlot = VFI->getStartSlotFor(SrcBB),
-      II = VFI->getIIFor(SrcBB);
-    unsigned ModuloSlot = (PHISlot - StartSlot) % II + StartSlot;
-    // Because the copy is run at the next iteration, so translate the slot
-    // to base on the first iteration.
-    if (ModuloSlot == StartSlot) ModuloSlot = StartSlot + II;
+    // Nothing to read.
+    if (ReadByPhi.empty()) continue;
 
-    PhiUse[ModuloSlot].insert(RegNum);
+    // Skip all implicit defines.
+    while (II->isImplicitDef()) ++II;
+
+    // The register/wire read by PHI will be read at the first slot of the MBB.
+    assert(II != BI->end() && "Empty block?");
+    MachineInstr *MI = II;
+    assert(MI->getOpcode() == VTM::Control && "First MI not control?");
+    MachineInstrBuilder Builder(MI);
+    unsigned PredSlot = ucState(MI).getSlot();
+    Builder.addOperand(ucOperand::CreateOpcode(VTM::ImpUse, PredSlot));
+    // PHIs are always execute.
+    Builder.addOperand(ucOperand::CreatePredicate());
+    for (RegSet::iterator UI = ReadByPhi.begin(), UE = ReadByPhi.end();UI != UE;
+         ++UI)
+      Builder.addReg(*UI, RegState::Implicit);
+
+    ReadByPhi.clear();
   }
 }
 

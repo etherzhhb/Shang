@@ -249,12 +249,6 @@ unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
     if (query(VirtReg, Overlaps[i]).checkInterference())
       return Overlaps[i];
 
-  ucOp Op = ucOp::getParent(MRI->def_begin(VirtReg.reg));
-  if (Op->getOpcode() == VTM::VOpDefPhi) {
-    unsigned PHINum = Op.getOperand(1).getReg();
-    return checkPhysRegInterference(LIS->getInterval(PHINum), PhysReg);
-  }
-
   return 0;
 }
 unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
