@@ -255,11 +255,23 @@ void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
         MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
         MachineInstr *LastMI = SrcBB->getFirstTerminator();
         assert(LastMI->getOpcode() == VTM::EndState && "Unexpected terminator!");
+        // Dirty Hack: Insert the implicit read at the EndState instruction.
+        MachineInstrBuilder Builder(LastMI);
 
-        if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass)
+        if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass) {
+          if (!LastMI->readsVirtualRegister(RegNum))
+            Builder.addReg(RegNum, RegState::Implicit);
           ReadByPhi.insert(RegNum);
-        else
-          set_union(ReadByPhi, getRegsUseBy(RegNum));
+        } else {
+          RegSet &ReadByWire = getRegsUseBy(RegNum);
+          for (RegSet::iterator RI = ReadByWire.begin(), RE = ReadByWire.end();
+               RI != RE; ++RI) {
+            unsigned R = *RI;
+            if (!LastMI->readsVirtualRegister(R))
+              Builder.addReg(R, RegState::Implicit);
+            ReadByPhi.insert(R);
+          }
+        }
       }
     }
 

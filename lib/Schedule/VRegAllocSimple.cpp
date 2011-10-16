@@ -107,6 +107,9 @@ public:
   virtual void enqueue(LiveInterval *LI) {
     unsigned Reg = LI->reg;
 
+    if (LI->isZeroLength())
+      return;
+
     // Preserves SSA From for wires.
     // if (MRI->getRegClass(Reg) == VTM::WireRegisterClass)
     if (VRegisterInfo::IsWire(Reg, MRI))
@@ -248,6 +251,12 @@ unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
   for (unsigned i = 0, e = VFI->getOverlaps(PhysReg, Overlaps); i < e; ++i)
     if (query(VirtReg, Overlaps[i]).checkInterference())
       return Overlaps[i];
+
+  ucOp Op = ucOp::getParent(MRI->def_begin(VirtReg.reg));
+  if (Op->getOpcode() == VTM::VOpDefPhi) {
+    unsigned PHINum = Op.getOperand(1).getReg();
+    return checkPhysRegInterference(LIS->getInterval(PHINum), PhysReg);
+  }
 
   return 0;
 }
