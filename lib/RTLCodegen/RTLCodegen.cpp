@@ -618,19 +618,10 @@ void RTLCodegen::emitAllocatedFUs() {
 }
 
 void RTLCodegen::emitAllSignals() {
-  // We organize the registers in a module like 64 bits width ram, and we treat
-  // the register number as the address of the register in the 'ram'. The
-  // address of the register is always aligned with the register's size in byte,
-  // that is, the register number of a 16 bits register will always divisible by
-  // 2. So we can address the register as if it is in the ram. for example, if
-  // we have a 32 bit register whose number is 20, that means it located at the
-  // high part of the 2th 64 bits physics register.
-
-  // Emit the register with max word length.
-  for (VFInfo::phyreg_iterator I = FInfo->phyreg_begin(8),
-       E = FInfo->phyreg_end(8); I < E; ++I) {
-    VM->addRegister(*I, 64);
-    TotalRegisterBits += 64;
+  for (unsigned i = 0, e = FInfo->num_phyreg(); i != e; ++i) {
+    unsigned RegNum = i + 1;
+    VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
+    if (Info.isTopLevelReg(RegNum)) VM->addRegister(RegNum, Info.getBitWidth());
   }
 
   emitSignals(VTM::DRRegisterClass, true);

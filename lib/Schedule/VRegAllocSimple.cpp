@@ -86,6 +86,12 @@ class VRASimple : public MachineFunctionPass,
 
   std::priority_queue<LiveInterval*, std::vector<LiveInterval*>,
                       CompSpillWeight> Queue;
+  unsigned UserTag;
+
+  //LiveIntervalUnion::Query &query(LiveInterval &VirtReg, unsigned PhysReg) {
+  //  Queries[PhysReg].init(UserTag, &VirtReg, &PhysReg2LiveUnion[PhysReg]);
+  //  return Queries[PhysReg];
+  //}
 
 public:
   VRASimple();
@@ -189,9 +195,7 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
   VRM = &vrm;
   LIS = &lis;
 
-  // DIRTY HACK: If all virtual registers is 64 bits,
-  // we have N * 8 byte registers.
-  PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() * 8);
+  PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs());
   // Cache an interferece query for each physical reg
   Queries.reset(new LiveIntervalUnion::Query[PhysReg2LiveUnion.numRegs()]);
 
@@ -201,6 +205,8 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   VFI = F.getInfo<VFInfo>();
   BLI = &getAnalysis<BitLevelInfo>();
+
+  UserTag = 0;
 
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
@@ -246,17 +252,17 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 }
 unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
                                              unsigned PhysReg) {
-  unsigned Overlaps[16];
+  //unsigned Overlaps[16];
 
-  for (unsigned i = 0, e = VFI->getOverlaps(PhysReg, Overlaps); i < e; ++i)
-    if (query(VirtReg, Overlaps[i]).checkInterference())
-      return Overlaps[i];
+  //for (unsigned i = 0, e = VFI->getOverlaps(PhysReg, Overlaps); i < e; ++i)
+  //  if (query(VirtReg, Overlaps[i]).checkInterference())
+  //    return Overlaps[i];
 
-  ucOp Op = ucOp::getParent(MRI->def_begin(VirtReg.reg));
-  if (Op->getOpcode() == VTM::VOpDefPhi) {
-    unsigned PHINum = Op.getOperand(1).getReg();
-    return checkPhysRegInterference(LIS->getInterval(PHINum), PhysReg);
-  }
+  //ucOp Op = ucOp::getParent(MRI->def_begin(VirtReg.reg));
+  //if (Op->getOpcode() == VTM::VOpDefPhi) {
+  //  unsigned PHINum = Op.getOperand(1).getReg();
+  //  return checkPhysRegInterference(LIS->getInterval(PHINum), PhysReg);
+  //}
 
   return 0;
 }
@@ -264,23 +270,20 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
                                   SmallVectorImpl<LiveInterval*> &splitLVRs) {
   unsigned VReg = VirtReg.reg;
   unsigned Size = BLI->getBitWidth(VReg);
-  if (Size < 8) Size = 8;
-  // Since we are allocating register with witdh of 2^N, round up the size.
-  Size = 8; //NextPowerOf2(Size - 1) / 8;
 
-  typedef VFInfo::phyreg_iterator reg_it;
-  //if (EnableSimpleRegisterSharing)
-    for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
-         I < E; ++I) {
-      unsigned PhysReg = *I;
-      if (checkPhysRegInterference(VirtReg, PhysReg) == 0)
-        return PhysReg;
-    }
+  ////if (EnableSimpleRegisterSharing)
+  //  for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
+  //       I < E; ++I) {
+  //    unsigned PhysReg = *I;
+  //    if (checkPhysRegInterference(VirtReg, PhysReg) == 0)
+  //      return PhysReg;
+  //  }
 
-  unsigned Reg =  VFI->allocatePhyReg(Size);
+  //unsigned Reg =  VFI->allocatePhyReg(Size);
 
-  while (checkPhysRegInterference(VirtReg, Reg) != 0)
-    Reg =  VFI->allocatePhyReg(Size);
+  //while (checkPhysRegInterference(VirtReg, Reg) != 0)
+  //  Reg =  VFI->allocatePhyReg(Size);
 
-  return Reg;
+  //return Reg;
+  return VFI->allocatePhyReg(MRI->getRegClass(VReg)->getID(), Size);
 }

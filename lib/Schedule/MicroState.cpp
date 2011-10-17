@@ -204,9 +204,9 @@ bool ucOperand::isWire() const {
 ucOperand::bit_range ucOperand::getBitRange() const {
   unsigned Offset = 0;
 
-  unsigned Reg = getReg();
-  if (TargetRegisterInfo::isPhysicalRegister(Reg))
-    Offset = (Reg & 0x7) * 8;
+  //unsigned Reg = getReg();
+  //if (TargetRegisterInfo::isPhysicalRegister(Reg))
+  //  Offset = (Reg & 0x7) * 8;
 
   return std::make_pair(getBitWidth() + Offset, 0 + Offset);
 }
@@ -235,9 +235,7 @@ void ucOperand::print(raw_ostream &OS,
       if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
     } else { // Compute the offset of physics register.
       Prefix = "phy_reg";
-      unsigned Offset = (Reg & 0x7) * 8;
-      Reg = (Reg & ~0x7);
-      BitRange = verilogBitRange(UB + Offset, LB + Offset, true);
+      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
     }
 
     if (isWire()) {

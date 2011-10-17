@@ -151,7 +151,8 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
 }
 
 VASTCnd VASTCnd::Create(VASTModule *M, ucOperand &Op) {
-  ucOperand::bit_range range = Op.getBitRange();
+  ucOperand::bit_range range = std::make_pair(0, 0);//Op.getBitRange();
+
   VASTCnd Cnd(M->getVASTValue(Op.getReg()), Op.isPredicateInverted(),
               range.first, range.second);
   return Cnd;

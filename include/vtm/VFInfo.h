@@ -47,13 +47,6 @@ class VFInfo : public MachineFunctionInfo {
                    std::pair<int, const MachineBasicBlock*> >
           PhiSlotMapTy;
   PhiSlotMapTy PHISlots;
-
-  // Allocated physics registers in a MachineFunction/RTL module.
-  // TODO: we need to perform per-BasicBlock register allocation to reduce
-  // the length of interconnection.
-  unsigned TotalRegs;
-  static const unsigned fistPhyReg = 8;
-
 public:
   // The data structure to describe the block ram.
   struct BRamInfo {
@@ -65,7 +58,27 @@ public:
 
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
   typedef BRamMapTy::const_iterator const_bram_iterator;
+
+  struct PhyRegInfo {
+    unsigned RegClassId : 4;
+    unsigned AliasSetId : 14;
+    unsigned UB         : 7;
+    unsigned LB         : 7;
+
+    PhyRegInfo(unsigned ClassId, unsigned AliasSet, unsigned U, unsigned L)
+      : RegClassId(ClassId), AliasSetId(AliasSet), UB(U), LB(L) {}
+
+    unsigned getBitWidth() const { return UB - LB; }
+    bool isTopLevelReg(unsigned RegNum) const { return RegNum == AliasSetId; }
+  };
+
 private:
+  typedef std::vector<PhyRegInfo> PhyRegVec;
+  typedef std::set<unsigned> PhyRegSet;
+  typedef std::map<unsigned, PhyRegSet> PhyRegAlaisMap;
+  PhyRegVec PhyRegs;
+  PhyRegAlaisMap PhyRegAliasInfo;
+
   BRamMapTy BRams;
 
   // Mapping Function unit number to callee function name.
@@ -166,63 +179,13 @@ public:
   const_bram_iterator bram_begin() const { return BRams.begin(); }
   const_bram_iterator bram_end() const { return BRams.end(); }
 
-  // Allocate a Physics register, its sizeInBytes can be 1/2/3/4
-  unsigned allocatePhyReg(unsigned SizeInBytes) {
-    unsigned ret = RoundUpToAlignment(TotalRegs, SizeInBytes);
-    // The register should always align.
-    TotalRegs = ret + SizeInBytes;
-    return ret;
-  }
+  // Physics register allocate information.
+  unsigned allocatePhyReg(unsigned RegClassID, unsigned Width);
 
-  class phyreg_iterator : public std::iterator<std::forward_iterator_tag,
-                                               unsigned> {
-    unsigned i, sizeInBytes;
-  public:
-    phyreg_iterator(unsigned I, unsigned SizeInBytes)
-      : i(I), sizeInBytes(SizeInBytes) {}
+  PhyRegInfo getPhyRegInfo(unsigned RegNum) const;
 
-    inline bool operator==(const phyreg_iterator RHS) const {
-      assert(sizeInBytes == RHS.sizeInBytes
-             && "Can not compare phyreg_iterator with different sizeInBytes!");
-      return i == RHS.i;
-    }
+  unsigned num_phyreg() const { return PhyRegs.size(); }
 
-    inline bool operator!=(const phyreg_iterator RHS) const {
-      return !operator==(RHS);
-    }
-
-    inline bool operator<(const phyreg_iterator RHS) const {
-      assert(sizeInBytes == RHS.sizeInBytes
-        && "Can not compare phyreg_iterator with different sizeInBytes!");
-      return i < RHS.i;
-    }
-
-    inline unsigned operator*() const { return i; }
-
-    inline phyreg_iterator &operator++() {
-      i += sizeInBytes;
-      return *this;
-    }
-
-    inline phyreg_iterator operator++(int) {
-      phyreg_iterator tmp = *this;
-      ++*this;
-      return tmp;
-    }
-  };
-
-  phyreg_iterator phyreg_begin(unsigned sizeInByte) const {
-    return phyreg_iterator(fistPhyReg,  sizeInByte);
-  }
-
-  phyreg_iterator phyreg_end(unsigned  sizeInByte) const {
-    return phyreg_iterator(TotalRegs,  sizeInByte);
-  }
-
-  unsigned getOverlaps(unsigned R, unsigned Overlaps[5]) const;
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
 };
 
 }
