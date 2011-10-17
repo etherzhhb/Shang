@@ -263,6 +263,10 @@ void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
             Builder.addReg(RegNum, RegState::Implicit);
           ReadByPhi.insert(RegNum);
         } else {
+          // Skip the implicit defines because it do not read any register.
+          if (MRI.getVRegDef(RegNum)->isImplicitDef())
+            continue;
+
           RegSet &ReadByWire = getRegsUseBy(RegNum);
           for (RegSet::iterator RI = ReadByWire.begin(), RE = ReadByWire.end();
                RI != RE; ++RI) {
