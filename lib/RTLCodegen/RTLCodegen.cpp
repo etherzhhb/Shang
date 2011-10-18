@@ -390,16 +390,13 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   VM = FInfo->getRtlMod();
   emitFunctionSignature(F.getFunction());
 
-  // Emit control register and idle state
-  unsigned totalFSMStates = MF->size() + 1;
-  TotalFSMStatesBit = Log2_32_Ceil(totalFSMStates);
-
-  VM->addRegister("NextFSMState", TotalFSMStatesBit);
-
-  emitAllSignals();
-  emitIdleState();
+  // Emit all function units then emit all register/wires because function units
+  // may alias with registers.
   emitAllocatedFUs();
+  emitAllSignals();
 
+  // States of the control flow.
+  emitIdleState();
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock &BB = *I;
     emitBasicBlock(BB);
