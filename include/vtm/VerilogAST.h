@@ -336,7 +336,6 @@ private:
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
 
-  VASTValue *indexVASTValue(unsigned RegNum, VASTValue *V);
 public:
   enum PortTypes {
     Clk = 0,
@@ -515,7 +514,9 @@ public:
                           const std::string &Comment = "");
 
   VASTValue *addWire(unsigned WireNum, unsigned BitWidth,
-    const std::string &Comment = "");
+                     const std::string &Comment = "");
+
+  VASTValue *indexVASTValue(unsigned RegNum, VASTValue *V);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);

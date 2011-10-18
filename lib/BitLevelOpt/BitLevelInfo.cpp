@@ -101,8 +101,12 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
 
       BitWidthAnnotator Annotator(Instr);
 
-      // Fix the RHS operand.
-      if (isShifts) {
+      // Store the function unit number to the target flag.
+      if (Instr.getOpcode() == VTM::VOpInternalCall) {
+        unsigned FNNum = Instr.getOperand(1).getTargetFlags();
+        Annotator.setBitWidth(FNNum, 0);
+      } else if (isShifts) {
+        // Fix the RHS operand.
         Annotator.setBitWidth(Log2_32_Ceil(Annotator.getBitWidth(1)), 2);
         Annotator.updateBitWidth();
       }

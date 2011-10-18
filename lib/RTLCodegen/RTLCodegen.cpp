@@ -273,14 +273,15 @@ class RTLCodegen : public MachineFunctionPass {
 
   void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true){
     if(Op.isReg()){
-      OS << VM->getVASTValue(Op.getReg())->getName();
-      assert (VM->getVASTValue(Op.getReg()) != 0
-              && "Cannot find this Value in vector!");
+      VASTValue *V = VM->getVASTValue(Op.getReg());
+      assert (V != 0 && "Cannot find this Value in vector!");
+      OS << V->getName();
       if(printBitwidth){
         OS << verilogBitRange(Op.getBitWidth(), 0, Op.getBitWidth() !=1);
       }
     }
-    else Op.print(OS);
+    else
+      Op.print(OS);
   }
 
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
@@ -628,7 +629,17 @@ void RTLCodegen::emitAllSignals() {
   for (unsigned i = 0, e = FInfo->num_phyreg(); i != e; ++i) {
     unsigned RegNum = i + 1;
     VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
-    if (Info.isTopLevelReg(RegNum)) VM->addRegister(RegNum, Info.getBitWidth());
+    switch (Info.RegClassId) {
+    case VTM::DRRegClassID:
+      if (Info.isTopLevelReg(RegNum))
+        VM->addRegister(RegNum, Info.getBitWidth());
+      break;
+    case VTM::RINFRegClassID:
+      // The offset of data input port is 3
+      unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0))+3;
+      VM->indexVASTValue(RegNum, &VM->getPort(DataInIdx));
+      break;
+    }
   }
 
   emitSignals(VTM::DRRegisterClass, true);
@@ -930,9 +941,7 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   VASTDatapath *data = VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
-  OS << "// IMPLICIT_DEF ";
-  printOperand(ImpDef.getOperand(0), OS);
-  OS << "\n";
+  OS << "// IMPLICIT_DEF " << ImpDef.getOperand(0) << "\n";
 }
 
 void RTLCodegen::emitOpSel(ucOp &OpSel) {
@@ -952,10 +961,14 @@ void RTLCodegen::emitOpSel(ucOp &OpSel) {
 }
 
 void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
+  ucOperand &Dst = OpCopy.getOperand(0), &Src = OpCopy.getOperand(1);
+  // Ignore the identical copy.
+  if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
+
   raw_ostream &OS = VM->getControlBlockBuffer();
-  printOperand(OpCopy.getOperand(0), OS);
+  printOperand(Dst, OS);
   OS << " <= ";
-  printOperand(OpCopy.getOperand(1), OS);
+  printOperand(Src, OS);
   OS << ";\n";
 }
 
@@ -1106,11 +1119,6 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
 
 void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
   unsigned FUNum = OpMemAccess->getFUId().getFUNum();
-  VASTDatapath *data = VM->createDatapath();
-  VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
-  DPS << "assign ";
-  printOperand(OpMemAccess.getOperand(0), DPS);
-  DPS << " = " << VFUMemBus::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();

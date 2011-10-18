@@ -140,7 +140,13 @@ public:
       return 0;
     }
 
-    return &LIS->getInterval(RegNum);
+    LiveInterval &LI = LIS->getInterval(RegNum);
+    if (LI.empty()) {
+      LIS->removeInterval(RegNum);
+      return 0;
+    }
+
+    return &LI;
   }
 
   void bindMemoryBus();
@@ -339,17 +345,27 @@ void VRASimple::bindCalleeFN() {
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp CallInst = ucOp::getParent(MRI->def_begin(RegNum));
-      unsigned FNNum = CallInst.getOperand(1).getTargetFlags();
+      unsigned FNNum;
+
+      //if (CallInst->getOpcode() != VTM::VOpInternalCall) {
+      //  assert(CallInst->getOpcode() == VTM::VOpDefPhi
+      //         && "Unexpected opcode defining callee fu!");
+
+      //  // Join the registers
+      //  FNNum = CallInst.getOperand(1).getTargetFlags();
+      //} else
+      FNNum = CallInst.getOperand(1).getBitWidth();
+      //}
+
       unsigned &FR = FNMap[FNNum];
       // Allocate the register for this submodule if it is not yet allocated.
       if (FR == 0) FR = VFI->allocateFN(VTM::RCFNRegClassID);
 
-      assert(!query(*LI, FR).checkInterference() && "Cannot bind sub module!");
+      assert(!query(*LI, FR).checkInterference()&&"Cannot bind sub module!");
       assign(*LI, FR);
     }
   }
 }
-
 
 bool VRASimple::bindDataRegister() {
   return false;
