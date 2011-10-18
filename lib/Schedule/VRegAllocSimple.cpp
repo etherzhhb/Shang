@@ -82,6 +82,8 @@ class VRASimple : public MachineFunctionPass,
   // Analysis
   LiveStacks *LS;
 
+  typedef const std::vector<unsigned> VRegVec;
+
   std::priority_queue<LiveInterval*, std::vector<LiveInterval*>,
                       CompSpillWeight> Queue;
   unsigned UserTag;
@@ -131,6 +133,21 @@ public:
   }
 
   unsigned checkPhysRegInterference(LiveInterval &VirtReg, unsigned PhysReg);
+
+  LiveInterval *getInterval(unsigned RegNum) {
+    if (MRI->reg_nodbg_empty(RegNum)) {
+      LIS->removeInterval(RegNum);
+      return 0;
+    }
+
+    return &LIS->getInterval(RegNum);
+  }
+
+  void bindMemoryBus();
+  void bindCalleeFN();
+
+  bool bindDataRegister();
+
   unsigned selectOrSplit(LiveInterval &VirtReg,
                          SmallVectorImpl<LiveInterval*> &splitLVRs);
 
@@ -209,7 +226,17 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
         printVMF(dbgs(), F);
   ); 
 
-  allocatePhysRegs();
+  // Bind the pre-bind function units.
+  bindMemoryBus();
+  bindCalleeFN();
+
+  bool SomethingBind = true;
+
+  while (SomethingBind) {
+    SomethingBind = false;
+    SomethingBind |= bindDataRegister();
+    // TODO: Bind Function units.
+  }
 
   addMBBLiveIns(MF);
   LIS->addKillFlags();
@@ -281,4 +308,49 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
 
   //return Reg;
   return VFI->allocatePhyReg(MRI->getRegClass(VReg)->getID(), Bitwidth);
+}
+
+void VRASimple::bindMemoryBus() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RINFRegisterClass);
+
+  //unsigned DataWidth = getFUDesc<VFUMemBus>()->getDataWidth();
+  unsigned MemBusReg = VFI->allocateFN(VTM::RINFRegClassID);
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+      // The register may defined by VOpMove_ww which produced by PHINodes, but
+      // it is also correct to check interference and bind it to memory bus
+      // register, because this just connecting the two wires(and their live
+      // intervals) together.
+      assert(!query(*LI, MemBusReg).checkInterference() && "Cannot bind membus!");
+      assign(*LI, MemBusReg);
+    }
+  }
+}
+
+void VRASimple::bindCalleeFN() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
+  std::map<unsigned, unsigned> FNMap;
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+      ucOp CallInst = ucOp::getParent(MRI->def_begin(RegNum));
+      unsigned FNNum = CallInst.getOperand(1).getTargetFlags();
+      unsigned &FR = FNMap[FNNum];
+      // Allocate the register for this submodule if it is not yet allocated.
+      if (FR == 0) FR = VFI->allocateFN(VTM::RCFNRegClassID);
+
+      assert(!query(*LI, FR).checkInterference() && "Cannot bind sub module!");
+      assign(*LI, FR);
+    }
+  }
+}
+
+
+bool VRASimple::bindDataRegister() {
+  return false;
 }

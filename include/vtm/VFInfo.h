@@ -181,6 +181,7 @@ public:
 
   // Physics register allocate information.
   unsigned allocatePhyReg(unsigned RegClassID, unsigned Width);
+  unsigned allocateFN(unsigned FNClassID, unsigned Width = 0);
 
   PhyRegInfo getPhyRegInfo(unsigned RegNum) const;
 

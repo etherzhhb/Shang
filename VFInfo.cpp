@@ -95,6 +95,10 @@ unsigned VFInfo::allocatePhyReg(unsigned RegClassID, unsigned Width) {
   return RegNum;
 }
 
+unsigned VFInfo::allocateFN(unsigned FNClassID, unsigned Width /* = 0 */) {
+  return allocatePhyReg(FNClassID, Width);
+}
+
 VFInfo::PhyRegInfo VFInfo::getPhyRegInfo(unsigned RegNum) const {
   return PhyRegs[RegNum - 1];
 }
