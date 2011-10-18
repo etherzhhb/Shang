@@ -272,6 +272,18 @@ class RTLCodegen : public MachineFunctionPass {
       SS << "1'b1";
   }
 
+  void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true){
+    if(Op.isReg()){
+      OS << VM->getVASTValue(Op.getReg())->getName();
+      assert (VM->getVASTValue(Op.getReg()) != 0
+              && "Cannot find this Value in vector!");
+      if(printBitwidth){
+        OS << verilogBitRange(Op.getBitWidth(), 0, Op.getBitWidth() !=1);
+      }
+    }
+    else Op.print(OS);
+  }
+
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
   void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);
   void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
@@ -385,9 +397,8 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   VM->addRegister("NextFSMState", TotalFSMStatesBit);
 
-  emitIdleState();
-
   emitAllSignals();
+  emitIdleState();
   emitAllocatedFUs();
 
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
@@ -830,13 +841,13 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   VM->addRegister(OpCName, 1);
   // Assign the value to function unit.
   CtrlS << OpAName << " <= ";
-  OpAdd.getOperand(2).print(CtrlS);
+  printOperand(OpAdd.getOperand(2), CtrlS);
   CtrlS << ";\n";
   CtrlS << OpBName << " <= ";
-  OpAdd.getOperand(3).print(CtrlS);
+  printOperand(OpAdd.getOperand(3), CtrlS);
   CtrlS << ";\n";
   CtrlS << OpCName << " <= ";
-  OpAdd.getOperand(4).print(CtrlS);
+  printOperand(OpAdd.getOperand(4), CtrlS);
   CtrlS << ";\n";
 
   // Write the datapath for function unit.
@@ -845,10 +856,10 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   // FIXME: Move these to emitAllocatedFUs
   DPS << "assign {";
   // Carry out.
-  OpAdd.getOperand(1).print(DPS);
+  printOperand(OpAdd.getOperand(1), DPS);
   DPS << ", ";
   // Sum.
-  OpAdd.getOperand(0).print(DPS);
+  printOperand(OpAdd.getOperand(0), DPS);
   DPS << "} = " << OpAName << " + " << OpBName << " + " << OpCName << ";\n";
 
 }
@@ -867,10 +878,10 @@ void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
   VM->addRegister(OpBName, Log2_32_Ceil(FUWidth));
   // Assign the value to function unit.
   CtrlS << OpAName << " <= ";
-  OpSHT.getOperand(1).print(CtrlS);
+  printOperand(OpSHT.getOperand(1), CtrlS);
   CtrlS << ";\n";
   CtrlS << OpBName << " <= ";
-  OpSHT.getOperand(2).print(CtrlS);
+  printOperand(OpSHT.getOperand(2), CtrlS);
   CtrlS << ";\n";
 
   // Write the datapath for function unit.
@@ -887,7 +898,7 @@ void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
   VASTDatapath *data1 = VM->createDatapath();
   VASTDatapath::builder_stream &OS = data1->getCodeBuffer();
   OS << "assign ";
-  OpSHT.getOperand(0).print(OS);
+  printOperand(OpSHT.getOperand(0), OS);
   OS << " = " << OpAName << Operator << OpBName << ";\n";
 }
 
@@ -905,10 +916,10 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
   VM->addRegister(OpBName, FUWidth);
   // Assign the value to function unit.
   CtrlS << OpAName << " <= ";
-  OpMult.getOperand(1).print(CtrlS);
+  printOperand(OpMult.getOperand(1), CtrlS);
   CtrlS << ";\n";
   CtrlS << OpBName << " <= ";
-  OpMult.getOperand(2).print(CtrlS);
+  printOperand(OpMult.getOperand(2), CtrlS);
   CtrlS << ";\n";
   // Write the datapath for function unit.
   VASTDatapath *data = VM->createDatapath();
@@ -916,7 +927,7 @@ void RTLCodegen::emitOpMult(ucOp &OpMult) {
   // FIXME: Move these to emitAllocatedFUs
   DPS << "assign ";
   // Sum.
-  OpMult.getOperand(0).print(DPS);
+  printOperand(OpMult.getOperand(0), DPS);
   DPS << " = " << OpAName << " * " << OpBName << ";\n";
 }
 
@@ -924,30 +935,31 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   VASTDatapath *data = VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   OS << "// IMPLICIT_DEF ";
-  ImpDef.getOperand(0).print(OS);
+  printOperand(ImpDef.getOperand(0), OS);
   OS << "\n";
 }
 
 void RTLCodegen::emitOpSel(ucOp &OpSel) {
   raw_ostream &OS = VM->getControlBlockBuffer();
-  OpSel.getOperand(0).print(OS);
+  printOperand(OpSel.getOperand(0), OS);
   OS << " <= ";
   if (OpSel.getOperand(1).isPredicateInverted())
     OS << "~";
-  OpSel.getOperand(1).print(OS, 1, 0, true);
+  printOperand(OpSel.getOperand(1), OS, false);
+  //OS << verilogBitRange(1, 0);
   OS << " ? ";
-  OpSel.getOperand(2).print(OS);
+  printOperand(OpSel.getOperand(2), OS);
   OS << " : ";
-  OpSel.getOperand(3).print(OS);
+  printOperand(OpSel.getOperand(3), OS);
   OS << ";\n";
 
 }
 
 void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
   raw_ostream &OS = VM->getControlBlockBuffer();
-  OpCopy.getOperand(0).print(OS);
+  printOperand(OpCopy.getOperand(0), OS);
   OS << " <= ";
-  OpCopy.getOperand(1).print(OS);
+  printOperand(OpCopy.getOperand(1), OS);
   OS << ";\n";
 }
 
@@ -980,15 +992,15 @@ void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   VASTDatapath *data = VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   OS << "assign ";
-  Op.getOperand(0).print(OS);
+  printOperand(Op.getOperand(0), OS);
   OS << " = ";
-  Op.getOperand(1).print(OS);
+  printOperand(Op.getOperand(1), OS);
   OS << ";\n";
 }
 
 void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot) {
   raw_ostream &OS = VM->getControlBlockBuffer();
-  OpReadSymbol.getOperand(0).print(OS);
+  printOperand(OpReadSymbol.getOperand(0), OS);
   unsigned FNNum = OpReadSymbol.getOperand(1).getTargetFlags();
   // The FNNum is encoded into the target flags field of the MachineOperand.
   OS << " <= "
@@ -1016,7 +1028,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
       Function::const_arg_iterator ArgIt = FN->arg_begin();
       for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
         OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
-        OpInternalCall.getOperand(2 + i).print(OS);
+        printOperand(OpInternalCall.getOperand(2 + i), OS);
         OS << ";\n";
         ++ArgIt;
       }
@@ -1051,8 +1063,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
               }
             }
           }
-
-        Op.print(OS);
+        printOperand(Op, OS);
       }
 
       OS << ", \");\""; // Enclose the c function call.
@@ -1066,7 +1077,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
   std::string s;
   raw_string_ostream SS(s);
   for (unsigned i = 2, e = OpInternalCall.getNumOperands(); i != e; ++i) {
-    OpInternalCall.getOperand(i).print(SS);
+    printOperand(OpInternalCall.getOperand(i), SS);
     SS.flush();
     InPorts.push_back(SS.str());
     s.clear();
@@ -1087,12 +1098,12 @@ void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
   unsigned retChannel = OpRetVal.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
   OS << "return_value <= ";
-  OpRetVal.getOperand(0).print(OS);
+  printOperand(OpRetVal.getOperand(0), OS);
   OS << ";\n";
   OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
         "$display(\"Module " << MF->getFunction()->getName()
      << " return %x\\n\", ";
-  OpRetVal.getOperand(0).print(OS);
+  printOperand(OpRetVal.getOperand(0), OS);
   OS << ");\n"
         "`endif\n";
 }
@@ -1102,26 +1113,26 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
   VASTDatapath *data = VM->createDatapath();
   VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
   DPS << "assign ";
-  OpMemAccess.getOperand(0).print(DPS);
+  printOperand(OpMemAccess.getOperand(0), DPS);
   DPS << " = " << VFUMemBus::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   OS << VFUMemBus::getAddrBusName(FUNum) << "_r <= ";
-  OpMemAccess.getOperand(1).print(OS);
+  printOperand(OpMemAccess.getOperand(1), OS);
   OS << ";\n";
   // Assign store data.
   OS << VFUMemBus::getOutDataBusName(FUNum) << "_r <= ";
-  OpMemAccess.getOperand(2).print(OS);
+  printOperand(OpMemAccess.getOperand(2), OS);
   OS << ";\n";
   // And write enable.
   OS << VFUMemBus::getWriteEnableName(FUNum) << "_r <= ";
-  OpMemAccess.getOperand(3).print(OS);
+  printOperand(OpMemAccess.getOperand(3), OS);
   OS << ";\n";
   // The byte enable.
   OS << VFUMemBus::getByteEnableName(FUNum) << "_r <= ";
-  OpMemAccess.getOperand(4).print(OS);
+  printOperand(OpMemAccess.getOperand(4), OS);
   OS << ";\n";
 
   // Remember we enabled the memory bus at this slot.
@@ -1143,24 +1154,24 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
 
   DPS << "assign ";
-  OpBRam.getOperand(0).print(DPS);
+  printOperand(OpBRam.getOperand(0), DPS);
   DPS << " = " << VFUBRam::getInDataBusName(FUNum) << ";\n";
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   OS << VFUBRam::getAddrBusName(FUNum) << " <= (";
-  OpBRam.getOperand(1).print(OS);
+  printOperand(OpBRam.getOperand(1), OS);
   unsigned SizeInBits
     = FInfo->getBRamInfo(OpBRam->getFUId().getFUNum()).ElemSizeInBytes;
   OS << " >> " << Log2_32_Ceil(SizeInBits) << ");\n";
   // Assign store data.
   OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
-  OpBRam.getOperand(2).print(OS);
+  printOperand(OpBRam.getOperand(2), OS);
   OS << ";\n";
   // And write enable.
   OS << VFUBRam::getWriteEnableName(FUNum) << " <= ";
-  OpBRam.getOperand(3).print(OS);
+  printOperand(OpBRam.getOperand(3), OS);
   OS << ";\n";
   // The byte enable.
   // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
@@ -1202,9 +1213,9 @@ void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
   VASTDatapath *data =  VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   OS << "assign ";
-  UnaOp.getOperand(0).print(OS);
+  printOperand(UnaOp.getOperand(0), OS);
   OS << " = " << Operator << ' ';
-  UnaOp.getOperand(1).print(OS);
+  printOperand(UnaOp.getOperand(1), OS);
   OS << ";\n";
 }
 
@@ -1212,11 +1223,11 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   VASTDatapath *data =  VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   OS << "assign ";
-  BinOp.getOperand(0).print(OS);
+  printOperand(BinOp.getOperand(0), OS);
   OS << " = ";
-  BinOp.getOperand(1).print(OS);
+  printOperand(BinOp.getOperand(1), OS);
   OS << ' ' << Operator << ' ';
-  BinOp.getOperand(2).print(OS);
+  printOperand(BinOp.getOperand(2), OS);
   OS << ";\n";
 }
 
@@ -1230,9 +1241,10 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
            LB = OpBitSlice.getOperand(3).getImm();
 
   OS << "assign ";
-  OpBitSlice.getOperand(0).print(OS);
+  printOperand(OpBitSlice.getOperand(0), OS);
   OS << " = ";
-  OpBitSlice.getOperand(1).print(OS, UB, LB);
+  printOperand(OpBitSlice.getOperand(1), OS, false);
+  OS << verilogBitRange(UB, LB, UB - LB == 1);
   OS << ";\n";
 }
 
@@ -1240,12 +1252,12 @@ void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
   VASTDatapath *data =  VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   OS << "assign ";
-  OpBitCat.getOperand(0).print(OS);
+  printOperand(OpBitCat.getOperand(0), OS);
   OS << " = {";
   // BitCat is a binary instruction now.
-  OpBitCat.getOperand(1).print(OS);
+  printOperand(OpBitCat.getOperand(1), OS);
   OS << ',';
-  OpBitCat.getOperand(2).print(OS);
+  printOperand(OpBitCat.getOperand(2), OS);
   OS << "};\n";
 }
 
@@ -1253,11 +1265,11 @@ void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
   VASTDatapath *data =  VM->createDatapath();
   VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   OS << "assign ";
-  OpBitRepeat.getOperand(0).print(OS);
+  printOperand(OpBitRepeat.getOperand(0), OS);
   OS << " = {";
 
   unsigned Times = OpBitRepeat.getOperand(2).getImm();
   OS << Times << '{';
-  OpBitRepeat.getOperand(1).print(OS);
+  printOperand(OpBitRepeat.getOperand(1), OS);
   OS << "}};\n";
 }
