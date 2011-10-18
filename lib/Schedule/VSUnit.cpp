@@ -24,7 +24,6 @@
 #include "vtm/SynSettings.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"
-#include "vtm/BitLevelInfo.h"
 
 #include "llvm/Support/raw_ostream.h"
 

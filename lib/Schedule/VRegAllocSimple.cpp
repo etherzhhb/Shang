@@ -20,7 +20,6 @@
 
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
-#include "vtm/BitLevelInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/Passes.h"
 
@@ -82,7 +81,6 @@ class VRASimple : public MachineFunctionPass,
 
   // Analysis
   LiveStacks *LS;
-  const BitLevelInfo *BLI;
 
   std::priority_queue<LiveInterval*, std::vector<LiveInterval*>,
                       CompSpillWeight> Queue;
@@ -180,8 +178,6 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<MachineLoopInfo>();
   AU.addRequired<VirtRegMap>();
   AU.addPreserved<VirtRegMap>();
-  AU.addRequired<BitLevelInfo>();
-  AU.addPreserved<BitLevelInfo>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -204,7 +200,6 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
 bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   VFI = F.getInfo<VFInfo>();
-  BLI = &getAnalysis<BitLevelInfo>();
 
   UserTag = 0;
 
@@ -269,8 +264,8 @@ unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
 unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
                                   SmallVectorImpl<LiveInterval*> &splitLVRs) {
   unsigned VReg = VirtReg.reg;
-  unsigned Size = BLI->getBitWidth(VReg);
-
+  ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(VReg).getOperand());
+  unsigned Bitwidth = DefOp.getBitWidth();
   ////if (EnableSimpleRegisterSharing)
   //  for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
   //       I < E; ++I) {
@@ -285,5 +280,5 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   //  Reg =  VFI->allocatePhyReg(Size);
 
   //return Reg;
-  return VFI->allocatePhyReg(MRI->getRegClass(VReg)->getID(), Size);
+  return VFI->allocatePhyReg(MRI->getRegClass(VReg)->getID(), Bitwidth);
 }

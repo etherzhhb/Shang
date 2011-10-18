@@ -23,7 +23,6 @@
 #include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"
 #include "vtm/LangSteam.h"
-#include "vtm/BitLevelInfo.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"

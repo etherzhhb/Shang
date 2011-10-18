@@ -20,10 +20,10 @@
 
 #include "VSUnit.h"
 #include "SchedulingBase.h"
+#include "vtm/MicroState.h"
 
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
-#include "vtm/BitLevelInfo.h"
 #include "vtm/VTM.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -48,7 +48,6 @@
 #include "llvm/Support/MathExtras.h"
 #define DEBUG_TYPE "vtm-sgraph"
 #include "llvm/Support/Debug.h"
-
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -224,7 +223,6 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
   AU.setPreservesCFG();
-  AU.addPreserved<BitLevelInfo>();
 }
 
 bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
