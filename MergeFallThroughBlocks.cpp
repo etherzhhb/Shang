@@ -165,7 +165,7 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
       } else if (I->getOpcode() <= TargetOpcode::COPY) {
         MachineInstr *PseudoInst = I;
         ++I; // Skip current instruction, we may change it.
-        PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, TII, FromBBCnd);
+        PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, FromBBCnd);
         if (!PseudoInst) {
 #ifndef NDEBUG
           dbgs() << "Unable to predicate " << *I << "!\n";

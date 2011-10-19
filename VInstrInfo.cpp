@@ -29,18 +29,6 @@
 #include "VGenInstrInfo.inc"
 using namespace llvm;
 
-static const unsigned MoveOpcodes[] = {
-    VTM::VOpMove_rr, //DRRegClassID = 0,
-    0, //PHIRRegClassID = 1,
-    VTM::VOpMove_ra, //RADDRegClassID = 2,
-    0,               //RBRMRegClassID = 3,
-    0,               //RCFNRegClassID = 4,
-    0,               //RINFRegClassID = 5,
-    VTM::VOpMove_rm, //RMULRegClassID = 6,
-    VTM::VOpMove_rs, //RSHTRegClassID = 7,
-    VTM::VOpMove_rw, //WireRegClassID = 8
-};
-
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
@@ -275,7 +263,6 @@ bool VInstrInfo::isProfitableToDupForIfCvt(MachineBasicBlock &MBB,
 }
 
 MachineInstr *VInstrInfo::PredicatePseudoInstruction(MachineInstr *MI,
-                                                     const TargetInstrInfo *TII,
                                                      const SmallVectorImpl<MachineOperand> &Pred) {
   // Implicit define do not need to predicate at all.
   if (MI->isImplicitDef()) return MI;
@@ -291,7 +278,7 @@ MachineInstr *VInstrInfo::PredicatePseudoInstruction(MachineInstr *MI,
 
   MachineBasicBlock::iterator InsertPos = MI;
   InsertPos = VInstrInfo::BuildConditionnalMove(*MI->getParent(), InsertPos,
-                                                Ops[1], Pred, Ops[0], TII);
+                                                Ops[1], Pred, Ops[0]);
   MI->eraseFromParent();
 
   return InsertPos;
@@ -635,9 +622,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator IP,
                                   MachineOperand &Res,
                                   const SmallVectorImpl<MachineOperand> &Pred,
-                                  MachineOperand IfTrueVal,
-                                  const TargetInstrInfo *TII) {
-  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+                                  MachineOperand IfTrueVal) {
   if (!Res.getReg()) {
     MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
     const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
@@ -647,10 +632,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   MachineOperand ResDef(Res);
   ResDef.setIsDef();
 
-  unsigned Opcode = MoveOpcodes[MRI.getRegClass(IfTrueVal.getReg())->getID()];
-  assert(Opcode && "Unsupported move!");
-
-  return *BuildMI(MBB, IP, DebugLoc(), TII->get(Opcode))
+  return *BuildMI(MBB, IP, DebugLoc(), VTMInsts[VTM::VOpMove_rr])
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 

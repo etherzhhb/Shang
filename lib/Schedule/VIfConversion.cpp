@@ -1406,7 +1406,7 @@ void VIfConverter::PredicateBlock(BBInfo &BBI,
     if (I->getOpcode() <= TargetOpcode::COPY) {
       MachineInstr *PseudoInst = I;
       ++I;
-      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, TII, Cond);
+      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, Cond);
       if (!PseudoInst) {
 #ifndef NDEBUG
         dbgs() << "Unable to predicate " << *I << "!\n";

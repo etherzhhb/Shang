@@ -46,7 +46,7 @@ public:
                                     const SmallVectorImpl<MachineOperand> &Pred)
                                     const;
   static MachineInstr *
-  PredicatePseudoInstruction(MachineInstr *MI, const TargetInstrInfo *TII,
+  PredicatePseudoInstruction(MachineInstr *MI,
                              const SmallVectorImpl<MachineOperand> &Pred);
 
   virtual unsigned RemoveBranch(MachineBasicBlock &MBB) const;
@@ -143,7 +143,7 @@ public:
   BuildConditionnalMove(MachineBasicBlock &MBB, MachineBasicBlock::iterator IP,
                         MachineOperand &Res,
                         const SmallVectorImpl<MachineOperand> &Pred,
-                        MachineOperand IfTrueVal, const TargetInstrInfo *TII);
+                        MachineOperand IfTrueVal);
 
   static bool isCopyLike(unsigned Opcode, bool IncludeMoveImm = true);
   static bool isBrCndLike(unsigned Opcode);
