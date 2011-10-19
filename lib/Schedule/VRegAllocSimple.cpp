@@ -344,7 +344,7 @@ void VRASimple::bindCalleeFN() {
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      ucOp CallInst = ucOp::getParent(MRI->def_begin(RegNum));
+      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
       unsigned FNNum;
 
       //if (CallInst->getOpcode() != VTM::VOpInternalCall) {
@@ -354,7 +354,7 @@ void VRASimple::bindCalleeFN() {
       //  // Join the registers
       //  FNNum = CallInst.getOperand(1).getTargetFlags();
       //} else
-      FNNum = CallInst.getOperand(1).getBitWidth();
+      FNNum = Op.getOperand(1).getBitWidth();
       //}
 
       unsigned &FR = FNMap[FNNum];
