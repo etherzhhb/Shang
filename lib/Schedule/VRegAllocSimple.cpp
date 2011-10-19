@@ -154,7 +154,7 @@ public:
 
   bool bindDataRegister();
   bool bindFUs();
-  bool bindFUsOf(unsigned FUClassID);
+  bool bindFUsOf(const TargetRegisterClass *RC);
 
   unsigned getBitWidthOf(unsigned RegNum) {
     ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
@@ -393,9 +393,23 @@ bool VRASimple::bindDataRegister() {
 }
 
 bool VRASimple::bindFUs() {
+  bindFUsOf(VTM::RMULRegisterClass);
   return false;
 }
 
-bool VRASimple::bindFUsOf(unsigned FUClassID) {
+bool VRASimple::bindFUsOf(const TargetRegisterClass *RC) {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(RC);
+  unsigned RegID = RC->getID();
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+      unsigned PhyReg = VFI->allocatePhyReg(RegID, getBitWidthOf(RegNum));
+
+      assign(*LI, PhyReg);
+    }
+  }
+
   return false;
 }

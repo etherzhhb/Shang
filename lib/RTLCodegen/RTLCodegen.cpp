@@ -226,6 +226,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitAllSignals();
   void emitSignals(const TargetRegisterClass *RC, bool isRegister);
+  VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth);
 
   void clear();
 
@@ -625,6 +626,22 @@ void RTLCodegen::emitAllocatedFUs() {
   MBBuilder.writeToStream(S);
 }
 
+VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth) {
+  // Write the datapath for function unit.
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
+
+  std::string ResultName = "mult" + utostr_32(FUNum);
+  DPS << "assign "<< ResultName << " = ";
+  std::string OpName = ResultName + "_a";
+  DPS << OpName << " * ";
+  VM->addRegister(OpName, BitWidth);
+  OpName = ResultName + "_b";
+  DPS << OpName << ";\n";
+  VM->addRegister(OpName, BitWidth);
+  return VM->addWire(ResultName, BitWidth);
+}
+
 void RTLCodegen::emitAllSignals() {
   for (unsigned i = 0, e = FInfo->num_phyreg(); i != e; ++i) {
     unsigned RegNum = i + 1;
@@ -634,10 +651,14 @@ void RTLCodegen::emitAllSignals() {
       if (Info.isTopLevelReg(RegNum))
         VM->addRegister(RegNum, Info.getBitWidth());
       break;
-    case VTM::RINFRegClassID:
+    case VTM::RINFRegClassID: {
       // The offset of data input port is 3
       unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0))+3;
       VM->indexVASTValue(RegNum, &VM->getPort(DataInIdx));
+      break;
+    }
+    case VTM::RMULRegClassID:
+      VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth()));
       break;
     }
   }
@@ -911,31 +932,17 @@ void RTLCodegen::emitOpShift(ucOp &OpSHT, const std::string &Operator) {
 
 void RTLCodegen::emitOpMult(ucOp &OpMult) {
   raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  // Allocate the function unit register.
-  // FIXME: Move these to emitAllocatedFUs
-  ucOperand &Product = OpMult.getOperand(0);
-  unsigned FUWidth = Product.getBitWidth();
-  unsigned MultNum = TargetRegisterInfo::virtReg2Index(Product.getReg());
-  std::string SumName = "mult" + utostr_32(MultNum);
-  std::string OpAName = SumName + "_a";
-  std::string OpBName = SumName + "_b";
-  VM->addRegister(OpAName, FUWidth);
-  VM->addRegister(OpBName, FUWidth);
+
+  VASTValue *Result = VM->getVASTValue(OpMult.getOperand(0).getReg());
+
   // Assign the value to function unit.
-  CtrlS << OpAName << " <= ";
+  CtrlS << Result->getName() << "_a <= ";
   printOperand(OpMult.getOperand(1), CtrlS);
   CtrlS << ";\n";
-  CtrlS << OpBName << " <= ";
+
+  CtrlS << Result->getName() << "_b <= ";
   printOperand(OpMult.getOperand(2), CtrlS);
   CtrlS << ";\n";
-  // Write the datapath for function unit.
-  VASTDatapath *data = VM->createDatapath();
-  VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
-  // FIXME: Move these to emitAllocatedFUs
-  DPS << "assign ";
-  // Sum.
-  printOperand(OpMult.getOperand(0), DPS);
-  DPS << " = " << OpAName << " * " << OpBName << ";\n";
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
