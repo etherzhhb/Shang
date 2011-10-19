@@ -156,6 +156,12 @@ public:
   bool bindFUs();
   bool bindFUsOf(unsigned FUClassID);
 
+  unsigned getBitWidthOf(unsigned RegNum) {
+    ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
+    return DefOp.getBitWidth();
+  }
+
+
   unsigned selectOrSplit(LiveInterval &VirtReg,
                          SmallVectorImpl<LiveInterval*> &splitLVRs);
 
@@ -376,9 +382,8 @@ bool VRASimple::bindDataRegister() {
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
-      unsigned Bitwidth = DefOp.getBitWidth();
-      unsigned PhyReg = VFI->allocatePhyReg(VTM::DRRegClassID, Bitwidth);
+      unsigned PhyReg = VFI->allocatePhyReg(VTM::DRRegClassID,
+                                            getBitWidthOf(RegNum));
 
       assign(*LI, PhyReg);
     }
