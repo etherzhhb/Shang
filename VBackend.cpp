@@ -40,8 +40,6 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-cl::opt<bool> EnableSimpleRegisterAllocate("vtm-enable-simple-allocate",
-                                           cl::init(false), cl::Hidden);
 cl::opt<bool> EnableIfConversion("vtm-enable-if-conversion",
                                  cl::init(true), cl::Hidden);
 
@@ -226,8 +224,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // interval correctly.
   PM.add(createForwardWireUsersPass());
 
-  if (EnableSimpleRegisterAllocate)
-    PM.add(createSimpleRegisterAllocator());
+  PM.add(createSimpleRegisterAllocator());
 
   PM.add(createRTLCodegenPreparePass());
 
