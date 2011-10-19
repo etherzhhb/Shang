@@ -149,6 +149,8 @@ public:
     return &LI;
   }
 
+  void joinPHINodeIntervals();
+
   void bindMemoryBus();
   void bindCalleeFN();
 
@@ -175,6 +177,276 @@ public:
 char VRASimple::ID = 0;
 
 }
+
+//===----------------------------------------------------------------------===//
+/// ComputeUltimateVN - Assuming we are going to join two live intervals,
+/// compute what the resultant value numbers for each value in the input two
+/// ranges will be.  This is complicated by copies between the two which can
+/// and will commonly cause multiple value numbers to be merged into one.
+///
+/// VN is the value number that we're trying to resolve.  InstDefiningValue
+/// keeps track of the new InstDefiningValue assignment for the result
+/// LiveInterval.  ThisFromOther/OtherFromThis are sets that keep track of
+/// whether a value in this or other is a copy from the opposite set.
+/// ThisValNoAssignments/OtherValNoAssignments keep track of value #'s that have
+/// already been assigned.
+///
+/// ThisFromOther[x] - If x is defined as a copy from the other interval, this
+/// contains the value number the copy is from.
+///
+static unsigned ComputeUltimateVN(VNInfo *VNI,
+  SmallVector<VNInfo*, 16> &NewVNInfo,
+  DenseMap<VNInfo*, VNInfo*> &ThisFromOther,
+  DenseMap<VNInfo*, VNInfo*> &OtherFromThis,
+  SmallVector<int, 16> &ThisValNoAssignments,
+  SmallVector<int, 16> &OtherValNoAssignments) {
+    unsigned VN = VNI->id;
+
+    // If the VN has already been computed, just return it.
+    if (ThisValNoAssignments[VN] >= 0)
+      return ThisValNoAssignments[VN];
+    assert(ThisValNoAssignments[VN] != -2 && "Cyclic value numbers");
+
+    // If this val is not a copy from the other val, then it must be a new value
+    // number in the destination.
+    DenseMap<VNInfo*, VNInfo*>::iterator I = ThisFromOther.find(VNI);
+    if (I == ThisFromOther.end()) {
+      NewVNInfo.push_back(VNI);
+      return ThisValNoAssignments[VN] = NewVNInfo.size()-1;
+    }
+    VNInfo *OtherValNo = I->second;
+
+    // Otherwise, this *is* a copy from the RHS.  If the other side has already
+    // been computed, return it.
+    if (OtherValNoAssignments[OtherValNo->id] >= 0)
+      return ThisValNoAssignments[VN] = OtherValNoAssignments[OtherValNo->id];
+
+    // Mark this value number as currently being computed, then ask what the
+    // ultimate value # of the other value is.
+    ThisValNoAssignments[VN] = -2;
+    unsigned UltimateVN =
+      ComputeUltimateVN(OtherValNo, NewVNInfo, OtherFromThis, ThisFromOther,
+      OtherValNoAssignments, ThisValNoAssignments);
+    return ThisValNoAssignments[VN] = UltimateVN;
+}
+
+/// JoinIntervals - Attempt to join these two intervals.  On failure, this
+/// returns false.
+static bool JoinIntervals(LiveInterval &LHS, LiveInterval &RHS,
+                          const TargetRegisterInfo *TRI,
+                          MachineRegisterInfo *MRI) {
+  DEBUG({ dbgs() << "\t\tRHS = "; RHS.print(dbgs(), TRI); dbgs() << "\n"; });
+  assert(!TargetRegisterInfo::isPhysicalRegister(LHS.reg)
+         && !TargetRegisterInfo::isPhysicalRegister(RHS.reg)
+         && "Cannot join physics registers yet!");
+  // If a live interval is a physical register, check for interference with any
+  // aliases. The interference check implemented here is a bit more conservative
+  // than the full interfeence check below. We allow overlapping live ranges
+  // only when one is a copy of the other.
+  //if (CP.isPhys()) {
+  //  for (const unsigned *AS = tri_->getAliasSet(CP.getDstReg()); *AS; ++AS){
+  //    if (!li_->hasInterval(*AS))
+  //      continue;
+  //    const LiveInterval &LHS = li_->getInterval(*AS);
+  //    LiveInterval::const_iterator LI = LHS.begin();
+  //    for (LiveInterval::const_iterator RI = RHS.begin(), RE = RHS.end();
+  //      RI != RE; ++RI) {
+  //        LI = std::lower_bound(LI, LHS.end(), RI->start);
+  //        // Does LHS have an overlapping live range starting before RI?
+  //        if ((LI != LHS.begin() && LI[-1].end > RI->start) &&
+  //          (RI->start != RI->valno->def ||
+  //          !CP.isCoalescable(li_->getInstructionFromIndex(RI->start)))) {
+  //            DEBUG({
+  //              dbgs() << "\t\tInterference from alias: ";
+  //              LHS.print(dbgs(), tri_);
+  //              dbgs() << "\n\t\tOverlap at " << RI->start << " and no copy.\n";
+  //            });
+  //            return false;
+  //        }
+
+  //        // Check that LHS ranges beginning in this range are copies.
+  //        for (; LI != LHS.end() && LI->start < RI->end; ++LI) {
+  //          if (LI->start != LI->valno->def ||
+  //            !CP.isCoalescable(li_->getInstructionFromIndex(LI->start))) {
+  //              DEBUG({
+  //                dbgs() << "\t\tInterference from alias: ";
+  //                LHS.print(dbgs(), tri_);
+  //                dbgs() << "\n\t\tDef at " << LI->start << " is not a copy.\n";
+  //              });
+  //              return false;
+  //          }
+  //        }
+  //    }
+  //  }
+  //}
+
+  // Compute the final value assignment, assuming that the live ranges can be
+  // coalesced.
+  SmallVector<int, 16> LHSValNoAssignments;
+  SmallVector<int, 16> RHSValNoAssignments;
+  DenseMap<VNInfo*, VNInfo*> LHSValsDefinedFromRHS;
+  DenseMap<VNInfo*, VNInfo*> RHSValsDefinedFromLHS;
+  SmallVector<VNInfo*, 16> NewVNInfo;
+
+  DEBUG({ dbgs() << "\t\tLHS = "; LHS.print(dbgs(), TRI); dbgs() << "\n"; });
+
+  // Loop over the value numbers of the LHS, seeing if any are defined from
+  // the RHS.
+  for (LiveInterval::vni_iterator i = LHS.vni_begin(), e = LHS.vni_end();
+    i != e; ++i) {
+      VNInfo *VNI = *i;
+      if (VNI->isUnused() || !VNI->isDefByCopy())  // Src not defined by a copy?
+        continue;
+
+      // Never join with a register that has EarlyClobber redefs.
+      if (VNI->hasRedefByEC())
+        return false;
+
+      // DstReg is known to be a register in the LHS interval.  If the src is
+      // from the RHS interval, we can use its value #.
+      //if (!CP.isCoalescable(VNI->getCopy()))
+      //  continue;
+
+      // Figure out the value # from the RHS.
+      LiveRange *lr = RHS.getLiveRangeContaining(VNI->def.getPrevSlot());
+      // The copy could be to an aliased physreg.
+      if (!lr) continue;
+      LHSValsDefinedFromRHS[VNI] = lr->valno;
+  }
+
+  // Loop over the value numbers of the RHS, seeing if any are defined from
+  // the LHS.
+  for (LiveInterval::vni_iterator i = RHS.vni_begin(), e = RHS.vni_end();
+    i != e; ++i) {
+      VNInfo *VNI = *i;
+      if (VNI->isUnused() || !VNI->isDefByCopy())  // Src not defined by a copy?
+        continue;
+
+      // Never join with a register that has EarlyClobber redefs.
+      if (VNI->hasRedefByEC())
+        return false;
+
+      // DstReg is known to be a register in the RHS interval.  If the src is
+      // from the LHS interval, we can use its value #.
+      //if (!CP.isCoalescable(VNI->getCopy()))
+      //  continue;
+
+      // Figure out the value # from the LHS.
+      LiveRange *lr = LHS.getLiveRangeContaining(VNI->def.getPrevSlot());
+      // The copy could be to an aliased physreg.
+      if (!lr) continue;
+      RHSValsDefinedFromLHS[VNI] = lr->valno;
+  }
+
+  LHSValNoAssignments.resize(LHS.getNumValNums(), -1);
+  RHSValNoAssignments.resize(RHS.getNumValNums(), -1);
+  NewVNInfo.reserve(LHS.getNumValNums() + RHS.getNumValNums());
+
+  for (LiveInterval::vni_iterator i = LHS.vni_begin(), e = LHS.vni_end();
+    i != e; ++i) {
+      VNInfo *VNI = *i;
+      unsigned VN = VNI->id;
+      if (LHSValNoAssignments[VN] >= 0 || VNI->isUnused())
+        continue;
+      ComputeUltimateVN(VNI, NewVNInfo,
+        LHSValsDefinedFromRHS, RHSValsDefinedFromLHS,
+        LHSValNoAssignments, RHSValNoAssignments);
+  }
+  for (LiveInterval::vni_iterator i = RHS.vni_begin(), e = RHS.vni_end();
+    i != e; ++i) {
+      VNInfo *VNI = *i;
+      unsigned VN = VNI->id;
+      if (RHSValNoAssignments[VN] >= 0 || VNI->isUnused())
+        continue;
+      // If this value number isn't a copy from the LHS, it's a new number.
+      if (RHSValsDefinedFromLHS.find(VNI) == RHSValsDefinedFromLHS.end()) {
+        NewVNInfo.push_back(VNI);
+        RHSValNoAssignments[VN] = NewVNInfo.size()-1;
+        continue;
+      }
+
+      ComputeUltimateVN(VNI, NewVNInfo,
+        RHSValsDefinedFromLHS, LHSValsDefinedFromRHS,
+        RHSValNoAssignments, LHSValNoAssignments);
+  }
+
+  // Armed with the mappings of LHS/RHS values to ultimate values, walk the
+  // interval lists to see if these intervals are coalescable.
+  LiveInterval::const_iterator I = LHS.begin();
+  LiveInterval::const_iterator IE = LHS.end();
+  LiveInterval::const_iterator J = RHS.begin();
+  LiveInterval::const_iterator JE = RHS.end();
+
+  // Skip ahead until the first place of potential sharing.
+  if (I != IE && J != JE) {
+    if (I->start < J->start) {
+      I = std::upper_bound(I, IE, J->start);
+      if (I != LHS.begin()) --I;
+    } else if (J->start < I->start) {
+      J = std::upper_bound(J, JE, I->start);
+      if (J != RHS.begin()) --J;
+    }
+  }
+
+  while (I != IE && J != JE) {
+    // Determine if these two live ranges overlap.
+    bool Overlaps;
+    if (I->start < J->start) {
+      Overlaps = I->end > J->start;
+    } else {
+      Overlaps = J->end > I->start;
+    }
+
+    // If so, check value # info to determine if they are really different.
+    if (Overlaps) {
+      // If the live range overlap will map to the same value number in the
+      // result liverange, we can still coalesce them.  If not, we can't.
+      if (LHSValNoAssignments[I->valno->id] !=
+        RHSValNoAssignments[J->valno->id])
+        return false;
+      // If it's re-defined by an early clobber somewhere in the live range,
+      // then conservatively abort coalescing.
+      if (NewVNInfo[LHSValNoAssignments[I->valno->id]]->hasRedefByEC())
+        return false;
+    }
+
+    if (I->end < J->end)
+      ++I;
+    else
+      ++J;
+  }
+
+  // Update kill info. Some live ranges are extended due to copy coalescing.
+  for (DenseMap<VNInfo*, VNInfo*>::iterator I = LHSValsDefinedFromRHS.begin(),
+    E = LHSValsDefinedFromRHS.end(); I != E; ++I) {
+      VNInfo *VNI = I->first;
+      unsigned LHSValID = LHSValNoAssignments[VNI->id];
+      if (VNI->hasPHIKill())
+        NewVNInfo[LHSValID]->setHasPHIKill(true);
+  }
+
+  // Update kill info. Some live ranges are extended due to copy coalescing.
+  for (DenseMap<VNInfo*, VNInfo*>::iterator I = RHSValsDefinedFromLHS.begin(),
+    E = RHSValsDefinedFromLHS.end(); I != E; ++I) {
+      VNInfo *VNI = I->first;
+      unsigned RHSValID = RHSValNoAssignments[VNI->id];
+      if (VNI->hasPHIKill())
+        NewVNInfo[RHSValID]->setHasPHIKill(true);
+  }
+
+  if (LHSValNoAssignments.empty())
+    LHSValNoAssignments.push_back(-1);
+  if (RHSValNoAssignments.empty())
+    RHSValNoAssignments.push_back(-1);
+
+  // If we get here, we know that we can coalesce the live ranges.  Ask the
+  // intervals to coalesce themselves now.
+  LHS.join(RHS, &LHSValNoAssignments[0], &RHSValNoAssignments[0], NewVNInfo,
+    MRI);
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
 
 FunctionPass *llvm::createSimpleRegisterAllocator() {
   return new VRASimple();
@@ -225,7 +497,6 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
   PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() + 1);
   // Cache an interferece query for each physical reg
   Queries.reset(new LiveIntervalUnion::Query[PhysReg2LiveUnion.numRegs()]);
-
 }
 
 bool VRASimple::runOnMachineFunction(MachineFunction &F) {
@@ -239,6 +510,8 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   DEBUG(dbgs() << "Before simple register allocation:\n";
         printVMF(dbgs(), F);
   ); 
+
+  joinPHINodeIntervals();
 
   // Bind the pre-bind function units.
   bindMemoryBus();
@@ -286,6 +559,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   return true;
 }
+
 unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
                                              unsigned PhysReg) {
   //unsigned Overlaps[16];
@@ -324,6 +598,38 @@ unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
   return VFI->allocatePhyReg(MRI->getRegClass(VReg)->getID(), Bitwidth);
 }
 
+void VRASimple::joinPHINodeIntervals() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::PHIRRegisterClass);
+
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned PHINum = *I;
+
+    MachineRegisterInfo::use_iterator UI = MRI->use_begin(PHINum);
+    ucOp Op = ucOp::getParent(UI);
+    assert(Op->getOpcode() == VTM::VOpDefPhi && "Unexpected Opcode!");
+    unsigned DstReg = Op.getOperand(0).getReg();
+    LiveInterval &DstLI = LIS->getInterval(DstReg);
+
+    JoinIntervals(DstLI, LIS->getInterval(PHINum), TRI, MRI);
+
+    if (MRI->getRegClass(DstReg) != VTM::DRRegisterClass) {
+      // Join the phi source to dst, too.
+      MachineRegisterInfo::def_iterator DI = MRI->def_begin(PHINum);
+      ucOp OpMove = ucOp::getParent(DI);
+      assert(++DI == MRI->def_end() && "PHI source not in SSA form!");
+      MachineOperand &PHISrcMO = OpMove.getOperand(1);
+      if (!PHISrcMO.isReg()) continue;
+
+      unsigned PHISrc = PHISrcMO.getReg();
+      JoinIntervals(DstLI, LIS->getInterval(PHISrc), TRI, MRI);
+      MRI->replaceRegWith(PHISrc, DstReg);
+    }
+
+    MRI->replaceRegWith(PHINum, DstReg);
+  }
+}
+
 void VRASimple::bindMemoryBus() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RINFRegisterClass);
 
@@ -334,10 +640,6 @@ void VRASimple::bindMemoryBus() {
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      // The register may defined by VOpMove_ww which produced by PHINodes, but
-      // it is also correct to check interference and bind it to memory bus
-      // register, because this just connecting the two wires(and their live
-      // intervals) together.
       assert(!query(*LI, MemBusReg).checkInterference() && "Cannot bind membus!");
       assign(*LI, MemBusReg);
     }
@@ -346,28 +648,13 @@ void VRASimple::bindMemoryBus() {
 
 void VRASimple::bindCalleeFN() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
-  std::map<unsigned, unsigned> FNMap;
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
-      unsigned FNNum;
-
-      //if (CallInst->getOpcode() != VTM::VOpInternalCall) {
-      //  assert(CallInst->getOpcode() == VTM::VOpDefPhi
-      //         && "Unexpected opcode defining callee fu!");
-
-      //  // Join the registers
-      //  FNNum = CallInst.getOperand(1).getTargetFlags();
-      //} else
-      FNNum = Op.getOperand(1).getBitWidth();
-      //}
-
-      unsigned &FR = FNMap[FNNum];
-      // Allocate the register for this submodule if it is not yet allocated.
-      if (FR == 0) FR = VFI->allocateFN(VTM::RCFNRegClassID);
+      unsigned FR = VFI->allocateFN(VTM::RCFNRegClassID);
 
       assert(!query(*LI, FR).checkInterference()&&"Cannot bind sub module!");
       assign(*LI, FR);

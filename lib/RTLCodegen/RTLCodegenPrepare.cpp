@@ -92,6 +92,8 @@ void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
   for (std::vector<unsigned>::const_iterator I = PHIs.begin(), E = PHIs.end();
        I != E; ++I) {
     unsigned PHINum = *I;
+    if (MRI.reg_nodbg_empty(PHINum)) continue;
+
     MachineRegisterInfo::use_iterator UI = MRI.use_begin(PHINum);
     assert(MRI.hasOneUse(PHINum) && "PHI Information broken!");
 

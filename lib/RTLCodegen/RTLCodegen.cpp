@@ -779,18 +779,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
     // Emit the operations.
     switch (Op->getOpcode()) {
-    case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
-    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
-    case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
-    case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
-    case VTM::VOpBRam:          emitOpBRam(Op);               break;
-    case VTM::VOpAdd:           emitOpAdd(Op);                break;
-    case VTM::VOpMult:          emitOpMult(Op);               break;
-    case VTM::VOpSHL:           emitOpShift(Op, "<<");       break;
-    case VTM::VOpSRL:           emitOpShift(Op, ">>");       break;
-    case VTM::VOpSRA:           emitOpShift(Op, ">>>");       break;
-    case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot);    break;
-    case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
     case VTM::VOpMove_rm:
@@ -798,7 +786,20 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
+    case VTM::VOpMvPipe:
     case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::VOpAdd:           emitOpAdd(Op);                break;
+    case VTM::VOpMult:          emitOpMult(Op);               break;
+    case VTM::VOpSHL:           emitOpShift(Op, "<<");       break;
+    case VTM::VOpSRL:           emitOpShift(Op, ">>");       break;
+    case VTM::VOpSRA:           emitOpShift(Op, ">>>");       break;
+    case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot);    break;
+    case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
+    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
+    case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
+    case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
+    case VTM::VOpBRam:          emitOpBRam(Op);               break;
+    case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot);break;
@@ -836,6 +837,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
     case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::VOpDefPhi:                                      break;
     case VTM::ImpUse:           /*Not need to handle*/        break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
