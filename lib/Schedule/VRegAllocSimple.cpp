@@ -136,7 +136,7 @@ public:
 
   LiveInterval *getInterval(unsigned RegNum) {
     if (MRI->reg_nodbg_empty(RegNum)) {
-      LIS->removeInterval(RegNum);
+      //LIS->removeInterval(RegNum);
       return 0;
     }
 
@@ -153,6 +153,8 @@ public:
   void bindCalleeFN();
 
   bool bindDataRegister();
+  bool bindFUs();
+  bool bindFUsOf(unsigned FUClassID);
 
   unsigned selectOrSplit(LiveInterval &VirtReg,
                          SmallVectorImpl<LiveInterval*> &splitLVRs);
@@ -238,11 +240,11 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   bool SomethingBind = true;
 
-  while (SomethingBind) {
+  //while (SomethingBind) {
     SomethingBind = false;
     SomethingBind |= bindDataRegister();
-    // TODO: Bind Function units.
-  }
+    SomethingBind |= bindFUs();
+  //}
 
   addMBBLiveIns(MF);
   LIS->addKillFlags();
@@ -368,5 +370,27 @@ void VRASimple::bindCalleeFN() {
 }
 
 bool VRASimple::bindDataRegister() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::DRRegisterClass);
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+      ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
+      unsigned Bitwidth = DefOp.getBitWidth();
+      unsigned PhyReg = VFI->allocatePhyReg(VTM::DRRegClassID, Bitwidth);
+
+      assign(*LI, PhyReg);
+    }
+  }
+
+  return false;
+}
+
+bool VRASimple::bindFUs() {
+  return false;
+}
+
+bool VRASimple::bindFUsOf(unsigned FUClassID) {
   return false;
 }
