@@ -214,7 +214,7 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
   VRM = &vrm;
   LIS = &lis;
 
-  PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs());
+  PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() + 1);
   // Cache an interferece query for each physical reg
   Queries.reset(new LiveIntervalUnion::Query[PhysReg2LiveUnion.numRegs()]);
 
