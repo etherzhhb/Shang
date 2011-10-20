@@ -223,29 +223,6 @@ void ucOperand::print(raw_ostream &OS,
     std::string BitRange = "";
     std::string Prefix = "reg";
 
-    if (TargetRegisterInfo::isVirtualRegister(Reg)) {
-      //DEBUG(
-        if (MachineInstr *MI = getParent()) {
-          MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
-          const TargetRegisterClass *RC = MRI.getRegClass(Reg);
-          OS << "/*" << RC->getName() << "*/ ";
-        }
-      //);
-      Reg = TargetRegisterInfo::virtReg2Index(Reg);
-      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
-
-      if (isWire()) {
-        OS << "wire" << Reg << BitRange;
-        return;
-      }
-    } else { // Compute the offset of physics register.
-      Prefix = "phy_reg";
-      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
-    }
-
-    //assert(TargetRegisterInfo::isPhysicalRegister(Reg)
-    //       && "Unexpected virtual register!");
-    // Get the one of the 64 bit registers.
     OS << "/*";
     if (isDef())
       OS << "def_";
@@ -253,8 +230,28 @@ void ucOperand::print(raw_ostream &OS,
       OS << "use_";
       if (isKill()) OS << "kill_";
     }
-    OS << "reg" << Reg <<"*/ " << Prefix << Reg << BitRange;
 
+    if (TargetRegisterInfo::isVirtualRegister(Reg)) {
+      //DEBUG(
+        if (MachineInstr *MI = getParent()) {
+          MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
+          const TargetRegisterClass *RC = MRI.getRegClass(Reg);
+          OS << RC->getName();
+        }
+      //);
+      Reg = TargetRegisterInfo::virtReg2Index(Reg);
+      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
+
+      if (isWire()) {
+        OS << "*/ wire" << Reg << BitRange;
+        return;
+      }
+    } else { // Compute the offset of physics register.
+      Prefix = "phy_reg";
+      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
+    }
+
+    OS << "_reg" << Reg <<"*/ " << Prefix << Reg << BitRange;
     return;
   }
   case MachineOperand::MO_Immediate:
