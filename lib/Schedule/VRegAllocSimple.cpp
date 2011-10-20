@@ -622,11 +622,18 @@ void VRASimple::joinPHINodeIntervals() {
       if (!PHISrcMO.isReg()) continue;
 
       unsigned PHISrc = PHISrcMO.getReg();
+
       JoinIntervals(DstLI, LIS->getInterval(PHISrc), TRI, MRI);
       MRI->replaceRegWith(PHISrc, DstReg);
+      // DirtyHack: Remove the define flag of the PHI stuffs so we have only
+      // 1 define for the register.
+      OpMove.getOperand(0).setIsDef(false);
     }
 
     MRI->replaceRegWith(PHINum, DstReg);
+    // DirtyHack: Remove the define flag of the PHI stuffs so we have only
+    // 1 define for the register.
+    Op.getOperand(0).setIsDef(false);
   }
 }
 
