@@ -668,8 +668,14 @@ void RTLCodegen::emitAllSignals() {
   emitSignals(VTM::WireRegisterClass, false);
   // FIXME: There are function units.
   emitSignals(VTM::RADDRegisterClass, false);
+  emitSignals(VTM::RCARRegisterClass, false);
+
   emitSignals(VTM::RMULRegisterClass, false);
-  emitSignals(VTM::RSHTRegisterClass, false);
+
+  emitSignals(VTM::RASRRegisterClass, false);
+  emitSignals(VTM::RSHLRegisterClass, false);
+  emitSignals(VTM::RLSRRegisterClass, false);
+
   emitSignals(VTM::RBRMRegisterClass, false);
   emitSignals(VTM::RCFNRegisterClass, false);
   emitSignals(VTM::RINFRegisterClass, false);
@@ -779,10 +785,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
 
     // Emit the operations.
     switch (Op->getOpcode()) {
-    case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
-    case VTM::VOpMove_rm:
-    case VTM::VOpMove_rs:
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
@@ -829,10 +832,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
     ucOp Op = *I;
 
     switch (Op->getOpcode()) {
-    case VTM::VOpMove_ra:
     case VTM::VOpMove_ri:
-    case VTM::VOpMove_rm:
-    case VTM::VOpMove_rs:
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:

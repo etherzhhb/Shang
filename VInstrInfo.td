@@ -142,9 +142,6 @@ let isReMaterializable = 1,
     def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [], 0, 1>;
     def _rr : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [], 0, 1>;
     def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
-    def _ra : CtrlInst<(outs DR:$dst), (ins RADD:$src), "$dst=$src", [], 0, 1>;
-    def _rm : CtrlInst<(outs DR:$dst), (ins RMUL:$src), "$dst=$src", [], 0, 1>;
-    def _rs : CtrlInst<(outs DR:$dst), (ins RSHT:$src), "$dst=$src", [], 0, 1>;
     def _ww : CtrlInst<(outs Wire:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
   }
 

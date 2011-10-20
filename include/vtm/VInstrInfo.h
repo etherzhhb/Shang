@@ -145,7 +145,7 @@ public:
                         const SmallVectorImpl<MachineOperand> &Pred,
                         MachineOperand IfTrueVal);
 
-  static bool isCopyLike(unsigned Opcode, bool IncludeMoveImm = true);
+  static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
   static bool isWireOp(const TargetInstrDesc &TID);
 

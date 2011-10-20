@@ -378,10 +378,11 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // written at the moment (clock event) that the atom finish.
   if (VTID.isWriteUntilFinish()) ++CopySlot;
 
+  unsigned OpC = Inst.getOpcode();
   typedef SmallVector<MachineOperand, 8> OperandVector;
   // Add the opcode metadata and the function unit id.
-  MachineOperand OpCMD = ucOperand::CreateOpcode(Inst.getOpcode(),
-                                                 SchedSlot.getSlot(), FUId);
+  MachineOperand OpCMD =
+    ucOperand::CreateOpcode(OpC, SchedSlot.getSlot(), FUId);
 
   // Create the default predicate operand, which means always execute.
   ucOperand Pred = ucOperand::CreatePredicate();
@@ -445,7 +446,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       // unit should be wire, and there must be a copy follow up.
       if (!NewOp.isWire()) {
         WireNum =
-          MRI.createVirtualRegister(VFUs::getRepRegisterClass(VTID.getFUType()));
+          MRI.createVirtualRegister(VFUs::getRepRegisterClass(OpC, i - OpStart));
         NewOp = ucOperand::CreateWire(WireNum, BitWidth, true);
       }
 

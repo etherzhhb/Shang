@@ -715,12 +715,9 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
   }
 }
 
-bool VInstrInfo::isCopyLike(unsigned Opcode, bool IncludeMoveImm) {
+bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
-         || Opcode == VTM::VOpMove_ra
-         || (Opcode == VTM::VOpMove_ri && IncludeMoveImm)
-         || Opcode == VTM::VOpMove_rm
-         || Opcode == VTM::VOpMove_rs
+         || Opcode == VTM::VOpMove_ri
          || Opcode == VTM::VOpMove_rw
          || Opcode == VTM::VOpSel
          || Opcode == VTM::VOpReadReturn

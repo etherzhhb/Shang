@@ -16,6 +16,7 @@
 #include "vtm/SynSettings.h" // DiryHack: Also implement the SynSetting class.
 #include "vtm/LuaScript.h"
 #include "vtm/VRegisterInfo.h"
+#include "vtm/VTM.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -36,23 +37,27 @@ void VFUDesc::print(raw_ostream &OS) const {
 
 namespace llvm {
   namespace VFUs {
-   const char *VFUNames[] = {
+    const char *VFUNames[] = {
       "Trivial", "AddSub", "Shift", "Mult", "MemoryBus", "BRam",
       "CalleeFN", "FSMFinish"
     };
 
-    const TargetRegisterClass *getRepRegisterClass(enum FUTypes T) {
-      static const TargetRegisterClass *RepRCTable[] = {
-        VTM::WireRegisterClass, //Trivial = 0,
-        VTM::RADDRegisterClass, //AddSub = 1,
-        VTM::RSHTRegisterClass, //Shift = 2,
-        VTM::RMULRegisterClass, //Mult = 3,
-        VTM::RINFRegisterClass, //MemoryBus = 4,
-        VTM::RBRMRegisterClass, //BRam = 5,
-        VTM::RCFNRegisterClass, //CalleeFN = 6,
-        VTM::WireRegisterClass  //FSMFinish = 7,
-      };
-      return RepRCTable[T];
+    const TargetRegisterClass *getRepRegisterClass(unsigned OpCode, unsigned i){
+      switch (OpCode) {
+      default:                  return VTM::WireRegisterClass;
+      case VTM::VOpAdd:
+        if (i == 0)             return VTM::RADDRegisterClass;
+        else                    return VTM::RCARRegisterClass;
+      case VTM::VOpSRA:         return VTM::RASRRegisterClass;
+      case VTM::VOpSRL:         return VTM::RLSRRegisterClass;
+      case VTM::VOpSHL:         return VTM::RSHLRegisterClass;
+      case VTM::VOpMult:        return VTM::RMULRegisterClass;
+      case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
+      case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
+      case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
+      }
+
+      return 0;
     }
   }
 }
