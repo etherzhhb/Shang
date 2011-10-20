@@ -150,14 +150,6 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
   return ss;
 }
 
-VASTCnd VASTCnd::Create(VASTModule *M, ucOperand &Op) {
-  ucOperand::bit_range range = std::make_pair(0, 0);//Op.getBitRange();
-
-  VASTCnd Cnd(M->getVASTValue(Op.getReg()), Op.isPredicateInverted(),
-              range.first, range.second);
-  return Cnd;
-}
-
 void VASTRValue::print(raw_ostream &OS) const {
   OS << V->getName();
 
@@ -509,7 +501,7 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
   return Port;
 }
 
-VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTValue *V) {
+VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTRValue V) {
   bool Inserted = RegsMap.insert(std::make_pair(RegNum, V)).second;
   assert(Inserted && "ValueIndex already existed!");
   (void) Inserted;

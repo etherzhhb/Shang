@@ -107,16 +107,22 @@ class VASTRValue {
 protected:
   // The ast node or simply the symbol.
   VASTValue *V;
-  // The bit range of this value.
-  uint8_t UB, LB;
 
 public:
-  VASTRValue(VASTValue *v = 0, uint8_t ub = 0, uint8_t lb = 0)
+  // The bit range of this value.
+  const uint8_t UB, LB;
+
+  VASTRValue(VASTValue *v, uint8_t ub, uint8_t lb)
     : V(v),UB(ub), LB(lb) {}
+
+  VASTRValue(VASTValue *v) : V(v),UB(v->getBitWidth()), LB(0) {}
+
+  VASTRValue() : V(0), UB(0), LB(0) {}
 
   operator bool() const { return V != 0; }
   // Implicit cast to VASTValue.
   operator VASTValue *() const { return V; }
+  VASTValue *operator->() const { return V; }
 
   void print(raw_ostream &OS) const;
 };
@@ -132,6 +138,12 @@ public:
     //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
+  /*implicit*/ VASTCnd(VASTRValue V, bool inverted = false)
+    : VASTRValue(V), Inverted(inverted)
+  {
+    //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
+  }
+
   /*implicit*/ VASTCnd(bool Cnd = true) : VASTRValue(), Inverted(!Cnd) {}
 
   bool isInverted() const { return Inverted; }
@@ -141,8 +153,6 @@ public:
   VASTCnd invert() const { return VASTCnd(getCndVal(), !isInverted()); }
 
   void print(raw_ostream &OS) const;
-
-  static VASTCnd Create(VASTModule *M, ucOperand &Op);
 };
 
 class VASTPort : public VASTValue {
@@ -328,7 +338,8 @@ private:
   std::string Name;
   BumpPtrAllocator Allocator;
   std::vector<VASTDatapath*> Datapaths;
-  std::map<unsigned, VASTValue*> RegsMap;
+  typedef std::map<unsigned, VASTRValue> RegIdxMapTy;
+  RegIdxMapTy RegsMap;
   StringMap<VASTValue*> SymbolTable;
   typedef std::vector<VASTSlot*> SlotVecTy;
   SlotVecTy Slots;
@@ -377,16 +388,16 @@ public:
   void printSlotActives(raw_ostream &OS) const;
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  VASTValue *getVASTValue(unsigned RegNum) const {
-    std::map<unsigned, VASTValue*>::const_iterator at = RegsMap.find(RegNum);
-    if(at == RegsMap.end()) return 0;
+  VASTRValue lookup(unsigned RegNum) const {
+    RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
+    if(at == RegsMap.end()) return VASTRValue();
 
     return at->second;
   }
 
   VASTValue *getVASTValue(const std::string &Name) const {
     StringMap<VASTValue*>::const_iterator at = SymbolTable.find(Name);
-    return VASTRValue(at->second, 0);
+    return at->second;
   }
 
   VASTValue *getVASTValue(const std::string &Name, VASTValue *V = 0) {
@@ -516,7 +527,7 @@ public:
   VASTValue *addWire(unsigned WireNum, unsigned BitWidth,
                      const std::string &Comment = "");
 
-  VASTValue *indexVASTValue(unsigned RegNum, VASTValue *V);
+  VASTValue *indexVASTValue(unsigned RegNum, VASTRValue V);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);

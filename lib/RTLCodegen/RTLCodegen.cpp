@@ -226,6 +226,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitAllSignals();
   void emitSignals(const TargetRegisterClass *RC, bool isRegister);
+  VASTValue *emitFUAdd(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUShift(unsigned FUNum, unsigned BitWidth,
                          const char *Operator, bool isSAR);
@@ -272,18 +273,9 @@ class RTLCodegen : public MachineFunctionPass {
       SS << "1'b1";
   }
 
-  void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true){
-    if(Op.isReg()){
-      VASTValue *V = VM->getVASTValue(Op.getReg());
-      assert (V != 0 && "Cannot find this Value in vector!");
-      OS << V->getName();
-      if(printBitwidth){
-        OS << verilogBitRange(Op.getBitWidth(), 0, Op.getBitWidth() !=1);
-      }
-    }
-    else
-      Op.print(OS);
-  }
+  VASTCnd createCondition(ucOperand &Op);
+
+  void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true);
 
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
   void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);
@@ -626,6 +618,27 @@ void RTLCodegen::emitAllocatedFUs() {
   MBBuilder.writeToStream(S);
 }
 
+VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
+  // Write the datapath for function unit.
+  VASTDatapath *data = VM->createDatapath();
+  VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
+  unsigned OperandWidth = BitWidth - 1;
+
+  std::string ResultName = "addsub" + utostr_32(FUNum);
+  DPS << "assign "<< ResultName << " = ";
+  std::string OpName = ResultName + "_a";
+  VM->addRegister(OpName, OperandWidth);
+  DPS << OpName << " + ";
+  OpName = ResultName + "_b";
+  VM->addRegister(OpName, OperandWidth);
+  DPS << OpName << " + ";
+  OpName = ResultName + "_c";
+  VM->addRegister(OpName, 1);
+  DPS << OpName << ";\n";
+
+  return VM->addWire(ResultName, BitWidth);
+}
+
 VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
   VASTDatapath *data = VM->createDatapath();
@@ -672,14 +685,23 @@ void RTLCodegen::emitAllSignals() {
   for (unsigned i = 0, e = FInfo->num_phyreg(); i != e; ++i) {
     unsigned RegNum = i + 1;
     VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
-    switch (Info.RegClassId) {
+    if (!Info.isTopLevelReg(RegNum)) {
+      unsigned Parent = Info.getParentRegister();
+      VASTRValue V = VASTRValue(VM->lookup(Parent), Info.getUB(), Info.getLB());
+      VM->indexVASTValue(RegNum, V);
+      continue;
+    }
+
+    switch (Info.getRegClass()) {
     case VTM::DRRegClassID:
-      if (Info.isTopLevelReg(RegNum))
-        VM->addRegister(RegNum, Info.getBitWidth());
+      VM->addRegister(RegNum, Info.getBitWidth());
+      break;
+    case VTM::RADDRegClassID:
+      VM->indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
       break;
     case VTM::RINFRegClassID: {
       // The offset of data input port is 3
-      unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0))+3;
+      unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
       VM->indexVASTValue(RegNum, &VM->getPort(DataInIdx));
       break;
     }
@@ -704,16 +726,7 @@ void RTLCodegen::emitAllSignals() {
     }
   }
 
-  emitSignals(VTM::DRRegisterClass, true);
-
   emitSignals(VTM::WireRegisterClass, false);
-  // FIXME: There are function units.
-  emitSignals(VTM::RADDRegisterClass, false);
-  emitSignals(VTM::RCARRegisterClass, false);
-
-  emitSignals(VTM::RBRMRegisterClass, false);
-  emitSignals(VTM::RCFNRegisterClass, false);
-  emitSignals(VTM::RINFRegisterClass, false);
 }
 
 void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
@@ -780,7 +793,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
       assert(Op.getPredicate().getReg() == 0 && "Cannot handle predicated BrCnd");
-      VASTCnd Cnd = VASTCnd::Create(VM, CndOp);
+      VASTCnd Cnd = createCondition(CndOp);
       CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
@@ -892,55 +905,35 @@ void RTLCodegen::emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot) {
 
 void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  // Allocate the function unit register.
-  // FIXME: Move these to emitAllocatedFUs
-  ucOperand &Sum = OpAdd.getOperand(0);
-  unsigned FUWidth = Sum.getBitWidth();
-  unsigned AddNum = TargetRegisterInfo::virtReg2Index(Sum.getReg());
-  std::string SumName = "addsub" + utostr_32(AddNum);
-  std::string OpAName = SumName + "_a";
-  std::string OpBName = SumName + "_b";
-  std::string OpCName = SumName + "_c";
-  VM->addRegister(OpAName, FUWidth);
-  VM->addRegister(OpBName, FUWidth);
-  VM->addRegister(OpCName, 1);
-  // Assign the value to function unit.
-  CtrlS << OpAName << " <= ";
-  printOperand(OpAdd.getOperand(2), CtrlS);
-  CtrlS << ";\n";
-  CtrlS << OpBName << " <= ";
-  printOperand(OpAdd.getOperand(3), CtrlS);
-  CtrlS << ";\n";
-  CtrlS << OpCName << " <= ";
-  printOperand(OpAdd.getOperand(4), CtrlS);
-  CtrlS << ";\n";
 
-  // Write the datapath for function unit.
-  VASTDatapath *data =  VM->createDatapath();
-  VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
-  // FIXME: Move these to emitAllocatedFUs
-  DPS << "assign {";
-  // Carry out.
-  printOperand(OpAdd.getOperand(1), DPS);
-  DPS << ", ";
-  // Sum.
-  printOperand(OpAdd.getOperand(0), DPS);
-  DPS << "} = " << OpAName << " + " << OpBName << " + " << OpCName << ";\n";
-
-}
-
-void RTLCodegen::emitBinaryFUOp(ucOp &OpMult) {
-  raw_ostream &CtrlS = VM->getControlBlockBuffer();
-
-  VASTValue *Result = VM->getVASTValue(OpMult.getOperand(0).getReg());
+  VASTValue *Result = VM->lookup(OpAdd.getOperand(0).getReg());
 
   // Assign the value to function unit.
   CtrlS << Result->getName() << "_a <= ";
-  printOperand(OpMult.getOperand(1), CtrlS);
+  printOperand(OpAdd.getOperand(2), CtrlS);
   CtrlS << ";\n";
 
   CtrlS << Result->getName() << "_b <= ";
-  printOperand(OpMult.getOperand(2), CtrlS);
+  printOperand(OpAdd.getOperand(3), CtrlS);
+  CtrlS << ";\n";
+
+  CtrlS << Result->getName() << "_c <= ";
+  printOperand(OpAdd.getOperand(4), CtrlS);
+  CtrlS << ";\n";
+}
+
+void RTLCodegen::emitBinaryFUOp(ucOp &OpBin) {
+  raw_ostream &CtrlS = VM->getControlBlockBuffer();
+
+  VASTValue *Result = VM->lookup(OpBin.getOperand(0).getReg());
+
+  // Assign the value to function unit.
+  CtrlS << Result->getName() << "_a <= ";
+  printOperand(OpBin.getOperand(1), CtrlS);
+  CtrlS << ";\n";
+
+  CtrlS << Result->getName() << "_b <= ";
+  printOperand(OpBin.getOperand(2), CtrlS);
   CtrlS << ";\n";
 }
 
@@ -994,7 +987,7 @@ void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
   }
 
   if (ReadyPort)
-    CurSlot->addReady(ReadyPort, VASTCnd::Create(VM, OpRdFU.getPredicate()));
+    CurSlot->addReady(ReadyPort, createCondition(OpRdFU.getPredicate()));
 
   // The dst operand of ReadFU change to immediate if it is dead.
   if (OpRdFU.getOperand(0).isReg())
@@ -1031,7 +1024,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
   unsigned FNNum = OpInternalCall.getOperand(1).getTargetFlags();
   OS << "// Calling function: " << CalleeName << ";\n";
 
-  VASTCnd Pred = VASTCnd::Create(VM, OpInternalCall.getPredicate());
+  VASTCnd Pred = createCondition(OpInternalCall.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getVASTValue(StartPortName);
   CurSlot->addEnable(StartSignal, Pred);
@@ -1148,7 +1141,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValue *MemEn = VM->getVASTValue(EnableName);
-  VASTCnd Pred = VASTCnd::Create(VM, OpMemAccess.getPredicate());
+  VASTCnd Pred = createCondition(OpMemAccess.getPredicate());
   CurSlot->addEnable(MemEn, Pred);
 
   // Disable the memory at next slot.
@@ -1282,4 +1275,24 @@ void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
   OS << Times << '{';
   printOperand(OpBitRepeat.getOperand(1), OS);
   OS << "}};\n";
+}
+
+VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
+  VASTRValue V = VM->lookup(Op.getReg());
+
+  return VASTCnd(V, Op.isPredicateInverted());
+}
+
+void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
+  if(Op.isReg()){
+    VASTRValue V = VM->lookup(Op.getReg());
+    assert (V != 0 && "Cannot find this Value in vector!");
+    OS << V->getName();
+    if(printRange)
+      OS << verilogBitRange(V.UB, V.LB, V->getBitWidth() !=1);
+
+    return;
+  }
+
+  Op.print(OS);
 }
