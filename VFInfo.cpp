@@ -95,6 +95,17 @@ unsigned VFInfo::allocatePhyReg(unsigned RegClassID, unsigned Width) {
   return RegNum;
 }
 
+unsigned VFInfo::getSubRegOf(unsigned Parent, unsigned UB, unsigned LB) {
+  PhyRegInfo Info = getPhyRegInfo(Parent);
+  unsigned AliasSetId = Info.getAliasSetId();
+  unsigned SubRegNum = PhyRegs.size() + 1;
+  PhyRegInfo SubRegInfo = PhyRegInfo(Info.getRegClass(), AliasSetId, UB, LB);
+  PhyRegs.push_back(SubRegInfo);
+  // TODO: Check if the sub register exist?
+  PhyRegAliasInfo[AliasSetId].insert(SubRegNum);
+  return SubRegNum;
+}
+
 unsigned VFInfo::allocateFN(unsigned FNClassID, unsigned Width /* = 0 */) {
   return allocatePhyReg(FNClassID, Width);
 }
