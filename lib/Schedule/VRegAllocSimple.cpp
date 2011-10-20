@@ -681,6 +681,9 @@ bool VRASimple::bindDataRegister() {
 
 bool VRASimple::bindFUs() {
   bindFUsOf(VTM::RMULRegisterClass);
+  bindFUsOf(VTM::RASRRegisterClass);
+  bindFUsOf(VTM::RSHLRegisterClass);
+  bindFUsOf(VTM::RLSRRegisterClass);
   return false;
 }
 
