@@ -157,6 +157,7 @@ public:
   bool bindDataRegister();
   bool bindFUs();
   bool bindFUsOf(const TargetRegisterClass *RC);
+  bool bindAdders();
 
   unsigned getBitWidthOf(unsigned RegNum) {
     ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
@@ -687,6 +688,7 @@ bool VRASimple::bindDataRegister() {
 }
 
 bool VRASimple::bindFUs() {
+  bindAdders();
   bindFUsOf(VTM::RMULRegisterClass);
   bindFUsOf(VTM::RASRRegisterClass);
   bindFUsOf(VTM::RSHLRegisterClass);
@@ -705,6 +707,32 @@ bool VRASimple::bindFUsOf(const TargetRegisterClass *RC) {
       unsigned PhyReg = VFI->allocatePhyReg(RegID, getBitWidthOf(RegNum));
 
       assign(*LI, PhyReg);
+    }
+  }
+
+  return false;
+}
+
+bool VRASimple::bindAdders() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RADDRegisterClass);
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+      unsigned Width = getBitWidthOf(RegNum);
+      // Allocate the register for the adder, which also contains the carry bit
+      unsigned AdderReg = VFI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
+      unsigned SumReg = VFI->getSubRegOf(AdderReg, Width, 0);
+      assign(*LI, SumReg);
+
+      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
+      assert(Op->getOpcode() == VTM::VOpAdd && "Unexpected opcode for adder!");
+      unsigned CarryNum = Op.getOperand(1).getReg();
+      LiveInterval *CarryLI = getInterval(CarryNum);
+      assert(CarryLI && "Cannot found interval of carry!");
+      unsigned CarryReg = VFI->getSubRegOf(AdderReg, Width + 1, Width);
+      assign(*CarryLI, CarryReg);
     }
   }
 
