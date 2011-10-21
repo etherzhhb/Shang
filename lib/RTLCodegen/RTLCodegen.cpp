@@ -263,15 +263,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitCtrlOp(ucState &State, PredMapTy &PredMap);
 
-  static void printPredicate(ucOperand &Pred, raw_ostream &SS) {
-    if (Pred.getReg()) {
-      SS << '(';
-      if (Pred.isPredicateInverted()) SS << '~';
-      Pred.print(SS, 1, 0, true);
-      SS << ')';
-    } else
-      SS << "1'b1";
-  }
+  void printPredicate(ucOperand &Pred, raw_ostream &SS);
 
   VASTCnd createCondition(ucOperand &Op);
 
@@ -779,7 +771,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     raw_string_ostream SlotPredSS(SlotPred);
 
     SlotPredSS << getucStateEnable(SlotNum - 1) << ')';
-
     // Emit the predicate operand.
     SlotPredSS << " & ";
     printPredicate(Op.getPredicate(), SlotPredSS);
@@ -1295,4 +1286,14 @@ void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
   }
 
   Op.print(OS);
+}
+
+void RTLCodegen::printPredicate(ucOperand &Pred, raw_ostream &SS) {
+  if (Pred.getReg()) {
+    SS << '(';
+    if (Pred.isPredicateInverted()) SS << '~';
+    printOperand(Pred, SS, true);
+    SS << ')';
+  } else
+    SS << "1'b1";
 }
