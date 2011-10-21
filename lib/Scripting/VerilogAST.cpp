@@ -450,13 +450,10 @@ void VASTModule::print(raw_ostream &OS) const {
   // Print the verilog module?
 }
 
-
 VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
-                                   PortTypes T /*= Others*/,
-                                   const std::string &Comment /*= ""*/ ) {
+                                   PortTypes T /*= Others*/) {
   VASTPort *Port
-    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, true, false,
-                                                    Comment);
+    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, true, false);
   getOrCreateSymbol(Name, Port);
   if (T < SpecialInPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
@@ -478,11 +475,10 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
 
 
 VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
-                                    PortTypes T /*= Others*/, bool isReg /*= true*/,
-                                    const std::string &Comment /*= ""*/ ) {
+                                    PortTypes T /*= Others*/,
+                                    bool isReg /*= true*/) {
   VASTPort *Port
-    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, false, isReg,
-                                                    Comment);
+    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, false, isReg);
   getOrCreateSymbol(Name, Port);
   if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
@@ -509,17 +505,15 @@ VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTRValue V) {
 }
 
 VASTValue *VASTModule::addSignal(const std::string &Name, unsigned BitWidth,
-                                bool isReg, const std::string &Comment /* = "" */) {
+                                bool isReg) {
   VASTSignal *Reg
-    = new (Allocator.Allocate<VASTSignal>()) VASTSignal(Name, BitWidth, isReg,
-                                                        Comment);
+    = new (Allocator.Allocate<VASTSignal>()) VASTSignal(Name, BitWidth, isReg);
   Signals.push_back(Reg);
 
   return Reg;
 }
 
-VASTValue *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
-                                   const std::string &Comment /* = "" */) {
+VASTValue *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
   std::string Name;
 
   if (TargetRegisterInfo::isVirtualRegister(RegNum))
@@ -527,18 +521,17 @@ VASTValue *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
   else
     Name = "phy_reg" + utostr_32(RegNum);
 
-  return indexVASTValue(RegNum, addRegister(Name, BitWidth, Comment));
+  return indexVASTValue(RegNum, addRegister(Name, BitWidth));
 }
 
-VASTValue *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
-                               const std::string &Comment /*= ""*/ ) {
+VASTValue *VASTModule::addWire(unsigned WireNum, unsigned BitWidth) {
   std::string Name;
 
   assert(TargetRegisterInfo::isVirtualRegister(WireNum)
          && "Unexpected physics register as wire!");
     Name = "wire" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum));
 
-  return indexVASTValue(WireNum, addWire(Name, BitWidth, Comment));
+  return indexVASTValue(WireNum, addWire(Name, BitWidth));
 }
 
 // Out of line virtual function to provide home for the class.
@@ -615,8 +608,8 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 
   OS << ' ' << getName();
 
-//  if (isRegister())
-//    OS << " = " << verilogConstToStr(0, getBitWidth(), false);
+  if (isRegister())
+    OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
 }

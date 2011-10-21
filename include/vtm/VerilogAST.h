@@ -60,13 +60,11 @@ enum VASTTypes {
 };
 
 class VASTNode {
-  std::string Comment;
   const unsigned short T;
   unsigned short SubclassData;
 protected:
-  VASTNode(VASTTypes NodeT, unsigned short subclassData,
-           const std::string &comment)
-    : Comment(comment), T(NodeT), SubclassData(subclassData) {}
+  VASTNode(VASTTypes NodeT, unsigned short subclassData)
+    : T(NodeT), SubclassData(subclassData) {}
 
   unsigned short getSubClassData() const { return SubclassData; }
 
@@ -86,8 +84,8 @@ class VASTValue : public VASTNode {
   unsigned InitVal;
 public:
   VASTValue(VASTTypes DeclType, const std::string name, unsigned BitWidth, bool isReg,
-    unsigned initVal, const std::string &Comment)
-    : VASTNode(DeclType, BitWidth, Comment),Name(name), IsReg(isReg), InitVal(initVal)
+            unsigned initVal)
+    : VASTNode(DeclType, BitWidth),Name(name), IsReg(isReg), InitVal(initVal)
   {
     assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
       && "Bad DeclType!");
@@ -158,9 +156,8 @@ public:
 class VASTPort : public VASTValue {
   bool IsInput;
 public:
-  VASTPort(const std::string Name, unsigned BitWidth, bool isInput, bool isReg,
-           const std::string &Comment)
-    : VASTValue(vastPort, Name, BitWidth, isReg, 0, Comment), IsInput(isInput) {
+  VASTPort(const std::string Name, unsigned BitWidth, bool isInput, bool isReg)
+    : VASTValue(vastPort, Name, BitWidth, isReg, 0), IsInput(isInput) {
     assert(!(isInput && isRegister()) && "Bad port decl!");
   }
 
@@ -183,9 +180,9 @@ public:
 class VASTSignal : public VASTValue {
 public:
   VASTSignal(const std::string Name, unsigned BitWidth, bool isReg,
-             const std::string &Comment, VASTTypes DeclType = vastSignal,
+             VASTTypes DeclType = vastSignal,
              unsigned InitVal = 0)
-    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal, Comment) {}
+    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal) {}
 
   virtual void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
@@ -196,9 +193,8 @@ public:
 
 class VASTWire : public VASTSignal {
 public:
-  VASTWire(const std::string Name, unsigned BitWidth,
-    const std::string &Comment)
-    : VASTSignal(Name, BitWidth, 0, Comment, vastWire) {}
+  VASTWire(const std::string Name, unsigned BitWidth)
+    : VASTSignal(Name, BitWidth, 0, vastWire) {}
 
   void print(raw_ostream &OS) const {};
 
@@ -208,9 +204,8 @@ public:
 
 class VASTRegister : public VASTSignal {
 public:
-  VASTRegister(const std::string Name, unsigned BitWidth,
-    const std::string &Comment)
-    : VASTSignal(Name, BitWidth, 1, Comment, vastRegister) {}
+  VASTRegister(const std::string Name, unsigned BitWidth)
+    : VASTSignal(Name, BitWidth, 1, vastRegister) {}
 
   void print(raw_ostream &OS) const {};
 
@@ -226,7 +221,7 @@ private:
   std::string Code;
   builder_stream CodeStream;
 public:
-  VASTDatapath() : VASTNode(vastDatapath, 0, ""), CodeStream(Code) {}
+  VASTDatapath() : VASTNode(vastDatapath, 0), CodeStream(Code) {}
 
   void print(raw_ostream &OS) const;
 
@@ -260,7 +255,7 @@ private:
   unsigned StartSlot, EndSlot, II;
 public:
   VASTSlot(unsigned slotNum)
-    : VASTSignal("Slot" + utostr_32(slotNum), 1, true, "", vastSlot,
+    : VASTSignal("Slot" + utostr_32(slotNum), 1, true, vastSlot,
                  slotNum == 0), SlotNum(slotNum),
       StartSlot(slotNum), EndSlot(slotNum), II(~0) {}
 
@@ -305,8 +300,7 @@ class VASTRegAssign : public VASTNode {
   VASTValue *Src;
   VASTValue *Dst;
 public:
-  VASTRegAssign() : VASTNode(vastRegAssign, 0, ""),
-    RegAssignSlot(), Predicates(), Src(), Dst() {}
+  VASTRegAssign() : VASTNode(vastRegAssign, 0) {}
 
   void print(raw_ostream &OS) const {};
 
@@ -361,7 +355,7 @@ public:
     RetPort // Port for function return value.
   };
 
-  VASTModule(const std::string &Name) : VASTNode(vastModule, 0, ""),
+  VASTModule(const std::string &Name) : VASTNode(vastModule, 0),
     StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
@@ -403,7 +397,7 @@ public:
   VASTValue *getOrCreateSymbol(const std::string &Name, VASTValue *V = 0) {
     if (V == 0) {
       V = Allocator.Allocate<VASTValue>();
-      new (V) VASTValue(vastSymbol, Name, 0, false, 0, "Symbol");
+      new (V) VASTValue(vastSymbol, Name, 0, false, 0);
     }
 
     return SymbolTable.GetOrCreateValue(Name, V).second;
@@ -429,12 +423,10 @@ public:
 
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
-                         PortTypes T = Others,
-                         const std::string &Comment = "");
+                         PortTypes T = Others);
 
   VASTPort *addOutputPort(const std::string &Name, unsigned BitWidth,
-                          PortTypes T = Others, bool isReg = true,
-                          const std::string &Comment = "");
+                          PortTypes T = Others, bool isReg = true);
 
   void setFUPortBegin(FuncUnitId ID) {
     unsigned offset = Ports.size();
@@ -508,24 +500,19 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTValue *addSignal(const std::string &Name, unsigned BitWidth, bool isReg,
-                       const std::string &Comment = "");
+  VASTValue *addSignal(const std::string &Name, unsigned BitWidth, bool isReg);
 
-  VASTValue *addRegister(const std::string &Name, unsigned BitWidth,
-                         const std::string &Comment = "") {
-    return addSignal(Name, BitWidth, true, Comment);
+  VASTValue *addRegister(const std::string &Name, unsigned BitWidth) {
+    return addSignal(Name, BitWidth, true);
   }
 
-  VASTValue *addWire(const std::string &Name, unsigned BitWidth,
-                     const std::string &Comment = "") {
-    return addSignal(Name, BitWidth, false, Comment);
+  VASTValue *addWire(const std::string &Name, unsigned BitWidth) {
+    return addSignal(Name, BitWidth, false);
   }
 
-  VASTValue *addRegister(unsigned RegNum, unsigned BitWidth,
-                          const std::string &Comment = "");
+  VASTValue *addRegister(unsigned RegNum, unsigned BitWidth);
 
-  VASTValue *addWire(unsigned WireNum, unsigned BitWidth,
-                     const std::string &Comment = "");
+  VASTValue *addWire(unsigned WireNum, unsigned BitWidth);
 
   VASTValue *indexVASTValue(unsigned RegNum, VASTRValue V);
 

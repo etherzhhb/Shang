@@ -734,9 +734,9 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
     const ucOperand &Op = cast<ucOperand>(DI.getOperand());
     unsigned Bitwidth = Op.getBitWidth();
     if (!isRegister)
-      VM->addWire(SignalNum, Bitwidth, RC->getName());
+      VM->addWire(SignalNum, Bitwidth);
     else {
-      VM->addRegister(SignalNum, Bitwidth, RC->getName());
+      VM->addRegister(SignalNum, Bitwidth);
       TotalRegisterBits += Bitwidth;
     }
   }
