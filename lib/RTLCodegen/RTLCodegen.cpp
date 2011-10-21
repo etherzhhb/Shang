@@ -679,7 +679,7 @@ void RTLCodegen::emitAllSignals() {
     VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
     if (!Info.isTopLevelReg(RegNum)) {
       unsigned Parent = Info.getParentRegister();
-      VASTRValue V = VASTRValue(VM->lookup(Parent), Info.getUB(), Info.getLB());
+      VASTRValue V = VASTRValue(VM->lookupSignal(Parent), Info.getUB(), Info.getLB());
       VM->indexVASTValue(RegNum, V);
       continue;
     }
@@ -897,7 +897,7 @@ void RTLCodegen::emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot) {
 void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
-  VASTValue *Result = VM->lookup(OpAdd.getOperand(0).getReg());
+  VASTValue *Result = VM->lookupSignal(OpAdd.getOperand(0).getReg());
 
   // Assign the value to function unit.
   CtrlS << Result->getName() << "_a <= ";
@@ -916,7 +916,7 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
 void RTLCodegen::emitBinaryFUOp(ucOp &OpBin) {
   raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
-  VASTValue *Result = VM->lookup(OpBin.getOperand(0).getReg());
+  VASTValue *Result = VM->lookupSignal(OpBin.getOperand(0).getReg());
 
   // Assign the value to function unit.
   CtrlS << Result->getName() << "_a <= ";
@@ -968,10 +968,10 @@ void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
 
   switch (Id.getFUType()) {
   case VFUs::MemoryBus:
-    ReadyPort = VM->getVASTValue(VFUMemBus::getReadyName(Id.getFUNum()));
+    ReadyPort = VM->getOrCreateSymbol(VFUMemBus::getReadyName(Id.getFUNum()));
     break;
   case VFUs::CalleeFN:
-    ReadyPort = VM->getVASTValue(getSubModulePortName(Id.getFUNum(), "fin"));
+    ReadyPort = VM->getOrCreateSymbol(getSubModulePortName(Id.getFUNum(), "fin"));
     break;
   default:
     break;
@@ -1017,7 +1017,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
 
   VASTCnd Pred = createCondition(OpInternalCall.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");
-  VASTValue *StartSignal = VM->getVASTValue(StartPortName);
+  VASTValue *StartSignal = VM->getOrCreateSymbol(StartPortName);
   CurSlot->addEnable(StartSignal, Pred);
   VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
   NextSlot->addDisable(StartSignal, Pred);
@@ -1131,7 +1131,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
 
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
-  VASTValue *MemEn = VM->getVASTValue(EnableName);
+  VASTValue *MemEn = VM->getOrCreateSymbol(EnableName);
   VASTCnd Pred = createCondition(OpMemAccess.getPredicate());
   CurSlot->addEnable(MemEn, Pred);
 
@@ -1269,14 +1269,14 @@ void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
 }
 
 VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
-  VASTRValue V = VM->lookup(Op.getReg());
+  VASTRValue V = VM->lookupSignal(Op.getReg());
 
   return VASTCnd(V, Op.isPredicateInverted());
 }
 
 void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
   if(Op.isReg()){
-    VASTRValue V = VM->lookup(Op.getReg());
+    VASTRValue V = VM->lookupSignal(Op.getReg());
     assert (V != 0 && "Cannot find this Value in vector!");
     OS << V->getName();
     if(printRange)

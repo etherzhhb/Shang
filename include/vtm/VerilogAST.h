@@ -388,19 +388,19 @@ public:
   void printSlotActives(raw_ostream &OS) const;
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  VASTRValue lookup(unsigned RegNum) const {
+  VASTRValue lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
     if(at == RegsMap.end()) return VASTRValue();
 
     return at->second;
   }
 
-  VASTValue *getVASTValue(const std::string &Name) const {
+  VASTValue *getSymbol(const std::string &Name) const {
     StringMap<VASTValue*>::const_iterator at = SymbolTable.find(Name);
     return at->second;
   }
 
-  VASTValue *getVASTValue(const std::string &Name, VASTValue *V = 0) {
+  VASTValue *getOrCreateSymbol(const std::string &Name, VASTValue *V = 0) {
     if (V == 0) {
       V = Allocator.Allocate<VASTValue>();
       new (V) VASTValue(vastSymbol, Name, 0, false, 0, "Symbol");

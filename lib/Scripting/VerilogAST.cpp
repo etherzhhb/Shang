@@ -457,7 +457,7 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
   VASTPort *Port
     = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, true, false,
                                                     Comment);
-  getVASTValue(Name, Port);
+  getOrCreateSymbol(Name, Port);
   if (T < SpecialInPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
     Ports[T] = Port;
@@ -483,7 +483,7 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
   VASTPort *Port
     = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, false, isReg,
                                                     Comment);
-  getVASTValue(Name, Port);
+  getOrCreateSymbol(Name, Port);
   if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
     Ports[T] = Port;
@@ -514,8 +514,6 @@ VASTValue *VASTModule::addSignal(const std::string &Name, unsigned BitWidth,
     = new (Allocator.Allocate<VASTSignal>()) VASTSignal(Name, BitWidth, isReg,
                                                         Comment);
   Signals.push_back(Reg);
-
-  getVASTValue(Name, Reg);
 
   return Reg;
 }
