@@ -92,7 +92,7 @@ class RTLCodegen : public MachineFunctionPass {
       MuxWiresDeclS << "reg ";
       if (Bitwidth > 1) MuxWiresDeclS << verilogBitRange(Bitwidth, 0, false);
       MuxWiresDeclS  << OutputName << "_mux_wire = "
-                     << verilogConstToStr(0, Bitwidth, false)<< ";\n";
+                     << Bitwidth << "'b0;\n";
       MuxWiresDeclS << "assign " << OutputName << " = " << OutputName
                     << "_mux_wire;\n";
     }
