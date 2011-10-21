@@ -295,9 +295,10 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
                      ExtractDisabledBits, ExtractEnabledBits, !flipped);
 }
 
-unsigned GetDefaultSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
-                            SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
-                            SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
+static unsigned GetDefaultSplitBit(SDNode *N,
+                                   TargetLowering::DAGCombinerInfo &DCI,
+                                   SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                                   SDValue RHS, SDValue &RHSLo, SDValue &RHSHi){
   if (LHS->getOpcode() != VTMISD::BitCat || RHS->getOpcode() != VTMISD::BitCat)
     return 0;
 
@@ -645,14 +646,14 @@ inline static SDValue ADDEBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   return Hi;
 }
 
-unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
-                         SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
-                         SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
-  if (RHS->getOpcode() != VTMISD::BitCat)
-    return 0;
-
+static
+unsigned GatADDEBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                               SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                               SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
   unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
   unsigned RHSHiBits = VTargetLowering::computeSizeInBits(RHS->getOperand(0));
+
+  // FIXME: Can we also optimize this?
   if (RHSLoBits < RHSHiBits) return 0;
 
   // C and RHSLo must be constant.
@@ -675,15 +676,52 @@ unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   LHSLo = VTargetLowering::getBitSlice(DAG, dl, LHS, RHSLoBits, 0);
   DCI.AddToWorklist(LHSLo.getNode());
   // Adjust the bitwidth of constant to match LHS's width.
-  if (LHSLo.getValueSizeInBits() != RHSLo.getValueSizeInBits())
+  if (LHSLo.getValueSizeInBits() != RHSLo.getValueSizeInBits()) {
     RHSLo = VTargetLowering::getBitSlice(DAG, dl, RHSLo, RHSLoBits, 0,
                                          LHSLo.getValueSizeInBits());
+    DCI.AddToWorklist(RHSLo.getNode());
+  }
 
   LHSHi = VTargetLowering::getBitSlice(DAG, dl, LHS,
                                        RHSLoBits + RHSHiBits, RHSLoBits);
   DCI.AddToWorklist(LHSHi.getNode());
 
   return RHSLoBits;
+}
+
+static unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                                SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                                SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
+  if (RHS->getOpcode() == VTMISD::BitCat)
+    return GatADDEBitCatSplitBit(N, DCI, LHS, LHSLo, LHSHi, RHS, RHSLo, RHSHi);
+
+  // Try to perform: a + 0x8000 => { a[15:14] + 0x1, a[13:0] }
+  uint64_t RHSVal = 0;
+  if (unsigned SizeInBit = ExtractConstant(RHS, RHSVal)) {
+    unsigned SplitBit = CountTrailingZeros_64(RHSVal);
+    // It is not profitable to split if the lower zero part is too small.
+    if (SplitBit < 8) return 0;
+
+    DebugLoc dl = N->getDebugLoc();
+    SelectionDAG &DAG = DCI.DAG;
+    LLVMContext &Context = *DAG.getContext();
+    // Build the lower part.
+    LHSLo = VTargetLowering::getBitSlice(DAG, dl, LHS, SplitBit, 0);
+    DCI.AddToWorklist(LHSLo.getNode());
+    RHSLo = VTargetLowering::getBitSlice(DAG, dl, RHS, SplitBit, 0,
+                                         LHSLo.getValueSizeInBits());
+    DCI.AddToWorklist(RHSLo.getNode());
+    // And the higher part.
+    LHSHi = VTargetLowering::getBitSlice(DAG, dl, LHS, SizeInBit, SplitBit);
+    DCI.AddToWorklist(LHSHi.getNode());
+    RHSHi = VTargetLowering::getBitSlice(DAG, dl, RHS, SizeInBit, SplitBit,
+                                         LHSHi.getValueSizeInBits());
+    DCI.AddToWorklist(RHSHi.getNode());
+
+    return SplitBit;
+  }
+
+  return 0;
 }
 
 static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
