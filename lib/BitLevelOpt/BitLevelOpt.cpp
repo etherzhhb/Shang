@@ -704,7 +704,6 @@ static unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
     DebugLoc dl = N->getDebugLoc();
     SelectionDAG &DAG = DCI.DAG;
-    LLVMContext &Context = *DAG.getContext();
     // Build the lower part.
     LHSLo = VTargetLowering::getBitSlice(DAG, dl, LHS, SplitBit, 0);
     DCI.AddToWorklist(LHSLo.getNode());
