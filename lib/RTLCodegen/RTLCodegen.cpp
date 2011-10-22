@@ -279,7 +279,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpCopy(ucOp &OpCopy);
   void emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot);
   void emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot);
-  void emitOpBRam(ucOp &OpBRam);
+  void emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -566,8 +566,8 @@ void RTLCodegen::emitAllocatedFUs() {
   VFUBRam *BlockRam = getFUDesc<VFUBRam>();
   for (VFInfo::const_bram_iterator I = FInfo->bram_begin(), E = FInfo->bram_end();
        I != E; ++I) {
-    unsigned BramNum = I->first;
     const VFInfo::BRamInfo &Info = I->second;
+    unsigned BramNum = Info.PhyRegNum;
 
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
                                 Info.ElemSizeInBytes * 8,
@@ -691,12 +691,6 @@ void RTLCodegen::emitAllSignals() {
     case VTM::RADDRegClassID:
       VM->indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
       break;
-    case VTM::RINFRegClassID: {
-      // The offset of data input port is 3
-      unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
-      VM->indexVASTValue(RegNum, &VM->getPort(DataInIdx));
-      break;
-    }
     case VTM::RMULRegClassID:
       VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth()));
       break;
@@ -713,6 +707,17 @@ void RTLCodegen::emitAllSignals() {
     case VTM::RSHLRegClassID:{
       VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), "<<", false);
       VM->indexVASTValue(RegNum, V);
+      break;
+    }
+    case VTM::RBRMRegClassID: {
+      VASTValue *V = VM->getOrCreateSymbol(VFUBRam::getInDataBusName(RegNum));
+      VM->indexVASTValue(RegNum, V);
+      break;
+    }
+    case VTM::RINFRegClassID: {
+      // The offset of data input port is 3
+      unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
+      VM->indexVASTValue(RegNum, &VM->getPort(DataInIdx));
       break;
     }
     }
@@ -1141,15 +1146,8 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
   NextSlot->addDisable(MemEn, Pred);
 }
 
-void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
-  unsigned FUNum = OpBRam->getFUId().getFUNum();
-
-  VASTDatapath *data = VM->createDatapath();
-  VASTDatapath::builder_stream &DPS = data->getCodeBuffer();
-
-  DPS << "assign ";
-  printOperand(OpBRam.getOperand(0), DPS);
-  DPS << " = " << VFUBRam::getInDataBusName(FUNum) << ";\n";
+void RTLCodegen::emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot) {
+  unsigned FUNum = OpBRam.getOperand(0).getReg();
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
@@ -1171,6 +1169,17 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam) {
   // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
   // OpBRam.getOperand(4).print(OS);
   // OS << ";\n";
+
+  // Remember we enabled the memory bus at this slot.
+  std::string EnableName = VFUBRam::getEnableName(FUNum);
+  VASTValue *MemEn = VM->getOrCreateSymbol(EnableName);
+  VASTCnd Pred = createCondition(OpBRam.getPredicate());
+  CurSlot->addEnable(MemEn, Pred);
+
+  // Disable the memory at next slot.
+  // TODO: Assert the control flow is linear.
+  VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
+  NextSlot->addDisable(MemEn, Pred);
 }
 
 void RTLCodegen::emitDatapath(ucState &State) {

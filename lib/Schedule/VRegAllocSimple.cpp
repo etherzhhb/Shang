@@ -152,6 +152,7 @@ public:
   void joinPHINodeIntervals();
 
   void bindMemoryBus();
+  void bindBlockRam();
   void bindCalleeFN();
 
   bool bindDataRegister();
@@ -516,6 +517,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   // Bind the pre-bind function units.
   bindMemoryBus();
+  bindBlockRam();
   bindCalleeFN();
 
   bool SomethingBind = true;
@@ -650,6 +652,33 @@ void VRASimple::bindMemoryBus() {
     if (LiveInterval *LI = getInterval(RegNum)) {
       assert(!query(*LI, MemBusReg).checkInterference() && "Cannot bind membus!");
       assign(*LI, MemBusReg);
+    }
+  }
+}
+
+void VRASimple::bindBlockRam() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RBRMRegisterClass);
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+
+      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
+      assert(Op->getOpcode() == VTM::VOpBRam && "Unexpected opcode!");
+      unsigned BRamNum = Op->getFUId().getFUNum();
+
+      VFInfo::BRamInfo &Info = VFI->getBRamInfo(BRamNum);
+      unsigned &PhyReg = Info.PhyRegNum;
+
+      // Had we allocate a register for this bram?
+      if (PhyReg == 0) {
+        unsigned BitWidth = Info.ElemSizeInBytes * 8;
+        PhyReg = VFI->allocatePhyReg(VTM::RBRMRegClassID, BitWidth);
+      }
+
+      assert(!query(*LI, PhyReg).checkInterference() && "Cannot bind bram!");
+      assign(*LI, PhyReg);
     }
   }
 }

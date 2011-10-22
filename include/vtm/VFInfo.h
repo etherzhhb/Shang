@@ -51,9 +51,10 @@ public:
   // The data structure to describe the block ram.
   struct BRamInfo {
     unsigned NumElem, ElemSizeInBytes;
+    unsigned PhyRegNum;
 
     BRamInfo(unsigned numElem, unsigned elemSizeInBytes)
-      : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes) {}
+      : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes), PhyRegNum(0) {}
   };
 
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
@@ -191,6 +192,12 @@ public:
 
   const BRamInfo &getBRamInfo(uint16_t ID) const {
     BRamMapTy::const_iterator at = BRams.find(ID);
+    assert(at != BRams.end() && "BRam not exists!");
+    return at->second;
+  }
+
+  BRamInfo &getBRamInfo(uint16_t ID) {
+    BRamMapTy::iterator at = BRams.find(ID);
     assert(at != BRams.end() && "BRam not exists!");
     return at->second;
   }
