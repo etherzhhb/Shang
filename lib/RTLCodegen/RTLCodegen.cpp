@@ -845,7 +845,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
     case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
     case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
-    case VTM::VOpBRam:          emitOpBRam(Op);               break;
+    case VTM::VOpBRam:          emitOpBRam(Op, CurSlot);      break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
