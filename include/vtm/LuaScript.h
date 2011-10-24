@@ -106,6 +106,9 @@ public:
   void init();
   // Update the status of script engine after script run.
   void updateStatus();
+  // Add the scripting pass to the pass manager and return how many passes
+  // added to the pass manager.
+  unsigned addScriptingPasses(PassManager &PM);
 
   bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
   bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);

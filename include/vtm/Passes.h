@@ -67,7 +67,8 @@ FunctionPass *createSimpleRegisterAllocator();
 Pass *createRTLCodegenPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
 
-Pass *createScriptingPass(const char *Name, const char *Script);
+Pass *createScriptingPass(const char *Name, const char *FScript,
+                          const char *GScript);
 
 // Verilator interface code generation.
 Pass *createVLTIfCodegenPass(raw_ostream &O);

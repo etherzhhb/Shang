@@ -30,11 +30,12 @@ using namespace llvm;
 namespace {
 struct ScriptingPass : public MachineFunctionPass {
   static char ID;
-  std::string PassName, PassScript;
+  std::string PassName, GlobalScript, FunctionScript;
   TargetData *TD;
 
-  ScriptingPass(const char *Name, const char *Script)
-    : MachineFunctionPass(ID), PassName(Name), PassScript(Script), TD(0) {}
+  ScriptingPass(const char *Name, const char *FScript, const char *GScript)
+    : MachineFunctionPass(ID), PassName(Name), FunctionScript(FScript),
+      GlobalScript(GScript), TD(0) {}
 
   const char *getPassName() const { return PassName.c_str(); }
 
@@ -147,6 +148,9 @@ bool ScriptingPass::doInitialization(Module &M) {
   }
 
   // Run the script against the GlobalVariables table.
+  if (!runScriptStr(GlobalScript, Err))
+    report_fatal_error("In Scripting pass[" + PassName + "]:\n"
+                       + Err.getMessage());
 
 
   return false;
@@ -201,13 +205,15 @@ bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
   Script.clear();
 
   bindToScriptEngine("CurModule", MF.getInfo<VFInfo>()->getRtlMod());
-  if (!runScriptFile(PassScript, Err))
+
+  if (!runScriptStr(FunctionScript, Err))
     report_fatal_error("In Scripting pass[" + PassName + "]:\n"
                        + Err.getMessage());
 
   return false;
 }
 
-Pass *llvm::createScriptingPass(const char *Name, const char *Script) {
-  return new ScriptingPass(Name, Script);
+Pass *llvm::createScriptingPass(const char *Name, const char *FScript,
+                                const char *GScript) {
+  return new ScriptingPass(Name, FScript, GScript);
 }

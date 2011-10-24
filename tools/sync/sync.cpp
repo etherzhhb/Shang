@@ -146,15 +146,10 @@ int main(int argc, char **argv) {
   // Generate the code.
   PM.add(createRTLCodegenPass(S->getOutputStream("RTLOutput")));
 
-  // Add the user defined passes to run.
-  for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
-       I != E; ++I)
-    PM.add(createScriptingPass(luabind::object_cast<std::string>(I.key()).c_str(),
-                               luabind::object_cast<std::string>(*I).c_str()));
-  
+  // Run some scripting passes.
+  S->addScriptingPasses(PM);
 
   // Add interface writer pass.
-
   if (S->getValue<bool>("EnableVLT"))
     PM.add(createVLTIfCodegenPass(S->getOutputStream("VLTOutput")));
 
