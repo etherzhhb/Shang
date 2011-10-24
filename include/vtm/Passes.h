@@ -30,9 +30,6 @@ class TargetIntrinsicInfo;
 
 Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
-
-
-
 // Promote all the GVs to arguments
 Pass *createGVPromotionPass();
 
@@ -86,9 +83,6 @@ void initializeRTLCodegenPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry);
 
 void initializeRAPass(PassRegistry &Registry);
-
-
-
 
 // Add the initialize implementation of GVPromotion.cpp.
 void initializeGVPromotionPass(PassRegistry &Registry);

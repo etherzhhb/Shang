@@ -197,22 +197,6 @@ SynSettings *llvm::getSynSetting(StringRef Name, SynSettings *ParentSetting) {
   return S;
 }
 
-unsigned LuaScript::addScriptingPasses(PassManager &PM) {
-  unsigned NumPass = 0;
-  // Add the user defined passes to run.
-  for (LuaScript::scriptpass_it I = passes_begin(), E = passes_end();
-       I != E; ++I) {
-    const luabind::object &o = *I;
-    Pass *P =
-      createScriptingPass(luabind::object_cast<std::string>(I.key()).c_str(),
-              luabind::object_cast<std::string>(o["FunctionScript"]).c_str(),
-              luabind::object_cast<std::string>(o["GlobalScript"]).c_str());
-    PM.add(P);
-  }
-
-  return NumPass;
-}
-
 LuaScript &llvm::scriptEngin() {
   return *Script;
 }

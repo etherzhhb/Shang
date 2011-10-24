@@ -34,8 +34,8 @@ struct ScriptingPass : public MachineFunctionPass {
   TargetData *TD;
 
   ScriptingPass(const char *Name, const char *FScript, const char *GScript)
-    : MachineFunctionPass(ID), PassName(Name), FunctionScript(FScript),
-      GlobalScript(GScript), TD(0) {}
+    : MachineFunctionPass(ID), PassName(Name),
+      GlobalScript(GScript), FunctionScript(FScript), TD(0) {}
 
   const char *getPassName() const { return PassName.c_str(); }
 
@@ -175,7 +175,7 @@ bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
   raw_string_ostream SS(Script);
 
   SS << "FuncInfo = { ";
-  SS << "Name = " << F->getName() << ", ";
+  SS << "Name = '" << F->getName() << "', ";
 
   SS << "ReturnSize = ";
   if (F->getReturnType()->isVoidTy())
@@ -188,13 +188,13 @@ bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
 
   if (F->arg_size()) {
     Function::const_arg_iterator I = F->arg_begin();
-    SS << I->getName() << " = "
-       << TD->getTypeStoreSizeInBits(I->getType());
+    SS << "{ Name = '" << I->getName() << "', Size = "
+       << TD->getTypeStoreSizeInBits(I->getType()) << "}";
     ++I;
 
     for (Function::const_arg_iterator E = F->arg_end(); I != E; ++I)
-      SS << ", " << I->getName() << " = "
-         << TD->getTypeStoreSizeInBits(I->getType());
+      SS << " , { Name = '" << I->getName() << "', Size = "
+         << TD->getTypeStoreSizeInBits(I->getType()) << "}";
   }
 
   SS << "} }";
