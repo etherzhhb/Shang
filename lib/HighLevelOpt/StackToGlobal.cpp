@@ -55,7 +55,7 @@ bool StackToGlobal::runOnModule(Module &M) {
       }
     }
   }
-    
+
 //iterate the vector to replace the AllocaInst with the GlobalVariable.
   for(std::vector<AllocaInst*>::iterator I = WorkList.begin(), E = WorkList.end();
       I != E; ++I){
@@ -63,20 +63,20 @@ bool StackToGlobal::runOnModule(Module &M) {
     const Type *Ty = AI->getAllocatedType();
     GlobalVariable *GV =
     new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
-        				       Constant::getNullValue(Ty), AI->getName() + ".s2g");
+					       Constant::getNullValue(Ty), AI->getName() + "_s2g");
     AI->replaceAllUsesWith(GV);
     AI->eraseFromParent();
   }
   return true;
 }
 
-  
+
 char StackToGlobal::ID = 0;
 INITIALIZE_PASS_BEGIN(StackToGlobal, "StackToGlobal",
                         "StackToGlobal", false, false)
 INITIALIZE_PASS_END(StackToGlobal, "StackToGlobal",
                     "StackToGlobal", false, false)
-  
+
 Pass *llvm::createStackToGlobalPass() {
   return new StackToGlobal();
 }
