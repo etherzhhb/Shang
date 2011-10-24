@@ -208,3 +208,7 @@ void bindToScriptEngine(const char *name, VASTModule *M) {
 bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) {
   return Script->runScriptFile(ScriptPath, Err);
 }
+
+bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
+  return Script->runScriptStr(ScriptStr, Err);
+}
