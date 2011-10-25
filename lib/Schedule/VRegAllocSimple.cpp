@@ -18,6 +18,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "CompGraphTraits.h"
+#include "CompGraph.h"
+#include "CompGraphDOT.h"
+
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/MicroState.h"
@@ -63,6 +67,19 @@ static RegisterRegAlloc VSimpleRegalloc("vsimple",
                                         "vtm-simple register allocator",
                                         createSimpleRegisterAllocator);
 
+namespace llvm {
+// Specialized For liveInterval.
+template<> struct CompGraphTraits<LiveInterval> {
+  static bool isEarlier(LiveInterval *LHS, LiveInterval *RHS) {
+    return *LHS < *RHS;
+  }
+
+  static bool compatible(LiveInterval *LHS, LiveInterval *RHS) {
+    return !LHS->overlapsFrom(*RHS, RHS->begin());
+  }
+};
+}
+
 namespace {
 struct CompSpillWeight {
   bool operator()(LiveInterval *A, LiveInterval *B) const {
@@ -81,6 +98,9 @@ class VRASimple : public MachineFunctionPass,
 
   // Analysis
   LiveStacks *LS;
+
+  typedef CompGraph<LiveInterval> LICompGraph;
+  typedef CompGraphNode<LiveInterval> LICompGraphNode;
 
   typedef const std::vector<unsigned> VRegVec;
 
@@ -197,11 +217,11 @@ char VRASimple::ID = 0;
 /// contains the value number the copy is from.
 ///
 static unsigned ComputeUltimateVN(VNInfo *VNI,
-  SmallVector<VNInfo*, 16> &NewVNInfo,
-  DenseMap<VNInfo*, VNInfo*> &ThisFromOther,
-  DenseMap<VNInfo*, VNInfo*> &OtherFromThis,
-  SmallVector<int, 16> &ThisValNoAssignments,
-  SmallVector<int, 16> &OtherValNoAssignments) {
+                                  SmallVector<VNInfo*, 16> &NewVNInfo,
+                                  DenseMap<VNInfo*, VNInfo*> &ThisFromOther,
+                                  DenseMap<VNInfo*, VNInfo*> &OtherFromThis,
+                                  SmallVector<int, 16> &ThisValNoAssignments,
+                                  SmallVector<int, 16> &OtherValNoAssignments) {
     unsigned VN = VNI->id;
 
     // If the VN has already been computed, just return it.
@@ -701,6 +721,7 @@ void VRASimple::bindCalleeFN() {
 
 bool VRASimple::bindDataRegister() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::DRRegisterClass);
+  //LICompGraph G;
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
@@ -708,11 +729,14 @@ bool VRASimple::bindDataRegister() {
     if (LiveInterval *LI = getInterval(RegNum)) {
       unsigned PhyReg = VFI->allocatePhyReg(VTM::DRRegClassID,
                                             getBitWidthOf(RegNum));
-
+      //G.GetOrCreateNode(LI);
       assign(*LI, PhyReg);
     }
   }
 
+  //G.buildGraph();
+
+  //G.viewGraph();
   return false;
 }
 

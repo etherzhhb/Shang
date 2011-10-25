@@ -671,7 +671,6 @@ public:
   //}
 };
 
-
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
   typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(VSchedGraph *G) {
