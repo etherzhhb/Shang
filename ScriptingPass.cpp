@@ -65,6 +65,15 @@ static void ExtractConstant(raw_ostream &OS, Constant *C) {
     return;
   }
 
+  if (ConstantArray *CA = dyn_cast<ConstantArray>(C)) {
+    ExtractConstant(OS, cast<Constant>(CA->getOperand(0)));
+    for (unsigned i = 1, e = CA->getNumOperands(); i != e; ++i) {
+      OS << ", ";
+      ExtractConstant(OS, cast<Constant>(CA->getOperand(i)));
+    }
+    return;
+  }
+
   errs() << "Unsupported constant type!";
   OS << '0';
 }
@@ -83,11 +92,7 @@ static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV) {
 
   if (ConstantArray *CA = dyn_cast<ConstantArray>(C)) {
     OS << "{ ";
-    ExtractConstant(OS, cast<Constant>(CA->getOperand(0)));
-    for (unsigned i = 1, e = CA->getNumOperands(); i != e; ++i) {
-      OS << ", ";
-      ExtractConstant(OS, cast<Constant>(CA->getOperand(i)));
-    }
+    ExtractConstant(OS, CA);
     OS << "}";
     return;
   }
@@ -126,13 +131,13 @@ bool ScriptingPass::doInitialization(Module &M) {
     const Type *Ty = cast<PointerType>(GV->getType())->getElementType();
     // The element type of a scalar is the type of the scalar.
     const Type *ElemTy = Ty;
-
-    if (const ArrayType *AT = dyn_cast<ArrayType>(Ty)) {
+    unsigned NumElem = 1;
+    while (const ArrayType *AT = dyn_cast<ArrayType>(ElemTy)) {
       ElemTy = AT->getElementType();
-      SS << AT->getNumElements();
-    } else
-      SS << '1';
-    SS << ", ";
+      NumElem *= AT->getNumElements();
+    }
+
+    SS << NumElem << ", ";
 
     SS << "ElemSize = " << TD->getTypeStoreSizeInBits(ElemTy) << ", ";
 
