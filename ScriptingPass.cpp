@@ -127,6 +127,7 @@ bool ScriptingPass::doInitialization(Module &M) {
     // The element type of a scalar is the type of the scalar.
     const Type *ElemTy = Ty;
     unsigned NumElem = 1;
+    // Try to expand multi-dimension array to single dimension array.
     while (const ArrayType *AT = dyn_cast<ArrayType>(ElemTy)) {
       ElemTy = AT->getElementType();
       NumElem *= AT->getNumElements();
@@ -136,6 +137,7 @@ bool ScriptingPass::doInitialization(Module &M) {
 
     SS << "ElemSize = " << TD->getTypeStoreSizeInBits(ElemTy) << ", ";
 
+    // The initialer table: Initializer = { c0, c1, c2, ... }
     SS << "Initializer = ";
     CreateInitializerInfo(SS, GV);
     SS << '}';
