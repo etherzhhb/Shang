@@ -90,14 +90,9 @@ static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV) {
     return;
   }
 
-  if (ConstantArray *CA = dyn_cast<ConstantArray>(C)) {
-    OS << "{ ";
-    ExtractConstant(OS, CA);
-    OS << "}";
-    return;
-  }
-
-  OS << "nil";
+  OS << "{ ";
+  ExtractConstant(OS, C);
+  OS << "}";
 }
 
 bool ScriptingPass::doInitialization(Module &M) {
