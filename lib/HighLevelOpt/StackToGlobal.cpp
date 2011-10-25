@@ -11,13 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 #include "vtm/Passes.h"
+#include "vtm/Utilities.h"
 #include "llvm/Pass.h"
 #include "llvm/Module.h"
 #include "llvm/Instructions.h"
 #include "llvm/Support/Casting.h"
-
 #define DEBUG_TYPE "StackToGlobal"
-
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/GlobalVariable.h"
@@ -63,7 +62,8 @@ bool StackToGlobal::runOnModule(Module &M) {
     const Type *Ty = AI->getAllocatedType();
     GlobalVariable *GV =
     new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
-					       Constant::getNullValue(Ty), AI->getName() + "_s2g");
+					             Constant::getNullValue(Ty),
+                       VBEMangle(AI->getName()) + "_s2g");
     AI->replaceAllUsesWith(GV);
     AI->eraseFromParent();
   }
