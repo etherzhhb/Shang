@@ -151,6 +151,12 @@ public:
     DeleteContainerSeconds(Nodes);
   }
 
+  typedef typename NodeTy::iterator iterator;
+
+  // All nodes (except exit node) are successors of the entry node.
+  iterator begin() { return Entry.succ_begin(); }
+  iterator end()   { return Entry.succ_end(); }
+
   NodeTy *GetOrCreateNode(T N) {
     assert(N && "Unexpected null pointer pass to GetOrCreateNode!");
     NodeTy *&Node = Nodes[N];
@@ -160,11 +166,7 @@ public:
     return Node;
   }
 
-  typedef typename NodeMapTy::iterator map_iterator;
-  typedef mapped_iterator<map_iterator, second> iterator;
 
-  iterator begin() { return iterator(Nodes.begin(), second()); }
-  iterator end()   { return iterator(Nodes.end(), second()); }
 
   void buildGraph() {
     typedef std::vector<NodeTy*> NodeVecTy;
