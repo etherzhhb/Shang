@@ -40,7 +40,7 @@ class CompGraphNode {
 public:
   explicit CompGraphNode(T Node = T()) : N(Node) {}
 
-  bool isEntry() const { return N == 0; }
+  bool isTrivial() const { return N == T(); }
 
   T get() const { return N; }
   T operator->() const { return N; }
@@ -62,16 +62,21 @@ public:
   iterator succ_begin() const { return Succs.begin(); }
   iterator succ_end() const { return Succs.end(); }
 
-  unsigned getWeight(iterator I) const {
+  unsigned num_pred() const { return Preds.size(); }
+
+  unsigned getWeightTo(iterator I) const {
     return SuccWeights[I - succ_begin()];
+  }
+
+  static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst, unsigned Weight){
+    Src.Succs.push_back(&Dst);
+    Src.SuccWeights.push_back(Weight);
+    Dst.Preds.push_back(&Src);
   }
 
   static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst,
                        CompGraphQuery<T> &Q){
-    assert(!Dst.isEntry() && "Entry node cannot be destination!");
-    Src.Succs.push_back(&Dst);
-    Src.SuccWeights.push_back(Q.calcWeight(Src.get(), Dst.get()));
-    Dst.Preds.push_back(&Src);
+    MakeEdge(Src, Dst, Q.calcWeight(Src.get(), Dst.get()));
   }
 };
 
@@ -96,7 +101,7 @@ private:
   QueryTy &Q;
   typedef std::map<T, NodeTy*> NodeMapTy;
   // The dummy entry node of the graph.
-  NodeTy Entry;
+  NodeTy Entry, Exit;
   // Nodes vector.
   NodeMapTy Nodes;
 
@@ -109,7 +114,7 @@ private:
   }; 
 
 public:
-  CompGraph(QueryTy &q) : Q(q), Entry() {}
+  CompGraph(QueryTy &q) : Q(q) {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);
@@ -153,11 +158,60 @@ public:
     }
 
     // Add the edge from entry node to all other nodes.
-    for (NodeVecIt NI = Visited.begin(), NE = Visited.end(); NI != NE;++NI)
-      NodeTy::MakeEdge(Entry, **NI, Q);
+    for (NodeVecIt NI = Visited.begin(), NE = Visited.end(); NI != NE;++NI) {
+      NodeTy::MakeEdge(Entry, **NI, Q.getVirtualEdgeWeight());
+      NodeTy::MakeEdge(**NI, Exit, Q.getVirtualEdgeWeight());
+    }
 
     // Also insert the entry node to the map.
     //Nodes.insert(std::make_pair((T*)0, &Entry));
+  }
+
+  void findLongestPath(SmallVectorImpl<NodeTy*> &PathVec) {
+    std::map<NodeTy*, unsigned> LenMap;
+
+    std::map<NodeTy*, NodeTy*> LongestPathPred;
+    std::map<NodeTy*, unsigned> LongestPathWeight;
+
+    //for each vertex v in topOrder(G) do
+    typedef NodeTy::iterator ChildIt;
+    SmallVector<std::pair<NodeTy*, ChildIt>, 32> WorkStack;
+    std::map<NodeTy*, unsigned> VisitCount;
+
+    WorkStack.push_back(std::make_pair(&Entry, Entry.succ_begin()));
+    LongestPathWeight[&Entry] = 0;
+
+    while (!WorkStack.empty()) {
+      NodeTy *Node = WorkStack.back().first;
+      ChildIt It = WorkStack.back().second;
+
+      if (It == Node->succ_end())
+        WorkStack.pop_back();
+      else {
+        //
+        NodeTy *ChildNode = *It;
+        ++WorkStack.back().second;
+        unsigned VC = ++VisitCount[ChildNode];
+
+        // for each edge (Node, ChildNode) in E(G) do
+        if (LongestPathWeight[ChildNode] <
+            LongestPathWeight[Node] + Node->getWeightTo(It)) {
+          // Update the weight
+          LongestPathWeight[ChildNode] =
+            LongestPathWeight[Node] + Node->getWeightTo(It);
+          // And the pred
+          LongestPathPred[ChildNode] = Node;
+        }
+
+        // Only move forward when we visit the node from all its preds.
+        if (VC == ChildNode->num_pred())
+          WorkStack.push_back(std::make_pair(ChildNode, ChildNode->succ_begin()));
+      }
+    }
+
+    // Build the path.
+    for (NodeTy *I = LongestPathPred[&Exit]; I != &Entry;I = LongestPathPred[I])
+      PathVec.push_back(I);
   }
 
   void viewGraph();

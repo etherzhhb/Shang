@@ -211,9 +211,11 @@ namespace llvm {
   // Specialized For liveInterval.
   template<> struct CompGraphQuery<unsigned> {
     VRASimple *VRA;
-    const unsigned EntryWeight = 256;
-    const unsigned SameFUWeight = 128;
+
     CompGraphQuery(VRASimple *V) : VRA(V) {}
+
+    unsigned getVirtualEdgeWeight () const { return 256; }
+    unsigned getSameFUWeight() const { return 128; }
 
     bool isEarlier(unsigned LHS, unsigned RHS) const {
       if (LHS == 0) return true;
@@ -236,15 +238,13 @@ namespace llvm {
     }
 
     unsigned calcWeight(unsigned Src, unsigned Dst) const {
-      assert(Dst && "Unexpected noreg as destination!");
-      // Start from entry if possible.
-      if (Src == 0) return EntryWeight;
+      assert(Dst && Src && "Unexpected noreg!");
 
       ucOp SrcOp = VRA->getDefineOp(Src), DstOp = VRA->getDefineOp(Dst);
       unsigned SrcFU = VRA->getDrivingFU(SrcOp),
                DstFU = VRA->getDrivingFU(DstOp);
       if (SrcFU && SrcFU == DstFU) {
-        return SameFUWeight;
+        return getSameFUWeight();
       }
 
       return 0;
@@ -791,6 +791,13 @@ bool VRASimple::bindDataRegister() {
   //G.buildGraph();
 
   //G.viewGraph();
+
+  //SmallVector<RegCompGraphNode*, 8> LongestPath;
+  //G.findLongestPath(LongestPath);
+
+  //for (unsigned i = 0; i < LongestPath.size(); ++i)
+  //  dbgs() << PrintReg(LongestPath[i]->get()) << '\n';
+
   return false;
 }
 
