@@ -50,7 +50,7 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
         unsigned Reg = MI->getOperand(0).getReg();
 
         typedef MachineRegisterInfo::use_iterator use_it;
-        for (use_it I = MRI.use_begin(Reg), E = MRI.use_end(); I != E; /*++I*/){
+        for (use_it I = MRI.use_begin(Reg), E = MRI.use_end(); I != E; ) {
           ucOperand *MO = cast<ucOperand>(&I.getOperand());
           ++I;
           // Implicit value always have 64 bit.

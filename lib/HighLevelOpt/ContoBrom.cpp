@@ -110,7 +110,7 @@ bool ContoBrom::runOnModule(Module &M) {
           //Firstly, it should be a GlobalVariable.
           if (!GV) 
             continue; 
-          //GV->dump();
+
           //Secondly, it should be a constant.
           if (!GV->isConstant()) 
             continue; 
@@ -133,14 +133,13 @@ bool ContoBrom::runOnModule(Module &M) {
           //this Con.
           Value* V = GV->getOperand(0);
           Constant* Con = cast<Constant>(V);
-          
 
           //If the Con is a multi-dimension constant array, skip this iteration
           if (const ArrayType* AT = cast<ArrayType>(Con->getType())) {
               const Type* ET = AT->getElementType();
               if (isa<ArrayType>(ET)) continue;
-          }        
-          
+          }                  
+
           BRom[Con] = ThisBromID++;
 
           //A GV user tree could look like this:
