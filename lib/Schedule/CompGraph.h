@@ -15,6 +15,7 @@
 #define COMPATIBILITY_GRAPH_H
 
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -30,11 +31,11 @@ class CompGraphNode {
   // The underlying data.
   T N;
 
-  typedef SmallVector<Self*, 8> NodeVecTy;
+  typedef SmallPtrSet<Self*, 8> NodeVecTy;
   // Predecessors and Successors.
   NodeVecTy Preds, Succs;
 
-  typedef SmallVector<unsigned, 8> WeightVecTy;
+  typedef std::map<Self*, unsigned> WeightVecTy;
   WeightVecTy SuccWeights;
 
 public:
@@ -60,18 +61,48 @@ public:
   typedef typename NodeVecTy::const_iterator iterator;
 
   iterator succ_begin() const { return Succs.begin(); }
-  iterator succ_end() const { return Succs.end(); }
+  iterator succ_end()   const { return Succs.end(); }
+  unsigned num_succ()   const { return Succs.size(); }
+  bool     succ_empty() const { return Succs.empty(); }
 
-  unsigned num_pred() const { return Preds.size(); }
+  iterator pred_begin() const { return Preds.begin(); }
+  iterator pred_end()   const { return Preds.end(); }
+  unsigned num_pred()   const { return Preds.size(); }
+  bool     pred_empty() const { return Preds.empty(); }
 
   unsigned getWeightTo(iterator I) const {
-    return SuccWeights[I - succ_begin()];
+    return SuccWeights.find(*I)->second;
+  }
+
+  // Unlink the Succ from current node.
+  void unlinkSucc(CompGraphNode *Succ) {
+    Succs.erase(Succ);
+    SuccWeights.erase(Succ);
+
+    // Current node is not the predecessor of succ node too.
+    Succ->Preds.erase(this);
+  }
+
+  // Unlink the Pred from current node.
+  void unlinkPred(CompGraphNode *Pred) {
+    Preds.erase(Pred);
+
+    // Current node is not the successor of pred node too.
+    Pred->Succs.erase(this);
+  }
+
+  void unlink() {
+    for (iterator I = succ_begin(), E = succ_end(); I != E; ++I)
+      unlinkSucc(*I);
+
+    for (iterator I = pred_begin(), E = pred_end(); I != E; ++I)
+      unlinkPred(*I);
   }
 
   static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst, unsigned Weight){
-    Src.Succs.push_back(&Dst);
-    Src.SuccWeights.push_back(Weight);
-    Dst.Preds.push_back(&Src);
+    Src.Succs.insert(&Dst);
+    Src.SuccWeights.insert(std::make_pair(&Dst, Weight));
+    Dst.Preds.insert(&Src);
   }
 
   static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst,
@@ -167,11 +198,17 @@ public:
     //Nodes.insert(std::make_pair((T*)0, &Entry));
   }
 
-  void findLongestPath(SmallVectorImpl<NodeTy*> &PathVec) {
+  void deleteNode(NodeTy *N) {
+    Nodes.erase(N->get());
+    N->unlink();
+    delete N;
+  }
+
+  void findLongestPath(SmallVectorImpl<T> &Path, bool DelNodes = false) {
     std::map<NodeTy*, unsigned> LenMap;
 
-    std::map<NodeTy*, NodeTy*> LongestPathPred;
-    std::map<NodeTy*, unsigned> LongestPathWeight;
+    std::map<NodeTy*, NodeTy*> PathPred;
+    std::map<NodeTy*, unsigned> PathWeight;
 
     //for each vertex v in topOrder(G) do
     typedef typename NodeTy::iterator ChildIt;
@@ -179,7 +216,7 @@ public:
     std::map<NodeTy*, unsigned> VisitCount;
 
     WorkStack.push_back(std::make_pair(&Entry, Entry.succ_begin()));
-    LongestPathWeight[&Entry] = 0;
+    PathWeight[&Entry] = 0;
 
     while (!WorkStack.empty()) {
       NodeTy *Node = WorkStack.back().first;
@@ -194,13 +231,12 @@ public:
         unsigned VC = ++VisitCount[ChildNode];
 
         // for each edge (Node, ChildNode) in E(G) do
-        if (LongestPathWeight[ChildNode] <
-            LongestPathWeight[Node] + Node->getWeightTo(It)) {
+        if (PathWeight[ChildNode] < PathWeight[Node] + Node->getWeightTo(It)) {
           // Update the weight
-          LongestPathWeight[ChildNode] =
-            LongestPathWeight[Node] + Node->getWeightTo(It);
+          PathWeight[ChildNode] =
+            PathWeight[Node] + Node->getWeightTo(It);
           // And the pred
-          LongestPathPred[ChildNode] = Node;
+          PathPred[ChildNode] = Node;
         }
 
         // Only move forward when we visit the node from all its preds.
@@ -209,9 +245,12 @@ public:
       }
     }
 
+
     // Build the path.
-    for (NodeTy *I = LongestPathPred[&Exit]; I != &Entry;I = LongestPathPred[I])
-      PathVec.push_back(I);
+    for (NodeTy *I = PathPred[&Exit]; I && I != &Entry; I = PathPred[I]) {
+      Path.push_back(I->get());
+      if (DelNodes) deleteNode(I);
+    }
   }
 
   void viewGraph();
