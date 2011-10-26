@@ -73,6 +73,9 @@ Pass *createVLTIfCodegenPass(raw_ostream &O);
 // PLB interface code generation.
 Pass *createPLBIfCodegenPass(raw_ostream &O);
 
+//ContoBram Pass
+Pass *createContoBromPass(const TargetIntrinsicInfo &IntrinsicInfo);
+
 //
 void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);

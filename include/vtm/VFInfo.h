@@ -50,11 +50,12 @@ class VFInfo : public MachineFunctionInfo {
 public:
   // The data structure to describe the block ram.
   struct BRamInfo {
+    const Value* Initializer;
     unsigned NumElem, ElemSizeInBytes;
     unsigned PhyRegNum;
 
-    BRamInfo(unsigned numElem, unsigned elemSizeInBytes)
-      : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes), PhyRegNum(0) {}
+    BRamInfo(const Value* Initializer, unsigned numElem, unsigned elemSizeInBytes)
+      : Initializer(Initializer), NumElem(numElem), ElemSizeInBytes(elemSizeInBytes), PhyRegNum(0) {}
   };
 
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
@@ -188,7 +189,8 @@ public:
   //}
 
   // Block Ram management.
-  void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes);
+  void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes, 
+                                           const Value* Initializer = 0);
 
   const BRamInfo &getBRamInfo(uint16_t ID) const {
     BRamMapTy::const_iterator at = BRams.find(ID);

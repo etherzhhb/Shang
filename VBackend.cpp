@@ -86,6 +86,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // add the pass which will convert the AllocaInst to GlobalVariable.
   PM.add(createStackToGlobalPass());
 
+  // The ContoBromPass
+  PM.add(createContoBromPass(*getIntrinsicInfo()));
+
   // Standard LLVM-Level Passes.
 
   // Before running any passes, run the verifier to determine if the input

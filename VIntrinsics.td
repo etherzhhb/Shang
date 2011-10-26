@@ -17,10 +17,11 @@
 
 let TargetPrefix = "vtm", isTarget = 1 in {
   // Return the base address of the allocated block ram.
-  // Arguments: BRamNum NumElement, ElemSizeInBytes
+  // Arguments: BRamNum, NumElement, ElemSizeInBytes
   def int_vtm_alloca_bram  : Intrinsic<[llvm_anyptr_ty],
                                        [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                                        [IntrReadMem]>;
+
 
   // Read or Write the block ram.
   // Return the read value.
@@ -31,4 +32,10 @@ let TargetPrefix = "vtm", isTarget = 1 in {
                                        LLVMMatchType<0>, llvm_i1_ty,
                                        llvm_i32_ty, llvm_i1_ty, llvm_i32_ty],
                                       [IntrReadWriteArgMem, NoCapture<0>]>;
-}
+
+  // Return the base address of the allocated block rom.
+  // Arguments: Initial Value Pointer, BRomNum, NumElement, ElemSizeInBytes
+  def int_vtm_alloca_brom  : Intrinsic<[llvm_anyptr_ty],
+                                       [llvm_anyptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                       [IntrReadMem]>;
+}//FIXME: add multi-dimension support

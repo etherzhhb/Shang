@@ -4,6 +4,7 @@ add_llvm_library(VTMHighLevelOpt
   HWPartitionInfo.cpp
   StackToGlobal.cpp
   AlwaysInlineFunction.cpp
+  ContoBrom.cpp
   )
 
 llvm_config(VTMHighLevelOpt transformutils ipo)
