@@ -214,7 +214,7 @@ namespace llvm {
 
     CompGraphQuery(VRASimple *V) : VRA(V) {}
 
-    unsigned getVirtualEdgeWeight () const { return 256; }
+    unsigned getVirtualEdgeWeight () const { return 0; }
     unsigned getSameFUWeight() const { return 128; }
 
     bool isEarlier(unsigned LHS, unsigned RHS) const {
