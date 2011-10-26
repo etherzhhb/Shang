@@ -13,11 +13,18 @@
 
 #ifndef VTM_FUNCTION_UNIT_H
 #define VTM_FUNCTION_UNIT_H
+
+#include "vtm/SynSettings.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Constants.h"
+#include "llvm/Function.h"
+#include "llvm/GlobalVariable.h"
+#include "llvm/DerivedTypes.h"
 
 namespace luabind {
   namespace adl {
@@ -231,16 +238,21 @@ typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
 
 class VFUBRam : public  VFUDesc {
   std::string Template; // Template for inferring block ram.
+  std::string InitFileDir; // Template for readmemh dir.
 public:
   VFUBRam(luabind::object FUTable);
 
-  std::string generateCode(const std::string &Clk, unsigned Num,
+  std::string generateCode(const std::string &Clk, unsigned Num, unsigned ID,
                            unsigned DataWidth, unsigned AddrWidth) const;
+
+  void generateInitFile(unsigned BramID, unsigned BramNum, 
+                           unsigned DataWidth, const Value* Initializer,
+                           unsigned NumElem);
 
   static inline bool classof(const VFUBRam *A) {
     return true;
   }
-
+  
   template<enum VFUs::FUTypes OtherT>
   static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
     return getType() == OtherT;
@@ -278,6 +290,24 @@ public:
   inline static std::string getEnableName(unsigned FUNum) {
     return "bram" + utostr(FUNum) + "en";
   }
+
+  // Helper Functions: print constant and its helpers. 
+  // These function helps initializing bram
+  void printConstant(raw_ostream &Out, Constant *CPV, unsigned DataWidth, 
+                        bool Static);
+  void printZeros(raw_ostream &Out, unsigned int NumElement, unsigned int Bytes);
+
+  raw_ostream &printSimpleType(raw_ostream &Out, const Type *Ty, bool isSigned,
+    const std::string &NameSoFar = "");
+
+  raw_ostream &printType(raw_ostream &Out, const Type *Ty,
+    bool isSigned = false,
+    const std::string &NameSoFar = "",
+    bool IgnoreName = false,
+    const AttrListPtr &PAL = AttrListPtr());
+
+  void printConstantArray(raw_ostream &Out, ConstantArray *CPA, 
+    unsigned DataWidth, bool Static);
 };
 
 struct CommonFUIdentityFunctor

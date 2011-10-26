@@ -49,6 +49,9 @@
 #define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
+#include <iostream>
+
+
 using namespace llvm;
 STATISTIC(TotalRegisterBits,
           "Number of total register bits in synthesised modules");
@@ -568,11 +571,21 @@ void RTLCodegen::emitAllocatedFUs() {
        I != E; ++I) {
     const VFInfo::BRamInfo &Info = I->second;
     unsigned BramNum = Info.PhyRegNum;
+    //unsigned BramID = I->first;
+    static unsigned BramID;
+    const Value* Initializer = Info.Initializer; 
+    unsigned NumElem = Info.NumElem;
+    unsigned DataWidth = Info.ElemSizeInBytes * 8;
 
-    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
-                                Info.ElemSizeInBytes * 8,
-                                Log2_32_Ceil(Info.NumElem))
+    //Print the Constant into a .txt file as the initializer to bram
+    BlockRam->generateInitFile(BramID, BramNum, DataWidth, Initializer, NumElem);
+
+    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum, BramID,
+                                DataWidth,
+                                Log2_32_Ceil(NumElem))
       << '\n';
+
+    BramID++;
   }
 
   // Generate the code for sub modules/external modules
@@ -724,6 +737,7 @@ void RTLCodegen::emitAllSignals() {
   }
 
   emitSignals(VTM::WireRegisterClass, false);
+  emitSignals(VTM::RBRMRegisterClass, false);
 }
 
 void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
@@ -1288,7 +1302,7 @@ void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
     VASTRValue V = VM->lookupSignal(Op.getReg());
     assert (V != 0 && "Cannot find this Value in vector!");
     OS << V->getName();
-    if(printRange)
+    if(printRange && V.UB != 0) 
       OS << verilogBitRange(V.UB, V.LB, V->getBitWidth() !=1);
 
     return;

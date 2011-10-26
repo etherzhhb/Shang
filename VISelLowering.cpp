@@ -690,6 +690,21 @@ SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
 
     return SDValue();
   }
+  case vtmIntrinsic::vtm_alloca_brom: {
+    unsigned BRomNum = Op->getConstantOperandVal(3),
+      NumElem = Op->getConstantOperandVal(4),
+      ElemSizeInBytes = Op->getConstantOperandVal(5);
+
+    VFInfo *Info =DAG.getMachineFunction().getInfo<VFInfo>();
+    GlobalAddressSDNode* GlobalSDNode = dyn_cast<GlobalAddressSDNode>(Op.getOperand(2));
+    Info->allocateBRam(BRomNum, NumElem, ElemSizeInBytes, GlobalSDNode->getGlobal());
+    // Replace the results.
+    // The base address inside a block ram is always 0.
+    DAG.ReplaceAllUsesOfValueWith(Op, DAG.getTargetConstant(0, getPointerTy()));
+    DAG.ReplaceAllUsesOfValueWith(Op.getValue(1), Chain);
+
+    return SDValue();
+  }
   }
 }
 
@@ -740,6 +755,18 @@ bool VTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
     Info.offset = 0;
     // Align by block ram cell size.
     Info.align = cast<VAllocaBRamInst>(I).getElementSizeInBytes();
+    Info.vol = false;
+    Info.readMem = true;
+    Info.writeMem = false;
+    return true;
+  }
+  case vtmIntrinsic::vtm_alloca_brom: {
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = getPointerTy();
+    Info.ptrVal = &I; // Pass the allocated base address as pointer value.
+    Info.offset = 0;
+    // Align by block rom cell size.
+    Info.align = cast<VAllocaBRomInst>(I).getElementSizeInBytes();
     Info.vol = false;
     Info.readMem = true;
     Info.writeMem = false;
