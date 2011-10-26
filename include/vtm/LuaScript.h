@@ -100,6 +100,7 @@ public:
   }
 
   raw_ostream &getOutputStream(const std::string &Name);
+  raw_ostream &getOutputFileStream(std::string &Name);
 
   void keepAllFiles();
 

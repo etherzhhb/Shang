@@ -116,7 +116,28 @@ bool LuaScript::runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) 
 }
 
 raw_ostream &LuaScript::getOutputStream(const std::string &Name) {
+
   std::string Path = getValueStr(Name);
+
+  // Try to return the existing file.
+  FileMapTy::const_iterator at = Files.find(Path);
+
+  if (at != Files.end()) return at->second->os();
+
+  if (Path.empty()) return outs();
+
+  std::string error;
+
+  tool_output_file *NewFile = new tool_output_file(Path.c_str(), error);
+  // TODO: Support binary file.
+  Files.insert(std::make_pair(Path, NewFile));
+
+  return NewFile->os();
+}
+
+raw_ostream &LuaScript::getOutputFileStream(std::string &Name) {
+
+  std::string Path = Name;
 
   // Try to return the existing file.
   FileMapTy::const_iterator at = Files.find(Path);
