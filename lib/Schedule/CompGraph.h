@@ -174,7 +174,7 @@ public:
     std::map<NodeTy*, unsigned> LongestPathWeight;
 
     //for each vertex v in topOrder(G) do
-    typedef NodeTy::iterator ChildIt;
+    typedef typename NodeTy::iterator ChildIt;
     SmallVector<std::pair<NodeTy*, ChildIt>, 32> WorkStack;
     std::map<NodeTy*, unsigned> VisitCount;
 
