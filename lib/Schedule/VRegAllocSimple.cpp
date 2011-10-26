@@ -762,7 +762,7 @@ void VRASimple::bindBlockRam() {
 
       // Merge to the representative live interval.
       LiveInterval *RepLI = RepLIs[PhyReg];
-      assert(!RepLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind membus!");
+      assert(!RepLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind bram!");
       JoinIntervals(*RepLI, *LI, TRI, MRI);
       MRI->replaceRegWith(LI->reg, RepLI->reg);
     }
@@ -771,16 +771,29 @@ void VRASimple::bindBlockRam() {
 
 void VRASimple::bindCalleeFN() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
+  std::map<unsigned, LiveInterval*> RepLIs;
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
-      unsigned FR = VFI->allocateFN(VTM::RCFNRegClassID);
+      unsigned FNNum = Op.getOperand(1).getBitWidth();
+      LiveInterval *&RepLI = RepLIs[FNNum];
 
-      assert(!query(*LI, FR).checkInterference()&&"Cannot bind sub module!");
-      assign(*LI, FR);
+      if (RepLI == 0) {
+        // This is the first live interval bound to this callee function.
+        // Use this live interval to represent the live interval of this callee
+        // function.
+        RepLI = LI;
+        assign(*LI, VFI->allocateFN(VTM::RCFNRegClassID));
+        continue;
+      }
+
+      // Merge to the representative live interval.
+      assert(!RepLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind calleefn!");
+      JoinIntervals(*RepLI, *LI, TRI, MRI);
+      MRI->replaceRegWith(LI->reg, RepLI->reg);
     }
   }
 }
