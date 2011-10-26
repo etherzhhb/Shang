@@ -68,27 +68,33 @@ public:
 
   // Unlink the Succ from current node.
   void unlinkSucc(CompGraphNode *Succ) {
-    Succs.erase(Succ);
+    bool deleted = Succs.erase(Succ);
+    assert(deleted && "Succ is not the successor of this!");
     SuccWeights.erase(Succ);
 
     // Current node is not the predecessor of succ node too.
-    Succ->Preds.erase(this);
+    deleted = Succ->Preds.erase(this);
+    assert(deleted && "this is not the predecessor of succ!");
+    (void) deleted;
   }
 
   // Unlink the Pred from current node.
   void unlinkPred(CompGraphNode *Pred) {
-    Preds.erase(Pred);
+    bool deleted = Preds.erase(Pred);
+    assert(deleted && "Pred is not the predecessor of this!");
 
     // Current node is not the successor of pred node too.
-    Pred->Succs.erase(this);
+    deleted = Pred->Succs.erase(this);
+    assert(deleted && "this is not the successor of Pred!");
+    (void) deleted;
   }
 
   void unlink() {
-    for (iterator I = succ_begin(), E = succ_end(); I != E; ++I)
-      unlinkSucc(*I);
+    while (!succ_empty())
+      unlinkSucc(*succ_begin());
 
-    for (iterator I = pred_begin(), E = pred_end(); I != E; ++I)
-      unlinkPred(*I);
+    while (!pred_empty())
+      unlinkPred(*pred_begin());
   }
 
   static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst, unsigned Weight){
