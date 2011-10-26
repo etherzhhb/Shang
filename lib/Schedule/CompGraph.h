@@ -204,7 +204,8 @@ public:
     delete N;
   }
 
-  void findLongestPath(SmallVectorImpl<T> &Path, bool DelNodes = false) {
+  // Return true if the longest path is not trivial (have more than 1 nodes).
+  bool findLongestPath(SmallVectorImpl<T> &Path, bool DelNodes = false) {
     std::map<NodeTy*, unsigned> LenMap;
 
     std::map<NodeTy*, NodeTy*> PathPred;
@@ -245,12 +246,15 @@ public:
       }
     }
 
-
+    unsigned NumNodes = 0;
     // Build the path.
     for (NodeTy *I = PathPred[&Exit]; I && I != &Entry; I = PathPred[I]) {
       Path.push_back(I->get());
       if (DelNodes) deleteNode(I);
+      ++NumNodes;
     }
+
+    return NumNodes > 1;
   }
 
   void viewGraph();
