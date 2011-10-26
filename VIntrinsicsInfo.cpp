@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VIntrinsicsInfo.h"
+#include "vtm/VIntrinsicsInfo.h"
 
 #include "llvm/DerivedTypes.h"
 #include "llvm/Function.h"

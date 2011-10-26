@@ -67,6 +67,25 @@ namespace llvm {
     unsigned getElementSizeInBytes() const;
   };
 
+  ///VAllocaBromInst - This represents the llvm.vtm.alloca.bram instruction.
+  ///
+  class VAllocaBRomInst : public VIntrinsicInst {
+  public:
+    // Methods for support type inquiry through isa, cast, and dyn_cast:
+    static inline bool classof(const VAllocaBRomInst *) {return true;}
+    static inline bool classof(const VIntrinsicInst *I) {
+      return I->getIntrinsicID() == vtmIntrinsic::vtm_alloca_brom;
+    }
+    static inline bool classof(const Value *V) {
+      return isa<VIntrinsicInst>(V) && classof(cast<VIntrinsicInst>(V));
+    }
+
+    Value *getPointerOperand() const;
+    unsigned getBRomId() const;
+    unsigned getNumElement() const;
+    unsigned getElementSizeInBytes() const;
+  };
+
   /// VAccessBramInst - This represents the llvm.vtm.access.bram instruction.
   ///
   class VAccessBRamInst : public VIntrinsicInst {
