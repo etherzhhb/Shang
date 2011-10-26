@@ -49,14 +49,6 @@ public:
   //void print(raw_ostream &OS) const;
   //void dump() const;
 
-  bool compatible(Self &Other, CompGraphQuery<T> &Q) const {
-    return Q.compatible(get(), Other.get());
-  }
-
-  bool isEarlier(Self &Other, CompGraphQuery<T> &Q) const {
-    return Q.isEarlier(get(), Other.get());
-  }
-
   //typedef NodeVecTy::iterator iterator;
   typedef typename NodeVecTy::const_iterator iterator;
 
@@ -160,9 +152,11 @@ public:
         NodeTy *Other = *I;
 
         // Make edge between compatible nodes.
-        if (Other->compatible(*Node, Q)) {
-          if (Other->isEarlier(*Node, Q)) NodeTy::MakeEdge(*Other, *Node, Q);
-          else                            NodeTy::MakeEdge(*Node, *Other, Q);
+        if (Q.compatible(Node->get(), Other->get())) {
+          if (Q.isEarlier(Node->get(), Other->get()))
+            NodeTy::MakeEdge(*Node, *Other, Q);
+          else
+            NodeTy::MakeEdge(*Other, *Node, Q);
         }
       }
 
