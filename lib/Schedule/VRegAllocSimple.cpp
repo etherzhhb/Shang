@@ -177,6 +177,7 @@ struct VRASimple : public MachineFunctionPass,
   }
 
   void joinPHINodeIntervals();
+  void mergeLI(LiveInterval *FromLI, LiveInterval *ToLI);
 
   void bindMemoryBus();
   void bindBlockRam();
@@ -713,6 +714,12 @@ void VRASimple::joinPHINodeIntervals() {
   }
 }
 
+void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI) {
+  assert(!ToLI->overlapsFrom(*FromLI, FromLI->begin()) && "Cannot mrege LI!");
+  JoinIntervals(*ToLI, *FromLI, TRI, MRI);
+  MRI->replaceRegWith(FromLI->reg, ToLI->reg);
+}
+
 void VRASimple::bindMemoryBus() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RINFRegisterClass);
 
@@ -729,9 +736,7 @@ void VRASimple::bindMemoryBus() {
       }
 
       // Merge all others LI to MemBusLI.
-      assert(!MemBusLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind membus!");
-      JoinIntervals(*MemBusLI, *LI, TRI, MRI);
-      MRI->replaceRegWith(LI->reg, MemBusLI->reg);
+      mergeLI(LI, MemBusLI);
     }
   }
 }
@@ -761,10 +766,7 @@ void VRASimple::bindBlockRam() {
       }
 
       // Merge to the representative live interval.
-      LiveInterval *RepLI = RepLIs[PhyReg];
-      assert(!RepLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind bram!");
-      JoinIntervals(*RepLI, *LI, TRI, MRI);
-      MRI->replaceRegWith(LI->reg, RepLI->reg);
+      mergeLI(LI, RepLIs[PhyReg]);
     }
   }
 }
@@ -791,9 +793,7 @@ void VRASimple::bindCalleeFN() {
       }
 
       // Merge to the representative live interval.
-      assert(!RepLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind calleefn!");
-      JoinIntervals(*RepLI, *LI, TRI, MRI);
-      MRI->replaceRegWith(LI->reg, RepLI->reg);
+      mergeLI(LI, RepLI);
     }
   }
 }
