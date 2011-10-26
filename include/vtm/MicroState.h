@@ -63,6 +63,11 @@ public:
     return (Context >> OpcodeShiftAmount) & OpcodeMask;
   }
 
+  bool isOpcode(unsigned OpCode) const {
+    assert(isOpcode() && "Bad Operand type!");
+    return getOpcode() == OpCode;
+  }
+
   void changeOpcode(unsigned Opcode, unsigned PredSlot,
                     FuncUnitId FUId = VFUs::Trivial);
 
