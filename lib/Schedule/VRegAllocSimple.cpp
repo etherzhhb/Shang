@@ -716,27 +716,34 @@ void VRASimple::joinPHINodeIntervals() {
 void VRASimple::bindMemoryBus() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RINFRegisterClass);
 
-  //unsigned DataWidth = getFUDesc<VFUMemBus>()->getDataWidth();
-  unsigned MemBusReg = VFI->allocateFN(VTM::RINFRegClassID);
+  LiveInterval *MemBusLI = 0;
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      assert(!query(*LI, MemBusReg).checkInterference() && "Cannot bind membus!");
-      assign(*LI, MemBusReg);
+      if (MemBusLI == 0) {
+        assign(*LI, VFI->allocateFN(VTM::RINFRegClassID));
+        MemBusLI = LI;
+        continue;
+      }
+
+      // Merge all others LI to MemBusLI.
+      assert(!MemBusLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind membus!");
+      JoinIntervals(*MemBusLI, *LI, TRI, MRI);
+      MRI->replaceRegWith(LI->reg, MemBusLI->reg);
     }
   }
 }
 
 void VRASimple::bindBlockRam() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RBRMRegisterClass);
+  std::map<unsigned, LiveInterval*> RepLIs;
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
       assert(Op->getOpcode() == VTM::VOpBRam && "Unexpected opcode!");
       unsigned BRamNum = Op->getFUId().getFUNum();
@@ -747,11 +754,17 @@ void VRASimple::bindBlockRam() {
       // Had we allocate a register for this bram?
       if (PhyReg == 0) {
         unsigned BitWidth = Info.ElemSizeInBytes * 8;
-        PhyReg = VFI->allocatePhyReg(VTM::RBRMRegClassID, BitWidth);
+        PhyReg = VFI->allocateFN(VTM::RBRMRegClassID, BitWidth);
+        RepLIs[PhyReg] = LI;
+        assign(*LI, PhyReg);
+        continue;
       }
 
-      assert(!query(*LI, PhyReg).checkInterference() && "Cannot bind bram!");
-      assign(*LI, PhyReg);
+      // Merge to the representative live interval.
+      LiveInterval *RepLI = RepLIs[PhyReg];
+      assert(!RepLI->overlapsFrom(*LI, LI->begin()) && "Cannot bind membus!");
+      JoinIntervals(*RepLI, *LI, TRI, MRI);
+      MRI->replaceRegWith(LI->reg, RepLI->reg);
     }
   }
 }
