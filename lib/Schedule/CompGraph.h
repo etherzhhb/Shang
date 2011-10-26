@@ -136,14 +136,6 @@ private:
   // Nodes vector.
   NodeMapTy Nodes;
 
-  struct second {
-    typedef NodeTy *result_type;
-
-    result_type operator()(typename NodeMapTy::value_type v) const {
-      return v.second;
-    }
-  }; 
-
 public:
   CompGraph(QueryTy &q) : Q(q) {}
 
