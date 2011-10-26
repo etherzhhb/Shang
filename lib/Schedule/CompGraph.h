@@ -28,41 +28,49 @@ template<class T>
 class CompGraphNode {
   typedef CompGraphNode<T> Self;
   // The underlying data.
-  T *N;
+  T N;
 
   typedef SmallVector<Self*, 8> NodeVecTy;
-
   // Predecessors and Successors.
   NodeVecTy Preds, Succs;
 
+  typedef SmallVector<unsigned, 8> WeightVecTy;
+  WeightVecTy SuccWeights;
+
 public:
-  explicit CompGraphNode(T *Node = 0) : N(Node) {}
+  explicit CompGraphNode(T Node = T()) : N(Node) {}
 
   bool isEntry() const { return N == 0; }
 
-  T *get() const { return N; }
-  T *operator->() const { return N; }
+  T get() const { return N; }
+  T operator->() const { return N; }
 
   //void print(raw_ostream &OS) const;
   //void dump() const;
 
-  bool compatible(Self &Other) const {
-    return CompGraphTraits<T>::compatible(get(), Other.get());
+  bool compatible(Self &Other, CompGraphQuery<T> &Q) const {
+    return Q.compatible(get(), Other.get());
   }
 
-  bool isEarlier(Self &Other) const {
-    return CompGraphTraits<T>::isEarlier(get(), Other.get());
+  bool isEarlier(Self &Other, CompGraphQuery<T> &Q) const {
+    return Q.isEarlier(get(), Other.get());
   }
 
   //typedef NodeVecTy::iterator iterator;
   typedef typename NodeVecTy::const_iterator iterator;
 
-  iterator succ_begin() { return Succs.begin(); }
-  iterator succ_end() { return Succs.end(); }
+  iterator succ_begin() const { return Succs.begin(); }
+  iterator succ_end() const { return Succs.end(); }
 
-  static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst) {
+  unsigned getWeight(iterator I) const {
+    return SuccWeights[I - succ_begin()];
+  }
+
+  static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst,
+                       CompGraphQuery<T> &Q){
     assert(!Dst.isEntry() && "Entry node cannot be destination!");
     Src.Succs.push_back(&Dst);
+    Src.SuccWeights.push_back(Q.calcWeight(Src.get(), Dst.get()));
     Dst.Preds.push_back(&Src);
   }
 };
@@ -83,9 +91,10 @@ template<class T>
 class CompGraph {
 public:
   typedef CompGraphNode<T> NodeTy;
-
+  typedef CompGraphQuery<T> QueryTy;
 private:
-  typedef std::map<T*, NodeTy*> NodeMapTy;
+  QueryTy &Q;
+  typedef std::map<T, NodeTy*> NodeMapTy;
   // The dummy entry node of the graph.
   NodeTy Entry;
   // Nodes vector.
@@ -100,13 +109,13 @@ private:
   }; 
 
 public:
-  CompGraph() : Entry(0) {}
+  CompGraph(QueryTy &q) : Q(q), Entry() {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);
   }
 
-  NodeTy *GetOrCreateNode(T *N) {
+  NodeTy *GetOrCreateNode(T N) {
     assert(N && "Unexpected null pointer pass to GetOrCreateNode!");
     NodeTy *&Node = Nodes[N];
     // Create the node if it not exisits yet.
@@ -132,12 +141,12 @@ public:
       for (NodeVecIt NI = Visited.begin(), NE = Visited.end(); NI != NE;++NI) {
         NodeTy *RHS = *NI;
 
-        if (!LHS->compatible(*RHS)) continue;
+        if (!LHS->compatible(*RHS, Q)) continue;
 
-        if (LHS->isEarlier(*RHS))
-          NodeTy::MakeEdge(*LHS, *RHS);
+        if (LHS->isEarlier(*RHS, Q))
+          NodeTy::MakeEdge(*LHS, *RHS, Q);
         else
-          NodeTy::MakeEdge(*RHS, *LHS);
+          NodeTy::MakeEdge(*RHS, *LHS, Q);
       }
 
       Visited.push_back(LHS);
@@ -145,7 +154,7 @@ public:
 
     // Add the edge from entry node to all other nodes.
     for (NodeVecIt NI = Visited.begin(), NE = Visited.end(); NI != NE;++NI)
-      NodeTy::MakeEdge(Entry, **NI);
+      NodeTy::MakeEdge(Entry, **NI, Q);
 
     // Also insert the entry node to the map.
     //Nodes.insert(std::make_pair((T*)0, &Entry));

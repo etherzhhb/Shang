@@ -67,19 +67,6 @@ static RegisterRegAlloc VSimpleRegalloc("vsimple",
                                         "vtm-simple register allocator",
                                         createSimpleRegisterAllocator);
 
-namespace llvm {
-// Specialized For liveInterval.
-template<> struct CompGraphTraits<LiveInterval> {
-  static bool isEarlier(LiveInterval *LHS, LiveInterval *RHS) {
-    return *LHS < *RHS;
-  }
-
-  static bool compatible(LiveInterval *LHS, LiveInterval *RHS) {
-    return !LHS->overlapsFrom(*RHS, RHS->begin());
-  }
-};
-}
-
 namespace {
 struct CompSpillWeight {
   bool operator()(LiveInterval *A, LiveInterval *B) const {
@@ -87,8 +74,8 @@ struct CompSpillWeight {
   }
 };
 
-class VRASimple : public MachineFunctionPass,
-                  public RegAllocBase {
+struct VRASimple : public MachineFunctionPass,
+                   public RegAllocBase {
   // DIRTY HACK: We need to init the PhysReg2LiveUnion again with correct
   // physics register number.
   LiveIntervalUnion::Allocator UnionAllocator;
@@ -99,8 +86,8 @@ class VRASimple : public MachineFunctionPass,
   // Analysis
   LiveStacks *LS;
 
-  typedef CompGraph<LiveInterval> LICompGraph;
-  typedef CompGraphNode<LiveInterval> LICompGraphNode;
+  typedef CompGraph<unsigned> RegCompGraph;
+  typedef CompGraphNode<unsigned> RegCompGraphNode;
 
   typedef const std::vector<unsigned> VRegVec;
 
@@ -113,7 +100,6 @@ class VRASimple : public MachineFunctionPass,
   //  return Queries[PhysReg];
   //}
 
-public:
   VRASimple();
   void init(VirtRegMap &vrm, LiveIntervals &lis);
   
@@ -169,6 +155,11 @@ public:
     return &LI;
   }
 
+  ucOp getDefineOp(unsigned Reg) {
+    assert(!MRI->def_empty(Reg) && "Cannot get define op!");
+    return ucOp::getParent(MRI->def_begin(Reg));
+  }
+
   void joinPHINodeIntervals();
 
   void bindMemoryBus();
@@ -199,6 +190,52 @@ public:
 char VRASimple::ID = 0;
 
 }
+
+namespace llvm {
+  // Specialized For liveInterval.
+  template<> struct CompGraphQuery<unsigned> {
+    VRASimple *VRA;
+
+    CompGraphQuery(VRASimple *V) : VRA(V) {}
+
+    bool isEarlier(unsigned LHS, unsigned RHS) const {
+      if (LHS == 0) return true;
+
+      if (RHS == 0) return false;
+
+      LiveInterval *LHSLI = VRA->getInterval(LHS),
+                   *RHSLI = VRA->getInterval(RHS);
+      assert(LHSLI && RHSLI && "Unexpected null live iterval!");
+      return *LHSLI < *RHSLI;
+    }
+
+    bool compatible(unsigned LHS, unsigned RHS) const {
+      if (LHS == 0 || RHS == 0) return true;
+
+      LiveInterval *LHSLI = VRA->getInterval(LHS),
+                   *RHSLI = VRA->getInterval(RHS);
+      assert(LHSLI && RHSLI && "Unexpected null live iterval!");
+      return !LHSLI->overlapsFrom(*RHSLI, RHSLI->begin());
+    }
+
+    unsigned calcWeight(unsigned Src, unsigned Dst) const {
+      assert(Dst && "Unexpected noreg as destination!");
+      if (Src == 0) return 0;
+
+      ucOp SrcOp = VRA->getDefineOp(Src), DstOp = VRA->getDefineOp(Dst);
+
+      if (SrcOp->isOpcode(VTM::VOpReadFU) && DstOp->isOpcode(VTM::VOpReadFU)) {
+        if (SrcOp.getOperand(1).getReg() == DstOp.getOperand(1).getReg()) {
+          return 1;
+        }
+      }
+
+
+      return 0;
+    }
+  };
+}
+
 
 //===----------------------------------------------------------------------===//
 /// ComputeUltimateVN - Assuming we are going to join two live intervals,
@@ -721,7 +758,8 @@ void VRASimple::bindCalleeFN() {
 
 bool VRASimple::bindDataRegister() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::DRRegisterClass);
-  //LICompGraph G;
+  //CompGraphQuery<unsigned> Q(this);
+  //RegCompGraph G(Q);
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
@@ -729,7 +767,7 @@ bool VRASimple::bindDataRegister() {
     if (LiveInterval *LI = getInterval(RegNum)) {
       unsigned PhyReg = VFI->allocatePhyReg(VTM::DRRegClassID,
                                             getBitWidthOf(RegNum));
-      //G.GetOrCreateNode(LI);
+      //G.GetOrCreateNode(LI->reg);
       assign(*LI, PhyReg);
     }
   }

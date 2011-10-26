@@ -23,22 +23,26 @@
 #include "CompGraph.h"
 
 #include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/CodeGen/LiveInterval.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/GraphWriter.h"
 
 namespace llvm {
 
 template<>
-struct DOTGraphTraits<CompGraph<LiveInterval>*> : public DefaultDOTGraphTraits {
-  typedef CompGraphNode<LiveInterval> NodeTy;
-  typedef CompGraph<LiveInterval> GraphTy;
+struct DOTGraphTraits<CompGraph<unsigned>*> : public DefaultDOTGraphTraits {
+  typedef CompGraphNode<unsigned> NodeTy;
+  typedef CompGraph<unsigned> GraphTy;
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
+
+  static std::string getEdgeSourceLabel(const NodeTy *Node, NodeTy::iterator I){
+    return itostr(Node->getWeight(I));
+  }
 
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
-    ss << PrintReg(Node->get()->reg);
+    ss << PrintReg(Node->get());
     return ss.str();
   }
 
@@ -49,7 +53,7 @@ struct DOTGraphTraits<CompGraph<LiveInterval>*> : public DefaultDOTGraphTraits {
 };
 
 template<>
-void CompGraph<LiveInterval>::viewGraph() {
+void CompGraph<unsigned>::viewGraph() {
   ViewGraph(this, "CompatibilityGraph");
 }
 
