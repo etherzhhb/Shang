@@ -152,44 +152,26 @@ public:
   NodeTy *GetOrCreateNode(T N) {
     assert(N && "Unexpected null pointer pass to GetOrCreateNode!");
     NodeTy *&Node = Nodes[N];
-    // Create the node if it not exisits yet.
-    if (Node == 0) Node = new NodeTy(N);
+    // Create the node if it not exists yet.
+    if (Node == 0) {
+      Node = new NodeTy(N);
+      // And insert the node into the graph.
+      for (iterator I = begin(), E = end(); I != E; ++I) {
+        NodeTy *Other = *I;
 
-    return Node;
-  }
-
-
-
-  void buildGraph() {
-    typedef std::vector<NodeTy*> NodeVecTy;
-    typedef typename NodeVecTy::iterator NodeVecIt;
-    NodeVecTy Visited;
-
-    for (iterator I = begin(), E = end(); I != E; ++I) {
-      NodeTy *LHS = *I;
-
-      for (NodeVecIt NI = Visited.begin(), NE = Visited.end(); NI != NE;++NI) {
-        NodeTy *RHS = *NI;
-
-        if (!LHS->compatible(*RHS, Q)) continue;
-
-        if (LHS->isEarlier(*RHS, Q))
-          NodeTy::MakeEdge(*LHS, *RHS, Q);
-        else
-          NodeTy::MakeEdge(*RHS, *LHS, Q);
+        // Make edge between compatible nodes.
+        if (Other->compatible(*Node, Q)) {
+          if (Other->isEarlier(*Node, Q)) NodeTy::MakeEdge(*Other, *Node, Q);
+          else                            NodeTy::MakeEdge(*Node, *Other, Q);
+        }
       }
 
-      Visited.push_back(LHS);
+      // There will always edge from entry to a node and from node to exit.
+      NodeTy::MakeEdge(Entry, *Node, Q.getVirtualEdgeWeight());
+      NodeTy::MakeEdge(*Node, Exit, Q.getVirtualEdgeWeight());
     }
 
-    // Add the edge from entry node to all other nodes.
-    for (NodeVecIt NI = Visited.begin(), NE = Visited.end(); NI != NE;++NI) {
-      NodeTy::MakeEdge(Entry, **NI, Q.getVirtualEdgeWeight());
-      NodeTy::MakeEdge(**NI, Exit, Q.getVirtualEdgeWeight());
-    }
-
-    // Also insert the entry node to the map.
-    //Nodes.insert(std::make_pair((T*)0, &Entry));
+    return Node;
   }
 
   void deleteNode(NodeTy *N) {
