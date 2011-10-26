@@ -155,9 +155,25 @@ struct VRASimple : public MachineFunctionPass,
     return &LI;
   }
 
-  ucOp getDefineOp(unsigned Reg) {
+  ucOp getDefineOp(unsigned Reg) const {
     assert(!MRI->def_empty(Reg) && "Cannot get define op!");
     return ucOp::getParent(MRI->def_begin(Reg));
+  }
+
+  unsigned getRepRegister(unsigned Reg) const {
+    if (TargetRegisterInfo::isVirtualRegister(Reg)) {
+      if (unsigned PhyReg = VRM->getPhys(Reg))
+        return PhyReg;
+    }
+
+    return Reg;
+  }
+
+  unsigned getDrivingFU(ucOp Op) const {
+    if (Op->isOpcode(VTM::VOpReadFU))
+      return getRepRegister(Op.getOperand(1).getReg());
+
+    return 0;
   }
 
   void joinPHINodeIntervals();
@@ -195,7 +211,8 @@ namespace llvm {
   // Specialized For liveInterval.
   template<> struct CompGraphQuery<unsigned> {
     VRASimple *VRA;
-
+    const unsigned EntryWeight = 256;
+    const unsigned SameFUWeight = 128;
     CompGraphQuery(VRASimple *V) : VRA(V) {}
 
     bool isEarlier(unsigned LHS, unsigned RHS) const {
@@ -220,16 +237,15 @@ namespace llvm {
 
     unsigned calcWeight(unsigned Src, unsigned Dst) const {
       assert(Dst && "Unexpected noreg as destination!");
-      if (Src == 0) return 0;
+      // Start from entry if possible.
+      if (Src == 0) return EntryWeight;
 
       ucOp SrcOp = VRA->getDefineOp(Src), DstOp = VRA->getDefineOp(Dst);
-
-      if (SrcOp->isOpcode(VTM::VOpReadFU) && DstOp->isOpcode(VTM::VOpReadFU)) {
-        if (SrcOp.getOperand(1).getReg() == DstOp.getOperand(1).getReg()) {
-          return 1;
-        }
+      unsigned SrcFU = VRA->getDrivingFU(SrcOp),
+               DstFU = VRA->getDrivingFU(DstOp);
+      if (SrcFU && SrcFU == DstFU) {
+        return SameFUWeight;
       }
-
 
       return 0;
     }
