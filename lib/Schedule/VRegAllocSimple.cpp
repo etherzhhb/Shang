@@ -148,7 +148,9 @@ struct VRASimple : public MachineFunctionPass,
   // Compatibility Graph building.
   void buildRegCompGraph(RCGraph &G);
 
-  bool reduceCompGraph(RCGraph &G);
+  template<class CompEdgeWeight>
+  bool reduceCompGraph(RCGraph &G, CompEdgeWeight C);
+
   void bindCompGraph(RCGraph &G, unsigned RCId);
 
   bool bindFUs();
@@ -173,23 +175,32 @@ struct VRASimple : public MachineFunctionPass,
   }
 };
 
-char VRASimple::ID = 0;
+struct CompRegEdgeWeight {
+  VRASimple *VRA;
 
+  CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
+
+  unsigned getSameFUWeight() const { return 128; }
+
+  unsigned operator()(LiveInterval *Src, LiveInterval *Dst) const {
+    assert(Dst && Src && "Unexpected null li!");
+
+    // FIXME: Find all driver of the live interval.
+    ucOp SrcOp = VRA->getDefineOp(Src->reg), DstOp = VRA->getDefineOp(Dst->reg);
+    unsigned SrcFU = VRA->getDrivingFU(SrcOp),
+      DstFU = VRA->getDrivingFU(DstOp);
+    if (SrcFU && SrcFU == DstFU) return getSameFUWeight();
+
+    return 0;
+  }
+};
 }
 
 namespace llvm {
   // Specialized For liveInterval.
-template<> struct CompGraphQuery<LiveInterval*> {
-  VRASimple *VRA;
-
-  CompGraphQuery(VRASimple *V) : VRA(V) {}
-
-  unsigned getSameFUWeight() const { return 128; }
-
+template<> struct CompGraphTraits<LiveInterval*> {
   static bool isEarlier(LiveInterval *LHS, LiveInterval *RHS) {
-    if (LHS == 0) return true;
-
-    if (RHS == 0) return false;
+    assert(LHS && RHS && "Unexpected virtual node!");
 
     return *LHS < *RHS;
   }
@@ -213,18 +224,6 @@ template<> struct CompGraphQuery<LiveInterval*> {
     // LHS and RHS is compatible if RHS end before LHS begin and vice versa.
     return LHS->beginIndex() >= RHS->endIndex()
             || RHS->beginIndex() >= LHS->endIndex();
-  }
-
-  unsigned calcWeight(LiveInterval *Src, LiveInterval *Dst) const {
-    assert(Dst && Src && "Unexpected null li!");
-
-    // FIXME: Find all driver of the live interval.
-    ucOp SrcOp = VRA->getDefineOp(Src->reg), DstOp = VRA->getDefineOp(Dst->reg);
-    unsigned SrcFU = VRA->getDrivingFU(SrcOp),
-              DstFU = VRA->getDrivingFU(DstOp);
-    if (SrcFU && SrcFU == DstFU) return getSameFUWeight();
-
-    return 0;
   }
 };
 }
@@ -503,6 +502,8 @@ FunctionPass *llvm::createSimpleRegisterAllocator() {
   return new VRASimple();
 }
 
+char VRASimple::ID = 0;
+
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
@@ -573,13 +574,13 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bool SomethingBind = true;
 
   //Build the Compatibility Graphs
-  RCGraph RCG(new CompGraphQuery<LiveInterval*>(this));
+  RCGraph RCG;
   buildRegCompGraph(RCG);
 
   // Reduce the Compatibility Graphs
   //while (SomethingBind) {
     SomethingBind = false;
-    SomethingBind |= reduceCompGraph(RCG);
+    SomethingBind |= reduceCompGraph(RCG, CompRegEdgeWeight(this));
     SomethingBind |= bindFUs();
   //}
 
@@ -754,8 +755,11 @@ void VRASimple::buildRegCompGraph(RCGraph &G) {
       G.GetOrCreateNode(LI);
 }
 
-bool VRASimple::reduceCompGraph(RCGraph &G) {
+template<class CompEdgeWeight>
+bool VRASimple::reduceCompGraph(RCGraph &G, CompEdgeWeight C) {
   SmallVector<LiveInterval*, 8> LongestPath;
+  G.updateEdgeWeight(C);
+
   bool AnyReduced = false;
 
   while (G.findLongestPath(LongestPath, true)) {

@@ -29,6 +29,7 @@ class raw_ostream;
 template<class T>
 class CompGraphNode {
   typedef CompGraphNode<T> Self;
+  typedef CompGraphTraits<T> Traits;
   // The underlying data.
   T N;
 
@@ -98,15 +99,25 @@ public:
       unlinkPred(*pred_begin());
   }
 
-  static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst, unsigned Weight){
-    Src.Succs.insert(&Dst);
-    Src.SuccWeights.insert(std::make_pair(&Dst, Weight));
-    Dst.Preds.insert(&Src);
+  template<class CompEdgeWeight>
+  void updateEdgeWeight(CompEdgeWeight C) {
+    for (iterator I = succ_begin(), E = succ_end(); I != E; ++I) {
+      Self *Succ = *I;
+      // Not need to update the weight of the exit edge.
+      if (Succ->get()) SuccWeights[Succ] = C(this->get(), Succ->get());
+    }
   }
 
-  static void MakeEdge(CompGraphNode &Src, CompGraphNode &Dst,
-                       CompGraphQuery<T> &Q){
-    MakeEdge(Src, Dst, Q.calcWeight(Src.get(), Dst.get()));
+  // Make the edge with default weight, we will udate the weight later.
+  static void MakeEdge(CompGraphNode *Src, CompGraphNode *Dst) {
+    T SrcN = Src->get(), DstN = Dst->get();
+    // Make sure source is earlier than destination.
+    if (SrcN != T() && DstN != T() && Traits::isEarlier(DstN, SrcN))
+      std::swap(Dst, Src);
+
+    Src->Succs.insert(Dst);
+    Src->SuccWeights.insert(std::make_pair(Dst, 0));
+    Dst->Preds.insert(Src);
   }
 };
 
@@ -126,11 +137,8 @@ template<class T>
 class CompGraph {
 public:
   typedef CompGraphNode<T> NodeTy;
-  typedef CompGraphQuery<T> QueryTy;
 private:
-  PointerIntPair<QueryTy*, 1, bool> Q;
-  QueryTy &query() { return *Q.getPointer(); }
-
+  typedef CompGraphTraits<T> Traits;
   typedef std::map<T, NodeTy*> NodeMapTy;
   // The dummy entry node of the graph.
   NodeTy Entry, Exit;
@@ -138,11 +146,10 @@ private:
   NodeMapTy Nodes;
 
 public:
-  CompGraph(QueryTy *q, bool deleteQ = true) : Q(q, deleteQ) {}
+  CompGraph() {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);
-    if (Q.getInt()) delete &query();
   }
 
   typedef typename NodeTy::iterator iterator;
@@ -162,17 +169,13 @@ public:
         NodeTy *Other = *I;
 
         // Make edge between compatible nodes.
-        if (QueryTy::compatible(Node->get(), Other->get())) {
-          if (QueryTy::isEarlier(Node->get(), Other->get()))
-            NodeTy::MakeEdge(*Node, *Other, query());
-          else
-            NodeTy::MakeEdge(*Other, *Node, query());
-        }
+        if (Traits::compatible(Node->get(), Other->get()))
+          NodeTy::MakeEdge(Node, Other);
       }
 
       // There will always edge from entry to a node and from node to exit.
-      NodeTy::MakeEdge(Entry, *Node, 0);
-      NodeTy::MakeEdge(*Node, Exit, 0);
+      NodeTy::MakeEdge(&Entry, Node);
+      NodeTy::MakeEdge(Node, &Exit);
     }
 
     return Node;
@@ -214,7 +217,7 @@ public:
         // for each edge (Node, ChildNode) in E(G) do
         unsigned EdgeWeight = Node->getWeightTo(ChildNode);
         // Do not introduce zero weight edge to the longest path.
-        if (EdgeWeight || ChildNode == &Exit) {
+        if (/*Node == &Entry ||*/ ChildNode == &Exit || EdgeWeight) {
           unsigned NewPathWeight = PathWeight[Node] + EdgeWeight;
           unsigned &OldPathWeight = PathWeight[ChildNode];
           if (OldPathWeight < NewPathWeight) {
@@ -240,6 +243,12 @@ public:
     }
 
     return NumNodes > 1;
+  }
+
+  template<class CompEdgeWeight>
+  void updateEdgeWeight(CompEdgeWeight C) {
+    for (iterator I = begin(), E = end(); I != E; ++I)
+      (*I)->updateEdgeWeight(C);
   }
 
   void viewGraph();
