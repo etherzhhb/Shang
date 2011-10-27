@@ -60,20 +60,11 @@
 
 using namespace llvm;
 
-cl::opt<bool> EnableSimpleRegisterSharing("vtm-enable-simple-register-sharing",
-                                          cl::init(false), cl::Hidden);
-
 static RegisterRegAlloc VSimpleRegalloc("vsimple",
                                         "vtm-simple register allocator",
                                         createSimpleRegisterAllocator);
 
 namespace {
-struct CompSpillWeight {
-  bool operator()(LiveInterval *A, LiveInterval *B) const {
-    return A->weight < B->weight;
-  }
-};
-
 struct VRASimple : public MachineFunctionPass,
                    public RegAllocBase {
   // DIRTY HACK: We need to init the PhysReg2LiveUnion again with correct
@@ -92,14 +83,7 @@ struct VRASimple : public MachineFunctionPass,
 
   typedef const std::vector<unsigned> VRegVec;
 
-  std::priority_queue<LiveInterval*, std::vector<LiveInterval*>,
-                      CompSpillWeight> Queue;
   unsigned UserTag;
-
-  //LiveIntervalUnion::Query &query(LiveInterval &VirtReg, unsigned PhysReg) {
-  //  Queries[PhysReg].init(UserTag, &VirtReg, &PhysReg2LiveUnion[PhysReg]);
-  //  return Queries[PhysReg];
-  //}
 
   VRASimple();
   void init(VirtRegMap &vrm, LiveIntervals &lis);
@@ -109,37 +93,15 @@ struct VRASimple : public MachineFunctionPass,
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void releaseMemory();
 
-
-  Spiller &spiller() {
-    llvm_unreachable("VRegAllocSimple - Never spill!");
-    return *(Spiller*)0;
+  // Abstract functions from the base class.
+  unsigned selectOrSplit(LiveInterval &, SmallVectorImpl<LiveInterval*> &) {
+    return 0;
   }
-
+  Spiller &spiller() { return *(Spiller*)0; }
   virtual float getPriority(LiveInterval *LI) { return LI->weight; }
-
-  virtual void enqueue(LiveInterval *LI) {
-    unsigned Reg = LI->reg;
-
-    if (LI->isZeroLength())
-      return;
-
-    // Preserves SSA From for wires.
-    // if (MRI->getRegClass(Reg) == VTM::WireRegisterClass)
-    if (VRegisterInfo::IsWire(Reg, MRI))
-      return;
-
-    Queue.push(LI);
-  }
-
-  virtual LiveInterval *dequeue() {
-    if (Queue.empty())
-      return 0;
-    LiveInterval *LI = Queue.top();
-    Queue.pop();
-    return LI;
-  }
-
-  unsigned checkPhysRegInterference(LiveInterval &VirtReg, unsigned PhysReg);
+  virtual void enqueue(LiveInterval *LI) {}
+  virtual LiveInterval *dequeue() { return 0; }
+  // End of Abstract functions
 
   LiveInterval *getInterval(unsigned RegNum) {
     if (MRI->reg_nodbg_empty(RegNum)) {
@@ -178,11 +140,14 @@ struct VRASimple : public MachineFunctionPass,
   void joinPHINodeIntervals();
   void mergeLI(LiveInterval *FromLI, LiveInterval *ToLI);
 
+  // Pre-bound function unit binding functions.
   void bindMemoryBus();
   void bindBlockRam();
   void bindCalleeFN();
 
+  // Compatibility Graph building.
   void buildRegCompGraph(RCGraph &G);
+
   bool reduceCompGraph(RCGraph &G);
   void bindCompGraph(RCGraph &G, unsigned RCId);
 
@@ -194,10 +159,6 @@ struct VRASimple : public MachineFunctionPass,
     ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
     return DefOp.getBitWidth();
   }
-
-
-  unsigned selectOrSplit(LiveInterval &VirtReg,
-                         SmallVectorImpl<LiveInterval*> &splitLVRs);
 
   bool runOnMachineFunction(MachineFunction &F);
 
@@ -579,10 +540,11 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
   MRI = &vrm.getRegInfo();
   VRM = &vrm;
   LIS = &lis;
-
+  // FIXME: Init the PhysReg2LiveUnion right before we start to bind the physics
+  // registers.
   PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() + 1);
   // Cache an interferece query for each physical reg
-  Queries.reset(new LiveIntervalUnion::Query[PhysReg2LiveUnion.numRegs()]);
+  // Queries.reset(new LiveIntervalUnion::Query[PhysReg2LiveUnion.numRegs()]);
 }
 
 bool VRASimple::runOnMachineFunction(MachineFunction &F) {
@@ -653,44 +615,6 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   ); 
 
   return true;
-}
-
-unsigned VRASimple::checkPhysRegInterference(LiveInterval &VirtReg,
-                                             unsigned PhysReg) {
-  //unsigned Overlaps[16];
-
-  //for (unsigned i = 0, e = VFI->getOverlaps(PhysReg, Overlaps); i < e; ++i)
-  //  if (query(VirtReg, Overlaps[i]).checkInterference())
-  //    return Overlaps[i];
-
-  //ucOp Op = ucOp::getParent(MRI->def_begin(VirtReg.reg));
-  //if (Op->getOpcode() == VTM::VOpDefPhi) {
-  //  unsigned PHINum = Op.getOperand(1).getReg();
-  //  return checkPhysRegInterference(LIS->getInterval(PHINum), PhysReg);
-  //}
-
-  return 0;
-}
-unsigned VRASimple::selectOrSplit(LiveInterval &VirtReg,
-                                  SmallVectorImpl<LiveInterval*> &splitLVRs) {
-  unsigned VReg = VirtReg.reg;
-  ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(VReg).getOperand());
-  unsigned Bitwidth = DefOp.getBitWidth();
-  ////if (EnableSimpleRegisterSharing)
-  //  for (reg_it I = VFI->phyreg_begin(Size), E = VFI->phyreg_end(Size);
-  //       I < E; ++I) {
-  //    unsigned PhysReg = *I;
-  //    if (checkPhysRegInterference(VirtReg, PhysReg) == 0)
-  //      return PhysReg;
-  //  }
-
-  //unsigned Reg =  VFI->allocatePhyReg(Size);
-
-  //while (checkPhysRegInterference(VirtReg, Reg) != 0)
-  //  Reg =  VFI->allocatePhyReg(Size);
-
-  //return Reg;
-  return VFI->allocatePhyReg(MRI->getRegClass(VReg)->getID(), Bitwidth);
 }
 
 void VRASimple::joinPHINodeIntervals() {
