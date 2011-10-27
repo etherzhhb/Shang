@@ -175,12 +175,12 @@ struct VRASimple : public MachineFunctionPass,
 struct CompRegEdgeWeight {
   VRASimple *VRA;
   // Context
-  // All source function units of both registers of the edge.
-  SmallSet<unsigned, 4> FUs;
+  // All copy source both registers of the edge.
+  SmallSet<unsigned, 4> Srcs;
   // The Maximum bit width of current register.
   unsigned CurMaxWidth;
-  // Total Function unit number of each register of the edge.
-  unsigned NumFUs;
+  // Total copy number of each register of the edge.
+  unsigned NumSrcs;
   // Other register of the edge.
   unsigned OtherReg;
   // Is there a copy between the src and dst of the edge?
@@ -189,22 +189,24 @@ struct CompRegEdgeWeight {
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
 
   void resetDefEvalator() {
-    FUs.clear();
+    Srcs.clear();
     CurMaxWidth = 0;
-    NumFUs = 0;
+    NumSrcs = 0;
     OtherReg = 0;
     hasCopy = false;
   }
 
-  void runOnFU(unsigned FU) {
-    assert(FU && "Bad FU register number!");
-    FUs.insert(FU);
-    ++NumFUs;
+  void addSrc(unsigned Src) {
+    assert(Src && "Bad FU register number!");
+    Srcs.insert(Src);
+    ++NumSrcs;
   }
 
   void runOnCopy(unsigned SrcReg) {
     // If we have copy between the edge?
     hasCopy |= SrcReg == OtherReg;
+    // Also count the source.
+    addSrc(SrcReg);
   }
 
   // Run on the definition of a register to collect information about the live
@@ -226,10 +228,10 @@ struct CompRegEdgeWeight {
       runOnCopy(Op.getOperand(1).getReg());
       break;
     case VTM::VOpReadFU:
-      runOnFU(Op.getOperand(1).getReg());
+      addSrc(Op.getOperand(1).getReg());
       return;
     case VTM::VOpReadReturn:
-      runOnFU(Op.getOperand(2).getReg());
+      addSrc(Op.getOperand(2).getReg());
       return;
     default:
       return;
@@ -262,8 +264,8 @@ struct CompRegEdgeWeight {
     // How many MUX ports can we reduce after these two register is merged.
     // FIXME: Prevent generate big MUX after merge event the merge is benefiting.
     // MUX is not acceptable at the moment.
-    if (FUs.size() <= 1)
-      Weight += (NumFUs - FUs.size()) * SrcWidth  * /*Reg Mux Cost*/ 128;
+    if (Srcs.size() <= 1)
+      Weight += (NumSrcs - Srcs.size()) * SrcWidth  * /*Reg Mux Cost*/ 128;
 
     // TODO: Also estimate lut cost like:
     // slotN, reg0 = 0;
