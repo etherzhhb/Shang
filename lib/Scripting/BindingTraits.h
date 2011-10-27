@@ -97,6 +97,9 @@ template<> struct BindingTraits<VASTModule> {
 
     C.def("getPortName",            &CurClass::getPortName);
 
+    // Return port;
+    C.def("getRetPortIdx",          &CurClass::getRetPortIdx);
+    C.def("getRetPort",             &CurClass::getRetPort);
     return C;
   }
 
