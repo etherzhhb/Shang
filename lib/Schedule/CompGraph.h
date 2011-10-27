@@ -15,6 +15,7 @@
 #define COMPATIBILITY_GRAPH_H
 
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -127,7 +128,9 @@ public:
   typedef CompGraphNode<T> NodeTy;
   typedef CompGraphQuery<T> QueryTy;
 private:
-  QueryTy &Q;
+  PointerIntPair<QueryTy*, 1, bool> Q;
+  QueryTy &query() { return *Q.getPointer(); }
+
   typedef std::map<T, NodeTy*> NodeMapTy;
   // The dummy entry node of the graph.
   NodeTy Entry, Exit;
@@ -135,10 +138,11 @@ private:
   NodeMapTy Nodes;
 
 public:
-  CompGraph(QueryTy &q) : Q(q) {}
+  CompGraph(QueryTy *q, bool deleteQ = true) : Q(q, deleteQ) {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);
+    if (Q.getInt()) delete &query();
   }
 
   typedef typename NodeTy::iterator iterator;
@@ -158,17 +162,17 @@ public:
         NodeTy *Other = *I;
 
         // Make edge between compatible nodes.
-        if (Q.compatible(Node->get(), Other->get())) {
-          if (Q.isEarlier(Node->get(), Other->get()))
-            NodeTy::MakeEdge(*Node, *Other, Q);
+        if (query().compatible(Node->get(), Other->get())) {
+          if (query().isEarlier(Node->get(), Other->get()))
+            NodeTy::MakeEdge(*Node, *Other, query());
           else
-            NodeTy::MakeEdge(*Other, *Node, Q);
+            NodeTy::MakeEdge(*Other, *Node, query());
         }
       }
 
       // There will always edge from entry to a node and from node to exit.
-      NodeTy::MakeEdge(Entry, *Node, Q.getVirtualEdgeWeight());
-      NodeTy::MakeEdge(*Node, Exit, Q.getVirtualEdgeWeight());
+      NodeTy::MakeEdge(Entry, *Node, query().getVirtualEdgeWeight());
+      NodeTy::MakeEdge(*Node, Exit, query().getVirtualEdgeWeight());
     }
 
     return Node;
