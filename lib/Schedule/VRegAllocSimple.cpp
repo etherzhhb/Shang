@@ -715,7 +715,9 @@ void VRASimple::joinPHINodeIntervals() {
 }
 
 void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI) {
-  assert(!ToLI->overlapsFrom(*FromLI, FromLI->begin()) && "Cannot mrege LI!");
+  assert(!ToLI->overlaps(*FromLI) && "Cannot mrege LI!");
+  assert(getBitWidthOf(FromLI->reg) == getBitWidthOf(ToLI->reg)
+         && "Cannot merge LIs difference with bit width!");
   JoinIntervals(*ToLI, *FromLI, TRI, MRI);
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
 }
