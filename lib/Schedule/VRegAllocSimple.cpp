@@ -210,7 +210,7 @@ char VRASimple::ID = 0;
 
 namespace llvm {
   // Specialized For liveInterval.
-  template<> struct CompGraphQuery<unsigned> {
+  template<> struct CompGraphQuery<LiveInterval*> {
     VRASimple *VRA;
 
     CompGraphQuery(VRASimple *V) : VRA(V) {}
@@ -218,35 +218,43 @@ namespace llvm {
     unsigned getVirtualEdgeWeight () const { return 0; }
     unsigned getSameFUWeight() const { return 128; }
 
-    bool isEarlier(unsigned LHS, unsigned RHS) const {
+    bool isEarlier(LiveInterval *LHS, LiveInterval *RHS) const {
       if (LHS == 0) return true;
 
       if (RHS == 0) return false;
 
-      LiveInterval *LHSLI = VRA->getInterval(LHS),
-                   *RHSLI = VRA->getInterval(RHS);
-      assert(LHSLI && RHSLI && "Unexpected null live iterval!");
-      return *LHSLI < *RHSLI;
+      return *LHS < *RHS;
     }
 
-    bool compatible(unsigned LHS, unsigned RHS) const {
+    bool compatible(LiveInterval *LHS, LiveInterval *RHS) const {
       if (LHS == 0 || RHS == 0) return true;
 
-      LiveInterval *LHSLI = VRA->getInterval(LHS),
-                   *RHSLI = VRA->getInterval(RHS);
-      assert(LHSLI && RHSLI && "Unexpected null live iterval!");
-      return !LHSLI->overlapsFrom(*RHSLI, RHSLI->begin());
+      // A LiveInterval may has multiple live ranges for example:
+      // LI0 = [0, 4), [32, 35)
+      // Suppose we have another LiveInterval LI1 and LI2:
+      // LI1 = [5, 9)
+      // LI2 = [26, 33)
+      // If we make LiveIntervals compatible if they are not overlap, we may
+      // have a compatible graph for LI0, LI1 and LI2 like this:
+      // LI0 -> LI1 -> LI2
+      // The compatibility in a compatible graph suppose to be transitive,
+      // but this not true in the above graph because LI0 is overlap with LI2.
+      // This means two live interval may not mark as "compatible" even if they
+      // are not overlap.
+
+      // LHS and RHS is compatible if RHS end before LHS begin and vice versa.
+      return LHS->beginIndex() >= RHS->endIndex()
+             || RHS->beginIndex() >= LHS->endIndex();
     }
 
-    unsigned calcWeight(unsigned Src, unsigned Dst) const {
-      assert(Dst && Src && "Unexpected noreg!");
+    unsigned calcWeight(LiveInterval *Src, LiveInterval *Dst) const {
+      assert(Dst && Src && "Unexpected null li!");
 
-      ucOp SrcOp = VRA->getDefineOp(Src), DstOp = VRA->getDefineOp(Dst);
+      // FIXME: Find all driver of the live interval.
+      ucOp SrcOp = VRA->getDefineOp(Src->reg), DstOp = VRA->getDefineOp(Dst->reg);
       unsigned SrcFU = VRA->getDrivingFU(SrcOp),
                DstFU = VRA->getDrivingFU(DstOp);
-      if (SrcFU && SrcFU == DstFU) {
-        return getSameFUWeight();
-      }
+      if (SrcFU && SrcFU == DstFU) return getSameFUWeight();
 
       return 0;
     }
