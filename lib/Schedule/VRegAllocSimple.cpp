@@ -182,8 +182,10 @@ struct VRASimple : public MachineFunctionPass,
   void bindBlockRam();
   void bindCalleeFN();
 
+  void buildRegCompGraph(RCGraph &G);
+  bool reduceCompGraph(RCGraph &G);
+  void bindCompGraph(RCGraph &G, unsigned RCId);
 
-  bool bindDataRegister();
   bool bindFUs();
   bool bindFUsOf(const TargetRegisterClass *RC);
   bool bindAdders();
@@ -604,11 +606,19 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   bool SomethingBind = true;
 
+  //Build the Compatibility Graphs
+  RCGraph RCG(new CompGraphQuery<LiveInterval*>(this));
+  buildRegCompGraph(RCG);
+
+  // Reduce the Compatibility Graphs
   //while (SomethingBind) {
     SomethingBind = false;
-    SomethingBind |= bindDataRegister();
+    SomethingBind |= reduceCompGraph(RCG);
     SomethingBind |= bindFUs();
   //}
+
+  // Bind the Compatibility Graphs
+  bindCompGraph(RCG, VTM::DRRegClassID);
 
   addMBBLiveIns(MF);
   LIS->addKillFlags();
@@ -808,23 +818,21 @@ void VRASimple::bindCalleeFN() {
   }
 }
 
-bool VRASimple::bindDataRegister() {
+void VRASimple::buildRegCompGraph(RCGraph &G) {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::DRRegisterClass);
-  CompGraphQuery<LiveInterval*> Q(this);
-  RCGraph G(Q);
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
-
-    if (LiveInterval *LI = getInterval(RegNum)) {
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I)
+    if (LiveInterval *LI = getInterval(*I))
       G.GetOrCreateNode(LI);
-    }
-  }
+}
 
+bool VRASimple::reduceCompGraph(RCGraph &G) {
   SmallVector<LiveInterval*, 8> LongestPath;
+  bool AnyReduced = false;
+
   while (G.findLongestPath(LongestPath, true)) {
     DEBUG(
-    dbgs() << "// longest path in register graph:\n";
+      dbgs() << "// longest path in register graph:\n";
     for (unsigned i = 0; i < LongestPath.size(); ++i) {
       LongestPath[i]->dump();
     });
@@ -836,14 +844,17 @@ bool VRASimple::bindDataRegister() {
       mergeLI(LongestPath.pop_back_val(), RepLI);
     // Add the merged LI back to the graph.
     G.GetOrCreateNode(RepLI);
+    AnyReduced = true;
   }
 
+  return AnyReduced;
+}
+
+void VRASimple::bindCompGraph(RCGraph &G, unsigned RCId) {
   for (RCGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();
-    assign(*LI, VFI->allocatePhyReg(VTM::DRRegClassID, getBitWidthOf(LI->reg)));
+    assign(*LI, VFI->allocatePhyReg(RCId, getBitWidthOf(LI->reg)));
   }
-
-  return false;
 }
 
 bool VRASimple::bindFUs() {
