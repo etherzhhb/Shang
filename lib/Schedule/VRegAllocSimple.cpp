@@ -86,8 +86,9 @@ struct VRASimple : public MachineFunctionPass,
   // Analysis
   LiveStacks *LS;
 
-  typedef CompGraph<unsigned> RegCompGraph;
-  typedef CompGraphNode<unsigned> RegCompGraphNode;
+  // Register Compatibility Graph.
+  typedef CompGraph<LiveInterval*> RCGraph;
+  typedef CompGraphNode<LiveInterval*> RCGraphNode;
 
   typedef const std::vector<unsigned> VRegVec;
 
@@ -809,29 +810,38 @@ void VRASimple::bindCalleeFN() {
 
 bool VRASimple::bindDataRegister() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::DRRegisterClass);
-  //CompGraphQuery<unsigned> Q(this);
-  //RegCompGraph G(Q);
+  CompGraphQuery<LiveInterval*> Q(this);
+  RCGraph G(Q);
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
     unsigned RegNum = *I;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      unsigned PhyReg = VFI->allocatePhyReg(VTM::DRRegClassID,
-                                            getBitWidthOf(RegNum));
-      //G.GetOrCreateNode(LI->reg);
-      assign(*LI, PhyReg);
+      G.GetOrCreateNode(LI);
     }
   }
 
-  //G.buildGraph();
+  SmallVector<LiveInterval*, 8> LongestPath;
+  while (G.findLongestPath(LongestPath, true)) {
+    DEBUG(
+    dbgs() << "// longest path in register graph:\n";
+    for (unsigned i = 0; i < LongestPath.size(); ++i) {
+      LongestPath[i]->dump();
+    });
 
-  //G.viewGraph();
+    LiveInterval *RepLI = LongestPath.pop_back_val();
 
-  //SmallVector<RegCompGraphNode*, 8> LongestPath;
-  //G.findLongestPath(LongestPath);
+    // Merge the other LIs in the path to the first LI.
+    while (!LongestPath.empty())
+      mergeLI(LongestPath.pop_back_val(), RepLI);
+    // Add the merged LI back to the graph.
+    G.GetOrCreateNode(RepLI);
+  }
 
-  //for (unsigned i = 0; i < LongestPath.size(); ++i)
-  //  dbgs() << PrintReg(LongestPath[i]->get()) << '\n';
+  for (RCGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
+    LiveInterval *LI = (*I)->get();
+    assign(*LI, VFI->allocatePhyReg(VTM::DRRegClassID, getBitWidthOf(LI->reg)));
+  }
 
   return false;
 }
