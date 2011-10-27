@@ -162,8 +162,8 @@ public:
         NodeTy *Other = *I;
 
         // Make edge between compatible nodes.
-        if (query().compatible(Node->get(), Other->get())) {
-          if (query().isEarlier(Node->get(), Other->get()))
+        if (QueryTy::compatible(Node->get(), Other->get())) {
+          if (QueryTy::isEarlier(Node->get(), Other->get()))
             NodeTy::MakeEdge(*Node, *Other, query());
           else
             NodeTy::MakeEdge(*Other, *Node, query());
@@ -171,8 +171,8 @@ public:
       }
 
       // There will always edge from entry to a node and from node to exit.
-      NodeTy::MakeEdge(Entry, *Node, query().getVirtualEdgeWeight());
-      NodeTy::MakeEdge(*Node, Exit, query().getVirtualEdgeWeight());
+      NodeTy::MakeEdge(Entry, *Node, 0);
+      NodeTy::MakeEdge(*Node, Exit, 0);
     }
 
     return Node;
