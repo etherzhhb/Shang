@@ -208,12 +208,17 @@ public:
         unsigned VC = ++VisitCount[ChildNode];
 
         // for each edge (Node, ChildNode) in E(G) do
-        if (PathWeight[ChildNode] < PathWeight[Node] + Node->getWeightTo(It)) {
-          // Update the weight
-          PathWeight[ChildNode] =
-            PathWeight[Node] + Node->getWeightTo(It);
-          // And the pred
-          PathPred[ChildNode] = Node;
+        unsigned EdgeWeight = Node->getWeightTo(ChildNode);
+        // Do not introduce zero weight edge to the longest path.
+        if (EdgeWeight || ChildNode == &Exit) {
+          unsigned NewPathWeight = PathWeight[Node] + EdgeWeight;
+          unsigned &OldPathWeight = PathWeight[ChildNode];
+          if (OldPathWeight < NewPathWeight) {
+            // Update the weight
+            OldPathWeight = NewPathWeight;
+            // And the pred
+            PathPred[ChildNode] = Node;
+          }
         }
 
         // Only move forward when we visit the node from all its preds.
@@ -223,7 +228,7 @@ public:
     }
 
     unsigned NumNodes = 0;
-    // Build the path.
+    // Fill the result vector.
     for (NodeTy *I = PathPred[&Exit]; I && I != &Entry; I = PathPred[I]) {
       Path.push_back(I->get());
       if (DelNodes) deleteNode(I);
