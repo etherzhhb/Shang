@@ -136,32 +136,12 @@ struct VRASimple : public MachineFunctionPass,
   unsigned getRepRegister(unsigned Reg) const {
     return Reg;
   }
-  // Get the FU the given ucOp read from.
-  unsigned getSrcFU(ucOp Op) const {
-    if (Op->isOpcode(VTM::VOpReadFU))
-      return getRepRegister(Op.getOperand(1).getReg());
 
-    if (Op->isOpcode(VTM::VOpReadReturn))
-      return getRepRegister(Op.getOperand(2).getReg());
-
-    return 0;
-  }
-  // Count the FUs driving this register and insert the FUs into the common
-  // FU set, this function also estimate the maximum bitwidth of this register.
-  unsigned countSrcFUs(unsigned Reg, SmallSet<unsigned, 4> &FUs,
-                       unsigned &MaxWidth) const {
-    unsigned NumFUs = 0;
-    MaxWidth = 0;
+  template<class DefFctor>
+  void foreachDef(unsigned Reg, DefFctor &F) const {
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
          E = MRI->def_end(); I != E; ++I)
-      if (unsigned FU = getSrcFU(ucOp::getParent(I))) {
-        unsigned CurWidth = cast<ucOperand>(I.getOperand()).getBitWidth();
-        MaxWidth = std::max(MaxWidth, CurWidth);
-        FUs.insert(FU);
-        ++NumFUs;
-      }
-
-    return NumFUs;
+      F(I);
   }
 
   void joinPHINodeIntervals();
@@ -194,25 +174,95 @@ struct VRASimple : public MachineFunctionPass,
 // Weight computation functor for register Compatibility Graph.
 struct CompRegEdgeWeight {
   VRASimple *VRA;
+  // Context
+  // All source function units of both registers of the edge.
+  SmallSet<unsigned, 4> FUs;
+  // The Maximum bit width of current register.
+  unsigned CurMaxWidth;
+  // Total Function unit number of each register of the edge.
+  unsigned NumFUs;
+  // Other register of the edge.
+  unsigned OtherReg;
+  // Is there a copy between the src and dst of the edge?
+  bool hasCopy;
 
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
 
-  unsigned operator()(LiveInterval *Src, LiveInterval *Dst) const {
+  void resetDefEvalator() {
+    FUs.clear();
+    CurMaxWidth = 0;
+    NumFUs = 0;
+    OtherReg = 0;
+    hasCopy = false;
+  }
+
+  void runOnFU(unsigned FU) {
+    assert(FU && "Bad FU register number!");
+    FUs.insert(FU);
+    ++NumFUs;
+  }
+
+  void runOnCopy(unsigned SrcReg) {
+    // If we have copy between the edge?
+    hasCopy |= SrcReg == OtherReg;
+  }
+
+  // Run on the definition of a register to collect information about the live
+  // interval.
+  void operator()(MachineRegisterInfo::def_iterator I) {
+    ucOperand &MO = cast<ucOperand>(I.getOperand());
+    // 1. Get the bit width information.
+    unsigned CurWidth = MO.getBitWidth();
+    CurMaxWidth = std::max(CurMaxWidth, CurWidth);
+    // 2. Analyze the definition op.
+    ucOp Op = ucOp::getParent(I);
+
+    switch (Op->getOpcode()) {
+    case VTM::VOpMove_rr:
+    case VTM::VOpMvPhi:
+    case VTM::VOpMvPipe:
+    case VTM::COPY:
+      runOnCopy(Op.getOperand(1).getReg());
+      break;
+    case VTM::VOpReadFU:
+      runOnFU(Op.getOperand(1).getReg());
+      return;
+    case VTM::VOpReadReturn:
+      runOnFU(Op.getOperand(2).getReg());
+      return;
+    default:
+      return;
+    }
+  }
+
+  // Run on the edge of the Compatibility Graph and return the weight of the
+  // edge.
+  unsigned operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
+    resetDefEvalator();
+
+    OtherReg = Dst->reg;
+    VRA->foreachDef(Src->reg, *this);
+    unsigned SrcWidth = CurMaxWidth;
+
+    OtherReg = Src->reg;
+    VRA->foreachDef(Dst->reg, *this);
+    unsigned DstWidth = CurMaxWidth;
+
+    // And we are not merge the register with difference width at the moment.
+    if (SrcWidth != DstWidth) return 0;
+
     unsigned Weight = 0;
 
-    // FIXME: Find all driver of the live interval.
-    SmallSet<unsigned, 4> CommonFUs;
-    unsigned SrcWidth, DstWidth;
-    unsigned MUXs = VRA->countSrcFUs(Src->reg, CommonFUs, SrcWidth);
-    MUXs += VRA->countSrcFUs(Dst->reg, CommonFUs, DstWidth);
+    // If there is a copy between the src and dst of the edge, we can save a
+    // register by merging them.
+    if (hasCopy)  Weight += SrcWidth * /*Reg Cost*/ 16;
 
     // How many MUX ports can we reduce after these two register is merged.
     // FIXME: Prevent generate big MUX after merge event the merge is benefiting.
     // MUX is not acceptable at the moment.
-    // And we are not merge the register with difference witdh at the moment.
-    if (SrcWidth == DstWidth && CommonFUs.size() <= 1)
-      Weight += (MUXs - CommonFUs.size()) * SrcWidth  * /*Reg Mux Cost*/ 128;
+    if (FUs.size() <= 1)
+      Weight += (NumFUs - FUs.size()) * SrcWidth  * /*Reg Mux Cost*/ 128;
 
     // TODO: Also estimate lut cost like:
     // slotN, reg0 = 0;
