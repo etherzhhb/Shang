@@ -763,8 +763,7 @@ bool VRASimple::reduceCompGraph(RCGraph &G, CompEdgeWeight C) {
   bool AnyReduced = false;
 
   while (G.findLongestPath(LongestPath, true)) {
-    DEBUG(
-      dbgs() << "// longest path in register graph:\n";
+    DEBUG(dbgs() << "// longest path in register graph:\n";
     for (unsigned i = 0; i < LongestPath.size(); ++i) {
       LongestPath[i]->dump();
     });
