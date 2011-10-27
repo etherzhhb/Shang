@@ -137,7 +137,7 @@ struct VRASimple : public MachineFunctionPass,
     return Reg;
   }
   // Get the FU the given ucOp read from.
-  unsigned getDrivingFU(ucOp Op) const {
+  unsigned getSrcFU(ucOp Op) const {
     if (Op->isOpcode(VTM::VOpReadFU))
       return getRepRegister(Op.getOperand(1).getReg());
 
@@ -148,11 +148,11 @@ struct VRASimple : public MachineFunctionPass,
   }
   // Count the FUs driving this register and insert the FUs into the common
   // FU set.
-  unsigned extractDrivingFUs(unsigned Reg, SmallSet<unsigned, 4> &FUs) const {
+  unsigned countSrcFUs(unsigned Reg, SmallSet<unsigned, 4> &FUs) const {
     unsigned NumFUs = 0;
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
          E = MRI->def_end(); I != E; ++I)
-      if (unsigned FU = getDrivingFU(ucOp::getParent(I))) {
+      if (unsigned FU = getSrcFU(ucOp::getParent(I))) {
         FUs.insert(FU);
         ++NumFUs;
       }
@@ -199,8 +199,8 @@ struct CompRegEdgeWeight {
 
     // FIXME: Find all driver of the live interval.
     SmallSet<unsigned, 4> CommonFUs;
-    unsigned MUXs = VRA->extractDrivingFUs(Src->reg, CommonFUs);
-    MUXs += VRA->extractDrivingFUs(Dst->reg, CommonFUs);
+    unsigned MUXs = VRA->countSrcFUs(Src->reg, CommonFUs);
+    MUXs += VRA->countSrcFUs(Dst->reg, CommonFUs);
 
     // How many MUX ports can we reduce after these two register is merged.
     Weight = (MUXs - CommonFUs.size()) * /*Mux Cost*/ 128;
