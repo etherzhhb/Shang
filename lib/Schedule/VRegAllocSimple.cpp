@@ -219,8 +219,9 @@ struct CompRegEdgeWeight {
 
     switch (Op->getOpcode()) {
     case VTM::VOpMove_rr:
-    case VTM::VOpMvPhi:
-    case VTM::VOpMvPipe:
+    // Dirty Hack: The phi copy op will never kill a register.
+    //case VTM::VOpMvPhi:
+    //case VTM::VOpMvPipe:
     case VTM::COPY:
       runOnCopy(Op.getOperand(1).getReg());
       break;
