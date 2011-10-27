@@ -37,7 +37,7 @@ struct DOTGraphTraits<CompGraph<LiveInterval*>*> : public DefaultDOTGraphTraits{
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
   static std::string getEdgeSourceLabel(const NodeTy *Node, NodeTy::iterator I){
-    return itostr(Node->getWeightTo(I));
+    return itostr(Node->getWeightTo(*I));
   }
 
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {

@@ -62,8 +62,8 @@ public:
   unsigned num_pred()   const { return Preds.size(); }
   bool     pred_empty() const { return Preds.empty(); }
 
-  unsigned getWeightTo(iterator I) const {
-    return SuccWeights.find(*I)->second;
+  unsigned getWeightTo(Self *To) const {
+    return SuccWeights.find(To)->second;
   }
 
   // Unlink the Succ from current node.
