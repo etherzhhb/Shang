@@ -147,12 +147,16 @@ struct VRASimple : public MachineFunctionPass,
     return 0;
   }
   // Count the FUs driving this register and insert the FUs into the common
-  // FU set.
-  unsigned countSrcFUs(unsigned Reg, SmallSet<unsigned, 4> &FUs) const {
+  // FU set, this function also estimate the maximum bitwidth of this register.
+  unsigned countSrcFUs(unsigned Reg, SmallSet<unsigned, 4> &FUs,
+                       unsigned &MaxWidth) const {
     unsigned NumFUs = 0;
+    MaxWidth = 0;
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
          E = MRI->def_end(); I != E; ++I)
       if (unsigned FU = getSrcFU(ucOp::getParent(I))) {
+        unsigned CurWidth = cast<ucOperand>(I.getOperand()).getBitWidth();
+        MaxWidth = std::max(MaxWidth, CurWidth);
         FUs.insert(FU);
         ++NumFUs;
       }
@@ -199,11 +203,24 @@ struct CompRegEdgeWeight {
 
     // FIXME: Find all driver of the live interval.
     SmallSet<unsigned, 4> CommonFUs;
-    unsigned MUXs = VRA->countSrcFUs(Src->reg, CommonFUs);
-    MUXs += VRA->countSrcFUs(Dst->reg, CommonFUs);
+    unsigned SrcWidth, DstWidth;
+    unsigned MUXs = VRA->countSrcFUs(Src->reg, CommonFUs, SrcWidth);
+    MUXs += VRA->countSrcFUs(Dst->reg, CommonFUs, DstWidth);
 
     // How many MUX ports can we reduce after these two register is merged.
-    Weight = (MUXs - CommonFUs.size()) * /*Mux Cost*/ 128;
+    // FIXME: Prevent generate big MUX after merge event the merge is benefiting.
+    // MUX is not acceptable at the moment.
+    // And we are not merge the register with difference witdh at the moment.
+    if (SrcWidth == DstWidth && CommonFUs.size() <= 1)
+      Weight += (MUXs - CommonFUs.size()) * SrcWidth  * /*Reg Mux Cost*/ 128;
+
+    // TODO: Also estimate lut cost like:
+    // slotN, reg0 = 0;
+    // slotM, reg0 = 10;
+
+    return Weight;
+  }
+};
 
     return Weight;
   }
