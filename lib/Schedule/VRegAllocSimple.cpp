@@ -32,8 +32,6 @@
 #include "llvm/../../lib/CodeGen/RegAllocBase.h"
 #include "llvm/../../lib/CodeGen/VirtRegMap.h"
 
-#include "llvm/ADT/Statistic.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Function.h"
 #include "llvm/PassAnalysisSupport.h"
@@ -50,13 +48,14 @@
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/RegisterCoalescer.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-regalloc"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
-
-#include <queue>
 
 using namespace llvm;
 
@@ -118,6 +117,17 @@ struct VRASimple : public MachineFunctionPass,
     return &LI;
   }
 
+  unsigned getBitWidthOf(unsigned RegNum) {
+    unsigned BitWidth = 0;
+    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
+      I != MachineRegisterInfo::def_end(); ++I) {
+        ucOperand &DefOp = cast<ucOperand>(I.getOperand());
+        BitWidth = std::max(BitWidth, DefOp.getBitWidth());
+    }
+
+    return BitWidth;
+  }
+
   ucOp getDefineOp(unsigned Reg) const {
     assert(!MRI->def_empty(Reg) && "Cannot get define op!");
     return ucOp::getParent(MRI->def_begin(Reg));
@@ -126,7 +136,7 @@ struct VRASimple : public MachineFunctionPass,
   unsigned getRepRegister(unsigned Reg) const {
     return Reg;
   }
-
+  // Get the FU the given ucOp read from.
   unsigned getDrivingFU(ucOp Op) const {
     if (Op->isOpcode(VTM::VOpReadFU))
       return getRepRegister(Op.getOperand(1).getReg());
@@ -135,6 +145,19 @@ struct VRASimple : public MachineFunctionPass,
       return getRepRegister(Op.getOperand(2).getReg());
 
     return 0;
+  }
+  // Count the FUs driving this register and insert the FUs into the common
+  // FU set.
+  unsigned extractDrivingFUs(unsigned Reg, SmallSet<unsigned, 4> &FUs) const {
+    unsigned NumFUs = 0;
+    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
+         E = MRI->def_end(); I != E; ++I)
+      if (unsigned FU = getDrivingFU(ucOp::getParent(I))) {
+        FUs.insert(FU);
+        ++NumFUs;
+      }
+
+    return NumFUs;
   }
 
   void joinPHINodeIntervals();
@@ -157,17 +180,6 @@ struct VRASimple : public MachineFunctionPass,
   bool bindFUsOf(const TargetRegisterClass *RC);
   bool bindAdders();
 
-  unsigned getBitWidthOf(unsigned RegNum) {
-    unsigned BitWidth = 0;
-    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
-         I != MachineRegisterInfo::def_end(); ++I) {
-      ucOperand &DefOp = cast<ucOperand>(I.getOperand());
-      BitWidth = std::max(BitWidth, DefOp.getBitWidth());
-    }
-
-    return BitWidth;
-  }
-
   bool runOnMachineFunction(MachineFunction &F);
 
   const char *getPassName() const {
@@ -183,14 +195,17 @@ struct CompRegEdgeWeight {
 
   unsigned operator()(LiveInterval *Src, LiveInterval *Dst) const {
     assert(Dst && Src && "Unexpected null li!");
+    unsigned Weight = 0;
 
     // FIXME: Find all driver of the live interval.
-    ucOp SrcOp = VRA->getDefineOp(Src->reg), DstOp = VRA->getDefineOp(Dst->reg);
-    unsigned SrcFU = VRA->getDrivingFU(SrcOp),
-      DstFU = VRA->getDrivingFU(DstOp);
-    if (SrcFU && SrcFU == DstFU) return 128;
+    SmallSet<unsigned, 4> CommonFUs;
+    unsigned MUXs = VRA->extractDrivingFUs(Src->reg, CommonFUs);
+    MUXs += VRA->extractDrivingFUs(Dst->reg, CommonFUs);
 
-    return 0;
+    // How many MUX ports can we reduce after these two register is merged.
+    Weight = (MUXs - CommonFUs.size()) * /*Mux Cost*/ 128;
+
+    return Weight;
   }
 };
 }
