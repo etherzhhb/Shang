@@ -161,17 +161,15 @@ struct VRASimple : public MachineFunctionPass,
   }
 
   unsigned getRepRegister(unsigned Reg) const {
-    if (TargetRegisterInfo::isVirtualRegister(Reg)) {
-      if (unsigned PhyReg = VRM->getPhys(Reg))
-        return PhyReg;
-    }
-
     return Reg;
   }
 
   unsigned getDrivingFU(ucOp Op) const {
     if (Op->isOpcode(VTM::VOpReadFU))
       return getRepRegister(Op.getOperand(1).getReg());
+
+    if (Op->isOpcode(VTM::VOpReadReturn))
+      return getRepRegister(Op.getOperand(2).getReg());
 
     return 0;
   }
@@ -182,6 +180,7 @@ struct VRASimple : public MachineFunctionPass,
   void bindMemoryBus();
   void bindBlockRam();
   void bindCalleeFN();
+
 
   bool bindDataRegister();
   bool bindFUs();
