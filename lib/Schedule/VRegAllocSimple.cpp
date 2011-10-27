@@ -838,7 +838,7 @@ void VRASimple::buildRegCompGraph(RCGraph &G) {
 
 template<class CompEdgeWeight>
 bool VRASimple::reduceCompGraph(RCGraph &G, CompEdgeWeight C) {
-  SmallVector<LiveInterval*, 8> LongestPath;
+  SmallVector<LiveInterval*, 8> LongestPath, MergedLIs;
   G.updateEdgeWeight(C);
 
   bool AnyReduced = false;
@@ -854,10 +854,14 @@ bool VRASimple::reduceCompGraph(RCGraph &G, CompEdgeWeight C) {
     // Merge the other LIs in the path to the first LI.
     while (!LongestPath.empty())
       mergeLI(LongestPath.pop_back_val(), RepLI);
-    // Add the merged LI back to the graph.
-    G.GetOrCreateNode(RepLI);
+    // Add the merged LI back to the graph later.
+    MergedLIs.push_back(RepLI);
     AnyReduced = true;
   }
+
+  // Re-add the merged LI to the graph.
+  while (!MergedLIs.empty())
+    G.GetOrCreateNode(MergedLIs.pop_back_val());
 
   return AnyReduced;
 }
