@@ -156,8 +156,14 @@ struct VRASimple : public MachineFunctionPass,
   bool bindAdders();
 
   unsigned getBitWidthOf(unsigned RegNum) {
-    ucOperand &DefOp = cast<ucOperand>(MRI->def_begin(RegNum).getOperand());
-    return DefOp.getBitWidth();
+    unsigned BitWidth = 0;
+    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
+         I != MachineRegisterInfo::def_end(); ++I) {
+      ucOperand &DefOp = cast<ucOperand>(I.getOperand());
+      BitWidth = std::max(BitWidth, DefOp.getBitWidth());
+    }
+
+    return BitWidth;
   }
 
   bool runOnMachineFunction(MachineFunction &F);
