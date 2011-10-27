@@ -518,7 +518,7 @@ static bool JoinIntervals(LiveInterval &LHS, LiveInterval &RHS,
   // If we get here, we know that we can coalesce the live ranges.  Ask the
   // intervals to coalesce themselves now.
   LHS.join(RHS, &LHSValNoAssignments[0], &RHSValNoAssignments[0], NewVNInfo,
-    MRI);
+           MRI);
   return true;
 }
 
