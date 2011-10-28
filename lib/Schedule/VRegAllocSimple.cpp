@@ -182,10 +182,13 @@ struct CompRegEdgeWeight {
 
   void resetDefEvalator() {
     Srcs.clear();
-    CurMaxWidth = 0;
     NumSrcs = 0;
-    OtherReg = 0;
     hasCopy = false;
+  }
+
+  void startForeachDef(unsigned other) {
+    CurMaxWidth = 0;
+    OtherReg = other;
   }
 
   void addSrc(unsigned Src) {
@@ -236,11 +239,11 @@ struct CompRegEdgeWeight {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator();
 
-    OtherReg = Dst->reg;
+    startForeachDef(Dst->reg);
     VRA->foreachDef(Src->reg, *this);
     unsigned SrcWidth = CurMaxWidth;
 
-    OtherReg = Src->reg;
+    startForeachDef(Src->reg);
     VRA->foreachDef(Dst->reg, *this);
     unsigned DstWidth = CurMaxWidth;
 
@@ -289,9 +292,12 @@ struct CompBinOpEdgeWeight {
     Srcs[1].clear();
     NumSrcs[0] = 0;
     NumSrcs[1] = 0;
-    CurMaxWidth = 0;
-    OtherFU = 0;
     hasCopy = 0;
+  }
+
+  void startForeachDef(unsigned other) {
+    CurMaxWidth = 0;
+    OtherFU = other;
   }
 
   template<unsigned Offset>
@@ -331,11 +337,11 @@ struct CompBinOpEdgeWeight {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator();
 
-    OtherFU = Dst->reg;
+    startForeachDef(Dst->reg);
     VRA->foreachDef(Src->reg, *this);
     unsigned SrcWidth = CurMaxWidth;
 
-    OtherFU = Src->reg;
+    startForeachDef(Src->reg);
     VRA->foreachDef(Dst->reg, *this);
     unsigned DstWidth = CurMaxWidth;
 
