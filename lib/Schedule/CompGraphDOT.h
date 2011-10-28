@@ -55,7 +55,7 @@ struct DOTGraphTraits<CompGraph<LiveInterval*>*> : public DefaultDOTGraphTraits{
 
 template<>
 void CompGraph<LiveInterval*>::viewGraph() {
-  ViewGraph(this, "CompatibilityGraph");
+  ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
 
 }
