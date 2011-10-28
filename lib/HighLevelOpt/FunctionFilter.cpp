@@ -117,6 +117,8 @@ bool FunctionFilter::runOnModule(Module &M) {
       FHW->setLinkage(GlobalValue::PrivateLinkage);
       FSW->setLinkage(GlobalValue::PrivateLinkage);
     }
+    if (FSW->getName() == "main")
+      FSW->setName("sw_main");
   }
 
   OwningPtr<ModulePass> GlobalDEC(createGlobalDCEPass());
