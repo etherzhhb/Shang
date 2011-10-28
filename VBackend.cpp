@@ -104,6 +104,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Run loop strength reduction before anything else.
   if (OptLevel != CodeGenOpt::None && !false/*DisableLSR*/) {
+
     //PM.add(createLoopStrengthReducePass(getTargetLowering()));
     DEBUG(PM.add(createPrintFunctionPass("\n\n*** Code after LSR ***\n",
                                          &dbgs())));

@@ -126,8 +126,7 @@ target_link_libraries (LLVMVerilogBackend
   VTMBitLevelOpt
   VTMHighLevelOpt
   VTMSchedule
-  VTMRTLCodegen
-  VTMIFCodegen
+  VTMRTLCodegen 
   VTMScripting)
 
 add_subdirectory(include)

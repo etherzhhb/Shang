@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
                              createFunctionInliningPass(75));
   createStandardLTOPasses(&PM, true, false, false);
   //PM.add(createPrintModulePass(&dbgs()));
-
+   
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());
   // Ask the target to add backend passes as necessary.
@@ -156,13 +156,7 @@ int main(int argc, char **argv) {
       luabind::object_cast<std::string>(o["GlobalScript"]).c_str());
     PM.add(P);
   }
-
-  // Add interface writer pass.
-  if (S->getValue<bool>("EnableVLT"))
-    PM.add(createVLTIfCodegenPass(S->getOutputStream("VLTOutput")));
-
-  if (S->getValue<bool>("EnablePLB"))
-    PM.add(createPLBIfCodegenPass(S->getOutputStream("PLBOutput")));
+ 
 
   // Run the passes.
   PM.run(mod);

@@ -29,7 +29,7 @@ class PassRegistry;
 class TargetIntrinsicInfo;
 
 Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
-
+ 
 // Promote all the GVs to arguments
 Pass *createGVPromotionPass();
 
@@ -67,11 +67,6 @@ Pass *createRTLCodegenPreparePass();
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
 
-// Verilator interface code generation.
-Pass *createVLTIfCodegenPass(raw_ostream &O);
-
-// PLB interface code generation.
-Pass *createPLBIfCodegenPass(raw_ostream &O);
 
 //ContoBram Pass
 Pass *createContoBromPass(const TargetIntrinsicInfo &IntrinsicInfo);
@@ -83,7 +78,7 @@ void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeStackToGlobalPass(PassRegistry &Registry);
 
 void initializeRTLCodegenPass(PassRegistry &Registry);
-void initializeFunctionFilterPass(PassRegistry &Registry);
+void initializeFunctionFilterPass(PassRegistry &Registry); 
 
 void initializeRAPass(PassRegistry &Registry);
 
