@@ -175,12 +175,11 @@ struct VRASimple : public MachineFunctionPass,
   }
 };
 
+// Weight computation functor for register Compatibility Graph.
 struct CompRegEdgeWeight {
   VRASimple *VRA;
 
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
-
-  unsigned getSameFUWeight() const { return 128; }
 
   unsigned operator()(LiveInterval *Src, LiveInterval *Dst) const {
     assert(Dst && Src && "Unexpected null li!");
@@ -189,7 +188,7 @@ struct CompRegEdgeWeight {
     ucOp SrcOp = VRA->getDefineOp(Src->reg), DstOp = VRA->getDefineOp(Dst->reg);
     unsigned SrcFU = VRA->getDrivingFU(SrcOp),
       DstFU = VRA->getDrivingFU(DstOp);
-    if (SrcFU && SrcFU == DstFU) return getSameFUWeight();
+    if (SrcFU && SrcFU == DstFU) return 128;
 
     return 0;
   }
