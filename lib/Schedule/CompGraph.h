@@ -146,7 +146,8 @@ private:
   NodeMapTy Nodes;
 
 public:
-  CompGraph() {}
+  const unsigned ID;
+  CompGraph(unsigned id) : ID(id) {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);

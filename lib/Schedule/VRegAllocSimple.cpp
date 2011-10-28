@@ -147,17 +147,14 @@ struct VRASimple : public MachineFunctionPass,
   void bindCalleeFN();
 
   // Compatibility Graph building.
-  void buildCompGraph(LICGraph &G, const TargetRegisterClass *RC);
+  void buildCompGraph(LICGraph &G);
 
   template<class CompEdgeWeight>
   bool reduceCompGraph(LICGraph &G, CompEdgeWeight C);
 
-  void bindCompGraph(LICGraph &G, unsigned RCId);
+  void bindCompGraph(LICGraph &G);
   // We need handle to special case when binding adder.
   void bindAdders(LICGraph &G);
-
-  bool bindFUs();
-  bool bindFUsOf(const TargetRegisterClass *RC);
 
   bool runOnMachineFunction(MachineFunction &F);
 
@@ -449,7 +446,7 @@ static unsigned ComputeUltimateVN(VNInfo *VNI,
 static bool JoinIntervals(LiveInterval &LHS, LiveInterval &RHS,
                           const TargetRegisterInfo *TRI,
                           MachineRegisterInfo *MRI) {
-  DEBUG({ dbgs() << "\t\tRHS = "; RHS.print(dbgs(), TRI); dbgs() << "\n"; });
+  //DEBUG({ dbgs() << "\t\tRHS = "; RHS.print(dbgs(), TRI); dbgs() << "\n"; });
   assert(!TargetRegisterInfo::isPhysicalRegister(LHS.reg)
          && !TargetRegisterInfo::isPhysicalRegister(RHS.reg)
          && "Cannot join physics registers yet!");
@@ -502,7 +499,7 @@ static bool JoinIntervals(LiveInterval &LHS, LiveInterval &RHS,
   DenseMap<VNInfo*, VNInfo*> RHSValsDefinedFromLHS;
   SmallVector<VNInfo*, 16> NewVNInfo;
 
-  DEBUG({ dbgs() << "\t\tLHS = "; LHS.print(dbgs(), TRI); dbgs() << "\n"; });
+  //DEBUG({ dbgs() << "\t\tLHS = "; LHS.print(dbgs(), TRI); dbgs() << "\n"; });
 
   // Loop over the value numbers of the LHS, seeing if any are defined from
   // the RHS.
@@ -725,7 +722,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
   DEBUG(dbgs() << "Before simple register allocation:\n";
-        printVMF(dbgs(), F);
+        //printVMF(dbgs(), F);
   ); 
 
   joinPHINodeIntervals();
@@ -735,26 +732,45 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bindBlockRam();
   bindCalleeFN();
 
-  bool SomethingBind = true;
-
   //Build the Compatibility Graphs
-  LICGraph RCG;
-  buildCompGraph(RCG, VTM::DRRegisterClass);
-  LICGraph AdderCG;
-  buildCompGraph(AdderCG, VTM::RADDRegisterClass);
+  LICGraph RCG(VTM::DRRegClassID),
+           AdderCG(VTM::RADDRegClassID),
+           MulCG(VTM::RMULRegClassID),
+           AsrCG(VTM::RASRRegClassID),
+           LsrCG(VTM::RLSRRegClassID),
+           ShlCG(VTM::RSHLRegClassID);
+  buildCompGraph(RCG);
+  buildCompGraph(AdderCG);
+  buildCompGraph(MulCG);
+  buildCompGraph(AsrCG);
+  buildCompGraph(LsrCG);
+  buildCompGraph(ShlCG);
 
+  bool SomethingBind = true;
   // Reduce the Compatibility Graphs
-  //while (SomethingBind) {
+  while (SomethingBind) {
+    DEBUG(dbgs() << "Going to reduce CompGraphs\n");
     SomethingBind = false;
     SomethingBind |= reduceCompGraph(RCG, CompRegEdgeWeight(this));
     SomethingBind |= reduceCompGraph(AdderCG,
                                      CompBinOpEdgeWeight<VTM::VOpAdd, 2>(this));
-    SomethingBind |= bindFUs();
-  //}
+    SomethingBind |= reduceCompGraph(MulCG,
+                                     CompBinOpEdgeWeight<VTM::VOpMult, 1>(this));
+    SomethingBind |= reduceCompGraph(AsrCG,
+                                     CompBinOpEdgeWeight<VTM::VOpSRA, 1>(this));
+    SomethingBind |= reduceCompGraph(LsrCG,
+                                     CompBinOpEdgeWeight<VTM::VOpSRL, 1>(this));
+    SomethingBind |= reduceCompGraph(ShlCG,
+                                     CompBinOpEdgeWeight<VTM::VOpSHL, 1>(this));
+  }
 
   // Bind the Compatibility Graphs
-  bindCompGraph(RCG, VTM::DRRegClassID);
+  bindCompGraph(RCG);
   bindAdders(AdderCG);
+  bindCompGraph(MulCG);
+  bindCompGraph(AsrCG);
+  bindCompGraph(LsrCG);
+  bindCompGraph(ShlCG);
 
   addMBBLiveIns(MF);
   LIS->addKillFlags();
@@ -785,7 +801,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   releaseMemory();
 
   DEBUG(dbgs() << "After simple register allocation:\n";
-        printVMF(dbgs(), F);
+        //printVMF(dbgs(), F);
   ); 
 
   return true;
@@ -916,8 +932,8 @@ void VRASimple::bindCalleeFN() {
   }
 }
 
-void VRASimple::buildCompGraph(LICGraph &G, const TargetRegisterClass *RC) {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(RC);
+void VRASimple::buildCompGraph(LICGraph &G) {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(TRI->getRegClass(G.ID));
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I)
     if (LiveInterval *LI = getInterval(*I))
@@ -932,9 +948,11 @@ bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight C) {
   bool AnyReduced = false;
 
   while (G.findLongestPath(LongestPath, true)) {
-    DEBUG(dbgs() << "// longest path in register graph:\n";
+    DEBUG(dbgs() << "// longest path in graph: {"
+      << TRI->getRegClass(G.ID)->getName() << "}\n";
     for (unsigned i = 0; i < LongestPath.size(); ++i) {
-      LongestPath[i]->dump();
+      LiveInterval *LI = LongestPath[i];
+      dbgs() << *LI << " bitwidth:" << getBitWidthOf(LI->reg) << '\n';
     });
 
     LiveInterval *RepLI = LongestPath.pop_back_val();
@@ -954,36 +972,12 @@ bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight C) {
   return AnyReduced;
 }
 
-void VRASimple::bindCompGraph(LICGraph &G, unsigned RCId) {
+void VRASimple::bindCompGraph(LICGraph &G) {
+  unsigned RC = G.ID;
   for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();
-    assign(*LI, VFI->allocatePhyReg(RCId, getBitWidthOf(LI->reg)));
+    assign(*LI, VFI->allocatePhyReg(RC, getBitWidthOf(LI->reg)));
   }
-}
-
-bool VRASimple::bindFUs() {
-  bindFUsOf(VTM::RMULRegisterClass);
-  bindFUsOf(VTM::RASRRegisterClass);
-  bindFUsOf(VTM::RSHLRegisterClass);
-  bindFUsOf(VTM::RLSRRegisterClass);
-  return false;
-}
-
-bool VRASimple::bindFUsOf(const TargetRegisterClass *RC) {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(RC);
-  unsigned RegID = RC->getID();
-
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
-
-    if (LiveInterval *LI = getInterval(RegNum)) {
-      unsigned PhyReg = VFI->allocatePhyReg(RegID, getBitWidthOf(RegNum));
-
-      assign(*LI, PhyReg);
-    }
-  }
-
-  return false;
 }
 
 void VRASimple::bindAdders(LICGraph &G) {
