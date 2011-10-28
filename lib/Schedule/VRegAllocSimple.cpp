@@ -177,6 +177,9 @@ struct CompRegEdgeWeight {
   unsigned OtherReg;
   // Is there a copy between the src and dst of the edge?
   bool hasCopy;
+  // Do not try to merge PHI copies, it is conditional and we cannot handle
+  // them correctly at the moment.
+  bool hasPHICopy;
 
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
 
@@ -184,6 +187,7 @@ struct CompRegEdgeWeight {
     Srcs.clear();
     NumSrcs = 0;
     hasCopy = false;
+    hasPHICopy = false;
   }
 
   void startForeachDef(unsigned other) {
@@ -215,10 +219,11 @@ struct CompRegEdgeWeight {
     ucOp Op = ucOp::getParent(I);
 
     switch (Op->getOpcode()) {
+    case VTM::VOpMvPhi:
+    case VTM::VOpMvPipe:
+      hasPHICopy = true;
+      break;
     case VTM::VOpMove_rr:
-    // Dirty Hack: The phi copy op will never kill a register.
-    //case VTM::VOpMvPhi:
-    //case VTM::VOpMvPipe:
     case VTM::COPY:
       runOnCopy(Op.getOperand(1).getReg());
       break;
@@ -249,6 +254,7 @@ struct CompRegEdgeWeight {
 
     // And we are not merge the register with difference width at the moment.
     if (SrcWidth != DstWidth) return 0;
+    if (hasPHICopy) return 0;
 
     unsigned Weight = 0;
 
