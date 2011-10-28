@@ -77,8 +77,8 @@ struct VRASimple : public MachineFunctionPass,
   LiveStacks *LS;
 
   // Register Compatibility Graph.
-  typedef CompGraph<LiveInterval*> RCGraph;
-  typedef CompGraphNode<LiveInterval*> RCGraphNode;
+  typedef CompGraph<LiveInterval*> LICGraph;
+  typedef CompGraphNode<LiveInterval*> LICGraphNode;
 
   typedef const std::vector<unsigned> VRegVec;
 
@@ -128,21 +128,15 @@ struct VRASimple : public MachineFunctionPass,
     return BitWidth;
   }
 
-  ucOp getDefineOp(unsigned Reg) const {
-    assert(!MRI->def_empty(Reg) && "Cannot get define op!");
-    return ucOp::getParent(MRI->def_begin(Reg));
-  }
-
-  unsigned getRepRegister(unsigned Reg) const {
-    return Reg;
-  }
-
   template<class DefFctor>
   void foreachDef(unsigned Reg, DefFctor &F) const {
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
          E = MRI->def_end(); I != E; ++I)
       F(I);
   }
+
+  // commutable
+  unsigned extractComBinOperand() { return 0; }
 
   void joinPHINodeIntervals();
   void mergeLI(LiveInterval *FromLI, LiveInterval *ToLI);
@@ -153,16 +147,17 @@ struct VRASimple : public MachineFunctionPass,
   void bindCalleeFN();
 
   // Compatibility Graph building.
-  void buildRegCompGraph(RCGraph &G);
+  void buildCompGraph(LICGraph &G, const TargetRegisterClass *RC);
 
   template<class CompEdgeWeight>
-  bool reduceCompGraph(RCGraph &G, CompEdgeWeight C);
+  bool reduceCompGraph(LICGraph &G, CompEdgeWeight C);
 
-  void bindCompGraph(RCGraph &G, unsigned RCId);
+  void bindCompGraph(LICGraph &G, unsigned RCId);
+  // We need handle to special case when binding adder.
+  void bindAdders(LICGraph &G);
 
   bool bindFUs();
   bool bindFUsOf(const TargetRegisterClass *RC);
-  bool bindAdders();
 
   bool runOnMachineFunction(MachineFunction &F);
 
@@ -274,6 +269,91 @@ struct CompRegEdgeWeight {
     return Weight;
   }
 };
+
+// Weight computation functor for commutable binary operation Compatibility
+// Graph.
+template<unsigned OpCode, unsigned OpIdx>
+struct CompBinOpEdgeWeight {
+  VRASimple *VRA;
+  // All copy source both fu of the edge.
+  SmallSet<unsigned, 4> Srcs[2];
+  // The Maximum bit width of current register.
+  unsigned CurMaxWidth;
+  // Total copy number of each register of the edge.
+  unsigned NumSrcs[2];
+  // Other register of the edge.
+  unsigned OtherFU;
+  // Is there a copy between the src and dst of the edge?
+  bool hasCopy;
+
+
+  void resetDefEvalator() {
+    Srcs[0].clear();
+    Srcs[1].clear();
+    NumSrcs[0] = 0;
+    NumSrcs[1] = 0;
+    CurMaxWidth = 0;
+    OtherFU = 0;
+    hasCopy = 0;
+  }
+
+  template<unsigned Offset>
+  void addOpSrc(unsigned Src) {
+    assert(Src && "Bad FU register number!");
+    Srcs[Offset].insert(Src);
+    ++NumSrcs[Offset];
+  }
+
+  template<unsigned Offset>
+  void visitOperand(ucOp &Op) {
+    ucOperand &MO = Op.getOperand(OpIdx + Offset);
+    // TODO: Estimate the lut cost.
+    if (!MO.isReg()) return;
+
+    addOpSrc<Offset>(MO.getReg());
+  }
+
+  CompBinOpEdgeWeight(VRASimple *V) : VRA(V) {}
+
+  // Run on the definition of a FU to collect information about the live
+  // interval.
+  void operator()(MachineRegisterInfo::def_iterator I) {
+    ucOperand &MO = cast<ucOperand>(I.getOperand());
+    // 1. Get the bit width information.
+    unsigned CurWidth = MO.getBitWidth();
+    CurMaxWidth = std::max(CurMaxWidth, CurWidth);
+    // 2. Analyze the definition op.
+    ucOp Op = ucOp::getParent(I);
+    assert(Op->isOpcode(OpCode) && "Unexpected Opcode!");
+
+    visitOperand<0>(Op);
+    visitOperand<1>(Op);
+  }
+
+  unsigned operator()(LiveInterval *Src, LiveInterval *Dst) {
+    assert(Dst && Src && "Unexpected null li!");
+    resetDefEvalator();
+
+    OtherFU = Dst->reg;
+    VRA->foreachDef(Src->reg, *this);
+    unsigned SrcWidth = CurMaxWidth;
+
+    OtherFU = Src->reg;
+    VRA->foreachDef(Dst->reg, *this);
+    unsigned DstWidth = CurMaxWidth;
+
+    // And we are not merge the fu with difference width at the moment.
+    if (SrcWidth != DstWidth) return 0;
+
+    // Do not introduce mux at the moment.
+    if (Srcs[0].size() > 1 || Srcs[1].size() > 1) return 0;
+
+    unsigned Weight = 0;
+
+    Weight += (NumSrcs[0] - Srcs[0].size()) * SrcWidth  * /*Reg Mux Cost*/ 128;
+    Weight += (NumSrcs[1] - Srcs[1].size()) * DstWidth  * /*Reg Mux Cost*/ 128;
+    // Dirty Hack: All operand are non-register operand? Merge them.
+    if (Weight == 0) Weight += 16;
 
     return Weight;
   }
@@ -658,18 +738,23 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bool SomethingBind = true;
 
   //Build the Compatibility Graphs
-  RCGraph RCG;
-  buildRegCompGraph(RCG);
+  LICGraph RCG;
+  buildCompGraph(RCG, VTM::DRRegisterClass);
+  LICGraph AdderCG;
+  buildCompGraph(AdderCG, VTM::RADDRegisterClass);
 
   // Reduce the Compatibility Graphs
   //while (SomethingBind) {
     SomethingBind = false;
     SomethingBind |= reduceCompGraph(RCG, CompRegEdgeWeight(this));
+    SomethingBind |= reduceCompGraph(AdderCG,
+                                     CompBinOpEdgeWeight<VTM::VOpAdd, 2>(this));
     SomethingBind |= bindFUs();
   //}
 
   // Bind the Compatibility Graphs
   bindCompGraph(RCG, VTM::DRRegClassID);
+  bindAdders(AdderCG);
 
   addMBBLiveIns(MF);
   LIS->addKillFlags();
@@ -831,8 +916,8 @@ void VRASimple::bindCalleeFN() {
   }
 }
 
-void VRASimple::buildRegCompGraph(RCGraph &G) {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::DRRegisterClass);
+void VRASimple::buildCompGraph(LICGraph &G, const TargetRegisterClass *RC) {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(RC);
 
   for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I)
     if (LiveInterval *LI = getInterval(*I))
@@ -840,7 +925,7 @@ void VRASimple::buildRegCompGraph(RCGraph &G) {
 }
 
 template<class CompEdgeWeight>
-bool VRASimple::reduceCompGraph(RCGraph &G, CompEdgeWeight C) {
+bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight C) {
   SmallVector<LiveInterval*, 8> LongestPath, MergedLIs;
   G.updateEdgeWeight(C);
 
@@ -869,15 +954,14 @@ bool VRASimple::reduceCompGraph(RCGraph &G, CompEdgeWeight C) {
   return AnyReduced;
 }
 
-void VRASimple::bindCompGraph(RCGraph &G, unsigned RCId) {
-  for (RCGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
+void VRASimple::bindCompGraph(LICGraph &G, unsigned RCId) {
+  for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();
     assign(*LI, VFI->allocatePhyReg(RCId, getBitWidthOf(LI->reg)));
   }
 }
 
 bool VRASimple::bindFUs() {
-  bindAdders();
   bindFUsOf(VTM::RMULRegisterClass);
   bindFUsOf(VTM::RASRRegisterClass);
   bindFUsOf(VTM::RSHLRegisterClass);
@@ -902,28 +986,25 @@ bool VRASimple::bindFUsOf(const TargetRegisterClass *RC) {
   return false;
 }
 
-bool VRASimple::bindAdders() {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RADDRegisterClass);
+void VRASimple::bindAdders(LICGraph &G) {
+  for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
+    LiveInterval *LI = (*I)->get();
+    unsigned Width = getBitWidthOf(LI->reg);
+    // Allocate the register for the adder, which also contains the carry bit
+    unsigned AdderReg = VFI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
+    unsigned SumReg = VFI->getSubRegOf(AdderReg, Width, 0);
+    assign(*LI, SumReg);
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
-
-    if (LiveInterval *LI = getInterval(RegNum)) {
-      unsigned Width = getBitWidthOf(RegNum);
-      // Allocate the register for the adder, which also contains the carry bit
-      unsigned AdderReg = VFI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
-      unsigned SumReg = VFI->getSubRegOf(AdderReg, Width, 0);
-      assign(*LI, SumReg);
-
-      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
+    // Bind the carry.
+    unsigned CarryReg = VFI->getSubRegOf(AdderReg, Width + 1, Width);
+    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(LI->reg),
+         E = MRI->def_end(); I != E; ++I) {
+      ucOp Op = ucOp::getParent(I);
       assert(Op->getOpcode() == VTM::VOpAdd && "Unexpected opcode for adder!");
       unsigned CarryNum = Op.getOperand(1).getReg();
       LiveInterval *CarryLI = getInterval(CarryNum);
       assert(CarryLI && "Cannot found interval of carry!");
-      unsigned CarryReg = VFI->getSubRegOf(AdderReg, Width + 1, Width);
       assign(*CarryLI, CarryReg);
     }
   }
-
-  return false;
 }
