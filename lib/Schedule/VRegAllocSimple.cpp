@@ -319,6 +319,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
   }
 
   bool visitUse(ucOp Op, MachineOperand &MO) {
+    addDst(Op, MO);
     // FIXME: The folowing code not work at all!
     //unsigned DefReg = addDst(Op, MO);
     //if (Op->isOpcode(VTM::VOpMvPhi) || Op->isOpcode(VTM::VOpMvPhi)) {
