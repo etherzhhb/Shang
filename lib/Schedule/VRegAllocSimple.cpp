@@ -194,6 +194,7 @@ template<int NUMSRC>
 struct SourceChecker {
   // All copy source both fu of the edge.
   SmallSet<unsigned, 4> Srcs[NUMSRC];
+  unsigned SrcNum[NUMSRC];
   unsigned ExtraCost;
   // TODO: Timing cost.
 
@@ -201,14 +202,17 @@ struct SourceChecker {
 
   void resetSrcs() {
     ExtraCost = 0;
-    for (unsigned i = 0; i < NUMSRC; ++i)
+    for (unsigned i = 0; i < NUMSRC; ++i) {
       Srcs[i].clear();
+      SrcNum[i] = 0;
+    }
   }
 
   template<int N>
   void addSrc(ucOperand &SrcOp) {
     if (SrcOp.isReg()) {
       Srcs[N].insert(SrcOp.getReg());
+      ++SrcNum[N];
     } else if (SrcOp.isImm())
       ExtraCost += /*LUT Cost*/ 1;
     else
@@ -221,32 +225,99 @@ struct SourceChecker {
   }
 
   template<int N>
+  int getSrcMuxSize() const {
+    return Srcs[N].size();
+  }
+
+  template<int N>
+  int getSrcNum() const {
+    return SrcNum[N];
+  }
+
+  template<int N>
+  int getSavedSrcMuxSize() const {
+    return getSrcNum<N>() - getSrcMuxSize<N>();
+  }
+
+  template<int N>
   int getSrcMuxCost() const {
-    return (Srcs[N].size() - 1) * /*Reg Mux Cost Pre-bit*/ 128;
+    // FIXME: It in fact contains some timing cost.
+    return (getSrcMuxSize<N>() - 1) * /*Mux pre-port cost */64;
+  }
+
+  template<int N>
+  int getSavedSrcMuxCost() const {
+    return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */96;
   }
 
   int getExtraCost() const { return ExtraCost; }
 };
 
+struct DstChecker {
+  // All copy source both fu of the edge.
+  SmallSet<unsigned, 8> Dsts;
+
+  void resetDsts() {
+    Dsts.clear();
+  }
+
+  unsigned addDst(ucOp Op, MachineOperand &MO) {
+    // Ignore the datapath at the moment.
+    if (!Op.isControl()) return 0;
+
+    MachineOperand &DefMO = Op.getOperand(0);
+    if (!DefMO.isReg()) {
+      if (Op->isOpcode(VTM::VOpRetVal))
+        addDst(0, 0);
+
+      return 0;
+    }
+
+    unsigned DstReg = DefMO.getReg();
+    addDst(DstReg, Op.getOpIdx(MO));
+    return DstReg;
+  }
+
+  void addDst(unsigned Reg, unsigned OpIdx) {
+    Dsts.insert(Reg | (OpIdx << 28));
+  }
+
+  int getDstMuxSize() const {
+    return Dsts.size();
+  }
+
+  int getDstMuxCost() const {
+    return getDstMuxSize() * /* Mux pre-port area cost */96;
+  }
+};
+
 // Weight computation functor for register Compatibility Graph.
-struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
+struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
+                           public DstChecker {
   VRASimple *VRA;
   // Context
   // Do not try to merge PHI copies, it is conditional and we cannot handle
   // them correctly at the moment.
   bool hasPHICopy;
-  unsigned SrcReg;
+  unsigned DstReg;
 
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
 
-  void resetDefEvalator(unsigned SrcR) {
-    SrcReg = 0;
+  void resetDefEvalator(unsigned DstR) {
+    DstReg = DstR;
+    resetDsts();
     resetSrcs();
     hasPHICopy = false;
     resetWidth();
   }
 
-  bool visitUse(ucOp Op) {
+  bool visitUse(ucOp Op, MachineOperand &MO) {
+    unsigned DefReg = addDst(Op, MO);
+    if (Op->isOpcode(VTM::VOpMvPhi) || Op->isOpcode(VTM::VOpMvPhi)) {
+      // We cannot handle these ops correctly after their src and dst merged.
+      if (DefReg == DstReg) return false;
+    }
+
     return false;
   }
 
@@ -254,11 +325,6 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
     switch (Op->getOpcode()) {
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
-      // We cannot handle these ops correctly after their src and dst merged.
-      if (SrcReg && Op.getOperand(1).isReg()
-          && Op.getOperand(1).getReg() == SrcReg)
-        return true;
-      // Else fall through.
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMove_ri:
@@ -296,7 +362,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
     }
 
     if (!MO.isImplicit())
-      return visitUse(ucOp::getParent(I));
+      return visitUse(ucOp::getParent(I), MO);
 
     return false;
   }
@@ -305,39 +371,39 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
   // edge.
   int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
-    resetDefEvalator(Src->reg);
+    resetDefEvalator(Dst->reg);
 
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     // Setup the source register to for phi copy checking.
-    SrcReg = Src->reg;
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
     // Src register appear in the src of mux do not cost anything.
-    removeSrcReg<0>(SrcReg);
+    removeSrcReg<0>(Src->reg);
 
     int Weight = 0;
-    unsigned Width = getWidth();
     // We can save some register if we merge these two registers.
-    Weight += Width * /*Reg Cost*/ 16;
+    Weight += /*Reg Cost*/ 16;
+    // How many mux port we can save?
+    Weight += getSavedSrcMuxCost<0>();
+    // We also can save the mux for the dsts.
+    Weight += getDstMuxCost();
+    // How big the mux it is after the registers are merged? Do not make it too
+    // big.
+    Weight -= getSrcMuxCost<0>();
 
-    // How many MUX ports can we reduce after these two register is merged.
-    // FIXME: Prevent generate big MUX after merge event the merge is benefiting.
-    // MUX is not acceptable at the moment.
-    Weight -= getSrcMuxCost<0>() * Width;
-    Weight -= getExtraCost() * Width;
-
-    return Weight;
+    return Weight * getWidth();
   }
 };
 
 // Weight computation functor for commutable binary operation Compatibility
 // Graph.
 template<unsigned OpCode, unsigned OpIdx>
-struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
+struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
+                             public DstChecker {
   VRASimple *VRA;
 
   // Is there a copy between the src and dst of the edge?
@@ -359,10 +425,11 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
   // Run on the use-def chain of a FU to collect information about the live
   // interval.
   bool operator()(MachineRegisterInfo::reg_iterator I) {
+    MachineOperand &MO = I.getOperand();
     if (I.getOperand().isDef()) {
-      ucOperand &MO = cast<ucOperand>(I.getOperand());
       // 1. Get the bit width information.
-      if (!checkWidth(MO.getBitWidth())) return true;
+      if (!checkWidth(cast<ucOperand>(MO).getBitWidth()))
+        return true;
       // 2. Analyze the definition op.
       ucOp Op = ucOp::getParent(I);
       assert(Op->isOpcode(OpCode) && "Unexpected Opcode!");
@@ -370,6 +437,10 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
       visitOperand<0>(Op);
       visitOperand<1>(Op);
     }
+
+    // FUs seems do not have multiple destination.
+    //if (!MO.isImplicit())
+    //  return addDst(ucOp::getParent(I), MO);
 
     return false;
   }
@@ -385,14 +456,18 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;
-    unsigned Width = getWidth();
     // We can save some register if we merge these two registers.
-    Weight += Width * /*FU Cost*/ 64;
-
-    Weight -= getSrcMuxCost<0>() * Width;
-    Weight -= getSrcMuxCost<1>() * Width;
-    Weight -= getExtraCost() * Width;
-    return Weight;
+    Weight += /*FU Cost*/ 64;
+    // How many mux port we can save?
+    Weight += getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
+    // We also can save the mux for the dsts.
+    Weight += getDstMuxCost();
+    // How big the mux it is after the registers are merged? Do not make it too
+    // big.
+    Weight -= getSrcMuxCost<0>() + getSrcMuxCost<1>();
+    // We can save some mux if we merge these two register.
+    // Weight += getDstMuxCost() * Width;
+    return Weight * getWidth();
   }
 };
 }
