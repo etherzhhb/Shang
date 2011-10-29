@@ -27,7 +27,7 @@ namespace llvm {
 class raw_ostream;
 
 namespace CompGraphWeights {
-  static const int HUGE_NEG_VAL = -10000000;
+  static const int HUGE_NEG_VAL = -1000000000;
 }
 
 template<class T>
