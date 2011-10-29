@@ -476,8 +476,6 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
     // How big the mux it is after the registers are merged? Do not make it too
     // big.
     Weight -= getSrcMuxCost<0>() + getSrcMuxCost<1>();
-    // We can save some mux if we merge these two register.
-    // Weight += getDstMuxCost() * Width;
     return Weight * getWidth();
   }
 };
