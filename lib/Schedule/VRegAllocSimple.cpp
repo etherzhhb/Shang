@@ -1131,7 +1131,7 @@ void VRASimple::bindAdders(LICGraph &G) {
     unsigned AdderReg = VFI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
     unsigned SumReg = VFI->getSubRegOf(AdderReg, Width, 0);
     assign(*LI, SumReg);
-
+    DEBUG(dbgs() << "Assign " << SumReg << " to " << *LI << '\n');
     // Bind the carry.
     unsigned CarryReg = VFI->getSubRegOf(AdderReg, Width + 1, Width);
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(LI->reg),

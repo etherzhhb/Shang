@@ -917,7 +917,7 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
   VASTValue *Result = VM->lookupSignal(OpAdd.getOperand(0).getReg());
-
+  assert(Result && "Adder not allocated?");
   // Assign the value to function unit.
   CtrlS << Result->getName() << "_a <= ";
   printOperand(OpAdd.getOperand(2), CtrlS);
