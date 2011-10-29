@@ -28,6 +28,7 @@ class raw_ostream;
 
 namespace CompGraphWeights {
   static const int HUGE_NEG_VAL = -1000000000;
+  static const int TINY_VAL = 1;
 }
 
 template<class T>
@@ -109,6 +110,8 @@ public:
       Self *Succ = *I;
       // Not need to update the weight of the exit edge.
       if (Succ->get()) SuccWeights[Succ] = C(this->get(), Succ->get());
+      // Make find longest path prefer to end with exit if possible.
+      else             SuccWeights[Succ] = CompGraphWeights::TINY_VAL;
     }
   }
 
@@ -222,7 +225,7 @@ public:
         // for each edge (Node, ChildNode) in E(G) do
         int EdgeWeight = Node->getWeightTo(ChildNode);
         // Do not introduce zero weight edge to the longest path.
-        //if (/*Node == &Entry ||*/ ChildNode == &Exit || EdgeWeight > ) {
+        if (EdgeWeight > 0) {
           int NewPathWeight = PathWeight[Node] + EdgeWeight;
           int &OldPathWeight = PathWeight[ChildNode];
           if (OldPathWeight < NewPathWeight) {
@@ -231,7 +234,7 @@ public:
             // And the pred
             PathPred[ChildNode] = Node;
           }
-        //}
+        }
 
         // Only move forward when we visit the node from all its preds.
         if (VC == ChildNode->num_pred())
@@ -239,16 +242,16 @@ public:
       }
     }
 
-    unsigned NumNodes = 0;
-    // Fill the result vector.
-    for (NodeTy *I = PathPred[&Exit]; I && I != &Entry; I = PathPred[I]) {
-      Path.push_back(I->get());
-      if (DelNodes) deleteNode(I);
-      ++NumNodes;
+    unsigned FinalPathWeight = PathWeight[&Exit] - CompGraphWeights::TINY_VAL;
+    if (FinalPathWeight > 0) {
+      // Fill the result vector.
+      for (NodeTy *I = PathPred[&Exit]; I && I != &Entry; I = PathPred[I]) {
+        Path.push_back(I->get());
+        if (DelNodes) deleteNode(I);
+      }
     }
 
-    assert(PathWeight[&Exit] >= 0 && "Unexpected negative path!");
-    return PathWeight[&Exit];
+    return FinalPathWeight;
   }
 
   template<class CompEdgeWeight>
