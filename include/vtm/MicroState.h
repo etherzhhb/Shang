@@ -176,6 +176,17 @@ public:
     return *I;
   }
 
+  unsigned getOpIdx(const MachineOperand &MO) const {
+    assert(MO.getParent() == OpCode.getParent()
+           && "Call getOpIdx with MO from other MI!");
+    int Idx = const_cast<MachineOperand*>(&MO)
+              - reinterpret_cast<MachineOperand*>(&OpCode);
+    assert(Idx > 0 && "Call getOpIdx with MO from other ucOp!");
+    // Operands place right after the opcode.
+    Idx -= (isControl() ? 2 : 1);
+    return Idx;
+  }
+
   ucOperand &getPredicate() const {
     assert(isControl() && "Data path do not have predicate operand!");
     return *(op_begin() - 1);
