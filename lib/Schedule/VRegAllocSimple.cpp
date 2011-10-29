@@ -132,9 +132,9 @@ struct VRASimple : public MachineFunctionPass,
   // if any functor return true (this means we meet some unexpected situation),
   // return false otherwise.
   template<class DefFctor>
-  bool foreachDef(unsigned Reg, DefFctor &F) const {
-    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
-         E = MRI->def_end(); I != E; ++I)
+  bool iterateUseDefChain(unsigned Reg, DefFctor &F) const {
+    for (MachineRegisterInfo::reg_iterator I = MRI->reg_begin(Reg),
+         E = MRI->reg_end(); I != E; ++I)
       if (F(I)) return true;
 
     return false;
@@ -240,27 +240,22 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
 
   void resetDefEvalator(unsigned SrcR) {
-    SrcReg = SrcR;
+    SrcReg = 0;
     resetSrcs();
     hasPHICopy = false;
     resetWidth();
   }
 
-  // Run on the definition of a register to collect information about the live
-  // interval.
-  bool operator()(MachineRegisterInfo::def_iterator I) {
-    ucOperand &MO = cast<ucOperand>(I.getOperand());
-    // 1. Get the bit width information.
-    if (!checkWidth(MO.getBitWidth())) return true;
+  bool visitUse(ucOp Op) {
+    return false;
+  }
 
-    // 2. Analyze the definition op.
-    ucOp Op = ucOp::getParent(I);
-
+  bool visitDef(ucOp Op) {
     switch (Op->getOpcode()) {
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
       // We cannot handle these ops correctly after their src and dst merged.
-      if (I.getOperand().getReg() != SrcReg && Op.getOperand(1).isReg()
+      if (SrcReg && Op.getOperand(1).isReg()
           && Op.getOperand(1).getReg() == SrcReg)
         return true;
       // Else fall through.
@@ -287,16 +282,37 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
     return false;
   }
 
+  // Run on the definition of a register to collect information about the live
+  // interval.
+  bool operator()(MachineRegisterInfo::reg_iterator I) {
+    MachineOperand &MO = I.getOperand();
+    if (MO.isDef()) {
+      // 1. Get the bit width information.
+      if (!checkWidth(cast<ucOperand>(I.getOperand()).getBitWidth()))
+        return true;
+
+      // 2. Analyze the definition op.
+      return visitDef(ucOp::getParent(I));
+    }
+
+    if (!MO.isImplicit())
+      return visitUse(ucOp::getParent(I));
+
+    return false;
+  }
+
   // Run on the edge of the Compatibility Graph and return the weight of the
   // edge.
   int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator(Src->reg);
 
-    if (VRA->foreachDef(Src->reg, *this))
+    if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    if (VRA->foreachDef(Dst->reg, *this))
+    // Setup the source register to for phi copy checking.
+    SrcReg = Src->reg;
+    if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
@@ -340,18 +356,21 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
 
   CompBinOpEdgeWeight(VRASimple *V) : VRA(V) {}
 
-  // Run on the definition of a FU to collect information about the live
+  // Run on the use-def chain of a FU to collect information about the live
   // interval.
-  bool operator()(MachineRegisterInfo::def_iterator I) {
-    ucOperand &MO = cast<ucOperand>(I.getOperand());
-    // 1. Get the bit width information.
-    if (!checkWidth(MO.getBitWidth())) return true;
-    // 2. Analyze the definition op.
-    ucOp Op = ucOp::getParent(I);
-    assert(Op->isOpcode(OpCode) && "Unexpected Opcode!");
+  bool operator()(MachineRegisterInfo::reg_iterator I) {
+    if (I.getOperand().isDef()) {
+      ucOperand &MO = cast<ucOperand>(I.getOperand());
+      // 1. Get the bit width information.
+      if (!checkWidth(MO.getBitWidth())) return true;
+      // 2. Analyze the definition op.
+      ucOp Op = ucOp::getParent(I);
+      assert(Op->isOpcode(OpCode) && "Unexpected Opcode!");
 
-    visitOperand<0>(Op);
-    visitOperand<1>(Op);
+      visitOperand<0>(Op);
+      visitOperand<1>(Op);
+    }
+
     return false;
   }
 
@@ -359,10 +378,10 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator();
 
-    if (VRA->foreachDef(Src->reg, *this))
+    if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    if (VRA->foreachDef(Dst->reg, *this))
+    if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;
