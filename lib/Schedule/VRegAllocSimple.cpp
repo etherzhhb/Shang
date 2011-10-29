@@ -82,6 +82,11 @@ struct VRASimple : public MachineFunctionPass,
 
   typedef const std::vector<unsigned> VRegVec;
 
+  // FU Area Costs.
+  static unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost, ShiftCost;
+  // MUX size limit factor.
+  static unsigned MuxSizeCost;
+
   unsigned UserTag;
 
   VRASimple();
@@ -155,7 +160,7 @@ struct VRASimple : public MachineFunctionPass,
   void buildCompGraph(LICGraph &G);
 
   template<class CompEdgeWeight>
-  bool reduceCompGraph(LICGraph &G, CompEdgeWeight C);
+  bool reduceCompGraph(LICGraph &G, CompEdgeWeight &C);
 
   void bindCompGraph(LICGraph &G);
   // We need handle to special case when binding adder.
@@ -214,9 +219,9 @@ struct SourceChecker {
       Srcs[N].insert(SrcOp.getReg());
       ++SrcNum[N];
     } else if (SrcOp.isImm())
-      ExtraCost += /*LUT Cost*/ 1;
+      ExtraCost += /*LUT Cost*/ VRASimple::LUTCost;
     else
-      ExtraCost += /*Reg Mux Cost Pre-bit*/ 64;
+      ExtraCost += /*Reg Mux Cost Pre-bit*/ VRASimple::MUXCost;
   }
 
   template<int N>
@@ -242,12 +247,12 @@ struct SourceChecker {
   template<int N>
   int getSrcMuxCost() const {
     // FIXME: It in fact contains some timing cost.
-    return (getSrcMuxSize<N>() - 1) * /*Mux pre-port cost */64;
+    return (getSrcMuxSize<N>() - 1) * /*Mux pre-port cost */VRASimple::MuxSizeCost;
   }
 
   template<int N>
   int getSavedSrcMuxCost() const {
-    return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */96;
+    return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */VRASimple::MUXCost;
   }
 
   int getExtraCost() const { return ExtraCost; }
@@ -287,7 +292,7 @@ struct DstChecker {
   }
 
   int getDstMuxCost() const {
-    return getDstMuxSize() * /* Mux pre-port area cost */96;
+    return getDstMuxSize() * /* Mux pre-port area cost */VRASimple::MUXCost;
   }
 };
 
@@ -295,13 +300,15 @@ struct DstChecker {
 struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
                            public DstChecker {
   VRASimple *VRA;
+  // The pre-bit cost of this kind of function unit.
+  unsigned Cost;
   // Context
   // Do not try to merge PHI copies, it is conditional and we cannot handle
   // them correctly at the moment.
   bool hasPHICopy;
   unsigned DstReg;
 
-  CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
+  CompRegEdgeWeight(VRASimple *V, unsigned cost) : VRA(V), Cost(cost) {}
 
   void resetDefEvalator(unsigned DstR) {
     DstReg = DstR;
@@ -388,7 +395,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
 
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    Weight += /*Reg Cost*/ 16;
+    Weight += /*Reg Cost*/ Cost;
     // How many mux port we can save?
     Weight += getSavedSrcMuxCost<0>();
     // We also can save the mux for the dsts.
@@ -407,6 +414,8 @@ template<unsigned OpCode, unsigned OpIdx>
 struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
                              public DstChecker {
   VRASimple *VRA;
+  // The pre-bit cost of this kind of function unit.
+  unsigned Cost;
 
   // Is there a copy between the src and dst of the edge?
   //bool hasCopy;
@@ -422,7 +431,7 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
     addSrc<Offset>(Op.getOperand(OpIdx + Offset));
   }
 
-  CompBinOpEdgeWeight(VRASimple *V) : VRA(V) {}
+  CompBinOpEdgeWeight(VRASimple *V, unsigned cost) : VRA(V), Cost(cost) {}
 
   // Run on the use-def chain of a FU to collect information about the live
   // interval.
@@ -440,7 +449,6 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
       visitOperand<1>(Op);
     }
 
-    // FUs seems do not have multiple destination.
     //if (!MO.isImplicit())
     //  return addDst(ucOp::getParent(I), MO);
 
@@ -459,7 +467,7 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
 
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    Weight += /*FU Cost*/ 64;
+    Weight += /*FU Cost*/ Cost;
     // How many mux port we can save?
     Weight += getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
     // We also can save the mux for the dsts.
@@ -782,6 +790,15 @@ FunctionPass *llvm::createSimpleRegisterAllocator() {
 
 char VRASimple::ID = 0;
 
+// Default cost parameter.
+unsigned VRASimple::LUTCost = 64;
+unsigned VRASimple::RegCost = 64;
+unsigned VRASimple::MUXCost = 64;
+unsigned VRASimple::AddCost = 64;
+unsigned VRASimple::MulCost = 128;
+unsigned VRASimple::ShiftCost = 256;
+unsigned VRASimple::MuxSizeCost = 8;
+
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
@@ -863,22 +880,24 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   buildCompGraph(LsrCG);
   buildCompGraph(ShlCG);
 
+  CompRegEdgeWeight RegWeight(this, RegCost);
+  CompBinOpEdgeWeight<VTM::VOpAdd, 2> AddWeight(this, AddCost);
+  CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, MulCost);
+  CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, ShiftCost);
+  CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, ShiftCost);
+  CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, ShiftCost);
+
   bool SomethingBind = true;
   // Reduce the Compatibility Graphs
   while (SomethingBind) {
     DEBUG(dbgs() << "Going to reduce CompGraphs\n");
     SomethingBind = false;
-    SomethingBind |= reduceCompGraph(RCG, CompRegEdgeWeight(this));
-    SomethingBind |= reduceCompGraph(AdderCG,
-                                     CompBinOpEdgeWeight<VTM::VOpAdd, 2>(this));
-    SomethingBind |= reduceCompGraph(MulCG,
-                                     CompBinOpEdgeWeight<VTM::VOpMult, 1>(this));
-    SomethingBind |= reduceCompGraph(AsrCG,
-                                     CompBinOpEdgeWeight<VTM::VOpSRA, 1>(this));
-    SomethingBind |= reduceCompGraph(LsrCG,
-                                     CompBinOpEdgeWeight<VTM::VOpSRL, 1>(this));
-    SomethingBind |= reduceCompGraph(ShlCG,
-                                     CompBinOpEdgeWeight<VTM::VOpSHL, 1>(this));
+    SomethingBind |= reduceCompGraph(RCG, RegWeight);
+    SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
+    SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
+    SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
+    SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
+    SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
   }
 
   // Bind the Compatibility Graphs
@@ -1058,7 +1077,7 @@ void VRASimple::buildCompGraph(LICGraph &G) {
 }
 
 template<class CompEdgeWeight>
-bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight C) {
+bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight &C) {
   SmallVector<LiveInterval*, 8> LongestPath, MergedLIs;
   G.updateEdgeWeight(C);
 

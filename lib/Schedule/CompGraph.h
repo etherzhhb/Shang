@@ -104,7 +104,7 @@ public:
   }
 
   template<class CompEdgeWeight>
-  void updateEdgeWeight(CompEdgeWeight C) {
+  void updateEdgeWeight(CompEdgeWeight &C) {
     for (iterator I = succ_begin(), E = succ_end(); I != E; ++I) {
       Self *Succ = *I;
       // Not need to update the weight of the exit edge.
@@ -252,7 +252,7 @@ public:
   }
 
   template<class CompEdgeWeight>
-  void updateEdgeWeight(CompEdgeWeight C) {
+  void updateEdgeWeight(CompEdgeWeight &C) {
     for (iterator I = begin(), E = end(); I != E; ++I)
       (*I)->updateEdgeWeight(C);
   }
