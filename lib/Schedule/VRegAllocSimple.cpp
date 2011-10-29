@@ -221,7 +221,7 @@ struct SourceChecker {
     } else if (SrcOp.isImm())
       ExtraCost += /*LUT Cost*/ VRASimple::LUTCost;
     else
-      ExtraCost += /*Reg Mux Cost Pre-bit*/ VRASimple::MUXCost;
+      ExtraCost += /*Reg Mux Cost Pre-bit*/ VRASimple::MuxSizeCost;
   }
 
   template<int N>
@@ -261,15 +261,16 @@ struct SourceChecker {
 struct DstChecker {
   // All copy source both fu of the edge.
   SmallSet<unsigned, 8> Dsts;
-
+  int NumDsts;
   void resetDsts() {
     Dsts.clear();
+    NumDsts = 0;
   }
 
   unsigned addDst(ucOp Op, MachineOperand &MO) {
     // Ignore the datapath at the moment.
     if (!Op.isControl()) return 0;
-
+    ++NumDsts;
     MachineOperand &DefMO = Op.getOperand(0);
     if (!DefMO.isReg()) {
       if (Op->isOpcode(VTM::VOpRetVal))
@@ -287,12 +288,12 @@ struct DstChecker {
     Dsts.insert(Reg | (OpIdx << 28));
   }
 
-  int getDstMuxSize() const {
-    return Dsts.size();
+  int getSavedDstMuxSize() const {
+    return NumDsts - int(Dsts.size());
   }
 
-  int getDstMuxCost() const {
-    return getDstMuxSize() * /* Mux pre-port area cost */VRASimple::MUXCost;
+  int getSavedDstMuxCost() const {
+    return getSavedDstMuxSize() * /* Mux pre-port area cost */VRASimple::MUXCost;
   }
 };
 
@@ -400,11 +401,12 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
     // How many mux port we can save?
     Weight += getSavedSrcMuxCost<0>();
     // We also can save the mux for the dsts.
-    Weight += getDstMuxCost();
+    Weight += getSavedDstMuxCost();
     // How big the mux it is after the registers are merged? Do not make it too
     // big.
     Weight -= getSrcMuxCost<0>();
-
+    // Other cost.
+    Weight -= getExtraCost();
     return Weight * getWidth();
   }
 };
@@ -425,6 +427,7 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
     //hasCopy = 0;
     resetWidth();
     resetSrcs();
+    resetDsts();
   }
 
   template<unsigned Offset>
@@ -450,8 +453,8 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
       visitOperand<1>(Op);
     }
 
-    //if (!MO.isImplicit())
-    //  return addDst(ucOp::getParent(I), MO);
+    if (!MO.isImplicit())
+      addDst(ucOp::getParent(I), MO);
 
     return false;
   }
@@ -472,10 +475,12 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
     // How many mux port we can save?
     Weight += getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
     // We also can save the mux for the dsts.
-    Weight += getDstMuxCost();
+    Weight += getSavedDstMuxCost();
     // How big the mux it is after the registers are merged? Do not make it too
     // big.
     Weight -= getSrcMuxCost<0>() + getSrcMuxCost<1>();
+    // Other cost.
+    Weight -= getExtraCost();
     return Weight * getWidth();
   }
 };
