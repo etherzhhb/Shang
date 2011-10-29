@@ -312,11 +312,12 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
   }
 
   bool visitUse(ucOp Op, MachineOperand &MO) {
-    unsigned DefReg = addDst(Op, MO);
-    if (Op->isOpcode(VTM::VOpMvPhi) || Op->isOpcode(VTM::VOpMvPhi)) {
-      // We cannot handle these ops correctly after their src and dst merged.
-      if (DefReg == DstReg) return false;
-    }
+    // FIXME: The folowing code not work at all!
+    //unsigned DefReg = addDst(Op, MO);
+    //if (Op->isOpcode(VTM::VOpMvPhi) || Op->isOpcode(VTM::VOpMvPhi)) {
+    //  // We cannot handle these ops correctly after their src and dst merged.
+    //  if (DefReg == DstReg) return true;
+    //}
 
     return false;
   }
@@ -325,6 +326,8 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
     switch (Op->getOpcode()) {
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
+      // Dirty Hack: They are not compatible actually.
+        return true;
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMove_ri:
@@ -376,7 +379,6 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    // Setup the source register to for phi copy checking.
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
