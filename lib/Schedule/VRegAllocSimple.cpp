@@ -246,8 +246,10 @@ struct SourceChecker {
 
   template<int N>
   int getSrcMuxCost() const {
-    // FIXME: It in fact contains some timing cost.
-    return (getSrcMuxSize<N>() - 1) * /*Mux pre-port cost */VRASimple::MuxSizeCost;
+    if (unsigned MuxSize = getSrcMuxSize<N>())
+      return (MuxSize - 1) * /*Mux pre-port cost */VRASimple::MuxSizeCost;
+
+    return 0;
   }
 
   template<int N>
