@@ -801,7 +801,7 @@ unsigned VRASimple::MUXCost = 64;
 unsigned VRASimple::AddCost = 64;
 unsigned VRASimple::MulCost = 128;
 unsigned VRASimple::ShiftCost = 256;
-unsigned VRASimple::MuxSizeCost = 8;
+unsigned VRASimple::MuxSizeCost = 32;
 
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
