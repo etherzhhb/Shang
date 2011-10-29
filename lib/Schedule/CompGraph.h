@@ -26,6 +26,10 @@
 namespace llvm {
 class raw_ostream;
 
+namespace CompGraphWeights {
+  static const int HUGE_NEG_VAL = -10000000;
+}
+
 template<class T>
 class CompGraphNode {
   typedef CompGraphNode<T> Self;
@@ -37,7 +41,7 @@ class CompGraphNode {
   // Predecessors and Successors.
   NodeVecTy Preds, Succs;
 
-  typedef std::map<Self*, unsigned> WeightVecTy;
+  typedef std::map<Self*, int> WeightVecTy;
   WeightVecTy SuccWeights;
 
 public:
@@ -64,7 +68,7 @@ public:
   unsigned num_pred()   const { return Preds.size(); }
   bool     pred_empty() const { return Preds.empty(); }
 
-  unsigned getWeightTo(Self *To) const {
+  int getWeightTo(Self *To) const {
     return SuccWeights.find(To)->second;
   }
 
@@ -189,11 +193,11 @@ public:
   }
 
   // Return true if the longest path is not trivial (have more than 1 nodes).
-  bool findLongestPath(SmallVectorImpl<T> &Path, bool DelNodes = false) {
+  int findLongestPath(SmallVectorImpl<T> &Path, bool DelNodes = false) {
     std::map<NodeTy*, unsigned> LenMap;
 
     std::map<NodeTy*, NodeTy*> PathPred;
-    std::map<NodeTy*, unsigned> PathWeight;
+    std::map<NodeTy*, int> PathWeight;
 
     //for each vertex v in topOrder(G) do
     typedef typename NodeTy::iterator ChildIt;
@@ -216,18 +220,18 @@ public:
         unsigned VC = ++VisitCount[ChildNode];
 
         // for each edge (Node, ChildNode) in E(G) do
-        unsigned EdgeWeight = Node->getWeightTo(ChildNode);
+        int EdgeWeight = Node->getWeightTo(ChildNode);
         // Do not introduce zero weight edge to the longest path.
-        if (/*Node == &Entry ||*/ ChildNode == &Exit || EdgeWeight) {
-          unsigned NewPathWeight = PathWeight[Node] + EdgeWeight;
-          unsigned &OldPathWeight = PathWeight[ChildNode];
+        //if (/*Node == &Entry ||*/ ChildNode == &Exit || EdgeWeight > ) {
+          int NewPathWeight = PathWeight[Node] + EdgeWeight;
+          int &OldPathWeight = PathWeight[ChildNode];
           if (OldPathWeight < NewPathWeight) {
             // Update the weight
             OldPathWeight = NewPathWeight;
             // And the pred
             PathPred[ChildNode] = Node;
           }
-        }
+        //}
 
         // Only move forward when we visit the node from all its preds.
         if (VC == ChildNode->num_pred())
@@ -243,7 +247,8 @@ public:
       ++NumNodes;
     }
 
-    return NumNodes > 1;
+    assert(PathWeight[&Exit] >= 0 && "Unexpected negative path!");
+    return PathWeight[&Exit];
   }
 
   template<class CompEdgeWeight>

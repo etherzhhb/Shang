@@ -193,61 +193,56 @@ template<int NUMSRC>
 struct SourceChecker {
   // All copy source both fu of the edge.
   SmallSet<unsigned, 4> Srcs[NUMSRC];
-  // Total copy number of each register of the edge.
-  unsigned NumSrcs[NUMSRC];
+  unsigned ExtraCost;
+  // TODO: Timing cost.
 
   SourceChecker() {}
 
   void resetSrcs() {
-    for (unsigned i = 0; i < NUMSRC; ++i) {
+    ExtraCost = 0;
+    for (unsigned i = 0; i < NUMSRC; ++i)
       Srcs[i].clear();
-      NumSrcs[i] = 0;
-    }
   }
 
   template<int N>
   void addSrc(ucOperand &SrcOp) {
     if (SrcOp.isReg()) {
       Srcs[N].insert(SrcOp.getReg());
-      ++NumSrcs[N];
-    }
+    } else if (SrcOp.isImm())
+      ExtraCost += /*LUT Cost*/ 1;
+    else
+      ExtraCost += /*Reg Mux Cost Pre-bit*/ 64;
   }
 
   template<int N>
-  unsigned getSrcSize() const { return NumSrcs[N]; }
+  void removeSrcReg(unsigned Reg) {
+    Srcs[N].erase(Reg);
+  }
 
   template<int N>
-  unsigned getMergedSrcSize() const { return Srcs[N].size(); }
+  int getSrcMuxCost() const {
+    return (Srcs[N].size() - 1) * /*Reg Mux Cost Pre-bit*/ 128;
+  }
+
+  int getExtraCost() const { return ExtraCost; }
 };
 
 // Weight computation functor for register Compatibility Graph.
 struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
   VRASimple *VRA;
   // Context
-  // Other register of the edge.
-  unsigned OtherReg;
-  // Is there a copy between the src and dst of the edge?
-  bool hasCopy;
   // Do not try to merge PHI copies, it is conditional and we cannot handle
   // them correctly at the moment.
   bool hasPHICopy;
+  unsigned SrcReg;
 
   CompRegEdgeWeight(VRASimple *V) : VRA(V) {}
 
-  void resetDefEvalator() {
+  void resetDefEvalator(unsigned SrcR) {
+    SrcReg = SrcR;
     resetSrcs();
-    hasCopy = false;
     hasPHICopy = false;
     resetWidth();
-  }
-
-  void startForeachDef(unsigned other) {
-    OtherReg = other;
-  }
-
-  void runOnCopy(unsigned SrcReg) {
-    // If we have copy between the edge?
-    hasCopy |= SrcReg == OtherReg;
   }
 
   // Run on the definition of a register to collect information about the live
@@ -255,7 +250,6 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
   bool operator()(MachineRegisterInfo::def_iterator I) {
     ucOperand &MO = cast<ucOperand>(I.getOperand());
     // 1. Get the bit width information.
-    unsigned CurWidth = MO.getBitWidth();
     if (!checkWidth(MO.getBitWidth())) return false;
 
     // 2. Analyze the definition op.
@@ -265,17 +259,29 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
       // We cannot handle these ops correctly after their src and dst merged.
-      return false;
+      if (I.getOperand().getReg() != SrcReg && Op.getOperand(1).isReg()
+          && Op.getOperand(1).getReg() == SrcReg)
+        return false;
+      // Else fall through.
+    case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
+    case VTM::VOpMove_ri:
     case VTM::COPY:
-      runOnCopy(Op.getOperand(1).getReg());
-      // Fall through
     case VTM::VOpReadFU:
       addSrc<0>(Op.getOperand(1));
       return true;
     case VTM::VOpReadReturn:
       addSrc<0>(Op.getOperand(2));
       return true;
+    case VTM::VOpSel:
+      addSrc<0>(Op.getOperand(2));
+      addSrc<0>(Op.getOperand(3));
+      return true;
+    default:
+#ifndef NDEBUG
+      Op.dump();
+      llvm_unreachable("Unexpected opcode in CompRegEdgeWeight!");
+#endif
     }
     // FIXME: Return false on unknown situation?
     return true;
@@ -283,33 +289,30 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
 
   // Run on the edge of the Compatibility Graph and return the weight of the
   // edge.
-  unsigned operator()(LiveInterval *Src, LiveInterval *Dst) {
+  int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
-    resetDefEvalator();
+    resetDefEvalator(Src->reg);
 
-    startForeachDef(Dst->reg);
-    if (!VRA->foreachDef(Src->reg, *this)) return 0;
+    if (!VRA->foreachDef(Src->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
 
-    startForeachDef(Src->reg);
-    if (!VRA->foreachDef(Dst->reg, *this)) return 0;
+    if (!VRA->foreachDef(Dst->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
 
-    if (hasPHICopy) return 0;
+    if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
+    // Src register appear in the src of mux do not cost anything.
+    removeSrcReg<0>(SrcReg);
 
-    unsigned Weight = 0;
-
-    // If there is a copy between the src and dst of the edge, we can save a
-    // register by merging them.
-    if (hasCopy)  Weight += getWidth() * /*Reg Cost*/ 16;
+    int Weight = 0;
+    unsigned Width = getWidth();
+    // We can save some register if we merge these two registers.
+    Weight += Width * /*Reg Cost*/ 16;
 
     // How many MUX ports can we reduce after these two register is merged.
     // FIXME: Prevent generate big MUX after merge event the merge is benefiting.
     // MUX is not acceptable at the moment.
-    if (getSrcSize<0>() <= 1)
-      Weight += (getSrcSize<0>() - getMergedSrcSize<0>()) * getWidth() * /*Reg Mux Cost*/ 128;
-
-    // TODO: Also estimate lut cost like:
-    // slotN, reg0 = 0;
-    // slotM, reg0 = 10;
+    Weight -= getSrcMuxCost<0>() * Width;
+    Weight -= getExtraCost() * Width;
 
     return Weight;
   }
@@ -328,16 +331,6 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
     //hasCopy = 0;
     resetWidth();
     resetSrcs();
-  }
-
-  void startForeachDef(unsigned other) {
-  }
-
-  template<unsigned Offset>
-  void addOpSrc(unsigned Src) {
-    assert(Src && "Bad FU register number!");
-    Srcs[Offset].insert(Src);
-    ++NumSrcs[Offset];
   }
 
   template<unsigned Offset>
@@ -362,28 +355,24 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
     return true;
   }
 
-  unsigned operator()(LiveInterval *Src, LiveInterval *Dst) {
+  int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator();
 
-    startForeachDef(Dst->reg);
-    if (!VRA->foreachDef(Src->reg, *this)) return 0;
+    if (!VRA->foreachDef(Src->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
 
-    startForeachDef(Src->reg);
-    if (!VRA->foreachDef(Dst->reg, *this)) return 0;
+    if (!VRA->foreachDef(Dst->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
 
-    // Do not introduce mux at the moment.
-    if (getMergedSrcSize<0>() > 1 || getMergedSrcSize<1>() > 1) return 0;
+    int Weight = 0;
+    unsigned Width = getWidth();
+    // We can save some register if we merge these two registers.
+    Weight += Width * /*FU Cost*/ 64;
 
-    unsigned Weight = 0;
-
-    Weight += (getSrcSize<0>() - getMergedSrcSize<0>())
-               * getWidth() * /*Reg Mux Cost*/ 128;
-    Weight += (getSrcSize<1>() - getMergedSrcSize<1>())
-               * getWidth() * /*Reg Mux Cost*/ 128;
-    // Dirty Hack: All operand are non-register operand? Merge them.
-    if (Weight == 0) Weight += 16;
-
+    Weight -= getSrcMuxCost<0>() * Width;
+    Weight -= getSrcMuxCost<1>() * Width;
+    Weight -= getExtraCost() * Width;
     return Weight;
   }
 };
@@ -979,9 +968,10 @@ bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight C) {
 
   bool AnyReduced = false;
 
-  while (G.findLongestPath(LongestPath, true)) {
+  for (int PathWeight = G.findLongestPath(LongestPath, true); PathWeight > 0;
+       PathWeight = G.findLongestPath(LongestPath, true)) {
     DEBUG(dbgs() << "// longest path in graph: {"
-      << TRI->getRegClass(G.ID)->getName() << "}\n";
+      << TRI->getRegClass(G.ID)->getName() << "} weight:" << PathWeight << "\n";
     for (unsigned i = 0; i < LongestPath.size(); ++i) {
       LiveInterval *LI = LongestPath[i];
       dbgs() << *LI << " bitwidth:" << getBitWidthOf(LI->reg) << '\n';
