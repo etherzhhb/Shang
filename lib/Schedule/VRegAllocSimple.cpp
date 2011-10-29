@@ -128,15 +128,16 @@ struct VRASimple : public MachineFunctionPass,
     return BitWidth;
   }
 
-  // Run the functor on each definition of the register, and return false
-  // if any functor return false, return true otherwise.
+  // Run the functor on each definition of the register, and return true
+  // if any functor return true (this means we meet some unexpected situation),
+  // return false otherwise.
   template<class DefFctor>
   bool foreachDef(unsigned Reg, DefFctor &F) const {
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(Reg),
          E = MRI->def_end(); I != E; ++I)
-      if (!F(I)) return false;
+      if (F(I)) return true;
 
-    return true;
+    return false;
   }
 
   // commutable
@@ -250,7 +251,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
   bool operator()(MachineRegisterInfo::def_iterator I) {
     ucOperand &MO = cast<ucOperand>(I.getOperand());
     // 1. Get the bit width information.
-    if (!checkWidth(MO.getBitWidth())) return false;
+    if (!checkWidth(MO.getBitWidth())) return true;
 
     // 2. Analyze the definition op.
     ucOp Op = ucOp::getParent(I);
@@ -261,7 +262,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
       // We cannot handle these ops correctly after their src and dst merged.
       if (I.getOperand().getReg() != SrcReg && Op.getOperand(1).isReg()
           && Op.getOperand(1).getReg() == SrcReg)
-        return false;
+        return true;
       // Else fall through.
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
@@ -269,22 +270,21 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
     case VTM::COPY:
     case VTM::VOpReadFU:
       addSrc<0>(Op.getOperand(1));
-      return true;
+      break;
     case VTM::VOpReadReturn:
       addSrc<0>(Op.getOperand(2));
-      return true;
+      break;
     case VTM::VOpSel:
       addSrc<0>(Op.getOperand(2));
       addSrc<0>(Op.getOperand(3));
-      return true;
+      break;
     default:
 #ifndef NDEBUG
       Op.dump();
       llvm_unreachable("Unexpected opcode in CompRegEdgeWeight!");
 #endif
     }
-    // FIXME: Return false on unknown situation?
-    return true;
+    return false;
   }
 
   // Run on the edge of the Compatibility Graph and return the weight of the
@@ -293,10 +293,10 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1> {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator(Src->reg);
 
-    if (!VRA->foreachDef(Src->reg, *this))
+    if (VRA->foreachDef(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    if (!VRA->foreachDef(Dst->reg, *this))
+    if (VRA->foreachDef(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
@@ -345,24 +345,24 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2> {
   bool operator()(MachineRegisterInfo::def_iterator I) {
     ucOperand &MO = cast<ucOperand>(I.getOperand());
     // 1. Get the bit width information.
-    if (!checkWidth(MO.getBitWidth())) return false;
+    if (!checkWidth(MO.getBitWidth())) return true;
     // 2. Analyze the definition op.
     ucOp Op = ucOp::getParent(I);
     assert(Op->isOpcode(OpCode) && "Unexpected Opcode!");
 
     visitOperand<0>(Op);
     visitOperand<1>(Op);
-    return true;
+    return false;
   }
 
   int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
     resetDefEvalator();
 
-    if (!VRA->foreachDef(Src->reg, *this))
+    if (VRA->foreachDef(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    if (!VRA->foreachDef(Dst->reg, *this))
+    if (VRA->foreachDef(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;
