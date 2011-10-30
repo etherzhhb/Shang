@@ -60,6 +60,15 @@ namespace llvm {
 
       return 0;
     }
+
+    // Default area cost parameter.
+    unsigned LUTCost = 64;
+    unsigned RegCost = 64;
+    unsigned MUXCost = 64;
+    unsigned AddCost = 64;
+    unsigned MulCost = 128;
+    unsigned ShiftCost = 256;
+    unsigned MuxSizeCost = 48;
   }
 }
 
@@ -86,7 +95,8 @@ VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable)
     Latency(getProperty<unsigned>(FUTable, "Latency")),
     StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
     TotalRes(getProperty<unsigned>(FUTable, "TotalNumber")),
-    MaxBitWidth(getProperty<unsigned>(FUTable, "OperandWidth")){}
+    MaxBitWidth(getProperty<unsigned>(FUTable, "OperandWidth")),
+    Cost(getProperty<unsigned>(FUTable, "Cost")) {}
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)
   : VFUDesc(VFUs::MemoryBus,
@@ -96,7 +106,6 @@ VFUMemBus::VFUMemBus(luabind::object FUTable)
             getProperty<unsigned>(FUTable, "DataWidth")),
     AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")) {}
 
-
 VFUBRam::VFUBRam(luabind::object FUTable)
   : VFUDesc(VFUs::BRam,
             getProperty<unsigned>(FUTable, "Latency"),
@@ -105,7 +114,6 @@ VFUBRam::VFUBRam(luabind::object FUTable)
             getProperty<unsigned>(FUTable, "DataWidth")),
   Template(getProperty<std::string>(FUTable, "Template")),
   InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){}
-
 
 // Dirty Hack: anchor from SynSettings.h
 SynSettings::SynSettings(StringRef Name, SynSettings &From)

@@ -82,8 +82,6 @@ struct VRASimple : public MachineFunctionPass,
 
   typedef const std::vector<unsigned> VRegVec;
 
-  // FU Area Costs.
-  static unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost, ShiftCost;
   // MUX size limit factor.
   static unsigned MuxSizeCost;
 
@@ -219,9 +217,9 @@ struct SourceChecker {
       Srcs[N].insert(SrcOp.getReg());
       ++SrcNum[N];
     } else if (SrcOp.isImm())
-      ExtraCost += /*LUT Cost*/ VRASimple::LUTCost;
+      ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
     else
-      ExtraCost += /*Reg Mux Cost Pre-bit*/ VRASimple::MuxSizeCost;
+      ExtraCost += /*Reg Mux Cost Pre-bit*/ VFUs::MuxSizeCost;
   }
 
   template<int N>
@@ -247,14 +245,14 @@ struct SourceChecker {
   template<int N>
   int getSrcMuxCost() const {
     if (unsigned MuxSize = getSrcMuxSize<N>())
-      return (MuxSize - 1) * /*Mux pre-port cost */VRASimple::MuxSizeCost;
+      return (MuxSize - 1) * /*Mux pre-port cost */VFUs::MuxSizeCost;
 
     return 0;
   }
 
   template<int N>
   int getSavedSrcMuxCost() const {
-    return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */VRASimple::MUXCost;
+    return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */VFUs::MUXCost;
   }
 
   int getExtraCost() const { return ExtraCost; }
@@ -295,7 +293,7 @@ struct DstChecker {
   }
 
   int getSavedDstMuxCost() const {
-    return getSavedDstMuxSize() * /* Mux pre-port area cost */VRASimple::MUXCost;
+    return getSavedDstMuxSize() * /* Mux pre-port area cost */VFUs::MUXCost;
   }
 };
 
@@ -793,15 +791,6 @@ FunctionPass *llvm::createSimpleRegisterAllocator() {
 
 char VRASimple::ID = 0;
 
-// Default cost parameter.
-unsigned VRASimple::LUTCost = 64;
-unsigned VRASimple::RegCost = 64;
-unsigned VRASimple::MUXCost = 64;
-unsigned VRASimple::AddCost = 64;
-unsigned VRASimple::MulCost = 128;
-unsigned VRASimple::ShiftCost = 256;
-unsigned VRASimple::MuxSizeCost = 48;
-
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
@@ -883,12 +872,12 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   buildCompGraph(LsrCG);
   buildCompGraph(ShlCG);
 
-  CompRegEdgeWeight RegWeight(this, RegCost);
-  CompBinOpEdgeWeight<VTM::VOpAdd, 2> AddWeight(this, AddCost);
-  CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, MulCost);
-  CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, ShiftCost);
-  CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, ShiftCost);
-  CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, ShiftCost);
+  CompRegEdgeWeight RegWeight(this, VFUs::RegCost);
+  CompBinOpEdgeWeight<VTM::VOpAdd, 2> AddWeight(this, VFUs::AddCost);
+  CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, VFUs::MulCost);
+  CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, VFUs::ShiftCost);
+  CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, VFUs::ShiftCost);
+  CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, VFUs::ShiftCost);
 
   bool SomethingBind = true;
   // Reduce the Compatibility Graphs

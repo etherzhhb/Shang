@@ -73,6 +73,10 @@ namespace VFUs {
                                  ArrayRef<std::string> Ports);
   std::string startModule(const std::string &ModName, unsigned ModNum,
                           ArrayRef<std::string> InPorts);
+
+  // Cost parameters.
+  extern unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost,
+                  ShiftCost, MuxSizeCost;
 }
 
 class FuncUnitId {
@@ -142,11 +146,14 @@ protected:
   const unsigned TotalRes;
   // The MaxBitWidth of the function unit.
   const unsigned MaxBitWidth;
+  // Function unit cost for resource allocation and binding.
+  const unsigned Cost;
 
   VFUDesc(VFUs::FUTypes type, unsigned latency, unsigned startInt,
           unsigned totalRes, unsigned maxBitWidth)
     : ResourceType(type), Latency(latency), StartInt(startInt),
-    TotalRes(totalRes), MaxBitWidth(maxBitWidth) {}
+    TotalRes(totalRes), MaxBitWidth(maxBitWidth), Cost(~0) {}
+
 public:
   VFUDesc(VFUs::FUTypes type, luabind::object FUTable);
 
