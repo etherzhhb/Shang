@@ -61,6 +61,11 @@ static inline void PrintEscapedString(const char *Str, unsigned Length,
 static inline void PrintEscapedString(const std::string &Str, raw_ostream &Out) {
   PrintEscapedString(Str.c_str(), Str.size(), Out);
 }
+
+class Module;
+class TargetData;
+// Allow other pass to run script against the GlobalVariables.
+void bindGlobalVariablesToEngine(Module &M, TargetData *TD);
 }
 
 #endif

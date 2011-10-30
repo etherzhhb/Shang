@@ -14,6 +14,7 @@
 
 #include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Module.h"
 #include "llvm/DerivedTypes.h"
@@ -95,10 +96,7 @@ static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV) {
   OS << "}";
 }
 
-bool ScriptingPass::doInitialization(Module &M) {
-  TD = getAnalysisIfAvailable<TargetData>();
-  assert(TD && "TD not avaialbe?");
-
+void llvm::bindGlobalVariablesToEngine(Module &M, TargetData *TD) {
   SMDiagnostic Err;
   // Put the global variable information to the script engine.
   if (!runScriptStr("GlobalVariables = {}\n", Err))
@@ -109,7 +107,6 @@ bool ScriptingPass::doInitialization(Module &M) {
   // Push the global variable information into the script engine.
   for (Module::global_iterator GI = M.global_begin(), E = M.global_end();
        GI != E; ++GI ){
-
     GlobalVariable *GV = GI;
     // GlobalVariable information:
     // GVInfo {
@@ -148,7 +145,15 @@ bool ScriptingPass::doInitialization(Module &M) {
 
     Script.clear();
   }
+}
 
+bool ScriptingPass::doInitialization(Module &M) {
+  TD = getAnalysisIfAvailable<TargetData>();
+  assert(TD && "TD not avaialbe?");
+
+  bindGlobalVariablesToEngine(M, TD);
+
+  SMDiagnostic Err;
   // Run the script against the GlobalVariables table.
   if (!runScriptStr(GlobalScript, Err))
     report_fatal_error("In Scripting pass[" + PassName + "]:\n"
