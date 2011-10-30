@@ -105,6 +105,8 @@ public:
   void keepAllFiles();
 
   void init();
+  // Read the Function units information from script engine
+  void updateFUs();
   // Update the status of script engine after script run.
   void updateStatus();
 

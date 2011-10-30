@@ -159,15 +159,39 @@ void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs) {
   FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)]);
 }
 
-void LuaScript::updateStatus() {
+void LuaScript::updateFUs() {
   luabind::object FUs = luabind::globals(State)["FUs"];
   FUSet[VFUs::MemoryBus]
     = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
   FUSet[VFUs::BRam] = new VFUBRam(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
 
   initSimpleFU(VFUs::AddSub, FUs);
+  // Override the cost parameter if user provided.
+  if (unsigned AdderCost = FUSet[VFUs::AddSub]->getCost())
+    VFUs::AddCost = AdderCost;
+
   initSimpleFU(VFUs::Shift, FUs);
+  if (unsigned ShiftCost = FUSet[VFUs::Shift]->getCost())
+    VFUs::ShiftCost = ShiftCost;
+
   initSimpleFU(VFUs::Mult, FUs);
+  if (unsigned MulCost = FUSet[VFUs::Mult]->getCost())
+    VFUs::MulCost = MulCost;
+
+  // Read other cost.
+#define READCOST(COST) \
+  if (boost::optional<unsigned> COST \
+      = luabind::object_cast_nothrow<unsigned>(FUs[#COST])) \
+    VFUs::COST = COST.get();
+
+  READCOST(LUTCost);
+  READCOST(RegCost);
+  READCOST(MUXCost);
+  READCOST(MuxSizeCost);
+}
+
+void LuaScript::updateStatus() {
+  updateFUs();
 
   typedef luabind::iterator tab_it;
   for (tab_it I = tab_it(luabind::globals(State)["Functions"]), E = tab_it();

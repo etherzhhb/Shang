@@ -170,6 +170,7 @@ public:
   unsigned getTotalRes() const { return TotalRes; }
   unsigned getStartInt() const { return StartInt; }
   unsigned getMaxBitWidth() const { return MaxBitWidth; }
+  unsigned getCost() const { return Cost; }
 
   virtual void print(raw_ostream &OS) const;
 };
