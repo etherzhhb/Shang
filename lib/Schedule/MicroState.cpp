@@ -265,7 +265,7 @@ void ucOperand::print(raw_ostream &OS,
     OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     return;
   case MachineOperand::MO_GlobalAddress:
-    OS << "(`gv" << VBEMangle(getGlobal()->getNameStr()) << " + "
+    OS << "(`gv" << getGlobal()->getNameStr() << " + "
        << verilogConstToStr(getOffset(), getBitWidth(), false) << ')';
     return;
   default: break;

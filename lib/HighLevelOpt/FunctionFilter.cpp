@@ -62,13 +62,10 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
-  // We had to name the global variable with the counter, otherwise Verilator
-  // will complain about that the variable name is illegal.
-  unsigned gvcounter = 0;
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I){
     GlobalVariable *GV = I;
-    GV->setName("gv_" + utostr_32(gvcounter++));
+    GV->setName(VBEMangle(GV->getName()));
   }
 
   OwningPtr<Module> SoftMod(CloneModule(&M));
