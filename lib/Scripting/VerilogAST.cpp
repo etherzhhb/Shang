@@ -359,14 +359,12 @@ VASTModule::~VASTModule() {
   Allocator.Reset();
   SymbolTable.clear();
 
-  delete &(StateDecl.str());
   delete &(DataPath.str());
   delete &(ControlBlock.str());
 }
 
 void VASTModule::clear() {
   // Clear buffers
-  StateDecl.str().clear();
   DataPath.str().clear();
   ControlBlock.str().clear();
 }

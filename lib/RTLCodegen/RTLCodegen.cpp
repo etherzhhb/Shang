@@ -390,18 +390,9 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
-  // Dirty Hack: Disable the "Warning-WIDTH" from verilator.
-  // FIXME: We should only generate this when we are going to simulate the
-  // module with verilator.
-  Out << "/* verilator lint_off WIDTH */\n";
-
   // Write buffers to output
   VM->printModuleDecl(Out);
   Out.module_begin();
-  Out << "\n\n";
-  // States
-  Out << "// States\n";
-  Out << VM->getStateDeclStr();
   Out << "\n\n";
   // Reg and wire
   Out << "// Reg and wire decl\n";
@@ -420,7 +411,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   VM->printRegisterReset(Out);
   Out.else_begin();
-  //Out.switch_begin("NextFSMState");
   Out << VM->getControlBlockStr();
 
   VM->printSlotCtrls(Out);

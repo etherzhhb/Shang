@@ -324,7 +324,7 @@ public:
 private:
   // Dirty Hack:
   // Buffers
-  raw_string_ostream StateDecl, DataPath, ControlBlock;
+  raw_string_ostream DataPath, ControlBlock;
   vlang_raw_ostream LangControlBlock;
   PortVector Ports;
   SignalVector Signals;
@@ -356,7 +356,6 @@ public:
   };
 
   VASTModule(const std::string &Name) : VASTNode(vastModule, 0),
-    StateDecl(*(new std::string())),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     LangControlBlock(ControlBlock),
@@ -525,14 +524,6 @@ public:
   static inline bool classof(const VASTModule *A) { return true; }
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastModule;
-  }
-
-  raw_ostream &getStateDeclBuffer() {
-    return StateDecl;
-  }
-
-  std::string &getStateDeclStr() {
-    return StateDecl.str();
   }
 
   vlang_raw_ostream &getControlBlockBuffer() {
