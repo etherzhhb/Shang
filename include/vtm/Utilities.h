@@ -12,9 +12,10 @@
 //===----------------------------------------------------------------------===//
 #ifndef VTM_UTILITIES_H
 #define VTM_UTILITIES_H
-
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Compiler.h"
 
 namespace llvm {
 static inline unsigned getByteEnable(unsigned SizeInBytes) {
@@ -64,8 +65,19 @@ static inline void PrintEscapedString(const std::string &Str, raw_ostream &Out) 
 
 class Module;
 class TargetData;
+class SMDiagnostic;
 // Allow other pass to run script against the GlobalVariables.
-void bindGlobalVariablesToEngine(Module &M, TargetData *TD);
+bool runScriptOnGlobalVariables(Module &M, TargetData *TD,
+                                const std::string &Script,
+                                SMDiagnostic Err);
+class VASTModule;
+// Bind VASTModule to script engine.
+void bindToScriptEngine(const char *name, VASTModule *M);
+bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
+bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
+//
+unsigned getIntValueFromEngine(ArrayRef<const char*> Path);
+std::string getStrValueFromEngine(ArrayRef<const char*> Path);
 }
 
 #endif

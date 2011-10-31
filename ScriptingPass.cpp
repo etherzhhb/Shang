@@ -49,12 +49,6 @@ struct ScriptingPass : public MachineFunctionPass {
 
 char ScriptingPass::ID = 0;
 
-//Dirty Hack: Invoke the functions from the scripting library, which compile
-// with rtti.
-void bindToScriptEngine(const char *name, VASTModule *M);
-bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err);
-bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
-
 static void ExtractConstant(raw_ostream &OS, Constant *C) {
   if (ConstantInt *CI = dyn_cast<ConstantInt>(C)) {
     const Type* Ty = CI->getType();
@@ -96,8 +90,9 @@ static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV) {
   OS << "}";
 }
 
-void llvm::bindGlobalVariablesToEngine(Module &M, TargetData *TD) {
-  SMDiagnostic Err;
+bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
+                                      const std::string &ScriptToRun,
+                                      SMDiagnostic Err) {
   // Put the global variable information to the script engine.
   if (!runScriptStr("GlobalVariables = {}\n", Err))
     llvm_unreachable("Cannot create globalvariable table in scripting pass!");
@@ -145,20 +140,19 @@ void llvm::bindGlobalVariablesToEngine(Module &M, TargetData *TD) {
 
     Script.clear();
   }
+
+  // Run the script against the GlobalVariables table.
+  return runScriptStr(ScriptToRun, Err);
 }
 
 bool ScriptingPass::doInitialization(Module &M) {
   TD = getAnalysisIfAvailable<TargetData>();
   assert(TD && "TD not avaialbe?");
 
-  bindGlobalVariablesToEngine(M, TD);
-
   SMDiagnostic Err;
-  // Run the script against the GlobalVariables table.
-  if (!runScriptStr(GlobalScript, Err))
+  if (!runScriptOnGlobalVariables(M, TD, GlobalScript, Err))
     report_fatal_error("In Scripting pass[" + PassName + "]:\n"
                        + Err.getMessage());
-
 
   return false;
 }

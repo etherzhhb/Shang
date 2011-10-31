@@ -15,6 +15,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/LuaScript.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/PassManager.h"
 #include "llvm/Support/raw_ostream.h"
@@ -93,6 +94,8 @@ void LuaScript::init() {
   luabind::globals(State)["Modules"] = luabind::newtable(State);
   // The scripting pass table.
   luabind::globals(State)["Passes"] = luabind::newtable(State);
+  // Table for Miscellaneous information
+  luabind::globals(State)["Misc"] = luabind::newtable(State);
 }
 
 bool LuaScript::runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
@@ -115,8 +118,7 @@ bool LuaScript::runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) 
   return true;
 }
 
-raw_ostream &LuaScript::getOutputStream(const std::string &Name) {
-
+raw_ostream &LuaScript::getOutputStream(const char *Name) {
   std::string Path = getValueStr(Name);
 
   // Try to return the existing file.
@@ -248,14 +250,22 @@ LuaScript &llvm::scriptEngin() {
 
 // Dirty Hack: Allow we invoke some scripting function in the libraries
 // compiled with no-rtti
-void bindToScriptEngine(const char *name, VASTModule *M) {
+void llvm::bindToScriptEngine(const char *name, VASTModule *M) {
   Script->bindToGlobals(name, M);
 }
 
-bool runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) {
+unsigned llvm::getIntValueFromEngine(ArrayRef<const char*> Path) {
+  return Script->getValue<unsigned>(Path);
+}
+
+std::string llvm::getStrValueFromEngine(ArrayRef<const char*> Path) {
+  return Script->getValue<std::string>(Path);
+}
+
+bool llvm::runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) {
   return Script->runScriptFile(ScriptPath, Err);
 }
 
-bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
+bool llvm::runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
   return Script->runScriptStr(ScriptStr, Err);
 }

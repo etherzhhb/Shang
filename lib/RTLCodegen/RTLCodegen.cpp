@@ -46,6 +46,7 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/SourceMgr.h"
 #define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
@@ -343,18 +344,16 @@ bool RTLCodegen::doInitialization(Module &Mod) {
   Mang = new Mangler(MMI->getContext(), *TD);
   M = &Mod;
 
-  // Define the blockram base address.
-  Out << "`ifdef __VERILATOR_SIM\n";
-  for(Module::global_iterator GI = Mod.global_begin(), E = Mod.global_end();
-      GI != E; ++GI){
-      Out << "import \"DPI-C\" function chandle vlt_"
-          << VBEMangle(GI->getNameStr()) << "();\n";
+  SMDiagnostic Err;
+  const char *GlobalScriptPath[] = { "Misc", "RTLGlobalScript" };
+  std::string GlobalScript = getStrValueFromEngine(GlobalScriptPath);
+  if (!runScriptOnGlobalVariables(Mod, TD, GlobalScript, Err))
+    report_fatal_error("RTLCodegen: Cannot run globalvariable script:\n"
+                        + Err.getMessage());
 
-      Out << "`define gv" << VBEMangle(GI->getNameStr())
-          << " vlt_" << VBEMangle(GI->getNameStr()) << "()\n";
-  }
-
-  Out << "`endif\n\n\n";
+  const char *GlobalCodePath[] = { "RTLGlobalCode" };
+  std::string GlobalCode = getStrValueFromEngine(GlobalCodePath);
+  Out << GlobalCode << '\n';
 
   return false;
 }

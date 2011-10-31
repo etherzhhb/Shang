@@ -21,6 +21,7 @@
 #include "llvm/Function.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/IndexedMap.h"
+#include "llvm/ADT/ArrayRef.h"
 
 // This is the only header we need to include for LuaBind to work
 #include "luabind/luabind.hpp"
@@ -70,9 +71,12 @@ public:
   }
 
   template<class T>
-  T getValue(const std::string &Name) const {
-    boost::optional<T> Res =
-      luabind::object_cast_nothrow<T>(luabind::globals(State)[Name]);
+  T getValue(ArrayRef<const char*> Path) const {
+    luabind::object o = luabind::globals(State);
+    for (unsigned i = 0; i < Path.size(); ++i)
+      o = o[Path[i]];
+
+    boost::optional<T> Res = luabind::object_cast_nothrow<T>(o);
 
     // If the value not found, just construct then with default constructor.
     if (!Res) return T();
@@ -80,12 +84,23 @@ public:
     return Res.get();
   }
 
-  luabind::object getModTemplate(const std::string &Name) const {
-    return luabind::globals(State)["Modules"][Name];
+  template<class T>
+  T getValue(const char *Name) {
+    const char *Path[] = { Name };
+    return getValue<T>(Path);
+  }
+
+  std::string getValueStr(const char *Name) const {
+    const char *Path[] = { Name };
+    return getValue<std::string>(Path);
   }
 
   std::string getValueStr(const std::string &Name) const {
-    return getValue<std::string>(Name);
+    return getValueStr(Name.c_str());
+  }
+
+  luabind::object getModTemplate(const std::string &Name) const {
+    return luabind::globals(State)["Modules"][Name];
   }
 
   // Iterator to iterate over all user scripting pass from the constraint script.
@@ -99,7 +114,7 @@ public:
     return scriptpass_it();
   }
 
-  raw_ostream &getOutputStream(const std::string &Name);
+  raw_ostream &getOutputStream(const char *Name);
   raw_ostream &getOutputFileStream(std::string &Name);
 
   void keepAllFiles();
@@ -117,7 +132,6 @@ public:
 };
 
 LuaScript &scriptEngin();
-
 }
 
 #endif
