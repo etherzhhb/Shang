@@ -36,7 +36,7 @@ static SDValue EmitMemSCM(unsigned Cmd, SelectionDAG &DAG, DebugLoc dl,
                      Chain,
                      // Dst pointer and num.
                      Op1, Op3,
-                     // CMD MEMSET
+                     // CMD
                      DAG.getTargetConstant(Cmd, CmdVT),
                      // Byte enable.
                      DAG.getTargetConstant(VFUMemBus::SeqBegin, MVT::i8)};
@@ -69,7 +69,7 @@ static SDValue EmitMemSCM(unsigned Cmd, SelectionDAG &DAG, DebugLoc dl,
     SDOps[2] = DAG.getTargetConstant(0, EVT::getIntegerVT(*Cntx, DataWidth));
   }
 
-  SDOps[4] = DAG.getTargetConstant(Cmd, MVT::i8);
+  SDOps[4] = DAG.getTargetConstant(VFUMemBus::SeqEnd, MVT::i8);
 
   SDValue MemsetCmd1  =
     DAG.getMemIntrinsicNode(VTMISD::MemAccess, dl,
