@@ -262,7 +262,8 @@ class VSUnit {
   /// The corresponding Instructions - We may store several instruction inside
   /// the same schedule unit, so we can clamp them in a same slot.
   SmallVector<MachineInstr*, 8> Instrs;
-  // Latency from representative instruction.
+  // Latency from representative instruction, the latency of the SUnit is store
+  // in latencies[0].
   SmallVector<int8_t, 8> latencies;
 
   friend class VSchedGraph;
@@ -395,6 +396,7 @@ public:
   // Get the latency from RepresentativeInst to MI.
   int8_t getLatencyFor(MachineInstr *MI) const;
   int8_t getLatencyAt(unsigned Idx) const {
+    assert(Idx && "Cannot get latency at index 0!");
     return latencies[Idx];
   }
 
@@ -421,14 +423,18 @@ public:
   const_instr_iterator instr_begin() const { return Instrs.begin(); }
   const_instr_iterator instr_end()   const { return Instrs.end(); }
 
+  MachineInstr *instr_back() const { return Instrs.back(); }
+
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return getRepresentativeInst() == 0; }
 
   unsigned getLatency() const {
-    if (isEntry()) return 0;
+    return latencies.front();
+  }
 
-    VIDesc Info = *getRepresentativeInst();
-    return Info.getLatency();
+  void setLatency(unsigned L) {
+    latencies[0] = L;
+    assert(getLatency() == L && "Latency overflow!");
   }
 
   unsigned getSlot() const { return SchedSlot.getSlot(); }

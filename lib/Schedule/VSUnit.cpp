@@ -55,11 +55,12 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 }
 
 VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
-  VSUnit *SU = new VSUnit(VIDesc(*I).hasDatapath(), SUCount, fuid);
+  VIDesc VTID(*I);
+  VSUnit *SU = new VSUnit(VTID.hasDatapath(), SUCount, fuid);
   ++SUCount;
 
   SUnits.push_back(SU);
-  mapMI2SU(I, SU, 0);
+  mapMI2SU(I, SU, VTID.getLatency());
   return SU;
 }
 
@@ -261,7 +262,7 @@ bool VSUnit::hasDatapath() const {
 int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
   const_instr_iterator at = std::find(instr_begin(), instr_end(), MI);
   assert(at != instr_end() && "Instruction not exist!");
-  return latencies[at - instr_begin()];
+  return getLatencyAt(at - instr_begin());
 }
 
 unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
