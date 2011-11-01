@@ -70,11 +70,12 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
-
+  // Remember the last cmd seq.
+  VSUnit *LastCmdSeq;
   // Terminators in a MBB.
   SmallVector<MachineInstr*, 2> Terms;
 
-  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1) {}
+  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1), LastCmdSeq(0) {}
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
@@ -197,8 +198,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   unsigned getTotalCycleBitWidth() const {
     return Log2_32_Ceil(totalCycle);
   }
-
-  void incTotalCycle() { ++totalCycle; }
 
   const char *getPassName() const {
     return "Schedule Hardware Operations for Verilog Backend";
@@ -685,6 +684,8 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     return;
   }
 
+  bool isCmdSeq = false;
+
   switch (MI->getOpcode()) {
   default: break;
   case VTM::VOpBitSlice:
@@ -710,12 +711,16 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     if (mergeBitCat(MI, CurState))
       return;
     break;
-  case VTM::VOpMemTrans:
+  case VTM::VOpCmdSeq:
+    isCmdSeq = true;
     // Merge the command sequence.
-    if (VInstrInfo::isCmdSeq(MI) && !VInstrInfo::isCmdSeqBegin(MI)) {
-      MachineInstr *PrevMI = MI->getPrevNode();
+    if (!VInstrInfo::isCmdSeqBegin(MI)) {
+      MachineInstr *PrevMI = LastCmdSeq->instr_back();
       if (VInstrInfo::isInSameCmdSeq(PrevMI, MI)) {
-        CurState.mapMI2SU(MI, CurState.lookupSUnit(PrevMI), /*DirtyHack*/1);
+        VSUnit *U = CurState.lookupSUnit(PrevMI);
+        CurState.mapMI2SU(MI, U, /*DirtyHack*/1);
+        // Increase the latency
+        U->setLatency(U->getLatency() + 1);
         return;
       }
     }
@@ -727,7 +732,9 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  CurState.createVSUnit(MI, Id.getFUNum());
+  VSUnit *U = CurState.createVSUnit(MI, Id.getFUNum());
+  // Remember the new command sequence.
+  if (isCmdSeq) LastCmdSeq = U;
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState) {
