@@ -222,6 +222,8 @@ public:
   inline static std::string getReadyName(unsigned FUNum) {
     return "mem" + utostr(FUNum) + "rdy";
   }
+
+  static const int CMDWidth = 4;
 };
 
 template<enum VFUs::FUTypes T>

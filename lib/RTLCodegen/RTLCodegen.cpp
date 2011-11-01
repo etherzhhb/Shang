@@ -163,7 +163,7 @@ class RTLCodegen : public MachineFunctionPass {
     void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
       S << addSubModulePort(VFUMemBus::getEnableName(BusNum), 1, SubModuleName,
                             true, true);
-      S << addSubModulePort(VFUMemBus::getCmdName(BusNum), 4,
+      S << addSubModulePort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
                             SubModuleName);
       S << addSubModulePort(VFUMemBus::getAddrBusName(BusNum),
                             Bus->getAddrWidth(), SubModuleName);
@@ -189,7 +189,7 @@ class RTLCodegen : public MachineFunctionPass {
       VM->setFUPortBegin(ID);
       // Control ports.
       createOutputPort(VFUMemBus::getEnableName(BusNum), 1, true);
-      createOutputPort(VFUMemBus::getCmdName(BusNum), 4);
+      createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth);
 
       // Address port.
       createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth());
