@@ -50,9 +50,6 @@
 #define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
-#include <iostream>
-
-
 using namespace llvm;
 STATISTIC(TotalRegisterBits,
           "Number of total register bits in synthesised modules");
