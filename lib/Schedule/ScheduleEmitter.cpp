@@ -400,6 +400,11 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     // And remove the trace number, too.
     Inst.RemoveOperand(PredIdx);
   }
+  // Opcode for the later copy op.
+  unsigned CopyOpC = VTM::VOpReadFU;
+  // Do not need the ready signal except command sequence end.
+  if (VInstrInfo::isCmdSeq(Inst.getOpcode()) && !VInstrInfo::isCmdSeqEnd(&Inst))
+    CopyOpC = VTM::ImpUse;
 
   unsigned NumOperands = Inst.getNumOperands();
   // FIXME: Use pointer operand.
@@ -497,7 +502,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     if (WD->shouldBeCopied()) {
       unsigned Slot = CopySlot.getSlot();
       // Export the register.
-      Ops.push_back(ucOperand::CreateOpcode(VTM::VOpReadFU, Slot, FUId));
+      Ops.push_back(ucOperand::CreateOpcode(CopyOpC, Slot, FUId));
       // Get the operand at current slot.
       Ops.push_back(getRegUseOperand(WD->Pred, CopySlot));
       MO.setIsDef();
