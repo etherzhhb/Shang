@@ -746,6 +746,30 @@ bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
          && VID.hasDatapath() && VID.hasTrivialFU();
 }
 
+bool VInstrInfo::isCmdSeq(const MachineInstr *MI) {
+  assert(MI->getOpcode() == VTM::VOpMemTrans && "Unexpected opcode!");
+
+  if (MI->getOperand(3).getImm() < VFUMemBus::CmdFirstNoLoadStore)
+    return false;
+
+  return true;
+}
+
+bool VInstrInfo::isInSameCmdSeq(const MachineInstr *PrevMI,
+                                const MachineInstr *MI) {
+  assert(PrevMI->getOperand(3).getImm() == MI->getOperand(3).getImm()
+         && "Bad command sequence!");
+  return !isCmdSeqBegin(MI);
+}
+
+bool VInstrInfo::isCmdSeqBegin(const MachineInstr *MI) {
+  return isCmdSeq(MI) && MI->getOperand(4).getImm() == VFUMemBus::SeqBegin;
+}
+
+bool VInstrInfo::isCmdSeqEnd(const MachineInstr *MI) {
+  return isCmdSeq(MI) && MI->getOperand(4).getImm() == VFUMemBus::SeqEnd;
+}
+
 unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
                                     const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");

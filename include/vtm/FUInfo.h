@@ -224,6 +224,18 @@ public:
   }
 
   static const int CMDWidth = 4;
+
+  enum Cmds {
+    // Load and store.
+    CmdLoad = 0, CmdStore = 1,
+    CmdFirstNoLoadStore = 2,
+    // Memset/Memcopy/Memmove
+    CmdMemSCM = 2
+  };
+
+  enum CmdSeqs {
+    SeqBegin = 0, Seq = 1, SeqEnd = 2
+  };
 };
 
 template<enum VFUs::FUTypes T>

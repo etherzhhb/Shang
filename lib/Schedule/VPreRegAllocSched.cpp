@@ -710,6 +710,16 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     if (mergeBitCat(MI, CurState))
       return;
     break;
+  case VTM::VOpMemTrans:
+    // Merge the command sequence.
+    if (VInstrInfo::isCmdSeq(MI) && !VInstrInfo::isCmdSeqBegin(MI)) {
+      MachineInstr *PrevMI = MI->getPrevNode();
+      if (VInstrInfo::isInSameCmdSeq(PrevMI, MI)) {
+        CurState.mapMI2SU(MI, CurState.lookupSUnit(PrevMI), /*DirtyHack*/1);
+        return;
+      }
+    }
+    break;
   }
 
   VIDesc VTID = *MI;
