@@ -199,157 +199,7 @@ std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num, unsigned
   return scriptEngin().getValueStr(ResultName);
 }
 
-raw_ostream &VFUBRam::printType(raw_ostream &Out, const Type *Ty,
-  bool isSigned, const std::string &NameSoFar,
-  bool IgnoreName, const AttrListPtr &PAL) {
-    if (Ty->isPrimitiveType() || Ty->isIntegerTy() || Ty->isVectorTy()) {
-      printSimpleType(Out, Ty, isSigned, NameSoFar);
-      return Out;
-    }
 
-    // Check to see if the type is named.
-    //if (!IgnoreName || Ty->isOpaqueTy()) {
-    //  assert(0 && "Unsupported Type!");
-    //  return Out << "Bad type!";
-    //}
-
-    switch (Ty->getTypeID()) {
-    case Type::FunctionTyID: {
-      const FunctionType *FTy = cast<FunctionType>(Ty);
-      std::string tstr;
-      raw_string_ostream FunctionInnards(tstr);
-      FunctionInnards << " (" << NameSoFar << ") (";
-      unsigned Idx = 1;
-      for (FunctionType::param_iterator I = FTy->param_begin(),
-        E = FTy->param_end(); I != E; ++I) {
-          const Type *ArgTy = *I;
-          if (PAL.paramHasAttr(Idx, Attribute::ByVal)) {
-            assert(ArgTy->isPointerTy());
-            ArgTy = cast<PointerType>(ArgTy)->getElementType();
-          }
-          if (I != FTy->param_begin())
-            FunctionInnards << ", ";
-          printType(FunctionInnards, ArgTy,
-            /*isSigned=*/PAL.paramHasAttr(Idx, Attribute::SExt), "");
-          ++Idx;
-      }
-      if (FTy->isVarArg()) {
-        if (!FTy->getNumParams())
-          FunctionInnards << " int"; //dummy argument for empty vaarg functs
-        FunctionInnards << ", ...";
-      } else if (!FTy->getNumParams()) {
-        FunctionInnards << "void";
-      }
-      FunctionInnards << ')';
-      printType(Out, FTy->getReturnType(),
-        /*isSigned=*/PAL.paramHasAttr(0, Attribute::SExt), FunctionInnards.str());
-      return Out;
-                             }
-    case Type::StructTyID: {
-      const StructType *STy = cast<StructType>(Ty);
-      Out << NameSoFar + " {\n";
-      unsigned Idx = 0;
-      for (StructType::element_iterator I = STy->element_begin(),
-        E = STy->element_end(); I != E; ++I) {
-          Out << "  ";
-          printType(Out, *I, false, "field" + utostr(Idx++));
-          Out << ";\n";
-      }
-      Out << '}';
-      if (STy->isPacked())
-        Out << " __attribute__ ((packed))";
-      return Out;
-                           }
-
-    case Type::PointerTyID: {
-      const PointerType *PTy = cast<PointerType>(Ty);
-      std::string ptrName = "*" + NameSoFar;
-
-      //if (PTy->getElementType()->isArrayTy() ||
-      //   PTy->getElementType()->isVectorTy())
-      //ptrName = "(" + ptrName + ")";
-
-      if (!PAL.isEmpty())
-        // Must be a function ptr cast!
-        return printType(Out, PTy->getElementType(), false, ptrName, true, PAL);
-      return printType(Out, PTy->getElementType(), false, ptrName);
-                            }
-
-    case Type::ArrayTyID: {
-      const ArrayType *ATy = cast<ArrayType>(Ty);
-      unsigned NumElements = ATy->getNumElements();
-      if (NumElements == 0) NumElements = 1;
-      // Arrays are wrapped in structs to allow them to have normal
-      // value semantics (avoiding the array "decay").
-      //Out << NameSoFar << " { ";
-      printType(Out, ATy->getElementType(), false,
-        NameSoFar+"[" + utostr(NumElements) + "]");
-      return Out;// << "; }";
-                          }
-
-    case Type::OpaqueTyID: {
-      assert(0 && "Unsupported Type!");
-      return Out << "Bad type!";
-                           }
-    default:
-      llvm_unreachable("Unhandled case in getTypeProps!");
-    }
-
-    return Out;
-}
-
-raw_ostream &VFUBRam::printSimpleType(raw_ostream &Out, const Type *Ty,
-  bool isSigned,
-  const std::string &NameSoFar) {
-    assert((Ty->isPrimitiveType() || Ty->isIntegerTy() || Ty->isVectorTy()) &&
-      "Invalid type for printSimpleType");
-    switch (Ty->getTypeID()) {
-    case Type::VoidTyID:   return Out << "void " << NameSoFar;
-    case Type::IntegerTyID: {
-      unsigned NumBits = cast<IntegerType>(Ty)->getBitWidth();
-      if (NumBits == 1)
-        return Out << "bool " << NameSoFar;
-      else if (NumBits <= 8)
-        return Out << (isSigned?"signed":"unsigned") << " char " << NameSoFar;
-      else if (NumBits <= 16)
-        return Out << (isSigned?"signed":"unsigned") << " short " << NameSoFar;
-      else if (NumBits <= 32)
-        return Out << (isSigned?"signed":"unsigned") << " int " << NameSoFar;
-      else if (NumBits <= 64)
-        return Out << (isSigned?"signed":"unsigned") << " long long "<< NameSoFar;
-      else {
-        assert(NumBits <= 128 && "Bit widths > 128 not implemented yet");
-        return Out << (isSigned?"llvmInt128":"llvmUInt128") << " " << NameSoFar;
-      }
-                            }
-    case Type::FloatTyID:  return Out << "float "   << NameSoFar;
-    case Type::DoubleTyID: return Out << "double "  << NameSoFar;
-      // Lacking emulation of FP80 on PPC, etc., we assume whichever of these is
-      // present matches host 'long double'.
-    case Type::X86_FP80TyID:
-    case Type::PPC_FP128TyID:
-    case Type::FP128TyID:  return Out << "long double " << NameSoFar;
-
-    case Type::X86_MMXTyID:
-      return printSimpleType(Out, Type::getInt32Ty(Ty->getContext()), isSigned,
-        " __attribute__((vector_size(64))) " + NameSoFar);
-
-    case Type::VectorTyID: {
-      assert(0 && "Unsupported Type!");
-      return Out << "Bad type!";
-      //const VectorType *VTy = cast<VectorType>(Ty);
-      //return printSimpleType(Out, VTy->getElementType(), isSigned,
-      //                 " __attribute__((vector_size(" +
-      //                 utostr(TD->getTypeAllocSize(VTy)) + " ))) " + NameSoFar);
-                           }
-
-    default:
-#ifndef NDEBUG
-      errs() << "Unknown primitive type: " << *Ty << "\n";
-#endif
-      llvm_unreachable(0);
-    }
-}
 
 void VFUBRam::printConstantArray(raw_ostream &Out, ConstantArray *CPA, 
   unsigned DataWidth, bool Static) {
@@ -361,58 +211,9 @@ void VFUBRam::printConstantArray(raw_ostream &Out, ConstantArray *CPA,
       ETy == Type::getInt8Ty(CPA->getContext())); 
 
     // Make sure the last character is a null char, as automatically added by C
-    if (isString && (CPA->getNumOperands() == 0 ||
+    /*if (isString && (CPA->getNumOperands() == 0 ||
       !cast<Constant>(*(CPA->op_end()-1))->isNullValue()))
-      isString = false;
-
-    //if (isString) {
-    //  Out << '\"';
-    //  // Keep track of whether the last number was a hexadecimal escape
-    //  bool LastWasHex = false;
-
-    //  // Do not include the last character, which we know is null
-    //  for (unsigned i = 0, e = CPA->getNumOperands()-1; i != e; ++i) {
-    //    unsigned char C = cast<ConstantInt>(CPA->getOperand(i))->getZExtValue();
-
-    //    // Print it out literally if it is a printable character.  The only thing
-    //    // to be careful about is when the last letter output was a hex escape
-    //    // code, in which case we have to be careful not to print out hex digits
-    //    // explicitly (the C compiler thinks it is a continuation of the previous
-    //    // character, sheesh...)
-    //    //
-    //    if (isprint(C) && (!LastWasHex || !isxdigit(C))) {
-    //      LastWasHex = false;
-    //      if (C == '"' || C == '\\')
-    //        Out << "\\" << (char)C;
-    //      else
-    //        Out << (char)C;
-    //    } else {
-    //      LastWasHex = false;
-    //      switch (C) {
-    //      case '\n': Out << "\\n"; break;
-    //      case '\t': Out << "\\t"; break;
-    //      case '\r': Out << "\\r"; break;
-    //      case '\v': Out << "\\v"; break;
-    //      case '\a': Out << "\\a"; break;
-    //      case '\"': Out << "\\\""; break;
-    //      case '\'': Out << "\\\'"; break;
-    //      default:
-    //        Out << "\\x";
-    //        Out << (char)(( C/16  < 10) ? ( C/16 +'0') : ( C/16 -10+'A'));
-    //        Out << (char)(((C&15) < 10) ? ((C&15)+'0') : ((C&15)-10+'A'));
-    //        LastWasHex = true;
-    //        break;
-    //      }
-    //    }
-    //  }
-    //  Out << '\"';
-    //} else {
-    if (CPA->getNumOperands()) {
-      printConstant(Out, cast<Constant>(CPA->getOperand(0)), DataWidth, Static);
-      for (unsigned i = 1, e = CPA->getNumOperands(); i != e; ++i) {
-        Out << "\n";
-        printConstant(Out, cast<Constant>(CPA->getOperand(i)), DataWidth, Static);
-      }
+      isString = false;*/
     }
     //   }
 }
@@ -426,41 +227,22 @@ void VFUBRam::printConstant(raw_ostream &Out, Constant *CPV,
         tempstr = (CI->getZExtValue() ? '1' : '0');
       }
       else {
+ /* if (ConstantInt *CI = dyn_cast<ConstantInt>(CPV)) {
+    const Type* Ty = CI->getType();
+    std::string tempstr;
+    if (Ty == Type::getInt1Ty(CPV->getContext()))
+      tempstr = (CI->getZExtValue() ? '1' : '0');
+    else if (Ty == Type::getInt32Ty(CPV->getContext()))
+      tempstr = utohexstr(CI->getZExtValue());
+    else if (Ty->getPrimitiveSizeInBits() > 32)
+      tempstr = utohexstr(CI->getZExtValue());
+    else {
+      if (CI->isMinValue(true))
+        tempstr = utohexstr(CI->getZExtValue());
+      else
         tempstr = utohexstr(CI->getSExtValue());
-      }
-
-      if (tempstr.size() > DataWidth/4) {
-        std::string str(tempstr.end()-DataWidth/4, tempstr.end());
-        Out << str;
-      } else {
-        Out << tempstr;
-      }
-      return;
     }*/
 
-    if (ConstantInt *CI = dyn_cast<ConstantInt>(CPV)) {
-      const Type* Ty = CI->getType();
-      std::string tempstr;
-      if (Ty == Type::getInt1Ty(CPV->getContext()))
-        tempstr = (CI->getZExtValue() ? '1' : '0');
-      else if (Ty == Type::getInt32Ty(CPV->getContext()))
-        tempstr = utohexstr(CI->getZExtValue());
-      else if (Ty->getPrimitiveSizeInBits() > 32)
-        tempstr = utohexstr(CI->getZExtValue());
-      else {
-        if (CI->isMinValue(true))
-          tempstr = utohexstr(CI->getZExtValue());
-        else
-          tempstr = utohexstr(CI->getSExtValue());
-      }
-
-      if (tempstr.size() > DataWidth/4) {
-        std::string str(tempstr.end()-DataWidth/4, tempstr.end());
-        Out << str;
-      } else {
-        Out << tempstr;
-      }
-      return;
     }
 
     switch (CPV->getType()->getTypeID()) {
