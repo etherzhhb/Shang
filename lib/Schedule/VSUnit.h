@@ -438,7 +438,7 @@ public:
   }
 
   unsigned getSlot() const { return SchedSlot.getSlot(); }
-  unsigned getDetailStep() const {return SchedSlot.getDetailStep(); }
+  unsigned getDetailStep() const { return SchedSlot.getDetailStep(); }
 
   bool isScheduled() const { return SchedSlot.getSlot() != 0; }
   void scheduledTo(unsigned slot);
