@@ -229,8 +229,8 @@ public:
     // Load and store.
     CmdLoad = 0, CmdStore = 1,
     CmdFirstNoLoadStore = 2,
-    // Memset/Memcopy/Memmove
-    CmdMemSCM = 2
+    // Memset/Memcpy/Memmove
+    CmdMemSet = 2, CmdMemCpy = 3, CmdMemMove = 4
   };
 
   enum CmdSeqs {

@@ -24,13 +24,11 @@ VSelectionDAGInfo::VSelectionDAGInfo(const VTargetMachine &TM)
 VSelectionDAGInfo::~VSelectionDAGInfo() {
 }
 
-SDValue
-VSelectionDAGInfo::EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
-                                           SDValue Chain,
-                                           SDValue Op1, SDValue Op2,
-                                           SDValue Op3, unsigned Align,
-                                           bool isVolatile,
-                                           MachinePointerInfo DstPtrInfo) const{
+static SDValue EmitMemSCM(unsigned Cmd, SelectionDAG &DAG, DebugLoc dl,
+                          SDValue Chain, SDValue Op1, SDValue Op2, SDValue Op3,
+                          unsigned Align, bool isVolatile,
+                          MachinePointerInfo DstPtrInfo,
+                          MachinePointerInfo SrcPtrInfo) {
   // Emit the memset command on the membus.
   LLVMContext *Cntx = DAG.getContext();
   EVT CmdVT = EVT::getIntegerVT(*Cntx, VFUMemBus::CMDWidth);
@@ -39,7 +37,7 @@ VSelectionDAGInfo::EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
                      // Dst pointer and num.
                      Op1, Op3,
                      // CMD MEMSET
-                     DAG.getTargetConstant(VFUMemBus::CmdMemSCM, CmdVT),
+                     DAG.getTargetConstant(Cmd, CmdVT),
                      // Byte enable.
                      DAG.getTargetConstant(VFUMemBus::SeqBegin, MVT::i8)};
   
@@ -60,11 +58,18 @@ VSelectionDAGInfo::EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
   unsigned AddrWidth = getFUDesc<VFUMemBus>()->getAddrWidth();
 
   SDOps[0] = MemsetCmd0.getValue(1);
-  SDOps[1] = DAG.getTargetConstant(0, EVT::getIntegerVT(*Cntx, AddrWidth));
-  // Value, according to memset fills the block of memory using the
-  // unsigned char conversion of this value.
-  SDOps[2] = VTargetLowering::getTruncate(DAG, dl, Op2, 8);
-  SDOps[4] = DAG.getTargetConstant(VFUMemBus::SeqEnd, MVT::i8);
+  if (Cmd == VFUMemBus::CmdMemSet) {
+    SDOps[1] = DAG.getTargetConstant(0, EVT::getIntegerVT(*Cntx, AddrWidth));
+    // Value, according to memset fills the block of memory using the
+    // unsigned char conversion of this value.
+    SDOps[2] = VTargetLowering::getTruncate(DAG, dl, Op2, 8);
+  } else {
+    // Source pointer.
+    SDOps[1] = Op2;
+    SDOps[2] = DAG.getTargetConstant(0, EVT::getIntegerVT(*Cntx, DataWidth));
+  }
+
+  SDOps[4] = DAG.getTargetConstant(Cmd, MVT::i8);
 
   SDValue MemsetCmd1  =
     DAG.getMemIntrinsicNode(VTMISD::MemAccess, dl,
@@ -73,8 +78,45 @@ VSelectionDAGInfo::EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
                             // SDValue operands
                             SDOps, array_lengthof(SDOps),
                             // Memory operands.
-                            /*FIXME*/MVT::i8, DstPtrInfo, Align, isVolatile,
+                            /*FIXME*/MVT::i8, SrcPtrInfo, Align, isVolatile,
                             false, true);
   // Return the chain.
   return MemsetCmd1.getValue(1);
+}
+
+SDValue
+VSelectionDAGInfo::EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
+                                           SDValue Chain,
+                                           SDValue Op1, SDValue Op2,
+                                           SDValue Op3, unsigned Align,
+                                           bool isVolatile,
+                                           MachinePointerInfo DstPtrInfo) const{
+  return EmitMemSCM(VFUMemBus::CmdMemSet, DAG, dl,
+                    Chain, Op1, Op2, Op3,
+                    Align, isVolatile, DstPtrInfo, MachinePointerInfo());
+}
+
+SDValue
+VSelectionDAGInfo::EmitTargetCodeForMemcpy(SelectionDAG &DAG, DebugLoc dl,
+                                           SDValue Chain,
+                                           SDValue Op1, SDValue Op2,
+                                           SDValue Op3, unsigned Align,
+                                           bool isVolatile, bool AlwaysInline,
+                                           MachinePointerInfo DstPtrInfo,
+                                           MachinePointerInfo SrcPtrInfo) const{
+  return EmitMemSCM(VFUMemBus::CmdMemCpy, DAG, dl,
+                    Chain, Op1, Op2, Op3,
+                    Align, isVolatile, DstPtrInfo, SrcPtrInfo);
+}
+
+SDValue
+VSelectionDAGInfo::EmitTargetCodeForMemmove(SelectionDAG &DAG, DebugLoc dl,
+                                            SDValue Chain,
+                                            SDValue Op1, SDValue Op2,
+                                            SDValue Op3, unsigned Align, bool isVolatile,
+                                            MachinePointerInfo DstPtrInfo,
+                                            MachinePointerInfo SrcPtrInfo)const{
+  return EmitMemSCM(VFUMemBus::CmdMemMove, DAG, dl,
+                    Chain, Op1, Op2, Op3,
+                    Align, isVolatile, DstPtrInfo, SrcPtrInfo);
 }
