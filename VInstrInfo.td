@@ -139,6 +139,7 @@ let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
   multiclass MoveInst {
+  let isMoveImm = 1 in
     def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [], 0, 1>;
     def _rr : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [], 0, 1>;
     def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
