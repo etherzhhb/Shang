@@ -333,8 +333,9 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
                     N->getOperand(0) };
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
-
-  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpMemTrans, N->getVTList(),
+  unsigned Opc = VInstrInfo::isCmdSeq(N->getConstantOperandVal(3)) ?
+                 VTM::VOpCmdSeq : VTM::VOpMemTrans;
+  SDNode *Ret = CurDAG->SelectNodeTo(N, Opc, N->getVTList(),
                                      Ops, array_lengthof(Ops));
 
   cast<MachineSDNode>(Ret)->setMemRefs(MemOp, MemOp + 1);

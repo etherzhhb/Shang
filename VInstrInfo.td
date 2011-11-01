@@ -227,6 +227,12 @@ let mayLoad      = 1,
                             "$dst = memtrans $src, $addr, $isStore, $byteenable",
                             [], FUMemBus, 1, 0, 0>;
 
+let hasCtrlDep = 1 in
+  def VOpCmdSeq : FUInst<(outs DR:$dst),
+                         (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
+                          "$dst = cmdseq $src, $addr, $isStore, $byteenable",
+                          [], FUMemBus, 1, 0, 0>;
+
   def VOpBRam : FUInst<(outs DR:$dst),
                        (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable,
                         i8imm:$bramnum),

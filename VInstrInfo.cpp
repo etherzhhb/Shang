@@ -746,28 +746,28 @@ bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
          && VID.hasDatapath() && VID.hasTrivialFU();
 }
 
-bool VInstrInfo::isCmdSeq(const MachineInstr *MI) {
-  assert(MI->getOpcode() == VTM::VOpMemTrans && "Unexpected opcode!");
-
-  if (MI->getOperand(3).getImm() < VFUMemBus::CmdFirstNoLoadStore)
-    return false;
-
-  return true;
+bool VInstrInfo::isCmdSeq(unsigned Cmd) {
+  return Cmd >= VFUMemBus::CmdFirstNoLoadStore;
 }
 
 bool VInstrInfo::isInSameCmdSeq(const MachineInstr *PrevMI,
                                 const MachineInstr *MI) {
+  assert(MI->getOpcode() == VTM::VOpCmdSeq
+         && PrevMI->getOpcode() == VTM::VOpCmdSeq
+         && "Bad opcode!");
   assert(PrevMI->getOperand(3).getImm() == MI->getOperand(3).getImm()
          && "Bad command sequence!");
   return !isCmdSeqBegin(MI);
 }
 
 bool VInstrInfo::isCmdSeqBegin(const MachineInstr *MI) {
-  return isCmdSeq(MI) && MI->getOperand(4).getImm() == VFUMemBus::SeqBegin;
+  return MI->getOpcode() == VTM::VOpCmdSeq
+         && MI->getOperand(4).getImm() == VFUMemBus::SeqBegin;
 }
 
 bool VInstrInfo::isCmdSeqEnd(const MachineInstr *MI) {
-  return isCmdSeq(MI) && MI->getOperand(4).getImm() == VFUMemBus::SeqEnd;
+  return MI->getOpcode() == VTM::VOpCmdSeq
+         && MI->getOperand(4).getImm() == VFUMemBus::SeqEnd;
 }
 
 unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
@@ -832,6 +832,7 @@ unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(getTID().Opcode) {
+  case VTM::VOpCmdSeq:
   case VTM::VOpMemTrans:
     return FuncUnitId(VFUs::MemoryBus, 0);
   case VTM::VOpBRam: {
@@ -900,14 +901,18 @@ bool VIDesc::mayLoad() const {
   default: return false;
   // There is a "isLoad" flag in memory access operation.
   case VTM::VOpMemTrans: return !get().getOperand(3).getImm();
+  // Dirty Hack: Command sequence reads memory.
+  case VTM::VOpCmdSeq:   return true;
   }
 }
 
 bool VIDesc::mayStore() const {
   switch (getTID().Opcode) {
   default: return false;
-    // There is a "isLoad" flag in memory access operation.
+  // There is a "isLoad" flag in memory access operation.
   case VTM::VOpMemTrans: return get().getOperand(3).getImm();
+  // Dirty Hack: Command sequence write memory.
+  case VTM::VOpCmdSeq:   return true;
   }
 }
 

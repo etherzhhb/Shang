@@ -53,6 +53,7 @@ namespace llvm {
       case VTM::VOpSRL:         return VTM::RLSRRegisterClass;
       case VTM::VOpSHL:         return VTM::RSHLRegisterClass;
       case VTM::VOpMult:        return VTM::RMULRegisterClass;
+      case VTM::VOpCmdSeq:
       case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
       case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
       case VTM::VOpBRam:        return VTM::RBRMRegisterClass;

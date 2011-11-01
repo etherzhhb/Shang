@@ -152,7 +152,7 @@ public:
   static unsigned computeLatency(const MachineInstr *SrcInstr,
                                  const MachineInstr *DstInstr);
 
-  static bool isCmdSeq(const MachineInstr *MI);
+  static bool isCmdSeq(unsigned Cmd);
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
   static bool isCmdSeqBegin(const MachineInstr *MI);
   static bool isCmdSeqEnd(const MachineInstr *MI);
