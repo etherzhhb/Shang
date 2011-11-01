@@ -211,8 +211,8 @@ public:
     return "mem" + utostr(FUNum) + "be";
   }
 
-  inline static std::string getWriteEnableName(unsigned FUNum) {
-    return "mem" + utostr(FUNum) + "we";
+  inline static std::string getCmdName(unsigned FUNum) {
+    return "mem" + utostr(FUNum) + "cmd";
   }
 
   inline static std::string getEnableName(unsigned FUNum) {

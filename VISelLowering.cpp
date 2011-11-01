@@ -597,12 +597,14 @@ SDValue VTargetLowering::LowerMemAccess(SDValue Op, SelectionDAG &DAG,
   SDValue StoreVal = isStore ? cast<StoreSDNode>(Op)->getValue()
                              : DAG.getTargetConstant(0, VT);
 
+  LLVMContext *Cntx = DAG.getContext();
   SDValue SDOps[] = {// The chain.
                      LSNode->getChain(),
                      // The Value to store (if any), and the address.
                      LSNode->getBasePtr(), StoreVal,
                      // Is load?
-                     DAG.getTargetConstant(isStore, MVT::i1),
+                     DAG.getTargetConstant(isStore,
+                                           EVT::getIntegerVT(*Cntx, 4)),
                      // Byte enable.
                      DAG.getTargetConstant(getByteEnable(VT.getStoreSize()),
                                            MVT::i8)

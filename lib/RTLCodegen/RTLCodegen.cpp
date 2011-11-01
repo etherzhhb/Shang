@@ -163,7 +163,7 @@ class RTLCodegen : public MachineFunctionPass {
     void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
       S << addSubModulePort(VFUMemBus::getEnableName(BusNum), 1, SubModuleName,
                             true, true);
-      S << addSubModulePort(VFUMemBus::getWriteEnableName(BusNum), 1,
+      S << addSubModulePort(VFUMemBus::getCmdName(BusNum), 4,
                             SubModuleName);
       S << addSubModulePort(VFUMemBus::getAddrBusName(BusNum),
                             Bus->getAddrWidth(), SubModuleName);
@@ -189,7 +189,7 @@ class RTLCodegen : public MachineFunctionPass {
       VM->setFUPortBegin(ID);
       // Control ports.
       createOutputPort(VFUMemBus::getEnableName(BusNum), 1, true);
-      createOutputPort(VFUMemBus::getWriteEnableName(BusNum), 1);
+      createOutputPort(VFUMemBus::getCmdName(BusNum), 4);
 
       // Address port.
       createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth());
@@ -1129,7 +1129,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
   printOperand(OpMemAccess.getOperand(2), OS);
   OS << ";\n";
   // And write enable.
-  OS << VFUMemBus::getWriteEnableName(FUNum) << "_r <= ";
+  OS << VFUMemBus::getCmdName(FUNum) << "_r <= ";
   printOperand(OpMemAccess.getOperand(3), OS);
   OS << ";\n";
   // The byte enable.
