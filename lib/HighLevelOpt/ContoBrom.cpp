@@ -26,12 +26,12 @@
 #include "llvm/Target/TargetData.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#define DEBUG_TYPE "ContoBrom"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 #include <set>
 #include <map>
-#define DEBUG_TYPE "ContoBrom"
 
 using namespace llvm;
 
