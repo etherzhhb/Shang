@@ -153,7 +153,7 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
 void VASTRValue::print(raw_ostream &OS) const {
   OS << V->getName();
 
-  if (UB != LB) OS << '[' << (UB - 1) << ':' << LB << ']';
+  if (UB != LB) OS << '[' << (unsigned(UB) - 1) << ':' << unsigned(LB) << ']';
 }
 
 void VASTCnd::print(raw_ostream &OS) const {
@@ -355,6 +355,44 @@ VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
                            unsigned InitVal)
   : VASTSignal(vastRegister, Name, BitWidth, true, InitVal) {}
 
+void VASTRegister::addAssignment(VASTRValue Src, CndVec &Cnd, VASTSlot *S) {
+  bool inserted =
+    Assigns.insert(std::make_pair(S, std::make_pair(Src, Cnd))).second;
+  // FIXME: It is legal in if convertion.
+  assert(inserted && "Multiple assignment at the same slot?");
+  (void) inserted;
+}
+
+void VASTRegister::print(vlang_raw_ostream &OS) const {
+  if (Assigns.empty()) return;
+
+  std::string Pred;
+  raw_string_ostream SS(Pred);
+  OS << "\n// Assignment of " << getName() << '\n';
+  for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
+       I != E; ++I) {
+    // Build the assign condition.
+    const VASTSlot *Slot = I->first;
+    // Dirty Hack: SlotAcitve signal.
+    SS << Slot->getName() << "Active";
+    const CndVec &Cnds = I->second.second;
+    typedef CndVec::const_pointer cnd_it;
+    for (cnd_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
+      SS << " & ";
+      CI->print(SS);
+    }
+    SS.flush();
+    // Print the assignment under the condition.
+    OS.if_begin(Pred);
+    OS << getName() << " <= ";
+    I->second.first.print(OS);
+    OS << ";\n";
+    OS.exit_block();
+
+    Pred.clear();
+  }
+}
+
 VASTWire::VASTWire(const std::string &Name, unsigned BitWidth)
   : VASTSignal(vastWire, Name, BitWidth, 0), S(0) {}
 
@@ -378,10 +416,16 @@ void VASTModule::clear() {
 
 void VASTModule::printDatapath(raw_ostream &OS) const{
   for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
-       I != E; ++I) {
-    VASTSignal *S = *I;
-    if (!S->isRegister()) S->print(OS);
-  }
+       I != E; ++I)
+    if (VASTWire *W = dyn_cast<VASTWire>(*I))
+      W->print(OS);
+}
+
+void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
+  for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
+       I != E; ++I)
+    if (VASTRegister *R = dyn_cast<VASTRegister>(*I))
+      R->print(OS);
 }
 
 void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
@@ -453,7 +497,6 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
   Ports.push_back(Port);
   return Port;
 }
-
 
 VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
                                     PortTypes T /*= Others*/,

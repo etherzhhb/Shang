@@ -254,7 +254,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpSel(ucOp &OpSel);
 
   void emitOpAdd(ucOp &OpAdd);
-  void emitBinaryFUOp(ucOp &OpMult);
+  void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, VASTRegister::CndVec &Cnds);
 
   void emitOpBitCat(ucOp &OpBitCat);
   void emitOpBitSlice(ucOp &OpBitSlice);
@@ -411,8 +411,8 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   VM->printRegisterReset(Out);
   Out.else_begin();
+  VM->printRegisterAssign(Out);
   Out << VM->getControlBlockStr();
-
   VM->printSlotCtrls(Out);
 
   Out.always_ff_end();
@@ -758,6 +758,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   unsigned IISlot = FInfo->getIISlotFor(CurBB);
   unsigned EndSlot = FInfo->getEndSlotFor(CurBB);
   unsigned II = IISlot - startSlot;
+  VASTRegister::CndVec Cnds;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
@@ -770,7 +771,8 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     assert(SlotNum != startSlot && "Unexpected first slot!");
     // Skip the marker.
     if (Op->getOpcode() == VTM::ImpUse) continue;
-
+    
+    Cnds.clear();
     // Emit the control operation at the rising edge of the clock.
     std::string SlotPred = "(";
     raw_string_ostream SlotPredSS(SlotPred);
@@ -779,12 +781,14 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     // Emit the predicate operand.
     SlotPredSS << " & ";
     printPredicate(Op.getPredicate(), SlotPredSS);
+    Cnds.push_back(createCondition(Op.getPredicate()));
 
     // Special case for state transferring operation.
     if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
       SlotPredSS << " & ";
       ucOperand &CndOp = Op.getOperand(0);
       printPredicate(CndOp, SlotPredSS);
+      Cnds.push_back(createCondition(CndOp));
 
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
@@ -839,7 +843,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpMult:
     case VTM::VOpSHL:
     case VTM::VOpSRL:
-    case VTM::VOpSRA:           emitBinaryFUOp(Op);           break;
+    case VTM::VOpSRA:           emitBinaryFUOp(Op, CurSlot, Cnds); break;
     case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot);    break;
     case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
     case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
@@ -919,19 +923,15 @@ void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
   CtrlS << ";\n";
 }
 
-void RTLCodegen::emitBinaryFUOp(ucOp &OpBin) {
+void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
+                                VASTRegister::CndVec &Cnds) {
   raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
-  VASTValue *Result = VM->lookupSignal(OpBin.getOperand(0).getReg());
-
-  // Assign the value to function unit.
-  CtrlS << Result->getName() << "_a <= ";
-  printOperand(OpBin.getOperand(1), CtrlS);
-  CtrlS << ";\n";
-
-  CtrlS << Result->getName() << "_b <= ";
-  printOperand(OpBin.getOperand(2), CtrlS);
-  CtrlS << ";\n";
+  VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
+  R->addAssignment(getSignal(Op.getOperand(1)), Cnds, Slot);
+  R = cast<VASTRegister>(Result->getOperand(1));
+  R->addAssignment(getSignal(Op.getOperand(2)), Cnds, Slot);
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
@@ -1287,10 +1287,19 @@ VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
 }
 
 VASTRValue RTLCodegen::getSignal(ucOperand &Op) {
-  assert(Op.isReg() && "Bad operand type!");
-  VASTRValue V = VM->lookupSignal(Op.getReg());
-  assert (V != 0 && "Cannot find this Value in vector!");
-  return V;
+  if (Op.isReg()) {
+    VASTRValue V = VM->lookupSignal(Op.getReg());
+    assert (V != 0 && "Cannot find this Value in vector!");
+    return V;
+  }
+
+  // Otherwise simply create a symbol.
+  std::string Name;
+  raw_string_ostream SS(Name);
+  Op.print(SS);
+  SS.flush();
+
+  return VM->getOrCreateSymbol(Name);
 }
 
 void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
