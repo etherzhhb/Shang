@@ -351,6 +351,12 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.exit_block("\n\n");
 }
 
+VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth)
+  : VASTSignal(vastRegister, Name, BitWidth, true) {}
+
+VASTWire::VASTWire(const std::string &Name, unsigned BitWidth)
+  : VASTSignal(vastWire, Name, BitWidth, 0) {}
+
 VASTModule::~VASTModule() {
   // Release all ports.
   Ports.clear();
@@ -502,10 +508,9 @@ VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTRValue V) {
   return V;
 }
 
-VASTValue *VASTModule::addSignal(const std::string &Name, unsigned BitWidth,
-                                bool isReg) {
-  VASTSignal *Reg
-    = new (Allocator.Allocate<VASTSignal>()) VASTSignal(Name, BitWidth, isReg);
+VASTValue *VASTModule::addRegister(const std::string &Name, unsigned BitWidth) {
+  VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
+  new (Reg) VASTRegister(Name, BitWidth);
   Signals.push_back(Reg);
 
   return Reg;
@@ -520,6 +525,14 @@ VASTValue *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
     Name = "phy_reg" + utostr_32(RegNum);
 
   return indexVASTValue(RegNum, addRegister(Name, BitWidth));
+}
+
+VASTValue *VASTModule::addWire(const std::string &Name, unsigned BitWidth) {
+  VASTWire *Wire = Allocator.Allocate<VASTWire>();
+  new (Wire) VASTWire(Name, BitWidth);
+  Signals.push_back(Wire);
+
+  return Wire;
 }
 
 VASTValue *VASTModule::addWire(unsigned WireNum, unsigned BitWidth) {

@@ -45,7 +45,6 @@ class VASTModule;
 // Leaf node type of Verilog AST.
 enum VASTTypes {
   vastPort,
-  vastSignal,
   vastWire,
   vastRegister,
   vastSymbol,
@@ -178,11 +177,11 @@ public:
 };
 
 class VASTSignal : public VASTValue {
-public:
-  VASTSignal(const std::string Name, unsigned BitWidth, bool isReg,
-             VASTTypes DeclType = vastSignal,
-             unsigned InitVal = 0)
+protected:
+  VASTSignal(VASTTypes DeclType, const std::string Name, unsigned BitWidth,
+    bool isReg, unsigned InitVal = 0)
     : VASTValue(DeclType, Name, BitWidth, isReg, InitVal) {}
+public:
 
   virtual void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
@@ -193,24 +192,16 @@ public:
 
 class VASTWire : public VASTSignal {
 public:
-  VASTWire(const std::string Name, unsigned BitWidth)
-    : VASTSignal(Name, BitWidth, 0, vastWire) {}
+  VASTWire(const std::string &Name, unsigned BitWidth);
 
   void print(raw_ostream &OS) const {};
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
 };
 
 class VASTRegister : public VASTSignal {
 public:
-  VASTRegister(const std::string Name, unsigned BitWidth)
-    : VASTSignal(Name, BitWidth, 1, vastRegister) {}
+  VASTRegister(const std::string &Name, unsigned BitWidth);
 
   void print(raw_ostream &OS) const {};
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
 };
 
 class VASTDatapath : public VASTNode {
@@ -255,7 +246,7 @@ private:
   unsigned StartSlot, EndSlot, II;
 public:
   VASTSlot(unsigned slotNum)
-    : VASTSignal("Slot" + utostr_32(slotNum), 1, true, vastSlot,
+    : VASTSignal(vastSlot, "Slot" + utostr_32(slotNum), 1, true,
                  slotNum == 0), SlotNum(slotNum),
       StartSlot(slotNum), EndSlot(slotNum), II(~0) {}
 
@@ -499,15 +490,9 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTValue *addSignal(const std::string &Name, unsigned BitWidth, bool isReg);
+  VASTValue *addRegister(const std::string &Name, unsigned BitWidth);
 
-  VASTValue *addRegister(const std::string &Name, unsigned BitWidth) {
-    return addSignal(Name, BitWidth, true);
-  }
-
-  VASTValue *addWire(const std::string &Name, unsigned BitWidth) {
-    return addSignal(Name, BitWidth, false);
-  }
+  VASTValue *addWire(const std::string &Name, unsigned BitWidth);
 
   VASTValue *addRegister(unsigned RegNum, unsigned BitWidth);
 
