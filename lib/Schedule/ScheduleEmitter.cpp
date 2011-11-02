@@ -403,7 +403,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Opcode for the later copy op.
   unsigned CopyOpC = VTM::VOpReadFU;
   // Do not need the ready signal except command sequence end.
-  if (VInstrInfo::isCmdSeq(Inst.getOpcode()) && !VInstrInfo::isCmdSeqEnd(&Inst))
+  if (Inst.getOpcode() == VTM::VOpCmdSeq && !VInstrInfo::isCmdSeqEnd(&Inst))
     CopyOpC = VTM::ImpUse;
 
   unsigned NumOperands = Inst.getNumOperands();
@@ -505,9 +505,13 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       Ops.push_back(ucOperand::CreateOpcode(CopyOpC, Slot, FUId));
       // Get the operand at current slot.
       Ops.push_back(getRegUseOperand(WD->Pred, CopySlot));
-      MO.setIsDef();
       MachineOperand Src = WD->createOperand();
-      Ops.push_back(MO);
+      // Do not define MO if we have a implicit use.
+      if (CopyOpC != VTM::ImpUse) {
+        MO.setIsDef();
+        Ops.push_back(MO);
+      } else
+        Src.setImplicit(true);
       Ops.push_back(Src);
 
       // Flush the operand to the control state.
