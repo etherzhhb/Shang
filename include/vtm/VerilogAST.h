@@ -194,14 +194,14 @@ class VASTWire : public VASTSignal {
 public:
   VASTWire(const std::string &Name, unsigned BitWidth);
 
-  void print(raw_ostream &OS) const {};
+  void print(raw_ostream &OS) const {}
 };
 
 class VASTRegister : public VASTSignal {
 public:
-  VASTRegister(const std::string &Name, unsigned BitWidth);
+  VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal);
 
-  void print(raw_ostream &OS) const {};
+  void print(raw_ostream &OS) const {}
 };
 
 class VASTDatapath : public VASTNode {
@@ -224,7 +224,7 @@ public:
   void addOutput(VASTValue *output)  { Outputs.push_back(output); }
 };
 
-class VASTSlot : public VASTSignal {
+class VASTSlot : public VASTNode {
 public:
   typedef std::map<unsigned, VASTCnd> SuccVecTy;
   typedef SuccVecTy::const_iterator const_succ_iterator;
@@ -233,7 +233,7 @@ public:
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
 private:
-  unsigned SlotNum;
+  VASTRegister *R;
   // The ready signals that need to wait before we go to next slot.
   FUCtrlVecTy Readys;
   // The function units that enabled at this slot.
@@ -245,16 +245,18 @@ private:
 
   unsigned StartSlot, EndSlot, II;
 public:
-  VASTSlot(unsigned slotNum)
-    : VASTSignal(vastSlot, "Slot" + utostr_32(slotNum), 1, true,
-                 slotNum == 0), SlotNum(slotNum),
-      StartSlot(slotNum), EndSlot(slotNum), II(~0) {}
+  VASTSlot(unsigned slotNum, VASTRegister *r)
+    : VASTNode(vastSlot, slotNum), R(r), StartSlot(slotNum), EndSlot(slotNum),
+    II(~0) {}
 
   void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
   void printActive(raw_ostream &OS, const VASTModule &Mod) const;
   void printReady(raw_ostream &OS) const;
 
-  unsigned getSlotNum() const { return SlotNum; }
+  void print(raw_ostream &OS) const {}
+
+  const std::string &getName() const { return R->getName(); }
+  unsigned getSlotNum() const { return getSubClassData(); }
 
   void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
   bool hasExplicitNextSlots() const { return !NextSlots.empty(); }
@@ -399,9 +401,11 @@ public:
 
   VASTSlot *getSlot(unsigned SlotNum) {
     VASTSlot *&Slot = Slots[SlotNum];
-    if(Slot == 0)
-      Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum);
-
+    if(Slot == 0) {
+      std::string SlotName = "Slot" + utostr_32(SlotNum);
+      VASTRegister *R = addRegister(SlotName, 1, SlotNum == 0);
+      Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum, R);
+    }
     return Slot;
   }
 
@@ -490,13 +494,14 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTValue *addRegister(const std::string &Name, unsigned BitWidth);
+  VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
+                         unsigned InitVal = 0);
 
-  VASTValue *addWire(const std::string &Name, unsigned BitWidth);
+  VASTWire *addWire(const std::string &Name, unsigned BitWidth);
 
-  VASTValue *addRegister(unsigned RegNum, unsigned BitWidth);
+  VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth);
 
-  VASTValue *addWire(unsigned WireNum, unsigned BitWidth);
+  VASTWire *addWire(unsigned WireNum, unsigned BitWidth);
 
   VASTValue *indexVASTValue(unsigned RegNum, VASTRValue V);
 

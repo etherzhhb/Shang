@@ -351,8 +351,9 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.exit_block("\n\n");
 }
 
-VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth)
-  : VASTSignal(vastRegister, Name, BitWidth, true) {}
+VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
+                           unsigned InitVal)
+  : VASTSignal(vastRegister, Name, BitWidth, true, InitVal) {}
 
 VASTWire::VASTWire(const std::string &Name, unsigned BitWidth)
   : VASTSignal(vastWire, Name, BitWidth, 0) {}
@@ -413,13 +414,6 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
     (*I)->printDecl(OS);
     OS << "\n";
   }
-  
-  // And Slots
-  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) {
-      S->printDecl(OS);
-      OS << "\n";
-    }
 }
 
 void VASTModule::printRegisterReset(raw_ostream &OS) {
@@ -441,13 +435,6 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
       OS << "\n";
     }
   }
-
-  // And Slots
-  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) {
-      S->printReset(OS);
-      OS << "\n";
-    }
 }
 
 void VASTModule::print(raw_ostream &OS) const {
@@ -508,15 +495,16 @@ VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTRValue V) {
   return V;
 }
 
-VASTValue *VASTModule::addRegister(const std::string &Name, unsigned BitWidth) {
+VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
+                                      unsigned InitVal) {
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
-  new (Reg) VASTRegister(Name, BitWidth);
+  new (Reg) VASTRegister(Name, BitWidth, InitVal);
   Signals.push_back(Reg);
 
   return Reg;
 }
 
-VASTValue *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
+VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
   std::string Name;
 
   if (TargetRegisterInfo::isVirtualRegister(RegNum))
@@ -524,10 +512,12 @@ VASTValue *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
   else
     Name = "phy_reg" + utostr_32(RegNum);
 
-  return indexVASTValue(RegNum, addRegister(Name, BitWidth));
+  VASTRegister *R = addRegister(Name, BitWidth);
+  indexVASTValue(RegNum, R);
+  return R;
 }
 
-VASTValue *VASTModule::addWire(const std::string &Name, unsigned BitWidth) {
+VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth) {
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(Name, BitWidth);
   Signals.push_back(Wire);
@@ -535,14 +525,16 @@ VASTValue *VASTModule::addWire(const std::string &Name, unsigned BitWidth) {
   return Wire;
 }
 
-VASTValue *VASTModule::addWire(unsigned WireNum, unsigned BitWidth) {
+VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth) {
   std::string Name;
 
   assert(TargetRegisterInfo::isVirtualRegister(WireNum)
          && "Unexpected physics register as wire!");
-    Name = "wire" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum));
+  Name = "wire" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum));
 
-  return indexVASTValue(WireNum, addWire(Name, BitWidth));
+  VASTWire *W = addWire(Name, BitWidth);
+  indexVASTValue(WireNum, W);
+  return W;
 }
 
 // Out of line virtual function to provide home for the class.
