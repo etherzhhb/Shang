@@ -117,11 +117,26 @@ public:
   VASTRValue() : V(0), UB(0), LB(0) {}
 
   operator bool() const { return V != 0; }
+  VASTValue *get() const { return V; }
   // Implicit cast to VASTValue.
   operator VASTValue *() const { return V; }
   VASTValue *operator->() const { return V; }
 
   void print(raw_ostream &OS) const;
+};
+// simplify_type - Allow clients to treat VASTRValue just like VASTValues when
+// using casting operators.
+template<> struct simplify_type<const VASTRValue> {
+  typedef VASTNode *SimpleType;
+  static SimpleType getSimplifiedValue(const VASTRValue &Val) {
+    return static_cast<SimpleType>(Val.get());
+  }
+};
+template<> struct simplify_type<VASTRValue> {
+  typedef VASTNode *SimpleType;
+  static SimpleType getSimplifiedValue(const VASTRValue &Val) {
+    return static_cast<SimpleType>(Val.get());
+  }
 };
 
 // The predicate condition, maybe a inverted value.
@@ -159,7 +174,6 @@ protected:
     : VASTValue(DeclType, Name, BitWidth, isReg, InitVal) {}
 public:
 
-  virtual void print(raw_ostream &OS) const;
   void printDecl(raw_ostream &OS) const;
 
   // Out of line virtual function to provide home for the class.
@@ -196,9 +210,29 @@ public:
 
 class VASTWire : public VASTSignal {
 public:
+  typedef raw_string_ostream builder_stream;
+private:
+  SmallVector<VASTRValue, 4> Inputs;
+  std::string Code;
+  builder_stream *S;
+public:
   VASTWire(const std::string &Name, unsigned BitWidth);
+  builder_stream &openCodeBuffer();
+  builder_stream &getCodeBuffer() {
+    assert(S && "Code buffer not open!");
+    return *S;
+  }
 
-  void print(raw_ostream &OS) const {}
+  void closeCodeBuffer();
+
+  void addOperand (VASTRValue Input)   { Inputs.push_back(Input); }
+  void print(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTWire *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastWire;
+  }
 };
 
 class VASTRegister : public VASTSignal {
@@ -206,26 +240,6 @@ public:
   VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal);
 
   void print(raw_ostream &OS) const {}
-};
-
-class VASTDatapath : public VASTNode {
-public:
-  typedef raw_string_ostream builder_stream;
-private:
-  std::vector<VASTValue*> Inputs, Outputs;
-  std::string Code;
-  builder_stream CodeStream;
-public:
-  VASTDatapath() : VASTNode(vastDatapath, 0), CodeStream(Code) {}
-
-  void print(raw_ostream &OS) const;
-
-  builder_stream &getCodeBuffer() {
-    return CodeStream;
-  }
-
-  void addInput (VASTValue *input)   { Inputs.push_back(input); }
-  void addOutput(VASTValue *output)  { Outputs.push_back(output); }
 };
 
 class VASTSlot : public VASTNode {
@@ -291,24 +305,6 @@ public:
   }
 };
 
-class VASTRegAssign : public VASTNode {
-  VASTSlot *RegAssignSlot;
-  std::vector<VASTValue*> Predicates;
-  VASTValue *Src;
-  VASTValue *Dst;
-public:
-  VASTRegAssign() : VASTNode(vastRegAssign, 0) {}
-
-  void print(raw_ostream &OS) const {};
-
-  void addPredicate(VASTValue *predicate){
-    Predicates.push_back(predicate);
-  }
-
-  VASTValue *getSrc() { return Src; }
-  VASTValue *getDst() { return Dst; }
-};
-
 // The class that represent Verilog modulo.
 class VASTModule : public VASTNode {
 public:
@@ -328,7 +324,6 @@ private:
 
   std::string Name;
   BumpPtrAllocator Allocator;
-  std::vector<VASTDatapath*> Datapaths;
   typedef std::map<unsigned, VASTRValue> RegIdxMapTy;
   RegIdxMapTy RegsMap;
   StringMap<VASTValue*> SymbolTable;
@@ -366,12 +361,6 @@ public:
   void clear();
 
   const std::string &getName() const { return Name; }
-
-  VASTDatapath *createDatapath(){
-    VASTDatapath *Datapath = new VASTDatapath();
-    Datapaths.push_back(Datapath);
-    return Datapath;
-  }
 
   void printDatapath(raw_ostream &OS) const;
   // Print the slot control flow.

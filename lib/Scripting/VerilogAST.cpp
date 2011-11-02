@@ -356,7 +356,7 @@ VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
   : VASTSignal(vastRegister, Name, BitWidth, true, InitVal) {}
 
 VASTWire::VASTWire(const std::string &Name, unsigned BitWidth)
-  : VASTSignal(vastWire, Name, BitWidth, 0) {}
+  : VASTSignal(vastWire, Name, BitWidth, 0), S(0) {}
 
 VASTModule::~VASTModule() {
   // Release all ports.
@@ -377,9 +377,10 @@ void VASTModule::clear() {
 }
 
 void VASTModule::printDatapath(raw_ostream &OS) const{
-  for (std::vector<VASTDatapath *>::const_iterator I = Datapaths.begin(),
-       E = Datapaths.end(); I != E; ++I) {
-   (*I)->print(OS);
+  for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
+       I != E; ++I) {
+    VASTSignal *S = *I;
+    if (!S->isRegister()) S->print(OS);
   }
 }
 
@@ -586,10 +587,6 @@ std::string VASTPort::getExternalDriverStr(unsigned InitVal) const {
 // Out of line virtual function to provide home for the class.
 void VASTPort::anchor() {}
 
-void VASTSignal::print(raw_ostream &OS) const {
-
-}
-
 void VASTSignal::printDecl(raw_ostream &OS) const {
   if (isRegister())
     OS << "reg";
@@ -607,9 +604,20 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
-void VASTDatapath::print(raw_ostream &OS) const{
-  const_cast<VASTDatapath*>(this)->CodeStream.flush();
-  OS << Code ;
+VASTWire::builder_stream &VASTWire::openCodeBuffer() {
+  assert(S == 0 && "Code buffer not closed!");
+  S = new builder_stream(Code);
+  return *S;
+}
+
+void VASTWire::closeCodeBuffer() {
+  delete S;
+  S = 0;
+}
+
+void VASTWire::print(raw_ostream &OS) const {
+  assert(S == 0 && "Code buffer not closed!");
+  OS << Code;
 }
 
 // Out of line virtual function to provide home for the class.
