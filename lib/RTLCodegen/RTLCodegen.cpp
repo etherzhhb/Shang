@@ -253,7 +253,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpSel(ucOp &OpSel);
 
-  void emitOpAdd(ucOp &OpAdd);
+  void emitOpAdd(ucOp &Op, VASTSlot *Slot, VASTRegister::CndVec &Cnds);
   void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, VASTRegister::CndVec &Cnds);
 
   void emitOpBitCat(ucOp &OpBitCat);
@@ -839,7 +839,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
     case VTM::COPY:             emitOpCopy(Op);               break;
-    case VTM::VOpAdd:           emitOpAdd(Op);                break;
+    case VTM::VOpAdd:           emitOpAdd(Op, CurSlot, Cnds); break;
     case VTM::VOpMult:
     case VTM::VOpSHL:
     case VTM::VOpSRL:
@@ -904,29 +904,19 @@ void RTLCodegen::emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot) {
   CurSlot->addNextSlot(0);
 }
 
-void RTLCodegen::emitOpAdd(ucOp &OpAdd) {
-  raw_ostream &CtrlS = VM->getControlBlockBuffer();
-
-  VASTValue *Result = VM->lookupSignal(OpAdd.getOperand(0).getReg());
-  assert(Result && "Adder not allocated?");
-  // Assign the value to function unit.
-  CtrlS << Result->getName() << "_a <= ";
-  printOperand(OpAdd.getOperand(2), CtrlS);
-  CtrlS << ";\n";
-
-  CtrlS << Result->getName() << "_b <= ";
-  printOperand(OpAdd.getOperand(3), CtrlS);
-  CtrlS << ";\n";
-
-  CtrlS << Result->getName() << "_c <= ";
-  printOperand(OpAdd.getOperand(4), CtrlS);
-  CtrlS << ";\n";
+void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
+                           VASTRegister::CndVec &Cnds) {
+  VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
+  R->addAssignment(getSignal(Op.getOperand(2)), Cnds, Slot);
+  R = cast<VASTRegister>(Result->getOperand(1));
+  R->addAssignment(getSignal(Op.getOperand(3)), Cnds, Slot);
+  R = cast<VASTRegister>(Result->getOperand(2));
+  R->addAssignment(getSignal(Op.getOperand(4)), Cnds, Slot);
 }
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
                                 VASTRegister::CndVec &Cnds) {
-  raw_ostream &CtrlS = VM->getControlBlockBuffer();
-
   VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
   R->addAssignment(getSignal(Op.getOperand(1)), Cnds, Slot);
