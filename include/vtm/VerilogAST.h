@@ -192,10 +192,11 @@ public:
 };
 
 class VASTSignal : public VASTValue {
+  std::string AttrStr;
 protected:
   VASTSignal(VASTTypes DeclType, const std::string Name, unsigned BitWidth,
-    bool isReg, unsigned InitVal = 0)
-    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal) {}
+    bool isReg, unsigned InitVal = 0, const std::string &Attr = "")
+    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal), AttrStr(Attr) {}
 public:
 
   void printDecl(raw_ostream &OS) const;
@@ -240,7 +241,8 @@ private:
   std::string Code;
   builder_stream *S;
 public:
-  VASTWire(const std::string &Name, unsigned BitWidth);
+  VASTWire(const std::string &Name, unsigned BitWidth,
+           const std::string &Attr = "");
   builder_stream &openCodeBuffer();
   builder_stream &getCodeBuffer() {
     assert(S && "Code buffer not open!");
@@ -272,7 +274,8 @@ public:
 private:
   AssignMapTy Assigns;
 public:
-  VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal);
+  VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal,
+               const std::string &Attr = "");
 
   void addAssignment(VASTRValue Src, CndVec &Cnd, VASTSlot *S);
 
@@ -533,13 +536,18 @@ public:
   }
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
-                         unsigned InitVal = 0);
+                            unsigned InitVal = 0,
+                            const std::string &Attr = "");
 
-  VASTWire *addWire(const std::string &Name, unsigned BitWidth);
+  VASTWire *addWire(const std::string &Name, unsigned BitWidth,
+                    const std::string &Attr = "");
 
-  VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth);
+  VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
+                            unsigned InitVal = 0,
+                            const std::string &Attr = "");
 
-  VASTWire *addWire(unsigned WireNum, unsigned BitWidth);
+  VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
+                    const std::string &Attr = "");
 
   VASTValue *indexVASTValue(unsigned RegNum, VASTRValue V);
 

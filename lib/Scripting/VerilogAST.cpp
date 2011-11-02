@@ -352,8 +352,8 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
 }
 
 VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
-                           unsigned InitVal)
-  : VASTSignal(vastRegister, Name, BitWidth, true, InitVal) {}
+                           unsigned InitVal, const std::string &Attr)
+  : VASTSignal(vastRegister, Name, BitWidth, true, InitVal, Attr) {}
 
 void VASTRegister::addAssignment(VASTRValue Src, CndVec &Cnd, VASTSlot *S) {
   bool inserted =
@@ -368,9 +368,15 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 
   std::string Pred;
   raw_string_ostream SS(Pred);
+  bool UseSwitch = Assigns.size() > 1;
+
   OS << "\n// Assignment of " << getName() << '\n';
+  if (UseSwitch) {
+    OS.switch_begin("1'b1");
+  }
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
+    SS << '(';
     // Build the assign condition.
     const VASTSlot *Slot = I->first;
     // Dirty Hack: SlotAcitve signal.
@@ -381,9 +387,11 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
       SS << " & ";
       CI->print(SS);
     }
+    SS << ')';
     SS.flush();
     // Print the assignment under the condition.
-    OS.if_begin(Pred);
+    if (UseSwitch) OS.match_case(Pred);
+    else OS.if_begin(Pred);
     OS << getName() << " <= ";
     I->second.first.print(OS);
     OS << ";\n";
@@ -391,10 +399,12 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 
     Pred.clear();
   }
+  if (UseSwitch) OS.switch_end();
 }
 
-VASTWire::VASTWire(const std::string &Name, unsigned BitWidth)
-  : VASTSignal(vastWire, Name, BitWidth, 0), S(0) {}
+VASTWire::VASTWire(const std::string &Name, unsigned BitWidth,
+                   const std::string &Attr)
+  : VASTSignal(vastWire, Name, BitWidth, 0, 0, Attr), S(0) {}
 
 VASTModule::~VASTModule() {
   // Release all ports.
@@ -478,7 +488,9 @@ void VASTModule::print(raw_ostream &OS) const {
 
 VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
                                    PortTypes T /*= Others*/) {
-  VASTWire *W = addWire(Name, BitWidth);
+  // DIRTYHACK: comment out the deceleration of the signal for ports.
+  VASTWire *W = addWire(Name, BitWidth, "//");
+
   VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(W, true);
   if (T < SpecialInPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
@@ -502,9 +514,10 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
                                     PortTypes T /*= Others*/,
                                     bool isReg /*= true*/) {
   VASTSignal *V = 0;
-  if (isReg) V = addRegister(Name, BitWidth);
-  else       V = addWire(Name, BitWidth);
-  
+  // DIRTYHACK: comment out the deceleration of the signal for ports.
+  if (isReg) V = addRegister(Name, BitWidth, 0, "//");
+  else       V = addWire(Name, BitWidth, "//");
+
   VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(V, false);
   if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
@@ -531,15 +544,18 @@ VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTRValue V) {
 }
 
 VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
-                                      unsigned InitVal) {
+                                      unsigned InitVal,
+                                      const std::string &Attr) {
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
-  new (Reg) VASTRegister(Name, BitWidth, InitVal);
+  new (Reg) VASTRegister(Name, BitWidth, InitVal, Attr);
   Signals.push_back(Reg);
 
   return Reg;
 }
 
-VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
+VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
+                                      unsigned InitVal,
+                                      const std::string &Attr) {
   std::string Name;
 
   if (TargetRegisterInfo::isVirtualRegister(RegNum))
@@ -547,27 +563,29 @@ VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth) {
   else
     Name = "phy_reg" + utostr_32(RegNum);
 
-  VASTRegister *R = addRegister(Name, BitWidth);
+  VASTRegister *R = addRegister(Name, BitWidth, 0, Attr);
   indexVASTValue(RegNum, R);
   return R;
 }
 
-VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth) {
+VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
+                              const std::string &Attr) {
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(Name, BitWidth);
+  new (Wire) VASTWire(Name, BitWidth, Attr);
   Signals.push_back(Wire);
 
   return Wire;
 }
 
-VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth) {
+VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
+                              const std::string &Attr) {
   std::string Name;
 
   assert(TargetRegisterInfo::isVirtualRegister(WireNum)
          && "Unexpected physics register as wire!");
   Name = "wire" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum));
 
-  VASTWire *W = addWire(Name, BitWidth);
+  VASTWire *W = addWire(Name, BitWidth, Attr);
   indexVASTValue(WireNum, W);
   return W;
 }
@@ -590,11 +608,11 @@ void VASTPort::print(raw_ostream &OS) const {
   else
     OS << "output ";
 
-  //if (isRegister())
-  //  OS << "reg";
-  //else
-  //  OS << "wire";
-  //
+  if (isRegister())
+    OS << "reg";
+  else
+    OS << "wire";
+
   if (getBitWidth() > 1) OS << "[" << (getBitWidth() - 1) << ":0]";
 
   OS << ' ' << getName();
@@ -631,6 +649,7 @@ std::string VASTPort::getExternalDriverStr(unsigned InitVal) const {
 void VASTPort::anchor() {}
 
 void VASTSignal::printDecl(raw_ostream &OS) const {
+  OS << AttrStr << ' ';
   if (isRegister())
     OS << "reg";
   else
