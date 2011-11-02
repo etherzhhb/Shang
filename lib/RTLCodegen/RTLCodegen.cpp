@@ -86,6 +86,7 @@ class RTLCodegen : public MachineFunctionPass {
         MuxWiresDeclS(*new raw_string_ostream(MuxWiresDecl), true, 2) {
       MuxLogicS << "always @(*)";
       MuxLogicS.enter_block(" // begin mux logic\n");
+      MuxLogicS << VASTModule::ParallelCaseAttr << ' ';
       MuxLogicS.switch_begin("1'b1");
     }
 

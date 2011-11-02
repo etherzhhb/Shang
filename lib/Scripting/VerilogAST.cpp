@@ -220,6 +220,7 @@ void VASTSlot::printActive(raw_ostream &OS, const VASTModule &Mod) const {
   }
 
   OS << ";// Are all waiting resources ready?\n";
+  OS << VASTModule::DirectClkEnAttr << ' ';
   OS << "wire " << getName() << "Active = " << getName() << "Ready & "
      << getName() << ";\n";
 }
@@ -372,6 +373,7 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {
+    OS << VASTModule::ParallelCaseAttr << ' ';
     OS.switch_begin("1'b1");
   }
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
@@ -405,6 +407,9 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 VASTWire::VASTWire(const std::string &Name, unsigned BitWidth,
                    const std::string &Attr)
   : VASTSignal(vastWire, Name, BitWidth, 0, 0, Attr), S(0) {}
+
+std::string VASTModule::DirectClkEnAttr = "";
+std::string VASTModule::ParallelCaseAttr = "";
 
 VASTModule::~VASTModule() {
   // Release all ports.

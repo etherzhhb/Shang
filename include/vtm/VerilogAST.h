@@ -380,6 +380,8 @@ private:
   unsigned NumArgPorts, RetPortIdx;
 
 public:
+  static std::string DirectClkEnAttr, ParallelCaseAttr;
+
   enum PortTypes {
     Clk = 0,
     RST,
@@ -444,7 +446,7 @@ public:
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
       std::string SlotName = "Slot" + utostr_32(SlotNum);
-      VASTRegister *R = addRegister(SlotName, 1, SlotNum == 0);
+      VASTRegister *R = addRegister(SlotName, 1, SlotNum == 0, DirectClkEnAttr);
       Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum, R);
     }
     return Slot;

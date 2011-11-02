@@ -94,6 +94,8 @@ void LuaScript::init() {
   luabind::globals(State)["Modules"] = luabind::newtable(State);
   // The scripting pass table.
   luabind::globals(State)["Passes"] = luabind::newtable(State);
+  // Synthesis attribute
+  luabind::globals(State)["SynAttr"] = luabind::newtable(State);
   // Table for Miscellaneous information
   luabind::globals(State)["Misc"] = luabind::newtable(State);
 }
@@ -194,6 +196,12 @@ void LuaScript::updateFUs() {
 
 void LuaScript::updateStatus() {
   updateFUs();
+
+  // Read the synthesis attributes.
+  const char *Path[] = { "SynAttr", "DirectClkEnAttr" };
+  VASTModule::DirectClkEnAttr = getValue<std::string>(Path);
+  Path[1] = "ParallelCaseAttr";
+  VASTModule::ParallelCaseAttr = getValue<std::string>(Path);
 
   typedef luabind::iterator tab_it;
   for (tab_it I = tab_it(luabind::globals(State)["Functions"]), E = tab_it();
