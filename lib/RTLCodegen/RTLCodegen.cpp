@@ -472,13 +472,13 @@ void RTLCodegen::emitIdleState() {
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getSlot(0);
-  VASTValue &StartPort = VM->getPort(VASTModule::Start);
+  VASTValue *StartPort = VM->getPort(VASTModule::Start);
   IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
-                        &StartPort);
-  IdleSlot->addNextSlot(0, VASTCnd(&StartPort, true));
+                        StartPort);
+  IdleSlot->addNextSlot(0, VASTCnd(StartPort, true));
 
   // Always Disable the finish signal.
-  IdleSlot->addDisable(&VM->getPort(VASTModule::Finish));
+  IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
   emitFirstCtrlState(EntryBB);
   // End if-else
   CtrlS.exit_block();
@@ -716,7 +716,7 @@ void RTLCodegen::emitAllSignals() {
     case VTM::RINFRegClassID: {
       // The offset of data input port is 3
       unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
-      VM->indexVASTValue(RegNum, &VM->getPort(DataInIdx));
+      VM->indexVASTValue(RegNum, VASTRValue(VM->getPort(DataInIdx)));
       break;
     }
     }
@@ -1095,7 +1095,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
 void RTLCodegen::emitOpRet(ucOp &OpArg, VASTSlot *CurSlot) {
   // Go back to the idle slot.
   CurSlot->addNextSlot(0);
-  CurSlot->addEnable(&VM->getPort(VASTModule::Finish));
+  CurSlot->addEnable(VM->getPort(VASTModule::Finish));
 }
 
 void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {

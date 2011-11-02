@@ -152,15 +152,33 @@ public:
   void print(raw_ostream &OS) const;
 };
 
-class VASTPort : public VASTValue {
-  bool IsInput;
+class VASTSignal : public VASTValue {
+protected:
+  VASTSignal(VASTTypes DeclType, const std::string Name, unsigned BitWidth,
+    bool isReg, unsigned InitVal = 0)
+    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal) {}
 public:
-  VASTPort(const std::string Name, unsigned BitWidth, bool isInput, bool isReg)
-    : VASTValue(vastPort, Name, BitWidth, isReg, 0), IsInput(isInput) {
-    assert(!(isInput && isRegister()) && "Bad port decl!");
+
+  virtual void print(raw_ostream &OS) const;
+  void printDecl(raw_ostream &OS) const;
+
+  // Out of line virtual function to provide home for the class.
+  virtual void anchor();
+};
+
+class VASTPort : public VASTNode {
+  VASTSignal *S;
+public:
+  VASTPort(VASTSignal *s, bool isInput) : VASTNode(vastPort, isInput), S(s) {
+    assert(!(isInput && S->isRegister()) && "Bad port decl!");
   }
 
-  bool isInput() const { return IsInput; }
+  const std::string &getName() const { return S->getName(); }
+  bool isRegister() const { return S->isRegister(); }
+  unsigned getBitWidth() const { return S->getBitWidth(); }
+  operator VASTValue *() const { return S; }
+
+  bool isInput() const { return getSubClassData(); }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTPort *A) { return true; }
@@ -171,20 +189,6 @@ public:
   void print(raw_ostream &OS) const;
   void printExternalDriver(raw_ostream &OS, uint64_t InitVal = 0) const;
   std::string getExternalDriverStr(unsigned InitVal = 0) const;
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
-};
-
-class VASTSignal : public VASTValue {
-protected:
-  VASTSignal(VASTTypes DeclType, const std::string Name, unsigned BitWidth,
-    bool isReg, unsigned InitVal = 0)
-    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal) {}
-public:
-
-  virtual void print(raw_ostream &OS) const;
-  void printDecl(raw_ostream &OS) const;
 
   // Out of line virtual function to provide home for the class.
   virtual void anchor();

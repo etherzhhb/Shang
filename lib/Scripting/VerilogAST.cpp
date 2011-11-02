@@ -417,16 +417,6 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 }
 
 void VASTModule::printRegisterReset(raw_ostream &OS) {
-  // Reset output registers.
-  for (PortVector::const_iterator I = Ports.begin(), E = Ports.end();
-       I != E; ++I) {
-    VASTPort *port = *I;
-    if (port->isRegister()) {
-      port->printReset(OS);
-      OS << "\n";
-    }
-  }
-
   for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
        I != E; ++I) {
     VASTSignal *signal = *I;
@@ -443,9 +433,8 @@ void VASTModule::print(raw_ostream &OS) const {
 
 VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
                                    PortTypes T /*= Others*/) {
-  VASTPort *Port
-    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, true, false);
-  getOrCreateSymbol(Name, Port);
+  VASTWire *W = addWire(Name, BitWidth);
+  VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(W, true);
   if (T < SpecialInPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
     Ports[T] = Port;
@@ -468,9 +457,11 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
 VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
                                     PortTypes T /*= Others*/,
                                     bool isReg /*= true*/) {
-  VASTPort *Port
-    = new (Allocator.Allocate<VASTPort>()) VASTPort(Name, BitWidth, false, isReg);
-  getOrCreateSymbol(Name, Port);
+  VASTSignal *V = 0;
+  if (isReg) V = addRegister(Name, BitWidth);
+  else       V = addWire(Name, BitWidth);
+  
+  VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(V, false);
   if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
     assert(Ports[T] == 0 && "Special port exist!");
     Ports[T] = Port;
@@ -555,15 +546,14 @@ void VASTPort::print(raw_ostream &OS) const {
   else
     OS << "output ";
 
-  if (isRegister())
-    OS << "reg";
-  else
-    OS << "wire";
-  
-  if (getBitWidth() > 1)
-    OS << "[" << (getBitWidth() - 1) << ":0]";
+  //if (isRegister())
+  //  OS << "reg";
+  //else
+  //  OS << "wire";
+  //
+  if (getBitWidth() > 1) OS << "[" << (getBitWidth() - 1) << ":0]";
 
-   OS << ' ' << getName();
+  OS << ' ' << getName();
 }
 
 void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
