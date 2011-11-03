@@ -253,7 +253,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
-  void emitOpSel(ucOp &OpSel);
+  void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
   void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -858,7 +858,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpBRam:          emitOpBRam(Op, CurSlot);      break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
-    case VTM::VOpSel:           emitOpSel(Op);                break;
+    case VTM::VOpSel:           emitOpSel(Op, CurSlot, Cnds); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot, Cnds);break;
     case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot);break;
     default:  assert(0 && "Unexpected opcode!");              break;
@@ -895,7 +895,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
     case VTM::VOpDefPhi:                                      break;
     case VTM::ImpUse:           /*Not need to handle*/        break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
-    case VTM::VOpSel:           emitOpSel(Op);                break;
+    case VTM::VOpSel:           emitOpSel(Op, Slot, Cnds);    break;
     case VTM::VOpRetVal:        emitOpRetVal(Op, Slot, Cnds); break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     default:  assert(0 && "Unexpected opcode!");              break;
@@ -936,20 +936,24 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
   //OS << "// IMPLICIT_DEF " << ImpDef.getOperand(0) << "\n";
 }
 
-void RTLCodegen::emitOpSel(ucOp &OpSel) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  printOperand(OpSel.getOperand(0), OS);
-  OS << " <= ";
-  if (OpSel.getOperand(1).isPredicateInverted())
+void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
+                           SmallVectorImpl<VASTCnd> &Cnds) {
+  VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
+  std::string SelWireName = R->getName() + "_Sel_" + Slot->getName();
+  // Dirty Hack: Create a wire for select result.
+  VASTWire *SelWire = VM->addWire(SelWireName, R->getBitWidth());
+  raw_ostream &OS = SelWire->openCodeBuffer();
+  OS << "assign " << SelWireName << " = ";
+  if (Op.getOperand(1).isPredicateInverted())
     OS << "~";
-  printOperand(OpSel.getOperand(1), OS, false);
-  //OS << verilogBitRange(1, 0);
+  printAsOperand(Op.getOperand(1), *SelWire, 1);
   OS << " ? ";
-  printOperand(OpSel.getOperand(2), OS);
+  printAsOperand(Op.getOperand(2), *SelWire);
   OS << " : ";
-  printOperand(OpSel.getOperand(3), OS);
+  printAsOperand(Op.getOperand(3), *SelWire);
   OS << ";\n";
-
+  SelWire->closeCodeBuffer();
+  VM->addAssignment(R, SelWire, Slot, Cnds);
 }
 
 void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
