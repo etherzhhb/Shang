@@ -245,7 +245,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
-  void emitFirstCtrlState(MachineBasicBlock *DstBB);
+  void emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
+                          SmallVectorImpl<VASTCnd> &Cnds);
 
   void emitDatapath(ucState &State);
 
@@ -277,7 +278,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
   void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);
   void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
-  void emitOpRetVal(ucOp &OpRetVal);
+  void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
   // Special ucop for connecting wires.
   void emitOpConnectWire(ucOp &Op);
@@ -483,7 +484,8 @@ void RTLCodegen::emitIdleState() {
 
   // Always Disable the finish signal.
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
-  emitFirstCtrlState(EntryBB);
+  SmallVector<VASTCnd, 1> Cnds(1, VASTCnd(StartPort));
+  emitFirstCtrlState(EntryBB, IdleSlot, Cnds);
   // End if-else
   CtrlS.exit_block();
   // End idle state.
@@ -800,7 +802,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
         CurSlot->addNextSlot(CurSlot->getSlotNum() + 1);
 
       // Emit the first micro state of the target state.
-      emitFirstCtrlState(TargetBB);
+      emitFirstCtrlState(TargetBB, CurSlot, Cnds);
 
       CtrlS.exit_block();
       PredMap.insert(std::make_pair(TargetBB, SlotPred));
@@ -842,7 +844,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpSRA:           emitBinaryFUOp(Op, CurSlot, Cnds); break;
     case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot);    break;
     case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
-    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
+    case VTM::VOpRetVal:        emitOpRetVal(Op, CurSlot, Cnds);break;
     case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
     case VTM::VOpCmdSeq:
     case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
@@ -866,7 +868,8 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   }
 }
 
-void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
+void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
+                                    SmallVectorImpl<VASTCnd> &Cnds) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *DstBB->getFirstNonPHI();
   assert(FInfo->getStartSlotFor(DstBB) == FirstState.getSlot()
@@ -886,7 +889,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB) {
     case VTM::ImpUse:           /*Not need to handle*/        break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
-    case VTM::VOpRetVal:        emitOpRetVal(Op);             break;
+    case VTM::VOpRetVal:        emitOpRetVal(Op, Slot, Cnds); break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
@@ -1085,19 +1088,12 @@ void RTLCodegen::emitOpRet(ucOp &OpArg, VASTSlot *CurSlot) {
   CurSlot->addEnable(VM->getPort(VASTModule::Finish));
 }
 
-void RTLCodegen::emitOpRetVal(ucOp &OpRetVal) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  unsigned retChannel = OpRetVal.getOperand(1).getImm();
+void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
+                              SmallVectorImpl<VASTCnd> &Cnds) {
+  VASTRegister &RetReg = cast<VASTRegister>(*VM->getRetPort());
+  unsigned retChannel = Op.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
-  OS << "return_value <= ";
-  printOperand(OpRetVal.getOperand(0), OS);
-  OS << ";\n";
-  OS << "`ifdef __VERILATOR_SIM_DEBUG\n"
-        "$display(\"Module " << MF->getFunction()->getName()
-     << " return %x\\n\", ";
-  printOperand(OpRetVal.getOperand(0), OS);
-  OS << ");\n"
-        "`endif\n";
+  VM->addAssignment(&RetReg, getSignal(Op.getOperand(0)), Slot, Cnds);
 }
 
 void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
