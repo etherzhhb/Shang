@@ -466,12 +466,6 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
 }
 
 void RTLCodegen::emitIdleState() {
-  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-
-  CtrlS.if_begin(getucStateEnable(0), "// Idle state\n");
-  //CtrlS.match_case("state_idle");
-  // Idle state is always ready.
-  CtrlS.if_begin("start");
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getSlot(0);
@@ -484,10 +478,6 @@ void RTLCodegen::emitIdleState() {
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
   SmallVector<VASTCnd, 1> Cnds(1, StartPort);
   emitFirstCtrlState(EntryBB, IdleSlot, Cnds);
-  // End if-else
-  CtrlS.exit_block();
-  // End idle state.
-  CtrlS.exit_block("// End idle state\n");
 }
 
 void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
