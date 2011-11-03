@@ -93,7 +93,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       }
 
       // Try to merge the Select to improve parallelism.
-      mergeSel(Inst, MRI, TII);
+      //mergeSel(Inst, MRI, TII);
     }
   }
 
