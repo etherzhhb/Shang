@@ -151,16 +151,16 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
 }
 
 void VASTRValue::print(raw_ostream &OS) const {
+  // Print the bit range if the value is have multiple bits.
   OS << V->getName();
-
-  if (UB != LB) OS << '[' << (unsigned(UB) - 1) << ':' << unsigned(LB) << ']';
+  if (UB) OS << verilogBitRange(UB, LB, V->getBitWidth() > 1);
 }
 
 void VASTCnd::print(raw_ostream &OS) const {
   OS << '(';
   if (isInverted()) OS << '~';
 
-  if (V != 0) OS << V->getName();
+  if (V != 0) VASTRValue::print(OS);
   else        OS << "1'b1";
 
   OS << ')';
