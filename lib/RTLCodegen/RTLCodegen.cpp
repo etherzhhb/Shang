@@ -283,7 +283,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpMemTrans(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot);
+  void emitOpBRam(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -853,7 +853,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
     case VTM::VOpCmdSeq:
     case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot, Cnds);break;
-    case VTM::VOpBRam:          emitOpBRam(Op, CurSlot);      break;
+    case VTM::VOpBRam:          emitOpBRam(Op, CurSlot, Cnds);    break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpSel:           emitOpSel(Op, CurSlot, Cnds); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot, Cnds);break;
@@ -1132,25 +1132,31 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
   NextSlot->addDisable(MemEn, Pred);
 }
 
-void RTLCodegen::emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot) {
-  unsigned FUNum = OpBRam.getOperand(0).getReg();
+void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
+                            SmallVectorImpl<VASTCnd> &Cnds) {
+  unsigned FUNum = Op.getOperand(0).getReg();
 
   // Emit the control logic.
-  raw_ostream &OS = VM->getControlBlockBuffer();
+  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
+  std::string PredStr;
+  raw_string_ostream PredSS(PredStr);
+  VASTRegister::printCondition(PredSS, Slot, Cnds);
+  OS.if_begin(PredStr);
   // Emit Address.
   OS << VFUBRam::getAddrBusName(FUNum) << " <= (";
-  printOperand(OpBRam.getOperand(1), OS);
+  printOperand(Op.getOperand(1), OS);
   unsigned SizeInBits
-    = FInfo->getBRamInfo(OpBRam->getFUId().getFUNum()).ElemSizeInBytes;
+    = FInfo->getBRamInfo(Op->getFUId().getFUNum()).ElemSizeInBytes;
   OS << " >> " << Log2_32_Ceil(SizeInBits) << ");\n";
   // Assign store data.
   OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
-  printOperand(OpBRam.getOperand(2), OS);
+  printOperand(Op.getOperand(2), OS);
   OS << ";\n";
   // And write enable.
   OS << VFUBRam::getWriteEnableName(FUNum) << " <= ";
-  printOperand(OpBRam.getOperand(3), OS);
+  printOperand(Op.getOperand(3), OS);
   OS << ";\n";
+  OS.exit_block();
   // The byte enable.
   // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
   // OpBRam.getOperand(4).print(OS);
@@ -1159,12 +1165,12 @@ void RTLCodegen::emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot) {
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUBRam::getEnableName(FUNum);
   VASTValue *MemEn = VM->getOrCreateSymbol(EnableName);
-  VASTCnd Pred = createCondition(OpBRam.getPredicate());
-  CurSlot->addEnable(MemEn, Pred);
+  VASTCnd Pred = createCondition(Op.getPredicate());
+  Slot->addEnable(MemEn, Pred);
 
   // Disable the memory at next slot.
   // TODO: Assert the control flow is linear.
-  VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
+  VASTSlot *NextSlot = VM->getSlot(Slot->getSlotNum() + 1);
   NextSlot->addDisable(MemEn, Pred);
 }
 
