@@ -357,6 +357,7 @@ VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
   : VASTSignal(vastRegister, Name, BitWidth, true, InitVal, Attr) {}
 
 void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
+  assert(Src.get() != this && "Self assignemnt not supported yet!");
   Assigns[Src].push_back(std::make_pair(S, Cnd));
 }
 
