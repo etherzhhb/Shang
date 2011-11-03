@@ -254,8 +254,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpSel(ucOp &OpSel);
 
-  void emitOpAdd(ucOp &Op, VASTSlot *Slot, VASTRegister::CndVec &Cnds);
-  void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, VASTRegister::CndVec &Cnds);
+  void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
+  void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
   void emitOpBitCat(ucOp &OpBitCat);
   void emitOpBitSlice(ucOp &OpBitSlice);
@@ -754,7 +754,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   unsigned IISlot = FInfo->getIISlotFor(CurBB);
   unsigned EndSlot = FInfo->getEndSlotFor(CurBB);
   unsigned II = IISlot - startSlot;
-  VASTRegister::CndVec Cnds;
+  SmallVector<VASTCnd, 4> Cnds;
 
   vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
 
@@ -901,23 +901,23 @@ void RTLCodegen::emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot) {
 }
 
 void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
-                           VASTRegister::CndVec &Cnds) {
+                           SmallVectorImpl<VASTCnd> &Cnds) {
   VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
-  R->addAssignment(getSignal(Op.getOperand(2)), Cnds, Slot);
+  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(1));
-  R->addAssignment(getSignal(Op.getOperand(3)), Cnds, Slot);
+  VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(2));
-  R->addAssignment(getSignal(Op.getOperand(4)), Cnds, Slot);
+  VM->addAssignment(R, getSignal(Op.getOperand(4)), Slot, Cnds);
 }
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
-                                VASTRegister::CndVec &Cnds) {
+                                SmallVectorImpl<VASTCnd> &Cnds) {
   VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
-  R->addAssignment(getSignal(Op.getOperand(1)), Cnds, Slot);
+  VM->addAssignment(R, getSignal(Op.getOperand(1)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(1));
-  R->addAssignment(getSignal(Op.getOperand(2)), Cnds, Slot);
+  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {

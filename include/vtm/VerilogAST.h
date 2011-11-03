@@ -267,17 +267,16 @@ public:
 };
 
 class VASTRegister : public VASTSignal {
-public:
-  typedef SmallVector<VASTCnd, 8> CndVec;
-  typedef std::pair<VASTRValue, CndVec> AssignCndTy;
-  typedef std::map<VASTSlot*, AssignCndTy> AssignMapTy;
-private:
+  typedef ArrayRef<VASTCnd> AndCndVec;
+  typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
+  typedef std::vector<AssignCndTy>  OrCndVec;
+  typedef std::map<VASTRValue, OrCndVec, VASTRValueLess> AssignMapTy;
   AssignMapTy Assigns;
 public:
   VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal,
                const std::string &Attr = "");
 
-  void addAssignment(VASTRValue Src, CndVec &Cnd, VASTSlot *S);
+  void addAssignment(VASTRValue Src, AndCndVec Cnd, VASTSlot *S);
 
   void print(vlang_raw_ostream &OS) const;
 
@@ -550,6 +549,8 @@ public:
 
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const std::string &Attr = "");
+  void addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
+                     SmallVectorImpl<VASTCnd> &Cnds);
 
   VASTValue *indexVASTValue(unsigned RegNum, VASTRValue V);
 

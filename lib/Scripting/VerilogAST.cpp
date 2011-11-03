@@ -356,12 +356,8 @@ VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
                            unsigned InitVal, const std::string &Attr)
   : VASTSignal(vastRegister, Name, BitWidth, true, InitVal, Attr) {}
 
-void VASTRegister::addAssignment(VASTRValue Src, CndVec &Cnd, VASTSlot *S) {
-  bool inserted =
-    Assigns.insert(std::make_pair(S, std::make_pair(Src, Cnd))).second;
-  // FIXME: It is legal in if convertion.
-  assert(inserted && "Multiple assignment at the same slot?");
-  (void) inserted;
+void VASTRegister::addAssignment(VASTRValue Src, AndCndVec Cnd, VASTSlot *S) {
+  Assigns[Src].push_back(std::make_pair(S, Cnd));
 }
 
 void VASTRegister::print(vlang_raw_ostream &OS) const {
@@ -369,7 +365,7 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 
   std::string Pred;
   raw_string_ostream SS(Pred);
-  bool UseSwitch = Assigns.size() > 1;
+  bool UseSwitch = false/*Assigns.size() > 1*/;
 
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {
@@ -379,23 +375,28 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
     SS << '(';
-    // Build the assign condition.
-    const VASTSlot *Slot = I->first;
-    // Dirty Hack: SlotAcitve signal.
-    SS << Slot->getName() << "Active";
-    const CndVec &Cnds = I->second.second;
-    typedef CndVec::const_pointer cnd_it;
-    for (cnd_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
-      SS << " & ";
-      CI->print(SS);
+    typedef OrCndVec::const_iterator or_it;
+    for (or_it OI = I->second.begin(), OE = I->second.end(); OI != OE; ++OI) {
+      SS << '(';
+      const VASTSlot *Slot = OI->first;
+      // Dirty Hack: SlotAcitve signal.
+      SS << Slot->getName() << "Active";
+      const AndCndVec &Cnds = OI->second;
+      typedef AndCndVec::const_iterator and_it;
+      for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
+        SS << " & ";
+        CI->print(SS);
+      }
+      SS << ") | ";
     }
-    SS << ')';
+    // Build the assign condition.
+    SS << "1'b0)";
     SS.flush();
     // Print the assignment under the condition.
     if (UseSwitch) OS.match_case(Pred);
     else OS.if_begin(Pred);
     OS << getName() << " <= ";
-    I->second.first.print(OS);
+    I->first.print(OS);
     OS << ";\n";
     OS.exit_block();
 
@@ -485,6 +486,13 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
       OS << "\n";
     }
   }
+}
+
+void VASTModule::addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
+                               SmallVectorImpl<VASTCnd> &Cnds) {
+  VASTCnd *CndArray = Allocator.Allocate<VASTCnd>(Cnds.size());
+  std::uninitialized_copy(Cnds.data(), Cnds.data() + Cnds.size(), CndArray);
+  Dst->addAssignment(Src, ArrayRef<VASTCnd>(CndArray, Cnds.size()), Slot);
 }
 
 void VASTModule::print(raw_ostream &OS) const {
