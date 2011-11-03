@@ -167,8 +167,9 @@ void FuncUnitId::dump() const {
   print(dbgs());
 }
 
-std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num, unsigned ID,
-                                  unsigned DataWidth, unsigned AddrWidth) const {
+std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num,
+                                  unsigned DataWidth, unsigned AddrWidth,
+                                  std::string Filename) const {
   std::string Script;
   raw_string_ostream ScriptBuilder(Script);
 
@@ -184,7 +185,11 @@ std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num, unsigned
   // And the look up.
                 << "lookup={ "
                 << "datawidth=" << DataWidth << ", addrwidth=" << AddrWidth
-                << ", num=" << Num << ", ID="<< ID <<", clk='" << Clk
+                << ", num=" << Num << ", filepath="
+                << "[[" << InitFileDir << "]]" << ", filename=" << "[[" << Filename
+                << "]]" << ", empty=" << "[[" << " " << "]]"
+                << ", clk='" << Clk
+
   // End the look up and the function call.
                 << "'}}\n";
   DEBUG(ScriptBuilder << "print(" << ResultName << ")\n");
@@ -199,10 +204,14 @@ std::string VFUBRam::generateCode(const std::string &Clk, unsigned Num, unsigned
   return scriptEngin().getValueStr(ResultName);
 }
 
+static void printConstant(raw_ostream &Out, Constant *CPV,
+  unsigned DataWidth);
 
+static void printConstantArray(raw_ostream &Out, ConstantArray *CPA,
+  unsigned DataWidth);
 
-void VFUBRam::printConstantArray(raw_ostream &Out, ConstantArray *CPA, 
-  unsigned DataWidth, bool Static) {
+static void printConstantArray(raw_ostream &Out, ConstantArray *CPA,
+  unsigned DataWidth) {
     // As a special case, print the array as a string if it is an array of
     // ubytes or an array of sbytes with positive values.
     //
@@ -214,19 +223,28 @@ void VFUBRam::printConstantArray(raw_ostream &Out, ConstantArray *CPA,
     /*if (isString && (CPA->getNumOperands() == 0 ||
       !cast<Constant>(*(CPA->op_end()-1))->isNullValue()))
       isString = false;*/
+
+    assert (CPA->getNumOperands() && "Constant has no operands!");
+    printConstant(Out, cast<Constant>(CPA->getOperand(0)), DataWidth);
+    for (unsigned i = 1, e = CPA->getNumOperands(); i != e; ++i) {
+      Out << "\n";
+      printConstant(Out, cast<Constant>(CPA->getOperand(i)), DataWidth);
     }
-    //   }
 }
 
-void VFUBRam::printConstant(raw_ostream &Out, Constant *CPV, 
-                     unsigned DataWidth,bool Static) {
-   /*if (ConstantInt *CI = dyn_cast<ConstantInt>(CPV)) {
-      const Type* Ty = CI->getType();
-      std::string tempstr;
-      if (Ty == Type::getInt1Ty(CPV->getContext())) {
-        tempstr = (CI->getZExtValue() ? '1' : '0');
-      }
-      else {
+// Helper Functions: print constant for initializing bram.
+// The printed constant is of hex format and separated by '\n'
+// It can be read by readmemh$()
+static void printConstant(raw_ostream &Out, Constant *CPV,
+                     unsigned DataWidth) {
+  if (ConstantInt *CI = dyn_cast<ConstantInt>(CPV)) {
+    const Type* Ty = CI->getType();
+    std::string tempstr;
+    if (Ty == Type::getInt1Ty(CPV->getContext())) {
+      tempstr = (CI->getZExtValue() ? '1' : '0');
+    } else {
+      tempstr = utohexstr(CI->getSExtValue());
+    }
  /* if (ConstantInt *CI = dyn_cast<ConstantInt>(CPV)) {
     const Type* Ty = CI->getType();
     std::string tempstr;
@@ -243,46 +261,39 @@ void VFUBRam::printConstant(raw_ostream &Out, Constant *CPV,
         tempstr = utohexstr(CI->getSExtValue());
     }*/
 
+    if (tempstr.size() > DataWidth/4) {
+      std::string str(tempstr.end()-DataWidth/4, tempstr.end());
+      Out << str;
+    } else {
+      Out << tempstr;
     }
+    return;
+  }
 
-    switch (CPV->getType()->getTypeID()) {
-    case Type::ArrayTyID:
-      // Use C99 compound expression literal initializer syntax.
-      if (!Static) {
-        Out << "(";
-        printType(Out, CPV->getType());
-        Out << ")";
-      }
-      //Out << "{ "; // Arrays are wrapped in struct types.
-      if (ConstantArray *CA = dyn_cast<ConstantArray>(CPV)) {
-        printConstantArray(Out, CA, DataWidth, Static);
-      } else {
-        assert(isa<ConstantAggregateZero>(CPV) || isa<UndefValue>(CPV));
-        const ArrayType *AT = cast<ArrayType>(CPV->getType());
-        //Out << '{';
-        if (AT->getNumElements()) {
-          //Out << ' ';
-          Constant *CZ = Constant::getNullValue(AT->getElementType());
-          printConstant(Out, CZ, DataWidth, Static);
-          for (unsigned i = 1, e = AT->getNumElements(); i != e; ++i) {
-            //Out << ", ";
-            Out << "\n";
-            printConstant(Out, CZ, DataWidth, Static);
-          }
+  switch (CPV->getType()->getTypeID()) {
+  case Type::ArrayTyID:
+    if (ConstantArray *CA = dyn_cast<ConstantArray>(CPV)) {
+      printConstantArray(Out, CA, DataWidth);
+    } else {
+      assert(isa<ConstantAggregateZero>(CPV) || isa<UndefValue>(CPV));
+      const ArrayType *AT = cast<ArrayType>(CPV->getType());
+      if (AT->getNumElements()) {
+        Constant *CZ = Constant::getNullValue(AT->getElementType());
+        printConstant(Out, CZ, DataWidth);
+        for (unsigned i = 1, e = AT->getNumElements(); i != e; ++i) {
+          Out << "\n";
+          printConstant(Out, CZ, DataWidth);
         }
-        //Out << " }";
       }
-      // Out << " }"; // Arrays are wrapped in struct types.
-      break;
-    default:
-#ifndef NDEBUG
-      errs() << "Unknown constant type: " << *CPV << "\n";
-#endif
-      llvm_unreachable(0);
     }
+    break;
+  default:
+    errs() << "Unknown constant type: " << *CPV << "\n";
+    llvm_unreachable(0);
+  }
 }
 
-void VFUBRam::printZeros(raw_ostream &Out, unsigned int NumElement, 
+static void printZeros(raw_ostream &Out, unsigned int NumElement,
   unsigned int Bytes){
     std::string element = utostr_32(Bytes)+"'h";
     std::string S;
@@ -291,21 +302,41 @@ void VFUBRam::printZeros(raw_ostream &Out, unsigned int NumElement,
     Out << S;
 }
 
-void VFUBRam::generateInitFile(unsigned BramID, unsigned BramNum,
-                                   unsigned DataWidth, const Value* Initializer, 
-                                   unsigned NumElem) {
-  std::string FileName = InitFileDir + "bram" + utostr_32(BramNum) + '_' 
-    + utostr_32(BramID) + ".txt";
-  raw_ostream& InitS = scriptEngin().getOutputFileStream(FileName);
-  if (GlobalVariable *GV = const_cast<GlobalVariable*>
-     (dyn_cast<GlobalVariable>(Initializer))) {
-      Constant* CPV = GV->getInitializer();
-      //There is initial value, print the constant array.
-      printConstant(InitS, CPV, DataWidth, 1); 
+std::string VFUBRam::generateInitFile(unsigned DataWidth, const Value* Initializer,
+                     unsigned NumElem) {
+  GlobalVariable *GV = const_cast<GlobalVariable*>
+                               (cast<GlobalVariable>(Initializer));
+  //if the initializer is null, as is the case with real bram, give it an empty file name
+  //so that the lua template can skip the initial statement.
+
+  std::string Filename;  // Template for the readmemh file name
+
+  //if the initializer has already been written in a .txt, skip it and keep the filename
+  if (GVSet.count(GV)) {
+    std::string GVName = GV->getNameStr();
+    Filename = "bram" + GVName + ".txt";
+    return Filename;
+  }
+  if (GV) {
+    std::string GVName = GV->getNameStr();
+    Filename = "bram" + GVName + ".txt";
+    GVSet.insert(GV);
+  } else {
+    Filename = "empty";
+  }
+  //write the initializer to a .txt file
+  std::string File = InitFileDir + Filename;
+  raw_ostream& InitS = scriptEngin().getOutputFileStream(File);
+
+  if (GV) {
+    Constant* CPV = GV->getInitializer();
+    //There is initial value, print the constant array.
+    printConstant(InitS, CPV, DataWidth);
   } else {
     //There is no initial value, print Zeros to the InitS.
     printZeros(InitS, NumElem, DataWidth/8); 
   }
+  return Filename;
 }
 
 std::string VFUs::instantiatesModule(const std::string &ModName, unsigned ModNum,

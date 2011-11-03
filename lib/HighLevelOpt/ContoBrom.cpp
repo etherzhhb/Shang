@@ -52,8 +52,8 @@ namespace {
   //Use a cast instruction number to mark the cast instruction
   unsigned CastNum;
 
-  ContoBrom(const TargetIntrinsicInfo &II) : ModulePass(ID), Mod(0), CastNum(0),
-    IntrinsicInfo(II) {}
+  ContoBrom(const TargetIntrinsicInfo &II) : ModulePass(ID), Mod(0), IntrinsicInfo(II), 
+    CastNum(0){}
 
   bool runOnModule(Module &M);
 

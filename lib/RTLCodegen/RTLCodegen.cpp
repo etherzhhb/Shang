@@ -561,21 +561,17 @@ void RTLCodegen::emitAllocatedFUs() {
        I != E; ++I) {
     const VFInfo::BRamInfo &Info = I->second;
     unsigned BramNum = Info.PhyRegNum;
-    //unsigned BramID = I->first;
-    static unsigned BramID;
     const Value* Initializer = Info.Initializer; 
     unsigned NumElem = Info.NumElem;
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
+    std::string Filename;
 
     //Print the Constant into a .txt file as the initializer to bram
-    BlockRam->generateInitFile(BramID, BramNum, DataWidth, Initializer, NumElem);
+    Filename = BlockRam->generateInitFile(DataWidth, Initializer, NumElem);
 
-    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum, BramID,
-                                DataWidth,
-                                Log2_32_Ceil(NumElem))
+    S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
+                                DataWidth, Log2_32_Ceil(NumElem), Filename)
       << '\n';
-
-    BramID++;
   }
 
   // Generate the code for sub modules/external modules
@@ -724,7 +720,6 @@ void RTLCodegen::emitAllSignals() {
   }
 
   emitSignals(VTM::WireRegisterClass, false);
-  emitSignals(VTM::RBRMRegisterClass, false);
 }
 
 void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
@@ -1297,7 +1292,8 @@ void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
   if(Op.isReg()){
     VASTRValue V = getSignal(Op);
     OS << V->getName();
-    if(printRange && V->getBitWidth() != 0) 
+
+    if(printRange && V->getBitWidth() != 0)
       OS << verilogBitRange(V.UB, V.LB, V->getBitWidth() !=1);
 
     return;
