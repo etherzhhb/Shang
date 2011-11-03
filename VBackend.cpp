@@ -221,6 +221,12 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Fix machine code so we can handle them easier.
   PM.add(createFixMachineCodePass());
 
+  // With optimization, dead code should already be eliminated. However
+  // there is one known exception: lowered code for arguments that are only
+  // used by tail calls, where the tail calls reuse the incoming stack
+  // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
+  PM.add(createDeadMachineInstructionElimPass());
+
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());
 
