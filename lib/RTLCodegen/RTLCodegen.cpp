@@ -816,9 +816,10 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
       unsigned CndSlot = SlotNum - II;
       SlotPredSS << " & (";
-      if (TargetBB == CurBB && CndSlot > startSlot)
+      if (TargetBB == CurBB && CndSlot > startSlot) {
         SlotPredSS << getucStateEnable(CndSlot - 1);
-      else {
+        Cnds.push_back(VM->getOrCreateSymbol(getucStateEnable(CndSlot - 1)));
+      } else {
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
         SlotPredSS << PredMap.find(TargetBB)->second;
       }
