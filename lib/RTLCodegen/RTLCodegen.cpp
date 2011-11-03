@@ -273,7 +273,7 @@ class RTLCodegen : public MachineFunctionPass {
   VASTRValue getSignal(ucOperand &Op);
   void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true);
   void printAsOperand(ucOperand &Op, VASTWire &Wire,
-                    unsigned UB = 64, unsigned LB = 0);
+                      unsigned UB = 64, unsigned LB = 0);
 
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
   void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);

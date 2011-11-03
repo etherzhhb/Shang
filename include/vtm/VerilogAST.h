@@ -285,6 +285,9 @@ public:
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastRegister;
   }
+
+  static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
+                             const AndCndVec Cnds);
 };
 
 class VASTSlot : public VASTNode {

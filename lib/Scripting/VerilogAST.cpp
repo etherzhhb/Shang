@@ -360,6 +360,21 @@ void VASTRegister::addAssignment(VASTRValue Src, AndCndVec Cnd, VASTSlot *S) {
   Assigns[Src].push_back(std::make_pair(S, Cnd));
 }
 
+void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
+                                  const AndCndVec Cnds) {
+  OS << '(';
+  if (Slot) OS << Slot->getName() << "Active";
+  else      OS << "1'b1";
+
+  typedef AndCndVec::const_iterator and_it;
+  for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
+    OS << " & ";
+    CI->print(OS);
+  }
+
+  OS << ')';
+}
+
 void VASTRegister::print(vlang_raw_ostream &OS) const {
   if (Assigns.empty()) return;
 
@@ -372,22 +387,14 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
     OS << VASTModule::ParallelCaseAttr << ' ';
     OS.switch_begin("1'b1");
   }
+
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
     SS << '(';
     typedef OrCndVec::const_iterator or_it;
     for (or_it OI = I->second.begin(), OE = I->second.end(); OI != OE; ++OI) {
-      SS << '(';
-      const VASTSlot *Slot = OI->first;
-      // Dirty Hack: SlotAcitve signal.
-      SS << Slot->getName() << "Active";
-      const AndCndVec &Cnds = OI->second;
-      typedef AndCndVec::const_iterator and_it;
-      for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
-        SS << " & ";
-        CI->print(SS);
-      }
-      SS << ") | ";
+      printCondition(SS, OI->first, OI->second);
+      SS << " | ";
     }
     // Build the assign condition.
     SS << "1'b0)";
