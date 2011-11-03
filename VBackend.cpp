@@ -87,7 +87,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createStackToGlobalPass());
 
   // The ContoBromPass
-  PM.add(createContoBromPass(*getIntrinsicInfo()));
+  //PM.add(createContoBromPass(*getIntrinsicInfo()));
 
   // Standard LLVM-Level Passes.
 
