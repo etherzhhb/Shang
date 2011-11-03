@@ -901,21 +901,15 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
 void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
                            SmallVectorImpl<VASTCnd> &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
-  std::string SelWireName = R->getName() + "_Sel_" + Slot->getName();
-  // Dirty Hack: Create a wire for select result.
-  VASTWire *SelWire = VM->addWire(SelWireName, R->getBitWidth());
-  raw_ostream &OS = SelWire->openCodeBuffer();
-  OS << "assign " << SelWireName << " = ";
-  if (Op.getOperand(1).isPredicateInverted())
-    OS << "~";
-  printAsOperand(Op.getOperand(1), *SelWire, 1);
-  OS << " ? ";
-  printAsOperand(Op.getOperand(2), *SelWire);
-  OS << " : ";
-  printAsOperand(Op.getOperand(3), *SelWire);
-  OS << ";\n";
-  SelWire->closeCodeBuffer();
-  VM->addAssignment(R, SelWire, Slot, Cnds);
+  // Assign the value for condition true.
+  VASTCnd Cnd = createCondition(Op.getOperand(1));
+  Cnds.push_back(Cnd);
+  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
+  // Assign the value for condition false.
+  Cnds.back() = Cnd.invert();
+  VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
+  Cnds.pop_back();
+}
 }
 
 void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
