@@ -275,7 +275,7 @@ class RTLCodegen : public MachineFunctionPass {
   void printAsOperand(ucOperand &Op, VASTWire &Wire,
                       unsigned UB = 64, unsigned LB = 0);
 
-  void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
+  void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
   void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -444,7 +444,7 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
       VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
     else {
       std::string RegName = getSubModulePortName(FNNum, Name);
-      VM->addRegister(RegName, BitWidth);
+      VM->getOrCreateSymbol(RegName, VM->addRegister(RegName, BitWidth));
       S << "." << Name << '(' << RegName << "),\n\t";
     }
   }
@@ -457,7 +457,7 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
-      VM->addWire(WireName, BitWidth);
+      VM->getOrCreateSymbol(WireName, VM->addWire(WireName, BitWidth));
       S << ".return_value(" << WireName << "),\n\t";
     }
   }
@@ -848,7 +848,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpSRL:
     case VTM::VOpSRA:           emitBinaryFUOp(Op, CurSlot, Cnds); break;
     case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot, Cnds);break;
-    case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
+    case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot, Cnds);break;
     case VTM::VOpRetVal:        emitOpRetVal(Op, CurSlot, Cnds);break;
     case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
     case VTM::VOpCmdSeq:
@@ -994,83 +994,94 @@ void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(R, VM->getOrCreateSymbol(PortName), Slot, Cnds);
 }
 
-void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
+void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
+                                    SmallVectorImpl<VASTCnd> &Cnds) {
   // Assign input port to some register.
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  const char *CalleeName = OpInternalCall.getOperand(1).getSymbolName();
+  const char *CalleeName = Op.getOperand(1).getSymbolName();
   // The FNNum is encoded into the target flags field of the MachineOperand.
-  unsigned FNNum = OpInternalCall.getOperand(1).getTargetFlags();
-  OS << "// Calling function: " << CalleeName << ";\n";
+  unsigned FNNum = Op.getOperand(1).getTargetFlags();
 
-  VASTCnd Pred = createCondition(OpInternalCall.getPredicate());
+  VASTCnd Pred = createCondition(Op.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getOrCreateSymbol(StartPortName);
-  CurSlot->addEnable(StartSignal, Pred);
-  VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
+  Slot->addEnable(StartSignal, Pred);
+  VASTSlot *NextSlot = VM->getSlot(Slot->getSlotNum() + 1);
   NextSlot->addDisable(StartSignal, Pred);
 
-  if (const Function *FN = M->getFunction(CalleeName)) {
-    if (!FN->isDeclaration()) {
-      Function::const_arg_iterator ArgIt = FN->arg_begin();
-      for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
-        OS << getSubModulePortName(FNNum, ArgIt->getName()) << " <= ";
-        printOperand(OpInternalCall.getOperand(2 + i), OS);
-        OS << ";\n";
-        ++ArgIt;
-      }
-      return;
-    } else {
-      // Dirty Hack.
-      // TODO: Extract these to some special instruction?
-      OS << "$c(\"" << FN->getName() << "(\",";
-      for (unsigned i = 2, e = OpInternalCall.getNumOperands(); i != e; ++i) {
-        ucOperand &Op = OpInternalCall.getOperand(i);
-        if (Op.isReg() && (Op.getReg() == 0 || Op.isImplicit())) continue;
+  const Function *FN = M->getFunction(CalleeName);
+  if (FN && !FN->isDeclaration()) {
+    Function::const_arg_iterator ArgIt = FN->arg_begin();
+    for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
+      VASTValue *V =
+        VM->getOrCreateSymbol(getSubModulePortName(FNNum, ArgIt->getName()));
+      VASTRegister *R = cast<VASTRegister>(V);
+      VM->addAssignment(R, getSignal(Op.getOperand(2 + i)), Slot, Cnds);
+      ++ArgIt;
+    }
+    return;
+  }
 
-        if (i != 2) OS << ",\",\", ";
+  // Else we had to write the control code to the control block.
+  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
+  OS << "// Calling function: " << CalleeName << ";\n";
+  std::string PredStr;
+  raw_string_ostream SS(PredStr);
+  VASTRegister::printCondition(SS, Slot, Cnds);
+  SS.flush();
 
-        if (Op.isGlobal()) // It is the format string?
-          if (const GlobalVariable *Str = cast<GlobalVariable>(Op.getGlobal())){
-            if (Str->hasInitializer()) {
-              const Constant *Initialer = Str->getInitializer();
-              if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)){
-                 if (Fmt->isCString()) {
-                   std::string FmtStr;
-                   raw_string_ostream SS(FmtStr);
-                   SS << '"';
-                   PrintEscapedString(Fmt->getAsString(), SS);
-                   SS << '"';
-                   SS.flush();
-                   OS << '"';
-                   PrintEscapedString(FmtStr, OS);
-                   OS << '"';
-                   continue;
-                 }
+  OS.if_begin(PredStr);
+  if (FN /*&& FN->isDeclaration()*/) {
+    // Dirty Hack.
+    // TODO: Extract these to some special instruction?
+    OS << "$c(\"" << FN->getName() << "(\",";
+    for (unsigned i = 2, e = Op.getNumOperands(); i != e; ++i) {
+      ucOperand &Operand = Op.getOperand(i);
+      if (Operand.isReg() && (Operand.getReg() == 0 || Operand.isImplicit()))
+        continue;
+
+      if (i != 2) OS << ",\",\", ";
+
+      if (Operand.isGlobal()) // It is the format string?
+        if (const GlobalVariable *Str = cast<GlobalVariable>(Operand.getGlobal())){
+          if (Str->hasInitializer()) {
+            const Constant *Initialer = Str->getInitializer();
+            if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)){
+              if (Fmt->isCString()) {
+                std::string FmtStr;
+                raw_string_ostream SS(FmtStr);
+                SS << '"';
+                PrintEscapedString(Fmt->getAsString(), SS);
+                SS << '"';
+                SS.flush();
+                OS << '"';
+                PrintEscapedString(FmtStr, OS);
+                OS << '"';
+                continue;
               }
             }
           }
-        printOperand(Op, OS);
-      }
-
-      OS << ", \");\""; // Enclose the c function call.
-      OS << ");\n";
-      return;
+        }
+      printOperand(Operand, OS);
     }
-  }
 
-  // Else ask the constraint about how to handle this call.
-  SmallVector<std::string, 8> InPorts;
-  std::string s;
-  raw_string_ostream SS(s);
-  for (unsigned i = 2, e = OpInternalCall.getNumOperands(); i != e; ++i) {
-    printOperand(OpInternalCall.getOperand(i), SS);
-    SS.flush();
-    InPorts.push_back(SS.str());
-    s.clear();
-  }
+    OS << ", \");\""; // Enclose the c function call.
+    OS << ");\n";
+  } else {
+    // Else ask the constraint about how to handle this call.
+    SmallVector<std::string, 8> InPorts;
+    std::string s;
+    raw_string_ostream SS(s);
+    for (unsigned i = 2, e = Op.getNumOperands(); i != e; ++i) {
+      printOperand(Op.getOperand(i), SS);
+      SS.flush();
+      InPorts.push_back(SS.str());
+      s.clear();
+    }
 
-  std::string Name = CalleeName;
-  OS << VFUs::startModule(Name, FInfo->getCalleeFNNum(CalleeName), InPorts);
+    std::string Name = CalleeName;
+    OS << VFUs::startModule(Name, FInfo->getCalleeFNNum(CalleeName), InPorts);
+  }
+  OS.exit_block();
 }
 
 void RTLCodegen::emitOpRet(ucOp &OpArg, VASTSlot *CurSlot) {
