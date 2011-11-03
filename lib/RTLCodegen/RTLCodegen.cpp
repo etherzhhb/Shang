@@ -277,7 +277,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
+  void emitOpUnreachable(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
   void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -495,15 +495,6 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned II = FInfo->getIIFor(&MBB);
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
   PredMapTy NextStatePred;
-
-  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-
-  // State information.
-  CtrlS << "// BB#" << MBB.getNumber() << " Total Slot: " << totalSlot
-        << " II: " << II;
-  if (II != totalSlot) CtrlS << " pipelined";
-  CtrlS << '\n';
-
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
                               E = MBB.getFirstTerminator();
   //ucState FstCtrl(I);
@@ -518,12 +509,11 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    CtrlS << "// Slot " << NextControl.getSlot() << '\n';
     if (NextControl.empty())
       emitSlotsForEmptyState(NextControl.getSlot(), EndSlot, II);
 
     emitCtrlOp(NextControl, NextStatePred);
-  };
+  }
 }
 
 void RTLCodegen::emitCommonPort(unsigned FNNum) {
@@ -756,8 +746,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   unsigned II = IISlot - startSlot;
   SmallVector<VASTCnd, 4> Cnds;
 
-  vlang_raw_ostream &CtrlS = VM->getControlBlockBuffer();
-
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
 
@@ -769,21 +757,11 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     if (Op->getOpcode() == VTM::ImpUse) continue;
     
     Cnds.clear();
-    // Emit the control operation at the rising edge of the clock.
-    std::string SlotPred = "(";
-    raw_string_ostream SlotPredSS(SlotPred);
-
-    SlotPredSS << getucStateEnable(SlotNum - 1) << ')';
-    // Emit the predicate operand.
-    SlotPredSS << " & ";
-    printPredicate(Op.getPredicate(), SlotPredSS);
     Cnds.push_back(createCondition(Op.getPredicate()));
 
     // Special case for state transferring operation.
     if (VInstrInfo::isBrCndLike(Op->getOpcode())) {
-      SlotPredSS << " & ";
       ucOperand &CndOp = Op.getOperand(0);
-      printPredicate(CndOp, SlotPredSS);
       Cnds.push_back(createCondition(CndOp));
 
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
@@ -793,8 +771,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
-      SlotPredSS.flush();
-      CtrlS.if_begin(SlotPred);
       if (TargetBB == CurBB && IISlot < EndSlot)
         // The loop op of pipelined loop enable next slot explicitly.
         CurSlot->addNextSlot(CurSlot->getSlotNum() + 1);
@@ -802,7 +778,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       // Emit the first micro state of the target state.
       emitFirstCtrlState(TargetBB, CurSlot, Cnds);
 
-      CtrlS.exit_block();
       VASTRegister::AssignCndTy JumpCnd
         = std::make_pair(CurSlot, VM->allocateAndCndVec(Cnds));
       PredMap.insert(std::make_pair(TargetBB, JumpCnd));
@@ -815,24 +790,20 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     if (Op->getOpcode() == VTM::VOpMvPhi) {
       MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
       unsigned CndSlot = SlotNum - II;
-      SlotPredSS << " & (";
       if (TargetBB == CurBB && CndSlot > startSlot) {
-        SlotPredSS << getucStateEnable(CndSlot - 1);
         Cnds.push_back(VM->getOrCreateSymbol(getucStateEnable(CndSlot - 1)));
       } else {
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
         VASTRegister::AssignCndTy PredCnd = PredMap.find(TargetBB)->second;
-        VASTRegister::printCondition(SlotPredSS, PredCnd);
-        std::string SlotActive = getucStateEnable(PredCnd.first->getSlotNum());
-        Cnds.push_back(VM->getOrCreateSymbol(SlotActive));
+        // Do we need extra predicate slot?
+        if (PredCnd.first != CurSlot) {
+          std::string SlotActive = getucStateEnable(PredCnd.first->getSlotNum());
+          Cnds.push_back(VM->getOrCreateSymbol(SlotActive));
+        }
+
         Cnds.insert(Cnds.end(), PredCnd.second.begin(), PredCnd.second.end());
       }
-
-      SlotPredSS << ')';
     }
-
-    SlotPredSS.flush();
-    CtrlS.if_begin(SlotPred);
 
     // Emit the operations.
     switch (Op->getOpcode()) {
@@ -857,11 +828,9 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpSel:           emitOpSel(Op, CurSlot, Cnds); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot, Cnds);break;
-    case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot);break;
+    case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot, Cnds);break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
-
-    CtrlS.exit_block();
   }
 
   // There will be alias slot if the BB is pipelined.
@@ -899,11 +868,19 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
   }
 }
 
-void RTLCodegen::emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot) {
-  raw_ostream &CtrlS = VM->getControlBlockBuffer();
-  CtrlS << "$display(\"BAD BAD BAD BAD! Run to unreachable\");\n";
-  CtrlS << "$finish();\n";
-  CurSlot->addNextSlot(0);
+void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
+                                   SmallVectorImpl<VASTCnd> &Cnds) {
+  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
+  std::string PredStr;
+  raw_string_ostream SS(PredStr);
+  VASTRegister::printCondition(SS, Slot, Cnds);
+  SS.flush();
+  OS.if_begin(PredStr);
+  OS << "$display(\"BAD BAD BAD BAD! Run to unreachable\");\n";
+  OS << "$finish();\n";
+  OS.exit_block();
+  
+  Slot->addNextSlot(0);
 }
 
 void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
@@ -1101,8 +1078,6 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
                                 SmallVectorImpl<VASTCnd> &Cnds) {
   unsigned FUNum = Op->getFUId().getFUNum();
 
-  // Emit the control logic.
-  raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
   std::string RegName = VFUMemBus::getAddrBusName(FUNum) + "_r";
   VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
