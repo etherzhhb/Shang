@@ -128,7 +128,7 @@ class RTLCodegen : public MachineFunctionPass {
       // We need to create multiplexer to allow current module and its submodules
       // share the bus.
       std::string PortReg = PortName + "_r";
-      VM->addRegister(PortReg, BitWidth);
+      VM->getOrCreateSymbol(PortReg, VM->addRegister(PortReg, BitWidth));
       VM->addOutputPort(PortName, BitWidth, VASTModule::Others, false);
       if (isEn) {
         EnableLogicS << "assign " << PortName << " = " << PortReg;
@@ -282,7 +282,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
   void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot);
+  void emitOpMemTrans(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot);
 
   std::string getSubModulePortName(unsigned FNNum,
@@ -852,7 +852,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpRetVal:        emitOpRetVal(Op, CurSlot, Cnds);break;
     case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
     case VTM::VOpCmdSeq:
-    case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
+    case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot, Cnds);break;
     case VTM::VOpBRam:          emitOpBRam(Op, CurSlot);      break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpSel:           emitOpSel(Op, CurSlot, Cnds); break;
@@ -1012,9 +1012,8 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
   if (FN && !FN->isDeclaration()) {
     Function::const_arg_iterator ArgIt = FN->arg_begin();
     for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
-      VASTValue *V =
-        VM->getOrCreateSymbol(getSubModulePortName(FNNum, ArgIt->getName()));
-      VASTRegister *R = cast<VASTRegister>(V);
+      VASTRegister *R =
+        VM->getSymbol<VASTRegister>(getSubModulePortName(FNNum, ArgIt->getName()));
       VM->addAssignment(R, getSignal(Op.getOperand(2 + i)), Slot, Cnds);
       ++ArgIt;
     }
@@ -1098,37 +1097,38 @@ void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(&RetReg, getSignal(Op.getOperand(0)), Slot, Cnds);
 }
 
-void RTLCodegen::emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot) {
-  unsigned FUNum = OpMemAccess->getFUId().getFUNum();
+void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
+                                SmallVectorImpl<VASTCnd> &Cnds) {
+  unsigned FUNum = Op->getFUId().getFUNum();
 
   // Emit the control logic.
   raw_ostream &OS = VM->getControlBlockBuffer();
   // Emit Address.
-  OS << VFUMemBus::getAddrBusName(FUNum) << "_r <= ";
-  printOperand(OpMemAccess.getOperand(1), OS);
-  OS << ";\n";
+  std::string RegName = VFUMemBus::getAddrBusName(FUNum) + "_r";
+  VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
+  VM->addAssignment(R, getSignal(Op.getOperand(1)), Slot, Cnds);
   // Assign store data.
-  OS << VFUMemBus::getOutDataBusName(FUNum) << "_r <= ";
-  printOperand(OpMemAccess.getOperand(2), OS);
-  OS << ";\n";
+  RegName = VFUMemBus::getOutDataBusName(FUNum) + "_r";
+  R = VM->getSymbol<VASTRegister>(RegName);
+  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
   // And write enable.
-  OS << VFUMemBus::getCmdName(FUNum) << "_r <= ";
-  printOperand(OpMemAccess.getOperand(3), OS);
-  OS << ";\n";
+  RegName = VFUMemBus::getCmdName(FUNum) + "_r";
+  R = VM->getSymbol<VASTRegister>(RegName);
+  VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
   // The byte enable.
-  OS << VFUMemBus::getByteEnableName(FUNum) << "_r <= ";
-  printOperand(OpMemAccess.getOperand(4), OS);
-  OS << ";\n";
+  RegName = VFUMemBus::getByteEnableName(FUNum) + "_r";
+  R = VM->getSymbol<VASTRegister>(RegName);
+  VM->addAssignment(R, getSignal(Op.getOperand(4)), Slot, Cnds);
 
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValue *MemEn = VM->getOrCreateSymbol(EnableName);
-  VASTCnd Pred = createCondition(OpMemAccess.getPredicate());
-  CurSlot->addEnable(MemEn, Pred);
+  VASTCnd Pred = createCondition(Op.getPredicate());
+  Slot->addEnable(MemEn, Pred);
 
   // Disable the memory at next slot.
   // TODO: Assert the control flow is linear.
-  VASTSlot *NextSlot = VM->getSlot(CurSlot->getSlotNum() + 1);
+  VASTSlot *NextSlot = VM->getSlot(Slot->getSlotNum() + 1);
   NextSlot->addDisable(MemEn, Pred);
 }
 

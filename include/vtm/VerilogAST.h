@@ -438,13 +438,23 @@ public:
     return at->second;
   }
 
+  template<class T>
+  T *getSymbol(const std::string &Name) const {
+    return cast<T>(getSymbol(Name));
+  }
+
   VASTValue *getOrCreateSymbol(const std::string &Name, VASTValue *V = 0) {
-    if (V == 0) {
-      V = Allocator.Allocate<VASTValue>();
-      new (V) VASTValue(vastSymbol, Name, 0, false, 0);
+    VASTValue *&NewV = SymbolTable.GetOrCreateValue(Name, V).second;
+    if (NewV == 0) {
+      if (V == 0) {
+        V = Allocator.Allocate<VASTValue>();
+        new (V) VASTValue(vastSymbol, Name, 0, false, 0);
+      }
+
+      NewV = V;
     }
 
-    return SymbolTable.GetOrCreateValue(Name, V).second;
+    return NewV;
   }
 
   void allocaSlots(unsigned TotalSlots) {
