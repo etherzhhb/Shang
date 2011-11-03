@@ -53,6 +53,11 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool handleImplicitDefs(MachineInstr *MI, MachineRegisterInfo &MRI,
                           const TargetInstrInfo *TII);
+  bool mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
+                const TargetInstrInfo *TII);
+  void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
+                      MachineOperand Cnd,
+                      MachineRegisterInfo &MRI, const TargetInstrInfo *TII);
 
   void eliminateMVImm(std::vector<MachineInstr*> &Worklist,
                       MachineRegisterInfo &MRI);
@@ -82,7 +87,13 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (handleImplicitDefs(Inst, MRI, TII)) continue;
 
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri) Imms.push_back(Inst);
+      if (Inst->getOpcode() == VTM::VOpMove_ri) {
+        Imms.push_back(Inst);
+        continue;
+      }
+
+      // Try to merge the Select to improve parallelism.
+      mergeSel(Inst, MRI, TII);
     }
   }
 
@@ -197,6 +208,77 @@ void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
     // Eliminate the instruction if it dead.
     if (MRI.use_empty(DstReg)) MI->eraseFromParent();
   }
+}
+
+bool FixMachineCode::mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
+                              const TargetInstrInfo *TII) {
+  if (MI->getOpcode() != VTM::VOpSel) return false;
+
+  MachineOperand TVal = MI->getOperand(2), FVal = MI->getOperand(3);
+  MachineInstr *TMI =0, *FMI = 0;
+  if (TVal.isReg()) {
+    TMI = MRI.getVRegDef(TVal.getReg());
+    if (TMI && TMI->getOpcode() != VTM::VOpSel)
+      TMI = 0;
+  }
+
+  if (FVal.isReg()) {
+    FMI = MRI.getVRegDef(FVal.getReg());
+    if (FMI && FMI->getOpcode() != VTM::VOpSel)
+      FMI = 0;
+  }
+
+  // Both operands are not read from VOpSel
+  if (!TMI && !FMI) return false;
+
+  MachineInstr *CaseMI =
+    BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII->get(VTM::VOpCase))
+      .addOperand(MI->getOperand(0)). // Result
+      addOperand(MI->getOperand(4)). // Predicate
+      addOperand(MI->getOperand(5)); // Trace number
+
+  // Merge the select in to the newly build case.
+  MachineOperand Cnd = MI->getOperand(1);
+  if (TMI)
+    mergeSelToCase(CaseMI, TMI, Cnd, MRI, TII);
+  if (FMI) {
+    VInstrInfo::ReversePredicateCondition(Cnd);
+    mergeSelToCase(CaseMI, FMI, Cnd, MRI, TII);
+  }
+
+  MI->eraseFromParent();
+  return true;
+}
+
+void FixMachineCode::mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
+                                    MachineOperand Cnd, MachineRegisterInfo &MRI,
+                                    const TargetInstrInfo *TII) {
+  MachineOperand SelTCnd = SelMI->getOperand(1);
+  MachineOperand SelFCnd = SelTCnd;
+  VInstrInfo::ReversePredicateCondition(SelFCnd);
+
+  // Merge the condition with predicate of the select operation.
+  if (TII->isPredicated(SelMI)) {
+    MachineOperand SelPred = *VInstrInfo::getPredOperand(SelMI);
+
+    SelTCnd = VInstrInfo::MergePred(SelTCnd, SelPred, *CaseMI->getParent(),
+                                    CaseMI, &MRI, TII);
+    SelFCnd = VInstrInfo::MergePred(SelFCnd, SelPred, *CaseMI->getParent(),
+                                    CaseMI, &MRI, TII);
+  }
+
+  // Merge the condition with the condition to select this SelMI.
+  SelTCnd = VInstrInfo::MergePred(SelTCnd, Cnd, *CaseMI->getParent(),
+                                  CaseMI, &MRI, TII);
+  SelFCnd = VInstrInfo::MergePred(SelFCnd, Cnd, *CaseMI->getParent(),
+                                  CaseMI, &MRI, TII);
+
+  // Add the value for True condition.
+  CaseMI->addOperand(SelTCnd);
+  CaseMI->addOperand(SelMI->getOperand(2));
+  // Add the value for False condition.
+  CaseMI->addOperand(SelFCnd);
+  CaseMI->addOperand(SelMI->getOperand(3));
 }
 
 Pass *llvm::createFixMachineCodePass() {

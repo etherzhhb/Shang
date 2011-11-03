@@ -348,6 +348,11 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
       addSrc<0>(Op.getOperand(2));
       addSrc<0>(Op.getOperand(3));
       break;
+    case VTM::VOpCase:
+      for (unsigned i = /*Skip retult and two predicate*/3,
+           e = Op.getNumOperands(); i != e; i+=2)
+        addSrc<0>(Op.getOperand(i + 1));
+      break;
     default:
 #ifndef NDEBUG
       Op.dump();

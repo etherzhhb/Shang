@@ -380,7 +380,7 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 
   std::string Pred;
   raw_string_ostream SS(Pred);
-  bool UseSwitch = false/*Assigns.size() > 1*/;
+  bool UseSwitch = Assigns.size() > 1;
 
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {

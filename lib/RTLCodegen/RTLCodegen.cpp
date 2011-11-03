@@ -254,6 +254,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
 
   void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
+  void emitOpCase(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
   void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -816,6 +817,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpBRam:          emitOpBRam(Op, CurSlot, Cnds);    break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpSel:           emitOpSel(Op, CurSlot, Cnds); break;
+    case VTM::VOpCase:          emitOpCase(Op, CurSlot, Cnds); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot, Cnds);break;
     case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot, Cnds);break;
     default:  assert(0 && "Unexpected opcode!");              break;
@@ -910,6 +912,15 @@ void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
   Cnds.pop_back();
 }
+
+void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
+                            SmallVectorImpl<VASTCnd> &Cnds) {
+  VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
+  for (unsigned i = 1, e = Op.getNumOperands(); i < e; i +=2) {
+    Cnds.push_back(createCondition(Op.getOperand(i)));
+    VM->addAssignment(R, getSignal(Op.getOperand(i + 1)), Slot, Cnds);
+    Cnds.pop_back();
+  }
 }
 
 void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
@@ -1238,6 +1249,9 @@ VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
 
 VASTRValue RTLCodegen::getSignal(ucOperand &Op) {
   if (Op.isReg()) {
+    // Dirty Hack for dead code.
+    if (Op.getReg() == 0) return VM->getOrCreateSymbol("1'b0");
+
     VASTRValue V = VM->lookupSignal(Op.getReg());
     assert (V != 0 && "Cannot find this Value in vector!");
     return V;

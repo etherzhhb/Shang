@@ -390,7 +390,7 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpAnd))
     .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
     .addOperand(ucOperand::CreatePredicate())
-    .addOperand(ucOperand::CreateTrace(&MBB));;
+    .addOperand(ucOperand::CreateTrace(&MBB));
   Dst.setIsDef(false);
   return Dst;
 }
@@ -725,7 +725,7 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
          || Opcode == VTM::VOpMove_ri
          || Opcode == VTM::VOpMove_rw
-         || Opcode == VTM::VOpSel
+         || Opcode == VTM::VOpSel || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpReadReturn
          || Opcode == VTM::VOpReadFU;
 }
