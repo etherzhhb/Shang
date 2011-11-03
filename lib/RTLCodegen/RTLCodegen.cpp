@@ -491,7 +491,6 @@ void RTLCodegen::emitIdleState() {
 }
 
 void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
-  unsigned totalSlot = FInfo->getTotalSlotFor(&MBB);
   unsigned II = FInfo->getIIFor(&MBB);
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
   PredMapTy NextStatePred;
@@ -1116,6 +1115,8 @@ void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
   std::string PredStr;
   raw_string_ostream PredSS(PredStr);
   VASTRegister::printCondition(PredSS, Slot, Cnds);
+  PredSS.flush();
+
   OS.if_begin(PredStr);
   // Emit Address.
   OS << VFUBRam::getAddrBusName(FUNum) << " <= (";
