@@ -495,11 +495,16 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
   }
 }
 
-void VASTModule::addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
-                               SmallVectorImpl<VASTCnd> &Cnds) {
+VASTRegister::AndCndVec
+VASTModule::allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds) {
   VASTCnd *CndArray = Allocator.Allocate<VASTCnd>(Cnds.size());
   std::uninitialized_copy(Cnds.data(), Cnds.data() + Cnds.size(), CndArray);
-  Dst->addAssignment(Src, ArrayRef<VASTCnd>(CndArray, Cnds.size()), Slot);
+  return ArrayRef<VASTCnd>(CndArray, Cnds.size());
+}
+
+void VASTModule::addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
+                               SmallVectorImpl<VASTCnd> &Cnds) {
+  Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
 }
 
 void VASTModule::print(raw_ostream &OS) const {

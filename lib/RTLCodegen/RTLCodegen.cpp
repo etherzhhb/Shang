@@ -68,7 +68,7 @@ class RTLCodegen : public MachineFunctionPass {
   unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
   // Mapping success fsm state to their predicate in current state.
-  typedef std::map<MachineBasicBlock*, std::string> PredMapTy;
+  typedef std::map<MachineBasicBlock*, VASTRegister::AssignCndTy> PredMapTy;
 
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
@@ -805,7 +805,9 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       emitFirstCtrlState(TargetBB, CurSlot, Cnds);
 
       CtrlS.exit_block();
-      PredMap.insert(std::make_pair(TargetBB, SlotPred));
+      VASTRegister::AssignCndTy JumpCnd
+        = std::make_pair(CurSlot, VM->allocateAndCndVec(Cnds));
+      PredMap.insert(std::make_pair(TargetBB, JumpCnd));
       continue;
     }
 
@@ -821,7 +823,11 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
         Cnds.push_back(VM->getOrCreateSymbol(getucStateEnable(CndSlot - 1)));
       } else {
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
-        SlotPredSS << PredMap.find(TargetBB)->second;
+        VASTRegister::AssignCndTy PredCnd = PredMap.find(TargetBB)->second;
+        VASTRegister::printCondition(SlotPredSS, PredCnd);
+        std::string SlotActive = getucStateEnable(PredCnd.first->getSlotNum());
+        Cnds.push_back(VM->getOrCreateSymbol(SlotActive));
+        Cnds.insert(Cnds.end(), PredCnd.second.begin(), PredCnd.second.end());
       }
 
       SlotPredSS << ')';

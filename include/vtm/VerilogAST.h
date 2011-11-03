@@ -267,8 +267,10 @@ public:
 };
 
 class VASTRegister : public VASTSignal {
+public:
   typedef ArrayRef<VASTCnd> AndCndVec;
   typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
+private:
   typedef std::vector<AssignCndTy>  OrCndVec;
   typedef std::map<VASTRValue, OrCndVec, VASTRValueLess> AssignMapTy;
   AssignMapTy Assigns;
@@ -288,6 +290,10 @@ public:
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec Cnds);
+
+  static void printCondition(raw_ostream &OS, AssignCndTy Cnd) {
+    printCondition(OS, Cnd.first, Cnd.second);
+  }
 };
 
 class VASTSlot : public VASTNode {
@@ -552,6 +558,8 @@ public:
 
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const std::string &Attr = "");
+
+  VASTRegister::AndCndVec allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds);
   void addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTCnd> &Cnds);
 
