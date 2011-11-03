@@ -11,11 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "vtm-selectiondag-info"
 #include "VTargetMachine.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/Support/CommandLine.h"
+#define DEBUG_TYPE "vtm-selectiondag-info"
+#include "llvm/Support/Debug.h"
+
 using namespace llvm;
+cl::opt<bool> EnableMemSCM("vtm-enable-memscm",
+                           cl::init(false), cl::Hidden);
 
 VSelectionDAGInfo::VSelectionDAGInfo(const VTargetMachine &TM)
   : TargetSelectionDAGInfo(TM) {
@@ -29,6 +34,8 @@ static SDValue EmitMemSCM(unsigned Cmd, SelectionDAG &DAG, DebugLoc dl,
                           unsigned Align, bool isVolatile,
                           MachinePointerInfo DstPtrInfo,
                           MachinePointerInfo SrcPtrInfo) {
+  if (!EnableMemSCM) return SDValue();
+
   // Emit the memset command on the membus.
   LLVMContext *Cntx = DAG.getContext();
   EVT CmdVT = EVT::getIntegerVT(*Cntx, VFUMemBus::CMDWidth);
