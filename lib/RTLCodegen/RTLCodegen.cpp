@@ -271,7 +271,7 @@ class RTLCodegen : public MachineFunctionPass {
   // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
 
-  VASTRValue getSignal(ucOperand &Op);
+  VASTUse getSignal(ucOperand &Op);
   void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true);
   void printAsOperand(ucOperand &Op, VASTWire &Wire,
                       unsigned UB = 64, unsigned LB = 0);
@@ -655,7 +655,7 @@ void RTLCodegen::emitAllSignals() {
     VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
     if (!Info.isTopLevelReg(RegNum)) {
       unsigned Parent = Info.getParentRegister();
-      VASTRValue V = VASTRValue(VM->lookupSignal(Parent), Info.getUB(), Info.getLB());
+      VASTUse V = VASTUse(VM->lookupSignal(Parent), Info.getUB(), Info.getLB());
       VM->indexVASTValue(RegNum, V);
       continue;
     }
@@ -693,7 +693,7 @@ void RTLCodegen::emitAllSignals() {
     case VTM::RINFRegClassID: {
       // The offset of data input port is 3
       unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
-      VM->indexVASTValue(RegNum, VASTRValue(VM->getPort(DataInIdx)));
+      VM->indexVASTValue(RegNum, VASTUse(VM->getPort(DataInIdx)));
       break;
     }
     }
@@ -1242,17 +1242,17 @@ void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
 }
 
 VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
-  VASTRValue V = VM->lookupSignal(Op.getReg());
+  VASTUse V = VM->lookupSignal(Op.getReg());
 
   return VASTCnd(V, Op.isPredicateInverted());
 }
 
-VASTRValue RTLCodegen::getSignal(ucOperand &Op) {
+VASTUse RTLCodegen::getSignal(ucOperand &Op) {
   if (Op.isReg()) {
     // Dirty Hack for dead code.
     if (Op.getReg() == 0) return VM->getOrCreateSymbol("1'b0");
 
-    VASTRValue V = VM->lookupSignal(Op.getReg());
+    VASTUse V = VM->lookupSignal(Op.getReg());
     assert (V != 0 && "Cannot find this Value in vector!");
     return V;
   }
@@ -1268,7 +1268,7 @@ VASTRValue RTLCodegen::getSignal(ucOperand &Op) {
 
 void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
   if(Op.isReg()){
-    VASTRValue V = getSignal(Op);
+    VASTUse V = getSignal(Op);
     OS << V->getName();
 
     if(printRange && V->getBitWidth() != 0)
@@ -1283,13 +1283,13 @@ void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
 void RTLCodegen::printAsOperand(ucOperand &Op, VASTWire &Wire,
                                 unsigned UB, unsigned LB) {
   if(Op.isReg()){
-    VASTRValue V = getSignal(Op);
+    VASTUse V = getSignal(Op);
     Wire.getCodeBuffer() << V->getName();
     UB = std::min(unsigned(V.UB), UB);
     LB = std::max(unsigned(V.LB), LB);
     if(UB - LB != 0)
       Wire.getCodeBuffer() << verilogBitRange(UB, LB, V->getBitWidth() != 1);
-    Wire.addOperand(VASTRValue(V, UB, LB));
+    Wire.addOperand(VASTUse(V, UB, LB));
     return;
   }
 

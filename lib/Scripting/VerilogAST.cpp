@@ -150,7 +150,7 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
   return ss;
 }
 
-void VASTRValue::print(raw_ostream &OS) const {
+void VASTUse::print(raw_ostream &OS) const {
   // Print the bit range if the value is have multiple bits.
   OS << V->getName();
   if (UB) OS << verilogBitRange(UB, LB, V->getBitWidth() > 1);
@@ -160,7 +160,7 @@ void VASTCnd::print(raw_ostream &OS) const {
   OS << '(';
   if (isInverted()) OS << '~';
 
-  if (V != 0) VASTRValue::print(OS);
+  if (V != 0) VASTUse::print(OS);
   else        OS << "1'b1";
 
   OS << ')';
@@ -356,7 +356,7 @@ VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
                            unsigned InitVal, const std::string &Attr)
   : VASTSignal(vastRegister, Name, BitWidth, true, InitVal, Attr) {}
 
-void VASTRegister::addAssignment(VASTRValue Src, AndCndVec Cnd, VASTSlot *S) {
+void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
   Assigns[Src].push_back(std::make_pair(S, Cnd));
 }
 
@@ -502,7 +502,7 @@ VASTModule::allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds) {
   return ArrayRef<VASTCnd>(CndArray, Cnds.size());
 }
 
-void VASTModule::addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
+void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                                SmallVectorImpl<VASTCnd> &Cnds) {
   Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
 }
@@ -561,7 +561,7 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
   return Port;
 }
 
-VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTRValue V) {
+VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
   bool Inserted = RegsMap.insert(std::make_pair(RegNum, V)).second;
   assert(Inserted && "ValueIndex already existed!");
   (void) Inserted;

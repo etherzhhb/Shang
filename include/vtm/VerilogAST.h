@@ -99,7 +99,7 @@ public:
 };
 
 // TODO: This is the VASTValue.
-class VASTRValue {
+class VASTUse {
 protected:
   // The ast node or simply the symbol.
   VASTValue *V;
@@ -108,12 +108,12 @@ public:
   // The bit range of this value.
   /*const*/ uint8_t UB, LB;
 
-  VASTRValue(VASTValue *v, uint8_t ub, uint8_t lb)
+  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb)
     : V(v),UB(ub), LB(lb) {}
 
-  VASTRValue(VASTValue *v) : V(v),UB(v->getBitWidth()), LB(0) {}
+  VASTUse(VASTValue *v) : V(v),UB(v->getBitWidth()), LB(0) {}
 
-  VASTRValue() : V(0), UB(0), LB(0) {}
+  VASTUse() : V(0), UB(0), LB(0) {}
 
   //const VASTRValue& operator=(const VASTRValue &RHS) {
   //  if (&RHS == this) return *this;
@@ -134,22 +134,22 @@ public:
 };
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
 // using casting operators.
-template<> struct simplify_type<const VASTRValue> {
+template<> struct simplify_type<const VASTUse> {
   typedef VASTNode *SimpleType;
-  static SimpleType getSimplifiedValue(const VASTRValue &Val) {
+  static SimpleType getSimplifiedValue(const VASTUse &Val) {
     return static_cast<SimpleType>(Val.get());
   }
 };
 
-template<> struct simplify_type<VASTRValue> {
+template<> struct simplify_type<VASTUse> {
   typedef VASTNode *SimpleType;
-  static SimpleType getSimplifiedValue(const VASTRValue &Val) {
+  static SimpleType getSimplifiedValue(const VASTUse &Val) {
     return static_cast<SimpleType>(Val.get());
   }
 };
 
 struct VASTRValueLess  {
-  bool operator() (const VASTRValue &LHS, const VASTRValue &RHS) const {
+  bool operator() (const VASTUse &LHS, const VASTUse &RHS) const {
     return ((LHS.get() < RHS.get()
             || (LHS.get() == RHS.get() && LHS.UB < RHS.UB))
             || (LHS.get() == RHS.get() && LHS.UB == RHS.UB && LHS.UB < RHS.UB));
@@ -157,23 +157,23 @@ struct VASTRValueLess  {
 };
 
 // The predicate condition, maybe a inverted value.
-class VASTCnd : public VASTRValue {
+class VASTCnd : public VASTUse {
   bool Inverted;
 public:
   /*implicit*/ VASTCnd(VASTValue *V, bool inverted = false,
                        unsigned ub = 0, unsigned lb = 0)
-    : VASTRValue(V, ub, lb), Inverted(inverted)
+    : VASTUse(V, ub, lb), Inverted(inverted)
   {
     //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
-  /*implicit*/ VASTCnd(VASTRValue V, bool inverted = false)
-    : VASTRValue(V), Inverted(inverted)
+  /*implicit*/ VASTCnd(VASTUse V, bool inverted = false)
+    : VASTUse(V), Inverted(inverted)
   {
     //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
-  /*implicit*/ VASTCnd(bool Cnd = true) : VASTRValue(), Inverted(!Cnd) {}
+  /*implicit*/ VASTCnd(bool Cnd = true) : VASTUse(), Inverted(!Cnd) {}
 
   //const VASTCnd& operator=(const VASTCnd &RHS) {
   //  if (&RHS == this) return *this;
@@ -183,7 +183,7 @@ public:
   //}
 
   bool isInverted() const { return Inverted; }
-  VASTRValue getCndVal() const { return VASTRValue(*this); }
+  VASTUse getCndVal() const { return VASTUse(*this); }
 
   // Return the "not" condition of current condition;
   VASTCnd invert() const { return VASTCnd(getCndVal(), !isInverted()); }
@@ -238,7 +238,7 @@ class VASTWire : public VASTSignal {
 public:
   typedef raw_string_ostream builder_stream;
 private:
-  SmallVector<VASTRValue, 4> Operands;
+  SmallVector<VASTUse, 4> Operands;
   std::string Code;
   builder_stream *S;
 public:
@@ -252,12 +252,12 @@ public:
 
   void closeCodeBuffer();
 
-  VASTRValue getOperand(unsigned Idx) const {
+  VASTUse getOperand(unsigned Idx) const {
     assert(Idx < Operands.size() && "Index out of range!");
     return Operands[Idx];
   }
 
-  void addOperand (VASTRValue Input)   { Operands.push_back(Input); }
+  void addOperand (VASTUse Input)   { Operands.push_back(Input); }
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -273,13 +273,13 @@ public:
   typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
 private:
   typedef std::vector<AssignCndTy>  OrCndVec;
-  typedef std::map<VASTRValue, OrCndVec, VASTRValueLess> AssignMapTy;
+  typedef std::map<VASTUse, OrCndVec, VASTRValueLess> AssignMapTy;
   AssignMapTy Assigns;
 public:
   VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal,
                const std::string &Attr = "");
 
-  void addAssignment(VASTRValue Src, AndCndVec Cnd, VASTSlot *S);
+  void addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S);
 
   void print(vlang_raw_ostream &OS) const;
 
@@ -379,7 +379,7 @@ private:
 
   std::string Name;
   BumpPtrAllocator Allocator;
-  typedef std::map<unsigned, VASTRValue> RegIdxMapTy;
+  typedef std::map<unsigned, VASTUse> RegIdxMapTy;
   RegIdxMapTy RegsMap;
   StringMap<VASTValue*> SymbolTable;
   typedef std::vector<VASTSlot*> SlotVecTy;
@@ -426,9 +426,9 @@ public:
   void printSlotActives(raw_ostream &OS) const;
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  VASTRValue lookupSignal(unsigned RegNum) const {
+  VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
-    if(at == RegsMap.end()) return VASTRValue();
+    if(at == RegsMap.end()) return VASTUse();
 
     return at->second;
   }
@@ -571,10 +571,10 @@ public:
                     const std::string &Attr = "");
 
   VASTRegister::AndCndVec allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds);
-  void addAssignment(VASTRegister *Dst, VASTRValue Src, VASTSlot *Slot,
+  void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTCnd> &Cnds);
 
-  VASTValue *indexVASTValue(unsigned RegNum, VASTRValue V);
+  VASTValue *indexVASTValue(unsigned RegNum, VASTUse V);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);
