@@ -215,7 +215,8 @@ public:
   const std::string &getName() const { return S->getName(); }
   bool isRegister() const { return S->isRegister(); }
   unsigned getBitWidth() const { return S->getBitWidth(); }
-  operator VASTValue *() const { return S; }
+  VASTSignal *get() const { return S; }
+  operator VASTSignal *() const { return S; }
 
   bool isInput() const { return getSubClassData(); }
 

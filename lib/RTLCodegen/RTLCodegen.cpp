@@ -282,8 +282,8 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
   // Special ucop for connecting wires.
   void emitOpConnectWire(ucOp &Op);
-  void emitOpCopy(ucOp &OpCopy);
-  void emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot);
+  void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
+  void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot);
   void emitOpBRam(ucOp &OpBRam, VASTSlot *CurSlot);
 
@@ -477,14 +477,14 @@ void RTLCodegen::emitIdleState() {
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getSlot(0);
-  VASTValue *StartPort = VM->getPort(VASTModule::Start);
+  VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
   IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
                         StartPort);
   IdleSlot->addNextSlot(0, VASTCnd(StartPort, true));
 
   // Always Disable the finish signal.
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
-  SmallVector<VASTCnd, 1> Cnds(1, VASTCnd(StartPort));
+  SmallVector<VASTCnd, 1> Cnds(1, StartPort);
   emitFirstCtrlState(EntryBB, IdleSlot, Cnds);
   // End if-else
   CtrlS.exit_block();
@@ -843,13 +843,13 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
-    case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::COPY:             emitOpCopy(Op, CurSlot, Cnds);break;
     case VTM::VOpAdd:           emitOpAdd(Op, CurSlot, Cnds); break;
     case VTM::VOpMult:
     case VTM::VOpSHL:
     case VTM::VOpSRL:
     case VTM::VOpSRA:           emitBinaryFUOp(Op, CurSlot, Cnds); break;
-    case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot);    break;
+    case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot, Cnds);break;
     case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot);break;
     case VTM::VOpRetVal:        emitOpRetVal(Op, CurSlot, Cnds);break;
     case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
@@ -891,7 +891,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
-    case VTM::COPY:             emitOpCopy(Op);               break;
+    case VTM::COPY:             emitOpCopy(Op, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;
     case VTM::ImpUse:           /*Not need to handle*/        break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
@@ -952,20 +952,19 @@ void RTLCodegen::emitOpSel(ucOp &OpSel) {
 
 }
 
-void RTLCodegen::emitOpCopy(ucOp &OpCopy) {
-  ucOperand &Dst = OpCopy.getOperand(0), &Src = OpCopy.getOperand(1);
+void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
+                            SmallVectorImpl<VASTCnd> &Cnds) {
+  ucOperand &Dst = Op.getOperand(0), &Src = Op.getOperand(1);
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
 
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  printOperand(Dst, OS);
-  OS << " <= ";
-  printOperand(Src, OS);
-  OS << ";\n";
+  VASTRegister *R = cast<VASTRegister>(getSignal(Dst));
+  VM->addAssignment(R, getSignal(Src), Slot, Cnds);
 }
 
-void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
-  FuncUnitId Id = OpRdFU->getFUId();
+void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
+                              SmallVectorImpl<VASTCnd> &Cnds) {
+  FuncUnitId Id = Op->getFUId();
   VASTValue *ReadyPort = 0;
 
   switch (Id.getFUType()) {
@@ -980,11 +979,10 @@ void RTLCodegen::emitOpReadFU(ucOp &OpRdFU, VASTSlot *CurSlot) {
   }
 
   if (ReadyPort)
-    CurSlot->addReady(ReadyPort, createCondition(OpRdFU.getPredicate()));
+    CurSlot->addReady(ReadyPort, createCondition(Op.getPredicate()));
 
   // The dst operand of ReadFU change to immediate if it is dead.
-  if (OpRdFU.getOperand(0).isReg())
-    emitOpCopy(OpRdFU);
+  if (Op.getOperand(0).isReg()) emitOpCopy(Op, CurSlot, Cnds);
 }
 
 void RTLCodegen::emitOpConnectWire(ucOp &Op) {
