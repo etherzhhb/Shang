@@ -267,7 +267,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitCtrlOp(ucState &State, PredMapTy &PredMap);
 
   void printPredicate(ucOperand &Pred, raw_ostream &SS);
-
+  // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
 
   VASTRValue getSignal(ucOperand &Op);
@@ -280,8 +280,6 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
   void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
-  // Special ucop for connecting wires.
-  void emitOpConnectWire(ucOp &Op);
   void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpMemTrans(ucOp &OpMemAccess, VASTSlot *CurSlot);
@@ -857,7 +855,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot);  break;
     case VTM::VOpBRam:          emitOpBRam(Op, CurSlot);      break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
-    case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op, CurSlot, Cnds); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot, Cnds);break;
     case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot);break;
@@ -894,7 +891,6 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
     case VTM::COPY:             emitOpCopy(Op, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;
     case VTM::ImpUse:           /*Not need to handle*/        break;
-    case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op, Slot, Cnds);    break;
     case VTM::VOpRetVal:        emitOpRetVal(Op, Slot, Cnds); break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
@@ -987,19 +983,6 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
 
   // The dst operand of ReadFU change to immediate if it is dead.
   if (Op.getOperand(0).isReg()) emitOpCopy(Op, CurSlot, Cnds);
-}
-
-void RTLCodegen::emitOpConnectWire(ucOp &Op) {
-  llvm_unreachable("Unexpected connect wire!");
-  //VM->getControlBlockBuffer() << "// Connect wire in datapath.\n";
-
-  //VASTDatapath *data = VM->createDatapath();
-  //VASTDatapath::builder_stream &OS = data->getCodeBuffer();
-  //OS << "assign ";
-  //printOperand(Op.getOperand(0), OS);
-  //OS << " = ";
-  //printOperand(Op.getOperand(1), OS);
-  //OS << ";\n";
 }
 
 void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
