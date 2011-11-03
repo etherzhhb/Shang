@@ -276,7 +276,7 @@ class RTLCodegen : public MachineFunctionPass {
                       unsigned UB = 64, unsigned LB = 0);
 
   void emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot);
-  void emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot);
+  void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpUnreachable(ucOp &OpUr, VASTSlot *CurSlot);
   void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
@@ -852,7 +852,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
     case VTM::VOpMove_ww:       emitOpConnectWire(Op);        break;
     case VTM::VOpSel:           emitOpSel(Op);                break;
-    case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot);break;
+    case VTM::VOpReadReturn:    emitOpReadReturn(Op, CurSlot, Cnds);break;
     case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot);break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
@@ -993,14 +993,13 @@ void RTLCodegen::emitOpConnectWire(ucOp &Op) {
   //OS << ";\n";
 }
 
-void RTLCodegen::emitOpReadReturn(ucOp &OpReadSymbol, VASTSlot *CurSlot) {
-  raw_ostream &OS = VM->getControlBlockBuffer();
-  printOperand(OpReadSymbol.getOperand(0), OS);
-  unsigned FNNum = OpReadSymbol.getOperand(1).getTargetFlags();
-  // The FNNum is encoded into the target flags field of the MachineOperand.
-  OS << " <= "
-    << getSubModulePortName(FNNum, OpReadSymbol.getOperand(1).getSymbolName());
-  OS << ";\n";
+void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
+                                  SmallVectorImpl<VASTCnd> &Cnds) {
+  VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
+  unsigned FNNum = Op.getOperand(1).getTargetFlags();
+  std::string PortName =
+    getSubModulePortName(FNNum, Op.getOperand(1).getSymbolName());
+  VM->addAssignment(R, VM->getOrCreateSymbol(PortName), Slot, Cnds);
 }
 
 void RTLCodegen::emitOpInternalCall(ucOp &OpInternalCall, VASTSlot *CurSlot) {
