@@ -72,14 +72,16 @@ public:
   static void BuildCondition(MachineBasicBlock &MBB,
                              SmallVectorImpl<MachineOperand> &Cnd,
                              MachineRegisterInfo *MRI,
-                             const TargetInstrInfo *TII);
+                             const TargetInstrInfo *TII,
+                             unsigned OpC);
 
   static MachineOperand MergePred(MachineOperand OldCndMO,
                                   MachineOperand NewCndMO,
                                   MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator IP,
                                   MachineRegisterInfo *MRI,
-                                  const TargetInstrInfo *TII);
+                                  const TargetInstrInfo *TII,
+                                  unsigned MergeOpC);
 
   virtual bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond)
     const;

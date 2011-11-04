@@ -379,7 +379,8 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
                                      MachineBasicBlock &MBB,
                                      MachineBasicBlock::iterator IP,
                                      MachineRegisterInfo *MRI,
-                                     const TargetInstrInfo *TII) {
+                                     const TargetInstrInfo *TII,
+                                     unsigned MergeOpC) {
   OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
   NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
 
@@ -387,7 +388,7 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
   Dst.setBitWidth(1);
 
-  BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpAnd))
+  BuildMI(MBB, IP, DebugLoc(), TII->get(MergeOpC))
     .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
     .addOperand(ucOperand::CreatePredicate())
     .addOperand(ucOperand::CreateTrace(&MBB));
@@ -398,13 +399,13 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
 void VInstrInfo::BuildCondition(MachineBasicBlock &MBB,
                                 SmallVectorImpl<MachineOperand> &Cnd,
                                 MachineRegisterInfo *MRI,
-                                const TargetInstrInfo *TII) {
+                                const TargetInstrInfo *TII, unsigned OpC) {
   // And all predicate together.
   while (Cnd.size() > 1) {
     MachineOperand LHS = Cnd.pop_back_val();
     MachineOperand RHS = Cnd.pop_back_val();
 
-    Cnd.push_back(MergePred(LHS, RHS, MBB, MBB.end(), MRI, TII));
+    Cnd.push_back(MergePred(LHS, RHS, MBB, MBB.end(), MRI, TII, OpC));
   }
 }
 

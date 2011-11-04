@@ -262,16 +262,16 @@ void FixMachineCode::mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
     MachineOperand SelPred = *VInstrInfo::getPredOperand(SelMI);
 
     SelTCnd = VInstrInfo::MergePred(SelTCnd, SelPred, *CaseMI->getParent(),
-                                    CaseMI, &MRI, TII);
+                                    CaseMI, &MRI, TII, VTM::VOpAnd);
     SelFCnd = VInstrInfo::MergePred(SelFCnd, SelPred, *CaseMI->getParent(),
-                                    CaseMI, &MRI, TII);
+                                    CaseMI, &MRI, TII, VTM::VOpAnd);
   }
 
   // Merge the condition with the condition to select this SelMI.
   SelTCnd = VInstrInfo::MergePred(SelTCnd, Cnd, *CaseMI->getParent(),
-                                  CaseMI, &MRI, TII);
+                                  CaseMI, &MRI, TII, VTM::VOpAnd);
   SelFCnd = VInstrInfo::MergePred(SelFCnd, Cnd, *CaseMI->getParent(),
-                                  CaseMI, &MRI, TII);
+                                  CaseMI, &MRI, TII, VTM::VOpAnd);
 
   // Add the value for True condition.
   CaseMI->addOperand(SelTCnd);

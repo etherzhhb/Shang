@@ -158,7 +158,8 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
         unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
         unsigned &Reg = PredMap[k];
         if (!Reg)
-          Reg = VInstrInfo::MergePred(*MO, FromBBCnd.front(), *FromBB, I, MRI, TII).getReg();
+          Reg = VInstrInfo::MergePred(*MO, FromBBCnd.front(), *FromBB, I, MRI,
+                                      TII, VTM::VOpAnd).getReg();
 
         MO->ChangeToRegister(Reg, false);
         MO->setTargetFlags(1);
@@ -202,7 +203,7 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   }
 
   VInstrInfo::MergeBranches(ToFBB, FromBBCnd, FromTBB, FromFBB, Cond, TII);
-  VInstrInfo::BuildCondition(*ToBB, Cond, MRI, TII);
+  VInstrInfo::BuildCondition(*ToBB, Cond, MRI, TII, VTM::VOpAnd);
 
   TII->InsertBranch(*ToBB, FromTBB, FromFBB, Cond, DebugLoc());
   ++NumFallThroughMerged;
