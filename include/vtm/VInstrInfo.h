@@ -72,17 +72,6 @@ public:
 
   static bool isAlwaysTruePred(MachineOperand &MO);
 
-  static MachineOperand RemoveInvertFlag(MachineOperand MO,
-                                         MachineRegisterInfo *MRI,
-                                         MachineBasicBlock &MBB,
-                                         MachineBasicBlock::iterator IP,
-                                         const TargetInstrInfo *TII);
-  static void BuildCondition(MachineBasicBlock &MBB,
-                             SmallVectorImpl<MachineOperand> &Cnd,
-                             MachineRegisterInfo *MRI,
-                             const TargetInstrInfo *TII,
-                             unsigned OpC);
-
   static MachineOperand MergePred(MachineOperand OldCndMO,
                                   MachineOperand NewCndMO,
                                   MachineBasicBlock &MBB,

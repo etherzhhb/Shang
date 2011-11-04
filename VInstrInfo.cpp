@@ -391,11 +391,11 @@ bool VInstrInfo::isAlwaysTruePred(MachineOperand &MO){
   return false;
 }
 
-MachineOperand VInstrInfo::RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,
-                                            MachineBasicBlock &MBB,
-                                            MachineBasicBlock::iterator IP,
-                                            const TargetInstrInfo *TII) {
-  assert(!isAlwaysTruePred(MO) && "Unexpected always false!");
+static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,
+                                       MachineBasicBlock &MBB,
+                                       MachineBasicBlock::iterator IP,
+                                       const TargetInstrInfo *TII) {
+  assert(!VInstrInfo::isAlwaysTruePred(MO) && "Unexpected always false!");
   ucOperand Op(MO);
 
   if (Op.isPredicateInverted()) {
@@ -446,19 +446,6 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
     .addOperand(ucOperand::CreateTrace(&MBB));
   Dst.setIsDef(false);
   return Dst;
-}
-
-void VInstrInfo::BuildCondition(MachineBasicBlock &MBB,
-                                SmallVectorImpl<MachineOperand> &Cnd,
-                                MachineRegisterInfo *MRI,
-                                const TargetInstrInfo *TII, unsigned OpC) {
-  // And all predicate together.
-  while (Cnd.size() > 1) {
-    MachineOperand LHS = Cnd.pop_back_val();
-    MachineOperand RHS = Cnd.pop_back_val();
-
-    Cnd.push_back(MergePred(LHS, RHS, MBB, MBB.end(), MRI, TII, OpC));
-  }
 }
 
 unsigned VInstrInfo::createPHIIncomingReg(unsigned DestReg,
