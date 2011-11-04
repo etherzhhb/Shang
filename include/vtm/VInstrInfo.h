@@ -130,7 +130,14 @@ public:
     unsigned SrcReg,
     unsigned SrcSubReg) const;
 
-
+  /// @brief Merge the source of the PHINodes in Succ after FromBB is predicated
+  ///        and merged to ToBB.
+  ///
+  /// @param Succ       The successor block of FromBB
+  /// @param FromBB     The BB that predicated and merged
+  /// @param ToBB       The BB that FromBB merged to.
+  /// @param MRI
+  /// @param FromBBCnd  The condition that jumping from ToBB to FromBB
   static void mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
                           MachineBasicBlock *ToBB, MachineRegisterInfo &MRI,
                           const SmallVectorImpl<MachineOperand> &FromBBCnd);

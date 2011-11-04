@@ -646,6 +646,7 @@ MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
                                       MachineOperand Pred,
                                       MachineOperand IfTrueVal,
                                       MachineOperand IfFalseVal) {
+  assert(!isAlwaysTruePred(Pred) && "Selection op with always true condition?");
   // create the result register if necessary.
   if (!Result.getReg()) {
     MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
