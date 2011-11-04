@@ -201,15 +201,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   if (addPreRegAlloc(PM, OptLevel))
     printAndVerify(PM, "After PreRegAlloc passes");
 
-  // Run the SCEVAA pass to compute more accurate alias information.
-  PM.add(createScalarEvolutionAliasAnalysisPass());
-
-  // Perform if conversion before schedule, so we have more parallelism
-  // available.
-  if (EnableIfConversion) {
-    PM.add(createVIfConverterPass());
-    printAndVerify(PM, "After VTM ifconversion pass");
-  }
 
   PM.add(createFixTerminatorsPass());
   PM.add(createMergeFallThroughBlocksPass());
@@ -226,6 +217,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // used by tail calls, where the tail calls reuse the incoming stack
   // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
   PM.add(createDeadMachineInstructionElimPass());
+
+  // Run the SCEVAA pass to compute more accurate alias information.
+  PM.add(createScalarEvolutionAliasAnalysisPass());
 
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());

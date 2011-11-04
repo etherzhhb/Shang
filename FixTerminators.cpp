@@ -17,6 +17,9 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/MicroState.h"
 
+#include "llvm/../../lib/CodeGen/BranchFolding.h"
+
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -53,7 +56,18 @@ char FixTerminators::ID = 0;
 
 bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
+  MachineRegisterInfo &MRI = MF.getRegInfo();
   SmallPtrSet<MachineBasicBlock*, 2> MissedSuccs;
+  // VInstrInfo::JT Table;
+  // typedef VInstrInfo::JT::iterator jt_it;
+
+  // Tail merge tend to expose more if-conversion opportunities.
+  BranchFolder BF(true);
+  BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
+                      getAnalysisIfAvailable<MachineModuleInfo>());
+
+  DEBUG(MF.verify(this));
+  MF.RenumberBlocks();
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
@@ -65,9 +79,19 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr *Inst = II;
       if (!VInstrInfo::isBrCndLike(Inst->getOpcode())) continue;
 
-      MachineOperand &Cnd = Inst->getOperand(1);
-      // Use reg0 for always true.
-      if (Cnd.isImm() && Cnd.getImm()) Cnd.ChangeToRegister(0, false);
+      MachineBasicBlock *TargetBB = Inst->getOperand(1).getMBB();
+      MachineOperand Cnd = Inst->getOperand(0);
+      bool inserted;
+      //jt_it at;
+      //tie(at, inserted) = Table.insert(std::make_pair(TargetBB, Cnd));
+      // BranchFolding may generate code that jumping to same bb with multiple
+      // instruction, merge the condition.
+      //if (!inserted) {
+      //  at->second = VInstrInfo::MergePred(Cnd, at->second, *MBB,
+      //                                     MBB->getFirstTerminator(), &MRI,
+      //                                     TII, VTM::VOpOr);
+      //}
+
       // Change the unconditional branch after conditional branch to
       // conditional branch.
       if (FirstTerminator && VInstrInfo::isUnConditionalBranch(Inst)){
@@ -79,7 +103,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       }
 
       FirstTerminator = Inst;
-      MissedSuccs.erase(Inst->getOperand(1).getMBB());
+      MissedSuccs.erase(TargetBB);
     }
 
     // Make sure each basic block have a terminator.
@@ -98,6 +122,19 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
         .addOperand(ucOperand::CreatePredicate())
         .addOperand(ucOperand::CreateTrace(MBB));
     }
+    //else if (Table.size() != MBB->succ_size()) {
+    //  // Also fix the CFG.
+    //  while (!MBB->succ_empty())
+    //    MBB->removeSuccessor(MBB->succ_end() - 1);
+    //  for (jt_it JI = Table.begin(), JE = Table.end(); JI != JE; ++JI)
+    //    MBB->addSuccessor(JI->first);
+
+    //  // Try to correct the CFG.
+    //  TII->RemoveBranch(*MBB);
+    //  VInstrInfo::insertJumpTable(*MBB, Table, DebugLoc());
+    //}
+
+    //Table.clear();
 
     if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
       ++Unreachables;
