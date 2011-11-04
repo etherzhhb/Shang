@@ -56,7 +56,7 @@ char FixTerminators::ID = 0;
 
 bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
-  MachineRegisterInfo &MRI = MF.getRegInfo();
+  //MachineRegisterInfo &MRI = MF.getRegInfo();
   SmallPtrSet<MachineBasicBlock*, 2> MissedSuccs;
   // VInstrInfo::JT Table;
   // typedef VInstrInfo::JT::iterator jt_it;
@@ -81,7 +81,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
 
       MachineBasicBlock *TargetBB = Inst->getOperand(1).getMBB();
       MachineOperand Cnd = Inst->getOperand(0);
-      bool inserted;
+      //bool inserted;
       //jt_it at;
       //tie(at, inserted) = Table.insert(std::make_pair(TargetBB, Cnd));
       // BranchFolding may generate code that jumping to same bb with multiple
