@@ -89,27 +89,18 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
   // Only handle simple case at the moment
   if (MBB->pred_size() != 1) return false;
 
-  MachineBasicBlock *Pred = *MBB->pred_begin(), *PredTBB = 0, *PredFBB = 0,
-                            *TBB = 0, *FBB = 0;
-  SmallVector<MachineOperand, 1> Cnd;
+  VInstrInfo::JT PredJT, CurJT;
 
-  // Do not mess up with strange CFG.
-  if (TII->AnalyzeBranch(*Pred, PredTBB, PredFBB, Cnd)) return false;
-
-  if (TII->AnalyzeBranch(*MBB, TBB, FBB, Cnd)) return false;
-
+  MachineBasicBlock *Pred = *MBB->pred_begin();
   // Do not change the parent loop of MBB.
   if (LI->getLoopFor(MBB) != LI->getLoopFor(Pred)) return false;
 
-  // Make sure the MBB and TBB are the same block.
-  if (PredTBB != MBB)
-    std::swap(PredTBB, PredFBB);
+  // Do not mess up with strange CFG.
+  if (VInstrInfo::extractJumpTable(*Pred, PredJT)) return false;
+  if (VInstrInfo::extractJumpTable(*MBB, CurJT)) return false;
 
-  assert(PredTBB == MBB && "ToBB is not the predeccessor of FromBB?");
-
-  // Try to avoid produce more than 2 successor after merge.
-  if (PredFBB && TBB && FBB && (PredFBB != TBB && PredFBB != FBB))
-    return false;
+  // Do not mess up with self loop.
+  if (CurJT.count(MBB)) return false;
 
   // We need to predicate the block when merging it.
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();I != E;++I){
@@ -122,90 +113,102 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
 }
 
 void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
-  MachineBasicBlock *ToBB = *FromBB->pred_begin(), *ToTBB = 0, *ToFBB = 0,
-                    *FromTBB = 0, *FromFBB = 0;
-  SmallVector<MachineOperand, 1> FromBBCnd, Cond;
+  MachineBasicBlock *ToBB = *FromBB->pred_begin();
+  VInstrInfo::JT FromJT, ToJT;
 
-  if (TII->AnalyzeBranch(*ToBB, ToTBB, ToFBB, FromBBCnd))
-    return;
+  // Do not mess up with strange CFG.
+  if (VInstrInfo::extractJumpTable(*ToBB, ToJT)) return;
 
-  if (TII->AnalyzeBranch(*FromBB, FromTBB, FromFBB, Cond))
-    return;
-
-  // Make sure the MBB and TBB are the same block.
-  if (ToTBB != FromBB) {
-    std::swap(ToTBB, ToFBB);
-    TII->ReverseBranchCondition(FromBBCnd);
-  }
-
-  assert(ToTBB == FromBB && "ToBB is not the predeccessor of FromBB?");
+  if (VInstrInfo::extractJumpTable(*FromBB, FromJT)) return;
+  assert(!FromJT.count(FromBB) && "Unexpected self loop!");
 
   TII->RemoveBranch(*ToBB);
   TII->RemoveBranch(*FromBB);
 
+  // Get the condition of jumping from ToBB to FromBB
+  typedef VInstrInfo::JT::iterator jt_it;
+  jt_it at = ToJT.find(FromBB);
+  assert(at != ToJT.end() && "ToBB not branching to FromBB?");
+  MachineOperand JumpingCnd = at->second;
+  SmallVector<MachineOperand, 1> JumpingCndVec(1, JumpingCnd);
+
   typedef std::map<unsigned, unsigned> PredMapTy;
   PredMapTy PredMap;
 
-  if (!FromBBCnd.empty()) {
-    // Predicate the Block.
-    for (MachineBasicBlock::iterator I = FromBB->begin(), E = FromBB->end();
-         I != E; ++I) {
-      if (I->isDebugValue())
-        continue;
+  assert(JumpingCnd.getReg() != 0 && "Unexpected unconditional branch!");
+  // Predicate the Block.
+  for (MachineBasicBlock::iterator I = FromBB->begin(), E = FromBB->end();
+        I != E; ++I) {
+    if (I->isDebugValue())
+      continue;
 
-      if (TII->isPredicated(I)) {
-        ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
-        unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
-        unsigned &Reg = PredMap[k];
-        if (!Reg)
-          Reg = VInstrInfo::MergePred(*MO, FromBBCnd.front(), *FromBB, I, MRI,
-                                      TII, VTM::VOpAnd).getReg();
+    if (TII->isPredicated(I)) {
+      ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
+      unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
+      unsigned &Reg = PredMap[k];
+      if (!Reg)
+        Reg = VInstrInfo::MergePred(*MO, JumpingCnd, *FromBB, I, MRI,
+                                    TII, VTM::VOpAnd).getReg();
 
-        MO->ChangeToRegister(Reg, false);
-        MO->setTargetFlags(1);
-      } else if (I->getOpcode() <= TargetOpcode::COPY) {
-        MachineInstr *PseudoInst = I;
-        ++I; // Skip current instruction, we may change it.
-        PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst, FromBBCnd);
-        if (!PseudoInst) {
-#ifndef NDEBUG
-          dbgs() << "Unable to predicate " << *I << "!\n";
-#endif
-          llvm_unreachable(0);
-        }
-        I = PseudoInst;
-      } else if (!TII->PredicateInstruction(I, FromBBCnd)) {
+      MO->ChangeToRegister(Reg, false);
+      MO->setTargetFlags(1);
+    } else if (I->getOpcode() <= TargetOpcode::COPY) {
+      MachineInstr *PseudoInst = I;
+      ++I; // Skip current instruction, we may change it.
+      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst,
+                                                          JumpingCndVec);
+      if (!PseudoInst) {
 #ifndef NDEBUG
         dbgs() << "Unable to predicate " << *I << "!\n";
 #endif
         llvm_unreachable(0);
       }
+      I = PseudoInst;
+    } else if (!TII->PredicateInstruction(I, JumpingCndVec)) {
+#ifndef NDEBUG
+      dbgs() << "Unable to predicate " << *I << "!\n";
+#endif
+      llvm_unreachable(0);
     }
   }
 
   // And merge the block into its predecessor.
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
 
-  VInstrInfo::mergePHISrc(FromTBB, FromBB, ToBB, *MRI, FromBBCnd);
-  if (FromFBB)
-    VInstrInfo::mergePHISrc(FromFBB, FromBB, ToBB, *MRI, FromBBCnd);
+  std::set<MachineBasicBlock*> NewSuccs;
+  for (jt_it I = FromJT.begin(),E = FromJT.end(); I != E; ++I){
+    MachineBasicBlock *Succ = I->first;
+    // Merge the PHINodes.
+    VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, JumpingCndVec);
+    // Is it the successor of FromBB become the new successor of ToBB?
+    if (!ToJT.count(Succ)) ToBB->addSuccessor(Succ);
 
-  // MBB is unreachable now.
-  ToBB->removeSuccessor(ToTBB);
-  if (FromTBB && FromTBB != ToFBB) {
-    ToBB->addSuccessor(FromTBB);
-    FromBB->removeSuccessor(FromTBB);
+    FromBB->removeSuccessor(Succ);
+
+    // And predicate the jump table.
+    I->second = VInstrInfo::MergePred(I->second, JumpingCnd, *ToBB, ToBB->end(),
+                                      MRI, TII, VTM::VOpAnd);
   }
-  // Do not add/remove the same block twice.
-  if (FromFBB && FromFBB != ToFBB && FromTBB != FromFBB) {
-    ToBB->addSuccessor(FromFBB);
-    FromBB->removeSuccessor(FromFBB);
+
+  // Do not jump to FromBB any more.
+  ToBB->removeSuccessor(FromBB);
+  ToJT.erase(FromBB);
+
+  // Build the new Jump table.
+  for (jt_it I = FromJT.begin(), E = FromJT.end(); I != E; ++I) {
+    MachineBasicBlock *Succ = I->first;
+    jt_it at = ToJT.find(Succ);
+    // If the entry already exist in target jump table, merge it with opcode OR.
+    if (at != ToJT.end())
+      at->second = VInstrInfo::MergePred(at->second, I->second,
+                                         *ToBB, ToBB->end(), MRI, TII,
+                                         VTM::VOpOr);
+    else // Simply insert the entry.
+      ToJT.insert(*I);
   }
 
-  VInstrInfo::MergeBranches(ToFBB, FromBBCnd, FromTBB, FromFBB, Cond, TII);
-  VInstrInfo::BuildCondition(*ToBB, Cond, MRI, TII, VTM::VOpAnd);
-
-  TII->InsertBranch(*ToBB, FromTBB, FromFBB, Cond, DebugLoc());
+  // Re-insert the jump table.
+  VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
   ++NumFallThroughMerged;
 }
 
