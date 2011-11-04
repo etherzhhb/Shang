@@ -427,14 +427,20 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   if (isAlwaysTruePred(OldCnd)) {
     OldCnd = MachineOperand::CreateImm(1);
     OldCnd.setTargetFlags(1);
-  } else
+  } else {
+    OldCnd.clearParent();
+    MRI->clearKillFlags(OldCnd.getReg());
     OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
+  }
 
   if (isAlwaysTruePred(NewCnd)) {
     NewCnd = MachineOperand::CreateImm(1);
     NewCnd.setTargetFlags(1);
-  } else
+  } else {
+    NewCnd.clearParent();
+    MRI->clearKillFlags(NewCnd.getReg());
     NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
+  }
 
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
   ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
