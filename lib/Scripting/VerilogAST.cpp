@@ -259,11 +259,11 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   // Enable next slot only when resources are ready.
   if (ReadyPresented) CtrlS.if_begin(SlotReady);
 
-  //DEBUG(
+  DEBUG(
   if (getSlotNum() != 0)
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
-          << " ready\"); $finish();\n";
-  //);
+          << " ready\");\n";
+  );
 
   bool hasSelfLoop = false;
   if (hasExplicitNextSlots()) {
@@ -296,8 +296,9 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   } else {
     // DirtyHack: Check if the memory bus is shutdown.
     //DEBUG(
-      CtrlS << "if (mem0en_r) $display(\"" << getName() << " in "
-            << Mod.getName() << " bad mem0en_r %b\\n\", mem0en_r);\n";
+      CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
+            << Mod.getName()
+            << " bad mem0en_r %b\\n\", mem0en_r);  $finish(); end\n";
     //);
   }
 

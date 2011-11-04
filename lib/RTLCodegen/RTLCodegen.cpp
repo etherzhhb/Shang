@@ -934,8 +934,8 @@ void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
   }
 
   // Report an error if no case hitted.
-  OS << "default: $display(\"Case miss in VOpCase at " << Slot->getName()
-     << "\"); $finish();\n";
+  OS << "default: begin $display(\"Case miss in VOpCase at "
+     << Slot->getName() << "\"); $finish(); end\n";
   OS.switch_end();
   OS.exit_block() << "\n";
 }
