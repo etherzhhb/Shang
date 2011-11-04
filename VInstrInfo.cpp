@@ -148,6 +148,27 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   return false;
 }
 
+bool VInstrInfo::extractJumpTable(MachineBasicBlock &BB, JT &Table) {
+  for (MachineBasicBlock::iterator I = BB.getFirstTerminator(), E = BB.end();
+       I != E; ++I) {
+    // We can only handle conditional jump.
+    if (!VInstrInfo::isBrCndLike(I->getOpcode())) return true;
+
+    // Do not mess up with the predicated terminator at the moment.
+    if (const MachineOperand *Pred = getPredOperand(I))
+      if (Pred->isReg() && Pred->getReg() != 0)
+        return true;
+
+    MachineBasicBlock *TargetBB = I->getOperand(1).getMBB();
+    MachineOperand Cnd = I->getOperand(0);
+    bool inserted = Table.insert(std::make_pair(TargetBB, Cnd)).second;
+    assert(inserted && "BB with multiple entry in jump table?");
+  }
+
+  // Are we fail to extract all jump table entry?
+  return Table.size() != BB.succ_size();
+}
+
 unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   // Do not mess with the scheduled code.
   if (MBB.back().getOpcode() == VTM::EndState)
@@ -222,6 +243,17 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
     .addOperand(ucOperand::CreatePredicate())
     .addOperand(ucOperand::CreateTrace(&MBB));
    return 2;
+}
+
+void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
+  assert(BB.getFirstTerminator() == BB.end() && "Cannot insert jump table!");
+
+  for (JT::iterator I = Table.begin(), E = Table.end(); I != E; ++I) {
+    BuildMI(&BB, dl, VTMInsts[VTM::VOpToStateb])
+      .addOperand(I->second).addMBB(I->first)
+      .addOperand(ucOperand::CreatePredicate())
+      .addOperand(ucOperand::CreateTrace(&BB));
+  }
 }
 
 bool VInstrInfo::DefinesPredicate(MachineInstr *MI,

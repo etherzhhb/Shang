@@ -21,6 +21,7 @@
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetOpcodes.h"
 #include "llvm/ADT/PointerUnion.h"
+#include <map>
 
 namespace llvm {
 class TargetData;
@@ -56,6 +57,11 @@ public:
                                 DebugLoc DL) const;
   static void ReversePredicateCondition(MachineOperand &Cond);
   static bool isUnConditionalBranch(MachineInstr *MI);
+
+  // Advance version of AnalyzeBranch.
+  typedef std::map<MachineBasicBlock*, MachineOperand> JT;
+  static bool extractJumpTable(MachineBasicBlock &BB, JT &Table);
+  static void insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl);
 
   static void MergeBranches(MachineBasicBlock *PredFBB,
                             SmallVectorImpl<MachineOperand> &Pred,
