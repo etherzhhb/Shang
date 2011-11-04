@@ -127,6 +127,24 @@ public:
     return *this;
   }
 
+  lang_raw_ostream &if_() {
+    *this << "if (";
+    return *this;
+  }
+
+  template<typename PosfixT>
+  lang_raw_ostream &_then(PosfixT Posfix) {
+    *this << ") ";
+    enter_block<PosfixT>(Posfix);
+    return *this;
+  }
+
+  lang_raw_ostream &_then(const char* Posfix = "\n") {
+    *this << ") ";
+    enter_block<const char*>(Posfix);
+    return *this;
+  }
+
   template<typename CndT>
   lang_raw_ostream &if_begin(CndT Cnd, const char* Posfix = "\n") {
     return if_begin<CndT, const char*>(Cnd, Posfix);
