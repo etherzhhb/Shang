@@ -349,10 +349,21 @@ void VInstrInfo::MergeBranches(MachineBasicBlock *PredFBB,
   }
 }
 
+bool VInstrInfo::isAlwaysTruePred(MachineOperand &MO){
+  assert(MO.isReg() && "Unexpected MO type!");
+  if (MO.getReg() == 0) {
+    assert(!cast<ucOperand>(MO).isPredicateInverted()&&"Illegal always false!");
+    return true;
+  }
+
+  return false;
+}
+
 MachineOperand VInstrInfo::RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,
                                             MachineBasicBlock &MBB,
                                             MachineBasicBlock::iterator IP,
                                             const TargetInstrInfo *TII) {
+  assert(!isAlwaysTruePred(MO) && "Unexpected always false!");
   ucOperand Op(MO);
 
   if (Op.isPredicateInverted()) {
@@ -381,8 +392,17 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
                                      MachineRegisterInfo *MRI,
                                      const TargetInstrInfo *TII,
                                      unsigned MergeOpC) {
-  OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
-  NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
+  if (isAlwaysTruePred(OldCnd)) {
+    OldCnd = MachineOperand::CreateImm(1);
+    OldCnd.setTargetFlags(1);
+  } else
+    OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
+
+  if (isAlwaysTruePred(NewCnd)) {
+    NewCnd = MachineOperand::CreateImm(1);
+    NewCnd.setTargetFlags(1);
+  } else
+    NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
 
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
   ucOperand Dst = MachineOperand::CreateReg(DstReg, true);

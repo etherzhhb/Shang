@@ -64,6 +64,8 @@ public:
                             SmallVectorImpl<MachineOperand> &Cnd,
                             const TargetInstrInfo *TII);
 
+  static bool isAlwaysTruePred(MachineOperand &MO);
+
   static MachineOperand RemoveInvertFlag(MachineOperand MO,
                                          MachineRegisterInfo *MRI,
                                          MachineBasicBlock &MBB,
