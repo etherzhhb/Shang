@@ -109,7 +109,19 @@ bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
       return false;
   }
 
-  return true;
+  unsigned IncreasedLatency = 0;
+  CompLatency CL;
+  unsigned PredLatency = CL.computeLatency(*Pred);
+  unsigned MergedLatency = CL.computeLatency(*MBB);
+  if (MergedLatency > PredLatency)
+    IncreasedLatency = MergedLatency - PredLatency;
+  double IncreaseRate = double(IncreasedLatency)/double(PredLatency);
+
+  DEBUG(dbgs() << "Merging BB#" << MBB->getNumber() << " To BB#"
+         << Pred->getNumber() << " IncreasedLatency " << IncreasedLatency
+         << ' ' << int(IncreaseRate * 100) << "%\n");
+
+  return IncreasedLatency < 5 && IncreaseRate < 0.2;
 }
 
 void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
@@ -180,6 +192,8 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
     MachineBasicBlock *Succ = I->first;
     // Merge the PHINodes.
     VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, JumpingCndVec);
+    // We had assert FromJT not contains FromBB, so we do not need to worry
+    // about adding FromBB to the successor of ToBB again.
     // Is it the successor of FromBB become the new successor of ToBB?
     if (!ToJT.count(Succ)) ToBB->addSuccessor(Succ);
 
@@ -193,6 +207,8 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   // Do not jump to FromBB any more.
   ToBB->removeSuccessor(FromBB);
   ToJT.erase(FromBB);
+  // We had assert FromJT not contains FromBB.
+  // FromJT.erase(FromBB);
 
   // Build the new Jump table.
   for (jt_it I = FromJT.begin(), E = FromJT.end(); I != E; ++I) {

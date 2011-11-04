@@ -987,5 +987,41 @@ bool VIDesc::canCopyBeFused() const {
   return MRI.getRegClass(DstReg) != MRI.getRegClass(SrcReg);
 }
 
-// Out of line virtual function to provide home for the class.
-void VIDesc::anchor() {}
+unsigned CompLatency::computeLatency(MachineBasicBlock &MBB) {
+  unsigned TotalLatency = 0;
+  for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
+    MachineInstr *MI = I;
+
+    unsigned L = 0;
+    // Iterate from use to define.
+    for (int i = MI->getNumOperands() - 1; i >= 0; --i) {
+      MachineOperand &MO = MI->getOperand(i);
+
+      if (!MO.isReg()) continue;
+
+      if (MO.isUse()) {
+        L = std::max(L, getLatencyFrom(MO.getReg(), MI));
+        continue;
+      }
+
+      // Remember the register latency.
+      LatencyInfo.insert(std::make_pair(MO.getReg(), std::make_pair(MI, L)));
+    }
+
+    TotalLatency = std::max(TotalLatency, L);
+  }
+
+  return TotalLatency;
+}
+
+unsigned CompLatency::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
+  unsigned SrcLatency = 0;
+  MachineInstr *SrcMI = 0;
+  LatencyMap::const_iterator at = LatencyInfo.find(Reg);
+  if (at != LatencyInfo.end()) {
+    SrcLatency = at->second.second;
+    SrcMI = at->second.first;
+  }
+
+  return SrcLatency + VInstrInfo::computeLatency(SrcMI, MI);
+}

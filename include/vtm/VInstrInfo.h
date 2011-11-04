@@ -318,9 +318,21 @@ public:
   const TargetInstrDesc* operator->() const { return &getTID(); }
 
   FuncUnitId getPrebindFUId() const;
+};
 
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
+// Compute the latency of a given MBB.
+class CompLatency {
+  typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > LatencyMap;
+  LatencyMap LatencyInfo;
+
+  unsigned getLatencyFrom(unsigned Reg, MachineInstr *MI) const ;
+
+public:
+  CompLatency() {}
+
+  unsigned computeLatency(MachineBasicBlock &MBB);
+
+
 };
 
 } // end namespace llvm
