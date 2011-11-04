@@ -247,6 +247,16 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
 
 void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
   assert(BB.getFirstTerminator() == BB.end() && "Cannot insert jump table!");
+  assert(Table.size() == BB.succ_size()&&"Table size and succ_size not match!");
+
+  // Dirty hack: We may not evaluate the predicate to always true at the moment.
+  if (Table.size() == 1) {
+    BuildMI(&BB, dl, VTMInsts[VTM::VOpToStateb])
+      .addOperand(ucOperand::CreatePredicate()).addMBB(*BB.succ_begin())
+      .addOperand(ucOperand::CreatePredicate())
+      .addOperand(ucOperand::CreateTrace(&BB));
+    return;
+  }
 
   for (JT::iterator I = Table.begin(), E = Table.end(); I != E; ++I) {
     BuildMI(&BB, dl, VTMInsts[VTM::VOpToStateb])
