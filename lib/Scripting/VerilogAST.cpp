@@ -259,11 +259,11 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   // Enable next slot only when resources are ready.
   if (ReadyPresented) CtrlS.if_begin(SlotReady);
 
-  DEBUG(
+  //DEBUG(
   if (getSlotNum() != 0)
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
-          << " ready\");\n";
-  );
+          << " ready\"); $finish();\n";
+  //);
 
   bool hasSelfLoop = false;
   if (hasExplicitNextSlots()) {

@@ -241,9 +241,19 @@ bool FixMachineCode::mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
   MachineOperand Cnd = MI->getOperand(1);
   if (TMI)
     mergeSelToCase(CaseMI, TMI, Cnd, MRI, TII);
-  if (FMI) {
-    VInstrInfo::ReversePredicateCondition(Cnd);
+  else {
+    // Re-add the condition into the case statement.
+    CaseMI->addOperand(Cnd);
+    CaseMI->addOperand(TVal);
+  }
+
+  VInstrInfo::ReversePredicateCondition(Cnd);
+  if (FMI)
     mergeSelToCase(CaseMI, FMI, Cnd, MRI, TII);
+  else {
+    // Re-add the condition into the case statement.
+    CaseMI->addOperand(Cnd);
+    CaseMI->addOperand(FVal);
   }
 
   MI->eraseFromParent();
