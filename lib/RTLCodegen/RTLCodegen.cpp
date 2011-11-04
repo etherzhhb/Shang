@@ -915,12 +915,29 @@ void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
 
 void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
                             SmallVectorImpl<VASTCnd> &Cnds) {
+  // Check if we got any case hitted
+  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
+  OS.if_();
+  VASTRegister::printCondition(OS, Slot, Cnds);
+  OS._then();
+  OS.switch_begin("1'b1");
+
   VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
   for (unsigned i = 1, e = Op.getNumOperands(); i < e; i +=2) {
     Cnds.push_back(createCondition(Op.getOperand(i)));
     VM->addAssignment(R, getSignal(Op.getOperand(i + 1)), Slot, Cnds);
+    // Do nothing if any case hit.
+    Cnds.back().print(OS);
+    OS << ":/*Case hit, do nothing*/;\n";
+
     Cnds.pop_back();
   }
+
+  // Report an error if no case hitted.
+  OS << "default: $display(\"Case miss in VOpCase at " << Slot->getName()
+     << "\");\n";
+  OS.switch_end();
+  OS.exit_block() << "\n";
 }
 
 void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
