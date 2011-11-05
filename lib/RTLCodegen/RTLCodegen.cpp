@@ -235,14 +235,6 @@ class RTLCodegen : public MachineFunctionPass {
 
   void clear();
 
-  inline std::string getucStateEnable(ucState &State) {
-    return getucStateEnable(State.getSlot());
-  }
-
-  inline std::string getucStateEnable(unsigned Slot) {
-    return "Slot" + utostr_32(Slot) + "Active";
-  }
-
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
   void emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
@@ -766,15 +758,13 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
       unsigned CndSlot = SlotNum - II;
       if (TargetBB == CurBB && CndSlot > startSlot) {
-        Cnds.push_back(VM->getOrCreateSymbol(getucStateEnable(CndSlot - 1)));
+        Cnds.push_back(VM->getSlot(CndSlot - 1)->getActive());
       } else {
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
         VASTRegister::AssignCndTy PredCnd = PredMap.find(TargetBB)->second;
         // Do we need extra predicate slot?
-        if (PredCnd.first != CurSlot) {
-          std::string SlotActive = getucStateEnable(PredCnd.first->getSlotNum());
-          Cnds.push_back(VM->getOrCreateSymbol(SlotActive));
-        }
+        if (PredCnd.first != CurSlot)
+          Cnds.push_back(PredCnd.first->getActive());
 
         Cnds.insert(Cnds.end(), PredCnd.second.begin(), PredCnd.second.end());
       }

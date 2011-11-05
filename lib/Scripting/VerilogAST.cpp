@@ -360,7 +360,7 @@ void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
                                   const AndCndVec Cnds) {
   OS << '(';
-  if (Slot) OS << Slot->getName() << "Active";
+  if (Slot) OS << Slot->getActive()->getName();
   else      OS << "1'b1";
 
   typedef AndCndVec::const_iterator and_it;
