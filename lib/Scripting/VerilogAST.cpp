@@ -161,7 +161,7 @@ void VASTUse::print(raw_ostream &OS) const {
   case USE_Symbol:
     OS << Data.SymbolName;
     if (UB) OS << verilogBitRange(UB, LB, false);
-    break;
+    return;
   case USE_Immediate:
     OS << verilogConstToStr(Data.ImmVal, UB, false);
     // No need to print bit range for immediate.
@@ -750,9 +750,9 @@ static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 
 static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << '{';
-  Ops[2].print(OS);
-  OS << '{';
   Ops[1].print(OS);
+  OS << '{';
+  Ops[0].print(OS);
   OS << "}}";
 }
 

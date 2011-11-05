@@ -126,7 +126,7 @@ public:
     UseKind = USE_Value;
   }
 
-  VASTUse(unsigned immVal, uint8_t width) : UB(width), LB(0) {
+  VASTUse(int64_t immVal, uint8_t width) : UB(width), LB(0) {
     Data.ImmVal = immVal;
     UseKind = USE_Immediate;
   }
