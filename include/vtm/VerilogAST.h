@@ -42,6 +42,8 @@ class MachineBasicBlock;
 class ucOperand;
 class VASTModule;
 class VASTSlot;
+class VASTWire;
+class VASTRegister;
 
 class VASTNode {
 public:
@@ -195,8 +197,13 @@ public:
 
   void printDecl(raw_ostream &OS) const;
 
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTSignal *A) { return true; }
+  static inline bool classof(const VASTWire *A) { return true; }
+  static inline bool classof(const VASTRegister *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastWire || A->getASTType() == vastRegister;
+  }
 };
 
 class VASTPort : public VASTNode {
@@ -229,16 +236,25 @@ public:
 };
 
 class VASTWire : public VASTSignal {
+public:
   // Datapath opcode.
-  enum OpCode {
-    dpUnkown
+  enum Opcode {
+    dpUnkown,
+    // FU datapath
+    dpAdd, dpMul, dpShl, dpSRA, dpSRL,
+    // Trivial datapath
+    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor
   };
 private:
   SmallVector<VASTUse, 4> Operands;
-  OpCode Opc;
+  Opcode Opc;
 public:
   VASTWire(const char *Name, unsigned BitWidth,
            const char *Attr = "");
+
+  void setOpcode(VASTWire::Opcode opc) { Opc = opc; }
+
+  unsigned getNumOperands() const { return Operands.size(); }
 
   VASTUse getOperand(unsigned Idx) const {
     assert(Idx < Operands.size() && "Index out of range!");

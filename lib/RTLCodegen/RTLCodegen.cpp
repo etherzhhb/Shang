@@ -231,7 +231,7 @@ class RTLCodegen : public MachineFunctionPass {
   VASTValue *emitFUAdd(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUShift(unsigned FUNum, unsigned BitWidth,
-                         const char *Operator, bool isSAR);
+                         VASTWire::Opcode Opc);
 
   void clear();
 
@@ -250,8 +250,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitDatapath(ucState &State);
 
-  void emitUnaryOp(ucOp &UnOp, const std::string &Operator);
-  void emitBinaryOp(ucOp &BinOp, const std::string &Operator);
+  void emitUnaryOp(ucOp &UnOp, VASTWire::Opcode Opc);
+  void emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc);
 
   void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpCase(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -593,19 +593,15 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
   std::string ResultName = "addsub" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  raw_ostream &DPS = VM->getDataPathBuffer();
-  unsigned OperandWidth = BitWidth - 1;
+  Result->setOpcode(VASTWire::dpAdd);
 
-  DPS << "assign "<< ResultName << " = ";
+  unsigned OperandWidth = BitWidth - 1;
   std::string OpName = ResultName + "_a";
   Result->addOperand(VM->addRegister(OpName, OperandWidth));
-  DPS << OpName << " + ";
   OpName = ResultName + "_b";
   Result->addOperand(VM->addRegister(OpName, OperandWidth));
-  DPS << OpName << " + ";
   OpName = ResultName + "_c";
   Result->addOperand(VM->addRegister(OpName, 1));
-  DPS << OpName << ";\n";
 
   return Result;
 }
@@ -613,38 +609,27 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
 VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth) {
   std::string ResultName = "mult" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  raw_ostream &DPS = VM->getDataPathBuffer();
-  DPS << "assign "<< ResultName << " = ";
+  Result->setOpcode(VASTWire::dpMul);
+
   std::string OpName = ResultName + "_a";
   Result->addOperand(VM->addRegister(OpName, BitWidth));
-  DPS << OpName << " * ";
   OpName = ResultName + "_b";
   Result->addOperand(VM->addRegister(OpName, BitWidth));
-  DPS << OpName << ";\n";
 
   return Result;
 }
 
 VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
-                                   const char *Operator, bool isSAR) {
+                                   VASTWire::Opcode Opc) {
   std::string ResultName = "shift" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  raw_ostream &DPS = VM->getDataPathBuffer();
-  unsigned RHSWidth = Log2_32_Ceil(BitWidth);
+  Result->setOpcode(Opc);
+
 
   std::string OpName = ResultName + "_a";
   Result->addOperand(VM->addRegister(OpName, BitWidth));
-  if (isSAR) {
-    // Convert the operand to signed wire if necessary.
-    DPS << "wire signed" << verilogBitRange(BitWidth) << ' '
-        << OpName << "_signed = " << OpName << ";\n";
-    OpName += "_signed";
-  }
-
-  DPS << "assign "<< ResultName << " = " << OpName << Operator;
   OpName = ResultName + "_b";
-  Result->addOperand(VM->addRegister(OpName, RHSWidth));
-  DPS << OpName << ";\n";
+  Result->addOperand(VM->addRegister(OpName, Log2_32_Ceil(BitWidth)));
 
   return Result;
 }
@@ -671,17 +656,17 @@ void RTLCodegen::emitAllSignals() {
       VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth()));
       break;
     case VTM::RASRRegClassID: {
-      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), ">>>", true);
+      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpSRA);
       VM->indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RLSRRegClassID:{
-      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), ">>", false);
+      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpSRL);
       VM->indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RSHLRegClassID:{
-      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), "<<", false);
+      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpShl);
       VM->indexVASTValue(RegNum, V);
       break;
     }
@@ -1175,41 +1160,33 @@ void RTLCodegen::emitDatapath(ucState &State) {
 
     case VTM::ImpUse:       /*Not need to handle*/  break;
 
-    case VTM::VOpXor:       emitBinaryOp(Op, "^");  break;
-    case VTM::VOpAnd:       emitBinaryOp(Op, "&");  break;
-    case VTM::VOpOr:        emitBinaryOp(Op, "|");  break;
+    case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor); break;
+    case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);  break;
+    case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);   break;
 
-    case VTM::VOpNot:       emitUnaryOp(Op, "~");   break;
-
-    case VTM::VOpROr:       emitUnaryOp(Op, "|");   break;
-    case VTM::VOpRAnd:      emitUnaryOp(Op, "&");   break;
-    case VTM::VOpRXor:      emitUnaryOp(Op, "^");   break;
+    case VTM::VOpNot:       emitUnaryOp(Op, VASTWire::dpNot);   break;
+    case VTM::VOpROr:       emitUnaryOp(Op, VASTWire::dpROr);   break;
+    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTWire::dpRAnd);  break;
+    case VTM::VOpRXor:      emitUnaryOp(Op, VASTWire::dpRXor);  break;
 
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   }
 }
 
-void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
+void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
   VASTWire &V = *cast<VASTWire>(getSignal(UnaOp.getOperand(0)));
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  printOperand(UnaOp.getOperand(0), OS);
-  OS << " = " << Operator << ' ';
-  printAsOperand(UnaOp.getOperand(1), V);
-  OS << ";\n";
+  V.setOpcode(Opc);
+
+  V.addOperand(getSignal(UnaOp.getOperand(1)));
 }
 
-void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
+void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
   VASTWire &V = *cast<VASTWire>(getSignal(BinOp.getOperand(0)));
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  printOperand(BinOp.getOperand(0), OS);
-  OS << " = ";
-  printAsOperand(BinOp.getOperand(1), V);
-  OS << ' ' << Operator << ' ';
-  printAsOperand(BinOp.getOperand(2), V);
-  OS << ";\n";
+  V.setOpcode(Opc);
+
+  V.addOperand(getSignal(BinOp.getOperand(1)));
+  V.addOperand(getSignal(BinOp.getOperand(2)));
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {

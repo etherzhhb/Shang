@@ -697,9 +697,60 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
-void VASTWire::print(raw_ostream &OS) const {
-  if (Opc == VASTWire::dpUnkown) return;
+static void printSimpleOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
+  OS << "assign " << W->getName() << " = ";
+  unsigned NumOps = W->getNumOperands();
+  assert(NumOps && "Unexpected zero operand!");
+  W->getOperand(0).print(OS);
+
+  for (unsigned i = 1; i < NumOps; ++i) {
+    OS << Opc;
+    W->getOperand(i).print(OS);
+  }
+
+  OS << ";\n";
 }
 
-// Out of line virtual function to provide home for the class.
-void VASTSignal::anchor() {}
+static void printUnaryOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
+  OS << "assign " << W->getName() << " = ";
+  assert(W->getNumOperands() && "Unexpected zero operand!");
+  OS << Opc;
+  W->getOperand(0).print(OS);
+  OS << ";\n";
+}
+
+
+static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
+  VASTSignal *LHS = cast<VASTSignal>(W->getOperand(0));
+  // Cast LHS to signed wire.
+  OS << "wire signed" << verilogBitRange(LHS->getBitWidth()) << ' '
+     << LHS->getName() << "_signed = " << LHS->getName() << ";\n";
+
+  OS << "assign "<< W->getName() << " = "
+     << LHS->getName() << "_signed >>> ";
+
+  W->getOperand(1).print(OS);
+  OS << ";\n";
+}
+
+void VASTWire::print(raw_ostream &OS) const {
+  if (Opc == dpUnkown) return;
+
+  switch (Opc) {
+  case dpNot: printUnaryOp(OS, this, " ~ "); break;
+  case dpAnd: printSimpleOp(OS, this, " & "); break;
+  case dpOr:  printSimpleOp(OS, this, " | "); break;
+  case dpXor: printSimpleOp(OS, this, " ^ "); break;
+
+  case dpRAnd:  printUnaryOp(OS, this, "&");  break;
+  case dpROr:   printUnaryOp(OS, this, "|");  break;
+  case dpRXor:  printUnaryOp(OS, this, "^");  break;
+
+  case dpAdd: printSimpleOp(OS, this, " + "); break;
+  case dpMul: printSimpleOp(OS, this, " * "); break;
+  case dpShl: printSimpleOp(OS, this, " << "); break;
+  case dpSRL: printSimpleOp(OS, this, " >> "); break;
+  case dpSRA: printSRAOp(OS, this);            break;
+  default: llvm_unreachable("Unknown datapath opcode!"); break;
+  }
+}
