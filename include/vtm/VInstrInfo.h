@@ -332,7 +332,7 @@ public:
 
   unsigned computeLatency(MachineBasicBlock &MBB);
 
-
+  void reset() { LatencyInfo.clear(); }
 };
 
 } // end namespace llvm
