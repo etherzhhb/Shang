@@ -216,8 +216,8 @@ void MergeFallThroughBlocks::PredicateBlock(MachineOperand Pred,
     if (I->isDebugValue())
       continue;
 
-    //if (VIDesc(*I).hasDatapath())
-    //  continue;
+    if (VIDesc(*I).hasDatapath())
+      continue;
 
     if (TII->isPredicated(I)) {
       ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
