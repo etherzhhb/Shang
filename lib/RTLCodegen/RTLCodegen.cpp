@@ -265,14 +265,11 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitCtrlOp(ucState &State, PredMapTy &PredMap);
 
-  void printPredicate(ucOperand &Pred, raw_ostream &SS);
   // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
 
   VASTUse getSignal(ucOperand &Op);
-  void printOperand(ucOperand &Op, raw_ostream &OS, bool printBitwidth = true);
-  void printAsOperand(ucOperand &Op, VASTWire &Wire,
-                      unsigned UB = 64, unsigned LB = 0);
+  void printOperand(ucOperand &Op, raw_ostream &OS);
 
   void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -1225,45 +1222,11 @@ VASTUse RTLCodegen::getSignal(ucOperand &Op) {
   return VM->getOrCreateSymbol(Name);
 }
 
-void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
+void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS) {
   if(Op.isReg()){
-    VASTUse V = getSignal(Op);
-    OS << V->getName();
-
-    if(printRange && V->getBitWidth() != 0)
-      OS << verilogBitRange(V.UB, V.LB, V->getBitWidth() !=1);
-
+    getSignal(Op).print(OS);
     return;
   }
 
   Op.print(OS);
-}
-
-void RTLCodegen::printAsOperand(ucOperand &Op, VASTWire &Wire,
-                                unsigned UB, unsigned LB) {
-  raw_ostream &OS = VM->getDataPathBuffer();
-
-  if(Op.isReg()){
-    VASTUse V = getSignal(Op);
-    VM->getDataPathBuffer() << V->getName();
-    UB = std::min(unsigned(V.UB), UB);
-    LB = std::max(unsigned(V.LB), LB);
-    if(UB - LB != 0)
-      OS << verilogBitRange(UB, LB, V->getBitWidth() != 1);
-    Wire.addOperand(VASTUse(V, UB, LB));
-    return;
-  }
-
-  assert(UB == 64 && LB == 0 && "Get bitslice on bad operand type?");
-  Op.print(OS);
-}
-
-void RTLCodegen::printPredicate(ucOperand &Pred, raw_ostream &SS) {
-  if (Pred.getReg()) {
-    SS << '(';
-    if (Pred.isPredicateInverted()) SS << '~';
-    printOperand(Pred, SS, true);
-    SS << ')';
-  } else
-    SS << "1'b1";
 }

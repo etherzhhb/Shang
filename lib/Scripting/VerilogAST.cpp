@@ -701,21 +701,21 @@ static void printAssign(raw_ostream &OS, const VASTWire *W) {
   OS << "assign " << W->getName() << " = ";
 }
 
-static void printSimpleOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
-  unsigned NumOps = W->getNumOperands();
+static void printSimpleOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
+                          const char *Opc) {
+  unsigned NumOps = Ops.size();
   assert(NumOps && "Unexpected zero operand!");
-  W->getOperand(0).print(OS);
+  Ops[0].print(OS);
 
   for (unsigned i = 1; i < NumOps; ++i) {
     OS << Opc;
-    W->getOperand(i).print(OS);
+    Ops[i].print(OS);
   }
 }
 
-static void printUnaryOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
-  assert(W->getNumOperands() && "Unexpected zero operand!");
+static void printUnaryOp(raw_ostream &OS, VASTUse U, const char *Opc) {
   OS << Opc;
-  W->getOperand(0).print(OS);
+  U.print(OS);
 }
 
 
@@ -732,17 +732,17 @@ static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
   OS << ";\n";
 }
 
-static void printBitCat(raw_ostream &OS, const VASTWire *W) {
+static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << '{';
-  printSimpleOp(OS, W, " , ");
+  printSimpleOp(OS, Ops, " , ");
   OS << '}';
 }
 
-static void printBitRepeat(raw_ostream &OS, const VASTWire *W) {
+static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << '{';
-  W->getOperand(2).print(OS);
+  Ops[2].print(OS);
   OS << '{';
-  W->getOperand(1).print(OS);
+  Ops[1].print(OS);
   OS << "}}";
 }
 
@@ -760,27 +760,24 @@ void VASTWire::print(raw_ostream &OS) const {
   printAssign(OS, this);
 
   switch (Opc) {
-  case dpNot: printUnaryOp(OS, this, " ~ ");  break;
-  case dpAnd: printSimpleOp(OS, this, " & "); break;
-  case dpOr:  printSimpleOp(OS, this, " | "); break;
-  case dpXor: printSimpleOp(OS, this, " ^ "); break;
+  case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
+  case dpAnd: printSimpleOp(OS, Operands, " & "); break;
+  case dpOr:  printSimpleOp(OS, Operands, " | "); break;
+  case dpXor: printSimpleOp(OS, Operands, " ^ "); break;
 
-  case dpRAnd:  printUnaryOp(OS, this, "&");  break;
-  case dpROr:   printUnaryOp(OS, this, "|");  break;
-  case dpRXor:  printUnaryOp(OS, this, "^");  break;
+  case dpRAnd:  printUnaryOp(OS, getOperand(0), "&");  break;
+  case dpROr:   printUnaryOp(OS, getOperand(0), "|");  break;
+  case dpRXor:  printUnaryOp(OS, getOperand(0), "^");  break;
 
-  case dpAdd: printSimpleOp(OS, this, " + "); break;
-  case dpMul: printSimpleOp(OS, this, " * "); break;
-  case dpShl: printSimpleOp(OS, this, " << ");break;
-  case dpSRL: printSimpleOp(OS, this, " >> ");break;
+  case dpAdd: printSimpleOp(OS, Operands, " + "); break;
+  case dpMul: printSimpleOp(OS, Operands, " * "); break;
+  case dpShl: printSimpleOp(OS, Operands, " << ");break;
+  case dpSRL: printSimpleOp(OS, Operands, " >> ");break;
 
-  case dpAssign:
-    getOperand(0).print(OS);
-    OS << ";\n";
-    break;
+  case dpAssign: getOperand(0).print(OS);     break;
 
-  case dpBitCat:    printBitCat(OS, this);    break;
-  case dpBitRepeat: printBitRepeat(OS, this); break;
+  case dpBitCat:    printBitCat(OS, Operands);    break;
+  case dpBitRepeat: printBitRepeat(OS, Operands); break;
   default: llvm_unreachable("Unknown datapath opcode!"); break;
   }
 
