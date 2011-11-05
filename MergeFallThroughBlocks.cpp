@@ -60,6 +60,9 @@ struct MergeFallThroughBlocks : public MachineFunctionPass {
                                  VInstrInfo::JT &DstJT);
 
   bool mergeFallThroughBlock(MachineBasicBlock *MBB);
+
+  void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB);
+
 };
 }
 
@@ -70,10 +73,14 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   LI = &getAnalysis<MachineLoopInfo>();
   bool MakeChanged = false;
-
+  bool BlockMerged = false;
   typedef MachineFunction::reverse_iterator rev_it;
-  for (rev_it I = MF.rbegin(), E = MF.rend(); I != E; ++I)
-    MakeChanged |= mergeFallThroughBlock(&*I);
+
+  do {
+    BlockMerged = false;
+    for (rev_it I = MF.rbegin(), E = MF.rend(); I != E; ++I)
+      MakeChanged |= BlockMerged |= mergeFallThroughBlock(&*I);
+  } while (BlockMerged);
 
   // Tail merge tend to expose more if-conversion opportunities.
   BranchFolder BF(true);
@@ -108,19 +115,7 @@ MachineBasicBlock *MergeFallThroughBlocks::getMergeDst(MachineBasicBlock *SrcBB,
       return 0;
   }
 
-  unsigned IncreasedLatency = 0;
-  CompLatency CL;
-  unsigned PredLatency = CL.computeLatency(*DstBB);
-  unsigned MergedLatency = CL.computeLatency(*SrcBB);
-  if (MergedLatency > PredLatency)
-    IncreasedLatency = MergedLatency - PredLatency;
-  double IncreaseRate = double(IncreasedLatency)/double(PredLatency);
-
-  DEBUG(dbgs() << "Merging BB#" << SrcBB->getNumber() << " To BB#"
-         << DstBB->getNumber() << " IncreasedLatency " << IncreasedLatency
-         << ' ' << int(IncreaseRate * 100) << "%\n");
-
-  return (IncreasedLatency < 5 && IncreaseRate < 0.2) ? DstBB : 0;
+  return DstBB;
 }
 
 bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
@@ -129,6 +124,19 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
 
   if (!ToBB) return false;
 
+  unsigned IncreasedLatency = 0;
+  CompLatency CL;
+  unsigned OriginalLatency = CL.computeLatency(*ToBB);
+  unsigned MergedLatency = CL.computeLatency(*FromBB);
+  if (MergedLatency > OriginalLatency)
+    IncreasedLatency = MergedLatency - OriginalLatency;
+  double IncreaseRate = double(IncreasedLatency)/double(OriginalLatency);
+
+  if (IncreasedLatency > 4 || IncreaseRate > 0.1) return false;
+  DEBUG(dbgs() << "Merging BB#" << FromBB->getNumber() << " To BB#"
+         << ToBB->getNumber() << " IncreasedLatency " << IncreasedLatency
+         << ' ' << int(IncreaseRate * 100.0) << "%\n");
+
   TII->RemoveBranch(*ToBB);
   TII->RemoveBranch(*FromBB);
 
@@ -136,57 +144,21 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   typedef VInstrInfo::JT::iterator jt_it;
   jt_it at = ToJT.find(FromBB);
   assert(at != ToJT.end() && "ToBB not branching to FromBB?");
-  MachineOperand JumpingCnd = at->second;
-  SmallVector<MachineOperand, 1> JumpingCndVec(1, JumpingCnd);
+  MachineOperand PredCnd = at->second;
 
-  typedef std::map<unsigned, unsigned> PredMapTy;
-  PredMapTy PredMap;
-
-  assert(JumpingCnd.getReg() != 0 && "Unexpected unconditional branch!");
-  // Predicate the Block.
-  for (MachineBasicBlock::iterator I = FromBB->begin(), E = FromBB->end();
-        I != E; ++I) {
-    if (I->isDebugValue())
-      continue;
-
-    if (TII->isPredicated(I)) {
-      ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
-      unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
-      unsigned &Reg = PredMap[k];
-      if (!Reg)
-        Reg = VInstrInfo::MergePred(*MO, JumpingCnd, *FromBB, I, MRI,
-                                    TII, VTM::VOpAnd).getReg();
-
-      MO->ChangeToRegister(Reg, false);
-      MO->setTargetFlags(1);
-    } else if (I->getOpcode() <= TargetOpcode::COPY) {
-      MachineInstr *PseudoInst = I;
-      ++I; // Skip current instruction, we may change it.
-      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst,
-                                                          JumpingCndVec);
-      if (!PseudoInst) {
-#ifndef NDEBUG
-        dbgs() << "Unable to predicate " << *I << "!\n";
-#endif
-        llvm_unreachable(0);
-      }
-      I = PseudoInst;
-    } else if (!TII->PredicateInstruction(I, JumpingCndVec)) {
-#ifndef NDEBUG
-      dbgs() << "Unable to predicate " << *I << "!\n";
-#endif
-      llvm_unreachable(0);
-    }
-  }
+  if (!VInstrInfo::isAlwaysTruePred(PredCnd))
+    PredicateBlock(PredCnd, FromBB);
 
   // And merge the block into its predecessor.
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
 
+  SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
   std::set<MachineBasicBlock*> NewSuccs;
+
   for (jt_it I = FromJT.begin(),E = FromJT.end(); I != E; ++I){
     MachineBasicBlock *Succ = I->first;
     // Merge the PHINodes.
-    VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, JumpingCndVec);
+    VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, PredVec);
     // We had assert FromJT not contains FromBB, so we do not need to worry
     // about adding FromBB to the successor of ToBB again.
     // Is it the successor of FromBB become the new successor of ToBB?
@@ -195,7 +167,7 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
     FromBB->removeSuccessor(Succ);
 
     // And predicate the jump table.
-    I->second = VInstrInfo::MergePred(I->second, JumpingCnd, *ToBB, ToBB->end(),
+    I->second = VInstrInfo::MergePred(I->second, PredCnd, *ToBB, ToBB->end(),
                                       MRI, TII, VTM::VOpAnd);
   }
 
@@ -221,7 +193,61 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   // Re-insert the jump table.
   VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
   ++NumFallThroughMerged;
+
+  DEBUG(CL.reset();
+        IncreasedLatency = CL.computeLatency(*ToBB) - OriginalLatency;
+        dbgs() << "........BB#" << FromBB->getNumber()
+         << " merged, IncreasedLatency " << IncreasedLatency
+         << ' ' << int(double(IncreasedLatency)/double(OriginalLatency) * 100.0)
+         << "%\n");
+
   return true;
+}
+
+void MergeFallThroughBlocks::PredicateBlock(MachineOperand Pred,
+                                            MachineBasicBlock *MBB ){
+  typedef std::map<unsigned, unsigned> PredMapTy;
+  PredMapTy PredMap;
+  SmallVector<MachineOperand, 1> PredVec(1, Pred);
+
+  // Predicate the Block.
+  for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
+       I != E; ++I) {
+    if (I->isDebugValue())
+      continue;
+
+    //if (VIDesc(*I).hasDatapath())
+    //  continue;
+
+    if (TII->isPredicated(I)) {
+      ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
+      unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
+      unsigned &Reg = PredMap[k];
+      if (!Reg)
+        Reg = VInstrInfo::MergePred(*MO, Pred, *MBB, I, MRI,
+                                    TII, VTM::VOpAnd).getReg();
+
+      MO->ChangeToRegister(Reg, false);
+      MO->setTargetFlags(1);
+    } else if (I->getOpcode() <= TargetOpcode::COPY) {
+      MachineInstr *PseudoInst = I;
+      ++I; // Skip current instruction, we may change it.
+      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst,
+                                                          PredVec);
+      if (!PseudoInst) {
+#ifndef NDEBUG
+        dbgs() << "Unable to predicate " << *I << "!\n";
+#endif
+        llvm_unreachable(0);
+      }
+      I = PseudoInst;
+    } else if (!TII->PredicateInstruction(I, PredVec)) {
+#ifndef NDEBUG
+      dbgs() << "Unable to predicate " << *I << "!\n";
+#endif
+      llvm_unreachable(0);
+    }
+  }
 }
 
 Pass *llvm::createMergeFallThroughBlocksPass() {
