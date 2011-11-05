@@ -222,6 +222,8 @@ public:
 };
 
 class VASTSignal : public VASTValue {
+  // TODO: Annotate the signal so we know that some of them are port signals
+  // and no need to declare again in the declaration list.
   const char *AttrStr;
 protected:
   VASTSignal(VASTTypes DeclType, const char *Name, unsigned BitWidth,
@@ -350,7 +352,8 @@ public:
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
 private:
-  VASTRegister *R;
+  // The relative signal of the slot: Slot register, Slot active and Slot ready.
+  VASTSignal *Signals[3];
   // The ready signals that need to wait before we go to next slot.
   FUCtrlVecTy Readys;
   // The function units that enabled at this slot.
@@ -362,41 +365,55 @@ private:
 
   unsigned StartSlot, EndSlot, II;
 public:
-  VASTSlot(unsigned slotNum, VASTRegister *r)
-    : VASTNode(vastSlot, slotNum), R(r), StartSlot(slotNum), EndSlot(slotNum),
-    II(~0) {}
+  VASTSlot(unsigned slotNum, VASTSignal *S[]);
 
   void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
-  void printActive(raw_ostream &OS, const VASTModule &Mod) const;
-  void printReady(raw_ostream &OS) const;
+  // Print the logic of ready signal of this slot, need alias slot information.
+  void printReady(raw_ostream &OS, const VASTModule &Mod) const;
+  // Print the ready expression of this slot.
+  void printFUReadyExpr(raw_ostream &OS) const;
 
-  void print(raw_ostream &OS) const {}
+  void print(raw_ostream &OS) const;
 
-  const char *getName() const { return R->getName(); }
+  const char *getName() const { return Signals[0]->getName(); }
+  // Getting the relative signals.
+  VASTRegister *getRegister() const { return cast<VASTRegister>(Signals[0]); }
+  VASTWire *getReady() const { return cast<VASTWire>(Signals[1]); }
+  VASTWire *getActive() const { return cast<VASTWire>(Signals[2]); }
+
   unsigned getSlotNum() const { return getSubClassData(); }
 
   void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
+  // Dose this slot jump to some other slot conditionally instead just fall
+  // through to SlotNum + 1 slot?
   bool hasExplicitNextSlots() const { return !NextSlots.empty(); }
 
+  // Successor slots of this slot.
   const_succ_iterator succ_begin() const { return NextSlots.begin(); }
   const_succ_iterator succ_end() const { return NextSlots.end(); }
 
+  // Signals need to be enabled at this slot.
   void addEnable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
   bool isEnabled(const VASTValue *V) const { return Enables.count(V); }
   const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
   const_fu_ctrl_it enable_end() const { return Enables.end(); }
 
+  // Signals need to set before this slot is ready.
   void addReady(const VASTValue *V, VASTCnd Cnd = VASTCnd());
   bool readyEmpty() const { return Readys.empty(); }
   const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
   const_fu_ctrl_it ready_end() const { return Readys.end(); }
 
+  // Signals need to be disabled at this slot.
   void addDisable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
   bool isDiabled(const VASTValue *V) const { return Disables.count(V); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
   const_fu_ctrl_it disable_end() const { return Disables.end(); }
 
+  // This slots alias with this slot, this happened in a pipelined loop.
+  // The slots from difference stage of the loop may active at the same time,
+  // and these slot called "alias".
   void setAliasSlots(unsigned startSlot, unsigned endSlot, unsigned ii) {
     StartSlot = startSlot;
     EndSlot = endSlot;
@@ -508,11 +525,19 @@ public:
   VASTSlot *getSlot(unsigned SlotNum) {
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
+      // Create the relative signals.
       std::string SlotName = "Slot" + utostr_32(SlotNum);
-      VASTRegister *R = addRegister(SlotName, 1, SlotNum == 0,
-                                    DirectClkEnAttr.c_str());
-      Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum, R);
+      std::string SlotReadyName = SlotName + "Ready";
+      std::string SlotActiveName = SlotName + "Active";
+      VASTSignal *Signals[] = {
+        addRegister(SlotName, 1, SlotNum == 0,  DirectClkEnAttr.c_str()),
+        addWire(SlotReadyName, 1, DirectClkEnAttr.c_str()),
+        addWire(SlotActiveName, 1, DirectClkEnAttr.c_str())
+      };
+
+      Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum, Signals);
     }
+
     return Slot;
   }
 
@@ -667,9 +692,6 @@ std::string verilogConstToStr(uint64_t value,unsigned bitwidth,
                               bool isMinValue);
 
 std::string verilogBitRange(unsigned UB, unsigned LB = 0, bool printOneBit = true);
-
-raw_ostream &verilogParam(raw_ostream &ss, const std::string &Name,
-                          unsigned BitWidth, unsigned Val);
 
 } // end namespace
 

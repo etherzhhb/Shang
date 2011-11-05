@@ -106,51 +106,15 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
   return pc.str();
 }
 
-//std::string VLang::GetValueName(const Value *Operand) {
-//  // Mangle globals with the standard mangler interface for LLC compatibility.
-//  if (const GlobalValue *GV = dyn_cast<GlobalValue>(Operand)) {
-//    SmallString<128> Str;
-//    Mang->getNameWithPrefix(Str, GV, false);
-//    return VLangMangle(Str.str().str());
-//  }
-//
-//  std::string Name = Operand->getName();
-//
-//  // Constant
-//
-//  if (Name.empty()) { // Assign unique names to local temporaries.
-//    unsigned &No = AnonValueNumbers[Operand];
-//    if (No == 0)
-//      No = ++NextAnonValueNumber;
-//    Name = "tmp__" + utostr(No);
-//  }
-//
-//  std::string VarName;
-//  VarName.reserve(Name.capacity());
-//
-//  for (std::string::iterator I = Name.begin(), E = Name.end();
-//      I != E; ++I) {
-//    char ch = *I;
-//
-//  if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') ||
-//      (ch >= '0' && ch <= '9') || ch == '_')) {
-//    char buffer[5];
-//    sprintf(buffer, "_%x_", ch);
-//    VarName += buffer;
-//  } else
-//    VarName += ch;
-//  }
-//
-//  return "esyn_" + VarName;
-//}
+//----------------------------------------------------------------------------//
+// Helper function for Verilog RTL printing.
 
-raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
-                                unsigned BitWidth, unsigned Val) {
-  ss << "parameter " << Name
-    << " = " << verilogConstToStr(Val, BitWidth, false) << ";\n";
-  return ss;
+static void printAssign(raw_ostream &OS, const VASTWire *W) {
+  OS << "assign " << W->getName() << " = ";
 }
 
+//----------------------------------------------------------------------------//
+// Classes in Verilog AST.
 void VASTUse::print(raw_ostream &OS) const {
   // Print the bit range if the value is have multiple bits.
   switch (UseKind) {
@@ -174,6 +138,18 @@ void VASTCnd::print(raw_ostream &OS) const {
   if (isInverted()) OS << '~';
   VASTUse::print(OS);
   OS << ')';
+}
+
+VASTSlot::VASTSlot(unsigned slotNum, VASTSignal *S[])
+  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0) {
+  std::uninitialized_copy(S, S + 3, Signals);
+
+  // SlotAcitve = SlotReady & SlotReg
+  VASTWire *SlotActive = getActive();
+  SlotActive->setOpcode(VASTWire::dpAnd);
+  SlotActive->addOperand(getRegister());
+  SlotActive->addOperand(getReady());
+  // We need alias slot to build the ready signal, keep it as unknown now.
 }
 
 void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTCnd Cnd) {
@@ -200,7 +176,7 @@ void VASTSlot::addDisable(const VASTValue *V, VASTCnd Cnd) {
   (void) Inserted;
 }
 
-void VASTSlot::printReady(raw_ostream &OS) const {
+void VASTSlot::printFUReadyExpr(raw_ostream &OS) const {
   OS << "1'b1";
   for (VASTSlot::const_fu_ctrl_it I = ready_begin(), E = ready_end();
         I != E; ++I) {
@@ -211,9 +187,9 @@ void VASTSlot::printReady(raw_ostream &OS) const {
   }
 }
 
-void VASTSlot::printActive(raw_ostream &OS, const VASTModule &Mod) const {
-  OS << "wire " << getName() << "Ready = ";
-  printReady(OS);
+void VASTSlot::printReady(raw_ostream &OS, const VASTModule &Mod) const {
+  printAssign(OS, getReady());
+  printFUReadyExpr(OS);
 
   if (StartSlot != EndSlot) {
     for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
@@ -223,16 +199,13 @@ void VASTSlot::printActive(raw_ostream &OS, const VASTModule &Mod) const {
 
       if (!AliasSlot->readyEmpty()) {
         OS << " & ( ~Slot" << slot << " | (";
-        AliasSlot->printReady(OS);
+        AliasSlot->printFUReadyExpr(OS);
         OS << "))";
       }
     }
   }
 
   OS << ";// Are all waiting resources ready?\n";
-  OS << VASTModule::DirectClkEnAttr << ' ';
-  OS << "wire " << getName() << "Active = " << getName() << "Ready & "
-     << getName() << ";\n";
 }
 
 void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
@@ -363,6 +336,10 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.exit_block("\n\n");
 }
 
+void VASTSlot::print(raw_ostream &OS) const {
+  llvm_unreachable("VASTSlot::print should not be called!");
+}
+
 VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
                            unsigned initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
@@ -479,7 +456,7 @@ void VASTModule::printSlotActives(raw_ostream &OS) const {
   OS << "\n\n// Slot Active Signal\n";
 
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) S->printActive(OS, *this);
+    if (VASTSlot *S = *I) S->printReady(OS, *this);
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
@@ -705,10 +682,6 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
     OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
-}
-
-static void printAssign(raw_ostream &OS, const VASTWire *W) {
-  OS << "assign " << W->getName() << " = ";
 }
 
 static void printSimpleOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
