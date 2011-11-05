@@ -1267,9 +1267,6 @@ VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
 
 VASTUse RTLCodegen::getSignal(ucOperand &Op) {
   if (Op.isReg()) {
-    // Dirty Hack for dead code.
-    if (Op.getReg() == 0) return VM->getOrCreateSymbol("1'b0");
-
     VASTUse V = VM->lookupSignal(Op.getReg());
     assert (V != 0 && "Cannot find this Value in vector!");
     return V;
