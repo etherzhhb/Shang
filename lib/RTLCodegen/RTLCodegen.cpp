@@ -541,7 +541,7 @@ void RTLCodegen::emitAllocatedFUs() {
        I != E; ++I) {
     const VFInfo::BRamInfo &Info = I->second;
     unsigned BramNum = Info.PhyRegNum;
-    const Value* Initializer = Info.Initializer; 
+    const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string Filename;
@@ -593,7 +593,7 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
   std::string ResultName = "addsub" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  VASTWire::builder_stream &DPS = Result->openCodeBuffer();
+  raw_ostream &DPS = VM->getDataPathBuffer();
   unsigned OperandWidth = BitWidth - 1;
 
   DPS << "assign "<< ResultName << " = ";
@@ -606,14 +606,14 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   OpName = ResultName + "_c";
   Result->addOperand(VM->addRegister(OpName, 1));
   DPS << OpName << ";\n";
-  Result->closeCodeBuffer();
+
   return Result;
 }
 
 VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth) {
   std::string ResultName = "mult" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  VASTWire::builder_stream &DPS = Result->openCodeBuffer();
+  raw_ostream &DPS = VM->getDataPathBuffer();
   DPS << "assign "<< ResultName << " = ";
   std::string OpName = ResultName + "_a";
   Result->addOperand(VM->addRegister(OpName, BitWidth));
@@ -621,7 +621,7 @@ VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth) {
   OpName = ResultName + "_b";
   Result->addOperand(VM->addRegister(OpName, BitWidth));
   DPS << OpName << ";\n";
-  Result->closeCodeBuffer();
+
   return Result;
 }
 
@@ -629,7 +629,7 @@ VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
                                    const char *Operator, bool isSAR) {
   std::string ResultName = "shift" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  VASTWire::builder_stream &DPS = Result->openCodeBuffer();
+  raw_ostream &DPS = VM->getDataPathBuffer();
   unsigned RHSWidth = Log2_32_Ceil(BitWidth);
 
   std::string OpName = ResultName + "_a";
@@ -645,7 +645,7 @@ VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
   OpName = ResultName + "_b";
   Result->addOperand(VM->addRegister(OpName, RHSWidth));
   DPS << OpName << ";\n";
-  Result->closeCodeBuffer();
+
   return Result;
 }
 
@@ -745,7 +745,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     assert(SlotNum != startSlot && "Unexpected first slot!");
     // Skip the marker.
     if (Op->getOpcode() == VTM::ImpUse) continue;
-    
+
     Cnds.clear();
     Cnds.push_back(createCondition(Op.getPredicate()));
 
@@ -870,7 +870,7 @@ void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
   OS << "$display(\"BAD BAD BAD BAD! Run to unreachable\");\n";
   OS << "$finish();\n";
   OS.exit_block();
-  
+
   Slot->addNextSlot(0);
 }
 
@@ -1192,18 +1192,17 @@ void RTLCodegen::emitDatapath(ucState &State) {
 
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, const std::string &Operator) {
   VASTWire &V = *cast<VASTWire>(getSignal(UnaOp.getOperand(0)));
-  VASTWire::builder_stream &OS = V.openCodeBuffer();
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   printOperand(UnaOp.getOperand(0), OS);
   OS << " = " << Operator << ' ';
   printAsOperand(UnaOp.getOperand(1), V);
   OS << ";\n";
-  V.closeCodeBuffer();
 }
 
 void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   VASTWire &V = *cast<VASTWire>(getSignal(BinOp.getOperand(0)));
-  VASTWire::builder_stream &OS = V.openCodeBuffer();
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   printOperand(BinOp.getOperand(0), OS);
   OS << " = ";
@@ -1211,12 +1210,11 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, const std::string &Operator) {
   OS << ' ' << Operator << ' ';
   printAsOperand(BinOp.getOperand(2), V);
   OS << ";\n";
-  V.closeCodeBuffer();
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   VASTWire &V = *cast<VASTWire>(getSignal(OpBitSlice.getOperand(0)));
-  VASTWire::builder_stream &OS = V.openCodeBuffer();
+  raw_ostream &OS = VM->getDataPathBuffer();
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice,
   // now we are going to get the included upper bound.
@@ -1228,12 +1226,11 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   OS << " = ";
   printAsOperand(OpBitSlice.getOperand(1), V, UB, LB);
   OS << ";\n";
-  V.closeCodeBuffer();
 }
 
 void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
   VASTWire &V = *cast<VASTWire>(getSignal(OpBitCat.getOperand(0)));
-  VASTWire::builder_stream &OS = V.openCodeBuffer();
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   printOperand(OpBitCat.getOperand(0), OS);
   OS << " = {";
@@ -1242,12 +1239,11 @@ void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
   OS << ',';
   printAsOperand(OpBitCat.getOperand(2), V);
   OS << "};\n";
-  V.closeCodeBuffer();
 }
 
 void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
   VASTWire &V = *cast<VASTWire>(getSignal(OpBitRepeat.getOperand(0)));
-  VASTWire::builder_stream &OS = V.openCodeBuffer();
+  raw_ostream &OS = VM->getDataPathBuffer();
   OS << "assign ";
   printOperand(OpBitRepeat.getOperand(0), OS);
   OS << " = {";
@@ -1256,7 +1252,6 @@ void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
   OS << Times << '{';
   printAsOperand(OpBitRepeat.getOperand(1), V);
   OS << "}};\n";
-  V.closeCodeBuffer();
 }
 
 VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
@@ -1297,19 +1292,21 @@ void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS, bool printRange) {
 
 void RTLCodegen::printAsOperand(ucOperand &Op, VASTWire &Wire,
                                 unsigned UB, unsigned LB) {
+  raw_ostream &OS = VM->getDataPathBuffer();
+
   if(Op.isReg()){
     VASTUse V = getSignal(Op);
-    Wire.getCodeBuffer() << V->getName();
+    VM->getDataPathBuffer() << V->getName();
     UB = std::min(unsigned(V.UB), UB);
     LB = std::max(unsigned(V.LB), LB);
     if(UB - LB != 0)
-      Wire.getCodeBuffer() << verilogBitRange(UB, LB, V->getBitWidth() != 1);
+      OS << verilogBitRange(UB, LB, V->getBitWidth() != 1);
     Wire.addOperand(VASTUse(V, UB, LB));
     return;
   }
 
   assert(UB == 64 && LB == 0 && "Get bitslice on bad operand type?");
-  Op.print(Wire.getCodeBuffer());
+  Op.print(OS);
 }
 
 void RTLCodegen::printPredicate(ucOperand &Pred, raw_ostream &SS) {

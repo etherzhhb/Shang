@@ -421,7 +421,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 
 VASTWire::VASTWire(const char *Name, unsigned BitWidth,
                    const char *Attr)
-  : VASTSignal(vastWire, Name, BitWidth, Attr), S(0) {}
+  : VASTSignal(vastWire, Name, BitWidth, Attr), Opc(dpUnkown) {}
 
 std::string VASTModule::DirectClkEnAttr = "";
 std::string VASTModule::ParallelCaseAttr = "";
@@ -697,20 +697,8 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
-VASTWire::builder_stream &VASTWire::openCodeBuffer() {
-  assert(S == 0 && "Code buffer not closed!");
-  S = new builder_stream(Code);
-  return *S;
-}
-
-void VASTWire::closeCodeBuffer() {
-  delete S;
-  S = 0;
-}
-
 void VASTWire::print(raw_ostream &OS) const {
-  assert(S == 0 && "Code buffer not closed!");
-  OS << Code;
+  if (Opc == VASTWire::dpUnkown) return;
 }
 
 // Out of line virtual function to provide home for the class.

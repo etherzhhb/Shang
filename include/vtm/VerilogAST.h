@@ -229,22 +229,16 @@ public:
 };
 
 class VASTWire : public VASTSignal {
-public:
-  typedef raw_string_ostream builder_stream;
+  // Datapath opcode.
+  enum OpCode {
+    dpUnkown
+  };
 private:
   SmallVector<VASTUse, 4> Operands;
-  std::string Code;
-  builder_stream *S;
+  OpCode Opc;
 public:
   VASTWire(const char *Name, unsigned BitWidth,
            const char *Attr = "");
-  builder_stream &openCodeBuffer();
-  builder_stream &getCodeBuffer() {
-    assert(S && "Code buffer not open!");
-    return *S;
-  }
-
-  void closeCodeBuffer();
 
   VASTUse getOperand(unsigned Idx) const {
     assert(Idx < Operands.size() && "Index out of range!");
