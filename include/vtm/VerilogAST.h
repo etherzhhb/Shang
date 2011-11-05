@@ -77,17 +77,16 @@ public:
 
 // TODO: Change VASTValue to VASTNamedNode
 class VASTValue : public VASTNode {
-  // TODO: Use const char* and use the key value of the symbol table.
-  std::string Name;
+  const char *Name;
 public:
-  VASTValue(VASTTypes DeclType, const std::string name, unsigned BitWidth)
+  VASTValue(VASTTypes DeclType, const char *name, unsigned BitWidth)
     : VASTNode(DeclType, BitWidth), Name(name)
   {
     assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
       && "Bad DeclType!");
   }
 
-  const std::string &getName() const { return Name; }
+  const char *getName() const { return Name; }
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return getASTType() == vastRegister; }
 
@@ -189,7 +188,7 @@ public:
 class VASTSignal : public VASTValue {
   const char *AttrStr;
 protected:
-  VASTSignal(VASTTypes DeclType, const std::string Name, unsigned BitWidth,
+  VASTSignal(VASTTypes DeclType, const char *Name, unsigned BitWidth,
              const char *Attr = "")
     : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr) {}
 public:
@@ -207,7 +206,7 @@ public:
     assert(!(isInput && S->isRegister()) && "Bad port decl!");
   }
 
-  const std::string &getName() const { return S->getName(); }
+  const char *getName() const { return S->getName(); }
   bool isRegister() const { return S->isRegister(); }
   unsigned getBitWidth() const { return S->getBitWidth(); }
   VASTSignal *get() const { return S; }
@@ -237,7 +236,7 @@ private:
   std::string Code;
   builder_stream *S;
 public:
-  VASTWire(const std::string &Name, unsigned BitWidth,
+  VASTWire(const char *Name, unsigned BitWidth,
            const char *Attr = "");
   builder_stream &openCodeBuffer();
   builder_stream &getCodeBuffer() {
@@ -272,7 +271,7 @@ private:
   typedef std::map<VASTUse, OrCndVec, VASTRValueLess> AssignMapTy;
   AssignMapTy Assigns;
 public:
-  VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal,
+  VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
 
   void addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S);
@@ -325,7 +324,7 @@ public:
 
   void print(raw_ostream &OS) const {}
 
-  const std::string &getName() const { return R->getName(); }
+  const char *getName() const { return R->getName(); }
   unsigned getSlotNum() const { return getSubClassData(); }
 
   void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
@@ -378,7 +377,10 @@ private:
   BumpPtrAllocator Allocator;
   typedef std::map<unsigned, VASTUse> RegIdxMapTy;
   RegIdxMapTy RegsMap;
-  StringMap<VASTValue*> SymbolTable;
+  typedef StringMap<VASTValue*> SymTabTy;
+  SymTabTy SymbolTable;
+  typedef StringMapEntry<VASTValue*> SymEntTy;
+
   typedef std::vector<VASTSlot*> SlotVecTy;
   SlotVecTy Slots;
   // The port starting offset of a specific function unit.
@@ -440,18 +442,15 @@ public:
     return cast<T>(getSymbol(Name));
   }
 
-  VASTValue *getOrCreateSymbol(const std::string &Name, VASTValue *V = 0) {
-    VASTValue *&NewV = SymbolTable.GetOrCreateValue(Name, V).second;
-    if (NewV == 0) {
-      if (V == 0) {
-        V = Allocator.Allocate<VASTValue>();
-        new (V) VASTValue(vastSymbol, Name, 0);
-      }
-
-      NewV = V;
+  VASTValue *getOrCreateSymbol(const std::string &Name) {
+    SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
+    VASTValue *&V = Entry.second;
+    if (V == 0) {
+       V = Allocator.Allocate<VASTValue>();
+       new (V) VASTValue(vastSymbol, Entry.first(), 0);
     }
 
-    return NewV;
+    return V;
   }
 
   void allocaSlots(unsigned TotalSlots) {
@@ -515,7 +514,7 @@ public:
     return *Ports[i];
   }
 
-  const std::string &getPortName(unsigned i) const {
+  const char *getPortName(unsigned i) const {
     return getPort(i).getName();
   }
 

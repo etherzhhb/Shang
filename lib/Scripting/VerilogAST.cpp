@@ -227,7 +227,7 @@ void VASTSlot::printActive(raw_ostream &OS, const VASTModule &Mod) const {
 
 void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.if_begin(getName());
-  std::string SlotReady = getName() + "Ready";
+  std::string SlotReady = std::string(getName()) + "Ready";
   bool ReadyPresented = !readyEmpty();
 
   // DirtyHack: Remember the enabled signals in alias slots, the signal may be
@@ -353,7 +353,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   CtrlS.exit_block("\n\n");
 }
 
-VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
+VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
                            unsigned initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
@@ -419,7 +419,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTWire::VASTWire(const std::string &Name, unsigned BitWidth,
+VASTWire::VASTWire(const char *Name, unsigned BitWidth,
                    const char *Attr)
   : VASTSignal(vastWire, Name, BitWidth, Attr), S(0) {}
 
@@ -576,8 +576,11 @@ VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
 VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
                                       unsigned InitVal,
                                       const char *Attr) {
+  SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
+  assert(Entry.second == 0 && "Symbol already exist!");
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
-  new (Reg) VASTRegister(Name, BitWidth, InitVal, Attr);
+  new (Reg) VASTRegister(Entry.first(), BitWidth, InitVal, Attr);
+  Entry.second = Reg;
   Signals.push_back(Reg);
 
   return Reg;
@@ -600,8 +603,11 @@ VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
 
 VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
                               const char *Attr) {
+  SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
+  assert(Entry.second == 0 && "Symbol already exist!");
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(Name, BitWidth, Attr);
+  new (Wire) VASTWire(Entry.first(), BitWidth, Attr);
+  Entry.second = Wire;
   Signals.push_back(Wire);
 
   return Wire;

@@ -128,7 +128,7 @@ class RTLCodegen : public MachineFunctionPass {
       // We need to create multiplexer to allow current module and its submodules
       // share the bus.
       std::string PortReg = PortName + "_r";
-      VM->getOrCreateSymbol(PortReg, VM->addRegister(PortReg, BitWidth));
+      VM->addRegister(PortReg, BitWidth);
       VM->addOutputPort(PortName, BitWidth, VASTModule::Others, false);
       if (isEn) {
         EnableLogicS << "assign " << PortName << " = " << PortReg;
@@ -445,7 +445,7 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
       VM->addInputPort(Name, BitWidth, VASTModule::ArgPort);
     else {
       std::string RegName = getSubModulePortName(FNNum, Name);
-      VM->getOrCreateSymbol(RegName, VM->addRegister(RegName, BitWidth));
+      VM->addRegister(RegName, BitWidth);
       S << "." << Name << '(' << RegName << "),\n\t";
     }
   }
@@ -458,7 +458,7 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
-      VM->getOrCreateSymbol(WireName, VM->addWire(WireName, BitWidth));
+      VM->addWire(WireName, BitWidth);
       S << ".return_value(" << WireName << "),\n\t";
     }
   }
