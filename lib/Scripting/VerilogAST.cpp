@@ -216,6 +216,7 @@ void VASTSlot::buildReadyLogic(raw_ostream &OS, const VASTModule &Mod) {
 }
 
 void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
+  // TODO: Build the AST for these logic.
   CtrlS.if_begin(getName());
   std::string SlotReady = std::string(getName()) + "Ready";
   bool ReadyPresented = !readyEmpty();
@@ -459,11 +460,15 @@ void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
     if (VASTSlot *S = *I) S->printCtrl(CtrlS, *this);
 }
 
-void VASTModule::buildSlotLogic(raw_ostream &OS) const {
+void VASTModule::buildSlotLogic() {
+  raw_ostream &OS = getDataPathBuffer();
   OS << "\n\n// Slot Active Signal\n";
 
+  // DirtyHack: print slot ready logic to data path instead of bulding logic
+  // expression for it.
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) S->buildReadyLogic(OS, *this);
+    if (VASTSlot *S = *I)
+      S->buildReadyLogic(OS, *this);
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {

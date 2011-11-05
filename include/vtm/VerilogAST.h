@@ -490,7 +490,7 @@ public:
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 
   // Print the slot control flow.
-  void buildSlotLogic(raw_ostream &OS) const;
+  void buildSlotLogic();
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
   VASTUse lookupSignal(unsigned RegNum) const {

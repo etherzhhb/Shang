@@ -386,6 +386,12 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
+  // Building the Slot active signals.
+  // FIXME: It is in fact simply printing the logic out.
+  VM->buildSlotLogic();
+
+  // TODO: Optimize the RTL net list.
+
   // Write buffers to output
   VM->printModuleDecl(Out);
   Out.module_begin();
@@ -394,9 +400,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   Out << "// Reg and wire decl\n";
   VM->printSignalDecl(Out);
   Out << "\n\n";
-  // Building the Slot active signals.
-  // FIXME: It is in fact simply printing the logic out.
-  VM->buildSlotLogic(Out);
   // Datapath
   Out << "// Datapath\n";
   Out << VM->getDataPathStr();
