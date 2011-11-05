@@ -97,19 +97,44 @@ public:
 
 class VASTUse {
 protected:
+  enum VASTUseTy {
+    USE_Value,              // Using a VASTValue
+    USE_Immediate,          // Simply a immediate
+    USE_Symbol              // A external symbol
+  };
   // The ast node or simply the symbol.
-  VASTValue *V;
+  union {
+    VASTValue *V;           // For USE_Value.
+    int64_t ImmVal;         // For USE_Immediate.
+    const char *SymbolName; // For USE_Symbol
+  } Data;
 
+  unsigned UseKind  :2; // VASTUseTy
+  int Inverted  :1;
 public:
   // The bit range of this value.
-  /*const*/ uint8_t UB, LB;
+  /*const*/ unsigned UB :8;
+  /*const*/ unsigned LB :8;
 
-  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb)
-    : V(v),UB(ub), LB(lb) {}
+  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb) : UB(ub), LB(lb) {
+    Data.V = v;
+    UseKind = USE_Value;
+  }
 
-  VASTUse(VASTValue *v) : V(v),UB(v->getBitWidth()), LB(0) {}
+  VASTUse(VASTValue *v) : UB(v->getBitWidth()), LB(0) {
+    Data.V = v;
+    UseKind = USE_Value;
+  }
 
-  VASTUse() : V(0), UB(0), LB(0) {}
+  VASTUse(unsigned immVal, uint8_t width) : UB(width), LB(0) {
+    Data.ImmVal = immVal;
+    UseKind = USE_Immediate;
+  }
+
+  VASTUse(const char *S, uint8_t width) : UB(width), LB(0) {
+    Data.SymbolName = S;
+    UseKind = USE_Symbol;
+  }
 
   //const VASTRValue& operator=(const VASTRValue &RHS) {
   //  if (&RHS == this) return *this;
@@ -120,11 +145,27 @@ public:
   //  return *this;
   //}
 
-  operator bool() const { return V != 0; }
-  VASTValue *get() const { return V; }
-  // Implicit cast to VASTValue.
-  operator VASTValue *() const { return V; }
-  VASTValue *operator->() const { return V; }
+  //operator bool() const { return V != 0; }
+  bool operator==(VASTValue *RHS) const {
+    return UseKind == USE_Value && Data.V == RHS;
+  }
+
+  bool operator!=(VASTValue *RHS) const {
+    return !operator==(RHS);
+  }
+
+  bool operator<(VASTUse RHS) const {
+    return (((Data.ImmVal < RHS.Data.ImmVal
+      || (Data.ImmVal == RHS.Data.ImmVal && UB < RHS.UB))
+      || (Data.ImmVal == RHS.Data.ImmVal && UB == RHS.UB && UB < RHS.UB))
+      || (Data.ImmVal == RHS.Data.ImmVal && UB == RHS.UB && UB == RHS.UB
+          && Inverted < RHS.Inverted));
+  }
+
+  VASTValue *get() const {
+    assert(UseKind == USE_Value && "");
+    return Data.V;
+  }
 
   void print(raw_ostream &OS) const;
 };
@@ -144,32 +185,25 @@ template<> struct simplify_type<VASTUse> {
   }
 };
 
-struct VASTRValueLess  {
-  bool operator() (const VASTUse &LHS, const VASTUse &RHS) const {
-    return ((LHS.get() < RHS.get()
-            || (LHS.get() == RHS.get() && LHS.UB < RHS.UB))
-            || (LHS.get() == RHS.get() && LHS.UB == RHS.UB && LHS.UB < RHS.UB));
-  }
-};
-
 // The predicate condition, maybe a inverted value.
 class VASTCnd : public VASTUse {
-  bool Inverted;
 public:
   /*implicit*/ VASTCnd(VASTValue *V, bool inverted = false,
                        unsigned ub = 0, unsigned lb = 0)
-    : VASTUse(V, ub, lb), Inverted(inverted)
+    : VASTUse(V, ub, lb)
   {
+    Inverted = inverted;
     //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
-  /*implicit*/ VASTCnd(VASTUse V, bool inverted = false)
-    : VASTUse(V), Inverted(inverted)
-  {
+  /*implicit*/ VASTCnd(VASTUse V, bool inverted = false) : VASTUse(V) {
+    Inverted = inverted;
     //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
-  /*implicit*/ VASTCnd(bool Cnd = true) : VASTUse(), Inverted(!Cnd) {}
+  /*implicit*/ VASTCnd(bool Cnd = true) : VASTUse(Cnd, 1) {
+    Inverted = false;
+  }
 
   //const VASTCnd& operator=(const VASTCnd &RHS) {
   //  if (&RHS == this) return *this;
@@ -282,7 +316,7 @@ public:
 private:
   unsigned InitVal;
   typedef std::vector<AssignCndTy>  OrCndVec;
-  typedef std::map<VASTUse, OrCndVec, VASTRValueLess> AssignMapTy;
+  typedef std::map<VASTUse, OrCndVec> AssignMapTy;
   AssignMapTy Assigns;
 public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
@@ -441,7 +475,7 @@ public:
 
   VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
-    if(at == RegsMap.end()) return VASTUse();
+    assert(at != RegsMap.end() && "Signal not found!");
 
     return at->second;
   }
@@ -585,7 +619,7 @@ public:
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTCnd> &Cnds);
 
-  VASTValue *indexVASTValue(unsigned RegNum, VASTUse V);
+  VASTUse indexVASTValue(unsigned RegNum, VASTUse V);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);

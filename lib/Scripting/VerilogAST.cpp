@@ -50,6 +50,7 @@ using namespace llvm;
 
 std::string llvm::verilogBitRange(unsigned UB, unsigned LB, bool printOneBit) {
   std::stringstream bw;
+  assert(UB && UB >= LB && "Bad bit range!");
   --UB;
   if (UB != LB)
     bw << "[" << UB << ":" << LB << "]";
@@ -152,17 +153,26 @@ raw_ostream &llvm::verilogParam(raw_ostream &ss, const std::string &Name,
 
 void VASTUse::print(raw_ostream &OS) const {
   // Print the bit range if the value is have multiple bits.
-  OS << V->getName();
-  if (UB) OS << verilogBitRange(UB, LB, V->getBitWidth() > 1);
+  switch (UseKind) {
+  case USE_Value:
+    OS << Data.V->getName();
+    if (UB) OS << verilogBitRange(UB, LB, Data.V->getBitWidth() > 1);
+    return;
+  case USE_Symbol:
+    OS << Data.SymbolName;
+    if (UB) OS << verilogBitRange(UB, LB, false);
+    break;
+  case USE_Immediate:
+    OS << verilogConstToStr(Data.ImmVal, UB, false);
+    // No need to print bit range for immediate.
+    return;
+  }
 }
 
 void VASTCnd::print(raw_ostream &OS) const {
   OS << '(';
   if (isInverted()) OS << '~';
-
-  if (V != 0) VASTUse::print(OS);
-  else        OS << "1'b1";
-
+  VASTUse::print(OS);
   OS << ')';
 }
 
@@ -358,7 +368,7 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
 void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
-  assert(Src.get() != this && "Self assignemnt not supported yet!");
+  assert(Src != this && "Self assignemnt not supported yet!");
   Assigns[Src].push_back(std::make_pair(S, Cnd));
 }
 
@@ -566,7 +576,7 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
   return Port;
 }
 
-VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
+VASTUse VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
   bool Inserted = RegsMap.insert(std::make_pair(RegNum, V)).second;
   assert(Inserted && "ValueIndex already existed!");
   (void) Inserted;

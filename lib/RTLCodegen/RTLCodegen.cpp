@@ -635,7 +635,8 @@ void RTLCodegen::emitAllSignals() {
     VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
     if (!Info.isTopLevelReg(RegNum)) {
       unsigned Parent = Info.getParentRegister();
-      VASTUse V = VASTUse(VM->lookupSignal(Parent), Info.getUB(), Info.getLB());
+      VASTUse V = VASTUse(VM->lookupSignal(Parent).get(),
+                          Info.getUB(), Info.getLB());
       VM->indexVASTValue(RegNum, V);
       continue;
     }
@@ -1201,19 +1202,29 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
 }
 
 VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
-  VASTUse V = VM->lookupSignal(Op.getReg());
+  // Is there an always true predicate?
+  if (VInstrInfo::isAlwaysTruePred(Op)) return VASTCnd(true);
 
-  return VASTCnd(V, Op.isPredicateInverted());
+  // Otherwise it must be some signal.
+  return VASTCnd(VM->lookupSignal(Op.getReg()), Op.isPredicateInverted());
 }
 
 VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
-  if (Op.isReg()) {
+  switch (Op.getType()) {
+  case MachineOperand::MO_Register: {
     VASTUse V = VM->lookupSignal(Op.getReg());
-    assert (V != 0 && "Cannot find this Value in vector!");
+    assert (V.get() && "Cannot find this Value in vector!");
     return V;
   }
+  case MachineOperand::MO_Immediate:
+    return VASTUse(Op.getImm(), Op.getBitWidth());
+  case MachineOperand::MO_ExternalSymbol:
+    return VASTUse(Op.getSymbolName(), Op.getBitWidth());
+  default:
+    break;
+  }
 
-  // Otherwise simply create a symbol.
+  // DirtyHack: simply create a symbol.
   std::string Name;
   raw_string_ostream SS(Name);
   Op.print(SS);
