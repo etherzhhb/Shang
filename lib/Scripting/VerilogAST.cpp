@@ -158,48 +158,55 @@ void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTCnd Cnd) {
   (void) Inserted;
 }
 
-void VASTSlot::addEnable(const VASTValue *V, VASTCnd Cnd) {
+void VASTSlot::addEnable(VASTValue *V, VASTCnd Cnd) {
   bool Inserted = Enables.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addReady(const VASTValue *V, VASTCnd Cnd /* = VASTCnd */) {
+void VASTSlot::addReady(VASTValue *V, VASTCnd Cnd /* = VASTCnd */) {
   bool Inserted = Readys.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addDisable(const VASTValue *V, VASTCnd Cnd) {
+void VASTSlot::addDisable(VASTValue *V, VASTCnd Cnd) {
   bool Inserted = Disables.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::printFUReadyExpr(raw_ostream &OS) const {
+void VASTSlot::buildFUReadyExpr(raw_ostream &OS, VASTSlot *SrcSlot) {
+  VASTWire *Ready = SrcSlot->getReady();
+
   OS << "1'b1";
   for (VASTSlot::const_fu_ctrl_it I = ready_begin(), E = ready_end();
         I != E; ++I) {
+    // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
     OS << " & (" << I->first->getName() << " | ~";
     I->second.print(OS);
     OS << ')';
+
+    // Build the dependence for ready signal.
+    Ready->addOperand(I->first);
+    Ready->addOperand(I->second);
   }
 }
 
-void VASTSlot::printReady(raw_ostream &OS, const VASTModule &Mod) const {
+void VASTSlot::buildReadyLogic(raw_ostream &OS, const VASTModule &Mod) {
   printAssign(OS, getReady());
-  printFUReadyExpr(OS);
+  buildFUReadyExpr(OS, this);
 
   if (StartSlot != EndSlot) {
     for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
       if (slot == getSlotNum()) continue;
 
-      const VASTSlot *AliasSlot = Mod.getSlot(slot);
+      VASTSlot *AliasSlot = Mod.getSlot(slot);
 
       if (!AliasSlot->readyEmpty()) {
         OS << " & ( ~Slot" << slot << " | (";
-        AliasSlot->printFUReadyExpr(OS);
+        AliasSlot->buildFUReadyExpr(OS, this);
         OS << "))";
       }
     }
@@ -452,11 +459,11 @@ void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
     if (VASTSlot *S = *I) S->printCtrl(CtrlS, *this);
 }
 
-void VASTModule::printSlotActives(raw_ostream &OS) const {
+void VASTModule::buildSlotLogic(raw_ostream &OS) const {
   OS << "\n\n// Slot Active Signal\n";
 
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) S->printReady(OS, *this);
+    if (VASTSlot *S = *I) S->buildReadyLogic(OS, *this);
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {

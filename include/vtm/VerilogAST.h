@@ -348,7 +348,7 @@ public:
   typedef std::map<unsigned, VASTCnd> SuccVecTy;
   typedef SuccVecTy::const_iterator const_succ_iterator;
 
-  typedef std::map<const VASTValue*, VASTCnd> FUCtrlVecTy;
+  typedef std::map<VASTValue*, VASTCnd> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
 private:
@@ -369,9 +369,12 @@ public:
 
   void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
   // Print the logic of ready signal of this slot, need alias slot information.
-  void printReady(raw_ostream &OS, const VASTModule &Mod) const;
-  // Print the ready expression of this slot.
-  void printFUReadyExpr(raw_ostream &OS) const;
+  void buildReadyLogic(raw_ostream &OS, const VASTModule &Mod);
+  /// @briefPrint the ready expression of this slot.
+  ///
+  /// @param OS       The output stream.
+  /// @param SrcSlot  Which Slot are the expression printing for?
+  void buildFUReadyExpr(raw_ostream &OS, VASTSlot *SrcSlot);
 
   void print(raw_ostream &OS) const;
 
@@ -393,20 +396,20 @@ public:
   const_succ_iterator succ_end() const { return NextSlots.end(); }
 
   // Signals need to be enabled at this slot.
-  void addEnable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
-  bool isEnabled(const VASTValue *V) const { return Enables.count(V); }
+  void addEnable(VASTValue *V, VASTCnd Cnd = VASTCnd());
+  bool isEnabled(VASTValue *V) const { return Enables.count(V); }
   const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
   const_fu_ctrl_it enable_end() const { return Enables.end(); }
 
   // Signals need to set before this slot is ready.
-  void addReady(const VASTValue *V, VASTCnd Cnd = VASTCnd());
+  void addReady(VASTValue *V, VASTCnd Cnd = VASTCnd());
   bool readyEmpty() const { return Readys.empty(); }
   const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
   const_fu_ctrl_it ready_end() const { return Readys.end(); }
 
   // Signals need to be disabled at this slot.
-  void addDisable(const VASTValue *V, VASTCnd Cnd = VASTCnd());
-  bool isDiabled(const VASTValue *V) const { return Disables.count(V); }
+  void addDisable(VASTValue *V, VASTCnd Cnd = VASTCnd());
+  bool isDiabled(VASTValue *V) const { return Disables.count(V); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
   const_fu_ctrl_it disable_end() const { return Disables.end(); }
@@ -487,7 +490,7 @@ public:
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 
   // Print the slot control flow.
-  void printSlotActives(raw_ostream &OS) const;
+  void buildSlotLogic(raw_ostream &OS) const;
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
   VASTUse lookupSignal(unsigned RegNum) const {
@@ -522,7 +525,7 @@ public:
     Slots.assign(TotalSlots, 0);
   }
 
-  VASTSlot *getSlot(unsigned SlotNum) {
+  VASTSlot *getOrCreateSlot(unsigned SlotNum) {
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
       // Create the relative signals.
