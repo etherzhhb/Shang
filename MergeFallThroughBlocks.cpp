@@ -55,9 +55,11 @@ struct MergeFallThroughBlocks : public MachineFunctionPass {
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
-  bool canMerge(MachineBasicBlock *MBB);
+  MachineBasicBlock *getMergeDst(MachineBasicBlock *Src,
+                                 VInstrInfo::JT &SrcJT,
+                                 VInstrInfo::JT &DstJT);
 
-  void mergeFallThroughBlock(MachineBasicBlock *MBB);
+  bool mergeFallThroughBlock(MachineBasicBlock *MBB);
 };
 }
 
@@ -67,72 +69,65 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   LI = &getAnalysis<MachineLoopInfo>();
+  bool MakeChanged = false;
 
   typedef MachineFunction::reverse_iterator rev_it;
-  for (rev_it I = MF.rbegin(), E = MF.rend(); I != E; ++I) {
-    MachineBasicBlock *MBB = &*I;
-
-    if (canMerge(MBB))
-      mergeFallThroughBlock(MBB);
-  }
+  for (rev_it I = MF.rbegin(), E = MF.rend(); I != E; ++I)
+    MakeChanged |= mergeFallThroughBlock(&*I);
 
   // Tail merge tend to expose more if-conversion opportunities.
   BranchFolder BF(true);
-  BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
-                      getAnalysisIfAvailable<MachineModuleInfo>());
+  MakeChanged |= BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
+                                     getAnalysisIfAvailable<MachineModuleInfo>());
 
   MF.RenumberBlocks();
-  return true;
+  return MakeChanged;
 }
 
-bool MergeFallThroughBlocks::canMerge(MachineBasicBlock *MBB) {
+MachineBasicBlock *MergeFallThroughBlocks::getMergeDst(MachineBasicBlock *SrcBB,
+                                                       VInstrInfo::JT &SrcJT,
+                                                       VInstrInfo::JT &DstJT) {
   // Only handle simple case at the moment
-  if (MBB->pred_size() != 1) return false;
+  if (SrcBB->pred_size() != 1) return 0;
 
-  VInstrInfo::JT PredJT, CurJT;
-
-  MachineBasicBlock *Pred = *MBB->pred_begin();
+  MachineBasicBlock *DstBB = *SrcBB->pred_begin();
   // Do not change the parent loop of MBB.
-  if (LI->getLoopFor(MBB) != LI->getLoopFor(Pred)) return false;
+  if (LI->getLoopFor(SrcBB) != LI->getLoopFor(DstBB)) return 0;
 
   // Do not mess up with strange CFG.
-  if (VInstrInfo::extractJumpTable(*Pred, PredJT)) return false;
-  if (VInstrInfo::extractJumpTable(*MBB, CurJT)) return false;
+  if (VInstrInfo::extractJumpTable(*DstBB, DstJT)) return 0;
+  if (VInstrInfo::extractJumpTable(*SrcBB, SrcJT)) return 0;
 
   // Do not mess up with self loop.
-  if (CurJT.count(MBB)) return false;
+  if (SrcJT.count(SrcBB)) return 0;
 
   // We need to predicate the block when merging it.
-  for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();I != E;++I){
+  for (MachineBasicBlock::iterator I = SrcBB->begin(), E = SrcBB->end();I != E;++I){
     MachineInstr *MI = I;
     if (!TII->isPredicable(MI))
-      return false;
+      return 0;
   }
 
   unsigned IncreasedLatency = 0;
   CompLatency CL;
-  unsigned PredLatency = CL.computeLatency(*Pred);
-  unsigned MergedLatency = CL.computeLatency(*MBB);
+  unsigned PredLatency = CL.computeLatency(*DstBB);
+  unsigned MergedLatency = CL.computeLatency(*SrcBB);
   if (MergedLatency > PredLatency)
     IncreasedLatency = MergedLatency - PredLatency;
   double IncreaseRate = double(IncreasedLatency)/double(PredLatency);
 
-  DEBUG(dbgs() << "Merging BB#" << MBB->getNumber() << " To BB#"
-         << Pred->getNumber() << " IncreasedLatency " << IncreasedLatency
+  DEBUG(dbgs() << "Merging BB#" << SrcBB->getNumber() << " To BB#"
+         << DstBB->getNumber() << " IncreasedLatency " << IncreasedLatency
          << ' ' << int(IncreaseRate * 100) << "%\n");
 
-  return IncreasedLatency < 5 && IncreaseRate < 0.2;
+  return (IncreasedLatency < 5 && IncreaseRate < 0.2) ? DstBB : 0;
 }
 
-void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
-  MachineBasicBlock *ToBB = *FromBB->pred_begin();
+bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   VInstrInfo::JT FromJT, ToJT;
+  MachineBasicBlock *ToBB = getMergeDst(FromBB, FromJT, ToJT);
 
-  // Do not mess up with strange CFG.
-  if (VInstrInfo::extractJumpTable(*ToBB, ToJT)) return;
-
-  if (VInstrInfo::extractJumpTable(*FromBB, FromJT)) return;
-  assert(!FromJT.count(FromBB) && "Unexpected self loop!");
+  if (!ToBB) return false;
 
   TII->RemoveBranch(*ToBB);
   TII->RemoveBranch(*FromBB);
@@ -226,6 +221,7 @@ void MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   // Re-insert the jump table.
   VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
   ++NumFallThroughMerged;
+  return true;
 }
 
 Pass *llvm::createMergeFallThroughBlocksPass() {
