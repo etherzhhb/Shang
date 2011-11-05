@@ -43,21 +43,22 @@ class ucOperand;
 class VASTModule;
 class VASTSlot;
 
-// Leaf node type of Verilog AST.
-enum VASTTypes {
-  vastPort,
-  vastWire,
-  vastRegister,
-  vastSymbol,
-  vastDatapath,
-  vastSlot,
-  vastFirstDeclType = vastPort,
-  vastLastDeclType = vastSlot,
-
-  vastModule
-};
-
 class VASTNode {
+public:
+  // Leaf node type of Verilog AST.
+  enum VASTTypes {
+    vastPort,
+    vastWire,
+    vastRegister,
+    vastSymbol,
+    vastDatapath,
+    vastSlot,
+    vastFirstDeclType = vastPort,
+    vastLastDeclType = vastSlot,
+
+    vastModule
+  };
+private:
   const unsigned short T;
   unsigned short SubclassData;
 protected:
@@ -78,12 +79,9 @@ public:
 class VASTValue : public VASTNode {
   // TODO: Use const char* and use the key value of the symbol table.
   std::string Name;
-  bool IsReg;
-  unsigned InitVal;
 public:
-  VASTValue(VASTTypes DeclType, const std::string name, unsigned BitWidth, bool isReg,
-            unsigned initVal)
-    : VASTNode(DeclType, BitWidth),Name(name), IsReg(isReg), InitVal(initVal)
+  VASTValue(VASTTypes DeclType, const std::string name, unsigned BitWidth)
+    : VASTNode(DeclType, BitWidth), Name(name)
   {
     assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
       && "Bad DeclType!");
@@ -91,14 +89,11 @@ public:
 
   const std::string &getName() const { return Name; }
   unsigned short getBitWidth() const { return getSubClassData(); }
-  bool isRegister() const { return IsReg; }
+  bool isRegister() const { return getASTType() == vastRegister; }
 
   virtual void print(raw_ostream &OS) const;
-
-  void printReset(raw_ostream &OS) const;
 };
 
-// TODO: This is the VASTValue.
 class VASTUse {
 protected:
   // The ast node or simply the symbol.
@@ -192,11 +187,11 @@ public:
 };
 
 class VASTSignal : public VASTValue {
-  std::string AttrStr;
+  const char *AttrStr;
 protected:
   VASTSignal(VASTTypes DeclType, const std::string Name, unsigned BitWidth,
-    bool isReg, unsigned InitVal = 0, const std::string &Attr = "")
-    : VASTValue(DeclType, Name, BitWidth, isReg, InitVal), AttrStr(Attr) {}
+             const char *Attr = "")
+    : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr) {}
 public:
 
   void printDecl(raw_ostream &OS) const;
@@ -243,7 +238,7 @@ private:
   builder_stream *S;
 public:
   VASTWire(const std::string &Name, unsigned BitWidth,
-           const std::string &Attr = "");
+           const char *Attr = "");
   builder_stream &openCodeBuffer();
   builder_stream &getCodeBuffer() {
     assert(S && "Code buffer not open!");
@@ -272,16 +267,18 @@ public:
   typedef ArrayRef<VASTCnd> AndCndVec;
   typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
 private:
+  unsigned InitVal;
   typedef std::vector<AssignCndTy>  OrCndVec;
   typedef std::map<VASTUse, OrCndVec, VASTRValueLess> AssignMapTy;
   AssignMapTy Assigns;
 public:
   VASTRegister(const std::string &Name, unsigned BitWidth, unsigned InitVal,
-               const std::string &Attr = "");
+               const char *Attr = "");
 
   void addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S);
 
-  void print(vlang_raw_ostream &OS) const;
+  void printAssignment(vlang_raw_ostream &OS) const;
+  void printReset(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTRegister *A) { return true; }
@@ -448,7 +445,7 @@ public:
     if (NewV == 0) {
       if (V == 0) {
         V = Allocator.Allocate<VASTValue>();
-        new (V) VASTValue(vastSymbol, Name, 0, false, 0);
+        new (V) VASTValue(vastSymbol, Name, 0);
       }
 
       NewV = V;
@@ -465,7 +462,8 @@ public:
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
       std::string SlotName = "Slot" + utostr_32(SlotNum);
-      VASTRegister *R = addRegister(SlotName, 1, SlotNum == 0, DirectClkEnAttr);
+      VASTRegister *R = addRegister(SlotName, 1, SlotNum == 0,
+                                    DirectClkEnAttr.c_str());
       Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum, R);
     }
     return Slot;
@@ -558,17 +556,17 @@ public:
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
-                            const std::string &Attr = "");
+                            const char *Attr = "");
 
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
-                    const std::string &Attr = "");
+                    const char *Attr = "");
 
   VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
                             unsigned InitVal = 0,
-                            const std::string &Attr = "");
+                            const char *Attr = "");
 
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
-                    const std::string &Attr = "");
+                    const char *Attr = "");
 
   VASTRegister::AndCndVec allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds);
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,

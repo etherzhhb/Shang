@@ -4,12 +4,12 @@
 //
 // Copyright: 2010 by Hongbin Zheng. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
-// of your agreement to the following terms, and your use, installation, 
+// of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
-// of these terms.  If you do not agree with these terms, please do not use, 
-// install, modify or redistribute this software. You may not redistribute, 
-// install copy or modify this software without written permission from 
-// Hongbin Zheng. 
+// of these terms.  If you do not agree with these terms, please do not use,
+// install, modify or redistribute this software. You may not redistribute,
+// install copy or modify this software without written permission from
+// Hongbin Zheng.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -51,7 +51,7 @@ using namespace llvm;
 std::string llvm::verilogBitRange(unsigned UB, unsigned LB, bool printOneBit) {
   std::stringstream bw;
   --UB;
-  if (UB != LB) 
+  if (UB != LB)
     bw << "[" << UB << ":" << LB << "]";
   else if(printOneBit)
     bw << "[" << LB << "]";
@@ -72,9 +72,9 @@ std::string llvm::verilogConstToStr(Constant *CPV) {
     case Instruction::BitCast:
       return verilogConstToStr(CE->getOperand(0));
     }
-    
+
   }
-  
+
   return "??Constant??";
 }
 
@@ -295,11 +295,11 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS.exit_block("// End resource ready.\n");
   } else {
     // DirtyHack: Check if the memory bus is shutdown.
-    //DEBUG(
+    DEBUG(
       CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
             << Mod.getName()
             << " bad mem0en_r %b\\n\", mem0en_r);  $finish(); end\n";
-    //);
+    );
   }
 
   CtrlS << "// Enable the active FUs.\n";
@@ -354,8 +354,8 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
 }
 
 VASTRegister::VASTRegister(const std::string &Name, unsigned BitWidth,
-                           unsigned InitVal, const std::string &Attr)
-  : VASTSignal(vastRegister, Name, BitWidth, true, InitVal, Attr) {}
+                           unsigned initVal, const char *Attr)
+  : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
 void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
   assert(Src.get() != this && "Self assignemnt not supported yet!");
@@ -377,7 +377,12 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
   OS << ')';
 }
 
-void VASTRegister::print(vlang_raw_ostream &OS) const {
+void VASTRegister::printReset(raw_ostream &OS) const {
+  OS << getName()  << " <= "
+     << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
+}
+
+void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (Assigns.empty()) return;
 
   std::string Pred;
@@ -415,8 +420,8 @@ void VASTRegister::print(vlang_raw_ostream &OS) const {
 }
 
 VASTWire::VASTWire(const std::string &Name, unsigned BitWidth,
-                   const std::string &Attr)
-  : VASTSignal(vastWire, Name, BitWidth, 0, 0, Attr), S(0) {}
+                   const char *Attr)
+  : VASTSignal(vastWire, Name, BitWidth, Attr), S(0) {}
 
 std::string VASTModule::DirectClkEnAttr = "";
 std::string VASTModule::ParallelCaseAttr = "";
@@ -450,7 +455,7 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
   for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
        I != E; ++I)
     if (VASTRegister *R = dyn_cast<VASTRegister>(*I))
-      R->print(OS);
+      R->printAssignment(OS);
 }
 
 void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
@@ -488,13 +493,11 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 
 void VASTModule::printRegisterReset(raw_ostream &OS) {
   for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
-       I != E; ++I) {
-    VASTSignal *signal = *I;
-    if (signal->isRegister()) {
-      signal->printReset(OS);
+       I != E; ++I)
+    if (VASTRegister *R = dyn_cast<VASTRegister>(*I)) {
+      R->printReset(OS);
       OS << "\n";
     }
-  }
 }
 
 VASTRegister::AndCndVec
@@ -572,7 +575,7 @@ VASTValue *VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
 
 VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
                                       unsigned InitVal,
-                                      const std::string &Attr) {
+                                      const char *Attr) {
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
   new (Reg) VASTRegister(Name, BitWidth, InitVal, Attr);
   Signals.push_back(Reg);
@@ -582,7 +585,7 @@ VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth
 
 VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
                                       unsigned InitVal,
-                                      const std::string &Attr) {
+                                      const char *Attr) {
   std::string Name;
 
   if (TargetRegisterInfo::isVirtualRegister(RegNum))
@@ -596,7 +599,7 @@ VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
 }
 
 VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
-                              const std::string &Attr) {
+                              const char *Attr) {
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(Name, BitWidth, Attr);
   Signals.push_back(Wire);
@@ -605,7 +608,7 @@ VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
 }
 
 VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
-                              const std::string &Attr) {
+                              const char *Attr) {
   std::string Name;
 
   assert(TargetRegisterInfo::isVirtualRegister(WireNum)
@@ -620,13 +623,8 @@ VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
 // Out of line virtual function to provide home for the class.
 void VASTModule::anchor() {}
 
-void VASTValue::printReset( raw_ostream &OS ) const {
-  OS << getName()  << " <= " 
-    << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
-}
-
 void VASTValue::print(raw_ostream &OS) const {
-  OS << "????";
+  assert(0 && "VASTValue::print should not be called!");
 }
 
 void VASTPort::print(raw_ostream &OS) const {
@@ -658,9 +656,9 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
 
   OS << ' ' << getName();
 
-  if (isInput())  
+  if (isInput())
     OS << " = " << verilogConstToStr(InitVal, getBitWidth(), false);
-  
+
   OS << ';';
 }
 
