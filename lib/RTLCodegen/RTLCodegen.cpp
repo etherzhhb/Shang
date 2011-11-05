@@ -268,7 +268,7 @@ class RTLCodegen : public MachineFunctionPass {
   // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
 
-  VASTUse getSignal(ucOperand &Op);
+  VASTUse getAsOperand(ucOperand &Op);
   void printOperand(ucOperand &Op, raw_ostream &OS);
 
   void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -856,22 +856,22 @@ void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
 
 void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
                            SmallVectorImpl<VASTCnd> &Cnds) {
-  VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
+  VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
-  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(1));
-  VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(2));
-  VM->addAssignment(R, getSignal(Op.getOperand(4)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(4)), Slot, Cnds);
 }
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
                                 SmallVectorImpl<VASTCnd> &Cnds) {
-  VASTWire *Result = cast<VASTWire>(getSignal(Op.getOperand(0)));
+  VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
-  VM->addAssignment(R, getSignal(Op.getOperand(1)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(1));
-  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
 }
 
 void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
@@ -882,14 +882,14 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
 
 void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
                            SmallVectorImpl<VASTCnd> &Cnds) {
-  VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   // Assign the value for condition true.
   VASTCnd Cnd = createCondition(Op.getOperand(1));
   Cnds.push_back(Cnd);
-  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
   // Assign the value for condition false.
   Cnds.back() = Cnd.invert();
-  VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
   Cnds.pop_back();
 }
 
@@ -902,10 +902,10 @@ void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
   OS._then();
   OS.switch_begin("1'b1");
 
-  VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   for (unsigned i = 1, e = Op.getNumOperands(); i < e; i +=2) {
     Cnds.push_back(createCondition(Op.getOperand(i)));
-    VM->addAssignment(R, getSignal(Op.getOperand(i + 1)), Slot, Cnds);
+    VM->addAssignment(R, getAsOperand(Op.getOperand(i + 1)), Slot, Cnds);
     // Do nothing if any case hit.
     Cnds.back().print(OS);
     OS << ":/*Case hit, do nothing*/;\n";
@@ -927,8 +927,8 @@ void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
 
-  VASTRegister *R = cast<VASTRegister>(getSignal(Dst));
-  VM->addAssignment(R, getSignal(Src), Slot, Cnds);
+  VASTRegister *R = cast<VASTRegister>(getAsOperand(Dst));
+  VM->addAssignment(R, getAsOperand(Src), Slot, Cnds);
 }
 
 void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
@@ -956,7 +956,7 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
 
 void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
                                   SmallVectorImpl<VASTCnd> &Cnds) {
-  VASTRegister *R = cast<VASTRegister>(getSignal(Op.getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   unsigned FNNum = Op.getOperand(1).getTargetFlags();
   std::string PortName =
     getSubModulePortName(FNNum, Op.getOperand(1).getSymbolName());
@@ -983,7 +983,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
     for (unsigned i = 0, e = FN->arg_size(); i != e; ++i) {
       VASTRegister *R =
         VM->getSymbol<VASTRegister>(getSubModulePortName(FNNum, ArgIt->getName()));
-      VM->addAssignment(R, getSignal(Op.getOperand(2 + i)), Slot, Cnds);
+      VM->addAssignment(R, getAsOperand(Op.getOperand(2 + i)), Slot, Cnds);
       ++ArgIt;
     }
     return;
@@ -1063,7 +1063,7 @@ void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
   VASTRegister &RetReg = cast<VASTRegister>(*VM->getRetPort());
   unsigned retChannel = Op.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
-  VM->addAssignment(&RetReg, getSignal(Op.getOperand(0)), Slot, Cnds);
+  VM->addAssignment(&RetReg, getAsOperand(Op.getOperand(0)), Slot, Cnds);
 }
 
 void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
@@ -1073,19 +1073,19 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
   // Emit Address.
   std::string RegName = VFUMemBus::getAddrBusName(FUNum) + "_r";
   VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getSignal(Op.getOperand(1)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
   // Assign store data.
   RegName = VFUMemBus::getOutDataBusName(FUNum) + "_r";
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getSignal(Op.getOperand(2)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
   // And write enable.
   RegName = VFUMemBus::getCmdName(FUNum) + "_r";
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getSignal(Op.getOperand(3)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
   // The byte enable.
   RegName = VFUMemBus::getByteEnableName(FUNum) + "_r";
   R = VM->getSymbol<VASTRegister>(RegName);
-  VM->addAssignment(R, getSignal(Op.getOperand(4)), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(4)), Slot, Cnds);
 
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
@@ -1170,29 +1170,29 @@ void RTLCodegen::emitDatapath(ucState &State) {
 }
 
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
-  VASTWire &V = *cast<VASTWire>(getSignal(UnaOp.getOperand(0)));
+  VASTWire &V = *cast<VASTWire>(getAsOperand(UnaOp.getOperand(0)));
   V.setOpcode(Opc);
 
-  V.addOperand(getSignal(UnaOp.getOperand(1)));
+  V.addOperand(getAsOperand(UnaOp.getOperand(1)));
 }
 
 void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
-  VASTWire &V = *cast<VASTWire>(getSignal(BinOp.getOperand(0)));
+  VASTWire &V = *cast<VASTWire>(getAsOperand(BinOp.getOperand(0)));
   V.setOpcode(Opc);
 
-  V.addOperand(getSignal(BinOp.getOperand(1)));
-  V.addOperand(getSignal(BinOp.getOperand(2)));
+  V.addOperand(getAsOperand(BinOp.getOperand(1)));
+  V.addOperand(getAsOperand(BinOp.getOperand(2)));
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
-  VASTWire &V = *cast<VASTWire>(getSignal(OpBitSlice.getOperand(0)));
+  VASTWire &V = *cast<VASTWire>(getAsOperand(OpBitSlice.getOperand(0)));
   V.setOpcode(VASTWire::dpAssign);
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice
   unsigned UB = OpBitSlice.getOperand(2).getImm(),
            LB = OpBitSlice.getOperand(3).getImm();
 
-  VASTUse RHS = getSignal(OpBitSlice.getOperand(1));
+  VASTUse RHS = getAsOperand(OpBitSlice.getOperand(1));
   // Adjust ub and lb.
   LB += RHS.LB;
   UB += RHS.LB;
@@ -1206,7 +1206,7 @@ VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
   return VASTCnd(V, Op.isPredicateInverted());
 }
 
-VASTUse RTLCodegen::getSignal(ucOperand &Op) {
+VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
   if (Op.isReg()) {
     VASTUse V = VM->lookupSignal(Op.getReg());
     assert (V != 0 && "Cannot find this Value in vector!");
@@ -1224,7 +1224,7 @@ VASTUse RTLCodegen::getSignal(ucOperand &Op) {
 
 void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS) {
   if(Op.isReg()){
-    getSignal(Op).print(OS);
+    getAsOperand(Op).print(OS);
     return;
   }
 
