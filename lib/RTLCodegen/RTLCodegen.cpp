@@ -259,9 +259,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
-  void emitOpBitCat(ucOp &OpBitCat);
   void emitOpBitSlice(ucOp &OpBitSlice);
-  void emitOpBitRepeat(ucOp &OpBitRepeat);
 
   void emitImplicitDef(ucOp &ImpDef);
 
@@ -1154,20 +1152,20 @@ void RTLCodegen::emitDatapath(ucState &State) {
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
     switch (Op->getOpcode()) {
-    case VTM::VOpBitSlice:  emitOpBitSlice(Op);     break;
-    case VTM::VOpBitCat:    emitOpBitCat(Op);       break;
-    case VTM::VOpBitRepeat: emitOpBitRepeat(Op);    break;
+    case VTM::VOpBitSlice:  emitOpBitSlice(Op);                       break;
+    case VTM::VOpBitCat:    emitBinaryOp(Op, VASTWire::dpBitCat);     break;
+    case VTM::VOpBitRepeat: emitBinaryOp(Op, VASTWire::dpBitRepeat);  break;
 
     case VTM::ImpUse:       /*Not need to handle*/  break;
 
-    case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor); break;
-    case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);  break;
-    case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);   break;
+    case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor);    break;
+    case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);    break;
+    case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);     break;
 
-    case VTM::VOpNot:       emitUnaryOp(Op, VASTWire::dpNot);   break;
-    case VTM::VOpROr:       emitUnaryOp(Op, VASTWire::dpROr);   break;
-    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTWire::dpRAnd);  break;
-    case VTM::VOpRXor:      emitUnaryOp(Op, VASTWire::dpRXor);  break;
+    case VTM::VOpNot:       emitUnaryOp(Op, VASTWire::dpNot);     break;
+    case VTM::VOpROr:       emitUnaryOp(Op, VASTWire::dpROr);     break;
+    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTWire::dpRAnd);    break;
+    case VTM::VOpRXor:      emitUnaryOp(Op, VASTWire::dpRXor);    break;
 
     default:  assert(0 && "Unexpected opcode!");    break;
     }
@@ -1191,44 +1189,18 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   VASTWire &V = *cast<VASTWire>(getSignal(OpBitSlice.getOperand(0)));
-  raw_ostream &OS = VM->getDataPathBuffer();
+  V.setOpcode(VASTWire::dpAssign);
   // Get the range of the bit slice, Note that the
-  // bit at upper bound is excluded in VOpBitSlice,
-  // now we are going to get the included upper bound.
+  // bit at upper bound is excluded in VOpBitSlice
   unsigned UB = OpBitSlice.getOperand(2).getImm(),
            LB = OpBitSlice.getOperand(3).getImm();
 
-  OS << "assign ";
-  printOperand(OpBitSlice.getOperand(0), OS);
-  OS << " = ";
-  printAsOperand(OpBitSlice.getOperand(1), V, UB, LB);
-  OS << ";\n";
-}
-
-void RTLCodegen::emitOpBitCat(ucOp &OpBitCat) {
-  VASTWire &V = *cast<VASTWire>(getSignal(OpBitCat.getOperand(0)));
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  printOperand(OpBitCat.getOperand(0), OS);
-  OS << " = {";
-  // BitCat is a binary instruction now.
-  printAsOperand(OpBitCat.getOperand(1), V);
-  OS << ',';
-  printAsOperand(OpBitCat.getOperand(2), V);
-  OS << "};\n";
-}
-
-void RTLCodegen::emitOpBitRepeat(ucOp &OpBitRepeat) {
-  VASTWire &V = *cast<VASTWire>(getSignal(OpBitRepeat.getOperand(0)));
-  raw_ostream &OS = VM->getDataPathBuffer();
-  OS << "assign ";
-  printOperand(OpBitRepeat.getOperand(0), OS);
-  OS << " = {";
-
-  unsigned Times = OpBitRepeat.getOperand(2).getImm();
-  OS << Times << '{';
-  printAsOperand(OpBitRepeat.getOperand(1), V);
-  OS << "}};\n";
+  VASTUse RHS = getSignal(OpBitSlice.getOperand(1));
+  // Adjust ub and lb.
+  LB += RHS.LB;
+  UB += RHS.LB;
+  assert((UB <= RHS.UB || RHS.UB == 0) && "Bitslice out of range!");
+  V.addOperand(VASTUse(RHS.get(), UB, LB));
 }
 
 VASTCnd RTLCodegen::createCondition(ucOperand &Op) {

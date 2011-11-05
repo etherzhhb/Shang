@@ -421,7 +421,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 
 VASTWire::VASTWire(const char *Name, unsigned BitWidth,
                    const char *Attr)
-  : VASTSignal(vastWire, Name, BitWidth, Attr), Opc(dpUnkown) {}
+  : VASTSignal(vastWire, Name, BitWidth, Attr), Opc(dpUnknown) {}
 
 std::string VASTModule::DirectClkEnAttr = "";
 std::string VASTModule::ParallelCaseAttr = "";
@@ -697,8 +697,11 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
-static void printSimpleOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
+static void printAssign(raw_ostream &OS, const VASTWire *W) {
   OS << "assign " << W->getName() << " = ";
+}
+
+static void printSimpleOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
   unsigned NumOps = W->getNumOperands();
   assert(NumOps && "Unexpected zero operand!");
   W->getOperand(0).print(OS);
@@ -707,16 +710,12 @@ static void printSimpleOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
     OS << Opc;
     W->getOperand(i).print(OS);
   }
-
-  OS << ";\n";
 }
 
 static void printUnaryOp(raw_ostream &OS, const VASTWire *W, const char *Opc) {
-  OS << "assign " << W->getName() << " = ";
   assert(W->getNumOperands() && "Unexpected zero operand!");
   OS << Opc;
   W->getOperand(0).print(OS);
-  OS << ";\n";
 }
 
 
@@ -726,18 +725,42 @@ static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
   OS << "wire signed" << verilogBitRange(LHS->getBitWidth()) << ' '
      << LHS->getName() << "_signed = " << LHS->getName() << ";\n";
 
-  OS << "assign "<< W->getName() << " = "
-     << LHS->getName() << "_signed >>> ";
+  printAssign(OS, W);
+  OS << LHS->getName() << "_signed >>> ";
 
   W->getOperand(1).print(OS);
   OS << ";\n";
 }
 
+static void printBitCat(raw_ostream &OS, const VASTWire *W) {
+  OS << '{';
+  printSimpleOp(OS, W, " , ");
+  OS << '}';
+}
+
+static void printBitRepeat(raw_ostream &OS, const VASTWire *W) {
+  OS << '{';
+  W->getOperand(2).print(OS);
+  OS << '{';
+  W->getOperand(1).print(OS);
+  OS << "}}";
+}
+
 void VASTWire::print(raw_ostream &OS) const {
-  if (Opc == dpUnkown) return;
+  // Skip unknown datapath, it should printed to the datapath buffer of the
+  // module
+  if (Opc == dpUnknown) return;
+
+  // SRA need special printing method.
+  if (Opc == dpSRA) {
+    printSRAOp(OS, this);
+    return;
+  }
+
+  printAssign(OS, this);
 
   switch (Opc) {
-  case dpNot: printUnaryOp(OS, this, " ~ "); break;
+  case dpNot: printUnaryOp(OS, this, " ~ ");  break;
   case dpAnd: printSimpleOp(OS, this, " & "); break;
   case dpOr:  printSimpleOp(OS, this, " | "); break;
   case dpXor: printSimpleOp(OS, this, " ^ "); break;
@@ -748,9 +771,18 @@ void VASTWire::print(raw_ostream &OS) const {
 
   case dpAdd: printSimpleOp(OS, this, " + "); break;
   case dpMul: printSimpleOp(OS, this, " * "); break;
-  case dpShl: printSimpleOp(OS, this, " << "); break;
-  case dpSRL: printSimpleOp(OS, this, " >> "); break;
-  case dpSRA: printSRAOp(OS, this);            break;
+  case dpShl: printSimpleOp(OS, this, " << ");break;
+  case dpSRL: printSimpleOp(OS, this, " >> ");break;
+
+  case dpAssign:
+    getOperand(0).print(OS);
+    OS << ";\n";
+    break;
+
+  case dpBitCat:    printBitCat(OS, this);    break;
+  case dpBitRepeat: printBitRepeat(OS, this); break;
   default: llvm_unreachable("Unknown datapath opcode!"); break;
   }
+
+  OS << ";\n";
 }

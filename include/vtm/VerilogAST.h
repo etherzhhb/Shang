@@ -239,11 +239,15 @@ class VASTWire : public VASTSignal {
 public:
   // Datapath opcode.
   enum Opcode {
-    dpUnkown,
+    dpUnknown,
     // FU datapath
     dpAdd, dpMul, dpShl, dpSRA, dpSRL,
-    // Trivial datapath
-    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor
+    // bitwise logic datapath
+    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
+    // bit level assignment.
+    dpBitCat, dpBitRepeat,
+    //
+    dpAssign
   };
 private:
   SmallVector<VASTUse, 4> Operands;
