@@ -322,17 +322,25 @@ public:
 
 // Compute the latency of a given MBB.
 class CompLatency {
-  typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > LatencyMap;
-  LatencyMap LatencyInfo;
+  typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > DepLatencyMap;
+  DepLatencyMap DepInfo;
 
   unsigned getLatencyFrom(unsigned Reg, MachineInstr *MI) const ;
+
+  typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > FULatencyInfo;
+  FULatencyInfo FUInfo;
+
+  unsigned updateFULatency(unsigned FUId, unsigned Latency, MachineInstr *MI);
 
 public:
   CompLatency() {}
 
   unsigned computeLatency(MachineBasicBlock &MBB);
 
-  void reset() { LatencyInfo.clear(); }
+  void reset() {
+    DepInfo.clear();
+    FUInfo.clear();
+  }
 };
 
 } // end namespace llvm

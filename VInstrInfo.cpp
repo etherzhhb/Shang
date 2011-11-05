@@ -991,6 +991,8 @@ unsigned CompLatency::computeLatency(MachineBasicBlock &MBB) {
   unsigned TotalLatency = 0;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
     MachineInstr *MI = I;
+    FuncUnitId FU = VIDesc(*MI).getPrebindFUId();
+    bool hasPrebindFU = FU.isBound();
 
     unsigned L = 0;
     // Iterate from use to define.
@@ -1004,8 +1006,10 @@ unsigned CompLatency::computeLatency(MachineBasicBlock &MBB) {
         continue;
       }
 
+      if (hasPrebindFU) L = updateFULatency(FU.getData(), L, MI);
+
       // Remember the register latency.
-      LatencyInfo.insert(std::make_pair(MO.getReg(), std::make_pair(MI, L)));
+      DepInfo.insert(std::make_pair(MO.getReg(), std::make_pair(MI, L)));
     }
 
     TotalLatency = std::max(TotalLatency, L);
@@ -1017,11 +1021,25 @@ unsigned CompLatency::computeLatency(MachineBasicBlock &MBB) {
 unsigned CompLatency::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   unsigned SrcLatency = 0;
   MachineInstr *SrcMI = 0;
-  LatencyMap::const_iterator at = LatencyInfo.find(Reg);
-  if (at != LatencyInfo.end()) {
+  DepLatencyMap::const_iterator at = DepInfo.find(Reg);
+  if (at != DepInfo.end()) {
     SrcLatency = at->second.second;
     SrcMI = at->second.first;
   }
 
   return SrcLatency + VInstrInfo::computeLatency(SrcMI, MI);
+}
+
+unsigned CompLatency::updateFULatency(unsigned FUId, unsigned Latency,
+                                      MachineInstr *MI) {
+  std::pair<MachineInstr*, unsigned> &LI = FUInfo[FUId];
+  unsigned &FULatency = LI.second;
+  MachineInstr *&LastMI = LI.first;
+  FuncUnitId ID(FUId);
+
+  // Update the FU latency information.
+  FULatency = std::max(FULatency + VInstrInfo::computeLatency(LastMI, MI),
+                       Latency);
+  LastMI = MI;
+  return FULatency;
 }
