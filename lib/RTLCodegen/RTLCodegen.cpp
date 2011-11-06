@@ -101,7 +101,7 @@ class RTLCodegen : public MachineFunctionPass {
         OutputWire->addOperand(LocalEn);
         OutputWire->addOperand(LocalReg);
       }
-      
+
       return OutputWire;
     }
 
@@ -126,7 +126,7 @@ class RTLCodegen : public MachineFunctionPass {
       // Write the connection.
       // The corresponding port name of submodule should be the same as current
       // output port name.
-      S << '.' << OutputWire->getName() << '(' << ConnectedWireName << "),\n\t"; 
+      S << '.' << OutputWire->getName() << '(' << ConnectedWireName << "),\n\t";
     }
 
     void addSubModuleInPort(raw_ostream &S, const std::string &PortName) {
@@ -165,7 +165,7 @@ class RTLCodegen : public MachineFunctionPass {
       // Control ports.
       MembusEn =
         createOutputPort(VFUMemBus::getEnableName(BusNum), 1, LocalEn);
-      MembusCmd = 
+      MembusCmd =
         createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
                          LocalEn);
 

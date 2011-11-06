@@ -752,7 +752,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
     OS << ";\n";
     return;
   }
-  
+
   // Create the temporary signal.
   OS << "// Combinational MUX\n"
      << "reg " << verilogBitRange(W->getBitWidth()) << ' ' << W->getName()
@@ -772,6 +772,9 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
     W->getOperand(i + 1).print(OS);
     OS << ";\n";
   }
+  // Write the default condition, otherwise latch will be inferred.
+  OS.indent(4) << "default: " << W->getName() << "_mux_wire = "
+               << W->getBitWidth() << "'bx;\n";
   OS.indent(2) << "endcase\nend  // end mux logic\n";
 }
 
