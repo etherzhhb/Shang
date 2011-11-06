@@ -301,7 +301,7 @@ public:
     return Operands[Idx];
   }
 
-  void addOperand (VASTUse Input)   { Operands.push_back(Input); }
+  void addOperand (VASTUse Op);
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:

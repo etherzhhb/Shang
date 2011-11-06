@@ -741,6 +741,10 @@ static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << "}}";
 }
 
+void VASTWire::addOperand(VASTUse Op) {
+  Operands.push_back(Op);;
+}
+
 void VASTWire::print(raw_ostream &OS) const {
   // Skip unknown datapath, it should printed to the datapath buffer of the
   // module
