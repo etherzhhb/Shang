@@ -20,6 +20,7 @@
 
 #include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
@@ -28,11 +29,10 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/SourceMgr.h"
 #define DEBUG_TYPE "verilog-ast"
 #include "llvm/Support/Debug.h"
 
-#include <set>
-#include <algorithm>
 #include <sstream>
 
 using namespace llvm;
@@ -372,55 +372,107 @@ void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
   Slots.insert(S);
 }
 
+static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path, unsigned Slack) {
+  assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
+  // Path table:
+  // Datapath: {
+  //  unsigned Slack,
+  //  table NodesInPath
+  // }
+  SMDiagnostic Err;
+
+  if (!runScriptStr("RTLDatapath = {}\n", Err))
+    llvm_unreachable("Cannot create RTLDatapath table in scripting pass!");
+
+  std::string Script;
+  raw_string_ostream SS(Script);
+  SS << "RTLDatapath.Slack = " << Slack;
+  SS.flush();
+  if (!runScriptStr(Script, Err))
+    llvm_unreachable("Cannot create slack of RTLDatapath!");
+
+  Script.clear();
+
+  SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
+  for (unsigned i = 1; i < Path.size(); ++i) {
+    SS << "', '" << Path[i].get()->getName();
+  }
+  SS << "'}";
+
+  SS.flush();
+  if (!runScriptStr(Script, Err))
+    llvm_unreachable("Cannot create node table of RTLDatapath!");
+
+  // Get the script from script engine.
+  const char *DatapathScriptPath[] = { "Misc", "DatapathScript" };
+  if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
+    report_fatal_error("Error occur while running datapath script:\n"
+                       + Err.getMessage());
+}
+
 // Traverse the use tree in datapath, stop when we meet a register or other
 // leaf node.
 void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
                                                      const OrCndVec &Cnds) {
   typedef VASTUse::iterator ChildIt;
-  typedef SmallVector<std::pair<VASTUse, ChildIt>, 16> StackTy;
-  StackTy WorkStack;
+  // Use seperate node and iterator stack, so we can get the path vector.
+  typedef SmallVector<VASTUse, 16> NodeStackTy;
+  typedef SmallVector<ChildIt, 16> ItStackTy;
+  NodeStackTy NodeWorkStack;
+  ItStackTy ItWorkStack;
 
-  WorkStack.push_back(std::make_pair(Root, Root.dp_src_begin()));
+  // Put the current node into the node stack, so it will appears in the path.
+  NodeWorkStack.push_back(this);
 
-  while (!WorkStack.empty()) {
-    VASTUse Node = WorkStack.back().first;
-    ChildIt It = WorkStack.back().second;
+  // Put the root.
+  NodeWorkStack.push_back(Root);
+  ItWorkStack.push_back(Root.dp_src_begin());
+
+  while (!ItWorkStack.empty()) {
+    VASTUse Node = NodeWorkStack.back();
+    ChildIt It = ItWorkStack.back();
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
       if (VASTValue *V = Node.getOrNull()) {
         DEBUG_WITH_TYPE("rtl-slack-info",
-        dbgs() << "Datapath:\t" << getName();
-        for (StackTy::iterator I = WorkStack.begin(), E = WorkStack.end(); I != E;
-             ++I) {
+        dbgs() << "Datapath:\t";
+        for (NodeStackTy::iterator I = NodeWorkStack.begin(),
+             E = NodeWorkStack.end(); I != E; ++I) {
           dbgs() << ", ";
-          I->first.print(dbgs());
+          I->print(dbgs());
         });
 
         if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
           unsigned Slack = findSlackFrom(R, Cnds);
           DEBUG_WITH_TYPE("rtl-slack-info",
                            dbgs() << " Slack: " << int(Slack));
+          bindPath2ScriptEngine(NodeWorkStack, Slack);
         }
 
         DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
       }
 
-      WorkStack.pop_back();
+      NodeWorkStack.pop_back();
+      ItWorkStack.pop_back();
       continue;
     }
 
     // All sources of this node is visited.
     if (It == Node.dp_src_end()) {
-      WorkStack.pop_back();
+      NodeWorkStack.pop_back();
+      ItWorkStack.pop_back();
       continue;
     }
 
     // Depth first traverse the child of current node.
     VASTUse ChildNode = *It;
-    ++WorkStack.back().second;
-    WorkStack.push_back(std::make_pair(ChildNode, ChildNode.dp_src_begin()));
+    ++ItWorkStack.back();
+    NodeWorkStack.push_back(ChildNode);
+    ItWorkStack.push_back(ChildNode.dp_src_begin());
   }
+
+  assert(NodeWorkStack.back().get() == this && "Node stack broken!");
 }
 
 VASTSlot *VASTRegister::findNearestAssignSlot(VASTSlot *Dst) const {
@@ -484,6 +536,8 @@ void VASTRegister::reportAssignmentSlack() {
                        dbgs() << "Datapath:\t" << getName() << ", "
                               << R->getName() << ": "
                               << int(Slack) << '\n');
+      VASTUse Path[] = { this, Src };
+      bindPath2ScriptEngine(Path, Slack);
       continue;
     }
 
