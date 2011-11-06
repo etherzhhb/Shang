@@ -42,6 +42,7 @@ STATISTIC(NumFallThroughMerged,
 namespace {
 struct MergeFallThroughBlocks : public MachineFunctionPass {
   static char ID;
+  std::vector<unsigned> IncreasedLatencies;
 
   const TargetInstrInfo *TII;
   MachineRegisterInfo *MRI;
@@ -75,6 +76,9 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
   bool MakeChanged = false;
   bool BlockMerged = false;
   typedef MachineFunction::reverse_iterator rev_it;
+
+  MF.RenumberBlocks();
+  IncreasedLatencies.assign(MF.getNumBlockIDs(), 0);
 
   do {
     BlockMerged = false;
@@ -131,6 +135,8 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   if (MergedLatency > OriginalLatency)
     IncreasedLatency = MergedLatency - OriginalLatency;
   double IncreaseRate = double(IncreasedLatency)/double(OriginalLatency);
+  // Also take account of the latency increased by previous merge.
+  IncreasedLatency += IncreasedLatencies[ToBB->getNumber()];
 
   if (IncreasedLatency > 4 || IncreaseRate > 0.1) return false;
   DEBUG(dbgs() << "Merging BB#" << FromBB->getNumber() << " To BB#"
@@ -193,14 +199,15 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   // Re-insert the jump table.
   VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
   ++NumFallThroughMerged;
+  CL.reset();
+  IncreasedLatency = CL.computeLatency(*ToBB) - OriginalLatency;
 
-  DEBUG(CL.reset();
-        IncreasedLatency = CL.computeLatency(*ToBB) - OriginalLatency;
-        dbgs() << "........BB#" << FromBB->getNumber()
+  DEBUG(dbgs() << "........BB#" << FromBB->getNumber()
          << " merged, IncreasedLatency " << IncreasedLatency
          << ' ' << int(double(IncreasedLatency)/double(OriginalLatency) * 100.0)
          << "%\n");
-
+  // Accumulate the increased latency
+  IncreasedLatencies[ToBB->getNumber()] += IncreasedLatency;
   return true;
 }
 
