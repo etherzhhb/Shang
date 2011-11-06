@@ -880,8 +880,19 @@ unsigned VInstrInfo::computeLatency(const MachineInstr *SrcInstr,
   // When DstInst dose not read at emit, it hopefully a datapath operation.
   // If the Src and Dst have difference slot type, it needs 1 extra slot to
   // adjust the slot type.
-  if (DstTID.hasDatapath() && !SrcTID.hasDatapath())
+  if (DstTID.hasDatapath() && !SrcTID.hasDatapath()) {
+    // Chain the datapath operation if source is not a pre-bound op.
+    // Which means we do not need to worry about if we are overlapping the
+    // live interval of the output register of the pre-bound FU by connecting
+    // it to a wire.
+    // And wire may be still in use when the FU have new incoming operation
+    // which will refresh the output register, thus we will read a wrong value
+    // from the wire.
+    //if (SrcTID.getPrebindFUId().isTrivial())
+    //  return latency ? latency - 1 : latency;
+    //else
     return latency + 1;
+  }
 
   return latency;
 }
