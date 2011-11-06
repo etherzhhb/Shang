@@ -98,6 +98,7 @@ bool IterativeModuloScheduling::scheduleState() {
     if(!A->isScheduled()) {
       assert(!A->getFUId().isTrivial()
               && "SUnit can be schedule only because resource conflict!");
+      // FIXME: This not work for membus with more than 1 cycle latency.
       VSUnit *Blocking = findBlockingSUnit(A, EarliestUntry);
       assert(Blocking && "No one blocking?");
       excludeStep(Blocking, Blocking->getSlot());
