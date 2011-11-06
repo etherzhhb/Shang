@@ -192,18 +192,6 @@ class RTLCodegen : public MachineFunctionPass {
   void emitAllocatedFUs();
 
   void emitIdleState();
-  // We need create the slots for the empty slot.
-  void emitSlotsForEmptyState(unsigned Slot, unsigned EndSlot, unsigned II,
-                              unsigned StartSlot) {
-    // Dirty Hack: When we need is the slot before current slot, we issue the
-    // control operation of current slot there.
-    --Slot;
-
-    while (Slot < EndSlot) {
-      (void) VM->getOrCreateSlot(Slot, StartSlot);
-      Slot += II;
-    }
-  }
 
   void emitBasicBlock(MachineBasicBlock &MBB);
 
@@ -236,7 +224,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitImplicitDef(ucOp &ImpDef);
 
-  void emitCtrlOp(ucState &State, PredMapTy &PredMap, unsigned II);
+  void emitCtrlOp(ucState &State, PredMapTy &PredMap,
+                  unsigned II, bool Pipelined);
 
   // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
@@ -487,7 +476,7 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
 
     if (NextControl.empty()) continue;
 
-    emitCtrlOp(NextControl, NextStatePred, IISlot < EndSlot ? II : 0);
+    emitCtrlOp(NextControl, NextStatePred, II, IISlot < EndSlot);
   }
 }
 
@@ -695,7 +684,8 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
 RTLCodegen::~RTLCodegen() {}
 
 //===----------------------------------------------------------------------===//
-void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap, unsigned II){
+void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
+                            unsigned II, bool Pipelined){
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   MachineBasicBlock *CurBB = State->getParent();
   SmallVector<VASTCnd, 4> Cnds;
@@ -724,7 +714,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap, unsigned II){
       CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
-      if (TargetBB == CurBB && II)
+      if (TargetBB == CurBB && Pipelined)
         // The loop op of pipelined loop enable next slot explicitly.
         CurSlot->addNextSlot(CurSlot->getSlotNum() + 1);
 
