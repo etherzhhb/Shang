@@ -191,14 +191,14 @@ public:
 template<> struct simplify_type<const VASTUse> {
   typedef VASTNode *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return static_cast<SimpleType>(Val.getOrNull());
+    return static_cast<SimpleType>(Val.get());
   }
 };
 
 template<> struct simplify_type<VASTUse> {
   typedef VASTNode *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return static_cast<SimpleType>(Val.getOrNull());
+    return static_cast<SimpleType>(Val.get());
   }
 };
 
@@ -337,41 +337,6 @@ public:
   }
 };
 
-class VASTRegister : public VASTSignal {
-public:
-  typedef ArrayRef<VASTCnd> AndCndVec;
-  typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
-private:
-  unsigned InitVal;
-  typedef std::vector<AssignCndTy>  OrCndVec;
-  typedef std::map<VASTUse, OrCndVec> AssignMapTy;
-  AssignMapTy Assigns;
-public:
-  VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
-               const char *Attr = "");
-
-  void addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S);
-
-  void printAssignment(vlang_raw_ostream &OS) const;
-  void printReset(raw_ostream &OS) const;
-
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VASTRegister *A) { return true; }
-  static inline bool classof(const VASTNode *A) {
-    return A->getASTType() == vastRegister;
-  }
-
-  // Compute the slack of the assignment.
-  void computeAssignmentSlack();
-
-  static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
-                             const AndCndVec Cnds);
-
-  static void printCondition(raw_ostream &OS, AssignCndTy Cnd) {
-    printCondition(OS, Cnd.first, Cnd.second);
-  }
-};
-
 class VASTSlot : public VASTNode {
 public:
   typedef std::map<unsigned, VASTCnd> SuccVecTy;
@@ -450,6 +415,54 @@ public:
     StartSlot = startSlot;
     EndSlot = endSlot;
     II = ii;
+  }
+
+
+  bool operator<(const VASTSlot &RHS) const {
+    return getSlotNum() < RHS.getSlotNum();
+  }
+};
+
+class VASTRegister : public VASTSignal {
+public:
+  typedef ArrayRef<VASTCnd> AndCndVec;
+  typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
+private:
+  unsigned InitVal;
+  typedef std::vector<AssignCndTy>  OrCndVec;
+  typedef std::map<VASTUse, OrCndVec> AssignMapTy;
+  AssignMapTy Assigns;
+  // FIXME: We need a VAST live interval analysis pass to hold this.
+  std::set<VASTSlot*, less_ptr<VASTSlot> > Slots;
+
+  // FIXME: These function should be the "SlackInfo" pass member function.
+  unsigned findSlackFrom(const VASTRegister *Src, const OrCndVec &AssignCnds);
+  // Find the nearest slot before Dst that assigning this register.
+  VASTSlot *findNearestAssignSlot(VASTSlot *Dst);
+  void DepthFristTraverseDataPathUseTree(VASTUse Root, const OrCndVec &Cnds);
+public:
+  VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
+               const char *Attr = "");
+
+  void addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S);
+
+  void printAssignment(vlang_raw_ostream &OS) const;
+  void printReset(raw_ostream &OS) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTRegister *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastRegister;
+  }
+
+  // Compute the slack of the assignment.
+  void computeAssignmentSlack();
+
+  static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
+                             const AndCndVec Cnds);
+
+  static void printCondition(raw_ostream &OS, AssignCndTy Cnd) {
+    printCondition(OS, Cnd.first, Cnd.second);
   }
 };
 

@@ -366,11 +366,13 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
 void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
   assert(Src != this && "Self assignemnt not supported yet!");
   Assigns[Src].push_back(std::make_pair(S, Cnd));
+  Slots.insert(S);
 }
 
 // Traverse the use tree in datapath, stop when we meet a register or other
 // leaf node.
-static void DepthFristTraverseDataPathUseTree(VASTUse Root) {
+void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
+                                                     const OrCndVec &Cnds) {
   typedef VASTUse::iterator ChildIt;
   typedef SmallVector<std::pair<VASTUse, ChildIt>, 16> StackTy;
   StackTy WorkStack;
@@ -387,15 +389,23 @@ static void DepthFristTraverseDataPathUseTree(VASTUse Root) {
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
-      DEBUG_WITH_TYPE("rtl-slack-info",
-      dbgs() << "Datapath:\n";
-      for (StackTy::iterator I = WorkStack.begin(), E = WorkStack.end(); I != E;
-           ++I) {
-        I->first.print(dbgs());
-        dbgs() << ", ";
-      }
+      if (VASTValue *V = Node.getOrNull()) {
 
-      dbgs() << '\n');
+        DEBUG_WITH_TYPE("rtl-slack-info",
+        dbgs() << "Datapath:\n";
+        for (StackTy::iterator I = WorkStack.begin(), E = WorkStack.end(); I != E;
+             ++I) {
+          I->first.print(dbgs());
+          dbgs() << ", ";
+        });
+
+        if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
+          DEBUG_WITH_TYPE("rtl-slack-info",
+                           dbgs() << " Slack: " << int(findSlackFrom(R, Cnds)));
+        }
+
+        DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
+      }
 
       WorkStack.pop_back();
       continue;
@@ -414,12 +424,57 @@ static void DepthFristTraverseDataPathUseTree(VASTUse Root) {
   }
 }
 
+VASTSlot *VASTRegister::findNearestAssignSlot(VASTSlot *Dst) {
+  VASTSlot *NearestSrc = 0;
+  typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::iterator SlotIt;
+  // FIXME: We can perform a binary search.
+  for (SlotIt I = Slots.begin(), E = Slots.end(); I != E; ++I) {
+    VASTSlot *Src = *I;
+    if (*Src < *Dst) {
+      NearestSrc = Src;
+    }
+  }
+
+  return NearestSrc;
+}
+
+unsigned VASTRegister::findSlackFrom(const VASTRegister *Src,
+                                     const OrCndVec &AssignCnds) {
+  unsigned Slack = ~0;
+
+  typedef OrCndVec::const_iterator cnd_it;
+  for (cnd_it I = AssignCnds.begin(), E = AssignCnds.end(); I != E; ++I) {
+    VASTSlot *Dst = I->first;
+    if (VASTSlot *Src = findNearestAssignSlot(Dst))
+      Slack = std::min(Slack, Dst->getSlotNum() - Src->getSlotNum());
+  }
+
+  return Slack;
+}
+
 void VASTRegister::computeAssignmentSlack() {
-  DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << "Dst reg: " << getName() << '\n';
+  // Do we have any assignment information?
+  if (Assigns.empty()) return;
+
+  /*DEBUG_WITH_TYPE("rtl-slack-info",*/ dbgs() << "Dst reg: " << getName() << '\n';
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
-    DepthFristTraverseDataPathUseTree(I->first);
-  });
+    VASTUse Src = I->first;
+
+    VASTValue *SrcValue = Src.getOrNull();
+
+    // Source is immediate or symbol, skip it.
+    if (!SrcValue) continue;
+
+    // Trivial case.
+    if (VASTRegister *R = dyn_cast<VASTRegister>(SrcValue)) {
+      dbgs() << "Slack from " << R->getName() << ": "
+             <<  int(findSlackFrom(R, I->second)) << '\n';
+      continue;
+    }
+
+    DepthFristTraverseDataPathUseTree(Src, I->second);
+  }//);
 }
 
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
