@@ -73,137 +73,117 @@ class RTLCodegen : public MachineFunctionPass {
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
 
-  struct MuxBuilder {
-    std::string MuxLogic;
-    vlang_raw_ostream MuxLogicS;
-    std::string MuxWiresDecl;
-    vlang_raw_ostream MuxWiresDeclS;
-
-    MuxBuilder()
-      : MuxLogic("//Mux\n"),
-        MuxLogicS(*new raw_string_ostream(MuxLogic), true, 2),
-        MuxWiresDecl("// Mux\n"),
-        MuxWiresDeclS(*new raw_string_ostream(MuxWiresDecl), true, 2) {
-      MuxLogicS << "always @(*)";
-      MuxLogicS.enter_block(" // begin mux logic\n");
-      MuxLogicS << VASTModule::ParallelCaseAttr << ' ';
-      MuxLogicS.switch_begin("1'b1");
-    }
-
-    void addOutput(const std::string &OutputName, unsigned Bitwidth) {
-      MuxWiresDeclS << "reg ";
-      if (Bitwidth > 1) MuxWiresDeclS << verilogBitRange(Bitwidth, 0, false);
-      MuxWiresDeclS  << OutputName << "_mux_wire = "
-                     << Bitwidth << "'b0;\n";
-      MuxWiresDeclS << "assign " << OutputName << " = " << OutputName
-                    << "_mux_wire;\n";
-    }
-
-    void assignValueInCase(const std::string &Dst, const std::string &Src) {
-      MuxLogicS << Dst << "_mux_wire = " << Src << ";\n";
-    }
-
-    void writeToStream(raw_ostream &S) {
-      MuxWiresDeclS.flush();
-      S << MuxWiresDecl << "\n";
-
-      MuxLogicS.exit_block();
-      MuxLogicS.switch_end();
-      MuxLogicS.exit_block(" // end mux logic\n\n\n\n");
-      MuxLogicS.flush();
-      S << MuxLogic;
-    }
-  };
-
   struct MemBusBuilder {
     VASTModule *VM;
     VFUMemBus *Bus;
     unsigned BusNum;
-    std::string EnableLogic;
-    vlang_raw_ostream EnableLogicS;
-    MuxBuilder BusMux;
+    VASTWire *MembusEn, *MembusCmd, *MemBusAddr, *MemBusOutData, *MemBusByteEn;
 
-    void createOutputPort(const std::string &PortName, unsigned BitWidth,
-                          bool isEn = false) {
+    VASTWire *createOutputPort(const std::string &PortName, unsigned BitWidth,
+                               VASTRegister *&LocalEn) {
       // We need to create multiplexer to allow current module and its submodules
       // share the bus.
       std::string PortReg = PortName + "_r";
-      VM->addRegister(PortReg, BitWidth);
-      VM->addOutputPort(PortName, BitWidth, VASTModule::Others, false);
-      if (isEn) {
-        EnableLogicS << "assign " << PortName << " = " << PortReg;
-        // The top level module control the memory bus by default.
-        BusMux.MuxLogicS.match_case("default");
-      } else {
-        BusMux.addOutput(PortName, BitWidth);
-        BusMux.assignValueInCase(PortName, PortReg);
+      VASTRegister *LocalReg = VM->addRegister(PortReg, BitWidth);
+      VASTPort *P = VM->addOutputPort(PortName, BitWidth, VASTModule::Others,
+                                      false);
+      VASTWire *OutputWire = cast<VASTWire>(P->get());
+      // Are we creating the enable port?
+      if (LocalEn == 0) {
+        // Or all enables together to generate the enable output
+        OutputWire->setOpcode(VASTWire::dpOr);
+        // Add the local enable.
+        OutputWire->addOperand(LocalReg);
+        LocalEn = LocalReg;
+      } else{
+        OutputWire->setOpcode(VASTWire::dpMux);
+        // Select the local signal if local enable is true.
+        OutputWire->addOperand(LocalEn);
+        OutputWire->addOperand(LocalReg);
       }
+      
+      return OutputWire;
     }
 
-    std::string addSubModulePort(const std::string &PortName, unsigned BitWidth,
-                                 const std::string &SubModuleName,
-                                 bool isOut = true, bool isEn = false){
-      std::string ConnectedWire = PortName;
-      if (isOut) { // Create extra wire for bus mux.
-        ConnectedWire = SubModuleName + "_" + ConnectedWire;
-        VM->addWire(ConnectedWire, BitWidth);
-        if (isEn) {
-          EnableLogicS << " | " << ConnectedWire ;
-          BusMux.MuxLogicS.exit_block();
-          BusMux.MuxLogicS.match_case(ConnectedWire);
-        } else
-          BusMux.assignValueInCase(PortName, ConnectedWire);
+    void addSubModuleOutPort(raw_ostream &S, VASTWire *OutputWire,
+                             unsigned BitWidth, const std::string &SubModuleName,
+                             VASTWire *&SubModEn) {
+      std::string ConnectedWireName = SubModuleName + "_"
+                                      + std::string(OutputWire->getName());
+
+      VASTWire *SubModWire = VM->addWire(ConnectedWireName, BitWidth);
+
+      // Are we creating the enable signal from sub module?
+      if (SubModEn == 0) {
+        OutputWire->addOperand(SubModWire);
+        SubModEn = SubModWire;
+      } else {
+        // Select the signal from submodule if sub module enable is true.
+        OutputWire->addOperand(SubModEn);
+        OutputWire->addOperand(SubModWire);
       }
 
-      return "." + PortName + "(" +  ConnectedWire + "),\n\t";
+      // Write the connection.
+      // The corresponding port name of submodule should be the same as current
+      // output port name.
+      S << '.' << OutputWire->getName() << '(' << ConnectedWireName << "),\n\t"; 
+    }
+
+    void addSubModuleInPort(raw_ostream &S, const std::string &PortName) {
+      // Simply connect the input port to the corresponding port of submodule,
+      // which suppose to have the same name.
+      S << '.' << PortName << '(' <<  PortName << "),\n\t";
     }
 
     void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
-      S << addSubModulePort(VFUMemBus::getEnableName(BusNum), 1, SubModuleName,
-                            true, true);
-      S << addSubModulePort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
-                            SubModuleName);
-      S << addSubModulePort(VFUMemBus::getAddrBusName(BusNum),
-                            Bus->getAddrWidth(), SubModuleName);
-      S << addSubModulePort(VFUMemBus::getInDataBusName(BusNum),
-                            Bus->getDataWidth(), SubModuleName, false);
-      S << addSubModulePort(VFUMemBus::getOutDataBusName(BusNum),
-                            Bus->getDataWidth(), SubModuleName);
-      S << addSubModulePort(VFUMemBus::getByteEnableName(BusNum),
-                            Bus->getDataWidth()/8, SubModuleName);
-      S << addSubModulePort(VFUMemBus::getReadyName(BusNum), 1, SubModuleName,
-                            false);
+      VASTWire *SubModEn = 0;
+      addSubModuleOutPort(S, MembusEn, 1, SubModuleName, SubModEn);
+      // Output ports.
+      addSubModuleOutPort(S, MembusCmd, VFUMemBus::CMDWidth, SubModuleName,
+                          SubModEn);
+      addSubModuleOutPort(S, MemBusAddr, Bus->getAddrWidth(), SubModuleName,
+                          SubModEn);
+      addSubModuleOutPort(S, MemBusOutData, Bus->getDataWidth(), SubModuleName,
+                          SubModEn);
+      addSubModuleOutPort(S, MemBusByteEn, Bus->getDataWidth()/8, SubModuleName,
+                          SubModEn);
+
+      // Input ports.
+      addSubModuleInPort(S, VFUMemBus::getInDataBusName(BusNum));
+      addSubModuleInPort(S, VFUMemBus::getReadyName(BusNum));
     }
 
     MemBusBuilder(VASTModule *M, unsigned N)
-      : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N),
-      EnableLogic("  // Membus enables\n"),
-      EnableLogicS(*new raw_string_ostream(EnableLogic), true, 2) {
+      : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N) {
       // Build the ports for current module.
       FuncUnitId ID(VFUs::MemoryBus, BusNum);
       // We need to create multiplexer to allow current module and its submodules
       // share the memory bus.
-
       VM->setFUPortBegin(ID);
+      // The enable signal for local memory bus.
+      VASTRegister *LocalEn = 0;
       // Control ports.
-      createOutputPort(VFUMemBus::getEnableName(BusNum), 1, true);
-      createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth);
+      MembusEn =
+        createOutputPort(VFUMemBus::getEnableName(BusNum), 1, LocalEn);
+      MembusCmd = 
+        createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
+                         LocalEn);
 
       // Address port.
-      createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth());
+      MemBusAddr =
+        createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth(),
+                         LocalEn);
       // Data ports.
       VM->addInputPort(VFUMemBus::getInDataBusName(BusNum), Bus->getDataWidth());
-      createOutputPort(VFUMemBus::getOutDataBusName(BusNum), Bus->getDataWidth());
+      MemBusOutData =
+        createOutputPort(VFUMemBus::getOutDataBusName(BusNum),
+                         Bus->getDataWidth(), LocalEn);
       // Byte enable.
-      createOutputPort(VFUMemBus::getByteEnableName(BusNum), Bus->getDataWidth() / 8);
+      MemBusByteEn =
+        createOutputPort(VFUMemBus::getByteEnableName(BusNum),
+                         Bus->getDataWidth() / 8, LocalEn);
       // Bus ready.
       VM->addInputPort(VFUMemBus::getReadyName(BusNum), 1);
-    }
-
-    void writeToStream(raw_ostream &S) {
-      EnableLogicS.flush();
-      S << EnableLogic << ";\n";
-      BusMux.writeToStream(S);
     }
   };
 
@@ -575,9 +555,6 @@ void RTLCodegen::emitAllocatedFUs() {
     S << "// External module: " << I->getKey() << '\n';
     S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
   }
-
-  // Write the memory bus mux.
-  MBBuilder.writeToStream(S);
 }
 
 VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {

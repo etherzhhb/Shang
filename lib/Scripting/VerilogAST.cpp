@@ -109,8 +109,9 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
 //----------------------------------------------------------------------------//
 // Helper function for Verilog RTL printing.
 
-static void printAssign(raw_ostream &OS, const VASTWire *W) {
+static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *W) {
   OS << "assign " << W->getName() << " = ";
+  return OS;
 }
 
 //----------------------------------------------------------------------------//
@@ -420,6 +421,7 @@ VASTWire::VASTWire(const char *Name, unsigned BitWidth,
 
 std::string VASTModule::DirectClkEnAttr = "";
 std::string VASTModule::ParallelCaseAttr = "";
+std::string VASTModule::FullCaseAttr = "";
 
 VASTModule::~VASTModule() {
   // Release all ports.
@@ -720,9 +722,7 @@ static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
   OS << "wire signed" << verilogBitRange(LHS->getBitWidth()) << ' '
      << LHS->getName() << "_signed = " << LHS->getName() << ";\n";
 
-  printAssign(OS, W);
-  OS << LHS->getName() << "_signed >>> ";
-
+  printAssign(OS, W) << LHS->getName() << "_signed >>> ";
   W->getOperand(1).print(OS);
   OS << ";\n";
 }
@@ -741,6 +741,40 @@ static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << "}}";
 }
 
+static void printCombMux(raw_ostream &OS, const VASTWire *W) {
+  unsigned NumOperands = W->getNumOperands();
+  assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
+
+  // Handle the trivial case trivially: Only 1 input.
+  if (NumOperands == 2) {
+    printAssign(OS, W);
+    W->getOperand(1).print(OS);
+    OS << ";\n";
+    return;
+  }
+  
+  // Create the temporary signal.
+  OS << "// Combinational MUX\n"
+     << "reg " << verilogBitRange(W->getBitWidth()) << ' ' << W->getName()
+     << "_mux_wire;\n";
+
+  // Assign the temporary signal to the wire.
+  printAssign(OS, W) << W->getName() << "_mux_wire;\n";
+
+  // Print the mux logic.
+  OS << "always @(*)begin  // begin mux logic\n";
+  OS.indent(2) << VASTModule::ParallelCaseAttr << ' ' << VASTModule::FullCaseAttr
+               << " case (1'b1)\n";
+  for (unsigned i = 0; i < NumOperands; i+=2) {
+    OS.indent(4);
+    W->getOperand(i).print(OS);
+    OS << ": " << W->getName() << "_mux_wire = ";
+    W->getOperand(i + 1).print(OS);
+    OS << ";\n";
+  }
+  OS.indent(2) << "endcase\nend  // end mux logic\n";
+}
+
 void VASTWire::addOperand(VASTUse Op) {
   Operands.push_back(Op);;
 }
@@ -750,9 +784,14 @@ void VASTWire::print(raw_ostream &OS) const {
   // module
   if (Opc == dpUnknown) return;
 
-  // SRA need special printing method.
+  // SRA and MUX need special printing method.
   if (Opc == dpSRA) {
     printSRAOp(OS, this);
+    return;
+  }
+
+  if (Opc == dpMux) {
+    printCombMux(OS, this);
     return;
   }
 

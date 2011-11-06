@@ -202,6 +202,8 @@ void LuaScript::updateStatus() {
   VASTModule::DirectClkEnAttr = getValue<std::string>(Path);
   Path[1] = "ParallelCaseAttr";
   VASTModule::ParallelCaseAttr = getValue<std::string>(Path);
+  Path[1] = "FullCaseAttr";
+  VASTModule::FullCaseAttr = getValue<std::string>(Path);
 
   typedef luabind::iterator tab_it;
   for (tab_it I = tab_it(luabind::globals(State)["Functions"]), E = tab_it();

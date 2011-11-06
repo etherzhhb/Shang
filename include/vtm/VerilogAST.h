@@ -282,8 +282,10 @@ public:
     dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
     // bit level assignment.
     dpBitCat, dpBitRepeat,
-    //
-    dpAssign
+    // Simple wire assignment.
+    dpAssign,
+    // Mux in datapath.
+    dpMux
   };
 private:
   SmallVector<VASTUse, 4> Operands;
@@ -456,7 +458,7 @@ private:
   unsigned NumArgPorts, RetPortIdx;
 
 public:
-  static std::string DirectClkEnAttr, ParallelCaseAttr;
+  static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
 
   enum PortTypes {
     Clk = 0,
