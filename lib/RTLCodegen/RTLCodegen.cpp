@@ -690,6 +690,13 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
   unsigned II = IISlot - startSlot;
   SmallVector<VASTCnd, 4> Cnds;
 
+  // There will be alias slot if the BB is pipelined.
+  if (startSlot + II < EndSlot) {
+    unsigned stateSlot = State.getSlot() - 1;
+    for (unsigned slot = stateSlot; slot < EndSlot; slot += II)
+      VM->getOrCreateSlot(slot)->setAliasSlots(stateSlot, EndSlot, II);
+  }
+
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
 
@@ -774,13 +781,6 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     case VTM::VOpUnreachable:   emitOpUnreachable(Op, CurSlot, Cnds);break;
     default:  assert(0 && "Unexpected opcode!");              break;
     }
-  }
-
-  // There will be alias slot if the BB is pipelined.
-  if (startSlot + II < EndSlot) {
-    unsigned stateSlot = State.getSlot() - 1;
-    for (unsigned slot = stateSlot; slot < EndSlot; slot += II)
-      VM->getOrCreateSlot(slot)->setAliasSlots(stateSlot, EndSlot, II);
   }
 }
 
