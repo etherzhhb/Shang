@@ -35,14 +35,6 @@
 #include <algorithm>
 #include <sstream>
 
-// Include the lua headers (the extern "C" is a requirement because we're
-// using C++ and lua has been compiled as C code)
-extern "C" {
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
-}
-
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -132,6 +124,24 @@ void VASTUse::print(raw_ostream &OS) const {
     // No need to print bit range for immediate.
     return;
   }
+}
+
+VASTUse::iterator VASTUse::dp_src_begin() {
+  if (UseKind != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
+
+  if (VASTWire *W = dyn_cast<VASTWire>(get()))
+    return W->op_begin();
+
+  return reinterpret_cast<VASTUse::iterator>(0);
+}
+
+VASTUse::iterator VASTUse::dp_src_end() {
+  if (UseKind != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
+
+  if (VASTWire *W = dyn_cast<VASTWire>(get()))
+    return W->op_end();
+
+  return reinterpret_cast<VASTUse::iterator>(0);
 }
 
 void VASTCnd::print(raw_ostream &OS) const {
@@ -358,6 +368,60 @@ void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
   Assigns[Src].push_back(std::make_pair(S, Cnd));
 }
 
+// Traverse the use tree in datapath, stop when we meet a register or other
+// leaf node.
+static void DepthFristTraverseDataPathUseTree(VASTUse Root) {
+  typedef VASTUse::iterator ChildIt;
+  typedef SmallVector<std::pair<VASTUse, ChildIt>, 16> StackTy;
+  StackTy WorkStack;
+  DEBUG_WITH_TYPE("rtl-slack-info",
+        dbgs() << "Datapath use tree of: ";
+        Root.print(dbgs());
+        dbgs() << '\n');
+
+  WorkStack.push_back(std::make_pair(Root, Root.dp_src_begin()));
+
+  while (!WorkStack.empty()) {
+    VASTUse Node = WorkStack.back().first;
+    ChildIt It = WorkStack.back().second;
+
+    // Do we reach the leaf?
+    if (Node.is_dp_leaf()) {
+      DEBUG_WITH_TYPE("rtl-slack-info",
+      dbgs() << "Datapath:\n";
+      for (StackTy::iterator I = WorkStack.begin(), E = WorkStack.end(); I != E;
+           ++I) {
+        I->first.print(dbgs());
+        dbgs() << ", ";
+      }
+
+      dbgs() << '\n');
+
+      WorkStack.pop_back();
+      continue;
+    }
+
+    // All sources of this node is visited.
+    if (It == Node.dp_src_end()) {
+      WorkStack.pop_back();
+      continue;
+    }
+
+    // Depth first traverse the child of current node.
+    VASTUse ChildNode = *It;
+    ++WorkStack.back().second;
+    WorkStack.push_back(std::make_pair(ChildNode, ChildNode.dp_src_begin()));
+  }
+}
+
+void VASTRegister::computeAssignmentSlack() {
+  DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << "Dst reg: " << getName() << '\n';
+  for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
+       I != E; ++I) {
+    DepthFristTraverseDataPathUseTree(I->first);
+  });
+}
+
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
                                   const AndCndVec Cnds) {
   OS << '(';
@@ -426,7 +490,8 @@ std::string VASTModule::FullCaseAttr = "";
 VASTModule::~VASTModule() {
   // Release all ports.
   Ports.clear();
-  Signals.clear();
+  Wires.clear();
+  Registers.clear();
   Slots.clear();
   Allocator.Reset();
   SymbolTable.clear();
@@ -442,17 +507,15 @@ void VASTModule::clear() {
 }
 
 void VASTModule::printDatapath(raw_ostream &OS) const{
-  for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
+  for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I)
-    if (VASTWire *W = dyn_cast<VASTWire>(*I))
-      W->print(OS);
+    (*I)->print(OS);
 }
 
 void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
-  for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
+  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
-    if (VASTRegister *R = dyn_cast<VASTRegister>(*I))
-      R->printAssignment(OS);
+    (*I)->printAssignment(OS);
 }
 
 void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
@@ -485,7 +548,13 @@ void VASTModule::printModuleDecl(raw_ostream &OS) const {
 }
 
 void VASTModule::printSignalDecl(raw_ostream &OS) {
-  for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
+  for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
+       I != E; ++I) {
+    (*I)->printDecl(OS);
+    OS << "\n";
+  }
+
+  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I) {
     (*I)->printDecl(OS);
     OS << "\n";
@@ -493,12 +562,11 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 }
 
 void VASTModule::printRegisterReset(raw_ostream &OS) {
-  for (SignalVector::const_iterator I = Signals.begin(), E = Signals.end();
-       I != E; ++I)
-    if (VASTRegister *R = dyn_cast<VASTRegister>(*I)) {
-      R->printReset(OS);
-      OS << "\n";
-    }
+  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
+       I != E; ++I) {
+    (*I)->printReset(OS);
+    OS << "\n";
+  }
 }
 
 VASTRegister::AndCndVec
@@ -511,6 +579,12 @@ VASTModule::allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds) {
 void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                                SmallVectorImpl<VASTCnd> &Cnds) {
   Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
+}
+
+void VASTModule::computeControlPathSlack() {
+  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
+       I != E; ++I)
+    (*I)->computeAssignmentSlack();
 }
 
 void VASTModule::print(raw_ostream &OS) const {
@@ -582,7 +656,7 @@ VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
   new (Reg) VASTRegister(Entry.first(), BitWidth, InitVal, Attr);
   Entry.second = Reg;
-  Signals.push_back(Reg);
+  Registers.push_back(Reg);
 
   return Reg;
 }
@@ -609,7 +683,7 @@ VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(Entry.first(), BitWidth, Attr);
   Entry.second = Wire;
-  Signals.push_back(Wire);
+  Wires.push_back(Wire);
 
   return Wire;
 }
@@ -763,8 +837,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
 
   // Print the mux logic.
   OS << "always @(*)begin  // begin mux logic\n";
-  OS.indent(2) << VASTModule::ParallelCaseAttr << ' ' << VASTModule::FullCaseAttr
-               << " case (1'b1)\n";
+  OS.indent(2) << VASTModule::ParallelCaseAttr << " case (1'b1)\n";
   for (unsigned i = 0; i < NumOperands; i+=2) {
     OS.indent(4);
     W->getOperand(i).print(OS);

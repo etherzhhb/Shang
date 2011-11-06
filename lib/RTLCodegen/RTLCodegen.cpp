@@ -363,6 +363,8 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   VM->buildSlotLogic();
 
   // TODO: Optimize the RTL net list.
+  // Extract the timming information.
+  VM->computeControlPathSlack();
 
   // Write buffers to output
   VM->printModuleDecl(Out);

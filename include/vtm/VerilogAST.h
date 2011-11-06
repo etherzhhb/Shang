@@ -162,10 +162,27 @@ public:
           && Inverted < RHS.Inverted));
   }
 
+  // Return the underlying VASTValue.
   VASTValue *get() const {
-    assert(UseKind == USE_Value && "");
+    assert(UseKind == USE_Value && "Call get on wrong VASTUse type!");
     return Data.V;
   }
+
+  // Return the underlying VASTValue if the Use hold a VASTValue, null otherwise
+  VASTValue *getOrNull() const {
+    if (UseKind == USE_Value)
+      return Data.V;
+
+    return 0;
+  }
+
+  // Iterators allow us to traverse the use tree.
+  typedef VASTUse *iterator;
+  // Iterator for datapath traverse.
+  iterator dp_src_begin();
+  iterator dp_src_end();
+
+  bool is_dp_leaf() { return dp_src_begin() == dp_src_end(); }
 
   void print(raw_ostream &OS) const;
 };
@@ -174,14 +191,14 @@ public:
 template<> struct simplify_type<const VASTUse> {
   typedef VASTNode *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return static_cast<SimpleType>(Val.get());
+    return static_cast<SimpleType>(Val.getOrNull());
   }
 };
 
 template<> struct simplify_type<VASTUse> {
   typedef VASTNode *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return static_cast<SimpleType>(Val.get());
+    return static_cast<SimpleType>(Val.getOrNull());
   }
 };
 
@@ -303,7 +320,14 @@ public:
     return Operands[Idx];
   }
 
+  typedef VASTUse *op_iterator;
+  op_iterator op_begin() { return Operands.begin(); }
+  op_iterator op_end() { return Operands.end(); }
+
+  // Add the depending value of this wire to the operand list.
   void addOperand (VASTUse Op);
+
+  // Print the logic to the output stream.
   void print(raw_ostream &OS) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -336,6 +360,9 @@ public:
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastRegister;
   }
+
+  // Compute the slack of the assignment.
+  void computeAssignmentSlack();
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec Cnds);
@@ -433,7 +460,8 @@ public:
   typedef PortVector::iterator port_iterator;
   typedef PortVector::const_iterator const_port_iterator;
 
-  typedef SmallVector<VASTSignal*, 128> SignalVector;
+  typedef SmallVector<VASTWire*, 128> WireVector;
+  typedef SmallVector<VASTRegister*, 128> RegisterVector;
 
 private:
   // Dirty Hack:
@@ -441,7 +469,8 @@ private:
   raw_string_ostream DataPath, ControlBlock;
   vlang_raw_ostream LangControlBlock;
   PortVector Ports;
-  SignalVector Signals;
+  WireVector Wires;
+  RegisterVector Registers;
 
   std::string Name;
   BumpPtrAllocator Allocator;
@@ -494,6 +523,9 @@ public:
   // Print the slot control flow.
   void buildSlotLogic();
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
+
+  // Compute the control path slack information.
+  void computeControlPathSlack();
 
   VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
