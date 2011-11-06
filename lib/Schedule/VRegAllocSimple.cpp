@@ -64,17 +64,19 @@ static RegisterRegAlloc VSimpleRegalloc("vsimple",
                                         createSimpleRegisterAllocator);
 
 namespace {
-struct VRASimple : public MachineFunctionPass,
-                   public RegAllocBase {
+struct VRASimple : public MachineFunctionPass {
   // DIRTY HACK: We need to init the PhysReg2LiveUnion again with correct
   // physics register number.
   LiveIntervalUnion::Allocator UnionAllocator;
   // Context.
   MachineFunction *MF;
   VFInfo *VFI;
-
+  MachineRegisterInfo *MRI;
+  const TargetInstrInfo *TII;
+  const TargetRegisterInfo *TRI;
   // Analysis
-  LiveStacks *LS;
+  VirtRegMap *VRM;
+  LiveIntervals *LIS;
 
   // Register Compatibility Graph.
   typedef CompGraph<LiveInterval*> LICGraph;
@@ -89,21 +91,26 @@ struct VRASimple : public MachineFunctionPass,
 
   VRASimple();
   void init(VirtRegMap &vrm, LiveIntervals &lis);
-  
+
   static char ID;
 
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void releaseMemory();
 
   // Abstract functions from the base class.
-  unsigned selectOrSplit(LiveInterval &, SmallVectorImpl<LiveInterval*> &) {
-    return 0;
-  }
-  Spiller &spiller() { return *(Spiller*)0; }
-  virtual float getPriority(LiveInterval *LI) { return LI->weight; }
-  virtual void enqueue(LiveInterval *LI) {}
-  virtual LiveInterval *dequeue() { return 0; }
+  //unsigned selectOrSplit(LiveInterval &, SmallVectorImpl<LiveInterval*> &) {
+  //  return 0;
+  //}
+  //Spiller &spiller() { return *(Spiller*)0; }
+  //virtual float getPriority(LiveInterval *LI) { return LI->weight; }
+  //virtual void enqueue(LiveInterval *LI) {}
+  //virtual LiveInterval *dequeue() { return 0; }
   // End of Abstract functions
+
+  void assign(LiveInterval &VirtReg, unsigned PhysReg) {
+    assert(!VRM->hasPhys(VirtReg.reg) && "Duplicate VirtReg assignment");
+    VRM->assignVirt2Phys(VirtReg.reg, PhysReg);
+  }
 
   LiveInterval *getInterval(unsigned RegNum) {
     if (MRI->reg_nodbg_empty(RegNum)) {
@@ -830,7 +837,7 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 void VRASimple::releaseMemory() {
-  RegAllocBase::releaseMemory();
+  //RegAllocBase::releaseMemory();
 }
 
 void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
@@ -840,7 +847,7 @@ void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
   LIS = &lis;
   // FIXME: Init the PhysReg2LiveUnion right before we start to bind the physics
   // registers.
-  PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() + 1);
+  // PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() + 1);
   // Cache an interferece query for each physical reg
   // Queries.reset(new LiveIntervalUnion::Query[PhysReg2LiveUnion.numRegs()]);
 }
@@ -906,27 +913,27 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bindCompGraph(LsrCG);
   bindCompGraph(ShlCG);
 
-  addMBBLiveIns(MF);
+  //addMBBLiveIns(MF);
   LIS->addKillFlags();
 
   // FIXME: Verification currently must run before VirtRegRewriter. We should
   // make the rewriter a separate pass and override verifyAnalysis instead. When
   // that happens, verification naturally falls under VerifyMachineCode.
 #ifndef NDEBUG
-  if (VerifyEnabled) {
-    // Verify accuracy of LiveIntervals. The standard machine code verifier
-    // ensures that each LiveIntervals covers all uses of the virtual reg.
+  //if (VerifyEnabled) {
+  //  // Verify accuracy of LiveIntervals. The standard machine code verifier
+  //  // ensures that each LiveIntervals covers all uses of the virtual reg.
 
-    // FIXME: MachineVerifier is badly broken when using the standard
-    // spiller. Always use -spiller=inline with -verify-regalloc. Even with the
-    // inline spiller, some tests fail to verify because the coalescer does not
-    // always generate verifiable code.
-    MF->verify(this, "In RABasic::verify");
+  //  // FIXME: MachineVerifier is badly broken when using the standard
+  //  // spiller. Always use -spiller=inline with -verify-regalloc. Even with the
+  //  // inline spiller, some tests fail to verify because the coalescer does not
+  //  // always generate verifiable code.
+  //  MF->verify(this, "In RABasic::verify");
 
-    // Verify that LiveIntervals are partitioned into unions and disjoint within
-    // the unions.
-    verify();
-  }
+  //  // Verify that LiveIntervals are partitioned into unions and disjoint within
+  //  // the unions.
+  //  verify();
+  //}
 #endif // !NDEBUG
 
   // Run rewriter
