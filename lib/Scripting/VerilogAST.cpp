@@ -151,8 +151,9 @@ void VASTCnd::print(raw_ostream &OS) const {
   OS << ')';
 }
 
-VASTSlot::VASTSlot(unsigned slotNum, VASTSignal *S[])
-  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0) {
+VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTSignal *S[])
+  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
+   ParentIdx(parentIdx) {
   std::uninitialized_copy(S, S + 3, Signals);
 
   // SlotAcitve = SlotReady & SlotReg
@@ -161,6 +162,8 @@ VASTSlot::VASTSlot(unsigned slotNum, VASTSignal *S[])
   SlotActive->addOperand(getRegister());
   SlotActive->addOperand(getReady());
   // We need alias slot to build the ready signal, keep it as unknown now.
+
+  assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
 void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTCnd Cnd) {
@@ -376,10 +379,6 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
   typedef VASTUse::iterator ChildIt;
   typedef SmallVector<std::pair<VASTUse, ChildIt>, 16> StackTy;
   StackTy WorkStack;
-  DEBUG_WITH_TYPE("rtl-slack-info",
-        dbgs() << "Datapath use tree of: ";
-        Root.print(dbgs());
-        dbgs() << '\n');
 
   WorkStack.push_back(std::make_pair(Root, Root.dp_src_begin()));
 
@@ -390,18 +389,18 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
       if (VASTValue *V = Node.getOrNull()) {
-
         DEBUG_WITH_TYPE("rtl-slack-info",
-        dbgs() << "Datapath:\n";
+        dbgs() << "Datapath:\t" << getName();
         for (StackTy::iterator I = WorkStack.begin(), E = WorkStack.end(); I != E;
              ++I) {
-          I->first.print(dbgs());
           dbgs() << ", ";
+          I->first.print(dbgs());
         });
 
         if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
+          unsigned Slack = findSlackFrom(R, Cnds);
           DEBUG_WITH_TYPE("rtl-slack-info",
-                           dbgs() << " Slack: " << int(findSlackFrom(R, Cnds)));
+                           dbgs() << " Slack: " << int(Slack));
         }
 
         DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
@@ -424,12 +423,17 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
   }
 }
 
-VASTSlot *VASTRegister::findNearestAssignSlot(VASTSlot *Dst) {
+VASTSlot *VASTRegister::findNearestAssignSlot(VASTSlot *Dst) const {
   VASTSlot *NearestSrc = 0;
-  typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::iterator SlotIt;
+  typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
   // FIXME: We can perform a binary search.
   for (SlotIt I = Slots.begin(), E = Slots.end(); I != E; ++I) {
     VASTSlot *Src = *I;
+
+    // Do not mess up with cross state live interval at the moment.
+    if (Src->getParentIdx() != Dst->getParentIdx())
+      continue;
+
     if (*Src < *Dst) {
       NearestSrc = Src;
     }
@@ -444,19 +448,26 @@ unsigned VASTRegister::findSlackFrom(const VASTRegister *Src,
 
   typedef OrCndVec::const_iterator cnd_it;
   for (cnd_it I = AssignCnds.begin(), E = AssignCnds.end(); I != E; ++I) {
-    VASTSlot *Dst = I->first;
-    if (VASTSlot *Src = findNearestAssignSlot(Dst))
-      Slack = std::min(Slack, Dst->getSlotNum() - Src->getSlotNum());
+    VASTSlot *DstSlot = I->first;
+    // Because we ingore cross state live interval, assume all registers assigned
+    // when the state start.
+    Slack = std::min(Slack, DstSlot->getSlackFromParentStart());
+
+    if (!Src) continue;
+
+    if (VASTSlot *SrcSlot = Src->findNearestAssignSlot(DstSlot))
+      // What we got is ASSIGN slot, the data need 1 more cycle to reach the
+      // output pin of the register.
+      Slack = std::min(Slack, DstSlot->getSlotNum() - (SrcSlot->getSlotNum() + 1));
   }
 
   return Slack;
 }
 
-void VASTRegister::computeAssignmentSlack() {
+void VASTRegister::reportAssignmentSlack() {
   // Do we have any assignment information?
   if (Assigns.empty()) return;
 
-  /*DEBUG_WITH_TYPE("rtl-slack-info",*/ dbgs() << "Dst reg: " << getName() << '\n';
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
     VASTUse Src = I->first;
@@ -468,8 +479,11 @@ void VASTRegister::computeAssignmentSlack() {
 
     // Trivial case.
     if (VASTRegister *R = dyn_cast<VASTRegister>(SrcValue)) {
-      dbgs() << "Slack from " << R->getName() << ": "
-             <<  int(findSlackFrom(R, I->second)) << '\n';
+      unsigned Slack = findSlackFrom(R, I->second);
+      DEBUG_WITH_TYPE("rtl-slack-info",
+                       dbgs() << "Datapath:\t" << getName() << ", "
+                              << R->getName() << ": "
+                              << int(Slack) << '\n');
       continue;
     }
 
@@ -636,10 +650,10 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
   Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
 }
 
-void VASTModule::computeControlPathSlack() {
+void VASTModule::reportAssignmentSlacks() {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
-    (*I)->computeAssignmentSlack();
+    (*I)->reportAssignmentSlack();
 }
 
 void VASTModule::print(raw_ostream &OS) const {

@@ -193,13 +193,14 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitIdleState();
   // We need create the slots for the empty slot.
-  void emitSlotsForEmptyState(unsigned Slot, unsigned EndSlot, unsigned II) {
+  void emitSlotsForEmptyState(unsigned Slot, unsigned EndSlot, unsigned II,
+                              unsigned StartSlot) {
     // Dirty Hack: When we need is the slot before current slot, we issue the
     // control operation of current slot there.
     --Slot;
 
     while (Slot < EndSlot) {
-      (void) VM->getOrCreateSlot(Slot);
+      (void) VM->getOrCreateSlot(Slot, StartSlot);
       Slot += II;
     }
   }
@@ -235,7 +236,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitImplicitDef(ucOp &ImpDef);
 
-  void emitCtrlOp(ucState &State, PredMapTy &PredMap);
+  void emitCtrlOp(ucState &State, PredMapTy &PredMap, unsigned II);
 
   // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
@@ -364,8 +365,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   // TODO: Optimize the RTL net list.
   // FIXME: Do these in seperate passes.
-  // Extract the timming information.
-  VM->computeControlPathSlack();
 
   // Write buffers to output
   VM->printModuleDecl(Out);
@@ -443,7 +442,7 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
 void RTLCodegen::emitIdleState() {
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
-  VASTSlot *IdleSlot = VM->getOrCreateSlot(0);
+  VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
   IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
                         StartPort);
@@ -456,7 +455,9 @@ void RTLCodegen::emitIdleState() {
 }
 
 void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
-  unsigned II = FInfo->getIIFor(&MBB);
+  unsigned startSlot = FInfo->getStartSlotFor(&MBB);
+  unsigned IISlot = FInfo->getIISlotFor(&MBB);
+  unsigned II = IISlot - startSlot;
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
   PredMapTy NextStatePred;
   MachineBasicBlock::iterator I = MBB.getFirstNonPHI(),
@@ -473,10 +474,20 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Emit next ucOp.
     ucState NextControl = *++I;
-    if (NextControl.empty())
-      emitSlotsForEmptyState(NextControl.getSlot(), EndSlot, II);
+    // We are assign the register at the previous slot of this slot, so the
+    // datapath op with same slot can read the register schedule to this slot.
+    unsigned stateSlot = NextControl.getSlot() - 1;
+    // Create the slots.
+    VM->getOrCreateSlot(stateSlot, startSlot);
+    // There will be alias slot if the BB is pipelined.
+    if (startSlot + II < EndSlot) {
+      for (unsigned slot = stateSlot; slot < EndSlot; slot += II)
+        VM->getOrCreateSlot(slot, startSlot)->setAliasSlots(stateSlot, EndSlot, II);
+    }
 
-    emitCtrlOp(NextControl, NextStatePred);
+    if (NextControl.empty()) continue;
+
+    emitCtrlOp(NextControl, NextStatePred, IISlot < EndSlot ? II : 0);
   }
 }
 
@@ -684,29 +695,17 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
 RTLCodegen::~RTLCodegen() {}
 
 //===----------------------------------------------------------------------===//
-void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
+void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap, unsigned II){
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   MachineBasicBlock *CurBB = State->getParent();
-  unsigned startSlot = FInfo->getStartSlotFor(CurBB);
-  unsigned IISlot = FInfo->getIISlotFor(CurBB);
-  unsigned EndSlot = FInfo->getEndSlotFor(CurBB);
-  unsigned II = IISlot - startSlot;
   SmallVector<VASTCnd, 4> Cnds;
-
-  // There will be alias slot if the BB is pipelined.
-  if (startSlot + II < EndSlot) {
-    unsigned stateSlot = State.getSlot() - 1;
-    for (unsigned slot = stateSlot; slot < EndSlot; slot += II)
-      VM->getOrCreateSlot(slot)->setAliasSlots(stateSlot, EndSlot, II);
-  }
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
-
     unsigned SlotNum = Op->getPredSlot();
-    VASTSlot *CurSlot = VM->getOrCreateSlot(SlotNum - 1);
+    VASTSlot *CurSlot = VM->getSlot(SlotNum - 1);
 
-    assert(SlotNum != startSlot && "Unexpected first slot!");
+    assert(SlotNum != CurSlot->getParentIdx() && "Unexpected first slot!");
     // Skip the marker.
     if (Op->getOpcode() == VTM::ImpUse) continue;
 
@@ -725,7 +724,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
       CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
-      if (TargetBB == CurBB && IISlot < EndSlot)
+      if (TargetBB == CurBB && II)
         // The loop op of pipelined loop enable next slot explicitly.
         CurSlot->addNextSlot(CurSlot->getSlotNum() + 1);
 
@@ -744,7 +743,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap) {
     if (Op->getOpcode() == VTM::VOpMvPhi) {
       MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
       unsigned CndSlot = SlotNum - II;
-      if (TargetBB == CurBB && CndSlot > startSlot) {
+      if (TargetBB == CurBB && CndSlot > CurSlot->getParentIdx()) {
         Cnds.push_back(VM->getSlot(CndSlot - 1)->getActive());
       } else {
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
@@ -949,7 +948,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getOrCreateSymbol(StartPortName);
   Slot->addEnable(StartSignal, Pred);
-  VASTSlot *NextSlot = VM->getOrCreateSlot(Slot->getSlotNum() + 1);
+  VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
   NextSlot->addDisable(StartSignal, Pred);
 
   const Function *FN = M->getFunction(CalleeName);
@@ -1070,7 +1069,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
 
   // Disable the memory at next slot.
   // TODO: Assert the control flow is linear.
-  VASTSlot *NextSlot = VM->getOrCreateSlot(Slot->getSlotNum() + 1);
+  VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
   NextSlot->addDisable(MemEn, Pred);
 }
 
@@ -1114,7 +1113,7 @@ void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
 
   // Disable the memory at next slot.
   // TODO: Assert the control flow is linear.
-  VASTSlot *NextSlot = VM->getOrCreateSlot(Slot->getSlotNum() + 1);
+  VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
   NextSlot->addDisable(MemEn, Pred);
 }
 

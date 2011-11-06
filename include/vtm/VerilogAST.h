@@ -356,10 +356,12 @@ private:
   FUCtrlVecTy Disables;
 
   SuccVecTy NextSlots;
-
+  // Slot ranges of alias slot.
   unsigned StartSlot, EndSlot, II;
+  // The start slot of parent state, can identify parent state.
+  unsigned ParentIdx;
 public:
-  VASTSlot(unsigned slotNum, VASTSignal *S[]);
+  VASTSlot(unsigned slotNum, unsigned parentIdx, VASTSignal *S[]);
 
   void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
   // Print the logic of ready signal of this slot, need alias slot information.
@@ -379,6 +381,13 @@ public:
   VASTWire *getActive() const { return cast<VASTWire>(Signals[2]); }
 
   unsigned getSlotNum() const { return getSubClassData(); }
+  // The start slot of parent state(MachineBasicBlock)
+  unsigned getParentIdx() const { return ParentIdx; }
+  // The slots passed after the parent state start before reach the current
+  // slot.
+  unsigned getSlackFromParentStart() const {
+    return getSlotNum() - getParentIdx();
+  }
 
   void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
   // Dose this slot jump to some other slot conditionally instead just fall
@@ -434,11 +443,17 @@ private:
   AssignMapTy Assigns;
   // FIXME: We need a VAST live interval analysis pass to hold this.
   std::set<VASTSlot*, less_ptr<VASTSlot> > Slots;
+  // The "Slack" in VAST means the extra cycles that after data appear in
+  // the output pin of the src register before the dst register read the data.
+  // i.e. if we assign reg0 at cycle 1, and the data will appear at the output
+  // pin of reg0 at cycle 2, and now reg1 can read the data. In this case
+  // becasue the data appear at cycle 2 and we read the data at the same cycle,
+  // the slack is 0. But if we read the data at cycle 3, the slack is 1.
 
   // FIXME: These function should be the "SlackInfo" pass member function.
   unsigned findSlackFrom(const VASTRegister *Src, const OrCndVec &AssignCnds);
   // Find the nearest slot before Dst that assigning this register.
-  VASTSlot *findNearestAssignSlot(VASTSlot *Dst);
+  VASTSlot *findNearestAssignSlot(VASTSlot *Dst) const;
   void DepthFristTraverseDataPathUseTree(VASTUse Root, const OrCndVec &Cnds);
 public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
@@ -456,7 +471,7 @@ public:
   }
 
   // Compute the slack of the assignment.
-  void computeAssignmentSlack();
+  void reportAssignmentSlack();
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec Cnds);
@@ -537,8 +552,8 @@ public:
   void buildSlotLogic();
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
-  // Compute the control path slack information.
-  void computeControlPathSlack();
+  // Compute the register assignments slack information, callable from lua.
+  void reportAssignmentSlacks();
 
   VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
@@ -572,7 +587,7 @@ public:
     Slots.assign(TotalSlots, 0);
   }
 
-  VASTSlot *getOrCreateSlot(unsigned SlotNum) {
+  VASTSlot *getOrCreateSlot(unsigned SlotNum, unsigned ParentIdx) {
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
       // Create the relative signals.
@@ -585,10 +600,16 @@ public:
         addWire(SlotActiveName, 1, DirectClkEnAttr.c_str())
       };
 
-      Slot = new (Allocator.Allocate<VASTSlot>()) VASTSlot(SlotNum, Signals);
+      Slot = Allocator.Allocate<VASTSlot>();
+      new (Slot) VASTSlot(SlotNum, ParentIdx, Signals);
     }
 
     return Slot;
+  }
+
+  VASTSlot *getOrCreateNextSlot(VASTSlot *S) {
+    // TODO: Check if the next slot out of bound.
+    return getOrCreateSlot(S->getSlotNum() + 1, S->getParentIdx());
   }
 
   VASTSlot *getSlot(unsigned SlotNum) const {
