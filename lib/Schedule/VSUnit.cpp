@@ -282,9 +282,10 @@ void VSUnit::print(raw_ostream &OS) const {
   for (const_instr_iterator I = InstrBase, E = instr_end(); I != E; ++I)
     if (MachineInstr *Instr = *I) {
       VIDesc VTID = *Instr;
-      OS << Instr->getDesc().getName()
-         << '+' << unsigned(getLatencyAt(I - InstrBase))
-         << '\n';
+      OS << Instr->getDesc().getName();
+      unsigned Idx = I - InstrBase;
+      if (Idx) OS << '+' << unsigned(getLatencyAt(Idx));
+      OS << '\n';
       DEBUG(OS << *Instr << '\n');
     }
 
