@@ -504,26 +504,24 @@ SDValue VTargetLowering::getVFlag(SelectionDAG &DAG, SDValue SetCC) {
 
 SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op->getOperand(0), RHS = Op->getOperand(1);
-  EVT VT = MVT::i1;
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
   DebugLoc dl = Op.getDebugLoc();
+  ISD::CondCode CC = Cnd->get();
 
-  switch (Cnd->get()) {
-  case ISD::SETNE:
+  switch (CC) {
+  case ISD::SETNE: {
     // Expand NE to not EQ.
-    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETEQ));
+    ISD::CondCode InvCC = ISD::getSetCCInverse(ISD::SETNE, true);
+    return getNot(DAG, dl, DAG.getSetCC(dl, MVT::i1, LHS, RHS, InvCC));
+  }
   case ISD::SETLT:
-    // Expand LT to not GE.
-    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGE));
   case ISD::SETLE:
-    // Expand LE to not GT.
-    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGT));
   case ISD::SETULT:
-    // Expand ULT to not UGE.
-    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGE));
-  case ISD::SETULE:
-    // Expand ULEto not UGT.
-    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGT));
+  case ISD::SETULE: {
+    ISD::CondCode SwapCC = ISD::getSetCCSwappedOperands(CC);
+    // Expand LT to not GE.
+    return DAG.getSetCC(dl, MVT::i1, RHS, LHS, SwapCC);
+  }
   default:
     assert(0 && "Bad condition code!");
     return SDValue();
