@@ -946,16 +946,16 @@ static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
 template<typename PrintOperandFN>
 static void printCmpFU(raw_ostream &OS, ArrayRef<VASTUse> Ops,
                        PrintOperandFN &FN) {
-  OS << "{ ";
+  OS << "{ ((";
   // Port 3: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " > ", FN);
-  OS << ", ";
+  OS << ") ? 1'b1 : 1'b0), ((";
   // Port 2: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " >= ", FN);
-  OS << ", ";
+  OS << ") ? 1'b1 : 1'b0), ((";
   // Port 1: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " == ", FN);
-  OS << ", 1'bx }";
+  OS << ") ? 1'b1 : 1'b0), 1'bx }";
 }
 
 static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
