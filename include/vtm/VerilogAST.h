@@ -294,7 +294,7 @@ public:
   enum Opcode {
     dpUnknown,
     // FU datapath
-    dpAdd, dpMul, dpShl, dpSRA, dpSRL,
+    dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
     // bitwise logic datapath
     dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
     // bit level assignment.

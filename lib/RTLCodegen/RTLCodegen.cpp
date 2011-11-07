@@ -202,6 +202,7 @@ class RTLCodegen : public MachineFunctionPass {
   VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUShift(unsigned FUNum, unsigned BitWidth,
                          VASTWire::Opcode Opc);
+  VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
   void clear();
 
@@ -646,6 +647,12 @@ void RTLCodegen::emitAllSignals() {
     case VTM::RADDRegClassID:
       VM->indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
       break;
+    case VTM::RUCMPRegClassID:
+      VM->indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), false));
+      break;
+    case VTM::RSCMPRegClassID:
+      VM->indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), true));
+      break;
     case VTM::RMULRegClassID:
       VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth()));
       break;
@@ -777,6 +784,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMvPipe:
     case VTM::COPY:             emitOpCopy(Op, CurSlot, Cnds);break;
     case VTM::VOpAdd:           emitOpAdd(Op, CurSlot, Cnds); break;
+    case VTM::VOpICmp:
     case VTM::VOpMult:
     case VTM::VOpSHL:
     case VTM::VOpSRL:

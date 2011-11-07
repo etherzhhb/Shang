@@ -895,34 +895,72 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << ";";
 }
 
+//----------------------------------------------------------------------------//
+// Operand printing helper functions.
+static void printSignedOperand(raw_ostream &OS, VASTUse U) {
+  OS << "$signed(";
+  U.print(OS);
+  OS << ")";
+}
+
+static void printUnsignedOperand(raw_ostream &OS, VASTUse U) {
+  U.print(OS);
+}
+
+template<typename PrintOperandFN>
 static void printSimpleOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
-                          const char *Opc) {
+                          const char *Opc, PrintOperandFN &FN) {
   unsigned NumOps = Ops.size();
   assert(NumOps && "Unexpected zero operand!");
-  Ops[0].print(OS);
+  FN(OS, Ops[0]);
 
   for (unsigned i = 1; i < NumOps; ++i) {
     OS << Opc;
-    Ops[i].print(OS);
+    FN(OS, Ops[i]);
   }
 }
 
+static void printSimpleUnsignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
+                                  const char *Opc) {
+  printSimpleOp(OS, Ops, Opc, printUnsignedOperand);
+}
+
+//static void printSimpleSignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
+//                                  const char *Opc) {
+//  printSimpleOp(OS, Ops, Opc, printSignedOperand);
+//}
+
+//----------------------------------------------------------------------------//
+// Generic datapath printing helper function.
 static void printUnaryOp(raw_ostream &OS, VASTUse U, const char *Opc) {
   OS << Opc;
   U.print(OS);
 }
 
-
 static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
-  OS << "$signed(";
-  W->getOperand(0).print(OS);
-  OS << ") >>> ";
+  printSignedOperand(OS, W->getOperand(0));
+  OS << " >>> ";
   W->getOperand(1).print(OS);
+}
+
+template<typename PrintOperandFN>
+static void printCmpFU(raw_ostream &OS, ArrayRef<VASTUse> Ops,
+                       PrintOperandFN &FN) {
+  OS << "{ ";
+  // Port 3: gt.
+  printSimpleOp<PrintOperandFN>(OS, Ops, " > ", FN);
+  OS << ", ";
+  // Port 2: gt.
+  printSimpleOp<PrintOperandFN>(OS, Ops, " >= ", FN);
+  OS << ", ";
+  // Port 1: gt.
+  printSimpleOp<PrintOperandFN>(OS, Ops, " == ", FN);
+  OS << ", 1'bx }";
 }
 
 static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << '{';
-  printSimpleOp(OS, Ops, " , ");
+  printSimpleUnsignedOp(OS, Ops, " , ");
   OS << '}';
 }
 
@@ -989,18 +1027,21 @@ void VASTWire::print(raw_ostream &OS) const {
 
   switch (Opc) {
   case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
-  case dpAnd: printSimpleOp(OS, Operands, " & "); break;
-  case dpOr:  printSimpleOp(OS, Operands, " | "); break;
-  case dpXor: printSimpleOp(OS, Operands, " ^ "); break;
+  case dpAnd: printSimpleUnsignedOp(OS, Operands, " & "); break;
+  case dpOr:  printSimpleUnsignedOp(OS, Operands, " | "); break;
+  case dpXor: printSimpleUnsignedOp(OS, Operands, " ^ "); break;
 
   case dpRAnd:  printUnaryOp(OS, getOperand(0), "&");  break;
   case dpROr:   printUnaryOp(OS, getOperand(0), "|");  break;
   case dpRXor:  printUnaryOp(OS, getOperand(0), "^");  break;
 
-  case dpAdd: printSimpleOp(OS, Operands, " + "); break;
-  case dpMul: printSimpleOp(OS, Operands, " * "); break;
-  case dpShl: printSimpleOp(OS, Operands, " << ");break;
-  case dpSRL: printSimpleOp(OS, Operands, " >> ");break;
+  case dpSCmp:  printCmpFU(OS, Operands, printSignedOperand); break;
+  case dpUCmp:  printCmpFU(OS, Operands, printUnsignedOperand); break;
+
+  case dpAdd: printSimpleUnsignedOp(OS, Operands, " + "); break;
+  case dpMul: printSimpleUnsignedOp(OS, Operands, " * "); break;
+  case dpShl: printSimpleUnsignedOp(OS, Operands, " << ");break;
+  case dpSRL: printSimpleUnsignedOp(OS, Operands, " >> ");break;
   case dpSRA: printSRAOp(OS, this);               break;
 
   case dpAssign: getOperand(0).print(OS);     break;
