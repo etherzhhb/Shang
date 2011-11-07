@@ -65,6 +65,15 @@ namespace llvm {
 
       return 0;
     }
+    
+    unsigned getICmpPort(unsigned CC) {
+      switch (CC) {
+      case ISD::SETEQ: return 1;
+      case ISD::SETGE: case ISD::SETUGE: return 2;
+      case ISD::SETGT: case ISD::SETUGT: return 3;
+      default: llvm_unreachable("Unexpected condition code!");
+      }
+    }
 
     // Default area cost parameter.
     unsigned LUTCost = 64;

@@ -68,6 +68,7 @@ namespace VFUs {
 
   extern const char *VFUNames[];
   const TargetRegisterClass *getRepRegisterClass(unsigned OpCode, unsigned idx);
+  unsigned getICmpPort(unsigned CC);
 
   // Ports layout: Clk, Rst, En, Fin, ouput0, output1 ...
   std::string instantiatesModule(const std::string &ModName, unsigned ModNum,

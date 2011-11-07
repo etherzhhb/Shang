@@ -850,15 +850,6 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
   }
 }
 
-static unsigned getICmpPort(unsigned CC) {
-  switch (CC) {
-  case ISD::SETEQ: return 1;
-  case ISD::SETGE: case ISD::SETUGE: return 2;
-  case ISD::SETGT: case ISD::SETUGT: return 3;
-  default: llvm_unreachable("Unexpected condition code!");
-  }
-}
-
 static void addSubRegIdx(unsigned Reg, unsigned SubReg,
                          MachineRegisterInfo *MRI) {
   typedef MachineRegisterInfo::use_iterator use_it;
@@ -886,7 +877,7 @@ void VPreRegAllocSched::fixCmpFUPort() {
     // Do not remove the operand, just change it to implicit define.
     ucOp Op = ucOp::getParent(DI);
     if (Op->isOpcode(VTM::VOpICmp)) {
-      unsigned SubRegIdx = getICmpPort(Op.getOperand(3).getImm());
+      unsigned SubRegIdx = VFUs::getICmpPort(Op.getOperand(3).getImm());
       addSubRegIdx(SrcReg, SubRegIdx, MRI);
       continue;
     }
