@@ -76,6 +76,7 @@ private:
 
   // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
+  SDNode *SelectICmp(SDNode *N);
 
   SDNode *SelectImmediate(SDNode *N, bool ForceMove = false);
 
@@ -177,6 +178,26 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
 
   return CurDAG->SelectNodeTo(N, VTM::VOpAdd, N->getVTList(),
                               Ops, array_lengthof(Ops));
+}
+
+SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
+  CondCodeSDNode *Cnd = cast<CondCodeSDNode>(N->getOperand(2));
+  SDValue LHS = N->getOperand(0);
+  unsigned OperandWidth = VTargetLowering::computeSizeInBits(LHS);
+  EVT FUVT = EVT::getIntegerVT(*CurDAG->getContext(), OperandWidth);
+
+  SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
+                    MoveToReg(N->getOperand(1), true),
+                    // Encode the operand width to the condition code width.
+                    CurDAG->getTargetConstant(Cnd->get(), FUVT),
+                    SDValue()/*The dummy bit width operand*/,
+                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+                  };
+
+  computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
+
+  return CurDAG->SelectNodeTo(N, VTM::VOpICmp, N->getVTList(),
+    Ops, array_lengthof(Ops));
 }
 
 SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
@@ -393,6 +414,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BRCOND:           return SelectBrcnd(N);
 
   case ISD::ADDE:             return SelectAdd(N);
+  case ISD::SETCC:            return SelectICmp(N);
   // DirtyHack: Is binary instruction enough?
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult, true);
 
