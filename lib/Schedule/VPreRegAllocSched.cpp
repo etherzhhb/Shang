@@ -32,6 +32,7 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Target/TargetData.h"
+#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -175,6 +176,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   void cleanUpRegisterClass(const TargetRegisterClass *RC);
+  void fixCmpFUPort();
 
   bool doInitialization(Module &M) {
     TD = getAnalysisIfAvailable<TargetData>();
@@ -804,6 +806,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
 
 void VPreRegAllocSched::cleanUpSchedule() {
   cleanUpRegisterClass(VTM::DRRegisterClass);
+  fixCmpFUPort();
 }
 
 void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
@@ -844,5 +847,48 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
         MO.setTargetFlags(64);
       }
     }
+  }
+}
+
+static unsigned getICmpPort(unsigned CC) {
+  switch (CC) {
+  case ISD::SETEQ: return 1;
+  case ISD::SETGE: case ISD::SETUGE: return 2;
+  case ISD::SETGT: case ISD::SETUGT: return 3;
+  default: llvm_unreachable("Unexpected condition code!");
+  }
+}
+
+static void addSubRegIdx(unsigned Reg, unsigned SubReg,
+                         MachineRegisterInfo *MRI) {
+  typedef MachineRegisterInfo::use_iterator use_it;
+
+  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I)
+    I.getOperand().setSubReg(SubReg);
+}
+
+void VPreRegAllocSched::fixCmpFUPort() {
+  // And Emit the wires defined in this module.
+  const std::vector<unsigned>& Cmps =
+    MRI->getRegClassVirtRegs(VTM::RUCMPRegisterClass);
+
+  for (std::vector<unsigned>::const_iterator I = Cmps.begin(), E = Cmps.end();
+       I != E; ++I) {
+    unsigned SrcReg = *I;
+    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
+
+    if (DI == MRI->def_end() || MRI->use_empty(SrcReg))
+      continue;
+
+    assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
+    // Do not remove the operand, just change it to implicit define.
+    ucOp Op = ucOp::getParent(DI);
+    if (Op->isOpcode(VTM::VOpICmp)) {
+      unsigned SubRegIdx = getICmpPort(Op.getOperand(3).getImm());
+      addSubRegIdx(SrcReg, SubRegIdx, MRI);
+      continue;
+    }
+
+    assert(0);
   }
 }
