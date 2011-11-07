@@ -880,6 +880,8 @@ void VPreRegAllocSched::fixCmpFUPort() {
     if (DI == MRI->def_end() || MRI->use_empty(SrcReg))
       continue;
 
+    assert(!DI->isPHI() && "PHI with RUCMPRegister is not supported!");
+
     assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
     // Do not remove the operand, just change it to implicit define.
     ucOp Op = ucOp::getParent(DI);
@@ -889,6 +891,6 @@ void VPreRegAllocSched::fixCmpFUPort() {
       continue;
     }
 
-    assert(0);
+    llvm_unreachable("Unsupported opcode!");
   }
 }
