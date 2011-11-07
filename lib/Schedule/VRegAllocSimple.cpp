@@ -1273,7 +1273,7 @@ void VRASimple::bindICmps(LICGraph &G) {
     assert(!succ && "Something went wrong while checking LI!");
     (void) succ;
 
-    unsigned FUType = ICmpChecker.hasSignedCC ? VTM::RUCMPRegClassID
+    unsigned FUType = ICmpChecker.hasSignedCC ? VTM::RSCMPRegClassID
                                               : VTM::RUCMPRegClassID;
     unsigned CmpFU = TRI->allocateFN(FUType, ICmpChecker.CurMaxWidth);
     assign(*LI, CmpFU);
