@@ -221,6 +221,7 @@ struct SourceChecker {
   template<int N>
   void addSrc(ucOperand &SrcOp) {
     if (SrcOp.isReg()) {
+      assert(SrcOp.getSubReg() == 0 && "Unsupported subregister!");
       Srcs[N].insert(SrcOp.getReg());
       ++SrcNum[N];
     } else if (SrcOp.isImm())
@@ -287,6 +288,7 @@ struct DstChecker {
     }
 
     unsigned DstReg = DefMO.getReg();
+    assert(MO.getSubReg() == 0 && "Unsupported subregister!");
     addDst(DstReg, Op.getOpIdx(MO));
     return DstReg;
   }
