@@ -66,20 +66,6 @@ namespace llvm {
       return 0;
     }
 
-    unsigned getFUPortIdx(MachineInstr *MI, unsigned idx) {
-      switch (MI->getOpcode()) {
-      default: return 0;
-      case VTM::VOpICmp:{
-        switch (MI->getOperand(3).getImm()) {
-        case ISD::SETEQ: return 1;
-        case ISD::SETGE: case ISD::SETUGE: return 2;
-        case ISD::SETGT: case ISD::SETUGT: return 3;
-        default: llvm_unreachable("Unexpected condition code!");
-        }
-      }
-      }
-    }
-
     // Default area cost parameter.
     unsigned LUTCost = 64;
     unsigned RegCost = 64;

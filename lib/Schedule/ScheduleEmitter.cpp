@@ -635,8 +635,6 @@ void VSchedGraph::emitSchedule() {
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());
   DEBUG(dbgs() << '\n');
-
   // Remember the schedule information.
-
   VFI->rememberTotalSlot(MBB, getStartSlot(), getTotalSlot(), getLoopOpSlot());
 }
