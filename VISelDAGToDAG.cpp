@@ -182,14 +182,32 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
 
 SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(N->getOperand(2));
-  SDValue LHS = N->getOperand(0);
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
   unsigned OperandWidth = VTargetLowering::computeSizeInBits(LHS);
   EVT FUVT = EVT::getIntegerVT(*CurDAG->getContext(), OperandWidth);
+  ISD::CondCode CC = Cnd->get();
 
-  SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
-                    MoveToReg(N->getOperand(1), true),
+  switch (CC) {
+  case ISD::SETEQ:
+  case ISD::SETGT:
+  case ISD::SETGE:
+  case ISD::SETUGT:
+  case ISD::SETUGE:
+    break;
+  case ISD::SETLT:
+  case ISD::SETLE:
+  case ISD::SETULT:
+  case ISD::SETULE:
+    CC = ISD::getSetCCSwappedOperands(CC);
+    std::swap(LHS, RHS);
+    break;
+  default: llvm_unreachable("Unexpected CondCode!");
+  }
+
+  SDValue Ops[] = { MoveToReg(LHS, true),
+                    MoveToReg(RHS, true),
                     // Encode the operand width to the condition code width.
-                    CurDAG->getTargetConstant(Cnd->get(), FUVT),
+                    CurDAG->getTargetConstant(CC, FUVT),
                     SDValue()/*The dummy bit width operand*/,
                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
                   };
