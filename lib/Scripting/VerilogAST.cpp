@@ -914,14 +914,10 @@ static void printUnaryOp(raw_ostream &OS, VASTUse U, const char *Opc) {
 
 
 static void printSRAOp(raw_ostream &OS, const VASTWire *W) {
-  VASTSignal *LHS = cast<VASTSignal>(W->getOperand(0));
-  // Cast LHS to signed wire.
-  OS << "wire signed" << verilogBitRange(LHS->getBitWidth()) << ' '
-     << LHS->getName() << "_signed = " << LHS->getName() << ";\n";
-
-  printAssign(OS, W) << LHS->getName() << "_signed >>> ";
+  OS << "$signed(";
+  W->getOperand(0).print(OS);
+  OS << ") >>> ";
   W->getOperand(1).print(OS);
-  OS << ";\n";
 }
 
 static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
@@ -983,12 +979,7 @@ void VASTWire::print(raw_ostream &OS) const {
   // module
   if (Opc == dpUnknown) return;
 
-  // SRA and MUX need special printing method.
-  if (Opc == dpSRA) {
-    printSRAOp(OS, this);
-    return;
-  }
-
+  // MUX need special printing method.
   if (Opc == dpMux) {
     printCombMux(OS, this);
     return;
@@ -1010,6 +1001,7 @@ void VASTWire::print(raw_ostream &OS) const {
   case dpMul: printSimpleOp(OS, Operands, " * "); break;
   case dpShl: printSimpleOp(OS, Operands, " << ");break;
   case dpSRL: printSimpleOp(OS, Operands, " >> ");break;
+  case dpSRA: printSRAOp(OS, this);               break;
 
   case dpAssign: getOperand(0).print(OS);     break;
 

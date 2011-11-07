@@ -329,7 +329,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
   bool visitUse(ucOp Op, MachineOperand &MO) {
     unsigned DefReg = addDst(Op, MO);
     if (Op->isOpcode(VTM::VOpMvPhi) || Op->isOpcode(VTM::VOpMvPhi)
-        || Op->isOpcode(VTM::VOpSel)) {
+        || Op->isOpcode(VTM::VOpSel) || Op->isOpcode(VTM::VOpCase)) {
       // We cannot handle these ops correctly after their src and dst merged.
       if (DefReg == DstReg) return true;
     }
@@ -356,11 +356,9 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
       addSrc<0>(Op.getOperand(3));
       break;
     case VTM::VOpCase:
-      // FIXME: Merge VOpCase break the benchmark.
-      return true;
-      //for (unsigned i = 1, e = Op.getNumOperands(); i != e; i+=2)
-      //  addSrc<0>(Op.getOperand(i + 1));
-      //break;
+      for (unsigned i = 1, e = Op.getNumOperands(); i != e; i+=2)
+        addSrc<0>(Op.getOperand(i + 1));
+      break;
     default:
 #ifndef NDEBUG
       Op.dump();
