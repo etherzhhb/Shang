@@ -200,10 +200,19 @@ struct WidthChecker {
   unsigned getWidth() const { return CurMaxWidth; }
 };
 
+// Implement this with some hash function?
+static uint64_t getRegKey(unsigned Reg, uint8_t OpIdx = 0, uint8_t SubReg = 0) {
+  return uint64_t(Reg) | (uint64_t(OpIdx & 0xf)<<32) | (uint64_t(SubReg)<<36);
+}
+
+static uint64_t getRegKey(MachineOperand &MO, uint8_t OpIdx = 0) {
+  return getRegKey(MO.getReg(), OpIdx, MO.getSubReg());
+}
+
 template<int NUMSRC>
 struct SourceChecker {
   // All copy source both fu of the edge.
-  SmallSet<unsigned, 4> Srcs[NUMSRC];
+  SmallSet<uint64_t, 4> Srcs[NUMSRC];
   unsigned SrcNum[NUMSRC];
   unsigned ExtraCost;
   // TODO: Timing cost.
@@ -221,8 +230,7 @@ struct SourceChecker {
   template<int N>
   void addSrc(ucOperand &SrcOp) {
     if (SrcOp.isReg()) {
-      assert(SrcOp.getSubReg() == 0 && "Unsupported subregister!");
-      Srcs[N].insert(SrcOp.getReg());
+      Srcs[N].insert(getRegKey(SrcOp.getReg()));
       ++SrcNum[N];
     } else if (SrcOp.isImm())
       ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
@@ -291,7 +299,7 @@ int SourceChecker<2>::getTotalSrcMuxCost() {
 
 struct DstChecker {
   // All copy source both fu of the edge.
-  SmallSet<unsigned, 8> Dsts;
+  SmallSet<uint64_t, 8> Dsts;
   int NumDsts;
   void resetDsts() {
     Dsts.clear();
@@ -305,19 +313,14 @@ struct DstChecker {
     MachineOperand &DefMO = Op.getOperand(0);
     if (!DefMO.isReg()) {
       if (Op->isOpcode(VTM::VOpRetVal))
-        addDst(0, 0);
+        Dsts.insert(getRegKey(0, 15, 255));
 
       return 0;
     }
 
     unsigned DstReg = DefMO.getReg();
-    assert(MO.getSubReg() == 0 && "Unsupported subregister!");
-    addDst(DstReg, Op.getOpIdx(MO));
+    Dsts.insert(getRegKey(DstReg, Op.getOpIdx(MO), MO.getSubReg()));
     return DstReg;
-  }
-
-  void addDst(unsigned Reg, unsigned OpIdx) {
-    Dsts.insert(Reg | (OpIdx << 28));
   }
 
   int getSavedDstMuxSize() const {
