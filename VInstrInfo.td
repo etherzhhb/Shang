@@ -223,6 +223,10 @@ let isReMaterializable = 1,
                        1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
 }
 
+// Integer comparison
+def VOpICmp   : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1, i8imm:$CC),
+                       "$dst = icmp $src0, $src1 $CC", [], FUICmp,
+					    1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
 // Memory transaction.
 let mayLoad      = 1,
     mayStore    = 1 in {

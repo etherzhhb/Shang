@@ -21,8 +21,9 @@ def FUAddSub	: FUType<1>;
 def FUSHIFT		: FUType<2>;
 def FUMult		: FUType<3>;
 def FUMemBus	: FUType<4>;
-def FUBRam	  : FUType<5>;
-def FUCalleeFN: FUType<6>;
+def FUBRam		: FUType<5>;
+def FUICmp		: FUType<6>;
+def FUCalleeFN	: FUType<7>;
 
 // Bit-width information operand.
 def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))>

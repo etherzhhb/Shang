@@ -182,6 +182,10 @@ void LuaScript::updateFUs() {
   if (unsigned MulCost = FUSet[VFUs::Mult]->getCost())
     VFUs::MulCost = MulCost;
 
+  initSimpleFU(VFUs::ICmp, FUs);
+  if (unsigned ICmpCost = FUSet[VFUs::ICmp]->getCost())
+    VFUs::ICmpCost = ICmpCost;
+
   // Read other cost.
 #define READCOST(COST) \
   if (boost::optional<unsigned> COST \

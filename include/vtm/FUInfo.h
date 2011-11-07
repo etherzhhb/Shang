@@ -46,21 +46,19 @@ namespace VFUs {
     Mult = 3,
     MemoryBus = 4,
     BRam = 5,
-
+    ICmp = 6,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
     LastPostBindFUType = Mult,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
-    LastCommonFUType = BRam,
+    LastCommonFUType = ICmp,
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
     NumNonTrivialCommonFUs = LastCommonFUType - FirstNonTrivialFUType + 1,
     // Special function unit.
     // RTL module corresponding to callee functions of function corresponding to
     // current RTL module.
-    CalleeFN = 6,
-    // Finite state machine finish.
-    FSMFinish = 7,
-    LastFUType = FSMFinish,
+    CalleeFN = 7,
+    LastFUType = CalleeFN,
     NumFUs = LastFUType - FirstFUType + 1,
     // Helper enumeration value, just for internal use as a flag to indicate
     // all kind of function units are selected.
@@ -78,7 +76,7 @@ namespace VFUs {
 
   // Cost parameters.
   extern unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost,
-                  ShiftCost, MuxSizeCost;
+                  ShiftCost, ICmpCost, MuxSizeCost;
 }
 
 class FuncUnitId {
@@ -100,7 +98,7 @@ public:
 
   /*implicit*/ FuncUnitId(VFUs::FUTypes T = VFUs::Trivial) {
     UID.ID.Type = T;
-    UID.ID.Num = (T == VFUs::FSMFinish) ? 0 : 0xfff;
+    UID.ID.Num = 0xfff;
   }
 
   explicit FuncUnitId(uint16_t Data) {
@@ -259,6 +257,7 @@ public:
 typedef VSimpleFUDesc<VFUs::AddSub>  VFUAddSub;
 typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
+typedef VSimpleFUDesc<VFUs::ICmp>    VFUICmp;
 
 class VFUBRam : public  VFUDesc {
   std::string Template; // Template for inferring block ram.
@@ -276,7 +275,7 @@ public:
   static inline bool classof(const VFUBRam *A) {
     return true;
   }
-  
+
   template<enum VFUs::FUTypes OtherT>
   static inline bool classof(const VSimpleFUDesc<OtherT> *A) {
     return getType() == OtherT;
