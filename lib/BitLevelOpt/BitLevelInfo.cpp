@@ -158,7 +158,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     assert (Operand.isReg()
             && TargetRegisterInfo::isVirtualRegister(Operand.getReg())
             && "Not support Physics register yet!");
-    
+
     unsigned Width = cast<ucOperand>(Operand).getBitWidthOrZero();
 
     if (updateBitWidth(Result, Width))
@@ -202,6 +202,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
            && "BitCat's width changed!");
     return;
   // Operations with Fixed bit width.
+  case VTM::VOpICmp:
   case VTM::VOpROr:
   case VTM::VOpRAnd:
   case VTM::VOpRXor: {
