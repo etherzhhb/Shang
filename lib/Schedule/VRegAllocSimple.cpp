@@ -264,7 +264,30 @@ struct SourceChecker {
   }
 
   int getExtraCost() const { return ExtraCost; }
+  // Total cost.
+  int getTotalSavedSrcMuxCost();
+  int getTotalSrcMuxCost();
 };
+
+template<>
+int SourceChecker<1>::getTotalSavedSrcMuxCost() {
+  return getSavedSrcMuxCost<0>();
+}
+
+template<>
+int SourceChecker<2>::getTotalSavedSrcMuxCost() {
+  return getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
+}
+
+template<>
+int SourceChecker<1>::getTotalSrcMuxCost() {
+  return getSavedSrcMuxCost<0>();
+}
+
+template<>
+int SourceChecker<2>::getTotalSrcMuxCost() {
+  return getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
+}
 
 struct DstChecker {
   // All copy source both fu of the edge.
@@ -306,26 +329,54 @@ struct DstChecker {
   }
 };
 
-// Weight computation functor for register Compatibility Graph.
-struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
-                           public DstChecker {
+template<int NUMSRC>
+struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
+                            public WidthChecker {
   VRASimple *VRA;
   // The pre-bit cost of this kind of function unit.
   unsigned Cost;
+
+  CompEdgeWeightBase(VRASimple *V, unsigned cost) : VRA(V), Cost(cost) {}
+
+  void reset() {
+    resetDsts();
+    resetSrcs();
+    resetWidth();
+  }
+
+  int computePerBitWeight() {
+    int Weight = 0;
+    // We can save some register if we merge these two registers.
+    Weight += /*FU Cost*/ Cost;
+    // How many mux port we can save?
+    Weight += getTotalSavedSrcMuxCost();
+    // We also can save the mux for the dsts.
+    Weight += getSavedDstMuxCost();
+    // How big the mux it is after the registers are merged? Do not make it too
+    // big.
+    Weight -= getTotalSrcMuxCost();
+    // Other cost.
+    Weight -= getExtraCost();
+
+    return Weight;
+  }
+};
+
+// Weight computation functor for register Compatibility Graph.
+struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
   // Context
   // Do not try to merge PHI copies, it is conditional and we cannot handle
   // them correctly at the moment.
   bool hasPHICopy;
   unsigned DstReg;
 
-  CompRegEdgeWeight(VRASimple *V, unsigned cost) : VRA(V), Cost(cost) {}
+  typedef CompEdgeWeightBase<1> Base;
+  CompRegEdgeWeight(VRASimple *V, unsigned cost) : Base(V, cost) {}
 
-  void resetDefEvalator(unsigned DstR) {
+  void reset(unsigned DstR) {
     DstReg = DstR;
-    resetDsts();
-    resetSrcs();
     hasPHICopy = false;
-    resetWidth();
+    Base::reset();
   }
 
   bool visitUse(ucOp Op, MachineOperand &MO) {
@@ -393,7 +444,7 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
   // edge.
   int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
-    resetDefEvalator(Dst->reg);
+    reset(Dst->reg);
 
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
@@ -405,39 +456,20 @@ struct CompRegEdgeWeight : public WidthChecker, public SourceChecker<1>,
     // Src register appear in the src of mux do not cost anything.
     removeSrcReg<0>(Src->reg);
 
-    int Weight = 0;
-    // We can save some register if we merge these two registers.
-    Weight += /*Reg Cost*/ Cost;
-    // How many mux port we can save?
-    Weight += getSavedSrcMuxCost<0>();
-    // We also can save the mux for the dsts.
-    Weight += getSavedDstMuxCost();
-    // How big the mux it is after the registers are merged? Do not make it too
-    // big.
-    Weight -= getSrcMuxCost<0>();
-    // Other cost.
-    Weight -= getExtraCost();
-    return Weight * getWidth();
+    return computePerBitWeight() * getWidth();
   }
 };
 
 // Weight computation functor for commutable binary operation Compatibility
 // Graph.
 template<unsigned OpCode, unsigned OpIdx>
-struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
-                             public DstChecker {
-  VRASimple *VRA;
-  // The pre-bit cost of this kind of function unit.
-  unsigned Cost;
-
+struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
   // Is there a copy between the src and dst of the edge?
   //bool hasCopy;
 
-  void resetDefEvalator() {
+  void reset() {
     //hasCopy = 0;
-    resetWidth();
-    resetSrcs();
-    resetDsts();
+    Base::reset();
   }
 
   template<unsigned Offset>
@@ -445,7 +477,8 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
     addSrc<Offset>(Op.getOperand(OpIdx + Offset));
   }
 
-  CompBinOpEdgeWeight(VRASimple *V, unsigned cost) : VRA(V), Cost(cost) {}
+  typedef CompEdgeWeightBase<2> Base;
+  CompBinOpEdgeWeight(VRASimple *V, unsigned cost) : Base(V, cost) {}
 
   // Run on the use-def chain of a FU to collect information about the live
   // interval.
@@ -471,7 +504,7 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
 
   int operator()(LiveInterval *Src, LiveInterval *Dst) {
     assert(Dst && Src && "Unexpected null li!");
-    resetDefEvalator();
+    reset();
 
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
@@ -479,19 +512,9 @@ struct CompBinOpEdgeWeight : public WidthChecker, SourceChecker<2>,
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    int Weight = 0;
-    // We can save some register if we merge these two registers.
-    Weight += /*FU Cost*/ Cost;
-    // How many mux port we can save?
-    Weight += getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
-    // We also can save the mux for the dsts.
-    Weight += getSavedDstMuxCost();
-    // How big the mux it is after the registers are merged? Do not make it too
-    // big.
-    Weight -= getSrcMuxCost<0>() + getSrcMuxCost<1>();
-    // Other cost.
-    Weight -= getExtraCost();
-    return Weight * getWidth();
+    return computePerBitWeight() * getWidth();
+  }
+};
   }
 };
 }
