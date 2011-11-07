@@ -147,12 +147,20 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // Condition code will not work.
     setOperationAction(ISD::SELECT_CC, CurVT, Expand);
     // Lower SetCC to more fundamental operation.
-    setOperationAction(ISD::SETCC, CurVT, Custom);
+    // setOperationAction(ISD::SETCC, CurVT, Custom);
 
     setOperationAction(ISD::JumpTable, CurVT, Custom);
 
-    for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
-      setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
+    //for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
+    //  setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
+    // Expand the condition codes.
+    setCondCodeAction(ISD::SETNE, CurVT, Custom);
+
+    setCondCodeAction(ISD::SETLE, CurVT, Custom);
+    setCondCodeAction(ISD::SETLT, CurVT, Custom);
+
+    setCondCodeAction(ISD::SETULE, CurVT, Custom);
+    setCondCodeAction(ISD::SETULT, CurVT, Custom);
   }
 
   setLibcallName(RTLIB::UDIV_I8, "__ip_udiv_i8");
@@ -495,51 +503,27 @@ SDValue VTargetLowering::getVFlag(SelectionDAG &DAG, SDValue SetCC) {
 }
 
 SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
+  SDValue LHS = Op->getOperand(0), RHS = Op->getOperand(1);
+  EVT VT = MVT::i1;
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
   DebugLoc dl = Op.getDebugLoc();
 
   switch (Cnd->get()) {
-  // Z==0
-  case ISD::SETNE:  return getNZFlag(DAG, Op, true);
-  // Z==1
-  case ISD::SETEQ:  return getZFlag(DAG, Op, true);
-  // (Z==0) && (N==V)
-  case ISD::SETGT:  {
-    // Create N==V flag, this may create a subtraction.
-    SDValue NEQVFlag = getNotFlag(DAG, Op, getNNotEQVFlag);
-    // Create Z == 0, we can reuse the previously created subtraction.
-    SDValue NZFlag = getNZFlag(DAG, Op);
-    return DAG.getNode(ISD::AND, dl, MVT::i1, NZFlag, NEQVFlag);
-  }
-  // N==V
-  case ISD::SETGE:  return getNotFlag(DAG, Op, getNNotEQVFlag);
-  // N!=V
-  case ISD::SETLT:  return getNNotEQVFlag(DAG, Op);
-  // (Z==1) || (N!=V)
-  case ISD::SETLE:  return DAG.getNode(ISD::OR, dl, MVT::i1,
-                                       getZFlag(DAG, Op),
-                                       getNNotEQVFlag(DAG, Op));
-
-  // (C==1) && (Z==0)
-  case ISD::SETUGT: {
-    // Create C==1 flag, this may create a subtraction.
-    SDValue CFlag = getCFlag(DAG, Op);
-    // Create Z == 0, we can reuse the previously created subtraction.
-    SDValue NZFlag = getNZFlag(DAG, Op);
-    return DAG.getNode(ISD::AND, dl, MVT::i1, CFlag, NZFlag);
-  }
-  // 	C==1
-  case ISD::SETUGE: return getCFlag(DAG, Op);
-  // 	C==0
-  case ISD::SETULT: return getNotFlag(DAG, Op, getCFlag);
-  // (C==0) || (Z==1)
-  case ISD::SETULE: {
-    // Create C==0 flag, this may create a subtraction.
-    SDValue NCFlag = getNotFlag(DAG, Op, getCFlag);
-    // Create Z == 1, we can reuse the previously created subtraction.
-    SDValue ZFlag = getZFlag(DAG, Op);
-    return DAG.getNode(ISD::OR, dl, MVT::i1, NCFlag, ZFlag);
-  }
+  case ISD::SETNE:
+    // Expand NE to not EQ.
+    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETEQ));
+  case ISD::SETLT:
+    // Expand LT to not GE.
+    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGE));
+  case ISD::SETLE:
+    // Expand LE to not GT.
+    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGT));
+  case ISD::SETULT:
+    // Expand ULT to not UGE.
+    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGE));
+  case ISD::SETULE:
+    // Expand ULEto not UGT.
+    return getNot(DAG, dl, DAG.getSetCC(dl, VT, LHS, RHS, ISD::SETGT));
   default:
     assert(0 && "Bad condition code!");
     return SDValue();
