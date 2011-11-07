@@ -1262,30 +1262,20 @@ void VRASimple::bindAdders(LICGraph &G) {
   }
 }
 
-static bool checkICmpSigness(MachineRegisterInfo::reg_iterator I) {
-  if (I.getOperand().isDef()) {
-    // 2. Analyze the definition op.
-    ucOp Op = ucOp::getParent(I);
-    assert(Op->isOpcode(VTM::VOpICmp) && "Unexpected Opcode!");
-
-    ucOperand &CondCode = Op.getOperand(3);
-
-    // Are these CC compatible?
-    if (ISD::isSignedIntSetCC((ISD::CondCode)CondCode.getImm()))
-      return true;
-  }
-
-  return false;
-}
-
 void VRASimple::bindICmps(LICGraph &G) {
+  CompICmpEdgeWeight ICmpChecker(this, 0);
+
   for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();
-    bool isSigned = iterateUseDefChain(LI->reg, checkICmpSigness);
+    // Run the checker on LI to collect the signedness and bitwidth information.
+    ICmpChecker.reset();
+    bool succ = iterateUseDefChain(LI->reg, ICmpChecker);
+    assert(!succ && "Something went wrong while checking LI!");
+    (void) succ;
 
-    unsigned FUType = isSigned ? VTM::RUCMPRegClassID
-                               : VTM::RUCMPRegClassID;
-    unsigned CmpFU = TRI->allocateFN(FUType, 4);
+    unsigned FUType = ICmpChecker.hasSignedCC ? VTM::RUCMPRegClassID
+                                              : VTM::RUCMPRegClassID;
+    unsigned CmpFU = TRI->allocateFN(FUType, ICmpChecker.CurMaxWidth);
     assign(*LI, CmpFU);
     // Allocate the register for FU Ports.
     // Eq port.
