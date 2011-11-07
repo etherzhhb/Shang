@@ -12,18 +12,17 @@
 //
 
 // The corresponding Function Unit type of the instruction.
-class FUType<bits<3> val, InstrItinClass InstItin> {
+class FUType<bits<3> val> {
   bits<3> Value = val;
-  InstrItinClass Itinerary = InstItin;
 }
 
-def FUTrivial	: FUType<0, IIC_Trivial>;
-def FUAddSub	: FUType<1, IIC_AddSub>;
-def FUSHIFT		: FUType<2, IIC_SHIFT>;
-def FUMult		: FUType<3, IIC_Mult>;
-def FUMemBus	: FUType<4, IIC_MemBus>;
-def FUBRam	  : FUType<5, IIC_BRam>;
-def FUCalleeFN: FUType<6, IIC_CalleeFN>;
+def FUTrivial	: FUType<0>;
+def FUAddSub	: FUType<1>;
+def FUSHIFT		: FUType<2>;
+def FUMult		: FUType<3>;
+def FUMemBus	: FUType<4>;
+def FUBRam	  : FUType<5>;
+def FUCalleeFN: FUType<6>;
 
 // Bit-width information operand.
 def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))>
@@ -51,7 +50,6 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
   FUType fu = FU;
 
   let TSFlags{2-0} = fu.Value;
-  let Itinerary = fu.Itinerary;
 
   let TSFlags{3} = readAtEmit;
   let TSFlags{4} = writeUntilFinish;
@@ -75,7 +73,7 @@ class FUInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 
 class DPTvaInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 		        bits<4> latency = 0,
-			      bit readAtEmit = 0, bit writeUntilFinish = 0>
+			    bit readAtEmit = 0, bit writeUntilFinish = 0>
 	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 1, latency,
 			  readAtEmit, writeUntilFinish>;
 
