@@ -61,44 +61,8 @@ public:
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
   typedef BRamMapTy::const_iterator const_bram_iterator;
 
-  struct PhyRegInfo {
-    union {
-      struct {
-        unsigned RegClassId : 4;
-        unsigned AliasSetId : 14;
-        unsigned UB         : 7;
-        unsigned LB         : 7;
-      } SData;
-      unsigned IData;
-    } UData;
-
-    PhyRegInfo(unsigned ClassId, unsigned AliasSet, unsigned U, unsigned L) {
-      UData.SData.RegClassId = ClassId;
-      UData.SData.AliasSetId = AliasSet;
-      UData.SData.UB = U;
-      UData.SData.LB = L;
-    }
-
-    /*implicit*/ PhyRegInfo(unsigned D) { UData.IData = D; }
-    operator unsigned() const {return UData.IData; }
-
-    unsigned getRegClass() const { return UData.SData.RegClassId; }
-    unsigned getUB() const { return UData.SData.UB; }
-    unsigned getLB() const { return UData.SData.LB; }
-    unsigned getBitWidth() const { return getUB() - getLB(); }
-    unsigned getAliasSetId() const { return UData.SData.AliasSetId; }
-    unsigned getParentRegister() const { return UData.SData.AliasSetId; }
-    bool isTopLevelReg(unsigned RegNum) const {
-      return RegNum == getParentRegister();
-    }
-  };
 
 private:
-  typedef std::vector<unsigned> PhyRegVec;
-  typedef std::set<unsigned> PhyRegSet;
-  typedef std::map<unsigned, PhyRegSet> PhyRegAlaisMap;
-  PhyRegVec PhyRegs;
-  PhyRegAlaisMap PhyRegAliasInfo;
 
   BRamMapTy BRams;
 
@@ -206,16 +170,6 @@ public:
 
   const_bram_iterator bram_begin() const { return BRams.begin(); }
   const_bram_iterator bram_end() const { return BRams.end(); }
-
-  // Physics register allocate information.
-  unsigned allocatePhyReg(unsigned RegClassID, unsigned Width);
-  unsigned getSubRegOf(unsigned Parent, unsigned UB, unsigned LB);
-  unsigned allocateFN(unsigned FNClassID, unsigned Width = 0);
-
-  PhyRegInfo getPhyRegInfo(unsigned RegNum) const;
-
-  unsigned num_phyreg() const { return PhyRegs.size(); }
-
 };
 
 }

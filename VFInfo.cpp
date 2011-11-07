@@ -88,28 +88,3 @@ void VFInfo::setTotalSlots(unsigned Slots) {
 VASTModule *VFInfo::getRtlMod() const {
   return Mod;
 }
-
-unsigned VFInfo::allocatePhyReg(unsigned RegClassID, unsigned Width) {
-  unsigned RegNum = PhyRegs.size() + 1;
-  PhyRegs.push_back(PhyRegInfo(RegClassID, RegNum, Width, 0));
-  return RegNum;
-}
-
-unsigned VFInfo::getSubRegOf(unsigned Parent, unsigned UB, unsigned LB) {
-  PhyRegInfo Info = getPhyRegInfo(Parent);
-  unsigned AliasSetId = Info.getAliasSetId();
-  unsigned SubRegNum = PhyRegs.size() + 1;
-  PhyRegInfo SubRegInfo = PhyRegInfo(Info.getRegClass(), AliasSetId, UB, LB);
-  PhyRegs.push_back(SubRegInfo);
-  // TODO: Check if the sub register exist?
-  PhyRegAliasInfo[AliasSetId].insert(SubRegNum);
-  return SubRegNum;
-}
-
-unsigned VFInfo::allocateFN(unsigned FNClassID, unsigned Width /* = 0 */) {
-  return allocatePhyReg(FNClassID, Width);
-}
-
-VFInfo::PhyRegInfo VFInfo::getPhyRegInfo(unsigned RegNum) const {
-  return PhyRegs[RegNum - 1];
-}

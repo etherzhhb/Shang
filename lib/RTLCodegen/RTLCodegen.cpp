@@ -60,6 +60,7 @@ class RTLCodegen : public MachineFunctionPass {
   const Module *M;
   MachineFunction *MF;
   TargetData *TD;
+  VRegisterInfo *TRI;
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
@@ -320,6 +321,10 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
+
+  TargetRegisterInfo *RegInfo
+    = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
+  TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
 
   DEBUG(
     Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
@@ -605,10 +610,27 @@ VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
   return Result;
 }
 
+VASTValue *RTLCodegen::emitFUCmp(unsigned FUNum, unsigned BitWidth,
+                                 bool isSigned) {
+  std::string ResultName = "cmp" + utostr_32(FUNum);
+  if (isSigned)  ResultName = "s" + ResultName;
+  else           ResultName = "u" + ResultName;
+
+  VASTWire *Result = VM->addWire(ResultName, BitWidth);
+  Result->setOpcode(isSigned ? VASTWire::dpSCmp : VASTWire::dpUCmp);
+
+  std::string OpName = ResultName + "_a";
+  Result->addOperand(VM->addRegister(OpName, BitWidth));
+  OpName = ResultName + "_b";
+  Result->addOperand(VM->addRegister(OpName, Log2_32_Ceil(BitWidth)));
+
+  return Result;
+}
+
 void RTLCodegen::emitAllSignals() {
-  for (unsigned i = 0, e = FInfo->num_phyreg(); i != e; ++i) {
+  for (unsigned i = 0, e = TRI->num_phyreg(); i != e; ++i) {
     unsigned RegNum = i + 1;
-    VFInfo::PhyRegInfo Info = FInfo->getPhyRegInfo(RegNum);
+    VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RegNum);
     if (!Info.isTopLevelReg(RegNum)) {
       unsigned Parent = Info.getParentRegister();
       VASTUse V = VASTUse(VM->lookupSignal(Parent).get(),

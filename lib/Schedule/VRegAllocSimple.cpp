@@ -73,7 +73,7 @@ struct VRASimple : public MachineFunctionPass {
   VFInfo *VFI;
   MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
-  const TargetRegisterInfo *TRI;
+  VRegisterInfo *TRI;
   // Analysis
   VirtRegMap *VRM;
   LiveIntervals *LIS;
@@ -867,10 +867,14 @@ void VRASimple::releaseMemory() {
 }
 
 void VRASimple::init(VirtRegMap &vrm, LiveIntervals &lis) {
-  TRI = &vrm.getTargetRegInfo();
+  TargetRegisterInfo *RegInfo
+    = const_cast<TargetRegisterInfo*>(&vrm.getTargetRegInfo());
+  TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
   MRI = &vrm.getRegInfo();
   VRM = &vrm;
   LIS = &lis;
+  // Reset the physics register allocation information before register allocation.
+  TRI->resetPhyRegAllocation();
   // FIXME: Init the PhysReg2LiveUnion right before we start to bind the physics
   // registers.
   // PhysReg2LiveUnion.init(UnionAllocator, MRI->getNumVirtRegs() + 1);
@@ -1031,7 +1035,7 @@ void VRASimple::bindMemoryBus() {
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       if (MemBusLI == 0) {
-        assign(*LI, VFI->allocateFN(VTM::RINFRegClassID));
+        assign(*LI, TRI->allocateFN(VTM::RINFRegClassID));
         MemBusLI = LI;
         continue;
       }
@@ -1060,7 +1064,7 @@ void VRASimple::bindBlockRam() {
       // Had we allocate a register for this bram?
       if (PhyReg == 0) {
         unsigned BitWidth = Info.ElemSizeInBytes * 8;
-        PhyReg = VFI->allocateFN(VTM::RBRMRegClassID, BitWidth);
+        PhyReg = TRI->allocateFN(VTM::RBRMRegClassID, BitWidth);
         RepLIs[PhyReg] = LI;
         assign(*LI, PhyReg);
         continue;
@@ -1089,7 +1093,7 @@ void VRASimple::bindCalleeFN() {
         // Use this live interval to represent the live interval of this callee
         // function.
         RepLI = LI;
-        assign(*LI, VFI->allocateFN(VTM::RCFNRegClassID));
+        assign(*LI, TRI->allocateFN(VTM::RCFNRegClassID));
         continue;
       }
 
@@ -1144,7 +1148,7 @@ void VRASimple::bindCompGraph(LICGraph &G) {
   unsigned RC = G.ID;
   for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();
-    assign(*LI, VFI->allocatePhyReg(RC, getBitWidthOf(LI->reg)));
+    assign(*LI, TRI->allocatePhyReg(RC, getBitWidthOf(LI->reg)));
   }
 }
 
@@ -1153,12 +1157,12 @@ void VRASimple::bindAdders(LICGraph &G) {
     LiveInterval *LI = (*I)->get();
     unsigned Width = getBitWidthOf(LI->reg);
     // Allocate the register for the adder, which also contains the carry bit
-    unsigned AdderReg = VFI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
-    unsigned SumReg = VFI->getSubRegOf(AdderReg, Width, 0);
+    unsigned AdderReg = TRI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
+    unsigned SumReg = TRI->getSubRegOf(AdderReg, Width, 0);
     assign(*LI, SumReg);
     DEBUG(dbgs() << "Assign " << SumReg << " to " << *LI << '\n');
     // Bind the carry.
-    unsigned CarryReg = VFI->getSubRegOf(AdderReg, Width + 1, Width);
+    unsigned CarryReg = TRI->getSubRegOf(AdderReg, Width + 1, Width);
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(LI->reg),
          E = MRI->def_end(); I != E; ++I) {
       ucOp Op = ucOp::getParent(I);

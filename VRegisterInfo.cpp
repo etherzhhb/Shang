@@ -110,3 +110,40 @@ bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {
   const TargetRegisterClass *RC = MRI->getRegClass(RegNo);
   return RC != VTM::DRRegisterClass;
 }
+
+unsigned VRegisterInfo::allocatePhyReg(unsigned RegClassID, unsigned Width) {
+  unsigned RegNum = PhyRegs.size() + 1;
+  PhyRegs.push_back(PhyRegInfo(RegClassID, RegNum, Width, 0));
+  return RegNum;
+}
+
+unsigned VRegisterInfo::getSubRegOf(unsigned Parent, unsigned UB, unsigned LB) {
+  PhyRegInfo Info = getPhyRegInfo(Parent);
+  unsigned AliasSetId = Info.getAliasSetId();
+  unsigned SubRegNum = PhyRegs.size() + 1;
+  PhyRegInfo SubRegInfo = PhyRegInfo(Info.getRegClass(), AliasSetId, UB, LB);
+  PhyRegs.push_back(SubRegInfo);
+  // TODO: Check if the sub register exist?
+  PhyRegAliasInfo[AliasSetId].insert(SubRegNum);
+  return SubRegNum;
+}
+
+unsigned VRegisterInfo::allocateFN(unsigned FNClassID, unsigned Width /* = 0 */) {
+  return allocatePhyReg(FNClassID, Width);
+}
+
+VRegisterInfo::PhyRegInfo VRegisterInfo::getPhyRegInfo(unsigned RegNum) const {
+  return PhyRegs[RegNum - 1];
+}
+
+void VRegisterInfo::resetPhyRegAllocation() {
+  PhyRegs.clear();
+  PhyRegAliasInfo.clear();
+}
+
+unsigned VRegisterInfo::getSubReg(unsigned RegNo, unsigned Index) const {
+  unsigned SubReg = RegNo + Index;
+  assert(getPhyRegInfo(SubReg).getParentRegister() == RegNo
+         && "Bad subreg index!");
+  return SubReg;
+}
