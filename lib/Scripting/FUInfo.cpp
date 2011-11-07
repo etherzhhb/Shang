@@ -18,6 +18,8 @@
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VTM.h"
 
+#include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -40,7 +42,7 @@ namespace llvm {
   namespace VFUs {
     const char *VFUNames[] = {
       "Trivial", "AddSub", "Shift", "Mult", "MemoryBus", "BRam",
-      "CalleeFN", "FSMFinish"
+      "ICmp", "CalleeFN"
     };
 
     const TargetRegisterClass *getRepRegisterClass(unsigned OpCode, unsigned i){
@@ -57,10 +59,25 @@ namespace llvm {
       case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
       case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
       case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
-      case VTM::VOpICmp:        return VTM::RCMPRegisterClass;
+      // allocate unsigned comparison fu by default.
+      case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
       }
 
       return 0;
+    }
+
+    unsigned getFUPortIdx(MachineInstr *MI, unsigned idx) {
+      switch (MI->getOpcode()) {
+      default: return 0;
+      case VTM::VOpICmp:{
+        switch (MI->getOperand(3).getImm()) {
+        case ISD::SETEQ: return 1;
+        case ISD::SETGE: case ISD::SETUGE: return 2;
+        case ISD::SETGT: case ISD::SETUGT: return 3;
+        default: llvm_unreachable("Unexpected condition code!");
+        }
+      }
+      }
     }
 
     // Default area cost parameter.

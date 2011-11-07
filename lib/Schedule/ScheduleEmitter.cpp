@@ -400,6 +400,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     // And remove the trace number, too.
     Inst.RemoveOperand(PredIdx);
   }
+
+  // Which port do we need to read from FU?
+  // FIXME: Only work for icmp.
+  unsigned FUPortIdx = VFUs::getFUPortIdx(&Inst, 0);
   // Opcode for the later copy op.
   unsigned CopyOpC = VTM::VOpReadFU;
   // Do not need the ready signal except command sequence end.
@@ -435,6 +439,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     if (VRegisterInfo::IsWire(RegNo, &MRI))
       cast<ucOperand>(MO).setIsWire();
 
+    assert(MO.getSubReg() == 0 && "Unexpected subregister!");
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
@@ -512,6 +517,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
         Ops.push_back(MO);
       } else
         Src.setImplicit(true);
+      // Encode the FU port information into subreg.
+      Src.setSubReg(FUPortIdx);
       Ops.push_back(Src);
 
       // Flush the operand to the control state.
@@ -635,7 +642,6 @@ void VSchedGraph::emitSchedule() {
   DEBUG(dbgs() << "After schedule emitted:\n");
   DEBUG(dump());
   DEBUG(dbgs() << '\n');
-
   // Remember the schedule information.
 
   VFI->rememberTotalSlot(MBB, getStartSlot(), getTotalSlot(), getLoopOpSlot());
