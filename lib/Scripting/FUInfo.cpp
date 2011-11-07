@@ -57,6 +57,7 @@ namespace llvm {
       case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
       case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
       case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
+      case VTM::VOpICmp:        return VTM::RCMPRegisterClass;
       }
 
       return 0;
