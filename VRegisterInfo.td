@@ -28,7 +28,8 @@ def SHLR : VTMReg<"shl">;
 def IR : VTMReg<"interface">;
 def CR : VTMReg<"callee">;
 def BR : VTMReg<"bram">;
-def CMPR : VTMReg<"icmp">;
+def UCMPR : VTMReg<"ucmp">;
+def SCMPR : VTMReg<"scmp">;
 
 def PhiR : VTMReg<"phi">;
 def R : VTMReg<"r">;
@@ -58,4 +59,5 @@ def RCFN    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [CR]>;
 def RBRM    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [BR]>;
 
 // Integer comparison
-def RCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [CMPR]>;
+def RUCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [UCMPR]>;
+def RSCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [SCMPR]>;
