@@ -35,6 +35,8 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Function.h"
 #include "llvm/PassAnalysisSupport.h"
+// We need CondCode.
+#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/CalcSpillWeights.h"
 #include "llvm/CodeGen/EdgeBundles.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
@@ -168,8 +170,9 @@ struct VRASimple : public MachineFunctionPass {
   bool reduceCompGraph(LICGraph &G, CompEdgeWeight &C);
 
   void bindCompGraph(LICGraph &G);
-  // We need handle to special case when binding adder.
+  // We need handle to special case when binding adder and comparor.
   void bindAdders(LICGraph &G);
+  void bindICmps(LICGraph &G);
 
   bool runOnMachineFunction(MachineFunction &F);
 
@@ -202,12 +205,25 @@ struct WidthChecker {
 
 // Implement this with some hash function?
 static uint64_t getRegKey(unsigned Reg, uint8_t OpIdx = 0, uint8_t SubReg = 0) {
-  return uint64_t(Reg) | (uint64_t(OpIdx & 0xf)<<32) | (uint64_t(SubReg)<<36);
+  union {
+    uint64_t Data;
+    struct {
+      unsigned RegNum;
+      uint8_t SubReg;
+      uint8_t OpIdx;
+    } S;
+  } U;
+
+  U.S.RegNum = Reg;
+  U.S.SubReg = SubReg;
+  U.S.OpIdx = OpIdx;
+
+  return U.Data;
 }
 
-static uint64_t getRegKey(MachineOperand &MO, uint8_t OpIdx = 0) {
-  return getRegKey(MO.getReg(), OpIdx, MO.getSubReg());
-}
+//static uint64_t getRegKey(MachineOperand &MO, uint8_t OpIdx = 0) {
+//  return getRegKey(MO.getReg(), OpIdx, MO.getSubReg());
+//}
 
 template<int NUMSRC>
 struct SourceChecker {
@@ -518,6 +534,72 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
     return computePerBitWeight() * getWidth();
   }
 };
+
+struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
+  bool hasSignedCC, hasUnsignedCC;
+
+  typedef CompBinOpEdgeWeight<VTM::VOpICmp, 1> Base;
+  CompICmpEdgeWeight(VRASimple *V, unsigned cost) : Base(V, cost) {}
+
+  void reset() {
+    hasSignedCC = false;
+    hasUnsignedCC = false;
+    //hasCopy = 0;
+    Base::reset();
+  }
+
+  bool hasInCompatibleCC(unsigned CC) {
+    if (ISD::isSignedIntSetCC((ISD::CondCode)CC)) {
+      hasSignedCC = true;
+      return hasUnsignedCC;
+    }
+
+    if (ISD::isUnsignedIntSetCC((ISD::CondCode)CC)) {
+      hasUnsignedCC = true;
+      return hasSignedCC;
+    }
+
+    return false;
+  }
+
+  // Run on the use-def chain of a FU to collect information about the live
+  // interval.
+  bool operator()(MachineRegisterInfo::reg_iterator I) {
+    MachineOperand &MO = I.getOperand();
+    if (I.getOperand().isDef()) {
+      // 2. Analyze the definition op.
+      ucOp Op = ucOp::getParent(I);
+      assert(Op->isOpcode(VTM::VOpICmp) && "Unexpected Opcode!");
+
+      ucOperand &CondCode = Op.getOperand(3);
+      // Get the bit width information.
+      if (!checkWidth(CondCode.getBitWidth()))
+        return true;
+      // Are these CC compatible?
+      if (hasInCompatibleCC(CondCode.getImm()))
+        return true;
+
+      visitOperand<0>(Op);
+      visitOperand<1>(Op);
+    }
+
+    if (!MO.isImplicit())
+      addDst(ucOp::getParent(I), MO);
+
+    return false;
+  }
+
+  int operator()(LiveInterval *Src, LiveInterval *Dst) {
+    assert(Dst && Src && "Unexpected null li!");
+    reset();
+
+    if (VRA->iterateUseDefChain(Src->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
+
+    if (VRA->iterateUseDefChain(Dst->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
+
+    return computePerBitWeight() * getWidth();
   }
 };
 }
@@ -891,8 +973,8 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
   DEBUG(dbgs() << "Before simple register allocation:\n";
-        //printVMF(dbgs(), F);
-  ); 
+        printVMF(dbgs(), F);
+  );
 
   joinPHINodeIntervals();
 
@@ -904,12 +986,14 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   //Build the Compatibility Graphs
   LICGraph RCG(VTM::DRRegClassID),
            AdderCG(VTM::RADDRegClassID),
+           ICmpCG(VTM::RUCMPRegClassID),
            MulCG(VTM::RMULRegClassID),
            AsrCG(VTM::RASRRegClassID),
            LsrCG(VTM::RLSRRegClassID),
            ShlCG(VTM::RSHLRegClassID);
   buildCompGraph(RCG);
   buildCompGraph(AdderCG);
+  buildCompGraph(ICmpCG);
   buildCompGraph(MulCG);
   buildCompGraph(AsrCG);
   buildCompGraph(LsrCG);
@@ -917,6 +1001,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   CompRegEdgeWeight RegWeight(this, VFUs::RegCost);
   CompBinOpEdgeWeight<VTM::VOpAdd, 2> AddWeight(this, VFUs::AddCost);
+  CompICmpEdgeWeight ICmpWeight(this, VFUs::ICmpCost);
   CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, VFUs::MulCost);
   CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, VFUs::ShiftCost);
   CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, VFUs::ShiftCost);
@@ -929,6 +1014,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
     SomethingBind = false;
     SomethingBind |= reduceCompGraph(RCG, RegWeight);
     SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
+    SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
     SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
     SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
     SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
@@ -938,6 +1024,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   // Bind the Compatibility Graphs
   bindCompGraph(RCG);
   bindAdders(AdderCG);
+  bindICmps(ICmpCG);
   bindCompGraph(MulCG);
   bindCompGraph(AsrCG);
   bindCompGraph(LsrCG);
@@ -1172,5 +1259,42 @@ void VRASimple::bindAdders(LICGraph &G) {
       assert(CarryLI && "Cannot found interval of carry!");
       assign(*CarryLI, CarryReg);
     }
+  }
+}
+
+static bool checkICmpSigness(MachineRegisterInfo::reg_iterator I) {
+  if (I.getOperand().isDef()) {
+    // 2. Analyze the definition op.
+    ucOp Op = ucOp::getParent(I);
+    assert(Op->isOpcode(VTM::VOpICmp) && "Unexpected Opcode!");
+
+    ucOperand &CondCode = Op.getOperand(3);
+
+    // Are these CC compatible?
+    if (ISD::isSignedIntSetCC((ISD::CondCode)CondCode.getImm()))
+      return true;
+  }
+
+  return false;
+}
+
+void VRASimple::bindICmps(LICGraph &G) {
+  for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
+    LiveInterval *LI = (*I)->get();
+    bool isSigned = iterateUseDefChain(LI->reg, checkICmpSigness);
+
+    unsigned FUType = isSigned ? VTM::RUCMPRegClassID
+                               : VTM::RUCMPRegClassID;
+    unsigned CmpFU = TRI->allocateFN(FUType, 4);
+    assign(*LI, CmpFU);
+    // Allocate the register for FU Ports.
+    // Dummy port.
+    TRI->getSubRegOf(CmpFU, 1, 0);
+    // Eq port.
+    TRI->getSubRegOf(CmpFU, 2, 1);
+    // Ge port.
+    TRI->getSubRegOf(CmpFU, 3, 2);
+    // Gt port.
+    TRI->getSubRegOf(CmpFU, 4, 3);
   }
 }
