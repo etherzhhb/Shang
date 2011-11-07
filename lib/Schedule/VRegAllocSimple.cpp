@@ -1288,8 +1288,6 @@ void VRASimple::bindICmps(LICGraph &G) {
     unsigned CmpFU = TRI->allocateFN(FUType, 4);
     assign(*LI, CmpFU);
     // Allocate the register for FU Ports.
-    // Dummy port.
-    TRI->getSubRegOf(CmpFU, 1, 0);
     // Eq port.
     TRI->getSubRegOf(CmpFU, 2, 1);
     // Ge port.
