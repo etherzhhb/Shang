@@ -420,6 +420,8 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
   typedef SmallVector<ChildIt, 16> ItStackTy;
   NodeStackTy NodeWorkStack;
   ItStackTy ItWorkStack;
+  // Remember what we had visited.
+  std::set<VASTUse> VisitedUses;
 
   // Put the current node into the node stack, so it will appears in the path.
   NodeWorkStack.push_back(this);
@@ -431,6 +433,9 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
   while (!ItWorkStack.empty()) {
     VASTUse Node = NodeWorkStack.back();
     ChildIt It = ItWorkStack.back();
+
+    // Had we visited this node?
+    if (!VisitedUses.insert(Node).second) continue;
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
