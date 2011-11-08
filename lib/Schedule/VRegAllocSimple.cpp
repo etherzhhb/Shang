@@ -412,6 +412,8 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
   bool visitDef(ucOp Op) {
     switch (Op->getOpcode()) {
     case VTM::VOpMvPhi:
+      // FIXME: Merging VOpMvPhi break adpcm_main_IMS_ASAP.
+      return true;
     case VTM::VOpMvPipe:
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
@@ -424,6 +426,8 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
       addSrc<0>(Op.getOperand(2));
       break;
     case VTM::VOpSel:
+      // FIXME: Merging VOpSel break aes_main_IMS_ASAP.
+      return true;
       addSrc<0>(Op.getOperand(2));
       addSrc<0>(Op.getOperand(3));
       break;
