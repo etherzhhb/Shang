@@ -886,10 +886,9 @@ unsigned GetICmpBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   RHSHi = RHS.getOperand(0);
   RHSLo = RHS.getOperand(1);
 
-  // Only promote the ICmp when one of them are constant, and the constant part
-  // must be bigger.
-  if (!(IsConstant(RHSLo) && RHSLoBits > RHSHiBits) &&
-      !(IsConstant(RHSHi) && RHSHiBits > RHSLoBits))
+  // Only promote the ICmp when one of them are constant, and we can split the
+  // icmp at the middle.
+  if (!((IsConstant(RHSLo)|| IsConstant(RHSHi)) && RHSLoBits == RHSHiBits))
     return 0;
 
   SelectionDAG &DAG = DCI.DAG;
@@ -926,16 +925,16 @@ static unsigned RoundDownToPowerOf2(unsigned KnownBits, unsigned UB) {
 
 // KnownBit appears at the higher part, round up the split bit, so higher part
 // are all known bit.
-static unsigned RoundUpToPowerOf2(unsigned KnownBits, unsigned UB) {
-  assert(KnownBits < UB && "Unexpected all known bits!");
-  unsigned UnknownBits = UB - KnownBits;
-  unsigned RoundUnknownBits = std::max(1u << Log2_32_Ceil(UnknownBits), 8u);
-  // Become all unknown after round?
-  if (RoundUnknownBits >= UB)
-    return 0;
-
-  return RoundUnknownBits;
-}
+//static unsigned RoundUpToPowerOf2(unsigned KnownBits, unsigned UB) {
+//  assert(KnownBits < UB && "Unexpected all known bits!");
+//  unsigned UnknownBits = UB - KnownBits;
+//  unsigned RoundUnknownBits = std::max(1u << Log2_32_Ceil(UnknownBits), 8u);
+//  // Become all unknown after round?
+//  if (RoundUnknownBits >= UB)
+//    return 0;
+//
+//  return RoundUnknownBits;
+//}
 
 static unsigned GetICmpRHSConstSplitBit(uint64_t RHSVal, unsigned RHSSize) {
   unsigned SplitBit = CountTrailingZeros_64(RHSVal);
