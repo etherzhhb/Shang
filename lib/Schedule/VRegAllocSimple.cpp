@@ -599,7 +599,12 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    return computePerBitWeight() * getWidth();
+    // Dirty Hack: The dst port of comparison it is 1 bit, subtract it from
+    // per bit weight so we will not multiply it by bitwidth.
+    int PerBitWeight = computePerBitWeight() - getSavedDstMuxCost();
+
+    return PerBitWeight * getWidth()
+           + getSavedDstMuxCost() * /*Output port width*/1;
   }
 };
 }
