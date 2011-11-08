@@ -83,7 +83,7 @@ namespace llvm {
     unsigned AddCost = 64;
     unsigned MulCost = 128;
     unsigned ShiftCost = 256;
-    unsigned ICmpCost = 72;
+    unsigned ICmpCost = 32;
     unsigned MuxSizeCost = 48;
   }
 }
