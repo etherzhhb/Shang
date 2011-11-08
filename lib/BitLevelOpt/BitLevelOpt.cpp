@@ -822,69 +822,82 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
   return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
 }
 
-static void ExpandOperand(TargetLowering::DAGCombinerInfo &DCI, SDValue Op,
-                          SDValue &HiOp, SDValue &LoOp) {
-  unsigned BitWidth = Op.getValueSizeInBits();
-  assert(isPowerOf2_32(BitWidth) && "Cannot handle irregular bitwidth!");
-  unsigned SplitBit = BitWidth / 2;
-  assert(VTargetLowering::computeSizeInBits(Op) > SplitBit
-         && "Cannot expand operand!");
-  HiOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
-                                      BitWidth, SplitBit);
-  DCI.AddToWorklist(HiOp.getNode());
-  LoOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
-                                      SplitBit, 0);
-  DCI.AddToWorklist(LoOp.getNode());
-}
+//static void ExpandOperand(TargetLowering::DAGCombinerInfo &DCI, SDValue Op,
+//                          SDValue &HiOp, SDValue &LoOp) {
+//  unsigned BitWidth = Op.getValueSizeInBits();
+//  assert(isPowerOf2_32(BitWidth) && "Cannot handle irregular bitwidth!");
+//  unsigned SplitBit = BitWidth / 2;
+//  assert(VTargetLowering::computeSizeInBits(Op) > SplitBit
+//         && "Cannot expand operand!");
+//  HiOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
+//                                      BitWidth, SplitBit);
+//  DCI.AddToWorklist(HiOp.getNode());
+//  LoOp = VTargetLowering::getBitSlice(DCI.DAG, Op.getDebugLoc(), Op,
+//                                      SplitBit, 0);
+//  DCI.AddToWorklist(LoOp.getNode());
+//}
+//
+//template<typename ConcatBitsFunc,
+//         typename BuildLowPartFunc,
+//         typename BuildHighPartFunc>
+//static SDValue ExpandArithmeticOp(TargetLowering::DAGCombinerInfo &DCI,
+//                                  const VTargetLowering &TLI, SDNode *N,
+//                                  ConcatBitsFunc ConcatBits,
+//                                  BuildLowPartFunc BuildLowPart,
+//                                  BuildHighPartFunc BuildHighPart) {
+//  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+//  SDValue LHSLo, LHSHi;
+//  ExpandOperand(DCI, LHS, LHSHi, LHSLo);
+//  SDValue RHSLo, RHSHi;
+//  ExpandOperand(DCI, RHS, RHSHi, RHSLo);
+//  SDValue ADDELo = BuildLowPart(DCI, N, LHSLo, RHSLo);
+//  SDValue ADDEHi = BuildHighPart(DCI, N, LHSHi, RHSHi, ADDELo);
+//  return ConcatBits(DCI, N, ADDEHi, ADDELo);
+//}
 
-template<typename ConcatBitsFunc,
-         typename BuildLowPartFunc,
-         typename BuildHighPartFunc>
-static SDValue ExpandArithmeticOp(TargetLowering::DAGCombinerInfo &DCI,
-                                  const VTargetLowering &TLI, SDNode *N,
-                                  ConcatBitsFunc ConcatBits,
-                                  BuildLowPartFunc BuildLowPart,
-                                  BuildHighPartFunc BuildHighPart) {
-  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
-  SDValue LHSLo, LHSHi;
-  ExpandOperand(DCI, LHS, LHSHi, LHSLo);
-  SDValue RHSLo, RHSHi;
-  ExpandOperand(DCI, RHS, RHSHi, RHSLo);
-  SDValue ADDELo = BuildLowPart(DCI, N, LHSLo, RHSLo);
-  SDValue ADDEHi = BuildHighPart(DCI, N, LHSHi, RHSHi, ADDELo);
-  return ConcatBits(DCI, N, ADDEHi, ADDELo);
-}
-
-static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
-                                  TargetLowering::DAGCombinerInfo &DCI,
-                                  bool Commuted = false) {
+static SDValue PerfromUnsignedICmpCombine(SDNode *N, const VTargetLowering &TLI,
+                                          TargetLowering::DAGCombinerInfo &DCI,
+                                          bool Commuted = false) {
   DebugLoc dl = N->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
   LLVMContext &Cntx = *DAG.getContext();
-
   SDValue LHS = N->getOperand(0 ^ Commuted), RHS = N->getOperand(1 ^ Commuted);
   CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
   ISD::CondCode CC = CCNode->get();
   if (Commuted) CC = ISD::getSetCCSwappedOperands(CC);
 
-  unsigned CmpWidth = VTargetLowering::computeSizeInBits(LHS);
-  assert(CmpWidth == VTargetLowering::computeSizeInBits(RHS)
-         && "Compare operand with difference width!");
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerfromUnsignedICmpCombine);
+}
 
-  EVT OperandVT = VTargetLowering::getRoundIntegerOrBitType(CmpWidth, Cntx);
+static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
+                                  TargetLowering::DAGCombinerInfo &DCI) {
+  CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
+  ISD::CondCode CC = CCNode->get();
 
   // Lower SETNE and SETEQ
   if (CC == ISD::SETNE || CC == ISD::SETEQ) {
+    DebugLoc dl = N->getDebugLoc();
+    SelectionDAG &DAG = DCI.DAG;
+    LLVMContext &Cntx = *DAG.getContext();
+    SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+
+    unsigned CmpWidth = VTargetLowering::computeSizeInBits(LHS);
+    assert(CmpWidth == VTargetLowering::computeSizeInBits(RHS)
+      && "Compare operand with difference width!");
+
+    EVT OperandVT = VTargetLowering::getRoundIntegerOrBitType(CmpWidth, Cntx);
+
     SDValue NE = DAG.getNode(ISD::XOR, dl, OperandVT, LHS, RHS);
     DCI.AddToWorklist(NE.getNode());
     NE = TLI.getReductionOp(DAG, VTMISD::ROr, dl, NE);
     if (CC == ISD::SETNE) return NE;
 
     // Else it is a SETEQ, just get it from not(SETNE);
+    DCI.AddToWorklist(NE.getNode());
     return TLI.getNot(DAG, dl, NE);
   }
 
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerfromICmpCombine);
+  return SDValue();
 }
 
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
@@ -899,10 +912,11 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
     SDValue RV = PerformAddCombine(N, *this, DCI);
     if (RV.getNode()) return RV;
 
+    // Expansion is disable at the moment.
     //Expand the operation if the ADDE cannot fit into the FU.
-    if (N->getValueSizeInBits(0) > MaxAddSubBits)
-      return ExpandArithmeticOp(DCI, *this, N, ConcatADDEs,
-                                ADDEBuildLowPart, ADDEBuildHighPart);
+    //if (N->getValueSizeInBits(0) > MaxAddSubBits)
+    //  return ExpandArithmeticOp(DCI, *this, N, ConcatADDEs,
+    //                            ADDEBuildLowPart, ADDEBuildHighPart);
     break;
   }
   case VTMISD::ICmp:
