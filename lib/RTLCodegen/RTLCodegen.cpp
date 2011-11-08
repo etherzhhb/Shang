@@ -618,7 +618,7 @@ VASTValue *RTLCodegen::emitFUCmp(unsigned FUNum, unsigned BitWidth,
   else           ResultName = "u" + ResultName;
 
   // Comparer have 4 output port.
-  VASTWire *Result = VM->addWire(ResultName, 4);
+  VASTWire *Result = VM->addWire(ResultName, 5);
   Result->setOpcode(isSigned ? VASTWire::dpSCmp : VASTWire::dpUCmp);
 
   std::string OpName = ResultName + "_a";

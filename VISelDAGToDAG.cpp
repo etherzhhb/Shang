@@ -184,11 +184,13 @@ SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(N->getOperand(2));
   SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
   unsigned OperandWidth = VTargetLowering::computeSizeInBits(LHS);
+  assert(OperandWidth > 1 && "Unexpected 1bit comparison!");
   EVT FUVT = EVT::getIntegerVT(*CurDAG->getContext(), OperandWidth);
   ISD::CondCode CC = Cnd->get();
 
   switch (CC) {
   case ISD::SETEQ:
+  case ISD::SETNE:
   case ISD::SETGT:
   case ISD::SETGE:
   case ISD::SETUGT:

@@ -947,14 +947,17 @@ template<typename PrintOperandFN>
 static void printCmpFU(raw_ostream &OS, ArrayRef<VASTUse> Ops,
                        PrintOperandFN &FN) {
   OS << "{ ((";
-  // Port 3: gt.
+  // Port 4: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " > ", FN);
   OS << ") ? 1'b1 : 1'b0), ((";
-  // Port 2: gt.
+  // Port 3: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " >= ", FN);
   OS << ") ? 1'b1 : 1'b0), ((";
-  // Port 1: gt.
+  // Port 2: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " == ", FN);
+  OS << ") ? 1'b1 : 1'b0), ((";
+  // Port 2: gt.
+  printSimpleOp<PrintOperandFN>(OS, Ops, " != ", FN);
   OS << ") ? 1'b1 : 1'b0), 1'bx }";
 }
 
