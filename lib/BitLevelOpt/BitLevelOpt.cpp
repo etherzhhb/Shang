@@ -946,15 +946,18 @@ static unsigned GetICmpRHSConstSplitBit(uint64_t RHSVal, unsigned RHSSize) {
   SplitBit = RoundDownToPowerOf2(SplitBit, RHSSize);
   if (SplitBit >= RHSSize / 2) return SplitBit;
 
-  //return 0;
-  int64_t SignedRHSVal = int64_t(RHSVal << (64 - RHSSize)) >> (64 - RHSSize);
-  unsigned LeadingOnes = (CountLeadingOnes_64(SignedRHSVal) - (64 - RHSSize));
-  SplitBit = RoundUpToPowerOf2(LeadingOnes, RHSSize);
-  if (SplitBit <= RHSSize / 2) return SplitBit;
+  // FIXME: This casue infinte loop in dag combiner.
+  //int64_t SignedRHSVal = int64_t(RHSVal << (64 - RHSSize)) >> (64 - RHSSize);
+  //unsigned LeadingOnes = CountLeadingOnes_64(SignedRHSVal);
+  //if (LeadingOnes) {
+  //  LeadingOnes = LeadingOnes - (64 - RHSSize);
+  //  SplitBit = RoundUpToPowerOf2(LeadingOnes, RHSSize);
+  //  if (SplitBit <= RHSSize / 2) return SplitBit;
+  //}
 
-  unsigned LeadingZeros = (CountLeadingZeros_64(RHSVal) - (64 - RHSSize));
-  SplitBit = RoundUpToPowerOf2(LeadingZeros, RHSSize);
-  if (SplitBit <= RHSSize / 2) return SplitBit;
+  //unsigned LeadingZeros = (CountLeadingZeros_64(RHSVal) - (64 - RHSSize));
+  //SplitBit = RoundUpToPowerOf2(LeadingZeros, RHSSize);
+  //if (SplitBit <= RHSSize / 2) return SplitBit;
 
   return 0;
 }
