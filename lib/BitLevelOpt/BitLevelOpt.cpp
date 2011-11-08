@@ -180,7 +180,8 @@ inline static SDValue ConcatBits(TargetLowering::DAGCombinerInfo &DCI,
 }
 
 inline static SDValue LogicOpBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
-                                          SDNode *N, SDValue LHS, SDValue RHS) {
+                                          SDNode *N, SDValue LHS, SDValue RHS,
+                                          bool Commuted) {
   SDValue Lo = DCI.DAG.getNode(N->getOpcode(), N->getDebugLoc(),
                                LHS.getValueType(), LHS, RHS);
   DCI.AddToWorklist(Lo.getNode());
@@ -189,7 +190,7 @@ inline static SDValue LogicOpBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
 
 inline static SDValue LogicOpBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
                                            SDNode *N, SDValue LHS, SDValue RHS,
-                                           SDValue Lo) {
+                                           SDValue Lo, bool Commuted) {
   SDValue Hi = DCI.DAG.getNode(N->getOpcode(), N->getDebugLoc(),
                                LHS.getValueType(), LHS, RHS);
   DCI.AddToWorklist(Hi.getNode());
@@ -333,10 +334,13 @@ template<typename ConcatBitsFunc,
          typename GetSplitBitFunc>
 static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
                                   TargetLowering::DAGCombinerInfo &DCI,
-                                  ConcatBitsFunc ConcatBits,
-                                  BuildLowPartFunc BuildLowPart,
-                                  BuildHighPartFunc BuildHighPart,
-                                  GetSplitBitFunc GetSplitBit,
+                                  // For some SDNode, we cannot call getbitslice
+                                  // on hi and lo.
+                                  bool GetBitSliceForHiLo,
+                                  ConcatBitsFunc &ConcatBits,
+                                  BuildLowPartFunc &BuildLowPart,
+                                  BuildHighPartFunc &BuildHighPart,
+                                  GetSplitBitFunc &GetSplitBit,
                                   bool Commuted = false) {
   SDValue LHS = N->getOperand(0 ^ Commuted), RHS = N->getOperand(1 ^ Commuted);
 
@@ -352,15 +356,21 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
   SelectionDAG &DAG = DCI.DAG;
   DebugLoc dl = N->getDebugLoc();
 
-  SDValue Lo = BuildLowPart(DCI, N, LHSLo, RHSLo);
-  Lo = VTargetLowering::getBitSlice(DAG, dl, Lo, LoBitWidth, 0);
-  DCI.AddToWorklist(Lo.getNode());
-  SDValue Hi = BuildHighPart(DCI, N, LHSHi, RHSHi, Lo);
-  Hi = VTargetLowering::getBitSlice(DAG, dl, Hi, HiBitWidth, 0);
-  DCI.AddToWorklist(Hi.getNode());
+  SDValue Lo = BuildLowPart(DCI, N, LHSLo, RHSLo, Commuted);
+  if (GetBitSliceForHiLo) {
+    Lo = VTargetLowering::getBitSlice(DAG, dl, Lo, LoBitWidth, 0);
+    DCI.AddToWorklist(Lo.getNode());
+  }
 
+  SDValue Hi = BuildHighPart(DCI, N, LHSHi, RHSHi, Lo, Commuted);
+  if (GetBitSliceForHiLo) {
+    Hi = VTargetLowering::getBitSlice(DAG, dl, Hi, HiBitWidth, 0);
+    DCI.AddToWorklist(Hi.getNode());
+  }
   return ConcatBits(DCI, N, Hi, Lo);
 }
+
+
 
 static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
                                    TargetLowering::DAGCombinerInfo &DCI,
@@ -384,7 +394,11 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
 
   // Try to promote the bitcat after operand commuted.
   if (Commuted) {
-    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatBits,
+    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
+                                    // Get bitslice from hi part and lo before
+                                    // concact them.
+                                    true,
+                                    ConcatBits,
                                     LogicOpBuildLowPart,
                                     LogicOpBuildHighPart,
                                     GetDefaultSplitBit);
@@ -616,7 +630,8 @@ inline void PadADDEOperand(TargetLowering::DAGCombinerInfo &DCI, DebugLoc dl,
 }
 
 inline static SDValue ADDEBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
-                                       SDNode *N, SDValue LHS, SDValue RHS) {
+                                       SDNode *N, SDValue LHS, SDValue RHS,
+                                       bool Commuted) {
   SelectionDAG &DAG = DCI.DAG;
   DebugLoc dl = N->getDebugLoc();
 
@@ -630,7 +645,7 @@ inline static SDValue ADDEBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
 
 inline static SDValue ADDEBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
                                         SDNode *N, SDValue LHS, SDValue RHS,
-                                        SDValue Lo) {
+                                        SDValue Lo, bool Commuted) {
   SelectionDAG &DAG = DCI.DAG;
   DebugLoc dl = N->getDebugLoc();
   PadADDEOperand(DCI, dl, LHS, RHS);
@@ -811,7 +826,11 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
     }
   }
 
-  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI, ConcatADDEs,
+  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
+                                  // Get bitslice from hi part and lo before
+                                  // concact them.
+                                  true,
+                                  ConcatADDEs,
                                   ADDEBuildLowPart,
                                   ADDEBuildHighPart,
                                   GetADDESplitBit,
