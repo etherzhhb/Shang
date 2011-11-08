@@ -78,13 +78,13 @@ namespace llvm {
 
     // Default area cost parameter.
     unsigned LUTCost = 64;
-    unsigned RegCost = 64;
+    unsigned RegCost = 48;
     unsigned MUXCost = 64;
     unsigned AddCost = 64;
     unsigned MulCost = 128;
     unsigned ShiftCost = 256;
     unsigned ICmpCost = 32;
-    unsigned MuxSizeCost = 48;
+    unsigned MuxSizeCost = 56;
   }
 }
 
