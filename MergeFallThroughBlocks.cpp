@@ -134,9 +134,9 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   unsigned MergedLatency = CL.computeLatency(*FromBB);
   if (MergedLatency > OriginalLatency)
     IncreasedLatency = MergedLatency - OriginalLatency;
-  double IncreaseRate = double(IncreasedLatency)/double(OriginalLatency);
   // Also take account of the latency increased by previous merge.
   IncreasedLatency += IncreasedLatencies[ToBB->getNumber()];
+  double IncreaseRate = double(IncreasedLatency)/double(OriginalLatency);
 
   if (IncreasedLatency > 4 || IncreaseRate > 0.1) return false;
   DEBUG(dbgs() << "Merging BB#" << FromBB->getNumber() << " To BB#"
@@ -208,6 +208,7 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
          << "%\n");
   // Accumulate the increased latency
   IncreasedLatencies[ToBB->getNumber()] += IncreasedLatency;
+  IncreasedLatencies[ToBB->getNumber()] += IncreasedLatencies[FromBB->getNumber()];
   return true;
 }
 
