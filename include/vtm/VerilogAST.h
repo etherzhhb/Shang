@@ -311,7 +311,10 @@ public:
   VASTWire(const char *Name, unsigned BitWidth,
            const char *Attr = "");
 
-  void setOpcode(VASTWire::Opcode opc) { Opc = opc; }
+  void setOpcode(VASTWire::Opcode opc) {
+    assert(Opc == dpUnknown && "Opcode already set!");
+    Opc = opc;
+  }
 
   unsigned getNumOperands() const { return Operands.size(); }
 
