@@ -315,7 +315,7 @@ static unsigned GetDefaultSplitBit(SDNode *N,
   // TODO: Force they have the same type!
   if (LHSHi.getValueType() != RHSHi.getValueType())
     return 0;
-  
+
   LHSLo = LHS.getOperand(1);
   RHSLo = RHS.getOperand(1);
   // TODO: Force they have the same type!
@@ -647,7 +647,7 @@ inline static SDValue ADDEBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
 }
 
 static
-unsigned GatADDEBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+unsigned GetADDEBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
                                SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
   unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
@@ -693,14 +693,14 @@ static unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                 SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
                                 SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
   if (RHS->getOpcode() == VTMISD::BitCat)
-    return GatADDEBitCatSplitBit(N, DCI, LHS, LHSLo, LHSHi, RHS, RHSLo, RHSHi);
+    return GetADDEBitCatSplitBit(N, DCI, LHS, LHSLo, LHSHi, RHS, RHSLo, RHSHi);
 
   // Try to perform: a + 0x8000 => { a[15:14] + 0x1, a[13:0] }
   uint64_t RHSVal = 0;
   if (unsigned SizeInBit = ExtractConstant(RHS, RHSVal)) {
     unsigned SplitBit = CountTrailingZeros_64(RHSVal);
     // It is not profitable to split if the lower zero part is too small.
-    if (SplitBit < 8) return 0;
+    if (SplitBit < SizeInBit / 2) return 0;
 
     DebugLoc dl = N->getDebugLoc();
     SelectionDAG &DAG = DCI.DAG;
@@ -855,31 +855,193 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
 //  return ConcatBits(DCI, N, ADDEHi, ADDELo);
 //}
 
-static SDValue PerfromUnsignedICmpCombine(SDNode *N, const VTargetLowering &TLI,
-                                          TargetLowering::DAGCombinerInfo &DCI,
-                                          bool Commuted = false) {
+// Function for ICmp combine.
+#define GETLHSNOT(WHAT) GetLHSNot##WHAT
+
+#define DEF_GETLHSNOT(WHAT) \
+static SDValue GETLHSNOT(WHAT)(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,\
+                               const VTargetLowering &TLI,\
+                               TargetLowering::DAGCombinerInfo &DCI) {\
+  SDValue LHSWHAT = GetLHS##WHAT(LHS, RHSVT, DAG, TLI, DCI);\
+  DCI.AddToWorklist(LHSWHAT.getNode());\
+  return TLI.getNot(DAG, LHS->getDebugLoc(), LHSWHAT);\
+}
+
+#define GETLHSBINOP(OP, LHS, RHS) GetLHS##LHS##OP##RHS
+#define DEF_GETLHSBINOP(OP, LHS, RHS) \
+static SDValue GETLHSBINOP(OP, LHS, RHS)(SDValue LHS, EVT RHSVT,\
+                                         SelectionDAG &DAG,\
+                                         const VTargetLowering &TLI,\
+                                         TargetLowering::DAGCombinerInfo &DCI) {\
+  /*Work around for GCC does not accept something like "ISD::##OP"*/\
+  unsigned OpCOR = ISD::OR;\
+  unsigned OpCAND = ISD::AND;\
+  SDValue OPLHS = GetLHS##LHS(LHS, RHSVT, DAG, TLI, DCI);\
+  DCI.AddToWorklist(OPLHS.getNode());\
+  SDValue OPRHS = GetLHS##RHS(LHS, RHSVT, DAG, TLI, DCI);\
+  DCI.AddToWorklist(OPRHS.getNode());\
+  return DAG.getNode(OpC##OP, LHS->getDebugLoc(), MVT::i1, OPLHS, OPRHS);\
+}
+
+static SDValue GetLHSNotZero(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
+                             const VTargetLowering &TLI,
+                             TargetLowering::DAGCombinerInfo &DCI) {
+  // A value is not zero, if it has some bit set.
+  return TLI.getReductionOp(DAG, VTMISD::ROr, LHS->getDebugLoc(), LHS);
+}
+
+static SDValue GetLHSAllOnes(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
+                             const VTargetLowering &TLI,
+                             TargetLowering::DAGCombinerInfo &DCI) {
+  // A value is all ones, if it has all bit set.
+  return TLI.getReductionOp(DAG, VTMISD::RAnd, LHS->getDebugLoc(), LHS);
+}
+
+static SDValue GetLHSNegative(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
+                              const VTargetLowering &TLI,
+                              TargetLowering::DAGCombinerInfo &DCI) {
+  return TLI.getSignBit(DAG, LHS->getDebugLoc(), LHS);
+}
+
+DEF_GETLHSNOT(AllOnes)
+DEF_GETLHSNOT(NotZero)
+DEF_GETLHSNOT(Negative)
+DEF_GETLHSBINOP(OR, AllOnes, NotNegative)
+DEF_GETLHSBINOP(OR, NotNotZero, Negative)
+DEF_GETLHSBINOP(AND, NotZero, NotNegative)
+DEF_GETLHSBINOP(AND, NotAllOnes, Negative)
+
+
+static SDValue GetAlwaysFalse(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
+                              const VTargetLowering &TLI,
+                              TargetLowering::DAGCombinerInfo &DCI) {
+  return DAG.getTargetConstant(0, MVT::i1);
+}
+
+static SDValue GetAlwaysTrue(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
+                              const VTargetLowering &TLI,
+                              TargetLowering::DAGCombinerInfo &DCI) {
+  return DAG.getTargetConstant(1, MVT::i1);
+}
+
+template<typename OnRHSZeroFunc, typename OnRHSAllOnesFunc>
+static SDValue PerfromGenericCombine(SDValue LHS, SDValue RHS, SelectionDAG &DAG,
+                                     DebugLoc dl, const VTargetLowering &TLI,
+                                     TargetLowering::DAGCombinerInfo &DCI,
+                                     OnRHSZeroFunc &OnRHSZero,
+                                     OnRHSAllOnesFunc &OnRHSAllOnes) {
+
+  LLVMContext &Cntx = *DAG.getContext();
+  uint64_t RHSVal;
+
+  unsigned RHSSize = ExtractConstant(RHS, RHSVal);
+  if (RHSSize) {
+    EVT RHSVT = EVT::getIntegerVT(Cntx, RHSSize);
+    if (isNullValue(RHSVal, RHSSize))
+      return OnRHSZero(LHS, RHSVT, DAG, TLI, DCI);
+    if (isAllOnesValue(RHSVal, RHSSize))
+      return OnRHSAllOnes(LHS, RHSVT, DAG, TLI, DCI);
+  }
+
+  return SDValue();
+}
+
+static SDValue PerfromICmpCommuteCombine(SDNode *N, const VTargetLowering &TLI,
+                                         TargetLowering::DAGCombinerInfo &DCI,
+                                         bool Commuted = false) {
   DebugLoc dl = N->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
-  LLVMContext &Cntx = *DAG.getContext();
   SDValue LHS = N->getOperand(0 ^ Commuted), RHS = N->getOperand(1 ^ Commuted);
   CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
   ISD::CondCode CC = CCNode->get();
   if (Commuted) CC = ISD::getSetCCSwappedOperands(CC);
 
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerfromUnsignedICmpCombine);
+  switch (CC) {
+  case ISD::SETUGT:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // Lower a > 0 to a != 0 for unsigned greater than.
+                                 GetLHSNotZero,
+        // We never have an unsigned value greater than ~0
+                                 GetAlwaysFalse);
+  case ISD::SETUGE:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // All unsigned value is greater than or equal to 0.
+                                 GetAlwaysTrue,
+        // An unsigned value is greater than or equal to ~0 only it is ~0
+                                 GetLHSNotAllOnes);
+  case ISD::SETULT:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // We never have an unsigned value less than 0
+                                 GetAlwaysFalse,
+        // An unsigned value is less than ~0 only it is not ~0
+                                 GetLHSNotAllOnes);
+  case ISD::SETULE:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // An unsigned value is less than or equal to 0 only is 0.
+                                 GetLHSNotNotZero,
+        // All unsigned value is less than or equal to ~0
+                                 GetAlwaysTrue);
+  case ISD::SETGT:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // An signed value is greater than 0
+        // if its signed bit not set and Not zero.
+                                 GetLHSNotZeroANDNotNegative,
+        // An signed value is greater than -1
+        // if its signed bit not set.
+                                 GetLHSNotNegative);
+  case ISD::SETGE:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // An signed value is greater than or equal to 0
+        // if its signed bit not set.
+                                 GetLHSNotNegative,
+        // An signed value is greater than or equal to -1
+        // if its -1 or signed bit not set.
+                                 GetLHSAllOnesORNotNegative);
+  case ISD::SETLT:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // An signed value is less than  0 if its signed bit set.
+                                 GetLHSNegative,
+        // An signed value is less than -1 its signed bit set and not equal to -1
+                                 GetLHSNotAllOnesANDNegative);
+  case ISD::SETLE:
+    return PerfromGenericCombine(LHS, RHS, DAG, dl, TLI, DCI,
+        // An signed value is less than or equal to 0
+        // if its signed bit set or it is 0.
+                                 GetLHSNotNotZeroORNegative,
+        // An signed value is less than  or equal to -1 its signed bit set
+                                 GetLHSNegative);
+  default: break;
+  }
+
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerfromICmpCommuteCombine);
 }
 
 static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
                                   TargetLowering::DAGCombinerInfo &DCI) {
+
+  DebugLoc dl = N->getDebugLoc();
+  SelectionDAG &DAG = DCI.DAG;
+  LLVMContext &Cntx = *DAG.getContext();
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+
   CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
   ISD::CondCode CC = CCNode->get();
 
+  uint64_t LHSVal, RHSVal;
+  unsigned LHSSize = ExtractConstant(LHS, LHSVal);
+
+  unsigned RHSSize = ExtractConstant(RHS, RHSVal);
+  // Do we got a constant comparison?
+  if (RHSSize && LHSSize) {
+    EVT LHSVT = EVT::getIntegerVT(Cntx, LHSSize);
+    EVT RHSVT = EVT::getIntegerVT(Cntx, RHSSize);
+    return DAG.FoldSetCC(MVT::i1, DAG.getTargetConstant(LHSVal, LHSVT),
+                                  DAG.getTargetConstant(LHSVal, RHSVT),
+                                  CC, dl);
+  }
+
   // Lower SETNE and SETEQ
   if (CC == ISD::SETNE || CC == ISD::SETEQ) {
-    DebugLoc dl = N->getDebugLoc();
-    SelectionDAG &DAG = DCI.DAG;
-    LLVMContext &Cntx = *DAG.getContext();
-    SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
 
     unsigned CmpWidth = VTargetLowering::computeSizeInBits(LHS);
     assert(CmpWidth == VTargetLowering::computeSizeInBits(RHS)
@@ -897,7 +1059,7 @@ static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
     return TLI.getNot(DAG, dl, NE);
   }
 
-  return SDValue();
+  return PerfromICmpCommuteCombine(N, TLI, DCI);
 }
 
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
