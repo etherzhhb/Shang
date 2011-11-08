@@ -434,9 +434,6 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
     VASTUse Node = NodeWorkStack.back();
     ChildIt It = ItWorkStack.back();
 
-    // Had we visited this node?
-    if (!VisitedUses.insert(Node).second) continue;
-
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
       if (VASTValue *V = Node.getOrNull()) {
@@ -473,6 +470,11 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
     // Depth first traverse the child of current node.
     VASTUse ChildNode = *It;
     ++ItWorkStack.back();
+
+    // Had we visited this node?
+    if (!VisitedUses.insert(ChildNode).second) continue;
+
+    // If ChildNode is not visit, go on visit it and its childrens.
     NodeWorkStack.push_back(ChildNode);
     ItWorkStack.push_back(ChildNode.dp_src_begin());
   }
