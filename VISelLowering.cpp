@@ -147,20 +147,20 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     // Condition code will not work.
     setOperationAction(ISD::SELECT_CC, CurVT, Expand);
     // Lower SetCC to more fundamental operation.
-    // setOperationAction(ISD::SETCC, CurVT, Custom);
+    setOperationAction(ISD::SETCC, CurVT, Custom);
 
     setOperationAction(ISD::JumpTable, CurVT, Custom);
 
     //for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
     //  setCondCodeAction((ISD::CondCode)CC, CurVT, Custom);
     // Expand the condition codes.
-    setCondCodeAction(ISD::SETNE, CurVT, Custom);
+    // setCondCodeAction(ISD::SETNE, CurVT, Custom);
 
-    setCondCodeAction(ISD::SETLE, CurVT, Custom);
-    setCondCodeAction(ISD::SETLT, CurVT, Custom);
+    //setCondCodeAction(ISD::SETLE, CurVT, Custom);
+    //setCondCodeAction(ISD::SETLT, CurVT, Custom);
 
-    setCondCodeAction(ISD::SETULE, CurVT, Custom);
-    setCondCodeAction(ISD::SETULT, CurVT, Custom);
+    //setCondCodeAction(ISD::SETULE, CurVT, Custom);
+    //setCondCodeAction(ISD::SETULT, CurVT, Custom);
   }
 
   setLibcallName(RTLIB::UDIV_I8, "__ip_udiv_i8");
@@ -225,6 +225,7 @@ const char *VTargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VTMISD::ROr:             return "VTMISD::ROr";
   case VTMISD::RXor:            return "VTMISD::RXor";
   case VTMISD::Not:             return "VTMISD::Not";
+  case VTMISD::ICmp:            return "VTMISD::ICmp";
   default:
     assert(0 && "Unknown SDNode!");
     return "???";
@@ -504,28 +505,10 @@ SDValue VTargetLowering::getVFlag(SelectionDAG &DAG, SDValue SetCC) {
 
 SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op->getOperand(0), RHS = Op->getOperand(1);
-  CondCodeSDNode *Cnd = cast<CondCodeSDNode>(Op->getOperand(2));
+  SDValue Cnd = Op->getOperand(2);
   DebugLoc dl = Op.getDebugLoc();
-  ISD::CondCode CC = Cnd->get();
-
-  switch (CC) {
-  case ISD::SETNE: {
-    // Expand NE to not EQ.
-    ISD::CondCode InvCC = ISD::getSetCCInverse(ISD::SETNE, true);
-    return getNot(DAG, dl, DAG.getSetCC(dl, MVT::i1, LHS, RHS, InvCC));
-  }
-  case ISD::SETLT:
-  case ISD::SETLE:
-  case ISD::SETULT:
-  case ISD::SETULE: {
-    ISD::CondCode SwapCC = ISD::getSetCCSwappedOperands(CC);
-    // Expand LT to not GE.
-    return DAG.getSetCC(dl, MVT::i1, RHS, LHS, SwapCC);
-  }
-  default:
-    assert(0 && "Bad condition code!");
-    return SDValue();
-  }
+  // Simply replace setcc by ICmp
+  return DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS, Cnd);
 }
 
 // A - B = A + (-B) = A + (~B) + 1

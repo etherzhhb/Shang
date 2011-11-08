@@ -432,7 +432,7 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BRCOND:           return SelectBrcnd(N);
 
   case ISD::ADDE:             return SelectAdd(N);
-  case ISD::SETCC:            return SelectICmp(N);
+  case VTMISD::ICmp:          return SelectICmp(N);
   // DirtyHack: Is binary instruction enough?
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult, true);
 

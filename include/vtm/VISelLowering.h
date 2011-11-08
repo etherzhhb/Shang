@@ -39,6 +39,8 @@ namespace VTMISD {
     RAnd,
     ROr,
     RXor,
+    // Integer comparision
+    ICmp,
     // Memory operations.
     MemAccess = ISD::FIRST_TARGET_MEMORY_OPCODE
   };

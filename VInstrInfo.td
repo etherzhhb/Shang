@@ -36,6 +36,8 @@ def SDT_FnRet : SDTypeProfile<0, 0, []>;
 def VTMFnRet  :  SDNode<"VTMISD::Ret", SDT_FnRet,
               [SDNPVariadic, SDNPHasChain]>;
 
+def VTMICmp : SDNode<"VTMISD::ICmp", SDTSetCC>;
+
 // 'Calling' internal module, which instantiated inside the current module.
 // Return the result token.
 def SDT_InternalCall : SDTypeProfile<1, -1, []>;
