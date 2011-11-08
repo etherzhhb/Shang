@@ -43,14 +43,13 @@ using namespace llvm;
 /// getRoundIntegerOrBitType - Rounds the bit-width of the given integer EVT
 /// up to the nearest power of two (one bit otherwise at least eight bits),
 /// and returns the integer EVT with that number of bits.
-static EVT getRoundIntegerOrBitType(EVT &VT, LLVMContext &Context) {
-  assert(VT.isInteger() && !VT.isVector() && "Invalid integer type!");
-  unsigned BitWidth = VT.getSizeInBits();
-  if (BitWidth == 1)
+EVT VTargetLowering::getRoundIntegerOrBitType(unsigned SizeInBit,
+                                              LLVMContext &Context) {
+  if (SizeInBit == 1)
     return MVT::i1;
-  if (BitWidth <= 8 )
+  if (SizeInBit <= 8 )
     return EVT(MVT::i8);
-  return EVT::getIntegerVT(Context, 1 << Log2_32_Ceil(BitWidth));
+  return EVT::getIntegerVT(Context, 1 << Log2_32_Ceil(SizeInBit));
 }
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation

@@ -176,6 +176,15 @@ public:
   // Negative not equal signed overflow.
   static SDValue getNNotEQVFlag(SelectionDAG &DAG, SDValue SetCC);
 
+  // Helper function.
+  static EVT getRoundIntegerOrBitType(unsigned SizeInBit, LLVMContext &Context);
+
+  static EVT getRoundIntegerOrBitType(EVT &VT, LLVMContext &Context) {
+    assert(VT.isInteger() && !VT.isVector() && "Invalid integer type!");
+    unsigned SizeInBit = VT.getSizeInBits();
+    return getRoundIntegerOrBitType(SizeInBit, Context);
+  }
+
 private:
   SDValue LowerAdd(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerAddC(SDValue Op, SelectionDAG &DAG) const;
