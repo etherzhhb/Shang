@@ -855,6 +855,38 @@ static SDValue ExpandArithmeticOp(TargetLowering::DAGCombinerInfo &DCI,
   return ConcatBits(DCI, N, ADDEHi, ADDELo);
 }
 
+static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
+                                  TargetLowering::DAGCombinerInfo &DCI,
+                                  bool Commuted = false) {
+  DebugLoc dl = N->getDebugLoc();
+  SelectionDAG &DAG = DCI.DAG;
+  LLVMContext &Cntx = *DAG.getContext();
+
+  SDValue LHS = N->getOperand(0 ^ Commuted), RHS = N->getOperand(1 ^ Commuted);
+  CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
+  ISD::CondCode CC = CCNode->get();
+  if (Commuted) CC = ISD::getSetCCSwappedOperands(CC);
+
+  unsigned CmpWidth = VTargetLowering::computeSizeInBits(LHS);
+  assert(CmpWidth == VTargetLowering::computeSizeInBits(RHS)
+         && "Compare operand with difference width!");
+
+  EVT OperandVT = VTargetLowering::getRoundIntegerOrBitType(CmpWidth, Cntx);
+
+  // Lower SETNE and SETEQ
+  if (CC == ISD::SETNE || CC == ISD::SETEQ) {
+    SDValue NE = DAG.getNode(ISD::XOR, dl, OperandVT, LHS, RHS);
+    DCI.AddToWorklist(NE.getNode());
+    NE = TLI.getReductionOp(DAG, VTMISD::ROr, dl, NE);
+    if (CC == ISD::SETNE) return NE;
+
+    // Else it is a SETEQ, just get it from not(SETNE);
+    return TLI.getNot(DAG, dl, NE);
+  }
+
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerfromICmpCombine);
+}
+
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            TargetLowering::DAGCombinerInfo &DCI)
                                            const {
@@ -873,6 +905,8 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                 ADDEBuildLowPart, ADDEBuildHighPart);
     break;
   }
+  case VTMISD::ICmp:
+    return PerfromICmpCombine(N, *this, DCI);
   case ISD::ROTL:
   case ISD::ROTR:
   case ISD::SHL:
