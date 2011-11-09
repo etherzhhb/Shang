@@ -149,9 +149,10 @@ struct VRASimple : public MachineFunctionPass {
 
   // Put all datapath op that using the corresponding register of the LI to
   // the user vector.
-  typedef DenseMap<ucOp, LiveInterval*, ucOpExpressionTrait> DatapathOpMap;
+  typedef DenseMap<ucOp, unsigned, ucOpExpressionTrait> DatapathOpMap;
   void extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users);
-  void mergeEquLIs(EquivalenceClasses<LiveInterval*> &LIs);
+  typedef EquivalenceClasses<unsigned> EquRegClasses;
+  void mergeEquLIs(EquRegClasses &LIs);
 
   // Pre-bound function unit binding functions.
   void bindMemoryBus();
@@ -1111,29 +1112,32 @@ void VRASimple::joinPHINodeIntervals() {
   }
 }
 
-void VRASimple::mergeEquLIs(EquivalenceClasses<LiveInterval*> &EquLIs) {
+void VRASimple::mergeEquLIs(EquRegClasses &EquLIs) {
   // Merge the equivalence liveintervals.
-  typedef EquivalenceClasses<LiveInterval*>::iterator equ_li_it;
-  typedef EquivalenceClasses<LiveInterval*>::member_iterator mem_it;
+  typedef EquRegClasses::iterator equ_li_it;
+  typedef EquRegClasses::member_iterator mem_it;
   for (equ_li_it I = EquLIs.begin(), E = EquLIs.end(); I != E; ++I) {
     if (!I->isLeader()) continue;
 
     mem_it MI = EquLIs.member_begin(I);
-    LiveInterval *LeaderLI = *MI++;
+    LiveInterval *LeaderLI = 0;
 
     while (MI != EquLIs.member_end()) {
-      LiveInterval *CurLI = *MI++;
-      if (MRI->use_empty(CurLI->reg)) continue;
+      LiveInterval *CurLI = getInterval(*MI++);
+      if (!CurLI) continue;
 
-    // FIXME: Why the identical datapath ops overlap?
-      mergeLI(CurLI, LeaderLI, true);
+      if (LeaderLI)
+        // FIXME: Why the identical datapath ops overlap?
+        mergeLI(CurLI, LeaderLI, true);
+      else
+        LeaderLI = CurLI;
     }
   }
 }
 
 void VRASimple::extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users) {
   typedef MachineRegisterInfo::use_iterator use_it;
-  EquivalenceClasses<LiveInterval*> EquLIs;
+  EquRegClasses EquLIs;
 
   for (use_it I = MRI->use_begin(LI->reg), E = MRI->use_end(); I != E; ++I) {
     if (I.getOperand().isImplicit()) continue;
@@ -1141,16 +1145,15 @@ void VRASimple::extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users) {
     ucOp Op = ucOp::getParent(I);
     if (!Op.isControl()) {
       // Datapath op should define and only define its result at operand 0.
-      LiveInterval *LI = getInterval(Op.getOperand(0).getReg());
+      unsigned NewReg = Op.getOperand(0).getReg();
       // Ignore the dead datapath ops.
-      if (MRI->use_empty(LI->reg)) continue;
+      if (MRI->use_empty(NewReg)) continue;
 
       std::pair<DatapathOpMap::iterator, bool> p =
-        Users.insert(std::make_pair(Op, LI));
+        Users.insert(std::make_pair(Op, NewReg));
       // Merge all identical datapath ops.
-      if (!p.second && LI != p.first->second) {
-        EquLIs.unionSets(LI, p.first->second);
-      }
+      if (!p.second && NewReg != p.first->second)
+        EquLIs.unionSets(NewReg, p.first->second);
     }
   }
 
@@ -1172,14 +1175,23 @@ void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
   JoinIntervals(*ToLI, *FromLI, TRI, MRI);
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
 
-  EquivalenceClasses<LiveInterval*> EquLIs;
+  EquRegClasses EquLIs;
   for (DatapathOpMap::iterator I = FromUsers.begin(), E = FromUsers.end();
        I != E; ++I) {
     ucOp FromOp = I->first;
     DatapathOpMap::iterator at = ToUsers.find(FromOp);
+    if (MRI->use_empty(I->second)) continue;
+
     if (at == ToUsers.end()) continue;
 
     assert(I->second != at->second && "Unexpected identical live interval!");
+
+    // Remove the dead op in the map.
+    if (MRI->use_empty(at->second)) {
+      ToUsers.erase(at);
+      continue;
+    }
+
     // Merge the identical datapath ops.
     EquLIs.unionSets(I->second, at->second);
   }
