@@ -327,6 +327,12 @@ struct DstChecker {
     // Ignore the datapath at the moment.
     if (!Op.isControl()) return 0;
     ++NumDsts;
+    if (Op.getNumOperands() == 0) {
+      assert(Op->isOpcode(VTM::VOpRet) && "Unexpected empty oprand op!");
+      Dsts.insert(getRegKey(1, 15, 255));
+      return 0;
+    }
+
     MachineOperand &DefMO = Op.getOperand(0);
     if (!DefMO.isReg()) {
       if (Op->isOpcode(VTM::VOpRetVal))
