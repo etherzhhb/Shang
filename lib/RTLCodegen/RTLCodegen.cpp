@@ -239,7 +239,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpUnreachable(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot);
+  void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpMemTrans(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
@@ -792,8 +792,8 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpSRA:           emitBinaryFUOp(Op, CurSlot, Cnds); break;
     case VTM::VOpReadFU:        emitOpReadFU(Op, CurSlot, Cnds);break;
     case VTM::VOpInternalCall:  emitOpInternalCall(Op, CurSlot, Cnds);break;
-    case VTM::VOpRetVal:        emitOpRetVal(Op, CurSlot, Cnds);break;
-    case VTM::VOpRet:           emitOpRet(Op, CurSlot);       break;
+    case VTM::VOpRetVal:        emitOpRetVal(Op, CurSlot, Cnds);  break;
+    case VTM::VOpRet:           emitOpRet(Op, CurSlot, Cnds);     break;
     case VTM::VOpCmdSeq:
     case VTM::VOpMemTrans:      emitOpMemTrans(Op, CurSlot, Cnds);break;
     case VTM::VOpBRam:          emitOpBRam(Op, CurSlot, Cnds);    break;
@@ -1047,10 +1047,12 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
   OS.exit_block();
 }
 
-void RTLCodegen::emitOpRet(ucOp &OpArg, VASTSlot *CurSlot) {
+void RTLCodegen::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
+                           SmallVectorImpl<VASTCnd> &Cnds) {
   // Go back to the idle slot.
   CurSlot->addNextSlot(0);
-  CurSlot->addEnable(VM->getPort(VASTModule::Finish));
+  VASTCnd Pred = createCondition(Op.getPredicate());
+  CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
 }
 
 void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
