@@ -1166,21 +1166,25 @@ void RTLCodegen::emitDatapath(ucState &State) {
 
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(UnaOp.getOperand(0)));
-  V.setOpcode(Opc);
+  if (!V.isUnknownOp()) return;
 
+  V.setOpcode(Opc);
   V.addOperand(getAsOperand(UnaOp.getOperand(1)));
 }
 
 void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(BinOp.getOperand(0)));
-  V.setOpcode(Opc);
+  if (!V.isUnknownOp()) return;
 
+  V.setOpcode(Opc);
   V.addOperand(getAsOperand(BinOp.getOperand(1)));
   V.addOperand(getAsOperand(BinOp.getOperand(2)));
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(OpBitSlice.getOperand(0)));
+  if (!V.isUnknownOp()) return;
+
   V.setOpcode(VASTWire::dpAssign);
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice

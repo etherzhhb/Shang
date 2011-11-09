@@ -80,17 +80,6 @@ struct VRASimple : public MachineFunctionPass {
   VirtRegMap *VRM;
   LiveIntervals *LIS;
 
-  // Register Compatibility Graph.
-  typedef CompGraph<LiveInterval*> LICGraph;
-  typedef CompGraphNode<LiveInterval*> LICGraphNode;
-
-  typedef const std::vector<unsigned> VRegVec;
-
-  // MUX size limit factor.
-  static unsigned MuxSizeCost;
-
-  unsigned UserTag;
-
   VRASimple();
   void init(VirtRegMap &vrm, LiveIntervals &lis);
 
@@ -152,16 +141,23 @@ struct VRASimple : public MachineFunctionPass {
     return false;
   }
 
-  // commutable
-  unsigned extractComBinOperand() { return 0; }
-
   void joinPHINodeIntervals();
-  void mergeLI(LiveInterval *FromLI, LiveInterval *ToLI);
+  void mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
+               bool AllowOverlap = false);
+
+  // Put all datapath op that using the corresponding register of the LI to
+  // the user vector.
+  void extractDatapathUsers(LiveInterval *LI, SmallVectorImpl<ucOp> &Users);
 
   // Pre-bound function unit binding functions.
   void bindMemoryBus();
   void bindBlockRam();
   void bindCalleeFN();
+
+  typedef const std::vector<unsigned> VRegVec;
+  // Register/FU Compatibility Graph.
+  typedef CompGraph<LiveInterval*> LICGraph;
+  typedef CompGraphNode<LiveInterval*> LICGraphNode;
 
   // Compatibility Graph building.
   void buildCompGraph(LICGraph &G);
@@ -977,8 +973,6 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   VFI = F.getInfo<VFInfo>();
 
-  UserTag = 0;
-
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
   DEBUG(dbgs() << "Before simple register allocation:\n";
@@ -1069,7 +1063,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   DEBUG(dbgs() << "After simple register allocation:\n";
         //printVMF(dbgs(), F);
-  ); 
+  );
 
   return true;
 }
@@ -1113,12 +1107,45 @@ void VRASimple::joinPHINodeIntervals() {
   }
 }
 
-void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI) {
-  assert(!ToLI->overlaps(*FromLI) && "Cannot mrege LI!");
+void VRASimple::extractDatapathUsers(LiveInterval *LI,
+                                     SmallVectorImpl<ucOp> &Users) {
+  typedef MachineRegisterInfo::use_iterator use_it;
+  for (use_it I = MRI->use_begin(LI->reg), E = MRI->use_end(); I != E; ++I) {
+    if (I.getOperand().isImplicit()) continue;
+
+    ucOp Op = ucOp::getParent(I);
+    if (!Op.isControl()) Users.push_back(Op);
+  }
+}
+
+void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
+                        bool AllowOverlap) {
+  assert((AllowOverlap || !ToLI->overlaps(*FromLI)) && "Cannot merge LI!");
   assert(getBitWidthOf(FromLI->reg) == getBitWidthOf(ToLI->reg)
          && "Cannot merge LIs difference with bit width!");
   JoinIntervals(*ToLI, *FromLI, TRI, MRI);
+
+  // Extract all wires drive by FromLI and ToLI, they may became identical.
+  SmallVector<ucOp, 16> FromUsers, ToUsers;
+  extractDatapathUsers(FromLI, FromUsers);
+  extractDatapathUsers(ToLI, ToUsers);
+
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
+
+  // Merge all identical datapath operations
+  while (!FromUsers.empty())  {
+    ucOp FromOp = FromUsers.pop_back_val();
+
+    for (unsigned i = 0, e = ToUsers.size(); i != e; ++i) {
+      ucOp ToOp = ToUsers[i];
+      if (ToOp.isIdenticalTo(FromOp)) {
+        unsigned FromReg = FromOp.getOperand(0).getReg();
+        unsigned ToReg = ToOp.getOperand(0).getReg();
+        if (FromReg != ToReg)
+          mergeLI(getInterval(FromReg), getInterval(ToReg), true);
+      }
+    }
+  }
 }
 
 void VRASimple::bindMemoryBus() {

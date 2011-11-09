@@ -71,6 +71,8 @@ public:
   void changeOpcode(unsigned Opcode, unsigned PredSlot,
                     FuncUnitId FUId = VFUs::Trivial);
 
+  void clearPredSlot();
+
   const TargetInstrDesc &getDesc() const;
 
   FuncUnitId getFUId() const {
@@ -215,8 +217,10 @@ public:
   void print(raw_ostream &OS) const;
   void dump() const;
 
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
+  /// isIdenticalTo - Return true if this instruction is identical to (same
+  /// opcode and same operands as) the specified instruction.
+  bool isIdenticalTo(const ucOp &Other, MachineInstr::MICheckType Check
+                     = MachineInstr::IgnoreVRegDefs) const;
 };
 
 
@@ -282,9 +286,6 @@ public:
     EndIt = I.EndIt;
     return *this;
   }
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
 };
 
 // uc State in a FSM state.
@@ -328,9 +329,6 @@ public:
 
   void print(raw_ostream &OS) const;
   void dump() const;
-
-  // Out of line virtual function to provide home for the class.
-  virtual void anchor();
 };
 
 // Print the scheduled machine code of verilog target machine, which only

@@ -75,6 +75,49 @@ void ucOp::dump() const {
   dbgs() << '\n';
 }
 
+bool ucOp::isIdenticalTo(const ucOp &Other,
+                         MachineInstr::MICheckType Check) const {
+  ucOperand ThisOpCode = OpCode, OtherOpCode = Other.OpCode;
+  // FIXME: Clear pred slot only if user ask to.
+  if (!isControl()) {
+    ThisOpCode.clearPredSlot();
+    OtherOpCode.clearPredSlot();
+  }
+
+  // Dose other have the same opcode?
+  if (!ThisOpCode.isIdenticalTo(OtherOpCode))
+    return false;
+
+  // If is control op, dose other have the same predicate?
+  if (isControl() && !getPredicate().isIdenticalTo(Other.getPredicate()))
+    return false;
+
+  // Dose other have the same operand number?
+  if (getNumOperands() != Other.getNumOperands())
+    return false;
+
+  // Check the operands
+  for (unsigned i = 0, e = getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = getOperand(i);
+    const MachineOperand &OMO = Other.getOperand(i);
+    // Clients may or may not want to ignore defs when testing for equality.
+    // For example, machine CSE pass only cares about finding common
+    // subexpressions, so it's safe to ignore virtual register defs.
+    if (Check != MachineInstr::CheckDefs && MO.isReg() && MO.isDef()) {
+      if (Check == MachineInstr::IgnoreDefs)
+        continue;
+      // Check == IgnoreVRegDefs
+      if (TargetRegisterInfo::isPhysicalRegister(MO.getReg()) ||
+        TargetRegisterInfo::isPhysicalRegister(OMO.getReg()))
+        if (MO.getReg() != OMO.getReg())
+          return false;
+    } else if (!MO.isIdenticalTo(OMO))
+      return false;
+  }
+
+  return true;
+}
+
 ucOp::op_iterator ucOpIterator::getNextIt() const {
   ucOp::op_iterator NextIt = CurIt;
 
@@ -87,12 +130,6 @@ ucOp::op_iterator ucOpIterator::getNextIt() const {
 
   return NextIt;
 }
-
-// Out of line virtual function to provide home for the class.
-void ucOp::anchor() {}
-
-// Out of line virtual function to provide home for the class.
-void ucOpIterator::anchor() {}
 
 void ucState::print(raw_ostream &OS) const {
   switch (Instr.getOpcode()) {
@@ -111,10 +148,6 @@ void ucState::print(raw_ostream &OS) const {
 void ucState::dump() const {
   print(dbgs());
 }
-
-// Out of line virtual function to provide home for the class.
-void ucState::anchor() {}
-
 
 const TargetInstrDesc &ucOperand::getDesc() const {
   assert(isOpcode() && "getDesc on a wrong operand type!");
@@ -152,6 +185,15 @@ void ucOperand::changeOpcode(unsigned Opcode, unsigned PredSlot,
   Context |= (uint64_t(Opcode & OpcodeMask) << OpcodeShiftAmount);
   Context |= (uint64_t(PredSlot & PredSlotMask) << PredSlotShiftAmount);
   Context |= (uint64_t(FUId.getData() & FUIDMask) << FUIDShiftAmount);
+  setImm(Context);
+  setTargetFlags(IsOpcode);
+}
+
+void ucOperand::clearPredSlot() {
+  uint64_t Context = 0x0;
+  Context |= (uint64_t(getOpcode() & OpcodeMask) << OpcodeShiftAmount);
+  Context |= (uint64_t(0 & PredSlotMask) << PredSlotShiftAmount);
+  Context |= (uint64_t(getFUId().getData() & FUIDMask) << FUIDShiftAmount);
   setImm(Context);
   setTargetFlags(IsOpcode);
 }
