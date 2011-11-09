@@ -64,7 +64,8 @@ struct MergeFallThroughBlocks : public MachineFunctionPass {
 
   void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB);
 
-  void mergeReturnBB(MachineFunction &MF, const TargetInstrInfo *TII);
+  bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
+                     const TargetInstrInfo *TII);
 };
 }
 
@@ -87,29 +88,36 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
       MakeChanged |= BlockMerged |= mergeFallThroughBlock(&*I);
   } while (BlockMerged);
 
-  mergeReturnBB(MF, TII);
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
+    if (I->succ_size() == 0 && !I->empty()
+        && I->back().getOpcode() == VTM::VOpRet)
+      MakeChanged |= mergeReturnBB(MF, *I, TII);
+  }
 
-  // Tail merge tend to expose more if-conversion opportunities.
+  // FIXME: Disable tail merge?
   BranchFolder BF(true);
   MakeChanged |= BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                                      getAnalysisIfAvailable<MachineModuleInfo>());
 
   MF.RenumberBlocks();
+
   return MakeChanged;
 }
 
-void MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
+bool MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
+                                           MachineBasicBlock &RetBB,
                                            const TargetInstrInfo *TII) {
-  MachineBasicBlock &RetBB = MF.back();
   // Return port do not have any successor.
-  if (RetBB.succ_size()) return;
+  if (RetBB.succ_size()) return false;
+
+  assert(!RetBB.empty() && "Unexpected empty return block!");
 
   MachineInstr *RetValPHI = 0, *RetVal = 0, *Ret = 0;
 
   MachineBasicBlock::iterator I = RetBB.begin();
   if (I->isPHI()) {
     // Too much PHIs.
-    if (RetValPHI) return;
+    if (RetValPHI) return false;
 
     RetValPHI = I;
     ++I;
@@ -126,7 +134,7 @@ void MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
   }
 
   // Do not merge, if there are any unexpected instructions.
-  if (I != RetBB.end() || !Ret) return;
+  if (I != RetBB.end() || !Ret) return false;
 
   unsigned RetReg = 0;
   if (RetVal) RetReg = RetVal->getOperand(0).getReg();
@@ -209,6 +217,8 @@ void MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
                                            false);
     RetValPHI->removeFromParent();
   }
+
+  return true;
 }
 
 MachineBasicBlock *MergeFallThroughBlocks::getMergeDst(MachineBasicBlock *SrcBB,

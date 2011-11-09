@@ -61,7 +61,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
   // VInstrInfo::JT Table;
   // typedef VInstrInfo::JT::iterator jt_it;
 
-  // Tail merge tend to expose more if-conversion opportunities.
+  // FIXME: Disable tail merge?
   BranchFolder BF(true);
   BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                       getAnalysisIfAvailable<MachineModuleInfo>());
