@@ -104,7 +104,8 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
       if (!isUnpredicatedTerminator(Inst)) return true;
 
       Terms.push_back(Inst);
-    }
+    } else // Do not mess up with non-brcnd like terminators, i.e. return
+      return true;
   }
 
   // Mixing branches and return?
