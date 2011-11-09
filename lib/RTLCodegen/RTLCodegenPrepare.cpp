@@ -110,9 +110,9 @@ void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
       ucOp PHIUse = ucOp::getParent(DI);
 
       if (isWire)
-        PHIUse->changeOpcode(VTM::VOpMove_ww, PHIUse->getPredSlot());
+        PHIUse.changeOpcode(VTM::VOpMove_ww, PHIUse->getPredSlot());
       else if (PHIUse->getOpcode() == VTM::VOpMvPipe)
-        PHIUse->changeOpcode(VTM::VOpMove_rw, PHIUse->getPredSlot());
+        PHIUse.changeOpcode(VTM::VOpMove_rw, PHIUse->getPredSlot());
 
       assert(PHIUse.getOperand(2).getMBB() == UI->getParent()
              && "Destination MBB not match!");
@@ -124,7 +124,7 @@ void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
       ++NumDef;
     }
 
-    PHIDef->changeOpcode(VTM::IMPLICIT_DEF, PHIDef->getPredSlot());
+    PHIDef.changeOpcode(VTM::IMPLICIT_DEF, PHIDef->getPredSlot());
     assert((!isWire || NumDef == 1) && "Broken PHINode for wire!");
     (void) NumDef;
   }

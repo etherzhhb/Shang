@@ -839,7 +839,7 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
       MO.ChangeToImmediate(SrcReg);
       MO.setTargetFlags(64);
     } else {
-      Op->changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
+      Op.changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
       for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
         // Change the operand to some rubbish value.
         MachineOperand &MO = *OI;

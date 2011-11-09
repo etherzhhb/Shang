@@ -146,7 +146,9 @@ public:
   typedef mapped_iterator<MachineInstr::mop_iterator, ucOperand::Mapper>
           op_iterator;
 private:
-  ucOperand &OpCode;
+  // FIXME: We should use reference of ucOperand instead, but the operator= will
+  // not work, which is need by DenseMap.
+  ucOperand OpCode;
   // iterator op begin and op end.
   op_iterator rangeBegin, rangeEnd;
 
@@ -159,11 +161,29 @@ private:
     if (isControl()) ++rangeBegin;
   }
 
+  ucOp(uint64_t i) : OpCode(MachineOperand::CreateImm(i)),
+    rangeBegin(MachineInstr::mop_iterator(), ucOperand::Mapper()),
+    rangeEnd(MachineInstr::mop_iterator(), ucOperand::Mapper()) {}
+
   friend class ucOpIterator;
   friend class ucOperand;
+  friend struct ucOpExpressionTrait;
 
   void printOpcode(raw_ostream &OS) const;
 public:
+
+  const ucOp& operator=(const ucOp &RHS) {
+    OpCode = RHS.OpCode;
+    rangeBegin = RHS.rangeBegin;
+    rangeEnd = RHS.rangeEnd;
+    return *this;
+  }
+
+  void changeOpcode(unsigned Opcode, unsigned PredSlot,
+                    FuncUnitId FUId = VFUs::Trivial) {
+    OpCode.changeOpcode(Opcode, PredSlot, FUId);
+  }
+
   bool isControl() const;
 
   op_iterator op_begin() const { return rangeBegin; }
@@ -182,10 +202,10 @@ public:
     assert(MO.getParent() == OpCode.getParent()
            && "Call getOpIdx with MO from other MI!");
     int Idx = const_cast<MachineOperand*>(&MO)
-              - reinterpret_cast<MachineOperand*>(&OpCode);
-    assert(Idx > 0 && "Call getOpIdx with MO from other ucOp!");
+              - reinterpret_cast<MachineOperand*>(&*rangeBegin.getCurrent());
     // Operands place right after the opcode.
-    Idx -= (isControl() ? 2 : 1);
+    Idx += (isControl() ? 2 : 1);
+    assert(Idx > 0 && "Call getOpIdx with MO from other ucOp!");
     return Idx;
   }
 
@@ -194,7 +214,7 @@ public:
     return *(op_begin() - 1);
   }
 
-  ucOperand *operator->() const { return &OpCode; }
+  const ucOperand *operator->() const { return &OpCode; }
 
   template<typename def_use_it>
   static ucOp getParent(def_use_it DI) {
