@@ -806,6 +806,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
 
 void VPreRegAllocSched::cleanUpSchedule() {
   cleanUpRegisterClass(VTM::DRRegisterClass);
+  cleanUpRegisterClass(VTM::WireRegisterClass);
   fixCmpFUPort();
 }
 

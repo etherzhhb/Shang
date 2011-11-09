@@ -50,6 +50,7 @@
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/CodeGen/RegisterCoalescer.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-regalloc"
@@ -126,6 +127,7 @@ struct VRASimple : public MachineFunctionPass {
         BitWidth = std::max(BitWidth, DefOp.getBitWidth());
     }
 
+    assert(BitWidth && "Unexpected empty define register");
     return BitWidth;
   }
 
@@ -147,7 +149,9 @@ struct VRASimple : public MachineFunctionPass {
 
   // Put all datapath op that using the corresponding register of the LI to
   // the user vector.
-  void extractDatapathUsers(LiveInterval *LI, SmallVectorImpl<ucOp> &Users);
+  typedef DenseMap<ucOp, LiveInterval*, ucOpExpressionTrait> DatapathOpMap;
+  void extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users);
+  void mergeEquLIs(EquivalenceClasses<LiveInterval*> &LIs);
 
   // Pre-bound function unit binding functions.
   void bindMemoryBus();
@@ -1107,45 +1111,81 @@ void VRASimple::joinPHINodeIntervals() {
   }
 }
 
-void VRASimple::extractDatapathUsers(LiveInterval *LI,
-                                     SmallVectorImpl<ucOp> &Users) {
+void VRASimple::mergeEquLIs(EquivalenceClasses<LiveInterval*> &EquLIs) {
+  // Merge the equivalence liveintervals.
+  typedef EquivalenceClasses<LiveInterval*>::iterator equ_li_it;
+  typedef EquivalenceClasses<LiveInterval*>::member_iterator mem_it;
+  for (equ_li_it I = EquLIs.begin(), E = EquLIs.end(); I != E; ++I) {
+    if (!I->isLeader()) continue;
+
+    mem_it MI = EquLIs.member_begin(I);
+    LiveInterval *LeaderLI = *MI++;
+
+    while (MI != EquLIs.member_end()) {
+      LiveInterval *CurLI = *MI++;
+      if (MRI->use_empty(CurLI->reg)) continue;
+
+    // FIXME: Why the identical datapath ops overlap?
+      mergeLI(CurLI, LeaderLI, true);
+    }
+  }
+}
+
+void VRASimple::extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users) {
   typedef MachineRegisterInfo::use_iterator use_it;
+  EquivalenceClasses<LiveInterval*> EquLIs;
+
   for (use_it I = MRI->use_begin(LI->reg), E = MRI->use_end(); I != E; ++I) {
     if (I.getOperand().isImplicit()) continue;
 
     ucOp Op = ucOp::getParent(I);
-    if (!Op.isControl()) Users.push_back(Op);
+    if (!Op.isControl()) {
+      // Datapath op should define and only define its result at operand 0.
+      LiveInterval *LI = getInterval(Op.getOperand(0).getReg());
+      // Ignore the dead datapath ops.
+      if (MRI->use_empty(LI->reg)) continue;
+
+      std::pair<DatapathOpMap::iterator, bool> p =
+        Users.insert(std::make_pair(Op, LI));
+      // Merge all identical datapath ops.
+      if (!p.second && LI != p.first->second) {
+        EquLIs.unionSets(LI, p.first->second);
+      }
+    }
   }
+
+  // Merge the equivalence liveintervals.
+  mergeEquLIs(EquLIs);
 }
 
 void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
                         bool AllowOverlap) {
+  assert(FromLI != ToLI && "Why we merge the same LI?");
   assert((AllowOverlap || !ToLI->overlaps(*FromLI)) && "Cannot merge LI!");
   assert(getBitWidthOf(FromLI->reg) == getBitWidthOf(ToLI->reg)
          && "Cannot merge LIs difference with bit width!");
-  JoinIntervals(*ToLI, *FromLI, TRI, MRI);
-
   // Extract all wires drive by FromLI and ToLI, they may became identical.
-  SmallVector<ucOp, 16> FromUsers, ToUsers;
+  DatapathOpMap FromUsers, ToUsers;
   extractDatapathUsers(FromLI, FromUsers);
   extractDatapathUsers(ToLI, ToUsers);
 
+  JoinIntervals(*ToLI, *FromLI, TRI, MRI);
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
 
-  // Merge all identical datapath operations
-  while (!FromUsers.empty())  {
-    ucOp FromOp = FromUsers.pop_back_val();
+  EquivalenceClasses<LiveInterval*> EquLIs;
+  for (DatapathOpMap::iterator I = FromUsers.begin(), E = FromUsers.end();
+       I != E; ++I) {
+    ucOp FromOp = I->first;
+    DatapathOpMap::iterator at = ToUsers.find(FromOp);
+    if (at == ToUsers.end()) continue;
 
-    for (unsigned i = 0, e = ToUsers.size(); i != e; ++i) {
-      ucOp ToOp = ToUsers[i];
-      if (ToOp.isIdenticalTo(FromOp)) {
-        unsigned FromReg = FromOp.getOperand(0).getReg();
-        unsigned ToReg = ToOp.getOperand(0).getReg();
-        if (FromReg != ToReg)
-          mergeLI(getInterval(FromReg), getInterval(ToReg), true);
-      }
-    }
+    assert(I->second != at->second && "Unexpected identical live interval!");
+    // Merge the identical datapath ops.
+    EquLIs.unionSets(I->second, at->second);
   }
+
+  // Merge the equivalence liveintervals.
+  mergeEquLIs(EquLIs);
 }
 
 void VRASimple::bindMemoryBus() {
