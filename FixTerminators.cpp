@@ -61,8 +61,8 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
   // VInstrInfo::JT Table;
   // typedef VInstrInfo::JT::iterator jt_it;
 
-  // FIXME: Disable tail merge?
-  BranchFolder BF(true);
+  // Optimize the cfg, but do not perform tail merge.
+  BranchFolder BF(false);
   BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                       getAnalysisIfAvailable<MachineModuleInfo>());
 
@@ -97,6 +97,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       if (FirstTerminator && VInstrInfo::isUnConditionalBranch(Inst)){
         MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
         MachineOperand &FalseCnd = Inst->getOperand(0);
+        TrueCnd.setIsKill(false);
         FalseCnd.setReg(TrueCnd.getReg());
         FalseCnd.setTargetFlags(TrueCnd.getTargetFlags());
         VInstrInfo::ReversePredicateCondition(FalseCnd);
@@ -114,6 +115,8 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       if (FirstTerminator) {
         MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
         assert(TrueCnd.getReg() != 0 && "Two unconditional branch?");
+        // We will use the register somewhere else
+        TrueCnd.setIsKill(false);
         Cnd = TrueCnd;
         VInstrInfo::ReversePredicateCondition(Cnd);
       }

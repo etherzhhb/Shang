@@ -94,8 +94,8 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
       MakeChanged |= mergeReturnBB(MF, *I, TII);
   }
 
-  // FIXME: Disable tail merge?
-  BranchFolder BF(true);
+  // Optimize the cfg, but do not perform tail merge.
+  BranchFolder BF(false);
   MakeChanged |= BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                                      getAnalysisIfAvailable<MachineModuleInfo>());
 
@@ -169,7 +169,7 @@ bool MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
             = SrcMOs.find(PredBB);
           if (at != SrcMOs.end()) {
             RetReg = at->second;
-            // Remove the incomming value from the PHI.
+            // Remove the incoming value from the PHI.
             for (unsigned i = 1, e = RetValPHI->getNumOperands();i != e;i += 2)
               if (RetValPHI->getOperand(i + 1).getMBB() == PredBB) {
                 RetValPHI->RemoveOperand(i);

@@ -260,6 +260,7 @@ void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
   }
 
   for (JT::iterator I = Table.begin(), E = Table.end(); I != E; ++I) {
+    I->second.setIsKill(false);
     BuildMI(&BB, dl, VTMInsts[VTM::VOpToStateb])
       .addOperand(I->second).addMBB(I->first)
       .addOperand(ucOperand::CreatePredicate())
