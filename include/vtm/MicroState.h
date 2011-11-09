@@ -31,6 +31,7 @@ class TargetInstrDesc;
 class ucOpIterator;
 class ucState;
 class ucOp;
+struct ucOpExpressionTrait;
 
 //uc Operand
 class ucOperand : public MachineOperand {
@@ -243,6 +244,31 @@ public:
                      = MachineInstr::IgnoreVRegDefs) const;
 };
 
+ //ucOpExpressionTrait - Special DenseMapInfo traits to compare
+ //ucOp* by *value* of the instruction rather than by pointer value.
+ //The hashing and equality testing functions ignore definitions so this is
+ //useful for CSE, etc.
+struct ucOpExpressionTrait : DenseMapInfo<ucOp> {
+  static inline ucOp getEmptyKey() {
+    return ucOp(0);
+  }
+
+  static inline ucOp getTombstoneKey() {
+    return ucOp(-1);
+  }
+
+  static unsigned getHashValue(ucOp Op);
+
+  static bool isEqual(ucOp LHS, ucOp RHS) {
+    if (RHS.OpCode.isIdenticalTo(getEmptyKey().OpCode)
+        || RHS.OpCode.isIdenticalTo(getTombstoneKey().OpCode)
+        || LHS.OpCode.isIdenticalTo(getEmptyKey().OpCode)
+        || LHS.OpCode.isIdenticalTo(getTombstoneKey().OpCode))
+        return LHS.OpCode.isIdenticalTo(RHS.OpCode);
+
+    return LHS.isIdenticalTo(RHS, MachineInstr::IgnoreVRegDefs);
+  }
+};
 
 static inline raw_ostream &operator<<(raw_ostream &O, const ucOp &Op) {
   Op.print(O);
