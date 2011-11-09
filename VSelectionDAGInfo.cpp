@@ -20,7 +20,7 @@
 
 using namespace llvm;
 cl::opt<bool> EnableMemSCM("vtm-enable-memscm",
-                           cl::init(false), cl::Hidden);
+                           cl::init(true), cl::Hidden);
 
 VSelectionDAGInfo::VSelectionDAGInfo(const VTargetMachine &TM)
   : TargetSelectionDAGInfo(TM) {
