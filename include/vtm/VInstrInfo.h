@@ -320,8 +320,8 @@ public:
   FuncUnitId getPrebindFUId() const;
 };
 
-// Compute the latency of a given MBB.
-class CompLatency {
+// Compute the cycle latency of a given MBB.
+class CycleLatencyInfo {
   typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > DepLatencyMap;
   DepLatencyMap DepInfo;
 
@@ -333,7 +333,7 @@ class CompLatency {
   unsigned updateFULatency(unsigned FUId, unsigned Latency, MachineInstr *MI);
 
 public:
-  CompLatency() {}
+  CycleLatencyInfo() {}
 
   unsigned computeLatency(MachineBasicBlock &MBB);
 

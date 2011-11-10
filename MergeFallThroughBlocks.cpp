@@ -255,7 +255,7 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
   if (!ToBB) return false;
 
   unsigned IncreasedLatency = 0;
-  CompLatency CL;
+  CycleLatencyInfo CL;
   unsigned OriginalLatency = CL.computeLatency(*ToBB);
   unsigned MergedLatency = CL.computeLatency(*FromBB);
   if (MergedLatency > OriginalLatency)

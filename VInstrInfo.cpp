@@ -1000,7 +1000,7 @@ bool VIDesc::canCopyBeFused() const {
   return MRI.getRegClass(DstReg) != MRI.getRegClass(SrcReg);
 }
 
-unsigned CompLatency::computeLatency(MachineBasicBlock &MBB) {
+unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
   unsigned TotalLatency = 0;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
     MachineInstr *MI = I;
@@ -1031,7 +1031,7 @@ unsigned CompLatency::computeLatency(MachineBasicBlock &MBB) {
   return TotalLatency;
 }
 
-unsigned CompLatency::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
+unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   unsigned SrcLatency = 0;
   MachineInstr *SrcMI = 0;
   DepLatencyMap::const_iterator at = DepInfo.find(Reg);
@@ -1043,7 +1043,7 @@ unsigned CompLatency::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   return SrcLatency + VInstrInfo::computeLatency(SrcMI, MI);
 }
 
-unsigned CompLatency::updateFULatency(unsigned FUId, unsigned Latency,
+unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
                                       MachineInstr *MI) {
   std::pair<MachineInstr*, unsigned> &LI = FUInfo[FUId];
   unsigned &FULatency = LI.second;

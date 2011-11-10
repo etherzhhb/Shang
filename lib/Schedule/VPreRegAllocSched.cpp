@@ -255,7 +255,6 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   return true;
 }
 
-
 void VPreRegAllocSched::clear() {
   // Reset total Cycle
   totalCycle = 1;
