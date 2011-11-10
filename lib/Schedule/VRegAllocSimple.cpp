@@ -150,7 +150,7 @@ struct VRASimple : public MachineFunctionPass {
   // Put all datapath op that using the corresponding register of the LI to
   // the user vector.
   typedef DenseMap<ucOp, unsigned, ucOpExpressionTrait> DatapathOpMap;
-  void extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users);
+  void mergeIdenticalDatapath(LiveInterval *LI);
   typedef EquivalenceClasses<unsigned> EquRegClasses;
   void mergeEquLIs(EquRegClasses &LIs);
 
@@ -1141,8 +1141,9 @@ void VRASimple::mergeEquLIs(EquRegClasses &EquLIs) {
   }
 }
 
-void VRASimple::extractDatapathUsers(LiveInterval *LI, DatapathOpMap &Users) {
+void VRASimple::mergeIdenticalDatapath(LiveInterval *LI) {
   typedef MachineRegisterInfo::use_iterator use_it;
+  DatapathOpMap Users;
   EquRegClasses EquLIs;
 
   for (use_it I = MRI->use_begin(LI->reg), E = MRI->use_end(); I != E; ++I) {
@@ -1173,37 +1174,11 @@ void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
   assert((AllowOverlap || !ToLI->overlaps(*FromLI)) && "Cannot merge LI!");
   assert(getBitWidthOf(FromLI->reg) == getBitWidthOf(ToLI->reg)
          && "Cannot merge LIs difference with bit width!");
-  // Extract all wires drive by FromLI and ToLI, they may became identical.
-  DatapathOpMap FromUsers, ToUsers;
-  extractDatapathUsers(FromLI, FromUsers);
-  extractDatapathUsers(ToLI, ToUsers);
 
   JoinIntervals(*ToLI, *FromLI, TRI, MRI);
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
-
-  EquRegClasses EquLIs;
-  for (DatapathOpMap::iterator I = FromUsers.begin(), E = FromUsers.end();
-       I != E; ++I) {
-    ucOp FromOp = I->first;
-    DatapathOpMap::iterator at = ToUsers.find(FromOp);
-    if (MRI->use_empty(I->second)) continue;
-
-    if (at == ToUsers.end()) continue;
-
-    assert(I->second != at->second && "Unexpected identical live interval!");
-
-    // Remove the dead op in the map.
-    if (MRI->use_empty(at->second)) {
-      ToUsers.erase(at);
-      continue;
-    }
-
-    // Merge the identical datapath ops.
-    EquLIs.unionSets(I->second, at->second);
-  }
-
-  // Merge the equivalence liveintervals.
-  mergeEquLIs(EquLIs);
+  // Merge the identical datapath ops.
+  mergeIdenticalDatapath(ToLI);
 }
 
 void VRASimple::bindMemoryBus() {
