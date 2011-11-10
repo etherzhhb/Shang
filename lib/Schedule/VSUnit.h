@@ -537,7 +537,7 @@ public:
 private:
   const TargetMachine &TM;
   MachineBasicBlock *MBB;
-  SUnitVecTy SUnits;
+  SUnitVecTy CtrlSUs;
   // The number of schedule unit.
   unsigned SUCount;
 
@@ -557,7 +557,7 @@ private:
   VSUnit *createEntry() {
     VSUnit *Entry = new VSUnit(SUCount);
     ++SUCount;
-    SUnits.push_back(Entry);
+    CtrlSUs.push_back(Entry);
     return Entry;
   }
 
@@ -571,7 +571,7 @@ public:
   }
 
   ~VSchedGraph() {
-    std::for_each(SUnits.begin(), SUnits.end(), deleter<VSUnit>);
+    std::for_each(CtrlSUs.begin(), CtrlSUs.end(), deleter<VSUnit>);
   }
 
   void mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
@@ -613,28 +613,28 @@ public:
 
   /// @name Roots
   //{
-  VSUnit *getEntryRoot() const { return SUnits.front(); }
-  VSUnit *getExitRoot() const { return SUnits.back(); }
+  VSUnit *getEntryRoot() const { return CtrlSUs.front(); }
+  VSUnit *getExitRoot() const { return CtrlSUs.back(); }
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
   typedef SUnitVecTy::iterator iterator;
-  iterator begin()  { return SUnits.begin(); }
-  iterator end()    { return SUnits.end(); }
+  iterator begin()  { return CtrlSUs.begin(); }
+  iterator end()    { return CtrlSUs.end(); }
 
   typedef SUnitVecTy::const_iterator const_iterator;
-  const_iterator begin() const { return SUnits.begin(); }
-  const_iterator end()   const { return SUnits.end(); }
+  const_iterator begin() const { return CtrlSUs.begin(); }
+  const_iterator end()   const { return CtrlSUs.end(); }
 
   typedef SUnitVecTy::reverse_iterator reverse_iterator;
-  reverse_iterator rbegin()  { return SUnits.rbegin(); }
-  reverse_iterator rend()    { return SUnits.rend(); }
+  reverse_iterator rbegin()  { return CtrlSUs.rbegin(); }
+  reverse_iterator rend()    { return CtrlSUs.rend(); }
 
   typedef SUnitVecTy::const_reverse_iterator const_reverse_iterator;
-  const_reverse_iterator rbegin() const { return SUnits.rbegin(); }
-  const_reverse_iterator rend()   const { return SUnits.rend(); }
+  const_reverse_iterator rbegin() const { return CtrlSUs.rbegin(); }
+  const_reverse_iterator rend()   const { return CtrlSUs.rend(); }
 
-  size_t getNumSUnits() const { return SUnits.size(); }
+  size_t getNumSUnits() const { return CtrlSUs.size(); }
 
   void resetSchedule(unsigned MII);
 

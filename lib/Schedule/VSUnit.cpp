@@ -59,7 +59,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   VSUnit *SU = new VSUnit(VTID.hasDatapath(), SUCount, fuid);
   ++SUCount;
 
-  SUnits.push_back(SU);
+  CtrlSUs.push_back(SU);
   mapMI2SU(I, SU, VTID.getLatency());
   return SU;
 }
@@ -83,15 +83,15 @@ void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
 
 void VSchedGraph::removeDeadSU() {
   unsigned Idx = 0;
-  for (unsigned i = 0, e = SUnits.size(); i != e; ++i) {
-    if (SUnits[i]) {
+  for (unsigned i = 0, e = CtrlSUs.size(); i != e; ++i) {
+    if (CtrlSUs[i]) {
       // Also update InstIdx.
-      SUnits[Idx] = SUnits[i]->updateIdx(Idx);
+      CtrlSUs[Idx] = CtrlSUs[i]->updateIdx(Idx);
       ++Idx;
     }
   }
 
-  SUnits.resize(Idx);
+  CtrlSUs.resize(Idx);
   SUCount = Idx;
 }
 

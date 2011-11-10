@@ -590,7 +590,7 @@ static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
 }
 
 void VSchedGraph::preSchedTopSort() {
-  std::sort(SUnits.begin(), SUnits.end(), top_sort_start);
+  std::sort(CtrlSUs.begin(), CtrlSUs.end(), top_sort_start);
 }
 
 void VSchedGraph::emitSchedule() {
