@@ -46,6 +46,7 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
+Pass *createBitLevelABCOptPass();
 
 Pass *createFixMachineCodePass();
 Pass *createFixTerminatorsPass();
@@ -75,6 +76,9 @@ Pass *createContoBromPass(const TargetIntrinsicInfo &IntrinsicInfo);
 void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 
+void initializeBitLevelABCOptPass(PassRegistry &Registry);
+
+//Add the initialization implementation of StackToGlobal.cpp.
 void initializeStackToGlobalPass(PassRegistry &Registry);
 
 void initializeRTLCodegenPass(PassRegistry &Registry);

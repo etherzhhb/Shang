@@ -89,6 +89,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // The ContoBromPass
   PM.add(createContoBromPass(*getIntrinsicInfo()));
 
+  // Dirty Hack: Map all frame stuffs to bram 1.
+  // PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
+
   // Standard LLVM-Level Passes.
 
   // Before running any passes, run the verifier to determine if the input
@@ -170,7 +173,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // PerformBit level information analyze.
   PM.add(createBitLevelInfoPass());
-
+  PM.add(createBitLevelABCOptPass());
   // Optimize PHIs before DCE: removing dead PHI cycles may make more
   // instructions dead.
   PM.add(createOptimizePHIsPass());
