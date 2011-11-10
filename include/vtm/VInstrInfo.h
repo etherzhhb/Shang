@@ -335,8 +335,13 @@ private:
   MachineRegisterInfo &MRI;
 
   // Update the latency entry in the latency information table.
-  static void updateLatency(OperandLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
+  static void updateLatency(OperandLatInfoTy &CurLatInfo,
+                            const MachineInstr *SrcMI,
                             double CurLatency);
+
+  // Add the latency information from SrcMI to CurLatInfo.
+  void buildOperandLatInfo(const MachineInstr *SrcMI,
+                           OperandLatInfoTy &CurLatInfo);
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
@@ -346,6 +351,9 @@ private:
 
   const OperandLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                            bool IgnorePHISrc);
+  // Also remember the operations that do not use by any others operations in
+  // the same bb.
+  std::set<const MachineInstr*> ExitMIs;
 public:
   DetialLatencyInfo(MachineRegisterInfo &mri) : MRI(mri) {}
 
@@ -371,7 +379,14 @@ public:
     return at == LatencyMap.end() ? 0 : &at->second;
   }
 
-  void reset() { LatencyMap.clear(); }
+  // All operation must finish before the BB exit, this function build the
+  // information about the latency from instruction to the BB exit.
+  void buildExitMIInfo(OperandLatInfoTy &Info);
+
+  void reset() {
+    LatencyMap.clear();
+    ExitMIs.clear();
+  }
 };
 
 // Compute the cycle latency of a given MBB.

@@ -1033,6 +1033,25 @@ DetialLatencyInfo::accumulateDatapathLatencies(OperandLatInfoTy &CurLatInfo,
     updateLatency(CurLatInfo, I->first, CurLatency + I->second);
 }
 
+void DetialLatencyInfo::buildOperandLatInfo(const MachineInstr *SrcMI,
+                                            OperandLatInfoTy &CurLatInfo) {
+  const OperandLatInfoTy *SrcLatInfo = getOperandLatInfo(SrcMI);
+  // Latency information not available, the SrcMI maybe in others BB, no need
+  // to compute cross BB latency.
+  if (SrcLatInfo == 0) return;
+
+  double CurLatency = getDetialLatency(SrcMI);
+  if (!VIDesc(*SrcMI).hasDatapath()) {
+    // Simply add the latency from ctrl op to the latency map.
+    updateLatency(CurLatInfo, SrcMI, CurLatency);
+    return;
+  }
+
+  // Forward all latency information from a datapath op to get the ctrl to
+  // ctrl latency.
+  accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, CurLatency);
+}
+
 const DetialLatencyInfo::OperandLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   OperandLatInfoTy &CurLatInfo = LatencyMap[MI];
@@ -1051,24 +1070,22 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     // Do we ignore phi as dependence?
     if (SrcMI->isPHI() && IgnorePHISrc) continue;
 
-    const OperandLatInfoTy *SrcLatInfo = getOperandLatInfo(SrcMI);
-    // Latency information not available, the SrcMI maybe in others BB, no need
-    // to compute cross BB latency.
-    if (SrcLatInfo == 0) continue;
-
-    double CurLatency = getDetialLatency(SrcMI);
-    if (!VIDesc(*SrcMI).hasDatapath()) {
-      // Simply add the latency from ctrl op to the latency map.
-      updateLatency(CurLatInfo, SrcMI, CurLatency);
-      continue;
-    }
-
-    // Forward all latency information from a datapath op to get the ctrl to
-    // ctrl latency.
-    accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, CurLatency);
+    // SrcMI have user now.
+    ExitMIs.erase(SrcMI);
+    buildOperandLatInfo(SrcMI, CurLatInfo);
   }
 
+  // Assume MI do not have any user in the same BB, if it has, it will be
+  // deleted later.
+  ExitMIs.insert(MI);
+
   return CurLatInfo;
+}
+
+void DetialLatencyInfo::buildExitMIInfo(OperandLatInfoTy &Info) {
+  typedef std::set<const MachineInstr*>::const_iterator exit_it;
+  for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
+    buildOperandLatInfo(*I, Info);
 }
 
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
