@@ -320,6 +320,60 @@ public:
   FuncUnitId getPrebindFUId() const;
 };
 
+// Compute the detail ctrlop to ctrlop latency (in cycle ratio) infromation of
+// a given MBB.
+class DetialLatencyInfo {
+public:
+  // The latency from a given operation to the current operation.
+  typedef std::map<const MachineInstr*, double> OperandLatInfoTy;
+private:
+  // The latency from all register source through the datapath to a given
+  // wire/register define by a datapath/control op
+  typedef std::map<const MachineInstr*, OperandLatInfoTy> LatencyMapTy;
+
+  LatencyMapTy LatencyMap;
+  MachineRegisterInfo &MRI;
+
+  // Update the latency entry in the latency information table.
+  static void updateLatency(OperandLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
+                            double CurLatency);
+
+  // Forward all datapath latencies so the latency information table only
+  // contains control to control latency.
+  void accumulateDatapathLatencies(OperandLatInfoTy &CurLatInfo,
+                                   const OperandLatInfoTy &SrcLatInfo,
+                                   double CurLatency);
+
+  const OperandLatInfoTy &addInstrInternal(const MachineInstr *MI,
+                                           bool IgnorePHISrc);
+public:
+  DetialLatencyInfo(MachineRegisterInfo &mri) : MRI(mri) {}
+
+  // Add the a machine instruction and compute the corresponding latency
+  // information, return true if the MI is a control operation, false otherwise.
+  void addInstr(const MachineInstr *MI) {
+    addInstrInternal(MI, false);
+  }
+
+  // Build the back-edge latency information of PHIs.
+  const OperandLatInfoTy &buildPHIBELatInfo(const MachineInstr *MI) {
+    assert(MI->isPHI() && "Expect PHI!");
+    // Simply add the back-edge dependence information of the which not
+    // available at the first scan, but already available now.
+    // Because PHINodes not depends on PHINodes in the same BB, we should ignore
+    // PHINodes if it appear as an operand.
+    return addInstrInternal(MI, true);
+  }
+
+  // Get the source register and the corresponding latency to DstMI
+  const OperandLatInfoTy *getOperandLatInfo(const MachineInstr *DstMI) const {
+    LatencyMapTy::const_iterator at = LatencyMap.find(DstMI);
+    return at == LatencyMap.end() ? 0 : &at->second;
+  }
+
+  void reset() { LatencyMap.clear(); }
+};
+
 // Compute the cycle latency of a given MBB.
 class CycleLatencyInfo {
   typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > DepLatencyMap;
@@ -342,7 +396,6 @@ public:
     FUInfo.clear();
   }
 };
-
 } // end namespace llvm
 
 #endif

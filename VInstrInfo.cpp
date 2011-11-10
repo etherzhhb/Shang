@@ -1000,6 +1000,77 @@ bool VIDesc::canCopyBeFused() const {
   return MRI.getRegClass(DstReg) != MRI.getRegClass(SrcReg);
 }
 
+// Get the latency of a machineinstr in cycle ratio.
+static double getDetialLatency(const MachineInstr *MI) {
+  // Dirty Hack: Datapath take 0 cycle, and control take 1 cycle.
+  if (VIDesc(*MI).hasDatapath()) return 0.0;
+  else                           return 1.0;
+}
+
+void DetialLatencyInfo::updateLatency(OperandLatInfoTy &CurLatInfo,
+                                      const MachineInstr*SrcMI,
+                                      double CurLatency) {
+  // Latency from a control operation is simply the latency of the control
+  // operation.
+  // We may have dependency like:
+  //  other op
+  //    |   \
+  //    |   other op
+  //    |   /
+  // current op
+  // We should update the latency if we get a bigger latency.
+  double &Latency = CurLatInfo[SrcMI];
+  Latency = std::max(Latency, CurLatency);
+}
+
+void
+DetialLatencyInfo::accumulateDatapathLatencies(OperandLatInfoTy &CurLatInfo,
+                                               const OperandLatInfoTy &SrcLatInfo,
+                                               double CurLatency){
+  typedef OperandLatInfoTy::const_iterator src_it;
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
+    // Accumulate the latency from the source latency information.
+    updateLatency(CurLatInfo, I->first, CurLatency + I->second);
+}
+
+const DetialLatencyInfo::OperandLatInfoTy &
+DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
+  OperandLatInfoTy &CurLatInfo = LatencyMap[MI];
+
+  // Iterate from use to define.
+  typedef MachineInstr::const_mop_iterator op_it;
+  for (op_it I = MI->operands_begin(), E = MI->operands_end(); I != E; ++I) {
+    const MachineOperand &MO = *I;
+
+    // Only care about a use register.
+    if (!MO.isReg() || MO.isDef() || MO.getReg() == 0) continue;
+
+    unsigned SrcReg = MO.getReg();
+    MachineInstr *SrcMI = MRI.getVRegDef(SrcReg);
+    assert(SrcMI && "Virtual register use without define!");
+    // Do we ignore phi as dependence?
+    if (SrcMI->isPHI() && IgnorePHISrc) continue;
+
+    const OperandLatInfoTy *SrcLatInfo = getOperandLatInfo(SrcMI);
+    // Latency information not available, the SrcMI maybe in others BB, no need
+    // to compute cross BB latency.
+    if (SrcLatInfo == 0) continue;
+
+    double CurLatency = getDetialLatency(SrcMI);
+    if (!VIDesc(*SrcMI).hasDatapath()) {
+      // Simply add the latency from ctrl op to the latency map.
+      updateLatency(CurLatInfo, SrcMI, CurLatency);
+      continue;
+    }
+
+    // Forward all latency information from a datapath op to get the ctrl to
+    // ctrl latency.
+    accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, CurLatency);
+  }
+
+  return CurLatInfo;
+}
+
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
   unsigned TotalLatency = 0;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
