@@ -139,10 +139,10 @@ template <> struct GraphTraits<SchedulingBase*>
     : public GraphTraits<VSchedGraph*> {
   typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(SchedulingBase *G) {
-    return G->getState().begin();
+    return G->getState().ctrl_begin();
   }
   static nodes_iterator nodes_end(SchedulingBase *G) {
-    return G->getState().end();
+    return G->getState().ctrl_end();
   }
 };
 

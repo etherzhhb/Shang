@@ -59,7 +59,10 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   VSUnit *SU = new VSUnit(VTID.hasDatapath(), SUCount, fuid);
   ++SUCount;
 
-  CtrlSUs.push_back(SU);
+  if  (VTID.hasDatapath())
+    DatapathSus.push_back(SU);
+  else
+    CtrlSUs.push_back(SU);
   mapMI2SU(I, SU, VTID.getLatency());
   return SU;
 }
@@ -76,7 +79,7 @@ void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
   }
 
   // Delete source and mark it as dead.
- iterator I = std::find(begin(), end(), Src);
+ iterator I = std::find(ctrl_begin(), ctrl_end(), Src);
  delete *I;
  *I = 0;
 }
@@ -96,7 +99,7 @@ void VSchedGraph::removeDeadSU() {
 }
 
 void VSchedGraph::resetSchedule(unsigned MII) {
-  for (iterator I = begin(), E = end(); I != E; ++I) {
+  for (iterator I = ctrl_begin(), E = ctrl_end(); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }

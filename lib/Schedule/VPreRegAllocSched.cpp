@@ -375,7 +375,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   MemOpMapTy VisitedMemOps;
   Loop *IRL = IRLI->getLoopFor(CurState.getMachineBasicBlock()->getBasicBlock());
 
-  for (VSchedGraph::iterator I = CurState.begin(), E = CurState.end(); I != E;
+  for (VSchedGraph::iterator I = CurState.ctrl_begin(), E = CurState.ctrl_end(); I != E;
        ++I) {
     VSUnit *DstU = *I;
     MachineInstr *DstMI = DstU->getRepresentativeInst();
@@ -755,7 +755,7 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   State.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
-  for (VSchedGraph::iterator I = ++State.begin(), E = State.end(); I != E; ++I)
+  for (VSchedGraph::iterator I = ++State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I)
     addValueDeps(*I, State, DetialLat);
 
   assert(!Terms.empty() && "Can not found any terminator!");

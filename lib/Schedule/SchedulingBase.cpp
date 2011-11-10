@@ -45,14 +45,14 @@ void SchedulingBase::buildASAPStep() {
   VSUnit *Entry = State.getEntryRoot();
   SUnitToTF[Entry->getIdx()].first = OpSlot(Entry->getSlot(), !Entry->hasDatapath());
 
-  VSchedGraph::iterator Start = State.begin();
+  VSchedGraph::iterator Start = State.ctrl_begin();
 
   bool changed = false;
 
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::iterator I = Start + 1, E = State.end(); I != E; ++I) {
+    for (VSchedGraph::iterator I = Start + 1, E = State.ctrl_end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A->getIdx()].first =OpSlot(A->getSlot(), !A->hasDatapath()) ;
@@ -102,13 +102,13 @@ void SchedulingBase::buildALAPStep() {
   int LastSlot = CriticalPathEnd;
   SUnitToTF[Exit->getIdx()].second = OpSlot(LastSlot , !Exit->hasDatapath());
 
-  VSchedGraph::reverse_iterator Start = State.rbegin();
+  VSchedGraph::reverse_iterator Start = State.ctrl_rbegin();
 
   bool changed = false;
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::reverse_iterator I = Start + 1, E = State.rend();
+    for (VSchedGraph::reverse_iterator I = Start + 1, E = State.ctrl_rend();
          I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
@@ -156,7 +156,7 @@ void SchedulingBase::buildALAPStep() {
 
 #ifndef NDEBUG
   // Verify the time frames.
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
   }
@@ -165,7 +165,7 @@ void SchedulingBase::buildALAPStep() {
 
 void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
       I != E; ++I) {
     VSUnit *A = *I;
     A->print(OS);
@@ -182,7 +182,7 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
 
 unsigned SchedulingBase::computeResMII() {
   std::map<FuncUnitId, unsigned> TotalResUsage;
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *SU = *I;
     if (SU->getFUId().isTrivial()) continue;
 
@@ -273,7 +273,7 @@ bool SchedulingBase::isResourceConstraintPreserved() {
   ExtraResReq = 0.0;
   resetRT();
 
-  for (VSchedGraph::iterator I = State.begin(), E = State.end(); I != E; ++I) {
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     FuncUnitId FU = A->getFUId();
     // We only try to balance the post bind resource.
@@ -322,7 +322,7 @@ unsigned SchedulingBase::buildFDepHD(bool rstSTF) {
 
 //===----------------------------------------------------------------------===//
 void SchedulingBase::schedulePassiveSUnits() {
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     VSUnit *A = *I;
     if (A->isScheduled())
@@ -339,7 +339,7 @@ void SchedulingBase::schedulePassiveSUnits() {
 }
 
 bool SchedulingBase::allNodesSchedued() const {
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled()) return false;
@@ -352,7 +352,7 @@ bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
   if (refreshFDepHD)
     buildFDepHD(true);
 
-  for (VSchedGraph::iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
     I != E; ++I) {
       VSUnit *A = *I;
 

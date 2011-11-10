@@ -537,7 +537,7 @@ public:
 private:
   const TargetMachine &TM;
   MachineBasicBlock *MBB;
-  SUnitVecTy CtrlSUs;
+  SUnitVecTy CtrlSUs, DatapathSus;
   // The number of schedule unit.
   unsigned SUCount;
 
@@ -619,20 +619,20 @@ public:
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
   typedef SUnitVecTy::iterator iterator;
-  iterator begin()  { return CtrlSUs.begin(); }
-  iterator end()    { return CtrlSUs.end(); }
+  iterator ctrl_begin()  { return CtrlSUs.begin(); }
+  iterator ctrl_end()    { return CtrlSUs.end(); }
 
   typedef SUnitVecTy::const_iterator const_iterator;
-  const_iterator begin() const { return CtrlSUs.begin(); }
-  const_iterator end()   const { return CtrlSUs.end(); }
+  const_iterator ctrl_begin() const { return CtrlSUs.begin(); }
+  const_iterator ctrl_end()   const { return CtrlSUs.end(); }
 
   typedef SUnitVecTy::reverse_iterator reverse_iterator;
-  reverse_iterator rbegin()  { return CtrlSUs.rbegin(); }
-  reverse_iterator rend()    { return CtrlSUs.rend(); }
+  reverse_iterator ctrl_rbegin()  { return CtrlSUs.rbegin(); }
+  reverse_iterator ctrl_rend()    { return CtrlSUs.rend(); }
 
   typedef SUnitVecTy::const_reverse_iterator const_reverse_iterator;
-  const_reverse_iterator rbegin() const { return CtrlSUs.rbegin(); }
-  const_reverse_iterator rend()   const { return CtrlSUs.rend(); }
+  const_reverse_iterator ctrl_rbegin() const { return CtrlSUs.rbegin(); }
+  const_reverse_iterator ctrl_rend()   const { return CtrlSUs.rend(); }
 
   size_t getNumSUnits() const { return CtrlSUs.size(); }
 

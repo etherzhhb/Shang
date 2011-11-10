@@ -602,7 +602,7 @@ void VSchedGraph::emitSchedule() {
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this);
 
-  for (iterator I = begin(), E = end(); I != E; ++I) {
+  for (iterator I = ctrl_begin(), E = ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
 
     if (A->getSlot() != CurSlot)

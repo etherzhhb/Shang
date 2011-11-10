@@ -71,7 +71,7 @@ ILPScheduler::ILPScheduler(VSchedGraph &S)
 
 unsigned ILPScheduler::buildSVIdx() {
   unsigned totalSV = 0;
-  for (VSchedGraph::const_iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::const_iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     VSUnit *U = *I;
     SUnitToSV[U->getIdx()] = totalSV;
@@ -85,7 +85,7 @@ void ILPScheduler::setUpVariables(lprec *lp) {
   ActiveSUs.clear();
 
   // Set up the step variables.
-  for (VSchedGraph::const_iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::const_iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     const VSUnit *U = *I;
 
@@ -155,7 +155,7 @@ void ILPScheduler::buildOneActiveStepConstraints(lprec *lp) {
   SmallVector<REAL, 64> Row;
   SmallVector<int, 64> ColIdx;
 
-  for (VSchedGraph::const_iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::const_iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     const VSUnit *U = *I;
 
@@ -223,7 +223,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
   SmallVector<REAL, 64> Row;
   SmallVector<int, 64> ColIdx;
 
-  for (VSchedGraph::const_iterator I = State.begin(), E = State.end();
+  for (VSchedGraph::const_iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     const VSUnit *DstU = *I;
 
@@ -397,7 +397,7 @@ void ILPScheduler::buildObject(lprec *lp) {
 void ILPScheduler::buildSchedule(lprec *lp) {
   DEBUG(dbgs() << "ILPScheduler: Cost = " << get_objective(lp) << '\n');
 
-   for (VSchedGraph::iterator I = State.begin(), E = State.end();
+   for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
        I != E; ++I) {
     VSUnit *U = *I;
 
