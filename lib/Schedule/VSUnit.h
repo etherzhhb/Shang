@@ -127,6 +127,10 @@ public:
   static inline bool classof(const VDEdge *A) {
     return A->getEdgeType() == edgeValDep;
   }
+
+  static VDValDep *CreateValDep(VSUnit *Src, unsigned Latency) {
+    return new VDValDep(Src, Latency);
+  }
 };
 
 class VDCtrlDep : public VDEdge {
@@ -150,6 +154,11 @@ public:
   static inline bool classof(const VDCtrlDep *A) { return true; }
   static inline bool classof(const VDEdge *A) {
     return A->getEdgeType() == edgeMemDep;
+  }
+
+  template<int DIFF>
+  static VDMemDep *CreateMemDep(VSUnit *Src, unsigned Latency) {
+    return new VDMemDep(Src, Latency, DIFF);
   }
 };
 
