@@ -419,7 +419,7 @@ module  Avalon_user_logic(
 #end
 #end
     //==============================================================================
-#if(CurModule:getRetPortIdx()) then
+#if(CurModule:getRetPortIdx() ~= 0) then
 #  local port = CurModule:getRetPort()
 #  local BitWidth = port:getBitWidth()
           4'd$(num+1) : begin
