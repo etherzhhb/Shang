@@ -229,13 +229,14 @@ void VSchedGraph::viewGraph() {
 void VSchedGraph::scheduleDatapath() {
   for (iterator I = DatapathSUs.begin(), E = DatapathSUs.end(); I != E; ++I) {
     VSUnit *DU = *I;
-    unsigned Step = startSlot;
+    unsigned Step = 0;
     for (VSUnit::dep_iterator DI = DU->dep_begin(), DE = DU->dep_end();
          DI != DE; ++DI) {
       VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
       Step = std::max(Step, DepSU->getSlot()/*+ DepSU->getLatency()*/);
     }
+    assert(Step && "Datapath SU do not have depending SUs?");
     // Schedule As soon as possible.
     DU->scheduledTo(Step);
   }

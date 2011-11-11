@@ -533,6 +533,8 @@ public:
   typedef SUnitVecTy::iterator iterator;
   iterator ctrl_begin()  { return CtrlSUs.begin(); }
   iterator ctrl_end()    { return CtrlSUs.end(); }
+  iterator datapath_begin() { return DatapathSUs.begin(); }
+  iterator datapath_end() { return DatapathSUs.end(); }
 
   typedef SUnitVecTy::const_iterator const_iterator;
   const_iterator ctrl_begin() const { return CtrlSUs.begin(); }

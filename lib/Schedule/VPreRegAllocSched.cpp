@@ -129,6 +129,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
+  template<int IsControl>
   void addValueDeps(VSUnit *A, VSchedGraph &CurState, DetialLatencyInfo &LatInfo,
                     bool AllowDepEmpty = false);
 
@@ -523,18 +524,19 @@ void VPreRegAllocSched::addValDepForDatapath(VSchedGraph &CurState, VSUnit *A) {
   }
 }
 
+template<int IsControl>
 void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
                                      DetialLatencyInfo &LatInfo,
                                      bool AllowDepEmpty) {
   std::map<VSUnit*, unsigned> Edges;
   // Build the dependence edge.
-  if (A->hasDatapath()) addValDepForDatapath(CurState, A);
-  else                  addValDepForCtrlOp(LatInfo, CurState, A);
+  if (IsControl) addValDepForCtrlOp(LatInfo, CurState, A);
+  else           addValDepForDatapath(CurState, A);
 
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !AllowDepEmpty) {
-    unsigned Latency =
+    unsigned Latency = !IsControl ? 0 :
       VInstrInfo::computeCtrlLatency(0, A->getRepresentativeInst());
     A->addDep(getValDepEdge(CurState.getEntryRoot(), Latency),
               !A->hasDatapath());
@@ -755,7 +757,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 
   // Do not try to add the entry root as the dependence source of the exit root
   // we will add it our self later.
-  addValueDeps(Exit, CurState, LatInfo, true);
+  addValueDeps<true>(Exit, CurState, LatInfo, true);
 
   // Wait all operation finish before the exit operation active.
   DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
@@ -793,8 +795,12 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   State.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
-  for (VSchedGraph::iterator I = ++State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I)
-    addValueDeps(*I, State, DetialLat);
+  for (VSchedGraph::iterator I = ++State.ctrl_begin(), E = State.ctrl_end();
+       I != E; ++I)
+    addValueDeps<true>(*I, State, DetialLat);
+  for (VSchedGraph::iterator I = State.datapath_begin(), E = State.datapath_end();
+       I != E; ++I)
+    addValueDeps<false>(*I, State, DetialLat);
 
   assert(!Terms.empty() && "Can not found any terminator!");
   // Create the exit node.
