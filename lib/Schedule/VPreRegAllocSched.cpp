@@ -542,7 +542,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !AllowDepEmpty) {
-    unsigned Latency = VInstrInfo::getEntryLatency(A->getRepresentativeInst());
+    unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
     A->addDep(VDValDep::CreateValDep(CurState.getEntryRoot(), Latency),
               !A->hasDatapath());
   }
@@ -617,7 +617,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
 
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                           VInstrInfo::getEntryLatency(MI));
+                           VInstrInfo::getStepsFromEntry(MI));
 }
 
 bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{

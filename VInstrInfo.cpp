@@ -895,7 +895,7 @@ unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
   return unsigned(ceil(getChainingLatency(SrcInstr, DstInstr)));
 }
 
-unsigned VInstrInfo::getEntryLatency(const MachineInstr *DstInstr) {
+unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");
   VIDesc DstTID(*DstInstr);
 
@@ -1153,7 +1153,7 @@ unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   } else
     // Else the SrcMI is in other BB, return the latency from the entry of the
     // parent BB of MI.
-    SrcLatency = VInstrInfo::getEntryLatency(MI);
+    SrcLatency = VInstrInfo::getStepsFromEntry(MI);
 
   return SrcLatency;
 }

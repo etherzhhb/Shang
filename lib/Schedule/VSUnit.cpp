@@ -286,7 +286,8 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
 }
 
 unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
-  int Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
+  int Latency = SrcMI ? VInstrInfo::getCtrlStepBetween(SrcMI, DstMI)
+                      : VInstrInfo::getStepsFromEntry(DstMI);
   if (SrcMI != getRepresentativeInst()) {
     Latency += getLatencyFor(SrcMI);
     assert(Latency >= 0 && "Unexpected negative latency!");

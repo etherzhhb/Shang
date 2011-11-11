@@ -165,7 +165,7 @@ public:
   static double getChainingLatency(const MachineInstr *SrcInstr,
                                    const MachineInstr *DstInstr);
   // Return the latency from the entry of the MachineBasicBlock to DstInstr.
-  static unsigned getEntryLatency(const MachineInstr *DstInstr);
+  static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
 
   static bool isCmdSeq(unsigned Cmd);
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
