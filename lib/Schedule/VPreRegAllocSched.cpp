@@ -129,7 +129,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void addValueDeps(VSUnit *A, VSchedGraph &CurState, DetialLatencyInfo &LatInfo,
                     bool AllowDepEmpty = false);
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
-  template<typename CreateDepFuncTy>
+  template<int IgnoreBackedge, typename CreateDepFuncTy>
   void addValDepForCtrlOp(DepLatInfoTy &LatInfo, VSchedGraph &CurState,
                           VSUnit *A, CreateDepFuncTy &CreateDepFunc);
 
@@ -474,7 +474,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 }
 
 //===----------------------------------------------------------------------===//
-template<typename CreateDepFuncTy>
+template<int IgnoreBackedge, typename CreateDepFuncTy>
 void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
                                            VSchedGraph &CurState,
                                            VSUnit *A,
@@ -490,7 +490,8 @@ void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
     assert(SrcSU && "Src SUnit not found!");
     assert(!SrcSU->hasDatapath() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
-    if (SrcSU->getIdx() >= A->getIdx()) continue;
+    if ((SrcSU->getIdx() > A->getIdx() && IgnoreBackedge) || SrcSU == A)
+      continue;
     // Get the latency from SrcMI to MI.
     // Dirty Hack: Adjust the latency with the read at emit/write at finish
     // information.
@@ -535,7 +536,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
     const DetialLatencyInfo::DepLatInfoTy *DepLatInfo =
       LatInfo.getOperandLatInfo(MI);
     assert(DepLatInfo && "Operand latency information not available!");
-    addValDepForCtrlOp(*DepLatInfo, CurState, A, VDValDep::CreateValDep);
+    addValDepForCtrlOp<true>(*DepLatInfo, CurState, A, VDValDep::CreateValDep);
   } else
     addValDepForDatapath(CurState, A);
 
@@ -594,7 +595,8 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
     // Add a anti-dependence edge from users of PHI to PHI because we must
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
-    addValDepForCtrlOp(PHILatInfo, State, PhiSU, VDMemDep::CreateMemDep<1>);
+    addValDepForCtrlOp<false>(PHILatInfo, State, PhiSU,
+                              VDMemDep::CreateMemDep<1>);
 
     // Dirty Hack: We can emit the PHI while looping back to the loop entry.
     unsigned Latency = 0;
