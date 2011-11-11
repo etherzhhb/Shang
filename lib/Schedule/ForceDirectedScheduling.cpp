@@ -181,12 +181,11 @@ bool ASAPScheduler::scheduleState() {
       const VSUnit *Dep = *DI;
 
       assert(Dep->isScheduled() && "Dependence SU not scheduled!");
-      unsigned Step = Dep->getDetailStep() + DI.getEdge()->getDetailLatency();
+      unsigned Step = Dep->getSlot() + DI.getEdge()->getLatency();
 
       NewStep = std::max(Step, NewStep);
     }
 
-    NewStep = OpSlot::detailStepCeil(NewStep, A->hasDatapath()).getSlot();
     while (!tryTakeResAtStep(A, NewStep))
       ++NewStep;
 

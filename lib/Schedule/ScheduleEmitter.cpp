@@ -32,6 +32,114 @@
 using namespace llvm;
 
 namespace {
+
+class OpSlot {
+  int SlotNum;
+  OpSlot(int S) : SlotNum(S) {}
+  enum SlotType { Control, Datapath };
+public:
+  OpSlot() : SlotNum(0) {}
+  OpSlot(int Slot, bool isCtrl) {
+    SlotType T = isCtrl ? Control : Datapath;
+    SlotNum = (Slot << 0x1) | (0x1 & T);
+  }
+
+  SlotType getSlotType() const {
+    return (SlotType)(SlotNum & 0x1);
+  }
+
+  bool isControl() const {
+    return getSlotType() == OpSlot::Control;
+  }
+
+  bool isDatapath() const {
+    return getSlotType() == OpSlot::Datapath;
+  }
+
+  int getSlot() const { return SlotNum / 2; }
+
+  inline bool operator==(OpSlot S) const {
+    return SlotNum == S.SlotNum;
+  }
+
+  inline bool operator!=(OpSlot S) const {
+    return SlotNum != S.SlotNum;
+  }
+
+  inline bool operator<(OpSlot S) const {
+    return SlotNum < S.SlotNum;
+  }
+
+  inline bool operator<=(OpSlot S) const {
+    return SlotNum <= S.SlotNum;
+  }
+
+  inline bool operator>(OpSlot S) const {
+    return SlotNum > S.SlotNum;
+  }
+  inline bool operator>=(OpSlot S) const {
+    return SlotNum >= S.SlotNum;
+  }
+
+  inline OpSlot &setSlot(unsigned RHS) {
+    unsigned T = SlotNum & 0x1;
+    SlotNum = (RHS << 0x1) | T;
+    return *this;
+  }
+
+  void setType(bool isCtrl) {
+    SlotType T = isCtrl ? Control : Datapath;
+    SlotNum = (getSlot() << 0x1) | (0x1 & T);
+  }
+
+  inline OpSlot operator+(unsigned RHS) const {
+    return OpSlot(getSlot() + RHS, isControl());
+  }
+
+  inline OpSlot &operator+=(unsigned RHS) {
+    SlotNum += RHS * 2;
+    return *this;
+  }
+
+  inline OpSlot &operator++() { return operator+=(1); }
+
+  inline OpSlot operator++(int) {
+    OpSlot Temp = *this;
+    SlotNum += 2;
+    return Temp;
+  }
+
+  OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
+  OpSlot getPrevSlot() const { return OpSlot(SlotNum - 1); }
+
+  int getDetailStep() const { return SlotNum; }
+
+  static OpSlot detailStepCeil(int S, bool isDatapath) {
+    //OpSlot s(S);
+
+    //// If the type not match, get the next slot.
+    //if (s.isControl() != isCtrl)
+    //  return s.getNextSlot();
+
+    //return s;
+    bool SIsDataPath = S & 0x1;
+    bool TypeNotMatch = SIsDataPath != isDatapath;
+    return OpSlot(S + TypeNotMatch);
+  }
+
+  static OpSlot detailStepFloor(int S, bool isDatapath) {
+    //OpSlot s(S);
+
+    //// If the type not match, get the next slot.
+    //if (s.isControl() != isCtrl)
+    //  return s.getPrevSlot();
+
+    //return s;
+    bool SIsDataPath = S & 0x1;
+    bool TypeNotMatch = SIsDataPath != isDatapath;
+    return OpSlot(S - TypeNotMatch);
+  }
+};
 // Helper class to build Micro state.
 struct MicroStateBuilder {
   MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
@@ -597,14 +705,17 @@ void VSchedGraph::emitSchedule() {
   unsigned CurSlot = startSlot;
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
-  preSchedTopSort();
+
+  SUnitVecTy AllSUnits(CtrlSUs);
+  AllSUnits.insert(AllSUnits.end(), DatapathSUs.begin(), DatapathSUs.end());
+  std::sort(AllSUnits.begin(), AllSUnits.end(), top_sort_start);
 
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this);
 
-  for (iterator I = ctrl_begin(), E = ctrl_end(); I != E; ++I) {
+  for (iterator I = AllSUnits.begin(), E = AllSUnits.end(); I != E; ++I) {
     VSUnit *A = *I;
-
+    DEBUG(dbgs() << "Going to emit: "; A->dump());
     if (A->getSlot() != CurSlot)
       CurSlot = StateBuilder.advanceToSlot(CurSlot, A->getSlot());
 

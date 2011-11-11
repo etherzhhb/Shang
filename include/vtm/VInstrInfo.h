@@ -152,11 +152,13 @@ public:
                         MachineOperand IfTrueVal);
 
   static bool isCopyLike(unsigned Opcode);
+  static bool isPrebound(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
   static bool isWireOp(const TargetInstrDesc &TID);
 
-  static unsigned computeLatency(const MachineInstr *SrcInstr,
-                                 const MachineInstr *DstInstr);
+  static unsigned computeCtrlLatency(const MachineInstr *SrcInstr,
+                                     const MachineInstr *DstInstr);
+  static double getDetialLatency(const MachineInstr *MI);
 
   static bool isCmdSeq(unsigned Cmd);
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
@@ -325,31 +327,31 @@ public:
 class DetialLatencyInfo {
 public:
   // The latency from a given operation to the current operation.
-  typedef std::map<const MachineInstr*, double> OperandLatInfoTy;
+  typedef std::map<const MachineInstr*, double> DepLatInfoTy;
 private:
   // The latency from all register source through the datapath to a given
   // wire/register define by a datapath/control op
-  typedef std::map<const MachineInstr*, OperandLatInfoTy> LatencyMapTy;
+  typedef std::map<const MachineInstr*, DepLatInfoTy> LatencyMapTy;
 
   LatencyMapTy LatencyMap;
   MachineRegisterInfo &MRI;
 
   // Update the latency entry in the latency information table.
-  static void updateLatency(OperandLatInfoTy &CurLatInfo,
+  static void updateLatency(DepLatInfoTy &CurLatInfo,
                             const MachineInstr *SrcMI,
                             double CurLatency);
 
   // Add the latency information from SrcMI to CurLatInfo.
-  void buildOperandLatInfo(const MachineInstr *SrcMI,
-                           OperandLatInfoTy &CurLatInfo);
+  bool buildDepLatInfo(const MachineInstr *SrcMI,
+                           DepLatInfoTy &CurLatInfo);
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
-  void accumulateDatapathLatencies(OperandLatInfoTy &CurLatInfo,
-                                   const OperandLatInfoTy &SrcLatInfo,
+  void accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
+                                   const DepLatInfoTy &SrcLatInfo,
                                    double CurLatency);
 
-  const OperandLatInfoTy &addInstrInternal(const MachineInstr *MI,
+  const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                            bool IgnorePHISrc);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
@@ -364,7 +366,7 @@ public:
   }
 
   // Build the back-edge latency information of PHIs.
-  const OperandLatInfoTy &buildPHIBELatInfo(const MachineInstr *MI) {
+  const DepLatInfoTy &buildPHIBELatInfo(const MachineInstr *MI) {
     assert(MI->isPHI() && "Expect PHI!");
     // Simply add the back-edge dependence information of the which not
     // available at the first scan, but already available now.
@@ -374,14 +376,14 @@ public:
   }
 
   // Get the source register and the corresponding latency to DstMI
-  const OperandLatInfoTy *getOperandLatInfo(const MachineInstr *DstMI) const {
+  const DepLatInfoTy *getOperandLatInfo(const MachineInstr *DstMI) const {
     LatencyMapTy::const_iterator at = LatencyMap.find(DstMI);
     return at == LatencyMap.end() ? 0 : &at->second;
   }
 
   // All operation must finish before the BB exit, this function build the
   // information about the latency from instruction to the BB exit.
-  void buildExitMIInfo(OperandLatInfoTy &Info);
+  void buildExitMIInfo(DepLatInfoTy &Info);
 
   void reset() {
     LatencyMap.clear();

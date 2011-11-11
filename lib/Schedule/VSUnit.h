@@ -74,8 +74,7 @@ public:
   VSUnit* operator->() const { return getSrc(); }
   //VSUnit* operator*() const { return getSrc(); }
   unsigned getEdgeType() const { return Src.getInt(); }
-  unsigned getLatency() const { return (Latancy + 1) / 2; }
-  unsigned getDetailLatency() const { return Latancy; }
+  unsigned getLatency() const { return Latancy; }
   unsigned getItDst() const { return ItDst; }
   bool isLoopCarried() const { return getItDst() > 0; }
 
@@ -154,95 +153,10 @@ public:
   }
 };
 
-class OpSlot {
-  int SlotNum;
-  OpSlot(int S) : SlotNum(S) {}
-  enum SlotType {Control, Datapath};
-public:
-  OpSlot() : SlotNum(0) {}
-  OpSlot(int Slot, bool isCtrl) {
-    SlotType T = isCtrl ? Control : Datapath;
-    SlotNum = (Slot << 0x1) | (0x1 & T);
-  }
-
-  SlotType getSlotType() const {
-    return (SlotType)(SlotNum & 0x1);
-  }
-
-  bool isControl() const {
-    return getSlotType() == OpSlot::Control;
-  }
-
-  bool isDatapath() const {
-    return getSlotType() == OpSlot::Datapath;
-  }
-
-  int getSlot() const { return SlotNum / 2; }
-
-  inline bool operator==(OpSlot S) const {
-    return SlotNum == S.SlotNum;
-  }
-
-  inline bool operator!=(OpSlot S) const {
-    return SlotNum != S.SlotNum;
-  }
-
-  inline bool operator<(OpSlot S) const {
-    return SlotNum < S.SlotNum;
-  }
-
-  inline bool operator<=(OpSlot S) const {
-    return SlotNum <= S.SlotNum;
-  }
-
-  inline bool operator>(OpSlot S) const {
-    return SlotNum > S.SlotNum;
-  }
-  inline bool operator>=(OpSlot S) const {
-    return SlotNum >= S.SlotNum;
-  }
-
-  inline OpSlot &setSlot(unsigned RHS) {
-    unsigned T = SlotNum & 0x1;
-    SlotNum = (RHS << 0x1) | T;
-    return *this;
-  }
-
-  void setType(bool isCtrl) {
-    SlotType T = isCtrl ? Control : Datapath;
-    SlotNum = (getSlot() << 0x1) | (0x1 & T);
-  }
-
-  inline OpSlot operator+(unsigned RHS) const {
-    return OpSlot(getSlot() + RHS, isControl());
-  }
-
-  inline OpSlot &operator+=(unsigned RHS) {
-    SlotNum += RHS * 2;
-    return *this;
-  }
-
-  inline OpSlot &operator++() { return operator+=(1); }
-
-  inline OpSlot operator++(int) {
-    OpSlot Temp = *this;
-    SlotNum += 2;
-    return Temp;
-  }
-
-  OpSlot getNextSlot() const { return OpSlot(SlotNum + 1); }
-  OpSlot getPrevSlot() const { return OpSlot(SlotNum - 1); }
-
-  int getDetailStep() const { return SlotNum; }
-
-  static OpSlot detailStepCeil(int S, bool isDatapath);
-  static OpSlot detailStepFloor(int S, bool isDatapath);
-};
-
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
-  OpSlot SchedSlot;
+  unsigned SchedSlot;
   unsigned short InstIdx;
   unsigned short FUNum;
 
@@ -269,16 +183,12 @@ class VSUnit {
   friend class VSchedGraph;
 
   // Create the entry node.
-  VSUnit(unsigned short Idx) : InstIdx(Idx), FUNum(0) {
+  VSUnit(unsigned short Idx) : SchedSlot(0), InstIdx(Idx), FUNum(0) {
     addInstr(0, 0);
-    SchedSlot.setType(!hasDatapath());
   }
 
-  VSUnit(bool datapath, unsigned short Idx, unsigned fuid)
-    : InstIdx(Idx), FUNum(fuid)
-  {
-    SchedSlot.setType(!datapath);
-  }
+  VSUnit(unsigned short Idx, unsigned fuid)
+    : SchedSlot(0), InstIdx(Idx), FUNum(fuid) {}
 
   void addInstr(MachineInstr *I, int8_t Latency) {
     Instrs.push_back(I);
@@ -310,14 +220,14 @@ public:
   /// @name Operands
   //{
   // Add a new depencence edge to the atom.
-  void addDep(VDEdge *NewE) {
+  void addDep(VDEdge *NewE, bool AddToSrcUseList = true) {
     VSUnit *Src = NewE->getSrc();
     for (edge_iterator I = edge_begin(), E = edge_end(); I != E; ++I) {
       VDEdge *CurE = *I;
       if (CurE->getSrc() == Src) {
         // If the new dependency constraint tighter?
         if (NewE->getItDst() <= CurE->getItDst()
-            && NewE->getDetailLatency() > CurE->getDetailLatency()) {
+            && NewE->getLatency() > CurE->getLatency()) {
           delete CurE;
           *I = NewE;
         }
@@ -326,7 +236,7 @@ public:
       }
     }
 
-    Src->addToUseList(this);
+    if (AddToSrcUseList) Src->addToUseList(this);
     Deps.push_back(NewE);
   }
 
@@ -402,6 +312,8 @@ public:
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
   unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
+  unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
+                        unsigned SrcLatency) const;
 
   // Get the maximum latency from RepresentativeInst to DstMI.
   unsigned getMaxLatencyTo(MachineInstr *DstMI) const {
@@ -437,12 +349,11 @@ public:
     assert(getLatency() == L && "Latency overflow!");
   }
 
-  unsigned getSlot() const { return SchedSlot.getSlot(); }
-  unsigned getDetailStep() const { return SchedSlot.getDetailStep(); }
+  unsigned getSlot() const { return SchedSlot; }
 
-  bool isScheduled() const { return SchedSlot.getSlot() != 0; }
+  bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
-  void resetSchedule() { SchedSlot.setSlot(0); }
+  void resetSchedule() { SchedSlot = 0; }
 
   unsigned getOpcode() const;
   VFUs::FUTypes getFUType() const;
@@ -537,7 +448,7 @@ public:
 private:
   const TargetMachine &TM;
   MachineBasicBlock *MBB;
-  SUnitVecTy CtrlSUs, DatapathSus;
+  SUnitVecTy CtrlSUs, DatapathSUs;
   // The number of schedule unit.
   unsigned SUCount;
 
@@ -572,6 +483,7 @@ public:
 
   ~VSchedGraph() {
     std::for_each(CtrlSUs.begin(), CtrlSUs.end(), deleter<VSUnit>);
+    std::for_each(DatapathSUs.begin(), DatapathSUs.end(), deleter<VSUnit>);
   }
 
   void mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
@@ -672,7 +584,10 @@ public:
   //{
   // Sort the schedule units base on the order of underlying instruction.
   void preSchedTopSort();
-  void schedule();
+  void scheduleCtrl();
+  // Schedule datapath operations as soon as possible after control operations
+  // scheduled.
+  void scheduleDatapath();
   void emitSchedule();
   //}
 };
@@ -680,10 +595,10 @@ public:
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
   typedef VSchedGraph::iterator nodes_iterator;
   static nodes_iterator nodes_begin(VSchedGraph *G) {
-    return G->begin();
+    return G->ctrl_begin();
   }
   static nodes_iterator nodes_end(VSchedGraph *G) {
-    return G->end();
+    return G->ctrl_end();
   }
 };
 

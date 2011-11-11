@@ -56,13 +56,12 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 
 VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   VIDesc VTID(*I);
-  VSUnit *SU = new VSUnit(VTID.hasDatapath(), SUCount, fuid);
+  VSUnit *SU = new VSUnit(SUCount, fuid);
   ++SUCount;
 
-  if  (VTID.hasDatapath())
-    DatapathSus.push_back(SU);
-  else
-    CtrlSUs.push_back(SU);
+  if  (VTID.hasDatapath()) DatapathSUs.push_back(SU);
+  else                     CtrlSUs.push_back(SU);
+
   mapMI2SU(I, SU, VTID.getLatency());
   return SU;
 }
@@ -139,7 +138,7 @@ static SchedulingBase *createLoopScheduler(VSchedGraph &G) {
   }
 }
 
-void VSchedGraph::schedule() {
+void VSchedGraph::scheduleCtrl() {
   if (enablePipeLine())
     scheduleLoop();
   else
@@ -227,6 +226,21 @@ void VSchedGraph::viewGraph() {
   ViewGraph(this, this->getMachineBasicBlock()->getName());
 }
 
+void VSchedGraph::scheduleDatapath() {
+  for (iterator I = DatapathSUs.begin(), E = DatapathSUs.end(); I != E; ++I) {
+    VSUnit *DU = *I;
+    unsigned Step = startSlot;
+    for (VSUnit::dep_iterator DI = DU->dep_begin(), DE = DU->dep_end();
+         DI != DE; ++DI) {
+      VSUnit *DepSU = *DI;
+      assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
+      Step = std::max(Step, DepSU->getSlot()/*+ DepSU->getLatency()*/);
+    }
+    // Schedule As soon as possible.
+    DU->scheduledTo(Step);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 
 void VSUnit::dump() const {
@@ -245,7 +259,7 @@ unsigned VSUnit::getOpcode() const {
 
 void VSUnit::scheduledTo(unsigned slot) {
   assert(slot && "Can not schedule to slot 0!");
-  SchedSlot.setSlot(slot);
+  SchedSlot = slot;
 }
 
 VFUs::FUTypes VSUnit::getFUType() const {
@@ -269,7 +283,18 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
 }
 
 unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
-  int Latency = VInstrInfo::computeLatency(SrcMI, DstMI);
+  int Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+  if (SrcMI != getRepresentativeInst()) {
+    Latency += getLatencyFor(SrcMI);
+    assert(Latency >= 0 && "Unexpected negative latency!");
+  }
+
+  return Latency;
+}
+
+unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
+                              unsigned SrcLatency) const {
+  int Latency = SrcLatency;
   if (SrcMI != getRepresentativeInst()) {
     Latency += getLatencyFor(SrcMI);
     assert(Latency >= 0 && "Unexpected negative latency!");
@@ -292,31 +317,5 @@ void VSUnit::print(raw_ostream &OS) const {
       DEBUG(OS << *Instr << '\n');
     }
 
-  OS << getFUId() << "\nAt slot: " << getDetailStep();
-}
-
-OpSlot OpSlot::detailStepCeil(int S, bool isDatapath) {
-  //OpSlot s(S);
-
-  //// If the type not match, get the next slot.
-  //if (s.isControl() != isCtrl)
-  //  return s.getNextSlot();
-
-  //return s;
-  bool SIsDataPath = S & 0x1;
-  bool TypeNotMatch = SIsDataPath != isDatapath;
-  return OpSlot(S + TypeNotMatch);
-}
-
-OpSlot OpSlot::detailStepFloor(int S, bool isDatapath) {
-  //OpSlot s(S);
-
-  //// If the type not match, get the next slot.
-  //if (s.isControl() != isCtrl)
-  //  return s.getPrevSlot();
-
-  //return s;
-  bool SIsDataPath = S & 0x1;
-  bool TypeNotMatch = SIsDataPath != isDatapath;
-  return OpSlot(S - TypeNotMatch);
+  OS << getFUId() << "\nAt slot: " << getSlot();
 }

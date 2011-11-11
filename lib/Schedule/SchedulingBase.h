@@ -37,7 +37,7 @@ class SchedulingBase {
   double ExtraResReq;
   // Time Frame {asap step, alap step }
 public:
-  typedef std::pair<OpSlot, OpSlot> TimeFrame;
+  typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
   // Time frames for each schedule unit.
   SmallVector<TimeFrame, 256> SUnitToTF;
@@ -77,17 +77,10 @@ public:
   void buildTimeFrame();
 
   unsigned getASAPStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].first.getSlot();
+    return SUnitToTF[A->getIdx()].first;
   }
   unsigned getALAPStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].second.getSlot();
-  }
-
-  unsigned getASAPDetailStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].first.getDetailStep();
-  }
-  unsigned getALAPDetailStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].second.getDetailStep();
+    return SUnitToTF[A->getIdx()].second;
   }
 
   unsigned getTimeFrame(const VSUnit *A) const {
