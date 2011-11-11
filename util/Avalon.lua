@@ -464,12 +464,37 @@ module  Avalon_user_logic(
   // master below
   //---------------------------------------------------------------------------------------------------------------------------------
   //IP_master FSM declaration
-  parameter m_start   = 3'b001;
-  parameter m_read_0  = 3'b010;
-  parameter m_write_0 = 3'b100;
-  reg [2:0] mst_state;
-  reg       Mst2Mem0rdy;
-  reg       Master2Mem0in;
+  // FSM state declareation
+  parameter m_start      = 11'b00000000001,
+            m_read_0     = 11'b00000000010,
+            m_write_0    = 11'b00000000100,
+            Memset       = 11'b00000001000,
+            Memset_Loop  = 11'b00000010000,
+            Memcpy       = 11'b00000100000,
+            Memcpy_Read  = 11'b00001000000,
+            Memcpy_Write = 11'b00010000000,
+            Memmove      = 11'b00100000000,
+            Memmove_Read = 11'b01000000000,
+            Memmove_Write= 11'b10000000000;
+  // mem0cmd parameter
+  parameter IP_read    = 4'b0000,
+            IP_write   = 4'b0001,
+            IP_memset  = 4'b0010,
+            IP_memcpy  = 4'b0011,
+            IP_memmove = 4'b0100;
+  reg [7:0]  mst_state;
+  reg        Mst2Mem0rdy;
+  reg [31:0] Master2Mem0in;
+  reg [31:0] mem0addr_reg;
+  reg [31:0] Memset_NUM;
+  reg [31:0] Memset_Value;
+  reg [31:0] Memcpy_Destination;
+  reg [31:0] Memcpy_Source;
+  reg [31:0] Memcpy_NUM;
+  reg [31:0] Memmove_Destination;
+  reg [31:0] Memmove_Source;
+  reg [31:0] Memmove_NUM;
+  reg        Is_Overlap;
   //master block to get the data according to the address sent by lookup_rtl
   always@(posedge  clk) begin
     if(~reset_n) begin
@@ -481,21 +506,62 @@ module  Avalon_user_logic(
       avm_Writedata_IP2Bus  <= 32'hffffffff;
       Mst2Mem0rdy           <= 0;
       Master2Mem0in         <= 0;
+      mem0addr_reg          <= 0;
+      Memset_NUM            <= 0;
+      Memset_Value          <= 0;
+      Memcpy_Destination    <= 0;
+      Memcpy_Source         <= 0;
+      Memcpy_NUM            <= 0;
+      Memmove_Destination   <= 0;
+      Memmove_Source        <= 0;
+      Memmove_NUM           <= 0;
+      Is_Overlap            <= 0;
     end else begin
       case(mst_state)
         m_start: begin
           Mst2Mem0rdy <= 0;
           if(mem0en & (mem0addr[31:16] != BlockRamBase)) begin  //if signal mem0en is asserted ,this block choose to read or write by checking signal mem0cmd
+            avm_Address_IP2Bus    <= {mem0addr[31:2], 2'b0};
             case(mem0cmd)
-              4'b0000 : mst_state <= m_read_0;
-              4'b0001 : mst_state <= m_write_0;
-              default : ;
+              IP_read : begin
+                avm_Read_IP2Bus       <= 1;
+                mst_state             <= m_read_0;
+                mem0addr_reg          <= mem0addr;
+                avm_Byteenable_IP2Bus <= (mem0be >> (mem0addr[1:0]));
+              end
+              IP_write : begin
+                avm_Write_IP2Bus      <= 1;
+                mst_state             <= m_write_0;
+                avm_Writedata_IP2Bus  <= (mem0out << {mem0addr[1:0], 3'b0});
+                avm_Byteenable_IP2Bus <= (mem0be >> (mem0addr[1:0]));
+              end
+              IP_memset : begin
+                mst_state <= Memset;
+                mem0addr_reg <= mem0addr;
+                avm_Byteenable_IP2Bus <= 4'b1111;
+                Memset_NUM <= mem0out;
+              end
+              IP_memcpy :begin
+                mst_state <= Memcpy;
+                Memcpy_Destination <= mem0addr;
+                avm_Byteenable_IP2Bus <= 4'b1111;
+                Memcpy_NUM <= mem0out;
+              end
+              IP_memmove :begin
+                mst_state <= Memmove;
+                Memmove_Destination <= mem0addr;
+                Memmove_NUM <= mem0out;
+                avm_Byteenable_IP2Bus <= 4'b1111;
+              end
+              default : mst_state <= m_start;
             endcase
           end else begin
             mst_state       <= m_start;
             avm_Read_IP2Bus <= 0;
+            avm_Write_IP2Bus <= 0;
           end
         end
+
         m_read_0 : begin
           if(~avm_Waitrequest_Bus2IP) begin
             avm_Read_IP2Bus       <= 0;
@@ -522,6 +588,182 @@ module  Avalon_user_logic(
             Mst2Mem0rdy <= 0;
           end
         end
+
+        Memset : begin
+          if (Memset_NUM != 0) begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              avm_Write_IP2Bus      <= 1;
+              Memset_Value         <= mem0out;
+              avm_Address_IP2Bus   <= mem0addr_reg;
+              avm_Writedata_IP2Bus <= mem0out;
+              Mst2Mem0rdy          <= 0;
+              Memset_NUM           <= Memset_NUM - 1;
+              mem0addr_reg         <= mem0addr_reg + 4;
+              mst_state            <= Memset_Loop;
+            end else begin
+              mst_state            <= Memset;
+            end
+          end else begin
+            avm_Byteenable_IP2Bus <= 4'b0;
+            avm_Address_IP2Bus    <= 32'b0;
+            Mst2Mem0rdy           <= 1;
+            mst_state             <= m_start;
+          end
+        end
+
+        Memset_Loop : begin
+          if (Memset_NUM != 0) begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              avm_Address_IP2Bus   <= mem0addr_reg;
+              avm_Writedata_IP2Bus <= Memset_Value;
+              Mst2Mem0rdy          <= 0;
+              Memset_NUM           <= Memset_NUM - 1;
+              mem0addr_reg         <= mem0addr_reg + 4;
+              mst_state            <= Memset_Loop;
+            end else begin
+              mst_state            <= Memset_Loop;
+            end
+          end else begin
+            avm_Byteenable_IP2Bus <= 4'b0;
+            avm_Address_IP2Bus    <= 32'b0;
+            avm_Write_IP2Bus      <= 0;
+            Mst2Mem0rdy           <= 1;
+            mst_state             <= m_start;
+          end
+        end
+
+        Memcpy : begin
+          if (Memcpy_NUM != 0) begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              avm_Read_IP2Bus      <= 1;
+              Memcpy_Source        <= mem0addr;
+              avm_Address_IP2Bus   <= mem0addr;
+              Mst2Mem0rdy          <= 0;
+              mst_state            <= Memcpy_Write;
+            end else begin
+              mst_state            <= Memcpy;
+            end
+          end else begin
+            avm_Byteenable_IP2Bus <= 4'b0;
+            avm_Address_IP2Bus    <= 32'b0;
+            Mst2Mem0rdy           <= 1;
+            mst_state             <= m_start;
+          end
+        end
+
+        Memcpy_Read : begin
+          if(~avm_Waitrequest_Bus2IP) begin
+            avm_Address_IP2Bus   <= Memcpy_Source;
+            avm_Read_IP2Bus      <= 1;
+            avm_Write_IP2Bus     <= 0;
+            mst_state            <= Memcpy_Write;
+          end else begin
+            mst_state            <= Memcpy_Read;
+          end
+        end
+
+        Memcpy_Write : begin
+          if (Memcpy_NUM != 0) begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              avm_Read_IP2Bus      <= 0;
+              avm_Write_IP2Bus     <= 1;
+              avm_Address_IP2Bus   <= Memcpy_Destination;
+              avm_Writedata_IP2Bus <= avm_Readdata_Bus2IP;
+              Mst2Mem0rdy          <= 0;
+              Memcpy_NUM           <= Memcpy_NUM - 1;
+              Memcpy_Source        <= Memcpy_Source + 4;
+              Memcpy_Destination   <= Memcpy_Destination + 4;
+              mst_state            <= Memcpy_Read;
+            end else begin
+              mst_state            <= Memcpy_Write;
+            end
+          end else begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              avm_Byteenable_IP2Bus <= 4'b0;
+              avm_Address_IP2Bus    <= 32'b0;
+              avm_Write_IP2Bus      <= 0;
+              avm_Read_IP2Bus       <= 0;
+              Mst2Mem0rdy           <= 1;
+              mst_state             <= m_start;
+            end else begin
+              mst_state             <= Memcpy_Write;
+            end
+          end
+        end
+
+        Memmove : begin
+          if (Memmove_NUM != 0) begin
+            Memmove_Source        <= mem0addr;
+            if ((mem0addr <= Memmove_Destination) &&
+                ((mem0addr + (Memmove_NUM << 2)) > Memmove_Destination)) begin
+              Is_Overlap             <= 1;
+              Memmove_Source         <= mem0addr + (Memmove_NUM << 2);
+              Memmove_Destination    <= Memmove_Destination + (Memmove_NUM << 2);
+              avm_Read_IP2Bus        <= 1;
+              Mst2Mem0rdy            <= 0;
+              avm_Address_IP2Bus     <= mem0addr + (Memmove_NUM << 2);
+              mst_state              <= Memmove_Write;
+            end else begin
+              Is_Overlap             <= 0;
+              Memmove_Source         <= mem0addr;
+              avm_Address_IP2Bus     <= mem0addr;
+              avm_Read_IP2Bus        <= 1;
+              Mst2Mem0rdy            <= 0;
+              mst_state              <= Memmove_Write;
+            end
+          end else begin
+            Is_Overlap            <= 0;
+            avm_Byteenable_IP2Bus <= 4'b0;
+            avm_Address_IP2Bus    <= 32'b0;
+            Mst2Mem0rdy           <= 1;
+            mst_state             <= m_start;
+          end
+        end
+
+        Memmove_Read : begin
+          if(~avm_Waitrequest_Bus2IP) begin
+            avm_Address_IP2Bus   <= Memmove_Source;
+            avm_Read_IP2Bus      <= 1;
+            avm_Write_IP2Bus     <= 0;
+            mst_state            <= Memmove_Write;
+          end else begin
+            mst_state            <= Memmove_Read;
+          end
+        end
+
+        Memmove_Write : begin
+          if(Memmove_NUM != 0) begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              avm_Read_IP2Bus       <= 0;
+              avm_Write_IP2Bus      <= 1;
+              Mst2Mem0rdy           <= 0;
+              mst_state             <= Memmove_Read;
+              avm_Address_IP2Bus    <= Memmove_Destination;
+              avm_Writedata_IP2Bus  <= avm_Readdata_Bus2IP;
+              Memmove_NUM           <= Memmove_NUM - 1;
+              if(~Is_Overlap) begin
+                Memmove_Source        <= Memmove_Source + 4;
+                Memmove_Destination   <= Memmove_Destination + 4;
+              end else begin
+                Memmove_Source        <= Memmove_Source - 4;
+                Memmove_Destination   <= Memmove_Destination - 4;
+              end
+            end else begin
+              mst_state             <= Memmove_Write;
+            end
+          end else begin
+            if(~avm_Waitrequest_Bus2IP) begin
+              Is_Overlap            <= 0;
+              avm_Byteenable_IP2Bus <= 4'b0;
+              avm_Address_IP2Bus    <= 32'b0;
+              avm_Write_IP2Bus      <= 0;
+              avm_Read_IP2Bus       <= 0;
+              Mst2Mem0rdy           <= 1;
+              mst_state             <= m_start;
+            end
+          end
+        end
+
         default: mst_state <= m_start;
       endcase
     end
