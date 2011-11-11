@@ -773,6 +773,28 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     Exit->addDep(getCtrlDepEdge(SrcSU, Latency));
   }
 
+  // If there is still schedule unit not connect to exit, connect it now.
+  for (VSchedGraph::iterator I = CurState.ctrl_begin(), E = CurState.ctrl_end();
+       I != E; ++I) {
+    VSUnit *VSU = *I;
+      // Since the exit root already added to state sunit list, skip the
+      // exit itself.
+    if (VSU->getNumUses() == 0 && VSU != Exit) {
+      // Dirty Hack.
+      unsigned Latency = VSU->getMaxLatencyTo(FstExit);
+      // We do not need to wait the trivial operation finish before exiting the
+      // state, because the first control slot of next state will only contains
+      // PHI copies, and the PHIElimination Hook will take care of the data
+      // dependence and try to forward the wire value in last control slot
+      // if possible, so they can take the time of the last control slot.
+      //VIDesc VID(*Instr);
+      //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
+      //  --Latency;
+
+      Exit->addDep(getCtrlDepEdge(VSU,  Latency));
+    }
+  }
+
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
