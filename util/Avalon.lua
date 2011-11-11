@@ -165,6 +165,26 @@ module  Avalon_user_logic(
 		altsyncram_component.wrcontrol_wraddress_reg_b = "CLOCK0";
 //==================================================================
 
+  //latency counter
+  reg [63:0] shang_count;
+  reg shang_count_en;
+
+  always @* begin
+    if(start) shang_count_en = 1;
+    if(fin) shang_count_en = 0;
+  end
+
+  always @(posedge clk) begin
+    if (~reset_n) begin
+      shang_count <= 0;
+    end else begin
+      if(shang_count_en)
+        shang_count <= shang_count + 1;
+      if(fin)
+        $display("shang_count = %d", shang_count);
+    end
+  end
+
   //User IP access the Local BRam
   parameter LocalBRam_Idle = 3'b001,
             read_bram      = 3'b010,
