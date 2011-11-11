@@ -826,6 +826,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
     case VTM::COPY:             emitOpCopy(Op, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;
     case VTM::ImpUse:           /*Not need to handle*/        break;
+    case VTM::VOpCase:          emitOpCase(Op, Slot, Cnds);   break;
     case VTM::VOpSel:           emitOpSel(Op, Slot, Cnds);    break;
     case VTM::VOpRetVal:        emitOpRetVal(Op, Slot, Cnds); break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(Op);          break;
