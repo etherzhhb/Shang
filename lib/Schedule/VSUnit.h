@@ -486,12 +486,16 @@ public:
     std::for_each(DatapathSUs.begin(), DatapathSUs.end(), deleter<VSUnit>);
   }
 
-  void mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
+  bool mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
+    if (SU->num_instrs() && SU->hasDatapath() != VIDesc(*MI).hasDatapath())
+      return false;
+
     SU->addInstr(MI, latency);
     SUnitMapType::iterator where;
     bool inserted;
     tie(where, inserted) = InstToSUnits.insert(std::make_pair(MI, SU));
     assert(inserted && "Mapping from I already exist!");
+    return true;
   }
 
   // Merge Src into Dst with a given latency.

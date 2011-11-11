@@ -609,23 +609,17 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
                                      VSchedGraph &CurState) {
   MachineInstr *SrcMI = 0;
   // Try to merge it into the VSUnit that defining its source operand.
-  if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI)) {
-    CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
-    return true;
-  }
+  if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI))
+    return CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
 
   // Try to merge it into the VSUnit that defining its predicate operand.
-  if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI)) {
-    if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI)) {
-      CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
-      return true;
-    }
-  }
+  if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI))
+    if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI))
+      return CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo(SrcMI, MI));
 
   // Merge it into the EntryRoot.
-  CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                    VInstrInfo::computeCtrlLatency(0, MI));
-  return true;
+  return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
+                           VInstrInfo::computeCtrlLatency(0, MI));
 }
 
 bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{
@@ -750,7 +744,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // Add others terminator to the exit node.
   while (Terms.size() != 1) {
     MachineInstr *Term = Terms.pop_back_val();
-    CurState.mapMI2SU(Term, Exit, 0);
+    bool mapped = CurState.mapMI2SU(Term, Exit, 0);
+    (void) mapped;
+    assert(mapped && "Cannot merge terminators!");
   }
 
   Terms.clear();
