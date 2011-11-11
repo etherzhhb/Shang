@@ -102,7 +102,8 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
 // Helper function for Verilog RTL printing.
 
 static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *W) {
-  OS << "assign " << W->getName() << " = ";
+  OS << "assign " << W->getName() << verilogBitRange(W->getBitWidth(), 0, false)
+     << " = ";
   return OS;
 }
 
