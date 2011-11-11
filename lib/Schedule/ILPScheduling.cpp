@@ -190,7 +190,7 @@ void ILPScheduler::buildOneActiveStepConstraints(lprec *lp) {
                          ColIdx.size(), ColIdx.data(), Row.data());
     if (!SOSIdx)
 #else
-    // Add the constraints to the model.
+    // Only one step can be actived at a time.
     if (!add_constraintex(lp, NumSVs, Row.data(), ColIdx.data(), EQ, 1.0))
 #endif
       report_fatal_error("ILPScheduler: Can NOT add step variable constraints"
@@ -227,7 +227,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
        I != E; ++I) {
     const VSUnit *DstU = *I;
 
-    unsigned DstType = DstU->hasDatapath() ? 1 :0 ;
+    assert(!DstU->hasDatapath() && "Unexpected datapath in scheduler!");
     unsigned DstFstIdx = getFstSVIdxOf(DstU),
              DstNumSVs = getTimeFrame(DstU),
              DstASAP = getASAPStep(DstU);
@@ -240,7 +240,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
 
     // Construct the step of Dst schedule unit.
     for (unsigned i = 0; i < DstNumSVs; ++i) {
-      DstRow.push_back((DstASAP + i) * 2 + DstType);
+      DstRow.push_back((REAL)(DstASAP + i));
       DstColIdx.push_back(DstFstIdx + i + 1);
     }
 
@@ -249,7 +249,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       const VSUnit *SrcU = *DI;
       VDEdge *Edge = DI.getEdge();
 
-      unsigned SrcType = SrcU->hasDatapath() ? 1 :0 ;
+      assert(!SrcU->hasDatapath() && "Unexpected datapath in scheduler!");
       // Get the index of first step variable of U.
       unsigned SrcFstIdx = getFstSVIdxOf(SrcU),
                // And the total step variable count of U.
@@ -260,14 +260,14 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       ColIdx.append(DstColIdx.begin(), DstColIdx.end());
 
       for (unsigned i = 0; i < SrcNumSVs; ++i) {
-        Row.push_back(-((REAL)((SrcASAP + i) * 2 + SrcType)));
+        Row.push_back(-((REAL)((SrcASAP + i))));
         // The column index is started from 1 in lp_slove.
         ColIdx.push_back(SrcFstIdx + i + 1);
       }
 
       // Add the constraints to the model.
       if (!add_constraintex(lp, ColIdx.size(), Row.data(), ColIdx.data(),
-                            GE, int(Edge->getLatency()) - int((getMII() *  Edge->getItDst()) * 2)))
+                            GE, int(Edge->getLatency()) - int((getMII() *  Edge->getItDst()))))
         report_fatal_error("ILPScheduler: Can NOT add Precedence constraints"
                            " of schedule unit " + utostr_32(DstU->getIdx()) +
                            " to " + utostr_32(SrcU->getIdx()));
