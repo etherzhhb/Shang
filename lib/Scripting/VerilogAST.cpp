@@ -600,7 +600,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     // Print the assignment under the condition.
     if (UseSwitch) OS.match_case(Pred);
     else OS.if_begin(Pred);
-    OS << getName() << " <= ";
+    OS << getName() << verilogBitRange(getBitWidth(), 0, false) << " <= ";
     I->first.print(OS);
     OS << ";\n";
     OS.exit_block();
