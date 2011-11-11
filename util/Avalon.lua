@@ -208,13 +208,17 @@ module  Avalon_user_logic(
         LocalBRam_Idle: begin
           LocalBRam_en <= 0;
           if (mem0en && (mem0addr[31:16] == BlockRamBase)) begin
-            address_b    <= mem0addr[9:0] >> 2;
+            address_b <= mem0addr[11:2];
+            byteena_b <= mem0be;
             case(mem0cmd)
               4'b0000 : begin
                 LocalBRamState <= read_bram;
                 LocalBRam_en   <= 1;
               end
-              4'b0001 : LocalBRamState <= write_bram;
+              4'b0001 : begin
+                LocalBRamState <= write_bram;
+                 data_b        <= mem0out;
+              end
               default : ;
             endcase
           end else begin
@@ -226,7 +230,6 @@ module  Avalon_user_logic(
 
         read_bram: begin
           wren_b         <= 0;
-          byteena_b      <= mem0be;
           BRam2Mem0rdy   <= 1;
           LocalBRamState <= LocalBRam_Idle;
           LocalBRam_en   <= 0;
@@ -234,8 +237,6 @@ module  Avalon_user_logic(
 
         write_bram: begin
           wren_b         <= 1;
-          byteena_b      <= mem0be;
-          data_b         <= mem0out;
           BRam2Mem0rdy   <= 1;
           LocalBRamState <= LocalBRam_Idle;
           LocalBRam_en   <= 1;
@@ -496,13 +497,10 @@ module  Avalon_user_logic(
           end
         end
         m_read_0 : begin
-          avm_Address_IP2Bus    <= {mem0addr[31:2], 2'b0};
-          avm_Byteenable_IP2Bus <= (mem0be >> (mem0addr[1:0]));
-          avm_Read_IP2Bus       <= 1;
-          if(avm_Read_IP2Bus & (~avm_Waitrequest_Bus2IP)) begin
+          if(~avm_Waitrequest_Bus2IP) begin
             avm_Read_IP2Bus       <= 0;
             Mst2Mem0rdy           <= 1;
-            Master2Mem0in         <= (avm_Readdata_Bus2IP >> {mem0addr[1:0], 3'b0});
+            Master2Mem0in         <= (avm_Readdata_Bus2IP >> {mem0addr_reg[1:0], 3'b0});
             avm_Address_IP2Bus    <= 32'b0;
             avm_Byteenable_IP2Bus <= 4'b0;
             mst_state             <= m_start;
@@ -511,12 +509,9 @@ module  Avalon_user_logic(
             Mst2Mem0rdy <= 0;
           end
         end
+
         m_write_0 : begin
-          avm_Address_IP2Bus    <= {mem0addr[31:2], 2'b0};
-          avm_Byteenable_IP2Bus <= (mem0be >> (mem0addr[1:0]));
-          avm_Write_IP2Bus      <= 1;
-          avm_Writedata_IP2Bus  <= (mem0out << {mem0addr[1:0], 3'b0});
-          if(avm_Write_IP2Bus&(~avm_Waitrequest_Bus2IP)) begin
+          if(~avm_Waitrequest_Bus2IP) begin
             avm_Write_IP2Bus      <= 0;
             Mst2Mem0rdy           <= 1;
             avm_Address_IP2Bus    <= 32'b0;
@@ -535,10 +530,11 @@ module  Avalon_user_logic(
   // assign the ready signal to the IP.
   assign mem0rdy = BRam2Mem0rdy | Mst2Mem0rdy;
   // assign the mem0in data to the IP.
-  assign mem0in = (mem0addr[31:16] == BlockRamBase)? q_b : Master2Mem0in;
+  assign mem0in = (Mst2Mem0rdy)? Master2Mem0in : (BRam2Mem0rdy)? q_b : 0;
 
 endmodule
 ]=]
+
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=AvalonTemplate, output={[[D:\cygwin\home\Government\test_llvm\]]..'Avalon_' .. CurModule:getName() .. '.v'}}
 print(message)
