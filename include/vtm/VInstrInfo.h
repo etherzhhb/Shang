@@ -160,6 +160,9 @@ public:
                                      const MachineInstr *DstInstr);
   // Return the latency of a MachineInstr in cycle ratio.
   static double getDetialLatency(const MachineInstr *MI);
+  static unsigned getStepsToFinish(const MachineInstr *MI) {
+    return unsigned(ceil(getDetialLatency(MI)));
+  }
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
   static double getChainingLatency(const MachineInstr *SrcInstr,
@@ -277,19 +280,6 @@ public:
     assert(getFUType() == VFUs::Trivial && "Bad resource Type!");
     return ((getTSFlags() >> TrivialLatencyShiftAmount)
              & TrivialLatencyMask);
-  }
-
-  // Get the latency of a specific type of Instruction.
-  unsigned getLatency() const {
-    VFUs::FUTypes ResTy = getFUType();
-
-    if (ResTy == VFUs::Trivial)
-      return getTrivialLatency();
-
-    // DiryHack: Latency of CalleeFN is 1.
-    if (ResTy == VFUs::CalleeFN) return 1;
-
-    return getFUDesc(ResTy)->getLatency();
   }
 
   inline bool isReadAtEmit() const {

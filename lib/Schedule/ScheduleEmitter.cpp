@@ -476,7 +476,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Compute the slots.
   OpSlot ReadSlot = SchedSlot;
 
-  unsigned FinSlot = SchedSlot.getSlot() + VTID.getLatency();
+  unsigned FinSlot = SchedSlot.getSlot() + VInstrInfo::getStepsToFinish(&Inst);
   OpSlot CopySlot(FinSlot, true);
   // We can not write the value to a register at the same moment we emit it.
   // Unless we read at emit.

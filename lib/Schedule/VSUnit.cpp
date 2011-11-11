@@ -62,7 +62,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   if  (VTID.hasDatapath()) DatapathSUs.push_back(SU);
   else                     CtrlSUs.push_back(SU);
 
-  bool mapped = mapMI2SU(I, SU, VTID.getLatency());
+  bool mapped = mapMI2SU(I, SU, VInstrInfo::getStepsToFinish(I));
   (void) mapped;
   assert(mapped && "Cannot add SU to the inst2su map!");
   return SU;
