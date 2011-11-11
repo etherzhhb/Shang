@@ -70,7 +70,7 @@ void SchedulingBase::buildASAPStep() {
           unsigned DepASAP = Dep->isScheduled() ?
                              Dep->getSlot() : getASAPStep(Dep);
           int Step = DepASAP + DI.getEdge()->getLatency()
-                     - (MII * DI.getEdge()->getItDst()) * 2;
+                     - (MII * DI.getEdge()->getItDst());
           DEBUG(dbgs() << "From ";
                 if (DI.getEdge()->isLoopCarried())
                   dbgs() << "BackEdge ";
@@ -131,7 +131,7 @@ void SchedulingBase::buildALAPStep() {
             UseALAP = VSUnit::MaxSlot;
           }
           unsigned Step = UseALAP - UseEdge->getLatency()
-                          + (MII * UseEdge->getItDst()) * 2;
+                          + (MII * UseEdge->getItDst());
           DEBUG(dbgs() << "From ";
                 if (UseEdge->isLoopCarried())
                   dbgs() << "BackEdge ";
