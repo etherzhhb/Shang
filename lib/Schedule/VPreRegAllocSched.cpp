@@ -74,7 +74,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Remember the last cmd seq.
   VSUnit *LastCmdSeq;
   // Terminators in a MBB.
-  SmallVector<MachineInstr*, 2> Terms;
+  SmallVector<MachineInstr*, 8> Terms;
 
   VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1), LastCmdSeq(0) {}
 
@@ -131,7 +131,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<int IgnoreBackedge, typename CreateDepFuncTy>
   void addValDepForCtrlOp(DepLatInfoTy &LatInfo, VSchedGraph &CurState,
-                          VSUnit *A, CreateDepFuncTy &CreateDepFunc);
+                          VSUnit *A, MachineInstr *MI,
+                          CreateDepFuncTy &CreateDepFunc);
 
   void addValDepForDatapath(VSchedGraph &CurState, VSUnit *A);
 
@@ -477,9 +478,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 template<int IgnoreBackedge, typename CreateDepFuncTy>
 void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
                                            VSchedGraph &CurState,
-                                           VSUnit *A,
+                                           VSUnit *A, MachineInstr *MI,
                                            CreateDepFuncTy &CreateDepFunc) {
-  MachineInstr *MI = A->getRepresentativeInst();
   assert(MI && "Unexpected entry root!");
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
@@ -531,12 +531,16 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
   std::map<VSUnit*, unsigned> Edges;
   // Build the dependence edge.
   if (IsControl) {
-    MachineInstr *MI = A->getRepresentativeInst();
-    assert(MI && "Unexpected entry root!");
-    const DetialLatencyInfo::DepLatInfoTy *DepLatInfo =
-      LatInfo.getOperandLatInfo(MI);
-    assert(DepLatInfo && "Operand latency information not available!");
-    addValDepForCtrlOp<true>(*DepLatInfo, CurState, A, VDValDep::CreateValDep);
+    typedef VSUnit::instr_iterator it;
+    for (it I = A->instr_begin(), E = A->instr_end(); I != E; ++I) {
+      MachineInstr *MI = *I;
+      assert(MI && "Unexpected entry root!");
+      const DetialLatencyInfo::DepLatInfoTy *DepLatInfo =
+        LatInfo.getOperandLatInfo(MI);
+      assert(DepLatInfo && "Operand latency information not available!");
+      addValDepForCtrlOp<true>(*DepLatInfo, CurState, A, MI,
+                               VDValDep::CreateValDep);
+    }
   } else
     addValDepForDatapath(CurState, A);
 
@@ -595,7 +599,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
     // Add a anti-dependence edge from users of PHI to PHI because we must
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
-    addValDepForCtrlOp<false>(PHILatInfo, State, PhiSU,
+    addValDepForCtrlOp<false>(PHILatInfo, State, PhiSU, &PN,
                               VDMemDep::CreateMemDep<1>);
 
     // Dirty Hack: We can emit the PHI while looping back to the loop entry.
@@ -738,26 +742,27 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
                                       DetialLatencyInfo &LatInfo) {
-  // Wait all operation finish before the exit operation active.
-  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
-  LatInfo.buildExitMIInfo(Terms, ExitDepInfo);
-
-  MachineInstr *FstExit = Terms.front();
+  SmallVectorImpl<MachineInstr*>::iterator ExitIt = Terms.begin(),
+                                           ExitEnd = Terms.end();
+  MachineInstr *FstExit = *ExitIt;
   VSUnit *Exit = CurState.createVSUnit(FstExit);
 
   // Add others terminator to the exit node.
-  while (Terms.size() != 1) {
-    MachineInstr *Term = Terms.pop_back_val();
+  while (++ExitIt != ExitEnd) {
+    MachineInstr *Term = *ExitIt;
     bool mapped = CurState.mapMI2SU(Term, Exit, 0);
     (void) mapped;
     assert(mapped && "Cannot merge terminators!");
   }
 
-  Terms.clear();
-
-  // Do not try to add the entry root as the dependence source of the exit root
-  // we will add it our self later.
+  // Add the dependence of exit root.
   addValueDeps<true>(Exit, CurState, LatInfo, true);
+
+  // We need wait all operation finish before the exit operation active, compute
+  // the latency from operations need to wait to the exit operation.
+  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
+  LatInfo.buildExitMIInfo(Terms, ExitDepInfo);
+  Terms.clear();
 
   for (src_it SI = ExitDepInfo.begin(), SE = ExitDepInfo.end(); SI != SE; ++SI){
     MachineInstr *SrcMI = const_cast<MachineInstr*>(SI->first);
