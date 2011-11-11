@@ -523,31 +523,6 @@ void VPreRegAllocSched::addValDepForDatapath(VSchedGraph &CurState, VSUnit *A) {
   }
 }
 
-static unsigned ComputeEntryLatency(const MachineInstr *DstInstr) {
-  assert(DstInstr && "DstInstr should not be null!");
-  VIDesc DstTID(*DstInstr);
-
-  //// Set latency of Control operation and entry root to 1, so we can prevent
-  //// scheduling control operation to the first slot.
-  //// Do not worry about PHI Nodes, their will be eliminated at the register
-  //// allocation pass.
-  if (DstInstr->getOpcode() == VTM::PHI) return 0;
-
-  // Schedule datapath operation right after the first control slot.
-  if (DstTID.hasDatapath()) return 0;
-
-  // Now DstInstr is control.
-  if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
-    // Dirty Hack: Also do not schedule return value to the entry slot of
-    // the state.
-    && DstTID->getOpcode() != VTM::VOpRetVal)
-    return 0;
-
-  // Do not schedule function unit operation to the first state at the moment
-  // there may be potential resource conflict.
-  return 1;
-}
-
 template<int IsControl>
 void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
                                      DetialLatencyInfo &LatInfo,
@@ -567,7 +542,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !AllowDepEmpty) {
-    unsigned Latency = ComputeEntryLatency(A->getRepresentativeInst());
+    unsigned Latency = VInstrInfo::getEntryLatency(A->getRepresentativeInst());
     A->addDep(VDValDep::CreateValDep(CurState.getEntryRoot(), Latency),
               !A->hasDatapath());
   }
@@ -642,7 +617,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
 
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                           ComputeEntryLatency(MI));
+                           VInstrInfo::getEntryLatency(MI));
 }
 
 bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{

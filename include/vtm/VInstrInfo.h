@@ -158,9 +158,15 @@ public:
 
   static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr);
+  // Return the latency of a MachineInstr in cycle ratio.
   static double getDetialLatency(const MachineInstr *MI);
+  // Return the edge latency between SrcInstr and DstInstr considering chaining
+  // effect.
   static double getChainingLatency(const MachineInstr *SrcInstr,
                                    const MachineInstr *DstInstr);
+  // Return the latency from the entry of the MachineBasicBlock to DstInstr.
+  static unsigned getEntryLatency(const MachineInstr *DstInstr);
+
   static bool isCmdSeq(unsigned Cmd);
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
   static bool isCmdSeqBegin(const MachineInstr *MI);

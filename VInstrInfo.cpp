@@ -895,6 +895,31 @@ unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
   return unsigned(ceil(getChainingLatency(SrcInstr, DstInstr)));
 }
 
+unsigned VInstrInfo::getEntryLatency(const MachineInstr *DstInstr) {
+  assert(DstInstr && "DstInstr should not be null!");
+  VIDesc DstTID(*DstInstr);
+
+  //// Set latency of Control operation and entry root to 1, so we can prevent
+  //// scheduling control operation to the first slot.
+  //// Do not worry about PHI Nodes, their will be eliminated at the register
+  //// allocation pass.
+  if (DstInstr->getOpcode() == VTM::PHI) return 0;
+
+  // Schedule datapath operation right after the first control slot.
+  if (DstTID.hasDatapath()) return 0;
+
+  // Now DstInstr is control.
+  if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
+    // Dirty Hack: Also do not schedule return value to the entry slot of
+    // the state.
+    && DstTID->getOpcode() != VTM::VOpRetVal)
+    return 0;
+
+  // Do not schedule function unit operation to the first state at the moment
+  // there may be potential resource conflict.
+  return 1;
+}
+
 FuncUnitId VIDesc::getPrebindFUId()  const {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(getTID().Opcode) {
@@ -1063,7 +1088,6 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     // Do we ignore phi as dependence?
     if (SrcMI->isPHI() && IgnorePHISrc) continue;
 
-    double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI, MI);
     if (buildDepLatInfo(SrcMI, MI, CurLatInfo))
       // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
       // have user now.
@@ -1124,11 +1148,14 @@ unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   MachineInstr *SrcMI = 0;
   DepLatencyMap::const_iterator at = DepInfo.find(Reg);
   if (at != DepInfo.end()) {
-    SrcLatency = at->second.second;
     SrcMI = at->second.first;
-  }
+    SrcLatency = at->second.second + VInstrInfo::getCtrlStepBetween(SrcMI, MI);
+  } else
+    // Else the SrcMI is in other BB, return the latency from the entry of the
+    // parent BB of MI.
+    SrcLatency = VInstrInfo::getEntryLatency(MI);
 
-  return SrcLatency + VInstrInfo::getCtrlStepBetween(SrcMI, MI);
+  return SrcLatency;
 }
 
 unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
