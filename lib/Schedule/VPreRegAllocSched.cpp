@@ -416,12 +416,12 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // Handle unanalyzable memory access.
       if (DstMO == 0 || SrcMO == 0) {
         // Build the Src -> Dst dependence.
-        unsigned Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+        unsigned Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
         DstU->addDep(getMemDepEdge(SrcU, Latency, 0));
 
         // Build the Dst -> Src (in next iteration) dependence.
         if (CurState.enablePipeLine()) {
-          Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+          Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
           SrcU->addDep(getMemDepEdge(DstU, Latency, 1));
         }
         // Go on handle next visited SUnit.
@@ -440,7 +440,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
 
         if (LD.hasDep()) {
-          unsigned Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+          unsigned Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
           VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, LD.getItDst());
           DstU->addDep(MemDep);
         }
@@ -450,7 +450,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
 
         if (LD.hasDep()) {
-          unsigned Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+          unsigned Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
           VDMemDep *MemDep = getMemDepEdge(DstU, Latency, LD.getItDst());
           SrcU->addDep(MemDep);
         }
@@ -462,7 +462,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
         // Ignore the No-Alias pointers.
-        unsigned Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+        unsigned Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
         VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, 0);
         DstU->addDep(MemDep);
       }
@@ -495,8 +495,7 @@ void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
     // Dirty Hack: Adjust the latency with the read at emit/write at finish
     // information.
     double DetailLatency = I->second;
-    unsigned Latency = std::max(unsigned(ceil(DetailLatency)),
-                                VInstrInfo::computeCtrlLatency(SrcMI, MI));
+    unsigned Latency = unsigned(ceil(DetailLatency));
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     A->addDep(CreateDepFunc(SrcSU, Latency));
@@ -515,12 +514,38 @@ void VPreRegAllocSched::addValDepForDatapath(VSchedGraph &CurState, VSUnit *A) {
     if (Dep == 0 || Dep->getIdx() >= A->getIdx()) continue;
 
     // Dirty Hack: Call get Detail latency.
-    unsigned Latency = unsigned(floor(VInstrInfo::getDetialLatency(DepSrc)));
+    double Latency = VInstrInfo::getChainingLatency(DepSrc, MI);
+    Latency = floor(Latency);
 
     // Do not add A to the use list of Dep, otherwise the schedule graph may
     // have both control operation and datapath operation.
-    A->addDep(VDValDep::CreateValDep(Dep, Latency), false);
+    A->addDep(VDValDep::CreateValDep(Dep, unsigned(Latency)), false);
   }
+}
+
+static unsigned ComputeEntryLatency(const MachineInstr *DstInstr) {
+  assert(DstInstr && "DstInstr should not be null!");
+  VIDesc DstTID(*DstInstr);
+
+  //// Set latency of Control operation and entry root to 1, so we can prevent
+  //// scheduling control operation to the first slot.
+  //// Do not worry about PHI Nodes, their will be eliminated at the register
+  //// allocation pass.
+  if (DstInstr->getOpcode() == VTM::PHI) return 0;
+
+  // Schedule datapath operation right after the first control slot.
+  if (DstTID.hasDatapath()) return 0;
+
+  // Now DstInstr is control.
+  if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
+    // Dirty Hack: Also do not schedule return value to the entry slot of
+    // the state.
+    && DstTID->getOpcode() != VTM::VOpRetVal)
+    return 0;
+
+  // Do not schedule function unit operation to the first state at the moment
+  // there may be potential resource conflict.
+  return 1;
 }
 
 template<int IsControl>
@@ -542,8 +567,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !AllowDepEmpty) {
-    unsigned Latency = !IsControl ? 0 :
-      VInstrInfo::computeCtrlLatency(0, A->getRepresentativeInst());
+    unsigned Latency = ComputeEntryLatency(A->getRepresentativeInst());
     A->addDep(VDValDep::CreateValDep(CurState.getEntryRoot(), Latency),
               !A->hasDatapath());
   }
@@ -618,7 +642,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
 
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                           VInstrInfo::computeCtrlLatency(0, MI));
+                           ComputeEntryLatency(MI));
 }
 
 bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{
@@ -737,6 +761,10 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
                                       DetialLatencyInfo &LatInfo) {
+  // Wait all operation finish before the exit operation active.
+  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
+  LatInfo.buildExitMIInfo(Terms, ExitDepInfo);
+
   MachineInstr *FstExit = Terms.front();
   VSUnit *Exit = CurState.createVSUnit(FstExit);
 
@@ -754,20 +782,16 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // we will add it our self later.
   addValueDeps<true>(Exit, CurState, LatInfo, true);
 
-  // Wait all operation finish before the exit operation active.
-  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
-  LatInfo.buildExitMIInfo(ExitDepInfo);
-
   for (src_it SI = ExitDepInfo.begin(), SE = ExitDepInfo.end(); SI != SE; ++SI){
     MachineInstr *SrcMI = const_cast<MachineInstr*>(SI->first);
     VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
-    if (SrcSU == Exit) continue;
+    assert(SrcSU != Exit && "Unexpected Exit as dependence source!");
 
     unsigned Latency = unsigned(ceil(SI->second));
     // Dirty Hack: Adjust the latency with the read at emit/write at finish
     // information.
-    Latency = std::max(Latency, VInstrInfo::computeCtrlLatency(SrcMI, FstExit));
+    Latency = std::max(Latency, VInstrInfo::getCtrlStepBetween(SrcMI, FstExit));
 
     Exit->addDep(getCtrlDepEdge(SrcSU, Latency));
   }

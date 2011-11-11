@@ -236,7 +236,7 @@ void VSchedGraph::scheduleDatapath() {
          DI != DE; ++DI) {
       VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
-      Step = std::max(Step, DepSU->getSlot()/*+ DepSU->getLatency()*/);
+      Step = std::max(Step, DepSU->getSlot() + DI.getEdge()->getLatency());
     }
     assert(Step && "Datapath SU do not have depending SUs?");
     // Schedule As soon as possible.
@@ -286,7 +286,7 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
 }
 
 unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
-  int Latency = VInstrInfo::computeCtrlLatency(SrcMI, DstMI);
+  int Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
   if (SrcMI != getRepresentativeInst()) {
     Latency += getLatencyFor(SrcMI);
     assert(Latency >= 0 && "Unexpected negative latency!");

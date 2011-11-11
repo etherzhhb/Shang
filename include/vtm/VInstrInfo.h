@@ -339,8 +339,8 @@ private:
                             double CurLatency);
 
   // Add the latency information from SrcMI to CurLatInfo.
-  bool buildDepLatInfo(const MachineInstr *SrcMI,
-                           DepLatInfoTy &CurLatInfo);
+  bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
+                       DepLatInfoTy &CurLatInfo);
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
@@ -380,7 +380,8 @@ public:
 
   // All operation must finish before the BB exit, this function build the
   // information about the latency from instruction to the BB exit.
-  void buildExitMIInfo(DepLatInfoTy &Info);
+  void buildExitMIInfo(ArrayRef</*const */MachineInstr*> Terminators,
+                       DepLatInfoTy &Info);
 
   void reset() {
     LatencyMap.clear();
