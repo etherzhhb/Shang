@@ -156,10 +156,11 @@ public:
   static bool isBrCndLike(unsigned Opcode);
   static bool isWireOp(const TargetInstrDesc &TID);
 
-  static unsigned computeCtrlLatency(const MachineInstr *SrcInstr,
+  static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr);
   static double getDetialLatency(const MachineInstr *MI);
-
+  static double getChainingLatency(const MachineInstr *SrcInstr,
+                                   const MachineInstr *DstInstr);
   static bool isCmdSeq(unsigned Cmd);
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
   static bool isCmdSeqBegin(const MachineInstr *MI);
@@ -299,14 +300,10 @@ public:
   bool mayStore() const;
 
   inline bool isWriteUntilFinish() const {
-    switch (getTID().getOpcode()) {
-    default:
-      return getTSFlags()
-             & (WriteUntilFinishMask << WriteUntilFinishShiftAmount);
-    case TargetOpcode::COPY:
-    case TargetOpcode::PHI:
-      return true;
-    }
+    unsigned Opc = getTID().getOpcode();
+
+    return VInstrInfo::isCopyLike(Opc) || Opc == TargetOpcode::PHI ||
+           (getTSFlags() & (WriteUntilFinishMask << WriteUntilFinishShiftAmount));
   }
 
   inline bool hasDatapath() const {

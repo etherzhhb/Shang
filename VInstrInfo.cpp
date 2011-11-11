@@ -853,45 +853,46 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   else                           return 1.0;
 }
 
-unsigned VInstrInfo::computeCtrlLatency(const MachineInstr *SrcInstr,
-                                        const MachineInstr *DstInstr) {
-  assert(DstInstr && "DstInstr should not be null!");
+double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
+                                      const MachineInstr *DstInstr) {
+  assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
   assert(SrcInstr != DstInstr && "Computing latency of self loop?");
+  static const double Delta = 0.000001;
   VIDesc DstTID(*DstInstr);
-  assert(!DstTID.hasDatapath() && "Unexpected datapath operation!");
 
-  if (SrcInstr == 0) {
-    //// Set latency of Control operation and entry root to 1, so we can prevent
-    //// scheduling control operation to the first slot.
-    //// Do not worry about PHI Nodes, their will be eliminated at the register
-    //// allocation pass.
-    if (DstInstr->getOpcode() == VTM::PHI)
-      return 0;
+  VIDesc SrcTID = *SrcInstr;
+  // Compute the latency correspond to detail slot.
+  double latency = getDetialLatency(SrcInstr);
 
-    // Now DstInstr is control.
-    if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
-        // Dirty Hack: Also do not schedule return value to the entry slot of
-        // the state.
-        && DstTID->getOpcode() != VTM::VOpRetVal)
-      return 0;
+  if (DstTID.isReadAtEmit() && SrcTID.isWriteUntilFinish())
+    // If the edge is reg->reg, the result is ready after the clock edge, add
+    // a delta to make sure DstInstr not schedule to the moment right at the
+    // SrcInstr finish
+    return ceil(latency) + Delta;
 
-    // Do not schedule function unit operation to the first state at the moment
-    // there may be potential resource conflict.
-    return 1;
+  // When DstInst dose not read at emit, it hopefully a datapath operation.
+  // If the Src and Dst have difference slot type, it needs 1 extra slot to
+  // adjust the slot type.
+  if (DstTID.hasDatapath() && !SrcTID.hasDatapath()) {
+    // Chain the datapath operation if source is not a pre-bound op.
+    // Which means we do not need to worry about if we are overlapping the
+    // live interval of the output register of the pre-bound FU by connecting
+    // it to a wire.
+    // And wire may be still in use when the FU have new incoming operation
+    // which will refresh the output register, thus we will read a wrong value
+    // from the wire.
+    // Do not chain the datapath after the pre-bound operation.
+    if (!SrcTID.getPrebindFUId().isTrivial())
+      return ceil(latency) + Delta;
   }
 
-  VIDesc SrcTID(*SrcInstr);
-  assert(!DstTID.hasDatapath() && "Unexpected datapath operation!");
+  // Chain the operations by default.
+  return std::max(latency - Delta, 0.0);
+}
 
-  unsigned Latency = unsigned(ceil(getDetialLatency(SrcInstr)));
-
-  // If the source operation is write until finish, the value will available at
-  // the output register a cycle later after the operation finish.
-  if (SrcTID.isWriteUntilFinish()
-      || VInstrInfo::isCopyLike(SrcInstr->getOpcode()))
-    Latency += 1;
-
-  return Latency;
+unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
+                                        const MachineInstr *DstInstr) {
+  return unsigned(ceil(getChainingLatency(SrcInstr, DstInstr)));
 }
 
 FuncUnitId VIDesc::getPrebindFUId()  const {
@@ -1021,26 +1022,24 @@ DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
 }
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
-                                            DepLatInfoTy &CurLatInfo) {
+                                        const MachineInstr *DstMI,
+                                        DepLatInfoTy &CurLatInfo) {
   const DepLatInfoTy *SrcLatInfo = getOperandLatInfo(SrcMI);
   // Latency information not available, the SrcMI maybe in others BB, no need
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;
 
-  double CurLatency = VInstrInfo::getDetialLatency(SrcMI);
+  double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI, DstMI);
+
   if (!VIDesc(*SrcMI).hasDatapath()) {
     // Simply add the latency from ctrl op to the latency map.
-    updateLatency(CurLatInfo, SrcMI, CurLatency);
+    updateLatency(CurLatInfo, SrcMI, EdgeLatency);
     return true;
   }
 
-  // Dirty Hack: Do not chain the datapath after a prebound operation
-  if (VInstrInfo::isPrebound(SrcMI->getOpcode()))
-   CurLatency += 0.5;
-
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
-  accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, CurLatency);
+  accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, EdgeLatency);
   return true;
 }
 
@@ -1064,7 +1063,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     // Do we ignore phi as dependence?
     if (SrcMI->isPHI() && IgnorePHISrc) continue;
 
-    if (buildDepLatInfo(SrcMI, CurLatInfo))
+    double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI, MI);
+    if (buildDepLatInfo(SrcMI, MI, CurLatInfo))
       // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
       // have user now.
       ExitMIs.erase(SrcMI);
@@ -1114,76 +1114,6 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
   return TotalLatency;
 }
 
-static unsigned outofDateComputeLatency(const MachineInstr *SrcInstr,
-                                 const MachineInstr *DstInstr) {
-  assert(DstInstr && "DstInstr should not be null!");
-  assert(SrcInstr != DstInstr && "Computing latency of self loop?");
-  VIDesc DstTID = *DstInstr;
-
-  if (SrcInstr == 0) {
-    //// Set latency of Control operation and entry root to 1, so we can prevent
-    //// scheduling control operation to the first slot.
-    //// Do not worry about PHI Nodes, their will be eliminated at the register
-    //// allocation pass.
-    if (DstInstr->getOpcode() == VTM::PHI)
-      return 0;
-
-    // 1 slot from control to datapath.
-    if (DstTID.hasDatapath()) return 1;
-
-    // Now DstInstr is control.
-    if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
-        // Dirty Hack: Also do not schedule return value to the entry slot of
-        // the state.
-        && DstTID->getOpcode() != VTM::VOpRetVal)
-      return 0;
-
-    // Do not schedule function unit operation to the first state at the moment
-    // there may be potential resource conflict.
-    return 2;
-  }
-
-  VIDesc SrcTID = *SrcInstr;
-  // Compute the latency correspond to detail slot.
-  unsigned latency = SrcTID.getLatency() * 2;
-
-  if (DstTID.isReadAtEmit()) {
-    // If the edge is reg->reg, increase the latency by 1, because the result
-    // is ready after the clock edge.
-    if (SrcTID.isWriteUntilFinish())
-      return latency + 1;
-
-    // Else if the edge is wire->reg, decrease the latency by 1, becaue the
-    // result is ready before the clock edge and let the register can
-    // capture the result.
-    if(latency > 0)
-      latency -= 1;
-
-    // If the Src and Dst have difference slot type, it needs 1 extra slot to
-    // adjust the slot type.
-    return latency + 1;
-  }
-
-  // When DstInst dose not read at emit, it hopefully a datapath operation.
-  // If the Src and Dst have difference slot type, it needs 1 extra slot to
-  // adjust the slot type.
-  if (DstTID.hasDatapath() && !SrcTID.hasDatapath()) {
-    // Chain the datapath operation if source is not a pre-bound op.
-    // Which means we do not need to worry about if we are overlapping the
-    // live interval of the output register of the pre-bound FU by connecting
-    // it to a wire.
-    // And wire may be still in use when the FU have new incoming operation
-    // which will refresh the output register, thus we will read a wrong value
-    // from the wire.
-    //if (SrcTID.getPrebindFUId().isTrivial())
-    //  return latency ? latency - 1 : latency;
-    //else
-    return latency + 1;
-  }
-
-  return latency;
-}
-
 unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   unsigned SrcLatency = 0;
   MachineInstr *SrcMI = 0;
@@ -1193,7 +1123,7 @@ unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
     SrcMI = at->second.first;
   }
 
-  return SrcLatency + outofDateComputeLatency(SrcMI, MI);
+  return SrcLatency + VInstrInfo::getCtrlStepBetween(SrcMI, MI);
 }
 
 unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
@@ -1204,7 +1134,8 @@ unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
   FuncUnitId ID(FUId);
 
   // Update the FU latency information.
-  FULatency = std::max(FULatency + outofDateComputeLatency(LastMI, MI), Latency);
+  FULatency = std::max(FULatency + VInstrInfo::getCtrlStepBetween(LastMI, MI),
+                       Latency);
   LastMI = MI;
   return FULatency;
 }
