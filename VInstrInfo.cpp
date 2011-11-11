@@ -1165,9 +1165,11 @@ unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
   MachineInstr *&LastMI = LI.first;
   FuncUnitId ID(FUId);
 
+  unsigned EdgeLatency = LastMI ? VInstrInfo::getCtrlStepBetween(LastMI, MI)
+                                : VInstrInfo::getStepsFromEntry(MI);
+
   // Update the FU latency information.
-  FULatency = std::max(FULatency + VInstrInfo::getCtrlStepBetween(LastMI, MI),
-                       Latency);
+  FULatency = std::max(FULatency + EdgeLatency, Latency);
   LastMI = MI;
   return FULatency;
 }
