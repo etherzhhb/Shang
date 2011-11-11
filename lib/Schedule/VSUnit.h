@@ -312,8 +312,7 @@ public:
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
   unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
-  unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
-                        unsigned SrcLatency) const;
+  unsigned getLatencyFrom(MachineInstr *SrcMI, unsigned SrcLatency) const;
 
   // Get the maximum latency from RepresentativeInst to DstMI.
   unsigned getMaxLatencyTo(MachineInstr *DstMI) const {

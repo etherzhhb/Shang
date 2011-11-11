@@ -295,8 +295,7 @@ unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
   return Latency;
 }
 
-unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
-                              unsigned SrcLatency) const {
+unsigned VSUnit::getLatencyFrom(MachineInstr *SrcMI, unsigned SrcLatency) const{
   int Latency = SrcLatency;
   if (SrcMI != getRepresentativeInst()) {
     Latency += getLatencyFor(SrcMI);
