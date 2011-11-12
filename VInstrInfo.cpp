@@ -802,8 +802,8 @@ bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
 
 bool VInstrInfo::isDatapath(unsigned OpC) {
   // All pseudo instructions are control operations.
-  return OpC > TargetOpcode::COPY
-         && VTMInsts[OpC].TSFlags & (DatapathMask << DatapathShiftAmount);
+  return //OpC > TargetOpcode::COPY Not need because the bit is clean by default
+         VTMInsts[OpC].TSFlags & (DatapathMask << DatapathShiftAmount);
 }
 
 bool VInstrInfo::isLazyEmit(unsigned OpC) {
