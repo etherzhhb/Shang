@@ -143,6 +143,10 @@ public:
   static inline bool classof(const VDEdge *A) {
     return A->getEdgeType() == edgeCtrlDep;
   }
+
+  static VDCtrlDep *CreateCtrlDep(VSUnit *Src, unsigned Latency) {
+    return new VDCtrlDep(Src, Latency);
+  }
 };
 
 class VDMemDep : public VDEdge {

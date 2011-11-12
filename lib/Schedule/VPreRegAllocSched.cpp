@@ -115,10 +115,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   LoopDep createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
                         int Diff = 0);
 
-  VDCtrlDep *getCtrlDepEdge(VSUnit *Src, unsigned Latency) {
-    return new VDCtrlDep(Src, Latency);
-  }
-
   VDMemDep *getMemDepEdge(VSUnit *Src, unsigned Latency, unsigned Diff) {
     return new VDMemDep(Src, Latency, Diff);
   }
@@ -762,19 +758,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   LatInfo.buildExitMIInfo(Terms, ExitDepInfo);
   Terms.clear();
 
-  for (src_it SI = ExitDepInfo.begin(), SE = ExitDepInfo.end(); SI != SE; ++SI){
-    MachineInstr *SrcMI = const_cast<MachineInstr*>(SI->first);
-    VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
-    assert(SrcSU && "Src SUnit not found!");
-    assert(SrcSU != Exit && "Unexpected Exit as dependence source!");
-
-    unsigned Latency = unsigned(ceil(SI->second));
-    // Dirty Hack: Adjust the latency with the read at emit/write at finish
-    // information.
-    Latency = std::max(Latency, VInstrInfo::getCtrlStepBetween(SrcMI, FstExit));
-
-    Exit->addDep(getCtrlDepEdge(SrcSU, Latency));
-  }
+  // Add the control dependence edge edges to wait all operation finish.
+  addValDepForCtrlOp<true>(ExitDepInfo, CurState, Exit, FstExit,
+                           VDCtrlDep::CreateCtrlDep);
 
   // If there is still schedule unit not connect to exit, connect it now.
   for (VSchedGraph::iterator I = CurState.ctrl_begin(), E = CurState.ctrl_end();
@@ -794,7 +780,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
       //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
       //  --Latency;
 
-      Exit->addDep(getCtrlDepEdge(VSU,  Latency));
+      Exit->addDep(VDCtrlDep::CreateCtrlDep(VSU,  Latency));
     }
   }
 
@@ -802,7 +788,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
   if (Entry->use_empty())
-    Exit->addDep(getCtrlDepEdge(Entry, 1));
+    Exit->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
 }
 
 void VPreRegAllocSched::buildState(VSchedGraph &State) {
