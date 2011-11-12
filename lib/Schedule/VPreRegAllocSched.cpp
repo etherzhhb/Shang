@@ -185,6 +185,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void cleanUpSchedule();
   void cleanUpRegisterClass(const TargetRegisterClass *RC);
   void fixCmpFUPort();
+  void fixSubModuleReturnPort();
 
   bool doInitialization(Module &M) {
     TD = getAnalysisIfAvailable<TargetData>();
@@ -709,7 +710,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
       return;
     break;
   case VTM::VOpReadReturn:
-    if (mergeUnaryOp(MI, 2, CurState))
+    if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
   case VTM::VOpCmdSeq:
@@ -836,8 +837,8 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
 
 void VPreRegAllocSched::cleanUpSchedule() {
   cleanUpRegisterClass(VTM::DRRegisterClass);
-  cleanUpRegisterClass(VTM::WireRegisterClass);
   fixCmpFUPort();
+  fixSubModuleReturnPort();
 }
 
 void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
@@ -914,5 +915,46 @@ void VPreRegAllocSched::fixCmpFUPort() {
     }
 
     llvm_unreachable("Unsupported opcode!");
+  }
+}
+
+static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
+  typedef MachineRegisterInfo::use_iterator use_it;
+
+  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I) {
+    ucOp User = ucOp::getParent(I);
+    if (User->isOpcode(VTM::VOpReadFU)) continue;
+
+    assert(User->isOpcode(VTM::VOpReadReturn) && "Unexpected callee user!");
+
+    unsigned ReturnPortIdx = User.getOperand(2).getImm();
+    I.getOperand().setSubReg(ReturnPortIdx);
+  }
+}
+
+void VPreRegAllocSched::fixSubModuleReturnPort() {
+  // And Emit the wires defined in this module.
+  const std::vector<unsigned>& Callees =
+    MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
+
+  for (std::vector<unsigned>::const_iterator I = Callees.begin(),
+       E = Callees.end(); I != E; ++I) {
+      unsigned SrcReg = *I;
+      MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
+
+      if (DI == MRI->def_end() || MRI->use_empty(SrcReg))
+        continue;
+
+      assert(!DI->isPHI() && "PHI with RUCMPRegister is not supported!");
+
+      assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
+      // Do not remove the operand, just change it to implicit define.
+      ucOp Op = ucOp::getParent(DI);
+      if (Op->isOpcode(VTM::VOpInternalCall)) {
+        addSubRegIdxForCalleeFN(SrcReg, MRI);
+        continue;
+      }
+
+      llvm_unreachable("Unsupported opcode!");
   }
 }

@@ -158,6 +158,7 @@ struct VRASimple : public MachineFunctionPass {
   void bindMemoryBus();
   void bindBlockRam();
   void bindCalleeFN();
+  unsigned allocateCalleeFNPorts(unsigned RegNum);
 
   typedef const std::vector<unsigned> VRegVec;
   // Register/FU Compatibility Graph.
@@ -1103,7 +1104,9 @@ void VRASimple::joinPHINodeIntervals() {
       if (!PHISrcMO.isReg()) continue;
 
       unsigned PHISrc = PHISrcMO.getReg();
-
+      // Sub register index will lost if we simply replace the register number.
+      assert(PHISrcMO.getSubReg() == 0
+             && "Cannot join PHI source copy with sub register!");
       JoinIntervals(DstLI, LIS->getInterval(PHISrc), TRI, MRI);
       MRI->replaceRegWith(PHISrc, DstReg);
       // DirtyHack: Remove the define flag of the PHI stuffs so we have only
@@ -1232,6 +1235,27 @@ void VRASimple::bindBlockRam() {
   }
 }
 
+unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
+  unsigned FNNum = TRI->allocateFN(VTM::RCFNRegClassID, 128);
+  unsigned RetPortSize = 0;
+  typedef MachineRegisterInfo::use_iterator use_it;
+  for (use_it I = MRI->use_begin(RegNum); I != MRI->use_end(); ++I) {
+    ucOp User = ucOp::getParent(I);
+    if (User->isOpcode(VTM::VOpReadFU)) continue;
+
+    assert(User->isOpcode(VTM::VOpReadReturn) && "Unexpected callee user!");
+    assert((RetPortSize == 0 || RetPortSize == User.getOperand(0).getBitWidth())
+            && "Return port has multiple size?");
+    assert(User.getOperand(1).getSubReg() == 1 && "Only support 1 return port!");
+    RetPortSize = User.getOperand(0).getBitWidth();
+  }
+
+  // Allocate the return port signal for sub module.
+  if (RetPortSize) TRI->getSubRegOf(FNNum, RetPortSize, 0);
+
+  return FNNum;
+}
+
 void VRASimple::bindCalleeFN() {
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
   std::map<unsigned, LiveInterval*> RepLIs;
@@ -1241,6 +1265,8 @@ void VRASimple::bindCalleeFN() {
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
+      assert(Op->isOpcode(VTM::VOpInternalCall)
+             && "Unexpected define op of CaleeFN!");
       unsigned FNNum = Op.getOperand(1).getBitWidth();
       LiveInterval *&RepLI = RepLIs[FNNum];
 
@@ -1249,7 +1275,12 @@ void VRASimple::bindCalleeFN() {
         // Use this live interval to represent the live interval of this callee
         // function.
         RepLI = LI;
-        assign(*LI, TRI->allocateFN(VTM::RCFNRegClassID));
+        // Get the return ports of this callee FN.
+        unsigned NewFNNum = allocateCalleeFNPorts(RegNum);
+        if (NewFNNum != FNNum)
+          VFI->remapCallee(Op.getOperand(1).getSymbolName(), NewFNNum);
+
+        assign(*LI, NewFNNum);
         continue;
       }
 

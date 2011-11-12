@@ -88,3 +88,10 @@ void VFInfo::setTotalSlots(unsigned Slots) {
 VASTModule *VFInfo::getRtlMod() const {
   return Mod;
 }
+
+void VFInfo::remapCallee(StringRef FNName, unsigned NewFNNum) {
+  FNMapTy::iterator at = UsedFNs.find(FNName);
+  assert(at != UsedFNs.end() && "Callee not exist!");
+  assert(at->second != NewFNNum && "No need to remap FNNum!");
+  at->second = NewFNNum;
+}

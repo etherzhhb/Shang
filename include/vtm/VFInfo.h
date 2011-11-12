@@ -134,6 +134,8 @@ public:
     return CalleeFNNum;
   }
 
+  void remapCallee(StringRef FNName, unsigned NewFNNum);
+
   unsigned getCalleeFNNum(StringRef FNName) const {
     return UsedFNs.lookup(FNName);
   }

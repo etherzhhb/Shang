@@ -337,7 +337,7 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
     assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");
     EVT RetVT = Ins[0].VT;
     // The FU port index is start from 1.
-    SDValue RetPortIdx = DAG.getTargetConstant(0 + 1, RetVT);
+    SDValue RetPortIdx = DAG.getTargetConstant(0 + VFUs::RetPortOffset, RetVT);
     SDValue RetValue = DAG.getNode(VTMISD::ReadReturn, dl, RetVT, CallNode,
                                    RetPortIdx);
     InVals.push_back(RetValue);

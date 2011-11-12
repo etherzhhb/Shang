@@ -569,6 +569,7 @@ public:
 
   VASTValue *getSymbol(const std::string &Name) const {
     StringMap<VASTValue*>::const_iterator at = SymbolTable.find(Name);
+    assert(at != SymbolTable.end() && "Symbol not found!");
     return at->second;
   }
 

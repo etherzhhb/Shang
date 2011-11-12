@@ -426,7 +426,8 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
-      VM->addWire(WireName, BitWidth);
+      VM->indexVASTValue(FNNum + VFUs::RetPortOffset,
+                         VM->addWire(WireName, BitWidth));
       S << ".return_value(" << WireName << "),\n\t";
     }
   }
@@ -557,8 +558,10 @@ void RTLCodegen::emitAllocatedFUs() {
       getSubModulePortName(FNNum, "fin"),
       getSubModulePortName(FNNum, "return_value")
     };
-    // Add the finsh signal to the signal list.
+    // Add the finsh signal and return_value to the signal list.
     VM->addRegister(Ports[2], 1);
+    VM->indexVASTValue(FNNum + VFUs::RetPortOffset,
+                       VM->getOrCreateSymbol(Ports[4]));
 
     // Else ask the constraint about how to instantiates this submodule.
     S << "// External module: " << I->getKey() << '\n';
@@ -633,7 +636,10 @@ void RTLCodegen::emitAllSignals() {
   for (unsigned i = 0, e = TRI->num_phyreg(); i != e; ++i) {
     unsigned RegNum = i + 1;
     VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RegNum);
-    if (!Info.isTopLevelReg(RegNum)) {
+    if (!Info.isTopLevelReg(RegNum)
+        // Sub-register for RCFNRegClass already handled in
+        // emitFunctionSignature called by emitAllocatedFUs;
+        && Info.getRegClass() != VTM::RCFNRegClassID) {
       unsigned Parent = Info.getParentRegister();
       VASTUse V = VASTUse(VM->lookupSignal(Parent).get(),
                           Info.getUB(), Info.getLB());
@@ -683,6 +689,8 @@ void RTLCodegen::emitAllSignals() {
       VM->indexVASTValue(RegNum, VASTUse(VM->getPort(DataInIdx)));
       break;
     }
+    case VTM::RCFNRegClassID: /*Nothing to do*/ break;
+    default: llvm_unreachable("Unexpected register class!"); break;
     }
   }
 
@@ -936,9 +944,11 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
   case VFUs::MemoryBus:
     ReadyPort = VM->getOrCreateSymbol(VFUMemBus::getReadyName(Id.getFUNum()));
     break;
-  case VFUs::CalleeFN:
-    ReadyPort = VM->getOrCreateSymbol(getSubModulePortName(Id.getFUNum(), "fin"));
+  case VFUs::CalleeFN: {
+    unsigned FNNum = Op.getOperand(1).getReg();
+    ReadyPort = VM->getOrCreateSymbol(getSubModulePortName(FNNum, "fin"));
     break;
+  }
   default:
     break;
   }
@@ -953,18 +963,14 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
 void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
                                   SmallVectorImpl<VASTCnd> &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
-  unsigned FNNum = Op.getOperand(1).getTargetFlags();
-  std::string PortName =
-    getSubModulePortName(FNNum, Op.getOperand(1).getSymbolName());
-  VM->addAssignment(R, VM->getOrCreateSymbol(PortName), Slot, Cnds);
+  VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
 }
 
 void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
                                     SmallVectorImpl<VASTCnd> &Cnds) {
   // Assign input port to some register.
   const char *CalleeName = Op.getOperand(1).getSymbolName();
-  // The FNNum is encoded into the target flags field of the MachineOperand.
-  unsigned FNNum = Op.getOperand(1).getTargetFlags();
+  unsigned FNNum = FInfo->getCalleeFNNum(CalleeName);
 
   VASTCnd Pred = createCondition(Op.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");

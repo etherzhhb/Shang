@@ -619,20 +619,14 @@ MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
         Ops.push_back(Src);
         return addOperandsToMI(InsertPos, Ops);
       }
+
+      assert(Src.isWire() && "Cannot forward PHI source copy!");
     }
 
     Ops.push_back(Src);
     MachineOperand TargetBBMO =
       MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
     Ops.push_back(TargetBBMO);
-
-    // Try to forward the imp-uses.
-    if (Src.isWire())
-      for (ucOp::op_iterator I = WriteOp.op_begin(), E = WriteOp.op_end(); I != E;
-           ++I) {
-          MachineOperand &Op = *I;
-          if (Op.isReg() && Op.isImplicit()) Ops.push_back(Op);
-      }
 
     return addOperandsToMI(InsertPos, Ops);
   }
