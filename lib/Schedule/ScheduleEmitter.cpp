@@ -726,8 +726,6 @@ void VSchedGraph::emitSchedule() {
         unsigned PHISlot = A->getSlot() + getII();
         VFI->rememberPHISlot(Inst, PHISlot);
       }
-
-      assert(!Inst->isCopy() && "Cannot handle copy!");
     }
 
     StateBuilder.emitSUnit(A);

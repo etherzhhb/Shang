@@ -87,7 +87,8 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (handleImplicitDefs(Inst, MRI, TII)) continue;
 
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri) {
+      if (Inst->getOpcode() == VTM::VOpMove_ri
+          || (Inst->getOpcode() == VTM::COPY && Inst->getOperand(1).isImm())) {
         Imms.push_back(Inst);
         continue;
       }

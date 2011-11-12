@@ -543,7 +543,7 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
   // make it depend on the entry node.
   if (A->dep_empty() && !AllowDepEmpty) {
     unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
-    A->addDep(VDValDep::CreateValDep(CurState.getEntryRoot(), Latency),
+    A->addDep(VDCtrlDep::CreateCtrlDep(CurState.getEntryRoot(), Latency),
               // Add A to the use list of dependence source if A is control op.
               A->isControl());
   }
@@ -762,6 +762,12 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   addValDepForCtrlOp<true>(ExitDepInfo, CurState, Exit, FstExit,
                            VDCtrlDep::CreateCtrlDep);
 
+  // If we have a trivial schedule graph that only containing entry and exit
+  // simply connect them together.
+  VSUnit *Entry = CurState.getEntryRoot();
+  if (Entry->use_empty())
+    Exit->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
+
   // If there is still schedule unit not connect to exit, connect it now.
   for (VSchedGraph::iterator I = CurState.ctrl_begin(), E = CurState.ctrl_end();
        I != E; ++I) {
@@ -769,6 +775,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
       // Since the exit root already added to state sunit list, skip the
       // exit itself.
     if (VSU->getNumUses() == 0 && VSU != Exit) {
+      llvm_unreachable("Unexpected handing node!");
       // Dirty Hack.
       unsigned Latency = VSU->getMaxLatencyTo(FstExit);
       // We do not need to wait the trivial operation finish before exiting the
@@ -783,12 +790,6 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
       Exit->addDep(VDCtrlDep::CreateCtrlDep(VSU,  Latency));
     }
   }
-
-  // If we have a trivial schedule graph that only containing entry and exit
-  // simply connect them together.
-  VSUnit *Entry = CurState.getEntryRoot();
-  if (Entry->use_empty())
-    Exit->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
 }
 
 void VPreRegAllocSched::buildState(VSchedGraph &State) {
