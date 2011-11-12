@@ -560,8 +560,10 @@ void RTLCodegen::emitAllocatedFUs() {
     };
     // Add the finsh signal and return_value to the signal list.
     VM->addRegister(Ports[2], 1);
-    VM->indexVASTValue(FNNum + VFUs::RetPortOffset,
-                       VM->getOrCreateSymbol(Ports[4]));
+    unsigned RetPortIdx = FNNum + VFUs::RetPortOffset;
+    // Had we allocate the return port?
+    if (TRI->getPhyRegInfo(RetPortIdx).getParentRegister() == FNNum)
+      VM->indexVASTValue(RetPortIdx, VM->getOrCreateSymbol(Ports[4]));
 
     // Else ask the constraint about how to instantiates this submodule.
     S << "// External module: " << I->getKey() << '\n';
