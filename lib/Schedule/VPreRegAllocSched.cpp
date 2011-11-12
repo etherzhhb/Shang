@@ -510,12 +510,13 @@ void VPreRegAllocSched::addValDepForDatapath(VSchedGraph &CurState, VSUnit *A) {
     if (Dep == 0 || Dep->getIdx() >= A->getIdx()) continue;
 
     // Dirty Hack: Call get Detail latency.
-    double Latency = VInstrInfo::getChainingLatency(DepSrc, MI);
-    Latency = floor(Latency);
+    double DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
+    unsigned Latency = floor(DetailLatency);
+    Latency = Dep->getLatencyFrom(DepSrc, Latency);
 
     // Do not add A to the use list of Dep, otherwise the schedule graph may
     // have both control operation and datapath operation.
-    A->addDep(VDValDep::CreateValDep(Dep, unsigned(Latency)), false);
+    A->addDep(VDValDep::CreateValDep(Dep, Latency), false);
   }
 }
 
