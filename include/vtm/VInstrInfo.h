@@ -294,6 +294,8 @@ private:
 public:
   DetialLatencyInfo(MachineRegisterInfo &mri) : MRI(mri) {}
 
+  static const MachineInstr *const EntryMarker;
+
   // Add the a machine instruction and compute the corresponding latency
   // information, return true if the MI is a control operation, false otherwise.
   void addInstr(const MachineInstr *MI) {

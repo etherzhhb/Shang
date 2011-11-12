@@ -480,18 +480,28 @@ void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
   // from the same source.
   for (src_it I = DepLatInfo.begin(), E = DepLatInfo.end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
+    // Get the latency from SrcMI to MI.
+    double DetailLatency = I->second;
+    unsigned Latency = unsigned(ceil(DetailLatency));
     assert(SrcMI && "Unexpected null SrcMI!");
+    // LatencyInfo use a special marker to mark the current MI have some latency
+    // from entry of the MBB.
+    if (SrcMI == DetialLatencyInfo::EntryMarker) {
+      assert(IgnoreBackedge && "Unexpected datapath between PHI and entry node!");
+      // Since there are some datapath between current schedule unit and the
+      // entry node, we cannot schedule current schedule unit to the same slot
+      // with the entry root.
+      Latency = std::max(1u, Latency);
+      A->addDep(CreateDepFunc(CurState.getEntryRoot(), Latency));
+      continue;
+    }
+
     VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
     if ((SrcSU->getIdx() > A->getIdx() && IgnoreBackedge) || SrcSU == A)
       continue;
-    // Get the latency from SrcMI to MI.
-    // Dirty Hack: Adjust the latency with the read at emit/write at finish
-    // information.
-    double DetailLatency = I->second;
-    unsigned Latency = unsigned(ceil(DetailLatency));
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     A->addDep(CreateDepFunc(SrcSU, Latency));

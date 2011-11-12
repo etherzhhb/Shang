@@ -1025,6 +1025,9 @@ void BitWidthAnnotator::changeToDefaultPred() {
   MO->setTargetFlags(4);
 }
 
+const MachineInstr *const DetialLatencyInfo::EntryMarker =
+  reinterpret_cast<const MachineInstr *const>(-1);
+
 void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
                                       const MachineInstr*SrcMI,
                                       double CurLatency) {
@@ -1102,6 +1105,13 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // Assume MI do not have any user in the same BB, if it has, it will be
   // deleted later.
   ExitMIs.insert(MI);
+  // We will not get any latency information if a datapath operation do not
+  // depends any control operation in the same BB
+  // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
+  // the BB.
+  if (VInstrInfo::isDatapath(MI->getOpcode()) && CurLatInfo.empty())
+    CurLatInfo.insert(std::make_pair(EntryMarker,
+                                     VInstrInfo::getDetialLatency(MI)));
 
   return CurLatInfo;
 }
