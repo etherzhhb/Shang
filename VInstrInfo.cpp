@@ -48,8 +48,8 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
 
 bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                    AliasAnalysis *AA) const {
-  VIDesc Desc(MI->getDesc());
-  return !Desc->isBarrier() && Desc.hasTrivialFU();
+  const TargetInstrDesc &TID = MI->getDesc();
+  return !TID.isBarrier() && hasTrivialFU(TID.getOpcode());
 }
 
 bool VInstrInfo::isPredicable(MachineInstr *MI) const {
@@ -704,7 +704,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
 // Add Source to PHINode, if PHINod only have 1 source value, replace the PHI by
 // a copy, adjust and return true
 static bool AddSrcValToPHI(MachineOperand SrcVal, MachineBasicBlock *SrcBB,
-  MachineInstr *PN, MachineRegisterInfo &MRI) {
+                           MachineInstr *PN, MachineRegisterInfo &MRI) {
     if (PN->getNumOperands() != 1) {
       PN->addOperand(SrcVal);
       PN->addOperand(MachineOperand::CreateMBB(SrcBB));
@@ -791,7 +791,8 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
          || Opcode == VTM::VOpMove_rw
          || Opcode == VTM::VOpSel || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpReadReturn
-         || Opcode == VTM::VOpReadFU;
+         || Opcode == VTM::VOpReadFU
+         || Opcode == VTM::PHI;
 }
 
 bool VInstrInfo::isBrCndLike(unsigned Opcode) {
@@ -799,15 +800,34 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
          || Opcode == VTM::VOpToStateb;
 }
 
-bool VInstrInfo::isWireOp(const TargetInstrDesc &TID) {
-  VIDesc VID(TID);
+bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
+  const TargetInstrDesc &TID = VTMInsts[OpC];
+  return VInstrInfo::isCopyLike(OpC) ||
+        (TID.TSFlags & (WriteUntilFinishMask << WriteUntilFinishShiftAmount));
+}
 
-  // When a instruction has datapath and only has trivial FU, they will not
-  // share the FU with others instructions, and its result will only be written
-  // once, this means we can simply put the value to a wire and do not need to
-  // register the value.
-  return VID->getOpcode() != VTM::VOpReadReturn
-         && VID.hasDatapath() && VID.hasTrivialFU();
+bool VInstrInfo::isDatapath(unsigned OpC) {
+  return VTMInsts[OpC].TSFlags & (DatapathMask << DatapathShiftAmount);
+}
+
+bool VInstrInfo::isLazyEmit(unsigned OpC) {
+  return VTMInsts[OpC].TSFlags & (LazyEmitMask << LazyEmitShiftAmount);
+}
+
+VFUs::FUTypes VInstrInfo::getFUType(unsigned OpC) {
+  return (VFUs::FUTypes)
+    ((VTMInsts[OpC].TSFlags >> ResTypeShiftAmount) & ResTypeMask);
+}
+
+//unsigned VInstrInfo::getTrivialLatency(unsigned OpC) {
+//  assert(getFUType(OpC) == VFUs::Trivial && "Bad resource Type!");
+//  return ((VTMInsts[OpC].TSFlags >> TrivialLatencyShiftAmount)
+//           & TrivialLatencyMask);
+//}
+
+bool VInstrInfo::isReadAtEmit(unsigned OpC) {
+  return isCopyLike(OpC)
+         || (VTMInsts[OpC].TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount));
 }
 
 bool VInstrInfo::isCmdSeq(unsigned Cmd) {
@@ -849,8 +869,8 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   }
 
   // Dirty Hack: Datapath take 0 cycle, and control take 1 cycle.
-  if (VIDesc(*MI).hasDatapath()) return 0.0;
-  else                           return 1.0;
+  if (isDatapath(OpC)) return 0.0;
+  else                 return 1.0;
 }
 
 double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
@@ -858,13 +878,15 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
   assert(SrcInstr != DstInstr && "Computing latency of self loop?");
   static const double Delta = 0.000001;
-  VIDesc DstTID(*DstInstr);
+  const TargetInstrDesc &DstTID = DstInstr->getDesc();
+  unsigned DstOpC = DstTID.getOpcode();
+  const TargetInstrDesc &SrcTID = SrcInstr->getDesc();
+  unsigned SrcOpC = SrcTID.getOpcode();
 
-  VIDesc SrcTID = *SrcInstr;
   // Compute the latency correspond to detail slot.
   double latency = getDetialLatency(SrcInstr);
 
-  if (DstTID.isReadAtEmit() && SrcTID.isWriteUntilFinish())
+  if (isReadAtEmit(DstOpC) && isWriteUntilFinish(SrcOpC))
     // If the edge is reg->reg, the result is ready after the clock edge, add
     // a delta to make sure DstInstr not schedule to the moment right at the
     // SrcInstr finish
@@ -873,7 +895,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   // When DstInst dose not read at emit, it hopefully a datapath operation.
   // If the Src and Dst have difference slot type, it needs 1 extra slot to
   // adjust the slot type.
-  if (DstTID.hasDatapath() && !SrcTID.hasDatapath()) {
+  if (isDatapath(DstOpC) && isControl(SrcOpC)) {
     // Chain the datapath operation if source is not a pre-bound op.
     // Which means we do not need to worry about if we are overlapping the
     // live interval of the output register of the pre-bound FU by connecting
@@ -882,7 +904,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
     // which will refresh the output register, thus we will read a wrong value
     // from the wire.
     // Do not chain the datapath after the pre-bound operation.
-    if (!SrcTID.getPrebindFUId().isTrivial())
+    //if (!SrcTID.getPrebindFUId().isTrivial())
       return ceil(latency) + Delta;
   }
 
@@ -897,7 +919,8 @@ unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
 
 unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");
-  VIDesc DstTID(*DstInstr);
+  unsigned DstOpC = DstInstr->getOpcode();
+  const TargetInstrDesc &DstTID = VTMInsts[DstOpC];
 
   //// Set latency of Control operation and entry root to 1, so we can prevent
   //// scheduling control operation to the first slot.
@@ -906,13 +929,13 @@ unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   if (DstInstr->getOpcode() == VTM::PHI) return 0;
 
   // Schedule datapath operation right after the first control slot.
-  if (DstTID.hasDatapath()) return 0;
+  if (isDatapath(DstOpC)) return 0;
 
   // Now DstInstr is control.
-  if (DstTID.hasTrivialFU() && !DstTID->isTerminator() && !DstTID->isReturn()
-    // Dirty Hack: Also do not schedule return value to the entry slot of
-    // the state.
-    && DstTID->getOpcode() != VTM::VOpRetVal)
+  if (hasTrivialFU(DstOpC) && !DstTID.isTerminator()
+     // Dirty Hack: Also do not schedule return value to the entry slot of
+     // the state.
+     && DstTID.getOpcode() != VTM::VOpRetVal)
     return 0;
 
   // Do not schedule function unit operation to the first state at the moment
@@ -920,22 +943,42 @@ unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   return 1;
 }
 
-FuncUnitId VIDesc::getPrebindFUId()  const {
+FuncUnitId VInstrInfo::getPrebindFUId(const MachineInstr *MI) {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
-  switch(getTID().Opcode) {
+  switch(MI->getOpcode()) {
   case VTM::VOpCmdSeq:
   case VTM::VOpMemTrans:
     return FuncUnitId(VFUs::MemoryBus, 0);
   case VTM::VOpBRam: {
-    unsigned Id = get().getOperand(5).getImm();
+    unsigned Id = MI->getOperand(5).getImm();
     return FuncUnitId(VFUs::BRam, Id);
   }
   case VTM::VOpInternalCall: {
-    unsigned Id = get().getOperand(1).getTargetFlags();
+    unsigned Id = MI->getOperand(1).getTargetFlags();
     return FuncUnitId(VFUs::CalleeFN, Id);
   }
   default:
     return FuncUnitId();
+  }
+}
+
+bool VInstrInfo::mayLoad(const MachineInstr *MI) {
+  switch (MI->getOpcode()) {
+  default: return false;
+    // There is a "isLoad" flag in memory access operation.
+  case VTM::VOpMemTrans: return !MI->getOperand(3).getImm();
+    // Dirty Hack: Command sequence reads memory.
+  case VTM::VOpCmdSeq:   return true;
+  }
+}
+
+bool VInstrInfo::mayStore(const MachineInstr *MI) {
+  switch (MI->getOpcode()) {
+  default: return false;
+    // There is a "isLoad" flag in memory access operation.
+  case VTM::VOpMemTrans: return MI->getOperand(3).getImm();
+    // Dirty Hack: Command sequence write memory.
+  case VTM::VOpCmdSeq:   return true;
   }
 }
 
@@ -986,40 +1029,6 @@ void BitWidthAnnotator::changeToDefaultPred() {
   MO->setTargetFlags(4);
 }
 
-bool VIDesc::mayLoad() const {
-  switch (getTID().Opcode) {
-  default: return false;
-  // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return !get().getOperand(3).getImm();
-  // Dirty Hack: Command sequence reads memory.
-  case VTM::VOpCmdSeq:   return true;
-  }
-}
-
-bool VIDesc::mayStore() const {
-  switch (getTID().Opcode) {
-  default: return false;
-  // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return get().getOperand(3).getImm();
-  // Dirty Hack: Command sequence write memory.
-  case VTM::VOpCmdSeq:   return true;
-  }
-}
-
-bool VIDesc::canCopyBeFused() const {
-  const MachineInstr &I = get();
-  assert(I.isCopy() && "canCopyBeFused called on the wrong instruction!");
-  if (I.getOperand(1).isImm()) return true;
-
-  assert(I.getParent() && "Expected instruction embedded in machine function!");
-  const MachineRegisterInfo &MRI = I.getParent()->getParent()->getRegInfo();
-  unsigned DstReg = I.getOperand(0).getReg(),
-           SrcReg = I.getOperand(1).getReg();
-
-  // Later pass can not eliminate the non-trivial copy, so it should be fused.
-  return MRI.getRegClass(DstReg) != MRI.getRegClass(SrcReg);
-}
-
 void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
                                       const MachineInstr*SrcMI,
                                       double CurLatency) {
@@ -1056,7 +1065,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI, DstMI);
 
-  if (!VIDesc(*SrcMI).hasDatapath()) {
+  if (VInstrInfo::isControl(SrcMI->getOpcode())) {
     // Simply add the latency from ctrl op to the latency map.
     updateLatency(CurLatInfo, SrcMI, EdgeLatency);
     return true;
@@ -1116,7 +1125,7 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
   unsigned TotalLatency = 0;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
     MachineInstr *MI = I;
-    FuncUnitId FU = VIDesc(*MI).getPrebindFUId();
+    FuncUnitId FU = VInstrInfo::getPrebindFUId(MI);
     bool hasPrebindFU = FU.isBound();
 
     unsigned L = 0;

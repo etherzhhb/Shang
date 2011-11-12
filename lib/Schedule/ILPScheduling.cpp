@@ -227,7 +227,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
        I != E; ++I) {
     const VSUnit *DstU = *I;
 
-    assert(!DstU->hasDatapath() && "Unexpected datapath in scheduler!");
+    assert(DstU->isControl() && "Unexpected datapath in scheduler!");
     unsigned DstFstIdx = getFstSVIdxOf(DstU),
              DstNumSVs = getTimeFrame(DstU),
              DstASAP = getASAPStep(DstU);
@@ -249,7 +249,7 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
       const VSUnit *SrcU = *DI;
       VDEdge *Edge = DI.getEdge();
 
-      assert(!SrcU->hasDatapath() && "Unexpected datapath in scheduler!");
+      assert(SrcU->isControl() && "Unexpected datapath in scheduler!");
       // Get the index of first step variable of U.
       unsigned SrcFstIdx = getFstSVIdxOf(SrcU),
                // And the total step variable count of U.

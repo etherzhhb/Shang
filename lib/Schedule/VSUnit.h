@@ -365,7 +365,8 @@ public:
 
   unsigned getOpcode() const;
   VFUs::FUTypes getFUType() const;
-  bool hasDatapath() const;
+  bool isDatapath() const;
+  bool isControl() const { return !isDatapath(); }
 
   unsigned getFUNum() const { return FUNum; }
 
@@ -495,7 +496,8 @@ public:
   }
 
   bool mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
-    if (SU->num_instrs() && SU->hasDatapath() != VIDesc(*MI).hasDatapath())
+    if (SU->num_instrs()
+        && SU->isDatapath() != VInstrInfo::isDatapath(MI->getOpcode()))
       return false;
 
     SU->addInstr(MI, latency);

@@ -436,7 +436,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
        E = SUnitsToEmit.end(); I !=E; ++I) {
     VSUnit *A = *I;
 
-    OpSlot SchedSlot(A->getSlot(), !A->hasDatapath());
+    OpSlot SchedSlot(A->getSlot(), A->isControl());
     MachineInstr *RepInst = A->getRepresentativeInst();
     // Handle representative instruction of the VSUnit.
     if (RepInst != 0 && !RepInst->isImplicitDef()) {
@@ -451,15 +451,15 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     for (VSUnit::instr_iterator II = InstrBase + 1, IE = A->instr_end();
          II != IE; ++II) {
       MachineInstr &Inst = **II;
-      VIDesc VTID = Inst;
 
       // The instructions in Exit Root are parallel.
       unsigned DetailStep = SchedSlot.getDetailStep();
       DetailStep += A->getLatencyAt(II - InstrBase);
 
-      OpSlot S = OpSlot::detailStepCeil(DetailStep, VTID.hasDatapath());
+      OpSlot S = OpSlot::detailStepCeil(DetailStep,
+                                        VInstrInfo::isDatapath(Inst.getOpcode()));
       // FIXME: Assert the instruction have trivial function unit.
-      fuseInstr(Inst, S, VTID.getPrebindFUId());
+      fuseInstr(Inst, S, VInstrInfo::getPrebindFUId(&Inst));
     }
   }
 
@@ -468,8 +468,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 
 void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
                                   FuncUnitId FUId) {
-  VIDesc VTID = Inst;
-  bool IsCtrl = !VTID.hasDatapath();
+  bool IsCtrl = VInstrInfo::isControl(Inst.getOpcode());
   bool IsCtrlSlot = SchedSlot.isControl();
   assert(IsCtrlSlot == IsCtrl && "Wrong slot type.");
   bool isCopyLike = VInstrInfo::isCopyLike(Inst.getOpcode());
@@ -484,7 +483,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   if (CopySlot < SchedSlot) ++CopySlot;
   // Write to register operation need to wait one more slot if the result is
   // written at the moment (clock event) that the atom finish.
-  if (VTID.isWriteUntilFinish()) ++CopySlot;
+  if (VInstrInfo::isWriteUntilFinish(Inst.getOpcode())) ++CopySlot;
 
   unsigned OpC = Inst.getOpcode();
   typedef SmallVector<MachineOperand, 8> OperandVector;
@@ -728,8 +727,7 @@ void VSchedGraph::emitSchedule() {
         VFI->rememberPHISlot(Inst, PHISlot);
       }
 
-      assert((!Inst->isCopy() || VIDesc(*Inst).canCopyBeFused())
-             && "Cannot handle copy!");
+      assert(!Inst->isCopy() && "Cannot handle copy!");
     }
 
     StateBuilder.emitSUnit(A);

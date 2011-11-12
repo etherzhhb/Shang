@@ -389,8 +389,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
     if (!mayAccessMemory(DstMI->getDesc())) continue;
 
-    VIDesc DstInfo = *DstMI;
-    bool isDstLoad = DstInfo.mayLoad();
+    bool isDstLoad = VInstrInfo::mayLoad(DstMI);
 
     // Dirty Hack: Is the const_cast safe?
     Value *DstMO = 0;
@@ -429,8 +428,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         continue;
       }
 
-      VIDesc SrcInfo = *SrcMI;
-      bool isSrcLoad = SrcInfo.mayLoad();
+      bool isSrcLoad = VInstrInfo::mayLoad(SrcMI);
 
       // Ignore RAR dependence.
       if (isDstLoad && isSrcLoad) continue;
@@ -488,7 +486,7 @@ void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
     assert(SrcMI && "Unexpected null SrcMI!");
     VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
-    assert(!SrcSU->hasDatapath() && "Datapath dependence should be forwarded!");
+    assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
     if ((SrcSU->getIdx() > A->getIdx() && IgnoreBackedge) || SrcSU == A)
       continue;
@@ -549,7 +547,8 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
   if (A->dep_empty() && !AllowDepEmpty) {
     unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
     A->addDep(VDValDep::CreateValDep(CurState.getEntryRoot(), Latency),
-              !A->hasDatapath());
+              // Add A to the use list of dependence source if A is control op.
+              A->isControl());
   }
 }
 
@@ -700,8 +699,6 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     return;
   }
 
-  VIDesc VTID = *MI;
-
   bool isCmdSeq = false;
   switch (MI->getOpcode()) {
   default: break;
@@ -731,7 +728,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     break;
   }
 
-  FuncUnitId Id = VTID.getPrebindFUId();
+  FuncUnitId Id = VInstrInfo::getPrebindFUId(MI);
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.

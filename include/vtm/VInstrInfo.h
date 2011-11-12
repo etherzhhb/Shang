@@ -152,9 +152,7 @@ public:
                         MachineOperand IfTrueVal);
 
   static bool isCopyLike(unsigned Opcode);
-  static bool isPrebound(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
-  static bool isWireOp(const TargetInstrDesc &TID);
 
   static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr);
@@ -174,6 +172,46 @@ public:
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
   static bool isCmdSeqBegin(const MachineInstr *MI);
   static bool isCmdSeqEnd(const MachineInstr *MI);
+
+private:
+  enum TSFlagsBitFields {
+    ResTypeMask = 0x7,
+    ResTypeShiftAmount = 0x0,
+
+    TrivialLatencyMask = 0xf,
+    TrivialLatencyShiftAmount = 0x6,
+
+    ReadAtEmitMask = 0x1,
+    ReadAtEmitShiftAmount = 0x3,
+
+    WriteUntilFinishMask = 0x1,
+    WriteUntilFinishShiftAmount = 0x4,
+
+    DatapathMask = 0x1,
+    DatapathShiftAmount = 0x5,
+
+    LazyEmitMask = 0x1,
+    LazyEmitShiftAmount = 0xa
+  };
+
+public:
+  // Return the information that encoded into the TSFlags
+  static bool isWriteUntilFinish(unsigned OpC);
+  static bool isDatapath(unsigned OpC);
+  static bool isControl(unsigned OpC) { return !isDatapath(OpC); }
+  static bool isLazyEmit(unsigned OpC);
+  static VFUs::FUTypes getFUType(unsigned OpC);
+  static bool hasTrivialFU(unsigned OpC) {
+    return getFUType(OpC) == VFUs::Trivial;
+  }
+
+  //static unsigned getTrivialLatency(unsigned OpC);
+  static bool isReadAtEmit(unsigned OpC);
+
+  static bool isPrebound(unsigned Opcode);
+  static FuncUnitId getPrebindFUId(const MachineInstr *MI);
+  static bool mayLoad(const MachineInstr *MI);
+  static bool mayStore(const MachineInstr *MI);
 };
 
 // Helper class for manipulating bit width operand.
@@ -217,102 +255,6 @@ public:
   // The BitWidthAnnotator is defined as predicate operand in fact, after we
   // read the bitwidth information, change it back to predicate operand.
   void changeToDefaultPred();
-};
-
-class VIDesc {
-  enum TSFlagsBitFields {
-    ResTypeMask = 0x7,
-    ResTypeShiftAmount = 0x0,
-
-    TrivialLatencyMask = 0xf,
-    TrivialLatencyShiftAmount = 0x6,
-
-    ReadAtEmitMask = 0x1,
-    ReadAtEmitShiftAmount = 0x3,
-
-    WriteUntilFinishMask = 0x1,
-    WriteUntilFinishShiftAmount = 0x4,
-
-    DatapathMask = 0x1,
-    DatapathShiftAmount = 0x5,
-
-    LazyEmitMask = 0x1,
-    LazyEmitShiftAmount = 0xa
-  };
-
-  PointerUnion<const MachineInstr*, const TargetInstrDesc*> Data;
-  const TargetInstrDesc &getTID() const {
-    if (const MachineInstr *MI = Data.dyn_cast<const MachineInstr*>())
-      return MI->getDesc();
-
-    return *Data.get<const TargetInstrDesc*>();
-  }
-  uint64_t getTSFlags() const { return getTID().TSFlags; }
-public:
-  /*implicit*/ VIDesc(const MachineInstr &MI) : Data(&MI) {}
-  /*implicit*/ VIDesc(const TargetInstrDesc &TID) : Data(&TID) {}
-
-  MachineInstr &get() const {
-    return *const_cast<MachineInstr*>(Data.get<const MachineInstr*>());
-  }
-
-  // TODO: Add method to help users manipulate the bit width flag.
-
-  inline VFUs::FUTypes getFUType() const {
-    return (VFUs::FUTypes)
-      ((getTSFlags() >> ResTypeShiftAmount) & ResTypeMask);
-  }
-
-  bool isCopyLike(bool IncludeMoveImm = true) const {
-    return VInstrInfo::isCopyLike(getTID().getOpcode());
-  }
-
-  bool isBrCndLike() const {
-    return VInstrInfo::isBrCndLike(getTID().getOpcode());
-  }
-
-  // Can the copy be fused into control block?
-  bool canCopyBeFused() const;
-
-  bool hasTrivialFU() const { return getFUType() == VFUs::Trivial; }
-
-  inline unsigned getTrivialLatency() const {
-    assert(getFUType() == VFUs::Trivial && "Bad resource Type!");
-    return ((getTSFlags() >> TrivialLatencyShiftAmount)
-             & TrivialLatencyMask);
-  }
-
-  inline bool isReadAtEmit() const {
-    switch (getTID().getOpcode()) {
-    default:
-      return getTSFlags() & (ReadAtEmitMask << ReadAtEmitShiftAmount);
-    case TargetOpcode::COPY:
-    case TargetOpcode::PHI:
-      return true;
-    }
-  }
-
-  bool mayLoad() const;
-  bool mayStore() const;
-
-  inline bool isWriteUntilFinish() const {
-    unsigned Opc = getTID().getOpcode();
-
-    return VInstrInfo::isCopyLike(Opc) || Opc == TargetOpcode::PHI ||
-           (getTSFlags() & (WriteUntilFinishMask << WriteUntilFinishShiftAmount));
-  }
-
-  inline bool hasDatapath() const {
-    return getTSFlags() & (DatapathMask << DatapathShiftAmount);
-  }
-
-  inline bool isLazyEmit() const {
-    return getTSFlags() & (LazyEmitMask << LazyEmitShiftAmount);
-  }
-
-  const TargetInstrDesc* operator->() const { return &getTID(); }
-
-  FuncUnitId getPrebindFUId() const;
 };
 
 // Compute the detail ctrlop to ctrlop latency (in cycle ratio) infromation of

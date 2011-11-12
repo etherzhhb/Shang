@@ -55,12 +55,13 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
 }
 
 VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
-  VIDesc VTID(*I);
   VSUnit *SU = new VSUnit(SUCount, fuid);
   ++SUCount;
 
-  if  (VTID.hasDatapath()) DatapathSUs.push_back(SU);
-  else                     CtrlSUs.push_back(SU);
+  if  (VInstrInfo::isDatapath(I->getOpcode()))
+    DatapathSUs.push_back(SU);
+  else
+    CtrlSUs.push_back(SU);
 
   bool mapped = mapMI2SU(I, SU, VInstrInfo::getStepsToFinish(I));
   (void) mapped;
@@ -267,14 +268,14 @@ void VSUnit::scheduledTo(unsigned slot) {
 
 VFUs::FUTypes VSUnit::getFUType() const {
   if (MachineInstr *Instr = getRepresentativeInst())
-    return VIDesc(*Instr).getFUType();
+    return VInstrInfo::getFUType(Instr->getOpcode());
 
   return VFUs::Trivial;
 }
 
-bool VSUnit::hasDatapath() const {
+bool VSUnit::isDatapath() const {
   if (MachineInstr *Instr = getRepresentativeInst())
-    return VIDesc(*Instr).hasDatapath();
+    return VInstrInfo::isDatapath(Instr->getOpcode());
 
   return false;
 }
@@ -312,7 +313,6 @@ void VSUnit::print(raw_ostream &OS) const {
   const VSUnit::const_instr_iterator InstrBase = instr_begin();
   for (const_instr_iterator I = InstrBase, E = instr_end(); I != E; ++I)
     if (MachineInstr *Instr = *I) {
-      VIDesc VTID = *Instr;
       OS << Instr->getDesc().getName();
       unsigned Idx = I - InstrBase;
       if (Idx) OS << '+' << unsigned(getLatencyAt(Idx));
