@@ -66,7 +66,7 @@ static const char *transSolveResult(int result) {
 }
 
 ILPScheduler::ILPScheduler(VSchedGraph &S)
-  : SchedulingBase(S), SUnitToSV(S.num_scheds()), NumStepVars(0) {
+  : SchedulingBase(S), NumStepVars(0) {
 }
 
 unsigned ILPScheduler::buildSVIdx() {
@@ -74,7 +74,7 @@ unsigned ILPScheduler::buildSVIdx() {
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     VSUnit *U = *I;
-    SUnitToSV[U->getIdx()] = totalSV;
+    SUnitToSV[U] = totalSV;
     totalSV += getTimeFrame(U);
   }
 

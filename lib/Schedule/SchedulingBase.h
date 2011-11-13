@@ -40,7 +40,7 @@ public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
   // Time frames for each schedule unit.
-  SmallVector<TimeFrame, 256> SUnitToTF;
+  std::map<const VSUnit*, TimeFrame> SUnitToTF;
 
   // Step -> resource require number.
   typedef std::map<unsigned, unsigned> UsageMapType;
@@ -55,8 +55,7 @@ protected:
   VSchedGraph &State;
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
-    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
-    SUnitToTF(S.num_scheds()), State(S) {}
+    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), State(S) {}
 
 public:
   virtual ~SchedulingBase() {}
@@ -77,10 +76,14 @@ public:
   void buildTimeFrame();
 
   unsigned getASAPStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].first;
+    std::map<const VSUnit*, TimeFrame>::const_iterator at = SUnitToTF.find(A);
+    assert(at != SUnitToTF.end() && "TimeFrame for SU not exist!");
+    return at->second.first;
   }
   unsigned getALAPStep(const VSUnit *A) const {
-    return SUnitToTF[A->getIdx()].second;
+    std::map<const VSUnit*, TimeFrame>::const_iterator at = SUnitToTF.find(A);
+    assert(at != SUnitToTF.end() && "TimeFrame for SU not exist!");
+    return at->second.second;
   }
 
   unsigned getTimeFrame(const VSUnit *A) const {
@@ -140,7 +143,7 @@ template <> struct GraphTraits<SchedulingBase*>
 };
 
 class IterativeModuloScheduling : public SchedulingBase {
-  SmallVector<std::set<unsigned>, 256> ExcludeSlots;
+  std::map<const VSUnit*, std::set<unsigned> > ExcludeSlots;
 
   void excludeStep(VSUnit *A, unsigned step);
   bool isStepExcluded(VSUnit *A, unsigned step);
@@ -148,7 +151,7 @@ class IterativeModuloScheduling : public SchedulingBase {
   VSUnit *findBlockingSUnit(VSUnit *U, unsigned step);
 public:
   IterativeModuloScheduling(VSchedGraph &S)
-    : SchedulingBase(S), ExcludeSlots(S.num_scheds()){}
+    : SchedulingBase(S) {}
 
   bool scheduleState();
 };
@@ -165,7 +168,7 @@ class ILPScheduler : public SchedulingBase {
   // will be N step variables:
   // sv_i_0, sv_i_1, sv_i_2, ... , sv_i_(N-1) 
   // sv_i_j set to 1 means the schedule unit is scheduled to asap + j step
-  SmallVector<unsigned, 256> SUnitToSV;
+  std::map<const VSUnit*, unsigned> SUnitToSV;
   // Total step variables count.
   unsigned NumStepVars;
   // Total Step Variable;
@@ -182,7 +185,9 @@ class ILPScheduler : public SchedulingBase {
 
   unsigned getFstSVIdxOf(const VSUnit *U) const {
     assert(U && "Unexpected NULL pointer!");
-    return SUnitToSV[U->getIdx()];
+    std::map<const VSUnit*, unsigned>::const_iterator at = SUnitToSV.find(U);
+    assert(at != SUnitToSV.end() && "SVIdx for VSUnit not exist!");
+    return at->second;
   }
 
   typedef std::pair<const VSUnit*, unsigned> SUToIdx;

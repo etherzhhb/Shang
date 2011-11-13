@@ -126,7 +126,7 @@ bool IterativeModuloScheduling::isStepExcluded(VSUnit *A, unsigned step) {
   assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
 
   unsigned ModuloStep = computeStepKey(step);
-  return ExcludeSlots[A->getIdx()].count(ModuloStep);
+  return ExcludeSlots[A].count(ModuloStep);
 }
 
 void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
@@ -134,7 +134,7 @@ void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
   assert(!A->getFUId().isTrivial() && "Unexpected trivial sunit!");
 
   unsigned ModuloStep = computeStepKey(step);
-  ExcludeSlots[A->getIdx()].insert(ModuloStep);
+  ExcludeSlots[A].insert(ModuloStep);
 }
 
 VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {

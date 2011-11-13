@@ -43,7 +43,7 @@ void SchedulingBase::buildTimeFrame() {
 
 void SchedulingBase::buildASAPStep() {
   VSUnit *Entry = State.getEntryRoot();
-  SUnitToTF[Entry->getIdx()].first = Entry->getSlot();
+  SUnitToTF[Entry].first = Entry->getSlot();
   typedef VSchedGraph::sched_iterator it;
   it Start = State.sched_begin();
 
@@ -55,7 +55,7 @@ void SchedulingBase::buildASAPStep() {
     for (it I = Start + 1, E = State.sched_end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
-        SUnitToTF[A->getIdx()].first = A->getSlot();
+        SUnitToTF[A].first = A->getSlot();
         continue;
       }
 
@@ -85,8 +85,9 @@ void SchedulingBase::buildASAPStep() {
       A->dump();
       dbgs() << "\n\n";);
 
-      if (SUnitToTF[A->getIdx()].first != NewStep) {
-        SUnitToTF[A->getIdx()].first = NewStep;
+      unsigned &ASAPStep = SUnitToTF[A].first;
+      if (ASAPStep != NewStep) {
+        ASAPStep = NewStep;
         changed |= true;
       }
     }
@@ -99,16 +100,16 @@ void SchedulingBase::buildASAPStep() {
 void SchedulingBase::buildALAPStep() {
   VSUnit *Exit = State.getExitRoot();
   int LastSlot = CriticalPathEnd;
-  SUnitToTF[Exit->getIdx()].second = LastSlot;
+  SUnitToTF[Exit].second = LastSlot;
 
   bool changed = false;
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (unsigned Idx = State.num_scheds()/*skip exitroot*/- 2; Idx >= 0; --Idx){
+    for (int Idx = State.num_scheds()/*skip exitroot*/- 2; Idx >= 0; --Idx){
       VSUnit *A = State.getCtrlAt(Idx);
       if (A->isScheduled()) {
-        SUnitToTF[A->getIdx()].second = A->getSlot();
+        SUnitToTF[A].second = A->getSlot();
         continue;
       }
 
@@ -142,8 +143,9 @@ void SchedulingBase::buildALAPStep() {
             A->dump();
             dbgs() << "\n\n";);
 
-      if (SUnitToTF[A->getIdx()].second != NewStep) {
-        SUnitToTF[A->getIdx()].second = NewStep;
+      unsigned &ALAPStep = SUnitToTF[A].second;
+      if (ALAPStep != NewStep) {
+        ALAPStep = NewStep;
         changed = true;
       }
     }

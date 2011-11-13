@@ -81,19 +81,19 @@ class SubGraph {
   // ModuloScheduleInfo *MSInfo;
 
   //Set of blocked nodes
-  typedef IndexedMap<bool, VSUnit::IdxFunctor<SubGraphNode> > SubGrapNodeFlags;
+  typedef std::map<const SubGraphNode*, bool> SubGrapNodeFlags;
   SubGrapNodeFlags blocked;
   //Stack holding current circuit
   SubGrapNodeVec stack;
   //Map for B Lists
-  typedef IndexedMap<SubGrapNodeSet, VSUnit::IdxFunctor<SubGraphNode> > BMapTy;
+  typedef std::map<const SubGraphNode*, SubGrapNodeSet> BMapTy;
   BMapTy B;
 
   // SCC with least vertex.
   SubGrapNodeSet Vk;
 
   // SubGraph stuff
-  typedef std::vector<SubGraphNode*> NodeVecTy;
+  typedef std::map<const VSUnit*, SubGraphNode*> NodeVecTy;
   NodeVecTy Nodes;
   SubGraphNode DummyNode;
 public:
@@ -101,7 +101,7 @@ public:
   unsigned RecMII;
 
   SubGraph(VSchedGraph *SG)
-    : G(SG), GraphEntry(SG->getEntryRoot()), blocked(false), DummyNode(0, this),
+    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this),
       CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->num_scheds()),
       RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
@@ -109,15 +109,12 @@ public:
     // the VSUnits vector of SG.
     typedef VSchedGraph::sched_iterator it;
     for (it I = SG->sched_begin(), E = SG->sched_end(); I != E; ++I)
-      Nodes.push_back(new SubGraphNode(*I, this));
-
-    blocked.resize(NumNodes);
-    B.resize(NumNodes);
+      Nodes.insert(std::make_pair(*I, new SubGraphNode(*I, this)));
   }
 
   unsigned getRecMII() const { return RecMII; }
 
-  ~SubGraph() { DeleteContainerPointers(Nodes); }
+  ~SubGraph() { DeleteContainerSeconds(Nodes); }
 
   VSUnit::const_dep_iterator dummy_end() const { return GraphEntry->dep_end(); }
 
@@ -126,7 +123,9 @@ public:
     assert(SU && "SU should not be NULL!");
     if (SU->getIdx() < CurIdx) return &DummyNode;
 
-    return Nodes[SU->getIdx()];
+    NodeVecTy::const_iterator at = Nodes.find(SU);
+    assert(at != Nodes.end() && "SubGraphNode not exists!");
+    return at->second;
   }
 
   // Iterate over the subgraph start from idx.
