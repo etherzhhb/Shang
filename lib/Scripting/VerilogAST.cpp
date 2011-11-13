@@ -301,11 +301,21 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS.exit_block("// End resource ready.\n");
   } else {
     // DirtyHack: Check if the memory bus is shutdown.
-    DEBUG(
-      CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
+    //DEBUG(
+    if (getSlotNum() != 0) {
+      CtrlS << "if (start) begin $display(\"" << getName() << " in "
             << Mod.getName()
-            << " bad mem0en_r %b\\n\", mem0en_r);  $finish(); end\n";
-    );
+            << " bad start %b\\n\", start);  $finish(); end\n";
+
+      CtrlS << "if (Slot0) begin $display(\"" << getName() << " in "
+            << Mod.getName()
+            << " bad Slot0 %b\\n\", Slot0);  $finish(); end\n";
+    }
+
+    CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
+          << Mod.getName()
+          << " bad mem0en_r %b\\n\", mem0en_r);  $finish(); end\n";
+    //);
   }
 
   CtrlS << "// Enable the active FUs.\n";
