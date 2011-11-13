@@ -167,6 +167,10 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef MachineBasicBlock::iterator instr_it;
   void buildExitRoot(VSchedGraph &CurState, MachineInstr *FirstTerminator,
                      DetialLatencyInfo &LatInfo);
+
+  template<int AllowHanging>
+  void buildExitDeps( VSchedGraph &CurState );
+
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
   bool mergeUnaryOp(MachineInstr *MI, unsigned OpIdx, VSchedGraph &CurState);
@@ -252,6 +256,8 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     buildControlPathGraph(State);
     DEBUG(State.viewGraph());
     State.scheduleCtrl();
+    buildDataPathGraph(State);
+    DEBUG(State.viewGraph());
     State.scheduleDatapath();
     setTotalCycle(State.getEndSlot() + 1);
     DEBUG(State.viewGraph());
@@ -517,6 +523,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   typedef VSUnit::instr_iterator it;
   for (it I = A->instr_begin(), E = A->instr_end(); I != E; ++I) {
     MachineInstr *MI = *I;
+    assert(MI && "Unexpected entry root!");
     for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
       MachineInstr *DepSrc = 0;
       VSUnit *Dep = getDefSU(MI->getOperand(i), CurState, DepSrc);
@@ -753,6 +760,33 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   if (isCmdSeq) LastCmdSeq = U;
 }
 
+template<int AllowHanging>
+void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
+  typedef VSchedGraph::sched_iterator it;
+  VSUnit *ExitRoot = CurState.getExitRoot();
+  MachineInstr *ExitMI = ExitRoot->getRepresentativeInst();
+  for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
+    VSUnit *VSU = *I;
+    // Since the exit root already added to state sunit list, skip the
+    // exit itself.
+    if (VSU->getNumUses() == 0 && VSU != ExitRoot) {
+      assert(AllowHanging && "Unexpected handing node!");
+      // Dirty Hack.
+      unsigned Latency = VSU->getMaxLatencyTo(ExitMI);
+      // We do not need to wait the trivial operation finish before exiting the
+      // state, because the first control slot of next state will only contains
+      // PHI copies, and the PHIElimination Hook will take care of the data
+      // dependence and try to forward the wire value in last control slot
+      // if possible, so they can take the time of the last control slot.
+      //VIDesc VID(*Instr);
+      //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
+      //  --Latency;
+
+      ExitRoot->addDep(VDCtrlDep::CreateCtrlDep(VSU,  Latency));
+    }
+  }
+}
+
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
                                       MachineInstr *FirstTerminator,
                                       DetialLatencyInfo &LatInfo) {
@@ -807,28 +841,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   if (Entry->use_empty())
     ExitSU->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
 
-  // If there is still schedule unit not connect to exit, connect it now.
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
-    VSUnit *VSU = *I;
-      // Since the exit root already added to state sunit list, skip the
-      // exit itself.
-    if (VSU->getNumUses() == 0 && VSU != ExitSU) {
-      llvm_unreachable("Unexpected handing node!");
-      // Dirty Hack.
-      unsigned Latency = VSU->getMaxLatencyTo(FstExit);
-      // We do not need to wait the trivial operation finish before exiting the
-      // state, because the first control slot of next state will only contains
-      // PHI copies, and the PHIElimination Hook will take care of the data
-      // dependence and try to forward the wire value in last control slot
-      // if possible, so they can take the time of the last control slot.
-      //VIDesc VID(*Instr);
-      //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
-      //  --Latency;
-
-      ExitSU->addDep(VDCtrlDep::CreateCtrlDep(VSU,  Latency));
-    }
-  }
+  // If there is still schedule unit not connect to exit, connect it now, but
+  // they are supposed to be connected in the previous stages, so hanging node
+  // is not allow.
+  buildExitDeps<false>(CurState);
 }
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
@@ -860,11 +876,18 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
 }
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
-//  for (su_it I = ++State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
-//    VSUnit *U = *I;
-//    U->cleanDeps();
-//    addValDep(State, U);
-//  }
+  State.unifySUs();
+  // Refresh the dependence edges and build data dependence.
+  State.getEntryRoot()->cleanDeps();
+  for (su_it I = State.begin() + 1, E = State.end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->isControl()) U->cleanDeps();
+    addValDep(State, U);
+  }
+
+  // Build control dependence for exitroot, hanging node is allowed because we
+  // do not handle them explicitly.
+  buildExitDeps<true>(State);
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
