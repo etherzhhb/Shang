@@ -100,15 +100,16 @@ let hasCtrlDep = 1 in {
   def VOpReadReturn : CtrlInst<(outs DR:$val),
                                 (ins DR:$token, i8imm:$ret_no),
                                 "$val = $token[$ret_no]", [],
-                                0 /*Latency*/, 1, 1>;
+                                0 /*Latency*/, 1 /*writeUntilFinish*/>;
   let isBarrier    = 1 in {
     let isReturn     = 1,
         isTerminator = 1 in
-    def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)]>;
+    def VOpRet : CtrlInst<(outs), (ins), "ret;", [(VTMFnRet)],
+                          0 /*Latency*/, 0 /*writeUntilFinish*/>;
 
     def VOpRetVal : CtrlInst<(outs), (ins DR:$var, i8imm:$ret_no),
                              "ret $var at $ret_no;",
-                             [], 0, 1>;
+                             [], 0 /*Latency*/, 0 /*writeUntilFinish*/>;
 
   }
 
@@ -117,9 +118,7 @@ let hasCtrlDep = 1 in {
                                  (ins i8imm:$CalleeNum, variable_ops),
                                  "call internal;", [],
                                  FUCalleeFN,
-                                 1/*ReadAtEmit*/,
-                                 0/*WriteUntilFinish*/,
-                                 0/*DATAPATH*/>;
+                                 0 /*writeUntilFinish*/>;
   }
 
   let isBranch   = 1,
@@ -127,13 +126,14 @@ let hasCtrlDep = 1 in {
     isTerminator = 1 in {
     def VOpToStateb : CtrlInst<(outs), (ins DR:$cnd, State:$target),
                               "to $target;",
-                              [], 0, 1, 1>;
+                              [], 0 /*Latency*/, 0 /*writeUntilFinish*/>;
   let isBarrier = 0 in
     def VOpToState : CtrlInst<(outs), (ins DR:$cnd, State:$target),
                               "to $target;",
-                              [], 0, 1, 1>;
+                              [], 0 /*Latency*/, 0 /*writeUntilFinish*/>;
 
-    def VOpUnreachable : CtrlInst<(outs), (ins), "unreachable;", [], 0, 1>;
+    def VOpUnreachable : CtrlInst<(outs), (ins), "unreachable;", [],
+                                  0 /*Latency*/, 0 /*writeUntilFinish*/>;
   }
 }
 
@@ -142,23 +142,28 @@ let isReMaterializable = 1,
     neverHasSideEffects = 1 in {
   multiclass MoveInst {
   let isMoveImm = 1 in
-    def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [], 0, 1>;
-    def _rr : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [], 0, 1>;
-    def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
-    def _ww : CtrlInst<(outs Wire:$dst), (ins Wire:$src), "$dst=$src", [], 0, 1>;
+    def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [],
+                        0 /*Latency*/, 1 /*writeUntilFinish*/>;
+    def _rr : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [],
+                        0 /*Latency*/, 1 /*writeUntilFinish*/>;
+    def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [],
+                        0 /*Latency*/, 1 /*writeUntilFinish*/>;
   }
 
   defm VOpMove  : MoveInst;
 
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
-                           "$dst <= $src", [], 0, 1>;
+                           "$dst <= $src", [],
+                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
   // Special instruction for copy source register to phi incomming register,
   // we may need to forward the source register.
   def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
-                           "$dst <= $src", [], 0, 1>;
+                           "$dst <= $src", [],
+                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
   // Move the pipeline, this is unconditional.
   def VOpMvPipe : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
-                            "$dst <= $src", [], 0, 1>;
+                            "$dst <= $src", [],
+                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   // Bitwise logic operation.
   let isCommutable       = 1 in {
@@ -173,13 +178,16 @@ let isReMaterializable = 1,
                             "$dst = ~ $src", []>;
 
   def VOpSel   : CtrlInst<(outs DR:$dst), (ins DR:$cnd, DR:$src0, DR:$src1),
-                          "$dst = $cnd?$src0:$src1", [], 1, 1>;
+                          "$dst = $cnd?$src0:$src1", [],
+                          0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   def VOpCase  : CtrlInst<(outs DR:$dst), (ins variable_ops),
-                          "$dst = case;", [], 1, 1>;
+                          "$dst = case;", [],
+                          0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   def VOpReadFU: CtrlInst<(outs DR:$dst), (ins DR:$src),
-                          "$dst = read fu $src", [], 1, 1>;
+                          "$dst = read fu $src", [],
+                          0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   // Reduction operation.
   def VOpRAnd   : DPTvaInst<(outs DR:$dst), (ins DR:$src),
@@ -207,47 +215,47 @@ let isReMaterializable = 1,
   let isCommutable        = 1 in {
     def VOpAdd : FUInst<(outs DR:$dst, DR:$co),(ins DR:$src1, DR:$src2, DR:$ci),
                          "{$dst, $co} = $src1 + $src2 + $ci;",
-                         [], FUAddSub, 1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+                         [], FUAddSub, 0 /*writeUntilFinish*/>;
     def VOpMult : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
                          "$dst = $src1 * $src2;",
-                         [], FUMult, 1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+                         [], FUMult, 0 /*writeUntilFinish*/>;
   }
 
   def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                        "$dst = shl $src0, $src1", [], FUSHIFT,
-                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+                       0 /*writeUntilFinish*/>;
   def VOpSRL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                        "$dst = lsr $src0, $src1", [], FUSHIFT,
-                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+                       0 /*writeUntilFinish*/>;
 
   def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                        "$dst = sra $src0, $src1", [], FUSHIFT,
-                       1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+                       0 /*writeUntilFinish*/>;
 }
 
 // Integer comparison
 def VOpICmp   : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1, i8imm:$CC),
                        "$dst = icmp $src0, $src1 $CC", [], FUICmp,
-					    1/*ReadAtEmit*/, 0, 0/*Datapath*/>;
+					    0 /*writeUntilFinish*/>;
 // Memory transaction.
 let mayLoad      = 1,
     mayStore    = 1 in {
   def VOpMemTrans : FUInst<(outs DR:$dst),
                            (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
                             "$dst = memtrans $src, $addr, $isStore, $byteenable",
-                            [], FUMemBus, 1, 0, 0>;
+                            [], FUMemBus, 0 /*writeUntilFinish*/>;
 
 let hasCtrlDep = 1 in
   def VOpCmdSeq : FUInst<(outs DR:$dst),
                          (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
                           "$dst = cmdseq $src, $addr, $isStore, $byteenable",
-                          [], FUMemBus, 1, 0, 0>;
+                          [], FUMemBus, 0 /*writeUntilFinish*/>;
 
   def VOpBRam : FUInst<(outs DR:$dst),
                        (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable,
                         i8imm:$bramnum),
                        "$dst = bram $src, $addr, $isStore, $byteenable, $bramnum",
-                       [], FUBRam, 1, 0, 0>;
+                       [], FUBRam, 0 /*writeUntilFinish*/>;
 }
 
 def ImpUse : InstVTM<(outs), (ins), "imp-use", [], FUTrivial>;

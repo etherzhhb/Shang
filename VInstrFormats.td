@@ -60,23 +60,17 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
 }
 
 class CtrlInst<dag outs, dag ins, string asmstr, list<dag> pattern,
-			   bits<4> latency = 0,
-			   bit readAtEmit = 0, bit writeUntilFinish = 0>
+			   bits<4> latency = 0, bit writeUntilFinish = 0>
 	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 0, latency,
-			  readAtEmit, writeUntilFinish>;
+			  1, writeUntilFinish>;
 
 class FUInst<dag outs, dag ins, string asmstr, list<dag> pattern,
-                FUType ResType,
-                bit readAtEmit = 0, bit writeUntilFinish = 0,
-                bit datapath = 1>
-	: InstVTM<outs, ins, asmstr, pattern, ResType, datapath, 0,
-			  readAtEmit, writeUntilFinish>;
+                FUType ResType, bit writeUntilFinish = 0>
+	: InstVTM<outs, ins, asmstr, pattern, ResType, 0, 0,
+			  1, writeUntilFinish>;
 
-class DPTvaInst<dag outs, dag ins, string asmstr, list<dag> pattern,
-		        bits<4> latency = 0,
-			    bit readAtEmit = 0, bit writeUntilFinish = 0>
-	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 1, latency,
-			  readAtEmit, writeUntilFinish>;
+class DPTvaInst<dag outs, dag ins, string asmstr, list<dag> pattern>
+	: InstVTM<outs, ins, asmstr, pattern, FUTrivial, 1, 0, 0, 0>;
 
 class BinOpFrag<dag res> : PatFrag<(ops node:$LHS, node:$RHS), res>;
 
