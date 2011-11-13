@@ -58,10 +58,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   VSUnit *SU = new VSUnit(SUCount, fuid);
   ++SUCount;
 
-  if  (VInstrInfo::isDatapath(I->getOpcode()))
-    DatapathSUs.push_back(SU);
-  else
-    CtrlSUs.push_back(SU);
+  AllSUs.push_back(SU);
 
   bool mapped = mapMI2SU(I, SU, VInstrInfo::getStepsToFinish(I));
   (void) mapped;
@@ -81,30 +78,61 @@ void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
   }
 
   // Delete source and mark it as dead.
- iterator I = std::find(ctrl_begin(), ctrl_end(), Src);
+ iterator I = std::find(begin(), end(), Src);
  delete *I;
  *I = 0;
 }
 
+// Sort the schedule to place all control schedule unit at the beginning of the
+// AllSU vector.
+static inline bool sort_by_type(const VSUnit* LHS, const VSUnit* RHS) {
+  if (LHS->isControl() != RHS->isControl())
+    return LHS->isControl();
+
+  return LHS->getIdx() < RHS->getIdx();
+}
+
 void VSchedGraph::removeDeadSU() {
   unsigned Idx = 0;
-  for (unsigned i = 0, e = CtrlSUs.size(); i != e; ++i) {
-    if (CtrlSUs[i]) {
+  for (unsigned i = 0, e = AllSUs.size(); i != e; ++i) {
+    if (AllSUs[i]) {
       // Also update InstIdx.
-      CtrlSUs[Idx] = CtrlSUs[i]->updateIdx(Idx);
+      AllSUs[Idx] = AllSUs[i]->updateIdx(Idx);
       ++Idx;
     }
   }
 
-  CtrlSUs.resize(Idx);
+  AllSUs.resize(Idx);
   SUCount = Idx;
 }
 
+void VSchedGraph::sortSUsForCtrlSchedule() {
+  unsigned NumCtrls = 0;
+  std::sort(AllSUs.begin(), AllSUs.end(), sort_by_type);
+
+#ifndef NDEBUG
+  int LastIdx = -1;
+#endif
+  for (iterator I = begin(), E = end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->isDatapath())
+      break;
+
+    ++NumCtrls;
+#ifndef NDEBUG
+    assert(LastIdx < U->getIdx() && "Schedule units not sorted!");
+#endif
+  }
+
+  CtrlSUs = ArrayRef<VSUnit*>(AllSUs.data(), NumCtrls);
+}
+
 void VSchedGraph::resetSchedule(unsigned MII) {
-  for (iterator I = ctrl_begin(), E = ctrl_end(); I != E; ++I) {
+  for (ctrl_iterator I = ctrl_begin(), E = ctrl_end(); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }
+
   getEntryRoot()->scheduledTo(startSlot);
   // Also schedule the LoopOp to MII step.
   if (MII) {
@@ -230,8 +258,11 @@ void VSchedGraph::viewGraph() {
 }
 
 void VSchedGraph::scheduleDatapath() {
-  for (iterator I = DatapathSUs.begin(), E = DatapathSUs.end(); I != E; ++I) {
+  for (iterator I = AllSUs.begin(), E = AllSUs.end(); I != E; ++I) {
     VSUnit *DU = *I;
+    if (DU->isScheduled()) continue;
+
+    assert(DU->isDatapath() && "Unexpected ctrl-sunit not to yet scheduled!");
     unsigned Step = 0;
     for (VSUnit::dep_iterator DI = DU->dep_begin(), DE = DU->dep_end();
          DI != DE; ++DI) {

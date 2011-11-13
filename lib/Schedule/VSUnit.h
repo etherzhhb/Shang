@@ -32,6 +32,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_os_ostream.h"
 
@@ -216,9 +217,14 @@ class VSUnit {
 public:
   static const unsigned short MaxSlot = ~0 >> 1;
 
-  ~VSUnit() {
-    std::for_each(Deps.begin(), Deps.end(), deleter<VDEdge>);
+  void cleanDeps() {
+    while (!Deps.empty())
+      delete Deps.pop_back_val();
+
+    UseList.clear();
   }
+
+  ~VSUnit() { cleanDeps(); }
 
   unsigned short getIdx() const { return InstIdx; }
 
@@ -233,7 +239,7 @@ public:
   /// @name Operands
   //{
   // Add a new depencence edge to the atom.
-  void addDep(VDEdge *NewE, bool AddToSrcUseList = true) {
+  void addDep(VDEdge *NewE) {
     VSUnit *Src = NewE->getSrc();
     for (edge_iterator I = edge_begin(), E = edge_end(); I != E; ++I) {
       VDEdge *CurE = *I;
@@ -249,7 +255,7 @@ public:
       }
     }
 
-    if (AddToSrcUseList) Src->addToUseList(this);
+    Src->addToUseList(this);
     Deps.push_back(NewE);
   }
 
@@ -461,7 +467,9 @@ public:
 private:
   const TargetMachine &TM;
   MachineBasicBlock *MBB;
-  SUnitVecTy CtrlSUs, DatapathSUs;
+  SUnitVecTy AllSUs;
+  ArrayRef<VSUnit*> CtrlSUs;
+  VSUnit *Entry, *Exit;
   // The number of schedule unit.
   unsigned SUCount;
 
@@ -481,22 +489,18 @@ private:
   VSUnit *createEntry() {
     VSUnit *Entry = new VSUnit(SUCount);
     ++SUCount;
-    CtrlSUs.push_back(Entry);
+    AllSUs.push_back(Entry);
     return Entry;
   }
 
 public:
   VSchedGraph(const TargetMachine &Target, MachineBasicBlock *MachBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : TM(Target), MBB(MachBB), SUCount(0), startSlot(StartSlot),
-      LoopOp(0, HaveLoopOp) {
-    // Create a dummy entry node.
-    (void) createEntry();
-  }
+    : TM(Target), MBB(MachBB), Entry(createEntry()), Exit(0), SUCount(0),
+      startSlot(StartSlot), LoopOp(0, HaveLoopOp) {}
 
   ~VSchedGraph() {
-    std::for_each(CtrlSUs.begin(), CtrlSUs.end(), deleter<VSUnit>);
-    std::for_each(DatapathSUs.begin(), DatapathSUs.end(), deleter<VSUnit>);
+    std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
   }
 
   bool mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
@@ -515,8 +519,13 @@ public:
   // Merge Src into Dst with a given latency.
   void mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency);
   void removeDeadSU();
+  void sortSUsForCtrlSchedule();
 
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
+  void setExitRoot(VSUnit *exit) {
+    assert(Exit == 0 && "ExitRoot already exist!");
+    Exit = exit;
+  }
 
   bool isLoopOp(MachineInstr *MI) {
     assert(MI->getDesc().isTerminator() && "Expected terminator!");
@@ -542,31 +551,21 @@ public:
 
   /// @name Roots
   //{
-  VSUnit *getEntryRoot() const { return CtrlSUs.front(); }
-  VSUnit *getExitRoot() const { return CtrlSUs.back(); }
+  VSUnit *getEntryRoot() const { return Entry; }
+  VSUnit *getExitRoot() const { return Exit; }
   //}
 
   /// iterator/begin/end - Iterate over all schedule unit in the graph.
   typedef SUnitVecTy::iterator iterator;
-  iterator ctrl_begin()  { return CtrlSUs.begin(); }
-  iterator ctrl_end()    { return CtrlSUs.end(); }
-  iterator datapath_begin() { return DatapathSUs.begin(); }
-  iterator datapath_end() { return DatapathSUs.end(); }
+  iterator begin() { return AllSUs.begin(); }
+  iterator end() { return AllSUs.end(); }
 
-  typedef SUnitVecTy::const_iterator const_iterator;
-  const_iterator ctrl_begin() const { return CtrlSUs.begin(); }
-  const_iterator ctrl_end()   const { return CtrlSUs.end(); }
-
-  typedef SUnitVecTy::reverse_iterator reverse_iterator;
-  reverse_iterator ctrl_rbegin()  { return CtrlSUs.rbegin(); }
-  reverse_iterator ctrl_rend()    { return CtrlSUs.rend(); }
-
-  typedef SUnitVecTy::const_reverse_iterator const_reverse_iterator;
-  const_reverse_iterator ctrl_rbegin() const { return CtrlSUs.rbegin(); }
-  const_reverse_iterator ctrl_rend()   const { return CtrlSUs.rend(); }
-
-  size_t getNumSUnits() const { return CtrlSUs.size(); }
-
+  typedef ArrayRef<VSUnit*>::iterator ctrl_iterator;
+  ctrl_iterator ctrl_begin()  const { return CtrlSUs.begin(); }
+  ctrl_iterator ctrl_end()    const { return CtrlSUs.end(); }
+  size_t num_ctrls() const { return CtrlSUs.size(); }
+  //size_t getNumSUnits() const { return AllSUs.size(); }
+  VSUnit *getCtrlAt(unsigned Idx) const { return CtrlSUs[Idx]; }
   void resetSchedule(unsigned MII);
 
   unsigned getStartSlot() const { return startSlot; }
@@ -601,8 +600,6 @@ public:
 
   /// @name Scheduling
   //{
-  // Sort the schedule units base on the order of underlying instruction.
-  void preSchedTopSort();
   void scheduleCtrl();
   // Schedule datapath operations as soon as possible after control operations
   // scheduled.
@@ -612,7 +609,7 @@ public:
 };
 
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
-  typedef VSchedGraph::iterator nodes_iterator;
+  typedef VSchedGraph::ctrl_iterator nodes_iterator;
   static nodes_iterator nodes_begin(VSchedGraph *G) {
     return G->ctrl_begin();
   }

@@ -68,7 +68,8 @@ bool IterativeModuloScheduling::scheduleState() {
   resetRT();
 
   typedef PriorityQueue<VSUnit*, std::vector<VSUnit*>, ims_sort> IMSQueueType;
-  IMSQueueType ToSched(++State.ctrl_begin(), State.ctrl_end(), ims_sort(*this));
+  IMSQueueType ToSched(State.ctrl_begin() + 1, State.ctrl_end(),
+                       ims_sort(*this));
   while (!ToSched.empty()) {
     VSUnit *A = ToSched.top();
     ToSched.pop();
@@ -142,7 +143,8 @@ VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
 
   step = computeStepKey(step);
 
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
       continue;
@@ -156,7 +158,8 @@ VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
 }
 
 bool IterativeModuloScheduling::isAllSUnitScheduled() {
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled())
       return false;
@@ -168,9 +171,10 @@ bool IterativeModuloScheduling::isAllSUnitScheduled() {
 bool ASAPScheduler::scheduleState() {
   State.getEntryRoot()->scheduledTo(State.getStartSlot());
 
-  for (VSchedGraph::iterator I = State.ctrl_begin() + 1, E = State.ctrl_end(); I != E;
-       ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin() + 1, E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
+    assert(A->isControl() && "Unexpected datapath operation to schedule!");
     unsigned NewStep = 0;
 
     for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();

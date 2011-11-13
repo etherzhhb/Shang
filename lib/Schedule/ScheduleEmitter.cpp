@@ -696,23 +696,17 @@ static inline bool top_sort_start(const VSUnit* LHS, const VSUnit* RHS) {
   return LHS->getIdx() < RHS->getIdx();
 }
 
-void VSchedGraph::preSchedTopSort() {
-  std::sort(CtrlSUs.begin(), CtrlSUs.end(), top_sort_start);
-}
-
 void VSchedGraph::emitSchedule() {
   unsigned CurSlot = startSlot;
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
-  SUnitVecTy AllSUnits(CtrlSUs);
-  AllSUnits.insert(AllSUnits.end(), DatapathSUs.begin(), DatapathSUs.end());
-  std::sort(AllSUnits.begin(), AllSUnits.end(), top_sort_start);
+  std::sort(AllSUs.begin(), AllSUs.end(), top_sort_start);
 
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this);
 
-  for (iterator I = AllSUnits.begin(), E = AllSUnits.end(); I != E; ++I) {
+  for (iterator I = begin(), E = end(); I != E; ++I) {
     VSUnit *A = *I;
     DEBUG(dbgs() << "Going to emit: "; A->dump());
     if (A->getSlot() != CurSlot)

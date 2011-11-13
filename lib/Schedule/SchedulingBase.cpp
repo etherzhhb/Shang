@@ -44,15 +44,15 @@ void SchedulingBase::buildTimeFrame() {
 void SchedulingBase::buildASAPStep() {
   VSUnit *Entry = State.getEntryRoot();
   SUnitToTF[Entry->getIdx()].first = Entry->getSlot();
-
-  VSchedGraph::iterator Start = State.ctrl_begin();
+  typedef VSchedGraph::ctrl_iterator it;
+  it Start = State.ctrl_begin();
 
   bool changed = false;
 
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::iterator I = Start + 1, E = State.ctrl_end(); I != E; ++I) {
+    for (it I = Start + 1, E = State.ctrl_end(); I != E; ++I) {
       VSUnit *A = *I;
       if (A->isScheduled()) {
         SUnitToTF[A->getIdx()].first = A->getSlot();
@@ -101,15 +101,12 @@ void SchedulingBase::buildALAPStep() {
   int LastSlot = CriticalPathEnd;
   SUnitToTF[Exit->getIdx()].second = LastSlot;
 
-  VSchedGraph::reverse_iterator Start = State.ctrl_rbegin();
-
   bool changed = false;
   // Build the time frame iteratively.
   do {
     changed = false;
-    for (VSchedGraph::reverse_iterator I = Start + 1, E = State.ctrl_rend();
-         I != E; ++I) {
-      VSUnit *A = *I;
+    for (unsigned Idx = State.num_ctrls()/*skip exitroot*/- 2; Idx >= 0; --Idx){
+      VSUnit *A = State.getCtrlAt(Idx);
       if (A->isScheduled()) {
         SUnitToTF[A->getIdx()].second = A->getSlot();
         continue;
@@ -154,7 +151,8 @@ void SchedulingBase::buildALAPStep() {
 
 #ifndef NDEBUG
   // Verify the time frames.
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
   }
@@ -163,8 +161,8 @@ void SchedulingBase::buildALAPStep() {
 
 void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
   OS << "Time frame:\n";
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
-      I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     A->print(OS);
     OS << " : {" << getASAPStep(A) << "," << getALAPStep(A)
@@ -180,7 +178,8 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
 
 unsigned SchedulingBase::computeResMII() {
   std::map<FuncUnitId, unsigned> TotalResUsage;
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *SU = *I;
     if (SU->getFUId().isTrivial()) continue;
 
@@ -271,7 +270,8 @@ bool SchedulingBase::isResourceConstraintPreserved() {
   ExtraResReq = 0.0;
   resetRT();
 
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     FuncUnitId FU = A->getFUId();
     // We only try to balance the post bind resource.
@@ -320,8 +320,8 @@ unsigned SchedulingBase::buildFDepHD(bool rstSTF) {
 
 //===----------------------------------------------------------------------===//
 void SchedulingBase::schedulePassiveSUnits() {
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
-       I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     if (A->isScheduled())
       continue;
@@ -337,8 +337,8 @@ void SchedulingBase::schedulePassiveSUnits() {
 }
 
 bool SchedulingBase::allNodesSchedued() const {
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
-       I != E; ++I) {
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
     VSUnit *A = *I;
     if (!A->isScheduled()) return false;
   }
@@ -350,17 +350,17 @@ bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
   if (refreshFDepHD)
     buildFDepHD(true);
 
-  for (VSchedGraph::iterator I = State.ctrl_begin(), E = State.ctrl_end();
-    I != E; ++I) {
-      VSUnit *A = *I;
+  typedef VSchedGraph::ctrl_iterator it;
+  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+    VSUnit *A = *I;
 
-      if (A->isScheduled() || getTimeFrame(A) != 1)
-        continue;
+    if (A->isScheduled() || getTimeFrame(A) != 1)
+      continue;
 
-      unsigned step = getASAPStep(A);
-      DEBUG(A->print(dbgs()));
-      DEBUG(dbgs() << " asap step: " << step << " in critical path.\n");
-      A->scheduledTo(step);
+    unsigned step = getASAPStep(A);
+    DEBUG(A->print(dbgs()));
+    DEBUG(dbgs() << " asap step: " << step << " in critical path.\n");
+    A->scheduledTo(step);
   }
 
   return isResourceConstraintPreserved();

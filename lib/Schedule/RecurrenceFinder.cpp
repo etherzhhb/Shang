@@ -102,13 +102,13 @@ public:
 
   SubGraph(VSchedGraph *SG)
     : G(SG), GraphEntry(SG->getEntryRoot()), blocked(false), DummyNode(0, this),
-      CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->getNumSUnits()),
+      CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->num_ctrls()),
       RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
     // the InstIdx of the VSUnit and this only works if they are sorted in
     // the VSUnits vector of SG.
-    for (VSchedGraph::const_iterator I = SG->ctrl_begin(), E = SG->ctrl_end();
-         I != E; ++I)
+    typedef VSchedGraph::ctrl_iterator it;
+    for (it I = SG->ctrl_begin(), E = SG->ctrl_end(); I != E; ++I)
       Nodes.push_back(new SubGraphNode(*I, this));
 
     blocked.resize(NumNodes);
@@ -131,11 +131,11 @@ public:
 
   // Iterate over the subgraph start from idx.
   // Node: The atom list of FSMState already sort by getIdx.
-  typedef mapped_iterator<VSchedGraph::const_iterator, SubGraphNode>
+  typedef mapped_iterator<VSchedGraph::ctrl_iterator, SubGraphNode>
     nodes_iterator;
 
   nodes_iterator sub_graph_begin() {
-    VSchedGraph::const_iterator I = G->ctrl_begin();
+    VSchedGraph::ctrl_iterator I = G->ctrl_begin();
     while ((*I)->getIdx() < CurIdx && I != G->ctrl_end())
       ++I;
 
