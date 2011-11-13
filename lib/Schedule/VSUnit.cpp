@@ -128,6 +128,12 @@ void VSchedGraph::prepareForCtrlSched() {
 }
 
 void VSchedGraph::prepareForDatapathSched() {
+  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
+    VSUnit *U = *I;
+    assert(U->isControl() && "Unexpected datapath op in to schedule list!");
+    U->cleanDeps();
+  }
+
   SUsToSched = ArrayRef<VSUnit*>(AllSUs);
   // TODO: Sort them?
 }

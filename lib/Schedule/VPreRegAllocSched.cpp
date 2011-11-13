@@ -881,11 +881,8 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
   State.prepareForDatapathSched();
-  // Refresh the dependence edges and build data dependence.
-  State.getEntryRoot()->cleanDeps();
   for (su_it I = State.begin() + 1, E = State.end(); I != E; ++I) {
     VSUnit *U = *I;
-    if (U->isControl()) U->cleanDeps();
     addValDep(State, U);
   }
 

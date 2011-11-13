@@ -214,15 +214,14 @@ class VSUnit {
     return this;
   }
 
-public:
-  static const unsigned short MaxSlot = ~0 >> 1;
-
   void cleanDeps() {
     while (!Deps.empty())
       delete Deps.pop_back_val();
 
     UseList.clear();
   }
+public:
+  static const unsigned short MaxSlot = ~0 >> 1;
 
   ~VSUnit() { cleanDeps(); }
 
