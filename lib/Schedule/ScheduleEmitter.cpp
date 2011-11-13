@@ -701,7 +701,10 @@ void VSchedGraph::emitSchedule() {
   MachineFunction *MF = MBB->getParent();
   VFInfo *VFI = MF->getInfo<VFInfo>();
 
-  std::sort(AllSUs.begin(), AllSUs.end(), top_sort_start);
+  std::sort(begin(), end(), top_sort_start);
+  DEBUG(dbgs() << "Sorted AllSUs:\n";
+        for (iterator I = begin(), E = end(); I != E; ++I)
+          (*I)->dump(););
 
   // Build bundle from schedule units.
   MicroStateBuilder StateBuilder(*this);
