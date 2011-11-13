@@ -521,6 +521,8 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
 
 void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   typedef VSUnit::instr_iterator it;
+  unsigned NumValDep = 0;
+
   for (it I = A->instr_begin(), E = A->instr_end(); I != E; ++I) {
     MachineInstr *MI = *I;
     assert(MI && "Unexpected entry root!");
@@ -543,8 +545,10 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
                && "Expected backedge for PHI!");
         // The iterate distance for backedge to PHI is always 1.
         Edge = VDMemDep::CreateMemDep<1>(Dep, Latency);
-      } else
+      } else {
         Edge = VDValDep::CreateValDep(Dep, Latency);
+        ++NumValDep;
+      }
 
       A->addDep(Edge);
     }
@@ -552,7 +556,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
 
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
-  if (A->dep_empty()) {
+  if (NumValDep == 0) {
     unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
     A->addDep(VDCtrlDep::CreateCtrlDep(CurState.getEntryRoot(), Latency));
   }
