@@ -1059,8 +1059,8 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
 void RTLCodegen::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
                            SmallVectorImpl<VASTCnd> &Cnds) {
   // Go back to the idle slot.
-  CurSlot->addNextSlot(0);
   VASTCnd Pred = createCondition(Op.getPredicate());
+  CurSlot->addNextSlot(0, Pred);
   CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
 }
 
