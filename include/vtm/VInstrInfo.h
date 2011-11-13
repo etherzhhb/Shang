@@ -320,8 +320,12 @@ public:
 
   // All operation must finish before the BB exit, this function build the
   // information about the latency from instruction to the BB exit.
-  void buildExitMIInfo(ArrayRef</*const */MachineInstr*> Terminators,
-                       DepLatInfoTy &Info);
+  void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info);
+
+  // Erase the instructions from exit set.
+  void eraseFromExitSet(const MachineInstr *MI) {
+    ExitMIs.erase(MI);
+  }
 
   void reset() {
     LatencyMap.clear();

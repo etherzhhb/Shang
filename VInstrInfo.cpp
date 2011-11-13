@@ -1117,15 +1117,11 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   return CurLatInfo;
 }
 
-void DetialLatencyInfo::buildExitMIInfo(ArrayRef</*const */MachineInstr*> Terminators,
+void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
                                         DepLatInfoTy &Info) {
-  const MachineInstr *Exit = Terminators[0];
-  for (unsigned i = 0; i < Terminators.size(); ++i)
-    ExitMIs.erase(Terminators[i]);
-
   typedef std::set<const MachineInstr*>::const_iterator exit_it;
   for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
-    buildDepLatInfo(*I, Exit, Info);
+    buildDepLatInfo(*I, ExitMI, Info);
 }
 
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {

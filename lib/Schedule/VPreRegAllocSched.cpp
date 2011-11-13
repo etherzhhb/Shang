@@ -73,8 +73,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   unsigned short totalCycle;
   // Remember the last cmd seq.
   VSUnit *LastCmdSeq;
-  // Terminators in a MBB.
-  SmallVector<MachineInstr*, 8> Terms;
 
   VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1), LastCmdSeq(0) {}
 
@@ -159,10 +157,13 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildMemDepEdges(VSchedGraph &CurState);
 
   bool couldBePipelined(const MachineBasicBlock *MBB);
-  void buildState(VSchedGraph &State);
+  void buildControlPathGraph(VSchedGraph &State);
 
   void buildPipeLineDepEdges(VSchedGraph &State, DetialLatencyInfo &LatInfo);
-  void buildExitRoot(VSchedGraph &CurState, DetialLatencyInfo &LatInfo);
+
+  typedef MachineBasicBlock::iterator instr_it;
+  void buildExitRoot(VSchedGraph &CurState, MachineInstr *FirstTerminator,
+                     DetialLatencyInfo &LatInfo);
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
   bool mergeUnaryOp(MachineInstr *MI, unsigned OpIdx, VSchedGraph &CurState);
@@ -245,7 +246,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
     VSchedGraph State(TM, MBB, couldBePipelined(MBB), getTotalCycle());
-    buildState(State);
+    buildControlPathGraph(State);
     DEBUG(State.viewGraph());
     State.scheduleCtrl();
     State.scheduleDatapath();
@@ -594,8 +595,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
   assert(LoopOp && "Not in loop?");
   assert(LoopOp != State.getExitRoot() && "Pipeline not enable!");
 
-  for (MachineBasicBlock::iterator I = CurBB->begin(), E = CurBB->end();
-       I != E && I->isPHI(); ++I) {
+  for (instr_it I = CurBB->begin(), E = CurBB->end();I != E && I->isPHI(); ++I) {
     MachineInstr &PN = *I;
     const DetialLatencyInfo::DepLatInfoTy &DepLatInfo =
       LatInfo.buildPHIBELatInfo(&PN);
@@ -700,12 +700,7 @@ bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
 }
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
-  // If the current instruction was eaten by as terminator?
-  if (CurState.eatTerminator(MI)) {
-    Terms.push_back(MI);
-    return;
-  }
-
+  assert(!MI->getDesc().isTerminator() && "Unexpected terminator!");
   bool isCmdSeq = false;
   switch (MI->getOpcode()) {
   default: break;
@@ -745,38 +740,57 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
+                                      MachineInstr *FirstTerminator,
                                       DetialLatencyInfo &LatInfo) {
-  SmallVectorImpl<MachineInstr*>::iterator ExitIt = Terms.begin(),
-                                           ExitEnd = Terms.end();
-  MachineInstr *FstExit = *ExitIt;
-  VSUnit *Exit = CurState.createVSUnit(FstExit);
+  SmallVector<MachineInstr*, 8> Exits;
+  // We need wait all operation finish before the exit operation active, compute
+  // the latency from operations need to wait to the exit operation.
+  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
+
+  for (instr_it I = FirstTerminator, E = CurState->end(); I !=E; ++I) {
+    MachineInstr *MI = I;
+    assert(MI->getDesc().isTerminator() && "Unexpected non-terminator!");
+    // Build the dependence latency information for the terminator.
+    LatInfo.addInstr(MI);
+    // Try to build the schedule unit for the loop back operation.
+    if (CurState.isLoopOp(I)) {
+      VSUnit *LoopOp = CurState.createVSUnit(MI);
+      addValueDeps<true>(LoopOp, CurState, LatInfo);
+      continue;
+    }
+
+    // No need to wait the terminator.
+    LatInfo.eraseFromExitSet(MI);
+    Exits.push_back(MI);
+  }
+
+  assert(!Exits.empty() && "Not get any terminator exiting the block?");
+  MachineInstr *FstExit = Exits.front();
+  VSUnit *ExitSU = CurState.createVSUnit(FstExit);
+  // Build datapath latency information for the terminator.
+  LatInfo.buildExitMIInfo(FstExit, ExitDepInfo);
 
   // Add others terminator to the exit node.
-  while (++ExitIt != ExitEnd) {
-    MachineInstr *Term = *ExitIt;
-    bool mapped = CurState.mapMI2SU(Term, Exit, 0);
+  while (Exits.size() != 1) {
+    MachineInstr *ExitMI = Exits.pop_back_val();
+    LatInfo.buildExitMIInfo(ExitMI, ExitDepInfo);
+    bool mapped = CurState.mapMI2SU(ExitMI, ExitSU, 0);
     (void) mapped;
     assert(mapped && "Cannot merge terminators!");
   }
 
   // Add the dependence of exit root.
-  addValueDeps<true>(Exit, CurState, LatInfo, true);
-
-  // We need wait all operation finish before the exit operation active, compute
-  // the latency from operations need to wait to the exit operation.
-  DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
-  LatInfo.buildExitMIInfo(Terms, ExitDepInfo);
-  Terms.clear();
+  addValueDeps<true>(ExitSU, CurState, LatInfo, true);
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDep<true>(ExitDepInfo, CurState, Exit, FstExit,
+  addSchedDep<true>(ExitDepInfo, CurState, ExitSU, FstExit,
                     VDCtrlDep::CreateCtrlDep);
 
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
   if (Entry->use_empty())
-    Exit->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
+    ExitSU->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
 
   // If there is still schedule unit not connect to exit, connect it now.
   for (VSchedGraph::iterator I = CurState.ctrl_begin(), E = CurState.ctrl_end();
@@ -784,7 +798,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     VSUnit *VSU = *I;
       // Since the exit root already added to state sunit list, skip the
       // exit itself.
-    if (VSU->getNumUses() == 0 && VSU != Exit) {
+    if (VSU->getNumUses() == 0 && VSU != ExitSU) {
       llvm_unreachable("Unexpected handing node!");
       // Dirty Hack.
       unsigned Latency = VSU->getMaxLatencyTo(FstExit);
@@ -797,17 +811,18 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
       //if (VID.hasTrivialFU() && !VID.hasDatapath() && Latency)
       //  --Latency;
 
-      Exit->addDep(VDCtrlDep::CreateCtrlDep(VSU,  Latency));
+      ExitSU->addDep(VDCtrlDep::CreateCtrlDep(VSU,  Latency));
     }
   }
 }
 
-void VPreRegAllocSched::buildState(VSchedGraph &State) {
+void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   DetialLatencyInfo DetialLat(*MRI);
-  for (MachineBasicBlock::iterator BI = State->begin(), BE = State->end();
-      BI != BE; ++BI) {
+  instr_it BI = State->begin();
+  while(!BI->getDesc().isTerminator()) {
     DetialLat.addInstr(BI);
     buildSUnit(&*BI, State);
+    ++BI;
   }
 
   State.removeDeadSU();
@@ -819,9 +834,8 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   for (su_it I = State.datapath_begin(), E = State.datapath_end(); I != E; ++I)
     addValueDeps<false>(*I, State, DetialLat);
 
-  assert(!Terms.empty() && "Can not found any terminator!");
-  // Create the exit node.
-  buildExitRoot(State, DetialLat);
+  // Create the exit node, now BI points to the first terminator.
+  buildExitRoot(State, BI, DetialLat);
 
   // Build loop edges if necessary.
   if (State.enablePipeLine())

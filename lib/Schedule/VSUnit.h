@@ -518,16 +518,15 @@ public:
 
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
 
-  bool eatTerminator(MachineInstr *MI) {
-    if (!MI->getDesc().isTerminator())
-      return false;
+  bool isLoopOp(MachineInstr *MI) {
+    assert(MI->getDesc().isTerminator() && "Expected terminator!");
 
-    // Do not eat the current instruction as terminator if it is jumping back
+    // Set the current instruction as loop operation if it is jumping back
     // to the current state and we want to pipeline the state.
     if (trySetLoopOp(MI) && enablePipeLine())
-      return false;
+      return true;
 
-    return true;
+    return false;
   }
 
   MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
