@@ -1057,7 +1057,7 @@ DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,
                                         DepLatInfoTy &CurLatInfo) {
-  const DepLatInfoTy *SrcLatInfo = getOperandLatInfo(SrcMI);
+  const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
   // Latency information not available, the SrcMI maybe in others BB, no need
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;

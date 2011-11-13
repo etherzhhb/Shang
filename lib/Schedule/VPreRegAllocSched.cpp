@@ -126,7 +126,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
                     bool AllowDepEmpty = false);
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<int IgnoreBackedge, typename CreateDepFuncTy>
-  void addValDepForCtrlOp(DepLatInfoTy &LatInfo, VSchedGraph &CurState,
+  void addSchedDep(DepLatInfoTy &LatInfo, VSchedGraph &CurState,
                           VSUnit *A, MachineInstr *MI,
                           CreateDepFuncTy &CreateDepFunc);
 
@@ -471,10 +471,9 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
 //===----------------------------------------------------------------------===//
 template<int IgnoreBackedge, typename CreateDepFuncTy>
-void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
-                                           VSchedGraph &CurState,
-                                           VSUnit *A, MachineInstr *MI,
-                                           CreateDepFuncTy &CreateDepFunc) {
+void VPreRegAllocSched::addSchedDep(DepLatInfoTy &DepLatInfo, VSchedGraph &S,
+                                    VSUnit *A, MachineInstr *MI,
+                                    CreateDepFuncTy &CreateDepFunc) {
   assert(MI && "Unexpected entry root!");
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
@@ -492,11 +491,11 @@ void VPreRegAllocSched::addValDepForCtrlOp(DepLatInfoTy &DepLatInfo,
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
       Latency = std::max(1u, Latency);
-      A->addDep(CreateDepFunc(CurState.getEntryRoot(), Latency));
+      A->addDep(CreateDepFunc(S.getEntryRoot(), Latency));
       continue;
     }
 
-    VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
+    VSUnit *SrcSU = S.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
@@ -542,10 +541,9 @@ void VPreRegAllocSched::addValueDeps(VSUnit *A, VSchedGraph &CurState,
       MachineInstr *MI = *I;
       assert(MI && "Unexpected entry root!");
       const DetialLatencyInfo::DepLatInfoTy *DepLatInfo =
-        LatInfo.getOperandLatInfo(MI);
+        LatInfo.getDepLatInfo(MI);
       assert(DepLatInfo && "Operand latency information not available!");
-      addValDepForCtrlOp<true>(*DepLatInfo, CurState, A, MI,
-                               VDValDep::CreateValDep);
+      addSchedDep<true>(*DepLatInfo, CurState, A, MI, VDValDep::CreateValDep);
     }
   } else
     addValDepForDatapath(CurState, A);
@@ -597,7 +595,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
   for (MachineBasicBlock::iterator I = CurBB->begin(), E = CurBB->end();
        I != E && I->isPHI(); ++I) {
     MachineInstr &PN = *I;
-    const DetialLatencyInfo::DepLatInfoTy &PHILatInfo =
+    const DetialLatencyInfo::DepLatInfoTy &DepLatInfo =
       LatInfo.buildPHIBELatInfo(&PN);
 
     VSUnit *PhiSU = State.lookupSUnit(&PN);
@@ -606,8 +604,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
     // Add a anti-dependence edge from users of PHI to PHI because we must
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
-    addValDepForCtrlOp<false>(PHILatInfo, State, PhiSU, &PN,
-                              VDMemDep::CreateMemDep<1>);
+    addSchedDep<false>(DepLatInfo, State, PhiSU, &PN, VDMemDep::CreateMemDep<1>);
 
     // Dirty Hack: We can emit the PHI while looping back to the loop entry.
     unsigned Latency = 0;
@@ -770,8 +767,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   Terms.clear();
 
   // Add the control dependence edge edges to wait all operation finish.
-  addValDepForCtrlOp<true>(ExitDepInfo, CurState, Exit, FstExit,
-                           VDCtrlDep::CreateCtrlDep);
+  addSchedDep<true>(ExitDepInfo, CurState, Exit, FstExit,
+                    VDCtrlDep::CreateCtrlDep);
 
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.
@@ -814,11 +811,10 @@ void VPreRegAllocSched::buildState(VSchedGraph &State) {
   State.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
-  for (VSchedGraph::iterator I = ++State.ctrl_begin(), E = State.ctrl_end();
-       I != E; ++I)
+  typedef VSchedGraph::iterator su_it;
+  for (su_it I = ++State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I)
     addValueDeps<true>(*I, State, DetialLat);
-  for (VSchedGraph::iterator I = State.datapath_begin(), E = State.datapath_end();
-       I != E; ++I)
+  for (su_it I = State.datapath_begin(), E = State.datapath_end(); I != E; ++I)
     addValueDeps<false>(*I, State, DetialLat);
 
   assert(!Terms.empty() && "Can not found any terminator!");

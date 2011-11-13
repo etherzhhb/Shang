@@ -313,7 +313,7 @@ public:
   }
 
   // Get the source register and the corresponding latency to DstMI
-  const DepLatInfoTy *getOperandLatInfo(const MachineInstr *DstMI) const {
+  const DepLatInfoTy *getDepLatInfo(const MachineInstr *DstMI) const {
     LatencyMapTy::const_iterator at = LatencyMap.find(DstMI);
     return at == LatencyMap.end() ? 0 : &at->second;
   }
