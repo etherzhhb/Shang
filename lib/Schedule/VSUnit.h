@@ -468,7 +468,8 @@ private:
   const TargetMachine &TM;
   MachineBasicBlock *MBB;
   SUnitVecTy AllSUs;
-  ArrayRef<VSUnit*> CtrlSUs;
+  // The VSUnits to schedule.
+  ArrayRef<VSUnit*> SUsToSched;
   VSUnit *Entry, *Exit;
   // The number of schedule unit.
   unsigned SUCount;
@@ -519,7 +520,11 @@ public:
   // Merge Src into Dst with a given latency.
   void mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency);
   void removeDeadSU();
-  void sortSUsForCtrlSchedule();
+  // Sort the schedule units to place control operations at the beginning of
+  // the SU list, so we can only schedule the control operations
+  void classifySUsByType();
+  // Extend the to schedule SU list to all SU in current schedule graph.
+  void unifySUs();
 
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
   void setExitRoot(VSUnit *exit) {
@@ -560,12 +565,12 @@ public:
   iterator begin() { return AllSUs.begin(); }
   iterator end() { return AllSUs.end(); }
 
-  typedef ArrayRef<VSUnit*>::iterator ctrl_iterator;
-  ctrl_iterator ctrl_begin()  const { return CtrlSUs.begin(); }
-  ctrl_iterator ctrl_end()    const { return CtrlSUs.end(); }
-  size_t num_ctrls() const { return CtrlSUs.size(); }
+  typedef ArrayRef<VSUnit*>::iterator sched_iterator;
+  sched_iterator sched_begin()  const { return SUsToSched.begin(); }
+  sched_iterator sched_end()    const { return SUsToSched.end(); }
+  size_t num_scheds() const { return SUsToSched.size(); }
   //size_t getNumSUnits() const { return AllSUs.size(); }
-  VSUnit *getCtrlAt(unsigned Idx) const { return CtrlSUs[Idx]; }
+  VSUnit *getCtrlAt(unsigned Idx) const { return SUsToSched[Idx]; }
   void resetSchedule(unsigned MII);
 
   unsigned getStartSlot() const { return startSlot; }
@@ -609,12 +614,12 @@ public:
 };
 
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
-  typedef VSchedGraph::ctrl_iterator nodes_iterator;
+  typedef VSchedGraph::sched_iterator nodes_iterator;
   static nodes_iterator nodes_begin(VSchedGraph *G) {
-    return G->ctrl_begin();
+    return G->sched_begin();
   }
   static nodes_iterator nodes_end(VSchedGraph *G) {
-    return G->ctrl_end();
+    return G->sched_end();
   }
 };
 

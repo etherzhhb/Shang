@@ -66,13 +66,13 @@ static const char *transSolveResult(int result) {
 }
 
 ILPScheduler::ILPScheduler(VSchedGraph &S)
-  : SchedulingBase(S), SUnitToSV(S.num_ctrls()), NumStepVars(0) {
+  : SchedulingBase(S), SUnitToSV(S.num_scheds()), NumStepVars(0) {
 }
 
 unsigned ILPScheduler::buildSVIdx() {
   unsigned totalSV = 0;
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     VSUnit *U = *I;
     SUnitToSV[U->getIdx()] = totalSV;
     totalSV += getTimeFrame(U);
@@ -85,8 +85,8 @@ void ILPScheduler::setUpVariables(lprec *lp) {
   ActiveSUs.clear();
 
   // Set up the step variables.
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
 
     // Get the index of first step variable of U.
@@ -155,8 +155,8 @@ void ILPScheduler::buildOneActiveStepConstraints(lprec *lp) {
   SmallVector<REAL, 64> Row;
   SmallVector<int, 64> ColIdx;
 
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *U = *I;
 
     // Get the index of first step variable of U.
@@ -223,8 +223,8 @@ void ILPScheduler::buildPrecedenceConstraints(lprec *lp) {
   SmallVector<REAL, 64> Row;
   SmallVector<int, 64> ColIdx;
 
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     const VSUnit *DstU = *I;
 
     assert(DstU->isControl() && "Unexpected datapath in scheduler!");
@@ -397,8 +397,8 @@ void ILPScheduler::buildObject(lprec *lp) {
 void ILPScheduler::buildSchedule(lprec *lp) {
   DEBUG(dbgs() << "ILPScheduler: Cost = " << get_objective(lp) << '\n');
 
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = State.ctrl_begin(), E = State.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     VSUnit *U = *I;
 
     // Get the index of first step variable of U.

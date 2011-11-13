@@ -106,7 +106,7 @@ void VSchedGraph::removeDeadSU() {
   SUCount = Idx;
 }
 
-void VSchedGraph::sortSUsForCtrlSchedule() {
+void VSchedGraph::classifySUsByType() {
   unsigned NumCtrls = 0;
   std::sort(AllSUs.begin(), AllSUs.end(), sort_by_type);
 
@@ -124,11 +124,16 @@ void VSchedGraph::sortSUsForCtrlSchedule() {
 #endif
   }
 
-  CtrlSUs = ArrayRef<VSUnit*>(AllSUs.data(), NumCtrls);
+  SUsToSched = ArrayRef<VSUnit*>(AllSUs.data(), NumCtrls);
+}
+
+void VSchedGraph::unifySUs() {
+  SUsToSched = ArrayRef<VSUnit*>(AllSUs);
+  // TODO: Sort them?
 }
 
 void VSchedGraph::resetSchedule(unsigned MII) {
-  for (ctrl_iterator I = ctrl_begin(), E = ctrl_end(); I != E; ++I) {
+  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
     VSUnit *U = *I;
     U->resetSchedule();
   }

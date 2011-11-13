@@ -380,8 +380,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   MemOpMapTy VisitedMemOps;
   Loop *IRL = IRLI->getLoopFor(CurState.getMachineBasicBlock()->getBasicBlock());
 
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = CurState.ctrl_begin(), E = CurState.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
     VSUnit *DstU = *I;
     MachineInstr *DstMI = DstU->getRepresentativeInst();
     // Skip the non-memory operation and non-call operation.
@@ -808,8 +808,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     ExitSU->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
 
   // If there is still schedule unit not connect to exit, connect it now.
-  typedef VSchedGraph::ctrl_iterator it;
-  for (it I = CurState.ctrl_begin(), E = CurState.ctrl_end(); I != E; ++I) {
+  typedef VSchedGraph::sched_iterator it;
+  for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
     VSUnit *VSU = *I;
       // Since the exit root already added to state sunit list, skip the
       // exit itself.
@@ -844,12 +844,12 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
   typedef VSchedGraph::iterator it;
-  for (it I =State.begin() + 1, E = State.end(); I != E; ++I)
+  for (it I = State.begin() + 1, E = State.end(); I != E; ++I)
     if ((*I)->isControl()) addSchedDepForSU(*I, State, DetialLat);
 
   // Create the exit node, now BI points to the first terminator.
   buildExitRoot(State, BI, DetialLat);
-  State.sortSUsForCtrlSchedule();
+  State.classifySUsByType();
 
   // Build loop edges if necessary.
   if (State.enablePipeLine())

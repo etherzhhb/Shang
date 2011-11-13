@@ -56,7 +56,7 @@ protected:
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
     : MII(0), CriticalPathEnd(0), ExtraResReq(0.0),
-    SUnitToTF(S.num_ctrls()), State(S) {}
+    SUnitToTF(S.num_scheds()), State(S) {}
 
 public:
   virtual ~SchedulingBase() {}
@@ -130,12 +130,12 @@ public:
 
 template <> struct GraphTraits<SchedulingBase*> 
     : public GraphTraits<VSchedGraph*> {
-  typedef VSchedGraph::ctrl_iterator nodes_iterator;
+  typedef VSchedGraph::sched_iterator nodes_iterator;
   static nodes_iterator nodes_begin(SchedulingBase *G) {
-    return G->getState().ctrl_begin();
+    return G->getState().sched_begin();
   }
   static nodes_iterator nodes_end(SchedulingBase *G) {
-    return G->getState().ctrl_end();
+    return G->getState().sched_end();
   }
 };
 
@@ -148,7 +148,7 @@ class IterativeModuloScheduling : public SchedulingBase {
   VSUnit *findBlockingSUnit(VSUnit *U, unsigned step);
 public:
   IterativeModuloScheduling(VSchedGraph &S)
-    : SchedulingBase(S), ExcludeSlots(S.num_ctrls()){}
+    : SchedulingBase(S), ExcludeSlots(S.num_scheds()){}
 
   bool scheduleState();
 };
