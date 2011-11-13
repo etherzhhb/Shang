@@ -865,7 +865,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
 
   // Create the exit node, now BI points to the first terminator.
   buildExitRoot(State, BI, DetialLat);
-  State.classifySUsByType();
+  State.prepareForCtrlSched();
 
   // Build loop edges if necessary.
   if (State.enablePipeLine())
@@ -876,7 +876,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
 }
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
-  State.unifySUs();
+  State.prepareForDatapathSched();
   // Refresh the dependence edges and build data dependence.
   State.getEntryRoot()->cleanDeps();
   for (su_it I = State.begin() + 1, E = State.end(); I != E; ++I) {

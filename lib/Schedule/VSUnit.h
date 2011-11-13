@@ -522,9 +522,9 @@ public:
   void removeDeadSU();
   // Sort the schedule units to place control operations at the beginning of
   // the SU list, so we can only schedule the control operations
-  void classifySUsByType();
+  void prepareForCtrlSched();
   // Extend the to schedule SU list to all SU in current schedule graph.
-  void unifySUs();
+  void prepareForDatapathSched();
 
   VSUnit *createVSUnit(MachineInstr *I, unsigned fuid = 0);
   void setExitRoot(VSUnit *exit) {

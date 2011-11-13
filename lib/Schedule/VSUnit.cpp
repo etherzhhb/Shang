@@ -106,7 +106,7 @@ void VSchedGraph::removeDeadSU() {
   SUCount = Idx;
 }
 
-void VSchedGraph::classifySUsByType() {
+void VSchedGraph::prepareForCtrlSched() {
   unsigned NumCtrls = 0;
   std::sort(AllSUs.begin(), AllSUs.end(), sort_by_type);
 
@@ -127,7 +127,7 @@ void VSchedGraph::classifySUsByType() {
   SUsToSched = ArrayRef<VSUnit*>(AllSUs.data(), NumCtrls);
 }
 
-void VSchedGraph::unifySUs() {
+void VSchedGraph::prepareForDatapathSched() {
   SUsToSched = ArrayRef<VSUnit*>(AllSUs);
   // TODO: Sort them?
 }
