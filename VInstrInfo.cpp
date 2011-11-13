@@ -910,7 +910,8 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
                                         const MachineInstr *DstInstr) {
-  return unsigned(ceil(getChainingLatency(SrcInstr, DstInstr)));
+  return SrcInstr ? unsigned(ceil(getChainingLatency(SrcInstr, DstInstr)))
+                  : getStepsFromEntry(DstInstr);
 }
 
 unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
@@ -1164,11 +1165,10 @@ unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
   DepLatencyMap::const_iterator at = DepInfo.find(Reg);
   if (at != DepInfo.end()) {
     SrcMI = at->second.first;
-    SrcLatency = at->second.second + VInstrInfo::getCtrlStepBetween(SrcMI, MI);
-  } else
-    // Else the SrcMI is in other BB, return the latency from the entry of the
-    // parent BB of MI.
-    SrcLatency = VInstrInfo::getStepsFromEntry(MI);
+    SrcLatency = at->second.second;
+  }
+
+  SrcLatency += VInstrInfo::getCtrlStepBetween(SrcMI, MI);
 
   return SrcLatency;
 }
@@ -1180,8 +1180,7 @@ unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
   MachineInstr *&LastMI = LI.first;
   FuncUnitId ID(FUId);
 
-  unsigned EdgeLatency = LastMI ? VInstrInfo::getCtrlStepBetween(LastMI, MI)
-                                : VInstrInfo::getStepsFromEntry(MI);
+  unsigned EdgeLatency = VInstrInfo::getCtrlStepBetween(LastMI, MI);
 
   // Update the FU latency information.
   FULatency = std::max(FULatency + EdgeLatency, Latency);
