@@ -109,9 +109,8 @@ void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
       def_it DI = MRI.def_begin(PHINum);
       ucOp PHIUse = ucOp::getParent(DI);
 
-      if (isWire)
-        PHIUse.changeOpcode(VTM::VOpMove_ww, PHIUse->getPredSlot());
-      else if (PHIUse->getOpcode() == VTM::VOpMvPipe)
+      assert(!isWire && "PHI for wires should be joined in VRASimple!");
+      if (PHIUse->getOpcode() == VTM::VOpMvPipe)
         PHIUse.changeOpcode(VTM::VOpMove_rw, PHIUse->getPredSlot());
 
       assert(PHIUse.getOperand(2).getMBB() == UI->getParent()
