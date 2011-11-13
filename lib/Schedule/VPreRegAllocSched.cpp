@@ -501,6 +501,8 @@ void VPreRegAllocSched::addSchedDep(DepLatInfoTy &DepLatInfo, VSchedGraph &S,
     // Avoid the back-edge or self-edge.
     if ((SrcSU->getIdx() > A->getIdx() && IgnoreBackedge) || SrcSU == A)
       continue;
+    // Adjust the step between SrcMI and MI.
+    Latency = std::max(Latency, VInstrInfo::getCtrlStepBetween(SrcMI, MI));
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     A->addDep(CreateDepFunc(SrcSU, Latency));
