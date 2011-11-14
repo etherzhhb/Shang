@@ -521,6 +521,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
 
 void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   typedef VSUnit::instr_iterator it;
+  bool isCtrl = A->isControl();
   unsigned NumValDep = 0;
 
   for (it I = A->instr_begin(), E = A->instr_end(); I != E; ++I) {
@@ -534,7 +535,9 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
 
       // Dirty Hack: Call get Detail latency.
       double DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
-      unsigned Latency = floor(DetailLatency);
+      // All control operations are read at emit, wait until the datapath
+      // operations finish if destination is control operation.
+      unsigned Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
 
       // Build the dependence edge.
