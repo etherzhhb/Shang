@@ -14,18 +14,86 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/BitLevelInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
+#include "vtm/MicroState.h"
 #include "vtm/VTM.h"
 
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #define DEBUG_TYPE "vtm-bli"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+
+namespace {
+  class BitLevelInfo : public MachineFunctionPass {
+  void computeBitWidth(MachineInstr *Instr);
+  void propagateBitWidth(MachineOperand &MO);
+
+  unsigned computeBitSliceWidth(MachineInstr *BitSlice) {
+    unsigned UB = BitSlice->getOperand(2).getImm(),
+      LB = BitSlice->getOperand(3).getImm();
+    return UB - LB;
+  }
+
+  unsigned computeBitRepeatWidth(MachineInstr *BitRepeat) const {
+      unsigned EltWidth = cast<ucOperand>(BitRepeat->getOperand(1)).getBitWidth(),
+                          Times = BitRepeat->getOperand(2).getImm();
+      return EltWidth * Times;
+  }
+
+  unsigned computeBitCatWidth(MachineInstr *BitCat) const {
+      unsigned BitWidth = 0;
+      for (MachineInstr::mop_iterator I = BitCat->operands_begin() + 1,
+        E = BitCat->operands_end(); I != E; ++I)
+        BitWidth += cast<ucOperand>(*I).getBitWidth();
+
+      return BitWidth;
+  }
+
+  unsigned computeByOpWithSameWidth(MachineInstr::mop_iterator I,
+                                    MachineInstr::mop_iterator E) {
+    assert(I != E && "The range is empty!");
+    unsigned BitWidth = cast<ucOperand>(*I).getBitWidth();
+    while (++I != E)
+      if (unsigned Width = cast<ucOperand>(*I).getBitWidth()) {
+        assert ((BitWidth == 0 || BitWidth == Width)
+                 && "Bit width of PHINode not match!");
+        BitWidth = Width;
+      }
+
+    return BitWidth;
+  }
+
+  unsigned computePHI(MachineInstr *PN);
+
+  MachineRegisterInfo *MRI;
+
+public:
+  static char ID;
+  BitLevelInfo();
+
+  void getAnalysisUsage(AnalysisUsage &AU) const;
+  bool runOnMachineFunction(MachineFunction &MF);
+
+  void verifyAnalysis() const;
+
+  unsigned getBitWidth(unsigned R) const;
+
+  bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
+    unsigned char OldBitWidth = cast<ucOperand>(MO).getBitWidthOrZero();
+    assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
+            && "Bit width not convergent!");
+    assert(BitWidth && "Invalid bit width!");
+    cast<ucOperand>(MO).setBitWidth(BitWidth);
+
+    return OldBitWidth != BitWidth;
+  }
+};
+}
 
 INITIALIZE_PASS(BitLevelInfo, "vtm-bli", "Verilog Target Machine - "
                 "Bit Level Information Analysis", false, true)
