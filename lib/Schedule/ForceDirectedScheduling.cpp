@@ -34,16 +34,11 @@ struct ims_sort {
 bool ims_sort::operator()(const VSUnit* LHS, const VSUnit* RHS) const {
   // Schedule the sunit that taking non-trivial function unit first.
   FuncUnitId LHSID = LHS->getFUId(), RHSID = RHS->getFUId();
-  if (!LHSID.isTrivial() && RHSID.isTrivial())
-    return false;
-  if (LHSID.isTrivial() && !RHSID.isTrivial())
-    return true;
-  if (!LHSID.isTrivial() && !RHSID.isTrivial()) {
-    unsigned LTFUs = LHSID.getTotalFUs(), RTFUs = RHSID.getTotalFUs();
-    // Schedule the schedule unit with less available function unit first.
-    if (LTFUs > RTFUs) return true;
-    if (LTFUs < RTFUs) return false;
-  }
+  if (!LHSID.isTrivial() && RHSID.isTrivial()) return false;
+  if (LHSID.isTrivial() && !RHSID.isTrivial()) return true;
+  // Schedule the schedule unit with less available function unit first.
+  if (!LHSID.isBound() && RHSID.isBound()) return true;
+  if (LHSID.isBound() && !RHSID.isBound()) return false;
 
   unsigned LASAP = Info.getASAPStep(LHS), RASAP = Info.getASAPStep(RHS);
   if (LASAP > RASAP) return true;

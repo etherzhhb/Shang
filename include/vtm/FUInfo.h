@@ -118,9 +118,6 @@ public:
     return !isTrivial() && getFUNum() != 0xfff;
   }
 
-  // Get the total avaliable number of this kind of function unit.
-  unsigned getTotalFUs() const;
-
   inline bool operator==(const FuncUnitId X) const { return UID.data == X.UID.data; }
   inline bool operator!=(const FuncUnitId X) const { return !operator==(X); }
   inline bool operator< (const FuncUnitId X) const { return UID.data < X.UID.data; }
@@ -145,17 +142,11 @@ protected:
   const unsigned Latency;
   // Start interval
   const unsigned StartInt;
-  // How many resources available?
-  const unsigned TotalRes;
-  // The MaxBitWidth of the function unit.
-  const unsigned MaxBitWidth;
   // Function unit cost for resource allocation and binding.
   const unsigned Cost;
 
-  VFUDesc(VFUs::FUTypes type, unsigned latency, unsigned startInt,
-          unsigned totalRes, unsigned maxBitWidth)
-    : ResourceType(type), Latency(latency), StartInt(startInt),
-    TotalRes(totalRes), MaxBitWidth(maxBitWidth), Cost(~0) {}
+  VFUDesc(VFUs::FUTypes type, unsigned latency, unsigned startInt)
+    : ResourceType(type), Latency(latency), StartInt(startInt), Cost(~0) {}
 
 public:
   VFUDesc(VFUs::FUTypes type, luabind::object FUTable);
@@ -170,9 +161,7 @@ public:
   }
 
   unsigned getLatency() const { return Latency; }
-  unsigned getTotalRes() const { return TotalRes; }
   unsigned getStartInt() const { return StartInt; }
-  unsigned getMaxBitWidth() const { return MaxBitWidth; }
   unsigned getCost() const { return Cost; }
 
   virtual void print(raw_ostream &OS) const;
@@ -180,12 +169,12 @@ public:
 
 class VFUMemBus : public VFUDesc {
   unsigned AddrWidth;
-
+  unsigned DataWidth;
 public:
   VFUMemBus(luabind::object FUTable);
 
   unsigned getAddrWidth() const { return AddrWidth; }
-  unsigned getDataWidth() const { return getMaxBitWidth(); }
+  unsigned getDataWidth() const { return DataWidth; }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VFUMemBus *A) { return true; }
@@ -263,6 +252,7 @@ typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
 typedef VSimpleFUDesc<VFUs::ICmp>    VFUICmp;
 
 class VFUBRam : public  VFUDesc {
+  unsigned DataWidth;
   std::string Template; // Template for inferring block ram.
   std::string InitFileDir; // Template for readmemh dir.
   std::set<GlobalVariable*> GVSet;

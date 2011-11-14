@@ -63,10 +63,6 @@ EVT VTargetLowering::getRoundIntegerOrBitType(unsigned SizeInBit,
 
 VTargetLowering::VTargetLowering(TargetMachine &TM)
   : TargetLowering(TM, new TargetLoweringObjectFileELF()) {
-  // Bitwidth information of function units.
-  MaxMultBits = getFUDesc<VFUMult>()->getMaxBitWidth();
-  MaxAddSubBits = getFUDesc<VFUAddSub>()->getMaxBitWidth();
-  MaxShiftBits = getFUDesc<VFUShift>()->getMaxBitWidth();
 
   setBooleanContents(UndefinedBooleanContent);
   setIntDivIsCheap(false);

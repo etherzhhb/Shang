@@ -179,11 +179,12 @@ void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
 }
 
 unsigned SchedulingBase::computeResMII() {
+  // FIXME: Compute the resource area cost
   std::map<FuncUnitId, unsigned> TotalResUsage;
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     VSUnit *SU = *I;
-    if (SU->getFUId().isTrivial()) continue;
+    if (!SU->getFUId().isBound()) continue;
 
     ++TotalResUsage[SU->getFUId()];
   }
@@ -191,8 +192,9 @@ unsigned SchedulingBase::computeResMII() {
   unsigned MaxResII = 0;
   typedef std::map<FuncUnitId, unsigned>::iterator UsageIt;
   for (UsageIt I = TotalResUsage.begin(), E = TotalResUsage.end(); I != E; ++I){
-    MaxResII = std::max(MaxResII,
-      I->second / I->first.getTotalFUs());
+    /*There is only 1 resource avaialbe for Prebound function unit kind*/
+    const unsigned NumFUs = 1;
+    MaxResII = std::max(MaxResII, I->second / NumFUs);
   }
   DEBUG(dbgs() << "ResMII: " << MaxResII << '\n');
   return MaxResII;
@@ -222,17 +224,22 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   if (FU.isTrivial()) return true;
 
   unsigned Latency = U->getLatency();
-  
-  // Do all resource at step been reserve?
-  for (unsigned i = step, e = step + Latency; i != e; ++i) {
-    unsigned s = computeStepKey(i);
-    if (RT[FU][s] >= FU.getTotalFUs())
-      return false;
-  }
 
-  for (unsigned i = step, e = step + Latency; i != e; ++i) {
-    unsigned s = computeStepKey(i);
-    ++RT[FU][s];
+  // FIXME: Compute the area cost.
+  if (FU.isBound()) {
+    // Do all resource at step been reserve?
+    for (unsigned i = step, e = step + Latency; i != e; ++i) {
+      unsigned s = computeStepKey(i);
+      /*There is only 1 resource avaialbe for Prebound function unit kind*/
+      const unsigned NumFUs = 1;
+      if (RT[FU][s] >= NumFUs)
+        return false;
+    }
+
+    for (unsigned i = step, e = step + Latency; i != e; ++i) {
+      unsigned s = computeStepKey(i);
+      ++RT[FU][s];
+    }
   }
 
   return true;
@@ -279,7 +286,7 @@ bool SchedulingBase::isResourceConstraintPreserved() {
     // We only try to balance the post bind resource.
     // if (A->getFUId().isBinded()) continue;
     // Ignore the DG for trivial resources.
-    if (FU.isTrivial()) continue;
+    if (!FU.isBound()) continue;
 
     bool available = false;
 
@@ -293,7 +300,7 @@ bool SchedulingBase::isResourceConstraintPreserved() {
     }
 
     if (!available)
-      ExtraResReq += 1.0 /  FU.getTotalFUs();
+      ExtraResReq += 1.0;
   }
 
   return ExtraResReq == 0.0;

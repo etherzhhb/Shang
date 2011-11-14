@@ -33,7 +33,6 @@ using namespace llvm;
 /// Hardware resource.
 void VFUDesc::print(raw_ostream &OS) const {
   // OS << "Resource: " << Name << '\n';
-  OS.indent(2) << "TotalNum: " << TotalRes << '\n';
   OS.indent(2) << "Latency: " << Latency << '\n';
   OS.indent(2) << "StartInterval: " << StartInt << '\n';
 }
@@ -110,24 +109,20 @@ VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable)
   : ResourceType(type),
     Latency(getProperty<unsigned>(FUTable, "Latency")),
     StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
-    TotalRes(getProperty<unsigned>(FUTable, "TotalNumber")),
-    MaxBitWidth(getProperty<unsigned>(FUTable, "OperandWidth")),
     Cost(getProperty<unsigned>(FUTable, "Cost")) {}
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)
   : VFUDesc(VFUs::MemoryBus,
             getProperty<unsigned>(FUTable, "Latency"),
-            getProperty<unsigned>(FUTable, "StartInterval"),
-            getProperty<unsigned>(FUTable, "TotalNumber"),
-            getProperty<unsigned>(FUTable, "DataWidth")),
-    AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")) {}
+            getProperty<unsigned>(FUTable, "StartInterval")),
+    AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")),
+    DataWidth(getProperty<unsigned>(FUTable, "DataWidth")){}
 
 VFUBRam::VFUBRam(luabind::object FUTable)
   : VFUDesc(VFUs::BRam,
             getProperty<unsigned>(FUTable, "Latency"),
-            getProperty<unsigned>(FUTable, "StartInterval"),
-            getProperty<unsigned>(FUTable, "TotalNumber"),
-            getProperty<unsigned>(FUTable, "DataWidth")),
+            getProperty<unsigned>(FUTable, "StartInterval")),
+  DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
   Template(getProperty<std::string>(FUTable, "Template")),
   InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){}
 
@@ -161,15 +156,6 @@ SynSettings::SynSettings(luabind::object SettingTable)
   if (boost::optional<bool> Result =
     luabind::object_cast_nothrow<bool>(SettingTable["isTopMod"]))
     IsTopLevelModule = Result.get();
-}
-
-unsigned FuncUnitId::getTotalFUs() const {
-  // If the function unit is binded, there is only one function unit with
-  // the specific function unit id available.
-  if (isBound()) return 1;
-
-  // Else we can just choose a function unit from all available function units.
-  return getFUDesc(getFUType())->getTotalRes();
 }
 
 void FuncUnitId::print(raw_ostream &OS) const {
