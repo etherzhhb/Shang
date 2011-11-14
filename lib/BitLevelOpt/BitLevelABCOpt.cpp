@@ -44,7 +44,7 @@ extern "C" {
 void   Abc_Start();
 void   Abc_Stop();
 Abc_Ntk_t *Abc_NtkAlloc(Abc_NtkType_t Type, Abc_NtkFunc_t Func, int fUseMemMan);
-};
+}
 
 using namespace llvm;
 
