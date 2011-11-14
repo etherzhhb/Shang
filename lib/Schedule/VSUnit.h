@@ -464,7 +464,7 @@ class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
 private:
-  const TargetMachine &TM;
+  DetialLatencyInfo LatInfo;
   MachineBasicBlock *MBB;
   SUnitVecTy AllSUs;
   // The VSUnits to schedule.
@@ -494,15 +494,40 @@ private:
   }
 
 public:
-  VSchedGraph(const TargetMachine &Target, MachineBasicBlock *MachBB,
+  VSchedGraph(MachineRegisterInfo &MRI, MachineBasicBlock *MachBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : TM(Target), MBB(MachBB), Entry(createEntry()), Exit(0), SUCount(0),
+    : LatInfo(MRI), MBB(MachBB), Entry(createEntry()), Exit(0), SUCount(0),
       startSlot(StartSlot), LoopOp(0, HaveLoopOp) {}
 
   ~VSchedGraph() {
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
   }
 
+  // Forward the method in DetailLatencyInfo
+  void addToLatInfo(const MachineInstr *MI) {
+    LatInfo.addInstr(MI);
+  }
+
+  const DetialLatencyInfo::DepLatInfoTy *
+  getDepLatInfo(const MachineInstr *MI) const {
+    return LatInfo.getDepLatInfo(MI);
+  }
+
+  const DetialLatencyInfo::DepLatInfoTy &
+  buildPHIBELatInfo(const MachineInstr *MI) {
+    return LatInfo.buildPHIBELatInfo(MI);
+  }
+
+  void buildExitMIInfo(const MachineInstr *ExitMI,
+                       DetialLatencyInfo::DepLatInfoTy &Info) {
+    LatInfo.buildExitMIInfo(ExitMI, Info);
+  }
+
+  void eraseFromExitSet(const MachineInstr *MI) {
+    LatInfo.eraseFromExitSet(MI);
+  }
+
+  // VSUnit Creating/Mapping/Merging
   bool mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {
     if (SU->num_instrs()
         && SU->isDatapath() != VInstrInfo::isDatapath(MI->getOpcode()))

@@ -121,7 +121,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
 
   void addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
-                        DetialLatencyInfo &LatInfo,
                         bool isExit = false);
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<int IgnoreBackedge, typename CreateDepFuncTy>
@@ -162,11 +161,10 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void buildControlPathGraph(VSchedGraph &State);
   void buildDataPathGraph(VSchedGraph &State);
 
-  void buildPipeLineDepEdges(VSchedGraph &State, DetialLatencyInfo &LatInfo);
+  void buildPipeLineDepEdges(VSchedGraph &State);
 
   typedef MachineBasicBlock::iterator instr_it;
-  void buildExitRoot(VSchedGraph &CurState, MachineInstr *FirstTerminator,
-                     DetialLatencyInfo &LatInfo);
+  void buildExitRoot(VSchedGraph &CurState, MachineInstr *FirstTerminator);
 
   template<int AllowHanging>
   void buildExitDeps( VSchedGraph &CurState );
@@ -240,7 +238,6 @@ void VPreRegAllocSched::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
-  const TargetMachine &TM = MF.getTarget();
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   FInfo = MF.getInfo<VFInfo>();
@@ -252,7 +249,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   for (MachineFunction::iterator I = MF.begin(), E = MF.end();
        I != E; ++I) {
     MachineBasicBlock *MBB = &*I;
-    VSchedGraph State(TM, MBB, couldBePipelined(MBB), getTotalCycle());
+    VSchedGraph State(*MRI, MBB, couldBePipelined(MBB), getTotalCycle());
     buildControlPathGraph(State);
     DEBUG(State.viewGraph());
     State.scheduleCtrl();
@@ -566,7 +563,6 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
 }
 
 void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
-                                         DetialLatencyInfo &LatInfo,
                                          bool isExit) {
   // Build the dependence edge.
   typedef VSUnit::instr_iterator it;
@@ -575,7 +571,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
     MachineInstr *MI = *I;
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *DepLat =
-      LatInfo.getDepLatInfo(MI);
+      CurState.getDepLatInfo(MI);
     assert(DepLat && "Operand latency information not available!");
     addSchedDepForMI<true>(MI, A, CurState, *DepLat, VDValDep::CreateValDep);
   }
@@ -615,8 +611,7 @@ bool VPreRegAllocSched::couldBePipelined(const MachineBasicBlock *MBB) {
   return FInfo->getInfo().enablePipeLine();
 }
 
-void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
-                                              DetialLatencyInfo &LatInfo) {
+void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
   MachineBasicBlock *CurBB = State.getMachineBasicBlock();
   VSUnit *LoopOp = State.getLoopOp();
   assert(LoopOp && "Not in loop?");
@@ -625,7 +620,7 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State,
   for (instr_it I = CurBB->begin(), E = CurBB->end();I != E && I->isPHI(); ++I) {
     MachineInstr &PN = *I;
     const DetialLatencyInfo::DepLatInfoTy &DepLatInfo =
-      LatInfo.buildPHIBELatInfo(&PN);
+      State.buildPHIBELatInfo(&PN);
 
     VSUnit *PhiSU = State.lookupSUnit(&PN);
     assert(PhiSU && "Can not find SUnit for PHI!");
@@ -795,8 +790,7 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
 }
 
 void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
-                                      MachineInstr *FirstTerminator,
-                                      DetialLatencyInfo &LatInfo) {
+                                      MachineInstr *FirstTerminator) {
   SmallVector<MachineInstr*, 8> Exits;
   // We need wait all operation finish before the exit operation active, compute
   // the latency from operations need to wait to the exit operation.
@@ -806,16 +800,16 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     MachineInstr *MI = I;
     assert(MI->getDesc().isTerminator() && "Unexpected non-terminator!");
     // Build the dependence latency information for the terminator.
-    LatInfo.addInstr(MI);
+    CurState.addToLatInfo(MI);
     // Try to build the schedule unit for the loop back operation.
     if (CurState.isLoopOp(I)) {
       VSUnit *LoopOp = CurState.createVSUnit(MI);
-      addSchedDepForSU(LoopOp, CurState, LatInfo);
+      addSchedDepForSU(LoopOp, CurState);
       continue;
     }
 
     // No need to wait the terminator.
-    LatInfo.eraseFromExitSet(MI);
+    CurState.eraseFromExitSet(MI);
     Exits.push_back(MI);
   }
 
@@ -824,19 +818,19 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   VSUnit *ExitSU = CurState.createVSUnit(FstExit);
   CurState.setExitRoot(ExitSU);
   // Build datapath latency information for the terminator.
-  LatInfo.buildExitMIInfo(FstExit, ExitDepInfo);
+  CurState.buildExitMIInfo(FstExit, ExitDepInfo);
 
   // Add others terminator to the exit node.
   while (Exits.size() != 1) {
     MachineInstr *ExitMI = Exits.pop_back_val();
-    LatInfo.buildExitMIInfo(ExitMI, ExitDepInfo);
+    CurState.buildExitMIInfo(ExitMI, ExitDepInfo);
     bool mapped = CurState.mapMI2SU(ExitMI, ExitSU, 0);
     (void) mapped;
     assert(mapped && "Cannot merge terminators!");
   }
 
   // Add the dependence of exit root.
-  addSchedDepForSU(ExitSU, CurState, LatInfo, true);
+  addSchedDepForSU(ExitSU, CurState, true);
 
   // Add the control dependence edge edges to wait all operation finish.
   addSchedDepForMI<true>(FstExit, ExitSU, CurState, ExitDepInfo,
@@ -855,10 +849,9 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 }
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
-  DetialLatencyInfo DetialLat(*MRI);
   instr_it BI = State->begin();
   while(!BI->getDesc().isTerminator()) {
-    DetialLat.addInstr(BI);
+    State.addToLatInfo(BI);
     buildSUnit(&*BI, State);
     ++BI;
   }
@@ -868,15 +861,15 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   // Make sure every VSUnit have a dependence edge except EntryRoot.
   typedef VSchedGraph::iterator it;
   for (it I = State.begin() + 1, E = State.end(); I != E; ++I)
-    if ((*I)->isControl()) addSchedDepForSU(*I, State, DetialLat);
+    if ((*I)->isControl()) addSchedDepForSU(*I, State);
 
   // Create the exit node, now BI points to the first terminator.
-  buildExitRoot(State, BI, DetialLat);
+  buildExitRoot(State, BI);
   State.prepareForCtrlSched();
 
   // Build loop edges if necessary.
   if (State.enablePipeLine())
-    buildPipeLineDepEdges(State, DetialLat);
+    buildPipeLineDepEdges(State);
 
   // Build the memory edges.
   buildMemDepEdges(State);

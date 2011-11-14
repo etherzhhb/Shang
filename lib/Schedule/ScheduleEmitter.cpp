@@ -733,7 +733,7 @@ void VSchedGraph::emitSchedule() {
   // Remove all unused instructions.
   StateBuilder.clearUp();
   // Build the dummy terminator.
-  BuildMI(MBB, DebugLoc(), TM.getInstrInfo()->get(VTM::EndState))
+  BuildMI(MBB, DebugLoc(), MF->getTarget().getInstrInfo()->get(VTM::EndState))
     .addImm(0).addImm(0);
 
   DEBUG(dbgs() << "After schedule emitted:\n");

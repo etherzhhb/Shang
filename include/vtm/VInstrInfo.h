@@ -263,13 +263,13 @@ class DetialLatencyInfo {
 public:
   // The latency from a given operation to the current operation.
   typedef std::map<const MachineInstr*, double> DepLatInfoTy;
+  MachineRegisterInfo &MRI;
 private:
   // The latency from all register source through the datapath to a given
   // wire/register define by a datapath/control op
   typedef std::map<const MachineInstr*, DepLatInfoTy> LatencyMapTy;
 
   LatencyMapTy LatencyMap;
-  MachineRegisterInfo &MRI;
 
   // Update the latency entry in the latency information table.
   static void updateLatency(DepLatInfoTy &CurLatInfo,
