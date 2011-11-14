@@ -269,21 +269,34 @@ void VSchedGraph::viewGraph() {
 }
 
 void VSchedGraph::scheduleDatapath() {
-  for (iterator I = AllSUs.begin(), E = AllSUs.end(); I != E; ++I) {
-    VSUnit *DU = *I;
-    if (DU->isScheduled()) continue;
+  unsigned EndSlot = getEndSlot(), II = getII();
 
-    assert(DU->isDatapath() && "Unexpected ctrl-sunit not to yet scheduled!");
-    unsigned Step = 0;
-    for (VSUnit::dep_iterator DI = DU->dep_begin(), DE = DU->dep_end();
-         DI != DE; ++DI) {
-      VSUnit *DepSU = *DI;
-      assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
-      Step = std::max(Step, DepSU->getSlot() + DI.getEdge()->getLatency());
+  typedef SUnitVecTy::reverse_iterator rev_it;
+  for (rev_it I = AllSUs.rbegin(), E = AllSUs.rend(); I != E; ++I) {
+    VSUnit *A = *I;
+    if (A->isScheduled()) continue;
+
+    unsigned Step = EndSlot;
+    for (VSUnit::use_iterator UI = A->use_begin(), UE = A->use_end();
+         UI != UE; ++UI) {
+      const VSUnit *Use = *UI;
+      VDEdge *UseEdge = Use->getEdgeFrom(A);
+      assert(Use->isScheduled() && "Expect use scheduled!");
+
+      unsigned UseSlot = Use->getSlot() + (II * UseEdge->getItDst());
+      unsigned CurStep = UseSlot - UseEdge->getLatency();
+      // All control operations are read at emit, do not schedule the datapath
+      // operation which is the control operation depends on to the same slot
+      // with the control operation.
+      if (Use->isControl()) CurStep = std::min(UseSlot - 1, CurStep);
+
+      Step = std::min(CurStep, Step);
     }
-    assert(Step && "Datapath SU do not have depending SUs?");
+
+    assert(Step != EndSlot && "Datapath SU do not have using SUs?");
+
     // Schedule As soon as possible.
-    DU->scheduledTo(Step);
+    A->scheduledTo(Step);
   }
 }
 
