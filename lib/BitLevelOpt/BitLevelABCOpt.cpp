@@ -93,6 +93,9 @@ namespace {
     // Get reg number from the name of Abc_Obj_t.
     int getRegNo(Abc_Obj_t *obj);
 
+    // Dump ABC_Ntk_t.
+    void dumpNtk(Abc_Ntk_t *pABC, bool blif);
+
     // Dump MOInfoMap, just for debugging.
     void dumpMOInfoMap(std::map<unsigned, RegInfo>MOInfoMap);
 
@@ -205,6 +208,7 @@ bool BitLevelABCOpt::runOnMachineFunction(MachineFunction &MF) {
     SmallVector<MachineInstr*, 16> MIDeleted;
     constructABCNtk(BI, pABC, MOInfoMap, NodeVec, MIDeleted);
 
+    // dumpNtk(pABC, true);
     //char *FileOut = "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\3.blif";
     DEBUG(Io_Write(pABC, "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\3.blif",
                    IO_FILE_BLIF));
@@ -282,6 +286,14 @@ int BitLevelABCOpt::getRegNo(Abc_Obj_t *obj) {
   else
     assert(0 && "Something is wrong when getting the RegNo of the output.");
   return RegNo;
+}
+
+void BitLevelABCOpt::dumpNtk(Abc_Ntk_t *pABC, bool blif) {
+  char *dstpath = "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\1.blif";
+  if (blif)
+    DEBUG(Io_Write(pABC, dstpath, IO_FILE_BLIF));
+  else
+    DEBUG(Io_Write(pABC, dstpath, IO_FILE_VERILOG));
 }
 
 void BitLevelABCOpt::dumpMOInfoMap(std::map<unsigned, RegInfo>MOInfoMap) {
@@ -557,7 +569,6 @@ void BitLevelABCOpt::traverseBinaryTree(Abc_Obj_t *objOut,
     // Right child of the node.
     else {
       temp = ObjStack.pop_back_val();
-      Abc_Obj_t *father = temp;
       Inv = Abc_ObjFaninC1(temp);
       DEBUG(dbgs() << "root is " << Abc_ObjName(temp) << "\n");
       if (Abc_ObjFaninNum(temp) == 2) {
@@ -694,7 +705,7 @@ int BitLevelABCOpt::getRegFromABCReg(const TargetInstrInfo *TII,
                                      Abc_Obj_t *child,
                                      std::map<unsigned, RegInfo> &MOInfoMap,
                                      std::map<int, InstrInfo> &MOOutInfo) {
-  int regNo = ~0;
+  int regNo;
   // Get the final reg. Then remember the corresponding reg.
   for (std::map<int, InstrInfo>::iterator I = MOOutInfo.begin(), E = MOOutInfo.end();
         I != E; ++I) {
@@ -707,26 +718,24 @@ int BitLevelABCOpt::getRegFromABCReg(const TargetInstrInfo *TII,
     }
   }
   // Create a new reg to replace the inverse reg of right child.
-  if (regNo == ~0) {
-    unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
-    MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
-    (cast<ucOperand>(Dst)).setBitWidth(MOInfoMap[getRegNo(child)].width);
-    MachineInstr *MI = BuildMI(MBB, Instr, DebugLoc(), TII->get(VTM::VOpNot))
-      .addOperand(Dst).addOperand(MOInfoMap[getRegNo(child)].MOIn)
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&MBB));
-    Dst.setIsDef(false);
-    DEBUG(MI->dump());
-    regNo = TargetRegisterInfo::virtReg2Index(DstReg);
-    MOInfoMap[regNo].MOIn = Dst;
-    MOInfoMap[regNo].numInput += 1;
-    MOInfoMap[regNo].width = MOInfoMap[getRegNo(child)].width;
-    MOOutInfo[regNo].MIOpcode = VTM::VOpNot;
-    MOOutInfo[regNo].MOIn0 = getRegNo(child);
-    MOOutInfo[regNo].MOIn1 = ~0;
-    DEBUG(dbgs() << "Second input reg is " << regNo << "\n");
-    return regNo;
-  }
+  unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
+  MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
+  (cast<ucOperand>(Dst)).setBitWidth(MOInfoMap[getRegNo(child)].width);
+  MachineInstr *MI = BuildMI(MBB, Instr, DebugLoc(), TII->get(VTM::VOpNot))
+    .addOperand(Dst).addOperand(MOInfoMap[getRegNo(child)].MOIn)
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(&MBB));
+  Dst.setIsDef(false);
+  DEBUG(MI->dump());
+  regNo = TargetRegisterInfo::virtReg2Index(DstReg);
+  MOInfoMap[regNo].MOIn = Dst;
+  MOInfoMap[regNo].numInput += 1;
+  MOInfoMap[regNo].width = MOInfoMap[getRegNo(child)].width;
+  MOOutInfo[regNo].MIOpcode = VTM::VOpNot;
+  MOOutInfo[regNo].MOIn0 = getRegNo(child);
+  MOOutInfo[regNo].MOIn1 = ~0;
+  DEBUG(dbgs() << "Second input reg is " << regNo << "\n");
+  return regNo;
 }
 
 int BitLevelABCOpt::getRegFromABCNode(const TargetInstrInfo *TII,
@@ -737,7 +746,7 @@ int BitLevelABCOpt::getRegFromABCNode(const TargetInstrInfo *TII,
                                       std::map<unsigned, RegInfo> &MOInfoMap,
                                       std::map<int, InstrInfo> &MOOutInfo,
                                       std::map<Abc_Obj_t*, int> &NodeMapMO) {
-  int regNo = ~0;
+  int regNo;
   int NodeRegNo = NodeMapMO[child];
   // Get the final reg. Then remember the corresponding reg.
   for (std::map<int, InstrInfo>::iterator I = MOOutInfo.begin(), E = MOOutInfo.end();
@@ -750,27 +759,25 @@ int BitLevelABCOpt::getRegFromABCNode(const TargetInstrInfo *TII,
     }
   }
   // Create a new reg to replace the inverse reg of right child.
-  if (regNo == ~0) {
-    unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
-    MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
-    (cast<ucOperand>(Dst)).setBitWidth(MOInfoMap[NodeRegNo].width);
-    DEBUG(dbgs() <<"%%%%The input MachineOperand is " << MOInfoMap[NodeRegNo].MOIn << "\n");
-    MachineInstr *MI = BuildMI(MBB, Instr, DebugLoc(), TII->get(VTM::VOpNot))
-      .addOperand(Dst).addOperand(MOInfoMap[NodeRegNo].MOIn)
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&MBB));
-    Dst.setIsDef(false);
-    DEBUG(MI->dump());
-    regNo = TargetRegisterInfo::virtReg2Index(DstReg);
-    MOInfoMap[regNo].MOIn = Dst;
-    MOInfoMap[regNo].numInput += 1;
-    MOInfoMap[regNo].width = MOInfoMap[NodeRegNo].width;
-    MOOutInfo[regNo].MIOpcode = VTM::VOpNot;
-    MOOutInfo[regNo].MOIn0 = NodeRegNo;
-    MOOutInfo[regNo].MOIn1 = ~0;
-    DEBUG(dbgs() << "Second input reg is " << regNo << "\n");
-    return regNo;
-  }
+  unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
+  MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
+  (cast<ucOperand>(Dst)).setBitWidth(MOInfoMap[NodeRegNo].width);
+  DEBUG(dbgs() <<"%%%%The input MachineOperand is " << MOInfoMap[NodeRegNo].MOIn << "\n");
+  MachineInstr *MI = BuildMI(MBB, Instr, DebugLoc(), TII->get(VTM::VOpNot))
+    .addOperand(Dst).addOperand(MOInfoMap[NodeRegNo].MOIn)
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(&MBB));
+  Dst.setIsDef(false);
+  DEBUG(MI->dump());
+  regNo = TargetRegisterInfo::virtReg2Index(DstReg);
+  MOInfoMap[regNo].MOIn = Dst;
+  MOInfoMap[regNo].numInput += 1;
+  MOInfoMap[regNo].width = MOInfoMap[NodeRegNo].width;
+  MOOutInfo[regNo].MIOpcode = VTM::VOpNot;
+  MOOutInfo[regNo].MOIn0 = NodeRegNo;
+  MOOutInfo[regNo].MOIn1 = ~0;
+  DEBUG(dbgs() << "Second input reg is " << regNo << "\n");
+  return regNo;
 }
 
 void BitLevelABCOpt::createInvMachineInstr(const TargetInstrInfo *TII,
