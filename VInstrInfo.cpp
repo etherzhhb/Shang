@@ -781,12 +781,14 @@ bool VInstrInfo::isPrebound(unsigned Opcode) {
 
 bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
+         || Opcode == VTM::PHI
          || Opcode == VTM::VOpMove_ri
+         || Opcode == VTM::VOpMove_rr
          || Opcode == VTM::VOpMove_rw
-         || Opcode == VTM::VOpSel || Opcode == VTM::VOpCase
+         || Opcode == VTM::VOpSel
+         || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpReadReturn
-         || Opcode == VTM::VOpReadFU
-         || Opcode == VTM::PHI;
+         || Opcode == VTM::VOpReadFU;
 }
 
 bool VInstrInfo::isBrCndLike(unsigned Opcode) {
@@ -796,8 +798,8 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
 
 bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
   const TargetInstrDesc &TID = VTMInsts[OpC];
-  return VInstrInfo::isCopyLike(OpC) ||
-        (TID.TSFlags & (WriteUntilFinishMask << WriteUntilFinishShiftAmount));
+  return (TID.TSFlags & (WriteUntilFinishMask << WriteUntilFinishShiftAmount))
+         || VInstrInfo::isCopyLike(OpC);
 }
 
 bool VInstrInfo::isDatapath(unsigned OpC) {
@@ -822,8 +824,8 @@ VFUs::FUTypes VInstrInfo::getFUType(unsigned OpC) {
 //}
 
 bool VInstrInfo::isReadAtEmit(unsigned OpC) {
-  return isCopyLike(OpC)
-         || (VTMInsts[OpC].TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount));
+  return (VTMInsts[OpC].TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount))
+         || isCopyLike(OpC);
 }
 
 bool VInstrInfo::isCmdSeq(unsigned Cmd) {
@@ -854,15 +856,22 @@ bool VInstrInfo::isCmdSeqEnd(const MachineInstr *MI) {
 double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   unsigned OpC = MI->getOpcode();
 
+  switch (OpC) {
+  // Zero cost operations
+  case VTM::VOpBitCat:
+  case VTM::VOpBitSlice:
+  // No need to wait terminators.
+  case VTM::VOpToState:
+  case VTM::VOpToStateb:
+  case VTM::VOpRet:
+  case VTM::VOpRetVal:
+  case VTM::VOpUnreachable:  return 0.0;
+  default:                   break;
+  }
+
   // Copy do not take time, but the value will be available for control
   // operation at next cycle, we will adjust this in computeCtrlLatency.
   if (isCopyLike(OpC)) return 0.0;
-
-  switch (OpC) {
-  // No need to wait VOpRetVal;
-  case VTM::VOpRetVal:  return 0.0;
-  default:              break;
-  }
 
   // Dirty Hack: Datapath take 0 cycle, and control take 1 cycle.
   if (isDatapath(OpC)) return 0.0;
@@ -900,7 +909,9 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
     // which will refresh the output register, thus we will read a wrong value
     // from the wire.
     // Do not chain the datapath after the pre-bound operation.
-    //if (!SrcTID.getPrebindFUId().isTrivial())
+    //if (isPrebound(SrcOpC))
+    // DirtyHack: Chain block ram access break get_dqt in jpeg.
+    if (SrcOpC == VTM::VOpBRam)
       return ceil(latency) + Delta;
   }
 
