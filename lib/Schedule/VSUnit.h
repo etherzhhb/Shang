@@ -367,6 +367,7 @@ public:
   }
 
   unsigned getSlot() const { return SchedSlot; }
+  unsigned getFinSlot() const { return getSlot() + getLatency(); }
 
   bool isScheduled() const { return SchedSlot != 0; }
   void scheduledTo(unsigned slot);
@@ -630,11 +631,17 @@ public:
   /// @name Scheduling
   //{
   void scheduleCtrl();
-  // Schedule datapath operations as soon as possible after control operations
-  // scheduled.
+  // Schedule datapath operations as late as possible after control operations
+  // scheduled, this can reduce register usage.
   void scheduleDatapath();
   void emitSchedule();
   //}
+
+  // If a datapath operation is chained with a non-trivial control operation,
+  // copy its result to register, otherwise the result register of the function
+  // unit of the control operation may have a long live interval and hard to
+  // be shared.
+  void fixChainedDatapathRC(VSUnit *U);
 };
 
 template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {

@@ -268,6 +268,45 @@ void VSchedGraph::viewGraph() {
   ViewGraph(this, this->getMachineBasicBlock()->getName());
 }
 
+void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
+  assert(U->isDatapath() && "Expected datapath operation!");
+  assert(U->num_instrs() == 1 && "Unexpected datapath operation merged!");
+
+  MachineInstr *MI = U->getRepresentativeInst();
+  const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = LatInfo.getDepLatInfo(MI);
+  assert(DepLatInfo && "dependence latency information not available?");
+
+  typedef DetialLatencyInfo::DepLatInfoTy::const_iterator dep_it;
+  bool NeedCopyToReg = false;
+
+  for (dep_it I = DepLatInfo->begin(), E = DepLatInfo->end(); I != E; ++I) {
+    const MachineInstr *SrcMI = I->first;
+
+    // Ignore the entry root.
+    if (SrcMI == DetialLatencyInfo::EntryMarker) continue;
+
+    // Ignore the operations without interesting function unit.
+    if (VInstrInfo::hasTrivialFU(SrcMI->getOpcode())) continue;
+
+    VSUnit *SrcSU = lookupSUnit(SrcMI);
+    assert(SrcSU && "Source schedule unit not exist?");
+    // Is the datapath operation chained with its depending control operation?
+    if (SrcSU->getFinSlot() > U->getSlot()) {
+      NeedCopyToReg = true;
+      // FIXME: Also compute the optimize copy slot.
+      break;
+    }
+  }
+
+  if (!NeedCopyToReg) {
+    assert(MI->getDesc().getNumDefs() == 1
+           && "Expect datapath operation have only 1 define!");
+
+    unsigned Reg = MI->getOperand(0).getReg();
+    LatInfo.MRI.setRegClass(Reg, VTM::WireRegisterClass);
+  }
+}
+
 void VSchedGraph::scheduleDatapath() {
   unsigned EndSlot = getEndSlot(), II = getII();
 
@@ -295,8 +334,10 @@ void VSchedGraph::scheduleDatapath() {
 
     assert(Step != EndSlot && "Datapath SU do not have using SUs?");
 
-    // Schedule As soon as possible.
+    // Schedule As late as possible to reduce register usage.
     A->scheduledTo(Step);
+
+    fixChainedDatapathRC(A);
   }
 }
 
