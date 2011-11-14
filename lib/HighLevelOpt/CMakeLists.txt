@@ -1,7 +1,5 @@
 add_llvm_library(VTMHighLevelOpt
   FunctionFilter.cpp
-  GVPromotion.cpp
-  HWPartitionInfo.cpp
   StackToGlobal.cpp
   AlwaysInlineFunction.cpp
   ContoBrom.cpp
