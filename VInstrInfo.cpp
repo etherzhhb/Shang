@@ -918,21 +918,6 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
     // SrcInstr finish
     return ceil(latency) + Delta;
 
-  //if (isDatapath(DstOpC) && isControl(SrcOpC)) {
-    // Chain the datapath operation if source is not a pre-bound op.
-    // Which means we do not need to worry about if we are overlapping the
-    // live interval of the output register of the pre-bound FU by connecting
-    // it to a wire.
-    // And wire may be still in use when the FU have new incoming operation
-    // which will refresh the output register, thus we will read a wrong value
-    // from the wire.
-    // Do not chain the datapath after the pre-bound operation.
-    //if (isPrebound(SrcOpC))
-    // DirtyHack: Chain block ram access break get_dqt in jpeg.
-    //if (SrcOpC == VTM::VOpBRam)
-      //return ceil(latency) + Delta;
-  //}
-
   // Chain the operations by default.
   return std::max(latency - Delta, 0.0);
 }
