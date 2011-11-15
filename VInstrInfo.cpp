@@ -893,6 +893,7 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
 
   case VTM::VOpBRam:        return VFUs::BRamLatency;
 
+  case VTM::VOpCmdSeq:
   case VTM::VOpInternalCall:  return 1.0;
   }
 
