@@ -26,6 +26,7 @@
 #include "vtm/VRegisterInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/Passes.h"
+#include "vtm/VInstrInfo.h"
 
 //Dirty Hack:
 #include "llvm/../../lib/CodeGen/LiveIntervalUnion.h"
@@ -1206,6 +1207,8 @@ void VRASimple::bindMemoryBus() {
 }
 
 void VRASimple::bindBlockRam() {
+  assert(VInstrInfo::isWriteUntilFinish(VTM::VOpBRam)
+         && "Expected block ram write until finish!");
   VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RBRMRegisterClass);
   std::map<unsigned, LiveInterval*> RepLIs;
 
@@ -1230,7 +1233,13 @@ void VRASimple::bindBlockRam() {
       }
 
       // Merge to the representative live interval.
-      mergeLI(LI, RepLIs[PhyReg]);
+      LiveInterval *RepLI = RepLIs[PhyReg];
+      // DirtyHack: Now bram is write until finish, it is ok to overlap the
+      // live interval of bram for 1 control step(2 indexes in SlotIndex).
+      SlotIndex NextStart = LI->beginIndex().getNextIndex().getNextIndex();
+      assert(!RepLI->overlaps(NextStart, LI->endIndex())
+             && "Unexpected bram overlap!");
+      mergeLI(LI, RepLI, true);
     }
   }
 }
