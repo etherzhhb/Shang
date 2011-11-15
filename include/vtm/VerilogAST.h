@@ -578,14 +578,16 @@ public:
     return cast<T>(getSymbol(Name));
   }
 
-  VASTValue *getOrCreateSymbol(const std::string &Name) {
+  VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth) {
     SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
     VASTValue *&V = Entry.second;
     if (V == 0) {
        V = Allocator.Allocate<VASTValue>();
-       new (V) VASTValue(vastSymbol, Entry.first(), 0);
+       new (V) VASTValue(vastSymbol, Entry.first(), BitWidth);
     }
 
+    assert(V->getBitWidth() == BitWidth
+           && "Getting symbol with wrong bitwidth!");
     return V;
   }
 

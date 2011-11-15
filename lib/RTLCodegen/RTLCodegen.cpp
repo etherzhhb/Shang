@@ -526,10 +526,10 @@ void RTLCodegen::emitAllocatedFUs() {
     unsigned NumElem = Info.NumElem;
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string Filename;
-
+    // Create the enable signal for bram.
+    VM->getOrCreateSymbol(VFUBRam::getEnableName(BramNum), 1);
     //Print the Constant into a .txt file as the initializer to bram
     Filename = BlockRam->generateInitFile(DataWidth, Initializer, NumElem);
-
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
                                 DataWidth, Log2_32_Ceil(NumElem), Filename)
       << '\n';
@@ -558,12 +558,16 @@ void RTLCodegen::emitAllocatedFUs() {
       getSubModulePortName(FNNum, "fin"),
       getSubModulePortName(FNNum, "return_value")
     };
-    // Add the finsh signal and return_value to the signal list.
+    // Add the start/finsh signal and return_value to the signal list.
     VM->addRegister(Ports[2], 1);
+    VM->getOrCreateSymbol(Ports[3], 1);
     unsigned RetPortIdx = FNNum + VFUs::RetPortOffset;
     // Had we allocate the return port?
-    if (TRI->getPhyRegInfo(RetPortIdx).getParentRegister() == FNNum)
-      VM->indexVASTValue(RetPortIdx, VM->getOrCreateSymbol(Ports[4]));
+    VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RetPortIdx);
+    if (Info.getParentRegister() == FNNum) {
+      VASTValue *PortName = VM->getOrCreateSymbol(Ports[4], Info.getBitWidth());
+      VM->indexVASTValue(RetPortIdx, PortName);
+    }
 
     // Else ask the constraint about how to instantiates this submodule.
     S << "// External module: " << I->getKey() << '\n';
@@ -681,7 +685,8 @@ void RTLCodegen::emitAllSignals() {
       break;
     }
     case VTM::RBRMRegClassID: {
-      VASTValue *V = VM->getOrCreateSymbol(VFUBRam::getInDataBusName(RegNum));
+      VASTValue *V = VM->getOrCreateSymbol(VFUBRam::getInDataBusName(RegNum),
+                                           Info.getBitWidth());
       VM->indexVASTValue(RegNum, V);
       break;
     }
@@ -944,11 +949,11 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
 
   switch (Id.getFUType()) {
   case VFUs::MemoryBus:
-    ReadyPort = VM->getOrCreateSymbol(VFUMemBus::getReadyName(Id.getFUNum()));
+    ReadyPort = VM->getSymbol(VFUMemBus::getReadyName(Id.getFUNum()));
     break;
   case VFUs::CalleeFN: {
     unsigned FNNum = Op.getOperand(1).getReg();
-    ReadyPort = VM->getOrCreateSymbol(getSubModulePortName(FNNum, "fin"));
+    ReadyPort = VM->getSymbol(getSubModulePortName(FNNum, "fin"));
     break;
   }
   default:
@@ -976,7 +981,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
 
   VASTCnd Pred = createCondition(Op.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");
-  VASTValue *StartSignal = VM->getOrCreateSymbol(StartPortName);
+  VASTValue *StartSignal = VM->getSymbol(StartPortName);
   Slot->addEnable(StartSignal, Pred);
   VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
   NextSlot->addDisable(StartSignal, Pred);
@@ -1095,7 +1100,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
 
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
-  VASTValue *MemEn = VM->getOrCreateSymbol(EnableName);
+  VASTValue *MemEn = VM->getSymbol(EnableName);
   VASTCnd Pred = createCondition(Op.getPredicate());
   Slot->addEnable(MemEn, Pred);
 
@@ -1139,7 +1144,7 @@ void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
 
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUBRam::getEnableName(FUNum);
-  VASTValue *MemEn = VM->getOrCreateSymbol(EnableName);
+  VASTValue *MemEn = VM->getSymbol(EnableName);
   VASTCnd Pred = createCondition(Op.getPredicate());
   Slot->addEnable(MemEn, Pred);
 
@@ -1203,10 +1208,11 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
            LB = OpBitSlice.getOperand(3).getImm();
 
   VASTUse RHS = getAsOperand(OpBitSlice.getOperand(1));
+  assert(RHS.UB != 0 && "Cannot get bitslice without bitwidth information!");
   // Adjust ub and lb.
   LB += RHS.LB;
   UB += RHS.LB;
-  assert((UB <= RHS.UB || RHS.UB == 0) && "Bitslice out of range!");
+  assert(UB <= RHS.UB && "Bitslice out of range!");
   V.addOperand(VASTUse(RHS.get(), UB, LB));
 }
 
@@ -1239,7 +1245,7 @@ VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
   Op.print(SS);
   SS.flush();
 
-  return VM->getOrCreateSymbol(Name);
+  return VM->getOrCreateSymbol(Name, 0);
 }
 
 void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS) {
