@@ -285,13 +285,16 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
     // Ignore the entry root.
     if (SrcMI == DetialLatencyInfo::EntryMarker) continue;
 
+    unsigned SrcOpC = SrcMI->getOpcode();
     // Ignore the operations without interesting function unit.
-    if (VInstrInfo::hasTrivialFU(SrcMI->getOpcode())) continue;
+    if (VInstrInfo::hasTrivialFU(SrcOpC)) continue;
 
     VSUnit *SrcSU = lookupSUnit(SrcMI);
     assert(SrcSU && "Source schedule unit not exist?");
+    unsigned SrcCopySlot =
+      SrcSU->getFinSlot() + VInstrInfo::isWriteUntilFinish(SrcOpC);
     // Is the datapath operation chained with its depending control operation?
-    if (SrcSU->getFinSlot() > U->getSlot()) {
+    if (SrcCopySlot > U->getSlot()) {
       NeedCopyToReg = true;
       // FIXME: Also compute the optimize copy slot.
       break;
