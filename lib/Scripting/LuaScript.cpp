@@ -15,6 +15,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/LuaScript.h"
+#include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
 
 #include "llvm/PassManager.h"
@@ -159,8 +160,9 @@ raw_ostream &LuaScript::getOutputFileStream(std::string &Name) {
   return NewFile->os();
 }
 
-void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs) {
-  FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)]);
+void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs,
+                             double *Latencies) {
+  FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)], Latencies);
 }
 
 void LuaScript::updateFUs() {
@@ -169,33 +171,38 @@ void LuaScript::updateFUs() {
     = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
   FUSet[VFUs::BRam] = new VFUBRam(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
 
-  initSimpleFU(VFUs::AddSub, FUs);
+  initSimpleFU(VFUs::AddSub, FUs, VFUs::AdderLatencies);
   // Override the cost parameter if user provided.
   if (unsigned AdderCost = FUSet[VFUs::AddSub]->getCost())
     VFUs::AddCost = AdderCost;
 
-  initSimpleFU(VFUs::Shift, FUs);
+  initSimpleFU(VFUs::Shift, FUs, VFUs::ShiftLatencies);
   if (unsigned ShiftCost = FUSet[VFUs::Shift]->getCost())
     VFUs::ShiftCost = ShiftCost;
 
-  initSimpleFU(VFUs::Mult, FUs);
+  initSimpleFU(VFUs::Mult, FUs, VFUs::MultLatencies);
   if (unsigned MulCost = FUSet[VFUs::Mult]->getCost())
     VFUs::MulCost = MulCost;
 
-  initSimpleFU(VFUs::ICmp, FUs);
+  initSimpleFU(VFUs::ICmp, FUs, VFUs::CmpLatencies);
   if (unsigned ICmpCost = FUSet[VFUs::ICmp]->getCost())
     VFUs::ICmpCost = ICmpCost;
 
-  // Read other cost.
-#define READCOST(COST) \
-  if (boost::optional<unsigned> COST \
-      = luabind::object_cast_nothrow<unsigned>(FUs[#COST])) \
-    VFUs::COST = COST.get();
+  // Latencies for reduction and bit repeat.
+  VFUs::initLatencyTable(FUs["ReductionLatencies"], VFUs::ReductionLatencies);
 
-  READCOST(LUTCost);
-  READCOST(RegCost);
-  READCOST(MUXCost);
-  READCOST(MuxSizeCost);
+  // Read other parameters.
+#define READPARAMETER(PARAMETER, T) \
+  if (boost::optional<T> PARAMETER \
+      = luabind::object_cast_nothrow<T>(FUs[#PARAMETER])) \
+    VFUs::PARAMETER = PARAMETER.get();
+
+  READPARAMETER(LUTCost, unsigned);
+  READPARAMETER(RegCost, unsigned);
+  READPARAMETER(MUXCost, unsigned);
+  READPARAMETER(MuxSizeCost, unsigned);
+
+  READPARAMETER(LutLatency, double);
 }
 
 void LuaScript::updateStatus() {

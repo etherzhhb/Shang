@@ -16,6 +16,7 @@
 #include "vtm/SynSettings.h" // DiryHack: Also implement the SynSetting class.
 #include "vtm/LuaScript.h"
 #include "vtm/VRegisterInfo.h"
+#include "vtm/VInstrInfo.h"
 #include "vtm/VTM.h"
 
 #include "llvm/CodeGen/ISDOpcodes.h"
@@ -26,15 +27,26 @@
 #include "llvm/Support/SourceMgr.h"
 #define DEBUG_TYPE "vtm-fu-info"
 #include "llvm/Support/Debug.h"
-
 using namespace llvm;
+
+//===----------------------------------------------------------------------===//
+// Helper functions for reading function unit table from script.
+template<typename PropType, typename IdxType>
+static PropType getProperty(luabind::object &FUTable, IdxType PropName,
+  PropType DefaultRetVal = PropType()) {
+    if (luabind::type(FUTable) != LUA_TTABLE) return DefaultRetVal;
+
+    boost::optional<PropType> Result =
+      luabind::object_cast_nothrow<PropType>(FUTable[PropName]);
+
+    if (!Result) return DefaultRetVal;
+
+    return Result.get();
+}
 
 //===----------------------------------------------------------------------===//
 /// Hardware resource.
 void VFUDesc::print(raw_ostream &OS) const {
-  // OS << "Resource: " << Name << '\n';
-  OS.indent(2) << "Latency: " << Latency << '\n';
-  OS.indent(2) << "StartInterval: " << StartInt << '\n';
 }
 
 namespace llvm {
@@ -84,47 +96,57 @@ namespace llvm {
     unsigned ShiftCost = 256;
     unsigned ICmpCost = 32;
     unsigned MuxSizeCost = 56;
+
+    // Default value of Latency tables.         8bit 16bit 32bit 64bit
+    double AdderLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
+    double CmpLatencies[]       = { 1.0, 1.0,  1.0,  1.0 };
+    double MultLatencies[]      = { 1.0, 1.0,  1.0,  1.0 };
+    double ShiftLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
+    double ReductionLatencies[] = { 0.0, 0.0,  0.0,  0.0 };
+    double MemBusLatency = 1.0;
+    double BRamLatency = 1.0;
+    double LutLatency = 0.0;
+
+    void initLatencyTable(luabind::object LuaLatTable, double *LatTable) {
+      // Lua array starts from 1
+      // Latency for 8 bit operand
+      LatTable[0] = getProperty<double>(LuaLatTable, 1, LatTable[0]);
+      // Latency for 16 bit operand
+      LatTable[1] = getProperty<double>(LuaLatTable, 2, LatTable[1]);
+      // Latency for 32 bit operand
+      LatTable[2] = getProperty<double>(LuaLatTable, 3, LatTable[2]);
+      // Latency for 64 bit operand
+      LatTable[3] = getProperty<double>(LuaLatTable, 4, LatTable[3]);
+    }
   }
 }
 
-//===----------------------------------------------------------------------===//
-// Helper functions for reading function unit table from script.
-template<class PropType>
-static PropType getProperty(luabind::object &FUTable,
-                              const std::string &PropName) {
-  //luabind::object FUTable =
-  //  Script->getRawObject("FU" + std::string(FUType::getTypeName()));
-
-  if (luabind::type(FUTable) != LUA_TTABLE) return PropType();
-
-  boost::optional<PropType> Result =
-    luabind::object_cast_nothrow<PropType>(FUTable[PropName]);
-
-  if (!Result) return PropType();
-
-  return Result.get();
-}
-
-VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable)
+VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, double *latencies)
   : ResourceType(type),
-    Latency(getProperty<unsigned>(FUTable, "Latency")),
     StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
-    Cost(getProperty<unsigned>(FUTable, "Cost")) {}
+    Cost(getProperty<unsigned>(FUTable, "Cost")), LatencyTable(latencies) {
+  luabind::object LatTable = FUTable["Latencies"];
+  VFUs::initLatencyTable(LatTable, latencies);
+}
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)
   : VFUDesc(VFUs::MemoryBus,
-            getProperty<unsigned>(FUTable, "Latency"),
-            getProperty<unsigned>(FUTable, "StartInterval")),
+            getProperty<unsigned>(FUTable, "StartInterval"),
+            &VFUs::MemBusLatency),
     AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")),
-    DataWidth(getProperty<unsigned>(FUTable, "DataWidth")){}
+    DataWidth(getProperty<unsigned>(FUTable, "DataWidth")){
+  *LatencyTable = getProperty<double>(FUTable, "Latency");
+}
 
 VFUBRam::VFUBRam(luabind::object FUTable)
   : VFUDesc(VFUs::BRam,
-            getProperty<unsigned>(FUTable, "Latency"),
-            getProperty<unsigned>(FUTable, "StartInterval")),
-  DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
-  Template(getProperty<std::string>(FUTable, "Template")),
-  InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){}
+            getProperty<unsigned>(FUTable, "StartInterval"),
+            &VFUs::BRamLatency),
+    DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
+    Template(getProperty<std::string>(FUTable, "Template")),
+    InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){
+  *LatencyTable = getProperty<double>(FUTable, "Latency");
+}
 
 // Dirty Hack: anchor from SynSettings.h
 SynSettings::SynSettings(StringRef Name, SynSettings &From)

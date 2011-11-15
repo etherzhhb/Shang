@@ -76,10 +76,16 @@ namespace VFUs {
                                  ArrayRef<std::string> Ports);
   std::string startModule(const std::string &ModName, unsigned ModNum,
                           ArrayRef<std::string> InPorts);
-
   // Cost parameters.
   extern unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost,
                   ShiftCost, ICmpCost, MuxSizeCost;
+
+  // Latency tables
+  extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
+                ShiftLatencies[4], ReductionLatencies[4];
+  extern double BRamLatency, MemBusLatency, LutLatency;
+
+  void initLatencyTable(luabind::object LuaLatTable, double *LatTable);
 }
 
 class FuncUnitId {
@@ -138,18 +144,19 @@ class VFUDesc {
 protected:
   // The HWResource baseclass this node corresponds to
   const unsigned ResourceType;
-  // How many cycles to finish?
-  const unsigned Latency;
   // Start interval
   const unsigned StartInt;
   // Function unit cost for resource allocation and binding.
   const unsigned Cost;
+  // Latency table of the function unit.
+  double *LatencyTable;
 
-  VFUDesc(VFUs::FUTypes type, unsigned latency, unsigned startInt)
-    : ResourceType(type), Latency(latency), StartInt(startInt), Cost(~0) {}
+  VFUDesc(VFUs::FUTypes type, unsigned startInt, double *latencies)
+    : ResourceType(type), StartInt(startInt), Cost(~0),
+      LatencyTable(latencies) {}
 
 public:
-  VFUDesc(VFUs::FUTypes type, luabind::object FUTable);
+  VFUDesc(VFUs::FUTypes type, luabind::object FUTable, double *latencies);
 
   static const char *getTypeName(VFUs::FUTypes FU) {
     return VFUs::VFUNames[FU];
@@ -160,7 +167,6 @@ public:
     return getTypeName((VFUs::FUTypes)getType());
   }
 
-  unsigned getLatency() const { return Latency; }
   unsigned getStartInt() const { return StartInt; }
   unsigned getCost() const { return Cost; }
 

@@ -852,30 +852,51 @@ bool VInstrInfo::isCmdSeqEnd(const MachineInstr *MI) {
          && MI->getOperand(4).getImm() == VFUMemBus::SeqEnd;
 }
 
+template<int Idx>
+static unsigned ComputeOperandSizeLog8Ceil(const MachineInstr *MI) {
+  unsigned SizeInBits = cast<ucOperand>(MI->getOperand(Idx)).getBitWidth();
+  return std::max(Log2_32_Ceil(SizeInBits), 3u) - 3;
+}
+
+template<int Idx>
+static double LookupLatency(const double *Table, const MachineInstr *MI){
+  unsigned i = ComputeOperandSizeLog8Ceil<Idx>(MI);
+  return Table[i];
+}
+
 // Get the latency of a machineinstr in cycle ratio.
 double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   unsigned OpC = MI->getOpcode();
 
   switch (OpC) {
-  // Zero cost operations
-  case VTM::VOpBitCat:
-  case VTM::VOpBitSlice:
-  // No need to wait terminators.
-  case VTM::VOpToState:
-  case VTM::VOpToStateb:
-  case VTM::VOpRet:
-  case VTM::VOpRetVal:
-  case VTM::VOpUnreachable:  return 0.0;
-  default:                   break;
+    // TODO: Bitrepeat.
+  default:                  break;
+
+  case VTM::VOpICmp:        return LookupLatency<3>(VFUs::CmpLatencies, MI);
+  case VTM::VOpAdd:         return LookupLatency<0>(VFUs::AdderLatencies, MI);
+
+  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
+
+  case VTM::VOpMult:        return LookupLatency<0>(VFUs::MultLatencies, MI);
+  case VTM::VOpSRA:
+  case VTM::VOpSRL:
+  case VTM::VOpSHL:         return LookupLatency<0>(VFUs::ShiftLatencies, MI);
+
+  case VTM::VOpAnd:
+  case VTM::VOpOr:
+  case VTM::VOpXor:
+  case VTM::VOpNot:         return VFUs::LutLatency;
+
+  case VTM::VOpROr:
+  case VTM::VOpRAnd:
+  case VTM::VOpRXor:        return LookupLatency<1>(VFUs::ReductionLatencies, MI);
+
+  case VTM::VOpBRam:        return VFUs::BRamLatency;
+
+  case VTM::VOpInternalCall:  return 1.0;
   }
 
-  // Copy do not take time, but the value will be available for control
-  // operation at next cycle, we will adjust this in computeCtrlLatency.
-  if (isCopyLike(OpC)) return 0.0;
-
-  // Dirty Hack: Datapath take 0 cycle, and control take 1 cycle.
-  if (isDatapath(OpC)) return 0.0;
-  else                 return 1.0;
+  return 0.0;
 }
 
 double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
