@@ -300,7 +300,6 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
           );
     CtrlS.exit_block("// End resource ready.\n");
   } else {
-    // DirtyHack: Check if the memory bus is shutdown.
     //DEBUG(
     if (getSlotNum() != 0) {
       CtrlS << "if (start) begin $display(\"" << getName() << " in "
