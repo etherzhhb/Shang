@@ -106,6 +106,7 @@ namespace llvm {
     double MemBusLatency = 1.0;
     double BRamLatency = 1.0;
     double LutLatency = 0.0;
+    double ClkEnSelLatency = 0.0;
 
     void initLatencyTable(luabind::object LuaLatTable, double *LatTable) {
       // Lua array starts from 1

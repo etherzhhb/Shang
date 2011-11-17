@@ -900,6 +900,17 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   return 0.0;
 }
 
+bool VInstrInfo::isOperandPartOfClkEn(unsigned OpCode, unsigned MOIdx) {
+  const TargetInstrDesc &TID = VTMInsts[OpCode];
+  bool isPredicate = MOIdx < TID.getNumOperands()
+                     && TID.OpInfo[MOIdx].isPredicate();
+  switch (OpCode) {
+  default:  return isPredicate;
+  case VTM::VOpSel: return /*the condition operand*/ MOIdx == 1 || isPredicate;
+  case VTM::VOpCase:return /*the condition operand*/ MOIdx & 0x1 || isPredicate;
+  }
+}
+
 double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                       const MachineInstr *DstInstr) {
   assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
@@ -1072,13 +1083,17 @@ DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,
-                                        DepLatInfoTy &CurLatInfo) {
+                                        DepLatInfoTy &CurLatInfo,
+                                        bool isPartOfClkEn) {
   const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
   // Latency information not available, the SrcMI maybe in others BB, no need
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;
 
   double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI, DstMI);
+  // It seems that the clk enable mux network have extra big latency, which
+  // are likely become the critical path.
+  if (isPartOfClkEn) EdgeLatency += VFUs::ClkEnSelLatency;
 
   if (VInstrInfo::isControl(SrcMI->getOpcode())) {
     // Simply add the latency from ctrl op to the latency map.
@@ -1095,11 +1110,11 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 const DetialLatencyInfo::DepLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   DepLatInfoTy &CurLatInfo = LatencyMap[MI];
+  unsigned Opcode = MI->getOpcode();
 
   // Iterate from use to define.
-  typedef MachineInstr::const_mop_iterator op_it;
-  for (op_it I = MI->operands_begin(), E = MI->operands_end(); I != E; ++I) {
-    const MachineOperand &MO = *I;
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
 
     // Only care about a use register.
     if (!MO.isReg() || MO.isDef() || MO.getReg() == 0)
@@ -1112,7 +1127,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     // Do we ignore phi as dependence?
     if (SrcMI->isPHI() && IgnorePHISrc) continue;
 
-    if (buildDepLatInfo(SrcMI, MI, CurLatInfo))
+    if (buildDepLatInfo(SrcMI, MI, CurLatInfo,
+                        VInstrInfo::isOperandPartOfClkEn(Opcode, i)))
       // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
       // have user now.
       ExitMIs.erase(SrcMI);
@@ -1136,7 +1152,7 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
                                         DepLatInfoTy &Info) {
   typedef std::set<const MachineInstr*>::const_iterator exit_it;
   for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
-    buildDepLatInfo(*I, ExitMI, Info);
+    buildDepLatInfo(*I, ExitMI, Info, false);
 }
 
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {

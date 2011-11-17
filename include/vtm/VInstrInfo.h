@@ -150,7 +150,10 @@ public:
                         MachineOperand &Res,
                         const SmallVectorImpl<MachineOperand> &Pred,
                         MachineOperand IfTrueVal);
-
+  // We need to identify the signals connect to clock enable network, which
+  // have big latency if connected to a multiplexer (this introduce by resource
+  // sharing algorithm) and likly become critical path.
+  static bool isOperandPartOfClkEn(unsigned OpCode, unsigned MOIdx);
   static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
 
@@ -279,7 +282,7 @@ private:
 
   // Add the latency information from SrcMI to CurLatInfo.
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
-                       DepLatInfoTy &CurLatInfo);
+                       DepLatInfoTy &CurLatInfo, bool isPartOfClkEn);
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
@@ -288,7 +291,7 @@ private:
                                    double CurLatency);
 
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
-                                           bool IgnorePHISrc);
+                                       bool IgnorePHISrc);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
