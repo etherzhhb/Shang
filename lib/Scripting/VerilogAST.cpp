@@ -533,37 +533,50 @@ unsigned VASTRegister::findSlackFrom(const VASTRegister *Src,
   return Slack;
 }
 
-void VASTRegister::reportAssignmentSlack() {
+void VASTRegister::computeSlackThrough(VASTUse Src, const OrCndVec & AssignCnds){
+  VASTValue *SrcValue = Src.getOrNull();
+
+  // Source is immediate or symbol, skip it.
+  if (!SrcValue) return;
+
+  // Trivial case.
+  if (VASTRegister *R = dyn_cast<VASTRegister>(SrcValue)) {
+    unsigned Slack = findSlackFrom(R, AssignCnds);
+    DEBUG_WITH_TYPE("rtl-slack-info",
+      dbgs() << "Datapath:\t" << getName() << ", "
+      << R->getName() << ": "
+      << int(Slack) << '\n');
+    VASTUse Path[] = { this, Src };
+    bindPath2ScriptEngine(Path, Slack);
+    return;
+  }
+
+  DepthFristTraverseDataPathUseTree(Src, AssignCnds);
+}
+
+void VASTRegister::computeAssignmentSlack() {
   // Do we have any assignment information?
   if (Assigns.empty()) return;
 
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
     VASTUse Src = I->first;
-
-    VASTValue *SrcValue = Src.getOrNull();
-
-    // Source is immediate or symbol, skip it.
-    if (!SrcValue) continue;
-
-    // Trivial case.
-    if (VASTRegister *R = dyn_cast<VASTRegister>(SrcValue)) {
-      unsigned Slack = findSlackFrom(R, I->second);
-      DEBUG_WITH_TYPE("rtl-slack-info",
-                       dbgs() << "Datapath:\t" << getName() << ", "
-                              << R->getName() << ": "
-                              << int(Slack) << '\n');
-      VASTUse Path[] = { this, Src };
-      bindPath2ScriptEngine(Path, Slack);
-      continue;
+    const OrCndVec &AssignCnds = I->second;
+    // Compute slack from source value.
+    computeSlackThrough(Src, AssignCnds);
+    // Compute slack from predicate value.
+    typedef OrCndVec::const_iterator or_it;
+    for (or_it OI = AssignCnds.begin(), OE = AssignCnds.end(); OI != OE; ++OI) {
+      typedef AndCndVec::const_iterator and_it;
+      const AndCndVec &Cnds = OI->second;
+      for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI)
+        computeSlackThrough(*CI, AssignCnds);
     }
-
-    DepthFristTraverseDataPathUseTree(Src, I->second);
-  }//);
+  }
 }
 
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
-                                  const AndCndVec Cnds) {
+                                  const AndCndVec &Cnds) {
   OS << '(';
   if (Slot) OS << Slot->getActive()->getName();
   else      OS << "1'b1";
@@ -721,10 +734,10 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
   Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
 }
 
-void VASTModule::reportAssignmentSlacks() {
+void VASTModule::computeAssignmentSlacks() {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
-    (*I)->reportAssignmentSlack();
+    (*I)->computeAssignmentSlack();
 }
 
 void VASTModule::print(raw_ostream &OS) const {

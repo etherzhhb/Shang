@@ -476,12 +476,13 @@ public:
   }
 
   // Compute the slack of the assignment.
-  void reportAssignmentSlack();
+  void computeAssignmentSlack();
+  void computeSlackThrough(VASTUse Src, const OrCndVec &AssignCnds);
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
-                             const AndCndVec Cnds);
+                             const AndCndVec &Cnds);
 
-  static void printCondition(raw_ostream &OS, AssignCndTy Cnd) {
+  static void printCondition(raw_ostream &OS, AssignCndTy &Cnd) {
     printCondition(OS, Cnd.first, Cnd.second);
   }
 };
@@ -558,7 +559,7 @@ public:
   void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
 
   // Compute the register assignments slack information, callable from lua.
-  void reportAssignmentSlacks();
+  void computeAssignmentSlacks();
 
   VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);

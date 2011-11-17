@@ -101,7 +101,7 @@ template<> struct BindingTraits<VASTModule> {
     C.def("getRetPortIdx",          &CurClass::getRetPortIdx);
     C.def("getRetPort",             &CurClass::getRetPort);
 
-    C.def("reportAssignmentSlacks", &CurClass::reportAssignmentSlacks);
+    C.def("computeAssignmentSlacks",&CurClass::computeAssignmentSlacks);
     return C;
   }
 
