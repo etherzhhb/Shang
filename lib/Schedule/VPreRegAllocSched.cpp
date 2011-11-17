@@ -186,7 +186,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   void cleanUpRegisterClass(const TargetRegisterClass *RC);
-  void fixCmpFUPort();
   void fixSubModuleReturnPort();
 
   bool doInitialization(Module &M) {
@@ -889,7 +888,6 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
 
 void VPreRegAllocSched::cleanUpSchedule() {
   cleanUpRegisterClass(VTM::DRRegisterClass);
-  fixCmpFUPort();
   fixSubModuleReturnPort();
 }
 
@@ -940,34 +938,6 @@ static void addSubRegIdx(unsigned Reg, unsigned SubReg,
 
   for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I)
     I.getOperand().setSubReg(SubReg);
-}
-
-void VPreRegAllocSched::fixCmpFUPort() {
-  // And Emit the wires defined in this module.
-  const std::vector<unsigned>& Cmps =
-    MRI->getRegClassVirtRegs(VTM::RUCMPRegisterClass);
-
-  for (std::vector<unsigned>::const_iterator I = Cmps.begin(), E = Cmps.end();
-       I != E; ++I) {
-    unsigned SrcReg = *I;
-    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
-
-    if (DI == MRI->def_end() || MRI->use_empty(SrcReg))
-      continue;
-
-    assert(!DI->isPHI() && "PHI with RUCMPRegister is not supported!");
-
-    assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
-    // Do not remove the operand, just change it to implicit define.
-    ucOp Op = ucOp::getParent(DI);
-    if (Op->isOpcode(VTM::VOpICmp)) {
-      unsigned SubRegIdx = VFUs::getICmpPort(Op.getOperand(3).getImm());
-      addSubRegIdx(SrcReg, SubRegIdx, MRI);
-      continue;
-    }
-
-    llvm_unreachable("Unsupported opcode!");
-  }
 }
 
 static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {

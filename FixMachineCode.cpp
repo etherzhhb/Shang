@@ -93,27 +93,27 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
 
-      //if (Inst->getOpcode() == VTM::VOpICmp) {
-      //  MachineOperand &DefMO = Inst->getOperand(0);
-      //  unsigned DefReg = DefMO.getReg();
-      //  unsigned NewReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
-      //  DefMO.setReg(NewReg);
-      //  DefMO.setTargetFlags(8);
+      if (Inst->getOpcode() == VTM::VOpICmp) {
+        MachineOperand &DefMO = Inst->getOperand(0);
+        unsigned DefReg = DefMO.getReg();
+        unsigned NewReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
+        DefMO.setReg(NewReg);
+        DefMO.setTargetFlags(8);
 
-      //  unsigned Idx = VFUs::getICmpPort(Inst->getOperand(3).getImm());
-      //  MachineOperand UB = MachineOperand::CreateImm(Idx + 1);
-      //  UB.setTargetFlags(8);
-      //  MachineOperand LB = MachineOperand::CreateImm(Idx);
-      //  LB.setTargetFlags(8);
+        unsigned Idx = VFUs::getICmpPort(Inst->getOperand(3).getImm());
+        MachineOperand UB = MachineOperand::CreateImm(Idx + 1);
+        UB.setTargetFlags(8);
+        MachineOperand LB = MachineOperand::CreateImm(Idx);
+        LB.setTargetFlags(8);
 
-      //  BuildMI(*MBB, II, DebugLoc(), TII->get(VTM::VOpBitSlice))
-      //    .addOperand(ucOperand::CreateReg(DefReg, 1, true))
-      //    .addOperand(ucOperand::CreateReg(NewReg, 1, false))
-      //    .addOperand(UB).addOperand(LB)
-      //    .addOperand(ucOperand::CreatePredicate())
-      //    .addOperand(ucOperand::CreateTrace(MBB));
-      //  continue;
-      //}
+        BuildMI(*MBB, II, DebugLoc(), TII->get(VTM::VOpBitSlice))
+          .addOperand(ucOperand::CreateReg(DefReg, 1, true))
+          .addOperand(ucOperand::CreateReg(NewReg, 1, false))
+          .addOperand(UB).addOperand(LB)
+          .addOperand(ucOperand::CreatePredicate())
+          .addOperand(ucOperand::CreateTrace(MBB));
+        continue;
+      }
 
       // Try to merge the Select to improve parallelism.
       mergeSel(Inst, MRI, TII);
