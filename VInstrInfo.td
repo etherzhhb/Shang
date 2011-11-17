@@ -231,12 +231,14 @@ let isReMaterializable = 1,
   def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                        "$dst = sra $src0, $src1", [], FUSHIFT,
                        0 /*writeUntilFinish*/>;
+
+  // Integer comparison
+  let isCompare = 1 in
+    def VOpICmp   : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1, i8imm:$CC),
+                           "$dst = icmp $src0, $src1 $CC", [], FUICmp,
+	                       0 /*writeUntilFinish*/>;
 }
 
-// Integer comparison
-def VOpICmp   : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1, i8imm:$CC),
-                       "$dst = icmp $src0, $src1 $CC", [], FUICmp,
-					    0 /*writeUntilFinish*/>;
 // Memory transaction.
 let mayLoad      = 1,
     mayStore    = 1 in {
