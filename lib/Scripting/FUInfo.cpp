@@ -89,13 +89,13 @@ namespace llvm {
 
     // Default area cost parameter.
     unsigned LUTCost = 64;
-    unsigned RegCost = 48;
-    unsigned MUXCost = 64;
+    unsigned RegCost = 64;
+    unsigned MUXCost = 72;
     unsigned AddCost = 64;
-    unsigned MulCost = 128;
-    unsigned ShiftCost = 256;
-    unsigned ICmpCost = 32;
-    unsigned MuxSizeCost = 56;
+    unsigned MulCost = 96;
+    unsigned ShiftCost = 192;
+    unsigned ICmpCost = 64;
+    unsigned MuxSizeCost = 72;
 
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
     double AdderLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
