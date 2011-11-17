@@ -29,6 +29,18 @@
 #include "VGenInstrInfo.inc"
 using namespace llvm;
 
+//----------------------------------------------------------------------------//
+// Halper function.
+static MachineInstr *addOperandsToMI(MachineInstr *MI,
+                                     ArrayRef<MachineOperand> Ops) {
+  for (unsigned i = 0; i < Ops.size(); ++i)
+    MI->addOperand(Ops[i]);
+
+  return MI;
+}
+
+//----------------------------------------------------------------------------//
+// VInstrInfo implementation.
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= VTM::COPY) return 0;
 
@@ -64,6 +76,91 @@ bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
     return (Pred->isReg() && Pred->getReg() != 0);
 
   return false;
+}
+
+void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
+  if (CopyMI->getOperand(1).isReg())
+    CopyMI->setDesc(VTMInsts[VTM::VOpMove_rr]);
+  else
+    CopyMI->setDesc(VTMInsts[VTM::VOpMove_ri]);
+  
+  CopyMI->addOperand(ucOperand::CreatePredicate());
+  CopyMI->addOperand(ucOperand::CreateTrace(CopyMI->getParent()));
+}
+
+bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
+                               unsigned Reg, MachineRegisterInfo *MRI) const {
+  // Do not mess up with bitslice at the moment.
+  if (UseMI->getOpcode() == VTM::VOpBitSlice)
+    return false;
+
+  // Simply change the machine operand in UseMI to imediate.
+  MachineOperand &ImmediateMO = DefMI->getOperand(1);
+  unsigned char ImmediateTFs = ImmediateMO.getTargetFlags();
+  
+  typedef MachineInstr::mop_iterator it;
+  if (ImmediateMO.isImm()) {
+    int64_t ImmediateValue = ImmediateMO.getImm();
+
+    typedef MachineInstr::mop_iterator it;
+    for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
+      MachineOperand &MO = *I;
+      if (MO.isReg() && MO.getReg() == Reg) {
+        assert(MO.getTargetFlags() == ImmediateTFs
+          && "Folding immediate with different Bitwidth?");
+        MO.ChangeToImmediate(ImmediateValue);
+      }
+    }
+  } else {
+    // Else we need to rebuild the UserMI.
+    SmallVector<MachineOperand, 6> MOs;
+    for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
+      MachineOperand &MO = *I;
+      // Are we going to replace the operand?
+      if (MO.isReg() && MO.getReg() == Reg) {
+        assert(MO.getTargetFlags() == ImmediateTFs
+          && "Folding immediate with different Bitwidth?");
+        MOs.push_back(ImmediateMO);
+        continue;
+      }
+
+      MOs.push_back(MO);
+    }
+
+    while (UseMI->getNumOperands())
+      UseMI->RemoveOperand(UseMI->getNumOperands() - 1);
+    addOperandsToMI(UseMI, MOs);
+  }
+
+  // Are we fold a immediate into a copy?
+  if (UseMI->isCopy())  ChangeCopyToMove(UseMI);
+
+  return true;
+}
+
+MachineInstr *VInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI)const{
+  const TargetInstrDesc &TID = MI->getDesc();
+  bool HasDef = TID.getNumDefs();
+  assert(HasDef && MI->getOperand(0).isReg() && "Bad instruction to commute!");
+  // Build the operand list and swap the operands to cummuted.
+  SmallVector<MachineOperand, 6> MOs;
+  typedef MachineInstr::mop_iterator it;
+  for (it I = MI->operands_begin(), E = MI->operands_end(); I != E; ++I)
+    MOs.push_back(*I);
+
+  if (TID.getOpcode() == VTM::VOpAdd) std::swap(MOs[2], MOs[3]);
+  else                                std::swap(MOs[1], MOs[2]);
+
+  // Build a empty MI or clear the operands in the original MI, and re-insert
+  // the operands to MI.
+  if (NewMI) {
+    MachineFunction &MF = *MI->getParent()->getParent();
+    MI = BuildMI(MF, MI->getDebugLoc(), TID);
+  } else
+    while (MI->getNumOperands())
+      MI->RemoveOperand(MI->getNumOperands() - 1);
+
+  return addOperandsToMI(MI, MOs);
 }
 
 bool VInstrInfo::isUnpredicatedTerminator(const MachineInstr *MI) const{
@@ -507,15 +604,6 @@ MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
     Src.setIsWire();
   Builder.addOperand(Src);
   return &*Builder;
-}
-
-static MachineInstr *addOperandsToMI(MachineInstr *MI,
-                                     SmallVectorImpl<MachineOperand> &Ops) {
-  for (SmallVectorImpl<MachineOperand>::iterator I = Ops.begin(), E = Ops.end();
-    I != E; ++I)
-    MI->addOperand(*I);
-
-  return MI;
 }
 
 MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,

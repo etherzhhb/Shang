@@ -59,8 +59,8 @@ struct FixMachineCode : public MachineFunctionPass {
                       MachineOperand Cnd,
                       MachineRegisterInfo &MRI, const TargetInstrInfo *TII);
 
-  void eliminateMVImm(std::vector<MachineInstr*> &Worklist,
-                      MachineRegisterInfo &MRI);
+  void FoldImmediate(std::vector<MachineInstr*> &ImmToFold,
+                     MachineRegisterInfo &MRI, const TargetInstrInfo *TII);
 
   const char *getPassName() const {
     return "Fix machine code for Verilog backend";
@@ -73,8 +73,8 @@ char FixMachineCode::ID = 0;
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
+  std::vector<MachineInstr*> ImmToFold;
 
-  std::vector<MachineInstr*> Imms;
    // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
     MachineBasicBlock *MBB = BI;
@@ -86,10 +86,11 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
       if (handleImplicitDefs(Inst, MRI, TII)) continue;
 
+      if (Inst->isCopy()) VInstrInfo::ChangeCopyToMove(Inst);
+
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri
-          || (Inst->getOpcode() == VTM::COPY && Inst->getOperand(1).isImm())) {
-        Imms.push_back(Inst);
+      if (Inst->getOpcode() == VTM::VOpMove_ri) {
+        ImmToFold.push_back(Inst);
         continue;
       }
 
@@ -120,7 +121,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  eliminateMVImm(Imms, MRI);
+  FoldImmediate(ImmToFold, MRI, TII);
 
   return true;
 }
@@ -154,67 +155,26 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI,
   return false;
 }
 
-void FixMachineCode::eliminateMVImm(std::vector<MachineInstr*> &Worklist,
-                                    MachineRegisterInfo &MRI) {
-  if (Worklist.empty()) return;
-
-  SmallVector<MachineOperand, 8> Ops;
-  // Find all replaceable operand.
-  std::vector<std::pair<MachineInstr*, unsigned> > ImmUsers;
-
-  while (!Worklist.empty()) {
-    MachineInstr *MI = Worklist.back();
-    Worklist.pop_back();
+void FixMachineCode::FoldImmediate(std::vector<MachineInstr*> &ImmToFold,
+                                   MachineRegisterInfo &MRI,
+                                   const TargetInstrInfo *TII) {
+  while (!ImmToFold.empty()) {
+    MachineInstr *MI = ImmToFold.back();
+    ImmToFold.pop_back();
 
     unsigned DstReg = MI->getOperand(0).getReg();
-    // Perform the replacement.
-    MachineOperand Imm = MI->getOperand(1);
 
     for (MachineRegisterInfo::use_iterator I = MRI.use_begin(DstReg),
           E = MRI.use_end(); I != E; /*++I*/) {
-      MachineInstr &MI = *I;
-      unsigned OpNo = I.getOperandNo();
-      MachineOperand &MO = I.getOperand();
+      MachineInstr &UserIM = *I;
       ++I;
 
       // Only replace if user is not a PHINode.
-      if (MI.getOpcode() == VTM::PHI) continue;
+      if (UserIM.getOpcode() == VTM::PHI) continue;
 
-      if (Imm.isImm()) {
-        // Dirty Hack: Do not eliminate the immediate if the user is
-        // BitSlice operation.
-        if (MI.getOpcode() != VTM::VOpBitSlice) {
-          MO.ChangeToImmediate(Imm.getImm());
-          MO.setTargetFlags(Imm.getTargetFlags());
-        }
-
-        continue;
-      }
-
-      ImmUsers.push_back(std::make_pair(&MI, OpNo));
-    }
-
-    // Perform the replacement.
-    Imm.clearParent();
-
-    while (!ImmUsers.empty()) {
-      MachineInstr *User = ImmUsers.back().first;
-      unsigned Idx = ImmUsers.back().second;
-      ImmUsers.pop_back();
-
-      unsigned NumOps = User->getNumOperands();
-      while (NumOps > 0) {
-        --NumOps;
-        if (NumOps == Idx)
-          Ops.push_back(Imm);
-        else
-          Ops.push_back(User->getOperand(NumOps));
-
-        User->RemoveOperand(NumOps);
-      }
-
-      while (!Ops.empty())
-        User->addOperand(Ops.pop_back_val());
+      if (TII->FoldImmediate(&UserIM, MI, DstReg, &MRI))
+        if (UserIM.getOpcode() == VTM::VOpMove_ri)
+          ImmToFold.push_back(&UserIM);
     }
 
     // Eliminate the instruction if it dead.
