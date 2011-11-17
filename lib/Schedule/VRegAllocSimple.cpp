@@ -574,12 +574,12 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
   }
 
   bool hasInCompatibleCC(unsigned CC) {
-    if (ISD::isSignedIntSetCC((ISD::CondCode)CC)) {
+    if (CC == VFUs::CmpSigned) {
       hasSignedCC = true;
       return hasUnsignedCC;
     }
 
-    if (ISD::isUnsignedIntSetCC((ISD::CondCode)CC)) {
+    if (CC == VFUs::CmpUnsigned) {
       hasUnsignedCC = true;
       return hasSignedCC;
     }

@@ -180,6 +180,16 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
                               Ops, array_lengthof(Ops));
 }
 
+static unsigned getICmpPort(unsigned CC) {
+  switch (CC) {
+  case ISD::SETNE: return 1;
+  case ISD::SETEQ: return 2;
+  case ISD::SETGE: case ISD::SETUGE: return 3;
+  case ISD::SETGT: case ISD::SETUGT: return 4;
+  default: llvm_unreachable("Unexpected condition code!");
+  }
+}
+
 SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
   CondCodeSDNode *Cnd = cast<CondCodeSDNode>(N->getOperand(2));
   SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
@@ -206,18 +216,46 @@ SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
   default: llvm_unreachable("Unexpected CondCode!");
   }
 
+  unsigned CmpType = (CC == ISD::SETEQ || CC == ISD::SETNE) ? VFUs::CmpEQ
+                               : (ISD::isSignedIntSetCC(CC) ? VFUs::CmpSigned
+                                                            : VFUs::CmpUnsigned);
+
   SDValue Ops[] = { MoveToReg(LHS, true),
                     MoveToReg(RHS, true),
                     // Encode the operand width to the condition code width.
-                    CurDAG->getTargetConstant(CC, FUVT),
+                    CurDAG->getTargetConstant(CmpType, FUVT),
                     SDValue()/*The dummy bit width operand*/,
                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
                   };
-
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
+  // DirtyHack: Fix the bitwidth of icmp result.
+  BitWidthAnnotator CmpAnnotator(cast<ConstantSDNode>(Ops[3])->getZExtValue());
+  CmpAnnotator.setBitWidth(8, 0);
+  Ops[3] = CurDAG->getTargetConstant(CmpAnnotator.get(), MVT::i64);
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpICmp, N->getVTList(),
-    Ops, array_lengthof(Ops));
+  SDNode *CmpNode = CurDAG->getMachineNode(VTM::VOpICmp, N->getDebugLoc(),
+                                           N->getVTList(),
+                                           Ops, array_lengthof(Ops));
+  // Read the result from specific bit of the result.
+  unsigned ResultPort = getICmpPort(CC);
+  BitWidthAnnotator Annotator;
+  Annotator.setBitWidth(1, 0);
+  Annotator.setBitWidth(8, 1);
+  Annotator.setBitWidth(8, 2);
+  Annotator.setBitWidth(8, 3);
+  SDValue ResOps[] = { SDValue(CmpNode, 0),
+                       // UB
+                       CurDAG->getTargetConstant(ResultPort + 1, MVT::i8),
+                       // LB
+                       CurDAG->getTargetConstant(ResultPort,     MVT::i8),
+                       // Bitwidth operand
+                       CurDAG->getTargetConstant(Annotator.get(), MVT::i64),
+                       // Trace number
+                       CurDAG->getTargetConstant(0, MVT::i64)
+                     };
+
+  return CurDAG->SelectNodeTo(N, VTM::VOpBitSlice, N->getVTList(),
+                              ResOps, array_lengthof(ResOps));
 }
 
 SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {

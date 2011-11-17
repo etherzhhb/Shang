@@ -68,7 +68,11 @@ namespace VFUs {
 
   extern const char *VFUNames[];
   const TargetRegisterClass *getRepRegisterClass(unsigned OpCode, unsigned idx);
-  unsigned getICmpPort(unsigned CC);
+
+  enum ICmpFUType {
+    CmpEQ, CmpSigned, CmpUnsigned
+  };
+
   static const int RetPortOffset = 1;
 
   // Ports layout: Clk, Rst, En, Fin, ouput0, output1 ...
