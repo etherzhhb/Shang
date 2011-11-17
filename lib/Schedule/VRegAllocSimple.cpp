@@ -235,6 +235,10 @@ struct SourceChecker {
   unsigned SrcNum[NUMSRC];
   unsigned ExtraCost;
   // TODO: Timing cost.
+  // The more predicate value we have, the bigger latency will get to select
+  // a value from the mux value.
+  unsigned PredNum;
+  SmallSet<uint64_t, 4> Preds;
 
   SourceChecker() {}
 
@@ -255,6 +259,14 @@ struct SourceChecker {
       ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
     else
       ExtraCost += /*Reg Mux Cost Pre-bit*/ VFUs::MuxSizeCost;
+  }
+
+  void addPred(ucOperand &PredOp) {
+    // Ignore the trivial predicate.
+    if (VInstrInfo::isAlwaysTruePred(PredOp)) return;
+    // Model the inverted preciate as sub-register
+    Preds.insert(getRegKey(PredOp.getReg(), 0, PredOp.getTargetFlags()));
+    ++PredNum;
   }
 
   template<int N>
