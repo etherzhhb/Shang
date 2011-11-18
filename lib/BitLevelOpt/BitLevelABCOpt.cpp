@@ -63,23 +63,19 @@ namespace {
     bool runOnMachineFunction(MachineFunction &MF);
 
     // Store the information of the MachineOperand.
-    // The MachineOperand may be used as input or output.
-    // The difference between them is that output is defined and the input is not,
-    // so they have different attributes, store both of them.
     struct RegInfo {
-      MachineOperand MOOut;       // The output MO.
-      MachineOperand MOIn;        // The input MO.
-      MachineInstr *MI;           // The MachineInstr which the output MO is MOOut.
-      unsigned width;             // The width of the MO.
-      unsigned pointerInVec;      // The pointer of the vector which stores Abc_Obj_t,
+      MachineOperand MO;            // The MO.
+      MachineInstr *MI;             // The MachineInstr which the output MO is MOOut.
+      unsigned width;               // The width of the MO.
+      unsigned pointerInVec;       // The pointer of the vector which stores Abc_Obj_t,
       // it will be used when we construct MIs.
       int numInput;                // The number of MO as input.
       int numOutput;               // The number of MO as output.
 
       // Default construct function.
       RegInfo()
-        : MOOut(MachineOperand::CreateReg(0, false)), MOIn(MachineOperand::CreateReg(0, false)),
-          width(0), pointerInVec(0), numInput(0), numOutput(0) {}
+        : MO(MachineOperand::CreateReg(0, false)),width(0),
+          pointerInVec(0), numInput(0), numOutput(0) {}
     };
 
     // Store the information of the newly constructed MI.
@@ -87,7 +83,7 @@ namespace {
       unsigned MIOpcode;        // Opcode.
       int MOIn0;                // First input reg number.
       int MOIn1;                // Second input reg number, it is useless for inv
-      // instruction.
+                                 // instruction.
     };
 
     // Get reg number from the name of Abc_Obj_t.
@@ -101,6 +97,16 @@ namespace {
 
     // Dump MOOutInfo, just for debugging.
     void dumpMOOutInfo(std::map<int, InstrInfo>MOOutInfo);
+
+    // Store output MO information.
+    unsigned storeOutputMOInfo(MachineInstr *Instr, MachineOperand &MO,
+                               std::map<unsigned, RegInfo> &MOInfoMap,
+                               SmallVector<Abc_Obj_t*, 128> &NodeVec);
+
+    // Store input MO information.
+    unsigned storeInputMOInfo(MachineInstr *Instr, MachineOperand &MO,
+                              std::map<unsigned, RegInfo> &MOInfoMap,
+                              SmallVector<Abc_Obj_t*, 128> &NodeVec);
 
     // Construct Abc_Ntk_t from a MBB, and store the information into different maps.
     void constructABCNtk(MachineBasicBlock *MBB, Abc_Ntk_t* pABC,
@@ -208,12 +214,8 @@ bool BitLevelABCOpt::runOnMachineFunction(MachineFunction &MF) {
     SmallVector<MachineInstr*, 16> MIDeleted;
     constructABCNtk(BI, pABC, MOInfoMap, NodeVec, MIDeleted);
 
-    // dumpNtk(pABC, true);
-    //char *FileOut = "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\3.blif";
-    DEBUG(Io_Write(pABC, "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\3.blif",
-                   IO_FILE_BLIF));
 
-    // Get the information from ABC network and construct the MachineInstr.
+    // Get the information from AIG network and construct the MachineInstr.
 
     MachineBasicBlock &MBB = *BI;
 
@@ -228,16 +230,12 @@ bool BitLevelABCOpt::runOnMachineFunction(MachineFunction &MF) {
 
     //Iterate all the primary outputs and traverse the binary tree.
     int PoNum;
-    for (PoNum = 0; PoNum < Abc_NtkPoNum(pABC); ) {
+    for (PoNum = 0; PoNum < Abc_NtkPoNum(pABC); PoNum++) {
       // The root obj.
       Abc_Obj_t *objOut = Abc_NtkPo(pABC, PoNum);
-      // Get the width of the original reg.
-      int RegWidth = MOInfoMap[getRegNo(objOut)].width;
       // The original MachineInstruction,
       // before which the newly created ones will insert.
       MachineInstr *Instr = MOInfoMap[getRegNo(objOut)].MI;
-      // Skip the same outputs.
-      PoNum += RegWidth;
 
       // Do the binary tree traversal.
       traverseBinaryTree(objOut,NodeStack);
@@ -260,25 +258,25 @@ bool BitLevelABCOpt::runOnMachineFunction(MachineFunction &MF) {
 
 int BitLevelABCOpt::getRegNo(Abc_Obj_t *obj) {
   // Get the reg number from the name of Abc_Obj_t.
-  // The format of the name: regXX_YY.
-  // XX is the reg number, and YY is the ID of the object.
+  // The format of the name: regXX.
+  // XX is the reg number.
   char *Name = Abc_ObjName(obj);
   int RegNo;
   if (Name[0] == 'r' && Name[1] == 'e' && Name[2] == 'g') {
-    if (Name[4] == '_') {
+    if (Name[4] =='\0') {
       RegNo = Name[3] - '0';
     }
     else
-      if (Name[5] == '_') {
+      if (Name[5] == '\0') {
         RegNo = (Name[3] - '0') * 10 + Name[4] - '0';
       }
       else
-        if (Name[6] == '_') {
+        if (Name[6] == '\0') {
           RegNo = (Name[3] - '0') * 100 + (Name[4] - '0') * 10
             + Name[5] - '0';
         }
         else
-          if (Name[7] == '_') {
+          if (Name[7] == '\0') {
             RegNo = (Name[3] - '0') * 1000 + (Name[4] - '0') * 100
               + (Name[5] - '0') * 10 + Name[6] - '0';
           }
@@ -289,11 +287,15 @@ int BitLevelABCOpt::getRegNo(Abc_Obj_t *obj) {
 }
 
 void BitLevelABCOpt::dumpNtk(Abc_Ntk_t *pABC, bool blif) {
-  char *dstpath = "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\1.blif";
-  if (blif)
-    DEBUG(Io_Write(pABC, dstpath, IO_FILE_BLIF));
-  else
-    DEBUG(Io_Write(pABC, dstpath, IO_FILE_VERILOG));
+  std::string dstpath = "D:\\cygwin\\home\\eric\\work\\Debug\\ABC\\";
+  if (blif) {
+    dstpath += "1.blif";
+    DEBUG(Io_Write(pABC, const_cast<char*>(dstpath.c_str()), IO_FILE_BLIF));
+  }
+  else {
+    dstpath += "2.blif";
+    DEBUG(Io_Write(pABC, const_cast<char*>(dstpath.c_str()), IO_FILE_BLIF));
+  }
 }
 
 void BitLevelABCOpt::dumpMOInfoMap(std::map<unsigned, RegInfo>MOInfoMap) {
@@ -302,7 +304,7 @@ void BitLevelABCOpt::dumpMOInfoMap(std::map<unsigned, RegInfo>MOInfoMap) {
   for (std::map<unsigned, RegInfo>::iterator IMap = MOInfoMap.begin(), EMap = MOInfoMap.end();
        IMap != EMap; IMap++, i++) {
     if (IMap->second.numInput) {
-      MachineOperand MO = IMap->second.MOIn;
+      MachineOperand MO = IMap->second.MO;
       bool isKill = MO.isKill();
       bool isDef = MO.isDef();
       int MOOutReg = TargetRegisterInfo::virtReg2Index(MO.getReg());
@@ -312,7 +314,7 @@ void BitLevelABCOpt::dumpMOInfoMap(std::map<unsigned, RegInfo>MOInfoMap) {
                     << " isDef: " << isDef << "\n");
     }
     if (IMap->second.numOutput) {
-      MachineOperand MO = IMap->second.MOOut;
+      MachineOperand MO = IMap->second.MO;
       bool isKill = MO.isKill();
       bool isDef = MO.isDef();
       int MOOutReg = TargetRegisterInfo::virtReg2Index(MO.getReg());
@@ -341,6 +343,39 @@ void BitLevelABCOpt::dumpMOOutInfo(std::map<int, InstrInfo>MOOutInfo) {
   }
 }
 
+unsigned BitLevelABCOpt::storeOutputMOInfo(MachineInstr *Instr, MachineOperand &MO,
+                                           std::map<unsigned, RegInfo> &MOInfoMap,
+                                           SmallVector<Abc_Obj_t*, 128> &NodeVec) {
+  unsigned MONum = TargetRegisterInfo::virtReg2Index(MO.getReg());
+  int MOWidth = cast<ucOperand>(MO).getBitWidth();
+  if (!MOInfoMap.count(MONum)) {
+    // Store the information of MO.
+    MO.setIsDef(false);
+    MOInfoMap[MONum].MO = MO;
+    MOInfoMap[MONum].MI = Instr;
+    MOInfoMap[MONum].numOutput += 1;
+    MOInfoMap[MONum].width = MOWidth;
+  }
+  return MONum;
+}
+
+unsigned BitLevelABCOpt::storeInputMOInfo(MachineInstr *Instr, MachineOperand &MO,
+                                          std::map<unsigned, RegInfo> &MOInfoMap,
+                                          SmallVector<Abc_Obj_t*, 128> &NodeVec) {
+  unsigned MONum = TargetRegisterInfo::virtReg2Index(MO.getReg());
+  int MOWidth = cast<ucOperand>(MO).getBitWidth();
+  if (!MOInfoMap.count(MONum)) {
+    MO.setIsKill(false);
+    MOInfoMap[MONum].MO = MO;
+    MOInfoMap[MONum].numInput += 1;
+    MOInfoMap[MONum].width = MOWidth;
+  }
+  else {
+    MOInfoMap[MONum].numInput += 1;
+  }
+  return MONum;
+}
+
 void BitLevelABCOpt::constructABCNtk(MachineBasicBlock *MBB, Abc_Ntk_t* pABC,
                                      std::map<unsigned, RegInfo> &MOInfoMap,
                                      SmallVector<Abc_Obj_t*, 128> &NodeVec,
@@ -363,6 +398,7 @@ void BitLevelABCOpt::constructABCNtk(MachineBasicBlock *MBB, Abc_Ntk_t* pABC,
     default:break;
     }
   }
+  Abc_AigCleanup((Abc_Aig_t *)pABC->pManFunc);
 }
 
 void BitLevelABCOpt::constructABCInstr(MachineInstr *Instr,
@@ -372,96 +408,70 @@ void BitLevelABCOpt::constructABCInstr(MachineInstr *Instr,
                                        ) {
   // Output MO.
   MachineOperand MO0 = Instr->getOperand(0);
-  unsigned MO0Num = TargetRegisterInfo::virtReg2Index(MO0.getReg());
-  int MOWidth = cast<ucOperand>(Instr->getOperand(0)).getBitWidth();
-  if (!MOInfoMap.count(MO0Num)) {
-    // Store the information of MO.
-    MOInfoMap[MO0Num].MOOut = MO0;
-    MOInfoMap[MO0Num].MI = Instr;
-    MOInfoMap[MO0Num].pointerInVec = NodeVec.size();
-    MOInfoMap[MO0Num].numOutput += 1;
-    MOInfoMap[MO0Num].width = MOWidth;
-  }
+  unsigned MO0Num = storeOutputMOInfo(Instr, MO0, MOInfoMap, NodeVec);
 
   // First input MO.
   MachineOperand MO1 = Instr->getOperand(1);
-  unsigned MO1Num = TargetRegisterInfo::virtReg2Index(MO1.getReg());
-  if (!MOInfoMap.count(MO1Num)) {
-    MO1.setIsKill(false);
-    MOInfoMap[MO1Num].MOIn = MO1;
-    MOInfoMap[MO1Num].pointerInVec = ~0;
-    MOInfoMap[MO1Num].numInput += 1;
-    MOInfoMap[MO1Num].width = MOWidth;
-  }
-  else {
-    MO1.setIsKill(false);
-    MOInfoMap[MO1Num].MOIn = MO1;
-    MOInfoMap[MO1Num].numInput += 1;
-  }
+  unsigned MO1Num = storeInputMOInfo(Instr, MO1, MOInfoMap, NodeVec);
 
   // Second input MO.
   MachineOperand MO2 = Instr->getOperand(2);
-  unsigned MO2Num = TargetRegisterInfo::virtReg2Index(MO2.getReg());
-  if (!MOInfoMap.count(MO2Num)) {
-    MO2.setIsKill(false);
-    MOInfoMap[MO2Num].MOIn = MO2;
-    MOInfoMap[MO2Num].pointerInVec = ~0;
-    MOInfoMap[MO2Num].numInput += 1;
-    MOInfoMap[MO2Num].width = MOWidth;
-  }
-  else {
-    MO2.setIsKill(false);
-    MOInfoMap[MO2Num].MOIn = MO2;
-    MOInfoMap[MO2Num].numInput += 1;
-  }
+  unsigned MO2Num = storeInputMOInfo(Instr, MO2, MOInfoMap, NodeVec);
 
   // construct ABC instruction.
   Abc_Obj_t *objIn1, *objIn2, *objOut, *Output;
-  int i;
-  char RegIn1Name[10], RegIn2Name[10], RegOutName[10];
-  // The width of the instruction is 1 bit, so if the width of reg is 32 bits,
-  // then 32 instructions will be created.
-  for (i = 0; i < MOWidth; i++) {
-    // Input obj.
-    //If the obj exists as output before, use it, else create a new one.
-    if (MOInfoMap[MO1Num].numOutput)
-      objIn1 = NodeVec[MOInfoMap[MO1Num].pointerInVec + i];
-    else {
-      objIn1 = Abc_NtkCreatePi(pABC);
-      // Set the name of the obj.
-      sprintf(RegIn1Name, "reg%d_%d", (int)MO1Num, i);
-      Abc_ObjAssignName(objIn1, RegIn1Name, NULL);
-    }
-    if (MOInfoMap[MO2Num].numOutput)
-      objIn2 = NodeVec[MOInfoMap[MO2Num].pointerInVec + i];
-    else {
-      objIn2 = Abc_NtkCreatePi(pABC);
-      sprintf(RegIn2Name, "reg%d_%d", (int)MO2Num, i);
-      Abc_ObjAssignName(objIn2, RegIn2Name, NULL);
-    }
-    // Create output obj.
-    switch(Instr->getOpcode()) {
-    case VTM::VOpAnd:
-      objOut = Abc_AigAnd((Abc_Aig_t *)pABC->pManFunc, objIn1, objIn2);
-      break;
-    case VTM::VOpXor:
-      objOut = Abc_AigXor((Abc_Aig_t *)pABC->pManFunc, objIn1, objIn2);
-      break;
-    case VTM::VOpOr:
-      objOut = Abc_AigOr((Abc_Aig_t *)pABC->pManFunc, objIn1, objIn2);
-      break;
-    default:
-      break;
-    }
-    NodeVec.push_back(objOut);
-    // Connect the output obj to primary output.
-    Output = Abc_NtkCreatePo(pABC);
-    Abc_ObjAddFanin(Output, objOut);
-    // Set the name of the PO.
-    sprintf(RegOutName, "reg%d_%d", (int)MO0Num, i);
-    Abc_ObjAssignName(Output, RegOutName, NULL);
+  // The width of the instruction is 1 bit, here we don't take care
+  // the width information of the reg, so it can represent the relationship
+  // of the input and output reg.
+  //
+  // Input obj.
+  // When the numInput is larger than 1 or the numOutput is not 0,
+  // it means that the Abc_Obj_t has been created, use it.
+  // Else, create a new one.
+  if (MOInfoMap[MO1Num].numInput > 1 || MOInfoMap[MO1Num].numOutput) {
+    objIn1 = NodeVec[MOInfoMap[MO1Num].pointerInVec];
   }
-  Abc_AigCleanup((Abc_Aig_t *)pABC->pManFunc);
+  else {
+    objIn1 = Abc_NtkCreatePi(pABC);
+    // Set the name of the obj.
+    std::string RegIn1Name = "reg" + utostr_32(MO1Num);
+    Abc_ObjAssignName(objIn1, const_cast<char*>(RegIn1Name.c_str()), NULL);
+    // Store the obj into the vector.
+    MOInfoMap[MO1Num].pointerInVec = NodeVec.size();
+    NodeVec.push_back(objIn1);
+  }
+  if (MOInfoMap[MO2Num].numInput > 1 || MOInfoMap[MO2Num].numOutput)
+    objIn2 = NodeVec[MOInfoMap[MO2Num].pointerInVec];
+  else {
+    objIn2 = Abc_NtkCreatePi(pABC);
+    std::string RegIn2Name = "reg" + utostr_32(MO2Num);
+    Abc_ObjAssignName(objIn2, const_cast<char*>(RegIn2Name.c_str()), NULL);
+    MOInfoMap[MO2Num].pointerInVec = NodeVec.size();
+    NodeVec.push_back(objIn2);
+  }
+  // Create output obj.
+  switch(Instr->getOpcode()) {
+  case VTM::VOpAnd:
+    objOut = Abc_AigAnd((Abc_Aig_t *)pABC->pManFunc, objIn1, objIn2);
+    break;
+  case VTM::VOpXor:
+    objOut = Abc_AigXor((Abc_Aig_t *)pABC->pManFunc, objIn1, objIn2);
+    break;
+  case VTM::VOpOr:
+    objOut = Abc_AigOr((Abc_Aig_t *)pABC->pManFunc, objIn1, objIn2);
+    break;
+  default:
+    break;
+  }
+  // Store the obj into the vector.
+  MOInfoMap[MO0Num].pointerInVec = NodeVec.size();
+  NodeVec.push_back(objOut);
+  // Connect the output obj to primary output.
+  Output = Abc_NtkCreatePo(pABC);
+  Abc_ObjAddFanin(Output, objOut);
+  // Set the name of the PO.
+  std::string RegOutName = "reg" + utostr_32(MO0Num);
+  Abc_ObjAssignName(Output, const_cast<char*>(RegOutName.c_str()), NULL);
 }
 
 void BitLevelABCOpt::constructInvABCInstr(MachineInstr *Instr,
@@ -471,61 +481,47 @@ void BitLevelABCOpt::constructInvABCInstr(MachineInstr *Instr,
                                           ) {
   // Output MO.
   MachineOperand MO0 = Instr->getOperand(0);
-  unsigned MO0Num = TargetRegisterInfo::virtReg2Index(MO0.getReg());
-  int MOWidth = cast<ucOperand>(MO0).getBitWidth();
-  if (!MOInfoMap.count(MO0Num)) {
-    // Store the information of the MO.
-    MOInfoMap[MO0Num].MOOut = MO0;
-    MOInfoMap[MO0Num].MI = Instr;
-    MOInfoMap[MO0Num].pointerInVec = NodeVec.size();
-    MOInfoMap[MO0Num].numOutput += 1;
-    MOInfoMap[MO0Num].width = MOWidth;
-  }
+  unsigned MO0Num = storeOutputMOInfo(Instr, MO0, MOInfoMap, NodeVec);
 
   // Input MO.
   MachineOperand MO1 = Instr->getOperand(1);
-  unsigned MO1Num = TargetRegisterInfo::virtReg2Index(MO1.getReg());
-  if (!MOInfoMap.count(MO1Num)) {
-    MO1.setIsKill(false);
-    MOInfoMap[MO1Num].MOIn = MO1;
-    MOInfoMap[MO1Num].pointerInVec = ~0;
-    MOInfoMap[MO1Num].numInput += 1;
-    MOInfoMap[MO1Num].width = MOWidth;
-  }
-  else {
-    MO1.setIsKill(false);
-    MOInfoMap[MO1Num].MOIn = MO1;
-    MOInfoMap[MO1Num].numInput += 1;
-  }
+  unsigned MO1Num = storeInputMOInfo(Instr, MO1, MOInfoMap, NodeVec);
 
   // Construct ABC instruction.
   Abc_Obj_t *objIn, *objOut, *Output;
-  int i;
-  char RegInName[10], RegOutName[10];
-  // The width of the instruction is 1 bit, so if the width of reg is 32 bits,
-  // then 32 instructions will be created.
-  for (i = 0; i < MOWidth; i++) {
-    if (MOInfoMap[MO1Num].numOutput) {
-      objIn = NodeVec[MOInfoMap[MO1Num].pointerInVec + i];
-    }
-    else {
-      objIn = Abc_NtkCreatePi(pABC);
-      // Set the name of the obj.
-      sprintf(RegInName, "reg%d_%d", (int)MO1Num, i);
-      Abc_ObjAssignName(objIn, RegInName, NULL);
-    }
-    // Create the output obj.
-    objOut = Abc_ObjNot(objIn);
-    NodeVec.push_back(objOut);
-    // Create the primary output and connect it to the output obj.
-    Output = Abc_NtkCreatePo(pABC);
-    Abc_ObjAddFanin(Output, objOut);
-    // Set the name of the PO.
-    sprintf(RegOutName, "reg%d_%d", (int)MO0Num, i);
-    Abc_ObjAssignName(Output, RegOutName, NULL);
+  // The width of the instruction is 1 bit, here we don't take care
+  // the width information of the reg, so it can represent the relationship
+  // of the input and output reg.
+  //
+  // Input obj.
+  // When the numInput is larger than 1 or the numOutput is not 0,
+  // it means that the Abc_Obj_t has been created, use it.
+  // Else, create a new one.
+  if (MOInfoMap[MO1Num].numInput > 1 || MOInfoMap[MO1Num].numOutput) {
+    objIn = NodeVec[MOInfoMap[MO1Num].pointerInVec];
   }
-  Abc_AigCleanup((Abc_Aig_t *)pABC->pManFunc);
+  else {
+    objIn = Abc_NtkCreatePi(pABC);
+    // Set the name of the obj.
+    std::string RegIn1Name = "reg" + utostr_32(MO1Num);
+    Abc_ObjAssignName(objIn, const_cast<char*>(RegIn1Name.c_str()), NULL);
+    // Store the obj into the vector.
+    MOInfoMap[MO1Num].pointerInVec = NodeVec.size();
+    NodeVec.push_back(objIn);
+  }
+  // Create the output obj.
+  objOut = Abc_ObjNot(objIn);
+  // Store the obj into the vector.
+  MOInfoMap[MO0Num].pointerInVec = NodeVec.size();
+  NodeVec.push_back(objOut);
+  // Create the primary output and connect it to the output obj.
+  Output = Abc_NtkCreatePo(pABC);
+  Abc_ObjAddFanin(Output, objOut);
+  // Set the name of the PO.
+  std::string RegOutName = "reg" + utostr_32(MO0Num);
+  Abc_ObjAssignName(Output, const_cast<char*>(RegOutName.c_str()), NULL);
 }
+
 
 void BitLevelABCOpt::traverseBinaryTree(Abc_Obj_t *objOut,
                                         SmallVector<Abc_Obj_t*, 16> &NodeStack) {
@@ -722,13 +718,13 @@ int BitLevelABCOpt::getRegFromABCReg(const TargetInstrInfo *TII,
   MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
   (cast<ucOperand>(Dst)).setBitWidth(MOInfoMap[getRegNo(child)].width);
   MachineInstr *MI = BuildMI(MBB, Instr, DebugLoc(), TII->get(VTM::VOpNot))
-    .addOperand(Dst).addOperand(MOInfoMap[getRegNo(child)].MOIn)
+    .addOperand(Dst).addOperand(MOInfoMap[getRegNo(child)].MO)
     .addOperand(ucOperand::CreatePredicate())
     .addOperand(ucOperand::CreateTrace(&MBB));
   Dst.setIsDef(false);
   DEBUG(MI->dump());
   regNo = TargetRegisterInfo::virtReg2Index(DstReg);
-  MOInfoMap[regNo].MOIn = Dst;
+  MOInfoMap[regNo].MO = Dst;
   MOInfoMap[regNo].numInput += 1;
   MOInfoMap[regNo].width = MOInfoMap[getRegNo(child)].width;
   MOOutInfo[regNo].MIOpcode = VTM::VOpNot;
@@ -762,15 +758,15 @@ int BitLevelABCOpt::getRegFromABCNode(const TargetInstrInfo *TII,
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
   MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
   (cast<ucOperand>(Dst)).setBitWidth(MOInfoMap[NodeRegNo].width);
-  DEBUG(dbgs() <<"%%%%The input MachineOperand is " << MOInfoMap[NodeRegNo].MOIn << "\n");
+  DEBUG(dbgs() <<"%%%%The input MachineOperand is " << MOInfoMap[NodeRegNo].MO << "\n");
   MachineInstr *MI = BuildMI(MBB, Instr, DebugLoc(), TII->get(VTM::VOpNot))
-    .addOperand(Dst).addOperand(MOInfoMap[NodeRegNo].MOIn)
+    .addOperand(Dst).addOperand(MOInfoMap[NodeRegNo].MO)
     .addOperand(ucOperand::CreatePredicate())
     .addOperand(ucOperand::CreateTrace(&MBB));
   Dst.setIsDef(false);
   DEBUG(MI->dump());
   regNo = TargetRegisterInfo::virtReg2Index(DstReg);
-  MOInfoMap[regNo].MOIn = Dst;
+  MOInfoMap[regNo].MO = Dst;
   MOInfoMap[regNo].numInput += 1;
   MOInfoMap[regNo].width = MOInfoMap[NodeRegNo].width;
   MOOutInfo[regNo].MIOpcode = VTM::VOpNot;
@@ -821,10 +817,12 @@ void BitLevelABCOpt::createInvMachineInstr(const TargetInstrInfo *TII,
   }
 
   // Construct MachineInstruction.
-  MachineOperand MOIn0 = MOInfoMap[inRegNo].MOIn;
+  MachineOperand MOIn0 = MOInfoMap[inRegNo].MO;
   MachineOperand MOOut = MOIn0;
-  if (!NewFlag)
-    MOOut = MOInfoMap[outRegNo].MOOut;
+  if (!NewFlag) {
+    MOOut = MOInfoMap[outRegNo].MO;
+    MOOut.setIsDef(true);
+  }
   else {
     MOOut = MachineOperand::CreateReg(TargetRegisterInfo::index2VirtReg(outRegNo), true);
     (cast<ucOperand>(MOOut)).setBitWidth(MOInfoMap[inRegNo].width);
@@ -835,13 +833,14 @@ void BitLevelABCOpt::createInvMachineInstr(const TargetInstrInfo *TII,
     .addOperand(ucOperand::CreateTrace(&MBB));
   DEBUG(MI->dump());
   if (NewFlag) {
-    MOInfoMap[outRegNo].MOOut = MOOut;
+    //MOInfoMap[outRegNo].MO = MOOut;
     MOOut.setIsDef(false);
     NodeMapMO[father] = outRegNo;
-    MOInfoMap[outRegNo].MOIn = MOOut;
+    MOInfoMap[outRegNo].MO = MOOut;
+    MOInfoMap[outRegNo].width = MOInfoMap[inRegNo].width;
   }
   DEBUG(dbgs() << "output reg is " << outRegNo << "\n\n");
-  MOInfoMap[outRegNo].width = MOInfoMap[inRegNo].width;
+
   MOOutInfo[outRegNo].MIOpcode = VTM::VOpNot;
   MOOutInfo[outRegNo].MOIn0 = inRegNo;
   MOOutInfo[outRegNo].MOIn1 = ~0;
@@ -889,11 +888,13 @@ void BitLevelABCOpt::createAndMachineInstr(const TargetInstrInfo *TII,
   }
 
   // Create the MachineInstruction.
-  MachineOperand MOIn0 = MOInfoMap[inRegNo0].MOIn;
-  MachineOperand MOIn1 = MOInfoMap[inRegNo1].MOIn;
+  MachineOperand MOIn0 = MOInfoMap[inRegNo0].MO;
+  MachineOperand MOIn1 = MOInfoMap[inRegNo1].MO;
   MachineOperand MOOut = MOIn0;
-  if (!NewFlag)
-    MOOut = MOInfoMap[outRegNo].MOOut;
+  if (!NewFlag) {
+    MOOut = MOInfoMap[outRegNo].MO;
+    MOOut.setIsDef(true);
+  }
   else {
     MOOut = MachineOperand::CreateReg(TargetRegisterInfo::index2VirtReg(outRegNo), true);
     (cast<ucOperand>(MOOut)).setBitWidth(MOInfoMap[inRegNo0].width);
@@ -903,17 +904,18 @@ void BitLevelABCOpt::createAndMachineInstr(const TargetInstrInfo *TII,
                      .addOperand(ucOperand::CreatePredicate())
                      .addOperand(ucOperand::CreateTrace(&MBB));
   DEBUG(MI->dump());
-  MOInfoMap[outRegNo].MOOut = MOOut;
+
   if (NewFlag) {
-    MOInfoMap[outRegNo].MOOut = MOOut;
+    //MOInfoMap[outRegNo].MOOut = MOOut;
     MOOut.setIsDef(false);
     NodeMapMO[father] = outRegNo;
-    MOInfoMap[outRegNo].MOIn = MOOut;
+    MOInfoMap[outRegNo].MO = MOOut;
+    MOInfoMap[outRegNo].width = MOInfoMap[inRegNo0].width;
   }
   DEBUG(dbgs() << "output reg is " << outRegNo << "\n\n");
   MOInfoMap[outRegNo].numInput += 1;
   MOInfoMap[outRegNo].numOutput += 1;
-  MOInfoMap[outRegNo].width = MOInfoMap[inRegNo0].width;
+
   MOOutInfo[outRegNo].MIOpcode = VTM::VOpAnd;
   MOOutInfo[outRegNo].MOIn0 = inRegNo0;
   MOOutInfo[outRegNo].MOIn1 = inRegNo1;
