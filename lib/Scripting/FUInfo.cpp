@@ -85,7 +85,7 @@ namespace llvm {
     unsigned MulCost = 96;
     unsigned ShiftCost = 192;
     unsigned ICmpCost = 64;
-    unsigned MuxSizeCost = 72;
+    unsigned MuxSizeCost = 96;
 
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
     double AdderLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
