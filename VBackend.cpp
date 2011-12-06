@@ -173,7 +173,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // PerformBit level information analyze.
   PM.add(createBitLevelInfoPass());
-  PM.add(createBitLevelABCOptPass());
   // Optimize PHIs before DCE: removing dead PHI cycles may make more
   // instructions dead.
   PM.add(createOptimizePHIsPass());
@@ -212,6 +211,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // Make sure we have a branch instruction for every success block.
   PM.add(createFixTerminatorsPass());
 
+  PM.add(createMachineCSEPass());
   // Fix machine code so we can handle them easier.
   PM.add(createFixMachineCodePass());
 
