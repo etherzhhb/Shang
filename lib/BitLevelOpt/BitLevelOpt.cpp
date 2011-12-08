@@ -171,6 +171,48 @@ static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
 //===--------------------------------------------------------------------===//
 // Bit level manipulate function for the BitSlice/BitCat based bit level
 // optimization framework.
+static void SplitLHSAt(TargetLowering::DAGCombinerInfo &DCI, unsigned SplitBit,
+                       SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                       SDValue &RHSLo)  {
+  SelectionDAG &DAG = DCI.DAG;
+
+  LHSLo = VTargetLowering::getBitSlice(DAG, LHS->getDebugLoc(), LHS, SplitBit, 0);
+  DCI.AddToWorklist(LHSLo.getNode());
+  // Adjust the bitwidth of constant to match LHS's width.
+  if (LHSLo.getValueSizeInBits() != RHSLo.getValueSizeInBits()) {
+    RHSLo = VTargetLowering::getBitSlice(DAG, RHSLo->getDebugLoc(), RHSLo, SplitBit, 0,
+                                         LHSLo.getValueSizeInBits());
+    DCI.AddToWorklist(RHSLo.getNode());
+  }
+
+  LHSHi = VTargetLowering::getBitSlice(DAG, LHS->getDebugLoc(), LHS,
+                                       VTargetLowering::computeSizeInBits(LHS),
+                                       SplitBit);
+  DCI.AddToWorklist(LHSHi.getNode());
+}
+
+static void SplitOpAtRHSConstant(TargetLowering::DAGCombinerInfo &DCI,
+                                 unsigned SplitBit,
+                                 SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                                 SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
+  SelectionDAG &DAG = DCI.DAG;
+  // Build the lower part.
+  LHSLo = VTargetLowering::getBitSlice(DAG, LHS->getDebugLoc(), LHS, SplitBit, 0);
+  DCI.AddToWorklist(LHSLo.getNode());
+  RHSLo = VTargetLowering::getBitSlice(DAG, RHS->getDebugLoc(), RHS, SplitBit, 0,
+                                       LHSLo.getValueSizeInBits());
+  DCI.AddToWorklist(RHSLo.getNode());
+  // And the higher part.
+  LHSHi = VTargetLowering::getBitSlice(DAG, LHS->getDebugLoc(), LHS,
+                                       VTargetLowering::computeSizeInBits(LHS),
+                                       SplitBit);
+  DCI.AddToWorklist(LHSHi.getNode());
+  RHSHi = VTargetLowering::getBitSlice(DAG, RHS->getDebugLoc(), RHS,
+                                       VTargetLowering::computeSizeInBits(LHS),
+                                       SplitBit,
+                                       LHSHi.getValueSizeInBits());
+  DCI.AddToWorklist(RHSHi.getNode());
+}
 
 // Simply concat higher part and lower part.
 inline static SDValue ConcatBits(TargetLowering::DAGCombinerInfo &DCI,
@@ -685,21 +727,7 @@ unsigned GetADDEBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
   if (!isNullValue(CVal + RHSLoVal, RHSLoBits)) return 0;
 
-  SelectionDAG &DAG = DCI.DAG;
-  DebugLoc dl = N->getDebugLoc();
-
-  LHSLo = VTargetLowering::getBitSlice(DAG, dl, LHS, RHSLoBits, 0);
-  DCI.AddToWorklist(LHSLo.getNode());
-  // Adjust the bitwidth of constant to match LHS's width.
-  if (LHSLo.getValueSizeInBits() != RHSLo.getValueSizeInBits()) {
-    RHSLo = VTargetLowering::getBitSlice(DAG, dl, RHSLo, RHSLoBits, 0,
-                                         LHSLo.getValueSizeInBits());
-    DCI.AddToWorklist(RHSLo.getNode());
-  }
-
-  LHSHi = VTargetLowering::getBitSlice(DAG, dl, LHS,
-                                       RHSLoBits + RHSHiBits, RHSLoBits);
-  DCI.AddToWorklist(LHSHi.getNode());
+  SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo);
 
   return RHSLoBits;
 }
@@ -717,20 +745,7 @@ static unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
     // It is not profitable to split if the lower zero part is too small.
     if (SplitBit < SizeInBit / 2) return 0;
 
-    DebugLoc dl = N->getDebugLoc();
-    SelectionDAG &DAG = DCI.DAG;
-    // Build the lower part.
-    LHSLo = VTargetLowering::getBitSlice(DAG, dl, LHS, SplitBit, 0);
-    DCI.AddToWorklist(LHSLo.getNode());
-    RHSLo = VTargetLowering::getBitSlice(DAG, dl, RHS, SplitBit, 0,
-                                         LHSLo.getValueSizeInBits());
-    DCI.AddToWorklist(RHSLo.getNode());
-    // And the higher part.
-    LHSHi = VTargetLowering::getBitSlice(DAG, dl, LHS, SizeInBit, SplitBit);
-    DCI.AddToWorklist(LHSHi.getNode());
-    RHSHi = VTargetLowering::getBitSlice(DAG, dl, RHS, SizeInBit, SplitBit,
-                                         LHSHi.getValueSizeInBits());
-    DCI.AddToWorklist(RHSHi.getNode());
+    SplitOpAtRHSConstant(DCI, SplitBit, LHS, LHSLo, LHSHi, RHS, RHSLo, RHSHi);
 
     return SplitBit;
   }
@@ -776,7 +791,6 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
     }
     return SDValue();
   }
-
 
   // A + (B + 1 bit value + 0) + 0 -> A + B + 1'bit value
   if (CVal == 0 && OpB->getOpcode() == ISD::ADDE) {
@@ -839,6 +853,136 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
 
   // TODO: Combine with bit mask information.
   return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
+}
+//----------------------------------------------------------------------------//
+static
+unsigned GetMULBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                              SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                              SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
+  unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
+  unsigned RHSHiBits = VTargetLowering::computeSizeInBits(RHS->getOperand(0));
+
+  // Only split the mul from the middle.
+  if (RHSLoBits != RHSHiBits) return 0;
+
+  RHSHi = RHS.getOperand(0);
+  RHSLo = RHS.getOperand(1);
+
+  // Only promote the ADDE when we can drop the lower part.
+  uint64_t RHSLoVal = 0, RHSHiVal = 0;
+  if (!ExtractConstant(RHSLo, RHSLoVal) && !ExtractConstant(RHSHi, RHSHiVal))
+    return 0;
+
+  if (!isNullValue(RHSLoVal, RHSLoBits) && !isNullValue(RHSHiVal, RHSHiBits))
+    return 0;
+
+  SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo);
+
+  return RHSLoBits;
+}
+
+static unsigned GetMULSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                               SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                               SDValue RHS, SDValue &RHSLo, SDValue &RHSHi) {
+  if (RHS->getOpcode() == VTMISD::BitCat)
+    return GetMULBitCatSplitBit(N, DCI, LHS, LHSLo, LHSHi, RHS, RHSLo, RHSHi);
+
+  // Try to perform: a * 0x8000 => { a[15:14] * 0x1, a[13:0] }
+  uint64_t RHSVal = 0;
+  if (unsigned SizeInBit = ExtractConstant(RHS, RHSVal)) {
+    unsigned TrailingZeros = CountTrailingZeros_64(RHSVal);
+    unsigned LeadingZeros = CountLeadingZeros_64(RHSVal);
+    if (LeadingZeros > (64 - SizeInBit)) LeadingZeros -= (64 - SizeInBit);
+    else                                 LeadingZeros = 0;
+
+    // It is not profitable to split if the zero part is too small.
+    if (TrailingZeros < SizeInBit / 2 && LeadingZeros > SizeInBit / 2)
+      return 0;
+
+    SplitOpAtRHSConstant(DCI, SizeInBit / 2,
+                         LHS, LHSLo, LHSHi,
+                         RHS, RHSLo, RHSHi);
+
+    return SizeInBit / 2;
+  }
+
+  return 0;
+}
+
+inline static SDValue MULBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
+                                      SDNode *N, SDValue LHS, SDValue RHS,
+                                      bool Commuted) {
+  SelectionDAG &DAG = DCI.DAG;
+  DebugLoc dl = N->getDebugLoc();
+  assert(VTargetLowering::computeSizeInBits(LHS) == LHS.getValueSizeInBits()
+         && "Expect aligned bit width in MUL!");
+  // We have to check this because the getNode will not check this for UMUL_LOHI
+  assert(LHS.getValueSizeInBits() == RHS.getValueSizeInBits()
+         && "UMUL_LOHI Operands size not match!");
+
+  SDVTList VTs = DAG.getVTList(LHS.getValueType(),  LHS.getValueType());
+  SDValue Lo = DAG.getNode(ISD::UMUL_LOHI, dl, VTs, LHS, RHS);
+  DCI.AddToWorklist(Lo.getNode());
+  return Lo;
+}
+
+
+inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
+                                       SDNode *N, SDValue LHS, SDValue RHS,
+                                       SDValue Lo, bool Commuted) {
+  // Build the result with the same way as ExpandIntRes_MUL.
+  SelectionDAG &DAG = DCI.DAG;
+  DebugLoc dl = N->getDebugLoc();
+  assert(Lo->getOpcode() == ISD::UMUL_LOHI && "Expect Lo is UMUL_LOHI!");
+  SDValue LHSLo = Lo->getOperand(0), RHSLo = Lo->getOperand(1);
+
+  SDValue Hi = Lo.getValue(1);
+  EVT HiVT = Hi.getValueType();
+
+  SDValue MulLLRH = DAG.getNode(ISD::MUL, dl, HiVT, LHSLo, RHS);
+  DCI.AddToWorklist(MulLLRH.getNode());
+  Hi = DAG.getNode(ISD::ADD, dl, HiVT, Hi, MulLLRH);
+  DCI.AddToWorklist(Hi.getNode());
+
+  SDValue MulLHRL = DAG.getNode(ISD::MUL, dl, HiVT, LHS, RHSLo);
+  DCI.AddToWorklist(MulLHRL.getNode());
+  Hi = DAG.getNode(ISD::ADD, dl, HiVT, Hi, MulLHRL);
+  DCI.AddToWorklist(Hi.getNode());
+
+  return Hi;
+}
+
+inline static SDValue ConcatMUL(TargetLowering::DAGCombinerInfo &DCI,
+                                SDNode *N, SDValue Hi, SDValue Lo) {
+  return DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
+                         N->getValueType(0), Hi, Lo);
+}
+
+static SDValue PerformMulCombine(SDNode *N, const VTargetLowering &TLI,
+                                 TargetLowering::DAGCombinerInfo &DCI,
+                                 bool Commuted = false) {
+  SDValue OpA = N->getOperand(0 ^ Commuted), OpB = N->getOperand(1 ^ Commuted);
+
+  uint64_t OpBVal = 0;
+  if (ExtractConstant(OpB, OpBVal)) {
+    // A * 1 = A
+    if (OpBVal == 1) return OpA;
+    // A * 0 = 0
+    if (OpBVal == 0) return OpA;
+  }
+
+  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
+                                  // Get bitslice from hi part and lo before
+                                  // concact them.
+                                  false,
+                                  ConcatMUL,
+                                  MULBuildLowPart,
+                                  MULBuildHighPart,
+                                  GetMULSplitBit,
+                                  Commuted);
+  if (RV.getNode()) return RV;
+
+  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformMulCombine);
 }
 
 //static void ExpandOperand(TargetLowering::DAGCombinerInfo &DCI, SDValue Op,
@@ -1306,17 +1450,10 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
     return PerformBitCatCombine(N, *this, DCI);
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, *this, DCI);
-  case ISD::ADDE: {
-    SDValue RV = PerformAddCombine(N, *this, DCI);
-    if (RV.getNode()) return RV;
-
-    // Expansion is disable at the moment.
-    //Expand the operation if the ADDE cannot fit into the FU.
-    //if (N->getValueSizeInBits(0) > MaxAddSubBits)
-    //  return ExpandArithmeticOp(DCI, *this, N, ConcatADDEs,
-    //                            ADDEBuildLowPart, ADDEBuildHighPart);
-    break;
-  }
+  case ISD::ADDE:
+    return PerformAddCombine(N, *this, DCI);
+  case ISD::MUL:
+    return PerformMulCombine(N, *this, DCI);
   case VTMISD::ICmp:
     return PerfromICmpCombine(N, *this, DCI);
   case ISD::ROTL:

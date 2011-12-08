@@ -962,7 +962,8 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpICmp:        return LookupLatency<3>(VFUs::CmpLatencies, MI);
   // Retrieve the FU bit width from its operand bit width
   case VTM::VOpAdd:         return LookupLatency<1>(VFUs::AdderLatencies, MI);
-  case VTM::VOpMult:        return LookupLatency<1>(VFUs::MultLatencies, MI);
+
+  case VTM::VOpMult:        return LookupLatency<0>(VFUs::MultLatencies, MI);
   case VTM::VOpSRA:
   case VTM::VOpSRL:
   case VTM::VOpSHL:         return LookupLatency<0>(VFUs::ShiftLatencies, MI);

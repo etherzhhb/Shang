@@ -102,10 +102,10 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     setOperationAction(ISD::UADDO, CurVT, Expand);
     setOperationAction(ISD::USUBO, CurVT, Expand);
 
-    // We don't have MUL_LOHI
+    // We don't have SMUL_LOHI
     setOperationAction(ISD::MULHS, CurVT, Expand);
     setOperationAction(ISD::MULHU, CurVT, Expand);
-    //setOperationAction(ISD::SMUL_LOHI, CurVT, Expand);
+    setOperationAction(ISD::SMUL_LOHI, CurVT, Expand);
     //setOperationAction(ISD::UMUL_LOHI, CurVT, Expand);
 
     // We don't have DIV
@@ -191,6 +191,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::OR);;
   setTargetDAGCombine(ISD::AND);
   setTargetDAGCombine(ISD::ADDE);
+  setTargetDAGCombine(ISD::MUL);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
@@ -375,7 +376,7 @@ SDValue VTargetLowering::getNot(SelectionDAG &DAG, DebugLoc dl,
 
 SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
                                      unsigned UB, unsigned LB,
-                                     unsigned ResultWidth){
+                                     unsigned ResultSize){
   LLVMContext &Context = *DAG.getContext();
   unsigned SizeInBits = UB - LB, OpSize = computeSizeInBits(Op);
 
@@ -384,18 +385,20 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   assert(SizeInBits && "BitSlice not contains anything!");
   // If the range contains all bits of the source operand, simple return the
   // source operand, also try to match the result width if necessary.
-  if (SizeInBits == OpSize && (ResultWidth == 0 || SizeInBits == ResultWidth))
-    return Op;
+  if (SizeInBits == OpSize && (ResultSize == 0
+                               || (SizeInBits == ResultSize
+                                   && Op.getValueSizeInBits() == ResultSize)))
+      return Op;
 
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
     // This may change the value type, which is undesirable during DAG combine.
-    if (ResultWidth == SizeInBits)
+    if (ResultSize == SizeInBits)
       return DAG.getTargetConstant(getBitSlice(C->getZExtValue(), UB, LB), VT);
   }
 
-  if (ResultWidth) VT =  EVT::getIntegerVT(Context, ResultWidth);
+  if (ResultSize) VT =  EVT::getIntegerVT(Context, ResultSize);
   else             VT = getRoundIntegerOrBitType(VT, Context);
 
   return DAG.getNode(VTMISD::BitSlice, dl, VT , Op,

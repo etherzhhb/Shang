@@ -76,6 +76,7 @@ private:
 
   // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
+  SDNode *SelectUMUL_LOHI(SDNode *N);
   SDNode *SelectICmp(SDNode *N);
 
   SDNode *buildBitSlice(SDNode *N, unsigned SizeOfN, unsigned UB, unsigned LB);
@@ -148,6 +149,12 @@ SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
                               Ops, array_lengthof(Ops));
 }
 
+template<std::size_t N>
+static inline void updateBitWidthAnnotator(SDValue (&Ops)[N], SelectionDAG *DAG,
+  int64_t BitWidthInfo) {
+    *(array_endof(Ops) - 2) = DAG->getTargetConstant(BitWidthInfo, MVT::i64);
+}
+
 SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC) {
   // Copy immediate to register if necessary.
   SDValue Ops [] = { N->getOperand(0),
@@ -160,12 +167,6 @@ SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC) {
 
   return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
                               Ops, array_lengthof(Ops));
-}
-
-template<std::size_t N>
-static inline void updateBitWidthAnnotator(SDValue (&Ops)[N], SelectionDAG *DAG,
-                                           int64_t BitWidthInfo) {
-  *(array_endof(Ops) - 2) = DAG->getTargetConstant(BitWidthInfo, MVT::i64);
 }
 
 SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
@@ -192,6 +193,35 @@ SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
                                 ResultVT, Ops, array_lengthof(Ops));
 }
 
+SDNode *VDAGToDAGISel::SelectUMUL_LOHI(SDNode *N) {
+  SDValue Ops[] = { N->getOperand(0),
+    N->getOperand(1),
+    SDValue()/*The dummy bit width operand*/,
+    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
+  };
+
+  BitWidthAnnotator AddAnnotator(0);
+  // Annotate the bitwidth information manually.
+  unsigned MulWidth = VTargetLowering::computeSizeInBits(Ops[0]);
+  assert(MulWidth <= 32 && "Unsupported multiplier width!");
+  AddAnnotator.setBitWidth(2 * MulWidth, 0);
+  // LHS and RHS operands.
+  AddAnnotator.setBitWidth(MulWidth, 1);
+  AddAnnotator.setBitWidth(MulWidth, 2);
+
+  updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
+  EVT ResultVT = VTargetLowering::getRoundIntegerOrBitType(2 * MulWidth,
+                                                           *CurDAG->getContext());
+  SDNode *MulNode = CurDAG->getMachineNode(VTM::VOpMult, N->getDebugLoc(),
+                                           ResultVT, Ops, array_lengthof(Ops));
+  SDNode *Hi = buildBitSlice(MulNode, 2 * MulWidth, 2 * MulWidth, MulWidth);
+  SDNode *Lo = buildBitSlice(MulNode, 2 * MulWidth, MulWidth, 0);
+
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), SDValue(Lo, 0));
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 1), SDValue(Hi, 0));
+
+  return 0;
+}
 
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   SDValue Ops[] = { N->getOperand(0),
@@ -503,8 +533,8 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   case ISD::ADDE:             return SelectAdd(N);
   case VTMISD::ICmp:          return SelectICmp(N);
-  // DirtyHack: Is binary instruction enough?
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
+  case ISD::UMUL_LOHI:        return SelectUMUL_LOHI(N);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
   case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
