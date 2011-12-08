@@ -76,7 +76,7 @@ private:
 
   // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
-  SDNode *SelectUMUL_LOHI(SDNode *N);
+  SDNode *SelectUMUL(SDNode *N, bool isUMUL_LOHI);
   SDNode *SelectICmp(SDNode *N);
 
   SDNode *buildBitSlice(SDNode *N, unsigned SizeOfN, unsigned UB, unsigned LB);
@@ -193,7 +193,7 @@ SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
                                 ResultVT, Ops, array_lengthof(Ops));
 }
 
-SDNode *VDAGToDAGISel::SelectUMUL_LOHI(SDNode *N) {
+SDNode *VDAGToDAGISel::SelectUMUL(SDNode *N, bool isUMUL_LOHI) {
   SDValue Ops[] = { N->getOperand(0),
     N->getOperand(1),
     SDValue()/*The dummy bit width operand*/,
@@ -202,20 +202,28 @@ SDNode *VDAGToDAGISel::SelectUMUL_LOHI(SDNode *N) {
 
   BitWidthAnnotator AddAnnotator(0);
   // Annotate the bitwidth information manually.
-  unsigned MulWidth = VTargetLowering::computeSizeInBits(Ops[0]);
-  assert(MulWidth <= 32 && "Unsupported multiplier width!");
-  AddAnnotator.setBitWidth(2 * MulWidth, 0);
+  unsigned OperandWidth = VTargetLowering::computeSizeInBits(Ops[0]);
+  unsigned MulWidth = OperandWidth * 2;
+  assert((!isUMUL_LOHI || MulWidth <= 64) && "Unsupported multiplier width!");
+  MulWidth = std::min(MulWidth, 64u);
+
+  AddAnnotator.setBitWidth(MulWidth, 0);
   // LHS and RHS operands.
-  AddAnnotator.setBitWidth(MulWidth, 1);
-  AddAnnotator.setBitWidth(MulWidth, 2);
+  AddAnnotator.setBitWidth(OperandWidth, 1);
+  AddAnnotator.setBitWidth(OperandWidth, 2);
 
   updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
-  EVT ResultVT = VTargetLowering::getRoundIntegerOrBitType(2 * MulWidth,
+  EVT ResultVT = VTargetLowering::getRoundIntegerOrBitType(2 * OperandWidth,
                                                            *CurDAG->getContext());
+  if (!isUMUL_LOHI)
+    return CurDAG->SelectNodeTo(N, VTM::VOpMult, N->getVTList(),
+                                Ops, array_lengthof(Ops));
+
   SDNode *MulNode = CurDAG->getMachineNode(VTM::VOpMult, N->getDebugLoc(),
                                            ResultVT, Ops, array_lengthof(Ops));
-  SDNode *Hi = buildBitSlice(MulNode, 2 * MulWidth, 2 * MulWidth, MulWidth);
-  SDNode *Lo = buildBitSlice(MulNode, 2 * MulWidth, MulWidth, 0);
+
+  SDNode *Hi = buildBitSlice(MulNode, MulWidth, MulWidth, OperandWidth);
+  SDNode *Lo = buildBitSlice(MulNode, MulWidth, OperandWidth, 0);
 
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), SDValue(Lo, 0));
   CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 1), SDValue(Hi, 0));
@@ -533,8 +541,8 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   case ISD::ADDE:             return SelectAdd(N);
   case VTMISD::ICmp:          return SelectICmp(N);
-  case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
-  case ISD::UMUL_LOHI:        return SelectUMUL_LOHI(N);
+  case ISD::MUL:              return SelectUMUL(N, false);
+  case ISD::UMUL_LOHI:        return SelectUMUL(N, true);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
   case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
