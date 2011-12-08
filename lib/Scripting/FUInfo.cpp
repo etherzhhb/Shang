@@ -229,8 +229,6 @@ static void printConstantArray(raw_ostream &Out, ConstantArray *CPA,
     // ubytes or an array of sbytes with positive values.
     //
     const Type *ETy = CPA->getType()->getElementType();
-    bool isString = (ETy == Type::getInt8Ty(CPA->getContext()) ||
-      ETy == Type::getInt8Ty(CPA->getContext())); 
 
     // Make sure the last character is a null char, as automatically added by C
     /*if (isString && (CPA->getNumOperands() == 0 ||
