@@ -40,8 +40,10 @@ using namespace llvm;
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
+  MachineRegisterInfo *MRI;
+  const TargetInstrInfo *TII;
 
-  FixMachineCode() : MachineFunctionPass(ID) {}
+  FixMachineCode() : MachineFunctionPass(ID), MRI(0), TII(0) {}
 
   //void getAnalysisUsage(AnalysisUsage &AU) const {
   //  MachineFunctionPass::getAnalysisUsage(AU);
@@ -51,16 +53,16 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  bool handleImplicitDefs(MachineInstr *MI, MachineRegisterInfo &MRI,
-                          const TargetInstrInfo *TII);
-  bool mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
-                const TargetInstrInfo *TII);
-  void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
-                      MachineOperand Cnd,
-                      MachineRegisterInfo &MRI, const TargetInstrInfo *TII);
+  bool handleImplicitDefs(MachineInstr *MI);
+  bool mergeSel(MachineInstr *MI);
+  void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI, MachineOperand Cnd);
 
-  void FoldImmediate(std::vector<MachineInstr*> &ImmToFold,
-                     MachineRegisterInfo &MRI, const TargetInstrInfo *TII);
+  void FoldInstructions(std::vector<MachineInstr*> &InstrToFold);
+
+  void FoldImmediate(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
+  void FoldAdd(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
+
+  bool canbeFold(MachineInstr *MI) const;
 
   const char *getPassName() const {
     return "Fix machine code for Verilog backend";
@@ -71,9 +73,9 @@ struct FixMachineCode : public MachineFunctionPass {
 char FixMachineCode::ID = 0;
 
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
-  MachineRegisterInfo &MRI = MF.getRegInfo();
-  const TargetInstrInfo *TII = MF.getTarget().getInstrInfo();
-  std::vector<MachineInstr*> ImmToFold;
+  MRI = &MF.getRegInfo();
+  TII = MF.getTarget().getInstrInfo();
+  std::vector<MachineInstr*> InstrToFold;
 
    // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
@@ -84,36 +86,53 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr *Inst = II;
       ++II; // We may delete the current instruction.
 
-      if (handleImplicitDefs(Inst, MRI, TII)) continue;
+      if (handleImplicitDefs(Inst)) continue;
 
       if (Inst->isCopy()) VInstrInfo::ChangeCopyToMove(Inst);
 
       // Try to eliminate unnecessary moves.
-      if (Inst->getOpcode() == VTM::VOpMove_ri) {
-        ImmToFold.push_back(Inst);
+      if (canbeFold(Inst)) {
+        InstrToFold.push_back(Inst);
         continue;
       }
 
       // Try to merge the Select to improve parallelism.
-      mergeSel(Inst, MRI, TII);
+      mergeSel(Inst);
     }
   }
 
-  FoldImmediate(ImmToFold, MRI, TII);
+  FoldInstructions(InstrToFold);
 
   return true;
 }
 
-bool FixMachineCode::handleImplicitDefs(MachineInstr *MI,
-                                        MachineRegisterInfo &MRI,
-                                        const TargetInstrInfo *TII) {
+bool FixMachineCode::canbeFold(MachineInstr *MI) const {
+  if (MI->getOpcode() == VTM::VOpMove_ri)
+    return true;
+
+  if (MI->getOpcode() == VTM::VOpAdd) {
+    // Fold the add only if carry input is 0.
+    if (!MI->getOperand(3).isImm() || MI->getOperand(3).getImm() != 0)
+      return false;
+
+    if (MI->getOperand(1).isImm() && MI->getOperand(1).getImm() == 0)
+      return true;
+
+    if (MI->getOperand(2).isImm() && MI->getOperand(2).getImm() == 0)
+      return true;
+  }
+
+  return false;
+}
+
+bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
   if (!MI->isImplicitDef()) return false;
 
   unsigned Reg = MI->getOperand(0).getReg();
   bool use_empty = true;
 
   typedef MachineRegisterInfo::use_iterator use_it;
-  for (use_it I = MRI.use_begin(Reg), E = MRI.use_end(); I != E; /*++I*/) {
+  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; /*++I*/) {
     ucOperand *MO = cast<ucOperand>(&I.getOperand());
     MachineInstr &UserMI = *I;
     ++I;
@@ -133,47 +152,82 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI,
   return false;
 }
 
-void FixMachineCode::FoldImmediate(std::vector<MachineInstr*> &ImmToFold,
-                                   MachineRegisterInfo &MRI,
-                                   const TargetInstrInfo *TII) {
-  while (!ImmToFold.empty()) {
-    MachineInstr *MI = ImmToFold.back();
-    ImmToFold.pop_back();
+void FixMachineCode::FoldImmediate(MachineInstr *MI,
+                                   std::vector<MachineInstr*> &InstrToFold) {
+  unsigned DstReg = MI->getOperand(0).getReg();
 
-    unsigned DstReg = MI->getOperand(0).getReg();
+  for (MachineRegisterInfo::use_iterator I = MRI->use_begin(DstReg),
+       E = MRI->use_end(); I != E; /*++I*/) {
+    MachineInstr &UserMI = *I;
+    ++I;
 
-    for (MachineRegisterInfo::use_iterator I = MRI.use_begin(DstReg),
-          E = MRI.use_end(); I != E; /*++I*/) {
-      MachineInstr &UserIM = *I;
-      ++I;
+    // Only replace if user is not a PHINode.
+    if (UserMI.getOpcode() == VTM::PHI) continue;
 
-      // Only replace if user is not a PHINode.
-      if (UserIM.getOpcode() == VTM::PHI) continue;
+    if (TII->FoldImmediate(&UserMI, MI, DstReg, MRI))
+      if (canbeFold(&UserMI))
+        InstrToFold.push_back(&UserMI);
+  }
 
-      if (TII->FoldImmediate(&UserIM, MI, DstReg, &MRI))
-        if (UserIM.getOpcode() == VTM::VOpMove_ri)
-          ImmToFold.push_back(&UserIM);
+  // Eliminate the instruction if it dead.
+  if (MRI->use_empty(DstReg)) MI->eraseFromParent();
+}
+
+void FixMachineCode::FoldAdd(MachineInstr *MI,
+                             std::vector<MachineInstr*> &InstrToFold) {
+  unsigned NoneZeroIdx = 1;
+  if (MI->getOperand(1).isImm() && MI->getOperand(1).getImm() == 0)
+    NoneZeroIdx = 2;
+
+  // Change the add to bitcat(0, NoneZeroOperand) to construct the result.
+  MI->setDesc(TII->get(VTM::VOpBitCat));
+  MI->RemoveOperand(3);
+
+  if (NoneZeroIdx != 2) {
+    unsigned NoneZeroReg = MI->getOperand(NoneZeroIdx).getReg();
+    MI->getOperand(2).ChangeToRegister(NoneZeroReg, false);
+  }
+
+  // Build the carry bit of the original
+  ucOperand &DummyCarry = cast<ucOperand>(MI->getOperand(1));
+  DummyCarry.ChangeToImmediate(0);
+  DummyCarry.setBitWidth(1);
+}
+
+void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
+  while (!InstrToFold.empty()) {
+    MachineInstr *MI = InstrToFold.back();
+    InstrToFold.pop_back();
+
+    switch (MI->getOpcode()) {
+    case VTM::VOpMove_ri:
+      FoldImmediate(MI, InstrToFold);
+      break;
+    case VTM::VOpAdd:
+      FoldAdd(MI, InstrToFold);
+      break;
+    default:
+      llvm_unreachable("Trying to fold unexpected instruction!");
     }
 
-    // Eliminate the instruction if it dead.
-    if (MRI.use_empty(DstReg)) MI->eraseFromParent();
+
+
   }
 }
 
-bool FixMachineCode::mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
-                              const TargetInstrInfo *TII) {
+bool FixMachineCode::mergeSel(MachineInstr *MI) {
   if (MI->getOpcode() != VTM::VOpSel) return false;
 
   MachineOperand TVal = MI->getOperand(2), FVal = MI->getOperand(3);
   MachineInstr *TMI =0, *FMI = 0;
   if (TVal.isReg()) {
-    TMI = MRI.getVRegDef(TVal.getReg());
+    TMI = MRI->getVRegDef(TVal.getReg());
     if (TMI && TMI->getOpcode() != VTM::VOpSel)
       TMI = 0;
   }
 
   if (FVal.isReg()) {
-    FMI = MRI.getVRegDef(FVal.getReg());
+    FMI = MRI->getVRegDef(FVal.getReg());
     if (FMI && FMI->getOpcode() != VTM::VOpSel)
       FMI = 0;
   }
@@ -190,7 +244,7 @@ bool FixMachineCode::mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
   // Merge the select in to the newly build case.
   MachineOperand Cnd = MI->getOperand(1);
   if (TMI)
-    mergeSelToCase(CaseMI, TMI, Cnd, MRI, TII);
+    mergeSelToCase(CaseMI, TMI, Cnd);
   else {
     // Re-add the condition into the case statement.
     CaseMI->addOperand(Cnd);
@@ -199,7 +253,7 @@ bool FixMachineCode::mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
 
   VInstrInfo::ReversePredicateCondition(Cnd);
   if (FMI)
-    mergeSelToCase(CaseMI, FMI, Cnd, MRI, TII);
+    mergeSelToCase(CaseMI, FMI, Cnd);
   else {
     // Re-add the condition into the case statement.
     CaseMI->addOperand(Cnd);
@@ -211,8 +265,7 @@ bool FixMachineCode::mergeSel(MachineInstr *MI, MachineRegisterInfo &MRI,
 }
 
 void FixMachineCode::mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
-                                    MachineOperand Cnd, MachineRegisterInfo &MRI,
-                                    const TargetInstrInfo *TII) {
+                                    MachineOperand Cnd) {
   MachineOperand SelTCnd = SelMI->getOperand(1);
   MachineOperand SelFCnd = SelTCnd;
   VInstrInfo::ReversePredicateCondition(SelFCnd);
@@ -230,9 +283,9 @@ void FixMachineCode::mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
 
   // Merge the condition with the condition to select this SelMI.
   SelTCnd = VInstrInfo::MergePred(SelTCnd, Cnd, *CaseMI->getParent(),
-                                  CaseMI, &MRI, TII, VTM::VOpAnd);
+                                  CaseMI, MRI, TII, VTM::VOpAnd);
   SelFCnd = VInstrInfo::MergePred(SelFCnd, Cnd, *CaseMI->getParent(),
-                                  CaseMI, &MRI, TII, VTM::VOpAnd);
+                                  CaseMI, MRI, TII, VTM::VOpAnd);
 
   // Add the value for True condition.
   CaseMI->addOperand(SelTCnd);
