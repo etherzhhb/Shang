@@ -862,8 +862,8 @@ unsigned GetMULBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
   unsigned RHSHiBits = VTargetLowering::computeSizeInBits(RHS->getOperand(0));
 
-  // Only split the mul from the middle.
-  if (RHSLoBits != RHSHiBits) return 0;
+  // Only split the mul from the middle, and do not generate small multiplier.
+  if (RHSLoBits != RHSHiBits || RHSLoBits < 8) return 0;
 
   RHSHi = RHS.getOperand(0);
   RHSLo = RHS.getOperand(1);
@@ -890,20 +890,24 @@ static unsigned GetMULSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   // Try to perform: a * 0x8000 => { a[15:14] * 0x1, a[13:0] }
   uint64_t RHSVal = 0;
   if (unsigned SizeInBit = ExtractConstant(RHS, RHSVal)) {
+    unsigned SplitBit = SizeInBit / 2;
+    // Do not generate small multiplier.
+    if (SplitBit < 8) return 0;
+
     unsigned TrailingZeros = CountTrailingZeros_64(RHSVal);
     unsigned LeadingZeros = CountLeadingZeros_64(RHSVal);
     if (LeadingZeros > (64 - SizeInBit)) LeadingZeros -= (64 - SizeInBit);
     else                                 LeadingZeros = 0;
 
     // It is not profitable to split if the zero part is too small.
-    if (TrailingZeros < SizeInBit / 2 && LeadingZeros > SizeInBit / 2)
+    if (TrailingZeros < SplitBit && LeadingZeros < SplitBit)
       return 0;
 
-    SplitOpAtRHSConstant(DCI, SizeInBit / 2,
+    SplitOpAtRHSConstant(DCI, SplitBit,
                          LHS, LHSLo, LHSHi,
                          RHS, RHSLo, RHSHi);
 
-    return SizeInBit / 2;
+    return SplitBit;
   }
 
   return 0;
