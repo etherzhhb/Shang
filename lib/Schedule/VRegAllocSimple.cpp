@@ -1373,14 +1373,5 @@ void VRASimple::bindICmps(LICGraph &G) {
                                               : VTM::RUCMPRegClassID;
     unsigned CmpFU = TRI->allocateFN(FUType, ICmpChecker.CurMaxWidth);
     assign(*LI, CmpFU);
-    // Allocate the register for FU Ports.
-    // Ne port.
-    TRI->getSubRegOf(CmpFU, 2, 1);
-    // Eq port.
-    TRI->getSubRegOf(CmpFU, 3, 2);
-    // Ge port.
-    TRI->getSubRegOf(CmpFU, 4, 3);
-    // Gt port.
-    TRI->getSubRegOf(CmpFU, 5, 4);
   }
 }
