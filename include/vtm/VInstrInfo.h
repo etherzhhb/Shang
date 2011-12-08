@@ -229,7 +229,7 @@ class BitWidthAnnotator {
   MachineOperand *MO;
   uint64_t BitWidths;
 public:
-  explicit BitWidthAnnotator(uint64_t O = 0) : MO(0), BitWidths(O){}
+  BitWidthAnnotator(uint64_t O = 0) : MO(0), BitWidths(O){}
   explicit BitWidthAnnotator(MachineInstr &MI);
 
   uint64_t get() const { return BitWidths; }

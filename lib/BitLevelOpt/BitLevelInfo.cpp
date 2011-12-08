@@ -281,18 +281,15 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // case VTM::IMPLICIT_DEF:
   // Other Instructions.
   case VTM::VOpAdd: {
-    MachineOperand &Carry = Instr->getOperand(1);
-    if (updateBitWidth(Carry, 1))
-      Defs.push_back(&Carry);
-    
     MachineOperand &Result = Instr->getOperand(0);
-    unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 2,
-                                              Instr->operands_begin() + 4);
-    if (updateBitWidth(Result, Width))
+    unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 1,
+                                              Instr->operands_begin() + 3);
+    // The carry bit is included in the result of the VOpAdd.
+    if (updateBitWidth(Result, Width + 1))
       Defs.push_back(&Result);
     break;
   }
-  case VTM::VOpMult:
+  //case VTM::VOpMult:
   case VTM::VOpOr:
   case VTM::VOpAnd:
   case VTM::VOpXor: {

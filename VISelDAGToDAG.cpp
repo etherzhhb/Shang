@@ -50,7 +50,8 @@ private:
   // The last operand of all VTM machine instructions is the bit width operand,
   // which hold the bit width information of all others operands. This operand
   // is a 64 bit immediate.
-  void computeOperandsBitWidth(SDNode *N, SDValue Ops[], unsigned NumOps);
+  BitWidthAnnotator computeOperandsBitWidth(SDNode *N, SDValue Ops[],
+                                            unsigned NumOps);
 
   // Copy constant to function unit operand register explicitly
   bool shouldMoveToReg(SDNode *N) {
@@ -78,6 +79,8 @@ private:
   SDNode *SelectAdd(SDNode *N);
   SDNode *SelectICmp(SDNode *N);
 
+  SDNode *buildBitSlice(SDNode *N, unsigned SizeOfN, unsigned UB, unsigned LB);
+
   SDNode *SelectImmediate(SDNode *N, bool ForceMove = false);
 
   SDNode *SelectMemAccess(SDNode *N);
@@ -102,8 +105,9 @@ FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
   return new VDAGToDAGISel(TM, OptLevel);
 }
 
-void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
-                                            unsigned NumOps) {
+BitWidthAnnotator VDAGToDAGISel::computeOperandsBitWidth(SDNode *N,
+                                                         SDValue Ops[],
+                                                         unsigned NumOps) {
   BitWidthAnnotator Annotator;
   unsigned NumDefs = 0;
   // Skip the trace number.
@@ -130,6 +134,7 @@ void VDAGToDAGISel::computeOperandsBitWidth(SDNode *N, SDValue Ops[],
 
   // FIXME: Build the bit width information.
   Ops[NumOps -1] = CurDAG->getTargetConstant(Annotator.get(), MVT::i64);
+  return Annotator;
 }
 
 SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
@@ -166,6 +171,37 @@ SDValue VDAGToDAGISel::MoveToReg(SDValue Operand, bool Force) {
   return SDValue(SelectImmediate(N, true), 0);
 }
 
+template<std::size_t N>
+static inline void updateBitWidthAnnotator(SDValue (&Ops)[N], SelectionDAG *DAG,
+                                           int64_t BitWidthInfo) {
+  *(array_endof(Ops) - 2) = DAG->getTargetConstant(BitWidthInfo, MVT::i64);
+}
+
+SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
+                                     unsigned UB, unsigned LB) {
+  BitWidthAnnotator Annotator;
+  Annotator.setBitWidth(UB - LB, 0);
+  Annotator.setBitWidth(SizeOfN, 1);
+  Annotator.setBitWidth(8, 2);
+  Annotator.setBitWidth(8, 3);
+  SDValue Ops[] = { SDValue(N, 0),
+    // UB
+    CurDAG->getTargetConstant(UB, MVT::i8),
+    // LB
+    CurDAG->getTargetConstant(LB, MVT::i8),
+    // Bitwidth operand
+    CurDAG->getTargetConstant(Annotator.get(), MVT::i64),
+    // Trace number
+    CurDAG->getTargetConstant(0, MVT::i64)
+  };
+
+  EVT ResultVT
+    = VTargetLowering::getRoundIntegerOrBitType(UB - LB, *CurDAG->getContext());
+  return CurDAG->getMachineNode(VTM::VOpBitSlice, N->getDebugLoc(),
+                                ResultVT, Ops, array_lengthof(Ops));
+}
+
+
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
                     MoveToReg(N->getOperand(1), true),
@@ -174,10 +210,28 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
                   };
 
-  computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
+  BitWidthAnnotator AddAnnotator(0);
+  // Annotate the bitwidth information manually.
+  unsigned AdderWidth = VTargetLowering::computeSizeInBits(Ops[0]);
+  AddAnnotator.setBitWidth(AdderWidth + 1, 0);
+  // LHS and RHS operands.
+  AddAnnotator.setBitWidth(AdderWidth, 1);
+  AddAnnotator.setBitWidth(AdderWidth, 2);
+  // Cin
+  AddAnnotator.setBitWidth(1, 3);
+  updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
+  EVT ResultVT = VTargetLowering::getRoundIntegerOrBitType(AdderWidth + 1,
+                                                           *CurDAG->getContext());
+  SDNode *AddNode = CurDAG->getMachineNode(VTM::VOpAdd, N->getDebugLoc(),
+                                           ResultVT, Ops, array_lengthof(Ops));
+  SDNode *Result = buildBitSlice(AddNode, AdderWidth + 1, AdderWidth, 0);
+  SDNode *Carry = buildBitSlice(AddNode, AdderWidth + 1,
+                                AdderWidth + 1, AdderWidth);
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpAdd, N->getVTList(),
-                              Ops, array_lengthof(Ops));
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), SDValue(Result, 0));
+  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 1), SDValue(Carry, 0));
+  // Simply return 0 since results of the SDNode are replaced.
+  return 0;
 }
 
 static unsigned getICmpPort(unsigned CC) {
@@ -227,35 +281,20 @@ SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
                     SDValue()/*The dummy bit width operand*/,
                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
                   };
-  computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
   // DirtyHack: Fix the bitwidth of icmp result.
-  BitWidthAnnotator CmpAnnotator(cast<ConstantSDNode>(Ops[3])->getZExtValue());
-  CmpAnnotator.setBitWidth(8, 0);
-  Ops[3] = CurDAG->getTargetConstant(CmpAnnotator.get(), MVT::i64);
+  unsigned ResultBitWidth = 8;
+  BitWidthAnnotator CmpAnnotator
+    = computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
+  CmpAnnotator.setBitWidth(ResultBitWidth, 0);
+  updateBitWidthAnnotator(Ops, CurDAG, CmpAnnotator.get());
 
   SDNode *CmpNode = CurDAG->getMachineNode(VTM::VOpICmp, N->getDebugLoc(),
                                            N->getVTList(),
                                            Ops, array_lengthof(Ops));
   // Read the result from specific bit of the result.
   unsigned ResultPort = getICmpPort(CC);
-  BitWidthAnnotator Annotator;
-  Annotator.setBitWidth(1, 0);
-  Annotator.setBitWidth(8, 1);
-  Annotator.setBitWidth(8, 2);
-  Annotator.setBitWidth(8, 3);
-  SDValue ResOps[] = { SDValue(CmpNode, 0),
-                       // UB
-                       CurDAG->getTargetConstant(ResultPort + 1, MVT::i8),
-                       // LB
-                       CurDAG->getTargetConstant(ResultPort,     MVT::i8),
-                       // Bitwidth operand
-                       CurDAG->getTargetConstant(Annotator.get(), MVT::i64),
-                       // Trace number
-                       CurDAG->getTargetConstant(0, MVT::i64)
-                     };
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpBitSlice, N->getVTList(),
-                              ResOps, array_lengthof(ResOps));
+  return buildBitSlice(CmpNode, ResultBitWidth, ResultPort + 1, ResultPort);
 }
 
 SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {

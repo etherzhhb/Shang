@@ -56,12 +56,10 @@ namespace llvm {
       "ICmp", "CalleeFN"
     };
 
-    const TargetRegisterClass *getRepRegisterClass(unsigned OpCode, unsigned i){
+    const TargetRegisterClass *getRepRegisterClass(unsigned OpCode){
       switch (OpCode) {
       default:                  return VTM::WireRegisterClass;
-      case VTM::VOpAdd:
-        if (i == 0)             return VTM::RADDRegisterClass;
-        else                    return VTM::RCARRegisterClass;
+      case VTM::VOpAdd:         return VTM::RADDRegisterClass;
       case VTM::VOpSRA:         return VTM::RASRRegisterClass;
       case VTM::VOpSRL:         return VTM::RLSRRegisterClass;
       case VTM::VOpSHL:         return VTM::RSHLRegisterClass;

@@ -123,9 +123,9 @@ struct VRASimple : public MachineFunctionPass {
   unsigned getBitWidthOf(unsigned RegNum) {
     unsigned BitWidth = 0;
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
-      I != MachineRegisterInfo::def_end(); ++I) {
-        ucOperand &DefOp = cast<ucOperand>(I.getOperand());
-        BitWidth = std::max(BitWidth, DefOp.getBitWidth());
+         I != MachineRegisterInfo::def_end(); ++I) {
+      ucOperand &DefOp = cast<ucOperand>(I.getOperand());
+      BitWidth = std::max(BitWidth, DefOp.getBitWidth());
     }
 
     assert(BitWidth && "Unexpected empty define register");
@@ -173,8 +173,6 @@ struct VRASimple : public MachineFunctionPass {
   bool reduceCompGraph(LICGraph &G, CompEdgeWeight &C);
 
   void bindCompGraph(LICGraph &G);
-  // We need handle to special case when binding adder and comparor.
-  void bindAdders(LICGraph &G);
   void bindICmps(LICGraph &G);
 
   bool runOnMachineFunction(MachineFunction &F);
@@ -1028,7 +1026,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   buildCompGraph(ShlCG);
 
   CompRegEdgeWeight RegWeight(this, VFUs::RegCost);
-  CompBinOpEdgeWeight<VTM::VOpAdd, 2> AddWeight(this, VFUs::AddCost);
+  CompBinOpEdgeWeight<VTM::VOpAdd, 1> AddWeight(this, VFUs::AddCost);
   CompICmpEdgeWeight ICmpWeight(this, VFUs::ICmpCost);
   CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, VFUs::MulCost);
   CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, VFUs::ShiftCost);
@@ -1051,7 +1049,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   // Bind the Compatibility Graphs
   bindCompGraph(RCG);
-  bindAdders(AdderCG);
+  bindCompGraph(AdderCG);
   bindICmps(ICmpCG);
   bindCompGraph(MulCG);
   bindCompGraph(AsrCG);
@@ -1357,29 +1355,6 @@ void VRASimple::bindCompGraph(LICGraph &G) {
   for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
     LiveInterval *LI = (*I)->get();
     assign(*LI, TRI->allocatePhyReg(RC, getBitWidthOf(LI->reg)));
-  }
-}
-
-void VRASimple::bindAdders(LICGraph &G) {
-  for (LICGraph::iterator I = G.begin(), E = G.end(); I != E; ++I) {
-    LiveInterval *LI = (*I)->get();
-    unsigned Width = getBitWidthOf(LI->reg);
-    // Allocate the register for the adder, which also contains the carry bit
-    unsigned AdderReg = TRI->allocatePhyReg(VTM::RADDRegClassID, Width + 1);
-    unsigned SumReg = TRI->getSubRegOf(AdderReg, Width, 0);
-    assign(*LI, SumReg);
-    DEBUG(dbgs() << "Assign " << SumReg << " to " << *LI << '\n');
-    // Bind the carry.
-    unsigned CarryReg = TRI->getSubRegOf(AdderReg, Width + 1, Width);
-    for (MachineRegisterInfo::def_iterator I = MRI->def_begin(LI->reg),
-         E = MRI->def_end(); I != E; ++I) {
-      ucOp Op = ucOp::getParent(I);
-      assert(Op->getOpcode() == VTM::VOpAdd && "Unexpected opcode for adder!");
-      unsigned CarryNum = Op.getOperand(1).getReg();
-      LiveInterval *CarryLI = getInterval(CarryNum);
-      assert(CarryLI && "Cannot found interval of carry!");
-      assign(*CarryLI, CarryReg);
-    }
   }
 }
 

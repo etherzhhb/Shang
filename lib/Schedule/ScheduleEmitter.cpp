@@ -558,7 +558,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       // unit should be wire, and there must be a copy follow up.
       if (!NewOp.isWire()) {
         WireNum =
-          MRI.createVirtualRegister(VFUs::getRepRegisterClass(OpC, i - OpStart));
+          MRI.createVirtualRegister(VFUs::getRepRegisterClass(OpC));
         NewOp = ucOperand::CreateWire(WireNum, BitWidth, true);
       }
 

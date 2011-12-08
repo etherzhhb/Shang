@@ -148,8 +148,7 @@ MachineInstr *VInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI)const{
   for (it I = MI->operands_begin(), E = MI->operands_end(); I != E; ++I)
     MOs.push_back(*I);
 
-  if (TID.getOpcode() == VTM::VOpAdd) std::swap(MOs[2], MOs[3]);
-  else                                std::swap(MOs[1], MOs[2]);
+  std::swap(MOs[1], MOs[2]);
 
   // Build a empty MI or clear the operands in the original MI, and re-insert
   // the operands to MI.
@@ -961,14 +960,14 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   default:                  break;
 
   case VTM::VOpICmp:        return LookupLatency<3>(VFUs::CmpLatencies, MI);
-  case VTM::VOpAdd:         return LookupLatency<0>(VFUs::AdderLatencies, MI);
-
-  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
-
-  case VTM::VOpMult:        return LookupLatency<0>(VFUs::MultLatencies, MI);
+  // Retrieve the FU bit width from its operand bit width
+  case VTM::VOpAdd:         return LookupLatency<1>(VFUs::AdderLatencies, MI);
+  case VTM::VOpMult:        return LookupLatency<1>(VFUs::MultLatencies, MI);
   case VTM::VOpSRA:
   case VTM::VOpSRL:
   case VTM::VOpSHL:         return LookupLatency<0>(VFUs::ShiftLatencies, MI);
+
+  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
 
   case VTM::VOpAnd:
   case VTM::VOpOr:

@@ -213,8 +213,8 @@ let isReMaterializable = 1,
 let isReMaterializable = 1,
     neverHasSideEffects = 1 in {
   let isCommutable        = 1 in {
-    def VOpAdd : FUInst<(outs DR:$dst, DR:$co),(ins DR:$src1, DR:$src2, DR:$ci),
-                         "{$dst, $co} = $src1 + $src2 + $ci;",
+    def VOpAdd : FUInst<(outs DR:$dst),(ins DR:$src1, DR:$src2, DR:$ci),
+                         "$dst = $src1 + $src2 + $ci;",
                          [], FUAddSub, 0 /*writeUntilFinish*/>;
     def VOpMult : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
                          "$dst = $src1 * $src2;",
