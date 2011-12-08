@@ -936,6 +936,7 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
                                        SDValue Lo, bool Commuted) {
   // Build the result with the same way as ExpandIntRes_MUL.
   SelectionDAG &DAG = DCI.DAG;
+  LLVMContext &Cntx = *DAG.getContext();
   DebugLoc dl = N->getDebugLoc();
   assert(Lo->getOpcode() == ISD::UMUL_LOHI && "Expect Lo is UMUL_LOHI!");
   SDValue LHSLo = Lo->getOperand(0), RHSLo = Lo->getOperand(1);
@@ -945,12 +946,16 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
 
   SDValue MulLLRH = DAG.getNode(ISD::MUL, dl, HiVT, LHSLo, RHS);
   DCI.AddToWorklist(MulLLRH.getNode());
-  Hi = DAG.getNode(ISD::ADD, dl, HiVT, Hi, MulLLRH);
+
+  SDVTList ADDEVTs = DAG.getVTList(HiVT, MVT::i1);
+  Hi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, Hi, MulLLRH,
+                   DAG.getTargetConstant(0, MVT::i1));
   DCI.AddToWorklist(Hi.getNode());
 
   SDValue MulLHRL = DAG.getNode(ISD::MUL, dl, HiVT, LHS, RHSLo);
   DCI.AddToWorklist(MulLHRL.getNode());
-  Hi = DAG.getNode(ISD::ADD, dl, HiVT, Hi, MulLHRL);
+  Hi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, Hi, MulLHRL,
+                   DAG.getTargetConstant(0, MVT::i1));
   DCI.AddToWorklist(Hi.getNode());
 
   return Hi;
