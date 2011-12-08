@@ -57,7 +57,6 @@ private:
   bool shouldMoveToReg(SDNode *N) {
     return isa<ConstantSDNode>(N) || isa<ExternalSymbolSDNode>(N);
   }
-  SDValue MoveToReg(SDValue Operand, bool Force = false);
 
   SDNode *Select(SDNode *N);
 
@@ -66,7 +65,7 @@ private:
 
   SDNode *SelectUnary(SDNode *N, unsigned OpC);
   // If we need to copy the operand to register explicitly, set CopyOp to true.
-  SDNode *SelectBinary(SDNode *N, unsigned OpC, bool ForceMove = false);
+  SDNode *SelectBinary(SDNode *N, unsigned OpC);
   SDNode *SelectSimpleNode(SDNode *N, unsigned OpC);
 
   // Function argument and return values.
@@ -149,10 +148,10 @@ SDNode *VDAGToDAGISel::SelectUnary(SDNode *N, unsigned OpC) {
                               Ops, array_lengthof(Ops));
 }
 
-SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC, bool ForceMove) {
+SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC) {
   // Copy immediate to register if necessary.
-  SDValue Ops [] = { MoveToReg(N->getOperand(0), ForceMove),
-                     MoveToReg(N->getOperand(1), ForceMove),
+  SDValue Ops [] = { N->getOperand(0),
+                     N->getOperand(1),
                      SDValue()/*The dummy bit width operand*/,
                      CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
                    };
@@ -161,14 +160,6 @@ SDNode *VDAGToDAGISel::SelectBinary(SDNode *N, unsigned OpC, bool ForceMove) {
 
   return CurDAG->SelectNodeTo(N, OpC, N->getVTList(),
                               Ops, array_lengthof(Ops));
-}
-
-SDValue VDAGToDAGISel::MoveToReg(SDValue Operand, bool Force) {
-  SDNode *N = Operand.getNode();
-  if (!Force || !shouldMoveToReg(N))
-    return Operand;
-
-  return SDValue(SelectImmediate(N, true), 0);
 }
 
 template<std::size_t N>
@@ -203,8 +194,8 @@ SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
 
 
 SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
-  SDValue Ops[] = { MoveToReg(N->getOperand(0), true),
-                    MoveToReg(N->getOperand(1), true),
+  SDValue Ops[] = { N->getOperand(0),
+                    N->getOperand(1),
                     N->getOperand(2),
                     SDValue()/*The dummy bit width operand*/,
                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
@@ -274,8 +265,8 @@ SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
                                : (ISD::isSignedIntSetCC(CC) ? VFUs::CmpSigned
                                                             : VFUs::CmpUnsigned);
 
-  SDValue Ops[] = { MoveToReg(LHS, true),
-                    MoveToReg(RHS, true),
+  SDValue Ops[] = { LHS,
+                    RHS,
                     // Encode the operand width to the condition code width.
                     CurDAG->getTargetConstant(CmpType, FUVT),
                     SDValue()/*The dummy bit width operand*/,
@@ -513,17 +504,17 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::ADDE:             return SelectAdd(N);
   case VTMISD::ICmp:          return SelectICmp(N);
   // DirtyHack: Is binary instruction enough?
-  case ISD::MUL:              return SelectBinary(N, VTM::VOpMult, true);
+  case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
 
-  case ISD::XOR:              return SelectBinary(N, VTM::VOpXor, true);
-  case ISD::AND:              return SelectBinary(N, VTM::VOpAnd, true);
-  case ISD::OR:               return SelectBinary(N, VTM::VOpOr, true);
+  case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
+  case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
+  case ISD::OR:               return SelectBinary(N, VTM::VOpOr);
   case VTMISD::Not:           return SelectUnary(N, VTM::VOpNot);
   case ISD::SELECT:           return SelectSimpleNode(N, VTM::VOpSel);
 
-  case ISD::SHL:              return SelectBinary(N, VTM::VOpSHL, true);
-  case ISD::SRL:              return SelectBinary(N, VTM::VOpSRL, true);
-  case ISD::SRA:              return SelectBinary(N, VTM::VOpSRA, true);
+  case ISD::SHL:              return SelectBinary(N, VTM::VOpSHL);
+  case ISD::SRL:              return SelectBinary(N, VTM::VOpSRL);
+  case ISD::SRA:              return SelectBinary(N, VTM::VOpSRA);
 
   case VTMISD::BitRepeat:     return SelectBinary(N, VTM::VOpBitRepeat);
   case VTMISD::BitCat:        return SelectBinary(N, VTM::VOpBitCat);
