@@ -931,11 +931,10 @@ inline static SDValue MULBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
 }
 
 inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
-                                       SDNode *N, SDValue LHS, SDValue RHS,
+                                       SDNode *N, SDValue LHSHi, SDValue RHSHi,
                                        SDValue Lo, bool Commuted) {
   // Build the result with the same way as ExpandIntRes_MUL.
   SelectionDAG &DAG = DCI.DAG;
-  LLVMContext &Cntx = *DAG.getContext();
   DebugLoc dl = N->getDebugLoc();
   assert(Lo->getOpcode() == ISD::UMUL_LOHI && "Expect Lo is UMUL_LOHI!");
   SDValue LHSLo = Lo->getOperand(0), RHSLo = Lo->getOperand(1);
@@ -948,18 +947,22 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   bool isUMUL_LoHi = MULOpcode == ISD::UMUL_LOHI;
   SDVTList MULVTs = isUMUL_LoHi ? DAG.getVTList(HiVT, HiVT)
                                 : DAG.getVTList(HiVT);
-  SDValue MulLLRHLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSLo, RHS);
+  SDValue MulLLRHLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSLo, RHSHi);
   DCI.AddToWorklist(MulLLRHLo.getNode());
 
   SDVTList ADDEVTs = DAG.getVTList(HiVT, MVT::i1);
   LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, MulLLRHLo,
-                   DAG.getTargetConstant(0, MVT::i1));
+                     DAG.getTargetConstant(0, MVT::i1));
+  // Carry bit is need if we build the high part of the multiplication.
+  SDValue C0 = LoHi.getValue(1);
   DCI.AddToWorklist(LoHi.getNode());
 
-  SDValue MulLHRLLo = DAG.getNode(MULOpcode, dl, MULVTs, LHS, RHSLo);
+  SDValue MulLHRLLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSHi, RHSLo);
   DCI.AddToWorklist(MulLHRLLo.getNode());
   LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, MulLHRLLo,
-                   DAG.getTargetConstant(0, MVT::i1));
+                     DAG.getTargetConstant(0, MVT::i1));
+  // Remember the carry bit.
+  SDValue C1 = LoHi.getValue(1);
   DCI.AddToWorklist(LoHi.getNode());
 
   Lo = DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
@@ -968,22 +971,32 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   if (!isUMUL_LoHi) return Lo;
 
   // Compute the High part of the result.
-  SDValue MulLLRHHi = MulLLRHLo.getValue(1);
-  SDValue MulLHRLHi = MulLHRLLo.getValue(1);
-  SDValue MulLHRHLo = DAG.getNode(ISD::UMUL_LOHI, dl, MULVTs, LHS, RHS);
+  // The lower half of the High Part.
+  SDValue HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs,
+                             MulLLRHLo.getValue(1), MulLHRLLo.getValue(1), C0);
+  // Remember the carry bit.
+  C0 = HiLo.getValue(1);
+  DCI.AddToWorklist(HiLo.getNode());
+
+  SDValue MulLHRHLo = DAG.getNode(ISD::UMUL_LOHI, dl, MULVTs, LHSHi, RHSHi);
   DCI.AddToWorklist(MulLHRHLo.getNode());
 
-  // The lower half of the High Part.
-  SDValue HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs, MulLHRHLo, MulLLRHHi,
-                             DAG.getTargetConstant(0, MVT::i1));
-  DCI.AddToWorklist(HiLo.getNode());
-  HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs, HiLo, MulLHRLHi,
-                     DAG.getTargetConstant(0, MVT::i1));
+  HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs, HiLo, MulLHRHLo, C1);
+  // Remember the carry bit.
+  C1 = HiLo.getValue(1);
   DCI.AddToWorklist(HiLo.getNode());
 
+  SDValue MulLHRHHi = MulLHRHLo.getValue(1);
+  SDValue HiHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs,
+                             MulLHRHHi, DAG.getTargetConstant(0, HiVT), C0);
+  DCI.AddToWorklist(HiHi.getNode());
+
+  HiHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs,
+                     HiHi, DAG.getTargetConstant(0, HiVT), C1);
+  DCI.AddToWorklist(HiHi.getNode());
   // Build the High part of the UMUL_LOHI.
   SDValue Hi = DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
-                           N->getValueType(0), MulLHRHLo.getValue(1), HiLo);
+                           N->getValueType(0), HiHi, HiLo);
   DCI.CombineTo(N, Lo, Hi);
   return SDValue(N, 0);
 }
@@ -1001,24 +1014,48 @@ static SDValue PerformMulCombine(SDNode *N, const VTargetLowering &TLI,
   bool isMUL_LoHi = N->getOpcode() == ISD::UMUL_LOHI;
 
   uint64_t OpBVal = 0;
-  if (ExtractConstant(OpB, OpBVal)) {
+  if (unsigned OpBSize = ExtractConstant(OpB, OpBVal)) {
     SelectionDAG &DAG = DCI.DAG;
-    SDValue Lo, Hi = DAG.getTargetConstant(0, OpA.getValueType());
+    LLVMContext &Cntx = *DAG.getContext();
+    DebugLoc dl = N->getDebugLoc();
+    EVT VT = N->getValueType(0);
+
+    SDValue Lo, Hi = DAG.getTargetConstant(0, VT);
     // A * 1 = A
     if (OpBVal == 1) Lo = OpA;
 
     // A * 0 = 0
-    if (OpBVal == 0) Lo = DAG.getTargetConstant(0, OpA.getValueType());
+    if (OpBVal == 0) Lo = DAG.getTargetConstant(0, VT);
+
+    // Try to lower mult to shift constant.
+    if (isPowerOf2_64(OpBVal)) {
+      unsigned PowerOf2 = Log2_64(OpBVal);
+      assert(PowerOf2 < OpBSize && "Bad power of 2 in mult!");
+      Lo = VTargetLowering::getBitSlice(DAG, dl, OpA, OpBSize - PowerOf2, 0);
+      DCI.AddToWorklist(Lo.getNode());
+      EVT PaddingVT = EVT::getIntegerVT(Cntx, PowerOf2);
+      Lo = DAG.getNode(VTMISD::BitCat, dl, VT,
+                       Lo, DAG.getTargetConstant(0, PaddingVT));
+      // Build the high part if necessary.
+      if (isMUL_LoHi) {
+        Hi = VTargetLowering::getBitSlice(DAG, dl, OpA,
+                                          OpBSize, OpBSize - PowerOf2);
+        DCI.AddToWorklist(Hi.getNode());
+        PaddingVT = EVT::getIntegerVT(Cntx, OpBSize - PowerOf2);
+        Hi = DAG.getNode(VTMISD::BitCat, dl, VT,
+                         DAG.getTargetConstant(0, PaddingVT), Hi);
+      }
+    }
 
     // If something combined
-    if (Lo.getNode())
+    if (Lo.getNode()) {
       if (isMUL_LoHi) {
         DCI.CombineTo(N, Lo, Hi);
         return SDValue(N, 0);
       } else
         return Lo;
+    }
   }
-
 
   SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
                                   // Get bitslice from hi part and lo before
