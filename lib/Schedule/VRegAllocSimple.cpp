@@ -1014,6 +1014,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
            AdderCG(VTM::RADDRegClassID),
            ICmpCG(VTM::RUCMPRegClassID),
            MulCG(VTM::RMULRegClassID),
+           MulLHCG(VTM::RMULLHRegClassID),
            AsrCG(VTM::RASRRegClassID),
            LsrCG(VTM::RLSRRegClassID),
            ShlCG(VTM::RSHLRegClassID);
@@ -1021,6 +1022,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   buildCompGraph(AdderCG);
   buildCompGraph(ICmpCG);
   buildCompGraph(MulCG);
+  buildCompGraph(MulLHCG);
   buildCompGraph(AsrCG);
   buildCompGraph(LsrCG);
   buildCompGraph(ShlCG);
@@ -1029,6 +1031,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   CompBinOpEdgeWeight<VTM::VOpAdd, 1> AddWeight(this, VFUs::AddCost);
   CompICmpEdgeWeight ICmpWeight(this, VFUs::ICmpCost);
   CompBinOpEdgeWeight<VTM::VOpMult, 1> MulWeiht(this, VFUs::MulCost);
+  CompBinOpEdgeWeight<VTM::VOpMultLoHi, 1> MulLHWeiht(this, VFUs::MulCost);
   CompBinOpEdgeWeight<VTM::VOpSRA, 1> SRAWeight(this, VFUs::ShiftCost);
   CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, VFUs::ShiftCost);
   CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, VFUs::ShiftCost);
@@ -1042,6 +1045,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
     SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
     SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
     SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
+    SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
     SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
     SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
     SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
@@ -1052,6 +1056,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bindCompGraph(AdderCG);
   bindICmps(ICmpCG);
   bindCompGraph(MulCG);
+  bindCompGraph(MulLHCG);
   bindCompGraph(AsrCG);
   bindCompGraph(LsrCG);
   bindCompGraph(ShlCG);

@@ -76,7 +76,7 @@ private:
 
   // Arithmetic operations.
   SDNode *SelectAdd(SDNode *N);
-  SDNode *SelectUMUL(SDNode *N, bool isUMUL_LOHI);
+  SDNode *SelectUMUL_LOHI(SDNode *N);
   SDNode *SelectICmp(SDNode *N);
 
   SDNode *buildBitSlice(SDNode *N, unsigned SizeOfN, unsigned UB, unsigned LB);
@@ -187,13 +187,13 @@ SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
     CurDAG->getTargetConstant(0, MVT::i64)
   };
 
-  EVT ResultVT
-    = VTargetLowering::getRoundIntegerOrBitType(UB - LB, *CurDAG->getContext());
+  EVT VT = VTargetLowering::getRoundIntegerOrBitType(UB - LB,
+                                                     *CurDAG->getContext());
   return CurDAG->getMachineNode(VTM::VOpBitSlice, N->getDebugLoc(),
-                                ResultVT, Ops, array_lengthof(Ops));
+                                VT, Ops, array_lengthof(Ops));
 }
 
-SDNode *VDAGToDAGISel::SelectUMUL(SDNode *N, bool isUMUL_LOHI) {
+SDNode *VDAGToDAGISel::SelectUMUL_LOHI(SDNode *N) {
   SDValue Ops[] = { N->getOperand(0),
     N->getOperand(1),
     SDValue()/*The dummy bit width operand*/,
@@ -204,8 +204,9 @@ SDNode *VDAGToDAGISel::SelectUMUL(SDNode *N, bool isUMUL_LOHI) {
   // Annotate the bitwidth information manually.
   unsigned OperandWidth = VTargetLowering::computeSizeInBits(Ops[0]);
   unsigned MulWidth = OperandWidth * 2;
-  assert((!isUMUL_LOHI || MulWidth <= 64) && "Unsupported multiplier width!");
-  MulWidth = std::min(MulWidth, 64u);
+  EVT VT = VTargetLowering::getRoundIntegerOrBitType(MulWidth,
+                                                     *CurDAG->getContext());
+  assert(MulWidth <= 64 && "Unsupported multiplier width!");
 
   AddAnnotator.setBitWidth(MulWidth, 0);
   // LHS and RHS operands.
@@ -213,14 +214,9 @@ SDNode *VDAGToDAGISel::SelectUMUL(SDNode *N, bool isUMUL_LOHI) {
   AddAnnotator.setBitWidth(OperandWidth, 2);
 
   updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
-  EVT ResultVT = VTargetLowering::getRoundIntegerOrBitType(2 * OperandWidth,
-                                                           *CurDAG->getContext());
-  if (!isUMUL_LOHI)
-    return CurDAG->SelectNodeTo(N, VTM::VOpMult, N->getVTList(),
-                                Ops, array_lengthof(Ops));
 
-  SDNode *MulNode = CurDAG->getMachineNode(VTM::VOpMult, N->getDebugLoc(),
-                                           ResultVT, Ops, array_lengthof(Ops));
+  SDNode *MulNode = CurDAG->getMachineNode(VTM::VOpMultLoHi, N->getDebugLoc(),
+                                           VT, Ops, array_lengthof(Ops));
 
   SDNode *Hi = buildBitSlice(MulNode, MulWidth, MulWidth, OperandWidth);
   SDNode *Lo = buildBitSlice(MulNode, MulWidth, OperandWidth, 0);
@@ -249,10 +245,10 @@ SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
   // Cin
   AddAnnotator.setBitWidth(1, 3);
   updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
-  EVT ResultVT = VTargetLowering::getRoundIntegerOrBitType(AdderWidth + 1,
+  EVT VT = VTargetLowering::getRoundIntegerOrBitType(AdderWidth + 1,
                                                            *CurDAG->getContext());
   SDNode *AddNode = CurDAG->getMachineNode(VTM::VOpAdd, N->getDebugLoc(),
-                                           ResultVT, Ops, array_lengthof(Ops));
+                                           VT, Ops, array_lengthof(Ops));
   SDNode *Result = buildBitSlice(AddNode, AdderWidth + 1, AdderWidth, 0);
   SDNode *Carry = buildBitSlice(AddNode, AdderWidth + 1,
                                 AdderWidth + 1, AdderWidth);
@@ -541,8 +537,8 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
 
   case ISD::ADDE:             return SelectAdd(N);
   case VTMISD::ICmp:          return SelectICmp(N);
-  case ISD::MUL:              return SelectUMUL(N, false);
-  case ISD::UMUL_LOHI:        return SelectUMUL(N, true);
+  case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
+  case ISD::UMUL_LOHI:        return SelectUMUL_LOHI(N);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
   case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);

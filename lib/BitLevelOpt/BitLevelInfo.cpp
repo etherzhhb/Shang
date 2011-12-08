@@ -289,7 +289,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
-  //case VTM::VOpMult:
+  case VTM::VOpMult:
   case VTM::VOpOr:
   case VTM::VOpAnd:
   case VTM::VOpXor: {
@@ -297,6 +297,14 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 1,
                                               Instr->operands_begin() + 3);
     if (updateBitWidth(Result, Width))
+      Defs.push_back(&Result);
+    break;
+  }
+  case VTM::VOpMultLoHi: {
+    MachineOperand &Result = Instr->getOperand(0);
+    unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 1,
+                                              Instr->operands_begin() + 3);
+    if (updateBitWidth(Result, Width * 2))
       Defs.push_back(&Result);
     break;
   }

@@ -199,7 +199,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitAllSignals();
   void emitSignals(const TargetRegisterClass *RC, bool isRegister);
   VASTValue *emitFUAdd(unsigned FUNum, unsigned BitWidth);
-  VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth);
+  VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi);
   VASTValue *emitFUShift(unsigned FUNum, unsigned BitWidth,
                          VASTWire::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
@@ -592,10 +592,13 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   return Result;
 }
 
-VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth) {
+VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
   std::string ResultName = "mult" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
   Result->setOpcode(VASTWire::dpMul);
+
+  // No need to include the high part is included in the operand register.
+  if (HasHi) BitWidth /= 2;
 
   std::string OpName = ResultName + "_a";
   Result->addOperand(VM->addRegister(OpName, BitWidth));
@@ -667,7 +670,10 @@ void RTLCodegen::emitAllSignals() {
       VM->indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RMULRegClassID:
-      VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth()));
+      VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), false));
+      break;
+    case VTM::RMULLHRegClassID:
+      VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RASRRegClassID: {
       VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpSRA);
@@ -801,6 +807,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::COPY:             emitOpCopy(Op, CurSlot, Cnds);break;
     case VTM::VOpAdd:           emitOpAdd(Op, CurSlot, Cnds); break;
     case VTM::VOpICmp:
+    case VTM::VOpMultLoHi:
     case VTM::VOpMult:
     case VTM::VOpSHL:
     case VTM::VOpSRL:

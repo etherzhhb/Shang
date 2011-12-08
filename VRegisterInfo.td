@@ -21,6 +21,7 @@ class VTMReg<string n> : Register<n> {
 // Result registers of function units.
 def AR : VTMReg<"add">;
 def MR : VTMReg<"mult">;
+def MLHR : VTMReg<"mult_lohi">;
 def LSRR : VTMReg<"shr">;
 def ASRR : VTMReg<"asr">;
 def SHLR : VTMReg<"shl">;
@@ -46,6 +47,7 @@ def PHIR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [PhiR]>;
 // Result register classes of function units.
 def RADD    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [AR]>;
 def RMUL    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MR]>;
+def RMULLH  : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MLHR]>;
 // Shifts
 def RLSR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [LSRR]>;
 def RASR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [ASRR]>;

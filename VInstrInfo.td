@@ -219,6 +219,9 @@ let isReMaterializable = 1,
     def VOpMult : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
                          "$dst = $src1 * $src2;",
                          [], FUMult, 0 /*writeUntilFinish*/>;
+    def VOpMultLoHi : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
+                             "$dst = $src1 * $src2;",
+                             [], FUMult, 0 /*writeUntilFinish*/>;
   }
 
   def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
