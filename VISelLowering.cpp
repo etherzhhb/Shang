@@ -192,6 +192,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::AND);
   setTargetDAGCombine(ISD::ADDE);
   setTargetDAGCombine(ISD::MUL);
+  setTargetDAGCombine(ISD::UMUL_LOHI);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {

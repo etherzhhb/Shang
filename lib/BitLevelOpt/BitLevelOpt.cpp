@@ -930,7 +930,6 @@ inline static SDValue MULBuildLowPart(TargetLowering::DAGCombinerInfo &DCI,
   return Lo;
 }
 
-
 inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
                                        SDNode *N, SDValue LHS, SDValue RHS,
                                        SDValue Lo, bool Commuted) {
@@ -941,44 +940,85 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   assert(Lo->getOpcode() == ISD::UMUL_LOHI && "Expect Lo is UMUL_LOHI!");
   SDValue LHSLo = Lo->getOperand(0), RHSLo = Lo->getOperand(1);
 
-  SDValue Hi = Lo.getValue(1);
-  EVT HiVT = Hi.getValueType();
+  // The High part of the UMUL_LOHI.
+  SDValue LoHi = Lo.getValue(1);
+  EVT HiVT = LoHi.getValueType();
 
-  SDValue MulLLRH = DAG.getNode(ISD::MUL, dl, HiVT, LHSLo, RHS);
-  DCI.AddToWorklist(MulLLRH.getNode());
+  unsigned MULOpcode = N->getOpcode();
+  bool isUMUL_LoHi = MULOpcode == ISD::UMUL_LOHI;
+  SDVTList MULVTs = isUMUL_LoHi ? DAG.getVTList(HiVT, HiVT)
+                                : DAG.getVTList(HiVT);
+  SDValue MulLLRHLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSLo, RHS);
+  DCI.AddToWorklist(MulLLRHLo.getNode());
 
   SDVTList ADDEVTs = DAG.getVTList(HiVT, MVT::i1);
-  Hi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, Hi, MulLLRH,
+  LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, MulLLRHLo,
                    DAG.getTargetConstant(0, MVT::i1));
-  DCI.AddToWorklist(Hi.getNode());
+  DCI.AddToWorklist(LoHi.getNode());
 
-  SDValue MulLHRL = DAG.getNode(ISD::MUL, dl, HiVT, LHS, RHSLo);
-  DCI.AddToWorklist(MulLHRL.getNode());
-  Hi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, Hi, MulLHRL,
+  SDValue MulLHRLLo = DAG.getNode(MULOpcode, dl, MULVTs, LHS, RHSLo);
+  DCI.AddToWorklist(MulLHRLLo.getNode());
+  LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, MulLHRLLo,
                    DAG.getTargetConstant(0, MVT::i1));
-  DCI.AddToWorklist(Hi.getNode());
+  DCI.AddToWorklist(LoHi.getNode());
 
-  return Hi;
+  Lo = DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
+                   N->getValueType(0), LoHi, Lo);
+  // The lower part of the multiplication is enough.
+  if (!isUMUL_LoHi) return Lo;
+
+  // Compute the High part of the result.
+  SDValue MulLLRHHi = MulLLRHLo.getValue(1);
+  SDValue MulLHRLHi = MulLHRLLo.getValue(1);
+  SDValue MulLHRHLo = DAG.getNode(ISD::UMUL_LOHI, dl, MULVTs, LHS, RHS);
+  DCI.AddToWorklist(MulLHRHLo.getNode());
+
+  // The lower half of the High Part.
+  SDValue HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs, MulLHRHLo, MulLLRHHi,
+                             DAG.getTargetConstant(0, MVT::i1));
+  DCI.AddToWorklist(HiLo.getNode());
+  HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs, HiLo, MulLHRLHi,
+                     DAG.getTargetConstant(0, MVT::i1));
+  DCI.AddToWorklist(HiLo.getNode());
+
+  // Build the High part of the UMUL_LOHI.
+  SDValue Hi = DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
+                           N->getValueType(0), MulLHRHLo.getValue(1), HiLo);
+  DCI.CombineTo(N, Lo, Hi);
+  return SDValue(N, 0);
 }
 
+// We already build the full result in MULBuildHighPart.
 inline static SDValue ConcatMUL(TargetLowering::DAGCombinerInfo &DCI,
                                 SDNode *N, SDValue Hi, SDValue Lo) {
-  return DCI.DAG.getNode(VTMISD::BitCat, N->getDebugLoc(),
-                         N->getValueType(0), Hi, Lo);
+  return Hi;
 }
 
 static SDValue PerformMulCombine(SDNode *N, const VTargetLowering &TLI,
                                  TargetLowering::DAGCombinerInfo &DCI,
                                  bool Commuted = false) {
   SDValue OpA = N->getOperand(0 ^ Commuted), OpB = N->getOperand(1 ^ Commuted);
+  bool isMUL_LoHi = N->getOpcode() == ISD::UMUL_LOHI;
 
   uint64_t OpBVal = 0;
   if (ExtractConstant(OpB, OpBVal)) {
+    SelectionDAG &DAG = DCI.DAG;
+    SDValue Lo, Hi = DAG.getTargetConstant(0, OpA.getValueType());
     // A * 1 = A
-    if (OpBVal == 1) return OpA;
+    if (OpBVal == 1) Lo = OpA;
+
     // A * 0 = 0
-    if (OpBVal == 0) return OpA;
+    if (OpBVal == 0) Lo = DAG.getTargetConstant(0, OpA.getValueType());
+
+    // If something combined
+    if (Lo.getNode())
+      if (isMUL_LoHi) {
+        DCI.CombineTo(N, Lo, Hi);
+        return SDValue(N, 0);
+      } else
+        return Lo;
   }
+
 
   SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
                                   // Get bitslice from hi part and lo before
@@ -1462,6 +1502,7 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::ADDE:
     return PerformAddCombine(N, *this, DCI);
   case ISD::MUL:
+  case ISD::UMUL_LOHI:
     return PerformMulCombine(N, *this, DCI);
   case VTMISD::ICmp:
     return PerfromICmpCombine(N, *this, DCI);
