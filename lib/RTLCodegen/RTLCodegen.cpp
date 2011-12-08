@@ -219,6 +219,7 @@ class RTLCodegen : public MachineFunctionPass {
   void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpCase(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
+  void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
   void emitOpBitSlice(ucOp &OpBitSlice);
@@ -798,7 +799,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
     case VTM::COPY:             emitOpCopy(Op, CurSlot, Cnds);break;
-    case VTM::VOpAdd:
+    case VTM::VOpAdd:           emitOpAdd(Op, CurSlot, Cnds); break;
     case VTM::VOpICmp:
     case VTM::VOpMult:
     case VTM::VOpSHL:
@@ -862,6 +863,17 @@ void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
   OS.exit_block();
 
   Slot->addNextSlot(0);
+}
+
+void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
+                           SmallVectorImpl<VASTCnd> &Cnds) {
+  VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
+  VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
+  R = cast<VASTRegister>(Result->getOperand(1));
+  VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
+  R = cast<VASTRegister>(Result->getOperand(2));
+  VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
 }
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
