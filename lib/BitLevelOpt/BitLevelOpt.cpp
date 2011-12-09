@@ -383,7 +383,6 @@ static unsigned GetDefaultSplitBit(SDNode *N,
                                    SDValue RHS, SDValue &RHSLo, SDValue &RHSHi){
   if (RHS->getOpcode() == VTMISD::BitCat) {
     unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
-    unsigned RHSHiBits = VTargetLowering::computeSizeInBits(RHS->getOperand(0));
 
     RHSHi = RHS.getOperand(0);
     RHSLo = RHS.getOperand(1);
@@ -920,6 +919,37 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
                                   Commuted);
   if (RV.getNode()) return RV;
 
+  // Try to concat ADDE togethers
+  //if (C->getOpcode() == ISD::ADDE && C->hasOneUse()) {
+  //  unsigned LowerSize = C->getValueSizeInBits(0);
+  //  if (LowerSize <= 32 && LowerSize == N->getValueSizeInBits(0)) {
+  //    SDValue LoOpA = C->getOperand(0), LoOpB = C->getOperand(1),
+  //                       LoC = C->getOperand(2);
+  //    // The concatation is profitable only if some operands are derived from
+  //    // the same node.
+  //    if (LoOpA.getNode() == OpA.getNode() || LoOpB.getNode() == OpB.getNode()){
+  //      LLVMContext &Cntx = *DAG.getContext();
+  //      EVT NewVT = VTargetLowering::getRoundIntegerOrBitType(LowerSize * 2, Cntx);
+
+  //      OpA = DAG.getNode(VTMISD::BitCat, OpA->getDebugLoc(), NewVT, OpA, LoOpA);
+  //      DCI.AddToWorklist(OpA.getNode());
+  //      OpB = DAG.getNode(VTMISD::BitCat, OpB->getDebugLoc(), NewVT, OpB, LoOpB);
+  //      DCI.AddToWorklist(OpB.getNode());
+
+  //      SDValue NewAdd = DAG.getNode(ISD::ADDE, dl, DAG.getVTList(NewVT, MVT::i1),
+  //                                   OpA, OpB, LoC);
+  //      DCI.AddToWorklist(NewAdd.getNode());
+  //      DCI.CombineTo(N, VTargetLowering::getBitSlice(DAG, dl, NewAdd,
+  //                                                    2 * LowerSize, LowerSize),
+  //                        NewAdd.getValue(1));
+
+  //      DCI.CombineTo(C.getNode(), VTargetLowering::getBitSlice(DAG, dl, NewAdd,
+  //                                                              LowerSize, 0));
+  //      return SDValue(N, 0);
+  //    }
+  //  }
+  //}
+
   // TODO: Combine with bit mask information.
   return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
 }
@@ -1022,7 +1052,7 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   DCI.AddToWorklist(MulLHRLLo.getNode());
 
   SDVTList ADDEVTs = DAG.getVTList(HiVT, MVT::i1);
-  SDValue LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, MulLHRLLo, MulLLRHLo,
+  SDValue LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, MulLLRHLo, MulLHRLLo,
                              DAG.getTargetConstant(0, MVT::i1));
   // Carry bit is need if we build the high part of the multiplication.
   SDValue C0 = LoHi.getValue(1);
