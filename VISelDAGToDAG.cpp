@@ -74,11 +74,6 @@ private:
   SDNode *SelectRetVal(SDNode *N);
   SDNode *SelectBrcnd(SDNode *N);
 
-  // Arithmetic operations.
-  SDNode *SelectAdd(SDNode *N);
-  SDNode *SelectUMUL_LOHI(SDNode *N);
-  SDNode *SelectICmp(SDNode *N);
-
   SDNode *buildBitSlice(SDNode *N, unsigned SizeOfN, unsigned UB, unsigned LB);
 
   SDNode *SelectImmediate(SDNode *N, bool ForceMove = false);
@@ -88,6 +83,7 @@ private:
 
   SDNode *SelectINTRINSIC_W_CHAIN(SDNode *N);
 
+  virtual void PreprocessISelDAG();
   virtual void PostprocessISelDAG();
   void CopyToReg(SelectionDAG &DAG, SDNode *N);
 
@@ -191,135 +187,6 @@ SDNode *VDAGToDAGISel::buildBitSlice(SDNode *N, unsigned SizeOfN,
                                                      *CurDAG->getContext());
   return CurDAG->getMachineNode(VTM::VOpBitSlice, N->getDebugLoc(),
                                 VT, Ops, array_lengthof(Ops));
-}
-
-SDNode *VDAGToDAGISel::SelectUMUL_LOHI(SDNode *N) {
-  SDValue Ops[] = { N->getOperand(0),
-    N->getOperand(1),
-    SDValue()/*The dummy bit width operand*/,
-    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
-  };
-
-  BitWidthAnnotator AddAnnotator(0);
-  // Annotate the bitwidth information manually.
-  unsigned OperandWidth = VTargetLowering::computeSizeInBits(Ops[0]);
-  unsigned MulWidth = OperandWidth * 2;
-  EVT VT = VTargetLowering::getRoundIntegerOrBitType(MulWidth,
-                                                     *CurDAG->getContext());
-  assert(MulWidth <= 64 && "Unsupported multiplier width!");
-
-  AddAnnotator.setBitWidth(MulWidth, 0);
-  // LHS and RHS operands.
-  AddAnnotator.setBitWidth(OperandWidth, 1);
-  AddAnnotator.setBitWidth(OperandWidth, 2);
-
-  updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
-
-  SDNode *MulNode = CurDAG->getMachineNode(VTM::VOpMultLoHi, N->getDebugLoc(),
-                                           VT, Ops, array_lengthof(Ops));
-
-  SDNode *Hi = buildBitSlice(MulNode, MulWidth, MulWidth, OperandWidth);
-  SDNode *Lo = buildBitSlice(MulNode, MulWidth, OperandWidth, 0);
-
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), SDValue(Lo, 0));
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 1), SDValue(Hi, 0));
-
-  return 0;
-}
-
-SDNode *VDAGToDAGISel::SelectAdd(SDNode *N) {
-  SDValue Ops[] = { N->getOperand(0),
-                    N->getOperand(1),
-                    N->getOperand(2),
-                    SDValue()/*The dummy bit width operand*/,
-                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
-                  };
-
-  BitWidthAnnotator AddAnnotator(0);
-  // Annotate the bitwidth information manually.
-  unsigned AdderWidth = VTargetLowering::computeSizeInBits(Ops[0]);
-  AddAnnotator.setBitWidth(AdderWidth + 1, 0);
-  // LHS and RHS operands.
-  AddAnnotator.setBitWidth(AdderWidth, 1);
-  AddAnnotator.setBitWidth(AdderWidth, 2);
-  // Cin
-  AddAnnotator.setBitWidth(1, 3);
-  updateBitWidthAnnotator(Ops, CurDAG, AddAnnotator.get());
-  EVT VT = VTargetLowering::getRoundIntegerOrBitType(AdderWidth + 1,
-                                                           *CurDAG->getContext());
-  SDNode *AddNode = CurDAG->getMachineNode(VTM::VOpAdd, N->getDebugLoc(),
-                                           VT, Ops, array_lengthof(Ops));
-  SDNode *Result = buildBitSlice(AddNode, AdderWidth + 1, AdderWidth, 0);
-  SDNode *Carry = buildBitSlice(AddNode, AdderWidth + 1,
-                                AdderWidth + 1, AdderWidth);
-
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 0), SDValue(Result, 0));
-  CurDAG->ReplaceAllUsesOfValueWith(SDValue(N, 1), SDValue(Carry, 0));
-  // Simply return 0 since results of the SDNode are replaced.
-  return 0;
-}
-
-static unsigned getICmpPort(unsigned CC) {
-  switch (CC) {
-  case ISD::SETNE: return 1;
-  case ISD::SETEQ: return 2;
-  case ISD::SETGE: case ISD::SETUGE: return 3;
-  case ISD::SETGT: case ISD::SETUGT: return 4;
-  default: llvm_unreachable("Unexpected condition code!");
-  }
-}
-
-SDNode *VDAGToDAGISel::SelectICmp(SDNode *N) {
-  CondCodeSDNode *Cnd = cast<CondCodeSDNode>(N->getOperand(2));
-  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
-  unsigned OperandWidth = VTargetLowering::computeSizeInBits(LHS);
-  assert(OperandWidth > 1 && "Unexpected 1bit comparison!");
-  EVT FUVT = EVT::getIntegerVT(*CurDAG->getContext(), OperandWidth);
-  ISD::CondCode CC = Cnd->get();
-
-  switch (CC) {
-  case ISD::SETEQ:
-  case ISD::SETNE:
-  case ISD::SETGT:
-  case ISD::SETGE:
-  case ISD::SETUGT:
-  case ISD::SETUGE:
-    break;
-  case ISD::SETLT:
-  case ISD::SETLE:
-  case ISD::SETULT:
-  case ISD::SETULE:
-    CC = ISD::getSetCCSwappedOperands(CC);
-    std::swap(LHS, RHS);
-    break;
-  default: llvm_unreachable("Unexpected CondCode!");
-  }
-
-  unsigned CmpType = (CC == ISD::SETEQ || CC == ISD::SETNE) ? VFUs::CmpEQ
-                               : (ISD::isSignedIntSetCC(CC) ? VFUs::CmpSigned
-                                                            : VFUs::CmpUnsigned);
-
-  SDValue Ops[] = { LHS,
-                    RHS,
-                    // Encode the operand width to the condition code width.
-                    CurDAG->getTargetConstant(CmpType, FUVT),
-                    SDValue()/*The dummy bit width operand*/,
-                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
-                  };
-  // DirtyHack: Fix the bitwidth of icmp result.
-  unsigned ResultBitWidth = 8;
-  BitWidthAnnotator CmpAnnotator
-    = computeOperandsBitWidth(N, Ops, array_lengthof(Ops));
-  CmpAnnotator.setBitWidth(ResultBitWidth, 0);
-  updateBitWidthAnnotator(Ops, CurDAG, CmpAnnotator.get());
-
-  SDNode *CmpNode = CurDAG->getMachineNode(VTM::VOpICmp, N->getDebugLoc(),
-                                           N->getVTList(),
-                                           Ops, array_lengthof(Ops));
-  // Read the result from specific bit of the result.
-  unsigned ResultPort = getICmpPort(CC);
-
-  return buildBitSlice(CmpNode, ResultBitWidth, ResultPort + 1, ResultPort);
 }
 
 SDNode *VDAGToDAGISel::SelectSimpleNode(SDNode *N, unsigned Opc) {
@@ -535,10 +402,10 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
-  case ISD::ADDE:             return SelectAdd(N);
-  case VTMISD::ICmp:          return SelectICmp(N);
+  case VTMISD::ADDCS:         return SelectSimpleNode(N, VTM::VOpAdd);
+  case VTMISD::ICmp:          return SelectSimpleNode(N, VTM::VOpICmp);
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
-  case ISD::UMUL_LOHI:        return SelectUMUL_LOHI(N);
+  case VTMISD::MULHiLo:       return SelectSimpleNode(N, VTM::VOpMultLoHi);
 
   case ISD::XOR:              return SelectBinary(N, VTM::VOpXor);
   case ISD::AND:              return SelectBinary(N, VTM::VOpAnd);
@@ -594,4 +461,12 @@ void VDAGToDAGISel::PostprocessISelDAG() {
       CopyToReg(*CurDAG, NI);
   }
   CurDAG->setRoot(Dummy.getValue());
+}
+
+void VDAGToDAGISel::PreprocessISelDAG() {
+  const VTargetLowering *TLI =
+    reinterpret_cast<const VTargetLowering*>(TM.getTargetLowering());
+  TLI->isPreISel = true;
+  CurDAG->Combine(NoIllegalOperations, *AA, OptLevel);
+  TLI->isPreISel = false;
 }

@@ -1640,12 +1640,16 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, *this, DCI);
   case ISD::ADDE:
-    return PerformAddCombine(N, *this, DCI);
-  case ISD::MUL:
+    if (isPreISel) return LowerADDEForISel(N, DCI);
+    else           return PerformAddCombine(N, *this, DCI);
   case ISD::UMUL_LOHI:
+    if (isPreISel) return LowerUMUL_LOHIForISel(N, DCI);
+    // Else fall though.
+  case ISD::MUL:
     return PerformMulCombine(N, *this, DCI);
   case VTMISD::ICmp:
-    return PerfromICmpCombine(N, *this, DCI);
+    if (isPreISel) return LowerICmpForISel(N, DCI);
+    else           return PerfromICmpCombine(N, *this, DCI);
   case ISD::ROTL:
   case ISD::ROTR:
   case ISD::SHL:

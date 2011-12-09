@@ -38,6 +38,17 @@ def VTMFnRet  :  SDNode<"VTMISD::Ret", SDT_FnRet,
 
 def VTMICmp : SDNode<"VTMISD::ICmp", SDTSetCC>;
 
+def SDT_VBinIntOp : SDTypeProfile<1, 2, [     // MULHiLo.
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>
+]>;
+
+def VTMUMUL_HiLo : SDNode<"VTMISD::UMUL_HiLo", SDT_VBinIntOp>;
+
+def SDT_VTernaryIntOp : SDTypeProfile<1, 3, [     // MULHiLo.
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<3>
+]>;
+def VTMADDCS     : SDNode<"VTMISD::ADDCS", SDT_VTernaryIntOp>;
+
 // 'Calling' internal module, which instantiated inside the current module.
 // Return the result token.
 def SDT_InternalCall : SDTypeProfile<1, -1, []>;
