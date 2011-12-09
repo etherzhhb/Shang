@@ -377,6 +377,24 @@ unsigned GetBitCatCommonSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI
   return LHSLoBits;
 }
 
+static unsigned CountLeadingZerosSplitBit(uint64_t Val, unsigned SizeInBit) {
+  unsigned LeadingZerosSplitBit = CountLeadingZeros_64(Val);
+  if (LeadingZerosSplitBit == 0) return 0;
+
+  LeadingZerosSplitBit = 64 - LeadingZerosSplitBit;
+  if (LeadingZerosSplitBit == SizeInBit) return 0;
+
+  return LeadingZerosSplitBit;
+}
+
+static unsigned CountLeadingOnesSplitBit(uint64_t Val, unsigned SizeInBit) {
+  Val = SignExtend64(Val, SizeInBit);
+  unsigned LeadingOnesSplitBit = CountLeadingOnes_64(Val);
+  if (LeadingOnesSplitBit) LeadingOnesSplitBit = 64 - LeadingOnesSplitBit;
+
+  return LeadingOnesSplitBit;
+}
+
 static unsigned GetDefaultSplitBit(SDNode *N,
                                    TargetLowering::DAGCombinerInfo &DCI,
                                    SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
@@ -407,16 +425,10 @@ static unsigned GetDefaultSplitBit(SDNode *N,
   uint64_t RHSVal = 0;
   if (unsigned SizeInBit = ExtractConstant(RHS, RHSVal)) {
     unsigned TrailingZerosSplitBit = CountTrailingZeros_64(RHSVal);
-    unsigned LeadingZerosSplitBit = CountLeadingZeros_64(RHSVal);
-    if (LeadingZerosSplitBit) {
-      LeadingZerosSplitBit = 64 - LeadingZerosSplitBit;
-      if (LeadingZerosSplitBit == SizeInBit) LeadingZerosSplitBit = 0;
-    }
+    unsigned LeadingZerosSplitBit = CountLeadingZerosSplitBit(RHSVal, SizeInBit);
 
     unsigned TrailingOnesSplitBit = CountTrailingOnes_64(RHSVal);
-    unsigned LeadingOnesSplitBit =
-      CountLeadingOnes_64(SignExtend64(RHSVal, SizeInBit));
-    if (LeadingOnesSplitBit) LeadingOnesSplitBit = 64 - LeadingOnesSplitBit;
+    unsigned LeadingOnesSplitBit = CountLeadingOnesSplitBit(RHSVal, SizeInBit);
 
     unsigned SplitBit =
       std::max(std::max(TrailingZerosSplitBit, LeadingZerosSplitBit),
