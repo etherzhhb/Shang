@@ -932,13 +932,13 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
   }
 }
 
-static void addSubRegIdx(unsigned Reg, unsigned SubReg,
-                         MachineRegisterInfo *MRI) {
-  typedef MachineRegisterInfo::use_iterator use_it;
-
-  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I)
-    I.getOperand().setSubReg(SubReg);
-}
+//static void addSubRegIdx(unsigned Reg, unsigned SubReg,
+//                         MachineRegisterInfo *MRI) {
+//  typedef MachineRegisterInfo::use_iterator use_it;
+//
+//  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I)
+//    I.getOperand().setSubReg(SubReg);
+//}
 
 static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
   typedef MachineRegisterInfo::use_iterator use_it;
