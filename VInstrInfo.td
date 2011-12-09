@@ -227,6 +227,11 @@ let isReMaterializable = 1,
     def VOpAdd : FUInst<(outs DR:$dst),(ins DR:$src1, DR:$src2, DR:$ci),
                          "$dst = $src1 + $src2 + $ci;",
                          [], FUAddSub, 0 /*writeUntilFinish*/>;
+
+	// Data-path only version.
+    def VOpAdd_c : DPTvaInst<(outs DR:$dst),(ins DR:$src1, DR:$src2, DR:$ci),
+                             "$dst = $src1 + $src2 + $ci;", []>;
+
     def VOpMult : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
                          "$dst = $src1 * $src2;",
                          [], FUMult, 0 /*writeUntilFinish*/>;
@@ -251,6 +256,9 @@ let isReMaterializable = 1,
     def VOpICmp   : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1, i8imm:$CC),
                            "$dst = icmp $src0, $src1 $CC", [], FUICmp,
 	                       0 /*writeUntilFinish*/>;
+	// Data-path only version.
+    def VOpICmp_c  : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1, i8imm:$CC),
+                                "$dst = icmp $src0, $src1 $CC", []>;
 }
 
 // Memory transaction.

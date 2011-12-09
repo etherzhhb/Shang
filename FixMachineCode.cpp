@@ -110,7 +110,7 @@ bool FixMachineCode::canbeFold(MachineInstr *MI) const {
   if (MI->getOpcode() == VTM::VOpMove_ri)
     return true;
 
-  if (MI->getOpcode() == VTM::VOpAdd) {
+  if (MI->getOpcode() == VTM::VOpAdd || MI->getOpcode() == VTM::VOpAdd_c) {
     // Fold the add only if carry input is 0.
     if (!MI->getOperand(3).isImm() || MI->getOperand(3).getImm() != 0)
       return false;
@@ -204,6 +204,7 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
       FoldImmediate(MI, InstrToFold);
       break;
     case VTM::VOpAdd:
+    case VTM::VOpAdd_c:
       FoldAdd(MI, InstrToFold);
       break;
     default:

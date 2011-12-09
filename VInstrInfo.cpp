@@ -959,8 +959,10 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
     // TODO: Bitrepeat.
   default:                  break;
 
+  case VTM::VOpICmp_c:
   case VTM::VOpICmp:        return LookupLatency<3>(VFUs::CmpLatencies, MI);
   // Retrieve the FU bit width from its operand bit width
+  case VTM::VOpAdd_c:
   case VTM::VOpAdd:         return LookupLatency<1>(VFUs::AdderLatencies, MI);
 
   case VTM::VOpMultLoHi:

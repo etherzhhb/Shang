@@ -216,6 +216,9 @@ class RTLCodegen : public MachineFunctionPass {
   void emitUnaryOp(ucOp &UnOp, VASTWire::Opcode Opc);
   void emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc);
 
+  void emitChainedOpAdd(ucOp &Op);
+  void emitChainedOpICmp(ucOp &Op);
+
   void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
   void emitOpCase(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
 
@@ -883,6 +886,21 @@ void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
 }
 
+void RTLCodegen::emitChainedOpAdd(ucOp &Op) {
+  VASTWire &V = *cast<VASTWire>(getAsOperand(Op.getOperand(0)));
+  if (!V.isUnknownOp()) return;
+
+  V.setOpcode(VASTWire::dpAdd);
+  V.addOperand(getAsOperand(Op.getOperand(1)));
+  V.addOperand(getAsOperand(Op.getOperand(2)));
+  V.addOperand(getAsOperand(Op.getOperand(3)));
+}
+
+void RTLCodegen::emitChainedOpICmp(ucOp &Op) {
+  unsigned CC = Op.getOperand(3).getImm();
+  emitBinaryOp(Op, CC == VFUs::CmpSigned ? VASTWire::dpSCmp : VASTWire::dpUCmp);
+}
+
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
                                 SmallVectorImpl<VASTCnd> &Cnds) {
   VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
@@ -1173,14 +1191,17 @@ void RTLCodegen::emitDatapath(ucState &State) {
 
     case VTM::ImpUse:       /*Not need to handle*/  break;
 
-    case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor);    break;
-    case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);    break;
-    case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);     break;
+    case VTM::VOpAdd_c:     emitChainedOpAdd(Op); break;
+    case VTM::VOpICmp_c:    emitChainedOpICmp(Op); break;
 
-    case VTM::VOpNot:       emitUnaryOp(Op, VASTWire::dpNot);     break;
-    case VTM::VOpROr:       emitUnaryOp(Op, VASTWire::dpROr);     break;
-    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTWire::dpRAnd);    break;
-    case VTM::VOpRXor:      emitUnaryOp(Op, VASTWire::dpRXor);    break;
+    case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor);  break;
+    case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);  break;
+    case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);   break;
+
+    case VTM::VOpNot:       emitUnaryOp(Op, VASTWire::dpNot);   break;
+    case VTM::VOpROr:       emitUnaryOp(Op, VASTWire::dpROr);   break;
+    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTWire::dpRAnd);  break;
+    case VTM::VOpRXor:      emitUnaryOp(Op, VASTWire::dpRXor);  break;
 
     default:  assert(0 && "Unexpected opcode!");    break;
     }

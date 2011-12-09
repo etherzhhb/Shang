@@ -402,8 +402,8 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
-  case VTMISD::ADDCS:         return SelectSimpleNode(N, VTM::VOpAdd);
-  case VTMISD::ICmp:          return SelectSimpleNode(N, VTM::VOpICmp);
+  case VTMISD::ADDCS:         return SelectSimpleNode(N, VTM::VOpAdd_c);
+  case VTMISD::ICmp:          return SelectSimpleNode(N, VTM::VOpICmp_c);
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
   case VTMISD::MULHiLo:       return SelectSimpleNode(N, VTM::VOpMultLoHi);
 

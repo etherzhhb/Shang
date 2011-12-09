@@ -266,6 +266,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
            && "BitCat's width changed!");
     return;
   // Operations with Fixed bit width.
+  case VTM::VOpICmp_c:
   case VTM::VOpICmp:
   case VTM::VOpROr:
   case VTM::VOpRAnd:
@@ -280,6 +281,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // Dirty Hack: this appear in bugpoint.
   // case VTM::IMPLICIT_DEF:
   // Other Instructions.
+  case VTM::VOpAdd_c:
   case VTM::VOpAdd: {
     MachineOperand &Result = Instr->getOperand(0);
     unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 1,
