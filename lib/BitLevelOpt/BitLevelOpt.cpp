@@ -1255,53 +1255,15 @@ unsigned GetICmpBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   return RHSLoBits;
 }
 
-// KnownBit appears at the lower part, round down the split bit, so lower part
-// are all known bit.
-static unsigned RoundDownToPowerOf2(unsigned KnownBits, unsigned UB) {
-  assert(KnownBits < UB && "Unexpected all known bits!");
-  unsigned UnknownBits = UB - KnownBits;
-  unsigned RoundUnknownBits = std::max(1u << Log2_32_Ceil(UnknownBits), 8u);
-  // Become all unknown after round?
-  if (RoundUnknownBits >= UB)
-    return 0;
-
-  return UB - RoundUnknownBits;
-}
-
-// KnownBit appears at the higher part, round up the split bit, so higher part
-// are all known bit.
-//static unsigned RoundUpToPowerOf2(unsigned KnownBits, unsigned UB) {
-//  assert(KnownBits < UB && "Unexpected all known bits!");
-//  unsigned UnknownBits = UB - KnownBits;
-//  unsigned RoundUnknownBits = std::max(1u << Log2_32_Ceil(UnknownBits), 8u);
-//  // Become all unknown after round?
-//  if (RoundUnknownBits >= UB)
-//    return 0;
-//
-//  return RoundUnknownBits;
-//}
-
 static unsigned GetICmpRHSConstSplitBit(uint64_t RHSVal, unsigned RHSSize) {
-  unsigned SplitBit = CountTrailingZeros_64(RHSVal);
-  SplitBit = RoundDownToPowerOf2(SplitBit, RHSSize);
-  if (SplitBit >= RHSSize / 2) return SplitBit;
+  if (RHSSize <= 8) return 0;
 
-  SplitBit = CountTrailingOnes_64(RHSVal);
-  SplitBit = RoundDownToPowerOf2(SplitBit, RHSSize);
-  if (SplitBit >= RHSSize / 2) return SplitBit;
-
-  // FIXME: This casue infinte loop in dag combiner.
-  //int64_t SignedRHSVal = int64_t(RHSVal << (64 - RHSSize)) >> (64 - RHSSize);
-  //unsigned LeadingOnes = CountLeadingOnes_64(SignedRHSVal);
-  //if (LeadingOnes) {
-  //  LeadingOnes = LeadingOnes - (64 - RHSSize);
-  //  SplitBit = RoundUpToPowerOf2(LeadingOnes, RHSSize);
-  //  if (SplitBit <= RHSSize / 2) return SplitBit;
-  //}
-
-  //unsigned LeadingZeros = (CountLeadingZeros_64(RHSVal) - (64 - RHSSize));
-  //SplitBit = RoundUpToPowerOf2(LeadingZeros, RHSSize);
-  //if (SplitBit <= RHSSize / 2) return SplitBit;
+  unsigned SplitBit = RHSSize / 2;
+  if (CountTrailingZeros_64(RHSVal) >= SplitBit
+      || CountTrailingOnes_64(RHSVal)  >= SplitBit
+      || CountLeadingZerosSplitBit(RHSVal, RHSSize) <= SplitBit
+      || CountLeadingOnesSplitBit(RHSVal, RHSSize) <= SplitBit)
+    return SplitBit;
 
   return 0;
 }
