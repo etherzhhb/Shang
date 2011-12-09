@@ -1009,26 +1009,27 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   SDValue LHSLo = Lo->getOperand(0), RHSLo = Lo->getOperand(1);
 
   // The High part of the UMUL_LOHI.
-  SDValue LoHi = Lo.getValue(1);
-  EVT HiVT = LoHi.getValueType();
+  EVT HiVT = Lo.getValueType();
 
   unsigned MULOpcode = N->getOpcode();
   bool isUMUL_LoHi = MULOpcode == ISD::UMUL_LOHI;
   SDVTList MULVTs = isUMUL_LoHi ? DAG.getVTList(HiVT, HiVT)
                                 : DAG.getVTList(HiVT);
+  // Build the lower part of LL * RH and LH * RL and add them together.
   SDValue MulLLRHLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSLo, RHSHi);
   DCI.AddToWorklist(MulLLRHLo.getNode());
+  SDValue MulLHRLLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSHi, RHSLo);
+  DCI.AddToWorklist(MulLHRLLo.getNode());
 
   SDVTList ADDEVTs = DAG.getVTList(HiVT, MVT::i1);
-  LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, MulLLRHLo,
-                     DAG.getTargetConstant(0, MVT::i1));
+  SDValue LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, MulLHRLLo, MulLLRHLo,
+                             DAG.getTargetConstant(0, MVT::i1));
   // Carry bit is need if we build the high part of the multiplication.
   SDValue C0 = LoHi.getValue(1);
   DCI.AddToWorklist(LoHi.getNode());
 
-  SDValue MulLHRLLo = DAG.getNode(MULOpcode, dl, MULVTs, LHSHi, RHSLo);
-  DCI.AddToWorklist(MulLHRLLo.getNode());
-  LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, MulLHRLLo,
+  // Add the higher part of Lo to the sum of Lo(LL * RH) and Lo(LH * RL)
+  LoHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs, LoHi, Lo.getValue(1),
                      DAG.getTargetConstant(0, MVT::i1));
   // Remember the carry bit.
   SDValue C1 = LoHi.getValue(1);
@@ -1040,21 +1041,24 @@ inline static SDValue MULBuildHighPart(TargetLowering::DAGCombinerInfo &DCI,
   if (!isUMUL_LoHi) return Lo;
 
   // Compute the High part of the result.
-  // The lower half of the High Part.
+  // The lower half of the High Par, add Hi(LL * RH) and Hi(LH * RL) together.
   SDValue HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs,
                              MulLLRHLo.getValue(1), MulLHRLLo.getValue(1), C0);
   // Remember the carry bit.
   C0 = HiLo.getValue(1);
   DCI.AddToWorklist(HiLo.getNode());
 
+  // Build LH * RH
   SDValue MulLHRHLo = DAG.getNode(ISD::UMUL_LOHI, dl, MULVTs, LHSHi, RHSHi);
   DCI.AddToWorklist(MulLHRHLo.getNode());
 
+  // Add Lo(LH * RH) to the sum of Hi(LL * RH) and Hi(LH * RL).
   HiLo = DAG.getNode(ISD::ADDE, dl, ADDEVTs, HiLo, MulLHRHLo, C1);
   // Remember the carry bit.
   C1 = HiLo.getValue(1);
   DCI.AddToWorklist(HiLo.getNode());
 
+  // Add Hi(LH * RH) and the carry bit from Lo(LH * RH) + Hi(LL * RH) + Hi(LH * RL)
   SDValue MulLHRHHi = MulLHRHLo.getValue(1);
   SDValue HiHi = DAG.getNode(ISD::ADDE, dl, ADDEVTs,
                              MulLHRHHi, DAG.getTargetConstant(0, HiVT), C0);
