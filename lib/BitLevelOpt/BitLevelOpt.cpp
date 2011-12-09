@@ -19,6 +19,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/VISelLowering.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Function.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -173,22 +174,30 @@ static bool ExtractBitMaskInfo(int64_t Val, unsigned SizeInBits,
 // optimization framework.
 static void SplitLHSAt(TargetLowering::DAGCombinerInfo &DCI, unsigned SplitBit,
                        SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
-                       SDValue &RHSLo)  {
+                       SDValue &RHSLo, SDValue &RHSHi)  {
   SelectionDAG &DAG = DCI.DAG;
 
   LHSLo = VTargetLowering::getBitSlice(DAG, LHS->getDebugLoc(), LHS, SplitBit, 0);
   DCI.AddToWorklist(LHSLo.getNode());
   // Adjust the bitwidth of constant to match LHS's width.
   if (LHSLo.getValueSizeInBits() != RHSLo.getValueSizeInBits()) {
-    RHSLo = VTargetLowering::getBitSlice(DAG, RHSLo->getDebugLoc(), RHSLo, SplitBit, 0,
+    RHSLo = VTargetLowering::getBitSlice(DAG, RHSLo->getDebugLoc(), RHSLo,
+                                         SplitBit, 0,
                                          LHSLo.getValueSizeInBits());
     DCI.AddToWorklist(RHSLo.getNode());
   }
 
+  unsigned LHSSizeInBit = VTargetLowering::computeSizeInBits(LHS);
   LHSHi = VTargetLowering::getBitSlice(DAG, LHS->getDebugLoc(), LHS,
-                                       VTargetLowering::computeSizeInBits(LHS),
-                                       SplitBit);
+                                       LHSSizeInBit, SplitBit);
   DCI.AddToWorklist(LHSHi.getNode());
+  // Adjust the bitwidth of constant to match RHS's width.
+  if (LHSHi.getValueSizeInBits() != RHSHi.getValueSizeInBits()) {
+    RHSHi = VTargetLowering::getBitSlice(DAG, RHSHi->getDebugLoc(), RHSHi,
+                                         LHSSizeInBit - SplitBit, 0,
+                                         LHSHi.getValueSizeInBits());
+    DCI.AddToWorklist(RHSHi.getNode());
+  }
 }
 
 static void SplitOpAtRHSConstant(TargetLowering::DAGCombinerInfo &DCI,
@@ -338,10 +347,10 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
                      ExtractDisabledBits, ExtractEnabledBits, !flipped);
 }
 
-static unsigned GetDefaultSplitBit(SDNode *N,
-                                   TargetLowering::DAGCombinerInfo &DCI,
-                                   SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
-                                   SDValue RHS, SDValue &RHSLo, SDValue &RHSHi){
+static
+unsigned GetBitCatCommonSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                                 SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                                 SDValue RHS, SDValue &RHSLo, SDValue &RHSHi){
   if (LHS->getOpcode() != VTMISD::BitCat || RHS->getOpcode() != VTMISD::BitCat)
     return 0;
 
@@ -368,6 +377,62 @@ static unsigned GetDefaultSplitBit(SDNode *N,
   return LHSLoBits;
 }
 
+static unsigned GetDefaultSplitBit(SDNode *N,
+                                   TargetLowering::DAGCombinerInfo &DCI,
+                                   SDValue LHS, SDValue &LHSLo, SDValue &LHSHi,
+                                   SDValue RHS, SDValue &RHSLo, SDValue &RHSHi){
+  if (RHS->getOpcode() == VTMISD::BitCat) {
+    unsigned RHSLoBits = VTargetLowering::computeSizeInBits(RHS->getOperand(1));
+    unsigned RHSHiBits = VTargetLowering::computeSizeInBits(RHS->getOperand(0));
+
+    RHSHi = RHS.getOperand(0);
+    RHSLo = RHS.getOperand(1);
+
+    // Only promote the ADDE when we can drop the lower part.
+    uint64_t RHSLoVal = 0, RHSHiVal = 0;
+    if (!ExtractConstant(RHSLo, RHSLoVal) && !ExtractConstant(RHSHi, RHSHiVal))
+      // If constant not found, is there a common bitcat split bit?
+      return GetBitCatCommonSplitBit(N, DCI,
+                                     LHS, LHSLo, LHSHi,
+                                     RHS, RHSLo, RHSHi);
+
+    //if (!isNullValue(RHSLoVal, RHSLoBits) && !isNullValue(RHSHiVal, RHSHiBits)&&
+    //    !isAllOnesValue(RHSLoVal, RHSLoBits) && !isAllOnesValue(RHSHiVal, RHSHiBits))
+    //  return 0;
+
+    SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo, RHSHi);
+
+    return RHSLoBits;
+  }
+
+  uint64_t RHSVal = 0;
+  if (unsigned SizeInBit = ExtractConstant(RHS, RHSVal)) {
+    unsigned TrailingZerosSplitBit = CountTrailingZeros_64(RHSVal);
+    unsigned LeadingZerosSplitBit = CountLeadingZeros_64(RHSVal);
+    if (LeadingZerosSplitBit) {
+      LeadingZerosSplitBit = 64 - LeadingZerosSplitBit;
+      if (LeadingZerosSplitBit == SizeInBit) LeadingZerosSplitBit = 0;
+    }
+
+    unsigned TrailingOnesSplitBit = CountTrailingOnes_64(RHSVal);
+    unsigned LeadingOnesSplitBit =
+      CountLeadingOnes_64(SignExtend64(RHSVal, SizeInBit));
+    if (LeadingOnesSplitBit) LeadingOnesSplitBit = 64 - LeadingOnesSplitBit;
+
+    unsigned SplitBit =
+      std::max(std::max(TrailingZerosSplitBit, LeadingZerosSplitBit),
+               std::max(TrailingOnesSplitBit, LeadingOnesSplitBit));
+    assert(SplitBit < SizeInBit && "Bad split bit!");
+
+    SplitOpAtRHSConstant(DCI, SplitBit,
+                         LHS, LHSLo, LHSHi,
+                         RHS, RHSLo, RHSHi);
+
+    return SplitBit;
+  }
+
+  return 0;
+}
 
 // Promote bitcat in dag, like {a , b} & {c, d} => {a & c, b &d } or something.
 template<typename ConcatBitsFunc,
@@ -420,32 +485,36 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
   SDValue LHS = N->getOperand(0 ^ Commuted),
           RHS = N->getOperand(1 ^ Commuted);
 
+  SDValue NewNode;
   uint64_t Mask = 0;
   if (ExtractConstant(RHS, Mask)) {
     switch(N->getOpcode()) {
     case ISD::AND:
-      return ExtractBits(LHS, Mask, TLI, DCI, ExtractBitSlice, GetZerosBitSlice);
+      NewNode = ExtractBits(LHS, Mask, TLI, DCI, ExtractBitSlice, GetZerosBitSlice);
+      break;
     case ISD::OR:
-      return ExtractBits(LHS, Mask, TLI, DCI, GetOnesBitSlice, ExtractBitSlice);
+      NewNode = ExtractBits(LHS, Mask, TLI, DCI, GetOnesBitSlice, ExtractBitSlice);
+      break;
     case ISD::XOR:
-      return ExtractBits(LHS, Mask, TLI, DCI, FlipBitSlice, ExtractBitSlice);
+      NewNode = ExtractBits(LHS, Mask, TLI, DCI, FlipBitSlice, ExtractBitSlice);
+      break;
     default:
       llvm_unreachable("Unexpected Logic Node!");
     }
   }
 
+  if (NewNode.getNode()) return NewNode;
+
   // Try to promote the bitcat after operand commuted.
-  if (Commuted) {
-    SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
-                                    // Get bitslice from hi part and lo before
-                                    // concact them.
-                                    true,
-                                    ConcatBits,
-                                    LogicOpBuildLowPart,
-                                    LogicOpBuildHighPart,
-                                    GetDefaultSplitBit);
-    if (RV.getNode()) return RV;
-  }
+  NewNode = PromoteBinOpBitCat(N, TLI, DCI,
+                               // Get bitslice from hi part and lo before
+                               // concact them.
+                               true,
+                               ConcatBits,
+                               LogicOpBuildLowPart,
+                               LogicOpBuildHighPart,
+                               GetDefaultSplitBit);
+  if (NewNode.getNode()) return NewNode;
 
   return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformLogicCombine);
 }
@@ -727,7 +796,7 @@ unsigned GetADDEBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
   if (!isNullValue(CVal + RHSLoVal, RHSLoBits)) return 0;
 
-  SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo);
+  SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo, RHSHi);
 
   return RHSLoBits;
 }
@@ -876,7 +945,7 @@ unsigned GetMULBitCatSplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   if (!isNullValue(RHSLoVal, RHSLoBits) && !isNullValue(RHSHiVal, RHSHiBits))
     return 0;
 
-  SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo);
+  SplitLHSAt(DCI, RHSLoBits, LHS, LHSLo, LHSHi, RHSLo, RHSHi);
 
   return RHSLoBits;
 }

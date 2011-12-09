@@ -22,6 +22,11 @@ static inline unsigned getByteEnable(unsigned SizeInBytes) {
   return (0x1 << SizeInBytes) - 1;
 }
 
+/// SignExtend64 - Sign extend B-bit number x to 64-bit int.
+/// Usage int64_t r = SignExtend64<5>(x);
+inline int64_t SignExtend64(uint64_t x, unsigned SizeInBits) {
+  return int64_t(x << (64 - SizeInBits)) >> (64 - SizeInBits);
+}
 
 static std::string VBEMangle(const std::string &S) {
   std::string Result;
