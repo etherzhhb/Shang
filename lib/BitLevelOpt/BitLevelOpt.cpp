@@ -36,14 +36,14 @@
 using namespace llvm;
 
 template<typename Func>
-inline static SDValue commuteAndTryAgain(SDNode *N, const VTargetLowering &TLI,
-                                         TargetLowering::DAGCombinerInfo &DCI,
-                                         bool Commuted, Func F) {
+inline static
+SDValue commuteAndTryAgain(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                           bool Commuted, Func F) {
 
   if (Commuted) return SDValue();
 
   // If we not try to exchange the operands, exchange and try again.
-  return F(N, TLI, DCI, !Commuted);
+  return F(N, DCI, !Commuted);
 }
 
 inline static bool isAllOnesValue(uint64_t Val, unsigned SizeInBits) {
@@ -79,8 +79,8 @@ inline static bool IsConstant(SDValue V) {
 
 // Lower shifting a constant amount:
 //   a[31:0] = b[31:0] << 2 => a[31:0] = {b[29:0], 2'b00 }
-static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
-                                      TargetLowering::DAGCombinerInfo &DCI) {
+static
+SDValue PerformShiftImmCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
   SelectionDAG &DAG = DCI.DAG;
   SDValue Op = N->getOperand(0);
   SDValue ShiftAmt = N->getOperand(1);
@@ -89,8 +89,8 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
 
   // Limit the shift amount.
   if (!ExtractConstant(ShiftAmt, ShiftVal)) {
-    unsigned MaxShiftAmtSize = Log2_32_Ceil(TLI.computeSizeInBits(Op));
-    unsigned ShiftAmtSize = TLI.computeSizeInBits(ShiftAmt);
+    unsigned MaxShiftAmtSize = Log2_32_Ceil(VTargetLowering::computeSizeInBits(Op));
+    unsigned ShiftAmtSize = VTargetLowering::computeSizeInBits(ShiftAmt);
     // Limit the shift amount to the the width of operand.
     if (ShiftAmtSize > MaxShiftAmtSize) {
       ShiftAmt = VTargetLowering::getBitSlice(DAG, dl, ShiftAmt,
@@ -112,7 +112,7 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   // If we not shift at all, simply return the operand.
   if (ShiftVal == 0) return N->getOperand(0);
 
-  unsigned SrcSize = TLI.computeSizeInBits(Op);
+  unsigned SrcSize = VTargetLowering::computeSizeInBits(Op);
   EVT VT = N->getValueType(0);
   unsigned PaddingSize = ShiftVal;
   EVT PaddingVT = EVT::getIntegerVT(*DAG.getContext(), PaddingSize);
@@ -124,15 +124,15 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
     PaddingBits = DAG.getConstant(0, PaddingVT, true);
     break;
   case ISD::SRA:
-    PaddingBits = TLI.getBitRepeat(DAG, dl, TLI.getSignBit(DAG, dl, Op),
+    PaddingBits = VTargetLowering::getBitRepeat(DAG, dl, VTargetLowering::getSignBit(DAG, dl, Op),
       PaddingSize);
     break;
   case ISD::ROTL:
-    PaddingBits = TLI.getBitSlice(DAG, dl, Op, SrcSize, SrcSize - PaddingSize);
+    PaddingBits = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, SrcSize - PaddingSize);
     DCI.AddToWorklist(PaddingBits.getNode());
     break;
   case ISD::ROTR:
-    PaddingBits = TLI.getBitSlice(DAG, dl, Op, PaddingSize, 0);
+    PaddingBits = VTargetLowering::getBitSlice(DAG, dl, Op, PaddingSize, 0);
     DCI.AddToWorklist(PaddingBits.getNode());
     break;
   }
@@ -141,7 +141,7 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   case ISD::ROTL:
   case ISD::SHL: {
     // Discard the higher bits of src.
-    Op = TLI.getBitSlice(DAG, dl, Op, SrcSize - PaddingSize, 0);
+    Op = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize - PaddingSize, 0);
     DCI.AddToWorklist(Op.getNode());
     return DAG.getNode(VTMISD::BitCat, dl, VT, Op, PaddingBits);
   }
@@ -149,7 +149,7 @@ static SDValue PerformShiftImmCombine(SDNode *N, const VTargetLowering &TLI,
   case ISD::SRA:
   case ISD::SRL:
     // Discard the lower bits of src.
-    Op = TLI.getBitSlice(DAG, dl, Op, SrcSize, PaddingSize);
+    Op = VTargetLowering::getBitSlice(DAG, dl, Op, SrcSize, PaddingSize);
     DCI.AddToWorklist(Op.getNode());
     return DAG.getNode(VTMISD::BitCat, dl, VT, PaddingBits, Op);
   default:
@@ -280,7 +280,7 @@ inline static SDValue FlipBitSlice(TargetLowering::DAGCombinerInfo &DCI,
 
 // FIXME: Allow custom bit concation.
 template<typename ExtractBitsFunc>
-static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
+static SDValue ExtractBits(SDValue Op, int64_t Mask,
                            TargetLowering::DAGCombinerInfo &DCI,
                            ExtractBitsFunc ExtractEnabledBits,
                            ExtractBitsFunc ExtractDisabledBits,
@@ -317,7 +317,7 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
     if(LB == 0) {
       assert(SizeInBits != UB && "Unexpected all one value!");
       SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, MidBits);
-      assert(TLI.computeSizeInBits(Result) == SizeInBits
+      assert(VTargetLowering::computeSizeInBits(Result) == SizeInBits
              && "Bit widht not match!");
       return Result;
     }
@@ -328,14 +328,14 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
 
     SDValue Lo = DAG.getNode(VTMISD::BitCat, dl, VT, MidBits, LoBits);
     if (UB == SizeInBits) {
-      assert(TLI.computeSizeInBits(Lo) == SizeInBits
+      assert(VTargetLowering::computeSizeInBits(Lo) == SizeInBits
              && "Bit widht not match!");
       return Lo;
     }
 
     DCI.AddToWorklist(Lo.getNode());
     SDValue Result = DAG.getNode(VTMISD::BitCat, dl, VT, HiBits, Lo);
-    assert(TLI.computeSizeInBits(Result) == SizeInBits
+    assert(VTargetLowering::computeSizeInBits(Result) == SizeInBits
            && "Bit widht not match!");
     return Result;
   }
@@ -343,7 +343,7 @@ static SDValue ExtractBits(SDValue Op, int64_t Mask, const VTargetLowering &TLI,
   if (flipped) return SDValue();
 
   // Flip the mask and try again.
-  return ExtractBits(Op, ~Mask, TLI, DCI,
+  return ExtractBits(Op, ~Mask, DCI,
                      ExtractDisabledBits, ExtractEnabledBits, !flipped);
 }
 
@@ -450,16 +450,16 @@ template<typename ConcatBitsFunc,
          typename BuildLowPartFunc,
          typename BuildHighPartFunc,
          typename GetSplitBitFunc>
-static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
-                                  TargetLowering::DAGCombinerInfo &DCI,
-                                  // For some SDNode, we cannot call getbitslice
-                                  // on hi and lo.
-                                  bool GetBitSliceForHiLo,
-                                  ConcatBitsFunc &ConcatBits,
-                                  BuildLowPartFunc &BuildLowPart,
-                                  BuildHighPartFunc &BuildHighPart,
-                                  GetSplitBitFunc &GetSplitBit,
-                                  bool Commuted = false) {
+static
+SDValue PromoteBinOpBitCat(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                           // For some SDNode, we cannot call getbitslice
+                           // on hi and lo.
+                           bool GetBitSliceForHiLo,
+                           ConcatBitsFunc &ConcatBits,
+                           BuildLowPartFunc &BuildLowPart,
+                           BuildHighPartFunc &BuildHighPart,
+                           GetSplitBitFunc &GetSplitBit,
+                           bool Commuted = false) {
   SDValue LHS = N->getOperand(0 ^ Commuted), RHS = N->getOperand(1 ^ Commuted);
 
   unsigned SizeInBit = VTargetLowering::computeSizeInBits(SDValue(N, 0));
@@ -490,9 +490,9 @@ static SDValue PromoteBinOpBitCat(SDNode *N, const VTargetLowering &TLI,
 
 
 
-static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
-                                   TargetLowering::DAGCombinerInfo &DCI,
-                                   bool Commuted = false) {
+static
+SDValue PerformLogicCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                            bool Commuted = false) {
   SDValue LHS = N->getOperand(0 ^ Commuted),
           RHS = N->getOperand(1 ^ Commuted);
 
@@ -501,13 +501,13 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
   if (ExtractConstant(RHS, Mask)) {
     switch(N->getOpcode()) {
     case ISD::AND:
-      NewNode = ExtractBits(LHS, Mask, TLI, DCI, ExtractBitSlice, GetZerosBitSlice);
+      NewNode = ExtractBits(LHS, Mask, DCI, ExtractBitSlice, GetZerosBitSlice);
       break;
     case ISD::OR:
-      NewNode = ExtractBits(LHS, Mask, TLI, DCI, GetOnesBitSlice, ExtractBitSlice);
+      NewNode = ExtractBits(LHS, Mask, DCI, GetOnesBitSlice, ExtractBitSlice);
       break;
     case ISD::XOR:
-      NewNode = ExtractBits(LHS, Mask, TLI, DCI, FlipBitSlice, ExtractBitSlice);
+      NewNode = ExtractBits(LHS, Mask, DCI, FlipBitSlice, ExtractBitSlice);
       break;
     default:
       llvm_unreachable("Unexpected Logic Node!");
@@ -517,21 +517,19 @@ static SDValue PerformLogicCombine(SDNode *N, const VTargetLowering &TLI,
   if (NewNode.getNode()) return NewNode;
 
   // Try to promote the bitcat after operand commuted.
-  NewNode = PromoteBinOpBitCat(N, TLI, DCI,
+  NewNode = PromoteBinOpBitCat(N, DCI,
                                // Get bitslice from hi part and lo before
                                // concact them.
                                true,
-                               ConcatBits,
-                               LogicOpBuildLowPart,
-                               LogicOpBuildHighPart,
-                               GetDefaultSplitBit);
+                               ConcatBits, LogicOpBuildLowPart,
+                               LogicOpBuildHighPart, GetDefaultSplitBit);
   if (NewNode.getNode()) return NewNode;
 
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformLogicCombine);
+  return commuteAndTryAgain(N, DCI, Commuted, PerformLogicCombine);
 }
 
-static SDValue PerformNotCombine(SDNode *N, const VTargetLowering &TLI,
-                                 TargetLowering::DAGCombinerInfo &DCI) {
+static
+SDValue PerformNotCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
   SDValue Op = N->getOperand(0);
 
   // ~(~A) = A.
@@ -574,8 +572,8 @@ static SDValue CombineConstants(SelectionDAG &DAG, SDValue &Hi, SDValue &Lo,
 }
 
 
-static SDValue PerformBitCatCombine(SDNode *N, const VTargetLowering &TLI,
-                                    TargetLowering::DAGCombinerInfo &DCI) {
+static
+SDValue PerformBitCatCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
   SDValue Hi = N->getOperand(0), Lo = N->getOperand(1);
   SelectionDAG &DAG = DCI.DAG;
 
@@ -599,8 +597,8 @@ static SDValue PerformBitCatCombine(SDNode *N, const VTargetLowering &TLI,
   return CombineConstants(DAG, Hi, Lo, N->getValueSizeInBits(0));
 }
 
-static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
-                                      TargetLowering::DAGCombinerInfo &DCI) {
+static
+SDValue PerformBitSliceCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
   SDValue Op = N->getOperand(0);
   unsigned UB = N->getConstantOperandVal(1),
            LB = N->getConstantOperandVal(2);
@@ -620,7 +618,7 @@ static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
   // return bitslice of that operand.
   if (Op->getOpcode() == VTMISD::BitCat) {
     SDValue HiOp = Op->getOperand(0), LoOp = Op->getOperand(1);
-    unsigned SplitBit = TLI.computeSizeInBits(LoOp);
+    unsigned SplitBit = VTargetLowering::computeSizeInBits(LoOp);
     if (UB <= SplitBit)
       return VTargetLowering::getBitSlice(DCI.DAG, dl, LoOp, UB, LB,
                                           N->getValueSizeInBits(0));
@@ -640,12 +638,12 @@ static SDValue PerformBitSliceCombine(SDNode *N, const VTargetLowering &TLI,
   return SDValue();
 }
 
-static SDValue PerformReduceCombine(SDNode *N, const VTargetLowering &TLI,
-                                    TargetLowering::DAGCombinerInfo &DCI) {
+static
+SDValue PerformReduceCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
   SDValue Op = N->getOperand(0);
 
   // 1 bit value do not need to reduce at all.
-  if (TLI.computeSizeInBits(Op) == 1) return Op;
+  if (VTargetLowering::computeSizeInBits(Op) == 1) return Op;
 
   SelectionDAG &DAG = DCI.DAG;
 
@@ -833,9 +831,9 @@ static unsigned GetADDESplitBit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   return 0;
 }
 
-static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
-                                 TargetLowering::DAGCombinerInfo &DCI,
-                                 bool Commuted = false) {
+static
+SDValue PerformAddCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                          bool Commuted = false) {
   DebugLoc dl = N->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
 
@@ -920,14 +918,12 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
     }
   }
 
-  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
+  SDValue RV = PromoteBinOpBitCat(N, DCI,
                                   // Get bitslice from hi part and lo before
                                   // concact them.
                                   true,
-                                  ConcatADDEs,
-                                  ADDEBuildLowPart,
-                                  ADDEBuildHighPart,
-                                  GetADDESplitBit,
+                                  ConcatADDEs, ADDEBuildLowPart,
+                                  ADDEBuildHighPart, GetADDESplitBit,
                                   Commuted);
   if (RV.getNode()) return RV;
 
@@ -963,7 +959,7 @@ static SDValue PerformAddCombine(SDNode *N, const VTargetLowering &TLI,
   //}
 
   // TODO: Combine with bit mask information.
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformAddCombine);
+  return commuteAndTryAgain(N, DCI, Commuted, PerformAddCombine);
 }
 //----------------------------------------------------------------------------//
 static
@@ -1122,8 +1118,8 @@ inline static SDValue ConcatMUL(TargetLowering::DAGCombinerInfo &DCI,
   return Hi;
 }
 
-static SDValue PerformMulCombine(SDNode *N, const VTargetLowering &TLI,
-                                 TargetLowering::DAGCombinerInfo &DCI,
+static
+SDValue PerformMulCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                  bool Commuted = false) {
   SDValue OpA = N->getOperand(0 ^ Commuted), OpB = N->getOperand(1 ^ Commuted);
   bool isMUL_LoHi = N->getOpcode() == ISD::UMUL_LOHI;
@@ -1172,18 +1168,16 @@ static SDValue PerformMulCombine(SDNode *N, const VTargetLowering &TLI,
     }
   }
 
-  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
+  SDValue RV = PromoteBinOpBitCat(N, DCI,
                                   // Get bitslice from hi part and lo before
                                   // concact them.
                                   false,
-                                  ConcatMUL,
-                                  MULBuildLowPart,
-                                  MULBuildHighPart,
-                                  GetMULSplitBit,
+                                  ConcatMUL, MULBuildLowPart,
+                                  MULBuildHighPart, GetMULSplitBit,
                                   Commuted);
   if (RV.getNode()) return RV;
 
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformMulCombine);
+  return commuteAndTryAgain(N, DCI, Commuted, PerformMulCombine);
 }
 
 //static void ExpandOperand(TargetLowering::DAGCombinerInfo &DCI, SDValue Op,
@@ -1377,49 +1371,44 @@ static SDValue ConcatICmps(TargetLowering::DAGCombinerInfo &DCI,
 
 #define DEF_GETLHSNOT(WHAT) \
 static SDValue GETLHSNOT(WHAT)(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,\
-                               const VTargetLowering &TLI,\
                                TargetLowering::DAGCombinerInfo &DCI) {\
-  SDValue LHSWHAT = GetLHS##WHAT(LHS, RHSVT, DAG, TLI, DCI);\
+  SDValue LHSWHAT = GetLHS##WHAT(LHS, RHSVT, DAG, DCI);\
   DCI.AddToWorklist(LHSWHAT.getNode());\
-  return TLI.getNot(DAG, LHS->getDebugLoc(), LHSWHAT);\
+  return VTargetLowering::getNot(DAG, LHS->getDebugLoc(), LHSWHAT);\
 }
 
 #define GETLHSBINOP(OP, LHS, RHS) GetLHS##LHS##OP##RHS
 #define DEF_GETLHSBINOP(OP, LHS, RHS) \
 static SDValue GETLHSBINOP(OP, LHS, RHS)(SDValue LHS, EVT RHSVT,\
                                          SelectionDAG &DAG,\
-                                         const VTargetLowering &TLI,\
                                          TargetLowering::DAGCombinerInfo &DCI) {\
   /*Work around for GCC does not accept something like "ISD::##OP"*/\
   unsigned OpCOR = ISD::OR;\
   (void) OpCOR;\
   unsigned OpCAND = ISD::AND;\
   (void) OpCAND;\
-  SDValue OPLHS = GetLHS##LHS(LHS, RHSVT, DAG, TLI, DCI);\
+  SDValue OPLHS = GetLHS##LHS(LHS, RHSVT, DAG, DCI);\
   DCI.AddToWorklist(OPLHS.getNode());\
-  SDValue OPRHS = GetLHS##RHS(LHS, RHSVT, DAG, TLI, DCI);\
+  SDValue OPRHS = GetLHS##RHS(LHS, RHSVT, DAG, DCI);\
   DCI.AddToWorklist(OPRHS.getNode());\
   return DAG.getNode(OpC##OP, LHS->getDebugLoc(), MVT::i1, OPLHS, OPRHS);\
 }
 
 static SDValue GetLHSNotZero(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
-                             const VTargetLowering &TLI,
                              TargetLowering::DAGCombinerInfo &DCI) {
   // A value is not zero, if it has some bit set.
-  return TLI.getReductionOp(DAG, VTMISD::ROr, LHS->getDebugLoc(), LHS);
+  return VTargetLowering::getReductionOp(DAG, VTMISD::ROr, LHS->getDebugLoc(), LHS);
 }
 
 static SDValue GetLHSAllOnes(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
-                             const VTargetLowering &TLI,
                              TargetLowering::DAGCombinerInfo &DCI) {
   // A value is all ones, if it has all bit set.
-  return TLI.getReductionOp(DAG, VTMISD::RAnd, LHS->getDebugLoc(), LHS);
+  return VTargetLowering::getReductionOp(DAG, VTMISD::RAnd, LHS->getDebugLoc(), LHS);
 }
 
 static SDValue GetLHSNegative(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
-                              const VTargetLowering &TLI,
                               TargetLowering::DAGCombinerInfo &DCI) {
-  return TLI.getSignBit(DAG, LHS->getDebugLoc(), LHS);
+  return VTargetLowering::getSignBit(DAG, LHS->getDebugLoc(), LHS);
 }
 
 DEF_GETLHSNOT(AllOnes)
@@ -1432,13 +1421,11 @@ DEF_GETLHSBINOP(AND, NotAllOnes, Negative)
 
 
 static SDValue GetAlwaysFalse(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
-                              const VTargetLowering &TLI,
                               TargetLowering::DAGCombinerInfo &DCI) {
   return DAG.getTargetConstant(0, MVT::i1);
 }
 
 static SDValue GetAlwaysTrue(SDValue LHS, EVT RHSVT, SelectionDAG &DAG,
-                              const VTargetLowering &TLI,
                               TargetLowering::DAGCombinerInfo &DCI) {
   return DAG.getTargetConstant(1, MVT::i1);
 }
@@ -1447,21 +1434,20 @@ template<typename OnRHSZeroFunc, typename OnRHSAllOnesFunc>
 static
 SDValue PerfromRHSConstantGenericCombine(SDValue LHS, uint64_t RHSVal,
                                          EVT RHSVT, SelectionDAG &DAG,
-                                         DebugLoc dl, const VTargetLowering &TLI,
+                                         DebugLoc dl,
                                          TargetLowering::DAGCombinerInfo &DCI,
                                          OnRHSZeroFunc &OnRHSZero,
                                          OnRHSAllOnesFunc &OnRHSAllOnes) {
   if (isNullValue(RHSVal, RHSVT.getSizeInBits()))
-    return OnRHSZero(LHS, RHSVT, DAG, TLI, DCI);
+    return OnRHSZero(LHS, RHSVT, DAG, DCI);
   if (isAllOnesValue(RHSVal, RHSVT.getSizeInBits()))
-    return OnRHSAllOnes(LHS, RHSVT, DAG, TLI, DCI);
+    return OnRHSAllOnes(LHS, RHSVT, DAG, DCI);
 
   return SDValue();
 }
 
 static
-SDValue PerfromICmpRHSConstantCombine(SDNode *N, const VTargetLowering &TLI,
-                                      TargetLowering::DAGCombinerInfo &DCI,
+SDValue PerfromICmpRHSConstantCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
                                       bool Commuted = false) {
   DebugLoc dl = N->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
@@ -1479,31 +1465,31 @@ SDValue PerfromICmpRHSConstantCombine(SDNode *N, const VTargetLowering &TLI,
 
     switch (CC) {
     case ISD::SETUGT:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // Lower a > 0 to a != 0 for unsigned greater than.
                                    GetLHSNotZero,
           // We never have an unsigned value greater than ~0
                                    GetAlwaysFalse);
     case ISD::SETUGE:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // All unsigned value is greater than or equal to 0.
                                    GetAlwaysTrue,
           // An unsigned value is greater than or equal to ~0 only it is ~0
                                    GetLHSNotAllOnes);
     case ISD::SETULT:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // We never have an unsigned value less than 0
                                    GetAlwaysFalse,
           // An unsigned value is less than ~0 only it is not ~0
                                    GetLHSNotAllOnes);
     case ISD::SETULE:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // An unsigned value is less than or equal to 0 only is 0.
                                    GetLHSNotNotZero,
           // All unsigned value is less than or equal to ~0
                                    GetAlwaysTrue);
     case ISD::SETGT:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // An signed value is greater than 0
           // if its signed bit not set and Not zero.
                                    GetLHSNotZeroANDNotNegative,
@@ -1511,7 +1497,7 @@ SDValue PerfromICmpRHSConstantCombine(SDNode *N, const VTargetLowering &TLI,
           // if its signed bit not set.
                                    GetLHSNotNegative);
     case ISD::SETGE:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // An signed value is greater than or equal to 0
           // if its signed bit not set.
                                    GetLHSNotNegative,
@@ -1519,13 +1505,13 @@ SDValue PerfromICmpRHSConstantCombine(SDNode *N, const VTargetLowering &TLI,
           // if its -1 or signed bit not set.
                                    GetLHSAllOnesORNotNegative);
     case ISD::SETLT:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // An signed value is less than  0 if its signed bit set.
                                    GetLHSNegative,
           // An signed value is less than -1 its signed bit set and not equal to -1
                                    GetLHSNotAllOnesANDNegative);
     case ISD::SETLE:
-      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, TLI, DCI,
+      return PerfromRHSConstantGenericCombine(LHS, RHSVal, RHSVT, DAG, dl, DCI,
           // An signed value is less than or equal to 0
           // if its signed bit set or it is 0.
                                    GetLHSNotNotZeroORNegative,
@@ -1535,29 +1521,27 @@ SDValue PerfromICmpRHSConstantCombine(SDNode *N, const VTargetLowering &TLI,
     }
   }
 
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerfromICmpRHSConstantCombine);
+  return commuteAndTryAgain(N, DCI, Commuted, PerfromICmpRHSConstantCombine);
 }
 
-static SDValue PerformICmpSplit(SDNode *N, const VTargetLowering &TLI,
-                                TargetLowering::DAGCombinerInfo &DCI,
-                                bool Commuted = false) {
+static
+SDValue PerformICmpSplit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
+                         bool Commuted = false) {
   // Can we find optimization opportunity by spliting the comparison?
-  SDValue RV = PromoteBinOpBitCat(N, TLI, DCI,
+  SDValue RV = PromoteBinOpBitCat(N, DCI,
                                   // No need to get bitslice from hi part and lo before
                                   // concact them.
                                   false,
-                                  ConcatICmps,
-                                  BuildICmpLowPart,
-                                  BuildICmpHighPart,
-                                  GetICmpSplitBit,
+                                  ConcatICmps, BuildICmpLowPart,
+                                  BuildICmpHighPart, GetICmpSplitBit,
                                   Commuted);
   if (RV.getNode()) return RV;
 
-  return commuteAndTryAgain(N, TLI, DCI, Commuted, PerformICmpSplit);
+  return commuteAndTryAgain(N, DCI, Commuted, PerformICmpSplit);
 }
 
-static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
-                                  TargetLowering::DAGCombinerInfo &DCI) {
+static
+SDValue PerfromICmpCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
 
   DebugLoc dl = N->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
@@ -1591,18 +1575,18 @@ static SDValue PerfromICmpCombine(SDNode *N, const VTargetLowering &TLI,
 
     SDValue NE = DAG.getNode(ISD::XOR, dl, OperandVT, LHS, RHS);
     DCI.AddToWorklist(NE.getNode());
-    NE = TLI.getReductionOp(DAG, VTMISD::ROr, dl, NE);
+    NE = VTargetLowering::getReductionOp(DAG, VTMISD::ROr, dl, NE);
     if (CC == ISD::SETNE) return NE;
 
     // Else it is a SETEQ, just get it from not(SETNE);
     DCI.AddToWorklist(NE.getNode());
-    return TLI.getNot(DAG, dl, NE);
+    return VTargetLowering::getNot(DAG, dl, NE);
   }
 
-  SDValue RV = PerfromICmpRHSConstantCombine(N, TLI, DCI);
+  SDValue RV = PerfromICmpRHSConstantCombine(N, DCI);
   if (RV.getNode()) return RV;
 
-  return PerformICmpSplit(N, TLI, DCI);
+  return PerformICmpSplit(N, DCI);
 }
 
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
@@ -1610,36 +1594,36 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            const {
   switch (N->getOpcode()) {
   case VTMISD::BitCat:
-    return PerformBitCatCombine(N, *this, DCI);
+    return PerformBitCatCombine(N, DCI);
   case VTMISD::BitSlice:
-    return PerformBitSliceCombine(N, *this, DCI);
+    return PerformBitSliceCombine(N, DCI);
   case ISD::ADDE:
     if (isPreISel) return LowerADDEForISel(N, DCI);
-    else           return PerformAddCombine(N, *this, DCI);
+    else           return PerformAddCombine(N, DCI);
   case ISD::UMUL_LOHI:
     if (isPreISel) return LowerUMUL_LOHIForISel(N, DCI);
     // Else fall though.
   case ISD::MUL:
-    return PerformMulCombine(N, *this, DCI);
+    return PerformMulCombine(N, DCI);
   case VTMISD::ICmp:
     if (isPreISel) return LowerICmpForISel(N, DCI);
-    else           return PerfromICmpCombine(N, *this, DCI);
+    else           return PerfromICmpCombine(N, DCI);
   case ISD::ROTL:
   case ISD::ROTR:
   case ISD::SHL:
   case ISD::SRA:
   case ISD::SRL:
-    return PerformShiftImmCombine(N, *this, DCI);
+    return PerformShiftImmCombine(N, DCI);
   case ISD::AND:
   case ISD::OR:
   case ISD::XOR:
-    return PerformLogicCombine(N, *this, DCI);
+    return PerformLogicCombine(N, DCI);
   case VTMISD::Not:
-    return PerformNotCombine(N, *this, DCI);
+    return PerformNotCombine(N, DCI);
   case VTMISD::RAnd:
   case VTMISD::ROr:
   case VTMISD::RXor:
-    return PerformReduceCombine(N, *this, DCI);
+    return PerformReduceCombine(N, DCI);
   }
 
   return SDValue();
