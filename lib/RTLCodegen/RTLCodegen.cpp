@@ -234,6 +234,7 @@ class RTLCodegen : public MachineFunctionPass {
 
   // Create a condition from a predicate operand.
   VASTCnd createCondition(ucOperand &Op);
+  void getPredValAtNextSlot(ucOp &Op, VASTCnd &Pred);
 
   VASTUse getAsOperand(ucOperand &Op);
   void printOperand(ucOperand &Op, raw_ostream &OS);
@@ -1011,6 +1012,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
   VASTValue *StartSignal = VM->getSymbol(StartPortName);
   Slot->addEnable(StartSignal, Pred);
   VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
+  getPredValAtNextSlot(Op, Pred);
   NextSlot->addDisable(StartSignal, Pred);
 
   const Function *FN = M->getFunction(CalleeName);
@@ -1134,6 +1136,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
   // Disable the memory at next slot.
   // TODO: Assert the control flow is linear.
   VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
+  getPredValAtNextSlot(Op, Pred);
   NextSlot->addDisable(MemEn, Pred);
 }
 
@@ -1172,12 +1175,14 @@ void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUBRam::getEnableName(FUNum);
   VASTValue *MemEn = VM->getSymbol(EnableName);
+
   VASTCnd Pred = createCondition(Op.getPredicate());
   Slot->addEnable(MemEn, Pred);
 
   // Disable the memory at next slot.
   // TODO: Assert the control flow is linear.
   VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
+  getPredValAtNextSlot(Op, Pred);
   NextSlot->addDisable(MemEn, Pred);
 }
 
@@ -1252,6 +1257,39 @@ VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
 
   // Otherwise it must be some signal.
   return VASTCnd(VM->lookupSignal(Op.getReg()), Op.isPredicateInverted());
+}
+
+void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTCnd &Pred) {
+  // Get the predicate value at next slot, if the predicate operand is copied to
+  // a register, use that register.
+  ucOperand &PredCnd = Op.getPredicate();
+
+  if (!VInstrInfo::isAlwaysTruePred(PredCnd)) {
+    const MachineInstr *CurMI = Op->getParent();
+    typedef MachineRegisterInfo::use_iterator it;
+    for (it I = MRI->use_begin(PredCnd.getReg()); I != MRI->use_end();++I) {
+      if (&*I != CurMI) continue;
+
+      ucOp UseOp = ucOp::getParent(I);
+      // We are find the copy operation that copy the current predicate value
+      // to a register.
+      if (UseOp->getOpcode() != VTM::VOpReadFU)
+        continue;
+
+      // Skip the ucOp predicate by current predicate operand.
+      if (&UseOp.getPredicate() == &I.getOperand())
+        continue;
+
+      // Be careful of 1 slot pipelined loops.
+      if (UseOp->getPredSlot() != Op->getPredSlot())
+        continue;
+
+      Pred = createCondition(UseOp.getOperand(0));
+      // Invert flag is not copied.
+      if (Pred.isInverted() != PredCnd.isPredicateInverted())
+        Pred = Pred.invert();
+    }
+  }
 }
 
 VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
