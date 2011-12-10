@@ -178,7 +178,7 @@ public:
   unsigned getCost() const { return Cost; }
 
   bool shouldBeChained(unsigned FUSize) const {
-    return FUSize < ChainingThreshold;
+    return FUSize <= ChainingThreshold;
   }
 
   virtual void print(raw_ostream &OS) const;
