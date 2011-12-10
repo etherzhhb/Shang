@@ -110,21 +110,26 @@ static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *W) {
 //----------------------------------------------------------------------------//
 // Classes in Verilog AST.
 void VASTUse::print(raw_ostream &OS) const {
+  OS << '(';
+  if (isInverted()) OS << '~';
+
   // Print the bit range if the value is have multiple bits.
   switch (UseKind) {
   case USE_Value:
     OS << Data.V->getName();
     if (UB) OS << verilogBitRange(UB, LB, Data.V->getBitWidth() > 1);
-    return;
+    break;
   case USE_Symbol:
     OS << Data.SymbolName;
     if (UB) OS << verilogBitRange(UB, LB, false);
-    return;
+    break;
   case USE_Immediate:
     OS << verilogConstToStr(Data.ImmVal, UB, false);
     // No need to print bit range for immediate.
-    return;
+    break;
   }
+
+  OS << ')';
 }
 
 VASTUse::iterator VASTUse::dp_src_begin() {
@@ -146,10 +151,7 @@ VASTUse::iterator VASTUse::dp_src_end() {
 }
 
 void VASTCnd::print(raw_ostream &OS) const {
-  OS << '(';
-  if (isInverted()) OS << '~';
   VASTUse::print(OS);
-  OS << ')';
 }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTSignal *S[])

@@ -116,22 +116,22 @@ public:
   /*const*/ unsigned UB :8;
   /*const*/ unsigned LB :8;
 
-  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb) : UB(ub), LB(lb) {
+  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb) : Inverted(false),UB(ub),LB(lb){
     Data.V = v;
     UseKind = USE_Value;
   }
 
-  VASTUse(VASTValue *v) : UB(v->getBitWidth()), LB(0) {
+  VASTUse(VASTValue *v) : Inverted(false), UB(v->getBitWidth()), LB(0) {
     Data.V = v;
     UseKind = USE_Value;
   }
 
-  VASTUse(int64_t immVal, uint8_t width) : UB(width), LB(0) {
+  VASTUse(int64_t immVal, uint8_t width) : Inverted(false), UB(width), LB(0) {
     Data.ImmVal = immVal;
     UseKind = USE_Immediate;
   }
 
-  VASTUse(const char *S, uint8_t width) : UB(width), LB(0) {
+  VASTUse(const char *S, uint8_t width) : Inverted(false), UB(width), LB(0) {
     Data.SymbolName = S;
     UseKind = USE_Symbol;
   }
@@ -184,6 +184,7 @@ public:
 
   bool is_dp_leaf() { return dp_src_begin() == dp_src_end(); }
 
+  bool isInverted() const { return Inverted; }
   void print(raw_ostream &OS) const;
 };
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
@@ -218,9 +219,7 @@ public:
     //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
   }
 
-  /*implicit*/ VASTCnd(bool Cnd = true) : VASTUse(Cnd, 1) {
-    Inverted = false;
-  }
+  /*implicit*/ VASTCnd(bool Cnd = true) : VASTUse(Cnd, 1) {}
 
   //const VASTCnd& operator=(const VASTCnd &RHS) {
   //  if (&RHS == this) return *this;
@@ -229,7 +228,6 @@ public:
   //  return *this;
   //}
 
-  bool isInverted() const { return Inverted; }
   VASTUse getCndVal() const { return VASTUse(*this); }
 
   // Return the "not" condition of current condition;
