@@ -232,6 +232,12 @@ void VASTSlot::buildReadyLogic(raw_ostream &OS, const VASTModule &Mod) {
   OS << ";// Are all waiting resources ready?\n";
 }
 
+bool VASTSlot::hasNextSlot(unsigned NextSlotNum) const {
+  if (NextSlots.empty()) return NextSlotNum == getSlotNum() + 1;
+
+  return NextSlots.count(NextSlotNum);
+}
+
 void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   // TODO: Build the AST for these logic.
   CtrlS.if_begin(getName());
@@ -240,6 +246,8 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   // DirtyHack: Remember the enabled signals in alias slots, the signal may be
   // assigned at a alias slot.
   std::set<const VASTValue*> AliasEnables;
+  // A slot may be enable by its alias slot if II of a pipelined loop is 1.
+  VASTValue *PredAliasSlots = 0;
 
   if (StartSlot != EndSlot) {
     CtrlS << "// Alias slots: ";
@@ -249,6 +257,10 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
       if (slot == getSlotNum()) continue;
 
       const VASTSlot *AliasSlot = Mod.getSlot(slot);
+      if (AliasSlot->hasNextSlot(getSlotNum())) {
+        assert(PredAliasSlots == 0 && "More than one PredAliasSlots found!");
+        PredAliasSlots = AliasSlot->getActive();
+      }
 
       for (VASTSlot::const_fu_ctrl_it I = AliasSlot->enable_begin(),
            E = AliasSlot->enable_end(); I != E; ++I) {
@@ -270,7 +282,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   );
 
   bool hasSelfLoop = false;
-  SmallVector<VASTCnd, 1> EmptySlotEnCnd;
+  SmallVector<VASTCnd, 2> EmptySlotEnCnd;
 
   if (hasExplicitNextSlots()) {
     CtrlS << "// Enable the successor slots.\n";
@@ -287,9 +299,14 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   }
 
   // Do not assign a value to the current slot enable twice.
-  if (!hasSelfLoop)
+  if (!hasSelfLoop) {
+    // Only disable the current slot if there is no alias slot enable current
+    // slot.
+    if (PredAliasSlots) EmptySlotEnCnd.push_back(VASTCnd(PredAliasSlots, true));
+
     // Disable the current slot.
     Mod.addAssignment(getRegister(), VASTCnd(false), this, EmptySlotEnCnd);
+  }
 
   if (ReadyPresented) {
     DEBUG(std::string NotSlotReady = "~" + std::string(getName()) + "Ready";

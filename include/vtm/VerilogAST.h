@@ -393,6 +393,7 @@ public:
   }
 
   void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
+  bool hasNextSlot(unsigned NextSlotNum) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
   bool hasExplicitNextSlots() const { return !NextSlots.empty(); }
