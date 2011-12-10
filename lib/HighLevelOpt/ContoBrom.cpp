@@ -1,4 +1,4 @@
-//==-ContoBrom.cpp ---This pass allocates BRoms to global constants===//
+//==-ContoBrom.cpp ---This pass allocates BRoms to global constants===========//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file is a pass to transform the global constants' location from main memory 
-// to local BRom.
+// This file is a pass to transform the global constants' location from main
+// memory to local BRom.
 //
 //===----------------------------------------------------------------------===//
 
@@ -36,379 +36,257 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-// This pass allocates a BRom for each global constant in the function and replaces
-// the load instruction by a call to vtm_access_bram intrinsic function, thus 
-// allowing a local BRom access to the global constant.
-//
+// This pass allocates a BRom for each global constant in the function and
+// replaces the load instruction by a call to vtm_access_bram intrinsic
+// function, thus allowing a local BRom access to the global constant.
 
 namespace {
  struct ContoBrom: public ModulePass {
-  static char ID;
-  Module* Mod;
-  const TargetIntrinsicInfo &IntrinsicInfo;
+   static char ID;
+   Module* Mod;
+   const TargetIntrinsicInfo &IntrinsicInfo;
+   unsigned AllocatedBRamNum;
 
-  //Every Constant has a relative unsigned BromID
-  std::map<Constant*, unsigned> BRom;
-  //Use a cast instruction number to mark the cast instruction
-  unsigned CastNum;
+   // A set to track the GlobalVariable.
+   std::set<Value*> VisitedGV;
+   // The Two maps below is to record the AllocaBramfucntion and BramNum, they
+   // are needed when we call the GetOrCreateBram function.
+   std::map<GlobalVariable*, Function*> TheAllocaBramFnMap;
+   std::map<GlobalVariable*, unsigned> BramNumMap;
 
-  ContoBrom(const TargetIntrinsicInfo &II) : ModulePass(ID), Mod(0), IntrinsicInfo(II), 
-    CastNum(0){}
+   // Define the a small vector of the WorkStack.
+   typedef SmallVector<std::pair<Value*, Value::use_iterator>, 16> WorkStackTy;
+   // Create a WorkStack for depth first search use tree.
+   WorkStackTy WorkStack;
+   // Create a Depth First Search use Tree Vector for the LowerGVToBram.
+   WorkStackTy DFSTVector;
 
-  bool runOnModule(Module &M);
+   ContoBrom(const TargetIntrinsicInfo &II) : ModulePass(ID),
+                                              IntrinsicInfo(II),
+                                              AllocatedBRamNum(1){}
 
-  //This function creates a call to  vtm_alloca_brom in the case of GEP-GV node.
-  Instruction* AllocaBromGEP(GlobalVariable* GV, Constant* Con, 
-    GetElementPtrInst* GEP, SmallVector<Instruction*, 16> &CIVect, Function* F);
+   bool runOnModule(Module &M);
 
-  //This function creates a call to  vtm_alloca_brom in the case of Load-GV node.
-  Instruction* AllocaBromLoad(GlobalVariable* GV, Constant* Con, 
-    LoadInst* Load, SmallVector<Instruction*, 16> &CIVect, Function* F);
+   // Depth first search the GlobalVariable, return true if we can handle this
+   // GlobalVariable.
+   bool VisitGVUsers(GlobalVariable *GV);
 
-  //Based on the information of the LoadInst, access the BRom using the ptr returned 
-  //by GEP or access the BRom directly by accessing ALlocaBrom.
-  void LoadtoBromAccess(LoadInst* Load, bool IsLoad, Instruction* AllocaBrom, 
-    Constant* Con);
+   // Lower the GlobalVariable to the local block ram.
+   void LowerGVToBram(GlobalVariable *GV);
+
+   // Declare vtm_alloca_bram intrinsic function of GloabalVariable.
+   void GetOrCreateBram(GlobalVariable *GV, Function *F, Instruction *I);
+
+   // replace the GEPInst or LoadInst with intrinsic to access local Bram.
+   void ReplaceLoadInstWithBRamAccess(LoadInst *LI);
   };
 
 }//end of anonymous namespace
 
 bool ContoBrom::runOnModule(Module &M) {
   Mod = &M;
-  unsigned ThisBromID = 0;
-
-   //The following variables are for DFS(Depth First Search) for the GV user tree
-   SmallVector<std::pair<Value*, Value::use_iterator>, 16>WorkStack;
-   SmallVector<std::pair<Value*, Value::use_iterator>, 16>DFSTVect;
-   std::set<Value*> Visited;
-
-  //Stores the cast instructions for each new BRom allocation 
-  //in the case of GEP-GV node
-  SmallVector<Instruction*, 16> CIVect;
-
-  //Stores the Load instructions of Load-GEP nodes
-  SmallVector<LoadInst*, 16>LIVect;
-
-  //Stores the load instructions to be erased
-  SmallVector<LoadInst*, 16>LIErase;
-
-  //Stores the return value(a call instruction to brom_alloca function)
-  Instruction* AllocaBrom = 0;
-
   //iterate all over the module graph
-  for (Module::iterator IF = M.begin(), EF = M.end(); IF != EF; ++IF)  {
-    Function &F = *IF;
-    for (Function::iterator IBB = F.begin(), EBB = F.end(); IBB != EBB; ++IBB) {
-      BasicBlock &BB = *IBB;
-      for (BasicBlock::iterator IInst = BB.begin(), EInst = BB.end(); 
-            IInst != EInst; ++IInst) {
-        Instruction &Inst = *IInst;
-        for (Instruction::op_iterator IOP = Inst.op_begin(), EOP = Inst.op_end(); 
-              IOP != EOP; ++IOP) {
-          GlobalVariable* GV = dyn_cast<GlobalVariable>(IOP);
-        
-          //Firstly, it should be a GlobalVariable.
-          if (!GV) 
-            continue; 
+  for (Module::global_iterator I = M.global_begin(), E = M.global_end();
+    I != E; ++I) {
+      GlobalVariable *GV = dyn_cast<GlobalVariable>(I);
 
-          //Secondly, it should be a constant.
-          if (!GV->isConstant()) 
-            continue; 
-          
-          //Thirdly, it has internal linkage.
-          if (!(GV->hasInternalLinkage()||GV->hasPrivateLinkage()))
-            continue; 
+      // Firstly, it should not be empty, but a GlobalVariable.
+      if (!GV)
+        continue;
 
-          //Fourthly, the user of the GV should be a GEP or a Load
-          if (!(isa<GetElementPtrInst>(*GV->use_begin()) ||
-                     isa<LoadInst>(*GV->use_begin()))) 
-            continue;
-              
-          //Fifthly, if this Con(GV) has already been visited
-          if(Visited.count(GV)) 
-            continue;
+      // Secondly, it should has internal linkage or private linkage.
+      if (!(GV->hasInternalLinkage() || GV->hasPrivateLinkage()))
+        continue;
 
-          //If the Con can go through all the conditions above, it is a Con
-          //that needs DFS, and there will be another DFS tree rooted from 
-          //this Con.
-          Value* V = GV->getOperand(0);
-          Constant* Con = cast<Constant>(V);
+      if (!GV->hasInitializer())
+        continue;
 
-          //If the Con is a multi-dimension constant array, skip this iteration
-          if (const ArrayType* AT = cast<ArrayType>(Con->getType())) {
-              const Type* ET = AT->getElementType();
-              if (isa<ArrayType>(ET)) continue;
-          }                  
-
-          BRom[Con] = ThisBromID++;
-
-          //A GV user tree could look like this:
-          /**********************************************************************
-                                      GV
-                              - - -   ||
-                           /        /     \ 
-                         /       /    /     \
-                      GEP  GEP  Load  Load (in this layer GEP and Load can't coexist)
-                       /       /  \
-                     /       /      \
-                 Load  Load    Load
-          **********************************************************************/
-
-          //Prepare the root node.
-          WorkStack.push_back(std::make_pair(GV, GV->use_begin()));
-
-          //Start the Depth First Search with this GV as root node.
-          //The result DFS Tree is preserved in DFSTVect.
-  
-          while(!WorkStack.empty()) {
-            Value* Node = WorkStack.back().first;
-            Value::use_iterator ChildIt = WorkStack.back().second;
-
-            DFSTVect.push_back(std::make_pair(Node, ChildIt));
-
-            if(ChildIt == Node->use_end() || !(isa<LoadInst>(*ChildIt) ||
-                                isa<GetElementPtrInst>(*ChildIt))) {
-              WorkStack.pop_back();
-              DFSTVect.pop_back();
-            } else {
-              Value* Child = *ChildIt;
-              ++WorkStack.back().second;
-
-              WorkStack.push_back(std::make_pair(Child, Child->use_begin()));
-            }         
-          }
-          Visited.insert(GV);
-
-          //The DFSVisit procedure generates a DFS Tree rooted from the GV.
-          //Now iterate through the DFS Tree, separate the nodes into tree groups.
-          SmallVector<std::pair<GetElementPtrInst*, GlobalVariable*>, 16>VectGEPGV;
-          SmallVector<std::pair<LoadInst*, GlobalVariable*>, 16>VectLoadGV;
-          SmallVector<std::pair<LoadInst*, GetElementPtrInst*>, 16>VectLoadGEP;
-          GetElementPtrInst* GEP = 0;
-          LoadInst* Load = 0;
-          GlobalVariable* GBV = 0;
-          for(SmallVector<std::pair<Value*, Value::use_iterator>, 16>::iterator INode = 
-               DFSTVect.begin(), ENode = DFSTVect.end(); INode != ENode; ++INode) {
-            if((GEP = dyn_cast<GetElementPtrInst>(*INode->second)) && 
-              (GBV = dyn_cast<GlobalVariable>(INode->first)))
-              VectGEPGV.push_back(std::make_pair(GEP, GBV));   
-            if((Load = dyn_cast<LoadInst>(*INode->second)) && 
-              (GBV = dyn_cast<GlobalVariable>(INode->first))) 
-              VectLoadGV.push_back(std::make_pair(Load, GBV));
-            if((Load = dyn_cast<LoadInst>(*INode->second)) &&
-              (GEP = dyn_cast<GetElementPtrInst>(INode->first)))
-              VectLoadGEP.push_back(std::make_pair(Load, GEP));
-          }
-
-          //Clear the DFSTVect for another DFS Tree rooted from another GV.
-          DFSTVect.clear(); 
-
-          //If the GEP is not used by a load, continue and clear the VectGEPGV
-          if(VectLoadGV.empty()&&VectLoadGEP.empty()) {
-            VectGEPGV.clear();
-            continue;
-          }
-
-          //Use a Function Set to keep track of the function in which the GV
-          //has been allocated a BRom.
-          std::set<Function*>FunctionSet;
-
-          //The following three blocks allocate BRoms for the Constant and replace
-          //the Load instructions with the brom_access instructions.
-          //Use reverse iterator because it fits the instructions' order in the Vectors.
-
-          //Allocate BRoms for the constant if it is used by GetElementPtrInsts.
-          //Because the GEP-GV nodes are in order, CastNum-1 can promise that
-          //the cast instruction to be setOperand and the GEP are within the same
-          //function.
-          if(!VectGEPGV.empty()) {
-            for(SmallVector<std::pair<GetElementPtrInst*, GlobalVariable*>, 16>::
-                 reverse_iterator IN = VectGEPGV.rbegin(), EN = VectGEPGV.rend(); 
-                 IN != EN; ++IN) {
-              //if within the same function the Con(or GV) has been allocated a BRom,
-              //set the first operand of the GEP using the cast instruction directly.
-              if(FunctionSet.count(IN->first->getParent ()->getParent()))
-                IN->first->setOperand(0, CIVect[CastNum-1]); 
-              else {
-                Function* Func = IN->first->getParent ()->getParent();
-                AllocaBrom = AllocaBromGEP(IN->second, Con, IN->first, CIVect, Func);
-                FunctionSet.insert(Func); 
-              }
-            }
-            VectGEPGV.clear();
-            FunctionSet.clear();
-          }
-
-          //Allocate BRoms for the constant if it is used by LoadInsts.
-          //Pay attention that a constant could not be used by both 
-          //GetElementPtrInst and LoadInst.
-
-          //Because a LoadGV node has some basic difference from the GEPGV node, 
-          //it is dealt separately. Because the Load-GV nodes are in order, the following 
-          //can promise the Brom_access instruction access only the AllocaBrom within 
-          //the same function.
-          if(!VectLoadGV.empty()) {
-            for(SmallVector<std::pair<LoadInst*, GlobalVariable*>, 16>::reverse_iterator
-                 IN = VectLoadGV.rbegin(), EN = VectLoadGV.rend(); IN != EN; ++IN) {
-              if(FunctionSet.count(IN->first->getParent ()->getParent ())) {
-                LoadtoBromAccess(IN->first, true, AllocaBrom, Con);
-                LIErase.push_back(IN->first);
-              } else {
-                  Function* Func = IN->first->getParent ()->getParent();
-                  AllocaBrom = AllocaBromLoad(IN->second , Con, IN->first , CIVect, Func);
-                  LoadtoBromAccess(IN->first, true, AllocaBrom, Con);
-                  LIErase.push_back(IN->first);
-                  FunctionSet.insert(Func); 
-              }
-            }
-            VectLoadGV.clear();
-            FunctionSet.clear();
-          }
-
-          //Push back the Load instructions that use GEP in to the LIVect which is to be 
-          //replaced by brom_access instructions.
-          if(!VectLoadGEP.empty()) {
-            for(SmallVector<std::pair<LoadInst*, GetElementPtrInst*>,16>::iterator
-                 IN = VectLoadGEP.begin(), EN = VectLoadGEP.end(); IN != EN; ++IN) {
-              LIVect.push_back(IN->first);
-            }
-            VectLoadGEP.clear();
-          }
-
-          //Replace the load instructions with the BRom access instructions(For Load-GEP)
-          while(!LIVect.empty()) {
-            LoadtoBromAccess(LIVect.back(), false, AllocaBrom, Con);
-            LIErase.push_back(LIVect.back());
-            LIVect.pop_back();
-          }        
-        }
+      // If the Con is a multi-dimension constant array, continue.
+      Constant *Con = cast<Constant>(GV->getInitializer());
+      if (const ArrayType* AT = dyn_cast<ArrayType>(Con->getType())) {
+        const Type* ET = AT->getElementType();
+        if (isa<ArrayType>(ET))
+          continue;
       }
+
+      // Whether we can lower the GlobalVariable to Bram,
+      // continue if we can not lower it.
+      if (!VisitGVUsers(GV))
+        continue;
+
+      // Lower the GlobalVariable if we can lower it.
+      LowerGVToBram(GV);
+      DFSTVector.clear();
+      WorkStack.clear();
+  }
+  return true;
+}
+
+bool ContoBrom::VisitGVUsers(GlobalVariable *GV){
+
+  //Preserve the root node.
+  WorkStack.push_back(std::make_pair(GV, GV->use_begin()));
+
+  // Remember what we had visited.
+  std::set<Value*> VisitedUses;
+
+  // The following variables are for DFS(Depth First Search) for the GV user
+  // tree.
+  while(!WorkStack.empty()) {
+    Value* Node = WorkStack.back().first;
+    Value::use_iterator ChildIt = WorkStack.back().second;
+
+
+    // Do we reach the end of the Nodes or Is the ChildNode a LoadInst?
+    if (ChildIt == Node->use_end()) {
+      WorkStack.pop_back();
+      continue;
+    }
+
+    // Push back the Use Tree for LowerGVToBram.
+    DFSTVector.push_back(std::make_pair(Node, ChildIt));
+
+    // Depth first search the child of current node.
+    Value *ChildNode = *ChildIt;
+    ++WorkStack.back().second;
+
+    if (isa<LoadInst>(ChildNode)){
+      continue;
+    }
+
+    // If there are nodes that we can not handle, return false.
+    if (!isa<GetElementPtrInst>(*ChildIt)) {
+      DFSTVector.clear();
+      return false;
+    }
+
+    // Had we visited this node?
+    if (!VisitedUses.insert(ChildNode).second) continue;
+
+    // If ChildNode is not visited, go on visit it and its children.
+    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->use_begin()));
+  }
+
+  // Now we can handle the GlobalVariable, return true.
+  return true;
+}
+
+void ContoBrom::LowerGVToBram(GlobalVariable *GV){
+
+  for(WorkStackTy::iterator I = DFSTVector.begin(), E = DFSTVector.end();
+      I != E; ++I){
+
+    // We need the function pointer the get the entry point when we use the
+    // GetOrCreateBram function.
+    Function *F = 0;
+
+    // If the Instruction is GetElementPtrInst, allocate a Bram if the module
+    // haven't alloca a Bram for the GlobalVariable.
+    if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(*I->second)){
+      F = GEP->getParent()->getParent();
+      GetOrCreateBram(GV, F, GEP);
+      continue;
+    }
+
+    // If the Instruction is LoadInst, allocate a Bram if the module
+    // haven't alloca a Bram for the GlobalVariable, and replace the LoadInst
+    // with vtm_access_bram intrinsic function.
+    if (LoadInst *LI = dyn_cast<LoadInst>(*I->second)){
+      F = LI->getParent()->getParent();
+      GetOrCreateBram(GV, F, LI);
+      ReplaceLoadInstWithBRamAccess(LI);
     }
   }
-
-  //When all that need to be processed finish, erase the load instructions
-  while(!LIErase.empty()) {
-    LIErase.back()->eraseFromParent();
-    LIErase.pop_back();
-  }
-  return false;
 }
 
-Instruction* ContoBrom::AllocaBromGEP(GlobalVariable* GV, Constant* Con, 
-                                  GetElementPtrInst* GEP, 
-                                  SmallVector<Instruction*, 16> &CIVect,
-                                  Function* F) {
-  //Gather the parameters of vtm_alloca_brom
-  const ArrayType* AT = cast<ArrayType>(Con->getType());
+void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
+                                    Instruction *I){
+  // dirty hack!!
+  Value* V = GV->getInitializer();
+  Constant* Con = cast<Constant>(V);
+  // Gather the parameters of vtm_alloca_brom
+  const ArrayType *AT = cast<ArrayType>(Con->getType());
+  const Type *ET = AT->getElementType();
   unsigned NumElems = AT->getNumElements();
-  const Type* ET = AT->getElementType();
   unsigned ElemSizeInBytes = ET->getPrimitiveSizeInBits() / 8;
   Instruction* EntryPoint = F->begin()->begin();
 
-  //allocate space for the alloca and get declaration 
-  //of the intrinsic function.
+  // allocate space for the alloca and get declaration
+  // of the intrinsic function.
   unsigned AllocaAddrSpace = GV->getType()->getAddressSpace();
 
-  //Transform the Element type into a pointer that 
-  //points to the Element
-  const Type* NewPtrTy = PointerType::get(ET, AllocaAddrSpace);                                                                             
+  // Transform the Element type into a pointer that
+  // points to the Element
+  const Type* NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
   const Type* CAPtrTy = PointerType::get(ET, AllocaAddrSpace);
-  const Type *ValTysAL[] = { NewPtrTy, CAPtrTy}; 
-  Function* TheAllocaBromFn = IntrinsicInfo.getDeclaration(Mod,  
-        vtmIntrinsic::vtm_alloca_brom, ValTysAL, 2);
-  //get the type of the context, construct the Args to the AllocaBromInst,  
-  //and creat a callinst to call the intrinsic alloca function
+
+  // If we do not have alloca a Bram for the GV, Allocate a Bram for it.
+  if (VisitedGV.insert(GV).second) {
+  const Type *ValTysAL[] = { NewPtrTy, CAPtrTy};
+  Function* TheAllocaBramFn
+    = IntrinsicInfo.getDeclaration(Mod, vtmIntrinsic::vtm_alloca_bram,
+                                   ValTysAL, array_lengthof(ValTysAL));
+  // record the AllocaBRamFunction and BramNum for the GV.
+  TheAllocaBramFnMap[GV] = TheAllocaBramFn;
+  BramNumMap[GV] = AllocatedBRamNum;
+  // increase the AllocatedBramNum for the next GV.
+  AllocatedBRamNum++;
+  }
+  // get the type of the context, construct the Args to the AllocaBromInst,
+  // and creat a CallInst to call the intrinsic alloca function
   const Type* Int32TyAL = Type::getInt32Ty(Mod->getContext());
   CastInst* CIET = BitCastInst::CreatePointerCast(GV, CAPtrTy, 
-        "const_cast", EntryPoint);
+                                                  "const_cast", EntryPoint);
 
-  Value* ArgsAL[] = {CIET, 
-        ConstantInt::get(Int32TyAL, BRom[Con]), 
-        ConstantInt::get(Int32TyAL, NumElems),
-        ConstantInt::get(Int32TyAL, ElemSizeInBytes)};
-  Instruction* AllocaBrom = CallInst::Create(TheAllocaBromFn, ArgsAL, 
-        array_endof(ArgsAL), GEP->getName(), EntryPoint);
+  Value* ArgsAL[] = {CIET,
+                     ConstantInt::get(Int32TyAL, BramNumMap[GV]),
+                     ConstantInt::get(Int32TyAL, NumElems),
+                     ConstantInt::get(Int32TyAL, ElemSizeInBytes)};
+  Instruction* AllocaBram
+    = CallInst::Create(TheAllocaBramFnMap[GV], ArgsAL, array_endof(ArgsAL),
+                       I->getName(), EntryPoint);
 
-  //replace all the uses of the GV with the AllocaBrom instruction  
-  //that calls the vtm_alloca_brom intrinsic function. Because they 
-  //return the same type of pointer.
-  const Type* ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
-  CastInst* CIAT = BitCastInst::CreatePointerCast(AllocaBrom, 
-        ArrayPtrTy, "cast", EntryPoint);
-  //There is a new BRomID, so store the CIAT into the SmallVector.
-  //in case there are other GEPs who use the same BRom
-  CIVect.push_back(CIAT);
-  GEP->setOperand(0, CIAT);
-  ++CastNum;
+  // If the Instruction is a LoadInst, set the Operand of the Load Instruction
+  // when the operand is a GV. When the operand of the Load Instruction is a
+  // GEP(it will be a cast Instruction), we do nothing to the instruction.
+  if (isa<LoadInst>(I)){
+    if(!isa<GlobalVariable>(I->getOperand(0))){
+      return;
+    }
+    // Replace the GV with CastInst.
+    I->setOperand(0, AllocaBram);
+    return;
+  }
 
-  return AllocaBrom;
+  // The CallInst return a i32* pointer, but the GEP Instruction need its first
+  // operand to be a array pointer [256 * i32]*. So we need to Cast pointer that
+  // pointing array element to pointer that pointing array.
+  const Type *ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
+  CastInst* CIAT = BitCastInst::CreatePointerCast(AllocaBram, ArrayPtrTy,
+                                                  "cast", EntryPoint);
+  // Replace the GV with CastInst.
+  I->setOperand(0, CIAT);
 }
 
-Instruction* ContoBrom::AllocaBromLoad(GlobalVariable* GV, Constant* Con, 
-                                     LoadInst* Load, 
-                                     SmallVector<Instruction*, 16> &CIVect,
-                                     Function* F) {
-  //The GV is inside a Load Instruction
-  //Gather the parameters of vtm_alloca_brom
-  const IntegerType* IT = cast<IntegerType>(Con->getType());
-  unsigned NumElems = 1;
-  const Type* ET = IT->getScalarType();
-  unsigned ElemSizeInBytes = ET->getPrimitiveSizeInBits() / 8;
-  Instruction* EntryPoint = F->begin()->begin();
+void ContoBrom::ReplaceLoadInstWithBRamAccess(LoadInst *LI){
+  Value *Ptr = LI->getPointerOperand();
+  const Type *ValTys[] = { LI->getType(), Ptr->getType() };
+  Function *TheLoadBRamFn
+    = IntrinsicInfo.getDeclaration(Mod, vtmIntrinsic::vtm_access_bram,
+                                   ValTys, array_lengthof(ValTys));
+  const Type *Int32Ty = Type::getInt32Ty(Mod->getContext()),
+             *Int1Ty = Type::getInt1Ty(Mod->getContext());
 
-  //allocate space for the alloca and get declaration 
-  //of the intrinsic function.
-  unsigned AllocaAddrSpace = GV->getType()->getAddressSpace();
+  Value *Args[] = { Ptr, UndefValue::get(ValTys[0]),
+                    ConstantInt::get(Int1Ty, 0),
+                    ConstantInt::get(Int32Ty, LI->getAlignment()),
+                    ConstantInt::get(Int1Ty, LI->isVolatile()),
+                    ConstantInt::get(Int32Ty, AllocatedBRamNum-1) };
 
-  //Transform the Element type into a pointer that 
-  //points to the Element
-  const Type* NewPtrTy = PointerType::get(ET, AllocaAddrSpace);                                                                             
-  const Type* CAPtrTy = PointerType::get(ET, AllocaAddrSpace);
-  const Type *ValTysAL[] = { NewPtrTy, CAPtrTy}; 
-  Function* TheAllocaBromFn = IntrinsicInfo.getDeclaration(Mod,  
-        vtmIntrinsic::vtm_alloca_brom, ValTysAL, 2);
-
-  //get the type of the context, construct the Args to the AllocaBromInst,  
-  //and creat a Callinst to call the intrinsic alloca function
-  const Type* Int32TyAL = Type::getInt32Ty(Mod->getContext());
-  CastInst* CIET = BitCastInst::CreatePointerCast(GV, CAPtrTy, 
-        "const_cast", EntryPoint);
-
-  Value* ArgsAL[] = {CIET, 
-        ConstantInt::get(Int32TyAL, BRom[Con]), 
-        ConstantInt::get(Int32TyAL, NumElems),
-        ConstantInt::get(Int32TyAL, ElemSizeInBytes)};
-  Instruction* AllocaBrom = CallInst::Create(TheAllocaBromFn, ArgsAL, 
-        array_endof(ArgsAL), Load->getName(), EntryPoint);
-
-  return AllocaBrom;
-}
-
-void ContoBrom::LoadtoBromAccess(LoadInst* Load, bool IsLoad, 
-                           Instruction* AllocaBrom, Constant* Con) {
-  //Use the LoadInst's information to get the declaration of the 
-  //vtm_access_brom intrinsic
-
-  Value* Ptr = 0;
-  if(!IsLoad) Ptr = Load->getPointerOperand();
-  else Ptr = AllocaBrom;
-
-  const Type *ValTysAC[] = {Load->getType (), Ptr->getType()};
-  Function* TheLoadBramFn = IntrinsicInfo.getDeclaration(Mod, 
-          vtmIntrinsic::vtm_access_bram, ValTysAC, array_lengthof(ValTysAC));
-  const Type* Int32TyAC = Type::getInt32Ty(Mod->getContext());
-  const Type* Int1TyAC = Type::getInt1Ty(Mod->getContext());
-
-  //Construct the Args of the vtm_access_bram intrinsic and 
-  //creat a CallInst to call it.
-  Value* ArgsAC[] = {Ptr, UndefValue::get(ValTysAC[0]), 
-          ConstantInt::get(Int1TyAC,0),
-          ConstantInt::get(Int32TyAC, Load->getAlignment ()),
-          ConstantInt::get(Int1TyAC, Load->isVolatile ()),
-          ConstantInt::get(Int32TyAC, BRom[Con])}; 
-  Instruction* AccessBram = CallInst::Create(TheLoadBramFn, ArgsAC, 
-          array_endof(ArgsAC), Load->getName(), Load);
-  Load->replaceAllUsesWith (AccessBram);
+  CallInst *NewLD = CallInst::Create(TheLoadBRamFn, Args, array_endof(Args),
+                                     LI->getName(), LI);
+  LI->replaceAllUsesWith(NewLD);
+  LI->eraseFromParent();
 }
 
 char ContoBrom::ID = 0;

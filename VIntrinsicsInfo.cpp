@@ -149,31 +149,19 @@ bool VIntrinsicInst::classof(const CallInst *I) {
   return false;
 }
 
-unsigned VAllocaBRamInst::getNumElement() const {
-  return getIntVal(getArgOperand(1));
-}
-
-unsigned VAllocaBRamInst::getElementSizeInBytes() const {
-  return  getIntVal(getArgOperand(2));
-}
-
-unsigned VAllocaBRamInst::getBRamId() const {
-  return getIntVal(getArgOperand(0));
-}
-
-Value *VAllocaBRomInst::getPointerOperand() const {
+Value *VAllocaBRamInst::getPointerOperand() const {
   return getArgOperand(0);
 }  
 
-unsigned VAllocaBRomInst::getBRomId() const{
+unsigned VAllocaBRamInst::getBRamId() const{
   return getIntVal(getArgOperand(1));
 }
 
-unsigned VAllocaBRomInst::getNumElement() const{
+unsigned VAllocaBRamInst::getNumElement() const{
   return getIntVal(getArgOperand(2));
 }
 
-unsigned VAllocaBRomInst::getElementSizeInBytes() const {
+unsigned VAllocaBRamInst::getElementSizeInBytes() const {
   return getIntVal(getArgOperand(3));
 }
 

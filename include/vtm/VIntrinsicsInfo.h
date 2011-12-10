@@ -49,12 +49,12 @@ namespace llvm {
     }
   };
 
-  /// VAllocaBramInst - This represents the llvm.vtm.alloca.bram instruction.
+  ///VAllocaBramInst - This represents the llvm.vtm.alloca.bram instruction.
   ///
   class VAllocaBRamInst : public VIntrinsicInst {
   public:
     // Methods for support type inquiry through isa, cast, and dyn_cast:
-    static inline bool classof(const VAllocaBRamInst *) { return true; }
+    static inline bool classof(const VAllocaBRamInst *) {return true;}
     static inline bool classof(const VIntrinsicInst *I) {
       return I->getIntrinsicID() == vtmIntrinsic::vtm_alloca_bram;
     }
@@ -62,26 +62,8 @@ namespace llvm {
       return isa<VIntrinsicInst>(V) && classof(cast<VIntrinsicInst>(V));
     }
 
-    unsigned getBRamId() const;
-    unsigned getNumElement() const;
-    unsigned getElementSizeInBytes() const;
-  };
-
-  ///VAllocaBromInst - This represents the llvm.vtm.alloca.bram instruction.
-  ///
-  class VAllocaBRomInst : public VIntrinsicInst {
-  public:
-    // Methods for support type inquiry through isa, cast, and dyn_cast:
-    static inline bool classof(const VAllocaBRomInst *) {return true;}
-    static inline bool classof(const VIntrinsicInst *I) {
-      return I->getIntrinsicID() == vtmIntrinsic::vtm_alloca_brom;
-    }
-    static inline bool classof(const Value *V) {
-      return isa<VIntrinsicInst>(V) && classof(cast<VIntrinsicInst>(V));
-    }
-
     Value *getPointerOperand() const;
-    unsigned getBRomId() const;
+    unsigned getBRamId() const;
     unsigned getNumElement() const;
     unsigned getElementSizeInBytes() const;
   };
