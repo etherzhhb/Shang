@@ -315,6 +315,8 @@ public:
     return Instrs.front();
   }
 
+  MachineInstr *getInstrAt(unsigned Idx) const { return Instrs[Idx]; }
+
   bool isRepresentativeInst(MachineInstr *MI) const {
     return MI == getRepresentativeInst();
   }
@@ -487,18 +489,14 @@ private:
 
   bool trySetLoopOp(MachineInstr *MI);
 
-  VSUnit *createEntry() {
-    VSUnit *Entry = new VSUnit(SUCount);
-    ++SUCount;
-    AllSUs.push_back(Entry);
-    return Entry;
-  }
-
 public:
   VSchedGraph(MachineRegisterInfo &MRI, MachineBasicBlock *MachBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : LatInfo(MRI), MBB(MachBB), Entry(createEntry()), Exit(0), SUCount(0),
-      startSlot(StartSlot), LoopOp(0, HaveLoopOp) {}
+    : LatInfo(MRI), MBB(MachBB), Entry(new VSUnit(0)), Exit(0),
+      SUCount(/*We already have the entry node*/1), startSlot(StartSlot),
+      LoopOp(0, HaveLoopOp) {
+    AllSUs.push_back(Entry);
+  }
 
   ~VSchedGraph() {
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);

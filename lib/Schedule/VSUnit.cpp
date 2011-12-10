@@ -69,18 +69,19 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
 void VSchedGraph::mergeSU(VSUnit *Src, VSUnit *Dst, int8_t Latency) {
   assert(!Src->isEntry() && "Cannot replace entry!");
 
-  const VSUnit::instr_iterator InstrBase = Src->instr_begin();
-  for (VSUnit::instr_iterator I = InstrBase, E = Src->instr_end();
-       I != E; ++I) {
-    MachineInstr *MI = *I;
-    Dst->addInstr(MI, Latency + Src->getLatencyAt(I - InstrBase));
+  for (unsigned i = 0, e = Src->num_instrs(); i != e; ++i) {
+    MachineInstr *MI = Src->getInstrAt(i);
+    int8_t IntraSULatency = i == 0 ? 0 : Src->getLatencyAt(i);
+    IntraSULatency += Latency;
+    Dst->addInstr(MI, IntraSULatency);
     InstToSUnits[MI] = Dst;
   }
 
   // Delete source and mark it as dead.
- iterator I = std::find(begin(), end(), Src);
- delete *I;
- *I = 0;
+  VSUnit *&SrcPos = AllSUs[Src->getIdx()];
+  assert(SrcPos == Src && "The index of Src not matches its position!");
+  delete SrcPos;
+  SrcPos = 0;
 }
 
 // Sort the schedule to place all control schedule unit at the beginning of the

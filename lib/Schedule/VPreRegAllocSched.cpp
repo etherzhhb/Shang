@@ -400,12 +400,15 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
     if (!DstMI->memoperands_empty() && !DstMI->hasVolatileMemoryRef()) {
       assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem ops!");
       assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile op!");
-
-      DstMO = const_cast<Value*>((*DstMI->memoperands_begin())->getValue());
-      const Type *DstElemTy
-        = cast<SequentialType>(DstMO->getType())->getElementType();
-      DstSize = TD->getTypeStoreSize(DstElemTy);
-      assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
+      
+      // FIXME: DstMO maybe null in a VOpCmdSeq
+      if ((DstMO =
+             const_cast<Value*>((*DstMI->memoperands_begin())->getValue()))){
+        const Type *DstElemTy
+          = cast<SequentialType>(DstMO->getType())->getElementType();
+        DstSize = TD->getTypeStoreSize(DstElemTy);
+        assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
+      }
     }
 
     for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
@@ -659,7 +662,7 @@ bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{
 
   if (SrcMI->getOpcode() != VTM::VOpBitCat) return false;
 
-  // Becareful of such graph:
+  // Be careful of such graph:
   //     bitcat
   //      |  \
   //      |   Op
@@ -742,21 +745,25 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     if (!VInstrInfo::isCmdSeqBegin(MI)) {
       MachineInstr *PrevMI = LastCmdSeq->instr_back();
       if (VInstrInfo::isInSameCmdSeq(PrevMI, MI)) {
-        VSUnit *U = CurState.lookupSUnit(PrevMI);
-        CurState.mapMI2SU(MI, U, /*DirtyHack*/1);
+        VSUnit *PrevSU = CurState.lookupSUnit(PrevMI);
+        VSUnit *NewSU =
+          CurState.createVSUnit(MI, VInstrInfo::getPrebindFUId(MI).getFUNum());
         // Increase the latency
-        U->setLatency(U->getLatency() + 1);
+        NewSU->setLatency(PrevSU->getLatency() + 1);
+        // There maybe some SU between PrevSU and NewSU, if we simply merge
+        // current MI into PrevSU, we may read the result from a SU with bigger
+        // index than PrevSU which is not acceptable.
+        CurState.mergeSU(PrevSU, NewSU, /*DirtyHack*/1);
         return;
       }
     }
     break;
   }
 
-  FuncUnitId Id = VInstrInfo::getPrebindFUId(MI);
-
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *U = CurState.createVSUnit(MI, Id.getFUNum());
+  VSUnit *U =
+    CurState.createVSUnit(MI, VInstrInfo::getPrebindFUId(MI).getFUNum());
   // Remember the new command sequence.
   if (isCmdSeq) LastCmdSeq = U;
 }
@@ -931,14 +938,6 @@ void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
     }
   }
 }
-
-//static void addSubRegIdx(unsigned Reg, unsigned SubReg,
-//                         MachineRegisterInfo *MRI) {
-//  typedef MachineRegisterInfo::use_iterator use_it;
-//
-//  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I)
-//    I.getOperand().setSubReg(SubReg);
-//}
 
 static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
   typedef MachineRegisterInfo::use_iterator use_it;
