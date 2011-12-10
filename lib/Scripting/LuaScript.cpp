@@ -189,7 +189,10 @@ void LuaScript::updateFUs() {
     VFUs::ICmpCost = ICmpCost;
 
   // Latencies for reduction and bit repeat.
-  VFUs::initLatencyTable(FUs["ReductionLatencies"], VFUs::ReductionLatencies);
+  VFUs::initLatencyTable(FUs["ReductionLatencies"], VFUs::ReductionLatencies,
+                         array_lengthof(VFUs::ReductionLatencies));
+  VFUs::initLatencyTable(FUs["MuxLatency"], VFUs::MuxLatencies,
+                         array_lengthof(VFUs::MuxLatencies));
 
   // Read other parameters.
 #define READPARAMETER(PARAMETER, T) \

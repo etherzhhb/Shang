@@ -991,15 +991,25 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   return 0.0;
 }
 
-bool VInstrInfo::isOperandPartOfClkEn(unsigned OpCode, unsigned MOIdx) {
+double VInstrInfo::getOperandLatency(unsigned OpCode, unsigned MOIdx) {
   const TargetInstrDesc &TID = VTMInsts[OpCode];
-  bool isPredicate = MOIdx < TID.getNumOperands()
-                     && TID.OpInfo[MOIdx].isPredicate();
+  if (MOIdx < TID.getNumOperands() && TID.OpInfo[MOIdx].isPredicate())
+    return VFUs::ClkEnSelLatency;
+
   switch (OpCode) {
-  default:  return isPredicate;
-  case VTM::VOpSel: return /*the condition operand*/ MOIdx == 1 || isPredicate;
-  case VTM::VOpCase:return /*the condition operand*/ MOIdx & 0x1 || isPredicate;
+  case VTM::VOpSel:
+    // We got the condition operand?
+    if (MOIdx == 1) return VFUs::ClkEnSelLatency;
+
+    return VFUs::getMuxLatency(2);
+  case VTM::VOpCase:
+    // We got the condition operand?
+    if (MOIdx & 0x1) return VFUs::ClkEnSelLatency;
+    // Dirty hack.
+    return VFUs::getMuxLatency(4);
   }
+
+  return 0.0;
 }
 
 double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
@@ -1175,7 +1185,7 @@ DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,
                                         DepLatInfoTy &CurLatInfo,
-                                        bool isPartOfClkEn) {
+                                        double OperandDelay) {
   const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
   // Latency information not available, the SrcMI maybe in others BB, no need
   // to compute cross BB latency.
@@ -1184,7 +1194,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI, DstMI);
   // It seems that the clk enable mux network have extra big latency, which
   // are likely become the critical path.
-  if (isPartOfClkEn) EdgeLatency += VFUs::ClkEnSelLatency;
+  EdgeLatency += OperandDelay;
 
   if (VInstrInfo::isControl(SrcMI->getOpcode())) {
     // Simply add the latency from ctrl op to the latency map.
@@ -1219,7 +1229,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     if (SrcMI->isPHI() && IgnorePHISrc) continue;
 
     if (buildDepLatInfo(SrcMI, MI, CurLatInfo,
-                        VInstrInfo::isOperandPartOfClkEn(Opcode, i)))
+                        VInstrInfo::getOperandLatency(Opcode, i)))
       // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
       // have user now.
       ExitMIs.erase(SrcMI);

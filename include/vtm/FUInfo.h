@@ -87,11 +87,16 @@ namespace VFUs {
   // Latency tables
   extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
                 ShiftLatencies[4], ReductionLatencies[4];
+  // Mux latency from 2-1 mux to 16-1 mux.
+  extern double MuxLatencies[16];
+  double getMuxLatency(unsigned MuxSize);
+
   extern double BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector
                 ClkEnSelLatency;
 
-  void initLatencyTable(luabind::object LuaLatTable, double *LatTable);
+  void initLatencyTable(luabind::object LuaLatTable, double *LatTable,
+                        unsigned Size);
 }
 
 class FuncUnitId {

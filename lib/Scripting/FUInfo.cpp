@@ -92,21 +92,25 @@ namespace llvm {
     double MultLatencies[]      = { 1.0, 1.0,  1.0,  1.0 };
     double ShiftLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
     double ReductionLatencies[] = { 0.0, 0.0,  0.0,  0.0 };
+    double MuxLatencies[16]     = { 0.0 };
     double MemBusLatency = 1.0;
     double BRamLatency = 1.0;
     double LutLatency = 0.0;
     double ClkEnSelLatency = 0.0;
 
-    void initLatencyTable(luabind::object LuaLatTable, double *LatTable) {
-      // Lua array starts from 1
-      // Latency for 8 bit operand
-      LatTable[0] = getProperty<double>(LuaLatTable, 1, LatTable[0]);
-      // Latency for 16 bit operand
-      LatTable[1] = getProperty<double>(LuaLatTable, 2, LatTable[1]);
-      // Latency for 32 bit operand
-      LatTable[2] = getProperty<double>(LuaLatTable, 3, LatTable[2]);
-      // Latency for 64 bit operand
-      LatTable[3] = getProperty<double>(LuaLatTable, 4, LatTable[3]);
+    void initLatencyTable(luabind::object LuaLatTable, double *LatTable,
+                          unsigned Size) {
+      for (unsigned i = 0; i < Size; ++i)
+        // Lua array starts from 1
+        LatTable[i] = getProperty<double>(LuaLatTable, i + 1, LatTable[i]);
+    }
+
+    double getMuxLatency(unsigned MuxSize) {
+      if (MuxSize < 2) return 0;
+      unsigned MuxLatenciesBackIdx = array_lengthof(MuxLatencies) - 1;
+      unsigned Idx = std::min(MuxSize - 2, MuxLatenciesBackIdx);
+
+      return MuxLatencies[Idx];
     }
   }
 }
@@ -117,7 +121,7 @@ VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, double *latencies)
     Cost(getProperty<unsigned>(FUTable, "Cost")), LatencyTable(latencies),
     ChainingThreshold(getProperty<unsigned>(FUTable, "ChainingThreshold")) {
   luabind::object LatTable = FUTable["Latencies"];
-  VFUs::initLatencyTable(LatTable, latencies);
+  VFUs::initLatencyTable(LatTable, latencies, 4);
 }
 
 VFUMemBus::VFUMemBus(luabind::object FUTable)
