@@ -1312,10 +1312,10 @@ static void PadICmpOperand(TargetLowering::DAGCombinerInfo &DCI, DebugLoc dl,
                                                      *DAG.getContext());
   if (VT.getSizeInBits() > ActualBits) {
     LHS = VTargetLowering::getExtend(DAG, dl, LHS, VT.getSizeInBits(),
-      ISD::isSignedIntSetCC(CC));
+                                     ISD::isSignedIntSetCC(CC));
     DCI.AddToWorklist(LHS.getNode());
     RHS = VTargetLowering::getExtend(DAG, dl, RHS, VT.getSizeInBits(),
-      ISD::isSignedIntSetCC(CC));
+                                     ISD::isSignedIntSetCC(CC));
     DCI.AddToWorklist(RHS.getNode());
   }
 }
@@ -1330,6 +1330,22 @@ inline static SDValue BuildICmpLowPart(TargetLowering::DAGCombinerInfo &DCI,
   if (Commuted) CC = ISD::getSetCCSwappedOperands(CC);
 
   PadICmpOperand(DCI, dl, LHS, RHS, CC);
+
+  // Lower part of ICmp is always unsigned because only the signed bit make
+  // signed compare difference from unsigned.
+  switch (CC) {
+  default: llvm_unreachable("Unknown integer setcc!");
+  case ISD::SETEQ:
+  case ISD::SETNE:  /*do nothing*/ break;
+  case ISD::SETLT:
+  case ISD::SETULT: CC = ISD::SETULT; break;
+  case ISD::SETGT:
+  case ISD::SETUGT: CC = ISD::SETUGT; break;
+  case ISD::SETLE:
+  case ISD::SETULE: CC = ISD::SETULE; break;
+  case ISD::SETGE:
+  case ISD::SETUGE: CC = ISD::SETUGE; break;
+  }
 
   SDValue Lo = DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS,
                            DAG.getCondCode(CC));
@@ -1348,23 +1364,29 @@ inline static SDValue BuildICmpHighPart(TargetLowering::DAGCombinerInfo &DCI,
 
   PadICmpOperand(DCI, dl, LHS, RHS, CC);
 
-  SDValue HiICmp = DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS,
-                               DAG.getCondCode(CC));
-  DCI.AddToWorklist(HiICmp.getNode());
-  SDValue HiEq = DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS,
-                             DAG.getCondCode(ISD::SETEQ));
-  DCI.AddToWorklist(HiEq.getNode());
-  // Combine the comparison result of lower part by:
-  // HiICmp | (HiEq & LoICmp)
-  SDValue LoActive = DAG.getNode(ISD::AND, dl, MVT::i1, HiEq, Lo);
-  DCI.AddToWorklist(LoActive.getNode());
-  return DAG.getNode(ISD::OR, dl, MVT::i1, HiICmp, LoActive);
+  SDValue Hi = DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS,
+                           DAG.getCondCode(CC));
+  DCI.AddToWorklist(Hi.getNode());
+
+  return Hi;
 }
 
 static SDValue ConcatICmps(TargetLowering::DAGCombinerInfo &DCI,
                            SDNode *N, SDValue Hi, SDValue Lo) {
-  // The ICmp result return by BuildICmpHighPart.
-  return Hi;
+  SelectionDAG &DAG = DCI.DAG;
+  DebugLoc dl = N->getDebugLoc();
+
+  SDValue HiLHS = Hi->getOperand(0), HiRHS = Hi->getOperand(1);
+  SDValue HiEq = DAG.getNode(VTMISD::ICmp, dl, MVT::i1, HiLHS, HiRHS,
+                             DAG.getCondCode(ISD::SETEQ));
+  DCI.AddToWorklist(HiEq.getNode());
+
+  // Return Hi(LHS) == Hi(RHS) ? LoCmp : HiCmp;
+  return DAG.getNode(ISD::OR, dl, MVT::i1,
+                              DAG.getNode(ISD::AND, dl, MVT::i1, HiEq, Lo),
+                              DAG.getNode(ISD::AND, dl, MVT::i1,
+                                          VTargetLowering::getNot(DAG, dl, HiEq),
+                                          Hi));
 }
 
 #define GETLHSNOT(WHAT) GetLHSNot##WHAT
