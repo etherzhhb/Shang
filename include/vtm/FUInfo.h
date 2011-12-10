@@ -156,10 +156,11 @@ protected:
   const unsigned Cost;
   // Latency table of the function unit.
   double *LatencyTable;
-
+  // Chain the operation if its size smaller than the threshold;
+  unsigned ChainingThreshold;
   VFUDesc(VFUs::FUTypes type, unsigned startInt, double *latencies)
     : ResourceType(type), StartInt(startInt), Cost(~0),
-      LatencyTable(latencies) {}
+      LatencyTable(latencies), ChainingThreshold(0) {}
 
 public:
   VFUDesc(VFUs::FUTypes type, luabind::object FUTable, double *latencies);
@@ -175,6 +176,10 @@ public:
 
   unsigned getStartInt() const { return StartInt; }
   unsigned getCost() const { return Cost; }
+
+  bool shouldBeChained(unsigned FUSize) const {
+    return FUSize < ChainingThreshold;
+  }
 
   virtual void print(raw_ostream &OS) const;
 };

@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "VTargetMachine.h"
+#include "vtm/FUInfo.h"
 
 #include "llvm/Intrinsics.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
@@ -389,6 +390,17 @@ SDNode *VDAGToDAGISel::SelectINTRINSIC_W_CHAIN(SDNode *N) {
   return 0;
 }
 
+template<enum VFUs::FUTypes T, unsigned ChainedOpc, unsigned ControlOpc>
+static unsigned SelectOpCode(unsigned FUSize) {
+  return getFUDesc(T)->shouldBeChained(FUSize) ? ChainedOpc : ControlOpc;
+}
+
+template<enum VFUs::FUTypes T, unsigned ChainedOpc, unsigned ControlOpc>
+static unsigned SelectOpCode(SDNode *N) {
+  unsigned FUSize = VTargetLowering::computeSizeInBits(N->getOperand(0));
+  return SelectOpCode<T, ChainedOpc, ControlOpc>(FUSize);
+}
+
 SDNode *VDAGToDAGISel::Select(SDNode *N) {
   if (N->isMachineOpcode())
     return 0;   // Already selected.
@@ -402,8 +414,17 @@ SDNode *VDAGToDAGISel::Select(SDNode *N) {
   case ISD::BR:
   case ISD::BRCOND:           return SelectBrcnd(N);
 
-  case VTMISD::ADDCS:         return SelectSimpleNode(N, VTM::VOpAdd_c);
-  case VTMISD::ICmp:          return SelectSimpleNode(N, VTM::VOpICmp_c);
+  case VTMISD::ADDCS:{
+    unsigned FUSize = VTargetLowering::computeSizeInBits(SDValue(N, 0)) - 1;
+    unsigned Opcode = SelectOpCode<VFUs::AddSub, VTM::VOpAdd_c, VTM::VOpAdd>(FUSize);
+    return SelectSimpleNode(N, Opcode);
+  }
+
+  case VTMISD::ICmp:{
+    unsigned Opcode = SelectOpCode<VFUs::ICmp, VTM::VOpICmp_c, VTM::VOpICmp>(N);
+    return SelectSimpleNode(N, Opcode);
+  }
+
   case ISD::MUL:              return SelectBinary(N, VTM::VOpMult);
   case VTMISD::MULHiLo:       return SelectSimpleNode(N, VTM::VOpMultLoHi);
 

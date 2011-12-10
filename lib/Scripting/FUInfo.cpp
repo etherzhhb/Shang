@@ -114,7 +114,8 @@ namespace llvm {
 VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, double *latencies)
   : ResourceType(type),
     StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
-    Cost(getProperty<unsigned>(FUTable, "Cost")), LatencyTable(latencies) {
+    Cost(getProperty<unsigned>(FUTable, "Cost")), LatencyTable(latencies),
+    ChainingThreshold(getProperty<unsigned>(FUTable, "ChainingThreshold")) {
   luabind::object LatTable = FUTable["Latencies"];
   VFUs::initLatencyTable(LatTable, latencies);
 }
