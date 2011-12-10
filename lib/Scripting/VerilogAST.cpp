@@ -232,10 +232,9 @@ void VASTSlot::buildReadyLogic(raw_ostream &OS, const VASTModule &Mod) {
   OS << ";// Are all waiting resources ready?\n";
 }
 
-void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
+void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   // TODO: Build the AST for these logic.
   CtrlS.if_begin(getName());
-  std::string SlotReady = std::string(getName()) + "Ready";
   bool ReadyPresented = !readyEmpty();
 
   // DirtyHack: Remember the enabled signals in alias slots, the signal may be
@@ -264,9 +263,6 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     CtrlS << '\n';
   } // SS flushes automatically here.
 
-  // Enable next slot only when resources are ready.
-  if (ReadyPresented) CtrlS.if_begin(SlotReady);
-
   DEBUG(
   if (getSlotNum() != 0)
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
@@ -274,33 +270,35 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
   );
 
   bool hasSelfLoop = false;
+  SmallVector<VASTCnd, 1> EmptySlotEnCnd;
+
   if (hasExplicitNextSlots()) {
     CtrlS << "// Enable the successor slots.\n";
     for (VASTSlot::const_succ_iterator I = succ_begin(),E = succ_end();
          I != E; ++I) {
       hasSelfLoop |= I->first == getSlotNum();
-      CtrlS << Mod.getSlot(I->first)->getName() << " <= ";
-      I->second.print(CtrlS);
-      CtrlS << ";\n";
+      VASTRegister *NextSlotReg = Mod.getSlot(I->first)->getRegister();
+      Mod.addAssignment(NextSlotReg, I->second, this, EmptySlotEnCnd);
     }
   } else {
-    CtrlS << "// Enable the default successor slots.\n";
-    CtrlS << Mod.getSlot(getSlotNum() + 1)->getName() << " <= 1'b1;\n";
+    // Enable the default successor slots.
+    VASTRegister *NextSlotReg = Mod.getSlot(getSlotNum() + 1)->getRegister();
+    Mod.addAssignment(NextSlotReg, VASTCnd(true), this, EmptySlotEnCnd);
   }
 
   // Do not assign a value to the current slot enable twice.
-  if (!hasSelfLoop) {
-    CtrlS << "// Disable the current slot.\n";
-    CtrlS << getName() << " <= 1'b0;\n";
-  }
+  if (!hasSelfLoop)
+    // Disable the current slot.
+    Mod.addAssignment(getRegister(), VASTCnd(false), this, EmptySlotEnCnd);
 
   if (ReadyPresented) {
-    DEBUG(CtrlS.else_begin();
+    DEBUG(std::string NotSlotReady = "~" + std::string(getName()) + "Ready";
+          CtrlS.if_begin(NotSlotReady);
           if (getSlotNum() != 0)
             CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
                   <<  " waiting \");\n";
-          );
-    CtrlS.exit_block("// End resource ready.\n");
+
+          CtrlS.exit_block("// End resource ready.\n"););
   } else {
     //DEBUG(
     if (getSlotNum() != 0) {
@@ -319,6 +317,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, const VASTModule &Mod) const{
     //);
   }
 
+  std::string SlotReady = std::string(getName()) + "Ready";
   CtrlS << "// Enable the active FUs.\n";
   for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
        I != E; ++I) {
@@ -673,7 +672,7 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
     (*I)->printAssignment(OS);
 }
 
-void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) const {
+void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) {
   CtrlS << "\n\n// Slot control flow\n";
 
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)

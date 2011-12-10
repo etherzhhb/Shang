@@ -366,7 +366,7 @@ private:
 public:
   VASTSlot(unsigned slotNum, unsigned parentIdx, VASTSignal *S[]);
 
-  void printCtrl(vlang_raw_ostream &OS, const VASTModule &Mod) const;
+  void printCtrl(vlang_raw_ostream &OS, VASTModule &Mod);
   // Print the logic of ready signal of this slot, need alias slot information.
   void buildReadyLogic(raw_ostream &OS, const VASTModule &Mod);
   /// @briefPrint the ready expression of this slot.
@@ -554,7 +554,7 @@ public:
 
   // Print the slot control flow.
   void buildSlotLogic();
-  void printSlotCtrls(vlang_raw_ostream &CtrlS) const;
+  void printSlotCtrls(vlang_raw_ostream &CtrlS);
 
   // Compute the register assignments slack information, callable from lua.
   void computeAssignmentSlacks();
