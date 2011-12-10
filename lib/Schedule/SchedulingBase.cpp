@@ -209,8 +209,6 @@ bool SchedulingBase::computeMII() {
 
   unsigned ResMII = computeResMII();
   MII = std::max(RecMII, ResMII);
-  // Dirty Hack: Our control logic cannot handle 1 slot II.
-  MII = std::max(MII, 2u);
   // Also adjust the critical path length.
   setCriticalPathLength(std::max(MII, getCriticalPathLength()));
   return true;
