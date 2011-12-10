@@ -342,6 +342,7 @@ public:
 
 class VASTSlot : public VASTNode {
 public:
+  // TODO: Store the pointer to the Slot instead the slot number.
   typedef std::map<unsigned, VASTCnd> SuccVecTy;
   typedef SuccVecTy::const_iterator const_succ_iterator;
 
@@ -392,6 +393,7 @@ public:
     return getSlotNum() - getParentIdx();
   }
 
+  // TODO: Rename to addSuccSlot.
   void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
   bool hasNextSlot(unsigned NextSlotNum) const;
   // Dose this slot jump to some other slot conditionally instead just fall
