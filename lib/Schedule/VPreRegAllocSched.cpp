@@ -561,6 +561,23 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   if (NumValDep == 0) {
     unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
     A->addDep(VDCtrlDep::CreateCtrlDep(CurState.getEntryRoot(), Latency));
+    return;
+  }
+
+  // For pipelined loop, take care of the Anti-dependence from PHI.
+  if (CurState.isPipelined() && !isCtrl) {
+    typedef VSUnit::dep_iterator it;
+    for (it I = A->dep_begin(), E = A->dep_end(); I != E; ++I) {
+      VSUnit *DepSU = *I;
+
+      if (!DepSU->isPHI()) continue;
+
+      // Data-path op must read the value from PHI before it is refreshed, so
+      // add the back-edge to constraint the ALAP step of the operation.
+      // Although it is possible to detect and handle this situation in
+      // ScheduleEmitter, but that solution is more complex.
+      DepSU->addDep(VDMemDep::CreateMemDep<1>(A, 0));
+    }
   }
 }
 

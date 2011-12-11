@@ -358,6 +358,7 @@ public:
 
   // If this Schedule Unit is just the place holder for the Entry node.
   bool isEntry() const { return getRepresentativeInst() == 0; }
+  bool isPHI() const { return !isEntry() && getRepresentativeInst()->isPHI(); }
 
   unsigned getLatency() const {
     return latencies.front();
