@@ -580,10 +580,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       // Update the operand.
       Ops[i] = NewOp;
       // }
-      continue;
-    }
-
-    Ops[i] = getRegUseOperand(MO, ReadSlot);
+    } else
+      Ops[i] = getRegUseOperand(MO, ReadSlot);
   }
 
   MachineInstrBuilder Builder(&getMIAt(SchedSlot));
