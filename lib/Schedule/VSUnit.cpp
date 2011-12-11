@@ -308,6 +308,10 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
 
     unsigned Reg = MI->getOperand(0).getReg();
     LatInfo.MRI.setRegClass(Reg, VTM::WireRegisterClass);
+
+    typedef MachineRegisterInfo::reg_iterator it;
+    for (it I = LatInfo.MRI.reg_begin(Reg); I != LatInfo.MRI.reg_end(); ++I)
+      cast<ucOperand>(I.getOperand()).setIsWire(true);
   }
 }
 
