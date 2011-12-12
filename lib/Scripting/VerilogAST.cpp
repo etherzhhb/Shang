@@ -474,7 +474,15 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
         });
 
         if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
-          unsigned Slack = findSlackFrom(R, Cnds);
+          unsigned Slack = 0;
+          // Data-path has timing information available.
+          for (NodeStackTy::iterator I = NodeWorkStack.begin(),
+               E = NodeWorkStack.end(); I != E; ++I)
+            if (VASTWire *W = dyn_cast<VASTWire>(I->get()))
+              if (W->getOpcode() == VASTWire::dpVarLatBB)
+                Slack += W->getLatency();
+
+          Slack = std::max(Slack, findSlackFrom(R, Cnds));
           DEBUG_WITH_TYPE("rtl-slack-info",
                            dbgs() << " Slack: " << int(Slack));
           bindPath2ScriptEngine(NodeWorkStack, Slack);
@@ -666,15 +674,10 @@ VASTModule::~VASTModule() {
   Slots.clear();
   Allocator.Reset();
   SymbolTable.clear();
+  BBLatInfo.clear();
 
   delete &(DataPath.str());
   delete &(ControlBlock.str());
-}
-
-void VASTModule::clear() {
-  // Clear buffers
-  DataPath.str().clear();
-  ControlBlock.str().clear();
 }
 
 void VASTModule::printDatapath(raw_ostream &OS) const{
@@ -1068,9 +1071,9 @@ void VASTWire::addOperand(VASTUse Op) {
 }
 
 void VASTWire::print(raw_ostream &OS) const {
-  // Skip unknown datapath, it should printed to the datapath buffer of the
-  // module
-  if (Opc == dpUnknown) return;
+  // Skip unknown or blackbox datapath, it should printed to the datapath
+  //  buffer of the module.
+  if (Opc == dpUnknown ||  Opc == dpVarLatBB) return;
 
   // MUX need special printing method.
   if (Opc == dpMux) {

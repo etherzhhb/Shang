@@ -308,21 +308,28 @@ public:
     // Simple wire assignment.
     dpAssign,
     // Mux in datapath.
-    dpMux
+    dpMux,
+    // Timing BlackBox, have latecy not capture by slots.
+    dpVarLatBB
   };
 private:
   SmallVector<VASTUse, 4> Operands;
   Opcode Opc;
+  unsigned Latency;
 public:
   VASTWire(const char *Name, unsigned BitWidth,
            const char *Attr = "");
 
   bool isUnknownOp() const { return Opc == dpUnknown; }
 
-  void setOpcode(VASTWire::Opcode opc) {
+  void setOpcode(VASTWire::Opcode opc, unsigned latency = 0) {
     assert(isUnknownOp() && "Opcode already set!");
     Opc = opc;
+    Latency = latency;
   }
+
+  Opcode getOpcode() const { return Opc; }
+  unsigned getLatency() const { return Latency; }
 
   unsigned getNumOperands() const { return Operands.size(); }
 
@@ -523,6 +530,11 @@ private:
   SymTabTy SymbolTable;
   typedef StringMapEntry<VASTValue*> SymEntTy;
 
+  // The variable latency data-path whose latency information not capture
+  // by schedule information.
+  typedef std::map<unsigned, VASTWire*> VarLatBBMap;
+  VarLatBBMap BBLatInfo;
+
   typedef std::vector<VASTSlot*> SlotVecTy;
   SlotVecTy Slots;
   // The port starting offset of a specific function unit.
@@ -556,7 +568,6 @@ public:
   }
 
   ~VASTModule();
-  void clear();
 
   const std::string &getName() const { return Name; }
 
@@ -569,6 +580,18 @@ public:
 
   // Compute the register assignments slack information, callable from lua.
   void computeAssignmentSlacks();
+
+  void addBBLatInfo(unsigned FNNum, VASTWire *W) {
+    assert(W->getOpcode() == VASTWire::dpVarLatBB && "Wrong datapath type!");
+    bool inserted = BBLatInfo.insert(std::make_pair(FNNum, W)).second;
+    assert(inserted && "Latency information for BlackBox already exist!");
+    (void)inserted;
+  }
+
+  VASTWire *getBBLatInfo(unsigned FNNum) const {
+    VarLatBBMap::const_iterator at = BBLatInfo.find(FNNum);
+    return at == BBLatInfo.end() ? 0 : at->second;
+  }
 
   VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);

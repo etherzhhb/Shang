@@ -80,6 +80,10 @@ namespace VFUs {
                                  ArrayRef<std::string> Ports);
   std::string startModule(const std::string &ModName, unsigned ModNum,
                           ArrayRef<std::string> InPorts);
+
+  typedef std::pair<std::string, unsigned> ModOpInfo;
+  unsigned getModuleOperands(const std::string &ModName, unsigned FNNum,
+                             SmallVectorImpl<ModOpInfo> &OpInfo);
   // Cost parameters.
   extern unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost,
                   ShiftCost, ICmpCost, MuxSizeCost;

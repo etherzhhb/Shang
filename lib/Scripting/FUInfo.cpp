@@ -442,3 +442,51 @@ std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
 
   return scriptEngin().getValueStr(ResultName);
 }
+
+unsigned VFUs::getModuleOperands(const std::string &ModName, unsigned FNNum,
+                                 SmallVectorImpl<ModOpInfo> &OpInfo) {
+  luabind::object O = scriptEngin().getModTemplate(ModName);
+  O = O["TimingInfo"];
+  if (luabind::type(O) != LUA_TTABLE) return 0;
+
+  unsigned NumOperands = getProperty<unsigned>(O, "NumOperands");
+  if (NumOperands == 0)  return 0;
+
+  unsigned Latency = getProperty<unsigned>(O, "Latency");
+  if (Latency == 0) return 0;
+
+  O = O["OperandInfo"];
+  if (luabind::type(O) != LUA_TTABLE) return 0;
+
+  std::string Script;
+  raw_string_ostream ScriptBuilder(Script);
+
+  std::string ResultName = ModName + utostr_32(FNNum) + "_operand";
+  for (unsigned i = 1; i <= NumOperands; ++i) {
+    luabind::object OpTab = O[i];
+    // FIXME: Use LUA api directly?
+    // Call the preprocess function.
+    ScriptBuilder <<
+      /*"local " <<*/ ResultName << ", message = require \"luapp\" . preprocess {"
+      // The inpute template.
+      "input=[=[" << getProperty<std::string>(OpTab, "Name") << "]=],"
+      // And the look up.
+      "lookup={ num=" << FNNum << "}}\n";
+    DEBUG(ScriptBuilder << "print(" << ResultName << ")\n");
+    DEBUG(ScriptBuilder << "print(message)\n");
+    ScriptBuilder.flush();
+    DEBUG(dbgs() << "Going to execute:\n" << Script);
+
+    SMDiagnostic Err;
+    if (!scriptEngin().runScriptStr(Script, Err))
+      report_fatal_error("External module starting:" + Err.getMessage());
+
+    std::string OpName = scriptEngin().getValueStr(ResultName);
+    unsigned OpSize = getProperty<unsigned>(OpTab, "SizeInBits");
+    OpInfo.push_back(ModOpInfo(OpName, OpSize));
+
+    Script.clear();
+  }
+
+  return Latency;
+}

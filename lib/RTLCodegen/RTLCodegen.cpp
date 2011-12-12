@@ -564,6 +564,10 @@ void RTLCodegen::emitAllocatedFUs() {
       getSubModulePortName(FNNum, "fin"),
       getSubModulePortName(FNNum, "return_value")
     };
+    // Else ask the constraint about how to instantiates this submodule.
+    S << "// External module: " << I->getKey() << '\n';
+    S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
+
     // Add the start/finsh signal and return_value to the signal list.
     VM->addRegister(Ports[2], 1);
     VM->getOrCreateSymbol(Ports[3], 1);
@@ -571,13 +575,26 @@ void RTLCodegen::emitAllocatedFUs() {
     // Had we allocate the return port?
     VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RetPortIdx);
     if (Info.getParentRegister() == FNNum) {
-      VASTValue *PortName = VM->getOrCreateSymbol(Ports[4], Info.getBitWidth());
-      VM->indexVASTValue(RetPortIdx, PortName);
-    }
+      SmallVector<VFUs::ModOpInfo, 4> OpInfo;
+      unsigned Latency = VFUs::getModuleOperands(I->getKey(), FNNum, OpInfo);
 
-    // Else ask the constraint about how to instantiates this submodule.
-    S << "// External module: " << I->getKey() << '\n';
-    S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
+      if (Latency == 0) {
+        VASTValue *PortName = VM->getOrCreateSymbol(Ports[4], Info.getBitWidth());
+        VM->indexVASTValue(RetPortIdx, PortName);
+        continue;
+      }
+
+      VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
+      VM->indexVASTValue(RetPortIdx, ResultWire);
+      // Allow user look up the wire with FNNum.
+      VM->indexVASTValue(FNNum, ResultWire);
+
+      ResultWire->setOpcode(VASTWire::dpVarLatBB, Latency);
+      for (unsigned i = 0, e = OpInfo.size(); i < e; ++i) {
+        VASTRegister *R = VM->addRegister(OpInfo[i].first, OpInfo[i].second);
+        ResultWire->addOperand(R);
+      }
+    }
   }
 }
 
@@ -1023,6 +1040,15 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
         VM->getSymbol<VASTRegister>(getSubModulePortName(FNNum, ArgIt->getName()));
       VM->addAssignment(R, getAsOperand(Op.getOperand(2 + i)), Slot, Cnds);
       ++ArgIt;
+    }
+    return;
+  }
+
+  // Is the function have latency information not captured by schedule?
+  if (VASTWire *RetPort = VM->getBBLatInfo(FNNum)) {
+    for (unsigned i = 0, e = RetPort->getNumOperands(); i < e; ++i) {
+      VASTRegister *R = cast<VASTRegister>(RetPort->getOperand(i));
+      VM->addAssignment(R, getAsOperand(Op.getOperand(2 + i)), Slot, Cnds);
     }
     return;
   }
