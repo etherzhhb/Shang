@@ -69,9 +69,6 @@ static RegisterRegAlloc VSimpleRegalloc("vsimple",
 
 namespace {
 struct VRASimple : public MachineFunctionPass {
-  // DIRTY HACK: We need to init the PhysReg2LiveUnion again with correct
-  // physics register number.
-  LiveIntervalUnion::Allocator UnionAllocator;
   // Context.
   MachineFunction *MF;
   VFInfo *VFI;
@@ -89,16 +86,6 @@ struct VRASimple : public MachineFunctionPass {
 
   void getAnalysisUsage(AnalysisUsage &AU) const;
   void releaseMemory();
-
-  // Abstract functions from the base class.
-  //unsigned selectOrSplit(LiveInterval &, SmallVectorImpl<LiveInterval*> &) {
-  //  return 0;
-  //}
-  //Spiller &spiller() { return *(Spiller*)0; }
-  //virtual float getPriority(LiveInterval *LI) { return LI->weight; }
-  //virtual void enqueue(LiveInterval *LI) {}
-  //virtual LiveInterval *dequeue() { return 0; }
-  // End of Abstract functions
 
   void assign(LiveInterval &VirtReg, unsigned PhysReg) {
     assert(!VRM->hasPhys(VirtReg.reg) && "Duplicate VirtReg assignment");

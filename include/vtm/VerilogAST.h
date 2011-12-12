@@ -53,7 +53,7 @@ public:
     vastWire,
     vastRegister,
     vastSymbol,
-    vastDatapath,
+    vastExpr,
     vastSlot,
     vastFirstDeclType = vastPort,
     vastLastDeclType = vastSlot,
@@ -75,6 +75,7 @@ public:
   unsigned getASTType() const { return T; }
 
   virtual void print(raw_ostream &OS) const = 0;
+  void dump() const;
 };
 
 // TODO: Change VASTValue to VASTNamedNode
@@ -93,6 +94,7 @@ public:
   bool isRegister() const { return getASTType() == vastRegister; }
 
   virtual void print(raw_ostream &OS) const;
+  virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 };
 
 class VASTSymbol : public VASTValue {
@@ -185,7 +187,7 @@ public:
   }
 
   // Iterators allow us to traverse the use tree.
-  typedef VASTUse *iterator;
+  typedef const VASTUse *iterator;
   // Iterator for datapath traverse.
   iterator dp_src_begin();
   iterator dp_src_end();
@@ -193,6 +195,7 @@ public:
   bool is_dp_leaf() { return dp_src_begin() == dp_src_end(); }
 
   bool isInverted() const { return Inverted; }
+  unsigned getBitWidth() const { return UB - LB; }
   void print(raw_ostream &OS) const;
 };
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
@@ -242,6 +245,74 @@ public:
   VASTCnd invert() const { return VASTCnd(getCndVal(), !isInverted()); }
 
   void print(raw_ostream &OS) const;
+};
+
+class VASTExpr : public VASTValue {
+public:
+  // Datapath opcode.
+  enum Opcode {
+    dpUnknown,
+    // FU datapath
+    dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
+    // bitwise logic datapath
+    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
+    // bit level assignment.
+    dpBitCat, dpBitRepeat,
+    // Simple wire assignment.
+    dpAssign,
+    // Mux in datapath.
+    dpMux,
+    // Timing BlackBox, have latecy not capture by slots.
+    dpVarLatBB
+  };
+private:
+  VASTExpr(const VASTExpr&);             // Do not implement
+public:
+  const uint32_t Opc;
+  const uint32_t NumOps;
+  const VASTUse *const Ops;
+
+  VASTExpr(uint16_t opc, uint16_t width, uint32_t numOps, VASTUse *ops)
+    : VASTValue(VASTNode::vastExpr, 0, width), Opc(opc), NumOps(numOps),
+      Ops(ops) {
+    assert(NumOps && "Unexpected empty expression!");
+  }
+
+  Opcode getOpcode() const { return (VASTExpr::Opcode)Opc; }
+  unsigned num_operands() const { return NumOps; }
+
+  VASTUse getOperand(unsigned Idx) const {
+    assert(Idx < num_operands() && "Index out of range!");
+    return Ops[Idx];
+  }
+
+  typedef const VASTUse *op_iterator;
+  op_iterator op_begin() const { return Ops; }
+  op_iterator op_end() const { return Ops + NumOps; }
+
+
+  // Print the logic to the output stream.
+  void print(raw_ostream &OS, const VASTWire *LV) const;
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  void print(raw_ostream &OS) const;
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTExpr *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastExpr;
+  }
+};
+
+struct VASTExprBuilder {
+  SmallVector<VASTUse, 4> Operands;
+  VASTExpr::Opcode Opc;
+  unsigned BitWidth;
+  void init(VASTExpr::Opcode opc, unsigned bitWidth) {
+    Opc = opc;
+    BitWidth = bitWidth;
+  }
+
+  void addOperand(VASTUse U) { Operands.push_back(U); }
 };
 
 class VASTSignal : public VASTValue {
@@ -295,55 +366,39 @@ public:
 };
 
 class VASTWire : public VASTSignal {
-public:
-  // Datapath opcode.
-  enum Opcode {
-    dpUnknown,
-    // FU datapath
-    dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
-    // bitwise logic datapath
-    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
-    // bit level assignment.
-    dpBitCat, dpBitRepeat,
-    // Simple wire assignment.
-    dpAssign,
-    // Mux in datapath.
-    dpMux,
-    // Timing BlackBox, have latecy not capture by slots.
-    dpVarLatBB
-  };
-private:
-  SmallVector<VASTUse, 4> Operands;
-  Opcode Opc;
+  VASTExpr *Expr;
+  // TODO: move to datapath.
   unsigned Latency;
+
 public:
   VASTWire(const char *Name, unsigned BitWidth,
            const char *Attr = "");
 
-  bool isUnknownOp() const { return Opc == dpUnknown; }
+  bool hasExpr() const { return Expr != 0; }
 
-  void setOpcode(VASTWire::Opcode opc, unsigned latency = 0) {
-    assert(isUnknownOp() && "Opcode already set!");
-    Opc = opc;
+  VASTExpr *getExpr() const { return Expr; }
+  void setExpr(VASTExpr *E) {
+    assert(Expr == 0 && "Datapath already set!");
+    assert(E->getBitWidth() == getBitWidth() && "Expr bit width not match!");
+    Expr = E;
+  }
+
+  void setLatency(unsigned latency) {
     Latency = latency;
   }
 
-  Opcode getOpcode() const { return Opc; }
+  VASTExpr::Opcode getOpcode() const { return Expr->getOpcode(); }
   unsigned getLatency() const { return Latency; }
 
-  unsigned getNumOperands() const { return Operands.size(); }
+  unsigned getNumOperands() const { return Expr->num_operands(); }
 
   VASTUse getOperand(unsigned Idx) const {
-    assert(Idx < Operands.size() && "Index out of range!");
-    return Operands[Idx];
+    return Expr->getOperand(Idx);
   }
 
-  typedef VASTUse *op_iterator;
-  op_iterator op_begin() { return Operands.begin(); }
-  op_iterator op_end() { return Operands.end(); }
-
-  // Add the depending value of this wire to the operand list.
-  void addOperand (VASTUse Op);
+  typedef VASTExpr::op_iterator op_iterator;
+  op_iterator op_begin() const { return hasExpr() ? Expr->op_begin() : 0; }
+  op_iterator op_end() const { return hasExpr() ? Expr->op_end() : 0; }
 
   // Print the logic to the output stream.
   void print(raw_ostream &OS) const;
@@ -366,7 +421,9 @@ public:
 
 private:
   // The relative signal of the slot: Slot register, Slot active and Slot ready.
-  VASTSignal *Signals[3];
+  VASTRegister *SlotReg;
+  VASTWire     *SlotActive;
+  VASTWire     *SlotReady;
   // The ready signals that need to wait before we go to next slot.
   FUCtrlVecTy Readys;
   // The function units that enabled at this slot.
@@ -379,25 +436,26 @@ private:
   unsigned StartSlot, EndSlot, II;
   // The start slot of parent state, can identify parent state.
   unsigned ParentIdx;
+
 public:
-  VASTSlot(unsigned slotNum, unsigned parentIdx, VASTSignal *S[]);
+  VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM);
 
   void printCtrl(vlang_raw_ostream &OS, VASTModule &Mod);
   // Print the logic of ready signal of this slot, need alias slot information.
-  void buildReadyLogic(raw_ostream &OS, const VASTModule &Mod);
+  void buildReadyLogic(VASTModule &Mod);
   /// @briefPrint the ready expression of this slot.
   ///
   /// @param OS       The output stream.
   /// @param SrcSlot  Which Slot are the expression printing for?
-  void buildFUReadyExpr(raw_ostream &OS, VASTSlot *SrcSlot);
+  VASTExpr *buildFUReadyExpr(VASTModule &VM);
 
   void print(raw_ostream &OS) const;
 
-  const char *getName() const { return Signals[0]->getName(); }
+  const char *getName() const;
   // Getting the relative signals.
-  VASTRegister *getRegister() const { return cast<VASTRegister>(Signals[0]); }
-  VASTWire *getReady() const { return cast<VASTWire>(Signals[1]); }
-  VASTWire *getActive() const { return cast<VASTWire>(Signals[2]); }
+  VASTRegister *getRegister() const { return SlotReg; }
+  VASTWire *getReady() const { return SlotReady; }
+  VASTWire *getActive() const { return SlotActive; }
 
   unsigned getSlotNum() const { return getSubClassData(); }
   // The start slot of parent state(MachineBasicBlock)
@@ -446,7 +504,6 @@ public:
     EndSlot = endSlot;
     II = ii;
   }
-
 
   bool operator<(const VASTSlot &RHS) const {
     return getSlotNum() < RHS.getSlotNum();
@@ -582,7 +639,7 @@ public:
   void computeAssignmentSlacks();
 
   void addBBLatInfo(unsigned FNNum, VASTWire *W) {
-    assert(W->getOpcode() == VASTWire::dpVarLatBB && "Wrong datapath type!");
+    assert(W->getOpcode() == VASTExpr::dpVarLatBB && "Wrong datapath type!");
     bool inserted = BBLatInfo.insert(std::make_pair(FNNum, W)).second;
     assert(inserted && "Latency information for BlackBox already exist!");
     (void)inserted;
@@ -631,18 +688,8 @@ public:
   VASTSlot *getOrCreateSlot(unsigned SlotNum, unsigned ParentIdx) {
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
-      // Create the relative signals.
-      std::string SlotName = "Slot" + utostr_32(SlotNum);
-      std::string SlotReadyName = SlotName + "Ready";
-      std::string SlotActiveName = SlotName + "Active";
-      VASTSignal *Signals[] = {
-        addRegister(SlotName, 1, SlotNum == 0,  DirectClkEnAttr.c_str()),
-        addWire(SlotReadyName, 1, DirectClkEnAttr.c_str()),
-        addWire(SlotActiveName, 1, DirectClkEnAttr.c_str())
-      };
-
       Slot = Allocator.Allocate<VASTSlot>();
-      new (Slot) VASTSlot(SlotNum, ParentIdx, Signals);
+      new (Slot) VASTSlot(SlotNum, ParentIdx, this);
     }
 
     return Slot;
@@ -737,6 +784,20 @@ public:
   const_port_iterator common_ports_begin() const {
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
+
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
+                    ArrayRef<VASTUse> Ops);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
+                    VASTUse Op);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
+                    VASTUse LHS, VASTUse RHS);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
+                    VASTUse Op0, VASTUse Op1, VASTUse Op2);
+  VASTExpr *getExpr(VASTExprBuilder &Builder) {
+    return getExpr(Builder.Opc, Builder.BitWidth, Builder.Operands);
+  }
+
+  VASTExpr *getNotExpr(VASTUse U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,

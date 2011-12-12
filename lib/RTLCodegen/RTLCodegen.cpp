@@ -79,9 +79,11 @@ class RTLCodegen : public MachineFunctionPass {
     VFUMemBus *Bus;
     unsigned BusNum;
     VASTWire *MembusEn, *MembusCmd, *MemBusAddr, *MemBusOutData, *MemBusByteEn;
+    // Helper class to build the expression.
+    VASTExprBuilder EnExpr, CmdExpr, AddrExpr, OutDataExpr, BeExpr;
 
     VASTWire *createOutputPort(const std::string &PortName, unsigned BitWidth,
-                               VASTRegister *&LocalEn) {
+                               VASTRegister *&LocalEn, VASTExprBuilder &Expr) {
       // We need to create multiplexer to allow current module and its submodules
       // share the bus.
       std::string PortReg = PortName + "_r";
@@ -92,15 +94,15 @@ class RTLCodegen : public MachineFunctionPass {
       // Are we creating the enable port?
       if (LocalEn == 0) {
         // Or all enables together to generate the enable output
-        OutputWire->setOpcode(VASTWire::dpOr);
+        Expr.init(VASTExpr::dpOr, OutputWire->getBitWidth());
         // Add the local enable.
-        OutputWire->addOperand(LocalReg);
+        Expr.addOperand(LocalReg);
         LocalEn = LocalReg;
       } else{
-        OutputWire->setOpcode(VASTWire::dpMux);
+        Expr.init(VASTExpr::dpMux, OutputWire->getBitWidth());
         // Select the local signal if local enable is true.
-        OutputWire->addOperand(LocalEn);
-        OutputWire->addOperand(LocalReg);
+        Expr.addOperand(LocalEn);
+        Expr.addOperand(LocalReg);
       }
 
       return OutputWire;
@@ -108,7 +110,7 @@ class RTLCodegen : public MachineFunctionPass {
 
     void addSubModuleOutPort(raw_ostream &S, VASTWire *OutputWire,
                              unsigned BitWidth, const std::string &SubModuleName,
-                             VASTWire *&SubModEn) {
+                             VASTWire *&SubModEn, VASTExprBuilder &Expr) {
       std::string ConnectedWireName = SubModuleName + "_"
                                       + std::string(OutputWire->getName());
 
@@ -116,12 +118,12 @@ class RTLCodegen : public MachineFunctionPass {
 
       // Are we creating the enable signal from sub module?
       if (SubModEn == 0) {
-        OutputWire->addOperand(SubModWire);
+        Expr.addOperand(SubModWire);
         SubModEn = SubModWire;
       } else {
         // Select the signal from submodule if sub module enable is true.
-        OutputWire->addOperand(SubModEn);
-        OutputWire->addOperand(SubModWire);
+        Expr.addOperand(SubModEn);
+        Expr.addOperand(SubModWire);
       }
 
       // Write the connection.
@@ -138,16 +140,16 @@ class RTLCodegen : public MachineFunctionPass {
 
     void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
       VASTWire *SubModEn = 0;
-      addSubModuleOutPort(S, MembusEn, 1, SubModuleName, SubModEn);
+      addSubModuleOutPort(S, MembusEn, 1, SubModuleName, SubModEn, EnExpr);
       // Output ports.
       addSubModuleOutPort(S, MembusCmd, VFUMemBus::CMDWidth, SubModuleName,
-                          SubModEn);
+                          SubModEn, CmdExpr);
       addSubModuleOutPort(S, MemBusAddr, Bus->getAddrWidth(), SubModuleName,
-                          SubModEn);
+                          SubModEn, AddrExpr);
       addSubModuleOutPort(S, MemBusOutData, Bus->getDataWidth(), SubModuleName,
-                          SubModEn);
+                          SubModEn, OutDataExpr);
       addSubModuleOutPort(S, MemBusByteEn, Bus->getDataWidth()/8, SubModuleName,
-                          SubModEn);
+                          SubModEn, BeExpr);
 
       // Input ports.
       addSubModuleInPort(S, VFUMemBus::getInDataBusName(BusNum));
@@ -165,26 +167,34 @@ class RTLCodegen : public MachineFunctionPass {
       VASTRegister *LocalEn = 0;
       // Control ports.
       MembusEn =
-        createOutputPort(VFUMemBus::getEnableName(BusNum), 1, LocalEn);
+        createOutputPort(VFUMemBus::getEnableName(BusNum), 1, LocalEn, EnExpr);
       MembusCmd =
         createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
-                         LocalEn);
+                         LocalEn, CmdExpr);
 
       // Address port.
       MemBusAddr =
         createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth(),
-                         LocalEn);
+                         LocalEn, AddrExpr);
       // Data ports.
       VM->addInputPort(VFUMemBus::getInDataBusName(BusNum), Bus->getDataWidth());
       MemBusOutData =
         createOutputPort(VFUMemBus::getOutDataBusName(BusNum),
-                         Bus->getDataWidth(), LocalEn);
+                         Bus->getDataWidth(), LocalEn, OutDataExpr);
       // Byte enable.
       MemBusByteEn =
         createOutputPort(VFUMemBus::getByteEnableName(BusNum),
-                         Bus->getDataWidth() / 8, LocalEn);
+                         Bus->getDataWidth() / 8, LocalEn, BeExpr);
       // Bus ready.
       VM->addInputPort(VFUMemBus::getReadyName(BusNum), 1);
+    }
+
+    ~MemBusBuilder() {
+      MembusEn->setExpr(VM->getExpr(EnExpr));
+      MembusCmd->setExpr(VM->getExpr(CmdExpr));
+      MemBusAddr->setExpr(VM->getExpr(AddrExpr));
+      MemBusOutData->setExpr(VM->getExpr(OutDataExpr));
+      MemBusByteEn->setExpr(VM->getExpr(BeExpr));
     }
   };
 
@@ -201,7 +211,7 @@ class RTLCodegen : public MachineFunctionPass {
   VASTValue *emitFUAdd(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi);
   VASTValue *emitFUShift(unsigned FUNum, unsigned BitWidth,
-                         VASTWire::Opcode Opc);
+                         VASTExpr::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
   void clear();
@@ -213,8 +223,8 @@ class RTLCodegen : public MachineFunctionPass {
 
   void emitDatapath(ucState &State);
 
-  void emitUnaryOp(ucOp &UnOp, VASTWire::Opcode Opc);
-  void emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc);
+  void emitUnaryOp(ucOp &UnOp, VASTExpr::Opcode Opc);
+  void emitBinaryOp(ucOp &BinOp, VASTExpr::Opcode Opc);
 
   void emitChainedOpAdd(ucOp &Op);
   void emitChainedOpICmp(ucOp &Op);
@@ -589,11 +599,14 @@ void RTLCodegen::emitAllocatedFUs() {
       // Allow user look up the wire with FNNum.
       VM->indexVASTValue(FNNum, ResultWire);
 
-      ResultWire->setOpcode(VASTWire::dpVarLatBB, Latency);
-      for (unsigned i = 0, e = OpInfo.size(); i < e; ++i) {
-        VASTRegister *R = VM->addRegister(OpInfo[i].first, OpInfo[i].second);
-        ResultWire->addOperand(R);
-      }
+      SmallVector<VASTUse, 4> Ops;
+
+      ResultWire->setLatency(Latency);
+      for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
+        Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
+
+      ResultWire->setExpr(VM->getExpr(VASTExpr::dpVarLatBB, Info.getBitWidth(),
+                                      Ops));
     }
   }
 }
@@ -602,47 +615,38 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
   std::string ResultName = "addsub" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  Result->setOpcode(VASTWire::dpAdd);
-
   unsigned OperandWidth = BitWidth - 1;
-  std::string OpName = ResultName + "_a";
-  Result->addOperand(VM->addRegister(OpName, OperandWidth));
-  OpName = ResultName + "_b";
-  Result->addOperand(VM->addRegister(OpName, OperandWidth));
-  OpName = ResultName + "_c";
-  Result->addOperand(VM->addRegister(OpName, 1));
 
+  Result->setExpr(VM->getExpr(VASTExpr::dpAdd, BitWidth,
+                              VM->addRegister(ResultName + "_a", OperandWidth),
+                              VM->addRegister(ResultName + "_b", OperandWidth),
+                              VM->addRegister(ResultName + "_c", 1)));
   return Result;
 }
 
 VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
   std::string ResultName = "mult" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  Result->setOpcode(VASTWire::dpMul);
 
   // No need to include the high part is included in the operand register.
-  if (HasHi) BitWidth /= 2;
+  unsigned OperandWidth = BitWidth;
+  if (HasHi) OperandWidth /= 2;
 
-  std::string OpName = ResultName + "_a";
-  Result->addOperand(VM->addRegister(OpName, BitWidth));
-  OpName = ResultName + "_b";
-  Result->addOperand(VM->addRegister(OpName, BitWidth));
+  Result->setExpr(VM->getExpr(VASTExpr::dpMul, BitWidth,
+                  VM->addRegister(ResultName + "_a", OperandWidth),
+                  VM->addRegister(ResultName + "_b", OperandWidth)));
 
   return Result;
 }
 
 VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
-                                   VASTWire::Opcode Opc) {
+                                   VASTExpr::Opcode Opc) {
   std::string ResultName = "shift" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
-  Result->setOpcode(Opc);
 
-
-  std::string OpName = ResultName + "_a";
-  Result->addOperand(VM->addRegister(OpName, BitWidth));
-  OpName = ResultName + "_b";
-  Result->addOperand(VM->addRegister(OpName, Log2_32_Ceil(BitWidth)));
-
+  Result->setExpr(VM->getExpr(Opc, BitWidth,
+                  VM->addRegister(ResultName + "_a", BitWidth),
+                  VM->addRegister(ResultName + "_b", Log2_32_Ceil(BitWidth))));
   return Result;
 }
 
@@ -654,13 +658,11 @@ VASTValue *RTLCodegen::emitFUCmp(unsigned FUNum, unsigned BitWidth,
 
   // Comparer have 4 output port.
   VASTWire *Result = VM->addWire(ResultName, 5);
-  Result->setOpcode(isSigned ? VASTWire::dpSCmp : VASTWire::dpUCmp);
 
-  std::string OpName = ResultName + "_a";
-  Result->addOperand(VM->addRegister(OpName, BitWidth));
-  OpName = ResultName + "_b";
-  Result->addOperand(VM->addRegister(OpName, BitWidth));
-
+  Result->setExpr(VM->getExpr(isSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp,
+                              5,
+                              VM->addRegister(ResultName + "_a", BitWidth),
+                              VM->addRegister(ResultName + "_b", BitWidth)));
   return Result;
 }
 
@@ -699,17 +701,17 @@ void RTLCodegen::emitAllSignals() {
       VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RASRRegClassID: {
-      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpSRA);
+      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpSRA);
       VM->indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RLSRRegClassID:{
-      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpSRL);
+      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpSRL);
       VM->indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RSHLRegClassID:{
-      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTWire::dpShl);
+      VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpShl);
       VM->indexVASTValue(RegNum, V);
       break;
     }
@@ -908,17 +910,16 @@ void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
 
 void RTLCodegen::emitChainedOpAdd(ucOp &Op) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(Op.getOperand(0)));
-  if (!V.isUnknownOp()) return;
-
-  V.setOpcode(VASTWire::dpAdd);
-  V.addOperand(getAsOperand(Op.getOperand(1)));
-  V.addOperand(getAsOperand(Op.getOperand(2)));
-  V.addOperand(getAsOperand(Op.getOperand(3)));
+  if (V.hasExpr()) return;
+  V.setExpr(VM->getExpr(VASTExpr::dpAdd, V.getBitWidth(),
+                        getAsOperand(Op.getOperand(1)),
+                        getAsOperand(Op.getOperand(2)),
+                        getAsOperand(Op.getOperand(3))));
 }
 
 void RTLCodegen::emitChainedOpICmp(ucOp &Op) {
   unsigned CC = Op.getOperand(3).getImm();
-  emitBinaryOp(Op, CC == VFUs::CmpSigned ? VASTWire::dpSCmp : VASTWire::dpUCmp);
+  emitBinaryOp(Op, CC == VFUs::CmpSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp);
 }
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
@@ -1219,50 +1220,47 @@ void RTLCodegen::emitDatapath(ucState &State) {
     ucOp Op = *I;
     switch (Op->getOpcode()) {
     case VTM::VOpBitSlice:  emitOpBitSlice(Op);                       break;
-    case VTM::VOpBitCat:    emitBinaryOp(Op, VASTWire::dpBitCat);     break;
-    case VTM::VOpBitRepeat: emitBinaryOp(Op, VASTWire::dpBitRepeat);  break;
+    case VTM::VOpBitCat:    emitBinaryOp(Op, VASTExpr::dpBitCat);     break;
+    case VTM::VOpBitRepeat: emitBinaryOp(Op, VASTExpr::dpBitRepeat);  break;
 
     case VTM::ImpUse:       /*Not need to handle*/  break;
 
     case VTM::VOpAdd_c:     emitChainedOpAdd(Op); break;
     case VTM::VOpICmp_c:    emitChainedOpICmp(Op); break;
 
-    case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor);  break;
-    case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);  break;
-    case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);   break;
+    case VTM::VOpXor:       emitBinaryOp(Op, VASTExpr::dpXor);  break;
+    case VTM::VOpAnd:       emitBinaryOp(Op, VASTExpr::dpAnd);  break;
+    case VTM::VOpOr:        emitBinaryOp(Op, VASTExpr::dpOr);   break;
 
-    case VTM::VOpNot:       emitUnaryOp(Op, VASTWire::dpNot);   break;
-    case VTM::VOpROr:       emitUnaryOp(Op, VASTWire::dpROr);   break;
-    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTWire::dpRAnd);  break;
-    case VTM::VOpRXor:      emitUnaryOp(Op, VASTWire::dpRXor);  break;
+    case VTM::VOpNot:       emitUnaryOp(Op, VASTExpr::dpNot);   break;
+    case VTM::VOpROr:       emitUnaryOp(Op, VASTExpr::dpROr);   break;
+    case VTM::VOpRAnd:      emitUnaryOp(Op, VASTExpr::dpRAnd);  break;
+    case VTM::VOpRXor:      emitUnaryOp(Op, VASTExpr::dpRXor);  break;
 
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   }
 }
 
-void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
+void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTExpr::Opcode Opc) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(UnaOp.getOperand(0)));
-  if (!V.isUnknownOp()) return;
-
-  V.setOpcode(Opc);
-  V.addOperand(getAsOperand(UnaOp.getOperand(1)));
+  if (V.hasExpr()) return;
+  V.setExpr(VM->getExpr(Opc, V.getBitWidth(),
+            getAsOperand(UnaOp.getOperand(1))));
 }
 
-void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
+void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTExpr::Opcode Opc) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(BinOp.getOperand(0)));
-  if (!V.isUnknownOp()) return;
-
-  V.setOpcode(Opc);
-  V.addOperand(getAsOperand(BinOp.getOperand(1)));
-  V.addOperand(getAsOperand(BinOp.getOperand(2)));
+  if (V.hasExpr()) return;
+  V.setExpr(VM->getExpr(Opc, V.getBitWidth(),
+                        getAsOperand(BinOp.getOperand(1)),
+                        getAsOperand(BinOp.getOperand(2))));
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   VASTWire &V = *cast<VASTWire>(getAsOperand(OpBitSlice.getOperand(0)));
-  if (!V.isUnknownOp()) return;
+  if (V.hasExpr()) return;
 
-  V.setOpcode(VASTWire::dpAssign);
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice
   unsigned UB = OpBitSlice.getOperand(2).getImm(),
@@ -1274,7 +1272,8 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
   LB += RHS.LB;
   UB += RHS.LB;
   assert(UB <= RHS.UB && "Bitslice out of range!");
-  V.addOperand(VASTUse(RHS.get(), UB, LB));
+  V.setExpr(VM->getExpr(VASTExpr::dpAssign, V.getBitWidth(),
+                        VASTUse(RHS.get(), UB, LB)));
 }
 
 VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
