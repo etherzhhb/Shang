@@ -359,6 +359,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
     cast<VASTRegister>(I->first)->addAssignment(SrcVal, getRegister(), this);
   }
 
+  SmallVector<VASTUse, 4> DisableAndCnds;
   if (!disableEmpty()) {
     CtrlS << "// Disable the resources when the condition is true.\n";
     for (VASTSlot::const_fu_ctrl_it I = disable_begin(), E = disable_end();
@@ -369,12 +370,11 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
       // ok that the port is enabled.
       if (isEnabled(I->first)) continue;
 
+      DisableAndCnds.push_back(getRegister());
       // If the port enabled in alias slots, disable it only if others slots is
       // not active.
       bool AliasEnabled = AliasEnables.count(I->first);
       if (AliasEnabled) {
-        std::string AliasDisactive = "1'b1";
-        raw_string_ostream SS(AliasDisactive);
         for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
           if (slot == getSlotNum()) continue;
 
@@ -382,20 +382,19 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
           assert(!ASlot->isDiabled(I->first)
                  && "Same signal disabled in alias slot!");
           if (ASlot->isEnabled(I->first)) {
-            SS << " & ~" << ASlot->getName();
+            DisableAndCnds.push_back(Mod.getNotExpr(ASlot->getRegister()));
             continue;
           }
         }
-
-        SS.flush();
-        CtrlS.if_begin(AliasDisactive, "// Resolve the conflict\n");
       }
 
-      CtrlS << "if (";
-      I->second.print(CtrlS);
-      CtrlS << ") "  << I->first->getName() << " <= 1'b0;\n";
+      DisableAndCnds.push_back(I->second);
 
-      if (AliasEnabled) CtrlS.exit_block();
+      VASTRegister *En = cast<VASTRegister>(I->first);
+      En->addAssignment(VASTUse((int64_t)0, 1),
+                        Mod.getExpr(VASTExpr::dpAnd, DisableAndCnds, 1),
+                        this);
+      DisableAndCnds.clear();
     }
   }
   CtrlS.exit_block("\n\n");
