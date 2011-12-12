@@ -353,10 +353,10 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   CtrlS << "// Enable the active FUs.\n";
   for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
        I != E; ++I) {
+    // No need to wait for the slot ready.
     // We may try to enable and disable the same port at the same slot.
-    CtrlS << I->first->getName() << " <= " << SlotReady << " & ";
-    I->second.print(CtrlS);
-    CtrlS << ";\n";
+    VASTExpr *SrcVal = Mod.getExpr(VASTExpr::dpAnd, getReady(), I->second, 1);
+    cast<VASTRegister>(I->first)->addAssignment(SrcVal, getRegister(), this);
   }
 
   if (!disableEmpty()) {
