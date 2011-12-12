@@ -120,28 +120,27 @@ protected:
   } Data;
 
   unsigned UseKind  :2; // VASTUseTy
-  int Inverted  :1;
 public:
   // The bit range of this value.
   /*const*/ unsigned UB :8;
   /*const*/ unsigned LB :8;
 
-  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb) : Inverted(false),UB(ub),LB(lb){
+  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb) : UB(ub),LB(lb){
     Data.V = v;
     UseKind = USE_Value;
   }
 
-  VASTUse(VASTValue *v) : Inverted(false), UB(v->getBitWidth()), LB(0) {
+  VASTUse(VASTValue *v) : UB(v->getBitWidth()), LB(0) {
     Data.V = v;
     UseKind = USE_Value;
   }
 
-  VASTUse(int64_t immVal, uint8_t width) : Inverted(false), UB(width), LB(0) {
+  VASTUse(int64_t immVal, uint8_t width) : UB(width), LB(0) {
     Data.ImmVal = immVal;
     UseKind = USE_Immediate;
   }
 
-  VASTUse(const char *S, uint8_t width) : Inverted(false), UB(width), LB(0) {
+  VASTUse(const char *S, uint8_t width) : UB(width), LB(0) {
     Data.SymbolName = S;
     UseKind = USE_Symbol;
   }
@@ -167,9 +166,7 @@ public:
   bool operator<(VASTUse RHS) const {
     return (((Data.ImmVal < RHS.Data.ImmVal
       || (Data.ImmVal == RHS.Data.ImmVal && UB < RHS.UB))
-      || (Data.ImmVal == RHS.Data.ImmVal && UB == RHS.UB && UB < RHS.UB))
-      || (Data.ImmVal == RHS.Data.ImmVal && UB == RHS.UB && UB == RHS.UB
-          && Inverted < RHS.Inverted));
+      || (Data.ImmVal == RHS.Data.ImmVal && UB == RHS.UB && UB < RHS.UB)));
   }
 
   // Return the underlying VASTValue.
@@ -194,7 +191,6 @@ public:
 
   bool is_dp_leaf() { return dp_src_begin() == dp_src_end(); }
 
-  bool isInverted() const { return Inverted; }
   unsigned getBitWidth() const { return UB - LB; }
   void print(raw_ostream &OS) const;
 };
@@ -212,39 +208,6 @@ template<> struct simplify_type<VASTUse> {
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
     return static_cast<SimpleType>(Val.get());
   }
-};
-
-// The predicate condition, maybe a inverted value.
-class VASTCnd : public VASTUse {
-public:
-  /*implicit*/ VASTCnd(VASTValue *V, bool inverted = false,
-                       unsigned ub = 0, unsigned lb = 0)
-    : VASTUse(V, ub, lb)
-  {
-    Inverted = inverted;
-    //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
-  }
-
-  /*implicit*/ VASTCnd(VASTUse V, bool inverted = false) : VASTUse(V) {
-    Inverted = inverted;
-    //assert((V == 0 || V->getBitWidth() == 1) && "Expected 1 bit condition!");
-  }
-
-  /*implicit*/ VASTCnd(bool Cnd = true) : VASTUse(Cnd, 1) {}
-
-  //const VASTCnd& operator=(const VASTCnd &RHS) {
-  //  if (&RHS == this) return *this;
-  //  Inverted = RHS.Inverted;
-  //  VASTRValue::operator=(RHS);
-  //  return *this;
-  //}
-
-  VASTUse getCndVal() const { return VASTUse(*this); }
-
-  // Return the "not" condition of current condition;
-  VASTCnd invert() const { return VASTCnd(getCndVal(), !isInverted()); }
-
-  void print(raw_ostream &OS) const;
 };
 
 class VASTExpr : public VASTValue {
@@ -413,10 +376,10 @@ public:
 class VASTSlot : public VASTNode {
 public:
   // TODO: Store the pointer to the Slot instead the slot number.
-  typedef std::map<unsigned, VASTCnd> SuccVecTy;
+  typedef std::map<unsigned, VASTUse> SuccVecTy;
   typedef SuccVecTy::const_iterator const_succ_iterator;
 
-  typedef std::map<VASTValue*, VASTCnd> FUCtrlVecTy;
+  typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
 private:
@@ -467,7 +430,7 @@ public:
   }
 
   // TODO: Rename to addSuccSlot.
-  void addNextSlot(unsigned NextSlotNum, VASTCnd Cnd = VASTCnd());
+  void addNextSlot(unsigned NextSlotNum, VASTUse Cnd = VASTUse(true, 1));
   bool hasNextSlot(unsigned NextSlotNum) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -478,19 +441,19 @@ public:
   const_succ_iterator succ_end() const { return NextSlots.end(); }
 
   // Signals need to be enabled at this slot.
-  void addEnable(VASTValue *V, VASTCnd Cnd = VASTCnd());
+  void addEnable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
   bool isEnabled(VASTValue *V) const { return Enables.count(V); }
   const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
   const_fu_ctrl_it enable_end() const { return Enables.end(); }
 
   // Signals need to set before this slot is ready.
-  void addReady(VASTValue *V, VASTCnd Cnd = VASTCnd());
+  void addReady(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
   bool readyEmpty() const { return Readys.empty(); }
   const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
   const_fu_ctrl_it ready_end() const { return Readys.end(); }
 
   // Signals need to be disabled at this slot.
-  void addDisable(VASTValue *V, VASTCnd Cnd = VASTCnd());
+  void addDisable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
   bool isDiabled(VASTValue *V) const { return Disables.count(V); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
@@ -512,7 +475,7 @@ public:
 
 class VASTRegister : public VASTSignal {
 public:
-  typedef ArrayRef<VASTCnd> AndCndVec;
+  typedef ArrayRef<VASTUse> AndCndVec;
   typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
 private:
   unsigned InitVal;
@@ -813,9 +776,9 @@ public:
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const char *Attr = "");
 
-  VASTRegister::AndCndVec allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds);
+  VASTRegister::AndCndVec allocateAndCndVec(SmallVectorImpl<VASTUse> &Cnds);
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
-                     SmallVectorImpl<VASTCnd> &Cnds);
+                     SmallVectorImpl<VASTUse> &Cnds);
 
   VASTUse indexVASTValue(unsigned RegNum, VASTUse V);
 

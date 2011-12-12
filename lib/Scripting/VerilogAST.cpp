@@ -113,8 +113,6 @@ void VASTNode::dump() const { print(dbgs()); }
 // Classes in Verilog AST.
 void VASTUse::print(raw_ostream &OS) const {
   OS << '(';
-  if (isInverted()) OS << '~';
-
   // Print the bit range if the value is have multiple bits.
   switch (UseKind) {
   case USE_Value:
@@ -152,10 +150,6 @@ VASTUse::iterator VASTUse::dp_src_end() {
   return reinterpret_cast<VASTUse::iterator>(0);
 }
 
-void VASTCnd::print(raw_ostream &OS) const {
-  VASTUse::print(OS);
-}
-
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
    ParentIdx(parentIdx) {
@@ -177,25 +171,25 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
-void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTCnd Cnd) {
+void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTUse Cnd) {
   bool Inserted = NextSlots.insert(std::make_pair(NextSlotNum, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addEnable(VASTValue *V, VASTCnd Cnd) {
+void VASTSlot::addEnable(VASTValue *V, VASTUse Cnd) {
   bool Inserted = Enables.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addReady(VASTValue *V, VASTCnd Cnd /* = VASTCnd */) {
+void VASTSlot::addReady(VASTValue *V, VASTUse Cnd) {
   bool Inserted = Readys.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addDisable(VASTValue *V, VASTCnd Cnd) {
+void VASTSlot::addDisable(VASTValue *V, VASTUse Cnd) {
   bool Inserted = Disables.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
@@ -292,7 +286,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   );
 
   bool hasSelfLoop = false;
-  SmallVector<VASTCnd, 2> EmptySlotEnCnd;
+  SmallVector<VASTUse, 2> EmptySlotEnCnd;
 
   if (hasExplicitNextSlots()) {
     CtrlS << "// Enable the successor slots.\n";
@@ -305,17 +299,21 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
   } else {
     // Enable the default successor slots.
     VASTRegister *NextSlotReg = Mod.getSlot(getSlotNum() + 1)->getRegister();
-    Mod.addAssignment(NextSlotReg, VASTCnd(true), this, EmptySlotEnCnd);
+    Mod.addAssignment(NextSlotReg, VASTUse(true, 1), this, EmptySlotEnCnd);
   }
 
+  assert(!(hasSelfLoop && PredAliasSlots)
+         && "Unexpected have self loop and pred alias slot at the same time.");
   // Do not assign a value to the current slot enable twice.
   if (!hasSelfLoop) {
     // Only disable the current slot if there is no alias slot enable current
     // slot.
-    if (PredAliasSlots) EmptySlotEnCnd.push_back(VASTCnd(PredAliasSlots, true));
+    if (PredAliasSlots)
+      EmptySlotEnCnd.push_back(Mod.getNotExpr(PredAliasSlots));
 
     // Disable the current slot.
-    Mod.addAssignment(getRegister(), VASTCnd(false), this, EmptySlotEnCnd);
+    Mod.addAssignment(getRegister(), VASTUse((int64_t)0, 1), this,
+                      EmptySlotEnCnd);
   }
 
   if (ReadyPresented) {
@@ -783,14 +781,14 @@ VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
 }
 
 VASTRegister::AndCndVec
-VASTModule::allocateAndCndVec(SmallVectorImpl<VASTCnd> &Cnds) {
-  VASTCnd *CndArray = Allocator.Allocate<VASTCnd>(Cnds.size());
+VASTModule::allocateAndCndVec(SmallVectorImpl<VASTUse> &Cnds) {
+  VASTUse *CndArray = Allocator.Allocate<VASTUse>(Cnds.size());
   std::uninitialized_copy(Cnds.data(), Cnds.data() + Cnds.size(), CndArray);
-  return ArrayRef<VASTCnd>(CndArray, Cnds.size());
+  return ArrayRef<VASTUse>(CndArray, Cnds.size());
 }
 
 void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
-                               SmallVectorImpl<VASTCnd> &Cnds) {
+                               SmallVectorImpl<VASTUse> &Cnds) {
   Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
 }
 

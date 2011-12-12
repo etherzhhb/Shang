@@ -219,7 +219,7 @@ class RTLCodegen : public MachineFunctionPass {
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
   void emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
-                          SmallVectorImpl<VASTCnd> &Cnds);
+                          SmallVectorImpl<VASTUse> &Cnds);
 
   void emitDatapath(ucState &State);
 
@@ -229,11 +229,11 @@ class RTLCodegen : public MachineFunctionPass {
   void emitChainedOpAdd(ucOp &Op);
   void emitChainedOpICmp(ucOp &Op);
 
-  void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpCase(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
+  void emitOpSel(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpCase(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
 
-  void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
+  void emitOpAdd(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitBinaryFUOp(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
 
   void emitOpBitSlice(ucOp &OpBitSlice);
 
@@ -243,21 +243,21 @@ class RTLCodegen : public MachineFunctionPass {
                   unsigned II, bool Pipelined);
 
   // Create a condition from a predicate operand.
-  VASTCnd createCondition(ucOperand &Op);
-  void getPredValAtNextSlot(ucOp &Op, VASTCnd &Pred);
+  VASTUse createCondition(ucOperand &Op);
+  void getPredValAtNextSlot(ucOp &Op, VASTUse &Pred);
 
   VASTUse getAsOperand(ucOperand &Op);
   void printOperand(ucOperand &Op, raw_ostream &OS);
 
-  void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpUnreachable(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpMemTrans(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
-  void emitOpBRam(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTCnd> &Cnds);
+  void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpReadReturn(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpUnreachable(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpRetVal(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpRet(ucOp &OpRet, VASTSlot *CurSlot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpCopy(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpReadFU(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpMemTrans(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpBRam(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -458,11 +458,11 @@ void RTLCodegen::emitIdleState() {
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
   IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
                         StartPort);
-  IdleSlot->addNextSlot(0, VASTCnd(StartPort, true));
+  IdleSlot->addNextSlot(0, VM->getNotExpr(StartPort));
 
   // Always Disable the finish signal.
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
-  SmallVector<VASTCnd, 1> Cnds(1, StartPort);
+  SmallVector<VASTUse, 1> Cnds(1, StartPort);
   emitFirstCtrlState(EntryBB, IdleSlot, Cnds);
 }
 
@@ -764,7 +764,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
                             unsigned II, bool Pipelined){
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   MachineBasicBlock *CurBB = State->getParent();
-  SmallVector<VASTCnd, 4> Cnds;
+  SmallVector<VASTUse, 4> Cnds;
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
     ucOp Op = *I;
@@ -786,7 +786,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       MachineBasicBlock *TargetBB = Op.getOperand(1).getMBB();
       unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
       assert(Op.getPredicate().getReg() == 0 && "Cannot handle predicated BrCnd");
-      VASTCnd Cnd = createCondition(CndOp);
+      VASTUse Cnd = createCondition(CndOp);
       CurSlot->addNextSlot(TargetSlotNum, Cnd);
 
       // Emit control operation for next state.
@@ -855,7 +855,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 }
 
 void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
-                                    SmallVectorImpl<VASTCnd> &Cnds) {
+                                    SmallVectorImpl<VASTUse> &Cnds) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *DstBB->getFirstNonPHI();
   assert(FInfo->getStartSlotFor(DstBB) == FirstState.getSlot()
@@ -883,7 +883,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
-                                   SmallVectorImpl<VASTCnd> &Cnds) {
+                                   SmallVectorImpl<VASTUse> &Cnds) {
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   std::string PredStr;
   raw_string_ostream SS(PredStr);
@@ -898,7 +898,7 @@ void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
-                           SmallVectorImpl<VASTCnd> &Cnds) {
+                           SmallVectorImpl<VASTUse> &Cnds) {
   VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
   VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
@@ -923,7 +923,7 @@ void RTLCodegen::emitChainedOpICmp(ucOp &Op) {
 }
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
-                                SmallVectorImpl<VASTCnd> &Cnds) {
+                                SmallVectorImpl<VASTUse> &Cnds) {
   VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
   VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
@@ -938,20 +938,20 @@ void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
 }
 
 void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
-                           SmallVectorImpl<VASTCnd> &Cnds) {
+                           SmallVectorImpl<VASTUse> &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   // Assign the value for condition true.
-  VASTCnd Cnd = createCondition(Op.getOperand(1));
+  VASTUse Cnd = createCondition(Op.getOperand(1));
   Cnds.push_back(Cnd);
   VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
   // Assign the value for condition false.
-  Cnds.back() = Cnd.invert();
+  Cnds.back() = VM->getNotExpr(Cnd);
   VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
   Cnds.pop_back();
 }
 
 void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
-                            SmallVectorImpl<VASTCnd> &Cnds) {
+                            SmallVectorImpl<VASTUse> &Cnds) {
   // Check if we got any case hitted
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   OS.if_();
@@ -979,7 +979,7 @@ void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
-                            SmallVectorImpl<VASTCnd> &Cnds) {
+                            SmallVectorImpl<VASTUse> &Cnds) {
   ucOperand &Dst = Op.getOperand(0), &Src = Op.getOperand(1);
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
@@ -989,7 +989,7 @@ void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
-                              SmallVectorImpl<VASTCnd> &Cnds) {
+                              SmallVectorImpl<VASTUse> &Cnds) {
   FuncUnitId Id = Op->getFUId();
   VASTValue *ReadyPort = 0;
 
@@ -1014,18 +1014,18 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
 }
 
 void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
-                                  SmallVectorImpl<VASTCnd> &Cnds) {
+                                  SmallVectorImpl<VASTUse> &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
 }
 
 void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
-                                    SmallVectorImpl<VASTCnd> &Cnds) {
+                                    SmallVectorImpl<VASTUse> &Cnds) {
   // Assign input port to some register.
   const char *CalleeName = Op.getOperand(1).getSymbolName();
   unsigned FNNum = FInfo->getCalleeFNNum(CalleeName);
 
-  VASTCnd Pred = createCondition(Op.getPredicate());
+  VASTUse Pred = createCondition(Op.getPredicate());
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getSymbol(StartPortName);
   Slot->addEnable(StartSignal, Pred);
@@ -1118,15 +1118,15 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
-                           SmallVectorImpl<VASTCnd> &Cnds) {
+                           SmallVectorImpl<VASTUse> &Cnds) {
   // Go back to the idle slot.
-  VASTCnd Pred = createCondition(Op.getPredicate());
+  VASTUse Pred = createCondition(Op.getPredicate());
   CurSlot->addNextSlot(0, Pred);
   CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
 }
 
 void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
-                              SmallVectorImpl<VASTCnd> &Cnds) {
+                              SmallVectorImpl<VASTUse> &Cnds) {
   VASTRegister &RetReg = cast<VASTRegister>(*VM->getRetPort());
   unsigned retChannel = Op.getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
@@ -1134,7 +1134,7 @@ void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
-                                SmallVectorImpl<VASTCnd> &Cnds) {
+                                SmallVectorImpl<VASTUse> &Cnds) {
   unsigned FUNum = Op->getFUId().getFUNum();
 
   // Emit Address.
@@ -1157,7 +1157,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValue *MemEn = VM->getSymbol(EnableName);
-  VASTCnd Pred = createCondition(Op.getPredicate());
+  VASTUse Pred = createCondition(Op.getPredicate());
   Slot->addEnable(MemEn, Pred);
 
   // Disable the memory at next slot.
@@ -1168,7 +1168,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
-                            SmallVectorImpl<VASTCnd> &Cnds) {
+                            SmallVectorImpl<VASTUse> &Cnds) {
   unsigned FUNum = Op.getOperand(0).getReg();
 
   // Emit the control logic.
@@ -1203,7 +1203,7 @@ void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
   std::string EnableName = VFUBRam::getEnableName(FUNum);
   VASTValue *MemEn = VM->getSymbol(EnableName);
 
-  VASTCnd Pred = createCondition(Op.getPredicate());
+  VASTUse Pred = createCondition(Op.getPredicate());
   Slot->addEnable(MemEn, Pred);
 
   // Disable the memory at next slot.
@@ -1276,15 +1276,19 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
                         VASTUse(RHS.get(), UB, LB)));
 }
 
-VASTCnd RTLCodegen::createCondition(ucOperand &Op) {
+VASTUse RTLCodegen::createCondition(ucOperand &Op) {
   // Is there an always true predicate?
-  if (VInstrInfo::isAlwaysTruePred(Op)) return VASTCnd(true);
+  if (VInstrInfo::isAlwaysTruePred(Op)) return VASTUse(true, 1);
 
   // Otherwise it must be some signal.
-  return VASTCnd(VM->lookupSignal(Op.getReg()), Op.isPredicateInverted());
+  VASTUse C = VM->lookupSignal(Op.getReg());
+
+  if (Op.isPredicateInverted()) C = VM->getNotExpr(C);
+
+  return C;
 }
 
-void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTCnd &Pred) {
+void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTUse &Pred) {
   // Get the predicate value at next slot, if the predicate operand is copied to
   // a register, use that register.
   ucOperand &PredCnd = Op.getPredicate();
@@ -1311,8 +1315,8 @@ void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTCnd &Pred) {
 
       Pred = createCondition(UseOp.getOperand(0));
       // Invert flag is not copied.
-      if (Pred.isInverted() != PredCnd.isPredicateInverted())
-        Pred = Pred.invert();
+      if (PredCnd.isPredicateInverted())
+        Pred = VM->getNotExpr(Pred);
     }
   }
 }
