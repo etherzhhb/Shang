@@ -657,7 +657,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     for (or_it OI = I->second.begin(), OE = I->second.end(); OI != OE; ++OI) {
       // Slot Active should already included in the assign condition if it is
       // need.
-      OI->second->print(SS);
+      OI->second->printAsOperand(SS);
       SS << " | ";
     }
     // Build the assign condition.

@@ -818,8 +818,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
         if (PredCnd.first != CurSlot)
           Cnds.push_back(PredCnd.first->getActive());
 
-        Cnds.insert(Cnds.end(), PredCnd.second->op_begin(),
-                                PredCnd.second->op_end());
+        Cnds.insert(Cnds.end(), PredCnd.second);
       }
     }
 
