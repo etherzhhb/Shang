@@ -486,6 +486,7 @@ public:
 class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTUse> AndCndVec;
+  // The VASTExpr should include the slot acttive signal.
   typedef std::pair<VASTSlot*, VASTExpr*> AssignCndTy;
 private:
   unsigned InitVal;
@@ -527,11 +528,6 @@ public:
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
-  static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
-                             VASTExpr *Cnd);
-  static void printCondition(raw_ostream &OS, AssignCndTy &Cnd) {
-    printCondition(OS, Cnd.first, Cnd.second);
-  }
 };
 
 // The class that represent Verilog modulo.

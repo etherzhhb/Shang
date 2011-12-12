@@ -632,17 +632,6 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
   OS << ')';
 }
 
-void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
-                                  VASTExpr *Cnd) {
-  OS << '(';
-  if (Slot) OS << Slot->getActive()->getName();
-  else      OS << "1'b1";
-
-  OS << " & ";
-  Cnd->print(OS);
-  OS << ')';
-}
-
 void VASTRegister::printReset(raw_ostream &OS) const {
   OS << getName()  << " <= "
      << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
@@ -666,7 +655,9 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     SS << '(';
     typedef OrCndVec::const_iterator or_it;
     for (or_it OI = I->second.begin(), OE = I->second.end(); OI != OE; ++OI) {
-      printCondition(SS, OI->first, OI->second);
+      // Slot Active should already included in the assign condition if it is
+      // need.
+      OI->second->print(SS);
       SS << " | ";
     }
     // Build the assign condition.
@@ -810,7 +801,8 @@ VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
 
 void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                                SmallVectorImpl<VASTUse> &Cnds) {
-  if (Cnds.empty()) Cnds.push_back(VASTUse(true, 1));
+  // We only assign the Src to Dst when the given slot is active.
+  Cnds.push_back(Slot->getActive());
 
   Dst->addAssignment(Src, getExpr(VASTExpr::dpAnd, Cnds, 1), Slot);
 }
