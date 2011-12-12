@@ -164,9 +164,13 @@ public:
   }
 
   bool operator<(VASTUse RHS) const {
-    return (((Data.ImmVal < RHS.Data.ImmVal
-      || (Data.ImmVal == RHS.Data.ImmVal && UB < RHS.UB))
-      || (Data.ImmVal == RHS.Data.ImmVal && UB == RHS.UB && UB < RHS.UB)));
+    if (UseKind != RHS.UseKind) return UseKind < RHS.UseKind;
+
+    if (Data.ImmVal != RHS.Data.ImmVal) return Data.ImmVal < RHS.Data.ImmVal;
+
+    if (UB!= RHS.UB) return UB < RHS.UB;
+
+    return LB < RHS.LB;
   }
 
   // Return the underlying VASTValue.
