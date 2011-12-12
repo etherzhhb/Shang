@@ -165,7 +165,7 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   SlotActive = VM->addWire(SlotActiveName, 1,
                            VASTModule::DirectClkEnAttr.c_str());
 
-  SlotActive->setExpr(VM->getExpr(VASTExpr::dpAnd, 1, SlotReg, SlotReady));
+  SlotActive->setExpr(VM->getExpr(VASTExpr::dpAnd, SlotReg, SlotReady, 1));
   // We need alias slot to build the ready signal, keep it as unknown now.
 
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
@@ -202,13 +202,13 @@ VASTExpr *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
         I != E; ++I)
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
-    Ops.push_back(VM.getExpr(VASTExpr::dpOr, 1, I->first,
-                             VM.getNotExpr(I->second)));
+    Ops.push_back(VM.getExpr(VASTExpr::dpOr, I->first,
+                             VM.getNotExpr(I->second), 1));
   
   // No waiting signal means always ready.
-  if (Ops.empty()) Ops.push_back(VASTUse(1, 1));
+  if (Ops.empty()) Ops.push_back(VASTUse(true, 1));
   
-  return VM.getExpr(VASTExpr::dpAnd, 1, Ops);
+  return VM.getExpr(VASTExpr::dpAnd, Ops, 1);
 }
 
 void VASTSlot::buildReadyLogic(VASTModule &Mod) {
@@ -225,15 +225,15 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
       if (!AliasSlot->readyEmpty()) {
         // FU ready for alias slot, when alias slot register is 1, its waiting
         // signal must be 1.
-        Ops.push_back(Mod.getExpr(VASTExpr::dpOr, 1,
+        Ops.push_back(Mod.getExpr(VASTExpr::dpOr,
                                   Mod.getNotExpr(AliasSlot->getRegister()),
-                                  AliasSlot->buildFUReadyExpr(Mod)));
+                                  AliasSlot->buildFUReadyExpr(Mod), 1));
       }
     }
   }
 
   // All signals should be 1.
-  getReady()->setExpr(Mod.getExpr(VASTExpr::dpAnd, 1, Ops));
+  getReady()->setExpr(Mod.getExpr(VASTExpr::dpAnd, Ops, 1));
 }
 
 bool VASTSlot::hasNextSlot(unsigned NextSlotNum) const {
@@ -747,31 +747,42 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
   }
 }
 
-VASTExpr *VASTModule::getNotExpr(VASTUse U) {
+VASTUse VASTModule::getNotExpr(VASTUse U) {
+  // Try to fold the not expression.
+  if (VASTValue *V = U.getOrNull()) {
+    if (VASTExpr *E = dyn_cast<VASTExpr>(V))
+      if (E->getOpcode() == VASTExpr::dpNot)
+        return E->getOperand(0);
+
+    if (VASTWire *W = dyn_cast<VASTWire>(V))
+      if (W->getOpcode() == VASTExpr::dpNot)
+        return W->getOperand(0);
+  }
+
   VASTUse Ops[] = { U };
-  return getExpr(VASTExpr::dpNot, U.getBitWidth(), Ops);
+  return getExpr(VASTExpr::dpNot, Ops, U.getBitWidth());
 }
 
-VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                              VASTUse Op) {
+VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, VASTUse Op,
+                              unsigned BitWidth) {
   VASTUse Ops[] = { Op };
-  return getExpr(Opc, BitWidth, Ops);
+  return getExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                              VASTUse LHS, VASTUse RHS) {
+VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                              unsigned BitWidth) {
   VASTUse Ops[] = { LHS, RHS };
-  return getExpr(Opc, BitWidth, Ops);
+  return getExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                              VASTUse Op0, VASTUse Op1, VASTUse Op2) {
+VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
+                              VASTUse Op2, unsigned BitWidth) {
   VASTUse Ops[] = { Op0, Op1, Op2 };
-  return getExpr(Opc, BitWidth, Ops);
+  return getExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                              ArrayRef<VASTUse> Ops) {
+VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                              unsigned BitWidth) {
   assert(!Ops.empty() && "Unexpected empty expression");
   VASTUse *OpArray = Allocator.Allocate<VASTUse>(Ops.size());
   std::uninitialized_copy(Ops.begin(), Ops.end(), OpArray);

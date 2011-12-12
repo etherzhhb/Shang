@@ -350,7 +350,10 @@ public:
     Latency = latency;
   }
 
-  VASTExpr::Opcode getOpcode() const { return Expr->getOpcode(); }
+  VASTExpr::Opcode getOpcode() const {
+    return hasExpr() ? Expr->getOpcode() : VASTExpr::dpUnknown;
+  }
+
   unsigned getLatency() const { return Latency; }
 
   unsigned getNumOperands() const { return Expr->num_operands(); }
@@ -748,19 +751,19 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                    ArrayRef<VASTUse> Ops);
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                    VASTUse Op);
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                    VASTUse LHS, VASTUse RHS);
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, unsigned BitWidth,
-                    VASTUse Op0, VASTUse Op1, VASTUse Op2);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                    unsigned BitWidth);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, VASTUse Op,
+                    unsigned BitWidth);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                    unsigned BitWidth);
+  VASTExpr *getExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1, VASTUse Op2,
+                    unsigned BitWidth);
   VASTExpr *getExpr(VASTExprBuilder &Builder) {
-    return getExpr(Builder.Opc, Builder.BitWidth, Builder.Operands);
+    return getExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
-  VASTExpr *getNotExpr(VASTUse U);
+  VASTUse getNotExpr(VASTUse U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
