@@ -487,7 +487,7 @@ class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTUse> AndCndVec;
   // The VASTExpr should include the slot acttive signal.
-  typedef std::pair<VASTSlot*, VASTExpr*> AssignCndTy;
+  typedef std::pair<VASTSlot*, VASTValue*> AssignCndTy;
 private:
   unsigned InitVal;
   typedef std::vector<AssignCndTy>  OrCndVec;
@@ -511,7 +511,7 @@ public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
 
-  void addAssignment(VASTUse Src, VASTExpr *Cnd, VASTSlot *S);
+  void addAssignment(VASTUse Src, VASTValue *Cnd, VASTSlot *S);
 
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;

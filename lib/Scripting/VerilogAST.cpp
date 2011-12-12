@@ -411,7 +411,7 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
                            unsigned initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
-void VASTRegister::addAssignment(VASTUse Src, VASTExpr *Cnd, VASTSlot *S) {
+void VASTRegister::addAssignment(VASTUse Src, VASTValue *Cnd, VASTSlot *S) {
   assert(Src != this && "Self assignment not supported yet!");
   Assigns[Src].push_back(std::make_pair(S, Cnd));
   Slots.insert(S);
