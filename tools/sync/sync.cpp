@@ -142,7 +142,8 @@ int main(int argc, char **argv) {
                               TargetMachine::CGFT_Null,
                               CodeGenOpt::Aggressive,
                               false/*NoVerify*/);
-
+  // Find the shortest path.
+  PM.add(createFindShortestPathPass());
   // Generate the code.
   PM.add(createRTLCodegenPass(S->getOutputStream("RTLOutput")));
 

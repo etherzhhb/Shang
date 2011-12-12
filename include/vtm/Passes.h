@@ -61,6 +61,9 @@ Pass *createVPreRegAllocSchedPass();
 // Register allocation.
 FunctionPass *createSimpleRegisterAllocator();
 
+// Find Shortest Path.
+Pass *createFindShortestPathPass();
+
 // RTL code generation.
 Pass *createRTLCodegenPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
@@ -80,6 +83,8 @@ void initializeBitLevelABCOptPass(PassRegistry &Registry);
 
 //Add the initialization implementation of StackToGlobal.cpp.
 void initializeStackToGlobalPass(PassRegistry &Registry);
+
+void initializeFindShortestPathPass(PassRegistry &Registry);
 
 void initializeRTLCodegenPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry); 
