@@ -805,6 +805,9 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
   Cnds.push_back(Slot->getActive());
 
   Dst->addAssignment(Src, getExpr(VASTExpr::dpAnd, Cnds, 1), Slot);
+
+  // Recover the condition vector.
+  Cnds.pop_back();
 }
 
 void VASTModule::computeAssignmentSlacks() {
