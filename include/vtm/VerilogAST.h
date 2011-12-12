@@ -143,7 +143,7 @@ public:
   }
 
   VASTUse(const char *S, uint8_t width)
-    : User(0, USE_Immediate), UB(width), LB(0) {
+    : User(0, USE_Symbol), UB(width), LB(0) {
     Data.SymbolName = S;
   }
 
