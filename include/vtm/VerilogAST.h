@@ -40,6 +40,7 @@
 namespace llvm {
 class MachineBasicBlock;
 class ucOperand;
+class VASTExpr;
 class VASTModule;
 class VASTSlot;
 class VASTWire;
@@ -106,7 +107,6 @@ public:
 };
 
 class VASTUse {
-protected:
   enum VASTUseTy {
     USE_Value,              // Using a VASTValue
     USE_Immediate,          // Simply a immediate
@@ -119,30 +119,32 @@ protected:
     const char *SymbolName; // For USE_Symbol
   } Data;
 
-  unsigned UseKind  :2; // VASTUseTy
+  PointerIntPair<VASTExpr*, 2, VASTUseTy> User;// VASTUseTy
+  friend class VASTExpr;
+
+  VASTUseTy getUseKind() const { return User.getInt(); }
 public:
   // The bit range of this value.
   /*const*/ unsigned UB :8;
   /*const*/ unsigned LB :8;
 
-  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb) : UB(ub),LB(lb){
+  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb)
+    : User(0, USE_Value), UB(ub), LB(lb){
     Data.V = v;
-    UseKind = USE_Value;
   }
 
-  VASTUse(VASTValue *v) : UB(v->getBitWidth()), LB(0) {
+  VASTUse(VASTValue *v) : User(0, USE_Value), UB(v->getBitWidth()), LB(0) {
     Data.V = v;
-    UseKind = USE_Value;
   }
 
-  VASTUse(int64_t immVal, uint8_t width) : UB(width), LB(0) {
+  VASTUse(int64_t immVal, uint8_t width)
+    : User(0, USE_Immediate), UB(width), LB(0) {
     Data.ImmVal = immVal;
-    UseKind = USE_Immediate;
   }
 
-  VASTUse(const char *S, uint8_t width) : UB(width), LB(0) {
+  VASTUse(const char *S, uint8_t width)
+    : User(0, USE_Immediate), UB(width), LB(0) {
     Data.SymbolName = S;
-    UseKind = USE_Symbol;
   }
 
   //const VASTRValue& operator=(const VASTRValue &RHS) {
@@ -156,7 +158,7 @@ public:
 
   //operator bool() const { return V != 0; }
   bool operator==(VASTValue *RHS) const {
-    return UseKind == USE_Value && Data.V == RHS;
+    return getUseKind() == USE_Value && Data.V == RHS;
   }
 
   bool operator!=(VASTValue *RHS) const {
@@ -164,7 +166,8 @@ public:
   }
 
   bool operator<(VASTUse RHS) const {
-    if (UseKind != RHS.UseKind) return UseKind < RHS.UseKind;
+    if (getUseKind() != RHS.getUseKind())
+      return getUseKind() < RHS.getUseKind();
 
     if (Data.ImmVal != RHS.Data.ImmVal) return Data.ImmVal < RHS.Data.ImmVal;
 
@@ -175,13 +178,13 @@ public:
 
   // Return the underlying VASTValue.
   VASTValue *get() const {
-    assert(UseKind == USE_Value && "Call get on wrong VASTUse type!");
+    assert(getUseKind() == USE_Value && "Call get on wrong VASTUse type!");
     return Data.V;
   }
 
   // Return the underlying VASTValue if the Use hold a VASTValue, null otherwise
   VASTValue *getOrNull() const {
-    if (UseKind == USE_Value)
+    if (getUseKind() == USE_Value)
       return Data.V;
 
     return 0;

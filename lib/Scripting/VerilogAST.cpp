@@ -114,7 +114,7 @@ void VASTNode::dump() const { print(dbgs()); }
 void VASTUse::print(raw_ostream &OS) const {
   OS << '(';
   // Print the bit range if the value is have multiple bits.
-  switch (UseKind) {
+  switch (getUseKind()) {
   case USE_Value:
     Data.V->printAsOperand(OS, UB, LB);
     break;
@@ -133,24 +133,27 @@ void VASTUse::print(raw_ostream &OS) const {
 }
 
 VASTUse::iterator VASTUse::dp_src_begin() {
-  if (UseKind != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
+  if (getUseKind() != USE_Value)
+    return reinterpret_cast<VASTUse::iterator>(0);
 
   if (VASTWire *W = dyn_cast<VASTWire>(get()))
     return W->op_begin();
 
   if (VASTExpr *E = dyn_cast<VASTExpr>(get()))
     return E->op_begin();
+
   return reinterpret_cast<VASTUse::iterator>(0);
 }
 
 VASTUse::iterator VASTUse::dp_src_end() {
-  if (UseKind != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
+  if (getUseKind() != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
 
   if (VASTWire *W = dyn_cast<VASTWire>(get()))
     return W->op_end();
 
   if (VASTExpr *E = dyn_cast<VASTExpr>(get()))
     return E->op_end();
+
   return reinterpret_cast<VASTUse::iterator>(0);
 }
 
@@ -437,7 +440,9 @@ static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path, unsigned Slack) {
 
   SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
   for (unsigned i = 1; i < Path.size(); ++i) {
-    SS << "', '" << Path[i].get()->getName();
+    // Skip the unnamed nodes.
+    const char *Name = Path[i].get()->getName();
+    if (Name) SS << "', '" << Name;
   }
   SS << "'}";
 
