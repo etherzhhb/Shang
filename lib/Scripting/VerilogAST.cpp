@@ -138,6 +138,8 @@ VASTUse::iterator VASTUse::dp_src_begin() {
   if (VASTWire *W = dyn_cast<VASTWire>(get()))
     return W->op_begin();
 
+  if (VASTExpr *E = dyn_cast<VASTExpr>(get()))
+    return E->op_begin();
   return reinterpret_cast<VASTUse::iterator>(0);
 }
 
@@ -147,6 +149,8 @@ VASTUse::iterator VASTUse::dp_src_end() {
   if (VASTWire *W = dyn_cast<VASTWire>(get()))
     return W->op_end();
 
+  if (VASTExpr *E = dyn_cast<VASTExpr>(get()))
+    return E->op_end();
   return reinterpret_cast<VASTUse::iterator>(0);
 }
 
