@@ -80,17 +80,25 @@ public:
 // TODO: Change VASTValue to VASTNamedNode
 class VASTValue : public VASTNode {
   const char *Name;
-public:
+protected:
   VASTValue(VASTTypes DeclType, const char *name, unsigned BitWidth)
     : VASTNode(DeclType, BitWidth), Name(name)
   {
     assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
-      && "Bad DeclType!");
+           && "Bad DeclType!");
   }
-
+public:
   const char *getName() const { return Name; }
   unsigned short getBitWidth() const { return getSubClassData(); }
   bool isRegister() const { return getASTType() == vastRegister; }
+
+  virtual void print(raw_ostream &OS) const;
+};
+
+class VASTSymbol : public VASTValue {
+public:
+  VASTSymbol(const char *Name, unsigned BitWidth)
+    : VASTValue(VASTNode::vastSymbol, Name, BitWidth) {}
 
   virtual void print(raw_ostream &OS) const;
 };
@@ -585,7 +593,7 @@ public:
     VASTValue *&V = Entry.second;
     if (V == 0) {
        V = Allocator.Allocate<VASTValue>();
-       new (V) VASTValue(vastSymbol, Entry.first(), BitWidth);
+       new (V) VASTSymbol(Entry.first(), BitWidth);
     }
 
     assert(V->getBitWidth() == BitWidth

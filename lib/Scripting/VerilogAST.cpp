@@ -395,7 +395,7 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
 void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
-  assert(Src != this && "Self assignemnt not supported yet!");
+  assert(Src != this && "Self assignment not supported yet!");
   Assigns[Src].push_back(std::make_pair(S, Cnd));
   Slots.insert(S);
 }
@@ -877,6 +877,10 @@ void VASTModule::anchor() {}
 
 void VASTValue::print(raw_ostream &OS) const {
   assert(0 && "VASTValue::print should not be called!");
+}
+
+void VASTSymbol::print(raw_ostream &OS) const {
+  assert(0 && "VASTSymbol::print should not be called!");
 }
 
 void VASTPort::print(raw_ostream &OS) const {
