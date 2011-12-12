@@ -798,7 +798,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       emitFirstCtrlState(TargetBB, CurSlot, Cnds);
 
       VASTRegister::AssignCndTy JumpCnd
-        = std::make_pair(CurSlot, VM->allocateAndCndVec(Cnds));
+        = std::make_pair(CurSlot, VM->getExpr(VASTExpr::dpAnd, Cnds, 1));
       PredMap.insert(std::make_pair(TargetBB, JumpCnd));
       continue;
     }
@@ -818,7 +818,8 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
         if (PredCnd.first != CurSlot)
           Cnds.push_back(PredCnd.first->getActive());
 
-        Cnds.insert(Cnds.end(), PredCnd.second.begin(), PredCnd.second.end());
+        Cnds.insert(Cnds.end(), PredCnd.second->op_begin(),
+                                PredCnd.second->op_end());
       }
     }
 

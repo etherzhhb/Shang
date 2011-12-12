@@ -483,7 +483,7 @@ public:
 class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTUse> AndCndVec;
-  typedef std::pair<VASTSlot*, AndCndVec> AssignCndTy;
+  typedef std::pair<VASTSlot*, VASTExpr*> AssignCndTy;
 private:
   unsigned InitVal;
   typedef std::vector<AssignCndTy>  OrCndVec;
@@ -507,7 +507,7 @@ public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
 
-  void addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S);
+  void addAssignment(VASTUse Src, VASTExpr *Cnd, VASTSlot *S);
 
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;
@@ -524,7 +524,8 @@ public:
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
-
+  static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
+                             VASTExpr *Cnd);
   static void printCondition(raw_ostream &OS, AssignCndTy &Cnd) {
     printCondition(OS, Cnd.first, Cnd.second);
   }
@@ -783,7 +784,6 @@ public:
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const char *Attr = "");
 
-  VASTRegister::AndCndVec allocateAndCndVec(SmallVectorImpl<VASTUse> &Cnds);
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTUse> &Cnds);
 

@@ -404,7 +404,7 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
                            unsigned initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
-void VASTRegister::addAssignment(VASTUse Src, AndCndVec Cnd, VASTSlot *S) {
+void VASTRegister::addAssignment(VASTUse Src, VASTExpr *Cnd, VASTSlot *S) {
   assert(Src != this && "Self assignment not supported yet!");
   Assigns[Src].push_back(std::make_pair(S, Cnd));
   Slots.insert(S);
@@ -603,10 +603,7 @@ void VASTRegister::computeAssignmentSlack() {
     // Compute slack from predicate value.
     typedef OrCndVec::const_iterator or_it;
     for (or_it OI = AssignCnds.begin(), OE = AssignCnds.end(); OI != OE; ++OI) {
-      typedef AndCndVec::const_iterator and_it;
-      const AndCndVec &Cnds = OI->second;
-      for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI)
-        computeSlackThrough(*CI, AssignCnds);
+      computeSlackThrough(OI->second, AssignCnds);
     }
   }
 }
@@ -623,6 +620,17 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
     CI->print(OS);
   }
 
+  OS << ')';
+}
+
+void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
+                                  VASTExpr *Cnd) {
+  OS << '(';
+  if (Slot) OS << Slot->getActive()->getName();
+  else      OS << "1'b1";
+
+  OS << " & ";
+  Cnd->print(OS);
   OS << ')';
 }
 
@@ -791,16 +799,11 @@ VASTExpr *VASTModule::getExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
   return new (D) VASTExpr(Opc, BitWidth, Ops.size(), OpArray);
 }
 
-VASTRegister::AndCndVec
-VASTModule::allocateAndCndVec(SmallVectorImpl<VASTUse> &Cnds) {
-  VASTUse *CndArray = Allocator.Allocate<VASTUse>(Cnds.size());
-  std::uninitialized_copy(Cnds.data(), Cnds.data() + Cnds.size(), CndArray);
-  return ArrayRef<VASTUse>(CndArray, Cnds.size());
-}
-
 void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                                SmallVectorImpl<VASTUse> &Cnds) {
-  Dst->addAssignment(Src, allocateAndCndVec(Cnds), Slot);
+  if (Cnds.empty()) Cnds.push_back(VASTUse(true, 1));
+
+  Dst->addAssignment(Src, getExpr(VASTExpr::dpAnd, Cnds, 1), Slot);
 }
 
 void VASTModule::computeAssignmentSlacks() {
