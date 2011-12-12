@@ -543,7 +543,7 @@ void RTLCodegen::emitAllocatedFUs() {
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string Filename;
     // Create the enable signal for bram.
-    VM->getOrCreateSymbol(VFUBRam::getEnableName(BramNum), 1);
+    VM->addRegister(VFUBRam::getEnableName(BramNum), 1);
     //Print the Constant into a .txt file as the initializer to bram
     Filename = BlockRam->generateInitFile(DataWidth, Initializer, NumElem);
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
