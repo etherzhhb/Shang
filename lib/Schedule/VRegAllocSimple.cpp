@@ -176,6 +176,7 @@ struct VRASimple : public MachineFunctionPass {
   void bindICmps(LICGraph &G);
 
   bool runOnMachineFunction(MachineFunction &F);
+  void addMBBLiveIns(MachineFunction *MF);
 
   const char *getPassName() const {
     return "Verilog Backend Resource Binding Pass";
@@ -1061,7 +1062,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bindCompGraph(LsrCG);
   bindCompGraph(ShlCG);
 
-  //addMBBLiveIns(MF);
+  addMBBLiveIns(MF);
   LIS->addKillFlags();
 
   // FIXME: Verification currently must run before VirtRegRewriter. We should
@@ -1094,6 +1095,36 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   );
 
   return true;
+}
+
+void VRASimple::addMBBLiveIns(MachineFunction *MF) {
+  typedef SmallVector<MachineBasicBlock*, 8> MBBVec;
+  MBBVec liveInMBBs;
+  MachineBasicBlock &entryMBB = *MF->begin();
+
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned Reg = TargetRegisterInfo::index2VirtReg(i);
+    unsigned PhysReg = VRM->getPhys(Reg);
+    // Virtual register not bound.
+    if (PhysReg == VirtRegMap::NO_PHYS_REG) continue;
+
+    LiveInterval &LI = LIS->getInterval(Reg);
+
+    for (LiveInterval::iterator RI = LI.begin(), RE = LI.end(); RI != RE; ++RI){
+      // Find the set of basic blocks which this range is live into...
+      liveInMBBs.clear();
+      if (!LIS->findLiveInMBBs(RI->start, RI->end, liveInMBBs)) continue;
+
+      // And add the physreg for this interval to their live-in sets.
+      for (MBBVec::iterator I = liveInMBBs.begin(), E = liveInMBBs.end();
+           I != E; ++I) {
+        MachineBasicBlock *MBB = *I;
+        if (MBB == &entryMBB) continue;
+        if (MBB->isLiveIn(PhysReg)) continue;
+        MBB->addLiveIn(PhysReg);
+      }
+    }
+  }
 }
 
 void VRASimple::joinPHINodeIntervals() {
