@@ -40,7 +40,6 @@
 namespace llvm {
 class MachineBasicBlock;
 class ucOperand;
-class VASTExpr;
 class VASTModule;
 class VASTSlot;
 class VASTWire;
@@ -54,7 +53,6 @@ public:
     vastWire,
     vastRegister,
     vastSymbol,
-    vastExpr,
     vastSlot,
     vastFirstDeclType = vastPort,
     vastLastDeclType = vastSlot,
@@ -96,6 +94,7 @@ public:
 
   virtual void print(raw_ostream &OS) const;
   virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
   void printAsOperand(raw_ostream &OS) const {
     printAsOperand(OS, getBitWidth(), 0);
   }
@@ -122,8 +121,8 @@ class VASTUse {
     const char *SymbolName; // For USE_Symbol
   } Data;
 
-  PointerIntPair<VASTExpr*, 2, VASTUseTy> User;// VASTUseTy
-  friend class VASTExpr;
+  PointerIntPair<VASTWire*, 2, VASTUseTy> User;// VASTUseTy
+  friend class VASTWire;
 
   VASTUseTy getUseKind() const { return User.getInt(); }
 public:
@@ -220,74 +219,6 @@ template<> struct simplify_type<VASTUse> {
   }
 };
 
-class VASTExpr : public VASTValue {
-public:
-  // Datapath opcode.
-  enum Opcode {
-    dpUnknown,
-    // FU datapath
-    dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
-    // bitwise logic datapath
-    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
-    // bit level assignment.
-    dpBitCat, dpBitRepeat,
-    // Simple wire assignment.
-    dpAssign,
-    // Mux in datapath.
-    dpMux,
-    // Timing BlackBox, have latecy not capture by slots.
-    dpVarLatBB
-  };
-private:
-  VASTExpr(const VASTExpr&);             // Do not implement
-public:
-  const uint32_t Opc;
-  const uint32_t NumOps;
-  const VASTUse *const Ops;
-
-  VASTExpr(uint16_t opc, uint16_t width, uint32_t numOps, VASTUse *ops)
-    : VASTValue(VASTNode::vastExpr, 0, width), Opc(opc), NumOps(numOps),
-      Ops(ops) {
-    assert(NumOps && "Unexpected empty expression!");
-  }
-
-  Opcode getOpcode() const { return (VASTExpr::Opcode)Opc; }
-  unsigned num_operands() const { return NumOps; }
-
-  VASTUse getOperand(unsigned Idx) const {
-    assert(Idx < num_operands() && "Index out of range!");
-    return Ops[Idx];
-  }
-
-  typedef const VASTUse *op_iterator;
-  op_iterator op_begin() const { return Ops; }
-  op_iterator op_end() const { return Ops + NumOps; }
-
-
-  // Print the logic to the output stream.
-  void print(raw_ostream &OS, const VASTWire *LV) const;
-  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
-
-  void print(raw_ostream &OS) const;
-  /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VASTExpr *A) { return true; }
-  static inline bool classof(const VASTNode *A) {
-    return A->getASTType() == vastExpr;
-  }
-};
-
-struct VASTExprBuilder {
-  SmallVector<VASTUse, 4> Operands;
-  VASTExpr::Opcode Opc;
-  unsigned BitWidth;
-  void init(VASTExpr::Opcode opc, unsigned bitWidth) {
-    Opc = opc;
-    BitWidth = bitWidth;
-  }
-
-  void addOperand(VASTUse U) { Operands.push_back(U); }
-};
-
 class VASTSignal : public VASTValue {
   // TODO: Annotate the signal so we know that some of them are port signals
   // and no need to declare again in the declaration list.
@@ -339,51 +270,93 @@ public:
 };
 
 class VASTWire : public VASTSignal {
-  VASTExpr *Expr;
-  // TODO: move to datapath.
-  unsigned Latency;
-
 public:
-  VASTWire(const char *Name, unsigned BitWidth,
-           const char *Attr = "");
+  // Datapath opcode.
+  enum Opcode {
+    dpUnknown,
+    // FU datapath
+    dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
+    // bitwise logic datapath
+    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
+    // bit level assignment.
+    dpBitCat, dpBitRepeat,
+    // Simple wire assignment.
+    dpAssign,
+    // Mux in datapath.
+    dpMux,
+    // Timing BlackBox, have latecy not capture by slots.
+    dpVarLatBB
+  };
+private:
+  VASTUse *Ops;
+  Opcode Opc;
+  uint8_t NumOps;
+  // TODO: move to datapath.
+  uint8_t Latency;
 
-  bool hasExpr() const { return Expr != 0; }
+  VASTWire(const VASTWire&);             // Do not implement
 
-  VASTExpr *getExpr() const { return Expr; }
-  void setExpr(VASTExpr *E) {
-    assert(Expr == 0 && "Datapath already set!");
-    assert(E->getBitWidth() == getBitWidth() && "Expr bit width not match!");
-    Expr = E;
-  }
+  VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "",
+           VASTUse *ops = 0, uint8_t numOps = 0, Opcode opc = dpUnknown);
+
+  void setExpr(VASTUse *ops, uint8_t numOps, Opcode opc);
+
+  friend class VASTModule;
+
+  void printAsOperandInteral(raw_ostream &OS) const;
+public:
+  bool hasExpr() const { return Opc != dpUnknown; }
 
   void setLatency(unsigned latency) {
     Latency = latency;
   }
 
-  VASTExpr::Opcode getOpcode() const {
-    return hasExpr() ? Expr->getOpcode() : VASTExpr::dpUnknown;
+  Opcode getOpcode() const { return Opc; }
+  unsigned num_operands() const { return NumOps; }
+
+  VASTUse getOperand(unsigned Idx) const {
+    assert(Idx < num_operands() && "Index out of range!");
+    return Ops[Idx];
   }
+
+  typedef const VASTUse *op_iterator;
+  op_iterator op_begin() const { return Ops; }
+  op_iterator op_end() const { return Ops + NumOps; }
 
   unsigned getLatency() const { return Latency; }
 
-  unsigned getNumOperands() const { return Expr->num_operands(); }
-
-  VASTUse getOperand(unsigned Idx) const {
-    return Expr->getOperand(Idx);
-  }
-
-  typedef VASTExpr::op_iterator op_iterator;
-  op_iterator op_begin() const { return hasExpr() ? Expr->op_begin() : 0; }
-  op_iterator op_end() const { return hasExpr() ? Expr->op_end() : 0; }
-
   // Print the logic to the output stream.
   void print(raw_ostream &OS) const;
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+    if (UB != getBitWidth() || LB != 0 || getName()) {
+      VASTValue::printAsOperand(OS, UB, LB);
+      return;
+    }
+
+    printAsOperandInteral(OS);
+  }
+
+  void printAsOperand(raw_ostream &OS) const {
+    printAsOperandInteral(OS);
+  }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTWire *A) { return true; }
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastWire;
   }
+};
+
+struct VASTWireBuilder {
+  SmallVector<VASTUse, 4> Operands;
+  VASTWire::Opcode Opc;
+  unsigned BitWidth;
+  void init(VASTWire::Opcode opc, unsigned bitWidth) {
+    Opc = opc;
+    BitWidth = bitWidth;
+  }
+
+  void addOperand(VASTUse U) { Operands.push_back(U); }
 };
 
 class VASTSlot : public VASTNode {
@@ -423,7 +396,7 @@ public:
   ///
   /// @param OS       The output stream.
   /// @param SrcSlot  Which Slot are the expression printing for?
-  VASTExpr *buildFUReadyExpr(VASTModule &VM);
+  VASTUse buildFUReadyExpr(VASTModule &VM);
 
   void print(raw_ostream &OS) const;
 
@@ -489,8 +462,8 @@ public:
 class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTUse> AndCndVec;
-  // The VASTExpr should include the slot acttive signal.
-  typedef std::pair<VASTSlot*, VASTValue*> AssignCndTy;
+  // The VASTWire should include the slot acttive signal.
+  typedef std::pair<VASTSlot*, VASTUse> AssignCndTy;
 private:
   unsigned InitVal;
   typedef std::vector<AssignCndTy>  OrCndVec;
@@ -514,7 +487,7 @@ public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
 
-  void addAssignment(VASTUse Src, VASTValue *Cnd, VASTSlot *S);
+  void addAssignment(VASTUse Src, VASTUse Cnd, VASTSlot *S);
 
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;
@@ -612,7 +585,7 @@ public:
   void computeAssignmentSlacks();
 
   void addBBLatInfo(unsigned FNNum, VASTWire *W) {
-    assert(W->getOpcode() == VASTExpr::dpVarLatBB && "Wrong datapath type!");
+    assert(W->getOpcode() == VASTWire::dpVarLatBB && "Wrong datapath type!");
     bool inserted = BBLatInfo.insert(std::make_pair(FNNum, W)).second;
     assert(inserted && "Latency information for BlackBox already exist!");
     (void)inserted;
@@ -758,16 +731,16 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
-                    unsigned BitWidth);
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, VASTUse Op,
-                    unsigned BitWidth);
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                    unsigned BitWidth);
-  VASTExpr *getExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1, VASTUse Op2,
-                    unsigned BitWidth);
-  VASTExpr *getExpr(VASTExprBuilder &Builder) {
-    return getExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
+  VASTUse buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
+                    unsigned BitWidth, VASTWire *DstWire = 0);
+  VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse Op,
+                    unsigned BitWidth, VASTWire *DstWire = 0);
+  VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                    unsigned BitWidth, VASTWire *DstWire = 0);
+  VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse Op0, VASTUse Op1, VASTUse Op2,
+                    unsigned BitWidth, VASTWire *DstWire = 0);
+  VASTUse buildExpr(VASTWireBuilder &Builder, VASTWire *DstWire = 0) {
+    return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth, DstWire);
   }
 
   VASTUse getNotExpr(VASTUse U);
