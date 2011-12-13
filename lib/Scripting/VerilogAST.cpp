@@ -203,7 +203,7 @@ VASTUse VASTSlot::buildFUReadyExpr(VASTModule &VM) {
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
     Ops.push_back(VM.buildExpr(VASTWire::dpOr, I->first,
-                             VM.getNotExpr(I->second), 1));
+                             VM.buildNotExpr(I->second), 1));
   
   // No waiting signal means always ready.
   if (Ops.empty()) Ops.push_back(VASTUse(true, 1));
@@ -226,7 +226,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
         // FU ready for alias slot, when alias slot register is 1, its waiting
         // signal must be 1.
         Ops.push_back(Mod.buildExpr(VASTWire::dpOr,
-                                  Mod.getNotExpr(AliasSlot->getRegister()),
+                                  Mod.buildNotExpr(AliasSlot->getRegister()),
                                   AliasSlot->buildFUReadyExpr(Mod), 1));
       }
     }
@@ -309,7 +309,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
     // Only disable the current slot if there is no alias slot enable current
     // slot.
     if (PredAliasSlots)
-      EmptySlotEnCnd.push_back(Mod.getNotExpr(PredAliasSlots));
+      EmptySlotEnCnd.push_back(Mod.buildNotExpr(PredAliasSlots));
 
     // Disable the current slot.
     Mod.addAssignment(getRegister(), VASTUse((int64_t)0, 1), this,
@@ -375,7 +375,7 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
           assert(!ASlot->isDiabled(I->first)
                  && "Same signal disabled in alias slot!");
           if (ASlot->isEnabled(I->first)) {
-            DisableAndCnds.push_back(Mod.getNotExpr(ASlot->getRegister()));
+            DisableAndCnds.push_back(Mod.buildNotExpr(ASlot->getRegister()));
             continue;
           }
         }
@@ -759,36 +759,47 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
   }
 }
 
-VASTUse VASTModule::getNotExpr(VASTUse U) {
-  // Try to fold the not expression.
-  if (VASTValue *V = U.getOrNull())
-    if (VASTWire *E = dyn_cast<VASTWire>(V))
-      if (E->getOpcode() == VASTWire::dpNot)
-        return E->getOperand(0);
-
+VASTUse VASTModule::buildNotExpr(VASTUse U) {
   return buildExpr(VASTWire::dpNot, U, U.getBitWidth());
 }
 
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
                               unsigned BitWidth, VASTWire *DstWire) {
+  switch (Opc) {
+  case VASTWire::dpNot: {
+     // Try to fold the not expression.
+    if (VASTValue *V = Op.getOrNull())
+      if (VASTWire *E = dyn_cast<VASTWire>(V))
+        if (E->getOpcode() == VASTWire::dpNot)
+          return buildExpr(VASTWire::dpAssign, E->getOperand(0),
+                           BitWidth, DstWire);
+  }
+  default: break;
+  }
+
   VASTUse Ops[] = { Op };
-  return buildExpr(Opc, Ops, BitWidth, DstWire);
+  return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                               unsigned BitWidth, VASTWire *DstWire) {
   VASTUse Ops[] = { LHS, RHS };
-  return buildExpr(Opc, Ops, BitWidth, DstWire);
+  return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op0, VASTUse Op1,
                               VASTUse Op2, unsigned BitWidth, VASTWire *DstWire) {
   VASTUse Ops[] = { Op0, Op1, Op2 };
-  return buildExpr(Opc, Ops, BitWidth, DstWire);
+  return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
                               unsigned BitWidth, VASTWire *DstWire) {
+  return createExpr(Opc, Ops, BitWidth, DstWire);
+}
+
+VASTWire *VASTModule::createExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
+                                 unsigned BitWidth, VASTWire *DstWire) {
   assert(!Ops.empty() && "Unexpected empty expression");
   VASTUse *OpArray = Allocator.Allocate<VASTUse>(Ops.size());
   std::uninitialized_copy(Ops.begin(), Ops.end(), OpArray);

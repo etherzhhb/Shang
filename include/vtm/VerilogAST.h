@@ -731,6 +731,8 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
+  VASTWire *createExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
+                       unsigned BitWidth, VASTWire *DstWire = 0);
   VASTUse buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
                     unsigned BitWidth, VASTWire *DstWire = 0);
   VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse Op,
@@ -743,7 +745,7 @@ public:
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth, DstWire);
   }
 
-  VASTUse getNotExpr(VASTUse U);
+  VASTUse buildNotExpr(VASTUse U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,

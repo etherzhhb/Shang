@@ -458,7 +458,7 @@ void RTLCodegen::emitIdleState() {
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
   IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
                         StartPort);
-  IdleSlot->addNextSlot(0, VM->getNotExpr(StartPort));
+  IdleSlot->addNextSlot(0, VM->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
@@ -946,7 +946,7 @@ void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
   Cnds.push_back(Cnd);
   VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
   // Assign the value for condition false.
-  Cnds.back() = VM->getNotExpr(Cnd);
+  Cnds.back() = VM->buildNotExpr(Cnd);
   VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
   Cnds.pop_back();
 }
@@ -1284,7 +1284,7 @@ VASTUse RTLCodegen::createCondition(ucOperand &Op) {
   // Otherwise it must be some signal.
   VASTUse C = VM->lookupSignal(Op.getReg());
 
-  if (Op.isPredicateInverted()) C = VM->getNotExpr(C);
+  if (Op.isPredicateInverted()) C = VM->buildNotExpr(C);
 
   return C;
 }
@@ -1317,7 +1317,7 @@ void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTUse &Pred) {
       Pred = createCondition(UseOp.getOperand(0));
       // Invert flag is not copied.
       if (PredCnd.isPredicateInverted())
-        Pred = VM->getNotExpr(Pred);
+        Pred = VM->buildNotExpr(Pred);
     }
   }
 }
