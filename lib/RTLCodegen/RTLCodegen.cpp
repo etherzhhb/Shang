@@ -26,6 +26,7 @@
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
+#include "vtm/FindMBBShortestPath.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
@@ -65,6 +66,7 @@ class RTLCodegen : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VASTModule *VM;
   Mangler *Mang;
+  FindShortestPath *FindSP;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
@@ -286,6 +288,12 @@ public:
 
   ~RTLCodegen();
 
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    MachineFunctionPass::getAnalysisUsage(AU);
+    AU.addRequired<FindShortestPath>();
+    AU.addPreserved<FindShortestPath>();
+  }
+
   bool doInitialization(Module &M);
 
   bool doFinalization(Module &M) {
@@ -347,7 +355,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
-
+  FindSP = &getAnalysis<FindShortestPath>();
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
@@ -379,12 +387,15 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
+  // Pass the FindShortestPath Pointer to the VASTModule.
+  VM->InitFindShortestPathPointer(FindSP);
   // Building the Slot active signals.
   // FIXME: It is in fact simply printing the logic out.
   VM->buildSlotLogic();
 
   // TODO: Optimize the RTL net list.
   // FIXME: Do these in seperate passes.
+
   VM->eliminateConstRegisters();
 
   // Write buffers to output

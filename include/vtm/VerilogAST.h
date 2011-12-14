@@ -21,6 +21,7 @@
 
 #include "vtm/FUInfo.h"
 #include "vtm/LangSteam.h"
+#include "vtm/FindMBBShortestPath.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Function.h"
@@ -47,6 +48,7 @@ class VASTSlot;
 class VASTWire;
 class VASTRegister;
 class VASTUse;
+class FindShortestPath;
 
 class VASTNode {
 public:
@@ -611,13 +613,16 @@ private:
   // the slack is 0. But if we read the data at cycle 3, the slack is 1.
 
   // FIXME: These function should be the "SlackInfo" pass member function.
-  unsigned findSlackFrom(const VASTRegister *Src, VASTSlot *UseSlot);
+  signed findSlackFrom(const VASTRegister *Src, VASTSlot *UseSlot,
+                       FindShortestPath *FindSP);
   // Find the nearest slot before Dst that assigning this register.
-  VASTSlot *findNearestAssignSlot(VASTSlot *Dst) const;
-  void DepthFristTraverseDataPathUseTree(VASTUse Root, VASTSlot *UseSlot);
+  signed findNearestAssignSlot(VASTSlot *Dst, FindShortestPath *FindSP) const;
+  void DepthFristTraverseDataPathUseTree(VASTUse Root, VASTSlot *UseSlot,
+                                         FindShortestPath *FindS);
   void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
 
   friend class VASTModule;
+
 public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
@@ -641,8 +646,9 @@ public:
   }
 
   // Compute the slack of the assignment.
-  void computeAssignmentSlack();
-  void computeSlackThrough(VASTUse Def, VASTSlot *UseSlot);
+  void computeAssignmentSlack(FindShortestPath *FindSP);
+  void computeSlackThrough(VASTUse Def, VASTSlot *UseSlot,
+                           FindShortestPath *FindSP);
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
@@ -686,6 +692,7 @@ private:
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
+  FindShortestPath *FindSP;
 
 public:
   static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
@@ -717,6 +724,7 @@ public:
 
   const std::string &getName() const { return Name; }
 
+  void InitFindShortestPathPointer(FindShortestPath *FindSPPointer);
   void printDatapath(raw_ostream &OS) const;
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 

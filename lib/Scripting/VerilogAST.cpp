@@ -21,6 +21,7 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
 #include "vtm/Utilities.h"
+#include "vtm/FindMBBShortestPath.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
@@ -512,7 +513,8 @@ static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path, unsigned Slack) {
 // Traverse the use tree in datapath, stop when we meet a register or other
 // leaf node.
 void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
-                                                     VASTSlot *UseSlot) {
+                                                     VASTSlot *UseSlot,
+                                                     FindShortestPath *FindSP) {
   typedef VASTUse::iterator ChildIt;
   // Use seperate node and iterator stack, so we can get the path vector.
   typedef SmallVector<VASTUse, 16> NodeStackTy;
@@ -545,7 +547,7 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
         });
 
         if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
-          unsigned Slack = 0;
+          signed Slack = 0;
           // Data-path has timing information available.
           for (NodeStackTy::iterator I = NodeWorkStack.begin(),
                E = NodeWorkStack.end(); I != E; ++I)
@@ -553,7 +555,9 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
               if (W->getOpcode() == VASTWire::dpVarLatBB)
                 Slack += W->getLatency();
 
-          Slack = std::max(Slack, findSlackFrom(R, UseSlot));
+
+          Slack = std::max(Slack, findSlackFrom(R, UseSlot, FindSP));
+
           DEBUG_WITH_TYPE("rtl-slack-info",
                            dbgs() << " Slack: " << int(Slack));
           bindPath2ScriptEngine(NodeWorkStack, Slack);
@@ -589,42 +593,46 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
   assert(NodeWorkStack.back().get() == this && "Node stack broken!");
 }
 
-VASTSlot *VASTRegister::findNearestAssignSlot(VASTSlot *Dst) const {
-  VASTSlot *NearestSrc = 0;
+int VASTRegister::findNearestAssignSlot(VASTSlot *UseSlot,
+                                           FindShortestPath *FindSP) const {
+  VASTSlot *NearestDef = 0;
+  unsigned NearestSlotDistance = FindShortestPath::infinite;
   typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
   // FIXME: We can perform a binary search.
   for (SlotIt I = Slots.begin(), E = Slots.end(); I != E; ++I) {
     VASTSlot *Src = *I;
 
-    // Do not mess up with cross state live interval at the moment.
-    if (Src->getParentIdx() != Dst->getParentIdx())
-      continue;
+    unsigned SlotDistance = FindSP->getSlotDistance(Src, UseSlot);
 
-    if (*Src < *Dst) {
-      NearestSrc = Src;
+    // if SlotDistance == 0, abandon this result.
+    if (SlotDistance <= 0) continue;
+
+    if (SlotDistance < NearestSlotDistance) {
+      NearestSlotDistance = SlotDistance;
+      assert(NearestSlotDistance != -1 && "we can not reach the slot!!!");
+      NearestDef = Src;
     }
   }
 
-  return NearestSrc;
+  return
+    NearestSlotDistance == FindShortestPath::infinite? -1 : NearestSlotDistance;
 }
 
-unsigned VASTRegister::findSlackFrom(const VASTRegister *Src,
-                                     VASTSlot *UseSlot) {
-  unsigned Slack = ~0;
+int VASTRegister::findSlackFrom(const VASTRegister *Src,
+                                   VASTSlot *UseSlot,
+                                   FindShortestPath *FindSP) {
+  int Slack = ~0;
 
-  // Because we ingore cross state live interval, assume all registers assigned
-  // when the state start.
-  Slack = std::min(Slack, UseSlot->getSlackFromParentStart());
+  int NearestSlotDistance = Src->findNearestAssignSlot(UseSlot, FindSP);
 
-  if (VASTSlot *DefSlot = Src->findNearestAssignSlot(UseSlot))
-    // What we got is ASSIGN slot, the data need 1 more cycle to reach the
-    // output pin of the register.
-    Slack = std::min(Slack, UseSlot->getSlotNum() - (DefSlot->getSlotNum() + 1));
+  if (NearestSlotDistance > 0)
+    Slack = NearestSlotDistance;
 
   return Slack;
 }
 
-void VASTRegister::computeSlackThrough(VASTUse Def, VASTSlot *UseSlot){
+void VASTRegister::computeSlackThrough(VASTUse Def, VASTSlot *UseSlot,
+                                       FindShortestPath *FindSP){
   VASTValue *DefValue = Def.getOrNull();
 
   // Source is immediate or symbol, skip it.
@@ -632,17 +640,19 @@ void VASTRegister::computeSlackThrough(VASTUse Def, VASTSlot *UseSlot){
 
   // Trivial case.
   if (VASTRegister *R = dyn_cast<VASTRegister>(DefValue)) {
-    unsigned Slack = findSlackFrom(R, UseSlot);
-    DEBUG_WITH_TYPE("rtl-slack-info",
-      dbgs() << "Datapath:\t" << getName() << ", "
-      << R->getName() << ": "
-      << int(Slack) << '\n');
-    VASTUse Path[] = { this, Def };
-    bindPath2ScriptEngine(Path, Slack);
+    signed Slack = findSlackFrom(R, UseSlot, FindSP);
+    if (Slack >= 0) {
+      DEBUG_WITH_TYPE("rtl-slack-info",
+        dbgs() << "Datapath:\t" << getName() << ", "
+        << R->getName() << ": "
+        << int(Slack) << '\n');
+      VASTUse Path[] = { this, Def };
+      bindPath2ScriptEngine(Path, Slack);
+    }
     return;
   }
 
-  DepthFristTraverseDataPathUseTree(Def, UseSlot);
+  DepthFristTraverseDataPathUseTree(Def, UseSlot, FindSP);
 }
 
 VASTUse VASTRegister::getConstantValue() const {
@@ -655,9 +665,10 @@ VASTUse VASTRegister::getConstantValue() const {
 
   // Some register assignment may have un-match bit-width
   return VASTUse(C->getImm(), getBitWidth());
+
 }
 
-void VASTRegister::computeAssignmentSlack() {
+void VASTRegister::computeAssignmentSlack(FindShortestPath *FindSP) {
   // Do we have any assignment information?
   if (Assigns.empty()) return;
 
@@ -667,11 +678,11 @@ void VASTRegister::computeAssignmentSlack() {
     VASTWire *AssignCnds = I->first;
     VASTSlot *UseSlot = AssignCnds->getSlot();
     // Compute slack from source value.
-    computeSlackThrough(Src, UseSlot);
+    computeSlackThrough(Src, UseSlot, FindSP);
     typedef VASTWire::op_iterator it;
     for (it I = AssignCnds->op_begin(), E = AssignCnds->op_end();
          I != E; ++I) {
-      computeSlackThrough(*I, UseSlot);
+      computeSlackThrough(*I, UseSlot, FindSP);
     }
   }
 }
@@ -1030,7 +1041,7 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
 void VASTModule::computeAssignmentSlacks() {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
-    (*I)->computeAssignmentSlack();
+    (*I)->computeAssignmentSlack(FindSP);
 }
 
 bool VASTModule::eliminateConstRegisters() {
@@ -1058,6 +1069,10 @@ bool VASTModule::eliminateConstRegisters() {
 
 void VASTModule::print(raw_ostream &OS) const {
   // Print the verilog module?
+}
+
+void VASTModule::InitFindShortestPathPointer(FindShortestPath *FindSPPointer){
+  FindSP = FindSPPointer;
 }
 
 VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
