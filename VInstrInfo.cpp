@@ -106,7 +106,7 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
     for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
       MachineOperand &MO = *I;
       if (MO.isReg() && MO.getReg() == Reg) {
-        assert(MO.getTargetFlags() == ImmediateTFs
+        assert(MO.getTargetFlags() <= ImmediateTFs
           && "Folding immediate with different Bitwidth?");
         MO.ChangeToImmediate(ImmediateValue);
       }
