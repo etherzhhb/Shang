@@ -822,11 +822,12 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       if (TargetBB == CurBB && CndSlot > CurSlot->getParentIdx()) {
         Cnds.push_back(VM->getSlot(CndSlot - 1)->getActive());
       } else {
-        // Get the loop back condition.
+        // Get the loop back condition, merged the loop back condition into
+        // current condition.
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
         VASTWire *PredCnd = PredMap.find(TargetBB)->second;
         // Slot active already of PredCnd included, no need to worry about.
-        Cnds.push_back(PredCnd);
+        Cnds.append(PredCnd->op_begin(), PredCnd->op_end());
       }
     }
 
