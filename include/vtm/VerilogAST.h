@@ -136,7 +136,7 @@ public:
   void removeFromList();
 
   void set(const VASTUse &RHS) {
-    Data.V = RHS.Data.V;
+    Data.ImmVal = RHS.Data.ImmVal;
     UB = RHS.UB;
     LB = RHS.LB;
     setUseKind(RHS.getUseKind());
