@@ -405,7 +405,7 @@ SDValue VTargetLowering::getBitSlice(SelectionDAG &DAG, DebugLoc dl, SDValue Op,
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
     // This may change the value type, which is undesirable during DAG combine.
     if (ResultSize == SizeInBits)
-      return DAG.getTargetConstant(getBitSlice(C->getZExtValue(), UB, LB), VT);
+      return DAG.getTargetConstant(getBitSlice64(C->getZExtValue(), UB, LB), VT);
   }
 
   if (ResultSize) VT =  EVT::getIntegerVT(Context, ResultSize);
@@ -449,7 +449,7 @@ SDValue VTargetLowering::getBitRepeat(SelectionDAG &DAG, DebugLoc dl, SDValue Op
   EVT VT = EVT::getIntegerVT(Context, SizeInBits);
 
   if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
-    uint64_t c = getBitSlice(C->getZExtValue(), EltBits);
+    uint64_t c = getBitSlice64(C->getZExtValue(), EltBits);
     uint64_t ret = 0;
     for (unsigned i = 0; i < Times; ++i)
       ret |= (c << (i * EltBits));

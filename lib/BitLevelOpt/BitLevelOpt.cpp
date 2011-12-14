@@ -47,25 +47,25 @@ SDValue commuteAndTryAgain(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 }
 
 inline static bool isAllOnesValue(uint64_t Val, unsigned SizeInBits) {
-  uint64_t AllOnes = VTargetLowering::getBitSlice(~uint64_t(0), SizeInBits);
-  return VTargetLowering::getBitSlice(Val, SizeInBits) == AllOnes;
+  uint64_t AllOnes = getBitSlice64(~uint64_t(0), SizeInBits);
+  return getBitSlice64(Val, SizeInBits) == AllOnes;
 }
 
 inline static bool isNullValue(uint64_t Val, unsigned SizeInBits) {
-  return VTargetLowering::getBitSlice(Val, SizeInBits) == 0;
+  return getBitSlice64(Val, SizeInBits) == 0;
 }
 
 inline static unsigned ExtractConstant(SDValue V, uint64_t &Val) {
   if (ConstantSDNode *CSD =dyn_cast<ConstantSDNode>(V)) {
     unsigned SizeInBits = V.getValueSizeInBits();
-    Val = VTargetLowering::getBitSlice(CSD->getZExtValue(), SizeInBits);
+    Val = getBitSlice64(CSD->getZExtValue(), SizeInBits);
     return SizeInBits;
   }
 
   if (V.getOpcode() == VTMISD::BitSlice)
     if (ConstantSDNode *CSD =dyn_cast<ConstantSDNode>(V.getOperand(0))) {
       unsigned UB = V.getConstantOperandVal(1), LB = V.getConstantOperandVal(2);
-      Val = VTargetLowering::getBitSlice(CSD->getZExtValue(), UB, LB);
+      Val = getBitSlice64(CSD->getZExtValue(), UB, LB);
       return UB - LB;
     }
 
@@ -907,8 +907,8 @@ SDValue PerformAddCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
     if (CVal) {
       // Fold the constant carry to RHS.
-      assert((VTargetLowering::getBitSlice(OpBVal, OpBSize) + 1 ==
-          VTargetLowering::getBitSlice(OpBVal + 1, std::min(64u, OpBSize + 1)))
+      assert((getBitSlice64(OpBVal, OpBSize) + 1 ==
+              getBitSlice64(OpBVal + 1, std::min(64u, OpBSize + 1)))
              && "Unexpected overflow!");
       OpBVal += 1;
       return DAG.getNode(ISD::ADDE, dl, N->getVTList(),

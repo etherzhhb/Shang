@@ -13,6 +13,7 @@
 
 #include "VTargetMachine.h"
 #include "vtm/FUInfo.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/Intrinsics.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
@@ -207,7 +208,7 @@ SDNode *VDAGToDAGISel::SelectConstBitSlice(ConstantSDNode *CSD, SDNode *N) {
   int64_t val = CSD->getSExtValue();
   unsigned UB = N->getConstantOperandVal(1);
   unsigned LB = N->getConstantOperandVal(2);
-  val = VTargetLowering::getBitSlice(val, UB, LB);
+  val = getBitSlice64(val, UB, LB);
   EVT VT = EVT::getIntegerVT(*CurDAG->getContext(), UB - LB);
   SDValue C = CurDAG->getTargetConstant(val, VT);
   // Copy the constant explicit since the value may use by some function unit.

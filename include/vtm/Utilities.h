@@ -18,8 +18,17 @@
 #include "llvm/Support/Compiler.h"
 
 namespace llvm {
-static inline unsigned getByteEnable(unsigned SizeInBytes) {
+inline unsigned getByteEnable(unsigned SizeInBytes) {
   return (0x1 << SizeInBytes) - 1;
+}
+// Get the bit slice in range (UB, LB].
+/// GetBits - Retrieve bits between [LB, UB).
+inline uint64_t getBitSlice64(uint64_t x, unsigned UB, unsigned LB = 0) {
+  assert(UB - LB <= 64 && UB <= 64 && "Cannot extract bit slice!");
+  // If the bit slice contains the whole 64-bit variable, simply return it.
+  if (UB == 64 && LB == 0) return x;
+
+  return (x >> LB) & ((uint64_t(1) << (UB - LB)) - 1);
 }
 
 /// SignExtend64 - Sign extend B-bit number x to 64-bit int.
@@ -45,8 +54,8 @@ static std::string VBEMangle(const std::string &S) {
 
 // PrintEscapedString - Print each character of the specified string, escaping
 // it if it is not printable or if it is an escape char.
-static inline void PrintEscapedString(const char *Str, unsigned Length,
-                                      raw_ostream &Out) {
+inline void PrintEscapedString(const char *Str, unsigned Length,
+                               raw_ostream &Out) {
     for (unsigned i = 0; i != Length; ++i) {
       unsigned char C = Str[i];
       if (isprint(C) && C != '\\' && C != '"')
@@ -64,7 +73,7 @@ static inline void PrintEscapedString(const char *Str, unsigned Length,
 
 // PrintEscapedString - Print each character of the specified string, escaping
 // it if it is not printable or if it is an escape char.
-static inline void PrintEscapedString(const std::string &Str, raw_ostream &Out) {
+inline void PrintEscapedString(const std::string &Str, raw_ostream &Out) {
   PrintEscapedString(Str.c_str(), Str.size(), Out);
 }
 
