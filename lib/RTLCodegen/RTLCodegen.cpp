@@ -1340,7 +1340,6 @@ VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     VASTUse V = VM->lookupSignal(Op.getReg());
-    assert (V.get() && "Cannot find this Value in vector!");
     return V;
   }
   case MachineOperand::MO_Immediate:
