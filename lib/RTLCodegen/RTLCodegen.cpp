@@ -385,6 +385,7 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   // TODO: Optimize the RTL net list.
   // FIXME: Do these in seperate passes.
+  VM->eliminateConstRegisters();
 
   // Write buffers to output
   VM->printModuleDecl(Out);

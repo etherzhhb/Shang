@@ -622,6 +622,15 @@ public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
 
+  void clearAssignments() {
+    assert(use_empty() && "Cannot clear assignments!");
+    // TODO: Release the Uses and Wires.
+    Assigns.clear();
+    Slots.clear();
+  }
+
+  VASTUse getConstantValue() const;
+
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;
 
@@ -716,6 +725,9 @@ public:
 
   // Compute the register assignments slack information, callable from lua.
   void computeAssignmentSlacks();
+
+  //
+  bool eliminateConstRegisters();
 
   void addBBLatInfo(unsigned FNNum, VASTWire *W) {
     assert(W->getOpcode() == VASTWire::dpVarLatBB && "Wrong datapath type!");

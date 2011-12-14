@@ -645,6 +645,18 @@ void VASTRegister::computeSlackThrough(VASTUse Def, VASTSlot *UseSlot){
   DepthFristTraverseDataPathUseTree(Def, UseSlot);
 }
 
+VASTUse VASTRegister::getConstantValue() const {
+  // Only 1 assignment?
+  if (Assigns.size() != 1) return VASTUse();
+
+  VASTUse *C = Assigns.begin()->second;
+
+  if (!C->isImm()) return VASTUse();
+
+  // Some register assignment may have un-match bit-width
+  return VASTUse(C->getImm(), getBitWidth());
+}
+
 void VASTRegister::computeAssignmentSlack() {
   // Do we have any assignment information?
   if (Assigns.empty()) return;
@@ -1019,6 +1031,29 @@ void VASTModule::computeAssignmentSlacks() {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
     (*I)->computeAssignmentSlack();
+}
+
+bool VASTModule::eliminateConstRegisters() {
+  bool Changed = false;
+  typedef RegisterVector::iterator it;
+  for (it I = Registers.begin(), E = Registers.end(); I != E; ++I) {
+    VASTRegister *R = *I;
+
+    VASTUse Const = R->getConstantValue();
+
+    if (Const.isInvalid()) continue;
+
+    // Replace the register by constant.
+    // FIXME: Also check no one read the register before it is assign, otherwise
+    // it is not safe to do the replacement.
+    replaceAndUpdateUseTree(R, Const);
+
+    R->clearAssignments();
+
+    Changed = true;
+  }
+
+  return Changed;
 }
 
 void VASTModule::print(raw_ostream &OS) const {
