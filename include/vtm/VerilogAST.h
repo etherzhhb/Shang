@@ -182,6 +182,12 @@ public:
     return 0;
   }
 
+  bool isImm() const { return getUseKind() == USE_Immediate; }
+  int64_t getImm() const {
+    assert(isImm() && "Call getImm on wrong type!");
+    return Data.ImmVal;
+  }
+
   // Iterators allow us to traverse the use tree.
   typedef const VASTUse *iterator;
   // Iterator for datapath traverse.

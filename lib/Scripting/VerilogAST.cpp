@@ -821,6 +821,10 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
         if (E->getOpcode() == VASTWire::dpNot)
           return buildExpr(VASTWire::dpAssign, E->getOperand(0),
                            BitWidth, DstWire);
+    if (Op.isImm())
+      return buildExpr(VASTWire::dpAssign,
+                       VASTUse(~Op.getImm(), Op.getBitWidth()),
+                       Op.getBitWidth(), DstWire);
     break;
   }
   case VASTWire::dpAssign:
