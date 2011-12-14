@@ -116,10 +116,16 @@ VASTUse::VASTUse(VASTValue *v)
   Data.V = v;
 }
 
+void VASTUse::removeFromList() {
+  if (VASTValue *List = getOrNull())
+    List->removeUseFromList(this);
+}
+
 void VASTUse::setUser(VASTValue *User) {
   assert(!ilist_traits<VASTUse>::inAnyList(this)
          && "Not unlink from old list!");
   if (VASTValue *List = getOrNull()) {
+    assert(List != User && "Unexpected cycle!");
     this->User.setPointer(User);
     List->addUseToList(this);
   }
@@ -718,15 +724,15 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 
 VASTWire::VASTWire(const char *Name, unsigned BitWidth, const char *Attr,
                    VASTUse *ops, uint8_t numOps, Opcode opc)
-  : VASTSignal(vastWire, Name, BitWidth, Attr), Ops(ops), Opc(opc),
-    NumOps(numOps) {
+  : VASTSignal(vastWire, Name, BitWidth, Attr), Ops(ops), NumOps(numOps),
+    Opc(opc) {
   Context.Latency = 0;
   assert((numOps || Ops == 0)&& "Unexpected empty operand list!");
   if (ops) buildUseList();
 }
 
 void VASTWire::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
-  assert(((numOps && !hasExpr()) || opc  == Dead)
+  assert(((numOps) || (opc  == Dead && !isPinned()))
          && "Cannot set expression!");
   Ops = ops;
   NumOps = numOps;
@@ -827,33 +833,6 @@ VASTUse VASTModule::buildNotExpr(VASTUse U) {
   return buildExpr(VASTWire::dpNot, U, U.getBitWidth());
 }
 
-bool VASTModule::replaceAllUseWith(VASTWire *From, VASTUse To,
-                                   SmallVectorImpl<VASTWire*> &Users) {
-  assert(To.getBitWidth() == From->getBitWidth() && "Bitwidth not match!");
-  // Nothing to replace.
-  if (From->use_empty()) return false;
-
-  typedef VASTValue::use_iterator it;
-  for (it I = From->use_begin(), E = From->use_end(); I != E; /*++I*/) {
-    VASTUse *U = I.get();
-    ++I;
-    VASTUse NewU = To.getBitSlice(U->UB, U->LB);
-    if (!NewU.isInvalid()) {
-      // Unlink from old list.
-      From->removeUseFromList(U);
-      VASTValue *User = U->getUser();
-      // Move to new list.
-      U->set(NewU);
-      U->setUser(User);
-      // We will re-calualte the user later.
-      if (VASTWire *W = dyn_cast_or_null<VASTWire>(User))
-        Users.push_back(W);
-    }
-  }
-
-  return From->use_empty();
-}
-
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
                               unsigned BitWidth, VASTWire *DstWire) {
   switch (Opc) {
@@ -872,12 +851,12 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
   }
   case VASTWire::dpAssign: {
     SmallVector<VASTWire*, 8> UpdatedUsers;
-    // Do not mess up with empty use wire, which may be pins.
+
     if (!DstWire) return Op;
 
     // Update the use list of DstWire.
-    bool AllReplaced = replaceAllUseWith(DstWire, Op, UpdatedUsers);
-
+    bool AllReplaced = DstWire->replaceAllUseWith(Op, &UpdatedUsers);
+    // Try to re-evaluate the users.
     while (!UpdatedUsers.empty()) {
       VASTWire *V = UpdatedUsers.back();
       UpdatedUsers.pop_back();
@@ -887,7 +866,14 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
 
     // The wire can be ignored if it is replaced in all its users.
     if (AllReplaced) {
-      DstWire->setExpr(0, 0, VASTWire::Dead);
+      if (!DstWire->isPinned())
+        DstWire->setExpr(0, 0, VASTWire::Dead);
+      else {
+        // Build data-path logic for pinned signal.
+        VASTUse Ops[] = { Op };
+        createExpr(Opc, Ops, BitWidth, DstWire);
+      }
+
       return Op;
     }
 
@@ -973,8 +959,10 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
 
 VASTWire *VASTModule::updateExpr(VASTWire *W, VASTWire::Opcode Opc,
                                  ArrayRef<VASTUse> Ops) {
-  assert(W->num_operands() <= Ops.size()
+  assert(W->num_operands() >= Ops.size()
          && "Unexpected number operands increased!");
+  // Unlink all operand from its use list.
+  W->dropOperandsFromUseList();
 
   std::uninitialized_copy(Ops.begin(), Ops.end(), W->Ops);
   W->setExpr(W->Ops, Ops.size(), Opc);
@@ -1166,10 +1154,9 @@ void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const{
   if (UB) OS << verilogBitRange(UB, LB, getBitWidth() > 1);
 }
 
-bool VASTValue::replaceAllUseWith(VASTUse To) {
+bool VASTValue::replaceAllUseWith(VASTUse To,
+                                  SmallVectorImpl<VASTWire*> *ReplacedUsers) {
   assert(To.getBitWidth() == getBitWidth() && "Bitwidth not match!");
-  // Nothing to replace.
-  if (use_empty()) return false;
 
   typedef VASTValue::use_iterator it;
   for (it I = use_begin(), E = use_end(); I != E; /*++I*/) {
@@ -1177,12 +1164,20 @@ bool VASTValue::replaceAllUseWith(VASTUse To) {
     ++I;
     VASTUse NewU = To.getBitSlice(U->UB, U->LB);
     if (!NewU.isInvalid()) {
+      VASTValue *User = U->getUser();
       // Unlink from old list.
       removeUseFromList(U);
-      VASTValue *User = U->getUser();
       // Move to new list.
       U->set(NewU);
       U->setUser(User);
+
+      if (!ReplacedUsers) continue;
+
+      if (VASTWire *UserWire = dyn_cast_or_null<VASTWire>(User)) {
+        assert(UserWire->hasExpr() && UserWire->num_operands()
+               && "Use list broken!");
+        ReplacedUsers->push_back(UserWire);
+      }
     }
   }
 

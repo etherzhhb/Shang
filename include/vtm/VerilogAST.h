@@ -128,9 +128,12 @@ public:
 
   VASTUse getBitSlice(unsigned UB, unsigned LB) const;
 
+  // Set the user of this use and insert this use to use list.
   void setUser(VASTValue *User);
-
+  // Get the user of this use.
   VASTValue *getUser() const { return User.getPointer(); }
+  // Remove this use from use list.
+  void removeFromList();
 
   void set(const VASTUse &RHS) {
     Data.V = RHS.Data.V;
@@ -282,8 +285,8 @@ public:
     printAsOperand(OS, getBitWidth(), 0);
   }
 
-  bool replaceAllUseWith(VASTUse To);
-  void dropAllUses() { UseList.clear(); }
+  bool replaceAllUseWith(VASTUse To,
+                         SmallVectorImpl<VASTWire*> *ReplacedUsers = 0);
 };
 
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
@@ -314,11 +317,16 @@ class VASTSignal : public VASTValue {
   // TODO: Annotate the signal so we know that some of them are port signals
   // and no need to declare again in the declaration list.
   const char *AttrStr;
+  bool Pinned;
 protected:
   VASTSignal(VASTTypes DeclType, const char *Name, unsigned BitWidth,
              const char *Attr = "")
-    : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr) {}
+    : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr), Pinned(false) {}
 public:
+
+  // Pin the wire, prevent it from being remove.
+  void Pin() { Pinned = true; }
+  bool isPinned() const { return Pinned; }
 
   void printDecl(raw_ostream &OS) const;
 
@@ -391,8 +399,8 @@ private:
     VASTSlot *Slot;
   } Context;
 
-  Opcode Opc;
   uint8_t NumOps;
+  Opcode Opc;
 
   VASTWire(const VASTWire&);             // Do not implement
 
@@ -411,6 +419,12 @@ private:
     assert(getOpcode() == cpAssignCnd && "Call setSlot on bad wire type!");
     Context.Slot = Slot;
   }
+
+  void dropOperandsFromUseList() {
+    for (VASTUse *I = Ops, *E = Ops + NumOps; I != E; ++I)
+      I->removeFromList();
+  }
+
 public:
   bool hasExpr() const { return Ops != 0; }
   bool isDead() const { return Opc == Dead; }
@@ -868,8 +882,6 @@ public:
   VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                         unsigned BitWidth, VASTWire *DstWire);
 
-  bool replaceAllUseWith(VASTWire *W, VASTUse To,
-                         SmallVectorImpl<VASTWire*> &Users);
   VASTWire *updateExpr(VASTWire *W, VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops);
 
   VASTUse buildNotExpr(VASTUse U);
