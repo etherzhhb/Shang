@@ -976,6 +976,7 @@ void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
     VM->addAssignment(R, getAsOperand(Op.getOperand(i + 1)), Slot, Cnds);
     // Do nothing if any case hit.
     Cnds.back().print(OS);
+    Cnds.back().PinUser();
     OS << ":/*Case hit, do nothing*/;\n";
 
     Cnds.pop_back();
@@ -1361,7 +1362,9 @@ VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
 
 void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS) {
   if(Op.isReg()){
-    getAsOperand(Op).print(OS);
+    VASTUse U = getAsOperand(Op);
+    U.print(OS);
+    U.PinUser();
     return;
   }
 

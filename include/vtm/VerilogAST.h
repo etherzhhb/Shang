@@ -181,6 +181,8 @@ public:
 
     return 0;
   }
+  // Prevent the user from being removed.
+  void PinUser() const;
 
   bool isImm() const { return getUseKind() == USE_Immediate; }
   int64_t getImm() const {

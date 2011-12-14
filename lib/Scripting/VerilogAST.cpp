@@ -170,6 +170,11 @@ void VASTUse::print(raw_ostream &OS) const {
   OS << ')';
 }
 
+void VASTUse::PinUser() const {
+  if (VASTSignal *S = dyn_cast_or_null<VASTSignal>(getOrNull()))
+    S->Pin();
+}
+
 VASTUse::iterator VASTUse::dp_src_begin() {
   if (getUseKind() != USE_Value)
     return reinterpret_cast<VASTUse::iterator>(0);
@@ -655,13 +660,17 @@ void VASTRegister::computeAssignmentSlack() {
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
                                   const AndCndVec &Cnds) {
   OS << '(';
-  if (Slot) Slot->getActive().print(OS);
-  else      OS << "1'b1";
+  if (Slot) {
+    VASTUse Active = Slot->getActive();
+    Active.print(OS);
+    Active.PinUser();
+  } else      OS << "1'b1";
 
   typedef AndCndVec::const_iterator and_it;
   for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
     OS << " & ";
     CI->print(OS);
+    CI->PinUser();
   }
 
   OS << ')';
@@ -1030,6 +1039,8 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
                                    PortTypes T /*= Others*/) {
   // DIRTYHACK: comment out the deceleration of the signal for ports.
   VASTWire *W = addWire(Name, BitWidth, "//");
+  // Do not remove the wire for input port.
+  W->Pin();
 
   VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(W, true);
   if (T < SpecialInPortEnd) {
@@ -1057,6 +1068,9 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
   // DIRTYHACK: comment out the deceleration of the signal for ports.
   if (isReg) V = addRegister(Name, BitWidth, 0, "//");
   else       V = addWire(Name, BitWidth, "//");
+
+  // Do not remove the signal for output port.
+  V->Pin();
 
   VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(V, false);
   if (SpecialInPortEnd <= T && T < SpecialOutPortEnd) {
