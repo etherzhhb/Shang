@@ -69,7 +69,7 @@ class RTLCodegen : public MachineFunctionPass {
   unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
   // Mapping success fsm state to their predicate in current state.
-  typedef std::map<MachineBasicBlock*, VASTRegister::AssignCndTy> PredMapTy;
+  typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
 
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
@@ -247,6 +247,17 @@ class RTLCodegen : public MachineFunctionPass {
   void getPredValAtNextSlot(ucOp &Op, VASTUse &Pred);
 
   VASTUse getAsOperand(ucOperand &Op);
+  template <class Ty>
+  Ty *getAsLValue(ucOperand &Op) {
+    assert(Op.isReg() && "Bad MO type for LValue!");
+
+    VASTUse U = VM->lookupSignal(Op.getReg());
+    if (VASTValue *V = U.getOrNull())
+      return dyn_cast<Ty>(V);
+
+    return 0;
+  }
+
   void printOperand(ucOperand &Op, raw_ostream &OS);
 
   void emitOpInternalCall(ucOp &Op, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
@@ -796,29 +807,26 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
       // Emit the first micro state of the target state.
       emitFirstCtrlState(TargetBB, CurSlot, Cnds);
-
-      VASTRegister::AssignCndTy JumpCnd
-        = std::make_pair(CurSlot, VM->buildExpr(VASTWire::dpAnd, Cnds, 1));
-      PredMap.insert(std::make_pair(TargetBB, JumpCnd));
+      PredMap.insert(std::make_pair(TargetBB, VM->buildAssignCnd(CurSlot, Cnds)));
       continue;
     }
 
     // Loop back PHI node moving only active when current slot and the same
     // slot at previous (.i.e Slot - II) are both enable. Which means we are
-    // looping back.
+    // looping back, so besides the predicate condition of current slot, the we
+    // need to also add the predicate condition for looping back, that means we
+    // only assign the loop back PHI when we are looping back.
     if (Op->getOpcode() == VTM::VOpMvPhi) {
       MachineBasicBlock *TargetBB = Op.getOperand(2).getMBB();
       unsigned CndSlot = SlotNum - II;
       if (TargetBB == CurBB && CndSlot > CurSlot->getParentIdx()) {
         Cnds.push_back(VM->getSlot(CndSlot - 1)->getActive());
       } else {
+        // Get the loop back condition.
         assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
-        VASTRegister::AssignCndTy PredCnd = PredMap.find(TargetBB)->second;
-        // Do we need extra predicate slot?
-        if (PredCnd.first != CurSlot)
-          Cnds.push_back(PredCnd.first->getActive());
-
-        Cnds.insert(Cnds.end(), PredCnd.second);
+        VASTWire *PredCnd = PredMap.find(TargetBB)->second;
+        // Slot active already of PredCnd included, no need to worry about.
+        Cnds.push_back(PredCnd);
       }
     }
 
@@ -909,7 +917,7 @@ void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
 }
 
 void RTLCodegen::emitChainedOpAdd(ucOp &Op) {
-  VASTWire *V = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
+  VASTWire *V = getAsLValue<VASTWire>(Op.getOperand(0));
   if (V->hasExpr()) return;
   VM->buildExpr(VASTWire::dpAdd,
                 getAsOperand(Op.getOperand(1)),
@@ -1259,8 +1267,8 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
 }
 
 void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
-  VASTWire *V = cast<VASTWire>(getAsOperand(OpBitSlice.getOperand(0)));
-  if (V->hasExpr()) return;
+  VASTWire *V = getAsLValue<VASTWire>(OpBitSlice.getOperand(0));
+  if (!V || V->hasExpr()) return;
 
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice
@@ -1269,9 +1277,13 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
 
   VASTUse RHS = getAsOperand(OpBitSlice.getOperand(1));
   assert(RHS.UB != 0 && "Cannot get bitslice without bitwidth information!");
+  // Already replaced.
+  if (RHS.getOrNull() == V) return;
+
   // Adjust ub and lb.
   LB += RHS.LB;
   UB += RHS.LB;
+
   assert(UB <= RHS.UB && "Bitslice out of range!");
   VM->buildExpr(VASTWire::dpAssign, VASTUse(RHS.get(), UB, LB),
                 V->getBitWidth(), V);

@@ -36,14 +36,17 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <map>
+#include <list>
 
 namespace llvm {
 class MachineBasicBlock;
 class ucOperand;
 class VASTModule;
+class VASTValue;
 class VASTSlot;
 class VASTWire;
 class VASTRegister;
+class VASTUse;
 
 class VASTNode {
 public:
@@ -77,42 +80,12 @@ public:
   void dump() const;
 };
 
-// TODO: Change VASTValue to VASTNamedNode
-class VASTValue : public VASTNode {
-  const char *Name;
-protected:
-  VASTValue(VASTTypes DeclType, const char *name, unsigned BitWidth)
-    : VASTNode(DeclType, BitWidth), Name(name)
-  {
-    assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
-           && "Bad DeclType!");
-  }
-public:
-  const char *getName() const { return Name; }
-  unsigned short getBitWidth() const { return getSubClassData(); }
-  bool isRegister() const { return getASTType() == vastRegister; }
-
-  virtual void print(raw_ostream &OS) const;
-  virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
-
-  void printAsOperand(raw_ostream &OS) const {
-    printAsOperand(OS, getBitWidth(), 0);
-  }
-};
-
-class VASTSymbol : public VASTValue {
-public:
-  VASTSymbol(const char *Name, unsigned BitWidth)
-    : VASTValue(VASTNode::vastSymbol, Name, BitWidth) {}
-
-  virtual void print(raw_ostream &OS) const;
-};
-
-class VASTUse {
+class VASTUse : public ilist_node<VASTUse> {
   enum VASTUseTy {
     USE_Value,              // Using a VASTValue
     USE_Immediate,          // Simply a immediate
-    USE_Symbol              // A external symbol
+    USE_Symbol,             // A external symbol
+    Invalid                 // For sentinel
   };
   // The ast node or simply the symbol.
   union {
@@ -121,11 +94,17 @@ class VASTUse {
     const char *SymbolName; // For USE_Symbol
   } Data;
 
-  PointerIntPair<VASTWire*, 2, VASTUseTy> User;// VASTUseTy
+  PointerIntPair<VASTValue*, 2, VASTUseTy> User;// VASTUseTy
   friend class VASTWire;
 
   VASTUseTy getUseKind() const { return User.getInt(); }
+  void setUseKind(VASTUseTy K) { User.setInt(K); }
+
+  friend struct ilist_sentinel_traits<VASTUse>;
 public:
+  VASTUse() : User(0, Invalid) {}
+  bool isInvalid() const { return getUseKind() == Invalid; }
+
   // The bit range of this value.
   /*const*/ unsigned UB :8;
   /*const*/ unsigned LB :8;
@@ -135,39 +114,50 @@ public:
     Data.V = v;
   }
 
-  VASTUse(VASTValue *v) : User(0, USE_Value), UB(v->getBitWidth()), LB(0) {
-    Data.V = v;
-  }
+  VASTUse(VASTValue *v);
 
   VASTUse(int64_t immVal, uint8_t width)
     : User(0, USE_Immediate), UB(width), LB(0) {
-    Data.ImmVal = immVal;
+      Data.ImmVal = immVal;
   }
 
   VASTUse(const char *S, uint8_t width)
     : User(0, USE_Symbol), UB(width), LB(0) {
-    Data.SymbolName = S;
+      Data.SymbolName = S;
   }
 
-  //const VASTRValue& operator=(const VASTRValue &RHS) {
-  //  if (&RHS == this) return *this;
+  VASTUse getBitSlice(unsigned UB, unsigned LB) const;
 
-  //  V = RHS.V;
-  //  UB = RHS.UB;
-  //  LB = RHS.LB;
-  //  return *this;
-  //}
+  void setUser(VASTValue *User);
+
+  VASTValue *getUser() const { return User.getPointer(); }
+
+  void set(const VASTUse &RHS) {
+    Data.V = RHS.Data.V;
+    UB = RHS.UB;
+    LB = RHS.LB;
+    setUseKind(RHS.getUseKind());
+  }
+
+  const VASTUse& operator=(const VASTUse &RHS) {
+    // Do not copy the parent.
+    set(RHS);
+    return *this;
+  }
+
+  VASTUse(const VASTUse &RHS) {
+    // Do not copy the parent.
+    set(RHS);
+  }
 
   //operator bool() const { return V != 0; }
-  bool operator==(VASTValue *RHS) const {
-    return getUseKind() == USE_Value && Data.V == RHS;
-  }
+  bool operator==(const VASTValue *RHS) const;
 
-  bool operator!=(VASTValue *RHS) const {
+  bool operator!=(const VASTValue *RHS) const {
     return !operator==(RHS);
   }
 
-  bool operator<(VASTUse RHS) const {
+  bool operator<(const VASTUse &RHS) const {
     if (getUseKind() != RHS.getUseKind())
       return getUseKind() < RHS.getUseKind();
 
@@ -203,6 +193,91 @@ public:
   unsigned getBitWidth() const { return UB - LB; }
   void print(raw_ostream &OS) const;
 };
+
+template<>
+struct ilist_traits<VASTUse> : public ilist_default_traits<VASTUse> {
+  static void deleteNode(VASTUse *U) {}
+
+  static bool inAnyList(const VASTUse *U) {
+    return U->getPrev() != 0 || U->getNext() != 0;
+  }
+};
+
+template<class IteratorType, class NodeType>
+class VASTUseIterator : public std::iterator<std::forward_iterator_tag,
+                                             NodeType*, ptrdiff_t> {
+    IteratorType I;   // std::vector<MSchedGraphEdge>::iterator or const_iterator
+    typedef VASTUseIterator<IteratorType, NodeType> Self;
+public:
+  VASTUseIterator(IteratorType i) : I(i) {}
+
+  bool operator==(const Self RHS) const { return I == RHS.I; }
+  bool operator!=(const Self RHS) const { return I != RHS.I; }
+
+  const Self &operator=(const Self &RHS) {
+    I = RHS.I;
+    return *this;
+  }
+
+  NodeType* operator*() const {
+    return I->getUser();
+  }
+
+  NodeType* operator->() const { return operator*(); }
+
+  Self& operator++() {                // Preincrement
+    ++I;
+    return *this;
+  }
+
+  VASTUseIterator operator++(int) { // Postincrement
+    VASTUseIterator tmp = *this;
+    ++*this;
+    return tmp;
+  }
+
+  VASTUse *get() { return I; }
+};
+
+// TODO: Change VASTValue to VASTNamedNode
+class VASTValue : public VASTNode {
+  const char *Name;
+
+  typedef iplist<VASTUse> UseListTy;
+  UseListTy UseList;
+protected:
+  VASTValue(VASTTypes DeclType, const char *name, unsigned BitWidth)
+    : VASTNode(DeclType, BitWidth), Name(name)
+  {
+    assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
+           && "Bad DeclType!");
+  }
+
+  void addUseToList(VASTUse *U) { UseList.push_back(U); }
+  void removeUseFromList(VASTUse *U) { UseList.remove(U); }
+  friend class VASTUse;
+public:
+  const char *getName() const { return Name; }
+  unsigned short getBitWidth() const { return getSubClassData(); }
+  bool isRegister() const { return getASTType() == vastRegister; }
+
+  typedef VASTUseIterator<UseListTy::iterator, VASTValue> use_iterator;
+  use_iterator use_begin() { return use_iterator(UseList.begin()); }
+  use_iterator use_end() { return use_iterator(UseList.end()); }
+
+  bool use_empty() const { return UseList.empty(); }
+
+  virtual void print(raw_ostream &OS) const;
+  virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  void printAsOperand(raw_ostream &OS) const {
+    printAsOperand(OS, getBitWidth(), 0);
+  }
+
+  bool replaceAllUseWith(VASTUse To);
+  void dropAllUses() { UseList.clear(); }
+};
+
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
 // using casting operators.
 template<> struct simplify_type<const VASTUse> {
@@ -217,6 +292,14 @@ template<> struct simplify_type<VASTUse> {
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
     return static_cast<SimpleType>(Val.get());
   }
+};
+
+class VASTSymbol : public VASTValue {
+public:
+  VASTSymbol(const char *Name, unsigned BitWidth)
+    : VASTValue(VASTNode::vastSymbol, Name, BitWidth) {}
+
+  virtual void print(raw_ostream &OS) const;
 };
 
 class VASTSignal : public VASTValue {
@@ -271,8 +354,8 @@ public:
 
 class VASTWire : public VASTSignal {
 public:
-  // Datapath opcode.
   enum Opcode {
+    // Datapath opcode.
     dpUnknown,
     // FU datapath
     dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
@@ -285,14 +368,22 @@ public:
     // Mux in datapath.
     dpMux,
     // Timing BlackBox, have latecy not capture by slots.
-    dpVarLatBB
+    dpVarLatBB,
+    // Register Assignment.
+    // Assignment condtion, Slot active signal should be included in ops if
+    // necessary.
+    cpAssignCnd
   };
 private:
   VASTUse *Ops;
+  // TODO: move to datapath.
+  union {
+    uint64_t Latency;
+    VASTSlot *Slot;
+  } Context;
+
   Opcode Opc;
   uint8_t NumOps;
-  // TODO: move to datapath.
-  uint8_t Latency;
 
   VASTWire(const VASTWire&);             // Do not implement
 
@@ -304,11 +395,29 @@ private:
   friend class VASTModule;
 
   void printAsOperandInteral(raw_ostream &OS) const;
+
+  void buildUseList();
+
+  void setSlot(VASTSlot *Slot) {
+    assert(getOpcode() == cpAssignCnd && "Call setSlot on bad wire type!");
+    Context.Slot = Slot;
+  }
 public:
-  bool hasExpr() const { return Opc != dpUnknown; }
+  bool hasExpr() const { return Ops != 0; }
+
+  unsigned getLatency() const {
+    assert(getOpcode() == dpVarLatBB && "Call getLatency on bad wire type!");
+    return Context.Latency;
+  }
 
   void setLatency(unsigned latency) {
-    Latency = latency;
+    assert(getOpcode() == dpVarLatBB && "Call setLatency on bad wire type!");
+    Context.Latency = latency;
+  }
+
+  VASTSlot *getSlot() const {
+    assert(getOpcode() == cpAssignCnd && "Call getSlot on bad wire type!");
+    return Context.Slot;
   }
 
   Opcode getOpcode() const { return Opc; }
@@ -323,7 +432,6 @@ public:
   op_iterator op_begin() const { return Ops; }
   op_iterator op_end() const { return Ops + NumOps; }
 
-  unsigned getLatency() const { return Latency; }
 
   // Print the logic to the output stream.
   void print(raw_ostream &OS) const;
@@ -371,8 +479,8 @@ public:
 private:
   // The relative signal of the slot: Slot register, Slot active and Slot ready.
   VASTRegister *SlotReg;
-  VASTWire     *SlotActive;
-  VASTWire     *SlotReady;
+  VASTUse       SlotActive;
+  VASTUse       SlotReady;
   // The ready signals that need to wait before we go to next slot.
   FUCtrlVecTy Readys;
   // The function units that enabled at this slot.
@@ -403,8 +511,8 @@ public:
   const char *getName() const;
   // Getting the relative signals.
   VASTRegister *getRegister() const { return SlotReg; }
-  VASTWire *getReady() const { return SlotReady; }
-  VASTWire *getActive() const { return SlotActive; }
+  VASTUse getReady() const { return SlotReady; }
+  VASTUse getActive() const { return SlotActive; }
 
   unsigned getSlotNum() const { return getSubClassData(); }
   // The start slot of parent state(MachineBasicBlock)
@@ -462,12 +570,9 @@ public:
 class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTUse> AndCndVec;
-  // The VASTWire should include the slot acttive signal.
-  typedef std::pair<VASTSlot*, VASTUse> AssignCndTy;
 private:
   unsigned InitVal;
-  typedef std::vector<AssignCndTy>  OrCndVec;
-  typedef std::map<VASTUse, OrCndVec> AssignMapTy;
+  typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns;
   // FIXME: We need a VAST live interval analysis pass to hold this.
   std::set<VASTSlot*, less_ptr<VASTSlot> > Slots;
@@ -479,15 +584,16 @@ private:
   // the slack is 0. But if we read the data at cycle 3, the slack is 1.
 
   // FIXME: These function should be the "SlackInfo" pass member function.
-  unsigned findSlackFrom(const VASTRegister *Src, const OrCndVec &AssignCnds);
+  unsigned findSlackFrom(const VASTRegister *Src, VASTSlot *UseSlot);
   // Find the nearest slot before Dst that assigning this register.
   VASTSlot *findNearestAssignSlot(VASTSlot *Dst) const;
-  void DepthFristTraverseDataPathUseTree(VASTUse Root, const OrCndVec &Cnds);
+  void DepthFristTraverseDataPathUseTree(VASTUse Root, VASTSlot *UseSlot);
+  void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
+
+  friend class VASTModule;
 public:
   VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
                const char *Attr = "");
-
-  void addAssignment(VASTUse Src, VASTUse Cnd, VASTSlot *S);
 
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;
@@ -500,7 +606,7 @@ public:
 
   // Compute the slack of the assignment.
   void computeAssignmentSlack();
-  void computeSlackThrough(VASTUse Src, const OrCndVec &AssignCnds);
+  void computeSlackThrough(VASTUse Def, VASTSlot *UseSlot);
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
@@ -527,7 +633,8 @@ private:
 
   std::string Name;
   BumpPtrAllocator Allocator;
-  typedef std::map<unsigned, VASTUse> RegIdxMapTy;
+  SpecificBumpPtrAllocator<VASTUse> UseAllocator;
+  typedef DenseMap<unsigned, VASTUse*> RegIdxMapTy;
   RegIdxMapTy RegsMap;
   typedef StringMap<VASTValue*> SymTabTy;
   SymTabTy SymbolTable;
@@ -600,7 +707,7 @@ public:
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
     assert(at != RegsMap.end() && "Signal not found!");
 
-    return at->second;
+    return *at->second;
   }
 
   VASTValue *getSymbol(const std::string &Name) const {
@@ -762,7 +869,9 @@ public:
                     const char *Attr = "");
 
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
-                     SmallVectorImpl<VASTUse> &Cnds);
+                     SmallVectorImpl<VASTUse> &Cnds, bool AddSlotActive = true);
+  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds,
+                           bool AddSlotActive = true);
 
   VASTUse indexVASTValue(unsigned RegNum, VASTUse V);
 
