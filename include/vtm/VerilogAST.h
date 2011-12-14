@@ -858,6 +858,9 @@ public:
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth, DstWire);
   }
 
+  VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                        unsigned BitWidth, VASTWire *DstWire);
+
   VASTUse buildNotExpr(VASTUse U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,

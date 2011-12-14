@@ -839,8 +839,47 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
   return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
+VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                                  unsigned BitWidth, VASTWire *DstWire) {
+  // Try to make RHS to be an constant.
+  if (LHS.isImm()) std::swap(LHS, RHS);
+
+  if (RHS.isImm()) {
+    VASTUse ValForRHSIsZero, ValForRHSIsAllOnes;
+    switch (Opc) {
+    default: break;
+    case VASTWire::dpAnd: {
+      ValForRHSIsZero = RHS;
+      ValForRHSIsAllOnes = LHS;
+      break;
+    }
+    case VASTWire::dpOr: {
+      ValForRHSIsZero = LHS;
+      ValForRHSIsAllOnes = RHS;
+      break;
+    }
+    }
+
+    if (RHS.getImm() == 0)
+      return buildExpr(VASTWire::dpAssign, ValForRHSIsZero, BitWidth, DstWire);
+
+    if (getBitSlice64(RHS.getImm(), BitWidth) == getBitSlice64(-1, BitWidth))
+      return buildExpr(VASTWire::dpAssign, ValForRHSIsAllOnes, BitWidth, DstWire);
+  }
+
+
+  VASTUse Ops[] = { LHS, RHS };
+  return buildExpr(Opc, Ops, BitWidth, DstWire);
+}
+
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                               unsigned BitWidth, VASTWire *DstWire) {
+  switch (Opc) {
+  default: break;
+  case VASTWire::dpAnd: case VASTWire::dpOr: case VASTWire::dpXor:
+    return buildLogicExpr(Opc, LHS, RHS, BitWidth, DstWire);
+  }
+
   VASTUse Ops[] = { LHS, RHS };
   return buildExpr(Opc, Ops, BitWidth, DstWire);
 }
