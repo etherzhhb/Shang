@@ -167,6 +167,8 @@ void FindShortestPath::Floyd() {
 }
 
 char FindShortestPath::ID = 0;
+const unsigned FindShortestPath::infinite = 100000;
+
 INITIALIZE_PASS_BEGIN(FindShortestPath, "FindShortestPath",
                       "FindShortestPath", false, false)
 INITIALIZE_PASS_END(FindShortestPath, "FindShortestPath",

@@ -67,7 +67,7 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  FindShortestPath() : MachineFunctionPass(ID), infinite(100000){
+  FindShortestPath() : MachineFunctionPass(ID) {
     initializeFindShortestPathPass(*PassRegistry::getPassRegistry());
   }
 };
