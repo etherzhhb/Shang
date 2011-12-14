@@ -907,7 +907,8 @@ void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
 
 void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
                            SmallVectorImpl<VASTUse> &Cnds) {
-  VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
+  VASTWire *Result = getAsLValue<VASTWire>(Op.getOperand(0));
+  assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
   VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(1));
@@ -918,7 +919,7 @@ void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
 
 void RTLCodegen::emitChainedOpAdd(ucOp &Op) {
   VASTWire *V = getAsLValue<VASTWire>(Op.getOperand(0));
-  if (V->hasExpr()) return;
+  if (!V || V->hasExpr()) return;
   VM->buildExpr(VASTWire::dpAdd,
                 getAsOperand(Op.getOperand(1)),
                 getAsOperand(Op.getOperand(2)),
@@ -933,7 +934,8 @@ void RTLCodegen::emitChainedOpICmp(ucOp &Op) {
 
 void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
                                 SmallVectorImpl<VASTUse> &Cnds) {
-  VASTWire *Result = cast<VASTWire>(getAsOperand(Op.getOperand(0)));
+  VASTWire *Result = getAsLValue<VASTWire>(Op.getOperand(0));
+  assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
   VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getOperand(1));
@@ -1252,14 +1254,14 @@ void RTLCodegen::emitDatapath(ucState &State) {
 }
 
 void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
-  VASTWire *V = cast<VASTWire>(getAsOperand(UnaOp.getOperand(0)));
-  if (V->hasExpr()) return;
+  VASTWire *V = getAsLValue<VASTWire>(UnaOp.getOperand(0));
+  if (!V || V->hasExpr()) return;
   VM->buildExpr(Opc, getAsOperand(UnaOp.getOperand(1)), V->getBitWidth(), V);
 }
 
 void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
-  VASTWire *V = cast<VASTWire>(getAsOperand(BinOp.getOperand(0)));
-  if (V->hasExpr()) return;
+  VASTWire *V = getAsLValue<VASTWire>(BinOp.getOperand(0));
+  if (!V || V->hasExpr()) return;
   VM->buildExpr(Opc,
                 getAsOperand(BinOp.getOperand(1)),
                 getAsOperand(BinOp.getOperand(2)),
