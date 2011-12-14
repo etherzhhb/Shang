@@ -307,7 +307,8 @@ void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
 
       const VASTSlot *AliasSlot = Mod.getSlot(slot);
       if (AliasSlot->hasNextSlot(getSlotNum())) {
-        assert(PredAliasSlots == 0 && "More than one PredAliasSlots found!");
+        assert(PredAliasSlots.isInvalid()
+               && "More than one PredAliasSlots found!");
         PredAliasSlots = AliasSlot->getActive();
       }
 
