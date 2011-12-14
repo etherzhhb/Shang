@@ -405,8 +405,6 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
 
   VM->printRegisterReset(Out);
   Out.else_begin();
-  // Also build the register assignments for Slot registers.
-  VM->printSlotCtrls(Out);
 
   VM->printRegisterAssign(Out);
   Out << VM->getControlBlockStr();

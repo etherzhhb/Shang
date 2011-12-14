@@ -298,7 +298,8 @@ bool VASTSlot::hasNextSlot(unsigned NextSlotNum) const {
   return NextSlots.count(NextSlotNum);
 }
 
-void VASTSlot::printCtrl(vlang_raw_ostream &CtrlS, VASTModule &Mod) {
+void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
+  vlang_raw_ostream &CtrlS = Mod.getControlBlockBuffer();
   // TODO: Build the AST for these logic.
   CtrlS.if_begin(getName());
   bool ReadyPresented = !readyEmpty();
@@ -781,16 +782,12 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
     (*I)->printAssignment(OS);
 }
 
-void VASTModule::printSlotCtrls(vlang_raw_ostream &CtrlS) {
-  CtrlS << "\n\n// Slot control flow\n";
-
-  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) S->printCtrl(CtrlS, *this);
-}
-
 void VASTModule::buildSlotLogic() {
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
-    if (VASTSlot *S = *I) S->buildReadyLogic(*this);
+    if (VASTSlot *S = *I) {
+      S->buildReadyLogic(*this);
+      S->buildCtrlLogic(*this);
+    }
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
