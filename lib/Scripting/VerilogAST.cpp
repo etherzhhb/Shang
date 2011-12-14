@@ -854,18 +854,8 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
 
     if (!DstWire) return Op;
 
-    // Update the use list of DstWire.
-    bool AllReplaced = DstWire->replaceAllUseWith(Op, &UpdatedUsers);
-    // Try to re-evaluate the users.
-    while (!UpdatedUsers.empty()) {
-      VASTWire *V = UpdatedUsers.back();
-      UpdatedUsers.pop_back();
-
-      buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth(), V);
-    }
-
     // The wire can be ignored if it is replaced in all its users.
-    if (AllReplaced) {
+    if (replaceAndUpdateUseTree(DstWire, Op)) {
       if (!DstWire->isPinned())
         DstWire->setExpr(0, 0, VASTWire::Dead);
       else {
@@ -955,6 +945,21 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
   }
 
   return createExpr(Opc, Ops, BitWidth, DstWire);
+}
+
+bool VASTModule::replaceAndUpdateUseTree(VASTValue *From, VASTUse To) {
+  SmallVector<VASTWire*, 8> UpdatedUsers;
+  // Update the use list of DstWire.
+  bool AllReplaced = From->replaceAllUseWith(To, &UpdatedUsers);
+  // Try to re-evaluate the users.
+  while (!UpdatedUsers.empty()) {
+    VASTWire *V = UpdatedUsers.back();
+    UpdatedUsers.pop_back();
+
+    buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth(), V);
+  }
+
+  return AllReplaced;
 }
 
 VASTWire *VASTModule::updateExpr(VASTWire *W, VASTWire::Opcode Opc,

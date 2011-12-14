@@ -881,6 +881,7 @@ public:
 
   VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                         unsigned BitWidth, VASTWire *DstWire);
+  bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
   VASTWire *updateExpr(VASTWire *W, VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops);
 
