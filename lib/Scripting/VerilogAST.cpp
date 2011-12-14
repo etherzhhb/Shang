@@ -717,8 +717,8 @@ VASTWire::VASTWire(const char *Name, unsigned BitWidth, const char *Attr,
 }
 
 void VASTWire::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
-  assert(!hasExpr() && "Expression already existed!");
-  assert(numOps && "Unexpected empty operand list!");
+  assert(((numOps && !hasExpr()) || opc  == Dead)
+         && "Cannot set expression!");
   Ops = ops;
   NumOps = numOps;
   Opc = opc;
@@ -752,8 +752,12 @@ VASTModule::~VASTModule() {
 
 void VASTModule::printDatapath(raw_ostream &OS) const{
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
-       I != E; ++I)
+       I != E; ++I) {
+    VASTWire *W = *I;
+    if (W->isDead()) continue;
+
     (*I)->print(OS);
+  }
 }
 
 void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
@@ -788,7 +792,10 @@ void VASTModule::printModuleDecl(raw_ostream &OS) const {
 void VASTModule::printSignalDecl(raw_ostream &OS) {
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
-    (*I)->printDecl(OS);
+    VASTWire *W = *I;
+    if (W->isDead()) continue;
+
+    W->printDecl(OS);
     OS << "\n";
   }
 
@@ -811,6 +818,33 @@ VASTUse VASTModule::buildNotExpr(VASTUse U) {
   return buildExpr(VASTWire::dpNot, U, U.getBitWidth());
 }
 
+bool VASTModule::replaceAllUseWith(VASTWire *From, VASTUse To,
+                                   SmallVectorImpl<VASTWire*> &Users) {
+  assert(To.getBitWidth() == From->getBitWidth() && "Bitwidth not match!");
+  // Nothing to replace.
+  if (From->use_empty()) return false;
+
+  typedef VASTValue::use_iterator it;
+  for (it I = From->use_begin(), E = From->use_end(); I != E; /*++I*/) {
+    VASTUse *U = I.get();
+    ++I;
+    VASTUse NewU = To.getBitSlice(U->UB, U->LB);
+    if (!NewU.isInvalid()) {
+      // Unlink from old list.
+      From->removeUseFromList(U);
+      VASTValue *User = U->getUser();
+      // Move to new list.
+      U->set(NewU);
+      U->setUser(User);
+      // We will re-calualte the user later.
+      if (VASTWire *W = dyn_cast_or_null<VASTWire>(User))
+        Users.push_back(W);
+    }
+  }
+
+  return From->use_empty();
+}
+
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
                               unsigned BitWidth, VASTWire *DstWire) {
   switch (Opc) {
@@ -827,11 +861,29 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
                        Op.getBitWidth(), DstWire);
     break;
   }
-  case VASTWire::dpAssign:
+  case VASTWire::dpAssign: {
+    SmallVector<VASTWire*, 8> UpdatedUsers;
     // Do not mess up with empty use wire, which may be pins.
-    if (!DstWire || DstWire->replaceAllUseWith(Op))
+    if (!DstWire) return Op;
+
+    // Update the use list of DstWire.
+    bool AllReplaced = replaceAllUseWith(DstWire, Op, UpdatedUsers);
+
+    while (!UpdatedUsers.empty()) {
+      VASTWire *V = UpdatedUsers.back();
+      UpdatedUsers.pop_back();
+
+      buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth(), V);
+    }
+
+    // The wire can be ignored if it is replaced in all its users.
+    if (AllReplaced) {
+      DstWire->setExpr(0, 0, VASTWire::Dead);
       return Op;
+    }
+
     break;
+  }
   default: break;
   }
 
@@ -869,7 +921,7 @@ VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RH
 
 
   VASTUse Ops[] = { LHS, RHS };
-  return buildExpr(Opc, Ops, BitWidth, DstWire);
+  return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
@@ -881,7 +933,7 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
   }
 
   VASTUse Ops[] = { LHS, RHS };
-  return buildExpr(Opc, Ops, BitWidth, DstWire);
+  return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
 VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op0, VASTUse Op1,
@@ -901,18 +953,40 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
   case VASTWire::dpAnd: case VASTWire::dpOr: {
     if (Ops.size() == 1)
       return buildExpr(VASTWire::dpAssign, Ops[0], BitWidth, DstWire);
+    else if(Ops.size() == 2)
+      return buildLogicExpr(Opc, Ops[0], Ops[1], BitWidth, DstWire);
     break;
   }
   }
+
   return createExpr(Opc, Ops, BitWidth, DstWire);
+}
+
+VASTWire *VASTModule::updateExpr(VASTWire *W, VASTWire::Opcode Opc,
+                                 ArrayRef<VASTUse> Ops) {
+  assert(W->num_operands() <= Ops.size()
+         && "Unexpected number operands increased!");
+
+  std::uninitialized_copy(Ops.begin(), Ops.end(), W->Ops);
+  W->setExpr(W->Ops, Ops.size(), Opc);
+
+  return W;
 }
 
 VASTWire *VASTModule::createExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
                                  unsigned BitWidth, VASTWire *DstWire) {
   assert(!Ops.empty() && "Unexpected empty expression");
+
+  if (DstWire && DstWire->hasExpr()) {
+    // We are re-evaluating an expression but nothing changed.
+    if (DstWire->getOpcode() == Opc && DstWire->num_operands() == Ops.size())
+      return DstWire;
+
+    return updateExpr(DstWire, Opc, Ops);
+  }
+
   VASTUse *OpArray = UseAllocator.Allocate(Ops.size());
   std::uninitialized_copy(Ops.begin(), Ops.end(), OpArray);
-
   if (DstWire) {
     DstWire->setExpr(OpArray, Ops.size(), Opc);
     return DstWire;
@@ -1308,26 +1382,26 @@ void VASTWire::printAsOperandInteral(raw_ostream &OS) const {
   switch (Opc) {
   case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
   case cpAssignCnd:
-  case dpAnd: printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " & "); break;
-  case dpOr:  printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " | "); break;
-  case dpXor: printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " ^ "); break;
+  case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;
+  case dpOr:  printSimpleUnsignedOp(OS, getOperands(), " | "); break;
+  case dpXor: printSimpleUnsignedOp(OS, getOperands(), " ^ "); break;
 
   case dpRAnd:  printUnaryOp(OS, getOperand(0), "&");  break;
   case dpROr:   printUnaryOp(OS, getOperand(0), "|");  break;
   case dpRXor:  printUnaryOp(OS, getOperand(0), "^");  break;
 
-  case dpSCmp:  printCmpFU(OS, UseArray(Ops, NumOps), printSignedOperand); break;
-  case dpUCmp:  printCmpFU(OS, UseArray(Ops, NumOps), printUnsignedOperand); break;
+  case dpSCmp:  printCmpFU(OS, getOperands(), printSignedOperand); break;
+  case dpUCmp:  printCmpFU(OS, getOperands(), printUnsignedOperand); break;
 
-  case dpAdd: printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " + "); break;
-  case dpMul: printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " * "); break;
-  case dpShl: printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " << ");break;
-  case dpSRL: printSimpleUnsignedOp(OS, UseArray(Ops, NumOps), " >> ");break;
-  case dpSRA: printSRAOp(OS, UseArray(Ops, NumOps));                                    break;
+  case dpAdd: printSimpleUnsignedOp(OS, getOperands(), " + "); break;
+  case dpMul: printSimpleUnsignedOp(OS, getOperands(), " * "); break;
+  case dpShl: printSimpleUnsignedOp(OS, getOperands(), " << ");break;
+  case dpSRL: printSimpleUnsignedOp(OS, getOperands(), " >> ");break;
+  case dpSRA: printSRAOp(OS, getOperands());                                    break;
   case dpAssign: getOperand(0).print(OS);     break;
 
-  case dpBitCat:    printBitCat(OS, UseArray(Ops, NumOps));    break;
-  case dpBitRepeat: printBitRepeat(OS, UseArray(Ops, NumOps)); break;
+  case dpBitCat:    printBitCat(OS, getOperands());    break;
+  case dpBitRepeat: printBitRepeat(OS, getOperands()); break;
 
   default: llvm_unreachable("Unknown datapath opcode!"); break;
   }

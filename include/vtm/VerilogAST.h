@@ -361,6 +361,7 @@ public:
 class VASTWire : public VASTSignal {
 public:
   enum Opcode {
+    Dead,
     // Datapath opcode.
     dpUnknown,
     // FU datapath
@@ -410,6 +411,7 @@ private:
   }
 public:
   bool hasExpr() const { return Ops != 0; }
+  bool isDead() const { return Opc == Dead; }
 
   unsigned getLatency() const {
     assert(getOpcode() == dpVarLatBB && "Call getLatency on bad wire type!");
@@ -438,6 +440,9 @@ public:
   op_iterator op_begin() const { return Ops; }
   op_iterator op_end() const { return Ops + NumOps; }
 
+  ArrayRef<VASTUse> getOperands() const {
+    return ArrayRef<VASTUse>(Ops, NumOps);
+  }
 
   // Print the logic to the output stream.
   void print(raw_ostream &OS) const;
@@ -860,6 +865,10 @@ public:
 
   VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                         unsigned BitWidth, VASTWire *DstWire);
+
+  bool replaceAllUseWith(VASTWire *W, VASTUse To,
+                         SmallVectorImpl<VASTWire*> &Users);
+  VASTWire *updateExpr(VASTWire *W, VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops);
 
   VASTUse buildNotExpr(VASTUse U);
 
