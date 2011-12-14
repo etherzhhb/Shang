@@ -885,7 +885,7 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
   return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
-VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
+VASTUse VASTModule::buildBinLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                                   unsigned BitWidth, VASTWire *DstWire) {
   // Try to make RHS to be an constant.
   if (LHS.isImm()) std::swap(LHS, RHS);
@@ -923,7 +923,7 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
   switch (Opc) {
   default: break;
   case VASTWire::dpAnd: case VASTWire::dpOr: case VASTWire::dpXor:
-    return buildLogicExpr(Opc, LHS, RHS, BitWidth, DstWire);
+    return buildBinLogicExpr(Opc, LHS, RHS, BitWidth, DstWire);
   }
 
   VASTUse Ops[] = { LHS, RHS };
@@ -948,7 +948,7 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
     if (Ops.size() == 1)
       return buildExpr(VASTWire::dpAssign, Ops[0], BitWidth, DstWire);
     else if(Ops.size() == 2)
-      return buildLogicExpr(Opc, Ops[0], Ops[1], BitWidth, DstWire);
+      return buildBinLogicExpr(Opc, Ops[0], Ops[1], BitWidth, DstWire);
     break;
   }
   }

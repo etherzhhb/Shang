@@ -890,7 +890,7 @@ public:
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth, DstWire);
   }
 
-  VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
+  VASTUse buildBinLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
                         unsigned BitWidth, VASTWire *DstWire);
   bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
