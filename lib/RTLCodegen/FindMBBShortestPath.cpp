@@ -120,7 +120,6 @@ void FindShortestPath::InitPath() {
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock *SrcMBB = I;
     unsigned TolalSlot = FInfo->getTotalSlotFor(SrcMBB);
-    unsigned IISlot = FInfo->getIISlotFor(SrcMBB);
 
     // assign 0 to the same MBB.
     getDistance(SrcMBB, SrcMBB) = 0;
@@ -175,4 +174,4 @@ INITIALIZE_PASS_END(FindShortestPath, "FindShortestPath",
                     "FindShortestPath", false, false)
 Pass *llvm::createFindShortestPathPass() {
   return new FindShortestPath();
-};
+}
