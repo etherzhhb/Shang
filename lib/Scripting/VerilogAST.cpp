@@ -609,7 +609,8 @@ int VASTRegister::findNearestAssignSlot(VASTSlot *UseSlot,
 
     if (SlotDistance < NearestSlotDistance) {
       NearestSlotDistance = SlotDistance;
-      assert(NearestSlotDistance != -1 && "we can not reach the slot!!!");
+      assert(NearestSlotDistance != FindShortestPath::infinite
+             && "we can not reach the slot!!!");
       NearestDef = Src;
     }
   }
