@@ -81,7 +81,8 @@ void LuaScript::init() {
         luabind::value("FDS", SynSettings::FDS),
         luabind::value("FDLS", SynSettings::FDLS),
         luabind::value("ILP", SynSettings::ILP),
-        luabind::value("ASAP", SynSettings::ASAP)
+        luabind::value("ASAP", SynSettings::ASAP),
+        luabind::value("SDC", SynSettings::SDC)
       ],
 
     BindingTraits<VASTPort>::register_("VASTPort"),

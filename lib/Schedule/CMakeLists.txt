@@ -6,7 +6,6 @@ include_directories(
 )
 
 add_llvm_library(VTMSchedule
-  CompGraph.cpp
   ForceDirectedScheduling.cpp
   ILPScheduling.cpp
   SchedulingBase.cpp
@@ -17,7 +16,8 @@ add_llvm_library(VTMSchedule
   RecurrenceFinder.cpp
   VPreRegAllocSched.cpp
   VRegAllocSimple.cpp
-)
+  SDCScheduler.cpp
+  )
 
 target_link_libraries (
 	VTMSchedule
