@@ -65,7 +65,8 @@ FunctionPass *createSimpleRegisterAllocator();
 Pass *createFindShortestPathPass();
 
 // RTL code generation.
-Pass *createRTLCodegenPass(raw_ostream &O);
+Pass *createVerilogASTBuilderPass(raw_ostream &O);
+Pass *createVerilogASTWriterPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
 
 Pass *createScriptingPass(const char *Name, const char *FScript,
@@ -86,7 +87,8 @@ void initializeStackToGlobalPass(PassRegistry &Registry);
 
 void initializeFindShortestPathPass(PassRegistry &Registry);
 
-void initializeRTLCodegenPass(PassRegistry &Registry);
+void initializeVerilogASTBuilderPass(PassRegistry &Registry);
+void initializeVerilogASTWriterPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry); 
 
 void initializeRAPass(PassRegistry &Registry);

@@ -145,7 +145,8 @@ int main(int argc, char **argv) {
   // Find the shortest path.
   PM.add(createFindShortestPathPass());
   // Generate the code.
-  PM.add(createRTLCodegenPass(S->getOutputStream("RTLOutput")));
+  PM.add(createVerilogASTBuilderPass(S->getOutputStream("RTLOutput")));
+  PM.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();

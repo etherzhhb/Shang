@@ -13,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the RTLCodegen pass, which write VTM machine instructions
+// This file implement the VerilogASTBuilder pass, which write VTM machine instructions
 // in form of RTL verilog code.
 //
 //===----------------------------------------------------------------------===//
@@ -26,7 +26,6 @@
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
-#include "vtm/FindMBBShortestPath.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
@@ -55,7 +54,7 @@ using namespace llvm;
 STATISTIC(TotalRegisterBits,
           "Number of total register bits in synthesised modules");
 namespace {
-class RTLCodegen : public MachineFunctionPass {
+class VerilogASTBuilder : public MachineFunctionPass {
   vlang_raw_ostream Out;
 
   const Module *M;
@@ -66,7 +65,6 @@ class RTLCodegen : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VASTModule *VM;
   Mangler *Mang;
-  FindShortestPath *FindSP;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
@@ -281,18 +279,12 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  RTLCodegen(raw_ostream &O);
-  RTLCodegen() : MachineFunctionPass(ID) {
+  VerilogASTBuilder(raw_ostream &O);
+  VerilogASTBuilder() : MachineFunctionPass(ID) {
     assert( 0 && "Cannot construct the class without the raw_stream!");
   }
 
-  ~RTLCodegen();
-
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    AU.addRequired<FindShortestPath>();
-    AU.addPreserved<FindShortestPath>();
-  }
+  ~VerilogASTBuilder();
 
   bool doInitialization(Module &M);
 
@@ -311,24 +303,24 @@ public:
 }
 
 //===----------------------------------------------------------------------===//
-char RTLCodegen::ID = 0;
+char VerilogASTBuilder::ID = 0;
 
-Pass *llvm::createRTLCodegenPass(raw_ostream &O) {
-  return new RTLCodegen(O);
+Pass *llvm::createVerilogASTBuilderPass(raw_ostream &O) {
+  return new VerilogASTBuilder(O);
 }
 
-INITIALIZE_PASS_BEGIN(RTLCodegen, "vtm-rtl-info",
+INITIALIZE_PASS_BEGIN(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
                       "Build RTL Verilog module for synthesised function.",
                       false, true)
-INITIALIZE_PASS_END(RTLCodegen, "vtm-rtl-info",
+INITIALIZE_PASS_END(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-RTLCodegen::RTLCodegen(raw_ostream &O) : MachineFunctionPass(ID), Out(O) {
-  initializeRTLCodegenPass(*PassRegistry::getPassRegistry());
+VerilogASTBuilder::VerilogASTBuilder(raw_ostream &O) : MachineFunctionPass(ID), Out(O) {
+  initializeVerilogASTBuilderPass(*PassRegistry::getPassRegistry());
 }
 
-bool RTLCodegen::doInitialization(Module &Mod) {
+bool VerilogASTBuilder::doInitialization(Module &Mod) {
   MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
   TD = getAnalysisIfAvailable<TargetData>();
 
@@ -337,25 +329,14 @@ bool RTLCodegen::doInitialization(Module &Mod) {
   Mang = new Mangler(MMI->getContext(), *TD);
   M = &Mod;
 
-  SMDiagnostic Err;
-  const char *GlobalScriptPath[] = { "Misc", "RTLGlobalScript" };
-  std::string GlobalScript = getStrValueFromEngine(GlobalScriptPath);
-  if (!runScriptOnGlobalVariables(Mod, TD, GlobalScript, Err))
-    report_fatal_error("RTLCodegen: Cannot run globalvariable script:\n"
-                        + Err.getMessage());
-
-  const char *GlobalCodePath[] = { "RTLGlobalCode" };
-  std::string GlobalCode = getStrValueFromEngine(GlobalCodePath);
-  Out << GlobalCode << '\n';
-
   return false;
 }
 
-bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
+bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
-  FindSP = &getAnalysis<FindShortestPath>();
+
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
@@ -387,57 +368,19 @@ bool RTLCodegen::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
-  // Pass the FindShortestPath Pointer to the VASTModule.
-  VM->InitFindShortestPathPointer(FindSP);
-  // Building the Slot active signals.
-  // FIXME: It is in fact simply printing the logic out.
-  VM->buildSlotLogic();
-
-  // TODO: Optimize the RTL net list.
-  // FIXME: Do these in seperate passes.
-
-  VM->eliminateConstRegisters();
-
-  // Write buffers to output
-  VM->printModuleDecl(Out);
-  Out.module_begin();
-  Out << "\n\n";
-  // Reg and wire
-  Out << "// Reg and wire decl\n";
-  VM->printSignalDecl(Out);
-  Out << "\n\n";
-  // Datapath
-  Out << "// Datapath\n";
-  Out << VM->getDataPathStr();
-  VM->printDatapath(Out);
-
-  Out << "\n\n";
-  Out << "// Always Block\n";
-  Out.always_ff_begin();
-
-  VM->printRegisterReset(Out);
-  Out.else_begin();
-
-  VM->printRegisterAssign(Out);
-  Out << VM->getControlBlockStr();
-
-  Out.always_ff_end();
-
-  Out.module_end();
-  Out.flush();
-
+ 
   return false;
 }
 
-void RTLCodegen::clear() {
+void VerilogASTBuilder::clear() {
   VM = 0;
 }
 
-void RTLCodegen::print(raw_ostream &O, const Module *M) const {
+void VerilogASTBuilder::print(raw_ostream &O, const Module *M) const {
 
 }
 
-void RTLCodegen::emitFunctionSignature(const Function *F) {
+void VerilogASTBuilder::emitFunctionSignature(const Function *F) {
   raw_ostream &S = VM->getDataPathBuffer();
   unsigned FNNum = FInfo->getCalleeFNNum(F->getName());
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
@@ -472,7 +415,7 @@ void RTLCodegen::emitFunctionSignature(const Function *F) {
   emitCommonPort(FNNum);
 }
 
-void RTLCodegen::emitIdleState() {
+void VerilogASTBuilder::emitIdleState() {
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
@@ -487,7 +430,7 @@ void RTLCodegen::emitIdleState() {
   emitFirstCtrlState(EntryBB, IdleSlot, Cnds);
 }
 
-void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
+void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned startSlot = FInfo->getStartSlotFor(&MBB);
   unsigned IISlot = FInfo->getIISlotFor(&MBB);
   unsigned II = IISlot - startSlot;
@@ -524,7 +467,7 @@ void RTLCodegen::emitBasicBlock(MachineBasicBlock &MBB) {
   }
 }
 
-void RTLCodegen::emitCommonPort(unsigned FNNum) {
+void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
   if (FNNum == 0) { // If F is current function.
     VM->addInputPort("clk", 1, VASTModule::Clk);
     VM->addInputPort("rstN", 1, VASTModule::RST);
@@ -543,7 +486,7 @@ void RTLCodegen::emitCommonPort(unsigned FNNum) {
   }
 }
 
-void RTLCodegen::emitAllocatedFUs() {
+void VerilogASTBuilder::emitAllocatedFUs() {
   //for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
   //     E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
   // FIXME: In fact, *I return the FUId instead of FUNum.
@@ -630,7 +573,7 @@ void RTLCodegen::emitAllocatedFUs() {
   }
 }
 
-VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
+VASTValue *VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
   std::string ResultName = "addsub" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
@@ -644,7 +587,7 @@ VASTValue *RTLCodegen::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   return Result;
 }
 
-VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
+VASTValue *VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
   std::string ResultName = "mult" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
 
@@ -660,7 +603,7 @@ VASTValue *RTLCodegen::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi)
   return Result;
 }
 
-VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
+VASTValue *VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
                                    VASTWire::Opcode Opc) {
   std::string ResultName = "shift" + utostr_32(FUNum);
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
@@ -671,7 +614,7 @@ VASTValue *RTLCodegen::emitFUShift(unsigned FUNum, unsigned BitWidth,
   return Result;
 }
 
-VASTValue *RTLCodegen::emitFUCmp(unsigned FUNum, unsigned BitWidth,
+VASTValue *VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
                                  bool isSigned) {
   std::string ResultName = "cmp" + utostr_32(FUNum);
   if (isSigned)  ResultName = "s" + ResultName;
@@ -687,7 +630,7 @@ VASTValue *RTLCodegen::emitFUCmp(unsigned FUNum, unsigned BitWidth,
   return Result;
 }
 
-void RTLCodegen::emitAllSignals() {
+void VerilogASTBuilder::emitAllSignals() {
   for (unsigned i = 0, e = TRI->num_phyreg(); i != e; ++i) {
     unsigned RegNum = i + 1;
     VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RegNum);
@@ -756,7 +699,7 @@ void RTLCodegen::emitAllSignals() {
   emitSignals(VTM::WireRegisterClass, false);
 }
 
-void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
+void VerilogASTBuilder::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
   // And Emit the wires defined in this module.
   const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
 
@@ -778,10 +721,10 @@ void RTLCodegen::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
 }
 
 
-RTLCodegen::~RTLCodegen() {}
+VerilogASTBuilder::~VerilogASTBuilder() {}
 
 //===----------------------------------------------------------------------===//
-void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
+void VerilogASTBuilder::emitCtrlOp(ucState &State, PredMapTy &PredMap,
                             unsigned II, bool Pipelined){
   assert(State->getOpcode() == VTM::Control && "Bad ucState!");
   MachineBasicBlock *CurBB = State->getParent();
@@ -873,7 +816,7 @@ void RTLCodegen::emitCtrlOp(ucState &State, PredMapTy &PredMap,
   }
 }
 
-void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
+void VerilogASTBuilder::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
                                     SmallVectorImpl<VASTUse> &Cnds) {
   // TODO: Emit PHINodes if necessary.
   ucState FirstState = *DstBB->getFirstNonPHI();
@@ -901,7 +844,7 @@ void RTLCodegen::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
   }
 }
 
-void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
                                    SmallVectorImpl<VASTUse> &Cnds) {
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   std::string PredStr;
@@ -916,7 +859,7 @@ void RTLCodegen::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
   Slot->addNextSlot(0);
 }
 
-void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpAdd(ucOp &Op, VASTSlot *Slot,
                            SmallVectorImpl<VASTUse> &Cnds) {
   VASTWire *Result = getAsLValue<VASTWire>(Op.getOperand(0));
   assert(Result && "FU result port replaced?");
@@ -928,7 +871,7 @@ void RTLCodegen::emitOpAdd(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(Op.getOperand(3)), Slot, Cnds);
 }
 
-void RTLCodegen::emitChainedOpAdd(ucOp &Op) {
+void VerilogASTBuilder::emitChainedOpAdd(ucOp &Op) {
   VASTWire *V = getAsLValue<VASTWire>(Op.getOperand(0));
   if (!V || V->hasExpr()) return;
   VM->buildExpr(VASTWire::dpAdd,
@@ -938,12 +881,12 @@ void RTLCodegen::emitChainedOpAdd(ucOp &Op) {
                 V->getBitWidth(), V);
 }
 
-void RTLCodegen::emitChainedOpICmp(ucOp &Op) {
+void VerilogASTBuilder::emitChainedOpICmp(ucOp &Op) {
   unsigned CC = Op.getOperand(3).getImm();
   emitBinaryOp(Op, CC == VFUs::CmpSigned ? VASTWire::dpSCmp : VASTWire::dpUCmp);
 }
 
-void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
                                 SmallVectorImpl<VASTUse> &Cnds) {
   VASTWire *Result = getAsLValue<VASTWire>(Op.getOperand(0));
   assert(Result && "FU result port replaced?");
@@ -953,13 +896,13 @@ void RTLCodegen::emitBinaryFUOp(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(Op.getOperand(2)), Slot, Cnds);
 }
 
-void RTLCodegen::emitImplicitDef(ucOp &ImpDef) {
+void VerilogASTBuilder::emitImplicitDef(ucOp &ImpDef) {
   //VASTDatapath *data = VM->createDatapath();
   //VASTDatapath::builder_stream &OS = data->getCodeBuffer();
   //OS << "// IMPLICIT_DEF " << ImpDef.getOperand(0) << "\n";
 }
 
-void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpSel(ucOp &Op, VASTSlot *Slot,
                            SmallVectorImpl<VASTUse> &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   // Assign the value for condition true.
@@ -972,7 +915,7 @@ void RTLCodegen::emitOpSel(ucOp &Op, VASTSlot *Slot,
   Cnds.pop_back();
 }
 
-void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpCase(ucOp &Op, VASTSlot *Slot,
                             SmallVectorImpl<VASTUse> &Cnds) {
   // Check if we got any case hitted
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
@@ -1001,7 +944,7 @@ void RTLCodegen::emitOpCase(ucOp &Op, VASTSlot *Slot,
   OS.exit_block() << "\n";
 }
 
-void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpCopy(ucOp &Op, VASTSlot *Slot,
                             SmallVectorImpl<VASTUse> &Cnds) {
   ucOperand &Dst = Op.getOperand(0), &Src = Op.getOperand(1);
   // Ignore the identical copy.
@@ -1011,7 +954,7 @@ void RTLCodegen::emitOpCopy(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(Src), Slot, Cnds);
 }
 
-void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
+void VerilogASTBuilder::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
                               SmallVectorImpl<VASTUse> &Cnds) {
   FuncUnitId Id = Op->getFUId();
   VASTValue *ReadyPort = 0;
@@ -1036,13 +979,13 @@ void RTLCodegen::emitOpReadFU(ucOp &Op, VASTSlot *CurSlot,
   if (Op.getOperand(0).isReg()) emitOpCopy(Op, CurSlot, Cnds);
 }
 
-void RTLCodegen::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpReadReturn(ucOp &Op, VASTSlot *Slot,
                                   SmallVectorImpl<VASTUse> &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(Op.getOperand(0)));
   VM->addAssignment(R, getAsOperand(Op.getOperand(1)), Slot, Cnds);
 }
 
-void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
                                     SmallVectorImpl<VASTUse> &Cnds) {
   // Assign input port to some register.
   const char *CalleeName = Op.getOperand(1).getSymbolName();
@@ -1140,7 +1083,7 @@ void RTLCodegen::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
   OS.exit_block();
 }
 
-void RTLCodegen::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
+void VerilogASTBuilder::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
                            SmallVectorImpl<VASTUse> &Cnds) {
   // Go back to the idle slot.
   VASTUse Pred = createCondition(Op.getPredicate());
@@ -1148,7 +1091,7 @@ void RTLCodegen::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
   CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
 }
 
-void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
                               SmallVectorImpl<VASTUse> &Cnds) {
   VASTRegister &RetReg = cast<VASTRegister>(*VM->getRetPort());
   unsigned retChannel = Op.getOperand(1).getImm();
@@ -1156,7 +1099,7 @@ void RTLCodegen::emitOpRetVal(ucOp &Op, VASTSlot *Slot,
   VM->addAssignment(&RetReg, getAsOperand(Op.getOperand(0)), Slot, Cnds);
 }
 
-void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
                                 SmallVectorImpl<VASTUse> &Cnds) {
   unsigned FUNum = Op->getFUId().getFUNum();
 
@@ -1190,7 +1133,7 @@ void RTLCodegen::emitOpMemTrans(ucOp &Op, VASTSlot *Slot,
   NextSlot->addDisable(MemEn, Pred);
 }
 
-void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
+void VerilogASTBuilder::emitOpBRam(ucOp &Op, VASTSlot *Slot,
                             SmallVectorImpl<VASTUse> &Cnds) {
   unsigned FUNum = Op.getOperand(0).getReg();
 
@@ -1236,7 +1179,7 @@ void RTLCodegen::emitOpBRam(ucOp &Op, VASTSlot *Slot,
   NextSlot->addDisable(MemEn, Pred);
 }
 
-void RTLCodegen::emitDatapath(ucState &State) {
+void VerilogASTBuilder::emitDatapath(ucState &State) {
   assert(State->getOpcode() == VTM::Datapath && "Bad ucState!");
 
   for (ucState::iterator I = State.begin(), E = State.end(); I != E; ++I) {
@@ -1265,13 +1208,13 @@ void RTLCodegen::emitDatapath(ucState &State) {
   }
 }
 
-void RTLCodegen::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
+void VerilogASTBuilder::emitUnaryOp(ucOp &UnaOp, VASTWire::Opcode Opc) {
   VASTWire *V = getAsLValue<VASTWire>(UnaOp.getOperand(0));
   if (!V || V->hasExpr()) return;
   VM->buildExpr(Opc, getAsOperand(UnaOp.getOperand(1)), V->getBitWidth(), V);
 }
 
-void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
+void VerilogASTBuilder::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
   VASTWire *V = getAsLValue<VASTWire>(BinOp.getOperand(0));
   if (!V || V->hasExpr()) return;
   VM->buildExpr(Opc,
@@ -1280,7 +1223,7 @@ void RTLCodegen::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
                 V->getBitWidth(), V);
 }
 
-void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
+void VerilogASTBuilder::emitOpBitSlice(ucOp &OpBitSlice) {
   VASTWire *V = getAsLValue<VASTWire>(OpBitSlice.getOperand(0));
   if (!V || V->hasExpr()) return;
 
@@ -1303,7 +1246,7 @@ void RTLCodegen::emitOpBitSlice(ucOp &OpBitSlice) {
                 V->getBitWidth(), V);
 }
 
-VASTUse RTLCodegen::createCondition(ucOperand &Op) {
+VASTUse VerilogASTBuilder::createCondition(ucOperand &Op) {
   // Is there an always true predicate?
   if (VInstrInfo::isAlwaysTruePred(Op)) return VASTUse(true, 1);
 
@@ -1315,7 +1258,7 @@ VASTUse RTLCodegen::createCondition(ucOperand &Op) {
   return C;
 }
 
-void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTUse &Pred) {
+void VerilogASTBuilder::getPredValAtNextSlot(ucOp &Op, VASTUse &Pred) {
   // Get the predicate value at next slot, if the predicate operand is copied to
   // a register, use that register.
   ucOperand &PredCnd = Op.getPredicate();
@@ -1348,7 +1291,7 @@ void RTLCodegen::getPredValAtNextSlot(ucOp &Op, VASTUse &Pred) {
   }
 }
 
-VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
+VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     VASTUse V = VM->lookupSignal(Op.getReg());
@@ -1371,7 +1314,7 @@ VASTUse RTLCodegen::getAsOperand(ucOperand &Op) {
   return VM->getOrCreateSymbol(Name, 0);
 }
 
-void RTLCodegen::printOperand(ucOperand &Op, raw_ostream &OS) {
+void VerilogASTBuilder::printOperand(ucOperand &Op, raw_ostream &OS) {
   if(Op.isReg()){
     VASTUse U = getAsOperand(Op);
     U.print(OS);

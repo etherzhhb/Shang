@@ -1,7 +1,8 @@
 add_llvm_library(VTMRTLCodegen
   RTLCodegenPrepare.cpp
-  RTLCodegen.cpp
+  VerilogASTBuilder.cpp
   FindMBBShortestPath.cpp
+  VerilogASTWriter.cpp
 )
 
 add_dependencies(VTMRTLCodegen VerilogBackendTable_gen)
