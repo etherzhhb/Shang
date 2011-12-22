@@ -20,7 +20,12 @@ FIND_PACKAGE(BOOST REQUIRED)
 FIND_PACKAGE(Lua REQUIRED)
 FIND_PACKAGE(LuaBind REQUIRED)
 FIND_PACKAGE(LpSolve REQUIRED)
+
+option(VBE_ENABLE_ABC
+       "Enable the Pre-schedule bitlevel optimization by ABC" OFF)
+if (VBE_ENABLE_ABC)
 FIND_PACKAGE(ABC REQUIRED)
+endif(VBE_ENABLE_ABC)
 
 macro(add_vbe_library name)
   set(srcs ${ARGN})

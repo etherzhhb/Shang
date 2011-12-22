@@ -1,11 +1,16 @@
+if (VBE_ENABLE_ABC)
+  set(BitLevelABCOpt LogicSynthesis/BitLevelABCOpt.cpp)
+endif (VBE_ENABLE_ABC)
+
 add_llvm_library(VTMBitLevelOpt
   BitLevelInfo.cpp
   BitLevelOpt.cpp 
-  BitLevelABCOpt.cpp
+  ${BitLevelABCOpt}
   )
 
 add_dependencies(VTMBitLevelOpt VerilogBackendTable_gen)
 
+if (VBE_ENABLE_ABC)
 include_directories(
   ${ABC_INCLUDE_DIR}
   ${ABC_INCLUDE_DIR}/aig/aig
@@ -42,9 +47,11 @@ include_directories(
   ${ABC_INCLUDE_DIR}/bdd/epd
   ${ABC_INCLUDE_DIR}/sat/bsat
   )
+endif (VBE_ENABLE_ABC)
 
-
+if (VBE_ENABLE_ABC)
 target_link_libraries (
 	VTMBitLevelOpt
 	${ABC_LIBRARY}
 )
+endif (VBE_ENABLE_ABC)
