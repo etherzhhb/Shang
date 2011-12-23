@@ -557,7 +557,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
 VASTValue *VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
-  std::string ResultName = "addsub" + utostr_32(FUNum);
+  std::string ResultName = "addsub" + utostr_32(FUNum) + "o";
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
   unsigned OperandWidth = BitWidth - 1;
 
@@ -570,7 +570,7 @@ VASTValue *VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
 }
 
 VASTValue *VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
-  std::string ResultName = "mult" + utostr_32(FUNum);
+  std::string ResultName = "mult" + utostr_32(FUNum) + "o";
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
 
   // No need to include the high part is included in the operand register.
@@ -587,7 +587,7 @@ VASTValue *VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool
 
 VASTValue *VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
                                    VASTWire::Opcode Opc) {
-  std::string ResultName = "shift" + utostr_32(FUNum);
+  std::string ResultName = "shift" + utostr_32(FUNum) + "o";
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
 
   VM->buildExpr(Opc, VM->addRegister(ResultName + "_a", BitWidth),
@@ -598,7 +598,7 @@ VASTValue *VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
 
 VASTValue *VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
                                  bool isSigned) {
-  std::string ResultName = "cmp" + utostr_32(FUNum);
+  std::string ResultName = "cmp" + utostr_32(FUNum) + "o";
   if (isSigned)  ResultName = "s" + ResultName;
   else           ResultName = "u" + ResultName;
 

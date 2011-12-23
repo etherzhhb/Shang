@@ -206,7 +206,7 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
 
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
-  SlotReg = VM->addRegister(SlotName, 1, slotNum == 0,
+  SlotReg = VM->addRegister(SlotName + "r", 1, slotNum == 0,
                         VASTModule::DirectClkEnAttr.c_str());
 
   VASTWire *Ready = VM->addWire(SlotName + "Ready", 1,
@@ -389,9 +389,9 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
             << Mod.getName()
             << " bad start %b\\n\", start);  $finish(); end\n";
 
-      CtrlS << "if (Slot0) begin $display(\"" << getName() << " in "
+      CtrlS << "if (Slot0r) begin $display(\"" << getName() << " in "
             << Mod.getName()
-            << " bad Slot0 %b\\n\", Slot0);  $finish(); end\n";
+            << " bad Slot0 %b\\n\", Slot0r);  $finish(); end\n";
     }
 
     CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
@@ -1144,9 +1144,11 @@ VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
   std::string Name;
 
   if (TargetRegisterInfo::isVirtualRegister(RegNum))
-    Name = "reg" + utostr_32(TargetRegisterInfo::virtReg2Index(RegNum));
+    Name = "v" + utostr_32(TargetRegisterInfo::virtReg2Index(RegNum));
   else
-    Name = "phy_reg" + utostr_32(RegNum);
+    Name = "p" + utostr_32(RegNum);
+
+  Name += "r";
 
   VASTRegister *R = addRegister(Name, BitWidth, 0, Attr);
   indexVASTValue(RegNum, R);
@@ -1171,7 +1173,7 @@ VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
 
   assert(TargetRegisterInfo::isVirtualRegister(WireNum)
          && "Unexpected physics register as wire!");
-  Name = "wire" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum));
+  Name = "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
 
   VASTWire *W = addWire(Name, BitWidth, Attr);
   indexVASTValue(WireNum, W);
