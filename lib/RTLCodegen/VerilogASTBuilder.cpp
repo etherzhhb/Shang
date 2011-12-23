@@ -503,8 +503,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     if (const Function *Callee = M->getFunction(I->getKey())) {
       if (!Callee->isDeclaration()) {
         S << getSynSetting(Callee->getName())->getModName() << ' '
-          << getSubModulePortName(I->second, "_inst")
-          << "(\n\t";
+          << I->getKey() << "_inst" << "(\n\t";
         MBBuilder.addSubModule(getSubModulePortName(I->second, "_inst"), S);
         emitFunctionSignature(Callee);
         S << ");\n";
