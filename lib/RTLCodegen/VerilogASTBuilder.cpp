@@ -55,7 +55,6 @@ STATISTIC(TotalRegisterBits,
           "Number of total register bits in synthesised modules");
 namespace {
 class VerilogASTBuilder : public MachineFunctionPass {
-  vlang_raw_ostream Out;
 
   const Module *M;
   MachineFunction *MF;
@@ -64,7 +63,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
-  Mangler *Mang;
 
   unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
@@ -288,11 +286,6 @@ public:
 
   bool doInitialization(Module &M);
 
-  bool doFinalization(Module &M) {
-    delete Mang;
-    return false;
-  }
-
   bool runOnMachineFunction(MachineFunction &MF);
 
   void releaseMemory() { clear(); }
@@ -316,17 +309,11 @@ INITIALIZE_PASS_END(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-VerilogASTBuilder::VerilogASTBuilder(raw_ostream &O) : MachineFunctionPass(ID), Out(O) {
+VerilogASTBuilder::VerilogASTBuilder(raw_ostream &O) : MachineFunctionPass(ID) {
   initializeVerilogASTBuilderPass(*PassRegistry::getPassRegistry());
 }
 
 bool VerilogASTBuilder::doInitialization(Module &Mod) {
-  MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
-  TD = getAnalysisIfAvailable<TargetData>();
-
-  assert(MMI && TD && "MachineModuleInfo and TargetData will always available"
-                      " in a machine function pass!");
-  Mang = new Mangler(MMI->getContext(), *TD);
   M = &Mod;
 
   return false;
@@ -334,18 +321,13 @@ bool VerilogASTBuilder::doInitialization(Module &Mod) {
 
 bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
+  TD = getAnalysisIfAvailable<TargetData>();
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
 
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
-
-  DEBUG(
-    Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
-    printVMF(Out, F);
-    Out << "`endif\n";
-  );
 
   SignedWireNum = 0;
   // Reset the current fsm state number.

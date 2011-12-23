@@ -22,32 +22,16 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"
-#include "vtm/LangSteam.h"
-#include "vtm/VRegisterInfo.h"
-#include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
 
-#include "llvm/Constants.h"
-#include "llvm/GlobalVariable.h"
-#include "llvm/Type.h"
 #include "llvm/Module.h"
 #include "llvm/Target/Mangler.h"
-#include "llvm/Target/TargetMachine.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
-#define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
@@ -57,16 +41,7 @@ namespace {
   class VerilogASTWriter : public MachineFunctionPass {
     vlang_raw_ostream Out;
 
-    const Module *M;
-    MachineFunction *MF;
     TargetData *TD;
-    VRegisterInfo *TRI;
-    VFInfo *FInfo;
-    MachineRegisterInfo *MRI;
-    VASTModule *VM;
-    Mangler *Mang;
-
-    void clear();
 
   public:
     /// @name FunctionPass interface
@@ -81,14 +56,8 @@ namespace {
 
     bool doInitialization(Module &M);
 
-    bool doFinalization(Module &M) {
-      delete Mang;
-      return false;
-    }
-
     bool runOnMachineFunction(MachineFunction &MF);
 
-    void releaseMemory() { clear(); }
   };
 
 }
@@ -112,13 +81,6 @@ INITIALIZE_PASS_BEGIN(VerilogASTWriter, "vtm-rtl-info",
 }
 
 bool VerilogASTWriter::doInitialization(Module &Mod) {
-  MachineModuleInfo *MMI = getAnalysisIfAvailable<MachineModuleInfo>();
-  TD = getAnalysisIfAvailable<TargetData>();
-
-  assert(MMI && TD && "MachineModuleInfo and TargetData will always available"
-    " in a machine function pass!");
-  Mang = new Mangler(MMI->getContext(), *TD);
-  M = &Mod;
 
   SMDiagnostic Err;
   const char *GlobalScriptPath[] = { "Misc", "RTLGlobalScript" };
@@ -135,11 +97,16 @@ bool VerilogASTWriter::doInitialization(Module &Mod) {
 }
 
 bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
-  MF = &F;
-  FInfo = MF->getInfo<VFInfo>();
-  MRI = &MF->getRegInfo();
+  TD = getAnalysisIfAvailable<TargetData>();
+  VFInfo *FInfo =F.getInfo<VFInfo>();
 
-  VM = FInfo->getRtlMod();
+  DEBUG(
+    Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
+  printVMF(Out, F);
+    Out << "`endif\n";
+  );
+
+  VASTModule *VM = FInfo->getRtlMod();
   // Building the Slot active signals.
   // FIXME: It is in fact simply printing the logic out.
   VM->buildSlotLogic();
@@ -177,10 +144,6 @@ bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
   Out.flush();
 
   return false;
-}
-
-void VerilogASTWriter::clear() {
-  VM = 0;
 }
 
 
