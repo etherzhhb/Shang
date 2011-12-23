@@ -81,6 +81,7 @@ INITIALIZE_PASS_BEGIN(VerilogASTWriter, "vtm-rtl-info",
 }
 
 bool VerilogASTWriter::doInitialization(Module &Mod) {
+  TD = getAnalysisIfAvailable<TargetData>();
 
   SMDiagnostic Err;
   const char *GlobalScriptPath[] = { "Misc", "RTLGlobalScript" };
@@ -97,7 +98,6 @@ bool VerilogASTWriter::doInitialization(Module &Mod) {
 }
 
 bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
-  TD = getAnalysisIfAvailable<TargetData>();
   VFInfo *FInfo =F.getInfo<VFInfo>();
 
   DEBUG(
