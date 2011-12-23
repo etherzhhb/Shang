@@ -187,8 +187,6 @@ private:
 
   SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue LowerMemAccess(SDValue Op, SelectionDAG &DAG, bool isStore) const;
-
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   /// ReplaceNodeResults - Replace the results of node with an illegal result
@@ -223,6 +221,8 @@ private:
   static SDValue LowerICmpForISel(SDNode *N, DAGCombinerInfo &DCI);
   static SDValue LowerUMUL_LOHIForISel(SDNode *N, DAGCombinerInfo &DCI);
   static SDValue LowerADDEForISel(SDNode *N, DAGCombinerInfo &DCI);
+  static SDValue LowerMemAccessISel(SDNode *N, DAGCombinerInfo &DCI,
+                                    bool isStore);
 };
 } // end namespace llvm
 
