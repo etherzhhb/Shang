@@ -95,6 +95,8 @@ private:
   const VRegisterInfo *getRegisterInfo() {
     return static_cast<const VTargetMachine&>(TM).getRegisterInfo();
   }
+
+  SDNode *LowerMemAccessISel(SDNode *N, SelectionDAG &DAG, bool isStore);
 };
 }  // end anonymous namespace
 
@@ -485,7 +487,95 @@ void VDAGToDAGISel::PostprocessISelDAG() {
   CurDAG->setRoot(Dummy.getValue());
 }
 
+SDNode *VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
+                                          bool isStore) {
+  LSBaseSDNode *LSNode = cast<LSBaseSDNode>(N);
+  // FIXME: Handle the index.
+  assert(LSNode->isUnindexed() && "Indexed load/store is not supported!");
+
+  EVT VT = LSNode->getMemoryVT();
+
+  unsigned VTSize = VT.getSizeInBits();
+
+  SDValue StoreVal = isStore ? cast<StoreSDNode>(LSNode)->getValue()
+                             : DAG.getTargetConstant(0, VT);
+
+  LLVMContext *Cntx = DAG.getContext();
+  EVT CmdVT = EVT::getIntegerVT(*Cntx, VFUMemBus::CMDWidth);
+  SDValue SDOps[] = {// The chain.
+                     LSNode->getChain(),
+                     // The Value to store (if any), and the address.
+                     LSNode->getBasePtr(), StoreVal,
+                     // Is load?
+                     DAG.getTargetConstant(isStore, CmdVT),
+                     // Byte enable.
+                     DAG.getTargetConstant(getByteEnable(VT.getStoreSize()),
+                                           MVT::i8)
+                    };
+
+  unsigned DataBusWidth = getFUDesc<VFUMemBus>()->getDataWidth();
+  assert(DataBusWidth >= VTSize && "Unexpected large data!");
+
+  MVT DataBusVT =
+    EVT::getIntegerVT(*DAG.getContext(), DataBusWidth).getSimpleVT();
+
+  DebugLoc dl = N->getDebugLoc();
+  SDValue Result  =
+    DAG.getMemIntrinsicNode(VTMISD::MemAccess, dl,
+                            // Result and the chain.
+                            DAG.getVTList(DataBusVT, MVT::Other),
+                            // SDValue operands
+                            SDOps, array_lengthof(SDOps),
+                            // Memory operands.
+                            LSNode->getMemoryVT(), LSNode->getMemOperand());
+
+  if (isStore)  {
+    DAG.ReplaceAllUsesOfValueWith(SDValue(N, 0), Result.getValue(1));
+    return Result.getNode();
+  }
+
+  SDValue Val = Result;
+  // Truncate the data bus, the system bus should place the valid data start
+  // from LSM.
+  if (DataBusWidth > VTSize)
+    Val = VTargetLowering::getTruncate(DAG, dl, Result, VTSize);
+
+  // Check if this an extend load.
+  LoadSDNode *LD = cast<LoadSDNode>(LSNode);
+  ISD::LoadExtType ExtType = LD->getExtensionType();
+  if (ExtType != ISD::NON_EXTLOAD) {
+    unsigned DstSize = LD->getValueSizeInBits(0);
+    Val = VTargetLowering::getExtend(DAG, dl, Val, DstSize,
+                                     ExtType == ISD::SEXTLOAD);
+  }
+
+  // Do we need to replace the result of the load operation?
+  SDValue NewValues[] = { Val, Result.getValue(1) };
+  DAG.ReplaceAllUsesWith(N, NewValues);
+  
+  return N;
+}
+
+
 void VDAGToDAGISel::PreprocessISelDAG() {
+  for (SelectionDAG::allnodes_iterator I = CurDAG->allnodes_begin(),
+       E = CurDAG->allnodes_end(); I != E; ) {
+    SDNode *N = I++;  // Preincrement iterator to avoid invalidation issues.
+  
+    switch (N->getOpcode()) {
+    default: break;
+    case ISD::LOAD:
+    case ISD::STORE:
+      // The node are going to be replace.
+      --I;
+      LowerMemAccessISel(N, *CurDAG, N->getOpcode() == ISD::STORE);
+      // Skip the node that going to deleted.
+      ++I;
+      CurDAG->DeleteNode(N);
+      break;
+    }
+  }
+
   const VTargetLowering *TLI =
     reinterpret_cast<const VTargetLowering*>(TM.getTargetLowering());
   TLI->isPreISel = true;

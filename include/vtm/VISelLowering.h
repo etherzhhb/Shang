@@ -221,8 +221,6 @@ private:
   static SDValue LowerICmpForISel(SDNode *N, DAGCombinerInfo &DCI);
   static SDValue LowerUMUL_LOHIForISel(SDNode *N, DAGCombinerInfo &DCI);
   static SDValue LowerADDEForISel(SDNode *N, DAGCombinerInfo &DCI);
-  static SDValue LowerMemAccessISel(SDNode *N, DAGCombinerInfo &DCI,
-                                    bool isStore);
 };
 } // end namespace llvm
 

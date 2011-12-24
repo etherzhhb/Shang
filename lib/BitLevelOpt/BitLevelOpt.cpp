@@ -1646,12 +1646,6 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case VTMISD::ROr:
   case VTMISD::RXor:
     return PerformReduceCombine(N, DCI);
-  case ISD::LOAD:
-    if (isPreISel) return LowerMemAccessISel(N, DCI, false);
-    break;
-  case ISD::STORE:
-    if (isPreISel) return LowerMemAccessISel(N, DCI, true);
-    break;
   }
 
   return SDValue();

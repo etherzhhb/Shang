@@ -193,9 +193,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::ADDE);
   setTargetDAGCombine(ISD::MUL);
   setTargetDAGCombine(ISD::UMUL_LOHI);
-
-  setTargetDAGCombine(ISD::LOAD);
-  setTargetDAGCombine(ISD::STORE);
 }
 
 MVT::SimpleValueType VTargetLowering::getSetCCResultType(EVT VT) const {
@@ -909,72 +906,6 @@ SDValue VTargetLowering::LowerADDEForISel(SDNode *N, DAGCombinerInfo &DCI) {
   DCI.CombineTo(N,
                 getBitSlice(DAG, dl, NewAdd, OpSize, 0),
                 getBitSlice(DAG, dl, NewAdd, OpSize + 1, OpSize));
-
-  return SDValue(N, 0);
-}
-
-
-SDValue VTargetLowering::LowerMemAccessISel(SDNode *N, DAGCombinerInfo &DCI,
-                                             bool isStore) {
-  SelectionDAG &DAG = DCI.DAG;
-  LSBaseSDNode *LSNode = cast<LSBaseSDNode>(N);
-  // FIXME: Handle the index.
-  assert(LSNode->isUnindexed() && "Indexed load/store is not supported!");
-
-  EVT VT = LSNode->getMemoryVT();
-
-  unsigned VTSize = VT.getSizeInBits();
-
-  SDValue StoreVal = isStore ? cast<StoreSDNode>(LSNode)->getValue()
-                             : DAG.getTargetConstant(0, VT);
-
-  LLVMContext *Cntx = DAG.getContext();
-  EVT CmdVT = EVT::getIntegerVT(*Cntx, VFUMemBus::CMDWidth);
-  SDValue SDOps[] = {// The chain.
-                     LSNode->getChain(),
-                     // The Value to store (if any), and the address.
-                     LSNode->getBasePtr(), StoreVal,
-                     // Is load?
-                     DAG.getTargetConstant(isStore, CmdVT),
-                     // Byte enable.
-                     DAG.getTargetConstant(getByteEnable(VT.getStoreSize()),
-                                           MVT::i8)
-                    };
-
-  unsigned DataBusWidth = getFUDesc<VFUMemBus>()->getDataWidth();
-  assert(DataBusWidth >= VTSize && "Unexpected large data!");
-
-  MVT DataBusVT =
-    EVT::getIntegerVT(*DAG.getContext(), DataBusWidth).getSimpleVT();
-
-  DebugLoc dl = N->getDebugLoc();
-  SDValue Result  =
-    DAG.getMemIntrinsicNode(VTMISD::MemAccess, dl,
-                            // Result and the chain.
-                            DAG.getVTList(DataBusVT, MVT::Other),
-                            // SDValue operands
-                            SDOps, array_lengthof(SDOps),
-                            // Memory operands.
-                            LSNode->getMemoryVT(), LSNode->getMemOperand());
-
-  if (isStore)  return Result.getValue(1);
-
-  SDValue Val = Result;
-  // Truncate the data bus, the system bus should place the valid data start
-  // from LSM.
-  if (DataBusWidth > VTSize)
-    Val = getTruncate(DAG, dl, Result, VTSize);
-
-  // Check if this an extend load.
-  LoadSDNode *LD = cast<LoadSDNode>(LSNode);
-  ISD::LoadExtType ExtType = LD->getExtensionType();
-  if (ExtType != ISD::NON_EXTLOAD) {
-    unsigned DstSize = LD->getValueSizeInBits(0);
-    Val = getExtend(DAG, dl, Val, DstSize, ExtType == ISD::SEXTLOAD);
-  }
-
-  // Do we need to replace the result of the load operation?
-  DCI.CombineTo(N, Val, Result.getValue(1));
 
   return SDValue(N, 0);
 }
