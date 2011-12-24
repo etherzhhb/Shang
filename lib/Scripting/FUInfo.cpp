@@ -146,7 +146,7 @@ VFUBRam::VFUBRam(luabind::object FUTable)
 // Dirty Hack: anchor from SynSettings.h
 SynSettings::SynSettings(StringRef Name, SynSettings &From)
   : PipeAlg(From.PipeAlg), SchedAlg(From.SchedAlg),
-  ModName(Name), HierPrefix(""), IsTopLevelModule(false) {}
+  ModName(Name), InstName(""), IsTopLevelModule(false) {}
 
 SynSettings::SynSettings(luabind::object SettingTable)
   : PipeAlg(SynSettings::DontPipeline),
@@ -159,8 +159,8 @@ SynSettings::SynSettings(luabind::object SettingTable)
     ModName = Result.get();
 
   if (boost::optional<std::string> Result =
-      luabind::object_cast_nothrow<std::string>(SettingTable["HierPrefix"]))
-    HierPrefix = Result.get();
+      luabind::object_cast_nothrow<std::string>(SettingTable["InstName"]))
+    InstName = Result.get();
 
   if (boost::optional<ScheduleAlgorithm> Result =
     luabind::object_cast_nothrow<ScheduleAlgorithm>(SettingTable["Scheduling"]))

@@ -43,7 +43,7 @@ private:
   // Rtl module name.
   std::string ModName;
   // Hierarchy prefix
-  std::string HierPrefix;
+  std::string InstName;
   bool IsTopLevelModule;
 
   friend class LuaScript;
@@ -59,7 +59,7 @@ public:
   ScheduleAlgorithm getScheduleAlgorithm() const { return SchedAlg; }
 
   const std::string &getModName() const { return ModName; }
-  const std::string &getHierPrefix() const { return HierPrefix; }
+  const std::string &getInstName() const { return InstName; }
 
   static inline const std::string getIfPostfix() { return "_if"; }
 };
