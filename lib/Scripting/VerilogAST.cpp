@@ -852,10 +852,13 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
         if (E->getOpcode() == VASTWire::dpNot)
           return buildExpr(VASTWire::dpAssign, E->getOperand(0),
                            BitWidth, DstWire);
-    if (Op.isImm())
+    if (Op.isImm()) {
+      unsigned Size = Op.getBitWidth();
       return buildExpr(VASTWire::dpAssign,
-                       VASTUse(~Op.getImm(), Op.getBitWidth()),
-                       Op.getBitWidth(), DstWire);
+                       VASTUse(getBitSlice64(~Op.getImm(), Size), Size),
+                       Size, DstWire);
+
+    }
     break;
   }
   case VASTWire::dpAssign: {
