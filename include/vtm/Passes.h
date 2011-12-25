@@ -65,7 +65,7 @@ FunctionPass *createSimpleRegisterAllocator();
 Pass *createFindShortestPathPass();
 
 // RTL code generation.
-Pass *createVerilogASTBuilderPass(raw_ostream &O);
+Pass *createVerilogASTBuilderPass();
 Pass *createVerilogASTWriterPass(raw_ostream &O);
 Pass *createRTLCodegenPreparePass();
 

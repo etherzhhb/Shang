@@ -40,7 +40,6 @@ STATISTIC(TotalRegisterBits,
 namespace {
   class VerilogASTWriter : public MachineFunctionPass {
     vlang_raw_ostream Out;
-
     TargetData *TD;
 
   public:
@@ -82,7 +81,6 @@ INITIALIZE_PASS_BEGIN(VerilogASTWriter, "vtm-rtl-info",
 
 bool VerilogASTWriter::doInitialization(Module &Mod) {
   TD = getAnalysisIfAvailable<TargetData>();
-
   SMDiagnostic Err;
   const char *GlobalScriptPath[] = { "Misc", "RTLGlobalScript" };
   std::string GlobalScript = getStrValueFromEngine(GlobalScriptPath);

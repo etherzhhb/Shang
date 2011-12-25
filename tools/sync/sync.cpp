@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
   // Find the shortest path.
   PM.add(createFindShortestPathPass());
   // Generate the code.
-  PM.add(createVerilogASTBuilderPass(S->getOutputStream("RTLOutput")));
+  PM.add(createVerilogASTBuilderPass());
   PM.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
   // Run some scripting passes.

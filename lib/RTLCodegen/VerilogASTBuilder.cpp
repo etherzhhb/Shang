@@ -55,7 +55,6 @@ STATISTIC(TotalRegisterBits,
           "Number of total register bits in synthesised modules");
 namespace {
 class VerilogASTBuilder : public MachineFunctionPass {
-
   const Module *M;
   MachineFunction *MF;
   TargetData *TD;
@@ -63,8 +62,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
-
-  unsigned TotalFSMStatesBit, CurFSMStateNum, SignedWireNum;
 
   // Mapping success fsm state to their predicate in current state.
   typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
@@ -212,7 +209,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
                          VASTWire::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
-  void clear();
 
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
@@ -277,9 +273,9 @@ public:
   /// @name FunctionPass interface
   //{
   static char ID;
-  VerilogASTBuilder(raw_ostream &O);
+
   VerilogASTBuilder() : MachineFunctionPass(ID) {
-    assert( 0 && "Cannot construct the class without the raw_stream!");
+    initializeVerilogASTBuilderPass(*PassRegistry::getPassRegistry());
   }
 
   ~VerilogASTBuilder();
@@ -288,7 +284,6 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  void releaseMemory() { clear(); }
   virtual void print(raw_ostream &O, const Module *M) const;
   //}
 };
@@ -298,8 +293,8 @@ public:
 //===----------------------------------------------------------------------===//
 char VerilogASTBuilder::ID = 0;
 
-Pass *llvm::createVerilogASTBuilderPass(raw_ostream &O) {
-  return new VerilogASTBuilder(O);
+Pass *llvm::createVerilogASTBuilderPass() {
+  return new VerilogASTBuilder();
 }
 
 INITIALIZE_PASS_BEGIN(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
@@ -309,13 +304,8 @@ INITIALIZE_PASS_END(VerilogASTBuilder, "vtm-rtl-info-VerilogASTBuilder",
                     "Build RTL Verilog module for synthesised function.",
                     false, true)
 
-VerilogASTBuilder::VerilogASTBuilder(raw_ostream &O) : MachineFunctionPass(ID) {
-  initializeVerilogASTBuilderPass(*PassRegistry::getPassRegistry());
-}
-
 bool VerilogASTBuilder::doInitialization(Module &Mod) {
   M = &Mod;
-
   return false;
 }
 
@@ -329,9 +319,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
 
-  SignedWireNum = 0;
   // Reset the current fsm state number.
-  CurFSMStateNum = 0;
 
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
@@ -350,12 +338,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
- 
   return false;
-}
-
-void VerilogASTBuilder::clear() {
-  VM = 0;
 }
 
 void VerilogASTBuilder::print(raw_ostream &O, const Module *M) const {
