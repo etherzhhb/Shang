@@ -47,6 +47,7 @@ class VASTSlot;
 class VASTWire;
 class VASTRegister;
 class VASTUse;
+class FindShortestPath;
 
 class VASTNode {
 public:
@@ -611,10 +612,13 @@ private:
   // the slack is 0. But if we read the data at cycle 3, the slack is 1.
 
   // FIXME: These function should be the "SlackInfo" pass member function.
-  unsigned findSlackFrom(const VASTRegister *Src, VASTSlot *UseSlot);
+  int findSlackFrom(const VASTRegister *Src, VASTSlot *UseSlot,
+                         FindShortestPath *FindSP);
   // Find the nearest slot before Dst that assigning this register.
-  VASTSlot *findNearestAssignSlot(VASTSlot *Dst) const;
-  void DepthFristTraverseDataPathUseTree(VASTUse Root, VASTSlot *UseSlot);
+  int findNearestAssignSlot(VASTSlot *Dst,
+                                  FindShortestPath *FindSP) const;
+  void DepthFristTraverseDataPathUseTree(VASTUse Root, VASTSlot *UseSlot,
+                                         FindShortestPath *FindSP);
   void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
 
   friend class VASTModule;
@@ -641,8 +645,9 @@ public:
   }
 
   // Compute the slack of the assignment.
-  void computeAssignmentSlack();
-  void computeSlackThrough(VASTUse Def, VASTSlot *UseSlot);
+  void computeAssignmentSlack(FindShortestPath *FindSP);
+  void computeSlackThrough(VASTUse Def, VASTSlot *UseSlot,
+                           FindShortestPath *FindSP);
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
@@ -686,6 +691,7 @@ private:
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
+  FindShortestPath *FindSP;
 
 public:
   static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
@@ -717,6 +723,7 @@ public:
 
   const std::string &getName() const { return Name; }
 
+  void InitFindShortestPathPointer(FindShortestPath *FindSPPointer);
   void printDatapath(raw_ostream &OS) const;
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 
@@ -890,8 +897,8 @@ public:
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth, DstWire);
   }
 
-  VASTUse buildBinLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                        unsigned BitWidth, VASTWire *DstWire);
+  VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                         unsigned BitWidth, VASTWire *DstWire);
   bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
   VASTWire *updateExpr(VASTWire *W, VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops);
