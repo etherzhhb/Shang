@@ -238,6 +238,13 @@ let isReMaterializable = 1,
     def VOpMultLoHi : FUInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
                              "$dst = $src1 * $src2;",
                              [], FUMult, 0 /*writeUntilFinish*/>;
+
+    def VOpMult_c : DPTvaInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
+                         "$dst = $src1 * $src2;",
+                         []>;
+    def VOpMultLoHi_c : DPTvaInst<(outs DR:$dst), (ins DR:$src1, DR:$src2),
+                             "$dst = $src1 * $src2;",
+                             []>;
   }
 
   def VOpSHL : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
@@ -250,6 +257,14 @@ let isReMaterializable = 1,
   def VOpSRA : FUInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                        "$dst = sra $src0, $src1", [], FUSHIFT,
                        0 /*writeUntilFinish*/>;
+
+  def VOpSHL_c : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+                           "$dst = shl $src0, $src1", []>;
+  def VOpSRL_c : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+                           "$dst = lsr $src0, $src1", []>;
+
+  def VOpSRA_c : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
+                           "$dst = sra $src0, $src1", []>;
 
   // Integer comparison
   let isCompare = 1 in

@@ -965,8 +965,14 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpAdd_c:
   case VTM::VOpAdd:         return LookupLatency<1>(VFUs::AdderLatencies, MI);
 
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
   case VTM::VOpMultLoHi:
   case VTM::VOpMult:        return LookupLatency<0>(VFUs::MultLatencies, MI);
+
+  case VTM::VOpSRA_c:
+  case VTM::VOpSRL_c:
+  case VTM::VOpSHL_c:
   case VTM::VOpSRA:
   case VTM::VOpSRL:
   case VTM::VOpSHL:         return LookupLatency<0>(VFUs::ShiftLatencies, MI);

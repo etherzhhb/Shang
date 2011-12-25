@@ -1158,6 +1158,12 @@ void VerilogASTBuilder::emitDatapath(ucState &State) {
     case VTM::VOpAdd_c:     emitChainedOpAdd(Op); break;
     case VTM::VOpICmp_c:    emitChainedOpICmp(Op); break;
 
+    case VTM::VOpSHL_c:     emitBinaryOp(Op, VASTWire::dpShl);  break;
+    case VTM::VOpSRA_c:     emitBinaryOp(Op, VASTWire::dpSRA);  break;
+    case VTM::VOpSRL_c:     emitBinaryOp(Op, VASTWire::dpSRL);  break;
+    case VTM::VOpMultLoHi_c:
+    case VTM::VOpMult_c:    emitBinaryOp(Op, VASTWire::dpMul);  break;
+
     case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor);  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);  break;
     case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);   break;

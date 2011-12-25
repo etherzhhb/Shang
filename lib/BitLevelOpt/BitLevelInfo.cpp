@@ -160,9 +160,9 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         // Fall through
       case VTM::Control:  case VTM::Datapath:
         continue;
-      case VTM::VOpSRA:
-      case VTM::VOpSRL:
-      case VTM::VOpSHL:
+      case VTM::VOpSRA: case VTM::VOpSRA_c:
+      case VTM::VOpSRL: case VTM::VOpSRL_c:
+      case VTM::VOpSHL: case VTM::VOpSHL_c:
         isShifts = true;
         break;
       }
@@ -291,7 +291,8 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
-  case VTM::VOpMult:
+
+  case VTM::VOpMult:  case VTM::VOpMult_c:
   case VTM::VOpOr:
   case VTM::VOpAnd:
   case VTM::VOpXor: {
@@ -302,7 +303,8 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
-  case VTM::VOpMultLoHi: {
+
+  case VTM::VOpMultLoHi: case VTM::VOpMultLoHi_c: {
     MachineOperand &Result = Instr->getOperand(0);
     unsigned Width = computeByOpWithSameWidth(Instr->operands_begin() + 1,
                                               Instr->operands_begin() + 3);
@@ -324,9 +326,9 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   // The bitwidth determinate by its first operand.
   case VTM::VOpMove_ri:
   case VTM::VOpNot:
-  case VTM::VOpSRA:
-  case VTM::VOpSRL:
-  case VTM::VOpSHL: {
+  case VTM::VOpSRA: case VTM::VOpSRA_c:
+  case VTM::VOpSRL: case VTM::VOpSRL_c:
+  case VTM::VOpSHL: case VTM::VOpSHL_c: {
     MachineOperand &Result = Instr->getOperand(0);
     unsigned Width = cast<ucOperand>(Instr->getOperand(1)).getBitWidth();
     if (updateBitWidth(Result, Width))
