@@ -49,8 +49,6 @@ namespace VTMISD {
 
 class VTargetLowering : public TargetLowering {
 public:
-  // Is the current stage is PreISel stage.?
-  mutable bool isPreISel;
   VTargetLowering(TargetMachine &TM);
 
   // TODO:
@@ -217,10 +215,6 @@ private:
 
   virtual bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
                                   unsigned Intrinsic) const;
-
-  static SDValue LowerICmpForISel(SDNode *N, DAGCombinerInfo &DCI);
-  static SDValue LowerUMUL_LOHIForISel(SDNode *N, DAGCombinerInfo &DCI);
-  static SDValue LowerADDEForISel(SDNode *N, DAGCombinerInfo &DCI);
 };
 } // end namespace llvm
 

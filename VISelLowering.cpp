@@ -62,7 +62,7 @@ EVT VTargetLowering::getRoundIntegerOrBitType(unsigned SizeInBit,
 //===----------------------------------------------------------------------===//
 
 VTargetLowering::VTargetLowering(TargetMachine &TM)
-  : TargetLowering(TM, new TargetLoweringObjectFileELF()), isPreISel(false) {
+  : TargetLowering(TM, new TargetLoweringObjectFileELF()) {
 
   setBooleanContents(UndefinedBooleanContent);
   setIntDivIsCheap(false);
@@ -812,100 +812,4 @@ void VTargetLowering::ComputeSignificantBitMask(SDValue Op, const APInt &Mask,
   DAG.ComputeMaskedBits(Op, SrcMask, KnownZero, KnownOne, Depth);
   KnownZero = KnownZero.zextOrTrunc(SignificantBitWidth);
   KnownOne = KnownOne.zextOrTrunc(SignificantBitWidth);
-}
-
-static unsigned getICmpPort(unsigned CC) {
-  switch (CC) {
-  case ISD::SETNE: return 1;
-  case ISD::SETEQ: return 2;
-  case ISD::SETGE: case ISD::SETUGE: return 3;
-  case ISD::SETGT: case ISD::SETUGT: return 4;
-  default: llvm_unreachable("Unexpected condition code!");
-  }
-}
-
-SDValue VTargetLowering::LowerICmpForISel(SDNode *N, DAGCombinerInfo &DCI) {
-  CondCodeSDNode *CCNode = dyn_cast<CondCodeSDNode>(N->getOperand(2));
-  // Aready lowered?
-  if (!CCNode) return SDValue();
-
-  SelectionDAG &DAG = DCI.DAG;
-  DebugLoc dl = N->getDebugLoc();
-  LLVMContext &Cntx = *DAG.getContext();
-
-  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
-  unsigned OpSize = VTargetLowering::computeSizeInBits(LHS);
-  assert(OpSize > 1 && "Unexpected 1bit comparison!");
-  EVT FUVT = EVT::getIntegerVT(Cntx, OpSize);
-  ISD::CondCode CC = CCNode->get();
-
-  switch (CC) {
-  case ISD::SETEQ:
-  case ISD::SETNE:
-  case ISD::SETGT:
-  case ISD::SETGE:
-  case ISD::SETUGT:
-  case ISD::SETUGE:
-    break;
-  case ISD::SETLT:
-  case ISD::SETLE:
-  case ISD::SETULT:
-  case ISD::SETULE:
-    CC = ISD::getSetCCSwappedOperands(CC);
-    std::swap(LHS, RHS);
-    break;
-  default: llvm_unreachable("Unexpected CondCode!");
-  }
-
-  unsigned CCNum = (CC == ISD::SETEQ || CC == ISD::SETNE) ? VFUs::CmpEQ
-                             : (ISD::isSignedIntSetCC(CC) ? VFUs::CmpSigned
-                                                          : VFUs::CmpUnsigned);
-
-  SDValue NewICmp = DAG.getNode(VTMISD::ICmp, dl, MVT::i8, LHS, RHS,
-                                DAG.getTargetConstant(CCNum, FUVT));
-  // Read the result from specific bit of the result.
-  unsigned ResultPort = getICmpPort(CC);
-
-  return VTargetLowering::getBitSlice(DAG, dl, NewICmp,
-                                      ResultPort + 1, ResultPort,
-                                      N->getValueSizeInBits(0));
-}
-
-SDValue VTargetLowering::LowerUMUL_LOHIForISel(SDNode *N, DAGCombinerInfo &DCI){
-  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
-  unsigned OpSize = computeSizeInBits(LHS);
-  unsigned MulSize = OpSize * 2;
-  assert(MulSize <= 64 && "Unsupported multiplier width!");
-
-  SelectionDAG &DAG = DCI.DAG;
-  DebugLoc dl = N->getDebugLoc();
-  LLVMContext &Cntx = *DAG.getContext();
-
-  EVT VT = LHS.getValueType(), NewVT = getRoundIntegerOrBitType(MulSize, Cntx);
-
-  SDValue NewMul = DAG.getNode(VTMISD::MULHiLo, dl, NewVT, LHS, RHS);
-
-  DCI.CombineTo(N,
-                getBitSlice(DAG, dl, NewMul, OpSize, 0),
-                getBitSlice(DAG, dl, NewMul, MulSize, OpSize));
-
-  return SDValue(N, 0);
-}
-
-SDValue VTargetLowering::LowerADDEForISel(SDNode *N, DAGCombinerInfo &DCI) {
-  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1), C = N->getOperand(2);
-  unsigned OpSize = computeSizeInBits(LHS);
-  unsigned AddSize = OpSize + 1;
-  SelectionDAG &DAG = DCI.DAG;
-  DebugLoc dl = N->getDebugLoc();
-  LLVMContext &Cntx = *DAG.getContext();
-
-  EVT VT = LHS.getValueType(), NewVT = getRoundIntegerOrBitType(AddSize, Cntx);
-  SDValue NewAdd = DAG.getNode(VTMISD::ADDCS, dl, NewVT, LHS, RHS, C);
-
-  DCI.CombineTo(N,
-                getBitSlice(DAG, dl, NewAdd, OpSize, 0),
-                getBitSlice(DAG, dl, NewAdd, OpSize + 1, OpSize));
-
-  return SDValue(N, 0);
 }

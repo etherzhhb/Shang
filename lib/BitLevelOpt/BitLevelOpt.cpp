@@ -1564,13 +1564,16 @@ SDValue PerformICmpSplit(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
 static
 SDValue PerfromICmpCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
-
   DebugLoc dl = N->getDebugLoc();
   SelectionDAG &DAG = DCI.DAG;
   LLVMContext &Cntx = *DAG.getContext();
   SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
 
-  CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
+  CondCodeSDNode *CCNode = dyn_cast<CondCodeSDNode>(N->getOperand(2));
+
+  // The node is already Lowered for ISel.
+  if (CCNode == 0) return SDValue();
+
   ISD::CondCode CC = CCNode->get();
 
   uint64_t LHSVal, RHSVal;
@@ -1620,16 +1623,12 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, DCI);
   case ISD::ADDE:
-    if (isPreISel) return LowerADDEForISel(N, DCI);
-    else           return PerformAddCombine(N, DCI);
+    return PerformAddCombine(N, DCI);
   case ISD::UMUL_LOHI:
-    if (isPreISel) return LowerUMUL_LOHIForISel(N, DCI);
-    // Else fall though.
   case ISD::MUL:
     return PerformMulCombine(N, DCI);
   case VTMISD::ICmp:
-    if (isPreISel) return LowerICmpForISel(N, DCI);
-    else           return PerfromICmpCombine(N, DCI);
+    return PerfromICmpCombine(N, DCI);
   case ISD::ROTL:
   case ISD::ROTR:
   case ISD::SHL:

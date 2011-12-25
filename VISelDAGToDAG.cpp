@@ -96,7 +96,12 @@ private:
     return static_cast<const VTargetMachine&>(TM).getRegisterInfo();
   }
 
-  SDNode *LowerMemAccessISel(SDNode *N, SelectionDAG &DAG, bool isStore);
+  void LowerMemAccessISel(SDNode *N, SelectionDAG &DAG, bool isStore);
+  void LowerADDEForISel(SDNode *N, SelectionDAG &DAG);
+  void LowerUMUL_LOHIForISel(SDNode *N, SelectionDAG &DAG);
+  // Return true if the node already lowered.
+  void LowerICmpForISel(SDNode *N, SelectionDAG &DAG);
+
 };
 }  // end anonymous namespace
 
@@ -487,8 +492,8 @@ void VDAGToDAGISel::PostprocessISelDAG() {
   CurDAG->setRoot(Dummy.getValue());
 }
 
-SDNode *VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
-                                          bool isStore) {
+void VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
+                                       bool isStore) {
   LSBaseSDNode *LSNode = cast<LSBaseSDNode>(N);
   // FIXME: Handle the index.
   assert(LSNode->isUnindexed() && "Indexed load/store is not supported!");
@@ -531,7 +536,7 @@ SDNode *VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
 
   if (isStore)  {
     DAG.ReplaceAllUsesOfValueWith(SDValue(N, 0), Result.getValue(1));
-    return Result.getNode();
+    return;
   }
 
   SDValue Val = Result;
@@ -552,33 +557,140 @@ SDNode *VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
   // Do we need to replace the result of the load operation?
   SDValue NewValues[] = { Val, Result.getValue(1) };
   DAG.ReplaceAllUsesWith(N, NewValues);
-  
-  return N;
 }
 
+void VDAGToDAGISel::LowerADDEForISel(SDNode *N, SelectionDAG &DAG) {
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1), C = N->getOperand(2);
+  unsigned OpSize = VTargetLowering::computeSizeInBits(LHS);
+  unsigned AddSize = OpSize + 1;
+  DebugLoc dl = N->getDebugLoc();
+  LLVMContext &Cntx = *DAG.getContext();
 
-void VDAGToDAGISel::PreprocessISelDAG() {
-  for (SelectionDAG::allnodes_iterator I = CurDAG->allnodes_begin(),
-       E = CurDAG->allnodes_end(); I != E; ) {
-    SDNode *N = I++;  // Preincrement iterator to avoid invalidation issues.
-  
-    switch (N->getOpcode()) {
-    default: break;
-    case ISD::LOAD:
-    case ISD::STORE:
-      // The node are going to be replace.
-      --I;
-      LowerMemAccessISel(N, *CurDAG, N->getOpcode() == ISD::STORE);
-      // Skip the node that going to deleted.
-      ++I;
-      CurDAG->DeleteNode(N);
-      break;
-    }
+  EVT VT = LHS.getValueType(),
+           NewVT = VTargetLowering::getRoundIntegerOrBitType(AddSize, Cntx);
+  SDValue NewAdd = DAG.getNode(VTMISD::ADDCS, dl, NewVT, LHS, RHS, C);
+  SDValue NewValues[] = {
+    VTargetLowering::getBitSlice(DAG, dl, NewAdd, OpSize, 0),
+    VTargetLowering::getBitSlice(DAG, dl, NewAdd, OpSize + 1, OpSize)
+  };
+
+  DAG.ReplaceAllUsesWith(N, NewValues);
+}
+
+void VDAGToDAGISel::LowerUMUL_LOHIForISel(SDNode *N, SelectionDAG &DAG){
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+  unsigned OpSize = VTargetLowering::computeSizeInBits(LHS);
+  unsigned MulSize = OpSize * 2;
+  assert(MulSize <= 64 && "Unsupported multiplier width!");
+
+  DebugLoc dl = N->getDebugLoc();
+  LLVMContext &Cntx = *DAG.getContext();
+
+  EVT VT = LHS.getValueType(),
+           NewVT = VTargetLowering::getRoundIntegerOrBitType(MulSize, Cntx);
+
+  SDValue NewMul = DAG.getNode(VTMISD::MULHiLo, dl, NewVT, LHS, RHS);
+  SDValue NewValues[] = {
+    VTargetLowering::getBitSlice(DAG, dl, NewMul, OpSize, 0),
+    VTargetLowering::getBitSlice(DAG, dl, NewMul, MulSize, OpSize)
+  };
+
+  DAG.ReplaceAllUsesWith(N, NewValues);
+}
+
+static unsigned getICmpPort(unsigned CC) {
+  switch (CC) {
+  case ISD::SETNE: return 1;
+  case ISD::SETEQ: return 2;
+  case ISD::SETGE: case ISD::SETUGE: return 3;
+  case ISD::SETGT: case ISD::SETUGT: return 4;
+  default: llvm_unreachable("Unexpected condition code!");
+  }
+}
+
+void VDAGToDAGISel::LowerICmpForISel(SDNode *N, SelectionDAG &DAG) {
+  CondCodeSDNode *CCNode = cast<CondCodeSDNode>(N->getOperand(2));
+
+  DebugLoc dl = N->getDebugLoc();
+  LLVMContext &Cntx = *DAG.getContext();
+
+  SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+  unsigned OpSize = VTargetLowering::computeSizeInBits(LHS);
+  //assert(OpSize > 1 && "Unexpected 1bit comparison!");
+  EVT FUVT = EVT::getIntegerVT(Cntx, OpSize);
+  ISD::CondCode CC = CCNode->get();
+
+  switch (CC) {
+  case ISD::SETEQ:
+  case ISD::SETNE:
+  case ISD::SETGT:
+  case ISD::SETGE:
+  case ISD::SETUGT:
+  case ISD::SETUGE:
+    break;
+  case ISD::SETLT:
+  case ISD::SETLE:
+  case ISD::SETULT:
+  case ISD::SETULE:
+    CC = ISD::getSetCCSwappedOperands(CC);
+    std::swap(LHS, RHS);
+    break;
+  default: llvm_unreachable("Unexpected CondCode!");
   }
 
-  const VTargetLowering *TLI =
-    reinterpret_cast<const VTargetLowering*>(TM.getTargetLowering());
-  TLI->isPreISel = true;
+  unsigned CCNum = (CC == ISD::SETEQ || CC == ISD::SETNE) ? VFUs::CmpEQ
+    : (ISD::isSignedIntSetCC(CC) ? VFUs::CmpSigned
+    : VFUs::CmpUnsigned);
+
+  SDValue NewICmp = DAG.getNode(VTMISD::ICmp, dl, MVT::i8, LHS, RHS,
+                                DAG.getTargetConstant(CCNum, FUVT));
+  // Read the result from specific bit of the result.
+  unsigned ResultPort = getICmpPort(CC);
+
+  DAG.ReplaceAllUsesWith(SDValue(N, 0),
+                         VTargetLowering::getBitSlice(DAG, dl, NewICmp,
+                                                      ResultPort + 1, ResultPort,
+                                                      N->getValueSizeInBits(0)));
+}
+
+void VDAGToDAGISel::PreprocessISelDAG() {
+  // Create a dummy node (which is not added to allnodes), that adds a reference
+  // to the root node, preventing it from being deleted, and tracking any
+  // changes of the root.
+  HandleSDNode Dummy(CurDAG->getRoot());
+
+  // The root of the dag may dangle to deleted nodes until the dag combiner is
+  // done.  Set it to null to avoid confusion.
+  CurDAG->setRoot(SDValue());
+
+  for (SelectionDAG::allnodes_iterator I = llvm::prior(CurDAG->allnodes_end()),
+       E = CurDAG->allnodes_begin(); I != E; /*--I*/) {
+    SDNode *N = I;
+
+    switch (N->getOpcode()) {
+    default: --I; continue;
+    case ISD::ADDE:
+      LowerADDEForISel(N, *CurDAG);
+      break;
+    case VTMISD::ICmp:
+      LowerICmpForISel(N, *CurDAG);
+      break;
+    case ISD::UMUL_LOHI:
+      LowerUMUL_LOHIForISel(N, *CurDAG);
+      break;
+    case ISD::LOAD:
+    case ISD::STORE:
+      LowerMemAccessISel(N, *CurDAG, N->getOpcode() == ISD::STORE);
+      break;
+    }
+
+    --I;
+    CurDAG->DeleteNode(N);
+  }
+
+  // If the root changed (e.g. it was a dead load, update the root).
+  CurDAG->setRoot(Dummy.getValue());
+
+  // Combine the bitslices produced by lower for ISel.
   CurDAG->Combine(NoIllegalOperations, *AA, OptLevel);
-  TLI->isPreISel = false;
 }
