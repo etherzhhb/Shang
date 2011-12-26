@@ -64,6 +64,9 @@ FunctionPass *createSimpleRegisterAllocator();
 // Find Shortest Path.
 Pass *createFindShortestPathPass();
 
+// Analyse the Combination Path Delay.
+Pass *createCombPathDelayAnalysisPass();
+
 // RTL code generation.
 Pass *createVerilogASTBuilderPass();
 Pass *createVerilogASTWriterPass(raw_ostream &O);
@@ -86,6 +89,8 @@ void initializeBitLevelABCOptPass(PassRegistry &Registry);
 void initializeStackToGlobalPass(PassRegistry &Registry);
 
 void initializeFindShortestPathPass(PassRegistry &Registry);
+
+void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
 
 void initializeVerilogASTBuilderPass(PassRegistry &Registry);
 void initializeVerilogASTWriterPass(PassRegistry &Registry);

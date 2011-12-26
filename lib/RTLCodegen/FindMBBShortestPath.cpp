@@ -11,7 +11,7 @@
 // weighted graph using Floyd¨CWarshall algorithm.
 //
 //===----------------------------------------------------------------------===//
-#include "vtm/FindMBBShortestPath.h"
+#include "FindMBBShortestPath.h"
 
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
@@ -32,32 +32,32 @@ bool FindShortestPath::runOnMachineFunction(MachineFunction &F) {
 }
 
 // Get the Key to PathVector according to the source and destination index
-unsigned FindShortestPath::getKey(unsigned src, unsigned dst) {
+unsigned FindShortestPath::getKey(unsigned Def, unsigned Use) {
   unsigned MBBNum = MF->getNumBlockIDs();
-  unsigned returnKey = src * MBBNum + dst;
+  unsigned returnKey = Def * MBBNum + Use;
   return returnKey;
 }
 
 // Get distance between the source MBB and the destination MBB.
-unsigned &FindShortestPath::getDistance(unsigned Src, unsigned Dst) {
-  unsigned Index = getKey(Src, Dst);
+unsigned &FindShortestPath::getDistance(unsigned DefIdx, unsigned UseIdx) {
+  unsigned Index = getKey(DefIdx, UseIdx);
   return PathVector[Index];
 }
 
 // Get distance between Two Slots.
-int FindShortestPath::getSlotDistance(VASTSlot *SrcSlot,
-                                           VASTSlot *DstSlot) {
+int FindShortestPath::getSlotDistance(VASTSlot *DefSlot,
+                                           VASTSlot *UseSlot) {
   signed SlotDistance;
 
-  unsigned SrcSlotStartIdx = SrcSlot->getParentIdx();
-  unsigned SrcSlotIdx = SrcSlot->getSlotNum();
-  unsigned SrcMBBNum = getMBBNum(SrcSlotStartIdx);
+  unsigned DefSlotStartIdx = DefSlot->getParentIdx();
+  unsigned DefSlotIdx = DefSlot->getSlotNum();
+  unsigned DefMBBNum = getMBBNum(DefSlotStartIdx);
 
-  unsigned DstSlotStartIdx = DstSlot->getParentIdx();
-  unsigned DstSlotIdx = DstSlot->getSlotNum();
-  unsigned DstMBBNum = getMBBNum(DstSlotStartIdx);
+  unsigned UseSlotStartIdx = UseSlot->getParentIdx();
+  unsigned UseSlotIdx = UseSlot->getSlotNum();
+  unsigned UseMBBNum = getMBBNum(UseSlotStartIdx);
 
-  unsigned MBBDistance = getDistance(SrcMBBNum, DstMBBNum);
+  unsigned MBBDistance = getDistance(DefMBBNum, UseMBBNum);
 
   // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
   // Return -1 which is the largest number in unsigned type.
@@ -68,11 +68,11 @@ int FindShortestPath::getSlotDistance(VASTSlot *SrcSlot,
   // when the slots are in different MBB. return the SlotDistance.
   // SlotDistance = MBBDistance - (SrcSlotIdx - SrcSlotStartIdx)
   //                            + (DstSlotIdx - DstSlotStartIdx)
-  if (SrcMBBNum != DstMBBNum) {
-    MBBDistance -= (SrcSlotIdx - SrcSlotStartIdx);
+  if (DefMBBNum != UseMBBNum) {
+    MBBDistance -= (DefSlotIdx - DefSlotStartIdx);
     assert(MBBDistance > 0 && "MBBDistance <= 0 !!!");
 
-    SlotDistance = MBBDistance + (DstSlotIdx - DstSlotStartIdx);
+    SlotDistance = MBBDistance + (UseSlotIdx - UseSlotStartIdx);
     assert(SlotDistance > 0 && "SlotDistance <= 0 !!!");
 
     return SlotDistance;
@@ -80,14 +80,14 @@ int FindShortestPath::getSlotDistance(VASTSlot *SrcSlot,
 
   // when the slots are in the same MBB and the SrcSlotIdx > DstSlotIdx, return
   // IISlot.
-  if (SrcSlotIdx > DstSlotIdx) {
+  if (DefSlotIdx > UseSlotIdx) {
     SlotDistance = MBBDistance;
     return (unsigned)SlotDistance;
   }
 
   // when the slots are in the same MBB and the SrcSlotIdx <= DstSlotIdx, return
   // DstSlotIdx - SrcSlotIdx.
-  SlotDistance = DstSlotIdx - SrcSlotIdx;
+  SlotDistance = UseSlotIdx - DefSlotIdx;
   assert(SlotDistance >= 0 && "SlotDistance < 0!");
 
   return (unsigned)SlotDistance;
@@ -118,17 +118,17 @@ void FindShortestPath::InitPath() {
 
   // Initial the PathVector with the Path.
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
-    MachineBasicBlock *SrcMBB = I;
-    unsigned TolalSlot = FInfo->getTotalSlotFor(SrcMBB);
+    MachineBasicBlock *DefMBB = I;
+    unsigned TolalSlot = FInfo->getTotalSlotFor(DefMBB);
 
     // assign 0 to the same MBB.
-    getDistance(SrcMBB, SrcMBB) = 0;
+    getDistance(DefMBB, DefMBB) = 0;
 
-    for (MachineBasicBlock::succ_iterator I = SrcMBB->succ_begin(), 
-         E = SrcMBB->succ_end(); I != E; ++I) {
-      MachineBasicBlock *DstMBB = *I;
-      if (SrcMBB == DstMBB) continue;
-      getDistance(SrcMBB, DstMBB) = TolalSlot;
+    for (MachineBasicBlock::succ_iterator I = DefMBB->succ_begin(),
+         E = DefMBB->succ_end(); I != E; ++I) {
+      MachineBasicBlock *UseMBB = *I;
+      if (DefMBB == UseMBB) continue;
+      getDistance(DefMBB, UseMBB) = TolalSlot;
     }
   }
 }
@@ -140,11 +140,11 @@ void FindShortestPath::Floyd() {
 
   // We use the Floyd algorithm to get the shortest path of two different MBBs.
   for (unsigned Mid = 0; Mid < MBBNum; ++Mid) {
-    for (unsigned Src = 0; Src < MBBNum; ++Src) {
-      for (unsigned Dst = 0; Dst < MBBNum; ++Dst) {
-        unsigned Src2DstIndex = getKey(Src, Dst);
-        unsigned Src2MidIndex = getKey(Src, Mid);
-        unsigned Mid2DstIndex = getKey(Mid, Dst);
+    for (unsigned Def = 0; Def < MBBNum; ++Def) {
+      for (unsigned Use = 0; Use < MBBNum; ++Use) {
+        unsigned Src2DstIndex = getKey(Def, Use);
+        unsigned Src2MidIndex = getKey(Def, Mid);
+        unsigned Mid2DstIndex = getKey(Mid, Use);
         if (PathVector[Src2MidIndex] + PathVector[Mid2DstIndex]
             < PathVector[Src2DstIndex])
           PathVector[Src2DstIndex]
@@ -152,15 +152,15 @@ void FindShortestPath::Floyd() {
       }
     }
   }
-  // if the SrcMBB == DstMBB, get the IISlot and assign it to the PathVector.
+  // if the DefMBB == UseMBB, get the IISlot and assign it to the PathVector.
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
-    MachineBasicBlock *SrcMBB = I;
-    unsigned IISlot = FInfo->getIISlotFor(SrcMBB);
-    for (MachineBasicBlock::succ_iterator I = SrcMBB->succ_begin(),
-         E = SrcMBB->succ_end(); I != E; ++I) {
-      MachineBasicBlock *DstMBB = *I;
-      if (SrcMBB != DstMBB) continue;
-      getDistance(SrcMBB, DstMBB) = IISlot;
+    MachineBasicBlock *DefMBB = I;
+    unsigned IISlot = FInfo->getIISlotFor(DefMBB);
+    for (MachineBasicBlock::succ_iterator I = DefMBB->succ_begin(),
+         E = DefMBB->succ_end(); I != E; ++I) {
+      MachineBasicBlock *UseMBB = *I;
+      if (DefMBB != UseMBB) continue;
+      getDistance(DefMBB, UseMBB) = IISlot;
     }
   }
 }

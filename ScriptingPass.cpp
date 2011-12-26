@@ -145,23 +145,7 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
   return runScriptStr(ScriptToRun, Err);
 }
 
-bool ScriptingPass::doInitialization(Module &M) {
-  TD = getAnalysisIfAvailable<TargetData>();
-  assert(TD && "TD not avaialbe?");
-
-  SMDiagnostic Err;
-  if (!runScriptOnGlobalVariables(M, TD, GlobalScript, Err))
-    report_fatal_error("In Scripting pass[" + PassName + "]:\n"
-                       + Err.getMessage());
-
-  return false;
-}
-
-bool ScriptingPass::doFinalization(Module &M) {
-  return false;
-}
-
-bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
+void llvm::bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD) {
   SMDiagnostic Err;
   // Push the function information into the script engine.
   // FuncInfo {
@@ -182,7 +166,7 @@ bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
   if (F->getReturnType()->isVoidTy())
     SS << '0';
   else
-    SS << TD->getTypeStoreSizeInBits(F->getReturnType());
+    SS << TD.getTypeStoreSizeInBits(F->getReturnType());
   SS << ", ";
 
   SS << "Args = { ";
@@ -190,12 +174,12 @@ bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
   if (F->arg_size()) {
     Function::const_arg_iterator I = F->arg_begin();
     SS << "{ Name = '" << I->getName() << "', Size = "
-       << TD->getTypeStoreSizeInBits(I->getType()) << "}";
+      << TD.getTypeStoreSizeInBits(I->getType()) << "}";
     ++I;
 
     for (Function::const_arg_iterator E = F->arg_end(); I != E; ++I)
       SS << " , { Name = '" << I->getName() << "', Size = "
-         << TD->getTypeStoreSizeInBits(I->getType()) << "}";
+      << TD.getTypeStoreSizeInBits(I->getType()) << "}";
   }
 
   SS << "} }";
@@ -206,7 +190,29 @@ bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
   Script.clear();
 
   bindToScriptEngine("CurModule", MF.getInfo<VFInfo>()->getRtlMod());
+}
 
+
+bool ScriptingPass::doInitialization(Module &M) {
+  TD = getAnalysisIfAvailable<TargetData>();
+  assert(TD && "TD not avaialbe?");
+
+  SMDiagnostic Err;
+  if (!runScriptOnGlobalVariables(M, TD, GlobalScript, Err))
+    report_fatal_error("In Scripting pass[" + PassName + "]:\n"
+                       + Err.getMessage());
+
+  return false;
+}
+
+bool ScriptingPass::doFinalization(Module &M) {
+  return false;
+}
+
+bool ScriptingPass::runOnMachineFunction(MachineFunction &MF) {
+  bindFunctionInfoToScriptEngine(MF, *TD);
+
+  SMDiagnostic Err;
   if (!runScriptStr(FunctionScript, Err))
     report_fatal_error("In Scripting pass[" + PassName + "]:\n"
                        + Err.getMessage());

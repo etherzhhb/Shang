@@ -1,38 +1,78 @@
+// FindMBBShortestPath.h -- find shortest paths in a weighted graph -- C++ -==//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This pass is a graph analysis algorithm for finding shortest paths in a
+// weighted graph using Floyd¨CWarshall algorithm.
+//
+//===----------------------------------------------------------------------===//
+#ifndef FINDMBBSHORTESTPATH_H
+#define FINDMBBSHORTESTPATH_H
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
+#include "vtm/VerilogAST.h"
+
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include <vector>
-using namespace llvm;
+#include <map>
 
-namespace{
-class FindShortestPath : public MachineFunctionPass{
-  
-  MachineFunction *MF;
-  VFInfo *FInfo;
+namespace llvm {
+  class VASTSlot;
+  class FindShortestPath : public MachineFunctionPass{
 
-  // Define a Vector to record the path.
-  std::vector<unsigned> PathVector;
+    MachineFunction *MF;
+    VFInfo *FInfo;
 
-  // Get the Key to PathVector according to the source and destination index
-  unsigned getKey(unsigned src, unsigned dst);
+    // Define a Vector to record the path.
+    std::vector<unsigned> PathVector;
 
-  // Initial the Path between two related Machine Basic Block.
-  void InitPath();
+    // Map StartSlot to MBB Number
+    std::map<unsigned, unsigned> StartSlotToMBBNumMap;
+    // Get the Key to PathVector according to the source and destination index
+    unsigned getKey(unsigned Def, unsigned Use);
 
-  // Use the Floyd Algorithm to find the shortest Path between two Machine Basic
-  // Block.
-  void Floyd();
+    // map the StartSlot to MBBNum.
+    void mapStartSlotToMBBNum();
 
-public:
+    // Get MBB number.
+    unsigned getMBBNum(unsigned SlotStartIdx);
 
-  static char ID;
-  // Get distance between the source MBB and the destination MBB.
-  unsigned getDistance(MachineBasicBlock *srcMBB, MachineBasicBlock *dstMBB);
+    // Initial the Path between two related Machine Basic Block.
+    void InitPath();
 
-  bool runOnMachineFunction(MachineFunction &MF);
+    // Use the Floyd Algorithm to find the shortest Path between two Machine Basic
+    // Block.
+    void Floyd();
 
-  FindShortestPath() : MachineFunctionPass(ID) {
-    initializeFindShortestPathPass(*PassRegistry::getPassRegistry());
-  }
-};
+  public:
+
+    static char ID;
+
+    // Initial the pathVector with infinite.
+    const static unsigned infinite;
+
+    // Get distance between the source MBB and the destination MBB.
+    unsigned &getDistance(unsigned DefIdx, unsigned UseIdx);
+    unsigned &getDistance(MachineBasicBlock *DefMBB, MachineBasicBlock *UseMBB){
+      return getDistance(DefMBB->getNumber(), UseMBB->getNumber());
+    }
+
+    // Get distance between Two Slots.
+    int getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot);
+    int getSlotDistance(VASTRegister *DefReg, VASTRegister *UseReg){
+
+    }
+
+    bool runOnMachineFunction(MachineFunction &MF);
+
+    FindShortestPath() : MachineFunctionPass(ID) {
+      initializeFindShortestPathPass(*PassRegistry::getPassRegistry());
+    }
+  };
 } // end anonymous.
+#endif

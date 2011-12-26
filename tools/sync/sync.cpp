@@ -154,6 +154,9 @@ int main(int argc, char **argv) {
   PM.add(createVerilogASTBuilderPass());
   PM.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
+  // Analyse the slack between registers.
+  PM.add(createCombPathDelayAnalysisPass());
+
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
        I != E; ++I) {

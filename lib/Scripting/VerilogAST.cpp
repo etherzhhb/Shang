@@ -470,45 +470,45 @@ void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
   Slots.insert(AssignCnd->getSlot());
 }
 
-static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path, unsigned Slack) {
-  assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
-  // Path table:
-  // Datapath: {
-  //  unsigned Slack,
-  //  table NodesInPath
-  // }
-  SMDiagnostic Err;
-
-  if (!runScriptStr("RTLDatapath = {}\n", Err))
-    llvm_unreachable("Cannot create RTLDatapath table in scripting pass!");
-
-  std::string Script;
-  raw_string_ostream SS(Script);
-  SS << "RTLDatapath.Slack = " << Slack;
-  SS.flush();
-  if (!runScriptStr(Script, Err))
-    llvm_unreachable("Cannot create slack of RTLDatapath!");
-
-  Script.clear();
-
-  SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
-  for (unsigned i = 1; i < Path.size(); ++i) {
-    // Skip the unnamed nodes.
-    const char *Name = Path[i].get()->getName();
-    if (Name) SS << "', '" << Name;
-  }
-  SS << "'}";
-
-  SS.flush();
-  if (!runScriptStr(Script, Err))
-    llvm_unreachable("Cannot create node table of RTLDatapath!");
-
-  // Get the script from script engine.
-  const char *DatapathScriptPath[] = { "Misc", "DatapathScript" };
-  if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
-    report_fatal_error("Error occur while running datapath script:\n"
-                       + Err.getMessage());
-}
+//static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path, unsigned Slack) {
+//  assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
+//  // Path table:
+//  // Datapath: {
+//  //  unsigned Slack,
+//  //  table NodesInPath
+//  // }
+//  SMDiagnostic Err;
+//
+//  if (!runScriptStr("RTLDatapath = {}\n", Err))
+//    llvm_unreachable("Cannot create RTLDatapath table in scripting pass!");
+//
+//  std::string Script;
+//  raw_string_ostream SS(Script);
+//  SS << "RTLDatapath.Slack = " << Slack;
+//  SS.flush();
+//  if (!runScriptStr(Script, Err))
+//    llvm_unreachable("Cannot create slack of RTLDatapath!");
+//
+//  Script.clear();
+//
+//  SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
+//  for (unsigned i = 1; i < Path.size(); ++i) {
+//    // Skip the unnamed nodes.
+//    const char *Name = Path[i].get()->getName();
+//    if (Name) SS << "', '" << Name;
+//  }
+//  SS << "'}";
+//
+//  SS.flush();
+//  if (!runScriptStr(Script, Err))
+//    llvm_unreachable("Cannot create node table of RTLDatapath!");
+//
+//  // Get the script from script engine.
+//  const char *DatapathScriptPath[] = { "Misc", "DatapathScript" };
+//  if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
+//    report_fatal_error("Error occur while running datapath script:\n"
+//                       + Err.getMessage());
+//}
 
 // Traverse the use tree in datapath, stop when we meet a register or other
 // leaf node.
@@ -560,7 +560,7 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
 
           DEBUG_WITH_TYPE("rtl-slack-info",
                            dbgs() << " Slack: " << int(Slack));
-          bindPath2ScriptEngine(NodeWorkStack, Slack);
+          //bindPath2ScriptEngine(NodeWorkStack, Slack);
         }
 
         DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
@@ -594,15 +594,15 @@ void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
 }
 
 int VASTRegister::findNearestAssignSlot(VASTSlot *UseSlot,
-                                           FindShortestPath *FindSP) const {
-  VASTSlot *NearestDef = 0;
+                                        FindShortestPath *FindSP) const {
+  VASTSlot *NearestDefSlot = 0;
   unsigned NearestSlotDistance = FindShortestPath::infinite;
   typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
   // FIXME: We can perform a binary search.
   for (SlotIt I = Slots.begin(), E = Slots.end(); I != E; ++I) {
-    VASTSlot *Src = *I;
+    VASTSlot *DefSlot = *I;
 
-    unsigned SlotDistance = FindSP->getSlotDistance(Src, UseSlot);
+    unsigned SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
 
     // if SlotDistance == 0, abandon this result.
     if (SlotDistance <= 0) continue;
@@ -611,7 +611,7 @@ int VASTRegister::findNearestAssignSlot(VASTSlot *UseSlot,
       NearestSlotDistance = SlotDistance;
       assert(NearestSlotDistance != FindShortestPath::infinite
              && "we can not reach the slot!!!");
-      NearestDef = Src;
+      NearestDefSlot = DefSlot;
     }
   }
 
@@ -619,12 +619,12 @@ int VASTRegister::findNearestAssignSlot(VASTSlot *UseSlot,
     NearestSlotDistance == FindShortestPath::infinite? -1 : NearestSlotDistance;
 }
 
-int VASTRegister::findSlackFrom(const VASTRegister *Src,
-                                   VASTSlot *UseSlot,
-                                   FindShortestPath *FindSP) {
+int VASTRegister::findSlackFrom(const VASTRegister *Def,
+                                VASTSlot *UseSlot,
+                                FindShortestPath *FindSP) {
   int Slack = ~0;
 
-  int NearestSlotDistance = Src->findNearestAssignSlot(UseSlot, FindSP);
+  int NearestSlotDistance = Def->findNearestAssignSlot(UseSlot, FindSP);
 
   if (NearestSlotDistance > 0)
     Slack = NearestSlotDistance;
@@ -641,14 +641,14 @@ void VASTRegister::computeSlackThrough(VASTUse Def, VASTSlot *UseSlot,
 
   // Trivial case.
   if (VASTRegister *R = dyn_cast<VASTRegister>(DefValue)) {
-    signed Slack = findSlackFrom(R, UseSlot, FindSP);
+    int Slack = findSlackFrom(R, UseSlot, FindSP);
     if (Slack >= 0) {
       DEBUG_WITH_TYPE("rtl-slack-info",
         dbgs() << "Datapath:\t" << getName() << ", "
         << R->getName() << ": "
         << int(Slack) << '\n');
       VASTUse Path[] = { this, Def };
-      bindPath2ScriptEngine(Path, Slack);
+      //bindPath2ScriptEngine(Path, Slack);
     }
     return;
   }
@@ -675,11 +675,11 @@ void VASTRegister::computeAssignmentSlack(FindShortestPath *FindSP) {
 
   for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
        I != E; ++I) {
-    VASTUse &Src = *I->second;
+    VASTUse &Def = *I->second;
     VASTWire *AssignCnds = I->first;
     VASTSlot *UseSlot = AssignCnds->getSlot();
     // Compute slack from source value.
-    computeSlackThrough(Src, UseSlot, FindSP);
+    computeSlackThrough(Def, UseSlot, FindSP);
     typedef VASTWire::op_iterator it;
     for (it I = AssignCnds->op_begin(), E = AssignCnds->op_end();
          I != E; ++I) {
