@@ -33,6 +33,7 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/StandardPasses.h"
 #include "llvm/Target/SubtargetFeature.h"
+#include "llvm/Target/TargetLibraryInfo.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetRegistry.h"
@@ -122,6 +123,11 @@ int main(int argc, char **argv) {
   PassManager PM;
 
   PM.add(new TargetData(*target->getTargetData()));
+
+  // Do not create memset/memcpy/memmove from LoopIdiomRecognize pass.
+  TargetLibraryInfo *TLI = new TargetLibraryInfo();
+  TLI->disableAllFunctions();
+  PM.add(TLI);
 
   // Perform Software/Hardware partition.
   PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
