@@ -58,26 +58,16 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
 
   unsigned MBBDistance = getDistance(DefMBBNum, UseMBBNum);
 
-  // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
-  // Return -1 which is the largest number in unsigned type.
-  if(MBBDistance == Infinite) return -1;
-
   // When the slots are in different MBB. return the SlotDistance.
   // SlotDistance = MBBDistance - (SrcSlotIdx - SrcSlotStartIdx)
   //                            + (DstSlotIdx - DstSlotStartIdx)
-  if (DefMBBNum != UseMBBNum) {
-    MBBDistance -= (DefSlotIdx - DefSlotStartIdx);
-    assert(MBBDistance > 0 && "MBBDistance <= 0 !!!");
-
-    SlotDistance = MBBDistance + (UseSlotIdx - UseSlotStartIdx);
-    assert(SlotDistance > 0 && "SlotDistance <= 0 !!!");
-
-    return SlotDistance;
-  }
-
   // When the slots are in the same MBB and the SrcSlotIdx > DstSlotIdx, return
   // compute the distance considering the IISlot.
-  if (DefSlotIdx > UseSlotIdx) {
+  if (DefMBBNum != UseMBBNum || DefSlotIdx > UseSlotIdx) {
+    // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
+    // Return -1 which is the largest number in unsigned type.
+    if(MBBDistance == Infinite) return -1;
+
     MBBDistance -= (DefSlotIdx - DefSlotStartIdx);
     assert(MBBDistance > 0 && "MBBDistance <= 0 !!!");
 
