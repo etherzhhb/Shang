@@ -601,29 +601,15 @@ public:
 private:
   unsigned InitVal;
 
-  // the first key VASTWire is Combinational logic path of condition. The second
-  // value VASTUse is the Combinational logic path of Define assignment.
+  // the first key VASTWire is Assignment condition. The second value VASTUse is
+  // assignment value.
   typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns;
 
   // FIXME: We need a VAST live interval analysis pass to hold this.
   // This set is to record the slots that the register is defined.
   std::set<VASTSlot*, less_ptr<VASTSlot> > Slots;
-  // The "Slack" in VAST means the extra cycles that after data appear in
-  // the output pin of the src register before the dst register read the data.
-  // i.e. if we assign reg0 at cycle 1, and the data will appear at the output
-  // pin of reg0 at cycle 2, and now reg1 can read the data. In this case
-  // becasue the data appear at cycle 2 and we read the data at the same cycle,
-  // the slack is 0. But if we read the data at cycle 3, the slack is 1.
 
-  // FIXME: These function should be the "SlackInfo" pass member function.
-  int findSlackFrom(const VASTRegister *Src, VASTSlot *UseSlot,
-                    FindShortestPath *FindSP);
-  // Find the nearest slot before Use that assigning this register.
-  int findNearestAssignSlot(VASTSlot *UseSlot,
-                            FindShortestPath *FindSP) const;
-  void DepthFristTraverseDataPathUseTree(VASTUse Root, VASTSlot *UseSlot,
-                                         FindShortestPath *FindSP);
   void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
 
   friend class VASTModule;
@@ -652,13 +638,10 @@ public:
   }
 
   // get the Slots begin and end iterator.
-  typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
-  SlotIt SlotsBegin() { return Slots.begin(); }
-  SlotIt SlotsEnd() { return Slots.end();  }
-  // Compute the slack of the assignment.
-  void computeAssignmentSlack(FindShortestPath *FindSP);
-  void computeSlackThrough(VASTUse Def, VASTSlot *UseSlot,
-                           FindShortestPath *FindSP);
+  typedef
+    std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator slot_iterator;
+  slot_iterator slots_begin() { return Slots.begin(); }
+  slot_iterator slots_end() { return Slots.end();  }
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
@@ -673,7 +656,7 @@ public:
 
   typedef SmallVector<VASTWire*, 128> WireVector;
   typedef SmallVector<VASTRegister*, 128> RegisterVector;
-  typedef RegisterVector::iterator Register_iterator;
+  typedef RegisterVector::iterator reg_iterator;
 private:
   // Dirty Hack:
   // Buffers
@@ -741,10 +724,6 @@ public:
   // Print the slot control flow.
   void buildSlotLogic();
 
-  // Compute the register assignments slack information, callable from lua.
-  void computeAssignmentSlacks();
-
-  //
   bool eliminateConstRegisters();
 
   void addBBLatInfo(unsigned FNNum, VASTWire *W) {
@@ -926,8 +905,8 @@ public:
   VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
                             unsigned InitVal = 0,
                             const char *Attr = "");
-  Register_iterator reg_begin() { return Registers.begin(); }
-  Register_iterator reg_end() { return Registers.end(); }
+  reg_iterator reg_begin() { return Registers.begin(); }
+  reg_iterator reg_end() { return Registers.end(); }
 
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const char *Attr = "");

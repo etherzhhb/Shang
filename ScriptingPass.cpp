@@ -192,7 +192,6 @@ void llvm::bindFunctionInfoToScriptEngine(MachineFunction &MF, TargetData &TD) {
   bindToScriptEngine("CurModule", MF.getInfo<VFInfo>()->getRtlMod());
 }
 
-
 bool ScriptingPass::doInitialization(Module &M) {
   TD = getAnalysisIfAvailable<TargetData>();
   assert(TD && "TD not avaialbe?");

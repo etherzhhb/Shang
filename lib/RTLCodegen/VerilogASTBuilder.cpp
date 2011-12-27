@@ -63,7 +63,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
-  FindShortestPath *FindSP;
 
   // Mapping success fsm state to their predicate in current state.
   typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
@@ -282,12 +281,6 @@ public:
 
   ~VerilogASTBuilder();
 
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    AU.addRequired<FindShortestPath>();
-    AU.addPreserved<FindShortestPath>();
-  }
-
   bool doInitialization(Module &M);
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -322,7 +315,6 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   TD = getAnalysisIfAvailable<TargetData>();
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
-  FindSP = &getAnalysis<FindShortestPath>();
 
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
@@ -333,9 +325,6 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   // FIXME: Demangle the c++ name.
   // Dirty Hack: Force the module have the name of the hw subsystem.
   VM = FInfo->getRtlMod();
-
-  // Pass the FindShortestPath Pointer to the VASTModule.
-  VM->InitFindShortestPathPointer(FindSP);
 
   emitFunctionSignature(F.getFunction());
 

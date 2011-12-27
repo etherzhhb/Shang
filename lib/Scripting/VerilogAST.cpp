@@ -470,192 +470,6 @@ void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
   Slots.insert(AssignCnd->getSlot());
 }
 
-//static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path, unsigned Slack) {
-//  assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
-//  // Path table:
-//  // Datapath: {
-//  //  unsigned Slack,
-//  //  table NodesInPath
-//  // }
-//  SMDiagnostic Err;
-//
-//  if (!runScriptStr("RTLDatapath = {}\n", Err))
-//    llvm_unreachable("Cannot create RTLDatapath table in scripting pass!");
-//
-//  std::string Script;
-//  raw_string_ostream SS(Script);
-//  SS << "RTLDatapath.Slack = " << Slack;
-//  SS.flush();
-//  if (!runScriptStr(Script, Err))
-//    llvm_unreachable("Cannot create slack of RTLDatapath!");
-//
-//  Script.clear();
-//
-//  SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
-//  for (unsigned i = 1; i < Path.size(); ++i) {
-//    // Skip the unnamed nodes.
-//    const char *Name = Path[i].get()->getName();
-//    if (Name) SS << "', '" << Name;
-//  }
-//  SS << "'}";
-//
-//  SS.flush();
-//  if (!runScriptStr(Script, Err))
-//    llvm_unreachable("Cannot create node table of RTLDatapath!");
-//
-//  // Get the script from script engine.
-//  const char *DatapathScriptPath[] = { "Misc", "DatapathScript" };
-//  if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
-//    report_fatal_error("Error occur while running datapath script:\n"
-//                       + Err.getMessage());
-//}
-
-// Traverse the use tree in datapath, stop when we meet a register or other
-// leaf node.
-void VASTRegister::DepthFristTraverseDataPathUseTree(VASTUse Root,
-                                                     VASTSlot *UseSlot,
-                                                     FindShortestPath *FindSP) {
-  typedef VASTUse::iterator ChildIt;
-  // Use seperate node and iterator stack, so we can get the path vector.
-  typedef SmallVector<VASTUse, 16> NodeStackTy;
-  typedef SmallVector<ChildIt, 16> ItStackTy;
-  NodeStackTy NodeWorkStack;
-  ItStackTy ItWorkStack;
-  // Remember what we had visited.
-  std::set<VASTUse> VisitedUses;
-
-  // Put the current node into the node stack, so it will appears in the path.
-  NodeWorkStack.push_back(this);
-
-  // Put the root.
-  NodeWorkStack.push_back(Root);
-  ItWorkStack.push_back(Root.dp_src_begin());
-
-  while (!ItWorkStack.empty()) {
-    VASTUse Node = NodeWorkStack.back();
-    ChildIt It = ItWorkStack.back();
-
-    // Do we reach the leaf?
-    if (Node.is_dp_leaf()) {
-      if (VASTValue *V = Node.getOrNull()) {
-        DEBUG_WITH_TYPE("rtl-slack-info",
-        dbgs() << "Datapath:\t";
-        for (NodeStackTy::iterator I = NodeWorkStack.begin(),
-             E = NodeWorkStack.end(); I != E; ++I) {
-          dbgs() << ", ";
-          I->print(dbgs());
-        });
-
-        if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
-          signed Slack = 0;
-          // Data-path has timing information available.
-          for (NodeStackTy::iterator I = NodeWorkStack.begin(),
-               E = NodeWorkStack.end(); I != E; ++I)
-            if (VASTWire *W = dyn_cast<VASTWire>(I->get()))
-              if (W->getOpcode() == VASTWire::dpVarLatBB)
-                Slack += W->getLatency();
-
-
-          Slack = std::max(Slack, findSlackFrom(R, UseSlot, FindSP));
-
-          DEBUG_WITH_TYPE("rtl-slack-info",
-                           dbgs() << " Slack: " << int(Slack));
-          //bindPath2ScriptEngine(NodeWorkStack, Slack);
-        }
-
-        DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
-      }
-
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
-    // All sources of this node is visited.
-    if (It == Node.dp_src_end()) {
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
-    // Depth first traverse the child of current node.
-    VASTUse ChildNode = *It;
-    ++ItWorkStack.back();
-
-    // Had we visited this node?
-    if (!VisitedUses.insert(ChildNode).second) continue;
-
-    // If ChildNode is not visit, go on visit it and its childrens.
-    NodeWorkStack.push_back(ChildNode);
-    ItWorkStack.push_back(ChildNode.dp_src_begin());
-  }
-
-  assert(NodeWorkStack.back().get() == this && "Node stack broken!");
-}
-
-int VASTRegister::findNearestAssignSlot(VASTSlot *UseSlot,
-                                        FindShortestPath *FindSP) const {
-  VASTSlot *NearestDefSlot = 0;
-  unsigned NearestSlotDistance = FindShortestPath::infinite;
-  typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
-  // FIXME: We can perform a binary search.
-  for (SlotIt I = Slots.begin(), E = Slots.end(); I != E; ++I) {
-    VASTSlot *DefSlot = *I;
-
-    unsigned SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
-
-    // if SlotDistance == 0, abandon this result.
-    if (SlotDistance <= 0) continue;
-
-    if (SlotDistance < NearestSlotDistance) {
-      NearestSlotDistance = SlotDistance;
-      assert(NearestSlotDistance != FindShortestPath::infinite
-             && "we can not reach the slot!!!");
-      NearestDefSlot = DefSlot;
-    }
-  }
-
-  return
-    NearestSlotDistance == FindShortestPath::infinite? -1 : NearestSlotDistance;
-}
-
-int VASTRegister::findSlackFrom(const VASTRegister *Def,
-                                VASTSlot *UseSlot,
-                                FindShortestPath *FindSP) {
-  int Slack = ~0;
-
-  int NearestSlotDistance = Def->findNearestAssignSlot(UseSlot, FindSP);
-
-  if (NearestSlotDistance > 0)
-    Slack = NearestSlotDistance;
-
-  return Slack;
-}
-
-void VASTRegister::computeSlackThrough(VASTUse Def, VASTSlot *UseSlot,
-                                       FindShortestPath *FindSP){
-  VASTValue *DefValue = Def.getOrNull();
-
-  // Source is immediate or symbol, skip it.
-  if (!DefValue) return;
-
-  // Trivial case.
-  if (VASTRegister *R = dyn_cast<VASTRegister>(DefValue)) {
-    int Slack = findSlackFrom(R, UseSlot, FindSP);
-    if (Slack >= 0) {
-      DEBUG_WITH_TYPE("rtl-slack-info",
-        dbgs() << "Datapath:\t" << getName() << ", "
-        << R->getName() << ": "
-        << int(Slack) << '\n');
-      VASTUse Path[] = { this, Def };
-      //bindPath2ScriptEngine(Path, Slack);
-    }
-    return;
-  }
-
-  DepthFristTraverseDataPathUseTree(Def, UseSlot, FindSP);
-}
-
 VASTUse VASTRegister::getConstantValue() const {
   // Only 1 assignment?
   if (Assigns.size() != 1) return VASTUse();
@@ -667,25 +481,6 @@ VASTUse VASTRegister::getConstantValue() const {
   // Some register assignment may have un-match bit-width
   return VASTUse(C->getImm(), getBitWidth());
 
-}
-
-void VASTRegister::computeAssignmentSlack(FindShortestPath *FindSP) {
-  // Do we have any assignment information?
-  if (Assigns.empty()) return;
-
-  for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
-       I != E; ++I) {
-    VASTUse &Def = *I->second;
-    VASTWire *AssignCnds = I->first;
-    VASTSlot *UseSlot = AssignCnds->getSlot();
-    // Compute slack from source value.
-    computeSlackThrough(Def, UseSlot, FindSP);
-    typedef VASTWire::op_iterator it;
-    for (it I = AssignCnds->op_begin(), E = AssignCnds->op_end();
-         I != E; ++I) {
-      computeSlackThrough(*I, UseSlot, FindSP);
-    }
-  }
 }
 
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
@@ -1042,12 +837,6 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
   Dst->addAssignment(U, buildAssignCnd(Slot, Cnds, AddSlotActive));
 }
 
-void VASTModule::computeAssignmentSlacks() {
-  for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
-       I != E; ++I)
-    (*I)->computeAssignmentSlack(FindSP);
-}
-
 bool VASTModule::eliminateConstRegisters() {
   bool Changed = false;
   typedef RegisterVector::iterator it;
@@ -1073,10 +862,6 @@ bool VASTModule::eliminateConstRegisters() {
 
 void VASTModule::print(raw_ostream &OS) const {
   // Print the verilog module?
-}
-
-void VASTModule::InitFindShortestPathPointer(FindShortestPath *FindSPPointer){
-  FindSP = FindSPPointer;
 }
 
 VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,

@@ -7,8 +7,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass analysis the path delay between two registers.
+// This pass analysis the slack between two registers.
 //
+// The "Slack" in VAST means the extra cycles that after data appear in
+// the output pin of the src register before the dst register read the data.
+// i.e. if we assign reg0 at cycle 1, and the data will appear at the output
+// pin of reg0 at cycle 2, and now reg1 can read the data. In this case
+// becasue the data appear at cycle 2 and we read the data at the same cycle,
+// the slack is 0. But if we read the data at cycle 3, the slack is 1.
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,7 +35,6 @@ using namespace llvm;
 namespace{
 class CombPathDelayAnalysis : public MachineFunctionPass {
   MachineFunction *MF;
-  VFInfo *FInfo;
   FindShortestPath *FindSP;
 
   // define a DenseMap to record the Slack Info between Registers.
@@ -77,14 +82,14 @@ public:
 bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &F) {
   bindFunctionInfoToScriptEngine(F, getAnalysis<TargetData>());
   MF = &F;
-  FInfo = MF->getInfo<VFInfo>();
-  VASTModule *VM = FInfo->getRtlMod();
+  VASTModule *VM = MF->getInfo<VFInfo>()->getRtlMod();
   FindSP = &getAnalysis<FindShortestPath>();
   InitRegPath(VM);
   return false;
 }
 
-static void bindPath2ScriptEngine(ArrayRef<VASTRegister*> Path, unsigned Slack) {
+static void bindPath2ScriptEngine(ArrayRef<VASTRegister*> Path,
+                                  unsigned Slack) {
   assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
   // Path table:
   // Datapath: {
@@ -127,10 +132,10 @@ static void bindPath2ScriptEngine(ArrayRef<VASTRegister*> Path, unsigned Slack) 
 void CombPathDelayAnalysis::InitRegPath(VASTModule *VM) {
 
   //Initial all the path with infinite.
-  for (VASTModule::Register_iterator I = VM->reg_begin(), E = VM->reg_end();
+  for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
        I != E; ++I){
     VASTRegister *DefReg = *I;
-    for (VASTModule::Register_iterator I = VM->reg_begin(), E = VM->reg_end();
+    for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
          I != E; ++I){
       VASTRegister *UseReg = *I;
       RegPathDelay[std::make_pair(DefReg, UseReg)] = FindShortestPath::infinite;
@@ -138,26 +143,23 @@ void CombPathDelayAnalysis::InitRegPath(VASTModule *VM) {
   }
 
   //Assign the path delay to path between two register.
-  for (VASTModule::Register_iterator I = VM->reg_begin(), E = VM->reg_end();
+  for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
        I != E; ++I) {
     VASTRegister *UseReg = *I;
     computePathSlack( UseReg );
   }
 
-  typedef RegPathDelayTy::const_iterator densnMapItTy;
-  densnMapItTy denseMapIt = RegPathDelay.begin();
-  while (denseMapIt != RegPathDelay.end()) {
-    if (denseMapIt->second != FindShortestPath::infinite) {
-      VASTRegister* Path[] = { (denseMapIt->first).first,
-                               (denseMapIt->first).second };
-      bindPath2ScriptEngine(Path, denseMapIt->second);
+  typedef RegPathDelayTy::const_iterator RegPairIt;
+  for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E;
+       ++I) {
+    if (I->second != FindShortestPath::infinite) {
+      VASTRegister* Path[] = { (I->first).first, (I->first).second };
+      bindPath2ScriptEngine(Path, I->second);
     }
-    ++denseMapIt;
   }
 }
 
 void CombPathDelayAnalysis::computePathSlack(VASTRegister* UseReg) {
-
   typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns = UseReg->getAssignments();
   // Do we have any assignment information?
@@ -198,6 +200,7 @@ void CombPathDelayAnalysis::getSlackThrough(VASTUse DefUse,
 
     return;
   }
+
   DepthFristTraverseDataPathUseTree(DefUse, UseReg, UseSlot);
 }
 
@@ -208,7 +211,7 @@ unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
   typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
 
   // FIXME: We can perform a binary search.
-  for (SlotIt I = DefReg->SlotsBegin(), E = DefReg->SlotsEnd(); I != E; ++I) {
+  for (SlotIt I = DefReg->slots_begin(), E = DefReg->slots_end(); I != E; ++I) {
     VASTSlot *DefSlot = *I;
     unsigned SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
 
