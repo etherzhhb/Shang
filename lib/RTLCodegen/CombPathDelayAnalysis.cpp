@@ -49,7 +49,7 @@ class CombPathDelayAnalysis : public MachineFunctionPass {
   void computePathSlack(VASTRegister* UseReg);
 
   // Get Slack through Define register.
-  void getSlackThrough(VASTUse DefUse, VASTRegister* UseReg, VASTSlot *UseSlot);
+  void computeSlackThrough(VASTUse DefUse, VASTRegister* UseReg, VASTSlot *UseSlot);
 
   // get nearest Define slot Distance.
   unsigned getNearestSlotDistance(VASTRegister *DefReg, VASTSlot *UseSlot);
@@ -64,6 +64,14 @@ public:
   // get the slack of Combination Path between two registers.
   unsigned getCombPathSlack(VASTRegister *DefReg, VASTRegister *UseReg);
 
+  void updateCombPathSlack(VASTRegister *Def, VASTRegister *Use,
+                           unsigned NewSlack) {
+    assert(RegPathDelay.count(std::make_pair(Def, Use)) && "Pair not exist!");
+    RegPathDelayTy::value_type &v =
+      RegPathDelay.FindAndConstruct(std::make_pair(Def, Use));
+    v.second = std::min(v.second, NewSlack);
+  }
+
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<TargetData>();
@@ -72,6 +80,20 @@ public:
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
+
+  void releaseMemory() {
+    RegPathDelay.clear();
+  }
+
+  bool doInitialization(Module &) {
+    SMDiagnostic Err;
+    // Get the script from script engine.
+    const char *HeaderScriptPath[] = { "Misc",
+                                       "TimingConstraintsHeaderScript" };
+    if (!runScriptStr(getStrValueFromEngine(HeaderScriptPath), Err))
+      report_fatal_error("Error occur while running timing header script:\n"
+                         + Err.getMessage());
+  }
 
   CombPathDelayAnalysis() : MachineFunctionPass(ID) {
     initializeCombPathDelayAnalysisPass(*PassRegistry::getPassRegistry());
@@ -126,11 +148,10 @@ static void bindPath2ScriptEngine(ArrayRef<VASTRegister*> Path,
   const char *DatapathScriptPath[] = { "Misc", "DatapathScript" };
   if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
     report_fatal_error("Error occur while running datapath script:\n"
-    + Err.getMessage());
+                       + Err.getMessage());
 }
 
 void CombPathDelayAnalysis::InitRegPath(VASTModule *VM) {
-
   //Initial all the path with infinite.
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
        I != E; ++I){
@@ -138,7 +159,7 @@ void CombPathDelayAnalysis::InitRegPath(VASTModule *VM) {
     for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
          I != E; ++I){
       VASTRegister *UseReg = *I;
-      RegPathDelay[std::make_pair(DefReg, UseReg)] = FindShortestPath::infinite;
+      RegPathDelay[std::make_pair(DefReg, UseReg)] = FindShortestPath::Infinite;
     }
   }
 
@@ -146,15 +167,15 @@ void CombPathDelayAnalysis::InitRegPath(VASTModule *VM) {
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
        I != E; ++I) {
     VASTRegister *UseReg = *I;
-    computePathSlack( UseReg );
+    computePathSlack(UseReg);
   }
 
   typedef RegPathDelayTy::const_iterator RegPairIt;
-  for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E;
-       ++I) {
-    if (I->second != FindShortestPath::infinite) {
+  for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E; ++I){
+    unsigned Slack = I->second;
+    if (Slack != FindShortestPath::Infinite) {
       VASTRegister* Path[] = { (I->first).first, (I->first).second };
-      bindPath2ScriptEngine(Path, I->second);
+      bindPath2ScriptEngine(Path, Slack);
     }
   }
 }
@@ -171,20 +192,20 @@ void CombPathDelayAnalysis::computePathSlack(VASTRegister* UseReg) {
     VASTWire *AssignCnds = I->first;
     VASTSlot *UseSlot = AssignCnds->getSlot();
 
-    //get Slack from the Define Value.
-    getSlackThrough(Def, UseReg, UseSlot);
+    //Get Slack from the Define Value.
+    computeSlackThrough(Def, UseReg, UseSlot);
 
+    //Get Slack from the condition of the assignment.
     typedef VASTWire::op_iterator it;
-    for (it I = AssignCnds->op_begin(), E = AssignCnds->op_end();
-      I != E; ++I) {
-      getSlackThrough(*I, UseReg, UseSlot);
+    for (it I = AssignCnds->op_begin(), E = AssignCnds->op_end(); I != E; ++I) {
+      computeSlackThrough(*I, UseReg, UseSlot);
     }
   }
 }
 
-void CombPathDelayAnalysis::getSlackThrough(VASTUse DefUse,
-                                            VASTRegister* UseReg,
-                                            VASTSlot *UseSlot) {
+void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
+                                                VASTRegister *UseReg,
+                                                VASTSlot *UseSlot) {
   VASTValue *DefValue = DefUse.getOrNull();
 
   // If Define Value is immediate or symbol, skip it.
@@ -192,12 +213,9 @@ void CombPathDelayAnalysis::getSlackThrough(VASTUse DefUse,
 
   if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)) {
     unsigned Slack = getNearestSlotDistance(DefReg, UseSlot);
-    unsigned SlackBefore = RegPathDelay[std::make_pair(DefReg, UseReg)];
-
     // If the Define register and Use register already have a slack, compare the
     // slacks and assign the smaller one to the RegPathDelay Map.
-    RegPathDelay[std::make_pair(DefReg, UseReg)] = std::min(Slack, SlackBefore);
-
+    updateCombPathSlack(DefReg, UseReg, Slack);
     return;
   }
 
@@ -207,16 +225,16 @@ void CombPathDelayAnalysis::getSlackThrough(VASTUse DefUse,
 unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
                                                        VASTSlot *UseSlot) {
 
-  unsigned NearestSlotDistance = FindShortestPath::infinite;
+  int NearestSlotDistance = FindShortestPath::Infinite;
   typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
 
   // FIXME: We can perform a binary search.
   for (SlotIt I = DefReg->slots_begin(), E = DefReg->slots_end(); I != E; ++I) {
     VASTSlot *DefSlot = *I;
-    unsigned SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
+    int SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
 
     // if SlotDistance == 0, abandon this result.
-    if (SlotDistance == 0) continue;
+    if (SlotDistance <= 0) continue;
 
     if (SlotDistance < NearestSlotDistance) {
       NearestSlotDistance = SlotDistance;
@@ -272,22 +290,15 @@ void
               if (W->getOpcode() == VASTWire::dpVarLatBB)
                 Slack += W->getLatency();
 
-
           Slack = std::max(Slack, getNearestSlotDistance(R, UseSlot));
 
           DEBUG_WITH_TYPE("rtl-slack-info",
             dbgs() << " Slack: " << int(Slack));
-          unsigned SlackBefore = RegPathDelay[std::make_pair(R, UseReg)];
 
           // If the Define register and Use register already have a slack,
           // compare the slacks and assign the smaller one to the RegPathDelay
           // Map.
-          RegPathDelay[std::make_pair(R, UseReg)]
-            = std::min(Slack, SlackBefore);
-
-          //VASTUse Path[] = { UseReg, DefUse };
-          //bindPath2ScriptEngine(Path,
-          //                      RegPathDelay[std::make_pair(R, UseReg)]);
+          updateCombPathSlack(R, UseReg, Slack);
         }
 
         DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
@@ -320,9 +331,11 @@ void
   assert(NodeWorkStack.back().get() == UseReg && "Node stack broken!");
 }
 
-unsigned CombPathDelayAnalysis::getCombPathSlack(VASTRegister *DefReg,
-                                                 VASTRegister *UseReg) {
-  return RegPathDelay[std::make_pair(DefReg, UseReg)];
+unsigned CombPathDelayAnalysis::getCombPathSlack(VASTRegister *Def,
+                                                 VASTRegister *Use) {
+  RegPathDelayTy::iterator at = RegPathDelay.find(std::make_pair(Def, Use));
+  assert(at != RegPathDelay.end() && "Cannot found pair!");
+  return at->second;
 }
 
 char CombPathDelayAnalysis::ID = 0;

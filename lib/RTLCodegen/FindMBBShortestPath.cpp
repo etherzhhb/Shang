@@ -45,9 +45,8 @@ unsigned &FindShortestPath::getDistance(unsigned DefIdx, unsigned UseIdx) {
 }
 
 // Get distance between Two Slots.
-int FindShortestPath::getSlotDistance(VASTSlot *DefSlot,
-                                           VASTSlot *UseSlot) {
-  signed SlotDistance;
+int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
+  signed SlotDistance = -1;
 
   unsigned DefSlotStartIdx = DefSlot->getParentIdx();
   unsigned DefSlotIdx = DefSlot->getSlotNum();
@@ -61,11 +60,9 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot,
 
   // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
   // Return -1 which is the largest number in unsigned type.
-  if(MBBDistance == infinite){
-    return -1;
-  }
+  if(MBBDistance == Infinite) return -1;
 
-  // when the slots are in different MBB. return the SlotDistance.
+  // When the slots are in different MBB. return the SlotDistance.
   // SlotDistance = MBBDistance - (SrcSlotIdx - SrcSlotStartIdx)
   //                            + (DstSlotIdx - DstSlotStartIdx)
   if (DefMBBNum != UseMBBNum) {
@@ -78,22 +75,27 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot,
     return SlotDistance;
   }
 
-  // when the slots are in the same MBB and the SrcSlotIdx > DstSlotIdx, return
-  // IISlot.
+  // When the slots are in the same MBB and the SrcSlotIdx > DstSlotIdx, return
+  // compute the distance considering the IISlot.
   if (DefSlotIdx > UseSlotIdx) {
-    SlotDistance = MBBDistance;
-    return (unsigned)SlotDistance;
+    MBBDistance -= (DefSlotIdx - DefSlotStartIdx);
+    assert(MBBDistance > 0 && "MBBDistance <= 0 !!!");
+
+    SlotDistance = MBBDistance + (UseSlotIdx - UseSlotStartIdx);
+    assert(SlotDistance > 0 && "SlotDistance <= 0 !!!");
+
+    return SlotDistance;
   }
 
-  // when the slots are in the same MBB and the SrcSlotIdx <= DstSlotIdx, return
+  // When the slots are in the same MBB and the SrcSlotIdx <= DstSlotIdx, return
   // DstSlotIdx - SrcSlotIdx.
   SlotDistance = UseSlotIdx - DefSlotIdx;
   assert(SlotDistance >= 0 && "SlotDistance < 0!");
 
-  return (unsigned)SlotDistance;
+  return SlotDistance;
 }
 
-// map the StartSlot to MBBNum.
+// Map the StartSlot to MBBNum.
 void FindShortestPath::mapStartSlotToMBBNum() {
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock *MBB = I;
@@ -104,8 +106,13 @@ void FindShortestPath::mapStartSlotToMBBNum() {
 }
 
 // Get MBB number.
-unsigned FindShortestPath::getMBBNum(unsigned SlotStartIdx) {
-  return StartSlotToMBBNumMap[SlotStartIdx];
+unsigned FindShortestPath::getMBBNum(unsigned SlotStartIdx) const {
+  // The start slot of the module.
+  if (SlotStartIdx == 0) return 0;
+  
+  Slot2BBMapTy::const_iterator at = StartSlotToMBBNumMap.find(SlotStartIdx);
+  assert(at != StartSlotToMBBNumMap.end() && "Bad start slot!");
+  return at->second;
 }
 
 // Initial the Path between two related Machine Basic Block.
@@ -114,21 +121,20 @@ void FindShortestPath::InitPath() {
 
   // assign infinite number to the PathVector.
   unsigned PathVectorSize = MBBNum * MBBNum;
-  PathVector.assign(PathVectorSize, infinite);
+  PathVector.assign(PathVectorSize, Infinite);
 
   // Initial the PathVector with the Path.
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock *DefMBB = I;
     unsigned TolalSlot = FInfo->getTotalSlotFor(DefMBB);
 
-    // assign 0 to the same MBB.
-    getDistance(DefMBB, DefMBB) = 0;
-
     for (MachineBasicBlock::succ_iterator I = DefMBB->succ_begin(),
          E = DefMBB->succ_end(); I != E; ++I) {
       MachineBasicBlock *UseMBB = *I;
-      if (DefMBB == UseMBB) continue;
-      getDistance(DefMBB, UseMBB) = TolalSlot;
+      unsigned &Distance = getDistance(DefMBB, UseMBB);
+      // The distance of self-loop edge is the initial interval of the BB.
+      Distance = DefMBB == UseMBB ? FInfo->getIISlotFor(UseMBB)
+                                  : TolalSlot;
     }
   }
 }
@@ -166,7 +172,7 @@ void FindShortestPath::Floyd() {
 }
 
 char FindShortestPath::ID = 0;
-const unsigned FindShortestPath::infinite = 100000;
+const unsigned FindShortestPath::Infinite = 100000;
 
 INITIALIZE_PASS_BEGIN(FindShortestPath, "FindShortestPath",
                       "FindShortestPath", false, false)

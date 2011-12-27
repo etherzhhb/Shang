@@ -32,7 +32,8 @@ namespace llvm {
     std::vector<unsigned> PathVector;
 
     // Map StartSlot to MBB Number
-    std::map<unsigned, unsigned> StartSlotToMBBNumMap;
+    typedef std::map<unsigned, unsigned> Slot2BBMapTy;
+    Slot2BBMapTy StartSlotToMBBNumMap;
     // Get the Key to PathVector according to the source and destination index
     unsigned getKey(unsigned Def, unsigned Use);
 
@@ -40,7 +41,7 @@ namespace llvm {
     void mapStartSlotToMBBNum();
 
     // Get MBB number.
-    unsigned getMBBNum(unsigned SlotStartIdx);
+    unsigned getMBBNum(unsigned SlotStartIdx) const;
 
     // Initial the Path between two related Machine Basic Block.
     void InitPath();
@@ -54,7 +55,7 @@ namespace llvm {
     static char ID;
 
     // Initial the pathVector with infinite.
-    const static unsigned infinite;
+    const static unsigned Infinite;
 
     // Get distance between the source MBB and the destination MBB.
     unsigned &getDistance(unsigned DefIdx, unsigned UseIdx);
