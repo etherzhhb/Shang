@@ -535,6 +535,8 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
       VM->buildExpr(VASTWire::dpVarLatBB, Ops, Info.getBitWidth(), ResultWire);
       ResultWire->setLatency(Latency);
+      // Remember the latency information.
+      VM->addBBLatInfo(FNNum, ResultWire);
     }
   }
 }
