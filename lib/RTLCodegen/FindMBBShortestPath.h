@@ -65,9 +65,6 @@ namespace llvm {
 
     // Get distance between Two Slots.
     int getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot);
-    int getSlotDistance(VASTRegister *DefReg, VASTRegister *UseReg){
-
-    }
 
     bool runOnMachineFunction(MachineFunction &MF);
 

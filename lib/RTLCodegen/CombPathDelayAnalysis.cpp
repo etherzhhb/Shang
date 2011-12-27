@@ -89,6 +89,7 @@ public:
     if (!runScriptStr(getStrValueFromEngine(HeaderScriptPath), Err))
       report_fatal_error("Error occur while running timing header script:\n"
                          + Err.getMessage());
+    return false;
   }
 
   CombPathDelayAnalysis() : MachineFunctionPass(ID) {
