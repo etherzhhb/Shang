@@ -275,14 +275,6 @@ CombPathDelayAnalysis::DepthFristTraverseDataPathUseTree(VASTUse DefUse,
   while (!ItWorkStack.empty()) {
     VASTUse Node = NodeWorkStack.back();
 
-    // Had we visited this node? If the Use slots are same, the same subtree
-    // will lead to a same slack, and we do not need to compute the slack agian.
-    if (!VisitedUses.insert(Node).second) {
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
     ChildIt It = ItWorkStack.back();
 
     // Do we reach the leaf?
@@ -332,6 +324,10 @@ CombPathDelayAnalysis::DepthFristTraverseDataPathUseTree(VASTUse DefUse,
     // Depth first traverse the child of current node.
     VASTUse ChildNode = *It;
     ++ItWorkStack.back();
+
+    // Had we visited this node? If the Use slots are same, the same subtree
+    // will lead to a same slack, and we do not need to compute the slack agian.
+    if (!VisitedUses.insert(ChildNode).second) continue;
 
     // If ChildNode is not visit, go on visit it and its childrens.
     NodeWorkStack.push_back(ChildNode);
