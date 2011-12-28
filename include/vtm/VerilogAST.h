@@ -624,7 +624,9 @@ public:
     Slots.clear();
   }
 
-  AssignMapTy getAssignments() {return Assigns;};
+  typedef AssignMapTy::const_iterator assign_itertor;
+  assign_itertor assign_begin() const { return Assigns.begin(); }
+  assign_itertor assign_end() const { return Assigns.end(); }
 
   VASTUse getConstantValue() const;
 

@@ -28,7 +28,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ErrorHandling.h"
 
-#define DEBUG_TYPE "CombPathDelayAnalysis"
+#define DEBUG_TYPE "vtm-comb-path-delay"
 #include "llvm/Support/Debug.h"
 using namespace llvm;
 
@@ -36,23 +36,26 @@ namespace{
 class CombPathDelayAnalysis : public MachineFunctionPass {
   FindShortestPath *FindSP;
 
-  // define a DenseMap to record the Slack Info between Registers.
+  // Define a DenseMap to record the Slack Info between Registers.
   typedef std::pair<VASTRegister*, VASTRegister*> RegisterMapTy;
   typedef DenseMap<RegisterMapTy, unsigned> RegPathDelayTy;
   RegPathDelayTy RegPathDelay;
+
+  typedef SmallVector<VASTSlot*, 4> SlotVec;
 
   // Compute the Path Slack between two register.
   void computePathSlack(VASTRegister* UseReg);
 
   // Get Slack through Define register.
-  void computeSlackThrough(VASTUse DefUse, VASTRegister* UseReg, VASTSlot *UseSlot);
+  void computeSlackThrough(VASTUse DefUse, VASTRegister* UseReg,
+                           SlotVec &UseSlots);
 
   // get nearest Define slot Distance.
-  unsigned getNearestSlotDistance(VASTRegister *DefReg, VASTSlot *UseSlot);
+  unsigned getNearestSlotDistance(VASTRegister *DefReg, SlotVec &UseSlots);
 
   void DepthFristTraverseDataPathUseTree(VASTUse DefUse,
-                                         VASTRegister* UseReg,
-                                         VASTSlot *UseSlot);
+                                         VASTRegister *UseReg,
+                                         SlotVec &UseSlots);
 
 public:
   static char ID;
@@ -178,61 +181,66 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
 
 void CombPathDelayAnalysis::computePathSlack(VASTRegister* UseReg) {
   typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
-  AssignMapTy Assigns = UseReg->getAssignments();
-  // Do we have any assignment information?
-  if (Assigns.empty()) return;
 
-  for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
+  typedef std::map<VASTUse, SlotVec> CSEMapTy;
+  CSEMapTy SrcCSEMap;
+  typedef VASTRegister::assign_itertor assign_it;
+  for (assign_it I = UseReg->assign_begin(), E = UseReg->assign_end();
        I != E; ++I) {
-    VASTUse &Def = *I->second;
-    VASTWire *AssignCnds = I->first;
-    VASTSlot *UseSlot = AssignCnds->getSlot();
-
+    VASTSlot *S = I->first->getSlot();
+    assert(S && "Unexpected empty slot!");
     //Get Slack from the Define Value.
-    computeSlackThrough(Def, UseReg, UseSlot);
-
+    SrcCSEMap[*I->second].push_back(S);
     //Get Slack from the condition of the assignment.
-    typedef VASTWire::op_iterator it;
-    for (it I = AssignCnds->op_begin(), E = AssignCnds->op_end(); I != E; ++I) {
-      computeSlackThrough(*I, UseReg, UseSlot);
-    }
+    SrcCSEMap[I->first].push_back(S);
   }
+
+  typedef CSEMapTy::iterator it;
+  for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I)
+    computeSlackThrough(I->first, UseReg, I->second);
 }
 
 void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
                                                 VASTRegister *UseReg,
-                                                VASTSlot *UseSlot) {
+                                                SlotVec &UseSlots) {
   VASTValue *DefValue = DefUse.getOrNull();
 
   // If Define Value is immediate or symbol, skip it.
   if (!DefValue) return;
 
   if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)) {
-    unsigned Slack = getNearestSlotDistance(DefReg, UseSlot);
+    unsigned Slack = getNearestSlotDistance(DefReg, UseSlots);
     // If the Define register and Use register already have a slack, compare the
     // slacks and assign the smaller one to the RegPathDelay Map.
     updateCombPathSlack(DefReg, UseReg, Slack);
     return;
   }
 
-  DepthFristTraverseDataPathUseTree(DefUse, UseReg, UseSlot);
+  DepthFristTraverseDataPathUseTree(DefUse, UseReg, UseSlots);
 }
 
 unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
-                                                       VASTSlot *UseSlot) {
+                                                       SlotVec &UseSlots) {
   int NearestSlotDistance = FindShortestPath::Infinite;
   typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
+  typedef SlotVec::iterator UseSlotIt;
 
-  // FIXME: We can perform a binary search.
-  for (SlotIt I = DefReg->slots_begin(), E = DefReg->slots_end(); I != E; ++I) {
-    VASTSlot *DefSlot = *I;
-    int SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
+  for (UseSlotIt UI = UseSlots.begin(), UE = UseSlots.end(); UI != UE; ++UI) {
+    VASTSlot *UseSlot = *UI;
+    for (SlotIt DI = DefReg->slots_begin(), DE = DefReg->slots_end();
+         DI != DE; ++DI) {
+      VASTSlot *DefSlot = *DI;
 
-    // if SlotDistance == 0, abandon this result.
-    if (SlotDistance <= 0) continue;
+      int SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
+      DEBUG(dbgs() << "\n(" << DefSlot->getSlotNum()
+                   << "->" << UseSlot->getSlotNum()
+                   << ") #" << SlotDistance << '\n');
+      // if SlotDistance == 0, abandon this result.
+      if (SlotDistance <= 0) continue;
 
-    if (SlotDistance < NearestSlotDistance) {
-      NearestSlotDistance = SlotDistance;
+      if (SlotDistance < NearestSlotDistance) {
+        NearestSlotDistance = SlotDistance;
+      }
     }
   }
 
@@ -242,9 +250,9 @@ unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
 // Traverse the use tree in datapath, stop when we meet a register or other
 // leaf node.
 void
-  CombPathDelayAnalysis::DepthFristTraverseDataPathUseTree(VASTUse DefUse,
-                                                           VASTRegister* UseReg,
-                                                           VASTSlot *UseSlot) {
+CombPathDelayAnalysis::DepthFristTraverseDataPathUseTree(VASTUse DefUse,
+                                                         VASTRegister *UseReg,
+                                                         SlotVec &UseSlots) {
   typedef VASTUse::iterator ChildIt;
   // Use seperate node and iterator stack, so we can get the path vector.
   typedef SmallVector<VASTUse, 16> NodeStackTy;
@@ -263,13 +271,21 @@ void
 
   while (!ItWorkStack.empty()) {
     VASTUse Node = NodeWorkStack.back();
+
+    // Had we visited this node? If the Use slots are same, the same subtree
+    // will lead to a same slack, and we do not need to compute the slack agian.
+    if (!VisitedUses.insert(Node).second) {
+      NodeWorkStack.pop_back();
+      ItWorkStack.pop_back();
+      continue;
+    }
+
     ChildIt It = ItWorkStack.back();
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
       if (VASTValue *V = Node.getOrNull()) {
-        DEBUG_WITH_TYPE("rtl-slack-info",
-          dbgs() << "Datapath:\t";
+        DEBUG(dbgs() << "Datapath:\t";
         for (NodeStackTy::iterator I = NodeWorkStack.begin(),
           E = NodeWorkStack.end(); I != E; ++I) {
             dbgs() << ", ";
@@ -285,10 +301,9 @@ void
               if (W->getOpcode() == VASTWire::dpVarLatBB)
                 Slack += W->getLatency();
 
-          Slack = std::max(Slack, getNearestSlotDistance(R, UseSlot));
+          Slack = std::max(Slack, getNearestSlotDistance(R, UseSlots));
 
-          DEBUG_WITH_TYPE("rtl-slack-info",
-            dbgs() << " Slack: " << int(Slack));
+          DEBUG(dbgs() << " Slack: " << int(Slack));
 
           // If the Define register and Use register already have a slack,
           // compare the slacks and assign the smaller one to the RegPathDelay
@@ -296,7 +311,7 @@ void
           updateCombPathSlack(R, UseReg, Slack);
         }
 
-        DEBUG_WITH_TYPE("rtl-slack-info", dbgs() << '\n');
+        DEBUG(dbgs() << '\n');
       }
 
       NodeWorkStack.pop_back();
@@ -314,9 +329,6 @@ void
     // Depth first traverse the child of current node.
     VASTUse ChildNode = *It;
     ++ItWorkStack.back();
-
-    // Had we visited this node?
-    if (!VisitedUses.insert(ChildNode).second) continue;
 
     // If ChildNode is not visit, go on visit it and its childrens.
     NodeWorkStack.push_back(ChildNode);
