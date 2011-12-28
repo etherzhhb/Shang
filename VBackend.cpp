@@ -87,7 +87,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createStackToGlobalPass());
 
   // The ContoBromPass
-  PM.add(createContoBromPass(*getIntrinsicInfo()));
+  // PM.add(createContoBromPass(*getIntrinsicInfo()));
 
   // Dirty Hack: Map all frame stuffs to bram 1.
   // PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
