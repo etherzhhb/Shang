@@ -194,6 +194,8 @@ public:
     return Data.ImmVal;
   }
 
+  int64_t getRawData() const { return Data.ImmVal; }
+
   // Iterators allow us to traverse the use tree.
   typedef const VASTUse *iterator;
   // Iterator for datapath traverse.
@@ -606,9 +608,8 @@ private:
   typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns;
 
-  // FIXME: We need a VAST live interval analysis pass to hold this.
-  // This set is to record the slots that the register is defined.
-  std::set<VASTSlot*, less_ptr<VASTSlot> > Slots;
+  // The slots that this register are assigned.
+  std::set<VASTSlot*> Slots;
 
   void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
 

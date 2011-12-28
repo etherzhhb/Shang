@@ -260,7 +260,7 @@ VASTUse VASTSlot::buildFUReadyExpr(VASTModule &VM) {
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
     Ops.push_back(VM.buildExpr(VASTWire::dpOr, I->first,
-                             VM.buildNotExpr(I->second), 1));
+                               VM.buildNotExpr(I->second), 1));
   
   // No waiting signal means always ready.
   if (Ops.empty()) Ops.push_back(VASTUse(true, 1));
@@ -514,25 +514,37 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   raw_string_ostream SS(Pred);
   bool UseSwitch = Assigns.size() > 1;
 
+  typedef std::vector<VASTWire*> OrVec;
+  typedef std::map<VASTUse, OrVec> CSEMapTy;
+  CSEMapTy SrcCSEMap;
+  for (VASTRegister::assign_itertor I = assign_begin(), E = assign_end();
+       I != E; ++I)
+    SrcCSEMap[*I->second].push_back(I->first);
+
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {
     OS << VASTModule::ParallelCaseAttr << ' ';
     OS.switch_begin("1'b1");
   }
 
-  for (AssignMapTy::const_iterator I = Assigns.begin(), E = Assigns.end();
-       I != E; ++I) {
-    // Slot Active should already included in the assign condition if it is
-    // need.
-    I->first->printAsOperand(SS);
-    // Build the assign condition.
+  typedef CSEMapTy::iterator it;
+  for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I) {
+    SS << '(';
+
+    OrVec &Ors = I->second;
+    for (OrVec::iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI) {
+      (*OI)->printAsOperand(SS);
+      SS << '|';
+    }
+
+    SS << "1'b0)";
     SS.flush();
     // Print the assignment under the condition.
     if (UseSwitch) OS.match_case(Pred);
     else OS.if_begin(Pred);
     printAsOperand(OS);
     OS << " <= ";
-    I->second->print(OS);
+    I->first.print(OS);
     OS << ";\n";
     OS.exit_block();
 
