@@ -36,8 +36,7 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-STATISTIC(TotalRegisterBits,
-  "Number of total register bits in synthesised modules");
+
 namespace {
   class VerilogASTWriter : public MachineFunctionPass {
     vlang_raw_ostream Out;

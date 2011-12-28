@@ -641,8 +641,7 @@ public:
   }
 
   // get the Slots begin and end iterator.
-  typedef
-    std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator slot_iterator;
+  typedef std::set<VASTSlot*>::const_iterator slot_iterator;
   slot_iterator slots_begin() { return Slots.begin(); }
   slot_iterator slots_end() { return Slots.end();  }
 

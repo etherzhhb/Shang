@@ -222,7 +222,7 @@ void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
 unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
                                                        SlotVec &UseSlots) {
   int NearestSlotDistance = FindShortestPath::Infinite;
-  typedef std::set<VASTSlot*, less_ptr<VASTSlot> >::const_iterator SlotIt;
+  typedef VASTRegister::slot_iterator SlotIt;
   typedef SlotVec::iterator UseSlotIt;
 
   for (UseSlotIt UI = UseSlots.begin(), UE = UseSlots.end(); UI != UE; ++UI) {
