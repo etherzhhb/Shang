@@ -1030,13 +1030,13 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
     DEBUG(dbgs() << "Going to reduce CompGraphs\n");
     SomethingBind = false;
     SomethingBind |= reduceCompGraph(RCG, RegWeight);
-    SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
-    SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
-    SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
-    SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
-    SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
-    SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
-    SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
+    //SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
+    //SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
+    //SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
+    //SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
+    //SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
+    //SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
+    //SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
   }
 
   // Bind the Compatibility Graphs
