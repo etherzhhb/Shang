@@ -12,6 +12,7 @@ add_llvm_library(VTMSchedule
   SchedulingBase.cpp
   MicroState.cpp
   VSUnit.cpp
+  PrebindMux.cpp
   ScheduleEmitter.cpp
   RecurrenceFinder.cpp
   VIfConversion.cpp
