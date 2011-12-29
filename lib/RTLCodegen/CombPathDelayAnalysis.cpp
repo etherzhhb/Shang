@@ -103,7 +103,7 @@ public:
 
 // The first node of the path is the use node and the last node of the path is
 // the define node.
-static void bindPath2ScriptEngine(ArrayRef<VASTRegister*> Path,
+static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path,
                                   unsigned Slack) {
   assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
   // Path table:
@@ -125,10 +125,10 @@ static void bindPath2ScriptEngine(ArrayRef<VASTRegister*> Path,
 
   Script.clear();
 
-  SS << "RTLDatapath.Nodes = {'" << Path[0]->getName();
+  SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
   for (unsigned i = 1; i < Path.size(); ++i) {
     // Skip the unnamed nodes.
-    const char *Name = Path[i]->getName();
+    const char *Name = Path[i].get()->getName();
     if (Name) SS << "', '" << Name;
   }
   SS << "'}";
@@ -171,7 +171,7 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
   for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E; ++I){
     unsigned Slack = I->second;
     if (Slack != FindShortestPath::Infinite) {
-      VASTRegister* Path[] = { (I->first).second, (I->first).first };
+      VASTUse Path[] = { (I->first).second, (I->first).first };
       bindPath2ScriptEngine(Path, Slack);
     }
   }
@@ -210,9 +210,12 @@ void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
 
   if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)) {
     unsigned Slack = getNearestSlotDistance(DefReg, UseSlots);
-    // If the Define register and Use register already have a slack, compare the
-    // slacks and assign the smaller one to the RegPathDelay Map.
-    updateCombPathSlack(DefReg, UseReg, Slack);
+    if (Slack < FindShortestPath::Infinite) {
+      // If the Define register and Use register already have a slack, compare the
+      // slacks and assign the smaller one to the RegPathDelay Map.
+      updateCombPathSlack(DefReg, UseReg, Slack);
+    }
+
     return;
   }
 
