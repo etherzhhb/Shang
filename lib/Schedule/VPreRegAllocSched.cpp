@@ -764,7 +764,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
       if (VInstrInfo::isInSameCmdSeq(PrevMI, MI)) {
         VSUnit *PrevSU = CurState.lookupSUnit(PrevMI);
         VSUnit *NewSU =
-          CurState.createVSUnit(MI, VInstrInfo::getPrebindFUId(MI).getFUNum());
+          CurState.createVSUnit(MI, VInstrInfo::getPreboundFUId(MI).getFUNum());
         // Increase the latency
         NewSU->setLatency(PrevSU->getLatency() + 1);
         // There maybe some SU between PrevSU and NewSU, if we simply merge
@@ -780,7 +780,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
   VSUnit *U =
-    CurState.createVSUnit(MI, VInstrInfo::getPrebindFUId(MI).getFUNum());
+    CurState.createVSUnit(MI, VInstrInfo::getPreboundFUId(MI).getFUNum());
   // Remember the new command sequence.
   if (isCmdSeq) LastCmdSeq = U;
 }

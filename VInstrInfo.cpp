@@ -1084,7 +1084,7 @@ unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   return 1;
 }
 
-FuncUnitId VInstrInfo::getPrebindFUId(const MachineInstr *MI) {
+FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(MI->getOpcode()) {
   case VTM::VOpCmdSeq:
@@ -1276,7 +1276,7 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
   unsigned TotalLatency = 0;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
     MachineInstr *MI = I;
-    FuncUnitId FU = VInstrInfo::getPrebindFUId(MI);
+    FuncUnitId FU = VInstrInfo::getPreboundFUId(MI);
     bool hasPrebindFU = FU.isBound();
 
     unsigned L = 0;

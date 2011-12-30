@@ -220,7 +220,7 @@ public:
   static bool isReadAtEmit(unsigned OpC);
 
   static bool isPrebound(unsigned Opcode);
-  static FuncUnitId getPrebindFUId(const MachineInstr *MI);
+  static FuncUnitId getPreboundFUId(const MachineInstr *MI);
   static bool mayLoad(const MachineInstr *MI);
   static bool mayStore(const MachineInstr *MI);
 };

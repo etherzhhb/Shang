@@ -29,15 +29,12 @@
 #include "vtm/VInstrInfo.h"
 
 //Dirty Hack:
-#include "llvm/../../lib/CodeGen/LiveIntervalUnion.h"
-#include "llvm/../../lib/CodeGen/RegAllocBase.h"
 #include "llvm/../../lib/CodeGen/VirtRegMap.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Function.h"
 #include "llvm/PassAnalysisSupport.h"
 // We need CondCode.
-#include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/CalcSpillWeights.h"
 #include "llvm/CodeGen/EdgeBundles.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"

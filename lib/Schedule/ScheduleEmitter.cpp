@@ -459,7 +459,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       OpSlot S = OpSlot::detailStepCeil(DetailStep,
                                         VInstrInfo::isDatapath(Inst.getOpcode()));
       // FIXME: Assert the instruction have trivial function unit.
-      fuseInstr(Inst, S, VInstrInfo::getPrebindFUId(&Inst));
+      fuseInstr(Inst, S, VInstrInfo::getPreboundFUId(&Inst));
     }
   }
 
