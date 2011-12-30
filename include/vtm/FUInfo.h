@@ -88,12 +88,15 @@ namespace VFUs {
   extern unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost,
                   ShiftCost, ICmpCost, MuxSizeCost;
 
+  extern unsigned MaxLutSize;
+  extern unsigned MaxMuxPreLut;
+
   // Latency tables
   extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
-                ShiftLatencies[4], ReductionLatencies[4];
-  // Mux latency from 2-1 mux to 16-1 mux.
-  extern double MuxLatencies[16];
-  double getMuxLatency(unsigned MuxSize);
+                ShiftLatencies[4];
+
+  double getMuxLatency(unsigned Size);
+  double getReductionLatency(unsigned Size);
 
   extern double BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector

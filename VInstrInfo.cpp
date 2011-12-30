@@ -874,6 +874,7 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
          || Opcode == VTM::VOpMove_rw
          || Opcode == VTM::VOpSel
          || Opcode == VTM::VOpCase
+         || Opcode == VTM::VOpDstMux
          || Opcode == VTM::VOpReadReturn
          || Opcode == VTM::VOpReadFU;
 }
@@ -987,8 +988,10 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
 
   case VTM::VOpROr:
   case VTM::VOpRAnd:
-  case VTM::VOpRXor:        return LookupLatency<1>(VFUs::ReductionLatencies, MI);
-
+  case VTM::VOpRXor:{
+    unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
+    return VFUs::getReductionLatency(size);
+  }
   case VTM::VOpBRam:        return VFUs::BRamLatency;
 
   case VTM::VOpCmdSeq:
@@ -998,7 +1001,8 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   return 0.0;
 }
 
-double VInstrInfo::getOperandLatency(unsigned OpCode, unsigned MOIdx) {
+double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
+  unsigned OpCode = MI->getOpcode();
   const TargetInstrDesc &TID = VTMInsts[OpCode];
   if (MOIdx < TID.getNumOperands() && TID.OpInfo[MOIdx].isPredicate())
     return VFUs::ClkEnSelLatency;
@@ -1009,6 +1013,12 @@ double VInstrInfo::getOperandLatency(unsigned OpCode, unsigned MOIdx) {
     if (MOIdx == 1) return VFUs::ClkEnSelLatency;
 
     return VFUs::getMuxLatency(2);
+  case VTM::VOpDstMux:
+    // We got the condition operand?
+    if (MOIdx == 1) return VFUs::ClkEnSelLatency;
+
+    // Get the prebound mux size.
+    return VFUs::getMuxLatency(MI->getOperand(3).getImm());
   case VTM::VOpCase:
     // We got the condition operand?
     if (MOIdx & 0x1) return VFUs::ClkEnSelLatency;
@@ -1218,7 +1228,6 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 const DetialLatencyInfo::DepLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   DepLatInfoTy &CurLatInfo = LatencyMap[MI];
-  unsigned Opcode = MI->getOpcode();
 
   // Iterate from use to define.
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
@@ -1236,7 +1245,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     if (SrcMI->isPHI() && IgnorePHISrc) continue;
 
     if (buildDepLatInfo(SrcMI, MI, CurLatInfo,
-                        VInstrInfo::getOperandLatency(Opcode, i)))
+                        VInstrInfo::getOperandLatency(MI, i)))
       // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
       // have user now.
       ExitMIs.erase(SrcMI);

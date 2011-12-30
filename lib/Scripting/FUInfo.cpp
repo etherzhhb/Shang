@@ -86,13 +86,14 @@ namespace llvm {
     unsigned ICmpCost = 64;
     unsigned MuxSizeCost = 96;
 
+    unsigned MaxLutSize = 4;
+    unsigned MaxMuxPreLut = 4;
+
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
     double AdderLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
     double CmpLatencies[]       = { 1.0, 1.0,  1.0,  1.0 };
     double MultLatencies[]      = { 1.0, 1.0,  1.0,  1.0 };
     double ShiftLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
-    double ReductionLatencies[] = { 0.0, 0.0,  0.0,  0.0 };
-    double MuxLatencies[16]     = { 0.0 };
     double MemBusLatency = 1.0;
     double BRamLatency = 1.0;
     double LutLatency = 0.0;
@@ -105,12 +106,22 @@ namespace llvm {
         LatTable[i] = getProperty<double>(LuaLatTable, i + 1, LatTable[i]);
     }
 
-    double getMuxLatency(unsigned MuxSize) {
-      if (MuxSize < 2) return 0;
-      unsigned MuxLatenciesBackIdx = array_lengthof(MuxLatencies) - 1;
-      unsigned Idx = std::min(MuxSize - 2, MuxLatenciesBackIdx);
+    double getReductionLatency(unsigned Size) {
+      if (Size < 2) return 0;
 
-      return MuxLatencies[Idx];
+      unsigned Level = ceil(double(Log2_32_Ceil(Size))
+                            / double(Log2_32_Ceil(MaxLutSize)));
+
+      return Level * LutLatency;
+    }
+
+    double getMuxLatency(unsigned Size) {
+      if (Size < 2) return 0;
+
+      unsigned Level = ceil(double(Log2_32_Ceil(Size))
+                            / double(Log2_32_Ceil(MaxMuxPreLut)));
+
+      return Level * LutLatency;
     }
   }
 }

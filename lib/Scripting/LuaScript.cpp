@@ -188,12 +188,6 @@ void LuaScript::updateFUs() {
   if (unsigned ICmpCost = FUSet[VFUs::ICmp]->getCost())
     VFUs::ICmpCost = ICmpCost;
 
-  // Latencies for reduction and bit repeat.
-  VFUs::initLatencyTable(FUs["ReductionLatencies"], VFUs::ReductionLatencies,
-                         array_lengthof(VFUs::ReductionLatencies));
-  VFUs::initLatencyTable(FUs["MuxLatency"], VFUs::MuxLatencies,
-                         array_lengthof(VFUs::MuxLatencies));
-
   // Read other parameters.
 #define READPARAMETER(PARAMETER, T) \
   if (boost::optional<T> PARAMETER \
@@ -206,6 +200,8 @@ void LuaScript::updateFUs() {
   READPARAMETER(MuxSizeCost, unsigned);
 
   READPARAMETER(LutLatency, double);
+  READPARAMETER(MaxLutSize, unsigned);
+  READPARAMETER(MaxMuxPreLut, unsigned);
 }
 
 void LuaScript::updateStatus() {
