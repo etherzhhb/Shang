@@ -204,7 +204,6 @@ public:
   static bool isWriteUntilFinish(unsigned OpC);
   static bool isDatapath(unsigned OpC);
   static bool isControl(unsigned OpC) { return !isDatapath(OpC); }
-  static bool isLazyEmit(unsigned OpC);
   static VFUs::FUTypes getFUType(unsigned OpC);
   static bool hasTrivialFU(unsigned OpC) {
     return getFUType(OpC) == VFUs::Trivial;

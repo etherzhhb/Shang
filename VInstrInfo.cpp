@@ -896,10 +896,6 @@ bool VInstrInfo::isDatapath(unsigned OpC) {
          VTMInsts[OpC].TSFlags & (DatapathMask << DatapathShiftAmount);
 }
 
-bool VInstrInfo::isLazyEmit(unsigned OpC) {
-  return VTMInsts[OpC].TSFlags & (LazyEmitMask << LazyEmitShiftAmount);
-}
-
 VFUs::FUTypes VInstrInfo::getFUType(unsigned OpC) {
   return (VFUs::FUTypes)
     ((VTMInsts[OpC].TSFlags >> ResTypeShiftAmount) & ResTypeMask);
