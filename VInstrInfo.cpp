@@ -979,10 +979,11 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
 
   case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
 
+  // Ignore the trivial logic operation latency at the moment.
   case VTM::VOpAnd:
   case VTM::VOpOr:
   case VTM::VOpXor:
-  case VTM::VOpNot:         return VFUs::LutLatency;
+  case VTM::VOpNot:         return 0;/*VFUs::LutLatency*/;
 
   case VTM::VOpROr:
   case VTM::VOpRAnd:
