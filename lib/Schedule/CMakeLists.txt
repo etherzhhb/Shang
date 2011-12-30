@@ -15,7 +15,6 @@ add_llvm_library(VTMSchedule
   PrebindMux.cpp
   ScheduleEmitter.cpp
   RecurrenceFinder.cpp
-  VIfConversion.cpp
   VPreRegAllocSched.cpp
   VRegAllocSimple.cpp
 )
