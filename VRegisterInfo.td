@@ -30,6 +30,7 @@ def CR : VTMReg<"callee">;
 def BR : VTMReg<"bram">;
 def UCMPR : VTMReg<"ucmp">;
 def SCMPR : VTMReg<"scmp">;
+def MUXR : VTMReg<"mux">;
 
 def PhiR : VTMReg<"phi">;
 def R : VTMReg<"r">;
@@ -60,3 +61,6 @@ def RBRM    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [BR]>;
 // Integer comparison
 def RUCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [UCMPR]>;
 def RSCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [SCMPR]>;
+
+// Prebinded distributed (in time domain) multiplexer.
+def RMUX    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MUXR]>;
