@@ -45,20 +45,21 @@ namespace VFUs {
     AddSub = 1,
     Shift = 2,
     Mult = 3,
-    MemoryBus = 4,
-    BRam = 5,
-    ICmp = 6,
+    ICmp = 4,
+    MemoryBus = 5,
+    BRam = 6,
+    Mux = 7,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
-    LastPostBindFUType = Mult,
+    LastPostBindFUType = ICmp,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
-    LastCommonFUType = ICmp,
+    LastCommonFUType = Mux,
     NumCommonFUs = LastCommonFUType - FirstFUType + 1,
     NumNonTrivialCommonFUs = LastCommonFUType - FirstNonTrivialFUType + 1,
     // Special function unit.
     // RTL module corresponding to callee functions of function corresponding to
     // current RTL module.
-    CalleeFN = 7,
+    CalleeFN = 8,
     LastFUType = CalleeFN,
     NumFUs = LastFUType - FirstFUType + 1,
     // Helper enumeration value, just for internal use as a flag to indicate
@@ -121,6 +122,7 @@ public:
   inline explicit FuncUnitId(VFUs::FUTypes T, unsigned N) {
     UID.ID.Type = T;
     UID.ID.Num = N;
+    assert(T == UID.ID.Type && UID.ID.Num == N && "Data overflow!");
   }
 
   /*implicit*/ FuncUnitId(VFUs::FUTypes T = VFUs::Trivial) {

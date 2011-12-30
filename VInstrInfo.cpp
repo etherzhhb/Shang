@@ -1014,9 +1014,6 @@ double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
 
     return VFUs::getMuxLatency(2);
   case VTM::VOpDstMux:
-    // We got the condition operand?
-    if (MOIdx == 1) return VFUs::ClkEnSelLatency;
-
     // Get the prebound mux size.
     return VFUs::getMuxLatency(MI->getOperand(3).getImm());
   case VTM::VOpCase:
@@ -1097,6 +1094,10 @@ FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
   case VTM::VOpInternalCall: {
     unsigned Id = MI->getOperand(1).getTargetFlags();
     return FuncUnitId(VFUs::CalleeFN, Id);
+  }
+  case VTM::VOpDstMux: {
+    unsigned Id = MI->getOperand(2).getImm();
+    return FuncUnitId(VFUs::Mux, Id);
   }
   default:
     return FuncUnitId();

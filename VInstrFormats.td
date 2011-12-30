@@ -12,18 +12,19 @@
 //
 
 // The corresponding Function Unit type of the instruction.
-class FUType<bits<3> val> {
-  bits<3> Value = val;
+class FUType<bits<4> val> {
+  bits<4> Value = val;
 }
 
 def FUTrivial	: FUType<0>;
 def FUAddSub	: FUType<1>;
 def FUSHIFT		: FUType<2>;
 def FUMult		: FUType<3>;
-def FUMemBus	: FUType<4>;
-def FUBRam		: FUType<5>;
-def FUICmp		: FUType<6>;
-def FUCalleeFN	: FUType<7>;
+def FUICmp		: FUType<4>;
+def FUMemBus	: FUType<5>;
+def FUBRam		: FUType<6>;
+def FUMUX		: FUType<7>;
+def FUCalleeFN	: FUType<8>;
 
 // Bit-width information operand.
 def BitWidthAnnotator : PredicateOperand<i64, (ops DR), (ops (i64 zero_reg))>
@@ -50,13 +51,11 @@ class InstVTM<dag oops, dag iops, string asmstr, list<dag> pattern, FUType FU,
 
   FUType fu = FU;
 
-  let TSFlags{2-0} = fu.Value;
+  let TSFlags{3-0} = fu.Value;
 
-  let TSFlags{3} = readAtEmit;
-  let TSFlags{4} = writeUntilFinish;
-  let TSFlags{5} = datapath;
-
-  let TSFlags{9-6} = latency;
+  let TSFlags{4} = readAtEmit;
+  let TSFlags{5} = writeUntilFinish;
+  let TSFlags{6} = datapath;
 }
 
 class CtrlInst<dag outs, dag ins, string asmstr, list<dag> pattern,

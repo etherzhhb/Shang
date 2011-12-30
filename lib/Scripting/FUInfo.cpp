@@ -52,8 +52,8 @@ void VFUDesc::print(raw_ostream &OS) const {
 namespace llvm {
   namespace VFUs {
     const char *VFUNames[] = {
-      "Trivial", "AddSub", "Shift", "Mult", "MemoryBus", "BRam",
-      "ICmp", "CalleeFN"
+      "Trivial", "AddSub", "Shift", "Mult", "ICmp", "MemoryBus", "BRam",
+      "Mux", "CalleeFN"
     };
 
     const TargetRegisterClass *getRepRegisterClass(unsigned OpCode){
@@ -71,6 +71,7 @@ namespace llvm {
       case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
       // allocate unsigned comparison fu by default.
       case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
+      case VTM::VOpDstMux:      return VTM::RMUXRegisterClass;
       }
 
       return 0;

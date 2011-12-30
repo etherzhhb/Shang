@@ -186,23 +186,17 @@ public:
 
 private:
   enum TSFlagsBitFields {
-    ResTypeMask = 0x7,
+    ResTypeMask = 0xf,
     ResTypeShiftAmount = 0x0,
 
-    TrivialLatencyMask = 0xf,
-    TrivialLatencyShiftAmount = 0x6,
-
     ReadAtEmitMask = 0x1,
-    ReadAtEmitShiftAmount = 0x3,
+    ReadAtEmitShiftAmount = 0x4,
 
     WriteUntilFinishMask = 0x1,
-    WriteUntilFinishShiftAmount = 0x4,
+    WriteUntilFinishShiftAmount = 0x5,
 
     DatapathMask = 0x1,
-    DatapathShiftAmount = 0x5,
-
-    LazyEmitMask = 0x1,
-    LazyEmitShiftAmount = 0xa
+    DatapathShiftAmount = 0x6
   };
 
 public:

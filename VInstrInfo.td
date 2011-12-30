@@ -193,9 +193,10 @@ let isReMaterializable = 1,
                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   // Distributed (in time domain) multiplexer.
-  def VOpDstMux : CtrlInst<(outs DR:$dst), (ins DR:$cnd, DR:$src, i8imm:$size),
-                          "$dst = $cnd?$src", [],
-                          0 /*Latency*/, 1 /*writeUntilFinish*/>;
+  def VOpDstMux : FUInst<(outs DR:$dst),
+                           (ins DR:$src, i8imm:$muxnum, i8imm:$size),
+                          "$dst($muxnum, $size) = $src",
+                          [], FUMUX, 1 /*writeUntilFinish*/>;
 
   def VOpCase  : CtrlInst<(outs DR:$dst), (ins variable_ops),
                           "$dst = case;", [],
