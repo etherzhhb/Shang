@@ -1210,7 +1210,9 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   // are likely become the critical path.
   EdgeLatency += OperandDelay;
 
-  if (VInstrInfo::isControl(SrcMI->getOpcode())) {
+  unsigned SrcOpC = SrcMI->getOpcode();
+  // The VOpDstMux should be merged to its user.
+  if (VInstrInfo::isControl(SrcOpC) && SrcOpC != VTM::VOpDstMux) {
     // Simply add the latency from ctrl op to the latency map.
     updateLatency(CurLatInfo, SrcMI, EdgeLatency);
     return true;

@@ -171,6 +171,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
+  void mergeDstMux(VSUnit *U, VSchedGraph &CurState);
+
   bool mergeUnaryOp(MachineInstr *MI, unsigned OpIdx, VSchedGraph &CurState);
 
   bool mergeBitCat(MachineInstr *MI, VSchedGraph &CurState);
@@ -741,6 +743,41 @@ bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
   return LHSMerged;
 }
 
+void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &CurState) {
+  // Look for the source value form distributed multiplexers.
+  SmallVector<std::pair<MachineInstr*, unsigned>, 4> WorkStack;
+  WorkStack.push_back(std::make_pair(U->getRepresentativeInst(), 0));
+
+  while (!WorkStack.empty()) {
+    MachineInstr *CurMI = WorkStack.back().first;
+    unsigned Idx = WorkStack.back().second;
+
+    // All child visited.
+    if (Idx == CurMI->getNumOperands()) {
+      WorkStack.pop_back();
+      continue;
+    }
+
+    MachineOperand &MO = CurMI->getOperand(Idx);
+    ++WorkStack.back().second;
+
+    // They do defined by machine instructions.
+    if (!MO.isReg() || MO.isDef() || MO.getReg() == 0) continue;
+
+    MachineInstr *ChildMI = MRI->getVRegDef(MO.getReg());
+    assert(ChildMI && "Reg not defined by any MI?");
+
+    // We only merge Muxs.
+    if (ChildMI->getOpcode() != VTM::VOpDstMux) continue;
+
+    int Level = int(WorkStack.size());
+    CurState.mapMI2SU(ChildMI, U, -Level);
+
+    // The operand 0 is a define, simply ignore it.
+    WorkStack.push_back(std::make_pair(ChildMI, 1));
+  }
+}
+
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   assert(!MI->getDesc().isTerminator() && "Unexpected terminator!");
   bool isCmdSeq = false;
@@ -775,12 +812,16 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
       }
     }
     break;
+    // The VOpDstMux should be merged to its user.
+    case VTM::VOpDstMux: return;
   }
 
   // TODO: Remember the register that live out this MBB.
   // and the instruction that only produce a chain.
-  VSUnit *U =
-    CurState.createVSUnit(MI, VInstrInfo::getPreboundFUId(MI).getFUNum());
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  VSUnit *U = CurState.createVSUnit(MI, Id.getFUNum());
+  if (Id.isBound()) mergeDstMux(U, CurState);
+
   // Remember the new command sequence.
   if (isCmdSeq) LastCmdSeq = U;
 }
