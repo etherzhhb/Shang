@@ -471,16 +471,19 @@ void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
 }
 
 VASTUse VASTRegister::getConstantValue() const {
+  std::set<VASTUse> Srcs;
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
+    Srcs.insert(*I->second);
+
   // Only 1 assignment?
-  if (Assigns.size() != 1) return VASTUse();
+  if (Srcs.size() != 1) return VASTUse();
 
-  VASTUse *C = Assigns.begin()->second;
+  VASTUse C = *Srcs.begin();
 
-  if (!C->isImm()) return VASTUse();
+  if (!C.isImm()) return VASTUse();
 
   // Some register assignment may have un-match bit-width
-  return VASTUse(C->getImm(), getBitWidth());
-
+  return VASTUse(C.getImm(), getBitWidth());
 }
 
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
@@ -517,8 +520,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   typedef std::vector<VASTWire*> OrVec;
   typedef std::map<VASTUse, OrVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
-  for (VASTRegister::assign_itertor I = assign_begin(), E = assign_end();
-       I != E; ++I)
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
     SrcCSEMap[*I->second].push_back(I->first);
 
   OS << "\n// Assignment of " << getName() << '\n';
@@ -856,22 +858,21 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
 bool VASTModule::eliminateConstRegisters() {
   bool Changed = false;
   typedef RegisterVector::iterator it;
-  for (it I = Registers.begin(), E = Registers.end(); I != E; ++I) {
-    VASTRegister *R = *I;
+  //for (it I = Registers.begin(), E = Registers.end(); I != E; ++I) {
+    //VASTRegister *R = *I;
 
-    VASTUse Const = R->getConstantValue();
+    // VASTUse Const = R->getConstantValue();
 
-    if (Const.isInvalid()) continue;
+    //if (Const.isInvalid()) continue;
 
     // Replace the register by constant.
     // FIXME: Also check no one read the register before it is assign, otherwise
     // it is not safe to do the replacement.
-    replaceAndUpdateUseTree(R, Const);
+    //if (replaceAndUpdateUseTree(R, Const))
+    //  R->clearAssignments();
 
-    R->clearAssignments();
-
-    Changed = true;
-  }
+    // Changed = true;
+  //}
 
   return Changed;
 }
