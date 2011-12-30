@@ -210,9 +210,6 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
     default:
       llvm_unreachable("Trying to fold unexpected instruction!");
     }
-
-
-
   }
 }
 

@@ -341,6 +341,13 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(BB);
   }
 
+  // Building the Slot active signals.
+  // FIXME: It is in fact simply printing the logic out.
+  VM->buildSlotLogic();
+
+  // TODO: Optimize the RTL net list.
+  // FIXME: Do these in separate passes.
+  VM->eliminateConstRegisters();
   return false;
 }
 
