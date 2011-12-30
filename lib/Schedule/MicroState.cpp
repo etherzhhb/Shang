@@ -299,6 +299,12 @@ ucOperand ucOperand::CreateReg(unsigned RegNum, unsigned BitWidth,
   return MO;
 }
 
+ucOperand ucOperand::CreateImm(int64_t Val, unsigned BitWidth) {
+  ucOperand MO = MachineOperand::CreateImm(Val);
+  MO.setBitWidth(BitWidth);
+  return MO;
+}
+
 bool ucOperand::isWire() const {
   return isReg() && (IsWireFlag & getTargetFlags());
 }

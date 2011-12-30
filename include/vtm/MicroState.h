@@ -124,6 +124,7 @@ public:
                               bool IsDef = false);
   static ucOperand CreateReg(unsigned RegNum, unsigned BitWidth,
                              bool IsDef = false);
+  static ucOperand CreateImm(int64_t Val, unsigned BitWidth);
 
   static ucOperand CreatePredicate(unsigned Reg = 0);
 
