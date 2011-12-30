@@ -122,7 +122,8 @@ public:
   inline explicit FuncUnitId(VFUs::FUTypes T, unsigned N) {
     UID.ID.Type = T;
     UID.ID.Num = N;
-    assert(T == UID.ID.Type && UID.ID.Num == N && "Data overflow!");
+    assert(unsigned(T) == UID.ID.Type && UID.ID.Num == N
+           && "Data overflow!");
   }
 
   /*implicit*/ FuncUnitId(VFUs::FUTypes T = VFUs::Trivial) {

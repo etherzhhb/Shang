@@ -50,9 +50,13 @@ public:
 
     PhyRegInfo(unsigned ClassId, unsigned AliasSet, unsigned U, unsigned L) {
       UData.SData.RegClassId = ClassId;
+      assert(UData.SData.RegClassId == ClassId && "ClassId overflow!");
       UData.SData.AliasSetId = AliasSet;
+      assert(UData.SData.AliasSetId == AliasSet && "AliasSet overflow!");
       UData.SData.UB = U;
+      assert(UData.SData.UB == U && "U overflow!");
       UData.SData.LB = L;
+      assert(UData.SData.LB == L && "L overflow!");
     }
 
     /*implicit*/ PhyRegInfo(unsigned D) { UData.IData = D; }

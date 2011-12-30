@@ -1312,7 +1312,7 @@ void VRASimple::bindBlockRam() {
 }
 
 unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
-  unsigned FNNum = TRI->allocateFN(VTM::RCFNRegClassID, 128);
+  unsigned FNNum = TRI->allocateFN(VTM::RCFNRegClassID, 64);
   unsigned RetPortSize = 0;
   typedef MachineRegisterInfo::use_iterator use_it;
   for (use_it I = MRI->use_begin(RegNum); I != MRI->use_end(); ++I) {
