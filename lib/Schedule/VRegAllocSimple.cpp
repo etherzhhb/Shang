@@ -143,6 +143,7 @@ struct VRASimple : public MachineFunctionPass {
   void bindMemoryBus();
   void bindBlockRam();
   void bindCalleeFN();
+  void bindDstMux();
   unsigned allocateCalleeFNPorts(unsigned RegNum);
 
   typedef const std::vector<unsigned> VRegVec;
@@ -424,6 +425,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     case VTM::VOpMove_ri:
     case VTM::COPY:
     case VTM::VOpReadFU:
+    case VTM::VOpDstMux:
       addSrc<0>(Op.getOperand(1));
       break;
     case VTM::VOpReadReturn:
@@ -993,6 +995,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bindMemoryBus();
   bindBlockRam();
   bindCalleeFN();
+  bindDstMux();
 
   //Build the Compatibility Graphs
   LICGraph RCG(VTM::DRRegClassID),
@@ -1232,6 +1235,40 @@ void VRASimple::bindMemoryBus() {
 
       // Merge all others LI to MemBusLI.
       mergeLI(LI, MemBusLI);
+    }
+  }
+}
+
+void VRASimple::bindDstMux() {
+  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RMUXRegisterClass);
+  std::map<unsigned, LiveInterval*> RepLIs;
+
+  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
+    unsigned RegNum = *I;
+
+    if (LiveInterval *LI = getInterval(RegNum)) {
+      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
+      assert(Op->getOpcode() == VTM::VOpDstMux && "Unexpected opcode!");
+      unsigned MuxNum = Op.getOperand(2).getImm();
+
+      // Merge to the representative live interval.
+      LiveInterval *RepLI = RepLIs[MuxNum];
+      // Had we allocate a register for this bram?
+      if (RepLI == 0) {
+        unsigned BitWidth = Op.getOperand(0).getBitWidth();
+        unsigned PhyReg = TRI->allocateFN(VTM::RMUXRegClassID, BitWidth);
+        RepLIs[MuxNum] = LI;
+        assign(*LI, PhyReg);
+        continue;
+      }
+
+      // Merge to the representative live interval.
+      // DirtyHack: Now bram is write until finish, it is ok to overlap the
+      // live interval of bram for 1 control step(2 indexes in SlotIndex).
+      //SlotIndex NextStart = LI->beginIndex().getNextIndex().getNextIndex();
+      //assert(!RepLI->overlaps(NextStart, LI->endIndex())
+        //&& "Unexpected bram overlap!");
+      mergeLI(LI, RepLI);
     }
   }
 }

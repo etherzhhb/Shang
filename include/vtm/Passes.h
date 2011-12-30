@@ -52,6 +52,7 @@ Pass *createFixMachineCodePass();
 Pass *createFixTerminatorsPass();
 Pass *createForwardWireUsersPass();
 Pass *createMergeFallThroughBlocksPass();
+Pass *createPrebindMuxPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
