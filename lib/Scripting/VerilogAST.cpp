@@ -834,12 +834,13 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive());
-  VASTWire *AssignCnd = cast<VASTWire>(buildExpr(VASTWire::cpAssignCnd,Cnds,1));
-  AssignCnd->setSlot(Slot);
+  VASTWire *AssignAtSlot = cast<VASTWire>(buildExpr(VASTWire::cpAssignAtSlot,
+                                          buildExpr(VASTWire::dpAnd,Cnds,1), 1));
+  AssignAtSlot->setSlot(Slot);
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();
 
-  return AssignCnd;
+  return AssignAtSlot;
 }
 
 void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
@@ -1245,7 +1246,7 @@ void VASTWire::printAsOperandInteral(raw_ostream &OS) const {
 
   switch (Opc) {
   case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
-  case cpAssignCnd:
+
   case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;
   case dpOr:  printSimpleUnsignedOp(OS, getOperands(), " | "); break;
   case dpXor: printSimpleUnsignedOp(OS, getOperands(), " ^ "); break;
@@ -1261,7 +1262,9 @@ void VASTWire::printAsOperandInteral(raw_ostream &OS) const {
   case dpMul: printSimpleUnsignedOp(OS, getOperands(), " * "); break;
   case dpShl: printSimpleUnsignedOp(OS, getOperands(), " << ");break;
   case dpSRL: printSimpleUnsignedOp(OS, getOperands(), " >> ");break;
-  case dpSRA: printSRAOp(OS, getOperands());                                    break;
+  case dpSRA: printSRAOp(OS, getOperands());                   break;
+
+  case cpAssignAtSlot:
   case dpAssign: getOperand(0).print(OS);     break;
 
   case dpBitCat:    printBitCat(OS, getOperands());    break;

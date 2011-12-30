@@ -366,25 +366,36 @@ public:
 class VASTWire : public VASTSignal {
 public:
   enum Opcode {
-    Dead,
-    // Datapath opcode.
-    dpUnknown,
     // FU datapath
-    dpAdd, dpMul, dpShl, dpSRA, dpSRL, dpSCmp, dpUCmp,
+    dpAdd = VTM::VOpAdd_c,
+    dpMul = VTM::VOpMult_c,
+    dpShl = VTM::VOpSHL_c,
+    dpSRA = VTM::VOpSRA_c,
+    dpSRL = VTM::VOpSRL_c,
+    dpSCmp = VTM::VOpICmp, dpUCmp = VTM::VOpICmp_c,
     // bitwise logic datapath
-    dpAnd, dpOr, dpXor, dpNot, dpRAnd, dpROr, dpRXor,
+    dpAnd = VTM::VOpAnd,
+    dpOr = VTM::VOpOr,
+    dpXor = VTM::VOpXor,
+    dpNot = VTM::VOpNot,
+    dpRAnd = VTM::VOpRAnd,
+    dpROr = VTM::VOpROr,
+    dpRXor = VTM::VOpRXor,
     // bit level assignment.
-    dpBitCat, dpBitRepeat,
+    dpBitCat = VTM::VOpBitCat,
+    dpBitRepeat = VTM::VOpBitRepeat,
     // Simple wire assignment.
-    dpAssign,
+    dpAssign = VTM::VOpBitSlice,
+    // VAST specific nodes.
+    Dead = VTM::INSTRUCTION_LIST_END,
     // Mux in datapath.
     dpMux,
     // Timing BlackBox, have latecy not capture by slots.
     dpVarLatBB,
-    // Register Assignment.
-    // Assignment condtion, Slot active signal should be included in ops if
-    // necessary.
-    cpAssignCnd
+    // Datapath opcode.
+    dpUnknown,
+    // Assignment with slot information.
+    cpAssignAtSlot
   };
 private:
   VASTUse *Ops;
@@ -395,7 +406,7 @@ private:
   } Context;
 
   uint8_t NumOps;
-  Opcode Opc;
+  Opcode  Opc;
 
   VASTWire(const VASTWire&);             // Do not implement
 
@@ -409,9 +420,8 @@ private:
   void printAsOperandInteral(raw_ostream &OS) const;
 
   void buildUseList();
-
   void setSlot(VASTSlot *Slot) {
-    assert(getOpcode() == cpAssignCnd && "Call setSlot on bad wire type!");
+    assert(getOpcode() == cpAssignAtSlot && "setSlot on wrong type!");
     Context.Slot = Slot;
   }
 
@@ -435,7 +445,7 @@ public:
   }
 
   VASTSlot *getSlot() const {
-    assert(getOpcode() == cpAssignCnd && "Call getSlot on bad wire type!");
+    assert(getOpcode() == cpAssignAtSlot &&  "Call getSlot on bad wire type!");
     return Context.Slot;
   }
 
