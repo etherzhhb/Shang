@@ -92,11 +92,11 @@ public:
     SlotNum = (getSlot() << 0x1) | (0x1 & T);
   }
 
-  inline OpSlot operator+(unsigned RHS) const {
+  inline OpSlot operator+(int RHS) const {
     return OpSlot(getSlot() + RHS, isControl());
   }
 
-  inline OpSlot &operator+=(unsigned RHS) {
+  inline OpSlot &operator+=(int RHS) {
     SlotNum += RHS * 2;
     return *this;
   }
@@ -430,36 +430,44 @@ struct MicroStateBuilder {
 }
 
 //===----------------------------------------------------------------------===//
+typedef std::pair<MachineInstr*, int8_t> InSUInstInfo;
+static inline bool sort_intra_latency(const InSUInstInfo &LHS,
+                                      const InSUInstInfo &RHS) {
+  return LHS.second < RHS.second;
+}
 
 MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
   for (SmallVectorImpl<VSUnit*>::iterator I = SUnitsToEmit.begin(),
        E = SUnitsToEmit.end(); I !=E; ++I) {
     VSUnit *A = *I;
 
-    OpSlot SchedSlot(A->getSlot(), A->isControl());
-    MachineInstr *RepInst = A->getRepresentativeInst();
-    // Handle representative instruction of the VSUnit.
-    if (RepInst != 0 && !RepInst->isImplicitDef()) {
-      if (!RepInst->isPHI())
-        fuseInstr(*RepInst, SchedSlot, A->getFUId());
-      else
-        PHIs.push_back(A);
+    SmallVector<InSUInstInfo, 8> Insts;
+
+    for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
+      MachineInstr *Inst = A->getInstrAt(i);
+      // Ignore the entry node marker (null) and implicit define.
+      if (Inst && !Inst->isImplicitDef()) {
+        if (Inst->isPHI()) {
+          PHIs.push_back(A);
+          continue;
+        }
+
+        Insts.push_back(std::make_pair(Inst, i ? A->getLatencyAt(i) : 0));
+      }
     }
 
-    // And other trivially merged instructions.
-    const VSUnit::instr_iterator InstrBase = A->instr_begin();
-    for (VSUnit::instr_iterator II = InstrBase + 1, IE = A->instr_end();
-         II != IE; ++II) {
-      MachineInstr &Inst = **II;
+    // Sort the instructions, so we can emit them in order.
+    std::sort(Insts.begin(), Insts.end(), sort_intra_latency);
 
-      // The instructions in Exit Root are parallel.
-      unsigned DetailStep = SchedSlot.getDetailStep();
-      DetailStep += A->getLatencyAt(II - InstrBase);
+    OpSlot SchedSlot(A->getSlot(), A->isControl());
 
-      OpSlot S = OpSlot::detailStepCeil(DetailStep,
-                                        VInstrInfo::isDatapath(Inst.getOpcode()));
-      // FIXME: Assert the instruction have trivial function unit.
-      fuseInstr(Inst, S, VInstrInfo::getPreboundFUId(&Inst));
+    typedef SmallVector<InSUInstInfo, 8>::iterator it;
+    for (it I = Insts.begin(), E = Insts.end(); I != E; ++I) {
+      MachineInstr *MI = I->first;
+      OpSlot S = SchedSlot + I->second;
+      S = OpSlot::detailStepCeil(S.getDetailStep(),
+                                 VInstrInfo::isDatapath(MI->getOpcode()));
+      fuseInstr(*MI, S, VInstrInfo::getPreboundFUId(MI));
     }
   }
 

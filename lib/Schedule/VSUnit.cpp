@@ -413,12 +413,11 @@ unsigned VSUnit::getLatencyFrom(MachineInstr *SrcMI, unsigned SrcLatency) const{
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
-  const VSUnit::const_instr_iterator InstrBase = instr_begin();
-  for (const_instr_iterator I = InstrBase, E = instr_end(); I != E; ++I)
-    if (MachineInstr *Instr = *I) {
+
+  for (unsigned i = 0, e = num_instrs(); i < e; ++i)
+    if (MachineInstr *Instr = getInstrAt(i)) {
       OS << Instr->getDesc().getName();
-      unsigned Idx = I - InstrBase;
-      if (Idx) OS << '+' << unsigned(getLatencyAt(Idx));
+      if (i) OS << '+' << int(getLatencyAt(i));
       OS << '\n';
       DEBUG(OS << *Instr << '\n');
     }
