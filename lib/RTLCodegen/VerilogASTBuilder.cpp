@@ -1269,8 +1269,10 @@ void VerilogASTBuilder::getPredValAtNextSlot(ucOp &Op, VASTUse &Pred) {
 VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
-    VASTUse V = VM->lookupSignal(Op.getReg());
-    return V;
+    if (unsigned Reg = Op.getReg())
+      return VM->lookupSignal(Reg);
+
+    return VASTUse();
   }
   case MachineOperand::MO_Immediate:
     return VASTUse(Op.getImm(), Op.getBitWidth());

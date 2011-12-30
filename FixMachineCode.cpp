@@ -144,8 +144,8 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
       continue;
     }
 
-    // Just set the implicit defined register to some strange value.
-    MO->ChangeToImmediate(TargetRegisterInfo::virtReg2Index(Reg));
+    // Change to register 0.
+    MO->ChangeToRegister(0, false);
   }
 
   if (use_empty) MI->removeFromParent();

@@ -846,6 +846,9 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
 void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                                SmallVectorImpl<VASTUse> &Cnds,
                                bool AddSlotActive) {
+  // No need to assign the invalid value.
+  if (Src.isInvalid()) return;
+
   VASTUse *U = new (UseAllocator.Allocate()) VASTUse(Src);
   Dst->addAssignment(U, buildAssignCnd(Slot, Cnds, AddSlotActive));
 }

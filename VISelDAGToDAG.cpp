@@ -522,7 +522,7 @@ void VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
   unsigned VTSize = VT.getSizeInBits();
 
   SDValue StoreVal = isStore ? cast<StoreSDNode>(LSNode)->getValue()
-                             : DAG.getTargetConstant(0, VT);
+                             : DAG.getUNDEF(VT);
 
   LLVMContext *Cntx = DAG.getContext();
   EVT CmdVT = EVT::getIntegerVT(*Cntx, VFUMemBus::CMDWidth);
