@@ -143,6 +143,32 @@ public:
   };
 };
 
+//ucOperandExpressionTrait - Special DenseMapInfo traits to compare
+//ucOperand* by *value* of the instruction rather than by pointer value.
+//The hashing and equality testing functions ignore definitions so this is
+//useful for CSE, etc.
+struct ucOperandValueTrait : DenseMapInfo<ucOperand> {
+  static inline ucOperand getEmptyKey() {
+    return ucOperand::CreateReg(0, false);
+  }
+
+  static inline ucOperand getTombstoneKey() {
+    return ucOperand::CreateOpcode(VTM::PHI, 0);
+  }
+
+  static unsigned getHashValue(ucOperand Op);
+
+  static bool isEqual(ucOperand LHS, ucOperand RHS) {
+    if (RHS.isIdenticalTo(getEmptyKey())
+      || RHS.isIdenticalTo(getTombstoneKey())
+      || LHS.isIdenticalTo(getEmptyKey())
+      || LHS.isIdenticalTo(getTombstoneKey()))
+      return LHS.isIdenticalTo(RHS);
+
+    return LHS.isIdenticalTo(RHS);
+  }
+};
+
 class ucOp {
 public:
   typedef mapped_iterator<MachineInstr::mop_iterator, ucOperand::Mapper>

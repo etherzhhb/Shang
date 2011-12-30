@@ -160,6 +160,10 @@ static uint64_t getMachineOperandHashValue(const MachineOperand &MO) {
   return Key;
 }
 
+unsigned ucOperandValueTrait::getHashValue(ucOperand Op) {
+  return getMachineOperandHashValue(Op);
+}
+
 unsigned
 ucOpExpressionTrait::getHashValue(ucOp Op) {
   unsigned Hash = 0;
