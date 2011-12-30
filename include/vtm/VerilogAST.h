@@ -19,24 +19,16 @@
 #ifndef VBE_VLANG_H
 #define VBE_VLANG_H
 
+#include "vtm/VTM.h"
 #include "vtm/FUInfo.h"
 #include "vtm/LangSteam.h"
 
-#include "llvm/Pass.h"
-#include "llvm/Function.h"
-#include "llvm/Target/Mangler.h"
-#include "llvm/Target/TargetData.h"
-#include "llvm/MC/MCAsmInfo.h"
-#include "llvm/MC/MCContext.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include <map>
-#include <list>
 
 namespace llvm {
 class MachineBasicBlock;

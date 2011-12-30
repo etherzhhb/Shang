@@ -34,6 +34,7 @@
 #include "llvm/Module.h"
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetData.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"

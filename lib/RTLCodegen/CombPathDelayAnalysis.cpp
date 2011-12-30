@@ -24,6 +24,7 @@
 #include "vtm/VFInfo.h"
 #include "vtm/Utilities.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/Target/TargetData.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ErrorHandling.h"
