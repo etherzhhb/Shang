@@ -331,18 +331,27 @@ public:
   }
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
-  unsigned getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
-  unsigned getLatencyFrom(MachineInstr *SrcMI, unsigned SrcLatency) const;
+  int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
+  int getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const;
 
   // Get the maximum latency from RepresentativeInst to DstMI.
-  unsigned getMaxLatencyTo(MachineInstr *DstMI) const {
-    unsigned latency = 0;
+  int getMaxLatencyTo(MachineInstr *DstMI) const {
+    int latency = 0;
     for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
       // Also compute the latency to DstMI even *I (SrcMI) is 0, which means the
       // source is the entry root of the state.
       latency = std::max(getLatencyTo(*I, DstMI), latency);
 
     return latency;
+  }
+
+  // Get the latency considering negative latency.
+  int getMaxLatencyFromEntry() const {
+    int latency = 0;
+    for (unsigned i = 1, e = num_instrs(); i < e; ++i)
+      latency = std::min(latency, int(getLatencyAt(i)));
+
+    return VInstrInfo::getStepsFromEntry(getRepresentativeInst()) - latency;
   }
 
   typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;

@@ -570,7 +570,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (NumValDep == 0) {
-    unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
+    int Latency =  A->getMaxLatencyFromEntry();
+
     A->addDep(VDCtrlDep::CreateCtrlDep(CurState.getEntryRoot(), Latency));
     return;
   }
@@ -596,7 +597,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
                                          bool isExit) {
   // Build the dependence edge.
   typedef VSUnit::instr_iterator it;
-  assert(A->isControl() && "Unexpected datapath schedule unit!");
+  assert(A->isControl() && "Unexpected data-path schedule unit!");
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
     MachineInstr *MI = A->getInstrAt(I);
     int IntraSULatency = I ? A->getLatencyAt(I) : 0;
@@ -611,7 +612,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !isExit) {
-    unsigned Latency = VInstrInfo::getStepsFromEntry(A->getRepresentativeInst());
+    int Latency = A->getMaxLatencyFromEntry();
     A->addDep(VDCtrlDep::CreateCtrlDep(CurState.getEntryRoot(), Latency));
   }
 }
@@ -718,8 +719,8 @@ bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
       LHSMI = RHSMI = 0;
     }
 
-    unsigned Latency = std::max(LHSSU->getLatencyTo(LHSMI, MI),
-                                RHSSU->getLatencyTo(RHSMI, MI));
+    int Latency = std::max(LHSSU->getLatencyTo(LHSMI, MI),
+                           RHSSU->getLatencyTo(RHSMI, MI));
     CurState.mapMI2SU(MI, LHSSU, Latency);
     return true;
   }

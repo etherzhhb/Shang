@@ -390,21 +390,19 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
   return getLatencyAt(at - instr_begin());
 }
 
-unsigned VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
+int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
   int Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
   if (SrcMI != getRepresentativeInst()) {
     Latency += getLatencyFor(SrcMI);
-    assert(Latency >= 0 && "Unexpected negative latency!");
   }
 
   return Latency;
 }
 
-unsigned VSUnit::getLatencyFrom(MachineInstr *SrcMI, unsigned SrcLatency) const{
+int VSUnit::getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const{
   int Latency = SrcLatency;
   if (SrcMI != getRepresentativeInst()) {
     Latency += getLatencyFor(SrcMI);
-    assert(Latency >= 0 && "Unexpected negative latency!");
   }
 
   return Latency;
@@ -413,11 +411,10 @@ unsigned VSUnit::getLatencyFrom(MachineInstr *SrcMI, unsigned SrcLatency) const{
 void VSUnit::print(raw_ostream &OS) const {
   OS << "[" << getIdx() << "] ";
 
-
   for (unsigned i = 0, e = num_instrs(); i < e; ++i)
     if (MachineInstr *Instr = getInstrAt(i)) {
       OS << Instr->getDesc().getName();
-      if (i) OS << '+' << int(getLatencyAt(i));
+      if (i) OS << ' ' << int(getLatencyAt(i));
       OS << '\n';
       DEBUG(OS << *Instr << '\n');
     }
