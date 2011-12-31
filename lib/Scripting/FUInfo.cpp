@@ -15,12 +15,7 @@
 #include "vtm/FUInfo.h"
 #include "vtm/SynSettings.h" // DiryHack: Also implement the SynSetting class.
 #include "vtm/LuaScript.h"
-#include "vtm/VRegisterInfo.h"
-#include "vtm/VInstrInfo.h"
-#include "vtm/VTM.h"
 
-#include "llvm/CodeGen/ISDOpcodes.h"
-#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -55,27 +50,6 @@ namespace llvm {
       "Trivial", "AddSub", "Shift", "Mult", "ICmp", "MemoryBus", "BRam",
       "Mux", "CalleeFN"
     };
-
-    const TargetRegisterClass *getRepRegisterClass(unsigned OpCode){
-      switch (OpCode) {
-      default:                  return VTM::WireRegisterClass;
-      case VTM::VOpAdd:         return VTM::RADDRegisterClass;
-      case VTM::VOpSRA:         return VTM::RASRRegisterClass;
-      case VTM::VOpSRL:         return VTM::RLSRRegisterClass;
-      case VTM::VOpSHL:         return VTM::RSHLRegisterClass;
-      case VTM::VOpMult:        return VTM::RMULRegisterClass;
-      case VTM::VOpMultLoHi:    return VTM::RMULLHRegisterClass;
-      case VTM::VOpCmdSeq:
-      case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
-      case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
-      case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
-      // allocate unsigned comparison fu by default.
-      case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
-      case VTM::VOpDstMux:      return VTM::RMUXRegisterClass;
-      }
-
-      return 0;
-    }
 
     // Default area cost parameter.
     unsigned LUTCost = 64;

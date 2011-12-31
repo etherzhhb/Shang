@@ -68,7 +68,6 @@ namespace VFUs {
   };
 
   extern const char *VFUNames[];
-  const TargetRegisterClass *getRepRegisterClass(unsigned OpCode);
 
   enum ICmpFUType {
     CmpEQ, CmpSigned, CmpUnsigned

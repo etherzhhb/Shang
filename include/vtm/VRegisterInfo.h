@@ -128,6 +128,8 @@ public:
   PhyRegInfo getPhyRegInfo(unsigned RegNum) const;
 
   unsigned num_phyreg() const { return PhyRegs.size(); }
+
+  static const TargetRegisterClass *getRepRegisterClass(unsigned OpCode);
 };
 
 } // end namespace llvm

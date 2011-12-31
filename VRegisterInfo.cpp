@@ -147,3 +147,25 @@ unsigned VRegisterInfo::getSubReg(unsigned RegNo, unsigned Index) const {
          && "Bad subreg index!");
   return SubReg;
 }
+
+
+const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned OpCode){
+  switch (OpCode) {
+  default:                  return VTM::WireRegisterClass;
+  case VTM::VOpAdd:         return VTM::RADDRegisterClass;
+  case VTM::VOpSRA:         return VTM::RASRRegisterClass;
+  case VTM::VOpSRL:         return VTM::RLSRRegisterClass;
+  case VTM::VOpSHL:         return VTM::RSHLRegisterClass;
+  case VTM::VOpMult:        return VTM::RMULRegisterClass;
+  case VTM::VOpMultLoHi:    return VTM::RMULLHRegisterClass;
+  case VTM::VOpCmdSeq:
+  case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
+  case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
+  case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
+    // allocate unsigned comparison fu by default.
+  case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
+  case VTM::VOpDstMux:      return VTM::RMUXRegisterClass;
+  }
+
+  return 0;
+}

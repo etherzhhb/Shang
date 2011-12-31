@@ -61,6 +61,8 @@ struct ForwardWireUsers : public MachineFunctionPass {
 
   void buildWireUseMap(MachineFunction &MF);
 
+  // Forward the register used to EndState operation.
+  void addReadToEndState(MachineInstr *EndState, unsigned R);
   void forwardPHIUse(MachineFunction &MF);
 
   void buildUseMapForState(MachineInstr *Inst, MachineRegisterInfo &MRI);
@@ -239,6 +241,11 @@ void ForwardWireUsers::buildUseMapForState(MachineInstr *Inst,
   }
 }
 
+void ForwardWireUsers::addReadToEndState(MachineInstr *EndState, unsigned R) {
+  if (!EndState->readsVirtualRegister(R))
+    MachineInstrBuilder(EndState).addReg(R, RegState::Implicit);
+}
+
 void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   RegSet ReadByPhi;
@@ -255,12 +262,12 @@ void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
         MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
         MachineInstr *LastMI = SrcBB->getFirstTerminator();
         assert(LastMI->getOpcode() == VTM::EndState && "Unexpected terminator!");
-        // Dirty Hack: Insert the implicit read at the EndState instruction.
-        MachineInstrBuilder Builder(LastMI);
 
+        // NOTE: The incoming value may have different register class than the
+        // PHI register! So we have to call getRegClass on each incoming value!
         if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass) {
-          if (!LastMI->readsVirtualRegister(RegNum))
-            Builder.addReg(RegNum, RegState::Implicit);
+          // Dirty Hack: Insert the implicit read at the EndState instruction.
+          addReadToEndState(LastMI, RegNum);
           ReadByPhi.insert(RegNum);
         } else {
           // Skip the implicit defines because it do not read any register.
@@ -271,8 +278,8 @@ void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
           for (RegSet::iterator RI = ReadByWire.begin(), RE = ReadByWire.end();
                RI != RE; ++RI) {
             unsigned R = *RI;
-            if (!LastMI->readsVirtualRegister(R))
-              Builder.addReg(R, RegState::Implicit);
+            // Dirty Hack: Insert the implicit read at the EndState instruction.
+            addReadToEndState(LastMI, R);
             ReadByPhi.insert(R);
           }
         }
