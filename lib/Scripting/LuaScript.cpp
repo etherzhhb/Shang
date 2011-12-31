@@ -201,7 +201,7 @@ void LuaScript::updateFUs() {
 
   READPARAMETER(LutLatency, double);
   READPARAMETER(MaxLutSize, unsigned);
-  READPARAMETER(MaxMuxPreLut, unsigned);
+  READPARAMETER(MaxMuxPerLut, unsigned);
 }
 
 void LuaScript::updateStatus() {

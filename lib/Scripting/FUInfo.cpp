@@ -88,7 +88,7 @@ namespace llvm {
     unsigned MuxSizeCost = 96;
 
     unsigned MaxLutSize = 4;
-    unsigned MaxMuxPreLut = 4;
+    unsigned MaxMuxPerLut = 4;
 
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
     double AdderLatencies[]     = { 1.0, 1.0,  1.0,  1.0 };
@@ -120,7 +120,7 @@ namespace llvm {
       if (Size < 2) return 0;
 
       unsigned Level = ceil(double(Log2_32_Ceil(Size))
-                            / double(Log2_32_Ceil(MaxMuxPreLut)));
+                            / double(Log2_32_Ceil(MaxMuxPerLut)));
 
       return Level * LutLatency;
     }

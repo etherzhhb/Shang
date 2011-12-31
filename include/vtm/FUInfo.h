@@ -90,7 +90,7 @@ namespace VFUs {
                   ShiftCost, ICmpCost, MuxSizeCost;
 
   extern unsigned MaxLutSize;
-  extern unsigned MaxMuxPreLut;
+  extern unsigned MaxMuxPerLut;
 
   // Latency tables
   extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
