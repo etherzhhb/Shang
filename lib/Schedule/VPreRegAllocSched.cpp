@@ -125,7 +125,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<int IgnoreBackedge, typename CreateDepFuncTy>
   void addSchedDepForMI(MachineInstr *MI, VSUnit *A, VSchedGraph &CurState,
-                        DepLatInfoTy &LatInfo, CreateDepFuncTy &CreateDepFunc);
+                        DepLatInfoTy &LatInfo, CreateDepFuncTy &CreateDepFunc,
+                        int IntraSULatency = 0);
 
   void addValDep(VSchedGraph &CurState, VSUnit *A);
 
@@ -484,7 +485,8 @@ template<int IgnoreBackedge, typename CreateDepFuncTy>
 void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
                                          VSchedGraph &CurState,
                                          DepLatInfoTy &LatInfo,
-                                         CreateDepFuncTy &CreateDepFunc) {
+                                         CreateDepFuncTy &CreateDepFunc,
+                                         int IntraSULatency) {
   assert(MI && "Unexpected entry root!");
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
@@ -492,7 +494,10 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
     double DetailLatency = I->second;
-    unsigned Latency = unsigned(ceil(DetailLatency));
+    int Latency = int(ceil(DetailLatency));
+    // Compute the latency from SrcMI to RepInst.
+    Latency = std::max(0, Latency - IntraSULatency);
+
     assert(SrcMI && "Unexpected null SrcMI!");
     // LatencyInfo use a special marker to mark the current MI have some latency
     // from entry of the MBB.
@@ -501,7 +506,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
       // Since there are some datapath between current schedule unit and the
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
-      Latency = std::max(1u, Latency);
+      Latency = std::max(1, Latency);
       A->addDep(CreateDepFunc(CurState.getEntryRoot(), Latency));
       continue;
     }
@@ -513,7 +518,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
     if ((SrcSU->getIdx() > A->getIdx() && IgnoreBackedge) || SrcSU == A)
       continue;
     // Adjust the step between SrcMI and MI.
-    Latency = std::max(Latency, VInstrInfo::getCtrlStepBetween(SrcMI, MI));
+    Latency = std::max(Latency, int(VInstrInfo::getCtrlStepBetween(SrcMI, MI)));
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     A->addDep(CreateDepFunc(SrcSU, Latency));
@@ -525,8 +530,10 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   bool isCtrl = A->isControl();
   unsigned NumValDep = 0;
 
-  for (it I = A->instr_begin(), E = A->instr_end(); I != E; ++I) {
-    MachineInstr *MI = *I;
+  for (unsigned I = 0, E = A->num_instrs(); I < E; ++I) {
+    MachineInstr *MI = A->getInstrAt(I);
+    int IntraSULatency = I ? A->getLatencyAt(I) : 0;
+
     assert(MI && "Unexpected entry root!");
     for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
       MachineInstr *DepSrc = 0;
@@ -536,11 +543,13 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
 
       // Dirty Hack: Call get Detail latency.
       double DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
+
       // All control operations are read at emit, wait until the datapath
       // operations finish if destination is control operation.
-      unsigned Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
+      int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
-
+      // Compute the latency from DepSrc to the repinst of the SU.
+      Latency = std::max(0, Latency - IntraSULatency);
       // Build the dependence edge.
       VDEdge *Edge = 0;
       // We got a back-edge, that should be a phi.
@@ -588,13 +597,15 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
   // Build the dependence edge.
   typedef VSUnit::instr_iterator it;
   assert(A->isControl() && "Unexpected datapath schedule unit!");
-  for (it I = A->instr_begin(), E = A->instr_end(); I != E; ++I) {
-    MachineInstr *MI = *I;
+  for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
+    MachineInstr *MI = A->getInstrAt(I);
+    int IntraSULatency = I ? A->getLatencyAt(I) : 0;
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *DepLat =
       CurState.getDepLatInfo(MI);
     assert(DepLat && "Operand latency information not available!");
-    addSchedDepForMI<true>(MI, A, CurState, *DepLat, VDValDep::CreateValDep);
+    addSchedDepForMI<true>(MI, A, CurState, *DepLat, VDValDep::CreateValDep,
+                           IntraSULatency);
   }
 
   // If the atom depend on nothing and it must has some dependence edge,

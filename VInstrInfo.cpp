@@ -1034,15 +1034,16 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
 
   // Compute the latency correspond to detail slot.
   double latency = getDetialLatency(SrcInstr);
+  bool DstReadAtEmit = isReadAtEmit(DstOpC);
 
-  if (isReadAtEmit(DstOpC) && isWriteUntilFinish(SrcOpC))
+  if (DstReadAtEmit && isWriteUntilFinish(SrcOpC))
     // If the edge is reg->reg, the result is ready after the clock edge, add
     // a delta to make sure DstInstr not schedule to the moment right at the
     // SrcInstr finish
     return ceil(latency) + Delta;
 
-  // Chain the operations by default.
-  return std::max(latency - Delta, 0.0);
+  // Chain the operations if dst not read value at the edge of the clock.
+  return std::max(latency - Delta, DstReadAtEmit ? Delta : 0.0);
 }
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
