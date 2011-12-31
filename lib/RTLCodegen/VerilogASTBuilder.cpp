@@ -668,6 +668,11 @@ void VerilogASTBuilder::emitAllSignals() {
       break;
     }
     case VTM::RCFNRegClassID: /*Nothing to do*/ break;
+    case VTM::RMUXRegClassID: {
+      std::string Name = "dstmux" + utostr_32(RegNum);
+      VM->indexVASTValue(RegNum, VM->addRegister(Name, Info.getBitWidth()));
+      break;
+    }
     default: llvm_unreachable("Unexpected register class!"); break;
     }
   }
@@ -762,6 +767,7 @@ void VerilogASTBuilder::emitCtrlOp(ucState &State, PredMapTy &PredMap,
 
     // Emit the operations.
     switch (Op->getOpcode()) {
+    case VTM::VOpDstMux:
     case VTM::VOpMove_ri:
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
@@ -804,6 +810,7 @@ void VerilogASTBuilder::emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *S
     ucOp Op = *I;
 
     switch (Op->getOpcode()) {
+    case VTM::VOpDstMux:
     case VTM::VOpMove_ri:
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
