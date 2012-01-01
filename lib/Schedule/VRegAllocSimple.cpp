@@ -34,7 +34,6 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Function.h"
 #include "llvm/PassAnalysisSupport.h"
-// We need CondCode.
 #include "llvm/CodeGen/CalcSpillWeights.h"
 #include "llvm/CodeGen/EdgeBundles.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
@@ -344,8 +343,12 @@ struct DstChecker {
     return DstReg;
   }
 
+  int getNumIdenticalDst() const {
+    return Dsts.size();
+  }
+
   int getSavedDstMuxSize() const {
-    return NumDsts - int(Dsts.size());
+    return NumDsts - int(getNumIdenticalDst());
   }
 
   int getSavedDstMuxCost() const {
@@ -479,6 +482,10 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
       return CompGraphWeights::HUGE_NEG_VAL;
 
     if (VRA->iterateUseDefChain(Dst->reg, *this))
+      return CompGraphWeights::HUGE_NEG_VAL;
+
+    // Only merge the register if their have the same driver.
+    if (getSrcMuxSize<0>() != 1)
       return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
