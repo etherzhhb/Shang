@@ -39,7 +39,7 @@
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
-
+using namespace llvm;
 //===----------------------------------------------------------------------===//
 
 extern "C" void LLVMInitializeVerilogBackendTarget() {
