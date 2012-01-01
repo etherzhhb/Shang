@@ -495,8 +495,6 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
     // Get the latency from SrcMI to MI.
     double DetailLatency = I->second;
     int Latency = int(ceil(DetailLatency));
-    // Compute the latency from SrcMI to RepInst.
-    Latency = std::max(0, Latency - IntraSULatency);
 
     assert(SrcMI && "Unexpected null SrcMI!");
     // LatencyInfo use a special marker to mark the current MI have some latency
@@ -543,13 +541,14 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
 
       // Dirty Hack: Call get Detail latency.
       double DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
-
+      DetailLatency += VInstrInfo::getOperandLatency(MI, i);
+      // Compute the latency from DepSrc to the repinst of the SU.
+      DetailLatency -= std::min(0.0, IntraSULatency - VInstrInfo::DeltaLatency);
       // All control operations are read at emit, wait until the datapath
       // operations finish if destination is control operation.
       int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
-      // Compute the latency from DepSrc to the repinst of the SU.
-      Latency = std::max(0, Latency - IntraSULatency);
+
       // Build the dependence edge.
       VDEdge *Edge = 0;
       // We got a back-edge, that should be a phi.

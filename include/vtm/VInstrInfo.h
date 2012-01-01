@@ -166,7 +166,7 @@ public:
 
   static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr);
-
+  const static double DeltaLatency;
   // Return the latency of a MachineInstr in cycle ratio.
   static double getDetialLatency(const MachineInstr *MI);
   static unsigned getStepsToFinish(const MachineInstr *MI) {

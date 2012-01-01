@@ -1022,11 +1022,12 @@ double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   return 0.0;
 }
 
+const double VInstrInfo::DeltaLatency = 0.000001;
+
 double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                       const MachineInstr *DstInstr) {
   assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
   assert(SrcInstr != DstInstr && "Computing latency of self loop?");
-  static const double Delta = 0.000001;
   const TargetInstrDesc &DstTID = DstInstr->getDesc();
   unsigned DstOpC = DstTID.getOpcode();
   const TargetInstrDesc &SrcTID = SrcInstr->getDesc();
@@ -1040,10 +1041,10 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
     // If the edge is reg->reg, the result is ready after the clock edge, add
     // a delta to make sure DstInstr not schedule to the moment right at the
     // SrcInstr finish
-    return ceil(latency) + Delta;
+    return ceil(latency) + DeltaLatency;
 
   // Chain the operations if dst not read value at the edge of the clock.
-  return std::max(latency - Delta, DstReadAtEmit ? Delta : 0.0);
+  return std::max(latency - DeltaLatency, 0.0);
 }
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
@@ -1213,11 +1214,15 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   unsigned SrcOpC = SrcMI->getOpcode();
   // The VOpDstMux should be merged to its user.
-  if (VInstrInfo::isControl(SrcOpC) && SrcOpC != VTM::VOpDstMux) {
-    // Simply add the latency from ctrl op to the latency map.
-    updateLatency(CurLatInfo, SrcMI, EdgeLatency);
-    return true;
-  }
+  if (SrcOpC != VTM::VOpDstMux) {
+    if (VInstrInfo::isControl(SrcOpC)) {
+      // Simply add the latency from ctrl op to the latency map.
+      updateLatency(CurLatInfo, SrcMI, EdgeLatency);
+      return true;
+    }
+  } else
+    // Accumulate the latency of DstMux.
+    EdgeLatency += 1.0;
 
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
