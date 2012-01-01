@@ -39,9 +39,6 @@
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
-using namespace llvm;
-cl::opt<bool> EnableIfConversion("vtm-enable-if-conversion",
-                                 cl::init(true), cl::Hidden);
 
 //===----------------------------------------------------------------------===//
 

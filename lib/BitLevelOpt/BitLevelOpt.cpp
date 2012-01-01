@@ -32,8 +32,13 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/CommandLine.h"
+using namespace llvm;
+
 
 using namespace llvm;
+cl::opt<bool> EnableArithOpt("vtm-enable-arith-opt",
+                             cl::init(true), cl::Hidden);
 
 template<typename Func>
 inline static
@@ -1623,12 +1628,15 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, DCI);
   case ISD::ADDE:
-    return PerformAddCombine(N, DCI);
+    if(EnableArithOpt)  return PerformAddCombine(N, DCI);
+    break;
   case ISD::UMUL_LOHI:
   case ISD::MUL:
-    return PerformMulCombine(N, DCI);
+    if(EnableArithOpt)  return PerformMulCombine(N, DCI);
+    break;
   case VTMISD::ICmp:
-    return PerfromICmpCombine(N, DCI);
+    if(EnableArithOpt)  return PerfromICmpCombine(N, DCI);
+    break;
   case ISD::ROTL:
   case ISD::ROTR:
   case ISD::SHL:
