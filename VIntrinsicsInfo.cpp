@@ -47,7 +47,8 @@ static inline unsigned lookupNameHelper(const char *Name, unsigned Len) {
 
 //===----------------------------------------------------------------------===//
 // IntrinsicInfo Implementation.
-std::string VIntrinsicInfo::getName(unsigned IntrID, ArrayRef<Type*> Tys) const {
+std::string VIntrinsicInfo::getName(unsigned IntrID, Type **Tys,
+                                    unsigned numTys) const {
     static const char *const names[] = {
 #define GET_INTRINSIC_NAME_TABLE
 #include "VerilogBackendGenIntrinsics.inc"
@@ -60,11 +61,10 @@ std::string VIntrinsicInfo::getName(unsigned IntrID, ArrayRef<Type*> Tys) const 
 
   std::string Result(names[IntrID - Intrinsic::num_intrinsics]);
 
-  unsigned numTys = Tys.size();
   if (numTys == 0) return Result;
 
   for (unsigned i = 0; i < numTys; ++i) {
-    if (const PointerType* PTyp = dyn_cast<PointerType>(Tys[i])) {
+    if (PointerType* PTyp = dyn_cast<PointerType>(Tys[i])) {
       Result += ".p" + llvm::utostr(PTyp->getAddressSpace());
       Result += EVT::getEVT(PTyp->getElementType()).getEVTString();
     } else if (Tys[i])
@@ -114,12 +114,13 @@ static FunctionType *getType(LLVMContext &Context, unsigned id,
 }
 
 Function *VIntrinsicInfo::getDeclaration(Module *M, unsigned IntrID,
-                                         ArrayRef<Type*> Tys) const {
+                                         Type **Tys, unsigned numTys) const {
   AttrListPtr AList = getAttributes((vtmIntrinsic::ID) IntrID);
 
   return cast<Function>(
-    M->getOrInsertFunction(getName(IntrID, Tys),
-                           getType(M->getContext(), IntrID, Tys),
+    M->getOrInsertFunction(getName(IntrID, Tys, numTys),
+                           getType(M->getContext(), IntrID,
+                           ArrayRef<Type*>(Tys, numTys)),
                            AList));
 }
 

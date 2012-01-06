@@ -91,7 +91,8 @@ namespace llvm {
 
   class VIntrinsicInfo : public TargetIntrinsicInfo {
   public:
-    std::string getName(unsigned IntrID, ArrayRef<Type*> Tys) const;
+    std::string getName(unsigned IntrID, Type **Tys = 0,
+                        unsigned numTys = 0) const;
 
     unsigned lookupName(const char *Name, unsigned Len) const;
 
@@ -99,7 +100,8 @@ namespace llvm {
 
     bool isOverloaded(unsigned IID) const;
 
-    Function *getDeclaration(Module *M, unsigned ID, ArrayRef<Type*> Tys) const;
+    Function *getDeclaration(Module *M, unsigned ID, Type **Tys = 0,
+                             unsigned numTys = 0) const;
   };
 
 }
