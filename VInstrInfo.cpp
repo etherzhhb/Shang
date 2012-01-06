@@ -11,26 +11,37 @@
 //
 //===----------------------------------------------------------------------===//
 
+
 #include "VTargetMachine.h"
 
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/VTM.h"
 #include "vtm/MicroState.h"
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Debug.h"
 
-#include "VGenInstrInfo.inc"
-using namespace llvm;
+#define GET_INSTRINFO_CTOR
+#include "VerilogBackendGenRegisterInfo.inc"
 
+namespace llvm {
+extern const MCInstrDesc VTMInsts[];
+}
+
+using namespace llvm;
 //----------------------------------------------------------------------------//
 // Halper function.
+static const MCInstrDesc &getDesc(unsigned Opcode)  {
+  return VTMInsts[Opcode];
+}
+
 static MachineInstr *addOperandsToMI(MachineInstr *MI,
                                      ArrayRef<MachineOperand> Ops) {
   for (unsigned i = 0; i < Ops.size(); ++i)
@@ -42,7 +53,7 @@ static MachineInstr *addOperandsToMI(MachineInstr *MI,
 //----------------------------------------------------------------------------//
 // VInstrInfo implementation.
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
-  if (MI->getOpcode() <= VTM::COPY) return 0;
+  if (MI->getOpcode() <= TargetOpcode::COPY) return 0;
 
   unsigned Idx = MI->getDesc().NumOperands - 2;
   assert(MI->getDesc().OpInfo[Idx].isPredicate() && "Cannot get PredOperand!");
@@ -52,11 +63,6 @@ const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
 MachineOperand *VInstrInfo::getPredOperand(MachineInstr *MI) {
   return const_cast<MachineOperand*>(getPredOperand((const MachineInstr*)MI));
 }
-
-VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
-  : TargetInstrInfoImpl(VTMInsts, array_lengthof(VTMInsts)), RI(*this, TD, TLI){
-}
-
 
 bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                    AliasAnalysis *AA) const {
@@ -80,9 +86,9 @@ bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
 
 void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
   if (CopyMI->getOperand(1).isReg())
-    CopyMI->setDesc(VTMInsts[VTM::VOpMove_rr]);
+    CopyMI->setDesc(getDesc(VTM::VOpMove_rr));
   else
-    CopyMI->setDesc(VTMInsts[VTM::VOpMove_ri]);
+    CopyMI->setDesc(getDesc(VTM::VOpMove_ri));
   
   CopyMI->addOperand(ucOperand::CreatePredicate());
   CopyMI->addOperand(ucOperand::CreateTrace(CopyMI->getParent()));
@@ -348,7 +354,7 @@ void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
 
   // Dirty hack: We may not evaluate the predicate to always true at the moment.
   if (Table.size() == 1) {
-    BuildMI(&BB, dl, VTMInsts[VTM::VOpToStateb])
+    BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
       .addOperand(ucOperand::CreatePredicate()).addMBB(*BB.succ_begin())
       .addOperand(ucOperand::CreatePredicate())
       .addOperand(ucOperand::CreateTrace(&BB));
@@ -357,7 +363,7 @@ void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
 
   for (JT::iterator I = Table.begin(), E = Table.end(); I != E; ++I) {
     I->second.setIsKill(false);
-    BuildMI(&BB, dl, VTMInsts[VTM::VOpToStateb])
+    BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
       .addOperand(I->second).addMBB(I->first)
       .addOperand(ucOperand::CreatePredicate())
       .addOperand(ucOperand::CreateTrace(&BB));
@@ -747,7 +753,7 @@ MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
 
   // Build and insert the select instruction at the end of the BB.
   return *BuildMI(*MBB, MBB->getFirstTerminator(), DebugLoc(),
-                  VTMInsts[VTM::VOpSel])
+                  getDesc(VTM::VOpSel))
             .addOperand(ResDef).addOperand(Pred)
             .addOperand(IfTrueVal).addOperand(IfFalseVal)
             .addOperand(ucOperand::CreatePredicate())
@@ -778,7 +784,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   MachineOperand ResDef(Res);
   ResDef.setIsDef();
 
-  return *BuildMI(MBB, IP, DebugLoc(), VTMInsts[VTM::VOpMove_rr])
+  return *BuildMI(MBB, IP, DebugLoc(), getDesc(VTM::VOpMove_rr))
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 
@@ -885,7 +891,7 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
 }
 
 bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
-  const MCInstrDesc &TID = VTMInsts[OpC];
+  const MCInstrDesc &TID = getDesc(OpC);
   return (TID.TSFlags & (WriteUntilFinishMask << WriteUntilFinishShiftAmount))
          || VInstrInfo::isCopyLike(OpC);
 }
@@ -893,22 +899,22 @@ bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
 bool VInstrInfo::isDatapath(unsigned OpC) {
   // All pseudo instructions are control operations.
   return //OpC > TargetOpcode::COPY Not need because the bit is clean by default
-         VTMInsts[OpC].TSFlags & (DatapathMask << DatapathShiftAmount);
+         getDesc(OpC).TSFlags & (DatapathMask << DatapathShiftAmount);
 }
 
 VFUs::FUTypes VInstrInfo::getFUType(unsigned OpC) {
   return (VFUs::FUTypes)
-    ((VTMInsts[OpC].TSFlags >> ResTypeShiftAmount) & ResTypeMask);
+    ((getDesc(OpC).TSFlags >> ResTypeShiftAmount) & ResTypeMask);
 }
 
 //unsigned VInstrInfo::getTrivialLatency(unsigned OpC) {
 //  assert(getFUType(OpC) == VFUs::Trivial && "Bad resource Type!");
-//  return ((VTMInsts[OpC].TSFlags >> TrivialLatencyShiftAmount)
+//  return ((get(OpC].TSFlags >> TrivialLatencyShiftAmount)
 //           & TrivialLatencyMask);
 //}
 
 bool VInstrInfo::isReadAtEmit(unsigned OpC) {
-  return (VTMInsts[OpC].TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount))
+  return (getDesc(OpC).TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount))
          || isCopyLike(OpC);
 }
 
@@ -999,7 +1005,7 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
 
 double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   unsigned OpCode = MI->getOpcode();
-  const MCInstrDesc &TID = VTMInsts[OpCode];
+  const MCInstrDesc &TID = getDesc(OpCode);
   if (MOIdx < TID.getNumOperands() && TID.OpInfo[MOIdx].isPredicate())
     return VFUs::ClkEnSelLatency;
 
@@ -1056,7 +1062,7 @@ unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
 unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");
   unsigned DstOpC = DstInstr->getOpcode();
-  const MCInstrDesc &DstTID = VTMInsts[DstOpC];
+  const MCInstrDesc &DstTID = getDesc(DstOpC);
 
   //// Set latency of Control operation and entry root to 1, so we can prevent
   //// scheduling control operation to the first slot.

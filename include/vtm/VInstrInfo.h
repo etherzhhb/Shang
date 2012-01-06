@@ -23,14 +23,16 @@
 #include "llvm/ADT/PointerUnion.h"
 #include <map>
 
+#define GET_INSTRINFO_HEADER
+#include "VerilogBackendGenInstrInfo.inc"
+
 namespace llvm {
 class TargetData;
 class TargetLowering;
 
-class VInstrInfo : public TargetInstrInfoImpl {
-  const VRegisterInfo RI;
+class VInstrInfo : public VTMGenInstrInfo {
 public:
-  VInstrInfo(const TargetData &TD, const TargetLowering &TLI);
+  VInstrInfo();
 
   static const unsigned PredInvertFlag = 0x2;
   virtual bool isPredicable(MachineInstr *MI) const;
@@ -104,10 +106,6 @@ public:
 
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
-  /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
-  /// such, whenever a client has an instance of instruction info, it should
-  /// always be able to get register info as well (through this method).
-  virtual const VRegisterInfo &getRegisterInfo() const { return RI; }
 
   virtual unsigned createPHIIncomingReg(unsigned DestReg,
                                            MachineRegisterInfo *MRI) const;
