@@ -153,7 +153,7 @@ struct ucOperandValueTrait : DenseMapInfo<ucOperand> {
   }
 
   static inline ucOperand getTombstoneKey() {
-    return ucOperand::CreateOpcode(VTM::PHI, 0);
+    return ucOperand::CreateOpcode(TargetOpcode::PHI, 0);
   }
 
   static unsigned getHashValue(ucOperand Op);
