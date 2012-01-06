@@ -97,17 +97,14 @@ install(DIRECTORY include
 add_definitions( -D_GNU_SOURCE )
 
 set(LLVM_TARGET_DEFINITIONS VTM.td)
-
-tablegen(VGenRegisterInfo.h.inc -gen-register-desc-header)
-tablegen(VGenRegisterNames.inc -gen-register-enums)
-tablegen(VGenRegisterInfo.inc -gen-register-desc)
-tablegen(VGenInstrNames.inc -gen-instr-enums)
-tablegen(VGenInstrInfo.inc -gen-instr-desc)
-tablegen(VGenAsmWriter.inc -gen-asm-writer)
-tablegen(VGenDAGISel.inc -gen-dag-isel)
-tablegen(VGenSubtarget.inc -gen-subtarget)
-tablegen(VGenIntrinsics.inc -gen-tgt-intrinsic)
-
+tablegen(LLVM VerilogBackendGenRegisterInfo.inc -gen-register-info)
+tablegen(LLVM VerilogBackendGenInstrInfo.inc -gen-instr-info)
+tablegen(LLVM VerilogBackendGenAsmWriter.inc -gen-asm-writer)
+tablegen(LLVM VerilogBackendGenDAGISel.inc -gen-dag-isel)
+tablegen(LLVM VerilogBackendGenCallingConv.inc -gen-callingconv)
+tablegen(LLVM VerilogBackendGenSubtargetInfo.inc -gen-subtarget)
+tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
+add_public_tablegen_target(VerilogBackendTableGen)
 
 add_llvm_target(VerilogBackend
   VBackend.cpp
