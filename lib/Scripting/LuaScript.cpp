@@ -104,7 +104,7 @@ void LuaScript::init() {
 bool LuaScript::runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
   // Run the script.
   if (luaL_dostring(State, ScriptStr.c_str())) {
-    Err = SMDiagnostic(ScriptStr, lua_tostring(State, -1));
+    Err = SMDiagnostic(ScriptStr, SourceMgr::DK_Warning, lua_tostring(State, -1));
     return false;
   }
 
@@ -114,7 +114,7 @@ bool LuaScript::runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err) {
 bool LuaScript::runScriptFile(const std::string &ScriptPath, SMDiagnostic &Err) {
   // Run the script.
   if (luaL_dofile(State, ScriptPath.c_str())) {
-    Err = SMDiagnostic(ScriptPath, lua_tostring(State, -1));
+    Err = SMDiagnostic(ScriptPath, SourceMgr::DK_Warning, lua_tostring(State, -1));
     return false;
   }
 

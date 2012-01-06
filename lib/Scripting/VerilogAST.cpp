@@ -952,7 +952,7 @@ VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
   assert(Entry.second == 0 && "Symbol already exist!");
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
-  new (Reg) VASTRegister(Entry.first(), BitWidth, InitVal, Attr);
+  new (Reg) VASTRegister(Entry.getKeyData(), BitWidth, InitVal, Attr);
   Entry.second = Reg;
   Registers.push_back(Reg);
 
@@ -981,7 +981,7 @@ VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
   assert(Entry.second == 0 && "Symbol already exist!");
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(Entry.first(), BitWidth, Attr);
+  new (Wire) VASTWire(Entry.getKeyData(), BitWidth, Attr);
   Entry.second = Wire;
   Wires.push_back(Wire);
 

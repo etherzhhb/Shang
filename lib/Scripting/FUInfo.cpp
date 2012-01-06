@@ -315,12 +315,12 @@ std::string VFUBRam::generateInitFile(unsigned DataWidth, const Value* Initializ
 
   //if the initializer has already been written in a .txt, skip it and keep the filename
   if (GVSet.count(GV)) {
-    std::string GVName = GV->getNameStr();
+    std::string GVName = GV->getName();
     Filename = "bram" + GVName + ".txt";
     return Filename;
   }
   if (GV) {
-    std::string GVName = GV->getNameStr();
+    std::string GVName = GV->getName();
     Filename = "bram" + GVName + ".txt";
     GVSet.insert(GV);
   } else {
