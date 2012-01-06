@@ -59,7 +59,7 @@ bool StackToGlobal::runOnModule(Module &M) {
   for(std::vector<AllocaInst*>::iterator I = WorkList.begin(), E = WorkList.end();
       I != E; ++I){
     AllocaInst* AI= *I;
-    const Type *Ty = AI->getAllocatedType();
+    Type *Ty = AI->getAllocatedType();
     GlobalVariable *GV =
     new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
 					             Constant::getNullValue(Ty),

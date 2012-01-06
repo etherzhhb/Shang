@@ -56,7 +56,7 @@ public:
     return false;
   }
 
-  virtual MVT::SimpleValueType getSetCCResultType(EVT VT) const;
+  virtual EVT getSetCCResultType(EVT VT) const;
 
   virtual SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const;
 

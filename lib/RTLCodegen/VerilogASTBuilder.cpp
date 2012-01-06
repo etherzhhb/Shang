@@ -204,7 +204,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
-  void emitSignals(const TargetRegisterClass *RC, bool isRegister);
+  bool emitVReg(unsigned RegNum, const TargetRegisterClass *RC, bool isReg);
   VASTValue *emitFUAdd(unsigned FUNum, unsigned BitWidth);
   VASTValue *emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi);
   VASTValue *emitFUShift(unsigned FUNum, unsigned BitWidth,
@@ -361,7 +361,7 @@ void VerilogASTBuilder::emitFunctionSignature(const Function *F) {
   for (Function::const_arg_iterator I = F->arg_begin(), E = F->arg_end();
       I != E; ++I) {
     const Argument *Arg = I;
-    std::string Name = Arg->getNameStr();
+    std::string Name = Arg->getName();
     unsigned BitWidth = TD->getTypeSizeInBits(Arg->getType());
     // Add port declaration.
     if (FNNum == 0)
@@ -373,7 +373,7 @@ void VerilogASTBuilder::emitFunctionSignature(const Function *F) {
     }
   }
 
-  const Type *RetTy = F->getReturnType();
+  Type *RetTy = F->getReturnType();
   if (!RetTy->isVoidTy()) {
     assert(RetTy->isIntegerTy() && "Only support return integer now!");
     unsigned BitWidth = TD->getTypeSizeInBits(RetTy);
@@ -677,28 +677,30 @@ void VerilogASTBuilder::emitAllSignals() {
     }
   }
 
-  emitSignals(VTM::WireRegisterClass, false);
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned VReg = TargetRegisterInfo::index2VirtReg(i);
+    emitVReg(VReg, VTM::WireRegisterClass, false);
+  }
 }
 
-void VerilogASTBuilder::emitSignals(const TargetRegisterClass *RC, bool isRegister) {
-  // And Emit the wires defined in this module.
-  const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
+bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
+                                 bool isReg) {
+  if (MRI->getRegClass(RegNum) != RC)
+    return false;
 
-  for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
-       I != E; ++I) {
-    unsigned SignalNum = *I;
-    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SignalNum);
-    if (DI == MRI->def_end()) continue;
+  MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
+  if (DI == MRI->def_end()) return false;
 
-    const ucOperand &Op = cast<ucOperand>(DI.getOperand());
-    unsigned Bitwidth = Op.getBitWidth();
-    if (!isRegister)
-      VM->addWire(SignalNum, Bitwidth);
-    else {
-      VM->addRegister(SignalNum, Bitwidth);
-      TotalRegisterBits += Bitwidth;
-    }
+  const ucOperand &Op = cast<ucOperand>(DI.getOperand());
+  unsigned Bitwidth = Op.getBitWidth();
+  if (!isReg)
+    VM->addWire(RegNum, Bitwidth);
+  else {
+    VM->addRegister(RegNum, Bitwidth);
+    TotalRegisterBits += Bitwidth;
   }
+
+  return true;
 }
 
 

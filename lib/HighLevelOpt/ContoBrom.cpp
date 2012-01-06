@@ -205,10 +205,10 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
   Value* V = GV->getInitializer();
   Constant* Con = cast<Constant>(V);
   // Gather the parameters of vtm_alloca_brom
-  const ArrayType *AT = cast<ArrayType>(Con->getType());
-  const Type *ET = AT->getElementType();
-  unsigned NumElems = AT->getNumElements();
-  unsigned ElemSizeInBytes = ET->getPrimitiveSizeInBits() / 8;
+  ArrayType *AT = cast<ArrayType>(Con->getType());
+  Type *ET = AT->getElementType();
+  uint16_t NumElems = AT->getNumElements();
+  uint16_t ElemSizeInBytes = ET->getPrimitiveSizeInBits() / 8;
   Instruction* EntryPoint = F->begin()->begin();
 
   // allocate space for the alloca and get declaration
@@ -217,12 +217,12 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
 
   // Transform the Element type into a pointer that
   // points to the Element
-  const Type* NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
-  const Type* CAPtrTy = PointerType::get(ET, AllocaAddrSpace);
+  Type* NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
+  Type* CAPtrTy = PointerType::get(ET, AllocaAddrSpace);
 
   // If we do not have alloca a Bram for the GV, Allocate a Bram for it.
   if (VisitedGV.insert(GV).second) {
-  const Type *ValTysAL[] = { NewPtrTy, CAPtrTy};
+  Type *ValTysAL[] = { NewPtrTy, CAPtrTy};
   Function* TheAllocaBramFn
     = IntrinsicInfo.getDeclaration(Mod, vtmIntrinsic::vtm_alloca_bram,
                                    ValTysAL, array_lengthof(ValTysAL));
@@ -234,7 +234,7 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
   }
   // get the type of the context, construct the Args to the AllocaBromInst,
   // and creat a CallInst to call the intrinsic alloca function
-  const Type* Int32TyAL = Type::getInt32Ty(Mod->getContext());
+  IntegerType *Int32TyAL = Type::getInt32Ty(Mod->getContext());
   CastInst* CIET = BitCastInst::CreatePointerCast(GV, CAPtrTy, 
                                                   "const_cast", EntryPoint);
 
@@ -243,7 +243,7 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
                      ConstantInt::get(Int32TyAL, NumElems),
                      ConstantInt::get(Int32TyAL, ElemSizeInBytes)};
   Instruction* AllocaBram
-    = CallInst::Create(TheAllocaBramFnMap[GV], ArgsAL, array_endof(ArgsAL),
+    = CallInst::Create(TheAllocaBramFnMap[GV], ArgsAL,
                        I->getName(), EntryPoint);
 
   // If the Instruction is a LoadInst, set the Operand of the Load Instruction
@@ -261,7 +261,7 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
   // The CallInst return a i32* pointer, but the GEP Instruction need its first
   // operand to be a array pointer [256 * i32]*. So we need to Cast pointer that
   // pointing array element to pointer that pointing array.
-  const Type *ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
+  Type *ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
   CastInst* CIAT = BitCastInst::CreatePointerCast(AllocaBram, ArrayPtrTy,
                                                   "cast", EntryPoint);
   // Replace the GV with CastInst.
@@ -270,12 +270,12 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
 
 void ContoBrom::ReplaceLoadInstWithBRamAccess(LoadInst *LI){
   Value *Ptr = LI->getPointerOperand();
-  const Type *ValTys[] = { LI->getType(), Ptr->getType() };
+  Type *ValTys[] = { LI->getType(), Ptr->getType() };
   Function *TheLoadBRamFn
     = IntrinsicInfo.getDeclaration(Mod, vtmIntrinsic::vtm_access_bram,
                                    ValTys, array_lengthof(ValTys));
-  const Type *Int32Ty = Type::getInt32Ty(Mod->getContext()),
-             *Int1Ty = Type::getInt1Ty(Mod->getContext());
+  IntegerType *Int32Ty = Type::getInt32Ty(Mod->getContext()),
+              *Int1Ty = Type::getInt1Ty(Mod->getContext());
 
   Value *Args[] = { Ptr, UndefValue::get(ValTys[0]),
                     ConstantInt::get(Int1Ty, 0),
@@ -283,8 +283,7 @@ void ContoBrom::ReplaceLoadInstWithBRamAccess(LoadInst *LI){
                     ConstantInt::get(Int1Ty, LI->isVolatile()),
                     ConstantInt::get(Int32Ty, AllocatedBRamNum-1) };
 
-  CallInst *NewLD = CallInst::Create(TheLoadBRamFn, Args, array_endof(Args),
-                                     LI->getName(), LI);
+  CallInst *NewLD = CallInst::Create(TheLoadBRamFn, Args, LI->getName(), LI);
   LI->replaceAllUsesWith(NewLD);
   LI->eraseFromParent();
 }

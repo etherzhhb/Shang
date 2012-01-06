@@ -26,7 +26,6 @@
 #include "llvm/Analysis/Verifier.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Assembly/PrintModulePass.h"
-#include "llvm/Target/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Target/TargetAsmInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
@@ -36,6 +35,7 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/TargetRegistry.h"
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
@@ -45,7 +45,7 @@ using namespace llvm;
 extern "C" void LLVMInitializeVerilogBackendTarget() {
   // Register the target.
   RegisterTargetMachine<VTargetMachine> X(TheVBackendTarget);
-  RegisterAsmInfo<VMCAsmInfo> Y(TheVBackendTarget);
+  //RegisterAsmInfo<VMCAsmInfo> Y(TheVBackendTarget);
 }
 
 VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,

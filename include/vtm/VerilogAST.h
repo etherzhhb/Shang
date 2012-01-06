@@ -765,7 +765,7 @@ public:
     VASTValue *&V = Entry.second;
     if (V == 0) {
        V = Allocator.Allocate<VASTValue>();
-       new (V) VASTSymbol(Entry.first(), BitWidth);
+       new (V) VASTSymbol(Entry.getKeyData(), BitWidth);
     }
 
     assert(V->getBitWidth() == BitWidth

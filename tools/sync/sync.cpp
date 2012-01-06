@@ -19,11 +19,18 @@
 #include "llvm/Module.h"
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
+#include "llvm/Config/config.h"
+#include "llvm/Assembly/PrintModulePass.h"
+#include "llvm/CodeGen/LinkAllCodegenComponents.h"
+#include "llvm/Target/TargetLibraryInfo.h"
+#include "llvm/Target/TargetData.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/IRReader.h"
-#include "llvm/CodeGen/LinkAllCodegenComponents.h"
-#include "llvm/Config/config.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -31,15 +38,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/Signals.h"
-#include "llvm/Support/StandardPasses.h"
-#include "llvm/Target/SubtargetFeature.h"
-#include "llvm/Target/TargetLibraryInfo.h"
-#include "llvm/Target/TargetData.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetRegistry.h"
-#include "llvm/Target/TargetSelect.h"
-#include "llvm/Assembly/PrintModulePass.h"
-#include "llvm/Transforms/IPO.h"
+#include "llvm/Support/SourceMgr.h"
 
 #include <memory>
 
@@ -53,7 +52,6 @@ extern "C" {
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
-#include "llvm/Assembly/PrintModulePass.h"
 }
 
 using namespace llvm;
@@ -68,6 +66,9 @@ InputFilename(cl::Positional, cl::desc("<input lua script>"), cl::init("-"));
 namespace llvm {
   extern Target TheVBackendTarget;
 }
+
+extern "C" void LLVMInitializeVerilogBackendTargetInfo();
+extern "C" void LLVMInitializeVerilogBackendTarget();
 
 // main - Entry point for the sync compiler.
 //
@@ -95,7 +96,7 @@ int main(int argc, char **argv) {
 
   // Run the lua script.
   if (!S->runScriptFile(InputFilename, Err)){
-    Err.Print(argv[0], errs());
+    Err.print(argv[0], errs());
     return 1;
   }
 
@@ -107,55 +108,58 @@ int main(int argc, char **argv) {
   M.reset(ParseIRFile(S->getValue<std::string>("InputFile"),
                       Err, Context));
   if (M.get() == 0) {
-    Err.Print(argv[0], errs());
+    Err.print(argv[0], errs());
     return 1;
   }
   Module &mod = *M.get();
 
   // TODO: Build the right triple.
   Triple TheTriple(mod.getTargetTriple());
-
+  TargetOptions TO;
   std::auto_ptr<TargetMachine>
-    target(TheVBackendTarget.createTargetMachine(TheTriple.getTriple(),
-           S->getDataLayout())); // DiryHack: Use features as datalayout.
+    target(TheVBackendTarget.createTargetMachine(TheTriple.getTriple(), "",
+                                                 S->getDataLayout(), TO));
 
   // Build up all of the passes that we want to do to the module.
-  PassManager PM;
+  PassManagerBuilder Builder;
+  Builder.DisableUnrollLoops = true;
+  Builder.LibraryInfo = new TargetLibraryInfo();
+  Builder.LibraryInfo->disableAllFunctions();
+  Builder.OptLevel = 3;
+  Builder.SizeLevel = 2;
+  Builder.DisableSimplifyLibCalls = true;
+  Builder.Inliner = createAlwaysInlineFunctionPass();
 
-  PM.add(new TargetData(*target->getTargetData()));
-
-  // Do not create memset/memcpy/memmove from LoopIdiomRecognize pass.
-  TargetLibraryInfo *TLI = new TargetLibraryInfo();
-  TLI->disableAllFunctions();
-  PM.add(TLI);
+  PassManager Passes;
+  Passes.add(new TargetData(*target->getTargetData()));
 
   // Perform Software/Hardware partition.
-  PM.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
-  PM.add(createGlobalDCEPass());
+  Passes.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
+  Passes.add(createGlobalDCEPass());
 
-  // Always inline function.
-  PM.add(createAlwaysInlineFunctionPass());
-  createStandardFunctionPasses(&PM, 3);
-  createStandardModulePasses(&PM, 3, true, true, false, true, false,
-                             createFunctionInliningPass(75));
-  createStandardLTOPasses(&PM, true, false, false);
+  // Optimize the hardware part.
+  //Builder.populateFunctionPassManager(*FPasses);
+  Builder.populateModulePassManager(Passes);
+  Builder.populateLTOPassManager(Passes,
+                                 /*Internalize*/true,
+                                 /*RunInliner*/true);
+
   //PM.add(createPrintModulePass(&dbgs()));
    
   // We do not use the stream that passing into addPassesToEmitFile.
   formatted_raw_ostream formatted_nulls(nulls());
   // Ask the target to add backend passes as necessary.
-  target->addPassesToEmitFile(PM, formatted_nulls,
+  target->addPassesToEmitFile(Passes, formatted_nulls,
                               TargetMachine::CGFT_Null,
-                              CodeGenOpt::Aggressive,
                               false/*NoVerify*/);
   // Find the shortest path.
-  PM.add(createFindShortestPathPass());
+  Passes.add(createFindShortestPathPass());
   // Generate the code.
-  PM.add(createVerilogASTBuilderPass());
-  PM.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
+  Passes.add(createVerilogASTBuilderPass());
+  Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
   // Analyse the slack between registers.
-  PM.add(createCombPathDelayAnalysisPass());
+  Passes.add(createCombPathDelayAnalysisPass());
 
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
@@ -165,12 +169,11 @@ int main(int argc, char **argv) {
       luabind::object_cast<std::string>(I.key()).c_str(),
       luabind::object_cast<std::string>(o["FunctionScript"]).c_str(),
       luabind::object_cast<std::string>(o["GlobalScript"]).c_str());
-    PM.add(P);
+    Passes.add(P);
   }
- 
 
   // Run the passes.
-  PM.run(mod);
+  Passes.run(mod);
 
   // If no error occur, keep the files.
   S->keepAllFiles();

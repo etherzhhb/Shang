@@ -86,12 +86,10 @@ Pass *llvm::createRTLCodegenPreparePass() {
 }
 
 void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
-  const std::vector<unsigned> &PHIs =
-    MRI.getRegClassVirtRegs(VTM::PHIRRegisterClass);
-
-  for (std::vector<unsigned>::const_iterator I = PHIs.begin(), E = PHIs.end();
-       I != E; ++I) {
-    unsigned PHINum = *I;
+  for (unsigned i = 0, e = MRI.getNumVirtRegs(); i != e; ++i) {
+    unsigned PHINum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI.getRegClass(PHINum) != VTM::PHIRRegisterClass) continue;
+    
     if (MRI.reg_nodbg_empty(PHINum)) continue;
 
     MachineRegisterInfo::use_iterator UI = MRI.use_begin(PHINum);

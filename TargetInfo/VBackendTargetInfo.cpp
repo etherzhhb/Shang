@@ -7,8 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Module.h"
-#include "llvm/Target/TargetRegistry.h"
+#include "llvm/Support/TargetRegistry.h"
 
 namespace llvm {
   Target TheVBackendTarget;
@@ -20,3 +19,5 @@ using namespace llvm;
 extern "C" void LLVMInitializeVerilogBackendTargetInfo() { 
   RegisterTarget<> X(TheVBackendTarget, "verilog", "Verilog backend");
 }
+
+extern "C" void LLVMInitializeCBackendTargetMC() {}
