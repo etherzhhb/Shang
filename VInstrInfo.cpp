@@ -60,7 +60,7 @@ VInstrInfo::VInstrInfo(const TargetData &TD, const TargetLowering &TLI)
 
 bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                    AliasAnalysis *AA) const {
-  const TargetInstrDesc &TID = MI->getDesc();
+  const MCInstrDesc &TID = MI->getDesc();
   return !TID.isBarrier() && hasTrivialFU(TID.getOpcode());
 }
 
@@ -139,7 +139,7 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
 }
 
 MachineInstr *VInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI)const{
-  const TargetInstrDesc &TID = MI->getDesc();
+  const MCInstrDesc &TID = MI->getDesc();
   bool HasDef = TID.getNumDefs();
   assert(HasDef && MI->getOperand(0).isReg() && "Bad instruction to commute!");
   // Build the operand list and swap the operands to cummuted.
@@ -163,7 +163,7 @@ MachineInstr *VInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI)const{
 }
 
 bool VInstrInfo::isUnpredicatedTerminator(const MachineInstr *MI) const{
-  const TargetInstrDesc &TID = MI->getDesc();
+  const MCInstrDesc &TID = MI->getDesc();
   if (!TID.isTerminator()) return false;
 
   return !isPredicated(MI);
@@ -885,7 +885,7 @@ bool VInstrInfo::isBrCndLike(unsigned Opcode) {
 }
 
 bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
-  const TargetInstrDesc &TID = VTMInsts[OpC];
+  const MCInstrDesc &TID = VTMInsts[OpC];
   return (TID.TSFlags & (WriteUntilFinishMask << WriteUntilFinishShiftAmount))
          || VInstrInfo::isCopyLike(OpC);
 }
@@ -999,7 +999,7 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
 
 double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   unsigned OpCode = MI->getOpcode();
-  const TargetInstrDesc &TID = VTMInsts[OpCode];
+  const MCInstrDesc &TID = VTMInsts[OpCode];
   if (MOIdx < TID.getNumOperands() && TID.OpInfo[MOIdx].isPredicate())
     return VFUs::ClkEnSelLatency;
 
@@ -1028,9 +1028,9 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                       const MachineInstr *DstInstr) {
   assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
   assert(SrcInstr != DstInstr && "Computing latency of self loop?");
-  const TargetInstrDesc &DstTID = DstInstr->getDesc();
+  const MCInstrDesc &DstTID = DstInstr->getDesc();
   unsigned DstOpC = DstTID.getOpcode();
-  const TargetInstrDesc &SrcTID = SrcInstr->getDesc();
+  const MCInstrDesc &SrcTID = SrcInstr->getDesc();
   unsigned SrcOpC = SrcTID.getOpcode();
 
   // Compute the latency correspond to detail slot.
@@ -1056,7 +1056,7 @@ unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
 unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");
   unsigned DstOpC = DstInstr->getOpcode();
-  const TargetInstrDesc &DstTID = VTMInsts[DstOpC];
+  const MCInstrDesc &DstTID = VTMInsts[DstOpC];
 
   //// Set latency of Control operation and entry root to 1, so we can prevent
   //// scheduling control operation to the first slot.

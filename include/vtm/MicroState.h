@@ -27,7 +27,7 @@
 #include "llvm/ADT/STLExtras.h"
 
 namespace llvm {
-class TargetInstrDesc;
+class MCInstrDesc;
 class ucOpIterator;
 class ucState;
 class ucOp;
@@ -74,7 +74,7 @@ public:
 
   void clearPredSlot();
 
-  const TargetInstrDesc &getDesc() const;
+  const MCInstrDesc &getDesc() const;
 
   FuncUnitId getFUId() const {
     assert(isOpcode() && "Bad Operand type!");

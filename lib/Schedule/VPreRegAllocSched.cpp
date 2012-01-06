@@ -375,7 +375,7 @@ VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
    return LoopDep(SrcBeforeDest ? LoopDep::AntiDep : LoopDep::TrueDep, Diff);
 }
 
-static inline bool mayAccessMemory(const TargetInstrDesc &TID) {
+static inline bool mayAccessMemory(const MCInstrDesc &TID) {
   return TID.mayLoad() || TID.mayStore() || TID.isCall();
 }
 

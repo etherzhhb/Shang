@@ -213,7 +213,7 @@ void ucState::dump() const {
   print(dbgs());
 }
 
-const TargetInstrDesc &ucOperand::getDesc() const {
+const MCInstrDesc &ucOperand::getDesc() const {
   assert(isOpcode() && "getDesc on a wrong operand type!");
   const TargetMachine &TM = getParent()->getParent()->getParent()->getTarget();
   return TM.getInstrInfo()->get(getOpcode());
@@ -377,7 +377,7 @@ void ucOperand::print(raw_ostream &OS,
     OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     return;
   case MachineOperand::MO_GlobalAddress:
-    OS << "(`gv" << getGlobal()->getNameStr() << " + "
+    OS << "(`gv" << getGlobal()->getName() << " + "
        << verilogConstToStr(getOffset(), getBitWidth(), false) << ')';
     return;
   default: break;

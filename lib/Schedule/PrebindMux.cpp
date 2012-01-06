@@ -125,7 +125,7 @@ void PrebindMux::collectFanIns(MachineFunction &MF){
       FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
       if (Id.isTrivial()) continue;
 
-      const TargetInstrDesc &TID = Inst->getDesc();
+      const MCInstrDesc &TID = Inst->getDesc();
 
       for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
         ucOperand &MO = cast<ucOperand>(Inst->getOperand(i));
@@ -199,7 +199,7 @@ void PrebindMux::insertDistrubedMuxOp(MachineFunction &MF) {
       FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
       if (Id.isTrivial()) continue;
 
-      const TargetInstrDesc &TID = Inst->getDesc();
+      const MCInstrDesc &TID = Inst->getDesc();
       MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
 
       for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
