@@ -27,7 +27,7 @@
 namespace llvm {
   namespace vtmIntrinsic {
 #define GET_LLVM_INTRINSIC_FOR_GCC_BUILTIN
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_LLVM_INTRINSIC_FOR_GCC_BUILTIN
   }
 }
@@ -40,18 +40,17 @@ static inline unsigned lookupNameHelper(const char *Name, unsigned Len) {
       return 0;  // All intrinsics start with 'llvm.'
 
 #define GET_FUNCTION_RECOGNIZER
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_FUNCTION_RECOGNIZER
     return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // IntrinsicInfo Implementation.
-std::string VIntrinsicInfo::getName(unsigned IntrID, const Type **Tys,
-                                    unsigned numTys) const {
+std::string VIntrinsicInfo::getName(unsigned IntrID, ArrayRef<Type*> Tys) const {
     static const char *const names[] = {
 #define GET_INTRINSIC_NAME_TABLE
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_NAME_TABLE
     };
 
@@ -61,6 +60,7 @@ std::string VIntrinsicInfo::getName(unsigned IntrID, const Type **Tys,
 
   std::string Result(names[IntrID - Intrinsic::num_intrinsics]);
 
+  unsigned numTys = Tys.size();
   if (numTys == 0) return Result;
 
   for (unsigned i = 0; i < numTys; ++i) {
@@ -86,7 +86,7 @@ bool VIntrinsicInfo::isOverloaded(unsigned IntrID) const {
   // Overload Table
   const bool OTable[] = {
 #define GET_INTRINSIC_OVERLOAD_TABLE
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_OVERLOAD_TABLE
   };
   if (IntrID == 0)
@@ -97,29 +97,29 @@ bool VIntrinsicInfo::isOverloaded(unsigned IntrID) const {
 
 /// This defines the "getAttributes(ID id)" method.
 #define GET_INTRINSIC_ATTRIBUTES
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_ATTRIBUTES
 
-static const FunctionType *getType(LLVMContext &Context, unsigned id,
-                                   const Type **Tys, unsigned numTys) {
-  const Type *ResultTy = NULL;
-  std::vector<const Type*> ArgTys;
+static FunctionType *getType(LLVMContext &Context, unsigned id,
+                             ArrayRef<Type*> Tys) {
+  Type *ResultTy = NULL;
+  std::vector<Type*> ArgTys;
   bool IsVarArg = false;
 
 #define GET_INTRINSIC_GENERATOR
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_GENERATOR
 
   return FunctionType::get(ResultTy, ArgTys, IsVarArg);
 }
 
 Function *VIntrinsicInfo::getDeclaration(Module *M, unsigned IntrID,
-                                         const Type **Tys, unsigned numTys) const {
+                                         ArrayRef<Type*> Tys) const {
   AttrListPtr AList = getAttributes((vtmIntrinsic::ID) IntrID);
 
   return cast<Function>(
-    M->getOrInsertFunction(getName(IntrID, Tys, numTys),
-                           getType(M->getContext(), IntrID, Tys, numTys),
+    M->getOrInsertFunction(getName(IntrID, Tys),
+                           getType(M->getContext(), IntrID, Tys),
                            AList));
 }
 

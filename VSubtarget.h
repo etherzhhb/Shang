@@ -14,7 +14,7 @@
 #ifndef VSUBTARGET_H
 #define VSUBTARGET_H
 
-#include "llvm/Target/TargetSubtarget.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 #include <string>
 #include <set>
@@ -23,7 +23,7 @@
 namespace llvm {
 class Module;
 
-class VSubtarget : public TargetSubtarget {
+class VSubtarget : public TargetSubtargetInfo {
   /// Selected instruction itineraries (one entry per itinerary class.)
   InstrItineraryData InstrItins;
   // Just some dummy subtarget features.

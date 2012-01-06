@@ -27,7 +27,6 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/Target/TargetAsmInfo.h"
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/MachineFunctionAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"

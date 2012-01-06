@@ -115,9 +115,9 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
     SS << "isLocal = " << GV->hasLocalLinkage() << ", ";
 
     SS << "NumElems = ";
-    const Type *Ty = cast<PointerType>(GV->getType())->getElementType();
+    Type *Ty = cast<PointerType>(GV->getType())->getElementType();
     // The element type of a scalar is the type of the scalar.
-    const Type *ElemTy = Ty;
+    Type *ElemTy = Ty;
     unsigned NumElem = 1;
     // Try to expand multi-dimension array to single dimension array.
     while (const ArrayType *AT = dyn_cast<ArrayType>(ElemTy)) {

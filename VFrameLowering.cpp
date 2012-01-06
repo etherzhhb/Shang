@@ -101,12 +101,12 @@ void LowerFrameInstrs::replaceBRamAccess(Function *F) {
     if (LoadInst *Load = dyn_cast<LoadInst>(Inst)) {
       Value *Ptr = Load->getPointerOperand();
       if (VAllocaBRamInst *Ram = getReferredBRam(Ptr)) {
-        const Type *ValTys[] = { Load->getType(), Ptr->getType() };
+        Type *ValTys[] = { Load->getType(), Ptr->getType() };
         Function *TheLoadBRamFn
           = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_access_bram,
           ValTys, array_lengthof(ValTys));
-        const Type *Int32Ty = Type::getInt32Ty(M->getContext()),
-          *Int1Ty = Type::getInt1Ty(M->getContext());
+        Type *Int32Ty = Type::getInt32Ty(M->getContext()),
+             *Int1Ty = Type::getInt1Ty(M->getContext());
 
         Value *Args[] = { Ptr, UndefValue::get(ValTys[0]),
                           ConstantInt::get(Int1Ty, 0),
@@ -115,8 +115,7 @@ void LowerFrameInstrs::replaceBRamAccess(Function *F) {
                           ConstantInt::get(Int32Ty,  Ram->getBRamId()) };
 
         CallInst *NewLD = CallInst::Create(TheLoadBRamFn,
-                                           Args, array_endof(Args),
-                                           Load->getName(), Load);
+                                           Args, Load->getName(), Load);
         Load->replaceAllUsesWith(NewLD);
         Load->eraseFromParent();
       }
@@ -129,12 +128,12 @@ void LowerFrameInstrs::replaceBRamAccess(Function *F) {
         Value *ValueOperand = Store->getValueOperand();
         assert(getReferredBRam(ValueOperand) == 0
                && "Can not store block ram address!");
-        const Type *ValTys[] = { ValueOperand->getType(), Ptr->getType() };
+        Type *ValTys[] = { ValueOperand->getType(), Ptr->getType() };
         Function *TheStoreBRamFn
           = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_access_bram,
           ValTys, array_lengthof(ValTys));
-        const Type *Int32Ty = Type::getInt32Ty(M->getContext()),
-                   *Int1Ty = Type::getInt1Ty(M->getContext());
+        Type *Int32Ty = Type::getInt32Ty(M->getContext()),
+             *Int1Ty = Type::getInt1Ty(M->getContext());
 
         Value *Args[] = { Ptr, ValueOperand,
                           ConstantInt::get(Int1Ty, 1),
@@ -142,8 +141,7 @@ void LowerFrameInstrs::replaceBRamAccess(Function *F) {
                           ConstantInt::get(Int1Ty, Store->isVolatile()),
                           ConstantInt::get(Int32Ty,  Ram->getBRamId()) };
 
-        (void) CallInst::Create(TheStoreBRamFn, Args, array_endof(Args),
-                                "store_bram", Store);
+        (void) CallInst::Create(TheStoreBRamFn, Args, "store_bram", Store);
         // The old store is not use anymore.
         Store->eraseFromParent();
       }
@@ -161,29 +159,28 @@ unsigned LowerFrameInstrs::lowerAlloca(AllocaInst *AI, unsigned allocatedBRams){
   unsigned NumElems = cast<ConstantInt>(AI->getArraySize())->getZExtValue();
 
   assert(isa<ArrayType>(AI->getAllocatedType()) && "Only support Array now!");
-  const ArrayType *AT = cast<ArrayType>(AI->getAllocatedType());
-  const Type *ET = AT->getElementType();
+  ArrayType *AT = cast<ArrayType>(AI->getAllocatedType());
+  Type *ET = AT->getElementType();
   unsigned ElemSizeInBytes = ET->getPrimitiveSizeInBits() / 8;
   assert(ElemSizeInBytes && "Non-primitive type are not supported!");
   NumElems *= AT->getNumElements();
 
   // We use address space
   unsigned AllocaAddrSpace = AI->getType()->getAddressSpace();
-  const Type *NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
+  Type *NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
   Function *TheAllocaBRamFn
     = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_alloca_bram,
                                    &NewPtrTy, 1);
 
-  const Type *Int32Ty = Type::getInt32Ty(Context);
+  Type *Int32Ty = Type::getInt32Ty(Context);
   Value *Args[] = { ConstantInt::get(Int32Ty, allocatedBRams),
                     ConstantInt::get(Int32Ty, NumElems),
                     ConstantInt::get(Int32Ty, ElemSizeInBytes) };
 
   Instruction *AllocaBRam = CallInst::Create(TheAllocaBRamFn,
-                                             Args, array_endof(Args),
-                                             AI->getName(), AI);
+                                             Args, AI->getName(), AI);
   // Cast pointer that pointing array element to pointer that pointing array.
-  const Type *ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
+  Type *ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
 
   AI->replaceAllUsesWith(BitCastInst::CreatePointerCast(AllocaBRam, ArrayPtrTy,
                                                         "cast", AI));

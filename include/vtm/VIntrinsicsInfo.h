@@ -22,7 +22,7 @@ namespace llvm {
     enum ID {
       last_non_vtm_intrinsic = Intrinsic::num_intrinsics - 1,
 #define GET_INTRINSIC_ENUM_VALUES
-#include "VGenIntrinsics.inc"
+#include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_ENUM_VALUES
       , num_vtm_intrinsics
     };
@@ -91,8 +91,7 @@ namespace llvm {
 
   class VIntrinsicInfo : public TargetIntrinsicInfo {
   public:
-    std::string getName(unsigned IntrID, const Type **Tys = 0,
-                        unsigned numTys = 0) const;
+    std::string getName(unsigned IntrID, ArrayRef<Type*> Tys) const;
 
     unsigned lookupName(const char *Name, unsigned Len) const;
 
@@ -100,8 +99,7 @@ namespace llvm {
 
     bool isOverloaded(unsigned IID) const;
 
-    Function *getDeclaration(Module *M, unsigned ID, const Type **Tys = 0,
-                             unsigned numTys = 0) const;
+    Function *getDeclaration(Module *M, unsigned ID, ArrayRef<Type*> Tys) const;
   };
 
 }
