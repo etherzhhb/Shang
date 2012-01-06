@@ -36,31 +36,27 @@ def PhiR : VTMReg<"phi">;
 def R : VTMReg<"r">;
 def W : VTMReg<"w">;
 
-class VRegClass<string namespace, list<ValueType> regTypes, int alignment,
-                    list<Register> regList>
-  : RegisterClass<namespace, regTypes, alignment, regList> {}
-
-def DR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [R]>;
-def Wire  : VRegClass<"VTM", [i64], 64, [W]>;
+def DR    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add R)>;
+def Wire  : RegisterClass<"VTM", [i64], 64, (add W)>;
 // Symbol for phi join.
-def PHIR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [PhiR]>;
+def PHIR    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add PhiR)>;
 
 // Result register classes of function units.
-def RADD    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [AR]>;
-def RMUL    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MR]>;
-def RMULLH  : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MLHR]>;
+def RADD    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add AR)>;
+def RMUL    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add MR)>;
+def RMULLH  : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add MLHR)>;
 // Shifts
-def RLSR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [LSRR]>;
-def RASR    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [ASRR]>;
-def RSHL    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [SHLR]>;
+def RLSR    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add LSRR)>;
+def RASR    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add ASRR)>;
+def RSHL    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add SHLR)>;
 
-def RINF    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [IR]>;
-def RCFN    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [CR]>;
-def RBRM    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [BR]>;
+def RINF    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add IR)>;
+def RCFN    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add CR)>;
+def RBRM    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add BR)>;
 
 // Integer comparison
-def RUCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [UCMPR]>;
-def RSCMP    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [SCMPR]>;
+def RUCMP    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add UCMPR)>;
+def RSCMP    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add SCMPR)>;
 
 // Prebinded distributed (in time domain) multiplexer.
-def RMUX    : VRegClass<"VTM", [i1, i8, i16, i32, i64], 64, [MUXR]>;
+def RMUX    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add MUXR)>;
