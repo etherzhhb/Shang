@@ -10,17 +10,18 @@
 // This file implements the vtm specific subclass of TargetSubtarget.
 //
 //===----------------------------------------------------------------------===//
-
 #include "VSubtarget.h"
 #define VTMSubtarget VSubtarget
-#include "VGenSubtarget.inc"
+
 #include "vtm/VTM.h"
+
+#define GET_SUBTARGETINFO_TARGET_DESC
+#include "VerilogBackendGenSubtargetInfo.inc"
 
 using namespace llvm;
 
-VSubtarget::VSubtarget(const std::string &TT,
-                     const std::string &FS) {
-  std::string CPU = "generic";
+VSubtarget::VSubtarget(StringRef TT, StringRef FS) {
+  StringRef CPU = "generic";
   // Parse features string.
   ParseSubtargetFeatures(FS, CPU);
 }

@@ -16,10 +16,6 @@
 
 #include "llvm/Target/TargetSubtargetInfo.h"
 
-#include <string>
-#include <set>
-#include <map>
-
 namespace llvm {
 class Module;
 
@@ -30,9 +26,8 @@ class VSubtarget : public TargetSubtargetInfo {
   bool vtmattr;
 
 public:
-  VSubtarget(const std::string &TT, const std::string &FS);
-  std::string ParseSubtargetFeatures(const std::string &FS,
-                                     const std::string &CPU);
+  VSubtarget(StringRef TT, StringRef FS);
+  void ParseSubtargetFeatures(StringRef FS,StringRef CPU);
 
   /// getInstrItins - Return the instruction itineraies based on subtarget
   /// selection.
