@@ -88,11 +88,27 @@ public:
   virtual bool needsStackRealignment(const MachineFunction &) const;
   unsigned getSubReg(unsigned RegNo, unsigned Index) const;
   unsigned getSubRegIndex(unsigned RegNo, unsigned SubRegNo) const {
+    assert(0 && "Unexpected calling getSubRegIndex!");
     return 0;
   }
   unsigned composeSubRegIndices(unsigned IdxA, unsigned IdxB) const {
+    assert(0 && "Unexpected calling composeSubRegIndices!");
     return IdxB;
   }
+  
+  virtual const TargetRegisterClass *
+    getMatchingSuperRegClass(const TargetRegisterClass *A,
+                             const TargetRegisterClass *B, unsigned Idx) const {
+    assert(0 && "Unexpected calling getMatchingSuperRegClass!");
+    return 0;
+  }
+
+  virtual const TargetRegisterClass *
+    getSubClassWithSubReg(const TargetRegisterClass *RC, unsigned Idx) const{
+    assert(0 && "Unexpected calling getSubClassWithSubReg!");
+    return 0;
+  }
+
 
   /// Code Generation virtual methods...
   const unsigned *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
