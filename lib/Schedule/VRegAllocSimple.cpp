@@ -45,7 +45,6 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
-#include "llvm/CodeGen/RegisterCoalescer.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SmallSet.h"
@@ -937,8 +936,6 @@ char VRASimple::ID = 0;
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
-  initializeStrongPHIEliminationPass(*PassRegistry::getPassRegistry());
-  initializeRegisterCoalescerAnalysisGroup(*PassRegistry::getPassRegistry());
   initializeCalculateSpillWeightsPass(*PassRegistry::getPassRegistry());
   initializeLiveStacksPass(*PassRegistry::getPassRegistry());
   initializeMachineDominatorTreePass(*PassRegistry::getPassRegistry());
@@ -953,7 +950,6 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<AliasAnalysis>();
   AU.addRequired<LiveIntervals>();
   AU.addPreserved<SlotIndexes>();
-  AU.addRequiredTransitive<RegisterCoalescer>();
   AU.addRequired<CalculateSpillWeights>();
   AU.addRequired<LiveStacks>();
   AU.addPreserved<LiveStacks>();
@@ -1122,13 +1118,13 @@ void VRASimple::addMBBLiveIns(MachineFunction *MF) {
 }
 
 void VRASimple::joinPHINodeIntervals() {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::PHIRRegisterClass);
-
-
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned PHINum = *I;
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned PHINum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI->getRegClass(PHINum) != VTM::PHIRRegisterClass) continue;
 
     MachineRegisterInfo::use_iterator UI = MRI->use_begin(PHINum);
+    if (UI == MachineRegisterInfo::use_end()) continue;
+    
     ucOp Op = ucOp::getParent(UI);
     assert(Op->getOpcode() == VTM::VOpDefPhi && "Unexpected Opcode!");
     unsigned DstReg = Op.getOperand(0).getReg();
@@ -1226,12 +1222,12 @@ void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
 }
 
 void VRASimple::bindMemoryBus() {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RINFRegisterClass);
-
   LiveInterval *MemBusLI = 0;
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI->getRegClass(RegNum) != VTM::RINFRegisterClass)
+      continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       if (MemBusLI == 0) {
@@ -1247,11 +1243,12 @@ void VRASimple::bindMemoryBus() {
 }
 
 void VRASimple::bindDstMux() {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RMUXRegisterClass);
   std::map<unsigned, LiveInterval*> RepLIs;
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI->getRegClass(RegNum) != VTM::RMUXRegisterClass)
+      continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
@@ -1283,11 +1280,12 @@ void VRASimple::bindDstMux() {
 void VRASimple::bindBlockRam() {
   assert(VInstrInfo::isWriteUntilFinish(VTM::VOpBRam)
          && "Expected block ram write until finish!");
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RBRMRegisterClass);
   std::map<unsigned, LiveInterval*> RepLIs;
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI->getRegClass(RegNum) != VTM::RBRMRegisterClass)
+      continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
@@ -1340,11 +1338,12 @@ unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
 }
 
 void VRASimple::bindCalleeFN() {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
   std::map<unsigned, LiveInterval*> RepLIs;
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I){
-    unsigned RegNum = *I;
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI->getRegClass(RegNum) != VTM::RCFNRegisterClass)
+      continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
@@ -1374,11 +1373,14 @@ void VRASimple::bindCalleeFN() {
 }
 
 void VRASimple::buildCompGraph(LICGraph &G) {
-  VRegVec &VRegs = MRI->getRegClassVirtRegs(TRI->getRegClass(G.ID));
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+    unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
+    if (MRI->getRegClass(RegNum)->getID() != G.ID)
+      continue;
 
-  for (VRegVec::const_iterator I = VRegs.begin(), E = VRegs.end(); I != E; ++I)
-    if (LiveInterval *LI = getInterval(*I))
+    if (LiveInterval *LI = getInterval(RegNum))
       G.GetOrCreateNode(LI);
+  }
 }
 
 template<class CompEdgeWeight>
