@@ -188,8 +188,8 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
-  void cleanUpRegisterClass(const TargetRegisterClass *RC);
-  void fixSubModuleReturnPort();
+  bool cleanUpRegisterClass(unsigned RegNum, const TargetRegisterClass *RC);
+  bool fixSubModuleReturnPort(unsigned RegNum);
 
   bool doInitialization(Module &M) {
     TD = getAnalysisIfAvailable<TargetData>();
@@ -293,11 +293,11 @@ VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
                                   bool SrcLoad, bool DstLoad,
                                   Loop &L, bool SrcBeforeDest) {
   uint64_t SrcSize = AliasAnalysis::UnknownSize;
-  const Type *SrcElTy = cast<PointerType>(SrcAddr->getType())->getElementType();
+  Type *SrcElTy = cast<PointerType>(SrcAddr->getType())->getElementType();
   if (SrcElTy->isSized()) SrcSize = AA->getTypeStoreSize(SrcElTy);
 
   uint64_t DstSize = AliasAnalysis::UnknownSize;
-  const Type *DstElTy = cast<PointerType>(DstAddr->getType())->getElementType();
+  Type *DstElTy = cast<PointerType>(DstAddr->getType())->getElementType();
   if (DstElTy->isSized()) DstSize = AA->getTypeStoreSize(DstElTy);
 
   if (L.isLoopInvariant(SrcAddr) && L.isLoopInvariant(DstAddr)) {
@@ -407,7 +407,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // FIXME: DstMO maybe null in a VOpCmdSeq
       if ((DstMO =
              const_cast<Value*>((*DstMI->memoperands_begin())->getValue()))){
-        const Type *DstElemTy
+        Type *DstElemTy
           = cast<SequentialType>(DstMO->getType())->getElementType();
         DstSize = TD->getTypeStoreSize(DstElemTy);
         assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
@@ -462,7 +462,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
           SrcU->addDep(MemDep);
         }
       } else {
-        const Type *SrcElemTy
+        Type *SrcElemTy
           = cast<SequentialType>(SrcMO->getType())->getElementType();
         size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
 
@@ -963,49 +963,53 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {
-  cleanUpRegisterClass(VTM::DRRegisterClass);
-  fixSubModuleReturnPort();
+  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
+     unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
+    if (cleanUpRegisterClass(RegNum, VTM::DRRegisterClass))
+      continue;
+    
+    fixSubModuleReturnPort(RegNum);
+  }
 }
 
-void VPreRegAllocSched::cleanUpRegisterClass(const TargetRegisterClass *RC) {
+bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
+                                             const TargetRegisterClass *RC) {
   // And Emit the wires defined in this module.
-  const std::vector<unsigned>& Wires = MRI->getRegClassVirtRegs(RC);
+  if (MRI->getRegClass(RegNum) != RC) return true;
 
-  for (std::vector<unsigned>::const_iterator I = Wires.begin(), E = Wires.end();
-       I != E; ++I) {
-    unsigned SrcReg = *I;
-    MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
+  MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
 
-    if (DI == MRI->def_end() || !MRI->use_empty(SrcReg))
-      continue;
+  if (DI == MRI->def_end() || !MRI->use_empty(RegNum))
+    return true;
 
-    MachineInstr &DefMI = *DI;
-    if (DefMI.isPHI()) {
-      // The instruction is dead.
-      DefMI.removeFromParent();
-      continue;
-    }
+  MachineInstr &DefMI = *DI;
+  if (DefMI.isPHI()) {
+    // The instruction is dead.
+    DefMI.removeFromParent();
+    return true;
+  }
 
-    assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
-    // Do not remove the operand, just change it to implicit define.
-    ucOp Op = ucOp::getParent(DI);
-    SrcReg = TargetRegisterInfo::virtReg2Index(SrcReg);
+  assert(++MRI->def_begin(RegNum) == MRI->def_end() && "Not in SSA From!");
+  // Do not remove the operand, just change it to implicit define.
+  ucOp Op = ucOp::getParent(DI);
+  RegNum = TargetRegisterInfo::virtReg2Index(RegNum);
 
-    // Preserve the read fu information, and keep reading the source fu register
-    if (Op->getOpcode() == VTM::VOpReadFU) {
-      MachineOperand &MO = DI.getOperand();
-      MO.ChangeToImmediate(SrcReg);
+  // Preserve the read fu information, and keep reading the source fu register
+  if (Op->getOpcode() == VTM::VOpReadFU) {
+    MachineOperand &MO = DI.getOperand();
+    MO.ChangeToImmediate(RegNum);
+    MO.setTargetFlags(64);
+  } else {
+    Op.changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
+    for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
+      // Change the operand to some rubbish value.
+      MachineOperand &MO = *OI;
+      MO.ChangeToRegister(0, false);
       MO.setTargetFlags(64);
-    } else {
-      Op.changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
-      for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
-        // Change the operand to some rubbish value.
-        MachineOperand &MO = *OI;
-        MO.ChangeToImmediate(SrcReg);
-        MO.setTargetFlags(64);
-      }
     }
   }
+
+  return false;
 }
 
 static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
@@ -1022,29 +1026,25 @@ static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
   }
 }
 
-void VPreRegAllocSched::fixSubModuleReturnPort() {
+bool VPreRegAllocSched::fixSubModuleReturnPort(unsigned RegNum) {
   // And Emit the wires defined in this module.
-  const std::vector<unsigned>& Callees =
-    MRI->getRegClassVirtRegs(VTM::RCFNRegisterClass);
+  if (MRI->getRegClass(RegNum) != VTM::RCFNRegisterClass) return true;
+    
+  MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
 
-  for (std::vector<unsigned>::const_iterator I = Callees.begin(),
-       E = Callees.end(); I != E; ++I) {
-      unsigned SrcReg = *I;
-      MachineRegisterInfo::def_iterator DI = MRI->def_begin(SrcReg);
+  if (DI == MRI->def_end() || MRI->use_empty(RegNum))
+    return true;
 
-      if (DI == MRI->def_end() || MRI->use_empty(SrcReg))
-        continue;
+  assert(!DI->isPHI() && "PHI with RUCMPRegister is not supported!");
 
-      assert(!DI->isPHI() && "PHI with RUCMPRegister is not supported!");
-
-      assert(++MRI->def_begin(SrcReg) == MRI->def_end() && "Not in SSA From!");
-      // Do not remove the operand, just change it to implicit define.
-      ucOp Op = ucOp::getParent(DI);
-      if (Op->isOpcode(VTM::VOpInternalCall)) {
-        addSubRegIdxForCalleeFN(SrcReg, MRI);
-        continue;
-      }
-
-      llvm_unreachable("Unsupported opcode!");
+  assert(++MRI->def_begin(RegNum) == MRI->def_end() && "Not in SSA From!");
+  // Do not remove the operand, just change it to implicit define.
+  ucOp Op = ucOp::getParent(DI);
+  if (Op->isOpcode(VTM::VOpInternalCall)) {
+    addSubRegIdxForCalleeFN(RegNum, MRI);
+    return false;
   }
+
+  llvm_unreachable("Unsupported opcode!");
+  return true;
 }
