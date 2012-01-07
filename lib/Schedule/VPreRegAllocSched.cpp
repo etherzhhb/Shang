@@ -975,12 +975,12 @@ void VPreRegAllocSched::cleanUpSchedule() {
 bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
                                              const TargetRegisterClass *RC) {
   // And Emit the wires defined in this module.
-  if (MRI->getRegClass(RegNum) != RC) return true;
+  if (MRI->getRegClass(RegNum) != RC) return false;
 
   MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
 
   if (DI == MRI->def_end() || !MRI->use_empty(RegNum))
-    return true;
+    return false;
 
   MachineInstr &DefMI = *DI;
   if (DefMI.isPHI()) {
@@ -1009,7 +1009,7 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
     }
   }
 
-  return false;
+  return true;
 }
 
 static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
