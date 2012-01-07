@@ -21,8 +21,8 @@
 #include "VSelectionDAGInfo.h"
 #include "VSubtarget.h"
 #include "VFrameLowering.h"
-#include "vtm/VIntrinsicsInfo.h"
 
+#include "vtm/VIntrinsicsInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/VISelLowering.h"
 // TODO:
@@ -39,7 +39,7 @@ namespace llvm {
 class VFrameInfo;
 
 class VTargetMachine : public LLVMTargetMachine {
-  // FIXME
+  // FIXME Delete this.
   const TargetData DataLayout;
   VSubtarget Subtarget;
   VTargetLowering TLInfo;
@@ -51,7 +51,9 @@ class VTargetMachine : public LLVMTargetMachine {
   // FIXME
   // VIntrinsicInfo IntrinsicInfo;
 public:
-  VTargetMachine(const Target &T, const std::string &TT, const std::string &FS);
+  VTargetMachine(const Target &T, StringRef TT,StringRef CPU,
+                 StringRef FS, TargetOptions Options, Reloc::Model RM,
+                 CodeModel::Model CM, CodeGenOpt::Level OL);
 
   virtual const VInstrInfo *getInstrInfo() const { return &InstrInfo; }
   // virtual const TargetFrameInfo *getFrameInfo() const { return &FrameInfo; }
@@ -65,7 +67,8 @@ public:
   }
 
   virtual const VRegisterInfo *getRegisterInfo() const {
-    return &InstrInfo.getRegisterInfo();
+    return 0;
+    //return &InstrInfo.getRegisterInfo();
   }
 
   virtual const VTargetLowering* getTargetLowering() const {

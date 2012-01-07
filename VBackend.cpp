@@ -47,9 +47,10 @@ extern "C" void LLVMInitializeVerilogBackendTarget() {
   //RegisterAsmInfo<VMCAsmInfo> Y(TheVBackendTarget);
 }
 
-VTargetMachine::VTargetMachine(const Target &T, const std::string &TT,
-                               const std::string &FS)
-  : LLVMTargetMachine(T, TT),
+VTargetMachine::VTargetMachine(const Target &T, StringRef TT,StringRef CPU,
+                               StringRef FS, TargetOptions Options, Reloc::Model RM,
+                               CodeModel::Model CM, CodeGenOpt::Level OL)
+  : LLVMTargetMachine(T, TT, "generic", "", ),
   // FIXME: Allow speicific data layout.
   DataLayout(FS),
   Subtarget(TT, ""),

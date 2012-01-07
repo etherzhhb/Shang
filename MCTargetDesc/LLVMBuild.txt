@@ -1,4 +1,4 @@
-;===- ./lib/Target/VerilogBackend/LLVMBuild.txt -----------------------*- Conf -*--===;
+;===- ./lib/Target/VerilogBackend/MCTargetDesc/LLVMBuild.txt ---*- Conf -*--===;
 ;
 ;                     The LLVM Compiler Infrastructure
 ;
@@ -15,20 +15,9 @@
 ;
 ;===------------------------------------------------------------------------===;
 
-[common]
-subdirectories = TargetInfo MCTargetDesc lib tools
-
-;MCTargetDesc
-
 [component_0]
-type = TargetGroup
-name = VerilogBackend
-parent = Target
-has_asmprinter = 1
-
-[component_1]
 type = Library
-name = VerilogBackendCodegen
+name = VerilogBackendDesc
 parent = VerilogBackend
-required_libraries = AsmPrinter CodeGen Core VerilogBackendInfo VerilogBackendDesc SelectionDAG Support Target MC VTMBitLevelOpt VTMHighLevelOpt VTMSchedule VTMRTLCodegen  VTMScripting
+required_libraries = VerilogBackendInfo MC
 add_to_library_groups = VerilogBackend

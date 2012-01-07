@@ -12,16 +12,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef VBACKEND_H
-#define VBACKEND_H
+#ifndef VERILOGBACKEND_MC_TARGET_DESC_H
+#define VERILOGBACKEND_MC_TARGET_DESC_H
 
-#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
-class FunctionPass;
-class VTargetMachine;
-
-FunctionPass *createVISelDag(VTargetMachine &TM, CodeGenOpt::Level OptLevel);
+extern Target TheVBackendTarget;
 } // end namespace llvm
+
+// Defines symbolic names for the Verilog TargetMachine registers. This defines
+// a mapping from register name to register number.
+#define GET_REGINFO_ENUM
+#include "VerilogBackendGenRegisterInfo.inc"
+
+#define GET_INSTRINFO_ENUM
+#include "VerilogBackendGenInstrInfo.inc"
+
+#define GET_SUBTARGETINFO_ENUM
+#include "VerilogBackendGenSubtargetInfo.inc"
+
 #endif

@@ -11,9 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "VSubtarget.h"
+
 #include "vtm/Passes.h"
 #include "vtm/VTM.h"
 #include "vtm/VRegisterInfo.h"
+#include "vtm/VInstrInfo.h"
 
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -85,17 +88,8 @@ bool VRegisterInfo::needsStackRealignment(const MachineFunction &) const {
 }
 
 
-#include "VGenRegisterInfo.inc"
-
-VRegisterInfo::VRegisterInfo(const TargetInstrInfo &tii, const TargetData &td,
-                             const TargetLowering &tli)
-  : TargetRegisterInfo(RegisterDescriptors, MaxPhyRegs,
-                       RegisterClasses, array_endof(RegisterClasses),
-                       SubRegIndexTable,
-                       -1, -1,
-                       SubregHashTable, SubregHashTableSize,
-                       AliasesHashTable, AliasesHashTableSize),
-    TII(tii), TD(td), TLI(tli) {}
+#define GET_REGINFO_TARGET_DESC
+#include "VerilogBackendGenRegisterInfo.inc"
 
 const TargetRegisterClass *
 VRegisterInfo::getPointerRegClass(unsigned Kind) const {
