@@ -19,5 +19,5 @@
 type = Tool
 name = sync
 parent = Tools
-required_libraries = VerilogBackendCodegen AsmParser BitReader BitWriter IPO Instrumentation Scalar
+required_libraries = VerilogBackendCodegen AsmParser BitReader BitWriter IPO Instrumentation Scalar Support Core
 

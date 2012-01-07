@@ -38,8 +38,8 @@ using namespace llvm;
 namespace {
 class VDAGToDAGISel : public SelectionDAGISel {
 public:
-  VDAGToDAGISel(VTargetMachine &TM, CodeGenOpt::Level OptLevel)
-    : SelectionDAGISel(TM, OptLevel) {}
+  VDAGToDAGISel(VTargetMachine &TM)
+    : SelectionDAGISel(TM, TM.getOptLevel()) {}
 
   virtual const char *getPassName() const {
     return "VTM DAG->DAG Pattern Instruction Selection";
@@ -105,9 +105,8 @@ private:
 };
 }  // end anonymous namespace
 
-FunctionPass *llvm::createVISelDag(VTargetMachine &TM,
-                                   CodeGenOpt::Level OptLevel) {
-  return new VDAGToDAGISel(TM, OptLevel);
+FunctionPass *llvm::createVISelDag(VTargetMachine &TM) {
+  return new VDAGToDAGISel(TM);
 }
 
 BitWidthAnnotator VDAGToDAGISel::computeOperandsBitWidth(SDNode *N,

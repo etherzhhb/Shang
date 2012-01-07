@@ -33,38 +33,38 @@ using namespace llvm;
 
 static MCInstrInfo *createVerilogBackendMCInstrInfo() {
   MCInstrInfo *X = new MCInstrInfo();
-  InitVerilogBackendMCInstrInfo(X);
+  InitVTMMCInstrInfo(X);
   return X;
 }
 
 static MCRegisterInfo *createVerilogBackendMCRegisterInfo(StringRef TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
-  InitVerilogBackendMCRegisterInfo(X, VerilogBackend::R0);
+  InitVTMMCRegisterInfo(X, VTM::R);
   return X;
 }
 
 static MCSubtargetInfo *createVerilogBackendMCSubtargetInfo(StringRef TT,
-  StringRef CPU,
-  StringRef FS) {
+                                                            StringRef CPU,
+                                                            StringRef FS) {
     MCSubtargetInfo *X = new MCSubtargetInfo();
-    InitVerilogBackendMCSubtargetInfo(X, TT, CPU, FS);
+    InitVTMMCSubtargetInfo(X, TT, CPU, FS);
     return X;
 }
 
 static MCAsmInfo *createVerilogBackendMCAsmInfo(const Target &T, StringRef TT) {
-  MCAsmInfo *MAI = new VerilogBackendMCAsmInfo(T, TT);
+  //MCAsmInfo *MAI = new VerilogBackendMCAsmInfo(T, TT);
 
-  // VirtualFP = (R30 + #0).
-  MachineLocation Dst(MachineLocation::VirtualFP);
-  MachineLocation Src(VerilogBackend::R30, 0);
-  MAI->addInitialFrameState(0, Dst, Src);
+  //// VirtualFP = (R30 + #0).
+  //MachineLocation Dst(MachineLocation::VirtualFP);
+  //MachineLocation Src(VerilogBackend::R30, 0);
+  //MAI->addInitialFrameState(0, Dst, Src);
 
-  return MAI;
+  return 0;//MAI;
 }
 
 static MCCodeGenInfo *createVerilogBackendMCCodeGenInfo(StringRef TT, Reloc::Model RM,
-  CodeModel::Model CM,
-  CodeGenOpt::Level OL) {
+                                                        CodeModel::Model CM,
+                                                        CodeGenOpt::Level OL) {
     MCCodeGenInfo *X = new MCCodeGenInfo();
     // For the time being, use static relocations, since there's really no
     // support for PIC yet.
@@ -75,20 +75,21 @@ static MCCodeGenInfo *createVerilogBackendMCCodeGenInfo(StringRef TT, Reloc::Mod
 // Force static initialization.
 extern "C" void LLVMInitializeVerilogBackendTargetMC() {
   // Register the MC asm info.
-  RegisterMCAsmInfoFn X(TheVerilogBackendTarget, createVerilogBackendMCAsmInfo);
+  RegisterMCAsmInfoFn X(TheVBackendTarget, createVerilogBackendMCAsmInfo);
 
   // Register the MC codegen info.
-  TargetRegistry::RegisterMCCodeGenInfo(TheVerilogBackendTarget,
-    createVerilogBackendMCCodeGenInfo);
+  TargetRegistry::RegisterMCCodeGenInfo(TheVBackendTarget,
+                                        createVerilogBackendMCCodeGenInfo);
 
   // Register the MC instruction info.
-  TargetRegistry::RegisterMCInstrInfo(TheVerilogBackendTarget, createVerilogBackendMCInstrInfo);
+  TargetRegistry::RegisterMCInstrInfo(TheVBackendTarget,
+                                      createVerilogBackendMCInstrInfo);
 
   // Register the MC register info.
-  TargetRegistry::RegisterMCRegInfo(TheVerilogBackendTarget,
-    createVerilogBackendMCRegisterInfo);
+  TargetRegistry::RegisterMCRegInfo(TheVBackendTarget,
+                                    createVerilogBackendMCRegisterInfo);
 
   // Register the MC subtarget info.
-  TargetRegistry::RegisterMCSubtargetInfo(TheVerilogBackendTarget,
-    createVerilogBackendMCSubtargetInfo);
+  TargetRegistry::RegisterMCSubtargetInfo(TheVBackendTarget,
+                                          createVerilogBackendMCSubtargetInfo);
 }

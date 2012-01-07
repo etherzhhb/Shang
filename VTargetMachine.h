@@ -89,15 +89,16 @@ public:
 
   virtual const TargetData *getTargetData() const { return &DataLayout; }
 
-  virtual bool addInstSelector(PassManagerBase &PM, CodeGenOpt::Level OptLevel);
+  virtual bool addInstSelector(PassManagerBase &PM);
 
   //const TargetIntrinsicInfo *getIntrinsicInfo() const {
   //  return &IntrinsicInfo;
   //}
 
-  bool addPassesToEmitFile(PassManagerBase &, formatted_raw_ostream &,
-                           CodeGenFileType, CodeGenOpt::Level,
-                           bool /* = true */);
+  bool addPassesToEmitFile(PassManagerBase &PM,
+                           formatted_raw_ostream &Out,
+                           CodeGenFileType FileType,
+                           bool DisableVerify = true);
 };
 extern Target TheVBackendTarget;
 

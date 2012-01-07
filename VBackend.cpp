@@ -27,7 +27,7 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/Target/TargetOptions.h"
-#include "llvm/CodeGen/LiveVariables.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/CodeGen/MachineFunctionAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -50,35 +50,24 @@ extern "C" void LLVMInitializeVerilogBackendTarget() {
 VTargetMachine::VTargetMachine(const Target &T, StringRef TT,StringRef CPU,
                                StringRef FS, TargetOptions Options, Reloc::Model RM,
                                CodeModel::Model CM, CodeGenOpt::Level OL)
-  : LLVMTargetMachine(T, TT, "generic", "", ),
+  : LLVMTargetMachine(T, TT, "generic", "", Options, RM, CM, OL),
   // FIXME: Allow speicific data layout.
   DataLayout(FS),
   Subtarget(TT, ""),
   TLInfo(*this),
   TSInfo(*this),
-  InstrInfo(DataLayout, TLInfo),
+  InstrInfo(),
   FrameInfo(Subtarget) {}
 
-bool VTargetMachine::addInstSelector(PassManagerBase &PM,
-                                     CodeGenOpt::Level OptLevel) {
-  PM.add(createVISelDag(*this, OptLevel));
+bool VTargetMachine::addInstSelector(PassManagerBase &PM) {
+  PM.add(createVISelDag(*this));
   return false;
 }
 
-// DIRTYHACK: Copy form LLVMTargetMachine.cpp
-static void printAndVerify(PassManagerBase &PM,
-                           const char *Banner) {
-  if (PrintMachineCode)
-    PM.add(createMachineFunctionPrinterPass(dbgs(), Banner));
-
-   PM.add(createMachineVerifierPass());
-}
-
 bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
-                                         formatted_raw_ostream &Out,
-                                         CodeGenFileType FileType,
-                                         CodeGenOpt::Level OptLevel,
-                                         bool DisableVerify) {
+                                        formatted_raw_ostream &Out,
+                                        CodeGenFileType FileType,
+                                        bool DisableVerify) {
 
   // add the pass which will convert the AllocaInst to GlobalVariable.
   PM.add(createStackToGlobalPass());
@@ -90,6 +79,14 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
 
   // Standard LLVM-Level Passes.
+  // Basic AliasAnalysis support.
+  // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that
+  // BasicAliasAnalysis wins if they disagree. This is intended to help
+  // support "obvious" type-punning idioms.
+  PM.add(createTypeBasedAliasAnalysisPass());
+  PM.add(createBasicAliasAnalysisPass());
+  // Run the SCEVAA pass to compute more accurate alias information.
+  PM.add(createScalarEvolutionAliasAnalysisPass());
 
   // Before running any passes, run the verifier to determine if the input
   // coming from the front-end and/or optimizer is valid.
@@ -103,12 +100,9 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   }
 
   // Run loop strength reduction before anything else.
-  if (OptLevel != CodeGenOpt::None && !false/*DisableLSR*/) {
-
-    //PM.add(createLoopStrengthReducePass(getTargetLowering()));
-    DEBUG(PM.add(createPrintFunctionPass("\n\n*** Code after LSR ***\n",
-                                         &dbgs())));
-  }
+  //PM.add(createLoopStrengthReducePass(getTargetLowering()));
+  DEBUG(PM.add(createPrintFunctionPass("\n\n*** Code after LSR ***\n",
+                                        &dbgs())));
 
   PM.add(createCFGSimplificationPass());
 
@@ -124,12 +118,11 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // The lower invoke pass may create unreachable code. Remove it.
   PM.add(createUnreachableBlockEliminationPass());
 
-  if (OptLevel != CodeGenOpt::None && !false/*DisableCGP*/)
-    PM.add(createCodeGenPreparePass(getTargetLowering()));
+  PM.add(createCodeGenPreparePass(getTargetLowering()));
 
   PM.add(createStackProtectorPass(getTargetLowering()));
 
-  addPreISel(PM, OptLevel);
+  addPreISel(PM);
 
   DEBUG(
     PM.add(createPrintFunctionPass("\n\n"
@@ -146,27 +139,23 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
 
   // Install a MachineModuleInfo class, which is an immutable pass that holds
   // all the per-module stuff we're generating, including MCContext.
-  TargetAsmInfo *TAI = new TargetAsmInfo(*this);
-  MachineModuleInfo *MMI = new MachineModuleInfo(*getMCAsmInfo(), TAI);
+  MachineModuleInfo *MMI = new MachineModuleInfo(*getMCAsmInfo(), 
+                                                 *getRegisterInfo(),
+                                    &getTargetLowering()->getObjFileLowering());
   PM.add(MMI);
 
   // Set up a MachineFunction for the rest of CodeGen to work on.
-  PM.add(new MachineFunctionAnalysis(*this, OptLevel));
-
-  // Enable FastISel with -fast, but allow that to be overridden.
-  if (false/*EnableFastISelOption == cl::BOU_TRUE*/ ||
-      (OptLevel == CodeGenOpt::None && false/*EnableFastISelOption != cl::BOU_FALSE*/))
-    EnableFastISel = true;
-
-  // Provide BasicAA for target independent codegen backend.
-  PM.add(createBasicAliasAnalysisPass());
+  PM.add(new MachineFunctionAnalysis(*this));
 
   // Ask the target for an isel.
-  if (addInstSelector(PM, OptLevel))
+  if (addInstSelector(PM))
     return true;
 
   // Print the instruction selected machine code...
   printAndVerify(PM, "After Instruction Selection");
+
+  // Expand pseudo-instructions emitted by ISel.
+  PM.add(createExpandISelPseudosPass());
 
   // PerformBit level information analyze.
   PM.add(createBitLevelInfoPass());
@@ -197,7 +186,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   //printAndVerify(PM, "After Pre-RegAlloc TailDuplicate");
 
   // Run pre-ra passes.
-  if (addPreRegAlloc(PM, OptLevel))
+  if (addPreRegAlloc(PM))
     printAndVerify(PM, "After PreRegAlloc passes");
 
 
@@ -219,9 +208,6 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   // used by tail calls, where the tail calls reuse the incoming stack
   // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
   PM.add(createDeadMachineInstructionElimPass());
-
-  // Run the SCEVAA pass to compute more accurate alias information.
-  PM.add(createScalarEvolutionAliasAnalysisPass());
 
   // Schedule.
   PM.add(createVPreRegAllocSchedPass());

@@ -29,7 +29,7 @@
 #include "llvm/Support/Debug.h"
 
 #define GET_INSTRINFO_CTOR
-#include "VerilogBackendGenRegisterInfo.inc"
+#include "VerilogBackendGenInstrInfo.inc"
 
 namespace llvm {
 extern const MCInstrDesc VTMInsts[];
@@ -52,6 +52,8 @@ static MachineInstr *addOperandsToMI(MachineInstr *MI,
 
 //----------------------------------------------------------------------------//
 // VInstrInfo implementation.
+VInstrInfo::VInstrInfo() : VTMGenInstrInfo() {}
+
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= TargetOpcode::COPY) return 0;
 

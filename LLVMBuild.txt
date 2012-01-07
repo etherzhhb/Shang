@@ -30,5 +30,5 @@ has_asmprinter = 1
 type = Library
 name = VerilogBackendCodegen
 parent = VerilogBackend
-required_libraries = AsmPrinter CodeGen Core VerilogBackendInfo VerilogBackendDesc SelectionDAG Support Target MC VTMBitLevelOpt VTMHighLevelOpt VTMSchedule VTMRTLCodegen  VTMScripting
+required_libraries = AsmPrinter CodeGen Core SelectionDAG Support Target MC VTMBitLevelOpt VTMHighLevelOpt VTMSchedule VTMRTLCodegen  VTMScripting VerilogBackendInfo VerilogBackendDesc
 add_to_library_groups = VerilogBackend

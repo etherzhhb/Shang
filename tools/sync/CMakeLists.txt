@@ -1,4 +1,5 @@
-set(LLVM_LINK_COMPONENTS VerilogBackend VerilogBackendInfo bitreader asmparser codegen SelectionDAG transformutils ipo)
+set(LLVM_LINK_COMPONENTS VerilogBackend VerilogBackendInfo VerilogBackendInfo VerilogBackendDesc
+                         bitreader asmparser codegen SelectionDAG transformutils ipo)
 
 set(LLVM_REQUIRES_RTTI 1)
 set(LLVM_REQUIRES_EH 1)

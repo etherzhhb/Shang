@@ -19,5 +19,4 @@
 type = Library
 name = VTMScripting
 parent = VerilogBackend
-required_libraries = Support
 add_to_library_groups = VerilogBackend
