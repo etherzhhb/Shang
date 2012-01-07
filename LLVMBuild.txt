@@ -18,13 +18,11 @@
 [common]
 subdirectories = TargetInfo MCTargetDesc lib tools
 
-;MCTargetDesc
-
 [component_0]
 type = TargetGroup
 name = VerilogBackend
 parent = Target
-has_asmprinter = 1
+has_asmprinter = 0
 
 [component_1]
 type = Library

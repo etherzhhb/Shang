@@ -54,4 +54,4 @@ target_link_libraries (
   ${LUABIND_LIBRARY}
 )
 
-add_dependencies(VTMScripting VerilogBackendTable_gen luappLua_gen)
+add_dependencies(VTMScripting VerilogBackendTableGen luappLua_gen)
