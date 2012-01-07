@@ -67,8 +67,7 @@ public:
   }
 
   virtual const VRegisterInfo *getRegisterInfo() const {
-    return 0;
-    //return &InstrInfo.getRegisterInfo();
+    return &InstrInfo.getRegisterInfo();
   }
 
   virtual const VTargetLowering* getTargetLowering() const {

@@ -30,6 +30,8 @@
 #include "llvm/ADT/STLExtras.h"
 using namespace llvm;
 
+VRegisterInfo::VRegisterInfo() : VTMGenRegisterInfo(0) {}
+
 const unsigned*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   static const unsigned CalleeSavedRegs[] = {0};
@@ -79,7 +81,7 @@ int VRegisterInfo::getDwarfRegNum(unsigned RegNum, bool isEH) const {
 }
 
 int VRegisterInfo::getDwarfRegNumFull(unsigned RegNum, unsigned Flavour) const {
-  assert(0 && "Unknown DWARF flavour");
+  llvm_unreachable("Unknown DWARF flavour");
   return -1;
 }
 
@@ -93,8 +95,7 @@ bool VRegisterInfo::needsStackRealignment(const MachineFunction &) const {
 
 const TargetRegisterClass *
 VRegisterInfo::getPointerRegClass(unsigned Kind) const {
-  MVT PtrVT = MVT::getIntegerVT(TD.getPointerSizeInBits());
-  return TLI.getRegClassFor(PtrVT);
+  return VTM::DRRegisterClass;
 }
 
 bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {

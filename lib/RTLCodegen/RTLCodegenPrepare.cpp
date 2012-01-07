@@ -31,9 +31,7 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
   std::map<unsigned, unsigned> PHIsMap;
   static char ID;
 
-  RTLCodegenPreapare() : MachineFunctionPass(ID) {
-    initializePHIEliminationPass(*PassRegistry::getPassRegistry());
-  }
+  RTLCodegenPreapare() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF) {
     MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -63,12 +61,6 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
       }
 
     return true;
-  }
-
-  void getAnalysisUsage(AnalysisUsage &AU) const {
-    MachineFunctionPass::getAnalysisUsage(AU);
-    AU.addRequiredID(PHIEliminationID);
-    AU.setPreservesAll();
   }
 
   void EliminatePseudoPHIs(MachineRegisterInfo &MRI);

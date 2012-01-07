@@ -31,8 +31,12 @@ class TargetData;
 class TargetLowering;
 
 class VInstrInfo : public VTMGenInstrInfo {
+  VRegisterInfo RI;
 public:
   VInstrInfo();
+
+  VRegisterInfo &getRegisterInfo() { return RI; }
+  const VRegisterInfo &getRegisterInfo() const { return RI; }
 
   static const unsigned PredInvertFlag = 0x2;
   virtual bool isPredicable(MachineInstr *MI) const;

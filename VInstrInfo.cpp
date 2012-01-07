@@ -52,7 +52,7 @@ static MachineInstr *addOperandsToMI(MachineInstr *MI,
 
 //----------------------------------------------------------------------------//
 // VInstrInfo implementation.
-VInstrInfo::VInstrInfo() : VTMGenInstrInfo() {}
+VInstrInfo::VInstrInfo() : VTMGenInstrInfo(), RI() {}
 
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= TargetOpcode::COPY) return 0;

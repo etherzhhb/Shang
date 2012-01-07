@@ -18,6 +18,7 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/Support/TargetRegistry.h"
 
 #define GET_INSTRINFO_MC_DESC
@@ -59,7 +60,7 @@ static MCAsmInfo *createVerilogBackendMCAsmInfo(const Target &T, StringRef TT) {
   //MachineLocation Src(VerilogBackend::R30, 0);
   //MAI->addInitialFrameState(0, Dst, Src);
 
-  return 0;//MAI;
+  return new MCAsmInfo();//MAI;
 }
 
 static MCCodeGenInfo *createVerilogBackendMCCodeGenInfo(StringRef TT, Reloc::Model RM,

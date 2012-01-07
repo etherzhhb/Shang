@@ -84,6 +84,8 @@ struct PrebindMux : public MachineFunctionPass {
   void collectFanIns(MachineFunction &MF);
   void allocateBalanceMux();
   void insertDistrubedMuxOp(MachineFunction &MF);
+
+  const char *getPassName() const { return "Bind Mux Ports before Scheduling";}
 };
 }
 

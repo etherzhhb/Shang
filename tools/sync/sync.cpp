@@ -67,8 +67,9 @@ namespace llvm {
   extern Target TheVBackendTarget;
 }
 
-extern "C" void LLVMInitializeVerilogBackendTargetInfo();
+extern "C" void LLVMInitializeVerilogBackendTargetMC();
 extern "C" void LLVMInitializeVerilogBackendTarget();
+extern "C" void LLVMInitializeVerilogBackendTargetInfo();
 
 // main - Entry point for the sync compiler.
 //
@@ -84,8 +85,9 @@ int main(int argc, char **argv) {
   llvm_shutdown_obj Y;  // Call llvm_shutdown() on exit.
 
   // Initialize target first, so that --version shows registered targets.
-  LLVMInitializeVerilogBackendTargetInfo();
   LLVMInitializeVerilogBackendTarget();
+  LLVMInitializeVerilogBackendTargetInfo();
+  LLVMInitializeVerilogBackendTargetMC();
 
   cl::ParseCommandLineOptions(argc, argv, "llvm system compiler\n");
   

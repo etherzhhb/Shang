@@ -71,6 +71,8 @@ struct ForwardWireUsers : public MachineFunctionPass {
                    MachineRegisterInfo &MRI);
 
   void forwardWireUses(MachineFunction &MF);
+
+  const char *getPassName() const { return "Forward Registers Used by Wires"; }
 };
 }
 

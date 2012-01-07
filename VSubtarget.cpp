@@ -23,5 +23,5 @@ using namespace llvm;
 VSubtarget::VSubtarget(StringRef TT, StringRef FS) {
   StringRef CPU = "generic";
   // Parse features string.
-  ParseSubtargetFeatures(FS, CPU);
+  //ParseSubtargetFeatures(FS, CPU);
 }

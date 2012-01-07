@@ -19,5 +19,3 @@ using namespace llvm;
 extern "C" void LLVMInitializeVerilogBackendTargetInfo() { 
   RegisterTarget<> X(TheVBackendTarget, "verilog", "Verilog backend");
 }
-
-extern "C" void LLVMInitializeCBackendTargetMC() {}
