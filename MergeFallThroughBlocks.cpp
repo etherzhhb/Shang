@@ -95,7 +95,7 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
   }
 
   // Optimize the cfg, but do not perform tail merge.
-  BranchFolder BF(false);
+  BranchFolder BF(true, true);
   MakeChanged |= BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                                      getAnalysisIfAvailable<MachineModuleInfo>());
 

@@ -62,7 +62,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
   // typedef VInstrInfo::JT::iterator jt_it;
 
   // Optimize the cfg, but do not perform tail merge.
-  BranchFolder BF(false);
+  BranchFolder BF(true, true);
   BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                       getAnalysisIfAvailable<MachineModuleInfo>());
 
