@@ -28,9 +28,18 @@
 #include "llvm/Type.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
+
+namespace llvm {
+  extern const MCRegisterDesc VTMRegDesc[];
+  extern const MCRegisterClass VTMMCRegisterClasses[];
+}
+
 using namespace llvm;
 
-VRegisterInfo::VRegisterInfo() : VTMGenRegisterInfo(0) {}
+VRegisterInfo::VRegisterInfo() : VTMGenRegisterInfo(0) {
+  // Dirty hack: Allocate enough physical register for the backend.
+  InitMCRegisterInfo(VTMRegDesc, MaxPhyRegs, 0, VTMMCRegisterClasses, 15);
+}
 
 const unsigned*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
