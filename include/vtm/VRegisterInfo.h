@@ -122,7 +122,6 @@ public:
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const;
 
   unsigned getFrameRegister(const MachineFunction &MF) const;
-  unsigned getRARegister() const;
 
   // Exception handling queries.
   unsigned getEHExceptionRegister() const;

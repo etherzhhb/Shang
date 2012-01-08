@@ -63,11 +63,6 @@ void VRegisterInfo::emitPrologue(MachineFunction &MF) const {}
 void VRegisterInfo::emitEpilogue(MachineFunction &MF,
                                  MachineBasicBlock &MBB) const {}
 
-unsigned VRegisterInfo::getRARegister() const {
-  llvm_unreachable("No return address register in VTM");
-  return 0;
-}
-
 unsigned
 VRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   llvm_unreachable("No return address register in VTM");
