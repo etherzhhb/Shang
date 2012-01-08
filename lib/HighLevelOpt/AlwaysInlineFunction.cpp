@@ -86,7 +86,7 @@ bool AlwaysInlineFunction::doInitialization(CallGraph &CG) {
        I != E; ++I) {
     Function *F = I;
 
-    if (!F->isDeclaration() && F->hasFnAttr(Attribute::NoInline)) {
+    if (F->isDeclaration() || F->hasFnAttr(Attribute::NoInline)) {
       NeverInline.insert(F);
       DEBUG(dbgs() << "No inline " << F->getName() << '\n');
       continue;
