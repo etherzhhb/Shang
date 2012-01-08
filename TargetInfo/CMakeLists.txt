@@ -4,5 +4,5 @@ add_llvm_library(LLVMVerilogBackendInfo
   VBackendTargetInfo.cpp
   )
   
-add_dependencies(LLVMVerilogBackendInfo VerilogBackendTable_gen)
+add_dependencies(LLVMVerilogBackendInfo VerilogBackendTableGen)
 
