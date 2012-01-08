@@ -37,7 +37,7 @@ inline int64_t SignExtend64(uint64_t x, unsigned SizeInBits) {
   return int64_t(x << (64 - SizeInBits)) >> (64 - SizeInBits);
 }
 
-static std::string VBEMangle(const std::string &S) {
+inline std::string VBEMangle(const std::string &S) {
   std::string Result;
 
   for (unsigned i = 0, e = S.size(); i != e; ++i)
