@@ -395,7 +395,9 @@ public:
     // Datapath opcode.
     dpUnknown,
     // Assignment with slot information.
-    cpAssignAtSlot
+    cpAssignAtSlot,
+    // The wire connected to an input port.
+    InputPort
   };
 private:
   VASTUse *Ops;
@@ -415,6 +417,12 @@ private:
 
   void setExpr(VASTUse *ops, uint8_t numOps, Opcode opc);
 
+  void setAsInput() {
+    Opc = InputPort;
+    // Pin the signal to prevent it from being optimized away.
+    Pin();
+  }
+
   friend class VASTModule;
 
   void printAsOperandInteral(raw_ostream &OS) const;
@@ -431,7 +439,7 @@ private:
   }
 
 public:
-  bool hasExpr() const { return Ops != 0; }
+  bool hasExpr() const { return Opc != dpUnknown; }
   bool isDead() const { return Opc == Dead; }
 
   unsigned getLatency() const {

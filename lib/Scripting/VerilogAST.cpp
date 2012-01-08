@@ -886,7 +886,7 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
   // DIRTYHACK: comment out the deceleration of the signal for ports.
   VASTWire *W = addWire(Name, BitWidth, "//");
   // Do not remove the wire for input port.
-  W->Pin();
+  W->setAsInput();
 
   VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(W, true);
   if (T < SpecialInPortEnd) {
@@ -1231,7 +1231,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
 void VASTWire::print(raw_ostream &OS) const {
   // Skip unknown or blackbox datapath, it should printed to the datapath
   //  buffer of the module.
-  if (Opc == dpUnknown ||  Opc == dpVarLatBB) return;
+  if (Opc == dpUnknown || Opc == InputPort || Opc == dpVarLatBB) return;
 
   // MUX need special printing method.
   if (Opc == dpMux) {
