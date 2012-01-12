@@ -15,10 +15,21 @@
 #ifndef VERILOGBACKEND_MC_TARGET_DESC_H
 #define VERILOGBACKEND_MC_TARGET_DESC_H
 
+#include "llvm/Intrinsics.h"
 #include "llvm/Target/TargetMachine.h"
-
 namespace llvm {
 extern Target TheVBackendTarget;
+
+namespace vtmIntrinsic {
+  enum ID {
+    last_non_vtm_intrinsic = Intrinsic::num_intrinsics - 1,
+#define GET_INTRINSIC_ENUM_VALUES
+#include "VerilogBackendGenIntrinsics.inc"
+#undef GET_INTRINSIC_ENUM_VALUES
+    , num_vtm_intrinsics
+  };
+}
+
 } // end namespace llvm
 
 // Defines symbolic names for the Verilog TargetMachine registers. This defines

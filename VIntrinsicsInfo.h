@@ -13,21 +13,12 @@
 #ifndef VTM_INTRINSICS_H
 #define VTM_INTRINSICS_H
 
-#include "llvm/Intrinsics.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
+
 #include "llvm/IntrinsicInst.h"
 #include "llvm/Target/TargetIntrinsicInfo.h"
 
 namespace llvm {
-  namespace vtmIntrinsic {
-    enum ID {
-      last_non_vtm_intrinsic = Intrinsic::num_intrinsics - 1,
-#define GET_INTRINSIC_ENUM_VALUES
-#include "VerilogBackendGenIntrinsics.inc"
-#undef GET_INTRINSIC_ENUM_VALUES
-      , num_vtm_intrinsics
-    };
-  }
-
   /// VIntrinsicInst - A useful wrapper class for inspecting calls to intrinsic
   /// functions.  This allows the standard isa/dyncast/cast functionality to
   /// work with calls to intrinsic functions.

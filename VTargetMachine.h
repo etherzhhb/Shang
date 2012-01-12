@@ -20,8 +20,8 @@
 
 #include "VSelectionDAGInfo.h"
 #include "VFrameLowering.h"
+#include "VIntrinsicsInfo.h"
 
-#include "vtm/VIntrinsicsInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/VISelLowering.h"
 // TODO:

@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/VIntrinsicsInfo.h"
+#include "VIntrinsicsInfo.h"
 #include "VFrameLowering.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
