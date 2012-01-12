@@ -11,8 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VSubtarget.h"
-
 #include "vtm/Passes.h"
 #include "vtm/VTM.h"
 #include "vtm/VRegisterInfo.h"

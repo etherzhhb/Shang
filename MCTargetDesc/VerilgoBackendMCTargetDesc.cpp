@@ -26,9 +26,6 @@
 #define GET_INSTRINFO_MC_DESC
 #include "VerilogBackendGenInstrInfo.inc"
 
-#define GET_SUBTARGETINFO_MC_DESC
-#include "VerilogBackendGenSubtargetInfo.inc"
-
 #define GET_REGINFO_MC_DESC
 #include "VerilogBackendGenRegisterInfo.inc"
 
@@ -44,14 +41,6 @@ static MCRegisterInfo *createVerilogBackendMCRegisterInfo(StringRef TT) {
   MCRegisterInfo *X = new MCRegisterInfo();
   InitVTMMCRegisterInfo(X, VTM::R);
   return X;
-}
-
-static MCSubtargetInfo *createVerilogBackendMCSubtargetInfo(StringRef TT,
-                                                            StringRef CPU,
-                                                            StringRef FS) {
-    MCSubtargetInfo *X = new MCSubtargetInfo();
-    InitVTMMCSubtargetInfo(X, TT, CPU, FS);
-    return X;
 }
 
 static MCAsmInfo *createVerilogBackendMCAsmInfo(const Target &T, StringRef TT) {
@@ -91,10 +80,6 @@ extern "C" void LLVMInitializeVerilogBackendTargetMC() {
   // Register the MC register info.
   TargetRegistry::RegisterMCRegInfo(TheVBackendTarget,
                                     createVerilogBackendMCRegisterInfo);
-
-  // Register the MC subtarget info.
-  TargetRegistry::RegisterMCSubtargetInfo(TheVBackendTarget,
-                                          createVerilogBackendMCSubtargetInfo);
 }
 
 namespace llvm {

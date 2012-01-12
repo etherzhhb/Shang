@@ -19,7 +19,6 @@
 #define VTARGETMACHINE_H
 
 #include "VSelectionDAGInfo.h"
-#include "VSubtarget.h"
 #include "VFrameLowering.h"
 
 #include "vtm/VIntrinsicsInfo.h"
@@ -27,7 +26,7 @@
 #include "vtm/VISelLowering.h"
 // TODO:
 // #include "VIntrinsicInfo.h"
-
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetData.h"
 
@@ -38,18 +37,23 @@
 namespace llvm {
 class VFrameInfo;
 
+struct VDummySubtarget : public TargetSubtargetInfo {
+  VDummySubtarget() : TargetSubtargetInfo() {}
+};
+
 class VTargetMachine : public LLVMTargetMachine {
   // FIXME Delete this.
   const TargetData DataLayout;
-  VSubtarget Subtarget;
   VTargetLowering TLInfo;
   VSelectionDAGInfo TSInfo;
   VInstrInfo InstrInfo;
   VIntrinsicInfo IntrinsicInfo;
-  InstrItineraryData  InstrItins;
   VFrameInfo FrameInfo;
   // FIXME
   // VIntrinsicInfo IntrinsicInfo;
+  
+  // Dummy subtarget.
+  VDummySubtarget ST;
 public:
   VTargetMachine(const Target &T, StringRef TT,StringRef CPU,
                  StringRef FS, TargetOptions Options, Reloc::Model RM,
@@ -58,13 +62,13 @@ public:
   virtual const VInstrInfo *getInstrInfo() const { return &InstrInfo; }
   // virtual const TargetFrameInfo *getFrameInfo() const { return &FrameInfo; }
 
-  virtual const VSubtarget *getSubtargetImpl() const {
-    return &Subtarget;
+  virtual const TargetSubtargetInfo *getSubtargetImpl() const {
+    return &ST;
   }
 
-  virtual const InstrItineraryData *getInstrItineraryData() const {
+/*  virtual const InstrItineraryData *getInstrItineraryData() const {
     return &InstrItins;
-  }
+  }*/
 
   virtual const VRegisterInfo *getRegisterInfo() const {
     return &InstrInfo.getRegisterInfo();

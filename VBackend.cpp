@@ -53,11 +53,10 @@ VTargetMachine::VTargetMachine(const Target &T, StringRef TT,StringRef CPU,
   : LLVMTargetMachine(T, TT, "generic", "", Options, RM, CM, OL),
   // FIXME: Allow speicific data layout.
   DataLayout(FS),
-  Subtarget(TT, ""),
   TLInfo(*this),
   TSInfo(*this),
   InstrInfo(),
-  FrameInfo(Subtarget) {}
+  FrameInfo() {}
 
 bool VTargetMachine::addInstSelector(PassManagerBase &PM) {
   PM.add(createVISelDag(*this));

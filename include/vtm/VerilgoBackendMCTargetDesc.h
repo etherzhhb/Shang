@@ -29,7 +29,4 @@ extern Target TheVBackendTarget;
 #define GET_INSTRINFO_ENUM
 #include "VerilogBackendGenInstrInfo.inc"
 
-#define GET_SUBTARGETINFO_ENUM
-#include "VerilogBackendGenSubtargetInfo.inc"
-
 #endif

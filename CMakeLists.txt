@@ -46,7 +46,6 @@ tablegen(LLVM VerilogBackendGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM VerilogBackendGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM VerilogBackendGenDAGISel.inc -gen-dag-isel)
 tablegen(LLVM VerilogBackendGenCallingConv.inc -gen-callingconv)
-tablegen(LLVM VerilogBackendGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
 add_public_tablegen_target(VerilogBackendTableGen)
 
@@ -61,7 +60,6 @@ add_llvm_target(VerilogBackend
   VMCAsmInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
-  VSubtarget.cpp
   FixMachineCode.cpp
   FixTerminators.cpp
   ForwardWireUsers.cpp
