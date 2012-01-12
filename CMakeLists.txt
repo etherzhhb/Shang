@@ -126,7 +126,6 @@ add_llvm_target(VerilogBackend
 )
 
 target_link_libraries (LLVMVerilogBackend
-  LLVMVerilogBackendInfo
   LLVMVerilogBackendDesc
   VTMBitLevelOpt
   VTMHighLevelOpt
@@ -136,7 +135,6 @@ target_link_libraries (LLVMVerilogBackend
 
 add_subdirectory(include)
 add_subdirectory(lib)
-add_subdirectory(TargetInfo)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(test)
 add_subdirectory(tools)

@@ -19,5 +19,5 @@
 type = Library
 name = VerilogBackendDesc
 parent = VerilogBackend
-required_libraries = VerilogBackendInfo MC
+required_libraries = MC
 add_to_library_groups = VerilogBackend

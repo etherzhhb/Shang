@@ -16,7 +16,7 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = TargetInfo MCTargetDesc lib tools
+subdirectories = MCTargetDesc lib tools
 
 [component_0]
 type = TargetGroup
@@ -28,5 +28,5 @@ has_asmprinter = 0
 type = Library
 name = VerilogBackendCodegen
 parent = VerilogBackend
-required_libraries = AsmPrinter CodeGen Core SelectionDAG Support Target MC VTMBitLevelOpt VTMHighLevelOpt VTMSchedule VTMRTLCodegen  VTMScripting VerilogBackendInfo VerilogBackendDesc
+required_libraries = AsmPrinter CodeGen Core SelectionDAG Support Target MC VTMBitLevelOpt VTMHighLevelOpt VTMSchedule VTMRTLCodegen  VTMScripting VerilogBackendDesc
 add_to_library_groups = VerilogBackend

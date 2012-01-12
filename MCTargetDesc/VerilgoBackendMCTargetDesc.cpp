@@ -13,12 +13,14 @@
 
 #include "vtm/VerilgoBackendMCTargetDesc.h"
 //#include "VerilogBackendMCAsmInfo.h"
+
 #include "llvm/MC/MachineLocation.h"
 #include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetRegistry.h"
 
 #define GET_INSTRINFO_MC_DESC
@@ -94,3 +96,12 @@ extern "C" void LLVMInitializeVerilogBackendTargetMC() {
   TargetRegistry::RegisterMCSubtargetInfo(TheVBackendTarget,
                                           createVerilogBackendMCSubtargetInfo);
 }
+
+namespace llvm {
+  Target TheVBackendTarget;
+}
+
+extern "C" void LLVMInitializeVerilogBackendTargetInfo() { 
+  RegisterTarget<> X(TheVBackendTarget, "verilog", "Verilog backend");
+}
+
