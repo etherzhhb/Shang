@@ -17,7 +17,6 @@
 //===----------------------------------------------------------------------===//
 //#include "VFrameLowering.h"
 #include "VTargetMachine.h"
-#include "VMCAsmInfo.h"
 
 #include "vtm/Passes.h"
 #include "vtm/SynSettings.h"

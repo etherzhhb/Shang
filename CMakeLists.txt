@@ -43,7 +43,6 @@ add_definitions( -D_GNU_SOURCE )
 set(LLVM_TARGET_DEFINITIONS VTM.td)
 tablegen(LLVM VerilogBackendGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM VerilogBackendGenInstrInfo.inc -gen-instr-info)
-tablegen(LLVM VerilogBackendGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM VerilogBackendGenDAGISel.inc -gen-dag-isel)
 tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
 add_public_tablegen_target(VerilogBackendTableGen)
@@ -56,7 +55,6 @@ add_llvm_target(VerilogBackend
   VISelLowering.cpp
   VInstrInfo.cpp
   VIntrinsicsInfo.cpp
-  VMCAsmInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
   FixMachineCode.cpp
