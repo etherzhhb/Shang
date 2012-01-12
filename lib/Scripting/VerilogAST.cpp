@@ -21,7 +21,6 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/MicroState.h"
 #include "vtm/Utilities.h"
-#include "vtm/FindMBBShortestPath.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"

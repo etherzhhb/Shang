@@ -26,7 +26,6 @@
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
-#include "vtm/FindMBBShortestPath.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
