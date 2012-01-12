@@ -48,7 +48,7 @@ tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
 add_public_tablegen_target(VerilogBackendTableGen)
 
 add_llvm_target(VerilogBackend
-  VBackend.cpp
+  VTargetMachine.cpp
   VFrameLowering.cpp
   VFInfo.cpp
   VISelDAGToDAG.cpp
