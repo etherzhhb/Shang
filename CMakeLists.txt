@@ -45,7 +45,6 @@ tablegen(LLVM VerilogBackendGenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM VerilogBackendGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM VerilogBackendGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM VerilogBackendGenDAGISel.inc -gen-dag-isel)
-tablegen(LLVM VerilogBackendGenCallingConv.inc -gen-callingconv)
 tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
 add_public_tablegen_target(VerilogBackendTableGen)
 
