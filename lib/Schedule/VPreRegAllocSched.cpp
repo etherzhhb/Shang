@@ -24,7 +24,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"

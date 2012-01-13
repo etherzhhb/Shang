@@ -15,7 +15,7 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/VRegisterInfo.h"
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/Utilities.h"
 
 #include "llvm/Function.h"

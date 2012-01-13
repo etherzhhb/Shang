@@ -19,7 +19,7 @@
 #ifndef VBE_VLANG_H
 #define VBE_VLANG_H
 
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/FUInfo.h"
 #include "vtm/LangSteam.h"
 

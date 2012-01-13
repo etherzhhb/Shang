@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/Passes.h"
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
 

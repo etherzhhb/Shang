@@ -19,8 +19,8 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
-#include "vtm/VTM.h"
-#include "VGenInstrInfo.inc"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
+
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"

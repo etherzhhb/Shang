@@ -21,7 +21,7 @@
 //
 //===----------------------------------------------------------------------===//
 #include "vtm/Passes.h"
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"

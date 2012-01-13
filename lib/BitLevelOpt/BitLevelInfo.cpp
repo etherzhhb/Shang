@@ -18,7 +18,7 @@
 #include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/MicroState.h"
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"

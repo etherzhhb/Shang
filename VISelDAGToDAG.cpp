@@ -12,6 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "VTargetMachine.h"
+
+#include "vtm/Passes.h"
 #include "vtm/FUInfo.h"
 #include "vtm/Utilities.h"
 

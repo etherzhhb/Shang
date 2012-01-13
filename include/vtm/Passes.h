@@ -27,6 +27,9 @@ class raw_ostream;
 class TargetMachine;
 class PassRegistry;
 class TargetIntrinsicInfo;
+class VTargetMachine;
+
+FunctionPass *createVISelDag(VTargetMachine &TM);
 
 Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
  

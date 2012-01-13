@@ -14,7 +14,7 @@
 
 
 #include "vtm/Passes.h"
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Module.h"

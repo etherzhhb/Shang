@@ -15,7 +15,7 @@
 #ifndef BUNDLE_TOKENS_H
 #define BUNDLE_TOKENS_H
 
-#include "vtm/VTM.h"
+#include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/FUInfo.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
