@@ -1137,11 +1137,13 @@ SDValue PerformMulCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
     EVT VT = N->getValueType(0);
 
     SDValue Lo, Hi = DAG.getTargetConstant(0, VT);
-    // A * 1 = A
+    // A * 1 -> A
     if (OpBVal == 1) Lo = OpA;
 
-    // A * 0 = 0
+    // A * 0 -> 0
     if (OpBVal == 0) Lo = DAG.getTargetConstant(0, VT);
+
+    // TODO: A * -1 -> -A
 
     // Try to lower mult to shift constant.
     if (isPowerOf2_64(OpBVal)) {
