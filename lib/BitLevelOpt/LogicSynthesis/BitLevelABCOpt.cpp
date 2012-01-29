@@ -208,12 +208,26 @@ struct LogicNetwork {
 
   // Function for logic network building.
   template <typename BuildFunc>
-  void buildBinOpNode(MachineInstr *MI, BuildFunc F) {
+  void buildBinaryOpNode(MachineInstr *MI, BuildFunc F) {
     Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1))),
               *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
   
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = F((Abc_Aig_t *)Ntk->pManFunc, Op0, Op1);
+    ucOperand ResMO = cast<ucOperand>(MI->getOperand(0));
+    // Create the define flag, because the virtual register define is ignore by
+    // the DenseMap.
+    ResMO.setIsDef(false);
+
+    unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
+    // Remember the node, assumes it is a PO.
+    Nodes.insert(std::make_pair(ResMO, NetworkObj(Res, ResMO, NumUse)));
+  }
+
+  void buildNotNode(MachineInstr *MI) {
+    Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
+    // Create the internal node for this machine instruction.
+    Abc_Obj_t *Res = Abc_ObjNot(Op0);
     ucOperand ResMO = cast<ucOperand>(MI->getOperand(0));
     // Create the define flag, because the virtual register define is ignore by
     // the DenseMap.
@@ -253,7 +267,16 @@ bool LogicNetwork::addInstr(MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default: break;
   case VTM::VOpAnd:
-    buildBinOpNode(MI, Abc_AigAnd);
+    buildBinaryOpNode(MI, Abc_AigAnd);
+    return true;
+  case VTM::VOpOr:
+    buildBinaryOpNode(MI, Abc_AigOr);
+    return true;
+  case VTM::VOpXor:
+    buildBinaryOpNode(MI, Abc_AigXor);
+    return true;
+  case VTM::VOpNot:
+    buildNotNode(MI);
     return true;
   }
 
@@ -298,6 +321,9 @@ bool LogicSynthesis::runOnMachineFunction(MachineFunction &MF) {
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
     Changed = synthesisBasicBlock(I);
+
+  // Verify the function.
+  MF.verify(this);
 
   return Changed;
 }
