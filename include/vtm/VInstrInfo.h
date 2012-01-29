@@ -218,6 +218,8 @@ public:
   static FuncUnitId getPreboundFUId(const MachineInstr *MI);
   static bool mayLoad(const MachineInstr *MI);
   static bool mayStore(const MachineInstr *MI);
+
+  static const MCInstrDesc &getDesc(unsigned Opcode);
 };
 
 // Helper class for manipulating bit width operand.

@@ -38,10 +38,6 @@ extern const MCInstrDesc VTMInsts[];
 using namespace llvm;
 //----------------------------------------------------------------------------//
 // Halper function.
-static const MCInstrDesc &getDesc(unsigned Opcode)  {
-  return VTMInsts[Opcode];
-}
-
 static MachineInstr *addOperandsToMI(MachineInstr *MI,
                                      ArrayRef<MachineOperand> Ops) {
   for (unsigned i = 0; i < Ops.size(); ++i)
@@ -53,6 +49,10 @@ static MachineInstr *addOperandsToMI(MachineInstr *MI,
 //----------------------------------------------------------------------------//
 // VInstrInfo implementation.
 VInstrInfo::VInstrInfo() : VTMGenInstrInfo(), RI() {}
+
+const MCInstrDesc &VInstrInfo::getDesc(unsigned Opcode)  {
+  return VTMInsts[Opcode];
+}
 
 const MachineOperand *VInstrInfo::getPredOperand(const MachineInstr *MI) {
   if (MI->getOpcode() <= TargetOpcode::COPY) return 0;
