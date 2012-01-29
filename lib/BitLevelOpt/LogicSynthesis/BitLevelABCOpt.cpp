@@ -65,7 +65,16 @@ struct LogicNetwork {
 
     // The object is exposed by default.
     NetworkObj(Abc_Obj_t *O, ucOperand &M, unsigned NumUses)
-      : Obj(O), MO(M), ExposedUses(NumUses) {}
+      : Obj(O), MO(M), ExposedUses(NumUses)
+    {
+      // Clear the flags.
+      MO.clearParent();
+      if (MO.isReg()) {
+        MO.setIsDef(false);
+        MO.setIsKill(false);
+      }
+    }
+
     NetworkObj()
       : Obj(0), MO(MachineOperand::CreateReg(0, false)), ExposedUses(0) {}
 
@@ -81,7 +90,7 @@ struct LogicNetwork {
   // Nodes.
   ObjMapTy Nodes;
 
-  // The indices of the blackbox instructions.
+  // The indices of the black box instructions.
   typedef DenseMap<MachineInstr*, unsigned> IdxMapTy;
   IdxMapTy IdxMap;
 
@@ -102,7 +111,13 @@ struct LogicNetwork {
   }
 
   //
-  Abc_Obj_t *getObj(ucOperand &MO) {
+  Abc_Obj_t *getObj(ucOperand MO) {
+    // Clear the flags berore looking up the object.
+    if (MO.isReg()) {
+      MO.setIsDef(false);
+      MO.setIsKill(false);
+    }
+
     ObjMapTy::iterator inNodes = Nodes.find(MO);
 
     if (inNodes != Nodes.end()) {
@@ -133,11 +148,16 @@ struct LogicNetwork {
           InstrMap.GetOrCreateValue(Name, DefMI);
       }
 
-      // Map the PI to MO.
-      MOMap.GetOrCreateValue(Name, MO);
-
       // PIs are not exposed.
-      Nodes.insert(std::make_pair(MO, NetworkObj(Obj, MO, 0)));
+      NetworkObj NtkObj(Obj, MO, 0);
+
+      // Use the normalized MO.
+      // Map the PI to MO.
+      MOMap.GetOrCreateValue(Name, NtkObj.MO);
+      Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
+      // The kill flags may broken during the rebuil process.
+      if (MO.isReg() && MO.getReg()) MRI.clearKillFlags(MO.getReg());
+
     }
 
     return Obj;
@@ -214,28 +234,22 @@ struct LogicNetwork {
   
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = F((Abc_Aig_t *)Ntk->pManFunc, Op0, Op1);
-    ucOperand ResMO = cast<ucOperand>(MI->getOperand(0));
-    // Create the define flag, because the virtual register define is ignore by
-    // the DenseMap.
-    ResMO.setIsDef(false);
+    ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
 
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
-    // Remember the node, assumes it is a PO.
-    Nodes.insert(std::make_pair(ResMO, NetworkObj(Res, ResMO, NumUse)));
+    NetworkObj NtkObj(Res, ResMO, NumUse);
+    Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
   }
 
   void buildNotNode(MachineInstr *MI) {
     Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = Abc_ObjNot(Op0);
-    ucOperand ResMO = cast<ucOperand>(MI->getOperand(0));
-    // Create the define flag, because the virtual register define is ignore by
-    // the DenseMap.
-    ResMO.setIsDef(false);
+    ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
 
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
-    // Remember the node, assumes it is a PO.
-    Nodes.insert(std::make_pair(ResMO, NetworkObj(Res, ResMO, NumUse)));
+    NetworkObj NtkObj(Res, ResMO, NumUse);
+    Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
   }
 
   bool addInstr(MachineInstr *MI);
