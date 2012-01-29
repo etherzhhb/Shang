@@ -19,8 +19,7 @@
 #include "vtm/FUInfo.h"
 
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/Support/StringPool.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/ADT/OwningPtr.h"
@@ -34,6 +33,8 @@ class MachineInstr;
 class VASTModule;
 
 class VFInfo : public MachineFunctionInfo {
+  StringSet<> Symbols;
+
   // Information about slots.
   struct StateSlots{
     unsigned startSlot : 32;
@@ -148,15 +149,13 @@ public:
   std::pair<int, const MachineBasicBlock*>
     lookupPHISlot(const MachineInstr *PN) const;
 
-  //const char *allocateSymbol(const std::string &Str) {
-  //  PooledStringPtr PSP = SymbolPool.intern(Str.c_str());
-  //  Symbols.insert(PSP);
-  //  return *PSP;
-  //}
+  const char *allocateSymbol(StringRef S) {
+    return Symbols.GetOrCreateValue(S, 0).getKeyData();
+  }
 
   // Block Ram management.
   void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes, 
-                                           const Value* Initializer = 0);
+                    const Value* Initializer = 0);
 
   const BRamInfo &getBRamInfo(uint16_t ID) const {
     BRamMapTy::const_iterator at = BRams.find(ID);
