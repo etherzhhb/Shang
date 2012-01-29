@@ -210,7 +210,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
                          VASTWire::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
-
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
   void emitFirstCtrlState(MachineBasicBlock *DstBB, VASTSlot *Slot,
@@ -220,6 +219,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   void emitUnaryOp(ucOp &UnOp, VASTWire::Opcode Opc);
   void emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc);
+  void emitOpLut(ucOp &Op);
 
   void emitChainedOpAdd(ucOp &Op);
   void emitChainedOpICmp(ucOp &Op);
@@ -1184,6 +1184,7 @@ void VerilogASTBuilder::emitDatapath(ucState &State) {
     case VTM::VOpMultLoHi_c:
     case VTM::VOpMult_c:    emitBinaryOp(Op, VASTWire::dpMul);  break;
 
+    case VTM::VOpLUT:       emitOpLut(Op);                      break;
     case VTM::VOpXor:       emitBinaryOp(Op, VASTWire::dpXor);  break;
     case VTM::VOpAnd:       emitBinaryOp(Op, VASTWire::dpAnd);  break;
     case VTM::VOpOr:        emitBinaryOp(Op, VASTWire::dpOr);   break;
@@ -1211,6 +1212,59 @@ void VerilogASTBuilder::emitBinaryOp(ucOp &BinOp, VASTWire::Opcode Opc) {
                 getAsOperand(BinOp.getOperand(1)),
                 getAsOperand(BinOp.getOperand(2)),
                 V->getBitWidth(), V);
+}
+
+void VerilogASTBuilder::emitOpLut(ucOp &Op) {
+  VASTWire *V = getAsLValue<VASTWire>(Op.getOperand(0));
+  if (!V || V->hasExpr()) return;
+
+  unsigned SizeInBits = V->getBitWidth();
+
+  SmallVector<VASTUse, 8> Operands;
+  for (unsigned i = 2, e = Op.getNumOperands(); i < e; ++i)
+    Operands.push_back(getAsOperand(Op.getOperand(i)));
+  unsigned NumInputs = Operands.size();
+
+  // Interpret the sum of product table.
+  const char *p = Op.getOperand(1).getSymbolName();
+  SmallVector<VASTUse, 8> ProductOps, SumOps;
+
+  while (*p) {
+    // Interpret the product.
+    ProductOps.clear();
+    for (unsigned i = 0; i < NumInputs; ++i) {
+      char c = *p++;
+      switch (c) {
+      default: llvm_unreachable("Unexpected SOP char!");
+      case '-': /*Dont care*/ break;
+      case '1': ProductOps.push_back(Operands[i]); break;
+      case '0': ProductOps.push_back(VM->buildNotExpr(Operands[i])); break;
+      }
+    }
+
+    // Inputs and outputs are seperated by blank space.
+    assert(*p == ' ' && "Expect the blank space!");
+    ++p;
+
+    // Create the product.
+    VASTUse P = VM->buildExpr(VASTWire::dpAnd, ProductOps, SizeInBits);
+    // Is the output inverted?
+    char c = *p++;
+    switch (c) {
+    default: llvm_unreachable("Unexpected SOP char!");
+    //case '-': /*Dont care*/ break;
+    case '1': SumOps.push_back(P); break;
+    case '0': SumOps.push_back(VM->buildNotExpr(P)); break;
+    }
+
+    // Products are separated by new line.
+    assert(*p == '\n' && "Expect the new line!");
+    ++p;
+  }
+
+  // Build the sum;
+  VM->buildExpr(VASTWire::dpOr, SumOps, SizeInBits, V);
+  return;
 }
 
 void VerilogASTBuilder::emitOpBitSlice(ucOp &OpBitSlice) {
