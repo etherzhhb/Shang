@@ -48,6 +48,7 @@ class ucOperand : public MachineOperand {
 
 public:
   /*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
+  ucOperand() : MachineOperand(MachineOperand::CreateReg(0, false)) {}
 
   static bool classof(const MachineOperand *) { return true; }
 
