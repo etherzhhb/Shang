@@ -185,8 +185,12 @@ let isReMaterializable = 1,
     def VOpOr     : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
                               "$dst = or $src0, $src1", []>;
   }
+
   def VOpNot   : DPTvaInst<(outs DR:$dst), (ins DR:$src),
                             "$dst = ~ $src", []>;
+
+  def VOpLUT : DPTvaInst<(outs DR:$dst), (ins DR:$table, variable_ops),
+                          "$dst = lut$size[$table]", []>;
 
   def VOpSel   : CtrlInst<(outs DR:$dst), (ins DR:$cnd, DR:$src0, DR:$src1),
                           "$dst = $cnd?$src0:$src1", [],
