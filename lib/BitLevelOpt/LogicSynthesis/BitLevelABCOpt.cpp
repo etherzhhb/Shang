@@ -346,6 +346,9 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
   bool Changed = false;
   LogicNetwork Ntk(BB);
 
+  DEBUG(dbgs() << "Before logic synthesis:\n";
+        BB->dump(););
+
   typedef MachineBasicBlock::iterator it;
   for (it I = BB->begin(), E = BB->end(); I != E; /*++I*/) {
     MachineInstr *MI = I++;
@@ -376,14 +379,14 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
     IP = Ntk.getInsertPos(Obj, IP);
 
     Abc_Obj_t *FO = Abc_ObjFanout0(Obj), *FI;
-    dbgs() << Abc_ObjName(FO) << '\n';
+    DEBUG(dbgs() << Abc_ObjName(FO) << '\n');
 
     // Get all operands and compute the bit width of the result.
     Ops.clear();
     unsigned SizeInBits = 0;
     int j;
     Abc_ObjForEachFanin(Obj, FI, j) {
-      dbgs() << Abc_ObjName(FI) << '\n';
+      DEBUG(dbgs() << Abc_ObjName(FI) << '\n');
       ucOperand MO = Ntk.getOperand(FI);
       assert((SizeInBits == 0 || SizeInBits == MO.getBitWidth())
              && "Operand SizeInBits not match!");
@@ -396,9 +399,9 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
     assert(DefMO.getBitWidth() == SizeInBits && "Result SizeInBits not match!");
     DefMO.setIsDef(true);
 
-    char *data = (char*)Abc_ObjData(Obj);
     // The sum of product table.
-    dbgs() << data << '\n';
+    char *data = (char*)Abc_ObjData(Obj);
+    DEBUG(dbgs() << data << '\n');
 
     MachineInstrBuilder Builder =
       BuildMI(*BB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpLUT))
@@ -411,7 +414,8 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
       Builder.addOperand(Ops[k]);
   }
 
-  BB->dump();
+  DEBUG(dbgs() << "After logic synthesis:\n";
+        BB->dump(););
 
   return true;
 }
