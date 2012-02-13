@@ -30,8 +30,8 @@
 // The header of ABC
 #define ABC_DLL
 //#include "base/main/mainInt.h"
-#include "base/main/main.h"
-#include "map/fpga/fpga.h"
+#include "src/base/main/main.h"
+#include "src/map/fpga/fpga.h"
 extern "C" {
   extern Abc_Ntk_t *Abc_NtkFpga(Abc_Ntk_t *pNtk, float DelayTarget,
                                 int fRecovery, int fSwitching, int fLatchPaths,
