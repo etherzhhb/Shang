@@ -29,8 +29,8 @@ macro(luamodule luasrc)
     # This prevents recompilation of all the files depending on it if there
     # aren't any.
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc.tmp
-        ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc
+            ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc.tmp
+            ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc.tmp
     COMMENT "Copying ${luasrc}.inc ..."
     )
@@ -41,12 +41,10 @@ macro(luamodule luasrc)
                ${luasrc}.lo ${luasrc}.inc.tmp ${luasrc}.inc)
 
   add_custom_target(${luasrc}Lua_gen
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc)
+                    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${luasrc}.inc)
 endmacro(luamodule) 
 
 luamodule(luapp)
-
-llvm_config(VTMScripting support)
 
 target_link_libraries (
   VTMScripting
