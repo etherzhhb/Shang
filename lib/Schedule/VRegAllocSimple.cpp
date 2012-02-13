@@ -989,11 +989,11 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
   DEBUG(dbgs() << "Before simple register allocation:\n";
-  printVMF(dbgs(), F);
+    printVMF(dbgs(), F);
   );
-
-  joinPHINodeIntervals();
   
+  joinPHINodeIntervals();
+
   // Bind the pre-bind function units.
   bindMemoryBus();
   bindBlockRam();

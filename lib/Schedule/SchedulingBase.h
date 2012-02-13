@@ -222,10 +222,9 @@ public:
 };
 
  class SDCScheduler : public SchedulingBase {
-
  public:
 
-   SDCScheduler(VSchedGraph &S);
+    SDCScheduler(VSchedGraph &S);
 
     bool scheduleState();
 
@@ -233,16 +232,17 @@ public:
 
     lprec *lp;
     // Total step variables count.
-    int numVars;
+    int NumVars;
     // Total instructions count.
-    int numInst;
-    unsigned shedCounter;
+    int NumInst;
+    unsigned ShedCounter;
     // The table of the constraint row of the schedule unit.
-    std::map<VSUnit*, unsigned> schedTable;
+    std::map<VSUnit*, unsigned> SchedTable;
     // The table of the start step variable of the schedule unit.
-    std::map<const VSUnit*, unsigned> startVariableIndex;
+    std::map<const VSUnit*, unsigned> StartVariableIndex;
     // The table of the end step variable of the schedule unit.
-    std::map<const VSUnit*, unsigned> endVariableIndex;
+    std::map<const VSUnit*, unsigned> EndVariableIndex;
+    typedef std::map<const VSUnit*, unsigned> SUIdxMapType;
 
     // Set the variables' name in the model.
     void createLPVariables(lprec *lp);

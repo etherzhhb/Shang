@@ -9,53 +9,50 @@
 using namespace llvm;
 
 SDCScheduler::SDCScheduler(VSchedGraph &S)
-  : SchedulingBase(S), numVars(0), numInst(0),shedCounter(1) {
+  : SchedulingBase(S), NumVars(0), NumInst(0),ShedCounter(1) {
 }
 
 void SDCScheduler::createLPVariables(lprec *lp) { 
-  unsigned col =  0;
+  unsigned Col =  0;
   // Set up the step variables.
   typedef VSchedGraph::sched_iterator it;
-  for (it I = State.sched_begin(),E = State.sched_end();
-    I != E; ++I) {     
-      numInst++;
-      col++;
-      const VSUnit* iNode = *I;
-      startVariableIndex[iNode] = numVars;
-      endVariableIndex[iNode] = numVars + iNode->getLatency();
+  for (it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
+      ++NumInst;
+      ++Col;
+      const VSUnit* U = *I;
+      StartVariableIndex[U] = NumVars;
+      EndVariableIndex[U] = NumVars + U->getLatency();
       // Set the name of the step variable.
-      std::string SVStart = "sv" + utostr_32(iNode->getIdx()) + "start" ;
-      std::string SVEnd = "sv" + utostr_32(iNode->getIdx()) + "end" ;
-      set_col_name(lp, col, const_cast<char*>(SVStart.c_str()));
-      numVars += (1 + iNode->getLatency());
-      if(iNode->getLatency()){
-        col++;
-        set_col_name(lp, col, const_cast<char*>(SVEnd.c_str()));
+      std::string SVStart = "sv" + utostr_32(U->getIdx()) + "start" ;
+      set_col_name(lp, Col, const_cast<char*>(SVStart.c_str()));
+      NumVars += (1 + U->getLatency());
+      if(U->getLatency()){
+        ++Col;
+        std::string SVEnd = "sv" + utostr_32(U->getIdx()) + "end" ;
+        set_col_name(lp, Col, const_cast<char*>(SVEnd.c_str()));
       }
     } 
 }
 
 void SDCScheduler::addMulticycleConstraints(lprec *lp) {
-
   int col[2];
   REAL val[2];
 
-  for (std::map<const VSUnit*, unsigned>::iterator i = startVariableIndex.begin(), 
-	 e = startVariableIndex.end(); i != e; i++) {
-
-    const VSUnit* iNode = i->first; 
+  for (SUIdxMapType::iterator i = StartVariableIndex.begin(),
+    e = StartVariableIndex.end(); i != e; i++) {
+    const VSUnit* U = i->first;
     
-    if (i->second == endVariableIndex[iNode] )
+    if (i->second == EndVariableIndex[U] )
       continue; // not a multicycle instruction
 
-    for (unsigned j = i->second + 1; j <= endVariableIndex[iNode]; j++) {
+    for (unsigned j = i->second + 1; j <= EndVariableIndex[U]; j++) {
       col[0] = 1 + j;
       col[1] = 1 + (j-1);
       val[0] = 1.0;
       val[1] = -1.0;
-      shedCounter++;
-      if(iNode->getLatency())
-        add_constraintex(lp, 2, val, col, GE, int(iNode->getLatency()-1));
+      ++ShedCounter;
+      if(U->getLatency())
+        add_constraintex(lp, 2, val, col, GE, int(U->getLatency()-1));
       else
         add_constraintex(lp, 2, val, col, GE, 0.0);
     }
@@ -71,23 +68,23 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
       VSUnit *shedNodeIndex = *I;
       assert(in->isControl() && "Unexpected datapath in scheduler!");
       // First make sure the slot for each instruction is  >= 0.
-      col[0] = 1+ startVariableIndex[in];
+      col[0] = 1+ StartVariableIndex[in];
       val[0] = 1.0;
       add_constraintex(lp, 1, val, col, GE, 0.0);
       // Remember the constraint row of the schedule unit.
-      schedTable[shedNodeIndex] = shedCounter;
-      shedCounter++;
+      SchedTable[shedNodeIndex] = ShedCounter;
+      ++ShedCounter;
       // Build the constraint for Dst_SU_startStep - Src_SU_endStep >= Src_Latency.
       for (VSUnit::const_dep_iterator DI = in->dep_begin(),
         DE = in->dep_end(); DI != DE;++DI) {
           const VSUnit *depIn = *DI;
           VDEdge *Edge = DI.getEdge();
-          col[0] = 1 + startVariableIndex[in];
+          col[0] = 1 + StartVariableIndex[in];
           val[0] = 1.0;
-          col[1] = 1 + endVariableIndex[depIn];
+          col[1] = 1 + EndVariableIndex[depIn];
           val[1] = -1.0;
           add_constraintex(lp, 2, val, col, GE, Edge->getLatency());
-          shedCounter++;
+          ShedCounter++;
       }
     }
 }
@@ -148,9 +145,9 @@ void SDCScheduler::addResourceConstraints(lprec *lp) {
       int col[2];
       REAL val[2];
       const VSUnit *back = *OVB;
-      col[0] = 1 + startVariableIndex[front];
+      col[0] = 1 + StartVariableIndex[front];
       val[0] = 1.0;
-      col[1] = 1 + startVariableIndex[back];
+      col[1] = 1 + StartVariableIndex[back];
       val[1] = -1.0;
       add_constraintex(lp, 2, val, col, GE, 1.0);
       front = back;
@@ -163,23 +160,21 @@ void SDCScheduler::addResourceConstraints(lprec *lp) {
 }
 
 void SDCScheduler::buildObject(bool ASAP) {
-  int *variableIndices = new int[numInst];
-  REAL *variableCoefficients = new REAL[numInst];
+  int *variableIndices = new int[NumInst];
+  REAL *variableCoefficients = new REAL[NumInst];
 
   int count = 0;
   //Build the AXAP object function.
-  for (std::map<const VSUnit*, unsigned>::iterator i = startVariableIndex.begin(), 
-    e = startVariableIndex.end(); i != e; i++) {
-
+  for (std::map<const VSUnit*, unsigned>::iterator i = StartVariableIndex.begin(),
+    e = StartVariableIndex.end(); i != e; i++) {
       unsigned varIndex = i->second;
       variableIndices[count] = 1 + varIndex;
       variableCoefficients[count] = 1.0;
-      count++;
+      ++count;
 
   }
 
-  assert(count == numInst);  
-
+  assert(count == NumInst);
   set_obj_fnex(lp, count, variableCoefficients, variableIndices);
   if (ASAP)
     set_minim(lp);
@@ -188,16 +183,11 @@ void SDCScheduler::buildObject(bool ASAP) {
 
   DEBUG(write_lp(lp, "log.lp"));
 
-  int ret = solve(lp);
-
-  delete [] variableCoefficients;
-  delete [] variableIndices;
-
 }
 
 void SDCScheduler::buildSchedule(lprec *lp) {
-  for (std::map<VSUnit*, unsigned>::iterator i = schedTable.begin(),
-    e = schedTable.end(); i != e; i++) {
+  for (std::map<VSUnit*, unsigned>::iterator i = SchedTable.begin(),
+    e = SchedTable.end(); i != e; i++) {
     VSUnit *U = i->first;
     unsigned idx = U->getIdx();
     unsigned row = i->second;
@@ -217,7 +207,7 @@ bool SDCScheduler::scheduleState() {
   if (allNodesSchedued()) return true;
   
   //viewGraph();
-  lp = make_lp(0, numVars);
+  lp = make_lp(0, NumVars);
 
   set_add_rowmode(lp, TRUE);
 
@@ -231,11 +221,12 @@ bool SDCScheduler::scheduleState() {
   // Turn off the add rowmode and start to solve the model.
   set_add_rowmode(lp, FALSE);
   buildObject(true);
+  int ret = solve(lp);
   // Schedule the state with the ILP result.
   buildSchedule(lp);
   viewGraph();
   delete_lp(lp);
-  schedTable.clear();
+  SchedTable.clear();
   return true;
 }
 
