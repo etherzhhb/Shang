@@ -51,6 +51,7 @@ include_directories(
 target_link_libraries (
 	VTMBitLevelOpt
 	${ABC_LIBRARY}
+	readline
 )
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
