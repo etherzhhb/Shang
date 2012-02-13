@@ -47,11 +47,24 @@ include_directories(
   ${ABC_INCLUDE_DIR}/bdd/epd
   ${ABC_INCLUDE_DIR}/sat/bsat
   )
-endif (VBE_ENABLE_ABC)
 
-if (VBE_ENABLE_ABC)
 target_link_libraries (
 	VTMBitLevelOpt
 	${ABC_LIBRARY}
 )
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+  set(ABC_PLATFORM LIN)
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  set(ABC_PLATFORM NT)
+else(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+message(ERROR " Unsupported platform to intergate ABC!")
+endif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+
+if (CMAKE_SIZEOF_VOID_P MATCHES 8)
+ set(ABC_PLATFORM ${ABC_PLATFORM}64)
+endif (CMAKE_SIZEOF_VOID_P MATCHES 8)
+
+add_definitions(-D${ABC_PLATFORM})
+
 endif (VBE_ENABLE_ABC)
