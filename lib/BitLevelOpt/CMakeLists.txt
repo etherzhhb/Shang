@@ -58,13 +58,14 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   set(ABC_PLATFORM NT)
 else(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-message(ERROR " Unsupported platform to intergate ABC!")
+message(FATAL_ERROR "Unsupported platform to intergate ABC!")
 endif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 
 if (CMAKE_SIZEOF_VOID_P MATCHES 8)
  set(ABC_PLATFORM ${ABC_PLATFORM}64)
 endif (CMAKE_SIZEOF_VOID_P MATCHES 8)
 
+message(STATUS "Platform variable for ABC is ${ABC_PLATFORM}")
 add_definitions(-D${ABC_PLATFORM})
 
 endif (VBE_ENABLE_ABC)
