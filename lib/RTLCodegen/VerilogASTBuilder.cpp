@@ -1219,6 +1219,8 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
   if (!V || V->hasExpr()) return;
 
   unsigned SizeInBits = V->getBitWidth();
+  std::string NamePrefix = V->getName();
+  unsigned NameIdx = 0;
 
   SmallVector<VASTUse, 8> Operands;
   for (unsigned i = 2, e = Op.getNumOperands(); i < e; ++i)
@@ -1238,7 +1240,13 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
       default: llvm_unreachable("Unexpected SOP char!");
       case '-': /*Dont care*/ break;
       case '1': ProductOps.push_back(Operands[i]); break;
-      case '0': ProductOps.push_back(VM->buildNotExpr(Operands[i])); break;
+      case '0': {
+        std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
+        VASTUse U = VM->buildExpr(VASTWire::dpNot, Operands[i], SizeInBits,
+                                  VM->addWire(InvWireName, SizeInBits));
+        ProductOps.push_back(U);
+        break;
+      }
       }
     }
 
@@ -1254,7 +1262,13 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
     default: llvm_unreachable("Unexpected SOP char!");
     //case '-': /*Dont care*/ break;
     case '1': SumOps.push_back(P); break;
-    case '0': SumOps.push_back(VM->buildNotExpr(P)); break;
+    case '0': {
+      std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
+      VASTUse U = VM->buildExpr(VASTWire::dpNot,P, SizeInBits,
+                                VM->addWire(InvWireName, SizeInBits));
+      SumOps.push_back(U);
+      break;
+    }
     }
 
     // Products are separated by new line.
