@@ -181,6 +181,9 @@ struct LogicNetwork {
       MO.ChangeToRegister(MRI.createVirtualRegister(VTM::DRRegisterClass),
                           false);
 
+    assert(MO.getBitWidthOrZero()
+           && "Instruction defining Obj not inserted yet?");
+
     return MO;
   }
 
@@ -262,6 +265,110 @@ struct LogicNetwork {
   bool addInstr(MachineInstr *MI);
   void buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
                       MachineBasicBlock::iterator IP);
+
+  // Sort the nodes in Netlist.
+  // Helper data structure to sort the nodes in logic network.
+  struct ObjIdx {
+    Abc_Obj_t *Obj;
+    unsigned MaxFIId;
+    // Topological order number.
+    unsigned Idx;
+
+    static inline bool sort_asap(const ObjIdx &LHS, const ObjIdx &RHS) {
+      return LHS.MaxFIId < RHS.MaxFIId ||
+        (LHS.MaxFIId == RHS.MaxFIId && LHS.Idx < RHS.Idx);
+    }
+
+    void print(raw_ostream &OS) const {
+      OS << "Node: " << Abc_ObjName(Abc_ObjRegular(Obj))
+        << " Id: " << Abc_ObjId(Abc_ObjRegular(Obj)) << " FI: {";
+
+      Abc_Obj_t *FI;
+      int j;
+      Abc_ObjForEachFanin(Obj, FI, j) {
+        OS << Abc_ObjName(Abc_ObjRegular(FI)) << ", ";
+      }
+
+      OS << "} FO: " << Abc_ObjName(Abc_ObjRegular(Abc_ObjFanout0(Obj)))
+        << " Idx: " << Idx << " MaxFIId: " << MaxFIId << '\n';
+    }
+
+    void dump() const { print(dbgs()); }
+  };
+
+  void sortNodes(SmallVectorImpl<ObjIdx> &ObjIdxList) {
+    DenseMap<Abc_Obj_t*, unsigned> NodeIdxMap;
+
+    Abc_Obj_t *Obj;
+    int i;
+
+    Abc_NtkForEachNode(Ntk, Obj, i) {
+      Abc_Obj_t *FO = Abc_ObjFanout0(Obj);
+
+      // Node already visited.
+      if (NodeIdxMap.count(Obj))
+       continue;
+
+      computeIdx(Obj, ObjIdxList, NodeIdxMap);
+    }
+
+    // Sort the nodes by its index.
+    std::sort(ObjIdxList.begin(), ObjIdxList.end(), ObjIdx::sort_asap);
+
+    DEBUG(dbgs() << "Sorted ObjList:\n";
+      for (unsigned i = 0, e = ObjIdxList.size(); i != e; ++i)
+        ObjIdxList[i].dump();
+    );
+  }
+
+  unsigned computeIdx(Abc_Obj_t *Obj, SmallVectorImpl<ObjIdx> &ObjIdxList,
+                      DenseMap<Abc_Obj_t*, unsigned> &NodeIdxMap) {
+    // Compute the FI index.
+    Abc_Obj_t *FI;
+    int j;
+
+    unsigned MaxFIIdx = 0;
+
+    // Compute the max FI index.
+    Abc_ObjForEachFanin(Obj, FI, j) {
+      DEBUG(dbgs() << "visiting FI: " << Abc_ObjName(Abc_ObjRegular(FI))
+                   << " " << Abc_ObjType(FI) << '\n');
+      // Get the instruction that defines the PI.
+      if (unsigned FIIdx = getDefIdx(FI)) {
+        MaxFIIdx = std::max(MaxFIIdx, FIIdx);
+        continue;
+      }
+
+      // PIs whose position is not important.
+      if (MOMap.count(Abc_ObjName(Abc_ObjRegular(FI))))
+        continue;
+
+      Abc_Obj_t *OFI = Abc_ObjFanin0Ntk(FI);
+
+      assert(Abc_ObjIsNode(Abc_ObjRegular(OFI)) && "Expect internal node!");
+
+      if (unsigned InteralIdx = NodeIdxMap.lookup(OFI)) {
+        MaxFIIdx = std::max(InteralIdx, MaxFIIdx);
+        continue;
+      }
+
+      MaxFIIdx = std::max(computeIdx(OFI, ObjIdxList, NodeIdxMap), MaxFIIdx);
+    }
+
+    // Create the index.
+    ObjIdx Idx;
+    Idx.Obj = Obj;
+    Idx.Idx = ObjIdxList.size();
+    Idx.MaxFIId = MaxFIIdx;
+
+    DEBUG(dbgs() << "Built Idx:\n"; Idx.dump());
+
+    // Remember the index.
+    ObjIdxList.push_back(Idx);
+    NodeIdxMap.insert(std::make_pair(Obj, MaxFIIdx));
+
+    return MaxFIIdx;
+  }
 };
 
 struct LogicSynthesis : public MachineFunctionPass {
@@ -318,7 +425,7 @@ void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
   unsigned SizeInBits = 0;
   int j;
   Abc_ObjForEachFanin(Obj, FI, j) {
-    DEBUG(dbgs() << Abc_ObjName(FI) << '\n');
+    DEBUG(dbgs() << "\tBuilt MO for FI: " << Abc_ObjName(FI) << '\n');
     ucOperand MO = getOperand(FI);
     assert((SizeInBits == 0 || SizeInBits == MO.getBitWidth())
       && "Operand SizeInBits not match!");
@@ -327,11 +434,14 @@ void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
   }
 
   // Get the result.
+  DEBUG(dbgs() << "Built LUT for FO: " << Abc_ObjName(FO) << "\n\n");
+  assert(SizeInBits && "Expect non-zero size output!");
   ucOperand DefMO = getOperand(FO, SizeInBits);
   assert(DefMO.getBitWidth() == SizeInBits && "Result SizeInBits not match!");
   DefMO.setIsDef(true);
 
   // The sum of product table.
+  // data can be also encoded by Abc_SopToTruth.
   char *data = (char*)Abc_ObjData(Obj);
   DEBUG(dbgs() << data << '\n');
 
@@ -344,6 +454,8 @@ void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
 
   for (unsigned k = 0, e = Ops.size(); k != e; ++k)
     Builder.addOperand(Ops[k]);
+
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -366,18 +478,6 @@ bool LogicSynthesis::runOnMachineFunction(MachineFunction &MF) {
 
   return Changed;
 }
-
-// Helper data structure to sort the nodes in logic network.
-struct ObjIdx {
-  Abc_Obj_t *Obj;
-  unsigned FIIdx;
-  unsigned NodeIdx;
-
-  static inline bool sort_asap(const ObjIdx &LHS, const ObjIdx &RHS) {
-    return LHS.FIIdx < RHS.FIIdx ||
-      (LHS.FIIdx == RHS.FIIdx && LHS.NodeIdx < RHS.NodeIdx);
-  }
-};
 
 bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
   bool Changed = false;
@@ -406,56 +506,16 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
   // Map the logic network to LUTs
   Ntk.performLUTMapping();
 
-  // Sort the Objects.
-  SmallVector<ObjIdx, 32> ObjIdxList;
-  StringMap<unsigned> NodeIdxMap;
-
-  Abc_Obj_t *Obj;
-  int i;
-
-  Abc_NtkForEachNode(Ntk.Ntk, Obj, i) {
-    ObjIdx Idx;
-    Idx.Obj = Obj;
-    Idx.NodeIdx = i;
-
-    // Compute the FI index.
-    Abc_Obj_t *FI;
-    int j;
-
-    unsigned MaxFIIdx = 0;
-
-    // Compute the max FI index.
-    Abc_ObjForEachFanin(Obj, FI, j) {
-      // Get the instruction that defines the PI.
-      if (unsigned FIIdx = Ntk.getDefIdx(FI)) {
-        MaxFIIdx = std::max(MaxFIIdx, FIIdx);
-        continue;
-      }
-
-      // If the FI is not a PI, look up the index from the node index map.
-      MaxFIIdx = std::max(NodeIdxMap.lookup(Abc_ObjName(Abc_ObjRegular(FI))),
-                          MaxFIIdx);
-    }
-
-    // Add the index to the list.
-    Idx.FIIdx = MaxFIIdx;
-    ObjIdxList.push_back(Idx);
-
-    // Remember the FO Idx of the obj.
-    Abc_Obj_t *FO = Abc_ObjFanout0(Obj);
-    NodeIdxMap.GetOrCreateValue(Abc_ObjName(Abc_ObjRegular(FO)), MaxFIIdx);
-  }
-
-  // Sort the nodes by its index.
-  std::sort(ObjIdxList.begin(), ObjIdxList.end(), ObjIdx::sort_asap);
+  SmallVector<LogicNetwork::ObjIdx, 32> ObjIdxList;
+  Ntk.sortNodes(ObjIdxList);
 
   // Build the BB from the logic netlist.
   MachineBasicBlock::iterator IP = BB->getFirstNonPHI();
 
   for (unsigned i = 0, e = ObjIdxList.size(); i != e; ++i) {
-    ObjIdx Idx = ObjIdxList[i];
+    LogicNetwork::ObjIdx Idx = ObjIdxList[i];
 
-    while (Ntk.getInstIdx(IP) <= Idx.FIIdx)
+    while (Ntk.getInstIdx(IP) <= Idx.MaxFIId)
       ++IP;
     
     Ntk.buildMappedLUT(Idx.Obj, VFI, IP);
