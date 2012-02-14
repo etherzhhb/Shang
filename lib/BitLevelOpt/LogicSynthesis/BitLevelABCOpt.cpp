@@ -96,18 +96,25 @@ struct LogicNetwork {
 
   // Map the Abc_Obj_t name to Instruction.
   typedef StringMap<MachineInstr*> InstrMapTy;
-  InstrMapTy InstrMap;
+  InstrMapTy FIMap;
   typedef MachineBasicBlock::iterator IPTy;
 
   typedef StringMap<ucOperand> MOMapTy;
   MOMapTy MOMap;
 
-  MachineInstr *getDefMI(Abc_Obj_t *FI) const {
-    return InstrMap.lookup(Abc_ObjName(Abc_ObjRegular(FI)));
+  unsigned getInstIdx(MachineInstr *MI) const {
+    return IdxMap.lookup(MI);
   }
 
-  bool isAfter(MachineInstr *LHS, MachineInstr *RHS) const {
-    return IdxMap.lookup(LHS) > IdxMap.lookup(RHS);
+  MachineInstr *getDefMI(Abc_Obj_t *FI) const {
+    return FIMap.lookup(Abc_ObjName(Abc_ObjRegular(FI)));
+  }
+
+  unsigned getDefIdx(Abc_Obj_t *FI) const {
+    if (MachineInstr *DefMI = getDefMI(FI))
+      return getInstIdx(DefMI);
+
+    return 0;
   }
 
   //
@@ -145,7 +152,7 @@ struct LogicNetwork {
         MachineInstr *DefMI = MRI.getVRegDef(MO.getReg());
         assert(DefMI && "VReg not defined?");
         if (DefMI->getParent() == BB)
-          InstrMap.GetOrCreateValue(Name, DefMI);
+          FIMap.GetOrCreateValue(Name, DefMI);
       }
 
       // PIs are not exposed.
@@ -253,8 +260,8 @@ struct LogicNetwork {
   }
 
   bool addInstr(MachineInstr *MI);
-
-  IPTy getInsertPos(Abc_Obj_t *Node, IPTy LastIP);
+  void buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
+                      MachineBasicBlock::iterator IP);
 };
 
 struct LogicSynthesis : public MachineFunctionPass {
@@ -294,31 +301,49 @@ bool LogicNetwork::addInstr(MachineInstr *MI) {
     return true;
   }
 
-  // Add the black box instruction to index map.
-  IdxMap.insert(std::make_pair(MI, IdxMap.size()));
+  // Add the black box instruction to index map,
+  // make sure the index is no-zero by adding 1 to the size of the map.
+  IdxMap.insert(std::make_pair(MI, IdxMap.size() + 1));
   return false;
 }
 
-LogicNetwork::IPTy LogicNetwork::getInsertPos(Abc_Obj_t *Node,
-                                              LogicNetwork::IPTy LastIP) {
-  // Check the fanins of Node, find a position that all the fanins are defined.
-  Abc_Obj_t *FI;
-  int i;
-  Abc_ObjForEachFanin(Node, FI, i) {
-    // Get the instruction that defines the PI.
-    MachineInstr *DefMI = getDefMI(FI);
+void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
+                                  MachineBasicBlock::iterator IP) {
+  SmallVector<ucOperand, 2> Ops;
+  Abc_Obj_t *FO = Abc_ObjFanout0(Obj), *FI;
+  DEBUG(dbgs() << Abc_ObjName(FO) << '\n');
 
-    // Ignore the FI that defined in other BB.
-    if (!DefMI) continue;
-
-    // Is the PI defined before LastIP?
-    while (!isAfter(LastIP, DefMI))
-      ++LastIP;
+  // Get all operands and compute the bit width of the result.
+  Ops.clear();
+  unsigned SizeInBits = 0;
+  int j;
+  Abc_ObjForEachFanin(Obj, FI, j) {
+    DEBUG(dbgs() << Abc_ObjName(FI) << '\n');
+    ucOperand MO = getOperand(FI);
+    assert((SizeInBits == 0 || SizeInBits == MO.getBitWidth())
+      && "Operand SizeInBits not match!");
+    Ops.push_back(MO);
+    SizeInBits = MO.getBitWidth();
   }
 
-  // TODO: Asser FO used after all FI.
+  // Get the result.
+  ucOperand DefMO = getOperand(FO, SizeInBits);
+  assert(DefMO.getBitWidth() == SizeInBits && "Result SizeInBits not match!");
+  DefMO.setIsDef(true);
 
-  return LastIP;
+  // The sum of product table.
+  char *data = (char*)Abc_ObjData(Obj);
+  DEBUG(dbgs() << data << '\n');
+
+  MachineInstrBuilder Builder =
+    BuildMI(*BB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpLUT))
+    .addOperand(DefMO)
+    .addExternalSymbol(VFI->allocateSymbol(data), Abc_ObjFaninNum(Obj))
+    .addOperand(ucOperand::CreatePredicate())
+    .addOperand(ucOperand::CreateTrace(BB));
+
+  for (unsigned k = 0, e = Ops.size(); k != e; ++k)
+    Builder.addOperand(Ops[k]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -341,6 +366,18 @@ bool LogicSynthesis::runOnMachineFunction(MachineFunction &MF) {
 
   return Changed;
 }
+
+// Helper data structure to sort the nodes in logic network.
+struct ObjIdx {
+  Abc_Obj_t *Obj;
+  unsigned FIIdx;
+  unsigned NodeIdx;
+
+  static inline bool sort_asap(const ObjIdx &LHS, const ObjIdx &RHS) {
+    return LHS.FIIdx < RHS.FIIdx ||
+      (LHS.FIIdx == RHS.FIIdx && LHS.NodeIdx < RHS.NodeIdx);
+  }
+};
 
 bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
   bool Changed = false;
@@ -369,49 +406,59 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
   // Map the logic network to LUTs
   Ntk.performLUTMapping();
 
+  // Sort the Objects.
+  SmallVector<ObjIdx, 32> ObjIdxList;
+  StringMap<unsigned> NodeIdxMap;
+
+  Abc_Obj_t *Obj;
+  int i;
+
+  Abc_NtkForEachNode(Ntk.Ntk, Obj, i) {
+    ObjIdx Idx;
+    Idx.Obj = Obj;
+    Idx.NodeIdx = i;
+
+    // Compute the FI index.
+    Abc_Obj_t *FI;
+    int j;
+
+    unsigned MaxFIIdx = 0;
+
+    // Compute the max FI index.
+    Abc_ObjForEachFanin(Obj, FI, j) {
+      // Get the instruction that defines the PI.
+      if (unsigned FIIdx = Ntk.getDefIdx(FI)) {
+        MaxFIIdx = std::max(MaxFIIdx, FIIdx);
+        continue;
+      }
+
+      // If the FI is not a PI, look up the index from the node index map.
+      MaxFIIdx = std::max(NodeIdxMap.lookup(Abc_ObjName(Abc_ObjRegular(FI))),
+                          MaxFIIdx);
+    }
+
+    // Add the index to the list.
+    Idx.FIIdx = MaxFIIdx;
+    ObjIdxList.push_back(Idx);
+
+    // Remember the FO Idx of the obj.
+    Abc_Obj_t *FO = Abc_ObjFanout0(Obj);
+    NodeIdxMap.GetOrCreateValue(Abc_ObjName(Abc_ObjRegular(FO)), MaxFIIdx);
+  }
+
+  // Sort the nodes by its index.
+  std::sort(ObjIdxList.begin(), ObjIdxList.end(), ObjIdx::sort_asap);
+
   // Build the BB from the logic netlist.
   MachineBasicBlock::iterator IP = BB->getFirstNonPHI();
 
-  SmallVector<ucOperand, 2> Ops;
-  Abc_Obj_t *Obj;
-  int i;
-  Abc_NtkForEachNode(Ntk.Ntk, Obj, i) {
-    IP = Ntk.getInsertPos(Obj, IP);
+  for (unsigned i = 0, e = ObjIdxList.size(); i != e; ++i) {
+    ObjIdx Idx = ObjIdxList[i];
 
-    Abc_Obj_t *FO = Abc_ObjFanout0(Obj), *FI;
-    DEBUG(dbgs() << Abc_ObjName(FO) << '\n');
-
-    // Get all operands and compute the bit width of the result.
-    Ops.clear();
-    unsigned SizeInBits = 0;
-    int j;
-    Abc_ObjForEachFanin(Obj, FI, j) {
-      DEBUG(dbgs() << Abc_ObjName(FI) << '\n');
-      ucOperand MO = Ntk.getOperand(FI);
-      assert((SizeInBits == 0 || SizeInBits == MO.getBitWidth())
-             && "Operand SizeInBits not match!");
-      Ops.push_back(MO);
-      SizeInBits = MO.getBitWidth();
-    }
+    while (Ntk.getInstIdx(IP) <= Idx.FIIdx)
+      ++IP;
     
-    // Get the result.
-    ucOperand DefMO = Ntk.getOperand(FO, SizeInBits);
-    assert(DefMO.getBitWidth() == SizeInBits && "Result SizeInBits not match!");
-    DefMO.setIsDef(true);
-
-    // The sum of product table.
-    char *data = (char*)Abc_ObjData(Obj);
-    DEBUG(dbgs() << data << '\n');
-
-    MachineInstrBuilder Builder =
-      BuildMI(*BB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpLUT))
-        .addOperand(DefMO)
-        .addExternalSymbol(VFI->allocateSymbol(data), Abc_ObjFaninNum(Obj))
-        .addOperand(ucOperand::CreatePredicate())
-        .addOperand(ucOperand::CreateTrace(BB));
-
-    for (unsigned k = 0, e = Ops.size(); k != e; ++k)
-      Builder.addOperand(Ops[k]);
+    Ntk.buildMappedLUT(Idx.Obj, VFI, IP);
   }
 
   DEBUG(dbgs() << "After logic synthesis:\n";
