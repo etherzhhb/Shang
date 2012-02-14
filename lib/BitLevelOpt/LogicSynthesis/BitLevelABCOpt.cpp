@@ -339,20 +339,21 @@ struct LogicNetwork {
         continue;
       }
 
+      FI = Abc_ObjFanin0Ntk(FI);
+
       // PIs whose position is not important.
-      if (MOMap.count(Abc_ObjName(Abc_ObjRegular(FI))))
-        continue;
+      if (Abc_ObjIsPi(FI)) continue;
 
-      Abc_Obj_t *OFI = Abc_ObjFanin0Ntk(FI);
+      // Is the node already visited?
+      DenseMap<Abc_Obj_t*, unsigned>::iterator at = NodeIdxMap.find(FI);
 
-      assert(Abc_ObjIsNode(Abc_ObjRegular(OFI)) && "Expect internal node!");
-
-      if (unsigned InteralIdx = NodeIdxMap.lookup(OFI)) {
-        MaxFIIdx = std::max(InteralIdx, MaxFIIdx);
+      if (at != NodeIdxMap.end()) {
+        MaxFIIdx = std::max(at->second, MaxFIIdx);
         continue;
       }
 
-      MaxFIIdx = std::max(computeIdx(OFI, ObjIdxList, NodeIdxMap), MaxFIIdx);
+      // Otherwise visit the depending node now.
+      MaxFIIdx = std::max(computeIdx(FI, ObjIdxList, NodeIdxMap), MaxFIIdx);
     }
 
     // Create the index.
@@ -455,7 +456,7 @@ void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
   for (unsigned k = 0, e = Ops.size(); k != e; ++k)
     Builder.addOperand(Ops[k]);
 
-
+  DEBUG(Builder->dump());
 }
 
 //===----------------------------------------------------------------------===//
@@ -517,7 +518,8 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
 
     while (Ntk.getInstIdx(IP) <= Idx.MaxFIId)
       ++IP;
-    
+
+    DEBUG(dbgs() << "For "; Idx.dump(););
     Ntk.buildMappedLUT(Idx.Obj, VFI, IP);
   }
 
