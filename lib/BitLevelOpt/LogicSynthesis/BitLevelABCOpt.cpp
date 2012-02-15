@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/Passes.h"
+#include "vtm/FUInfo.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
@@ -222,6 +223,29 @@ struct LogicNetwork {
     assert(Abc_NtkCheck(Ntk) && "The AIG construction has failed!");
   }
 
+  // Call abc routine to synthesis the logic network.
+  void synthesis() {
+    // FIXME: Do not synthesis if the network is very small.
+    // FIXME: Call dispatch command to run user script?
+    int res;
+    // Use the resyn flow, which invoking:
+    //  balance
+    Ntk = Abc_NtkBalance(Ntk, false, false, false);
+    //  rewrite
+    res = Abc_NtkRewrite(Ntk, 0, 0, 0, 0, 0);
+    assert(res && "Rewrite fail during logic synthesis!");
+    //  rewrite -z
+    res = Abc_NtkRewrite(Ntk, 0, 1, 0, 0, 0);
+    assert(res && "Rewrite fail during logic synthesis!");
+    //  balance
+    Ntk = Abc_NtkBalance(Ntk, false, false, false);
+    //  rewrite -z
+    res = Abc_NtkRewrite(Ntk, 0, 1, 0, 0, 0);
+    assert(res && "Rewrite fail during logic synthesis!");
+    //  balance
+    Ntk = Abc_NtkBalance(Ntk, false, false, false);
+  }
+
   void performLUTMapping() {
     // Map the network to LUTs
     Ntk = Abc_NtkFpga(Ntk, 1, 0, 0, 0, 0);
@@ -380,8 +404,8 @@ struct LogicSynthesis : public MachineFunctionPass {
 
   LogicSynthesis() : MachineFunctionPass(ID), VFI(0) {
     Abc_Start();
-    // FIXME: Read lut size from user script.
-    Fpga_SetSimpleLutLib(4);
+    // FIXME: Set complex library?
+    Fpga_SetSimpleLutLib(VFUs::MaxLutSize);
   }
 
   ~LogicSynthesis() {
@@ -496,6 +520,8 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
     // Try to add the instruction into the logic network.
     if (!Ntk.addInstr(MI)) continue;
 
+    // FIXME: Unlink the instruction from BB and erase them only if the
+    // synthesis success.
     MI->eraseFromParent();
     Changed = true;
   }
@@ -505,6 +531,9 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
 
   // Clean up the network, prepare for logic optimization.
   Ntk.cleanUp();
+
+  // Synthesis the logic network.
+  Ntk.synthesis();
 
   // Map the logic network to LUTs
   Ntk.performLUTMapping();
