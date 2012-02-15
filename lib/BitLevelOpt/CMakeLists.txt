@@ -1,16 +1,16 @@
-if (VBE_ENABLE_ABC)
-  set(BitLevelABCOpt LogicSynthesis/BitLevelABCOpt.cpp)
-endif (VBE_ENABLE_ABC)
+if (ENABLE_LOGIC_SYNTHESIS)
+  set(LogicSynthesis LogicSynthesis/LogicSynthesis.cpp)
+endif (ENABLE_LOGIC_SYNTHESIS)
 
 add_llvm_library(VTMBitLevelOpt
   BitLevelInfo.cpp
   BitLevelOpt.cpp 
-  ${BitLevelABCOpt}
+  ${LogicSynthesis}
   )
 
 add_dependencies(VTMBitLevelOpt VerilogBackendTable_gen)
 
-if (VBE_ENABLE_ABC)
+if (ENABLE_LOGIC_SYNTHESIS)
 include_directories(
   ${ABC_INCLUDE_DIR}
   ${ABC_INCLUDE_DIR}/src/aig/aig
@@ -69,4 +69,4 @@ endif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 
 
 
-endif (VBE_ENABLE_ABC)
+endif (ENABLE_LOGIC_SYNTHESIS)
