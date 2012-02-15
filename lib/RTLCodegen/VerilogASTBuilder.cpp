@@ -668,7 +668,7 @@ void VerilogASTBuilder::emitAllSignals() {
     }
     case VTM::RCFNRegClassID: /*Nothing to do*/ break;
     case VTM::RMUXRegClassID: {
-      std::string Name = "dstmux" + utostr_32(RegNum);
+      std::string Name = "dstmux" + utostr_32(RegNum) + "r";
       VM->indexVASTValue(RegNum, VM->addRegister(Name, Info.getBitWidth()));
       break;
     }
