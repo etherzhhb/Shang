@@ -657,6 +657,7 @@ void VerilogASTBuilder::emitAllSignals() {
       break;
     }
     case VTM::RINFRegClassID: {
+      // FIXME: Do not use such magic number!
       // The offset of data input port is 3
       unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
       VM->indexVASTValue(RegNum, VASTUse(VM->getPort(DataInIdx)));

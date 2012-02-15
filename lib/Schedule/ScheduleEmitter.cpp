@@ -147,13 +147,14 @@ struct MicroStateBuilder {
 
   const VSchedGraph &State;
   MachineBasicBlock &MBB;
-  MachineBasicBlock::iterator InsertPos;
+  typedef MachineBasicBlock::iterator InsertPosTy;
+  InsertPosTy InsertPos;
 
   const TargetInstrInfo &TII;
   MachineRegisterInfo &MRI;
   VFInfo &VFI;
 
-  SmallVector<VSUnit*, 8> SUnitsToEmit, PHIs;
+  SmallVector<VSUnit*, 8> SUnitsToEmit;
   
   std::vector<MachineInstr*> InstsToDel;
 
@@ -285,8 +286,10 @@ struct MicroStateBuilder {
   // Main state building function.
   MachineInstr *buildMicroState(unsigned Slot);
 
+  // Fuse instructions in a bundle.
   void fuseInstr(MachineInstr &Inst, OpSlot SchedSlot, FuncUnitId FUId);
 
+  // Build the machine operand that use at a specified slot.
   MachineOperand getRegUseOperand(ucOperand MO, OpSlot ReadSlot) {
     // Else this is a use.
     SWDMapTy::iterator at = StateWireDefs.find(MO.getReg());
@@ -320,9 +323,10 @@ struct MicroStateBuilder {
     return Ret;
   }
 
-
+  // Build the machine operand that read the wire definition at a specified slot.
   MachineOperand getRegUseOperand(WireDef &WD, OpSlot ReadSlot, ucOperand MO);
 
+  // Build copy instruction.
   ucOperand buildCopy(OpSlot CopySlot, unsigned SizeInBits, unsigned RegNo,
                      MachineOperand Pred) {
     unsigned PipedReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
@@ -336,7 +340,7 @@ struct MicroStateBuilder {
     return Dst;
   }
 
-
+  // Build PHI nodes to preserve anti-dependence for pipelined BB.
   unsigned createPHI(unsigned RegNo, unsigned SizeInBits, unsigned WriteSlot) {
     SmallVector<MachineInstr*, 4> InsertedPHIs;
 
@@ -382,7 +386,7 @@ struct MicroStateBuilder {
     return NewReg;
   }
 
-
+  // Increase the slot counter and emit all pending schedule units.
   unsigned advanceToSlot(unsigned CurSlot, unsigned TargetSlot) {
     assert(TargetSlot > CurSlot && "Bad target slot!");
     buildMicroState(CurSlot);
@@ -400,27 +404,8 @@ struct MicroStateBuilder {
     return CurSlot;
   }
 
-  void handlePHI(VSUnit *A) {
-    MachineInstr *PN = A->getRepresentativeInst();
-    assert(PN->isPHI() && "Unexpected instruction type!");
-    OpSlot PHISlot(A->getSlot() + State.getII() - 1, true);
-
-    for (unsigned i = 1, e = PN->getNumOperands(); i < e; i +=2) {
-      MachineBasicBlock *TargetBB = PN->getOperand(i + 1).getMBB();
-      if (TargetBB != &MBB) continue;
-
-      MachineOperand &MO = PN->getOperand(i);
-      MachineOperand NewMO = getRegUseOperand(MO, PHISlot);
-      if (MO.getReg() != NewMO.getReg())
-        MO.ChangeToRegister(NewMO.getReg(), false);
-    }
-  }
-
   // Clean up the basic block by remove all unused instructions.
   void clearUp() {
-    //while (!PHIs.empty())
-    //  handlePHI(PHIs.pop_back_val());
-
     while (!InstsToDel.empty()) {
       InstsToDel.back()->eraseFromParent();
       InstsToDel.pop_back();
@@ -447,10 +432,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       MachineInstr *Inst = A->getInstrAt(i);
       // Ignore the entry node marker (null) and implicit define.
       if (Inst && !Inst->isImplicitDef()) {
-        if (Inst->isPHI()) {
-          PHIs.push_back(A);
+        if (Inst->isPHI())
           continue;
-        }
 
         Insts.push_back(std::make_pair(Inst, i ? A->getLatencyAt(i) : 0));
       }
