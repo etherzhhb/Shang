@@ -1008,7 +1008,13 @@ void VASTValue::print(raw_ostream &OS) const {
 }
 
 void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const{
-  assert(getName() && "Cannot print unamed object as operand!");
+  if (!getName()) {
+    assert(UB == getBitWidth() && LB == 0
+           && "Cannot print unamed object as operand!");
+    print(OS);
+    return;
+  }
+
   OS << getName();
   if (UB) OS << verilogBitRange(UB, LB, getBitWidth() > 1);
 }
