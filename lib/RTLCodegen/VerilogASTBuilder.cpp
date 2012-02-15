@@ -1259,14 +1259,14 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
     std::string ProductWireName = NamePrefix + utostr_32(++NameIdx) + "p";
     VASTUse P = VM->buildExpr(VASTWire::dpAnd, ProductOps, SizeInBits,
                               VM->addWire(ProductWireName, SizeInBits));
+    // Add the product to the operand list of the sum.
+    SumOps.push_back(P);
+
     // Is the output inverted?
     char c = *p++;
     assert((c == '0' || c == '1') && "Unexpected SOP char!");
-
     isComplement = (c == '0');
 
-    // Push the sums.
-    SumOps.push_back(P);
     // Products are separated by new line.
     assert(*p == '\n' && "Expect the new line!");
     ++p;

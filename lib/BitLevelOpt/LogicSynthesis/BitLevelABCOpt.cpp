@@ -263,7 +263,7 @@ struct LogicNetwork {
   }
 
   bool addInstr(MachineInstr *MI);
-  void buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
+  void buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
                       MachineBasicBlock::iterator IP);
 
   // Sort the nodes in Netlist.
@@ -350,13 +350,16 @@ struct LogicNetwork {
         continue;
       }
 
-      // Otherwise visit the depending node now.
+      // Otherwise visit the depending node now, and push all child node
+      // of current node into the list.
       MaxFIIdx = std::max(computeIdx(FI, ObjIdxList, NodeIdxMap), MaxFIIdx);
     }
 
     // Create the index.
     ObjIdx Idx;
     Idx.Obj = Obj;
+    // The nodes are pushed into the list in topological order,
+    // so use the size of the list as topological order index.
     Idx.Idx = ObjIdxList.size();
     Idx.MaxFIId = MaxFIIdx;
 
@@ -377,6 +380,7 @@ struct LogicSynthesis : public MachineFunctionPass {
 
   LogicSynthesis() : MachineFunctionPass(ID), VFI(0) {
     Abc_Start();
+    // FIXME: Read lut size from user script.
     Fpga_SetSimpleLutLib(4);
   }
 
@@ -413,8 +417,8 @@ bool LogicNetwork::addInstr(MachineInstr *MI) {
   return false;
 }
 
-void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
-                                  MachineBasicBlock::iterator IP) {
+void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
+                                MachineBasicBlock::iterator IP) {
   SmallVector<ucOperand, 2> Ops;
   Abc_Obj_t *FO = Abc_ObjFanout0(Obj), *FI;
   DEBUG(dbgs() << Abc_ObjName(FO) << '\n');
@@ -439,8 +443,8 @@ void LogicNetwork::buildMappedLUT(Abc_Obj_t *Obj, VFInfo *VFI,
   assert(DefMO.getBitWidth() == SizeInBits && "Result SizeInBits not match!");
   DefMO.setIsDef(true);
 
-  // The sum of product table.
-  // data can be also encoded by Abc_SopToTruth.
+  // Get the sum of product table.
+  // FIXME: data can be also encoded by Abc_SopToTruth.
   char *data = (char*)Abc_ObjData(Obj);
   DEBUG(dbgs() << data << '\n');
 
@@ -518,7 +522,7 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
       ++IP;
 
     DEBUG(dbgs() << "For "; Idx.dump(););
-    Ntk.buildMappedLUT(Idx.Obj, VFI, IP);
+    Ntk.buildLUTInst(Idx.Obj, VFI, IP);
   }
 
   DEBUG(dbgs() << "After logic synthesis:\n";
