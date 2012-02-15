@@ -1256,7 +1256,9 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
     ++p;
 
     // Create the product.
-    VASTUse P = VM->buildExpr(VASTWire::dpAnd, ProductOps, SizeInBits);
+    std::string ProductWireName = NamePrefix + utostr_32(++NameIdx) + "p";
+    VASTUse P = VM->buildExpr(VASTWire::dpAnd, ProductOps, SizeInBits,
+                              VM->addWire(ProductWireName, SizeInBits));
     // Is the output inverted?
     char c = *p++;
     assert((c == '0' || c == '1') && "Unexpected SOP char!");
@@ -1271,7 +1273,9 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
   }
 
   // Or the products together to build the SOP (Sum of Product).
-  VASTUse SOP = VM->buildExpr(VASTWire::dpOr, SumOps, SizeInBits);
+  std::string SumWireName = NamePrefix + utostr_32(++NameIdx) + "s";
+  VASTUse SOP = VM->buildExpr(VASTWire::dpOr, SumOps, SizeInBits,
+                              VM->addWire(SumWireName, SizeInBits));
 
   if (isComplement) {
     std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
