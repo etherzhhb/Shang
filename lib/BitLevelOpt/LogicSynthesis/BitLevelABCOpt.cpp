@@ -303,8 +303,6 @@ struct LogicNetwork {
     int i;
 
     Abc_NtkForEachNode(Ntk, Obj, i) {
-      Abc_Obj_t *FO = Abc_ObjFanout0(Obj);
-
       // Node already visited.
       if (NodeIdxMap.count(Obj))
        continue;
