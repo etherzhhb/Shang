@@ -1230,7 +1230,8 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
   // Interpret the sum of product table.
   const char *p = Op.getOperand(1).getSymbolName();
   SmallVector<VASTUse, 8> ProductOps, SumOps;
-
+  bool isComplement = false;
+  
   while (*p) {
     // Interpret the product.
     ProductOps.clear();
@@ -1258,26 +1259,28 @@ void VerilogASTBuilder::emitOpLut(ucOp &Op) {
     VASTUse P = VM->buildExpr(VASTWire::dpAnd, ProductOps, SizeInBits);
     // Is the output inverted?
     char c = *p++;
-    switch (c) {
-    default: llvm_unreachable("Unexpected SOP char!");
-    //case '-': /*Dont care*/ break;
-    case '1': SumOps.push_back(P); break;
-    case '0': {
-      std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
-      VASTUse U = VM->buildExpr(VASTWire::dpNot,P, SizeInBits,
-                                VM->addWire(InvWireName, SizeInBits));
-      SumOps.push_back(U);
-      break;
-    }
-    }
+    assert((c == '0' || c == '1') && "Unexpected SOP char!");
 
+    isComplement = (c == '0');
+
+    // Push the sums.
+    SumOps.push_back(P);
     // Products are separated by new line.
     assert(*p == '\n' && "Expect the new line!");
     ++p;
   }
 
+  // Or the products together to build the SOP (Sum of Product).
+  VASTUse SOP = VM->buildExpr(VASTWire::dpOr, SumOps, SizeInBits);
+
+  if (isComplement) {
+    std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
+    SOP = VM->buildExpr(VASTWire::dpNot, SOP, SizeInBits,
+                        VM->addWire(InvWireName, SizeInBits));
+  }
+
   // Build the sum;
-  VM->buildExpr(VASTWire::dpOr, SumOps, SizeInBits, V);
+  VM->buildExpr(VASTWire::dpAssign, SOP, SizeInBits, V);
   return;
 }
 
