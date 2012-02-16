@@ -221,48 +221,5 @@ public:
   bool scheduleState();
 };
 
- class SDCScheduler : public SchedulingBase {
- public:
-
-    SDCScheduler(VSchedGraph &S);
-
-    bool scheduleState();
-
- private:
-
-    lprec *lp;
-    // Total step variables count.
-    int NumVars;
-    // Total instructions count.
-    int NumInst;
-    unsigned ShedCounter;
-    // The table of the constraint row of the schedule unit.
-    std::map<VSUnit*, unsigned> SchedTable;
-    // The table of the start step variable of the schedule unit.
-    std::map<const VSUnit*, unsigned> StartVariableIndex;
-    // The table of the end step variable of the schedule unit.
-    std::map<const VSUnit*, unsigned> EndVariableIndex;
-    typedef std::map<const VSUnit*, unsigned> SUIdxMapType;
-
-    // Set the variables' name in the model.
-    void createLPVariables(lprec *lp);
-
-    // The schedule should satisfy the multi-cycle operations.
-    void addMulticycleConstraints(lprec *lp);
-
-    // The schedule should satisfy the dependences.
-    void addDependencyConstraints(lprec *lp);
-
-    // Avoid the resources conflict for the function units.
-    void addResourceConstraints(lprec *lp);
-
-    // Build the schedule object function.
-    void buildObject(bool ASAP = true);
-
-    // Build the schedule form the result of ILP.
-    void buildSchedule(lprec *lp);
-
-};
-
 } // End namespace.
 #endif

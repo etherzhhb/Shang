@@ -164,7 +164,6 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
               "Going to use ILP scheduler.\n";
   case SynSettings::ILP:   return new ILPScheduler(G);
   case SynSettings::ASAP:  return new ASAPScheduler(G);
-  case SynSettings::SDC:   return new SDCScheduler(G);
   }
   return 0;
 }
