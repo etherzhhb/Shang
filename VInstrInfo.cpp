@@ -1228,9 +1228,11 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
       updateLatency(CurLatInfo, SrcMI, EdgeLatency);
       return true;
     }
-  } else
+  } else {
     // Accumulate the latency of DstMux.
     EdgeLatency += 1.0;
+    assert(!SrcLatInfo->empty() && "Mux latency information lost!");
+  }
 
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
@@ -1271,7 +1273,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // depends any control operation in the same BB
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
-  if (VInstrInfo::isDatapath(MI->getOpcode()) && CurLatInfo.empty())
+  if (CurLatInfo.empty() && (VInstrInfo::isDatapath(MI->getOpcode())
+                             || (MI->getOpcode() == VTM::VOpDstMux)))
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      VInstrInfo::getDetialLatency(MI)));
 
