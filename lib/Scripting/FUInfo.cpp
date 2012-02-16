@@ -68,10 +68,10 @@ namespace llvm {
     unsigned MaxAllowedMuxSize = 8;
 
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
-    double AdderLatencies[]     = { 1.0, 1.0,  1.0,  1.0, 1.0 };
-    double CmpLatencies[]       = { 1.0, 1.0,  1.0,  1.0, 1.0 };
-    double MultLatencies[]      = { 1.0, 1.0,  1.0,  1.0, 1.0 };
-    double ShiftLatencies[]     = { 1.0, 1.0,  1.0,  1.0, 1.0 };
+    double AdderLatencies[]     = { 1.0,  1.0,  1.0, 1.0 };
+    double CmpLatencies[]       = { 1.0,  1.0,  1.0, 1.0 };
+    double MultLatencies[]      = { 1.0,  1.0,  1.0, 1.0 };
+    double ShiftLatencies[]     = { 1.0,  1.0,  1.0, 1.0 };
     double MemBusLatency = 1.0;
     double BRamLatency = 1.0;
     double LutLatency = 0.0;
@@ -136,7 +136,7 @@ VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, d
     Costs(costs), LatencyTable(latencies),
     ChainingThreshold(getProperty<unsigned>(FUTable, "ChainingThreshold")) {
   luabind::object LatTable = FUTable["Latencies"];
-  VFUs::initLatencyTable(LatTable, latencies, 5);
+  VFUs::initLatencyTable(LatTable, latencies, 4);
   luabind::object CostTable = FUTable["Costs"];
   VFUs::initCostTable(CostTable, costs, 5);
 }

@@ -93,8 +93,8 @@ namespace VFUs {
   extern unsigned MaxAllowedMuxSize;
 
   // Latency tables
-  extern double AdderLatencies[5], CmpLatencies[5], MultLatencies[5],
-                ShiftLatencies[5];
+  extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
+                ShiftLatencies[4];
 
   double getMuxLatency(unsigned Size);
   double getReductionLatency(unsigned Size);
