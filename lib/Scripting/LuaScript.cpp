@@ -73,16 +73,12 @@ void LuaScript::init() {
     luabind::class_<SynSettings>("SynSettings")
       .enum_("PipeLine")[
         luabind::value("IMS", SynSettings::IMS),
-          luabind::value("FDMS", SynSettings::FDMS),
           luabind::value("ILPMS", SynSettings::ILPMS),
           luabind::value("DontPipeline", SynSettings::DontPipeline)
       ]
       .enum_("Schedule")[
-        luabind::value("FDS", SynSettings::FDS),
-        luabind::value("FDLS", SynSettings::FDLS),
         luabind::value("ILP", SynSettings::ILP),
-        luabind::value("ASAP", SynSettings::ASAP),
-        luabind::value("SDC", SynSettings::SDC)
+        luabind::value("ASAP", SynSettings::ASAP)
       ],
 
     BindingTraits<VASTPort>::register_("VASTPort"),
