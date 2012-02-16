@@ -288,6 +288,7 @@ struct SourceChecker {
   // Total cost.
   int getTotalSavedSrcMuxCost();
   int getTotalSrcMuxCost();
+  int getMaxSrcMuxSize();
 };
 
 template<>
@@ -308,6 +309,16 @@ int SourceChecker<1>::getTotalSrcMuxCost() {
 template<>
 int SourceChecker<2>::getTotalSrcMuxCost() {
   return getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
+}
+
+template<>
+int SourceChecker<1>::getMaxSrcMuxSize() {
+  return getSrcMuxSize<0>();
+}
+
+template<>
+int SourceChecker<2>::getMaxSrcMuxSize() {
+  return std::max(getSrcMuxSize<0>(), getSrcMuxSize<1>());
 }
 
 struct DstChecker {
@@ -371,6 +382,10 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
   }
 
   int computeWeight(int BitWidth) {
+    // Only merge the register if the mux size not exceed the max allowed size.
+    if (getMaxSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
+      return CompGraphWeights::HUGE_NEG_VAL;
+
     int Weight = 0;
     // We can save some register if we merge these two registers.
     Weight += /*FU Cost*/ Cost[BitWidth];
@@ -482,12 +497,6 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
 
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
-
-    // Only merge the register if the mux size not exceed the max allowed size.
-    if (getSrcMuxSize<0>() > int(VFUs::MaxAllowedMuxSize))
-      return CompGraphWeights::HUGE_NEG_VAL;
-    //if (getSrcMuxSize<0>() != 1)
-    //  return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
     // Src register appear in the src of mux do not cost anything.
