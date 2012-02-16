@@ -377,8 +377,7 @@ void VerilogASTBuilder::emitFunctionSignature(const Function *F) {
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
-      VM->indexVASTValue(FNNum + VFUs::RetPortOffset,
-                         VM->addWire(WireName, BitWidth));
+      VM->indexVASTValue(FNNum, VM->addWire(WireName, BitWidth));
       S << ".return_value(" << WireName << "),\n\t";
     }
   }
