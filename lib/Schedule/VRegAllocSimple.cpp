@@ -383,7 +383,7 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
 
   int computeWeight(int BitWidth) {
     // Only merge the register if the mux size not exceed the max allowed size.
-    if (getMaxSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
+    if (SourceChecker<NUMSRC>::getMaxSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;
