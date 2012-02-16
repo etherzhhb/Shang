@@ -189,7 +189,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Remove redundant code after schedule emitted.
   void cleanUpSchedule();
   bool cleanUpRegisterClass(unsigned RegNum, const TargetRegisterClass *RC);
-  bool fixSubModuleReturnPort(unsigned RegNum);
 
   bool doInitialization(Module &M) {
     TD = getAnalysisIfAvailable<TargetData>();
@@ -965,10 +964,7 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
 void VPreRegAllocSched::cleanUpSchedule() {
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
      unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
-    if (cleanUpRegisterClass(RegNum, VTM::DRRegisterClass))
-      continue;
-    
-    fixSubModuleReturnPort(RegNum);
+    cleanUpRegisterClass(RegNum, VTM::DRRegisterClass);
   }
 }
 
@@ -1009,42 +1005,5 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
     }
   }
 
-  return true;
-}
-
-static void addSubRegIdxForCalleeFN(unsigned Reg, MachineRegisterInfo *MRI) {
-  typedef MachineRegisterInfo::use_iterator use_it;
-
-  for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; ++I) {
-    ucOp User = ucOp::getParent(I);
-    if (User->isOpcode(VTM::VOpReadFU)) continue;
-
-    assert(User->isOpcode(VTM::VOpReadReturn) && "Unexpected callee user!");
-
-    unsigned ReturnPortIdx = User.getOperand(2).getImm();
-    I.getOperand().setSubReg(ReturnPortIdx);
-  }
-}
-
-bool VPreRegAllocSched::fixSubModuleReturnPort(unsigned RegNum) {
-  // And Emit the wires defined in this module.
-  if (MRI->getRegClass(RegNum) != VTM::RCFNRegisterClass) return true;
-    
-  MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
-
-  if (DI == MRI->def_end() || MRI->use_empty(RegNum))
-    return true;
-
-  assert(!DI->isPHI() && "PHI with RUCMPRegister is not supported!");
-
-  assert(++MRI->def_begin(RegNum) == MRI->def_end() && "Not in SSA From!");
-  // Do not remove the operand, just change it to implicit define.
-  ucOp Op = ucOp::getParent(DI);
-  if (Op->isOpcode(VTM::VOpInternalCall)) {
-    addSubRegIdxForCalleeFN(RegNum, MRI);
-    return false;
-  }
-
-  llvm_unreachable("Unsupported opcode!");
   return true;
 }

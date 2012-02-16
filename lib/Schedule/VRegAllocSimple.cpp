@@ -1317,7 +1317,6 @@ void VRASimple::bindBlockRam() {
 }
 
 unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
-  unsigned FNNum = TRI->allocateFN(VTM::RCFNRegClassID, 64);
   unsigned RetPortSize = 0;
   typedef MachineRegisterInfo::use_iterator use_it;
   for (use_it I = MRI->use_begin(RegNum); I != MRI->use_end(); ++I) {
@@ -1327,14 +1326,10 @@ unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
     assert(User->isOpcode(VTM::VOpReadReturn) && "Unexpected callee user!");
     assert((RetPortSize == 0 || RetPortSize == User.getOperand(0).getBitWidth())
             && "Return port has multiple size?");
-    assert(User.getOperand(1).getSubReg() == 1 && "Only support 1 return port!");
     RetPortSize = User.getOperand(0).getBitWidth();
   }
 
-  // Allocate the return port signal for sub module.
-  if (RetPortSize) TRI->getSubRegOf(FNNum, RetPortSize, 0);
-
-  return FNNum;
+  return TRI->allocateFN(VTM::RCFNRegClassID, RetPortSize);
 }
 
 void VRASimple::bindCalleeFN() {

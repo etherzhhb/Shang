@@ -335,13 +335,10 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
 
   // States of the control flow.
   emitIdleState();
-  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
-    MachineBasicBlock &BB = *I;
-    emitBasicBlock(BB);
-  }
+  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I)
+    emitBasicBlock(*I);
 
   // Building the Slot active signals.
-  // FIXME: It is in fact simply printing the logic out.
   VM->buildSlotLogic();
 
   // TODO: Optimize the RTL net list.
@@ -518,10 +515,10 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     // Add the start/finsh signal and return_value to the signal list.
     VM->addRegister(Ports[2], 1);
     VM->getOrCreateSymbol(Ports[3], 1);
-    unsigned RetPortIdx = FNNum + VFUs::RetPortOffset;
-    // Had we allocate the return port?
+    unsigned RetPortIdx = FNNum;
+    // Dose the submodule have a return port?
     VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RetPortIdx);
-    if (Info.getParentRegister() == FNNum) {
+    if (Info.getBitWidth()) {
       SmallVector<VFUs::ModOpInfo, 4> OpInfo;
       unsigned Latency = VFUs::getModuleOperands(I->getKey(), FNNum, OpInfo);
 
@@ -666,7 +663,9 @@ void VerilogASTBuilder::emitAllSignals() {
       VM->indexVASTValue(RegNum, VASTUse(VM->getPort(DataInIdx)));
       break;
     }
-    case VTM::RCFNRegClassID: /*Nothing to do*/ break;
+    case VTM::RCFNRegClassID:
+      /*Nothing to do, it is allocated by emitAllocatedFUs*/
+      break;
     case VTM::RMUXRegClassID: {
       std::string Name = "dstmux" + utostr_32(RegNum) + "r";
       VM->indexVASTValue(RegNum, VM->addRegister(Name, Info.getBitWidth()));
