@@ -530,8 +530,6 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
       VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
       VM->indexVASTValue(RetPortIdx, ResultWire);
-      // Allow user look up the wire with FNNum.
-      VM->indexVASTValue(FNNum, ResultWire);
 
       SmallVector<VASTUse, 4> Ops;
       for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
