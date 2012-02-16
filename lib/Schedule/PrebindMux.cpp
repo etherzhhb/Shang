@@ -64,7 +64,7 @@ struct PrebindMux : public MachineFunctionPass {
 
   bool doInitialization(Module &) {
     // Compute the proper mux size that fix within 1 cycle.
-    while (MaxMuxSize < 16)
+    while (MaxMuxSize < VFUs::MaxAllowedMuxSize)
       if (VFUs::getMuxLatency(++MaxMuxSize) > 0.5)
         break;
 

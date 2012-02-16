@@ -162,8 +162,8 @@ raw_ostream &LuaScript::getOutputFileStream(std::string &Name) {
 }
 
 void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs,
-                             double *Latencies) {
-  FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)], Latencies);
+                             unsigned *Costs, double *Latencies) {
+  FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)], Costs, Latencies);
 }
 
 void LuaScript::updateFUs() {
@@ -172,22 +172,13 @@ void LuaScript::updateFUs() {
     = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
   FUSet[VFUs::BRam] = new VFUBRam(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
 
-  initSimpleFU(VFUs::AddSub, FUs, VFUs::AdderLatencies);
-  // Override the cost parameter if user provided.
-  if (unsigned AdderCost = FUSet[VFUs::AddSub]->getCost())
-    VFUs::AddCost = AdderCost;
+  initSimpleFU(VFUs::AddSub, FUs, VFUs::AddCost, VFUs::AdderLatencies);
 
-  initSimpleFU(VFUs::Shift, FUs, VFUs::ShiftLatencies);
-  if (unsigned ShiftCost = FUSet[VFUs::Shift]->getCost())
-    VFUs::ShiftCost = ShiftCost;
+  initSimpleFU(VFUs::Shift, FUs, VFUs::ShiftCost, VFUs::ShiftLatencies);
 
-  initSimpleFU(VFUs::Mult, FUs, VFUs::MultLatencies);
-  if (unsigned MulCost = FUSet[VFUs::Mult]->getCost())
-    VFUs::MulCost = MulCost;
+  initSimpleFU(VFUs::Mult, FUs, VFUs::MulCost, VFUs::MultLatencies);
 
-  initSimpleFU(VFUs::ICmp, FUs, VFUs::CmpLatencies);
-  if (unsigned ICmpCost = FUSet[VFUs::ICmp]->getCost())
-    VFUs::ICmpCost = ICmpCost;
+  initSimpleFU(VFUs::ICmp, FUs, VFUs::ICmpCost, VFUs::CmpLatencies);
 
   // Read other parameters.
 #define READPARAMETER(PARAMETER, T) \
@@ -196,13 +187,15 @@ void LuaScript::updateFUs() {
     VFUs::PARAMETER = PARAMETER.get();
 
   READPARAMETER(LUTCost, unsigned);
-  READPARAMETER(RegCost, unsigned);
+  //FIX ME: This can not initialize the RegCost.
+  //READPARAMETER(RegCost, unsigned);
   READPARAMETER(MUXCost, unsigned);
   READPARAMETER(MuxSizeCost, unsigned);
 
   READPARAMETER(LutLatency, double);
   READPARAMETER(MaxLutSize, unsigned);
   READPARAMETER(MaxMuxPerLut, unsigned);
+  READPARAMETER(MaxAllowedMuxSize, unsigned);
 }
 
 void LuaScript::updateStatus() {

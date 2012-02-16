@@ -360,9 +360,9 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
                             public WidthChecker {
   VRASimple *VRA;
   // The pre-bit cost of this kind of function unit.
-  unsigned Cost;
+  unsigned *const Cost;
 
-  CompEdgeWeightBase(VRASimple *V, unsigned cost) : VRA(V), Cost(cost) {}
+  CompEdgeWeightBase(VRASimple *V, unsigned cost[]) : VRA(V), Cost(cost) {}
 
   void reset() {
     resetDsts();
@@ -370,10 +370,10 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
     resetWidth();
   }
 
-  int computePerBitWeight() {
+  int computeWeight(int BitWidth) {
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    Weight += /*FU Cost*/ Cost;
+    Weight += /*FU Cost*/ Cost[BitWidth];
     // How many mux port we can save?
     Weight += SourceChecker<NUMSRC>::getTotalSavedSrcMuxCost();
     // We also can save the mux for the dsts.
@@ -397,7 +397,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
   unsigned DstReg;
 
   typedef CompEdgeWeightBase<1> Base;
-  CompRegEdgeWeight(VRASimple *V, unsigned cost) : Base(V, cost) {}
+  CompRegEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
 
   void reset(unsigned DstR) {
     DstReg = DstR;
@@ -483,15 +483,17 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    // Only merge the register if their have the same driver.
-    if (getSrcMuxSize<0>() != 1)
+    // Only merge the register if the mux size not exceed the max allowed size.
+    if (getSrcMuxSize<0>() > int(VFUs::MaxAllowedMuxSize))
       return CompGraphWeights::HUGE_NEG_VAL;
+    //if (getSrcMuxSize<0>() != 1)
+    //  return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
     // Src register appear in the src of mux do not cost anything.
     removeSrcReg<0>(Src->reg);
 
-    return computePerBitWeight() * getWidth();
+    return computeWeight(getWidth());
   }
 };
 
@@ -513,7 +515,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
   }
 
   typedef CompEdgeWeightBase<2> Base;
-  CompBinOpEdgeWeight(VRASimple *V, unsigned cost) : Base(V, cost) {}
+  CompBinOpEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
 
   // Run on the use-def chain of a FU to collect information about the live
   // interval.
@@ -547,7 +549,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    return computePerBitWeight() * getWidth();
+    return computeWeight(getWidth());
   }
 };
 
@@ -555,7 +557,7 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
   bool hasSignedCC, hasUnsignedCC;
 
   typedef CompBinOpEdgeWeight<VTM::VOpICmp, 1> Base;
-  CompICmpEdgeWeight(VRASimple *V, unsigned cost) : Base(V, cost) {}
+  CompICmpEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
 
   void reset() {
     hasSignedCC = false;
@@ -617,10 +619,7 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
 
     // Dirty Hack: The dst port of comparison it is 1 bit, subtract it from
     // per bit weight so we will not multiply it by bitwidth.
-    int PerBitWeight = computePerBitWeight() - getSavedDstMuxCost();
-
-    return PerBitWeight * getWidth()
-           + getSavedDstMuxCost() * /*Output port width*/1;
+    return computeWeight(getWidth()) - getSavedDstMuxCost() * (getWidth() - 1);
   }
 };
 }

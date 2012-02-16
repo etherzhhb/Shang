@@ -85,15 +85,16 @@ namespace VFUs {
   unsigned getModuleOperands(const std::string &ModName, unsigned FNNum,
                              SmallVectorImpl<ModOpInfo> &OpInfo);
   // Cost parameters.
-  extern unsigned LUTCost, RegCost, MUXCost, AddCost, MulCost,
-                  ShiftCost, ICmpCost, MuxSizeCost;
+  extern unsigned LUTCost, RegCost[64], MUXCost, AddCost[64], MulCost[64],
+                  ShiftCost[64], ICmpCost[64], MuxSizeCost;
 
   extern unsigned MaxLutSize;
   extern unsigned MaxMuxPerLut;
+  extern unsigned MaxAllowedMuxSize;
 
   // Latency tables
-  extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
-                ShiftLatencies[4];
+  extern double AdderLatencies[5], CmpLatencies[5], MultLatencies[5],
+                ShiftLatencies[5];
 
   double getMuxLatency(unsigned Size);
   double getReductionLatency(unsigned Size);
@@ -103,6 +104,8 @@ namespace VFUs {
                 ClkEnSelLatency;
 
   void initLatencyTable(luabind::object LuaLatTable, double *LatTable,
+                        unsigned Size);
+  void initCostTable(luabind::object LuaCostTable, unsigned *CostTable,
                         unsigned Size);
 }
 
@@ -167,17 +170,17 @@ protected:
   // Start interval
   const unsigned StartInt;
   // Function unit cost for resource allocation and binding.
-  const unsigned Cost;
+  unsigned *const Costs;
   // Latency table of the function unit.
-  double *LatencyTable;
+  double *const LatencyTable;
   // Chain the operation if its size smaller than the threshold;
   unsigned ChainingThreshold;
-  VFUDesc(VFUs::FUTypes type, unsigned startInt, double *latencies)
-    : ResourceType(type), StartInt(startInt), Cost(~0),
+  VFUDesc(VFUs::FUTypes type, unsigned startInt, unsigned *costs, double *latencies)
+    : ResourceType(type), StartInt(startInt), Costs(costs),
       LatencyTable(latencies), ChainingThreshold(0) {}
 
 public:
-  VFUDesc(VFUs::FUTypes type, luabind::object FUTable, double *latencies);
+  VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, double *latencies);
 
   static const char *getTypeName(VFUs::FUTypes FU) {
     return VFUs::VFUNames[FU];
@@ -189,7 +192,7 @@ public:
   }
 
   unsigned getStartInt() const { return StartInt; }
-  unsigned getCost() const { return Cost; }
+  const unsigned *getCost() const { return Costs; }
 
   bool shouldBeChained(unsigned FUSize) const {
     return FUSize <= ChainingThreshold;
