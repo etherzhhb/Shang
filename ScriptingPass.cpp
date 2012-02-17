@@ -60,6 +60,15 @@ static void ExtractConstant(raw_ostream &OS, Constant *C) {
     return;
   }
 
+  if (ConstantDataSequential *CDS = dyn_cast<ConstantDataSequential>(C)) {
+    ExtractConstant(OS, CDS->getElementAsConstant(0));
+    for (unsigned i = 1, e = CDS->getNumElements(); i != e; ++i) {
+      OS << ", ";
+      ExtractConstant(OS, CDS->getElementAsConstant(i));
+    }
+    return;
+  }
+
   if (ConstantArray *CA = dyn_cast<ConstantArray>(C)) {
     ExtractConstant(OS, cast<Constant>(CA->getOperand(0)));
     for (unsigned i = 1, e = CA->getNumOperands(); i != e; ++i) {
@@ -69,7 +78,7 @@ static void ExtractConstant(raw_ostream &OS, Constant *C) {
     return;
   }
 
-  errs() << "Unsupported constant type!";
+  llvm_unreachable("Unsupported constant type to bind to script engine!");
   OS << '0';
 }
 

@@ -32,9 +32,6 @@ class VTargetMachine;
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
 Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
- 
-// Promote all the GVs to arguments
-Pass *createGVPromotionPass();
 
 // Always inline function.
 Pass *createAlwaysInlineFunctionPass();
@@ -42,15 +39,12 @@ Pass *createAlwaysInlineFunctionPass();
 //Convert the AllocaInst to GlobalVariable.
 Pass *createStackToGlobalPass();
 
-Pass *createHWPartitionInfoPass();
-
 Pass *createFunctionFilterPass(raw_ostream &O);
 
 
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 Pass *createLogicSynthesisPass();
-
 Pass *createFixMachineCodePass();
 Pass *createFixTerminatorsPass();
 Pass *createForwardWireUsersPass();
