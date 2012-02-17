@@ -8,7 +8,7 @@ add_llvm_library(VTMBitLevelOpt
   ${LogicSynthesis}
   )
 
-add_dependencies(VTMBitLevelOpt VerilogBackendTable_gen)
+add_dependencies(VTMBitLevelOpt VerilogBackendTableGen)
 
 if (ENABLE_LOGIC_SYNTHESIS)
 include_directories(

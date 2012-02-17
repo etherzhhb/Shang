@@ -7,4 +7,4 @@ add_llvm_library(VTMHighLevelOpt
 
 llvm_config(VTMHighLevelOpt transformutils ipo)
 
-add_dependencies(VTMHighLevelOpt VerilogBackendTable_gen)
+add_dependencies(VTMHighLevelOpt VerilogBackendTableGen)

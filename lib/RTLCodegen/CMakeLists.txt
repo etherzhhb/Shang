@@ -6,4 +6,4 @@ add_llvm_library(VTMRTLCodegen
   CombPathDelayAnalysis.cpp
 )
 
-add_dependencies(VTMRTLCodegen VerilogBackendTable_gen)
+add_dependencies(VTMRTLCodegen VerilogBackendTableGen)

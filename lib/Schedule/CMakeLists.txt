@@ -24,4 +24,4 @@ target_link_libraries (
 	${LPSOLVE_LIBRARY}
 )
 
-add_dependencies(VTMSchedule VerilogBackendTable_gen)
+add_dependencies(VTMSchedule VerilogBackendTableGen)
