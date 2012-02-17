@@ -88,6 +88,8 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createBitLevelInfoPass());
 
     TargetPassConfig::addMachineSSAOptimization();
+    // Fix the machine code to avoid unnecessary mux.
+    PM.add(createFixMachineCodePass());
 
     // Construct multiplexer tree for prebound function units.
     PM.add(createPrebindMuxPass());

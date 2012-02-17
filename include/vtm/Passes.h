@@ -86,14 +86,10 @@ Pass *createScriptingPass(const char *Name, const char *FScript,
 Pass *createContoBromPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
 //
-void initializeVIfConverterPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
-
-void initializeBitLevelABCOptPass(PassRegistry &Registry);
 
 //Add the initialization implementation of StackToGlobal.cpp.
 void initializeStackToGlobalPass(PassRegistry &Registry);
-
 void initializeCFGShortestPathPass(PassRegistry &Registry);
 
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
@@ -102,14 +98,8 @@ void initializeRtlSSAAnalysisPass(PassRegistry &Registry);
 void initializeVerilogASTBuilderPass(PassRegistry &Registry);
 void initializeVerilogASTWriterPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry); 
-
 void initializeRAPass(PassRegistry &Registry);
-
-// Add the initialize implementation of GVPromotion.cpp.
-void initializeGVPromotionPass(PassRegistry &Registry);
-
 void initializeAlwaysInlineFunctionPass(PassRegistry &Registry);
-
 void initializeHWPartitionInfoPass(PassRegistry &Registry);
 } // end namespace
 
