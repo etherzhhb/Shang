@@ -390,7 +390,7 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
     // We can save some register if we merge these two registers.
     Weight += /*FU Cost*/ Cost[BitWidth];
     // How many mux port we can save?
-    Weight += SourceChecker<NUMSRC>::getTotalSavedSrcMuxCost();
+    // Weight += SourceChecker<NUMSRC>::getTotalSavedSrcMuxCost();
     // We also can save the mux for the dsts.
     Weight += getSavedDstMuxCost();
     // How big the mux it is after the registers are merged? Do not make it too
