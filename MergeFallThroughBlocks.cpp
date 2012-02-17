@@ -137,7 +137,8 @@ bool MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
   if (I != RetBB.end() || !Ret) return false;
 
   unsigned RetReg = 0;
-  if (RetVal) RetReg = RetVal->getOperand(0).getReg();
+  if (RetVal && RetVal->getOperand(0).isReg())
+    RetReg = RetVal->getOperand(0).getReg();
 
   // Build the income value map, it is enough to only store the register number
   // since the PHI node will not change the bit width of the register.
