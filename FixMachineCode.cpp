@@ -42,8 +42,10 @@ struct FixMachineCode : public MachineFunctionPass {
   static char ID;
   MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
+  bool IsPreOpt;
 
-  FixMachineCode() : MachineFunctionPass(ID), MRI(0), TII(0) {}
+  FixMachineCode(bool isPreOpt) : MachineFunctionPass(ID), MRI(0), TII(0),
+    IsPreOpt(isPreOpt) {}
 
   //void getAnalysisUsage(AnalysisUsage &AU) const {
   //  MachineFunctionPass::getAnalysisUsage(AU);
@@ -95,6 +97,10 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         InstrToFold.push_back(Inst);
         continue;
       }
+
+      // Do not perform select merging in pre-optimization run, because selects
+      // may only appear after if conversion.
+      if (IsPreOpt) continue;
 
       // Try to merge the Select to improve parallelism.
       mergeSel(Inst);
@@ -293,6 +299,6 @@ void FixMachineCode::mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
   CaseMI->addOperand(SelMI->getOperand(3));
 }
 
-Pass *llvm::createFixMachineCodePass() {
-  return new FixMachineCode();
+Pass *llvm::createFixMachineCodePass(bool IsPreOpt) {
+  return new FixMachineCode(IsPreOpt);
 }

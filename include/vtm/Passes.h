@@ -45,7 +45,7 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 Pass *createLogicSynthesisPass();
-Pass *createFixMachineCodePass();
+Pass *createFixMachineCodePass(bool IsPreOpt);
 Pass *createFixTerminatorsPass();
 Pass *createForwardWireUsersPass();
 Pass *createMergeFallThroughBlocksPass();

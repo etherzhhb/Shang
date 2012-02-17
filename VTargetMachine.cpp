@@ -89,7 +89,7 @@ struct VTMPassConfig : public TargetPassConfig {
 
     TargetPassConfig::addMachineSSAOptimization();
     // Fix the machine code to avoid unnecessary mux.
-    PM.add(createFixMachineCodePass());
+    PM.add(createFixMachineCodePass(true));
 
     // Construct multiplexer tree for prebound function units.
     PM.add(createPrebindMuxPass());
@@ -105,7 +105,7 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createLogicSynthesisPass());
 
     // Fix the machine code for schedule and function unit allocation.
-    PM.add(createFixMachineCodePass());
+    PM.add(createFixMachineCodePass(false));
 
     // Clean up the MachineFunction.
     addPass(MachineCSEID);
