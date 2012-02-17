@@ -489,7 +489,7 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
 // Implement of the logic synthesis pass.
 char LogicSynthesis::ID = 0;
 
-Pass *llvm::createBitLevelABCOptPass() {
+Pass *llvm::createLogicSynthesisPass() {
   return new LogicSynthesis();
 }
 

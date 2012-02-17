@@ -34,7 +34,9 @@ bool ucOp::isControl() const {
   return OpCode.getParent()->getOpcode() == VTM::Control;
 }
 void ucOp::printOpcode(raw_ostream &OS) const {
-  OS << OpCode.getDesc().getName();
+  const TargetInstrInfo *TII = OpCode.getParent()->getParent()->getParent()
+                                    ->getTarget().getInstrInfo();
+  OS << TII->getName(OpCode.getDesc().getOpcode());
 
   OS << "{" << OpCode.getFUId() << "} ";
 }

@@ -31,6 +31,7 @@
 #include "llvm/GlobalVariable.h"
 #include "llvm/Type.h"
 #include "llvm/Module.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetData.h"
@@ -1026,11 +1027,12 @@ void VerilogASTBuilder::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
           if (Str->hasInitializer()) {
             const Constant *Initialer = Str->getInitializer();
             if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)){
-              if (Fmt->isCString()) {
+              StringRef FmtStr;
+              if (getConstantStringInfo(Fmt, FmtStr)) {
                 std::string FmtStr;
                 raw_string_ostream SS(FmtStr);
                 SS << '"';
-                PrintEscapedString(Fmt->getAsString(), SS);
+                PrintEscapedString(FmtStr, SS);
                 SS << '"';
                 SS.flush();
                 OS << '"';

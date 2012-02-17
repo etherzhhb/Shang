@@ -62,162 +62,179 @@ bool VTargetMachine::addInstSelector(PassManagerBase &PM) {
   return false;
 }
 
-bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
-                                        formatted_raw_ostream &Out,
-                                        CodeGenFileType FileType,
-                                        bool DisableVerify) {
+namespace {
+struct VTMPassConfig : public TargetPassConfig {
+  VTMPassConfig(VTargetMachine *TM, PassManagerBase &PM)
+    : TargetPassConfig(TM, PM) {}
 
-  // add the pass which will convert the AllocaInst to GlobalVariable.
-  PM.add(createStackToGlobalPass());
-
-  // The ContoBromPass
-  // PM.add(createContoBromPass(*getIntrinsicInfo()));
-
-  // Dirty Hack: Map all frame stuffs to bram 1.
-  // PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
-
-  // Standard LLVM-Level Passes.
-  // Basic AliasAnalysis support.
-  // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that
-  // BasicAliasAnalysis wins if they disagree. This is intended to help
-  // support "obvious" type-punning idioms.
-  PM.add(createTypeBasedAliasAnalysisPass());
-  PM.add(createBasicAliasAnalysisPass());
-  // Run the SCEVAA pass to compute more accurate alias information.
-  PM.add(createScalarEvolutionAliasAnalysisPass());
-
-  // Before running any passes, run the verifier to determine if the input
-  // coming from the front-end and/or optimizer is valid.
-  if (!DisableVerify)
-    PM.add(createVerifierPass());
-
-  // Optionally, tun split-GEPs and no-load GVN.
-  if (true/*EnableSplitGEPGVN*/) {
-    //PM.add(createGEPSplitterPass());
-    PM.add(createGVNPass(/*NoLoads=*/true));
+  virtual bool addPreRegAlloc() {
+    PM.add(createVPreRegAllocSchedPass());
+    PM.add(createForwardWireUsersPass());
+    return true;
   }
 
-  // Run loop strength reduction before anything else.
-  //PM.add(createLoopStrengthReducePass(getTargetLowering()));
-  DEBUG(PM.add(createPrintFunctionPass("\n\n*** Code after LSR ***\n",
-                                        &dbgs())));
+  virtual bool addInstSelector() {
+    PM.add(createVISelDag(getTM<VTargetMachine>()));
+    return false;
+  }
 
-  PM.add(createCFGSimplificationPass());
-
-  PM.add(createGCLoweringPass());
-
-  // Make sure that no unreachable blocks are instruction selected.
-  PM.add(createUnreachableBlockEliminationPass());
-
-  // Turn exception handling constructs into something the code generators can
-  // handle.
-  PM.add(createLowerInvokePass(getTargetLowering()));
-
-  // The lower invoke pass may create unreachable code. Remove it.
-  PM.add(createUnreachableBlockEliminationPass());
-
-  PM.add(createCodeGenPreparePass(getTargetLowering()));
-
-  PM.add(createStackProtectorPass(getTargetLowering()));
-
-  addPreISel(PM);
-
-  DEBUG(
-    PM.add(createPrintFunctionPass("\n\n"
-                                   "*** Final LLVM Code input to ISel ***\n",
-                                   &dbgs()));
-  );
-
-  // All passes which modify the LLVM IR are now complete; run the verifier
-  // to ensure that the IR is valid.
-  if (!DisableVerify)
-    PM.add(createVerifierPass());
-
-  // Standard Lower-Level Passes.
-
-  // Install a MachineModuleInfo class, which is an immutable pass that holds
-  // all the per-module stuff we're generating, including MCContext.
-  MachineModuleInfo *MMI = new MachineModuleInfo(*getMCAsmInfo(), 
-                                                 *getRegisterInfo(),
-                                    &getTargetLowering()->getObjFileLowering());
-  PM.add(MMI);
-
-  // Set up a MachineFunction for the rest of CodeGen to work on.
-  PM.add(new MachineFunctionAnalysis(*this));
-
-  // Ask the target for an isel.
-  if (addInstSelector(PM))
+  virtual bool addFinalizeRegAlloc() {
+    PM.add(createRTLCodegenPreparePass());
     return true;
+  }
 
-  // Print the instruction selected machine code...
-  printAndVerify(PM, "After Instruction Selection");
+  virtual void addMachineSSAOptimization() {
+    // Annotate the bit level information.
+    PM.add(createBitLevelInfoPass());
 
-  // Expand pseudo-instructions emitted by ISel.
-  PM.add(createExpandISelPseudosPass());
+    TargetPassConfig::addMachineSSAOptimization();
 
-  // PerformBit level information analyze.
-  PM.add(createBitLevelInfoPass());
-  // Optimize PHIs before DCE: removing dead PHI cycles may make more
-  // instructions dead.
-  PM.add(createOptimizePHIsPass());
+    // Construct multiplexer tree for prebound function units.
+    PM.add(createPrebindMuxPass());
 
-  // If the target requests it, assign local variables to stack slots relative
-  // to one another and simplify frame index references where possible.
-  PM.add(createLocalStackSlotAllocationPass());
+    // Optimize the CFG.
+    PM.add(createFixTerminatorsPass());
+    PM.add(createMergeFallThroughBlocksPass());
+    printAndVerify("After merge fall through pass.");
+    // Make sure we have a branch instruction for every success block.
+    PM.add(createFixTerminatorsPass());
 
-  // With optimization, dead code should already be eliminated. However
-  // there is one known exception: lowered code for arguments that are only
-  // used by tail calls, where the tail calls reuse the incoming stack
-  // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
-  PM.add(createDeadMachineInstructionElimPass());
-  printAndVerify(PM, "After codegen DCE pass");
+    // Perform logic synthesis.
+    PM.add(createLogicSynthesisPass());
 
-  PM.add(createPeepholeOptimizerPass());
+    // Fix the machine code for schedule and function unit allocation.
+    PM.add(createFixMachineCodePass());
 
-  PM.add(createMachineLICMPass());
-  PM.add(createMachineCSEPass());
-  PM.add(createMachineSinkingPass());
-  printAndVerify(PM, "After Machine LICM, CSE and Sinking passes");
+    // Clean up the MachineFunction.
+    addPass(MachineCSEID);
+    // Clean up the MachineFunction.
+    addPass(DeadMachineInstructionElimID);
+  }
 
-  // Pre-ra tail duplication.
-  //PM.add(createTailDuplicatePass(true));
-  //printAndVerify(PM, "After Pre-RegAlloc TailDuplicate");
+  virtual void addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
+    // LiveVariables currently requires pure SSA form.
+    //
+    // FIXME: Once TwoAddressInstruction pass no longer uses kill flags,
+    // LiveVariables can be removed completely, and LiveIntervals can be directly
+    // computed. (We still either need to regenerate kill flags after regalloc, or
+    // preferably fix the scavenger to not depend on them).
+    addPass(LiveVariablesID);
 
-  // Run pre-ra passes.
-  if (addPreRegAlloc(PM))
-    printAndVerify(PM, "After PreRegAlloc passes");
+    // Add passes that move from transformed SSA into conventional SSA. This is a
+    // "copy coalescing" problem.
+    //
+    // if (!EnableStrongPHIElim) {
+      // Edge splitting is smarter with machine loop info.
+      addPass(MachineLoopInfoID);
+      addPass(PHIEliminationID);
+    // }
+    // addPass(TwoAddressInstructionPassID);
 
+    // FIXME: Either remove this pass completely, or fix it so that it works on
+    // SSA form. We could modify LiveIntervals to be independent of this pass, But
+    // it would be even better to simply eliminate *all* IMPLICIT_DEFs before
+    // leaving SSA.
+    addPass(ProcessImplicitDefsID);
 
-  PM.add(createFixTerminatorsPass());
-  PM.add(createMergeFallThroughBlocksPass());
-  printAndVerify(PM, "After merge fall through pass");
+    //if (EnableStrongPHIElim)
+    //  addPass(StrongPHIEliminationID);
 
-  // Make sure we have a branch instruction for every success block.
-  PM.add(createFixTerminatorsPass());
+    // addPass(RegisterCoalescerID);
 
-  PM.add(createMachineCSEPass());
-  //PM.add(createBitLevelABCOptPass());
-  // Fix machine code so we can handle them easier.
-  PM.add(createFixMachineCodePass());
-  // Construct multiplexer tree for prebound function units.
-  PM.add(createPrebindMuxPass());
+    // Add the selected register allocation pass.
+    PM.add(RegAllocPass);
+    printAndVerify("After Register Allocation");
 
-  // With optimization, dead code should already be eliminated. However
-  // there is one known exception: lowered code for arguments that are only
-  // used by tail calls, where the tail calls reuse the incoming stack
-  // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
-  PM.add(createDeadMachineInstructionElimPass());
+    // FinalizeRegAlloc is convenient until MachineInstrBundles is more mature,
+    // but eventually, all users of it should probably be moved to addPostRA and
+    // it can go away.  Currently, it's the intended place for targets to run
+    // FinalizeMachineBundles, because passes other than MachineScheduling an
+    // RegAlloc itself may not be aware of bundles.
+    if (addFinalizeRegAlloc())
+      printAndVerify("After RegAlloc finalization");
 
-  // Schedule.
-  PM.add(createVPreRegAllocSchedPass());
+    // Perform stack slot coloring and post-ra machine LICM.
+    //
+    // FIXME: Re-enable coloring with register when it's capable of adding
+    // kill markers.
+    // addPass(StackSlotColoringID);
 
-  // Forward the register used by wire operations so we can compute live
-  // interval correctly.
-  PM.add(createForwardWireUsersPass());
+    // Run post-ra machine LICM to hoist reloads / remats.
+    //
+    // FIXME: can this move into MachineLateOptimization?
+    // addPass(PostRAMachineLICMID);
 
-  PM.add(createSimpleRegisterAllocator());
+    // printAndVerify("After StackSlotColoring and postra Machine LICM");
+  }
 
-  PM.add(createRTLCodegenPreparePass());
+  virtual void addMachinePasses() {
+    // Print the instruction selected machine code...
+    printAndVerify("After Instruction Selection");
 
+    // Expand pseudo-instructions emitted by ISel.
+    addPass(ExpandISelPseudosID);
+
+    // Add passes that optimize machine instructions in SSA form.
+    //if (getOptLevel() != CodeGenOpt::None) {
+      addMachineSSAOptimization();
+    //}
+    //else {
+    //  // If the target requests it, assign local variables to stack slots relative
+    //  // to one another and simplify frame index references where possible.
+    //  addPass(LocalStackSlotAllocationID);
+    //}
+
+    // Run pre-ra passes.
+    if (addPreRegAlloc())
+      printAndVerify("After PreRegAlloc passes");
+
+    // Run register allocation and passes that are tightly coupled with it,
+    // including phi elimination and scheduling.
+    //if (getOptimizeRegAlloc())
+      addOptimizedRegAlloc(createSimpleRegisterAllocator());
+    //else
+    //  addFastRegAlloc(createRegAllocPass(false));
+  }
+
+  virtual void addIRPasses() {
+    // add the pass which will convert the AllocaInst to GlobalVariable.
+    PM.add(createStackToGlobalPass());
+
+    // The construct block ram for local memory access.
+    // PM.add(createContoBromPass(*getIntrinsicInfo()));
+
+    // Dirty Hack: Map all frame stuffs to bram 1.
+    // PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
+
+    TargetPassConfig::addIRPasses();
+
+    // Turn exception handling constructs into something the code generators can
+    // handle.
+    PM.add(createLowerInvokePass(getTargetLowering()));
+
+    PM.add(createCFGSimplificationPass());
+
+    // Run the SCEVAA pass to compute more accurate alias information.
+    PM.add(createScalarEvolutionAliasAnalysisPass());
+  }
+};
+} // namespace
+
+TargetPassConfig *VTargetMachine::createPassConfig(PassManagerBase &PM) {
+  return new VTMPassConfig(this, PM);
+}
+
+bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
+                                         formatted_raw_ostream &Out,
+                                         CodeGenFileType FileType,
+                                         bool DisableVerify) {
+  //addPassesToGenerateCode
+  //  PassConfig->addIRPasses();
+  //  addPassesToHandleExceptions
+  //  addISelPrepare
+  //  addMachinePasses
+  LLVMTargetMachine::addPassesToEmitFile(PM, Out, FileType, DisableVerify);
+
+  PM.add(createGCInfoDeleter());
   return false;
 }
