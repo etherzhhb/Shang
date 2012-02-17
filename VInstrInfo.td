@@ -196,12 +196,6 @@ let isReMaterializable = 1,
                           "$dst = $cnd?$src0:$src1", [],
                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
-  // Distributed (in time domain) multiplexer.
-  def VOpDstMux : FUInst<(outs DR:$dst),
-                           (ins DR:$src, i8imm:$muxnum, i8imm:$size),
-                          "$dst($muxnum, $size) = $src",
-                          [], FUMUX, 1 /*writeUntilFinish*/>;
-
   def VOpCase  : CtrlInst<(outs DR:$dst), (ins variable_ops),
                           "$dst = case;", [],
                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
@@ -228,6 +222,14 @@ let isReMaterializable = 1,
   def VOpBitCat     : DPTvaInst<(outs DR:$dst), (ins DR:$lhs, DR:$rhs),
                                 "$dst = bitcat $lhs, $rhs", []>;
 }
+
+// Distributed (in time domain) multiplexer, have side effects,
+// and should not be CSEed.
+// Already set by default: let hasSideEffects = 1 in
+  def VOpDstMux : FUInst<(outs DR:$dst),
+                         (ins DR:$src, i8imm:$muxnum, i8imm:$size),
+                         "$dst($muxnum, $size) = $src",
+                         [], FUMUX, 1 /*writeUntilFinish*/>;
 
 //===----------------------------------------------------------------------===//
 // Computation operations.
