@@ -239,8 +239,8 @@ unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
       DEBUG(dbgs() << "\n(" << DefSlot->getSlotNum()
                    << "->" << UseSlot->getSlotNum()
                    << ") #" << SlotDistance << '\n');
-      // if SlotDistance == 0, abandon this result.
-      if (SlotDistance <= 0) continue;
+      // if SlotDistance < 0, abandon this result.
+      if (SlotDistance < 0) continue;
 
       if (SlotDistance < NearestSlotDistance) {
         NearestSlotDistance = SlotDistance;
