@@ -1045,11 +1045,17 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   double latency = getDetialLatency(SrcInstr);
   bool DstReadAtEmit = isReadAtEmit(DstOpC);
 
-  if (DstReadAtEmit && isWriteUntilFinish(SrcOpC))
-    // If the edge is reg->reg, the result is ready after the clock edge, add
-    // a delta to make sure DstInstr not schedule to the moment right at the
-    // SrcInstr finish
-    return ceil(latency) + DeltaLatency;
+  if (DstReadAtEmit && isWriteUntilFinish(SrcOpC)) {
+    if (SrcOpC == VTM::VOpDstMux)
+      // Special case: Set latency from VOpDstMux to Ctrl-Op to 1 explicitly.
+      // Because this latency is accumulated into the chain latency.
+      return 1;
+    else
+      // If the edge is reg->reg, the result is ready after the clock edge, add
+      // a delta to make sure DstInstr not schedule to the moment right at the
+      // SrcInstr finish
+      return ceil(latency) + DeltaLatency;
+  }
 
   // Chain the operations if dst not read value at the edge of the clock.
   return std::max(latency - DeltaLatency, 0.0);
@@ -1221,18 +1227,14 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   EdgeLatency += OperandDelay;
 
   unsigned SrcOpC = SrcMI->getOpcode();
-  // The VOpDstMux should be merged to its user.
-  if (SrcOpC != VTM::VOpDstMux) {
+  // The VOpDstMux should be merged to its user and its latency should be
+  // accumulated into the chain latency.
+  if (SrcOpC != VTM::VOpDstMux)
     if (VInstrInfo::isControl(SrcOpC)) {
       // Simply add the latency from ctrl op to the latency map.
       updateLatency(CurLatInfo, SrcMI, EdgeLatency);
       return true;
     }
-  } else {
-    // Accumulate the latency of DstMux.
-    EdgeLatency += 1.0;
-    assert(!SrcLatInfo->empty() && "Mux latency information lost!");
-  }
 
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
