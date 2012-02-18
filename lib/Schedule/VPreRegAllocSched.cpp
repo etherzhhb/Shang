@@ -176,9 +176,6 @@ struct VPreRegAllocSched : public MachineFunctionPass {
 
   bool mergeUnaryOp(MachineInstr *MI, unsigned OpIdx, VSchedGraph &CurState);
 
-  bool mergeBitCat(MachineInstr *MI, VSchedGraph &CurState);
-  bool canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU) const;
-
   /// @name FunctionPass interface
   //{
   static char ID;
@@ -692,73 +689,6 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
                            VInstrInfo::getStepsFromEntry(MI));
-}
-
-bool VPreRegAllocSched::canMergeBitCat(MachineInstr *SrcMI, VSUnit *SrcSU)const{
-  if (!SrcSU->isRepresentativeInst(SrcMI)) return false;
-
-  if (SrcMI->getOpcode() != VTM::VOpBitCat) return false;
-
-  // Be careful of such graph:
-  //     bitcat
-  //      |  \
-  //      |   Op
-  //      |  /
-  //     bitcat
-  //
-  // In this case, the two bitcat cannot merge.
-  if (!MRI->hasOneNonDBGUse(SrcMI->getOperand(0).getReg())) return false;
-
-  return true;
-}
-
-bool VPreRegAllocSched::mergeBitCat(MachineInstr *MI, VSchedGraph &CurState) {
-  MachineInstr *LHSMI = 0, *RHSMI = 0;
-  VSUnit *LHSSU = getDefSU(MI->getOperand(1), CurState, LHSMI),
-         *RHSSU = getDefSU(MI->getOperand(2), CurState, RHSMI);
-
-  // Sources are merged?
-  if (LHSSU == RHSSU) {
-    // Concatting two symbol?
-    if (LHSSU == 0) {
-      LHSSU = RHSSU = CurState.getEntryRoot();
-      LHSMI = RHSMI = 0;
-    }
-
-    int Latency = std::max(LHSSU->getLatencyTo(LHSMI, MI),
-                           RHSSU->getLatencyTo(RHSMI, MI));
-    CurState.mapMI2SU(MI, LHSSU, Latency);
-    return true;
-  }
-
-  // Only have 1 valid source?
-  if (LHSSU == 0) {
-    std::swap(LHSSU, RHSSU);
-    std::swap(LHSMI, RHSMI);
-  }
-
-  if (RHSSU == 0) {
-    CurState.mapMI2SU(MI, LHSSU, LHSSU->getLatencyTo(LHSMI, MI));
-    return true;
-  }
-
-  bool LHSMerged = false;
-  if (canMergeBitCat(LHSMI, LHSSU)) {
-    CurState.mapMI2SU(MI, LHSSU, LHSSU->getLatencyTo(LHSMI, MI));
-    LHSMerged = true;
-  }
-
-  if (canMergeBitCat(RHSMI, RHSSU)) {
-    if (!LHSMerged) {
-      CurState.mapMI2SU(MI, RHSSU, RHSSU->getLatencyTo(RHSMI, MI));
-      return true;
-    }
-
-    CurState.mergeSU(RHSSU, LHSSU, 0);
-    return true;
-  }
-
-  return LHSMerged;
 }
 
 void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &CurState) {
