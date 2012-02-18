@@ -67,6 +67,10 @@ namespace llvm {
     int getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot);
 
     bool runOnMachineFunction(MachineFunction &MF);
+    void releaseMemory() {
+      PathVector.clear();
+      StartSlotToMBBNumMap.clear();
+    }
 
     FindShortestPath() : MachineFunctionPass(ID) {
       initializeFindShortestPathPass(*PassRegistry::getPassRegistry());

@@ -46,7 +46,7 @@ unsigned &FindShortestPath::getDistance(unsigned DefIdx, unsigned UseIdx) {
 
 // Get distance between Two Slots.
 int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
-  signed SlotDistance = -1;
+  int SlotDistance = -1;
 
   unsigned DefSlotStartIdx = DefSlot->getParentIdx();
   unsigned DefSlotIdx = DefSlot->getSlotNum();
@@ -56,8 +56,7 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
   unsigned UseSlotIdx = UseSlot->getSlotNum();
   unsigned UseMBBNum = getMBBNum(UseSlotStartIdx);
 
-  unsigned MBBDistance = getDistance(DefMBBNum, UseMBBNum);
-
+  int MBBDistance = getDistance(DefMBBNum, UseMBBNum);
   // When the slots are in different MBB. return the SlotDistance.
   // SlotDistance = MBBDistance - (SrcSlotIdx - SrcSlotStartIdx)
   //                            + (DstSlotIdx - DstSlotStartIdx)
@@ -68,19 +67,19 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
     // Return -1 which is the largest number in unsigned type.
     if(MBBDistance == Infinite) return -1;
 
-    MBBDistance -= (DefSlotIdx - DefSlotStartIdx);
-    assert(MBBDistance > 0 && "MBBDistance <= 0 !!!");
-
-    SlotDistance = MBBDistance + (UseSlotIdx - UseSlotStartIdx);
-    assert(SlotDistance > 0 && "SlotDistance <= 0 !!!");
-
+    SlotDistance = MBBDistance - (DefSlotIdx - DefSlotStartIdx)
+                               + (UseSlotIdx - UseSlotStartIdx);
+    // SlotDistance < 0 means UseSlot is unreachable from DefSlot.
+    // assert((SlotDistance >= 0 || DefMBBNum == UseMBBNum)
+    //       && "SlotDistance < 0 !!!");
     return SlotDistance;
   }
 
   // When the slots are in the same MBB and the SrcSlotIdx <= DstSlotIdx, return
   // DstSlotIdx - SrcSlotIdx.
   SlotDistance = UseSlotIdx - DefSlotIdx;
-  assert(SlotDistance >= 0 && "SlotDistance < 0!");
+  // SlotDistance < 0 means UseSlot is unreachable from DefSlot.
+  // assert(SlotDistance >= 0 && "SlotDistance < 0!");
 
   return SlotDistance;
 }
@@ -112,21 +111,6 @@ void FindShortestPath::InitPath() {
   // assign infinite number to the PathVector.
   unsigned PathVectorSize = MBBNum * MBBNum;
   PathVector.assign(PathVectorSize, Infinite);
-
-  // Initial the PathVector with the Path.
-  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
-    MachineBasicBlock *DefMBB = I;
-    unsigned TolalSlot = FInfo->getTotalSlotFor(DefMBB);
-
-    for (MachineBasicBlock::succ_iterator I = DefMBB->succ_begin(),
-         E = DefMBB->succ_end(); I != E; ++I) {
-      MachineBasicBlock *UseMBB = *I;
-      unsigned &Distance = getDistance(DefMBB, UseMBB);
-      // The distance of self-loop edge is the initial interval of the BB.
-      Distance = DefMBB == UseMBB ? FInfo->getIISlotFor(UseMBB)
-                                  : TolalSlot;
-    }
-  }
 }
 
 // Use the Floyd Algorithm to find the shortest Path between two Machine Basic
@@ -135,19 +119,16 @@ void FindShortestPath::Floyd() {
   unsigned MBBNum = MF->getNumBlockIDs();
 
   // We use the Floyd algorithm to get the shortest path of two different MBBs.
-  for (unsigned Mid = 0; Mid < MBBNum; ++Mid) {
+  for (unsigned Thru = 0; Thru < MBBNum; ++Thru) {
     for (unsigned Def = 0; Def < MBBNum; ++Def) {
       for (unsigned Use = 0; Use < MBBNum; ++Use) {
-        unsigned Src2DstIndex = getKey(Def, Use);
-        unsigned Src2MidIndex = getKey(Def, Mid);
-        unsigned Mid2DstIndex = getKey(Mid, Use);
-        if (PathVector[Src2MidIndex] + PathVector[Mid2DstIndex]
-            < PathVector[Src2DstIndex])
-          PathVector[Src2DstIndex]
-            = PathVector[Src2MidIndex] + PathVector[Mid2DstIndex];
+        unsigned &Src2Dst = getDistance(Def, Use);
+        unsigned Src2Thru2Dst = getDistance(Def, Thru) +  getDistance(Thru, Use);
+        Src2Dst = std::min(Src2Dst, Src2Thru2Dst);
       }
     }
   }
+
   // if the DefMBB == UseMBB, get the IISlot and assign it to the PathVector.
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock *DefMBB = I;
