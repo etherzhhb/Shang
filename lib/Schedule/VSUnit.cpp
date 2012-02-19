@@ -54,6 +54,14 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
   return true;
 }
 
+void VSchedGraph::verify() {
+  if (getEntryRoot()->getNumDeps())
+    llvm_unreachable("Entry root should not have any dependence!");
+  if (getExitRoot()->getNumUses())
+    llvm_unreachable("Exit root should not have any use!");
+  // TODO: Other verification.
+}
+
 VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
   VSUnit *SU = new VSUnit(SUCount, fuid);
   ++SUCount;

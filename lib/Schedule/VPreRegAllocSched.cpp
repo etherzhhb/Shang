@@ -955,6 +955,9 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
 
   // Build the memory edges.
   buildMemDepEdges(State);
+
+  // Verify the schedule graph.
+  State.verify();
 }
 
 void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
@@ -967,6 +970,9 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
   // Build control dependence for exitroot, hanging node is allowed because we
   // do not handle them explicitly.
   buildExitDeps<true>(State);
+
+  // Verify the schedule graph.
+  State.verify();
 }
 
 void VPreRegAllocSched::cleanUpSchedule() {

@@ -512,6 +512,9 @@ public:
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
   }
 
+  // Verify the schedule graph, should be call after the graph is built.
+  void verify();
+
   // Forward the method in DetailLatencyInfo
   void addToLatInfo(const MachineInstr *MI) {
     LatInfo.addInstr(MI);
