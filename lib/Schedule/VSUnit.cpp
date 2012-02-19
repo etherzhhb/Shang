@@ -26,7 +26,7 @@
 #include "vtm/VFInfo.h"
 
 #include "llvm/Support/raw_ostream.h"
-
+#include "llvm/Support/ErrorHandling.h"
 #define DEBUG_TYPE "vtm-sunit"
 #include "llvm/Support/Debug.h"
 
