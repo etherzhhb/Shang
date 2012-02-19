@@ -653,19 +653,27 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
     const DetialLatencyInfo::DepLatInfoTy &DepLatInfo =
       State.buildPHIBELatInfo(&PN);
 
-    VSUnit *PhiSU = State.lookupSUnit(&PN);
-    assert(PhiSU && "Can not find SUnit for PHI!");
+    VSUnit *PHISU = State.lookupSUnit(&PN);
+    assert(PHISU && "Can not find SUnit for PHI!");
 
+    // Add dependence from PHI incoming value:
+    // PHI_incoming -(RAW dep)-> PHI_at_next_iteration.
+    addSchedDepForMI<false>(&PN, PHISU, State, DepLatInfo,
+                            VDMemDep::CreateMemDep<1>);
     // Add a anti-dependence edge from users of PHI to PHI because we must
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
-    addSchedDepForMI<false>(&PN, PhiSU, State, DepLatInfo,
-                            VDMemDep::CreateMemDep<1>);
+    typedef VSUnit::use_iterator use_it;
+    for (use_it UI = PHISU->use_begin(), UE = PHISU->use_end(); UI != UE; ++UI){
+      VSUnit *PHIUser = *UI;
+      if (PHIUser != State.getExitRoot())
+        PHISU->addDep(getMemDepEdge(PHIUser, 0, 1));
+    }
 
     // Dirty Hack: We can emit the PHI while looping back to the loop entry.
     unsigned Latency = 0;
     //  LoopOp->getLatencyTo(LoopOp->getRepresentativeInst(), &PN);
-    PhiSU->addDep(getMemDepEdge(LoopOp, Latency, 1));
+    PHISU->addDep(getMemDepEdge(LoopOp, Latency, 1));
   }
 }
 
