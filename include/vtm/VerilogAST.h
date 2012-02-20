@@ -689,6 +689,10 @@ public:
   typedef SmallVector<VASTWire*, 128> WireVector;
   typedef SmallVector<VASTRegister*, 128> RegisterVector;
   typedef RegisterVector::iterator reg_iterator;
+
+  typedef std::vector<VASTSlot*> SlotVecTy;
+  SlotVecTy Slots;
+  typedef SlotVecTy::iterator slot_iterator;
 private:
   // Dirty Hack:
   // Buffers
@@ -712,8 +716,6 @@ private:
   typedef std::map<unsigned, VASTWire*> VarLatBBMap;
   VarLatBBMap BBLatInfo;
 
-  typedef std::vector<VASTSlot*> SlotVecTy;
-  SlotVecTy Slots;
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
@@ -940,6 +942,9 @@ public:
 
   reg_iterator reg_begin() { return Registers.begin(); }
   reg_iterator reg_end() { return Registers.end(); }
+
+  slot_iterator slot_begin() { return Slots.begin(); }
+  slot_iterator slot_end() { return Slots.end(); }
 
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const char *Attr = "");
