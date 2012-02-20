@@ -240,7 +240,14 @@ unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
                    << "->" << UseSlot->getSlotNum()
                    << ") #" << SlotDistance << '\n');
       // if SlotDistance < 0, abandon this result.
-      if (SlotDistance < 0) continue;
+      // The slot distance is from the slot the source register is assigned to
+      // the slot that the destination register should be assigned. Note that
+      // the signal from the input pin of the source register takes 1 slot
+      // to arrive the output pin of the source register, so if the defslot is
+      // equal to the useslot, the destiantion will not read the assigned
+      // value at the def/useslot, and useslot not depends on defslot if they
+      // are equal.
+      if (SlotDistance <= 0) continue;
 
       if (SlotDistance < NearestSlotDistance) {
         NearestSlotDistance = SlotDistance;
