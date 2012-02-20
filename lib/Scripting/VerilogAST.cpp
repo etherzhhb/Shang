@@ -359,8 +359,11 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     }
   } else {
     // Enable the default successor slots.
-    VASTRegister *NextSlotReg = Mod.getSlot(getSlotNum() + 1)->getRegister();
+    VASTSlot *NextSlot = Mod.getSlot(getSlotNum() + 1);
+    VASTRegister *NextSlotReg = NextSlot->getRegister();
     Mod.addAssignment(NextSlotReg, VASTUse(true, 1), this, EmptySlotEnCnd);
+    // And connect the fall through edge now.
+    addNextSlot(NextSlot);
   }
 
   assert(!(hasSelfLoop && !PredAliasSlots.isInvalid())
