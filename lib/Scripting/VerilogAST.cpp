@@ -227,8 +227,11 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
-void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTUse Cnd) {
-  bool Inserted = NextSlots.insert(std::make_pair(NextSlotNum, Cnd)).second;
+void VASTSlot::addNextSlot(VASTSlot *NextSlot, VASTUse Cnd) {
+  SuccSlotVec.push_back(NextSlot);
+  bool Inserted =
+    NextSlots.insert(std::make_pair(NextSlot->getSlotNum(), Cnd)).second;
+  Inserted &= (NextSlot->PredSlots).insert(getSlotNum()).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }

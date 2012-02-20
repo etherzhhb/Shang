@@ -516,6 +516,11 @@ public:
   typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
+  typedef std::set<unsigned> PredVecTy;
+  typedef PredVecTy::iterator pred_iterator;
+
+  typedef SmallVector<VASTSlot*, 4> SuccSlotVecTy;
+  typedef SuccSlotVecTy::iterator succ_slot_it;
 private:
   // The relative signal of the slot: Slot register, Slot active and Slot ready.
   VASTRegister *SlotReg;
@@ -527,6 +532,10 @@ private:
   FUCtrlVecTy Enables;
   // The function units that need to disable when condition is not satisfy.
   FUCtrlVecTy Disables;
+
+  SuccSlotVecTy SuccSlotVec;
+
+  PredVecTy PredSlots;
 
   SuccVecTy NextSlots;
   // Slot ranges of alias slot.
@@ -564,7 +573,7 @@ public:
   }
 
   // TODO: Rename to addSuccSlot.
-  void addNextSlot(unsigned NextSlotNum, VASTUse Cnd = VASTUse(true, 1));
+  void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd = VASTUse(true, 1));
   bool hasNextSlot(unsigned NextSlotNum) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -573,6 +582,17 @@ public:
   // Successor slots of this slot.
   const_succ_iterator succ_begin() const { return NextSlots.begin(); }
   const_succ_iterator succ_end() const { return NextSlots.end(); }
+
+  succ_slot_it succ_slot_begin() { return SuccSlotVec.begin(); }
+  succ_slot_it succ_slot_end() { return SuccSlotVec.end(); }
+
+  // Return true if this slot jump from some other slots conditionally instead
+  // of inherits from SlotNum - 1 slot.
+  bool hasExplicitPredSlots() const { return !PredSlots.empty(); }
+
+  // Predecessor slots of this slot.
+  pred_iterator pred_begin() const { return PredSlots.begin(); }
+  pred_iterator pred_end() const { return PredSlots.end(); }
 
   // Signals need to be enabled at this slot.
   void addEnable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
@@ -917,6 +937,7 @@ public:
   VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
                             unsigned InitVal = 0,
                             const char *Attr = "");
+
   reg_iterator reg_begin() { return Registers.begin(); }
   reg_iterator reg_end() { return Registers.end(); }
 
