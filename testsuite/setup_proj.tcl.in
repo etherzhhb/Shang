@@ -123,7 +123,7 @@ load_report
 
 ################################################################################
 # Summary
-set DataJSON [open "@ETS_BINARY_ROOT@/benchmark.summary.json.tmp" a+]
+set DataJSON [open "@VTS_BINARY_ROOT@/benchmark.summary.json.tmp" a+]
 
 puts $DataJSON ",\n\{\"name\":\"@MAIN_RTL_ENTITY@\","
 puts $DataJSON "\"restricted_fmax\":\"[get_report_panel_data -name {*Fmax*} -col 1 -row 1]\","
