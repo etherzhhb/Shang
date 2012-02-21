@@ -229,9 +229,9 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
 
 void VASTSlot::addNextSlot(VASTSlot *NextSlot, VASTUse Cnd) {
   SuccSlotVec.push_back(NextSlot);
+  (NextSlot->PredSlots).push_back(this);
   bool Inserted =
     NextSlots.insert(std::make_pair(NextSlot->getSlotNum(), Cnd)).second;
-  Inserted &= (NextSlot->PredSlots).insert(getSlotNum()).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }

@@ -516,8 +516,8 @@ public:
   typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
-  typedef std::set<unsigned> PredVecTy;
-  typedef PredVecTy::iterator pred_iterator;
+  typedef SmallVector<VASTSlot*, 4> PredVecTy;
+  typedef PredVecTy::iterator pred_it;
 
   typedef SmallVector<VASTSlot*, 4> SuccSlotVecTy;
   typedef SuccSlotVecTy::iterator succ_slot_it;
@@ -586,13 +586,9 @@ public:
   succ_slot_it succ_slot_begin() { return SuccSlotVec.begin(); }
   succ_slot_it succ_slot_end() { return SuccSlotVec.end(); }
 
-  // Return true if this slot jump from some other slots conditionally instead
-  // of inherits from SlotNum - 1 slot.
-  bool hasExplicitPredSlots() const { return !PredSlots.empty(); }
-
   // Predecessor slots of this slot.
-  pred_iterator pred_begin() const { return PredSlots.begin(); }
-  pred_iterator pred_end() const { return PredSlots.end(); }
+  pred_it pred_begin() { return PredSlots.begin(); }
+  pred_it pred_end() { return PredSlots.end(); }
 
   // Signals need to be enabled at this slot.
   void addEnable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
