@@ -1,0 +1,9 @@
+g56k -D__SIMULATION__ -D__MNECOUNT__ -alo -mx-memory \
+     $1.c -o $1.sim.cld
+
+date > $1.sim
+cldinfo $1.sim.cld >> $1.sim
+run56sim -t -x $1.sim.cld >> $1.sim
+date >> $1.sim
+
+

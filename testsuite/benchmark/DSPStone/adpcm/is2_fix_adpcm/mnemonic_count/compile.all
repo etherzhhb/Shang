@@ -1,0 +1,4 @@
+compile opt_adpcm-v1
+compile opt_adpcm-v2
+compile opt_adpcm-v3
+compile opt_adpcm-v4

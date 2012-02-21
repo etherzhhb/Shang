@@ -1,0 +1,145 @@
+/* ObjectCenter Project File */
+/* Options for project */
+unsetopt ansi
+setopt auto_compile
+unsetopt auto_reload
+setopt auto_replace
+unsetopt batch_load
+unsetopt batch_run
+setopt cc_prog              cc
+setopt ccargs               -g
+setopt primary_language     C++
+setopt cxx_prog             /tools/sw1/c++/CenterLine/bin/CC
+setopt cxxargs              +d -g
+setopt demand_driven_level  3
+setopt cxx_suffixes         C c CC cc CXX cxx cpp H h HH hh HXX hxx hpp
+setopt c_suffixes           c h
+setopt show_inheritance
+setopt print_inherited
+unsetopt print_static
+setopt print_runtime_type
+setopt tmpl_instantiate_obj
+unsetopt tmpl_instantiate_flg
+unsetopt create_file
+unsetopt debug_child
+unsetopt echo
+unsetopt editor
+unsetopt eight_bit
+setopt email_address        objectcenter-support@centerline.com
+unsetopt ignore_sharp_lines
+unsetopt instrument_all
+unsetopt instrument_byte
+setopt instrument_space     2
+setopt histchar             35
+setopt line_edit
+unsetopt line_meta
+setopt lint_load            2
+setopt lint_run             2
+setopt list_action
+unsetopt load_flags
+unsetopt long_not_int
+setopt old_make
+unsetopt make_args
+setopt check_hfiles
+unsetopt make_offset
+setopt make_prog            make
+setopt make_symbol          #
+setopt mem_config           16384
+unsetopt mem_trace
+unsetopt page_cmds
+setopt page_list            10
+unsetopt page_load
+unsetopt path
+setopt proto_path           . /tools/sw1/c++/CenterLine/oc_2.0.0/sparc-sunos4/proto /tools/sw1/c++/CenterLine/general/proto
+unsetopt preprocessor
+setopt program_name         a.out
+unsetopt print_custom
+setopt print_pointer
+setopt print_string         20
+unsetopt save_memory
+setopt sbrk_size            1048576
+unsetopt swap_uses_path
+setopt sys_load_cflags      -L/lib -L/usr/lib -L/usr/local/lib -I/tools/sw1/c++/CenterLine/include/CodeCenter -I/usr/include -Dunix -Dsun -Dsparc
+setopt sys_load_cxxflags    -L/tools/sw1/c++/CenterLine/sparc-sunos4/lib -L/lib -L/usr/lib -L/usr/local/lib -I/tools/sw1/c++/CenterLine/clc++/sparc-sunos4/incl -I/usr/include -Dsun -DBSD -Dsparc -Dunix
+unsetopt tab_stop
+unsetopt terse_suppress
+unsetopt terse_where
+setopt unset_value          191
+unsetopt win_no_raise
+/* Suppressions for project */
+suppress 5 
+/* DEFAULT SUPPRESSION: Over/underflow unsigned <minus> */
+suppress 7 
+/* DEFAULT SUPPRESSION: Over/underflow unsigned <plus> */
+suppress 52 
+/* DEFAULT SUPPRESSION: Information lost <float> */
+suppress 97 in xfree 
+/* DEFAULT SUPPRESSION: Freeing memory */
+suppress 157 on __builtin_va_alist 
+/* DEFAULT SUPPRESSION: Formal variable */
+suppress 465 /usr/include/ 
+/* DEFAULT SUPPRESSION: Nested comment */
+suppress 481 
+/* DEFAULT SUPPRESSION: Extra text in directive */
+suppress 500 on alloca 
+/* DEFAULT SUPPRESSION: Too few macro arguments */
+suppress 1075 
+/* DEFAULT SUPPRESSION: `static' formerly `extern' */
+suppress 1076 
+/* DEFAULT SUPPRESSION: CenterLine function redefined */
+suppress 1102 
+/* DEFAULT SUPPRESSION: Non-ANSI field syntax */
+suppress 1103 
+/* DEFAULT SUPPRESSION: Result of ?: used as lvalue */
+suppress 1104 
+/* DEFAULT SUPPRESSION: Result of cast used as lvalue */
+
+/* Contents of project */
+load  /lib/libc.sa.1.8
+load  /lib/libc.so.1.8
+load  /tools/sw1/c++/CenterLine/sparc-sunos4/lib/libC.sa.2.0
+load  /tools/sw1/c++/CenterLine/sparc-sunos4/lib/libC.so.2.0
+load -CXX  g721.c g721.h portab.h itu_encoder.c mocad.H mocad.C
+link
+
+/* Instrumented files */
+
+
+/* Signals caught and ignored */
+catch HUP
+catch INT
+catch QUIT
+catch ILL
+catch TRAP
+catch IOT
+catch EMT
+catch FPE
+catch KILL
+catch BUS
+catch SEGV
+catch SYS
+catch PIPE
+catch TERM
+catch STOP
+catch TSTP
+catch TTIN
+catch TTOU
+catch XCPU
+catch XFSZ
+catch LOST
+catch USR1
+catch USR2
+ignore ALRM
+ignore URG
+ignore CONT
+ignore CHLD
+ignore IO
+ignore VTALRM
+ignore PROF
+ignore WINCH
+
+/* Status of project */
+stop at "mocad.C":8
+stop at "mocad.C":15
+stop at "mocad.C":22
+stop at "mocad.C":29

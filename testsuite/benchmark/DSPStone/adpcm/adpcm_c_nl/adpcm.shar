@@ -1,0 +1,1210 @@
+#! /bin/sh
+# This is a shell archive.  Remove anything before this line, then unpack
+# it by saving it into a file and typing "sh file".  To overwrite existing
+# files, type "sh file -c".  You can also feed this as standard input via
+# unshar, or by typing "sh <file", e.g..  If this archive is complete, you
+# will see the following message at the end:
+#		"End of shell archive."
+# Contents:  README adpcm.2 Makefile adpcm.h libst.h adpcm.c timing.c
+#   rawcaudio.c rawdaudio.c suncaudio.c sgicaudio.c sgidaudio.c
+#   hello.adpcm.uu
+# Wrapped by jack@schelvis.cwi.nl on Thu Feb 25 11:41:49 1993
+PATH=/bin:/usr/bin:/usr/ucb ; export PATH
+if test -f 'README' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'README'\"
+else
+echo shar: Extracting \"'README'\" \(3485 characters\)
+sed "s/^X//" >'README' <<'END_OF_FILE'
+XThis directory contains version 1.2 of a simple 16 bit PCM <-> 4 bit
+XADPCM coder and decoder. See the source and the manpage for comments
+Xon the algorithm.
+X
+XIf you have previously used version 1.0: there was a bug in it. This
+Xversion fixes the bug. (1.1 fixed that, but had another slight bug
+Xthat caused loss of quality on SGI machines).
+X
+XThe routines have been tested on an SGI Indigo running Irix 4.0.2 and
+X4.0.5F and on a Sun Sparc SLC running SunOS 4.1.1. There are no real
+Xmachine dependencies, though, so there should be no problems on other
+Xarchitectures. 
+X
+XThere is a timing program to test how fast the stuff runs on your
+Xmachine. Here are some sample numbers:
+X
+XR4000 Indigo:	compress: 1.1Msample/sec, decompress: 1.7Msample/sec
+XR3000 Indigo:	compress: 410Ksample/sec, decompress: 850Ksample/sec
+XSun SLC:	compress: 250Ksample/sec, decompress: 420Ksample/sec
+XMac-IIsi	compress   21Ksample/sec, decompress:  35Ksample/sec
+X
+XI'd be interested in numbers for PC class machines.
+X
+XAlso included are some simple test programs that convert audio files
+Xto/from 4bit ADPCM samples. Rawcaudio/rawdaudio convert to/from raw
+X16bit PCM files; sgicaudio/sgidaudio convert to/from SGI AIFF files
+Xand suncaudio/sundaudio convert to/from SUN/NeXT format audio files.
+XThe Sun program was donated by Hughes Doug, hughes@sde.mdso.vf.ge.com
+X(it is actually only one program and looks at the program name to
+Xdecide whether to compress or decompress). Oh yeah, the sun and sgi
+Xcompressors will probably only compile on those machines. Also, for
+Xthe sgi compressor you need the Digital Media Developers Option, which
+X(I think) is available with Irix 4.0.5.
+X
+XNote: I have had to make a few changes to the sun audio converter, but
+Xunfortunately I have no way of testing the result (since it needs
+XSolaris 1.somethingorother which I don't have). If the program does
+Xnot work and someone fixes it I would like to get a copy.
+X
+XFinally, there is a uuencoded adpcm sound file of me saying "hello
+Xworld" (with a cold) that you can use to test that everything works
+Xcorrectly.
+X
+XIf you use this package I would like to hear from you.
+XI am especially interested in people who can test interoperability
+Xwith proven Intel/DVI ADPCM coders. I have tried to get the algorithm
+Xcorrect, but you never know....
+X
+XAnswers to often-asked questions:
+X- No, this is *not* a G.721 coder/decoder. The algorithm used by G.721
+X  is very complicated, requiring oodles of floating-point ops per
+X  sample (resulting in very poor performance). I have not done any
+X  tests myself but various people have assured my that 721 quality is
+X  actually lower than DVI quality.
+X
+X- No, it is not a CDROM-XA coder either, as far as I know. I haven't
+X  come across a good description of XA yet.
+X
+X- No, testc and testd are not full-blown audio-file converters, only
+X  simple test programs. If you write a file-converter (like caudio.c,
+X  which compresses Sun audio files) and you're willing to donate it
+X  I'd be very happy to include it in the distribution.
+X
+X- Also, I know next-to-nothing about who IMA are. Their address, though,
+X  from their May 1992 proceedings (where I got the algorithm from):
+X	IMA Compatability Project Headquarters
+X	9 Randall Court
+X	Annapolis MD 21401
+X	USA
+X
+X	Phone: (410) 626-1380
+X	Fax:   (410) 263-0590
+X
+XThey might be able to send back issues of their proceedings, I don't
+Xknow.
+X
+X	Jack Jansen
+X	Centre for Mathematics and Computer Science
+X	Kruislaan 413
+X	Amsterdam
+X	the Netherlands
+X
+X	+31 20 592 4098
+X	Jack.Jansen@cwi.nl
+END_OF_FILE
+if test 3485 -ne `wc -c <'README'`; then
+    echo shar: \"'README'\" unpacked with wrong size!
+fi
+# end of 'README'
+fi
+if test -f 'adpcm.2' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'adpcm.2'\"
+else
+echo shar: Extracting \"'adpcm.2'\" \(1866 characters\)
+sed "s/^X//" >'adpcm.2' <<'END_OF_FILE'
+X.TH ADPCM 2 "7 June 1992"
+X.SH NAME
+Xadpcm - Adaptive delta compression for audio samples
+X.B
+X#include "adpcm.h"
+X.br
+Xadpcm_coder(short inbuf[], char outbuf[], int nsample,
+X.br
+X	struct adpcm_state *state);
+X.br
+Xadpcm_decoder(char inbuf[], short outbuf[], int nsample,
+X.br
+X	struct adpcm_state *state);
+X.SH DESCRIPTION
+XThese routine convert 16 bit linear PCM samples to 4 bit ADPCM code
+Xand vice versa. The ADPCM code used is the Intel/DVI ADPCM code which
+Xis being recommended by the IMA Digital Audio Technical Working Group.
+X.PP
+X\fIAdpcm_coder\fP converts \fInsample\fP 16 bit samples from
+X\fIinbuf\fP and stores the 4 bit codes, packed two per byte, in
+X\fIoutbuf\fP. \fIState\fP points to a structure containing the coder
+Xstate information, a short and a char. It should be initialized to
+Xzero before the first call. The coder updates the state record, and it
+Xshould be passed to each subsequent call.
+X.PP
+X\fIAdpcm_decoder\fP converts \fInsample\fP 4 bit codes from
+X\fIinbuf\fP to 16 bit samples and stores these in \fPoutbuf\fP.
+X\fIState\fP is a state record similar to that used by the coder.
+X.PP
+XIf you compress audio to transmit it across a lossy network it is a
+Xgood idea to send the compressor state along with each packet. (This
+Xmust be the state as it was \fIbefore\fP the call to
+X\fIadpcm_coder\fP, not the state after the return). This state record
+Xcan then be fed to the decompressor. This way the decompressor can
+Xtolerate packet loss.
+X.SH NOTES
+XThe routines have not been tested against an official Intel/DVI coder
+Xyet, so incompatabilities might exist.
+X.br
+XThe state record is not byte-order-independent. Remember this when
+Xtransmitting it across the network.
+X.SH "SEE ALSO"
+XProposal for Standardized Audio Interchange Formats, IMA compatability
+Xproject proceedings, Vol 2, Issue 2, May 1992.
+X.SH AUTHOR
+XJack Jansen, CWI, Amsterdam
+X.br
+XJack.Jansen@cwi.nl
+END_OF_FILE
+if test 1866 -ne `wc -c <'adpcm.2'`; then
+    echo shar: \"'adpcm.2'\" unpacked with wrong size!
+fi
+# end of 'adpcm.2'
+fi
+if test -f 'Makefile' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'Makefile'\"
+else
+echo shar: Extracting \"'Makefile'\" \(958 characters\)
+sed "s/^X//" >'Makefile' <<'END_OF_FILE'
+X#
+X# Makefile for adpcm and test programs
+X# -------------------
+XCFLAGS=-O
+X# May need this on a sun:
+X# CFLAGS=-O -I/usr/demo/SOUND
+X
+XALLSRC=README adpcm.2 Makefile adpcm.h libst.h adpcm.c timing.c rawcaudio.c \
+X	rawdaudio.c suncaudio.c sgicaudio.c sgidaudio.c hello.adpcm.uu
+X
+Xall: adpcm.o rawcaudio rawdaudio timing
+X
+Xsgi: all sgicaudio sgidaudio
+X
+Xsun: all suncaudio sundaudio
+X
+Xadpcm.o: adpcm.h
+X
+Xsuncaudio: suncaudio.o adpcm.o
+X	$(CC) adpcm.o suncaudio.o -o suncaudio -L/usr/demo/SOUND -laudio
+X
+Xsundaudio: suncaudio
+X	cp suncaudio sundaudio
+X
+Xsgicaudio: sgicaudio.o adpcm.o
+X	$(CC) sgicaudio.o adpcm.o -o sgicaudio -laudiofile -lm
+X
+Xsgidaudio: sgidaudio.o adpcm.o
+X	$(CC) sgidaudio.o adpcm.o -o sgidaudio -laudiofile -lm
+X
+Xrawcaudio: rawcaudio.o adpcm.o
+X	cc rawcaudio.o adpcm.o -o rawcaudio
+X
+Xrawdaudio: rawdaudio.o adpcm.o
+X	cc rawdaudio.o adpcm.o -o rawdaudio
+X
+Xtiming: timing.o adpcm.o
+X	cc timing.o adpcm.o -o timing
+X
+Xadpcm.shar: $(ALLSRC)
+X	shar $(ALLSRC) > adpcm.shar
+END_OF_FILE
+if test 958 -ne `wc -c <'Makefile'`; then
+    echo shar: \"'Makefile'\" unpacked with wrong size!
+fi
+# end of 'Makefile'
+fi
+if test -f 'adpcm.h' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'adpcm.h'\"
+else
+echo shar: Extracting \"'adpcm.h'\" \(411 characters\)
+sed "s/^X//" >'adpcm.h' <<'END_OF_FILE'
+X/*
+X** adpcm.h - include file for adpcm coder.
+X**
+X** Version 1.0, 7-Jul-92.
+X*/
+X
+Xstruct adpcm_state {
+X    short	valprev;	/* Previous output value */
+X    char	index;		/* Index into stepsize table */
+X};
+X
+X#ifdef __STDC__
+X#define ARGS(x) x
+X#else
+X#define ARGS(x) ()
+X#endif
+X
+Xvoid adpcm_coder ARGS((short [], char [], int, struct adpcm_state *));
+Xvoid adpcm_decoder ARGS((char [], short [], int, struct adpcm_state *));
+END_OF_FILE
+if test 411 -ne `wc -c <'adpcm.h'`; then
+    echo shar: \"'adpcm.h'\" unpacked with wrong size!
+fi
+# end of 'adpcm.h'
+fi
+if test -f 'libst.h' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'libst.h'\"
+else
+echo shar: Extracting \"'libst.h'\" \(3224 characters\)
+sed "s/^X//" >'libst.h' <<'END_OF_FILE'
+X/* libst.h - include file for portable sound tools library
+X**
+X** Copyright (C) 1989 by Jef Poskanzer.
+X**
+X** Permission to use, copy, modify, and distribute this software and its
+X** documentation for any purpose and without fee is hereby granted, provided
+X** that the above copyright notice appear in all copies and that both that
+X** copyright notice and this permission notice appear in supporting
+X** documentation.  This software is provided "as is" without express or
+X** implied warranty.
+X*/
+X
+X#define SAMPLES_PER_SECOND 8192
+X
+X#define MINLIN -32768
+X#define MAXLIN 32767
+X#define LINCLIP(x) do { if ( x < MINLIN ) x = MINLIN ; else if ( x > MAXLIN ) x = MAXLIN; } while ( 0 )
+X
+Xunsigned char st_linear_to_ulaw( /* int sample */ );
+Xint st_ulaw_to_linear_slow( /* unsigned char ulawbyte */ );
+X
+X/*
+X** This macro converts from ulaw to 16 bit linear, faster.
+X**
+X** Jef Poskanzer
+X** 23 October 1989
+X**
+X** Input: 8 bit ulaw sample
+X** Output: signed 16 bit linear sample
+X*/
+X#define st_ulaw_to_linear(ulawbyte) ulaw_table[ulawbyte]
+X
+Xstatic int ulaw_table[256] = {
+X    -32124, -31100, -30076, -29052, -28028, -27004, -25980, -24956,
+X    -23932, -22908, -21884, -20860, -19836, -18812, -17788, -16764,
+X    -15996, -15484, -14972, -14460, -13948, -13436, -12924, -12412,
+X    -11900, -11388, -10876, -10364,  -9852,  -9340,  -8828,  -8316,
+X     -7932,  -7676,  -7420,  -7164,  -6908,  -6652,  -6396,  -6140,
+X     -5884,  -5628,  -5372,  -5116,  -4860,  -4604,  -4348,  -4092,
+X     -3900,  -3772,  -3644,  -3516,  -3388,  -3260,  -3132,  -3004,
+X     -2876,  -2748,  -2620,  -2492,  -2364,  -2236,  -2108,  -1980,
+X     -1884,  -1820,  -1756,  -1692,  -1628,  -1564,  -1500,  -1436,
+X     -1372,  -1308,  -1244,  -1180,  -1116,  -1052,   -988,   -924,
+X      -876,   -844,   -812,   -780,   -748,   -716,   -684,   -652,
+X      -620,   -588,   -556,   -524,   -492,   -460,   -428,   -396,
+X      -372,   -356,   -340,   -324,   -308,   -292,   -276,   -260,
+X      -244,   -228,   -212,   -196,   -180,   -164,   -148,   -132,
+X      -120,   -112,   -104,    -96,    -88,    -80,    -72,    -64,
+X       -56,    -48,    -40,    -32,    -24,    -16,     -8,      0,
+X     32124,  31100,  30076,  29052,  28028,  27004,  25980,  24956,
+X     23932,  22908,  21884,  20860,  19836,  18812,  17788,  16764,
+X     15996,  15484,  14972,  14460,  13948,  13436,  12924,  12412,
+X     11900,  11388,  10876,  10364,   9852,   9340,   8828,   8316,
+X      7932,   7676,   7420,   7164,   6908,   6652,   6396,   6140,
+X      5884,   5628,   5372,   5116,   4860,   4604,   4348,   4092,
+X      3900,   3772,   3644,   3516,   3388,   3260,   3132,   3004,
+X      2876,   2748,   2620,   2492,   2364,   2236,   2108,   1980,
+X      1884,   1820,   1756,   1692,   1628,   1564,   1500,   1436,
+X      1372,   1308,   1244,   1180,   1116,   1052,    988,    924,
+X       876,    844,    812,    780,    748,    716,    684,    652,
+X       620,    588,    556,    524,    492,    460,    428,    396,
+X       372,    356,    340,    324,    308,    292,    276,    260,
+X       244,    228,    212,    196,    180,    164,    148,    132,
+X       120,    112,    104,     96,     88,     80,     72,     64,
+X	56,     48,     40,     32,     24,     16,      8,      0 };
+END_OF_FILE
+if test 3224 -ne `wc -c <'libst.h'`; then
+    echo shar: \"'libst.h'\" unpacked with wrong size!
+fi
+# end of 'libst.h'
+fi
+if test -f 'adpcm.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'adpcm.c'\"
+else
+echo shar: Extracting \"'adpcm.c'\" \(7304 characters\)
+sed "s/^X//" >'adpcm.c' <<'END_OF_FILE'
+X/***********************************************************
+XCopyright 1992 by Stichting Mathematisch Centrum, Amsterdam, The
+XNetherlands.
+X
+X                        All Rights Reserved
+X
+XPermission to use, copy, modify, and distribute this software and its 
+Xdocumentation for any purpose and without fee is hereby granted, 
+Xprovided that the above copyright notice appear in all copies and that
+Xboth that copyright notice and this permission notice appear in 
+Xsupporting documentation, and that the names of Stichting Mathematisch
+XCentrum or CWI not be used in advertising or publicity pertaining to
+Xdistribution of the software without specific, written prior permission.
+X
+XSTICHTING MATHEMATISCH CENTRUM DISCLAIMS ALL WARRANTIES WITH REGARD TO
+XTHIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+XFITNESS, IN NO EVENT SHALL STICHTING MATHEMATISCH CENTRUM BE LIABLE
+XFOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+XWHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+XACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+XOF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+X
+X******************************************************************/
+X
+X/*
+X** Intel/DVI ADPCM coder/decoder.
+X**
+X** The algorithm for this coder was taken from the IMA Compatability Project
+X** proceedings, Vol 2, Number 2; May 1992.
+X**
+X** Version 1.2, 18-Dec-92.
+X**
+X** Change log:
+X** - Fixed a stupid bug, where the delta was computed as
+X**   stepsize*code/4 in stead of stepsize*(code+0.5)/4.
+X** - There was an off-by-one error causing it to pick
+X**   an incorrect delta once in a blue moon.
+X** - The NODIVMUL define has been removed. Computations are now always done
+X**   using shifts, adds and subtracts. It turned out that, because the standard
+X**   is defined using shift/add/subtract, you needed bits of fixup code
+X**   (because the div/mul simulation using shift/add/sub made some rounding
+X**   errors that real div/mul don't make) and all together the resultant code
+X**   ran slower than just using the shifts all the time.
+X** - Changed some of the variable names to be more meaningful.
+X*/
+X
+X#include "adpcm.h"
+X#include <stdio.h> /*DBG*/
+X
+X#ifndef __STDC__
+X#define signed
+X#endif
+X
+X/* Intel ADPCM step variation table */
+Xstatic int indexTable[16] = {
+X    -1, -1, -1, -1, 2, 4, 6, 8,
+X    -1, -1, -1, -1, 2, 4, 6, 8,
+X};
+X
+Xstatic int stepsizeTable[89] = {
+X    7, 8, 9, 10, 11, 12, 13, 14, 16, 17,
+X    19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
+X    50, 55, 60, 66, 73, 80, 88, 97, 107, 118,
+X    130, 143, 157, 173, 190, 209, 230, 253, 279, 307,
+X    337, 371, 408, 449, 494, 544, 598, 658, 724, 796,
+X    876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066,
+X    2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358,
+X    5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899,
+X    15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767
+X};
+X    
+Xvoid
+Xadpcm_coder(indata, outdata, len, state)
+X    short indata[];
+X    char outdata[];
+X    int len;
+X    struct adpcm_state *state;
+X{
+X    short *inp;			/* Input buffer pointer */
+X    signed char *outp;		/* output buffer pointer */
+X    int val;			/* Current input sample value */
+X    int sign;			/* Current adpcm sign bit */
+X    int delta;			/* Current adpcm output value */
+X    int diff;			/* Difference between val and valprev */
+X    int step;			/* Stepsize */
+X    int valpred;		/* Predicted output value */
+X    int vpdiff;			/* Current change to valpred */
+X    int index;			/* Current step change index */
+X    int outputbuffer;		/* place to keep previous 4-bit value */
+X    int bufferstep;		/* toggle between outputbuffer/output */
+X
+X    outp = (signed char *)outdata;
+X    inp = indata;
+X
+X    valpred = state->valprev;
+X    index = state->index;
+X    step = stepsizeTable[index];
+X    
+X    bufferstep = 1;
+X
+X    for ( ; len > 0 ; len-- ) {
+X	val = *inp++;
+X
+X	/* Step 1 - compute difference with previous value */
+X	diff = val - valpred;
+X	sign = (diff < 0) ? 8 : 0;
+X	if ( sign ) diff = (-diff);
+X
+X	/* Step 2 - Divide and clamp */
+X	/* Note:
+X	** This code *approximately* computes:
+X	**    delta = diff*4/step;
+X	**    vpdiff = (delta+0.5)*step/4;
+X	** but in shift step bits are dropped. The net result of this is
+X	** that even if you have fast mul/div hardware you cannot put it to
+X	** good use since the fixup would be too expensive.
+X	*/
+X	delta = 0;
+X	vpdiff = (step >> 3);
+X	
+X	if ( diff >= step ) {
+X	    delta = 4;
+X	    diff -= step;
+X	    vpdiff += step;
+X	}
+X	step >>= 1;
+X	if ( diff >= step  ) {
+X	    delta |= 2;
+X	    diff -= step;
+X	    vpdiff += step;
+X	}
+X	step >>= 1;
+X	if ( diff >= step ) {
+X	    delta |= 1;
+X	    vpdiff += step;
+X	}
+X
+X	/* Step 3 - Update previous value */
+X	if ( sign )
+X	  valpred -= vpdiff;
+X	else
+X	  valpred += vpdiff;
+X
+X	/* Step 4 - Clamp previous value to 16 bits */
+X	if ( valpred > 32767 )
+X	  valpred = 32767;
+X	else if ( valpred < -32768 )
+X	  valpred = -32768;
+X
+X	/* Step 5 - Assemble value, update index and step values */
+X	delta |= sign;
+X	
+X	index += indexTable[delta];
+X	if ( index < 0 ) index = 0;
+X	if ( index > 88 ) index = 88;
+X	step = stepsizeTable[index];
+X
+X	/* Step 6 - Output value */
+X	if ( bufferstep ) {
+X	    outputbuffer = (delta << 4) & 0xf0;
+X	} else {
+X	    *outp++ = (delta & 0x0f) | outputbuffer;
+X	}
+X	bufferstep = !bufferstep;
+X    }
+X
+X    /* Output last step, if needed */
+X    if ( !bufferstep )
+X      *outp++ = outputbuffer;
+X    
+X    state->valprev = valpred;
+X    state->index = index;
+X}
+X
+Xvoid
+Xadpcm_decoder(indata, outdata, len, state)
+X    char indata[];
+X    short outdata[];
+X    int len;
+X    struct adpcm_state *state;
+X{
+X    signed char *inp;		/* Input buffer pointer */
+X    short *outp;		/* output buffer pointer */
+X    int sign;			/* Current adpcm sign bit */
+X    int delta;			/* Current adpcm output value */
+X    int step;			/* Stepsize */
+X    int valpred;		/* Predicted value */
+X    int vpdiff;			/* Current change to valpred */
+X    int index;			/* Current step change index */
+X    int inputbuffer;		/* place to keep next 4-bit value */
+X    int bufferstep;		/* toggle between inputbuffer/input */
+X
+X    outp = outdata;
+X    inp = (signed char *)indata;
+X
+X    valpred = state->valprev;
+X    index = state->index;
+X    step = stepsizeTable[index];
+X
+X    bufferstep = 0;
+X    
+X    for ( ; len > 0 ; len-- ) {
+X	
+X	/* Step 1 - get the delta value */
+X	if ( bufferstep ) {
+X	    delta = inputbuffer & 0xf;
+X	} else {
+X	    inputbuffer = *inp++;
+X	    delta = (inputbuffer >> 4) & 0xf;
+X	}
+X	bufferstep = !bufferstep;
+X
+X	/* Step 2 - Find new index value (for later) */
+X	index += indexTable[delta];
+X	if ( index < 0 ) index = 0;
+X	if ( index > 88 ) index = 88;
+X
+X	/* Step 3 - Separate sign and magnitude */
+X	sign = delta & 8;
+X	delta = delta & 7;
+X
+X	/* Step 4 - Compute difference and new predicted value */
+X	/*
+X	** Computes 'vpdiff = (delta+0.5)*step/4', but see comment
+X	** in adpcm_coder.
+X	*/
+X	vpdiff = step >> 3;
+X	if ( delta & 4 ) vpdiff += step;
+X	if ( delta & 2 ) vpdiff += step>>1;
+X	if ( delta & 1 ) vpdiff += step>>2;
+X
+X	if ( sign )
+X	  valpred -= vpdiff;
+X	else
+X	  valpred += vpdiff;
+X
+X	/* Step 5 - clamp output value */
+X	if ( valpred > 32767 )
+X	  valpred = 32767;
+X	else if ( valpred < -32768 )
+X	  valpred = -32768;
+X
+X	/* Step 6 - Update step value */
+X	step = stepsizeTable[index];
+X
+X	/* Step 7 - Output value */
+X	*outp++ = valpred;
+X    }
+X
+X    state->valprev = valpred;
+X    state->index = index;
+X}
+END_OF_FILE
+if test 7304 -ne `wc -c <'adpcm.c'`; then
+    echo shar: \"'adpcm.c'\" unpacked with wrong size!
+fi
+# end of 'adpcm.c'
+fi
+if test -f 'timing.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'timing.c'\"
+else
+echo shar: Extracting \"'timing.c'\" \(1336 characters\)
+sed "s/^X//" >'timing.c' <<'END_OF_FILE'
+X/*
+X** Timing - Test timing on adpcm coder and decoder.
+X**
+X** The program creates 10Kb garbage, and runs the compressor and
+X** the decompressor on it.
+X*/
+X
+X#include <stdio.h>
+X#include <math.h>
+X#include "adpcm.h"
+X
+X#define DATASIZE 10*1024	/* Data block size */
+X#define DURATION 10		/* How many seconds to measure */
+X
+Xshort pcmdata[DATASIZE];
+Xchar adpcmdata[DATASIZE/2];
+Xshort pcmdata_2[DATASIZE];
+X
+Xstruct adpcm_state coder_1_state, coder_2_state, decoder_state;
+X
+Xmain() {
+X    int i;
+X    int t0, t1, t2, t3;
+X    int count = 0, count2;
+X
+X    for(i=0; i<DATASIZE; i++)
+X      pcmdata[i] = random() & 0xffff;
+X
+X    t0 = time(0);
+X    do {
+X	adpcm_coder(pcmdata, adpcmdata, DATASIZE, &coder_1_state);
+X	t1 = time(0);
+X	count++;
+X    } while (t1 < t0+DURATION);
+X    printf("Coder: %d Ksample/second\n", count*DATASIZE/(1000*(t1-t0)));
+X    printf("  (coded %d blocks of %d samples in %d seconds)\n",
+X	   count, DATASIZE, t1-t0);
+X    t2 = time(0);
+X    count2 = count;
+X    while ( count2 > 0 ) {
+X	adpcm_coder(pcmdata, adpcmdata, DATASIZE, &coder_2_state);
+X	adpcm_decoder(adpcmdata, pcmdata_2, DATASIZE, &decoder_state);
+X	count2--;
+X    }
+X    t3 = time(0);
+X    printf("Decoder: %d Ksample/second\n",
+X	   count*DATASIZE/(1000*(t3-t2-t1+t0)));
+X    printf("  (coded&decoded %d blocks of %d samples in %d seconds)\n",
+X	   count, DATASIZE, t3-t2);
+X    exit(0);
+X}
+END_OF_FILE
+if test 1336 -ne `wc -c <'timing.c'`; then
+    echo shar: \"'timing.c'\" unpacked with wrong size!
+fi
+# end of 'timing.c'
+fi
+if test -f 'rawcaudio.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'rawcaudio.c'\"
+else
+echo shar: Extracting \"'rawcaudio.c'\" \(485 characters\)
+sed "s/^X//" >'rawcaudio.c' <<'END_OF_FILE'
+X/* testc - Test adpcm coder */
+X
+X#include "adpcm.h"
+X#include <stdio.h>
+X
+Xstruct adpcm_state state;
+X
+X#define NSAMPLES 1000
+X
+Xchar	abuf[NSAMPLES/2];
+Xshort	sbuf[NSAMPLES];
+X
+Xmain() {
+X    int n;
+X
+X    while(1) {
+X	n = read(0, sbuf, NSAMPLES*2);
+X	if ( n < 0 ) {
+X	    perror("input file");
+X	    exit(1);
+X	}
+X	if ( n == 0 ) break;
+X	adpcm_coder(sbuf, abuf, n/2, &state);
+X	write(1, abuf, n/4);
+X    }
+X    fprintf(stderr, "Final valprev=%d, index=%d\n",
+X	    state.valprev, state.index);
+X    exit(0);
+X}
+END_OF_FILE
+if test 485 -ne `wc -c <'rawcaudio.c'`; then
+    echo shar: \"'rawcaudio.c'\" unpacked with wrong size!
+fi
+# end of 'rawcaudio.c'
+fi
+if test -f 'rawdaudio.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'rawdaudio.c'\"
+else
+echo shar: Extracting \"'rawdaudio.c'\" \(489 characters\)
+sed "s/^X//" >'rawdaudio.c' <<'END_OF_FILE'
+X/* testd - Test adpcm decoder */
+X
+X#include "adpcm.h"
+X#include <stdio.h>
+X
+Xstruct adpcm_state state;
+X
+X#define NSAMPLES 1000
+X
+Xchar	abuf[NSAMPLES/2];
+Xshort	sbuf[NSAMPLES];
+X
+Xmain() {
+X    int n;
+X
+X    while(1) {
+X	n = read(0, abuf, NSAMPLES/2);
+X	if ( n < 0 ) {
+X	    perror("input file");
+X	    exit(1);
+X	}
+X	if ( n == 0 ) break;
+X	adpcm_decoder(abuf, sbuf, n*2, &state);
+X	write(1, sbuf, n*4);
+X    }
+X    fprintf(stderr, "Final valprev=%d, index=%d\n",
+X	    state.valprev, state.index);
+X    exit(0);
+X}
+END_OF_FILE
+if test 489 -ne `wc -c <'rawdaudio.c'`; then
+    echo shar: \"'rawdaudio.c'\" unpacked with wrong size!
+fi
+# end of 'rawdaudio.c'
+fi
+if test -f 'suncaudio.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'suncaudio.c'\"
+else
+echo shar: Extracting \"'suncaudio.c'\" \(3882 characters\)
+sed "s/^X//" >'suncaudio.c' <<'END_OF_FILE'
+X#include <stdio.h>
+X#include <strings.h>
+X#include <fcntl.h>
+X#include <sys/types.h>
+X#include <sys/stat.h>
+X#include <multimedia/ulaw2linear.h>
+X#include <multimedia/libaudio.h>
+X#include "adpcm.h"
+X
+X#ifdef __STDC__
+X#define A(x) x
+X#else
+X#define A(x) ()
+X#endif
+X
+Xextern char *strdup A((char *));
+Xextern char *strstr A((char *, char *));
+X
+X
+Xmain(argc, argv)
+X    int argc;
+X    char *argv[];
+X{
+X
+Xint file,outfile;		/* input file */
+XAudio_hdr audiohdr;		/* Audio File header */
+Xint cnt;			/* how much read ? */
+Xregister char *ulaw;		/* pointer to ulaw output from pcm conv */
+Xregister short *pcm;		/* pointer to pcm output from ulaw conv */
+Xchar ulawbuf[BUFSIZ];		/* to hold ulaw data */
+Xshort pcmbuf[BUFSIZ];		/* to hold pcm data */
+Xint decompress=0;		/* just a flag */
+Xstruct stat statbuf;
+Xchar *newfn;			/* output file name */
+Xchar *p;			/* temporary character pointer */
+Xstruct adpcm_state state;
+Xint pos;
+X
+X
+X/* this program can be called with two different names, if it
+X   is called as caudio then we want to compress the file and if
+X   it is called with uaudio then we want to uncompress it */
+X
+X        pos = strlen(argv[0]) - strlen("caudio");
+X        if (strcmp(argv[0]+pos,"daudio") == 0) 
+X		decompress=1;
+X        else if ( strcmp(argv[0]+pos,"caudio") != 0) {
+X	    puts("Progname should end in 'caudio' or 'daudio'");
+X	    exit(1);
+X	}
+X
+X	if (argc < 2) {
+X		puts("No input file(s) specified");
+X		exit(1);
+X	}
+X
+X/* Now we pass through the entire list of input files and compress
+X   each file found */
+X
+X	while (argc-- > 1) {
+X		if ((file = open(*++argv,O_RDONLY)) == NULL) {
+X			perror("couldn't open input file");
+X			exit(1);
+X		}
+X		if (!decompress) {
+X			if (! audio_isaudiofile(*argv)) {
+X				perror("not an audio file");
+X				exit(2);
+X			}
+X			if (audio_read_filehdr(file, &audiohdr, 
+X					(char *)NULL, 0) != AUDIO_SUCCESS) {
+X				perror("bad header");
+X				exit(3);
+X			}
+X			newfn=(char *) malloc(strlen(*argv)+5);
+X			sprintf(newfn,"%s.pcm",*argv);
+X
+X			if ((outfile = open(newfn, O_RDWR |O_CREAT | O_EXCL,
+X					    0644)) < 0) {
+X				printf("%s already exists\n",newfn);
+X				free(newfn);
+X				continue;
+X			}
+X			while ((cnt = read(file, (char *) ulawbuf,
+X					   sizeof ulawbuf)) > 0) {
+X				ulaw = ulawbuf;
+X				pcm = pcmbuf;
+X
+X				/* translate all from ulaw to 16 bit pcm */
+X				while (ulaw != ulawbuf+cnt) {
+X					*pcm++ = (ushort) audio_u2s(*ulaw++);
+X				}
+X
+X				/* now quantize it using adpcm */
+X				adpcm_coder(pcmbuf, ulawbuf, cnt, &state);
+X				write(outfile, ulawbuf, cnt/2);
+X			}
+X			close(outfile);
+X			free(newfn);
+X		}
+X		else {
+X			newfn=strdup(*argv);
+X			if ((p=strstr(newfn,".pcm")) == NULL) {
+X				puts("not a valid pcm file");
+X				continue;
+X			}
+X			*p='\0';		/* take off .pcm suffix */
+X
+X			if ((outfile = open(newfn, O_RDWR |O_CREAT | O_EXCL,
+X					    0644)) < 0) {
+X				printf("%s already exists\n",newfn);
+X				free(newfn);
+X				continue;
+X			}
+X			fstat(file,&statbuf);
+X			audiohdr.sample_rate = 8000;
+X			audiohdr.samples_per_unit = 1;
+X			audiohdr.bytes_per_unit = 1;
+X			audiohdr.channels = 1;
+X			audiohdr.encoding = AUDIO_ENCODING_ULAW;
+X
+X			/* now tell it how big the audio file is. The original
+X			 * file has exactly twice as many playable bytes as
+X			 * this one, so we double the current number.
+X			 * There are also 32Bytes in
+X			 * the sound header, but they don't count */
+X			audiohdr.data_size = statbuf.st_size * 2;
+X
+X			if (audio_write_filehdr(outfile, &audiohdr, NULL, 0) 
+X							!= AUDIO_SUCCESS) {
+X				perror("writing header");
+X				exit(5);
+X			}
+X			while ((cnt = read(file, ulawbuf, sizeof(ulawbuf)/2))
+X			                                     > 0) {
+X				ulaw = ulawbuf;
+X				pcm = pcmbuf;
+X
+X				/* first we decode from adpcm format */
+X				adpcm_decoder(ulawbuf, pcmbuf, cnt*2, &state);
+X
+X				/* now translate from 16bit pcm to Sun
+X				 * mulaw format */
+X				while (pcm != pcmbuf+cnt*2) {
+X					*ulaw++ = audio_s2u(*pcm++);
+X				}
+X				write(outfile, ulawbuf, cnt*2);
+X			}
+X		}
+X	}
+X	exit(0);
+X}
+END_OF_FILE
+if test 3882 -ne `wc -c <'suncaudio.c'`; then
+    echo shar: \"'suncaudio.c'\" unpacked with wrong size!
+fi
+# end of 'suncaudio.c'
+fi
+if test -f 'sgicaudio.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'sgicaudio.c'\"
+else
+echo shar: Extracting \"'sgicaudio.c'\" \(1575 characters\)
+sed "s/^X//" >'sgicaudio.c' <<'END_OF_FILE'
+X/*
+X** sgicaudio - Simple AIFF file compressor.
+X**
+X** Needs libaf, which is in the Digital Media developers option.
+X*/
+X
+X#include <stdio.h>
+X#include <audio.h>
+X#include <audiofile.h>
+X#include "adpcm.h"
+X
+X#define NFRAMES 8000
+X
+Xstruct adpcm_state astate;
+Xshort ibuf[NFRAMES];
+Xchar obuf[NFRAMES/2];
+X
+Xmain(argc, argv)
+X    int argc;
+X    char **argv;
+X{
+X    AFfilehandle af;
+X    FILE *of;
+X    long fmt, width;
+X    long count;
+X    
+X    if ( argc < 2 || argc > 3 ) {
+X	fprintf(stderr, "Usage: %s aifffile [adpcmfile]\n", argv[0]);
+X	exit(1);
+X    }
+X    /*
+X    ** Open input file and check format
+X    */
+X    if ( (af = AFopenfile(argv[1], "r", NULL)) == 0 ) {
+X	perror(argv[1]);
+X	exit(1);
+X    }
+X    AFgetsampfmt(af, AF_DEFAULT_TRACK, &fmt, &width);
+X    if ( AFgetchannels(af, AF_DEFAULT_TRACK) != 1 || fmt != AF_SAMPFMT_TWOSCOMP
+X	|| width != 16 ) {
+X	fprintf(stderr, "%s: %s: only 16bit mono integer files supported\n",
+X		argv[0], argv[1]);
+X	exit(1);
+X    }
+X    if ( AFgetrate(af, AF_DEFAULT_TRACK) != 8000.0 )
+X      fprintf(stderr, "%s: %s: WARNING: not 8Khz\n", argv[0], argv[1]);
+X    /*
+X    ** Open output file
+X    */
+X    if ( argc == 3 ) {
+X	if ( (of=fopen(argv[2], "w")) == 0 ) {
+X	    perror(argv[2]);
+X	    exit(1);
+X	}
+X    } else {
+X	of = stdout;
+X    }
+X    /*
+X    ** Copy loop
+X    */
+X    while (1) {
+X	count = AFreadframes(af, AF_DEFAULT_TRACK, ibuf, NFRAMES);
+X	if ( count <= 0 ) break;
+X	if ( count & 1 ) {
+X	    ibuf[count] = ibuf[count-1];
+X	    count++;
+X	}
+X	adpcm_coder(ibuf, obuf, count, &astate);
+X	fwrite(obuf, 1, (count+1)/2, of);
+X    }
+X    fclose(of);
+X    AFclosefile(af);
+X    exit(0);
+X}
+END_OF_FILE
+if test 1575 -ne `wc -c <'sgicaudio.c'`; then
+    echo shar: \"'sgicaudio.c'\" unpacked with wrong size!
+fi
+# end of 'sgicaudio.c'
+fi
+if test -f 'sgidaudio.c' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'sgidaudio.c'\"
+else
+echo shar: Extracting \"'sgidaudio.c'\" \(1417 characters\)
+sed "s/^X//" >'sgidaudio.c' <<'END_OF_FILE'
+X/*
+X** sgidaudio - Simple AIFF file decompressor.
+X**
+X** Needs libaf, which is in the Digital Media developers option.
+X*/
+X
+X#include <stdio.h>
+X#include <audio.h>
+X#include <audiofile.h>
+X#include "adpcm.h"
+X
+X#define NFRAMES 8000
+X
+Xstruct adpcm_state astate;
+Xchar ibuf[NFRAMES/2];
+Xshort obuf[NFRAMES];
+X
+Xmain(argc, argv)
+X    int argc;
+X    char **argv;
+X{
+X    AFfilehandle af;
+X    AFfilesetup afsetup;
+X    FILE *of;
+X    long fmt, width;
+X    long count;
+X    int outindex;
+X    
+X    if ( argc < 2 || argc > 3 ) {
+X	fprintf(stderr, "Usage: %s [adpcmfile] aifffile\n", argv[0]);
+X	exit(1);
+X    }
+X    /*
+X    ** Open input file
+X    */
+X    if ( argc == 3 ) {
+X	if ( (of = fopen(argv[1], "r")) == NULL ) {
+X	    perror(argv[1]);
+X	    exit(1);
+X	}
+X	outindex = 2;
+X    } else {
+X	of = stdin;
+X	outindex = 1;
+X    }
+X    /*
+X    ** Open output file
+X    */
+X    afsetup = AFnewfilesetup();
+X    AFinitchannels(afsetup, AF_DEFAULT_TRACK, 1);
+X    AFinitrate(afsetup, AF_DEFAULT_TRACK, 8000.0);
+X    AFinitsampfmt(afsetup, AF_DEFAULT_TRACK, AF_SAMPFMT_TWOSCOMP, 16);
+X    if ( (af = AFopenfile(argv[outindex], "w", afsetup)) == 0 ) {
+X	perror(argv[outindex]);
+X	exit(1);
+X    }
+X    /*
+X    ** Copy loop
+X    */
+X    while (1) {
+X	count = fread(ibuf, 1, NFRAMES/2, of);
+X	if ( count <= 0 ) break;
+X	count = count*2;
+X	adpcm_decoder(ibuf, obuf, count, &astate);
+X	AFwriteframes(af, AF_DEFAULT_TRACK, obuf, count);
+X    }
+X    fclose(of);
+X    AFclosefile(af);
+X    exit(0);
+X}
+END_OF_FILE
+if test 1417 -ne `wc -c <'sgidaudio.c'`; then
+    echo shar: \"'sgidaudio.c'\" unpacked with wrong size!
+fi
+# end of 'sgidaudio.c'
+fi
+if test -f 'hello.adpcm.uu' -a "${1}" != "-c" ; then 
+  echo shar: Will not clobber existing file \"'hello.adpcm.uu'\"
+else
+echo shar: Extracting \"'hello.adpcm.uu'\" \(8440 characters\)
+sed "s/^X//" >'hello.adpcm.uu' <<'END_OF_FILE'
+Xbegin 664 hello.adpcm
+XM=W=\)R-RD#V@G)(:AS.)"=H9H4H'*!G(N"^`@"01`*"IJ'*X,P*+/_D)A8H"
+XM&!\"B)@2$B`0O-&J$2X8*!/[+(0M)8@XF*D,H+$J!YDBNSZ!I1`CF1#:JP`/
+XM`A<IF+&*$O@B(0**'XH`IY/EH#T*"A&S!)6(&0L:;9$8$`"(B;$?@0%!$XK*
+XM.HZS(U#`"#R+RR,),88$BL(.$I$8H,D9^#@`$"$!JE"]T0BB#&"!*!F<$L*"
+XMJN(*$*^6E`HCB3VAN+M2+).C6Y,)$`DY2QOZA*\AB$'5"!D*R0BC"2J#5!#)
+XM.)(#CP/;/9$II2`3*P@<^)J#&0C!"Z03()&GBC/^"*DQ%!"D.8"?TI`2*H%:
+XMM@F8&3"1S6F8F9&H.&A`()))J<K1@ID2^"DE&8(842F[#Z"9$QJ$"0<(O)A`
+XM`P&/H*`ZPTD1`UNJ\(NAB',A"(/`+YBAB@&*CXF4`"@G)1DJJ*Z!H;D2B&J0
+XM*@:"B`2B7*D*`P&$`QBK^3",`>-+$8LVN3"S'Q"HV:L4D'"0(!0:H;NQ8`BX
+XM3+GXB#`'&!*J"KJK$T"!,&.LR)!"F'"0B*H-F0HG$C$9&/R!L(DHA@F`J2E$
+XMD2-Q@8V8V:D(E$A)E9@9L"L0EQ$IF=L*R0$G,J!(F/N(@*E`%RB)B;C:DB,R
+XM(3BB+YG@,Y(%68KJBJF`%!4A0`*,K+BB2A4(`(B=N:(5`$$R(N`.H,`2B80<
+XM2,@:LX\P@!@V@P\`H`FSF@`SDR3K&L`:A1A`8+B[$;`P)R$IB/`/@:E!!(`H
+XMN:W(H!$X1!.*J:F+8Y<I`<R*J\@H-1%@D9B="*`YIP`HB(2("J)ZD*`XH/@0
+XMH1DX59B`&P#*"_B`A`T!2"*1!!T3RS#1/*.-B!@!N1/Y2P&#0TB2CQC0BX.@
+XM00*JBJJ!0$<E"0B<OJFY"$-$0@@)B8RY%B`0&J#?F<`I!1)`@YFLF-H0DSH"
+XM@EK@BA*!*8.C3+"L<<`*!"D2'860*<&HD(^RL5$2@#V#F!G)B36Z"H21*G.Y
+XM>+*LB!@RM"(1G[RPJ#-3$F.@G@#)F0@%.@6L&;D"D""'<`&I"0K:R8F2(W`3
+XM`0BDRPG(F7`#"3HDRJRCT6B#&2C`GXF0$364*A2*BLF*J0`2.&"PJ@Q0M(!2
+XME"J2BXW`NAJ#P7.&"P*<*:$<H[@@(?Z)@`DDEC@""0$9VANQF!+ZF2#!4">!
+XM4:$9BLN;N)"KA!!Q$B0)0H<;DHJMJ;R($(%2%1(X0*0.F*V:@Y$$(``Z,OHX
+XMD"F4FT3H+H&)":@9`R0E@BL`>9*\J0B!^0J0B63(20,YE*D)@"^2N8HX)@HD
+XM@PLC+>F]B0H3##<`,)(M"-H+0[(:D-DKTSEBJ$")P3B"";I`*0RLL,@HM"FD
+XMGQ:*,:!H`ZK)FZG+DA9)((.X(W`##(*^&K*\(L<Y,*6+&*@)&?"*4KHZD;T2
+XM@U$B`P",^:D!,:E@H8VH*"`$.$(1$`/!R+_9(+HYM(JBR'&2("R!FLN"<X`2
+XM`I^1RCK@J1D2B]@&*!0D."$I*_F*^X@!JSJBBS=B(X%@F)NMK)F9L%01`$,P
+XM0+$0BMB-JI@,D)@7(TD2$R00N\``WYF]F9B+A#1"`Q$H-*V1@<\(J:RJ@1$C
+XM5@,3(AR)BQW(C""R*KL,@Q2-,3`72(&*@KV]L1LED5$1$P(Q^CG*BR"XI%%"
+XMOP@#FJF`<X`!V:L@R:`98*P"RY%4F3&7&8FC#A**HJG*G(M4$3(V#!BX'!FX
+XM,<`4*K0-A1R(L%FS"`SA(CH!$!<,DB@)FA*9P\R-N!,RDDP9AQ,`"L-P")`@
+XMJ>F["\H)%8!QJ3,RJ%.Y"OP`J-`#C@,!F)(.`(JF`#`%0(B`&=HYZ2@+Z`&1
+XM@0F)91&!8;`,H(D;!CD;V<R8*:N:O&<C$C*:FQBBDF&ZFLG9(8$(!0`[Z8*7
+XM.\NP#]RZF-IW0(F`B[DS09@`B[HB*;J"0<H4.>J#,;$Z_\J(B,AW((J(C*@D
+XM0(B`BK@1**`)B,D3..@#00`=[*B`J[HG=P"9"JJ!4A"(B9NI!!B)@2F@$DC(
+XMA$&<O9K)F""=%W,9J0@,N04AB8`@K)`3O(`"&"&)R"5`JLN:V\`;W[1349``
+XM"<NH`!F`A3(9N9B-H"1`B!$2&_S)FZFB&=_#8T&`"`C+R1`AJ112BJL)J9`S
+XM9!B9$0K\F)B;D:O-PW1"@`D"N\V!$0J!-0B;J0&)$7,1BI")^[JHJKR\JJTW
+XM<T"!@1J[^!@8L`A#B+N!,9J&80G)"(JYB0FYS:VIJT=C(`&"&KOX"(BZ$5*)
+XMJ`)!)``(F,N=N8F)D(V\Z]JI)U,Q`1)9JNF(D+L0)AD`HT`@L"A(V8LXX,B*
+XMK*O+J(<G<2"XNPFYB78!BH"`G*`"0!`".*S;`0&9(C2_J[C)F41"<Q.[OXB)
+XM@140"9@)F8!A(I@9">NJ@B%!([SKN9NLLB="A6`XRMB2B!E1,(N@D:C0&&`8
+XM"1B`N;*C"S^:JJ"R6LFZ<I%V%9J=B!@(!!,(J:H+'2HW`X#`J)J-*3(2D;+9
+XMK)N<"J$5)71"J=N)*BHV%9"JF0@8$3,AG<O)@`)"0#*(^KJ9BHV;@1<0="0*
+XMK:D)$905$9J,B("`@2$PG*N#IA@:"2")_IF`FIO*(46!=C.IZJ`8.!,%@;JM
+XM"A@0@B03FZ^I$C,`JA**Z[J<KLJKDR<P="0(O+L*,#(&@@F<JPD8@*-&(0F:
+XM$$(*S+B(FNN9@;Z;@E%H1A4`J[T)$0.3@B`;KYN(@005,BB,F9&+S<@!,XJO
+XMF+JKH$-B)T,YGJR(`1*!$3&0S)N*@88$(B"=NY@0$*`A%+[-R9D(@!`$EW)`
+XMB:J@L8$863,$B:R[F;4"42$8@+D;C<JIDQ&>W9JJJYBS!W=!&)FYJ!D9@(0D
+XM(!O:R8`20B(#`:K?FYD``@BLVYJYNZ@%!W5!$9K)J0@9&8,6,2"\VJ@101$`
+XM@(`:O\FH@`'+K0F8JK'(EW12(IBJO(D8":`"<B&)N^N(-1*)@2$QF,_;J8"1
+XMFIJ8F,@9AW52(@FJVIDH&8B!!2-1F[VI`3(Q"9F#,9_[RIJ0``FL@0$(=R0Q
+XM41FJV9@(&(B9$G,QB+KZB1$(&0"(4PFNV\N@F0@:RJ$7<$,C$0B;OIF!")HJ
+XM,0<B&;VKH#)1")*Z"PB?^YO9N8`)JH!U5"0A")F*BJF(`*RA((`$0,NHA"!2
+XM0<BZF:V:O=OYF`J0@B-'4T(0F)FJB`F+H!.LBD68S(*"*"$0._D`R:T*OKO,
+XMNK@A%C1S,R")F)NQ,QS8&@B`8)FHZ"@`$9'.(BF(N`GLS+O+O)D%,F4B,@"(
+XMJXH3BYG($B1CFKSKN#1)``"1Z1.+RY$,V[N_NZB`="4B,BB(FYJ0@9VRE'(@
+XM*=J]J!(R@+JQ<`"*G:R0N<O+G,L1)T-B(1"`JZB)JPN21C4C`*Z[N8`0@9H(
+XM)C"Y_9F0")F_V9F0`48E-#`8BJRYJ8B14S1`(KS+J@BH`1"`-5"*O+VINLNI
+XMS)F9")-W<S(ABKJZN9N($G0Q&+C:J9H8ND,D6:*,N+Z*V0B)BJBOL`J")W<R
+XM$:FKJ0J;N@5%,8B<JHH(J@,V4@B:F:^IFJ$"(HJ(VIW:B#<W0C()O+J8JJH"
+XM53,IFLFKFY@#<S08BKR\RYD2$S(KRLO,O+D4="<Q,9O:JH"H@11A((NZJI"J
+XM%"9"&)O+F;FH$T,2&]V;JMJ9FB=C-T$AG+JJF)H!0W$8FJF(JIJ&0S$+JJJL
+XMRZ$4(A**J]KLF@":!U,U8A*JW(J8B8$U,Q":F0J_J0(D(HJ8FKRZ@2!"0AGK
+XMO,J`"<R#=B%$$HG.J9@`B!4C((J9J;VI@40R&J@)FJOX`3**J)^:NIJQ"`9T
+XM,C=A&:W8B(@``E(0":J9J\F114$(B`&<J[@3&8$6.NNZ"`F*L%<B%V(8J_J`
+XM"`@0-A&(N9B<NP%4,A@!F)W:J1$0`5(0K,FZJ[J`)V$2=1&:VY``F(`W(HFJ
+XMF`F\D28S"`"8B_RH`B(9$S@+_KF8F9D#<R`G<0FLJ``)@`-B"*F9`)NP!5,H
+XMJ8H`G[H"%""0&+W;V@B9H`)6,`=B"*RY@0F0@G,8J9F"B\F#8CFJ@)"<ZA(2
+XM4)``R]O*B)F80T1!!V(9K,B`"(@!4RFJF8$,V`)#**D`B)OZ@!`XF82?NKNA
+XMFJHG1#,W<AFMN(`(D`-B&9FI"9G)%%(8F)D(J^J!$0@`@!_JF8@9J@1%0%<B
+XM";Z8D(B1!#$JF[@8G+`701B*J(J*ZH,A`(`(C^JHB`JI$W4A92(:S9B`"9$$
+XM(BJLJ("+H"<R(+N9F]O)%!(($0G.VZJHB9AD)2=!,:OYB(B(`$(3FJR0"*R`
+XM51$)J9B9RY`S,8!!$-[:FIB9D50T9Q(9K*FH"9`28C":RA"HR9-Q(9J)B8OI
+XM@2,HB!B+W[FJB)R!5%-D(PN^J8"8"`8B*(V8B1JY`R<PB:H)G*J24B&(B)Z]
+XMNJH(N!5T$W,SJOJ:"(D8)A,8JJN(C)FC<R(*N*BKVX$D(""!K\R:JKK8)&(D
+XM<C*YVZH)"(A3-@":N8B+G8)%(0J8D)O+H`0B,!B[S;NMR9@E-"9Q09C+J8@9
+XM@!1$$(JYH)V;@%0B&(F9J>B;$`,E")R-R*NLH"13)T)`B.FXD!D9(C8"FJNH
+XMFJD`<E(1FJFLB=F`%#(1K;RJJNN@,W-'!!@<G(F2LZ$H<""(N:F9BI(6,S@J
+XMK*O*R)DB5"*JW8JLJZ`')S%H$*C(N(L]*!2$@YD,B8F0LB!0,0BYVHR)FA,7
+XM*`RLF:OYD"-V,P*@N:T."9&3!`(Y*IJ9N-F($D%"B,FZC(NI$S<`N\RZR[J$
+XM=T,2F*BJCHN9@H<#$`D*"I#)J@`T,A+:BYFKK<(`,0J>V<JI%652(HB9J+N_
+XMBY@C-A(`@(D;G;NQMA(Q')FAR<H,B"H4H,O*D'%S)"$8BHN=R=FA`4$Q*(&3
+XMF+S:R8`C.0JK@1SKV<FZ(3"3HW<T,1(0*`G+O[N[&1-$0A&3(8'=G9F0$X.>
+XMB8@YR<FZBQ@C,A=W(A`)$(&KR\R:B(&!$V1`$`B`Z;J\FJ`YA!,R")O^NHH8
+XM$V0"5`*`F`D`@:CXFYL8RZ$'4A@HF:F9S*J(*"(UT9":*XNQ^C-D(B8R(8$H
+XM_8BH*8JYB*FP*6048)@!JJG\C!"1`A)0$0JP2.`P*:%C(8K9.YNNH8"2'K`8
+XM"K91A#$#JY&?J;RI`R)$4`$*P9K*B3*#=3,)H`X*F<F@HRJ(I$D413`(%)Z8
+XMB,V9F9(!*A)D$P8-K(@2"))D&0`)KZF(N8$3$5$8@D"`'#*8C*#]B@(#D'*1
+XM(2#YBI`(+5AQD,``"`R*(@GY`),9.4@T`($,"L"LJ8V`.;6#0ZDIC@D3DI<J
+XM(4.[89G*NZTMD;@'$())"0-K@HJTF<F:&2Y!`H4!&D!-HIBRFSJ:):,UU)H9
+XMFIN[Y)*"44B`$IKD@9X1B"D(\8*1"`HN"2JB6*`E&0](FH&9()J>B2JY:!03
+XM*4`EO@B+JR2PDG@`(R#"(@C,/!B8L:>ZJF"[@P+B.BLI:<(!"1T+0)61`DJ,
+XM,:FD(;!X&8LIW9*)"0.;00Q+"OB3F;APC8`0D3<:$B()LJN(G1E*L/`PV2(-
+XM(@(Z%XV1`(C8F1M)D2*8XP*:@WP0*$G3$KHCB3\JB:/Q$3"Y>!R!FL"RD`AR
+XM"2B#^*&I/!LX`9H'"Z<3@!I0&32[LLFMF!V!"D0"G0`(FA&Z($:@(@ZX0(FV
+XM*9(:.$,ODQ'0@IFY,JXY:YB7$*`K"!M(N:[@`:DQ6($!$)(P^0E)N03XH9`Y
+XM2)EA$:`!L!(;*7"/P`C*H@H9`E(EF389@`@LP!K`$1"0<@N$@)"*@%J:X3F3
+XMJ(&\0[AV&9T2C+*!O0*2`GB`")@!0,@EFX`1CZ(LN!@"V#<!.)D8O9JPS84)
+XM`2,*RE&Z$!&4(9PCWI(+`!4HE!*I%3Z8,MH(`=B(F0-)0@$)JBGP(,H40+XC
+XMBZDDA)`I10H(JKHH/OJ!N+11F@!2D%&HN)R1#*F+H(A3TH4#@',;@BN>N`JQ
+XM*-!1@RJ`+8.*`Q6\`Q_1*!RS(8DSMQ`(JQE,A!^0$Q`$.=`8&NHAJ"'H@@@;
+XME4B0*+#(.!Q4T($)G0&?@0B`D@&*<H@8D(@@^"2OF"&*H)",*H>9D+@(`'`8
+XM@#1#5XH)D8R9B9`8!*`B^@`(-#A8@6C`D0J`#:%`OX@"!!(@I#%!VY@8K^$!
+XMF0(0K"(K@A8```F\R:ZJ`*R1)W,8D`"*J)RK`QHP&.D5$8E!<!&!JIS`F)^B
+XM.8N#*@43D$8!.<B$2;J0'?B2"KE2("0U*J"KNK'>D"B(`"20(44ANSC,OY&9
+XM%8&*`AOL`0,91#`2@1O^`8F2$IK:&)H(4Q-E`8F\&8NID@`?M8F*(A91B1@`
+XM^IB0F%$!(0)`B-&ZG0J`F\BA<T&HD``=D0-YD0DIV2@:X(B0,#_Y$QB@@W(0
+XMB(@*K("PZ9@)B1ES$E(PO-`BS9B201@DF2"MK:DC*I(%*A*'28$*J9`OLXE)
+XMH!`F@+(IHWF:FD&\P8@@@U$6&1J``?N9"J-H$8N@=(VZHY$,L4!1%(@1`@RZ
+XMV9B>J(DF$H@%&+$1$D&Z:IG;Z1*,H6(@F!2:J9%3&,@($$NWB0"0VPGI$2.(
+XM4R:)BJ"LR8H@%B0@D8HPKLJH@;^H`3@2D7`3FP<0"X*8KLF,@(@R0R=`B)FI
+XM":O*E&@8`HJ8D)V8J0=#"3-C'*&=FJB9@20H-C,+HF"<\`@+"(FHDLDE2"0!
+XM`3"3K_D*FK@`,`$S=!&8BZ$-@(RX)P`;!(L"@!)(Z@`7/*(0K*Z1F*,@<14`
+XM()(/J`B;D!()HYMQ`9-R$AB#.*_9JYF:K),X!!-S.849BH.]BY$_DJN*@OLD
+XM)"F20R"#OZJXOJD0(#43,2<@K8&*F\":$RRX)P$24SFA01J^R:G(BIH%$#$E
+XM,2-C"ZBQCZ&;(`'[`LD)@T@I%R@#&*FY#=R(N0`%0A002!&<O;&=FIF+H;8X
+XMA#0X-"(ZD`_YF)B8HE`@$Q@U,XFPWYB;NH09:)(Z`P.LDW(H@B.<)*X)N`BQ
+XMJS\%`#`&B`G+"9RI#;@1&8=!%!(1B!B_K;N0JAZ!%`@6(C$"C)NJSZFX(Q`4
+XMF%(P"(4`$(B]@+ROJ)"``YN7)$@"$E"8K8BPFII%2($)@&(8`Q<9J<J,R:G,
+XME!$`$7$#,@N2J([;NIN#F"D"=``!!3$8G:F>F]F9$@$1E4,2$RZC&HK+":O)
+XMO`&7&I-34(`"2(,+R\D+\*@Y!C$@-R$9JI#:JZVB&2DD`;(70"01#;N:J]$.
+XMF!$P@X(Y)T&(`0KZS(F@"M$D,`D%(3,%*9F1'^B<B($($B80!!`@F8,-L)_)
+XMF0F"$;AT(``4,0L!,L"I[ZBHB2I9I!E0D()1H8K+N=RY`HDQ<R0@(0"0+9')
+XMCJFKJ[)C!!)AB+,XF)J?P(D`HZ^2,T`@H#R3&L$9G=J1*0PHN@-W$(`2`1*<
+XMD.H+BAVHE0!"1#&8"@OXJ]J**L$B0!*%`)DR#*$2+[J[E!B/H2-#`TJD$(G(
+XM+JO**.@2$`,600D4@:$,RHJ-NY"LE0-B!$`(D8JAKZFX"*J9<@,38Q&1&`F+
+XMSXFKV;&;$Q!V`4(``8H1C+F\GLN9@J(`<S,A)2"HC:J*S*&*Z,HQ%$0C&!F*
+XMV9VI@PD4&1G)$Q-#.R<#'8*JG9N4++`"V1-P`E("&PK[BKJIB!0:%T`(`YB0
+XM6J&^#Z"8B9DD(1-`68*1G)G/D@F8@"&0Q6@1`AL($@K0RXJ8*:K50@%R$1(@
+XMH)#\J0O9JB@(@7*#)#-"@H`*K^FYB:B989,@44,9F#2ONIF\JJ!"@T,A-2BI
+XML#FT"MC>JY"1-2$S4@`:BR<8N0F9[("JHE0A(!BJ!@V"$#CPB\B<`($@=!"(
+XM"+@9C*$@`/@0B\AP$T@(DPRCRHZP"+RKF#A6`B$S4:B*N[^0O;HS,-$0AB$1
+XM(7F8B@R)\AX0`@@`,A(C**M*S?H(*-B`,`""(I(`-F"0D(V<F(&I+:`$0CL#
+XM<A)BF+N\K;V)&)$C4@)!@3&*D,N>^9F9BA`"48('$``A$QJ+SLJ8D:!34Q,K
+XMT8!`Z(HIJ3.JZ_^0@("`@`@(@`B`@`@(@`B`@`B`"(`(@("`@`@("```````
+X>````````````````````````````````````````
+X`
+Xend
+END_OF_FILE
+if test 8440 -ne `wc -c <'hello.adpcm.uu'`; then
+    echo shar: \"'hello.adpcm.uu'\" unpacked with wrong size!
+fi
+# end of 'hello.adpcm.uu'
+fi
+echo shar: End of shell archive.
+exit 0

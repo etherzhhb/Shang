@@ -1,0 +1,17 @@
+Makefile (asm file):
+\begin{verbatim}
+C50_DIR = /tools/home1/dsp/c50
+
+CC     = $(C50_DIR)/dspcl
+LINKER = $(C50_DIR)/dsplnk
+
+g72150.out : g72150.obj g72150.cmd Makefile
+        $(LINKER) g72150.cmd
+        sim5x g72150.out &
+
+%.obj : %.asm Makefile
+        $(CC) -as $*.asm -v50
+
+%.asm : %.c
+        $(CC) $*.c -c -g -o2 -mn -n -s -as -v50
+\end{verbatim}

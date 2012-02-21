@@ -1,0 +1,33 @@
+README FLT_ADPCM						martinez
+================
+
+In diesem Verzeichnis steht das handgeschriebene floating point optimierte
+C Programm f"ur die adpcm Anwendung. Mit Hilfe des Makefiles und verschiedener
+Macros kann man folgende executables bzw. object files generieren.
+
+(1) make flt_adpcm.exe
+    generiert ein f"ur die SUN executable Programm, die mit "runme"
+    gestartet wird. Danach werden Eingangs- und Ausgangsdaten sowie
+    der Fehler (Eingang - Ausgang) mit xgraph dargestellt.
+
+(2) make flt_adpcm
+    generiert code f"ur den g56 compiler. Es werden zwei Programme compiliert
+	a) flt_adpcm.asm, flt_adpcm.cld bei denen werden reelle Daten (CCITT)
+  	   gelesen und bearbeitet. Die Anzahl der Daten h"angt von der 
+	   Auskommentierung im File "data_in.c", die ggfs. included wird.
+	b) flt_adpcm_1.asm, flt_adpcm_1.cld, bei diesen werden konstante Daten
+	   benutzt (Wert 0x7a). Die Anzahl der Daten kann man mit dem Macro
+	   N_OF_DATA im flt_adpcm.c steuern.
+
+
+---------------------------------------------------------------------
+
+Mit dem shell script compile kann man das handgeschriebene floating
+point programm 
+
+(1)	Zu einem asm file compilieren
+(2)	Zu einem cld file compilieren
+(3)     Mnemonic Counten, Gr"o\3e bestimmen, Instruction Cycles mit
+	dem Simulator Programm bestimmen
+(4)	Mnemonic Information kann graphisch mit Hilfe von
+	showgraph progname (ohne suffix) dargestellt werden

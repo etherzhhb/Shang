@@ -76,5 +76,6 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(tools)
+add_subdirectory(testsuite)
 
 # TODO: docs.

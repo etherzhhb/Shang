@@ -1,0 +1,133 @@
+
+
+
+
+
+
+
+          There are 3 input vector types. The first is  a  general  PCM   set
+          consisting  of  various sinusoidal  inputs; this set is the 'normal
+          input'. The second set of inputs or 'overload  input'  consists  of
+          very  high  level  PCM  signals. The  third  set  is denoted as 'i-
+          input' and is an ADPCM sequence that exercises the algorithm  in  a
+          manner that is not possible   with  a  PCM input  sequence.
+
+          This diskette contains 34 files as follows:
+
+            1.  NRM.M, the PCM normal mu-law input sequence of 16384 values.
+
+            2.  OVR.M, the PCM overload mu-law input sequence of 2048 values.
+
+            3.  I16, I24, I32, I40: the ADPCM input sequences for operation at 
+                16, 24, 32 and 40 kbit/s
+
+            4.  28 ADPCM or PCM outputs (including cross-vectors) of an ADPCM
+                implementation  starting   from  reset.
+
+          All test sequence files are in  ASCII  notation.   Each  value  (or
+          sample)  of  every   file uses  hexadecimal  representation  with 2
+          hex characters for each 8 bit value.   Every  line  in  every  file
+          contains  32 values (or 64 characters) and is terminated by a  line
+          feed character.  For  files containing  x  bit  ADPCM  values,  the
+          (8-x) most  significant bits are set to 0.  Two more hex characters
+          representing a checksum computation  over the   entire   file   are
+          appended   to   the   end  of  each  file.  Checksum is computed by
+          summing every sample value (two hex characters  comprise  a  sample
+          value)  in   the   file  and   then   finding  the  remainder  when
+          divided by 255. The following Table  describes  the  test  sequence
+          files for  Mu-law.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                         - 2 -
+
+
+
+                              TABLE 1.  Mu-Law Test Files (Reset)
+
+          File Name   No. of value                           Description
+
+          RN40FM.I       16384       APDCM values for fixed 40 kbit/s
+                                     and normal PCM input
+          RN40FM.O       16384       Output PCM values for fixed 40 kbit/s
+                                     and normal PCM input
+          RI40FM.O       16384       Output PCM values for fixed 40 kbit/s
+                                     and the i-input values i40.
+          RV40FM.I        2048       APDCM values for for fixed 40 kbit/s
+                                     and overload PCM input
+          RV40FM.O        2048       Output PCM values for fixed 40 kbit/s
+                                     and overload PCM input
+          RN40FC.O       16384       A-law PCM cross-vector values following normal Mu-law PCM
+                                     input for fixed 40 kbit/s
+          RV40FC.O        2048       A-law PCM values following overload Mu-law PCM
+                                     input for fixed 40 kbit/s
+          gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+          RN32FM.I       16384       APDCM values for fixed 32 kbit/s
+                                     and normal PCM input
+          RN32FM.O       16384       Output PCM values for fixed 32 kbit/s
+                                     and normal PCM input
+          RI32FM.O       16384       Output PCM values for fixed 32 kbit/s
+                                     and the i-input values i32.
+          RV32FM.I        2048       APDCM values for for fixed 32 kbit/s
+                                     and overload PCM input
+          RV32FM.O        2048       Output PCM values for fixed 32 kbit/s
+                                     and overload PCM input
+          RN32FC.O       16384       A-law PCM cross-vector values following normal Mu-law PCM
+                                     input for fixed 32 kbit/s
+          RV32FC.O        2048       A-law PCM values following overload Mu-law PCM
+                                     input for fixed 32 kbit/s
+          gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+          RN24FM.I       16384       APDCM values for fixed 24 kbit/s
+                                     and normal PCM input
+          RN24FM.O       16384       Output PCM values for fixed 24 kbit/s
+                                     and normal PCM input
+          RI24FM.O       16384       Output PCM values for fixed 24 kbit/s
+                                     and the i-input values i24.
+          RV24FM.I        2048       APDCM values for for fixed 24 kbit/s
+                                     and overload PCM input
+          RV24FM.O        2048       Output PCM values for fixed 24 kbit/s
+          RN24FC.O       16384       A-law PCM values following normal Mu-law PCM
+                                     input for fixed 24 kbit/s
+          RV24FC.O        2048       A-law PCM cross-vector values following overload Mu-law PCM
+                                     input for fixed 24 kbit/s
+          gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+          RN16FM.I       16384       APDCM values for fixed 16 kbit/s
+                                     and normal PCM input
+          RN16FM.O       16384       Output PCM values for fixed 16 kbit/s
+                                     and normal PCM input
+          RI16FM.O       16384       Output PCM values for fixed 16 kbit/s
+                                     and the i-input values i16.
+          RV16FM.I        2048       APDCM values for for fixed 16 kbit/s
+                                     and overload PCM input
+          RV16FM.O        2048       Output PCM values for fixed 16 kbit/s
+          RN16FC.O       16384       A-law PCM values following normal Mu-law PCM
+                                     input for fixed 16 kbit/s
+          RV16FC.O        2048       A-law PCM cross-vector values following overload Mu-law PCM
+                                     input for fixed 16 kbit/s

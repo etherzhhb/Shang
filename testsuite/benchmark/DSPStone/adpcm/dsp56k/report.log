@@ -1,0 +1,625 @@
+This is TeX, Version 3.0 (preloaded format=dlplain30 91.8.9)  18 MAY 1994 08:39
+**&dlplain30 report 
+(report.tex
+LaTeX Version 2.09 - Released 19 April 1986
+(/common/sw/tex/lib/macros_standard/is2.sty
+(/common/sw/tex/lib/macros_standard/ert.tex
+(/common/sw/tex/lib/macros_standard/ert11.sty)
+\descriptionmargin=\dimen99
+\c@part=\count79
+\c@chapter=\count80
+\c@section=\count81
+\c@subsection=\count82
+\c@subsubsection=\count83
+\c@paragraph=\count84
+\c@subparagraph=\count85
+\c@figure=\count86
+\c@table=\count87
+\c@bild=\count88
+
+(/common/sw/tex/lib/macros/titlepage.sty)
+(/common/sw/tex/lib/macros_standard/titleert.sty)
+(/common/sw/tex/lib/macros_standard/titleis2.sty))) (report.aux) [0
+
+]
+Overfull \hbox (10.13242pt too wide) in paragraph at lines 59--64
+ [] 
+
+\hbox(25.13747+19.66248)x441.01772
+.\glue(\leftskip) 0.0 plus 1.0fil
+.\hbox(25.13747+19.66248)x451.15013
+..\mathon
+..\vbox(25.13747+19.66248)x451.15013
+...\rule(0.4+0.0)x451.15013
+...\hbox(9.51996+4.08003)x451.15013 []
+...\rule(0.4+0.0)x451.15013
+...\glue 2.0
+...\rule(0.4+0.0)x451.15013
+...etc.
+..\mathoff
+.\penalty 10000
+.\glue(\parfillskip) 0.0
+.\glue(\rightskip) 0.0 plus 1.0fil
+
+
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[1] (adpcm.prof
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[2]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[3]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[4]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[5]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[6]
+Overfull \hbox (13.12862pt too wide) in paragraph at lines 324--324
+[]\elvtt is taken advantage of whenever possible. This causes the code to "run 
+together"[] 
+
+\hbox(6.69167+2.43333)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\elvtt i
+.\elvtt s
+.\glue 5.74869
+.\elvtt t
+.etc.
+
+
+Overfull \hbox (1.63124pt too wide) in paragraph at lines 324--324
+[]\elvtt current section has been completed. This does however make the executi
+on time[] 
+
+\hbox(6.69167+2.43333)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\elvtt c
+.\elvtt u
+.\elvtt r
+.\elvtt r
+.etc.
+
+
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[7]
+Overfull \hbox (1.63124pt too wide) in paragraph at lines 324--324
+[]\elvtt relatively simple and no modifications were made to the algorithm impl
+ementa-[] 
+
+\hbox(6.69167+2.43333)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\elvtt r
+.\elvtt e
+.\elvtt l
+.\elvtt a
+.etc.
+
+
+Overfull \hbox (13.12862pt too wide) in paragraph at lines 324--324
+[]\elvtt tion. The operation of the test set-up with sample speech signals was 
+performed[] 
+
+\hbox(6.69167+2.43333)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\elvtt t
+.\elvtt i
+.\elvtt o
+.\elvtt n
+.etc.
+
+)
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[8] (g721.c.tex
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 37.98328fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[9]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[10]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[11]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[12]
+Overfull \hbox (1.63124pt too wide) in paragraph at lines 920--920
+[]    \elvtt SEZI = (U16BIT) ((SEZI + f_mult(S->B[i], S->DQ[i])) & ((U16BIT) 65
+535L));[] 
+
+\hbox(7.60416+1.52081)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\glue 5.74869
+.\glue 5.74869
+.\glue 5.74869
+.\glue 5.74869
+.etc.
+
+
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[13]
+Overfull \hbox (1.63124pt too wide) in paragraph at lines 920--920
+[]    \elvtt FA = IF_ELSE(PKS1, FA1, (((U24BIT) 131072L) - FA1) & ((U24BIT) 131
+071L));[] 
+
+\hbox(7.60416+1.52081)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\glue 5.74869
+.\glue 5.74869
+.\glue 5.74869
+.\glue 5.74869
+.etc.
+
+
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[14]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[15]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[16]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[17]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[18]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[19]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[20]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[21]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[22]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[23]
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[24]
+Overfull \hbox (13.12862pt too wide) in paragraph at lines 920--920
+[]\elvtt /***************************** public part ***************************
+********/[] 
+
+\hbox(7.60416+2.43333)x441.01772
+.\hbox(0.0+0.0)x0.0
+.\elvtt /
+.\elvtt *
+.\elvtt *
+.\elvtt *
+.etc.
+
+
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[25])
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[26] (g721.h.tex)
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[27] (portab.h.tex)
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[28] (mocad.H.tex
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[29])
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[30] (board_test.c.tex)
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[31] (Makefile.tex)
+Overfull \vbox (2.30302pt too high) has occurred while \output is active
+\vbox(12.0+8.82802)x441.01772
+.\glue 0.0 plus 1.0fil
+.\hbox(14.30302+8.82802)x441.01772, glue set 35.24577fill
+..\hbox(0.0+0.0)x0.0
+..\hbox(13.60344+6.09053)x66.36952
+...\hbox(19.69397+0.0)x66.36952, shifted 6.09053 []
+..\glue 0.0 plus 1.0fill
+..\hbox(14.30302+8.82802)x177.06998
+...\hbox(23.13104+0.0)x177.06998, shifted 8.82802 []
+..\glue 0.0 plus 1.0fill
+..etc.
+
+
+[32] (report.aux) ) 
+Here is how much of TeX's memory you used:
+ 249 strings out of 1983
+ 2338 string characters out of 13365
+ 60972 words of memory out of 65001
+ 2159 multiletter control sequences out of 4000
+ 18998 words of font info for 72 fonts, out of 40000 for 127
+ 0 hyphenation exceptions out of 307
+ 17i,10n,16p,172b,204s stack positions out of 200i,40n,60p,500b,2000s
+
+Output written on report.dvi (33 pages, 59592 bytes).

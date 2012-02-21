@@ -1,0 +1,13 @@
+(1) total_count
+    All files concerning the total instruction count, taking loops in account.
+
+(2) mnemonic count
+    All files concerning a stright forward mnemonic count. 
+    Several versions
+    i.  opt_adpcm-v1.c, original CCITT algorithm C implementation (handwritten)
+    ii. opt_adpcm-v2.c, first C optimization program (handwritten)
+    iii.opt_adpcm-v3.c, Structs included (handwritten)
+    iv. opt_adpcm-v4.c, Specific Code for the S56X Board (handwritten)
+    v.  opt_adpcm_call.c,  DESCARTES Generated Code in call
+    vi. opt_adpcm_inl.c,   DESCARTES Generated Code in inline
+    vii.adpcm.asm, MOTOROLA asm program (no expand/compress routines)

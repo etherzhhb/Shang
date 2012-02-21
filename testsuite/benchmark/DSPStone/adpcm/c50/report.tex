@@ -1,0 +1,107 @@
+\documentstyle[11pt]{is2}
+
+\pagestyle{myheadings}
+\fboxsep=2mm
+\parskip=1em
+
+\newcommand{\makehead}[3]{
+\markboth
+	{\fbox{\bf DSPstone}\hfill \fbox{#1(#2) -
+#3}\hfill \fbox{\today}\hspace*{5mm} page }
+	{\fbox{\bf DSPstone}\hfill \fbox{#1(#2) -
+#3}\hfill \fbox{\today}\hspace*{5mm} page }
+}
+
+\makehead{ADPCM}{Applications}{TMS320C50}
+\parindent=0pt
+
+\begin{document}
+\setcounter{page}{0}
+
+%empty page
+
+this page intentionally left blank
+
+
+\newpage
+$\! \hrulefill \! $
+\begin{tabbing}
+{\bf Benchmark:} \hspace*{25mm}	\= ADPCM \\
+{\bf Version:}			\> 0.1\\
+{\bf Benchmark suite:}          \> DSP - kernel \\
+{\bf Description:}              \> CCITT g721 recommendation algorithm \\
+{\bf Target:}                   \> Texas Instruments TMS320C50\\
+{\bf Memory:}			\> program - internal, no WS \\
+                                \> data - internal, no WS\\
+                                \> PDWSR = 0x28 = 0 \\
+                                \> IOWSR = 0x29 = 0\\
+                                \> CWSR  = 0x2a = 0 \\
+{\bf Compiler:}	                \> dspcl shell version 6.4\\
+{\bf Compiling commands:}       \> see Makefiles\\
+{\bf Linking commands:}         \> see Makefiles\\
+{\bf Reference code:}\>  TI\_BBS/swds506.exe compressed file\\
+                     \>  g72150.asm \\
+                     \>  g72150.cmd \\
+{\bf Profiling procedure:}\> from the list file and simulator based (sim5x v1.1).\\
+\> Load first the {\tt sim5x.exe} program, then change the PMST\\
+\> and ST1 registers according to the memory mapping.\\
+\> Finally load the program to profile.\\
+{\bf History:}                  \> 24-03-94 - C code creation (Schlaeger, Martinez Velarde)\\
+                                \> 24-03-94 - C code profiling (Schlaeger) \\
+\end{tabbing}
+
+{\bf Benchmarking results:}
+
+\begin{table} [htb]
+\begin{center}
+\begin{tabular} {|c|c|c|c|c|} 
+\hline
+{\bf code} & {\bf \#clock-cycles} & {\bf \#instructions} & {\bf\#operations} & {\bf time@25ns [$\bf {\mu}$s]}\\ \hline \hline
+adpcm.asm  & 1365  & N/A & N/A & 34.125 \\ \hline
+g721.c     & 8947  & N/A & N/A & 223.675  \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table} [htb]
+\begin{center}
+\begin{tabular} {|c|c|c|c|c|} \hline
+{\bf code} & {\bf \#words(prog)} & {\bf \#words(const)} & {\bf \#words(variables)} & {\bf \#words(total)}\\ \hline \hline
+adpcm.asm  & 2934  & 155 & 153 & 3242  \\ \hline
+g721.c     & 2957  & 591 & 664 & 4192  \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+
+$\! \hrulefill \! $
+
+{\bf Remarks:}
+
+$\! \hrulefill \! $
+
+
+Next follow the C code version of the g721 recommendation
+(g721.c,g721.h, portab.h, board\_test.c, board\_test.cmd as well the Makefiles).
+
+\newpage
+\input{g721.c.tex}
+
+\newpage
+\input{g721.h.tex}
+
+\newpage
+\input{portab.h.tex}
+
+\newpage
+\input{board_test.c.tex}
+
+\newpage
+\input{Makefile.tex}
+
+
+\newpage
+\input{Makefile.asm.tex}
+
+
+\end{document}
+

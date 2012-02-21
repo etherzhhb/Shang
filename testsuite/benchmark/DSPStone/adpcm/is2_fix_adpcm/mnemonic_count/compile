@@ -1,0 +1,6 @@
+g56k -S -alo -mx-memory $1.c
+asm56 -L -Occ $1.asm
+mnecount $1
+movecount $1
+tfrcount $1
+xgparser $1.inf

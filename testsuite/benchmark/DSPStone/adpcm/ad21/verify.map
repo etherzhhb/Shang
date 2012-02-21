@@ -1,0 +1,763 @@
+Release 5.0
+Analog Devices Inc. : ADSP-21XX Linker
+Version 2.16 7/23/93
+
+verify (verify.exe) mapped according to ADPCM_SYSTEM (adsp2101.ach)
+
+     xref for module: _verify_     
+
+     _verify_                        pm  0800 [0975]   module(global)
+     Input_                          dm  3800 [0020]   variable(global)
+     Output_                         dm  3820 [0020]   variable(global)
+     A_LAW_table_                    dm  3840 [0100]   variable        
+     u_LAW_table_                    dm  3940 [0100]   variable        
+     adapt_quant_                    pm  0800          label        
+     adapt_quantL2_                  pm  0813          label        
+     adapt_quantL3_                  pm  0814          label        
+     adapt_quantL6_                  pm  081A          label        
+     adapt_quantL5_                  pm  0820          label        
+     adapt_quantL7_                  pm  082F          label        
+     adapt_quantL41_                 pm  0834          label        
+     adapt_quantL11_                 pm  084F          label        
+     adapt_quantL10_                 pm  0852          label        
+     adapt_quantL17_                 pm  085B          label        
+     adapt_quantL16_                 pm  085D          label        
+     adapt_quantL21_                 pm  0866          label        
+     adapt_quantL20_                 pm  0869          label        
+     adapt_quantL24_                 pm  086D          label        
+     adapt_quantL9_                  pm  0870          label        
+     adapt_quantL29_                 pm  087D          label        
+     adapt_quantL28_                 pm  087F          label        
+     adapt_quantL32_                 pm  0884          label        
+     adapt_quantL27_                 pm  0887          label        
+     adapt_quantL36_                 pm  088F          label        
+     adapt_quantL35_                 pm  0892          label        
+     adapt_quantL42_                 pm  0894          label        
+     adapt_quantL39_                 pm  0897          label        
+     adapt_quantL43_                 pm  0898          label        
+     adapt_quantL26_                 pm  0899          label        
+     adpt_predict_1_                 pm  08A3          label        
+     adpt_predict_1L64_              pm  08C0          label        
+     adpt_predict_1L48_              pm  08CC          label        
+     adpt_predict_1L49_              pm  08CF          label        
+     adpt_predict_1L52_              pm  08D3          label        
+     adpt_predict_1L55_              pm  08EA          label        
+     adpt_predict_1L53_              pm  08F0          label        
+     adpt_predict_1L54_              pm  08F1          label        
+     adpt_predict_1L57_              pm  0913          label        
+     adpt_predict_1L65_              pm  0918          label        
+     adpt_predict_1L61_              pm  0928          label        
+     adpt_predict_1L62_              pm  092A          label        
+     adpt_predict_1L59_              pm  092E          label        
+     adpt_predict_1L66_              pm  0931          label        
+     adpt_predict_1L47_              pm  093A          label        
+     adpt_predict_2_                 pm  095B          label        
+     adpt_predict_2L68_              pm  0983          label        
+     adpt_predict_2L69_              pm  0984          label        
+     adpt_predict_2L70_              pm  098F          label        
+     adpt_predict_2L148_             pm  0992          label        
+     adpt_predict_2L72_              pm  09A1          label        
+     adpt_predict_2L73_              pm  09A2          label        
+     adpt_predict_2L74_              pm  09AD          label        
+     adpt_predict_2L149_             pm  09B0          label        
+     adpt_predict_2L76_              pm  09BF          label        
+     adpt_predict_2L77_              pm  09C0          label        
+     adpt_predict_2L80_              pm  09C5          label        
+     adpt_predict_2L79_              pm  09CB          label        
+     adpt_predict_2L81_              pm  09D2          label        
+     adpt_predict_2L84_              pm  09E3          label        
+     adpt_predict_2L82_              pm  09EC          label        
+     adpt_predict_2L150_             pm  09EF          label        
+     adpt_predict_2L87_              pm  0A0F          label        
+     adpt_predict_2L86_              pm  0A12          label        
+     adpt_predict_2L157_             pm  0A16          label        
+     adpt_predict_2L90_              pm  0A1A          label        
+     adpt_predict_2L89_              pm  0A1C          label        
+     adpt_predict_2L92_              pm  0A28          label        
+     adpt_predict_2L93_              pm  0A2A          label        
+     adpt_predict_2L94_              pm  0A31          label        
+     adpt_predict_2L151_             pm  0A3D          label        
+     adpt_predict_2L96_              pm  0A59          label        
+     adpt_predict_2L97_              pm  0A5A          label        
+     adpt_predict_2L99_              pm  0A63          label        
+     adpt_predict_2L152_             pm  0A67          label        
+     adpt_predict_2L105_             pm  0A72          label        
+     adpt_predict_2L147_             pm  0A7B          label        
+     adpt_predict_2L101_             pm  0A7C          label        
+     adpt_predict_2L107_             pm  0A86          label        
+     adpt_predict_2L158_             pm  0A8C          label        
+     adpt_predict_2L108_             pm  0A8E          label        
+     adpt_predict_2L113_             pm  0AA0          label        
+     adpt_predict_2L153_             pm  0AA1          label        
+     adpt_predict_2L111_             pm  0AA3          label        
+     adpt_predict_2L115_             pm  0AAC          label        
+     adpt_predict_2L154_             pm  0AAF          label        
+     adpt_predict_2L117_             pm  0AC0          label        
+     adpt_predict_2L118_             pm  0AC6          label        
+     adpt_predict_2L132_             pm  0ADA          label        
+     adpt_predict_2L128_             pm  0AED          label        
+     adpt_predict_2L129_             pm  0AF0          label        
+     adpt_predict_2L126_             pm  0AF2          label        
+     adpt_predict_2L155_             pm  0AF3          label        
+     adpt_predict_2L124_             pm  0AF7          label        
+     adpt_predict_2L125_             pm  0AF8          label        
+     adpt_predict_2L130_             pm  0B03          label        
+     adpt_predict_2L156_             pm  0B06          label        
+     adpt_predict_2L146_             pm  0B0B          label        
+     adpt_predict_2L106_             pm  0B0B          label        
+     adpt_predict_2L136_             pm  0B0E          label        
+     adpt_predict_2L145_             pm  0B18          label        
+     adpt_predict_2L139_             pm  0B1F          label        
+     adpt_predict_2L138_             pm  0B25          label        
+     adpt_predict_2L140_             pm  0B36          label        
+     adpt_predict_2L143_             pm  0B46          label        
+     adpt_predict_2L141_             pm  0B4D          label        
+     adpt_predict_2L142_             pm  0B52          label        
+     coding_adjustment_              pm  0B7E          label        
+     coding_adjustmentL160_          pm  0B91          label        
+     coding_adjustmentL161_          pm  0B92          label        
+     coding_adjustmentL164_          pm  0B98          label        
+     coding_adjustmentL163_          pm  0B9E          label        
+     coding_adjustmentL165_          pm  0BB1          label        
+     coding_adjustmentL233_          pm  0BB6          label        
+     coding_adjustmentL167_          pm  0BCA          label        
+     coding_adjustmentL234_          pm  0BCB          label        
+     coding_adjustmentL238_          pm  0BD8          label        
+     coding_adjustmentL170_          pm  0BDA          label        
+     coding_adjustmentL176_          pm  0BEA          label        
+     coding_adjustmentL180_          pm  0BF3          label        
+     coding_adjustmentL169_          pm  0BF8          label        
+     coding_adjustmentL188_          pm  0C05          label        
+     coding_adjustmentL187_          pm  0C0A          label        
+     coding_adjustmentL195_          pm  0C13          label        
+     coding_adjustmentL186_          pm  0C17          label        
+     coding_adjustmentL239_          pm  0C27          label        
+     coding_adjustmentL203_          pm  0C2B          label        
+     coding_adjustmentL237_          pm  0C31          label        
+     coding_adjustmentL205_          pm  0C36          label        
+     coding_adjustmentL202_          pm  0C46          label        
+     coding_adjustmentL240_          pm  0C50          label        
+     coding_adjustmentL211_          pm  0C54          label        
+     coding_adjustmentL215_          pm  0C5C          label        
+     coding_adjustmentL216_          pm  0C5D          label        
+     coding_adjustmentL209_          pm  0C5E          label        
+     coding_adjustmentL201_          pm  0C63          label        
+     coding_adjustmentL219_          pm  0C70          label        
+     coding_adjustmentL241_          pm  0C77          label        
+     coding_adjustmentL221_          pm  0C7A          label        
+     coding_adjustmentL218_          pm  0C82          label        
+     coding_adjustmentL242_          pm  0C8D          label        
+     coding_adjustmentL236_          pm  0C8E          label        
+     coding_adjustmentL227_          pm  0C91          label        
+     coding_adjustmentL243_          pm  0C96          label        
+     coding_adjustmentL235_          pm  0C96          label        
+     coding_adjustmentL229_          pm  0C9A          label        
+     coding_adjustmentL231_          pm  0C9F          label        
+     coding_adjustmentL217_          pm  0CA0          label        
+     diff_computation_               pm  0CAA          label        
+     diff_computationL245_           pm  0CBC          label        
+     diff_computationL246_           pm  0CC5          label        
+     qtab_12_                        dm  3A40 [0010]   variable        
+     iadpt_quant_                    pm  0CD3          label        
+     iadpt_quantL252_                pm  0D10          label        
+     iadpt_quantL254_                pm  0D15          label        
+     iadpt_quantL250_                pm  0D18          label        
+     input_conversion_               pm  0D28          label        
+     input_conversionL256_           pm  0D43          label        
+     input_conversionL257_           pm  0D4D          label        
+     input_conversionL258_           pm  0D54          label        
+     input_conversionL259_           pm  0D55          label        
+     output_conversion_              pm  0D62          label        
+     output_conversionL261_          pm  0D76          label        
+     output_conversionL262_          pm  0D77          label        
+     output_conversionL266_          pm  0D86          label        
+     output_conversionL267_          pm  0D89          label        
+     output_conversionL268_          pm  0D90          label        
+     output_conversionL272_          pm  0D98          label        
+     output_conversionL271_          pm  0D9C          label        
+     output_conversionL274_          pm  0DAA          label        
+     output_conversionL263_          pm  0DB2          label        
+     output_conversionL277_          pm  0DB6          label        
+     output_conversionL279_          pm  0DC2          label        
+     output_conversionL283_          pm  0DC6          label        
+     output_conversionL282_          pm  0DCF          label        
+     output_conversionL286_          pm  0DDD          label        
+     output_conversionL285_          pm  0DDF          label        
+     output_conversionL276_          pm  0DE1          label        
+     reset_states_                   pm  0DEC          label        
+     reset_statesL291_               pm  0DFD          label        
+     reset_statesL297_               pm  0E05          label        
+     reset_statesL295_               pm  0E09          label        
+     reset_statesL296_               pm  0E11          label        
+     scale_factor_1_                 pm  0E59          label        
+     scale_factor_1L299_             pm  0E82          label        
+     scale_factor_1L300_             pm  0E83          label        
+     scale_factor_1L301_             pm  0EA6          label        
+     scale_factor_1L303_             pm  0EA9          label        
+     W_23_                           dm  3A50 [0008]   variable        
+     scale_factor_2_                 pm  0EC1          label        
+     scale_factor_2L305_             pm  0EE4          label        
+     scale_factor_2L314_             pm  0EE6          label        
+     scale_factor_2L307_             pm  0F15          label        
+     scale_factor_2L315_             pm  0F19          label        
+     scale_factor_2L311_             pm  0F2A          label        
+     scale_factor_2L309_             pm  0F2C          label        
+     scale_factor_2L310_             pm  0F2D          label        
+     scale_factor_2L313_             pm  0F62          label        
+     speed_control_1_                pm  0F97          label        
+     speed_control_1L319_            pm  0FA9          label        
+     speed_control_1L317_            pm  0FAB          label        
+     speed_control_1L318_            pm  0FAC          label        
+     F_28_                           dm  3A58 [0008]   variable        
+     speed_control_2_                pm  0FB9          label        
+     speed_control_2L321_            pm  0FD1          label        
+     speed_control_2L322_            pm  0FD3          label        
+     speed_control_2L323_            pm  0FEA          label        
+     speed_control_2L336_            pm  0FED          label        
+     speed_control_2L325_            pm  1003          label        
+     speed_control_2L337_            pm  1006          label        
+     speed_control_2L327_            pm  101E          label        
+     speed_control_2L328_            pm  101F          label        
+     speed_control_2L331_            pm  1031          label        
+     speed_control_2L329_            pm  1033          label        
+     speed_control_2L330_            pm  1034          label        
+     speed_control_2L332_            pm  1047          label        
+     speed_control_2L338_            pm  104A          label        
+     speed_control_2L334_            pm  1053          label        
+     tone_detector_1_                pm  1063          label        
+     tone_detector_1L343_            pm  1081          label        
+     tone_detector_1L340_            pm  1087          label        
+     tone_detector_1L341_            pm  1088          label        
+     tone_detector_1L342_            pm  1099          label        
+     tone_detector_2_                pm  10A8          label        
+     tone_detector_2L348_            pm  10BB          label        
+     tone_detector_2L345_            pm  10BC          label        
+     tone_detector_2L346_            pm  10C5          label        
+     LAW_                            dm  3A60 [0001]   variable(global)
+     reset_encoder_                  pm  10D3          label(global)
+     encoder_                        pm  10E6          label(global)
+     reset_decoder_                  pm  1107          label(global)
+     decoder_                        pm  111A          label(global)
+     main_                           pm  113C          label(global)
+     mainL358_                       pm  1150          label        
+     mainL356_                       pm  115F          label        
+     mainL359_                       pm  1165          label        
+     AL_                             dm  3A61 [0001]   variable        
+     A2P_                            dm  3A62 [0001]   variable        
+     D_                              dm  3A63 [0001]   variable        
+     DQ_                             dm  3A64 [0001]   variable        
+     I_                              dm  3A65 [0001]   variable        
+     SD_                             dm  3A66 [0001]   variable        
+     SE_                             dm  3A67 [0001]   variable        
+     SEZ_                            dm  3A68 [0001]   variable        
+     S_                              dm  3A69 [0001]   variable        
+     SL_                             dm  3A6A [0001]   variable        
+     SR_                             dm  3A6B [0001]   variable        
+     TDP_                            dm  3A6C [0001]   variable        
+     TR_                             dm  3A6D [0001]   variable        
+     Y_                              dm  3A6E [0001]   variable        
+     X_                              dm  3A6F [0001]   variable        
+     E_STATES_                       dm  3A70 [001A]   variable        
+     D_STATES_                       dm  3A8A [001A]   variable        
+     Register_Spill_Area__           dm  3AA4 [0012]   variable        
+     ___lib_restore_frame                01DF [0000]   extern(___Large_Frame_Save)        
+     __adddi3_                           0220 [0000]   extern(__adddi3__)        
+     ___lib_save_frame                   01C0 [0000]   extern(___Large_Frame_Save)        
+     __lshldi3_                          0204 [0000]   extern(__lshldi3__)        
+     __negdi2_                           0218 [0000]   extern(__negdi2__)        
+     __lshrdi3_                          020E [0000]   extern(__lshrdi3__)        
+     __subdi3_                           022D [0000]   extern(__subdi3__)        
+
+     xref for module: ADSP2101_Runtime_Header     
+
+     ADSP2101_Runtime_Header         pm  0000 [001C]   module(global)
+     ___lib_prog_term                pm  0002          label(global)
+     __Reset_vector                  pm  0000          label        
+     __Interrupt2                    pm  0004          label        
+     __Sport0_trans                  pm  0008          label        
+     __Sport0_recv                   pm  000C          label        
+     __Interrupt1                    pm  0010          label        
+     __Interrupt0                    pm  0014          label        
+     __Timer_interrupt               pm  0018          label        
+     ___lib_tmri_ctrl                    017A [0000]   extern(__Timer_Dispatcher)        
+     main_                               113C [0000]   extern(_verify_)        
+     ___lib_setup_everything             0200 [0000]   extern(Library_Setup_Everything)        
+     ___lib_int0_ctrl                    0134 [0000]   extern(__Interrupt_0_Dispatcher)        
+     ___lib_int1_ctrl                    00EE [0000]   extern(__Interrupt_1_Dispatcher)        
+     ___lib_int2_ctrl                    001C [0000]   extern(__Interrupt_2_Dispatcher)        
+     ___lib_sp0r_ctrl                    00A8 [0000]   extern(__Sport_0_Recv_Dispatcher)        
+     ___lib_sp0x_ctrl                    0062 [0000]   extern(__Sport_0_Xmit_Dispatcher)        
+
+     xref for module: __Interrupt_2_Dispatcher     
+
+     __Interrupt_2_Dispatcher        pm  001C [0046]   module(global)
+     ___lib_int2_ctrl                pm  001C          label(global)
+     __lib_SIGINT2_L0                dm  3AB6 [0001]   variable        
+     __lib_SIGINT2_I1                dm  3AB7 [0001]   variable        
+     __lib_SIGINT2_L1                dm  3AB8 [0001]   variable        
+     __lib_SIGINT2_M2                dm  3AB9 [0001]   variable        
+     __lib_SIGINT2_M3                dm  3ABA [0001]   variable        
+     __lib_SIGINT2_M5                dm  3ABB [0001]   variable        
+     __lib_SIGINT2_L5                dm  3ABC [0001]   variable        
+     __lib_SIGINT2_I6                dm  3ABD [0001]   variable        
+     __lib_SIGINT2_M6                dm  3ABE [0001]   variable        
+     __lib_SIGINT2_L6                dm  3ABF [0001]   variable        
+     __lib_SIGINT2_SB                dm  3AC0 [0001]   variable        
+     __lib_SIGINT2_PX                dm  3AC1 [0001]   variable        
+     __lib_SIGINT2_next_handler      dm  3AC2 [0001]   variable(global)
+     __lib_SIGINT2_handler           dm  3AC3 [0001]   variable(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Sport_0_Xmit_Dispatcher     
+
+     __Sport_0_Xmit_Dispatcher       pm  0062 [0046]   module(global)
+     ___lib_sp0x_ctrl                pm  0062          label(global)
+     __lib_SIGSPORT0XMIT_L0          dm  3AC4 [0001]   variable        
+     __lib_SIGSPORT0XMIT_I1          dm  3AC5 [0001]   variable        
+     __lib_SIGSPORT0XMIT_L1          dm  3AC6 [0001]   variable        
+     __lib_SIGSPORT0XMIT_M2          dm  3AC7 [0001]   variable        
+     __lib_SIGSPORT0XMIT_M3          dm  3AC8 [0001]   variable        
+     __lib_SIGSPORT0XMIT_M5          dm  3AC9 [0001]   variable        
+     __lib_SIGSPORT0XMIT_L5          dm  3ACA [0001]   variable        
+     __lib_SIGSPORT0XMIT_I6          dm  3ACB [0001]   variable        
+     __lib_SIGSPORT0XMIT_M6          dm  3ACC [0001]   variable        
+     __lib_SIGSPORT0XMIT_L6          dm  3ACD [0001]   variable        
+     __lib_SIGSPORT0XMIT_SB          dm  3ACE [0001]   variable        
+     __lib_SIGSPORT0XMIT_PX          dm  3ACF [0001]   variable        
+     __lib_SIGSPORT0XMIT_next_handlerdm  3AD0 [0001]   variable(global)
+     __lib_SIGSPORT0XMIT_handler     dm  3AD1 [0001]   variable(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Sport_0_Recv_Dispatcher     
+
+     __Sport_0_Recv_Dispatcher       pm  00A8 [0046]   module(global)
+     ___lib_sp0r_ctrl                pm  00A8          label(global)
+     __lib_SIGSPORT0RECV_L0          dm  3AD2 [0001]   variable        
+     __lib_SIGSPORT0RECV_I1          dm  3AD3 [0001]   variable        
+     __lib_SIGSPORT0RECV_L1          dm  3AD4 [0001]   variable        
+     __lib_SIGSPORT0RECV_M2          dm  3AD5 [0001]   variable        
+     __lib_SIGSPORT0RECV_M3          dm  3AD6 [0001]   variable        
+     __lib_SIGSPORT0RECV_M5          dm  3AD7 [0001]   variable        
+     __lib_SIGSPORT0RECV_L5          dm  3AD8 [0001]   variable        
+     __lib_SIGSPORT0RECV_I6          dm  3AD9 [0001]   variable        
+     __lib_SIGSPORT0RECV_M6          dm  3ADA [0001]   variable        
+     __lib_SIGSPORT0RECV_L6          dm  3ADB [0001]   variable        
+     __lib_SIGSPORT0RECV_SB          dm  3ADC [0001]   variable        
+     __lib_SIGSPORT0RECV_PX          dm  3ADD [0001]   variable        
+     __lib_SIGSPORT0RECV_next_handlerdm  3ADE [0001]   variable(global)
+     __lib_SIGSPORT0RECV_handler     dm  3ADF [0001]   variable(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Interrupt_1_Dispatcher     
+
+     __Interrupt_1_Dispatcher        pm  00EE [0046]   module(global)
+     ___lib_int1_ctrl                pm  00EE          label(global)
+     __lib_SIGINT1_L0                dm  3AE0 [0001]   variable        
+     __lib_SIGINT1_I1                dm  3AE1 [0001]   variable        
+     __lib_SIGINT1_L1                dm  3AE2 [0001]   variable        
+     __lib_SIGINT1_M2                dm  3AE3 [0001]   variable        
+     __lib_SIGINT1_M3                dm  3AE4 [0001]   variable        
+     __lib_SIGINT1_M5                dm  3AE5 [0001]   variable        
+     __lib_SIGINT1_L5                dm  3AE6 [0001]   variable        
+     __lib_SIGINT1_I6                dm  3AE7 [0001]   variable        
+     __lib_SIGINT1_M6                dm  3AE8 [0001]   variable        
+     __lib_SIGINT1_L6                dm  3AE9 [0001]   variable        
+     __lib_SIGINT1_SB                dm  3AEA [0001]   variable        
+     __lib_SIGINT1_PX                dm  3AEB [0001]   variable        
+     __lib_SIGINT1_next_handler      dm  3AEC [0001]   variable(global)
+     __lib_SIGINT1_handler           dm  3AED [0001]   variable(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Interrupt_0_Dispatcher     
+
+     __Interrupt_0_Dispatcher        pm  0134 [0046]   module(global)
+     ___lib_int0_ctrl                pm  0134          label(global)
+     __lib_SIGINT0_L0                dm  3AEE [0001]   variable        
+     __lib_SIGINT0_I1                dm  3AEF [0001]   variable        
+     __lib_SIGINT0_L1                dm  3AF0 [0001]   variable        
+     __lib_SIGINT0_M2                dm  3AF1 [0001]   variable        
+     __lib_SIGINT0_M3                dm  3AF2 [0001]   variable        
+     __lib_SIGINT0_M5                dm  3AF3 [0001]   variable        
+     __lib_SIGINT0_L5                dm  3AF4 [0001]   variable        
+     __lib_SIGINT0_I6                dm  3AF5 [0001]   variable        
+     __lib_SIGINT0_M6                dm  3AF6 [0001]   variable        
+     __lib_SIGINT0_L6                dm  3AF7 [0001]   variable        
+     __lib_SIGINT0_SB                dm  3AF8 [0001]   variable        
+     __lib_SIGINT0_PX                dm  3AF9 [0001]   variable        
+     __lib_SIGINT0_next_handler      dm  3AFA [0001]   variable(global)
+     __lib_SIGINT0_handler           dm  3AFB [0001]   variable(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Timer_Dispatcher     
+
+     __Timer_Dispatcher              pm  017A [0046]   module(global)
+     ___lib_tmri_ctrl                pm  017A          label(global)
+     __lib_SIGTIMER_L0               dm  3AFC [0001]   variable        
+     __lib_SIGTIMER_I1               dm  3AFD [0001]   variable        
+     __lib_SIGTIMER_L1               dm  3AFE [0001]   variable        
+     __lib_SIGTIMER_M2               dm  3AFF [0001]   variable        
+     __lib_SIGTIMER_M3               dm  3B00 [0001]   variable        
+     __lib_SIGTIMER_M5               dm  3B01 [0001]   variable        
+     __lib_SIGTIMER_L5               dm  3B02 [0001]   variable        
+     __lib_SIGTIMER_I6               dm  3B03 [0001]   variable        
+     __lib_SIGTIMER_M6               dm  3B04 [0001]   variable        
+     __lib_SIGTIMER_L6               dm  3B05 [0001]   variable        
+     __lib_SIGTIMER_SB               dm  3B06 [0001]   variable        
+     __lib_SIGTIMER_PX               dm  3B07 [0001]   variable        
+     __lib_SIGTIMER_next_handler     dm  3B08 [0001]   variable(global)
+     __lib_SIGTIMER_handler          dm  3B09 [0001]   variable(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: ___Large_Frame_Save     
+
+     ___Large_Frame_Save             pm  01C0 [0040]   module(global)
+     ___lib_save_frame               pm  01C0          label(global)
+     ___lib_save_large_frame         pm  01C0          label(global)
+     ___lib_restore_frame            pm  01DF          label(global)
+     ___lib_restore_large_frame      pm  01DF          label(global)
+     ___lib_cbug_finish              pm  01FF          label        
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: Library_Setup_Everything     
+
+     Library_Setup_Everything        pm  0200 [0004]   module(global)
+     ___lib_setup_everything         pm  0200          label(global)
+     ___lib_setup_processor              027A [0000]   extern(Library_Setup_Processor)        
+     ___lib_setup_args                   028E [0000]   extern(__Library_setup_args_)        
+     ___lib_setup_environment            027D [0000]   extern(Library_Setup_Environment)        
+
+     xref for module: __lshldi3__     
+
+     __lshldi3__                     pm  0204 [000A]   module(global)
+     __lshldi3_                      pm  0204          label(global)
+     __restore_state                 pm  020D          label        
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __lshrdi3__     
+
+     __lshrdi3__                     pm  020E [000A]   module(global)
+     __lshrdi3_                      pm  020E          label(global)
+     __restore_state                 pm  0217          label        
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __negdi2__     
+
+     __negdi2__                      pm  0218 [0008]   module(global)
+     __negdi2_                       pm  0218          label(global)
+     __restore_state                 pm  021F          label        
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __adddi3__     
+
+     __adddi3__                      pm  0220 [000D]   module(global)
+     __adddi3_                       pm  0220          label(global)
+     __restore_state                 pm  022C          label        
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __subdi3__     
+
+     __subdi3__                      pm  022D [000A]   module(global)
+     __subdi3_                       pm  022D          label(global)
+     __restore_state                 pm  0236          label        
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Swap_Frame_Only     
+
+     __Swap_Frame_Only               pm  0237 [0011]   module(global)
+     ___lib_frame_swap               pm  0237          label(global)
+     ___lib_frame_restore            pm  0240          label(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: Small_Frame_Save     
+
+     Small_Frame_Save                pm  0248 [001D]   module(global)
+     ___lib_save_small_frame         pm  0248          label(global)
+     ___lib_restore_small_frame      pm  0257          label(global)
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: __Setup_to_Read_Paramters     
+
+     __Setup_to_Read_Paramters       pm  0265 [0004]   module(global)
+     ___lib_setup_stack_read         pm  0265          label(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: Library_divide_support     
+
+     Library_divide_support          pm  0269 [0011]   module(global)
+     ___lib_div_core                 pm  0269          label(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+
+     xref for module: Library_Setup_Processor     
+
+     Library_Setup_Processor         pm  027A [0003]   module(global)
+     ___lib_setup_processor          pm  027A          label(global)
+
+     xref for module: Library_Setup_Environment     
+
+     Library_Setup_Environment       pm  027D [0011]   module(global)
+     ___lib_setup_environment        pm  027D          label(global)
+     ___setup_heap_called            dm  3B0A [0001]   variable(global)
+     ____top_of_stack                    0C00 [0001]   extern(Stack_Declaration)        
+
+     xref for module: __Library_setup_args_     
+
+     __Library_setup_args_           pm  028E [0005]   module(global)
+     ___lib_argv                     dm  3B0B [0001]   variable        
+     ___lib_arg1                     dm  3B0C [0005]   variable        
+     ___lib_setup_args               pm  028E          label(global)
+     ___lib_restore_small_frame          0257 [0000]   extern(Small_Frame_Save)        
+     ___lib_frame_restore                0240 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_save_small_frame             0248 [0000]   extern(Small_Frame_Save)        
+     ___lib_setup_stack_read             0265 [0000]   extern(__Setup_to_Read_Paramters)        
+     ___lib_frame_swap                   0237 [0000]   extern(__Swap_Frame_Only)        
+     ___lib_div_core                     0269 [0000]   extern(Library_divide_support)        
+
+     xref for module: Stack_Declaration     
+
+     Stack_Declaration               pm XXXXXX [0000]   module(global)
+     stack                           dm  0800 [0400]   variable        
+     ____top_of_stack                dm  0C00 [0001]   variable        
+
+
+     210x memory per ADPCM_SYSTEM (adsp2101.ach)
+
+     0000 - 07FF [  2048.] pm ram data/code INT_PMEM                        
+     0800 - 17FF [  4096.] pm ram data/code EXT_PMEM                        
+     3800 - 3BFF [  1024.] dm ram data INT_DMEM                        
+     0800 - 2FFF [ 10240.] dm ram data EXT_DMEM                        
+
+
+
+     boot memory and bootable run time program memory map:
+
+     fixed program memory map:
+
+     0000 - 001B [    28.] pm ram      module   ADSP2101_Runtime_Header
+     001C - 0061 [    70.] pm ram      module   __Interrupt_2_Dispatcher
+     0062 - 00A7 [    70.] pm ram      module   __Sport_0_Xmit_Dispatcher
+     00A8 - 00ED [    70.] pm ram      module   __Sport_0_Recv_Dispatcher
+     00EE - 0133 [    70.] pm ram      module   __Interrupt_1_Dispatcher
+     0134 - 0179 [    70.] pm ram      module   __Interrupt_0_Dispatcher
+     017A - 01BF [    70.] pm ram      module   __Timer_Dispatcher
+     01C0 - 01FF [    64.] pm ram      module   ___Large_Frame_Save
+     0200 - 0203 [     4.] pm ram      module   Library_Setup_Everything
+     0204 - 020D [    10.] pm ram      module   __lshldi3__
+     020E - 0217 [    10.] pm ram      module   __lshrdi3__
+     0218 - 021F [     8.] pm ram      module   __negdi2__
+     0220 - 022C [    13.] pm ram      module   __adddi3__
+     022D - 0236 [    10.] pm ram      module   __subdi3__
+     0237 - 0247 [    17.] pm ram      module   __Swap_Frame_Only
+     0248 - 0264 [    29.] pm ram      module   Small_Frame_Save
+     0265 - 0268 [     4.] pm ram      module   __Setup_to_Read_Paramters
+     0269 - 0279 [    17.] pm ram      module   Library_divide_support
+     027A - 027C [     3.] pm ram      module   Library_Setup_Processor
+     027D - 028D [    17.] pm ram      module   Library_Setup_Environment
+     028E - 0292 [     5.] pm ram      module   __Library_setup_args_
+     0800 - 1174 [  2421.] pm ram      module   _verify_
+
+
+
+     fixed program memory rom:      0.
+     fixed program memory ram:   3080.
+
+
+     dynamic data memory map:
+
+     fixed data memory map:
+
+     0800 - 0C00 [  1025.] dm ram      variable stack of Stack_Declaration 
+     3800 - 381F [    32.] dm ram      variable Input_ of _verify_ 
+     3820 - 383F [    32.] dm ram      variable Output_ of _verify_ 
+     3840 - 393F [   256.] dm ram      variable A_LAW_table_ of _verify_ 
+     3940 - 3A3F [   256.] dm ram      variable u_LAW_table_ of _verify_ 
+     3A40 - 3A4F [    16.] dm ram      variable qtab_12_ of _verify_ 
+     3A50 - 3A57 [     8.] dm ram      variable W_23_ of _verify_ 
+     3A58 - 3A5F [     8.] dm ram      variable F_28_ of _verify_ 
+     3A60 - 3A60 [     1.] dm ram      variable LAW_ of _verify_ 
+     3A61 - 3A61 [     1.] dm ram      variable AL_ of _verify_ 
+     3A62 - 3A62 [     1.] dm ram      variable A2P_ of _verify_ 
+     3A63 - 3A63 [     1.] dm ram      variable D_ of _verify_ 
+     3A64 - 3A64 [     1.] dm ram      variable DQ_ of _verify_ 
+     3A65 - 3A65 [     1.] dm ram      variable I_ of _verify_ 
+     3A66 - 3A66 [     1.] dm ram      variable SD_ of _verify_ 
+     3A67 - 3A67 [     1.] dm ram      variable SE_ of _verify_ 
+     3A68 - 3A68 [     1.] dm ram      variable SEZ_ of _verify_ 
+     3A69 - 3A69 [     1.] dm ram      variable S_ of _verify_ 
+     3A6A - 3A6A [     1.] dm ram      variable SL_ of _verify_ 
+     3A6B - 3A6B [     1.] dm ram      variable SR_ of _verify_ 
+     3A6C - 3A6C [     1.] dm ram      variable TDP_ of _verify_ 
+     3A6D - 3A6D [     1.] dm ram      variable TR_ of _verify_ 
+     3A6E - 3A6E [     1.] dm ram      variable Y_ of _verify_ 
+     3A6F - 3A6F [     1.] dm ram      variable X_ of _verify_ 
+     3A70 - 3A89 [    26.] dm ram      variable E_STATES_ of _verify_ 
+     3A8A - 3AA3 [    26.] dm ram      variable D_STATES_ of _verify_ 
+     3AA4 - 3AB5 [    18.] dm ram      variable Register_Spill_Area__ of _verify_ 
+     3AB6 - 3AB6 [     1.] dm ram      variable __lib_SIGINT2_L0 of __Interrupt_2_Dispatcher 
+     3AB7 - 3AB7 [     1.] dm ram      variable __lib_SIGINT2_I1 of __Interrupt_2_Dispatcher 
+     3AB8 - 3AB8 [     1.] dm ram      variable __lib_SIGINT2_L1 of __Interrupt_2_Dispatcher 
+     3AB9 - 3AB9 [     1.] dm ram      variable __lib_SIGINT2_M2 of __Interrupt_2_Dispatcher 
+     3ABA - 3ABA [     1.] dm ram      variable __lib_SIGINT2_M3 of __Interrupt_2_Dispatcher 
+     3ABB - 3ABB [     1.] dm ram      variable __lib_SIGINT2_M5 of __Interrupt_2_Dispatcher 
+     3ABC - 3ABC [     1.] dm ram      variable __lib_SIGINT2_L5 of __Interrupt_2_Dispatcher 
+     3ABD - 3ABD [     1.] dm ram      variable __lib_SIGINT2_I6 of __Interrupt_2_Dispatcher 
+     3ABE - 3ABE [     1.] dm ram      variable __lib_SIGINT2_M6 of __Interrupt_2_Dispatcher 
+     3ABF - 3ABF [     1.] dm ram      variable __lib_SIGINT2_L6 of __Interrupt_2_Dispatcher 
+     3AC0 - 3AC0 [     1.] dm ram      variable __lib_SIGINT2_SB of __Interrupt_2_Dispatcher 
+     3AC1 - 3AC1 [     1.] dm ram      variable __lib_SIGINT2_PX of __Interrupt_2_Dispatcher 
+     3AC2 - 3AC2 [     1.] dm ram      variable __lib_SIGINT2_next_handler of __Interrupt_2_Dispatcher 
+     3AC3 - 3AC3 [     1.] dm ram      variable __lib_SIGINT2_handler of __Interrupt_2_Dispatcher 
+     3AC4 - 3AC4 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_L0 of __Sport_0_Xmit_Dispatcher 
+     3AC5 - 3AC5 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_I1 of __Sport_0_Xmit_Dispatcher 
+     3AC6 - 3AC6 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_L1 of __Sport_0_Xmit_Dispatcher 
+     3AC7 - 3AC7 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_M2 of __Sport_0_Xmit_Dispatcher 
+     3AC8 - 3AC8 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_M3 of __Sport_0_Xmit_Dispatcher 
+     3AC9 - 3AC9 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_M5 of __Sport_0_Xmit_Dispatcher 
+     3ACA - 3ACA [     1.] dm ram      variable __lib_SIGSPORT0XMIT_L5 of __Sport_0_Xmit_Dispatcher 
+     3ACB - 3ACB [     1.] dm ram      variable __lib_SIGSPORT0XMIT_I6 of __Sport_0_Xmit_Dispatcher 
+     3ACC - 3ACC [     1.] dm ram      variable __lib_SIGSPORT0XMIT_M6 of __Sport_0_Xmit_Dispatcher 
+     3ACD - 3ACD [     1.] dm ram      variable __lib_SIGSPORT0XMIT_L6 of __Sport_0_Xmit_Dispatcher 
+     3ACE - 3ACE [     1.] dm ram      variable __lib_SIGSPORT0XMIT_SB of __Sport_0_Xmit_Dispatcher 
+     3ACF - 3ACF [     1.] dm ram      variable __lib_SIGSPORT0XMIT_PX of __Sport_0_Xmit_Dispatcher 
+     3AD0 - 3AD0 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_next_handler of __Sport_0_Xmit_Dispatcher 
+     3AD1 - 3AD1 [     1.] dm ram      variable __lib_SIGSPORT0XMIT_handler of __Sport_0_Xmit_Dispatcher 
+     3AD2 - 3AD2 [     1.] dm ram      variable __lib_SIGSPORT0RECV_L0 of __Sport_0_Recv_Dispatcher 
+     3AD3 - 3AD3 [     1.] dm ram      variable __lib_SIGSPORT0RECV_I1 of __Sport_0_Recv_Dispatcher 
+     3AD4 - 3AD4 [     1.] dm ram      variable __lib_SIGSPORT0RECV_L1 of __Sport_0_Recv_Dispatcher 
+     3AD5 - 3AD5 [     1.] dm ram      variable __lib_SIGSPORT0RECV_M2 of __Sport_0_Recv_Dispatcher 
+     3AD6 - 3AD6 [     1.] dm ram      variable __lib_SIGSPORT0RECV_M3 of __Sport_0_Recv_Dispatcher 
+     3AD7 - 3AD7 [     1.] dm ram      variable __lib_SIGSPORT0RECV_M5 of __Sport_0_Recv_Dispatcher 
+     3AD8 - 3AD8 [     1.] dm ram      variable __lib_SIGSPORT0RECV_L5 of __Sport_0_Recv_Dispatcher 
+     3AD9 - 3AD9 [     1.] dm ram      variable __lib_SIGSPORT0RECV_I6 of __Sport_0_Recv_Dispatcher 
+     3ADA - 3ADA [     1.] dm ram      variable __lib_SIGSPORT0RECV_M6 of __Sport_0_Recv_Dispatcher 
+     3ADB - 3ADB [     1.] dm ram      variable __lib_SIGSPORT0RECV_L6 of __Sport_0_Recv_Dispatcher 
+     3ADC - 3ADC [     1.] dm ram      variable __lib_SIGSPORT0RECV_SB of __Sport_0_Recv_Dispatcher 
+     3ADD - 3ADD [     1.] dm ram      variable __lib_SIGSPORT0RECV_PX of __Sport_0_Recv_Dispatcher 
+     3ADE - 3ADE [     1.] dm ram      variable __lib_SIGSPORT0RECV_next_handler of __Sport_0_Recv_Dispatcher 
+     3ADF - 3ADF [     1.] dm ram      variable __lib_SIGSPORT0RECV_handler of __Sport_0_Recv_Dispatcher 
+     3AE0 - 3AE0 [     1.] dm ram      variable __lib_SIGINT1_L0 of __Interrupt_1_Dispatcher 
+     3AE1 - 3AE1 [     1.] dm ram      variable __lib_SIGINT1_I1 of __Interrupt_1_Dispatcher 
+     3AE2 - 3AE2 [     1.] dm ram      variable __lib_SIGINT1_L1 of __Interrupt_1_Dispatcher 
+     3AE3 - 3AE3 [     1.] dm ram      variable __lib_SIGINT1_M2 of __Interrupt_1_Dispatcher 
+     3AE4 - 3AE4 [     1.] dm ram      variable __lib_SIGINT1_M3 of __Interrupt_1_Dispatcher 
+     3AE5 - 3AE5 [     1.] dm ram      variable __lib_SIGINT1_M5 of __Interrupt_1_Dispatcher 
+     3AE6 - 3AE6 [     1.] dm ram      variable __lib_SIGINT1_L5 of __Interrupt_1_Dispatcher 
+     3AE7 - 3AE7 [     1.] dm ram      variable __lib_SIGINT1_I6 of __Interrupt_1_Dispatcher 
+     3AE8 - 3AE8 [     1.] dm ram      variable __lib_SIGINT1_M6 of __Interrupt_1_Dispatcher 
+     3AE9 - 3AE9 [     1.] dm ram      variable __lib_SIGINT1_L6 of __Interrupt_1_Dispatcher 
+     3AEA - 3AEA [     1.] dm ram      variable __lib_SIGINT1_SB of __Interrupt_1_Dispatcher 
+     3AEB - 3AEB [     1.] dm ram      variable __lib_SIGINT1_PX of __Interrupt_1_Dispatcher 
+     3AEC - 3AEC [     1.] dm ram      variable __lib_SIGINT1_next_handler of __Interrupt_1_Dispatcher 
+     3AED - 3AED [     1.] dm ram      variable __lib_SIGINT1_handler of __Interrupt_1_Dispatcher 
+     3AEE - 3AEE [     1.] dm ram      variable __lib_SIGINT0_L0 of __Interrupt_0_Dispatcher 
+     3AEF - 3AEF [     1.] dm ram      variable __lib_SIGINT0_I1 of __Interrupt_0_Dispatcher 
+     3AF0 - 3AF0 [     1.] dm ram      variable __lib_SIGINT0_L1 of __Interrupt_0_Dispatcher 
+     3AF1 - 3AF1 [     1.] dm ram      variable __lib_SIGINT0_M2 of __Interrupt_0_Dispatcher 
+     3AF2 - 3AF2 [     1.] dm ram      variable __lib_SIGINT0_M3 of __Interrupt_0_Dispatcher 
+     3AF3 - 3AF3 [     1.] dm ram      variable __lib_SIGINT0_M5 of __Interrupt_0_Dispatcher 
+     3AF4 - 3AF4 [     1.] dm ram      variable __lib_SIGINT0_L5 of __Interrupt_0_Dispatcher 
+     3AF5 - 3AF5 [     1.] dm ram      variable __lib_SIGINT0_I6 of __Interrupt_0_Dispatcher 
+     3AF6 - 3AF6 [     1.] dm ram      variable __lib_SIGINT0_M6 of __Interrupt_0_Dispatcher 
+     3AF7 - 3AF7 [     1.] dm ram      variable __lib_SIGINT0_L6 of __Interrupt_0_Dispatcher 
+     3AF8 - 3AF8 [     1.] dm ram      variable __lib_SIGINT0_SB of __Interrupt_0_Dispatcher 
+     3AF9 - 3AF9 [     1.] dm ram      variable __lib_SIGINT0_PX of __Interrupt_0_Dispatcher 
+     3AFA - 3AFA [     1.] dm ram      variable __lib_SIGINT0_next_handler of __Interrupt_0_Dispatcher 
+     3AFB - 3AFB [     1.] dm ram      variable __lib_SIGINT0_handler of __Interrupt_0_Dispatcher 
+     3AFC - 3AFC [     1.] dm ram      variable __lib_SIGTIMER_L0 of __Timer_Dispatcher 
+     3AFD - 3AFD [     1.] dm ram      variable __lib_SIGTIMER_I1 of __Timer_Dispatcher 
+     3AFE - 3AFE [     1.] dm ram      variable __lib_SIGTIMER_L1 of __Timer_Dispatcher 
+     3AFF - 3AFF [     1.] dm ram      variable __lib_SIGTIMER_M2 of __Timer_Dispatcher 
+     3B00 - 3B00 [     1.] dm ram      variable __lib_SIGTIMER_M3 of __Timer_Dispatcher 
+     3B01 - 3B01 [     1.] dm ram      variable __lib_SIGTIMER_M5 of __Timer_Dispatcher 
+     3B02 - 3B02 [     1.] dm ram      variable __lib_SIGTIMER_L5 of __Timer_Dispatcher 
+     3B03 - 3B03 [     1.] dm ram      variable __lib_SIGTIMER_I6 of __Timer_Dispatcher 
+     3B04 - 3B04 [     1.] dm ram      variable __lib_SIGTIMER_M6 of __Timer_Dispatcher 
+     3B05 - 3B05 [     1.] dm ram      variable __lib_SIGTIMER_L6 of __Timer_Dispatcher 
+     3B06 - 3B06 [     1.] dm ram      variable __lib_SIGTIMER_SB of __Timer_Dispatcher 
+     3B07 - 3B07 [     1.] dm ram      variable __lib_SIGTIMER_PX of __Timer_Dispatcher 
+     3B08 - 3B08 [     1.] dm ram      variable __lib_SIGTIMER_next_handler of __Timer_Dispatcher 
+     3B09 - 3B09 [     1.] dm ram      variable __lib_SIGTIMER_handler of __Timer_Dispatcher 
+     3B0A - 3B0A [     1.] dm ram      variable ___setup_heap_called of Library_Setup_Environment 
+     3B0B - 3B0B [     1.] dm ram      variable ___lib_argv of __Library_setup_args_ 
+     3B0C - 3B10 [     5.] dm ram      variable ___lib_arg1 of __Library_setup_args_ 
+
+
+
+     fixed data memory rom:      0.
+     fixed data memory ram:   1810.
+
+
+

@@ -1,0 +1,2412 @@
+$m.i,d,rA_board_test_ 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c780041 
+$c800001 .uD_ ,f04 
+$c480005 
+$c23890F 
+$c0D00CA 
+$c267C0F 
+$c180000 .uadapt_quantL2_ ,f04 
+$c23390F 
+$c47FFF5 
+$c238A0F 
+$c0D007A 
+$c18000F .uadapt_quantL3_ ,f04 
+$c0D0071 
+$c0D00F7 
+$c0F07FF 
+$c400008 
+$c0D001F 
+$c26790F 
+$c180000 .uadapt_quantL5_ ,f04 
+$c0D00F1 
+$c0D0048 
+$c0F07FF 
+$c2A201F 
+$c2E798A 
+$c180001 .uadapt_quantL6_ ,f04 
+$c4FFF95 
+$c0D00A8 
+$c0F2007 
+$c2A6ABF 
+$c0D001A 
+$c26790F 
+$c180005 .uadapt_quantL7_ ,f04 
+$c0D0048 
+$c400071 
+$c4007F5 
+$c2AE1F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c18000F .uadapt_quantL41_ ,f04 
+$c4007F5 
+$c2B39F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c0D001F 
+$c23890F 
+$c0D005A 
+$c226B0F 
+$c0D001A 
+$c80000B .uY_ ,f04 
+$c0F03FE 
+$c0D005F 
+$c22E90F 
+$c40FFF5 
+$c238A0F 
+$c4012B5 
+$c0D001A 
+$c26E90F 
+$c180009 .uadapt_quantL9_ ,f04 
+$c180000 .uadapt_quantL9_ ,f04 
+$c407FF5 
+$c26E90F 
+$c180009 .uadapt_quantL10_ ,f04 
+$c180000 .uadapt_quantL10_ ,f04 
+$c40F835 
+$c26E90F 
+$c180009 .uadapt_quantL11_ ,f04 
+$c180000 .uadapt_quantL11_ ,f04 
+$c267C0F 
+$c180001 .uadapt_quantL42_ ,f04 
+$c18000F .uadapt_quantL39_ ,f04 
+$c4000FF 
+$c90000F .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c4018F5 
+$c26E90F 
+$c180009 .uadapt_quantL16_ ,f04 
+$c180000 .uadapt_quantL16_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL17_ ,f04 
+$c400084 
+$c900004 .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c40007A 
+$c18000F .uadapt_quantL43_ ,f04 
+$c4015C5 
+$c26E90F 
+$c180009 .uadapt_quantL20_ ,f04 
+$c180000 .uadapt_quantL20_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL21_ ,f04 
+$c40009F 
+$c90000F .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c400064 
+$c900004 .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL24_ ,f04 
+$c4000AA 
+$c18000F .uadapt_quantL43_ ,f04 
+$c40005F 
+$c90000F .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c400B15 
+$c26E90F 
+$c180009 .uadapt_quantL27_ ,f04 
+$c180000 .uadapt_quantL27_ ,f04 
+$c400F55 
+$c26E90F 
+$c180009 .uadapt_quantL28_ ,f04 
+$c180000 .uadapt_quantL28_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL29_ ,f04 
+$c4000B4 
+$c900004 .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c40004A 
+$c18000F .uadapt_quantL43_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL32_ ,f04 
+$c4000CF 
+$c90000F .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c400034 
+$c900004 .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c4004F5 
+$c26E90F 
+$c180009 .uadapt_quantL35_ ,f04 
+$c180000 .uadapt_quantL35_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL36_ ,f04 
+$c4000DA 
+$c18000F .uadapt_quantL43_ ,f04 
+$c40002F 
+$c90000F .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c267C0F 
+$c180000 .uadapt_quantL39_ ,f04 
+$c4000E4 
+$c900004 .uI_ ,f04 
+$c18000F .uadapt_quantL26_ ,f04 
+$c40001A 
+$c90000A .uI_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700049 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c780021 
+$c780031 
+$c780061 
+$c0D01E2 
+$c7800E1 
+$c0D02E1 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c0D02E7 
+$c7800E1 
+$c400003 
+$c400002 
+$c380085 
+$c340014 
+$c800001 .uX_ ,f04 
+$c3BFFF7 
+$c0D0421 
+$c0D0912 
+$c090015 
+$c6000CA 
+$c0F04F1 
+$c0D000F 
+$c26780F 
+$c180000 .uadpt_predict_1L48_ ,f04 
+$c0F04FE 
+$c41FFF5 
+$c233F0F 
+$c090008 
+$c238A0F 
+$c0D007A 
+$c18000F .uadpt_predict_1L49_ ,f04 
+$c0F04FE 
+$c090008 
+$c0D007F 
+$c0D0017 
+$c400008 
+$c26790F 
+$c180000 .uadpt_predict_1L53_ ,f04 
+$c0D00F1 
+$c0D0048 
+$c0F07FF 
+$c2A201F 
+$c2E798A 
+$c180001 .uadpt_predict_1L52_ ,f04 
+$c0D00A7 
+$c267A0F 
+$c180000 .uadpt_predict_1L53_ ,f04 
+$c4FFFA5 
+$c0D00A8 
+$c226A0F 
+$c0D001A 
+$c26790F 
+$c180005 .uadpt_predict_1L55_ ,f04 
+$c400061 
+$c0D0048 
+$c2AE1F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c0D001F 
+$c18000F .uadpt_predict_1L54_ ,f04 
+$c2B39F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c0D001F 
+$c18000F .uadpt_predict_1L54_ ,f04 
+$c400201 
+$c700046 
+$c4003F5 
+$c0D00A4 
+$c2B8A61 
+$c0D00EA 
+$c400305 
+$c20860F 
+$c0D001B 
+$c7A6946 
+$c4000F5 
+$c0D00CA 
+$c0F04FC 
+$c0D007F 
+$c0D00F4 
+$c0F07FA 
+$c0D001F 
+$c2B8948 
+$c0D001A 
+$c22610F 
+$c400131 
+$c0D00CA 
+$c0D004C 
+$c22E10F 
+$c0D005A 
+$c26080F 
+$c180005 .uadpt_predict_1L57_ ,f04 
+$c4FFED5 
+$c2A6C17 
+$c0D005A 
+$c780053 
+$c780013 
+$cB00003 
+$c1C000F .u__lshldi3_ ,f04 
+$c18000F .uadpt_predict_1L65_ ,f04 
+$c0D0017 
+$c780053 
+$c780013 
+$cB00003 
+$c1C000F .u__lshrdi3_ ,f04 
+$c380035 
+$c47FFF4 
+$c0D001E 
+$c090011 
+$c23810F 
+$c90000A .uRegister_Spill_Area__ ,f04 
+$c0D0954 
+$c404005 
+$c700015 
+$c23890F 
+$c267A0F 
+$c180000 .uadpt_predict_1L61_ ,f04 
+$c400015 
+$c26E80F 
+$c180001 .uadpt_predict_1L62_ ,f04 
+$c18000F .uadpt_predict_1L59_ ,f04 
+$c26780F 
+$c180000 .uadpt_predict_1L59_ ,f04 
+$c800004 .uRegister_Spill_Area__ ,f04 
+$c0D00A3 
+$c22E20F 
+$c18000F .uadpt_predict_1L66_ ,f04 
+$c800004 .uRegister_Spill_Area__ ,f04 
+$c0D00A3 
+$c22620F 
+$c0D003A 
+$c400051 
+$c0D0042 
+$c27210F 
+$c180001 .uadpt_predict_1L47_ ,f04 
+$c0D00F3 
+$c0F07FF 
+$c0D001F 
+$c900001 .uSEZ_ ,f04 
+$c0D0042 
+$c400071 
+$c22200F 
+$c0D002A 
+$c0D0042 
+$c27210F 
+$c180003 .uadpt_predict_1L64_ ,f04 
+$c0D00F3 
+$c0F07FF 
+$c0D001F 
+$c900001 .uSE_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c700029 
+$c700039 
+$c700069 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0815 
+$c700059 
+$c0D0445 
+$c700059 
+$c0D0875 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c780021 
+$c780031 
+$c780061 
+$c0D01E0 
+$c7800E1 
+$c0D01E2 
+$c7800E1 
+$c0D01E3 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c0D02E7 
+$c7800E1 
+$c840004 .uX_ ,f04 
+$c0D0524 
+$c0D0502 
+$c340067 
+$c440005 
+$c090003 
+$c800001 .uDQ_ ,f04 
+$c340077 
+$c0D0532 
+$c23890F 
+$c09000F 
+$c267A0F 
+$c180000 .uadpt_predict_2L68_ ,f04 
+$c43FFF5 
+$c23890F 
+$c233A0F 
+$c0D003A 
+$c18000F .uadpt_predict_2L69_ ,f04 
+$c0D0031 
+$c800001 .uSEZ_ ,f04 
+$c440005 
+$c23890F 
+$c267A0F 
+$c180000 .uadpt_predict_2L70_ ,f04 
+$c480005 
+$c0D00A3 
+$c2A6A41 
+$c0D00BA 
+$c22630F 
+$c18000F .uadpt_predict_2L148_ ,f04 
+$c0D0051 
+$c0D0013 
+$c22690F 
+$c90000A .uRegister_Spill_Area__ ,f04 ,o0003 
+$c800001 .uDQ_ ,f04 
+$c80000F .uRegister_Spill_Area__ ,f04 ,o0003 
+$c440005 
+$c0F07F1 
+$c23890F 
+$c90000F .uRegister_Spill_Area__ ,f04 ,o0004 
+$c0D005A 
+$c26080F 
+$c180000 .uadpt_predict_2L72_ ,f04 
+$c43FFF5 
+$c23890F 
+$c233A0F 
+$c0D003A 
+$c18000F .uadpt_predict_2L73_ ,f04 
+$c0D0031 
+$c800001 .uSE_ ,f04 
+$c440005 
+$c23890F 
+$c267A0F 
+$c180000 .uadpt_predict_2L74_ ,f04 
+$c480005 
+$c0D00A3 
+$c2A6A41 
+$c0D00BA 
+$c22630F 
+$c18000F .uadpt_predict_2L149_ ,f04 
+$c0D0051 
+$c0D0013 
+$c22690F 
+$c0D003A 
+$c480005 
+$c0D00A3 
+$c900003 .uSR_ ,f04 
+$c238A0F 
+$c0D001A 
+$c26790F 
+$c180000 .uadpt_predict_2L76_ ,f04 
+$c0D00A3 
+$c233A0F 
+$c47FFF5 
+$c0D00BA 
+$c238B0F 
+$c0D007A 
+$c18000F .uadpt_predict_2L77_ ,f04 
+$c0D0073 
+$c0D0037 
+$c0D00F7 
+$c40000B 
+$c267F0F 
+$c180000 .uadpt_predict_2L79_ ,f04 
+$c0D00F3 
+$c0D005B 
+$c0F07FF 
+$c2A283F 
+$c2E7FBA 
+$c180001 .uadpt_predict_2L80_ ,f04 
+$c0F2306 
+$c2E793F 
+$c180000 .uadpt_predict_2L81_ ,f04 
+$c404005 
+$c0D00A3 
+$c226A0F 
+$c0D003A 
+$c0D00F7 
+$c267F0F 
+$c180000 .uadpt_predict_2L82_ ,f04 
+$c4FFFA5 
+$c226B0F 
+$c0D001A 
+$c26790F 
+$c180005 .uadpt_predict_2L84_ ,f04 
+$c400061 
+$c0D004B 
+$c2AE143 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c0D001F 
+$c22610F 
+$c18000F .uadpt_predict_2L150_ ,f04 
+$c2B39F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c0D001F 
+$c0D0051 
+$c0D0013 
+$c22690F 
+$c18000F .uadpt_predict_2L150_ ,f04 
+$c400205 
+$c0D00A3 
+$c226A0F 
+$c90000A .uRegister_Spill_Area__ ,f04 ,o0005 
+$c340107 
+$c0D0524 
+$c80000A .uRegister_Spill_Area__ ,f04 ,o0004 
+$c09000B 
+$c60001A 
+$c0D0051 
+$c0D001A 
+$c0D0520 
+$c23C90F 
+$c90000A .uRegister_Spill_Area__ ,f04 ,o0006 
+$c6000BA 
+$c267B0F 
+$c180005 .uadpt_predict_2L86_ ,f04 
+$c4E0005 
+$c26EB0F 
+$c180009 .uadpt_predict_2L87_ ,f04 
+$c180000 .uadpt_predict_2L87_ ,f04 
+$c0D001B 
+$c3BFFF5 
+$cB00021 
+$c780011 
+$cB00001 
+$c1C000F .u__lshldi3_ ,f04 
+$c380035 
+$c400015 
+$c090011 
+$c0D001F 
+$c2B893E 
+$c0D0073 
+$c0D00BA 
+$c18000F .uadpt_predict_2L89_ ,f04 
+$c40001B 
+$c480047 
+$c18000F .uadpt_predict_2L89_ ,f04 
+$c41FFF5 
+$c26EB0F 
+$c180000 .uadpt_predict_2L157_ ,f04 
+$c180008 .uadpt_predict_2L90_ ,f04 
+$c0F0302 
+$c40000B 
+$c0D007F 
+$c18000F .uadpt_predict_2L89_ ,f04 
+$c40000B 
+$c47FFC7 
+$c340117 
+$c0D0524 
+$c80000A .uRegister_Spill_Area__ ,f04 ,o0004 
+$c09000B 
+$c60001A 
+$c0D0051 
+$c0D001A 
+$c26E90F 
+$c180000 .uadpt_predict_2L92_ ,f04 
+$c400010 
+$c4C0006 
+$c18000F .uadpt_predict_2L93_ ,f04 
+$c400000 
+$c440006 
+$c80000F .uRegister_Spill_Area__ ,f04 ,o0006 
+$c267F0F 
+$c180000 .uadpt_predict_2L94_ ,f04 
+$c3BFFF7 
+$c780073 
+$c7800B3 
+$c18000F .uadpt_predict_2L151_ ,f04 
+$c3BFFF7 
+$c780073 
+$c7800B3 
+$c1C000F .u__negdi2_ ,f04 
+$c400015 
+$c0D001F 
+$c380025 
+$c0D003E 
+$c090011 
+$c2B8953 
+$c780053 
+$c7800A3 
+$c780063 
+$c780003 
+$c1C000F .u__adddi3_ ,f04 
+$c380045 
+$c090011 
+$cB00073 
+$c0D001E 
+$c0D005F 
+$c780013 
+$c780053 
+$c1C000F .u__lshrdi3_ ,f04 
+$c403FF5 
+$c80000F .uRegister_Spill_Area__ ,f04 ,o0003 
+$c238E0F 
+$c2E7F1A 
+$c180000 .uadpt_predict_2L96_ ,f04 
+$c0D0031 
+$c402005 
+$c0D00A3 
+$c238A0F 
+$c0D001A 
+$c26790F 
+$c180000 .uadpt_predict_2L97_ ,f04 
+$c4FC005 
+$c0D00A3 
+$c23AA0F 
+$c0D003A 
+$c18000F .uadpt_predict_2L97_ ,f04 
+$c400003 
+$c0D0523 
+$c6000BA 
+$c267B0F 
+$c180005 .uadpt_predict_2L99_ ,f04 
+$c0F03F9 
+$c4FE005 
+$c226F0F 
+$c233A0F 
+$c18000F .uadpt_predict_2L152_ ,f04 
+$c0F03F9 
+$c0D007F 
+$c0D0017 
+$c23390F 
+$c0D007A 
+$c0D0523 
+$c0D00A3 
+$c60005A 
+$c2A6A47 
+$c0D001A 
+$c22610F 
+$c800001 .uTR_ ,f04 
+$c2E793A 
+$c180000 .uadpt_predict_2L101_ ,f04 
+$c400001 
+$c3C0085 
+$c14000E .uadpt_predict_2L147_ ,f04 ,oFFFF 
+$c0D0524 
+$c0D0051 
+$c0D0471 
+$c22280F 
+$c09000B 
+$c0D001A 
+$cA0000A 
+$c18000F .uadpt_predict_2L106_ ,f04 
+$c0D0013 
+$c26790F 
+$c180004 .uadpt_predict_2L107_ ,f04 
+$c430005 
+$c900003 .uA2P_ ,f04 
+$c26E90F 
+$c180009 .uadpt_predict_2L108_ ,f04 
+$c180000 .uadpt_predict_2L108_ ,f04 
+$c900005 .uA2P_ ,f04 
+$c18000F .uadpt_predict_2L108_ ,f04 
+$c0D00F3 
+$c4CFFF5 
+$c900003 .uA2P_ ,f04 
+$c26EF0F 
+$c180000 .uadpt_predict_2L158_ ,f04 
+$c180008 .uadpt_predict_2L108_ ,f04 
+$c4D0004 
+$c900004 .uA2P_ ,f04 
+$c340107 
+$c0D0524 
+$c800001 .uA2P_ ,f04 
+$c09000B 
+$c68001E 
+$c60001A 
+$c80000A .uRegister_Spill_Area__ ,f04 ,o0004 
+$c0D0051 
+$c0D001A 
+$c0D0520 
+$c63C91A 
+$c80000F .uRegister_Spill_Area__ ,f04 ,o0003 
+$c2E7F5A 
+$c180000 .uadpt_predict_2L111_ ,f04 
+$c26080F 
+$c180000 .uadpt_predict_2L113_ ,f04 
+$c4FF405 
+$c18000F .uadpt_predict_2L153_ ,f04 
+$c400C05 
+$c22690F 
+$c0D001A 
+$c0D0520 
+$c6000BA 
+$c267B0F 
+$c180005 .uadpt_predict_2L115_ ,f04 
+$c401005 
+$c0F03F8 
+$c2A694F 
+$c22E20F 
+$c18000F .uadpt_predict_2L154_ ,f04 
+$c0F03F8 
+$c0D005F 
+$c22E90F 
+$c0D00CA 
+$c0D0523 
+$c43C001 
+$c6000BA 
+$c0D004B 
+$c4C4005 
+$c22E10F 
+$c0D007A 
+$c2A6B1C 
+$c2E793A 
+$c180004 .uadpt_predict_2L117_ ,f04 
+$c0D0057 
+$c6EE9C2 
+$c180009 .uadpt_predict_2L118_ ,f04 
+$c180000 .uadpt_predict_2L118_ ,f04 
+$c680072 
+$c18000F .uadpt_predict_2L118_ ,f04 
+$c0D001C 
+$c0D0053 
+$c6EE9C2 
+$c180008 .uadpt_predict_2L118_ ,f04 
+$c180000 .uadpt_predict_2L118_ ,f04 
+$c680032 
+$c480008 
+$c400800 
+$c0D0524 
+$c4FF802 
+$c0D0512 
+$c400015 
+$c80000B .uDQ_ ,f04 
+$c340087 
+$c0F03F2 
+$c090007 
+$c0D007F 
+$c0D00A7 
+$c400016 
+$c238A0F 
+$c43FFF5 
+$c340013 
+$c0D007A 
+$c0D0504 
+$c238B0F 
+$c0D00CA 
+$c3C0065 
+$c14000E .uadpt_predict_2L106_ ,f04 ,oFFFF 
+$c0D0520 
+$c667C3A 
+$c180000 .uadpt_predict_2L124_ ,f04 
+$c600016 
+$c404004 
+$c0D0521 
+$c0D0923 
+$c0D0672 
+$c23810F 
+$c090007 
+$c267A0F 
+$c180000 .uadpt_predict_2L128_ ,f04 
+$c0D0056 
+$c0D0017 
+$c26E90F 
+$c180001 .uadpt_predict_2L129_ ,f04 
+$c18000F .uadpt_predict_2L126_ ,f04 
+$c0D00A7 
+$c267A0F 
+$c180000 .uadpt_predict_2L126_ ,f04 
+$c0D0052 
+$c18000F .uadpt_predict_2L155_ ,f04 
+$c0D0050 
+$c0D0013 
+$c22690F 
+$c0D001A 
+$c18000F .uadpt_predict_2L125_ ,f04 
+$c0D0013 
+$c0D0520 
+$c0D0048 
+$c6000BA 
+$c23830F 
+$c267A0F 
+$c180000 .uadpt_predict_2L130_ ,f04 
+$c401004 
+$c0F03F8 
+$c2A615F 
+$c22EA0F 
+$c18000F .uadpt_predict_2L156_ ,f04 
+$c0F03F8 
+$c0D005F 
+$c22E90F 
+$c0D001A 
+$c680012 
+$c0D0520 
+$c340017 
+$c090003 
+$c0D0524 
+$c3400D7 
+$c09000B 
+$c3C0055 
+$c14000E .uadpt_predict_2L145_ ,f04 ,oFFFF 
+$c0D0922 
+$c37FFF7 
+$c09000B 
+$c37FFF7 
+$c6000AA 
+$c0D0622 
+$c09000B 
+$c7800AA 
+$c43FFF5 
+$c800001 .uDQ_ ,f04 
+$c400003 
+$c23890F 
+$c0D00BA 
+$c2E7B1B 
+$c180000 .uadpt_predict_2L138_ ,f04 
+$c0D00F1 
+$c0D0053 
+$c0F07FF 
+$c2A281F 
+$c2E793A 
+$c180001 .uadpt_predict_2L139_ ,f04 
+$c440005 
+$c0D00F3 
+$c340087 
+$c0F2706 
+$c0D0524 
+$c0D001F 
+$c0D0071 
+$c800001 .uDQ_ ,f04 
+$c09000B 
+$c23890F 
+$c0D001A 
+$c26790F 
+$c180000 .uadpt_predict_2L140_ ,f04 
+$c404005 
+$c0D00A7 
+$c226A0F 
+$c0D007A 
+$c267B0F 
+$c180000 .uadpt_predict_2L141_ ,f04 
+$c4FFFA5 
+$c0D00A3 
+$c226A0F 
+$c0D001A 
+$c26790F 
+$c180005 .uadpt_predict_2L143_ ,f04 
+$c400061 
+$c0D0043 
+$c2AE147 
+$c0D009A 
+$c0E030F 
+$c22670F 
+$c6800AA 
+$c18000F .uadpt_predict_2L142_ ,f04 
+$c2B3917 
+$c0D009A 
+$c0E030F 
+$c0D005F 
+$c22690F 
+$c6800AA 
+$c18000F .uadpt_predict_2L142_ ,f04 
+$c400205 
+$c0D00A7 
+$c226A0F 
+$c0D001A 
+$c68001A 
+$c0D0524 
+$c340117 
+$c0D0502 
+$c090003 
+$c340107 
+$c0D0922 
+$c3800F5 
+$c09000B 
+$c3400E7 
+$c6000AA 
+$c6800A2 
+$c80000F .uRegister_Spill_Area__ ,f04 ,o0004 
+$c6800FA 
+$c0D0622 
+$c090019 
+$c09000B 
+$c6000AA 
+$c7800AA 
+$c80000F .uRegister_Spill_Area__ ,f04 ,o0005 
+$c6800FA 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c700029 
+$c700039 
+$c700069 
+$c700059 
+$c0D0405 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0435 
+$c700059 
+$c0D0445 
+$c700059 
+$c0D0875 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c780041 
+$c800001 .uD_ ,f04 
+$c480005 
+$c23890F 
+$c0D00CA 
+$c267C0F 
+$c180000 .ucoding_adjustmentL160_ ,f04 
+$c23390F 
+$c47FFF5 
+$c238A0F 
+$c0D007A 
+$c18000F .ucoding_adjustmentL161_ ,f04 
+$c0D0071 
+$c0D00F7 
+$c0F07FF 
+$c400008 
+$c0D001F 
+$c26790F 
+$c180000 .ucoding_adjustmentL163_ ,f04 
+$c0D00F1 
+$c0D0058 
+$c0F07FF 
+$c2A281F 
+$c2E798A 
+$c180001 .ucoding_adjustmentL164_ ,f04 
+$c80000B .uY_ ,f04 
+$c4FFF95 
+$c0F2007 
+$c0D00A8 
+$c90000F .uRegister_Spill_Area__ ,f04 ,o000B 
+$c226A0F 
+$c0F03FE 
+$c0D001A 
+$c90000F .uRegister_Spill_Area__ ,f04 ,o0009 
+$c26790F 
+$c180005 .ucoding_adjustmentL165_ ,f04 
+$c0D0048 
+$c400071 
+$c4007F5 
+$c2AE1F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c18000F .ucoding_adjustmentL233_ ,f04 
+$c4007F5 
+$c2B39F7 
+$c0D001A 
+$c0D0091 
+$c0E070F 
+$c0D001F 
+$c800004 .uRegister_Spill_Area__ ,f04 ,o000B 
+$c23890F 
+$c0D001A 
+$c23A10F 
+$c800004 .uRegister_Spill_Area__ ,f04 ,o0009 
+$c0D001A 
+$c40FFF5 
+$c22E10F 
+$c0D001A 
+$c23890F 
+$c0D00BA 
+$c800001 .uI_ ,f04 
+$c400085 
+$c23890F 
+$c267A0F 
+$c180000 .ucoding_adjustmentL167_ ,f04 
+$c400075 
+$c23890F 
+$c18000F .ucoding_adjustmentL234_ ,f04 
+$c22690F 
+$c0D008A 
+$c4012B5 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL169_ ,f04 
+$c180000 .ucoding_adjustmentL169_ ,f04 
+$c407FF5 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL170_ ,f04 
+$c180000 .ucoding_adjustmentL170_ ,f04 
+$c40F835 
+$c26EB0F 
+$c180000 .ucoding_adjustmentL238_ ,f04 
+$c180008 .ucoding_adjustmentL195_ ,f04 
+$c40007E 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c4018F5 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL176_ ,f04 
+$c180000 .ucoding_adjustmentL176_ ,f04 
+$c23E40F 
+$c0D005A 
+$c23080F 
+$c0D00FA 
+$c0F27F1 
+$c4000F5 
+$c90000A .uRegister_Spill_Area__ ,f04 ,o000A 
+$c0D00AF 
+$c238A0F 
+$c90000F .uRegister_Spill_Area__ ,f04 ,o000A 
+$c0D00EA 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c4015C5 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL180_ ,f04 
+$c180000 .ucoding_adjustmentL180_ ,f04 
+$c4000EE 
+$c267C0F 
+$c180000 .ucoding_adjustmentL186_ ,f04 
+$c40001E 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c4000DE 
+$c267C0F 
+$c180000 .ucoding_adjustmentL186_ ,f04 
+$c40002E 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c400B15 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL187_ ,f04 
+$c180000 .ucoding_adjustmentL187_ ,f04 
+$c400F55 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL188_ ,f04 
+$c180000 .ucoding_adjustmentL188_ ,f04 
+$c4000CE 
+$c267C0F 
+$c180000 .ucoding_adjustmentL186_ ,f04 
+$c40003E 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c4000BE 
+$c267C0F 
+$c180000 .ucoding_adjustmentL186_ ,f04 
+$c40004E 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c4004F5 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL195_ ,f04 
+$c180000 .ucoding_adjustmentL195_ ,f04 
+$c4000AE 
+$c267C0F 
+$c180000 .ucoding_adjustmentL186_ ,f04 
+$c40005E 
+$c18000F .ucoding_adjustmentL186_ ,f04 
+$c40009E 
+$c267C0F 
+$c180000 .ucoding_adjustmentL186_ ,f04 
+$c40006E 
+$c800001 .uLAW_ ,f04 
+$c26790F 
+$c180000 .ucoding_adjustmentL201_ ,f04 
+$c400555 
+$c800001 .uS_ ,f04 
+$c2BC958 
+$c0D001E 
+$c0D007A 
+$c900007 .uSD_ ,f04 
+$c26E90F 
+$c180009 .ucoding_adjustmentL202_ ,f04 
+$c180000 .ucoding_adjustmentL202_ ,f04 
+$c4007E5 
+$c26EA0F 
+$c180000 .ucoding_adjustmentL239_ ,f04 
+$c180008 .ucoding_adjustmentL203_ ,f04 
+$c0D0057 
+$c22280F 
+$c90000A .uSD_ ,f04 
+$c18000F .ucoding_adjustmentL209_ ,f04 
+$c40080B 
+$c0D0017 
+$c0D005B 
+$c26E90F 
+$c180009 .ucoding_adjustmentL205_ ,f04 
+$c180000 .ucoding_adjustmentL205_ ,f04 
+$c4FFFF5 
+$c0D00A7 
+$c226A0F 
+$c0D001A 
+$c18000F .ucoding_adjustmentL216_ ,f04 
+$c0D004B 
+$c0D00A7 
+$c23C20F 
+$c0D001A 
+$c23E10F 
+$c0D001A 
+$c23390F 
+$c0D00FA 
+$c0F27F1 
+$c4007F5 
+$c90000A .uRegister_Spill_Area__ ,f04 ,o000A 
+$c0D00AF 
+$c238A0F 
+$c90000F .uRegister_Spill_Area__ ,f04 ,o000A 
+$c0D001A 
+$c18000F .ucoding_adjustmentL216_ ,f04 
+$c0D0058 
+$c0D001E 
+$c26E90F 
+$c180008 .ucoding_adjustmentL209_ ,f04 
+$c180000 .ucoding_adjustmentL209_ ,f04 
+$c4007F5 
+$c0D00F7 
+$c26EF0F 
+$c180000 .ucoding_adjustmentL240_ ,f04 
+$c180008 .ucoding_adjustmentL211_ ,f04 
+$c267F0F 
+$c180001 .ucoding_adjustmentL237_ ,f04 
+$c400801 
+$c18000F .ucoding_adjustmentL216_ ,f04 
+$c400FF5 
+$c0D00F7 
+$c26EF0F 
+$c180000 .ucoding_adjustmentL215_ ,f04 
+$c0D0057 
+$c22280F 
+$c0D001A 
+$c18000F .ucoding_adjustmentL216_ ,f04 
+$c400FF1 
+$c900001 .uSD_ ,f04 
+$c400555 
+$c800001 .uSD_ ,f04 
+$c23C90F 
+$c90000A .uSD_ ,f04 
+$c18000F .ucoding_adjustmentL217_ ,f04 
+$c0D001E 
+$c80000B .uS_ ,f04 
+$c0D0058 
+$c90000B .uSD_ ,f04 
+$c26E90F 
+$c180009 .ucoding_adjustmentL218_ ,f04 
+$c180000 .ucoding_adjustmentL218_ ,f04 
+$c267B0F 
+$c180000 .ucoding_adjustmentL219_ ,f04 
+$c4007F5 
+$c26EB0F 
+$c180009 .ucoding_adjustmentL235_ ,f04 
+$c180000 .ucoding_adjustmentL235_ ,f04 
+$c800001 .uS_ ,f04 
+$c4FF805 
+$c4007E7 
+$c2A6947 
+$c26E20F 
+$c180000 .ucoding_adjustmentL241_ ,f04 
+$c180008 .ucoding_adjustmentL221_ ,f04 
+$c800001 .uSD_ ,f04 
+$c0D0051 
+$c18000F .ucoding_adjustmentL236_ ,f04 
+$c2BE157 
+$c233A0F 
+$c0F22F1 
+$c0D00AF 
+$c0D001A 
+$c23890F 
+$c90000A .uSD_ ,f04 
+$c18000F .ucoding_adjustmentL217_ ,f04 
+$c0D0058 
+$c0D001E 
+$c26E90F 
+$c180008 .ucoding_adjustmentL217_ ,f04 
+$c180000 .ucoding_adjustmentL217_ ,f04 
+$c4007E7 
+$c0D001B 
+$c0D0057 
+$c26E90F 
+$c180000 .ucoding_adjustmentL242_ ,f04 
+$c180008 .ucoding_adjustmentL227_ ,f04 
+$c0D005B 
+$c22280F 
+$c90000A .uSD_ ,f04 
+$c18000F .ucoding_adjustmentL217_ ,f04 
+$c4FF7F5 
+$c2A6B47 
+$c26E20F 
+$c180000 .ucoding_adjustmentL243_ ,f04 
+$c180008 .ucoding_adjustmentL229_ ,f04 
+$c4FFFF5 
+$c226B0F 
+$c90000A .uSD_ ,f04 
+$c18000F .ucoding_adjustmentL217_ ,f04 
+$c4007F5 
+$c400801 
+$c26EB0F 
+$c180001 .ucoding_adjustmentL231_ ,f04 
+$c400FE1 
+$c900001 .uSD_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700049 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780041 
+$c800007 .uSL_ ,f04 
+$c420005 
+$c0D00A7 
+$c238A0F 
+$c0D005A 
+$c26080F 
+$c180000 .udiff_computationL245_ ,f04 
+$c4C0005 
+$c0D00A7 
+$c226A0F 
+$c0D007A 
+$c80000B .uSE_ ,f04 
+$c440005 
+$c238B0F 
+$c0D005A 
+$c26080F 
+$c180000 .udiff_computationL246_ ,f04 
+$c480005 
+$c226B0F 
+$c0D00BA 
+$c0D004B 
+$c0D00A7 
+$c22E20F 
+$c0D005A 
+$c900005 .uD_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700049 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c380002 .uqtab_12_ ,f04 
+$c0D0642 
+$c80000B .uY_ ,f04 
+$c840002 .uI_ ,f04 
+$c0F03FE 
+$c090008 
+$c0D001F 
+$c60005A 
+$c22690F 
+$c4000F5 
+$c0D00BA 
+$c0F03F9 
+$c0D001F 
+$c23890F 
+$c4007F5 
+$c2B8B0A 
+$c400805 
+$c0D001A 
+$c22690F 
+$c400085 
+$c800001 .uI_ ,f04 
+$c2B89CA 
+$c0D001A 
+$c440005 
+$c23390F 
+$c0D001A 
+$c0D00F1 
+$c0F27F1 
+$c0D001F 
+$c23890F 
+$c408005 
+$c2B8B7A 
+$c0D005A 
+$c2E0817 
+$c180001 .uiadpt_quantL250_ ,f04 
+$c400071 
+$c0D0040 
+$c22E10F 
+$c0D001A 
+$c26790F 
+$c180005 .uiadpt_quantL252_ ,f04 
+$c4FFF95 
+$c22680F 
+$c0D001A 
+$c0D00A7 
+$c0D0091 
+$c0E040F 
+$c18000F .uiadpt_quantL254_ ,f04 
+$c23390F 
+$c0D001A 
+$c0D00A7 
+$c0D0091 
+$c0E040F 
+$c0D005F 
+$c226A0F 
+$c0D001A 
+$c900001 .uDQ_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c800001 .uLAW_ ,f04 
+$c26790F 
+$c180000 .uinput_conversionL256_ ,f04 
+$c410005 
+$c380002 .uA_LAW_table_ ,f04 
+$c840002 .uS_ ,f04 
+$c0D0642 
+$c090008 
+$c60001A 
+$c23890F 
+$c40FFF5 
+$c2B89BA 
+$c0D00CA 
+$c0F0401 
+$c0D001F 
+$c18000F .uinput_conversionL257_ ,f04 
+$c420005 
+$c380002 .uu_LAW_table_ ,f04 
+$c840002 .uS_ ,f04 
+$c0D0642 
+$c090008 
+$c60001A 
+$c23890F 
+$c41FFF5 
+$c2B89BA 
+$c0D001A 
+$c267B0F 
+$c180000 .uinput_conversionL258_ ,f04 
+$c23390F 
+$c43FFF5 
+$c238A0F 
+$c90000A .uSL_ ,f04 
+$c18000F .uinput_conversionL259_ ,f04 
+$c900001 .uSL_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c800001 .uSR_ ,f04 
+$c480005 
+$c23890F 
+$c0D00BA 
+$c267B0F 
+$c180000 .uoutput_conversionL261_ ,f04 
+$c23390F 
+$c47FFF5 
+$c238A0F 
+$c0D007A 
+$c18000F .uoutput_conversionL262_ ,f04 
+$c0D0071 
+$c800001 .uLAW_ ,f04 
+$c26790F 
+$c180000 .uoutput_conversionL263_ ,f04 
+$c400D5C 
+$c267B0F 
+$c180000 .uoutput_conversionL266_ ,f04 
+$c0D0047 
+$c4FFFF5 
+$c22200F 
+$c0D00BA 
+$c0F03FF 
+$c40055C 
+$c226F0F 
+$c0D001A 
+$c18000F .uoutput_conversionL267_ ,f04 
+$c0D00F7 
+$c0F07FF 
+$c0D001F 
+$c40FFF5 
+$c26E90F 
+$c180009 .uoutput_conversionL268_ ,f04 
+$c180000 .uoutput_conversionL268_ ,f04 
+$c4007F5 
+$c23CC0F 
+$c18000F .uoutput_conversionL285_ ,f04 
+$c0D00F1 
+$c0F07FC 
+$c400005 
+$c0D00BF 
+$c0F03FF 
+$c0D00BF 
+$c267B0F 
+$c180000 .uoutput_conversionL271_ ,f04 
+$c0F03FF 
+$c2A28BF 
+$c2E7B5A 
+$c180001 .uoutput_conversionL272_ ,f04 
+$c0D00F5 
+$c0F0704 
+$c2E08BF 
+$c180000 .uoutput_conversionL274_ ,f04 
+$c2AA8F1 
+$c0D005A 
+$c0D0095 
+$c0E070F 
+$c4000F5 
+$c0D001F 
+$c23890F 
+$c0D005A 
+$c2BAB4C 
+$c18000F .uoutput_conversionL286_ ,f04 
+$c0D00F1 
+$c0F07FF 
+$c4000F5 
+$c0D001F 
+$c23890F 
+$c0D005A 
+$c2BAB4C 
+$c18000F .uoutput_conversionL286_ ,f04 
+$c400FF0 
+$c267B0F 
+$c180000 .uoutput_conversionL277_ ,f04 
+$c4007F0 
+$c400215 
+$c0D00A7 
+$c226A0F 
+$c41FFF5 
+$c0D00BA 
+$c26EB0F 
+$c180009 .uoutput_conversionL279_ ,f04 
+$c180000 .uoutput_conversionL279_ ,f04 
+$c4007F5 
+$c23C80F 
+$c90000A .uS_ ,f04 
+$c18000F .uoutput_conversionL276_ ,f04 
+$c0F03FB 
+$c400051 
+$c267F0F 
+$c180000 .uoutput_conversionL282_ ,f04 
+$c0D0041 
+$c22200F 
+$c0D001A 
+$c23390F 
+$c0D005A 
+$c0D0095 
+$c0E030F 
+$c267F0F 
+$c180001 .uoutput_conversionL283_ ,f04 
+$c4FFFA5 
+$c22690F 
+$c0D001A 
+$c2B61F1 
+$c0D001A 
+$c0F0704 
+$c4000F5 
+$c0D00CF 
+$c0D0091 
+$c0E030F 
+$c0D001F 
+$c23890F 
+$c0D005A 
+$c2BAC40 
+$c0D001A 
+$c23C10F 
+$c0D001A 
+$c900001 .uS_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c0D01E0 
+$c7800E1 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c0D02E7 
+$c7800E1 
+$c840001 .uX_ ,f04 
+$c400005 
+$c3C0085 
+$c14000E .ureset_statesL297_ ,f04 ,oFFFF 
+$c0D0521 
+$c0D0445 
+$c22280F 
+$c090008 
+$c0D005A 
+$cA0000A 
+$c0D0501 
+$c340084 
+$c400005 
+$c090000 
+$c3C0065 
+$c14000E .ureset_statesL296_ ,f04 ,oFFFF 
+$c0D0520 
+$c0D0445 
+$c22280F 
+$c090008 
+$c0D005A 
+$cA0020A 
+$c0D0521 
+$c0D0921 
+$c3400F4 
+$c3800E7 
+$c090008 
+$c09001B 
+$cA0020A 
+$c0D0521 
+$cB0020A 
+$c340114 
+$c0D0921 
+$c090008 
+$c380107 
+$c340124 
+$c09001B 
+$cA0000A 
+$cB0000A 
+$c0D0921 
+$c0D0501 
+$c0D0521 
+$c090000 
+$c380137 
+$c340144 
+$c09001B 
+$c090008 
+$cA0000A 
+$c0D0521 
+$cB0000A 
+$c340154 
+$cA00002 
+$c090008 
+$c0D0501 
+$c340164 
+$c0D0921 
+$cA0220A 
+$c0D0521 
+$c090008 
+$c340174 
+$cA0000A 
+$c0D0521 
+$c090000 
+$c380187 
+$c340194 
+$c09001B 
+$c3BFFF5 
+$cB0000A 
+$c090008 
+$cA8800A 
+$c70001A 
+$cB00061 
+$cB88001 
+$c780011 
+$c1C000F .u__lshrdi3_ ,f04 
+$c0D001E 
+$c680012 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700059 
+$c0D0405 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c700059 
+$c0D0875 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c780021 
+$c780031 
+$c780061 
+$c0D01E0 
+$c7800E1 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c0D02E7 
+$c7800E1 
+$c840000 .uX_ ,f04 
+$c380177 
+$c0D0520 
+$c340154 
+$c0D0920 
+$c090008 
+$c09001B 
+$c60001A 
+$c70005A 
+$c22E90F 
+$c420005 
+$c0D001A 
+$c23890F 
+$c0D000A 
+$c26780F 
+$c180000 .uscale_factor_1L299_ ,f04 
+$c23390F 
+$c41FFF5 
+$c238A0F 
+$c0D005A 
+$c18000F .uscale_factor_1L300_ ,f04 
+$c0D0051 
+$c0D0035 
+$c800007 .uAL_ ,f04 
+$c20890F 
+$c0D005C 
+$c0D00F3 
+$c0D008B 
+$c0F07F1 
+$c0D0063 
+$c0D002F 
+$c0D0520 
+$c0D00F7 
+$c3BFFF5 
+$c0F07F1 
+$c0D00BF 
+$c340174 
+$c20830F 
+$c90000F .uRegister_Spill_Area__ ,f04 ,o000C 
+$c0D001B 
+$cB00061 
+$c788881 
+$c2A69EB 
+$c0D001A 
+$c0D0041 
+$c090008 
+$c22660F 
+$c0D001A 
+$c780011 
+$c1C000F .u__lshrdi3_ ,f04 
+$c60001A 
+$c0D005E 
+$c2E7835 
+$c180000 .uscale_factor_1L301_ ,f04 
+$c22E90F 
+$c41FFF5 
+$c18000F .uscale_factor_1L303_ ,f04 
+$c0D0043 
+$c41FFF5 
+$c22610F 
+$c238A0F 
+$c90000A .uY_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c700029 
+$c700039 
+$c700069 
+$c700059 
+$c0D0405 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c700059 
+$c0D0875 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c780041 
+$c780021 
+$c780031 
+$c0D01E0 
+$c7800E1 
+$c0D01E2 
+$c7800E1 
+$c0D01E3 
+$c7800E1 
+$c0D02E1 
+$c7800E1 
+$c0D02E3 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c0D02E7 
+$c7800E1 
+$c80000B .uI_ ,f04 
+$c840003 .uX_ ,f04 
+$c0F03FD 
+$c267F0F 
+$c180000 .uscale_factor_2L305_ ,f04 
+$c4000F1 
+$c0D004B 
+$c400075 
+$c22E10F 
+$c238A0F 
+$c18000F .uscale_factor_2L314_ ,f04 
+$c400075 
+$c238B0F 
+$c90000A .uRegister_Spill_Area__ ,f04 ,o000F 
+$c800004 .uRegister_Spill_Area__ ,f04 ,o000F 
+$c340002 .uW_23_ ,f04 
+$c3BFFF7 
+$c0D0444 
+$c090008 
+$c60001A 
+$cB00053 
+$c780013 
+$cB00003 
+$c1C000F .u__lshldi3_ ,f04 
+$c380035 
+$c800001 .uY_ ,f04 
+$c090011 
+$c780013 
+$cB00003 
+$c0D005E 
+$c0D003F 
+$c780053 
+$c780033 
+$c1C000F .u__subdi3_ ,f04 
+$c380045 
+$c090011 
+$cB00053 
+$c0D001E 
+$c0D005F 
+$c780013 
+$c780053 
+$c1C000F .u__lshrdi3_ ,f04 
+$c40FFF5 
+$c0D001E 
+$c23890F 
+$c408005 
+$c380035 
+$c0D00BA 
+$c090011 
+$c238B0F 
+$c0D001A 
+$c26790F 
+$c180000 .uscale_factor_2L307_ ,f04 
+$c410005 
+$c800001 .uY_ ,f04 
+$c2A694B 
+$c41FFF5 
+$c22620F 
+$c238A0F 
+$c18000F .uscale_factor_2L315_ ,f04 
+$c800005 .uY_ ,f04 
+$c41FFF4 
+$c226B0F 
+$c23820F 
+$c0D001A 
+$c0D0523 
+$c340154 
+$c420003 
+$c43DE05 
+$c2A6943 
+$c090008 
+$c23820F 
+$c267A0F 
+$c180001 .uscale_factor_2L309_ ,f04 
+$c42C005 
+$c22690F 
+$c23820F 
+$c267A0F 
+$c180000 .uscale_factor_2L311_ ,f04 
+$c68001A 
+$c18000F .uscale_factor_2L310_ ,f04 
+$cA1400A 
+$c18000F .uscale_factor_2L310_ ,f04 
+$cA0220A 
+$c0D0523 
+$c340154 
+$c0D0502 
+$c090000 
+$c3BFFF7 
+$c340194 
+$c090008 
+$c340184 
+$c0D0932 
+$c60005A 
+$c0D0523 
+$c090008 
+$c0D0912 
+$c60001A 
+$c780053 
+$c780013 
+$c1C000F .u__negdi2_ ,f04 
+$c380025 
+$c090011 
+$cB00063 
+$c0D001E 
+$c0D005F 
+$c780013 
+$c780053 
+$c1C000F .u__lshrdi3_ ,f04 
+$c600012 
+$c0D004E 
+$c43FFF5 
+$c22610F 
+$c0D001A 
+$c400007 
+$c23890F 
+$c0D005A 
+$c0D0035 
+$c420005 
+$c380035 
+$c0D00A3 
+$c090011 
+$c238A0F 
+$c0D001A 
+$c26790F 
+$c180000 .uscale_factor_2L313_ ,f04 
+$cBC0003 
+$cB00073 
+$c780033 
+$c780073 
+$c1C000F .u__adddi3_ ,f04 
+$c0D001F 
+$c0D0071 
+$c380045 
+$c0D005E 
+$c090011 
+$c0D0035 
+$c0D0523 
+$c0D0603 
+$c0D0621 
+$c600052 
+$c60001A 
+$c780033 
+$c780073 
+$c780053 
+$c780013 
+$c1C000F .u__adddi3_ ,f04 
+$c400075 
+$c380045 
+$c0D001F 
+$c340174 
+$c0D003E 
+$c090011 
+$c2B8953 
+$c09000C 
+$c6800AA 
+$c680052 
+$c60001A 
+$cB00063 
+$c780053 
+$c780013 
+$c1C000F .u__lshrdi3_ ,f04 
+$c0D001E 
+$c68001E 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700049 
+$c700029 
+$c700039 
+$c700059 
+$c0D0405 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0435 
+$c700059 
+$c0D0815 
+$c700059 
+$c0D0835 
+$c700059 
+$c0D0445 
+$c700059 
+$c0D0875 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c340124 
+$c840002 .uX_ ,f04 
+$c400FF5 
+$c090008 
+$c6000BA 
+$c26EB0F 
+$c180000 .uspeed_control_1L319_ ,f04 
+$c180008 .uspeed_control_1L317_ ,f04 
+$c0F03FE 
+$c18000F .uspeed_control_1L318_ ,f04 
+$c40040F 
+$c90000F .uAL_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c80000B .uI_ ,f04 
+$c80000C .uX_ ,f04 
+$c0F03FD 
+$c267F0F 
+$c180000 .uspeed_control_2L321_ ,f04 
+$c4000F1 
+$c0D004B 
+$c400075 
+$c22E10F 
+$c238A0F 
+$c18000F .uspeed_control_2L322_ ,f04 
+$c400075 
+$c238B0F 
+$c340002 .uF_28_ ,f04 
+$c0D044A 
+$c090008 
+$c340134 
+$c6000BA 
+$c0D042C 
+$c090008 
+$c0D0922 
+$c60001A 
+$c0D0041 
+$c41FFF5 
+$c22E30F 
+$c238A0F 
+$c400805 
+$c0F02FB 
+$c238F0F 
+$c267A0F 
+$c180000 .uspeed_control_2L323_ ,f04 
+$c40F005 
+$c2A694F 
+$c40FFF5 
+$c22620F 
+$c18000F .uspeed_control_2L336_ ,f04 
+$c0D0041 
+$c40FFF5 
+$c22670F 
+$c238A0F 
+$c7800AA 
+$c340144 
+$c0D042C 
+$c0F2302 
+$c090008 
+$c0D0922 
+$c60001A 
+$c0D0041 
+$c47FFF5 
+$c22E70F 
+$c238A0F 
+$c400805 
+$c0F02F9 
+$c238F0F 
+$c267A0F 
+$c180000 .uspeed_control_2L325_ ,f04 
+$c43F005 
+$c2A694F 
+$c43FFF5 
+$c22620F 
+$c18000F .uspeed_control_2L337_ ,f04 
+$c0D0041 
+$c43FFF5 
+$c22670F 
+$c238A0F 
+$c7800AA 
+$c0D042C 
+$c340134 
+$c090008 
+$c340144 
+$c6000BA 
+$c0D042C 
+$c090008 
+$c0F2302 
+$c60004A 
+$c47FFF5 
+$c22E70F 
+$c238A0F 
+$c440005 
+$c2B8A7A 
+$c267A0F 
+$c180000 .uspeed_control_2L327_ ,f04 
+$c480001 
+$c0D0047 
+$c43FFF5 
+$c22E10F 
+$c238A0F 
+$c18000F .uspeed_control_2L328_ ,f04 
+$c0D00A7 
+$c405FF5 
+$c800001 .uY_ ,f04 
+$c26E90F 
+$c180009 .uspeed_control_2L331_ ,f04 
+$c180000 .uspeed_control_2L331_ ,f04 
+$c340144 
+$c0D042C 
+$c0D001A 
+$c090008 
+$c6000BA 
+$c0F03FD 
+$c0D005F 
+$c26E90F 
+$c180008 .uspeed_control_2L331_ ,f04 
+$c180000 .uspeed_control_2L331_ ,f04 
+$c800001 .uTDP_ ,f04 
+$c26790F 
+$c180000 .uspeed_control_2L329_ ,f04 
+$c402001 
+$c18000F .uspeed_control_2L330_ ,f04 
+$c400001 
+$c0D042C 
+$c340124 
+$c090008 
+$c60007A 
+$c0D0047 
+$c407FF5 
+$c22E10F 
+$c238A0F 
+$c400405 
+$c0F02FC 
+$c238F0F 
+$c267A0F 
+$c180000 .uspeed_control_2L332_ ,f04 
+$c403805 
+$c0D0007 
+$c2A684F 
+$c403FF5 
+$c22620F 
+$c18000F .uspeed_control_2L338_ ,f04 
+$c0D0047 
+$c403FF5 
+$c22670F 
+$c238A0F 
+$c340124 
+$c800001 .uTR_ ,f04 
+$c0D042C 
+$c401005 
+$c090008 
+$c26790F 
+$c180001 .uspeed_control_2L334_ ,f04 
+$c0D005A 
+$c68005A 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c780041 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c43FFF5 
+$c800001 .uDQ_ ,f04 
+$c880002 .uX_ ,f04 
+$c340174 
+$c0D0622 
+$c090008 
+$c6389BA 
+$c4001F5 
+$c0D00CA 
+$c0F03F7 
+$c0D001F 
+$c0F03FC 
+$c0D00BF 
+$c238B0F 
+$c400085 
+$c2EE9BA 
+$c180000 .utone_detector_1L343_ ,f04 
+$c180008 .utone_detector_1L340_ ,f04 
+$c400205 
+$c226B0F 
+$c0D0091 
+$c0E020F 
+$c0D00BF 
+$c18000F .utone_detector_1L341_ ,f04 
+$c43E00B 
+$c0D0622 
+$c340164 
+$c400007 
+$c090008 
+$c60001A 
+$c26790F 
+$c180000 .utone_detector_1L342_ ,f04 
+$c0F03FF 
+$c0D005F 
+$c226B0F 
+$c0F02FF 
+$c0D001F 
+$c0D0041 
+$c26E40F 
+$c180009 .utone_detector_1L342_ ,f04 
+$c180000 .utone_detector_1L342_ ,f04 
+$c400017 
+$c900007 .uTR_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700049 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c800001 .uA2P_ ,f04 
+$c480005 
+$c400007 
+$c22690F 
+$c451FF5 
+$c26EA0F 
+$c180000 .utone_detector_2L348_ ,f04 
+$c180008 .utone_detector_2L345_ ,f04 
+$c400017 
+$c900007 .uTDP_ ,f04 
+$c340164 
+$c800001 .uTR_ ,f04 
+$c840002 .uX_ ,f04 
+$c400005 
+$c090008 
+$c26790F 
+$c180001 .utone_detector_2L346_ ,f04 
+$c0D0057 
+$c68005A 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c400001 .uE_STATES_ ,f04 
+$c900001 .uX_ ,f04 
+$c1C000F .ureset_states_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c0D001A 
+$c400005 .uE_STATES_ ,f04 
+$c900001 .uS_ ,f04 
+$c900005 .uX_ ,f04 
+$c1C000F .uinput_conversion_ ,f04 
+$c1C000F .uadpt_predict_1_ ,f04 
+$c1C000F .udiff_computation_ ,f04 
+$c1C000F .uspeed_control_1_ ,f04 
+$c1C000F .uscale_factor_1_ ,f04 
+$c1C000F .uadapt_quant_ ,f04 
+$c1C000F .uiadpt_quant_ ,f04 
+$c1C000F .utone_detector_1_ ,f04 
+$c1C000F .uadpt_predict_2_ ,f04 
+$c1C000F .utone_detector_2_ ,f04 
+$c1C000F .uscale_factor_2_ ,f04 
+$c1C000F .uspeed_control_2_ ,f04 
+$c80000A .uI_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c400001 .uD_STATES_ ,f04 
+$c900001 .uX_ ,f04 
+$c1C000F .ureset_states_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780011 
+$c0D001A 
+$c400005 .uD_STATES_ ,f04 
+$c900001 .uI_ ,f04 
+$c900005 .uX_ ,f04 
+$c1C000F .uspeed_control_1_ ,f04 
+$c1C000F .uscale_factor_1_ ,f04 
+$c1C000F .uiadpt_quant_ ,f04 
+$c1C000F .utone_detector_1_ ,f04 
+$c1C000F .uadpt_predict_1_ ,f04 
+$c1C000F .uadpt_predict_2_ ,f04 
+$c1C000F .utone_detector_2_ ,f04 
+$c1C000F .uscale_factor_2_ ,f04 
+$c1C000F .uspeed_control_2_ ,f04 
+$c1C000F .uoutput_conversion_ ,f04 
+$c1C000F .uinput_conversion_ ,f04 
+$c1C000F .udiff_computation_ ,f04 
+$c1C000F .ucoding_adjustment_ ,f04 
+$c80000A .uSD_ ,f04 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700019 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$c0D03CF 
+$c0D0284 
+$c0D0A40 
+$c3BFFF5 
+$c780081 
+$c7800C1 
+$c780001 
+$c780011 
+$c780041 
+$c0D01E2 
+$c7800E1 
+$c0D01E4 
+$c7800E1 
+$c400004 
+$c1C000F .ureset_encoder_ ,f04 
+$c340004 .uInput_ ,f04 
+$c1C000F .ureset_decoder_ ,f04 
+$c4001F0 
+$c0D0424 
+$c090008 
+$c6000AA 
+$c1C000F .uencoder_ ,f04 
+$c0D001A 
+$c1C000F .udecoder_ ,f04 
+$c22200F 
+$c0D004A 
+$c27200F 
+$c180009 .umainL357_ ,f04 
+$c180000 .umainL357_ ,f04 
+$c40000A 
+$c0D0A24 
+$c3BFFF5 
+$c700089 
+$c7000C9 
+$c700009 
+$c700019 
+$c700049 
+$c700059 
+$c0D0425 
+$c700059 
+$c0D0445 
+$c0D0A04 
+$c0D082C 
+$c0D0848 
+$c0B008F 
+$m.o,l0969 
+$ 

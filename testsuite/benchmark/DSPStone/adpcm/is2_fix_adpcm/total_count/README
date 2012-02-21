@@ -1,0 +1,43 @@
+README.FIX VERSION (MNEMONIC COUNT VERSION 1.4)
+==================
+
+batch files:
+show		shows histograms (detailed mnemonic count), as xgraph files
+
+		(1) opt_adpcm.xg
+		(2) opt_adpcm-grp1.xg
+
+showoriginal	show original (straight-forward count) histograms, as xgraph files
+		(1) opt_adpcm-orig.xg
+		(2) opt_adpcm-grp1-orig.xg
+	
+
+
+programs & listings :
+	
+opt_adpcm.asm	assembler file of opt_adpcm.c
+opt_adpcm.lst   assembler listing of opt_adpcm.c
+
+opt_adpcm.xg       percentual mnemonic distribution
+		   (loops, calls, etc included) - xgraph file
+opt_adpcm-grp1.xg  percentual mnemonic distribution of move and transfer
+		   instructions (2 cycle instructions vs 4 cycles instructions)
+
+opt_adpcm.inf      absolute mnemonic distribution
+opt_adpcm-grp1.inf absoulte mnemonic distribution of move ans transfer
+		   instructions (2 cycle instructions vs 4 cycle instructions)
+
+allgemein:
+
+
+*.ps		postscript files containing the xgraph histograms
+*.xg		percentual mnemonic distribution (xgraph file)
+*.inf		absolute mnemonic distribution 
+*.mvc 		move distribution 
+		move (2 instruct cycles) vs move (4 instruct cycles)
+*.tfc		transfer distribution
+		transfer (2 instruct cycles) vs transfer (4 instruct cycles)
+*.c		C files (complete program or single modules)
+*.asm		correspondent asm files
+*.lst 		correspondent lst file
+*.loop?		program loops (1 to 7)

@@ -1,0 +1,101 @@
+\documentstyle[11pt]{is2}
+\pagestyle{myheadings}
+\fboxsep=2mm
+\parskip=1em
+
+\newcommand{\makehead}[3]{
+\markboth
+	{\fbox{\bf DSPstone}\hfill \fbox{#1(#2) -
+#3}\hfill \fbox{\today}\hspace*{5mm} page }
+	{\fbox{\bf DSPstone}\hfill \fbox{#1(#2) -
+#3}\hfill \fbox{\today}\hspace*{5mm} page }
+}
+
+\makehead{ADPCM}{DSP-kernel}{DSP56001}
+\parindent=0pt
+
+\begin{document}
+\setcounter{page}{0}
+
+%empty page
+
+this page intentionally left blank
+
+\newpage
+$\! \hrulefill \! $
+\begin{tabbing}
+{\bf Benchmark:} \hspace*{25mm}	\= ADPCM \\
+{\bf Version:}                  \> 0.1\\
+{\bf Benchmark suite:}          \> DSP - kernel \\
+{\bf Description:}              \> evaluation of the ADPCM application\\
+{\bf Target:}			\> Motorola DSP56001\\
+{\bf Memory:}			\> program - internal, no WS\\
+                                \> data - internal, no WS\\
+{\bf Compiler:}	  		\> g56k (v1.11)\\
+{\bf Compiling command:}        \> see Makefile\\
+{\bf Reference code:}		\> adpcm.asm\\
+{\bf Profiling procedure:}	\> from the list file \\
+{\bf History:}                  \> 24-03-94 - C code creation (Schlaeger, Martinez Velarde)\\
+                                \> 24-03-94 - C code profiling (Schlaeger) \\
+\end{tabbing}
+
+$\! \hrulefill \! $
+
+{\bf Benchmarking results:}
+
+\begin{table} [htb]
+\begin{center}
+\begin{tabular} {|c|c|c|c|c|} 
+\hline
+{\bf code} & {\bf \#clock-cycles} & {\bf \#instructions} & {\bf\#operations} & {\bf time@33MHz [$\bf {\mu}$s]}\\ \hline \hline
+adpcm.asm  & 3414   & N/A & N/A & 103.45 \\ \hline
+g721.c     & 20854  & N/A & N/A & 631.94  \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table} [htb]
+\begin{center}
+\begin{tabular} {|c|c|c|c|c|} \hline
+{\bf code} & {\bf \#words(prog)} & {\bf \#words(const)} & {\bf \#words(variables)} & {\bf \#words(total)}\\ \hline \hline
+adpcm.asm  & 1230  &  -   & 222 & 1452  \\ \hline
+g721.c     & 1852  & 544  & 66  & 2462  \\ \hline
+\end{tabular}
+\end{center}
+\end{table}
+
+$\! \hrulefill \! $
+
+{\bf Remarks:}
+
+$\! \hrulefill \! $
+
+Next follow the MOTOROLA documentation for the assembler reference code of the
+g721 CCITT 32kbit/s ADPCM speech coding algorithm.
+
+Then you will find the C code version of the g721 recommendation (g721.c,g721.h, portab.h, mocad.H, board\_test.c as well as the Makefile).
+
+\newpage 
+\input{adpcm.prof} 
+
+\newpage
+\input{g721.c.tex}
+
+\newpage
+\input{g721.h.tex}
+
+\newpage
+\input{portab.h.tex}
+
+\newpage
+\input{mocad.H.tex}
+
+\newpage
+\input{board_test.c.tex}
+
+\newpage
+\input{Makefile.tex}
+
+
+\end{document}
+

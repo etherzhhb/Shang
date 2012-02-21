@@ -1,0 +1,2 @@
+showgraph opt_adpcm-orig
+xgraph -nl -bar -brb 1 -brw 1 -x "2 vs 4 instruct cycles operations" -y "Percent of Total Move&Transfer Operations (straight forward)"  opt_adpcm-grp1-orig.xg &

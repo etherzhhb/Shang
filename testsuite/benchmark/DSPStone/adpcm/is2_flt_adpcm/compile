@@ -1,0 +1,19 @@
+#! /bin/sh
+
+DSPLOC=/tools/home1/dsp/dsp56k
+export DSPLOC
+
+${DSPLOC}/dsp/bin/g56k -D__DSP56K__ -D__SIMULATION__ -mx-memory -alo -S ${1}.c
+echo assembler file ${1}.asm generated
+${DSPLOC}/dsp/bin/g56k -alo -D__DSP56K__ -D__SIMULATION__ -mx-memory -o ${1}.cld ${1}.c
+echo cld file ${1}.cld generated
+echo first remove old ${1}.inf file
+/bin/rm ${1}.inf
+run56sim -t ${1}.cld > ${1}.inf
+echo simulation completed
+${DSPLOC}/dsp/bin/cldinfo ${1}.cld >> ${1}.inf
+/tools/home1/martinez/bin/mnecount ${1} >> ${1}.inf
+echo Mnemonic Count Completed
+echo All information in ${1}.inf available
+/tools/home1/martinez/bin/xgparser ${1}
+showgraph ${1}

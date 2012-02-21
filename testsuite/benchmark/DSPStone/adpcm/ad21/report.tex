@@ -1,0 +1,109 @@
+\documentstyle[11pt]{is2}
+
+\pagestyle{myheadings}
+\fboxsep=2mm
+\parskip=1em
+
+\newcommand{\makehead}[3]{
+\markboth
+	{\fbox{\bf DSPstone}\hfill \fbox{ #1 (#2) -
+#3}\hfill \fbox{\today}\hspace*{5mm} page }
+	{\fbox{\bf DSPstone}\hfill \fbox{ #1 (#2) -
+#3}\hfill \fbox{\today}\hspace*{5mm} page }
+}
+
+\makehead{ADPCM}{Applications}{ADSP-2101}
+\parindent=0pt
+
+\begin{document}
+\setcounter{page}{0}
+
+%empty page
+
+this page intentionally left blank
+
+\newpage
+$\! \hrulefill \! $
+\begin{tabbing}
+{\bf Benchmark:} \hspace*{25mm}	\= ADPCM\\
+{\bf Version:}                  \> 0.1\\
+{\bf Benchmark suite:}          \> Applications-Kernel\\
+{\bf Description}               \> CCITT g721 recommendation algorithm \\
+{\bf Target:}                   \> Analog Devices ADSP-2101\\
+{\bf Memory:}                   \> intmem\_only.sys architecture file \\
+				\> program - internal, set PWAIT: 0\\
+				\> data - internal + external, set DWAIT0 to 4:0\\
+{\bf Compiler:}         \> system builder bld21 5.0 version 3.8 6/29/93\\
+                        \> assembler asm21 5.01 version 1.13 3/14/94\\
+                        \> linker ld21 5.0 version 2.16 7/23/93\\
+{\bf Compiling command (C files):}\\
+\verb+     bld21 adsp2101.ach+        \\
+\verb+     g21 board_test.c -Wall -S -D__ADSP2101__ -a adsp2101.ach+ -mstatic-spill\\
+\verb+     g21 board_test.s -map -a adsp2101.ach+\\
+\verb+     -runhdr${ADI_DSP}/21xx/lib/2101_hdr.obj -o $*.exe+\\
+{\bf Reference code:} \> DSP Applications using the ADSP2100 Family, Volume 1 \\ 
+{\bf Profiling procedure:} \> simulator based (xsim2101 -w adsp2101.win -e .exe -a adsp2101.ach)\\
+                           \> xsim2101 - release 5.01, Version 1.34,1994   \\
+{\bf History:}  \> 24-03-94 - C code creation (Schlaeger, Martinez) \\
+                \> 24-03-94 - C code profiling (Schlaeger) \\
+\end{tabbing}
+
+$\! \hrulefill \! $
+
+{\bf Benchmarking results:}
+
+\begin{table} [htb]
+\begin{center}
+\begin{tabular} {|c|c|c|c|c|} 
+\hline
+{\bf code} & {\bf \#clock-cycles} & {\bf \#instructions} & {\bf \#operations} & {\bf time@16.5MHz [$\bf {\mu}$s]}\\ \hline \hline
+adpcm.dsp & 892  & 892  & N/A &  54.061 \\ \hline
+g721.c    & 7122 & 7122 & N/A & 431.636 \\ \hline % compiler 5.01
+\hline 
+\end{tabular}
+\end{center}
+\end{table}
+
+\begin{table} [htb]
+\begin{center}
+\begin{tabular} {|c|c|c|c|c|} 
+\hline
+{\bf code} & {\bf \#words(prog)} & {\bf \#words(constants)} & {\bf \#words(variables)} & {\bf \#words(p+d)}\\  \hline  \hline
+adpcm.dsp   & 628  & -   & 137 & 765  \\ \hline
+g721.c      & 2410 & 544 & 118 & 3072  \\ \hline \hline % compiler 5.01
+\end{tabular}
+\end{center}
+\end{table}
+
+\newpage
+
+$\! \hrulefill \! $
+
+{\bf Remarks:}
+
+
+$\! \hrulefill \! $
+
+Next follow the C code version of the g721 recommendation
+(g721.c g721.h, portab.h, board\_test.c as well as the Makefile).
+
+Notice to set all wait-states control registers to 0 at simulation time.
+Following memory mapping is used :
+\input{adsp2101.sys.tex}
+
+\newpage
+\input{g721.c.tex}
+
+\newpage
+\input{g721.h.tex}
+
+\newpage
+\input{portab.h.tex}
+
+\newpage
+\input{board_test.c.tex}
+
+\newpage
+\input{Makefile.tex}
+
+\end{document}

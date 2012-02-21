@@ -1,0 +1,48 @@
+.TH ADPCM 2 "7 June 1992"
+.SH NAME
+adpcm - Adaptive delta compression for audio samples
+.B
+#include "adpcm.h"
+.br
+adpcm_coder(short inbuf[], char outbuf[], int nsample,
+.br
+	struct adpcm_state *state);
+.br
+adpcm_decoder(char inbuf[], short outbuf[], int nsample,
+.br
+	struct adpcm_state *state);
+.SH DESCRIPTION
+These routine convert 16 bit linear PCM samples to 4 bit ADPCM code
+and vice versa. The ADPCM code used is the Intel/DVI ADPCM code which
+is being recommended by the IMA Digital Audio Technical Working Group.
+.PP
+\fIAdpcm_coder\fP converts \fInsample\fP 16 bit samples from
+\fIinbuf\fP and stores the 4 bit codes, packed two per byte, in
+\fIoutbuf\fP. \fIState\fP points to a structure containing the coder
+state information, a short and a char. It should be initialized to
+zero before the first call. The coder updates the state record, and it
+should be passed to each subsequent call.
+.PP
+\fIAdpcm_decoder\fP converts \fInsample\fP 4 bit codes from
+\fIinbuf\fP to 16 bit samples and stores these in \fPoutbuf\fP.
+\fIState\fP is a state record similar to that used by the coder.
+.PP
+If you compress audio to transmit it across a lossy network it is a
+good idea to send the compressor state along with each packet. (This
+must be the state as it was \fIbefore\fP the call to
+\fIadpcm_coder\fP, not the state after the return). This state record
+can then be fed to the decompressor. This way the decompressor can
+tolerate packet loss.
+.SH NOTES
+The routines have not been tested against an official Intel/DVI coder
+yet, so incompatabilities might exist.
+.br
+The state record is not byte-order-independent. Remember this when
+transmitting it across the network.
+.SH "SEE ALSO"
+Proposal for Standardized Audio Interchange Formats, IMA compatability
+project proceedings, Vol 2, Issue 2, May 1992.
+.SH AUTHOR
+Jack Jansen, CWI, Amsterdam
+.br
+Jack.Jansen@cwi.nl
