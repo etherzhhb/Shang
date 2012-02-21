@@ -76,6 +76,9 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(MCTargetDesc)
 add_subdirectory(tools)
-add_subdirectory(testsuite)
+option(ENABLE_TESTSUITE "Run the testsuite" OFF)
+if (ENABLE_TESTSUITE)
+  add_subdirectory(testsuite)
+endif (ENABLE_TESTSUITE)
 
 # TODO: docs.
