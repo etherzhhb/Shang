@@ -19,7 +19,7 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/FoldingSet.h"
-
+#include "llvm/ADT/SetOperations.h"
 #define DEBUG_TYPE "vtm-reg-dependency"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GraphWriter.h"
@@ -123,15 +123,12 @@ public:
 
 private:
   // This vector is for the ValueAtSlot.
-  VASVec VASVector;
+  VASVec AllVASs;
 
   SlotVecTy SlotVec;
 
   // ChangeSet is used to record the changes in the SlotOutMap.
   VASSetTy ChangeSet;
-  // EraseSet is used to record the VAS from SlotKillMap which will be erase
-  // from the SlotInMap.
-  VASSetTy EraseSet;
 
   // Define Map for the reaching definition.
   typedef DenseMap<const VASTSlot*, VASSetTy> Slot2VecTy;
@@ -139,7 +136,6 @@ private:
   Slot2VecTy SlotKillMap;
   Slot2VecTy SlotInMap;
   Slot2VecTy SlotOutMap;
-  Slot2VecTy OldSlotOutMap;
 
   MachineFunction *MF;
 
@@ -184,8 +180,8 @@ public:
   }
 
   // All nodes (except exit node) are successors of the entry node.
-  vasvec_it vas_begin() { return VASVector.begin(); }
-  vasvec_it vas_end() { return VASVector.end(); }
+  vasvec_it vas_begin() { return AllVASs.begin(); }
+  vasvec_it vas_end() { return AllVASs.end(); }
 
   slot_vec_it slot_begin() { return SlotVec.begin(); }
   slot_vec_it slot_end() { return SlotVec.end(); }
@@ -209,10 +205,10 @@ public:
   // relationship of registers.
   // Dirty hack: maybe there are two same statements is a slot, and we can use
   // bit vector to implement the algorithm similar to the compiler principle.
-  void ComputeReachingDefinition(MachineFunction &F, VASTModule *VM);
+  void ComputeReachingDefinition();
 
   // collect the Generated and Killed statements of the slot.
-  void ComputeGenAndKill(VASTModule *VM);
+  void ComputeGenAndKill();
 
   void viewGraph();
 
@@ -270,11 +266,11 @@ struct DOTGraphTraits<RegDependencyAnalysis*> : public DefaultDOTGraphTraits{
           << VAS->getSlot()->getName() << "\n";
     }
     ss << "\n\n";*/
-    for (RegDependencyAnalysis::vasset_it I = Graph->vas_kill_begin(Node),
-      E = Graph->vas_kill_end(Node); I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        ss<<"    kill: "<< VAS->getValue()->getName() << "   "
-          << VAS->getSlot()->getName() << "\n";
+    for (RegDependencyAnalysis::vasset_it I = Graph->getVASKillBegin(Node),
+         E = Graph->getVASKillEnd(Node); I != E; ++I) {
+      ValueAtSlot *VAS = *I;
+      ss<<"    kill: "<< VAS->getValue()->getName() << "   "
+        << VAS->getSlot()->getName() << "\n";
     }
     ss << "\n\n";
     /*for (RegDependencyAnalysis::vasset_it I = Graph->vas_in_begin(Node),
@@ -284,11 +280,11 @@ struct DOTGraphTraits<RegDependencyAnalysis*> : public DefaultDOTGraphTraits{
           << VAS->getSlot()->getName() << "\n";
     }
     ss << "\n\n";*/
-    for (RegDependencyAnalysis::vasset_it I = Graph->vas_out_begin(Node),
-      E = Graph->vas_out_end(Node); I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        ss<<"    Out: "<< VAS->getValue()->getName() << "   "
-          << VAS->getSlot()->getName() << "\n";
+    for (RegDependencyAnalysis::vasset_it I = Graph->getVASOutBegin(Node),
+         E = Graph->getVASOutEnd(Node); I != E; ++I) {
+      ValueAtSlot *VAS = *I;
+      ss<<"    Out: "<< VAS->getValue()->getName() << "   "
+        << VAS->getSlot()->getName() << "\n";
     }
     return ss.str();
   }
@@ -321,7 +317,7 @@ bool RegDependencyAnalysis::runOnMachineFunction(MachineFunction &F) {
   // Define the VAS.
   DefineVAS(VM);
 
-  ComputeReachingDefinition(*MF, VM);
+  ComputeReachingDefinition();
 
   viewGraph();
 
@@ -343,6 +339,8 @@ ValueAtSlot *RegDependencyAnalysis::getOrCreateVAS(VASTValue *V,
   ValueAtSlot *VAS =
     new (VASAllocator)ValueAtSlot(ID.Intern(VASAllocator), V, S);
   UniqueVASs.InsertNode(VAS, IP);
+  AllVASs.push_back(VAS);
+
   return VAS;
 }
 
@@ -361,19 +359,19 @@ void RegDependencyAnalysis::addDependentVAS(ValueAtSlot *VAS,
 
 void RegDependencyAnalysis::DefineVAS(VASTModule *VM) {
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
-    ++I){
-      VASTRegister *UseReg = *I;
+       ++I){
+    VASTRegister *UseReg = *I;
 
-      typedef VASTRegister::assign_itertor assign_it;
-      for (assign_it I = UseReg->assign_begin(), E = UseReg->assign_end();
-        I != E; ++I) {
-          VASTSlot *S = I->first->getSlot();
-          // Create the origin VAS.
-          ValueAtSlot *VAS = getOrCreateVAS(UseReg,S);
-          VASTUse *DefUse = I->second;
-          // Traverse the dependent VAS.
-          TraverseDependentRegister(DefUse, VAS);
-      }
+    typedef VASTRegister::assign_itertor assign_it;
+    for (assign_it I = UseReg->assign_begin(), E = UseReg->assign_end();
+         I != E; ++I) {
+      VASTSlot *S = I->first->getSlot();
+      // Create the origin VAS.
+      ValueAtSlot *VAS = getOrCreateVAS(UseReg,S);
+      VASTUse *DefUse = I->second;
+      // Traverse the dependent VAS.
+      TraverseDependentRegister(DefUse, VAS);
+    }
   }
 }
 
@@ -469,130 +467,83 @@ void RegDependencyAnalysis::DepthFirstTraverseUseTree(addDependentVASFuncTy F,
   assert(NodeWorkStack.back().get() == VAS->getValue() && "Node stack broken!");
 }
 
-void RegDependencyAnalysis::ComputeReachingDefinition(MachineFunction &F,
-                                                      VASTModule *VM) {
-  ComputeGenAndKill(VM);
+void RegDependencyAnalysis::ComputeReachingDefinition() {
+  ComputeGenAndKill();
 
   do {
     ChangeSet.clear();
 
-    for (VASTModule::slot_iterator I = VM->slot_begin(), E = VM->slot_end();
-         I != E; ++I) {
+    for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
       VASTSlot *S =*I;
 
       // If the VASTslot is void, abandon it.
       if (!S) continue;
-
-      // Return true If this slot jump from some other slots conditionally
-      // instead of inherits from SlotNum - 1 slot. If false, compute the
-      // SlotInMap.
-      if (!S->hasExplicitPredSlots()) {
-        VASTSlot *PS = VM->getSlot(S->getSlotNum()-1);
-        for (vasset_it I = SlotOutMap[PS].begin(), E = SlotOutMap[PS].end();
-              I != E; ++I) {
-          ValueAtSlot *OutVAS = *I;
-          SlotInMap[S].insert(OutVAS);
-        }
-      }
+      VASSetTy SlotOut = SlotOutMap[S];
+      VASSetTy &CurIn = SlotInMap[S], &CurKill = SlotKillMap[S],
+               &CurOut = SlotOutMap[S], &CurGen = SlotGenMap[S];
 
       // Compute the SlotInMap.
-      for (VASTSlot::pred_iterator I = S->pred_begin(), E = S->pred_end();
-            I != E; ++I) {
-        VASTSlot *PS = VM->getSlot(*I);
+      for (VASTSlot::pred_it I = S->pred_begin(), E = S->pred_end(); I != E;
+           ++I) {
+        VASTSlot *PS = *I;
         for (vasset_it I = SlotOutMap[PS].begin(), E = SlotOutMap[PS].end();
               I != E; ++I) {
           ValueAtSlot *OutVAS = *I;
-          SlotInMap[S].insert(OutVAS);
+          CurIn.insert(OutVAS);
         }
       }
 
       // Compute the SlotInMap subtract the SlotKillMap. Push all the VAS
       // which should be erased to the EraseSet.
-      for (vasset_it I = SlotInMap[S].begin(), E = SlotInMap[S].end();
-            I != E; ++I) {
-        ValueAtSlot *InVAS = *I;
-        if (SlotKillMap[S].count(InVAS)) {
-          EraseSet.insert(InVAS);
-        }
-      }
+      set_subtract(CurIn, CurKill);
 
-      // Erase the VAS from SlotInMap.
-      for (vasset_it I = EraseSet.begin(), E = EraseSet.end(); I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        SlotInMap[S].erase(VAS);
-      }
-
-      EraseSet.clear();
-      SlotOutMap[S].clear();
+      CurOut.clear();
 
       // Compute the SlotOutMap. insert the VAS from the SlotGenMap.
-      for (vasset_it I = SlotGenMap[S].begin(), E = SlotGenMap[S].end();
-            I != E; ++I) {
-        ValueAtSlot *GenVAS = *I;
-        SlotOutMap[S].insert(GenVAS);
-      }
-
+      CurOut.insert(CurGen.begin(), CurGen.end());
       // Compute the SlotOutMap. Insert the VAS from the SlotInMap.
-      for (vasset_it I = SlotInMap[S].begin(), E = SlotInMap[S].end(); I != E;
-            ++I) {
-        ValueAtSlot *InVAS = *I;
-        SlotOutMap[S].insert(InVAS);
-      }
+      CurOut.insert(CurIn.begin(), CurIn.end());
 
       // Compare the SlotOutMap and OldSlotOutMap, findout whether there are
       // changes in the SlotOut.
-      for (vasset_it I = SlotOutMap[S].begin(), E = SlotOutMap[S].end();
-            I != E; ++I) {
+      for (vasset_it I = CurOut.begin(), E = CurOut.end(); I != E; ++I) {
         ValueAtSlot *NewVAS = *I;
-        if (!OldSlotOutMap[S].count(NewVAS)) {
+        if (!SlotOut.count(NewVAS)) {
           ChangeSet.insert(NewVAS);
         }
-      }
-
-      // clear the old SlotOutMap and replace with the new SlotOutMap.
-      OldSlotOutMap[S].clear();
-      for (vasset_it I = SlotOutMap[S].begin(), E = SlotOutMap[S].end();
-            I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        OldSlotOutMap[S].insert(VAS);
       }
     }
   } while (!ChangeSet.empty());
 }
 
-void RegDependencyAnalysis::ComputeGenAndKill(VASTModule *VM){
-    // Push all the VAS from the UniqueVASs to the VASVector.
-  for (fs_vas_it I = UniqueVASs.begin(), E = UniqueVASs.end(); I != E; ++I) {
-    ValueAtSlot *VAS = &*I;
-    VASVector.push_back(VAS);
-  }
-
+void RegDependencyAnalysis::ComputeGenAndKill(){
   // Collect the generated statements to the SlotGenMap, and collect the killed
   // statements to the SlotKillMap.
-  for (VASTModule::slot_iterator I = VM->slot_begin(), E = VM->slot_end();
-    I != E; ++I) {
+  for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
     VASTSlot *S = *I;
+
+    VASSetTy &CurGen = SlotGenMap[S], &CurKill = SlotKillMap[S];
+
     // If the VASTslot is void, abandon it.
     if (!S) continue;
 
     DEBUG(dbgs()<<"origin slot: "<< S->getName()<< "\n";);
 
     // Collect the generated statements to the SlotGenMap.
-    for (vasvec_it I = VASVector.begin(), E = VASVector.end(); I != E; ++I) {
+    for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
       ValueAtSlot *GenVAS = *I;
 
       // If the VAS have the same slot with S, then its a Generated VAS to this
       // slot.
-      if (GenVAS->getSlot() == S) (SlotGenMap[S]).insert(GenVAS);
+      if (GenVAS->getSlot() == S) CurGen.insert(GenVAS);
     }
 
     // Collect the killed statements to the SlotGenMap.
-    for (vasset_it I = SlotGenMap[S].begin(), E = SlotGenMap[S].end(); I != E;
-      ++I) {
+    for (vasset_it I = CurGen.begin(), E = CurGen.end(); I != E; ++I) {
       ValueAtSlot *GenVAS = *I;
 
-      for (vasvec_it VI = VASVector.begin(), VE = VASVector.end(); VI != VE;
-        ++VI) {
+      for (vasvec_it VI = AllVASs.begin(), VE = AllVASs.end(); VI != VE;
+           ++VI) {
         ValueAtSlot *KillVAS = *VI;
 
         // abandon the same VAS.
@@ -600,7 +551,7 @@ void RegDependencyAnalysis::ComputeGenAndKill(VASTModule *VM){
 
         // If the KillVAS have the same value with the GenVAS, then it's killed.
         if (GenVAS->getValue() == KillVAS->getValue())
-          SlotKillMap[S].insert(KillVAS);
+          CurKill.insert(KillVAS);
       }
     }
 
