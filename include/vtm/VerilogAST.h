@@ -627,6 +627,18 @@ public:
   }
 };
 
+template<> struct GraphTraits<VASTSlot*> {
+  typedef VASTSlot NodeType;
+  typedef NodeType::succ_slot_it ChildIteratorType;
+  static NodeType *getEntryNode(NodeType* N) { return N; }
+  static inline ChildIteratorType child_begin(NodeType *N) {
+    return N->succ_slot_begin();
+  }
+  static inline ChildIteratorType child_end(NodeType *N) {
+    return N->succ_slot_end();
+  }
+};
+
 class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTUse> AndCndVec;

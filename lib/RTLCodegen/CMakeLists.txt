@@ -4,6 +4,7 @@ add_llvm_library(VTMRTLCodegen
   FindMBBShortestPath.cpp
   VerilogASTWriter.cpp
   CombPathDelayAnalysis.cpp
+  RegDependencyAnalysis.cpp
 )
 
 add_dependencies(VTMRTLCodegen VerilogBackendTableGen)
