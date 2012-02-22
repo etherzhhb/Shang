@@ -181,8 +181,6 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
 }
 
 void CombPathDelayAnalysis::computePathSlack(VASTRegister* UseReg) {
-  typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
-
   typedef std::map<VASTUse, SlotVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
   typedef VASTRegister::assign_itertor assign_it;

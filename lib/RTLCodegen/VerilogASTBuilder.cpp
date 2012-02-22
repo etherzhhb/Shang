@@ -390,9 +390,10 @@ void VerilogASTBuilder::emitIdleState() {
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
-  IdleSlot->addNextSlot(FInfo->getStartSlotFor(EntryBB),
+  unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
+  IdleSlot->addNextSlot(VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
                         StartPort);
-  IdleSlot->addNextSlot(0, VM->buildNotExpr(StartPort));
+  IdleSlot->addNextSlot(IdleSlot, VM->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
@@ -729,12 +730,12 @@ void VerilogASTBuilder::emitCtrlOp(ucState &State, PredMapTy &PredMap,
       unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
       assert(Op.getPredicate().getReg() == 0 && "Cannot handle predicated BrCnd");
       VASTUse Cnd = createCondition(CndOp);
-      CurSlot->addNextSlot(TargetSlotNum, Cnd);
+      CurSlot->addNextSlot(VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum), Cnd);
 
       // Emit control operation for next state.
       if (TargetBB == CurBB && Pipelined)
         // The loop op of pipelined loop enable next slot explicitly.
-        CurSlot->addNextSlot(CurSlot->getSlotNum() + 1);
+        CurSlot->addNextSlot(VM->getOrCreateNextSlot(CurSlot));
 
       // Emit the first micro state of the target state.
       emitFirstCtrlState(TargetBB, CurSlot, Cnds);
@@ -836,7 +837,7 @@ void VerilogASTBuilder::emitOpUnreachable(ucOp &Op, VASTSlot *Slot,
   OS << "$finish();\n";
   OS.exit_block();
 
-  Slot->addNextSlot(0);
+  Slot->addNextSlot(VM->getOrCreateSlot(0, 0));
 }
 
 void VerilogASTBuilder::emitOpAdd(ucOp &Op, VASTSlot *Slot,
@@ -1064,10 +1065,10 @@ void VerilogASTBuilder::emitOpInternalCall(ucOp &Op, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpRet(ucOp &Op, VASTSlot *CurSlot,
-                           SmallVectorImpl<VASTUse> &Cnds) {
+                                  SmallVectorImpl<VASTUse> &Cnds) {
   // Go back to the idle slot.
   VASTUse Pred = createCondition(Op.getPredicate());
-  CurSlot->addNextSlot(0, Pred);
+  CurSlot->addNextSlot(VM->getOrCreateSlot(0, 0), Pred);
   CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
 }
 

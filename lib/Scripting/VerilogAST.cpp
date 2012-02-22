@@ -227,8 +227,11 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
-void VASTSlot::addNextSlot(unsigned NextSlotNum, VASTUse Cnd) {
-  bool Inserted = NextSlots.insert(std::make_pair(NextSlotNum, Cnd)).second;
+void VASTSlot::addNextSlot(VASTSlot *NextSlot, VASTUse Cnd) {
+  SuccSlotVec.push_back(NextSlot);
+  (NextSlot->PredSlots).push_back(this);
+  bool Inserted =
+    NextSlots.insert(std::make_pair(NextSlot->getSlotNum(), Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
@@ -356,8 +359,11 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     }
   } else {
     // Enable the default successor slots.
-    VASTRegister *NextSlotReg = Mod.getSlot(getSlotNum() + 1)->getRegister();
+    VASTSlot *NextSlot = Mod.getSlot(getSlotNum() + 1);
+    VASTRegister *NextSlotReg = NextSlot->getRegister();
     Mod.addAssignment(NextSlotReg, VASTUse(true, 1), this, EmptySlotEnCnd);
+    // And connect the fall through edge now.
+    addNextSlot(NextSlot);
   }
 
   assert(!(hasSelfLoop && !PredAliasSlots.isInvalid())

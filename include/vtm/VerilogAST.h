@@ -516,6 +516,11 @@ public:
   typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
+  typedef SmallVector<VASTSlot*, 4> PredVecTy;
+  typedef PredVecTy::iterator pred_it;
+
+  typedef SmallVector<VASTSlot*, 4> SuccSlotVecTy;
+  typedef SuccSlotVecTy::iterator succ_slot_it;
 private:
   // The relative signal of the slot: Slot register, Slot active and Slot ready.
   VASTRegister *SlotReg;
@@ -527,6 +532,10 @@ private:
   FUCtrlVecTy Enables;
   // The function units that need to disable when condition is not satisfy.
   FUCtrlVecTy Disables;
+
+  SuccSlotVecTy SuccSlotVec;
+
+  PredVecTy PredSlots;
 
   SuccVecTy NextSlots;
   // Slot ranges of alias slot.
@@ -564,7 +573,7 @@ public:
   }
 
   // TODO: Rename to addSuccSlot.
-  void addNextSlot(unsigned NextSlotNum, VASTUse Cnd = VASTUse(true, 1));
+  void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd = VASTUse(true, 1));
   bool hasNextSlot(unsigned NextSlotNum) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -573,6 +582,13 @@ public:
   // Successor slots of this slot.
   const_succ_iterator succ_begin() const { return NextSlots.begin(); }
   const_succ_iterator succ_end() const { return NextSlots.end(); }
+
+  succ_slot_it succ_slot_begin() { return SuccSlotVec.begin(); }
+  succ_slot_it succ_slot_end() { return SuccSlotVec.end(); }
+
+  // Predecessor slots of this slot.
+  pred_it pred_begin() { return PredSlots.begin(); }
+  pred_it pred_end() { return PredSlots.end(); }
 
   // Signals need to be enabled at this slot.
   void addEnable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
@@ -604,6 +620,18 @@ public:
 
   bool operator<(const VASTSlot &RHS) const {
     return getSlotNum() < RHS.getSlotNum();
+  }
+};
+
+template<> struct GraphTraits<VASTSlot*> {
+  typedef VASTSlot NodeType;
+  typedef NodeType::succ_slot_it ChildIteratorType;
+  static NodeType *getEntryNode(NodeType* N) { return N; }
+  static inline ChildIteratorType child_begin(NodeType *N) {
+    return N->succ_slot_begin();
+  }
+  static inline ChildIteratorType child_end(NodeType *N) {
+    return N->succ_slot_end();
   }
 };
 
@@ -669,6 +697,10 @@ public:
   typedef SmallVector<VASTWire*, 128> WireVector;
   typedef SmallVector<VASTRegister*, 128> RegisterVector;
   typedef RegisterVector::iterator reg_iterator;
+
+  typedef std::vector<VASTSlot*> SlotVecTy;
+  SlotVecTy Slots;
+  typedef SlotVecTy::iterator slot_iterator;
 private:
   // Dirty Hack:
   // Buffers
@@ -692,8 +724,6 @@ private:
   typedef std::map<unsigned, VASTWire*> VarLatBBMap;
   VarLatBBMap BBLatInfo;
 
-  typedef std::vector<VASTSlot*> SlotVecTy;
-  SlotVecTy Slots;
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
@@ -917,8 +947,12 @@ public:
   VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
                             unsigned InitVal = 0,
                             const char *Attr = "");
+
   reg_iterator reg_begin() { return Registers.begin(); }
   reg_iterator reg_end() { return Registers.end(); }
+
+  slot_iterator slot_begin() { return Slots.begin(); }
+  slot_iterator slot_end() { return Slots.end(); }
 
   VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
                     const char *Attr = "");
