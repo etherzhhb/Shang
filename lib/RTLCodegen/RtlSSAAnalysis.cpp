@@ -1,4 +1,4 @@
-//RegDependencyAnalysis.cpp-- Analyse the dependency between registers- C++ -=//
+//RtlSSAAnalysis.cpp---- Analyse the dependency between registers---- C++ ---=//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -162,7 +162,7 @@ namespace llvm {
 }
 
 namespace llvm{
-class RegDependencyAnalysis : public MachineFunctionPass {
+class RtlSSAAnalysis : public MachineFunctionPass {
 public:
   // define VASVec for the ValueAtSlot.
   typedef SmallVector<ValueAtSlot*, 4> VASVec;
@@ -196,7 +196,7 @@ private:
   typedef VASTRegister::assign_itertor assign_it;
 
   // define a function pointer which is use to add dependent VAS.
-  typedef void(RegDependencyAnalysis::* addDependentVASFuncTy)(ValueAtSlot*,
+  typedef void(RtlSSAAnalysis::* addDependentVASFuncTy)(ValueAtSlot*,
                                                                VASTRegister*);
 
 public:
@@ -257,27 +257,27 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  RegDependencyAnalysis() : MachineFunctionPass(ID) {
-    initializeRegDependencyAnalysisPass(*PassRegistry::getPassRegistry());
+  RtlSSAAnalysis() : MachineFunctionPass(ID) {
+    initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
   }
 };
 
-template <> struct GraphTraits<RegDependencyAnalysis*>
+template <> struct GraphTraits<RtlSSAAnalysis*>
 : public GraphTraits<VASTSlot*> {
 
-  typedef RegDependencyAnalysis::slot_vec_it nodes_iterator;
-  static nodes_iterator nodes_begin(RegDependencyAnalysis *G) {
+  typedef RtlSSAAnalysis::slot_vec_it nodes_iterator;
+  static nodes_iterator nodes_begin(RtlSSAAnalysis *G) {
     return G->slot_begin();
   }
-  static nodes_iterator nodes_end(RegDependencyAnalysis *G) {
+  static nodes_iterator nodes_end(RtlSSAAnalysis *G) {
     return G->slot_end();
   }
 };
 
 template<>
-struct DOTGraphTraits<RegDependencyAnalysis*> : public DefaultDOTGraphTraits{
+struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
   typedef VASTSlot NodeTy;
-  typedef RegDependencyAnalysis GraphTy;
+  typedef RtlSSAAnalysis GraphTy;
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
@@ -329,13 +329,13 @@ struct DOTGraphTraits<RegDependencyAnalysis*> : public DefaultDOTGraphTraits{
   }
 };
 
-void RegDependencyAnalysis::viewGraph() {
+void RtlSSAAnalysis::viewGraph() {
   ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
 
 }
 
-bool RegDependencyAnalysis::runOnMachineFunction(MachineFunction &F) {
+bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   VASTModule *VM = MF->getInfo<VFInfo>()->getRtlMod();
 
@@ -358,7 +358,7 @@ bool RegDependencyAnalysis::runOnMachineFunction(MachineFunction &F) {
   return false;
 }
 
-ValueAtSlot *RegDependencyAnalysis::getOrCreateVAS(VASTValue *V,
+ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V,
                                                    VASTSlot *S){
   FoldingSetNodeID ID;
   ID.AddPointer(V);
@@ -388,7 +388,7 @@ ValueAtSlot *RegDependencyAnalysis::getOrCreateVAS(VASTValue *V,
 //  return 0;
 //}
 
-SlotInfo *RegDependencyAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
+SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   // Get SlotInfo if there exist in the SlotInfos map.
   slotinfo_it It = getSlotInfo(S);
   if (It != SlotInfos.end()) return It->second;
@@ -399,7 +399,7 @@ SlotInfo *RegDependencyAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   return SIPointer;
 }
 
-void RegDependencyAnalysis::addDependentVAS(ValueAtSlot *VAS,
+void RtlSSAAnalysis::addDependentVAS(ValueAtSlot *VAS,
                                             VASTRegister *DefReg) {
   for (assign_it I = DefReg->assign_begin(), E = DefReg->assign_end();
     I != E; ++I){
@@ -412,7 +412,7 @@ void RegDependencyAnalysis::addDependentVAS(ValueAtSlot *VAS,
   }
 }
 
-void RegDependencyAnalysis::defineVAS(VASTModule *VM) {
+void RtlSSAAnalysis::defineVAS(VASTModule *VM) {
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
        ++I){
     VASTRegister *UseReg = *I;
@@ -430,7 +430,7 @@ void RegDependencyAnalysis::defineVAS(VASTModule *VM) {
   }
 }
 
-void RegDependencyAnalysis::TraverseDependentRegister(VASTUse *DefUse,
+void RtlSSAAnalysis::TraverseDependentRegister(VASTUse *DefUse,
                                                       ValueAtSlot *VAS){
 
   VASTValue *DefValue = DefUse->getOrNull();
@@ -447,11 +447,11 @@ void RegDependencyAnalysis::TraverseDependentRegister(VASTUse *DefUse,
 
   // If the define Value is wire, traverse the use tree to get the
   // ultimate registers.
-  DepthFirstTraverseUseTree(&RegDependencyAnalysis::addDependentVAS, *DefUse,
+  DepthFirstTraverseUseTree(&RtlSSAAnalysis::addDependentVAS, *DefUse,
                             VAS);
 }
 
-void RegDependencyAnalysis::DepthFirstTraverseUseTree(addDependentVASFuncTy F,
+void RtlSSAAnalysis::DepthFirstTraverseUseTree(addDependentVASFuncTy F,
                                                       VASTUse DefUse,
                                                       ValueAtSlot *VAS) {
   typedef VASTUse::iterator ChildIt;
@@ -522,7 +522,7 @@ void RegDependencyAnalysis::DepthFirstTraverseUseTree(addDependentVASFuncTy F,
   assert(NodeWorkStack.back().get() == VAS->getValue() && "Node stack broken!");
 }
 
-bool RegDependencyAnalysis::DetectChange(VASSet SlotOut, VASSet CurOut) {
+bool RtlSSAAnalysis::DetectChange(VASSet SlotOut, VASSet CurOut) {
   // Compare the SlotOutMap and OldSlotOutMap, findout whether there are
   // changes in the SlotOut.
   for (SlotInfo::vasset_it I = CurOut.begin(), E = CurOut.end(); I != E;
@@ -544,7 +544,7 @@ bool RegDependencyAnalysis::DetectChange(VASSet SlotOut, VASSet CurOut) {
   return false;
 }
 
-void RegDependencyAnalysis::ComputeReachingDefinition() {
+void RtlSSAAnalysis::ComputeReachingDefinition() {
   ComputeGenAndKill();
 
   bool Change;
@@ -585,7 +585,7 @@ void RegDependencyAnalysis::ComputeReachingDefinition() {
   } while (Change);
 }
 
-void RegDependencyAnalysis::ComputeGenAndKill(){
+void RtlSSAAnalysis::ComputeGenAndKill(){
   // Collect the generated statements to the SlotGenMap, and collect the killed
   // statements to the SlotKillMap.
   for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
@@ -648,12 +648,12 @@ void RegDependencyAnalysis::ComputeGenAndKill(){
   }
 }
 
-char RegDependencyAnalysis::ID = 0;
-INITIALIZE_PASS_BEGIN(RegDependencyAnalysis, "RegDependencyAnalysis",
-                      "RegDependencyAnalysiss", false, false)
-INITIALIZE_PASS_END(RegDependencyAnalysis, "RegDependencyAnalysis",
-                    "RegDependencyAnalysis", false, false)
+char RtlSSAAnalysis::ID = 0;
+INITIALIZE_PASS_BEGIN(RtlSSAAnalysis, "RtlSSAAnalysis",
+                      "RtlSSAAnalysis", false, false)
+INITIALIZE_PASS_END(RtlSSAAnalysis, "RtlSSAAnalysis",
+                    "RtlSSAAnalysis", false, false)
 
-Pass *llvm::createRegDependencyAnalysisPass() {
-  return new RegDependencyAnalysis();
+Pass *llvm::createRtlSSAAnalysisPass() {
+  return new RtlSSAAnalysis();
 }

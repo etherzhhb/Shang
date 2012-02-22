@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
   Passes.add(createCombPathDelayAnalysisPass());
 
   // Analyse the dependency between registers.
-  Passes.add(createRegDependencyAnalysisPass());
+  Passes.add(createRtlSSAAnalysisPass());
 
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
