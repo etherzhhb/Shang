@@ -111,29 +111,53 @@ namespace llvm {
     typedef std::set<ValueAtSlot*> VASSetTy;
     typedef VASSetTy::iterator vasset_it;
   private:
-    VASTSlot *S;
-
+    const VASTSlot *S;
     // Define Set for the reaching definition.
     VASSetTy SlotGen;
     VASSetTy SlotKill;
     VASSetTy SlotIn;
     VASSetTy SlotOut;
   public:
-    SlotInfo(VASTSlot *s) : S(s) {}
+    SlotInfo(const VASTSlot *s) : S(s) {}
     // get the iterator of the defining map of reaching definition.
-    vasset_it getVASGenBegin() const { return SlotGen.begin(); }
-    vasset_it getVASGenEnd() const { return SlotGen.end(); }
-    vasset_it getVASKillBegin() const { return SlotKill.begin(); }
-    vasset_it getVASKillEnd() const { return SlotKill.end(); }
-    vasset_it getVASInBegin() const { return SlotIn.begin(); }
-    vasset_it getVASInEnd() const { return SlotIn.end(); }
-    vasset_it getVASOutBegin() const { return SlotOut.begin(); }
-    vasset_it getVASOutEnd() const { return SlotOut.end(); }
+    vasset_it gen_begin() const { return SlotGen.begin(); }
+    vasset_it gen_end() const { return SlotGen.end(); }
+    vasset_it kill_begin() const { return SlotKill.begin(); }
+    vasset_it kill_end() const { return SlotKill.end(); }
+    vasset_it in_begin() const { return SlotIn.begin(); }
+    vasset_it in_end() const { return SlotIn.end(); }
+    vasset_it out_begin() const { return SlotOut.begin(); }
+    vasset_it out_end() const { return SlotOut.end(); }
 
-    VASSetTy getGenVASSet() const{ return SlotGen; }
-    VASSetTy getKillVASSet() const { return SlotKill; }
-    VASSetTy getInVASSet() const { return SlotIn; }
-    VASSetTy getOutVASSet() const { return SlotOut; }
+    // Get different VAS sets.
+    VASSetTy getGenVASSet() { return SlotGen; }
+    VASSetTy getKillVASSet() { return SlotKill; }
+    VASSetTy getInVASSet() { return SlotIn; }
+    VASSetTy getOutVASSet() { return SlotOut; }
+
+    // Insert VAS into different set.
+    void insertGen(ValueAtSlot *VAS) { SlotGen.insert(VAS); }
+    void insertGen(vasset_it begin, vasset_it end) {
+      SlotGen.insert(begin, end);
+    }
+    void insertKill(ValueAtSlot *VAS) { SlotKill.insert(VAS); }
+    void insertKill(vasset_it begin, vasset_it end) {
+      SlotKill.insert(begin, end);
+    }
+    void insertIn(ValueAtSlot *VAS) { SlotIn.insert(VAS); }
+    void insertIn(vasset_it begin, vasset_it end) {
+      SlotIn.insert(begin, end);
+    }
+    void insertOut(ValueAtSlot *VAS) { SlotOut.insert(VAS); }
+    void insertOut(vasset_it begin, vasset_it end) {
+      SlotOut.insert(begin, end);
+    }
+
+    // Clear the SlotOut set.
+    void clearOutSet() { SlotOut.clear(); }
+
+    // Get Slot pointer.
+    const VASTSlot *getSlot() { return S; }
   };
 }
 
@@ -148,10 +172,13 @@ public:
   typedef SmallVector<VASTSlot*, 4> SlotVecTy;
   typedef SlotVecTy::iterator slot_vec_it;
 
-  typedef std::set<SlotInfo*> SlotInfoTy;
+  typedef std::map<const VASTSlot* ,SlotInfo*> SlotInfoTy;
+  typedef SlotInfoTy::const_iterator slotinfo_it;
+
 
 private:
   typedef SlotInfo::VASSetTy VASSet;
+
   SlotInfoTy SlotInfos;
 
   // This vector is for the ValueAtSlot.
@@ -182,7 +209,14 @@ public:
   slot_vec_it slot_begin() { return SlotVec.begin(); }
   slot_vec_it slot_end() { return SlotVec.end(); }
 
-  SlotInfoTy *getOrCreateSlotInfo(VASTSlot *S);
+  // Get SlotInfo from the existing SlotInfos set.
+  slotinfo_it getSlotInfo(const VASTSlot *S) const {
+    return SlotInfos.find(S);
+  }
+
+  // Get SlotInfo from the existing SlotInfos set or create a slotInfo and
+  // insert it to the SlotInfos set.
+  SlotInfo *getOrCreateSlotInfo(const VASTSlot *S) ;
 
   ValueAtSlot *getOrCreateVAS(VASTValue *V, VASTSlot *S);
 
@@ -219,8 +253,6 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
-   // AU.addRequired<FindShortestPath>();
-   // AU.addPreserved<FindShortestPath>();
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -259,20 +291,22 @@ struct DOTGraphTraits<RegDependencyAnalysis*> : public DefaultDOTGraphTraits{
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
-    /*for (RegDependencyAnalysis::vasset_it I = Graph->vas_gen_begin(Node),
-         E = Graph->vas_gen_end(Node); I != E; ++I) {
+    SlotInfo * SI = Graph->getSlotInfo(Node)->second;
+    for (SlotInfo::vasset_it I = SI->gen_begin(), E = SI->gen_end();
+         I != E; ++I) {
       ValueAtSlot *VAS = *I;
         ss<<"    Gen: "<< VAS->getValue()->getName() << "   "
           << VAS->getSlot()->getName() << "\n";
     }
-    ss << "\n\n";*/
-    for (SlotInfo::vasset_it I = Graph->getVASKillBegin(Node),
-         E = Graph->getVASKillEnd(Node); I != E; ++I) {
+    ss << "\n\n";
+
+    /*for (SlotInfo::vasset_it I = SI->getVASKillBegin(), E = SI->getVASKillEnd();
+         I != E; ++I) {
       ValueAtSlot *VAS = *I;
       ss<<"    kill: "<< VAS->getValue()->getName() << "   "
         << VAS->getSlot()->getName() << "\n";
     }
-    ss << "\n\n";
+    ss << "\n\n";*/
     /*for (RegDependencyAnalysis::vasset_it I = Graph->vas_in_begin(Node),
       E = Graph->vas_in_end(Node); I != E; ++I) {
         ValueAtSlot *VAS = *I;
@@ -280,12 +314,12 @@ struct DOTGraphTraits<RegDependencyAnalysis*> : public DefaultDOTGraphTraits{
           << VAS->getSlot()->getName() << "\n";
     }
     ss << "\n\n";*/
-    for (SlotInfo::vasset_it I = Graph->getVASOutBegin(Node),
+    /*for (SlotInfo::vasset_it I = Graph->getVASOutBegin(Node),
          E = Graph->getVASOutEnd(Node); I != E; ++I) {
       ValueAtSlot *VAS = *I;
       ss<<"    Out: "<< VAS->getValue()->getName() << "   "
         << VAS->getSlot()->getName() << "\n";
-    }
+    }*/
     return ss.str();
   }
 
@@ -344,13 +378,25 @@ ValueAtSlot *RegDependencyAnalysis::getOrCreateVAS(VASTValue *V,
   return VAS;
 }
 
-SlotInfo *RegDependencyAnalysis::getOrCreateSlotInfo(VASTSlot *S) {
-  SlotInfo SI(S);
-  SlotInfo *SIPointer = &SI;
-  if (SlotInfos.insert(SIPointer).second) return SIPointer;
+//slotinfo_it *RegDependencyAnalysis::getSlotInfo(const VASTSlot *S) const {
+//  return SlotInfos.find(S);
+//  for (slotinfo_it I = SlotInfos.begin(), E = SlotInfos.end(); I != E; ++I) {
+//    if (I->first == S) {
+//      return I->second;
+//    }
+//  }
+//  return 0;
+//}
 
-  SlotInfos.insert(SIPointer).second;
-  return *SlotInfos.find(SI);
+SlotInfo *RegDependencyAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
+  // Get SlotInfo if there exist in the SlotInfos map.
+  slotinfo_it It = getSlotInfo(S);
+  if (It != SlotInfos.end()) return It->second;
+
+  // Create a new slotinfo if it is not defined before.
+  SlotInfo *SIPointer = new SlotInfo(S);
+  SlotInfos.insert(std::make_pair(S, SIPointer));
+  return SIPointer;
 }
 
 void RegDependencyAnalysis::addDependentVAS(ValueAtSlot *VAS,
@@ -509,31 +555,30 @@ void RegDependencyAnalysis::ComputeReachingDefinition() {
     for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
       VASTSlot *S =*I;
 
-      SlotInfo SI(S);
+      SlotInfo *SI = getOrCreateSlotInfo(S);
 
       // If the VASTslot is void, abandon it.
       if (!S) continue;
-      VASSet SlotOut = SI.getOutVASSet();
-      VASSet &CurIn = SI.getInVASSet(), &CurKill = SI.getKillVASSet(),
-              &CurOut = SI.getOutVASSet(), &CurGen = SI.getGenVASSet();
+
+      VASSet SlotOut = SI->getOutVASSet(), &CurOut = SI->getOutVASSet();
 
       // Compute the SlotInMap.
       for (VASTSlot::pred_it I = S->pred_begin(), E = S->pred_end(); I != E;
            ++I) {
         VASTSlot *PS = *I;
-        SlotInfo
-        CurIn.insert(SlotOutMap[PS].begin(), SlotOutMap[PS].end());
+        SlotInfo *PSI = getOrCreateSlotInfo(PS);
+        SI->insertIn(PSI->out_begin(), PSI->out_end());
       }
 
       // Compute the SlotInMap subtract the SlotKillMap.
-      set_subtract(CurIn, CurKill);
+      set_subtract(SI->getInVASSet(), SI->getKillVASSet());
 
-      CurOut.clear();
+      SI->clearOutSet();
 
       // Compute the SlotOutMap. insert the VAS from the SlotGenMap.
-      CurOut.insert(CurGen.begin(), CurGen.end());
+      SI->insertOut(SI->gen_begin(), SI->gen_end());
       // Compute the SlotOutMap. Insert the VAS from the SlotInMap.
-      CurOut.insert(CurIn.begin(), CurIn.end());
+      SI->insertOut(SI->in_begin(), SI->in_end());
 
       Change = DetectChange(SlotOut, CurOut);
     }
@@ -548,8 +593,10 @@ void RegDependencyAnalysis::ComputeGenAndKill(){
 
     // If the VASTslot is void, abandon it.
     if (!S) continue;
-    VASSetTy &CurGen = SlotGenMap[S], &CurKill = SlotKillMap[S];
 
+    SlotInfo *SI = getOrCreateSlotInfo(S);
+
+    typedef SlotInfo::vasset_it vasset_iterator;
 
     DEBUG(dbgs()<<"origin slot: "<< S->getName()<< "\n";);
 
@@ -559,12 +606,12 @@ void RegDependencyAnalysis::ComputeGenAndKill(){
 
       // If the VAS have the same slot with S, then its a Generated VAS to this
       // slot.
-      if (GenVAS->getSlot() == S) CurGen.insert(GenVAS);
+      if (GenVAS->getSlot() == S) SI->insertGen(GenVAS);
     }
 
     // Collect the killed statements to the SlotGenMap.
-    for (SlotInfo::vasset_it I = CurGen.begin(), E = CurGen.end(); I != E;
-         ++I) {
+    for (vasset_iterator I = SI->gen_begin(), E = SI->gen_end();
+         I != E; ++I) {
       ValueAtSlot *GenVAS = *I;
 
       for (vasvec_it VI = AllVASs.begin(), VE = AllVASs.end(); VI != VE;
@@ -576,23 +623,23 @@ void RegDependencyAnalysis::ComputeGenAndKill(){
 
         // If the KillVAS have the same value with the GenVAS, then it's killed.
         if (GenVAS->getValue() == KillVAS->getValue())
-          CurKill.insert(KillVAS);
+          SI->insertKill(KillVAS);
       }
     }
 
     DEBUG(
-      for (SlotInfo::vasset_it I = CurGen.begin(), E = CurGen.end(); I != E;
-           ++I) {
+      for (vasset_iterator I = SI->gen_begin(), E = SI->gen_end();
+           I != E; ++I) {
         ValueAtSlot *VAS = *I;
-        if (S->getSlotNum() == 2) {
+        if (S->getSlotNum() == 0) {
           dbgs()<<"    Gen: "<< VAS->getValue()->getName() << "   "
                 << VAS->getSlot()->getName() << "\n";
         }
       }
-      for (SlotInfo::vasset_it I = CurKill.begin(), E = CurKill.end(); I != E;
-           ++I) {
+      for (vasset_iterator I = SI->kill_begin(), E = SI->kill_end();
+            I != E; ++I) {
         ValueAtSlot *VAS = *I;
-        if (S->getSlotNum() == 2) {
+        if (S->getSlotNum() == 0) {
           dbgs()<<"    Kill: "<< VAS->getValue()->getName() << "   "
                 << VAS->getSlot()->getName()  << "\n";
         }
