@@ -196,7 +196,7 @@ bool VTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createFixTerminatorsPass());
 
   PM.add(createMachineCSEPass());
-  //PM.add(createBitLevelABCOptPass());
+  PM.add(createBitLevelABCOptPass());
   // Fix machine code so we can handle them easier.
   PM.add(createFixMachineCodePass());
   // Construct multiplexer tree for prebound function units.

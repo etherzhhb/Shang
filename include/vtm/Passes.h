@@ -70,9 +70,6 @@ Pass *createFindShortestPathPass();
 // Analyse the Combination Path Delay.
 Pass *createCombPathDelayAnalysisPass();
 
-// Analysis the dependency between registers
-Pass *createRegDependencyAnalysisPass();
-
 // RTL code generation.
 Pass *createVerilogASTBuilderPass();
 Pass *createVerilogASTWriterPass(raw_ostream &O);
@@ -97,7 +94,6 @@ void initializeStackToGlobalPass(PassRegistry &Registry);
 void initializeFindShortestPathPass(PassRegistry &Registry);
 
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
-void initializeRegDependencyAnalysisPass(PassRegistry &Registry);
 
 void initializeVerilogASTBuilderPass(PassRegistry &Registry);
 void initializeVerilogASTWriterPass(PassRegistry &Registry);
