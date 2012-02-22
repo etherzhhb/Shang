@@ -111,6 +111,22 @@ void FindShortestPath::InitPath() {
   // assign infinite number to the PathVector.
   unsigned PathVectorSize = MBBNum * MBBNum;
   PathVector.assign(PathVectorSize, Infinite);
+
+  // Initial the PathVector with the Path.
+  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
+    MachineBasicBlock *DefMBB = I;
+    unsigned TolalSlot = FInfo->getTotalSlotFor(DefMBB);
+
+    // Initialize the distance between the direct connected MBBs.
+    for (MachineBasicBlock::succ_iterator I = DefMBB->succ_begin(),
+         E = DefMBB->succ_end(); I != E; ++I) {
+      MachineBasicBlock *UseMBB = *I;
+      unsigned &Distance = getDistance(DefMBB, UseMBB);
+      // The distance of self-loop edge is the initial interval of the BB.
+      Distance = DefMBB == UseMBB ? FInfo->getIISlotFor(UseMBB)
+                                  : TolalSlot;
+    }
+  }
 }
 
 // Use the Floyd Algorithm to find the shortest Path between two Machine Basic
