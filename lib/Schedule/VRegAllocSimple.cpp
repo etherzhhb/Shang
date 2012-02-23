@@ -212,11 +212,9 @@ static uint64_t getRegKey(unsigned Reg, uint8_t OpIdx = 0, uint8_t SubReg = 0) {
 
 template<int NUMSRC>
 struct SourceChecker {
-  // TODO Explain sources and fanins
   // All copy source both fu of the edge.
-  SmallSet<uint64_t, 4> MergedFanins[NUMSRC];
-  unsigned Fanins[2][NUMSRC];
-  unsigned CurSrc;
+  SmallSet<uint64_t, 4> Srcs[NUMSRC];
+  unsigned SrcNum[NUMSRC];
   unsigned ExtraCost;
   // TODO: Timing cost.
   // The more predicate value we have, the bigger latency will get to select
@@ -228,26 +226,21 @@ struct SourceChecker {
 
   void resetSrcs() {
     ExtraCost = 0;
-    CurSrc = 0;
     for (unsigned i = 0; i < NUMSRC; ++i) {
-      MergedFanins[i].clear();
-      Fanins[0][i] = 0;
-      Fanins[1][i] = 0;
+      Srcs[i].clear();
+      SrcNum[i] = 0;
     }
   }
 
-  // Notify the source checker that we are switching to next source.
-  void nextSrc() { ++CurSrc; }
-
   template<int N>
-  void addFanin(ucOperand &FanInOp) {
-    if (FanInOp.isReg()) {
-      MergedFanins[N].insert(getRegKey(FanInOp.getReg()));
-      ++Fanins[CurSrc][N];
-    } else if (FanInOp.isImm())
+  void addSrc(ucOperand &SrcOp) {
+    if (SrcOp.isReg()) {
+      Srcs[N].insert(getRegKey(SrcOp.getReg()));
+      ++SrcNum[N];
+    } else if (SrcOp.isImm())
       ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
     else
-      ExtraCost += /*Reg Mux Cost Pre-bit*/ VFUs::MUXCost[0];
+      ExtraCost += /*Reg Mux Cost Pre-bit*/ VFUs::MuxSizeCost;
   }
 
   void addPred(ucOperand &PredOp) {
@@ -260,98 +253,73 @@ struct SourceChecker {
 
   template<int N>
   void removeSrcReg(unsigned Reg) {
-    MergedFanins[N].erase(Reg);
+    Srcs[N].erase(Reg);
   }
 
   template<int N>
-  int getMergedSrcMuxSize() const {
-    return MergedFanins[N].size();
+  int getSrcMuxSize() const {
+    return Srcs[N].size();
   }
 
   template<int N>
-  int getSrcNum(int SrcIndex) const {
-    return Fanins[SrcIndex][N];
-  }
-  
-  //template<int N>
-  //int getSavedSrcMuxSize() const {
-  //  return getSrcNum<N>() - getSrcMuxSize<N>();
-  //}
-  //
-
-  //template<int N>
-  //int getSrcMuxCost(int BitWidth) const {
-  //  if (unsigned MuxSize = getSrcMuxSize<N>())
-  //    return (MuxSize - 1) * /*Mux pre-port cost */VFUs::MUXCost * BitWidth;
-
-  //  return 0;
-  //}
-  //
-  //template<int N>
-  //int getSavedSrcMuxCost(int BitWidth) const {
-  //  return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */VFUs::MUXCost * BitWidth;
-  //}
-  int getMuxCost(int Size){
-    if(Size == 0 || Size == 1)
-      return 0;
-    else if(Size > 1 && Size < 9)
-      return VFUs::MUXCost[Size];
-    else 
-      return 0;
+  int getSrcNum() const {
+    return SrcNum[N];
   }
 
   template<int N>
-  int getSavedSrcMuxCost(int BitWidth){
-    return (getMuxCost(getSrcNum<N>(0)) +getMuxCost(getSrcNum<N>(1)) 
-            - getMuxCost(getMergedSrcMuxSize<N>())) *BitWidth;
+  int getSavedSrcMuxSize() const {
+    return getSrcNum<N>() - getSrcMuxSize<N>();
+  }
+
+  template<int N>
+  int getSrcMuxCost() const {
+    if (unsigned MuxSize = getSrcMuxSize<N>())
+      return (MuxSize - 1) * /*Mux pre-port cost */VFUs::MuxSizeCost;
+
+    return 0;
+  }
+
+  template<int N>
+  int getSavedSrcMuxCost() const {
+    return getSavedSrcMuxSize<N>() * /* Mux pre-port area cost */VFUs::MUXCost;
   }
 
   int getExtraCost() const { return ExtraCost; }
-  //// Total cost.
-  int getTotalSavedSrcMuxCost(int BitWidth);
-  //int getTotalSrcMuxCost(int BitWidth);
-  int getMaxMergedSrcMuxSize();
+  // Total cost.
+  int getTotalSavedSrcMuxCost();
+  int getTotalSrcMuxCost();
+  int getMaxSrcMuxSize();
 };
 
-  template<>
-  int SourceChecker<1>::getTotalSavedSrcMuxCost(int BitWidth){
-    return getSavedSrcMuxCost<0>(BitWidth);
-  }
+template<>
+int SourceChecker<1>::getTotalSavedSrcMuxCost() {
+  return getSavedSrcMuxCost<0>();
+}
 
-  template<>
-  int SourceChecker<2>::getTotalSavedSrcMuxCost(int BitWidth){
-    return getSavedSrcMuxCost<0>(BitWidth) + getSavedSrcMuxCost<1>(BitWidth);
-  }
+template<>
+int SourceChecker<2>::getTotalSavedSrcMuxCost() {
+  return getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
+}
 
-  //template<>
-  //int SourceChecker<1>::getTotalSavedSrcMuxCost(int BitWidth) {
-  //return getSavedSrcMuxCost<0>(BitWidth);
-  //}
+template<>
+int SourceChecker<1>::getTotalSrcMuxCost() {
+  return getSavedSrcMuxCost<0>();
+}
 
-  //template<>
-  //int SourceChecker<2>::getTotalSavedSrcMuxCost(int BitWidth) {
-  //return getSavedSrcMuxCost<0>(BitWidth) + getSavedSrcMuxCost<1>(BitWidth);
-  //}
+template<>
+int SourceChecker<2>::getTotalSrcMuxCost() {
+  return getSavedSrcMuxCost<0>() + getSavedSrcMuxCost<1>();
+}
 
-  //template<>
-  //int SourceChecker<1>::getTotalSrcMuxCost(int BitWidth) {
-  //return getSrcMuxCost<0>(BitWidth);
-  //}
+template<>
+int SourceChecker<1>::getMaxSrcMuxSize() {
+  return getSrcMuxSize<0>();
+}
 
-  //template<>
-  //int SourceChecker<2>::getTotalSrcMuxCost(int BitWidth) {
-  //return getSrcMuxCost<0>(BitWidth) + getSrcMuxCost<1>(BitWidth);
-  //}
-
-  template<>
-  int SourceChecker<1>::getMaxMergedSrcMuxSize() {
-  return getMergedSrcMuxSize<0>();
-  }
-
-  template<>
-  int SourceChecker<2>::getMaxMergedSrcMuxSize() {
-  return std::max(getMergedSrcMuxSize<0>(), getMergedSrcMuxSize<1>());
-  }
+template<>
+int SourceChecker<2>::getMaxSrcMuxSize() {
+  return std::max(getSrcMuxSize<0>(), getSrcMuxSize<1>());
+}
 
 struct DstChecker {
   // All copy source both fu of the edge.
@@ -385,17 +353,17 @@ struct DstChecker {
     return DstReg;
   }
 
-  //int getNumIdenticalDst() const {
-  //  return Dsts.size();
-  //}
+  int getNumIdenticalDst() const {
+    return Dsts.size();
+  }
 
-  //int getSavedDstMuxSize() const {
-  //  return NumDsts - int(getNumIdenticalDst());
-  //}
+  int getSavedDstMuxSize() const {
+    return NumDsts - int(getNumIdenticalDst());
+  }
 
-  //int getSavedDstMuxCost(int BitWidth) const {
-  //  return getSavedDstMuxSize() * /* Mux pre-port area cost */VFUs::MUXCost * BitWidth;
-  //}
+  int getSavedDstMuxCost() const {
+    return getSavedDstMuxSize() * /* Mux pre-port area cost */VFUs::MUXCost;
+  }
 };
 
 template<int NUMSRC>
@@ -405,7 +373,7 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
   // The pre-bit cost of this kind of function unit.
   unsigned *const Cost;
 
-  CompEdgeWeightBase(VRASimple *V, unsigned cost[]) : VRA(V),Cost(cost){}
+  CompEdgeWeightBase(VRASimple *V, unsigned cost[]) : VRA(V), Cost(cost) {}
 
   void reset() {
     resetDsts();
@@ -413,29 +381,26 @@ struct CompEdgeWeightBase : public SourceChecker<NUMSRC>, public DstChecker,
     resetWidth();
   }
 
-  int computeWeight(int SrcBitWidth, int DstBitWidth) {
+  int computeWeight(int BitWidth) {
     // Only merge the register if the mux size not exceed the max allowed size.
-    if (SourceChecker<NUMSRC>::getMaxMergedSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
+    if (SourceChecker<NUMSRC>::getMaxSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    Weight += /*FU Cost*/ Cost[SrcBitWidth];
-    Weight -= SourceChecker<NUMSRC>::getTotalSavedSrcMuxCost(SrcBitWidth);
+    Weight += /*FU Cost*/ Cost[BitWidth];
     // How many mux port we can save?
-    //Weight += SourceChecker<NUMSRC>::getTotalSavedSrcMuxCost(SrcBitWidth);
+    // Weight += SourceChecker<NUMSRC>::getTotalSavedSrcMuxCost();
     // We also can save the mux for the dsts.
-    //Weight += getSavedDstMuxCost(DstBitWidth);
+    Weight += getSavedDstMuxCost();
     // How big the mux it is after the registers are merged? Do not make it too
     // big.
-    //Weight -= SourceChecker<NUMSRC>::getTotalSrcMuxCost(SrcBitWidth);
+    Weight -= SourceChecker<NUMSRC>::getTotalSrcMuxCost();
     // Other cost.
-    //Weight -= SourceChecker<NUMSRC>::getExtraCost();
+    Weight -= SourceChecker<NUMSRC>::getExtraCost();
 
     return Weight;
   }
-
-  int computeWeight(int BitWidth) { return computeWeight(BitWidth, BitWidth); }
 };
 
 // Weight computation functor for register Compatibility Graph.
@@ -447,7 +412,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
   unsigned DstReg;
 
   typedef CompEdgeWeightBase<1> Base;
-  CompRegEdgeWeight(VRASimple *V, unsigned cost[]): Base(V, cost) {}
+  CompRegEdgeWeight(VRASimple *V, unsigned cost[]) : Base(V, cost) {}
 
   void reset(unsigned DstR) {
     DstReg = DstR;
@@ -478,20 +443,20 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     case VTM::COPY:
     case VTM::VOpReadFU:
     case VTM::VOpDstMux:
-      addFanin<0>(Op.getOperand(1));
+      addSrc<0>(Op.getOperand(1));
       break;
     case VTM::VOpReadReturn:
-      addFanin<0>(Op.getOperand(2));
+      addSrc<0>(Op.getOperand(2));
       break;
     case VTM::VOpSel:
       // FIXME: Merging VOpSel break aes_main_IMS_ASAP.
       return true;
-      addFanin<0>(Op.getOperand(2));
-      addFanin<0>(Op.getOperand(3));
+      addSrc<0>(Op.getOperand(2));
+      addSrc<0>(Op.getOperand(3));
       break;
     case VTM::VOpCase:
       for (unsigned i = 1, e = Op.getNumOperands(); i != e; i+=2)
-        addFanin<0>(Op.getOperand(i + 1));
+        addSrc<0>(Op.getOperand(i + 1));
       break;
     default:
 #ifndef NDEBUG
@@ -530,13 +495,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    // Go on check next source.
-    nextSrc();
-
     if (VRA->iterateUseDefChain(Dst->reg, *this))
-      return CompGraphWeights::HUGE_NEG_VAL;
-
-    if (getMergedSrcMuxSize<0>() != 1)
       return CompGraphWeights::HUGE_NEG_VAL;
 
     if (hasPHICopy) return CompGraphWeights::HUGE_NEG_VAL;
@@ -561,7 +520,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
 
   template<unsigned Offset>
   void visitOperand(ucOp &Op) {
-    addFanin<Offset>(Op.getOperand(OpIdx + Offset));
+    addSrc<Offset>(Op.getOperand(OpIdx + Offset));
   }
 
   typedef CompEdgeWeightBase<2> Base;
@@ -667,7 +626,9 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
 
-    return computeWeight(getWidth(), 1);
+    // Dirty Hack: The dst port of comparison it is 1 bit, subtract it from
+    // per bit weight so we will not multiply it by bitwidth.
+    return computeWeight(getWidth()) - getSavedDstMuxCost() * (getWidth() - 1);
   }
 };
 }
@@ -1082,11 +1043,11 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
     SomethingBind |= reduceCompGraph(RCG, RegWeight);
     //SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
     //SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
-    SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
-    SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
-    SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
-    SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
-    SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
+    //SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
+    //SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
+    //SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
+    //SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
+    //SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
   }
 
   // Bind the Compatibility Graphs
@@ -1429,7 +1390,7 @@ template<class CompEdgeWeight>
 bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight &C) {
   SmallVector<LiveInterval*, 8> LongestPath, MergedLIs;
   G.updateEdgeWeight(C);
-  //G.viewGraph();
+
   bool AnyReduced = false;
 
   for (int PathWeight = G.findLongestPath(LongestPath, true); PathWeight > 0;
@@ -1454,7 +1415,7 @@ bool VRASimple::reduceCompGraph(LICGraph &G, CompEdgeWeight &C) {
   // Re-add the merged LI to the graph.
   while (!MergedLIs.empty())
     G.GetOrCreateNode(MergedLIs.pop_back_val());
-  //G.viewGraph();
+
   return AnyReduced;
 }
 

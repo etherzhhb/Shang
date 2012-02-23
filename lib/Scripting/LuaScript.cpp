@@ -185,8 +185,8 @@ void LuaScript::updateFUs() {
   READPARAMETER(LUTCost, unsigned);
   //FIX ME: This can not initialize the RegCost.
   //READPARAMETER(RegCost, unsigned);
-  //READPARAMETER(MUXCost, unsigned);
-  //READPARAMETER(MuxSizeCost, unsigned);
+  READPARAMETER(MUXCost, unsigned);
+  READPARAMETER(MuxSizeCost, unsigned);
 
   READPARAMETER(LutLatency, double);
   READPARAMETER(MaxLutSize, unsigned);
