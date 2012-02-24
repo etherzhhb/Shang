@@ -65,7 +65,7 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
   if (DefMBBNum != UseMBBNum || DefSlotIdx > UseSlotIdx) {
     // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
     // Return -1 which is the largest number in unsigned type.
-    if(MBBDistance == Infinite) return -1;
+    if(MBBDistance == int(Infinite)) return -1;
 
     SlotDistance = MBBDistance - (DefSlotIdx - DefSlotStartIdx)
                                + (UseSlotIdx - UseSlotStartIdx);
