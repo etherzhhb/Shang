@@ -10,5 +10,5 @@ do
 done < $ExpectFailListPath
 
 # Append the fail test to the fail list.
-echo $CurrentFail `find $PWD -name *.bc` >> $TargetFailListPath
+echo "$CurrentFail"_diff_output `find $PWD -name $CurrentFail*.bc` >> $TargetFailListPath
 

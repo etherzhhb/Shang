@@ -86,14 +86,14 @@ add_custom_target(benchmark_test
           COMMENT "Run test on the benchmarks")
 
 add_custom_target(test_verilogbackend
-          COMMAND [ -s ${FAILLIST} ] && make -C ${LLVM_BINARY_DIR} `cat ${FAILLIST}` || exit 0
+          COMMAND [ -f ${FAILLIST} ] && [ -s ${FAILLIST} ] && cat ${FAILLIST} && make -i -C ${LLVM_BINARY_DIR} `cat ${FAILLIST}` || exit 0
           COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
           COMMAND mv ${FAILLISTTMP} ${FAILLIST}
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Compiling all source to llvm test_verilogbackend")
 
-add_custom_target(last_fail
-          COMMAND [ -s ${FAILLIST} ] && make -C ${LLVM_BINARY_DIR} `cat ${FAILLIST}` || exit 0
+add_custom_target(last_fail          
+          COMMAND [ -f ${FAILLIST} ] && [ -s ${FAILLIST} ] && cat ${FAILLIST} && make -i -C ${LLVM_BINARY_DIR} `cat ${FAILLIST}` || exit 0
           COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
           COMMAND mv ${FAILLISTTMP} ${FAILLIST}
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
@@ -128,7 +128,7 @@ macro(add_general_test test_file config_file setup_prj_file postfix pipeline_typ
   set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")	
 
-  set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${TEST}_diff_output ${FAILLISTTMP})
+  set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${TEST} ${FAILLISTTMP})
  
   set(PIPELINE_TYPE 	  "${pipeline_type}")
   set(SCHEDULE_TYPE 	  "${schedule_type}")

@@ -1,4 +1,4 @@
-sim_memcpy_libcall_opt_DontPipeline_ASAP_diff_output
-mem_unalign_DontPipeline_ASAP_diff_output
-op_shl_DontPipeline_ASAP_diff_output
+sim_memcpy_libcall_opt_DontPipeline_ASAP
+mem_unalign_DontPipeline_ASAP
+op_shl_DontPipeline_ASAP
 
