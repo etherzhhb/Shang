@@ -65,7 +65,7 @@ Pass *createVPreRegAllocSchedPass();
 FunctionPass *createSimpleRegisterAllocator();
 
 // Find Shortest Path.
-Pass *createFindShortestPathPass();
+Pass *createCFGShortestPathPass();
 
 // Analyse the Combination Path Delay.
 Pass *createCombPathDelayAnalysisPass();
@@ -94,7 +94,7 @@ void initializeBitLevelABCOptPass(PassRegistry &Registry);
 //Add the initialization implementation of StackToGlobal.cpp.
 void initializeStackToGlobalPass(PassRegistry &Registry);
 
-void initializeFindShortestPathPass(PassRegistry &Registry);
+void initializeCFGShortestPathPass(PassRegistry &Registry);
 
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
 void initializeRtlSSAAnalysisPass(PassRegistry &Registry);

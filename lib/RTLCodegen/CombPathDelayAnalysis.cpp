@@ -18,7 +18,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "FindMBBShortestPath.h"
+#include "CFGShortestPath.h"
 #include "vtm/VerilogAST.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
@@ -35,7 +35,7 @@ using namespace llvm;
 
 namespace{
 class CombPathDelayAnalysis : public MachineFunctionPass {
-  FindShortestPath *FindSP;
+  CFGShortestPath *FindSP;
 
   // Define a DenseMap to record the Slack Info between Registers.
   typedef std::pair<VASTRegister*, VASTRegister*> RegisterMapTy;
@@ -75,8 +75,8 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<TargetData>();
-    AU.addRequired<FindShortestPath>();
-    AU.addPreserved<FindShortestPath>();
+    AU.addRequired<CFGShortestPath>();
+    AU.addPreserved<CFGShortestPath>();
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -148,7 +148,7 @@ static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path,
 bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
   bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
   VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
-  FindSP = &getAnalysis<FindShortestPath>();
+  FindSP = &getAnalysis<CFGShortestPath>();
 
   //Initial all the path with infinite.
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
@@ -157,7 +157,7 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
       for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
         I != E; ++I){
           VASTRegister *UseReg = *I;
-          RegPathDelay[std::make_pair(DefReg, UseReg)] = FindShortestPath::Infinite;
+          RegPathDelay[std::make_pair(DefReg, UseReg)] = CFGShortestPath::Infinite;
       }
   }
 
@@ -171,7 +171,7 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
   typedef RegPathDelayTy::const_iterator RegPairIt;
   for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E; ++I){
     unsigned Slack = I->second;
-    if (Slack != FindShortestPath::Infinite) {
+    if (Slack != CFGShortestPath::Infinite) {
       VASTUse Path[] = { (I->first).second, (I->first).first };
       bindPath2ScriptEngine(Path, Slack);
     }
@@ -209,7 +209,7 @@ void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
 
   if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)) {
     unsigned Slack = getNearestSlotDistance(DefReg, UseSlots);
-    if (Slack < FindShortestPath::Infinite) {
+    if (Slack < CFGShortestPath::Infinite) {
       // If the Define register and Use register already have a slack, compare the
       // slacks and assign the smaller one to the RegPathDelay Map.
       updateCombPathSlack(DefReg, UseReg, Slack);
@@ -223,7 +223,7 @@ void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
 
 unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
                                                        SlotVec &UseSlots) {
-  int NearestSlotDistance = FindShortestPath::Infinite;
+  int NearestSlotDistance = CFGShortestPath::Infinite;
   typedef VASTRegister::slot_iterator SlotIt;
   typedef SlotVec::iterator UseSlotIt;
 

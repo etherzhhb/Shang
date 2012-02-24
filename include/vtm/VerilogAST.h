@@ -39,7 +39,7 @@ class VASTSlot;
 class VASTWire;
 class VASTRegister;
 class VASTUse;
-class FindShortestPath;
+class CFGShortestPath;
 
 class VASTNode {
 public:
@@ -727,7 +727,7 @@ private:
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
-  FindShortestPath *FindSP;
+  CFGShortestPath *SP;
 
 public:
   static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
@@ -759,7 +759,7 @@ public:
 
   const std::string &getName() const { return Name; }
 
-  void InitFindShortestPathPointer(FindShortestPath *FindSPPointer);
+  void InitCFGShortestPathPointer(CFGShortestPath *SPPointer);
   void printDatapath(raw_ostream &OS) const;
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 

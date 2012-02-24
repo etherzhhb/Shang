@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
                               TargetMachine::CGFT_Null,
                               false/*NoVerify*/);
   // Find the shortest path.
-  Passes.add(createFindShortestPathPass());
+  Passes.add(createCFGShortestPathPass());
   // Generate the code.
   Passes.add(createVerilogASTBuilderPass());
   Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));

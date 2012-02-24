@@ -1,4 +1,4 @@
-// FindMBBShortestPath.cpp - find shortest paths in a weighted graph - C++ -==//
+// CFGShortestPath.cpp --- find shortest paths in a weighted graph -- C++ --==//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,11 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass is a graph analysis algorithm for finding shortest paths in a 
+// This pass is a graph analysis algorithm for finding shortest paths in a
 // weighted graph using Floyd¨CWarshall algorithm.
 //
 //===----------------------------------------------------------------------===//
-#include "FindMBBShortestPath.h"
+#include "CFGShortestPath.h"
 
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
@@ -22,30 +22,30 @@
 #include <map>
 using namespace llvm;
 
-bool FindShortestPath::runOnMachineFunction(MachineFunction &F) {
+bool CFGShortestPath::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   FInfo = MF->getInfo<VFInfo>();
   mapStartSlotToMBBNum();
   InitPath();
-  Floyd();
+  computeShortestPathFloyd();
   return false;
 }
 
 // Get the Key to PathVector according to the source and destination index
-unsigned FindShortestPath::getKey(unsigned Def, unsigned Use) {
+unsigned CFGShortestPath::getKey(unsigned Def, unsigned Use) {
   unsigned MBBNum = MF->getNumBlockIDs();
   unsigned returnKey = Def * MBBNum + Use;
   return returnKey;
 }
 
 // Get distance between the source MBB and the destination MBB.
-unsigned &FindShortestPath::getDistance(unsigned DefIdx, unsigned UseIdx) {
+unsigned &CFGShortestPath::getDistance(unsigned DefIdx, unsigned UseIdx) {
   unsigned Index = getKey(DefIdx, UseIdx);
   return PathVector[Index];
 }
 
 // Get distance between Two Slots.
-int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
+int CFGShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
   int SlotDistance = -1;
 
   unsigned DefSlotStartIdx = DefSlot->getParentIdx();
@@ -85,7 +85,7 @@ int FindShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
 }
 
 // Map the StartSlot to MBBNum.
-void FindShortestPath::mapStartSlotToMBBNum() {
+void CFGShortestPath::mapStartSlotToMBBNum() {
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock *MBB = I;
     unsigned StartSlot = FInfo->getStartSlotFor(MBB);
@@ -95,17 +95,17 @@ void FindShortestPath::mapStartSlotToMBBNum() {
 }
 
 // Get MBB number.
-unsigned FindShortestPath::getMBBNum(unsigned SlotStartIdx) const {
+unsigned CFGShortestPath::getMBBNum(unsigned SlotStartIdx) const {
   // The start slot of the module.
   if (SlotStartIdx == 0) return 0;
-  
+
   Slot2BBMapTy::const_iterator at = StartSlotToMBBNumMap.find(SlotStartIdx);
   assert(at != StartSlotToMBBNumMap.end() && "Bad start slot!");
   return at->second;
 }
 
 // Initial the Path between two related Machine Basic Block.
-void FindShortestPath::InitPath() {
+void CFGShortestPath::InitPath() {
   unsigned MBBNum = MF->getNumBlockIDs();
 
   // assign infinite number to the PathVector.
@@ -131,7 +131,7 @@ void FindShortestPath::InitPath() {
 
 // Use the Floyd Algorithm to find the shortest Path between two Machine Basic
 // Block.
-void FindShortestPath::Floyd() {
+void CFGShortestPath::computeShortestPathFloyd() {
   unsigned MBBNum = MF->getNumBlockIDs();
 
   // We use the Floyd algorithm to get the shortest path of two different MBBs.
@@ -158,13 +158,13 @@ void FindShortestPath::Floyd() {
   }
 }
 
-char FindShortestPath::ID = 0;
-const unsigned FindShortestPath::Infinite = 100000;
+char CFGShortestPath::ID = 0;
+const unsigned CFGShortestPath::Infinite = 100000;
 
-INITIALIZE_PASS_BEGIN(FindShortestPath, "FindShortestPath",
-                      "FindShortestPath", false, false)
-INITIALIZE_PASS_END(FindShortestPath, "FindShortestPath",
-                    "FindShortestPath", false, false)
-Pass *llvm::createFindShortestPathPass() {
-  return new FindShortestPath();
+INITIALIZE_PASS_BEGIN(CFGShortestPath, "CFGShortestPath",
+                      "CFGShortestPath", false, false)
+INITIALIZE_PASS_END(CFGShortestPath, "CFGShortestPath",
+                    "CFGShortestPath", false, false)
+Pass *llvm::createCFGShortestPathPass() {
+  return new CFGShortestPath();
 }

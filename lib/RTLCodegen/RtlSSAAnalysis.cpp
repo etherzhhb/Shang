@@ -330,13 +330,13 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
 void RtlSSAAnalysis::viewGraph() {
   ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
-
 }
 
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
   MF = &F;
   VASTModule *VM = MF->getInfo<VFInfo>()->getRtlMod();
 
+  // Push back all the slot into the SlotVec for the purpose of view graph.
   for (VASTModule::slot_iterator I = VM->slot_begin(), E = VM->slot_end();
     I != E; ++I) {
       VASTSlot *S = *I;
@@ -386,7 +386,7 @@ SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   SlotInfo *SIPointer = getSlotInfo(S);
   if (SIPointer) return SIPointer;
 
-  // Create a new slotinfo if it is not defined before.
+  // Create a new SlotInfo if it is not defined before.
   SIPointer = new SlotInfo(S);
   SlotInfos.insert(std::make_pair(S, SIPointer));
   return SIPointer;

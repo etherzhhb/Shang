@@ -1,4 +1,4 @@
-// FindMBBShortestPath.h -- find shortest paths in a weighted graph -- C++ -==//
+// CFGShortestPath.h --- find shortest paths in a weighted graph --- C++ ---==//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -11,8 +11,8 @@
 // weighted graph using Floyd¨CWarshall algorithm.
 //
 //===----------------------------------------------------------------------===//
-#ifndef FINDMBBSHORTESTPATH_H
-#define FINDMBBSHORTESTPATH_H
+#ifndef CFGSHORTESTPATH_H
+#define CFGSHORTESTPATH_H
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VerilogAST.h"
@@ -23,7 +23,7 @@
 
 namespace llvm {
   class VASTSlot;
-  class FindShortestPath : public MachineFunctionPass{
+  class CFGShortestPath : public MachineFunctionPass{
 
     MachineFunction *MF;
     VFInfo *FInfo;
@@ -48,7 +48,7 @@ namespace llvm {
 
     // Use the Floyd Algorithm to find the shortest Path between two Machine Basic
     // Block.
-    void Floyd();
+    void computeShortestPathFloyd();
 
   public:
 
@@ -72,8 +72,8 @@ namespace llvm {
       StartSlotToMBBNumMap.clear();
     }
 
-    FindShortestPath() : MachineFunctionPass(ID) {
-      initializeFindShortestPathPass(*PassRegistry::getPassRegistry());
+    CFGShortestPath() : MachineFunctionPass(ID) {
+      initializeCFGShortestPathPass(*PassRegistry::getPassRegistry());
     }
   };
 } // end anonymous.
