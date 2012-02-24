@@ -210,9 +210,7 @@ public:
   slot_vec_it slot_end() { return SlotVec.end(); }
 
   // Get SlotInfo from the existing SlotInfos set.
-  slotinfo_it getSlotInfo(const VASTSlot *S) const {
-    return SlotInfos.find(S);
-  }
+  SlotInfo* getSlotInfo(const VASTSlot *S) const;
 
   // Get SlotInfo from the existing SlotInfos set or create a slotInfo and
   // insert it to the SlotInfos set.
@@ -291,7 +289,7 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
-    SlotInfo * SI = Graph->getSlotInfo(Node)->second;
+    SlotInfo * SI = Graph->getSlotInfo(Node);
     for (SlotInfo::vasset_it I = SI->gen_begin(), E = SI->gen_end();
          I != E; ++I) {
       ValueAtSlot *VAS = *I;
@@ -378,23 +376,18 @@ ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V,
   return VAS;
 }
 
-//slotinfo_it *RegDependencyAnalysis::getSlotInfo(const VASTSlot *S) const {
-//  return SlotInfos.find(S);
-//  for (slotinfo_it I = SlotInfos.begin(), E = SlotInfos.end(); I != E; ++I) {
-//    if (I->first == S) {
-//      return I->second;
-//    }
-//  }
-//  return 0;
-//}
+SlotInfo *RtlSSAAnalysis::getSlotInfo(const VASTSlot *S) const {
+  slotinfo_it It = SlotInfos.find(S);
+  return It == SlotInfos.end()? 0 : It->second;
+}
 
 SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   // Get SlotInfo if there exist in the SlotInfos map.
-  slotinfo_it It = getSlotInfo(S);
-  if (It != SlotInfos.end()) return It->second;
+  SlotInfo *SIPointer = getSlotInfo(S);
+  if (SIPointer) return SIPointer;
 
   // Create a new slotinfo if it is not defined before.
-  SlotInfo *SIPointer = new SlotInfo(S);
+  SIPointer = new SlotInfo(S);
   SlotInfos.insert(std::make_pair(S, SIPointer));
   return SIPointer;
 }
