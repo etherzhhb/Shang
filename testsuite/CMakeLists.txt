@@ -86,18 +86,11 @@ add_custom_target(benchmark_test
           COMMENT "Run test on the benchmarks")
 
 add_custom_target(test_verilogbackend
-          COMMAND [ -f ${FAILLIST} ] && [ -s ${FAILLIST} ] && cat ${FAILLIST} && make -i -C ${LLVM_BINARY_DIR} `cat ${FAILLIST}` || exit 0
           COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
+          COMMAND cat ${FAILLISTTMP}
           COMMAND mv ${FAILLISTTMP} ${FAILLIST}
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Compiling all source to llvm test_verilogbackend")
-
-add_custom_target(last_fail          
-          COMMAND [ -f ${FAILLIST} ] && [ -s ${FAILLIST} ] && cat ${FAILLIST} && make -i -C ${LLVM_BINARY_DIR} `cat ${FAILLIST}` || exit 0
-          COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
-          COMMAND mv ${FAILLISTTMP} ${FAILLIST}
-          COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
-          COMMENT "Rerun the testcases fail at last build")
             
 macro(add_general_test test_file config_file setup_prj_file postfix pipeline_type schedule_type)
   set(TEST_NAME "${test_file}_${pipeline_type}_${schedule_type}")
