@@ -53,7 +53,7 @@ namespace llvm {
 
     // Default area cost parameter.
     unsigned LUTCost = 64;
-    unsigned RegCost[64] ;
+    unsigned RegCost;
 
     ////////////////////////////////////
     unsigned AddCost[64] ;
@@ -61,8 +61,8 @@ namespace llvm {
     unsigned ShiftCost[64] ;
     unsigned ICmpCost[64] ;
     //////////////////////////////////
-    unsigned MuxSizeCost = 96;
-    unsigned MUXCost = 64;
+    //FIX ME: This can be initialized the MuxCost from lua.
+    unsigned MUXCost[9] = {0, 0, 65, 88, 131, 259, 324, 364, 454};
     unsigned MaxLutSize = 4;
     unsigned MaxMuxPerLut = 4;
     unsigned MaxAllowedMuxSize = 8;

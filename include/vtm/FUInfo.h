@@ -85,9 +85,11 @@ namespace VFUs {
   unsigned getModuleOperands(const std::string &ModName, unsigned FNNum,
                              SmallVectorImpl<ModOpInfo> &OpInfo);
   // Cost parameters.
-  extern unsigned LUTCost, RegCost[64], MUXCost, AddCost[64], MulCost[64],
-                  ShiftCost[64], ICmpCost[64], MuxSizeCost;
+  extern unsigned MUXCost[9], AddCost[64], MulCost[64],
+                  ShiftCost[64], ICmpCost[64];
 
+  extern unsigned LUTCost;
+  extern unsigned RegCost;
   extern unsigned MaxLutSize;
   extern unsigned MaxMuxPerLut;
   extern unsigned MaxAllowedMuxSize;
