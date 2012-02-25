@@ -71,6 +71,12 @@ set(FAILLISTTMP ${VTS_BINARY_ROOT}/faillist-tmp)
 set(FIXFAILLIST_SH ${VTS_SOURCE_ROOT}/FixFailList.sh)
 set(XFAILLIST ${VTS_SOURCE_ROOT}/ExpectFails)
 
+set(file_to_clear ${FAILLISTTMP} ${FAILLIST}
+                  ${VTS_BINARY_ROOT}/benchmark.summary.json.tmp
+                  ${VTS_BINARY_ROOT}/benchmark.summary.json
+                  ${VTS_BINARY_ROOT}/benchmark.report.json.tmp)
+set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES ${file_to_clear})
+
 add_custom_target(hls
           #COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
           #COMMAND cat ${FAILLISTTMP} >> ${FAILLIST}
