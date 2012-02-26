@@ -190,7 +190,7 @@ private:
 
   typedef FoldingSet<ValueAtSlot>::iterator fs_vas_it;
   FoldingSet<ValueAtSlot> UniqueVASs;
-  BumpPtrAllocator VASAllocator;
+  BumpPtrAllocator Allocator;
 
   // define VAS assign iterator.
   typedef VASTRegister::assign_itertor assign_it;
@@ -246,7 +246,7 @@ public:
 
   void releaseMemory() {
     UniqueVASs.clear();
-    VASAllocator.Reset();
+    Allocator.Reset();
     SlotVec.clear();
     AllVASs.clear();
     SlotInfos.clear();
@@ -372,8 +372,7 @@ ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V,
     return VAS;
   }
 
-  ValueAtSlot *VAS =
-    new (VASAllocator)ValueAtSlot(ID.Intern(VASAllocator), V, S);
+  ValueAtSlot *VAS = new (Allocator) ValueAtSlot(ID.Intern(Allocator), V, S);
   UniqueVASs.InsertNode(VAS, IP);
   AllVASs.push_back(VAS);
 
@@ -391,7 +390,7 @@ SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   if (SIPointer) return SIPointer;
 
   // Create a new SlotInfo if it is not defined before.
-  SIPointer = new SlotInfo(S);
+  SIPointer = new (Allocator) SlotInfo(S);
   SlotInfos.insert(std::make_pair(S, SIPointer));
   return SIPointer;
 }
