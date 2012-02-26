@@ -40,7 +40,7 @@ namespace llvm {
 
     /// FastID - A reference to an Interned FoldingSetNodeID for this node.
     /// The ScalarEvolution's BumpPtrAllocator holds the data.
-    FoldingSetNodeIDRef FastID;
+    const FoldingSetNodeIDRef FastID;
 
     // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
     typedef SmallVector<ValueAtSlot*, 4> VASVecTy;
@@ -51,7 +51,7 @@ namespace llvm {
 
   public:
     explicit ValueAtSlot(const FoldingSetNodeIDRef ID, VASTValue *v,
-                         VASTSlot *slot) : FastID(ID), V(v), Slot(slot) {}
+                         VASTSlot *slot) : V(v), Slot(slot), FastID(ID) {}
 
     void addPredValueAtSlot(ValueAtSlot *VAS){ PredVAS.push_back(VAS); }
 
@@ -130,10 +130,10 @@ namespace llvm {
     vasset_it out_end() const { return SlotOut.end(); }
 
     // Get different VAS sets.
-    VASSetTy getGenVASSet() { return SlotGen; }
-    VASSetTy getKillVASSet() { return SlotKill; }
-    VASSetTy getInVASSet() { return SlotIn; }
-    VASSetTy getOutVASSet() { return SlotOut; }
+    VASSetTy &getGenVASSet() { return SlotGen; }
+    VASSetTy &getKillVASSet() { return SlotKill; }
+    VASSetTy &getInVASSet() { return SlotIn; }
+    VASSetTy &getOutVASSet() { return SlotOut; }
 
     // Insert VAS into different set.
     void insertGen(ValueAtSlot *VAS) { SlotGen.insert(VAS); }
@@ -247,6 +247,9 @@ public:
   void releaseMemory() {
     UniqueVASs.clear();
     VASAllocator.Reset();
+    SlotVec.clear();
+    AllVASs.clear();
+    SlotInfos.clear();
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
@@ -259,6 +262,7 @@ public:
     initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
   }
 };
+
 
 template <> struct GraphTraits<RtlSSAAnalysis*>
 : public GraphTraits<VASTSlot*> {
@@ -338,12 +342,12 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
 
   // Push back all the slot into the SlotVec for the purpose of view graph.
   for (VASTModule::slot_iterator I = VM->slot_begin(), E = VM->slot_end();
-    I != E; ++I) {
-      VASTSlot *S = *I;
-      // If the VASTslot is void, abandon it.
-      if (!S) continue;
+       I != E; ++I) {
+    VASTSlot *S = *I;
+    // If the VASTslot is void, abandon it.
+    if (!S) continue;
 
-      SlotVec.push_back(S);
+    SlotVec.push_back(S);
   }
 
   // Define the VAS.
@@ -351,13 +355,13 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
 
   ComputeReachingDefinition();
 
-  viewGraph();
+  DEBUG(viewGraph(););
 
   return false;
 }
 
 ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V,
-                                                   VASTSlot *S){
+                                            VASTSlot *S){
   FoldingSetNodeID ID;
   ID.AddPointer(V);
   ID.AddPointer(S);
@@ -556,9 +560,9 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       VASSet SlotOut = SI->getOutVASSet(), &CurOut = SI->getOutVASSet();
 
       // Compute the SlotInMap.
-      for (VASTSlot::pred_it I = S->pred_begin(), E = S->pred_end(); I != E;
-           ++I) {
-        VASTSlot *PS = *I;
+      for (VASTSlot::pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE;
+           ++PI) {
+        VASTSlot *PS = *PI;
         SlotInfo *PSI = getOrCreateSlotInfo(PS);
         SI->insertIn(PSI->out_begin(), PSI->out_end());
       }
