@@ -35,7 +35,7 @@ using namespace llvm;
 
 //===----------------------------------------------------------------------===//
 void VSchedGraph::print(raw_ostream &OS) const {
-  printVMBB(OS, *MBB);
+  MBB->dump();
 }
 
 void VSchedGraph::dump() const {
@@ -54,12 +54,27 @@ bool VSchedGraph::trySetLoopOp(MachineInstr *MI) {
   return true;
 }
 
-void VSchedGraph::verify() {
+bool VSchedGraph::isLoopPHIMove(MachineInstr *MI) {
+  assert(MI->getOpcode() == VTM::VOpMvPhi && "Bad opcode!");
+
+  return MI->getOperand(2).getMBB() == MBB && enablePipeLine();
+}
+
+void VSchedGraph::verify() const {
   if (getEntryRoot()->getNumDeps())
     llvm_unreachable("Entry root should not have any dependence!");
   if (getExitRoot()->getNumUses())
     llvm_unreachable("Exit root should not have any use!");
   // TODO: Other verification.
+
+  for (sched_iterator I = sched_begin(), E = sched_end(); I != E; ++I) {
+    VSUnit *SU = *I;
+    typedef VSUnit::dep_iterator dep_it;
+    for (dep_it DI = SU->dep_begin(), DE = SU->dep_end(); DI != DE; ++DI)
+      assert((DI.getEdge()->getEdgeType() == VDEdge::edgeMemDep
+              || SU->getIdx() > DI->getIdx())
+             && "Bad value dependent edge!");
+  }  
 }
 
 VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
@@ -159,6 +174,12 @@ void VSchedGraph::resetSchedule(unsigned MII) {
     assert(hasLoopOp() && "MII provided but LoopOp not exist!");
     getLoopOp()->scheduledTo(startSlot + MII);
   }
+
+  // Make sure the PHI copy emit before the BB jump to other BBs.
+  typedef VSUnit::dep_iterator dep_it;
+  VSUnit *ExitRoot = getExitRoot();
+  for (dep_it I = ExitRoot->dep_begin(), E = ExitRoot->dep_end(); I != E; ++I)
+    if (I->isPHI()) I.getEdge()->setLatency(MII);
 }
 
 static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
@@ -261,6 +282,7 @@ void VSchedGraph::scheduleLoop() {
     Scheduler->setCriticalPathLength(NextPoints.back().second);
     NextPoints.pop_back();
   }
+
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
                << " Latency: " << getTotalSlot() << '\n');
   assert(getII() == Scheduler->getMII()
@@ -344,7 +366,7 @@ void VSchedGraph::scheduleDatapath() {
       Step = std::min(CurStep, Step);
     }
 
-    assert(Step != EndSlot && "Datapath SU do not have using SUs?");
+    assert(Step < EndSlot && "Datapath SU do not have using SUs?");
 
     // Schedule As late as possible to reduce register usage.
     A->scheduledTo(Step);

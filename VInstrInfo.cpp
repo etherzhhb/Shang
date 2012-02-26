@@ -253,11 +253,15 @@ bool VInstrInfo::AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
   return false;
 }
 
-bool VInstrInfo::extractJumpTable(MachineBasicBlock &BB, JT &Table) {
+bool VInstrInfo::extractJumpTable(MachineBasicBlock &BB, JT &Table, bool BrOnly)
+{
   for (MachineBasicBlock::iterator I = BB.getFirstTerminator(), E = BB.end();
        I != E; ++I) {
     // We can only handle conditional jump.
-    if (!VInstrInfo::isBrCndLike(I->getOpcode())) return true;
+    if (!VInstrInfo::isBrCndLike(I->getOpcode())) {
+      if (BrOnly) return true;
+      continue;
+    }
 
     // Do not mess up with the predicated terminator at the moment.
     if (const MachineOperand *Pred = getPredOperand(I))
@@ -570,171 +574,6 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   return Dst;
 }
 
-unsigned VInstrInfo::createPHIIncomingReg(unsigned DestReg,
-                                          MachineRegisterInfo *MRI) const {
-  const TargetRegisterClass *PHIRC = VTM::PHIRRegisterClass;
-  return MRI->createVirtualRegister(PHIRC);
-}
-
-typedef MachineBasicBlock::iterator mbb_it;
-
-MachineInstr *VInstrInfo::insertPHIImpDef(MachineBasicBlock &MBB,
-                                          mbb_it InsertPos,
-                                          MachineInstr *PN) const {
-  return TargetInstrInfo::insertPHIImpDef(MBB, InsertPos, PN);
-}
-
-MachineInstr *VInstrInfo::insertPHIIcomingCopy(MachineBasicBlock &MBB,
-                                               mbb_it InsertPos,
-                                               MachineInstr *PN,
-                                               unsigned IncomingReg) const {
-  ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
-  // Skip all implicit defines at the beginning of the MBB.
-  while (InsertPos->isImplicitDef())
-    ++InsertPos;
-
-  ucState Ctrl(InsertPos);
-  assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
-  // Simply build the copy in the first control slot.
-  MachineInstrBuilder Builder(InsertPos);
-  Builder.addOperand(ucOperand::CreateOpcode(VTM::VOpDefPhi, Ctrl.getSlot()));
-  Builder.addOperand(ucOperand::CreatePredicate());
-  // Not need to insert trace for scheduled MBB.
-  // Builder.addOperand(ucOperand::CreateTrace(&MBB));
-  ucOperand Dst = MachineOperand::CreateReg(DefOp.getReg(), true);
-  Dst.setBitWidth(DefOp.getBitWidth());
-  Dst.setIsWire(DefOp.isWire());
-  Builder.addOperand(Dst);
-  ucOperand Src = MachineOperand::CreateReg(IncomingReg, false);
-  Src.setBitWidth(DefOp.getBitWidth());
-  if (VRegisterInfo::IsWire(IncomingReg, &MBB.getParent()->getRegInfo()))
-    Src.setIsWire();
-  Builder.addOperand(Src);
-  return &*Builder;
-}
-
-MachineInstr *VInstrInfo::insertPHICopySrc(MachineBasicBlock &MBB,
-                                           mbb_it InsertPos, MachineInstr *PN,
-                                           unsigned IncomingReg,
-                                           unsigned SrcReg, unsigned SrcSubReg)
-                                           const {
-  ucOperand &DefOp = cast<ucOperand>(PN->getOperand(0));
-  // Get the last slot.
-  while ((--InsertPos)->getOpcode() == VTM::IMPLICIT_DEF)
-    ;
-
-  VFInfo *VFI = MBB.getParent()->getInfo<VFInfo>();
-
-  // Look up the slot of PHI and the parent MBB of PHI.
-  int SSlot;
-  const MachineBasicBlock *TargetBB;
-  tie(SSlot, TargetBB) = VFI->lookupPHISlot(PN);
-
-  bool isPipeline = SSlot < 0;
-  unsigned Slot = isPipeline ? -SSlot : SSlot;
-
-  unsigned StartSlot = VFI->getStartSlotFor(&MBB);
-  unsigned EndSlot = VFI->getEndSlotFor(&MBB);
-  // If the phi scheduled into this MBB, insert the copy to the right control
-  // slot.
-  //if (Slot > StartSlot && Slot <= EndSlot) {
-  if (Slot <= StartSlot || Slot > EndSlot)
-    // Else we are issuing the copy at the end of the BB.
-    Slot = EndSlot;
-
-  unsigned II = VFI->getIIFor(&MBB);
-  unsigned ModuloSlot = (Slot - StartSlot) % II + StartSlot;
-  // If modulo slot is 0, insert the copy in the last control slot.
-  // Otherwise, iterate over the BB to find the match slot.
-  if (ModuloSlot != StartSlot) {
-    while(ucState(InsertPos).getSlot() != ModuloSlot) {
-      --InsertPos; // Skip the current control slot.
-      --InsertPos; // Skip the current datapath slot.
-    }
-  }
-
-  ucState Ctrl(InsertPos);
-  assert(Ctrl->getOpcode() == VTM::Control && "Unexpected instruction type!");
-  SmallVector<MachineOperand, 8> Ops;
-  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
-
-  // Build the instruction in form of:
-  // IncomingReg = Opc SrcReg, TargetMBB ...
-  unsigned Opc = isPipeline ? VTM::VOpMvPipe : VTM::VOpMvPhi;
-  Ops.push_back(ucOperand::CreateOpcode(Opc, Slot));
-  Ops.push_back(ucOperand::CreatePredicate());
-  // Not need to insert trace for scheduled MBB.
-  // Builder.addOperand(ucOperand::CreateTrace(&MBB));
-  MachineOperand &Pred = Ops.back();
-  ucOperand Dst = MachineOperand::CreateReg(IncomingReg, true);
-  Dst.setBitWidth(DefOp.getBitWidth());
-  if (VRegisterInfo::IsWire(IncomingReg, &MRI))
-    Dst.setIsWire();
-  Ops.push_back(Dst);
-
-  MachineRegisterInfo::def_iterator DI = MRI.def_begin(SrcReg);
-
-  DEBUG(dbgs() << "Copying " << TargetRegisterInfo::virtReg2Index(SrcReg)
-               << " in\n";
-    ucState(*DI).dump();
-  );
-
-  ucOperand Src = MachineOperand::CreateReg(SrcReg, false);
-  Src.setSubReg(SrcSubReg);
-  Src.setBitWidth(DefOp.getBitWidth());
-  if (VRegisterInfo::IsWire(SrcReg, &MRI))
-    Src.setIsWire();
-
-  // Try to forward the source value.
-  if (DI->getOpcode() != VTM::PHI) {
-    assert (++MRI.def_begin(SrcReg) == MRI.def_end() && "Not in SSA From!");
-    ucOp WriteOp = ucOp::getParent(DI);
-
-    // Do not copy the implicit define.
-    if (WriteOp->getOpcode() == VTM::IMPLICIT_DEF)
-      return InsertPos;
-
-    // We need to forward the wire copy if the source register is written
-    // in the same slot, otherwise we will read a out of date value.
-    if (WriteOp->getParent() == &*Ctrl && WriteOp->getPredSlot() == Slot) {
-      // Copy the predicate operand.
-      MachineOperand &WritePred = WriteOp.getPredicate();
-      Pred.ChangeToRegister(WritePred.getReg(), false);
-      Pred.setTargetFlags(WritePred.getTargetFlags());
-
-      // FIXME: Handle others case.
-      if (isCopyLike(WriteOp->getOpcode())) {
-        MachineOperand ForwardedVal = WriteOp.getOperand(1);
-        Ops.push_back(ForwardedVal);
-        MachineOperand TargetBBMO =
-          MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
-        Ops.push_back(TargetBBMO);
-        // Make sure the state reads this register, otherwise PHIElimination
-        // will complain about that.
-        Ops.push_back(Src);
-        return addOperandsToMI(InsertPos, Ops);
-      }
-
-      assert(Src.isWire() && "Cannot forward PHI source copy!");
-    }
-
-    Ops.push_back(Src);
-    MachineOperand TargetBBMO =
-      MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
-    Ops.push_back(TargetBBMO);
-
-    return addOperandsToMI(InsertPos, Ops);
-  }
-
-  // Trivial case, just copy src to dst.
-  Ops.push_back(Src);
-  MachineOperand TargetBBMO =
-    MachineOperand::CreateMBB(const_cast<MachineBasicBlock*>(TargetBB));
-  Ops.push_back(TargetBBMO);
-
-  return addOperandsToMI(InsertPos, Ops);
-}
-
 MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
                                       MachineOperand &Result,
                                       MachineOperand Pred,
@@ -884,12 +723,14 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
          || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpDstMux
          || Opcode == VTM::VOpReadReturn
-         || Opcode == VTM::VOpReadFU;
+         || Opcode == VTM::VOpReadFU
+         || Opcode == VTM::VOpMvPhi;
 }
 
 bool VInstrInfo::isBrCndLike(unsigned Opcode) {
   return Opcode == VTM::VOpToState
-         || Opcode == VTM::VOpToStateb;
+         || Opcode == VTM::VOpToStateb
+         || Opcode == VTM::VOpToState_nt;
 }
 
 bool VInstrInfo::isWriteUntilFinish(unsigned OpC) {
@@ -1050,7 +891,14 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
       // Special case: Set latency from VOpDstMux to Ctrl-Op to 1 explicitly.
       // Because this latency is accumulated into the chain latency.
       return 1;
-    else
+    else if (SrcOpC == VTM::VOpMvPhi) {
+      assert((DstOpC == TargetOpcode::PHI || DstOpC == VTM::VOpMvPhi 
+              || VInstrInfo::getDesc(DstOpC).isTerminator())
+             && "VOpMvPhi should only used by PHIs or terminators!!");
+      // The latency from VOpMvPhi to PHI is exactly 0, because the VOpMvPhi is
+      // simply identical to the PHI at next iteration.
+      return 0.0;
+    } else
       // If the edge is reg->reg, the result is ready after the clock edge, add
       // a delta to make sure DstInstr not schedule to the moment right at the
       // SrcInstr finish
@@ -1096,6 +944,8 @@ unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
 FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
   // Dirty Hack: Bind all memory access to channel 0 at this moment.
   switch(MI->getOpcode()) {
+  case VTM::VOpReadFU:
+    return FuncUnitId(uint16_t(MI->getOperand(2).getImm()));
   case VTM::VOpCmdSeq:
   case VTM::VOpMemTrans:
     return FuncUnitId(VFUs::MemoryBus, 0);

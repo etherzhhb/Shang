@@ -132,7 +132,8 @@ struct VRASimple : public MachineFunctionPass {
 
   // Put all datapath op that using the corresponding register of the LI to
   // the user vector.
-  typedef DenseMap<ucOp, unsigned, ucOpExpressionTrait> DatapathOpMap;
+  typedef DenseMap<MachineInstr*, unsigned, MachineInstrExpressionTrait>
+    DatapathOpMap;
   void mergeIdenticalDatapath(LiveInterval *LI);
   typedef EquivalenceClasses<unsigned> EquRegClasses;
   void mergeEquLIs(EquRegClasses &LIs);
@@ -189,18 +190,16 @@ struct WidthChecker {
 };
 
 // Implement this with some hash function?
-static uint64_t getRegKey(unsigned Reg, uint8_t OpIdx = 0, uint8_t SubReg = 0) {
+static uint64_t getRegKey(uint32_t Reg, uint32_t OpIdx) {
   union {
     uint64_t Data;
     struct {
-      unsigned RegNum;
-      uint8_t SubReg;
-      uint8_t OpIdx;
+      uint32_t RegNum;
+      uint32_t OpIdx;
     } S;
   } U;
 
   U.S.RegNum = Reg;
-  U.S.SubReg = SubReg;
   U.S.OpIdx = OpIdx;
 
   return U.Data;
@@ -242,20 +241,17 @@ struct FaninChecker {
   template<int N>
   void addFanin(ucOperand &FanInOp) {
     if (FanInOp.isReg()) {
-      MergedFanins[N].insert(getRegKey(FanInOp.getReg()));
+      // Igore the operand index.
+      MergedFanins[N].insert(getRegKey(FanInOp.getReg(), 0));
       ++Fanins[CurSrc][N];
     } else if (FanInOp.isImm())
       ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
     else
       ExtraCost += /*Reg Mux Cost Pre-bit*/ VFUs::MUXCost[0];
   }
-
-  void addPred(ucOperand &PredOp) {
-    // Ignore the trivial predicate.
-    if (VInstrInfo::isAlwaysTruePred(PredOp)) return;
-    // Model the inverted preciate as sub-register
-    Preds.insert(getRegKey(PredOp.getReg(), 0, PredOp.getTargetFlags()));
-    ++PredNum;
+  template<int N>
+  void addFanin(MachineOperand &SrcOp) {
+    FaninChecker<NUMSRC>::addFanin<N>(cast<ucOperand>(SrcOp));
   }
 
   template<int N>
@@ -324,26 +320,28 @@ struct FanoutChecker {
     NumFanouts = 0;
   }
 
-  unsigned addFanout(ucOp Op, MachineOperand &MO) {
+  unsigned addFanout(MachineRegisterInfo::reg_iterator I) {
+    MachineInstr *MI = &*I;
+
     // Ignore the datapath at the moment.
-    if (!Op.isControl()) return 0;
+    if (!isCtrlBundle(MI)) return 0;
     ++NumFanouts;
-    if (Op.getNumOperands() == 0) {
-      assert(Op->isOpcode(VTM::VOpRet) && "Unexpected empty oprand op!");
-      mergedFanouts.insert(getRegKey(1, 15, 255));
+    if (MI->getNumOperands() == 0) {
+      assert(MI->getOpcode() == VTM::VOpRet && "Unexpected empty operand op!");
+      mergedFanouts.insert(getRegKey(1, -1));
       return 0;
     }
 
-    MachineOperand &DefMO = Op.getOperand(0);
+    MachineOperand &DefMO = MI->getOperand(0);
     if (!DefMO.isReg()) {
-      if (Op->isOpcode(VTM::VOpRetVal))
-        mergedFanouts.insert(getRegKey(0, 15, 255));
+      if (MI->getOpcode() == VTM::VOpRetVal)
+        mergedFanouts.insert(getRegKey(0, -2));
 
       return 0;
     }
 
     unsigned DstReg = DefMO.getReg();
-    mergedFanouts.insert(getRegKey(DstReg, Op.getOpIdx(MO), MO.getSubReg()));
+    mergedFanouts.insert(getRegKey(DstReg, I.getOperandNo()));
     return DstReg;
   }
 
@@ -417,10 +415,10 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     Base::reset();
   }
 
-  bool visitUse(ucOp Op, MachineOperand &MO) {
-    unsigned DefReg = addFanout(Op, MO);
-    if (Op->isOpcode(VTM::VOpMvPhi) || Op->isOpcode(VTM::VOpMvPhi)
-        || Op->isOpcode(VTM::VOpSel) || Op->isOpcode(VTM::VOpCase)) {
+  bool visitUse(MachineRegisterInfo::reg_iterator I) {
+    unsigned DefReg = addFanout(I);
+    if (I->getOpcode() == VTM::VOpMvPhi || I->getOpcode() == VTM::VOpSel
+        || I->getOpcode() == VTM::VOpCase) {
       // We cannot handle these ops correctly after their src and dst merged.
       if (DefReg == DstReg) return true;
     }
@@ -428,8 +426,8 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     return false;
   }
 
-  bool visitDef(ucOp Op) {
-    switch (Op->getOpcode()) {
+  bool visitDef(MachineInstr *MI) {
+    switch (MI->getOpcode()) {
     case VTM::VOpMvPhi:
       // FIXME: Merging VOpMvPhi break adpcm_main_IMS_ASAP.
       return true;
@@ -440,24 +438,24 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     case VTM::COPY:
     case VTM::VOpReadFU:
     case VTM::VOpDstMux:
-      addFanin<0>(Op.getOperand(1));
+      addFanin<0>(MI->getOperand(1));
       break;
     case VTM::VOpReadReturn:
-      addFanin<0>(Op.getOperand(2));
+      addFanin<0>(MI->getOperand(2));
       break;
     case VTM::VOpSel:
       // FIXME: Merging VOpSel break aes_main_IMS_ASAP.
       return true;
-      addFanin<0>(Op.getOperand(2));
-      addFanin<0>(Op.getOperand(3));
+      addFanin<0>(MI->getOperand(2));
+      addFanin<0>(MI->getOperand(3));
       break;
     case VTM::VOpCase:
-      for (unsigned i = 1, e = Op.getNumOperands(); i != e; i+=2)
-        addFanin<0>(Op.getOperand(i + 1));
+      for (unsigned i = 1, e = MI->getNumOperands(); i != e; i+=2)
+        addFanin<0>(MI->getOperand(i + 1));
       break;
     default:
 #ifndef NDEBUG
-      Op.dump();
+      MI->dump();
       llvm_unreachable("Unexpected opcode in CompRegEdgeWeight!");
 #endif
     }
@@ -474,11 +472,10 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
         return true;
 
       // 2. Analyze the definition op.
-      return visitDef(ucOp::getParent(I));
+      return visitDef(&*I);
     }
 
-    if (!MO.isImplicit())
-      return visitUse(ucOp::getParent(I), MO);
+    if (!MO.isImplicit()) return visitUse(I);
 
     return false;
   }
@@ -519,8 +516,8 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
   }
 
   template<unsigned Offset>
-  void visitOperand(ucOp &Op) {
-    addFanin<Offset>(Op.getOperand(OpIdx + Offset));
+  void visitOperand(MachineInstr *MI) {
+    addFanin<Offset>(MI->getOperand(OpIdx + Offset));
   }
 
   typedef CompEdgeWeightBase<2> Base;
@@ -535,15 +532,14 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
       if (!checkWidth(cast<ucOperand>(MO).getBitWidth()))
         return true;
       // 2. Analyze the definition op.
-      ucOp Op = ucOp::getParent(I);
-      assert(Op->isOpcode(OpCode) && "Unexpected Opcode!");
+      MachineInstr *MI = &*I;
+      assert(MI->getOpcode() == OpCode && "Unexpected Opcode!");
 
-      visitOperand<0>(Op);
-      visitOperand<1>(Op);
+      visitOperand<0>(MI);
+      visitOperand<1>(MI);
     }
 
-    if (!MO.isImplicit())
-      addFanout(ucOp::getParent(I), MO);
+    if (!MO.isImplicit()) addFanout(I);
 
     return false;
   }
@@ -595,10 +591,10 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
     MachineOperand &MO = I.getOperand();
     if (I.getOperand().isDef()) {
       // 2. Analyze the definition op.
-      ucOp Op = ucOp::getParent(I);
-      assert(Op->isOpcode(VTM::VOpICmp) && "Unexpected Opcode!");
+      MachineInstr *MI = &*I;
+      assert(MI->getOpcode() == VTM::VOpICmp && "Unexpected Opcode!");
 
-      ucOperand &CondCode = Op.getOperand(3);
+      ucOperand &CondCode = cast<ucOperand>(MI->getOperand(3));
       // Get the bit width information.
       if (!checkWidth(CondCode.getBitWidth()))
         return true;
@@ -606,12 +602,11 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
       if (hasInCompatibleCC(CondCode.getImm()))
         return true;
 
-      visitOperand<0>(Op);
-      visitOperand<1>(Op);
+      visitOperand<0>(MI);
+      visitOperand<1>(MI);
     }
 
-    if (!MO.isImplicit())
-      addFanout(ucOp::getParent(I), MO);
+    if (!MO.isImplicit()) addFanout(I);
 
     return false;
   }
@@ -1023,9 +1018,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
 
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
-  DEBUG(dbgs() << "Before simple register allocation:\n";
-    printVMF(dbgs(), F);
-  );
+  DEBUG(dbgs() << "Before simple register allocation:\n";F.dump());
   
   joinPHINodeIntervals();
 
@@ -1153,43 +1146,19 @@ void VRASimple::addMBBLiveIns(MachineFunction *MF) {
 }
 
 void VRASimple::joinPHINodeIntervals() {
-  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
-    unsigned PHINum = TargetRegisterInfo::index2VirtReg(i);
-    if (MRI->getRegClass(PHINum) != VTM::PHIRRegisterClass) continue;
+  typedef MachineFunction::iterator bb_it;
+  typedef MachineBasicBlock::instr_iterator instr_it;
 
-    MachineRegisterInfo::use_iterator UI = MRI->use_begin(PHINum);
-    if (UI == MachineRegisterInfo::use_end()) continue;
-    
-    ucOp Op = ucOp::getParent(UI);
-    assert(Op->getOpcode() == VTM::VOpDefPhi && "Unexpected Opcode!");
-    unsigned DstReg = Op.getOperand(0).getReg();
-    LiveInterval &DstLI = LIS->getInterval(DstReg);
+  for (bb_it BI = MF->begin(), BE = MF->end(); BI != BE; ++BI) {
+    for (instr_it II = BI->instr_begin(),IE = BI->instr_end();II != IE;/*++II*/){
+      MachineInstr *PHIDef = II++;
 
-    JoinIntervals(DstLI, LIS->getInterval(PHINum), TRI, MRI, LIS);
-
-    if (MRI->getRegClass(DstReg) != VTM::DRRegisterClass) {
-      // Join the phi source to dst, too.
-      MachineRegisterInfo::def_iterator DI = MRI->def_begin(PHINum);
-      ucOp OpMove = ucOp::getParent(DI);
-      assert(++DI == MRI->def_end() && "PHI source not in SSA form!");
-      MachineOperand &PHISrcMO = OpMove.getOperand(1);
-      if (!PHISrcMO.isReg()) continue;
-
-      unsigned PHISrc = PHISrcMO.getReg();
-      // Sub register index will lost if we simply replace the register number.
-      assert(PHISrcMO.getSubReg() == 0
-             && "Cannot join PHI source copy with sub register!");
-      JoinIntervals(DstLI, LIS->getInterval(PHISrc), TRI, MRI, LIS);
-      MRI->replaceRegWith(PHISrc, DstReg);
-      // DirtyHack: Remove the define flag of the PHI stuffs so we have only
-      // 1 define for the register.
-      OpMove.getOperand(0).setIsDef(false);
+      if (PHIDef->getOpcode() != VTM::VOpDefPhi) continue;
+ 
+      mergeLI(&LIS->getInterval(PHIDef->getOperand(1).getReg()),
+              &LIS->getInterval(PHIDef->getOperand(0).getReg()), true);
+      BI->erase_instr(PHIDef);
     }
-
-    MRI->replaceRegWith(PHINum, DstReg);
-    // DirtyHack: Remove the define flag of the PHI stuffs so we have only
-    // 1 define for the register.
-    Op.getOperand(0).setIsDef(false);
   }
 }
 
@@ -1224,19 +1193,19 @@ void VRASimple::mergeIdenticalDatapath(LiveInterval *LI) {
   for (use_it I = MRI->use_begin(LI->reg), E = MRI->use_end(); I != E; ++I) {
     if (I.getOperand().isImplicit()) continue;
 
-    ucOp Op = ucOp::getParent(I);
-    if (!Op.isControl()) {
-      // Datapath op should define and only define its result at operand 0.
-      unsigned NewReg = Op.getOperand(0).getReg();
-      // Ignore the dead datapath ops.
-      if (MRI->use_empty(NewReg)) continue;
+    MachineInstr *MI = &*I;
+    if (isCtrlBundle(MI)) continue;
 
-      std::pair<DatapathOpMap::iterator, bool> p =
-        Users.insert(std::make_pair(Op, NewReg));
-      // Merge all identical datapath ops.
-      if (!p.second && NewReg != p.first->second)
-        EquLIs.unionSets(NewReg, p.first->second);
-    }
+    // Datapath op should define and only define its result at operand 0.
+    unsigned NewReg = MI->getOperand(0).getReg();
+    // Ignore the dead datapath ops.
+    if (MRI->use_empty(NewReg)) continue;
+
+    std::pair<DatapathOpMap::iterator, bool> p =
+      Users.insert(std::make_pair(MI, NewReg));
+    // Merge all identical datapath ops.
+    if (!p.second && NewReg != p.first->second)
+      EquLIs.unionSets(NewReg, p.first->second);
   }
 
   // Merge the equivalence liveintervals.
@@ -1286,15 +1255,15 @@ void VRASimple::bindDstMux() {
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
-      assert(Op->getOpcode() == VTM::VOpDstMux && "Unexpected opcode!");
-      unsigned MuxNum = Op.getOperand(2).getImm();
+      MachineInstr *MI = MRI->getVRegDef(RegNum);
+      assert(MI && MI->getOpcode() == VTM::VOpDstMux && "Unexpected opcode!");
+      unsigned MuxNum = VInstrInfo::getPreboundFUId(MI).getFUNum();
 
       // Merge to the representative live interval.
       LiveInterval *RepLI = RepLIs[MuxNum];
       // Had we allocate a register for this bram?
       if (RepLI == 0) {
-        unsigned BitWidth = Op.getOperand(0).getBitWidth();
+        unsigned BitWidth = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
         unsigned PhyReg = TRI->allocateFN(VTM::RMUXRegClassID, BitWidth);
         RepLIs[MuxNum] = LI;
         assign(*LI, PhyReg);
@@ -1323,9 +1292,9 @@ void VRASimple::bindBlockRam() {
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
-      assert(Op->getOpcode() == VTM::VOpBRam && "Unexpected opcode!");
-      unsigned BRamNum = Op->getFUId().getFUNum();
+      MachineInstr *MI = MRI->getVRegDef(RegNum);
+      assert(MI->getOpcode() == VTM::VOpBRam && "Unexpected opcode!");
+      unsigned BRamNum = VInstrInfo::getPreboundFUId(MI).getFUNum();
 
       VFInfo::BRamInfo &Info = VFI->getBRamInfo(BRamNum);
       unsigned &PhyReg = Info.PhyRegNum;
@@ -1355,13 +1324,14 @@ unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
   unsigned RetPortSize = 0;
   typedef MachineRegisterInfo::use_iterator use_it;
   for (use_it I = MRI->use_begin(RegNum); I != MRI->use_end(); ++I) {
-    ucOp User = ucOp::getParent(I);
-    if (User->isOpcode(VTM::VOpReadFU)) continue;
+    MachineInstr *MI = &*I;
+    if (MI->getOpcode() == VTM::VOpReadFU) continue;
 
-    assert(User->isOpcode(VTM::VOpReadReturn) && "Unexpected callee user!");
-    assert((RetPortSize == 0 || RetPortSize == User.getOperand(0).getBitWidth())
+    assert(MI->getOpcode() == VTM::VOpReadReturn && "Unexpected callee user!");
+    assert((RetPortSize == 0 ||
+            RetPortSize == cast<ucOperand>(MI->getOperand(0)).getBitWidth())
             && "Return port has multiple size?");
-    RetPortSize = User.getOperand(0).getBitWidth();
+    RetPortSize = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
   }
 
   return TRI->allocateFN(VTM::RCFNRegClassID, RetPortSize);
@@ -1376,10 +1346,10 @@ void VRASimple::bindCalleeFN() {
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
-      ucOp Op = ucOp::getParent(MRI->def_begin(RegNum));
-      assert(Op->isOpcode(VTM::VOpInternalCall)
+      MachineInstr *MI = MRI->getVRegDef(RegNum);
+      assert(MI && MI->getOpcode() == VTM::VOpInternalCall
              && "Unexpected define op of CaleeFN!");
-      unsigned FNNum = Op.getOperand(1).getBitWidth();
+      unsigned FNNum = VInstrInfo::getPreboundFUId(MI).getFUNum();
       LiveInterval *&RepLI = RepLIs[FNNum];
 
       if (RepLI == 0) {
@@ -1390,7 +1360,7 @@ void VRASimple::bindCalleeFN() {
         // Get the return ports of this callee FN.
         unsigned NewFNNum = allocateCalleeFNPorts(RegNum);
         if (NewFNNum != FNNum)
-          VFI->remapCallee(Op.getOperand(1).getSymbolName(), NewFNNum);
+          VFI->remapCallee(MI->getOperand(1).getSymbolName(), NewFNNum);
 
         assign(*LI, NewFNNum);
         continue;

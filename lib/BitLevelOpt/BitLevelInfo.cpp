@@ -157,8 +157,6 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
       case VTM::COPY:     case VTM::PHI:
-        // Fall through
-      case VTM::Control:  case VTM::Datapath:
         continue;
       case VTM::VOpSRA: case VTM::VOpSRA_c:
       case VTM::VOpSRL: case VTM::VOpSRL_c:
@@ -235,9 +233,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
       Defs.push_back(&Result);
     break;
   }
-  // We can not check these instructions at this moment.
-  case VTM::Control:
-  case VTM::Datapath:
+
   // Not necessary to compute the bitwitdh information of these instructions.
   //case VTM::VOpArg:
   case VTM::VOpMemTrans:

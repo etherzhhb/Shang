@@ -70,6 +70,7 @@ struct VTMPassConfig : public TargetPassConfig {
   virtual bool addPreRegAlloc() {
     PM.add(createVPreRegAllocSchedPass());
     PM.add(createForwardWireUsersPass());
+    //addPass(FinalizeMachineBundlesID);
     return true;
   }
 
@@ -141,7 +142,7 @@ struct VTMPassConfig : public TargetPassConfig {
     //if (EnableStrongPHIElim)
     //  addPass(StrongPHIEliminationID);
 
-    // addPass(RegisterCoalescerID);
+    addPass(RegisterCoalescerID);
 
     // Add the selected register allocation pass.
     PM.add(RegAllocPass);

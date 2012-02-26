@@ -61,16 +61,14 @@ struct ForwardWireUsers : public MachineFunctionPass {
 
   void buildWireUseMap(MachineFunction &MF);
 
-  // Forward the register used to EndState operation.
-  void addReadToEndState(MachineInstr *EndState, unsigned R);
-  void forwardPHIUse(MachineFunction &MF);
-
-  void buildUseMapForState(MachineInstr *Inst, MachineRegisterInfo &MRI);
+  void buildUseMapForDatapath(MachineInstr *Inst, MachineRegisterInfo &MRI);
 
   void addUseToMap(unsigned RegNum, SmallVectorImpl<WireMapIt> &WireDefs,
                    MachineRegisterInfo &MRI);
 
   void forwardWireUses(MachineFunction &MF);
+  void addUseToBundle(MachineInstr *Bundle, RegSet &ImpUses, RegSet &ExpUse);
+
 
   const char *getPassName() const { return "Forward Registers Used by Wires"; }
 };
@@ -85,20 +83,22 @@ bool ForwardWireUsers::runOnMachineFunction(MachineFunction &MF) {
 
   forwardWireUses(MF);
 
-  forwardPHIUse(MF);
-
   return true;
 }
 
-void
-ForwardWireUsers::buildWireUseMap(MachineFunction &MF) {
+void ForwardWireUsers::buildWireUseMap(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
-    for (MachineBasicBlock::iterator II = BI->getFirstNonPHI(), IE = BI->end();
+    typedef MachineBasicBlock::instr_iterator instr_it;
+    bool IsInDataPath = false;
+    for (instr_it II = instr_it(&*BI->getFirstNonPHI()), IE = BI->instr_end();
          II != IE; ++II) {
-      if (II->getOpcode() == VTM::Datapath)
-        buildUseMapForState(II, MRI);
+      MachineInstr *MI = II;
+      if (MI->getOpcode() == VTM::CtrlStart) IsInDataPath = false;
+      else if (MI->getOpcode() == VTM::Datapath) IsInDataPath = true;
+      else if (IsInDataPath && MI->isInsideBundle())
+        buildUseMapForDatapath(MI, MRI);
     }
   }
 
@@ -131,8 +131,8 @@ void ForwardWireUsers::addUseToMap(unsigned RegNum,
     if (src == WireUse.end()) {
       // Dirty Hack: Build the wire map not if we not visited it yet.
       if (MachineInstr *SrcMI = MRI.getVRegDef(RegNum)) {
-        assert(SrcMI->getOpcode() == VTM::Datapath && "Unexpected opcode!");
-        buildUseMapForState(SrcMI, MRI);
+        assert(isDatapathBundle(SrcMI) && "Unexpected opcode!");
+        buildUseMapForDatapath(SrcMI, MRI);
         src = WireUse.find(RegNum);
       }
     }
@@ -149,16 +149,18 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   RegSet ImpUses, ExpUse;
 
-  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI)
-    for (MachineBasicBlock::iterator II = BI->begin(), IE = BI->end();
+  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
+    typedef MachineBasicBlock::instr_iterator instr_it;
+    // F
+    for (instr_it II = instr_it(BI->getFirstNonPHI()), IE = BI->instr_end();
          II != IE; ++II) {
       MachineInstr *Inst = II;
-      unsigned OpC = Inst->getOpcode();
-      if (OpC != VTM::Datapath && OpC != VTM::Control) continue;
 
-      ImpUses.clear();
-      ExpUse.clear();
-
+      // Flush the forwarded uses to the ctrl end.
+      if (Inst->getOpcode() == VTM::CtrlEnd) {
+        addUseToBundle(Inst, ImpUses, ExpUse);
+        continue;
+      }
 
       // Iterate over the machine operands to build the current implicit use
       // set.
@@ -178,136 +180,63 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
 
         WireMapIt src = WireUse.find(RegNum);
         if (src == WireUse.end()) {
-          assert(MRI.getVRegDef(RegNum)->isPHI() && "Wire not define?");
+          assert((MRI.getVRegDef(RegNum)->isImplicitDef()
+                  || MRI.getVRegDef(RegNum)->isPHI()) && "Wire not define?");
           continue;
         }
 
         ImpUses.insert(src->second.begin(), src->second.end());
       }
-
-      // Do not add the register to implicit use if it is explicit used.
-      set_subtract(ImpUses, ExpUse);
-
-      if (ImpUses.empty()) continue;
-
-      // Flush the current implicit use to the machine code.
-      MachineInstrBuilder Builder(Inst);
-      unsigned PredSlot = ucState(Inst).getSlot();
-      Builder.addOperand(ucOperand::CreateOpcode(VTM::ImpUse, PredSlot));
-      // DirtyHack: Add the dummy predicate to the control op.
-      // FIXME: Also add predicate operand for implicit use?
-      if (OpC == VTM::Control) Builder.addOperand(ucOperand::CreatePredicate());
-
-      for (RegSet::iterator UI = ImpUses.begin(), UE = ImpUses.end();
-           UI != UE; ++UI)
-        Builder.addReg(*UI, RegState::Implicit);
-    }
-
-  DEBUG(
-    printVMF(dbgs(), MF);
-  );
-}
-
-void ForwardWireUsers::buildUseMapForState(MachineInstr *Inst,
-                                           MachineRegisterInfo &MRI) {
-  SmallVector<WireMapIt, 2> WireDefs;
-  ucState S(Inst);
-
-  for (ucState::iterator I = S.begin(), E = S.end(); I != E; ++I) {
-    ucOp Op = *I;
-    WireDefs.clear();
-
-    for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end(); OI != OE;
-         ++OI) {
-      MachineOperand &MO = *OI;
-
-      if (!MO.isReg() || MO.getReg() == 0) continue;
-
-      unsigned RegNum = MO.getReg();
-      if (MO.isDef()) {
-        assert(MRI.getRegClass(RegNum) == VTM::WireRegisterClass
-               && "Datapath defines register?");
-
-        WireMapIt at;
-        bool inserted;
-        tie(at, inserted) = WireUse.insert(std::make_pair(RegNum, RegSet()));
-        WireDefs.push_back(at);
-        // Seems that we had already visited this instruction?
-        if (!inserted) return;
-        // assert(inserted && "Wire already existed!");
-      } else {
-        assert(!WireDefs.empty() && "Datapath dose not defines wire?");
-        addUseToMap(RegNum, WireDefs, MRI);
-      }
     }
   }
+
+  DEBUG(MF.dump());
 }
 
-void ForwardWireUsers::addReadToEndState(MachineInstr *EndState, unsigned R) {
-  if (!EndState->readsVirtualRegister(R))
-    MachineInstrBuilder(EndState).addReg(R, RegState::Implicit);
-}
+void ForwardWireUsers::addUseToBundle(MachineInstr *Bundle,
+                                      RegSet &ImpUses, RegSet &ExpUse) {
+  // Do not add the register to implicit use if it is explicit used.
+  set_subtract(ImpUses, ExpUse);
 
-void ForwardWireUsers::forwardPHIUse(MachineFunction &MF) {
-  MachineRegisterInfo &MRI = MF.getRegInfo();
-  RegSet ReadByPhi;
-
-  for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
-    MachineBasicBlock::iterator II = BI->begin();
-    // Collect the registers read by PHI.
-    while (II->isPHI()) {
-      MachineInstr *PN = II;
-      ++II;
-
-      for (unsigned i = 1, e = PN->getNumOperands(); i != e; i += 2) {
-        unsigned RegNum = PN->getOperand(i).getReg();
-        MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
-        MachineInstr *LastMI = SrcBB->getFirstTerminator();
-        assert(LastMI->getOpcode() == VTM::EndState && "Unexpected terminator!");
-
-        // NOTE: The incoming value may have different register class than the
-        // PHI register! So we have to call getRegClass on each incoming value!
-        if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass) {
-          // Dirty Hack: Insert the implicit read at the EndState instruction.
-          addReadToEndState(LastMI, RegNum);
-          ReadByPhi.insert(RegNum);
-        } else {
-          // Skip the implicit defines because it do not read any register.
-          if (MRI.getVRegDef(RegNum)->isImplicitDef())
-            continue;
-
-          RegSet &ReadByWire = getRegsUseBy(RegNum);
-          for (RegSet::iterator RI = ReadByWire.begin(), RE = ReadByWire.end();
-               RI != RE; ++RI) {
-            unsigned R = *RI;
-            // Dirty Hack: Insert the implicit read at the EndState instruction.
-            addReadToEndState(LastMI, R);
-            ReadByPhi.insert(R);
-          }
-        }
-      }
-    }
-
-    // Nothing to read.
-    if (ReadByPhi.empty()) continue;
-
-    // Skip all implicit defines.
-    while (II->isImplicitDef()) ++II;
-
-    // The register/wire read by PHI will be read at the first slot of the MBB.
-    assert(II != BI->end() && "Empty block?");
-    MachineInstr *MI = II;
-    assert(MI->getOpcode() == VTM::Control && "First MI not control?");
-    MachineInstrBuilder Builder(MI);
-    unsigned PredSlot = ucState(MI).getSlot();
-    Builder.addOperand(ucOperand::CreateOpcode(VTM::ImpUse, PredSlot));
-    // PHIs are always execute.
-    Builder.addOperand(ucOperand::CreatePredicate());
-    for (RegSet::iterator UI = ReadByPhi.begin(), UE = ReadByPhi.end();UI != UE;
-         ++UI)
+  if (!ImpUses.empty()) {
+    MachineInstrBuilder Builder(Bundle);
+    for (RegSet::iterator UI = ImpUses.begin(), UE = ImpUses.end();
+         UI != UE; ++UI)
       Builder.addReg(*UI, RegState::Implicit);
 
-    ReadByPhi.clear();
+    ImpUses.clear();
+  }
+
+  ExpUse.clear();
+}
+
+void ForwardWireUsers::buildUseMapForDatapath(MachineInstr *Inst,
+                                              MachineRegisterInfo &MRI) {
+  SmallVector<WireMapIt, 2> WireDefs;
+
+  typedef MachineInstr::mop_iterator op_it;
+  for (op_it OI = Inst->operands_begin(), OE = Inst->operands_end();
+       OI != OE; ++OI) {
+    MachineOperand &MO = *OI;
+
+    if (!MO.isReg() || MO.getReg() == 0) continue;
+
+    unsigned RegNum = MO.getReg();
+    if (MO.isDef()) {
+      assert(MRI.getRegClass(RegNum) == VTM::WireRegisterClass
+              && "Datapath defines register?");
+
+      WireMapIt at;
+      bool inserted;
+      tie(at, inserted) = WireUse.insert(std::make_pair(RegNum, RegSet()));
+      WireDefs.push_back(at);
+      // Seems that we had already visited this instruction?
+      if (!inserted) return;
+      // assert(inserted && "Wire already existed!");
+    } else {
+      assert(!WireDefs.empty() && "Datapath dose not defines wire?");
+      addUseToMap(RegNum, WireDefs, MRI);
+    }
   }
 }
 

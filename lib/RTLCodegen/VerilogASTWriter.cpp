@@ -101,7 +101,7 @@ bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
 
   DEBUG(
     Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
-  printVMF(Out, F);
+    F.print(Out);
     Out << "`endif\n";
   );
 

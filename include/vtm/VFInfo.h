@@ -47,7 +47,6 @@ class VFInfo : public MachineFunctionInfo {
   typedef std::map<const MachineInstr*,
                    std::pair<int, const MachineBasicBlock*> >
           PhiSlotMapTy;
-  PhiSlotMapTy PHISlots;
 public:
   // The data structure to describe the block ram.
   struct BRamInfo {
@@ -105,20 +104,9 @@ public:
   }
 
   void rememberTotalSlot(const MachineBasicBlock* MBB,
-                        unsigned startSlot,
-                        unsigned totalSlot,
-                        unsigned IISlot);
-
-  void rememberPHISlot(const MachineInstr *PN, unsigned Slot,
-                       bool Pipe = false) {
-    int S = Pipe ? - Slot : Slot;
-    bool success =
-      PHISlots.insert(std::make_pair(PN,
-                                     std::make_pair(S, PN->getParent()))).second;
-    assert(success && "Insert the same phinode twice?");
-    (void) success;
-  }
-
+                         unsigned startSlot,
+                         unsigned totalSlot,
+                         unsigned IISlot);
 
   typedef FNMapTy::const_iterator const_fn_iterator;
   const_fn_iterator fn_begin() const { return UsedFNs.begin(); }
@@ -145,9 +133,6 @@ public:
   //  assert(FNNum < UsedFNs.size() && "Invalid FNNum!");
   //  return UsedFNs[FNNum];
   //}
-
-  std::pair<int, const MachineBasicBlock*>
-    lookupPHISlot(const MachineInstr *PN) const;
 
   const char *allocateSymbol(StringRef S) {
     return Symbols.GetOrCreateValue(S, 0).getKeyData();

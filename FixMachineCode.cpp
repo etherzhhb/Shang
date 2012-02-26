@@ -55,6 +55,8 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
+  void handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB);
+
   bool handleImplicitDefs(MachineInstr *MI);
   bool mergeSel(MachineInstr *MI);
   void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI, MachineOperand Cnd);
@@ -77,7 +79,7 @@ char FixMachineCode::ID = 0;
 bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   TII = MF.getTarget().getInstrInfo();
-  std::vector<MachineInstr*> InstrToFold;
+  std::vector<MachineInstr*> InstrToFold, PNs;
 
    // Find out all VOpMove_mi.
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
@@ -86,7 +88,13 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
     for (MachineBasicBlock::iterator II = MBB->begin(), IE = MBB->end();
          II != IE; /*++II*/) {
       MachineInstr *Inst = II;
-      ++II; // We may delete the current instruction.
+
+      ++II; // We may delete the current instruction.      
+
+      if (Inst->isPHI() && !IsPreOpt) {
+        PNs.push_back(Inst);
+        continue;
+      }
 
       if (handleImplicitDefs(Inst)) continue;
 
@@ -105,11 +113,62 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       // Try to merge the Select to improve parallelism.
       mergeSel(Inst);
     }
+
+    //MachineInstr *FirstNotPHI = 0;
+
+    while (!PNs.empty()) {
+      MachineInstr *PN = PNs.back();
+      PNs.pop_back();
+
+      //if (FirstNotPHI == 0)
+      //  FirstNotPHI = llvm::next(MachineBasicBlock::instr_iterator(PN));
+
+      handlePHI(PN, MBB);
+    }
   }
 
   FoldInstructions(InstrToFold);
 
   return true;
+}
+
+
+void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {  
+  unsigned BitWidth = cast<ucOperand>(PN->getOperand(0)).getBitWidth();
+  //bool isAllImpDef = true;
+
+  for (unsigned i = 1, e = PN->getNumOperands(); i != e; i += 2) {
+    MachineOperand &SrcMO = PN->getOperand(i);
+    MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
+    assert(DefMI && "Not in SSA form?");
+    if (DefMI->isImplicitDef())
+      continue;
+
+    MachineBasicBlock *SrcBB = PN->getOperand(i + 1).getMBB();
+    VInstrInfo::JT SrcJT;
+    bool success = !VInstrInfo::extractJumpTable(*SrcBB, SrcJT, false);
+    assert(success && "Broken machine code?");
+
+    // Insert the PHI copy.
+    MachineBasicBlock::instr_iterator IP = SrcBB->getFirstInstrTerminator();
+    unsigned NewSrcReg =
+      MRI->createVirtualRegister(MRI->getRegClass(SrcMO.getReg()));
+    VInstrInfo::JT::iterator at = SrcJT.find(CurBB);
+    assert(at != SrcJT.end() && "Broken CFG?");
+
+    BuildMI(*SrcBB, IP, DebugLoc(), TII->get(VTM::VOpMvPhi))
+      .addOperand(ucOperand::CreateReg(NewSrcReg, BitWidth, true))
+      .addOperand(SrcMO).addMBB(CurBB)
+      // The phi copy is only active when SrcBB jumping to CurBB.
+      .addOperand(at->second)
+      .addImm(0);
+
+    SrcMO.ChangeToRegister(NewSrcReg, false);
+    //isAllImpDef = false;
+  }
+
+  // TODO: Incoming copy?
+  // TODO: if all the incoming value of the PHI is ImpDef, erase the PN.
 }
 
 bool FixMachineCode::canbeFold(MachineInstr *MI) const {

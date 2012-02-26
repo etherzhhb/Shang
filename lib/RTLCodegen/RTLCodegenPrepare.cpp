@@ -26,7 +26,6 @@
 using namespace llvm;
 namespace {
 struct RTLCodegenPreapare : public MachineFunctionPass {
-  VFInfo *FInfo;
   // Mapping the PHI number to accutally register.
   std::map<unsigned, unsigned> PHIsMap;
   static char ID;
@@ -35,7 +34,6 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF) {
     MachineRegisterInfo &MRI = MF.getRegInfo();
-    EliminatePseudoPHIs(MRI);
 
     for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
       for (MachineBasicBlock::iterator II = I->begin(), IE = I->end(); II != IE;
@@ -46,24 +44,12 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
         if (!MI->isImplicitDef()) continue;
 
         unsigned Reg = MI->getOperand(0).getReg();
-
-        typedef MachineRegisterInfo::use_iterator use_it;
-        for (use_it I = MRI.use_begin(Reg), E = MRI.use_end(); I != E; ) {
-          ucOperand *MO = cast<ucOperand>(&I.getOperand());
-          ++I;
-          // Implicit value always have 64 bit.
-          MO->setBitWidth(64);
-          // Just set the implicit defined register to some strange value.
-          MO->ChangeToImmediate(TargetRegisterInfo::virtReg2Index(Reg));
-        }
-
+        MRI.replaceRegWith(Reg, 0);
         MI->removeFromParent();
       }
 
     return true;
   }
-
-  void EliminatePseudoPHIs(MachineRegisterInfo &MRI);
 
   const char *getPassName() const {
     return "RTL Code Generation Preparation Pass";
@@ -75,46 +61,4 @@ char RTLCodegenPreapare::ID = 0;
 
 Pass *llvm::createRTLCodegenPreparePass() {
   return new RTLCodegenPreapare();
-}
-
-void RTLCodegenPreapare::EliminatePseudoPHIs(MachineRegisterInfo &MRI) {
-  for (unsigned i = 0, e = MRI.getNumVirtRegs(); i != e; ++i) {
-    unsigned PHINum = TargetRegisterInfo::index2VirtReg(i);
-    if (MRI.getRegClass(PHINum) != VTM::PHIRRegisterClass) continue;
-    
-    if (MRI.reg_nodbg_empty(PHINum)) continue;
-
-    MachineRegisterInfo::use_iterator UI = MRI.use_begin(PHINum);
-    assert(MRI.hasOneUse(PHINum) && "PHI Information broken!");
-
-    ucOp PHIDef = ucOp::getParent(UI);
-    assert(PHIDef->getOpcode() == VTM::VOpDefPhi && "PHI Information broken!");
-    unsigned PHIDst = PHIDef.getOperand(0).getReg();
-    // Only fix the PHIs for wire register.
-    bool isWire = VRegisterInfo::IsWire(PHIDst, &MRI);
-
-    unsigned NumDef = 0;
-    typedef MachineRegisterInfo::def_iterator def_it;
-    while (!MRI.def_empty(PHINum)){
-      def_it DI = MRI.def_begin(PHINum);
-      ucOp PHIUse = ucOp::getParent(DI);
-
-      assert(!isWire && "PHI for wires should be joined in VRASimple!");
-      if (PHIUse->getOpcode() == VTM::VOpMvPipe)
-        PHIUse.changeOpcode(VTM::VOpMove_rw, PHIUse->getPredSlot());
-
-      assert(PHIUse.getOperand(2).getMBB() == UI->getParent()
-             && "Destination MBB not match!");
-      // The opcode will be keep if the move is in side a loop, which need
-      // extra predicate.
-
-      PHIUse.getOperand(0).setReg(PHIDst);
-      PHIUse.getOperand(0).setIsWire(isWire);
-      ++NumDef;
-    }
-
-    PHIDef.changeOpcode(VTM::IMPLICIT_DEF, PHIDef->getPredSlot());
-    assert((!isWire || NumDef == 1) && "Broken PHINode for wire!");
-    (void) NumDef;
-  }
 }

@@ -123,10 +123,11 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   void addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
                         bool isExit = false);
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
-  template<int IgnoreBackedge, typename CreateDepFuncTy>
+  template<typename CreateDepFuncTy>
   void addSchedDepForMI(MachineInstr *MI, VSUnit *A, VSchedGraph &CurState,
-                        DepLatInfoTy &LatInfo, CreateDepFuncTy &CreateDepFunc,
-                        int IntraSULatency = 0);
+                        DepLatInfoTy &LatInfo, CreateDepFuncTy &CreateDepFunc);
+  // Add the dependence from the incoming value of PHI to PHI.
+  void addIncomingDepForPHI(VSUnit *PN, VSchedGraph &CurState);
 
   void addValDep(VSchedGraph &CurState, VSUnit *A);
 
@@ -477,12 +478,11 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 }
 
 //===----------------------------------------------------------------------===//
-template<int IgnoreBackedge, typename CreateDepFuncTy>
+template<typename CreateDepFuncTy>
 void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
                                          VSchedGraph &CurState,
                                          DepLatInfoTy &LatInfo,
-                                         CreateDepFuncTy &CreateDepFunc,
-                                         int IntraSULatency) {
+                                         CreateDepFuncTy &CreateDepFunc) {
   assert(MI && "Unexpected entry root!");
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
@@ -496,7 +496,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
     // LatencyInfo use a special marker to mark the current MI have some latency
     // from entry of the MBB.
     if (SrcMI == DetialLatencyInfo::EntryMarker) {
-      assert(IgnoreBackedge && "Unexpected datapath between PHI and entry node!");
+      assert(!A->isPHI() && "Unexpected datapath between PHI and entry node!");
       // Since there are some datapath between current schedule unit and the
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
@@ -509,13 +509,49 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
     assert(SrcSU && "Src SUnit not found!");
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
-    if ((SrcSU->getIdx() > A->getIdx() && IgnoreBackedge) || SrcSU == A)
-      continue;
+    if (SrcSU->getIdx() >= A->getIdx()) continue;
+
     // Adjust the step between SrcMI and MI.
     Latency = std::max(Latency, int(VInstrInfo::getCtrlStepBetween(SrcMI, MI)));
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     A->addDep(CreateDepFunc(SrcSU, Latency));
+  }
+}
+
+void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurState){
+  assert(PHISU->isPHI() && "Expect PHI in addIncomingDepForPHI!");
+  MachineInstr *PN = PHISU->getRepresentativeInst();
+
+  // Find the incoming copy.
+  MachineInstr *IncomingCopy = PHISU->getInstrAt(1);
+  assert(IncomingCopy->getOpcode() == VTM::VOpMvPhi && "Expect PHI move!");
+  DepLatInfoTy *LatInfo = CurState.getDepLatInfo(IncomingCopy);
+  assert(LatInfo && "Latency information for incoming copy not avaiable!");
+
+  for (src_it I = LatInfo->begin(), E = LatInfo->end(); I != E; ++I) {
+    MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
+    // Get the latency from SrcMI to MI.
+    double DetailLatency = I->second;
+    int Latency = int(ceil(DetailLatency));
+
+    assert(SrcMI && SrcMI != DetialLatencyInfo::EntryMarker
+           && "Unexpected null SrcMI!");
+    
+    VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
+    assert(SrcSU && "Src SUnit not found!");
+    assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
+
+    // Avoid self-edge.
+    if (SrcSU == PHISU) continue;
+    
+    //assert(SrcSU->getIdx() > PHISU->getIdx() && "Expect back-edge!");
+
+    // Adjust the step between SrcMI and MI.
+    Latency = std::max(Latency, int(VInstrInfo::getCtrlStepBetween(SrcMI, PN)));
+    // Call getLatencyTo to accumulate the intra-unit latency.
+    Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
+    PHISU->addDep(VDMemDep::CreateMemDep<1>(SrcSU, Latency));
   }
 }
 
@@ -545,20 +581,18 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
       int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
       Latency = Dep->getLatencyFrom(DepSrc, Latency);
 
-      // Build the dependence edge.
-      VDEdge *Edge = 0;
-      // We got a back-edge, that should be a phi.
+      // If we got a back-edge, that should be a phinode.
       if (Dep->getIdx() > A->getIdx()) {
         assert(A->getRepresentativeInst()->isPHI()
                && "Expected backedge for PHI!");
-        // The iterate distance for backedge to PHI is always 1.
-        Edge = VDMemDep::CreateMemDep<1>(Dep, Latency);
+        // Cross iteration dependences do not make sense in normal loops.
+        if (CurState.isPipelined())
+          // The iterate distance for back-edge to PHI is always 1.
+          A->addDep(VDMemDep::CreateMemDep<1>(Dep, Latency));
       } else {
-        Edge = VDValDep::CreateValDep(Dep, Latency);
+        A->addDep(VDValDep::CreateValDep(Dep, Latency));
         ++NumValDep;
       }
-
-      A->addDep(Edge);
     }
   }
 
@@ -594,14 +628,12 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
   typedef VSUnit::instr_iterator it;
   assert(A->isControl() && "Unexpected data-path schedule unit!");
   for (unsigned I = 0, E = A->num_instrs(); I != E; ++I) {
-    MachineInstr *MI = A->getInstrAt(I);
-    int IntraSULatency = I ? A->getLatencyAt(I) : 0;
+    MachineInstr *MI = A->getInstrAt(I);    
     assert(MI && "Unexpected entry root!");
     const DetialLatencyInfo::DepLatInfoTy *DepLat =
       CurState.getDepLatInfo(MI);
     assert(DepLat && "Operand latency information not available!");
-    addSchedDepForMI<true>(MI, A, CurState, *DepLat, VDValDep::CreateValDep,
-                           IntraSULatency);
+    addSchedDepForMI(MI, A, CurState, *DepLat, VDValDep::CreateValDep);
   }
 
   // If the atom depend on nothing and it must has some dependence edge,
@@ -647,16 +679,12 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
 
   for (instr_it I = CurBB->begin(), E = CurBB->end();I != E && I->isPHI(); ++I) {
     MachineInstr &PN = *I;
-    const DetialLatencyInfo::DepLatInfoTy &DepLatInfo =
-      State.buildPHIBELatInfo(&PN);
-
     VSUnit *PHISU = State.lookupSUnit(&PN);
     assert(PHISU && "Can not find SUnit for PHI!");
 
     // Add dependence from PHI incoming value:
     // PHI_incoming -(RAW dep)-> PHI_at_next_iteration.
-    addSchedDepForMI<false>(&PN, PHISU, State, DepLatInfo,
-                            VDMemDep::CreateMemDep<1>);
+    addIncomingDepForPHI(PHISU, State);
     // Add a anti-dependence edge from users of PHI to PHI because we must
     // have:
     // PHI -(RAW dep)-> PHI_user -(WAR dep)-> PHI_at_next_iteration.
@@ -667,10 +695,9 @@ void VPreRegAllocSched::buildPipeLineDepEdges(VSchedGraph &State) {
         PHISU->addDep(getMemDepEdge(PHIUser, 0, 1));
     }
 
-    // Dirty Hack: We can emit the PHI while looping back to the loop entry.
-    unsigned Latency = 0;
-    //  LoopOp->getLatencyTo(LoopOp->getRepresentativeInst(), &PN);
-    PHISU->addDep(getMemDepEdge(LoopOp, Latency, 1));
+    // Add the dependence edge PHI -> Loop back -> PHI_at_iteration.
+    PHISU->addDep(getMemDepEdge(LoopOp, 0, 1));
+    //LoopOp->addDep(VDValDep::CreateValDep(PHISU, 0));
   }
 }
 
@@ -762,6 +789,17 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     break;
     // The VOpDstMux should be merged to its user.
     case VTM::VOpDstMux: return;
+    case VTM::VOpMvPhi:
+      if (CurState.isLoopPHIMove(MI)) {
+        unsigned Reg = MI->getOperand(0).getReg();
+        assert(MRI->hasOneUse(Reg) && "Incoming copy has more than one use?");
+        MachineInstr *PN = &*MRI->use_begin(Reg);
+        assert(PN && PN->isPHI() && "Bad user of incoming copy!");
+        VSUnit *PHISU = CurState.lookupSUnit(PN);
+        assert(PHISU && "Schedule unit for PHI node not found!");
+        CurState.mapMI2SU(MI, PHISU, 0);
+      }
+    return;
   }
 
   // TODO: Remember the register that live out this MBB.
@@ -784,8 +822,9 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
     if (VSU->getNumUses() == 0 && VSU != ExitRoot) {
-      assert(AllowHanging && "Unexpected handing node!");
-      // Dirty Hack.
+      assert((AllowHanging || CurState.isLoopOp(VSU->getRepresentativeInst()))
+             && "Unexpected handing node!");
+      // A PHIMove can be scheduled to the same slot with the exit root.
       unsigned Latency = VSU->getMaxLatencyTo(ExitMI);
       // We do not need to wait the trivial operation finish before exiting the
       // state, because the first control slot of next state will only contains
@@ -807,52 +846,90 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // We need wait all operation finish before the exit operation active, compute
   // the latency from operations need to wait to the exit operation.
   DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
+  VSUnit *ExitSU = 0;
 
-  for (instr_it I = FirstTerminator, E = CurState->end(); I !=E; ++I) {
+  for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
     MachineInstr *MI = I;
-    assert(MI->getDesc().isTerminator() && "Unexpected non-terminator!");
-    // Build the dependence latency information for the terminator.
-    CurState.addToLatInfo(MI);
-    // Try to build the schedule unit for the loop back operation.
+    if (!I->isTerminator()) {
+      assert(MI->getOpcode() == VTM::VOpMvPhi && "Bad MBB!");
+      continue;
+    }
+
+    // Build the schedule unit for loop back operation.
     if (CurState.isLoopOp(I)) {
+      CurState.addToLatInfo(MI);
       VSUnit *LoopOp = CurState.createVSUnit(MI);
       addSchedDepForSU(LoopOp, CurState);
       continue;
     }
-
-    // No need to wait the terminator.
-    CurState.eraseFromExitSet(MI);
-    Exits.push_back(MI);
+  }
+  
+  for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
+    MachineInstr *MI = I;
+    if (!I->isTerminator() || CurState.isLoopOp(I)) continue;
+    
+    // Build a exit root or merge the terminators into the exit root.
+    if (ExitSU == 0) {
+      ExitSU = CurState.createVSUnit(MI);
+      CurState.setExitRoot(ExitSU);
+    } else {
+      bool mapped = CurState.mapMI2SU(MI, ExitSU, 0);
+      (void) mapped;
+      assert(mapped && "Cannot merge terminators!");
+    }
   }
 
-  assert(!Exits.empty() && "Not get any terminator exiting the block?");
-  MachineInstr *FstExit = Exits.front();
-  VSUnit *ExitSU = CurState.createVSUnit(FstExit);
-  CurState.setExitRoot(ExitSU);
-  // Build datapath latency information for the terminator.
-  CurState.buildExitMIInfo(FstExit, ExitDepInfo);
+  assert(ExitSU && "Terminator not found?");
 
-  // Add others terminator to the exit node.
-  while (Exits.size() != 1) {
-    MachineInstr *ExitMI = Exits.pop_back_val();
-    CurState.buildExitMIInfo(ExitMI, ExitDepInfo);
-    bool mapped = CurState.mapMI2SU(ExitMI, ExitSU, 0);
-    (void) mapped;
-    assert(mapped && "Cannot merge terminators!");
+  for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
+    MachineInstr *MI = I;
+
+    if (MI->getOpcode() == VTM::VOpMvPhi) {
+      if (CurState.isLoopPHIMove(MI)) {
+        // Forward the edges to exit root, so the dependences of PHI moves
+        // can always finish in time.
+        const DetialLatencyInfo::DepLatInfoTy *DepLat =
+          CurState.getDepLatInfo(MI);
+        assert(DepLat && "Operand latency information not available!");
+        addSchedDepForMI(MI, ExitSU, CurState, *DepLat,
+                         VDCtrlDep::CreateCtrlDep);
+        // Add the dependence from PHISU to ExitSU, we will constraint the PHI
+        // so it will schedule before the last stage of a pipeline BB.
+        VSUnit *PHISU = CurState.lookupSUnit(MI);
+        assert(PHISU->isPHI() && "Expect PHISU merged by PHI!");
+        ExitSU->addDep(VDCtrlDep::CreateCtrlDep(PHISU, 0));
+        continue;
+      } else { // Also merge the PHI moves.
+        bool mapped = CurState.mapMI2SU(MI, ExitSU, 0);
+        (void) mapped;
+        assert(mapped && "Cannot merge terminators!");
+      }
+    } else if (CurState.isLoopOp(I))
+      continue;
+
+    // Compute the dependence information.
+    CurState.addToLatInfo(MI);
+    // No need to wait the terminator.
+    CurState.eraseFromExitSet(MI);
+    // Build datapath latency information for the terminator.
+    CurState.buildExitMIInfo(MI, ExitDepInfo);
   }
 
   // Add the dependence of exit root.
   addSchedDepForSU(ExitSU, CurState, true);
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDepForMI<true>(FstExit, ExitSU, CurState, ExitDepInfo,
-                         VDCtrlDep::CreateCtrlDep);
+  addSchedDepForMI(ExitSU->getRepresentativeInst(), ExitSU, CurState,
+                   ExitDepInfo, VDCtrlDep::CreateCtrlDep);
 
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
   if (Entry->use_empty())
     ExitSU->addDep(VDCtrlDep::CreateCtrlDep(Entry, 1));
+
+  // Sort the schedule units after all units are built.
+  CurState.prepareForCtrlSched();
 
   // If there is still schedule unit not connect to exit, connect it now, but
   // they are supposed to be connected in the previous stages, so hanging node
@@ -862,12 +939,12 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 
 void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   instr_it BI = State->begin();
-  while(!BI->getDesc().isTerminator()) {
-    State.addToLatInfo(BI);
-    buildSUnit(&*BI, State);
+  while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
+    MachineInstr *MI = BI;    
+    State.addToLatInfo(MI);
+    buildSUnit(MI, State);
     ++BI;
   }
-
   State.removeDeadSU();
 
   // Make sure every VSUnit have a dependence edge except EntryRoot.
@@ -875,9 +952,22 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   for (it I = State.begin() + 1, E = State.end(); I != E; ++I)
     if ((*I)->isControl()) addSchedDepForSU(*I, State);
 
+  // Merge the loop PHI moves into the PHI Node, after the intra iteration
+  // dependence edge added. If we merge the PHI moves into the PHI schedule
+  // units before we adding intra iteration edges, the dependences of the PHI
+  // moves are added to the PHI schedule unit as intra iteration dependences,
+  // which is incorrect, all dependences of a PHI should be inter iteration
+  // dependences.
+  for (instr_it I = BI; !I->isTerminator(); ++I) {
+    if (!State.isLoopPHIMove(I))
+      continue;
+
+    State.addToLatInfo(I);
+    buildSUnit(I, State);
+  }
+
   // Create the exit node, now BI points to the first terminator.
   buildExitRoot(State, BI);
-  State.prepareForCtrlSched();
 
   // Build loop edges if necessary.
   if (State.enablePipeLine())
@@ -922,31 +1012,23 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
   if (DI == MRI->def_end() || !MRI->use_empty(RegNum))
     return false;
 
+  // Skip the bundle instruction.
+  assert(llvm::next(MRI->def_begin(RegNum)) ==  MRI->def_end() &&"Not in SSA!");
+
   MachineInstr &DefMI = *DI;
+
   if (DefMI.isPHI()) {
     // The instruction is dead.
-    DefMI.removeFromParent();
+    DefMI.eraseFromParent();
     return true;
   }
 
-  assert(++MRI->def_begin(RegNum) == MRI->def_end() && "Not in SSA From!");
-  // Do not remove the operand, just change it to implicit define.
-  ucOp Op = ucOp::getParent(DI);
-  RegNum = TargetRegisterInfo::virtReg2Index(RegNum);
-
   // Preserve the read fu information, and keep reading the source fu register
-  if (Op->getOpcode() == VTM::VOpReadFU) {
-    MachineOperand &MO = DI.getOperand();
-    MO.ChangeToImmediate(RegNum);
-    MO.setTargetFlags(64);
-  } else {
-    Op.changeOpcode(VTM::IMPLICIT_DEF, Op->getPredSlot());
-    for (ucOp::op_iterator OI = Op.op_begin(), OE = Op.op_end();OI != OE;++OI){
-      // Change the operand to some rubbish value.
-      MachineOperand &MO = *OI;
-      MO.ChangeToRegister(0, false);
-      MO.setTargetFlags(64);
-    }
+  if (DefMI.getOpcode() == VTM::VOpReadFU)    
+    DI.getOperand().ChangeToRegister(0, false);
+  else {
+    assert(0 && "Unexpected dead define!");
+    DefMI.eraseFromParent();
   }
 
   return true;

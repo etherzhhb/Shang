@@ -148,6 +148,13 @@ let hasCtrlDep = 1 in {
   }
 }
 
+// Terminator instuctions inside bundle, the isTerminator flag is 0.
+def VOpToState_nt : CtrlInst<(outs), (ins DR:$cnd, State:$target),
+                             "to $target;",
+                             [], 0 /*Latency*/, 0 /*writeUntilFinish*/>;
+def VOpRet_nt : CtrlInst<(outs), (ins), "ret;", [],
+						 0 /*Latency*/, 0 /*writeUntilFinish*/>;
+
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
@@ -163,16 +170,18 @@ let isReMaterializable = 1,
 
   defm VOpMove  : MoveInst;
 
-  def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins PHIR:$src),
+  def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins DR:$src),
                            "$dst <= $src", [],
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
   // Special instruction for copy source register to phi incomming register,
   // we may need to forward the source register.
-  def VOpMvPhi : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
+  def VOpMvPhi : CtrlInst<(outs DR:$dst),
+                          (ins DR:$src, State:$target),
                            "$dst <= $src", [],
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
   // Move the pipeline, this is unconditional.
-  def VOpMvPipe : CtrlInst<(outs PHIR:$dst), (ins DR:$src),
+  def VOpMvPipe : CtrlInst<(outs DR:$dst),
+                           (ins DR:$src, State:$target),
                             "$dst <= $src", [],
                             0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
@@ -200,8 +209,8 @@ let isReMaterializable = 1,
                           "$dst = case;", [],
                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
-  def VOpReadFU: CtrlInst<(outs DR:$dst), (ins DR:$src),
-                          "$dst = read fu $src", [],
+  def VOpReadFU: CtrlInst<(outs DR:$dst), (ins DR:$src, i8imm:$fuid),
+                          "$dst = read fu $src $fuid", [],
                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
   // Reduction operation.
@@ -307,16 +316,19 @@ let hasCtrlDep = 1 in
                           [], FUMemBus, 0 /*writeUntilFinish*/>;
 }
 
-def ImpUse : InstVTM<(outs), (ins), "imp-use", [], FUTrivial>;
+def ImpUse : InstVTM<(outs), (ins variable_ops), "imp-use", [], FUTrivial>;
 
 //===----------------------------------------------------------------------===//
 
 let isBarrier    = 1 in {
   // These instruction use the bitwidth operand as slot operand.
-  def Control  : CtrlInst<(outs variable_ops), (ins variable_ops),
-                         "control;", []>;
-  def Datapath : DPTvaInst<(outs variable_ops), (ins variable_ops),
-                           "datapath;", []>;
+  def CtrlStart  : CtrlInst<(outs), (ins i8imm:$slot),
+                            "ctrl start;", []>;
+  def CtrlEnd  : CtrlInst<(outs), (ins i8imm:$slot, variable_ops),
+                            "control;", []>;
+
+  def Datapath  : CtrlInst<(outs), (ins i8imm:$slot),
+                           "control;", []>;
   let  isTerminator = 1 in
-  def EndState : DPTvaInst<(outs),(ins), "End state;", []>;
+    def EndState : DPTvaInst<(outs),(ins), "End state;", []>;
 }

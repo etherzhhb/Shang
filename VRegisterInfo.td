@@ -32,14 +32,11 @@ def UCMPR : VTMReg<"ucmp">;
 def SCMPR : VTMReg<"scmp">;
 def MUXR : VTMReg<"mux">;
 
-def PhiR : VTMReg<"phi">;
 def R : VTMReg<"r">;
 def W : VTMReg<"w">;
 
 def DR    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add R)>;
 def Wire  : RegisterClass<"VTM", [i64], 64, (add W)>;
-// Symbol for phi join.
-def PHIR    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add PhiR)>;
 
 // Result register classes of function units.
 def RADD    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add AR)>;

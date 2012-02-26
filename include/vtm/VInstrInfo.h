@@ -72,7 +72,8 @@ public:
 
   // Advance version of AnalyzeBranch.
   typedef std::map<MachineBasicBlock*, MachineOperand> JT;
-  static bool extractJumpTable(MachineBasicBlock &BB, JT &Table);
+  static bool extractJumpTable(MachineBasicBlock &BB, JT &Table,
+                               bool BrOnly = true);
   static void insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl);
 
   static void MergeBranches(MachineBasicBlock *PredFBB,
@@ -110,22 +111,6 @@ public:
 
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
-
-  virtual unsigned createPHIIncomingReg(unsigned DestReg,
-                                           MachineRegisterInfo *MRI) const;
-  virtual MachineInstr *insertPHIImpDef(MachineBasicBlock &MBB,
-    MachineBasicBlock::iterator InsertPos,
-    MachineInstr *PN) const;
-  virtual MachineInstr *insertPHIIcomingCopy(MachineBasicBlock &MBB,
-    MachineBasicBlock::iterator InsertPos,
-    MachineInstr *PN,
-    unsigned IncomingReg) const;
-
-  virtual MachineInstr *insertPHICopySrc(MachineBasicBlock &MBB,
-    MachineBasicBlock::iterator InsertPos,
-    MachineInstr *PN, unsigned IncomingReg,
-    unsigned SrcReg,
-    unsigned SrcSubReg) const;
 
   /// @brief Merge the source of the PHINodes in Succ after FromBB is predicated
   ///        and merged to ToBB.

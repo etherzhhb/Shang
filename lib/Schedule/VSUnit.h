@@ -62,7 +62,7 @@ private:
   // Iterate distance.
   const unsigned short ItDst;
   // The latancy of this edge.
-  const unsigned short Latancy;
+  unsigned short Latancy;
 
   VDEdge(const VDEdge &);            // DO NOT IMPLEMENT
   void operator=(const VDEdge &);    // DO NOT IMPLEMENT
@@ -76,6 +76,8 @@ public:
   //VSUnit* operator*() const { return getSrc(); }
   unsigned getEdgeType() const { return Src.getInt(); }
   unsigned getLatency() const { return Latancy; }
+  void setLatency(unsigned latency) { Latancy = latency; }
+
   unsigned getItDst() const { return ItDst; }
   bool isLoopCarried() const { return getItDst() > 0; }
 
@@ -513,7 +515,7 @@ public:
   }
 
   // Verify the schedule graph, should be call after the graph is built.
-  void verify();
+  void verify() const;
 
   // Forward the method in DetailLatencyInfo
   void addToLatInfo(const MachineInstr *MI) {
@@ -578,6 +580,8 @@ public:
 
     return false;
   }
+
+  bool isLoopPHIMove(MachineInstr *MI);
 
   MachineBasicBlock *getMachineBasicBlock() const { return MBB; }
   MachineBasicBlock *operator->() const { return getMachineBasicBlock(); }
