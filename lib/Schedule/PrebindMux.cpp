@@ -54,7 +54,8 @@ struct PrebindMux : public MachineFunctionPass {
   RegSet MuxRegs;
   MuxSizeMapTy MuxSizeInfo;
   unsigned MuxCounter;
-  PrebindMux() : MachineFunctionPass(ID), MaxMuxSize(0), MuxCounter(0) {}
+  PrebindMux()
+    : MachineFunctionPass(ID), MaxMuxSize(0), MuxCounter(FIRST_MUXC_NUM) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
