@@ -32,6 +32,8 @@ set(SHIFT_ChainingThreshold "-1" CACHE STRING "The chaining threshold of shift f
 set(ICMP_ChainingThreshold "-1" CACHE STRING "The chaining threshold of icmp function unit (Set to -1 to chains all)")
 set(EXTRA_HLS_OPTION "" CACHE STRING "Extra high level synthesis options should be passed to sync")
 set(TIMEOUT "240" CACHE STRING "Maximum time allow the simulation to run")
+set(MaxAllowedMuxSize "16" CACHE STRING "Maximum allowed mux size without pipeline register")
+set(ENABLE_PHYSICAL_SYNTHESIS "OFF" CACHE BOOL "Enable quartus physical synthesis")
 
 set(ENV{PATH} ${VERILATOR_ROOT_DIR})
 
