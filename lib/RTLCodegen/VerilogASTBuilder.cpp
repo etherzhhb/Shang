@@ -1049,27 +1049,21 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 
       if (i != 4) OS << ",\",\", ";
 
-      if (Operand.isGlobal()) // It is the format string?
-        if (const GlobalVariable *Str = cast<GlobalVariable>(Operand.getGlobal())){
-          if (Str->hasInitializer()) {
-            const Constant *Initialer = Str->getInitializer();
-            if (const ConstantArray *Fmt = dyn_cast<ConstantArray>(Initialer)){
-              StringRef FmtStr;
-              if (getConstantStringInfo(Fmt, FmtStr)) {
-                std::string FmtStr;
-                raw_string_ostream SS(FmtStr);
-                SS << '"';
-                PrintEscapedString(FmtStr, SS);
-                SS << '"';
-                SS.flush();
-                OS << '"';
-                PrintEscapedString(FmtStr, OS);
-                OS << '"';
-                continue;
-              }
-            }
-          }
-        }
+      // It is the format string?
+      StringRef FmtStr;
+      if (Operand.isGlobal()
+          && getConstantStringInfo(Operand.getGlobal(), FmtStr)) {
+        std::string FmtStr;
+        raw_string_ostream SS(FmtStr);
+        SS << '"';
+        PrintEscapedString(FmtStr, SS);
+        SS << '"';
+        SS.flush();
+        OS << '"';
+        PrintEscapedString(FmtStr, OS);
+        OS << '"';
+        continue;
+      }
       printOperand(Operand, OS);
     }
 
