@@ -503,11 +503,12 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
       MachineInstr *Inst = A->getInstrAt(i);
       // Ignore the entry node marker (null) and implicit define.
-      if (Inst && !Inst->isImplicitDef())
+      if (Inst && !Inst->isImplicitDef()) {
         if (Inst->isPHI())
           emitPHIDef(Inst);
         else
           Insts.push_back(std::make_pair(Inst, i ? A->getLatencyAt(i) : 0));
+      }
     }
 
     // Sort the instructions, so we can emit them in order.
