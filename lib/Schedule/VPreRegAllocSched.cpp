@@ -764,6 +764,14 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
+  case VTM::PHI:
+    // Merge the the PHI into entry root if the BB is not pipelined.
+    if (!CurState.enablePipeLine()) {
+      CurState.mapMI2SU(MI, CurState.getEntryRoot(),
+                        VInstrInfo::getStepsFromEntry(MI));
+      return;
+    }
+    break;
   case VTM::VOpReadReturn:
     if (mergeUnaryOp(MI, 1, CurState))
       return;
