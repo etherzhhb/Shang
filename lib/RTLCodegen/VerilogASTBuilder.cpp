@@ -1053,14 +1053,14 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
       StringRef FmtStr;
       if (Operand.isGlobal()
           && getConstantStringInfo(Operand.getGlobal(), FmtStr)) {
-        std::string FmtStr;
-        raw_string_ostream SS(FmtStr);
+        std::string s;
+        raw_string_ostream SS(s);
         SS << '"';
         PrintEscapedString(FmtStr, SS);
         SS << '"';
         SS.flush();
         OS << '"';
-        PrintEscapedString(FmtStr, OS);
+        PrintEscapedString(s, OS);
         OS << '"';
         continue;
       }
