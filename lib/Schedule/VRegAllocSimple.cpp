@@ -1060,9 +1060,9 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   while (SomethingBind) {
     DEBUG(dbgs() << "Going to reduce CompGraphs\n");
     SomethingBind = false;
-    //SomethingBind |= reduceCompGraph(RCG, RegWeight);
-    //SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
-    //SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
+    SomethingBind |= reduceCompGraph(RCG, RegWeight);
+    SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
+    SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
     SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
     SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
     SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
