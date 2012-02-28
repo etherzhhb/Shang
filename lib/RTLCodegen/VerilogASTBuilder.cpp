@@ -1359,8 +1359,10 @@ void VerilogASTBuilder::getPredValAtNextSlot(MachineInstr *MI, VASTUse &Pred) {
   for (it I = MRI->use_begin(PredCnd.getReg()); I != MRI->use_end();++I) {
     MachineInstr *UseMI = &*I;
     // We are find the copy operation that copy the current predicate value
-    // to a register.
-    if (UseMI->getOpcode() != VTM::VOpReadFU)
+    // to a register, and the ReadFU instruction is copying the predicate
+    // value only if the value is the second operand (source operand).
+    // FIXME: VOpMove_rr is also a copy.
+    if (UseMI->getOpcode() != VTM::VOpReadFU || I.getOperandNo() != 1)
       continue;
 
     // Skip the MI predicate by current predicate operand.
@@ -1370,6 +1372,7 @@ void VerilogASTBuilder::getPredValAtNextSlot(MachineInstr *MI, VASTUse &Pred) {
     if (getInstrSlot(MI) != getInstrSlot(UseMI))
       continue;
 
+    assert(UseMI->getOperand(0).getReg() && "UseMI not copying PredCnd!");
     Pred = createCnd(UseMI->getOperand(0));
     // Invert flag is not copied.
     if (PredCnd.isPredicateInverted())
