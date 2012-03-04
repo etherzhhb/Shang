@@ -172,7 +172,7 @@ void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {
 }
 
 bool FixMachineCode::canbeFold(MachineInstr *MI) const {
-  if (MI->getOpcode() == VTM::VOpMove_ri)
+  if (MI->getOpcode() == VTM::VOpMove && MI->getOperand(1).isImm())
     return true;
 
   if (MI->getOpcode() == VTM::VOpAdd || MI->getOpcode() == VTM::VOpAdd_c) {
@@ -265,8 +265,9 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
     InstrToFold.pop_back();
 
     switch (MI->getOpcode()) {
-    case VTM::VOpMove_ri:
-      FoldImmediate(MI, InstrToFold);
+    case VTM::VOpMove:
+      if (MI->getOperand(1).isImm())
+        FoldImmediate(MI, InstrToFold);
       break;
     case VTM::VOpAdd:
     case VTM::VOpAdd_c:

@@ -87,11 +87,7 @@ bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
 }
 
 void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
-  if (CopyMI->getOperand(1).isReg())
-    CopyMI->setDesc(getDesc(VTM::VOpMove_rr));
-  else
-    CopyMI->setDesc(getDesc(VTM::VOpMove_ri));
-  
+  CopyMI->setDesc(getDesc(VTM::VOpMove));
   CopyMI->addOperand(ucOperand::CreatePredicate());
   CopyMI->addOperand(ucOperand::CreateTrace(CopyMI->getParent()));
 }
@@ -625,7 +621,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   MachineOperand ResDef(Res);
   ResDef.setIsDef();
 
-  return *BuildMI(MBB, IP, DebugLoc(), getDesc(VTM::VOpMove_rr))
+  return *BuildMI(MBB, IP, DebugLoc(), getDesc(VTM::VOpMove))
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 
@@ -716,9 +712,7 @@ bool VInstrInfo::isPrebound(unsigned Opcode) {
 bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
          || Opcode == VTM::PHI
-         || Opcode == VTM::VOpMove_ri
-         || Opcode == VTM::VOpMove_rr
-         || Opcode == VTM::VOpMove_rw
+         || Opcode == VTM::VOpMove
          || Opcode == VTM::VOpSel
          || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpDstMux

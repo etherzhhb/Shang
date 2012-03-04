@@ -758,9 +758,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   bool isCmdSeq = false;
   switch (MI->getOpcode()) {
   default: break;
-  case VTM::VOpMove_ri:
-  case VTM::VOpMove_rw:
-  case VTM::VOpMove_rr:
+  case VTM::VOpMove:
     if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
