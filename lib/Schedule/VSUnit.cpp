@@ -37,7 +37,15 @@ static cl::opt<bool>
 ScheduleDataPathALAP("vtm-schedule-datapath-alap",
                      cl::desc("Schedule datapath operaton As Last As Possible "
                               "to allow more effecient resource sharing"),
-                     cl::init(true));
+                     cl::init(true)),
+// FIXME: When multi-cycles chain is disabled, also set the chaining threshold
+// of all functional units to 0 to avoid chaining.
+DisableMultiCyclesChain("vtm-disable-multi-cycles-chain",
+                        cl::desc("Disable multi-cycles chaining "
+                                 "(manually setting all chaining threshold to "
+                                 "0 is need)"),
+                        cl::init(false));
+
 //===----------------------------------------------------------------------===//
 void VSchedGraph::print(raw_ostream &OS) const {
   MBB->dump();
@@ -309,7 +317,8 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
   assert(DepLatInfo && "dependence latency information not available?");
 
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator dep_it;
-  bool NeedCopyToReg = false;
+  // If multi-cycle chain is disable, a copy is always need.
+  bool NeedCopyToReg = DisableMultiCyclesChain;
 
   for (dep_it I = DepLatInfo->begin(), E = DepLatInfo->end(); I != E; ++I) {
     const MachineInstr *SrcMI = I->first;
