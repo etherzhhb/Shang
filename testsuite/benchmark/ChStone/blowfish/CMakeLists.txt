@@ -11,5 +11,5 @@ foreach(test_source ${test_sources})
 				 )
 endforeach()
 
-add_benchmark_stats("BF_set_key")
+add_benchmark_stats("blowfish_main")
 
