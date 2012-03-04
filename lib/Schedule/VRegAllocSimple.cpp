@@ -49,18 +49,15 @@
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
-#define DEBUG_TYPE "vtm-regalloc"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/CommandLine.h"
+#define DEBUG_TYPE "vtm-regalloc"
+#include "llvm/Support/Debug.h"
 
+STATISTIC(LIMerged,
+          "Number of live intervals merged in resource binding pass");
 using namespace llvm;
-
-static RegisterRegAlloc VSimpleRegalloc("vsimple",
-                                        "vtm-simple register allocator",
-                                        createSimpleRegisterAllocator);
 
 namespace {
 struct VRASimple : public MachineFunctionPass {
@@ -1219,6 +1216,7 @@ void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
 
   JoinIntervals(*ToLI, *FromLI, TRI, MRI, LIS);
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
+  ++LIMerged;
   // Merge the identical datapath ops.
   mergeIdenticalDatapath(ToLI);
 }
