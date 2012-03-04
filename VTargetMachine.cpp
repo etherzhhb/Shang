@@ -32,7 +32,6 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetRegistry.h"
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"

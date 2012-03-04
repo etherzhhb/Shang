@@ -649,6 +649,8 @@ public:
   // Schedule datapath operations as late as possible after control operations
   // scheduled, this can reduce register usage.
   void scheduleDatapath();
+  void scheduleDatapathALAP();
+  void scheduleDatapathASAP();
   void emitSchedule();
   //}
 

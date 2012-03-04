@@ -27,12 +27,17 @@
 
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-sunit"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
 
-
+static cl::opt<bool>
+ScheduleDataPathALAP("vtm-schedule-datapath-alap",
+                     cl::desc("Schedule datapath operaton As Last As Possible "
+                              "to allow more effecient resource sharing"),
+                     cl::init(true));
 //===----------------------------------------------------------------------===//
 void VSchedGraph::print(raw_ostream &OS) const {
   MBB->dump();
@@ -341,7 +346,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
   }
 }
 
-void VSchedGraph::scheduleDatapath() {
+void VSchedGraph::scheduleDatapathALAP() {
   unsigned EndSlot = getEndSlot(), II = getII();
 
   typedef SUnitVecTy::reverse_iterator rev_it;
@@ -366,13 +371,42 @@ void VSchedGraph::scheduleDatapath() {
       Step = std::min(CurStep, Step);
     }
 
-    assert(Step < EndSlot && "Datapath SU do not have using SUs?");
+    assert(Step < EndSlot && Step >= getStartSlot()
+           && "Bad schedule for datapath SU!");
 
     // Schedule As late as possible to reduce register usage.
     A->scheduledTo(Step);
 
     fixChainedDatapathRC(A);
   }
+}
+
+void VSchedGraph::scheduleDatapathASAP() {
+  unsigned StartSlot = getStartSlot(), II = getII();
+  for (iterator I = AllSUs.begin(), E = AllSUs.end(); I != E; ++I) {
+    VSUnit *A = *I;
+    if (A->isScheduled()) continue;
+
+    unsigned Step = StartSlot;
+    for (VSUnit::dep_iterator DI = A->dep_begin(), DE = A->dep_end();
+         DI != DE; ++DI) {
+      VSUnit *DepSU = *DI;
+      assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
+      Step = std::max(Step, DepSU->getSlot() - II * DI.getEdge()->getItDst());
+    }
+
+    assert(Step < getEndSlot() && Step >= getStartSlot()
+           && "Bad schedule for datapath SU!");
+    // Schedule As soon as possible.
+    A->scheduledTo(Step);
+
+    fixChainedDatapathRC(A);
+  }
+}
+
+void VSchedGraph::scheduleDatapath() {
+  if (ScheduleDataPathALAP) scheduleDatapathALAP();
+  else                      scheduleDatapathASAP();
 }
 
 //===----------------------------------------------------------------------===//
