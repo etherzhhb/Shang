@@ -899,8 +899,10 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
       return ceil(latency) + DeltaLatency;
   }
 
-  // Chain the operations if dst not read value at the edge of the clock.
-  return std::max(latency - DeltaLatency, 0.0);
+  // Chain the operations if dst not read value at the edge of the clock. When
+  // the DstMI is DstReadAtEmit, we add a delta to the latency in case that
+  // SrcMI is a wire and the SrcMI wire may read from regs.
+  return std::max(latency - DeltaLatency, DstReadAtEmit ? DeltaLatency : 0.0);
 }
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
