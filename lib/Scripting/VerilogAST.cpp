@@ -228,10 +228,8 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
 }
 
 void VASTSlot::addNextSlot(VASTSlot *NextSlot, VASTUse Cnd) {
-  SuccSlotVec.push_back(NextSlot);
   (NextSlot->PredSlots).push_back(this);
-  bool Inserted =
-    NextSlots.insert(std::make_pair(NextSlot->getSlotNum(), Cnd)).second;
+  bool Inserted = NextSlots.insert(std::make_pair(NextSlot, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
@@ -295,10 +293,10 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
   Mod.buildExpr(VASTWire::dpAnd, Ops, 1, cast<VASTWire>(getReady()));
 }
 
-bool VASTSlot::hasNextSlot(unsigned NextSlotNum) const {
-  if (NextSlots.empty()) return NextSlotNum == getSlotNum() + 1;
+bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
+  if (NextSlots.empty()) return NextSlot->getSlotNum() == getSlotNum() + 1;
 
-  return NextSlots.count(NextSlotNum);
+  return NextSlots.count(NextSlot);
 }
 
 void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
@@ -321,7 +319,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       if (slot == getSlotNum()) continue;
 
       const VASTSlot *AliasSlot = Mod.getSlot(slot);
-      if (AliasSlot->hasNextSlot(getSlotNum())) {
+      if (AliasSlot->hasNextSlot(this)) {
         assert(PredAliasSlots.isInvalid()
                && "More than one PredAliasSlots found!");
         PredAliasSlots = AliasSlot->getActive();
@@ -351,10 +349,10 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
 
   if (hasExplicitNextSlots()) {
     CtrlS << "// Enable the successor slots.\n";
-    for (VASTSlot::const_succ_iterator I = succ_begin(),E = succ_end();
+    for (VASTSlot::const_succ_cnd_iterator I = succ_cnd_begin(),E = succ_cnd_end();
          I != E; ++I) {
-      hasSelfLoop |= I->first == getSlotNum();
-      VASTRegister *NextSlotReg = Mod.getSlot(I->first)->getRegister();
+      hasSelfLoop |= I->first->getSlotNum() == getSlotNum();
+      VASTRegister *NextSlotReg = I->first->getRegister();
       Mod.addAssignment(NextSlotReg, I->second, this, EmptySlotEnCnd);
     }
   } else {

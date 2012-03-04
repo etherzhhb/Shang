@@ -26,6 +26,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Allocator.h"
 
 #include <map>
@@ -510,17 +511,24 @@ struct VASTWireBuilder {
 class VASTSlot : public VASTNode {
 public:
   // TODO: Store the pointer to the Slot instead the slot number.
-  typedef std::map<unsigned, VASTUse> SuccVecTy;
-  typedef SuccVecTy::const_iterator const_succ_iterator;
+  typedef std::map<VASTSlot*, VASTUse> SuccVecTy;
+  typedef SuccVecTy::iterator succ_cnd_iterator;
+  typedef SuccVecTy::const_iterator const_succ_cnd_iterator;
+
+  // Use mapped_iterator which is a simple iterator adapter that causes a
+  // function to be dereferenced whenever operator* is invoked on the iterator.
+  typedef
+    std::pointer_to_unary_function<std::pair<VASTSlot*, VASTUse>, VASTSlot*>
+    pair_first;
+  typedef mapped_iterator<succ_cnd_iterator, pair_first> succ_iterator;
+  typedef mapped_iterator<const_succ_cnd_iterator, pair_first>
+          const_succ_iterator;
 
   typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
   typedef SmallVector<VASTSlot*, 4> PredVecTy;
   typedef PredVecTy::iterator pred_it;
-
-  typedef SmallVector<VASTSlot*, 4> SuccSlotVecTy;
-  typedef SuccSlotVecTy::iterator succ_slot_it;
 private:
   // The relative signal of the slot: Slot register, Slot active and Slot ready.
   VASTRegister *SlotReg;
@@ -533,8 +541,6 @@ private:
   // The function units that need to disable when condition is not satisfy.
   FUCtrlVecTy Disables;
 
-  SuccSlotVecTy SuccSlotVec;
-
   PredVecTy PredSlots;
 
   SuccVecTy NextSlots;
@@ -542,6 +548,20 @@ private:
   unsigned StartSlot, EndSlot, II;
   // The start slot of parent state, can identify parent state.
   unsigned ParentIdx;
+
+  // Define the success vector type dereference function, this function pointer
+  // will be passed to the succ_iterator map_iterator.
+  inline static
+    VASTSlot *get_pair_first(std::pair<VASTSlot*, VASTUse> P) {
+    return P.first;
+  }
+
+  // Successor slots of this slot.
+  succ_cnd_iterator succ_cnd_begin() { return NextSlots.begin(); }
+  succ_cnd_iterator succ_cnd_end() { return NextSlots.end(); }
+  
+  const_succ_cnd_iterator succ_cnd_begin() const { return NextSlots.begin(); }
+  const_succ_cnd_iterator succ_cnd_end() const { return NextSlots.end(); }
 
 public:
   VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM);
@@ -574,17 +594,27 @@ public:
 
   // TODO: Rename to addSuccSlot.
   void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd = VASTUse(true, 1));
-  bool hasNextSlot(unsigned NextSlotNum) const;
+  bool hasNextSlot(VASTSlot *NextSlot) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
   bool hasExplicitNextSlots() const { return !NextSlots.empty(); }
 
-  // Successor slots of this slot.
-  const_succ_iterator succ_begin() const { return NextSlots.begin(); }
-  const_succ_iterator succ_end() const { return NextSlots.end(); }
+  // Next VASTSlot iterator. 
+  succ_iterator succ_begin() {
+    return map_iterator(NextSlots.begin(), pair_first(get_pair_first));
+  }
 
-  succ_slot_it succ_slot_begin() { return SuccSlotVec.begin(); }
-  succ_slot_it succ_slot_end() { return SuccSlotVec.end(); }
+  const_succ_iterator succ_begin() const {
+    return map_iterator(NextSlots.begin(), pair_first(get_pair_first));
+  }
+
+  succ_iterator succ_end() {
+    return map_iterator(NextSlots.end(), pair_first(get_pair_first));
+  }
+
+  const_succ_iterator succ_end() const {
+    return map_iterator(NextSlots.end(), pair_first(get_pair_first));
+  }
 
   // Predecessor slots of this slot.
   pred_it pred_begin() { return PredSlots.begin(); }
@@ -625,13 +655,13 @@ public:
 
 template<> struct GraphTraits<VASTSlot*> {
   typedef VASTSlot NodeType;
-  typedef NodeType::succ_slot_it ChildIteratorType;
+  typedef NodeType::succ_iterator ChildIteratorType;
   static NodeType *getEntryNode(NodeType* N) { return N; }
   static inline ChildIteratorType child_begin(NodeType *N) {
-    return N->succ_slot_begin();
+    return N->succ_begin();
   }
   static inline ChildIteratorType child_end(NodeType *N) {
-    return N->succ_slot_end();
+    return N->succ_end();
   }
 };
 

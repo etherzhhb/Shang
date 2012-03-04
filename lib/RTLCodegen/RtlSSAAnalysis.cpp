@@ -283,7 +283,8 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
-  static std::string getEdgeSourceLabel(const NodeTy *Node, NodeTy::succ_slot_it I){
+  static std::string getEdgeSourceLabel(const NodeTy *Node,
+                                        NodeTy::succ_iterator I){
     std::string Str;
     raw_string_ostream ss(Str);
     ss << Node->getName();
