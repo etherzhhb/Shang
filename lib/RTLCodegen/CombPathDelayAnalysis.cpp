@@ -28,10 +28,15 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ErrorHandling.h"
-
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-comb-path-delay"
 #include "llvm/Support/Debug.h"
 using namespace llvm;
+
+static cl::opt<bool>
+DisableTimingScriptGeneration("vtm-disable-timing-script",
+                              cl::desc("Disable timing script generation"),
+                              cl::init(false));
 
 namespace{
 class CombPathDelayAnalysis : public MachineFunctionPass {
@@ -146,27 +151,28 @@ static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path,
 }
 
 bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
+  // No need to write timing script at all.
+  if (DisableTimingScriptGeneration) return false;
+
   bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
   VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
   FindSP = &getAnalysis<CFGShortestPath>();
 
   //Initial all the path with infinite.
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
-    I != E; ++I){
-      VASTRegister *DefReg = *I;
-      for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
-        I != E; ++I){
-          VASTRegister *UseReg = *I;
-          RegPathDelay[std::make_pair(DefReg, UseReg)] = CFGShortestPath::Infinite;
-      }
+       I != E; ++I){
+    VASTRegister *DefReg = *I;
+    for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
+         I != E; ++I){
+      VASTRegister *UseReg = *I;
+      RegPathDelay[std::make_pair(DefReg, UseReg)] = CFGShortestPath::Infinite;
+    }
   }
 
   //Assign the path delay to path between two register.
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
-    I != E; ++I) {
-      VASTRegister *UseReg = *I;
-      computePathSlack(UseReg);
-  }
+       I != E; ++I)
+    computePathSlack(*I);
 
   typedef RegPathDelayTy::const_iterator RegPairIt;
   for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E; ++I){

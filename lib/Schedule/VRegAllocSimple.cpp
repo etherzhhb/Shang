@@ -51,13 +51,18 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #define DEBUG_TYPE "vtm-regalloc"
 #include "llvm/Support/Debug.h"
 
+using namespace llvm;
+
 STATISTIC(LIMerged,
           "Number of live intervals merged in resource binding pass");
-using namespace llvm;
+static cl::opt<bool> DisableFUSharing("vtm-disable-fu-sharing",
+                                      cl::desc("Disable function unit sharing"),
+                                      cl::init(false));
 
 namespace {
 struct VRASimple : public MachineFunctionPass {
@@ -1050,7 +1055,7 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, VFUs::ShiftCost);
   CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, VFUs::ShiftCost);
 
-  bool SomethingBind = true;
+  bool SomethingBind = !DisableFUSharing;
   // Reduce the Compatibility Graphs
   while (SomethingBind) {
     DEBUG(dbgs() << "Going to reduce CompGraphs\n");
