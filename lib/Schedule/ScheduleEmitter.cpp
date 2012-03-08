@@ -364,7 +364,7 @@ struct MicroStateBuilder {
       OpSlot CopySlot(Slot, true);
       unsigned DstReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
 
-      BuildMI(MBB, getStateCtrlAt(CopySlot), DebugLoc(), TII.get(VTM::VOpMove))
+      BuildMI(MBB, getStateCtrlAt(CopySlot), DebugLoc(), TII.get(VTM::VOpMove_rr))
         .addOperand(ucOperand::CreateReg(DstReg, SrcMO.getBitWidth(), true))
         .addOperand(getRegUseOperand(SrcMO, CopySlot))
         .addOperand(ucOperand::CreatePredicate())

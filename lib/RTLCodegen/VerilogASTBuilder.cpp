@@ -786,7 +786,9 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
     // Emit the operations.
     switch (MI->getOpcode()) {
     case VTM::VOpDstMux:
-    case VTM::VOpMove:
+    case VTM::VOpMove_ri:
+    case VTM::VOpMove_rw:
+    case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:
     case VTM::COPY:             emitOpCopy(MI, CurSlot, Cnds);break;
@@ -831,7 +833,9 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
 
     switch (I->getOpcode()) {
     case VTM::VOpDstMux:
-    case VTM::VOpMove:
+    case VTM::VOpMove_ri:
+    case VTM::VOpMove_rw:
+    case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
     case VTM::COPY:             emitOpCopy(MI, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;

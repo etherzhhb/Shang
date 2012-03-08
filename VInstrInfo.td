@@ -158,9 +158,17 @@ def VOpRet_nt : CtrlInst<(outs), (ins), "ret;", [],
 let isReMaterializable = 1,
     isAsCheapAsAMove   = 1,
     neverHasSideEffects = 1 in {
-
-  def VOpMove : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [],
+  multiclass MoveInst {
+  let isMoveImm = 1 in
+    def _ri : CtrlInst<(outs DR:$dst), (ins i64imm:$src), "$dst=$src", [],
                         0 /*Latency*/, 1 /*writeUntilFinish*/>;
+    def _rr : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [],
+                        0 /*Latency*/, 1 /*writeUntilFinish*/>;
+    def _rw : CtrlInst<(outs DR:$dst), (ins Wire:$src), "$dst=$src", [],
+                        0 /*Latency*/, 1 /*writeUntilFinish*/>;
+  }
+
+  defm VOpMove  : MoveInst;
 
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins DR:$src),
                            "$dst <= $src", [],

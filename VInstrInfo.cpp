@@ -87,7 +87,11 @@ bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
 }
 
 void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
-  CopyMI->setDesc(getDesc(VTM::VOpMove));
+  if (CopyMI->getOperand(1).isReg())
+    CopyMI->setDesc(getDesc(VTM::VOpMove_rr));
+  else
+    CopyMI->setDesc(getDesc(VTM::VOpMove_ri));
+
   CopyMI->addOperand(ucOperand::CreatePredicate());
   CopyMI->addOperand(ucOperand::CreateTrace(CopyMI->getParent()));
 }
@@ -621,7 +625,7 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   MachineOperand ResDef(Res);
   ResDef.setIsDef();
 
-  return *BuildMI(MBB, IP, DebugLoc(), getDesc(VTM::VOpMove))
+  return *BuildMI(MBB, IP, DebugLoc(), getDesc(VTM::VOpMove_rr))
             .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
 }
 
@@ -712,7 +716,9 @@ bool VInstrInfo::isPrebound(unsigned Opcode) {
 bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
          || Opcode == VTM::PHI
-         || Opcode == VTM::VOpMove
+         || Opcode == VTM::VOpMove_ri
+         || Opcode == VTM::VOpMove_rr
+         || Opcode == VTM::VOpMove_rw
          || Opcode == VTM::VOpSel
          || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpDstMux
@@ -899,12 +905,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
       return ceil(latency) + DeltaLatency;
   }
 
-  // Chain the operations if dst not read value at the edge of the clock. When
-  // the DstMI is DstReadAtEmit, we add a delta to the latency in case that
-  // SrcMI is a wire and the SrcMI wire may read from regs.
-  // Dirty hack: whether we can find a way to return a DeltaLatency directly?
-  if (DstOpC == VTM::VOpDstMux)
-    return std::max(latency - DeltaLatency, DstReadAtEmit? DeltaLatency : 0.0);
+  // Chain the operations if dst not read value at the edge of the clock.
   return std::max(latency - DeltaLatency, 0.0);
 }
 

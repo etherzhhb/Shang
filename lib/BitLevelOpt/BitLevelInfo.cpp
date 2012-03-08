@@ -212,7 +212,8 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   switch (Instr->getOpcode()) {
   // Copy instruction may inserted during register allocation, in this case
   // its operand will not come with any bit width information.
-  case VTM::VOpMove:
+  case VTM::VOpMove_rw:
+  case VTM::VOpMove_rr:
   case VTM::COPY: {
     MachineOperand &Result = Instr->getOperand(0),
                    &Operand = Instr->getOperand(1);
@@ -319,6 +320,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
     break;
   }
   // The bitwidth determinate by its first operand.
+  case VTM::VOpMove_ri:
   case VTM::VOpNot:
   case VTM::VOpSRA: case VTM::VOpSRA_c:
   case VTM::VOpSRL: case VTM::VOpSRL_c:

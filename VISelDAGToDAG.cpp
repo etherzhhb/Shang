@@ -224,7 +224,7 @@ SDNode *VDAGToDAGISel::SelectConstBitSlice(ConstantSDNode *CSD, SDNode *N) {
                     CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/
                   };
   computeOperandsBitWidth(C.getNode(), Ops, array_lengthof(Ops));
-  return CurDAG->SelectNodeTo(N, VTM::VOpMove, N->getValueType(0),
+  return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getValueType(0),
                               Ops, array_lengthof(Ops));
 }
 
@@ -274,10 +274,10 @@ SDNode *VDAGToDAGISel::SelectImmediate(SDNode *N, bool ForceMove) {
 
   // Do not create cycle.
   if (ForceMove)
-    return CurDAG->getMachineNode(VTM::VOpMove, dl, N->getVTList(),
+    return CurDAG->getMachineNode(VTM::VOpMove_ri, dl, N->getVTList(),
                                   Ops, array_lengthof(Ops));
   else
-    return CurDAG->SelectNodeTo(N, VTM::VOpMove, N->getVTList(),
+    return CurDAG->SelectNodeTo(N, VTM::VOpMove_ri, N->getVTList(),
                                 Ops, array_lengthof(Ops));
 }
 
@@ -322,7 +322,7 @@ SDNode *VDAGToDAGISel::SelectLoadArgument(SDNode *N) {
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpMove, N->getVTList(),
+  return CurDAG->SelectNodeTo(N, VTM::VOpMove_rw, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }
 
