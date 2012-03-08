@@ -401,7 +401,8 @@ void VSchedGraph::scheduleDatapathASAP() {
          DI != DE; ++DI) {
       VSUnit *DepSU = *DI;
       assert(DepSU->isScheduled() && "Datapath dependence not schedule!");
-      Step = std::max(Step, DepSU->getSlot() - II * DI.getEdge()->getItDst());
+      Step = std::max(Step, DepSU->getSlot() + DI.getEdge()->getLatency()
+                            - II * DI.getEdge()->getItDst());
     }
 
     assert(Step < getEndSlot() && Step >= getStartSlot()
