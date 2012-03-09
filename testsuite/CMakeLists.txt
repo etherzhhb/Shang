@@ -128,7 +128,7 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
   set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")	
 
-  set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${TEST} ${FAILLISTTMP})
+  set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${test_file} ${FAILLISTTMP})
   
   configure_file (
     ${config_file}
