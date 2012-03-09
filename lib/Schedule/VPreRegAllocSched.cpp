@@ -124,8 +124,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
                         bool isExit = false);
   typedef const DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
   template<typename CreateDepFuncTy>
-  void addSchedDepForMI(MachineInstr *MI, VSUnit *A, VSchedGraph &CurState,
-                        DepLatInfoTy &LatInfo, CreateDepFuncTy &CreateDepFunc);
+  void addSchedDepForMI(MachineInstr *MI, int MIOffset, VSUnit *A,
+                        VSchedGraph &CurState, DepLatInfoTy &LatInfo,
+                        CreateDepFuncTy &CreateDepFunc);
   // Add the dependence from the incoming value of PHI to PHI.
   void addIncomingDepForPHI(VSUnit *PN, VSchedGraph &CurState);
 
@@ -479,18 +480,21 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
 //===----------------------------------------------------------------------===//
 template<typename CreateDepFuncTy>
-void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, VSUnit *A,
-                                         VSchedGraph &CurState,
+void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
+                                         VSUnit *A, VSchedGraph &CurState,
                                          DepLatInfoTy &LatInfo,
                                          CreateDepFuncTy &CreateDepFunc) {
   assert(MI && "Unexpected entry root!");
+  // Dirt
+  MIOffset = std::min(MIOffset, 0);
+
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
     double DetailLatency = I->second;
-    int Latency = int(ceil(DetailLatency));
+    int Latency = int(ceil(DetailLatency)) - MIOffset;
 
     assert(SrcMI && "Unexpected null SrcMI!");
     // LatencyInfo use a special marker to mark the current MI have some latency
@@ -633,7 +637,8 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
     const DetialLatencyInfo::DepLatInfoTy *DepLat =
       CurState.getDepLatInfo(MI);
     assert(DepLat && "Operand latency information not available!");
-    addSchedDepForMI(MI, A, CurState, *DepLat, VDValDep::CreateValDep);
+    addSchedDepForMI(MI, I ? A->getLatencyAt(I) : 0, A, CurState, *DepLat,
+                     VDValDep::CreateValDep);
   }
 
   // If the atom depend on nothing and it must has some dependence edge,
@@ -899,7 +904,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
         const DetialLatencyInfo::DepLatInfoTy *DepLat =
           CurState.getDepLatInfo(MI);
         assert(DepLat && "Operand latency information not available!");
-        addSchedDepForMI(MI, ExitSU, CurState, *DepLat,
+        addSchedDepForMI(MI, 0/*Offset*/, ExitSU, CurState, *DepLat,
                          VDCtrlDep::CreateCtrlDep);
         // Add the dependence from PHISU to ExitSU, we will constraint the PHI
         // so it will schedule before the last stage of a pipeline BB.
@@ -927,8 +932,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   addSchedDepForSU(ExitSU, CurState, true);
 
   // Add the control dependence edge edges to wait all operation finish.
-  addSchedDepForMI(ExitSU->getRepresentativeInst(), ExitSU, CurState,
-                   ExitDepInfo, VDCtrlDep::CreateCtrlDep);
+  addSchedDepForMI(ExitSU->getRepresentativeInst(), 0/*Offset*/, ExitSU,
+                   CurState, ExitDepInfo, VDCtrlDep::CreateCtrlDep);
 
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.

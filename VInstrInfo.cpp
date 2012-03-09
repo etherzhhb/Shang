@@ -1079,12 +1079,11 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   unsigned SrcOpC = SrcMI->getOpcode();
   // The VOpDstMux should be merged to its user and its latency should be
   // accumulated into the chain latency.
-  if (SrcOpC != VTM::VOpDstMux)
-    if (VInstrInfo::isControl(SrcOpC)) {
-      // Simply add the latency from ctrl op to the latency map.
-      updateLatency(CurLatInfo, SrcMI, EdgeLatency);
-      return true;
-    }
+  if (VInstrInfo::isControl(SrcOpC)) {
+    // Simply add the latency from ctrl op to the latency map.
+    updateLatency(CurLatInfo, SrcMI, EdgeLatency);
+    return true;
+  }
 
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
@@ -1125,8 +1124,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // depends any control operation in the same BB
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
-  if (CurLatInfo.empty() && (VInstrInfo::isDatapath(MI->getOpcode())
-                             || (MI->getOpcode() == VTM::VOpDstMux)))
+  if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode()))
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      VInstrInfo::getDetialLatency(MI)));
 
