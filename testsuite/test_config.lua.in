@@ -50,7 +50,7 @@ IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
 CounterFile = [[@CycleCounter@]]
 
-Functions.@SYN_FUNC@ = { ModName = RTLModuleName, Scheduling = SynSettings.@SCHEDULE_TYPE@, Pipeline = SynSettings.@PIPELINE_TYPE@ }
+Functions.@SYN_FUNC@ = { ModName = RTLModuleName, Scheduling = SynSettings.@ScheduleType@, Pipeline = SynSettings.@PipelineType@ }
 
 --Return type with given size.
 function getType(Size)

@@ -1,8 +1,4 @@
 #Add the banchmark of simple algorithm
-  set(DP_ASAP 		TRUE)		# pipeline_type = DontPipeline, schedule_type = ASAP
-  set(ILPMS_ILP 	FALSE)		# pipeline_type = ILPMS, schedule_tpye = ILP
-  set(IMS_ASAP 		TRUE)		# pipeline_type = IMS, schedule_type = ASAP
-
 add_subdirectory(complex_multiply)
 add_subdirectory(complex_update)
 add_subdirectory(convolution)

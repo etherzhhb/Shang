@@ -34,6 +34,8 @@ set(EXTRA_HLS_OPTION "" CACHE STRING "Extra high level synthesis options should 
 set(TIMEOUT "240" CACHE STRING "Maximum time allow the simulation to run")
 set(MaxAllowedMuxSize "16" CACHE STRING "Maximum allowed mux size without pipeline register")
 set(ENABLE_PHYSICAL_SYNTHESIS "OFF" CACHE BOOL "Enable quartus physical synthesis")
+set(ScheduleType "ASAP" CACHE STRING "The algorithm to schedule linear code region")
+set(PipelineType "DontPipeline" CACHE STRING "The algorithm to schedule cyclic code region")
 
 set(ENV{PATH} ${VERILATOR_ROOT_DIR})
 
@@ -97,8 +99,8 @@ add_custom_target(test_verilogbackend
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Compiling all source to llvm test_verilogbackend")
             
-macro(add_general_test test_file config_file setup_prj_file postfix pipeline_type schedule_type)
-  set(TEST_NAME "${test_file}_${pipeline_type}_${schedule_type}")
+macro(add_general_test test_file config_file setup_prj_file postfix)
+  set(TEST_NAME "${test_file}_${PipelineType}_${ScheduleType}")
   set(TEST     "${TEST_NAME}")
   set(DUT_NAME "${TEST_NAME}_DUT")
   set(SYN_FUNC ${test_file})
@@ -127,9 +129,6 @@ macro(add_general_test test_file config_file setup_prj_file postfix pipeline_typ
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")	
 
   set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${TEST} ${FAILLISTTMP})
- 
-  set(PIPELINE_TYPE 	  "${pipeline_type}")
-  set(SCHEDULE_TYPE 	  "${schedule_type}")
   
   configure_file (
     ${config_file}
@@ -260,34 +259,11 @@ endif(SYNTHESIS_DUT AND TARGET benchmark_report)
   	
 endmacro(add_general_test)
 
-macro(add_test_cases file_name DP_ASAP ILPMS_ILP IMS_ASAP)
-  if (${DP_ASAP})
+macro(add_test_cases file_name)
 	add_general_test(${file_name}
 					 "${VTS_SOURCE_ROOT}/test_config.lua.in"
-                                         "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
-					 "cpp"
-				     "DontPipeline"		#pipeline_type
-					 "ASAP"				#schedule_type
-					 )
-  endif(${DP_ASAP})
-  if (${ILPMS_ILP})
-	add_general_test(${file_name}
-				     "${VTS_SOURCE_ROOT}/test_config.lua.in"
-                                     "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
-				     "cpp"
-				     "ILPMS"			#pipeline_type
-				     "ILP"				#schedule_type
-				     )
-  endif(${ILPMS_ILP})
-  if (${IMS_ASAP})
-	add_general_test(${file_name}
-				     "${VTS_SOURCE_ROOT}/test_config.lua.in"
-                                     "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
-				     "cpp"
-				     "IMS"				#pipeline_type
-				     "ASAP"				#schedule_type
-				     )
-  endif(${IMS_ASAP})
+           "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
+					 "cpp")
 endmacro(add_test_cases)
 
 enable_testing()
