@@ -28,9 +28,9 @@ add_subdirectory(motion)
 #message(STATUS "Chstore Benchmarks : " ${Benchmarks})
 
 add_custom_target(chstone_benchmark_report
-    COMMAND echo '[' > ${VTS_BINARY_ROOT}/benchmark.summary.json
-    COMMAND sed 1d ${VTS_BINARY_ROOT}/benchmark.summary.json.tmp >> ${VTS_BINARY_ROOT}/benchmark.summary.json
-    COMMAND echo ']' >> ${VTS_BINARY_ROOT}/benchmark.summary.json
+    COMMAND echo '[' > ${BenchmarkSummary}
+    COMMAND sed 1d ${${BenchmarkSummaryTmp}} >> ${BenchmarkSummary}
+    COMMAND echo ']' >> ${BenchmarkSummary}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "Report the area and FMax about the synthesized module of benchmarks with Quartus II")
 add_dependencies(chstone_benchmark_report benchmark_report)

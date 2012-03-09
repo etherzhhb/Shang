@@ -74,9 +74,13 @@ set(FAILLIST ${VTS_BINARY_ROOT}/faillist)
 set(FAILLISTTMP ${VTS_BINARY_ROOT}/faillist-tmp)
 set(FIXFAILLIST_SH ${VTS_SOURCE_ROOT}/FixFailList.sh)
 set(XFAILLIST ${VTS_SOURCE_ROOT}/ExpectFails)
+set(BenchmarkSummary ${VTS_BINARY_ROOT}/benchmark.summary.json)
+set(BenchmarkSummaryTmp ${BenchmarkSummary}.tmp)
+set(BenchmarkReport ${VTS_BINARY_ROOT}/benchmark.report.json)
+set(BenchmarkReportTmp ${BenchmarkReport}.tmp)
 
 SET_DIRECTORY_PROPERTIES(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES
-                        "${FAILLIST};${FAILLISTTMP};${VTS_BINARY_ROOT}/benchmark.summary.json.tmp;${VTS_BINARY_ROOT}/benchmark.report.json.tmp;${VTS_BINARY_ROOT}/benchmark.summary.json;${VTS_BINARY_ROOT}/benchmark.report.json")
+                        "${FAILLIST};${FAILLISTTMP};${BenchmarkSummaryTmp};${BenchmarkReport};${BenchmarkSummary};${BenchmarkReportTmp}")
 
 add_custom_target(hls
           #COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
