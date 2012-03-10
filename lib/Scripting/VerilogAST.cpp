@@ -671,11 +671,12 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
   switch (Opc) {
   case VASTWire::dpNot: {
      // Try to fold the not expression.
-    if (VASTValue *V = Op.getOrNull())
-      if (VASTWire *E = dyn_cast<VASTWire>(V))
-        if (E->getOpcode() == VASTWire::dpNot)
-          return buildExpr(VASTWire::dpAssign, E->getOperand(0),
-                           BitWidth, DstWire);
+    if (VASTWire *E = dyn_cast_or_null<VASTWire>(Op.getOrNull()))
+      if (E->getOpcode() == VASTWire::dpNot) {
+        // We should also propagate the bit slice information.
+        VASTUse U = E->getOperand(0).getBitSlice(Op.UB, Op.LB);
+        return buildExpr(VASTWire::dpAssign, U, BitWidth, DstWire);
+      }
     if (Op.isImm()) {
       unsigned Size = Op.getBitWidth();
       return buildExpr(VASTWire::dpAssign,
