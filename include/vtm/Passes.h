@@ -86,6 +86,7 @@ void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeStackToGlobalPass(PassRegistry &Registry);
 void initializeCFGShortestPathPass(PassRegistry &Registry);
 
+void initializeBBDelayAnalysisPass(PassRegistry &Registry);
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
 void initializeRtlSSAAnalysisPass(PassRegistry &Registry);
 
