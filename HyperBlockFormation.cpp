@@ -1,4 +1,4 @@
-//===- MergeFallThroughBlocks.cpp - Merge Fall Through Blocks ---*- C++ -*-===//
+//===- HyperBlockFormation.cpp - Merge Fall Through Blocks ---*- C++ -*-===//
 //
 //                            The Verilog Backend
 //
@@ -12,16 +12,19 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "BBDelayAnalysis.h"
+
 #include "vtm/Passes.h"
 #include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/MicroState.h"
 
 #include "llvm/../../lib/CodeGen/BranchFolding.h"
-
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
+#include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -36,23 +39,32 @@
 
 using namespace llvm;
 
-STATISTIC(NumFallThroughMerged,
-          "VTM - Number of Fall Through Blocks Merged");
+STATISTIC(BBMerged, "VTM - Number of blocks merged into hyperblock");
 
 namespace {
-struct MergeFallThroughBlocks : public MachineFunctionPass {
+struct HyperBlockFormation : public MachineFunctionPass {
   static char ID;
-  std::vector<unsigned> IncreasedLatencies;
 
   const TargetInstrInfo *TII;
   MachineRegisterInfo *MRI;
   MachineLoopInfo *LI;
+  MachineBranchProbabilityInfo *MBPI;
+  MachineBlockFrequencyInfo *MBFI;
+  BBDelayAnalysis *BBDelay;
 
-  MergeFallThroughBlocks() : MachineFunctionPass(ID), TII(0), MRI(0) {}
+  HyperBlockFormation()
+    : MachineFunctionPass(ID), TII(0), MRI(0), LI(0), MBPI(0), MBFI(0),
+      BBDelay(0) {
+    initializeHyperBlockFormationPass(*PassRegistry::getPassRegistry());
+  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<MachineLoopInfo>();
+    AU.addRequired<MachineBranchProbabilityInfo>();
+    AU.addRequired<MachineBlockFrequencyInfo>();
+    AU.addRequired<BBDelayAnalysis>();
+    //AU.addPreserved<BBDelayAnalysis>();
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -60,33 +72,128 @@ struct MergeFallThroughBlocks : public MachineFunctionPass {
                                  VInstrInfo::JT &SrcJT,
                                  VInstrInfo::JT &DstJT);
 
-  bool mergeFallThroughBlock(MachineBasicBlock *MBB);
+  bool mergeBlock(MachineBasicBlock *FromBB,
+                             MachineBasicBlock *ToBB);
+
+  bool mergeSuccBlocks(MachineBasicBlock *MBB);
 
   void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB);
 
   bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
                      const TargetInstrInfo *TII);
 };
+
+// Helper class for BB sorting.
+struct sort_bb_by_freq {
+  MachineBlockFrequencyInfo *MBFI;
+
+  explicit sort_bb_by_freq(MachineBlockFrequencyInfo *mbfi) : MBFI(mbfi) {}
+
+  inline bool operator() (const MachineBasicBlock *LHS,
+                          const MachineBasicBlock *RHS) const {
+    return MBFI->getBlockFreq(LHS) < MBFI->getBlockFreq(RHS);
+  }
+};
 }
 
-char MergeFallThroughBlocks::ID = 0;
+char HyperBlockFormation::ID = 0;
 
-bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
+INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
+                      "VTM - Hyper Block Formation", false, false)
+  INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
+  INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
+  INITIALIZE_PASS_DEPENDENCY(BBDelayAnalysis)
+INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
+                    "VTM - Hyper Block Formation", false, false)
+
+bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
+  // Collect the successor blocks to merge.
+  std::vector<MachineBasicBlock*> BBs;
+
+  VInstrInfo::JT CurJT, SuccJT;
+  BlockFrequency BBFreq = MBFI->getBlockFreq(MBB);
+
+  // Latency statistics.
+  CycleLatencyInfo CL;
+  unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergeLatnecy = 0;
+  uint64_t AvePathDelay = 0;
+  std::map<MachineBasicBlock*, int64_t> BBSavedCyles;
+
+  typedef MachineBasicBlock::succ_iterator succ_iterator;
+  for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
+    MachineBasicBlock *SuccBB = *I;
+    SuccJT.clear();
+    CurJT.clear();
+
+    uint64_t BrFreq =
+      (BBFreq * MBPI->getEdgeProbability(MBB, SuccBB)).getFrequency();
+
+    MachineBasicBlock *MergeDst = getMergeDst(SuccBB, SuccJT, CurJT);
+    if (!MergeDst) {
+      // SuccBB can not be merged, the path delay is simply the delay of current
+      // BB.
+      AvePathDelay += MBBDelay * BrFreq;
+      continue;
+    }
+
+    assert(MergeDst == MBB && "Succ have more than one Pred?");
+    unsigned MergeLatency = CL.computeLatency(*SuccBB);
+    MaxMergeLatnecy = std::max(MaxMergeLatnecy, MergeLatency);
+    // Compute the original path delay including current BB and success BB.
+    unsigned PathDelay = MBBDelay + BBDelay->getBBDelay(SuccBB);
+    AvePathDelay += PathDelay * BrFreq;
+    BBs.push_back(SuccBB);
+  }
+
+  if (BBs.empty()) return false;
+
+  // Only merge the SuccBB into current BB if the merge is beneficial.
+  // TODO: Remove the SuccBB with smallest beneficial and try again.
+  if (AvePathDelay < MaxMergeLatnecy * BBFreq.getFrequency())
+    return false;
+
+  while (!BBs.empty()) {
+    MachineBasicBlock *SuccMBB = BBs.back();
+    BBs.pop_back();
+
+    mergeBlock(SuccMBB, MBB);
+  }
+
+  // Update the delay.
+  BBDelay->updateDelay(MBB, CL.computeLatency(*MBB, true));
+  return true;
+}
+
+bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   LI = &getAnalysis<MachineLoopInfo>();
+  MBPI = &getAnalysis<MachineBranchProbabilityInfo>();
+  MBFI = &getAnalysis<MachineBlockFrequencyInfo>();
+  BBDelay = &getAnalysis<BBDelayAnalysis>();
+
   bool MakeChanged = false;
-  bool BlockMerged = false;
   typedef MachineFunction::reverse_iterator rev_it;
 
   MF.RenumberBlocks();
-  IncreasedLatencies.assign(MF.getNumBlockIDs(), 0);
 
-  do {
-    BlockMerged = false;
-    for (rev_it I = MF.rbegin(), E = MF.rend(); I != E; ++I)
-      MakeChanged |= BlockMerged |= mergeFallThroughBlock(&*I);
-  } while (BlockMerged);
+  // Sort the BBs according they frequency.
+  std::vector<MachineBasicBlock*> SortedBBs;
+
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
+    SortedBBs.push_back(I);
+
+  std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
+
+  while (!SortedBBs.empty()) {
+    bool BlockMerged = false;
+    MachineBasicBlock *MBB = SortedBBs.back();
+    SortedBBs.pop_back();
+
+    do {
+      MakeChanged |= BlockMerged = mergeSuccBlocks(MBB);
+    } while (BlockMerged);
+  }
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     if (I->succ_size() == 0 && !I->empty()
@@ -104,7 +211,7 @@ bool MergeFallThroughBlocks::runOnMachineFunction(MachineFunction &MF) {
   return MakeChanged;
 }
 
-bool MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
+bool HyperBlockFormation::mergeReturnBB(MachineFunction &MF,
                                            MachineBasicBlock &RetBB,
                                            const TargetInstrInfo *TII) {
   // Return port do not have any successor.
@@ -222,7 +329,7 @@ bool MergeFallThroughBlocks::mergeReturnBB(MachineFunction &MF,
   return true;
 }
 
-MachineBasicBlock *MergeFallThroughBlocks::getMergeDst(MachineBasicBlock *SrcBB,
+MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
                                                        VInstrInfo::JT &SrcJT,
                                                        VInstrInfo::JT &DstJT) {
   // Only handle simple case at the moment
@@ -239,36 +346,26 @@ MachineBasicBlock *MergeFallThroughBlocks::getMergeDst(MachineBasicBlock *SrcBB,
   // Do not mess up with self loop.
   if (SrcJT.count(SrcBB)) return 0;
 
-  // We need to predicate the block when merging it.
-  for (MachineBasicBlock::iterator I = SrcBB->begin(), E = SrcBB->end();I != E;++I){
-    MachineInstr *MI = I;
-    if (!TII->isPredicable(MI))
-      return 0;
+  VInstrInfo::JT::iterator at = DstJT.find(SrcBB);
+  assert(at != DstJT.end() && "SrcBB is not the successor of DstBB?");
+  if (VInstrInfo::isAlwaysTruePred(at->second)) {
+    typedef MachineBasicBlock::iterator it;
+    // We need to predicate the block when merging it.
+    for (it I = SrcBB->begin(), E = SrcBB->end();I != E;++I){
+      MachineInstr *MI = I;
+      if (!TII->isPredicable(MI))
+        return 0;
+    }
   }
 
   return DstBB;
 }
 
-bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
+bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
+                                        MachineBasicBlock *ToBB) {
   VInstrInfo::JT FromJT, ToJT;
-  MachineBasicBlock *ToBB = getMergeDst(FromBB, FromJT, ToJT);
-
-  if (!ToBB) return false;
-
-  unsigned IncreasedLatency = 0;
-  CycleLatencyInfo CL;
-  unsigned OriginalLatency = CL.computeLatency(*ToBB);
-  unsigned MergedLatency = CL.computeLatency(*FromBB);
-  if (MergedLatency > OriginalLatency)
-    IncreasedLatency = MergedLatency - OriginalLatency;
-  // Also take account of the latency increased by previous merge.
-  IncreasedLatency += IncreasedLatencies[ToBB->getNumber()];
-  double IncreaseRate = double(IncreasedLatency)/double(OriginalLatency);
-
-  if (IncreasedLatency > 4 || IncreaseRate > 0.1) return false;
-  DEBUG(dbgs() << "Merging BB#" << FromBB->getNumber() << " To BB#"
-         << ToBB->getNumber() << " IncreasedLatency " << IncreasedLatency
-         << ' ' << int(IncreaseRate * 100.0) << "%\n");
+  VInstrInfo::extractJumpTable(*FromBB, FromJT);
+  VInstrInfo::extractJumpTable(*ToBB, ToJT);
 
   TII->RemoveBranch(*ToBB);
   TII->RemoveBranch(*FromBB);
@@ -325,21 +422,11 @@ bool MergeFallThroughBlocks::mergeFallThroughBlock(MachineBasicBlock *FromBB) {
 
   // Re-insert the jump table.
   VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
-  ++NumFallThroughMerged;
-  CL.reset();
-  IncreasedLatency = CL.computeLatency(*ToBB) - OriginalLatency;
-
-  DEBUG(dbgs() << "........BB#" << FromBB->getNumber()
-         << " merged, IncreasedLatency " << IncreasedLatency
-         << ' ' << int(double(IncreasedLatency)/double(OriginalLatency) * 100.0)
-         << "%\n");
-  // Accumulate the increased latency
-  IncreasedLatencies[ToBB->getNumber()] += IncreasedLatency;
-  IncreasedLatencies[ToBB->getNumber()] += IncreasedLatencies[FromBB->getNumber()];
+  ++BBMerged;
   return true;
 }
 
-void MergeFallThroughBlocks::PredicateBlock(MachineOperand Pred,
+void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
                                             MachineBasicBlock *MBB ){
   typedef std::map<unsigned, unsigned> PredMapTy;
   PredMapTy PredMap;
@@ -385,6 +472,6 @@ void MergeFallThroughBlocks::PredicateBlock(MachineOperand Pred,
   }
 }
 
-Pass *llvm::createMergeFallThroughBlocksPass() {
-  return new MergeFallThroughBlocks();
+Pass *llvm::createHyperBlockFormationPass() {
+  return new HyperBlockFormation();
 }

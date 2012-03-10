@@ -96,7 +96,7 @@ struct VTMPassConfig : public TargetPassConfig {
 
     // Optimize the CFG.
     PM.add(createFixTerminatorsPass());
-    PM.add(createMergeFallThroughBlocksPass());
+    PM.add(createHyperBlockFormationPass());
     printAndVerify("After merge fall through pass.");
     // Make sure we have a branch instruction for every success block.
     PM.add(createFixTerminatorsPass());

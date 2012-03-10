@@ -61,7 +61,7 @@ add_llvm_target(VerilogBackend
   FixTerminators.cpp
   ForwardWireUsers.cpp
   BBDelayAnalysis.cpp
-  MergeFallThroughBlocks.cpp
+  HyperBlockFormation.cpp
   ScriptingPass.cpp
 )
 

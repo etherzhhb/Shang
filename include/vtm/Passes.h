@@ -48,7 +48,7 @@ Pass *createLogicSynthesisPass();
 Pass *createFixMachineCodePass(bool IsPreOpt);
 Pass *createFixTerminatorsPass();
 Pass *createForwardWireUsersPass();
-Pass *createMergeFallThroughBlocksPass();
+Pass *createHyperBlockFormationPass();
 Pass *createPrebindMuxPass();
 Pass *createVPreRegAllocSchedPass();
 
@@ -86,16 +86,16 @@ void initializeBitLevelInfoPass(PassRegistry &Registry);
 void initializeStackToGlobalPass(PassRegistry &Registry);
 void initializeCFGShortestPathPass(PassRegistry &Registry);
 
+void initializeHyperBlockFormationPass(PassRegistry &Registry);
 void initializeBBDelayAnalysisPass(PassRegistry &Registry);
+
 void initializeCombPathDelayAnalysisPass(PassRegistry &Registry);
 void initializeRtlSSAAnalysisPass(PassRegistry &Registry);
-
 void initializeVerilogASTBuilderPass(PassRegistry &Registry);
 void initializeVerilogASTWriterPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry); 
 void initializeRAPass(PassRegistry &Registry);
 void initializeAlwaysInlineFunctionPass(PassRegistry &Registry);
-void initializeHWPartitionInfoPass(PassRegistry &Registry);
 } // end namespace
 
 
