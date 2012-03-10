@@ -1138,7 +1138,9 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
     buildDepLatInfo(*I, ExitMI, Info, false);
 }
 
-unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB) {
+unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
+  if (Reset) reset();
+
   unsigned TotalLatency = 0;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
     MachineInstr *MI = I;

@@ -341,7 +341,7 @@ class CycleLatencyInfo {
 public:
   CycleLatencyInfo() {}
 
-  unsigned computeLatency(MachineBasicBlock &MBB);
+  unsigned computeLatency(MachineBasicBlock &MBB, bool reset = false);
 
   void reset() {
     DepInfo.clear();
