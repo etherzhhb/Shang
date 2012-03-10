@@ -169,7 +169,7 @@ close $DataJSON
 
 ################################################################################
 # Detail report
-set DataJSON [open "@VTS_BINARY_ROOT@/benchmark.report.json.tmp" a+]
+set DataJSON [open "@BenchmarkReportTmp@" a+]
 puts $DataJSON ",\n\{\"name\":\"@MAIN_RTL_ENTITY@\""
 
 # Detail report

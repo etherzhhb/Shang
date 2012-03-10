@@ -107,8 +107,9 @@ SC_MODULE(V$(RTLModuleName)_tb){
       ofstream outfile;
       outfile.open ("$(CounterFile)"); 
       outfile <<"$(RTLModuleName) hardware run cycles " << cnt << " wait cycles " << memcnt <<endl;
-      std::cerr << cnt << std::endl;
-      std::cerr << memcnt << std::endl;
+      outfile.close();
+      outfile.open ("$(BenchmarkCycles)", ios_base::app); 
+      outfile <<",\n{\"name\":\"$(RTLModuleName)\", \"total\":" << cnt << ", \"wait\":" << memcnt << '}' <<endl;
       outfile.close();
       sc_stop();
     }

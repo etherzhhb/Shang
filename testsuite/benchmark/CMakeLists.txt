@@ -1,5 +1,3 @@
-add_custom_target(benchmark_report COMMENT "Report the area and FMax about the synthesized module of benchmarks with Quartus II")
-
 macro(add_benchmark_stats name)
 set(TESTNAME ${name}_${PipelineType}_${ScheduleType})
 add_dependencies(benchmark_report ${TESTNAME}_synthesis)

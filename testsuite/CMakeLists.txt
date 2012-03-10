@@ -71,35 +71,36 @@ add_custom_target(test_output
           COMMENT "Compiling all source to llvm output")
 
 set(FAILLIST ${VTS_BINARY_ROOT}/faillist)
-set(FAILLISTTMP ${VTS_BINARY_ROOT}/faillist-tmp)
+set(FAILLIST ${VTS_BINARY_ROOT}/faillist-tmp)
 set(FIXFAILLIST_SH ${VTS_SOURCE_ROOT}/FixFailList.sh)
 set(XFAILLIST ${VTS_SOURCE_ROOT}/ExpectFails)
-set(BenchmarkSummary ${VTS_BINARY_ROOT}/benchmark.summary.json)
-set(BenchmarkSummaryTmp ${BenchmarkSummary}.tmp)
-set(BenchmarkReport ${VTS_BINARY_ROOT}/benchmark.report.json)
-set(BenchmarkReportTmp ${BenchmarkReport}.tmp)
+set(StatsCyclesPy ${VTS_SOURCE_ROOT}/StatsCycles.py)
+set(StatsSynthesis ${VTS_SOURCE_ROOT}/StatsSynthesis.py)
+
+set(BenchmarkSummaryTmp ${VTS_BINARY_ROOT}/benchmark.summary.json.tmp)
+set(BenchmarkReportTmp ${VTS_BINARY_ROOT}/benchmark.report.json.tmp)
+set(BenchmarkCyclesTmp ${VTS_BINARY_ROOT}/benchmark.cycles.json.tmp)
+set(BenchmarkCyclesXls ${VTS_BINARY_ROOT}/benchmark.cycles.xls)
+set(BenchmarkSummaryXls ${VTS_BINARY_ROOT}/benchmark.summary.xls)
 
 SET_DIRECTORY_PROPERTIES(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES
-                        "${FAILLIST};${FAILLISTTMP};${BenchmarkSummaryTmp};${BenchmarkReport};${BenchmarkSummary};${BenchmarkReportTmp}")
+                        "${FAILLIST};${BenchmarkSummaryTmp};${BenchmarkCyclesTmp};${BenchmarkCyclesXls};${BenchmarkReportTmp}")
 
 add_custom_target(hls
-          #COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
-          #COMMAND cat ${FAILLISTTMP} >> ${FAILLIST}
-          #COMMAND rm ${FAILLISTTMP}
-          #COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Synthesising RTL module and interface for all source")
 
 add_custom_target(benchmark_test
-          #COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
-          #COMMAND cat ${FAILLISTTMP} >> ${FAILLIST}
-          #COMMAND rm ${FAILLISTTMP}
-          #COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
-          COMMENT "Run test on the benchmarks")
+                  COMMAND ${StatsCyclesPy} ${BenchmarkCyclesTmp} ${BenchmarkCyclesXls}
+                  COMMENT "Run test on the benchmarks")
+
+add_custom_target(benchmark_report
+                  COMMAND ${StatsSynthesis} ${BenchmarkSummaryTmp} ${BenchmarkSummaryXls}
+                  COMMENT "Report the area and FMax about the synthesized module of benchmarks with Quartus II")
+add_dependencies(benchmark_report benchmark_test)
 
 add_custom_target(test_verilogbackend
-          COMMAND [ -f ${FAILLISTTMP} ] || touch ${FAILLISTTMP}
-          COMMAND cat ${FAILLISTTMP}
-          COMMAND mv ${FAILLISTTMP} ${FAILLIST}
+          COMMAND [ -f ${FAILLIST} ] || touch ${FAILLIST}
+          COMMAND cat ${FAILLIST}
           COMMAND [ -s ${FAILLIST} ] && exit 1 || exit 0
           COMMENT "Compiling all source to llvm test_verilogbackend")
             
@@ -132,7 +133,7 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
   set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")	
 
-  set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${test_file} ${FAILLISTTMP})
+  set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${test_file} ${FAILLIST})
   
   configure_file (
     ${config_file}

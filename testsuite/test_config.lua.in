@@ -49,6 +49,7 @@ SoftwareIROutput = [[@MAIN_SW_LL@]]
 IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
 CounterFile = [[@CycleCounter@]]
+BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
 
 Functions.@SYN_FUNC@ = { ModName = RTLModuleName, Scheduling = SynSettings.@ScheduleType@, Pipeline = SynSettings.@PipelineType@ }
 
