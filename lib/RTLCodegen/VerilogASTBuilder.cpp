@@ -763,26 +763,6 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
       continue;
     }
 
-    // Loop back PHI node moving only active when current slot and the same
-    // slot at previous (.i.e Slot - II) are both enable. Which means we are
-    // looping back, so besides the predicate condition of current slot, the we
-    // need to also add the predicate condition for looping back, that means we
-    // only assign the loop back PHI when we are looping back.
-    if (MI->getOpcode() == VTM::VOpMvPhi) {
-      MachineBasicBlock *TargetBB = MI->getOperand(2).getMBB();
-      unsigned CndSlot = SlotNum - II;
-      if (TargetBB == CurBB && CndSlot > CurSlot->getParentIdx()) {
-        Cnds.push_back(VM->getSlot(CndSlot - 1)->getActive());
-      } else {
-        // Get the loop back condition, merged the loop back condition into
-        // current condition.
-        //assert(PredMap.count(TargetBB) && "Loop back predicate not found!");
-        //VASTWire *PredCnd = PredMap.find(TargetBB)->second;
-        // Slot active already of PredCnd included, no need to worry about.
-        //Cnds.append(PredCnd->op_begin(), PredCnd->op_end());
-      }
-    }
-
     // Emit the operations.
     switch (MI->getOpcode()) {
     case VTM::VOpDstMux:
