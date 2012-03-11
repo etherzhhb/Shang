@@ -111,21 +111,6 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (IsPreOpt) continue;
 
       // Post optimization fixes.
-
-      // Insert the DiableFU instruction.
-      FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
-      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
-        MachineOperand FU = Inst->getOperand(0);
-        FU.clearParent();
-        FU.setIsDef(false);
-        DebugLoc dl = Inst->getDebugLoc();
-        BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
-          .addOperand(FU).addImm(Id.getData())
-          .addOperand(*VInstrInfo::getPredOperand(Inst))
-          .addOperand(ucOperand::CreateTrace(MBB));
-        continue;
-      }
-
       // Try to merge the Select to improve parallelism.
       mergeSel(Inst);
     }

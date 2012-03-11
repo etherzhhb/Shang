@@ -124,9 +124,6 @@ void PrebindMux::collectFanIns(MachineFunction &MF){
     for (MachineBasicBlock::iterator II = MBB->begin(), IE = MBB->end();
          II != IE; ++II) {
       MachineInstr *Inst = II;
-      
-      // DisableFUs do not make sense.
-      if (Inst->getOpcode() == VTM::VOpDisableFU) continue;
 
       FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
       if (Id.isTrivial()) continue;

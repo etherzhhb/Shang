@@ -500,6 +500,29 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
 
     SmallVector<InSUInstInfo, 8> Insts;
 
+    // Insert the DiableFU instruction If necessary.
+    MachineInstr *RepMI = A->getRepresentativeInst();
+    if (RepMI) {
+      FuncUnitId Id = VInstrInfo::getPreboundFUId(RepMI);
+      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
+        MachineBasicBlock *MBB = RepMI->getParent();
+
+        MachineOperand FU = RepMI->getOperand(0);
+        FU.clearParent();
+        FU.setIsDef(false);
+        DebugLoc dl = RepMI->getDebugLoc();
+        MachineBasicBlock::iterator II = RepMI;
+        ++II;
+        MachineInstr *DisableMI =
+          BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
+            .addOperand(FU).addImm(Id.getData())
+            .addOperand(*VInstrInfo::getPredOperand(RepMI))
+            .addOperand(ucOperand::CreateTrace(MBB));
+        // Add the instruction into the emit list.
+        Insts.push_back(std::make_pair(DisableMI, 1));
+      }
+    }
+
     for (unsigned i = 0, e = A->num_instrs(); i < e; ++i) {
       MachineInstr *Inst = A->getInstrAt(i);
       // Ignore the entry node marker (null) and implicit define.
