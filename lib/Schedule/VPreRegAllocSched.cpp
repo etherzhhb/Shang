@@ -1052,6 +1052,9 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
   if (DefMI.getOpcode() == VTM::VOpReadFU)    
     DI.getOperand().ChangeToRegister(0, false);
   else {
+    // FIXME: Remove the PHI, and incoming copies (Bug 14).
+    if (DefMI.getOpcode() == VTM::VOpDefPhi) return false;
+
     assert(0 && "Unexpected dead define!");
     DefMI.eraseFromParent();
   }
