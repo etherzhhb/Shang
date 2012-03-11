@@ -232,16 +232,17 @@ def VOpDstMux : FUInst<(outs DR:$dst),
 // we may need to forward the source register.
 // The PHI related instruction should not be CSEed, too.
 // Already set by default: let hasSideEffects = 1 in
-def VOpMvPhi : CtrlInst<(outs DR:$dst),
-                          (ins DR:$src, State:$target),
+def VOpMvPhi : CtrlInst<(outs DR:$dst), (ins DR:$src, State:$target),
                            "$dst <= $src", [],
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
 // Move the pipeline, this is unconditional.
-def VOpMvPipe : CtrlInst<(outs DR:$dst),
-                           (ins DR:$src, State:$target),
-                            "$dst <= $src", [],
-                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
+def VOpMvPipe : CtrlInst<(outs DR:$dst), (ins DR:$src, State:$target),
+                         "$dst <= $src", [],
+                         0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
+def VOpDisableFU: CtrlInst<(outs), (ins DR:$src, i8imm:$fuid),
+                           "disable fu $src $fuid", [],
+                           0 /*Latency*/, 0 /*writeUntilFinish*/>;
 //===----------------------------------------------------------------------===//
 // Computation operations.
 let isReMaterializable = 1,

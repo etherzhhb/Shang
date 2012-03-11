@@ -89,7 +89,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
          II != IE; /*++II*/) {
       MachineInstr *Inst = II;
 
-      ++II; // We may delete the current instruction.      
+      ++II; // We may delete the current instruction.
 
       if (Inst->isPHI() && !IsPreOpt) {
         PNs.push_back(Inst);
@@ -109,6 +109,22 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       // Do not perform select merging in pre-optimization run, because selects
       // may only appear after if conversion.
       if (IsPreOpt) continue;
+
+      // Post optimization fixes.
+
+      // Insert the DiableFU instruction.
+      FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
+      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
+        MachineOperand FU = Inst->getOperand(0);
+        FU.clearParent();
+        FU.setIsDef(false);
+        DebugLoc dl = Inst->getDebugLoc();
+        BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
+          .addOperand(FU).addImm(Id.getData())
+          .addOperand(*VInstrInfo::getPredOperand(Inst))
+          .addOperand(ucOperand::CreateTrace(MBB));
+        continue;
+      }
 
       // Try to merge the Select to improve parallelism.
       mergeSel(Inst);

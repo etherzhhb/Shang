@@ -770,6 +770,17 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
+  case VTM::VOpDisableFU: {
+    MachineInstr *SrcMI = 0;
+    // Try to merge it into the VSUnit that defining its source operand.
+    VSUnit *SrcSU = getDefSU(MI->getOperand(0), CurState, SrcMI);
+    assert(SrcSU && "Expected source schedule unit!");
+    // Disable the FU at next state.
+    bool merged = CurState.mapMI2SU(MI, SrcSU, 1);
+    assert(merged && "DisableFU not merged?");
+    (void) merged;
+    return;
+  }
   case VTM::PHI:
     // Merge the the PHI into entry root if the BB is not pipelined.
     if (!CurState.enablePipeLine()) {

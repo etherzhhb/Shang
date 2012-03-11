@@ -1328,7 +1328,9 @@ unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
   typedef MachineRegisterInfo::use_iterator use_it;
   for (use_it I = MRI->use_begin(RegNum); I != MRI->use_end(); ++I) {
     MachineInstr *MI = &*I;
-    if (MI->getOpcode() == VTM::VOpReadFU) continue;
+    if (MI->getOpcode() == VTM::VOpReadFU ||
+        MI->getOpcode() == VTM::VOpDisableFU)
+      continue;
 
     assert(MI->getOpcode() == VTM::VOpReadReturn && "Unexpected callee user!");
     assert((RetPortSize == 0 ||
@@ -1362,9 +1364,11 @@ void VRASimple::bindCalleeFN() {
         RepLI = LI;
         // Get the return ports of this callee FN.
         unsigned NewFNNum = allocateCalleeFNPorts(RegNum);
+        // Also allocate the enable port.
+        TRI->getSubRegOf(NewFNNum, 1, 0);
         if (NewFNNum != FNNum)
           VFI->remapCallee(MI->getOperand(1).getSymbolName(), NewFNNum);
-
+        
         assign(*LI, NewFNNum);
         continue;
       }

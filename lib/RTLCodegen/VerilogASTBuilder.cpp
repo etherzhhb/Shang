@@ -244,8 +244,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VASTUse createCnd(MachineOperand &Op) {
     return createCnd(cast<ucOperand>(Op));
   }
-  
-  void getPredValAtNextSlot(MachineInstr *MI, VASTUse &Pred);
 
   VASTUse getAsOperand(ucOperand &Op);
   VASTUse getAsOperand(MachineOperand &Op) {
@@ -462,8 +460,8 @@ void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
     VM->addOutputPort("fin", 1, VASTModule::Finish);
   } else { // It is a callee function, emit the signal for the sub module.
     std::string StartPortName = getSubModulePortName(FNNum, "start");
+    VM->indexVASTValue(FNNum + 1, VM->addRegister(StartPortName, 1));
     std::string FinPortName = getSubModulePortName(FNNum, "fin");
-    VM->addRegister(StartPortName, 1);
     VM->addWire(FinPortName, 1);
     // Connect to the ports
     raw_ostream &S = VM->getDataPathBuffer();
@@ -529,7 +527,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
 
     // Add the start/finsh signal and return_value to the signal list.
-    VM->addRegister(Ports[2], 1);
+    VM->indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
     VM->getOrCreateSymbol(Ports[3], 1);
     unsigned RetPortIdx = FNNum;
     // Dose the submodule have a return port?
@@ -773,28 +771,28 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
     case VTM::VOpMove_rw:
     case VTM::VOpMove_rr:
     case VTM::VOpMvPhi:
-    case VTM::VOpMvPipe:
-    case VTM::COPY:             emitOpCopy(MI, CurSlot, Cnds);break;
-    case VTM::VOpAdd:           emitOpAdd(MI, CurSlot, Cnds); break;
+    case VTM::VOpMvPipe:        emitOpCopy(MI, CurSlot, Cnds);            break;
+    case VTM::VOpAdd:           emitOpAdd(MI, CurSlot, Cnds);             break;
     case VTM::VOpICmp:
     case VTM::VOpMultLoHi:
     case VTM::VOpMult:
     case VTM::VOpSHL:
     case VTM::VOpSRL:
-    case VTM::VOpSRA:           emitBinaryFUOp(MI, CurSlot, Cnds); break;
-    case VTM::VOpReadFU:        emitOpReadFU(MI, CurSlot, Cnds);break;
-    case VTM::VOpInternalCall:  emitOpInternalCall(MI, CurSlot, Cnds);break;
-    case VTM::VOpRetVal:        emitOpRetVal(MI, CurSlot, Cnds);  break;
-    case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);     break;
+    case VTM::VOpSRA:           emitBinaryFUOp(MI, CurSlot, Cnds);        break;
+    case VTM::VOpReadFU:        emitOpReadFU(MI, CurSlot, Cnds);          break;
+    case VTM::VOpDisableFU:     emitOpDisableFU(MI, CurSlot, Cnds);       break;
+    case VTM::VOpInternalCall:  emitOpInternalCall(MI, CurSlot, Cnds);    break;
+    case VTM::VOpRetVal:        emitOpRetVal(MI, CurSlot, Cnds);          break;
+    case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);             break;
     case VTM::VOpCmdSeq:
-    case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);break;
-    case VTM::VOpBRam:          emitOpBRam(MI, CurSlot, Cnds);    break;
-    case VTM::IMPLICIT_DEF:     emitImplicitDef(MI);          break;
-    case VTM::VOpSel:           emitOpSel(MI, CurSlot, Cnds); break;
-    case VTM::VOpCase:          emitOpCase(MI, CurSlot, Cnds); break;
-    case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);break;
-    case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);break;
-    default:  assert(0 && "Unexpected opcode!");              break;
+    case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);        break;
+    case VTM::VOpBRam:          emitOpBRam(MI, CurSlot, Cnds);            break;
+    case VTM::IMPLICIT_DEF:     emitImplicitDef(MI);                      break;
+    case VTM::VOpSel:           emitOpSel(MI, CurSlot, Cnds);             break;
+    case VTM::VOpCase:          emitOpCase(MI, CurSlot, Cnds);            break;
+    case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);      break;
+    case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;
+    default:  assert(0 && "Unexpected opcode!");                          break;
     }
   }
 
@@ -944,7 +942,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
-                              VASTUseVecTy &Cnds) {
+                                     VASTUseVecTy &Cnds) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VASTValue *ReadyPort = 0;
 
@@ -971,6 +969,27 @@ void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
     emitOpCopy(MI, CurSlot, Cnds);
 }
 
+void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
+                                        VASTUseVecTy &Cnds) {
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  unsigned FUNum = Id.getFUNum();
+  VASTValue *EnablePort = 0;
+
+  switch (Id.getFUType()) {
+  case VFUs::MemoryBus:
+    EnablePort = VM->getSymbol(VFUMemBus::getEnableName(FUNum) + "_r");
+    break;
+  case VFUs::CalleeFN:
+    EnablePort =  VM->lookupSignal(MI->getOperand(0).getReg() + 1).get();
+    break;
+  default:
+    llvm_unreachable("Unexpected FU to disable!");
+    break;
+  }
+
+  Slot->addDisable(EnablePort, createCnd(*VInstrInfo::getPredOperand(MI)));
+}
+
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
                                          VASTUseVecTy &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
@@ -987,9 +1006,6 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getSymbol(StartPortName);
   Slot->addEnable(StartSignal, Pred);
-  VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
-  getPredValAtNextSlot(MI, Pred);
-  NextSlot->addDisable(StartSignal, Pred);
 
   const Function *FN = M->getFunction(CalleeName);
   if (FN && !FN->isDeclaration()) {
@@ -1112,12 +1128,6 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   VASTValue *MemEn = VM->getSymbol(EnableName);
   VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   Slot->addEnable(MemEn, Pred);
-
-  // Disable the memory at next slot.
-  // TODO: Assert the control flow is linear.
-  VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
-  getPredValAtNextSlot(MI, Pred);
-  NextSlot->addDisable(MemEn, Pred);
 }
 
 void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
@@ -1157,12 +1167,6 @@ void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
 
   VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   Slot->addEnable(MemEn, Pred);
-
-  // Disable the memory at next slot.
-  // TODO: Assert the control flow is linear.
-  VASTSlot *NextSlot = VM->getOrCreateNextSlot(Slot);
-  getPredValAtNextSlot(MI, Pred);
-  NextSlot->addDisable(MemEn, Pred);
 }
 
 MachineBasicBlock::instr_iterator
@@ -1329,40 +1333,6 @@ VASTUse VerilogASTBuilder::createCnd(ucOperand &Op) {
   if (Op.isPredicateInverted()) C = VM->buildNotExpr(C);
 
   return C;
-}
-
-void VerilogASTBuilder::getPredValAtNextSlot(MachineInstr *MI, VASTUse &Pred) {
-  // Get the predicate value at next slot, if the predicate operand is copied to
-  // a register, use that register.
-  ucOperand &PredCnd = cast<ucOperand>(*VInstrInfo::getPredOperand(MI));
-
-  if (VInstrInfo::isAlwaysTruePred(PredCnd)) return;
-
-  typedef MachineRegisterInfo::use_iterator it;
-  for (it I = MRI->use_begin(PredCnd.getReg()); I != MRI->use_end();++I) {
-    MachineInstr *UseMI = &*I;
-    // We are find the copy operation that copy the current predicate value
-    // to a register, and the ReadFU instruction is copying the predicate
-    // value only if the value is the second operand (source operand).
-    // FIXME: VOpMove_rr is also a copy.
-    if (UseMI->getOpcode() != VTM::VOpReadFU || I.getOperandNo() != 1)
-      continue;
-
-    // Skip the MI predicate by current predicate operand.
-    if (UseMI == MI) continue;
-
-    // Be careful of 1 slot pipelined loops.
-    if (getInstrSlot(MI) != getInstrSlot(UseMI))
-      continue;
-
-    assert(UseMI->getOperand(0).getReg() && "UseMI not copying PredCnd!");
-    Pred = createCnd(UseMI->getOperand(0));
-    // Invert flag is not copied.
-    if (PredCnd.isPredicateInverted())
-      Pred = VM->buildNotExpr(Pred);
-
-    return;
-  }
 }
 
 VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
