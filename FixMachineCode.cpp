@@ -331,6 +331,12 @@ bool FixMachineCode::mergeSel(MachineInstr *MI) {
     CaseMI->addOperand(FVal);
   }
 
+  // DirtyHack: Remove the annoying kill flags.
+  for (unsigned i = 1, e = CaseMI->getNumOperands(); i != e; ++i) {
+    MachineOperand &MO = CaseMI->getOperand(i);
+    if (MO.isReg() && MO.getReg()) MRI->clearKillFlags(MO.getReg());
+  }
+
   MI->eraseFromParent();
   return true;
 }
