@@ -221,6 +221,7 @@ void FixMachineCode::FoldImmediate(MachineInstr *MI,
                                    std::vector<MachineInstr*> &InstrToFold) {
   unsigned DstReg = MI->getOperand(0).getReg();
 
+  std::set<MachineInstr*> FoldList;
   for (MachineRegisterInfo::use_iterator I = MRI->use_begin(DstReg),
        E = MRI->use_end(); I != E; /*++I*/) {
     MachineInstr &UserMI = *I;
@@ -229,9 +230,16 @@ void FixMachineCode::FoldImmediate(MachineInstr *MI,
     // Only replace if user is not a PHINode.
     if (UserMI.getOpcode() == VTM::PHI) continue;
 
-    if (TII->FoldImmediate(&UserMI, MI, DstReg, MRI))
-      if (canbeFold(&UserMI))
-        InstrToFold.push_back(&UserMI);
+    // There maybe an instruction read the same register twice.
+    FoldList.insert(&UserMI);
+  }
+
+  // Replace the register operand by a immediate operand.
+  typedef std::set<MachineInstr*>::iterator it;
+  for (it I = FoldList.begin(), E = FoldList.end(); I != E; ++I) {
+    MachineInstr *UserMI = *I;
+    if (TII->FoldImmediate(UserMI, MI, DstReg, MRI) && canbeFold(UserMI))
+      InstrToFold.push_back(UserMI);
   }
 
   // Eliminate the instruction if it dead.
