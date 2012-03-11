@@ -654,7 +654,7 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
 
   // Fix up any PHI nodes in the successor.
   for (MachineBasicBlock::iterator MI = Succ->begin(), ME = Succ->end();
-    MI != ME && MI->isPHI(); ++MI)
+       MI != ME && MI->isPHI(); ++MI)
     PHIs.push_back(MI);
 
   while (!PHIs.empty()) {

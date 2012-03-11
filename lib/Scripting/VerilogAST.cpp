@@ -378,15 +378,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
                       EmptySlotEnCnd);
   }
 
-  if (ReadyPresented) {
-    DEBUG(std::string NotSlotReady = "~" + std::string(getName()) + "Ready";
-          CtrlS.if_begin(NotSlotReady);
-          if (getSlotNum() != 0)
-            CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
-                  <<  " waiting \");\n";
-
-          CtrlS.exit_block("// End resource ready.\n"););
-  } else {
+  if (!ReadyPresented) {
     //DEBUG(
     if (getSlotNum() != 0) {
       CtrlS << "if (start) begin $display(\"" << getName() << " in "
