@@ -148,6 +148,7 @@ SC_MODULE(V$(RTLModuleName)_tb){
             mem0waitrequest = 1;
             ++memcnt;
             wait();
+            assert(!mem0en && "Please disable memory while waiting it ready!");
           }
 
           mem0waitrequest = 0;

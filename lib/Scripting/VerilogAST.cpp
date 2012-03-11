@@ -341,7 +341,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
   DEBUG(
   if (getSlotNum() != 0)
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
-          << " ready\");\n";
+          << " ready at %d\", $time());\n";
   );
 
   bool hasSelfLoop = false;
