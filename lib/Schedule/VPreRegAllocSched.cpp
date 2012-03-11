@@ -539,8 +539,9 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
     double DetailLatency = I->second;
     int Latency = int(ceil(DetailLatency));
 
-    assert(SrcMI && SrcMI != DetialLatencyInfo::EntryMarker
-           && "Unexpected null SrcMI!");
+    assert(SrcMI && "Unexpected null SrcMI!");
+    // Simply ignore the edge from entry, it is not an anti-dependence.
+    if (SrcMI == DetialLatencyInfo::EntryMarker) continue;
     
     VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
