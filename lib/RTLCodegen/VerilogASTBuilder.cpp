@@ -211,10 +211,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
                          VASTWire::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
+  typedef SmallVectorImpl<VASTUse> VASTUseVecTy;
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
   void emitFirstCtrlBundle(MachineBasicBlock *DstBB, VASTSlot *Slot,
-                          SmallVectorImpl<VASTUse> &Cnds);
+                          VASTUseVecTy &Cnds);
 
   MachineBasicBlock::instr_iterator emitDatapath(MachineInstr *Bundle);
 
@@ -225,11 +226,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitChainedOpAdd(MachineInstr *MI);
   void emitChainedOpICmp(MachineInstr *MI);
 
-  void emitOpSel(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpCase(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpSel(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpCase(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
 
-  void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
 
   void emitOpBitSlice(MachineInstr *MI);
 
@@ -271,15 +272,17 @@ class VerilogASTBuilder : public MachineFunctionPass {
     printOperand(cast<ucOperand>(Op), OS);
   }
 
-  void emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpRetVal(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
-  void emitOpBRam(MachineInstr *MI, VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds);
+  void emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpRetVal(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, VASTUseVecTy &Cnds);
+  void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+
+  void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpBRam(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -800,7 +803,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
 
 void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
                                             VASTSlot *Slot,
-                                            SmallVectorImpl<VASTUse> &Cnds) {
+                                            VASTUseVecTy &Cnds) {
   // TODO: Emit PHINodes if necessary.
   MachineInstr *FirstBundle = DstBB->instr_begin();
   assert(FInfo->getStartSlotFor(DstBB) == getBundleSlot(FirstBundle)
@@ -830,7 +833,7 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
 }
 
 void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
-                                          SmallVectorImpl<VASTUse> &Cnds) {
+                                          VASTUseVecTy &Cnds) {
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   std::string PredStr;
   raw_string_ostream SS(PredStr);
@@ -845,7 +848,7 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
-                                  SmallVectorImpl<VASTUse> &Cnds) {
+                                  VASTUseVecTy &Cnds) {
   VASTWire *Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
@@ -873,7 +876,7 @@ void VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
 }
 
 void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
-                                SmallVectorImpl<VASTUse> &Cnds) {
+                                VASTUseVecTy &Cnds) {
   VASTWire *Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getOperand(0));
@@ -889,7 +892,7 @@ void VerilogASTBuilder::emitImplicitDef(MachineInstr *MI) {
 }
 
 void VerilogASTBuilder::emitOpSel(MachineInstr *MI, VASTSlot *Slot,
-                           SmallVectorImpl<VASTUse> &Cnds) {
+                                  VASTUseVecTy &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
   // Assign the value for condition true.
   VASTUse Cnd = createCnd(MI->getOperand(1));
@@ -902,7 +905,7 @@ void VerilogASTBuilder::emitOpSel(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpCase(MachineInstr *MI, VASTSlot *Slot,
-                            SmallVectorImpl<VASTUse> &Cnds) {
+                                   VASTUseVecTy &Cnds) {
   // Check if we got any case hitted
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   OS.if_();
@@ -931,7 +934,7 @@ void VerilogASTBuilder::emitOpCase(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
-                                   SmallVectorImpl<VASTUse> &Cnds) {
+                                   VASTUseVecTy &Cnds) {
   MachineOperand &Dst = MI->getOperand(0), &Src = MI->getOperand(1);
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
@@ -941,7 +944,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
-                              SmallVectorImpl<VASTUse> &Cnds) {
+                              VASTUseVecTy &Cnds) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VASTValue *ReadyPort = 0;
 
@@ -969,13 +972,13 @@ void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
 }
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
-                                         SmallVectorImpl<VASTUse> &Cnds) {
+                                         VASTUseVecTy &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
   VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds);
 }
 
 void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
-                                    SmallVectorImpl<VASTUse> &Cnds) {
+                                           VASTUseVecTy &Cnds) {
   // Assign input port to some register.
   const char *CalleeName = MI->getOperand(1).getSymbolName();
   unsigned FNNum = FInfo->getCalleeFNNum(CalleeName);
@@ -1068,7 +1071,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpRet(MachineInstr *MI, VASTSlot *CurSlot,
-                           SmallVectorImpl<VASTUse> &Cnds) {
+                                  VASTUseVecTy &Cnds) {
   // Go back to the idle slot.
   VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   CurSlot->addNextSlot(VM->getOrCreateSlot(0, 0), Pred);
@@ -1076,7 +1079,7 @@ void VerilogASTBuilder::emitOpRet(MachineInstr *MI, VASTSlot *CurSlot,
 }
 
 void VerilogASTBuilder::emitOpRetVal(MachineInstr *MI, VASTSlot *Slot,
-                              SmallVectorImpl<VASTUse> &Cnds) {
+                                     VASTUseVecTy &Cnds) {
   VASTRegister &RetReg = cast<VASTRegister>(*VM->getRetPort());
   unsigned retChannel = MI->getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
@@ -1084,7 +1087,7 @@ void VerilogASTBuilder::emitOpRetVal(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
-                                       SmallVectorImpl<VASTUse> &Cnds) {
+                                       VASTUseVecTy &Cnds) {
   unsigned FUNum = VInstrInfo::getPreboundFUId(MI).getFUNum();
 
   // Emit Address.
@@ -1118,7 +1121,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
-                                   SmallVectorImpl<VASTUse> &Cnds) {
+                                   VASTUseVecTy &Cnds) {
   unsigned FUNum = MI->getOperand(0).getReg();
 
   // Emit the control logic.
