@@ -173,18 +173,6 @@ let isReMaterializable = 1,
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins DR:$src),
                            "$dst <= $src", [],
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
-  // Special instruction for copy source register to phi incomming register,
-  // we may need to forward the source register.
-  def VOpMvPhi : CtrlInst<(outs DR:$dst),
-                          (ins DR:$src, State:$target),
-                           "$dst <= $src", [],
-                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
-  // Move the pipeline, this is unconditional.
-  def VOpMvPipe : CtrlInst<(outs DR:$dst),
-                           (ins DR:$src, State:$target),
-                            "$dst <= $src", [],
-                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
-
   // Bitwise logic operation.
   let isCommutable       = 1 in {
     def VOpXor   : DPTvaInst<(outs DR:$dst), (ins DR:$src0, DR:$src1),
@@ -235,10 +223,24 @@ let isReMaterializable = 1,
 // Distributed (in time domain) multiplexer, have side effects,
 // and should not be CSEed.
 // Already set by default: let hasSideEffects = 1 in
-  def VOpDstMux : FUInst<(outs DR:$dst),
-                         (ins DR:$src, i8imm:$muxnum, i8imm:$size),
-                         "$dst($muxnum, $size) = $src",
-                         [], FUMUX, 1 /*writeUntilFinish*/>;
+def VOpDstMux : FUInst<(outs DR:$dst),
+                        (ins DR:$src, i8imm:$muxnum, i8imm:$size),
+                        "$dst($muxnum, $size) = $src",
+                        [], FUMUX, 1 /*writeUntilFinish*/>;
+
+// Special instruction for copy source register to phi incomming register,
+// we may need to forward the source register.
+// The PHI related instruction should not be CSEed, too.
+// Already set by default: let hasSideEffects = 1 in
+def VOpMvPhi : CtrlInst<(outs DR:$dst),
+                          (ins DR:$src, State:$target),
+                           "$dst <= $src", [],
+                           0 /*Latency*/, 1 /*writeUntilFinish*/>;
+// Move the pipeline, this is unconditional.
+def VOpMvPipe : CtrlInst<(outs DR:$dst),
+                           (ins DR:$src, State:$target),
+                            "$dst <= $src", [],
+                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
 //===----------------------------------------------------------------------===//
 // Computation operations.
