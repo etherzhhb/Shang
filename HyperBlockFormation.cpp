@@ -39,7 +39,7 @@
 
 using namespace llvm;
 
-STATISTIC(BBMerged, "VTM - Number of blocks merged into hyperblock");
+STATISTIC(BBMerged, "Number of blocks merged into hyperblock");
 
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
@@ -152,16 +152,17 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
   if (AvePathDelay < MaxMergeLatnecy * BBFreq.getFrequency())
     return false;
 
+  bool ActuallyMerged = false;
   while (!BBs.empty()) {
     MachineBasicBlock *SuccMBB = BBs.back();
     BBs.pop_back();
 
-    mergeBlock(SuccMBB, MBB);
+    ActuallyMerged |= mergeBlock(SuccMBB, MBB);
   }
 
   // Update the delay.
   BBDelay->updateDelay(MBB, CL.computeLatency(*MBB, true));
-  return true;
+  return ActuallyMerged;
 }
 
 bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
@@ -330,8 +331,8 @@ bool HyperBlockFormation::mergeReturnBB(MachineFunction &MF,
 }
 
 MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
-                                                       VInstrInfo::JT &SrcJT,
-                                                       VInstrInfo::JT &DstJT) {
+                                                     VInstrInfo::JT &SrcJT,
+                                                     VInstrInfo::JT &DstJT) {
   // Only handle simple case at the moment
   if (SrcBB->pred_size() != 1) return 0;
 
@@ -362,10 +363,12 @@ MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
 }
 
 bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
-                                        MachineBasicBlock *ToBB) {
+                                     MachineBasicBlock *ToBB) {
   VInstrInfo::JT FromJT, ToJT;
-  VInstrInfo::extractJumpTable(*FromBB, FromJT);
-  VInstrInfo::extractJumpTable(*ToBB, ToJT);
+  MachineBasicBlock *MergeDst = getMergeDst(FromBB, FromJT, ToJT);
+  assert(MergeDst == ToBB && "Cannot merge block!");
+
+  DEBUG(dbgs() << "Merging BB#" << FromBB->getNumber() << "\n");
 
   TII->RemoveBranch(*ToBB);
   TII->RemoveBranch(*FromBB);
