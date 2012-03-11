@@ -101,11 +101,11 @@ struct VTMPassConfig : public TargetPassConfig {
     // Make sure we have a branch instruction for every success block.
     PM.add(createFixTerminatorsPass());
 
-    // Perform logic synthesis.
-    PM.add(createLogicSynthesisPass());
-
     // Fix the machine code for schedule and function unit allocation.
     PM.add(createFixMachineCodePass(false));
+
+    // Perform logic synthesis.
+    PM.add(createLogicSynthesisPass());
 
     // Clean up the MachineFunction.
     addPass(MachineCSEID);
