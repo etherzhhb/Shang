@@ -40,7 +40,8 @@
 
 using namespace llvm;
 
-STATISTIC(BBMerged, "Number of blocks merged into hyperblock");
+STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
+STATISTIC(BBsNotMerged, "Number of blocks are not merged into hyperblock");
 
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
@@ -207,16 +208,16 @@ INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
 bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
                                           DenseMap<MachineBasicBlock*, unsigned>
                                           &UnmergedDelays) {
-  // Collect the successor blocks to merge.
-  std::vector<MachineBasicBlock*> BBs;
-
   VInstrInfo::JT CurJT, SuccJT;
   uint64_t WeightSum = 0;
 
   // Latency statistics.
   CycleLatencyInfo CL;
-  unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergeLatnecy = 0;
-  uint64_t AvePathDelay = 0;
+  unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergedDelay = 0;
+  uint64_t UnmergedTotalDelay = 0, MergedTotalDelay = 0;
+  // The delay after BB is merged.
+  SmallVector<MachineBasicBlock*, 8> BBsToMerge;
+  SmallPtrSet<MachineBasicBlock*, 8> UmergedBBs;
 
   typedef MachineBasicBlock::succ_iterator succ_iterator;
   for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
@@ -227,47 +228,57 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
     uint64_t EdgeWeight = MBPI->getEdgeWeight(MBB, SuccBB);
     WeightSum += EdgeWeight;
 
+    unsigned UnmergedPathDelay = MBBDelay + BBDelay->getBBDelay(SuccBB);
+    DenseMap<MachineBasicBlock*, unsigned>::const_iterator at;
+    bool updated;
+    tie(at, updated) = UnmergedDelays.insert(std::make_pair(MBB,
+                                                            UnmergedPathDelay));
+    if (updated) UnmergedPathDelay = at->second;
+    // Delay of unmerged edge.
+    UnmergedTotalDelay += UnmergedPathDelay * EdgeWeight;
+
     MachineBasicBlock *MergeDst = getMergeDst(SuccBB, SuccJT, CurJT);
     if (!MergeDst) {
-      unsigned &UnmergedDelay = UnmergedDelays[SuccBB];
-      if (UnmergedDelay == 0) UnmergedDelay = MBBDelay;
-
-      // SuccBB can not be merged, the path delay is simply the delay of current
-      // BB.
-      AvePathDelay += UnmergedDelay * EdgeWeight;
+      UmergedBBs.insert(SuccBB);
       continue;
     }
 
     assert(MergeDst == MBB && "Succ have more than one Pred?");
-    unsigned MergedLatency = CL.computeLatency(*SuccBB);
-    MaxMergeLatnecy = std::max(MaxMergeLatnecy, MergeLatency);
-    MaxMergeLatnecy = std::max(MaxMergeLatnecy, MergedLatency);
-    // Compute the original path delay including current BB and success BB.
-    unsigned PathDelay = MBBDelay + BBDelay->getBBDelay(SuccBB);
-    AvePathDelay += PathDelay * EdgeWeight;
-    BBs.push_back(SuccBB);
+    unsigned MergedDelay = CL.computeLatency(*SuccBB);
+    BBsToMerge.push_back(SuccBB);
+    MaxMergedDelay = std::max(MaxMergedDelay, MergedDelay);
   }
 
-  if (BBs.empty()) return false;
+  // Compute the delay of paths after BBs are merged.
+  for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
+    MachineBasicBlock *SuccBB = *I;
+    // The path delay of the merged edge becomes the max delay of the merged block.
+    unsigned PathDelay = MaxMergedDelay;
+    // The block delay still contributes to the path delay for umerged block.
+    if (UmergedBBs.count(SuccBB)) PathDelay += BBDelay->getBBDelay(SuccBB);
+
+    MergedTotalDelay += MaxMergedDelay * MBPI->getEdgeWeight(MBB, SuccBB);
+  }
 
   // Only merge the SuccBB into current BB if the merge is beneficial.
   // TODO: Remove the SuccBB with smallest beneficial and try again.
-  if (AvePathDelay < MaxMergeLatnecy * WeightSum) {
+  if (UnmergedTotalDelay < MergedTotalDelay) {
+    ++BBsNotMerged;
     return false;
   }
 
   bool ActuallyMerged = false;
-  while (!BBs.empty()) {
-    MachineBasicBlock *SuccMBB = BBs.back();
-    BBs.pop_back();
+  while (!BBsToMerge.empty()) {
+    MachineBasicBlock *SuccBB = BBsToMerge.back();
+    BBsToMerge.pop_back();
 
-    ActuallyMerged |= mergeBlock(SuccMBB, MBB);
-    // Going to merge SuccBB.
-    // if merged UnmergedDelays.erase(SuccBB);
+    ActuallyMerged |= mergeBlock(SuccBB, MBB);
   }
 
   // Update the delay.
-  BBDelay->updateDelay(MBB, CL.computeLatency(*MBB, true));
+  if (ActuallyMerged)
+    BBDelay->updateDelay(MBB, CL.computeLatency(*MBB, true));
+
   return ActuallyMerged;
 }
 
@@ -300,9 +311,9 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock *MBB = SortedBBs.back();
     SortedBBs.pop_back();
 
-    do {
+    do
       MakeChanged |= BlockMerged = mergeSuccBlocks(MBB, UnmergedDelays);
-    } while (BlockMerged);
+    while (BlockMerged);
     // Prepare for next block.
     UnmergedDelays.clear();
   }
@@ -565,7 +576,7 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
 
   // Re-insert the jump table.
   VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
-  ++BBMerged;
+  ++BBsMerged;
   return true;
 }
 
