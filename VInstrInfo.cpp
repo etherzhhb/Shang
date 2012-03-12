@@ -882,11 +882,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   bool DstReadAtEmit = isReadAtEmit(DstOpC);
 
   if (DstReadAtEmit && SrcWriteUntilFInish) {
-    if (SrcOpC == VTM::VOpDstMux)
-      // Special case: Set latency from VOpDstMux to Ctrl-Op to 1 explicitly.
-      // Because this latency is accumulated into the chain latency.
-      return 1;
-    else if (SrcOpC == VTM::VOpMvPhi) {
+    if (SrcOpC == VTM::VOpMvPhi) {
       assert((DstOpC == TargetOpcode::PHI || DstOpC == VTM::VOpMvPhi 
               || VInstrInfo::getDesc(DstOpC).isTerminator())
              && "VOpMvPhi should only used by PHIs or terminators!!");
