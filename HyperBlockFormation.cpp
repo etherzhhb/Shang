@@ -74,9 +74,10 @@ struct HyperBlockFormation : public MachineFunctionPass {
                                  VInstrInfo::JT &DstJT);
 
   bool mergeBlock(MachineBasicBlock *FromBB,
-                             MachineBasicBlock *ToBB);
+                  MachineBasicBlock *ToBB);
 
-  bool mergeSuccBlocks(MachineBasicBlock *MBB);
+  bool mergeSuccBlocks(MachineBasicBlock *MBB,
+                       DenseMap<MachineBasicBlock*, unsigned> &UnmergedDelays);
 
   void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB);
 
@@ -203,7 +204,9 @@ INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
 
-bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
+bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
+                                          DenseMap<MachineBasicBlock*, unsigned>
+                                          &UnmergedDelays) {
   // Collect the successor blocks to merge.
   std::vector<MachineBasicBlock*> BBs;
 
@@ -226,9 +229,12 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
 
     MachineBasicBlock *MergeDst = getMergeDst(SuccBB, SuccJT, CurJT);
     if (!MergeDst) {
+      unsigned &UnmergedDelay = UnmergedDelays[SuccBB];
+      if (UnmergedDelay == 0) UnmergedDelay = MBBDelay;
+
       // SuccBB can not be merged, the path delay is simply the delay of current
       // BB.
-      AvePathDelay += MBBDelay * EdgeWeight;
+      AvePathDelay += UnmergedDelay * EdgeWeight;
       continue;
     }
 
@@ -256,6 +262,8 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
     BBs.pop_back();
 
     ActuallyMerged |= mergeBlock(SuccMBB, MBB);
+    // Going to merge SuccBB.
+    // if merged UnmergedDelays.erase(SuccBB);
   }
 
   // Update the delay.
@@ -284,14 +292,19 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
 
+  // Delays before branching to not BB that cannot be merged.
+  DenseMap<MachineBasicBlock*, unsigned> UnmergedDelays;
+
   while (!SortedBBs.empty()) {
     bool BlockMerged = false;
     MachineBasicBlock *MBB = SortedBBs.back();
     SortedBBs.pop_back();
 
     do {
-      MakeChanged |= BlockMerged = mergeSuccBlocks(MBB);
+      MakeChanged |= BlockMerged = mergeSuccBlocks(MBB, UnmergedDelays);
     } while (BlockMerged);
+    // Prepare for next block.
+    UnmergedDelays.clear();
   }
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
