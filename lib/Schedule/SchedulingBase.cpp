@@ -33,8 +33,14 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 void SchedulingBase::buildTimeFrame() {
   VSUnit *EntryRoot = State.getEntryRoot();
-  // Build the time frame
   assert(EntryRoot->isScheduled() && "Entry must be scheduled first!");
+
+  // Reset the time frames
+  typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
+  for (TFMapTy::iterator I = SUnitToTF.begin(), E = SUnitToTF.end();I != E;++I)
+    I->second = std::make_pair(0, VSUnit::MaxSlot);
+
+  // Build the time frames
   buildASAPStep();
   buildALAPStep();
 

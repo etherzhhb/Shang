@@ -40,7 +40,8 @@ public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
 private:
   // Time frames for each schedule unit.
-  std::map<const VSUnit*, TimeFrame> SUnitToTF;
+  typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
+  TFMapTy SUnitToTF;
 
   // Step -> resource require number.
   typedef std::map<unsigned, unsigned> UsageMapType;
