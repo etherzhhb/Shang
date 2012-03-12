@@ -222,5 +222,68 @@ public:
   bool scheduleState();
 };
 
+class SDCScheduler : public SchedulingBase {
+  public:
+    SDCScheduler(VSchedGraph &S);
+    bool scheduleState();
+  private:
+    lprec *lp;
+    // Total step variables count.
+    int NumVars;
+    // Total instructions count.
+    int NumInst;
+    // Total rows in LP.
+    unsigned TotalRows;
+    // The table of the index of the VSUnits and the column number in LP.
+    typedef std::map<const VSUnit*, unsigned> SUIdx2LPColMap;
+    typedef SUIdx2LPColMap::iterator SUIdxIt;
+    SUIdx2LPColMap SUIdx;
+    // The table of the slots and the VSUnits.
+    typedef std::vector<const VSUnit*> BoundSUVec;
+    typedef std::map<unsigned, BoundSUVec> Step2SUMap;
+
+    bool hasCommonInput(const VSUnit* Src, const VSUnit* Dst);
+
+    // Get the MaxLatency of the VSUnit.
+    unsigned getMaxLatency(const VSUnit* U){
+      typedef std::list<VSUnit*>::const_iterator const_use_iterator;
+      unsigned FinLatency = U->getLatency();
+      for(const_use_iterator EI = U->use_begin(),EE = U->use_end();
+        EI != EE; ++EI){
+          const VSUnit* Use = *EI;
+          const VDEdge* Edge = Use->getEdgeFrom(U);
+          FinLatency = std::max<unsigned>(FinLatency, ((*Edge).getLatency()));
+      }
+      return FinLatency;
+    }
+
+    // Set the variables' name in the model.
+    void createLPVariables(lprec *lp);
+
+    // Build the intrinsic constraints for LP variables.
+    void stepVariableConstraints(lprec *lp);
+
+    // The schedule should satisfy the dependences.
+    void addDependencyConstraints(lprec *lp);
+
+    // Build the ResourceConstraints as topology order.
+    void addTopologyResourceConstraints(lprec *lp, Step2SUMap &Map);
+
+    // Build the Constant ResourceConstraints.
+    void setConstantResourceConstraints(lprec *lp,const VSUnit* U,unsigned Slot);
+
+    // Avoid the resources conflict for the function units.
+    void addResourceConstraints(lprec *lp);
+
+    // Build the schedule object function.
+    void buildAXAPObject();
+    void buildOptimizingSlackDistributionObject();
+
+    // Build the schedule form the result of ILP.
+    void buildSchedule(lprec *lp);
+
+};
+
+
 } // End namespace.
 #endif

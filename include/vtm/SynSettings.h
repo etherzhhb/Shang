@@ -34,7 +34,7 @@ public:
   };
 
   enum ScheduleAlgorithm {
-    ILP, ASAP
+    ILP, ASAP, SDC
   };
 
 private:

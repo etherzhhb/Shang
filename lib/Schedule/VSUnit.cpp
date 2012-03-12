@@ -202,6 +202,7 @@ static SchedulingBase *createLinearScheduler(VSchedGraph &G) {
   switch (I.getScheduleAlgorithm()) {
   case SynSettings::ILP:   return new ILPScheduler(G);
   case SynSettings::ASAP:  return new ASAPScheduler(G);
+  case SynSettings::SDC:  return new SDCScheduler(G);
   }
   return 0;
 }
