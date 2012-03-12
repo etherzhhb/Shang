@@ -212,7 +212,7 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
   uint64_t WeightSum = 0;
 
   // Latency statistics.
-  CycleLatencyInfo CL;
+  CycleLatencyInfo CL(*MRI);
   unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergedDelay = 0;
   uint64_t UnmergedTotalDelay = 0, MergedTotalDelay = 0;
   // The delay after BB is merged.

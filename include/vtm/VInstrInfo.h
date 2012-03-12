@@ -278,12 +278,12 @@ private:
   void accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
                                    const DepLatInfoTy &SrcLatInfo,
                                    double CurLatency);
-
-  const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
-                                       bool IgnorePHISrc);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
+protected:
+  const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
+                                       bool IgnorePHISrc);
 public:
   DetialLatencyInfo(MachineRegisterInfo &mri) : MRI(mri) {}
 
@@ -327,25 +327,28 @@ public:
 };
 
 // Compute the cycle latency of a given MBB.
-class CycleLatencyInfo {
-  typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > DepLatencyMap;
+class CycleLatencyInfo : public DetialLatencyInfo {
+  typedef std::map<const MachineInstr*, unsigned> DepLatencyMap;
   DepLatencyMap DepInfo;
 
-  unsigned getLatencyFrom(unsigned Reg, MachineInstr *MI) const ;
-
-  typedef std::map<unsigned, std::pair<MachineInstr*, unsigned> > FULatencyInfo;
+  typedef std::map<unsigned, std::pair<const MachineInstr*, unsigned> >
+          FULatencyInfo;
   FULatencyInfo FUInfo;
 
   unsigned updateFULatency(unsigned FUId, unsigned Latency, MachineInstr *MI);
 
 public:
-  CycleLatencyInfo() {}
+  CycleLatencyInfo(MachineRegisterInfo &MRI) : DetialLatencyInfo(MRI) {
+    reset();
+  }
 
   unsigned computeLatency(MachineBasicBlock &MBB, bool reset = false);
 
   void reset() {
-    DepInfo.clear();
+    DetialLatencyInfo::reset();
     FUInfo.clear();
+    DepInfo.clear();
+    DepInfo.insert(std::make_pair(DetialLatencyInfo::EntryMarker, 0));
   }
 };
 } // end namespace llvm

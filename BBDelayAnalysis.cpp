@@ -31,7 +31,7 @@ BBDelayAnalysis::BBDelayAnalysis() : MachineFunctionPass(ID) {
 }
 
 bool BBDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
-  CycleLatencyInfo CL;
+  CycleLatencyInfo CL(MF.getRegInfo());
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     MachineBasicBlock *MBB = I;

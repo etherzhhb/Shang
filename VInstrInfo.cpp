@@ -1137,7 +1137,7 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
   if (Reset) reset();
 
-  unsigned TotalLatency = 0;
+  unsigned TotalLatency = 1;
   for (MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end(); I != E; ++I){
     MachineInstr *MI = I;
 
@@ -1145,22 +1145,25 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
     bool hasPrebindFU = FU.isBound();
 
     unsigned L = 0;
-    // Iterate from use to define.
-    for (int i = MI->getNumOperands() - 1; i >= 0; --i) {
-      MachineOperand &MO = MI->getOperand(i);
 
-      if (!MO.isReg()) continue;
-
-      if (MO.isUse()) {
-        L = std::max(L, getLatencyFrom(MO.getReg(), MI));
-        continue;
-      }
-
-      if (hasPrebindFU) L = updateFULatency(FU.getData(), L, MI);
-
-      // Remember the register latency.
-      DepInfo.insert(std::make_pair(MO.getReg(), std::make_pair(MI, L)));
+    const DepLatInfoTy &LatInfo = addInstrInternal(MI, false);
+    typedef DepLatInfoTy::const_iterator dep_it;
+    for (dep_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
+      const MachineInstr *DepMI = I->first;
+      // Get the delay (from entry) of DepMI.
+      DepLatencyMap::iterator at = DepInfo.find(DepMI);
+      assert(at != DepInfo.end() && "Dependence missed?");
+      // Compute the delay of thie MI by accumulating the edge delay to the
+      // delay of DepMI.
+      L = at->second + std::ceil(I->second);
+      if (DepMI == DetialLatencyInfo::EntryMarker) DepMI = 0;
+      L = std::max(L, VInstrInfo::getCtrlStepBetween(DepMI, MI));
     }
+
+    if (hasPrebindFU) L = updateFULatency(FU.getData(), L, MI);
+
+    // Remember the delay (from entry) of this MI.
+    DepInfo[MI] = L;
 
     TotalLatency = std::max(TotalLatency, L);
   }
@@ -1168,25 +1171,11 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
   return TotalLatency;
 }
 
-unsigned CycleLatencyInfo::getLatencyFrom(unsigned Reg, MachineInstr *MI)const{
-  unsigned SrcLatency = 0;
-  MachineInstr *SrcMI = 0;
-  DepLatencyMap::const_iterator at = DepInfo.find(Reg);
-  if (at != DepInfo.end()) {
-    SrcMI = at->second.first;
-    SrcLatency = at->second.second;
-  }
-
-  SrcLatency += VInstrInfo::getCtrlStepBetween(SrcMI, MI);
-
-  return SrcLatency;
-}
-
 unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
-                                      MachineInstr *MI) {
-  std::pair<MachineInstr*, unsigned> &LI = FUInfo[FUId];
+                                           MachineInstr *MI) {
+  std::pair<const MachineInstr*, unsigned> &LI = FUInfo[FUId];
   unsigned &FULatency = LI.second;
-  MachineInstr *&LastMI = LI.first;
+  const MachineInstr *&LastMI = LI.first;
   FuncUnitId ID(FUId);
 
   unsigned EdgeLatency = VInstrInfo::getCtrlStepBetween(LastMI, MI);
