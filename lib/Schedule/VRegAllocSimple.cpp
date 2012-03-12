@@ -434,9 +434,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
       // FIXME: Merging VOpMvPhi break adpcm_main_IMS_ASAP.
       return true;
     case VTM::VOpMvPipe:
-    case VTM::VOpMove_rw:
-    case VTM::VOpMove_rr:
-    case VTM::VOpMove_ri:
+    case VTM::VOpMove:
     case VTM::COPY:
     case VTM::VOpReadFU:
     case VTM::VOpDstMux:
