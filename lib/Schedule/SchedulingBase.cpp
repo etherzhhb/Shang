@@ -145,20 +145,12 @@ void SchedulingBase::buildALAPStep() {
 
       unsigned &ALAPStep = SUnitToTF[A].second;
       if (ALAPStep != NewStep) {
+        assert(getASAPStep(A) <= NewStep && "Broken ALAP step!");
         ALAPStep = NewStep;
         changed = true;
       }
     }
   } while (changed);
-
-#ifndef NDEBUG
-  // Verify the time frames.
-  typedef VSchedGraph::sched_iterator it;
-  for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
-    VSUnit *A = *I;
-    assert(getALAPStep(A) >= getASAPStep(A)  && "Broken time frame!");
-  }
-#endif
 }
 
 void SchedulingBase::printTimeFrame(raw_ostream &OS) const {
