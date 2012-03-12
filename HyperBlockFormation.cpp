@@ -32,6 +32,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Format.h"
 #define DEBUG_TYPE "vtm-merge-fallthroughs"
 #include "llvm/Support/Debug.h"
 #include <set>
@@ -94,6 +95,102 @@ struct sort_bb_by_freq {
     return MBFI->getBlockFreq(LHS) < MBFI->getBlockFreq(RHS);
   }
 };
+
+template<typename T>
+static T gcd(T a, T b) {
+  while (b > 0) {
+    T temp = b;
+    b = a % b; // % is remainder
+    a = temp;
+  }
+
+  return a;
+}
+
+template<typename T>
+static T lcm(T a, T b) {
+  return a * (b / gcd(a, b));
+}
+
+//template<typename T>
+//static long gcd(ArrayRef<T> input) {
+//  T result = input[0];
+//
+//  for(unsigned i = 1; i < input.size(); i++)
+//    result = gcd(result, input[i]);
+//
+//  return result;
+//}
+//
+//template<typename T>
+//static T lcm(ArrayRef<T> input) {
+//  T result = input[0];
+//
+//  for(int i = 1; i < input.size(); i++)
+//    result = lcm(result, input[i]);
+//
+//  return result;
+//}
+
+struct Probability {
+  // Numerator
+  uint32_t N;
+
+  // Denominator
+  uint32_t D;
+
+  void scale(uint32_t S) {
+    N /= S;
+    D /= S;
+  }
+
+  void scaleByGCD() {
+    scale(gcd(N, D));
+  }
+
+  /*implicit*/ Probability(BranchProbability P)
+    : N(P.getNumerator()), D(P.getDenominator()) {
+    assert(D > 0 && "Denomiator cannot be 0!");
+    //scaleByGCD();
+  }
+
+  explicit Probability(uint32_t n = 0, uint32_t d = 1) : N(n), D(d) {
+    assert(D > 0 && "Denomiator cannot be 0!");
+    //scaleByGCD();
+  }
+
+  uint32_t getNumerator() const { return N; }
+  uint32_t getDenominator() const { return D; }
+
+  Probability &operator+=(Probability P) {
+
+    uint32_t Numerator = getNumerator() * P.getDenominator() +
+                        P.getNumerator() * getDenominator();
+    uint32_t Denominator = getDenominator() * P.getDenominator();
+    N = Numerator;
+    D = Denominator;
+    scaleByGCD();
+    return *this;
+  }
+
+  Probability &operator*=(Probability P) {
+    uint32_t Numerator = getNumerator() * P.getNumerator();
+    uint32_t Denominator = getDenominator() * P.getDenominator();
+    N = Numerator;
+    D = Denominator;
+    scaleByGCD();
+    return *this;
+  }
+
+  void print(raw_ostream &OS) const {
+    OS << N << " / " << D << " = " << format("%g%%", ((double)N / D) * 100.0);
+  }
+};
+
+raw_ostream &operator<<(raw_ostream &OS, const Probability &Prob) {
+  Prob.print(OS);
+  return OS;
+}
 }
 
 char HyperBlockFormation::ID = 0;
@@ -388,14 +485,23 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
   std::set<MachineBasicBlock*> NewSuccs;
 
+  typedef DenseMap<MachineBasicBlock*, Probability> ProbMapTy;
+  ProbMapTy BBProbs;
+  uint32_t WeightLCM = 1;
+  // The probability of the edge from ToBB to FromBB.
+  BranchProbability MergedBBProb =MBPI->getEdgeProbability(ToBB, FromBB);
+
   for (jt_it I = FromJT.begin(),E = FromJT.end(); I != E; ++I){
     MachineBasicBlock *Succ = I->first;
     // Merge the PHINodes.
     VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, PredVec);
-    // We had assert FromJT not contains FromBB, so we do not need to worry
-    // about adding FromBB to the successor of ToBB again.
-    // Is it the successor of FromBB become the new successor of ToBB?
-    if (!ToJT.count(Succ)) ToBB->addSuccessor(Succ);
+
+    Probability SuccProb = MBPI->getEdgeProbability(FromBB, Succ);
+    // In the merged block, sum of probabilities of FromBB's successor should
+    // be the original edge probability from ToBB to FromBB.
+    SuccProb *= MergedBBProb;
+    BBProbs.insert(std::make_pair(Succ, SuccProb));
+    WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
 
     FromBB->removeSuccessor(Succ);
 
@@ -404,8 +510,28 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
                                       MRI, TII, VTM::VOpAnd);
   }
 
+  typedef MachineBasicBlock::succ_iterator succ_it;
+  for (unsigned i = ToBB->succ_size(); i > 0; --i) {
+    succ_it SuccIt = ToBB->succ_begin() + i - 1;
+    MachineBasicBlock *Succ = *SuccIt;
+    if (Succ != FromBB) {
+      Probability &SuccProb = BBProbs[Succ];
+      SuccProb += MBPI->getEdgeProbability(ToBB, Succ);
+      WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
+    }
+
+    ToBB->removeSuccessor(SuccIt);
+  }
+
+  // Rebuild the successor list with new weights.
+  for (ProbMapTy::iterator I = BBProbs.begin(), E = BBProbs.end(); I != E; ++I){
+    Probability Prob = I->second;
+    uint32_t w = Prob.getNumerator() * WeightLCM / Prob.getDenominator();
+    dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n';
+    ToBB->addSuccessor(I->first, w);
+  }
+
   // Do not jump to FromBB any more.
-  ToBB->removeSuccessor(FromBB);
   ToJT.erase(FromBB);
   // We had assert FromJT not contains FromBB.
   // FromJT.erase(FromBB);
