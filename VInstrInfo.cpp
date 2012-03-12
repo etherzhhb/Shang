@@ -825,8 +825,6 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpXor:
   case VTM::VOpNot:         return VFUs::LutLatency;
 
-  case VTM::PHI:            return DeltaLatency;
-
   case VTM::VOpROr:
   case VTM::VOpRAnd:
   case VTM::VOpRXor:{
@@ -880,9 +878,10 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
 
   // Compute the latency correspond to detail slot.
   double latency = getDetialLatency(SrcInstr);
+  bool SrcWriteUntilFInish = isWriteUntilFinish(SrcOpC);
   bool DstReadAtEmit = isReadAtEmit(DstOpC);
 
-  if (DstReadAtEmit && isWriteUntilFinish(SrcOpC)) {
+  if (DstReadAtEmit && SrcWriteUntilFInish) {
     if (SrcOpC == VTM::VOpDstMux)
       // Special case: Set latency from VOpDstMux to Ctrl-Op to 1 explicitly.
       // Because this latency is accumulated into the chain latency.
@@ -902,7 +901,9 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   }
 
   // Chain the operations if dst not read value at the edge of the clock.
-  return std::max(latency - DeltaLatency, 0.0);
+  return std::max(latency - DeltaLatency,
+                  // If the value is written to register, it has a delta latency
+                  SrcWriteUntilFInish ? DeltaLatency : 0.0);
 }
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
