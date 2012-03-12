@@ -551,8 +551,7 @@ private:
 
   // Define the success vector type dereference function, this function pointer
   // will be passed to the succ_iterator map_iterator.
-  inline static
-    VASTSlot *get_pair_first(std::pair<VASTSlot*, VASTUse> P) {
+  inline static VASTSlot *get_pair_first(std::pair<VASTSlot*, VASTUse> P) {
     return P.first;
   }
 
@@ -586,11 +585,6 @@ public:
   unsigned getSlotNum() const { return getSubClassData(); }
   // The start slot of parent state(MachineBasicBlock)
   unsigned getParentIdx() const { return ParentIdx; }
-  // The slots passed after the parent state start before reach the current
-  // slot.
-  unsigned getSlackFromParentStart() const {
-    return getSlotNum() - getParentIdx();
-  }
 
   // TODO: Rename to addSuccSlot.
   void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd = VASTUse(true, 1));
@@ -647,6 +641,13 @@ public:
     EndSlot = endSlot;
     II = ii;
   }
+
+  // Is the current slot the first slot of its alias slots?
+  bool isLeaderSlot() const { return StartSlot == getSlotNum(); }
+  // Iterates over all alias slot
+  unsigned alias_start() const { return StartSlot; }
+  unsigned alias_end() const { return EndSlot; }
+  unsigned alias_ii() const { return II; }
 
   bool operator<(const VASTSlot &RHS) const {
     return getSlotNum() < RHS.getSlotNum();
@@ -757,7 +758,6 @@ private:
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
-  CFGShortestPath *SP;
 
 public:
   static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
@@ -789,12 +789,13 @@ public:
 
   const std::string &getName() const { return Name; }
 
-  void InitCFGShortestPathPointer(CFGShortestPath *SPPointer);
   void printDatapath(raw_ostream &OS) const;
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 
   // Print the slot control flow.
-  void buildSlotLogic();
+  typedef DenseMap<unsigned, const MachineBasicBlock*> StartIdxMapTy;
+  void buildSlotLogic(StartIdxMapTy &StartIdxMap);
+  void writeProfileCounters(VASTSlot *S, StartIdxMapTy &StartIdxMap);
 
   bool eliminateConstRegisters();
 

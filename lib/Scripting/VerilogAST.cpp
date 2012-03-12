@@ -30,12 +30,18 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "verilog-ast"
 #include "llvm/Support/Debug.h"
 
 #include <sstream>
 
 using namespace llvm;
+
+static cl::opt<bool>
+EnableBBProfile("vtm-enable-bb-profile",
+                cl::desc("Generate counters to profile the design"),
+                cl::init(false));
 
 //===----------------------------------------------------------------------===//
 // Value and type printing
@@ -201,7 +207,7 @@ VASTUse::iterator VASTUse::dp_src_end() {
 }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
-  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
+  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum + 1), II(1),
    ParentIdx(parentIdx) {
 
   // Create the relative signals.
@@ -610,11 +616,14 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
     (*I)->printAssignment(OS);
 }
 
-void VASTModule::buildSlotLogic() {
+void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
     if (VASTSlot *S = *I) {
       S->buildReadyLogic(*this);
       S->buildCtrlLogic(*this);
+
+      // Create a profile counter for each BB.
+      if (EnableBBProfile) writeProfileCounters(S, StartIdxMap);
     }
 }
 
@@ -999,6 +1008,55 @@ VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
 
 // Out of line virtual function to provide home for the class.
 void VASTModule::anchor() {}
+
+void VASTModule::writeProfileCounters(VASTSlot *S,
+                                      VASTModule::StartIdxMapTy &StartIdxMap) {
+  std::string BBCounter = "cnt" + utostr_32(S->getParentIdx());
+  std::string FunctionCounter = "cnt" + getName();
+  vlang_raw_ostream &CtrlS = getControlBlockBuffer();
+  
+  // Create the profile counter.
+  if (S->getParentIdx() == S->getSlotNum()) {
+    unsigned ParentIdx = S->getParentIdx();
+    addRegister(BBCounter, 64)->Pin();
+
+    CtrlS.if_begin(getPortName(VASTModule::Finish));
+    CtrlS << "$display(\"Module: " << getName();
+    // Write the parent MBB name.
+    if (ParentIdx) {
+      const MachineBasicBlock *MBB = StartIdxMap.lookup(ParentIdx);
+      CtrlS << " MBB#" << MBB->getNumber() << ": " << MBB->getName();
+    }
+
+    CtrlS << ' ' << "->%d\"," << BBCounter << ");\n";
+    CtrlS.exit_block() << "\n";
+
+    // Write the counter for the function.
+    if (S->getSlotNum() == 0) {
+      addRegister(FunctionCounter, 64)->Pin();
+      CtrlS.if_begin(getPortName(VASTModule::Finish));
+      CtrlS << "$display(\"Module: " << getName();
+
+      CtrlS << " total cycles" << "->%d\"," << FunctionCounter << ");\n";
+      CtrlS.exit_block() << "\n";
+    }
+  }
+
+  // Increase the profile counter.
+  if (S->isLeaderSlot()) {
+    CtrlS.if_() << "0'b0";
+    for (unsigned i = S->alias_start(), e = S->alias_end(),
+      k = S->alias_ii(); i < e; i += k) {
+        CtrlS << '|' << getSlot(i)->getRegister()->getName();
+    }
+
+    CtrlS._then();
+    CtrlS << BBCounter << " <= " << BBCounter << " +1;\n";
+    CtrlS << FunctionCounter << " <= " << FunctionCounter << " +1;\n";
+    CtrlS.exit_block() << "\n";
+  }
+}
+
 
 void VASTValue::print(raw_ostream &OS) const {
   assert(0 && "VASTValue::print should not be called!");

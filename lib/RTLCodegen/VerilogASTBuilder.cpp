@@ -201,6 +201,12 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   void emitIdleState();
 
+  // Remember the MBB with specific start slot.
+  VASTModule::StartIdxMapTy StartIdxMap;
+  void indexMBB(unsigned StartIdx, const MachineBasicBlock *MBB) {
+    StartIdxMap.insert(std::make_pair(StartIdx, MBB));
+  }
+
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
@@ -300,6 +306,10 @@ public:
 
   bool doInitialization(Module &M);
 
+  void releaseMemory() {
+    StartIdxMap.clear();
+  }
+
   bool runOnMachineFunction(MachineFunction &MF);
 
   virtual void print(raw_ostream &O, const Module *M) const;
@@ -356,7 +366,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
     emitBasicBlock(*I);
 
   // Building the Slot active signals.
-  VM->buildSlotLogic();
+  VM->buildSlotLogic(StartIdxMap);
 
   // TODO: Optimize the RTL net list.
   // FIXME: Do these in separate passes.
@@ -426,6 +436,9 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   PredMapTy NextStatePred;
   typedef MachineBasicBlock::instr_iterator instr_it;
   instr_it I = &*llvm::next(MachineBasicBlock::iterator(MBB.getFirstNonPHI()));
+
+  // Index the mbb for debug.
+  indexMBB(startSlot, &MBB);
 
   //ucState FstCtrl(I);
   //if (FstCtrl.empty())
