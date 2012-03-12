@@ -208,13 +208,12 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
   std::vector<MachineBasicBlock*> BBs;
 
   VInstrInfo::JT CurJT, SuccJT;
-  BlockFrequency BBFreq = MBFI->getBlockFreq(MBB);
+  uint64_t WeightSum = 0;
 
   // Latency statistics.
   CycleLatencyInfo CL;
   unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergeLatnecy = 0;
   uint64_t AvePathDelay = 0;
-  std::map<MachineBasicBlock*, int64_t> BBSavedCyles;
 
   typedef MachineBasicBlock::succ_iterator succ_iterator;
   for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
@@ -222,23 +221,24 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
     SuccJT.clear();
     CurJT.clear();
 
-    uint64_t BrFreq =
-      (BBFreq * MBPI->getEdgeProbability(MBB, SuccBB)).getFrequency();
+    uint64_t EdgeWeight = MBPI->getEdgeWeight(MBB, SuccBB);
+    WeightSum += EdgeWeight;
 
     MachineBasicBlock *MergeDst = getMergeDst(SuccBB, SuccJT, CurJT);
     if (!MergeDst) {
       // SuccBB can not be merged, the path delay is simply the delay of current
       // BB.
-      AvePathDelay += MBBDelay * BrFreq;
+      AvePathDelay += MBBDelay * EdgeWeight;
       continue;
     }
 
     assert(MergeDst == MBB && "Succ have more than one Pred?");
-    unsigned MergeLatency = CL.computeLatency(*SuccBB);
+    unsigned MergedLatency = CL.computeLatency(*SuccBB);
     MaxMergeLatnecy = std::max(MaxMergeLatnecy, MergeLatency);
+    MaxMergeLatnecy = std::max(MaxMergeLatnecy, MergedLatency);
     // Compute the original path delay including current BB and success BB.
     unsigned PathDelay = MBBDelay + BBDelay->getBBDelay(SuccBB);
-    AvePathDelay += PathDelay * BrFreq;
+    AvePathDelay += PathDelay * EdgeWeight;
     BBs.push_back(SuccBB);
   }
 
@@ -246,8 +246,9 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB) {
 
   // Only merge the SuccBB into current BB if the merge is beneficial.
   // TODO: Remove the SuccBB with smallest beneficial and try again.
-  if (AvePathDelay < MaxMergeLatnecy * BBFreq.getFrequency())
+  if (AvePathDelay < MaxMergeLatnecy * WeightSum) {
     return false;
+  }
 
   bool ActuallyMerged = false;
   while (!BBs.empty()) {
@@ -527,7 +528,7 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   for (ProbMapTy::iterator I = BBProbs.begin(), E = BBProbs.end(); I != E; ++I){
     Probability Prob = I->second;
     uint32_t w = Prob.getNumerator() * WeightLCM / Prob.getDenominator();
-    dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n';
+    DEBUG(dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n');
     ToBB->addSuccessor(I->first, w);
   }
 
