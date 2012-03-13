@@ -567,6 +567,13 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
 }
 
 void RtlSSAAnalysis::ComputeGenAndKill(){
+  // Collect the generated statements to the SlotGenMap.
+  for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
+    ValueAtSlot *VAS = *I;
+    SlotInfo *SI = getOrCreateSlotInfo(VAS->getSlot());
+    SI->insertGen(VAS);
+  }
+
   // Collect the generated statements to the SlotGenMap, and collect the killed
   // statements to the SlotKillMap.
   for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
@@ -580,15 +587,6 @@ void RtlSSAAnalysis::ComputeGenAndKill(){
     typedef SlotInfo::vasset_it vasset_iterator;
 
     DEBUG(dbgs()<<"origin slot: "<< S->getName()<< "\n";);
-
-    // Collect the generated statements to the SlotGenMap.
-    for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
-      ValueAtSlot *GenVAS = *I;
-
-      // If the VAS have the same slot with S, then its a Generated VAS to this
-      // slot.
-      if (GenVAS->getSlot() == S) SI->insertGen(GenVAS);
-    }
 
     // Collect the killed statements to the SlotGenMap.
     for (vasset_iterator I = SI->gen_begin(), E = SI->gen_end();
