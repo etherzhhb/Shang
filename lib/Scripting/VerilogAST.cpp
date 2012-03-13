@@ -1016,44 +1016,44 @@ void VASTModule::writeProfileCounters(VASTSlot *S,
   vlang_raw_ostream &CtrlS = getControlBlockBuffer();
   
   // Create the profile counter.
-  if (S->getParentIdx() == S->getSlotNum()) {
-    unsigned ParentIdx = S->getParentIdx();
-    addRegister(BBCounter, 64)->Pin();
-
+  // Write the counter for the function.
+  if (S->getSlotNum() == 0) {
+    addRegister(FunctionCounter, 64)->Pin();
     CtrlS.if_begin(getPortName(VASTModule::Finish));
     CtrlS << "$display(\"Module: " << getName();
-    // Write the parent MBB name.
-    if (ParentIdx) {
-      const MachineBasicBlock *MBB = StartIdxMap.lookup(ParentIdx);
-      CtrlS << " MBB#" << MBB->getNumber() << ": " << MBB->getName();
-    }
 
-    CtrlS << ' ' << "->%d\"," << BBCounter << ");\n";
+    CtrlS << " total cycles" << "->%d\"," << FunctionCounter << ");\n";
     CtrlS.exit_block() << "\n";
+  } else { // Dont count the ilde state at the moment.
+    if (S->getParentIdx() == S->getSlotNum()) {
+      unsigned ParentIdx = S->getParentIdx();
+      addRegister(BBCounter, 64)->Pin();
 
-    // Write the counter for the function.
-    if (S->getSlotNum() == 0) {
-      addRegister(FunctionCounter, 64)->Pin();
       CtrlS.if_begin(getPortName(VASTModule::Finish));
       CtrlS << "$display(\"Module: " << getName();
+      // Write the parent MBB name.
+      if (ParentIdx) {
+        const MachineBasicBlock *MBB = StartIdxMap.lookup(ParentIdx);
+        CtrlS << " MBB#" << MBB->getNumber() << ": " << MBB->getName();
+      }
 
-      CtrlS << " total cycles" << "->%d\"," << FunctionCounter << ");\n";
+      CtrlS << ' ' << "->%d\"," << BBCounter << ");\n";
       CtrlS.exit_block() << "\n";
     }
-  }
 
-  // Increase the profile counter.
-  if (S->isLeaderSlot()) {
-    CtrlS.if_() << S->getRegister()->getName();
-    for (unsigned i = S->alias_start(), e = S->alias_end(),
-      k = S->alias_ii(); i < e; i += k) {
-        CtrlS << '|' << getSlot(i)->getRegister()->getName();
+    // Increase the profile counter.
+    if (S->isLeaderSlot()) {
+      CtrlS.if_() << S->getRegister()->getName();
+      for (unsigned i = S->alias_start(), e = S->alias_end(),
+        k = S->alias_ii(); i < e; i += k) {
+          CtrlS << '|' << getSlot(i)->getRegister()->getName();
+      }
+
+      CtrlS._then();
+      CtrlS << BBCounter << " <= " << BBCounter << " +1;\n";
+      CtrlS << FunctionCounter << " <= " << FunctionCounter << " +1;\n";
+      CtrlS.exit_block() << "\n";
     }
-
-    CtrlS._then();
-    CtrlS << BBCounter << " <= " << BBCounter << " +1;\n";
-    CtrlS << FunctionCounter << " <= " << FunctionCounter << " +1;\n";
-    CtrlS.exit_block() << "\n";
   }
 }
 
