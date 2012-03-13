@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
   Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
   // Analyse the slack between registers.
-  Passes.add(createCombPathDelayAnalysisPass());
+  //Passes.add(createCombPathDelayAnalysisPass());
 
   // Analyse the dependency between registers.
   Passes.add(createRtlSSAAnalysisPass());
