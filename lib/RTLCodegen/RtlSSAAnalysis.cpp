@@ -523,19 +523,19 @@ void RtlSSAAnalysis::DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS,
 
 void RtlSSAAnalysis::ComputeReachingDefinition() {
   ComputeGenAndKill();
+  // TODO: Simplify the data-flow, some slot may neither define new VAS nor
+  // kill any VAS.
 
-  bool Change;
+  bool Change = false;
 
   do {
     Change = false;
 
     for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
       VASTSlot *S =*I;
+      assert(S && "Unexpected null slot!");
 
       SlotInfo *SI = getOrCreateSlotInfo(S);
-
-      // If the VASTslot is void, abandon it.
-      if (!S) continue;
 
       VASSet OldOut = SI->getOutVASSet();
 
@@ -547,9 +547,6 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
         SI->insertIn(PSI->out_begin(), PSI->out_end());
       }
 
-      // Compute the SlotInMap subtract the SlotKillMap.
-      set_subtract(SI->getInVASSet(), SI->getKillVASSet());
-
       SI->clearOutSet();
 
       // Compute the SlotOutMap. insert the VAS from the SlotGenMap.
@@ -558,6 +555,10 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       SI->insertOut(SI->in_begin(), SI->in_end());
 
       VASSet &NewOut = SI->getOutVASSet();
+
+      // Do not let the killed VASs go out
+      set_subtract(NewOut, SI->getKillVASSet());
+
       Change |= OldOut != NewOut;
     }
   } while (Change);
