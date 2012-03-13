@@ -535,15 +535,17 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       VASTSlot *S =*I;
       assert(S && "Unexpected null slot!");
 
-      SlotInfo *SI = getOrCreateSlotInfo(S);
+      SlotInfo *SI = getSlotInfo(S);
+      assert(SI && "Slot information not existed?");
 
       VASSet OldOut = SI->getOutVASSet();
 
       // Compute the SlotInMap.
-      for (VASTSlot::pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE;
-           ++PI) {
+      typedef VASTSlot::pred_it pred_it;
+      for (pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE; ++PI) {
         VASTSlot *PS = *PI;
-        SlotInfo *PSI = getOrCreateSlotInfo(PS);
+        SlotInfo *PSI = getSlotInfo(PS);
+        assert(PSI && "Slot information not existed?");
         SI->insertIn(PSI->out_begin(), PSI->out_end());
       }
 
