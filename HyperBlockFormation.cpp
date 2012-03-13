@@ -33,7 +33,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Format.h"
-#define DEBUG_TYPE "vtm-merge-fallthroughs"
+#define DEBUG_TYPE "vtm-hyper-block"
 #include "llvm/Support/Debug.h"
 #include <set>
 #include <map>
