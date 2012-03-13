@@ -214,6 +214,7 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
   // Latency statistics.
   CycleLatencyInfo CL(*MRI);
   unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergedDelay = 0;
+  // Weighted delays.
   uint64_t UnmergedTotalDelay = 0, MergedTotalDelay = 0;
   // The delay after BB is merged.
   SmallVector<MachineBasicBlock*, 8> BBsToMerge;
@@ -233,8 +234,9 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
     bool updated;
     tie(at, updated) = UnmergedDelays.insert(std::make_pair(MBB,
                                                             UnmergedPathDelay));
-    if (updated) UnmergedPathDelay = at->second;
-    // Delay of unmerged edge.
+    // Delay already in the map.
+    if (!updated) UnmergedPathDelay = at->second;
+    // Weighted delay of unmerged edge.
     UnmergedTotalDelay += UnmergedPathDelay * EdgeWeight;
 
     MachineBasicBlock *MergeDst = getMergeDst(SuccBB, SuccJT, CurJT);
