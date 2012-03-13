@@ -207,7 +207,7 @@ VASTUse::iterator VASTUse::dp_src_end() {
 }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
-  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum + 1), II(1),
+  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
    ParentIdx(parentIdx) {
 
   // Create the relative signals.
@@ -1044,7 +1044,7 @@ void VASTModule::writeProfileCounters(VASTSlot *S,
 
   // Increase the profile counter.
   if (S->isLeaderSlot()) {
-    CtrlS.if_() << "0'b0";
+    CtrlS.if_() << S->getRegister()->getName();
     for (unsigned i = S->alias_start(), e = S->alias_end(),
       k = S->alias_ii(); i < e; i += k) {
         CtrlS << '|' << getSlot(i)->getRegister()->getName();
