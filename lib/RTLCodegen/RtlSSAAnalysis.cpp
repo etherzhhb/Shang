@@ -537,7 +537,7 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       // If the VASTslot is void, abandon it.
       if (!S) continue;
 
-      VASSet SlotOut = SI->getOutVASSet(), &CurOut = SI->getOutVASSet();
+      VASSet OldOut = SI->getOutVASSet();
 
       // Compute the SlotInMap.
       for (VASTSlot::pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE;
@@ -557,7 +557,8 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       // Compute the SlotOutMap. Insert the VAS from the SlotInMap.
       SI->insertOut(SI->in_begin(), SI->in_end());
 
-      Change |= SlotOut != CurOut;
+      VASSet &NewOut = SI->getOutVASSet();
+      Change |= OldOut != NewOut;
     }
   } while (Change);
 }
