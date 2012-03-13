@@ -16,8 +16,10 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
+
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/SetOperations.h"
 #define DEBUG_TYPE "vtm-reg-dependency"
@@ -43,48 +45,47 @@ namespace llvm {
     const FoldingSetNodeIDRef FastID;
 
     // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
-    typedef SmallVector<ValueAtSlot*, 4> VASVecTy;
-    VASVecTy PredVAS;
+    typedef SmallPtrSet<ValueAtSlot*, 8> VASVecTy;
+    VASVecTy DepVAS;
 
     // Vector for the successor ValueAtSlot.
-    VASVecTy SuccVAS;
+    VASVecTy UseVAS;
 
   public:
     explicit ValueAtSlot(const FoldingSetNodeIDRef ID, VASTValue *v,
                          VASTSlot *slot) : V(v), Slot(slot), FastID(ID) {}
 
-    void addPredValueAtSlot(ValueAtSlot *VAS){ PredVAS.push_back(VAS); }
-
-    void addSuccValueAtSlot(ValueAtSlot *VAS) { SuccVAS.push_back(VAS); }
+    void addDepVAS(ValueAtSlot *VAS){
+      DepVAS.insert(VAS);
+      VAS->UseVAS.insert(this);
+    }
 
     VASTValue *getValue() const { return V; }
 
     VASTSlot *getSlot() const { return Slot; }
 
 
-    typedef VASVecTy::iterator DVASIt;
-    DVASIt pred_vas_begin() { return PredVAS.begin(); }
-    DVASIt pred_vas_end() { return PredVAS.end(); }
+    typedef VASVecTy::iterator iterator;
+    iterator dep_begin() { return DepVAS.begin(); }
+    iterator dep_end() { return DepVAS.end(); }
 
-    DVASIt succ_vas_begin() { return SuccVAS.begin(); }
-    DVASIt succ_vas_end() { return SuccVAS.end(); }
+    iterator use_begin() { return UseVAS.begin(); }
+    iterator use_end() { return UseVAS.end(); }
 
     bool operator==(ValueAtSlot &RHS) const {
-      if ((V == RHS.getValue()) && (Slot == RHS.getSlot())) return true;
-      return false;
+      return V == RHS.getValue() && Slot == RHS.getSlot();
     }
-
   };
 
   template<> struct GraphTraits<ValueAtSlot*> {
     typedef ValueAtSlot NodeType;
-    typedef NodeType::DVASIt ChildIteratorType;
+    typedef NodeType::iterator ChildIteratorType;
     static NodeType *getEntryNode(NodeType* N) { return N; }
     static inline ChildIteratorType child_begin(NodeType *N) {
-      return N->succ_vas_begin();
+      return N->use_begin();
     }
     static inline ChildIteratorType child_end(NodeType *N) {
-      return N->succ_vas_end();
+      return N->use_end();
     }
   };
 
@@ -146,9 +147,9 @@ namespace llvm {
     }
 
     void insertIn(ValueAtSlot *VAS) { SlotIn.insert(VAS); }
-    void insertIn(vasset_it begin, vasset_it end) {
-      SlotIn.insert(begin, end);
-    }
+
+    // If the given slot lives in this slot?
+    bool isLiveIn(ValueAtSlot *VAS) const { return SlotIn.count(VAS); }
 
     std::pair<SlotInfo::vasset_it, bool> insertOut(ValueAtSlot *VAS) {
       return SlotOut.insert(VAS);
@@ -187,8 +188,6 @@ private:
 
   SlotVecTy SlotVec;
 
-  MachineFunction *MF;
-
   typedef FoldingSet<ValueAtSlot>::iterator fs_vas_it;
   FoldingSet<ValueAtSlot> UniqueVASs;
   BumpPtrAllocator Allocator;
@@ -216,17 +215,20 @@ public:
   ValueAtSlot *getOrCreateVAS(VASTValue *V, VASTSlot *S);
 
   // Traverse every register to define the ValueAtSlots.
+  void buildAllVAS(VASTModule *VM);
+
+  // Traverse every register to define the ValueAtSlots.
   void buildVASGraph(VASTModule *VM);
 
   // Add dependent ValueAtSlot.
-  void addVASDep(ValueAtSlot *VAS, VASTRegister *DefReg);
+  void addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg);
 
   // Traverse the dependent VASTUse to get the registers.
-  void visitDepRegister(VASTUse *DefUse, ValueAtSlot *VAS);
+  void visitDepTree(VASTUse DepTree, ValueAtSlot *VAS);
 
   // Traverse the use tree to get the registers.
   template<typename Func>
-  void DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS, Func F);
+  void DepthFirstTraverseDepTree(VASTUse DefUse, ValueAtSlot *VAS, Func F);
 
   // Using the reaching definition algorithm to sort out the ultimate
   // relationship of registers.
@@ -342,13 +344,12 @@ void RtlSSAAnalysis::viewGraph() {
 }
 }
 
-bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
-  MF = &F;
-  VASTModule *VM = MF->getInfo<VFInfo>()->getRtlMod();
+bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
+  VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
 
   // Push back all the slot into the SlotVec for the purpose of view graph.
-  for (VASTModule::slot_iterator I = VM->slot_begin(), E = VM->slot_end();
-       I != E; ++I) {
+  typedef VASTModule::slot_iterator slot_it;
+  for (slot_it I = VM->slot_begin(), E = VM->slot_end(); I != E; ++I) {
     VASTSlot *S = *I;
     // If the VASTslot is void, abandon it.
     if (!S) continue;
@@ -357,17 +358,19 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
   }
 
   // Define the VAS.
-  buildVASGraph(VM);
+  buildAllVAS(VM);
 
   ComputeReachingDefinition();
 
-  DEBUG(viewGraph(););
+  // Build the VAS dependence graph with reaching define information.
+  buildVASGraph(VM);
+
+  DEBUG(viewGraph());
 
   return false;
 }
 
-ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V,
-                                            VASTSlot *S){
+ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V, VASTSlot *S){
   FoldingSetNodeID ID;
   ID.AddPointer(V);
   ID.AddPointer(S);
@@ -401,58 +404,73 @@ SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   return SIPointer;
 }
 
-void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DefReg) {
-  for (assign_it I = DefReg->assign_begin(), E = DefReg->assign_end();
-       I != E; ++I){
-    VASTSlot *DefS = I->first->getSlot();
-    ValueAtSlot *PredVAS = getOrCreateVAS(DefReg, DefS);
-    VAS->addPredValueAtSlot(PredVAS);
+void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
+  SlotInfo *SI = getSlotInfo(VAS->getSlot());
+  assert(SI && "SlotInfo missed!");
 
-    // Add the VAS to the successor VAS vector.
-    PredVAS->addSuccValueAtSlot(VAS);
+  for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
+       I != E; ++I){
+    VASTSlot *DefSlot = I->first->getSlot();
+    ValueAtSlot *DefVAS = getOrCreateVAS(DepReg, DefSlot);
+    // VAS is only depends on DefVAS if it can reach this slot.
+    if (SI->isLiveIn(DefVAS)) VAS->addDepVAS(DefVAS);
   }
 }
 
-void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
-  for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
-       ++I){
-    VASTRegister *UseReg = *I;
+void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
+  typedef VASTModule::reg_iterator reg_it;
+  for (reg_it I = VM->reg_begin(), E = VM->reg_end(); I != E; ++I){
+      VASTRegister *Reg = *I;
 
     typedef VASTRegister::assign_itertor assign_it;
-    for (assign_it I = UseReg->assign_begin(), E = UseReg->assign_end();
-         I != E; ++I) {
+    for (assign_it I = Reg->assign_begin(), E = Reg->assign_end(); I != E; ++I){
       VASTSlot *S = I->first->getSlot();
       // Create the origin VAS.
-      ValueAtSlot *VAS = getOrCreateVAS(UseReg,S);
-      VASTUse *DefUse = I->second;
-      // Traverse the dependent VAS.
-      visitDepRegister(DefUse, VAS);
+      (void) getOrCreateVAS(Reg, S);
     }
   }
 }
 
-void RtlSSAAnalysis::visitDepRegister(VASTUse *DefUse, ValueAtSlot *VAS){
+void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
+  typedef VASTModule::reg_iterator it;
+  for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
+       ++I){
+    VASTRegister *R = *I;
 
-  VASTValue *DefValue = DefUse->getOrNull();
+    typedef VASTRegister::assign_itertor assign_it;
+    for (assign_it I = R->assign_begin(), E = R->assign_end(); I != E; ++I) {
+      VASTSlot *S = I->first->getSlot();
+      // Create the origin VAS.
+      ValueAtSlot *VAS = getOrCreateVAS(R, S);
+      // Build dependence for conditions
+      visitDepTree(I->first, VAS);
+      // Build dependence for the assigning value.
+      visitDepTree(*I->second, VAS);
+    }
+  }
+}
+
+void RtlSSAAnalysis::visitDepTree(VASTUse DepTree, ValueAtSlot *VAS){
+  VASTValue *DefValue = DepTree.getOrNull();
 
   // If Define Value is immediate or symbol, skip it.
   if (!DefValue) return;
 
   // If the define Value is register, add the dependent VAS to the
   // dependentVAS.
-  if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)){
-    addVASDep(VAS, DefReg);
+  if (VASTRegister *DepReg = dyn_cast<VASTRegister>(DefValue)){
+    addVASDep(VAS, DepReg);
     return;
   }
 
   VASDepBuilder B(*this);
   // If the define Value is wire, traverse the use tree to get the
   // ultimate registers.
-  DepthFirstTraverseUseTree(*DefUse, VAS, B);
+  DepthFirstTraverseDepTree(DepTree, VAS, B);
 }
 
 template<typename Func>
-void RtlSSAAnalysis::DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS,
+void RtlSSAAnalysis::DepthFirstTraverseDepTree(VASTUse DepTree, ValueAtSlot *VAS,
                                                Func F) {
   typedef VASTUse::iterator ChildIt;
   // Use seperate node and iterator stack, so we can get the path vector.
@@ -463,12 +481,9 @@ void RtlSSAAnalysis::DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS,
   // Remember what we had visited.
   std::set<VASTUse> VisitedUses;
 
-  // Put the current node into the node stack, so it will appears in the path.
-  NodeWorkStack.push_back(VAS->getValue());
-
   // Put the root.
-  NodeWorkStack.push_back(DefUse);
-  ItWorkStack.push_back(DefUse.dp_src_begin());
+  NodeWorkStack.push_back(DepTree);
+  ItWorkStack.push_back(DepTree.dp_src_begin());
 
   while (!ItWorkStack.empty()) {
     VASTUse Node = NodeWorkStack.back();
@@ -519,7 +534,7 @@ void RtlSSAAnalysis::DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS,
     ItWorkStack.push_back(ChildNode.dp_src_begin());
   }
 
-  assert(NodeWorkStack.back().get() == VAS->getValue() && "Node stack broken!");
+  assert(NodeWorkStack.empty() && "Node stack broken!");
 }
 
 void RtlSSAAnalysis::ComputeReachingDefinition() {
