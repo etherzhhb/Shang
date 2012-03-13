@@ -114,7 +114,8 @@ namespace llvm {
     const VASTSlot *S;
     // Define Set for the reaching definition.
     VASSetTy SlotGen;
-    VASSetTy SlotKill;
+    typedef std::set<VASTValue*> ValueSet;
+    ValueSet OverWrittenValue;
     VASSetTy SlotIn;
     VASSetTy SlotOut;
   public:
@@ -122,8 +123,6 @@ namespace llvm {
     // get the iterator of the defining map of reaching definition.
     vasset_it gen_begin() const { return SlotGen.begin(); }
     vasset_it gen_end() const { return SlotGen.end(); }
-    vasset_it kill_begin() const { return SlotKill.begin(); }
-    vasset_it kill_end() const { return SlotKill.end(); }
     vasset_it in_begin() const { return SlotIn.begin(); }
     vasset_it in_end() const { return SlotIn.end(); }
     vasset_it out_begin() const { return SlotOut.begin(); }
@@ -131,26 +130,28 @@ namespace llvm {
 
     // Get different VAS sets.
     VASSetTy &getGenVASSet() { return SlotGen; }
-    VASSetTy &getKillVASSet() { return SlotKill; }
     VASSetTy &getInVASSet() { return SlotIn; }
     VASSetTy &getOutVASSet() { return SlotOut; }
 
+    // Any VAS whose value is generated at this slot, but its slot is not equal
+    // to this slot is killed.
+    bool isVASKilled(const ValueAtSlot *VAS) const {
+      return VAS->getSlot() != S && OverWrittenValue.count(VAS->getValue());
+    }
+
     // Insert VAS into different set.
-    void insertGen(ValueAtSlot *VAS) { SlotGen.insert(VAS); }
-    void insertGen(vasset_it begin, vasset_it end) {
-      SlotGen.insert(begin, end);
+    void insertGen(ValueAtSlot *VAS) {
+      SlotGen.insert(VAS);
+      OverWrittenValue.insert(VAS->getValue());
     }
-    void insertKill(ValueAtSlot *VAS) { SlotKill.insert(VAS); }
-    void insertKill(vasset_it begin, vasset_it end) {
-      SlotKill.insert(begin, end);
-    }
+
     void insertIn(ValueAtSlot *VAS) { SlotIn.insert(VAS); }
     void insertIn(vasset_it begin, vasset_it end) {
       SlotIn.insert(begin, end);
     }
-    void insertOut(ValueAtSlot *VAS) { SlotOut.insert(VAS); }
-    void insertOut(vasset_it begin, vasset_it end) {
-      SlotOut.insert(begin, end);
+
+    std::pair<SlotInfo::vasset_it, bool> insertOut(ValueAtSlot *VAS) {
+      return SlotOut.insert(VAS);
     }
 
     // Clear the SlotOut set.
@@ -538,35 +539,28 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       SlotInfo *SI = getSlotInfo(S);
       assert(SI && "Slot information not existed?");
 
-      VASSet OldOut = SI->getOutVASSet();
-
-      // Compute the SlotInMap.
+      // Compute the out set.
       typedef VASTSlot::pred_it pred_it;
       for (pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE; ++PI) {
         VASTSlot *PS = *PI;
         SlotInfo *PSI = getSlotInfo(PS);
         assert(PSI && "Slot information not existed?");
-        SI->insertIn(PSI->out_begin(), PSI->out_end());
+        typedef SlotInfo::vasset_it it;
+        for (it II = PSI->out_begin(), IE = PSI->out_end(); II != IE; ++II) {
+          ValueAtSlot *PredOut = *II;
+          SI->insertIn(PredOut);
+          // Do not let the killed VASs go out
+          if (!SI->isVASKilled(PredOut))
+            // New out occur.
+            Change |= SI->insertOut(PredOut).second;
+        }
       }
-
-      SI->clearOutSet();
-
-      // Compute the SlotOutMap. insert the VAS from the SlotGenMap.
-      SI->insertOut(SI->gen_begin(), SI->gen_end());
-      // Compute the SlotOutMap. Insert the VAS from the SlotInMap.
-      SI->insertOut(SI->in_begin(), SI->in_end());
-
-      VASSet &NewOut = SI->getOutVASSet();
-
-      // Do not let the killed VASs go out
-      set_subtract(NewOut, SI->getKillVASSet());
-
-      Change |= OldOut != NewOut;
     }
   } while (Change);
 }
 
 void RtlSSAAnalysis::ComputeGenAndKill(){
+  typedef SlotInfo::vasset_it vas_it;
   // Collect the generated statements to the SlotGenMap.
   for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
     ValueAtSlot *VAS = *I;
@@ -574,56 +568,17 @@ void RtlSSAAnalysis::ComputeGenAndKill(){
     SI->insertGen(VAS);
   }
 
-  // Collect the generated statements to the SlotGenMap, and collect the killed
-  // statements to the SlotKillMap.
+  // Build the Out set from Gen set.
   for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
-    VASTSlot *S = *I;
-
-    // If the VASTslot is void, abandon it.
-    if (!S) continue;
-
+    VASTSlot *S =*I;
+    assert(S && "Unexpected null slot!");
     SlotInfo *SI = getOrCreateSlotInfo(S);
-
-    typedef SlotInfo::vasset_it vasset_iterator;
-
-    DEBUG(dbgs()<<"origin slot: "<< S->getName()<< "\n";);
-
-    // Collect the killed statements to the SlotGenMap.
-    for (vasset_iterator I = SI->gen_begin(), E = SI->gen_end();
-         I != E; ++I) {
-      ValueAtSlot *GenVAS = *I;
-
-      for (vasvec_it VI = AllVASs.begin(), VE = AllVASs.end(); VI != VE;
-           ++VI) {
-        ValueAtSlot *KillVAS = *VI;
-
-        // abandon the same VAS.
-        if (GenVAS == KillVAS) continue;
-
-        // If the KillVAS have the same value with the GenVAS, then it's killed.
-        if (GenVAS->getValue() == KillVAS->getValue())
-          SI->insertKill(KillVAS);
-      }
+    for (vas_it VI = SI->gen_begin(), VE = SI->gen_end(); VI != VE; ++VI) {
+      ValueAtSlot *VAS = *VI;
+      SI->insertOut(VAS);
+      DEBUG(dbgs() << "    Gen: " << VAS->getValue()->getName() << "   "
+                    << VAS->getSlot()->getName() << "\n");
     }
-
-    DEBUG(
-      for (vasset_iterator I = SI->gen_begin(), E = SI->gen_end();
-           I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        if (S->getSlotNum() == 0) {
-          dbgs()<<"    Gen: "<< VAS->getValue()->getName() << "   "
-                << VAS->getSlot()->getName() << "\n";
-        }
-      }
-      for (vasset_iterator I = SI->kill_begin(), E = SI->kill_end();
-            I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        if (S->getSlotNum() == 0) {
-          dbgs()<<"    Kill: "<< VAS->getValue()->getName() << "   "
-                << VAS->getSlot()->getName()  << "\n";
-        }
-      }
-    );
   }
 }
 
