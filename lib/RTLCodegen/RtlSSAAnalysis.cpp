@@ -195,10 +195,6 @@ private:
   // define VAS assign iterator.
   typedef VASTRegister::assign_itertor assign_it;
 
-  // define a function pointer which is use to add dependent VAS.
-  typedef void(RtlSSAAnalysis::* addDependentVASFuncTy)(ValueAtSlot*,
-                                                               VASTRegister*);
-
 public:
   static char ID;
 
@@ -222,14 +218,14 @@ public:
   void defineVAS(VASTModule *VM);
 
   // Add dependent ValueAtSlot.
-  void addDependentVAS(ValueAtSlot *VAS, VASTRegister *DefReg);
+  void addVASDep(ValueAtSlot *VAS, VASTRegister *DefReg);
 
   // Traverse the dependent VASTUse to get the registers.
-  void TraverseDependentRegister(VASTUse *DefUse, ValueAtSlot *VAS);
+  void visitDepRegister(VASTUse *DefUse, ValueAtSlot *VAS);
 
   // Traverse the use tree to get the registers.
-  void DepthFirstTraverseUseTree(addDependentVASFuncTy F, VASTUse DefUse,
-                                 ValueAtSlot *VAS);
+  template<typename Func>
+  void DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS, Func F);
 
   // Using the reaching definition algorithm to sort out the ultimate
   // relationship of registers.
@@ -260,6 +256,16 @@ public:
 
   RtlSSAAnalysis() : MachineFunctionPass(ID) {
     initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
+  }
+};
+
+// Helper class
+struct VASDepBuilder {
+  RtlSSAAnalysis &A;
+  VASDepBuilder(RtlSSAAnalysis &RtlSSA) : A(RtlSSA) {}
+
+  void operator() (ValueAtSlot *VAS, VASTRegister *DefReg) {
+    A.addVASDep(VAS, DefReg);
   }
 };
 
@@ -396,16 +402,15 @@ SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
   return SIPointer;
 }
 
-void RtlSSAAnalysis::addDependentVAS(ValueAtSlot *VAS,
-                                            VASTRegister *DefReg) {
+void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DefReg) {
   for (assign_it I = DefReg->assign_begin(), E = DefReg->assign_end();
-    I != E; ++I){
-      VASTSlot *DefS = I->first->getSlot();
-      ValueAtSlot *PredVAS = getOrCreateVAS(DefReg, DefS);
-      VAS->addPredValueAtSlot(PredVAS);
+       I != E; ++I){
+    VASTSlot *DefS = I->first->getSlot();
+    ValueAtSlot *PredVAS = getOrCreateVAS(DefReg, DefS);
+    VAS->addPredValueAtSlot(PredVAS);
 
-      // Add the VAS to the successor VAS vector.
-      PredVAS->addSuccValueAtSlot(VAS);
+    // Add the VAS to the successor VAS vector.
+    PredVAS->addSuccValueAtSlot(VAS);
   }
 }
 
@@ -422,13 +427,12 @@ void RtlSSAAnalysis::defineVAS(VASTModule *VM) {
       ValueAtSlot *VAS = getOrCreateVAS(UseReg,S);
       VASTUse *DefUse = I->second;
       // Traverse the dependent VAS.
-      TraverseDependentRegister(DefUse, VAS);
+      visitDepRegister(DefUse, VAS);
     }
   }
 }
 
-void RtlSSAAnalysis::TraverseDependentRegister(VASTUse *DefUse,
-                                                      ValueAtSlot *VAS){
+void RtlSSAAnalysis::visitDepRegister(VASTUse *DefUse, ValueAtSlot *VAS){
 
   VASTValue *DefValue = DefUse->getOrNull();
 
@@ -438,19 +442,19 @@ void RtlSSAAnalysis::TraverseDependentRegister(VASTUse *DefUse,
   // If the define Value is register, add the dependent VAS to the
   // dependentVAS.
   if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)){
-    addDependentVAS(VAS, DefReg);
+    addVASDep(VAS, DefReg);
     return;
   }
 
+  VASDepBuilder B(*this);
   // If the define Value is wire, traverse the use tree to get the
   // ultimate registers.
-  DepthFirstTraverseUseTree(&RtlSSAAnalysis::addDependentVAS, *DefUse,
-                            VAS);
+  DepthFirstTraverseUseTree(*DefUse, VAS, B);
 }
 
-void RtlSSAAnalysis::DepthFirstTraverseUseTree(addDependentVASFuncTy F,
-                                                      VASTUse DefUse,
-                                                      ValueAtSlot *VAS) {
+template<typename Func>
+void RtlSSAAnalysis::DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS,
+                                               Func F) {
   typedef VASTUse::iterator ChildIt;
   // Use seperate node and iterator stack, so we can get the path vector.
   typedef SmallVector<VASTUse, 16> NodeStackTy;
@@ -485,7 +489,7 @@ void RtlSSAAnalysis::DepthFirstTraverseUseTree(addDependentVASFuncTy F,
         if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
           // Add dependent VAS. Use the function pointer to get the desired
           // function.
-          (this->*F)(VAS, R);
+          F(VAS, R);
         }
 
         DEBUG(dbgs() << '\n');
