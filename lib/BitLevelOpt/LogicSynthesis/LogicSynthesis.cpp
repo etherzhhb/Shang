@@ -24,7 +24,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/Passes.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-logic-synthesis"
 #include "llvm/Support/Debug.h"
 
@@ -40,6 +40,10 @@ extern "C" {
 }
 
 using namespace llvm;
+static cl::opt<bool>
+EnableLogicOpt("vtm-enable-logic-optimization",
+               cl::desc("Perform pre-schedule logic optimization by ABC"),
+               cl::init(false));
 
 namespace {
 struct LogicNetwork {
@@ -533,7 +537,7 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
   Ntk.cleanUp();
 
   // Synthesis the logic network.
-  Ntk.synthesis();
+  if (EnableLogicOpt) Ntk.synthesis();
 
   // Map the logic network to LUTs
   Ntk.performLUTMapping();
