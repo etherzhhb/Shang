@@ -215,7 +215,7 @@ public:
   ValueAtSlot *getOrCreateVAS(VASTValue *V, VASTSlot *S);
 
   // Traverse every register to define the ValueAtSlots.
-  void defineVAS(VASTModule *VM);
+  void buildVASGraph(VASTModule *VM);
 
   // Add dependent ValueAtSlot.
   void addVASDep(ValueAtSlot *VAS, VASTRegister *DefReg);
@@ -235,8 +235,6 @@ public:
 
   // collect the Generated and Killed statements of the slot.
   void ComputeGenAndKill();
-
-  bool DetectChange(VASSet SlotOut, VASSet CurOut);
 
   void viewGraph();
 
@@ -358,7 +356,7 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &F) {
   }
 
   // Define the VAS.
-  defineVAS(VM);
+  buildVASGraph(VM);
 
   ComputeReachingDefinition();
 
@@ -414,7 +412,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DefReg) {
   }
 }
 
-void RtlSSAAnalysis::defineVAS(VASTModule *VM) {
+void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
        ++I){
     VASTRegister *UseReg = *I;
@@ -523,28 +521,6 @@ void RtlSSAAnalysis::DepthFirstTraverseUseTree(VASTUse DefUse, ValueAtSlot *VAS,
   assert(NodeWorkStack.back().get() == VAS->getValue() && "Node stack broken!");
 }
 
-bool RtlSSAAnalysis::DetectChange(VASSet SlotOut, VASSet CurOut) {
-  // Compare the SlotOutMap and OldSlotOutMap, findout whether there are
-  // changes in the SlotOut.
-  for (SlotInfo::vasset_it I = CurOut.begin(), E = CurOut.end(); I != E;
-       ++I) {
-    ValueAtSlot *NewVAS = *I;
-    if (!SlotOut.count(NewVAS)) {
-      return true;
-    }
-  }
-
-  for (SlotInfo::vasset_it I = SlotOut.begin(), E = SlotOut.end(); I != E;
-       ++I) {
-    ValueAtSlot *NewVAS = *I;
-    if (!CurOut.count(NewVAS)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 void RtlSSAAnalysis::ComputeReachingDefinition() {
   ComputeGenAndKill();
 
@@ -581,7 +557,7 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       // Compute the SlotOutMap. Insert the VAS from the SlotInMap.
       SI->insertOut(SI->in_begin(), SI->in_end());
 
-      Change = DetectChange(SlotOut, CurOut);
+      Change |= SlotOut != CurOut;
     }
   } while (Change);
 }
