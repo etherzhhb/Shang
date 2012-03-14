@@ -77,6 +77,12 @@ inline void PrintEscapedString(const std::string &Str, raw_ostream &Out) {
   PrintEscapedString(Str.c_str(), Str.size(), Out);
 }
 
+template <typename X, typename Y>
+inline X pair_first(std::pair<X, Y> P) { return P.first; }
+
+template <typename X, typename Y>
+inline Y pair_second(std::pair<X, Y> P) { return P.second; }
+
 class Module;
 class TargetData;
 class SMDiagnostic;

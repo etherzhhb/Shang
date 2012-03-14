@@ -19,6 +19,7 @@
 #ifndef VBE_VLANG_H
 #define VBE_VLANG_H
 
+#include "vtm/Utilities.h"
 #include "vtm/VerilgoBackendMCTargetDesc.h"
 #include "vtm/FUInfo.h"
 #include "vtm/LangSteam.h"
@@ -40,7 +41,6 @@ class VASTSlot;
 class VASTWire;
 class VASTRegister;
 class VASTUse;
-class CFGShortestPath;
 
 class VASTNode {
 public:
@@ -518,10 +518,11 @@ public:
   // Use mapped_iterator which is a simple iterator adapter that causes a
   // function to be dereferenced whenever operator* is invoked on the iterator.
   typedef
-    std::pointer_to_unary_function<std::pair<VASTSlot*, VASTUse>, VASTSlot*>
-    pair_first;
-  typedef mapped_iterator<succ_cnd_iterator, pair_first> succ_iterator;
-  typedef mapped_iterator<const_succ_cnd_iterator, pair_first>
+  std::pointer_to_unary_function<std::pair<VASTSlot*, VASTUse>, VASTSlot*>
+  slot_getter;
+
+  typedef mapped_iterator<succ_cnd_iterator, slot_getter> succ_iterator;
+  typedef mapped_iterator<const_succ_cnd_iterator, slot_getter>
           const_succ_iterator;
 
   typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
@@ -548,12 +549,6 @@ private:
   unsigned StartSlot, EndSlot, II;
   // The start slot of parent state, can identify parent state.
   unsigned ParentIdx;
-
-  // Define the success vector type dereference function, this function pointer
-  // will be passed to the succ_iterator map_iterator.
-  inline static VASTSlot *get_pair_first(std::pair<VASTSlot*, VASTUse> P) {
-    return P.first;
-  }
 
   // Successor slots of this slot.
   succ_cnd_iterator succ_cnd_begin() { return NextSlots.begin(); }
@@ -595,19 +590,23 @@ public:
 
   // Next VASTSlot iterator. 
   succ_iterator succ_begin() {
-    return map_iterator(NextSlots.begin(), pair_first(get_pair_first));
+    return map_iterator(NextSlots.begin(),
+                        slot_getter(pair_first<VASTSlot*, VASTUse>));
   }
 
   const_succ_iterator succ_begin() const {
-    return map_iterator(NextSlots.begin(), pair_first(get_pair_first));
+    return map_iterator(NextSlots.begin(),
+                        slot_getter(pair_first<VASTSlot*, VASTUse>));
   }
 
   succ_iterator succ_end() {
-    return map_iterator(NextSlots.end(), pair_first(get_pair_first));
+    return map_iterator(NextSlots.end(),
+                        slot_getter(pair_first<VASTSlot*, VASTUse>));
   }
 
   const_succ_iterator succ_end() const {
-    return map_iterator(NextSlots.end(), pair_first(get_pair_first));
+    return map_iterator(NextSlots.end(),
+                        slot_getter(pair_first<VASTSlot*, VASTUse>));
   }
 
   // Predecessor slots of this slot.
