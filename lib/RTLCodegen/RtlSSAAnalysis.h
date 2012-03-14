@@ -134,6 +134,9 @@ public:
 
   // Get Slot pointer.
   const VASTSlot *getSlot() { return S; }
+
+  void print(raw_ostream &OS) const;
+  void dump() const;
 };
 
 // The RtlSSAAnalysis that construct the SSA form.

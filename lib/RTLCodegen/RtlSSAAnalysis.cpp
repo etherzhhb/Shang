@@ -101,6 +101,27 @@ void ValueAtSlot::dump() const {
   print(dbgs());
 }
 
+void SlotInfo::dump() const {
+  print(dbgs());
+}
+
+void SlotInfo::print(raw_ostream &OS) const {
+  typedef SlotInfo::vasset_it it;
+  OS << S->getName() << "\nGen:\n";
+  for (it I = gen_begin(), E = gen_end(); I != E; ++I) {
+    ValueAtSlot *VAS = *I;
+    OS.indent(2) << VAS->getName() << "\n";
+  }
+
+  OS << "\n\nIn:\n";
+  for (it I = in_begin(), E = in_end(); I != E; ++I) {
+    ValueAtSlot *VAS = *I;
+    OS.indent(2) << VAS->getName() << "\n";
+  }
+
+  OS << "\n\n";
+}
+
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
 
