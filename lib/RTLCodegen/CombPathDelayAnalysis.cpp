@@ -185,11 +185,15 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
     // Update the PathDelay if the source VAS reaches DstSlot.
     if (Dst->isDependOn(SrcVAS)) {
       int D = CFGSP->getSlotDistance(SrcSlot, DstSlot);
-      assert(D > 0 && "Reaching define reaches an unreachable slot?");
-      PathDelay = std::min(PathDelay, D);
+      // Note that getSlotDistance is possible, because the define may reach
+      // the dst slot via a non-shortest path. And getSlotDistance returns a
+      // shortest distance so the result maybe invalid.
+      assert(D >= 0 && "Reaching define reaches an unreachable slot?");
+      if (D) PathDelay = std::min(PathDelay, D);
     }
   }
 
+  assert(PathDelay != CFGShortestPath::Infinite && "All path invalid?");
   // The path delay is the sum of minimum distance between source/destinate slot
   // and the delay of block boxes.
   P->Delay = PathDelay + BlockBoxesDelay;
