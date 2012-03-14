@@ -62,7 +62,7 @@ int CFGShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
   //                            + (DstSlotIdx - DstSlotStartIdx)
   // When the slots are in the same MBB and the SrcSlotIdx > DstSlotIdx, return
   // compute the distance considering the IISlot.
-  if (DefMBBNum != UseMBBNum || DefSlotIdx > UseSlotIdx) {
+  if (DefMBBNum != UseMBBNum || DefSlotIdx >= UseSlotIdx) {
     // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
     // Return -1 which is the largest number in unsigned type.
     if(MBBDistance == int(Infinite)) return -1;
@@ -122,9 +122,9 @@ void CFGShortestPath::InitPath() {
          E = DefMBB->succ_end(); I != E; ++I) {
       MachineBasicBlock *UseMBB = *I;
       unsigned &Distance = getDistance(DefMBB, UseMBB);
-      // The distance of self-loop edge is the initial interval of the BB.
-      Distance = DefMBB == UseMBB ? FInfo->getIISlotFor(UseMBB)
-                                  : TolalSlot;
+      // Initialize the distance of self-loop edge to the total delay of the BB,
+      // we will fix it later.
+      Distance = TolalSlot;
     }
   }
 }

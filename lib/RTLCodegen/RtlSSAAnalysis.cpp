@@ -440,7 +440,6 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
     typedef DenseMap<VASTValue*, int>::iterator distance_it;
     for (distance_it DI = DistanceMap.begin(), DE = DistanceMap.end();
          DI != DE; ++DI) {
-
       // Path from Src to Dst
       VASTUse Path[] = { DstVAS->getValue(), DI->first };
       bindPath2ScriptEngine(Path, DI->second);
@@ -463,15 +462,17 @@ SlotInfo *RtlSSAAnalysis::getSlotInfo(const VASTSlot *S) const {
 }
 
 void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
-  SlotInfo *SI = getSlotInfo(VAS->getSlot());
-  assert(SI && "SlotInfo missed!");
+  VASTSlot *UseSlot = VAS->getSlot();
+  SlotInfo *UseSI = getSlotInfo(UseSlot);
+  assert(UseSI && "SlotInfo missed!");
 
   for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
        I != E; ++I){
     VASTSlot *DefSlot = I->first->getSlot();
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
+
     // VAS is only depends on DefVAS if it can reach this slot.
-    if (SI->isLiveIn(DefVAS)) VAS->addDepVAS(DefVAS);
+    if (UseSI->isLiveIn(DefVAS)) VAS->addDepVAS(DefVAS);
   }
 }
 
