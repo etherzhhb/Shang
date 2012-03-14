@@ -48,12 +48,12 @@ unsigned &CFGShortestPath::getDistance(unsigned DefIdx, unsigned UseIdx) {
 int CFGShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
   int SlotDistance = -1;
 
-  unsigned DefSlotStartIdx = DefSlot->getParentIdx();
-  unsigned DefSlotIdx = DefSlot->getSlotNum();
+  int DefSlotStartIdx = DefSlot->getParentIdx();
+  int DefSlotIdx = DefSlot->getSlotNum();
   unsigned DefMBBNum = getMBBNum(DefSlotStartIdx);
 
-  unsigned UseSlotStartIdx = UseSlot->getParentIdx();
-  unsigned UseSlotIdx = UseSlot->getSlotNum();
+  int UseSlotStartIdx = UseSlot->getParentIdx();
+  int UseSlotIdx = UseSlot->getSlotNum();
   unsigned UseMBBNum = getMBBNum(UseSlotStartIdx);
 
   int MBBDistance = getDistance(DefMBBNum, UseMBBNum);
