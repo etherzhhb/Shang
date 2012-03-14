@@ -111,11 +111,7 @@ public:
   vasset_it out_begin() const { return SlotOut.begin(); }
   vasset_it out_end() const { return SlotOut.end(); }
 
-  // Any VAS whose value is generated at this slot, but its slot is not equal
-  // to this slot is killed.
-  bool isVASKilled(const ValueAtSlot *VAS) const {
-    return VAS->getSlot() != S && OverWrittenValue.count(VAS->getValue());
-  }
+  bool isVASKilled(const ValueAtSlot *VAS) const;
 
   // Insert VAS into different set.
   void insertGen(ValueAtSlot *VAS) {

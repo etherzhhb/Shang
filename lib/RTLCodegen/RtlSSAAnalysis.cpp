@@ -46,18 +46,21 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
     SlotInfo * SI = Graph->getSlotInfo(Node);
     typedef SlotInfo::vasset_it it;
 
-    ss << Node->getName() << "\nGen:\n";
-    for (it I = SI->gen_begin(), E = SI->gen_end(); I != E; ++I) {
-      ValueAtSlot *VAS = *I;
-      ss.indent(2) << VAS->getName() << "\n";
-    }
+    ss << Node->getName();
+    DEBUG(
+      ss << "\nGen:\n";
+      for (it I = SI->gen_begin(), E = SI->gen_end(); I != E; ++I) {
+        ValueAtSlot *VAS = *I;
+        ss.indent(2) << VAS->getName() << "\n";
+      }
 
-    ss << "\n\nIn:\n";
-    for (it I = SI->in_begin(), E = SI->in_end(); I != E; ++I) {
-      ValueAtSlot *VAS = *I;
-      ss.indent(2) << VAS->getName() << "\n";
-    }
-    ss << "\n\n";
+      ss << "\n\nIn:\n";
+      for (it I = SI->in_begin(), E = SI->in_end(); I != E; ++I) {
+        ValueAtSlot *VAS = *I;
+        ss.indent(2) << VAS->getName() << "\n";
+      }
+      ss << "\n\n";
+    );
 
     return ss.str();
   }
@@ -120,6 +123,12 @@ void SlotInfo::print(raw_ostream &OS) const {
   }
 
   OS << "\n\n";
+}
+
+// Any VAS whose value is generated at this slot, but its slot is not equal
+// to this slot is killed.
+bool SlotInfo::isVASKilled(const ValueAtSlot *VAS) const {
+  return VAS->getSlot() != S && OverWrittenValue.count(VAS->getValue());
 }
 
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {

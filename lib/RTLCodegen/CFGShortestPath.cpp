@@ -63,29 +63,23 @@ int CFGShortestPath::getSlotDistance(VASTSlot *DefSlot, VASTSlot *UseSlot) {
   unsigned UseMBBNum = getMBBNum(UseSlotStartIdx);
 
   int MBBDistance = getDistance(DefMBBNum, UseMBBNum);
-  // When the slots are in different MBB. return the SlotDistance.
-  // SlotDistance = MBBDistance - (SrcSlotIdx - SrcSlotStartIdx)
-  //                            + (DstSlotIdx - DstSlotStartIdx)
+
   // When the slots are in the same MBB and the SrcSlotIdx > DstSlotIdx, return
   // compute the distance considering the IISlot.
   if (DefMBBNum != UseMBBNum || DefSlotIdx >= UseSlotIdx) {
     // If the MBBDistance is infinite, then the srcMBB can not reach the dstMBB,
     // Return -1 which is the largest number in unsigned type.
-    if(MBBDistance == int(Infinite)) return -1;
+    if(MBBDistance == Infinite) return -1;
 
     SlotDistance = MBBDistance - (DefSlotIdx - DefSlotStartIdx)
                                + (UseSlotIdx - UseSlotStartIdx);
-    // SlotDistance < 0 means UseSlot is unreachable from DefSlot.
-    // assert((SlotDistance >= 0 || DefMBBNum == UseMBBNum)
-    //       && "SlotDistance < 0 !!!");
-    return SlotDistance;
-  }
+  } else
+    // When the slots are in the same MBB and the SrcSlotIdx < DstSlotIdx, return
+    // DstSlotIdx - SrcSlotIdx.
+    SlotDistance = UseSlotIdx - DefSlotIdx;
 
-  // When the slots are in the same MBB and the SrcSlotIdx <= DstSlotIdx, return
-  // DstSlotIdx - SrcSlotIdx.
-  SlotDistance = UseSlotIdx - DefSlotIdx;
-  // SlotDistance < 0 means UseSlot is unreachable from DefSlot.
-  // assert(SlotDistance >= 0 && "SlotDistance < 0!");
+  assert((DefMBBNum != UseMBBNum || SlotDistance <= MBBDistance)
+         && "Chain's distance bigger than II!");
 
   return SlotDistance;
 }
