@@ -225,10 +225,6 @@ public:
   // Get SlotInfo from the existing SlotInfos set.
   SlotInfo* getSlotInfo(const VASTSlot *S) const;
 
-  // Get SlotInfo from the existing SlotInfos set or create a slotInfo and
-  // insert it to the SlotInfos set.
-  SlotInfo *getOrCreateSlotInfo(const VASTSlot *S) ;
-
   ValueAtSlot *getOrCreateVAS(VASTValue *V, VASTSlot *S);
 
   // Traverse every register to define the ValueAtSlots.
@@ -415,6 +411,11 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
     if (!S) continue;
 
     SlotVec.push_back(S);
+    // Create a new SlotInfo if it is not defined before.
+    SlotInfo *SI = new (Allocator) SlotInfo(S);
+    bool inserted = SlotInfos.insert(std::make_pair(S, SI)).second;
+    assert(inserted && "SlotInfo inserted?");
+    (void) inserted;
   }
 
   // Define the VAS.
@@ -482,18 +483,8 @@ ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V, VASTSlot *S){
 
 SlotInfo *RtlSSAAnalysis::getSlotInfo(const VASTSlot *S) const {
   slotinfo_it It = SlotInfos.find(S);
-  return It == SlotInfos.end()? 0 : It->second;
-}
-
-SlotInfo *RtlSSAAnalysis::getOrCreateSlotInfo(const VASTSlot *S) {
-  // Get SlotInfo if there exist in the SlotInfos map.
-  SlotInfo *SIPointer = getSlotInfo(S);
-  if (SIPointer) return SIPointer;
-
-  // Create a new SlotInfo if it is not defined before.
-  SIPointer = new (Allocator) SlotInfo(S);
-  SlotInfos.insert(std::make_pair(S, SIPointer));
-  return SIPointer;
+  assert(It != SlotInfos.end() && "SlotInfo not exist!");
+  return It->second;
 }
 
 void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
@@ -674,7 +665,7 @@ void RtlSSAAnalysis::ComputeGenAndKill(){
   // Collect the generated statements to the SlotGenMap.
   for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
     ValueAtSlot *VAS = *I;
-    SlotInfo *SI = getOrCreateSlotInfo(VAS->getSlot());
+    SlotInfo *SI = getSlotInfo(VAS->getSlot());
     SI->insertGen(VAS);
   }
 
@@ -682,7 +673,7 @@ void RtlSSAAnalysis::ComputeGenAndKill(){
   for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
     VASTSlot *S =*I;
     assert(S && "Unexpected null slot!");
-    SlotInfo *SI = getOrCreateSlotInfo(S);
+    SlotInfo *SI = getSlotInfo(S);
     for (vas_it VI = SI->gen_begin(), VE = SI->gen_end(); VI != VE; ++VI) {
       ValueAtSlot *VAS = *VI;
       SI->insertOut(VAS);
