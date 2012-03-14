@@ -19,6 +19,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "CFGShortestPath.h"
+#include "RtlSSAAnalysis.h"
+
 #include "vtm/VerilogAST.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
@@ -39,56 +41,26 @@ DisableTimingScriptGeneration("vtm-disable-timing-script",
                               cl::init(false));
 
 namespace{
-class CombPathDelayAnalysis : public MachineFunctionPass {
-  CFGShortestPath *FindSP;
+struct CombPathDelayAnalysis : public MachineFunctionPass {
+  CFGShortestPath *CFGSP;
+  RtlSSAAnalysis *RtlSSA;
 
-  // Define a DenseMap to record the Slack Info between Registers.
-  typedef std::pair<VASTRegister*, VASTRegister*> RegisterMapTy;
-  typedef DenseMap<RegisterMapTy, unsigned> RegPathDelayTy;
-  RegPathDelayTy RegPathDelay;
-
-  typedef SmallVector<VASTSlot*, 4> SlotVec;
-
-  // Compute the Path Slack between two register.
-  void computePathSlack(VASTRegister* UseReg);
-
-  // Get Slack through Define register.
-  void computeSlackThrough(VASTUse DefUse, VASTRegister* UseReg,
-                           SlotVec &UseSlots);
-
-  // get nearest Define slot Distance.
-  unsigned getNearestSlotDistance(VASTRegister *DefReg, SlotVec &UseSlots);
-
-  void DepthFristTraverseDataPathUseTree(VASTUse DefUse,
-                                         VASTRegister *UseReg,
-                                         SlotVec &UseSlots);
-
-public:
   static char ID;
-
-  // get the slack of Combination Path between two registers.
-  unsigned getCombPathSlack(VASTRegister *DefReg, VASTRegister *UseReg);
-
-  void updateCombPathSlack(VASTRegister *Def, VASTRegister *Use,
-                           unsigned NewSlack) {
-    assert(RegPathDelay.count(std::make_pair(Def, Use)) && "Pair not exist!");
-    RegPathDelayTy::value_type &v =
-      RegPathDelay.FindAndConstruct(std::make_pair(Def, Use));
-    v.second = std::min(v.second, NewSlack);
-  }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<TargetData>();
     AU.addRequired<CFGShortestPath>();
-    AU.addPreserved<CFGShortestPath>();
+    AU.addRequired<RtlSSAAnalysis>();
+    AU.setPreservesAll();
   }
+
+  void writeConstraintsForDstReg(VASTRegister *DstReg);
+
+  void extractTimingPathsFor(ValueAtSlot *DstVAS,
+                             DenseMap<VASTValue*, int> &Distances);
 
   bool runOnMachineFunction(MachineFunction &MF);
-
-  void releaseMemory() {
-    RegPathDelay.clear();
-  }
 
   bool doInitialization(Module &) {
     SMDiagnostic Err;
@@ -156,204 +128,52 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
 
   bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
   VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
-  FindSP = &getAnalysis<CFGShortestPath>();
+  CFGSP = &getAnalysis<CFGShortestPath>();
+  RtlSSA = &getAnalysis<RtlSSAAnalysis>();
 
-  //Initial all the path with infinite.
-  for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
-       I != E; ++I){
-    VASTRegister *DefReg = *I;
-    for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
-         I != E; ++I){
-      VASTRegister *UseReg = *I;
-      RegPathDelay[std::make_pair(DefReg, UseReg)] = CFGShortestPath::Infinite;
-    }
-  }
-
-  //Assign the path delay to path between two register.
-  for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end();
-       I != E; ++I)
-    computePathSlack(*I);
-
-  typedef RegPathDelayTy::const_iterator RegPairIt;
-  for (RegPairIt I = RegPathDelay.begin(), E = RegPathDelay.end(); I != E; ++I){
-    unsigned Slack = I->second;
-    if (Slack != CFGShortestPath::Infinite) {
-      VASTUse Path[] = { (I->first).second, (I->first).first };
-      bindPath2ScriptEngine(Path, Slack);
-    }
-  }
+  //Write the timing constraints.
+  typedef VASTModule::reg_iterator reg_it;
+  for (reg_it I = VM->reg_begin(), E = VM->reg_end(); I != E; ++I)
+    writeConstraintsForDstReg(*I);
 
   return false;
 }
 
-void CombPathDelayAnalysis::computePathSlack(VASTRegister* UseReg) {
-  typedef std::map<VASTUse, SlotVec> CSEMapTy;
-  CSEMapTy SrcCSEMap;
+void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
+  DenseMap<VASTValue*, int> DistanceMap;
+
   typedef VASTRegister::assign_itertor assign_it;
-  for (assign_it I = UseReg->assign_begin(), E = UseReg->assign_end();
+  for (assign_it I = DstReg->assign_begin(), E = DstReg->assign_end();
        I != E; ++I) {
     VASTSlot *S = I->first->getSlot();
-    assert(S && "Unexpected empty slot!");
-    //Get Slack from the Define Value.
-    SrcCSEMap[*I->second].push_back(S);
-    //Get Slack from the condition of the assignment.
-    SrcCSEMap[I->first].push_back(S);
+    ValueAtSlot *DstVAS = RtlSSA->getValueASlot(DstReg, S);
+
+    extractTimingPathsFor(DstVAS, DistanceMap);
   }
 
-  typedef CSEMapTy::iterator it;
-  for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I)
-    computeSlackThrough(I->first, UseReg, I->second);
-}
-
-void CombPathDelayAnalysis::computeSlackThrough(VASTUse DefUse,
-                                                VASTRegister *UseReg,
-                                                SlotVec &UseSlots) {
-  VASTValue *DefValue = DefUse.getOrNull();
-
-  // If Define Value is immediate or symbol, skip it.
-  if (!DefValue) return;
-
-  if (VASTRegister *DefReg = dyn_cast<VASTRegister>(DefValue)) {
-    unsigned Slack = getNearestSlotDistance(DefReg, UseSlots);
-    if (Slack < CFGShortestPath::Infinite) {
-      // If the Define register and Use register already have a slack, compare the
-      // slacks and assign the smaller one to the RegPathDelay Map.
-      updateCombPathSlack(DefReg, UseReg, Slack);
-    }
-
-    return;
+  typedef DenseMap<VASTValue*, int>::iterator distance_it;
+  for (distance_it DI = DistanceMap.begin(), DE = DistanceMap.end();
+       DI != DE; ++DI) {
+    // Path from Src to Dst
+    VASTUse Path[] = { DstReg, DI->first };
+    bindPath2ScriptEngine(Path, DI->second);
   }
-
-  DepthFristTraverseDataPathUseTree(DefUse, UseReg, UseSlots);
 }
 
-unsigned CombPathDelayAnalysis::getNearestSlotDistance(VASTRegister *DefReg,
-                                                       SlotVec &UseSlots) {
-  int NearestSlotDistance = CFGShortestPath::Infinite;
-  typedef VASTRegister::slot_iterator SlotIt;
-  typedef SlotVec::iterator UseSlotIt;
+void CombPathDelayAnalysis::extractTimingPathsFor(ValueAtSlot *DstVAS,
+                                                  DenseMap<VASTValue*, int>
+                                                  &Distances) {
+  typedef ValueAtSlot::iterator dep_it;
+  for (dep_it DI = DstVAS->dep_begin(), DE = DstVAS->dep_end();DI != DE;++DI){
+    ValueAtSlot *SrcVAS = *DI;
 
-  for (UseSlotIt UI = UseSlots.begin(), UE = UseSlots.end(); UI != UE; ++UI) {
-    VASTSlot *UseSlot = *UI;
-    for (SlotIt DI = DefReg->slots_begin(), DE = DefReg->slots_end();
-         DI != DE; ++DI) {
-      VASTSlot *DefSlot = *DI;
+    int D = CFGSP->getSlotDistance(SrcVAS->getSlot(), DstVAS->getSlot());
+    assert(D > 0 && "SrcSlot should able to reach DstSlot!");
+    int &Distance = Distances[SrcVAS->getValue()];
 
-      int SlotDistance = FindSP->getSlotDistance(DefSlot, UseSlot);
-      DEBUG(dbgs() << "\n(" << DefSlot->getSlotNum()
-                   << "->" << UseSlot->getSlotNum()
-                   << ") #" << SlotDistance << '\n');
-      // if SlotDistance < 0, abandon this result.
-      // The slot distance is from the slot the source register is assigned to
-      // the slot that the destination register should be assigned. Note that
-      // the signal from the input pin of the source register takes 1 slot
-      // to arrive the output pin of the source register, so if the defslot is
-      // equal to the useslot, the destiantion will not read the assigned
-      // value at the def/useslot, and useslot not depends on defslot if they
-      // are equal.
-      if (SlotDistance <= 0) continue;
-
-      if (SlotDistance < NearestSlotDistance) {
-        NearestSlotDistance = SlotDistance;
-      }
-    }
+    // Update the distance.
+    if (Distance == 0 || Distance > D) Distance = D;
   }
-
-  return NearestSlotDistance;
-}
-
-// Traverse the use tree in datapath, stop when we meet a register or other
-// leaf node.
-void
-CombPathDelayAnalysis::DepthFristTraverseDataPathUseTree(VASTUse DefUse,
-                                                         VASTRegister *UseReg,
-                                                         SlotVec &UseSlots) {
-  typedef VASTUse::iterator ChildIt;
-  // Use seperate node and iterator stack, so we can get the path vector.
-  typedef SmallVector<VASTUse, 16> NodeStackTy;
-  typedef SmallVector<ChildIt, 16> ItStackTy;
-  NodeStackTy NodeWorkStack;
-  ItStackTy ItWorkStack;
-  // Remember what we had visited.
-  std::set<VASTUse> VisitedUses;
-
-  // Put the current node into the node stack, so it will appears in the path.
-  NodeWorkStack.push_back(UseReg);
-
-  // Put the root.
-  NodeWorkStack.push_back(DefUse);
-  ItWorkStack.push_back(DefUse.dp_src_begin());
-
-  while (!ItWorkStack.empty()) {
-    VASTUse Node = NodeWorkStack.back();
-
-    ChildIt It = ItWorkStack.back();
-
-    // Do we reach the leaf?
-    if (Node.is_dp_leaf()) {
-      if (VASTValue *V = Node.getOrNull()) {
-        DEBUG(dbgs() << "Datapath:\t";
-        for (NodeStackTy::iterator I = NodeWorkStack.begin(),
-          E = NodeWorkStack.end(); I != E; ++I) {
-            dbgs() << ", ";
-            I->print(dbgs());
-        });
-
-        if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
-          unsigned Slack = 0;
-          // Data-path has timing information available.
-          for (NodeStackTy::iterator I = NodeWorkStack.begin(),
-            E = NodeWorkStack.end(); I != E; ++I)
-            if (VASTWire *W = dyn_cast<VASTWire>(I->get()))
-              if (W->getOpcode() == VASTWire::dpVarLatBB)
-                Slack += W->getLatency();
-
-          Slack = std::max(Slack, getNearestSlotDistance(R, UseSlots));
-
-          DEBUG(dbgs() << " Slack: " << int(Slack));
-
-          // If the Define register and Use register already have a slack,
-          // compare the slacks and assign the smaller one to the RegPathDelay
-          // Map.
-          updateCombPathSlack(R, UseReg, Slack);
-        }
-
-        DEBUG(dbgs() << '\n');
-      }
-
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
-    // All sources of this node is visited.
-    if (It == Node.dp_src_end()) {
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
-    // Depth first traverse the child of current node.
-    VASTUse ChildNode = *It;
-    ++ItWorkStack.back();
-
-    // Had we visited this node? If the Use slots are same, the same subtree
-    // will lead to a same slack, and we do not need to compute the slack agian.
-    if (!VisitedUses.insert(ChildNode).second) continue;
-
-    // If ChildNode is not visit, go on visit it and its childrens.
-    NodeWorkStack.push_back(ChildNode);
-    ItWorkStack.push_back(ChildNode.dp_src_begin());
-  }
-
-  assert(NodeWorkStack.back().get() == UseReg && "Node stack broken!");
-}
-
-unsigned CombPathDelayAnalysis::getCombPathSlack(VASTRegister *Def,
-                                                 VASTRegister *Use) {
-  RegPathDelayTy::iterator at = RegPathDelay.find(std::make_pair(Def, Use));
-  assert(at != RegPathDelay.end() && "Cannot found pair!");
-  return at->second;
 }
 
 char CombPathDelayAnalysis::ID = 0;

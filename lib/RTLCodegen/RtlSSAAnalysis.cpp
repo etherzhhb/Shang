@@ -101,63 +101,6 @@ void ValueAtSlot::dump() const {
   print(dbgs());
 }
 
-// FIXME: Move this to a separate pass!
-// The first node of the path is the use node and the last node of the path is
-// the define node.
-static void bindPath2ScriptEngine(ArrayRef<VASTUse> Path,
-                                  unsigned Slack) {
-  assert(Path.size() >= 2 && "Path vector have less than 2 nodes!");
-  assert(Slack && "Unexpected zero slack!");
-  // Path table:
-  // Datapath: {
-  //  unsigned Slack,
-  //  table NodesInPath
-  // }
-  SMDiagnostic Err;
-
-  if (!runScriptStr("RTLDatapath = {}\n", Err))
-    llvm_unreachable("Cannot create RTLDatapath table in scripting pass!");
-
-  std::string Script;
-  raw_string_ostream SS(Script);
-  SS << "RTLDatapath.Slack = " << Slack;
-  SS.flush();
-  if (!runScriptStr(Script, Err))
-    llvm_unreachable("Cannot create slack of RTLDatapath!");
-
-  Script.clear();
-
-  SS << "RTLDatapath.Nodes = {'" << Path[0].get()->getName();
-  for (unsigned i = 1; i < Path.size(); ++i) {
-    // Skip the unnamed nodes.
-    const char *Name = Path[i].get()->getName();
-    if (Name) SS << "', '" << Name;
-  }
-  SS << "'}";
-
-  SS.flush();
-  if (!runScriptStr(Script, Err))
-    llvm_unreachable("Cannot create node table of RTLDatapath!");
-
-  // Get the script from script engine.
-  const char *DatapathScriptPath[] = { "Misc", "DatapathScript" };
-  if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
-    report_fatal_error("Error occur while running datapath script:\n"
-                       + Err.getMessage());
-}
-
-// FIXME: Move this to a separate pass!
-bool RtlSSAAnalysis::doInitialization(Module &) {
-  SMDiagnostic Err;
-  // Get the script from script engine.
-  const char *HeaderScriptPath[] = { "Misc",
-    "TimingConstraintsHeaderScript" };
-  if (!runScriptStr(getStrValueFromEngine(HeaderScriptPath), Err))
-    report_fatal_error("Error occur while running timing header script:\n"
-    + Err.getMessage());
-  return false;
-}
-
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
 
@@ -185,37 +128,6 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   buildVASGraph(VM);
 
   DEBUG(viewGraph());
-
-  // FIXME: Move this to a separate pass!
-  bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
-
-  CFGShortestPath &CFGSP = getAnalysis<CFGShortestPath>();
-  DenseMap<VASTValue*, int> DistanceMap;
-  // Dirty Hack: Write timing script according to the VAS Graph.
-  // Collect the generated statements to the SlotGenMap.
-  for (vas_iterator I = vas_begin(), E = vas_end(); I != E; ++I) {
-    ValueAtSlot *DstVAS = *I;
-    DistanceMap.clear();
-
-    typedef ValueAtSlot::iterator dep_it;
-    for (dep_it DI = DstVAS->dep_begin(), DE = DstVAS->dep_end();DI != DE;++DI){
-      ValueAtSlot *SrcVAS = *DI;
-
-      int D = CFGSP.getSlotDistance(SrcVAS->getSlot(), DstVAS->getSlot());
-      assert(D > 0 && "SrcSlot should able to reach DstSlot!");
-      int &Distance = DistanceMap[SrcVAS->getValue()];
-      if (Distance == 0) Distance = CFGShortestPath::Infinite;
-      Distance = std::min(Distance, D);
-    }
-
-    typedef DenseMap<VASTValue*, int>::iterator distance_it;
-    for (distance_it DI = DistanceMap.begin(), DE = DistanceMap.end();
-         DI != DE; ++DI) {
-      // Path from Src to Dst
-      VASTUse Path[] = { DstVAS->getValue(), DI->first };
-      bindPath2ScriptEngine(Path, DI->second);
-    }
-  }
 
   return false;
 }

@@ -229,9 +229,6 @@ public:
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  // FIXME: Move this to a separate pass!
-  bool doInitialization(Module &);
-
   RtlSSAAnalysis() : MachineFunctionPass(ID) {
     initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
   }

@@ -160,11 +160,10 @@ int main(int argc, char **argv) {
   Passes.add(createVerilogASTBuilderPass());
   Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
-  // Analyse the slack between registers.
-  //Passes.add(createCombPathDelayAnalysisPass());
-
   // Analyse the dependency between registers.
   Passes.add(createRtlSSAAnalysisPass());
+  // Analyse the slack between registers.
+  Passes.add(createCombPathDelayAnalysisPass());
 
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
