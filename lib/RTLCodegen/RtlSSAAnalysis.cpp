@@ -66,9 +66,24 @@ namespace llvm {
     }
 
     VASTValue *getValue() const { return V; }
-
     VASTSlot *getSlot() const { return Slot; }
+    std::string getName() const {
+      return std::string(getValue()->getName()) + "@"
+             + utostr_32(getSlot()->getSlotNum());
+    }
 
+    void print(raw_ostream &OS) const {
+      OS << getValue()->getName() << '@' << getSlot()->getSlotNum()
+         << "\t <= {";
+
+      typedef VASVecTy::iterator it;
+      for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I)
+        OS << (*I)->getName() << ',';
+
+      OS << "}\n";
+    }
+
+    void dump() const;
 
     typedef VASVecTy::iterator iterator;
     iterator dep_begin() { return DepVAS.begin(); }
@@ -159,9 +174,6 @@ namespace llvm {
     std::pair<SlotInfo::vasset_it, bool> insertOut(ValueAtSlot *VAS) {
       return SlotOut.insert(VAS);
     }
-
-    // Clear the SlotOut set.
-    void clearOutSet() { SlotOut.clear(); }
 
     // Get Slot pointer.
     const VASTSlot *getSlot() { return S; }
@@ -310,51 +322,30 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
-  static std::string getEdgeSourceLabel(const NodeTy *Node,
-                                        NodeTy::succ_iterator I){
-    std::string Str;
-    raw_string_ostream ss(Str);
-    ss << Node->getName();
-    return ss.str();
-  }
-
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
     SlotInfo * SI = Graph->getSlotInfo(Node);
-    for (SlotInfo::vasset_it I = SI->gen_begin(), E = SI->gen_end();
-         I != E; ++I) {
+    typedef SlotInfo::vasset_it it;
+
+    ss << Node->getName() << "\nGen:\n";
+    for (it I = SI->gen_begin(), E = SI->gen_end(); I != E; ++I) {
       ValueAtSlot *VAS = *I;
-        ss<<"    Gen: "<< VAS->getValue()->getName() << "   "
-          << VAS->getSlot()->getName() << "\n";
+      ss.indent(2) << VAS->getName() << "\n";
+    }
+
+    ss << "\n\nIn:\n";
+    for (it I = SI->in_begin(), E = SI->in_end(); I != E; ++I) {
+      ValueAtSlot *VAS = *I;
+      ss.indent(2) << VAS->getName() << "\n";
     }
     ss << "\n\n";
 
-    /*for (SlotInfo::vasset_it I = SI->getVASKillBegin(), E = SI->getVASKillEnd();
-         I != E; ++I) {
-      ValueAtSlot *VAS = *I;
-      ss<<"    kill: "<< VAS->getValue()->getName() << "   "
-        << VAS->getSlot()->getName() << "\n";
-    }
-    ss << "\n\n";*/
-    /*for (RegDependencyAnalysis::vasset_it I = Graph->vas_in_begin(Node),
-      E = Graph->vas_in_end(Node); I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        ss<<"    In: "<< VAS->getValue()->getName() << "   "
-          << VAS->getSlot()->getName() << "\n";
-    }
-    ss << "\n\n";*/
-    /*for (SlotInfo::vasset_it I = Graph->getVASOutBegin(Node),
-         E = Graph->getVASOutEnd(Node); I != E; ++I) {
-      ValueAtSlot *VAS = *I;
-      ss<<"    Out: "<< VAS->getValue()->getName() << "   "
-        << VAS->getSlot()->getName() << "\n";
-    }*/
     return ss.str();
   }
 
   static std::string getNodeAttributes(const NodeTy *Node,
-    const GraphTy *Graph) {
+                                       const GraphTy *Graph) {
       return "shape=Mrecord";
   }
 };
@@ -362,6 +353,10 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
 void RtlSSAAnalysis::viewGraph() {
   ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
+}
+
+void ValueAtSlot::dump() const {
+  print(dbgs());
 }
 
 // FIXME: Move this to a separate pass!
