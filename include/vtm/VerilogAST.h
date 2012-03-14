@@ -1036,8 +1036,8 @@ public:
 
 // Helper functions
 // Traverse the use tree to get the registers.
-template<typename Func>
-void DepthFirstTraverseDepTree(VASTUse DepTree, Func F) {
+template<typename VisitPathFunc>
+void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
   typedef VASTUse::iterator ChildIt;
   // Use seperate node and iterator stack, so we can get the path vector.
   typedef SmallVector<VASTUse, 16> NodeStackTy;
@@ -1058,24 +1058,8 @@ void DepthFirstTraverseDepTree(VASTUse DepTree, Func F) {
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
-      if (VASTValue *V = Node.getOrNull()) {
-        //DEBUG(dbgs() << "Datapath:\t";
-        //for (NodeStackTy::iterator I = NodeWorkStack.begin(),
-        //  E = NodeWorkStack.end(); I != E; ++I) {
-        //    dbgs() << ", ";
-        //    I->print(dbgs());
-        //});
-
-        if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
-          // Add dependent VAS. Use the function pointer to get the desired
-          // function.
-          F(R);
-        }
-
-        // TODO: Handle other leaves.
-
-        //DEBUG(dbgs() << '\n');
-      }
+      if (VASTValue *V = Node.getOrNull())
+        VisitPath(NodeWorkStack);
 
       NodeWorkStack.pop_back();
       ItWorkStack.pop_back();

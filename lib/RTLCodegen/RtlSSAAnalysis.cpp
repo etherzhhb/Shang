@@ -77,11 +77,13 @@ void RtlSSAAnalysis::viewGraph() {
 // Helper class
 struct VASDepBuilder {
   RtlSSAAnalysis &A;
-  ValueAtSlot *VAS;
-  VASDepBuilder(RtlSSAAnalysis &RtlSSA, ValueAtSlot *V) : A(RtlSSA), VAS(V) {}
+  ValueAtSlot *DstVAS;
+  VASDepBuilder(RtlSSAAnalysis &RtlSSA, ValueAtSlot *V) : A(RtlSSA), DstVAS(V) {}
 
-  void operator() (VASTRegister *DefReg) {
-    A.addVASDep(VAS, DefReg);
+  void operator() (ArrayRef<VASTUse> PathArray) {
+    VASTUse SrcUse = PathArray.back();
+    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.getOrNull()))
+      A.addVASDep(DstVAS, Src);
   }
 };
 
