@@ -143,16 +143,49 @@ struct TimgPathBuilder {
 
   void operator() (ArrayRef<VASTUse> PathArray) {
     VASTUse SrcUse = PathArray.back();
-    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.getOrNull()))
-      Paths.push_back(A.createTimingPath(DstVAS, PathArray));
+    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.getOrNull())){
+      TimingPath *P = A.createTimingPath(DstVAS, PathArray);
+      // Ignore the false path.
+      if (P) Paths.push_back(P);
+    }
   }
 };
 
 TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
                                                     ArrayRef<VASTUse> Path) {
-  TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
   VASTSlot *DstSlot = Dst->getSlot();
-  P->Delay = 0;
+  // Add the end slots.
+  VASTRegister *SrcReg = cast<VASTRegister>(Path.back().get());
+
+  int PathDelay = CFGShortestPath::Infinite;
+  //bool isFalsePath = true;
+
+  typedef VASTRegister::assign_itertor assign_it;
+  for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
+       I != E; ++I) {
+    VASTSlot *SrcSlot = I->first->getSlot();
+    ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
+
+    // Update the PathDelay if the source VAS reaches DstSlot.
+    if (Dst->isDependOn(SrcVAS)) {
+      //isFalsePath = false;
+      int D = CFGSP->getSlotDistance(SrcSlot, DstSlot);
+      // Note that getSlotDistance is possible, because the define may reach
+      // the dst slot via a non-shortest path. And getSlotDistance returns a
+      // shortest distance so the result maybe invalid.
+      assert(D >= 0 && "Reaching define reaches an unreachable slot?");
+      if (D) PathDelay = std::min(PathDelay, D);
+    }
+  }
+
+  // The path {SrcReg -> DstReg} maybe a false path, i.e. SrcReg never reaches
+  // DstSlot.
+  //if (isFalsePath) return 0;
+
+  //assert(PathDelay != CFGShortestPath::Infinite && "All path invalid?");
+  if (PathDelay == CFGShortestPath::Infinite) return 0;
+
+  TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
 
   // The Path should include the Dst.
   P->PathSize = Path.size() + 1;
@@ -171,29 +204,6 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
         BlockBoxesDelay += W->getLatency();
   }
 
-  // Add the end slots.
-  VASTRegister *SrcReg = cast<VASTRegister>(Path.back().get());
-
-  int PathDelay = CFGShortestPath::Infinite;
-
-  typedef VASTRegister::assign_itertor assign_it;
-  for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
-       I != E; ++I) {
-    VASTSlot *SrcSlot = I->first->getSlot();
-    ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
-
-    // Update the PathDelay if the source VAS reaches DstSlot.
-    if (Dst->isDependOn(SrcVAS)) {
-      int D = CFGSP->getSlotDistance(SrcSlot, DstSlot);
-      // Note that getSlotDistance is possible, because the define may reach
-      // the dst slot via a non-shortest path. And getSlotDistance returns a
-      // shortest distance so the result maybe invalid.
-      assert(D >= 0 && "Reaching define reaches an unreachable slot?");
-      if (D) PathDelay = std::min(PathDelay, D);
-    }
-  }
-
-  assert(PathDelay != CFGShortestPath::Infinite && "All path invalid?");
   // The path delay is the sum of minimum distance between source/destinate slot
   // and the delay of block boxes.
   P->Delay = PathDelay + BlockBoxesDelay;
@@ -261,7 +271,9 @@ void CombPathDelayAnalysis::extractTimingPaths(ValueAtSlot *DstVAS,
   // Trivial case: register to register path.
   if (VASTRegister *SrcReg = dyn_cast<VASTRegister>(SrcValue)){
     VASTUse Path[] = { VASTUse(SrcReg) };
-    Paths.push_back(createTimingPath(DstVAS, Path));
+    TimingPath *P = createTimingPath(DstVAS, Path);
+    assert(P && "A trivial path is a false path?");
+    Paths.push_back(P);
     return;
   }
 
