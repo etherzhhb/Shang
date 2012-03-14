@@ -535,6 +535,9 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
     for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
       VASTSlot *S =*I;
       assert(S && "Unexpected null slot!");
+      // No need to update the out set of Slot 0 according its incoming value.
+      // It is the first slot of the FSM.
+      if (S->getSlotNum() == 0) continue;
 
       SlotInfo *SI = getSlotInfo(S);
       assert(SI && "Slot information not existed?");
