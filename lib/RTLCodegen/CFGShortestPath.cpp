@@ -154,7 +154,7 @@ void CFGShortestPath::computeShortestPathFloyd() {
   // if the DefMBB == UseMBB, get the IISlot and assign it to the PathVector.
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
     MachineBasicBlock *DefMBB = I;
-    unsigned IISlot = FInfo->getIISlotFor(DefMBB);
+    unsigned IISlot = FInfo->getIIFor(DefMBB);
     for (MachineBasicBlock::succ_iterator I = DefMBB->succ_begin(),
          E = DefMBB->succ_end(); I != E; ++I) {
       MachineBasicBlock *UseMBB = *I;

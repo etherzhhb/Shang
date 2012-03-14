@@ -306,6 +306,11 @@ public:
 
   bool doInitialization(Module &M);
 
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.setPreservesAll();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+
   void releaseMemory() {
     StartIdxMap.clear();
   }

@@ -47,6 +47,7 @@ unsigned VFInfo::getIISlotFor(const MachineBasicBlock* MBB) const {
 void VFInfo::rememberTotalSlot(const MachineBasicBlock* MBB, unsigned startSlot,
                               unsigned totalSlot, unsigned IISlot) {
   StateSlots SS;
+  assert(IISlot <= startSlot + totalSlot && "Bad pipelined schedule!");
   SS.startSlot = startSlot;
   SS.totalSlot = totalSlot;
   SS.IISlot = IISlot;

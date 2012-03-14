@@ -58,6 +58,10 @@ namespace {
 
     bool runOnMachineFunction(MachineFunction &MF);
 
+    void getAnalysisUsage(AnalysisUsage &AU) const {
+      MachineFunctionPass::getAnalysisUsage(AU);
+      AU.setPreservesAll();
+    }
   };
 
 }
