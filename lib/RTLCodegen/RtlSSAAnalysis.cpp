@@ -226,9 +226,6 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
     for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
       VASTSlot *S =*I;
       assert(S && "Unexpected null slot!");
-      // No need to update the out set of Slot 0 according its incoming value.
-      // It is the first slot of the FSM.
-      if (S->getSlotNum() == 0) continue;
 
       SlotInfo *SI = getSlotInfo(S);
       assert(SI && "Slot information not existed?");
@@ -237,6 +234,11 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
       typedef VASTSlot::pred_it pred_it;
       for (pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE; ++PI) {
         VASTSlot *PS = *PI;
+
+        // No need to update the out set of Slot 0 according its incoming value.
+        // It is the first slot of the FSM.
+        if (S->getSlotNum() == 0 && PS->getSlotNum() != 0) continue;
+
         SlotInfo *PSI = getSlotInfo(PS);
         assert(PSI && "Slot information not existed?");
         typedef SlotInfo::vasset_it it;

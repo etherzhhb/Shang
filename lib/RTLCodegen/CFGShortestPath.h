@@ -55,7 +55,7 @@ namespace llvm {
     static char ID;
 
     // Initial the pathVector with infinite.
-    const static unsigned Infinite;
+    const static int Infinite;
 
     // Get distance between the source MBB and the destination MBB.
     unsigned &getDistance(unsigned DefIdx, unsigned UseIdx);
