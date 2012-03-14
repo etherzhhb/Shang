@@ -134,6 +134,10 @@ if "@SYNTHESIS_DUT@" == "ON" then
 
 RunOnDatapath = [=[
 $(_put('#')) Slack $(RTLDatapath.Slack)
+#_put('# Path nodes: ')
+#for _, n in pairs(RTLDatapath.Nodes) do
+#_put(n .. ', ')
+#end
 #local Slack = RTLDatapath.Slack
 #local DstName = RTLDatapath.Nodes[1]
 #local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)]
@@ -141,6 +145,7 @@ $(_put('#')) Slack $(RTLDatapath.Slack)
 #DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
 #SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
 #end
+
 set dst [get_keepers {$(DstName)*}]
 set src [get_keepers {$(SrcName)*}]
 
