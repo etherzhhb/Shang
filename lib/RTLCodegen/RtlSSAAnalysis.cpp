@@ -172,13 +172,20 @@ private:
   typedef SlotInfo::VASSetTy VASSet;
 
   SlotInfoTy SlotInfos;
-
-  // This vector is for the ValueAtSlot.
-  VASVec AllVASs;
-
   SlotVecTy SlotVec;
 
-  DenseMap<std::pair<VASTValue*, VASTSlot*>, ValueAtSlot*> UniqueVASs;
+  typedef DenseMap<std::pair<VASTValue*, VASTSlot*>, ValueAtSlot*> VASMapTy;
+  VASMapTy UniqueVASs;
+  // Use mapped_iterator which is a simple iterator adapter that causes a
+  // function to be dereferenced whenever operator* is invoked on the iterator.
+  typedef
+  std::pointer_to_unary_function<std::pair<std::pair<VASTValue*, VASTSlot*>,
+                                                     ValueAtSlot*>,
+                                 ValueAtSlot*>
+  vas_getter;
+
+  typedef mapped_iterator<VASMapTy::iterator, vas_getter> vas_iterator;
+
   BumpPtrAllocator Allocator;
 
   // define VAS assign iterator.
@@ -188,8 +195,17 @@ public:
   static char ID;
 
   // All nodes (except exit node) are successors of the entry node.
-  vasvec_it vas_begin() { return AllVASs.begin(); }
-  vasvec_it vas_end() { return AllVASs.end(); }
+  vas_iterator vas_begin() {
+    return vas_iterator(UniqueVASs.begin(),
+                        vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
+                                                         ValueAtSlot*>));
+  }
+
+  vas_iterator vas_end() {
+    return vas_iterator(UniqueVASs.end(),
+                        vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
+                                                         ValueAtSlot*>));
+ }
 
   slot_vec_it slot_begin() { return SlotVec.begin(); }
   slot_vec_it slot_end() { return SlotVec.end(); }
@@ -230,7 +246,6 @@ public:
     UniqueVASs.clear();
     Allocator.Reset();
     SlotVec.clear();
-    AllVASs.clear();
     SlotInfos.clear();
   }
 
@@ -407,7 +422,7 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   DenseMap<VASTValue*, int> DistanceMap;
   // Dirty Hack: Write timing script according to the VAS Graph.
   // Collect the generated statements to the SlotGenMap.
-  for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
+  for (vas_iterator I = vas_begin(), E = vas_end(); I != E; ++I) {
     ValueAtSlot *DstVAS = *I;
     DistanceMap.clear();
 
@@ -472,7 +487,6 @@ void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
       // Create the origin VAS.
       ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S);
       UniqueVASs.insert(std::make_pair(std::make_pair(Reg, S), VAS));
-      AllVASs.push_back(VAS);
     }
   }
 }
@@ -624,9 +638,8 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
 }
 
 void RtlSSAAnalysis::ComputeGenAndKill(){
-  typedef SlotInfo::vasset_it vas_it;
   // Collect the generated statements to the SlotGenMap.
-  for (vasvec_it I = AllVASs.begin(), E = AllVASs.end(); I != E; ++I) {
+  for (vas_iterator I = vas_begin(), E = vas_end(); I != E; ++I) {
     ValueAtSlot *VAS = *I;
     SlotInfo *SI = getSlotInfo(VAS->getSlot());
     SI->insertGen(VAS);
@@ -637,6 +650,7 @@ void RtlSSAAnalysis::ComputeGenAndKill(){
     VASTSlot *S =*I;
     assert(S && "Unexpected null slot!");
     SlotInfo *SI = getSlotInfo(S);
+    typedef SlotInfo::vasset_it vas_it;
     for (vas_it VI = SI->gen_begin(), VE = SI->gen_end(); VI != VE; ++VI) {
       ValueAtSlot *VAS = *VI;
       SI->insertOut(VAS);
