@@ -150,7 +150,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
   assert(UseSI && "SlotInfo missed!");
 
   for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
-       I != E; ++I){
+       I != E; ++I) {
     VASTSlot *DefSlot = I->first->getSlot();
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
 

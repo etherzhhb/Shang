@@ -25,6 +25,7 @@
 
 
 namespace llvm {
+class RtlSSAAnalysis;
 // ValueAtSlot, represent the value that is defined at a specific slot.
 class ValueAtSlot {
   VASTValue *V;
@@ -37,19 +38,25 @@ class ValueAtSlot {
   // Vector for the successor ValueAtSlot.
   VASVecTy UseVAS;
 
-public:
-  ValueAtSlot(VASTValue *v, VASTSlot *slot) : V(v), Slot(slot){}
-
   void addDepVAS(ValueAtSlot *VAS){
     DepVAS.insert(VAS);
     VAS->UseVAS.insert(this);
   }
 
+  ValueAtSlot(VASTValue *v, VASTSlot *slot) : V(v), Slot(slot){}
+  ValueAtSlot(const ValueAtSlot&); // Do not implement.
+
+  friend class RtlSSAAnalysis;
+public:
   VASTValue *getValue() const { return V; }
   VASTSlot *getSlot() const { return Slot; }
   std::string getName() const {
     return std::string(getValue()->getName()) + "@"
       + utostr_32(getSlot()->getSlotNum());
+  }
+
+  bool isDependOn(ValueAtSlot *VAS) const {
+    return DepVAS.count(VAS);
   }
 
   void print(raw_ostream &OS) const;
