@@ -229,7 +229,7 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
 }
 
 static bool path_delay_is_bigger(const TimingPath *LHS, const TimingPath *RHS) {
-  return LHS > RHS;
+  return LHS->Delay > RHS->Delay;
 }
 
 void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
