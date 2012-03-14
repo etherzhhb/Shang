@@ -24,7 +24,6 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/Support/SourceMgr.h"
 #define DEBUG_TYPE "vtm-reg-dependency"
@@ -36,18 +35,10 @@
 using namespace llvm;
 
 namespace llvm {
-  class ValueAtSlot;
-  template<> struct FoldingSetTrait<ValueAtSlot>;
-
-  class ValueAtSlot : public FoldingSetNode {
-    friend struct FoldingSetTrait<ValueAtSlot>;
+  class ValueAtSlot {
 
     VASTValue *V;
     VASTSlot *Slot;
-
-    /// FastID - A reference to an Interned FoldingSetNodeID for this node.
-    /// The ScalarEvolution's BumpPtrAllocator holds the data.
-    const FoldingSetNodeIDRef FastID;
 
     // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
     typedef SmallPtrSet<ValueAtSlot*, 8> VASVecTy;
@@ -57,8 +48,7 @@ namespace llvm {
     VASVecTy UseVAS;
 
   public:
-    explicit ValueAtSlot(const FoldingSetNodeIDRef ID, VASTValue *v,
-                         VASTSlot *slot) : V(v), Slot(slot), FastID(ID) {}
+    explicit ValueAtSlot(VASTValue *v, VASTSlot *slot) : V(v), Slot(slot){}
 
     void addDepVAS(ValueAtSlot *VAS){
       DepVAS.insert(VAS);
@@ -106,23 +96,6 @@ namespace llvm {
     }
     static inline ChildIteratorType child_end(NodeType *N) {
       return N->use_end();
-    }
-  };
-
-  // Specialize FoldingSetTrait for ValueAtSlot to avoid needing to compute
-  // temporary FoldingSetNodeID values.
-  template<>
-    struct FoldingSetTrait<ValueAtSlot> : DefaultFoldingSetTrait<ValueAtSlot> {
-    static void Profile(const ValueAtSlot &X, FoldingSetNodeID& ID) {
-      ID = X.FastID;
-    }
-    static bool Equals(const ValueAtSlot &X, const FoldingSetNodeID &ID,
-      FoldingSetNodeID &TempID) {
-        return ID == X.FastID;
-    }
-    static unsigned ComputeHash(const ValueAtSlot &X,
-                                FoldingSetNodeID &TempID) {
-      return X.FastID.ComputeHash();
     }
   };
 
@@ -205,8 +178,7 @@ private:
 
   SlotVecTy SlotVec;
 
-  typedef FoldingSet<ValueAtSlot>::iterator fs_vas_it;
-  FoldingSet<ValueAtSlot> UniqueVASs;
+  DenseMap<std::pair<VASTValue*, VASTSlot*>, ValueAtSlot*> UniqueVASs;
   BumpPtrAllocator Allocator;
 
   // define VAS assign iterator.
@@ -225,7 +197,7 @@ public:
   // Get SlotInfo from the existing SlotInfos set.
   SlotInfo* getSlotInfo(const VASTSlot *S) const;
 
-  ValueAtSlot *getOrCreateVAS(VASTValue *V, VASTSlot *S);
+  ValueAtSlot *getValueASlot(VASTValue *V, VASTSlot *S);
 
   // Traverse every register to define the ValueAtSlots.
   void buildAllVAS(VASTModule *VM);
@@ -463,21 +435,9 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-ValueAtSlot *RtlSSAAnalysis::getOrCreateVAS(VASTValue *V, VASTSlot *S){
-  FoldingSetNodeID ID;
-  ID.AddPointer(V);
-  ID.AddPointer(S);
-  void *IP = 0;
-  if (ValueAtSlot *VAS = UniqueVASs.FindNodeOrInsertPos(ID, IP)) {
-    //assert(cast<ValueAtSlot>(VAS)->getValue() == V &&
-           //"Stale ValueAtSlot in uniquing map!");
-    return VAS;
-  }
-
-  ValueAtSlot *VAS = new (Allocator) ValueAtSlot(ID.Intern(Allocator), V, S);
-  UniqueVASs.InsertNode(VAS, IP);
-  AllVASs.push_back(VAS);
-
+ValueAtSlot *RtlSSAAnalysis::getValueASlot(VASTValue *V, VASTSlot *S){
+  ValueAtSlot *VAS = UniqueVASs.lookup(std::make_pair(V, S));
+  assert(VAS && "VAS not exist!");
   return VAS;
 }
 
@@ -494,7 +454,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
   for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
        I != E; ++I){
     VASTSlot *DefSlot = I->first->getSlot();
-    ValueAtSlot *DefVAS = getOrCreateVAS(DepReg, DefSlot);
+    ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
     // VAS is only depends on DefVAS if it can reach this slot.
     if (SI->isLiveIn(DefVAS)) VAS->addDepVAS(DefVAS);
   }
@@ -508,8 +468,11 @@ void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = Reg->assign_begin(), E = Reg->assign_end(); I != E; ++I){
       VASTSlot *S = I->first->getSlot();
+
       // Create the origin VAS.
-      (void) getOrCreateVAS(Reg, S);
+      ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S);
+      UniqueVASs.insert(std::make_pair(std::make_pair(Reg, S), VAS));
+      AllVASs.push_back(VAS);
     }
   }
 }
@@ -524,7 +487,7 @@ void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
     for (assign_it I = R->assign_begin(), E = R->assign_end(); I != E; ++I) {
       VASTSlot *S = I->first->getSlot();
       // Create the origin VAS.
-      ValueAtSlot *VAS = getOrCreateVAS(R, S);
+      ValueAtSlot *VAS = getValueASlot(R, S);
       // Build dependence for conditions
       visitDepTree(I->first, VAS);
       // Build dependence for the assigning value.
