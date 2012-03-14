@@ -202,10 +202,6 @@ public:
   // Traverse the dependent VASTUse to get the registers.
   void visitDepTree(VASTUse DepTree, ValueAtSlot *VAS);
 
-  // Traverse the use tree to get the registers.
-  template<typename Func>
-  void DepthFirstTraverseDepTree(VASTUse DefUse, ValueAtSlot *VAS, Func F);
-
   // Using the reaching definition algorithm to sort out the ultimate
   // relationship of registers.
   // Dirty hack: maybe there are two same statements is a slot, and we can use

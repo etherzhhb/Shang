@@ -77,9 +77,10 @@ void RtlSSAAnalysis::viewGraph() {
 // Helper class
 struct VASDepBuilder {
   RtlSSAAnalysis &A;
-  VASDepBuilder(RtlSSAAnalysis &RtlSSA) : A(RtlSSA) {}
+  ValueAtSlot *VAS;
+  VASDepBuilder(RtlSSAAnalysis &RtlSSA, ValueAtSlot *V) : A(RtlSSA), VAS(V) {}
 
-  void operator() (ValueAtSlot *VAS, VASTRegister *DefReg) {
+  void operator() (VASTRegister *DefReg) {
     A.addVASDep(VAS, DefReg);
   }
 };
@@ -293,78 +294,10 @@ void RtlSSAAnalysis::visitDepTree(VASTUse DepTree, ValueAtSlot *VAS){
     return;
   }
 
-  VASDepBuilder B(*this);
+  VASDepBuilder B(*this, VAS);
   // If the define Value is wire, traverse the use tree to get the
   // ultimate registers.
-  DepthFirstTraverseDepTree(DepTree, VAS, B);
-}
-
-template<typename Func>
-void RtlSSAAnalysis::DepthFirstTraverseDepTree(VASTUse DepTree, ValueAtSlot *VAS,
-                                               Func F) {
-  typedef VASTUse::iterator ChildIt;
-  // Use seperate node and iterator stack, so we can get the path vector.
-  typedef SmallVector<VASTUse, 16> NodeStackTy;
-  typedef SmallVector<ChildIt, 16> ItStackTy;
-  NodeStackTy NodeWorkStack;
-  ItStackTy ItWorkStack;
-  // Remember what we had visited.
-  std::set<VASTUse> VisitedUses;
-
-  // Put the root.
-  NodeWorkStack.push_back(DepTree);
-  ItWorkStack.push_back(DepTree.dp_src_begin());
-
-  while (!ItWorkStack.empty()) {
-    VASTUse Node = NodeWorkStack.back();
-
-    ChildIt It = ItWorkStack.back();
-
-    // Do we reach the leaf?
-    if (Node.is_dp_leaf()) {
-      if (VASTValue *V = Node.getOrNull()) {
-        DEBUG(dbgs() << "Datapath:\t";
-        for (NodeStackTy::iterator I = NodeWorkStack.begin(),
-          E = NodeWorkStack.end(); I != E; ++I) {
-            dbgs() << ", ";
-            I->print(dbgs());
-        });
-
-        if (VASTRegister *R = dyn_cast<VASTRegister>(V)) {
-          // Add dependent VAS. Use the function pointer to get the desired
-          // function.
-          F(VAS, R);
-        }
-
-        DEBUG(dbgs() << '\n');
-      }
-
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
-    // All sources of this node is visited.
-    if (It == Node.dp_src_end()) {
-      NodeWorkStack.pop_back();
-      ItWorkStack.pop_back();
-      continue;
-    }
-
-    // Depth first traverse the child of current node.
-    VASTUse ChildNode = *It;
-    ++ItWorkStack.back();
-
-    // Had we visited this node? If the Use slots are same, the same subtree
-    // will lead to a same slack, and we do not need to compute the slack agian.
-    if (!VisitedUses.insert(ChildNode).second) continue;
-
-    // If ChildNode is not visit, go on visit it and its childrens.
-    NodeWorkStack.push_back(ChildNode);
-    ItWorkStack.push_back(ChildNode.dp_src_begin());
-  }
-
-  assert(NodeWorkStack.empty() && "Node stack broken!");
+  DepthFirstTraverseDepTree(DepTree, B);
 }
 
 void RtlSSAAnalysis::ComputeReachingDefinition() {
