@@ -1085,8 +1085,6 @@ void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
     NodeWorkStack.push_back(ChildNode);
     ItWorkStack.push_back(ChildNode.dp_src_begin());
   }
-
-  assert(NodeWorkStack.empty() && "Node stack broken!");
 }
 
 

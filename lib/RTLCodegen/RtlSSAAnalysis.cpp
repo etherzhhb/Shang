@@ -73,7 +73,6 @@ void RtlSSAAnalysis::viewGraph() {
   ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
 
-
 // Helper class
 struct VASDepBuilder {
   RtlSSAAnalysis &A;
