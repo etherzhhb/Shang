@@ -29,7 +29,7 @@ namespace llvm {
 class RtlSSAAnalysis;
 // ValueAtSlot, represent the value that is defined at a specific slot.
 class ValueAtSlot {
-  VASTValue *V;
+  VASTSignal *V;
   VASTSlot *Slot;
 
   // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
@@ -53,12 +53,12 @@ class ValueAtSlot {
     VAS->UseVAS.insert(this);
   }
 
-  ValueAtSlot(VASTValue *v, VASTSlot *slot) : V(v), Slot(slot){}
+  ValueAtSlot(VASTSignal *v, VASTSlot *slot) : V(v), Slot(slot){}
   ValueAtSlot(const ValueAtSlot&); // Do not implement.
 
   friend class RtlSSAAnalysis;
 public:
-  VASTValue *getValue() const { return V; }
+  VASTSignal *getValue() const { return V; }
   VASTSlot *getSlot() const { return Slot; }
   std::string getName() const {
     return std::string(getValue()->getName()) + "@"
@@ -262,7 +262,7 @@ public:
   // Traverse the dependent VASTUse to get the registers.
   void visitDepTree(VASTUse DepTree, ValueAtSlot *VAS);
 
-  bool addLiveIns(SlotInfo *From, SlotInfo *To);
+  bool addLiveIns(SlotInfo *From, SlotInfo *To, bool OnlyUndefTiming);
   bool addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To, VASTModule *VM);
 
   // Using the reaching definition algorithm to sort out the ultimate

@@ -256,11 +256,16 @@ void RtlSSAAnalysis::visitDepTree(VASTUse DepTree, ValueAtSlot *VAS){
   DepthFirstTraverseDepTree(DepTree, B);
 }
 
-bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To) {
+bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
+                                bool OnlyUndefTiming) {
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
   for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
     ValueAtSlot *PredOut = II->first;
+    // Are we only add live-ins with undefine timing?
+    if (OnlyUndefTiming && ! PredOut->getValue()->isTimingUndef())
+      continue;
+
     unsigned PreviousOutCycle = II->second;
     // Increase the cycles by 1 after the value lives to next slot.
     unsigned CurrentInCycle = PreviousOutCycle + 1;
@@ -277,11 +282,16 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To) {
 bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To,
                                              VASTModule *VM) {
   bool Changed = false;
+  unsigned FromSlotNum = From->getSlotNum();
 
-  for (unsigned i = From->alias_start(), e = From->getSlotNum(),
+  for (unsigned i = From->alias_start(), e = From->alias_end(),
        ii = From->alias_ii(); i < e; i += ii) {
     SlotInfo * PredSI = getSlotInfo(VM->getSlot(i));
-    Changed |= addLiveIns(PredSI, To);
+    if (i == FromSlotNum) continue;
+
+    // From the view of signals with undefined timing, all alias slot is the
+    // same slot.
+    Changed |= addLiveIns(PredSI, To, i > FromSlotNum);
   }
 
   return Changed;
@@ -314,7 +324,8 @@ void RtlSSAAnalysis::ComputeReachingDefinition(VASTModule *VM) {
 
         SlotInfo *PredSI = getSlotInfo(PredSlot);
 
-        Changed |= addLiveIns(PredSI, CurSI);
+        Changed |= addLiveIns(PredSI, CurSI, false);
+
         if (PredSlot->getParentIdx() == S->getParentIdx() &&
             PredSlot->hasAliasSlot())
           Changed |= addLiveInFromAliasSlots(PredSlot, CurSI, VM);
