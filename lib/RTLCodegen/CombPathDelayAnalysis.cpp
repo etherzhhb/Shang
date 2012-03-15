@@ -189,8 +189,8 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
     P->Path[i + 1] = V;
 
     // Accumulates the block box latency.
-    if (VASTWire *W = dyn_cast<VASTWire>(V))
-      if (W->getOpcode() == VASTWire::dpVarLatBB)
+    if (VASTExpr *W = dyn_cast<VASTExpr>(V))
+      if (W->getOpcode() == VASTExpr::dpVarLatBB)
         BlockBoxesDelay += W->getLatency();
   }
 

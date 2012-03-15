@@ -37,6 +37,7 @@ class VASTModule;
 class VASTValue;
 class VASTSlot;
 class VASTWire;
+class VASTExpr;
 class VASTRegister;
 class VASTUse;
 
@@ -46,6 +47,7 @@ public:
   enum VASTTypes {
     vastPort,
     vastWire,
+    vastExpr,
     vastRegister,
     vastSymbol,
     vastSlot,
@@ -87,7 +89,7 @@ class VASTUse : public ilist_node<VASTUse> {
   } Data;
 
   PointerIntPair<VASTValue*, 2, VASTUseTy> User;// VASTUseTy
-  friend class VASTWire;
+  friend class VASTExpr;
 
   VASTUseTy getUseKind() const { return User.getInt(); }
   void setUseKind(VASTUseTy K) { User.setInt(K); }
@@ -280,7 +282,7 @@ public:
   }
 
   bool replaceAllUseWith(VASTUse To,
-                         SmallVectorImpl<VASTWire*> *ReplacedUsers = 0);
+                         SmallVectorImpl<VASTExpr*> *ReplacedUsers = 0);
 };
 
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
@@ -332,7 +334,7 @@ public:
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTSignal *A) { return true; }
-  static inline bool classof(const VASTWire *A) { return true; }
+  static inline bool classof(const VASTExpr *A) { return true; }
   static inline bool classof(const VASTRegister *A) { return true; }
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastWire || A->getASTType() == vastRegister;
@@ -368,7 +370,47 @@ public:
   virtual void anchor();
 };
 
-class VASTWire : public VASTSignal {
+class VASTWire :public VASTSignal {
+  // TODO: move to datapath.
+  union {
+    uint64_t Latency;
+    VASTSlot *Slot;
+  } Context;
+
+  friend class VASTModule;
+
+  VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "",
+           VASTValue *v = 0) : VASTSignal(vastWire, Name, BitWidth, Attr), V(v){
+    Context.Latency = 0;
+  }
+
+  void setAsInput() {
+    // Pin the signal to prevent it from being optimized away.
+    Pin();
+  }
+
+  void setSlot(VASTSlot *Slot) {
+    //assert(getOpcode() == cpAssignAtSlot && "setSlot on wrong type!");
+    Context.Slot = Slot;
+  }
+public:
+  unsigned getLatency() const {
+    //assert(getOpcode() == dpVarLatBB && "Call getLatency on bad wire type!");
+    return Context.Latency;
+  }
+
+  void setLatency(unsigned latency) {
+    //assert(getOpcode() == dpVarLatBB && "Call setLatency on bad wire type!");
+    Context.Latency = latency;
+  }
+
+  VASTSlot *getSlot() const {
+    //assert(getOpcode() == cpAssignAtSlot &&  "Call getSlot on bad wire type!");
+    return Context.Slot;
+  }
+};
+
+class VASTExpr : public VASTValue {
 public:
   enum Opcode {
     // FU datapath
@@ -406,40 +448,22 @@ public:
   };
 private:
   VASTUse *Ops;
-  // TODO: move to datapath.
-  union {
-    uint64_t Latency;
-    VASTSlot *Slot;
-  } Context;
 
   uint8_t NumOps;
   Opcode  Opc;
 
-  VASTWire(const VASTWire&);             // Do not implement
+  VASTExpr(const VASTExpr&);             // Do not implement
 
-  VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "",
-           VASTUse *ops = 0, uint8_t numOps = 0, Opcode opc = dpUnknown);
+  VASTExpr(const char *Name, unsigned BitWidth,VASTUse *ops = 0,
+           uint8_t numOps = 0, Opcode opc = dpUnknown);
 
   void setExpr(VASTUse *ops, uint8_t numOps, Opcode opc);
-
-  void setAsInput() {
-    Opc = InputPort;
-    // Pin the signal to prevent it from being optimized away.
-    Pin();
-    // We cannot control the timing of a input port.
-    // FIXME: In fact, we can annotate more information.
-    setTimingUndef();
-  }
 
   friend class VASTModule;
 
   void printAsOperandInteral(raw_ostream &OS) const;
 
   void buildUseList();
-  void setSlot(VASTSlot *Slot) {
-    assert(getOpcode() == cpAssignAtSlot && "setSlot on wrong type!");
-    Context.Slot = Slot;
-  }
 
   void dropOperandsFromUseList() {
     for (VASTUse *I = Ops, *E = Ops + NumOps; I != E; ++I)
@@ -449,21 +473,6 @@ private:
 public:
   bool hasExpr() const { return Opc != dpUnknown; }
   bool isDead() const { return Opc == Dead; }
-
-  unsigned getLatency() const {
-    assert(getOpcode() == dpVarLatBB && "Call getLatency on bad wire type!");
-    return Context.Latency;
-  }
-
-  void setLatency(unsigned latency) {
-    assert(getOpcode() == dpVarLatBB && "Call setLatency on bad wire type!");
-    Context.Latency = latency;
-  }
-
-  VASTSlot *getSlot() const {
-    assert(getOpcode() == cpAssignAtSlot &&  "Call getSlot on bad wire type!");
-    return Context.Slot;
-  }
 
   Opcode getOpcode() const { return Opc; }
   unsigned num_operands() const { return NumOps; }
@@ -497,17 +506,17 @@ public:
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const VASTWire *A) { return true; }
+  static inline bool classof(const VASTExpr *A) { return true; }
   static inline bool classof(const VASTNode *A) {
-    return A->getASTType() == vastWire;
+    return A->getASTType() == vastExpr;
   }
 };
 
-struct VASTWireBuilder {
+struct VASTExprBuilder {
   SmallVector<VASTUse, 4> Operands;
-  VASTWire::Opcode Opc;
+  VASTExpr::Opcode Opc;
   unsigned BitWidth;
-  void init(VASTWire::Opcode opc, unsigned bitWidth) {
+  void init(VASTExpr::Opcode opc, unsigned bitWidth) {
     Opc = opc;
     BitWidth = bitWidth;
   }
@@ -681,13 +690,13 @@ private:
 
   // the first key VASTWire is Assignment condition. The second value VASTUse is
   // assignment value.
-  typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
+  typedef DenseMap<VASTExpr*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns;
 
   // The slots that this register are assigned.
   std::set<VASTSlot*> Slots;
 
-  void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
+  void addAssignment(VASTUse *Src, VASTExpr *AssignCnd);
 
   friend class VASTModule;
 public:
@@ -732,7 +741,7 @@ public:
   typedef PortVector::iterator port_iterator;
   typedef PortVector::const_iterator const_port_iterator;
 
-  typedef SmallVector<VASTWire*, 128> WireVector;
+  typedef SmallVector<VASTExpr*, 128> WireVector;
   typedef SmallVector<VASTRegister*, 128> RegisterVector;
   typedef RegisterVector::iterator reg_iterator;
 
@@ -759,7 +768,7 @@ private:
 
   // The variable latency data-path whose latency information not capture
   // by schedule information.
-  typedef std::map<unsigned, VASTWire*> VarLatBBMap;
+  typedef std::map<unsigned, VASTExpr*> VarLatBBMap;
   VarLatBBMap BBLatInfo;
 
   // The port starting offset of a specific function unit.
@@ -806,14 +815,14 @@ public:
 
   bool eliminateConstRegisters();
 
-  void addBBLatInfo(unsigned FNNum, VASTWire *W) {
-    assert(W->getOpcode() == VASTWire::dpVarLatBB && "Wrong datapath type!");
+  void addBBLatInfo(unsigned FNNum, VASTExpr *W) {
+    assert(W->getOpcode() == VASTExpr::dpVarLatBB && "Wrong datapath type!");
     bool inserted = BBLatInfo.insert(std::make_pair(FNNum, W)).second;
     assert(inserted && "Latency information for BlackBox already exist!");
     (void)inserted;
   }
 
-  VASTWire *getBBLatInfo(unsigned FNNum) const {
+  VASTExpr *getBBLatInfo(unsigned FNNum) const {
     VarLatBBMap::const_iterator at = BBLatInfo.find(FNNum);
     return at == BBLatInfo.end() ? 0 : at->second;
   }
@@ -953,25 +962,25 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTWire *createExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
-                       unsigned BitWidth, VASTWire *DstWire = 0);
-  VASTUse buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
-                    unsigned BitWidth, VASTWire *DstWire = 0);
-  VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse Op,
-                    unsigned BitWidth, VASTWire *DstWire = 0);
-  VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                    unsigned BitWidth, VASTWire *DstWire = 0);
-  VASTUse buildExpr(VASTWire::Opcode Opc, VASTUse Op0, VASTUse Op1, VASTUse Op2,
-                    unsigned BitWidth, VASTWire *DstWire = 0);
-  VASTUse buildExpr(VASTWireBuilder &Builder, VASTWire *DstWire = 0) {
+  VASTExpr *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                       unsigned BitWidth, VASTExpr *DstWire = 0);
+  VASTUse buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                    unsigned BitWidth, VASTExpr *DstWire = 0);
+  VASTUse buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
+                    unsigned BitWidth, VASTExpr *DstWire = 0);
+  VASTUse buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                    unsigned BitWidth, VASTExpr *DstWire = 0);
+  VASTUse buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1, VASTUse Op2,
+                    unsigned BitWidth, VASTExpr *DstWire = 0);
+  VASTUse buildExpr(VASTExprBuilder &Builder, VASTExpr *DstWire = 0) {
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth, DstWire);
   }
 
-  VASTUse buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                         unsigned BitWidth, VASTWire *DstWire);
+  VASTUse buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                         unsigned BitWidth, VASTExpr *DstWire);
   bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
-  VASTWire *updateExpr(VASTWire *W, VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops);
+  VASTExpr *updateExpr(VASTExpr *W, VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops);
 
   VASTUse buildNotExpr(VASTUse U);
 
@@ -979,7 +988,7 @@ public:
                             unsigned InitVal = 0,
                             const char *Attr = "");
 
-  VASTWire *addWire(const std::string &Name, unsigned BitWidth,
+  VASTExpr *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");
 
   VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
@@ -992,12 +1001,12 @@ public:
   slot_iterator slot_begin() { return Slots.begin(); }
   slot_iterator slot_end() { return Slots.end(); }
 
-  VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
+  VASTExpr *addWire(unsigned WireNum, unsigned BitWidth,
                     const char *Attr = "");
 
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTUse> &Cnds, bool AddSlotActive = true);
-  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds,
+  VASTExpr *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds,
                            bool AddSlotActive = true);
 
   VASTUse indexVASTValue(unsigned RegNum, VASTUse V);

@@ -105,7 +105,7 @@ std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
 //----------------------------------------------------------------------------//
 // Helper function for Verilog RTL printing.
 
-static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *W) {
+static raw_ostream &printAssign(raw_ostream &OS, const VASTExpr *W) {
   OS << "assign " << W->getName() << verilogBitRange(W->getBitWidth(), 0, false)
      << " = ";
   return OS;
@@ -189,7 +189,7 @@ VASTUse::iterator VASTUse::dp_src_begin() {
   if (getUseKind() != USE_Value)
     return reinterpret_cast<VASTUse::iterator>(0);
 
-  if (VASTWire *W = dyn_cast<VASTWire>(get()))
+  if (VASTExpr *W = dyn_cast<VASTExpr>(get()))
     return W->op_begin();
 
   return reinterpret_cast<VASTUse::iterator>(0);
@@ -198,7 +198,7 @@ VASTUse::iterator VASTUse::dp_src_begin() {
 VASTUse::iterator VASTUse::dp_src_end() {
   if (getUseKind() != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
 
-  if (VASTWire *W = dyn_cast<VASTWire>(get()))
+  if (VASTExpr *W = dyn_cast<VASTExpr>(get()))
     return W->op_end();
 
   return reinterpret_cast<VASTUse::iterator>(0);
@@ -214,19 +214,19 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   // The slot enable register's timing is not captured by schedule information.
   SlotReg->setTimingUndef();
 
-  VASTWire *Ready = VM->addWire(SlotName + "Ready", 1,
+  VASTExpr *Ready = VM->addWire(SlotName + "Ready", 1,
                                 VASTModule::DirectClkEnAttr.c_str());
   SlotReady = Ready;
   // Someone is using the signal.
   SlotReady.setUser(0);
 
-  VASTWire *Active = VM->addWire(SlotName + "Active", 1,
+  VASTExpr *Active = VM->addWire(SlotName + "Active", 1,
                                  VASTModule::DirectClkEnAttr.c_str());
   SlotActive = Active;
   // Someone is using the signal.
   SlotActive.setUser(0);
 
-  VM->buildExpr(VASTWire::dpAnd, SlotReg, Ready, 1, Active);
+  VM->buildExpr(VASTExpr::dpAnd, SlotReg, Ready, 1, Active);
   // We need alias slot to build the ready signal, keep it as unknown now.
 
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
@@ -264,13 +264,13 @@ VASTUse VASTSlot::buildFUReadyExpr(VASTModule &VM) {
         I != E; ++I)
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
-    Ops.push_back(VM.buildExpr(VASTWire::dpOr, I->first,
+    Ops.push_back(VM.buildExpr(VASTExpr::dpOr, I->first,
                                VM.buildNotExpr(I->second), 1));
   
   // No waiting signal means always ready.
   if (Ops.empty()) Ops.push_back(VASTUse(true, 1));
   
-  return VM.buildExpr(VASTWire::dpAnd, Ops, 1);
+  return VM.buildExpr(VASTExpr::dpAnd, Ops, 1);
 }
 
 void VASTSlot::buildReadyLogic(VASTModule &Mod) {
@@ -287,7 +287,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
       if (!AliasSlot->readyEmpty()) {
         // FU ready for alias slot, when alias slot register is 1, its waiting
         // signal must be 1.
-        Ops.push_back(Mod.buildExpr(VASTWire::dpOr,
+        Ops.push_back(Mod.buildExpr(VASTExpr::dpOr,
                                   Mod.buildNotExpr(AliasSlot->getRegister()),
                                   AliasSlot->buildFUReadyExpr(Mod), 1));
       }
@@ -295,7 +295,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
   }
 
   // All signals should be 1.
-  Mod.buildExpr(VASTWire::dpAnd, Ops, 1, cast<VASTWire>(getReady()));
+  Mod.buildExpr(VASTExpr::dpAnd, Ops, 1, cast<VASTExpr>(getReady()));
 }
 
 bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
@@ -410,7 +410,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     EmptySlotEnCnd.clear();
     EmptySlotEnCnd.push_back(getRegister());
     Mod.addAssignment(cast<VASTRegister>(I->first),
-                      Mod.buildExpr(VASTWire::dpAnd, getReady(), I->second, 1),
+                      Mod.buildExpr(VASTExpr::dpAnd, getReady(), I->second, 1),
                       this, EmptySlotEnCnd, false);
   }
 
@@ -463,7 +463,7 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
                            unsigned initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
-void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
+void VASTRegister::addAssignment(VASTUse *Src, VASTExpr *AssignCnd) {
   bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
   assert(inserted &&  "Assignment condition conflict detected!");
   Src->setUser(this);
@@ -517,7 +517,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   raw_string_ostream SS(Pred);
   bool UseSwitch = Assigns.size() > 1;
 
-  typedef std::vector<VASTWire*> OrVec;
+  typedef std::vector<VASTExpr*> OrVec;
   typedef std::map<VASTUse, OrVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
   for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
@@ -556,18 +556,17 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTWire::VASTWire(const char *Name, unsigned BitWidth, const char *Attr,
+VASTExpr::VASTExpr(const char *Name, unsigned BitWidth,
                    VASTUse *ops, uint8_t numOps, Opcode opc)
-  : VASTSignal(vastWire, Name, BitWidth, Attr), Ops(ops), NumOps(numOps),
+  : VASTValue(vastExpr, Name, BitWidth), Ops(ops), NumOps(numOps),
     Opc(opc) {
-  Context.Latency = 0;
   assert((numOps || Ops == 0)&& "Unexpected empty operand list!");
   if (ops) buildUseList();
 }
 
-void VASTWire::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
-  assert(((numOps) || (opc  == Dead && !isPinned()))
-         && "Cannot set expression!");
+void VASTExpr::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
+  //assert(((numOps) || (opc  == Dead && !isPinned()))
+  //       && "Cannot set expression!");
   Ops = ops;
   NumOps = numOps;
   Opc = opc;
@@ -575,7 +574,7 @@ void VASTWire::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
   buildUseList();
 }
 
-void VASTWire::buildUseList() {
+void VASTExpr::buildUseList() {
   for (VASTUse *I = Ops, *E = Ops + NumOps; I != E; ++I)
     I->setUser(this);
 }
@@ -602,7 +601,7 @@ VASTModule::~VASTModule() {
 void VASTModule::printDatapath(raw_ostream &OS) const{
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
-    VASTWire *W = *I;
+    VASTExpr *W = *I;
     if (W->isDead()) continue;
 
     (*I)->print(OS);
@@ -640,7 +639,7 @@ void VASTModule::printModuleDecl(raw_ostream &OS) const {
 void VASTModule::printSignalDecl(raw_ostream &OS) {
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
-    VASTWire *W = *I;
+    VASTExpr *W = *I;
     if (W->isDead()) continue;
 
     W->printDecl(OS);
@@ -663,38 +662,38 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
 }
 
 VASTUse VASTModule::buildNotExpr(VASTUse U) {
-  return buildExpr(VASTWire::dpNot, U, U.getBitWidth());
+  return buildExpr(VASTExpr::dpNot, U, U.getBitWidth());
 }
 
-VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
-                              unsigned BitWidth, VASTWire *DstWire) {
+VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
+                              unsigned BitWidth, VASTExpr *DstWire) {
   switch (Opc) {
-  case VASTWire::dpNot: {
+  case VASTExpr::dpNot: {
      // Try to fold the not expression.
-    if (VASTWire *E = dyn_cast_or_null<VASTWire>(Op.getOrNull()))
-      if (E->getOpcode() == VASTWire::dpNot) {
+    if (VASTExpr *E = dyn_cast_or_null<VASTExpr>(Op.getOrNull()))
+      if (E->getOpcode() == VASTExpr::dpNot) {
         // We should also propagate the bit slice information.
         VASTUse U = E->getOperand(0).getBitSlice(Op.UB, Op.LB);
-        return buildExpr(VASTWire::dpAssign, U, BitWidth, DstWire);
+        return buildExpr(VASTExpr::dpAssign, U, BitWidth, DstWire);
       }
     if (Op.isImm()) {
       unsigned Size = Op.getBitWidth();
-      return buildExpr(VASTWire::dpAssign,
+      return buildExpr(VASTExpr::dpAssign,
                        VASTUse(getBitSlice64(~Op.getImm(), Size), Size),
                        Size, DstWire);
 
     }
     break;
   }
-  case VASTWire::dpAssign: {
-    SmallVector<VASTWire*, 8> UpdatedUsers;
+  case VASTExpr::dpAssign: {
+    SmallVector<VASTExpr*, 8> UpdatedUsers;
 
     if (!DstWire) return Op;
 
     // The wire can be ignored if it is replaced in all its users.
     if (replaceAndUpdateUseTree(DstWire, Op)) {
       if (!DstWire->isPinned())
-        DstWire->setExpr(0, 0, VASTWire::Dead);
+        DstWire->setExpr(0, 0, VASTExpr::Dead);
       else {
         // Build data-path logic for pinned signal.
         VASTUse Ops[] = { Op };
@@ -713,8 +712,8 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op,
   return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
-VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                                  unsigned BitWidth, VASTWire *DstWire) {
+VASTUse VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                                  unsigned BitWidth, VASTExpr *DstWire) {
   // Try to make RHS to be an constant.
   if (LHS.isImm()) std::swap(LHS, RHS);
 
@@ -722,12 +721,12 @@ VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RH
     VASTUse ValForRHSIsZero, ValForRHSIsAllOnes;
     switch (Opc) {
     default: break;
-    case VASTWire::dpAnd: {
+    case VASTExpr::dpAnd: {
       ValForRHSIsZero = RHS;
       ValForRHSIsAllOnes = LHS;
       break;
     }
-    case VASTWire::dpOr: {
+    case VASTExpr::dpOr: {
       ValForRHSIsZero = LHS;
       ValForRHSIsAllOnes = RHS;
       break;
@@ -735,10 +734,10 @@ VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RH
     }
 
     if (RHS.getImm() == 0)
-      return buildExpr(VASTWire::dpAssign, ValForRHSIsZero, BitWidth, DstWire);
+      return buildExpr(VASTExpr::dpAssign, ValForRHSIsZero, BitWidth, DstWire);
 
     if (getBitSlice64(RHS.getImm(), BitWidth) == getBitSlice64(-1, BitWidth))
-      return buildExpr(VASTWire::dpAssign, ValForRHSIsAllOnes, BitWidth, DstWire);
+      return buildExpr(VASTExpr::dpAssign, ValForRHSIsAllOnes, BitWidth, DstWire);
   }
 
 
@@ -746,11 +745,11 @@ VASTUse VASTModule::buildLogicExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RH
   return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
-VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                              unsigned BitWidth, VASTWire *DstWire) {
+VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                              unsigned BitWidth, VASTExpr *DstWire) {
   switch (Opc) {
   default: break;
-  case VASTWire::dpAnd: case VASTWire::dpOr: case VASTWire::dpXor:
+  case VASTExpr::dpAnd: case VASTExpr::dpOr: case VASTExpr::dpXor:
     return buildLogicExpr(Opc, LHS, RHS, BitWidth, DstWire);
   }
 
@@ -758,23 +757,23 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse LHS, VASTUse RHS,
   return createExpr(Opc, Ops, BitWidth, DstWire);
 }
 
-VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, VASTUse Op0, VASTUse Op1,
-                              VASTUse Op2, unsigned BitWidth, VASTWire *DstWire) {
+VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
+                              VASTUse Op2, unsigned BitWidth, VASTExpr *DstWire) {
   VASTUse Ops[] = { Op0, Op1, Op2 };
   return buildExpr(Opc, Ops, BitWidth, DstWire);
 }
 
-VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
-                              unsigned BitWidth, VASTWire *DstWire) {
+VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                              unsigned BitWidth, VASTExpr *DstWire) {
   switch (Opc) {
   default: break;
-  case VASTWire::dpNot: case VASTWire::dpAssign: {
+  case VASTExpr::dpNot: case VASTExpr::dpAssign: {
     assert(Ops.size() == 1 && "Bad operand number!");
     return buildExpr(Opc, Ops[0], BitWidth, DstWire);
   }
-  case VASTWire::dpAnd: case VASTWire::dpOr: {
+  case VASTExpr::dpAnd: case VASTExpr::dpOr: {
     if (Ops.size() == 1)
-      return buildExpr(VASTWire::dpAssign, Ops[0], BitWidth, DstWire);
+      return buildExpr(VASTExpr::dpAssign, Ops[0], BitWidth, DstWire);
     else if(Ops.size() == 2)
       return buildLogicExpr(Opc, Ops[0], Ops[1], BitWidth, DstWire);
     break;
@@ -785,12 +784,12 @@ VASTUse VASTModule::buildExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
 }
 
 bool VASTModule::replaceAndUpdateUseTree(VASTValue *From, VASTUse To) {
-  SmallVector<VASTWire*, 8> UpdatedUsers;
+  SmallVector<VASTExpr*, 8> UpdatedUsers;
   // Update the use list of DstWire.
   bool AllReplaced = From->replaceAllUseWith(To, &UpdatedUsers);
   // Try to re-evaluate the users.
   while (!UpdatedUsers.empty()) {
-    VASTWire *V = UpdatedUsers.back();
+    VASTExpr *V = UpdatedUsers.back();
     UpdatedUsers.pop_back();
 
     buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth(), V);
@@ -799,7 +798,7 @@ bool VASTModule::replaceAndUpdateUseTree(VASTValue *From, VASTUse To) {
   return AllReplaced;
 }
 
-VASTWire *VASTModule::updateExpr(VASTWire *W, VASTWire::Opcode Opc,
+VASTExpr *VASTModule::updateExpr(VASTExpr *W, VASTExpr::Opcode Opc,
                                  ArrayRef<VASTUse> Ops) {
   assert(W->num_operands() >= Ops.size()
          && "Unexpected number operands increased!");
@@ -812,8 +811,8 @@ VASTWire *VASTModule::updateExpr(VASTWire *W, VASTWire::Opcode Opc,
   return W;
 }
 
-VASTWire *VASTModule::createExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
-                                 unsigned BitWidth, VASTWire *DstWire) {
+VASTExpr *VASTModule::createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                                 unsigned BitWidth, VASTExpr *DstWire) {
   assert(!Ops.empty() && "Unexpected empty expression");
 
   if (DstWire && DstWire->hasExpr()) {
@@ -831,17 +830,17 @@ VASTWire *VASTModule::createExpr(VASTWire::Opcode Opc, ArrayRef<VASTUse> Ops,
     return DstWire;
   }
 
-  VASTWire *D = Allocator.Allocate<VASTWire>();
-  return new (D) VASTWire(0, BitWidth, "", OpArray, Ops.size(), Opc);
+  VASTExpr *D = Allocator.Allocate<VASTExpr>();
+  return new (D) VASTExpr(0, BitWidth, "", OpArray, Ops.size(), Opc);
 }
 
-VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
+VASTExpr *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      SmallVectorImpl<VASTUse> &Cnds,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive());
-  VASTWire *AssignAtSlot = cast<VASTWire>(buildExpr(VASTWire::cpAssignAtSlot,
-                                          buildExpr(VASTWire::dpAnd,Cnds,1), 1));
+  VASTExpr *AssignAtSlot = cast<VASTExpr>(buildExpr(VASTExpr::cpAssignAtSlot,
+                                          buildExpr(VASTExpr::dpAnd,Cnds,1), 1));
   AssignAtSlot->setSlot(Slot);
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();
@@ -888,7 +887,7 @@ void VASTModule::print(raw_ostream &OS) const {
 VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
                                    PortTypes T /*= Others*/) {
   // DIRTYHACK: comment out the deceleration of the signal for ports.
-  VASTWire *W = addWire(Name, BitWidth, "//");
+  VASTExpr *W = addWire(Name, BitWidth, "//");
   // Do not remove the wire for input port.
   W->setAsInput();
 
@@ -980,19 +979,19 @@ VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
   return R;
 }
 
-VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
+VASTExpr *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
                               const char *Attr) {
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
   assert(Entry.second == 0 && "Symbol already exist!");
-  VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(Entry.getKeyData(), BitWidth, Attr);
+  VASTExpr *Wire = Allocator.Allocate<VASTExpr>();
+  new (Wire) VASTExpr(Entry.getKeyData(), BitWidth, Attr);
   Entry.second = Wire;
   Wires.push_back(Wire);
 
   return Wire;
 }
 
-VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
+VASTExpr *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
                               const char *Attr) {
   std::string Name;
 
@@ -1000,7 +999,7 @@ VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
          && "Unexpected physics register as wire!");
   Name = "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
 
-  VASTWire *W = addWire(Name, BitWidth, Attr);
+  VASTExpr *W = addWire(Name, BitWidth, Attr);
   indexVASTValue(WireNum, W);
   return W;
 }
@@ -1074,7 +1073,7 @@ void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const{
 }
 
 bool VASTValue::replaceAllUseWith(VASTUse To,
-                                  SmallVectorImpl<VASTWire*> *ReplacedUsers) {
+                                  SmallVectorImpl<VASTExpr*> *ReplacedUsers) {
   assert(To.getBitWidth() == getBitWidth() && "Bitwidth not match!");
 
   typedef VASTValue::use_iterator it;
@@ -1092,7 +1091,7 @@ bool VASTValue::replaceAllUseWith(VASTUse To,
 
       if (!ReplacedUsers) continue;
 
-      if (VASTWire *UserWire = dyn_cast_or_null<VASTWire>(User)) {
+      if (VASTExpr *UserWire = dyn_cast_or_null<VASTExpr>(User)) {
         assert(UserWire->hasExpr() && UserWire->num_operands()
                && "Use list broken!");
         ReplacedUsers->push_back(UserWire);
@@ -1251,7 +1250,7 @@ static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << "}}";
 }
 
-static void printCombMux(raw_ostream &OS, const VASTWire *W) {
+static void printCombMux(raw_ostream &OS, const VASTExpr *W) {
   unsigned NumOperands = W->num_operands();
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
 
@@ -1287,7 +1286,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   OS.indent(2) << "endcase\nend  // end mux logic\n";
 }
 
-void VASTWire::print(raw_ostream &OS) const {
+void VASTExpr::print(raw_ostream &OS) const {
   // Skip unknown or blackbox datapath, it should printed to the datapath
   //  buffer of the module.
   if (Opc == dpUnknown || Opc == InputPort || Opc == dpVarLatBB) return;
@@ -1303,7 +1302,7 @@ void VASTWire::print(raw_ostream &OS) const {
   OS << ";\n";
 }
 
-void VASTWire::printAsOperandInteral(raw_ostream &OS) const {
+void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   OS << '(';
   typedef ArrayRef<VASTUse> UseArray;
 
