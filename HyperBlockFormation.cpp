@@ -41,7 +41,14 @@
 using namespace llvm;
 
 STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
-STATISTIC(BBsNotMerged, "Number of blocks are not merged into hyperblock");
+STATISTIC(BBsMergedNotBenefit, "Number of blocks are not merged into hyperblock"
+                               " (weighted path not benefit)");
+STATISTIC(BBsMergedBigIncreas, "Number of blocks are not merged into hyperblock"
+                               " (BB delay increase too much)");
+
+cl::opt<unsigned> PathDiffThreshold("vtm-hyper-block-path-threshold",
+                                    cl::desc("HyperBlock merging threshold"),
+                                    cl::init(8));
 
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
@@ -265,7 +272,15 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
   // Only merge the SuccBB into current BB if the merge is beneficial.
   // TODO: Remove the SuccBB with smallest beneficial and try again.
   if (UnmergedTotalDelay < MergedTotalDelay) {
-    ++BBsNotMerged;
+    ++BBsMergedNotBenefit;
+    return false;
+  }
+
+  // Do not completely trust the branch probability analysis! Do merge the
+  // blocks if the delay increase too much.
+  if (double(MaxMergedDelay) / double(MBBDelay) >
+      PathDiffThreshold / double(LI->getLoopDepth(MBB) + 1)) {
+    ++BBsMergedBigIncreas;
     return false;
   }
 
