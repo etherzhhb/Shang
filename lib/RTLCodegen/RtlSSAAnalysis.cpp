@@ -80,7 +80,7 @@ void ValueAtSlot::print(raw_ostream &OS) const {
 
   typedef VASCycMapTy::const_iterator it;
   for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I)
-    OS << I->first->getName() << '[' << I->second << ']' << ',';
+    OS << I->first->getName() << '[' << I->second.getCycles() << ']' << ',';
 
   OS << "}\n";
 }
@@ -90,9 +90,10 @@ void ValueAtSlot::verify() const {
   VASTSlot *UseSlot = getSlot();
   for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I) {
     VASTSlot *DefSlot = I->first->getSlot();
-
+    LiveInInfo LI = I->second;
     if (DefSlot->getParentIdx() == UseSlot->getParentIdx() &&
-        UseSlot->hasAliasSlot() && I->second > DefSlot->alias_ii())
+        UseSlot->hasAliasSlot() && !LI.isFromOtherBB() &&
+        LI.getCycles() > DefSlot->alias_ii())
       llvm_unreachable("Broken RTL dependence!");
   }
 }
@@ -112,11 +113,11 @@ void SlotInfo::print(raw_ostream &OS) const {
     OS.indent(2) << VAS->getName() << "\n";
   }
 
-  //OS << "\n\nIn:\n";
-  //for (it I = in_begin(), E = in_end(); I != E; ++I) {
-  //  ValueAtSlot *VAS = *I;
-  //  OS.indent(2) << VAS->getName() << "\n";
-  //}
+  OS << "\n\nIn:\n";
+  for (VASCycMapTy::const_iterator I = in_begin(), E = in_end(); I != E; ++I) {
+    ValueAtSlot *VAS = I->first;
+    OS.indent(2) << VAS->getName() << '[' << I->second.getCycles() << "]\n";
+  }
 
   OS << "\n\n";
 }
@@ -129,7 +130,7 @@ bool SlotInfo::isVASKilled(const ValueAtSlot *VAS) const {
 void SlotInfo::initOutSet() {
   // Build the initial out set ignoring the kill set.
   for (gen_iterator I = gen_begin(), E = gen_end(); I != E; ++I)
-    SlotOut.insert(std::make_pair(*I, 0));
+    SlotOut.insert(std::make_pair(*I, ValueAtSlot::LiveInInfo()));
 }
 
 RtlSSAAnalysis::RtlSSAAnalysis() : MachineFunctionPass(ID) {
@@ -191,9 +192,11 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
     VASTSlot *DefSlot = I->first->getSlot();
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
 
+    ValueAtSlot::LiveInInfo LI = UseSI->getLiveIn(DefVAS);
+
     // VAS is only depends on DefVAS if it can reach this slot.
-    if (unsigned Distance = UseSI->getCyclesFromDef(DefVAS))
-      VAS->addDepVAS(DefVAS, Distance);
+    if (unsigned Distance = LI.getCycles())
+      VAS->addDepVAS(DefVAS, Distance, LI.isFromOtherBB());
   }
 }
 
@@ -260,20 +263,30 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
                                 bool OnlyUndefTiming) {
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
+  unsigned CurBBIdx = To->getSlot()->getParentIdx();
+
   for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
     ValueAtSlot *PredOut = II->first;
     // Are we only add live-ins with undefine timing?
     if (OnlyUndefTiming && ! PredOut->getValue()->isTimingUndef())
       continue;
 
-    unsigned PreviousOutCycle = II->second;
+    unsigned DefBBIdx = PredOut->getSlot()->getParentIdx();
+    
+    ValueAtSlot::LiveInInfo LI = II->second;
+    unsigned PreviousOutCycle = LI.getCycles();
     // Increase the cycles by 1 after the value lives to next slot.
     unsigned CurrentInCycle = PreviousOutCycle + 1;
-    Changed |= To->insertIn(PredOut, CurrentInCycle);
+
+    // Trace the propagation path.
+    bool IsFromOtherBB = LI.isFromOtherBB();
+    IsFromOtherBB |= DefBBIdx != CurBBIdx;
+
+    Changed |= To->insertIn(PredOut, CurrentInCycle, IsFromOtherBB);
     // Do not let the killed VASs go out
     if (!To->isVASKilled(PredOut))
       // New out occur.
-      Changed |= To->insertOut(PredOut, CurrentInCycle);
+      Changed |= To->insertOut(PredOut, CurrentInCycle, IsFromOtherBB);
   }
 
   return Changed;

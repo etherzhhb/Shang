@@ -27,35 +27,61 @@
 
 namespace llvm {
 class RtlSSAAnalysis;
+class SlotInfo;
+
 // ValueAtSlot, represent the value that is defined at a specific slot.
 class ValueAtSlot {
+  struct LiveInInfo {
+    union {
+      struct {
+        uint32_t Cycles : 31;
+        uint32_t FromOtherBB : 1;
+      } I;
+
+      uint32_t D;
+    } U;
+
+    LiveInInfo() { U.D = 0; }
+
+    uint32_t getCycles() const { return U.I.Cycles; }
+    bool isFromOtherBB() const { return U.I.FromOtherBB; }
+    uint32_t getData() const { return U.D; }
+  };
+
   VASTSignal *V;
   VASTSlot *Slot;
 
   // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
-  typedef DenseMap<ValueAtSlot*, unsigned> VASCycMapTy;
+  typedef DenseMap<ValueAtSlot*, LiveInInfo> VASCycMapTy;
   VASCycMapTy DepVAS;
 
   typedef SmallPtrSet<ValueAtSlot*, 8> VASSetTy;
   // Vector for the successor ValueAtSlot.
   VASSetTy UseVAS;
 
-  void addDepVAS(ValueAtSlot *VAS, unsigned CyclesFormDef){
+  void addDepVAS(ValueAtSlot *VAS, unsigned CyclesFormDef, bool FromOtherBB){
     assert(CyclesFormDef && "Expect non-zero distance!");
 
-    unsigned &C = DepVAS[VAS];
+    LiveInInfo &Info = DepVAS[VAS];
 
-    unsigned OldC = C;
+    if (Info.getCycles() == 0) VAS->UseVAS.insert(this);
 
-    if (C == 0) C = CyclesFormDef;
-    else        C = std::min(C, CyclesFormDef); // Try to take the shortest path.
-
-    VAS->UseVAS.insert(this);
+    if (Info.getCycles() == 0 || Info.getCycles() > CyclesFormDef) {
+      // Try to take the shortest path.
+      Info.U.I.Cycles = CyclesFormDef;
+      Info.U.I.FromOtherBB = FromOtherBB;
+    }
   }
 
   ValueAtSlot(VASTSignal *v, VASTSlot *slot) : V(v), Slot(slot){}
   ValueAtSlot(const ValueAtSlot&); // Do not implement.
 
+  LiveInInfo getDepInfo(ValueAtSlot *VAS) const {
+    VASCycMapTy::const_iterator at = DepVAS.find(VAS);
+    return at == DepVAS.end() ? LiveInInfo() : at->second;
+  }
+
+  friend class SlotInfo;
   friend class RtlSSAAnalysis;
 public:
   VASTSignal *getValue() const { return V; }
@@ -66,8 +92,11 @@ public:
   }
 
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
-    VASCycMapTy::const_iterator at = DepVAS.find(VAS);
-    return at == DepVAS.end() ? 0 : at->second;
+    return getDepInfo(VAS).getCycles();
+  }
+
+  bool isFromOtherBB(ValueAtSlot *VAS) const {
+    return getDepInfo(VAS).isFromOtherBB();
   }
 
   void verify() const;
@@ -101,7 +130,7 @@ template<> struct GraphTraits<ValueAtSlot*> {
 class SlotInfo {
   // Define the VAS set for the reaching definition dense map.
   typedef std::set<ValueAtSlot*> VASSetTy;
-  typedef std::map<ValueAtSlot*, unsigned> VASCycMapTy;
+  typedef std::map<ValueAtSlot*, ValueAtSlot::LiveInInfo> VASCycMapTy;
   const VASTSlot *S;
   // Define Set for the reaching definition.
   VASSetTy SlotGen;
@@ -121,24 +150,50 @@ class SlotInfo {
                                  ValueAtSlot*>
   vas_getter;
 
-  bool updateSet(ValueAtSlot *VAS, unsigned LiveInCycle, VASCycMapTy &S) {
+  static bool updateSet(ValueAtSlot *VAS, unsigned LiveInCycle,
+                        bool FromOtherBB, VASCycMapTy &S) {
     assert(LiveInCycle && "It takes at least a cycle to live in!");
-    unsigned &C = S[VAS];
 
-    unsigned OldC = C;
+    ValueAtSlot::LiveInInfo &Info = S[VAS];
 
-    if (C == 0) C = LiveInCycle;
-    else        C = std::min(C, LiveInCycle); // Try to take the shortest path.
+    unsigned OldInfo = Info.getData();
+
+    if (Info.U.I.Cycles == 0 || Info.U.I.Cycles > LiveInCycle) {
+      // Try to take the shortest path.
+      Info.U.I.Cycles = LiveInCycle;
+      Info.U.I.FromOtherBB = FromOtherBB;
+    }
 
     // Updated?
-    return OldC != C;
+    return OldInfo != Info.getData();
   }
 
-public:
-  SlotInfo(const VASTSlot *s) : S(s) {}
+  ValueAtSlot::LiveInInfo getLiveIn(ValueAtSlot *VAS) const {
+    vascyc_iterator at = SlotIn.find(VAS);
+    return at == SlotIn.end() ? ValueAtSlot::LiveInInfo() : at->second;
+  }
+
   // Initialize the out set by simply copying the gen set, and initialize the
   // cycle counter to 0.
   void initOutSet();
+
+  // Insert VAS into different set.
+  void insertGen(ValueAtSlot *VAS) {
+    SlotGen.insert(VAS);
+    OverWrittenValue.insert(VAS->getValue());
+  }
+
+  bool insertIn(ValueAtSlot *VAS, unsigned LiveInCycle, bool FromOtherBB) {
+    return updateSet(VAS, LiveInCycle, FromOtherBB, SlotIn);
+  }
+
+  bool insertOut(ValueAtSlot *VAS, unsigned LiveInCycle, bool FromOtherBB) {
+    return updateSet(VAS, LiveInCycle, FromOtherBB, SlotOut);
+  }
+
+  friend class RtlSSAAnalysis;
+public:
+  SlotInfo(const VASTSlot *s) : S(s) {}
 
   typedef VASCycMapTy::const_iterator vascyc_iterator;
   typedef mapped_iterator<VASCycMapTy::iterator, vas_getter> iterator;
@@ -150,24 +205,13 @@ public:
 
   bool isVASKilled(const ValueAtSlot *VAS) const;
 
-  // Insert VAS into different set.
-  void insertGen(ValueAtSlot *VAS) {
-    SlotGen.insert(VAS);
-    OverWrittenValue.insert(VAS->getValue());
-  }
-
-  bool insertIn(ValueAtSlot *VAS, unsigned LiveInCycle) {
-    return updateSet(VAS, LiveInCycle, SlotIn);
-  }
-
-  bool insertOut(ValueAtSlot *VAS, unsigned LiveInCycle) {
-    return updateSet(VAS, LiveInCycle, SlotOut);
-  }
-
   // Get the distance (in cycles) from the define slot of the VAS to this slot.
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
-    vascyc_iterator at = SlotIn.find(VAS);
-    return at == SlotIn.end() ? 0 : at->second;
+    return getLiveIn(VAS).getCycles();
+  }
+
+  unsigned isFromOtherBB(ValueAtSlot *VAS) const {
+    return getLiveIn(VAS).isFromOtherBB();
   }
 
   // Get Slot pointer.
