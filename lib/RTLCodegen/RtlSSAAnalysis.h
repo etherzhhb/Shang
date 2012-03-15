@@ -42,7 +42,14 @@ class ValueAtSlot {
 
   void addDepVAS(ValueAtSlot *VAS, unsigned CyclesFormDef){
     assert(CyclesFormDef && "Expect non-zero distance!");
-    DepVAS.insert(std::make_pair(VAS, CyclesFormDef));
+
+    unsigned &C = DepVAS[VAS];
+
+    unsigned OldC = C;
+
+    if (C == 0) C = CyclesFormDef;
+    else        C = std::min(C, CyclesFormDef); // Try to take the shortest path.
+
     VAS->UseVAS.insert(this);
   }
 
@@ -62,6 +69,8 @@ public:
     VASCycMapTy::const_iterator at = DepVAS.find(VAS);
     return at == DepVAS.end() ? 0 : at->second;
   }
+
+  void verify() const;
 
   void print(raw_ostream &OS) const;
 
@@ -111,6 +120,20 @@ class SlotInfo {
   std::pointer_to_unary_function<std::pair<ValueAtSlot*, unsigned>,
                                  ValueAtSlot*>
   vas_getter;
+
+  bool updateSet(ValueAtSlot *VAS, unsigned LiveInCycle, VASCycMapTy &S) {
+    assert(LiveInCycle && "It takes at least a cycle to live in!");
+    unsigned &C = S[VAS];
+
+    unsigned OldC = C;
+
+    if (C == 0) C = LiveInCycle;
+    else        C = std::min(C, LiveInCycle); // Try to take the shortest path.
+
+    // Updated?
+    return OldC != C;
+  }
+
 public:
   SlotInfo(const VASTSlot *s) : S(s) {}
   // Initialize the out set by simply copying the gen set, and initialize the
@@ -133,20 +156,18 @@ public:
     OverWrittenValue.insert(VAS->getValue());
   }
 
-  void insertIn(ValueAtSlot *VAS, unsigned LiveInCycle) {
-    assert(LiveInCycle && "It takes at least a cycle to live in!");
-    SlotIn.insert(std::make_pair(VAS, LiveInCycle));
+  bool insertIn(ValueAtSlot *VAS, unsigned LiveInCycle) {
+    return updateSet(VAS, LiveInCycle, SlotIn);
+  }
+
+  bool insertOut(ValueAtSlot *VAS, unsigned LiveInCycle) {
+    return updateSet(VAS, LiveInCycle, SlotOut);
   }
 
   // Get the distance (in cycles) from the define slot of the VAS to this slot.
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
     vascyc_iterator at = SlotIn.find(VAS);
     return at == SlotIn.end() ? 0 : at->second;
-  }
-
-  bool insertOut(ValueAtSlot *VAS, unsigned LiveInCycle) {
-    assert(LiveInCycle && "It takes at least a cycle to live in!");
-    return SlotOut.insert(std::make_pair(VAS, LiveInCycle)).second;
   }
 
   // Get Slot pointer.
@@ -185,6 +206,8 @@ private:
   vas_getter;
 
   typedef mapped_iterator<VASMapTy::iterator, vas_getter> vas_iterator;
+  typedef mapped_iterator<VASMapTy::const_iterator, vas_getter>
+          const_vas_iterator;
 
   BumpPtrAllocator Allocator;
 
@@ -194,18 +217,30 @@ private:
 public:
   static char ID;
 
-  // All nodes (except exit node) are successors of the entry node.
   vas_iterator vas_begin() {
     return vas_iterator(UniqueVASs.begin(),
-      vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
-      ValueAtSlot*>));
+                        vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
+                                               ValueAtSlot*>));
   }
 
   vas_iterator vas_end() {
     return vas_iterator(UniqueVASs.end(),
-      vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
-      ValueAtSlot*>));
+                        vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
+                        ValueAtSlot*>));
   }
+
+  const_vas_iterator vas_begin() const {
+    return const_vas_iterator(UniqueVASs.begin(),
+                        vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
+                                               ValueAtSlot*>));
+  }
+
+  const_vas_iterator vas_end() const {
+    return const_vas_iterator(UniqueVASs.end(),
+                        vas_getter(pair_second<std::pair<VASTValue*, VASTSlot*>,
+                        ValueAtSlot*>));
+  }
+
 
   slot_vec_it slot_begin() { return SlotVec.begin(); }
   slot_vec_it slot_end() { return SlotVec.end(); }
@@ -227,14 +262,19 @@ public:
   // Traverse the dependent VASTUse to get the registers.
   void visitDepTree(VASTUse DepTree, ValueAtSlot *VAS);
 
+  bool addLiveIns(SlotInfo *From, SlotInfo *To);
+  bool addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To, VASTModule *VM);
+
   // Using the reaching definition algorithm to sort out the ultimate
   // relationship of registers.
   // Dirty hack: maybe there are two same statements is a slot, and we can use
   // bit vector to implement the algorithm similar to the compiler principle.
-  void ComputeReachingDefinition();
+  void ComputeReachingDefinition(VASTModule *VM);
 
   // collect the Generated and Killed statements of the slot.
   void ComputeGenAndKill();
+
+  void verifyRTLDependences() const;
 
   void viewGraph();
 

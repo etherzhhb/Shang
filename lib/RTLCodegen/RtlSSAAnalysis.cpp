@@ -85,6 +85,18 @@ void ValueAtSlot::print(raw_ostream &OS) const {
   OS << "}\n";
 }
 
+void ValueAtSlot::verify() const {
+  typedef VASCycMapTy::const_iterator it;
+  VASTSlot *UseSlot = getSlot();
+  for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I) {
+    VASTSlot *DefSlot = I->first->getSlot();
+
+    if (DefSlot->getParentIdx() == UseSlot->getParentIdx() &&
+        UseSlot->hasAliasSlot() && I->second > DefSlot->alias_ii())
+      llvm_unreachable("Broken RTL dependence!");
+  }
+}
+
 void ValueAtSlot::dump() const {
   print(dbgs());
 }
@@ -109,13 +121,13 @@ void SlotInfo::print(raw_ostream &OS) const {
   OS << "\n\n";
 }
 
-// Any VAS whose value is generated at this slot, but its slot is not equal
-// to this slot is killed.
+// Any VAS whose value is overwritten at this slot is killed.
 bool SlotInfo::isVASKilled(const ValueAtSlot *VAS) const {
-  return VAS->getSlot() != S && OverWrittenValue.count(VAS->getValue());
+  return OverWrittenValue.count(VAS->getValue());
 }
 
 void SlotInfo::initOutSet() {
+  // Build the initial out set ignoring the kill set.
   for (gen_iterator I = gen_begin(), E = gen_end(); I != E; ++I)
     SlotOut.insert(std::make_pair(*I, 0));
 }
@@ -145,12 +157,14 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   // Define the VAS.
   buildAllVAS(VM);
 
-  ComputeReachingDefinition();
+  ComputeReachingDefinition(VM);
 
   // Build the VAS dependence graph with reaching define information.
   buildVASGraph(VM);
 
   DEBUG(viewGraph());
+
+  verifyRTLDependences();
 
   return false;
 }
@@ -199,6 +213,11 @@ void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
   }
 }
 
+void RtlSSAAnalysis::verifyRTLDependences() const {
+  for (const_vas_iterator I = vas_begin(), E = vas_end(); I != E; ++I)
+    (*I)->verify();
+}
+
 void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
   typedef VASTModule::reg_iterator it;
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
@@ -237,49 +256,71 @@ void RtlSSAAnalysis::visitDepTree(VASTUse DepTree, ValueAtSlot *VAS){
   DepthFirstTraverseDepTree(DepTree, B);
 }
 
-void RtlSSAAnalysis::ComputeReachingDefinition() {
+bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To) {
+  bool Changed = false;
+  typedef SlotInfo::vascyc_iterator it;
+  for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
+    ValueAtSlot *PredOut = II->first;
+    unsigned PreviousOutCycle = II->second;
+    // Increase the cycles by 1 after the value lives to next slot.
+    unsigned CurrentInCycle = PreviousOutCycle + 1;
+    Changed |= To->insertIn(PredOut, CurrentInCycle);
+    // Do not let the killed VASs go out
+    if (!To->isVASKilled(PredOut))
+      // New out occur.
+      Changed |= To->insertOut(PredOut, CurrentInCycle);
+  }
+
+  return Changed;
+}
+
+bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To,
+                                             VASTModule *VM) {
+  bool Changed = false;
+
+  for (unsigned i = From->alias_start(), e = From->getSlotNum(),
+       ii = From->alias_ii(); i < e; i += ii) {
+    SlotInfo * PredSI = getSlotInfo(VM->getSlot(i));
+    Changed |= addLiveIns(PredSI, To);
+  }
+
+  return Changed;
+}
+
+void RtlSSAAnalysis::ComputeReachingDefinition(VASTModule *VM) {
   ComputeGenAndKill();
   // TODO: Simplify the data-flow, some slot may neither define new VAS nor
   // kill any VAS.
 
-  bool Change = false;
+  bool Changed = false;
 
   do {
-    Change = false;
+    Changed = false;
 
     for (slot_vec_it I = SlotVec.begin(), E = SlotVec.end(); I != E; ++I) {
       VASTSlot *S =*I;
       assert(S && "Unexpected null slot!");
 
-      SlotInfo *SI = getSlotInfo(S);
-      assert(SI && "Slot information not existed?");
+      SlotInfo *CurSI = getSlotInfo(S);
 
       // Compute the out set.
       typedef VASTSlot::pred_it pred_it;
       for (pred_it PI = S->pred_begin(), PE = S->pred_end(); PI != PE; ++PI) {
-        VASTSlot *PS = *PI;
+        VASTSlot *PredSlot = *PI;
 
         // No need to update the out set of Slot 0 according its incoming value.
         // It is the first slot of the FSM.
-        if (S->getSlotNum() == 0 && PS->getSlotNum() != 0) continue;
+        if (S->getSlotNum() == 0 && PredSlot->getSlotNum() != 0) continue;
 
-        SlotInfo *PSI = getSlotInfo(PS);
-        assert(PSI && "Slot information not existed?");
-        typedef SlotInfo::vascyc_iterator it;
-        for (it II = PSI->out_begin(), IE = PSI->out_end(); II != IE; ++II) {
-          ValueAtSlot *PredOut = II->first;
-          unsigned PreviousOutCycle = II->second;
-          // Increase the cycles by 1 after the value lives to next slot.
-          unsigned CurrentInCycle = PreviousOutCycle + 1;
-          SI->insertIn(PredOut, CurrentInCycle);
-          // Do not let the killed VASs go out
-          if (!SI->isVASKilled(PredOut))
-            // New out occur.
-            Change |= SI->insertOut(PredOut, CurrentInCycle);
-        }
+        SlotInfo *PredSI = getSlotInfo(PredSlot);
+
+        Changed |= addLiveIns(PredSI, CurSI);
+        if (PredSlot->getParentIdx() == S->getParentIdx() &&
+            PredSlot->hasAliasSlot())
+          Changed |= addLiveInFromAliasSlots(PredSlot, CurSI, VM);
       }
     }
-  } while (Change);
+  } while (Changed);
 }
 
 void RtlSSAAnalysis::ComputeGenAndKill(){
