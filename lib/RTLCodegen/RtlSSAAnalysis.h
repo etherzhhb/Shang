@@ -46,6 +46,11 @@ class ValueAtSlot {
     uint32_t getCycles() const { return U.I.Cycles; }
     bool isFromOtherBB() const { return U.I.FromOtherBB; }
     uint32_t getData() const { return U.D; }
+
+    void incCycles(int Inc = 1) { U.I.Cycles += Inc; }
+    void liveThroughOtherBB(bool IsOtherBB) {
+      U.I.FromOtherBB |= IsOtherBB;
+    }
   };
 
   VASTSignal *V;
@@ -59,18 +64,16 @@ class ValueAtSlot {
   // Vector for the successor ValueAtSlot.
   VASSetTy UseVAS;
 
-  void addDepVAS(ValueAtSlot *VAS, unsigned CyclesFormDef, bool FromOtherBB){
-    assert(CyclesFormDef && "Expect non-zero distance!");
+  void addDepVAS(ValueAtSlot *VAS, ValueAtSlot::LiveInInfo NewLI){
+    assert(NewLI.getCycles() && "Expect non-zero distance!");
 
     LiveInInfo &Info = DepVAS[VAS];
 
     if (Info.getCycles() == 0) VAS->UseVAS.insert(this);
 
-    if (Info.getCycles() == 0 || Info.getCycles() > CyclesFormDef) {
+    if (Info.getCycles() == 0 || Info.getCycles() > NewLI.getCycles())
       // Try to take the shortest path.
-      Info.U.I.Cycles = CyclesFormDef;
-      Info.U.I.FromOtherBB = FromOtherBB;
-    }
+      Info = NewLI;
   }
 
   ValueAtSlot(VASTSignal *v, VASTSlot *slot) : V(v), Slot(slot){}
@@ -150,19 +153,17 @@ class SlotInfo {
                                  ValueAtSlot*>
   vas_getter;
 
-  static bool updateSet(ValueAtSlot *VAS, unsigned LiveInCycle,
-                        bool FromOtherBB, VASCycMapTy &S) {
-    assert(LiveInCycle && "It takes at least a cycle to live in!");
+  static bool updateLiveIn(ValueAtSlot *VAS, ValueAtSlot::LiveInInfo NewLI,
+                           VASCycMapTy &S) {
+    assert(NewLI.getCycles() && "It takes at least a cycle to live in!");
 
     ValueAtSlot::LiveInInfo &Info = S[VAS];
 
     unsigned OldInfo = Info.getData();
 
-    if (Info.U.I.Cycles == 0 || Info.U.I.Cycles > LiveInCycle) {
+    if (Info.U.I.Cycles == 0 || Info.U.I.Cycles > NewLI.getCycles())
       // Try to take the shortest path.
-      Info.U.I.Cycles = LiveInCycle;
-      Info.U.I.FromOtherBB = FromOtherBB;
-    }
+      Info = NewLI;
 
     // Updated?
     return OldInfo != Info.getData();
@@ -183,12 +184,12 @@ class SlotInfo {
     OverWrittenValue.insert(VAS->getValue());
   }
 
-  bool insertIn(ValueAtSlot *VAS, unsigned LiveInCycle, bool FromOtherBB) {
-    return updateSet(VAS, LiveInCycle, FromOtherBB, SlotIn);
+  bool insertIn(ValueAtSlot *VAS, ValueAtSlot::LiveInInfo NewLI) {
+    return updateLiveIn(VAS, NewLI, SlotIn);
   }
 
-  bool insertOut(ValueAtSlot *VAS, unsigned LiveInCycle, bool FromOtherBB) {
-    return updateSet(VAS, LiveInCycle, FromOtherBB, SlotOut);
+  bool insertOut(ValueAtSlot *VAS, ValueAtSlot::LiveInInfo NewLI) {
+    return updateLiveIn(VAS, NewLI, SlotOut);
   }
 
   friend class RtlSSAAnalysis;

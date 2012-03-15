@@ -196,7 +196,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
 
     // VAS is only depends on DefVAS if it can reach this slot.
     if (unsigned Distance = LI.getCycles())
-      VAS->addDepVAS(DefVAS, Distance, LI.isFromOtherBB());
+      VAS->addDepVAS(DefVAS, LI);
   }
 }
 
@@ -274,19 +274,17 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
     unsigned DefBBIdx = PredOut->getSlot()->getParentIdx();
     
     ValueAtSlot::LiveInInfo LI = II->second;
-    unsigned PreviousOutCycle = LI.getCycles();
     // Increase the cycles by 1 after the value lives to next slot.
-    unsigned CurrentInCycle = PreviousOutCycle + 1;
+    LI.incCycles();
 
     // Trace the propagation path.
-    bool IsFromOtherBB = LI.isFromOtherBB();
-    IsFromOtherBB |= DefBBIdx != CurBBIdx;
+    LI.liveThroughOtherBB(DefBBIdx != CurBBIdx);
 
-    Changed |= To->insertIn(PredOut, CurrentInCycle, IsFromOtherBB);
+    Changed |= To->insertIn(PredOut, LI);
     // Do not let the killed VASs go out
     if (!To->isVASKilled(PredOut))
       // New out occur.
-      Changed |= To->insertOut(PredOut, CurrentInCycle, IsFromOtherBB);
+      Changed |= To->insertOut(PredOut, LI);
   }
 
   return Changed;
