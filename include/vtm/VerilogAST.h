@@ -314,15 +314,21 @@ class VASTSignal : public VASTValue {
   // and no need to declare again in the declaration list.
   const char *AttrStr;
   bool Pinned;
+  bool HasUndefTiming;
 protected:
   VASTSignal(VASTTypes DeclType, const char *Name, unsigned BitWidth,
              const char *Attr = "")
-    : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr), Pinned(false) {}
+    : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr), Pinned(false),
+      HasUndefTiming(false) {}
 public:
 
   // Pin the wire, prevent it from being remove.
   void Pin() { Pinned = true; }
   bool isPinned() const { return Pinned; }
+
+  // The timing of a node may not captured by schedule information.
+  void setTimingUndef(bool UnDef = true) { HasUndefTiming = UnDef; }
+  bool isTimingUndef() const { return HasUndefTiming; }
 
   void printDecl(raw_ostream &OS) const;
 
@@ -422,6 +428,9 @@ private:
     Opc = InputPort;
     // Pin the signal to prevent it from being optimized away.
     Pin();
+    // We cannot control the timing of a input port.
+    // FIXME: In fact, we can annotate more information.
+    setTimingUndef();
   }
 
   friend class VASTModule;
