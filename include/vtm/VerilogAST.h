@@ -647,6 +647,7 @@ public:
   unsigned alias_start() const { return StartSlot; }
   unsigned alias_end() const { return EndSlot; }
   unsigned alias_ii() const { return II; }
+  bool hasAliasSlot() const { return alias_start() != alias_end(); }
 
   bool operator<(const VASTSlot &RHS) const {
     return getSlotNum() < RHS.getSlotNum();

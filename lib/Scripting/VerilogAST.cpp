@@ -209,7 +209,6 @@ VASTUse::iterator VASTUse::dp_src_end() {
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
    ParentIdx(parentIdx) {
-
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
   SlotReg = VM->addRegister(SlotName + "r", 1, slotNum == 0,
