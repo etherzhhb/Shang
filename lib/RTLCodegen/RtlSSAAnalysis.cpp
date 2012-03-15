@@ -13,18 +13,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CFGShortestPath.h"
 #include "RtlSSAAnalysis.h"
-
 #include "vtm/Passes.h"
+#include "vtm/VFInfo.h"
 
 #include "llvm/Target/TargetData.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/Support/SourceMgr.h"
-#define DEBUG_TYPE "vtm-reg-dependency"
+#define DEBUG_TYPE "vtm-rtl-ssa"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GraphWriter.h"
 
@@ -43,24 +42,10 @@ struct DOTGraphTraits<RtlSSAAnalysis*> : public DefaultDOTGraphTraits{
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {
     std::string Str;
     raw_string_ostream ss(Str);
-    SlotInfo * SI = Graph->getSlotInfo(Node);
-    typedef SlotInfo::vasset_it it;
-
     ss << Node->getName();
     DEBUG(
-      ss << "\nGen:\n";
-      for (it I = SI->gen_begin(), E = SI->gen_end(); I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        ss.indent(2) << VAS->getName() << "\n";
-      }
-
-      ss << "\n\nIn:\n";
-      for (it I = SI->in_begin(), E = SI->in_end(); I != E; ++I) {
-        ValueAtSlot *VAS = *I;
-        ss.indent(2) << VAS->getName() << "\n";
-      }
-      ss << "\n\n";
-    );
+      SlotInfo * SI = Graph->getSlotInfo(Node);
+      SI->print(ss););
 
     return ss.str();
   }
@@ -93,9 +78,9 @@ void ValueAtSlot::print(raw_ostream &OS) const {
   OS << getValue()->getName() << '@' << getSlot()->getSlotNum()
     << "\t <= {";
 
-  typedef VASVecTy::iterator it;
+  typedef VASCycMapTy::const_iterator it;
   for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I)
-    OS << (*I)->getName() << ',';
+    OS << I->first->getName() << '[' << I->second << ']' << ',';
 
   OS << "}\n";
 }
@@ -109,18 +94,17 @@ void SlotInfo::dump() const {
 }
 
 void SlotInfo::print(raw_ostream &OS) const {
-  typedef SlotInfo::vasset_it it;
   OS << S->getName() << "\nGen:\n";
-  for (it I = gen_begin(), E = gen_end(); I != E; ++I) {
+  for (gen_iterator I = gen_begin(), E = gen_end(); I != E; ++I) {
     ValueAtSlot *VAS = *I;
     OS.indent(2) << VAS->getName() << "\n";
   }
 
-  OS << "\n\nIn:\n";
-  for (it I = in_begin(), E = in_end(); I != E; ++I) {
-    ValueAtSlot *VAS = *I;
-    OS.indent(2) << VAS->getName() << "\n";
-  }
+  //OS << "\n\nIn:\n";
+  //for (it I = in_begin(), E = in_end(); I != E; ++I) {
+  //  ValueAtSlot *VAS = *I;
+  //  OS.indent(2) << VAS->getName() << "\n";
+  //}
 
   OS << "\n\n";
 }
@@ -129,6 +113,15 @@ void SlotInfo::print(raw_ostream &OS) const {
 // to this slot is killed.
 bool SlotInfo::isVASKilled(const ValueAtSlot *VAS) const {
   return VAS->getSlot() != S && OverWrittenValue.count(VAS->getValue());
+}
+
+void SlotInfo::initOutSet() {
+  for (gen_iterator I = gen_begin(), E = gen_end(); I != E; ++I)
+    SlotOut.insert(std::make_pair(*I, 0));
+}
+
+RtlSSAAnalysis::RtlSSAAnalysis() : MachineFunctionPass(ID) {
+  initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
 }
 
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
@@ -185,7 +178,8 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
 
     // VAS is only depends on DefVAS if it can reach this slot.
-    if (UseSI->isLiveIn(DefVAS)) VAS->addDepVAS(DefVAS);
+    if (unsigned Distance = UseSI->getCyclesFromDef(DefVAS))
+      VAS->addDepVAS(DefVAS, Distance);
   }
 }
 
@@ -271,14 +265,17 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
 
         SlotInfo *PSI = getSlotInfo(PS);
         assert(PSI && "Slot information not existed?");
-        typedef SlotInfo::vasset_it it;
+        typedef SlotInfo::vascyc_iterator it;
         for (it II = PSI->out_begin(), IE = PSI->out_end(); II != IE; ++II) {
-          ValueAtSlot *PredOut = *II;
-          SI->insertIn(PredOut);
+          ValueAtSlot *PredOut = II->first;
+          unsigned PreviousOutCycle = II->second;
+          // Increase the cycles by 1 after the value lives to next slot.
+          unsigned CurrentInCycle = PreviousOutCycle + 1;
+          SI->insertIn(PredOut, CurrentInCycle);
           // Do not let the killed VASs go out
           if (!SI->isVASKilled(PredOut))
             // New out occur.
-            Change |= SI->insertOut(PredOut).second;
+            Change |= SI->insertOut(PredOut, CurrentInCycle);
         }
       }
     }
@@ -298,13 +295,7 @@ void RtlSSAAnalysis::ComputeGenAndKill(){
     VASTSlot *S =*I;
     assert(S && "Unexpected null slot!");
     SlotInfo *SI = getSlotInfo(S);
-    typedef SlotInfo::vasset_it vas_it;
-    for (vas_it VI = SI->gen_begin(), VE = SI->gen_end(); VI != VE; ++VI) {
-      ValueAtSlot *VAS = *VI;
-      SI->insertOut(VAS);
-      DEBUG(dbgs() << "    Gen: " << VAS->getValue()->getName() << "   "
-                    << VAS->getSlot()->getName() << "\n");
-    }
+    SI->initOutSet();
   }
 }
 

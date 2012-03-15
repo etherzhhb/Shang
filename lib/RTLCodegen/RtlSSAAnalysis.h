@@ -16,6 +16,7 @@
 #include "vtm/VerilogAST.h"
 #include "vtm/Utilities.h"
 
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Allocator.h"
@@ -32,14 +33,16 @@ class ValueAtSlot {
   VASTSlot *Slot;
 
   // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
-  typedef SmallPtrSet<ValueAtSlot*, 8> VASVecTy;
-  VASVecTy DepVAS;
+  typedef DenseMap<ValueAtSlot*, unsigned> VASCycMapTy;
+  VASCycMapTy DepVAS;
 
+  typedef SmallPtrSet<ValueAtSlot*, 8> VASSetTy;
   // Vector for the successor ValueAtSlot.
-  VASVecTy UseVAS;
+  VASSetTy UseVAS;
 
-  void addDepVAS(ValueAtSlot *VAS){
-    DepVAS.insert(VAS);
+  void addDepVAS(ValueAtSlot *VAS, unsigned CyclesFormDef){
+    assert(CyclesFormDef && "Expect non-zero distance!");
+    DepVAS.insert(std::make_pair(VAS, CyclesFormDef));
     VAS->UseVAS.insert(this);
   }
 
@@ -55,18 +58,16 @@ public:
       + utostr_32(getSlot()->getSlotNum());
   }
 
-  bool isDependOn(ValueAtSlot *VAS) const {
-    return DepVAS.count(VAS);
+  unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
+    VASCycMapTy::const_iterator at = DepVAS.find(VAS);
+    return at == DepVAS.end() ? 0 : at->second;
   }
 
   void print(raw_ostream &OS) const;
 
   void dump() const;
 
-  typedef VASVecTy::iterator iterator;
-  iterator dep_begin() { return DepVAS.begin(); }
-  iterator dep_end() { return DepVAS.end(); }
-
+  typedef VASSetTy::iterator iterator;
   iterator use_begin() { return UseVAS.begin(); }
   iterator use_end() { return UseVAS.end(); }
 
@@ -89,27 +90,40 @@ template<> struct GraphTraits<ValueAtSlot*> {
 
 // SlotInfo, store the data-flow information of a slot.
 class SlotInfo {
-public:
   // Define the VAS set for the reaching definition dense map.
   typedef std::set<ValueAtSlot*> VASSetTy;
-  typedef VASSetTy::iterator vasset_it;
-private:
+  typedef std::map<ValueAtSlot*, unsigned> VASCycMapTy;
   const VASTSlot *S;
   // Define Set for the reaching definition.
   VASSetTy SlotGen;
   typedef std::set<VASTValue*> ValueSet;
   ValueSet OverWrittenValue;
-  VASSetTy SlotIn;
-  VASSetTy SlotOut;
+  // In/Out set with cycles form define information.
+  VASCycMapTy SlotIn;
+  VASCycMapTy SlotOut;
+
+  typedef VASSetTy::iterator gen_iterator;
+  // get the iterator of the defining map of reaching definition.
+  gen_iterator gen_begin() const { return SlotGen.begin(); }
+  gen_iterator gen_end() const { return SlotGen.end(); }
+
+  typedef
+  std::pointer_to_unary_function<std::pair<ValueAtSlot*, unsigned>,
+                                 ValueAtSlot*>
+  vas_getter;
 public:
   SlotInfo(const VASTSlot *s) : S(s) {}
-  // get the iterator of the defining map of reaching definition.
-  vasset_it gen_begin() const { return SlotGen.begin(); }
-  vasset_it gen_end() const { return SlotGen.end(); }
-  vasset_it in_begin() const { return SlotIn.begin(); }
-  vasset_it in_end() const { return SlotIn.end(); }
-  vasset_it out_begin() const { return SlotOut.begin(); }
-  vasset_it out_end() const { return SlotOut.end(); }
+  // Initialize the out set by simply copying the gen set, and initialize the
+  // cycle counter to 0.
+  void initOutSet();
+
+  typedef VASCycMapTy::const_iterator vascyc_iterator;
+  typedef mapped_iterator<VASCycMapTy::iterator, vas_getter> iterator;
+
+  vascyc_iterator in_begin() const { return SlotIn.begin(); }
+  vascyc_iterator in_end() const { return SlotIn.end(); }
+  vascyc_iterator out_begin() const { return SlotOut.begin(); }
+  vascyc_iterator out_end() const { return SlotOut.end(); }
 
   bool isVASKilled(const ValueAtSlot *VAS) const;
 
@@ -119,13 +133,20 @@ public:
     OverWrittenValue.insert(VAS->getValue());
   }
 
-  void insertIn(ValueAtSlot *VAS) { SlotIn.insert(VAS); }
+  void insertIn(ValueAtSlot *VAS, unsigned LiveInCycle) {
+    assert(LiveInCycle && "It takes at least a cycle to live in!");
+    SlotIn.insert(std::make_pair(VAS, LiveInCycle));
+  }
 
-  // If the given slot lives in this slot?
-  bool isLiveIn(ValueAtSlot *VAS) const { return SlotIn.count(VAS); }
+  // Get the distance (in cycles) from the define slot of the VAS to this slot.
+  unsigned getCyclesFromDef(ValueAtSlot *VAS) const {
+    vascyc_iterator at = SlotIn.find(VAS);
+    return at == SlotIn.end() ? 0 : at->second;
+  }
 
-  std::pair<SlotInfo::vasset_it, bool> insertOut(ValueAtSlot *VAS) {
-    return SlotOut.insert(VAS);
+  bool insertOut(ValueAtSlot *VAS, unsigned LiveInCycle) {
+    assert(LiveInCycle && "It takes at least a cycle to live in!");
+    return SlotOut.insert(std::make_pair(VAS, LiveInCycle)).second;
   }
 
   // Get Slot pointer.
@@ -150,8 +171,6 @@ public:
   typedef SlotInfoTy::const_iterator slotinfo_it;
 
 private:
-  typedef SlotInfo::VASSetTy VASSet;
-
   SlotInfoTy SlotInfos;
   SlotVecTy SlotVec;
 
@@ -228,16 +247,12 @@ public:
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
-    AU.addRequired<CFGShortestPath>();
-    AU.addRequired<TargetData>();
     AU.setPreservesAll();
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  RtlSSAAnalysis() : MachineFunctionPass(ID) {
-    initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
-  }
+  RtlSSAAnalysis();
 };
 
 

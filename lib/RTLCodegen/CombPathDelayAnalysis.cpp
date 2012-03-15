@@ -18,7 +18,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CFGShortestPath.h"
 #include "RtlSSAAnalysis.h"
 
 #include "vtm/VerilogAST.h"
@@ -50,7 +49,6 @@ struct TimingPath {
 };
 
 struct CombPathDelayAnalysis : public MachineFunctionPass {
-  CFGShortestPath *CFGSP;
   RtlSSAAnalysis *RtlSSA;
   BumpPtrAllocator Allocator;
 
@@ -59,7 +57,6 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<TargetData>();
-    AU.addRequired<CFGShortestPath>();
     AU.addRequired<RtlSSAAnalysis>();
     AU.setPreservesAll();
   }
@@ -157,8 +154,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   // Add the end slots.
   VASTRegister *SrcReg = cast<VASTRegister>(Path.back().get());
 
-  int PathDelay = CFGShortestPath::Infinite;
-  //bool isFalsePath = true;
+  unsigned PathDelay = -1;
 
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
@@ -167,23 +163,13 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
     ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
 
     // Update the PathDelay if the source VAS reaches DstSlot.
-    if (Dst->isDependOn(SrcVAS)) {
-      //isFalsePath = false;
-      int D = CFGSP->getSlotDistance(SrcSlot, DstSlot);
-      // Note that getSlotDistance is possible, because the define may reach
-      // the dst slot via a non-shortest path. And getSlotDistance returns a
-      // shortest distance so the result maybe invalid.
-      assert(D >= 0 && "Reaching define reaches an unreachable slot?");
-      if (D) PathDelay = std::min(PathDelay, D);
-    }
+    if (unsigned Distance = Dst->getCyclesFromDef(SrcVAS))
+      PathDelay = std::min(PathDelay, Distance);
   }
 
   // The path {SrcReg -> DstReg} maybe a false path, i.e. SrcReg never reaches
   // DstSlot.
-  //if (isFalsePath) return 0;
-
-  //assert(PathDelay != CFGShortestPath::Infinite && "All path invalid?");
-  if (PathDelay == CFGShortestPath::Infinite) return 0;
+  if (PathDelay == -1) return 0;
 
   TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
 
@@ -217,7 +203,6 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
 
   bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
   VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
-  CFGSP = &getAnalysis<CFGShortestPath>();
   RtlSSA = &getAnalysis<RtlSSAAnalysis>();
 
   //Write the timing constraints.
