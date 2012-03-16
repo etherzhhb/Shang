@@ -240,8 +240,6 @@ class SDCScheduler : public SchedulingBase {
     typedef std::vector<const VSUnit*> BoundSUVec;
     typedef std::map<unsigned, BoundSUVec> Step2SUMap;
 
-    bool hasCommonInput(const VSUnit* Src, const VSUnit* Dst);
-
     // Get the MaxLatency of the VSUnit.
     unsigned getMaxLatency(const VSUnit* U){
       typedef std::list<VSUnit*>::const_iterator const_use_iterator;
@@ -255,6 +253,14 @@ class SDCScheduler : public SchedulingBase {
       return FinLatency;
     }
 
+    bool hasCommonInput(const VSUnit* Src, const VSUnit* Dst);
+
+    bool isOverlap(const VSUnit* Dst, const VSUnit* Src){
+      if(getALAPStep(Src) < getASAPStep(Dst))
+        return false;
+      else
+        return true;
+    }
     // Set the variables' name in the model.
     void createStepVariables(lprec *lp);
 
@@ -264,14 +270,10 @@ class SDCScheduler : public SchedulingBase {
     // The schedule should satisfy the dependences.
     void addDependencyConstraints(lprec *lp);
 
-    // Build the ResourceConstraints as topology order.
-    void addTopologyResourceConstraints(lprec *lp, Step2SUMap &Map);
-
-    // Build the Constant ResourceConstraints.
-    void setConstantResourceConstraints(lprec *lp,const VSUnit* U,unsigned Slot);
+    unsigned FindMaxOrMinValue(Step2SUMap &Map, unsigned var, bool Max);
 
     // Avoid the resources conflict for the function units.
-    void addResourceConstraints(lprec *lp);
+    void PreBind();
 
     // Build the schedule object function.
     void buildASAPObject();
