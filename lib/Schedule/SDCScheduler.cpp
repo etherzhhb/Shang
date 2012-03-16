@@ -1,4 +1,4 @@
-//===- SDCScheduler.cpp -      SDCScheduler                   --*- C++ -*-===//
+//===- SDCScheduler.cpp ------- SDCScheduler --------------------*- C++ -*-===//
 //
 // Copyright: 2011 by SYSU EDA Group. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
@@ -17,7 +17,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "SchedulingBase.h"
-#include "llvm/Instructions.h"
 #include "vtm/VInstrInfo.h"
 #include "lp_solve/lp_lib.h"
 #define DEBUG_TYPE "SDCdebug"
@@ -29,14 +28,12 @@ SDCScheduler::SDCScheduler(VSchedGraph &S)
   : SchedulingBase(S), NumVars(0), NumInst(0) {
 }
 
-void SDCScheduler::createLPVariables(lprec *lp) {
+void SDCScheduler::createStepVariables(lprec *lp) {
   unsigned Col =  1;
-  unsigned count = 0;
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
-      ++NumInst;
+    ++NumInst;
     const VSUnit* U = *I;
-    count++;
     // Set up the scheduling variables for VSUnits.
     SUIdx[U] = NumVars;
     for(unsigned i = 0, j = getMaxLatency(U); i <= j; i++){
@@ -50,21 +47,19 @@ void SDCScheduler::createLPVariables(lprec *lp) {
   }
 }
 
-void SDCScheduler::stepVariableConstraints(lprec *lp){
-  int col[2];
-  REAL val[2];
+void SDCScheduler::addStepConstraints(lprec *lp){
+  int Col[2];
+  /*const*/ REAL Val[2] = { -1.0, 1.0 };
   //Build the constraints for LP Variables as SVXStart1 - SVXstart0 = 1.
   for(SUIdxIt EI = SUIdx.begin(), EE = SUIdx.end(); EI != EE; ++EI){
-    unsigned startIdx = EI->second;
+    unsigned Idx = EI->second;
     const VSUnit* U = EI->first;
     unsigned MaxLatency = getMaxLatency(U);
     if(MaxLatency < 1) continue;
     for(unsigned i = 0, j = MaxLatency; i < j; ++i){
-      col[0] = 1 + startIdx + i;
-      col[1] = 1 + startIdx + (i + 1);
-      val[0] = -1.0;
-      val[1] = 1.0;
-      if(!add_constraintex(lp, 2, val, col, EQ, 1.0))
+      Col[0] = 1 + Idx + i;
+      Col[1] = 1 + Idx + i + 1;
+      if(!add_constraintex(lp, 2, Val, Col, EQ, 1.0))
         report_fatal_error("SDCScheduler: Can NOT step Variable Constraints"
           " at VSUnit " + utostr_32(U->getIdx()) );
     }
@@ -72,10 +67,10 @@ void SDCScheduler::stepVariableConstraints(lprec *lp){
 }
 
 void SDCScheduler::addDependencyConstraints(lprec *lp) {
+  int Col[2];
+  /*const*/ REAL Val[2] = { -1.0, 1.0 };
   for(VSchedGraph::sched_iterator I = State.sched_begin(), E = State.sched_end();
       I != E; ++I) {
-    int col[2];
-    REAL val[2];
     const VSUnit *U = *I;
     assert(U->isControl() && "Unexpected datapath in scheduler!");
 
@@ -89,11 +84,9 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
       unsigned DstStartIdx = SUIdx[depIn];
 
       // Build the LP.
-      col[0] = 1 + SrcEndIdx;
-      val[0] = -1.0;
-      col[1] = 1 + DstStartIdx;
-      val[1] = 1.0;
-      if(!add_constraintex(lp, 2, val, col, GE, 0.0))
+      Col[0] = 1 + SrcEndIdx;
+      Col[1] = 1 + DstStartIdx;
+      if(!add_constraintex(lp, 2, Val, Col, GE, 0.0))
         report_fatal_error("SDCScheduler: Can NOT step Dependency Constraints"
         " at VSUnit " + utostr_32(U->getIdx()));
     }
@@ -174,8 +167,6 @@ void SDCScheduler::addResourceConstraints(lprec *lp) {
 
     addTopologyResourceConstraints(lp, IdenticalMap);
   }
-  FUMap.clear();
-  return;
 }
 
 void SDCScheduler::addTopologyResourceConstraints(lprec *lp, Step2SUMap &Map){
@@ -197,73 +188,66 @@ void SDCScheduler::addTopologyResourceConstraints(lprec *lp, Step2SUMap &Map){
     }
     Map.erase(it);
   }
-  Map.clear();
 
+  int Col[2];
+  /*const*/ REAL Val[2] = { 1.0, -1.0 };
   //Build the constraints for Dst_SU_startStep - Src_SU_startStep >= Lantency
   //that means Dst_SU and Src_SU can not be scheduled in the same step.
-  BoundSUVec::iterator i = OrderVec.begin();
-  const VSUnit *front = *i;
-  unsigned DstStartIdx = SUIdx[front];
-  for(BoundSUVec::iterator OVB = ++i,OVE = OrderVec.end();
-      OVB != OVE; OVB++){
-    int col[2];
-    REAL val[2];
-    const VSUnit *back = *OVB;
-    unsigned SrcStartIdx = SUIdx[back];
-    col[0] = 1 + DstStartIdx;
-    val[0] = 1.0;
-    col[1] = 1 + SrcStartIdx;
-    val[1] = -1.0;
-    if(!add_constraintex(lp, 2, val, col, GE, int(front->getLatency())))
+  const VSUnit *Dst = OrderVec.front();
+  unsigned DstStartIdx = SUIdx[Dst];
+  for(BoundSUVec::iterator I = llvm::next(OrderVec.begin()), E = OrderVec.end();
+      I != E; I++){
+    const VSUnit *Src = *I;
+    unsigned SrcStartIdx = SUIdx[Src];
+    Col[0] = 1 + DstStartIdx;
+    Col[1] = 1 + SrcStartIdx;
+    if(!add_constraintex(lp, 2, Val, Col, GE, int(Dst->getLatency())))
       report_fatal_error("SDCScheduler: Can NOT stepTopology Resource Constraints"
-      " at VSUnit " + utostr_32(back->getIdx()));
-    front = back;
+      " at VSUnit " + utostr_32(Src->getIdx()));
+    Dst = Src;
     DstStartIdx = SrcStartIdx;
   }
   OrderVec.clear();
-  return;
 }
 
-void SDCScheduler::buildAXAPObject() {
-  int *variableIndices = new int[NumInst];
-  REAL *variableCoefficients = new REAL[NumInst];
+void SDCScheduler::buildASAPObject() {
+  std::vector<int> Indices(NumInst);
+  std::vector<REAL> Coefficients(NumInst);
 
-  int count = 0;
+  unsigned Col = 0;
   //Build the ASAP object function.
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
       const VSUnit* U = *I;
-    unsigned varIndex = SUIdx[U];
-    variableIndices[count] = 1 + varIndex;
-    variableCoefficients[count] = 1.0;
-    ++count;
+    unsigned Idx = SUIdx[U];
+    Indices[Col] = 1 + Idx;
+    Coefficients[Col] = 1.0;
+    ++Col;
   }
 
-  assert(count == NumInst);
-  set_obj_fnex(lp, count, variableCoefficients, variableIndices);
+  set_obj_fnex(lp, Col, Coefficients.data(), Indices.data());
   set_minim(lp);
   DEBUG(write_lp(lp, "log.lp"));
 }
 
 void SDCScheduler::buildOptimizingSlackDistributionObject(){
-  int *variableIndices = new int[NumInst];
-  REAL *variableCoefficients = new REAL[NumInst];
+  std::vector<int> Indices(NumInst);
+  std::vector<REAL> Coefficients(NumInst);
 
-  int count = 0;
+  unsigned Col = 0;
   //Build the Optimizing Slack object function.
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
-     const VSUnit* U = *I;
+    const VSUnit* U = *I;
     int Indeg = U->getNumDeps();
     int Outdeg = U->getNumUses();
-    unsigned varIndex = SUIdx[U];
-    variableIndices[count] = 1 + varIndex;
-    variableCoefficients[count] = Outdeg - Indeg;
-    ++count;
+    unsigned Idx = SUIdx[U];
+    Indices[Col] = 1 + Idx;
+    Coefficients[Col] = Outdeg - Indeg;
+    ++Col;
   }
 
-  assert(count == NumInst);
-  set_obj_fnex(lp, count, variableCoefficients, variableIndices);
+  set_obj_fnex(lp, Col, Coefficients.data(), Indices.data());
   set_maxim(lp);
 
   DEBUG(write_lp(lp, "log.lp"));
@@ -277,7 +261,8 @@ void SDCScheduler::buildSchedule(lprec *lp) {
     unsigned Offset = SUIdx[U];
     unsigned cur = State.getStartSlot();
     unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
-    DEBUG(dbgs()<<"the row is:"<<TotalRows + Offset + 1<<"the result is:"<<j<<"\n");
+    DEBUG(dbgs() << "the row is:" << TotalRows + Offset + 1
+                 <<"the result is:" << j << "\n");
     unsigned shedslot = j+State.getStartSlot();
     U->scheduledTo(j+State.getStartSlot());
   }
@@ -297,10 +282,10 @@ bool SDCScheduler::scheduleState() {
   set_add_rowmode(lp, TRUE);
 
   // Build the step variables.
-  createLPVariables(lp);
+  createStepVariables(lp);
 
   // Build the constraints.
-  stepVariableConstraints(lp);
+  addStepConstraints(lp);
   addDependencyConstraints(lp);
   addResourceConstraints(lp);
   // Turn off the add rowmode and start to solve the model.

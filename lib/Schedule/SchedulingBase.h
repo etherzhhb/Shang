@@ -256,10 +256,10 @@ class SDCScheduler : public SchedulingBase {
     }
 
     // Set the variables' name in the model.
-    void createLPVariables(lprec *lp);
+    void createStepVariables(lprec *lp);
 
     // Build the intrinsic constraints for LP variables.
-    void stepVariableConstraints(lprec *lp);
+    void addStepConstraints(lprec *lp);
 
     // The schedule should satisfy the dependences.
     void addDependencyConstraints(lprec *lp);
@@ -274,7 +274,7 @@ class SDCScheduler : public SchedulingBase {
     void addResourceConstraints(lprec *lp);
 
     // Build the schedule object function.
-    void buildAXAPObject();
+    void buildASAPObject();
     void buildOptimizingSlackDistributionObject();
 
     // Build the schedule form the result of ILP.
