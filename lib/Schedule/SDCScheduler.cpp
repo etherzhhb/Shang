@@ -309,8 +309,6 @@ bool SDCScheduler::scheduleState() {
   //buildAXAPObject();
   buildOptimizingSlackDistributionObject();
   int result = solve(lp);
-  // Schedule the state with the ILP result.
-  buildSchedule(lp);
   //viewGraph();
   switch (result) {
   case INFEASIBLE:
@@ -324,6 +322,8 @@ bool SDCScheduler::scheduleState() {
   default:
     report_fatal_error(Twine("SDCScheduler Schedule fail: "));
   }
+  // Schedule the state with the ILP result.
+  buildSchedule(lp);
   delete_lp(lp);
   SUIdx.clear();
   return true;
