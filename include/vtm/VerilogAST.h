@@ -1,8 +1,6 @@
 //===------------- VLang.h - Verilog HDL writing engine ---------*- C++ -*-===//
 //
-//                            The Verilog Backend
-//
-// Copyright: 2010 by Hongbin Zheng. all rights reserved.
+// Copyright: 2011 by SYSU EDA Group. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
 // of your agreement to the following terms, and your use, installation,
 // modification or redistribution of this software constitutes acceptance
