@@ -371,6 +371,8 @@ public:
 };
 
 class VASTWire :public VASTSignal {
+  // VASTValue pointer point to the VASTExpr.
+  VASTValue *V;
   // TODO: move to datapath.
   union {
     uint64_t Latency;
@@ -394,6 +396,10 @@ class VASTWire :public VASTSignal {
     Context.Slot = Slot;
   }
 public:
+  VASTValue *getValue() { return V;}
+
+  void setValue(VASTValue *v) { V = v; }
+
   unsigned getLatency() const {
     //assert(getOpcode() == dpVarLatBB && "Call getLatency on bad wire type!");
     return Context.Latency;
