@@ -253,13 +253,10 @@ class SDCScheduler : public SchedulingBase {
       return FinLatency;
     }
 
-    bool hasCommonInput(const VSUnit* Src, const VSUnit* Dst);
+    unsigned getComInNum(const VSUnit* Src, const VSUnit* Dst);
 
     bool isOverlap(const VSUnit* Dst, const VSUnit* Src){
-      if(getALAPStep(Src) < getASAPStep(Dst))
-        return false;
-      else
-        return true;
+      return getALAPStep(Src) >= getASAPStep(Dst);
     }
     // Set the variables' name in the model.
     void createStepVariables(lprec *lp);

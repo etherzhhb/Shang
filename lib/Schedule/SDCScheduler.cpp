@@ -279,27 +279,26 @@ unsigned SDCScheduler::FindMaxOrMinValue(Step2SUMap &Map, unsigned var, bool Max
   return Idx;
 }
 
-bool SDCScheduler::hasCommonInput(const VSUnit* Src, const VSUnit* Dst){
+unsigned SDCScheduler::getComInNum(const VSUnit* Src, const VSUnit* Dst){
   std::set<const VSUnit*> DepSet;
-  unsigned SrcCounter = 0;
+  unsigned DepCounter = 0;
   for(VSUnit::const_dep_iterator iS = Src->dep_begin(), eS = Src->dep_end();
       iS != eS; iS++){
     if(iS.getEdge()->getEdgeType() != VDEdge::edgeValDep) continue;
     const VSUnit* U = *iS;
     DepSet.insert(U);
-    ++SrcCounter;
+    ++DepCounter;
   }
-  unsigned DstCounter = 0;
+
   for(VSUnit::const_dep_iterator iD = Dst->dep_begin(), eD = Dst->dep_end();
       iD != eD; iD++){
     if(iD.getEdge()->getEdgeType() != VDEdge::edgeValDep) continue;
     const VSUnit* U = *iD;
     DepSet.insert(U);
-    ++DstCounter;
+    ++DepCounter;
   }
 
-  unsigned OriginSize = SrcCounter + DstCounter;
-  return (DepSet.size() - OriginSize);
+  return DepCounter - DepSet.size();
 }
 
 void SDCScheduler::buildASAPObject() {
@@ -388,7 +387,7 @@ bool SDCScheduler::scheduleState() {
   //buildAXAPObject();
   buildOptimizingSlackDistributionObject();
   int result = solve(lp);
-  viewGraph();
+
   switch (result) {
   case INFEASIBLE:
     delete_lp(lp);
@@ -403,6 +402,9 @@ bool SDCScheduler::scheduleState() {
   }
   // Schedule the state with the ILP result.
   buildSchedule(lp);
+
+  DEBUG(viewGraph());
+
   delete_lp(lp);
   SUIdx.clear();
   return true;
