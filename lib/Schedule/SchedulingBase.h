@@ -267,7 +267,16 @@ class SDCScheduler : public SchedulingBase {
     // The schedule should satisfy the dependences.
     void addDependencyConstraints(lprec *lp);
 
-    unsigned FindMaxOrMinValue(Step2SUMap &Map, unsigned var, bool Max);
+    template<typename FuncTy>
+    static unsigned getMaxOrMinSlot(Step2SUMap &Map, unsigned InitVal, FuncTy F);
+
+    static unsigned getMaxSlot(Step2SUMap &Map) {
+      return getMaxOrMinSlot(Map, 0, std::max<unsigned>);
+    }
+
+    static unsigned getMinSlot(Step2SUMap &Map) {
+      return getMaxOrMinSlot(Map, VSUnit::MaxSlot, std::min<unsigned>);
+    }
 
     // Avoid the resources conflict for the function units.
     void PreBind();

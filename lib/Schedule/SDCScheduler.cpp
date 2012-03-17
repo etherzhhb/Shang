@@ -158,7 +158,7 @@ void SDCScheduler::PreBind() {
           CriticalFUNum = Num;
         //-------------------------------------------//
         while(!OrderIdentityMap.empty()){
-          unsigned MinTimeFrame = FindMaxOrMinValue(OrderIdentityMap, 100, false);
+          unsigned MinTimeFrame = getMinSlot(OrderIdentityMap);
           Step2SUMap::iterator it = OrderIdentityMap.find(MinTimeFrame);
           BoundSUVec B = it->second;
           typedef BoundSUVec::iterator OrderIt;
@@ -203,7 +203,7 @@ void SDCScheduler::PreBind() {
 
     //List Scheduling
     while(!IdenticalMap.empty()){
-      unsigned MaxALAP = FindMaxOrMinValue(IdenticalMap, 0, true);
+      unsigned MaxALAP = getMaxSlot(IdenticalMap);
       Step2SUMap::iterator it = IdenticalMap.find(MaxALAP);
       unsigned CurSlot = it->first;
       BoundSUVec BV = it->second;
@@ -232,7 +232,7 @@ void SDCScheduler::PreBind() {
             OrderIdentityMap[getASAPStep(V)].push_back(V);
           }
           while(!OrderIdentityMap.empty()){
-            unsigned MaxSlot = FindMaxOrMinValue(OrderIdentityMap, 0, true);
+            unsigned MaxSlot = getMaxSlot(OrderIdentityMap);
             Step2SUMap::iterator IT = OrderIdentityMap.find(MaxSlot);
             BoundSUVec B = IT->second;
             typedef BoundSUVec::iterator OrderIt;
@@ -263,20 +263,13 @@ void SDCScheduler::PreBind() {
   }   
 }
 
-unsigned SDCScheduler::FindMaxOrMinValue(Step2SUMap &Map, unsigned var, bool Max){
-  unsigned Idx = var;
-  for(Step2SUMap::iterator iB = Map.begin(),eB = Map.end(); iB != eB; iB++){
-    unsigned CurIdx = iB->first;
-    if(Max){
-      if(CurIdx > Idx)
-        Idx = CurIdx;
-    }
-    else{
-      if(CurIdx < Idx)
-        Idx = CurIdx;
-    }
-  }
-  return Idx;
+template<typename FuncTy>
+unsigned SDCScheduler::getMaxOrMinSlot(Step2SUMap &Map, unsigned InitVal,
+                                         FuncTy F){
+  for(Step2SUMap::iterator I = Map.begin(), E = Map.end(); I != E; I++)
+    InitVal = F(InitVal, I->first);
+
+  return InitVal;
 }
 
 unsigned SDCScheduler::getComInNum(const VSUnit* Src, const VSUnit* Dst){
