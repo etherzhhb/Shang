@@ -876,7 +876,7 @@ void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (!W || W->hasExpr()) return;
+  if (!W || W->getExpr()) return;
 
   W->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpAdd,
                                          getAsOperand(MI->getOperand(1)),
@@ -1233,7 +1233,7 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
 
 void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (!W || W->hasExpr()) return;
+  if (!W || W->getExpr()) return;
 
   W->assign(cast<VASTExpr>(VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
                                          W->getBitWidth()))) ;
@@ -1241,7 +1241,7 @@ void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
 
 void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (!W || W->hasExpr()) return;
+  if (!W || W->getExpr()) return;
   W->assign(cast<VASTExpr>(VM->buildExpr(Opc,
                                          getAsOperand(MI->getOperand(1)),
                                          getAsOperand(MI->getOperand(2)),
@@ -1250,7 +1250,7 @@ void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
 
 void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (!W || W->hasExpr()) return;
+  if (!W || W->getExpr()) return;
 
   unsigned SizeInBits = W->getBitWidth();
   std::string NamePrefix = W->getName();
@@ -1328,7 +1328,7 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
 
 void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (!W || W->hasExpr()) return;
+  if (!W || W->getExpr()) return;
 
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice

@@ -1076,8 +1076,7 @@ bool VASTValue::replaceAllUseWith(VASTUse To,
       if (!ReplacedUsers) continue;
 
       if (VASTExpr *UserExpr = dyn_cast_or_null<VASTExpr>(User)) {
-        assert(UserExpr && UserExpr->getOpcode() != VASTExpr::dpUnknown &&
-               UserExpr->num_operands() && "Use list broken!");
+        assert(UserExpr && UserExpr->num_operands() && "Use list broken!");
         ReplacedUsers->push_back(UserExpr);
       }
     }

@@ -396,8 +396,6 @@ public:
     dpAssign,
     // VAST specific nodes.
     Dead,
-    // Datapath opcode.
-    dpUnknown,
     // Mux in datapath.
     dpMux,
     // Blackbox,
@@ -521,10 +519,6 @@ private:
   }
 public:
   VASTExpr *getExpr() const { return E.getPointer();}
-
-  bool hasExpr() const {
-    return getExpr() && (getExpr()->getOpcode() != VASTExpr::dpUnknown);
-  }
 
   VASTWire::Type getWireType() const { return E.getInt(); }
 
