@@ -374,27 +374,28 @@ class VASTExpr : public VASTValue {
 public:
   enum Opcode {
     // FU datapath
-    dpAdd = VTM::VOpAdd_c,
-    dpMul = VTM::VOpMult_c,
-    dpShl = VTM::VOpSHL_c,
-    dpSRA = VTM::VOpSRA_c,
-    dpSRL = VTM::VOpSRL_c,
-    dpSCmp = VTM::VOpICmp, dpUCmp = VTM::VOpICmp_c,
+    dpAdd,
+    dpMul,
+    dpShl,
+    dpSRA,
+    dpSRL,
+    dpSCmp,
+    dpUCmp,
     // bitwise logic datapath
-    dpAnd = VTM::VOpAnd,
-    dpOr = VTM::VOpOr,
-    dpXor = VTM::VOpXor,
-    dpNot = VTM::VOpNot,
-    dpRAnd = VTM::VOpRAnd,
-    dpROr = VTM::VOpROr,
-    dpRXor = VTM::VOpRXor,
+    dpAnd,
+    dpOr,
+    dpXor,
+    dpNot,
+    dpRAnd,
+    dpROr,
+    dpRXor,
     // bit level assignment.
-    dpBitCat = VTM::VOpBitCat,
-    dpBitRepeat = VTM::VOpBitRepeat,
+    dpBitCat,
+    dpBitRepeat,
     // Simple wire assignment.
-    dpAssign = VTM::VOpBitSlice,
+    dpAssign,
     // VAST specific nodes.
-    Dead = VTM::INSTRUCTION_LIST_END,
+    Dead,
     // Datapath opcode.
     dpUnknown,
     // Mux in datapath.
