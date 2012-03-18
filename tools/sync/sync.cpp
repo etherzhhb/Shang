@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 
   // Build up all of the passes that we want to do to the module.
   PassManagerBuilder Builder;
-  Builder.DisableUnrollLoops = true;
+  Builder.DisableUnrollLoops = false;
   Builder.LibraryInfo = new TargetLibraryInfo();
   Builder.LibraryInfo->disableAllFunctions();
   Builder.OptLevel = 3;
