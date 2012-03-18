@@ -568,10 +568,8 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTExpr::VASTExpr(const char *Name, unsigned BitWidth, Opcode opc,
-                   VASTUse *ops, uint8_t numOps)
-  : VASTValue(vastExpr, Name, BitWidth), Ops(ops), NumOps(numOps),
-    Opc(opc) {
+VASTExpr::VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth)
+  : VASTValue(vastExpr, 0, BitWidth), Ops(ops), NumOps(numOps), Opc(opc) {
   assert(numOps && Ops && "Unexpected empty operand list!");
   buildUseList();
 }
@@ -813,7 +811,7 @@ VASTExpr *VASTModule::createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
   std::uninitialized_copy(Ops.begin(), Ops.end(), OpArray);
 
   VASTExpr *D = Allocator.Allocate<VASTExpr>();
-  return new (D) VASTExpr(0, BitWidth, Opc, OpArray, Ops.size());
+  return new (D) VASTExpr(Opc, OpArray, Ops.size(), BitWidth);
 }
 
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
