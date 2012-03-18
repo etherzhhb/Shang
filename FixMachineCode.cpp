@@ -61,7 +61,7 @@ struct FixMachineCode : public MachineFunctionPass {
 
   void FoldInstructions(std::vector<MachineInstr*> &InstrToFold);
 
-  void FoldImmediate(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
+  void FoldMove(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
   void FoldAdd(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
 
   bool canbeFold(MachineInstr *MI) const;
@@ -171,8 +171,7 @@ void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {
 }
 
 bool FixMachineCode::canbeFold(MachineInstr *MI) const {
-  if (MI->getOpcode() == VTM::VOpMove && MI->getOperand(1).isImm())
-    return true;
+  if (MI->getOpcode() == VTM::VOpMove) return true;
 
   if (MI->getOpcode() == VTM::VOpAdd || MI->getOpcode() == VTM::VOpAdd_c) {
     // Fold the add only if carry input is 0.
@@ -216,7 +215,7 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
   return false;
 }
 
-void FixMachineCode::FoldImmediate(MachineInstr *MI,
+void FixMachineCode::FoldMove(MachineInstr *MI,
                                    std::vector<MachineInstr*> &InstrToFold) {
   unsigned DstReg = MI->getOperand(0).getReg();
 
@@ -273,8 +272,7 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
 
     switch (MI->getOpcode()) {
     case VTM::VOpMove:
-      if (MI->getOperand(1).isImm())
-        FoldImmediate(MI, InstrToFold);
+      FoldMove(MI, InstrToFold);
       break;
     case VTM::VOpAdd:
     case VTM::VOpAdd_c:
