@@ -529,7 +529,6 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
 
   SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
-  std::set<MachineBasicBlock*> NewSuccs;
 
   typedef DenseMap<MachineBasicBlock*, Probability> ProbMapTy;
   ProbMapTy BBProbs;

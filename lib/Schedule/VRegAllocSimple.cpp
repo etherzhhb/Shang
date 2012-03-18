@@ -1053,19 +1053,19 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   CompBinOpEdgeWeight<VTM::VOpSRL, 1> SRLWeight(this, VFUs::ShiftCost);
   CompBinOpEdgeWeight<VTM::VOpSHL, 1> SHLWeight(this, VFUs::ShiftCost);
 
-  bool SomethingBind = !DisableFUSharing;
+  bool SomethingBound = !DisableFUSharing;
   // Reduce the Compatibility Graphs
-  while (SomethingBind) {
+  while (SomethingBound) {
     DEBUG(dbgs() << "Going to reduce CompGraphs\n");
-    SomethingBind = false;
-    SomethingBind |= reduceCompGraph(RCG, RegWeight);
-    SomethingBind |= reduceCompGraph(AdderCG, AddWeight);
-    SomethingBind |= reduceCompGraph(ICmpCG, ICmpWeight);
-    SomethingBind |= reduceCompGraph(MulCG, MulWeiht);
-    SomethingBind |= reduceCompGraph(MulLHCG, MulLHWeiht);
-    SomethingBind |= reduceCompGraph(AsrCG, SRAWeight);
-    SomethingBind |= reduceCompGraph(LsrCG, SRLWeight);
-    SomethingBind |= reduceCompGraph(ShlCG, SHLWeight);
+    SomethingBound = false;
+    SomethingBound |= reduceCompGraph(RCG, RegWeight);
+    SomethingBound |= reduceCompGraph(AdderCG, AddWeight);
+    SomethingBound |= reduceCompGraph(ICmpCG, ICmpWeight);
+    SomethingBound |= reduceCompGraph(MulCG, MulWeiht);
+    SomethingBound |= reduceCompGraph(MulLHCG, MulLHWeiht);
+    SomethingBound |= reduceCompGraph(AsrCG, SRAWeight);
+    SomethingBound |= reduceCompGraph(LsrCG, SRLWeight);
+    SomethingBound |= reduceCompGraph(ShlCG, SHLWeight);
   }
 
   // Bind the Compatibility Graphs
