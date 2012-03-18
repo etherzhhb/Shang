@@ -186,22 +186,31 @@ void VASTUse::PinUser() const {
 }
 
 VASTUse::iterator VASTUse::dp_src_begin() {
-  if (getUseKind() != USE_Value)
-    return reinterpret_cast<VASTUse::iterator>(0);
+  VASTExpr *E = 0;
 
-  if (VASTExpr *W = dyn_cast<VASTExpr>(get()))
-    return W->op_begin();
+  if (getUseKind() == USE_Value) {
+    E = dyn_cast<VASTExpr>(get());
 
-  return reinterpret_cast<VASTUse::iterator>(0);
+    if (E == 0)
+      if (VASTWire *W = dyn_cast<VASTWire>(get()))
+        E = W->getExpr();
+  }
+
+  return E ? E->op_begin() : reinterpret_cast<VASTUse::iterator>(0);
 }
 
 VASTUse::iterator VASTUse::dp_src_end() {
-  if (getUseKind() != USE_Value)  return reinterpret_cast<VASTUse::iterator>(0);
+  VASTExpr *E = 0;
 
-  if (VASTExpr *W = dyn_cast<VASTExpr>(get()))
-    return W->op_end();
+  if (getUseKind() == USE_Value) {
+    E = dyn_cast<VASTExpr>(get());
 
-  return reinterpret_cast<VASTUse::iterator>(0);
+    if (E == 0)
+      if (VASTWire *W = dyn_cast<VASTWire>(get()))
+        E = W->getExpr();
+  }
+
+  return E ? E->op_end() : reinterpret_cast<VASTUse::iterator>(0);
 }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
@@ -595,7 +604,6 @@ VASTModule::~VASTModule() {
   Allocator.Reset();
   UseAllocator.DestroyAll();
   SymbolTable.clear();
-  BBLatInfo.clear();
 
   delete &(DataPath.str());
   delete &(ControlBlock.str());
@@ -813,10 +821,10 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive());
-  VASTExpr *AssignAtSlot = cast<VASTExpr>(buildExpr(VASTExpr::cpAssignAtSlot,
-                                          buildExpr(VASTExpr::dpAnd,Cnds,1), 1));
+  VASTExpr *AssignAtSlot = cast<VASTExpr>(buildExpr(VASTExpr::dpAnd,Cnds,1));
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "", AssignAtSlot);
+  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "",
+                      AssignAtSlot, VASTWire::AssignCond);
   Wire->setSlot(Slot);
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();
@@ -1264,21 +1272,29 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
 }
 
 void VASTWire::print(raw_ostream &OS) const {
+  VASTWire::Type T = getWireType();
+  // Input ports do not have datapath.
+  if (T == VASTWire::InputPort) return;
+
+  VASTExpr *Expr = getExpr();
   // Skip unknown or blackbox datapath, it should printed to the datapath
   //  buffer of the module.
-  if (E->getOpcode() == VASTExpr::dpUnknown ||
-      E->getOpcode() == VASTExpr::InputPort ||
-      E->getOpcode() == VASTExpr::dpVarLatBB)
-    return;
+  //if (getExpr()->getOpcode() == VASTExpr::dpUnknown ||
+  //    E->getOpcode() == VASTExpr::InputPort ||
+  //    E->getOpcode() == VASTExpr::dpVarLatBB)
+  //  return;
+
+  // Dont know how to print black box.
+  if (Expr->getOpcode() == VASTExpr::dpBlackBox) return;
 
   // MUX need special printing method.
-  if (E->getOpcode() == VASTExpr::dpMux) {
+  if (Expr->getOpcode() == VASTExpr::dpMux) {
     printCombMux(OS, this);
     return;
   }
-  
+
   printAssign(OS, this);
-  E->print(OS);
+  Expr->print(OS);
   OS << ";\n";
 }
 
@@ -1306,7 +1322,6 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   case dpSRL: printSimpleUnsignedOp(OS, getOperands(), " >> ");break;
   case dpSRA: printSRAOp(OS, getOperands());                   break;
 
-  case cpAssignAtSlot:
   case dpAssign: getOperand(0).print(OS);     break;
 
   case dpBitCat:    printBitCat(OS, getOperands());    break;

@@ -395,16 +395,12 @@ public:
     dpAssign = VTM::VOpBitSlice,
     // VAST specific nodes.
     Dead = VTM::INSTRUCTION_LIST_END,
-    // Mux in datapath.
-    dpMux,
-    // Timing BlackBox, have latecy not capture by slots.
-    dpVarLatBB,
     // Datapath opcode.
     dpUnknown,
-    // Assignment with slot information.
-    cpAssignAtSlot,
-    // The wire connected to an input port.
-    InputPort
+    // Mux in datapath.
+    dpMux,
+    // Blackbox,
+    dpBlackBox
   };
 private:
   VASTUse *Ops;
@@ -434,6 +430,8 @@ public:
   bool isDead() const { return Opc == Dead; }
 
   Opcode getOpcode() const { return Opc; }
+  void setOpcode(Opcode O) { Opc = O; }
+
   unsigned num_operands() const { return NumOps; }
 
   VASTUse getOperand(unsigned Idx) const {
@@ -482,8 +480,19 @@ struct VASTExprBuilder {
 };
 
 class VASTWire :public VASTSignal {
+public:
+  enum Type {
+    Common,
+    // Timing BlackBox, have latecy not capture by slots.
+    haveExtraDelay,
+    // Assignment with slot information.
+    AssignCond,
+    // The wire connected to an input port.
+    InputPort
+  };
+private:
   // VASTValue pointer point to the VASTExpr.
-  VASTExpr *E;
+  PointerIntPair<VASTExpr *, 2, VASTWire::Type> E;
   // TODO: move to datapath.
   union {
     uint64_t Latency;
@@ -493,11 +502,13 @@ class VASTWire :public VASTSignal {
   friend class VASTModule;
 
   VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "",
-    VASTExpr *e = 0) : VASTSignal(vastWire, Name, BitWidth, Attr), E(e){
-      Context.Latency = 0;
+           VASTExpr *e = 0, VASTWire::Type T = VASTWire::Common)
+    : VASTSignal(vastWire, Name, BitWidth, Attr), E(e, T) {
+    Context.Latency = 0;
   }
 
   void setAsInput() {
+    E.setInt(VASTWire::InputPort);
     // Pin the signal to prevent it from being optimized away.
     Pin();
     setTimingUndef();
@@ -508,25 +519,31 @@ class VASTWire :public VASTSignal {
     Context.Slot = Slot;
   }
 public:
+  VASTExpr *getExpr() const { return E.getPointer();}
+
   bool hasExpr() const {
-    return E && (E->getOpcode() != VASTExpr::dpUnknown);
-  }
-  VASTExpr *getExpr() const { return E;}
-
-  void assign(VASTExpr *e) { E = e; }
-
-  unsigned getLatency() const {
-    //assert(getOpcode() == dpVarLatBB && "Call getLatency on bad wire type!");
-    return Context.Latency;
+    return getExpr() && (getExpr()->getOpcode() != VASTExpr::dpUnknown);
   }
 
-  void setLatency(unsigned latency) {
-    //assert(getOpcode() == dpVarLatBB && "Call setLatency on bad wire type!");
+  VASTWire::Type getWireType() const { return E.getInt(); }
+
+  void assign(VASTExpr *e, VASTWire::Type T = VASTWire::Common) {
+    E.setPointer(e);
+    E.setInt(T);
+  }
+
+  void assignWithExtraDelay(VASTExpr *e, unsigned latency) {
+    assign(e, VASTWire::haveExtraDelay);
     Context.Latency = latency;
   }
 
+  unsigned getExtraDelayIfAny() const {
+    return getWireType() == VASTWire::haveExtraDelay ? Context.Latency : 0;
+  }
+
   VASTSlot *getSlot() const {
-    //assert(getOpcode() == cpAssignAtSlot &&  "Call getSlot on bad wire type!");
+    assert(getWireType() == VASTWire::AssignCond &&
+           "Call getSlot on bad wire type!");
     return Context.Slot;
   }
 
@@ -782,11 +799,6 @@ private:
   SymTabTy SymbolTable;
   typedef StringMapEntry<VASTValue*> SymEntTy;
 
-  // The variable latency data-path whose latency information not capture
-  // by schedule information.
-  typedef std::map<unsigned, VASTExpr*> VarLatBBMap;
-  VarLatBBMap BBLatInfo;
-
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
@@ -831,24 +843,11 @@ public:
 
   bool eliminateConstRegisters();
 
-  void addBBLatInfo(unsigned FNNum, VASTWire *W) {
-    assert(W->getExpr()->getOpcode() == VASTExpr::dpVarLatBB
-           && "Wrong datapath type!");
-    bool inserted = BBLatInfo.insert(std::make_pair(FNNum, W->getExpr())).second;
-    assert(inserted && "Latency information for BlackBox already exist!");
-    (void)inserted;
-  }
-
-  VASTExpr *getBBLatInfo(unsigned FNNum) const {
-    VarLatBBMap::const_iterator at = BBLatInfo.find(FNNum);
-    return at == BBLatInfo.end() ? 0 : at->second;
-  }
-
-  VASTUse lookupSignal(unsigned RegNum) const {
+  VASTUse lookupSignal(unsigned RegNum, bool MayNotExist = false) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
-    assert(at != RegsMap.end() && "Signal not found!");
+    assert((MayNotExist || at != RegsMap.end()) && "Signal not found!");
 
-    return *at->second;
+    return at != RegsMap.end() ? *at->second : VASTUse();
   }
 
   VASTValue *getSymbol(const std::string &Name) const {
@@ -1007,6 +1006,9 @@ public:
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");
 
+  VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
+                    const char *Attr = "");
+
   VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
                             unsigned InitVal = 0,
                             const char *Attr = "");
@@ -1016,9 +1018,6 @@ public:
 
   slot_iterator slot_begin() { return Slots.begin(); }
   slot_iterator slot_end() { return Slots.end(); }
-
-  VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
-                    const char *Attr = "");
 
   void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTUse> &Cnds, bool AddSlotActive = true);

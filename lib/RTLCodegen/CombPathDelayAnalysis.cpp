@@ -181,7 +181,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   P->PathSize = Path.size() + 1;
   P->Path = Allocator.Allocate<VASTValue*>(P->PathSize);
 
-  int BlockBoxesDelay = 0;
+  unsigned ExtraDelay = 0;
 
   P->Path[0] = Dst->getValue();
   for (unsigned i = 0; i < Path.size(); ++i) {
@@ -190,13 +190,14 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
 
     // Accumulates the block box latency.
     if (VASTWire *W = dyn_cast<VASTWire>(V))
-      if (W->getExpr()->getOpcode() == VASTExpr::dpVarLatBB)
-        BlockBoxesDelay += W->getLatency();
+      ExtraDelay += W->getExtraDelayIfAny();
   }
 
+  assert((ExtraDelay == 0 || PathDelay == 1)
+         && "Unexpected multi-cycles path with extra delay!");
   // The path delay is the sum of minimum distance between source/destinate slot
   // and the delay of block boxes.
-  P->Delay = PathDelay + BlockBoxesDelay;
+  P->Delay = std::max(PathDelay, ExtraDelay);
 
   return P;
 }

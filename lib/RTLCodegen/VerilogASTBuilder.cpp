@@ -569,11 +569,9 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
         Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
 
-      ResultWire->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpVarLatBB, Ops,
-                                                      Info.getBitWidth())));
-      ResultWire->setLatency(Latency);
-      // Remember the latency information.
-      VM->addBBLatInfo(FNNum, ResultWire);
+      VASTExpr *Expr = cast<VASTExpr>(VM->buildExpr(VASTExpr::dpBlackBox, Ops,
+                                                    Info.getBitWidth()));
+      ResultWire->assignWithExtraDelay(Expr, Latency);
     }
   }
 }
@@ -1040,9 +1038,11 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   }
 
   // Is the function have latency information not captured by schedule?
-  if (VASTExpr *RetPort = VM->getBBLatInfo(FNNum)) {
-    for (unsigned i = 0, e = RetPort->num_operands(); i < e; ++i) {
-      VASTRegister *R = cast<VASTRegister>(RetPort->getOperand(i));
+  VASTUse U = VM->lookupSignal(FNNum, true);
+  if (VASTWire *RetPort = dyn_cast_or_null<VASTWire>(U.getOrNull())) {
+    VASTExpr *Expr = RetPort->getExpr();
+    for (unsigned i = 0, e = Expr->num_operands(); i < e; ++i) {
+      VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
       VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds);
     }
     return;
