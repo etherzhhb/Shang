@@ -433,9 +433,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
       return true;
     case VTM::VOpMvPipe:
     case VTM::VOpMove:
-    case VTM::COPY:
     case VTM::VOpReadFU:
-    case VTM::VOpDstMux:
       addFanin<0>(MI->getOperand(1));
       break;
     case VTM::VOpReadReturn:
