@@ -568,12 +568,12 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTExpr::VASTExpr(const char *Name, unsigned BitWidth,
-                   VASTUse *ops, uint8_t numOps, Opcode opc)
+VASTExpr::VASTExpr(const char *Name, unsigned BitWidth, Opcode opc,
+                   VASTUse *ops, uint8_t numOps)
   : VASTValue(vastExpr, Name, BitWidth), Ops(ops), NumOps(numOps),
     Opc(opc) {
-  assert((numOps || Ops == 0)&& "Unexpected empty operand list!");
-  if (ops) buildUseList();
+  assert(numOps && Ops && "Unexpected empty operand list!");
+  buildUseList();
 }
 
 void VASTExpr::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
@@ -813,7 +813,7 @@ VASTExpr *VASTModule::createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
   std::uninitialized_copy(Ops.begin(), Ops.end(), OpArray);
 
   VASTExpr *D = Allocator.Allocate<VASTExpr>();
-  return new (D) VASTExpr(0, BitWidth, OpArray, Ops.size(), Opc);
+  return new (D) VASTExpr(0, BitWidth, Opc, OpArray, Ops.size());
 }
 
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
@@ -821,7 +821,7 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive());
-  VASTExpr *AssignAtSlot = cast<VASTExpr>(buildExpr(VASTExpr::dpAnd,Cnds,1));
+  VASTExpr *AssignAtSlot = cast<VASTExpr>(buildExpr(VASTExpr::dpAnd, Cnds, 1));
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "",
                       AssignAtSlot, VASTWire::AssignCond);

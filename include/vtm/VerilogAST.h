@@ -411,8 +411,8 @@ private:
 
   VASTExpr(const VASTExpr&);             // Do not implement
 
-  VASTExpr(const char *Name, unsigned BitWidth,VASTUse *ops = 0,
-           uint8_t numOps = 0, Opcode opc = dpUnknown);
+  VASTExpr(const char *Name, unsigned BitWidth,Opcode opc, VASTUse *ops = 0,
+           uint8_t numOps = 0);
 
   void setExpr(VASTUse *ops, uint8_t numOps, Opcode opc);
 
