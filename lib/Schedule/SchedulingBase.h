@@ -255,6 +255,12 @@ class SDCScheduler : public SchedulingBase {
 
     unsigned getComInNum(const VSUnit* Src, const VSUnit* Dst);
 
+    //Sort the vector in ASAP decreasing order.
+    void sortVector(BoundSUVec &Vec, Step2SUMap &Map, unsigned Idx);
+
+    unsigned countValDeps(const VSUnit* U);
+    unsigned countValUses(const VSUnit* U);
+
     bool isOverlap(const VSUnit* Dst, const VSUnit* Src){
       return getALAPStep(Src) >= getASAPStep(Dst);
     }
@@ -280,6 +286,10 @@ class SDCScheduler : public SchedulingBase {
 
     // Avoid the resources conflict for the function units.
     void PreBind();
+    // PreBind the Memory.
+    void allcoMem(unsigned FUType, Step2SUMap& Map);
+    // PreBind the FUs.
+    void PreBindFU(unsigned FUType, Step2SUMap &Map);
 
     // Build the schedule object function.
     void buildASAPObject();

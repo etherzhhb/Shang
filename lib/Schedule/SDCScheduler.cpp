@@ -97,14 +97,188 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   }
 }
 
-void SDCScheduler::PreBind() {
+void SDCScheduler::allcoMem(unsigned FUType, Step2SUMap &Map){
   //The table of the ALAP and the VSUnits.
   Step2SUMap IdenticalMap;
-  BoundSUVec OrderIdentity;
   BoundSUVec OrderVec;
+
+  BoundSUVec Vec = Map[FUType];
+  if(Vec.size() <= 1) return;
+
+  //Map the VSUnits to their ALAPStep.
+  for(BoundSUVec::iterator iB = Vec.begin(),eB = Vec.end(); iB != eB; iB++){
+    const VSUnit *V = *iB;
+    IdenticalMap[getALAPStep(V)].push_back(V);
+  }
+
+  for(Step2SUMap::iterator SI = IdenticalMap.begin(), SE = IdenticalMap.end();
+      SI != SE; SI++ ){
+      BoundSUVec MI = SI->second;
+      unsigned CurSlot = SI->first;
+      if(MI.size() > 1)
+        sortVector(MI, IdenticalMap, CurSlot);
+  }
+
+  //List Scheduling
+  unsigned AverageNum = 1;
+  while(!IdenticalMap.empty()){
+    unsigned MaxALAP = getMaxSlot(IdenticalMap);
+    Step2SUMap::iterator it = IdenticalMap.find(MaxALAP);
+    unsigned CurSlot = it->first;
+    BoundSUVec BV = it->second;
+    const VSUnit* U = *BV.begin();
+    unsigned MoveSlot = CurSlot - U->getLatency();
+    OrderVec.push_back(U);
+
+    if(BV.size() > AverageNum){
+      unsigned counter = 0;
+      BoundSUVec::reverse_iterator rit = BV.rbegin();
+      for(unsigned i = 0 , j = BV.size() - AverageNum; i < j; i++){
+        const VSUnit* MU = *rit;
+        unsigned Slot = getASAPStep(MU);
+        if(Slot < CurSlot){
+          IdenticalMap[MoveSlot].push_back(MU);
+          ++counter;
+        }
+        ++rit;
+      }
+
+      //Sort the Inserted Vector in ASAP descending order
+      if(counter){
+        BoundSUVec Vec = IdenticalMap[MoveSlot];
+        if(Vec.size() > 1)
+          sortVector(Vec, IdenticalMap, MoveSlot);
+      }
+    }//end if
+    IdenticalMap.erase(it);
+  }//end while
+
+  // Build the Control Edges.
+  for(unsigned i = 0,e = OrderVec.size(); i < e; i++){
+    VSUnit* Dst = const_cast<VSUnit*>(OrderVec[i]);
+    unsigned next = i + 1;
+    if(next >= OrderVec.size()) continue;
+    VSUnit* Src = const_cast<VSUnit*>(OrderVec[next]);
+    if(isOverlap(Dst,Src))
+      Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
+  }
+
+  OrderVec.clear();
+  buildFDepHD(true);
+}
+
+void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
+  //The table of the ALAP and the VSUnits.
+  Step2SUMap IdenticalMap;
+  Step2SUMap VirMap;
+  BoundSUVec OrderVec;
+
+  BoundSUVec Vec = Map[FUType];
+  if(Vec.size() <= 1) return;
+
+  //Map the VSUnits to their ALAPStep.
+  for(BoundSUVec::iterator iB = Vec.begin(),eB = Vec.end(); iB != eB; iB++){
+    const VSUnit *V = *iB;
+    IdenticalMap[getALAPStep(V)].push_back(V);
+  }
+
+  for(Step2SUMap::iterator SI = IdenticalMap.begin(), SE = IdenticalMap.end();
+      SI != SE; SI++ ){
+    BoundSUVec MI = SI->second;
+    unsigned CurSlot = SI->first;
+    if(MI.size() > 1)
+      sortVector(MI, IdenticalMap, CurSlot);
+  }
+
+  //List Scheduling
+  unsigned AverageNum = 1;
+  bool finish = false;
+  while(!finish){
+    VirMap = IdenticalMap;
+
+    //Test for AverageNum.
+    while(!VirMap.empty()){
+      unsigned MaxALAP = getMaxSlot(VirMap);
+      Step2SUMap::iterator it = VirMap.find(MaxALAP);
+      unsigned CurSlot = it->first;
+      BoundSUVec BV = it->second;
+      const VSUnit* U = *BV.begin();
+      unsigned MoveSlot = CurSlot - U->getLatency();
+      OrderVec.push_back(U);
+      unsigned counter = 0;
+      ////Find the operations that have the same inputs.
+      //for(Step2SUMap::iterator II = IdenticalMap.begin(), EI =IdenticalMap.end();
+      //    II != EI; II++){
+      //  BoundSUVec BV = II->second;
+      //  if(BV.size() > 1){
+      //    for(BoundSUVec::iterator iU = BV.begin(),eU = BV.end(); iU != eU; iU++){
+      //      const VSUnit* U = *iU;
+      //      BoundSUVec::iterator Cur = iU;
+      //      ++Cur;
+      //      BoundSUVec::iterator Next = Cur;
+      //      if(Next == BV.end()) continue;
+      //      const VSUnit* V = *Next;
+      //      if(U->getIdx() != V->getIdx()){
+      //        if(hasCommonInput(U,V)){
+      //        CommonPair = std::make_pair(U,V);
+      //        CommonVec.push_back(CommonPair);
+      //      }// end if
+      //    }//end for
+      //  }
+      //  }
+      //}
+
+      if(BV.size() > AverageNum){
+        BoundSUVec::reverse_iterator rit = BV.rbegin();
+        for(unsigned i = 0 , j = BV.size() - AverageNum; i < j; i++){
+          const VSUnit* MU = *rit;
+          unsigned Slot = getASAPStep(MU);
+          if(Slot < CurSlot){
+            VirMap[MoveSlot].push_back(MU);
+            ++counter;
+          }
+          ++rit;
+        }
+
+        //Can not satisfy the Resource Constraints.
+        if((BV.size() - counter) > AverageNum) break;
+
+        //Sort the Inserted Vector in ASAP descending order
+        if(counter){
+          BoundSUVec Vec = VirMap[MoveSlot];
+          if(Vec.size() > 1)
+            sortVector(Vec, VirMap, MoveSlot);
+        }//finish reorder.
+      }//finish a step.
+
+      VirMap.erase(it);
+    }//finish a search.
+    if(VirMap.empty())
+      finish = true;
+    else{
+      VirMap.clear();
+      OrderVec.clear();
+      ++AverageNum;
+    }
+  }//finish all.
+  DEBUG(dbgs()<<"Final AverageNum is:"<<AverageNum<<"\n");
+  // Build the Control Edges.
+  for(unsigned i = 0,e = OrderVec.size(); i < e; i++){
+    VSUnit* Dst = const_cast<VSUnit*>(OrderVec[i]);
+    unsigned next = i + 1;
+    if(next >= OrderVec.size()) continue;
+    VSUnit* Src = const_cast<VSUnit*>(OrderVec[next]);
+    if(isOverlap(Dst,Src))
+      Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
+  }
+
+  OrderVec.clear();
+  buildFDepHD(true);
+}
+
+void SDCScheduler::PreBind() {
+  //The table of the ALAP and the VSUnits.
   Step2SUMap FUMap;
-  std::set<unsigned> SlotSet;
-  Step2SUMap OrderIdentityMap;
 
   //Get the VSUnits that need add into the resource constraints.
   for(VSchedGraph::sched_iterator I = State.sched_begin(), E = State.sched_end();
@@ -115,152 +289,14 @@ void SDCScheduler::PreBind() {
       continue;
       FUMap[SV->getFUType()].push_back(SV);
   }
-  
-  for( Step2SUMap::iterator FI = FUMap.begin(), FE = FUMap.end(); 
-    FI != FE; FI++){
-    bool MemType = false;
-    unsigned FuType = FI->first;
-    DEBUG(dbgs()<<"The FU Type is :"<<FuType<<"\n");
 
-    if(FuType == VFUs::BRam || FuType == VFUs::MemoryBus || FuType == VFUs::CalleeFN)
-      MemType = true;
-
-    BoundSUVec Set = FI->second;
-    if(Set.size()<=1) continue;
-   
-    //Map the VSUnits to their ALAPStep.
-    for(BoundSUVec::iterator iB = Set.begin(),eB = Set.end(); iB != eB; iB++){
-      const VSUnit *V = *iB;
-      for(unsigned i = getASAPStep(V), j = getALAPStep(V); i <= j; i++)
-        SlotSet.insert(i);
-      IdenticalMap[getALAPStep(V)].push_back(V);
-    }
-
-    //Sort the IdenticalMap in descending order of the TimeFrame.
-    //The TimeFrame means the freedom of the VSUnits in scheduling. 
-    //SDCScheduler prefer to move the VSUnits that have the bigger TimeFrame 
-    //to next slot.
-    unsigned CriticalFUNum = 0;
-    for(Step2SUMap::iterator IS = IdenticalMap.begin(), ES = IdenticalMap.end();
-      IS != ES; IS++){
-        BoundSUVec V = IS->second;
-        unsigned idx = IS->first;
-
-        if(V.size()<=1) continue;      
-        for(BoundSUVec::iterator iU = V.begin(),eU = V.end(); iU != eU; iU++){
-          const VSUnit* U = *iU;
-          OrderIdentityMap [getTimeFrame(U)].push_back(U);
-        }
-
-        //-------------------------------------------//
-        unsigned Num = OrderIdentityMap[1].size();
-        if(Num > CriticalFUNum)
-          CriticalFUNum = Num;
-        //-------------------------------------------//
-        while(!OrderIdentityMap.empty()){
-          unsigned MinTimeFrame = getMinSlot(OrderIdentityMap);
-          Step2SUMap::iterator it = OrderIdentityMap.find(MinTimeFrame);
-          BoundSUVec B = it->second;
-          typedef BoundSUVec::iterator OrderIt;
-          for(OrderIt i = B.begin(),e = B.end(); i != e; i++){
-            const VSUnit *O = *i;
-            OrderIdentity.push_back(O);
-          }
-          OrderIdentityMap.erase(it);
-        }//end while
-        IdenticalMap[idx] = OrderIdentity;
-        OrderIdentity.clear();
-    }
-
-    //Compute the average number of the FU.
-    double AverageRC = double(Set.size())/double(SlotSet.size());
-    unsigned AverageNum = std::max<unsigned>(ceil(AverageRC), CriticalFUNum);
-    DEBUG(dbgs()<<"the average resource is :"<<AverageNum<<"\n");
-
-    if(MemType) AverageNum =1;
-
-    ////Find the operations that have the same inputs.
-    //for(Step2SUMap::iterator II = IdenticalMap.begin(), EI =IdenticalMap.end();
-    //    II != EI; II++){
-    //  BoundSUVec BV = II->second;
-    //  if(BV.size() > 1){
-    //    for(BoundSUVec::iterator iU = BV.begin(),eU = BV.end(); iU != eU; iU++){
-    //      const VSUnit* U = *iU;
-    //      BoundSUVec::iterator Cur = iU;
-    //      ++Cur;
-    //      BoundSUVec::iterator Next = Cur;
-    //      if(Next == BV.end()) continue;
-    //      const VSUnit* V = *Next;
-    //      if(U->getIdx() != V->getIdx()){
-    //        if(hasCommonInput(U,V)){
-    //        CommonPair = std::make_pair(U,V);
-    //        CommonVec.push_back(CommonPair);
-    //      }// end if
-    //    }//end for
-    //  }
-    //  }
-    //}
-
-    //List Scheduling
-    while(!IdenticalMap.empty()){
-      unsigned MaxALAP = getMaxSlot(IdenticalMap);
-      Step2SUMap::iterator it = IdenticalMap.find(MaxALAP);
-      unsigned CurSlot = it->first;
-      BoundSUVec BV = it->second;
-      const VSUnit* U = *BV.begin();
-      unsigned MoveSlot = CurSlot - U->getLatency();
-      OrderVec.push_back(U);
-
-      if(BV.size() > AverageNum){
-        unsigned counter = 0;
-        BoundSUVec::reverse_iterator rit = BV.rbegin();
-        for(unsigned i = 0 , j = BV.size() - AverageNum; i < j; i++){
-          const VSUnit* MU = *rit;
-          unsigned Slot = getASAPStep(MU);
-          if(Slot < CurSlot){
-            IdenticalMap[MoveSlot].push_back(MU);
-            ++counter;
-          }
-          ++rit;
-        }
-
-        //Sort the Inserted Vector in ASAP descending order
-        if(counter){
-          BoundSUVec Vec = IdenticalMap[MoveSlot];
-          for(BoundSUVec::iterator I = Vec.begin(), E = Vec.end(); I != E; I++){
-            const VSUnit* V = *I;
-            OrderIdentityMap[getASAPStep(V)].push_back(V);
-          }
-          while(!OrderIdentityMap.empty()){
-            unsigned MaxSlot = getMaxSlot(OrderIdentityMap);
-            Step2SUMap::iterator IT = OrderIdentityMap.find(MaxSlot);
-            BoundSUVec B = IT->second;
-            typedef BoundSUVec::iterator OrderIt;
-            for(OrderIt i = B.begin(),e = B.end(); i != e; i++){
-              const VSUnit *O = *i;
-              OrderIdentity.push_back(O);
-            }
-            OrderIdentityMap.erase(IT);
-          }//end while
-          IdenticalMap[MoveSlot] = OrderIdentity;
-          OrderIdentity.clear();
-        }
-      }//end if
-      IdenticalMap.erase(it);
-    }//end while
-
-    // Build the Control Edges.
-    for(unsigned i = 0,e = OrderVec.size(); i < e; i++){
-      VSUnit* Dst = const_cast<VSUnit*>(OrderVec[i]);
-      unsigned next = i + 1;
-      if(next >= OrderVec.size()) continue;
-      VSUnit* Src = const_cast<VSUnit*>(OrderVec[next]);
-      if(isOverlap(Dst,Src))
-        Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
-    }
-
-    OrderVec.clear();
-  }   
+  allcoMem(VFUs::MemoryBus, FUMap);
+  allcoMem(VFUs::BRam, FUMap);
+  allcoMem(VFUs::CalleeFN, FUMap);
+  PreBindFU(VFUs::Mult, FUMap);
+  PreBindFU(VFUs::Shift, FUMap);
+  PreBindFU(VFUs::AddSub, FUMap);
+  PreBindFU(VFUs::ICmp, FUMap);
 }
 
 template<typename FuncTy>
@@ -294,6 +330,48 @@ unsigned SDCScheduler::getComInNum(const VSUnit* Src, const VSUnit* Dst){
   return DepCounter - DepSet.size();
 }
 
+unsigned SDCScheduler::countValDeps(const VSUnit* U){
+  unsigned DepCounter = 0;
+  for(VSUnit::const_dep_iterator iS = U->dep_begin(), eS = U->dep_end();
+    iS != eS; iS++){
+      if(iS.getEdge()->getEdgeType() != VDEdge::edgeValDep) continue;
+      ++DepCounter;
+  }
+  return DepCounter;
+}
+
+unsigned SDCScheduler::countValUses(const VSUnit* U){
+  unsigned DepCounter = 0;
+  for(VSUnit::const_use_iterator iS = U->use_begin(), eS = U->use_end();
+    iS != eS; iS++){
+      const VSUnit* V =*iS;
+      if(V->getEdgeFrom(U)->getEdgeType() != VDEdge::edgeValDep) continue;
+      ++DepCounter;
+  }
+  return DepCounter;
+}
+
+void SDCScheduler::sortVector(BoundSUVec &Vec, Step2SUMap &Map, unsigned Idx){
+  Step2SUMap OrderIdentityMap;
+  BoundSUVec OrderIdentity;
+  for(BoundSUVec::iterator I = Vec.begin(), E = Vec.end(); I != E; I++){
+    const VSUnit* V = *I;
+    OrderIdentityMap[getASAPStep(V)].push_back(V);
+  }
+  while(!OrderIdentityMap.empty()){
+    unsigned MaxSlot = getMaxSlot(OrderIdentityMap);
+    Step2SUMap::iterator IT = OrderIdentityMap.find(MaxSlot);
+    BoundSUVec B = IT->second;
+    typedef BoundSUVec::iterator OrderIt;
+    for(OrderIt i = B.begin(),e = B.end(); i != e; i++){
+      const VSUnit *O = *i;
+      OrderIdentity.push_back(O);
+    }
+    OrderIdentityMap.erase(IT);
+  }
+  Map[Idx] = OrderIdentity;
+}
+
 void SDCScheduler::buildASAPObject() {
   std::vector<int> Indices(NumInst);
   std::vector<REAL> Coefficients(NumInst);
@@ -323,8 +401,8 @@ void SDCScheduler::buildOptimizingSlackDistributionObject(){
   typedef VSchedGraph::sched_iterator it;
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
     const VSUnit* U = *I;
-    int Indeg = U->getNumDeps();
-    int Outdeg = U->getNumUses();
+    int Indeg = countValDeps(U);
+    int Outdeg = countValUses(U);
     unsigned Idx = SUIdx[U];
     Indices[Col] = 1 + Idx;
     Coefficients[Col] = Outdeg - Indeg;
@@ -354,7 +432,7 @@ void SDCScheduler::buildSchedule(lprec *lp) {
 
 bool SDCScheduler::scheduleState() {
   buildFDepHD(true);
-  //DEBUG(viewGraph());
+  DEBUG(viewGraph());
   //Ensure there is no resource conflict in critical path.
   if (!scheduleCriticalPath(false))
     return false;
@@ -377,8 +455,8 @@ bool SDCScheduler::scheduleState() {
   // Turn off the add rowmode and start to solve the model.
   set_add_rowmode(lp, FALSE);
   TotalRows = get_Nrows(lp);
-  //buildAXAPObject();
-  buildOptimizingSlackDistributionObject();
+  buildASAPObject();
+  //buildOptimizingSlackDistributionObject();
   int result = solve(lp);
 
   switch (result) {
