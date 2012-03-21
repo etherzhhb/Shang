@@ -63,8 +63,50 @@ class VerilogASTBuilder : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VASTModule *VM;
 
-  // Mapping success fsm state to their predicate in current state.
-  typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
+  typedef DenseMap<unsigned, VASTValue*> RegIdxMapTy;
+  RegIdxMapTy Idx2Reg;
+
+  VASTValue *lookupSignal(unsigned RegNum) const {
+    RegIdxMapTy::const_iterator at = Idx2Reg.find(RegNum);
+    assert(at != Idx2Reg.end() && "Signal not found!");
+
+    return at->second;
+  }
+
+  VASTValue *indexVASTValue(unsigned RegNum, VASTValue *V) {
+    bool inserted = Idx2Reg.insert(std::make_pair(RegNum, V)).second;
+    assert(inserted && "RegNum already indexed some value!");
+
+    return V;
+  }
+
+  VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
+                            unsigned InitVal = 0, const char *Attr = "") {
+    std::string Name;
+
+    if (TargetRegisterInfo::isVirtualRegister(RegNum))
+      Name = "v" + utostr_32(TargetRegisterInfo::virtReg2Index(RegNum));
+    else
+      Name = "p" + utostr_32(RegNum);
+
+    Name += "r";
+
+    VASTRegister *R = VM->addRegister(Name, BitWidth, 0, Attr);
+    indexVASTValue(RegNum, R);
+    return R;
+  }
+
+  VASTWire *addWire(unsigned WireNum, unsigned BitWidth, const char *Attr = ""){
+    std::string Name;
+
+    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
+           && "Unexpected physics register as wire!");
+    Name = "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
+
+    VASTWire *W = VM->addWire(Name, BitWidth, Attr);
+    indexVASTValue(WireNum, W);
+    return W;
+  }
 
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
@@ -244,12 +286,14 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   void emitImplicitDef(MachineInstr *MI);
 
+  // Mapping success fsm state to their predicate in current state.
+  typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
   MachineBasicBlock::instr_iterator
   emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap, unsigned II, bool Pipelined);
 
   // Create a condition from a predicate operand.
-  VASTUse createCnd(ucOperand &Op);
-  VASTUse createCnd(MachineOperand &Op) {
+  VASTValue *createCnd(ucOperand &Op);
+  VASTValue *createCnd(MachineOperand &Op) {
     return createCnd(cast<ucOperand>(Op));
   }
 
@@ -262,8 +306,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   Ty *getAsLValue(ucOperand &Op) {
     assert(Op.isReg() && "Bad MO type for LValue!");
 
-    VASTUse U = VM->lookupSignal(Op.getReg());
-    if (VASTValue *V = U.unwrap())
+    if (VASTValue *V = lookupSignal(Op.getReg()))
       return dyn_cast<Ty>(V);
 
     return 0;
@@ -315,6 +358,7 @@ public:
 
   void releaseMemory() {
     StartIdxMap.clear();
+    Idx2Reg.clear();
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -411,7 +455,7 @@ void VerilogASTBuilder::emitFunctionSignature(const Function *F) {
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
-      VM->indexVASTValue(FNNum, VM->addWire(WireName, BitWidth));
+      indexVASTValue(FNNum, VM->addWire(WireName, BitWidth));
       S << ".return_value(" << WireName << "),\n\t";
     }
   }
@@ -481,7 +525,7 @@ void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
     VM->addOutputPort("fin", 1, VASTModule::Finish);
   } else { // It is a callee function, emit the signal for the sub module.
     std::string StartPortName = getSubModulePortName(FNNum, "start");
-    VM->indexVASTValue(FNNum + 1, VM->addRegister(StartPortName, 1));
+    indexVASTValue(FNNum + 1, VM->addRegister(StartPortName, 1));
     std::string FinPortName = getSubModulePortName(FNNum, "fin");
     VM->addWire(FinPortName, 1);
     // Connect to the ports
@@ -548,7 +592,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
 
     // Add the start/finsh signal and return_value to the signal list.
-    VM->indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
+    indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
     VM->getOrCreateSymbol(Ports[3], 1);
     unsigned RetPortIdx = FNNum;
     // Dose the submodule have a return port?
@@ -559,12 +603,12 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
       if (Latency == 0) {
         VASTValue *PortName = VM->getOrCreateSymbol(Ports[4], Info.getBitWidth());
-        VM->indexVASTValue(RetPortIdx, PortName);
+        indexVASTValue(RetPortIdx, PortName);
         continue;
       }
 
       VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
-      VM->indexVASTValue(RetPortIdx, ResultWire);
+      indexVASTValue(RetPortIdx, ResultWire);
 
       SmallVector<VASTUse, 4> Ops;
       for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
@@ -574,7 +618,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
                                      Info.getBitWidth());
       ResultWire->assignWithExtraDelay(Expr, Latency);
     } else
-      VM->indexVASTValue(RetPortIdx, 0);
+      indexVASTValue(RetPortIdx, 0);
   }
 }
 
@@ -644,59 +688,57 @@ void VerilogASTBuilder::emitAllSignals() {
         // Sub-register for RCFNRegClass already handled in
         // emitFunctionSignature called by emitAllocatedFUs;
         && Info.getRegClass() != VTM::RCFNRegClassID) {
-      unsigned Parent = Info.getParentRegister();
-      VASTUse U = VM->lookupSignal(Parent);
-      VASTExpr *E = VM->buildBitSlice(U, Info.getUB(), Info.getLB());
-      VASTUse V = VASTUse(E);
-      VM->indexVASTValue(RegNum, V);
+      VASTValue *Parent = lookupSignal(Info.getParentRegister());
+      indexVASTValue(RegNum,
+                     VM->buildBitSlice(Parent, Info.getUB(), Info.getLB()));
       continue;
     }
 
     switch (Info.getRegClass()) {
     case VTM::DRRegClassID:
-      VM->addRegister(RegNum, Info.getBitWidth());
+      addRegister(RegNum, Info.getBitWidth());
       break;
     case VTM::RADDRegClassID:
-      VM->indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
+      indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
       break;
     case VTM::RUCMPRegClassID:
-      VM->indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), false));
+      indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), false));
       break;
     case VTM::RSCMPRegClassID:
-      VM->indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), true));
+      indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RMULRegClassID:
-      VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), false));
+      indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), false));
       break;
     case VTM::RMULLHRegClassID:
-      VM->indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), true));
+      indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RASRRegClassID: {
       VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpSRA);
-      VM->indexVASTValue(RegNum, V);
+      indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RLSRRegClassID:{
       VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpSRL);
-      VM->indexVASTValue(RegNum, V);
+      indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RSHLRegClassID:{
       VASTValue *V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpShl);
-      VM->indexVASTValue(RegNum, V);
+      indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RBRMRegClassID: {
       VASTValue *V = VM->getOrCreateSymbol(VFUBRam::getInDataBusName(RegNum),
                                            Info.getBitWidth());
-      VM->indexVASTValue(RegNum, V);
+      indexVASTValue(RegNum, V);
       break;
     }
     case VTM::RINFRegClassID: {
       // FIXME: Do not use such magic number!
       // The offset of data input port is 3
       unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
-      VM->indexVASTValue(RegNum, VASTUse(VM->getPort(DataInIdx)));
+      indexVASTValue(RegNum, VM->getPort(DataInIdx));
       break;
     }
     case VTM::RCFNRegClassID:
@@ -704,7 +746,7 @@ void VerilogASTBuilder::emitAllSignals() {
       break;
     case VTM::RMUXRegClassID: {
       std::string Name = "dstmux" + utostr_32(RegNum) + "r";
-      VM->indexVASTValue(RegNum, VM->addRegister(Name, Info.getBitWidth()));
+      indexVASTValue(RegNum, VM->addRegister(Name, Info.getBitWidth()));
       break;
     }
     default: llvm_unreachable("Unexpected register class!"); break;
@@ -728,9 +770,9 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
   const ucOperand &Op = cast<ucOperand>(DI.getOperand());
   unsigned Bitwidth = Op.getBitWidth();
   if (!isReg)
-    VM->addWire(RegNum, Bitwidth);
+    addWire(RegNum, Bitwidth);
   else {
-    VM->addRegister(RegNum, Bitwidth);
+    addRegister(RegNum, Bitwidth);
     TotalRegisterBits += Bitwidth;
   }
 
@@ -1000,7 +1042,7 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     EnablePort = VM->getSymbol(VFUMemBus::getEnableName(FUNum) + "_r");
     break;
   case VFUs::CalleeFN:
-    EnablePort =  *VM->lookupSignal(MI->getOperand(0).getReg() + 1);
+    EnablePort =  lookupSignal(MI->getOperand(0).getReg() + 1);
     break;
   default:
     llvm_unreachable("Unexpected FU to disable!");
@@ -1348,12 +1390,12 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   W->assign(cast<VASTExpr>(VM->buildBitSlice(RHS, UB, LB)));
 }
 
-VASTUse VerilogASTBuilder::createCnd(ucOperand &Op) {
+VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
   // Is there an always true predicate?
   if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getAlwaysTrue();
 
   // Otherwise it must be some signal.
-  VASTUse C = VM->lookupSignal(Op.getReg());
+  VASTValue *C = lookupSignal(Op.getReg());
 
   if (Op.isPredicateInverted()) C = VM->buildNotExpr(C);
 
@@ -1365,7 +1407,7 @@ VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     if (unsigned Reg = Op.getReg())
-      return VM->lookupSignal(Reg);
+      return lookupSignal(Reg);
 
     return VASTUse();
   }

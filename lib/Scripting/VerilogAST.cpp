@@ -665,7 +665,7 @@ VASTExpr* VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
 }
 
 VASTExpr * VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
-                                   VASTUse RHS, unsigned BitWidth) {
+                                      VASTUse RHS, unsigned BitWidth) {
   // Try to make RHS to be an constant.
   /*if (LHS.isImm()) std::swap(LHS, RHS);
 
@@ -881,18 +881,6 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
   return Port;
 }
 
-VASTUse VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
-  VASTUse *U = new (UseAllocator.Allocate()) VASTUse(V);
-  bool inserted = RegsMap.insert(std::make_pair(RegNum, U)).second;
-  assert(inserted && "RegNum already indexed some value!");
-
-  // We want to replace the indexed value.
-  // Dirty Hack.
-  if (U->unwrap()) U->setUser(0);
-
-  return V;
-}
-
 VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
                                       unsigned InitVal, const char *Attr) {
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
@@ -905,23 +893,6 @@ VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth
   return Reg;
 }
 
-VASTRegister *VASTModule::addRegister(unsigned RegNum, unsigned BitWidth,
-                                      unsigned InitVal,
-                                      const char *Attr) {
-  std::string Name;
-
-  if (TargetRegisterInfo::isVirtualRegister(RegNum))
-    Name = "v" + utostr_32(TargetRegisterInfo::virtReg2Index(RegNum));
-  else
-    Name = "p" + utostr_32(RegNum);
-
-  Name += "r";
-
-  VASTRegister *R = addRegister(Name, BitWidth, 0, Attr);
-  indexVASTValue(RegNum, R);
-  return R;
-}
-
 VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
                               const char *Attr) {
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
@@ -932,19 +903,6 @@ VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
   Wires.push_back(Wire);
 
   return Wire;
-}
-
-VASTWire *VASTModule::addWire(unsigned WireNum, unsigned BitWidth,
-                              const char *Attr) {
-  std::string Name;
-
-  assert(TargetRegisterInfo::isVirtualRegister(WireNum)
-         && "Unexpected physics register as wire!");
-  Name = "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
-
-  VASTWire *W = addWire(Name, BitWidth, Attr);
-  indexVASTValue(WireNum, W);
-  return W;
 }
 
 // Out of line virtual function to provide home for the class.

@@ -734,8 +734,6 @@ private:
   std::string Name;
   BumpPtrAllocator Allocator;
   SpecificBumpPtrAllocator<VASTUse> UseAllocator;
-  typedef DenseMap<unsigned, VASTUse*> RegIdxMapTy;
-  RegIdxMapTy RegsMap;
   typedef StringMap<VASTValue*> SymTabTy;
   SymTabTy SymbolTable;
   typedef StringMapEntry<VASTValue*> SymEntTy;
@@ -783,13 +781,6 @@ public:
   void writeProfileCounters(VASTSlot *S, StartIdxMapTy &StartIdxMap);
 
   bool eliminateConstRegisters();
-
-  VASTUse lookupSignal(unsigned RegNum) const {
-    RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
-    assert(at != RegsMap.end() && "Signal not found!");
-
-    return *at->second;
-  }
 
   VASTValue *getSymbol(const std::string &Name) const {
     StringMap<VASTValue*>::const_iterator at = SymbolTable.find(Name);
@@ -957,13 +948,6 @@ public:
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");
 
-  VASTWire *addWire(unsigned WireNum, unsigned BitWidth,
-                    const char *Attr = "");
-
-  VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
-                            unsigned InitVal = 0,
-                            const char *Attr = "");
-
   reg_iterator reg_begin() { return Registers.begin(); }
   reg_iterator reg_end() { return Registers.end(); }
 
@@ -975,7 +959,6 @@ public:
   VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds,
                            bool AddSlotActive = true);
 
-  VASTUse indexVASTValue(unsigned RegNum, VASTUse V);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);
