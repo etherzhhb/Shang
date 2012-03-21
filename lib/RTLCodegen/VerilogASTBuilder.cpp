@@ -189,11 +189,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
     }
 
     ~MemBusBuilder() {
-      MembusEn->assign(cast<VASTExpr>(VM->buildExpr(EnExpr)));
-      MembusCmd->assign(cast<VASTExpr>(VM->buildExpr(CmdExpr)));
-      MemBusAddr->assign(cast<VASTExpr>(VM->buildExpr(AddrExpr)));
-      MemBusOutData->assign(cast<VASTExpr>(VM->buildExpr(OutDataExpr)));
-      MemBusByteEn->assign(cast<VASTExpr>(VM->buildExpr(BeExpr)));
+      MembusEn->assign(VM->buildExpr(EnExpr));
+      MembusCmd->assign(VM->buildExpr(CmdExpr));
+      MemBusAddr->assign(VM->buildExpr(AddrExpr));
+      MemBusOutData->assign(VM->buildExpr(OutDataExpr));
+      MemBusByteEn->assign(VM->buildExpr(BeExpr));
     }
   };
 
@@ -570,8 +570,8 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
         Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
 
-      VASTExpr *Expr = cast<VASTExpr>(VM->buildExpr(VASTExpr::dpBlackBox, Ops,
-                                                    Info.getBitWidth()));
+      VASTExpr *Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops, 
+                                     Info.getBitWidth());
       ResultWire->assignWithExtraDelay(Expr, Latency);
     } else
       VM->indexVASTValue(RetPortIdx, 0);
@@ -583,11 +583,11 @@ VASTValue *VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   std::string ResultName = "addsub" + utostr_32(FUNum) + "o";
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
   unsigned OperandWidth = BitWidth - 1;
-  Result->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpAdd,
-                                VM->addRegister(ResultName + "_a", OperandWidth),
-                                VM->addRegister(ResultName + "_b", OperandWidth),
-                                VM->addRegister(ResultName + "_c", 1),
-                                BitWidth)));
+  Result->assign(VM->buildExpr(VASTExpr::dpAdd,
+                               VM->addRegister(ResultName + "_a", OperandWidth),
+                               VM->addRegister(ResultName + "_b", OperandWidth),
+                               VM->addRegister(ResultName + "_c", 1),
+                               BitWidth));
   return Result;
 }
 
@@ -599,10 +599,10 @@ VASTValue *VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool
   unsigned OperandWidth = BitWidth;
   if (HasHi) OperandWidth /= 2;
 
-  Result->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpMul,
-                                VM->addRegister(ResultName + "_a", OperandWidth),
-                                VM->addRegister(ResultName + "_b", OperandWidth),
-                                BitWidth)));
+  Result->assign(VM->buildExpr(VASTExpr::dpMul,
+                               VM->addRegister(ResultName + "_a", OperandWidth),
+                               VM->addRegister(ResultName + "_b", OperandWidth),
+                               BitWidth));
 
   return Result;
 }
@@ -612,11 +612,11 @@ VASTValue *VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
   std::string ResultName = "shift" + utostr_32(FUNum) + "o";
   VASTWire *Result = VM->addWire(ResultName, BitWidth);
 
-  Result->assign(cast<VASTExpr>(VM->buildExpr(Opc,
-                                VM->addRegister(ResultName + "_a", BitWidth),
-                                VM->addRegister(ResultName + "_b",
-                                                Log2_32_Ceil(BitWidth)),
-                                BitWidth)));
+  Result->assign(VM->buildExpr(Opc,
+                               VM->addRegister(ResultName + "_a", BitWidth),
+                               VM->addRegister(ResultName + "_b",
+                                               Log2_32_Ceil(BitWidth)),
+                               BitWidth));
   return Result;
 }
 
@@ -629,11 +629,10 @@ VASTValue *VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
   // Comparer have 4 output port.
   VASTWire *Result = VM->addWire(ResultName, 5);
 
-  Result->assign(
-    cast<VASTExpr>(VM->buildExpr(isSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp,
-                                 VM->addRegister(ResultName + "_a", BitWidth),
-                                 VM->addRegister(ResultName + "_b", BitWidth),
-                                 5)));
+  Result->assign(VM->buildExpr(isSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp,
+                               VM->addRegister(ResultName + "_a", BitWidth),
+                               VM->addRegister(ResultName + "_b", BitWidth),
+                               5));
   return Result;
 }
 
@@ -646,8 +645,9 @@ void VerilogASTBuilder::emitAllSignals() {
         // emitFunctionSignature called by emitAllocatedFUs;
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       unsigned Parent = Info.getParentRegister();
-      VASTUse V = VASTUse(&VASTExpr(&(VM->lookupSignal(Parent)), Info.getUB(),
-                                    Info.getLB()));
+      VASTUse U = VM->lookupSignal(Parent);
+      VASTExpr *E = VM->buildBitSlice(U, Info.getUB(), Info.getLB());
+      VASTUse V = VASTUse(E);
       VM->indexVASTValue(RegNum, V);
       continue;
     }
@@ -881,11 +881,10 @@ void VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (!W || W->getExpr()) return;
 
-  W->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpAdd,
-                                         getAsOperand(MI->getOperand(1)),
-                                         getAsOperand(MI->getOperand(2)),
-                                         getAsOperand(MI->getOperand(3)),
-                                         W->getBitWidth())));
+  W->assign(VM->buildExpr(VASTExpr::dpAdd, getAsOperand(MI->getOperand(1)),
+                          getAsOperand(MI->getOperand(2)),
+                          getAsOperand(MI->getOperand(3)),
+                          W->getBitWidth()));
 }
 
 void VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
@@ -1237,17 +1236,15 @@ void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (!W || W->getExpr()) return;
 
-  W->assign(cast<VASTExpr>(VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
-                                         W->getBitWidth()))) ;
+  W->assign(VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
+                          W->getBitWidth())) ;
 }
 
 void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
   VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (!W || W->getExpr()) return;
-  W->assign(cast<VASTExpr>(VM->buildExpr(Opc,
-                                         getAsOperand(MI->getOperand(1)),
-                                         getAsOperand(MI->getOperand(2)),
-                                         W->getBitWidth())));
+  W->assign(VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
+                          getAsOperand(MI->getOperand(2)), W->getBitWidth()));
 }
 
 void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
@@ -1280,9 +1277,9 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
       case '0': {
         std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
         VASTWire *Winv = VM->addWire(InvWireName, SizeInBits);
-        VASTUse U = VM->buildExpr(VASTExpr::dpNot, Operands[i], SizeInBits);
-        Winv->assign(cast<VASTExpr>(U));
-        ProductOps.push_back(U);
+        VASTExpr *E = VM->buildExpr(VASTExpr::dpNot, Operands[i], SizeInBits);
+        Winv->assign(E);
+        ProductOps.push_back(E);
         break;
       }
       }
@@ -1295,8 +1292,8 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
     // Create the product.
     std::string ProductWireName = NamePrefix + utostr_32(++NameIdx) + "p";
     VASTWire *Wp = VM->addWire(ProductWireName, SizeInBits);
-    VASTUse P = VM->buildExpr(VASTExpr::dpAnd, ProductOps, SizeInBits);
-    Wp->assign(cast<VASTExpr>(P));
+    VASTExpr *P = VM->buildExpr(VASTExpr::dpAnd, ProductOps, SizeInBits);
+    Wp->assign(P);
     // Add the product to the operand list of the sum.
     SumOps.push_back(P);
 
@@ -1313,18 +1310,18 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   // Or the products together to build the SOP (Sum of Product).
   std::string SumWireName = NamePrefix + utostr_32(++NameIdx) + "s";
   VASTWire *Ws = VM->addWire(SumWireName, SizeInBits);
-  VASTUse SOP = VM->buildExpr(VASTExpr::dpOr, SumOps, SizeInBits);
-  Ws->assign(cast<VASTExpr>(SOP));
+  VASTExpr *SOP = VM->buildExpr(VASTExpr::dpOr, SumOps, SizeInBits);
+  Ws->assign(SOP);
 
   if (isComplement) {
     std::string InvWireName = NamePrefix + utostr_32(++NameIdx) + "inv";
     VASTWire *Winv = VM->addWire(InvWireName, SizeInBits);
     SOP = VM->buildExpr(VASTExpr::dpNot, SOP, SizeInBits);
-    Winv->assign(cast<VASTExpr>(SOP));
+    Winv->assign(SOP);
   }
 
   // Build the sum;
-  W->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpAssign, SOP, SizeInBits)));
+  W->assign(VM->buildExpr(VASTExpr::dpAssign, SOP, SizeInBits));
   return;
 }
 

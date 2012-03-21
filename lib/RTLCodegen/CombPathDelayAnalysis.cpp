@@ -144,7 +144,7 @@ struct TimgPathBuilder {
 
   void operator() (ArrayRef<VASTUse> PathArray) {
     VASTUse SrcUse = PathArray.back();
-    if (VASTRegister *Src = dyn_cast<VASTRegister>(SrcUse)){
+    if (isa<VASTRegister>(SrcUse)){
       TimingPath *P = A.createTimingPath(DstVAS, PathArray);
       // Ignore the false path.
       if (P) Paths.push_back(P);
@@ -154,7 +154,6 @@ struct TimgPathBuilder {
 
 TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
                                                     ArrayRef<VASTUse> Path) {
-  VASTSlot *DstSlot = Dst->getSlot();
   // Add the end slots.
   VASTRegister *SrcReg = cast<VASTRegister>(Path.back());
 
@@ -173,7 +172,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
 
   // The path {SrcReg -> DstReg} maybe a false path, i.e. SrcReg never reaches
   // DstSlot.
-  if (PathDelay == -1) return 0;
+  if ((int)PathDelay == -1) return 0;
 
   TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
 

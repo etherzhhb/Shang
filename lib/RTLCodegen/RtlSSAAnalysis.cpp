@@ -199,7 +199,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
     ValueAtSlot::LiveInInfo LI = UseSI->getLiveIn(DefVAS);
 
     // VAS is only depends on DefVAS if it can reach this slot.
-    if (unsigned Distance = LI.getCycles())
+    if (LI.getCycles())
       VAS->addDepVAS(DefVAS, LI);
   }
 }

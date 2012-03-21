@@ -192,8 +192,7 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   // Someone is using the signal.
   SlotActive.setUser(0);
 
-  Active->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpAnd, SlotReg, Ready,
-                                              1)));
+  Active->assign(VM->buildExpr(VASTExpr::dpAnd, SlotReg, Ready, 1));
   // We need alias slot to build the ready signal, keep it as unknown now.
 
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
@@ -262,8 +261,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
   }
 
   // All signals should be 1.
-  cast<VASTWire>(getReady())->
-    assign(cast<VASTExpr>(Mod.buildExpr(VASTExpr::dpAnd, Ops, 1)));
+  cast<VASTWire>(getReady())->assign(Mod.buildExpr(VASTExpr::dpAnd, Ops, 1));
 }
 
 bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
@@ -638,16 +636,16 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
   }
 }
 
-VASTUse VASTModule::buildNotExpr(VASTUse U) {
+VASTExpr *VASTModule::buildNotExpr(VASTUse U) {
   return buildExpr(VASTExpr::dpNot, U, U.getBitWidth());
 }
 
-VASTUse VASTModule::buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB) {
+VASTExpr *VASTModule::buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB) {
   VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
   return new (Allocator.Allocate<VASTExpr>()) VASTExpr(Op, UB, LB);
 }
 
-VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
+VASTExpr* VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
                               unsigned BitWidth) {
   switch (Opc) {
   case VASTExpr::dpNot: {
@@ -666,7 +664,7 @@ VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTUse VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
+VASTExpr * VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
                                    VASTUse RHS, unsigned BitWidth) {
   // Try to make RHS to be an constant.
   /*if (LHS.isImm()) std::swap(LHS, RHS);
@@ -699,7 +697,7 @@ VASTUse VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
                               unsigned BitWidth) {
   switch (Opc) {
   default: break;
@@ -711,13 +709,13 @@ VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
+VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
                               VASTUse Op2, unsigned BitWidth) {
   VASTUse Ops[] = { Op0, Op1, Op2 };
   return buildExpr(Opc, Ops, BitWidth);
 }
 
-VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
                               unsigned BitWidth) {
   switch (Opc) {
   default: break;
@@ -746,8 +744,7 @@ bool VASTModule::replaceAndUpdateUseTree(VASTValue *From, VASTUse To) {
     VASTExpr *V = UpdatedUsers.back();
     UpdatedUsers.pop_back();
 
-    V = cast<VASTExpr>(buildExpr(V->getOpcode(), V->getOperands(),
-                                 V->getBitWidth()));
+    V = buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth());
   }
 
   return AllReplaced;
@@ -782,7 +779,7 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive());
-  VASTExpr *AssignAtSlot = cast<VASTExpr>(buildExpr(VASTExpr::dpAnd, Cnds, 1));
+  VASTExpr *AssignAtSlot = buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "",
                       AssignAtSlot, VASTWire::AssignCond);

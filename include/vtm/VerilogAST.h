@@ -929,26 +929,26 @@ public:
 
   VASTExpr *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
                        unsigned BitWidth);
-  VASTUse buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
-                    unsigned BitWidth);
-  VASTUse buildExpr(VASTExpr::Opcode Opc, VASTUse Op, unsigned BitWidth);
-  VASTUse buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                    unsigned BitWidth);
-  VASTUse buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1, VASTUse Op2,
-                    unsigned BitWidth);
-  VASTUse buildExpr(VASTExprBuilder &Builder) {
+  VASTExpr *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                      unsigned BitWidth);
+  VASTExpr *buildExpr(VASTExpr::Opcode Opc, VASTUse Op, unsigned BitWidth);
+  VASTExpr *buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                      unsigned BitWidth);
+  VASTExpr *buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
+                      VASTUse Op2, unsigned BitWidth);
+  VASTExpr *buildExpr(VASTExprBuilder &Builder) {
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
-  VASTUse buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB);
+  VASTExpr *buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB);
 
-  VASTUse buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+  VASTExpr *buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
                          unsigned BitWidth);
   bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
   VASTExpr *updateExpr(VASTExpr *E, VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops);
 
-  VASTUse buildNotExpr(VASTUse U);
+  VASTExpr *buildNotExpr(VASTUse U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
@@ -1041,9 +1041,7 @@ void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
-      if (VASTValue *V = *Node)
-        VisitPath(NodeWorkStack);
-
+      VisitPath(NodeWorkStack);
       NodeWorkStack.pop_back();
       ItWorkStack.pop_back();
       continue;
