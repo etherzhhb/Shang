@@ -75,65 +75,24 @@ public:
 };
 
 class VASTUse : public ilist_node<VASTUse> {
-  enum VASTUseTy {
-    USE_Value,              // Using a VASTValue
-    USE_Immediate,          // Simply a immediate
-    USE_Symbol,             // A external symbol
-    Invalid                 // For sentinel
-  };
-  // The ast node or simply the symbol.
-  union {
-    VASTValue *V;           // For USE_Value.
-    int64_t ImmVal;         // For USE_Immediate.
-    const char *SymbolName; // For USE_Symbol
-  } Data;
-
-  PointerIntPair<VASTValue*, 2, VASTUseTy> User;// VASTUseTy
+  VASTValue *V;
+  VASTValue *User;
   friend class VASTExpr;
-
-  VASTUseTy getUseKind() const { return User.getInt(); }
-  void setUseKind(VASTUseTy K) { User.setInt(K); }
 
   friend struct ilist_sentinel_traits<VASTUse>;
 public:
-  VASTUse() : User(0, Invalid) {}
-  bool isInvalid() const { return getUseKind() == Invalid; }
-
-  // The bit range of this value.
-  /*const*/ unsigned UB :8;
-  /*const*/ unsigned LB :8;
-
-  VASTUse(VASTValue *v, uint8_t ub, uint8_t lb)
-    : User(0, USE_Value), UB(ub), LB(lb){
-    Data.V = v;
-  }
-
-  VASTUse(VASTValue *v);
-
-  VASTUse(int64_t immVal, uint8_t width)
-    : User(0, USE_Immediate), UB(width), LB(0) {
-      Data.ImmVal = immVal;
-  }
-
-  VASTUse(const char *S, uint8_t width)
-    : User(0, USE_Symbol), UB(width), LB(0) {
-      Data.SymbolName = S;
-  }
-
-  VASTUse getBitSlice(unsigned UB, unsigned LB) const;
+  VASTUse(VASTValue *v = 0);
+  bool isInvalid() const { return V == 0; }
 
   // Set the user of this use and insert this use to use list.
   void setUser(VASTValue *User);
   // Get the user of this use.
-  VASTValue *getUser() const { return User.getPointer(); }
+  VASTValue *getUser() const { return User; }
   // Remove this use from use list.
   void removeFromList();
 
   void set(const VASTUse &RHS) {
-    Data.ImmVal = RHS.Data.ImmVal;
-    UB = RHS.UB;
-    LB = RHS.LB;
-    setUseKind(RHS.getUseKind());
+    V = RHS.V;
   }
 
   const VASTUse& operator=(const VASTUse &RHS) {
@@ -155,39 +114,21 @@ public:
   }
 
   bool operator<(const VASTUse &RHS) const {
-    if (getUseKind() != RHS.getUseKind())
-      return getUseKind() < RHS.getUseKind();
-
-    if (Data.ImmVal != RHS.Data.ImmVal) return Data.ImmVal < RHS.Data.ImmVal;
-
-    if (UB!= RHS.UB) return UB < RHS.UB;
-
-    return LB < RHS.LB;
+    return V < RHS.V;
   }
 
   // Return the underlying VASTValue.
-  VASTValue *get() const {
-    assert(getUseKind() == USE_Value && "Call get on wrong VASTUse type!");
-    return Data.V;
+  VASTValue *operator*() const {
+    assert(!isInvalid() && "Not a valid Use!");
+    return V;
   }
 
-  // Return the underlying VASTValue if the Use hold a VASTValue, null otherwise
-  VASTValue *getOrNull() const {
-    if (getUseKind() == USE_Value)
-      return Data.V;
+  VASTValue *operator->() const { return operator*(); }
 
-    return 0;
-  }
+  VASTValue *unwrap() const { return V; }
+
   // Prevent the user from being removed.
   void PinUser() const;
-
-  bool isImm() const { return getUseKind() == USE_Immediate; }
-  int64_t getImm() const {
-    assert(isImm() && "Call getImm on wrong type!");
-    return Data.ImmVal;
-  }
-
-  int64_t getRawData() const { return Data.ImmVal; }
 
   // Iterators allow us to traverse the use tree.
   typedef const VASTUse *iterator;
@@ -197,7 +138,7 @@ public:
 
   bool is_dp_leaf() { return dp_src_begin() == dp_src_end(); }
 
-  unsigned getBitWidth() const { return UB - LB; }
+  unsigned getBitWidth() const ;
   void print(raw_ostream &OS) const;
 };
 
@@ -282,30 +223,30 @@ public:
   }
 
   bool replaceAllUseWith(VASTUse To,
-                         SmallVectorImpl<VASTExpr*> *ReplacedUsers = 0);
+    SmallVectorImpl<VASTExpr*> *ReplacedUsers = 0);
 };
 
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
 // using casting operators.
 template<> struct simplify_type<const VASTUse> {
-  typedef VASTNode *SimpleType;
+  typedef VASTValue *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return static_cast<SimpleType>(Val.get());
+    return Val.unwrap();
   }
 };
 
 template<> struct simplify_type<VASTUse> {
-  typedef VASTNode *SimpleType;
+  typedef VASTValue *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return static_cast<SimpleType>(Val.get());
+    return Val.unwrap();
   }
 };
 
 class VASTSymbol : public VASTValue {
-public:
   VASTSymbol(const char *Name, unsigned BitWidth)
     : VASTValue(VASTNode::vastSymbol, Name, BitWidth) {}
 
+  friend class VASTModule;
   virtual void print(raw_ostream &OS) const;
 };
 
@@ -403,9 +344,10 @@ public:
   };
 private:
   VASTUse *Ops;
-
   uint8_t NumOps;
-  Opcode  Opc;
+  uint8_t Opc;
+  uint8_t UB;
+  uint8_t LB;
 
   VASTExpr(const VASTExpr&);             // Do not implement
 
@@ -425,9 +367,11 @@ private:
   }
 
 public:
+  VASTExpr(VASTUse *U, unsigned ub, unsigned lb);
+
   bool isDead() const { return Opc == Dead; }
 
-  Opcode getOpcode() const { return Opc; }
+  Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
   void setOpcode(Opcode O) { Opc = O; }
 
   unsigned num_operands() const { return NumOps; }
@@ -444,6 +388,9 @@ public:
   ArrayRef<VASTUse> getOperands() const {
     return ArrayRef<VASTUse>(Ops, NumOps);
   }
+
+  uint8_t getUB() const { return UB; }
+  uint8_t getLB() const { return LB; }
 
   void print(raw_ostream &OS, unsigned UB, unsigned LB) const {
     if (UB != getBitWidth() || LB != 0 || getName()) {
@@ -625,7 +572,7 @@ public:
   unsigned getParentIdx() const { return ParentIdx; }
 
   // TODO: Rename to addSuccSlot.
-  void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd = VASTUse(true, 1));
+  void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd);
   bool hasNextSlot(VASTSlot *NextSlot) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -657,19 +604,19 @@ public:
   pred_it pred_end() { return PredSlots.end(); }
 
   // Signals need to be enabled at this slot.
-  void addEnable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
+  void addEnable(VASTValue *V, VASTUse Cnd);
   bool isEnabled(VASTValue *V) const { return Enables.count(V); }
   const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
   const_fu_ctrl_it enable_end() const { return Enables.end(); }
 
   // Signals need to set before this slot is ready.
-  void addReady(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
+  void addReady(VASTValue *V, VASTUse Cnd);
   bool readyEmpty() const { return Readys.empty(); }
   const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
   const_fu_ctrl_it ready_end() const { return Readys.end(); }
 
   // Signals need to be disabled at this slot.
-  void addDisable(VASTValue *V, VASTUse Cnd = VASTUse(true, 1));
+  void addDisable(VASTValue *V, VASTUse Cnd);
   bool isDiabled(VASTValue *V) const { return Disables.count(V); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
@@ -741,7 +688,7 @@ public:
   assign_itertor assign_begin() const { return Assigns.begin(); }
   assign_itertor assign_end() const { return Assigns.end(); }
 
-  VASTUse getConstantValue() const;
+  /*VASTUse getConstantValue() const;*/
 
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;
@@ -837,11 +784,11 @@ public:
 
   bool eliminateConstRegisters();
 
-  VASTUse lookupSignal(unsigned RegNum, bool MayNotExist = false) const {
+  VASTUse lookupSignal(unsigned RegNum) const {
     RegIdxMapTy::const_iterator at = RegsMap.find(RegNum);
-    assert((MayNotExist || at != RegsMap.end()) && "Signal not found!");
+    assert(at != RegsMap.end() && "Signal not found!");
 
-    return at != RegsMap.end() ? *at->second : VASTUse();
+    return *at->second;
   }
 
   VASTValue *getSymbol(const std::string &Name) const {
@@ -866,6 +813,14 @@ public:
     assert(V->getBitWidth() == BitWidth
            && "Getting symbol with wrong bitwidth!");
     return V;
+  }
+
+  VASTValue *getAlwaysTrue() {
+    return getOrCreateSymbol("1'b1", 0);
+  }
+
+  VASTValue *getAlwaysFalse() {
+    return getOrCreateSymbol("1'b0", 0);
   }
 
   void allocaSlots(unsigned TotalSlots) {
@@ -985,6 +940,8 @@ public:
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
+  VASTUse buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB);
+
   VASTUse buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
                          unsigned BitWidth);
   bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
@@ -1084,7 +1041,7 @@ void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
 
     // Do we reach the leaf?
     if (Node.is_dp_leaf()) {
-      if (VASTValue *V = Node.getOrNull())
+      if (VASTValue *V = *Node)
         VisitPath(NodeWorkStack);
 
       NodeWorkStack.pop_back();

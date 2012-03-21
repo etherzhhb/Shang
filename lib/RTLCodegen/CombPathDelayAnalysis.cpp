@@ -144,7 +144,7 @@ struct TimgPathBuilder {
 
   void operator() (ArrayRef<VASTUse> PathArray) {
     VASTUse SrcUse = PathArray.back();
-    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.getOrNull())){
+    if (VASTRegister *Src = dyn_cast<VASTRegister>(SrcUse)){
       TimingPath *P = A.createTimingPath(DstVAS, PathArray);
       // Ignore the false path.
       if (P) Paths.push_back(P);
@@ -156,7 +156,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
                                                     ArrayRef<VASTUse> Path) {
   VASTSlot *DstSlot = Dst->getSlot();
   // Add the end slots.
-  VASTRegister *SrcReg = cast<VASTRegister>(Path.back().get());
+  VASTRegister *SrcReg = cast<VASTRegister>(Path.back());
 
   unsigned PathDelay = -1;
 
@@ -185,7 +185,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
 
   P->Path[0] = Dst->getValue();
   for (unsigned i = 0; i < Path.size(); ++i) {
-    VASTValue *V = Path[i].get();
+    VASTValue *V = *Path[i];
     P->Path[i + 1] = V;
 
     // Accumulates the block box latency.
@@ -253,7 +253,7 @@ void CombPathDelayAnalysis::extractTimingPaths(ValueAtSlot *DstVAS,
                                                VASTUse DepTree,
                                                SmallVectorImpl<TimingPath*>
                                                &Paths) {
-  VASTValue *SrcValue = DepTree.getOrNull();
+  VASTValue *SrcValue = *DepTree;
 
   // If Define Value is immediate or symbol, skip it.
   if (!SrcValue) return;

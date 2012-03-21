@@ -263,7 +263,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
     assert(Op.isReg() && "Bad MO type for LValue!");
 
     VASTUse U = VM->lookupSignal(Op.getReg());
-    if (VASTValue *V = U.getOrNull())
+    if (VASTValue *V = U.unwrap())
       return dyn_cast<Ty>(V);
 
     return 0;
@@ -430,7 +430,8 @@ void VerilogASTBuilder::emitIdleState() {
   IdleSlot->addNextSlot(IdleSlot, VM->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.
-  IdleSlot->addDisable(VM->getPort(VASTModule::Finish));
+  IdleSlot->addDisable(VM->getPort(VASTModule::Finish),
+                       VM->getAlwaysTrue());
   SmallVector<VASTUse, 1> Cnds(1, StartPort);
   emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds);
 }
@@ -572,7 +573,8 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       VASTExpr *Expr = cast<VASTExpr>(VM->buildExpr(VASTExpr::dpBlackBox, Ops,
                                                     Info.getBitWidth()));
       ResultWire->assignWithExtraDelay(Expr, Latency);
-    }
+    } else
+      VM->indexVASTValue(RetPortIdx, 0);
   }
 }
 
@@ -644,8 +646,8 @@ void VerilogASTBuilder::emitAllSignals() {
         // emitFunctionSignature called by emitAllocatedFUs;
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       unsigned Parent = Info.getParentRegister();
-      VASTUse V = VASTUse(VM->lookupSignal(Parent).get(),
-                          Info.getUB(), Info.getLB());
+      VASTUse V = VASTUse(&VASTExpr(&(VM->lookupSignal(Parent)), Info.getUB(),
+                                    Info.getLB()));
       VM->indexVASTValue(RegNum, V);
       continue;
     }
@@ -777,7 +779,8 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
       // Emit control operation for next state.
       if (TargetBB == CurBB && Pipelined)
         // The loop op of pipelined loop enable next slot explicitly.
-        CurSlot->addNextSlot(VM->getOrCreateNextSlot(CurSlot));
+        CurSlot->addNextSlot(VM->getOrCreateNextSlot(CurSlot),
+                             VM->getAlwaysTrue());
 
       // Emit the first micro state of the target state.
       emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
@@ -859,7 +862,7 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
   OS << "$finish();\n";
   OS.exit_block();
 
-  Slot->addNextSlot(VM->getOrCreateSlot(0, 0));
+  Slot->addNextSlot(VM->getOrCreateSlot(0, 0), VM->getAlwaysTrue());
 }
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
@@ -998,7 +1001,7 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     EnablePort = VM->getSymbol(VFUMemBus::getEnableName(FUNum) + "_r");
     break;
   case VFUs::CalleeFN:
-    EnablePort =  VM->lookupSignal(MI->getOperand(0).getReg() + 1).get();
+    EnablePort =  *VM->lookupSignal(MI->getOperand(0).getReg() + 1);
     break;
   default:
     llvm_unreachable("Unexpected FU to disable!");
@@ -1038,8 +1041,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   }
 
   // Is the function have latency information not captured by schedule?
-  VASTUse U = VM->lookupSignal(FNNum, true);
-  if (VASTWire *RetPort = dyn_cast_or_null<VASTWire>(U.getOrNull())) {
+  if (VASTWire *RetPort = getAsLValue<VASTWire>(MI->getOperand(0))) {
     VASTExpr *Expr = RetPort->getExpr();
     for (unsigned i = 0, e = Expr->num_operands(); i < e; ++i) {
       VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
@@ -1336,23 +1338,22 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
            LB = MI->getOperand(3).getImm();
 
   VASTUse RHS = getAsOperand(MI->getOperand(1));
-  assert(RHS.UB != 0 && "Cannot get bitslice without bitwidth information!");
+  //VASTExpr *E = cast<VASTExpr>(RHS.get());
+  //assert(E->getUB() != 0 && "Cannot get bitslice without bitwidth information!");
   // Already replaced.
-  if (RHS.getOrNull() == W) return;
+  if (RHS == W) return;
 
   // Adjust ub and lb.
-  LB += RHS.LB;
-  UB += RHS.LB;
+  //LB += E->getLB();
+  //UB += E->getLB();
 
-  assert(UB <= RHS.UB && "Bitslice out of range!");
-  W->assign(cast<VASTExpr>(VM->buildExpr(VASTExpr::dpAssign,
-                                         VASTUse(RHS.get(), UB, LB),
-                                         W->getBitWidth())));
+  //assert(UB <= E->getUB() && "Bitslice out of range!");
+  W->assign(cast<VASTExpr>(VM->buildBitSlice(RHS, UB, LB)));
 }
 
 VASTUse VerilogASTBuilder::createCnd(ucOperand &Op) {
   // Is there an always true predicate?
-  if (VInstrInfo::isAlwaysTruePred(Op)) return VASTUse(true, 1);
+  if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getAlwaysTrue();
 
   // Otherwise it must be some signal.
   VASTUse C = VM->lookupSignal(Op.getReg());
@@ -1363,6 +1364,7 @@ VASTUse VerilogASTBuilder::createCnd(ucOperand &Op) {
 }
 
 VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
+  unsigned BitWidth = 0;
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     if (unsigned Reg = Op.getReg())
@@ -1370,12 +1372,9 @@ VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
 
     return VASTUse();
   }
-  case MachineOperand::MO_Immediate:
-    return VASTUse(Op.getImm(), Op.getBitWidth());
-  case MachineOperand::MO_ExternalSymbol:
-    return VASTUse(Op.getSymbolName(), Op.getBitWidth());
-  default:
-    break;
+  //case MachineOperand::MO_Immediate:
+  //case MachineOperand::MO_ExternalSymbol:  BitWidth = Op.getBitWidth(); break;
+  default: break;
   }
 
   // DirtyHack: simply create a symbol.
@@ -1384,7 +1383,7 @@ VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   Op.print(SS);
   SS.flush();
 
-  return VM->getOrCreateSymbol(Name, 0);
+  return VM->getOrCreateSymbol(Name, BitWidth);
 }
 
 void VerilogASTBuilder::printOperand(ucOperand &Op, raw_ostream &OS) {

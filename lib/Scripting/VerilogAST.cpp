@@ -115,86 +115,43 @@ void VASTNode::dump() const { print(dbgs()); }
 
 //----------------------------------------------------------------------------//
 // Classes in Verilog AST.
-VASTUse::VASTUse(VASTValue *v)
-  : User(0, USE_Value), UB(v->getBitWidth()), LB(0) {
-  Data.V = v;
-}
+VASTUse::VASTUse(VASTValue *v) : V(v), User(0) {}
 
 void VASTUse::removeFromList() {
-  if (VASTValue *List = getOrNull())
-    List->removeUseFromList(this);
+  operator*()->removeUseFromList(this);
 }
 
-void VASTUse::setUser(VASTValue *User) {
+void VASTUse::setUser(VASTValue *U) {
   assert(!ilist_traits<VASTUse>::inAnyList(this)
          && "Not unlink from old list!");
-  if (VASTValue *List = getOrNull()) {
-    assert(List != User && "Unexpected cycle!");
-    this->User.setPointer(User);
-    List->addUseToList(this);
-  }
-}
-
-VASTUse VASTUse::getBitSlice(unsigned ub, unsigned lb) const {
-  // Rebase ub and lb.
-  ub += LB;
-  lb += LB;
-
-  assert(ub > lb && ub <= UB && lb >= LB && "Bad bitslice range!");
-  // Bit slice is contained.
-  if (ub == UB && lb == LB) return *this;
-
-  switch (getUseKind()) {
-  case USE_Value: return VASTUse(Data.V, ub, lb);
-  case USE_Immediate: return VASTUse(getBitSlice64(Data.ImmVal, ub, lb), ub-lb);
-  case USE_Symbol: break;
-  default: llvm_unreachable("Get bitslice on bad use kind!");
-  }
-
-  return VASTUse();
+  VASTValue *List = operator*();
+  assert(List != U && "Unexpected cycle!");
+  this->User = U;
+  List->addUseToList(this);
 }
 
 bool VASTUse::operator==(const VASTValue *RHS) const {
-  return getUseKind() == USE_Value && LB == 0
-    && Data.V == RHS && UB == RHS->getBitWidth();
+  return V == RHS;
 }
 
 void VASTUse::print(raw_ostream &OS) const {
   OS << '(';
-  // Print the bit range if the value is have multiple bits.
-  switch (getUseKind()) {
-  case USE_Value:
-    Data.V->printAsOperand(OS, UB, LB);
-    break;
-  case USE_Symbol:
-    OS << Data.SymbolName;
-    if (UB) OS << verilogBitRange(UB, LB, false);
-    break;
-  case USE_Immediate:
-    OS << verilogConstToStr(Data.ImmVal, UB, false);
-    // No need to print bit range for immediate.
-    break;
-  default: llvm_unreachable("Broken VASTUse type!");
-  }
-
+  assert(!isInvalid() && "Cannot print invalid use!");
+  V->printAsOperand(OS);
   OS << ')';
 }
 
 void VASTUse::PinUser() const {
-  if (VASTSignal *S = dyn_cast_or_null<VASTSignal>(getOrNull()))
+  if (VASTSignal *S = dyn_cast<VASTSignal>(operator*()))
     S->Pin();
 }
 
 VASTUse::iterator VASTUse::dp_src_begin() {
-  VASTExpr *E = 0;
+  VASTExpr *E = dyn_cast<VASTExpr>(operator*());
 
-  if (getUseKind() == USE_Value) {
-    E = dyn_cast<VASTExpr>(get());
-
-    if (E == 0)
-      if (VASTWire *W = dyn_cast<VASTWire>(get()))
-        E = W->getExpr();
-  }
+  if (E == 0)
+    if (VASTWire *W = dyn_cast<VASTWire>(operator*()))
+      E = W->getExpr();
 
   return E ? E->op_begin() : reinterpret_cast<VASTUse::iterator>(0);
 }
@@ -202,16 +159,16 @@ VASTUse::iterator VASTUse::dp_src_begin() {
 VASTUse::iterator VASTUse::dp_src_end() {
   VASTExpr *E = 0;
 
-  if (getUseKind() == USE_Value) {
-    E = dyn_cast<VASTExpr>(get());
+  E = dyn_cast<VASTExpr>(operator*());
 
-    if (E == 0)
-      if (VASTWire *W = dyn_cast<VASTWire>(get()))
-        E = W->getExpr();
-  }
+  if (E == 0)
+    if (VASTWire *W = dyn_cast<VASTWire>(operator*()))
+      E = W->getExpr();
 
   return E ? E->op_end() : reinterpret_cast<VASTUse::iterator>(0);
 }
+
+unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
@@ -278,7 +235,7 @@ VASTUse VASTSlot::buildFUReadyExpr(VASTModule &VM) {
                                VM.buildNotExpr(I->second), 1));
   
   // No waiting signal means always ready.
-  if (Ops.empty()) Ops.push_back(VASTUse(true, 1));
+  if (Ops.empty()) Ops.push_back(VM.getAlwaysTrue());
   
   return VM.buildExpr(VASTExpr::dpAnd, Ops, 1);
 }
@@ -375,9 +332,10 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     // Enable the default successor slots.
     VASTSlot *NextSlot = Mod.getSlot(getSlotNum() + 1);
     VASTRegister *NextSlotReg = NextSlot->getRegister();
-    Mod.addAssignment(NextSlotReg, VASTUse(true, 1), this, EmptySlotEnCnd);
+    Mod.addAssignment(NextSlotReg, Mod.getAlwaysTrue(), this,
+                      EmptySlotEnCnd);
     // And connect the fall through edge now.
-    addNextSlot(NextSlot);
+    addNextSlot(NextSlot, Mod.getAlwaysTrue());
   }
 
   assert(!(hasSelfLoop && !PredAliasSlots.isInvalid())
@@ -390,7 +348,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       EmptySlotEnCnd.push_back(Mod.buildNotExpr(PredAliasSlots));
 
     // Disable the current slot.
-    Mod.addAssignment(getRegister(), VASTUse((int64_t)0, 1), this,
+    Mod.addAssignment(getRegister(), Mod.getAlwaysFalse(), this,
                       EmptySlotEnCnd);
   }
 
@@ -457,7 +415,8 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       DisableAndCnds.push_back(I->second);
 
       VASTRegister *En = cast<VASTRegister>(I->first);
-      Mod.addAssignment(En, VASTUse((int64_t)0, 1), this, DisableAndCnds, false);
+      Mod.addAssignment(En, Mod.getAlwaysFalse(), this,
+                        DisableAndCnds, false);
       DisableAndCnds.clear();
     }
   }
@@ -475,28 +434,28 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
 void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
-  bool inserted =
-    Assigns.insert(std::make_pair(AssignCnd, Src)).second;
+  bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
   assert(inserted &&  "Assignment condition conflict detected!");
   Src->setUser(this);
+  assert(AssignCnd->getWireType() == VASTWire::AssignCond && "what the fuck??");
   Slots.insert(AssignCnd->getSlot());
 }
 
-VASTUse VASTRegister::getConstantValue() const {
-  std::set<VASTUse> Srcs;
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
-    Srcs.insert(*I->second);
-
-  // Only 1 assignment?
-  if (Srcs.size() != 1) return VASTUse();
-
-  VASTUse C = *Srcs.begin();
-
-  if (!C.isImm()) return VASTUse();
-
-  // Some register assignment may have un-match bit-width
-  return VASTUse(C.getImm(), getBitWidth());
-}
+//VASTUse VASTRegister::getConstantValue() const {
+//  std::set<VASTUse> Srcs;
+//  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
+//    Srcs.insert(*I->second);
+//
+//  // Only 1 assignment?
+//  if (Srcs.size() != 1) return VASTUse();
+//
+//  VASTUse C = *Srcs.begin();
+//
+//  if (!C.isImm()) return VASTUse();
+//
+//  // Some register assignment may have un-match bit-width
+//  return VASTUse(C.getImm(), getBitWidth());
+//}
 
 void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
                                   const AndCndVec &Cnds) {
@@ -569,8 +528,15 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 }
 
 VASTExpr::VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth)
-  : VASTValue(vastExpr, 0, BitWidth), Ops(ops), NumOps(numOps), Opc(opc) {
+  : VASTValue(vastExpr, 0, BitWidth), Ops(ops), NumOps(numOps), Opc(opc),
+    UB(BitWidth), LB(0) {
   assert(numOps && Ops && "Unexpected empty operand list!");
+  buildUseList();
+}
+
+VASTExpr::VASTExpr(VASTUse *U, unsigned ub, unsigned lb)
+  : VASTValue(vastExpr, 0, ub - lb), Ops(U), NumOps(1), Opc(VASTExpr::dpAssign),
+    UB(ub), LB(lb) {
   buildUseList();
 }
 
@@ -676,24 +642,21 @@ VASTUse VASTModule::buildNotExpr(VASTUse U) {
   return buildExpr(VASTExpr::dpNot, U, U.getBitWidth());
 }
 
+VASTUse VASTModule::buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB) {
+  VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
+  return new (Allocator.Allocate<VASTExpr>()) VASTExpr(Op, UB, LB);
+}
+
 VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
                               unsigned BitWidth) {
   switch (Opc) {
   case VASTExpr::dpNot: {
      // Try to fold the not expression.
-    if (VASTExpr *E = dyn_cast_or_null<VASTExpr>(Op.getOrNull()))
+    if (VASTExpr *E = dyn_cast<VASTExpr>(Op))
       if (E->getOpcode() == VASTExpr::dpNot) {
         // We should also propagate the bit slice information.
-        VASTUse U = E->getOperand(0).getBitSlice(Op.UB, Op.LB);
-        return buildExpr(VASTExpr::dpAssign, U, BitWidth);
+        return buildBitSlice(E->getOperand(0), E->getUB(), E->getLB());
       }
-    if (Op.isImm()) {
-      unsigned Size = Op.getBitWidth();
-      return buildExpr(VASTExpr::dpAssign,
-                       VASTUse(getBitSlice64(~Op.getImm(), Size), Size),
-                       Size);
-
-    }
     break;
   }
   default: break;
@@ -706,7 +669,7 @@ VASTUse VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
 VASTUse VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
                                    VASTUse RHS, unsigned BitWidth) {
   // Try to make RHS to be an constant.
-  if (LHS.isImm()) std::swap(LHS, RHS);
+  /*if (LHS.isImm()) std::swap(LHS, RHS);
 
   if (RHS.isImm()) {
     VASTUse ValForRHSIsZero, ValForRHSIsAllOnes;
@@ -729,7 +692,7 @@ VASTUse VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
 
     if (getBitSlice64(RHS.getImm(), BitWidth) == getBitSlice64(-1, BitWidth))
       return buildExpr(VASTExpr::dpAssign, ValForRHSIsAllOnes, BitWidth);
-  }
+  }*/
 
 
   VASTUse Ops[] = { LHS, RHS };
@@ -927,7 +890,8 @@ VASTUse VASTModule::indexVASTValue(unsigned RegNum, VASTUse V) {
   assert(inserted && "RegNum already indexed some value!");
 
   // We want to replace the indexed value.
-  U->setUser(0);
+  // Dirty Hack.
+  if (U->unwrap()) U->setUser(0);
 
   return V;
 }
@@ -1062,21 +1026,19 @@ bool VASTValue::replaceAllUseWith(VASTUse To,
   for (it I = use_begin(), E = use_end(); I != E; /*++I*/) {
     VASTUse *U = I.get();
     ++I;
-    VASTUse NewU = To.getBitSlice(U->UB, U->LB);
-    if (!NewU.isInvalid()) {
-      VASTValue *User = U->getUser();
-      // Unlink from old list.
-      removeUseFromList(U);
-      // Move to new list.
-      U->set(NewU);
-      U->setUser(User);
+    assert(U->getBitWidth() == To.getBitWidth() && "Bitwidth not match!");
+    VASTValue *User = U->getUser();
+    // Unlink from old list.
+    removeUseFromList(U);
+    // Move to new list.
+    U->set(To);
+    U->setUser(User);
 
-      if (!ReplacedUsers) continue;
+    if (!ReplacedUsers) continue;
 
-      if (VASTExpr *UserExpr = dyn_cast_or_null<VASTExpr>(User)) {
-        assert(UserExpr && UserExpr->num_operands() && "Use list broken!");
-        ReplacedUsers->push_back(UserExpr);
-      }
+    if (VASTExpr *UserExpr = dyn_cast_or_null<VASTExpr>(User)) {
+      assert(UserExpr && UserExpr->num_operands() && "Use list broken!");
+      ReplacedUsers->push_back(UserExpr);
     }
   }
 
@@ -1319,7 +1281,7 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   case dpSRL: printSimpleUnsignedOp(OS, getOperands(), " >> ");break;
   case dpSRA: printSRAOp(OS, getOperands());                   break;
 
-  case dpAssign: getOperand(0).print(OS);     break;
+  case dpAssign: getOperand(0)->printAsOperand(OS, getUB(), getLB() ); break;
 
   case dpBitCat:    printBitCat(OS, getOperands());    break;
   case dpBitRepeat: printBitRepeat(OS, getOperands()); break;

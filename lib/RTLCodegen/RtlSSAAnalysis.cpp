@@ -73,7 +73,7 @@ struct VASDepBuilder {
 
   void operator() (ArrayRef<VASTUse> PathArray) {
     VASTUse SrcUse = PathArray.back();
-    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.getOrNull()))
+    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.unwrap()))
       A.addVASDep(DstVAS, Src);
   }
 };
@@ -245,7 +245,7 @@ void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
 }
 
 void RtlSSAAnalysis::visitDepTree(VASTUse DepTree, ValueAtSlot *VAS){
-  VASTValue *DefValue = DepTree.getOrNull();
+  VASTValue *DefValue = *DepTree;
 
   // If Define Value is immediate or symbol, skip it.
   if (!DefValue) return;
