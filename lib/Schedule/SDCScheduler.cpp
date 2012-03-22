@@ -81,7 +81,6 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
         DE = U->use_end(); DI != DE;++DI) {
       const VSUnit *depIn = *DI;
       const VDEdge *Edge = depIn->getEdgeFrom(U);
-      unsigned Latency = Edge->getLatency();
       unsigned SrcEndIdx =  SUIdx[U] + Edge->getLatency();
       unsigned DstStartIdx = SUIdx[depIn];
 
@@ -440,11 +439,9 @@ void SDCScheduler::buildSchedule(lprec *lp) {
   for(it I = State.sched_begin(),E = State.sched_end();I != E; ++I) {
       VSUnit *U = *I;
     unsigned Offset = SUIdx[U];
-    unsigned cur = State.getStartSlot();
     unsigned j = get_var_primalresult(lp, TotalRows + Offset + 1);
     DEBUG(dbgs() << "the row is:" << TotalRows + Offset + 1
                  <<"the result is:" << j << "\n");
-    unsigned shedslot = j+State.getStartSlot();
     U->scheduledTo(j+State.getStartSlot());
   }
 }
