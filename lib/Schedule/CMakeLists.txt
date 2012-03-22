@@ -12,7 +12,8 @@ add_llvm_library(VTMSchedule
   SchedulingBase.cpp
   MicroState.cpp
   VSUnit.cpp
-  PrebindMux.cpp
+  UnbalanceMuxPrebind.cpp
+  PrebindMuxBase.cpp
   ScheduleEmitter.cpp
   RecurrenceFinder.cpp
   VPreRegAllocSched.cpp

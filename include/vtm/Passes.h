@@ -47,7 +47,8 @@ Pass *createFixMachineCodePass(bool IsPreOpt);
 Pass *createFixTerminatorsPass();
 Pass *createForwardWireUsersPass();
 Pass *createHyperBlockFormationPass();
-Pass *createPrebindMuxPass();
+Pass *createPrebindUnbalanceMuxPass();
+Pass *createPrebindMuxBasePass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
@@ -78,6 +79,8 @@ Pass *createScriptingPass(const char *Name, const char *FScript,
 Pass *createContoBromPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
 //
+void initializePrebindMuxBasePass(PassRegistry &Registry);
+void initializePrebindUnbalanceMuxPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 
 //Add the initialization implementation of StackToGlobal.cpp.

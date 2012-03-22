@@ -96,7 +96,8 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createFixMachineCodePass(true));
 
     // Construct multiplexer tree for prebound function units.
-    PM.add(createPrebindMuxPass());
+    PM.add(createPrebindUnbalanceMuxPass());
+    //PM.add(createPrebindMuxBasePass());
 
     // Optimize the CFG.
     PM.add(createFixTerminatorsPass());
@@ -109,7 +110,7 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createFixMachineCodePass(false));
 
     // Perform logic synthesis.
-    PM.add(createLogicSynthesisPass());
+    //PM.add(createLogicSynthesisPass());
 
     // Clean up the MachineFunction.
     addPass(MachineCSEID);
