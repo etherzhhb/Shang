@@ -71,9 +71,9 @@ struct VASDepBuilder {
   ValueAtSlot *DstVAS;
   VASDepBuilder(RtlSSAAnalysis &RtlSSA, ValueAtSlot *V) : A(RtlSSA), DstVAS(V) {}
 
-  void operator() (ArrayRef<VASTUse> PathArray) {
-    VASTUse SrcUse = PathArray.back();
-    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse.unwrap()))
+  void operator() (ArrayRef<VASTValue*> PathArray) {
+    VASTValue *SrcUse = PathArray.back();
+    if (VASTRegister *Src = dyn_cast_or_null<VASTRegister>(SrcUse))
       A.addVASDep(DstVAS, Src);
   }
 };
@@ -193,7 +193,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
 
   for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
        I != E; ++I) {
-    VASTSlot *DefSlot = I->first->getSlot();
+    VASTSlot *DefSlot = cast<VASTWire>(*I->first)->getSlot();
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
 
     ValueAtSlot::LiveInInfo LI = UseSI->getLiveIn(DefVAS);
@@ -211,7 +211,7 @@ void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
 
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = Reg->assign_begin(), E = Reg->assign_end(); I != E; ++I){
-      VASTSlot *S = I->first->getSlot();
+      VASTSlot *S = cast<VASTWire>(*I->first)->getSlot();
 
       // Create the origin VAS.
       ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S);
@@ -233,19 +233,19 @@ void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
 
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = R->assign_begin(), E = R->assign_end(); I != E; ++I) {
-      VASTSlot *S = I->first->getSlot();
+      VASTSlot *S = cast<VASTWire>(*I->first)->getSlot();
       // Create the origin VAS.
       ValueAtSlot *VAS = getValueASlot(R, S);
       // Build dependence for conditions
-      visitDepTree(I->first, VAS);
+      visitDepTree(*I->first, VAS);
       // Build dependence for the assigning value.
       visitDepTree(*I->second, VAS);
     }
   }
 }
 
-void RtlSSAAnalysis::visitDepTree(VASTUse DepTree, ValueAtSlot *VAS){
-  VASTValue *DefValue = *DepTree;
+void RtlSSAAnalysis::visitDepTree(VASTValue *DepTree, ValueAtSlot *VAS){
+  VASTValue *DefValue = DepTree;
 
   // If Define Value is immediate or symbol, skip it.
   if (!DefValue) return;

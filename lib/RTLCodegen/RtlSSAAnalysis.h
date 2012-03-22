@@ -308,8 +308,8 @@ public:
   // Add dependent ValueAtSlot.
   void addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg);
 
-  // Traverse the dependent VASTUse to get the registers.
-  void visitDepTree(VASTUse DepTree, ValueAtSlot *VAS);
+  // Traverse the dependent VASTValue *to get the registers.
+  void visitDepTree(VASTValue *DepTree, ValueAtSlot *VAS);
 
   bool addLiveIns(SlotInfo *From, SlotInfo *To, bool OnlyUndefTiming);
   bool addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To, VASTModule *VM);

@@ -261,11 +261,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
                          VASTExpr::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
-  typedef SmallVectorImpl<VASTUse> VASTUseVecTy;
+  typedef SmallVectorImpl<VASTValue*> VASTValueVecTy;
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
   void emitFirstCtrlBundle(MachineBasicBlock *DstBB, VASTSlot *Slot,
-                          VASTUseVecTy &Cnds);
+                           VASTValueVecTy &Cnds);
 
   MachineBasicBlock::instr_iterator emitDatapath(MachineInstr *Bundle);
 
@@ -276,11 +276,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitChainedOpAdd(MachineInstr *MI);
   void emitChainedOpICmp(MachineInstr *MI);
 
-  void emitOpSel(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpCase(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpSel(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpCase(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
-  void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   void emitOpBitSlice(MachineInstr *MI);
 
@@ -297,8 +297,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
     return createCnd(cast<ucOperand>(Op));
   }
 
-  VASTUse getAsOperand(ucOperand &Op);
-  VASTUse getAsOperand(MachineOperand &Op) {
+  VASTValue *getAsOperand(ucOperand &Op);
+  VASTValue *getAsOperand(MachineOperand &Op) {
     return getAsOperand(cast<ucOperand>(Op));
   }
 
@@ -321,17 +321,17 @@ class VerilogASTBuilder : public MachineFunctionPass {
     printOperand(cast<ucOperand>(Op), OS);
   }
 
-  void emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpRetVal(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, VASTUseVecTy &Cnds);
-  void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpRetVal(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, VASTValueVecTy &Cnds);
+  void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
-  void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
-  void emitOpBRam(MachineInstr *MI, VASTSlot *Slot, VASTUseVecTy &Cnds);
+  void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpBRam(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -476,7 +476,7 @@ void VerilogASTBuilder::emitIdleState() {
   // Always Disable the finish signal.
   IdleSlot->addDisable(VM->getPort(VASTModule::Finish),
                        VM->getAlwaysTrue());
-  SmallVector<VASTUse, 1> Cnds(1, StartPort);
+  SmallVector<VASTValue*, 1> Cnds(1, StartPort);
   emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds);
 }
 
@@ -610,7 +610,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
       indexVASTValue(RetPortIdx, ResultWire);
 
-      SmallVector<VASTUse, 4> Ops;
+      SmallVector<VASTValue*, 4> Ops;
       for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
         Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
 
@@ -784,7 +784,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
                               unsigned II, bool Pipelined){
   MachineBasicBlock *CurBB = Bundle->getParent();
   assert(Bundle->getOpcode() == VTM::CtrlStart && "Expect control bundle!");
-  SmallVector<VASTUse, 4> Cnds;
+  SmallVector<VASTValue*, 4> Cnds;
 
   typedef MachineBasicBlock::instr_iterator instr_it;
   instr_it I = Bundle;
@@ -811,7 +811,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
       VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
       assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
              "Cannot handle predicated BrCnd");
-      VASTUse Cnd = createCnd(CndOp);
+      VASTValue *Cnd = createCnd(CndOp);
       CurSlot->addNextSlot(TargetSlot, Cnd);
 
       // Emit control operation for next state.
@@ -861,7 +861,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
 
 void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
                                             VASTSlot *Slot,
-                                            VASTUseVecTy &Cnds) {
+                                            VASTValueVecTy &Cnds) {
   // TODO: Emit PHINodes if necessary.
   MachineInstr *FirstBundle = DstBB->instr_begin();
   assert(FInfo->getStartSlotFor(DstBB) == getBundleSlot(FirstBundle)
@@ -889,7 +889,7 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
 }
 
 void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
-                                          VASTUseVecTy &Cnds) {
+                                          VASTValueVecTy &Cnds) {
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   std::string PredStr;
   raw_string_ostream SS(PredStr);
@@ -904,7 +904,7 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
-                                  VASTUseVecTy &Cnds) {
+                                  VASTValueVecTy &Cnds) {
   VASTWire *Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getExpr()->getOperand(0));
@@ -933,7 +933,7 @@ void VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
 }
 
 void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
-                                VASTUseVecTy &Cnds) {
+                                       VASTValueVecTy &Cnds) {
   VASTWire *Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
   VASTRegister *R = cast<VASTRegister>(Result->getExpr()->getOperand(0));
@@ -949,10 +949,10 @@ void VerilogASTBuilder::emitImplicitDef(MachineInstr *MI) {
 }
 
 void VerilogASTBuilder::emitOpSel(MachineInstr *MI, VASTSlot *Slot,
-                                  VASTUseVecTy &Cnds) {
+                                  VASTValueVecTy &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
   // Assign the value for condition true.
-  VASTUse Cnd = createCnd(MI->getOperand(1));
+  VASTValue *Cnd = createCnd(MI->getOperand(1));
   Cnds.push_back(Cnd);
   VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
   // Assign the value for condition false.
@@ -962,7 +962,7 @@ void VerilogASTBuilder::emitOpSel(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpCase(MachineInstr *MI, VASTSlot *Slot,
-                                   VASTUseVecTy &Cnds) {
+                                   VASTValueVecTy &Cnds) {
   // Check if we got any case hitted
   vlang_raw_ostream &OS = VM->getControlBlockBuffer();
   OS.if_();
@@ -975,8 +975,8 @@ void VerilogASTBuilder::emitOpCase(MachineInstr *MI, VASTSlot *Slot,
     Cnds.push_back(createCnd(MI->getOperand(i)));
     VM->addAssignment(R, getAsOperand(MI->getOperand(i + 1)), Slot, Cnds);
     // Do nothing if any case hit.
-    Cnds.back().print(OS);
-    Cnds.back().PinUser();
+    Cnds.back()->printAsOperand(OS);
+    //Cnds.back()->Pin();
     OS << ":/*Case hit, do nothing*/;\n";
 
     Cnds.pop_back();
@@ -991,7 +991,7 @@ void VerilogASTBuilder::emitOpCase(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
-                                   VASTUseVecTy &Cnds) {
+                                   VASTValueVecTy &Cnds) {
   MachineOperand &Dst = MI->getOperand(0), &Src = MI->getOperand(1);
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
@@ -1001,7 +1001,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
-                                     VASTUseVecTy &Cnds) {
+                                     VASTValueVecTy &Cnds) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VASTValue *ReadyPort = 0;
 
@@ -1029,7 +1029,7 @@ void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
 }
 
 void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
-                                        VASTUseVecTy &Cnds) {
+                                        VASTValueVecTy &Cnds) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   unsigned FUNum = Id.getFUNum();
   VASTValue *EnablePort = 0;
@@ -1050,18 +1050,18 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
-                                         VASTUseVecTy &Cnds) {
+                                         VASTValueVecTy &Cnds) {
   VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
   VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds);
 }
 
 void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
-                                           VASTUseVecTy &Cnds) {
+                                           VASTValueVecTy &Cnds) {
   // Assign input port to some register.
   const char *CalleeName = MI->getOperand(1).getSymbolName();
   unsigned FNNum = FInfo->getCalleeFNNum(CalleeName);
 
-  VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getSymbol(StartPortName);
   Slot->addEnable(StartSignal, Pred);
@@ -1147,15 +1147,15 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpRet(MachineInstr *MI, VASTSlot *CurSlot,
-                                  VASTUseVecTy &Cnds) {
+                                  VASTValueVecTy &Cnds) {
   // Go back to the idle slot.
-  VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   CurSlot->addNextSlot(VM->getOrCreateSlot(0, 0), Pred);
   CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
 }
 
 void VerilogASTBuilder::emitOpRetVal(MachineInstr *MI, VASTSlot *Slot,
-                                     VASTUseVecTy &Cnds) {
+                                     VASTValueVecTy &Cnds) {
   VASTRegister &RetReg = cast<VASTRegister>(*VM->getRetPort());
   unsigned retChannel = MI->getOperand(1).getImm();
   assert(retChannel == 0 && "Only support Channel 0!");
@@ -1163,7 +1163,7 @@ void VerilogASTBuilder::emitOpRetVal(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
-                                       VASTUseVecTy &Cnds) {
+                                       VASTValueVecTy &Cnds) {
   unsigned FUNum = VInstrInfo::getPreboundFUId(MI).getFUNum();
 
   // Emit Address.
@@ -1186,12 +1186,12 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValue *MemEn = VM->getSymbol(EnableName);
-  VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   Slot->addEnable(MemEn, Pred);
 }
 
 void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
-                                   VASTUseVecTy &Cnds) {
+                                   VASTValueVecTy &Cnds) {
   unsigned FUNum = MI->getOperand(0).getReg();
 
   // Emit the control logic.
@@ -1225,7 +1225,7 @@ void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
   std::string EnableName = VFUBRam::getEnableName(FUNum);
   VASTValue *MemEn = VM->getSymbol(EnableName);
 
-  VASTUse Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   Slot->addEnable(MemEn, Pred);
 }
 
@@ -1294,16 +1294,15 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
 
   unsigned SizeInBits = W->getBitWidth();
   std::string NamePrefix = W->getName();
-  unsigned NameIdx = 0;
 
-  SmallVector<VASTUse, 8> Operands;
+  SmallVector<VASTValue*, 8> Operands;
   for (unsigned i = 4, e = MI->getNumOperands(); i < e; ++i)
     Operands.push_back(getAsOperand(MI->getOperand(i)));
   unsigned NumInputs = Operands.size();
 
   // Interpret the sum of product table.
   const char *p = MI->getOperand(1).getSymbolName();
-  SmallVector<VASTUse, 8> ProductOps, SumOps;
+  SmallVector<VASTValue*, 8> ProductOps, SumOps;
   bool isComplement = false;
   
   while (*p) {
@@ -1359,7 +1358,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   unsigned UB = MI->getOperand(2).getImm(),
            LB = MI->getOperand(3).getImm();
 
-  VASTUse RHS = getAsOperand(MI->getOperand(1));
+  VASTValue *RHS = getAsOperand(MI->getOperand(1));
   //VASTExpr *E = cast<VASTExpr>(RHS.get());
   //assert(E->getUB() != 0 && "Cannot get bitslice without bitwidth information!");
   // Already replaced.
@@ -1385,14 +1384,14 @@ VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
   return C;
 }
 
-VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
+VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   unsigned BitWidth = 0;
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     if (unsigned Reg = Op.getReg())
       return lookupSignal(Reg);
 
-    return VASTUse();
+    return 0;
   }
   //case MachineOperand::MO_Immediate:
   //case MachineOperand::MO_ExternalSymbol:  BitWidth = Op.getBitWidth(); break;
@@ -1410,9 +1409,9 @@ VASTUse VerilogASTBuilder::getAsOperand(ucOperand &Op) {
 
 void VerilogASTBuilder::printOperand(ucOperand &Op, raw_ostream &OS) {
   if(Op.isReg()){
-    VASTUse U = getAsOperand(Op);
-    U.print(OS);
-    U.PinUser();
+    VASTValue *U = getAsOperand(Op);
+    U->printAsOperand(OS);
+    //U.PinUser();
     return;
   }
 

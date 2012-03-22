@@ -80,31 +80,35 @@ class VASTUse : public ilist_node<VASTUse> {
   friend class VASTExpr;
 
   friend struct ilist_sentinel_traits<VASTUse>;
-public:
   VASTUse(VASTValue *v = 0);
+
+  const VASTUse& operator=(const VASTUse &RHS) {
+    // Do not copy the parent.
+    set(RHS.unwrap());
+    return *this;
+  }
+
+  VASTUse(const VASTUse &RHS) {
+    // Do not copy the parent.
+    set(RHS.unwrap());
+  }
+
+  friend class VASTModule;
+  friend class VASTSlot;
+  friend class VASTWire;
+public:
   bool isInvalid() const { return V == 0; }
 
+  void set(VASTValue *RHS) {
+    assert(V == 0 && "Already using some value!");
+    V = RHS;
+  }
   // Set the user of this use and insert this use to use list.
   void setUser(VASTValue *User);
   // Get the user of this use.
   VASTValue *getUser() const { return User; }
   // Remove this use from use list.
   void removeFromList();
-
-  void set(const VASTUse &RHS) {
-    V = RHS.V;
-  }
-
-  const VASTUse& operator=(const VASTUse &RHS) {
-    // Do not copy the parent.
-    set(RHS);
-    return *this;
-  }
-
-  VASTUse(const VASTUse &RHS) {
-    // Do not copy the parent.
-    set(RHS);
-  }
 
   //operator bool() const { return V != 0; }
   bool operator==(const VASTValue *RHS) const;
@@ -123,20 +127,14 @@ public:
     return V;
   }
 
+  operator VASTValue *() const { return operator*(); }
+
   VASTValue *operator->() const { return operator*(); }
 
   VASTValue *unwrap() const { return V; }
 
   // Prevent the user from being removed.
   void PinUser() const;
-
-  // Iterators allow us to traverse the use tree.
-  typedef const VASTUse *iterator;
-  // Iterator for datapath traverse.
-  iterator dp_src_begin();
-  iterator dp_src_end();
-
-  bool is_dp_leaf() { return dp_src_begin() == dp_src_end(); }
 
   unsigned getBitWidth() const ;
   void print(raw_ostream &OS) const;
@@ -222,8 +220,15 @@ public:
     printAsOperand(OS, getBitWidth(), 0);
   }
 
-  bool replaceAllUseWith(VASTUse To,
-    SmallVectorImpl<VASTExpr*> *ReplacedUsers = 0);
+  bool replaceAllUseWith(VASTValue *To);
+
+  typedef const VASTUse *dp_dep_it;
+  static dp_dep_it dp_dep_begin(VASTValue *V);
+  static dp_dep_it dp_dep_end(VASTValue *V);
+
+  static bool is_dp_leaf(VASTValue *V) {
+    return dp_dep_begin(V) == dp_dep_end(V);
+  }
 };
 
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
@@ -376,7 +381,7 @@ public:
 
   unsigned num_operands() const { return NumOps; }
 
-  VASTUse getOperand(unsigned Idx) const {
+  VASTUse &getOperand(unsigned Idx) const {
     assert(Idx < num_operands() && "Index out of range!");
     return Ops[Idx];
   }
@@ -393,8 +398,9 @@ public:
   uint8_t getLB() const { return LB; }
 
   void print(raw_ostream &OS, unsigned UB, unsigned LB) const {
-    if (UB != getBitWidth() || LB != 0 || getName()) {
-      VASTValue::printAsOperand(OS, UB, LB);
+    // Print the bit slice.
+    if (UB != getBitWidth() || LB != 0) {
+      getOperand(0)->printAsOperand(OS, UB, LB);
       return;
     }
 
@@ -413,7 +419,7 @@ public:
 };
 
 struct VASTExprBuilder {
-  SmallVector<VASTUse, 4> Operands;
+  SmallVector<VASTValue*, 4> Operands;
   VASTExpr::Opcode Opc;
   unsigned BitWidth;
   void init(VASTExpr::Opcode opc, unsigned bitWidth) {
@@ -421,7 +427,7 @@ struct VASTExprBuilder {
     BitWidth = bitWidth;
   }
 
-  void addOperand(VASTUse U) { Operands.push_back(U); }
+  void addOperand(VASTValue *V) { Operands.push_back(V); }
 };
 
 class VASTWire :public VASTSignal {
@@ -437,7 +443,8 @@ public:
   };
 private:
   // VASTValue pointer point to the VASTExpr.
-  PointerIntPair<VASTExpr *, 2, VASTWire::Type> E;
+  VASTUse U;
+  Type Ty;
   // TODO: move to datapath.
   union {
     uint64_t Latency;
@@ -447,12 +454,12 @@ private:
   friend class VASTModule;
 
   VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "")
-    : VASTSignal(vastWire, Name, BitWidth, Attr), E(0, VASTWire::Common) {
+    : VASTSignal(vastWire, Name, BitWidth, Attr), Ty(VASTWire::Common) {
     Context.Latency = 0;
   }
 
   void setAsInput() {
-    E.setInt(VASTWire::InputPort);
+    Ty = VASTWire::InputPort;
     // Pin the signal to prevent it from being optimized away.
     Pin();
     setTimingUndef();
@@ -464,18 +471,26 @@ private:
   }
 
   void assign(VASTExpr *e, VASTWire::Type T = VASTWire::Common) {
-    E.setPointer(e);
-    E.setInt(T);
+    Ty = T;
+    U.set(e);
+    U.setUser(this);
   }
 
   void assignWithExtraDelay(VASTExpr *e, unsigned latency) {
     assign(e, VASTWire::haveExtraDelay);
     Context.Latency = latency;
   }
-public:
-  VASTExpr *getExpr() const { return E.getPointer();}
 
-  VASTWire::Type getWireType() const { return E.getInt(); }
+  VASTValue::dp_dep_it op_begin() const { return U.isInvalid() ? 0 : &U; }
+  VASTValue::dp_dep_it op_end() const { return U.isInvalid() ? 0 : &U + 1; }
+
+  friend class VASTValue;
+public:
+  VASTExpr *getExpr() const {
+    return dyn_cast_or_null<VASTExpr>(U.unwrap());
+  }
+
+  VASTWire::Type getWireType() const { return Ty; }
 
   unsigned getExtraDelayIfAny() const {
     return getWireType() == VASTWire::haveExtraDelay ? Context.Latency : 0;
@@ -489,6 +504,7 @@ public:
 
   // Print the logic to the output stream.
   void print(raw_ostream &OS) const;
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTWire *A) { return true; }
@@ -500,30 +516,30 @@ public:
 class VASTSlot : public VASTNode {
 public:
   // TODO: Store the pointer to the Slot instead the slot number.
-  typedef std::map<VASTSlot*, VASTUse> SuccVecTy;
+  typedef std::map<VASTSlot*, VASTValue*> SuccVecTy;
   typedef SuccVecTy::iterator succ_cnd_iterator;
   typedef SuccVecTy::const_iterator const_succ_cnd_iterator;
 
   // Use mapped_iterator which is a simple iterator adapter that causes a
   // function to be dereferenced whenever operator* is invoked on the iterator.
   typedef
-  std::pointer_to_unary_function<std::pair<VASTSlot*, VASTUse>, VASTSlot*>
+  std::pointer_to_unary_function<std::pair<VASTSlot*, VASTValue*>, VASTSlot*>
   slot_getter;
 
   typedef mapped_iterator<succ_cnd_iterator, slot_getter> succ_iterator;
   typedef mapped_iterator<const_succ_cnd_iterator, slot_getter>
           const_succ_iterator;
 
-  typedef std::map<VASTValue*, VASTUse> FUCtrlVecTy;
+  typedef std::map<VASTValue*, VASTValue*> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
 
   typedef SmallVector<VASTSlot*, 4> PredVecTy;
   typedef PredVecTy::iterator pred_it;
 private:
   // The relative signal of the slot: Slot register, Slot active and Slot ready.
-  VASTRegister *SlotReg;
-  VASTUse       SlotActive;
-  VASTUse       SlotReady;
+  VASTUse SlotReg;
+  VASTUse SlotActive;
+  VASTUse SlotReady;
   // The ready signals that need to wait before we go to next slot.
   FUCtrlVecTy Readys;
   // The function units that enabled at this slot.
@@ -556,22 +572,22 @@ public:
   ///
   /// @param OS       The output stream.
   /// @param SrcSlot  Which Slot are the expression printing for?
-  VASTUse buildFUReadyExpr(VASTModule &VM);
+  VASTValue *buildFUReadyExpr(VASTModule &VM);
 
   void print(raw_ostream &OS) const;
 
   const char *getName() const;
   // Getting the relative signals.
-  VASTRegister *getRegister() const { return SlotReg; }
-  VASTUse getReady() const { return SlotReady; }
-  VASTUse getActive() const { return SlotActive; }
+  VASTRegister *getRegister() const { return cast<VASTRegister>(SlotReg); }
+  VASTValue *getReady() const { return *SlotReady; }
+  VASTValue *getActive() const { return *SlotActive; }
 
   unsigned getSlotNum() const { return getSubClassData(); }
   // The start slot of parent state(MachineBasicBlock)
   unsigned getParentIdx() const { return ParentIdx; }
 
   // TODO: Rename to addSuccSlot.
-  void addNextSlot(VASTSlot *NextSlot, VASTUse Cnd);
+  void addNextSlot(VASTSlot *NextSlot, VASTValue *Cnd);
   bool hasNextSlot(VASTSlot *NextSlot) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -580,22 +596,22 @@ public:
   // Next VASTSlot iterator. 
   succ_iterator succ_begin() {
     return map_iterator(NextSlots.begin(),
-                        slot_getter(pair_first<VASTSlot*, VASTUse>));
+                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
   }
 
   const_succ_iterator succ_begin() const {
     return map_iterator(NextSlots.begin(),
-                        slot_getter(pair_first<VASTSlot*, VASTUse>));
+                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
   }
 
   succ_iterator succ_end() {
     return map_iterator(NextSlots.end(),
-                        slot_getter(pair_first<VASTSlot*, VASTUse>));
+                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
   }
 
   const_succ_iterator succ_end() const {
     return map_iterator(NextSlots.end(),
-                        slot_getter(pair_first<VASTSlot*, VASTUse>));
+                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
   }
 
   // Predecessor slots of this slot.
@@ -603,19 +619,19 @@ public:
   pred_it pred_end() { return PredSlots.end(); }
 
   // Signals need to be enabled at this slot.
-  void addEnable(VASTValue *V, VASTUse Cnd);
+  void addEnable(VASTValue *V, VASTValue *Cnd);
   bool isEnabled(VASTValue *V) const { return Enables.count(V); }
   const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
   const_fu_ctrl_it enable_end() const { return Enables.end(); }
 
   // Signals need to set before this slot is ready.
-  void addReady(VASTValue *V, VASTUse Cnd);
+  void addReady(VASTValue *V, VASTValue *Cnd);
   bool readyEmpty() const { return Readys.empty(); }
   const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
   const_fu_ctrl_it ready_end() const { return Readys.end(); }
 
   // Signals need to be disabled at this slot.
-  void addDisable(VASTValue *V, VASTUse Cnd);
+  void addDisable(VASTValue *V, VASTValue *Cnd);
   bool isDiabled(VASTValue *V) const { return Disables.count(V); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
@@ -657,19 +673,16 @@ template<> struct GraphTraits<VASTSlot*> {
 
 class VASTRegister : public VASTSignal {
 public:
-  typedef ArrayRef<VASTUse> AndCndVec;
+  typedef ArrayRef<VASTValue*> AndCndVec;
 private:
   unsigned InitVal;
 
-  // the first key VASTWire is Assignment condition. The second value VASTUse is
+  // the first key VASTWire is Assignment condition. The second value is
   // assignment value.
-  typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
+  typedef DenseMap<VASTUse*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns;
 
-  // The slots that this register are assigned.
-  std::set<VASTSlot*> Slots;
-
-  void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
+  void addAssignment(VASTUse *Src, VASTUse *AssignCnd);
 
   friend class VASTModule;
 public:
@@ -680,7 +693,6 @@ public:
     assert(use_empty() && "Cannot clear assignments!");
     // TODO: Release the Uses and Wires.
     Assigns.clear();
-    Slots.clear();
   }
 
   typedef AssignMapTy::const_iterator assign_itertor;
@@ -697,11 +709,6 @@ public:
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastRegister;
   }
-
-  // get the Slots begin and end iterator.
-  typedef std::set<VASTSlot*>::const_iterator slot_iterator;
-  slot_iterator slots_begin() { return Slots.begin(); }
-  slot_iterator slots_end() { return Slots.end();  }
 
   static void printCondition(raw_ostream &OS, const VASTSlot *Slot,
                              const AndCndVec &Cnds);
@@ -917,28 +924,25 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTExpr *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+  VASTExpr *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                        unsigned BitWidth);
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                       unsigned BitWidth);
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTUse Op, unsigned BitWidth);
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op, unsigned BitWidth);
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
                       unsigned BitWidth);
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
-                      VASTUse Op2, unsigned BitWidth);
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0, VASTValue *Op1,
+                       VASTValue *Op2, unsigned BitWidth);
   VASTValue *buildExpr(VASTExprBuilder &Builder) {
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
-  VASTValue *buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB);
+  VASTValue *buildBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);
 
-  VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+  VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
                             unsigned BitWidth);
-  bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
-  VASTExpr *updateExpr(VASTExpr *E, VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops);
-
-  VASTValue *buildNotExpr(VASTUse U);
+  VASTValue *buildNotExpr(VASTValue *U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
@@ -953,9 +957,10 @@ public:
   slot_iterator slot_begin() { return Slots.begin(); }
   slot_iterator slot_end() { return Slots.end(); }
 
-  void addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
-                     SmallVectorImpl<VASTUse> &Cnds, bool AddSlotActive = true);
-  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds,
+  void addAssignment(VASTRegister *Dst, VASTValue *Src, VASTSlot *Slot,
+                     SmallVectorImpl<VASTValue*> &Cnds,
+                     bool AddSlotActive = true);
+  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValue*> &Cnds,
                            bool AddSlotActive = true);
 
   VASTValue *assign(VASTWire *W, VASTValue *V, VASTWire::Type T = VASTWire::Common);
@@ -1004,27 +1009,27 @@ public:
 // Helper functions
 // Traverse the use tree to get the registers.
 template<typename VisitPathFunc>
-void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
-  typedef VASTUse::iterator ChildIt;
+void DepthFirstTraverseDepTree(VASTValue *DepTree, VisitPathFunc VisitPath) {
+  typedef VASTValue::dp_dep_it ChildIt;
   // Use seperate node and iterator stack, so we can get the path vector.
-  typedef SmallVector<VASTUse, 16> NodeStackTy;
+  typedef SmallVector<VASTValue*, 16> NodeStackTy;
   typedef SmallVector<ChildIt, 16> ItStackTy;
   NodeStackTy NodeWorkStack;
   ItStackTy ItWorkStack;
   // Remember what we had visited.
-  std::set<VASTUse> VisitedUses;
+  std::set<VASTValue*> VisitedUses;
 
   // Put the root.
   NodeWorkStack.push_back(DepTree);
-  ItWorkStack.push_back(DepTree.dp_src_begin());
+  ItWorkStack.push_back(VASTValue::dp_dep_begin(DepTree));
 
   while (!ItWorkStack.empty()) {
-    VASTUse Node = NodeWorkStack.back();
+    VASTValue *Node = NodeWorkStack.back();
 
     ChildIt It = ItWorkStack.back();
 
     // Do we reach the leaf?
-    if (Node.is_dp_leaf()) {
+    if (VASTValue::is_dp_leaf(Node)) {
       VisitPath(NodeWorkStack);
       NodeWorkStack.pop_back();
       ItWorkStack.pop_back();
@@ -1032,14 +1037,14 @@ void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
     }
 
     // All sources of this node is visited.
-    if (It == Node.dp_src_end()) {
+    if (It == VASTValue::dp_dep_end(Node)) {
       NodeWorkStack.pop_back();
       ItWorkStack.pop_back();
       continue;
     }
 
     // Depth first traverse the child of current node.
-    VASTUse ChildNode = *It;
+    VASTValue *ChildNode = *It;
     ++ItWorkStack.back();
 
     // Had we visited this node? If the Use slots are same, the same subtree
@@ -1048,7 +1053,7 @@ void DepthFirstTraverseDepTree(VASTUse DepTree, VisitPathFunc VisitPath) {
 
     // If ChildNode is not visit, go on visit it and its childrens.
     NodeWorkStack.push_back(ChildNode);
-    ItWorkStack.push_back(ChildNode.dp_src_begin());
+    ItWorkStack.push_back(VASTValue::dp_dep_begin(ChildNode));
   }
 }
 

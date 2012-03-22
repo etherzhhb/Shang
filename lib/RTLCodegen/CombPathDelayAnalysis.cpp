@@ -67,7 +67,7 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
 
   void writeConstraintsForDstReg(VASTRegister *DstReg);
 
-  void extractTimingPaths(ValueAtSlot *DstVAS, VASTUse DepTree,
+  void extractTimingPaths(ValueAtSlot *DstVAS, VASTValue *DepTree,
                           SmallVectorImpl<TimingPath*> &Paths);
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -87,7 +87,7 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
     initializeCombPathDelayAnalysisPass(*PassRegistry::getPassRegistry());
   }
 
-  TimingPath *createTimingPath(ValueAtSlot *Dst, ArrayRef<VASTUse> Path);
+  TimingPath *createTimingPath(ValueAtSlot *Dst, ArrayRef<VASTValue*> Path);
 };
 }
 
@@ -142,8 +142,8 @@ struct TimgPathBuilder {
   TimgPathBuilder(CombPathDelayAnalysis &a, ValueAtSlot *V,
                   SmallVectorImpl<TimingPath*> &P) : A(a), DstVAS(V), Paths(P){}
 
-  void operator() (ArrayRef<VASTUse> PathArray) {
-    VASTUse SrcUse = PathArray.back();
+  void operator() (ArrayRef<VASTValue*> PathArray) {
+    VASTValue *SrcUse = PathArray.back();
     if (isa<VASTRegister>(SrcUse)){
       TimingPath *P = A.createTimingPath(DstVAS, PathArray);
       // Ignore the false path.
@@ -153,7 +153,7 @@ struct TimgPathBuilder {
 };
 
 TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
-                                                    ArrayRef<VASTUse> Path) {
+                                                    ArrayRef<VASTValue*> Path) {
   // Add the end slots.
   VASTRegister *SrcReg = cast<VASTRegister>(Path.back());
 
@@ -162,7 +162,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
        I != E; ++I) {
-    VASTSlot *SrcSlot = I->first->getSlot();
+    VASTSlot *SrcSlot = cast<VASTWire>(*I->first)->getSlot();
     ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
 
     // Update the PathDelay if the source VAS reaches DstSlot.
@@ -184,7 +184,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
 
   P->Path[0] = Dst->getValue();
   for (unsigned i = 0; i < Path.size(); ++i) {
-    VASTValue *V = *Path[i];
+    VASTValue *V = Path[i];
     P->Path[i + 1] = V;
 
     // Accumulates the block box latency.
@@ -227,11 +227,11 @@ void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = DstReg->assign_begin(), E = DstReg->assign_end();
        I != E; ++I) {
-    VASTSlot *S = I->first->getSlot();
+    VASTSlot *S = cast<VASTWire>(*I->first)->getSlot();
     ValueAtSlot *DstVAS = RtlSSA->getValueASlot(DstReg, S);
 
     // Paths for the assigning value
-    extractTimingPaths(DstVAS, I->first, Paths);
+    extractTimingPaths(DstVAS, *I->first, Paths);
     // Paths for the condition.
     extractTimingPaths(DstVAS, *I->second, Paths);
   }
@@ -249,17 +249,17 @@ void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
 }
 
 void CombPathDelayAnalysis::extractTimingPaths(ValueAtSlot *DstVAS,
-                                               VASTUse DepTree,
+                                               VASTValue *DepTree,
                                                SmallVectorImpl<TimingPath*>
                                                &Paths) {
-  VASTValue *SrcValue = *DepTree;
+  VASTValue *SrcValue = DepTree;
 
   // If Define Value is immediate or symbol, skip it.
   if (!SrcValue) return;
 
   // Trivial case: register to register path.
   if (VASTRegister *SrcReg = dyn_cast<VASTRegister>(SrcValue)){
-    VASTUse Path[] = { VASTUse(SrcReg) };
+    VASTValue *Path[] = { SrcReg };
     TimingPath *P = createTimingPath(DstVAS, Path);
     assert(P && "A trivial path is a false path?");
     Paths.push_back(P);
