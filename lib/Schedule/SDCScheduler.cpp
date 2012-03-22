@@ -171,7 +171,10 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
   //The table of the ALAP and the VSUnits.
   Step2SUMap IdenticalMap;
   Step2SUMap VirMap;
-  BoundSUVec OrderVec;
+  Step2SUMap ResMap;
+  typedef std::pair<const VSUnit*, const VSUnit*> FUPair;
+  typedef std::vector<FUPair> FUVec;
+  FUVec ResVec;
 
   BoundSUVec Vec = Map[FUType];
   if(Vec.size() <= 1) return;
@@ -204,7 +207,6 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
       BoundSUVec BV = it->second;
       const VSUnit* U = *BV.begin();
       unsigned MoveSlot = CurSlot - U->getLatency();
-      OrderVec.push_back(U);
       unsigned counter = 0;
       ////Find the operations that have the same inputs.
       //for(Step2SUMap::iterator II = IdenticalMap.begin(), EI =IdenticalMap.end();
@@ -229,19 +231,18 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
       //}
 
       if(BV.size() > AverageNum){
-        BoundSUVec::reverse_iterator rit = BV.rbegin();
         for(unsigned i = 0 , j = BV.size() - AverageNum; i < j; i++){
-          const VSUnit* MU = *rit;
+          const VSUnit* MU = BV.back();
           unsigned Slot = getASAPStep(MU);
           if(Slot < CurSlot){
             VirMap[MoveSlot].push_back(MU);
+            BV.pop_back();
             ++counter;
           }
-          ++rit;
         }
 
         //Can not satisfy the Resource Constraints.
-        if((BV.size() - counter) > AverageNum) break;
+        if(BV.size() > AverageNum) break;
 
         //Sort the Inserted Vector in ASAP descending order
         if(counter){
@@ -251,28 +252,46 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
         }//finish reorder.
       }//finish a step.
 
+      ResMap[CurSlot] = BV;
       VirMap.erase(it);
     }//finish a search.
     if(VirMap.empty())
       finish = true;
     else{
       VirMap.clear();
-      OrderVec.clear();
+      ResMap.clear();
       ++AverageNum;
     }
   }//finish all.
   DEBUG(dbgs()<<"Final AverageNum is:"<<AverageNum<<"\n");
-  // Build the Control Edges.
-  for(unsigned i = 0,e = OrderVec.size(); i < e; i++){
-    VSUnit* Dst = const_cast<VSUnit*>(OrderVec[i]);
-    unsigned next = i + 1;
-    if(next >= OrderVec.size()) continue;
-    VSUnit* Src = const_cast<VSUnit*>(OrderVec[next]);
-    if(isOverlap(Dst,Src))
-      Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
+
+  // Build the Map contains the PreBind result.
+  while(!ResMap.empty()){
+    unsigned DstStep = getMaxSlot(ResMap);
+    Step2SUMap::iterator it = ResMap.find(DstStep);
+    BoundSUVec DstVec = ResMap[DstStep];
+    ResMap.erase(it);
+    if(ResMap.empty()) break;
+    unsigned SrcStep = getMaxSlot(ResMap);
+    BoundSUVec SrcVec = ResMap[SrcStep];
+    for(BoundSUVec::iterator DI = DstVec.begin(), DE = DstVec.end(); DI != DE; DI++){
+      const VSUnit* DstU = *DI;
+      for(BoundSUVec::iterator SI = SrcVec.begin(), SE = SrcVec.end(); SI != SE; SI++){
+        const VSUnit* SrcU = *SI;
+        if(isOverlap(DstU,SrcU))
+          ResVec.push_back(std::make_pair(DstU, SrcU));
+      }
+    }
   }
 
-  OrderVec.clear();
+  // Build the Control Edges.
+  for(FUVec::iterator FI = ResVec.begin(), FE = ResVec.end(); FI != FE; FI++){
+    VSUnit* Dst = const_cast<VSUnit*>(FI->first);
+    VSUnit* Src = const_cast<VSUnit*>(FI->second);
+    Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
+  }
+
+  ResVec.clear();
   buildFDepHD(true);
 }
 
