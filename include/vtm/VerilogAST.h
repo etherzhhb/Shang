@@ -446,9 +446,8 @@ private:
 
   friend class VASTModule;
 
-  VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "",
-           VASTExpr *e = 0, VASTWire::Type T = VASTWire::Common)
-    : VASTSignal(vastWire, Name, BitWidth, Attr), E(e, T) {
+  VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "")
+    : VASTSignal(vastWire, Name, BitWidth, Attr), E(0, VASTWire::Common) {
     Context.Latency = 0;
   }
 
@@ -460,7 +459,7 @@ private:
   }
 
   void setSlot(VASTSlot *Slot) {
-    //assert(getOpcode() == cpAssignAtSlot && "setSlot on wrong type!");
+    assert(getWireType() == VASTWire::AssignCond && "setSlot on wrong type!");
     Context.Slot = Slot;
   }
 
@@ -920,26 +919,26 @@ public:
 
   VASTExpr *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
                        unsigned BitWidth);
-  VASTExpr *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
                       unsigned BitWidth);
-  VASTExpr *buildExpr(VASTExpr::Opcode Opc, VASTUse Op, unsigned BitWidth);
-  VASTExpr *buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTUse Op, unsigned BitWidth);
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
                       unsigned BitWidth);
-  VASTExpr *buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
+  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
                       VASTUse Op2, unsigned BitWidth);
-  VASTExpr *buildExpr(VASTExprBuilder &Builder) {
+  VASTValue *buildExpr(VASTExprBuilder &Builder) {
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
-  VASTExpr *buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB);
+  VASTValue *buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB);
 
-  VASTExpr *buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                         unsigned BitWidth);
+  VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                            unsigned BitWidth);
   bool replaceAndUpdateUseTree(VASTValue *From, VASTUse To);
 
   VASTExpr *updateExpr(VASTExpr *E, VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops);
 
-  VASTExpr *buildNotExpr(VASTUse U);
+  VASTValue *buildNotExpr(VASTUse U);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,

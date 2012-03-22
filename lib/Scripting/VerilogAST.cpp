@@ -636,17 +636,17 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
   }
 }
 
-VASTExpr *VASTModule::buildNotExpr(VASTUse U) {
+VASTValue *VASTModule::buildNotExpr(VASTUse U) {
   return buildExpr(VASTExpr::dpNot, U, U.getBitWidth());
 }
 
-VASTExpr *VASTModule::buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB) {
+VASTValue *VASTModule::buildBitSlice(VASTUse U, uint8_t UB, uint8_t LB) {
   VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
   return new (Allocator.Allocate<VASTExpr>()) VASTExpr(Op, UB, LB);
 }
 
-VASTExpr* VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
-                              unsigned BitWidth) {
+VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
+                                 unsigned BitWidth) {
   switch (Opc) {
   case VASTExpr::dpNot: {
      // Try to fold the not expression.
@@ -664,7 +664,7 @@ VASTExpr* VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr * VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
+VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
                                       VASTUse RHS, unsigned BitWidth) {
   // Try to make RHS to be an constant.
   /*if (LHS.isImm()) std::swap(LHS, RHS);
@@ -697,8 +697,8 @@ VASTExpr * VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTUse LHS,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
-                              unsigned BitWidth) {
+VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
+                                 unsigned BitWidth) {
   switch (Opc) {
   default: break;
   case VASTExpr::dpAnd: case VASTExpr::dpOr: case VASTExpr::dpXor:
@@ -709,14 +709,14 @@ VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse LHS, VASTUse RHS,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
-                              VASTUse Op2, unsigned BitWidth) {
+VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTUse Op0, VASTUse Op1,
+                                 VASTUse Op2, unsigned BitWidth) {
   VASTUse Ops[] = { Op0, Op1, Op2 };
   return buildExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
-                              unsigned BitWidth) {
+VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTUse> Ops,
+                                 unsigned BitWidth) {
   switch (Opc) {
   default: break;
   case VASTExpr::dpNot: case VASTExpr::dpAssign: {
@@ -740,12 +740,12 @@ bool VASTModule::replaceAndUpdateUseTree(VASTValue *From, VASTUse To) {
   // Update the use list of DstWire.
   bool AllReplaced = From->replaceAllUseWith(To, &UpdatedUsers);
   // Try to re-evaluate the users.
-  while (!UpdatedUsers.empty()) {
-    VASTExpr *V = UpdatedUsers.back();
-    UpdatedUsers.pop_back();
+  //while (!UpdatedUsers.empty()) {
+  //  VASTValue *V = UpdatedUsers.back();
+  //  UpdatedUsers.pop_back();
 
-    V = buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth());
-  }
+  //  V = buildExpr(V->getOpcode(), V->getOperands(), V->getBitWidth());
+  //}
 
   return AllReplaced;
 }
@@ -779,10 +779,10 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
   if (AddSlotActive) Cnds.push_back(Slot->getActive());
-  VASTExpr *AssignAtSlot = buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValue *AssignAtSlot = buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "",
-                      AssignAtSlot, VASTWire::AssignCond);
+  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
+  assign(Wire, AssignAtSlot, VASTWire::AssignCond);
   Wire->setSlot(Slot);
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();

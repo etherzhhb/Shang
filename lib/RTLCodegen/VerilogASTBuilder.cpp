@@ -614,8 +614,8 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
         Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
 
-      VASTExpr *Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops, 
-                                     Info.getBitWidth());
+      VASTValue *Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops, 
+                                      Info.getBitWidth());
       VM->assignWithExtraDelay(ResultWire, Expr, Latency);
     } else
       indexVASTValue(RetPortIdx, 0);
@@ -1327,7 +1327,6 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
     ++p;
 
     // Create the product.
-    std::string ProductWireName = NamePrefix + utostr_32(++NameIdx) + "p";
     // Add the product to the operand list of the sum.
     SumOps.push_back(VM->buildExpr(VASTExpr::dpAnd, ProductOps, SizeInBits));
 
@@ -1342,9 +1341,7 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   }
 
   // Or the products together to build the SOP (Sum of Product).
-  std::string SumWireName = NamePrefix + utostr_32(++NameIdx) + "s";
-  VASTExpr *SOP = VM->buildExpr(VASTExpr::dpOr, SumOps, SizeInBits);
-
+  VASTValue *SOP = VM->buildExpr(VASTExpr::dpOr, SumOps, SizeInBits);
 
   if (isComplement) SOP = VM->buildExpr(VASTExpr::dpNot, SOP, SizeInBits);
 
