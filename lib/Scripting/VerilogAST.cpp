@@ -192,7 +192,7 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   // Someone is using the signal.
   SlotActive.setUser(0);
 
-  Active->assign(VM->buildExpr(VASTExpr::dpAnd, SlotReg, Ready, 1));
+  VM->assign(Active, VM->buildExpr(VASTExpr::dpAnd, SlotReg, Ready, 1));
   // We need alias slot to build the ready signal, keep it as unknown now.
 
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
@@ -261,7 +261,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
   }
 
   // All signals should be 1.
-  cast<VASTWire>(getReady())->assign(Mod.buildExpr(VASTExpr::dpAnd, Ops, 1));
+  Mod.assign(cast<VASTWire>(getReady()), Mod.buildExpr(VASTExpr::dpAnd, Ops, 1));
 }
 
 bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
@@ -798,6 +798,17 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTUse Src, VASTSlot *Slot,
 
   VASTUse *U = new (UseAllocator.Allocate()) VASTUse(Src);
   Dst->addAssignment(U, buildAssignCnd(Slot, Cnds, AddSlotActive));
+}
+
+VASTValue *VASTModule::assign(VASTWire *W, VASTValue *V, VASTWire::Type T) {
+  W->assign(cast<VASTExpr>(V));
+  return W;
+}
+
+VASTValue *VASTModule::assignWithExtraDelay(VASTWire *W, VASTValue *V,
+                                            unsigned latency) {
+  W->assignWithExtraDelay(cast<VASTExpr>(V), latency);
+  return W;
 }
 
 bool VASTModule::eliminateConstRegisters() {

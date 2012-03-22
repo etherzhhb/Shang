@@ -463,10 +463,6 @@ private:
     //assert(getOpcode() == cpAssignAtSlot && "setSlot on wrong type!");
     Context.Slot = Slot;
   }
-public:
-  VASTExpr *getExpr() const { return E.getPointer();}
-
-  VASTWire::Type getWireType() const { return E.getInt(); }
 
   void assign(VASTExpr *e, VASTWire::Type T = VASTWire::Common) {
     E.setPointer(e);
@@ -477,6 +473,10 @@ public:
     assign(e, VASTWire::haveExtraDelay);
     Context.Latency = latency;
   }
+public:
+  VASTExpr *getExpr() const { return E.getPointer();}
+
+  VASTWire::Type getWireType() const { return E.getInt(); }
 
   unsigned getExtraDelayIfAny() const {
     return getWireType() == VASTWire::haveExtraDelay ? Context.Latency : 0;
@@ -959,6 +959,8 @@ public:
   VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTUse> &Cnds,
                            bool AddSlotActive = true);
 
+  VASTValue *assign(VASTWire *W, VASTValue *V, VASTWire::Type T = VASTWire::Common);
+  VASTValue *assignWithExtraDelay(VASTWire *W, VASTValue *V, unsigned latency);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);
