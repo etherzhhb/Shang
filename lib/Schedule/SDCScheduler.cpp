@@ -96,9 +96,10 @@ void SDCScheduler::addDependencyConstraints(lprec *lp) {
   }
 }
 
-void SDCScheduler::allcoMem(unsigned FUType, Step2SUMap &Map){
+void SDCScheduler::PreBindSingleFU(unsigned FUType, Step2SUMap &Map){
   //The table of the ALAP and the VSUnits.
   Step2SUMap IdenticalMap;
+  //The vector of the PreBindSingleFU results.
   BoundSUVec OrderVec;
 
   BoundSUVec Vec = Map[FUType];
@@ -118,7 +119,7 @@ void SDCScheduler::allcoMem(unsigned FUType, Step2SUMap &Map){
         sortVector(MI, IdenticalMap, CurSlot);
   }
 
-  //List Scheduling
+  //PreBind single FU.
   unsigned AverageNum = 1;
   while(!IdenticalMap.empty()){
     unsigned MaxALAP = getMaxSlot(IdenticalMap);
@@ -166,24 +167,29 @@ void SDCScheduler::allcoMem(unsigned FUType, Step2SUMap &Map){
   buildFDepHD(true);
 }
 
-void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
-  //The table of the ALAP and the VSUnits.
+void SDCScheduler::PreBindMultiFU(unsigned FUType, Step2SUMap &Map){
+  // The table of the ALAP and the VSUnits.
   Step2SUMap IdenticalMap;
+  // The copy of the IdenticalMap that need in PreBind.
   Step2SUMap VirMap;
+  // The table contains the whole PreBind result.
   Step2SUMap ResMap;
   typedef std::pair<const VSUnit*, const VSUnit*> FUPair;
   typedef std::vector<FUPair> FUVec;
+  // The Vector of the VSUnit pairs that need add a Control Edge.
   FUVec ResVec;
 
+  // Get the specific VSUnits from the FU Map.
   BoundSUVec Vec = Map[FUType];
   if(Vec.size() <= 1) return;
 
-  //Map the VSUnits to their ALAPStep.
+  // Map the VSUnits to their ALAPStep.
   for(BoundSUVec::iterator iB = Vec.begin(),eB = Vec.end(); iB != eB; iB++){
     const VSUnit *V = *iB;
     IdenticalMap[getALAPStep(V)].push_back(V);
   }
 
+  // If VSUnits have the same ALAP slot, then sort them in ASAP descending order.
   for(Step2SUMap::iterator SI = IdenticalMap.begin(), SE = IdenticalMap.end();
       SI != SE; SI++ ){
     BoundSUVec MI = SI->second;
@@ -192,13 +198,14 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
       sortVector(MI, IdenticalMap, CurSlot);
   }
 
-  //List Scheduling
+  // PreBind Multi-FU.
   unsigned AverageNum = 1;
   bool finish = false;
   while(!finish){
     VirMap = IdenticalMap;
 
-    //Test for AverageNum.
+    // Test for AverageNum. Here use the iterative method to find out the suitable
+    // AverageNum.
     while(!VirMap.empty()){
       unsigned MaxALAP = getMaxSlot(VirMap);
       Step2SUMap::iterator it = VirMap.find(MaxALAP);
@@ -240,10 +247,10 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
           }
         }
 
-        //Can not satisfy the Resource Constraints.
+        // AverageNum Can not satisfy the resource distribution.
         if(BV.size() > AverageNum) break;
 
-        //Sort the Inserted Vector in ASAP descending order
+        //Sort the Inserted Vector in ASAP descending order.
         if(counter){
           BoundSUVec Vec = VirMap[MoveSlot];
           if(Vec.size() > 1)
@@ -264,7 +271,7 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
   }//finish all.
   DEBUG(dbgs()<<"Final AverageNum is:"<<AverageNum<<"\n");
 
-  // Build the Map contains the PreBind result.
+  // Build the Vector of the VSUnit pairs that need add a Control Edge.
   while(!ResMap.empty()){
     unsigned DstStep = getMaxSlot(ResMap);
     Step2SUMap::iterator it = ResMap.find(DstStep);
@@ -295,10 +302,10 @@ void SDCScheduler::PreBindFU(unsigned FUType, Step2SUMap &Map){
 }
 
 void SDCScheduler::PreBind() {
-  //The table of the ALAP and the VSUnits.
+  //The table of the VSUnits that need PreBind.
   Step2SUMap FUMap;
 
-  //Get the VSUnits that need add into the resource constraints.
+  //Get the VSUnits that need add into the PreBind.
   for(VSchedGraph::sched_iterator I = State.sched_begin(), E = State.sched_end();
     I != E; ++I) {
     const VSUnit *SV = *I;
@@ -308,13 +315,13 @@ void SDCScheduler::PreBind() {
       FUMap[SV->getFUType()].push_back(SV);
   }
 
-  allcoMem(VFUs::MemoryBus, FUMap);
-  allcoMem(VFUs::BRam, FUMap);
-  allcoMem(VFUs::CalleeFN, FUMap);
-  PreBindFU(VFUs::Mult, FUMap);
-  PreBindFU(VFUs::Shift, FUMap);
-  PreBindFU(VFUs::AddSub, FUMap);
-  PreBindFU(VFUs::ICmp, FUMap);
+  PreBindSingleFU(VFUs::MemoryBus, FUMap);
+  PreBindSingleFU(VFUs::BRam, FUMap);
+  PreBindSingleFU(VFUs::CalleeFN, FUMap);
+  PreBindMultiFU(VFUs::Mult, FUMap);
+  PreBindMultiFU(VFUs::Shift, FUMap);
+  PreBindMultiFU(VFUs::AddSub, FUMap);
+  PreBindMultiFU(VFUs::ICmp, FUMap);
 }
 
 template<typename FuncTy>

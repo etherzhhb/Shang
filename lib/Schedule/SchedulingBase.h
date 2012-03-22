@@ -287,9 +287,9 @@ class SDCScheduler : public SchedulingBase {
     // Avoid the resources conflict for the function units.
     void PreBind();
     // PreBind the Memory.
-    void allcoMem(unsigned FUType, Step2SUMap& Map);
+    void PreBindSingleFU(unsigned FUType, Step2SUMap& Map);
     // PreBind the FUs.
-    void PreBindFU(unsigned FUType, Step2SUMap &Map);
+    void PreBindMultiFU(unsigned FUType, Step2SUMap &Map);
 
     // Build the schedule object function.
     void buildASAPObject();
