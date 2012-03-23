@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
   Builder.OptLevel = 3;
   Builder.SizeLevel = 2;
   Builder.DisableSimplifyLibCalls = true;
-  Builder.Inliner = createAlwaysInlineFunctionPass();
+  Builder.Inliner = createHLSInlinerPass();
 
   PassManager Passes;
   Passes.add(new TargetData(*target->getTargetData()));
