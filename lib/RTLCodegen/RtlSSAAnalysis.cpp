@@ -193,7 +193,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
 
   for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
        I != E; ++I) {
-    VASTSlot *DefSlot = cast<VASTWire>(*I->first)->getSlot();
+    VASTSlot *DefSlot = I->first->getSlot();
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
 
     ValueAtSlot::LiveInInfo LI = UseSI->getLiveIn(DefVAS);
@@ -211,7 +211,7 @@ void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
 
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = Reg->assign_begin(), E = Reg->assign_end(); I != E; ++I){
-      VASTSlot *S = cast<VASTWire>(*I->first)->getSlot();
+      VASTSlot *S = I->first->getSlot();
 
       // Create the origin VAS.
       ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S);
@@ -233,11 +233,11 @@ void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
 
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = R->assign_begin(), E = R->assign_end(); I != E; ++I) {
-      VASTSlot *S = cast<VASTWire>(*I->first)->getSlot();
+      VASTSlot *S = I->first->getSlot();
       // Create the origin VAS.
       ValueAtSlot *VAS = getValueASlot(R, S);
       // Build dependence for conditions
-      visitDepTree(*I->first, VAS);
+      visitDepTree(I->first, VAS);
       // Build dependence for the assigning value.
       visitDepTree(*I->second, VAS);
     }

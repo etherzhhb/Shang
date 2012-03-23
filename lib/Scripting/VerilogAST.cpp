@@ -404,13 +404,12 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
                            unsigned initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
-void VASTRegister::addAssignment(VASTUse *Src, VASTUse *AssignCnd) {
+void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
   bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
   assert(inserted &&  "Assignment condition conflict detected!");
-  assert(cast<VASTWire>(*AssignCnd)->getWireType() == VASTWire::AssignCond
+  assert(AssignCnd->getWireType() == VASTWire::AssignCond
          && "Expect wire for assign condition!");
   Src->setUser(this);
-  AssignCnd->setUser(this);
 }
 
 //VASTUse VASTRegister::getConstantValue() const {
@@ -461,10 +460,10 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   bool UseSwitch = Assigns.size() > 1;
 
   typedef std::vector<VASTValue*> OrVec;
-  typedef std::map<VASTUse*, OrVec> CSEMapTy;
+  typedef std::map<VASTValue*, OrVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
   for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
-    SrcCSEMap[I->second].push_back(*I->first);
+    SrcCSEMap[*I->second].push_back(I->first);
 
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {
@@ -489,7 +488,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     else OS.if_begin(Pred);
     printAsOperand(OS);
     OS << " <= ";
-    I->first->print(OS);
+    I->first->printAsOperand(OS);
     OS << ";\n";
     OS.exit_block();
 
@@ -742,8 +741,7 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValue *Src, VASTSlot *Slot
                                bool AddSlotActive) {
   if (Src) {
     VASTWire *Cnd = buildAssignCnd(Slot, Cnds, AddSlotActive);
-    Dst->addAssignment(new (UseAllocator.Allocate()) VASTUse(Src),
-                       new (UseAllocator.Allocate()) VASTUse(Cnd));
+    Dst->addAssignment(new (UseAllocator.Allocate()) VASTUse(Src), Cnd);
   }
 }
 

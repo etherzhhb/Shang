@@ -162,7 +162,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
        I != E; ++I) {
-    VASTSlot *SrcSlot = cast<VASTWire>(*I->first)->getSlot();
+    VASTSlot *SrcSlot = I->first->getSlot();
     ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
 
     // Update the PathDelay if the source VAS reaches DstSlot.
@@ -227,11 +227,11 @@ void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = DstReg->assign_begin(), E = DstReg->assign_end();
        I != E; ++I) {
-    VASTSlot *S = cast<VASTWire>(*I->first)->getSlot();
+    VASTSlot *S = I->first->getSlot();
     ValueAtSlot *DstVAS = RtlSSA->getValueASlot(DstReg, S);
 
     // Paths for the assigning value
-    extractTimingPaths(DstVAS, *I->first, Paths);
+    extractTimingPaths(DstVAS, I->first, Paths);
     // Paths for the condition.
     extractTimingPaths(DstVAS, *I->second, Paths);
   }

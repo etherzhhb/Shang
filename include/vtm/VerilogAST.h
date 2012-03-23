@@ -679,10 +679,10 @@ private:
 
   // the first key VASTWire is Assignment condition. The second value is
   // assignment value.
-  typedef DenseMap<VASTUse*, VASTUse*> AssignMapTy;
+  typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
   AssignMapTy Assigns;
 
-  void addAssignment(VASTUse *Src, VASTUse *AssignCnd);
+  void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
 
   friend class VASTModule;
 public:
