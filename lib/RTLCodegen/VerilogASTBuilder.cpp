@@ -469,12 +469,12 @@ void VerilogASTBuilder::emitIdleState() {
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
   unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
-  IdleSlot->addNextSlot(VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
-                        StartPort);
-  IdleSlot->addNextSlot(IdleSlot, VM->buildNotExpr(StartPort));
+  VM->addSlotSucc(IdleSlot, VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
+                  StartPort);
+  VM->addSlotSucc(IdleSlot, IdleSlot, VM->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.
-  IdleSlot->addDisable(VM->getPort(VASTModule::Finish),
+  VM->addSlotDisable(IdleSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
                        VM->getAlwaysTrue());
   SmallVector<VASTValue*, 1> Cnds(1, StartPort);
   emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds);
@@ -812,13 +812,13 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
       assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
              "Cannot handle predicated BrCnd");
       VASTValue *Cnd = createCnd(CndOp);
-      CurSlot->addNextSlot(TargetSlot, Cnd);
+      VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
 
       // Emit control operation for next state.
       if (TargetBB == CurBB && Pipelined)
         // The loop op of pipelined loop enable next slot explicitly.
-        CurSlot->addNextSlot(VM->getOrCreateNextSlot(CurSlot),
-                             VM->getAlwaysTrue());
+        VM->addSlotSucc(CurSlot, VM->getOrCreateNextSlot(CurSlot),
+                        VM->getAlwaysTrue());
 
       // Emit the first micro state of the target state.
       emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
@@ -900,7 +900,7 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
   OS << "$finish();\n";
   OS.exit_block();
 
-  Slot->addNextSlot(VM->getOrCreateSlot(0, 0), VM->getAlwaysTrue());
+  VM->addSlotSucc(Slot, VM->getOrCreateSlot(0, 0), VM->getAlwaysTrue());
 }
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
@@ -1021,7 +1021,8 @@ void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
   }
 
   if (ReadyPort)
-    CurSlot->addReady(ReadyPort, createCnd(*VInstrInfo::getPredOperand(MI)));
+    VM->addSlotReady(CurSlot, ReadyPort,
+                     createCnd(*VInstrInfo::getPredOperand(MI)));
 
   // The dst operand of ReadFU change to immediate if it is dead.
   if (MI->getOperand(0).isReg() && MI->getOperand(0).getReg())
@@ -1046,7 +1047,8 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     break;
   }
 
-  Slot->addDisable(EnablePort, createCnd(*VInstrInfo::getPredOperand(MI)));
+  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort),
+                     createCnd(*VInstrInfo::getPredOperand(MI)));
 }
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
@@ -1064,7 +1066,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getSymbol(StartPortName);
-  Slot->addEnable(StartSignal, Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(StartSignal), Pred);
 
   const Function *FN = M->getFunction(CalleeName);
   if (FN && !FN->isDeclaration()) {
@@ -1150,8 +1152,9 @@ void VerilogASTBuilder::emitOpRet(MachineInstr *MI, VASTSlot *CurSlot,
                                   VASTValueVecTy &Cnds) {
   // Go back to the idle slot.
   VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
-  CurSlot->addNextSlot(VM->getOrCreateSlot(0, 0), Pred);
-  CurSlot->addEnable(VM->getPort(VASTModule::Finish), Pred);
+  VM->addSlotSucc(CurSlot, VM->getOrCreateSlot(0, 0), Pred);
+  VM->addSlotEnable(CurSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
+                    Pred);
 }
 
 void VerilogASTBuilder::emitOpRetVal(MachineInstr *MI, VASTSlot *Slot,
@@ -1187,7 +1190,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValue *MemEn = VM->getSymbol(EnableName);
   VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
-  Slot->addEnable(MemEn, Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
 void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
@@ -1226,7 +1229,7 @@ void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
   VASTValue *MemEn = VM->getSymbol(EnableName);
 
   VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
-  Slot->addEnable(MemEn, Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
 MachineBasicBlock::instr_iterator

@@ -172,27 +172,27 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
-void VASTSlot::addNextSlot(VASTSlot *NextSlot, VASTValue *Cnd) {
+void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTUse *Cnd) {
   (NextSlot->PredSlots).push_back(this);
   bool Inserted = NextSlots.insert(std::make_pair(NextSlot, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addEnable(VASTValue *V, VASTValue *Cnd) {
-  bool Inserted = Enables.insert(std::make_pair(V, Cnd)).second;
+void VASTSlot::addEnable(VASTRegister *R, VASTUse *Cnd) {
+  bool Inserted = Enables.insert(std::make_pair(R, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addReady(VASTValue *V, VASTValue *Cnd) {
+void VASTSlot::addReady(VASTValue *V, VASTUse *Cnd) {
   bool Inserted = Readys.insert(std::make_pair(V, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
 
-void VASTSlot::addDisable(VASTValue *V, VASTValue *Cnd) {
-  bool Inserted = Disables.insert(std::make_pair(V, Cnd)).second;
+void VASTSlot::addDisable(VASTRegister *R, VASTUse *Cnd) {
+  bool Inserted = Disables.insert(std::make_pair(R, Cnd)).second;
   assert(Inserted && "NextSlot already existed!");
   (void) Inserted;
 }
@@ -200,12 +200,11 @@ void VASTSlot::addDisable(VASTValue *V, VASTValue *Cnd) {
 VASTValue *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
   SmallVector<VASTValue*, 4> Ops;
 
-  for (VASTSlot::const_fu_ctrl_it I = ready_begin(), E = ready_end();
-        I != E; ++I)
+  for (VASTSlot::const_fu_rdy_it I = ready_begin(), E = ready_end();I != E; ++I)
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
     Ops.push_back(VM.buildExpr(VASTExpr::dpOr, I->first,
-                               VM.buildNotExpr(I->second), 1));
+                               VM.buildNotExpr(*I->second), 1));
   
   // No waiting signal means always ready.
   if (Ops.empty()) Ops.push_back(VM.getAlwaysTrue());
@@ -297,7 +296,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
          I != E; ++I) {
       hasSelfLoop |= I->first->getSlotNum() == getSlotNum();
       VASTRegister *NextSlotReg = I->first->getRegister();
-      Mod.addAssignment(NextSlotReg, I->second, this, EmptySlotEnCnd);
+      Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd);
     }
   } else {
     // Enable the default successor slots.
@@ -306,7 +305,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     Mod.addAssignment(NextSlotReg, Mod.getAlwaysTrue(), this,
                       EmptySlotEnCnd);
     // And connect the fall through edge now.
-    addNextSlot(NextSlot, Mod.getAlwaysTrue());
+    Mod.addSlotSucc(this, NextSlot, Mod.getAlwaysTrue());
   }
 
   assert(!(hasSelfLoop && PredAliasSlots)
@@ -350,7 +349,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     EmptySlotEnCnd.clear();
     EmptySlotEnCnd.push_back(getRegister());
     Mod.addAssignment(cast<VASTRegister>(I->first),
-                      Mod.buildExpr(VASTExpr::dpAnd, getReady(), I->second, 1),
+                      Mod.buildExpr(VASTExpr::dpAnd, getReady(), *I->second, 1),
                       this, EmptySlotEnCnd, false);
   }
 
@@ -383,7 +382,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
         }
       }
 
-      DisableAndCnds.push_back(I->second);
+      DisableAndCnds.push_back(*I->second);
 
       VASTRegister *En = cast<VASTRegister>(I->first);
       Mod.addAssignment(En, Mod.getAlwaysFalse(), this,
@@ -559,6 +558,22 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
     (*I)->printAssignment(OS);
+}
+
+void VASTModule::addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
+  S->addEnable(R, new (UseAllocator.Allocate()) VASTUse(Cnd));
+}
+
+void VASTModule::addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
+  S->addDisable(R, new (UseAllocator.Allocate()) VASTUse(Cnd));
+}
+
+void VASTModule::addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd) {
+  S->addReady(V, new (UseAllocator.Allocate()) VASTUse(Cnd));
+}
+
+void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
+  S->addSuccSlot(SuccS, new (UseAllocator.Allocate()) VASTUse(V));
 }
 
 void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {

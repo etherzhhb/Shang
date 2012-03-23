@@ -316,6 +316,22 @@ public:
   virtual void anchor();
 };
 
+// simplify_type - Allow clients to treat VASTRValue just like VASTValues when
+// using casting operators.
+template<> struct simplify_type<const VASTPort> {
+  typedef VASTSignal *SimpleType;
+  static SimpleType getSimplifiedValue(const VASTPort &Val) {
+    return Val.get();
+  }
+};
+
+template<> struct simplify_type<VASTPort> {
+  typedef VASTSignal *SimpleType;
+  static SimpleType getSimplifiedValue(const VASTPort &Val) {
+    return Val.get();
+  }
+};
+
 class VASTExpr : public VASTValue {
 public:
   enum Opcode {
@@ -516,22 +532,25 @@ public:
 class VASTSlot : public VASTNode {
 public:
   // TODO: Store the pointer to the Slot instead the slot number.
-  typedef std::map<VASTSlot*, VASTValue*> SuccVecTy;
+  typedef std::map<VASTSlot*, VASTUse*> SuccVecTy;
   typedef SuccVecTy::iterator succ_cnd_iterator;
   typedef SuccVecTy::const_iterator const_succ_cnd_iterator;
 
   // Use mapped_iterator which is a simple iterator adapter that causes a
   // function to be dereferenced whenever operator* is invoked on the iterator.
   typedef
-  std::pointer_to_unary_function<std::pair<VASTSlot*, VASTValue*>, VASTSlot*>
+  std::pointer_to_unary_function<std::pair<VASTSlot*, VASTUse*>, VASTSlot*>
   slot_getter;
 
   typedef mapped_iterator<succ_cnd_iterator, slot_getter> succ_iterator;
   typedef mapped_iterator<const_succ_cnd_iterator, slot_getter>
           const_succ_iterator;
 
-  typedef std::map<VASTValue*, VASTValue*> FUCtrlVecTy;
+  typedef std::map<VASTRegister*, VASTUse*> FUCtrlVecTy;
   typedef FUCtrlVecTy::const_iterator const_fu_ctrl_it;
+
+  typedef std::map<VASTValue*, VASTUse*> FUReadyVecTy;
+  typedef FUReadyVecTy::const_iterator const_fu_rdy_it;
 
   typedef SmallVector<VASTSlot*, 4> PredVecTy;
   typedef PredVecTy::iterator pred_it;
@@ -541,7 +560,7 @@ private:
   VASTUse SlotActive;
   VASTUse SlotReady;
   // The ready signals that need to wait before we go to next slot.
-  FUCtrlVecTy Readys;
+  FUReadyVecTy Readys;
   // The function units that enabled at this slot.
   FUCtrlVecTy Enables;
   // The function units that need to disable when condition is not satisfy.
@@ -562,6 +581,12 @@ private:
   const_succ_cnd_iterator succ_cnd_begin() const { return NextSlots.begin(); }
   const_succ_cnd_iterator succ_cnd_end() const { return NextSlots.end(); }
 
+  void addEnable(VASTRegister *R, VASTUse *Cnd);
+  void addReady(VASTValue *V, VASTUse *Cnd);
+  void addDisable(VASTRegister *R, VASTUse *Cnd);
+  void addSuccSlot(VASTSlot *NextSlot, VASTUse *Cnd);
+
+  friend class VASTModule;
 public:
   VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM);
 
@@ -587,7 +612,6 @@ public:
   unsigned getParentIdx() const { return ParentIdx; }
 
   // TODO: Rename to addSuccSlot.
-  void addNextSlot(VASTSlot *NextSlot, VASTValue *Cnd);
   bool hasNextSlot(VASTSlot *NextSlot) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -596,22 +620,22 @@ public:
   // Next VASTSlot iterator. 
   succ_iterator succ_begin() {
     return map_iterator(NextSlots.begin(),
-                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
+                        slot_getter(pair_first<VASTSlot*, VASTUse*>));
   }
 
   const_succ_iterator succ_begin() const {
     return map_iterator(NextSlots.begin(),
-                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
+                        slot_getter(pair_first<VASTSlot*, VASTUse*>));
   }
 
   succ_iterator succ_end() {
     return map_iterator(NextSlots.end(),
-                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
+                        slot_getter(pair_first<VASTSlot*, VASTUse*>));
   }
 
   const_succ_iterator succ_end() const {
     return map_iterator(NextSlots.end(),
-                        slot_getter(pair_first<VASTSlot*, VASTValue*>));
+                        slot_getter(pair_first<VASTSlot*, VASTUse*>));
   }
 
   // Predecessor slots of this slot.
@@ -619,20 +643,17 @@ public:
   pred_it pred_end() { return PredSlots.end(); }
 
   // Signals need to be enabled at this slot.
-  void addEnable(VASTValue *V, VASTValue *Cnd);
-  bool isEnabled(VASTValue *V) const { return Enables.count(V); }
+  bool isEnabled(VASTRegister *R) const { return Enables.count(R); }
   const_fu_ctrl_it enable_begin() const { return Enables.begin(); }
   const_fu_ctrl_it enable_end() const { return Enables.end(); }
 
   // Signals need to set before this slot is ready.
-  void addReady(VASTValue *V, VASTValue *Cnd);
   bool readyEmpty() const { return Readys.empty(); }
-  const_fu_ctrl_it ready_begin() const { return Readys.begin(); }
-  const_fu_ctrl_it ready_end() const { return Readys.end(); }
+  const_fu_rdy_it ready_begin() const { return Readys.begin(); }
+  const_fu_rdy_it ready_end() const { return Readys.end(); }
 
   // Signals need to be disabled at this slot.
-  void addDisable(VASTValue *V, VASTValue *Cnd);
-  bool isDiabled(VASTValue *V) const { return Disables.count(V); }
+  bool isDiabled(VASTRegister *R) const { return Disables.count(R); }
   bool disableEmpty() const { return Disables.empty(); }
   const_fu_ctrl_it disable_begin() const { return Disables.begin(); }
   const_fu_ctrl_it disable_end() const { return Disables.end(); }
@@ -845,6 +866,10 @@ public:
     return S;
   }
 
+  void addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd);
+  void addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd);
+  void addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd);
+  void addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V);
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
                          PortTypes T = Others);
