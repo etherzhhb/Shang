@@ -161,6 +161,9 @@ let isReMaterializable = 1,
   def VOpMove  : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [],
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;
 
+  def VOpMoveArg  : CtrlInst<(outs DR:$dst), (ins DR:$src), "$dst=$src", [],
+							 0 /*Latency*/, 1 /*writeUntilFinish*/>;
+
   def VOpDefPhi : CtrlInst<(outs DR:$dst), (ins DR:$src),
                            "$dst <= $src", [],
                            0 /*Latency*/, 1 /*writeUntilFinish*/>;

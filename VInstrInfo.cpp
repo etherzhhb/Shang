@@ -717,6 +717,7 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
          || Opcode == VTM::PHI
          || Opcode == VTM::VOpMove
+         || Opcode == VTM::VOpMoveArg
          || Opcode == VTM::VOpSel
          || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpDstMux

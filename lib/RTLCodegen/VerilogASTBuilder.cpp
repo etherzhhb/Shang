@@ -475,7 +475,7 @@ void VerilogASTBuilder::emitIdleState() {
 
   // Always Disable the finish signal.
   VM->addSlotDisable(IdleSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
-                       VM->getAlwaysTrue());
+                     VM->getAlwaysTrue());
   SmallVector<VASTValue*, 1> Cnds(1, StartPort);
   emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds);
 }
@@ -829,6 +829,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
     // Emit the operations.
     switch (MI->getOpcode()) {
     case VTM::VOpDstMux:
+    case VTM::VOpMoveArg:
     case VTM::VOpMove:
     case VTM::VOpMvPhi:
     case VTM::VOpMvPipe:        emitOpCopy(MI, CurSlot, Cnds);            break;
@@ -874,6 +875,7 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
 
     switch (I->getOpcode()) {
     case VTM::VOpDstMux:
+    case VTM::VOpMoveArg:
     case VTM::VOpMove:
     case VTM::VOpMvPhi:
     case VTM::COPY:             emitOpCopy(MI, Slot, Cnds);   break;

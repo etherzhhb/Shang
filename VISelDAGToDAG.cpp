@@ -326,7 +326,7 @@ SDNode *VDAGToDAGISel::SelectLoadArgument(SDNode *N) {
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
 
-  return CurDAG->SelectNodeTo(N, VTM::VOpMove, N->getVTList(),
+  return CurDAG->SelectNodeTo(N, VTM::VOpMoveArg, N->getVTList(),
                               Ops, array_lengthof(Ops));
 }
 

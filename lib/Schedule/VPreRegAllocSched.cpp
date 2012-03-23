@@ -789,6 +789,9 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     if (mergeUnaryOp(MI, 1, CurState))
       return;
     break;
+  case VTM::VOpMoveArg:
+    CurState.mapMI2SU(MI, CurState.getEntryRoot(), 0);
+    return;
   case VTM::VOpCmdSeq:
     isCmdSeq = true;
     // Merge the command sequence.
