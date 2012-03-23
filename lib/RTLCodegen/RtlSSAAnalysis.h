@@ -185,7 +185,11 @@ class SlotInfo {
   // Insert VAS into different set.
   void insertGen(ValueAtSlot *VAS) {
     SlotGen.insert(VAS);
-    OverWrittenValue.insert(VAS->getValue());
+    insertOvewritten(VAS->getValue());
+  }
+
+  void insertOvewritten(VASTValue *V) {
+    OverWrittenValue.insert(V);
   }
 
   bool insertIn(ValueAtSlot *VAS, ValueAtSlot::LiveInInfo NewLI) {
@@ -321,7 +325,7 @@ public:
   void ComputeReachingDefinition(VASTModule *VM);
 
   // collect the Generated and Killed statements of the slot.
-  void ComputeGenAndKill();
+  void ComputeGenAndKill(VASTModule *VM);
 
   void verifyRTLDependences() const;
 

@@ -704,8 +704,11 @@ public:
   // Iterates over all alias slot
   unsigned alias_start() const { return StartSlot; }
   unsigned alias_end() const { return EndSlot; }
-  unsigned alias_ii() const { return II; }
   bool hasAliasSlot() const { return alias_start() != alias_end(); }
+  unsigned alias_ii() const {
+    assert(hasAliasSlot() && "Dont have II!");
+    return II;
+  }
 
   bool operator<(const VASTSlot &RHS) const {
     return getSlotNum() < RHS.getSlotNum();

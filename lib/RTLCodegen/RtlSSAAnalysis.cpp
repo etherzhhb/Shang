@@ -301,8 +301,9 @@ bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To,
 
   for (unsigned i = From->alias_start(), e = From->alias_end(),
        ii = From->alias_ii(); i < e; i += ii) {
-    SlotInfo * PredSI = getSlotInfo(VM->getSlot(i));
     if (i == FromSlotNum) continue;
+
+    SlotInfo * PredSI = getSlotInfo(VM->getSlot(i));
 
     // From the view of signals with undefined timing, all alias slot is the
     // same slot.
@@ -313,7 +314,7 @@ bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To,
 }
 
 void RtlSSAAnalysis::ComputeReachingDefinition(VASTModule *VM) {
-  ComputeGenAndKill();
+  ComputeGenAndKill(VM);
   // TODO: Simplify the data-flow, some slot may neither define new VAS nor
   // kill any VAS.
 
@@ -349,12 +350,30 @@ void RtlSSAAnalysis::ComputeReachingDefinition(VASTModule *VM) {
   } while (Changed);
 }
 
-void RtlSSAAnalysis::ComputeGenAndKill(){
+void RtlSSAAnalysis::ComputeGenAndKill(VASTModule *VM) {
   // Collect the generated statements to the SlotGenMap.
   for (vas_iterator I = vas_begin(), E = vas_end(); I != E; ++I) {
     ValueAtSlot *VAS = *I;
-    SlotInfo *SI = getSlotInfo(VAS->getSlot());
+    VASTSlot *S = VAS->getSlot();
+    SlotInfo *SI = getSlotInfo(S);
     SI->insertGen(VAS);
+
+    // Values are overwritten by the alias slots of its defining slot.
+    if (!S->hasAliasSlot()) continue;
+
+    unsigned CurSlotNum = S->getSlotNum();
+    VASTSignal *V = VAS->getValue();
+    for (unsigned i = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
+         i < e; i += ii) {
+       if (i == CurSlotNum) continue;
+
+       SlotInfo *AliasSlot = getSlotInfo(VM->getSlot(i));
+
+       // From the view of signals with undefined timing, all alias slot is the
+       // same slot, otherwise, the signal is only overwritten by its following
+       // alias slot.
+       if (i > CurSlotNum || V->isTimingUndef()) AliasSlot->insertOvewritten(V);
+    }
   }
 
   // Build the Out set from Gen set.
