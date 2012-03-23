@@ -26,6 +26,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/FoldingSet.h"
 #include "llvm/Support/Allocator.h"
 
 #include <map>
@@ -332,7 +333,8 @@ template<> struct simplify_type<VASTPort> {
   }
 };
 
-class VASTExpr : public VASTValue {
+template<> struct FoldingSetTrait<VASTExpr>;
+class VASTExpr : public VASTValue, public FoldingSetNode {
 public:
   enum Opcode {
     // FU datapath
@@ -370,9 +372,18 @@ private:
   uint8_t UB;
   uint8_t LB;
 
+  friend struct FoldingSetTrait<VASTExpr>;
+  /// FastID - A reference to an Interned FoldingSetNodeID for this node.
+  /// The ScalarEvolution's BumpPtrAllocator holds the data.
+  const FoldingSetNodeIDRef FastID;
+
   VASTExpr(const VASTExpr&);             // Do not implement
 
-  VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth);
+  explicit VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth,
+                    const FoldingSetNodeIDRef ID);
+
+  explicit VASTExpr(VASTUse *U, unsigned ub, unsigned lb,
+                    const FoldingSetNodeIDRef ID);
 
   void setExpr(VASTUse *ops, uint8_t numOps, Opcode opc);
 
@@ -388,7 +399,6 @@ private:
   }
 
 public:
-  VASTExpr(VASTUse *U, unsigned ub, unsigned lb);
 
   bool isDead() const { return Opc == Dead; }
 
@@ -433,6 +443,22 @@ public:
     return A->getASTType() == vastExpr;
   }
 };
+
+// Specialize FoldingSetTrait for VASTWire to avoid needing to compute
+// temporary FoldingSetNodeID values.
+template<>
+struct FoldingSetTrait<VASTExpr> : DefaultFoldingSetTrait<VASTExpr> {
+    static void Profile(const VASTExpr &X, FoldingSetNodeID& ID) {
+        ID = X.FastID;
+      }
+    static bool Equals(const VASTExpr &X, const FoldingSetNodeID &ID,
+        FoldingSetNodeID &TempID) {
+            return ID == X.FastID;
+        }
+    static unsigned ComputeHash(const VASTExpr &X, FoldingSetNodeID &TempID) {
+        return X.FastID.ComputeHash();
+      }
+  };
 
 struct VASTExprBuilder {
   SmallVector<VASTValue*, 4> Operands;
@@ -758,6 +784,9 @@ private:
   WireVector Wires;
   RegisterVector Registers;
 
+  typedef FoldingSet<VASTExpr>::iterator fs_vas_it;
+  FoldingSet<VASTExpr> UniqueExprs;
+
   std::string Name;
   BumpPtrAllocator Allocator;
   SpecificBumpPtrAllocator<VASTUse> UseAllocator;
@@ -949,20 +978,20 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTExpr *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+  VASTValue *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                        unsigned BitWidth);
   VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                      unsigned BitWidth);
+                       unsigned BitWidth);
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op, unsigned BitWidth);
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
-                      unsigned BitWidth);
+                       unsigned BitWidth);
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0, VASTValue *Op1,
                        VASTValue *Op2, unsigned BitWidth);
   VASTValue *buildExpr(VASTExprBuilder &Builder) {
     return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
-  VASTValue *buildBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);
+  VASTValue *getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);
 
   VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
                             unsigned BitWidth);
@@ -988,7 +1017,8 @@ public:
   VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValue*> &Cnds,
                            bool AddSlotActive = true);
 
-  VASTValue *assign(VASTWire *W, VASTValue *V, VASTWire::Type T = VASTWire::Common);
+  VASTValue *assign(VASTWire *W, VASTValue *V,
+                    VASTWire::Type T = VASTWire::Common);
   VASTValue *assignWithExtraDelay(VASTWire *W, VASTValue *V, unsigned latency);
 
   void printSignalDecl(raw_ostream &OS);

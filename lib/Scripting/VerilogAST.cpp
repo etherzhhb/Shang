@@ -497,17 +497,19 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTExpr::VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth)
+VASTExpr::VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth,
+                   const FoldingSetNodeIDRef ID)
   : VASTValue(vastExpr, 0, BitWidth), Ops(ops), NumOps(numOps), Opc(opc),
-    UB(BitWidth), LB(0) {
-  assert(numOps && Ops && "Unexpected empty operand list!");
-  buildUseList();
+  UB(BitWidth), LB(0), FastID(ID) {
+    assert(numOps && Ops && "Unexpected empty operand list!");
+    buildUseList();
 }
 
-VASTExpr::VASTExpr(VASTUse *U, unsigned ub, unsigned lb)
+VASTExpr::VASTExpr(VASTUse *U, unsigned ub, unsigned lb,
+                   const FoldingSetNodeIDRef ID)
   : VASTValue(vastExpr, 0, ub - lb), Ops(U), NumOps(1), Opc(VASTExpr::dpAssign),
-    UB(ub), LB(lb) {
-  buildUseList();
+  UB(ub), LB(lb), FastID(ID){
+    buildUseList();
 }
 
 void VASTExpr::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
@@ -538,6 +540,7 @@ VASTModule::~VASTModule() {
   Allocator.Reset();
   UseAllocator.DestroyAll();
   SymbolTable.clear();
+  UniqueExprs.clear();
 
   delete &(DataPath.str());
   delete &(ControlBlock.str());
@@ -628,9 +631,30 @@ VASTValue *VASTModule::buildNotExpr(VASTValue *U) {
   return buildExpr(VASTExpr::dpNot, U, U->getBitWidth());
 }
 
-VASTValue *VASTModule::buildBitSlice(VASTValue *U, uint8_t UB, uint8_t LB) {
+VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB,
+                                           uint8_t LB) {
+  FoldingSetNodeID ID;
+
+  // Profile the elements of VASTExpr.
+  ID.AddInteger(VASTExpr::dpAssign);
+  ID.AddInteger(UB);
+  ID.AddInteger(LB);
+  ID.AddPointer(U);
+
+  void *IP = 0;
+  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP)) {
+    return E;
+  }
+
+  // If there is no expression in the current VASTExpr set, create a new one.
   VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
-  return new (Allocator.Allocate<VASTExpr>()) VASTExpr(Op, UB, LB);
+  VASTExpr * E = new (Allocator) VASTExpr(Op, UB, LB, ID.Intern(Allocator));
+  UniqueExprs.InsertNode(E, IP);
+
+  return E;
+/*
+  VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
+  return new (Allocator.Allocate<VASTExpr>()) VASTExpr(Op, UB, LB);*/
 }
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
@@ -641,7 +665,7 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
     if (VASTExpr *E = dyn_cast<VASTExpr>(Op))
       if (E->getOpcode() == VASTExpr::dpNot) {
         // We should also propagate the bit slice information.
-        return buildBitSlice(E->getOperand(0), E->getUB(), E->getLB());
+        return getOrCreateBitSlice(E->getOperand(0), E->getUB(), E->getLB());
       }
     break;
   }
@@ -679,7 +703,6 @@ VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
     if (getBitSlice64(RHS.getImm(), BitWidth) == getBitSlice64(-1, BitWidth))
       return buildExpr(VASTExpr::dpAssign, ValForRHSIsAllOnes, BitWidth);
   }*/
-
   VASTValue *Ops[] = { LHS, RHS };
   return createExpr(Opc, Ops, BitWidth);
 }
@@ -723,16 +746,37 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
   return createExpr(Opc, Ops, BitWidth);
 }
 
-VASTExpr *VASTModule::createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                                 unsigned BitWidth) {
+VASTValue *VASTModule::createExpr(VASTExpr::Opcode Opc,
+                                  ArrayRef<VASTValue*> Ops,
+                                  unsigned BitWidth) {
   assert(!Ops.empty() && "Unexpected empty expression");
 
+  FoldingSetNodeID ID;
+  uint8_t UB = BitWidth;
+  uint8_t LB = 0;
+
+  // Profile the elements of VASTExpr.
+  ID.AddInteger(Opc);
+  ID.AddInteger(UB);
+  ID.AddInteger(LB);
+  for (unsigned i = 0; i < Ops.size(); ++i)
+    ID.AddPointer(Ops[i]);
+
+  void *IP = 0;
+  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP)) {
+    return E;
+  }
+  
+  // If the Expression do not exist, allocate a new one.
   VASTUse *OpArray = UseAllocator.Allocate(Ops.size());
   for (unsigned i = 0; i < Ops.size(); ++i)
     (void) new (OpArray + i) VASTUse(Ops[i]);
 
-  VASTExpr *D = Allocator.Allocate<VASTExpr>();
-  return new (D) VASTExpr(Opc, OpArray, Ops.size(), BitWidth);
+  VASTExpr * E = new (Allocator) VASTExpr(Opc, OpArray, Ops.size(), BitWidth,
+                                          ID.Intern(Allocator));
+  UniqueExprs.InsertNode(E, IP);
+  
+  return E;
 }
 
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,

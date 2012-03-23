@@ -686,7 +686,8 @@ void VerilogASTBuilder::emitAllSignals() {
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       VASTValue *Parent = lookupSignal(Info.getParentRegister());
       indexVASTValue(RegNum,
-                     VM->buildBitSlice(Parent, Info.getUB(), Info.getLB()));
+                     VM->getOrCreateBitSlice(Parent, Info.getUB(),
+                                             Info.getLB()));
       continue;
     }
 
@@ -1374,7 +1375,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   //UB += E->getLB();
 
   //assert(UB <= E->getUB() && "Bitslice out of range!");
-  VM->assign(W, VM->buildBitSlice(RHS, UB, LB));
+  VM->assign(W, VM->getOrCreateBitSlice(RHS, UB, LB));
 }
 
 VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
