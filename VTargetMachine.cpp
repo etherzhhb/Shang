@@ -84,6 +84,12 @@ struct VTMPassConfig : public TargetPassConfig {
 
   virtual bool addFinalizeRegAlloc() {
     PM.add(createRTLCodegenPreparePass());
+    // Generate the code.
+    PM.add(createVerilogASTBuilderPass());
+
+    // Analyse the dependency between registers.
+    PM.add(createRtlSSAAnalysisPass());
+
     return true;
   }
 
@@ -110,7 +116,7 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createFixMachineCodePass(false));
 
     // Perform logic synthesis.
-    //PM.add(createLogicSynthesisPass());
+    PM.add(createLogicSynthesisPass());
 
     // Clean up the MachineFunction.
     addPass(MachineCSEID);

@@ -158,14 +158,10 @@ int main(int argc, char **argv) {
   target->addPassesToEmitFile(Passes, formatted_nulls,
                               TargetMachine::CGFT_Null,
                               false/*NoVerify*/);
-  // Generate the code.
-  Passes.add(createVerilogASTBuilderPass());
-  Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
-  // Analyse the dependency between registers.
-  Passes.add(createRtlSSAAnalysisPass());
   // Analyse the slack between registers.
   Passes.add(createCombPathDelayAnalysisPass());
+  Passes.add(createVerilogASTWriterPass(S->getOutputStream("RTLOutput")));
 
   // Run some scripting passes.
   for (LuaScript::scriptpass_it I = S->passes_begin(), E = S->passes_end();
