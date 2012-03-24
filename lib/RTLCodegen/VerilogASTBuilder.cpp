@@ -1399,7 +1399,8 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op) {
 
     return 0;
   }
-  //case MachineOperand::MO_Immediate:
+  case MachineOperand::MO_Immediate:
+    return VM->getOrCreateImmediate(Op.getImm(), Op.getBitWidth());
   //case MachineOperand::MO_ExternalSymbol:  BitWidth = Op.getBitWidth(); break;
   default: break;
   }

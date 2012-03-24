@@ -278,6 +278,30 @@ template<> struct simplify_type<VASTUse> {
   }
 };
 
+class VASTImmediate : public VASTValue {
+  uint64_t imm() const { return i64(); }
+
+  VASTImmediate(uint64_t Imm, unsigned BitWidth)
+    : VASTValue(vastImmediate, BitWidth) {
+    i64(Imm);
+  }
+
+  friend class VASTModule;
+public:
+  uint64_t getValue() const { return imm(); }
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTImmediate *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() == vastImmediate;
+  }
+
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  void printAsOperand(raw_ostream &OS) const {
+    printAsOperand(OS, getBitWidth(), 0);
+  }
+};
+
 class VASTNamedValue : public VASTValue {
 protected:
   const char *name() const { return ptr<const char>(); }
@@ -312,7 +336,6 @@ class VASTSymbol : public VASTNamedValue {
 
   friend class VASTModule;
 public:
-  virtual void print(raw_ostream &OS) const;
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTSymbol *A) { return true; }
   static inline bool classof(const VASTNode *A) {
@@ -869,26 +892,35 @@ public:
   typedef RegisterVector::iterator reg_iterator;
 
   typedef std::vector<VASTSlot*> SlotVecTy;
-  SlotVecTy Slots;
   typedef SlotVecTy::iterator slot_iterator;
 private:
   // Dirty Hack:
   // Buffers
   raw_string_ostream DataPath, ControlBlock;
   vlang_raw_ostream LangControlBlock;
+  // The slots vector, each slot represent a state in the FSM of the design.
+  SlotVecTy Slots;
+  // Input/Output ports of the design.
   PortVector Ports;
+  // Wires and Registers of the design.
   WireVector Wires;
   RegisterVector Registers;
 
+  // Expression in data-path
   typedef FoldingSet<VASTExpr>::iterator fs_vas_it;
   FoldingSet<VASTExpr> UniqueExprs;
 
-  std::string Name;
-  BumpPtrAllocator Allocator;
-  SpecificBumpPtrAllocator<VASTUse> UseAllocator;
   typedef StringMap<VASTNamedValue*> SymTabTy;
   SymTabTy SymbolTable;
   typedef StringMapEntry<VASTNamedValue*> SymEntTy;
+
+  typedef DenseMap<std::pair<uint64_t, char>, VASTImmediate*> UniqueImmSetTy;
+  UniqueImmSetTy UniqueImms;
+
+  // The Name of the Design.
+  std::string Name;
+  BumpPtrAllocator Allocator;
+  SpecificBumpPtrAllocator<VASTUse> UseAllocator;
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
@@ -933,6 +965,14 @@ public:
   void writeProfileCounters(VASTSlot *S, StartIdxMapTy &StartIdxMap);
 
   bool eliminateConstRegisters();
+
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
+    VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
+    if (!Imm) // Create the immediate if it is not yet created.
+      Imm = new (Allocator.Allocate<VASTImmediate>()) VASTImmediate(Value, BitWidth);
+    return Imm;
+  }
 
   VASTValue *getSymbol(const std::string &Name) const {
     SymTabTy::const_iterator at = SymbolTable.find(Name);
@@ -1013,7 +1053,7 @@ public:
 
   unsigned getFUPortOf(FuncUnitId ID) const {
     typedef std::map<unsigned, unsigned> MapTy;
-    MapTy Map = FUPortOffsets[ID.getFUType()];
+    const MapTy &Map = FUPortOffsets[ID.getFUType()];
     MapTy::const_iterator at = Map.find(ID.getFUNum());
     assert(at != Map.end() && "FU do not existed!");
     return at->second;

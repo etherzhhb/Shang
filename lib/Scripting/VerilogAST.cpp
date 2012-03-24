@@ -1058,8 +1058,9 @@ VASTValue::dp_dep_it VASTValue::dp_dep_end(VASTValue *V) {
 
 }
 
-void VASTSymbol::print(raw_ostream &OS) const {
-  assert(0 && "VASTSymbol::print should not be called!");
+void VASTImmediate::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+  assert(UB == getBitWidth() && LB == 0 && "Cannot print bitslice of Expr!");
+  OS << verilogConstToStr(getValue(), getBitWidth(), false);
 }
 
 void VASTPort::print(raw_ostream &OS) const {
