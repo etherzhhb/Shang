@@ -136,50 +136,6 @@ void ucOperand::print(raw_ostream &OS,
                       unsigned UB /* = 64 */, unsigned LB /* = 0 */,
                       bool isPredicate /* = false */) {
   switch (getType()) {
-  case MachineOperand::MO_Register: {
-    UB = std::min(getBitWidthOrZero(), UB);
-    if (isImplicit() || getReg() == 0) break;
-
-    unsigned Reg = getReg();
-    std::string BitRange = "";
-    std::string Prefix = "reg";
-
-    OS << "/*";
-    if (isDef())
-      OS << "def_";
-    else {
-      OS << "use_";
-      if (isKill()) OS << "kill_";
-    }
-
-    if (TargetRegisterInfo::isVirtualRegister(Reg)) {
-      //DEBUG(
-        if (MachineInstr *MI = getParent()) {
-          MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
-          const TargetRegisterClass *RC = MRI.getRegClass(Reg);
-          OS << RC->getName();
-        }
-      //);
-      Reg = TargetRegisterInfo::virtReg2Index(Reg);
-      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
-
-      if (isWire()) {
-        OS << "*/ wire" << Reg << BitRange;
-        return;
-      }
-    } else { // Compute the offset of physics register.
-      Prefix = "phy_reg";
-      if (!isPredicate) BitRange = verilogBitRange(UB, LB, getBitWidth() != 1);
-    }
-
-    OS << "_reg" << Reg <<"*/ " << Prefix << Reg << BitRange;
-    return;
-  }
-  case MachineOperand::MO_Immediate:
-    UB = std::min(getBitWidthOrZero(), UB);
-    assert(UB == getBitWidth() && LB == 0 && "Get BitSlice of constant!");
-    OS << verilogConstToStr(getImm(), getBitWidth(), false);
-    return;
   case MachineOperand::MO_ExternalSymbol:
     UB = std::min(getBitWidth(), UB);
     OS << getSymbolName();

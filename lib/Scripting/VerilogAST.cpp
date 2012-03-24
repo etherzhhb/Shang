@@ -115,19 +115,21 @@ void VASTNode::dump() const { print(dbgs()); }
 
 //----------------------------------------------------------------------------//
 // Classes in Verilog AST.
-VASTUse::VASTUse(VASTValue *v) : V(v), User(0) {}
+VASTUse::VASTUse(VASTValue *v, VASTValue *u) : V(v), User(u) {
+  if (User) setUser(User);
+}
 
 void VASTUse::removeFromList() {
   operator*()->removeUseFromList(this);
 }
 
-void VASTUse::setUser(VASTValue *U) {
+void VASTUse::setUser(VASTValue *User) {
   assert(!ilist_traits<VASTUse>::inAnyList(this)
          && "Not unlink from old list!");
-  VASTValue *List = operator*();
-  assert(List != U && "Unexpected cycle!");
-  this->User = U;
-  List->addUseToList(this);
+  VASTValue *Use = operator*();
+  assert(Use != User && "Unexpected cycle!");
+  this->User = User;
+  Use->addUseToList(this);
 }
 
 bool VASTUse::operator==(const VASTValue *RHS) const {
@@ -149,7 +151,7 @@ void VASTUse::PinUser() const {
 unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
-  :VASTNode(vastSlot) {
+  :VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0) {
   SlotNum(slotNum);
   StartSlot(slotNum);
   EndSlot(slotNum);
@@ -514,7 +516,6 @@ VASTExpr::VASTExpr(Opcode Opc, VASTUse *Ops, uint8_t NumOps, unsigned BitWidth,
   ub(BitWidth);
   lb(0);
   assert(num_ops() && ops() && "Unexpected empty operand list!");
-  buildUseList();
 }
 
 VASTExpr::VASTExpr(VASTUse *U, unsigned UB, unsigned LB,
@@ -525,12 +526,6 @@ VASTExpr::VASTExpr(VASTUse *U, unsigned UB, unsigned LB,
   opc(VASTExpr::dpAssign);
   ub(UB);
   lb(LB);
-  buildUseList();
-}
-
-void VASTExpr::buildUseList() {
-  for (VASTUse *I = ops(), *E = ops() + num_ops(); I != E; ++I)
-    I->setUser(this);
 }
 
 std::string VASTModule::DirectClkEnAttr = "";
@@ -570,19 +565,19 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
 }
 
 void VASTModule::addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
-  S->addEnable(R, new (UseAllocator.Allocate()) VASTUse(Cnd));
+  S->addEnable(R, new (UseAllocator.Allocate()) VASTUse(Cnd, 0));
 }
 
 void VASTModule::addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
-  S->addDisable(R, new (UseAllocator.Allocate()) VASTUse(Cnd));
+  S->addDisable(R, new (UseAllocator.Allocate()) VASTUse(Cnd, 0));
 }
 
 void VASTModule::addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd) {
-  S->addReady(V, new (UseAllocator.Allocate()) VASTUse(Cnd));
+  S->addReady(V, new (UseAllocator.Allocate()) VASTUse(Cnd, 0));
 }
 
 void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
-  S->addSuccSlot(SuccS, new (UseAllocator.Allocate()) VASTUse(V));
+  S->addSuccSlot(SuccS, new (UseAllocator.Allocate()) VASTUse(V, 0));
 }
 
 void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {
@@ -648,14 +643,15 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB,
   ID.AddPointer(U);
 
   void *IP = 0;
-  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP)) {
+  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
     return E;
-  }
 
   // If there is no expression in the current VASTExpr set, create a new one.
-  VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
+  VASTUse *Op = Allocator.Allocate<VASTUse>();
   VASTExpr * E = new (Allocator) VASTExpr(Op, UB, LB, ID.Intern(Allocator));
   UniqueExprs.InsertNode(E, IP);
+
+  new (Op) VASTUse(U, E);
 
   return E;
 }
@@ -798,19 +794,19 @@ VASTValue *VASTModule::createExpr(VASTExpr::Opcode Opc,
     ID.AddPointer(Ops[i]);
 
   void *IP = 0;
-  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP)) {
+  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
     return E;
-  }
   
   // If the Expression do not exist, allocate a new one.
   VASTUse *OpArray = UseAllocator.Allocate(Ops.size());
-  for (unsigned i = 0; i < Ops.size(); ++i)
-    (void) new (OpArray + i) VASTUse(Ops[i]);
-
-  VASTExpr * E = new (Allocator) VASTExpr(Opc, OpArray, Ops.size(), BitWidth,
-                                          ID.Intern(Allocator));
+  VASTExpr *E = new (Allocator) VASTExpr(Opc, OpArray, Ops.size(), BitWidth,
+                                         ID.Intern(Allocator));
   UniqueExprs.InsertNode(E, IP);
-  
+
+  // Initialize the use list.
+  for (unsigned i = 0; i < Ops.size(); ++i)
+    (void) new (OpArray + i) VASTUse(Ops[i], E);
+
   return E;
 }
 
@@ -835,7 +831,7 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValue *Src, VASTSlot *Slot
                                bool AddSlotActive) {
   if (Src) {
     VASTWire *Cnd = buildAssignCnd(Slot, Cnds, AddSlotActive);
-    Dst->addAssignment(new (UseAllocator.Allocate()) VASTUse(Src), Cnd);
+    Dst->addAssignment(new (UseAllocator.Allocate()) VASTUse(Src, 0), Cnd);
   }
 }
 

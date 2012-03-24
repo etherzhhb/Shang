@@ -113,18 +113,10 @@ class VASTUse : public ilist_node<VASTUse> {
   friend class VASTExpr;
 
   friend struct ilist_sentinel_traits<VASTUse>;
-  VASTUse(VASTValue *v = 0);
+  VASTUse(VASTValue *v = 0, VASTValue *user = 0);
 
-  const VASTUse& operator=(const VASTUse &RHS) {
-    // Do not copy the parent.
-    set(RHS.unwrap());
-    return *this;
-  }
-
-  VASTUse(const VASTUse &RHS) {
-    // Do not copy the parent.
-    set(RHS.unwrap());
-  }
+  void operator=(const VASTUse &RHS); // DO NOT IMPLEMENT
+  VASTUse(const VASTUse &RHS); // DO NOT IMPLEMENT
 
   friend class VASTModule;
   friend class VASTSlot;
@@ -498,8 +490,6 @@ private:
 
   void printAsOperandInteral(raw_ostream &OS) const;
 
-  void buildUseList();
-
   void dropOperandsFromUseList() {
     for (VASTUse *I = ops(), *E = ops() + num_ops(); I != E; ++I)
       I->removeFromList();
@@ -601,7 +591,7 @@ private:
   friend class VASTModule;
 
   VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "")
-    : VASTSignal(vastWire, Name, BitWidth, Attr) {
+    : VASTSignal(vastWire, Name, BitWidth, Attr), U(0, 0) {
     WireType(Common);
     Latency(0);
   }
