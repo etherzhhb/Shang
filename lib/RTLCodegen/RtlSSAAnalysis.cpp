@@ -137,12 +137,12 @@ void SlotInfo::initOutSet() {
     SlotOut.insert(std::make_pair(*I, ValueAtSlot::LiveInInfo()));
 }
 
-RtlSSAAnalysis::RtlSSAAnalysis() : MachineFunctionPass(ID) {
+RtlSSAAnalysis::RtlSSAAnalysis() : MachineFunctionPass(ID), VM(0) {
   initializeRtlSSAAnalysisPass(*PassRegistry::getPassRegistry());
 }
 
 bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
-  VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
+  VM = MF.getInfo<VFInfo>()->getRtlMod();
 
   // Push back all the slot into the SlotVec for the purpose of view graph.
   typedef VASTModule::slot_iterator slot_it;
@@ -160,12 +160,12 @@ bool RtlSSAAnalysis::runOnMachineFunction(MachineFunction &MF) {
   }
 
   // Define the VAS.
-  buildAllVAS(VM);
+  buildAllVAS();
 
-  ComputeReachingDefinition(VM);
+  ComputeReachingDefinition();
 
   // Build the VAS dependence graph with reaching define information.
-  buildVASGraph(VM);
+  buildVASGraph();
 
   DEBUG(viewGraph());
 
@@ -193,7 +193,7 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
 
   for (assign_it I = DepReg->assign_begin(), E = DepReg->assign_end();
        I != E; ++I) {
-    VASTSlot *DefSlot = I->first->getSlot();
+    VASTSlot *DefSlot = VM->getSlot(I->first->getSlotNum());
     ValueAtSlot *DefVAS = getValueASlot(DepReg, DefSlot);
 
     ValueAtSlot::LiveInInfo LI = UseSI->getLiveIn(DefVAS);
@@ -204,14 +204,14 @@ void RtlSSAAnalysis::addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg) {
   }
 }
 
-void RtlSSAAnalysis::buildAllVAS(VASTModule *VM) {
+void RtlSSAAnalysis::buildAllVAS() {
   typedef VASTModule::reg_iterator reg_it;
   for (reg_it I = VM->reg_begin(), E = VM->reg_end(); I != E; ++I){
       VASTRegister *Reg = *I;
 
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = Reg->assign_begin(), E = Reg->assign_end(); I != E; ++I){
-      VASTSlot *S = I->first->getSlot();
+      VASTSlot *S = VM->getSlot(I->first->getSlotNum());
 
       // Create the origin VAS.
       ValueAtSlot *VAS = new (Allocator) ValueAtSlot(Reg, S);
@@ -225,7 +225,7 @@ void RtlSSAAnalysis::verifyRTLDependences() const {
     (*I)->verify();
 }
 
-void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
+void RtlSSAAnalysis::buildVASGraph() {
   typedef VASTModule::reg_iterator it;
   for (VASTModule::reg_iterator I = VM->reg_begin(), E = VM->reg_end(); I != E;
        ++I){
@@ -233,7 +233,7 @@ void RtlSSAAnalysis::buildVASGraph(VASTModule *VM) {
 
     typedef VASTRegister::assign_itertor assign_it;
     for (assign_it I = R->assign_begin(), E = R->assign_end(); I != E; ++I) {
-      VASTSlot *S = I->first->getSlot();
+      VASTSlot *S = VM->getSlot(I->first->getSlotNum());
       // Create the origin VAS.
       ValueAtSlot *VAS = getValueASlot(R, S);
       // Build dependence for conditions
@@ -294,8 +294,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
   return Changed;
 }
 
-bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To,
-                                             VASTModule *VM) {
+bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To) {
   bool Changed = false;
   unsigned FromSlotNum = From->getSlotNum();
 
@@ -313,8 +312,8 @@ bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To,
   return Changed;
 }
 
-void RtlSSAAnalysis::ComputeReachingDefinition(VASTModule *VM) {
-  ComputeGenAndKill(VM);
+void RtlSSAAnalysis::ComputeReachingDefinition() {
+  ComputeGenAndKill();
   // TODO: Simplify the data-flow, some slot may neither define new VAS nor
   // kill any VAS.
 
@@ -344,13 +343,13 @@ void RtlSSAAnalysis::ComputeReachingDefinition(VASTModule *VM) {
 
         if (PredSlot->getParentIdx() == S->getParentIdx() &&
             PredSlot->hasAliasSlot())
-          Changed |= addLiveInFromAliasSlots(PredSlot, CurSI, VM);
+          Changed |= addLiveInFromAliasSlots(PredSlot, CurSI);
       }
     }
   } while (Changed);
 }
 
-void RtlSSAAnalysis::ComputeGenAndKill(VASTModule *VM) {
+void RtlSSAAnalysis::ComputeGenAndKill() {
   // Collect the generated statements to the SlotGenMap.
   for (vas_iterator I = vas_begin(), E = vas_end(); I != E; ++I) {
     ValueAtSlot *VAS = *I;

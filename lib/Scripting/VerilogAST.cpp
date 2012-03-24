@@ -149,8 +149,13 @@ void VASTUse::PinUser() const {
 unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
-  :VASTNode(vastSlot, slotNum), StartSlot(slotNum), EndSlot(slotNum), II(~0),
-   ParentIdx(parentIdx) {
+  :VASTNode(vastSlot) {
+  SlotNum(slotNum);
+  StartSlot(slotNum);
+  EndSlot(slotNum);
+  II(~0);
+  ParentIdx(parentIdx);
+
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
   SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0,
@@ -217,11 +222,12 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
   // FU ready for current slot.
   Ops.push_back(buildFUReadyExpr(Mod));
 
-  if (StartSlot != EndSlot) {
-    for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
-      if (slot == getSlotNum()) continue;
+  if (hasAliasSlot()) {
+    for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
+         s < e; s += ii) {
+      if (s == getSlotNum()) continue;
 
-      VASTSlot *AliasSlot = Mod.getSlot(slot);
+      VASTSlot *AliasSlot = Mod.getSlot(s);
 
       if (!AliasSlot->readyEmpty()) {
         // FU ready for alias slot, when alias slot register is 1, its waiting
@@ -255,14 +261,15 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
   // A slot may be enable by its alias slot if II of a pipelined loop is 1.
   VASTValue *PredAliasSlots = 0;
 
-  if (StartSlot != EndSlot) {
+  if (hasAliasSlot()) {
     CtrlS << "// Alias slots: ";
 
-    for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
-      CtrlS << slot << ", ";
-      if (slot == getSlotNum()) continue;
+    for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
+         s < e; s += ii) {
+      CtrlS << s << ", ";
+      if (s == getSlotNum()) continue;
 
-      const VASTSlot *AliasSlot = Mod.getSlot(slot);
+      const VASTSlot *AliasSlot = Mod.getSlot(s);
       if (AliasSlot->hasNextSlot(this)) {
         assert(PredAliasSlots == 0 && "More than one PredAliasSlots found!");
         PredAliasSlots = AliasSlot->getActive();
@@ -369,10 +376,11 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       // not active.
       bool AliasEnabled = AliasEnables.count(I->first);
       if (AliasEnabled) {
-        for (unsigned slot = StartSlot; slot < EndSlot; slot += II) {
-          if (slot == getSlotNum()) continue;
+        for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
+             s < e; s += ii) {
+          if (s == getSlotNum()) continue;
 
-          VASTSlot *ASlot = Mod.getSlot(slot);
+          VASTSlot *ASlot = Mod.getSlot(s);
           assert(!ASlot->isDiabled(I->first)
                  && "Same signal disabled in alias slot!");
           if (ASlot->isEnabled(I->first)) {
@@ -393,14 +401,14 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
   CtrlS.exit_block("\n\n");
 }
 
-const char *VASTSlot::getName() const { return SlotReg->getName(); }
+const char *VASTSlot::getName() const { return getRegister()->getName(); }
 
 void VASTSlot::print(raw_ostream &OS) const {
   llvm_unreachable("VASTSlot::print should not be called!");
 }
 
 VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
-                           unsigned initVal, const char *Attr)
+                           uint64_t initVal, const char *Attr)
   : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
 
 void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
@@ -497,33 +505,31 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTExpr::VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth,
+VASTExpr::VASTExpr(Opcode Opc, VASTUse *Ops, uint8_t NumOps, unsigned BitWidth,
                    const FoldingSetNodeIDRef ID)
-  : VASTValue(vastExpr, 0, BitWidth), Ops(ops), NumOps(numOps), Opc(opc),
-  UB(BitWidth), LB(0), FastID(ID) {
-    assert(numOps && Ops && "Unexpected empty operand list!");
-    buildUseList();
+  : VASTValue(vastExpr, BitWidth), FastID(ID) {
+  ops(Ops);
+  num_ops(NumOps);
+  opc(Opc);
+  ub(BitWidth);
+  lb(0);
+  assert(num_ops() && ops() && "Unexpected empty operand list!");
+  buildUseList();
 }
 
-VASTExpr::VASTExpr(VASTUse *U, unsigned ub, unsigned lb,
+VASTExpr::VASTExpr(VASTUse *U, unsigned UB, unsigned LB,
                    const FoldingSetNodeIDRef ID)
-  : VASTValue(vastExpr, 0, ub - lb), Ops(U), NumOps(1), Opc(VASTExpr::dpAssign),
-  UB(ub), LB(lb), FastID(ID){
-    buildUseList();
-}
-
-void VASTExpr::setExpr(VASTUse *ops, uint8_t numOps, Opcode opc) {
-  //assert(((numOps) || (opc  == Dead && !isPinned()))
-  //       && "Cannot set expression!");
-  Ops = ops;
-  NumOps = numOps;
-  Opc = opc;
-
+  : VASTValue(vastExpr, UB - LB), FastID(ID){
+  ops(U);
+  num_ops(1);
+  opc(VASTExpr::dpAssign);
+  ub(UB);
+  lb(LB);
   buildUseList();
 }
 
 void VASTExpr::buildUseList() {
-  for (VASTUse *I = Ops, *E = Ops + NumOps; I != E; ++I)
+  for (VASTUse *I = ops(), *E = ops() + num_ops(); I != E; ++I)
     I->setUser(this);
 }
 
@@ -817,7 +823,7 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
   assign(Wire, AssignAtSlot, VASTWire::AssignCond);
-  Wire->setSlot(Slot);
+  Wire->setSlot(Slot->getSlotNum());
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();
 
@@ -1005,14 +1011,12 @@ void VASTValue::print(raw_ostream &OS) const {
   assert(0 && "VASTValue::print should not be called!");
 }
 
-void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const{
-  if (!getName()) {
-    assert(UB == getBitWidth() && LB == 0
-           && "Cannot print unamed object as operand!");
-    print(OS);
-    return;
-  }
+void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+  assert(0 && "VASTValue::printAsOperand should not be called!");
+}
 
+void VASTNamedValue::printAsOperand(raw_ostream &OS, unsigned UB,
+                                    unsigned LB) const{
   OS << getName();
   if (UB) OS << verilogBitRange(UB, LB, getBitWidth() > 1);
 }
@@ -1106,7 +1110,7 @@ void VASTPort::anchor() {}
 
 void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << AttrStr << ' ';
-  if (isRegister())
+  if (isa<VASTRegister>(this))
     OS << "reg";
   else
     OS << "wire";
@@ -1116,7 +1120,7 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 
   OS << ' ' << getName();
 
-  if (isRegister())
+  if (isa<VASTRegister>(this))
     OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
@@ -1241,7 +1245,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
 
 void VASTWire::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
   if (getName())
-    VASTValue::printAsOperand(OS, UB, LB);
+    VASTNamedValue::printAsOperand(OS, UB, LB);
   else {
     VASTExpr *E = getExpr();
     assert(E && "Cannot print wire as operand!");
@@ -1272,7 +1276,7 @@ void VASTWire::print(raw_ostream &OS) const {
   }
 
   printAssign(OS, this);
-  Expr->print(OS);
+  Expr->printAsOperand(OS);
   OS << ";\n";
 }
 
@@ -1280,7 +1284,7 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   OS << '(';
   typedef ArrayRef<VASTUse> UseArray;
 
-  switch (Opc) {
+  switch (opc()) {
   case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
 
   case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;

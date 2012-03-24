@@ -267,6 +267,7 @@ private:
   // define VAS assign iterator.
   typedef VASTRegister::assign_itertor assign_it;
 
+  VASTModule *VM;
 public:
   static char ID;
 
@@ -304,10 +305,10 @@ public:
   ValueAtSlot *getValueASlot(VASTValue *V, VASTSlot *S);
 
   // Traverse every register to define the ValueAtSlots.
-  void buildAllVAS(VASTModule *VM);
+  void buildAllVAS();
 
   // Traverse every register to define the ValueAtSlots.
-  void buildVASGraph(VASTModule *VM);
+  void buildVASGraph();
 
   // Add dependent ValueAtSlot.
   void addVASDep(ValueAtSlot *VAS, VASTRegister *DepReg);
@@ -316,16 +317,16 @@ public:
   void visitDepTree(VASTValue *DepTree, ValueAtSlot *VAS);
 
   bool addLiveIns(SlotInfo *From, SlotInfo *To, bool OnlyUndefTiming);
-  bool addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To, VASTModule *VM);
+  bool addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To);
 
   // Using the reaching definition algorithm to sort out the ultimate
   // relationship of registers.
   // Dirty hack: maybe there are two same statements is a slot, and we can use
   // bit vector to implement the algorithm similar to the compiler principle.
-  void ComputeReachingDefinition(VASTModule *VM);
+  void ComputeReachingDefinition();
 
   // collect the Generated and Killed statements of the slot.
-  void ComputeGenAndKill(VASTModule *VM);
+  void ComputeGenAndKill();
 
   void verifyRTLDependences() const;
 

@@ -54,6 +54,7 @@ struct TimingPath {
 
 struct CombPathDelayAnalysis : public MachineFunctionPass {
   RtlSSAAnalysis *RtlSSA;
+  VASTModule *VM;
   BumpPtrAllocator Allocator;
 
   static char ID;
@@ -83,7 +84,7 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
     return false;
   }
 
-  CombPathDelayAnalysis() : MachineFunctionPass(ID) {
+  CombPathDelayAnalysis() : MachineFunctionPass(ID), RtlSSA(0), VM(0) {
     initializeCombPathDelayAnalysisPass(*PassRegistry::getPassRegistry());
   }
 
@@ -114,11 +115,13 @@ void TimingPath::bindPath2ScriptEngine() {
 
   Script.clear();
 
-  SS << "RTLDatapath.Nodes = {'" << Path[0]->getName();
+  SS << "RTLDatapath.Nodes = {'" << cast<VASTNamedValue>(Path[0])->getName();
   for (unsigned i = 1; i < PathSize; ++i) {
     // Skip the unnamed nodes.
-    const char *Name = Path[i]->getName();
-    if (Name) SS << "', '" << Name;
+    if (VASTNamedValue *NV = dyn_cast<VASTNamedValue>(Path[i])) {
+      const char *Name = NV->getName();
+      if (Name) SS << "', '" << Name;
+    }
   }
   SS << "'}";
 
@@ -162,7 +165,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
        I != E; ++I) {
-    VASTSlot *SrcSlot = I->first->getSlot();
+    VASTSlot *SrcSlot = VM->getSlot(I->first->getSlotNum());
     ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
 
     // Update the PathDelay if the source VAS reaches DstSlot.
@@ -206,7 +209,7 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
   if (DisableTimingScriptGeneration) return false;
 
   bindFunctionInfoToScriptEngine(MF, getAnalysis<TargetData>());
-  VASTModule *VM = MF.getInfo<VFInfo>()->getRtlMod();
+  VM = MF.getInfo<VFInfo>()->getRtlMod();
   RtlSSA = &getAnalysis<RtlSSAAnalysis>();
 
   //Write the timing constraints.
@@ -227,7 +230,7 @@ void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = DstReg->assign_begin(), E = DstReg->assign_end();
        I != E; ++I) {
-    VASTSlot *S = I->first->getSlot();
+    VASTSlot *S = VM->getSlot(I->first->getSlotNum());
     ValueAtSlot *DstVAS = RtlSSA->getValueASlot(DstReg, S);
 
     // Paths for the assigning value

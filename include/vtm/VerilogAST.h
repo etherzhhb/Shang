@@ -46,32 +46,64 @@ class VASTNode {
 public:
   // Leaf node type of Verilog AST.
   enum VASTTypes {
-    vastPort,
-    vastWire,
+    vastImmediate,
+    vastFirstValueType = vastImmediate,
     vastExpr,
-    vastRegister,
     vastSymbol,
+    vastFirstNamedType = vastSymbol,
+    vastRegister,
+    vastWire,
+    vastLastNamedType = vastWire,
+    vastLastValueType = vastWire,
+    vastPort,
     vastSlot,
-    vastFirstDeclType = vastPort,
-    vastLastDeclType = vastSlot,
 
     vastModule
   };
 private:
-  const unsigned short T;
-  unsigned short SubclassData;
+  uint8_t data[16];
 protected:
-  VASTNode(VASTTypes NodeT, unsigned short subclassData)
-    : T(NodeT), SubclassData(subclassData) {}
+  enum { SubClassDataBase = 1 };
 
-  unsigned short getSubClassData() const { return SubclassData; }
+  template<typename T, unsigned Offset>
+  void d(T D) {
+    *reinterpret_cast<T*>(data + Offset) = D;
+  }
 
+  template<typename T, unsigned Offset>
+  T d() const {
+    return Offset < array_lengthof(data) ?
+           *reinterpret_cast<const T*>(data + Offset) : 0;
+  }
+
+  template<typename T>
+  void ptr(T *p) { return d<T*, 8>(p); }
+  template<typename T>
+  T *ptr() const { return d<T*, 8>(); }
+
+  void i64(int64_t i) { return d<int64_t, 8>(i); }
+  int64_t i64() const { return d<int64_t, 8>(); }
+
+  template<int Offset>
+  void i8(int8_t i) { return d<int8_t, Offset>(i); }
+  template<int Offset>
+  int8_t i8() const { return d<int8_t, Offset>(); }
+
+  template<int Offset>
+  void i16(int16_t i) { return d<int16_t, (Offset & ~0x1)>(i); }
+  template<int Offset>
+  int16_t i16() const { return d<int16_t, (Offset & ~0x1)>(); }
+
+
+  VASTNode(VASTTypes NodeT) {
+    i8<0>(NodeT);
+  }
+  virtual void print(raw_ostream &OS) const = 0;
 public:
   virtual ~VASTNode() {}
 
-  unsigned getASTType() const { return T; }
+  unsigned getASTType() const { return i8<0>(); }
 
-  virtual void print(raw_ostream &OS) const = 0;
   void dump() const;
 };
 
@@ -186,27 +218,26 @@ public:
   VASTUse *get() { return I; }
 };
 
-// TODO: Change VASTValue to VASTNamedNode
 class VASTValue : public VASTNode {
-  const char *Name;
-
   typedef iplist<VASTUse> UseListTy;
   UseListTy UseList;
+  int8_t bitwidth() const { return i8<VASTNode::SubClassDataBase>(); }
 protected:
-  VASTValue(VASTTypes DeclType, const char *name, unsigned BitWidth)
-    : VASTNode(DeclType, BitWidth), Name(name)
-  {
-    assert(DeclType >= vastFirstDeclType && DeclType <= vastLastDeclType
+  enum { SubClassDataBase = VASTNode::SubClassDataBase + 1 };
+
+  VASTValue(VASTTypes T, unsigned BitWidth) : VASTNode(T) {
+    assert(T >= vastFirstValueType && T <= vastLastValueType
            && "Bad DeclType!");
+    i8<VASTNode::SubClassDataBase>(BitWidth);
   }
 
   void addUseToList(VASTUse *U) { UseList.push_back(U); }
   void removeUseFromList(VASTUse *U) { UseList.remove(U); }
   friend class VASTUse;
+
+  virtual void print(raw_ostream &OS) const;
 public:
-  const char *getName() const { return Name; }
-  unsigned short getBitWidth() const { return getSubClassData(); }
-  bool isRegister() const { return getASTType() == vastRegister; }
+  unsigned getBitWidth() const { return bitwidth(); }
 
   typedef VASTUseIterator<UseListTy::iterator, VASTValue> use_iterator;
   use_iterator use_begin() { return use_iterator(UseList.begin()); }
@@ -214,7 +245,6 @@ public:
 
   bool use_empty() const { return UseList.empty(); }
 
-  virtual void print(raw_ostream &OS) const;
   virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   void printAsOperand(raw_ostream &OS) const {
@@ -248,9 +278,37 @@ template<> struct simplify_type<VASTUse> {
   }
 };
 
-class VASTSymbol : public VASTValue {
+class VASTNamedValue : public VASTValue {
+protected:
+  const char *name() const { return ptr<const char>(); }
+  enum { SubClassDataBase = VASTValue::SubClassDataBase };
+
+  VASTNamedValue(VASTTypes T, const char *Name, unsigned BitWidth)
+    : VASTValue(T, BitWidth) {
+    assert(T >= vastFirstNamedType && T <= vastLastNamedType
+      && "Bad DeclType!");
+    ptr<const char>(Name);
+  }
+
+public:
+  const char *getName() const { return name(); }
+  virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTNamedValue *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() >= vastFirstNamedType &&
+           A->getASTType() <= vastLastNamedType;
+  }
+
+  void printAsOperand(raw_ostream &OS) const {
+    printAsOperand(OS, getBitWidth(), 0);
+  }
+};
+
+class VASTSymbol : public VASTNamedValue {
   VASTSymbol(const char *Name, unsigned BitWidth)
-    : VASTValue(VASTNode::vastSymbol, Name, BitWidth) {}
+    : VASTNamedValue(VASTNode::vastSymbol, Name, BitWidth) {}
 
   friend class VASTModule;
 public:
@@ -262,26 +320,36 @@ public:
   }
 };
 
-class VASTSignal : public VASTValue {
+class VASTSignal : public VASTNamedValue {
   // TODO: Annotate the signal so we know that some of them are port signals
   // and no need to declare again in the declaration list.
   const char *AttrStr;
-  bool Pinned;
-  bool HasUndefTiming;
 protected:
+  enum { SubClassDataBase = VASTValue::SubClassDataBase + 2 };
+
   VASTSignal(VASTTypes DeclType, const char *Name, unsigned BitWidth,
              const char *Attr = "")
-    : VASTValue(DeclType, Name, BitWidth), AttrStr(Attr), Pinned(false),
-      HasUndefTiming(false) {}
+    : VASTNamedValue(DeclType, Name, BitWidth), AttrStr(Attr) {
+    Pin(false);
+    setTimingUndef(false);
+  }
 public:
 
   // Pin the wire, prevent it from being remove.
-  void Pin() { Pinned = true; }
-  bool isPinned() const { return Pinned; }
+  void Pin(bool isPinned = true) {
+    i8<VASTValue::SubClassDataBase + 1>(isPinned);
+  }
+  bool isPinned() const {
+    return i8<VASTValue::SubClassDataBase>();
+  }
 
   // The timing of a node may not captured by schedule information.
-  void setTimingUndef(bool UnDef = true) { HasUndefTiming = UnDef; }
-  bool isTimingUndef() const { return HasUndefTiming; }
+  void setTimingUndef(bool UnDef = true) {
+    return i8<VASTValue::SubClassDataBase + 1>(UnDef);
+  }
+  bool isTimingUndef() const {
+    return i8<VASTValue::SubClassDataBase + 1>();
+  }
 
   void printDecl(raw_ostream &OS) const;
 
@@ -295,19 +363,24 @@ public:
 };
 
 class VASTPort : public VASTNode {
-  VASTSignal *S;
+  void s(VASTSignal *S) { ptr<VASTSignal>(S); }
+  VASTSignal *s() const { return ptr<VASTSignal>(); }
+  void is_input(bool isInput) { i8<VASTNode::SubClassDataBase>(isInput); }
+  int8_t is_input() const { return i8<VASTNode::SubClassDataBase>(); }
 public:
-  VASTPort(VASTSignal *s, bool isInput) : VASTNode(vastPort, isInput), S(s) {
-    assert(!(isInput && S->isRegister()) && "Bad port decl!");
+  VASTPort(VASTSignal *S, bool isInput) : VASTNode(vastPort) {
+    assert(!(isInput && isa<VASTRegister>(S)) && "Bad port decl!");
+    s(S);
+    is_input(isInput);
   }
 
-  const char *getName() const { return S->getName(); }
-  bool isRegister() const { return S->isRegister(); }
-  unsigned getBitWidth() const { return S->getBitWidth(); }
-  VASTSignal *get() const { return S; }
-  operator VASTSignal *() const { return S; }
+  const char *getName() const { return s()->getName(); }
+  bool isRegister() const { return isa<VASTRegister>(s()); }
+  unsigned getBitWidth() const { return s()->getBitWidth(); }
+  VASTSignal *get() const { return s(); }
+  operator VASTSignal *() const { return s(); }
 
-  bool isInput() const { return getSubClassData(); }
+  bool isInput() const { return is_input(); }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTPort *A) { return true; }
@@ -372,11 +445,18 @@ public:
     dpBlackBox
   };
 private:
-  VASTUse *Ops;
-  uint8_t NumOps;
-  uint8_t Opc;
-  uint8_t UB;
-  uint8_t LB;
+  void ops(VASTUse *Ops) { ptr<VASTUse>(Ops); }
+  VASTUse *ops() const { return ptr<VASTUse>(); }
+  void num_ops(uint8_t N) { i8<VASTValue::SubClassDataBase>(N); }
+  uint8_t num_ops() const { return i8<VASTValue::SubClassDataBase>(); }
+  uint8_t opc() const { return i8<VASTValue::SubClassDataBase + 1>(); }
+  void opc(uint8_t C) { return i8<VASTValue::SubClassDataBase + 1>(C); }
+  uint8_t ub() const { return i8<VASTValue::SubClassDataBase + 2>(); }
+  void ub(uint8_t u) { return i8<VASTValue::SubClassDataBase + 2>(u); }
+  uint8_t lb() const { return i8<VASTValue::SubClassDataBase + 3>(); }
+  void lb(uint8_t l) { return i8<VASTValue::SubClassDataBase + 3>(l); }
+
+  enum { SubClassDataBase = VASTValue::SubClassDataBase + 4 };
 
   friend struct FoldingSetTrait<VASTExpr>;
   /// FastID - A reference to an Interned FoldingSetNodeID for this node.
@@ -391,8 +471,6 @@ private:
   explicit VASTExpr(VASTUse *U, unsigned ub, unsigned lb,
                     const FoldingSetNodeIDRef ID);
 
-  void setExpr(VASTUse *ops, uint8_t numOps, Opcode opc);
-
   friend class VASTModule;
 
   void printAsOperandInteral(raw_ostream &OS) const;
@@ -400,47 +478,43 @@ private:
   void buildUseList();
 
   void dropOperandsFromUseList() {
-    for (VASTUse *I = Ops, *E = Ops + NumOps; I != E; ++I)
+    for (VASTUse *I = ops(), *E = ops() + num_ops(); I != E; ++I)
       I->removeFromList();
   }
 
 public:
+  Opcode getOpcode() const { return VASTExpr::Opcode(opc()); }
+  bool isDead() const { return getOpcode() == Dead; }
 
-  bool isDead() const { return Opc == Dead; }
-
-  Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
-  void setOpcode(Opcode O) { Opc = O; }
-
-  unsigned num_operands() const { return NumOps; }
+  unsigned num_operands() const { return num_ops(); }
 
   VASTUse &getOperand(unsigned Idx) const {
     assert(Idx < num_operands() && "Index out of range!");
-    return Ops[Idx];
+    return ops()[Idx];
   }
 
   typedef const VASTUse *op_iterator;
-  op_iterator op_begin() const { return Ops; }
-  op_iterator op_end() const { return Ops + NumOps; }
+  op_iterator op_begin() const { return ops(); }
+  op_iterator op_end() const { return ops() + num_ops(); }
+
+  //typedef VASTUse *op_iterator;
+  //op_iterator op_begin() const { return ops(); }
+  //op_iterator op_end() const { return ops() + num_ops(); }
 
   ArrayRef<VASTUse> getOperands() const {
-    return ArrayRef<VASTUse>(Ops, NumOps);
+    return ArrayRef<VASTUse>(ops(), num_ops());
   }
 
-  uint8_t getUB() const { return UB; }
-  uint8_t getLB() const { return LB; }
+  uint8_t getUB() const { return ub(); }
+  uint8_t getLB() const { return lb(); }
 
-  void print(raw_ostream &OS, unsigned UB, unsigned LB) const {
-    // Print the bit slice.
-    if (UB != getBitWidth() || LB != 0) {
-      getOperand(0)->printAsOperand(OS, UB, LB);
-      return;
-    }
-
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+    assert(UB == getUB() && LB == getLB() && "Cannot print bitslice of Expr!");
     printAsOperandInteral(OS);
   }
 
-  void print(raw_ostream &OS) const {
-    printAsOperandInteral(OS);
+  void printAsOperand(raw_ostream &OS) const {
+    printAsOperand(OS, getUB(), getLB());
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -492,41 +566,44 @@ public:
 private:
   // VASTValue pointer point to the VASTExpr.
   VASTUse U;
-  Type Ty;
-  // TODO: move to datapath.
-  union {
-    uint64_t Latency;
-    VASTSlot *Slot;
-  } Context;
+  uint8_t WireType() const { return i8<VASTSignal::SubClassDataBase>(); }
+  void WireType(uint8_t T) { i8<VASTSignal::SubClassDataBase>(T); }
+
+  // SlotNum and Latency share the same location.
+  uint16_t Latency() const { return i16<VASTSignal::SubClassDataBase + 2>(); }
+  void Latency(uint16_t L) { i16<VASTSignal::SubClassDataBase + 2>(L); }
+  uint16_t SlotNum() const { return i16<VASTSignal::SubClassDataBase + 2>(); }
+  void SlotNum(uint16_t S) { i16<VASTSignal::SubClassDataBase + 2>(S); }
 
   friend class VASTModule;
 
   VASTWire(const char *Name, unsigned BitWidth, const char *Attr = "")
-    : VASTSignal(vastWire, Name, BitWidth, Attr), Ty(VASTWire::Common) {
-    Context.Latency = 0;
+    : VASTSignal(vastWire, Name, BitWidth, Attr) {
+    WireType(Common);
+    Latency(0);
   }
 
   void setAsInput() {
-    Ty = VASTWire::InputPort;
+    WireType(InputPort);
     // Pin the signal to prevent it from being optimized away.
     Pin();
     setTimingUndef();
   }
 
-  void setSlot(VASTSlot *Slot) {
+  void setSlot(uint16_t slotNum) {
     assert(getWireType() == VASTWire::AssignCond && "setSlot on wrong type!");
-    Context.Slot = Slot;
+    SlotNum(slotNum);
   }
 
   void assign(VASTExpr *e, VASTWire::Type T = VASTWire::Common) {
-    Ty = T;
+    WireType(T);
     U.set(e);
     U.setUser(this);
   }
 
   void assignWithExtraDelay(VASTExpr *e, unsigned latency) {
-    assign(e, VASTWire::haveExtraDelay);
-    Context.Latency = latency;
+    assign(e, haveExtraDelay);
+    Latency(latency);
   }
 
   VASTValue::dp_dep_it op_begin() const { return U.isInvalid() ? 0 : &U; }
@@ -538,16 +615,16 @@ public:
     return dyn_cast_or_null<VASTExpr>(U.unwrap());
   }
 
-  VASTWire::Type getWireType() const { return Ty; }
+  VASTWire::Type getWireType() const { return VASTWire::Type(WireType()); }
 
   unsigned getExtraDelayIfAny() const {
-    return getWireType() == VASTWire::haveExtraDelay ? Context.Latency : 0;
+    return getWireType() == VASTWire::haveExtraDelay ? Latency() : 0;
   }
 
-  VASTSlot *getSlot() const {
+  uint16_t getSlotNum() const {
     assert(getWireType() == VASTWire::AssignCond &&
            "Call getSlot on bad wire type!");
-    return Context.Slot;
+    return SlotNum();
   }
 
   // Print the logic to the output stream.
@@ -601,10 +678,20 @@ private:
   PredVecTy PredSlots;
 
   SuccVecTy NextSlots;
-  // Slot ranges of alias slot.
-  unsigned StartSlot, EndSlot, II;
+  uint16_t SlotNum() const { return i16<VASTNode::SubClassDataBase + 1>(); }
+  void SlotNum(uint16_t S) { i16<VASTNode::SubClassDataBase + 1>(S); }
   // The start slot of parent state, can identify parent state.
-  unsigned ParentIdx;
+  uint16_t ParentIdx() const { return i16<VASTNode::SubClassDataBase + 3>(); }
+  void ParentIdx(uint16_t Idx) { i16<VASTNode::SubClassDataBase + 3>(Idx); }
+  uint16_t BBNum() const { return i16<VASTNode::SubClassDataBase + 5>(); }
+  void BBNum(uint16_t Num) { i16<VASTNode::SubClassDataBase + 5>(Num); }
+  // Slot ranges of alias slot.
+  uint16_t StartSlot() const { return i16<VASTNode::SubClassDataBase + 7>(); }
+  void StartSlot(uint16_t S) { i16<VASTNode::SubClassDataBase + 7>(S); }
+  uint16_t EndSlot() const { return i16<VASTNode::SubClassDataBase + 9>(); }
+  void EndSlot(uint16_t S) { i16<VASTNode::SubClassDataBase + 9>(S); }
+  uint16_t II() const { return i16<VASTNode::SubClassDataBase + 11>(); }
+  void II(uint16_t ii) { i16<VASTNode::SubClassDataBase + 11>(ii); }
 
   // Successor slots of this slot.
   succ_cnd_iterator succ_cnd_begin() { return NextSlots.begin(); }
@@ -639,9 +726,9 @@ public:
   VASTValue *getReady() const { return *SlotReady; }
   VASTValue *getActive() const { return *SlotActive; }
 
-  unsigned getSlotNum() const { return getSubClassData(); }
+  unsigned getSlotNum() const { return SlotNum(); }
   // The start slot of parent state(MachineBasicBlock)
-  unsigned getParentIdx() const { return ParentIdx; }
+  unsigned getParentIdx() const { return ParentIdx(); }
 
   // TODO: Rename to addSuccSlot.
   bool hasNextSlot(VASTSlot *NextSlot) const;
@@ -694,20 +781,20 @@ public:
   // The slots from difference stage of the loop may active at the same time,
   // and these slot called "alias".
   void setAliasSlots(unsigned startSlot, unsigned endSlot, unsigned ii) {
-    StartSlot = startSlot;
-    EndSlot = endSlot;
-    II = ii;
+    StartSlot(startSlot);
+    EndSlot(endSlot);
+    II(ii);
   }
 
   // Is the current slot the first slot of its alias slots?
-  bool isLeaderSlot() const { return StartSlot == getSlotNum(); }
+  bool isLeaderSlot() const { return StartSlot() == getSlotNum(); }
   // Iterates over all alias slot
-  unsigned alias_start() const { return StartSlot; }
-  unsigned alias_end() const { return EndSlot; }
+  unsigned alias_start() const { return StartSlot(); }
+  unsigned alias_end() const { return EndSlot(); }
   bool hasAliasSlot() const { return alias_start() != alias_end(); }
   unsigned alias_ii() const {
     assert(hasAliasSlot() && "Dont have II!");
-    return II;
+    return II();
   }
 
   bool operator<(const VASTSlot &RHS) const {
@@ -731,7 +818,7 @@ class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTValue*> AndCndVec;
 private:
-  unsigned InitVal;
+  uint64_t InitVal;
 
   // the first key VASTWire is Assignment condition. The second value is
   // assignment value.
@@ -742,7 +829,7 @@ private:
 
   friend class VASTModule;
 public:
-  VASTRegister(const char *Name, unsigned BitWidth, unsigned InitVal,
+  VASTRegister(const char *Name, unsigned BitWidth, uint64_t InitVal,
                const char *Attr = "");
 
   void clearAssignments() {
@@ -799,9 +886,9 @@ private:
   std::string Name;
   BumpPtrAllocator Allocator;
   SpecificBumpPtrAllocator<VASTUse> UseAllocator;
-  typedef StringMap<VASTValue*> SymTabTy;
+  typedef StringMap<VASTNamedValue*> SymTabTy;
   SymTabTy SymbolTable;
-  typedef StringMapEntry<VASTValue*> SymEntTy;
+  typedef StringMapEntry<VASTNamedValue*> SymEntTy;
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
@@ -823,7 +910,7 @@ public:
     RetPort // Port for function return value.
   };
 
-  VASTModule(const std::string &Name) : VASTNode(vastModule, 0),
+  VASTModule(const std::string &Name) : VASTNode(vastModule),
     DataPath(*(new std::string())),
     ControlBlock(*(new std::string())),
     LangControlBlock(ControlBlock),
@@ -848,7 +935,7 @@ public:
   bool eliminateConstRegisters();
 
   VASTValue *getSymbol(const std::string &Name) const {
-    StringMap<VASTValue*>::const_iterator at = SymbolTable.find(Name);
+    SymTabTy::const_iterator at = SymbolTable.find(Name);
     assert(at != SymbolTable.end() && "Symbol not found!");
     return at->second;
   }
@@ -860,9 +947,9 @@ public:
 
   VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth) {
     SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
-    VASTValue *&V = Entry.second;
+    VASTNamedValue *&V = Entry.second;
     if (V == 0) {
-       V = Allocator.Allocate<VASTValue>();
+       V = Allocator.Allocate<VASTNamedValue>();
        new (V) VASTSymbol(Entry.getKeyData(), BitWidth);
     }
 
