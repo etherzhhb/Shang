@@ -652,9 +652,6 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB,
   UniqueExprs.InsertNode(E, IP);
 
   return E;
-/*
-  VASTUse *Op = new (Allocator.Allocate<VASTUse>()) VASTUse(U);
-  return new (Allocator.Allocate<VASTExpr>()) VASTExpr(Op, UB, LB);*/
 }
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
@@ -713,6 +710,14 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
   default: break;
   case VASTExpr::dpAnd: case VASTExpr::dpOr: case VASTExpr::dpXor:
     return buildLogicExpr(Opc, LHS, RHS, BitWidth);
+  case VASTExpr::dpAdd: {
+    VASTValue *Ops[] = { LHS, RHS };
+    return buildAddExpr(Opc, Ops, BitWidth);
+  }
+  case VASTExpr::dpMul: {
+    VASTValue *Ops[] = { LHS, RHS };
+    return buildMulExpr(Opc, Ops, BitWidth);
+  }
   }
 
   VASTValue *Ops[] = { LHS, RHS };
@@ -734,6 +739,10 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
     assert(Ops.size() == 1 && "Bad operand number!");
     return buildExpr(Opc, Ops[0], BitWidth);
   }
+  case VASTExpr::dpAdd:  return buildAddExpr(Opc, Ops, BitWidth);
+
+  case VASTExpr::dpMul:  return buildMulExpr(Opc, Ops, BitWidth);
+
   case VASTExpr::dpAnd: case VASTExpr::dpOr: {
     if (Ops.size() == 1)
       return buildExpr(VASTExpr::dpAssign, Ops[0], BitWidth);
@@ -743,6 +752,26 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
   }
   }
 
+  return createExpr(Opc, Ops, BitWidth);
+}
+
+VASTValue *VASTModule::buildMulExpr(VASTExpr::Opcode Opc,
+                                    ArrayRef<VASTValue*> Ops,
+                                    unsigned BitWidth) {
+  return getOrCreateCommutativeExpr(Opc, Ops, BitWidth);
+}
+
+VASTValue *VASTModule::buildAddExpr(VASTExpr::Opcode Opc,
+                                    ArrayRef<VASTValue*> Ops,
+                                    unsigned BitWidth) {
+  return getOrCreateCommutativeExpr(Opc, Ops, BitWidth);
+}
+
+VASTValue *VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                                  ArrayRef<VASTValue*> Ops,
+                                                  unsigned BitWidth) {
+  SmallVector<VASTValue*, 4> ValueVec(Ops.begin(), Ops.end());
+  std::sort(ValueVec.begin(), ValueVec.end());
   return createExpr(Opc, Ops, BitWidth);
 }
 

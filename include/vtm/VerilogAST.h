@@ -979,7 +979,12 @@ public:
   }
 
   VASTValue *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                       unsigned BitWidth);
+                        unsigned BitWidth);
+
+  VASTValue *getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                        ArrayRef<VASTValue*> Ops,
+                                        unsigned BitWidth);
+
   VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                        unsigned BitWidth);
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op, unsigned BitWidth);
@@ -995,6 +1000,12 @@ public:
 
   VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
                             unsigned BitWidth);
+
+  VASTValue *buildMulExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+                          unsigned BitWidth);
+
+  VASTValue *buildAddExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+                          unsigned BitWidth);
 
   VASTValue *buildNotExpr(VASTValue *U);
 
