@@ -651,7 +651,10 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB)
   }
 
   assert(UB <= OperandSize && UB > LB && "Bad bit range!");
-  assert(isa<VASTNamedValue>(U) && "Cannot get bitslice of value without name!");
+  // FIXME: We can name the expression when necessary.
+  assert(isa<VASTNamedValue>(U) && cast<VASTNamedValue>(U)->getName()
+         && *cast<VASTNamedValue>(U)->getName() != '\0'
+         && "Cannot get bitslice of value without name!");
 
   VASTValue *Ops[] = { U };
   return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
