@@ -495,6 +495,7 @@ private:
       I->removeFromList();
   }
 
+  void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
 public:
   Opcode getOpcode() const { return VASTExpr::Opcode(opc()); }
   bool isDead() const { return getOpcode() == Dead; }
