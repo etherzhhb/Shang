@@ -644,19 +644,22 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB,
   // Not a sub bitslice.
   if (UB == OperandSize && LB == 0) return U;
 
+  // Try to fold the bitslice.
+  VASTExpr *AssignExpr = 0;
+  if (VASTExpr *E = dyn_cast<VASTExpr>(U) )
+    AssignExpr = E;
+  else if (VASTWire *W = dyn_cast<VASTWire>(U))
+    AssignExpr = W->getExpr();
+
+  if (AssignExpr && AssignExpr->getOpcode() == VASTExpr::dpAssign) {
+    unsigned Offset = AssignExpr->getLB();
+    UB += Offset;
+    LB += Offset;
+    return getOrCreateBitSlice(AssignExpr->getOperand(0), UB, LB);
+  }
+
   assert(UB <= OperandSize && UB > LB && "Bad bit range!");
   assert(isa<VASTNamedValue>(U) && "Cannot get bitslice of value without name!");
-
-  // Try to fold the bitslice.
-  if (VASTWire *W = dyn_cast<VASTWire>(U))
-    if (VASTExpr *E = W->getExpr())
-      if (E->getOpcode() == VASTExpr::dpAssign) {
-        unsigned Offset = E->getLB();
-        UB += Offset;
-        LB += Offset;
-        return getOrCreateBitSlice(E->getOperand(0), UB, LB);
-      }
-
   FoldingSetNodeID ID;
 
   // Profile the elements of VASTExpr.
