@@ -1258,9 +1258,9 @@ void VASTWire::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
   if (getName())
     VASTNamedValue::printAsOperand(OS, UB, LB);
   else {
-    VASTExpr *E = getExpr();
-    assert(E && "Cannot print wire as operand!");
-    E->printAsOperand(OS, UB, LB);
+    VASTValue *V = getAssigningValue();
+    assert(V && "Cannot print wire as operand!");
+    V->printAsOperand(OS, UB, LB);
   }
 }
 
