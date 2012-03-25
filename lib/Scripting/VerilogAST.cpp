@@ -685,10 +685,10 @@ VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
     }
     }
 
-    if (I->getValue() == 0) return ValForRHSIsZero;
+    uint64_t ImmVal = getBitSlice64(I->getValue(), BitWidth);
 
-    if (getBitSlice64(I->getValue(), BitWidth) == getBitSlice64(-1, BitWidth))
-      return ValForRHSIsAllOnes;
+    if (ImmVal == getBitSlice64(~0ull, BitWidth))  return ValForRHSIsAllOnes;
+    else if (ImmVal == 0)                          return ValForRHSIsZero;
   }
   VASTValue *Ops[] = { LHS, RHS };
   return createExpr(Opc, Ops, BitWidth, 0);
