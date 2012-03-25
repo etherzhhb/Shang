@@ -480,11 +480,8 @@ private:
 
   VASTExpr(const VASTExpr&);             // Do not implement
 
-  explicit VASTExpr(Opcode opc, VASTUse *ops, uint8_t numOps, unsigned BitWidth,
-                    const FoldingSetNodeIDRef ID);
-
-  explicit VASTExpr(VASTUse *U, unsigned ub, unsigned lb,
-                    const FoldingSetNodeIDRef ID);
+  explicit VASTExpr(Opcode Opc, VASTUse *Ops, uint8_t numOps, unsigned UB,
+                    unsigned LB, const FoldingSetNodeIDRef ID);
 
   friend class VASTModule;
 
@@ -1107,7 +1104,7 @@ public:
   }
 
   VASTValue *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                        unsigned BitWidth);
+                        unsigned UB, unsigned LB);
 
   VASTValue *getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
                                         ArrayRef<VASTValue*> Ops,
