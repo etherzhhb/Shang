@@ -631,6 +631,23 @@ VASTValue *VASTModule::buildNotExpr(VASTValue *U) {
 
 VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB,
                                            uint8_t LB) {
+  unsigned OperandSize = U->getBitWidth();
+  // Not a sub bitslice.
+  if (UB == OperandSize && LB == 0) return U;
+
+  assert(UB <= OperandSize && UB > LB && "Bad bit range!");
+  assert(isa<VASTNamedValue>(U) && "Cannot get bitslice of value without name!");
+
+  // Try to fold the bitslice.
+  if (VASTWire *W = dyn_cast<VASTWire>(U))
+    if (VASTExpr *E = W->getExpr())
+      if (E->getOpcode() == VASTExpr::dpAssign) {
+        unsigned Offset = E->getLB();
+        UB += Offset;
+        LB += Offset;
+        return getOrCreateBitSlice(E->getOperand(0), UB, LB);
+      }
+
   FoldingSetNodeID ID;
 
   // Profile the elements of VASTExpr.
