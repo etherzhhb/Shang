@@ -510,10 +510,9 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (UseSwitch) OS.switch_end();
 }
 
-VASTExpr::VASTExpr(Opcode Opc, VASTUse *Ops, uint8_t NumOps, unsigned UB,
+VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
                    unsigned LB, const FoldingSetNodeIDRef ID)
   : VASTValue(vastExpr, UB - LB), FastID(ID) {
-  ops(Ops);
   num_ops(NumOps);
   opc(Opc);
   ub(UB);
@@ -780,18 +779,20 @@ VASTValue *VASTModule::createExpr(VASTExpr::Opcode Opc,
     ID.AddPointer(Ops[i]);
 
   void *IP = 0;
-  if (VASTExpr * E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
+  if (VASTExpr *E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
     return E;
   
   // If the Expression do not exist, allocate a new one.
-  VASTUse *OpArray = UseAllocator.Allocate(Ops.size());
-  VASTExpr *E = new (Allocator) VASTExpr(Opc, OpArray, Ops.size(), UB, LB,
-                                         ID.Intern(Allocator));
+  // Place the VASTUse array right after the VASTExpr.
+  void *P = Allocator.Allocate(sizeof(VASTExpr) + Ops.size() * sizeof(VASTUse),
+                               alignOf<VASTExpr>());
+  VASTExpr *E = new (P) VASTExpr(Opc, Ops.size(), UB, LB,
+                                 ID.Intern(Allocator));
   UniqueExprs.InsertNode(E, IP);
 
   // Initialize the use list.
   for (unsigned i = 0; i < Ops.size(); ++i)
-    (void) new (OpArray + i) VASTUse(Ops[i], E);
+    (void) new (E->ops() + i) VASTUse(Ops[i], E);
 
   return E;
 }
@@ -1146,7 +1147,7 @@ static void printSimpleUnsignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
 
 //----------------------------------------------------------------------------//
 // Generic datapath printing helper function.
-static void printUnaryOp(raw_ostream &OS, VASTUse &U, const char *Opc) {
+static void printUnaryOp(raw_ostream &OS, const VASTUse &U, const char *Opc) {
   OS << Opc;
   U.print(OS);
 }

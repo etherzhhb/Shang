@@ -463,8 +463,10 @@ public:
     dpBlackBox
   };
 private:
-  void ops(VASTUse *Ops) { ptr<VASTUse>(Ops); }
-  VASTUse *ops() const { return ptr<VASTUse>(); }
+  const VASTUse *ops() const {
+    return reinterpret_cast<const VASTUse*>(this + 1);
+  }
+  VASTUse *ops() { return reinterpret_cast<VASTUse*>(this + 1); }
   void num_ops(uint8_t N) { i8<VASTValue::SubClassDataBase>(N); }
   uint8_t num_ops() const { return i8<VASTValue::SubClassDataBase>(); }
   uint8_t opc() const { return i8<VASTValue::SubClassDataBase + 1>(); }
@@ -483,7 +485,7 @@ private:
 
   VASTExpr(const VASTExpr&);             // Do not implement
 
-  explicit VASTExpr(Opcode Opc, VASTUse *Ops, uint8_t numOps, unsigned UB,
+  explicit VASTExpr(Opcode Opc, uint8_t numOps, unsigned UB,
                     unsigned LB, const FoldingSetNodeIDRef ID);
 
   friend class VASTModule;
@@ -502,7 +504,7 @@ public:
 
   unsigned num_operands() const { return num_ops(); }
 
-  VASTUse &getOperand(unsigned Idx) const {
+  const VASTUse &getOperand(unsigned Idx) const {
     assert(Idx < num_operands() && "Index out of range!");
     return ops()[Idx];
   }
