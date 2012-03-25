@@ -964,6 +964,10 @@ public:
     return Imm;
   }
 
+  VASTImmediate *getBoolImmediate(bool Value) {
+    return getOrCreateImmediate(Value ? 1 : 0, 1);
+  }
+
   VASTValue *getSymbol(const std::string &Name) const {
     SymTabTy::const_iterator at = SymbolTable.find(Name);
     assert(at != SymbolTable.end() && "Symbol not found!");
@@ -986,14 +990,6 @@ public:
     assert(V->getBitWidth() == BitWidth
            && "Getting symbol with wrong bitwidth!");
     return V;
-  }
-
-  VASTValue *getAlwaysTrue() {
-    return getOrCreateSymbol("1'b1", 0);
-  }
-
-  VASTValue *getAlwaysFalse() {
-    return getOrCreateSymbol("1'b0", 0);
   }
 
   void allocaSlots(unsigned TotalSlots) {

@@ -214,7 +214,7 @@ VASTValue *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
                                VM.buildNotExpr(*I->second), 1));
   
   // No waiting signal means always ready.
-  if (Ops.empty()) Ops.push_back(VM.getAlwaysTrue());
+  if (Ops.empty()) Ops.push_back(VM.getBoolImmediate(true));
   
   return VM.buildExpr(VASTExpr::dpAnd, Ops, 1);
 }
@@ -311,10 +311,10 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     // Enable the default successor slots.
     VASTSlot *NextSlot = Mod.getSlot(getSlotNum() + 1);
     VASTRegister *NextSlotReg = NextSlot->getRegister();
-    Mod.addAssignment(NextSlotReg, Mod.getAlwaysTrue(), this,
+    Mod.addAssignment(NextSlotReg, Mod.getBoolImmediate(true), this,
                       EmptySlotEnCnd);
     // And connect the fall through edge now.
-    Mod.addSlotSucc(this, NextSlot, Mod.getAlwaysTrue());
+    Mod.addSlotSucc(this, NextSlot, Mod.getBoolImmediate(true));
   }
 
   assert(!(hasSelfLoop && PredAliasSlots)
@@ -327,7 +327,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       EmptySlotEnCnd.push_back(Mod.buildNotExpr(PredAliasSlots));
 
     // Disable the current slot.
-    Mod.addAssignment(getRegister(), Mod.getAlwaysFalse(), this,
+    Mod.addAssignment(getRegister(), Mod.getBoolImmediate(false), this,
                       EmptySlotEnCnd);
   }
 
@@ -395,7 +395,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       DisableAndCnds.push_back(*I->second);
 
       VASTRegister *En = cast<VASTRegister>(I->first);
-      Mod.addAssignment(En, Mod.getAlwaysFalse(), this,
+      Mod.addAssignment(En, Mod.getBoolImmediate(false), this,
                         DisableAndCnds, false);
       DisableAndCnds.clear();
     }

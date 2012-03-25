@@ -475,7 +475,7 @@ void VerilogASTBuilder::emitIdleState() {
 
   // Always Disable the finish signal.
   VM->addSlotDisable(IdleSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
-                     VM->getAlwaysTrue());
+                     VM->getBoolImmediate(true));
   SmallVector<VASTValue*, 1> Cnds(1, StartPort);
   emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds);
 }
@@ -819,7 +819,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
       if (TargetBB == CurBB && Pipelined)
         // The loop op of pipelined loop enable next slot explicitly.
         VM->addSlotSucc(CurSlot, VM->getOrCreateNextSlot(CurSlot),
-                        VM->getAlwaysTrue());
+                        VM->getBoolImmediate(true));
 
       // Emit the first micro state of the target state.
       emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
@@ -903,7 +903,7 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
   OS << "$finish();\n";
   OS.exit_block();
 
-  VM->addSlotSucc(Slot, VM->getOrCreateSlot(0, 0), VM->getAlwaysTrue());
+  VM->addSlotSucc(Slot, VM->getOrCreateSlot(0, 0), VM->getBoolImmediate(true));
 }
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
@@ -1380,7 +1380,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
 
 VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
   // Is there an always true predicate?
-  if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getAlwaysTrue();
+  if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getBoolImmediate(true);
 
   // Otherwise it must be some signal.
   VASTValue *C = lookupSignal(Op.getReg());
