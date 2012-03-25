@@ -162,7 +162,6 @@ public:
   void PinUser() const;
 
   unsigned getBitWidth() const ;
-  void print(raw_ostream &OS) const;
 };
 
 template<>
@@ -955,7 +954,6 @@ private:
   // The Name of the Design.
   std::string Name;
   BumpPtrAllocator Allocator;
-  SpecificBumpPtrAllocator<VASTUse> UseAllocator;
 
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;

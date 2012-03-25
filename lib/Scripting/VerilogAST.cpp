@@ -136,13 +136,6 @@ bool VASTUse::operator==(const VASTValue *RHS) const {
   return V == RHS;
 }
 
-void VASTUse::print(raw_ostream &OS) const {
-  OS << '(';
-  assert(!isInvalid() && "Cannot print invalid use!");
-  V->printAsOperand(OS);
-  OS << ')';
-}
-
 void VASTUse::PinUser() const {
   if (VASTSignal *S = dyn_cast<VASTSignal>(operator*()))
     S->Pin();
@@ -532,7 +525,6 @@ VASTModule::~VASTModule() {
   Registers.clear();
   Slots.clear();
   Allocator.Reset();
-  UseAllocator.DestroyAll();
   SymbolTable.clear();
   UniqueExprs.clear();
 
@@ -555,19 +547,19 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
 }
 
 void VASTModule::addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
-  S->addEnable(R, new (UseAllocator.Allocate()) VASTUse(Cnd, 0));
+  S->addEnable(R, new (Allocator.Allocate<VASTUse>()) VASTUse(Cnd, 0));
 }
 
 void VASTModule::addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
-  S->addDisable(R, new (UseAllocator.Allocate()) VASTUse(Cnd, 0));
+  S->addDisable(R, new (Allocator.Allocate<VASTUse>()) VASTUse(Cnd, 0));
 }
 
 void VASTModule::addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd) {
-  S->addReady(V, new (UseAllocator.Allocate()) VASTUse(Cnd, 0));
+  S->addReady(V, new (Allocator.Allocate<VASTUse>()) VASTUse(Cnd, 0));
 }
 
 void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
-  S->addSuccSlot(SuccS, new (UseAllocator.Allocate()) VASTUse(V, 0));
+  S->addSuccSlot(SuccS, new (Allocator.Allocate<VASTUse>()) VASTUse(V, 0));
 }
 
 void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {
@@ -826,7 +818,7 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValue *Src, VASTSlot *Slot
                                bool AddSlotActive) {
   if (Src) {
     VASTWire *Cnd = buildAssignCnd(Slot, Cnds, AddSlotActive);
-    Dst->addAssignment(new (UseAllocator.Allocate()) VASTUse(Src, 0), Cnd);
+    Dst->addAssignment(new (Allocator.Allocate<VASTUse>()) VASTUse(Src, 0), Cnd);
   }
 }
 
@@ -1122,12 +1114,12 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 // Operand printing helper functions.
 static void printSignedOperand(raw_ostream &OS, const VASTUse &U) {
   OS << "$signed(";
-  U.print(OS);
+  U->printAsOperand(OS);
   OS << ")";
 }
 
 static void printUnsignedOperand(raw_ostream &OS, const VASTUse &U) {
-  U.print(OS);
+  U->printAsOperand(OS);
 }
 
 template<typename PrintOperandFN>
@@ -1157,13 +1149,13 @@ static void printSimpleUnsignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
 // Generic datapath printing helper function.
 static void printUnaryOp(raw_ostream &OS, const VASTUse &U, const char *Opc) {
   OS << Opc;
-  U.print(OS);
+  U->printAsOperand(OS);
 }
 
 static void printSRAOp(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   printSignedOperand(OS, Ops[0]);
   OS << " >>> ";
-  Ops[1].print(OS);
+  Ops[1]->printAsOperand(OS);
 }
 
 template<typename PrintOperandFN>
@@ -1191,10 +1183,8 @@ static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 }
 
 static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
-  OS << '{';
-  Ops[1].print(OS);
-  OS << '{';
-  Ops[0].print(OS);
+  OS << '{' << cast<VASTImmediate>(Ops[1])->getValue() << '{';
+  Ops[0]->printAsOperand(OS);
   OS << "}}";
 }
 
@@ -1206,7 +1196,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   // Handle the trivial case trivially: Only 1 input.
   if (NumOperands == 2) {
     printAssign(OS, W);
-    E->getOperand(1).print(OS);
+    E->getOperand(1)->printAsOperand(OS);
     OS << ";\n";
     return;
   }
@@ -1224,9 +1214,9 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   OS.indent(2) << VASTModule::ParallelCaseAttr << " case (1'b1)\n";
   for (unsigned i = 0; i < NumOperands; i+=2) {
     OS.indent(4);
-    E->getOperand(i).print(OS);
+    E->getOperand(i)->printAsOperand(OS);
     OS << ": " << W->getName() << "_mux_wire = ";
-    E->getOperand(i + 1).print(OS);
+    E->getOperand(i + 1)->printAsOperand(OS);
     OS << ";\n";
   }
   // Write the default condition, otherwise latch will be inferred.
