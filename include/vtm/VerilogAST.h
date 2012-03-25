@@ -239,7 +239,7 @@ public:
 
   virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
-  void printAsOperand(raw_ostream &OS) const {
+  virtual void printAsOperand(raw_ostream &OS) const {
     printAsOperand(OS, getBitWidth(), 0);
   }
 

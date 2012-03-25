@@ -551,10 +551,7 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
     VASTWire *W = *I;
-    VASTExpr *Expr = W->getExpr();
-    if (!Expr || (Expr && Expr->isDead())) continue;
-
-    (*I)->print(OS);
+    if (W->getAssigningValue()) W->print(OS);
   }
 }
 
@@ -1255,25 +1252,22 @@ void VASTWire::print(raw_ostream &OS) const {
   // Input ports do not have datapath.
   if (T == VASTWire::InputPort) return;
 
-  VASTExpr *Expr = getExpr();
-  // Skip unknown or blackbox datapath, it should printed to the datapath
-  //  buffer of the module.
-  //if (getExpr()->getOpcode() == VASTExpr::dpUnknown ||
-  //    E->getOpcode() == VASTExpr::InputPort ||
-  //    E->getOpcode() == VASTExpr::dpVarLatBB)
-  //  return;
+  VASTValue *V = getAssigningValue();
+  assert(V && "Cannot print the wire!");
 
-  // Dont know how to print black box.
-  if (Expr->getOpcode() == VASTExpr::dpBlackBox) return;
+  if (VASTExpr *Expr = dyn_cast<VASTExpr>(V)) {
+    // Dont know how to print black box.
+    if (Expr->getOpcode() == VASTExpr::dpBlackBox) return;
 
-  // MUX need special printing method.
-  if (Expr->getOpcode() == VASTExpr::dpMux) {
-    printCombMux(OS, this);
-    return;
+    // MUX need special printing method.
+    if (Expr->getOpcode() == VASTExpr::dpMux) {
+      printCombMux(OS, this);
+      return;
+    }
   }
 
   printAssign(OS, this);
-  Expr->printAsOperand(OS);
+  V->printAsOperand(OS);
   OS << ";\n";
 }
 
