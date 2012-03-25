@@ -435,14 +435,6 @@ template<> struct FoldingSetTrait<VASTExpr>;
 class VASTExpr : public VASTValue, public FoldingSetNode {
 public:
   enum Opcode {
-    // FU datapath
-    dpAdd,
-    dpMul,
-    dpShl,
-    dpSRA,
-    dpSRL,
-    dpSCmp,
-    dpUCmp,
     // bitwise logic datapath
     dpAnd,
     dpOr,
@@ -454,8 +446,18 @@ public:
     // bit level assignment.
     dpBitCat,
     dpBitRepeat,
+    LastInlinableOpc = dpBitRepeat,
     // Simple wire assignment.
     dpAssign,
+    // Cannot inline.
+    // FU datapath
+    dpAdd,
+    dpMul,
+    dpShl,
+    dpSRA,
+    dpSRL,
+    dpSCmp,
+    dpUCmp,
     // VAST specific nodes.
     Dead,
     // Mux in datapath.
@@ -529,6 +531,24 @@ public:
 
   uint8_t getUB() const { return ub(); }
   uint8_t getLB() const { return lb(); }
+
+  bool isSubBitSlice() const {
+    assert(getOpcode() == dpAssign && "Not an assignment!");
+    return getUB() != getOperand(0)->getBitWidth() || getLB() != 0;
+  }
+
+  bool isInlinable() const {
+    return getOpcode() <= LastInlinableOpc ||
+           (getOpcode() == dpAssign && !isSubBitSlice());
+  }
+
+  VASTValue *getAsInlineOperand() {
+    // Can the expression be printed inline?
+    if (getOpcode() == VASTExpr::dpAssign && !isSubBitSlice())
+      return getOperand(0)->getAsInlineOperand();
+
+    return this;
+  }
 
   void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
@@ -639,6 +659,18 @@ public:
 
   VASTExpr *getExpr() const {
     return dyn_cast_or_null<VASTExpr>(getAssigningValue());
+  }
+
+  VASTValue *getAsInlineOperand() {
+    if (VASTValue *V = getAssigningValue()) {
+      // Can the expression be printed inline?
+      if (VASTExpr *E = dyn_cast<VASTExpr>(V)) {
+        if (E->isInlinable()) return E->getAsInlineOperand();
+      } else // This is a simple assignment.
+        return V;
+    }
+
+    return this;
   }
 
   VASTWire::Type getWireType() const { return VASTWire::Type(WireType()); }

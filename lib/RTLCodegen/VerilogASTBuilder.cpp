@@ -1367,8 +1367,12 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
            LB = MI->getOperand(3).getImm();
 
   // RHS should be a register.
-  VASTValue *RHS = getAsOperand(MI->getOperand(1));
-
+  ucOperand &MO = cast<ucOperand>(MI->getOperand(1));
+  VASTValue *RHS = lookupSignal(MO.getReg());
+  RHS = VM->getOrCreateBitSlice(RHS, MO.getBitWidth(), 0);
+  // Pass RHS without getting inline operand, because for bitslice, only
+  // inlining the assign expression is allowed, which already handled in the
+  // getOrCreateBitSlice.
   VM->assign(W, VM->getOrCreateBitSlice(RHS, UB, LB));
 }
 
