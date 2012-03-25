@@ -626,6 +626,15 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
 }
 
 VASTValue *VASTModule::buildNotExpr(VASTValue *U) {
+  // Try to fold the not expression.
+  if (VASTExpr *E = dyn_cast<VASTExpr>(U)) {
+    if (E->getOpcode() == VASTExpr::dpNot) {
+      // We should also propagate the bit slice information.
+      return getOrCreateBitSlice(E->getOperand(0), E->getUB(), E->getLB());
+    }
+  } else if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U))
+    return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
+
   return buildExpr(VASTExpr::dpNot, U, U->getBitWidth());
 }
 
@@ -672,19 +681,6 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB,
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
                                  unsigned BitWidth) {
-  switch (Opc) {
-  case VASTExpr::dpNot: {
-     // Try to fold the not expression.
-    if (VASTExpr *E = dyn_cast<VASTExpr>(Op))
-      if (E->getOpcode() == VASTExpr::dpNot) {
-        // We should also propagate the bit slice information.
-        return getOrCreateBitSlice(E->getOperand(0), E->getUB(), E->getLB());
-      }
-    break;
-  }
-  default: break;
-  }
-
   VASTValue *Ops[] = { Op };
   return createExpr(Opc, Ops, BitWidth);
 }
