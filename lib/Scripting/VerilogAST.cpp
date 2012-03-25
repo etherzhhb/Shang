@@ -166,9 +166,6 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
                                  VASTModule::DirectClkEnAttr.c_str());
   SlotActive.set(Active);
 
-  VM->assign(Active, VM->buildExpr(VASTExpr::dpAnd, SlotReg, Ready, 1));
-  // We need alias slot to build the ready signal, keep it as unknown now.
-
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
@@ -235,8 +232,12 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
     }
   }
 
-  // All signals should be 1.
-  Mod.assign(cast<VASTWire>(getReady()), Mod.buildExpr(VASTExpr::dpAnd, Ops, 1));
+  // All signals should be 1 before the slot is ready.
+  VASTValue *ReadyExpr = Mod.buildExpr(VASTExpr::dpAnd, Ops, 1);
+  Mod.assign(cast<VASTWire>(getReady()), ReadyExpr);
+  // The slot is actived when the slot is enable and all waiting signal is ready
+  Mod.assign(cast<VASTWire>(getActive()),
+             Mod.buildExpr(VASTExpr::dpAnd, SlotReg, ReadyExpr, 1));
 }
 
 bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
