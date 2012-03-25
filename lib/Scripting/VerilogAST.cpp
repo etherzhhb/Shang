@@ -211,7 +211,8 @@ VASTValue *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
     Ops.push_back(VM.buildExpr(VASTExpr::dpOr, I->first,
-                               VM.buildNotExpr(*I->second), 1));
+                               VM.buildNotExpr((*I->second)->getAsInlineOperand()),
+                               1));
   
   // No waiting signal means always ready.
   if (Ops.empty()) Ops.push_back(VM.getBoolImmediate(true));
@@ -358,7 +359,9 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     EmptySlotEnCnd.clear();
     EmptySlotEnCnd.push_back(getRegister());
     Mod.addAssignment(cast<VASTRegister>(I->first),
-                      Mod.buildExpr(VASTExpr::dpAnd, getReady(), *I->second, 1),
+                      Mod.buildExpr(VASTExpr::dpAnd,
+                                    getReady()->getAsInlineOperand(),
+                                    (*I->second)->getAsInlineOperand(), 1),
                       this, EmptySlotEnCnd, false);
   }
 
@@ -1281,7 +1284,7 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   case dpSRL: printSimpleUnsignedOp(OS, getOperands(), " >> ");break;
   case dpSRA: printSRAOp(OS, getOperands());                   break;
 
-  case dpAssign: getOperand(0)->printAsOperand(OS, getUB(), getLB() ); break;
+  case dpAssign: getOperand(0)->printAsOperand(OS, getUB(), getLB()); break;
 
   case dpBitCat:    printBitCat(OS, getOperands());    break;
   case dpBitRepeat: printBitRepeat(OS, getOperands()); break;

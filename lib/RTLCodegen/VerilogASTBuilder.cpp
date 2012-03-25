@@ -686,8 +686,8 @@ void VerilogASTBuilder::emitAllSignals() {
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       VASTValue *Parent = lookupSignal(Info.getParentRegister());
       indexVASTValue(RegNum,
-                     VM->getOrCreateBitSlice(Parent, Info.getUB(),
-                                             Info.getLB()));
+                     VM->getOrCreateBitSlice(Parent->getAsInlineOperand(),
+                                             Info.getUB(), Info.getLB()));
       continue;
     }
 
@@ -999,7 +999,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
 
-  VASTRegister *R = cast<VASTRegister>(getAsOperand(Dst));
+  VASTRegister *R = getAsLValue<VASTRegister>(Dst);
   VM->addAssignment(R, getAsOperand(Src), Slot, Cnds);
 }
 
@@ -1056,8 +1056,10 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
                                          VASTValueVecTy &Cnds) {
-  VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
-  VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds);
+  VASTRegister *R = getAsLValue<VASTRegister>(MI->getOperand(0));
+  // Dirty Hack: Do not trust the bitwidth information of the operand
+  // representing the return port.
+  VM->addAssignment(R, lookupSignal(MI->getOperand(1).getReg()), Slot, Cnds);
 }
 
 void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
@@ -1364,17 +1366,9 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   unsigned UB = MI->getOperand(2).getImm(),
            LB = MI->getOperand(3).getImm();
 
+  // RHS should be a register.
   VASTValue *RHS = getAsOperand(MI->getOperand(1));
-  //VASTExpr *E = cast<VASTExpr>(RHS.get());
-  //assert(E->getUB() != 0 && "Cannot get bitslice without bitwidth information!");
-  // Already replaced.
-  if (RHS == W) return;
 
-  // Adjust ub and lb.
-  //LB += E->getLB();
-  //UB += E->getLB();
-
-  //assert(UB <= E->getUB() && "Bitslice out of range!");
   VM->assign(W, VM->getOrCreateBitSlice(RHS, UB, LB));
 }
 
@@ -1395,7 +1389,12 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     if (unsigned Reg = Op.getReg())
-      return lookupSignal(Reg);
+      if (VASTValue *V = lookupSignal(Reg)) {
+        // The operand may only use a sub bitslice of the signal.
+        V = VM->getOrCreateBitSlice(V, Op.getBitWidth(), 0);
+        // Try to inline the operand.
+        return V->getAsInlineOperand();
+      }
 
     return 0;
   }

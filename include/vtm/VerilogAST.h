@@ -243,6 +243,9 @@ public:
     printAsOperand(OS, getBitWidth(), 0);
   }
 
+  // Print the value as inline operand.
+  virtual VASTValue *getAsInlineOperand() { return this; }
+
   bool replaceAllUseWith(VASTValue *To);
 
   typedef const VASTUse *dp_dep_it;
@@ -560,7 +563,7 @@ struct VASTExprBuilder {
     BitWidth = bitWidth;
   }
 
-  void addOperand(VASTValue *V) { Operands.push_back(V); }
+  void addOperand(VASTValue *V) { Operands.push_back(V->getAsInlineOperand()); }
 };
 
 class VASTWire :public VASTSignal {
