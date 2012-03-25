@@ -692,10 +692,10 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
 VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
                                       VASTValue *RHS, unsigned BitWidth) {
   // Try to make RHS to be an constant.
-  /*if (LHS.isImm()) std::swap(LHS, RHS);
+  if (isa<VASTImmediate>(LHS)) std::swap(LHS, RHS);
 
-  if (RHS.isImm()) {
-    VASTUse ValForRHSIsZero, ValForRHSIsAllOnes;
+  if (VASTImmediate *I = dyn_cast<VASTImmediate>(RHS)) {
+    VASTValue *ValForRHSIsZero, *ValForRHSIsAllOnes;
     switch (Opc) {
     default: break;
     case VASTExpr::dpAnd: {
@@ -710,12 +710,12 @@ VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
     }
     }
 
-    if (RHS.getImm() == 0)
+    if (I->getValue() == 0)
       return buildExpr(VASTExpr::dpAssign, ValForRHSIsZero, BitWidth);
 
-    if (getBitSlice64(RHS.getImm(), BitWidth) == getBitSlice64(-1, BitWidth))
+    if (getBitSlice64(I->getValue(), BitWidth) == getBitSlice64(-1, BitWidth))
       return buildExpr(VASTExpr::dpAssign, ValForRHSIsAllOnes, BitWidth);
-  }*/
+  }
   VASTValue *Ops[] = { LHS, RHS };
   return createExpr(Opc, Ops, BitWidth);
 }
