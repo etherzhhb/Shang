@@ -609,6 +609,7 @@ private:
   }
 
   void assign(VASTValue *V, VASTWire::Type T = VASTWire::Common) {
+    assert(U.isInvalid() && "The already has an expression!");
     WireType(T);
     U.set(V);
     U.setUser(this);
