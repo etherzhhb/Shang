@@ -498,6 +498,14 @@ private:
 
   friend class VASTModule;
 
+  // Return true if the name is successfully set.
+  bool set_lhs_wire_name(const char *name) {
+    if (lhs_wire_name()) return false;
+    // Set the LHS wire name if not exist.
+    lhs_wire_name(name);
+    return true;
+  }
+
   void printAsOperandInteral(raw_ostream &OS) const;
 
   void dropOperandsFromUseList() {

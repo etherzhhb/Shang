@@ -591,9 +591,10 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
     VASTWire *W = *I;
     if (VASTExpr *E = W->getExpr()) {
       // Don't print the expression inline, print the lhs wire instead.
-      E->lhs_wire_name(W->getName());
-      // W will be use as operand later.
-      W->Pin();
+      if (E->set_lhs_wire_name(W->getName())) {
+        // W will be use as operand later.
+        W->Pin();
+      }
     }
 
     W->printDecl(OS);
