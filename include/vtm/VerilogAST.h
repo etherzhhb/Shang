@@ -227,7 +227,6 @@ protected:
   void removeUseFromList(VASTUse *U) { UseList.remove(U); }
   friend class VASTUse;
 
-  virtual void print(raw_ostream &OS) const;
 public:
   unsigned getBitWidth() const { return bitwidth(); }
 
@@ -242,6 +241,8 @@ public:
   virtual void printAsOperand(raw_ostream &OS) const {
     printAsOperand(OS, getBitWidth(), 0);
   }
+
+  virtual void print(raw_ostream &OS) const;
 
   // Print the value as inline operand.
   virtual VASTValue *getAsInlineOperand() { return this; }
@@ -463,18 +464,24 @@ public:
     dpBlackBox
   };
 private:
+  // Operands, right after this VASTExpr.
   const VASTUse *ops() const {
     return reinterpret_cast<const VASTUse*>(this + 1);
   }
   VASTUse *ops() { return reinterpret_cast<VASTUse*>(this + 1); }
   void num_ops(uint8_t N) { i8<VASTValue::SubClassDataBase>(N); }
   uint8_t num_ops() const { return i8<VASTValue::SubClassDataBase>(); }
+
   uint8_t opc() const { return i8<VASTValue::SubClassDataBase + 1>(); }
   void opc(uint8_t C) { return i8<VASTValue::SubClassDataBase + 1>(C); }
   uint8_t ub() const { return i8<VASTValue::SubClassDataBase + 2>(); }
   void ub(uint8_t u) { return i8<VASTValue::SubClassDataBase + 2>(u); }
   uint8_t lb() const { return i8<VASTValue::SubClassDataBase + 3>(); }
   void lb(uint8_t l) { return i8<VASTValue::SubClassDataBase + 3>(l); }
+
+  // The name of the lvalue of this expression (if any).
+  void lhs_wire_name(const char *name) { ptr<const char>(name); }
+  const char *lhs_wire_name() const { return ptr<const char>(); }
 
   enum { SubClassDataBase = VASTValue::SubClassDataBase + 4 };
 
@@ -497,7 +504,6 @@ private:
       I->removeFromList();
   }
 
-  void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
 public:
   Opcode getOpcode() const { return VASTExpr::Opcode(opc()); }
   bool isDead() const { return getOpcode() == Dead; }
@@ -524,14 +530,13 @@ public:
   uint8_t getUB() const { return ub(); }
   uint8_t getLB() const { return lb(); }
 
-  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
-    assert(UB == getUB() && LB == getLB() && "Cannot print bitslice of Expr!");
-    printAsOperandInteral(OS);
-  }
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   void printAsOperand(raw_ostream &OS) const {
     printAsOperand(OS, getUB(), getLB());
   }
+
+  void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTExpr *A) { return true; }
@@ -649,7 +654,7 @@ public:
   }
 
   // Print the logic to the output stream.
-  void print(raw_ostream &OS) const;
+  void printAssignment(raw_ostream &OS) const;
   void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:

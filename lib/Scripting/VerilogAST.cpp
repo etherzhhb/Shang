@@ -517,6 +517,7 @@ VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
   opc(Opc);
   ub(UB);
   lb(LB);
+  lhs_wire_name(0);
   assert(num_ops() && ops() && "Unexpected empty operand list!");
 }
 
@@ -543,7 +544,7 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
     VASTWire *W = *I;
-    if (W->getAssigningValue()) W->print(OS);
+    if (W->getAssigningValue()) W->printAssignment(OS);
   }
 }
 
@@ -595,8 +596,12 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
     VASTWire *W = *I;
-    VASTExpr *Expr = W->getExpr();
-    if (Expr && Expr->isDead()) continue;
+    if (VASTExpr *E = W->getExpr()) {
+      // Don't print the expression inline, print the lhs wire instead.
+      E->lhs_wire_name(W->getName());
+      // W will be use as operand later.
+      W->Pin();
+    }
 
     W->printDecl(OS);
     OS << "\n";
@@ -994,7 +999,7 @@ void VASTModule::writeProfileCounters(VASTSlot *S,
 
 
 void VASTValue::print(raw_ostream &OS) const {
-  assert(0 && "VASTValue::print should not be called!");
+  printAsOperand(OS);
 }
 
 void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
@@ -1240,7 +1245,7 @@ void VASTWire::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
   }
 }
 
-void VASTWire::print(raw_ostream &OS) const {
+void VASTWire::printAssignment(raw_ostream &OS) const {
   VASTWire::Type T = getWireType();
   // Input ports do not have datapath.
   if (T == VASTWire::InputPort) return;
@@ -1260,8 +1265,18 @@ void VASTWire::print(raw_ostream &OS) const {
   }
 
   printAssign(OS, this);
-  V->printAsOperand(OS);
+  V->print(OS);
   OS << ";\n";
+}
+
+void VASTExpr::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+  assert(UB == getUB() && LB == getLB() && "Cannot print bitslice of Expr!");
+  if (const char *Name = lhs_wire_name()) {
+    OS << Name << verilogBitRange(getBitWidth(), 0, false);
+    return;
+  }
+
+  printAsOperandInteral(OS);
 }
 
 void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
