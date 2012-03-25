@@ -710,11 +710,10 @@ VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
     }
     }
 
-    if (I->getValue() == 0)
-      return buildExpr(VASTExpr::dpAssign, ValForRHSIsZero, BitWidth);
+    if (I->getValue() == 0) return ValForRHSIsZero;
 
     if (getBitSlice64(I->getValue(), BitWidth) == getBitSlice64(-1, BitWidth))
-      return buildExpr(VASTExpr::dpAssign, ValForRHSIsAllOnes, BitWidth);
+      return ValForRHSIsAllOnes;
   }
   VASTValue *Ops[] = { LHS, RHS };
   return createExpr(Opc, Ops, BitWidth);
@@ -761,7 +760,7 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
 
   case VASTExpr::dpAnd: case VASTExpr::dpOr: {
     if (Ops.size() == 1)
-      return buildExpr(VASTExpr::dpAssign, Ops[0], BitWidth);
+      return Ops[0];
     else if(Ops.size() == 2)
       return buildLogicExpr(Opc, Ops[0], Ops[1], BitWidth);
     break;
