@@ -836,13 +836,13 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValue *Src, VASTSlot *Slot
 }
 
 VASTValue *VASTModule::assign(VASTWire *W, VASTValue *V, VASTWire::Type T) {
-  W->assign(cast<VASTExpr>(V), T);
+  if (W->getExpr() != V) W->assign(V, T);
   return W;
 }
 
 VASTValue *VASTModule::assignWithExtraDelay(VASTWire *W, VASTValue *V,
                                             unsigned latency) {
-  W->assignWithExtraDelay(cast<VASTExpr>(V), latency);
+  if (W->getExpr() != V) W->assignWithExtraDelay(V, latency);
   return W;
 }
 

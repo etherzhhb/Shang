@@ -608,14 +608,14 @@ private:
     SlotNum(slotNum);
   }
 
-  void assign(VASTExpr *e, VASTWire::Type T = VASTWire::Common) {
+  void assign(VASTValue *V, VASTWire::Type T = VASTWire::Common) {
     WireType(T);
-    U.set(e);
+    U.set(V);
     U.setUser(this);
   }
 
-  void assignWithExtraDelay(VASTExpr *e, unsigned latency) {
-    assign(e, haveExtraDelay);
+  void assignWithExtraDelay(VASTValue *V, unsigned latency) {
+    assign(V, haveExtraDelay);
     Latency(latency);
   }
 
@@ -624,8 +624,12 @@ private:
 
   friend class VASTValue;
 public:
+  VASTValue *getAssigningValue() const {
+    return U.unwrap();
+  }
+
   VASTExpr *getExpr() const {
-    return dyn_cast_or_null<VASTExpr>(U.unwrap());
+    return dyn_cast_or_null<VASTExpr>(getAssigningValue());
   }
 
   VASTWire::Type getWireType() const { return VASTWire::Type(WireType()); }
