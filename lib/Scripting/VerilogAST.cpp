@@ -810,7 +810,7 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      SmallVectorImpl<VASTValue*> &Cnds,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
-  if (AddSlotActive) Cnds.push_back(Slot->getActive());
+  if (AddSlotActive) Cnds.push_back(Slot->getActive()->getAsInlineOperand());
   VASTValue *AssignAtSlot = buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
