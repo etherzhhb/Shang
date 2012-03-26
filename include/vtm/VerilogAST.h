@@ -234,6 +234,7 @@ public:
   use_iterator use_end() { return use_iterator(UseList.end()); }
 
   bool use_empty() const { return UseList.empty(); }
+  size_t num_uses() const { return UseList.size(); }
 
   virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
@@ -601,6 +602,8 @@ class VASTWire :public VASTSignal {
 public:
   enum Type {
     Common,
+    // Result of a look up table, may have a large expression tree.
+    LUT,
     // Timing BlackBox, have latecy not capture by slots.
     haveExtraDelay,
     // Assignment with slot information.

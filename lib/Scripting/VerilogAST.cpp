@@ -537,7 +537,9 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
     VASTWire *W = *I;
-    if (W->getAssigningValue()) W->printAssignment(OS);
+    // Do not print the trivial dead data-path.
+    if (W->getAssigningValue() && (W->isPinned() || !W->use_empty()))
+      W->printAssignment(OS);
   }
 }
 
@@ -589,16 +591,21 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
     VASTWire *W = *I;
-    if (VASTExpr *E = W->getExpr()) {
-      // Don't print the expression inline, print the lhs wire instead.
-      if (E->set_lhs_wire_name(W->getName())) {
-        // W will be use as operand later.
-        W->Pin();
+
+    // Do not print the LUT inline.
+    if (W->getWireType() == VASTWire::LUT) {
+      if (VASTExpr *E = W->getExpr()) {
+        //assert(!E->use_empty() && "E is used by W atleast!");
+        // Don't print the expression inline, print the lhs wire instead.
+        // And pin W because it will be use as operand later.
+        if (E->set_lhs_wire_name(W->getName())) W->Pin();
       }
     }
 
+    // Print the declaration.
+    if (W->use_empty() && !W->isPinned()) OS << "//";
     W->printDecl(OS);
-    OS << "\n";
+    OS << "// uses " << W->num_uses() << " pinned " << W->isPinned() << '\n';
   }
 
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();

@@ -1353,7 +1353,7 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   if (isComplement) SOP = VM->buildExpr(VASTExpr::dpNot, SOP, SizeInBits);
 
   // Build the sum;
-  VM->assign(W, SOP);
+  VM->assign(W, SOP, VASTWire::LUT);
   return;
 }
 
