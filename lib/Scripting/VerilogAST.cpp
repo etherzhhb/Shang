@@ -1192,7 +1192,7 @@ static void printSRAOp(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 template<typename PrintOperandFN>
 static void printCmpFU(raw_ostream &OS, ArrayRef<VASTUse> Ops,
                        PrintOperandFN &FN) {
-  OS << "{ ((";
+  OS << "{ 3'bx, ((";
   // Port 4: gt.
   printSimpleOp<PrintOperandFN>(OS, Ops, " > ", FN);
   OS << ") ? 1'b1 : 1'b0), ((";

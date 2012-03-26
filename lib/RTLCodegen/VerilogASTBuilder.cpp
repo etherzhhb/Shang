@@ -719,7 +719,7 @@ VASTValue *VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
   else           ResultName = "u" + ResultName;
 
   // Comparer have 4 output port.
-  return VM->assign(VM->addWire(ResultName, 5),
+  return VM->assign(VM->addWire(ResultName, 8),
                     VM->buildExpr(isSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp,
                                   VM->addRegister(ResultName + "_a", BitWidth),
                                   VM->addRegister(ResultName + "_b", BitWidth),
