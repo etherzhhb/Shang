@@ -674,17 +674,20 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
 VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
                                        ArrayRef<VASTValue*> Ops,
                                        unsigned BitWidth) {
-  SmallVector<VASTValue*, 4> NewOps;
+  SmallVector<VASTValue*, 8> NewOps;
   typedef const VASTUse *op_iterator;
 
   for (unsigned i = 0; i < Ops.size(); ++i) {
+    // Try to flatten the expression tree.
     if (VASTExpr *Expr = dyn_cast<VASTExpr>(Ops[i])) {
+      // Suppose Expr is flatten
       if (Expr->opc() == Opc) {
         for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
-          NewOps.push_back(I->unwrap()->getAsInlineOperand());
+          NewOps.push_back((*I)->getAsInlineOperand());
         continue;
       }
     }
+
     NewOps.push_back(Ops[i]);
   }
 
