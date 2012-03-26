@@ -592,8 +592,8 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
     VASTWire *W = *I;
 
     // Do not print the LUT inline.
-    if (W->getWireType() == VASTWire::LUT) {
-      if (VASTExpr *E = W->getExpr()) {
+    if (VASTExpr *E = W->getExpr()) {
+      if (W->getWireType() == VASTWire::LUT || W->num_uses() > 2) {
         //assert(!E->use_empty() && "E is used by W atleast!");
         // Don't print the expression inline, print the lhs wire instead.
         // And pin W because it will be use as operand later.
