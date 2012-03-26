@@ -272,9 +272,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
   // Mapping success fsm state to their predicate in current state.
-  typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
   MachineBasicBlock::iterator
-    emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap, unsigned II, bool Pipelined);
+  emitCtrlOp(MachineInstr *Bundle, unsigned II, bool Pipelined);
   MachineBasicBlock::iterator emitDatapath(MachineInstr *Bundle);
 
   typedef SmallVectorImpl<VASTValue*> VASTValueVecTy;
@@ -500,7 +499,6 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
   // The alias slots of pipelined BB.
   SmallVector<VASTSlot*, 8> AliasSlots;
-  PredMapTy NextStatePred;
   typedef MachineBasicBlock::instr_iterator instr_it;
   typedef MachineBasicBlock::iterator it;
   it I = MBB.getFirstNonPHI();
@@ -518,6 +516,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     // datapath op with same slot can read the register schedule to this slot.
     unsigned stateSlot = getBundleSlot(I) - 1;
 
+    // Collect slot ready signals.
     instr_it NextI = instr_it(I);
     while ((++NextI)->isInsideBundle())
       if (NextI->getOpcode() == VTM::VOpReadFU)
@@ -540,7 +539,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     while (!AliasSlots.empty())
       AliasSlots.pop_back_val()->buildReadyLogic(*VM);
 
-    I = emitCtrlOp(I, NextStatePred, II, IISlot < EndSlot);
+    I = emitCtrlOp(I, II, IISlot < EndSlot);
   }
 }
 
@@ -829,8 +828,7 @@ VerilogASTBuilder::~VerilogASTBuilder() {}
 
 //===----------------------------------------------------------------------===//
 MachineBasicBlock::iterator
-VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
-                              unsigned II, bool Pipelined){
+VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, unsigned II, bool Pipelined){
   MachineBasicBlock *CurBB = Bundle->getParent();
   assert(Bundle->getOpcode() == VTM::CtrlStart && "Expect control bundle!");
   SmallVector<VASTValue*, 4> Cnds;
@@ -870,7 +868,6 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
 
       // Emit the first micro state of the target state.
       emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
-      PredMap.insert(std::make_pair(TargetBB, VM->buildAssignCnd(CurSlot, Cnds)));
       continue;
     }
 
