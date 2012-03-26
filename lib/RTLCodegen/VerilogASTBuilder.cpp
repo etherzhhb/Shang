@@ -272,8 +272,9 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
   // Mapping success fsm state to their predicate in current state.
-  MachineBasicBlock::iterator
-  emitCtrlOp(MachineInstr *Bundle, unsigned II, bool Pipelined);
+  void emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
+                  MachineBasicBlock::instr_iterator ctrl_end,
+                  unsigned II, bool Pipelined);
   MachineBasicBlock::iterator emitDatapath(MachineInstr *Bundle);
 
   typedef SmallVectorImpl<VASTValue*> VASTValueVecTy;
@@ -518,7 +519,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
 
     // Collect slot ready signals.
     instr_it NextI = instr_it(I);
-    while ((++NextI)->isInsideBundle())
+    while ((++NextI)->getOpcode() != VTM::CtrlEnd)
       if (NextI->getOpcode() == VTM::VOpReadFU)
         addSlotReady(NextI, getOrCreateInstrSlot(NextI, startSlot));
 
@@ -539,7 +540,9 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     while (!AliasSlots.empty())
       AliasSlots.pop_back_val()->buildReadyLogic(*VM);
 
-    I = emitCtrlOp(I, II, IISlot < EndSlot);
+    // Emit the control operations.
+    emitCtrlOp(instr_it(I), NextI, II, IISlot < EndSlot);
+    I = it(llvm::next(NextI));
   }
 }
 
@@ -827,18 +830,16 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
 VerilogASTBuilder::~VerilogASTBuilder() {}
 
 //===----------------------------------------------------------------------===//
-MachineBasicBlock::iterator
-VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, unsigned II, bool Pipelined){
-  MachineBasicBlock *CurBB = Bundle->getParent();
-  assert(Bundle->getOpcode() == VTM::CtrlStart && "Expect control bundle!");
+void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
+                                   MachineBasicBlock::instr_iterator ctrl_end,
+                                   unsigned II, bool Pipelined) {
+  MachineBasicBlock *CurBB = ctrl_begin->getParent();
+  assert(ctrl_begin->getOpcode() == VTM::CtrlStart && "Expect control bundle!");
   SmallVector<VASTValue*, 4> Cnds;
 
   typedef MachineBasicBlock::instr_iterator instr_it;
-  instr_it I = Bundle;
-  while ((++I)->isInsideBundle()) {
+  for (instr_it I = llvm::next(ctrl_begin); I != ctrl_end; ++I) {
     MachineInstr *MI = I;
-    // Skip the marker.
-    if (MI->getOpcode() == VTM::CtrlEnd) continue;
 
     VASTSlot *CurSlot = getInstrSlot(MI);
     assert(getInstrSlotNum(MI) != CurSlot->getParentIdx()
@@ -901,8 +902,6 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, unsigned II, bool Pipelined)
     default:  assert(0 && "Unexpected opcode!");                          break;
     }
   }
-
-  return I;
 }
 
 void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
