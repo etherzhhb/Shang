@@ -342,6 +342,11 @@ class VASTSignal : public VASTNamedValue {
   // TODO: Annotate the signal so we know that some of them are port signals
   // and no need to declare again in the declaration list.
   const char *AttrStr;
+  bool pin() const { return i8<VASTValue::SubClassDataBase>(); }
+  void pin(bool p) { i8<VASTValue::SubClassDataBase>(p); }
+
+  bool timing_undef() const { return i8<VASTValue::SubClassDataBase>(); }
+  void timing_undef(bool u) { i8<VASTValue::SubClassDataBase>(u); }
 protected:
   enum { SubClassDataBase = VASTValue::SubClassDataBase + 2 };
 
@@ -354,20 +359,12 @@ protected:
 public:
 
   // Pin the wire, prevent it from being remove.
-  void Pin(bool isPinned = true) {
-    i8<VASTValue::SubClassDataBase + 1>(isPinned);
-  }
-  bool isPinned() const {
-    return i8<VASTValue::SubClassDataBase>();
-  }
+  void Pin(bool isPinned = true) { pin(isPinned); }
+  bool isPinned() const { return pin(); }
 
   // The timing of a node may not captured by schedule information.
-  void setTimingUndef(bool UnDef = true) {
-    return i8<VASTValue::SubClassDataBase + 1>(UnDef);
-  }
-  bool isTimingUndef() const {
-    return i8<VASTValue::SubClassDataBase + 1>();
-  }
+  void setTimingUndef(bool UnDef = true) { timing_undef(UnDef); }
+  bool isTimingUndef() const { return timing_undef(); }
 
   void printDecl(raw_ostream &OS) const;
 
