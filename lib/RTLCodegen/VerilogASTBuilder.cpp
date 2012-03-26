@@ -503,30 +503,26 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   PredMapTy NextStatePred;
   typedef MachineBasicBlock::instr_iterator instr_it;
   typedef MachineBasicBlock::iterator it;
-  it FirstBundle = MBB.getFirstNonPHI();
+  it I = MBB.getFirstNonPHI();
   // Skip the first bundle, it already emitted by the predecessor bbs.
-  ++FirstBundle;
+  ++I;
 
   // Index the mbb for debug.
   indexMBB(startSlot, &MBB);
 
-  // Phase 1: Collect the ready signal that the current slot should wait.
-  instr_it I = FirstBundle;
-  for (instr_it II = I, E = MBB.instr_end(); II != E; ++II)
-    if (II->getOpcode() == VTM::VOpReadFU)
-      addSlotReady(II, getOrCreateInstrSlot(II, startSlot));
-
-  
-  // Phase 2: Build the Verilog AST.
-  instr_it I = FirstBundle;
+  // Build the Verilog AST.
   while(!I->isTerminator()) {
     // Emit the datepath of current state.
     I = emitDatapath(I);
-
-    // Emit next ucOp.
     // We are assign the register at the previous slot of this slot, so the
     // datapath op with same slot can read the register schedule to this slot.
     unsigned stateSlot = getBundleSlot(I) - 1;
+
+    instr_it NextI = instr_it(I);
+    while ((++NextI)->isInsideBundle())
+      if (NextI->getOpcode() == VTM::VOpReadFU)
+        addSlotReady(NextI, getOrCreateInstrSlot(NextI, startSlot));
+
     // Create and collect the slots.
     VASTSlot *LeaderSlot = VM->getOrCreateSlot(stateSlot, startSlot);
     AliasSlots.push_back(LeaderSlot);
