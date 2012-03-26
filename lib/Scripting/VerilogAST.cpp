@@ -671,6 +671,26 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
+VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
+                                       ArrayRef<VASTValue*> Ops,
+                                       unsigned BitWidth) {
+  SmallVector<VASTValue*, 4> NewOps;
+  typedef const VASTUse *op_iterator;
+
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    if (VASTExpr *Expr = dyn_cast<VASTExpr>(Ops[i])) {
+      if (Expr->opc() == Opc) {
+        for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
+          NewOps.push_back(I->unwrap()->getAsInlineOperand());
+        continue;
+      }
+    }
+    NewOps.push_back(Ops[i]);
+  }
+
+  return createExpr(Opc, NewOps, BitWidth, 0);
+}
+
 VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
                                       VASTValue *RHS, unsigned BitWidth) {
   // Try to make RHS to be an constant.
@@ -698,7 +718,7 @@ VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
     else if (ImmVal == 0)                          return ValForRHSIsZero;
   }
   VASTValue *Ops[] = { LHS, RHS };
-  return createExpr(Opc, Ops, BitWidth, 0);
+  return flattenExprTree(Opc, Ops, BitWidth);
 }
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS,

@@ -1182,6 +1182,9 @@ public:
 
   VASTValue *buildNotExpr(VASTValue *U);
 
+  VASTValue *flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+                             unsigned BitWidth);
+
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
                             const char *Attr = "");
