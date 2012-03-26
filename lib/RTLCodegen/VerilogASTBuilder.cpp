@@ -271,13 +271,17 @@ class VerilogASTBuilder : public MachineFunctionPass {
                          VASTExpr::Opcode Opc);
   VASTValue *emitFUCmp(unsigned FUNum, unsigned BitWidth, bool isSigned);
 
+  // Mapping success fsm state to their predicate in current state.
+  typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
+  MachineBasicBlock::iterator
+    emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap, unsigned II, bool Pipelined);
+  MachineBasicBlock::iterator emitDatapath(MachineInstr *Bundle);
+
   typedef SmallVectorImpl<VASTValue*> VASTValueVecTy;
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
   void emitFirstCtrlBundle(MachineBasicBlock *DstBB, VASTSlot *Slot,
                            VASTValueVecTy &Cnds);
-
-  MachineBasicBlock::instr_iterator emitDatapath(MachineInstr *Bundle);
 
   void emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
   void emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
@@ -295,11 +299,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitOpBitSlice(MachineInstr *MI);
 
   void emitImplicitDef(MachineInstr *MI);
-
-  // Mapping success fsm state to their predicate in current state.
-  typedef std::map<MachineBasicBlock*, VASTWire*> PredMapTy;
-  MachineBasicBlock::instr_iterator
-  emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap, unsigned II, bool Pipelined);
 
   // Create a condition from a predicate operand.
   VASTValue *createCnd(ucOperand &Op);
@@ -503,17 +502,23 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   SmallVector<VASTSlot*, 8> AliasSlots;
   PredMapTy NextStatePred;
   typedef MachineBasicBlock::instr_iterator instr_it;
-  instr_it I = &*llvm::next(MachineBasicBlock::iterator(MBB.getFirstNonPHI()));
+  typedef MachineBasicBlock::iterator it;
+  it FirstBundle = MBB.getFirstNonPHI();
+  // Skip the first bundle, it already emitted by the predecessor bbs.
+  ++FirstBundle;
 
   // Index the mbb for debug.
   indexMBB(startSlot, &MBB);
 
   // Phase 1: Collect the ready signal that the current slot should wait.
+  instr_it I = FirstBundle;
   for (instr_it II = I, E = MBB.instr_end(); II != E; ++II)
     if (II->getOpcode() == VTM::VOpReadFU)
       addSlotReady(II, getOrCreateInstrSlot(II, startSlot));
 
+  
   // Phase 2: Build the Verilog AST.
+  instr_it I = FirstBundle;
   while(!I->isTerminator()) {
     // Emit the datepath of current state.
     I = emitDatapath(I);
@@ -827,7 +832,7 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
 VerilogASTBuilder::~VerilogASTBuilder() {}
 
 //===----------------------------------------------------------------------===//
-MachineBasicBlock::instr_iterator
+MachineBasicBlock::iterator
 VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
                               unsigned II, bool Pipelined){
   MachineBasicBlock *CurBB = Bundle->getParent();
@@ -1261,7 +1266,7 @@ void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
-MachineBasicBlock::instr_iterator
+MachineBasicBlock::iterator
 VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
   typedef MachineBasicBlock::instr_iterator instr_it;
   assert(Bundle->getOpcode() == VTM::Datapath
