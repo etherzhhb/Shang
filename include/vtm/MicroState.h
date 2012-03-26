@@ -151,7 +151,7 @@ static inline unsigned getBundleSlot(MachineInstr *MI) {
   return getBundleHead(MI)->getOperand(0).getImm();
 }
 
-static inline unsigned getInstrSlot(MachineInstr *MI) {
+static inline unsigned getInstrSlotNum(MachineInstr *MI) {
   assert(MI->isInsideBundle() && "Cannot get InstrSlot!");
   return VInstrInfo::getPredOperand(MI)[1].getImm();
 }

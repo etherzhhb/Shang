@@ -818,7 +818,7 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
     // Skip the marker.
     if (MI->getOpcode() == VTM::CtrlEnd) continue;
 
-    unsigned SlotNum = getInstrSlot(MI);
+    unsigned SlotNum = getInstrSlotNum(MI);
     VASTSlot *CurSlot = VM->getSlot(SlotNum - 1);
 
     assert(SlotNum != CurSlot->getParentIdx() && "Unexpected first slot!");
