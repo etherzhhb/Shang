@@ -108,6 +108,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
     return W;
   }
 
+  VASTSlot *getInstrSlot(MachineInstr *MI) {
+    unsigned SlotNum = getInstrSlotNum(MI);
+    return VM->getSlot(SlotNum - 1);
+  }
+
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
 
@@ -818,10 +823,9 @@ VerilogASTBuilder::emitCtrlOp(MachineInstr *Bundle, PredMapTy &PredMap,
     // Skip the marker.
     if (MI->getOpcode() == VTM::CtrlEnd) continue;
 
-    unsigned SlotNum = getInstrSlotNum(MI);
-    VASTSlot *CurSlot = VM->getSlot(SlotNum - 1);
-
-    assert(SlotNum != CurSlot->getParentIdx() && "Unexpected first slot!");
+    VASTSlot *CurSlot = getInstrSlot(MI);
+    assert(getInstrSlotNum(MI) != CurSlot->getParentIdx()
+           && "Unexpected first slot!");
 
     Cnds.clear();
     Cnds.push_back(createCnd(*VInstrInfo::getPredOperand(MI)));
