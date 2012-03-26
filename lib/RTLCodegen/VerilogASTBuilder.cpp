@@ -514,11 +514,14 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     // datapath op with same slot can read the register schedule to this slot.
     unsigned stateSlot = getBundleSlot(I) - 1;
     // Create the slots.
-    VM->getOrCreateSlot(stateSlot, startSlot);
+    VASTSlot *LeaderSlot = VM->getOrCreateSlot(stateSlot, startSlot);
     // There will be alias slot if the BB is pipelined.
     if (startSlot + II < EndSlot) {
-      for (unsigned slot = stateSlot; slot < EndSlot; slot += II)
-        VM->getOrCreateSlot(slot, startSlot)->setAliasSlots(stateSlot, EndSlot, II);
+      LeaderSlot->setAliasSlots(stateSlot, EndSlot, II);
+      for (unsigned slot = stateSlot + II; slot < EndSlot; slot += II) {
+        VASTSlot *S = VM->getOrCreateSlot(slot, startSlot);
+        S->setAliasSlots(stateSlot, EndSlot, II);
+      }
     }
 
     I = emitCtrlOp(I, NextStatePred, II, IISlot < EndSlot);
