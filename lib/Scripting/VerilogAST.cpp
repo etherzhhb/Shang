@@ -568,7 +568,6 @@ void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
 void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
     if (VASTSlot *S = *I) {
-      S->buildReadyLogic(*this);
       S->buildCtrlLogic(*this);
 
       // Create a profile counter for each BB.

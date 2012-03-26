@@ -480,6 +480,7 @@ void VerilogASTBuilder::emitIdleState() {
   // The module is busy now
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
+  IdleSlot->buildReadyLogic(*VM);
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
   unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
   VM->addSlotSucc(IdleSlot, VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
@@ -498,6 +499,8 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   unsigned IISlot = FInfo->getIISlotFor(&MBB);
   unsigned II = IISlot - startSlot;
   unsigned EndSlot = FInfo->getEndSlotFor(&MBB);
+  // The alias slots of pipelined BB.
+  SmallVector<VASTSlot*, 8> AliasSlots;
   PredMapTy NextStatePred;
   typedef MachineBasicBlock::instr_iterator instr_it;
   instr_it I = &*llvm::next(MachineBasicBlock::iterator(MBB.getFirstNonPHI()));
@@ -505,11 +508,12 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   // Index the mbb for debug.
   indexMBB(startSlot, &MBB);
 
-  //ucState FstCtrl(I);
-  //if (FstCtrl.empty())
-  //  emitSlotsForEmptyState(FstCtrl.getOrCreateSlot(), EndSlot, II);
+  // Phase 1: Collect the ready signal that the current slot should wait.
+  for (instr_it II = I, E = MBB.instr_end(); II != E; ++II)
+    if (II->getOpcode() == VTM::VOpReadFU)
+      addSlotReady(II, getOrCreateInstrSlot(II, startSlot));
 
-  // FIXME: Refactor the loop.
+  // Phase 2: Build the Verilog AST.
   while(!I->isTerminator()) {
     // Emit the datepath of current state.
     I = emitDatapath(I);
@@ -518,16 +522,22 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     // We are assign the register at the previous slot of this slot, so the
     // datapath op with same slot can read the register schedule to this slot.
     unsigned stateSlot = getBundleSlot(I) - 1;
-    // Create the slots.
+    // Create and collect the slots.
     VASTSlot *LeaderSlot = VM->getOrCreateSlot(stateSlot, startSlot);
+    AliasSlots.push_back(LeaderSlot);
     // There will be alias slot if the BB is pipelined.
     if (startSlot + II < EndSlot) {
       LeaderSlot->setAliasSlots(stateSlot, EndSlot, II);
       for (unsigned slot = stateSlot + II; slot < EndSlot; slot += II) {
         VASTSlot *S = VM->getOrCreateSlot(slot, startSlot);
         S->setAliasSlots(stateSlot, EndSlot, II);
+        AliasSlots.push_back(S);
       }
     }
+
+    // Build the slot ready expression.
+    while (!AliasSlots.empty())
+      AliasSlots.pop_back_val()->buildReadyLogic(*VM);
 
     I = emitCtrlOp(I, NextStatePred, II, IISlot < EndSlot);
   }
@@ -1041,7 +1051,6 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
                                      VASTValueVecTy &Cnds) {
-  addSlotReady(MI, getOrCreateInstrSlot(MI, CurSlot->getParentIdx()));
   // The dst operand of ReadFU change to immediate if it is dead.
   if (MI->getOperand(0).isReg() && MI->getOperand(0).getReg())
     emitOpCopy(MI, CurSlot, Cnds);
