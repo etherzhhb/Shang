@@ -328,6 +328,9 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitOpRet(MachineInstr *MIRet, VASTSlot *CurSlot, VASTValueVecTy &Cnds);
   void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+
+  void addSlotReady(MachineInstr *MI, VASTSlot *CurSlot);
+
   void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
@@ -515,6 +518,27 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
 
     I = emitCtrlOp(I, NextStatePred, II, IISlot < EndSlot);
   }
+}
+
+void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *CurSlot) {
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+  VASTValue *ReadyPort = 0;
+
+  switch (Id.getFUType()) {
+  case VFUs::MemoryBus:
+    ReadyPort = VM->getSymbol(VFUMemBus::getReadyName(Id.getFUNum()));
+    break;
+  case VFUs::CalleeFN: {
+    // The register representing the function unit is store in the src operand
+    // of VOpReadFU.
+    unsigned FNNum = MI->getOperand(1).getReg();
+    ReadyPort = VM->getSymbol(getSubModulePortName(FNNum, "fin"));
+    break;
+  }
+  default: return;
+  }
+
+  VM->addSlotReady(CurSlot,ReadyPort,createCnd(*VInstrInfo::getPredOperand(MI)));
 }
 
 void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
@@ -1005,27 +1029,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
                                      VASTValueVecTy &Cnds) {
-  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
-  VASTValue *ReadyPort = 0;
-
-  switch (Id.getFUType()) {
-  case VFUs::MemoryBus:
-    ReadyPort = VM->getSymbol(VFUMemBus::getReadyName(Id.getFUNum()));
-    break;
-  case VFUs::CalleeFN: {
-    // The register representing the function unit is store in the src operand
-    // of VOpReadFU.
-    unsigned FNNum = MI->getOperand(1).getReg();
-    ReadyPort = VM->getSymbol(getSubModulePortName(FNNum, "fin"));
-    break;
-  }
-  default:
-    break;
-  }
-
-  if (ReadyPort)
-    VM->addSlotReady(CurSlot, ReadyPort,
-                     createCnd(*VInstrInfo::getPredOperand(MI)));
+  addSlotReady(MI, CurSlot);
 
   // The dst operand of ReadFU change to immediate if it is dead.
   if (MI->getOperand(0).isReg() && MI->getOperand(0).getReg())
