@@ -113,6 +113,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
     return VM->getSlot(SlotNum - 1);
   }
 
+  VASTSlot *getOrCreateInstrSlot(MachineInstr *MI, unsigned ParentIdx) {
+    unsigned SlotNum = getInstrSlotNum(MI);
+    return VM->getOrCreateSlot(SlotNum - 1, ParentIdx);
+  }
+
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
 
@@ -334,7 +339,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitOpCopy(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpReadFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
-  void addSlotReady(MachineInstr *MI, VASTSlot *CurSlot);
+  void addSlotReady(MachineInstr *MI, VASTSlot *S);
 
   void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
@@ -528,7 +533,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   }
 }
 
-void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *CurSlot) {
+void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *S) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VASTValue *ReadyPort = 0;
 
@@ -546,7 +551,7 @@ void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *CurSlot) {
   default: return;
   }
 
-  VM->addSlotReady(CurSlot,ReadyPort,createCnd(*VInstrInfo::getPredOperand(MI)));
+  VM->addSlotReady(S, ReadyPort, createCnd(*VInstrInfo::getPredOperand(MI)));
 }
 
 void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
@@ -1036,8 +1041,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitOpReadFU(MachineInstr *MI, VASTSlot *CurSlot,
                                      VASTValueVecTy &Cnds) {
-  addSlotReady(MI, CurSlot);
-
+  addSlotReady(MI, getOrCreateInstrSlot(MI, CurSlot->getParentIdx()));
   // The dst operand of ReadFU change to immediate if it is dead.
   if (MI->getOperand(0).isReg() && MI->getOperand(0).getReg())
     emitOpCopy(MI, CurSlot, Cnds);
