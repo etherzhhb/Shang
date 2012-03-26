@@ -66,7 +66,6 @@ namespace llvm {
     unsigned ICmpCost[64] ;
     //////////////////////////////////
     //FIX ME: This can be initialized the MuxCost from lua.
-    unsigned MUXCost[9] = {0, 0, 65, 88, 131, 259, 324, 364, 454};
     unsigned MaxLutSize = 4;
     unsigned MaxMuxPerLut = 4;
     unsigned MaxAllowedMuxSize = 8;
@@ -130,6 +129,14 @@ namespace llvm {
                             / double(Log2_32_Ceil(MaxMuxPerLut)));
 
       return Level * LutLatency;
+    }
+
+    double getMuxCost(unsigned Size) {
+      if (Size < 2) return 0;
+
+      // Every MUX will eliminates inputs number by (MaxMuxPerLut - 1), how
+      // many MUX need to reduce the input number from Size to 1?
+      return (Size - 1) / (MaxMuxPerLut - 1) * LUTCost;
     }
   }
 }

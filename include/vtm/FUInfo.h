@@ -89,8 +89,7 @@ namespace VFUs {
   unsigned getModuleOperands(const std::string &ModName, unsigned FNNum,
                              SmallVectorImpl<ModOpInfo> &OpInfo);
   // Cost parameters.
-  extern unsigned MUXCost[9], AddCost[64], MulCost[64],
-                  ShiftCost[64], ICmpCost[64];
+  extern unsigned AddCost[64], MulCost[64], ShiftCost[64], ICmpCost[64];
 
   extern unsigned LUTCost;
   extern unsigned RegCost;
@@ -104,6 +103,7 @@ namespace VFUs {
 
   double getMuxLatency(unsigned Size);
   double getReductionLatency(unsigned Size);
+  double getMuxCost(unsigned Size);
 
   extern double BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector

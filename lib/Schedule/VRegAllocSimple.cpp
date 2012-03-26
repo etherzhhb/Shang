@@ -244,10 +244,8 @@ struct FaninChecker {
       // Igore the operand index.
       MergedFanins[N].insert(getRegKey(FanInOp.getReg(), 0));
       ++Fanins[CurSrc][N];
-    } else if (FanInOp.isImm())
+    } else
       ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
-    else
-      ExtraCost += /*Reg Mux Cost Pre-bit*/ VFUs::MUXCost[0];
   }
   template<int N>
   void addFanin(MachineOperand &SrcOp) {
@@ -269,19 +267,10 @@ struct FaninChecker {
     return Fanins[SrcIndex][N];
   }
 
-  int getMuxCost(int Size){
-    if(Size == 0 || Size == 1)
-      return 0;
-    else if(Size > 1 && Size < 9)
-      return VFUs::MUXCost[Size];
-    else
-      return 0;
-  }
-
   template<int N>
   int getSavedSrcMuxCost(int BitWidth){
-    return (getMuxCost(getSrcNum<N>(0)) +getMuxCost(getSrcNum<N>(1))
-            - getMuxCost(getMergedSrcMuxSize<N>())) *BitWidth;
+    return (VFUs::getMuxCost(getSrcNum<N>(0)) + VFUs::getMuxCost(getSrcNum<N>(1))
+            - VFUs::getMuxCost(getMergedSrcMuxSize<N>())) *BitWidth;
   }
 
   int getExtraCost() const { return ExtraCost; }
@@ -349,17 +338,9 @@ struct FanoutChecker {
     return mergedFanouts.size();
   }
 
-  int getMuxCost(int Size){
-    if(Size == 0 || Size == 1)
-      return 0;
-    else if(Size > 1 && Size < 9)
-      return VFUs::MUXCost[Size];
-    else
-      return 0;
-  }
-
   int getSavedFanoutsCost(int BitWidth) {
-    return (getMuxCost(NumFanouts) - getMuxCost(getNumMergedFanouts())) * BitWidth;
+    return (VFUs::getMuxCost(NumFanouts) - VFUs::getMuxCost(getNumMergedFanouts()))
+            * BitWidth;
   }
 
 };

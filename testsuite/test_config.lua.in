@@ -2,6 +2,7 @@ local FMAX = @FMAX@
 PERIOD = 1000.0 / FMAX
 FUs.MaxAllowedMuxSize = @MaxAllowedMuxSize@
 FUs.RegCost = 64
+FUs.LUTCost = 64
 
 ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
 SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
