@@ -691,7 +691,10 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
     NewOps.push_back(Ops[i]);
   }
 
-  return createExpr(Opc, NewOps, BitWidth, 0);
+  // If new operand is added, we may have new optimization opportunity.
+  if (NewOps.size() != Ops.size()) return buildExpr(Opc, NewOps, BitWidth);
+  // The expression that can perform tree flatten should be commutative.
+  else return getOrCreateCommutativeExpr(Opc, NewOps, BitWidth, 0);
 }
 
 VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
