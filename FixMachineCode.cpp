@@ -35,6 +35,7 @@
 
 using namespace llvm;
 
+STATISTIC(ReductionSimplified, "Number of Reductions are simplified");
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
@@ -54,7 +55,7 @@ struct FixMachineCode : public MachineFunctionPass {
   bool runOnMachineFunction(MachineFunction &MF);
 
   void handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB);
-
+  bool simplifyReduction(MachineInstr *MI);
   bool handleImplicitDefs(MachineInstr *MI);
   bool mergeSel(MachineInstr *MI);
   void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI, MachineOperand Cnd);
@@ -94,6 +95,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         continue;
       }
 
+      if (simplifyReduction(Inst)) continue;
       if (handleImplicitDefs(Inst)) continue;
 
       if (Inst->isCopy()) VInstrInfo::ChangeCopyToMove(Inst);
@@ -131,6 +133,26 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   return true;
 }
 
+
+bool FixMachineCode::simplifyReduction(MachineInstr *MI) {
+  unsigned Opcode = MI->getOpcode();
+  if (Opcode != VTM::VOpROr && Opcode != VTM::VOpRAnd && Opcode != VTM::VOpRXor)
+    return false;
+
+  ucOperand &Src = cast<ucOperand>(MI->getOperand(1));
+  if (Src.getBitWidth() != 1) return false;
+
+  // If the bitwidth of src operand is 1, the reduction is not necessary.
+  unsigned SrcReg = Src.getReg();
+  unsigned DstReg = MI->getOperand(0).getReg();
+
+  MI->eraseFromParent();
+  MRI->replaceRegWith(DstReg, SrcReg);
+  MRI->clearKillFlags(SrcReg);
+
+  ++ReductionSimplified;
+  return true;
+}
 
 void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {  
   unsigned BitWidth = cast<ucOperand>(PN->getOperand(0)).getBitWidth();
