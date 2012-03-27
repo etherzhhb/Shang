@@ -187,7 +187,7 @@ struct MicroStateBuilder {
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
-      return ucOperand::CreateWire(WireNum, Op.getBitWidth());
+      return ucOperand::CreateReg(WireNum, Op.getBitWidth());
     }
   };
 
@@ -591,9 +591,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Handle the predicate operand.
   ucOperand Pred = *VInstrInfo::getPredOperand(&Inst);
   assert(Pred.isReg() && "Cannot handle predicate operand!");
-    
-  if (Pred.getReg() && VRegisterInfo::IsWire(Pred.getReg(), &MRI))
-    Pred.setIsWire();
 
   // The value defined by this instruction.
   DefVector Defs;
@@ -607,9 +604,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       continue;
 
     unsigned RegNo = MO.getReg();
-    // Set the wire flag now.
-    if (VRegisterInfo::IsWire(RegNo, &MRI))
-      cast<ucOperand>(MO).setIsWire();
 
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
@@ -625,10 +619,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
       // Define wire for trivial operation, otherwise, the result of function
       // unit should be wire, and there must be a copy follow up.
-      if (!NewOp.isWire()) {
+      if (!VRegisterInfo::IsWire(RegNo, &MRI)) {
         WireNum =
           MRI.createVirtualRegister(VRegisterInfo::getRepRegisterClass(Opc));
-        NewOp = ucOperand::CreateWire(WireNum, BitWidth, true);
+        NewOp = ucOperand::CreateReg(WireNum, BitWidth, true);
       }
 
       // If the wire define and the copy wrap around?

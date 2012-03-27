@@ -84,14 +84,6 @@ bool ucOperand::isPredicateInverted() const {
   return getTargetFlags() & VInstrInfo::PredInvertFlag;
 }
 
-ucOperand ucOperand::CreateWire(unsigned WireNum, unsigned BitWidth,
-                                bool IsDef /* = false */) {
-  ucOperand MO = MachineOperand::CreateReg(WireNum, IsDef);
-  MO.setBitWidth(BitWidth);
-  MO.setIsWire();
-  return MO;
-}
-
 ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   // Read reg0 means always execute.
   ucOperand MO = MachineOperand::CreateReg(Reg, false);
@@ -116,20 +108,6 @@ ucOperand ucOperand::CreateImm(int64_t Val, unsigned BitWidth) {
   ucOperand MO = MachineOperand::CreateImm(Val);
   MO.setBitWidth(BitWidth);
   return MO;
-}
-
-bool ucOperand::isWire() const {
-  return isReg() && (IsWireFlag & getTargetFlags());
-}
-
-ucOperand::bit_range ucOperand::getBitRange() const {
-  unsigned Offset = 0;
-
-  //unsigned Reg = getReg();
-  //if (TargetRegisterInfo::isPhysicalRegister(Reg))
-  //  Offset = (Reg & 0x7) * 8;
-
-  return std::make_pair(getBitWidth() + Offset, 0 + Offset);
 }
 
 void ucOperand::print(raw_ostream &OS,

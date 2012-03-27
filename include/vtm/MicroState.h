@@ -57,8 +57,6 @@ public:
 
   static bool classof(const MachineOperand *) { return true; }
 
-  bool isWire() const;
-
   unsigned getBitWidthOrZero() const {
     assert((isImm() || isReg() || isSymbol() || isGlobal())
       && "Unsupported operand type!");
@@ -71,15 +69,6 @@ public:
     return BitWidth;
   }
 
-  typedef std::pair<unsigned, unsigned> bit_range;
-  bit_range getBitRange() const;
-
-  void setIsWire(bool isWire = true) {
-    unsigned char TF = getTargetFlags();
-    TF = isWire ? (TF | IsWireFlag) : (TF & ~IsWireFlag);
-    setTargetFlags(TF);
-  }
-
   void setBitWidth(unsigned BitWidth) {
     unsigned TF = getTargetFlags();
     TF &= ~BitwidthMask;
@@ -90,8 +79,6 @@ public:
 
   bool isPredicateInverted() const;
 
-  static ucOperand CreateWire(unsigned WireNum, unsigned BitWidth,
-                              bool IsDef = false);
   static ucOperand CreateReg(unsigned RegNum, unsigned BitWidth,
                              bool IsDef = false);
   static ucOperand CreateImm(int64_t Val, unsigned BitWidth);
