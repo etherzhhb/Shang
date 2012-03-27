@@ -116,7 +116,7 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createFixMachineCodePass(false));
 
     // Perform logic synthesis.
-    //PM.add(createLogicSynthesisPass());
+    PM.add(createLogicSynthesisPass());
     printAndVerify("After logic synthesis.");
 
     // Clean up the MachineFunction.

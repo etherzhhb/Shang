@@ -29,6 +29,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Allocator.h"
 #define DEBUG_TYPE "vtm-logic-synthesis"
 #include "llvm/Support/Debug.h"
 
@@ -64,6 +65,8 @@ struct LogicNetwork {
 
   ~LogicNetwork() {
     Abc_NtkDelete(Ntk);
+    // Called by its destructor.
+    //NtkObjAllocator.DestroyAll();
   }
 
   // Helper class
@@ -84,8 +87,8 @@ struct LogicNetwork {
       }
     }
 
-    NetworkObj()
-      : Obj(0), MO(MachineOperand::CreateReg(0, false)), ExposedUses(0) {}
+    NetworkObj(const NetworkObj&);     // DO NOT IMPLEMENT
+    void operator=(const NetworkObj&); // DO NOT IMPLEMENT
 
     unsigned decreaseUses() {
       if (ExposedUses) --ExposedUses;
@@ -94,8 +97,9 @@ struct LogicNetwork {
     }
   };
 
+  SpecificBumpPtrAllocator<NetworkObj> NtkObjAllocator;
   // Mapping register number to logic network port.
-  typedef DenseMap<ucOperand, NetworkObj, ucOperandValueTrait> ObjMapTy;
+  typedef DenseMap<ucOperand, NetworkObj*, ucOperandValueTrait> ObjMapTy;
   // Nodes.
   ObjMapTy Nodes;
 
@@ -127,7 +131,7 @@ struct LogicNetwork {
   }
 
   //
-  Abc_Obj_t *getObj(ucOperand MO) {
+  NetworkObj *getObj(ucOperand MO) {
     // Clear the flags berore looking up the object.
     if (MO.isReg()) {
       MO.setIsDef(false);
@@ -136,55 +140,48 @@ struct LogicNetwork {
 
     ObjMapTy::iterator inNodes = Nodes.find(MO);
 
-    if (inNodes != Nodes.end()) {
-      // Decrease the reference count.
-      inNodes->second.decreaseUses();
-      return inNodes->second.Obj;
-    }
+    if (inNodes != Nodes.end()) return inNodes->second;
 
     return 0;
   }
 
-  Abc_Obj_t *getOrCreateObj(ucOperand &MO) {
+  NetworkObj *getOrCreateObj(ucOperand &MO) {
     MachineInstr *DefMI = 0;
-    // Remember the MI that define this MO so we can compute the insert
-    // position. Also check if the mo contains complicated operand usage.
     if (MO.isReg() && MO.getReg()) {
       DefMI = MRI.getVRegDef(MO.getReg());
       assert(DefMI && "VReg not defined?");
       if (DefMI->getParent() == BB) {
-        unsigned DefBitWidth =
-          cast<ucOperand>(DefMI->getOperand(0)).getBitWidth();
-        // Implicit bit slice operation contains in the MO.
-        if (DefBitWidth != MO.getBitWidth()) return 0;
-      }
+        // Implicit bitslice operand is not supported at the moment.
+        if (cast<ucOperand>(DefMI->getOperand(0)).getBitWidth()!=MO.getBitWidth())
+          return 0;
+      } else // Reset DefMI if it not located in the current BB.
+        DefMI = 0;
     }
 
-    // Try to get the corresponding object of MO and decrease its use count.
-    Abc_Obj_t *Obj = getObj(MO);
+    NetworkObj *NtkObj = getObj(MO);
 
     // Object not existed, create a PI for the MO now.
-    if (Obj == 0) {
-      Obj = Abc_NtkCreatePi(Ntk);
+    if (NtkObj == 0) {
+      Abc_Obj_t *Obj = Abc_NtkCreatePi(Ntk);
       std::string PIName = "i" + utostr_32(Abc_ObjId(Abc_ObjRegular(Obj)));
       Abc_ObjAssignName(Obj, const_cast<char*>(PIName.c_str()), 0);
       char *Name = Abc_ObjName(Abc_ObjRegular(Obj));
-      // Create the fan-in entry.
-      if (DefMI) FIMap.GetOrCreateValue(Name, DefMI);
 
+      // Remember the MI that define this MO so we can compute the insert
+      // position.
+      if (DefMI) FIMap.GetOrCreateValue(Name, DefMI);
       // PIs are not exposed.
-      NetworkObj NtkObj(Obj, MO, 0);
+      NtkObj = new (NtkObjAllocator.Allocate()) NetworkObj(Obj, MO, 0);
 
       // Use the normalized MO.
       // Map the PI to MO.
-      MOMap.GetOrCreateValue(Name, NtkObj.MO);
-      Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
+      MOMap.GetOrCreateValue(Name, NtkObj->MO);
+      Nodes.insert(std::make_pair(NtkObj->MO, NtkObj));
       // The kill flags may broken during the rebuil process.
       if (MO.isReg() && MO.getReg()) MRI.clearKillFlags(MO.getReg());
-
     }
 
-    return Obj;
+    return NtkObj;
   }
 
   ucOperand getOperand(Abc_Obj_t *Obj, unsigned SizeInBits = 0) {
@@ -209,7 +206,7 @@ struct LogicNetwork {
     typedef ObjMapTy::iterator it;
 
     for (it I = Nodes.begin(), E = Nodes.end(); I != E; ++I) {
-      NetworkObj &Node = I->second;
+      NetworkObj &Node = *I->second;
 
       // Only create PO for exposed node.
       if (!Node.ExposedUses) continue;
@@ -279,36 +276,44 @@ struct LogicNetwork {
   // Function for logic network building.
   template <typename BuildFunc>
   bool buildBinaryOpNode(MachineInstr *MI, BuildFunc F) {
-    Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
+    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
     // Some operands are too complicated to handle.
     if (!Op0) return false;
 
-    Abc_Obj_t *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
+    NetworkObj *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
     // Some operands are too complicated to handle.
     if (!Op1) return false;
 
+    // They are used in the logic network.
+    Op0->decreaseUses();
+    Op1->decreaseUses();
     // Create the internal node for this machine instruction.
-    Abc_Obj_t *Res = F((Abc_Aig_t *)Ntk->pManFunc, Op0, Op1);
+    Abc_Obj_t *Res = F((Abc_Aig_t *)Ntk->pManFunc, Op0->Obj, Op1->Obj);
     ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
 
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
-    NetworkObj NtkObj(Res, ResMO, NumUse);
-    Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
+    NetworkObj *NtkObj =
+      new (NtkObjAllocator.Allocate()) NetworkObj(Res, ResMO, NumUse);
+    Nodes.insert(std::make_pair(NtkObj->MO, NtkObj));
     return true;
   }
 
   bool buildNotNode(MachineInstr *MI) {
-    Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
+    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
     // Some operands are too complicated to handle.
     if (!Op0) return false;
 
+    // It is used in the logic network.
+    Op0->decreaseUses();
+
     // Create the internal node for this machine instruction.
-    Abc_Obj_t *Res = Abc_ObjNot(Op0);
+    Abc_Obj_t *Res = Abc_ObjNot(Op0->Obj);
     ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
 
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
-    NetworkObj NtkObj(Res, ResMO, NumUse);
-    Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
+    NetworkObj *NtkObj =
+      new (NtkObjAllocator.Allocate()) NetworkObj(Res, ResMO, NumUse);
+    Nodes.insert(std::make_pair(NtkObj->MO, NtkObj));
     return true;
   }
 
