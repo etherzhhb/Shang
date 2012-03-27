@@ -1155,7 +1155,7 @@ public:
                         unsigned UB, unsigned LB);
 
   VASTValue *getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                        ArrayRef<VASTValue*> Ops,
+                                        SmallVectorImpl<VASTValue*> &Ops,
                                         unsigned BitWidth);
 
   VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,

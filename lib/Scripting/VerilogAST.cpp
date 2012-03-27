@@ -798,11 +798,11 @@ VASTValue *VASTModule::buildAddExpr(VASTExpr::Opcode Opc,
   return flattenExprTree(Opc, Ops, BitWidth);
 }
 
-VASTValue *VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                                  ArrayRef<VASTValue*> Ops,
-                                                  unsigned BitWidth) {
-  SmallVector<VASTValue*, 4> ValueVec(Ops.begin(), Ops.end());
-  std::sort(ValueVec.begin(), ValueVec.end());
+VASTValue
+  *VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                          SmallVectorImpl<VASTValue*> &Ops,
+                                          unsigned BitWidth) {
+  std::sort(Ops.begin(), Ops.end());
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
