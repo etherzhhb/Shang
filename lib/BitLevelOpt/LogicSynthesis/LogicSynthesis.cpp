@@ -515,7 +515,7 @@ bool LogicSynthesis::runOnMachineFunction(MachineFunction &MF) {
 }
 
 bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
-  bool Changed = false;
+  SmallVector<MachineInstr*, 16> InstrsToRewrite;
   LogicNetwork Ntk(BB);
 
   DEBUG(dbgs() << "Before logic synthesis:\n";
@@ -528,14 +528,15 @@ bool LogicSynthesis::synthesisBasicBlock(MachineBasicBlock *BB) {
     // Try to add the instruction into the logic network.
     if (!Ntk.addInstr(MI)) continue;
 
-    // FIXME: Unlink the instruction from BB and erase them only if the
-    // synthesis success.
-    MI->eraseFromParent();
-    Changed = true;
+    InstrsToRewrite.push_back(MI);
   }
 
   // Not change at all.
-  if (!Changed) return false;
+  if (InstrsToRewrite.empty()) return false;
+
+  // Erase the instructions before rewriting them.
+  while (!InstrsToRewrite.empty())
+    InstrsToRewrite.pop_back_val()->eraseFromParent();
 
   // Clean up the network, prepare for logic optimization.
   Ntk.cleanUp();
