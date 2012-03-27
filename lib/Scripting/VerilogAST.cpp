@@ -40,6 +40,11 @@ static cl::opt<bool>
 EnableBBProfile("vtm-enable-bb-profile",
                 cl::desc("Generate counters to profile the design"),
                 cl::init(false));
+static cl::opt<unsigned>
+ExprInlineThreshold("vtm-expr-inline-thredhold",
+                    cl::desc("Inline the expression which has less than N use"
+                             " (0 for always inline)"),
+                    cl::init(2));
 
 //===----------------------------------------------------------------------===//
 // Value and type printing
@@ -587,13 +592,16 @@ void VASTModule::printModuleDecl(raw_ostream &OS) const {
 }
 
 void VASTModule::printSignalDecl(raw_ostream &OS) {
+  unsigned InlineThreshold = ExprInlineThreshold;
+  if (InlineThreshold == 0) InlineThreshold = ~0;
+
   for (WireVector::const_iterator I = Wires.begin(), E = Wires.end();
        I != E; ++I) {
     VASTWire *W = *I;
 
     // Do not print the LUT inline.
     if (VASTExpr *E = W->getExpr()) {
-      if (W->getWireType() == VASTWire::LUT || W->num_uses() > 2) {
+      if (W->getWireType() == VASTWire::LUT || W->num_uses() > InlineThreshold){
         //assert(!E->use_empty() && "E is used by W atleast!");
         // Don't print the expression inline, print the lhs wire instead.
         // And pin W because it will be use as operand later.
