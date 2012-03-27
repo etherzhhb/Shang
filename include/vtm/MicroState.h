@@ -40,17 +40,6 @@ struct ucOpExpressionTrait;
 
 //uc Operand
 class ucOperand : public MachineOperand {
-  static const unsigned BitwidthMask = 0x7f;
-  static const unsigned IsWireFlag = 0x80;
-
-  static const unsigned IsOpcode = 0x80;
-  static const unsigned FUIDMask = 0xffff;
-  static const unsigned FUIDShiftAmount = 0x0;
-  static const unsigned PredSlotMask = 0xffff;
-  static const unsigned PredSlotShiftAmount = 0x10;
-  static const unsigned OpcodeMask = 0xffff;
-  static const unsigned OpcodeShiftAmount = 0x20;
-
 public:
   /*implicit*/ ucOperand(const MachineOperand &O) : MachineOperand(O) {}
   ucOperand() : MachineOperand(MachineOperand::CreateReg(0, false)) {}
@@ -60,7 +49,7 @@ public:
   unsigned getBitWidthOrZero() const {
     assert((isImm() || isReg() || isSymbol() || isGlobal())
       && "Unsupported operand type!");
-    return getTargetFlags() & BitwidthMask;
+    return getTargetFlags() & VInstrInfo::BitwidthMask;
   }
 
   unsigned getBitWidth() const {
@@ -71,8 +60,8 @@ public:
 
   void setBitWidth(unsigned BitWidth) {
     unsigned TF = getTargetFlags();
-    TF &= ~BitwidthMask;
-    TF |= BitWidth & BitwidthMask;
+    TF &= ~VInstrInfo::BitwidthMask;
+    TF |= BitWidth & VInstrInfo::BitwidthMask;
     setTargetFlags(TF);
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }
