@@ -145,19 +145,17 @@ struct LogicNetwork {
     return 0;
   }
 
-  NetworkObj *getOrCreateObj(ucOperand &MO) {
-    MachineInstr *DefMI = 0;
-    if (MO.isReg() && MO.getReg()) {
-      DefMI = MRI.getVRegDef(MO.getReg());
-      assert(DefMI && "VReg not defined?");
-      if (DefMI->getParent() == BB) {
-        // Implicit bitslice operand is not supported at the moment.
-        if (cast<ucOperand>(DefMI->getOperand(0)).getBitWidth()!=MO.getBitWidth())
-          return 0;
-      } else // Reset DefMI if it not located in the current BB.
-        DefMI = 0;
-    }
 
+  bool hasImplicitBitslice(ucOperand &MO) {
+    if (!MO.isReg() || !MO.getReg()) return false;
+
+    MachineRegisterInfo::def_iterator I = MRI.def_begin(MO.getReg());
+    assert(I != MRI.def_end() && llvm::next(I) == MRI.def_end() &&
+           "Not in SSA form!");
+    return MO.getBitWidth() != cast<ucOperand>(I.getOperand()).getBitWidth();
+  }
+
+  NetworkObj *getOrCreateObj(ucOperand &MO) {
     NetworkObj *NtkObj = getObj(MO);
 
     // Object not existed, create a PI for the MO now.
@@ -169,7 +167,12 @@ struct LogicNetwork {
 
       // Remember the MI that define this MO so we can compute the insert
       // position.
-      if (DefMI) FIMap.GetOrCreateValue(Name, DefMI);
+      if (MO.isReg() && MO.getReg()) {
+        MachineInstr *DefMI = MRI.getVRegDef(MO.getReg());
+        assert(DefMI && "VReg not defined?");
+        if (DefMI->getParent() == BB)
+          FIMap.GetOrCreateValue(Name, DefMI);
+      }
       // PIs are not exposed.
       NtkObj = new (NtkObjAllocator.Allocate()) NetworkObj(Obj, MO, 0);
 
@@ -276,13 +279,12 @@ struct LogicNetwork {
   // Function for logic network building.
   template <typename BuildFunc>
   bool buildBinaryOpNode(MachineInstr *MI, BuildFunc F) {
-    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
-    // Some operands are too complicated to handle.
-    if (!Op0) return false;
+    if (hasImplicitBitslice(cast<ucOperand>(MI->getOperand(1))) ||
+        hasImplicitBitslice(cast<ucOperand>(MI->getOperand(2))))
+      return false;
 
+    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
     NetworkObj *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
-    // Some operands are too complicated to handle.
-    if (!Op1) return false;
 
     // They are used in the logic network.
     Op0->decreaseUses();
@@ -299,10 +301,10 @@ struct LogicNetwork {
   }
 
   bool buildNotNode(MachineInstr *MI) {
-    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
-    // Some operands are too complicated to handle.
-    if (!Op0) return false;
+    if (hasImplicitBitslice(cast<ucOperand>(MI->getOperand(1))))
+      return false;
 
+    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
     // It is used in the logic network.
     Op0->decreaseUses();
 
@@ -454,12 +456,16 @@ bool LogicNetwork::addInstr(MachineInstr *MI) {
   default: break;
   case VTM::VOpAnd:
     if (buildBinaryOpNode(MI, Abc_AigAnd)) return true;
+    break;
   case VTM::VOpOr:
     if (buildBinaryOpNode(MI, Abc_AigOr)) return true;
+    break;
   case VTM::VOpXor:
     if (buildBinaryOpNode(MI, Abc_AigXor)) return true;
+    break;
   case VTM::VOpNot:
     if (buildNotNode(MI)) return true;
+    break;
   }
 
   // Add the black box instruction to index map,
