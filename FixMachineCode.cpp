@@ -146,8 +146,6 @@ bool FixMachineCode::simplifyBitSlice(MachineInstr *MI) {
   // of the dst register, i.e. using the lower part of the src register.
   if (MI->getOperand(3).getImm() != 0) return false;
 
-  unsigned UB = MI->getOperand(2).getImm();
-
   unsigned SrcReg = MI->getOperand(1).getReg();
   unsigned DstReg = MI->getOperand(0).getReg();
 
