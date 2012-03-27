@@ -40,16 +40,20 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
     MachineRegisterInfo &MRI = MF.getRegInfo();
 
     for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
-      for (MachineBasicBlock::iterator II = I->begin(), IE = I->end(); II != IE;
-           /*++II*/) {
+      for (MachineBasicBlock::instr_iterator II = I->instr_begin(),
+           IE = I->instr_end(); II != IE; /*++II*/) {
         MachineInstr *MI = II;
         ++II;
 
-        if (!MI->isImplicitDef()) continue;
-
-        unsigned Reg = MI->getOperand(0).getReg();
-        MRI.replaceRegWith(Reg, 0);
-        MI->removeFromParent();
+        if (MI->getOpcode() == VTM::VOpReadFU &&
+            (!MI->getOperand(0).isReg() || !MI->getOperand(0).getReg()) &&
+            VInstrInfo::getPreboundFUId(MI).isTrivial()) {
+          I->erase_instr(MI);
+        } else if (MI->isImplicitDef()) {
+          unsigned Reg = MI->getOperand(0).getReg();
+          MRI.replaceRegWith(Reg, 0);
+          MI->eraseFromParent();
+        }
       }
 
     return true;
