@@ -29,6 +29,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-fix-machine-code"
 #include "llvm/Support/Debug.h"
 #include <set>
@@ -36,6 +37,7 @@
 using namespace llvm;
 
 STATISTIC(ReductionSimplified, "Number of Reductions are simplified");
+STATISTIC(BitSliceSimplified, "Number of BitSlices are simplified");
 namespace {
 struct FixMachineCode : public MachineFunctionPass {
   static char ID;
@@ -56,6 +58,7 @@ struct FixMachineCode : public MachineFunctionPass {
 
   void handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB);
   bool simplifyReduction(MachineInstr *MI);
+  bool simplifyBitSlice(MachineInstr *MI);
   bool handleImplicitDefs(MachineInstr *MI);
   bool mergeSel(MachineInstr *MI);
   void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI, MachineOperand Cnd);
@@ -96,6 +99,7 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       }
 
       if (simplifyReduction(Inst)) continue;
+      if (simplifyBitSlice(Inst)) continue;
       if (handleImplicitDefs(Inst)) continue;
 
       if (Inst->isCopy()) VInstrInfo::ChangeCopyToMove(Inst);
@@ -133,6 +137,26 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
   return true;
 }
 
+bool FixMachineCode::simplifyBitSlice(MachineInstr *MI) {
+  if (MI->getOpcode() != VTM::VOpBitSlice) return false;
+
+  // Only can simplify if lower bound is 0, which means the result simply
+  // use the lower part of the src register. We can simply replace the use
+  // of dst register by src register, with the original bitwidth information
+  // of the dst register, i.e. using the lower part of the src register.
+  if (MI->getOperand(3).getImm() != 0) return false;
+
+  unsigned UB = MI->getOperand(2).getImm();
+
+  unsigned SrcReg = MI->getOperand(1).getReg();
+  unsigned DstReg = MI->getOperand(0).getReg();
+
+  MI->eraseFromParent();
+  MRI->replaceRegWith(DstReg, SrcReg);
+  MRI->clearKillFlags(SrcReg);
+  ++BitSliceSimplified;
+  return true;
+}
 
 bool FixMachineCode::simplifyReduction(MachineInstr *MI) {
   unsigned Opcode = MI->getOpcode();

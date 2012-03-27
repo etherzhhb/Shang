@@ -123,10 +123,10 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
     // Else we need to rebuild the UserMI.
     SmallVector<MachineOperand, 6> MOs;
     for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
-      MachineOperand &MO = *I;
+      ucOperand &MO = cast<ucOperand>(*I);
       // Are we going to replace the operand?
       if (MO.isReg() && MO.getReg() == Reg) {
-        assert(MO.getTargetFlags() == ImmediateTFs
+        assert(MO.getBitWidth() <= ImmediateTFs
           && "Folding immediate with different Bitwidth?");
         MOs.push_back(ImmediateMO);
         continue;
