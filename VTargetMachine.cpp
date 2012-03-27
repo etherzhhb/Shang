@@ -117,6 +117,7 @@ struct VTMPassConfig : public TargetPassConfig {
 
     // Perform logic synthesis.
     PM.add(createLogicSynthesisPass());
+    printAndVerify("After logic synthesis.");
 
     // Clean up the MachineFunction.
     addPass(MachineCSEID);
