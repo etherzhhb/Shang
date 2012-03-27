@@ -146,6 +146,21 @@ struct LogicNetwork {
   }
 
   Abc_Obj_t *getOrCreateObj(ucOperand &MO) {
+    MachineInstr *DefMI = 0;
+    // Remember the MI that define this MO so we can compute the insert
+    // position. Also check if the mo contains complicated operand usage.
+    if (MO.isReg() && MO.getReg()) {
+      DefMI = MRI.getVRegDef(MO.getReg());
+      assert(DefMI && "VReg not defined?");
+      if (DefMI->getParent() == BB) {
+        unsigned DefBitWidth =
+          cast<ucOperand>(DefMI->getOperand(0)).getBitWidth();
+        // Implicit bit slice operation contains in the MO.
+        if (DefBitWidth != MO.getBitWidth()) return 0;
+      }
+    }
+
+    // Try to get the corresponding object of MO and decrease its use count.
     Abc_Obj_t *Obj = getObj(MO);
 
     // Object not existed, create a PI for the MO now.
@@ -154,15 +169,8 @@ struct LogicNetwork {
       std::string PIName = "i" + utostr_32(Abc_ObjId(Abc_ObjRegular(Obj)));
       Abc_ObjAssignName(Obj, const_cast<char*>(PIName.c_str()), 0);
       char *Name = Abc_ObjName(Abc_ObjRegular(Obj));
-
-      // Remember the MI that define this MO so we can compute the insert
-      // position.
-      if (MO.isReg() && MO.getReg()) {
-        MachineInstr *DefMI = MRI.getVRegDef(MO.getReg());
-        assert(DefMI && "VReg not defined?");
-        if (DefMI->getParent() == BB)
-          FIMap.GetOrCreateValue(Name, DefMI);
-      }
+      // Create the fan-in entry.
+      if (DefMI) FIMap.GetOrCreateValue(Name, DefMI);
 
       // PIs are not exposed.
       NetworkObj NtkObj(Obj, MO, 0);
@@ -270,10 +278,15 @@ struct LogicNetwork {
 
   // Function for logic network building.
   template <typename BuildFunc>
-  void buildBinaryOpNode(MachineInstr *MI, BuildFunc F) {
-    Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1))),
-              *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
-  
+  bool buildBinaryOpNode(MachineInstr *MI, BuildFunc F) {
+    Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
+    // Some operands are too complicated to handle.
+    if (!Op0) return false;
+
+    Abc_Obj_t *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
+    // Some operands are too complicated to handle.
+    if (!Op1) return false;
+
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = F((Abc_Aig_t *)Ntk->pManFunc, Op0, Op1);
     ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
@@ -281,10 +294,14 @@ struct LogicNetwork {
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
     NetworkObj NtkObj(Res, ResMO, NumUse);
     Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
+    return true;
   }
 
-  void buildNotNode(MachineInstr *MI) {
+  bool buildNotNode(MachineInstr *MI) {
     Abc_Obj_t *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
+    // Some operands are too complicated to handle.
+    if (!Op0) return false;
+
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = Abc_ObjNot(Op0);
     ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
@@ -292,6 +309,7 @@ struct LogicNetwork {
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
     NetworkObj NtkObj(Res, ResMO, NumUse);
     Nodes.insert(std::make_pair(NtkObj.MO, NtkObj));
+    return true;
   }
 
   bool addInstr(MachineInstr *MI);
@@ -430,17 +448,13 @@ bool LogicNetwork::addInstr(MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default: break;
   case VTM::VOpAnd:
-    buildBinaryOpNode(MI, Abc_AigAnd);
-    return true;
+    if (buildBinaryOpNode(MI, Abc_AigAnd)) return true;
   case VTM::VOpOr:
-    buildBinaryOpNode(MI, Abc_AigOr);
-    return true;
+    if (buildBinaryOpNode(MI, Abc_AigOr)) return true;
   case VTM::VOpXor:
-    buildBinaryOpNode(MI, Abc_AigXor);
-    return true;
+    if (buildBinaryOpNode(MI, Abc_AigXor)) return true;
   case VTM::VOpNot:
-    buildNotNode(MI);
-    return true;
+    if (buildNotNode(MI)) return true;
   }
 
   // Add the black box instruction to index map,
