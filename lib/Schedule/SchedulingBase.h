@@ -102,6 +102,7 @@ public:
     RT.clear();
   }
 
+  unsigned getPredicateChannel(VSUnit *U);
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);

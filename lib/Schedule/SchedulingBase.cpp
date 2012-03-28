@@ -215,6 +215,13 @@ void SchedulingBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
+unsigned SchedulingBase::getPredicateChannel(VSUnit * U) {
+  MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
+  unsigned PredReg = P->getReg();
+  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+  return PredReg;
+}
+
 bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   FuncUnitId FU = U->getFUId();
   // We will always have enough trivial resources.
@@ -224,9 +231,7 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
 
   // FIXME: Compute the area cost.
   if (FU.isBound()) {
-    MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
-    unsigned PredReg = P->getReg();
-    if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+    unsigned PredReg = getPredicateChannel(U);
     // Do all resource at step been reserve?
     for (unsigned i = step, e = step + Latency; i != e; ++i) {
       unsigned s = computeStepKey(i);
@@ -260,9 +265,7 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
-  MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
-  unsigned PredReg = P->getReg();
-  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+  unsigned PredReg = getPredicateChannel(U);
   unsigned Latency = U->getLatency();
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
@@ -280,9 +283,7 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
-  MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
-  unsigned PredReg = P->getReg();
-  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+  unsigned PredReg = getPredicateChannel(U);
   unsigned Latency = U->getLatency();
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
