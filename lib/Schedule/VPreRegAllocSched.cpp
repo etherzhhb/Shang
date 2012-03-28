@@ -570,12 +570,14 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
     assert(MI && "Unexpected entry root!");
     for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
       MachineInstr *DepSrc = 0;
-      VSUnit *Dep = getDefSU(MI->getOperand(i), CurState, DepSrc);
+      const ucOperand &MO = cast<ucOperand>(MI->getOperand(i));
+      VSUnit *Dep = getDefSU(MO, CurState, DepSrc);
       // Avoid self-edge
       if (Dep == 0 || Dep->getIdx() == A->getIdx()) continue;
 
-      // Dirty Hack: Call get Detail latency.
-      double DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
+      // Dirty Hack: Get the detail latency.
+      double DetailLatency =
+        VInstrInfo::getChainingLatency(DepSrc, MI, MO.getBitWidth());
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
       DetailLatency -= std::min(0.0, IntraSULatency - VInstrInfo::DeltaLatency);

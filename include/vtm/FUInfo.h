@@ -55,6 +55,7 @@ namespace VFUs {
     Mux = 7,
     FirstFUType = Trivial,
     FirstNonTrivialFUType = AddSub,
+    LastBitLevelChainingFUType = Mult,
     LastPostBindFUType = ICmp,
     NumPostBindFUs = LastPostBindFUType - FirstNonTrivialFUType + 1,
     LastCommonFUType = Mux,

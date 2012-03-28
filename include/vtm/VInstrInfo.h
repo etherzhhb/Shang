@@ -160,14 +160,16 @@ public:
                                      const MachineInstr *DstInstr);
   const static double DeltaLatency;
   // Return the latency of a MachineInstr in cycle ratio.
-  static double getDetialLatency(const MachineInstr *MI);
+  static double getDetialLatency(const MachineInstr *MI, bool EnableBLC = false,
+                                 unsigned OperandWidth = 0);
   static unsigned getStepsToFinish(const MachineInstr *MI) {
     return unsigned(ceil(getDetialLatency(MI)));
   }
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
   static double getChainingLatency(const MachineInstr *SrcInstr,
-                                   const MachineInstr *DstInstr);
+                                   const MachineInstr *DstInstr,
+                                   unsigned OperandWidth);
   // Return the latency from the entry of the MachineBasicBlock to DstInstr.
   static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
 
@@ -200,6 +202,7 @@ public:
   static bool hasTrivialFU(unsigned OpC) {
     return getFUType(OpC) == VFUs::Trivial;
   }
+  static bool isBLCCapable(unsigned OpC);
 
   //static unsigned getTrivialLatency(unsigned OpC);
   static bool isReadAtEmit(unsigned OpC);
@@ -276,7 +279,8 @@ private:
 
   // Add the latency information from SrcMI to CurLatInfo.
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
-                       DepLatInfoTy &CurLatInfo, double OperandDelay);
+                       DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
+                       double OperandDelay);
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
