@@ -45,14 +45,20 @@
 using namespace llvm;
 
 STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
+STATISTIC(TrivialBBsMerged, "Number of trivial blocks are merged into hyperblock");
 STATISTIC(BBsMergedNotBenefit, "Number of blocks are not merged into hyperblock"
                                " (weighted path not benefit)");
-STATISTIC(BBsMergedBigIncreas, "Number of blocks are not merged into hyperblock"
+STATISTIC(BBsMergedBigIncrement, "Number of blocks are not merged into hyperblock"
                                " (BB delay increase too much)");
 
 cl::opt<unsigned> PathDiffThreshold("vtm-hyper-block-path-threshold",
                                     cl::desc("HyperBlock merging threshold"),
                                     cl::init(8));
+cl::opt<unsigned>
+TrivialBBThreshold("vtm-hyper-block-trivial-bb",
+                   cl::desc("The minimal delay of bb that will be treated as"
+                            " non-trivial bb in HyperBlock Formation"),
+                            cl::init(1)); //Disabled at the moment.
 
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
@@ -85,12 +91,14 @@ struct HyperBlockFormation : public MachineFunctionPass {
                                  VInstrInfo::JT &SrcJT,
                                  VInstrInfo::JT &DstJT);
 
-  bool mergeBlock(MachineBasicBlock *FromBB,
-                  MachineBasicBlock *ToBB);
+  typedef SmallVectorImpl<MachineBasicBlock*> BBVecTy;
+  bool mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBsToMerge);
 
-  bool mergeSuccBlocks(MachineBasicBlock *MBB,
-                       DenseMap<MachineBasicBlock*, unsigned> &UnmergedDelays);
+  bool mergeBlock(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB);
+  typedef DenseMap<MachineBasicBlock*, unsigned> BB2DelayMapTy;
+  bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays);
 
+  bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB);
   void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB);
 
   bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
@@ -216,9 +224,25 @@ INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
 
+bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
+  bool ActuallyMerged = false;
+  while (!BBs.empty()) {
+    MachineBasicBlock *SuccBB = BBs.back();
+    BBs.pop_back();
+
+    ActuallyMerged |= mergeBlock(SuccBB, MBB);
+  }
+
+  CycleLatencyInfo CL(*MRI);
+  // Update the delay.
+  if (ActuallyMerged)
+    BBDelay->updateDelay(MBB, CL.computeLatency(*MBB));
+
+  return ActuallyMerged;
+}
+
 bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
-                                          DenseMap<MachineBasicBlock*, unsigned>
-                                          &UnmergedDelays) {
+                                          BB2DelayMapTy &UnmergedDelays) {
   VInstrInfo::JT CurJT, SuccJT;
   uint64_t WeightSum = 0;
 
@@ -284,23 +308,34 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
   // blocks if the delay increase too much.
   if (double(MaxMergedDelay) / double(MBBDelay) >
       PathDiffThreshold / double(LI->getLoopDepth(MBB) + 1)) {
-    ++BBsMergedBigIncreas;
+    ++BBsMergedBigIncrement;
     return false;
   }
 
-  bool ActuallyMerged = false;
-  while (!BBsToMerge.empty()) {
-    MachineBasicBlock *SuccBB = BBsToMerge.back();
-    BBsToMerge.pop_back();
+  return mergeBlocks(MBB, BBsToMerge);
+}
 
-    ActuallyMerged |= mergeBlock(SuccBB, MBB);
+bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
+  bool ActuallyMerged = false;
+  SmallVector<MachineBasicBlock*, 8> BBsToMerge;
+  VInstrInfo::JT CurJT, SuccJT;
+
+  typedef MachineBasicBlock::succ_iterator succ_iterator;
+  for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
+    MachineBasicBlock *Succ = *I;
+    CurJT.clear();
+    SuccJT.clear();
+    // Cannot merge Succ to MBB.
+    if (getMergeDst(Succ, SuccJT, CurJT) != MBB) continue;
+
+    unsigned Delay = BBDelay->getBBDelay(Succ);
+    if (Delay < TrivialBBThreshold) {
+      ++TrivialBBsMerged;
+      BBsToMerge.push_back(Succ);
+    }
   }
 
-  // Update the delay.
-  if (ActuallyMerged)
-    BBDelay->updateDelay(MBB, CL.computeLatency(*MBB, true));
-
-  return ActuallyMerged;
+  return mergeBlocks(MBB, BBsToMerge);
 }
 
 bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
@@ -333,7 +368,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     SortedBBs.pop_back();
 
     do
-      MakeChanged |= BlockMerged = mergeSuccBlocks(MBB, UnmergedDelays);
+      MakeChanged |= BlockMerged =
+        (mergeSuccBlocks(MBB, UnmergedDelays) || mergeTrivialSuccBlocks(MBB));
     while (BlockMerged);
     // Prepare for next block.
     UnmergedDelays.clear();
