@@ -128,6 +128,12 @@ public:
     assert(V == 0 && "Already using some value!");
     V = RHS;
   }
+
+  void replaceUseBy(VASTValue *RHS) {
+    assert(V != 0 && V != RHS && "Cannot replace!");
+    V = RHS;
+  }
+
   // Set the user of this use and insert this use to use list.
   void setUser(VASTValue *User);
   // Get the user of this use.
@@ -765,9 +771,9 @@ private:
   const_succ_cnd_iterator succ_cnd_begin() const { return NextSlots.begin(); }
   const_succ_cnd_iterator succ_cnd_end() const { return NextSlots.end(); }
 
-  void addEnable(VASTRegister *R, VASTUse *Cnd);
-  void addReady(VASTValue *V, VASTUse *Cnd);
-  void addDisable(VASTRegister *R, VASTUse *Cnd);
+  void addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM);
+  void addReady(VASTValue *V, VASTValue *Cnd, VASTModule *VM);
+  void addDisable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM);
   void addSuccSlot(VASTSlot *NextSlot, VASTUse *Cnd);
 
   friend class VASTModule;
@@ -1068,6 +1074,7 @@ public:
     return S;
   }
 
+  VASTUse *allocateUse() { return Allocator.Allocate<VASTUse>(); }
   void addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd);
   void addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd);
   void addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd);

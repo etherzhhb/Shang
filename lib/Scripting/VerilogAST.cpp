@@ -181,22 +181,28 @@ void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTUse *Cnd) {
   (void) Inserted;
 }
 
-void VASTSlot::addEnable(VASTRegister *R, VASTUse *Cnd) {
-  bool Inserted = Enables.insert(std::make_pair(R, Cnd)).second;
-  assert(Inserted && "NextSlot already existed!");
-  (void) Inserted;
+void VASTSlot::addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
+  VASTUse *&U = Enables[R];
+  if (U == 0)
+    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
+  else
+    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
 }
 
-void VASTSlot::addReady(VASTValue *V, VASTUse *Cnd) {
-  bool Inserted = Readys.insert(std::make_pair(V, Cnd)).second;
-  assert(Inserted && "NextSlot already existed!");
-  (void) Inserted;
+void VASTSlot::addReady(VASTValue *V, VASTValue *Cnd, VASTModule *VM) {
+  VASTUse *&U = Readys[V];
+  if (U == 0)
+    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
+  else
+    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
 }
 
-void VASTSlot::addDisable(VASTRegister *R, VASTUse *Cnd) {
-  bool Inserted = Disables.insert(std::make_pair(R, Cnd)).second;
-  assert(Inserted && "NextSlot already existed!");
-  (void) Inserted;
+void VASTSlot::addDisable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
+  VASTUse *&U = Disables[R];
+  if (U == 0)
+    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
+  else
+    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
 }
 
 VASTValue *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
@@ -555,15 +561,15 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
 }
 
 void VASTModule::addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
-  S->addEnable(R, new (Allocator.Allocate<VASTUse>()) VASTUse(Cnd, 0));
+  S->addEnable(R, Cnd, this);
 }
 
 void VASTModule::addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd) {
-  S->addDisable(R, new (Allocator.Allocate<VASTUse>()) VASTUse(Cnd, 0));
+  S->addDisable(R, Cnd, this);
 }
 
 void VASTModule::addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd) {
-  S->addReady(V, new (Allocator.Allocate<VASTUse>()) VASTUse(Cnd, 0));
+  S->addReady(V, Cnd, this);
 }
 
 void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
