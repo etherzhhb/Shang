@@ -41,8 +41,9 @@ private:
   typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
   TFMapTy SUnitToTF;
 
-  // Step -> resource require number.
-  typedef std::map<unsigned, unsigned> UsageMapType;
+  static const unsigned PredicatedChannel = ~0u;
+  // { Step, Predicate } -> resource require number.
+  typedef std::map<std::pair<unsigned, unsigned>, unsigned> UsageMapType;
   // Resource -> resource usage at each step.
   typedef std::map<FuncUnitId, UsageMapType> RTType;
   RTType RT;

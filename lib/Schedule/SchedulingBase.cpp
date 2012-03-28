@@ -19,6 +19,7 @@
 #include "SchedulingBase.h"
 #include "ScheduleDOT.h"
 #include "vtm/Passes.h"
+#include "vtm/MicroState.h"
 
 #include "llvm/Support/CommandLine.h"
 
@@ -223,18 +224,29 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
 
   // FIXME: Compute the area cost.
   if (FU.isBound()) {
+    MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
+    unsigned PredReg = P->getReg();
+    if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
     // Do all resource at step been reserve?
     for (unsigned i = step, e = step + Latency; i != e; ++i) {
       unsigned s = computeStepKey(i);
       /*There is only 1 resource avaialbe for Prebound function unit kind*/
       const unsigned NumFUs = 1;
-      if (RT[FU][s] >= NumFUs)
+      if (RT[FU][std::make_pair(s, PredReg)] >= NumFUs)
+        return false;
+      // Do not conflict with the predicated channel as well.
+      if (PredReg == 0 && RT[FU][std::make_pair(s, PredicatedChannel)] >= NumFUs)
+        return false;
+      // Do not conflict with the un-predicated channel as well.
+      if (PredReg && RT[FU][std::make_pair(s, 0)] >= NumFUs)
         return false;
     }
 
     for (unsigned i = step, e = step + Latency; i != e; ++i) {
       unsigned s = computeStepKey(i);
-      ++RT[FU][s];
+      ++RT[FU][std::make_pair(s, PredReg)];
+      // Also take the un-predicated channel.
+      if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
     }
   }
 
@@ -248,10 +260,15 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
+  MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
+  unsigned PredReg = P->getReg();
+  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
   unsigned Latency = U->getLatency();
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    ++RT[FU][s];
+    ++RT[FU][std::make_pair(s, PredReg)];
+    // Also take the un-predicated channel.
+    if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
   }
 }
 
@@ -263,11 +280,15 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
+  MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
+  unsigned PredReg = P->getReg();
+  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
   unsigned Latency = U->getLatency();
-
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    --RT[FU][s];
+    --RT[FU][std::make_pair(s, PredReg)];
+    // Also take the un-predicated channel.
+    if (PredReg) --RT[FU][std::make_pair(s, PredicatedChannel)];
   }
 }
 
