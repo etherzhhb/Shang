@@ -144,7 +144,12 @@ bool FixMachineCode::simplifyBitSlice(MachineInstr *MI) {
   // use the lower part of the src register. We can simply replace the use
   // of dst register by src register, with the original bitwidth information
   // of the dst register, i.e. using the lower part of the src register.
-  if (MI->getOperand(3).getImm() != 0) return false;
+  if (MI->getOperand(3).getImm() != 0) {
+    unsigned UB = MI->getOperand(2).getImm();
+    // We can narrow the bitwidth of the operand to the upper bound.
+    cast<ucOperand>(MI->getOperand(1)).setBitWidth(UB);
+    return false;
+  }
 
   unsigned SrcReg = MI->getOperand(1).getReg();
   unsigned DstReg = MI->getOperand(0).getReg();
