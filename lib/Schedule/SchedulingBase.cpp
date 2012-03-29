@@ -216,10 +216,11 @@ void SchedulingBase::dumpTimeFrame() const {
 }
 
 unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
-  MachineOperand *P = VInstrInfo::getPredOperand(MI);
-  unsigned PredReg = P->getReg();
-  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
-  return PredReg;
+  //MachineOperand *P = VInstrInfo::getPredOperand(MI);
+  //unsigned PredReg = P->getReg();
+  //if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+  //return PredReg;
+  return 0;
 }
 
 void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
@@ -229,7 +230,7 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
     unsigned s = computeStepKey(i);
     ++RT[FU][std::make_pair(s, PredReg)];
     // Also take the un-predicated channel.
-    if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
+    //if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
   }
 }
 
@@ -244,11 +245,11 @@ bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
     if (RT[FU][std::make_pair(s, PredReg)] >= NumFUs)
       return false;
     // Do not conflict with the predicated channel as well.
-    if (PredReg == 0 && RT[FU][std::make_pair(s, PredicatedChannel)] >= NumFUs)
-      return false;
+    //if (PredReg == 0 && RT[FU][std::make_pair(s, PredicatedChannel)] >= NumFUs)
+    //  return false;
     // Do not conflict with the un-predicated channel as well.
-    if (PredReg && RT[FU][std::make_pair(s, 0)] >= NumFUs)
-      return false;
+    //if (PredReg && RT[FU][std::make_pair(s, 0)] >= NumFUs)
+    //  return false;
   }
 
   return true;
@@ -291,7 +292,7 @@ void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
     unsigned s = computeStepKey(i);
     --RT[FU][std::make_pair(s, PredReg)];
     // Also take the un-predicated channel.
-    if (PredReg) --RT[FU][std::make_pair(s, PredicatedChannel)];
+    //if (PredReg) --RT[FU][std::make_pair(s, PredicatedChannel)];
   }
 }
 
