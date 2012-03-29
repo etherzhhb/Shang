@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
   for(i = 0; i < 16; ++i) {
    int a = rand();
    int b = rand();
-   printf("result:%d\n", op_sub(a, b));
+   printf("result:%x\n", op_sub(a, b));
   }
   return 0;
 }
