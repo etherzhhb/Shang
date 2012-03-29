@@ -105,11 +105,14 @@ public:
     return RT[std::make_pair(FU, PredReg)];
   }
   unsigned getPredicateChannel(MachineInstr *MI);
+
   void revertFUUsage(MachineInstr *MI, unsigned step, unsigned Latency,
                      FuncUnitId FU);
+  void takeFU(VSUnit *U, unsigned step);
   void takeFU(MachineInstr *MI, unsigned step, unsigned Latency, FuncUnitId FU);
   bool hasSpareFU(MachineInstr *MI, unsigned step, unsigned Latency,
                   FuncUnitId FU);
+  bool hasSpareFU(VSUnit *U, unsigned step);
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);
