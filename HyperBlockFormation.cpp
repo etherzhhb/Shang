@@ -316,7 +316,6 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
 }
 
 bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
-  bool ActuallyMerged = false;
   SmallVector<MachineBasicBlock*, 8> BBsToMerge;
   VInstrInfo::JT CurJT, SuccJT;
 
