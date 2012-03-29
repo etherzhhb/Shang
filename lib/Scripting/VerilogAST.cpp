@@ -778,9 +778,9 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                                  unsigned BitWidth) {
   switch (Opc) {
   default: break;
-  case VASTExpr::dpNot: case VASTExpr::dpAssign: {
+  case VASTExpr::dpNot: {
     assert(Ops.size() == 1 && "Bad operand number!");
-    return buildExpr(Opc, Ops[0], BitWidth);
+    return buildNotExpr(Ops[0]);
   }
   case VASTExpr::dpAdd:  return buildAddExpr(Opc, Ops, BitWidth);
 
