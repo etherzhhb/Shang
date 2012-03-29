@@ -233,6 +233,27 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
   }
 }
 
+bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
+                                FuncUnitId FU) {
+  unsigned PredReg = getPredicateChannel(MI);
+  // Do all resource at step been reserve?
+  for (unsigned i = step, e = step + Latency; i != e; ++i) {
+    unsigned s = computeStepKey(i);
+    /*There is only 1 resource avaialbe for Prebound function unit kind*/
+    const unsigned NumFUs = 1;
+    if (RT[FU][std::make_pair(s, PredReg)] >= NumFUs)
+      return false;
+    // Do not conflict with the predicated channel as well.
+    if (PredReg == 0 && RT[FU][std::make_pair(s, PredicatedChannel)] >= NumFUs)
+      return false;
+    // Do not conflict with the un-predicated channel as well.
+    if (PredReg && RT[FU][std::make_pair(s, 0)] >= NumFUs)
+      return false;
+  }
+
+  return true;
+}
+
 bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   FuncUnitId FU = U->getFUId();
   // We will always have enough trivial resources.
@@ -243,21 +264,7 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   // FIXME: Compute the area cost.
   if (FU.isBound()) {
     MachineInstr *MI = U->getRepresentativeInst();
-    unsigned PredReg = getPredicateChannel(MI);
-    // Do all resource at step been reserve?
-    for (unsigned i = step, e = step + Latency; i != e; ++i) {
-      unsigned s = computeStepKey(i);
-      /*There is only 1 resource avaialbe for Prebound function unit kind*/
-      const unsigned NumFUs = 1;
-      if (RT[FU][std::make_pair(s, PredReg)] >= NumFUs)
-        return false;
-      // Do not conflict with the predicated channel as well.
-      if (PredReg == 0 && RT[FU][std::make_pair(s, PredicatedChannel)] >= NumFUs)
-        return false;
-      // Do not conflict with the un-predicated channel as well.
-      if (PredReg && RT[FU][std::make_pair(s, 0)] >= NumFUs)
-        return false;
-    }
+    if (!hasSpareFU(MI, step, Latency, FU)) return false;
 
     takeFU(MI, step, Latency, FU);
   }
