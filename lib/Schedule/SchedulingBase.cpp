@@ -222,6 +222,17 @@ unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
   return PredReg;
 }
 
+void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
+                            FuncUnitId FU) {
+  unsigned PredReg = getPredicateChannel(MI);
+  for (unsigned i = step, e = step + Latency; i != e; ++i) {
+    unsigned s = computeStepKey(i);
+    ++RT[FU][std::make_pair(s, PredReg)];
+    // Also take the un-predicated channel.
+    if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
+  }
+}
+
 bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
   FuncUnitId FU = U->getFUId();
   // We will always have enough trivial resources.
@@ -248,12 +259,7 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
         return false;
     }
 
-    for (unsigned i = step, e = step + Latency; i != e; ++i) {
-      unsigned s = computeStepKey(i);
-      ++RT[FU][std::make_pair(s, PredReg)];
-      // Also take the un-predicated channel.
-      if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
-    }
+    takeFU(MI, step, Latency, FU);
   }
 
   return true;
@@ -267,14 +273,8 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   if (FU.isTrivial()) return;
 
   MachineInstr *MI = U->getRepresentativeInst();
-  unsigned PredReg = getPredicateChannel(MI);
   unsigned Latency = U->getLatency();
-  for (unsigned i = step, e = step + Latency; i != e; ++i) {
-    unsigned s = computeStepKey(i);
-    ++RT[FU][std::make_pair(s, PredReg)];
-    // Also take the un-predicated channel.
-    if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
-  }
+  takeFU(MI, step, Latency, FU);
 }
 
 void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
