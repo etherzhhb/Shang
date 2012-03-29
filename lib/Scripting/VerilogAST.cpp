@@ -690,6 +690,8 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
                                        unsigned BitWidth) {
   SmallVector<VASTValue*, 8> NewOps;
   typedef const VASTUse *op_iterator;
+  bool isCommutative = true;
+  unsigned OperandBitWidth = Ops[0]->getBitWidth();
 
   for (unsigned i = 0; i < Ops.size(); ++i) {
     // Try to flatten the expression tree.
@@ -703,12 +705,16 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
     }
 
     NewOps.push_back(Ops[i]);
+    // The expression is actually commutative only if all its operands have the
+    // same bitwidth.
+    isCommutative &= (OperandBitWidth == Ops[i]->getBitWidth());
   }
 
   // If new operand is added, we may have new optimization opportunity.
   if (NewOps.size() != Ops.size()) return buildExpr(Opc, NewOps, BitWidth);
   // The expression that can perform tree flatten should be commutative.
-  else return getOrCreateCommutativeExpr(Opc, NewOps, BitWidth);
+  else return isCommutative ? getOrCreateCommutativeExpr(Opc, NewOps, BitWidth)
+                            : createExpr(Opc, NewOps, BitWidth, 0);
 }
 
 VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
@@ -804,10 +810,10 @@ VASTValue *VASTModule::buildAddExpr(VASTExpr::Opcode Opc,
   return flattenExprTree(Opc, Ops, BitWidth);
 }
 
-VASTValue
-  *VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                          SmallVectorImpl<VASTValue*> &Ops,
-                                          unsigned BitWidth) {
+VASTValue *
+VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                       SmallVectorImpl<VASTValue*> &Ops,
+                                       unsigned BitWidth) {
   std::sort(Ops.begin(), Ops.end());
   return createExpr(Opc, Ops, BitWidth, 0);
 }
