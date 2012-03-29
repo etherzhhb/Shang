@@ -1255,7 +1255,7 @@ void VRASimple::bindDstMux() {
       //SlotIndex NextStart = LI->beginIndex().getNextIndex().getNextIndex();
       //assert(!RepLI->overlaps(NextStart, LI->endIndex())
         //&& "Unexpected bram overlap!");
-      mergeLI(LI, RepLI, true/*DirtyHack*/);
+      mergeLI(LI, RepLI);
     }
   }
 }
