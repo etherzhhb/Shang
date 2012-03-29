@@ -21,6 +21,7 @@
 #include "VSUnit.h"
 
 #include "llvm/ADT/PriorityQueue.h"
+#include "llvm/ADT/SparseBitVector.h"
 #include <map>
 using namespace llvm;
 
@@ -31,6 +32,7 @@ typedef _lprec lprec;
 namespace llvm {
 class SchedulingBase {
   // MII in modulo schedule.
+  const unsigned StartSlot;
   unsigned MII, CriticalPathEnd;
   double ExtraResReq;
   // Time Frame {asap step, alap step }
@@ -42,10 +44,9 @@ private:
   TFMapTy SUnitToTF;
 
   static const unsigned PredicatedChannel = ~0u;
-  // { Step, Predicate } -> resource require number.
-  typedef std::map<std::pair<unsigned, unsigned>, unsigned> UsageMapType;
+  // Predicate -> resource usage at step.
   // Resource -> resource usage at each step.
-  typedef std::map<FuncUnitId, UsageMapType> RTType;
+  typedef std::map<std::pair<FuncUnitId, unsigned>, SparseBitVector<> > RTType;
   RTType RT;
 
 protected:
@@ -55,7 +56,8 @@ protected:
   VSchedGraph &State;
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
-    : MII(0), CriticalPathEnd(0), ExtraResReq(0.0), State(S) {}
+    : StartSlot(S.getStartSlot()), MII(0), CriticalPathEnd(0),
+      ExtraResReq(0.0), State(S) {}
 
 public:
   virtual ~SchedulingBase() {}
@@ -94,14 +96,14 @@ public:
   void dumpTimeFrame() const;
   //}
 
-  /// Check the distribution graphs to see if we could schedule the nodes
-  /// without breaking the resource constrain.
   void resetRT() {
-    // FIXME: Do not clear the RT but set the function unit count in the
-    // table to 0.
-    RT.clear();
+    for (RTType::iterator I = RT.begin(), E = RT.end(); I != E; ++I)
+      I->second.clear();
   }
 
+  SparseBitVector<> &getRTFor(unsigned PredReg, FuncUnitId FU) {
+    return RT[std::make_pair(FU, PredReg)];
+  }
   unsigned getPredicateChannel(MachineInstr *MI);
   void revertFUUsage(MachineInstr *MI, unsigned step, unsigned Latency,
                      FuncUnitId FU);

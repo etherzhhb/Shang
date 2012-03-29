@@ -228,7 +228,9 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
   unsigned PredReg = getPredicateChannel(MI);
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    ++RT[FU][std::make_pair(s, PredReg)];
+    SparseBitVector<> &V = getRTFor(PredReg, FU);
+    assert(!V.test(s - StartSlot) && "FU already in use!");
+    V.set(s - StartSlot);
     // Also take the un-predicated channel.
     //if (PredReg) ++RT[FU][std::make_pair(s, PredicatedChannel)];
   }
@@ -240,9 +242,8 @@ bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
   // Do all resource at step been reserve?
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    /*There is only 1 resource avaialbe for Prebound function unit kind*/
-    const unsigned NumFUs = 1;
-    if (RT[FU][std::make_pair(s, PredReg)] >= NumFUs)
+    SparseBitVector<> &V = getRTFor(PredReg, FU);
+    if (V.test(s - StartSlot))
       return false;
     // Do not conflict with the predicated channel as well.
     //if (PredReg == 0 && RT[FU][std::make_pair(s, PredicatedChannel)] >= NumFUs)
@@ -290,7 +291,7 @@ void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
   unsigned PredReg = getPredicateChannel(MI);
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    --RT[FU][std::make_pair(s, PredReg)];
+    getRTFor(PredReg, FU).reset(s - StartSlot);
     // Also take the un-predicated channel.
     //if (PredReg) --RT[FU][std::make_pair(s, PredicatedChannel)];
   }
@@ -339,14 +340,8 @@ bool SchedulingBase::isResourceConstraintPreserved() {
 }
 
 unsigned SchedulingBase::computeStepKey(unsigned step) const {
-  if (MII != 0) {
-#ifndef NDEBUG
-    unsigned StartSlot = State.getStartSlot();
+  if (MII != 0)
     step = StartSlot + (step - StartSlot) % MII;
-#else
-    step = step % MII;
-#endif
-  }
 
   return step;
 }
