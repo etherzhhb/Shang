@@ -103,6 +103,8 @@ public:
   }
 
   unsigned getPredicateChannel(MachineInstr *MI);
+  void revertFUUsage(MachineInstr *MI, unsigned step, unsigned Latency,
+                     FuncUnitId FU);
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);

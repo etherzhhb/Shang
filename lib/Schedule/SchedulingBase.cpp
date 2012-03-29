@@ -277,6 +277,17 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   }
 }
 
+void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
+                                   unsigned Latency, FuncUnitId FU) {
+  unsigned PredReg = getPredicateChannel(MI);
+  for (unsigned i = step, e = step + Latency; i != e; ++i) {
+    unsigned s = computeStepKey(i);
+    --RT[FU][std::make_pair(s, PredReg)];
+    // Also take the un-predicated channel.
+    if (PredReg) --RT[FU][std::make_pair(s, PredicatedChannel)];
+  }
+}
+
 void SchedulingBase::unscheduleSU(VSUnit *U) {
   unsigned step = U->getSlot();
   U->resetSchedule();
@@ -285,15 +296,7 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
-  MachineInstr *MI = U->getRepresentativeInst();
-  unsigned PredReg = getPredicateChannel(MI);
-  unsigned Latency = U->getLatency();
-  for (unsigned i = step, e = step + Latency; i != e; ++i) {
-    unsigned s = computeStepKey(i);
-    --RT[FU][std::make_pair(s, PredReg)];
-    // Also take the un-predicated channel.
-    if (PredReg) --RT[FU][std::make_pair(s, PredicatedChannel)];
-  }
+  revertFUUsage(U->getRepresentativeInst(), step, U->getLatency(), FU);
 }
 
 bool SchedulingBase::isResourceConstraintPreserved() {
