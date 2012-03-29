@@ -709,6 +709,22 @@ public:
   }
 };
 
+struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {
+  static unsigned getHashValue(const VASTWire *Val) {
+    return DenseMapInfo<VASTValue*>::getHashValue(Val ? Val->getAssigningValue()
+                                                       : 0);
+  }
+
+  static VASTValue *getAssigningValue(const VASTWire *W) {
+    return (W == getEmptyKey() || W == getTombstoneKey() || W == 0) ?
+           0 : W->getAssigningValue();
+  }
+
+  static bool isEqual(const VASTWire *LHS, const VASTWire *RHS) {
+    return LHS == RHS || getAssigningValue(LHS) == getAssigningValue(RHS);
+  }
+};
+
 class VASTSlot : public VASTNode {
 public:
   // TODO: Store the pointer to the Slot instead the slot number.
@@ -893,7 +909,7 @@ private:
 
   // the first key VASTWire is Assignment condition. The second value is
   // assignment value.
-  typedef DenseMap<VASTWire*, VASTUse*> AssignMapTy;
+  typedef DenseMap<VASTWire*, VASTUse*, VASTWireExpressionTrait> AssignMapTy;
   AssignMapTy Assigns;
 
   void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
