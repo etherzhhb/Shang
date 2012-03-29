@@ -102,7 +102,7 @@ public:
     RT.clear();
   }
 
-  unsigned getPredicateChannel(VSUnit *U);
+  unsigned getPredicateChannel(MachineInstr *MI);
   bool tryTakeResAtStep(VSUnit *U, unsigned step);
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);

@@ -215,8 +215,8 @@ void SchedulingBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-unsigned SchedulingBase::getPredicateChannel(VSUnit * U) {
-  MachineOperand *P = VInstrInfo::getPredOperand(U->getRepresentativeInst());
+unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
+  MachineOperand *P = VInstrInfo::getPredOperand(MI);
   unsigned PredReg = P->getReg();
   if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
   return PredReg;
@@ -231,7 +231,8 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
 
   // FIXME: Compute the area cost.
   if (FU.isBound()) {
-    unsigned PredReg = getPredicateChannel(U);
+    MachineInstr *MI = U->getRepresentativeInst();
+    unsigned PredReg = getPredicateChannel(MI);
     // Do all resource at step been reserve?
     for (unsigned i = step, e = step + Latency; i != e; ++i) {
       unsigned s = computeStepKey(i);
@@ -265,7 +266,8 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
-  unsigned PredReg = getPredicateChannel(U);
+  MachineInstr *MI = U->getRepresentativeInst();
+  unsigned PredReg = getPredicateChannel(MI);
   unsigned Latency = U->getLatency();
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
@@ -283,7 +285,8 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
 
-  unsigned PredReg = getPredicateChannel(U);
+  MachineInstr *MI = U->getRepresentativeInst();
+  unsigned PredReg = getPredicateChannel(MI);
   unsigned Latency = U->getLatency();
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
