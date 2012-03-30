@@ -491,7 +491,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
-    float DetailLatency = I->second.first;
+    float DetailLatency = DetialLatencyInfo::getLatency(*I);
     int Latency = int(ceil(DetailLatency)) - MIOffset;
 
     assert(SrcMI && "Unexpected null SrcMI!");
@@ -534,7 +534,7 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
   for (src_it I = LatInfo->begin(), E = LatInfo->end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
-    float DetailLatency = I->second.first;
+    float DetailLatency = DetialLatencyInfo::getLatency(*I);
     int Latency = int(ceil(DetailLatency));
 
     assert(SrcMI && "Unexpected null SrcMI!");

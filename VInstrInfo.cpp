@@ -809,30 +809,6 @@ static float LookupLatency(const float *Table, const MachineInstr *MI,
   return latency;
 }
 
-bool VInstrInfo::isBLCCapable(unsigned OpC) {
-  switch (OpC) {
-    // TODO: Bitrepeat.
-  default:                  break;
-  case VTM::VOpAdd_c:
-  case VTM::VOpAdd:
-
-  case VTM::VOpMultLoHi_c:
-  case VTM::VOpMult_c:
-  case VTM::VOpMultLoHi:
-  case VTM::VOpMult:
-
-  //case VTM::VOpSRA_c:
-  //case VTM::VOpSRL_c:
-  //case VTM::VOpSHL_c:
-  //case VTM::VOpSRA:
-  //case VTM::VOpSRL:
-  //case VTM::VOpSHL:
-    return EnableBLC;
-  }
-
-  return false;
-}
-
 // Get the latency of a machineinstr in cycle ratio.
 float VInstrInfo::getDetialLatency(const MachineInstr *MI, unsigned OpSize) {
   unsigned OpC = MI->getOpcode();
@@ -1093,25 +1069,73 @@ void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
   // We should update the latency if we get a bigger latency.
   float &OldLSBLatency = CurLatInfo[SrcMI].first;
   OldLSBLatency = std::max(OldLSBLatency, LSBLatency);
-  assert(LSBLatency <= MSBLatency && "Broken latency pair!");
+  //assert(LSBLatency <= MSBLatency && "Broken latency pair!");
   float &OldMSBLatency = CurLatInfo[SrcMI].second;
   OldMSBLatency = std::max(OldMSBLatency, MSBLatency);
 }
 
 void
-DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
-                                               const DepLatInfoTy &SrcLatInfo,
-                                               float MSBLatency,
-                                               float LSBLatency){
+DetialLatencyInfo::accumulateLSB2MSBLatencies(DepLatInfoTy &CurLatInfo,
+                                              const DepLatInfoTy &SrcLatInfo,
+                                              float TotalLatency,
+                                              float PerBitLatency) {
   typedef DepLatInfoTy::const_iterator src_it;
-  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I) {
+    float SrcMSBLatency = I->second.first, SrcLSBLatency = I->second.second;
+    float MSBLatency = std::max(TotalLatency + SrcLSBLatency,
+                                PerBitLatency + SrcMSBLatency);
+    float LSBLatency = PerBitLatency + SrcLSBLatency;
     // Accumulate the latency from the source latency information.
-    updateLatency(CurLatInfo, I->first, MSBLatency + I->second.first,
-                  LSBLatency + I->second.second);
+    updateLatency(CurLatInfo, I->first, MSBLatency, LSBLatency);
+  }
+}
+
+void
+DetialLatencyInfo::accumulateMSB2LSBLatencies(DepLatInfoTy &CurLatInfo,
+                                              const DepLatInfoTy &SrcLatInfo,
+                                              float TotalLatency,
+                                              float PerBitLatency) {
+  typedef DepLatInfoTy::const_iterator src_it;
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I) {
+    float SrcMSBLatency = I->second.first, SrcLSBLatency = I->second.second;
+    float MSBLatency = PerBitLatency + SrcMSBLatency;
+    float LSBLatency = std::max(PerBitLatency + SrcLSBLatency,
+                                TotalLatency + SrcMSBLatency);
+    // Accumulate the latency from the source latency information.
+    updateLatency(CurLatInfo, I->first, MSBLatency, LSBLatency);
+  }
+}
+
+void DetialLatencyInfo::accumulateWorstLatencies(DepLatInfoTy &CurLatInfo,
+                                                 const DepLatInfoTy &SrcLatInfo,
+                                                 float TotalLatency) {
+  typedef DepLatInfoTy::const_iterator src_it;
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I) {
+    float SrcMSBLatency = I->second.first, SrcLSBLatency = I->second.second;
+    float MSBLatency = TotalLatency + SrcMSBLatency;
+    float LSBLatency = TotalLatency + SrcLSBLatency;
+    float WorstLatency = std::max(MSBLatency, LSBLatency);
+    // Accumulate the latency from the source latency information.
+    updateLatency(CurLatInfo, I->first, WorstLatency, WorstLatency);
+  }
+}
+
+void
+DetialLatencyInfo::accumulateLatenciesParallel(DepLatInfoTy &CurLatInfo,
+                                               const DepLatInfoTy &SrcLatInfo,
+                                               float TotalLatency) {
+  typedef DepLatInfoTy::const_iterator src_it;
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I) {
+    float SrcMSBLatency = I->second.first, SrcLSBLatency = I->second.second;
+    float MSBLatency = TotalLatency + SrcMSBLatency;
+    float LSBLatency = TotalLatency + SrcLSBLatency;
+    // Accumulate the latency from the source latency information.
+    updateLatency(CurLatInfo, I->first, MSBLatency, LSBLatency);
+  }
 }
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
-                                        const MachineInstr *DstMI,
+                                        const MachineInstr *DstMI,// Not needed
                                         DepLatInfoTy &CurLatInfo,
                                         unsigned OperandWidth,
                                         float OperandDelay) {
@@ -1120,24 +1144,54 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;
 
-  float EdgeLatency = VInstrInfo::getChainingLatency(SrcMI,DstMI,OperandWidth);
-
-  // It seems that the clk enable mux network have extra big latency, which
-  // are likely become the critical path.
-  EdgeLatency += OperandDelay;
+  float TotalLatency = VInstrInfo::getChainingLatency(SrcMI,DstMI,OperandWidth);
 
   unsigned SrcOpC = SrcMI->getOpcode();
   // The VOpDstMux should be merged to its user and its latency should be
   // accumulated into the chain latency.
   if (VInstrInfo::isControl(SrcOpC)) {
+    // It seems that the clk enable mux network have extra big latency, which
+    // are likely become the critical path.
+    TotalLatency += OperandDelay;
     // Simply add the latency from ctrl op to the latency map.
-    updateLatency(CurLatInfo, SrcMI, EdgeLatency, EdgeLatency);
+    updateLatency(CurLatInfo, SrcMI, TotalLatency, TotalLatency);
     return true;
   }
 
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
-  accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, EdgeLatency, EdgeLatency);
+  switch (SrcOpC) {
+  default:
+    accumulateWorstLatencies(CurLatInfo, *SrcLatInfo, TotalLatency);
+    break;
+  case VTM::VOpAdd_c:
+
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
+
+  //case VTM::VOpSRA_c:
+  //case VTM::VOpSRL_c:
+  //case VTM::VOpSHL_c:
+    // Result propagate from LSB to MSB.
+    accumulateLSB2MSBLatencies(CurLatInfo, *SrcLatInfo, TotalLatency,
+                               TotalLatency / OperandWidth);
+    break;
+    // Ignore the trivial logic operation latency at the moment.
+  case VTM::VOpLUT:
+  case VTM::VOpAnd:
+  case VTM::VOpOr:
+  case VTM::VOpXor:
+  case VTM::VOpNot:
+  case VTM::VOpBitCat:
+  case VTM::VOpBitSlice:
+    accumulateLatenciesParallel(CurLatInfo, *SrcLatInfo, TotalLatency);
+    break;
+  case VTM::VOpICmp_c:
+  case VTM::VOpICmp:
+    accumulateMSB2LSBLatencies(CurLatInfo, *SrcLatInfo, TotalLatency,
+                               TotalLatency / OperandWidth);
+    break;
+  }
   return true;
 }
 
@@ -1175,7 +1229,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
   if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
-    float latency = VInstrInfo::getDetialLatency(MI);
+    float latency = VInstrInfo::getDetialLatency(MI) + VInstrInfo::DeltaLatency;
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      std::make_pair(latency, latency)));
   }

@@ -201,7 +201,6 @@ public:
   static bool hasTrivialFU(unsigned OpC) {
     return getFUType(OpC) == VFUs::Trivial;
   }
-  static bool isBLCCapable(unsigned OpC);
 
   //static unsigned getTrivialLatency(unsigned OpC);
   static bool isReadAtEmit(unsigned OpC);
@@ -264,6 +263,10 @@ public:
   // The latency of MSB and LSB from a particular operation to the current
   // operation.
   typedef std::map<const MachineInstr*, std::pair<float, float> > DepLatInfoTy;
+  static float getLatency(DepLatInfoTy::value_type v) {
+    return std::max(v.second.first, v.second.second);
+  }
+
   MachineRegisterInfo &MRI;
 private:
   // The latency from all register source through the datapath to a given
@@ -283,9 +286,20 @@ private:
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
-  void accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
-                                   const DepLatInfoTy &SrcLatInfo,
-                                   float MSBLatency, float LSBLatency);
+  static void accumulateLSB2MSBLatencies(DepLatInfoTy &CurLatInfo,
+                                         const DepLatInfoTy &SrcLatInfo,
+                                         float TotalLatency,
+                                         float PerBitLatency);
+  static void accumulateMSB2LSBLatencies(DepLatInfoTy &CurLatInfo,
+                                         const DepLatInfoTy &SrcLatInfo,
+                                         float TotalLatency,
+                                         float PerBitLatency);
+  static void accumulateWorstLatencies(DepLatInfoTy &CurLatInfo,
+                                       const DepLatInfoTy &SrcLatInfo,
+                                       float TotalLatency);
+  static void accumulateLatenciesParallel(DepLatInfoTy &CurLatInfo,
+                                          const DepLatInfoTy &SrcLatInfo,
+                                          float TotalLatency);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
