@@ -341,8 +341,7 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
   revertFUUsage(U, step);
 }
 
-bool SchedulingBase::isResourceConstraintPreserved() {
-  ExtraResReq = 0.0;
+void SchedulingBase::verifyFUUsage() {
   resetRT();
 
   typedef VSchedGraph::sched_iterator it;
@@ -354,22 +353,15 @@ bool SchedulingBase::isResourceConstraintPreserved() {
     // Ignore the DG for trivial resources.
     if (!FU.isBound()) continue;
 
-    bool available = false;
-
     // Check ifwe have enough function unit by try to fit them in the resource
     // table including ALAPStep.
     for (unsigned i = getASAPStep(A), e = getALAPStep(A) + 1; i != e; ++i) {
-      if (tryTakeResAtStep(A, i)) {
-        available = true;
-        break;;
+      if (!tryTakeResAtStep(A, i)) {
+        llvm_unreachable("Resource conflict detected!");
+        break;
       }
     }
-
-    if (!available)
-      ExtraResReq += 1.0;
   }
-
-  return ExtraResReq == 0.0;
 }
 
 unsigned SchedulingBase::computeStepKey(unsigned step) const {
@@ -416,8 +408,7 @@ bool SchedulingBase::allNodesSchedued() const {
 }
 
 bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
-  if (refreshFDepHD)
-    buildFDepHD(true);
+  if (refreshFDepHD) buildFDepHD(true);
 
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
@@ -427,12 +418,13 @@ bool SchedulingBase::scheduleCriticalPath(bool refreshFDepHD) {
       continue;
 
     unsigned step = getASAPStep(A);
+    if (!tryTakeResAtStep(A, step)) return false;
     DEBUG(A->print(dbgs()));
     DEBUG(dbgs() << " asap step: " << step << " in critical path.\n");
     A->scheduledTo(step);
   }
 
-  return isResourceConstraintPreserved();
+  return true;
 }
 
 void SchedulingBase::viewGraph() {

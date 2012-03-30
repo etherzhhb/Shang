@@ -109,8 +109,10 @@ bool IterativeModuloScheduling::scheduleState() {
   DEBUG(buildTimeFrame());
   DEBUG(dumpTimeFrame());
 
-  assert(isResourceConstraintPreserved()
-         && "Resource constraints not preserved!");
+#ifndef NDEBUG
+  verifyFUUsage();
+#endif
+
   return true;
 }
 

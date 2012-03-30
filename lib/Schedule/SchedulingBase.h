@@ -118,7 +118,7 @@ public:
   void scheduleSU(VSUnit *U, unsigned step);
   void unscheduleSU(VSUnit *U);
 
-  bool isResourceConstraintPreserved();
+  void verifyFUUsage();
   double getExtraResReq() const { return ExtraResReq; }
 
   unsigned buildFDepHD(bool resetSTF);
