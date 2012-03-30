@@ -794,20 +794,18 @@ static unsigned ComputeOperandSizeInByteLog2Ceil(unsigned SizeInBits) {
   return std::max(Log2_32_Ceil(SizeInBits), 3u) - 3;
 }
 
-template<int Idx, bool ResultPropagateLSB2MSB>
+template<int Idx>
 static float LookupLatency(const float *Table, const MachineInstr *MI,
-                            bool EnableBLC, unsigned OperandWidth = 0){
+                           unsigned OperandWidth = 0){
   unsigned SizeInBits = 0;
-  if (ResultPropagateLSB2MSB && OperandWidth) SizeInBits = OperandWidth;
+  if (OperandWidth) SizeInBits = OperandWidth;
   else SizeInBits = cast<ucOperand>(MI->getOperand(Idx)).getBitWidth();
 
   unsigned i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
   float latency = Table[i];
   unsigned SizeRoundUpToByteInBits = 8 << i;
-  // Compute the latency considering bit level chaining.
-  if (EnableBLC) latency /= float(SizeRoundUpToByteInBits);
   // Scale the latency accoriding to the actually width.
-  else latency = latency / float(SizeRoundUpToByteInBits) * float(SizeInBits);
+  latency = latency / float(SizeRoundUpToByteInBits) * float(SizeInBits);
   return latency;
 }
 
@@ -836,8 +834,7 @@ bool VInstrInfo::isBLCCapable(unsigned OpC) {
 }
 
 // Get the latency of a machineinstr in cycle ratio.
-float VInstrInfo::getDetialLatency(const MachineInstr *MI, bool EnableBLC,
-                                    unsigned OperandWidth) {
+float VInstrInfo::getDetialLatency(const MachineInstr *MI, unsigned OpSize) {
   unsigned OpC = MI->getOpcode();
 
   switch (OpC) {
@@ -846,17 +843,17 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI, bool EnableBLC,
 
   case VTM::VOpICmp_c:
   case VTM::VOpICmp:
-    return LookupLatency<3, false>(VFUs::CmpLatencies, MI, false);
+    return LookupLatency<3>(VFUs::CmpLatencies, MI, OpSize);
   // Retrieve the FU bit width from its operand bit width
   case VTM::VOpAdd_c:
   case VTM::VOpAdd:
-    return LookupLatency<1, true>(VFUs::AdderLatencies, MI, EnableBLC, OperandWidth);
+    return LookupLatency<1>(VFUs::AdderLatencies, MI, OpSize);
 
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
   case VTM::VOpMultLoHi:
   case VTM::VOpMult:
-    return LookupLatency<0, true>(VFUs::MultLatencies, MI, EnableBLC, OperandWidth);
+    return LookupLatency<0>(VFUs::MultLatencies, MI, OpSize);
 
   case VTM::VOpSRA_c:
   case VTM::VOpSRL_c:
@@ -864,7 +861,7 @@ float VInstrInfo::getDetialLatency(const MachineInstr *MI, bool EnableBLC,
   case VTM::VOpSRA:
   case VTM::VOpSRL:
   case VTM::VOpSHL:
-    return LookupLatency<0, false>(VFUs::ShiftLatencies, MI, false);
+    return LookupLatency<0>(VFUs::ShiftLatencies, MI, false);
 
   case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
 
@@ -928,7 +925,7 @@ float VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   unsigned SrcOpC = SrcTID.getOpcode();
 
   // Compute the latency correspond to detail slot.
-  float latency = getDetialLatency(SrcInstr, isBLCCapable(DstOpC),OperandWidth);
+  float latency = getDetialLatency(SrcInstr, OperandWidth);
   bool SrcWriteUntilFInish = isWriteUntilFinish(SrcOpC);
   bool DstReadAtEmit = isReadAtEmit(DstOpC);
 
@@ -1084,7 +1081,7 @@ const MachineInstr *const DetialLatencyInfo::EntryMarker =
 
 void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
                                       const MachineInstr*SrcMI,
-                                      float CurLatency) {
+                                      float MSBLatency, float LSBLatency) {
   // Latency from a control operation is simply the latency of the control
   // operation.
   // We may have dependency like:
@@ -1094,18 +1091,23 @@ void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
   //    |   /
   // current op
   // We should update the latency if we get a bigger latency.
-  float &Latency = CurLatInfo[SrcMI].first;
-  Latency = std::max(Latency, CurLatency);
+  float &OldLSBLatency = CurLatInfo[SrcMI].first;
+  OldLSBLatency = std::max(OldLSBLatency, LSBLatency);
+  assert(LSBLatency <= MSBLatency && "Broken latency pair!");
+  float &OldMSBLatency = CurLatInfo[SrcMI].second;
+  OldMSBLatency = std::max(OldMSBLatency, MSBLatency);
 }
 
 void
 DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
                                                const DepLatInfoTy &SrcLatInfo,
-                                               float CurLatency){
+                                               float MSBLatency,
+                                               float LSBLatency){
   typedef DepLatInfoTy::const_iterator src_it;
   for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
     // Accumulate the latency from the source latency information.
-    updateLatency(CurLatInfo, I->first, CurLatency + I->second.first);
+    updateLatency(CurLatInfo, I->first, MSBLatency + I->second.first,
+                  LSBLatency + I->second.second);
 }
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
@@ -1129,13 +1131,13 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   // accumulated into the chain latency.
   if (VInstrInfo::isControl(SrcOpC)) {
     // Simply add the latency from ctrl op to the latency map.
-    updateLatency(CurLatInfo, SrcMI, EdgeLatency);
+    updateLatency(CurLatInfo, SrcMI, EdgeLatency, EdgeLatency);
     return true;
   }
 
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
-  accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, EdgeLatency);
+  accumulateDatapathLatencies(CurLatInfo, *SrcLatInfo, EdgeLatency, EdgeLatency);
   return true;
 }
 

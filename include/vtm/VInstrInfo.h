@@ -160,8 +160,7 @@ public:
                                      const MachineInstr *DstInstr);
   const static float DeltaLatency;
   // Return the latency of a MachineInstr in cycle ratio.
-  static float getDetialLatency(const MachineInstr *MI, bool EnableBLC = false,
-                                 unsigned OperandWidth = 0);
+  static float getDetialLatency(const MachineInstr *MI, unsigned OperandWidth = 0);
   static unsigned getStepsToFinish(const MachineInstr *MI) {
     return unsigned(ceil(getDetialLatency(MI)));
   }
@@ -274,9 +273,8 @@ private:
   LatencyMapTy LatencyMap;
 
   // Update the latency entry in the latency information table.
-  static void updateLatency(DepLatInfoTy &CurLatInfo,
-                            const MachineInstr *SrcMI,
-                            float CurLatency);
+  static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
+                            float MSBLatency, float LSBLatency);
 
   // Add the latency information from SrcMI to CurLatInfo.
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
@@ -287,7 +285,7 @@ private:
   // contains control to control latency.
   void accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
                                    const DepLatInfoTy &SrcLatInfo,
-                                   float CurLatency);
+                                   float MSBLatency, float LSBLatency);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
