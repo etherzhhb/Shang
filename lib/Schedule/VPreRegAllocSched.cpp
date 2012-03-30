@@ -491,7 +491,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
-    double DetailLatency = I->second;
+    float DetailLatency = I->second;
     int Latency = int(ceil(DetailLatency)) - MIOffset;
 
     assert(SrcMI && "Unexpected null SrcMI!");
@@ -534,7 +534,7 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
   for (src_it I = LatInfo->begin(), E = LatInfo->end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
-    double DetailLatency = I->second;
+    float DetailLatency = I->second;
     int Latency = int(ceil(DetailLatency));
 
     assert(SrcMI && "Unexpected null SrcMI!");
@@ -576,11 +576,11 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
       if (Dep == 0 || Dep->getIdx() == A->getIdx()) continue;
 
       // Dirty Hack: Get the detail latency.
-      double DetailLatency =
+      float DetailLatency =
         VInstrInfo::getChainingLatency(DepSrc, MI, MO.getBitWidth());
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
-      DetailLatency -= std::min(0.0, IntraSULatency - VInstrInfo::DeltaLatency);
+      DetailLatency -= std::min(0.0f, IntraSULatency - VInstrInfo::DeltaLatency);
       // All control operations are read at emit, wait until the datapath
       // operations finish if destination is control operation.
       int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);

@@ -35,6 +35,7 @@
 #include "llvm/Support/Debug.h"
 #define GET_INSTRINFO_CTOR
 #include "VerilogBackendGenInstrInfo.inc"
+#include <float.h>
 
 namespace llvm {
 extern const MCInstrDesc VTMInsts[];
@@ -794,19 +795,19 @@ static unsigned ComputeOperandSizeInByteLog2Ceil(unsigned SizeInBits) {
 }
 
 template<int Idx, bool ResultPropagateLSB2MSB>
-static double LookupLatency(const double *Table, const MachineInstr *MI,
+static float LookupLatency(const float *Table, const MachineInstr *MI,
                             bool EnableBLC, unsigned OperandWidth = 0){
   unsigned SizeInBits = 0;
   if (ResultPropagateLSB2MSB && OperandWidth) SizeInBits = OperandWidth;
   else SizeInBits = cast<ucOperand>(MI->getOperand(Idx)).getBitWidth();
 
   unsigned i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
-  double latency = Table[i];
+  float latency = Table[i];
   unsigned SizeRoundUpToByteInBits = 8 << i;
   // Compute the latency considering bit level chaining.
-  if (EnableBLC) latency /= double(SizeRoundUpToByteInBits);
+  if (EnableBLC) latency /= float(SizeRoundUpToByteInBits);
   // Scale the latency accoriding to the actually width.
-  else latency = latency / double(SizeRoundUpToByteInBits) * double(SizeInBits);
+  else latency = latency / float(SizeRoundUpToByteInBits) * float(SizeInBits);
   return latency;
 }
 
@@ -835,7 +836,7 @@ bool VInstrInfo::isBLCCapable(unsigned OpC) {
 }
 
 // Get the latency of a machineinstr in cycle ratio.
-double VInstrInfo::getDetialLatency(const MachineInstr *MI, bool EnableBLC,
+float VInstrInfo::getDetialLatency(const MachineInstr *MI, bool EnableBLC,
                                     unsigned OperandWidth) {
   unsigned OpC = MI->getOpcode();
 
@@ -883,13 +884,13 @@ double VInstrInfo::getDetialLatency(const MachineInstr *MI, bool EnableBLC,
   case VTM::VOpBRam:        return VFUs::BRamLatency;
 
   case VTM::VOpCmdSeq:
-  case VTM::VOpInternalCall:  return 1.0;
+  case VTM::VOpInternalCall:  return 1.0f;
   }
 
-  return 0.0;
+  return 0.0f;
 }
 
-double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
+float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   unsigned OpCode = MI->getOpcode();
   const MCInstrDesc &TID = getDesc(OpCode);
   if (MOIdx < TID.getNumOperands() && TID.OpInfo[MOIdx].isPredicate())
@@ -911,12 +912,12 @@ double VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
     return VFUs::getMuxLatency(4);
   }
 
-  return 0.0;
+  return 0.0f;
 }
 
-const double VInstrInfo::DeltaLatency = 0.00000000001;
+const float VInstrInfo::DeltaLatency = FLT_EPSILON * 2.0f;
 
-double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
+float VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                       const MachineInstr *DstInstr,
                                       unsigned OperandWidth) {
   assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
@@ -927,7 +928,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   unsigned SrcOpC = SrcTID.getOpcode();
 
   // Compute the latency correspond to detail slot.
-  double latency = getDetialLatency(SrcInstr, isBLCCapable(DstOpC),OperandWidth);
+  float latency = getDetialLatency(SrcInstr, isBLCCapable(DstOpC),OperandWidth);
   bool SrcWriteUntilFInish = isWriteUntilFinish(SrcOpC);
   bool DstReadAtEmit = isReadAtEmit(DstOpC);
 
@@ -938,7 +939,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
              && "VOpMvPhi should only used by PHIs or terminators!!");
       // The latency from VOpMvPhi to PHI is exactly 0, because the VOpMvPhi is
       // simply identical to the PHI at next iteration.
-      return 0.0;
+      return 0.0f;
     } else
       // If the edge is reg->reg, the result is ready after the clock edge, add
       // a delta to make sure DstInstr not schedule to the moment right at the
@@ -949,7 +950,7 @@ double VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   // Chain the operations if dst not read value at the edge of the clock.
   return std::max(latency - DeltaLatency,
                   // If the value is written to register, it has a delta latency
-                  SrcWriteUntilFInish ? DeltaLatency : 0.0);
+                  SrcWriteUntilFInish ? DeltaLatency : 0.0f);
 }
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
@@ -1083,7 +1084,7 @@ const MachineInstr *const DetialLatencyInfo::EntryMarker =
 
 void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
                                       const MachineInstr*SrcMI,
-                                      double CurLatency) {
+                                      float CurLatency) {
   // Latency from a control operation is simply the latency of the control
   // operation.
   // We may have dependency like:
@@ -1093,14 +1094,14 @@ void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
   //    |   /
   // current op
   // We should update the latency if we get a bigger latency.
-  double &Latency = CurLatInfo[SrcMI];
+  float &Latency = CurLatInfo[SrcMI];
   Latency = std::max(Latency, CurLatency);
 }
 
 void
 DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
                                                const DepLatInfoTy &SrcLatInfo,
-                                               double CurLatency){
+                                               float CurLatency){
   typedef DepLatInfoTy::const_iterator src_it;
   for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
     // Accumulate the latency from the source latency information.
@@ -1111,13 +1112,13 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,
                                         DepLatInfoTy &CurLatInfo,
                                         unsigned OperandWidth,
-                                        double OperandDelay) {
+                                        float OperandDelay) {
   const DepLatInfoTy *SrcLatInfo = getDepLatInfo(SrcMI);
   // Latency information not available, the SrcMI maybe in others BB, no need
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;
 
-  double EdgeLatency = VInstrInfo::getChainingLatency(SrcMI,DstMI,OperandWidth);
+  float EdgeLatency = VInstrInfo::getChainingLatency(SrcMI,DstMI,OperandWidth);
 
   // It seems that the clk enable mux network have extra big latency, which
   // are likely become the critical path.

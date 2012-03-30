@@ -99,18 +99,18 @@ namespace VFUs {
   extern unsigned MaxAllowedMuxSize;
 
   // Latency tables
-  extern double AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
+  extern float AdderLatencies[4], CmpLatencies[4], MultLatencies[4],
                 ShiftLatencies[4];
 
-  double getMuxLatency(unsigned Size);
-  double getReductionLatency(unsigned Size);
-  double getMuxCost(unsigned Size);
+  float getMuxLatency(unsigned Size);
+  float getReductionLatency(unsigned Size);
+  float getMuxCost(unsigned Size);
 
-  extern double BRamLatency, MemBusLatency, LutLatency,
+  extern float BRamLatency, MemBusLatency, LutLatency,
                 // Latency of clock enable multiplexer selector
                 ClkEnSelLatency;
 
-  void initLatencyTable(luabind::object LuaLatTable, double *LatTable,
+  void initLatencyTable(luabind::object LuaLatTable, float *LatTable,
                         unsigned Size);
   void initCostTable(luabind::object LuaCostTable, unsigned *CostTable,
                         unsigned Size);
@@ -179,15 +179,15 @@ protected:
   // Function unit cost for resource allocation and binding.
   unsigned *const Costs;
   // Latency table of the function unit.
-  double *const LatencyTable;
+  float *const LatencyTable;
   // Chain the operation if its size smaller than the threshold;
   unsigned ChainingThreshold;
-  VFUDesc(VFUs::FUTypes type, unsigned startInt, unsigned *costs, double *latencies)
+  VFUDesc(VFUs::FUTypes type, unsigned startInt, unsigned *costs, float *latencies)
     : ResourceType(type), StartInt(startInt), Costs(costs),
       LatencyTable(latencies), ChainingThreshold(0) {}
 
 public:
-  VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, double *latencies);
+  VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, float *latencies);
 
   static const char *getTypeName(VFUs::FUTypes FU) {
     return VFUs::VFUNames[FU];

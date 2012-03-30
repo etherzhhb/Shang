@@ -163,7 +163,7 @@ raw_ostream &LuaScript::getOutputFileStream(std::string &Name) {
 }
 
 void LuaScript::initSimpleFU(enum VFUs::FUTypes T, luabind::object FUs,
-                             unsigned *Costs, double *Latencies) {
+                             unsigned *Costs, float *Latencies) {
   FUSet[T] = new VFUDesc(T, FUs[VFUDesc::getTypeName(T)], Costs, Latencies);
 }
 

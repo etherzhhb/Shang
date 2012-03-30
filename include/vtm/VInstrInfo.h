@@ -151,23 +151,23 @@ public:
   // We need to identify the signals connect to clock enable network, which
   // have big latency if connected to a multiplexer (this introduce by resource
   // sharing algorithm) and likly become critical path.
-  static double getOperandLatency(const MachineInstr *MI, unsigned MOIdx);
+  static float getOperandLatency(const MachineInstr *MI, unsigned MOIdx);
 
   static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
 
   static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr);
-  const static double DeltaLatency;
+  const static float DeltaLatency;
   // Return the latency of a MachineInstr in cycle ratio.
-  static double getDetialLatency(const MachineInstr *MI, bool EnableBLC = false,
+  static float getDetialLatency(const MachineInstr *MI, bool EnableBLC = false,
                                  unsigned OperandWidth = 0);
   static unsigned getStepsToFinish(const MachineInstr *MI) {
     return unsigned(ceil(getDetialLatency(MI)));
   }
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
-  static double getChainingLatency(const MachineInstr *SrcInstr,
+  static float getChainingLatency(const MachineInstr *SrcInstr,
                                    const MachineInstr *DstInstr,
                                    unsigned OperandWidth);
   // Return the latency from the entry of the MachineBasicBlock to DstInstr.
@@ -263,7 +263,7 @@ public:
 class DetialLatencyInfo {
 public:
   // The latency from a given operation to the current operation.
-  typedef std::map<const MachineInstr*, double> DepLatInfoTy;
+  typedef std::map<const MachineInstr*, float> DepLatInfoTy;
   MachineRegisterInfo &MRI;
 private:
   // The latency from all register source through the datapath to a given
@@ -275,18 +275,18 @@ private:
   // Update the latency entry in the latency information table.
   static void updateLatency(DepLatInfoTy &CurLatInfo,
                             const MachineInstr *SrcMI,
-                            double CurLatency);
+                            float CurLatency);
 
   // Add the latency information from SrcMI to CurLatInfo.
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
                        DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
-                       double OperandDelay);
+                       float OperandDelay);
 
   // Forward all datapath latencies so the latency information table only
   // contains control to control latency.
   void accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
                                    const DepLatInfoTy &SrcLatInfo,
-                                   double CurLatency);
+                                   float CurLatency);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;

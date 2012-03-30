@@ -71,25 +71,25 @@ namespace llvm {
     unsigned MaxAllowedMuxSize = 8;
 
     // Default value of Latency tables.         8bit 16bit 32bit 64bit
-    double AdderLatencies[]     = { 1.0,  1.0,  1.0, 1.0 };
-    double CmpLatencies[]       = { 1.0,  1.0,  1.0, 1.0 };
-    double MultLatencies[]      = { 1.0,  1.0,  1.0, 1.0 };
-    double ShiftLatencies[]     = { 1.0,  1.0,  1.0, 1.0 };
-    double MemBusLatency = 1.0;
-    double BRamLatency = 1.0;
-    double LutLatency = 0.0;
-    double ClkEnSelLatency = 0.0;
+    float AdderLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float CmpLatencies[]       = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float MultLatencies[]      = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float ShiftLatencies[]     = { 1.0f,  1.0f,  1.0f, 1.0f };
+    float MemBusLatency = 1.0f;
+    float BRamLatency = 1.0f;
+    float LutLatency = 0.0f;
+    float ClkEnSelLatency = 0.0f;
 
-    void initLatencyTable(luabind::object LuaLatTable, double *LatTable,
+    void initLatencyTable(luabind::object LuaLatTable, float *LatTable,
                           unsigned Size) {
       for (unsigned i = 0; i < Size; ++i)
         // Lua array starts from 1
-        LatTable[i] = getProperty<double>(LuaLatTable, i + 1, LatTable[i]);
+        LatTable[i] = getProperty<float>(LuaLatTable, i + 1, LatTable[i]);
     }
 
     void computeCost(unsigned StartY, unsigned EndY, int Size,
                      unsigned StartX, unsigned Index, unsigned *CostTable){
-      double Slope = double((EndY - StartY)) / double((Size - 1));
+      float Slope = float((EndY - StartY)) / float((Size - 1));
       int Intercept = StartY - Slope * StartX;
       for (int i = 0; i < Size; ++i){
         CostTable[Index + i] = Slope * (StartX + i) + Intercept;
@@ -113,25 +113,25 @@ namespace llvm {
         computeCost(CopyTable[3], CopyTable[4], 33, 32, 31, CostTable);
     }
 
-    double getReductionLatency(unsigned Size) {
+    float getReductionLatency(unsigned Size) {
       if (Size < 2) return 0;
 
-      unsigned Level = ceil(double(Log2_32_Ceil(Size))
-                            / double(Log2_32_Ceil(MaxLutSize)));
+      unsigned Level = ceil(float(Log2_32_Ceil(Size))
+                            / float(Log2_32_Ceil(MaxLutSize)));
 
       return Level * LutLatency;
     }
 
-    double getMuxLatency(unsigned Size) {
+    float getMuxLatency(unsigned Size) {
       if (Size < 2) return 0;
 
-      unsigned Level = ceil(double(Log2_32_Ceil(Size))
-                            / double(Log2_32_Ceil(MaxMuxPerLut)));
+      unsigned Level = ceil(float(Log2_32_Ceil(Size))
+                            / float(Log2_32_Ceil(MaxMuxPerLut)));
 
       return Level * LutLatency;
     }
 
-    double getMuxCost(unsigned Size) {
+    float getMuxCost(unsigned Size) {
       if (Size < 2) return 0;
 
       // Every MUX will eliminates inputs number by (MaxMuxPerLut - 1), how
@@ -141,7 +141,7 @@ namespace llvm {
   }
 }
 
-VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, double *latencies)
+VFUDesc::VFUDesc(VFUs::FUTypes type, luabind::object FUTable, unsigned *costs, float *latencies)
   : ResourceType(type),
     StartInt(getProperty<unsigned>(FUTable, "StartInterval")),
     Costs(costs), LatencyTable(latencies),
@@ -158,7 +158,7 @@ VFUMemBus::VFUMemBus(luabind::object FUTable)
             0, &VFUs::MemBusLatency),
     AddrWidth(getProperty<unsigned>(FUTable, "AddressWidth")),
     DataWidth(getProperty<unsigned>(FUTable, "DataWidth")){
-  *LatencyTable = getProperty<double>(FUTable, "Latency");
+  *LatencyTable = getProperty<float>(FUTable, "Latency");
 }
 
 VFUBRam::VFUBRam(luabind::object FUTable)
@@ -168,7 +168,7 @@ VFUBRam::VFUBRam(luabind::object FUTable)
     DataWidth(getProperty<unsigned>(FUTable, "DataWidth")),
     Template(getProperty<std::string>(FUTable, "Template")),
     InitFileDir(getProperty<std::string>(FUTable, "InitFileDir")){
-  *LatencyTable = getProperty<double>(FUTable, "Latency");
+  *LatencyTable = getProperty<float>(FUTable, "Latency");
 }
 
 // Dirty Hack: anchor from SynSettings.h
