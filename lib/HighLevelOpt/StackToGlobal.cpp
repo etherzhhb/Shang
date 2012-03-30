@@ -67,7 +67,7 @@ bool StackToGlobal::runOnModule(Module &M) {
     GlobalVariable *GV =
     new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
 					             Constant::getNullValue(Ty),
-                       VBEMangle(AI->getName()) + "_s2g");
+                       AI->getName() + "_s2g");
     AI->replaceAllUsesWith(GV);
     AI->eraseFromParent();
   }

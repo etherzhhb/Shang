@@ -124,7 +124,7 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
     //   table Initializer.
     //}
 
-    SS << "GlobalVariables." << GV->getName() << " = { ";
+    SS << "GlobalVariables." << VBEMangle(GV->getName()) << " = { ";
     SS << "isLocal = " << GV->hasLocalLinkage() << ", ";
 
     SS << "NumElems = ";
@@ -148,9 +148,9 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
     SS << '}';
 
     SS.flush();
-    if (!runScriptStr(Script, Err))
+    if (!runScriptStr(Script, Err)) {
       llvm_unreachable("Cannot create globalvariable infomation!");
-
+    }
     Script.clear();
   }
 
