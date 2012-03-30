@@ -1094,7 +1094,7 @@ void DetialLatencyInfo::updateLatency(DepLatInfoTy &CurLatInfo,
   //    |   /
   // current op
   // We should update the latency if we get a bigger latency.
-  float &Latency = CurLatInfo[SrcMI];
+  float &Latency = CurLatInfo[SrcMI].first;
   Latency = std::max(Latency, CurLatency);
 }
 
@@ -1105,7 +1105,7 @@ DetialLatencyInfo::accumulateDatapathLatencies(DepLatInfoTy &CurLatInfo,
   typedef DepLatInfoTy::const_iterator src_it;
   for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
     // Accumulate the latency from the source latency information.
-    updateLatency(CurLatInfo, I->first, CurLatency + I->second);
+    updateLatency(CurLatInfo, I->first, CurLatency + I->second.first);
 }
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
@@ -1172,10 +1172,11 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // depends any control operation in the same BB
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
-  if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode()))
+  if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
+    float latency = VInstrInfo::getDetialLatency(MI);
     CurLatInfo.insert(std::make_pair(EntryMarker,
-                                     VInstrInfo::getDetialLatency(MI)));
-
+                                     std::make_pair(latency, latency)));
+  }
   return CurLatInfo;
 }
 
@@ -1207,7 +1208,7 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
       assert(at != DepInfo.end() && "Dependence missed?");
       // Compute the delay of thie MI by accumulating the edge delay to the
       // delay of DepMI.
-      L = at->second + std::ceil(I->second);
+      L = at->second + std::ceil(I->second.first);
       if (DepMI == DetialLatencyInfo::EntryMarker) DepMI = 0;
       L = std::max(L, VInstrInfo::getCtrlStepBetween(DepMI, MI));
     }

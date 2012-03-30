@@ -262,8 +262,9 @@ public:
 // a given MBB.
 class DetialLatencyInfo {
 public:
-  // The latency from a given operation to the current operation.
-  typedef std::map<const MachineInstr*, float> DepLatInfoTy;
+  // The latency of MSB and LSB from a particular operation to the current
+  // operation.
+  typedef std::map<const MachineInstr*, std::pair<float, float> > DepLatInfoTy;
   MachineRegisterInfo &MRI;
 private:
   // The latency from all register source through the datapath to a given
