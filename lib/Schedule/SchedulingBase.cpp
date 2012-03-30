@@ -216,10 +216,11 @@ void SchedulingBase::dumpTimeFrame() const {
 }
 
 unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
-  MachineOperand *P = VInstrInfo::getPredOperand(MI);
-  unsigned PredReg = P->getReg();
-  if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
-  return PredReg;
+  //MachineOperand *P = VInstrInfo::getPredOperand(MI);
+  //unsigned PredReg = P->getReg();
+  //if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+  //return PredReg;
+  return 0;
 }
 
 void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
@@ -231,7 +232,7 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
     assert(!V.test(s - StartSlot) && "FU already in use!");
     V.set(s - StartSlot);
     // Also take the un-predicated channel.
-    if (PredReg) getRTFor(PredicatedChannel, FU).set(s - StartSlot);
+    //if (PredReg) getRTFor(PredicatedChannel, FU).set(s - StartSlot);
   }
 }
 
@@ -243,13 +244,13 @@ void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
   takeFU(MI, step, U->getLatency(), FU);
 
   // Take the FU of DstMux.
-  for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
-    MI = U->getInstrAt(i);
-    FU = VInstrInfo::getPreboundFUId(MI);
-    if (FU.getFUType() != VFUs::Mux) continue;
+  //for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
+  //  MI = U->getInstrAt(i);
+  //  FU = VInstrInfo::getPreboundFUId(MI);
+  //  if (FU.getFUType() != VFUs::Mux) continue;
 
-    takeFU(MI, step + U->getLatencyAt(i), 1, FU);
-  }
+  //  takeFU(MI, step + U->getLatencyAt(i), 1, FU);
+  //}
 }
 
 bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
@@ -261,12 +262,12 @@ bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
     SparseBitVector<> &V = getRTFor(PredReg, FU);
     if (V.test(s - StartSlot))
       return false;
-    // Do not conflict with the predicated channel as well.
-    if (PredReg == 0 && getRTFor(PredicatedChannel, FU).test(s - StartSlot))
-      return false;
-    // Do not conflict with the un-predicated channel as well.
-    if (PredReg && getRTFor(0, FU).test(s - StartSlot))
-      return false;
+    //// Do not conflict with the predicated channel as well.
+    //if (PredReg == 0 && getRTFor(PredicatedChannel, FU).test(s - StartSlot))
+    //  return false;
+    //// Do not conflict with the un-predicated channel as well.
+    //if (PredReg && getRTFor(0, FU).test(s - StartSlot))
+    //  return false;
   }
 
   return true;
@@ -281,14 +282,14 @@ bool SchedulingBase::hasSpareFU(VSUnit *U, unsigned step) {
     return false;
 
   // Take the FU of DstMux.
-  for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
-    MI = U->getInstrAt(i);
-    FU = VInstrInfo::getPreboundFUId(MI);
-    if (FU.getFUType() != VFUs::Mux) continue;
+  //for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
+  //  MI = U->getInstrAt(i);
+  //  FU = VInstrInfo::getPreboundFUId(MI);
+  //  if (FU.getFUType() != VFUs::Mux) continue;
 
-    if (!hasSpareFU(MI, step + U->getLatencyAt(i), 1, FU))
-      return false;
-  }
+  //  if (!hasSpareFU(MI, step + U->getLatencyAt(i), 1, FU))
+  //    return false;
+  //}
 
   return true;
 }
@@ -325,13 +326,13 @@ void SchedulingBase::revertFUUsage(VSUnit *U, unsigned step) {
 
   revertFUUsage(U->getRepresentativeInst(), step, U->getLatency(), FU);
   // Revert the Usage of DstMux.
-  for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
-    MachineInstr *MI = U->getInstrAt(i);
-    FU = VInstrInfo::getPreboundFUId(MI);
-    if (FU.getFUType() != VFUs::Mux) continue;
+  //for (unsigned i = 1, e = U->num_instrs(); i < e; ++i) {
+  //  MachineInstr *MI = U->getInstrAt(i);
+  //  FU = VInstrInfo::getPreboundFUId(MI);
+  //  if (FU.getFUType() != VFUs::Mux) continue;
 
-    revertFUUsage(MI, step + U->getLatencyAt(i), 1, FU);
-  }
+  //  revertFUUsage(MI, step + U->getLatencyAt(i), 1, FU);
+  //}
 }
 
 void SchedulingBase::unscheduleSU(VSUnit *U) {

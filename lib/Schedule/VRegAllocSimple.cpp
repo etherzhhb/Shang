@@ -1220,7 +1220,7 @@ void VRASimple::bindMemoryBus() {
       }
 
       // Merge all others LI to MemBusLI.
-      mergeLI(LI, MemBusLI, true/*DirtyHack*/);
+      mergeLI(LI, MemBusLI);
     }
   }
 }
@@ -1255,7 +1255,7 @@ void VRASimple::bindDstMux() {
       //SlotIndex NextStart = LI->beginIndex().getNextIndex().getNextIndex();
       //assert(!RepLI->overlaps(NextStart, LI->endIndex())
         //&& "Unexpected bram overlap!");
-      mergeLI(LI, RepLI, true/*DirtyHack*/);
+      mergeLI(LI, RepLI);
     }
   }
 }
@@ -1350,7 +1350,7 @@ void VRASimple::bindCalleeFN() {
       }
 
       // Merge to the representative live interval.
-      mergeLI(LI, RepLI, true/*DirtyHack*/);
+      mergeLI(LI, RepLI);
     }
   }
 }
