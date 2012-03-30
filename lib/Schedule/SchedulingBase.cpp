@@ -318,10 +318,7 @@ void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
   }
 }
 
-void SchedulingBase::unscheduleSU(VSUnit *U) {
-  unsigned step = U->getSlot();
-  U->resetSchedule();
-
+void SchedulingBase::revertFUUsage(VSUnit *U, unsigned step) {
   FuncUnitId FU = U->getFUId();
   // We will always have enough trivial resources.
   if (FU.isTrivial()) return;
@@ -335,6 +332,12 @@ void SchedulingBase::unscheduleSU(VSUnit *U) {
 
     revertFUUsage(MI, step + U->getLatencyAt(i), 1, FU);
   }
+}
+
+void SchedulingBase::unscheduleSU(VSUnit *U) {
+  unsigned step = U->getSlot();
+  U->resetSchedule();
+  revertFUUsage(U, step);
 }
 
 bool SchedulingBase::isResourceConstraintPreserved() {

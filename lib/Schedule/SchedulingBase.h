@@ -108,6 +108,7 @@ public:
 
   void revertFUUsage(MachineInstr *MI, unsigned step, unsigned Latency,
                      FuncUnitId FU);
+  void revertFUUsage(VSUnit *U, unsigned step);
   void takeFU(VSUnit *U, unsigned step);
   void takeFU(MachineInstr *MI, unsigned step, unsigned Latency, FuncUnitId FU);
   bool hasSpareFU(MachineInstr *MI, unsigned step, unsigned Latency,
