@@ -1068,10 +1068,11 @@ static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
   //    |   /
   // current op
   // We should update the latency if we get a bigger latency.
-  float &OldLSBLatency = CurLatInfo[SrcMI].first;
+  DepLatInfoTy::mapped_type &V = CurLatInfo[SrcMI];
+  float &OldLSBLatency = V.first;
   OldLSBLatency = std::max(OldLSBLatency, LSBLatency);
   //assert(LSBLatency <= MSBLatency && "Broken latency pair!");
-  float &OldMSBLatency = CurLatInfo[SrcMI].second;
+  float &OldMSBLatency = V.second;
   OldMSBLatency = std::max(OldMSBLatency, MSBLatency);
 }
 
@@ -1141,26 +1142,32 @@ struct UpdateBitSliceLatencyFN {
 };
 }
 
+void DetialLatencyInfo::alignDepLatency(const MachineInstr *MI) {
+  DepLatInfoTy::mapped_type &V = AlignedLatnecyMap[MI];
+  float &SrcMSBLatency = V.first, &SrcLSBLatency = V.second;
+  // Align the latency of all possible path.
+  if (const DepLatInfoTy *SrcLatInfo = getDepLatInfo(MI)) {
+    typedef DepLatInfoTy::const_iterator src_it;
+    for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I) {
+      SrcMSBLatency = std::max(SrcMSBLatency, I->second.first);
+      SrcLSBLatency = std::max(SrcLSBLatency, I->second.second);
+    }
+  }
+}
+
 template<typename F>
 void DetialLatencyInfo::accumulateLatencies(DepLatInfoTy &CurLatInfo,
+                                            const MachineInstr *SrcMI,
                                             const DepLatInfoTy &SrcLatInfo,
                                             float TotalLatency,
                                             float PerBitLatency, F UpdateFn) {
   typedef DepLatInfoTy::const_iterator src_it;
   // Align the latency of LSB and MSB.
   // FIXME: We should cache the result?
-  float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
-  SmallVector<const MachineInstr*, 8> DepLeaves;
-  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I) {
-    DepLeaves.push_back(I->first);
-    SrcMSBLatency = std::max(SrcMSBLatency, I->second.first);
-    SrcLSBLatency = std::max(SrcLSBLatency, I->second.second);
-  }
-
-  // Update the latency from dependent leaves.
-  typedef SmallVectorImpl<const MachineInstr*>::iterator leaves_it;
-  for (leaves_it I = DepLeaves.begin(), E = DepLeaves.end(); I != E; ++I)
-    UpdateFn(CurLatInfo, *I, SrcMSBLatency, SrcLSBLatency, TotalLatency,
+  float SrcMSBLatency, SrcLSBLatency;
+  tie(SrcMSBLatency, SrcLSBLatency) = getAlignedLatency(SrcMI);
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
+    UpdateFn(CurLatInfo, I->first, SrcMSBLatency, SrcLSBLatency, TotalLatency,
              PerBitLatency);
 }
 
@@ -1184,7 +1191,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   switch (SrcOpC) {
   default:
     if (VInstrInfo::isDatapath(SrcOpC))
-      accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, 0,
+      accumulateLatencies(CurLatInfo, SrcMI, *SrcLatInfo, TotalLatency, 0,
                           updateWorstLatency);
     else
       updateLatency(CurLatInfo, SrcMI, TotalLatency + OperandDelay,
@@ -1200,8 +1207,8 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   //case VTM::VOpSRL_c:
   //case VTM::VOpSHL_c:
     // Result propagate from LSB to MSB.
-    accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, PerBitLatency,
-                        updateLSB2MSBLatency);
+    accumulateLatencies(CurLatInfo, SrcMI, *SrcLatInfo, TotalLatency,
+                        PerBitLatency, updateLSB2MSBLatency);
     break;
   case VTM::VOpAdd:
   case VTM::VOpMult:
@@ -1216,17 +1223,17 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   case VTM::VOpXor:
   case VTM::VOpNot:
   case VTM::VOpBitCat:
-    accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, 0,
+    accumulateLatencies(CurLatInfo, SrcMI, *SrcLatInfo, TotalLatency, 0,
                         updateParallelLatency);
     break;
   case VTM::VOpBitSlice:
-    accumulateLatencies(CurLatInfo, *SrcLatInfo, 0, 0,
+    accumulateLatencies(CurLatInfo, SrcMI, *SrcLatInfo, 0, 0,
                         UpdateBitSliceLatencyFN(SrcMI));
     break;
   // Result bits are computed from MSB to LSB.
   case VTM::VOpICmp_c:
-    accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, PerBitLatency,
-                        updateMSB2LSBLatency);
+    accumulateLatencies(CurLatInfo, SrcMI, *SrcLatInfo, TotalLatency,
+                        PerBitLatency, updateMSB2LSBLatency);
     break;
   case VTM::VOpICmp:
     updateLatency(CurLatInfo, SrcMI, PerBitLatency + OperandDelay,
@@ -1274,6 +1281,9 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      std::make_pair(latency, latency)));
   }
+
+  // Align the operand latency.
+  alignDepLatency(MI);
   return CurLatInfo;
 }
 

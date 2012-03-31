@@ -269,6 +269,16 @@ public:
 
   MachineRegisterInfo &MRI;
 private:
+  // Aligned the operand's latency of instructions, because the instruction can
+  // only start its computation if all they operands are ready.
+  DepLatInfoTy AlignedLatnecyMap;
+  void alignDepLatency(const MachineInstr *MI);
+  DepLatInfoTy::mapped_type getAlignedLatency(const MachineInstr *MI) const {
+    DepLatInfoTy::const_iterator at = AlignedLatnecyMap.find(MI);
+    return at == AlignedLatnecyMap.end() ? std::make_pair(0.0f, 0.0f)
+                                         : at->second;
+  }
+
   // The latency from all register source through the datapath to a given
   // wire/register define by a datapath/control op
   typedef std::map<const MachineInstr*, DepLatInfoTy> LatencyMapTy;
@@ -284,6 +294,7 @@ private:
 
   template<typename F>
   void accumulateLatencies(DepLatInfoTy &CurLatInfo,
+                           const MachineInstr *SrcMI,
                            const DepLatInfoTy &SrcLatInfo,
                            float TotalLatency, float PerBitLatency, F UpdateFn);
 protected:
@@ -326,6 +337,7 @@ public:
   }
 
   void reset() {
+    AlignedLatnecyMap.clear();
     LatencyMap.clear();
     ExitMIs.clear();
   }
