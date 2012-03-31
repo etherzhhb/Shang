@@ -576,8 +576,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
       if (Dep == 0 || Dep->getIdx() == A->getIdx()) continue;
 
       // Dirty Hack: Get the detail latency.
-      float DetailLatency =
-        VInstrInfo::getChainingLatency(DepSrc, MI, MO.getBitWidth());
+      float DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
       DetailLatency -= std::min(0.0f, IntraSULatency - VInstrInfo::DeltaLatency);

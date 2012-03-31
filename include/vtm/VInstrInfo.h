@@ -160,15 +160,14 @@ public:
                                      const MachineInstr *DstInstr);
   const static float DeltaLatency;
   // Return the latency of a MachineInstr in cycle ratio.
-  static float getDetialLatency(const MachineInstr *MI, unsigned OperandWidth = 0);
+  static float getDetialLatency(const MachineInstr *MI);
   static unsigned getStepsToFinish(const MachineInstr *MI) {
     return unsigned(ceil(getDetialLatency(MI)));
   }
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
   static float getChainingLatency(const MachineInstr *SrcInstr,
-                                   const MachineInstr *DstInstr,
-                                   unsigned OperandWidth);
+                                   const MachineInstr *DstInstr);
   // Return the latency from the entry of the MachineBasicBlock to DstInstr.
   static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
 
@@ -272,8 +271,8 @@ private:
   // Aligned the operand's latency of instructions, because the instruction can
   // only start its computation if all they operands are ready.
   DepLatInfoTy AlignedLatnecyMap;
-  void alignDepLatency(const MachineInstr *MI);
-  DepLatInfoTy::mapped_type getAlignedLatency(const MachineInstr *MI) const {
+  void alignResultLatency(const MachineInstr *MI);
+  DepLatInfoTy::mapped_type getResultLatency(const MachineInstr *MI) const {
     DepLatInfoTy::const_iterator at = AlignedLatnecyMap.find(MI);
     return at == AlignedLatnecyMap.end() ? std::make_pair(0.0f, 0.0f)
                                          : at->second;
@@ -292,11 +291,10 @@ private:
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
 
-  template<typename F>
-  void accumulateLatencies(DepLatInfoTy &CurLatInfo,
+  void accumulateLatencies(const MachineInstr *DstMI,
+                           DepLatInfoTy &CurLatInfo,
                            const MachineInstr *SrcMI,
-                           const DepLatInfoTy &SrcLatInfo,
-                           float TotalLatency, float PerBitLatency, F UpdateFn);
+                           const DepLatInfoTy &SrcLatInfo);
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                        bool IgnorePHISrc);
