@@ -1069,10 +1069,10 @@ static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
   // current op
   // We should update the latency if we get a bigger latency.
   DepLatInfoTy::mapped_type &V = CurLatInfo[SrcMI];
-  float &OldLSBLatency = V.first;
+  float &OldLSBLatency = V.second;
   OldLSBLatency = std::max(OldLSBLatency, LSBLatency);
   //assert(LSBLatency <= MSBLatency && "Broken latency pair!");
-  float &OldMSBLatency = V.second;
+  float &OldMSBLatency = V.first;
   OldMSBLatency = std::max(OldMSBLatency, MSBLatency);
 }
 
