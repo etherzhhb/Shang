@@ -274,32 +274,10 @@ private:
   typedef std::map<const MachineInstr*, DepLatInfoTy> LatencyMapTy;
 
   LatencyMapTy LatencyMap;
-
-  // Update the latency entry in the latency information table.
-  static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
-                            float MSBLatency, float LSBLatency);
-
   // Add the latency information from SrcMI to CurLatInfo.
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
                        DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
                        float OperandDelay);
-
-  // Forward all datapath latencies so the latency information table only
-  // contains control to control latency.
-  static void accumulateLSB2MSBLatencies(DepLatInfoTy &CurLatInfo,
-                                         const DepLatInfoTy &SrcLatInfo,
-                                         float TotalLatency,
-                                         float PerBitLatency);
-  static void accumulateMSB2LSBLatencies(DepLatInfoTy &CurLatInfo,
-                                         const DepLatInfoTy &SrcLatInfo,
-                                         float TotalLatency,
-                                         float PerBitLatency);
-  static void accumulateWorstLatencies(DepLatInfoTy &CurLatInfo,
-                                       const DepLatInfoTy &SrcLatInfo,
-                                       float TotalLatency);
-  static void accumulateLatenciesParallel(DepLatInfoTy &CurLatInfo,
-                                          const DepLatInfoTy &SrcLatInfo,
-                                          float TotalLatency);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
