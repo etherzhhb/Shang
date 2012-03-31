@@ -1142,23 +1142,19 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   float PerBitLatency = TotalLatency / OperandWidth;
 
   unsigned SrcOpC = SrcMI->getOpcode();
-  // The VOpDstMux should be merged to its user and its latency should be
-  // accumulated into the chain latency.
-  if (VInstrInfo::isControl(SrcOpC)) {
-    // It seems that the clk enable mux network have extra big latency, which
-    // are likely become the critical path.
-    TotalLatency += OperandDelay;
-    // Simply add the latency from ctrl op to the latency map.
-    updateLatency(CurLatInfo, SrcMI, TotalLatency, TotalLatency);
-    return true;
-  }
+
   // Forward all latency information from a datapath op to get the ctrl to
   // ctrl latency.
   switch (SrcOpC) {
   default:
-    accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, 0,
-                        updateWorstLatency);
+    if (VInstrInfo::isDatapath(SrcOpC))
+      accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, 0,
+                          updateWorstLatency);
+    else
+      updateLatency(CurLatInfo, SrcMI, TotalLatency + OperandDelay,
+                    TotalLatency + OperandDelay);
     break;
+  // Result bits are computed from MSB to LSB.
   case VTM::VOpAdd_c:
 
   case VTM::VOpMultLoHi_c:
@@ -1171,7 +1167,13 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, PerBitLatency,
                         updateLSB2MSBLatency);
     break;
-    // Ignore the trivial logic operation latency at the moment.
+  case VTM::VOpAdd:
+  case VTM::VOpMult:
+  case VTM::VOpMultLoHi:
+    updateLatency(CurLatInfo, SrcMI, TotalLatency + OperandDelay,
+                  PerBitLatency + OperandDelay);
+    break;
+  // Each bits are compute independently.
   case VTM::VOpLUT:
   case VTM::VOpAnd:
   case VTM::VOpOr:
@@ -1182,9 +1184,14 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, 0,
                         updateParallelLatency);
     break;
+  // Result bits are computed from MSB to LSB.
   case VTM::VOpICmp_c:
     accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, PerBitLatency,
                         updateMSB2LSBLatency);
+    break;
+  case VTM::VOpICmp:
+    updateLatency(CurLatInfo, SrcMI, PerBitLatency + OperandDelay,
+                  TotalLatency + OperandDelay);
     break;
   }
   return true;
