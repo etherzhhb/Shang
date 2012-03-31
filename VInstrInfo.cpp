@@ -1142,9 +1142,10 @@ struct UpdateBitSliceLatencyFN {
 }
 
 template<typename F>
-static
-void accumulateLatencies(DepLatInfoTy &CurLatInfo, const DepLatInfoTy &SrcLatInfo,
-                         float TotalLatency, float PerBitLatency, F UpdateFn) {
+void DetialLatencyInfo::accumulateLatencies(DepLatInfoTy &CurLatInfo,
+                                            const DepLatInfoTy &SrcLatInfo,
+                                            float TotalLatency,
+                                            float PerBitLatency, F UpdateFn) {
   typedef DepLatInfoTy::const_iterator src_it;
   // Align the latency of LSB and MSB.
   // FIXME: We should cache the result?

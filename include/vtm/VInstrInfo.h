@@ -281,6 +281,11 @@ private:
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
+
+  template<typename F>
+  void accumulateLatencies(DepLatInfoTy &CurLatInfo,
+                           const DepLatInfoTy &SrcLatInfo,
+                           float TotalLatency, float PerBitLatency, F UpdateFn);
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                        bool IgnorePHISrc);
