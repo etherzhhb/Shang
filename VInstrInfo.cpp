@@ -1146,9 +1146,21 @@ static
 void accumulateLatencies(DepLatInfoTy &CurLatInfo, const DepLatInfoTy &SrcLatInfo,
                          float TotalLatency, float PerBitLatency, F UpdateFn) {
   typedef DepLatInfoTy::const_iterator src_it;
-  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I)
-    UpdateFn(CurLatInfo, I->first, I->second.first, I->second.second,
-             TotalLatency, PerBitLatency);
+  // Align the latency of LSB and MSB.
+  // FIXME: We should cache the result?
+  float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
+  SmallVector<const MachineInstr*, 8> DepLeaves;
+  for (src_it I = SrcLatInfo.begin(), E = SrcLatInfo.end(); I != E; ++I) {
+    DepLeaves.push_back(I->first);
+    SrcMSBLatency = std::max(SrcMSBLatency, I->second.first);
+    SrcLSBLatency = std::max(SrcLSBLatency, I->second.second);
+  }
+
+  // Update the latency from dependent leaves.
+  typedef SmallVectorImpl<const MachineInstr*>::iterator leaves_it;
+  for (leaves_it I = DepLeaves.begin(), E = DepLeaves.end(); I != E; ++I)
+    UpdateFn(CurLatInfo, *I, SrcMSBLatency, SrcLSBLatency, TotalLatency,
+             PerBitLatency);
 }
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
