@@ -1110,12 +1110,35 @@ void updateWorstLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
 
 static
 void updateParallelLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
-                          float SrcMSBLatency, float SrcLSBLatency,
-                          float TotalLatency, float PerBitLatency) {
+                           float SrcMSBLatency, float SrcLSBLatency,
+                           float TotalLatency, float PerBitLatency) {
   float MSBLatency = TotalLatency + SrcMSBLatency;
   float LSBLatency = TotalLatency + SrcLSBLatency;
   // Accumulate the latency from the source latency information.
   updateLatency(CurLatInfo, SrcMI, MSBLatency, LSBLatency);
+}
+
+namespace {
+struct UpdateBitSliceLatencyFN {
+  unsigned OperandSize, UB, LB;
+
+  UpdateBitSliceLatencyFN(const MachineInstr *BitSliceOp)
+    : OperandSize(cast<ucOperand>(BitSliceOp->getOperand(1)).getBitWidth()),
+      UB(BitSliceOp->getOperand(2).getImm()),
+      LB(BitSliceOp->getOperand(3).getImm()) {}
+
+  void operator()(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
+                  float SrcMSBLatency, float SrcLSBLatency,
+                  float TotalLatency, float PerBitLatency) {
+    // Time difference between MSB and LSB.
+    float MSB2LSBDelta = SrcMSBLatency - SrcLSBLatency;
+    float DeltaPerBit = MSB2LSBDelta / OperandSize;
+    // Compute the latency of LSB/MSB by assuming the latency is increasing linear
+    float MSBLatency = SrcLSBLatency + UB * DeltaPerBit,
+          LSBLatency = SrcLSBLatency + LB * DeltaPerBit;
+    updateLatency(CurLatInfo, SrcMI, MSBLatency, LSBLatency);
+  }
+};
 }
 
 template<typename F>
@@ -1180,9 +1203,12 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   case VTM::VOpXor:
   case VTM::VOpNot:
   case VTM::VOpBitCat:
-  case VTM::VOpBitSlice:
     accumulateLatencies(CurLatInfo, *SrcLatInfo, TotalLatency, 0,
                         updateParallelLatency);
+    break;
+  case VTM::VOpBitSlice:
+    accumulateLatencies(CurLatInfo, *SrcLatInfo, 0, 0,
+                        UpdateBitSliceLatencyFN(SrcMI));
     break;
   // Result bits are computed from MSB to LSB.
   case VTM::VOpICmp_c:
