@@ -884,8 +884,8 @@ float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
 
 const float VInstrInfo::DeltaLatency = FLT_EPSILON * 8.0f;
 
-static float getChainingDelta(const MachineInstr *SrcInstr,
-                              const MachineInstr *DstInstr) {
+static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
+                                   const MachineInstr *DstInstr) {
   assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
   assert(SrcInstr != DstInstr && "Computing latency of self loop?");
   const MCInstrDesc &DstTID = DstInstr->getDesc();
@@ -910,21 +910,21 @@ static float getChainingDelta(const MachineInstr *SrcInstr,
       // If the edge is reg->reg, the result is ready after the clock edge, add
       // a delta to make sure DstInstr not schedule to the moment right at the
       // SrcInstr finish
-      return Delta;
+      return ceil(Latency) + Delta;
   }
 
   // If the value is written to register, it has a delta latency
-  if (SrcWriteUntilFInish) return Delta;
+  if (SrcWriteUntilFInish) return Latency + Delta;
 
   // Chain the operations if dst not read value at the edge of the clock.
-  return -Delta;
+  return std::max(0.0f, Latency - Delta);
 }
 
 float VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                      const MachineInstr *DstInstr) {
   // Compute the latency correspond to detail slot.
   float latency = getDetialLatency(SrcInstr);
-  return std::max(latency + getChainingDelta(SrcInstr, DstInstr), 0.0f);
+  return adjustChainingLatency(latency, SrcInstr, DstInstr);
 }
 
 unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
@@ -1104,7 +1104,7 @@ static LatInfoTy getWorstLatency(float SrcMSBLatency, float SrcLSBLatency,
   float MSBLatency = TotalLatency + SrcMSBLatency;
   float LSBLatency = TotalLatency + SrcLSBLatency;
   float WorstLatency = std::max(MSBLatency, LSBLatency);
-  return std::make_pair(MSBLatency, LSBLatency);
+  return std::make_pair(WorstLatency, WorstLatency);
 }
 
 static LatInfoTy getParallelLatency(float SrcMSBLatency, float SrcLSBLatency,
@@ -1148,21 +1148,10 @@ struct BitSliceLatencyFN {
 };
 }
 
-void DetialLatencyInfo::alignResultLatency(const MachineInstr *MI) {
+void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
-  unsigned Opcode = MI->getOpcode();
-  // Align the latency of all possible path.
-  if (VInstrInfo::isDatapath(Opcode)) {  
-    if (const DepLatInfoTy *SrcLatInfo = getDepLatInfo(MI)) {
-      typedef DepLatInfoTy::const_iterator src_it;
-      for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I) {
-        SrcMSBLatency = std::max(SrcMSBLatency, I->second.first);
-        SrcLSBLatency = std::max(SrcLSBLatency, I->second.second);
-      }
-    }
-  }
-
   float TotalLatency = VInstrInfo::getDetialLatency(MI);
+  unsigned Opcode = MI->getOpcode();
 
   // Accumulate the latency to compute the result.
   switch (Opcode) {
@@ -1216,8 +1205,8 @@ void DetialLatencyInfo::alignResultLatency(const MachineInstr *MI) {
   }
 
   // Remember the latency from all MI's dependence leaves.
-  AlignedLatnecyMap.insert(std::make_pair(MI, std::make_pair(SrcMSBLatency,
-                                                             SrcLSBLatency)));
+  CachedLatencies.insert(std::make_pair(MI, std::make_pair(SrcMSBLatency,
+                                                           SrcLSBLatency)));
 }
 
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
@@ -1231,9 +1220,9 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   if (SrcLatInfo == 0) return false;
 
   float SrcMSBLatency, SrcLSBLatency;
-  tie(SrcMSBLatency, SrcLSBLatency) = getResultLatency(SrcMI);
-  SrcMSBLatency += getChainingDelta(SrcMI, DstMI);
-  SrcLSBLatency += getChainingDelta(SrcMI, DstMI);
+  tie(SrcMSBLatency, SrcLSBLatency) = getLatencyOf(SrcMI);
+  SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
+  SrcLSBLatency = adjustChainingLatency(SrcLSBLatency, SrcMI, DstMI);
   if (OperandWidth) {
     unsigned SrcSize = cast<ucOperand>(SrcMI->getOperand(0)).getBitWidth();
     // DirtyHack: Ignore the invert flag.
@@ -1247,8 +1236,10 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
     typedef DepLatInfoTy::const_iterator src_it;
+    // Compute minimal delay for all possible pathes.
     for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
-      updateLatency(CurLatInfo, I->first, SrcMSBLatency, SrcLSBLatency);
+      updateLatency(CurLatInfo, I->first, I->second.first + SrcMSBLatency,
+                    I->second.second + SrcLSBLatency);
 
     return true;
   } //else
@@ -1305,7 +1296,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   }
 
   // Align the operand latency.
-  alignResultLatency(MI);
+  computeLatencyFor(MI);
   return CurLatInfo;
 }
 

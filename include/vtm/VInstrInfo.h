@@ -268,13 +268,12 @@ public:
 
   MachineRegisterInfo &MRI;
 private:
-  // Aligned the operand's latency of instructions, because the instruction can
-  // only start its computation if all they operands are ready.
-  DepLatInfoTy AlignedLatnecyMap;
-  void alignResultLatency(const MachineInstr *MI);
-  DepLatInfoTy::mapped_type getResultLatency(const MachineInstr *MI) const {
-    DepLatInfoTy::const_iterator at = AlignedLatnecyMap.find(MI);
-    return at == AlignedLatnecyMap.end() ? std::make_pair(0.0f, 0.0f)
+  // Cache the computational delay for every instruction.
+  DepLatInfoTy CachedLatencies;
+  void computeLatencyFor(const MachineInstr *MI);
+  DepLatInfoTy::mapped_type getLatencyOf(const MachineInstr *MI) const {
+    DepLatInfoTy::const_iterator at = CachedLatencies.find(MI);
+    return at == CachedLatencies.end() ? std::make_pair(0.0f, 0.0f)
                                          : at->second;
   }
 
@@ -335,7 +334,7 @@ public:
   }
 
   void reset() {
-    AlignedLatnecyMap.clear();
+    CachedLatencies.clear();
     LatencyMap.clear();
     ExitMIs.clear();
   }
