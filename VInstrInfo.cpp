@@ -1078,11 +1078,6 @@ static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
   OldMSBLatency = std::max(OldMSBLatency, MSBLatency);
 }
 
-static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
-                          LatInfoTy L) {
-  updateLatency(CurLatInfo, SrcMI, L.first, L.second);
-}
-
 static LatInfoTy getLSB2MSBLatency(float SrcMSBLatency, float SrcLSBLatency,
                                    float TotalLatency, float PerBitLatency) {
   float MSBLatency = std::max(TotalLatency + SrcLSBLatency,
@@ -1209,6 +1204,7 @@ void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
                                                            SrcLSBLatency)));
 }
 
+template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,// Not needed
                                         DepLatInfoTy &CurLatInfo,
@@ -1221,17 +1217,22 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
 
   float SrcMSBLatency, SrcLSBLatency;
   tie(SrcMSBLatency, SrcLSBLatency) = getLatencyOf(SrcMI);
-  SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
-  SrcLSBLatency = adjustChainingLatency(SrcLSBLatency, SrcMI, DstMI);
-  if (OperandWidth) {
-    unsigned SrcSize = cast<ucOperand>(SrcMI->getOperand(0)).getBitWidth();
-    // DirtyHack: Ignore the invert flag.
-    if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {
-      assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
-      tie(SrcMSBLatency, SrcLSBLatency)
-        = BitSliceLatencyFN::getBitSliceLatency(SrcSize, OperandWidth, 0,
-                                                SrcMSBLatency, SrcLSBLatency);
+  if (!IsCtrlDep) {
+    SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
+    SrcLSBLatency = adjustChainingLatency(SrcLSBLatency, SrcMI, DstMI);
+    if (OperandWidth) {
+      unsigned SrcSize = cast<ucOperand>(SrcMI->getOperand(0)).getBitWidth();
+      // DirtyHack: Ignore the invert flag.
+      if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {
+        assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
+        tie(SrcMSBLatency, SrcLSBLatency)
+          = BitSliceLatencyFN::getBitSliceLatency(SrcSize, OperandWidth, 0,
+          SrcMSBLatency, SrcLSBLatency);
+      }
     }
+  } else {// IsCtrlDep
+    SrcMSBLatency = std::max(0.0f, SrcMSBLatency - VInstrInfo::DeltaLatency);
+    SrcLSBLatency = std::max(0.0f, SrcLSBLatency - VInstrInfo::DeltaLatency);
   }
 
   if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
@@ -1276,7 +1277,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     } else
       OpDelay = VInstrInfo::getOperandLatency(MI, i);
 
-    if (buildDepLatInfo(SrcMI, MI, CurLatInfo, OpSize, OpDelay))
+    if (buildDepLatInfo<false>(SrcMI, MI, CurLatInfo, OpSize, OpDelay))
       // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
       // have user now.
       ExitMIs.erase(SrcMI);
@@ -1290,7 +1291,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
   if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
-    float latency = VInstrInfo::getDetialLatency(MI) + VInstrInfo::DeltaLatency;
+    float latency = std::max(VInstrInfo::getDetialLatency(MI),
+                             VInstrInfo::DeltaLatency);
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      std::make_pair(latency, latency)));
   }
@@ -1304,7 +1306,7 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
                                         DepLatInfoTy &Info) {
   typedef std::set<const MachineInstr*>::const_iterator exit_it;
   for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
-    buildDepLatInfo(*I, ExitMI, Info, 0, 0.0);
+    buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
 }
 
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {

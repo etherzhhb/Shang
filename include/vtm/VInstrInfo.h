@@ -283,6 +283,7 @@ private:
 
   LatencyMapTy LatencyMap;
   // Add the latency information from SrcMI to CurLatInfo.
+  template<bool IsCtrlDep>
   bool buildDepLatInfo(const MachineInstr *SrcMI, const MachineInstr *DstMI,
                        DepLatInfoTy &CurLatInfo, unsigned OperandWidth,
                        float OperandDelay);
