@@ -925,7 +925,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
   VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
   assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
     "Cannot handle predicated BrCnd");
-  VASTValue *Cnd = createCnd(CndOp);
+  VASTValue *Cnd = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
 
   // Emit control operation for next state.
