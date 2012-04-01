@@ -1022,6 +1022,60 @@ static unsigned countNumRegOperands(const MachineInstr *MI) {
   return NumRegs;
 }
 
+// Get the latency of a machineinstr in cycle ratio.
+float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
+  unsigned OpC = MI->getOpcode();
+
+  switch (OpC) {
+    // TODO: Bitrepeat.
+  default:                  break;
+
+  case VTM::VOpICmp_c:
+  case VTM::VOpICmp:
+    return LookupLatency<3>(VFUs::CmpLatencies, MI);
+  // Retrieve the FU bit width from its operand bit width
+  case VTM::VOpAdd_c:
+  case VTM::VOpAdd:
+    return LookupLatency<1>(VFUs::AdderLatencies, MI);
+
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
+  case VTM::VOpMultLoHi:
+  case VTM::VOpMult:
+    return LookupLatency<0>(VFUs::MultLatencies, MI);
+
+  case VTM::VOpSRA_c:
+  case VTM::VOpSRL_c:
+  case VTM::VOpSHL_c:
+  case VTM::VOpSRA:
+  case VTM::VOpSRL:
+  case VTM::VOpSHL:
+    return LookupLatency<0>(VFUs::ShiftLatencies, MI);
+
+  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
+
+  // Ignore the trivial logic operation latency at the moment.
+  case VTM::VOpLUT:
+  case VTM::VOpAnd:
+  case VTM::VOpOr:
+  case VTM::VOpXor:
+  case VTM::VOpNot:         return VFUs::LutLatency;
+
+  case VTM::VOpROr:
+  case VTM::VOpRAnd:
+  case VTM::VOpRXor:{
+    unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
+    return VFUs::getReductionLatency(size);
+  }
+  case VTM::VOpBRam:        return VFUs::BRamLatency;
+
+  case VTM::VOpCmdSeq:
+  case VTM::VOpInternalCall:  return 1.0f;
+  }
+
+  return 0.0f;
+}
+
 void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
   float TotalLatency = getDetialLatency(MI);
@@ -1220,6 +1274,9 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
       ExitMIs.erase(SrcMI);
   }
 
+  // Align the compute the latency of MI.
+  computeLatencyFor(MI);
+
   // Assume MI do not have any user in the same BB, if it has, it will be
   // deleted later.
   ExitMIs.insert(MI);
@@ -1228,13 +1285,11 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
   if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
-    float latency = std::max(getDetialLatency(MI), DetialLatencyInfo::DeltaLatency);
+    float latency = std::max(getMaxLatency(MI), DetialLatencyInfo::DeltaLatency);
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      std::make_pair(latency, latency)));
   }
 
-  // Align the operand latency.
-  computeLatencyFor(MI);
   return CurLatInfo;
 }
 
@@ -1243,60 +1298,6 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
   typedef std::set<const MachineInstr*>::const_iterator exit_it;
   for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
     buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
-}
-
-// Get the latency of a machineinstr in cycle ratio.
-float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
-  unsigned OpC = MI->getOpcode();
-
-  switch (OpC) {
-    // TODO: Bitrepeat.
-  default:                  break;
-
-  case VTM::VOpICmp_c:
-  case VTM::VOpICmp:
-    return LookupLatency<3>(VFUs::CmpLatencies, MI);
-  // Retrieve the FU bit width from its operand bit width
-  case VTM::VOpAdd_c:
-  case VTM::VOpAdd:
-    return LookupLatency<1>(VFUs::AdderLatencies, MI);
-
-  case VTM::VOpMultLoHi_c:
-  case VTM::VOpMult_c:
-  case VTM::VOpMultLoHi:
-  case VTM::VOpMult:
-    return LookupLatency<0>(VFUs::MultLatencies, MI);
-
-  case VTM::VOpSRA_c:
-  case VTM::VOpSRL_c:
-  case VTM::VOpSHL_c:
-  case VTM::VOpSRA:
-  case VTM::VOpSRL:
-  case VTM::VOpSHL:
-    return LookupLatency<0>(VFUs::ShiftLatencies, MI);
-
-  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
-
-  // Ignore the trivial logic operation latency at the moment.
-  case VTM::VOpLUT:
-  case VTM::VOpAnd:
-  case VTM::VOpOr:
-  case VTM::VOpXor:
-  case VTM::VOpNot:         return VFUs::LutLatency;
-
-  case VTM::VOpROr:
-  case VTM::VOpRAnd:
-  case VTM::VOpRXor:{
-    unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
-    return VFUs::getReductionLatency(size);
-  }
-  case VTM::VOpBRam:        return VFUs::BRamLatency;
-
-  case VTM::VOpCmdSeq:
-  case VTM::VOpInternalCall:  return 1.0f;
-  }
-
-  return 0.0f;
 }
 
 const float DetialLatencyInfo::DeltaLatency = FLT_EPSILON * 8.0f;
