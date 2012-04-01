@@ -51,8 +51,8 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-STATISTIC(TotalRegisterBits,
-          "Number of total register bits in synthesised modules");
+STATISTIC(SlotsByPassed, "Number of slots are bypassed");
+
 namespace {
 class VerilogASTBuilder : public MachineFunctionPass {
   const Module *M;
@@ -281,7 +281,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
   typedef SmallVectorImpl<VASTValue*> VASTValueVecTy;
   // Emit the operations in the first micro state in the FSM state when we are
   // jumping to it.
-  void emitFirstCtrlBundle(MachineBasicBlock *DstBB, VASTSlot *Slot,
+  // Return true if the first slot of DstBB is bypassed.
+  bool emitFirstCtrlBundle(MachineBasicBlock *DstBB, VASTSlot *Slot,
                            VASTValueVecTy &Cnds);
 
   void emitBr(MachineInstr *MI, VASTSlot *CurSlot, VASTValueVecTy &Cnds,
@@ -484,16 +485,18 @@ void VerilogASTBuilder::emitIdleState() {
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
   IdleSlot->buildReadyLogic(*VM);
   VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
-  unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
-  VM->addSlotSucc(IdleSlot, VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
-                  StartPort);
   VM->addSlotSucc(IdleSlot, IdleSlot, VM->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.
   VM->addSlotDisable(IdleSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
                      VM->getBoolImmediate(true));
   SmallVector<VASTValue*, 1> Cnds(1, StartPort);
-  emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds);
+  if (!emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds)) {
+    unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
+    VM->addSlotSucc(IdleSlot,
+                    VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
+                    StartPort);
+  }
 }
 
 void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
@@ -819,12 +822,8 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
 
   const ucOperand &Op = cast<ucOperand>(DI.getOperand());
   unsigned Bitwidth = Op.getBitWidth();
-  if (!isReg)
-    addWire(RegNum, Bitwidth);
-  else {
-    addRegister(RegNum, Bitwidth);
-    TotalRegisterBits += Bitwidth;
-  }
+  if (!isReg) addWire(RegNum, Bitwidth);
+  else        addRegister(RegNum, Bitwidth);
 
   return true;
 }
@@ -884,13 +883,14 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
   }
 }
 
-void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
+bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
                                             VASTSlot *Slot,
                                             VASTValueVecTy &Cnds) {
   // TODO: Emit PHINodes if necessary.
   MachineInstr *FirstBundle = DstBB->instr_begin();
   assert(FInfo->getStartSlotFor(DstBB) == getBundleSlot(FirstBundle)
          && FirstBundle->getOpcode() == VTM::CtrlStart && "Broken Slot!");
+  bool Bypassed = false;
 
   typedef MachineBasicBlock::instr_iterator instr_it;
   instr_it I = FirstBundle;
@@ -905,6 +905,11 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     case VTM::COPY:             emitOpCopy(MI, Slot, Cnds);   break;
     case VTM::VOpDefPhi:                                      break;
     case VTM::CtrlEnd:          /*Not need to handle*/        break;
+    case VTM::VOpToState_nt:
+      emitBr(MI, Slot, Cnds, DstBB, false);
+      ++SlotsByPassed;
+      Bypassed = true;
+      break;
     case VTM::VOpCase:          emitOpCase(MI, Slot, Cnds);   break;
     case VTM::VOpSel:           emitOpSel(MI, Slot, Cnds);    break;
     case VTM::VOpRetVal:        emitOpRetVal(MI, Slot, Cnds); break;
@@ -912,6 +917,8 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     default:  llvm_unreachable("Unexpected opcode!");              break;
     }
   }
+
+  return Bypassed;
 }
 
 void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
@@ -921,12 +928,8 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
   Cnds.push_back(createCnd(CndOp));
 
   MachineBasicBlock *TargetBB = MI->getOperand(1).getMBB();
-  unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
-  VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
   assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
     "Cannot handle predicated BrCnd");
-  VASTValue *Cnd = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
-  VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
 
   // Emit control operation for next state.
   if (TargetBB == CurBB && Pipelined)
@@ -935,7 +938,13 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
     VM->getBoolImmediate(true));
 
   // Emit the first micro state of the target state.
-  emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
+  if (!emitFirstCtrlBundle(TargetBB, CurSlot, Cnds)) {
+    // Build the edge if the edge is not bypassed.
+    unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
+    VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
+    VASTValue *Cnd = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+    VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
+  }
 }
 
 void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
