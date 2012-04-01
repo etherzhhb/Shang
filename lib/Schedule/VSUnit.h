@@ -350,7 +350,8 @@ public:
     for (unsigned i = 1, e = num_instrs(); i < e; ++i)
       latency = std::min(latency, int(getLatencyAt(i)));
 
-    return VInstrInfo::getStepsFromEntry(getRepresentativeInst()) - latency;
+    return DetialLatencyInfo::getStepsFromEntry(getRepresentativeInst())
+           - latency;
   }
 
   typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;

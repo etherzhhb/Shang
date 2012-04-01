@@ -522,7 +522,6 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
 
 void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurState){
   assert(PHISU->isPHI() && "Expect PHI in addIncomingDepForPHI!");
-  MachineInstr *PN = PHISU->getRepresentativeInst();
 
   // Find the incoming copy.
   MachineInstr *IncomingCopy = PHISU->getInstrAt(1);
@@ -578,7 +577,8 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
       float DetailLatency = CurState.getChainingLatency(DepSrc, MI);
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
-      DetailLatency -= std::min(0.0f, IntraSULatency - VInstrInfo::DeltaLatency);
+      DetailLatency -= std::min(0.0f,
+                                IntraSULatency - DetialLatencyInfo::DeltaLatency);
       // All control operations are read at emit, wait until the datapath
       // operations finish if destination is control operation.
       int Latency = isCtrl ? ceil(DetailLatency) : floor(DetailLatency);
@@ -721,7 +721,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
 
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                           VInstrInfo::getStepsFromEntry(MI));
+                           DetialLatencyInfo::getStepsFromEntry(MI));
 }
 
 void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &CurState) {
@@ -783,7 +783,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     // Merge the the PHI into entry root if the BB is not pipelined.
     if (!CurState.enablePipeLine()) {
       CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                        VInstrInfo::getStepsFromEntry(MI));
+                        DetialLatencyInfo::getStepsFromEntry(MI));
       return;
     }
     break;

@@ -806,60 +806,6 @@ static float LookupLatency(const float *Table, const MachineInstr *MI){
   return latency;
 }
 
-// Get the latency of a machineinstr in cycle ratio.
-float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
-  unsigned OpC = MI->getOpcode();
-
-  switch (OpC) {
-    // TODO: Bitrepeat.
-  default:                  break;
-
-  case VTM::VOpICmp_c:
-  case VTM::VOpICmp:
-    return LookupLatency<3>(VFUs::CmpLatencies, MI);
-  // Retrieve the FU bit width from its operand bit width
-  case VTM::VOpAdd_c:
-  case VTM::VOpAdd:
-    return LookupLatency<1>(VFUs::AdderLatencies, MI);
-
-  case VTM::VOpMultLoHi_c:
-  case VTM::VOpMult_c:
-  case VTM::VOpMultLoHi:
-  case VTM::VOpMult:
-    return LookupLatency<0>(VFUs::MultLatencies, MI);
-
-  case VTM::VOpSRA_c:
-  case VTM::VOpSRL_c:
-  case VTM::VOpSHL_c:
-  case VTM::VOpSRA:
-  case VTM::VOpSRL:
-  case VTM::VOpSHL:
-    return LookupLatency<0>(VFUs::ShiftLatencies, MI);
-
-  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
-
-  // Ignore the trivial logic operation latency at the moment.
-  case VTM::VOpLUT:
-  case VTM::VOpAnd:
-  case VTM::VOpOr:
-  case VTM::VOpXor:
-  case VTM::VOpNot:         return VFUs::LutLatency;
-
-  case VTM::VOpROr:
-  case VTM::VOpRAnd:
-  case VTM::VOpRXor:{
-    unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
-    return VFUs::getReductionLatency(size);
-  }
-  case VTM::VOpBRam:        return VFUs::BRamLatency;
-
-  case VTM::VOpCmdSeq:
-  case VTM::VOpInternalCall:  return 1.0f;
-  }
-
-  return 0.0f;
-}
-
 float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   unsigned OpCode = MI->getOpcode();
 
@@ -880,77 +826,6 @@ float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   }
 
   return 0.0f;
-}
-
-const float VInstrInfo::DeltaLatency = FLT_EPSILON * 8.0f;
-
-static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
-                                   const MachineInstr *DstInstr) {
-  assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
-  assert(SrcInstr != DstInstr && "Computing latency of self loop?");
-  const MCInstrDesc &DstTID = DstInstr->getDesc();
-  unsigned DstOpC = DstTID.getOpcode();
-  const MCInstrDesc &SrcTID = SrcInstr->getDesc();
-  unsigned SrcOpC = SrcTID.getOpcode();
-
-  bool SrcWriteUntilFInish = VInstrInfo::isWriteUntilFinish(SrcOpC);
-  bool DstReadAtEmit = VInstrInfo::isReadAtEmit(DstOpC);
-
-  float Delta = VInstrInfo::DeltaLatency;
-
-  if (DstReadAtEmit && SrcWriteUntilFInish) {
-    if (SrcOpC == VTM::VOpMvPhi) {
-      assert((DstOpC == TargetOpcode::PHI || DstOpC == VTM::VOpMvPhi 
-              || VInstrInfo::getDesc(DstOpC).isTerminator())
-             && "VOpMvPhi should only used by PHIs or terminators!!");
-      // The latency from VOpMvPhi to PHI is exactly 0, because the VOpMvPhi is
-      // simply identical to the PHI at next iteration.
-      return 0.0f;
-    } else
-      // If the edge is reg->reg, the result is ready after the clock edge, add
-      // a delta to make sure DstInstr not schedule to the moment right at the
-      // SrcInstr finish
-      return ceil(Latency) + Delta;
-  }
-
-  // If the value is written to register, it has a delta latency
-  if (SrcWriteUntilFInish) return Latency + Delta;
-
-  // Chain the operations if dst not read value at the edge of the clock.
-  return std::max(0.0f, Latency - Delta);
-}
-
-float VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
-                                     const MachineInstr *DstInstr) {
-  // Compute the latency correspond to detail slot.
-  float latency = getDetialLatency(SrcInstr);
-  return adjustChainingLatency(latency, SrcInstr, DstInstr);
-}
-
-unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
-  assert(DstInstr && "DstInstr should not be null!");
-  unsigned DstOpC = DstInstr->getOpcode();
-  const MCInstrDesc &DstTID = getDesc(DstOpC);
-
-  //// Set latency of Control operation and entry root to 1, so we can prevent
-  //// scheduling control operation to the first slot.
-  //// Do not worry about PHI Nodes, their will be eliminated at the register
-  //// allocation pass.
-  if (DstInstr->getOpcode() == VTM::PHI) return 0;
-
-  // Schedule datapath operation right after the first control slot.
-  if (isDatapath(DstOpC)) return 0;
-
-  // Now DstInstr is control.
-  if (hasTrivialFU(DstOpC) && !DstTID.isTerminator()
-     // Dirty Hack: Also do not schedule return value to the entry slot of
-     // the state.
-     && DstTID.getOpcode() != VTM::VOpRetVal)
-    return 0;
-
-  // Do not schedule function unit operation to the first state at the moment
-  // there may be potential resource conflict.
-  return 1;
 }
 
 FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
@@ -1139,7 +1014,7 @@ struct BitSliceLatencyFN {
 
 void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
-  float TotalLatency = VInstrInfo::getDetialLatency(MI);
+  float TotalLatency = getDetialLatency(MI);
   unsigned Opcode = MI->getOpcode();
 
   // Accumulate the latency to compute the result.
@@ -1198,6 +1073,42 @@ void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
                                                            SrcLSBLatency)));
 }
 
+static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
+                                   const MachineInstr *DstInstr) {
+  assert(DstInstr && SrcInstr && "Dst and Src Instr should not be null!");
+  assert(SrcInstr != DstInstr && "Computing latency of self loop?");
+  const MCInstrDesc &DstTID = DstInstr->getDesc();
+  unsigned DstOpC = DstTID.getOpcode();
+  const MCInstrDesc &SrcTID = SrcInstr->getDesc();
+  unsigned SrcOpC = SrcTID.getOpcode();
+
+  bool SrcWriteUntilFInish = VInstrInfo::isWriteUntilFinish(SrcOpC);
+  bool DstReadAtEmit = VInstrInfo::isReadAtEmit(DstOpC);
+
+  float Delta = DetialLatencyInfo::DeltaLatency;
+
+  if (DstReadAtEmit && SrcWriteUntilFInish) {
+    if (SrcOpC == VTM::VOpMvPhi) {
+      assert((DstOpC == TargetOpcode::PHI || DstOpC == VTM::VOpMvPhi
+              || VInstrInfo::getDesc(DstOpC).isTerminator())
+             && "VOpMvPhi should only used by PHIs or terminators!!");
+      // The latency from VOpMvPhi to PHI is exactly 0, because the VOpMvPhi is
+      // simply identical to the PHI at next iteration.
+      return 0.0f;
+    } else
+      // If the edge is reg->reg, the result is ready after the clock edge, add
+      // a delta to make sure DstInstr not schedule to the moment right at the
+      // SrcInstr finish
+      return ceil(Latency) + Delta;
+  }
+
+  // If the value is written to register, it has a delta latency
+  if (SrcWriteUntilFInish) return Latency + Delta;
+
+  // Chain the operations if dst not read value at the edge of the clock.
+  return std::max(0.0f, Latency - Delta);
+}
+
 template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,// Not needed
@@ -1225,8 +1136,8 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
       }
     }
   } else {// IsCtrlDep
-    SrcMSBLatency = std::max(0.0f, SrcMSBLatency - VInstrInfo::DeltaLatency);
-    SrcLSBLatency = std::max(0.0f, SrcLSBLatency - VInstrInfo::DeltaLatency);
+    SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
+    SrcLSBLatency = std::max(0.0f, SrcLSBLatency - DetialLatencyInfo::DeltaLatency);
   }
 
   if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
@@ -1285,8 +1196,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
   if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
-    float latency = std::max(VInstrInfo::getDetialLatency(MI),
-                             VInstrInfo::DeltaLatency);
+    float latency = std::max(getDetialLatency(MI), DetialLatencyInfo::DeltaLatency);
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      std::make_pair(latency, latency)));
   }
@@ -1302,6 +1212,89 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
   for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
     buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
 }
+
+// Get the latency of a machineinstr in cycle ratio.
+float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
+  unsigned OpC = MI->getOpcode();
+
+  switch (OpC) {
+    // TODO: Bitrepeat.
+  default:                  break;
+
+  case VTM::VOpICmp_c:
+  case VTM::VOpICmp:
+    return LookupLatency<3>(VFUs::CmpLatencies, MI);
+  // Retrieve the FU bit width from its operand bit width
+  case VTM::VOpAdd_c:
+  case VTM::VOpAdd:
+    return LookupLatency<1>(VFUs::AdderLatencies, MI);
+
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
+  case VTM::VOpMultLoHi:
+  case VTM::VOpMult:
+    return LookupLatency<0>(VFUs::MultLatencies, MI);
+
+  case VTM::VOpSRA_c:
+  case VTM::VOpSRL_c:
+  case VTM::VOpSHL_c:
+  case VTM::VOpSRA:
+  case VTM::VOpSRL:
+  case VTM::VOpSHL:
+    return LookupLatency<0>(VFUs::ShiftLatencies, MI);
+
+  case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
+
+  // Ignore the trivial logic operation latency at the moment.
+  case VTM::VOpLUT:
+  case VTM::VOpAnd:
+  case VTM::VOpOr:
+  case VTM::VOpXor:
+  case VTM::VOpNot:         return VFUs::LutLatency;
+
+  case VTM::VOpROr:
+  case VTM::VOpRAnd:
+  case VTM::VOpRXor:{
+    unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
+    return VFUs::getReductionLatency(size);
+  }
+  case VTM::VOpBRam:        return VFUs::BRamLatency;
+
+  case VTM::VOpCmdSeq:
+  case VTM::VOpInternalCall:  return 1.0f;
+  }
+
+  return 0.0f;
+}
+
+const float DetialLatencyInfo::DeltaLatency = FLT_EPSILON * 8.0f;
+
+unsigned DetialLatencyInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
+  assert(DstInstr && "DstInstr should not be null!");
+  const MCInstrDesc &DstTID = DstInstr->getDesc();
+  unsigned DstOpC = DstTID.getOpcode();
+
+  //// Set latency of Control operation and entry root to 1, so we can prevent
+  //// scheduling control operation to the first slot.
+  //// Do not worry about PHI Nodes, their will be eliminated at the register
+  //// allocation pass.
+  if (DstInstr->getOpcode() == VTM::PHI) return 0;
+
+  // Schedule datapath operation right after the first control slot.
+  if (VInstrInfo::isDatapath(DstOpC)) return 0;
+
+  // Now DstInstr is control.
+  if (VInstrInfo::hasTrivialFU(DstOpC) && !DstTID.isTerminator()
+     // Dirty Hack: Also do not schedule return value to the entry slot of
+     // the state.
+     && DstTID.getOpcode() != VTM::VOpRetVal)
+    return 0;
+
+  // Do not schedule function unit operation to the first state at the moment
+  // there may be potential resource conflict.
+  return 1;
+}
+
 
 float DetialLatencyInfo::getChainingLatency(const MachineInstr *SrcInstr,
                                             const MachineInstr *DstInstr) const{
@@ -1333,7 +1326,7 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
       // delay of DepMI.
       L = at->second + std::ceil(I->second.first);
       if (DepMI == DetialLatencyInfo::EntryMarker) DepMI = 0;
-      L = std::max(L, VInstrInfo::getCtrlStepBetween<true>(DepMI, MI));
+      L = std::max(L, getCtrlStepBetween<true>(DepMI, MI));
     }
 
     if (hasPrebindFU) L = updateFULatency(FU.getData(), L, MI);
@@ -1354,7 +1347,7 @@ unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
   const MachineInstr *&LastMI = LI.first;
   FuncUnitId ID(FUId);
 
-  unsigned EdgeLatency = VInstrInfo::getCtrlStepBetween<false>(LastMI, MI);
+  unsigned EdgeLatency = getCtrlStepBetween<false>(LastMI, MI);
 
   // Update the FU latency information.
   FULatency = std::max(FULatency + EdgeLatency, Latency);

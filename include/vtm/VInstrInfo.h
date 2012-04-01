@@ -156,29 +156,6 @@ public:
   static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
 
-  template<bool IsValDep>
-  static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
-                                     const MachineInstr *DstInstr) {
-    if (!SrcInstr) return getStepsFromEntry(DstInstr);
-
-    if (IsValDep) return ceil(getChainingLatency(SrcInstr, DstInstr));
-
-    return ceil(getDetialLatency(SrcInstr));
-  }
-
-  const static float DeltaLatency;
-  // Return the latency of a MachineInstr in cycle ratio.
-  static float getDetialLatency(const MachineInstr *MI);
-  static unsigned getStepsToFinish(const MachineInstr *MI) {
-    return unsigned(ceil(getDetialLatency(MI)));
-  }
-  // Return the edge latency between SrcInstr and DstInstr considering chaining
-  // effect.
-  static float getChainingLatency(const MachineInstr *SrcInstr,
-                                   const MachineInstr *DstInstr);
-  // Return the latency from the entry of the MachineBasicBlock to DstInstr.
-  static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
-
   static bool isCmdSeq(unsigned Cmd);
   static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
   static bool isCmdSeqBegin(const MachineInstr *MI);
@@ -274,8 +251,11 @@ public:
     return std::max(v.second.first, v.second.second);
   }
 
+  const static float DeltaLatency;
+
   MachineRegisterInfo &MRI;
 private:
+  static float getDetialLatency(const MachineInstr *MI);
   // Cache the computational delay for every instruction.
   DepLatInfoTy CachedLatencies;
   void computeLatencyFor(const MachineInstr *MI);
@@ -357,15 +337,18 @@ public:
     return ceil(getMaxLatency(MI));
   }
 
+
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
   float getChainingLatency(const MachineInstr *SrcInstr,
                            const MachineInstr *DstInstr) const;
 
+  static unsigned getStepsFromEntry(const MachineInstr *DstInstr);
+
   template<bool IsValDep>
   unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
                               const MachineInstr *DstInstr) {
-    if (!SrcInstr) return VInstrInfo::getStepsFromEntry(DstInstr);
+    if (!SrcInstr) return getStepsFromEntry(DstInstr);
 
     if (IsValDep) return ceil(getChainingLatency(SrcInstr, DstInstr));
 
