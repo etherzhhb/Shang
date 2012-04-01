@@ -1012,6 +1012,16 @@ struct BitSliceLatencyFN {
 };
 }
 
+template<unsigned IdxStart, unsigned IdxEnd>
+static unsigned countNumRegOperands(const MachineInstr *MI) {
+  unsigned NumRegs = 0;
+  for (unsigned i = IdxStart; i < IdxEnd; ++i)
+    if (MI->getOperand(i).isReg() && MI->getOperand(i).getReg())
+      ++NumRegs;
+
+  return NumRegs;
+}
+
 void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
   float TotalLatency = getDetialLatency(MI);
@@ -1021,19 +1031,34 @@ void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   switch (Opcode) {
   default:
     tie(SrcMSBLatency, SrcLSBLatency)
-      = getWorstLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0);
+      = getWorstLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
     break;
     // Result bits are computed from MSB to LSB.
   case VTM::VOpAdd_c:
-  case VTM::VOpAdd:
+    // Added by constant can be reduced to LUT.
+    if (countNumRegOperands<1,4>(MI) < 2) {
+      tie(SrcMSBLatency, SrcLSBLatency) =
+        getParallelLatency(SrcMSBLatency, SrcLSBLatency, VFUs::LutLatency, 0.0f);
+      break;
+    }
+    goto CASE_ADDC;
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
+    // Multiplied by constant can be reduced to LUT.
+    if (countNumRegOperands<1,3>(MI) < 2) {
+      tie(SrcMSBLatency, SrcLSBLatency) =
+        getParallelLatency(SrcMSBLatency, SrcLSBLatency, VFUs::LutLatency, 0.0f);
+      break;
+    }
+    // FALL THROUGH
+  case VTM::VOpAdd:
   case VTM::VOpMult:
   case VTM::VOpMultLoHi:
   //case VTM::VOpSRA_c:
   //case VTM::VOpSRL_c:
   //case VTM::VOpSHL_c:
   {
+CASE_ADDC:
     unsigned ResultSize = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
     float PerBitLatency = TotalLatency / ResultSize;
     // Result propagate from LSB to MSB.
@@ -1050,13 +1075,20 @@ void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   case VTM::VOpNot:
   case VTM::VOpBitCat:
     tie(SrcMSBLatency, SrcLSBLatency)
-      = getParallelLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0);
+      = getParallelLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
     break;
   case VTM::VOpBitSlice:
     tie(SrcMSBLatency, SrcLSBLatency)
-      = BitSliceLatencyFN(MI)(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0);
+      = BitSliceLatencyFN(MI)(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
     break;
   case VTM::VOpICmp_c:
+    // Multiplied by constant can be reduced to LUT.
+    if (countNumRegOperands<1,3>(MI) < 2) {
+      tie(SrcMSBLatency, SrcLSBLatency) =
+        getParallelLatency(SrcMSBLatency, SrcLSBLatency, VFUs::LutLatency, 0.0f);
+      break;
+    }
+    // FALL THROUGH
   case VTM::VOpICmp:{
     // Result bits are computed from MSB to LSB.
     unsigned ResultSize = cast<ucOperand>(MI->getOperand(3)).getBitWidth();
