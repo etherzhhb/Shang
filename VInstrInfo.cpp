@@ -755,39 +755,9 @@ VFUs::FUTypes VInstrInfo::getFUType(unsigned OpC) {
     ((getDesc(OpC).TSFlags >> ResTypeShiftAmount) & ResTypeMask);
 }
 
-//unsigned VInstrInfo::getTrivialLatency(unsigned OpC) {
-//  assert(getFUType(OpC) == VFUs::Trivial && "Bad resource Type!");
-//  return ((get(OpC].TSFlags >> TrivialLatencyShiftAmount)
-//           & TrivialLatencyMask);
-//}
-
 bool VInstrInfo::isReadAtEmit(unsigned OpC) {
   return (getDesc(OpC).TSFlags & (ReadAtEmitMask << ReadAtEmitShiftAmount))
          || isCopyLike(OpC);
-}
-
-bool VInstrInfo::isCmdSeq(unsigned Cmd) {
-  return Cmd >= VFUMemBus::CmdFirstNoLoadStore;
-}
-
-bool VInstrInfo::isInSameCmdSeq(const MachineInstr *PrevMI,
-                                const MachineInstr *MI) {
-  assert(MI->getOpcode() == VTM::VOpCmdSeq
-         && PrevMI->getOpcode() == VTM::VOpCmdSeq
-         && "Bad opcode!");
-  assert(PrevMI->getOperand(3).getImm() == MI->getOperand(3).getImm()
-         && "Bad command sequence!");
-  return !isCmdSeqBegin(MI);
-}
-
-bool VInstrInfo::isCmdSeqBegin(const MachineInstr *MI) {
-  return MI->getOpcode() == VTM::VOpCmdSeq
-         && MI->getOperand(4).getImm() == VFUMemBus::SeqBegin;
-}
-
-bool VInstrInfo::isCmdSeqEnd(const MachineInstr *MI) {
-  return MI->getOpcode() == VTM::VOpCmdSeq
-         && MI->getOperand(4).getImm() == VFUMemBus::SeqEnd;
 }
 
 static unsigned ComputeOperandSizeInByteLog2Ceil(unsigned SizeInBits) {
@@ -835,7 +805,6 @@ FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
     return FuncUnitId(uint16_t(MI->getOperand(1).getImm()));
   case VTM::VOpReadFU:
     return FuncUnitId(uint16_t(MI->getOperand(2).getImm()));
-  case VTM::VOpCmdSeq:
   case VTM::VOpMemTrans:
     return FuncUnitId(VFUs::MemoryBus, 0);
   case VTM::VOpBRam: {
@@ -860,8 +829,6 @@ bool VInstrInfo::mayLoad(const MachineInstr *MI) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
   case VTM::VOpMemTrans: return !MI->getOperand(3).getImm();
-    // Dirty Hack: Command sequence reads memory.
-  case VTM::VOpCmdSeq:   return true;
   }
 }
 
@@ -870,8 +837,6 @@ bool VInstrInfo::mayStore(const MachineInstr *MI) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
   case VTM::VOpMemTrans: return MI->getOperand(3).getImm();
-    // Dirty Hack: Command sequence write memory.
-  case VTM::VOpCmdSeq:   return true;
   }
 }
 
@@ -1089,7 +1054,6 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   }
   case VTM::VOpBRam:        return VFUs::BRamLatency;
 
-  case VTM::VOpCmdSeq:
   case VTM::VOpInternalCall:  return 1.0f;
   }
 

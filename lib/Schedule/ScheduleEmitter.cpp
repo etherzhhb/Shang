@@ -583,12 +583,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     else                              Inst.setDesc(TII.get(VTM::VOpRet_nt));
   }
 
-  // Opcode for the later copy op.
-  unsigned CpyOpc = VTM::VOpReadFU;
-  // Do not need the ready signal except command sequence end.
-  if (Inst.getOpcode() == VTM::VOpCmdSeq && !VInstrInfo::isCmdSeqEnd(&Inst))
-    CpyOpc = VTM::ImpUse;
-
   // Handle the predicate operand.
   ucOperand Pred = *VInstrInfo::getPredOperand(&Inst);
   assert(Pred.isReg() && "Cannot handle predicate operand!");
@@ -688,19 +682,17 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     if (WD->shouldBeCopied()) {
       unsigned Slot = CopySlot.getSlot();
       // Export the register.
-      MachineInstrBuilder Builder = BuildMI(MBB, IP, DebugLoc(), TII.get(CpyOpc));
+      MachineInstrBuilder Builder = BuildMI(MBB, IP, DebugLoc(),
+                                            TII.get(VTM::VOpReadFU));
       MachineOperand Src = WD->createOperand();
       // Do not define MO if we have a implicit use.
-      if (CpyOpc != VTM::ImpUse) {
-        MO.setIsDef();
-        Builder.addOperand(MO);
-      } else
-        Src.setImplicit(true);
+      MO.setIsDef();
+      Builder.addOperand(MO);
 
       Builder.addOperand(Src);
 
       // Also remember the function unit id.
-      if (CpyOpc != VTM::ImpUse) Builder.addImm(FUId.getData());
+      Builder.addImm(FUId.getData());
 
       // Get the predicate operand at current slot.
       Builder.addOperand(getRegUseOperand(WD->Pred, CopySlot));

@@ -794,25 +794,6 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   case VTM::VOpMoveArg:
     CurState.mapMI2SU(MI, CurState.getEntryRoot(), 0);
     return;
-  case VTM::VOpCmdSeq:
-    isCmdSeq = true;
-    // Merge the command sequence.
-    if (!VInstrInfo::isCmdSeqBegin(MI)) {
-      MachineInstr *PrevMI = LastCmdSeq->instr_back();
-      if (VInstrInfo::isInSameCmdSeq(PrevMI, MI)) {
-        VSUnit *PrevSU = CurState.lookupSUnit(PrevMI);
-        VSUnit *NewSU =
-          CurState.createVSUnit(MI, VInstrInfo::getPreboundFUId(MI).getFUNum());
-        // Increase the latency
-        NewSU->setLatency(PrevSU->getLatency() + 1);
-        // There maybe some SU between PrevSU and NewSU, if we simply merge
-        // current MI into PrevSU, we may read the result from a SU with bigger
-        // index than PrevSU which is not acceptable.
-        CurState.mergeSU(PrevSU, NewSU, /*DirtyHack*/1);
-        return;
-      }
-    }
-    break;
     // The VOpDstMux should be merged to its user.
     case VTM::VOpDstMux: return;
     case VTM::VOpMvPhi:

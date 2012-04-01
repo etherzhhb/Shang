@@ -869,7 +869,6 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpInternalCall:  emitOpInternalCall(MI, CurSlot, Cnds);    break;
     case VTM::VOpRetVal:        emitOpRetVal(MI, CurSlot, Cnds);          break;
     case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);             break;
-    case VTM::VOpCmdSeq:
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);        break;
     case VTM::VOpBRam:          emitOpBRam(MI, CurSlot, Cnds);            break;
     case VTM::IMPLICIT_DEF:     emitImplicitDef(MI);                      break;

@@ -306,11 +306,6 @@ let mayLoad      = 1,
                         i8imm:$bramnum),
                        "$dst = bram $src, $addr, $isStore, $byteenable, $bramnum",
                        [], FUBRam, 1 /*writeUntilFinish*/>;
-let hasCtrlDep = 1 in
-  def VOpCmdSeq : FUInst<(outs DR:$dst),
-                         (ins ptr_rc:$addr, DR:$src, DR:$isStore, DR:$byteenable),
-                          "$dst = cmdseq $src, $addr, $isStore, $byteenable",
-                          [], FUMemBus, 0 /*writeUntilFinish*/>;
 }
 
 def ImpUse : InstVTM<(outs), (ins variable_ops), "imp-use", [], FUTrivial>;

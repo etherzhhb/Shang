@@ -159,7 +159,6 @@ const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned OpCode){
   case VTM::VOpSHL:         return VTM::RSHLRegisterClass;
   case VTM::VOpMult:        return VTM::RMULRegisterClass;
   case VTM::VOpMultLoHi:    return VTM::RMULLHRegisterClass;
-  case VTM::VOpCmdSeq:
   case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
   case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
   case VTM::VOpBRam:        return VTM::RBRMRegisterClass;

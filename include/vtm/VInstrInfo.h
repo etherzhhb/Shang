@@ -155,12 +155,6 @@ public:
 
   static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
-
-  static bool isCmdSeq(unsigned Cmd);
-  static bool isInSameCmdSeq(const MachineInstr *PrevMI, const MachineInstr *MI);
-  static bool isCmdSeqBegin(const MachineInstr *MI);
-  static bool isCmdSeqEnd(const MachineInstr *MI);
-
 private:
   enum TSFlagsBitFields {
     ResTypeMask = 0xf,
