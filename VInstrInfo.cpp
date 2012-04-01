@@ -1031,15 +1031,24 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   default:                  break;
 
   case VTM::VOpICmp_c:
+    // Comparing with constant can be reduced to LUT.
+    if (countNumRegOperands<1,3>(MI) < 2) return VFUs::LutLatency;
+    // FALL THROUGH
   case VTM::VOpICmp:
     return LookupLatency<3>(VFUs::CmpLatencies, MI);
   // Retrieve the FU bit width from its operand bit width
   case VTM::VOpAdd_c:
+    // Added by constant can be reduced to LUT.
+    if (countNumRegOperands<1,4>(MI) < 2) return VFUs::LutLatency;
+    // FALL THROUGH
   case VTM::VOpAdd:
     return LookupLatency<1>(VFUs::AdderLatencies, MI);
 
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
+    // Multiplied by constant can be reduced to LUT.
+    if (countNumRegOperands<1,3>(MI) < 2) return VFUs::LutLatency;
+    // FALL THROUGH
   case VTM::VOpMultLoHi:
   case VTM::VOpMult:
     return LookupLatency<0>(VFUs::MultLatencies, MI);
@@ -1047,6 +1056,9 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpSRA_c:
   case VTM::VOpSRL_c:
   case VTM::VOpSHL_c:
+    // Shift by constant can be reduced to LUT.
+    if (countNumRegOperands<2,3>(MI) < 1) return VFUs::LutLatency;
+    // FALL THROUGH
   case VTM::VOpSRA:
   case VTM::VOpSRL:
   case VTM::VOpSHL:
@@ -1089,22 +1101,8 @@ void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
     break;
     // Result bits are computed from MSB to LSB.
   case VTM::VOpAdd_c:
-    // Added by constant can be reduced to LUT.
-    if (countNumRegOperands<1,4>(MI) < 2) {
-      tie(SrcMSBLatency, SrcLSBLatency) =
-        getParallelLatency(SrcMSBLatency, SrcLSBLatency, VFUs::LutLatency, 0.0f);
-      break;
-    }
-    goto CASE_ADDC;
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
-    // Multiplied by constant can be reduced to LUT.
-    if (countNumRegOperands<1,3>(MI) < 2) {
-      tie(SrcMSBLatency, SrcLSBLatency) =
-        getParallelLatency(SrcMSBLatency, SrcLSBLatency, VFUs::LutLatency, 0.0f);
-      break;
-    }
-    // FALL THROUGH
   case VTM::VOpAdd:
   case VTM::VOpMult:
   case VTM::VOpMultLoHi:
@@ -1112,7 +1110,6 @@ void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   //case VTM::VOpSRL_c:
   //case VTM::VOpSHL_c:
   {
-CASE_ADDC:
     unsigned ResultSize = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
     float PerBitLatency = TotalLatency / ResultSize;
     // Result propagate from LSB to MSB.
@@ -1136,13 +1133,6 @@ CASE_ADDC:
       = BitSliceLatencyFN(MI)(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
     break;
   case VTM::VOpICmp_c:
-    // Multiplied by constant can be reduced to LUT.
-    if (countNumRegOperands<1,3>(MI) < 2) {
-      tie(SrcMSBLatency, SrcLSBLatency) =
-        getParallelLatency(SrcMSBLatency, SrcLSBLatency, VFUs::LutLatency, 0.0f);
-      break;
-    }
-    // FALL THROUGH
   case VTM::VOpICmp:{
     // Result bits are computed from MSB to LSB.
     unsigned ResultSize = cast<ucOperand>(MI->getOperand(3)).getBitWidth();
