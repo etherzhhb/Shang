@@ -1180,15 +1180,55 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   } else // IsCtrlDep
     SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
 
-  if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
-    assert(OperandWidth && "Unexpected zero size operand!");
-    float PerBitLatency = SrcMSBLatency / OperandWidth;
-    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency, getWorstLatency);
-    return true;
-  } //else
+  // Try to compute the per-bit latency.
+  float PerBitLatency = 0.0f;
+  if (OperandWidth)
+    PerBitLatency = std::max(SrcMSBLatency / OperandWidth, VFUs::LutLatency);
 
-  updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
+  unsigned Opcode = SrcMI->getOpcode();
+  switch (Opcode) {
+  default:
+    if (VInstrInfo::isDatapath(Opcode))
+      accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
+                                PerBitLatency, getWorstLatency);
+    else
+      updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
+    break;
+    // Result bits are computed from LSB to MSB.
+  case VTM::VOpAdd_c:
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
+                              PerBitLatency, getLSB2MSBLatency);
+    break;
+  case VTM::VOpAdd:
+  case VTM::VOpMult:
+  case VTM::VOpMultLoHi:
+    updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, PerBitLatency);
+    break;
+    // Each bits are compute independently.
+  case VTM::VOpLUT:
+  case VTM::VOpAnd:
+  case VTM::VOpOr:
+  case VTM::VOpXor:
+  case VTM::VOpNot:
+  case VTM::VOpBitCat:
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
+                              PerBitLatency, getParallelLatency);
+    break;
+  case VTM::VOpBitSlice:
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
+                              PerBitLatency, BitSliceLatencyFN(SrcMI));
+    break;
+  case VTM::VOpICmp_c:
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
+                              PerBitLatency, getMSB2LSBLatency);
+    break;
+  case VTM::VOpICmp:
+    // Result bits are computed from MSB to LSB.
+    updateLatency(CurLatInfo, SrcMI, PerBitLatency, SrcMSBLatency);
+    break;
+  }
 
   return true;
 }
