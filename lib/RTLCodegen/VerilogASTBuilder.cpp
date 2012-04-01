@@ -903,6 +903,9 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
       Bypassed = true;
       break;
     case VTM::VOpRetVal:        emitOpRetVal(MI, Slot, Cnds); break;
+    case VTM::VOpInternalCall:  emitOpInternalCall(MI, Slot, Cnds);    break;
+    case VTM::VOpRet_nt:        emitOpRet(MI, Slot, Cnds);             break;
+    case VTM::VOpMemTrans:      emitOpMemTrans(MI, Slot, Cnds);        break;
     default:  llvm_unreachable("Unexpected opcode!");         break;
     }
   }

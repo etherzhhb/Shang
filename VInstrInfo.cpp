@@ -983,6 +983,16 @@ static unsigned countNumRegOperands(const MachineInstr *MI) {
   return NumRegs;
 }
 
+static unsigned countNumRegOperands(const MachineInstr *MI) {
+  unsigned NumRegs = 0;
+  for (unsigned i = 0, e = MI->getNumOperands(); i < e; ++i)
+    if (MI->getOperand(i).isReg() && MI->getOperand(i).getReg() &&
+        !MI->getOperand(i).isDef())
+      ++NumRegs;
+
+  return NumRegs;
+}
+
 // Get the latency of a machineinstr in cycle ratio.
 float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   unsigned OpC = MI->getOpcode();
@@ -1263,16 +1273,11 @@ unsigned DetialLatencyInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   // Schedule datapath operation right after the first control slot.
   if (VInstrInfo::isDatapath(DstOpC)) return 0;
 
-  // Now DstInstr is control.
-  if (VInstrInfo::hasTrivialFU(DstOpC) && !DstTID.isTerminator()
-     // Dirty Hack: Also do not schedule return value to the entry slot of
-     // the state.
-     && DstTID.getOpcode() != VTM::VOpRetVal)
-    return 0;
-
   // Do not schedule function unit operation to the first state at the moment
   // there may be potential resource conflict.
-  return 1;
+  if (countNumRegOperands(DstInstr)) return 1;
+
+  return 0;
 }
 
 
