@@ -1145,9 +1145,13 @@ static void accumulateDatapathLatency(DepLatInfoTy &CurLatInfo,
                                       float PerBitLatency) {
   typedef DepLatInfoTy::const_iterator src_it;
   // Compute minimal delay for all possible pathes.
-  for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
-    updateLatency(CurLatInfo, I->first, I->second.first + SrcMSBLatency,
-                  I->second.second + SrcMSBLatency);
+  for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I) {
+    float MSBLatency, LSBLatency;
+    tie(MSBLatency, LSBLatency)
+      = getWorstLatency(I->second.first, I->second.second,
+                        SrcMSBLatency, PerBitLatency);
+    updateLatency(CurLatInfo, I->first, MSBLatency, LSBLatency);
+  }
 }
 
 template<bool IsCtrlDep>
