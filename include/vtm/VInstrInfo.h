@@ -279,11 +279,6 @@ private:
   // Also remember the operations that do not use by any others operations in
   // the same bb.
   std::set<const MachineInstr*> ExitMIs;
-
-  void accumulateLatencies(const MachineInstr *DstMI,
-                           DepLatInfoTy &CurLatInfo,
-                           const MachineInstr *SrcMI,
-                           const DepLatInfoTy &SrcLatInfo);
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                        bool IgnorePHISrc);

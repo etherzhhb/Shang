@@ -1139,6 +1139,16 @@ static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
   return std::max(0.0f, Latency - Delta);
 }
 
+static void accumulateDatapathLatency(DepLatInfoTy &CurLatInfo,
+                                      const DepLatInfoTy *SrcLatInfo,
+                                      float SrcMSBLatency) {
+  typedef DepLatInfoTy::const_iterator src_it;
+  // Compute minimal delay for all possible pathes.
+  for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
+    updateLatency(CurLatInfo, I->first, I->second.first + SrcMSBLatency,
+                  I->second.second + SrcMSBLatency);
+}
+
 template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,// Not needed
@@ -1167,12 +1177,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
 
   if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
-    typedef DepLatInfoTy::const_iterator src_it;
-    // Compute minimal delay for all possible pathes.
-    for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
-      updateLatency(CurLatInfo, I->first, I->second.first + SrcMSBLatency,
-                    I->second.second + SrcMSBLatency);
-
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency);
     return true;
   } //else
 
