@@ -724,8 +724,6 @@ bool VInstrInfo::isCopyLike(unsigned Opcode) {
          || Opcode == VTM::PHI
          || Opcode == VTM::VOpMove
          || Opcode == VTM::VOpMoveArg
-         || Opcode == VTM::VOpSel
-         || Opcode == VTM::VOpCase
          || Opcode == VTM::VOpDstMux
          || Opcode == VTM::VOpReadReturn
          || Opcode == VTM::VOpReadFU
@@ -780,19 +778,9 @@ float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {
   unsigned OpCode = MI->getOpcode();
 
   switch (OpCode) {
-  case VTM::VOpSel:
-    // We got the condition operand?
-    if (MOIdx == 1) return VFUs::ClkEnSelLatency;
-
-    return VFUs::getMuxLatency(2);
   case VTM::VOpDstMux:
     // Get the prebound mux size.
     return VFUs::getMuxLatency(MI->getOperand(3).getImm());
-  case VTM::VOpCase:
-    // We got the condition operand?
-    if (MOIdx & 0x1) return VFUs::ClkEnSelLatency;
-    // Dirty hack.
-    return VFUs::getMuxLatency(4);
   }
 
   return 0.0f;
@@ -1001,8 +989,6 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
 
   switch (OpC) {
     // TODO: Bitrepeat.
-  default:                  break;
-
   case VTM::VOpICmp_c:
     // Comparing with constant can be reduced to LUT.
     if (countNumRegOperands<1,3>(MI) < 2) return VFUs::LutLatency;
@@ -1039,6 +1025,9 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
 
   case VTM::VOpMemTrans:    return VFUs::MemBusLatency;
 
+  // Can be fitted into LUT.
+  case VTM::VOpSel:         return VFUs::LutLatency;
+
   // Ignore the trivial logic operation latency at the moment.
   case VTM::VOpLUT:
   case VTM::VOpAnd:
@@ -1055,6 +1044,8 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpBRam:        return VFUs::BRamLatency;
 
   case VTM::VOpInternalCall:  return 1.0f;
+
+  default:                  break;
   }
 
   return 0.0f;

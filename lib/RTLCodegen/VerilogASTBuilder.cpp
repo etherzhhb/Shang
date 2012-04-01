@@ -290,19 +290,15 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
   void emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
   void emitOpLut(MachineInstr *MI);
+  void emitOpSel(MachineInstr *MI);
 
   void emitChainedOpAdd(MachineInstr *MI);
   void emitChainedOpICmp(MachineInstr *MI);
-
-  void emitOpSel(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
-  void emitOpCase(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   void emitOpBitSlice(MachineInstr *MI);
-
-  void emitImplicitDef(MachineInstr *MI);
 
   // Create a condition from a predicate operand.
   VASTValue *createCnd(ucOperand &Op);
@@ -871,9 +867,6 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);             break;
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);        break;
     case VTM::VOpBRam:          emitOpBRam(MI, CurSlot, Cnds);            break;
-    case VTM::IMPLICIT_DEF:     emitImplicitDef(MI);                      break;
-    case VTM::VOpSel:           emitOpSel(MI, CurSlot, Cnds);             break;
-    case VTM::VOpCase:          emitOpCase(MI, CurSlot, Cnds);            break;
     case VTM::VOpToState_nt: emitBr(MI, CurSlot, Cnds, CurBB, Pipelined); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);      break;
     case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;
@@ -909,11 +902,8 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
       ++SlotsByPassed;
       Bypassed = true;
       break;
-    case VTM::VOpCase:          emitOpCase(MI, Slot, Cnds);   break;
-    case VTM::VOpSel:           emitOpSel(MI, Slot, Cnds);    break;
     case VTM::VOpRetVal:        emitOpRetVal(MI, Slot, Cnds); break;
-    case VTM::IMPLICIT_DEF:     emitImplicitDef(MI);          break;
-    default:  llvm_unreachable("Unexpected opcode!");              break;
+    default:  llvm_unreachable("Unexpected opcode!");         break;
     }
   }
 
@@ -998,54 +988,6 @@ void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getExpr()->getOperand(1));
   VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
-}
-
-void VerilogASTBuilder::emitImplicitDef(MachineInstr *MI) {
-  //VASTDatapath *data = VM->createDatapath();
-  //VASTDatapath::builder_stream &OS = data->getCodeBuffer();
-  //OS << "// IMPLICIT_DEF " << ImpDef.getOperand(0) << "\n";
-}
-
-void VerilogASTBuilder::emitOpSel(MachineInstr *MI, VASTSlot *Slot,
-                                  VASTValueVecTy &Cnds) {
-  VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
-  // Assign the value for condition true.
-  VASTValue *Cnd = createCnd(MI->getOperand(1));
-  Cnds.push_back(Cnd);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
-  // Assign the value for condition false.
-  Cnds.back() = VM->buildNotExpr(Cnd);
-  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds);
-  Cnds.pop_back();
-}
-
-void VerilogASTBuilder::emitOpCase(MachineInstr *MI, VASTSlot *Slot,
-                                   VASTValueVecTy &Cnds) {
-  // Check if we got any case hitted
-  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
-  OS.if_();
-  VASTRegister::printCondition(OS, Slot, Cnds);
-  OS._then();
-  OS.switch_begin("1'b1");
-
-  VASTRegister *R = cast<VASTRegister>(getAsOperand(MI->getOperand(0)));
-  for (unsigned i = 3, e = MI->getNumOperands(); i < e; i +=2) {
-    Cnds.push_back(createCnd(MI->getOperand(i)));
-    VM->addAssignment(R, getAsOperand(MI->getOperand(i + 1)), Slot, Cnds);
-    // Do nothing if any case hit.
-    Cnds.back()->printAsOperand(OS);
-    //Cnds.back()->Pin();
-    OS << ":/*Case hit, do nothing*/;\n";
-
-    Cnds.pop_back();
-  }
-
-  // Report an error if no case hitted.
-  OS << "default: begin $display(\"Case miss in VOpCase at "
-     << Slot->getName() << " assigning: " << R->getName() << " in "
-     << VM->getName() << "\"); $finish(); end\n";
-  OS.switch_end();
-  OS.exit_block() << "\n";
 }
 
 void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
@@ -1295,6 +1237,8 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
     case VTM::VOpMultLoHi_c:
     case VTM::VOpMult_c:    emitBinaryOp(MI, VASTExpr::dpMul);  break;
 
+    case VTM::VOpSel:       emitOpSel(MI);                      break;
+
     case VTM::VOpLUT:       emitOpLut(MI);                      break;
     case VTM::VOpXor:       emitBinaryOp(MI, VASTExpr::dpXor);  break;
     case VTM::VOpAnd:       emitBinaryOp(MI, VASTExpr::dpAnd);  break;
@@ -1304,7 +1248,6 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
     case VTM::VOpROr:       emitUnaryOp(MI, VASTExpr::dpROr);   break;
     case VTM::VOpRAnd:      emitUnaryOp(MI, VASTExpr::dpRAnd);  break;
     case VTM::VOpRXor:      emitUnaryOp(MI, VASTExpr::dpRXor);  break;
-
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   }
@@ -1327,6 +1270,17 @@ void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
                               getAsOperand(MI->getOperand(1)),
                               getAsOperand(MI->getOperand(2)),
                               W->getBitWidth()));
+}
+
+void VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
+  if (W->getAssigningValue()) return;
+
+  VASTValue *Ops[] = { createCnd(MI->getOperand(1)),
+                       getAsOperand(MI->getOperand(2)),
+                       getAsOperand(MI->getOperand(3)) };
+
+  VM->assign(W, VM->buildExpr(VASTExpr::dpSel, Ops, W->getBitWidth()));
 }
 
 void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {

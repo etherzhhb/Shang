@@ -398,8 +398,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
 
   bool visitUse(MachineRegisterInfo::reg_iterator I) {
     unsigned DefReg = addFanout(I);
-    if (I->getOpcode() == VTM::VOpMvPhi || I->getOpcode() == VTM::VOpSel
-        || I->getOpcode() == VTM::VOpCase) {
+    if (I->getOpcode() == VTM::VOpMvPhi || I->getOpcode() == VTM::VOpSel) {
       // We cannot handle these ops correctly after their src and dst merged.
       if (DefReg == DstReg) return true;
     }
@@ -420,16 +419,6 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
       break;
     case VTM::VOpReadReturn:
       addFanin<0>(MI->getOperand(2));
-      break;
-    case VTM::VOpSel:
-      // FIXME: Merging VOpSel break aes_main_IMS_ASAP.
-      return true;
-      addFanin<0>(MI->getOperand(2));
-      addFanin<0>(MI->getOperand(3));
-      break;
-    case VTM::VOpCase:
-      for (unsigned i = 1, e = MI->getNumOperands(); i != e; i+=2)
-        addFanin<0>(MI->getOperand(i + 1));
       break;
     default:
 #ifndef NDEBUG

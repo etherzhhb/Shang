@@ -183,13 +183,8 @@ let isReMaterializable = 1,
   def VOpLUT : DPTvaInst<(outs DR:$dst), (ins DR:$table, variable_ops),
                           "$dst = lut$size[$table]", []>;
 
-  def VOpSel   : CtrlInst<(outs DR:$dst), (ins DR:$cnd, DR:$src0, DR:$src1),
-                          "$dst = $cnd?$src0:$src1", [],
-                          0 /*Latency*/, 1 /*writeUntilFinish*/>;
-
-  def VOpCase  : CtrlInst<(outs DR:$dst), (ins variable_ops),
-                          "$dst = case;", [],
-                          0 /*Latency*/, 1 /*writeUntilFinish*/>;
+  def VOpSel   : DPTvaInst<(outs DR:$dst), (ins DR:$cnd, DR:$src0, DR:$src1),
+                           "$dst = $cnd?$src0:$src1", []>;
 
   def VOpReadFU: CtrlInst<(outs DR:$dst), (ins DR:$src, i8imm:$fuid),
                           "$dst = read fu $src $fuid", [],

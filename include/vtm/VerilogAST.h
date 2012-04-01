@@ -446,6 +446,7 @@ public:
     dpRAnd,
     dpROr,
     dpRXor,
+    dpSel,
     // bit level assignment.
     dpBitCat,
     dpBitRepeat,

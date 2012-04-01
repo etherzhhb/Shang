@@ -60,9 +60,6 @@ struct FixMachineCode : public MachineFunctionPass {
   bool simplifyReduction(MachineInstr *MI);
   bool simplifyBitSlice(MachineInstr *MI);
   bool handleImplicitDefs(MachineInstr *MI);
-  bool mergeSel(MachineInstr *MI);
-  void mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI, MachineOperand Cnd);
-
   void FoldInstructions(std::vector<MachineInstr*> &InstrToFold);
 
   void FoldMove(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
@@ -109,14 +106,6 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         InstrToFold.push_back(Inst);
         continue;
       }
-
-      // Do not perform select merging in pre-optimization run, because selects
-      // may only appear after if conversion.
-      if (IsPreOpt) continue;
-
-      // Post optimization fixes.
-      // Try to merge the Select to improve parallelism.
-      mergeSel(Inst);
     }
 
     //MachineInstr *FirstNotPHI = 0;
@@ -331,92 +320,6 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
       llvm_unreachable("Trying to fold unexpected instruction!");
     }
   }
-}
-
-bool FixMachineCode::mergeSel(MachineInstr *MI) {
-  if (MI->getOpcode() != VTM::VOpSel) return false;
-
-  MachineOperand TVal = MI->getOperand(2), FVal = MI->getOperand(3);
-  MachineInstr *TMI =0, *FMI = 0;
-  if (TVal.isReg()) {
-    TMI = MRI->getVRegDef(TVal.getReg());
-    if (TMI && TMI->getOpcode() != VTM::VOpSel)
-      TMI = 0;
-  }
-
-  if (FVal.isReg()) {
-    FMI = MRI->getVRegDef(FVal.getReg());
-    if (FMI && FMI->getOpcode() != VTM::VOpSel)
-      FMI = 0;
-  }
-
-  // Both operands are not read from VOpSel
-  if (!TMI && !FMI) return false;
-
-  MachineInstr *CaseMI =
-    BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII->get(VTM::VOpCase))
-      .addOperand(MI->getOperand(0)). // Result
-      addOperand(MI->getOperand(4)). // Predicate
-      addOperand(MI->getOperand(5)); // Trace number
-
-  // Merge the select in to the newly build case.
-  MachineOperand Cnd = MI->getOperand(1);
-  if (TMI)
-    mergeSelToCase(CaseMI, TMI, Cnd);
-  else {
-    // Re-add the condition into the case statement.
-    CaseMI->addOperand(Cnd);
-    CaseMI->addOperand(TVal);
-  }
-
-  VInstrInfo::ReversePredicateCondition(Cnd);
-  if (FMI)
-    mergeSelToCase(CaseMI, FMI, Cnd);
-  else {
-    // Re-add the condition into the case statement.
-    CaseMI->addOperand(Cnd);
-    CaseMI->addOperand(FVal);
-  }
-
-  // DirtyHack: Remove the annoying kill flags.
-  for (unsigned i = 1, e = CaseMI->getNumOperands(); i != e; ++i) {
-    MachineOperand &MO = CaseMI->getOperand(i);
-    if (MO.isReg() && MO.getReg()) MRI->clearKillFlags(MO.getReg());
-  }
-
-  MI->eraseFromParent();
-  return true;
-}
-
-void FixMachineCode::mergeSelToCase(MachineInstr *CaseMI, MachineInstr *SelMI,
-                                    MachineOperand Cnd) {
-  MachineOperand SelTCnd = SelMI->getOperand(1);
-  MachineOperand SelFCnd = SelTCnd;
-  VInstrInfo::ReversePredicateCondition(SelFCnd);
-
-  // Merge the condition with predicate of the select operation.
-  if (TII->isPredicated(SelMI)) {
-    // DIRTYHACK: This pass the testsuite, why?
-    //MachineOperand SelPred = *VInstrInfo::getPredOperand(SelMI);
-
-    //SelTCnd = VInstrInfo::MergePred(SelTCnd, SelPred, *CaseMI->getParent(),
-    //                                CaseMI, &MRI, TII, VTM::VOpAnd);
-    //SelFCnd = VInstrInfo::MergePred(SelFCnd, SelPred, *CaseMI->getParent(),
-    //                                CaseMI, &MRI, TII, VTM::VOpAnd);
-  }
-
-  // Merge the condition with the condition to select this SelMI.
-  SelTCnd = VInstrInfo::MergePred(SelTCnd, Cnd, *CaseMI->getParent(),
-                                  CaseMI, MRI, TII, VTM::VOpAnd);
-  SelFCnd = VInstrInfo::MergePred(SelFCnd, Cnd, *CaseMI->getParent(),
-                                  CaseMI, MRI, TII, VTM::VOpAnd);
-
-  // Add the value for True condition.
-  CaseMI->addOperand(SelTCnd);
-  CaseMI->addOperand(SelMI->getOperand(2));
-  // Add the value for False condition.
-  CaseMI->addOperand(SelFCnd);
-  CaseMI->addOperand(SelMI->getOperand(3));
 }
 
 Pass *llvm::createFixMachineCodePass(bool IsPreOpt) {

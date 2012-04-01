@@ -1230,6 +1230,14 @@ static void printCmpFU(raw_ostream &OS, ArrayRef<VASTUse> Ops,
   OS << ") ? 1'b1 : 1'b0), 1'bx }";
 }
 
+static void printSel(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
+ printUnsignedOperand(OS, Ops[0]);
+ OS << '?';
+ printUnsignedOperand(OS, Ops[1]);
+ OS << ':';
+ printUnsignedOperand(OS, Ops[2]);
+}
+
 static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << '{';
   printSimpleUnsignedOp(OS, Ops, " , ");
@@ -1346,6 +1354,8 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   case dpShl: printSimpleUnsignedOp(OS, getOperands(), " << ");break;
   case dpSRL: printSimpleUnsignedOp(OS, getOperands(), " >> ");break;
   case dpSRA: printSRAOp(OS, getOperands());                   break;
+
+  case dpSel: printSel(OS, getOperands());                     break;
 
   case dpAssign: getOperand(0)->printAsOperand(OS, getUB(), getLB()); break;
 
