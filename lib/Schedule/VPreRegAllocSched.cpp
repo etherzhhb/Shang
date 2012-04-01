@@ -893,6 +893,8 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
     MachineInstr *MI = I;
     if (!I->isTerminator() || CurState.isLoopOp(I)) continue;
+
+    CurState.addDummyLatencyEntry(MI);
     
     // Build a exit root or merge the terminators into the exit root.
     if (ExitSU == 0) {

@@ -155,7 +155,7 @@ struct MicroStateBuilder {
   MicroStateBuilder(const MicroStateBuilder&);     // DO NOT IMPLEMENT
   void operator=(const MicroStateBuilder&); // DO NOT IMPLEMENT
 
-  const VSchedGraph &State;
+  VSchedGraph &State;
   MachineBasicBlock &MBB;
   typedef MachineInstr *InsertPosTy;
   InsertPosTy InsertPos;
@@ -524,6 +524,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
             .addOperand(ucOperand::CreateTrace(MBB));
         // Add the instruction into the emit list.
         Insts.push_back(std::make_pair(DisableMI, 1));
+        State.addDummyLatencyEntry(DisableMI);
       }
     }
 

@@ -261,8 +261,8 @@ private:
   void computeLatencyFor(const MachineInstr *MI);
   DepLatInfoTy::mapped_type getLatencyOf(const MachineInstr *MI) const {
     DepLatInfoTy::const_iterator at = CachedLatencies.find(MI);
-    return at == CachedLatencies.end() ? std::make_pair(0.0f, 0.0f)
-                                         : at->second;
+    assert(at != CachedLatencies.end() && "Latency not calculated!");
+    return at->second;
   }
 
   // The latency from all register source through the datapath to a given
@@ -320,6 +320,10 @@ public:
   // Erase the instructions from exit set.
   void eraseFromExitSet(const MachineInstr *MI) {
     ExitMIs.erase(MI);
+  }
+
+  void addDummyLatencyEntry(const MachineInstr *MI) {
+    (void) CachedLatencies[MI];
   }
 
   void reset() {
