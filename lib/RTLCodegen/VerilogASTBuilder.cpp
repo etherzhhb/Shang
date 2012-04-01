@@ -275,6 +275,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
                   MachineBasicBlock::instr_iterator ctrl_end,
                   unsigned II, bool Pipelined);
+
   MachineBasicBlock::iterator emitDatapath(MachineInstr *Bundle);
 
   typedef SmallVectorImpl<VASTValue*> VASTValueVecTy;
@@ -283,6 +284,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitFirstCtrlBundle(MachineBasicBlock *DstBB, VASTSlot *Slot,
                            VASTValueVecTy &Cnds);
 
+  void emitBr(MachineInstr *MI, VASTSlot *CurSlot, VASTValueVecTy &Cnds,
+              MachineBasicBlock *CurBB, bool Pipelined);
   void emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
   void emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
   void emitOpLut(MachineInstr *MI);
@@ -850,25 +853,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
 
     // Special case for state transferring operation.
     if (VInstrInfo::isBrCndLike(MI->getOpcode())) {
-      ucOperand &CndOp = cast<ucOperand>(MI->getOperand(0));
-      Cnds.push_back(createCnd(CndOp));
-
-      MachineBasicBlock *TargetBB = MI->getOperand(1).getMBB();
-      unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
-      VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
-      assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
-             "Cannot handle predicated BrCnd");
-      VASTValue *Cnd = createCnd(CndOp);
-      VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
-
-      // Emit control operation for next state.
-      if (TargetBB == CurBB && Pipelined)
-        // The loop op of pipelined loop enable next slot explicitly.
-        VM->addSlotSucc(CurSlot, VM->getOrCreateNextSlot(CurSlot),
-                        VM->getBoolImmediate(true));
-
-      // Emit the first micro state of the target state.
-      emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
+      emitBr(MI, CurSlot, Cnds, CurBB, Pipelined);
       continue;
     }
 
@@ -932,6 +917,30 @@ void VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
     default:  llvm_unreachable("Unexpected opcode!");              break;
     }
   }
+}
+
+void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
+                               VASTValueVecTy &Cnds, MachineBasicBlock *CurBB,
+                               bool Pipelined) {
+  ucOperand &CndOp = cast<ucOperand>(MI->getOperand(0));
+  Cnds.push_back(createCnd(CndOp));
+
+  MachineBasicBlock *TargetBB = MI->getOperand(1).getMBB();
+  unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
+  VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
+  assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
+    "Cannot handle predicated BrCnd");
+  VASTValue *Cnd = createCnd(CndOp);
+  VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
+
+  // Emit control operation for next state.
+  if (TargetBB == CurBB && Pipelined)
+    // The loop op of pipelined loop enable next slot explicitly.
+    VM->addSlotSucc(CurSlot, VM->getOrCreateNextSlot(CurSlot),
+    VM->getBoolImmediate(true));
+
+  // Emit the first micro state of the target state.
+  emitFirstCtrlBundle(TargetBB, CurSlot, Cnds);
 }
 
 void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
