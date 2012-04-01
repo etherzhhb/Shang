@@ -1009,6 +1009,14 @@ struct BitSliceLatencyFN {
           LSBLatency = SrcLSBLatency + LB * DeltaPerBit;
     return std::make_pair(MSBLatency, LSBLatency);
   }
+
+  static float getBitSliceLatency(unsigned OperandSize, unsigned UB,
+                                  float SrcMSBLatency) {
+    assert(OperandSize && "Unexpected zero size operand!");
+    // Compute the latency of MSB by assuming the latency is increasing linear
+    float DeltaPerBit = SrcMSBLatency / OperandSize;
+    return UB * DeltaPerBit;
+  }
 };
 }
 
@@ -1143,36 +1151,32 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   if (SrcLatInfo == 0) return false;
 
   float SrcMSBLatency = getCachedLatencyResult(SrcMI);
-  float SrcLSBLatency = SrcMSBLatency;
   if (!IsCtrlDep) {
     SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
-    SrcLSBLatency = adjustChainingLatency(SrcLSBLatency, SrcMI, DstMI);
     if (OperandWidth) {
       unsigned SrcSize = cast<ucOperand>(SrcMI->getOperand(0)).getBitWidth();
       // DirtyHack: Ignore the invert flag.
       if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {
         assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
-        tie(SrcMSBLatency, SrcLSBLatency)
-          = BitSliceLatencyFN::getBitSliceLatency(SrcSize, OperandWidth, 0,
-          SrcMSBLatency, SrcLSBLatency);
+        SrcMSBLatency = BitSliceLatencyFN::getBitSliceLatency(SrcSize,
+                                                              OperandWidth,
+                                                              SrcMSBLatency);
       }
     }
-  } else {// IsCtrlDep
+  } else // IsCtrlDep
     SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
-    SrcLSBLatency = std::max(0.0f, SrcLSBLatency - DetialLatencyInfo::DeltaLatency);
-  }
 
   if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
     typedef DepLatInfoTy::const_iterator src_it;
     // Compute minimal delay for all possible pathes.
     for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
       updateLatency(CurLatInfo, I->first, I->second.first + SrcMSBLatency,
-                    I->second.second + SrcLSBLatency);
+                    I->second.second + SrcMSBLatency);
 
     return true;
   } //else
 
-  updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcLSBLatency);
+  updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
 
   return true;
 }
