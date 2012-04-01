@@ -1138,18 +1138,17 @@ static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
   // Chain the operations if dst not read value at the edge of the clock.
   return std::max(0.0f, Latency - Delta);
 }
-
+template<typename FuncTy>
 static void accumulateDatapathLatency(DepLatInfoTy &CurLatInfo,
                                       const DepLatInfoTy *SrcLatInfo,
-                                      float SrcMSBLatency,
-                                      float PerBitLatency) {
+                                      float SrcMSBLatency, float PerBitLatency,
+                                      FuncTy F) {
   typedef DepLatInfoTy::const_iterator src_it;
   // Compute minimal delay for all possible pathes.
   for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I) {
     float MSBLatency, LSBLatency;
-    tie(MSBLatency, LSBLatency)
-      = getWorstLatency(I->second.first, I->second.second,
-                        SrcMSBLatency, PerBitLatency);
+    tie(MSBLatency, LSBLatency) = F(I->second.first, I->second.second,
+                                    SrcMSBLatency, PerBitLatency);
     updateLatency(CurLatInfo, I->first, MSBLatency, LSBLatency);
   }
 }
@@ -1185,7 +1184,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     assert(OperandWidth && "Unexpected zero size operand!");
     float PerBitLatency = SrcMSBLatency / OperandWidth;
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency);
+                              PerBitLatency, getWorstLatency);
     return true;
   } //else
 
