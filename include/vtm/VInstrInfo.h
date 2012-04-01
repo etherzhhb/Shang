@@ -156,8 +156,16 @@ public:
   static bool isCopyLike(unsigned Opcode);
   static bool isBrCndLike(unsigned Opcode);
 
+  template<bool IsValDep>
   static unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
-                                     const MachineInstr *DstInstr);
+                                     const MachineInstr *DstInstr) {
+    if (!SrcInstr) return getStepsFromEntry(DstInstr);
+
+    if (IsValDep) return ceil(getChainingLatency(SrcInstr, DstInstr));
+
+    return ceil(getDetialLatency(SrcInstr));
+  }
+
   const static float DeltaLatency;
   // Return the latency of a MachineInstr in cycle ratio.
   static float getDetialLatency(const MachineInstr *MI);

@@ -455,15 +455,6 @@ int8_t VSUnit::getLatencyFor(MachineInstr *MI) const {
   return getLatencyAt(at - instr_begin());
 }
 
-int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
-  int Latency = VInstrInfo::getCtrlStepBetween(SrcMI, DstMI);
-  if (SrcMI != getRepresentativeInst()) {
-    Latency += getLatencyFor(SrcMI);
-  }
-
-  return Latency;
-}
-
 int VSUnit::getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const{
   int Latency = SrcLatency;
   if (SrcMI != getRepresentativeInst()) {

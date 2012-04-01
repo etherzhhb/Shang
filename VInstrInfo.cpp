@@ -927,12 +927,6 @@ float VInstrInfo::getChainingLatency(const MachineInstr *SrcInstr,
   return adjustChainingLatency(latency, SrcInstr, DstInstr);
 }
 
-unsigned VInstrInfo::getCtrlStepBetween(const MachineInstr *SrcInstr,
-                                        const MachineInstr *DstInstr) {
-  return SrcInstr ? unsigned(ceil(getChainingLatency(SrcInstr, DstInstr)))
-                  : getStepsFromEntry(DstInstr);
-}
-
 unsigned VInstrInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   assert(DstInstr && "DstInstr should not be null!");
   unsigned DstOpC = DstInstr->getOpcode();
@@ -1332,7 +1326,7 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
       // delay of DepMI.
       L = at->second + std::ceil(I->second.first);
       if (DepMI == DetialLatencyInfo::EntryMarker) DepMI = 0;
-      L = std::max(L, VInstrInfo::getCtrlStepBetween(DepMI, MI));
+      L = std::max(L, VInstrInfo::getCtrlStepBetween<true>(DepMI, MI));
     }
 
     if (hasPrebindFU) L = updateFULatency(FU.getData(), L, MI);
@@ -1353,7 +1347,7 @@ unsigned CycleLatencyInfo::updateFULatency(unsigned FUId, unsigned Latency,
   const MachineInstr *&LastMI = LI.first;
   FuncUnitId ID(FUId);
 
-  unsigned EdgeLatency = VInstrInfo::getCtrlStepBetween(LastMI, MI);
+  unsigned EdgeLatency = VInstrInfo::getCtrlStepBetween<false>(LastMI, MI);
 
   // Update the FU latency information.
   FULatency = std::max(FULatency + EdgeLatency, Latency);

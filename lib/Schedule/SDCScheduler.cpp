@@ -160,7 +160,7 @@ void SDCScheduler::PreBindSingleFU(unsigned FUType, Step2SUMap &Map){
     if(next >= OrderVec.size()) continue;
     VSUnit* Src = const_cast<VSUnit*>(OrderVec[next]);
     if(isOverlap(Dst,Src))
-      Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
+      Dst->addDep(VDCtrlDep::CreateDep(Src, Src->getLatency()));
   }
 
   OrderVec.clear();
@@ -294,7 +294,7 @@ void SDCScheduler::PreBindMultiFU(unsigned FUType, Step2SUMap &Map){
   for(FUVec::iterator FI = ResVec.begin(), FE = ResVec.end(); FI != FE; FI++){
     VSUnit* Dst = const_cast<VSUnit*>(FI->first);
     VSUnit* Src = const_cast<VSUnit*>(FI->second);
-    Dst->addDep(VDCtrlDep::CreateCtrlDep(Src, Src->getLatency()));
+    Dst->addDep(VDCtrlDep::CreateDep(Src, Src->getLatency()));
   }
 
   ResVec.clear();

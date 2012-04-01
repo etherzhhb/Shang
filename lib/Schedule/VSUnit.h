@@ -129,7 +129,9 @@ public:
     return A->getEdgeType() == edgeValDep;
   }
 
-  static VDValDep *CreateValDep(VSUnit *Src, unsigned Latency) {
+  enum { IsValDep = true };
+
+  static VDValDep *CreateDep(VSUnit *Src, unsigned Latency) {
     return new VDValDep(Src, Latency);
   }
 };
@@ -145,7 +147,9 @@ public:
     return A->getEdgeType() == edgeCtrlDep;
   }
 
-  static VDCtrlDep *CreateCtrlDep(VSUnit *Src, unsigned Latency) {
+  enum { IsValDep = false };
+
+  static VDCtrlDep *CreateDep(VSUnit *Src, unsigned Latency) {
     return new VDCtrlDep(Src, Latency);
   }
 };
@@ -162,7 +166,7 @@ public:
   }
 
   template<int DIFF>
-  static VDMemDep *CreateMemDep(VSUnit *Src, unsigned Latency) {
+  static VDMemDep *CreateDep(VSUnit *Src, unsigned Latency) {
     return new VDMemDep(Src, Latency, DIFF);
   }
 };
@@ -331,16 +335,25 @@ public:
   }
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
-  int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const;
+  template<bool IsValDep>
+  int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
+    int Latency = VInstrInfo::getCtrlStepBetween<IsValDep>(SrcMI, DstMI);
+    if (SrcMI != getRepresentativeInst()) {
+      Latency += getLatencyFor(SrcMI);
+    }
+
+    return Latency;
+  }
   int getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const;
 
   // Get the maximum latency from RepresentativeInst to DstMI.
+  template<bool IsValDep>
   int getMaxLatencyTo(MachineInstr *DstMI) const {
     int latency = 0;
     for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
       // Also compute the latency to DstMI even *I (SrcMI) is 0, which means the
       // source is the entry root of the state.
-      latency = std::max(getLatencyTo(*I, DstMI), latency);
+      latency = std::max(getLatencyTo<IsValDep>(*I, DstMI), latency);
 
     return latency;
   }
