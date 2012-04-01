@@ -312,7 +312,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
   assert(U->num_instrs() == 1 && "Unexpected datapath operation merged!");
 
   MachineInstr *MI = U->getRepresentativeInst();
-  const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = LatInfo.getDepLatInfo(MI);
+  const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = getDepLatInfo(MI);
   assert(DepLatInfo && "dependence latency information not available?");
 
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator dep_it;
@@ -346,7 +346,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
            && "Expect datapath operation have only 1 define!");
 
     unsigned Reg = MI->getOperand(0).getReg();
-    LatInfo.MRI.setRegClass(Reg, VTM::WireRegisterClass);
+    MRI.setRegClass(Reg, VTM::WireRegisterClass);
   }
 }
 

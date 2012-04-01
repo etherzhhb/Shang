@@ -473,11 +473,10 @@ typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
   GraphTraits<Inverse<const VSUnit*> > > const_deptree_iterator;
 
 
-class VSchedGraph {
+class VSchedGraph : public DetialLatencyInfo {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
 private:
-  DetialLatencyInfo LatInfo;
   MachineBasicBlock *MBB;
   SUnitVecTy AllSUs;
   // The VSUnits to schedule.
@@ -502,7 +501,7 @@ private:
 public:
   VSchedGraph(MachineRegisterInfo &MRI, MachineBasicBlock *MachBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : LatInfo(MRI), MBB(MachBB), Entry(new VSUnit(0)), Exit(0),
+    : DetialLatencyInfo(MRI), MBB(MachBB), Entry(new VSUnit(0)), Exit(0),
       SUCount(/*We already have the entry node*/1), startSlot(StartSlot),
       LoopOp(0, HaveLoopOp) {
     AllSUs.push_back(Entry);
@@ -514,50 +513,6 @@ public:
 
   // Verify the schedule graph, should be call after the graph is built.
   void verify() const;
-
-  // Forward the method in DetailLatencyInfo
-  void addToLatInfo(const MachineInstr *MI) {
-    LatInfo.addInstr(MI);
-  }
-
-  float getMaxLatency(const MachineInstr *MI) const {
-    return LatInfo.getMaxLatency(MI);
-  }
-
-  unsigned getStepsToFinish(const MachineInstr *MI) const {
-    return LatInfo.getStepsToFinish(MI);
-  }
-
-
-  float getChainingLatency(const MachineInstr *SrcInstr,
-                           const MachineInstr *DstInstr) const {
-    return LatInfo.getChainingLatency(SrcInstr, DstInstr);
-  }
-
-  template<bool IsValDep>
-  unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
-                              const MachineInstr *DstInstr) {
-    return LatInfo.getCtrlStepBetween<IsValDep>(SrcInstr, DstInstr);
-  }
-
-  const DetialLatencyInfo::DepLatInfoTy *
-  getDepLatInfo(const MachineInstr *MI) const {
-    return LatInfo.getDepLatInfo(MI);
-  }
-
-  const DetialLatencyInfo::DepLatInfoTy &
-  buildPHIBELatInfo(const MachineInstr *MI) {
-    return LatInfo.buildPHIBELatInfo(MI);
-  }
-
-  void buildExitMIInfo(const MachineInstr *ExitMI,
-                       DetialLatencyInfo::DepLatInfoTy &Info) {
-    LatInfo.buildExitMIInfo(ExitMI, Info);
-  }
-
-  void eraseFromExitSet(const MachineInstr *MI) {
-    LatInfo.eraseFromExitSet(MI);
-  }
 
   // VSUnit Creating/Mapping/Merging
   bool mapMI2SU(MachineInstr *MI, VSUnit *SU, int8_t latency) {

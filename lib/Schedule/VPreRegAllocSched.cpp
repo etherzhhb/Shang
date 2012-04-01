@@ -883,7 +883,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
 
     // Build the schedule unit for loop back operation.
     if (CurState.isLoopOp(I)) {
-      CurState.addToLatInfo(MI);
+      CurState.addInstr(MI);
       VSUnit *LoopOp = CurState.createVSUnit(MI);
       addSchedDepForSU(LoopOp, CurState);
       continue;
@@ -933,7 +933,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
       continue;
 
     // Compute the dependence information.
-    CurState.addToLatInfo(MI);
+    CurState.addInstr(MI);
     // No need to wait the terminator.
     CurState.eraseFromExitSet(MI);
     // Build datapath latency information for the terminator.
@@ -966,7 +966,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   instr_it BI = State->begin();
   while(!BI->isTerminator() && BI->getOpcode() != VTM::VOpMvPhi) {
     MachineInstr *MI = BI;    
-    State.addToLatInfo(MI);
+    State.addInstr(MI);
     buildSUnit(MI, State);
     ++BI;
   }
@@ -987,7 +987,7 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
     if (!State.isLoopPHIMove(I))
       continue;
 
-    State.addToLatInfo(I);
+    State.addInstr(I);
     buildSUnit(I, State);
   }
 
