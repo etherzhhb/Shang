@@ -533,6 +533,14 @@ public:
     LatInfo.addInstr(MI);
   }
 
+  float getMaxLatency(const MachineInstr *MI) const {
+    return LatInfo.getMaxLatency(MI);
+  }
+
+  unsigned getStepsToFinish(const MachineInstr *MI) const {
+    return LatInfo.getStepsToFinish(MI);
+  }
+
   const DetialLatencyInfo::DepLatInfoTy *
   getDepLatInfo(const MachineInstr *MI) const {
     return LatInfo.getDepLatInfo(MI);

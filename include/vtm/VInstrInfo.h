@@ -347,6 +347,15 @@ public:
     LatencyMap.clear();
     ExitMIs.clear();
   }
+
+  float getMaxLatency(const MachineInstr *MI) const {
+    DepLatInfoTy::mapped_type v = getLatencyOf(MI);
+    return std::max(v.first, v.second);
+  }
+
+  unsigned getStepsToFinish(const MachineInstr *MI) const {
+    return ceil(getMaxLatency(MI));
+  }
 };
 
 // Compute the cycle latency of a given MBB.

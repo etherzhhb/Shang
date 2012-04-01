@@ -419,12 +419,12 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // Handle unanalyzable memory access.
       if (DstMO == 0 || SrcMO == 0) {
         // Build the Src -> Dst dependence.
-        unsigned Latency = VInstrInfo::getCtrlStepBetween<false>(SrcMI, DstMI);
+        unsigned Latency = CurState.getStepsToFinish(SrcMI);
         DstU->addDep(getMemDepEdge(SrcU, Latency, 0));
 
         // Build the Dst -> Src (in next iteration) dependence.
         if (CurState.enablePipeLine()) {
-          Latency = VInstrInfo::getCtrlStepBetween<false>(SrcMI, DstMI);
+          Latency = CurState.getStepsToFinish(SrcMI);
           SrcU->addDep(getMemDepEdge(DstU, Latency, 1));
         }
         // Go on handle next visited SUnit.
@@ -442,7 +442,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
 
         if (LD.hasDep()) {
-          unsigned Latency = VInstrInfo::getCtrlStepBetween<false>(SrcMI, DstMI);
+          unsigned Latency = CurState.getStepsToFinish(SrcMI);
           VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, LD.getItDst());
           DstU->addDep(MemDep);
         }
@@ -452,7 +452,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
 
         if (LD.hasDep()) {
-          unsigned Latency = VInstrInfo::getCtrlStepBetween<false>(SrcMI, DstMI);
+          unsigned Latency = CurState.getStepsToFinish(SrcMI);
           VDMemDep *MemDep = getMemDepEdge(DstU, Latency, LD.getItDst());
           SrcU->addDep(MemDep);
         }
@@ -464,7 +464,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
 
         // Ignore the No-Alias pointers.
-        unsigned Latency = VInstrInfo::getCtrlStepBetween<false>(SrcMI, DstMI);
+        unsigned Latency = CurState.getStepsToFinish(SrcMI);
         VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, 0);
         DstU->addDep(MemDep);
       }
@@ -550,8 +550,7 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
     //assert(SrcSU->getIdx() > PHISU->getIdx() && "Expect back-edge!");
 
     // Adjust the step between SrcMI and MI.
-    Latency = std::max(int(VInstrInfo::getCtrlStepBetween<false>(SrcMI, PN)),
-                       Latency);
+    Latency = std::max(int(CurState.getStepsToFinish(SrcMI)), Latency);
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     PHISU->addDep(VDMemDep::CreateDep<1>(SrcSU, Latency));

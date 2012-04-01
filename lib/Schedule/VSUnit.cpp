@@ -94,7 +94,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
 
   AllSUs.push_back(SU);
 
-  bool mapped = mapMI2SU(I, SU, VInstrInfo::getStepsToFinish(I));
+  bool mapped = mapMI2SU(I, SU, getStepsToFinish(I));
   (void) mapped;
   assert(mapped && "Cannot add SU to the inst2su map!");
   return SU;
