@@ -851,12 +851,6 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     Cnds.clear();
     Cnds.push_back(createCnd(*VInstrInfo::getPredOperand(MI)));
 
-    // Special case for state transferring operation.
-    if (VInstrInfo::isBrCndLike(MI->getOpcode())) {
-      emitBr(MI, CurSlot, Cnds, CurBB, Pipelined);
-      continue;
-    }
-
     // Emit the operations.
     switch (MI->getOpcode()) {
     case VTM::VOpDstMux:
@@ -882,6 +876,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::IMPLICIT_DEF:     emitImplicitDef(MI);                      break;
     case VTM::VOpSel:           emitOpSel(MI, CurSlot, Cnds);             break;
     case VTM::VOpCase:          emitOpCase(MI, CurSlot, Cnds);            break;
+    case VTM::VOpToState_nt: emitBr(MI, CurSlot, Cnds, CurBB, Pipelined); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);      break;
     case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;
     default:  assert(0 && "Unexpected opcode!");                          break;
