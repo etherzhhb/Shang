@@ -356,6 +356,21 @@ public:
   unsigned getStepsToFinish(const MachineInstr *MI) const {
     return ceil(getMaxLatency(MI));
   }
+
+  // Return the edge latency between SrcInstr and DstInstr considering chaining
+  // effect.
+  float getChainingLatency(const MachineInstr *SrcInstr,
+                           const MachineInstr *DstInstr) const;
+
+  template<bool IsValDep>
+  unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
+                              const MachineInstr *DstInstr) {
+    if (!SrcInstr) return VInstrInfo::getStepsFromEntry(DstInstr);
+
+    if (IsValDep) return ceil(getChainingLatency(SrcInstr, DstInstr));
+
+    return getStepsToFinish(SrcInstr);
+  }
 };
 
 // Compute the cycle latency of a given MBB.

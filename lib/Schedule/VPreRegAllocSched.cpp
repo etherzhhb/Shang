@@ -511,7 +511,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
     // Avoid the back-edge or self-edge.
     if (SrcSU->getIdx() >= A->getIdx()) continue;
     // Step between MI and its dependent.
-    unsigned S = VInstrInfo::getCtrlStepBetween<DepEdgeTy::IsValDep>(SrcMI, MI);
+    unsigned S = CurState.getCtrlStepBetween<DepEdgeTy::IsValDep>(SrcMI, MI);
     // Adjust the step between SrcMI and MI.
     Latency = std::max(int(S), Latency);
     // Call getLatencyTo to accumulate the intra-unit latency.
@@ -575,7 +575,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
       if (Dep == 0 || Dep->getIdx() == A->getIdx()) continue;
 
       // Dirty Hack: Get the detail latency.
-      float DetailLatency = VInstrInfo::getChainingLatency(DepSrc, MI);
+      float DetailLatency = CurState.getChainingLatency(DepSrc, MI);
       DetailLatency += VInstrInfo::getOperandLatency(MI, i);
       // Compute the latency from DepSrc to the repinst of the SU.
       DetailLatency -= std::min(0.0f, IntraSULatency - VInstrInfo::DeltaLatency);
@@ -710,12 +710,14 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
   MachineInstr *SrcMI = 0;
   // Try to merge it into the VSUnit that defining its source operand.
   if (VSUnit *SrcSU = getDefSU(MI->getOperand(OpIdx), CurState, SrcMI))
-    return CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo<true>(SrcMI, MI));
+    return CurState.mapMI2SU(MI, SrcSU,
+                             SrcSU->getLatencyTo<true>(SrcMI, MI, CurState));
 
   // Try to merge it into the VSUnit that defining its predicate operand.
   if (const MachineOperand *Pred = VInstrInfo::getPredOperand(MI))
     if (VSUnit *SrcSU = getDefSU(*Pred, CurState, SrcMI))
-      return CurState.mapMI2SU(MI, SrcSU, SrcSU->getLatencyTo<true>(SrcMI, MI));
+      return CurState.mapMI2SU(MI, SrcSU,
+                               SrcSU->getLatencyTo<true>(SrcMI, MI, CurState));
 
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
@@ -849,7 +851,7 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
       assert((AllowHanging || CurState.isLoopOp(VSU->getRepresentativeInst()))
              && "Unexpected handing node!");
       // A PHIMove can be scheduled to the same slot with the exit root.
-      unsigned Latency = VSU->getMaxLatencyTo<false>(ExitMI);
+      unsigned Latency = VSU->getMaxLatencyTo<false>(ExitMI, CurState);
       // We do not need to wait the trivial operation finish before exiting the
       // state, because the first control slot of next state will only contains
       // PHI copies, and the PHIElimination Hook will take care of the data

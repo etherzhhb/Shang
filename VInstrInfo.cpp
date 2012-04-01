@@ -1303,6 +1303,13 @@ void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
     buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
 }
 
+float DetialLatencyInfo::getChainingLatency(const MachineInstr *SrcInstr,
+                                            const MachineInstr *DstInstr) const{
+  // Compute the latency correspond to detail slot.
+  float latency = getMaxLatency(SrcInstr);
+  return adjustChainingLatency(latency, SrcInstr, DstInstr);
+}
+
 unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
   if (Reset) reset();
 

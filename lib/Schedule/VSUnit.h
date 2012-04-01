@@ -335,28 +335,14 @@ public:
   }
 
   // Get the total latency from the RepresentativeInst through SrcMI to DstMI.
-  template<bool IsValDep>
-  int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI) const {
-    int Latency = VInstrInfo::getCtrlStepBetween<IsValDep>(SrcMI, DstMI);
-    if (SrcMI != getRepresentativeInst()) {
-      Latency += getLatencyFor(SrcMI);
-    }
 
-    return Latency;
-  }
+  template<bool IsValDep>
+  int getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI, VSchedGraph &G) const;
   int getLatencyFrom(MachineInstr *SrcMI, int SrcLatency) const;
 
   // Get the maximum latency from RepresentativeInst to DstMI.
   template<bool IsValDep>
-  int getMaxLatencyTo(MachineInstr *DstMI) const {
-    int latency = 0;
-    for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
-      // Also compute the latency to DstMI even *I (SrcMI) is 0, which means the
-      // source is the entry root of the state.
-      latency = std::max(getLatencyTo<IsValDep>(*I, DstMI), latency);
-
-    return latency;
-  }
+  int getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const;
 
   // Get the latency considering negative latency.
   int getMaxLatencyFromEntry() const {
@@ -541,6 +527,18 @@ public:
     return LatInfo.getStepsToFinish(MI);
   }
 
+
+  float getChainingLatency(const MachineInstr *SrcInstr,
+                           const MachineInstr *DstInstr) const {
+    return LatInfo.getChainingLatency(SrcInstr, DstInstr);
+  }
+
+  template<bool IsValDep>
+  unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
+                              const MachineInstr *DstInstr) {
+    return LatInfo.getCtrlStepBetween<IsValDep>(SrcInstr, DstInstr);
+  }
+
   const DetialLatencyInfo::DepLatInfoTy *
   getDepLatInfo(const MachineInstr *MI) const {
     return LatInfo.getDepLatInfo(MI);
@@ -689,6 +687,28 @@ template <> struct GraphTraits<VSchedGraph*> : public GraphTraits<VSUnit*> {
     return G->sched_end();
   }
 };
+
+template<bool IsValDep>
+int VSUnit::getLatencyTo(MachineInstr *SrcMI, MachineInstr *DstMI,
+                         VSchedGraph &G) const {
+  int Latency = G.getCtrlStepBetween<IsValDep>(SrcMI, DstMI);
+  if (SrcMI != getRepresentativeInst()) {
+    Latency += getLatencyFor(SrcMI);
+  }
+
+  return Latency;
+}
+
+template<bool IsValDep>
+int VSUnit::getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const {
+  int latency = 0;
+  for (const_instr_iterator I = instr_begin(), E = instr_end(); I != E; ++I)
+    // Also compute the latency to DstMI even *I (SrcMI) is 0, which means the
+    // source is the entry root of the state.
+    latency = std::max(getLatencyTo<IsValDep>(*I, DstMI, G), latency);
+
+  return latency;
+}
 
 } // end namespace
 
