@@ -1141,7 +1141,8 @@ static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
 
 static void accumulateDatapathLatency(DepLatInfoTy &CurLatInfo,
                                       const DepLatInfoTy *SrcLatInfo,
-                                      float SrcMSBLatency) {
+                                      float SrcMSBLatency,
+                                      float PerBitLatency) {
   typedef DepLatInfoTy::const_iterator src_it;
   // Compute minimal delay for all possible pathes.
   for (src_it I = SrcLatInfo->begin(), E = SrcLatInfo->end(); I != E; ++I)
@@ -1168,16 +1169,19 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
       // DirtyHack: Ignore the invert flag.
       if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {
         assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
-        SrcMSBLatency = BitSliceLatencyFN::getBitSliceLatency(SrcSize,
-                                                              OperandWidth,
-                                                              SrcMSBLatency);
+        SrcMSBLatency =
+          BitSliceLatencyFN::getBitSliceLatency(SrcSize, OperandWidth,
+                                                SrcMSBLatency);
       }
     }
   } else // IsCtrlDep
     SrcMSBLatency = std::max(0.0f, SrcMSBLatency - DetialLatencyInfo::DeltaLatency);
 
   if (VInstrInfo::isDatapath(SrcMI->getOpcode())) {
-    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency);
+    assert(OperandWidth && "Unexpected zero size operand!");
+    float PerBitLatency = SrcMSBLatency / OperandWidth;
+    accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
+                              PerBitLatency);
     return true;
   } //else
 
