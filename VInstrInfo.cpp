@@ -1088,65 +1088,11 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   return 0.0f;
 }
 
-void DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
-  float SrcMSBLatency = 0.0f, SrcLSBLatency = 0.0f;
+float DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
   float TotalLatency = getDetialLatency(MI);
-  unsigned Opcode = MI->getOpcode();
-
-  // Accumulate the latency to compute the result.
-  switch (Opcode) {
-  default:
-    tie(SrcMSBLatency, SrcLSBLatency)
-      = getWorstLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
-    break;
-    // Result bits are computed from MSB to LSB.
-  case VTM::VOpAdd_c:
-  case VTM::VOpMultLoHi_c:
-  case VTM::VOpMult_c:
-  case VTM::VOpAdd:
-  case VTM::VOpMult:
-  case VTM::VOpMultLoHi:
-  //case VTM::VOpSRA_c:
-  //case VTM::VOpSRL_c:
-  //case VTM::VOpSHL_c:
-  {
-    unsigned ResultSize = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
-    float PerBitLatency = TotalLatency / ResultSize;
-    // Result propagate from LSB to MSB.
-    tie(SrcMSBLatency, SrcLSBLatency)
-      = getLSB2MSBLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency,
-                          PerBitLatency);
-    break;
-  }
-    // Each bits are compute independently.
-  case VTM::VOpLUT:
-  case VTM::VOpAnd:
-  case VTM::VOpOr:
-  case VTM::VOpXor:
-  case VTM::VOpNot:
-  case VTM::VOpBitCat:
-    tie(SrcMSBLatency, SrcLSBLatency)
-      = getParallelLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
-    break;
-  case VTM::VOpBitSlice:
-    tie(SrcMSBLatency, SrcLSBLatency)
-      = BitSliceLatencyFN(MI)(SrcMSBLatency, SrcLSBLatency, TotalLatency, 0.0f);
-    break;
-  case VTM::VOpICmp_c:
-  case VTM::VOpICmp:{
-    // Result bits are computed from MSB to LSB.
-    unsigned ResultSize = cast<ucOperand>(MI->getOperand(3)).getBitWidth();
-    float PerBitLatency = TotalLatency / ResultSize;
-    tie(SrcMSBLatency, SrcLSBLatency)
-      = getMSB2LSBLatency(SrcMSBLatency, SrcLSBLatency, TotalLatency,
-                          PerBitLatency);
-    break;
-  }
-  }
-
   // Remember the latency from all MI's dependence leaves.
-  CachedLatencies.insert(std::make_pair(MI, std::make_pair(SrcMSBLatency,
-                                                           SrcLSBLatency)));
+  CachedLatencies.insert(std::make_pair(MI, TotalLatency));
+  return TotalLatency;
 }
 
 static float adjustChainingLatency(float Latency, const MachineInstr *SrcInstr,
@@ -1196,8 +1142,8 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   // to compute cross BB latency.
   if (SrcLatInfo == 0) return false;
 
-  float SrcMSBLatency, SrcLSBLatency;
-  tie(SrcMSBLatency, SrcLSBLatency) = getLatencyOf(SrcMI);
+  float SrcMSBLatency = getCachedLatencyResult(SrcMI);
+  float SrcLSBLatency = SrcMSBLatency;
   if (!IsCtrlDep) {
     SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
     SrcLSBLatency = adjustChainingLatency(SrcLSBLatency, SrcMI, DstMI);
@@ -1265,7 +1211,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   }
 
   // Align the compute the latency of MI.
-  computeLatencyFor(MI);
+  float Latency = computeLatencyFor(MI);
 
   // Assume MI do not have any user in the same BB, if it has, it will be
   // deleted later.
@@ -1275,7 +1221,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
   // the BB.
   if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
-    float latency = std::max(getMaxLatency(MI), DetialLatencyInfo::DeltaLatency);
+    float latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
     CurLatInfo.insert(std::make_pair(EntryMarker,
                                      std::make_pair(latency, latency)));
   }

@@ -257,10 +257,11 @@ public:
 private:
   static float getDetialLatency(const MachineInstr *MI);
   // Cache the computational delay for every instruction.
-  DepLatInfoTy CachedLatencies;
-  void computeLatencyFor(const MachineInstr *MI);
-  DepLatInfoTy::mapped_type getLatencyOf(const MachineInstr *MI) const {
-    DepLatInfoTy::const_iterator at = CachedLatencies.find(MI);
+  typedef std::map<const MachineInstr*, float> CachedLatMapTy;
+  CachedLatMapTy CachedLatencies;
+  float computeLatencyFor(const MachineInstr *MI);
+  CachedLatMapTy::mapped_type getCachedLatencyResult(const MachineInstr *MI) const {
+    CachedLatMapTy::const_iterator at = CachedLatencies.find(MI);
     assert(at != CachedLatencies.end() && "Latency not calculated!");
     return at->second;
   }
@@ -333,8 +334,7 @@ public:
   }
 
   float getMaxLatency(const MachineInstr *MI) const {
-    DepLatInfoTy::mapped_type v = getLatencyOf(MI);
-    return std::max(v.first, v.second);
+    return getCachedLatencyResult(MI);
   }
 
   unsigned getStepsToFinish(const MachineInstr *MI) const {
