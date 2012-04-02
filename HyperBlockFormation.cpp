@@ -439,9 +439,6 @@ bool HyperBlockFormation::mergeReturnBB(MachineFunction &MF,
                                              RetBB.pred_end());
   while (!PredBBs.empty()) {
     MachineBasicBlock *PredBB = PredBBs.pop_back_val();
-    // Do not merge RetBB into loops
-    if (LI->getLoopFor(PredBB))
-      continue;
 
     MachineBasicBlock::iterator FirstTerm = PredBB->getFirstTerminator();
     for (MachineBasicBlock::iterator PI = FirstTerm, PE = PredBB->end();
