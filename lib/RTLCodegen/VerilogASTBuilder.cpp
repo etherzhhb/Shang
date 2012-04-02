@@ -565,7 +565,7 @@ void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *S) {
   }
   default: return;
   }
-
+  // TODO: Assert not in first slot.
   VM->addSlotReady(S, ReadyPort, createCnd(*VInstrInfo::getPredOperand(MI)));
 }
 
@@ -1025,8 +1025,8 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     break;
   }
 
-  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort),
-                     createCnd(*VInstrInfo::getPredOperand(MI)));
+  VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort), Pred);
 }
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
@@ -1043,7 +1043,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   const char *CalleeName = MI->getOperand(1).getSymbolName();
   unsigned FNNum = FInfo->getCalleeFNNum(CalleeName);
 
-  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValue *StartSignal = VM->getSymbol(StartPortName);
   VM->addSlotEnable(Slot, cast<VASTRegister>(StartSignal), Pred);
@@ -1131,7 +1131,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 void VerilogASTBuilder::emitOpRet(MachineInstr *MI, VASTSlot *CurSlot,
                                   VASTValueVecTy &Cnds) {
   // Go back to the idle slot.
-  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VM->addSlotSucc(CurSlot, VM->getOrCreateSlot(0, 0), Pred);
   VM->addSlotEnable(CurSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
                     Pred);
@@ -1169,7 +1169,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValue *MemEn = VM->getSymbol(EnableName);
-  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
@@ -1208,7 +1208,7 @@ void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
   std::string EnableName = VFUBRam::getEnableName(FUNum);
   VASTValue *MemEn = VM->getSymbol(EnableName);
 
-  VASTValue *Pred = createCnd(*VInstrInfo::getPredOperand(MI));
+  VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
