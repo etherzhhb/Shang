@@ -106,6 +106,10 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         InstrToFold.push_back(Inst);
         continue;
       }
+
+      // No need to predicate the VOpMoveArg.
+      if (Inst->getOpcode() == VTM::VOpMoveArg)
+        VInstrInfo::getPredOperand(Inst)->ChangeToRegister(0, false);
     }
 
     //MachineInstr *FirstNotPHI = 0;

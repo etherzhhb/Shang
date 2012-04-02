@@ -794,18 +794,18 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   case VTM::VOpMoveArg:
     CurState.mapMI2SU(MI, CurState.getEntryRoot(), 0);
     return;
-    // The VOpDstMux should be merged to its user.
-    case VTM::VOpDstMux: return;
-    case VTM::VOpMvPhi:
-      if (CurState.isLoopPHIMove(MI)) {
-        unsigned Reg = MI->getOperand(0).getReg();
-        assert(MRI->hasOneUse(Reg) && "Incoming copy has more than one use?");
-        MachineInstr *PN = &*MRI->use_begin(Reg);
-        assert(PN && PN->isPHI() && "Bad user of incoming copy!");
-        VSUnit *PHISU = CurState.lookupSUnit(PN);
-        assert(PHISU && "Schedule unit for PHI node not found!");
-        CurState.mapMI2SU(MI, PHISU, 0);
-      }
+  // The VOpDstMux should be merged to its user.
+  case VTM::VOpDstMux: return;
+  case VTM::VOpMvPhi:
+    if (CurState.isLoopPHIMove(MI)) {
+      unsigned Reg = MI->getOperand(0).getReg();
+      assert(MRI->hasOneUse(Reg) && "Incoming copy has more than one use?");
+      MachineInstr *PN = &*MRI->use_begin(Reg);
+      assert(PN && PN->isPHI() && "Bad user of incoming copy!");
+      VSUnit *PHISU = CurState.lookupSUnit(PN);
+      assert(PHISU && "Schedule unit for PHI node not found!");
+      CurState.mapMI2SU(MI, PHISU, 0);
+    }
     return;
   }
 
