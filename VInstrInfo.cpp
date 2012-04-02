@@ -152,6 +152,10 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
   return true;
 }
 
+bool VInstrInfo::shouldAvoidSinking(MachineInstr *MI) const {
+  return MI->getOpcode() == VTM::VOpMoveArg || isDatapath(MI->getOpcode());
+}
+
 MachineInstr *VInstrInfo::commuteInstruction(MachineInstr *MI, bool NewMI)const{
   const MCInstrDesc &TID = MI->getDesc();
   bool HasDef = TID.getNumDefs();

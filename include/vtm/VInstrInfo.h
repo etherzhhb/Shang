@@ -114,6 +114,8 @@ public:
                                    unsigned ExtraFCycles,
                                    float Probability, float Confidence) const;
 
+  virtual bool shouldAvoidSinking(MachineInstr *MI) const;
+
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
 

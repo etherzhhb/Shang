@@ -97,7 +97,33 @@ struct VTMPassConfig : public TargetPassConfig {
     // Annotate the bit level information.
     PM.add(createBitLevelInfoPass());
 
-    TargetPassConfig::addMachineSSAOptimization();
+    // Pre-ra tail duplication.
+    if (addPass(EarlyTailDuplicateID) != &NoPassID)
+      printAndVerify("After Pre-RegAlloc TailDuplicate");
+
+    // Optimize PHIs before DCE: removing dead PHI cycles may make more
+    // instructions dead.
+    addPass(OptimizePHIsID);
+
+    // If the target requests it, assign local variables to stack slots relative
+    // to one another and simplify frame index references where possible.
+    addPass(LocalStackSlotAllocationID);
+
+    // With optimization, dead code should already be eliminated. However
+    // there is one known exception: lowered code for arguments that are only
+    // used by tail calls, where the tail calls reuse the incoming stack
+    // arguments directly (see t11 in test/CodeGen/X86/sibcall.ll).
+    addPass(DeadMachineInstructionElimID);
+    printAndVerify("After codegen DCE pass");
+
+    addPass(MachineLICMID);
+    addPass(MachineCSEID);
+    addPass(MachineSinkingID);
+    printAndVerify("After Machine LICM, CSE and Sinking passes");
+
+    addPass(PeepholeOptimizerID);
+    printAndVerify("After codegen peephole optimization pass");
+
     // Fix the machine code to avoid unnecessary mux.
     PM.add(createFixMachineCodePass(true));
 
