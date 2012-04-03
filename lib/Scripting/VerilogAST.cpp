@@ -717,33 +717,15 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
                             : createExpr(Opc, NewOps, BitWidth, 0);
 }
 
-VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
-                                      VASTValue *RHS, unsigned BitWidth) {
-  // Try to make RHS to be an constant.
-  if (isa<VASTImmediate>(LHS)) std::swap(LHS, RHS);
-
-  if (VASTImmediate *I = dyn_cast<VASTImmediate>(RHS)) {
-    VASTValue *ValForRHSIsZero, *ValForRHSIsAllOnes;
-    switch (Opc) {
-    default: break;
-    case VASTExpr::dpAnd: {
-      ValForRHSIsZero = RHS;
-      ValForRHSIsAllOnes = LHS;
-      break;
-    }
-    case VASTExpr::dpOr: {
-      ValForRHSIsZero = LHS;
-      ValForRHSIsAllOnes = RHS;
-      break;
-    }
-    }
-
-    uint64_t ImmVal = getBitSlice64(I->getValue(), BitWidth);
-
-    if (ImmVal == getBitSlice64(~0ull, BitWidth))  return ValForRHSIsAllOnes;
-    else if (ImmVal == 0)                          return ValForRHSIsZero;
+VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc,
+                                      ArrayRef<VASTValue*> Ops,
+                                      unsigned BitWidth) {
+  switch (Opc) {
+  default: break;
+  case VASTExpr::dpOr: return buildOrExpr(Opc, Ops, BitWidth);
+  case VASTExpr::dpRXor: return buildXorExpr(Opc, Ops, BitWidth);
   }
-  VASTValue *Ops[] = { LHS, RHS };
+
   return flattenExprTree(Opc, Ops, BitWidth);
 }
 
@@ -751,8 +733,10 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
                                  VASTValue *RHS, unsigned BitWidth) {
   switch (Opc) {
   default: break;
-  case VASTExpr::dpAnd: case VASTExpr::dpOr: case VASTExpr::dpXor:
-    return buildLogicExpr(Opc, LHS, RHS, BitWidth);
+  case VASTExpr::dpAnd: case VASTExpr::dpXor: case VASTExpr::dpOr: {
+    VASTValue *Ops[] = { LHS, RHS };
+    return buildLogicExpr(Opc, Ops, BitWidth);
+  }
   case VASTExpr::dpAdd: {
     VASTValue *Ops[] = { LHS, RHS };
     return buildAddExpr(Opc, Ops, BitWidth);
@@ -789,8 +773,7 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
   case VASTExpr::dpAnd: case VASTExpr::dpOr: {
     if (Ops.size() == 1)
       return Ops[0];
-    else if(Ops.size() == 2)
-      return buildLogicExpr(Opc, Ops[0], Ops[1], BitWidth);
+    return buildLogicExpr(Opc, Ops, BitWidth);
     break;
   }
   }
@@ -808,6 +791,35 @@ VASTValue *VASTModule::buildAddExpr(VASTExpr::Opcode Opc,
                                     ArrayRef<VASTValue*> Ops,
                                     unsigned BitWidth) {
   return flattenExprTree(Opc, Ops, BitWidth);
+}
+
+VASTValue *VASTModule::buildOrExpr(VASTExpr::Opcode Opc,
+                                   ArrayRef<VASTValue*> Ops,
+                                   unsigned BitWidth) {
+  assert (Ops.size() > 1 && "There should be more than one operand!!");
+
+  SmallVector<VASTValue*, 4> NotExprs;
+  // Build the operands of Or operation into not Expr.
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    VASTValue *V = buildNotExpr(Ops[i]);
+    NotExprs.push_back(V);
+  }
+
+  // Build Or operation with the And Inverter Graph (AIG).
+  return buildNotExpr(buildExpr(VASTExpr::dpAnd, NotExprs, BitWidth));
+}
+
+VASTValue *VASTModule::buildXorExpr(VASTExpr::Opcode Opc,
+                                    ArrayRef<VASTValue*> Ops,
+                                    unsigned BitWidth) {
+  assert (Ops.size() == 2 && "There should be more than one operand!!");
+
+  // Build the Xor Expr with the And Inverter Graph (AIG).
+  return buildExpr(VASTExpr::dpAnd,
+                   buildExpr(VASTExpr::dpOr, Ops[0], Ops[1], BitWidth),
+                   buildNotExpr(buildExpr(VASTExpr::dpAnd, Ops[0],
+                                          Ops[1], BitWidth)),
+                   BitWidth);
 }
 
 VASTValue *

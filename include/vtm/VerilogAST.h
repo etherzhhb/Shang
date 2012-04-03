@@ -1195,7 +1195,7 @@ public:
 
   VASTValue *getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);
 
-  VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
+  VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                             unsigned BitWidth);
 
   VASTValue *buildMulExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
@@ -1205,6 +1205,12 @@ public:
                           unsigned BitWidth);
 
   VASTValue *buildNotExpr(VASTValue *U);
+
+  VASTValue *buildOrExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+                         unsigned BitWidth);
+
+  VASTValue *buildXorExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+                          unsigned BitWidth);
 
   VASTValue *flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                              unsigned BitWidth);
