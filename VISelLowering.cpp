@@ -91,14 +91,6 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
     MVT CurVT = MVT((MVT::SimpleValueType)VT);
 
 
-    // Lower the add/sub operation to full adder operation.
-    setOperationAction(ISD::ADD, CurVT, Custom);
-    setOperationAction(ISD::ADDC, CurVT, Custom);
-    // Expend a - b to a + ~b + 1;
-    setOperationAction(ISD::SUB, CurVT, Custom);
-    setOperationAction(ISD::SUBE, CurVT, Expand);
-    //setOperationAction(ISD::ADDC, CurVT, Expand);
-    setOperationAction(ISD::SUBC, CurVT, Custom);
     // Expand overflow aware operations
     setOperationAction(ISD::SADDO, CurVT, Expand);
     setOperationAction(ISD::SSUBO, CurVT, Expand);
@@ -136,17 +128,9 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
       setTruncStoreAction(CurVT, DstVT, Expand);
     }
 
-    // Lower cast node to bit level operation.
-    setOperationAction(ISD::SIGN_EXTEND, CurVT, Custom);
     setOperationAction(ISD::SIGN_EXTEND_INREG, CurVT, Expand);
-    setOperationAction(ISD::ZERO_EXTEND, CurVT, Custom);
-    setOperationAction(ISD::ANY_EXTEND, CurVT, Custom);
-    setOperationAction(ISD::TRUNCATE, CurVT, Custom);
     // Condition code will not work.
     setOperationAction(ISD::SELECT_CC, CurVT, Expand);
-    // Lower SetCC to more fundamental operation.
-    setOperationAction(ISD::SETCC, CurVT, Custom);
-
     setOperationAction(ISD::JumpTable, CurVT, Custom);
 
     //for (unsigned CC = 0; CC < ISD::SETCC_INVALID; ++CC)
@@ -190,10 +174,19 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::ROTL);
   setTargetDAGCombine(ISD::ROTR);
 
+  setTargetDAGCombine(ISD::SIGN_EXTEND);
+  setTargetDAGCombine(ISD::ANY_EXTEND);
+  setTargetDAGCombine(ISD::ZERO_EXTEND);
+  setTargetDAGCombine(ISD::TRUNCATE);
+
   setTargetDAGCombine(ISD::XOR);
   setTargetDAGCombine(ISD::OR);;
   setTargetDAGCombine(ISD::AND);
+  setTargetDAGCombine(ISD::ADD);
+  setTargetDAGCombine(ISD::ADDC);
   setTargetDAGCombine(ISD::ADDE);
+  setTargetDAGCombine(ISD::SUB);
+  setTargetDAGCombine(ISD::SUBC);
   setTargetDAGCombine(ISD::MUL);
   setTargetDAGCombine(ISD::UMUL_LOHI);
 }
@@ -515,68 +508,11 @@ SDValue VTargetLowering::getVFlag(SelectionDAG &DAG, SDValue SetCC) {
                                  LHSSign, N));
 }
 
-SDValue VTargetLowering::LowerSetCC(SDValue Op, SelectionDAG &DAG) const {
-  SDValue LHS = Op->getOperand(0), RHS = Op->getOperand(1);
-  SDValue Cnd = Op->getOperand(2);
-  DebugLoc dl = Op.getDebugLoc();
-  // Simply replace setcc by ICmp
-  return DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS, Cnd);
-}
-
-// A - B = A + (-B) = A + (~B) + 1
-SDValue VTargetLowering::LowerSub(SDValue Op, SelectionDAG &DAG) const {
-  SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
-  RHS = getNot(DAG, Op.getDebugLoc(), RHS);
-  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
-                     DAG.getVTList(Op.getValueType(), MVT::i1),
-                     LHS, RHS, DAG.getTargetConstant(1, MVT::i1));
-}
-
-SDValue VTargetLowering::LowerSubC(SDValue Op, SelectionDAG &DAG) const {
-  SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
-  RHS = getNot(DAG, Op.getDebugLoc(), RHS);
-  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
-                     DAG.getVTList(Op.getValueType(), MVT::i1),
-                     LHS, RHS, DAG.getTargetConstant(1, MVT::i1));
-}
-
-SDValue VTargetLowering::LowerAdd(SDValue Op, SelectionDAG &DAG) const {
-  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
-                     DAG.getVTList(Op.getValueType(), MVT::i1),
-                     Op.getOperand(0), Op.getOperand(1),
-                     DAG.getTargetConstant(0, MVT::i1));
-}
-
-SDValue VTargetLowering::LowerAddC(SDValue Op, SelectionDAG &DAG) const {
-  SDValue LHS = Op.getOperand(0), RHS = Op.getOperand(1);
-  return DAG.getNode(ISD::ADDE, Op.getDebugLoc(),
-                     DAG.getVTList(Op.getValueType(), MVT::i1),
-                     Op.getOperand(0), Op.getOperand(1), Op->getOperand(2));
-}
-
 SDValue VTargetLowering::getReductionOp(SelectionDAG &DAG, unsigned Opc,
                                         DebugLoc dl, SDValue Src) {
   assert((Opc == VTMISD::RAnd || Opc == VTMISD::ROr || Opc == VTMISD::RXor)
          && "Bad opcode!");
   return DAG.getNode(Opc, dl, MVT::i1, Src);
-}
-
-SDValue VTargetLowering::LowerExtend(SDValue Op, SelectionDAG &DAG,
-                                     bool Signed) const {
-  SDValue Operand = Op.getOperand(0);
-  DebugLoc dl = Operand.getDebugLoc();
-
-  unsigned DstSize = Op.getValueSizeInBits();
-
-  return getExtend(DAG, dl, Operand, DstSize, Signed);
-}
-
-SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
-  SDValue Operand = Op.getOperand(0);
-  unsigned DstSize = Op.getValueSizeInBits();
-
-  // Select the lower bit slice to truncate values.
-  return getTruncate(DAG, Op.getDebugLoc(), Operand, DstSize);
 }
 
 SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
@@ -626,23 +562,6 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
     return SDValue();
-  case ISD::ADD:
-    return LowerAdd(Op, DAG);
-  case ISD::ADDC:
-    return LowerAddC(Op, DAG);
-  case ISD::SUB:
-    return LowerSub(Op, DAG);
-  case ISD::SUBC:
-    return LowerSubC(Op, DAG);
-  case ISD::SETCC:
-    return LowerSetCC(Op, DAG);
-  case ISD::SIGN_EXTEND:
-    return LowerExtend(Op, DAG, true);
-  case ISD::ANY_EXTEND:
-  case ISD::ZERO_EXTEND:
-    return LowerExtend(Op, DAG, false);
-  case ISD::TRUNCATE:
-    return LowerTruncate(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
     return LowerINTRINSIC_W_CHAIN(Op, DAG);
   }

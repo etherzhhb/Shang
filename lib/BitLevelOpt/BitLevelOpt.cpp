@@ -1627,13 +1627,41 @@ SDValue PerfromICmpCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            TargetLowering::DAGCombinerInfo &DCI)
                                            const {
-  if (DCI.isBeforeLegalize()) return SDValue();
+  if (DCI.isBeforeLegalize() || DCI.isBeforeLegalizeOps() ||
+      DCI.isCalledByLegalizer())
+    return SDValue();
+
+  SelectionDAG &DAG = DCI.DAG;
 
   switch (N->getOpcode()) {
   case VTMISD::BitCat:
     return PerformBitCatCombine(N, DCI);
   case VTMISD::BitSlice:
     return PerformBitSliceCombine(N, DCI);
+  case ISD::ADD:
+    return DCI.DAG.getNode(ISD::ADDE, N->getDebugLoc(),
+                           DCI.DAG.getVTList(N->getValueType(0), MVT::i1),
+                           N->getOperand(0), N->getOperand(1),
+                           DCI.DAG.getTargetConstant(0, MVT::i1));
+  // A - B = A + (-B) = A + (~B) + 1
+  case ISD::SUB:{
+      SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+      RHS = getNot(DAG, N->getDebugLoc(), RHS);
+      return DAG.getNode(ISD::ADDE, N->getDebugLoc(),
+                         DAG.getVTList(N->getValueType(0), MVT::i1),
+                         LHS, RHS, DAG.getTargetConstant(1, MVT::i1));
+  }
+  case ISD::SUBC: {
+      SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+      RHS = getNot(DAG, N->getDebugLoc(), RHS);
+      return DAG.getNode(ISD::ADDE, N->getDebugLoc(),
+                         DAG.getVTList(N->getValueType(0), MVT::i1),
+                         LHS, RHS, DAG.getTargetConstant(1, MVT::i1));
+  }
+  case ISD::ADDC:
+    return DAG.getNode(ISD::ADDE, N->getDebugLoc(),
+                       DAG.getVTList(N->getValueType(0), MVT::i1),
+                       N->getOperand(0), N->getOperand(1), N->getOperand(2));
   case ISD::ADDE:
     if(EnableArithOpt)  return PerformAddCombine(N, DCI);
     break;
@@ -1641,6 +1669,37 @@ SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::MUL:
     if(EnableArithOpt)  return PerformMulCombine(N, DCI);
     break;
+  case ISD::SETCC: {
+    SDValue LHS = N->getOperand(0), RHS = N->getOperand(1);
+    SDValue Cnd = N->getOperand(2);
+    DebugLoc dl = N->getDebugLoc();
+    // Simply replace setcc by ICmp
+    return DAG.getNode(VTMISD::ICmp, dl, MVT::i1, LHS, RHS, Cnd);
+  }
+  case ISD::SIGN_EXTEND: {
+    SDValue Operand = N->getOperand(0);
+    DebugLoc dl = Operand.getDebugLoc();
+
+    unsigned DstSize = N->getValueSizeInBits(0);
+
+    return getExtend(DAG, dl, Operand, DstSize, true);
+  }
+  case ISD::ANY_EXTEND:
+  case ISD::ZERO_EXTEND: {
+    SDValue Operand = N->getOperand(0);
+    DebugLoc dl = Operand.getDebugLoc();
+
+    unsigned DstSize = N->getValueSizeInBits(0);
+
+    return getExtend(DAG, dl, Operand, DstSize, false);
+  }
+  case ISD::TRUNCATE: {
+    SDValue Operand = N->getOperand(0);
+    unsigned DstSize = N->getValueSizeInBits(0);
+
+    // Select the lower bit slice to truncate values.
+    return getTruncate(DAG, N->getDebugLoc(), Operand, DstSize);
+  }
   case VTMISD::ICmp:
     if(EnableArithOpt)  return PerfromICmpCombine(N, DCI);
     break;

@@ -180,15 +180,6 @@ public:
   }
 
 private:
-  SDValue LowerAdd(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerAddC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerSub(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerSubC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerExtend(SDValue Op, SelectionDAG &DAG, bool Signed) const;
-  SDValue LowerTruncate(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerSetCC(SDValue Op, SelectionDAG &DAG) const;
-
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   /// ReplaceNodeResults - Replace the results of node with an illegal result
