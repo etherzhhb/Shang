@@ -1187,6 +1187,12 @@ public:
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op, unsigned BitWidth);
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
                        unsigned BitWidth);
+  template<VASTExpr::Opcode Opc>
+  static VASTValue *buildExpr(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth,
+                              VASTModule *VM) {
+    return VM->buildExpr(Opc, LHS, RHS, BitWidth);
+  }
+
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0, VASTValue *Op1,
                        VASTValue *Op2, unsigned BitWidth);
   VASTValue *buildExpr(VASTExprBuilder &Builder) {

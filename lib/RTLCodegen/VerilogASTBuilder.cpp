@@ -288,7 +288,9 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitBr(MachineInstr *MI, VASTSlot *CurSlot, VASTValueVecTy &Cnds,
               MachineBasicBlock *CurBB, bool Pipelined);
   void emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
-  void emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
+
+  template<typename FnTy>
+  void emitBinaryOp(MachineInstr *MI, FnTy F);
   void emitOpLut(MachineInstr *MI);
   void emitOpSel(MachineInstr *MI);
 
@@ -983,8 +985,10 @@ void VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
 
 void VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
   unsigned CndCode = MI->getOperand(3).getImm();
-  emitBinaryOp(MI, CndCode == VFUs::CmpSigned ? VASTExpr::dpSCmp
-                                              : VASTExpr::dpUCmp);
+  if (CndCode == VFUs::CmpSigned)
+    emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSCmp>);
+  else
+    emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpUCmp>);
 }
 
 void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
@@ -1219,6 +1223,14 @@ void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
+template<typename FnTy>
+void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
+  if (W->getAssigningValue()) return;
+  VM->assign(W, F(getAsOperand(MI->getOperand(1)), getAsOperand(MI->getOperand(2)),
+                  W->getBitWidth(), VM));
+}
+
 MachineBasicBlock::iterator
 VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
   typedef MachineBasicBlock::instr_iterator instr_it;
@@ -1230,26 +1242,42 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
     MachineInstr *MI = I;
     switch (MI->getOpcode()) {
     case VTM::VOpBitSlice:  emitOpBitSlice(MI);                       break;
-    case VTM::VOpBitCat:    emitBinaryOp(MI, VASTExpr::dpBitCat);     break;
-    case VTM::VOpBitRepeat: emitBinaryOp(MI, VASTExpr::dpBitRepeat);  break;
+    case VTM::VOpBitCat:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitCat>);
+      break;
+    case VTM::VOpBitRepeat:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitRepeat>);
+      break;
 
     case VTM::ImpUse:       /*Not need to handle*/  break;
 
     case VTM::VOpAdd_c:     emitChainedOpAdd(MI); break;
     case VTM::VOpICmp_c:    emitChainedOpICmp(MI); break;
 
-    case VTM::VOpSHL_c:     emitBinaryOp(MI, VASTExpr::dpShl);  break;
-    case VTM::VOpSRA_c:     emitBinaryOp(MI, VASTExpr::dpSRA);  break;
-    case VTM::VOpSRL_c:     emitBinaryOp(MI, VASTExpr::dpSRL);  break;
+    case VTM::VOpSHL_c:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpShl>);
+      break;
+    case VTM::VOpSRA_c:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRA>);
+      break;
+    case VTM::VOpSRL_c:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRL>);
+      break;
     case VTM::VOpMultLoHi_c:
-    case VTM::VOpMult_c:    emitBinaryOp(MI, VASTExpr::dpMul);  break;
+    case VTM::VOpMult_c:    emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpMul>);  break;
 
     case VTM::VOpSel:       emitOpSel(MI);                      break;
 
     case VTM::VOpLUT:       emitOpLut(MI);                      break;
-    case VTM::VOpXor:       emitBinaryOp(MI, VASTExpr::dpXor);  break;
-    case VTM::VOpAnd:       emitBinaryOp(MI, VASTExpr::dpAnd);  break;
-    case VTM::VOpOr:        emitBinaryOp(MI, VASTExpr::dpOr);   break;
+    case VTM::VOpXor:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpXor>);
+      break;
+    case VTM::VOpAnd:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpAnd>);
+      break;
+    case VTM::VOpOr:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpOr>);
+      break;
 
     case VTM::VOpNot:       emitUnaryOp(MI, VASTExpr::dpNot);   break;
     case VTM::VOpROr:       emitUnaryOp(MI, VASTExpr::dpROr);   break;
@@ -1268,15 +1296,6 @@ void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
 
   VM->assign(W, VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
                               W->getBitWidth())) ;
-}
-
-void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
-  VM->assign(W, VM->buildExpr(Opc,
-                              getAsOperand(MI->getOperand(1)),
-                              getAsOperand(MI->getOperand(2)),
-                              W->getBitWidth()));
 }
 
 void VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
