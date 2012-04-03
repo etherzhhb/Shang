@@ -20,6 +20,7 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/CodeMetrics.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -93,10 +94,70 @@ Pass *llvm::createHLSLoopUnrollPass() {
 
 namespace {
 struct HLSCodeMetrics : public CodeMetrics {
+  Loop *CurLoop;
+  const TargetData *TD;
+  ScalarEvolution *SE;
+
+  unsigned NumLoadStore;
+
+  HLSCodeMetrics(Loop *L, const TargetData *td, ScalarEvolution *se)
+    : CurLoop(L), TD(td), SE(se), NumLoadStore(0) {}
+
+  /// processLoopStore - See if this store can be promoted to a memset or memcpy.
+  bool processLoopStore(StoreInst *SI, const SCEV *BECount) {
+    if (!SI->isSimple()) return false;
+
+    Value *StoredVal = SI->getValueOperand();
+    Value *StorePtr = SI->getPointerOperand();
+
+    // Reject stores that are so large that they overflow an unsigned.
+    uint64_t SizeInBits = TD->getTypeSizeInBits(StoredVal->getType());
+    if ((SizeInBits & 7) || (SizeInBits >> 32) != 0 || SizeInBits >= 64)
+      return false;
+
+    // See if the pointer expression is an AddRec like {base,+,1} on the current
+    // loop, which indicates a strided store.  If we have something else, it's a
+    // random store we can't handle.
+    const SCEVAddRecExpr *StoreEv =
+      dyn_cast<SCEVAddRecExpr>(SE->getSCEV(StorePtr));
+    if (StoreEv == 0 || StoreEv->getLoop() != CurLoop || !StoreEv->isAffine())
+      return false;
+
+    // Check to see if the stride matches the size of the store.  If so, then we
+    // know that every byte is touched in the loop.
+    unsigned StoreSize = (unsigned)SizeInBits >> 3;
+    const SCEVConstant *Stride = dyn_cast<SCEVConstant>(StoreEv->getOperand(1));
+
+    if (Stride == 0 || StoreSize != Stride->getValue()->getValue()) {
+      // TODO: Could also handle negative stride here someday, that will require
+      // the validity check in mayLoopAccessLocation to be updated though.
+      // Enable this to print exact negative strides.
+      if (0 && Stride && StoreSize == -Stride->getValue()->getValue()) {
+        dbgs() << "NEGATIVE STRIDE: " << *SI << "\n";
+        dbgs() << "BB: " << *SI->getParent();
+      }
+
+      return false;
+    }
+
+    // If the stored value is a strided load in the same loop with the same stride
+    // this this may be transformable into a memcpy.  This kicks in for stuff like
+    //   for (i) A[i] = B[i];
+    if (LoadInst *LI = dyn_cast<LoadInst>(StoredVal)) {
+      const SCEVAddRecExpr *LoadEv =
+        dyn_cast<SCEVAddRecExpr>(SE->getSCEV(LI->getOperand(0)));
+      if (LoadEv && LoadEv->getLoop() == CurLoop && LoadEv->isAffine() &&
+          StoreEv->getOperand(1) == LoadEv->getOperand(1) && LI->isSimple())
+        return true;
+    }
+    //errs() << "UNHANDLED strided store: " << *StoreEv << " - " << *SI << "\n";
+
+    return true;
+  }
+
   /// analyzeBasicBlock - Fill in the current structure with information gleaned
   /// from the specified block.
-  void analyzeBasicBlock(const BasicBlock *BB, const TargetData *TD,
-                         ScalarEvolution *SE) {
+  void analyzeBasicBlock(const BasicBlock *BB, const SCEV *BECount) {
     ++NumBlocks;
     unsigned NumInstsBeforeThisBB = NumInsts;
     for (BasicBlock::const_iterator II = BB->begin(), E = BB->end();
@@ -110,6 +171,9 @@ struct HLSCodeMetrics : public CodeMetrics {
       case Instruction::And:
       case Instruction::Xor:
       case Instruction::Or:
+        continue;
+      case Instruction::Load:
+
         continue;
       case Instruction::Call:
       case Instruction::Invoke:
@@ -129,6 +193,13 @@ struct HLSCodeMetrics : public CodeMetrics {
       if (I->isCast() || (I->isBinaryOp() && isa<Constant>(I->getOperand(1)))
           || I->isTerminator())
         continue;
+
+      // Can the loop be vecotorize?
+      if (const StoreInst *SI = dyn_cast<StoreInst>(I)) {
+        ++NumLoadStore;
+        if (BECount && processLoopStore(const_cast<StoreInst*>(SI), BECount))
+          continue;
+      }
 
       ++NumInsts;
     }
@@ -205,7 +276,7 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // from UnrollThreshold, it is overridden to a smaller value if the current
   // function is marked as optimize-for-size, and the unroll threshold was
   // not user specified.
-  unsigned Threshold = 16;
+  unsigned Threshold = 8;
 
   // Find trip count and trip multiple if count is not available
   unsigned TripCount = 0;
@@ -236,16 +307,18 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Compute the loop size
   const TargetData *TD = getAnalysisIfAvailable<TargetData>();
 
-  HLSCodeMetrics Metrics;
+  const SCEV *BECount = dyn_cast<SCEVConstant>(SE->getBackedgeTakenCount(L));
+
+  HLSCodeMetrics Metrics(L, TD, SE);
   for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
     I != E; ++I)
-    Metrics.analyzeBasicBlock(*I, TD, SE);
+    Metrics.analyzeBasicBlock(*I, BECount);
   unsigned NumInlineCandidates = Metrics.NumInlineCandidates;
 
   // Don't allow an estimate of size zero.  This would allows unrolling of loops
   // with huge iteration counts, which is a compile time problem even if it's
   // not a problem for code quality.
-  unsigned LoopSize = std::min(Metrics.NumInsts, 1u);
+  unsigned LoopSize = std::max(Metrics.NumInsts + Metrics.NumLoadStore, 1u);
 
   DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
   if (NumInlineCandidates != 0) {
