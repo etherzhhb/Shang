@@ -33,7 +33,7 @@ namespace {
   class HLSLoopUnroll : public LoopPass {
   public:
     static char ID; // Pass ID, replacement for typeid
-    HLSLoopUnroll(int T = -1, int C = -1,  int P = -1) : LoopPass(ID) {
+    HLSLoopUnroll(int T = -1, int C = -1) : LoopPass(ID) {
       CurrentThreshold = (T == -1) ? 150 : unsigned(T);
       CurrentCount = (C == -1) ? 0 : unsigned(C);
       initializeHLSLoopUnrollPass(*PassRegistry::getPassRegistry());
@@ -164,7 +164,7 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
           << " because size: " << Size << ">" << Threshold << "\n");
     if (TripCount) {
       // Reduce unroll count to be modulo of TripCount for partial unrolling
-      Count = CurrentThreshold / LoopSize;
+      Count = Threshold / LoopSize;
       while (Count != 0 && TripCount % Count != 0)
         --Count;
     }
