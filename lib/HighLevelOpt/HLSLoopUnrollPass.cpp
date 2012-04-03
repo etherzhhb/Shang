@@ -36,10 +36,6 @@ namespace {
     HLSLoopUnroll(int T = -1, int C = -1,  int P = -1) : LoopPass(ID) {
       CurrentThreshold = (T == -1) ? 150 : unsigned(T);
       CurrentCount = (C == -1) ? 0 : unsigned(C);
-      CurrentAllowPartial = (P == -1) ? false : (bool)P;
-
-      UserThreshold = (T != -1);
-
       initializeHLSLoopUnrollPass(*PassRegistry::getPassRegistry());
     }
 
@@ -58,8 +54,6 @@ namespace {
 
     unsigned CurrentCount;
     unsigned CurrentThreshold;
-    bool     CurrentAllowPartial;
-    bool     UserThreshold;        // CurrentThreshold is user-specified.
 
     bool runOnLoop(Loop *L, LPPassManager &LPM);
 
@@ -128,10 +122,7 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // from UnrollThreshold, it is overridden to a smaller value if the current
   // function is marked as optimize-for-size, and the unroll threshold was
   // not user specified.
-  unsigned Threshold = CurrentThreshold;
-  if (!UserThreshold &&
-      Header->getParent()->hasFnAttr(Attribute::OptimizeForSize))
-    Threshold = OptSizeUnrollThreshold;
+  unsigned Threshold = OptSizeUnrollThreshold;
 
   // Find trip count and trip multiple if count is not available
   unsigned TripCount = 0;
@@ -148,8 +139,6 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // and the trip count is a run-time value.  The default is different
   // for run-time or compile-time trip count loops.
   unsigned Count = CurrentCount;
-  if (CurrentCount == 0 && TripCount == 0)
-    Count = UnrollRuntimeCount;
 
   if (Count == 0) {
     // Conservative heuristic: if we know the trip count, see if we can
@@ -161,38 +150,30 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
     Count = TripCount;
   }
 
-  // Enforce the threshold.
-  if (Threshold != NoThreshold) {
-    const TargetData *TD = getAnalysisIfAvailable<TargetData>();
-    unsigned NumInlineCandidates;
-    unsigned LoopSize = ApproximateLoopSize(L, NumInlineCandidates, TD);
-    DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
-    if (NumInlineCandidates != 0) {
-      DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
+  const TargetData *TD = getAnalysisIfAvailable<TargetData>();
+  unsigned NumInlineCandidates;
+  unsigned LoopSize = ApproximateLoopSize(L, NumInlineCandidates, TD);
+  DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
+  if (NumInlineCandidates != 0) {
+    DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
+    return false;
+  }
+  uint64_t Size = (uint64_t)LoopSize*Count;
+  if (TripCount != 1 && Size > Threshold) {
+    DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
+          << " because size: " << Size << ">" << Threshold << "\n");
+    if (TripCount) {
+      // Reduce unroll count to be modulo of TripCount for partial unrolling
+      Count = CurrentThreshold / LoopSize;
+      while (Count != 0 && TripCount % Count != 0)
+        --Count;
+    }
+
+    if (Count < 2) {
+      DEBUG(dbgs() << "  could not unroll partially\n");
       return false;
     }
-    uint64_t Size = (uint64_t)LoopSize*Count;
-    if (TripCount != 1 && Size > Threshold) {
-      DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
-            << " because size: " << Size << ">" << Threshold << "\n");
-      if (!CurrentAllowPartial) {
-        DEBUG(dbgs() << "  will not try to unroll partially because "
-              << "-unroll-allow-partial not given\n");
-        return false;
-      }
-      if (TripCount) {
-        // Reduce unroll count to be modulo of TripCount for partial unrolling
-        Count = CurrentThreshold / LoopSize;
-        while (Count != 0 && TripCount % Count != 0)
-          Count--;
-      }
-
-      if (Count < 2) {
-        DEBUG(dbgs() << "  could not unroll partially\n");
-        return false;
-      }
-      DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
-    }
+    DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
   }
 
   // Unroll the loop.
