@@ -79,14 +79,24 @@ public:
                                               const SelectionDAG &DAG,
                                               unsigned Depth = 0) const;
   // Narrowing is always profitable.
-  virtual bool isNarrowingProfitable(EVT VT1, EVT VT2) const { return true; }
-  virtual bool isTruncateFree(EVT VT1, EVT VT2) const { return true; }
-  virtual bool isTruncateFree(const Type *Ty1, const Type *Ty2) const {
+  virtual bool isNarrowingProfitable(EVT VT1, EVT VT2) const {
     return true;
   }
-  virtual bool isZExtFree(EVT VT1, EVT VT2) const { return true; }
+
+  // FIXME: Remove this.
+  virtual bool isTruncateFree(EVT VT1, EVT VT2) const {
+    return VT2.getSizeInBits() >= 8;
+  }
+  virtual bool isTruncateFree(const Type *Ty1, const Type *Ty2) const {
+    unsigned SizeInBits = Ty2->getPrimitiveSizeInBits();
+    return SizeInBits >= 8 && isPowerOf2_32(SizeInBits);
+  }
+  virtual bool isZExtFree(EVT VT1, EVT VT2) const {
+    return VT2.getSizeInBits() >= 8;
+  }
   virtual bool isZExtFree(const Type *Ty1, const Type *Ty2) const {
-    return true;
+    unsigned SizeInBits = Ty2->getPrimitiveSizeInBits();
+    return SizeInBits >= 8 && isPowerOf2_32(SizeInBits);
   }
 
   // Dirty Hack: Always fold offset.
