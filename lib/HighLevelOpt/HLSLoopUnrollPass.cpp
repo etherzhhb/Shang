@@ -24,6 +24,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/UnrollLoop.h"
+#include "llvm/Support/CallSite.h"
 #include "llvm/Target/TargetData.h"
 #include <climits>
 
@@ -90,23 +91,105 @@ Pass *llvm::createHLSLoopUnrollPass() {
   return new HLSLoopUnroll();
 }
 
-/// ApproximateLoopSize - Approximate the size of the loop.
-static unsigned ApproximateLoopSize(const Loop *L, unsigned &NumCalls,
-                                    const TargetData *TD) {
-  CodeMetrics Metrics;
-  for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
-       I != E; ++I)
-    Metrics.analyzeBasicBlock(*I, TD);
-  NumCalls = Metrics.NumInlineCandidates;
+namespace {
+struct HLSCodeMetrics : public CodeMetrics {
+  /// analyzeBasicBlock - Fill in the current structure with information gleaned
+  /// from the specified block.
+  void analyzeBasicBlock(const BasicBlock *BB, const TargetData *TD,
+                         ScalarEvolution *SE) {
+    ++NumBlocks;
+    unsigned NumInstsBeforeThisBB = NumInsts;
+    for (BasicBlock::const_iterator II = BB->begin(), E = BB->end();
+         II != E; ++II) {
+      const Instruction *I = II;
 
-  unsigned LoopSize = Metrics.NumInsts;
+      if (isa<PHINode>(I)) continue;           // PHI nodes don't count.      
 
-  // Don't allow an estimate of size zero.  This would allows unrolling of loops
-  // with huge iteration counts, which is a compile time problem even if it's
-  // not a problem for code quality.
-  if (LoopSize == 0) LoopSize = 1;
+      // Special handling for calls.
+      switch (I->getOpcode()) {
+      case Instruction::And:
+      case Instruction::Xor:
+      case Instruction::Or:
+        continue;
+      case Instruction::Call:
+      case Instruction::Invoke:
+        visitCallInst(I, BB);
+        continue;
+      }
 
-  return LoopSize;
+      if (const AllocaInst *AI = dyn_cast<AllocaInst>(I)) {
+        if (!AI->isStaticAlloca())
+          this->usesDynamicAlloca = true;
+      }
+
+      if (isa<ExtractElementInst>(II) || II->getType()->isVectorTy())
+        ++NumVectorInsts;
+
+      // Zero cost instructions.
+      if (I->isCast() || (I->isBinaryOp() && isa<Constant>(I->getOperand(1)))
+          || I->isTerminator())
+        continue;
+
+      ++NumInsts;
+    }
+
+    if (isa<ReturnInst>(BB->getTerminator()))
+      ++NumRets;
+
+    // We never want to inline functions that contain an indirectbr.  This is
+    // incorrect because all the blockaddress's (in static global initializers
+    // for example) would be referring to the original function, and this indirect
+    // jump would jump from the inlined copy of the function into the original
+    // function which is extremely undefined behavior.
+    // FIXME: This logic isn't really right; we can safely inline functions
+    // with indirectbr's as long as no other function or global references the
+    // blockaddress of a block within the current function.  And as a QOI issue,
+    // if someone is using a blockaddress without an indirectbr, and that
+    // reference somehow ends up in another function or global, we probably
+    // don't want to inline this function.
+    if (isa<IndirectBrInst>(BB->getTerminator()))
+      containsIndirectBr = true;
+
+    // Remember NumInsts for this BB.
+    NumBBInsts[BB] = NumInsts - NumInstsBeforeThisBB;
+  }
+
+  void visitCallInst(const Instruction *I, const BasicBlock * BB ) {
+    if (const IntrinsicInst *IntrinsicI = dyn_cast<IntrinsicInst>(I)) {
+      switch (IntrinsicI->getIntrinsicID()) {
+      default: break;
+      case Intrinsic::dbg_declare:
+      case Intrinsic::dbg_value:
+      case Intrinsic::invariant_start:
+      case Intrinsic::invariant_end:
+      case Intrinsic::lifetime_start:
+      case Intrinsic::lifetime_end:
+      case Intrinsic::objectsize:
+      case Intrinsic::ptr_annotation:
+      case Intrinsic::var_annotation:
+        // These intrinsics don't count as size.
+        return;
+      }
+    }
+
+    ImmutableCallSite CS(cast<Instruction>(I));
+
+    if (const Function *F = CS.getCalledFunction()) {
+      // If a function is both internal and has a single use, then it is
+      // extremely likely to get inlined in the future (it was probably
+      // exposed by an interleaved devirtualization pass).
+      if (!CS.isNoInline() && F->hasInternalLinkage() && F->hasOneUse())
+        ++NumInlineCandidates;
+
+      // If this call is to function itself, then the function is recursive.
+      // Inlining it into other functions is a bad idea, because this is
+      // basically just a form of loop peeling, and our metrics aren't useful
+      // for that case.
+      if (F == BB->getParent())
+        isRecursive = true;
+    }
+  }
+};
 }
 
 bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
@@ -122,7 +205,7 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // from UnrollThreshold, it is overridden to a smaller value if the current
   // function is marked as optimize-for-size, and the unroll threshold was
   // not user specified.
-  unsigned Threshold = OptSizeUnrollThreshold;
+  unsigned Threshold = 16;
 
   // Find trip count and trip multiple if count is not available
   unsigned TripCount = 0;
@@ -150,15 +233,26 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
     Count = TripCount;
   }
 
+  // Compute the loop size
   const TargetData *TD = getAnalysisIfAvailable<TargetData>();
-  unsigned NumInlineCandidates;
-  unsigned LoopSize = ApproximateLoopSize(L, NumInlineCandidates, TD);
+
+  HLSCodeMetrics Metrics;
+  for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
+    I != E; ++I)
+    Metrics.analyzeBasicBlock(*I, TD, SE);
+  unsigned NumInlineCandidates = Metrics.NumInlineCandidates;
+
+  // Don't allow an estimate of size zero.  This would allows unrolling of loops
+  // with huge iteration counts, which is a compile time problem even if it's
+  // not a problem for code quality.
+  unsigned LoopSize = std::min(Metrics.NumInsts, 1u);
+
   DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
   if (NumInlineCandidates != 0) {
     DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
     return false;
   }
-  uint64_t Size = (uint64_t)LoopSize*Count;
+  uint64_t Size = (uint64_t)LoopSize * Count;
   if (TripCount != 1 && Size > Threshold) {
     DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
           << " because size: " << Size << ">" << Threshold << "\n");
