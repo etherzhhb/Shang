@@ -174,6 +174,8 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setTargetDAGCombine(ISD::ROTL);
   setTargetDAGCombine(ISD::ROTR);
 
+  setTargetDAGCombine(ISD::SETCC);
+
   setTargetDAGCombine(ISD::SIGN_EXTEND);
   setTargetDAGCombine(ISD::ANY_EXTEND);
   setTargetDAGCombine(ISD::ZERO_EXTEND);
