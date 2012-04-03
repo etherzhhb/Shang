@@ -2,6 +2,7 @@ add_llvm_library(VTMHighLevelOpt
   FunctionFilter.cpp
   StackToGlobal.cpp
   HLSInliner.cpp
+  HLSLoopUnrollPass.cpp
   ContoBrom.cpp
   )
 

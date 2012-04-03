@@ -33,6 +33,7 @@ Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 
 // Always inline function.
 Pass *createHLSInlinerPass();
+Pass *createHLSLoopUnrollPass();
 
 //Convert the AllocaInst to GlobalVariable.
 Pass *createStackToGlobalPass();
@@ -97,6 +98,7 @@ void initializeVerilogASTWriterPass(PassRegistry &Registry);
 void initializeFunctionFilterPass(PassRegistry &Registry); 
 void initializeRAPass(PassRegistry &Registry);
 void initializeHLSInlinerPass(PassRegistry &Registry);
+void initializeHLSLoopUnrollPass(PassRegistry &Registry);
 } // end namespace
 
 
