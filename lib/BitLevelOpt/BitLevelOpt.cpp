@@ -1627,6 +1627,8 @@ SDValue PerfromICmpCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI) {
 SDValue VTargetLowering::PerformDAGCombine(SDNode *N,
                                            TargetLowering::DAGCombinerInfo &DCI)
                                            const {
+  if (DCI.isBeforeLegalize()) return SDValue();
+
   switch (N->getOpcode()) {
   case VTMISD::BitCat:
     return PerformBitCatCombine(N, DCI);
