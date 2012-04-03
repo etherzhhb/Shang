@@ -133,15 +133,15 @@ int main(int argc, char **argv) {
 
   // Build up all of the passes that we want to do to the module.
   PassManagerBuilder Builder;
-  Builder.DisableUnrollLoops = true;
+  Builder.DisableUnrollLoops = false;
   Builder.LibraryInfo = new TargetLibraryInfo();
   Builder.LibraryInfo->disableAllFunctions();
   Builder.OptLevel = 3;
   Builder.SizeLevel = 2;
   Builder.DisableSimplifyLibCalls = true;
   Builder.Inliner = createHLSInlinerPass();
-  Builder.addExtension(PassManagerBuilder::EP_LoopOptimizerEnd,
-                       LoopOptimizerEndExtensionFn);
+  //Builder.addExtension(PassManagerBuilder::EP_LoopOptimizerEnd,
+  //                     LoopOptimizerEndExtensionFn);
   PassManager Passes;
   Passes.add(new TargetData(*target->getTargetData()));
 
