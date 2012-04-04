@@ -854,6 +854,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // the latency from operations need to wait to the exit operation.
   DetialLatencyInfo::DepLatInfoTy ExitDepInfo;
   VSUnit *ExitSU = 0;
+  bool PHIPresent = false;
 
   for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
     MachineInstr *MI = I;
@@ -894,6 +895,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     MachineInstr *MI = I;
 
     if (MI->getOpcode() == VTM::VOpMvPhi) {
+      PHIPresent = true;
       if (CurState.isLoopPHIMove(MI)) {
         // Forward the edges to exit root, so the dependences of PHI moves
         // can always finish in time.
@@ -934,7 +936,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
   if (Entry->use_empty())
-    ExitSU->addDep(VDCtrlDep::CreateDep(Entry, 1));
+    ExitSU->addDep(VDCtrlDep::CreateDep(Entry, PHIPresent? 1 : 0));
 
   // Sort the schedule units after all units are built.
   CurState.prepareForCtrlSched();
