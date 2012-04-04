@@ -935,8 +935,10 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // If we have a trivial schedule graph that only containing entry and exit
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
-  if (Entry->use_empty())
-    ExitSU->addDep(VDCtrlDep::CreateDep(Entry, PHIPresent? 1 : 0));
+  if (Entry->use_empty()) {
+    unsigned L = CurState.getStepsFromEntry(ExitSU->getRepresentativeInst()));
+    ExitSU->addDep(VDCtrlDep::CreateDep(Entry, L));
+  }
 
   // Sort the schedule units after all units are built.
   CurState.prepareForCtrlSched();
