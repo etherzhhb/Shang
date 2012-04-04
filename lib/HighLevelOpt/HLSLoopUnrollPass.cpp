@@ -173,7 +173,7 @@ struct HLSCodeMetrics : public CodeMetrics {
       case Instruction::Or:
         continue;
       case Instruction::Load:
-
+        ++NumLoadStore;
         continue;
       case Instruction::Call:
       case Instruction::Invoke:
