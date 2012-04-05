@@ -1,4 +1,4 @@
-//===-- HLSLoopUnroll.cpp - Loop unroller pass -------------------------------===//
+//===-- TrivialLoopUnroll.cpp - Loop unroller pass ------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -32,13 +32,11 @@
 using namespace llvm;
 
 namespace {
-  class HLSLoopUnroll : public LoopPass {
+  class TrivialLoopUnroll : public LoopPass {
   public:
     static char ID; // Pass ID, replacement for typeid
-    HLSLoopUnroll(int T = -1, int C = -1) : LoopPass(ID) {
-      CurrentThreshold = (T == -1) ? 150 : unsigned(T);
-      CurrentCount = (C == -1) ? 0 : unsigned(C);
-      initializeHLSLoopUnrollPass(*PassRegistry::getPassRegistry());
+    TrivialLoopUnroll() : LoopPass(ID) {
+      initializeTrivialLoopUnrollPass(*PassRegistry::getPassRegistry());
     }
 
     /// A magic value for use with the Threshold parameter to indicate
@@ -53,9 +51,6 @@ namespace {
     // Default unroll count for loops with run-time trip count if
     // -unroll-count is not set
     static const unsigned UnrollRuntimeCount = 8;
-
-    unsigned CurrentCount;
-    unsigned CurrentThreshold;
 
     bool runOnLoop(Loop *L, LPPassManager &LPM);
 
@@ -80,100 +75,42 @@ namespace {
   };
 }
 
-char HLSLoopUnroll::ID = 0;
-INITIALIZE_PASS_BEGIN(HLSLoopUnroll, "loop-unroll", "Unroll loops", false, false)
+char TrivialLoopUnroll::ID = 0;
+INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "loop-unroll", "Unroll loops", false, false)
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
-INITIALIZE_PASS_END(HLSLoopUnroll, "loop-unroll", "Unroll loops", false, false)
+INITIALIZE_PASS_END(TrivialLoopUnroll, "loop-unroll", "Unroll loops", false, false)
 
-Pass *llvm::createHLSLoopUnrollPass() {
-  return new HLSLoopUnroll();
+Pass *llvm::createTrivialLoopUnrollPass() {
+  return new TrivialLoopUnroll();
 }
 
 namespace {
 struct HLSCodeMetrics : public CodeMetrics {
   Loop *CurLoop;
   const TargetData *TD;
-  ScalarEvolution *SE;
 
-  unsigned NumLoadStore;
-
-  HLSCodeMetrics(Loop *L, const TargetData *td, ScalarEvolution *se)
-    : CurLoop(L), TD(td), SE(se), NumLoadStore(0) {}
-
-  /// processLoopStore - See if this store can be promoted to a memset or memcpy.
-  bool processLoopStore(StoreInst *SI, const SCEV *BECount) {
-    if (!SI->isSimple()) return false;
-
-    Value *StoredVal = SI->getValueOperand();
-    Value *StorePtr = SI->getPointerOperand();
-
-    // Reject stores that are so large that they overflow an unsigned.
-    uint64_t SizeInBits = TD->getTypeSizeInBits(StoredVal->getType());
-    if ((SizeInBits & 7) || (SizeInBits >> 32) != 0 || SizeInBits >= 64)
-      return false;
-
-    // See if the pointer expression is an AddRec like {base,+,1} on the current
-    // loop, which indicates a strided store.  If we have something else, it's a
-    // random store we can't handle.
-    const SCEVAddRecExpr *StoreEv =
-      dyn_cast<SCEVAddRecExpr>(SE->getSCEV(StorePtr));
-    if (StoreEv == 0 || StoreEv->getLoop() != CurLoop || !StoreEv->isAffine())
-      return false;
-
-    // Check to see if the stride matches the size of the store.  If so, then we
-    // know that every byte is touched in the loop.
-    unsigned StoreSize = (unsigned)SizeInBits >> 3;
-    const SCEVConstant *Stride = dyn_cast<SCEVConstant>(StoreEv->getOperand(1));
-
-    if (Stride == 0 || StoreSize != Stride->getValue()->getValue()) {
-      // TODO: Could also handle negative stride here someday, that will require
-      // the validity check in mayLoopAccessLocation to be updated though.
-      // Enable this to print exact negative strides.
-      if (0 && Stride && StoreSize == -Stride->getValue()->getValue()) {
-        dbgs() << "NEGATIVE STRIDE: " << *SI << "\n";
-        dbgs() << "BB: " << *SI->getParent();
-      }
-
-      return false;
-    }
-
-    // If the stored value is a strided load in the same loop with the same stride
-    // this this may be transformable into a memcpy.  This kicks in for stuff like
-    //   for (i) A[i] = B[i];
-    if (LoadInst *LI = dyn_cast<LoadInst>(StoredVal)) {
-      const SCEVAddRecExpr *LoadEv =
-        dyn_cast<SCEVAddRecExpr>(SE->getSCEV(LI->getOperand(0)));
-      if (LoadEv && LoadEv->getLoop() == CurLoop && LoadEv->isAffine() &&
-          StoreEv->getOperand(1) == LoadEv->getOperand(1) && LI->isSimple())
-        return true;
-    }
-    //errs() << "UNHANDLED strided store: " << *StoreEv << " - " << *SI << "\n";
-
-    return true;
-  }
+  HLSCodeMetrics(Loop *L, const TargetData *td)
+    : CurLoop(L), TD(td) {}
 
   /// analyzeBasicBlock - Fill in the current structure with information gleaned
   /// from the specified block.
-  void analyzeBasicBlock(const BasicBlock *BB, const SCEV *BECount) {
+  void analyzeBasicBlock(const BasicBlock *BB) {
     ++NumBlocks;
     unsigned NumInstsBeforeThisBB = NumInsts;
     for (BasicBlock::const_iterator II = BB->begin(), E = BB->end();
          II != E; ++II) {
       const Instruction *I = II;
 
-      if (isa<PHINode>(I)) continue;           // PHI nodes don't count.      
+      if (isa<PHINode>(I)) continue;           // PHI nodes don't count.
 
       // Special handling for calls.
       switch (I->getOpcode()) {
       case Instruction::And:
       case Instruction::Xor:
       case Instruction::Or:
-        continue;
-      case Instruction::Load:
-        ++NumLoadStore;
         continue;
       case Instruction::Call:
       case Instruction::Invoke:
@@ -193,13 +130,6 @@ struct HLSCodeMetrics : public CodeMetrics {
       if (I->isCast() || (I->isBinaryOp() && isa<Constant>(I->getOperand(1)))
           || I->isTerminator())
         continue;
-
-      // Can the loop be vecotorize?
-      if (const StoreInst *SI = dyn_cast<StoreInst>(I)) {
-        ++NumLoadStore;
-        if (BECount && processLoopStore(const_cast<StoreInst*>(SI), BECount))
-          continue;
-      }
 
       ++NumInsts;
     }
@@ -263,7 +193,7 @@ struct HLSCodeMetrics : public CodeMetrics {
 };
 }
 
-bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
+bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   LoopInfo *LI = &getAnalysis<LoopInfo>();
   ScalarEvolution *SE = &getAnalysis<ScalarEvolution>();
 
@@ -292,7 +222,7 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Use a default unroll-count if the user doesn't specify a value
   // and the trip count is a run-time value.  The default is different
   // for run-time or compile-time trip count loops.
-  unsigned Count = CurrentCount;
+  unsigned Count = 0;
 
   if (Count == 0) {
     // Conservative heuristic: if we know the trip count, see if we can
@@ -307,18 +237,16 @@ bool HLSLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Compute the loop size
   const TargetData *TD = getAnalysisIfAvailable<TargetData>();
 
-  const SCEV *BECount = dyn_cast<SCEVConstant>(SE->getBackedgeTakenCount(L));
-
-  HLSCodeMetrics Metrics(L, TD, SE);
+  HLSCodeMetrics Metrics(L, TD);
   for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
     I != E; ++I)
-    Metrics.analyzeBasicBlock(*I, BECount);
+    Metrics.analyzeBasicBlock(*I);
   unsigned NumInlineCandidates = Metrics.NumInlineCandidates;
 
   // Don't allow an estimate of size zero.  This would allows unrolling of loops
   // with huge iteration counts, which is a compile time problem even if it's
   // not a problem for code quality.
-  unsigned LoopSize = std::max(Metrics.NumInsts + Metrics.NumLoadStore, 1u);
+  unsigned LoopSize = std::max(Metrics.NumInsts, 1u);
 
   DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
   if (NumInlineCandidates != 0) {
