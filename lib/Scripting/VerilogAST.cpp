@@ -174,11 +174,13 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
-void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTUse *Cnd) {
-  (NextSlot->PredSlots).push_back(this);
-  bool Inserted = NextSlots.insert(std::make_pair(NextSlot, Cnd)).second;
-  assert(Inserted && "NextSlot already existed!");
-  (void) Inserted;
+void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTValue *Cnd, VASTModule *VM) {
+  VASTUse *&U = NextSlots[NextSlot];
+  if (U == 0) {
+    NextSlot->PredSlots.push_back(this);
+    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
+  } else
+    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
 }
 
 void VASTSlot::addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
@@ -573,7 +575,7 @@ void VASTModule::addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd) {
 }
 
 void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
-  S->addSuccSlot(SuccS, new (Allocator.Allocate<VASTUse>()) VASTUse(V, 0));
+  S->addSuccSlot(SuccS, V, this);
 }
 
 void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {

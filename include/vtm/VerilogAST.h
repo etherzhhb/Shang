@@ -791,7 +791,7 @@ private:
   void addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM);
   void addReady(VASTValue *V, VASTValue *Cnd, VASTModule *VM);
   void addDisable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM);
-  void addSuccSlot(VASTSlot *NextSlot, VASTUse *Cnd);
+  void addSuccSlot(VASTSlot *NextSlot, VASTValue *Cnd, VASTModule *VM);
 
   friend class VASTModule;
 public:

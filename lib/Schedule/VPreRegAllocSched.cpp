@@ -936,7 +936,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
   if (Entry->use_empty()) {
-    unsigned L = CurState.getStepsFromEntry(ExitSU->getRepresentativeInst());
+    unsigned L = ExitSU->getMaxLatencyFromEntry();
     ExitSU->addDep(VDCtrlDep::CreateDep(Entry, L));
   }
 
