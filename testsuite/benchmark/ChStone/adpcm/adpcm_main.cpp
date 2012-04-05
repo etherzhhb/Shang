@@ -398,7 +398,7 @@ int encode (int xin1, int xin2)
 
 /* decode function, result in xout1 and xout2 */
 
-void decode (int input)
+void decode (int arg_input)
 {
   int i;
   long int xa1, xa2;		/* qmf accumulators */
@@ -406,8 +406,8 @@ void decode (int input)
   int *ac_ptr, *ac_ptr1, *ad_ptr, *ad_ptr1;
 
 /* split transmitted word from input into ilr and ih */
-  ilr = input & 0x3f;
-  ih = input >> 6;
+  ilr = arg_input & 0x3f;
+  ih = arg_input >> 6;
 
 /* LOWER SUB_BAND DECODER */
 

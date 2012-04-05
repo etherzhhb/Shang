@@ -5,4 +5,4 @@ foreach(test_source ${test_sources})
 endforeach()
 
 add_benchmark_stats("float64_mul")
-
+add_benchmark_symain_stats("float64_mul")
