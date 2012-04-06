@@ -230,7 +230,7 @@ endif(SYNTHESIS_DUT AND TARGET benchmark_report)
   add_dependencies(main_x86_o ${TEST}_main_x86_o)
 
   add_custom_command(OUTPUT ${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL.mk
-    COMMAND rm -f "${TEST_BINARY_ROOT}/obj_dir/*"
+    COMMAND rm -rf "${TEST_BINARY_ROOT}/obj_dir/*"
     COMMAND ${VERILATOR_EXECUTABLE} ${MAIN_RTL_SRC} -Wall --sc -D__DEBUG_IF +define+__VERILATOR_SIM --top-module ${MAIN_RTL_ENTITY} || ${CatchFail}
     MAIN_DEPENDENCY ${MAIN_RTL_SRC}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
@@ -258,7 +258,7 @@ endif(SYNTHESIS_DUT AND TARGET benchmark_report)
   add_dependencies(CoSimExe ${TEST}_CoSimExe)
 
   add_custom_command(OUTPUT "${TEST_BINARY_ROOT}/Test.output" ${CycleCounter}
-    COMMAND rm "${TEST_BINARY_ROOT}/Test.output"
+    COMMAND rm -rf "${TEST_BINARY_ROOT}/Test.output"
     COMMAND timeout ${TIMEOUT}s "${SC_TB_EXE}" > "${TEST_BINARY_ROOT}/Test.output" || ${CatchFail}
     MAIN_DEPENDENCY ${SC_TB_EXE}
     COMMENT "Run programs to get the test output"
@@ -366,7 +366,7 @@ if(SYNTHESIS_DUT AND TARGET benchmart_synthesis_main)
 endif(SYNTHESIS_DUT AND TARGET benchmart_synthesis_main)
 
   add_custom_command(OUTPUT ${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL.mk
-    COMMAND rm -f "${TEST_BINARY_ROOT}/obj_dir/*"
+    COMMAND rm -rf "${TEST_BINARY_ROOT}/obj_dir/*"
     COMMAND ${VERILATOR_EXECUTABLE} ${MAIN_RTL_SRC} -Wall --sc -D__DEBUG_IF +define+__VERILATOR_SIM --top-module ${MAIN_RTL_ENTITY}
     MAIN_DEPENDENCY ${MAIN_RTL_SRC}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}

@@ -1076,7 +1076,8 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   DEBUG(dbgs() << "After simple register allocation:\n";
         //printVMF(dbgs(), F);
   );
-
+  MRI->leaveSSA();
+  MRI->invalidateLiveness();
   return true;
 }
 
