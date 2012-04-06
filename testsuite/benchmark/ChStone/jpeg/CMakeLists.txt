@@ -5,4 +5,3 @@ foreach(test_source ${test_sources})
 endforeach()
 
 add_benchmark_stats("jpeg2bmp_main")
-add_benchmark_symain_stats("jpeg2bmp_main")

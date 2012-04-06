@@ -60,13 +60,21 @@ struct FunctionFilter : public ModulePass {
     AU.addRequired<CallGraph>();
     ModulePass::getAnalysisUsage(AU);
   }
-  void SplitSoftFunctions(Module &M,SmallPtrSet<const Function*, 32> &HWFunctions);
+
   bool runOnModule(Module &M);
 };
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
-  bool isSyntesizingMain = false;
+  for (Module::global_iterator I = M.global_begin(), E = M.global_end();
+       I != E; ++I){
+    GlobalVariable *GV = I;
+    GV->setName(VBEMangle(GV->getName()));
+  }
+
+  OwningPtr<Module> SoftMod(CloneModule(&M));
+  SoftMod->setModuleIdentifier(M.getModuleIdentifier() + ".sw");
+
   SmallPtrSet<const Function*, 32> HWFunctions;
   CallGraph &CG = getAnalysis<CallGraph>();
   for (CallGraph::iterator ICG = CG.begin(), ECG = CG.end(); ICG != ECG; 
@@ -78,8 +86,6 @@ bool FunctionFilter::runOnModule(Module &M) {
       continue;
     DEBUG(dbgs() << "*************Function name: " << F->getName() << "\n");
     if (SynSettings *TopSetting = getSynSetting(F->getName())){
-      if (F->getName()=="main")
-        isSyntesizingMain = true;
       HWFunctions.insert(F);
       for (df_iterator<CallGraphNode*> ICGN = df_begin(CGN),
            ECGN = df_end(CGN); ICGN != ECGN; ++ICGN){
@@ -96,90 +102,77 @@ bool FunctionFilter::runOnModule(Module &M) {
     }
   }
 
-if (!isSyntesizingMain) SplitSoftFunctions(M,HWFunctions);
-
-  return true;
-}
-
-char FunctionFilter::ID = 0;
-
-INITIALIZE_PASS_BEGIN(FunctionFilter, "FunctionFilter",
-                      "Function Filter", false, false)
-  INITIALIZE_AG_DEPENDENCY(CallGraph)
-INITIALIZE_PASS_END(FunctionFilter, "FunctionFilter",
-                    "Function Filter", false, false)
-
-Pass *llvm::createFunctionFilterPass(raw_ostream &O) {
-  return new FunctionFilter(O);
-}
-
-void FunctionFilter::SplitSoftFunctions(Module &M,SmallPtrSet<const Function*, 32> &HWFunctions){
-  OwningPtr<Module> SoftMod(CloneModule(&M));
-  SoftMod->setModuleIdentifier(M.getModuleIdentifier() + ".sw");
   for (Module::iterator IHW = M.begin(), ISW = SoftMod->begin(), 
-    EHW = M.end(), E = SoftMod->end(); IHW != EHW; ++IHW, ++ISW) {
-      Function *FHW = IHW;
-      Function *FSW = ISW;
+       EHW = M.end(), E = SoftMod->end(); IHW != EHW; ++IHW, ++ISW) {
+    Function *FHW = IHW;
+    Function *FSW = ISW;
 
-      // The function is s software function, delete it from the hardware module.
-      if (!HWFunctions.count(FHW))
-        FHW->deleteBody();
-      else if (getSynSetting(FSW->getName())->isTopLevelModule())
-        // Remove hardware functions in software module and leave the declaretion
-        // only.
-        FSW->deleteBody();
-      else if (FHW->getName() != "main" && !FHW->isDeclaration()) {
-        FHW->setLinkage(GlobalValue::PrivateLinkage);
-        FSW->setLinkage(GlobalValue::PrivateLinkage);
-      }
-
-      if (FSW->getName() == "main") {
-        FSW->setName("sw_main");
-        // If we are synthesizing main, change its name so the SystemC module can find it.
-        //if (getSynSetting("main")) FHW->setName("sw_main");
-      }
+    // The function is s software function, delete it from the hardware module.
+    if (!HWFunctions.count(FHW))
+      FHW->deleteBody();
+    else if (getSynSetting(FSW->getName())->isTopLevelModule())
+      // Remove hardware functions in software module and leave the declaretion 
+      // only.
+      FSW->deleteBody();
+    else if (FHW->getName() != "main" && !FHW->isDeclaration()) {
+      FHW->setLinkage(GlobalValue::PrivateLinkage);
+      FSW->setLinkage(GlobalValue::PrivateLinkage);
+    }
+    if (FSW->getName() == "main")
+      FSW->setName("sw_main");
   }
 
   OwningPtr<ModulePass> GlobalDEC(createGlobalDCEPass());
   GlobalDEC->runOnModule(*SoftMod);
 
-  if (!SoftMod->empty()) {
-    // If a global variable present in software module, set the linkage of
-    // corresponding one in hardware module to external.
-    for (Module::global_iterator I = SoftMod->global_begin(),
-      E = SoftMod->global_end(); I != E; ++I) {
-        // Make sure we can link against the global variables in software module.
-        I->setLinkage(GlobalVariable::LinkOnceAnyLinkage);
+  // If a global variable present in software module, set the linkage of
+  // corresponding one in hardware module to external.
+  for (Module::global_iterator I = SoftMod->global_begin(),
+       E = SoftMod->global_end(); I != E; ++I) {
+    // Make sure we can link against the global variables in software module.
+    I->setLinkage(GlobalVariable::LinkOnceAnyLinkage);
 
-        if (GlobalVariable *GV = M.getGlobalVariable(I->getName(), true)) {
-          GV->setLinkage(GlobalValue::ExternalLinkage);
-          GV->setInitializer(0);
-        }
+    if (GlobalVariable *GV = M.getGlobalVariable(I->getName(), true)) {
+      GV->setLinkage(GlobalValue::ExternalLinkage);
+      GV->setInitializer(0);
     }
+  }
 
-    for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
-      Function *FHW = I;
-      // Do not inline the functions that called by software module.
-      if (Function *F = SoftMod->getFunction(I->getName())) {
-        if (!F->isDeclaration()) continue;
-        // If F is a cross module reference
-        if (!I->isDeclaration())
-          F->setName(F->getName() + SynSettings::getIfPostfix());
+  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
+    // Do not inline the functions that called by software module.
+    if (Function *F = SoftMod->getFunction(I->getName())) {
+      if (!F->isDeclaration()) continue;
+      // If F is a cross module reference
+      if (!I->isDeclaration())
+        F->setName(F->getName() + SynSettings::getIfPostfix());
 
-        I->removeAttribute(~0, Attribute::AlwaysInline);
-        I->addAttribute(~0, Attribute::NoInline);
-        DEBUG(dbgs() << "No inline -- " << I->getName() << '\n');
-      } else if (!I->isDeclaration() && !HWFunctions.count(FHW)) {
-        I->setLinkage(GlobalValue::PrivateLinkage);
-        // The function only used in the hardware module
-        //if (!I->hasFnAttr(Attribute::NoInline))
-        //  I->addAttribute(~0, Attribute::AlwaysInline);
-        // DEBUG(dbgs() << "Always inline " << I->getName() << '\n');
-      }
+      I->removeAttribute(~0, Attribute::AlwaysInline);
+      I->addAttribute(~0, Attribute::NoInline);
+      DEBUG(dbgs() << "No inline -- " << I->getName() << '\n');
+    } else if (!I->isDeclaration()) {
+      I->setLinkage(GlobalValue::PrivateLinkage);
+      // The function only used in the hardware module
+      //if (!I->hasFnAttr(Attribute::NoInline))
+      //  I->addAttribute(~0, Attribute::AlwaysInline);
+      // DEBUG(dbgs() << "Always inline " << I->getName() << '\n');
     }
   }
 
   // TODO: We may rename the entry function, too.
   OwningPtr<AssemblyAnnotationWriter> Annotator;
   SoftMod->print(SwOut, Annotator.get());
+
+  return true;
+}
+
+char FunctionFilter::ID = 0;
+
+INITIALIZE_PASS_BEGIN(FunctionFilter, "FunctionFilter", 
+                      "Function Filter", false, false)
+  INITIALIZE_AG_DEPENDENCY(CallGraph)
+INITIALIZE_PASS_END(FunctionFilter, "FunctionFilter", 
+                    "Function Filter", false, false)
+
+Pass *llvm::createFunctionFilterPass(raw_ostream &O) {
+  return new FunctionFilter(O);
 }

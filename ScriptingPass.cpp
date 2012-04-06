@@ -57,9 +57,9 @@ static void ExtractConstant(raw_ostream &OS, Constant *C) {
   if (ConstantInt *CI = dyn_cast<ConstantInt>(C)) {
     const Type* Ty = CI->getType();
     if (Ty == Type::getInt1Ty(C->getContext()))
-      OS << '\'' << (CI->getZExtValue() ? '1' : '0') << '\'';
+      OS << (CI->getZExtValue() ? '1' : '0');
     else
-      OS << "\'0x" << utohexstr(CI->getZExtValue()) << '\'';
+      OS << CI->getZExtValue();
 
     return;
   }

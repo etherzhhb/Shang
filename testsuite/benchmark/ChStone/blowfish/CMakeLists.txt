@@ -5,5 +5,4 @@ foreach(test_source ${test_sources})
 endforeach()
 
 add_benchmark_stats("blowfish_main")
-add_benchmark_symain_stats("blowfish_main")
 

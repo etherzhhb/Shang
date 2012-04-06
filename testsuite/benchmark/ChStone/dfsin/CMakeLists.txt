@@ -5,5 +5,4 @@ foreach(test_source ${test_sources})
 endforeach()
 
 add_benchmark_stats("sin")
-add_benchmark_symain_stats("sin")
 

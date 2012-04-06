@@ -5,5 +5,4 @@ foreach(test_source ${test_sources})
 endforeach()
 
 add_benchmark_stats("Gsm_LPC_Analysis")
-add_benchmark_symain_stats("Gsm_LPC_Analysis")
 

@@ -6,5 +6,4 @@ endforeach()
 
 add_benchmark_stats("motion_vectors")
 #add_benchmark_stats("Initialize_Buffer")
-add_benchmark_symain_stats("motion_vectors")
 
