@@ -12,7 +12,7 @@
 // counts of loops easily.
 //===----------------------------------------------------------------------===//
 
-#define DEBUG_TYPE "loop-unroll"
+#define DEBUG_TYPE "trivial-loop-unroll"
 #include "vtm/Passes.h"
 
 #include "llvm/IntrinsicInst.h"
@@ -39,19 +39,6 @@ namespace {
       initializeTrivialLoopUnrollPass(*PassRegistry::getPassRegistry());
     }
 
-    /// A magic value for use with the Threshold parameter to indicate
-    /// that the loop unroll should be performed regardless of how much
-    /// code expansion would result.
-    static const unsigned NoThreshold = UINT_MAX;
-
-    // Threshold to use when optsize is specified (and there is no
-    // explicit -unroll-threshold).
-    static const unsigned OptSizeUnrollThreshold = 50;
-
-    // Default unroll count for loops with run-time trip count if
-    // -unroll-count is not set
-    static const unsigned UnrollRuntimeCount = 8;
-
     bool runOnLoop(Loop *L, LPPassManager &LPM);
 
     /// This transformation requires natural loop information & requires that
@@ -76,30 +63,28 @@ namespace {
 }
 
 char TrivialLoopUnroll::ID = 0;
-INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "loop-unroll", "Unroll loops", false, false)
+INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "trivial-loop-unroll", "Unroll loops",
+                      false, false)
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
-INITIALIZE_PASS_END(TrivialLoopUnroll, "loop-unroll", "Unroll loops", false, false)
+INITIALIZE_PASS_END(TrivialLoopUnroll, "trivial-loop-unroll", "Unroll loops",
+                    false, false)
 
 Pass *llvm::createTrivialLoopUnrollPass() {
   return new TrivialLoopUnroll();
 }
 
 namespace {
-struct HLSCodeMetrics : public CodeMetrics {
-  Loop *CurLoop;
-  const TargetData *TD;
-
-  HLSCodeMetrics(Loop *L, const TargetData *td)
-    : CurLoop(L), TD(td) {}
+struct HLSCodeMetrics {
+  unsigned NumInsts, NumMemInsts, NumInlineCandidates;
+  HLSCodeMetrics()
+    : NumInsts(0), NumMemInsts(0), NumInlineCandidates(0) {}
 
   /// analyzeBasicBlock - Fill in the current structure with information gleaned
   /// from the specified block.
   void analyzeBasicBlock(const BasicBlock *BB) {
-    ++NumBlocks;
-    unsigned NumInstsBeforeThisBB = NumInsts;
     for (BasicBlock::const_iterator II = BB->begin(), E = BB->end();
          II != E; ++II) {
       const Instruction *I = II;
@@ -115,44 +100,25 @@ struct HLSCodeMetrics : public CodeMetrics {
       case Instruction::Call:
       case Instruction::Invoke:
         visitCallInst(I, BB);
+      case Instruction::Load:
+      case Instruction::Store:
+        ++NumMemInsts;
         continue;
       }
 
-      if (const AllocaInst *AI = dyn_cast<AllocaInst>(I)) {
-        if (!AI->isStaticAlloca())
-          this->usesDynamicAlloca = true;
-      }
-
-      if (isa<ExtractElementInst>(II) || II->getType()->isVectorTy())
-        ++NumVectorInsts;
-
       // Zero cost instructions.
-      if (I->isCast() || (I->isBinaryOp() && isa<Constant>(I->getOperand(1)))
-          || I->isTerminator())
+      if (I->isCast() || I->isTerminator())
+        continue;
+
+      if ((I->isBinaryOp() || isa<ICmpInst>(I))
+          && (isa<Constant>(I->getOperand(0))||isa<Constant>(I->getOperand(1))))
+        continue;
+
+      if (I->isShift() && isa<Constant>(I->getOperand(1)))
         continue;
 
       ++NumInsts;
     }
-
-    if (isa<ReturnInst>(BB->getTerminator()))
-      ++NumRets;
-
-    // We never want to inline functions that contain an indirectbr.  This is
-    // incorrect because all the blockaddress's (in static global initializers
-    // for example) would be referring to the original function, and this indirect
-    // jump would jump from the inlined copy of the function into the original
-    // function which is extremely undefined behavior.
-    // FIXME: This logic isn't really right; we can safely inline functions
-    // with indirectbr's as long as no other function or global references the
-    // blockaddress of a block within the current function.  And as a QOI issue,
-    // if someone is using a blockaddress without an indirectbr, and that
-    // reference somehow ends up in another function or global, we probably
-    // don't want to inline this function.
-    if (isa<IndirectBrInst>(BB->getTerminator()))
-      containsIndirectBr = true;
-
-    // Remember NumInsts for this BB.
-    NumBBInsts[BB] = NumInsts - NumInstsBeforeThisBB;
   }
 
   void visitCallInst(const Instruction *I, const BasicBlock * BB ) {
@@ -181,14 +147,11 @@ struct HLSCodeMetrics : public CodeMetrics {
       // exposed by an interleaved devirtualization pass).
       if (!CS.isNoInline() && F->hasInternalLinkage() && F->hasOneUse())
         ++NumInlineCandidates;
-
-      // If this call is to function itself, then the function is recursive.
-      // Inlining it into other functions is a bad idea, because this is
-      // basically just a form of loop peeling, and our metrics aren't useful
-      // for that case.
-      if (F == BB->getParent())
-        isRecursive = true;
     }
+  }
+
+  unsigned getSize() const {
+    return NumMemInsts + NumMemInsts * 32 + NumInlineCandidates * 256;
   }
 };
 }
@@ -206,7 +169,7 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // from UnrollThreshold, it is overridden to a smaller value if the current
   // function is marked as optimize-for-size, and the unroll threshold was
   // not user specified.
-  unsigned Threshold = 8;
+  unsigned Threshold = 16;
 
   // Find trip count and trip multiple if count is not available
   unsigned TripCount = 0;
@@ -237,7 +200,7 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Compute the loop size
   const TargetData *TD = getAnalysisIfAvailable<TargetData>();
 
-  HLSCodeMetrics Metrics(L, TD);
+  HLSCodeMetrics Metrics;
   for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
     I != E; ++I)
     Metrics.analyzeBasicBlock(*I);
@@ -246,29 +209,29 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Don't allow an estimate of size zero.  This would allows unrolling of loops
   // with huge iteration counts, which is a compile time problem even if it's
   // not a problem for code quality.
-  unsigned LoopSize = std::max(Metrics.NumInsts, 1u);
-
-  DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
-  if (NumInlineCandidates != 0) {
-    DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
-    return false;
-  }
-  uint64_t Size = (uint64_t)LoopSize * Count;
-  if (TripCount != 1 && Size > Threshold) {
-    DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
-          << " because size: " << Size << ">" << Threshold << "\n");
-    if (TripCount) {
-      // Reduce unroll count to be modulo of TripCount for partial unrolling
-      Count = Threshold / LoopSize;
-      while (Count != 0 && TripCount % Count != 0)
-        --Count;
-    }
-
-    if (Count < 2) {
-      DEBUG(dbgs() << "  could not unroll partially\n");
+  if (unsigned LoopSize = Metrics.getSize()) {
+    DEBUG(dbgs() << "  Loop Size = " << LoopSize << "\n");
+    if (NumInlineCandidates != 0) {
+      DEBUG(dbgs() << "  Not unrolling loop with inlinable calls.\n");
       return false;
     }
-    DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
+    uint64_t Size = (uint64_t)LoopSize * Count;
+    if (TripCount != 1 && Size > Threshold) {
+      DEBUG(dbgs() << "  Too large to fully unroll with count: " << Count
+            << " because size: " << Size << ">" << Threshold << "\n");
+      if (TripCount) {
+        // Reduce unroll count to be modulo of TripCount for partial unrolling
+        Count = Threshold / LoopSize;
+        while (Count != 0 && TripCount % Count != 0)
+          --Count;
+      }
+
+      if (Count < 2) {
+        DEBUG(dbgs() << "  could not unroll partially\n");
+        return false;
+      }
+      DEBUG(dbgs() << "  partially unrolling with count: " << Count << "\n");
+    }
   }
 
   // Unroll the loop.
