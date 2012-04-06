@@ -3,6 +3,7 @@ add_llvm_library(VTMHighLevelOpt
   StackToGlobal.cpp
   HLSInliner.cpp
   TrivialLoopUnrollPass.cpp
+  LoopVectorizePass.cpp
   ContoBrom.cpp
   )
 
