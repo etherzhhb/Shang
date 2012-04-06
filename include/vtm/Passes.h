@@ -34,7 +34,7 @@ Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
 // Always inline function.
 Pass *createHLSInlinerPass();
 Pass *createTrivialLoopUnrollPass();
-
+Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
 Pass *createStackToGlobalPass();
 
@@ -99,6 +99,7 @@ void initializeFunctionFilterPass(PassRegistry &Registry);
 void initializeRAPass(PassRegistry &Registry);
 void initializeHLSInlinerPass(PassRegistry &Registry);
 void initializeTrivialLoopUnrollPass(PassRegistry &Registry);
+void initializeLoopVectorizerPass(PassRegistry &Registry);
 } // end namespace
 
 

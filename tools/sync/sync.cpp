@@ -78,6 +78,7 @@ extern "C" void LLVMInitializeVerilogBackendTargetInfo();
 static void LoopOptimizerEndExtensionFn(const PassManagerBuilder &Builder,
                                         PassManagerBase &PM) {
   PM.add(createTrivialLoopUnrollPass());
+  PM.add(createLoopVectorizerPass());
 }
 
 // main - Entry point for the sync compiler.
