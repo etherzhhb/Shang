@@ -440,8 +440,6 @@ public:
   enum Opcode {
     // bitwise logic datapath
     dpAnd,
-    dpOr,
-    dpXor,
     dpNot,
     dpRAnd,
     dpROr,
@@ -597,9 +595,11 @@ struct VASTExprBuilder {
   SmallVector<VASTValue*, 4> Operands;
   VASTExpr::Opcode Opc;
   unsigned BitWidth;
-  void init(VASTExpr::Opcode opc, unsigned bitWidth) {
+  bool BuildNot;
+  void init(VASTExpr::Opcode opc, unsigned bitWidth, bool buildNot = false) {
     Opc = opc;
     BitWidth = bitWidth;
+    BuildNot = buildNot;
   }
 
   void addOperand(VASTValue *V) { Operands.push_back(V->getAsInlineOperand()); }
@@ -1196,7 +1196,12 @@ public:
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0, VASTValue *Op1,
                        VASTValue *Op2, unsigned BitWidth);
   VASTValue *buildExpr(VASTExprBuilder &Builder) {
-    return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
+   // If opc is dpAnd and BuildNot is true. It mean Or in And Invert Graph.
+   if (Builder.Opc == VASTExpr::dpAnd && Builder.BuildNot == true) {
+     return buildOrExpr(Builder.Operands, Builder.BitWidth);
+   }
+
+   return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
   }
 
   VASTValue *getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);
@@ -1212,11 +1217,25 @@ public:
 
   VASTValue *buildNotExpr(VASTValue *U);
 
-  VASTValue *buildOrExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                         unsigned BitWidth);
+  static VASTValue *buildOr(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth,
+                            VASTModule *VM) {
+    return VM->buildOrExpr(LHS, RHS, BitWidth);
+  }
 
-  VASTValue *buildXorExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                          unsigned BitWidth);
+  VASTValue *buildOrExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
+
+  VASTValue *buildOrExpr(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth) {
+    VASTValue *Ops[] = { LHS, RHS };
+    return buildOrExpr(Ops, BitWidth);
+  }
+
+  static VASTValue *buildXor(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth,
+                             VASTModule *VM) {
+    VASTValue *Ops[] = { LHS, RHS };
+    return VM->buildXorExpr(Ops, BitWidth);
+  }
+
+  VASTValue *buildXorExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
 
   VASTValue *flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
                              unsigned BitWidth);

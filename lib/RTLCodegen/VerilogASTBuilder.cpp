@@ -141,7 +141,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
       // Are we creating the enable port?
       if (LocalEn == 0) {
         // Or all enables together to generate the enable output
-        Expr.init(VASTExpr::dpOr, OutputWire->getBitWidth());
+        Expr.init(VASTExpr::dpAnd, OutputWire->getBitWidth(), true);
         // Add the local enable.
         Expr.addOperand(LocalReg);
         LocalEn = LocalReg;
@@ -1270,13 +1270,13 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
 
     case VTM::VOpLUT:       emitOpLut(MI);                      break;
     case VTM::VOpXor:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpXor>);
+      emitBinaryOp(MI, VASTModule::buildXor);
       break;
     case VTM::VOpAnd:
       emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpAnd>);
       break;
     case VTM::VOpOr:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpOr>);
+      emitBinaryOp(MI, VASTModule::buildOr);
       break;
 
     case VTM::VOpNot:       emitUnaryOp(MI, VASTExpr::dpNot);   break;
@@ -1361,7 +1361,7 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   }
 
   // Or the products together to build the SOP (Sum of Product).
-  VASTValue *SOP = VM->buildExpr(VASTExpr::dpOr, SumOps, SizeInBits);
+  VASTValue *SOP = VM->buildOrExpr(SumOps, SizeInBits);
 
   if (isComplement) SOP = VM->buildExpr(VASTExpr::dpNot, SOP, SizeInBits);
 

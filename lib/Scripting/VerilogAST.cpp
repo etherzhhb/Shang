@@ -180,7 +180,7 @@ void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTValue *Cnd, VASTModule *VM) {
     NextSlot->PredSlots.push_back(this);
     U = new (VM->allocateUse()) VASTUse(Cnd, 0);
   } else
-    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
+    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
 }
 
 void VASTSlot::addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
@@ -188,7 +188,7 @@ void VASTSlot::addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
   if (U == 0)
     U = new (VM->allocateUse()) VASTUse(Cnd, 0);
   else
-    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
+    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
 }
 
 void VASTSlot::addReady(VASTValue *V, VASTValue *Cnd, VASTModule *VM) {
@@ -196,7 +196,7 @@ void VASTSlot::addReady(VASTValue *V, VASTValue *Cnd, VASTModule *VM) {
   if (U == 0)
     U = new (VM->allocateUse()) VASTUse(Cnd, 0);
   else
-    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
+    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
 }
 
 void VASTSlot::addDisable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
@@ -204,7 +204,7 @@ void VASTSlot::addDisable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM) {
   if (U == 0)
     U = new (VM->allocateUse()) VASTUse(Cnd, 0);
   else
-    U->replaceUseBy(VM->buildExpr(VASTExpr::dpOr, Cnd, U->unwrap(), 1));
+    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
 }
 
 VASTValue *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
@@ -213,9 +213,10 @@ VASTValue *VASTSlot::buildFUReadyExpr(VASTModule &VM) {
   for (VASTSlot::const_fu_rdy_it I = ready_begin(), E = ready_end();I != E; ++I)
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
-    Ops.push_back(VM.buildExpr(VASTExpr::dpOr, I->first,
-                               VM.buildNotExpr((*I->second)->getAsInlineOperand()),
-                               1));
+    Ops.push_back(VM.buildOrExpr(I->first,
+                                 VM.buildNotExpr((*I->second)->
+                                                  getAsInlineOperand()),
+                                 1));
   
   // No waiting signal means always ready.
   if (Ops.empty()) Ops.push_back(VM.getBoolImmediate(true));
@@ -238,9 +239,9 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
       if (!AliasSlot->readyEmpty()) {
         // FU ready for alias slot, when alias slot register is 1, its waiting
         // signal must be 1.
-        Ops.push_back(Mod.buildExpr(VASTExpr::dpOr,
-                                  Mod.buildNotExpr(AliasSlot->getRegister()),
-                                  AliasSlot->buildFUReadyExpr(Mod), 1));
+        Ops.push_back(Mod.buildOrExpr(Mod.buildNotExpr(AliasSlot->
+                                                       getRegister()),
+                                      AliasSlot->buildFUReadyExpr(Mod), 1));
       }
     }
   }
@@ -722,34 +723,20 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
 VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc,
                                       ArrayRef<VASTValue*> Ops,
                                       unsigned BitWidth) {
-  switch (Opc) {
-  default: break;
-  case VASTExpr::dpOr: return buildOrExpr(Opc, Ops, BitWidth);
-  case VASTExpr::dpRXor: return buildXorExpr(Opc, Ops, BitWidth);
-  }
-
   return flattenExprTree(Opc, Ops, BitWidth);
 }
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
                                  VASTValue *RHS, unsigned BitWidth) {
+  VASTValue *Ops[] = { LHS, RHS };
+
   switch (Opc) {
   default: break;
-  case VASTExpr::dpAnd: case VASTExpr::dpXor: case VASTExpr::dpOr: {
-    VASTValue *Ops[] = { LHS, RHS };
-    return buildLogicExpr(Opc, Ops, BitWidth);
-  }
-  case VASTExpr::dpAdd: {
-    VASTValue *Ops[] = { LHS, RHS };
-    return buildAddExpr(Opc, Ops, BitWidth);
-  }
-  case VASTExpr::dpMul: {
-    VASTValue *Ops[] = { LHS, RHS };
-    return buildMulExpr(Opc, Ops, BitWidth);
-  }
+  case VASTExpr::dpAnd: return buildLogicExpr(Opc, Ops, BitWidth);
+  case VASTExpr::dpAdd: return buildAddExpr(Opc, Ops, BitWidth);
+  case VASTExpr::dpMul: return buildMulExpr(Opc, Ops, BitWidth);
   }
 
-  VASTValue *Ops[] = { LHS, RHS };
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
@@ -772,7 +759,7 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
 
   case VASTExpr::dpMul:  return buildMulExpr(Opc, Ops, BitWidth);
 
-  case VASTExpr::dpAnd: case VASTExpr::dpOr: {
+  case VASTExpr::dpAnd: {
     if (Ops.size() == 1)
       return Ops[0];
     return buildLogicExpr(Opc, Ops, BitWidth);
@@ -795,9 +782,10 @@ VASTValue *VASTModule::buildAddExpr(VASTExpr::Opcode Opc,
   return flattenExprTree(Opc, Ops, BitWidth);
 }
 
-VASTValue *VASTModule::buildOrExpr(VASTExpr::Opcode Opc,
-                                   ArrayRef<VASTValue*> Ops,
+VASTValue *VASTModule::buildOrExpr(ArrayRef<VASTValue*> Ops,
                                    unsigned BitWidth) {
+  if (Ops.size() == 1) return Ops[0];
+
   assert (Ops.size() > 1 && "There should be more than one operand!!");
 
   SmallVector<VASTValue*, 4> NotExprs;
@@ -811,16 +799,13 @@ VASTValue *VASTModule::buildOrExpr(VASTExpr::Opcode Opc,
   return buildNotExpr(buildExpr(VASTExpr::dpAnd, NotExprs, BitWidth));
 }
 
-VASTValue *VASTModule::buildXorExpr(VASTExpr::Opcode Opc,
-                                    ArrayRef<VASTValue*> Ops,
+VASTValue *VASTModule::buildXorExpr(ArrayRef<VASTValue*> Ops,
                                     unsigned BitWidth) {
   assert (Ops.size() == 2 && "There should be more than one operand!!");
 
   // Build the Xor Expr with the And Inverter Graph (AIG).
-  return buildExpr(VASTExpr::dpAnd,
-                   buildExpr(VASTExpr::dpOr, Ops[0], Ops[1], BitWidth),
-                   buildNotExpr(buildExpr(VASTExpr::dpAnd, Ops[0],
-                                          Ops[1], BitWidth)),
+  return buildExpr(VASTExpr::dpAnd, buildOrExpr(Ops, BitWidth),
+                   buildNotExpr(buildExpr(VASTExpr::dpAnd, Ops, BitWidth)),
                    BitWidth);
 }
 
@@ -1353,8 +1338,6 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
 
   case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;
-  case dpOr:  printSimpleUnsignedOp(OS, getOperands(), " | "); break;
-  case dpXor: printSimpleUnsignedOp(OS, getOperands(), " ^ "); break;
 
   case dpRAnd:  printUnaryOp(OS, getOperand(0), "&");  break;
   case dpROr:   printUnaryOp(OS, getOperand(0), "|");  break;
