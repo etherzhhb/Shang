@@ -23,18 +23,17 @@
 #include "llvm/Target/TargetMachine.h"
 namespace llvm {
 extern Target TheVBackendTarget;
+} // end namespace llvm
 
 namespace vtmIntrinsic {
   enum ID {
-    last_non_vtm_intrinsic = Intrinsic::num_intrinsics - 1,
+    last_non_vtm_intrinsic = llvm::Intrinsic::num_intrinsics - 1,
 #define GET_INTRINSIC_ENUM_VALUES
 #include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_ENUM_VALUES
     , num_vtm_intrinsics
   };
 }
-
-} // end namespace llvm
 
 // Defines symbolic names for the Verilog TargetMachine registers. This defines
 // a mapping from register name to register number.

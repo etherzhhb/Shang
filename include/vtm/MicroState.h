@@ -25,6 +25,7 @@
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -117,7 +118,7 @@ struct ucOperandValueTrait : DenseMapInfo<ucOperand> {
 
 static MachineInstr *getBundleHead(MachineInstr *MI) {
   assert(MI->isBundled() && "Not a bundle!");
-  MachineInstr *Head = MI->getBundleStart();
+  MachineInstr *Head = getBundleStart(MI);
   assert((Head->getOpcode() == VTM::CtrlStart ||
           Head->getOpcode() == VTM::Datapath) && "Broken bundle found!");
   return Head;

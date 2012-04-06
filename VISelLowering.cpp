@@ -284,7 +284,7 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
 SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
                                    CallingConv::ID CallConv, bool isVarArg,
-                                   bool &isTailCall,
+                                   bool doesNotRet, bool &isTailCall,
                                    const SmallVectorImpl<ISD::OutputArg> &Outs,
                                    const SmallVectorImpl<SDValue> &OutVals,
                                    const SmallVectorImpl<ISD::InputArg> &Ins,
@@ -727,7 +727,7 @@ void VTargetLowering::computeMaskedBitsForTargetNode(const SDValue Op,
   case VTMISD::Not: {
     SDValue Src = Op->getOperand(0);
     // Swap knownOne and KnownZero and compute compute the mask for the "Not".
-    DAG.ComputeMaskedBits(Src, Mask, KnownOne, KnownZero, Depth + 1);
+    DAG.ComputeMaskedBits(Src, KnownOne, KnownZero, Depth + 1);
     return;
   }
   case VTMISD::RAnd:
@@ -757,7 +757,7 @@ void VTargetLowering::computeMaskedBitsForTargetNode(const SDValue Op,
     APInt SrcMask = APInt::getBitsSet(SrcBitWidth, LB, UB)
                     & Mask.zextOrTrunc(SrcBitWidth).shl(LB);
     APInt SrcKnownZero, SrcKnownOne;
-    DAG.ComputeMaskedBits(Src, SrcMask, SrcKnownZero, SrcKnownOne, Depth + 1);
+    DAG.ComputeMaskedBits(Src, SrcKnownZero, SrcKnownOne, Depth + 1);
     unsigned BitWidth = Op.getValueSizeInBits();
     // Return the bitslice of the source masks.
     KnownOne = SrcKnownOne.lshr(LB).zextOrTrunc(BitWidth);
@@ -793,7 +793,7 @@ void VTargetLowering::computeMaskedBitsForTargetNode(const SDValue Op,
     assert(SrcBitWidth == 1 && "Cannot handle complex bit pattern!");
     APInt SrcMaks = APInt::getAllOnesValue(SrcBitWidth);
     APInt SrcZero, SrcOne;
-    DAG.ComputeMaskedBits(Src, SrcMaks, SrcZero, SrcOne, Depth + 1);
+    DAG.ComputeMaskedBits(Src, SrcZero, SrcOne, Depth + 1);
 
     unsigned Repeat = Op->getConstantOperandVal(1);
     if (SrcOne.isAllOnesValue())
@@ -812,7 +812,7 @@ void VTargetLowering::ComputeSignificantBitMask(SDValue Op, const APInt &Mask,
   unsigned SignificantBitWidth = computeSizeInBits(Op);
   unsigned BitWidth = Op.getValueSizeInBits();
   APInt SrcMask = APInt::getLowBitsSet(BitWidth, SignificantBitWidth) & Mask;
-  DAG.ComputeMaskedBits(Op, SrcMask, KnownZero, KnownOne, Depth);
+  DAG.ComputeMaskedBits(Op, KnownZero, KnownOne, Depth);
   KnownZero = KnownZero.zextOrTrunc(SignificantBitWidth);
   KnownOne = KnownOne.zextOrTrunc(SignificantBitWidth);
 }

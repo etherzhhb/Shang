@@ -103,6 +103,8 @@ struct HyperBlockFormation : public MachineFunctionPass {
 
   bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
                      const TargetInstrInfo *TII);
+
+  const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
 
 // Helper class for BB sorting.

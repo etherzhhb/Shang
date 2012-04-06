@@ -445,6 +445,8 @@ struct LogicSynthesis : public MachineFunctionPass {
     Abc_Stop();
   }
 
+  const char *getPassName() const { return "Pre-schedule Logic Synthesis"; }
+
   bool runOnMachineFunction(MachineFunction &MF);
   bool synthesisBasicBlock(MachineBasicBlock *BB);
 };

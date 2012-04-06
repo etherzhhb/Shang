@@ -23,20 +23,26 @@
 #include "llvm/Type.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/DataTypes.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include <cstring>
 
-namespace llvm {
-  namespace vtmIntrinsic {
+using namespace llvm;
+namespace vtmIntrinsic {
+//enum ID {
+//  last_non_mblaze_intrinsic = Intrinsic::num_intrinsics-1,
+//#define GET_INTRINSIC_ENUM_VALUES
+//#include "VerilogBackendGenIntrinsics.inc"
+//#undef GET_INTRINSIC_ENUM_VALUES
+//  , num_vtm_intrinsics
+//};
 #define GET_LLVM_INTRINSIC_FOR_GCC_BUILTIN
 #include "VerilogBackendGenIntrinsics.inc"
 #undef GET_LLVM_INTRINSIC_FOR_GCC_BUILTIN
-  }
 }
 
-using namespace llvm;
 //===----------------------------------------------------------------------===//
 static inline unsigned lookupNameHelper(const char *Name, unsigned Len) {
     if (Len < 5 || Name[4] != '.' || Name[0] != 'l' || Name[1] != 'l'
@@ -87,16 +93,13 @@ unsigned VIntrinsicInfo::lookupGCCName(const char *Name) const {
 }
 
 bool VIntrinsicInfo::isOverloaded(unsigned IntrID) const {
-  // Overload Table
-  const bool OTable[] = {
+  if (IntrID == 0)
+    return false;
+
+  unsigned id = IntrID - Intrinsic::num_intrinsics + 1;
 #define GET_INTRINSIC_OVERLOAD_TABLE
 #include "VerilogBackendGenIntrinsics.inc"
 #undef GET_INTRINSIC_OVERLOAD_TABLE
-  };
-  if (IntrID == 0)
-    return false;
-  else
-    return OTable[IntrID - Intrinsic::num_intrinsics];
 }
 
 /// This defines the "getAttributes(ID id)" method.

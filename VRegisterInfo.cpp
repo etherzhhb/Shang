@@ -33,19 +33,22 @@
 
 namespace llvm {
   extern const MCRegisterDesc VTMRegDesc[];
-  extern const MCRegisterClass VTMMCRegisterClasses[];
+  extern const uint16_t VTMRegLists[];
 }
 
 using namespace llvm;
 
 VRegisterInfo::VRegisterInfo() : VTMGenRegisterInfo(0) {
   // Dirty hack: Allocate enough physical register for the backend.
-  InitMCRegisterInfo(VTMRegDesc, MaxPhyRegs, 0, VTMMCRegisterClasses, 15);
+  InitMCRegisterInfo(VTMRegDesc, MaxPhyRegs, 0,
+                     VTMMCRegisterClasses, 14,
+                     VTMRegLists,
+                     NULL, 0);
 }
 
-const unsigned*
+const uint16_t*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  static const unsigned CalleeSavedRegs[] = {0};
+  static const uint16_t CalleeSavedRegs[] = {0};
   return  CalleeSavedRegs;
 }
 

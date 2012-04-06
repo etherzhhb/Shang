@@ -88,8 +88,7 @@ struct VRASimple : public MachineFunctionPass {
   }
 
   LiveInterval *getInterval(unsigned RegNum) {
-    if (MRI->reg_nodbg_empty(RegNum)) {
-      //LIS->removeInterval(RegNum);
+    if (MRI->reg_nodbg_empty(RegNum) || !LIS->hasInterval(RegNum)) {
       return 0;
     }
 

@@ -111,9 +111,11 @@ public:
     return 0;
   }
 
-
   /// Code Generation virtual methods...
-  const unsigned *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
+  const uint16_t *getCalleeSavedRegs(const MachineFunction *MF = 0) const;
+  virtual bool requiresRegisterScavenging(const MachineFunction &MF) const {
+    return true;
+  }
 
   BitVector getReservedRegs(const MachineFunction &MF) const;
 
