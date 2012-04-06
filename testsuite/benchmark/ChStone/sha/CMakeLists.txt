@@ -5,4 +5,5 @@ foreach(test_source ${test_sources})
 endforeach()
 
 add_benchmark_stats("sha_stream")
+add_benchmark_symain_stats("sha_stream")
 

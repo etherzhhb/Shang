@@ -81,7 +81,7 @@ function GetRetPort(Size)
   else                    return "sc_signal<uint32_t>return_value"
   end
 end
-Functions.@SYN_FUNC@ = { ModName = RTLModuleName, Scheduling = SynSettings.@ScheduleType@, Pipeline = SynSettings.@PipelineType@ }
+Functions.main = { ModName = RTLModuleName, Scheduling = SynSettings.@ScheduleType@, Pipeline = SynSettings.@PipelineType@ }
 
 --Giving the arguments type in SystemC
 function SetBitWids(Size)

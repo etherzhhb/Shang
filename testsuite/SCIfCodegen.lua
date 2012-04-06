@@ -68,7 +68,10 @@ $(getType(FuncInfo.ReturnSize)) $(FuncInfo.Name)_if($(
     _put(getType(v.Size) .. ' '.. v.Name)
   end
  ));
+#if FuncInfo.Name ~= "main" then
   int sw_main();
+#end
+
 $('#')ifdef __cplusplus
 }
 $('#')endif
@@ -102,8 +105,17 @@ SC_MODULE(V$(RTLModuleName)_tb){
       wait(); tb_ptr->rstN = 0;
       wait(10); tb_ptr->rstN = 1;
       wait();
-      sw_main();
-
+#if FuncInfo.Name ~= "main"	then
+			sw_main();
+#else
+			$(getType(FuncInfo.ReturnSize)) RetVle = $(FuncInfo.Name)_if($(
+				for i,v in ipairs(FuncInfo.Args) do
+					if i ~= 1 then _put(', ') end
+					_put(v.Name)
+				end
+			 ));
+		  assert(RetVle == 0 && "The main function don't have a return value!");
+#end
       ofstream outfile;
       outfile.open ("$(CounterFile)"); 
       outfile <<"$(RTLModuleName) hardware run cycles " << cnt << " wait cycles " << memcnt <<endl;
