@@ -174,7 +174,10 @@ bool LoopVectorizer::runOnLoop(Loop *L, LPPassManager &LPM) {
   // optimized by this pass.
   if (const SCEVConstant *BECst = dyn_cast<SCEVConstant>(BECount)) {
     if (BECst->getValue()->getValue() == 0) return false;
-  }
+  } else
+    return false;
+
+  assert(TripCount != 0 && "Unexpected unknown tripcount!");
 
   // We require target data for now.
   TD = getAnalysisIfAvailable<TargetData>();

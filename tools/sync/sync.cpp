@@ -80,7 +80,7 @@ static void LoopOptimizerEndExtensionFn(const PassManagerBuilder &Builder,
                                         PassManagerBase &PM) {
   //PM.add(createScalarEvolutionAliasAnalysisPass());
   PM.add(createTrivialLoopUnrollPass());
-  //PM.add(createLoopVectorizerPass());
+  PM.add(createLoopVectorizerPass());
 }
 
 // main - Entry point for the sync compiler.
