@@ -197,9 +197,6 @@ bool TrivialLoopUnroll::runOnLoop(Loop *L, LPPassManager &LPM) {
     Count = TripCount;
   }
 
-  // Compute the loop size
-  const TargetData *TD = getAnalysisIfAvailable<TargetData>();
-
   HLSCodeMetrics Metrics;
   for (Loop::block_iterator I = L->block_begin(), E = L->block_end();
     I != E; ++I)
