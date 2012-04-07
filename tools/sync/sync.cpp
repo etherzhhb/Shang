@@ -24,6 +24,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Config/config.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
 #include "llvm/Target/TargetLibraryInfo.h"
@@ -77,8 +78,9 @@ extern "C" void LLVMInitializeVerilogBackendTargetInfo();
 
 static void LoopOptimizerEndExtensionFn(const PassManagerBuilder &Builder,
                                         PassManagerBase &PM) {
+  //PM.add(createScalarEvolutionAliasAnalysisPass());
   PM.add(createTrivialLoopUnrollPass());
-  PM.add(createLoopVectorizerPass());
+  //PM.add(createLoopVectorizerPass());
 }
 
 // main - Entry point for the sync compiler.
