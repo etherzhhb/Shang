@@ -68,6 +68,7 @@ bool StackToGlobal::runOnModule(Module &M) {
     new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
 					             Constant::getNullValue(Ty),
                        AI->getName() + "_s2g");
+    GV->setAlignment(8);
     AI->replaceAllUsesWith(GV);
     AI->eraseFromParent();
   }

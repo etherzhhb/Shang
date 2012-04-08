@@ -56,6 +56,14 @@ public:
   VTargetLowering(TargetMachine &TM);
 
   // TODO:
+  virtual Sched::Preference getSchedulingPreference(SDNode *N) const {
+    return Sched::ILP;
+  }
+
+  virtual unsigned getMaximalGlobalOffset() const {
+    return ~0u;
+  }
+
   virtual bool allowsUnalignedMemoryAccesses(EVT VT) const {
     return false;
   }

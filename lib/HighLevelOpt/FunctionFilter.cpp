@@ -66,6 +66,11 @@ struct FunctionFilter : public ModulePass {
 } // end anonymous.
 
 bool FunctionFilter::runOnModule(Module &M) {
+  for (Module::global_iterator I = M.global_begin(), E = M.global_end(); I != E;
+       ++I) {
+    I->setAlignment(8);
+  }
+
   bool isSyntesizingMain = false;
   SmallPtrSet<const Function*, 32> HWFunctions;
   CallGraph &CG = getAnalysis<CallGraph>();

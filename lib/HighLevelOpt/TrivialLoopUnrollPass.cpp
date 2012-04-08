@@ -63,14 +63,14 @@ namespace {
 }
 
 char TrivialLoopUnroll::ID = 0;
-INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "trivial-loop-unroll", "Unroll loops",
-                      false, false)
+INITIALIZE_PASS_BEGIN(TrivialLoopUnroll, "trivial-loop-unroll",
+                      "Unroll trivial loops", false, false)
 INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
-INITIALIZE_PASS_END(TrivialLoopUnroll, "trivial-loop-unroll", "Unroll loops",
-                    false, false)
+INITIALIZE_PASS_END(TrivialLoopUnroll, "trivial-loop-unroll",
+                    "Unroll trivial loops", false, false)
 
 Pass *llvm::createTrivialLoopUnrollPass() {
   return new TrivialLoopUnroll();

@@ -69,6 +69,10 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
 
   setBooleanContents(UndefinedBooleanContent);
   setIntDivIsCheap(false);
+  setSelectIsExpensive(false);
+  setPow2DivIsCheap(false);
+  setJumpIsExpensive(false);
+  setBooleanContents(TargetLowering::UndefinedBooleanContent);
   setSchedulingPreference(Sched::ILP);
 
   // Set up the legal register classes.
@@ -77,6 +81,15 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   addRegisterClass(MVT::i16,  VTM::DRRegisterClass);
   addRegisterClass(MVT::i32,  VTM::DRRegisterClass);
   addRegisterClass(MVT::i64,  VTM::DRRegisterClass);
+
+  //addRegisterClass(MVT::v2i8,  VTM::DRRegisterClass);
+  //addRegisterClass(MVT::v2i16,  VTM::DRRegisterClass);
+  //addRegisterClass(MVT::v2i32,  VTM::DRRegisterClass);
+
+  //addRegisterClass(MVT::v4i8,  VTM::DRRegisterClass);
+  //addRegisterClass(MVT::v4i16,  VTM::DRRegisterClass);
+
+  //addRegisterClass(MVT::v8i8,  VTM::DRRegisterClass);
 
   computeRegisterProperties();
 

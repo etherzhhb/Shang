@@ -71,6 +71,9 @@ struct VTMPassConfig : public TargetPassConfig {
     : TargetPassConfig(TM, PM) {}
 
   virtual bool addPreRegAlloc() {
+    PM.add(createBasicAliasAnalysisPass());
+    // Run the SCEVAA pass to compute more accurate alias information.
+    PM.add(createScalarEvolutionAliasAnalysisPass());
     PM.add(createVPreRegAllocSchedPass());
     PM.add(createForwardWireUsersPass());
     //addPass(FinalizeMachineBundlesID);
@@ -253,9 +256,6 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createLowerInvokePass(getTargetLowering()));
 
     PM.add(createCFGSimplificationPass());
-
-    // Run the SCEVAA pass to compute more accurate alias information.
-    PM.add(createScalarEvolutionAliasAnalysisPass());
   }
 };
 } // namespace
