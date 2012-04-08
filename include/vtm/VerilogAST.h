@@ -596,6 +596,8 @@ struct VASTExprBuilder {
   VASTExpr::Opcode Opc;
   unsigned BitWidth;
   bool BuildNot;
+  bool isBuildingOrExpr() { return BuildNot == true && Opc == VASTExpr::dpAnd; }
+
   void init(VASTExpr::Opcode opc, unsigned bitWidth, bool buildNot = false) {
     Opc = opc;
     BitWidth = bitWidth;
@@ -1196,12 +1198,12 @@ public:
   VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0, VASTValue *Op1,
                        VASTValue *Op2, unsigned BitWidth);
   VASTValue *buildExpr(VASTExprBuilder &Builder) {
-   // If opc is dpAnd and BuildNot is true. It mean Or in And Invert Graph.
-   if (Builder.Opc == VASTExpr::dpAnd && Builder.BuildNot == true) {
-     return buildOrExpr(Builder.Operands, Builder.BitWidth);
-   }
+    VASTValue *V = buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
 
-   return buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
+    // If opc is dpAnd and BuildNot is true. It mean Or in And Invert Graph.
+    if (Builder.BuildNot) V = buildNotExpr(V);
+
+    return V;
   }
 
   VASTValue *getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);

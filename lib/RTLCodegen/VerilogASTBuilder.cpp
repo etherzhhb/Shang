@@ -140,12 +140,15 @@ class VerilogASTBuilder : public MachineFunctionPass {
       VASTWire *OutputWire = cast<VASTWire>(P->get());
       // Are we creating the enable port?
       if (LocalEn == 0) {
-        // Or all enables together to generate the enable output
+        // Or all enables together to generate the enable output,
+        // we use And Inverter Graph here.
         Expr.init(VASTExpr::dpAnd, OutputWire->getBitWidth(), true);
         // Add the local enable.
-        Expr.addOperand(LocalReg);
+        assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
+        VASTValue *V =VM->buildNotExpr(LocalReg);
+        Expr.addOperand(V);
         LocalEn = LocalReg;
-      } else{
+      } else {
         Expr.init(VASTExpr::dpMux, OutputWire->getBitWidth());
         // Select the local signal if local enable is true.
         Expr.addOperand(LocalEn);
@@ -165,7 +168,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
       // Are we creating the enable signal from sub module?
       if (SubModEn == 0) {
-        Expr.addOperand(SubModWire);
+        // Or all enables together to generate the enable output.
+        // we use And Inverter Graph here.
+        assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
+        VASTValue *V = VM->buildNotExpr(SubModWire);
+        Expr.addOperand(V);
         SubModEn = SubModWire;
       } else {
         // Select the signal from submodule if sub module enable is true.
