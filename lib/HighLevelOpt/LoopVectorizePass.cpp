@@ -32,6 +32,7 @@
 
 using namespace llvm;
 STATISTIC(NumLoopUnrollForVecotirze, "Number of loops unrolled for vectrizie");
+STATISTIC(NumMemOpVecotirzed, "Number memory operations be vectorized");
 
 namespace {
 struct LoopVectorizer : public LoopPass {
@@ -47,16 +48,17 @@ struct LoopVectorizer : public LoopPass {
     AU.addRequired<AliasAnalysis>();
     AU.addRequired<LoopInfo>();
     AU.addPreserved<LoopInfo>();
-    AU.addRequiredID(LoopSimplifyID);
-    AU.addPreservedID(LoopSimplifyID);
-    AU.addRequiredID(LCSSAID);
-    AU.addPreservedID(LCSSAID);
+    //AU.addRequiredID(LoopSimplifyID);
+    //AU.addPreservedID(LoopSimplifyID);
+    //AU.addRequiredID(LCSSAID);
+    //AU.addPreservedID(LCSSAID);
     AU.addRequired<ScalarEvolution>();
     AU.addPreserved<ScalarEvolution>();
     // FIXME: Loop unroll requires LCSSA. And LCSSA requires dom info.
     // If loop unroll does not preserve dom info then LCSSA pass on next
     // loop will receive invalid dom info.
     // For now, recreate dom info, if loop is unrolled.
+    AU.addRequired<DominatorTree>();
     AU.addPreserved<DominatorTree>();
   }
 
@@ -71,7 +73,7 @@ Pass *llvm::createLoopVectorizerPass() {
 }
 
 char LoopVectorizer::ID = 0;
-INITIALIZE_PASS_BEGIN(LoopVectorizer, "loop-vectorize-unroll", "Unroll loops",
+INITIALIZE_PASS_BEGIN(LoopVectorizer, "loop-vectorize-unroll", "Vectorize loops",
                       false, false)
 INITIALIZE_AG_DEPENDENCY(AliasAnalysis)
 INITIALIZE_PASS_DEPENDENCY(DominatorTree)
@@ -79,7 +81,7 @@ INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_DEPENDENCY(LoopSimplify)
 INITIALIZE_PASS_DEPENDENCY(LCSSA)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolution)
-INITIALIZE_PASS_END(LoopVectorizer, "loop-vectorize-unroll", "Unroll loops",
+INITIALIZE_PASS_END(LoopVectorizer, "loop-vectorize-unroll", "Vectorize loops",
                     false, false)
 
 /// processLoopStore - See if this store can be promoted to a memset or memcpy.
@@ -89,16 +91,21 @@ unsigned LoopVectorizer::processLoopMemOp(Value *Val, Value *Ptr, Loop *L){
   if ((SizeInBits & 7) || (SizeInBits >> 32) != 0)
     return UINT_MAX;
 
+  const SCEVAddRecExpr *PtrEv = dyn_cast<SCEVAddRecExpr>(SE->getSCEV(Ptr));
   // See if the pointer expression is an AddRec like {base,+,1} on the current
   // loop, which indicates a strided store.  If we have something else, it's a
   // random store we can't handle.
-  const SCEVAddRecExpr *PtrEv = dyn_cast<SCEVAddRecExpr>(SE->getSCEV(Ptr));
   if (PtrEv == 0 || PtrEv->getLoop() != L || !PtrEv->isAffine())
     return UINT_MAX;
 
   // Check to see if the stride matches the size of the store.  If so, then we
   // know that every byte is touched in the loop.
   unsigned SizeInBytes = (unsigned)SizeInBits >> 3;
+
+  // Not benefit from vectorize if we do not have bigger alignment.
+  if ((1u << SE->GetMinTrailingZeros(PtrEv->getStart())) <= SizeInBytes)
+    return UINT_MAX;
+
   const SCEVConstant *Stride = dyn_cast<SCEVConstant>(PtrEv->getOperand(1));
 
   if (Stride == 0 || SizeInBytes != Stride->getValue()->getValue()) {
@@ -120,34 +127,45 @@ unsigned LoopVectorizer::processLoopMemOp(Value *Val, Value *Ptr, Loop *L){
 unsigned LoopVectorizer::analyzeLoop(Loop *L, const SCEV *BECount) {
   BasicBlock *BB = L->getHeader();
   unsigned MemOpSize = UINT_MAX;
+  unsigned NumInstr = 0;
   for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
     Instruction *Inst = I;
     // Look for store instructions, which may be optimized to memset/memcpy.
     if (StoreInst *SI = dyn_cast<StoreInst>(Inst)) {
       if (!SI->isSimple()) return 0;
+      Value *Val = SI->getValueOperand();
+      Value *StPtr = SI->getPointerOperand();
+      if (!L->isLoopInvariant(Val)) {
+        if (LoadInst *LI = dyn_cast<LoadInst>(Val)) {
+          Value *LdPtr = LI->getPointerOperand();
+          unsigned LoadSize = processLoopMemOp(LI, LdPtr, L);
+          if (LoadSize ==  processLoopMemOp(Val, StPtr, L)) {
+            MemOpSize = std::min(LoadSize, MemOpSize);
+            continue;
+          }
+        }
+        continue;
+      }
 
-      MemOpSize = std::min(processLoopMemOp(SI->getValueOperand(),
-                                            SI->getPointerOperand(),
-                                            L),
-                           MemOpSize);
-      continue;
+      // BBVectorize cannot vectorize store with loop invariant.
+      //unsigned StoreSize = processLoopMemOp(Val, StPtr, L);
+      //if (StoreSize < UINT_MAX) {
+      //  MemOpSize = std::min(StoreSize, MemOpSize);
+      //  continue;
+      //}
     }
 
-    if (LoadInst *LI = dyn_cast<LoadInst>(Inst)) {
-      if (!LI->isSimple()) return 0;
-
-      MemOpSize = std::min(processLoopMemOp(LI, LI->getPointerOperand(),
-                                            L),
-                           MemOpSize);
-      continue;
-    }
-
+    // Do not unroll loops with calls.
+    if (isa<CallInst>(Inst)) return UINT_MAX;
   }
 
   return MemOpSize;
 }
 
 bool LoopVectorizer::runOnLoop(Loop *L, LPPassManager &LPM) {
+  if (!L->isLCSSAForm(getAnalysis<DominatorTree>()) || !L->isLoopSimplifyForm())
+    return false;
+
   // Only handle the loop with single BB at the moment.
   if (L->getNumBlocks() > 1) return false;
 
@@ -191,6 +209,73 @@ bool LoopVectorizer::runOnLoop(Loop *L, LPPassManager &LPM) {
   // Unroll the loop.
   if (!UnrollLoop(L, UnrollCount, TripCount, false, TripMultiple, LI, &LPM))
     return false;
+
+  for (BasicBlock::iterator I = LatchBlock->begin(), E = LatchBlock->end();
+       I != E; ++I) {
+    if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+      const SCEV *Ptr = SE->getSCEV(LI->getPointerOperand());
+      unsigned Align = (1 << SE->GetMinTrailingZeros(Ptr));
+      LI->setAlignment(Align);
+    } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+      const SCEV *Ptr = SE->getSCEV(SI->getPointerOperand());
+      unsigned Align = (1 << SE->GetMinTrailingZeros(Ptr));
+      SI->setAlignment(Align);
+    }
+  }
+
+  DEBUG(LatchBlock->dump());
+  VectorizeConfig C;
+  C.AlignedOnly = true;
+  C.NoCasts = true;
+  C.VectorBits = 64;
+  vectorizeBasicBlock(this, *LatchBlock, C);
+
+  DEBUG(LatchBlock->dump());
+
+  for (BasicBlock::iterator I = LatchBlock->begin(), E = LatchBlock->end();
+       I != E; /*++I*/) {
+     Instruction *Inst = I++;
+     if (StoreInst *SI = dyn_cast<StoreInst>(Inst)) {
+       Value *V = SI->getValueOperand();
+       Type *T = V->getType();
+       if (!T->isVectorTy()) continue;
+       ++NumMemOpVecotirzed;
+
+       Type *ScalarTy =
+         IntegerType::get(T->getContext(), T->getPrimitiveSizeInBits());
+       // Cast the stored value.
+       Instruction *CastedValue =
+         CastInst::Create(Instruction::BitCast, V, ScalarTy, "", Inst);
+       SI->getOperandUse(0).set(CastedValue);
+       // Cast the pointer.
+       Instruction *CastedPtr =
+         CastInst::Create(Instruction::BitCast, SI->getPointerOperand(),
+                          PointerType::get(ScalarTy, 0), "", Inst);
+       SI->getOperandUse(1).set(CastedPtr);
+    } else if (LoadInst *LI = dyn_cast<LoadInst>(Inst)) {
+      Type *T = LI->getType();
+      if (!T->isVectorTy()) continue;
+      ++NumMemOpVecotirzed;
+
+      Instruction *NewLI = LI->clone();
+      NewLI->insertBefore(Inst);
+      Type *ScalarTy =
+        IntegerType::get(T->getContext(), T->getPrimitiveSizeInBits());
+
+      // Cast the pointer.
+      Instruction *CastedPtr =
+        CastInst::Create(Instruction::BitCast, LI->getPointerOperand(),
+                        PointerType::get(ScalarTy, 0), "", NewLI);
+       NewLI->getOperandUse(0).set(CastedPtr);
+      // Setup the right type for the load.
+      NewLI->mutateType(ScalarTy);
+      // Cast the loaded value back to vector.
+      Instruction *CastedValue =
+        CastInst::Create(Instruction::BitCast, NewLI, T, "", Inst);
+      LI->replaceAllUsesWith(CastedValue);
+      LI->eraseFromParent();
+    }
+  }
 
   ++NumLoopUnrollForVecotirze;
   return true;
