@@ -581,7 +581,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // SchedSlot is supposed to strictly smaller than CopySlot, if this not hold
   // then slots is wrapped.
   bool WrappedAround = ((getModuloSlot(SchedSlot) >= getModuloSlot(CopySlot))
-                       && Opc != VTM::VOpMvPhi);
+                       && Opc != VTM::VOpMvPhi && Opc != VTM::VOpDisableFU);
   // FIX the opcode of terminators.
   if (Inst.isTerminator()) {
     if (VInstrInfo::isBrCndLike(Opc)) Inst.setDesc(TII.get(VTM::VOpToState_nt));

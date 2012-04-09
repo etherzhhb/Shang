@@ -25,6 +25,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Config/config.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/Verifier.h"
 #include "llvm/Assembly/PrintModulePass.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
 #include "llvm/Target/TargetLibraryInfo.h"
@@ -32,6 +33,7 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/IRReader.h"
 #include "llvm/Support/CommandLine.h"
@@ -78,9 +80,10 @@ extern "C" void LLVMInitializeVerilogBackendTargetInfo();
 
 static void LoopOptimizerEndExtensionFn(const PassManagerBuilder &Builder,
                                         PassManagerBase &PM) {
-  //PM.add(createScalarEvolutionAliasAnalysisPass());
   PM.add(createTrivialLoopUnrollPass());
+  PM.add(createScalarEvolutionAliasAnalysisPass());
   PM.add(createLoopVectorizerPass());
+  PM.add(createInstructionCombiningPass());
 }
 
 // main - Entry point for the sync compiler.
@@ -147,6 +150,7 @@ int main(int argc, char **argv) {
                        LoopOptimizerEndExtensionFn);
   PassManager Passes;
   Passes.add(new TargetData(*target->getTargetData()));
+  Passes.add(createVerifierPass());
 
   // Perform Software/Hardware partition.
   Passes.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));

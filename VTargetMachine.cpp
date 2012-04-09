@@ -240,9 +240,9 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual void addIRPasses() {
-    // add the pass which will convert the AllocaInst to GlobalVariable.
     PM.add(createStackToGlobalPass());
-
+    // add the pass which will convert the AllocaInst to GlobalVariable.
+    //PM.add(createGVNPass(false));
     // The construct block ram for local memory access.
     // PM.add(createContoBromPass(*getIntrinsicInfo()));
 
