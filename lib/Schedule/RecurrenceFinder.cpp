@@ -176,10 +176,10 @@ typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
 
 void SubGraph::unblock(SubGraphNode *N) {
   blocked[N] = false;
-
-  while (!B[N].empty()) {
-    SubGraphNode *W = *B[N].begin();
-    B[N].erase(W);
+  SubGrapNodeSet &BN = B[N];
+  while (!BN.empty()) {
+    SubGraphNode *W = *BN.begin();
+    BN.erase(W);
     if(blocked[W]) unblock(W);
   }
 }
