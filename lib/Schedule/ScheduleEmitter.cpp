@@ -324,8 +324,9 @@ struct MicroStateBuilder {
 
   // Build the machine operand that use at a specified slot.
   MachineOperand getRegUseOperand(ucOperand MO, OpSlot ReadSlot) {
+    unsigned Reg = MO.getReg();
     // Else this is a use.
-    SWDMapTy::iterator at = StateWireDefs.find(MO.getReg());
+    SWDMapTy::iterator at = StateWireDefs.find(Reg);
     // Using register from previous state.
     if (at == StateWireDefs.end()) {
       // Do not need to worry about if the new loop overwrite the the loop
@@ -577,6 +578,10 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   if (VInstrInfo::isWriteUntilFinish(Inst.getOpcode())) ++CopySlot;
 
   unsigned Opc = Inst.getOpcode();
+  // SchedSlot is supposed to strictly smaller than CopySlot, if this not hold
+  // then slots is wrapped.
+  bool WrappedAround = ((getModuloSlot(SchedSlot) >= getModuloSlot(CopySlot))
+                       && Opc != VTM::VOpMvPhi);
   // FIX the opcode of terminators.
   if (Inst.isTerminator()) {
     if (VInstrInfo::isBrCndLike(Opc)) Inst.setDesc(TII.get(VTM::VOpToState_nt));
@@ -603,7 +608,8 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
-    if (MO.isDef() && SchedSlot != CopySlot && !isCopyLike) {
+
+    if (MO.isDef() && SchedSlot != CopySlot && (!isCopyLike || WrappedAround)) {
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
@@ -621,7 +627,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       }
 
       // If the wire define and the copy wrap around?
-      if (getModuloSlot(SchedSlot) > getModuloSlot(CopySlot))
+      if (WrappedAround)
         WireNum = createPHI(WireNum, BitWidth, SchedSlot.getSlot(), true);
 
       WireDef WDef = createWireDef(WireNum, MO, Pred, SchedSlot, CopySlot);
@@ -660,7 +666,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   Inst.removeFromParent();
   MBB.insert((MachineBasicBlock::iterator)IP, &Inst);
 
-  if (isCopyLike) {
+  if (isCopyLike && !WrappedAround) {
     assert(Defs.empty() && "CopyLike instructions do not have extra defs!");
     return;
   }
@@ -679,7 +685,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     //if (MRI.use_empty(MO.getReg()))
     //  continue;
 
-    if (WD->shouldBeCopied()) {
+    if (WD->shouldBeCopied() && !isCopyLike) {
       unsigned Slot = CopySlot.getSlot();
       // Export the register.
       MachineInstrBuilder Builder = BuildMI(MBB, IP, DebugLoc(),
