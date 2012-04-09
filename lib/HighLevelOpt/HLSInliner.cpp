@@ -36,8 +36,6 @@ namespace {
 
 // AlwaysInliner only inlines functions that are mark as "always inline".
 class HLSInliner : public Inliner {
-  // Functions that are never inlined
-  SmallPtrSet<const Function*, 16> NeverInline;
   InlineCostAnalyzer CA;
 public:
   // Use extremely low threshold.
@@ -46,6 +44,12 @@ public:
   }
   static char ID; // Pass identification, replacement for typeid
   InlineCost getInlineCost(CallSite CS) {
+    Function *F = CS.getCalledFunction();
+    if (!F || F->isDeclaration() ||  F->hasFnAttr(Attribute::NoInline))
+      return InlineCost::getNever();
+
+    if (F->hasFnAttr(Attribute::AlwaysInline)) return InlineCost::getAlways();
+
     return CA.getInlineCost(CS, -1);
   }
   virtual bool doInitialization(CallGraph &CG);
@@ -73,13 +77,12 @@ bool HLSInliner::doInitialization(CallGraph &CG) {
        I != E; ++I) {
     Function *F = I;
 
+    CallGraphNode *CGN = CG[F];
+
     if (F->isDeclaration() || F->hasFnAttr(Attribute::NoInline)) {
-      NeverInline.insert(F);
       DEBUG(dbgs() << "No inline " << F->getName() << '\n');
       continue;
     }
-
-    CallGraphNode *CGN = CG[F];
 
     // Inlining the functions with only 1 caller will never increase
     // the module size.
