@@ -37,6 +37,7 @@ Pass *createTrivialLoopUnrollPass();
 Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
 Pass *createStackToGlobalPass();
+Pass *createAllocaAlignerPass();
 
 Pass *createFunctionFilterPass(raw_ostream &O);
 

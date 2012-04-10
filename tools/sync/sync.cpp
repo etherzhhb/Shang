@@ -81,6 +81,7 @@ extern "C" void LLVMInitializeVerilogBackendTargetInfo();
 static void LoopOptimizerEndExtensionFn(const PassManagerBuilder &Builder,
                                         PassManagerBase &PM) {
   PM.add(createTrivialLoopUnrollPass());
+  PM.add(createAllocaAlignerPass());
   PM.add(createScalarEvolutionAliasAnalysisPass());
   PM.add(createLoopVectorizerPass());
   PM.add(createInstructionCombiningPass());

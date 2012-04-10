@@ -35,6 +35,31 @@ STATISTIC(NumLoopUnrollForVecotirze, "Number of loops unrolled for vectrizie");
 STATISTIC(NumMemOpVecotirzed, "Number memory operations be vectorized");
 
 namespace {
+//
+struct AllocaAligner : public FunctionPass {
+  static char ID;
+
+  AllocaAligner() : FunctionPass(ID) {}
+
+  void getAnalysisUsage(AnalysisUsage &AU) const {
+    AU.setPreservesCFG();
+  }
+
+  bool runOnFunction(Function &F) {
+    bool changed = false;
+    // Only handle the allocas in entry block.
+    BasicBlock &Entry = F.getEntryBlock();
+    for (BasicBlock::iterator I = Entry.begin(), E = Entry.end(); I != E; ++I) {
+      AllocaInst *AI = dyn_cast<AllocaInst>(I);
+
+      if (AI == 0) continue;
+      AI->setAlignment(std::max(8u, AI->getAlignment()));
+    }
+
+    return changed;
+  }
+};
+
 struct LoopVectorizer : public LoopPass {
   static char ID;
   ScalarEvolution *SE;
@@ -67,6 +92,12 @@ struct LoopVectorizer : public LoopPass {
   unsigned processLoopMemOp(Value *Val, Value *Ptr, Loop *CurLoop);
 };
 }
+
+Pass *llvm::createAllocaAlignerPass() {
+  return new AllocaAligner();
+}
+
+char AllocaAligner::ID = 0;
 
 Pass *llvm::createLoopVectorizerPass() {
   return new LoopVectorizer();
