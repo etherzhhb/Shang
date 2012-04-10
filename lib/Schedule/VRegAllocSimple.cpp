@@ -368,10 +368,9 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
 
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    Weight += /*FU Cost*/ Cost[SrcBitWidth];
-    Weight -= FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(SrcBitWidth);
-    Weight += getSavedFanoutsCost(DstBitWidth);
-
+    unsigned Index = std::min<unsigned>(SrcBitWidth, DstBitWidth) - 1;
+    Weight += /*FU Cost*/ Cost[Index];
+    Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(SrcBitWidth);
     return Weight;
   }
 
@@ -516,6 +515,9 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
 
     if (VRA->iterateUseDefChain(Src->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
+
+    // Go on check next source.
+    nextSrc();
 
     if (VRA->iterateUseDefChain(Dst->reg, *this))
       return CompGraphWeights::HUGE_NEG_VAL;
