@@ -100,11 +100,12 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     }
   };
 
-  LoopDep analyzeLoopDep(Value *SrcAddr, Value *DstAddr, bool SrcLoad,
-                         bool DstLoad, Loop &L, bool SrcBeforeDest);
+  LoopDep analyzeLoopDep(MachineMemOperand *SrcAddr, MachineMemOperand *DstAddr,
+                         bool SrcLoad, bool DstLoad, Loop &L, bool SrcBeforeDest);
 
 
-  LoopDep advancedLoopDepsAnalysis(Value *SrcAddr, Value *DstAddr,
+  LoopDep advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
+                                   MachineMemOperand *DstAddr,
                                    bool SrcLoad, bool DstLoad, Loop &L,
                                    bool SrcBeforeDest, unsigned ElSizeInByte);
 
@@ -284,21 +285,18 @@ VPreRegAllocSched::~VPreRegAllocSched() {
 //===----------------------------------------------------------------------===//
 
 VPreRegAllocSched::LoopDep
-VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
+VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
+                                  MachineMemOperand *DstAddr,
                                   bool SrcLoad, bool DstLoad,
                                   Loop &L, bool SrcBeforeDest) {
-  uint64_t SrcSize = AliasAnalysis::UnknownSize;
-  Type *SrcElTy = cast<PointerType>(SrcAddr->getType())->getElementType();
-  if (SrcElTy->isSized()) SrcSize = AA->getTypeStoreSize(SrcElTy);
-
-  uint64_t DstSize = AliasAnalysis::UnknownSize;
-  Type *DstElTy = cast<PointerType>(DstAddr->getType())->getElementType();
-  if (DstElTy->isSized()) DstSize = AA->getTypeStoreSize(DstElTy);
-
-  if (L.isLoopInvariant(SrcAddr) && L.isLoopInvariant(DstAddr)) {
+  uint64_t SrcSize = SrcAddr->getSize();
+  uint64_t DstSize = DstAddr->getSize();
+  Value *SrcAddrVal = const_cast<Value*>(SrcAddr->getValue()),
+        *DstAddrVal = const_cast<Value*>(DstAddr->getValue());
+  if (L.isLoopInvariant(SrcAddrVal) && L.isLoopInvariant(DstAddrVal)) {
     // FIXME: What about nested loops?
     // Loop Invariant, let AA decide.
-    if (!AA->isNoAlias(SrcAddr, SrcSize, DstAddr, DstSize))
+    if (!AA->isNoAlias(SrcAddrVal, SrcSize, DstAddrVal, DstSize))
       return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
     else
       return LoopDep();
@@ -307,18 +305,16 @@ VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
   // TODO: Use "getUnderlyingObject" implemented in ScheduleInstrs?
   // Get the underlying object directly, SCEV will take care of the
   // the offsets.
-  Value *SGPtr = GetUnderlyingObject(SrcAddr),
-        *DGPtr = GetUnderlyingObject(DstAddr);
+  Value *SGPtr = GetUnderlyingObject(SrcAddrVal),
+        *DGPtr = GetUnderlyingObject(DstAddrVal);
 
   switch(AA->alias(SGPtr, SrcSize, DGPtr, DstSize)) {
+  case AliasAnalysis::MayAlias:
   case AliasAnalysis::MustAlias:
     // We can only handle two access have the same element size.
     if (SrcSize == DstSize)
       return advancedLoopDepsAnalysis(SrcAddr, DstAddr, SrcLoad, DstLoad,
                                       L, SrcBeforeDest, SrcSize);
-    // FIXME: Handle pointers with difference size.
-    // Fall though.
-  case AliasAnalysis::MayAlias:
     return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
   default:  break;
   }
@@ -327,12 +323,15 @@ VPreRegAllocSched::analyzeLoopDep(Value *SrcAddr, Value *DstAddr,
 }
 
 VPreRegAllocSched::LoopDep
-VPreRegAllocSched::advancedLoopDepsAnalysis(Value *SrcAddr, Value *DstAddr,
+VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
+                                            MachineMemOperand *DstAddr,
                                             bool SrcLoad, bool DstLoad,
                                             Loop &L, bool SrcBeforeDest,
                                             unsigned ElSizeInByte) {
-  const SCEV *SSAddr = SE->getSCEVAtScope(SrcAddr, &L),
-             *SDAddr = SE->getSCEVAtScope(DstAddr, &L);
+  const SCEV *SSAddr =
+    SE->getSCEVAtScope(const_cast<Value*>(SrcAddr->getValue()), &L);
+  const SCEV *SDAddr =
+    SE->getSCEVAtScope(const_cast<Value*>(DstAddr->getValue()), &L);
   DEBUG(dbgs() << *SSAddr << " and " << *SDAddr << '\n');
   // Use SCEV to compute the dependencies distance.
   const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
@@ -376,7 +375,7 @@ static inline bool mayAccessMemory(const MCInstrDesc &TID) {
 
 void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   // The schedule unit and the corresponding memory operand.
-  typedef std::vector<std::pair<Value*, VSUnit*> > MemOpMapTy;
+  typedef std::vector<std::pair<MachineMemOperand*, VSUnit*> > MemOpMapTy;
   MemOpMapTy VisitedMemOps;
   Loop *IRL = IRLI->getLoopFor(CurState.getMachineBasicBlock()->getBasicBlock());
 
@@ -392,7 +391,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
     bool isDstLoad = VInstrInfo::mayLoad(DstMI);
 
     // Dirty Hack: Is the const_cast safe?
-    Value *DstMO = 0;
+    MachineMemOperand *DstMO = 0;
     uint64_t DstSize = AliasAnalysis::UnknownSize;
     // TODO: Also try to get the address information for call instruction.
     if (!DstMI->memoperands_empty() && !DstMI->hasVolatileMemoryRef()) {
@@ -400,18 +399,16 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile op!");
       
       // FIXME: DstMO maybe null in a VOpCmdSeq
-      if ((DstMO =
-             const_cast<Value*>((*DstMI->memoperands_begin())->getValue()))){
-        Type *DstElemTy
-          = cast<SequentialType>(DstMO->getType())->getElementType();
-        DstSize = TD->getTypeStoreSize(DstElemTy);
-        assert(!isa<PseudoSourceValue>(DstMO) && "Unexpected frame stuffs!");
+      if (DstMO = *DstMI->memoperands_begin()){
+        DstSize = DstMO->getSize();
+        assert(!isa<PseudoSourceValue>(DstMO->getValue())
+               && "Unexpected frame stuffs!");
       }
     }
 
     for (MemOpMapTy::iterator I = VisitedMemOps.begin(), E = VisitedMemOps.end();
          I != E; ++I) {
-      Value *SrcMO = I->first;
+      MachineMemOperand *SrcMO = I->first;
       VSUnit *SrcU = I->second;
 
       MachineInstr *SrcMI = SrcU->getRepresentativeInst();
@@ -457,11 +454,10 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
           SrcU->addDep(MemDep);
         }
       } else {
-        Type *SrcElemTy
-          = cast<SequentialType>(SrcMO->getType())->getElementType();
-        size_t SrcSize = TD->getTypeStoreSize(SrcElemTy);
+        size_t SrcSize = SrcMO->getSize();
 
-        if (AA->isNoAlias(SrcMO, SrcSize, DstMO, DstSize)) continue;
+        if (AA->isNoAlias(SrcMO->getValue(),SrcSize,DstMO->getValue(),DstSize))
+          continue;
 
         // Ignore the No-Alias pointers.
         unsigned Latency = CurState.getStepsToFinish(SrcMI);
