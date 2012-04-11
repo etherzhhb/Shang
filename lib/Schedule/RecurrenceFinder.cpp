@@ -77,18 +77,18 @@ struct SubGraphNode {
 };
 
 class SubGraph {
-  typedef SmallVector<SubGraphNode*, 32> SubGrapNodeVec;
-  typedef SmallPtrSet<SubGraphNode*, 64> SubGrapNodeSet;
+  typedef SmallVector<const VSUnit*, 32> VSUnitVec;
+  typedef SmallPtrSet<const VSUnit*, 32> VSUnitSet;
 
   const VSchedGraph *G;
   const VSUnit *GraphEntry;
   //Set of blocked nodes
-  typedef BitVector SubGrapNodeFlags;
-  SubGrapNodeFlags blocked;
+  typedef BitVector VSUnitFlags;
+  VSUnitFlags blocked;
   //Stack holding current circuit
-  SubGrapNodeVec CurPath;
+  VSUnitVec CurPath;
   //Map for B Lists
-  typedef std::map<const SubGraphNode*, SubGrapNodeSet> BMapTy;
+  typedef std::map<const VSUnit*, VSUnitSet> BMapTy;
   BMapTy B;
 
   // SubGraph stuff
@@ -145,10 +145,10 @@ public:
   }
 
   bool findAllCircuits();
-  bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
-               const SubGrapNodeFlags &SCC);
+  bool circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
+               const VSUnitFlags &SCC);
   void addRecurrence();
-  void unblock(SubGraphNode *N);
+  void unblock(const VSUnit *N);
 };
 }
 
@@ -171,11 +171,11 @@ typedef GraphTraits<SubGraphNode*> VSUSccGT;
 
 typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
 
-void SubGraph::unblock(SubGraphNode *N) {
+void SubGraph::unblock(const VSUnit *N) {
   blocked.reset(N->getIdx());
-  SubGrapNodeSet &BN = B[N];
-  for (SubGrapNodeSet::iterator I = BN.begin(), E = BN.end(); I != E; ++I) {
-    SubGraphNode *W = *I;
+  VSUnitSet &BN = B[N];
+  for (VSUnitSet::iterator I = BN.begin(), E = BN.end(); I != E; ++I) {
+    const VSUnit *W = *I;
     BN.erase(W);
     if(blocked.test(W->getIdx())) unblock(W);
   }
@@ -187,12 +187,10 @@ void SubGraph::addRecurrence() {
   //std::vector<VSUnit*> Recurrence;
   unsigned TotalLatency = 0;
   unsigned TotalDistance = 0;
-  const VSUnit *LastAtom = CurPath.back()->getSUnit();
+  const VSUnit *LastAtom = CurPath.back();
 
-  for (SubGrapNodeVec::iterator I = CurPath.begin(), E = CurPath.end(); I != E; ++I) {
-    SubGraphNode *N = *I;
-
-    const VSUnit *A = N->getSUnit();
+  for (VSUnitVec::iterator I = CurPath.begin(), E = CurPath.end(); I != E; ++I) {
+    const VSUnit *A = *I;
     VDEdge *Edge = LastAtom->getEdgeFrom(A);
 
     TotalLatency += Edge->getLatency();
@@ -200,7 +198,7 @@ void SubGraph::addRecurrence() {
 
     TotalDistance += Edge->getItDst();
 
-    DEBUG(N->dump());
+    DEBUG(A->dump());
     LastAtom = A;
     // Dirty Hack.
     //Recurrence.push_back(const_cast<VSUnit*>(A));
@@ -212,17 +210,17 @@ void SubGraph::addRecurrence() {
   DEBUG(dbgs() << "RecII: " << RecII << '\n');
 }
 
-bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
-                       const SubGrapNodeFlags &SCC) {
+bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
+                       const VSUnitFlags &SCC) {
   bool closed = false;
 
   CurPath.push_back(CurNode);
   blocked.set(CurNode->getIdx());
 
-  SubGrapNodeVec AkV;
-  for (SubGraphNode::ChildIt I = CurNode->child_begin(),
-       E = CurNode->child_end(); I != E; ++I) {
-    SubGraphNode *N = *I;
+  VSUnitVec AkV;
+  for (VSUnit::const_dep_iterator I = CurNode->dep_begin(),
+       E = CurNode->dep_end(); I != E; ++I) {
+    const VSUnit *N = *I;
 
     if (!SCC.test(N->getIdx())) continue;
 
@@ -238,9 +236,9 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
   if (closed)
     unblock(CurNode);
   else
-    for (SubGrapNodeVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
-      SubGraphNode *N = *I;
-      B[N].insert(CurNode);
+    for (VSUnitVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
+      const VSUnit *U = *I;
+      B[U].insert(CurNode);
     }
 
   // Pop current node.
@@ -258,7 +256,7 @@ bool SubGraph::findAllCircuits() {
 
   typedef std::vector<SubGraphNode*> SCCTy;
   SCCTy LeastSCCVec;
-  SubGrapNodeFlags SCCNodes(G->all_schedunits_size());
+  VSUnitFlags SCCNodes(G->all_schedunits_size());
   // While the subgraph not empty.
   while (CurIdx < ExitIdx) {
     DEBUG(dbgs() << "Current Idx: " << CurIdx << '\n');
@@ -272,7 +270,7 @@ bool SubGraph::findAllCircuits() {
     // Iterate over all the SCCs in the graph to find the scc with the least
     // vertex
     for (dep_scc_iterator SCCI = dep_scc_iterator::begin(RootNode),
-          SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
+         SCCE = dep_scc_iterator::end(RootNode); SCCI != SCCE; ++SCCI) {
       SCCTy &nextSCC = *SCCI;
 
       if (nextSCC.size() == 1) {
@@ -319,11 +317,11 @@ bool SubGraph::findAllCircuits() {
 
       SCCNodes.set(N->getIdx());
       blocked.reset(N->getIdx());
-      B[N].clear();
+      B[N->getSUnit()].clear();
     }
 
     // Find the circuits.
-    circuit(LeastVertex, LeastVertex, SCCNodes);
+    circuit(LeastVertex->getSUnit(), LeastVertex->getSUnit(), SCCNodes);
 
     // Move forward.
     ++CurIdx;
