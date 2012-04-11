@@ -223,11 +223,10 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
   for (SubGraphNode::ChildIt I = CurNode->child_begin(),
        E = CurNode->child_end(); I != E; ++I) {
     SubGraphNode *N = *I;
-    if (SCC.count(N)) AkV.push_back(N);
-  }
 
-  for (SubGrapNodeVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
-    SubGraphNode *N = *I;
+    if (!SCC.count(N)) continue;
+
+    AkV.push_back(N);
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.
       addRecurrence();
