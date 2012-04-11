@@ -476,6 +476,7 @@ typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
 class VSchedGraph : public DetialLatencyInfo {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
+  enum { NULL_SU_IDX = 0u };
 private:
   MachineBasicBlock *MBB;
   SUnitVecTy AllSUs;
@@ -501,9 +502,9 @@ private:
 public:
   VSchedGraph(MachineRegisterInfo &MRI, MachineBasicBlock *MachBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : DetialLatencyInfo(MRI), MBB(MachBB), Entry(new VSUnit(0)), Exit(0),
-      SUCount(/*We already have the entry node*/1), startSlot(StartSlot),
-      LoopOp(0, HaveLoopOp) {
+    : DetialLatencyInfo(MRI), MBB(MachBB), Entry(new VSUnit(1)), Exit(0),
+      SUCount(/*We already have the entry node and a null node (index 0)*/2),
+      startSlot(StartSlot), LoopOp(0, HaveLoopOp) {
     AllSUs.push_back(Entry);
   }
 
