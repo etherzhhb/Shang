@@ -359,7 +359,7 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
     resetWidth();
   }
 
-  int computeWeight(int FanInWidth, int FanOutWidth) {
+  int computeWeight(unsigned FanInWidth, unsigned FanOutWidth) {
     // Only merge the register if the mux size not exceed the max allowed size.
     if (FaninChecker<NUMSRC>::getMaxMergedSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
       return CompGraphWeights::HUGE_NEG_VAL;
