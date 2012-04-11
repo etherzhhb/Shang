@@ -82,10 +82,8 @@ class SubGraph {
 
   const VSchedGraph *G;
   const VSUnit *GraphEntry;
-  // ModuloScheduleInfo *MSInfo;
-
   //Set of blocked nodes
-  typedef std::map<const SubGraphNode*, bool> SubGrapNodeFlags;
+  typedef BitVector SubGrapNodeFlags;
   SubGrapNodeFlags blocked;
   //Stack holding current circuit
   SubGrapNodeVec CurPath;
@@ -98,12 +96,13 @@ class SubGraph {
   NodeVecTy Nodes;
   SubGraphNode DummyNode;
 public:
-  unsigned CurIdx, NumNodes;
+  unsigned CurIdx;
   unsigned RecMII;
 
   SubGraph(VSchedGraph *SG)
-    : G(SG), GraphEntry(SG->getEntryRoot()), DummyNode(0, this),
-      CurIdx(G->getEntryRoot()->getIdx()), NumNodes(G->num_scheds()),
+    : G(SG), GraphEntry(SG->getEntryRoot()),
+      DummyNode(0, this), blocked(SG->all_schedunits_size(), false),
+      CurIdx(G->getEntryRoot()->getIdx()),
       RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
     // the InstIdx of the VSUnit and this only works if they are sorted in
@@ -173,12 +172,12 @@ typedef GraphTraits<SubGraphNode*> VSUSccGT;
 typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
 
 void SubGraph::unblock(SubGraphNode *N) {
-  blocked[N] = false;
+  blocked.reset(N->getIdx());
   SubGrapNodeSet &BN = B[N];
   for (SubGrapNodeSet::iterator I = BN.begin(), E = BN.end(); I != E; ++I) {
     SubGraphNode *W = *I;
     BN.erase(W);
-    if(blocked[W]) unblock(W);
+    if(blocked.test(W->getIdx())) unblock(W);
   }
   BN.clear();
 }
@@ -218,7 +217,7 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
   bool closed = false;
 
   CurPath.push_back(CurNode);
-  blocked[CurNode] = true;
+  blocked.set(CurNode->getIdx());
 
   SubGrapNodeVec AkV;
   for (SubGraphNode::ChildIt I = CurNode->child_begin(),
@@ -232,7 +231,7 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
       //We have a circuit, so add it to recurrent list.
       addRecurrence();
       closed = true;
-    } else if (!blocked[N] && circuit(N, LeastVertex, SCC))
+    } else if (!blocked.test(N->getIdx()) && circuit(N, LeastVertex, SCC))
       closed = true;
   }
 
@@ -320,7 +319,7 @@ bool SubGraph::findAllCircuits() {
         return false;
       }
 
-      blocked[N] = false;
+      blocked.reset(N->getIdx());
       B[N].clear();
     }
 

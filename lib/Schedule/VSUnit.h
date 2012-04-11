@@ -577,7 +577,7 @@ public:
   typedef SUnitVecTy::iterator iterator;
   iterator begin() { return AllSUs.begin(); }
   iterator end() { return AllSUs.end(); }
-
+  size_t all_schedunits_size() const { return SUCount; }
   typedef ArrayRef<VSUnit*>::iterator sched_iterator;
   sched_iterator sched_begin()  const { return SUsToSched.begin(); }
   sched_iterator sched_end()    const { return SUsToSched.end(); }
