@@ -93,9 +93,6 @@ class SubGraph {
   typedef std::map<const SubGraphNode*, SubGrapNodeSet> BMapTy;
   BMapTy B;
 
-  // SCC with least vertex.
-  SubGrapNodeSet Vk;
-
   // SubGraph stuff
   typedef std::map<const VSUnit*, SubGraphNode*> NodeVecTy;
   NodeVecTy Nodes;
@@ -149,7 +146,8 @@ public:
   }
 
   bool findAllCircuits();
-  bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex);
+  bool circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
+               const SubGrapNodeSet &SCC);
   void addRecurrence();
   void unblock(SubGraphNode *N);
 };
@@ -214,7 +212,8 @@ void SubGraph::addRecurrence() {
   DEBUG(dbgs() << "RecII: " << RecII << '\n');
 }
 
-bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
+bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex,
+                       const SubGrapNodeSet &SCC) {
   bool closed = false;
 
   CurPath.push_back(CurNode);
@@ -224,7 +223,7 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
   for (SubGraphNode::ChildIt I = CurNode->child_begin(),
        E = CurNode->child_end(); I != E; ++I) {
     SubGraphNode *N = *I;
-    if (Vk.count(N)) AkV.push_back(N);
+    if (SCC.count(N)) AkV.push_back(N);
   }
 
   for (SubGrapNodeVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
@@ -233,7 +232,7 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
       //We have a circuit, so add it to recurrent list.
       addRecurrence();
       closed = true;
-    } else if (!blocked[N] && circuit(N, LeastVertex))
+    } else if (!blocked[N] && circuit(N, LeastVertex, SCC))
       closed = true;
   }
 
@@ -258,13 +257,14 @@ bool SubGraph::findAllCircuits() {
                << G->getMachineBasicBlock()->getName()
                << '\n');
 
+  SubGrapNodeSet SCCNodes;
   // While the subgraph not empty.
   while (CurIdx < ExitIdx) {
     DEBUG(dbgs() << "Current Idx: " << CurIdx << '\n');
     // Initialize the subgraph induced by {CurIdx, ...., ExitIdx}
     SubGraphNode *RootNode = getNode(ExitRoot);
 
-    Vk.clear();
+    SCCNodes.clear();
     // least vertex in Vk
     SubGraphNode *LeastVertex = 0;
 
@@ -290,13 +290,13 @@ bool SubGraph::findAllCircuits() {
       }
       // Update Vk if we have new leastVertex.
       if (OldLeastVertex != LeastVertex) {
-        Vk.clear();
-        Vk.insert(nextSCC.begin(), nextSCC.end());
+        SCCNodes.clear();
+        SCCNodes.insert(nextSCC.begin(), nextSCC.end());
       }
     }
 
     // No SCC?
-    if (Vk.empty())
+    if (SCCNodes.empty())
       break;
 
     // Now we have the SCC with the least vertex.
@@ -304,7 +304,8 @@ bool SubGraph::findAllCircuits() {
     uint64_t complexity = 1;
 
     // Do some clear up.
-    for (SubGrapNodeSet::iterator I = Vk.begin(), E = Vk.end(); I != E; ++I) {
+    for (SubGrapNodeSet::iterator I = SCCNodes.begin(), E = SCCNodes.end();
+         I != E; ++I) {
       SubGraphNode *N = *I;
       unsigned ChildNums = std::distance(N->child_begin(), N->child_end());
       complexity *= ChildNums;
@@ -324,7 +325,7 @@ bool SubGraph::findAllCircuits() {
     }
 
     // Find the circuits.
-    circuit(LeastVertex, LeastVertex);
+    circuit(LeastVertex, LeastVertex, SCCNodes);
 
     // Move forward.
     ++CurIdx;
