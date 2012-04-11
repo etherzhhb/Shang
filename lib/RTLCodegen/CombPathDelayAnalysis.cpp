@@ -264,6 +264,12 @@ void CombPathDelayAnalysis::extractTimingPaths(ValueAtSlot *DstVAS,
   if (VASTRegister *SrcReg = dyn_cast<VASTRegister>(SrcValue)){
     VASTValue *Path[] = { SrcReg };
     TimingPath *P = createTimingPath(DstVAS, Path);
+    // Even a trivial path can be a false path, e.g.:
+    // slot 1:
+    // reg_a <= c + x;
+    // slot 2:
+    // reg_a <= reg_b
+    // For DstAVS = reg_a@1, there are no timing path from reg_b.
     if (P) Paths.push_back(P);
     return;
   }
