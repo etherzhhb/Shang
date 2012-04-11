@@ -175,11 +175,12 @@ typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
 void SubGraph::unblock(SubGraphNode *N) {
   blocked[N] = false;
   SubGrapNodeSet &BN = B[N];
-  while (!BN.empty()) {
-    SubGraphNode *W = *BN.begin();
+  for (SubGrapNodeSet::iterator I = BN.begin(), E = BN.end(); I != E; ++I) {
+    SubGraphNode *W = *I;
     BN.erase(W);
     if(blocked[W]) unblock(W);
   }
+  BN.clear();
 }
 
 void SubGraph::addRecurrence() {
