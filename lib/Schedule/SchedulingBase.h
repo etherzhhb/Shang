@@ -34,7 +34,6 @@ class SchedulingBase {
   // MII in modulo schedule.
   const unsigned StartSlot;
   unsigned MII, CriticalPathEnd;
-  double ExtraResReq;
   // Time Frame {asap step, alap step }
 public:
   typedef std::pair<unsigned, unsigned> TimeFrame;
@@ -57,7 +56,7 @@ protected:
   unsigned computeStepKey(unsigned step) const;
   SchedulingBase(VSchedGraph &S)
     : StartSlot(S.getStartSlot()), MII(0), CriticalPathEnd(0),
-      ExtraResReq(0.0), State(S) {}
+      State(S) {}
 
 public:
   virtual ~SchedulingBase() {}
@@ -119,7 +118,6 @@ public:
   void unscheduleSU(VSUnit *U);
 
   void verifyFUUsage();
-  double getExtraResReq() const { return ExtraResReq; }
 
   unsigned buildFDepHD(bool resetSTF);
 

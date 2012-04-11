@@ -251,7 +251,7 @@ void VSchedGraph::scheduleLoop() {
   DEBUG(dbgs() << "MII: " << Scheduler->getMII() << "...");
   while (!Scheduler->scheduleCriticalPath(true)) {
     // Make sure MII smaller than the critical path length.
-    if (Scheduler->getMII() < Scheduler->getCriticalPathLength())
+    if (2 * Scheduler->getMII() < Scheduler->getCriticalPathLength())
       Scheduler->increaseMII();
     else
       Scheduler->lengthenCriticalPath();
@@ -260,39 +260,12 @@ void VSchedGraph::scheduleLoop() {
   assert(Scheduler->getMII() <= Scheduler->getCriticalPathLength()
          && "MII bigger then Critical path length!");
 
-  // The point of current solution.
-  typedef std::pair<unsigned, unsigned> SolutionPoint;
-  SolutionPoint CurPoint
-    = std::make_pair(Scheduler->getMII(), Scheduler->getCriticalPathLength());
-  SmallVector<SolutionPoint, 3> NextPoints;
-
-  double lastReq = 1e9;
-
   while (!Scheduler->scheduleState()) {
-    double CurReq = Scheduler->getExtraResReq();
-    if (lastReq > CurReq) {
-      CurPoint = std::make_pair(Scheduler->getMII(),
-        Scheduler->getCriticalPathLength());
-      lastReq = CurReq;
-      NextPoints.clear();
-    }
-
-    if (NextPoints.empty()) {
-      NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second  + 1));
-      // Do not try to pipeline the loop if we cannot find MII.
-      // FIXME: Just schedule the loop with linear scheduler.
-      if (IIFound) {
-        if (Scheduler->getCriticalPathLength() > Scheduler->getMII())
-          NextPoints.push_back(std::make_pair(CurPoint.first + 1, CurPoint.second));
-        NextPoints.push_back(std::make_pair(CurPoint.first, CurPoint.second  + 1));
-      }
-      // Add both by default.
-      CurPoint = std::make_pair(CurPoint.first + 1, CurPoint.second  + 1);
-    }
-
-    Scheduler->setMII(NextPoints.back().first);
-    Scheduler->setCriticalPathLength(NextPoints.back().second);
-    NextPoints.pop_back();
+    // Make sure MII smaller than the critical path length.
+    if (Scheduler->getMII() < Scheduler->getCriticalPathLength())
+      Scheduler->increaseMII();
+    else
+      Scheduler->lengthenCriticalPath();
   }
 
   DEBUG(dbgs() << "SchedII: " << Scheduler->getMII()
