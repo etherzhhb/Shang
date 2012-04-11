@@ -88,7 +88,7 @@ class SubGraph {
   typedef std::map<const SubGraphNode*, bool> SubGrapNodeFlags;
   SubGrapNodeFlags blocked;
   //Stack holding current circuit
-  SubGrapNodeVec stack;
+  SubGrapNodeVec CurPath;
   //Map for B Lists
   typedef std::map<const SubGraphNode*, SubGrapNodeSet> BMapTy;
   BMapTy B;
@@ -189,9 +189,9 @@ void SubGraph::addRecurrence() {
   //std::vector<VSUnit*> Recurrence;
   unsigned TotalLatency = 0;
   unsigned TotalDistance = 0;
-  const VSUnit *LastAtom = stack.back()->getSUnit();
+  const VSUnit *LastAtom = CurPath.back()->getSUnit();
 
-  for (SubGrapNodeVec::iterator I = stack.begin(), E = stack.end(); I != E; ++I) {
+  for (SubGrapNodeVec::iterator I = CurPath.begin(), E = CurPath.end(); I != E; ++I) {
     SubGraphNode *N = *I;
 
     const VSUnit *A = N->getSUnit();
@@ -215,9 +215,9 @@ void SubGraph::addRecurrence() {
 }
 
 bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
-  bool f = false;
+  bool closed = false;
 
-  stack.push_back(CurNode);
+  CurPath.push_back(CurNode);
   blocked[CurNode] = true;
 
   SubGrapNodeVec AkV;
@@ -232,12 +232,12 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.
       addRecurrence();
-      f = true;
+      closed = true;
     } else if (!blocked[N] && circuit(N, LeastVertex))
-      f = true;
+      closed = true;
   }
 
-  if (f)
+  if (closed)
     unblock(CurNode);
   else
     for (SubGrapNodeVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
@@ -246,9 +246,9 @@ bool SubGraph::circuit(SubGraphNode *CurNode, SubGraphNode *LeastVertex) {
     }
 
   // Pop current node.
-  stack.pop_back();
+  CurPath.pop_back();
 
-  return f;
+  return closed;
 }
 
 bool SubGraph::findAllCircuits() {
@@ -288,7 +288,7 @@ bool SubGraph::findAllCircuits() {
         if (!LeastVertex || CurNode->getIdx() < LeastVertex->getIdx())
           LeastVertex = CurNode;
       }
-      // Update Vk if leastVe
+      // Update Vk if we have new leastVertex.
       if (OldLeastVertex != LeastVertex) {
         Vk.clear();
         Vk.insert(nextSCC.begin(), nextSCC.end());
