@@ -151,7 +151,9 @@ struct HLSCodeMetrics {
   }
 
   unsigned getSize() const {
-    return NumMemInsts + NumMemInsts * 32 + NumInlineCandidates * 256;
+    // FIXME: Unrolling memory operations introduce extra control cost, model
+    // the cost correctly.
+    return NumMemInsts + NumMemInsts * 8 + NumInlineCandidates * 256;
   }
 };
 }
