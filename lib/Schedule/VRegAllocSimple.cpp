@@ -359,18 +359,17 @@ struct CompEdgeWeightBase : public FaninChecker<NUMSRC>, public FanoutChecker,
     resetWidth();
   }
 
-  // The SrcBitWidth stands for the BitWidth of the FanIn, 
-  // while the DstBitWidth stands for the BitWidth of the FanOut.
-  int computeWeight(int SrcBitWidth, int DstBitWidth) {
+  int computeWeight(int FanInWidth, int FanOutWidth) {
     // Only merge the register if the mux size not exceed the max allowed size.
     if (FaninChecker<NUMSRC>::getMaxMergedSrcMuxSize() > int(VFUs::MaxAllowedMuxSize))
       return CompGraphWeights::HUGE_NEG_VAL;
 
     int Weight = 0;
     // We can save some register if we merge these two registers.
-    unsigned Index = std::min<unsigned>(SrcBitWidth, DstBitWidth) - 1;
+    unsigned Index = std::min(FanInWidth, 64u);
     Weight += /*FU Cost*/ Cost[Index];
-    Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(SrcBitWidth);
+    Weight += FaninChecker<NUMSRC>::getTotalSavedSrcMuxCost(FanInWidth);
+    Weight += getSavedFanoutsCost(FanOutWidth);
     return Weight;
   }
 
