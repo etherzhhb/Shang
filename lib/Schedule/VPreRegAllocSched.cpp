@@ -283,7 +283,104 @@ VPreRegAllocSched::~VPreRegAllocSched() {
 }
 
 //===----------------------------------------------------------------------===//
+const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE){
+  const SCEV *S = SE->getSCEV(const_cast<Value*>(V->getValue()));
+  if (int64_t Offset = V->getOffset())
+    S = SE->getAddExpr(S, SE->getConstant(S->getType(), Offset, true));
 
+  return S;
+}
+
+static Value *GetBaseValue(const SCEV *S) {
+  if (const SCEVAddRecExpr *AR = dyn_cast<SCEVAddRecExpr>(S)) {
+    // In an addrec, assume that the base will be in the start, rather
+    // than the step.
+    return GetBaseValue(AR->getStart());
+  } else if (const SCEVAddExpr *A = dyn_cast<SCEVAddExpr>(S)) {
+    // If there's a pointer operand, it'll be sorted at the end of the list.
+    const SCEV *Last = A->getOperand(A->getNumOperands()-1);
+    if (Last->getType()->isPointerTy())
+      return GetBaseValue(Last);
+  } else if (const SCEVUnknown *U = dyn_cast<SCEVUnknown>(S)) {
+    // This is a leaf node.
+    return U->getValue();
+  }
+  // No Identified object found.
+  return 0;
+}
+
+static AliasAnalysis::AliasResult
+MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
+                       AliasAnalysis *AA, ScalarEvolution *SE) {
+  uint64_t V1Size = V1->getSize(), V2Size = V2->getSize();
+  // If either of the memory references is empty, it doesn't matter what the
+  // pointer values are. This allows the code below to ignore this special
+  // case.
+  if (V1Size == 0 || V2Size == 0) return AliasAnalysis::NoAlias;
+
+  Value *V1Ptr = const_cast<Value *>(V1->getValue()),
+        *V2Ptr = const_cast<Value *>(V2->getValue());
+  int64_t V1Offset = V1->getOffset(), V2Offset = V2->getOffset();
+
+  // AliasAnalysis can handle memory location with zero offset.
+  // Ask AliasAnalysis for help.
+  if (V1Offset == V2Offset) return AA->alias(V1Ptr, V1Size, V2Ptr, V2Size);
+
+  // This is ScalarEvolutionAliasAnalysis. Get the SCEVs!
+  const SCEV *V1S = getMachineMemOperandSCEV(V1, SE);
+  const SCEV *V2S = getMachineMemOperandSCEV(V2, SE);
+
+  // If they evaluate to the same expression, it's a MustAlias.
+  if (V1S == V2S) return AliasAnalysis::MustAlias;
+  // If something is known about the difference between the two addresses,
+  // see if it's enough to prove a NoAlias.
+  if (SE->getEffectiveSCEVType(V1S->getType()) ==
+      SE->getEffectiveSCEVType(V2S->getType())) {
+    unsigned BitWidth = SE->getTypeSizeInBits(V1S->getType());
+    APInt ASizeInt(BitWidth, V1Size);
+    APInt BSizeInt(BitWidth, V2Size);
+
+    // Compute the difference between the two pointers.
+    const SCEV *BA = SE->getMinusSCEV(V2S, V1S);
+
+    // Test whether the difference is known to be great enough that memory of
+    // the given sizes don't overlap. This assumes that ASizeInt and BSizeInt
+    // are non-zero, which is special-cased above.
+    if (ASizeInt.ule(SE->getUnsignedRange(BA).getUnsignedMin()) &&
+        (-BSizeInt).uge(SE->getUnsignedRange(BA).getUnsignedMax()))
+      return AliasAnalysis::NoAlias;
+
+    // Folding the subtraction while preserving range information can be tricky
+    // (because of INT_MIN, etc.); if the prior test failed, swap AS and BS
+    // and try again to see if things fold better that way.
+
+    // Compute the difference between the two pointers.
+    const SCEV *AB = SE->getMinusSCEV(V1S, V2S);
+
+    // Test whether the difference is known to be great enough that memory of
+    // the given sizes don't overlap. This assumes that ASizeInt and BSizeInt
+    // are non-zero, which is special-cased above.
+    if (BSizeInt.ule(SE->getUnsignedRange(AB).getUnsignedMin()) &&
+        (-ASizeInt).uge(SE->getUnsignedRange(AB).getUnsignedMax()))
+      return AliasAnalysis::NoAlias;
+  }
+
+  if (AA->isMustAlias(AliasAnalysis::Location(V1Ptr, V1Size),
+                      AliasAnalysis::Location(V2Ptr, V2Size))) {
+    assert(V1Offset != V2Offset
+           && "MachineMemOperand with same offset should not reach here!");
+    return AliasAnalysis::NoAlias;
+  }
+
+  // Cannot go any further, cause the AliasAnalysis is not offset aware.
+  return AliasAnalysis::MayAlias;
+}
+
+static
+bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
+                              AliasAnalysis *AA, ScalarEvolution *SE) {
+  return MachineMemOperandAlias(V1, V2, AA, SE) != AliasAnalysis::NoAlias;
+}
 VPreRegAllocSched::LoopDep
 VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
                                   MachineMemOperand *DstAddr,
@@ -293,33 +390,31 @@ VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
   uint64_t DstSize = DstAddr->getSize();
   Value *SrcAddrVal = const_cast<Value*>(SrcAddr->getValue()),
         *DstAddrVal = const_cast<Value*>(DstAddr->getValue());
+
+  DEBUG(dbgs() << '\n'
+        << *SrcAddr->getValue() << "+" << SrcAddr->getOffset() << " and "
+        << *DstAddr->getValue() << "+" << DstAddr->getOffset() << ": ");
+
   if (L.isLoopInvariant(SrcAddrVal) && L.isLoopInvariant(DstAddrVal)) {
+    DEBUG(dbgs() << " Invariant");
     // FIXME: What about nested loops?
     // Loop Invariant, let AA decide.
-    if (!AA->isNoAlias(SrcAddrVal, SrcSize, DstAddrVal, DstSize))
+    if (isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
       return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
     else
       return LoopDep();
   }
 
-  // TODO: Use "getUnderlyingObject" implemented in ScheduleInstrs?
-  // Get the underlying object directly, SCEV will take care of the
-  // the offsets.
-  Value *SGPtr = GetUnderlyingObject(SrcAddrVal),
-        *DGPtr = GetUnderlyingObject(DstAddrVal);
+  if (!isMachineMemOperandAlias(SrcAddr, DstAddr, AA, SE))
+    return LoopDep();
 
-  switch(AA->alias(SGPtr, SrcSize, DGPtr, DstSize)) {
-  case AliasAnalysis::MayAlias:
-  case AliasAnalysis::MustAlias:
-    // We can only handle two access have the same element size.
-    if (SrcSize == DstSize)
-      return advancedLoopDepsAnalysis(SrcAddr, DstAddr, SrcLoad, DstLoad,
-                                      L, SrcBeforeDest, SrcSize);
-    return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
-  default:  break;
-  }
+  // We can only handle two access have the same element size.
+  if (SrcSize == DstSize)
+    return advancedLoopDepsAnalysis(SrcAddr, DstAddr, SrcLoad, DstLoad,
+                                    L, SrcBeforeDest, SrcSize);
 
-  return LoopDep();
+  // Cannot handle, simply assume dependence occur.
+  return createLoopDep(SrcLoad, DstLoad, SrcBeforeDest);
 }
 
 VPreRegAllocSched::LoopDep
@@ -329,12 +424,13 @@ VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
                                             Loop &L, bool SrcBeforeDest,
                                             unsigned ElSizeInByte) {
   const SCEV *SSAddr =
-    SE->getSCEVAtScope(const_cast<Value*>(SrcAddr->getValue()), &L);
+    SE->getSCEVAtScope(getMachineMemOperandSCEV(SrcAddr, SE), &L);
   const SCEV *SDAddr =
-    SE->getSCEVAtScope(const_cast<Value*>(DstAddr->getValue()), &L);
-  DEBUG(dbgs() << *SSAddr << " and " << *SDAddr << '\n');
+    SE->getSCEVAtScope(getMachineMemOperandSCEV(DstAddr, SE), &L);
+  DEBUG(dbgs() << *SSAddr << " and " << *SDAddr << ": ");
   // Use SCEV to compute the dependencies distance.
   const SCEV *Distance = SE->getMinusSCEV(SSAddr, SDAddr);
+  DEBUG(Distance->dump());
   // TODO: Get range.
   if (const SCEVConstant *C = dyn_cast<SCEVConstant>(Distance)) {
     int ItDistance = C->getValue()->getSExtValue();
@@ -353,19 +449,21 @@ VPreRegAllocSched::advancedLoopDepsAnalysis(MachineMemOperand *SrcAddr,
 VPreRegAllocSched::LoopDep
 VPreRegAllocSched::createLoopDep(bool SrcLoad, bool DstLoad, bool SrcBeforeDest,
                                  int Diff) {
-   if (!SrcBeforeDest && (Diff == 0))
-     Diff = 1;
+   if (!SrcBeforeDest && (Diff == 0)) Diff = 1;
 
    assert(Diff >= 0 && "Do not create a dependence with diff small than 0!");
    assert(!(SrcLoad && DstLoad) && "Do not create a RAR dep!");
 
    // WAW
-   if (!SrcLoad && !DstLoad )
+   if (!SrcLoad && !DstLoad ) {
+     DEBUG(dbgs() << " Out " << Diff << '\n');
      return LoopDep(LoopDep::OutputDep, Diff);
+   }
 
    if (!SrcLoad && DstLoad)
      SrcBeforeDest = !SrcBeforeDest;
 
+   DEBUG(dbgs() << " Anti/True " << Diff << '\n');
    return LoopDep(SrcBeforeDest ? LoopDep::AntiDep : LoopDep::TrueDep, Diff);
 }
 
@@ -412,7 +510,6 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       VSUnit *SrcU = I->second;
 
       MachineInstr *SrcMI = SrcU->getRepresentativeInst();
-
       // Handle unanalyzable memory access.
       if (DstMO == 0 || SrcMO == 0) {
         // Build the Src -> Dst dependence.
@@ -435,6 +532,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
       if (CurState.enablePipeLine()) {
         assert(IRL && "Can not handle machine loop without IR loop!");
+        DEBUG(SrcMI->dump();  dbgs() << "vs\n"; DstMI->dump(); dbgs() << '\n');
+
         // Compute the iterate distance.
         LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
 
@@ -456,7 +555,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       } else {
         size_t SrcSize = SrcMO->getSize();
 
-        if (AA->isNoAlias(SrcMO->getValue(),SrcSize,DstMO->getValue(),DstSize))
+        if (!isMachineMemOperandAlias(SrcMO, DstMO, AA, SE))
           continue;
 
         // Ignore the No-Alias pointers.
