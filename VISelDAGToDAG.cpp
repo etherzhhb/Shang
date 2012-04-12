@@ -522,7 +522,6 @@ MachineMemOperand *StripPtrCasts(MachineMemOperand *MemOp, SelectionDAG &DAG) {
   const ConstantExpr *CExpr = dyn_cast<ConstantExpr>(V);
   if (!CExpr || CExpr->getOpcode() != Instruction::IntToPtr) return MemOp;
 
-  V ->dump();
   ConstantExpr *TheInt = dyn_cast<ConstantExpr>(CExpr->getOperand(0));
   if (!TheInt) return MemOp;
 
