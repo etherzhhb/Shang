@@ -85,8 +85,10 @@ class SubGraph {
   //Set of blocked nodes
   typedef BitVector VSUnitFlags;
   VSUnitFlags blocked;
+#ifdef XDEBUG
   //Stack holding current circuit
   VSUnitVec CurPath;
+#endif
   //Map for B Lists
   typedef std::map<const VSUnit*, VSUnitSet> BMapTy;
   BMapTy B;
@@ -146,8 +148,8 @@ public:
 
   bool findAllCircuits();
   bool circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
-               const VSUnitFlags &SCC);
-  void addRecurrence();
+               const VSUnitFlags &SCC, unsigned CurLat, unsigned CurDist);
+  void addRecurrence(unsigned CurLat, unsigned CurDist);
   void unblock(const VSUnit *N);
 };
 }
@@ -182,39 +184,36 @@ void SubGraph::unblock(const VSUnit *N) {
   BN.clear();
 }
 
-void SubGraph::addRecurrence() {
-  DEBUG(dbgs() << "\nRecurrence:\n");
-  //std::vector<VSUnit*> Recurrence;
-  unsigned TotalLatency = 0;
-  unsigned TotalDistance = 0;
+void SubGraph::addRecurrence(unsigned CurLat, unsigned CurDist) {
+  unsigned RecII = ceil(double(CurLat) / double(CurDist));
+  //MSInfo->addRecurrence(RecII, Recurrence);
+  RecMII = std::max(RecMII, RecII);
+
+#ifdef XDEBUG
+  DEBUG(dbgs() << "RecII: " << RecII << '\n';
   const VSUnit *LastAtom = CurPath.back();
 
   for (VSUnitVec::iterator I = CurPath.begin(), E = CurPath.end(); I != E; ++I) {
     const VSUnit *A = *I;
     VDEdge *Edge = LastAtom->getEdgeFrom(A);
 
-    TotalLatency += Edge->getLatency();
-    DEBUG(if (Edge->isLoopCarried()) dbgs() << "Backedge --> ";);
-
-    TotalDistance += Edge->getItDst();
-
-    DEBUG(A->dump());
+    if (Edge->isLoopCarried()) dbgs() << "Backedge --> ";
+    A->dump();
     LastAtom = A;
     // Dirty Hack.
     //Recurrence.push_back(const_cast<VSUnit*>(A));
-  }
-
-  unsigned RecII = ceil((double)TotalLatency / TotalDistance);
-  //MSInfo->addRecurrence(RecII, Recurrence);
-  RecMII = std::max(RecMII, RecII);
-  DEBUG(dbgs() << "RecII: " << RecII << '\n');
+  });
+#endif
 }
 
 bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
-                       const VSUnitFlags &SCC) {
+                       const VSUnitFlags &SCC, unsigned CurLat,
+                       unsigned CurDist) {
   bool closed = false;
 
+#ifdef XDEBUG
   CurPath.push_back(CurNode);
+#endif
   blocked.set(CurNode->getIdx());
 
   VSUnitVec AkV;
@@ -224,13 +223,17 @@ bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
 
     if (!SCC.test(N->getIdx())) continue;
 
+    unsigned LatIncr = I.getEdge()->getLatency();
+    unsigned DistIncr = I.getEdge()->getItDst();
     AkV.push_back(N);
     if (N == LeastVertex) {
       //We have a circuit, so add it to recurrent list.
-      addRecurrence();
+      addRecurrence(CurLat + LatIncr, CurDist + DistIncr);
       closed = true;
-    } else if (!blocked.test(N->getIdx()) && circuit(N, LeastVertex, SCC))
-      closed = true;
+    } else if (!blocked.test(N->getIdx())) {
+      if (circuit(N, LeastVertex, SCC, CurLat + LatIncr, CurDist + DistIncr))
+        closed = true;
+    }
   }
 
   if (closed)
@@ -241,8 +244,10 @@ bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
       B[U].insert(CurNode);
     }
 
+#ifdef XDEBUG
   // Pop current node.
   CurPath.pop_back();
+#endif
 
   return closed;
 }
@@ -321,7 +326,7 @@ bool SubGraph::findAllCircuits() {
     }
 
     // Find the circuits.
-    circuit(LeastVertex->getSUnit(), LeastVertex->getSUnit(), SCCNodes);
+    circuit(LeastVertex->getSUnit(), LeastVertex->getSUnit(), SCCNodes, 0, 0);
 
     // Move forward.
     ++CurIdx;
