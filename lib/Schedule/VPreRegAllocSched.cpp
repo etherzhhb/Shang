@@ -490,15 +490,13 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
     // Dirty Hack: Is the const_cast safe?
     MachineMemOperand *DstMO = 0;
-    uint64_t DstSize = AliasAnalysis::UnknownSize;
     // TODO: Also try to get the address information for call instruction.
     if (!DstMI->memoperands_empty() && !DstMI->hasVolatileMemoryRef()) {
       assert(DstMI->hasOneMemOperand() && "Can not handle multiple mem ops!");
       assert(!DstMI->hasVolatileMemoryRef() && "Can not handle volatile op!");
       
       // FIXME: DstMO maybe null in a VOpCmdSeq
-      if (DstMO = *DstMI->memoperands_begin()){
-        DstSize = DstMO->getSize();
+      if ((DstMO = /*ASSIGNMENT*/ *DstMI->memoperands_begin())){
         assert(!isa<PseudoSourceValue>(DstMO->getValue())
                && "Unexpected frame stuffs!");
       }
@@ -553,8 +551,6 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
           SrcU->addDep(MemDep);
         }
       } else {
-        size_t SrcSize = SrcMO->getSize();
-
         if (!isMachineMemOperandAlias(SrcMO, DstMO, AA, SE))
           continue;
 
