@@ -243,7 +243,7 @@ void VSchedGraph::scheduleLoop() {
     Scheduler->lengthenCriticalPath();
 
   // computeMII may return a very big II if we cannot compute the RecII.
-  bool IIFound = Scheduler->computeMII();
+  Scheduler->computeMII();
   DEBUG(dbgs() << "Pipelining BB# " << MBB->getNumber()
                << " in function " << MBB->getParent()->getFunction()->getName()
                << " #" << MBB->getParent()->getFunctionNumber() << '\n');
