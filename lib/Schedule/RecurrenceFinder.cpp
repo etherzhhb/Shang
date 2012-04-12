@@ -90,7 +90,7 @@ class SubGraph {
   VSUnitVec CurPath;
 #endif
   //Map for B Lists
-  typedef std::map<const VSUnit*, VSUnitSet> BMapTy;
+  typedef SmallVector<VSUnitSet, 64> BMapTy;
   BMapTy B;
 
   // SubGraph stuff
@@ -103,9 +103,8 @@ public:
 
   SubGraph(VSchedGraph *SG)
     : G(SG), GraphEntry(SG->getEntryRoot()),
-      DummyNode(0, this), blocked(SG->all_schedunits_size(), false),
-      CurIdx(G->getEntryRoot()->getIdx()),
-      RecMII(0) {
+      blocked(SG->all_schedunits_size(), false), B(SG->all_schedunits_size()),
+      DummyNode(0, this), CurIdx(G->getEntryRoot()->getIdx()), RecMII(0) {
     // Add the Create the nodes, node that we will address the Nodes by the
     // the InstIdx of the VSUnit and this only works if they are sorted in
     // the VSUnits vector of SG.
@@ -175,10 +174,9 @@ typedef scc_iterator<SubGraphNode*, VSUSccGT> dep_scc_iterator;
 
 void SubGraph::unblock(const VSUnit *N) {
   blocked.reset(N->getIdx());
-  VSUnitSet &BN = B[N];
+  VSUnitSet &BN = B[N->getIdx()];
   for (VSUnitSet::iterator I = BN.begin(), E = BN.end(); I != E; ++I) {
     const VSUnit *W = *I;
-    BN.erase(W);
     if(blocked.test(W->getIdx())) unblock(W);
   }
   BN.clear();
@@ -241,7 +239,7 @@ bool SubGraph::circuit(const VSUnit *CurNode, const VSUnit *LeastVertex,
   else
     for (VSUnitVec::iterator I = AkV.begin(), E = AkV.end(); I != E; ++I) {
       const VSUnit *U = *I;
-      B[U].insert(CurNode);
+      B[U->getIdx()].insert(CurNode);
     }
 
 #ifdef XDEBUG
@@ -322,7 +320,7 @@ bool SubGraph::findAllCircuits() {
 
       SCCNodes.set(N->getIdx());
       blocked.reset(N->getIdx());
-      B[N->getSUnit()].clear();
+      B[N->getIdx()].clear();
     }
 
     // Find the circuits.
