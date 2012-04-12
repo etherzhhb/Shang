@@ -288,11 +288,11 @@ endmacro(add_general_test)
 macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(TEST_NAME "${test_file}_${PipelineType}_${ScheduleType}")
   set(TEST     "${TEST_NAME}")
-  set(DUT_NAME "${TEST_NAME}_MAIN_DUT")
+  set(DUT_NAME "${TEST_NAME}_main_DUT")
   set(SYN_FUNC ${test_file})
 
   set(TEST_SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
-  set(TEST_BINARY_ROOT "${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME}_MAIN")
+  set(TEST_BINARY_ROOT "${CMAKE_CURRENT_BINARY_DIR}/${TEST_NAME}_main")
   set(MAIN_OBJ_PRJ_ROOT	"${TEST_BINARY_ROOT}/obj_dir")
 
   set(TEST_SRC            "${TEST_SOURCE_ROOT}/${test_file}.${postfix}")
@@ -404,7 +404,7 @@ endif(SYNTHESIS_DUT AND TARGET benchmart_synthesis_main)
   set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES
 				${MAIN_RTL_SRC}
         ${CycleCounter}
-				${TEST_BINARY_ROOT}/obj_dir/V${DUT_NAME}_RTL ${TEST}_origin)
+				${TEST_BINARY_ROOT}/obj_dir/V${DUT_NAME}_RTL)
 endmacro(add_general_main_test)
 
 macro(add_test_cases file_name)
@@ -417,7 +417,7 @@ endmacro(add_test_cases)
 macro(add_test_main_cases file_name)
   add_general_main_test(${file_name}
 					 "${VTS_SOURCE_ROOT}/test_config_main.lua.in"
-           "${VTS_SOURCE_ROOT}/setup_proj.tcl.in"
+           "${VTS_SOURCE_ROOT}/setup_proj_symain.tcl.in"
 					 "cpp")
 endmacro(add_test_main_cases)
 
