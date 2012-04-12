@@ -31,4 +31,11 @@ let TargetPrefix = "vtm", isTarget = 1 in {
   def int_vtm_alloca_bram  : Intrinsic<[llvm_anyptr_ty],
                                        [llvm_anyptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                                        [IntrReadMem]>;
+
+  // The dummy intrinsics that mark a pointer to the result of alloca is alias
+  // with a global address.
+  def int_vtm_alloca_alias_global : Intrinsic<[],
+                                              [llvm_anyptr_ty, llvm_anyptr_ty],
+                                              [IntrReadWriteArgMem,
+                                              NoCapture<0>, NoCapture<1>]>;
 }//FIXME: add multi-dimension support
