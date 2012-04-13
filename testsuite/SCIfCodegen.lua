@@ -68,8 +68,9 @@ $(getType(FuncInfo.ReturnSize)) $(FuncInfo.Name)_if($(
     _put(getType(v.Size) .. ' '.. v.Name)
   end
  ));
+
 #if FuncInfo.Name ~= "main" then
-  int sw_main();
+int sw_main();
 #end
 
 $('#')ifdef __cplusplus
@@ -131,8 +132,8 @@ SC_MODULE(V$(RTLModuleName)_tb){
       while (true){
         if(mem0en){
           unsigned CyclesToWait = 0;
-		  unsigned char cur_be = mem0be.read(), addrmask = 0;
-		  long long cur_addr = mem0addr.read();
+		      unsigned char cur_be = mem0be.read(), addrmask = 0;
+          long long cur_addr = mem0addr.read();
 
           if(mem0cmd){
             CyclesToWait = 2;
@@ -177,7 +178,11 @@ SC_MODULE(V$(RTLModuleName)_tb){
       mem0rdy = !(mem0en || mem0waitrequest);
     }
 
-    static V$(RTLModuleName)_tb* Instance() { static V$(RTLModuleName)_tb _instance("top") ; return &_instance ; }
+    static V$(RTLModuleName)_tb* Instance() {
+      static V$(RTLModuleName)_tb _instance("top");
+      return &_instance ;
+    }
+
     protected:
     //Include the DUT in the top module
       SC_CTOR(V$(RTLModuleName)_tb): DUT("DUT"){
@@ -187,11 +192,11 @@ SC_MODULE(V$(RTLModuleName)_tb){
 #end        
         DUT.fin(fin);
         //whether there is a return value
-#  if FuncInfo.ReturnSize~=0 then
+#if FuncInfo.ReturnSize~=0 then
         DUT.return_value(return_value);  
 #else
         
-#  end
+#end
         DUT.start(start);
         DUT.rstN(rstN);
         DUT.mem0en(mem0en);
@@ -229,13 +234,14 @@ SC_MODULE(V$(RTLModuleName)_tb){
     }
     
     //printf("$(RTLModuleName) finish\n");
-#  if FuncInfo.ReturnSize~=0 then
+#if FuncInfo.ReturnSize~=0 then
     return ($(getType(FuncInfo.ReturnSize))) tb_ptr->return_value;      
-#    else 
+#else 
     return;
-#  end
-    }    
-//The main function called sc_main in SystemC  
+#end
+  }
+
+  //The main function called sc_main in SystemC  
   int sc_main(int argc, char **argv) {
     //Close the information which provided by SystemC
     sc_report_handler::set_actions("/IEEE_Std_1666/deprecated", SC_DO_NOTHING);
