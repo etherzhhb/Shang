@@ -120,8 +120,10 @@ void ucOperand::print(raw_ostream &OS,
     OS << verilogBitRange(UB, LB, getBitWidth() != 1);
     return;
   case MachineOperand::MO_GlobalAddress:
-    OS << "(`gv" << VBEMangle(getGlobal()->getName()) << " + "
-       << verilogConstToStr(getOffset(), getBitWidth(), false) << ')';
+    OS << "(`gv" << VBEMangle(getGlobal()->getName());
+    if (int64_t Offset = getOffset())
+      OS  << " + " << verilogConstToStr(Offset, getBitWidth(), false);
+    OS << ')';
     return;
   default: break;
   }

@@ -1055,18 +1055,7 @@ public:
     return cast<T>(getSymbol(Name));
   }
 
-  VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth) {
-    SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
-    VASTNamedValue *&V = Entry.second;
-    if (V == 0) {
-       V = Allocator.Allocate<VASTNamedValue>();
-       new (V) VASTSymbol(Entry.getKeyData(), BitWidth);
-    }
-
-    assert(V->getBitWidth() == BitWidth
-           && "Getting symbol with wrong bitwidth!");
-    return V;
-  }
+  VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth);
 
   void allocaSlots(unsigned TotalSlots) {
     Slots.assign(TotalSlots, 0);

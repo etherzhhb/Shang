@@ -315,9 +315,9 @@ class VerilogASTBuilder : public MachineFunctionPass {
     return createCnd(cast<ucOperand>(Op));
   }
 
-  VASTValue *getAsOperand(ucOperand &Op);
-  VASTValue *getAsOperand(MachineOperand &Op) {
-    return getAsOperand(cast<ucOperand>(Op));
+  VASTValue *getAsOperand(ucOperand &Op, bool GetAsInlineOperand = true);
+  VASTValue *getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true) {
+    return getAsOperand(cast<ucOperand>(Op), GetAsInlineOperand);
   }
 
   template <class Ty>
@@ -1388,7 +1388,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
 
   // RHS should be a register.
   ucOperand &MO = cast<ucOperand>(MI->getOperand(1));
-  VASTValue *RHS = getAsOperand(MO);
+  VASTValue *RHS = getAsOperand(MO, false);
   //RHS = VM->getOrCreateBitSlice(RHS, MO.getBitWidth(), 0);
   // Pass RHS without getting inline operand, because for bitslice, only
   // inlining the assign expression is allowed, which already handled in the
@@ -1408,22 +1408,24 @@ VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
   return C;
 }
 
-VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op) {
-  unsigned BitWidth = 0;
+VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
+                                           bool GetAsInlineOperand) {
+  unsigned BitWidth = Op.getBitWidth();
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     if (unsigned Reg = Op.getReg())
       if (VASTValue *V = lookupSignal(Reg)) {
         // The operand may only use a sub bitslice of the signal.
-        V = VM->getOrCreateBitSlice(V, Op.getBitWidth(), 0);
+        V = VM->getOrCreateBitSlice(V, BitWidth, 0);
         // Try to inline the operand.
-        return V->getAsInlineOperand();
+        if (GetAsInlineOperand) V = V->getAsInlineOperand();
+        return V;
       }
 
     return 0;
   }
   case MachineOperand::MO_Immediate:
-    return VM->getOrCreateImmediate(Op.getImm(), Op.getBitWidth());
+    return VM->getOrCreateImmediate(Op.getImm(), BitWidth);
   //case MachineOperand::MO_ExternalSymbol:  BitWidth = Op.getBitWidth(); break;
   default: break;
   }
@@ -1434,7 +1436,10 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op) {
   Op.print(SS);
   SS.flush();
 
-  return VM->getOrCreateSymbol(Name, BitWidth);
+  unsigned SymbolWidth = std::max(TD->getPointerSizeInBits(), BitWidth);
+  VASTValue *Symbol = VM->getOrCreateSymbol(Name, SymbolWidth);
+  // Don't get the symbol as inline operand.
+  return VM->getOrCreateBitSlice(Symbol, BitWidth, 0);
 }
 
 void VerilogASTBuilder::printOperand(ucOperand &Op, raw_ostream &OS) {
