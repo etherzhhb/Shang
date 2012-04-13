@@ -104,10 +104,6 @@ void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
 
 bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
                                unsigned Reg, MachineRegisterInfo *MRI) const {
-  // Do not mess up with bitslice at the moment.
-  if (UseMI->getOpcode() == VTM::VOpBitSlice)
-    return false;
-
   // Simply change the machine operand in UseMI to imediate.
   MachineOperand &ImmediateMO = DefMI->getOperand(1);
   unsigned char ImmediateTFs = ImmediateMO.getTargetFlags();
