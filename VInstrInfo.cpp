@@ -135,6 +135,9 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
         assert(MO.getBitWidth() <= ImmediateTFs
           && "Folding immediate with different Bitwidth?");
         MOs.push_back(ImmediateMO);
+        // Keep the original flags, because the target flags of ImmediateMO may
+        // difference from MO after simplify bitslice.
+        MOs.back().setTargetFlags(MO.getTargetFlags());
         continue;
       }
 
