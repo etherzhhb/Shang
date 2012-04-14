@@ -28,10 +28,6 @@ always @(posedge $(clk), negedge $(rst)) begin
   end
 end
 ]=],
-StartTmplt = [=[
-div64_$(num)opa <= $(in0);
-div64_$(num)opb <= $(in1);
-]=],
 TimingInfo = { NumOperands = 2, Latency = 64, OperandInfo = { { Name = [=[div64_$(num)opa]=], SizeInBits = 64 }, { Name = [=[div64_$(num)opb]=], SizeInBits = 64 } } }
 }
 
@@ -56,10 +52,8 @@ always @(posedge $(clk), negedge $(rst)) begin
   end
 end
 ]=],
-StartTmplt = [=[
-div32_$(num)opa <= $(in0);
-div32_$(num)opb <= $(in1);
-]=] }
+TimingInfo = { NumOperands = 2, Latency = 32, OperandInfo = { { Name = [=[div64_$(num)opa]=], SizeInBits = 32 }, { Name = [=[div64_$(num)opb]=], SizeInBits = 32 } } }
+}
 
 Modules.__ip_sdiv_i32 = {
 InstTmplt = [=[
@@ -90,10 +84,6 @@ always @(posedge $(clk), negedge $(rst)) begin
 	  div32_$(num)_busy <= 1'b0;
   end
 end
-]=],
-StartTmplt = [=[
-div32_$(num)opa <= $(in0);
-div32_$(num)opb <= $(in1);
 ]=],
 TimingInfo = { NumOperands = 2, Latency = 32, OperandInfo = { { Name = [=[div32_$(num)opa]=], SizeInBits = 32 }, { Name = [=[div32_$(num)opb]=], SizeInBits = 32 } } }
 }
@@ -127,10 +117,6 @@ always @(posedge $(clk), negedge $(rst)) begin
 	  div32_$(num)_busy <= 1'b0;
   end
 end
-]=],
-StartTmplt = [=[
-div32_$(num)opa <= $(in0);
-div32_$(num)opb <= $(in1);
 ]=],
 TimingInfo = { NumOperands = 2, Latency = 32, OperandInfo = { { Name = [=[div32_$(num)opa]=], SizeInBits = 32 }, { Name = [=[div32_$(num)opb]=], SizeInBits = 32 } } }
 }
