@@ -52,7 +52,9 @@ struct SubGraphNode {
   const SubGraphNode &operator=(const SubGraphNode &RHS);
 
   const VSUnit *getSUnit() const { return U; }
-  unsigned getIdx() const { return U ? U->getIdx() : VSchedGraph::NULL_SU_IDX; }
+  unsigned getIdx() const {
+    return U ? U->getIdx() : unsigned(VSchedGraph::NULL_SU_IDX);
+  }
 
   typedef SubGraphNode *result_type;
   result_type operator()(const VSUnit *U) const;
