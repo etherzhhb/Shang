@@ -121,9 +121,6 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       MachineInstr *PN = PNs.back();
       PNs.pop_back();
 
-      //if (FirstNotPHI == 0)
-      //  FirstNotPHI = llvm::next(MachineBasicBlock::instr_iterator(PN));
-
       handlePHI(PN, MBB);
     }
   }

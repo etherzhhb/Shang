@@ -158,7 +158,6 @@ unsigned LoopVectorizer::processLoopMemOp(Value *Val, Value *Ptr, Loop *L){
 unsigned LoopVectorizer::analyzeLoop(Loop *L, const SCEV *BECount) {
   BasicBlock *BB = L->getHeader();
   unsigned MemOpSize = UINT_MAX;
-  unsigned NumInstr = 0;
   for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
     Instruction *Inst = I;
     // Look for store instructions, which may be optimized to memset/memcpy.
