@@ -14,7 +14,9 @@ $('#')endif
 #for k,v in pairs(GlobalVariables) do
 void *vlt_$(escapeNumber(k))() {
   $(if v.isLocal == 1 then _put('static') else _put('extern')
-    end) $(getType(v.ElemSize)) $(k)$(if v.NumElems > 1 then  _put('[' .. v.NumElems .. ']') end) $(if v.Initializer ~= nil then
+    end)
+    __attribute__((aligned($(v.Alignment))))
+    $(getType(v.ElemSize)) $(k)$(if v.NumElems > 1 then  _put('[' .. v.NumElems .. ']') end) $(if v.Initializer ~= nil then
     _put(' = {')
     for i,n in ipairs(v.Initializer) do
       if i ~= 1 then _put(', ') end

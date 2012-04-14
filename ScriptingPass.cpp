@@ -119,6 +119,7 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
     // GlobalVariable information:
     // GVInfo {
     //   bool isLocal
+    //   unsigned Alignment
     //   unsigned NumElems
     //   unsigned ElemSize
     //   table Initializer.
@@ -126,7 +127,7 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
 
     SS << "GlobalVariables." << VBEMangle(GV->getName()) << " = { ";
     SS << "isLocal = " << GV->hasLocalLinkage() << ", ";
-
+    SS << "Alignment = " << GV->getAlignment() << ", ";
     SS << "NumElems = ";
     Type *Ty = cast<PointerType>(GV->getType())->getElementType();
     // The element type of a scalar is the type of the scalar.
