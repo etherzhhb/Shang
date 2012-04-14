@@ -311,7 +311,7 @@ bool SubGraph::findAllCircuits() {
       complexity *= ChildNums;
 
       // FIXME: Read the threshold from user script.
-      if (complexity > UINT64_C(0x1000000000000000)) {
+      if (complexity > UINT64_C(0x200000000000000)) {
         MachineBasicBlock *MBB = G->getMachineBasicBlock();
         errs() << "Cannot analysis RecII with complexity " << complexity
                << " in BB " << MBB->getName()
