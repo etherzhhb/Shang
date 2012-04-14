@@ -35,6 +35,7 @@ namespace llvm {
 class MachineBasicBlock;
 class MachineInstr;
 class VASTModule;
+class GlobalValue;
 
 class VFInfo : public MachineFunctionInfo {
   StringSet<> Symbols;
@@ -51,6 +52,10 @@ class VFInfo : public MachineFunctionInfo {
   typedef std::map<const MachineInstr*,
                    std::pair<int, const MachineBasicBlock*> >
           PhiSlotMapTy;
+  // Remember the stack objects that aliased with global value.
+  typedef std::map<int, const GlobalValue*> Idx2GVMapTy;
+  Idx2GVMapTy FrameIdx2GV;
+
 public:
   // The data structure to describe the block ram.
   struct BRamInfo {
@@ -64,7 +69,6 @@ public:
 
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
   typedef BRamMapTy::const_iterator const_bram_iterator;
-
 
 private:
 
@@ -82,6 +86,18 @@ private:
 public:
   explicit VFInfo(MachineFunction &MF);
   ~VFInfo();
+
+  void rememberFrameIdxAlias(int Idx, const GlobalValue *V) {
+    bool inserted = FrameIdx2GV.insert(std::make_pair(Idx, V)).second;
+    assert(inserted && "Stack object already exist!");
+    (void) inserted;
+  }
+
+  const GlobalValue *getGlobalAliasOfFrameIdx(int Idx) const {
+    Idx2GVMapTy::const_iterator at = FrameIdx2GV.find(Idx);
+    assert(at != FrameIdx2GV.end() && "Frame index not exist!");
+    return at->second;
+  }
 
   bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
   void removeBitWidthAnnotators() {

@@ -122,7 +122,7 @@ static FunctionType *getType(LLVMContext &Context, unsigned id,
 
 Function *VIntrinsicInfo::getDeclaration(Module *M, unsigned IntrID,
                                          Type **Tys, unsigned numTys) const {
-  AttrListPtr AList = getAttributes((vtmIntrinsic::ID) IntrID);
+  AttrListPtr AList = getAttributes((vtmIntrinsic::ID)IntrID);
 
   return cast<Function>(
     M->getOrInsertFunction(getName(IntrID, Tys, numTys),

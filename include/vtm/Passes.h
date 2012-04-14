@@ -36,7 +36,7 @@ Pass *createHLSInlinerPass();
 Pass *createTrivialLoopUnrollPass();
 Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
-Pass *createStackToGlobalPass();
+Pass *createStackToGlobalPass(const TargetIntrinsicInfo &IntrInfo);
 Pass *createAllocaAlignerPass();
 
 Pass *createFunctionFilterPass(raw_ostream &O);

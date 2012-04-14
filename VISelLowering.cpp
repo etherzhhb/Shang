@@ -103,6 +103,7 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
        VT <= (unsigned)MVT::LAST_INTEGER_VALUETYPE; ++VT) {
     MVT CurVT = MVT((MVT::SimpleValueType)VT);
 
+    setOperationAction(ISD::FrameIndex, CurVT, Custom);
 
     // Lower the add/sub operation to full adder operation.
     setOperationAction(ISD::ADD, CurVT, Custom);
@@ -592,6 +593,13 @@ SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
   return getTruncate(DAG, Op.getDebugLoc(), Operand, DstSize);
 }
 
+SDValue VTargetLowering::LowerFrameIndex(SDValue Op, SelectionDAG &DAG) const {
+  VFInfo *Info =DAG.getMachineFunction().getInfo<VFInfo>();
+  int FI = cast<FrameIndexSDNode>(Op)->getIndex();
+  const GlobalValue *GV = Info->getGlobalAliasOfFrameIdx(FI);
+  return DAG.getGlobalAddress(GV, Op->getDebugLoc(), Op.getValueType());
+}
+
 SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                                 SelectionDAG &DAG) const {
   SDValue Chain = Op.getOperand(0);
@@ -634,6 +642,34 @@ SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   }
 }
 
+SDValue
+VTargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const {
+  //SDValue Chain = Op.getOperand(0);
+  //unsigned IntNo = Op.getConstantOperandVal(1);
+  //DebugLoc dl = Op.getDebugLoc();
+  return SDValue();
+}
+
+SDValue
+VTargetLowering::LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const {
+  SDValue Chain = Op.getOperand(0);
+  unsigned IntNo = Op.getConstantOperandVal(1);
+  DebugLoc dl = Op.getDebugLoc();
+
+  switch (IntNo) {
+  default: break;
+  case vtmIntrinsic::vtm_alloca_alias_global: {
+    FrameIndexSDNode *FI = cast<FrameIndexSDNode>(Op->getOperand(2));
+    GlobalAddressSDNode *GSD = cast<GlobalAddressSDNode>(Op->getOperand(3));
+    VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
+    VFI->rememberFrameIdxAlias(FI->getIndex(), GSD->getGlobal());
+    // The node is not need now.
+    return Chain;
+  }
+  }
+  return SDValue();
+}
+
 SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
@@ -656,8 +692,14 @@ SDValue VTargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerExtend(Op, DAG, false);
   case ISD::TRUNCATE:
     return LowerTruncate(Op, DAG);
+  case ISD::FrameIndex:
+    return LowerFrameIndex(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
     return LowerINTRINSIC_W_CHAIN(Op, DAG);
+  case ISD::INTRINSIC_WO_CHAIN:
+    return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::INTRINSIC_VOID:
+    return LowerINTRINSIC_VOID(Op, DAG);
   }
 }
 
