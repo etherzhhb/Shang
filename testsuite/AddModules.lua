@@ -34,21 +34,29 @@ TimingInfo = { NumOperands = 2, Latency = 64, OperandInfo = { { Name = [=[div64_
 Modules.__ip_udiv_i32 = {
 InstTmplt = [=[
 // 32bit div
-reg [$(32 - 1):0] div32_$(num)opa;
-reg [$(32 - 1):0] div32_$(num)opb;
-reg [$(32 - 1):0] $(out0);
+reg [5:0] div32_$(num)_counter;
+wire [6:0] div32_$(num)_counter_wire = div32_$(num)_counter + 1'b1;
 
-reg $(fin);
+reg div32_$(num)_busy;
+wire $(fin) = ~(div32_$(num)_busy | $(en));
+
+assign $(out0) = div32_$(num)opa / div32_$(num)opb;
 
 always @(posedge $(clk), negedge $(rst)) begin
   if (!$(rst)) begin
-   $(fin) <= 1'b0;
-   $(out0) <= 32'b0;
+   div32_$(num)_counter <= 6'b0;
+   div32_$(num)_busy <= 1'b0;
   end else begin
-    if ($(en))
-      $(out0) <= div32_$(num)opa / div32_$(num)opb;
+    if ($(en)) begin
+	  div32_$(num)_busy <= 1'b1;
+      div32_$(num)_counter <= 6'b0;
+    end
 
-    $(fin) <= $(en);
+	if (div32_$(num)_busy)
+	  div32_$(num)_counter <= div32_$(num)_counter_wire;
+
+    if (div32_$(num)_counter_wire[6])
+	  div32_$(num)_busy <= 1'b0;
   end
 end
 ]=],
@@ -57,10 +65,9 @@ TimingInfo = { NumOperands = 2, Latency = 32, OperandInfo = { { Name = [=[div64_
 
 Modules.__ip_sdiv_i32 = {
 InstTmplt = [=[
-
 // 32bit div
-reg [4:0] div32_$(num)_counter;
-wire [5:0] div32_$(num)_counter_wire = div32_$(num)_counter + 1'b1;
+reg [5:0] div32_$(num)_counter;
+wire [6:0] div32_$(num)_counter_wire = div32_$(num)_counter + 1'b1;
 
 reg div32_$(num)_busy;
 wire $(fin) = ~(div32_$(num)_busy | $(en));
@@ -80,7 +87,7 @@ always @(posedge $(clk), negedge $(rst)) begin
 	if (div32_$(num)_busy)
 	  div32_$(num)_counter <= div32_$(num)_counter_wire;
 
-    if (div32_$(num)_counter_wire[5])
+    if (div32_$(num)_counter_wire[6])
 	  div32_$(num)_busy <= 1'b0;
   end
 end
