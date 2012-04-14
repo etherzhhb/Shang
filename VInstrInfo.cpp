@@ -986,7 +986,7 @@ static unsigned countNumRegOperands(const MachineInstr *MI) {
   return NumRegs;
 }
 
-static unsigned countNumRegOperands(const MachineInstr *MI) {
+unsigned VInstrInfo::countNumRegUses(const MachineInstr *MI) {
   unsigned NumRegs = 0;
   for (unsigned i = 0, e = MI->getNumOperands(); i < e; ++i)
     if (MI->getOperand(i).isReg() && MI->getOperand(i).getReg() &&
@@ -1266,7 +1266,7 @@ unsigned DetialLatencyInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
 
   // Do not schedule function unit operation to the first state at the moment
   // there may be potential resource conflict.
-  if (countNumRegOperands(DstInstr)) return 1;
+  if (VInstrInfo::countNumRegUses(DstInstr)) return 1;
 
   return 0;
 }

@@ -191,6 +191,7 @@ public:
   static bool mayStore(const MachineInstr *MI);
 
   static const MCInstrDesc &getDesc(unsigned Opcode);
+  static unsigned countNumRegUses(const MachineInstr *MI);
 };
 
 // Helper class for manipulating bit width operand.
