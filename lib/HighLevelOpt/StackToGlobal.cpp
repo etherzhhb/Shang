@@ -89,34 +89,20 @@ bool StackToGlobal::handleAlloca(AllocaInst *AI, Function *F, Module &M) {
 }
 
 bool StackToGlobal::runOnModule(Module &M) {
-  std::vector<AllocaInst*> WorkList;
+  bool changed = false;
   for (Module::iterator FI = M.begin(), E = M.end(); FI != E; ++FI){
     Function *F = FI;
-    for(Function::iterator BBI = F->begin(), E = F->end(); BBI != E; ++BBI){
-      BasicBlock *BB = BBI;
-      for (BasicBlock::iterator II = BB->begin(), E = BB->end(); II != E; ++II){
-        if (AllocaInst *AI = dyn_cast<AllocaInst>(&*II)) {
-            //push back the AllocaInst to a vector.
-              WorkList.push_back(AI);
-        }
-      }
+
+    if (F->isDeclaration()) continue;
+    for (Function::iterator BI = F->begin(), BE = F->end(); BI != BE; ++BI) {
+      BasicBlock &BB = *BI;
+      for (BasicBlock::iterator II = BB.begin(), E = BB.end(); II != E; ++II)
+        if (AllocaInst *AI = dyn_cast<AllocaInst>(II))
+          changed |= handleAlloca(AI, F, M);
     }
   }
 
-//iterate the vector to replace the AllocaInst with the GlobalVariable.
-  for(std::vector<AllocaInst*>::iterator I = WorkList.begin(), E = WorkList.end();
-      I != E; ++I){
-    AllocaInst* AI= *I;
-    Type *Ty = AI->getAllocatedType();
-    GlobalVariable *GV =
-    new GlobalVariable(M, Ty, false, GlobalValue::InternalLinkage,
-					             Constant::getNullValue(Ty),
-                       AI->getName() + "_s2g");
-    GV->setAlignment(std::max(8u, AI->getAlignment()));
-    AI->replaceAllUsesWith(GV);
-    AI->eraseFromParent();
-  }
-  return true;
+  return changed;
 }
 
 
