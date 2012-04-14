@@ -60,7 +60,7 @@ always @(posedge $(clk), negedge $(rst)) begin
   end
 end
 ]=],
-TimingInfo = { NumOperands = 2, Latency = 32, OperandInfo = { { Name = [=[div64_$(num)opa]=], SizeInBits = 32 }, { Name = [=[div64_$(num)opb]=], SizeInBits = 32 } } }
+TimingInfo = { NumOperands = 2, Latency = 32, OperandInfo = { { Name = [=[div32_$(num)opa]=], SizeInBits = 32 }, { Name = [=[div32_$(num)opb]=], SizeInBits = 32 } } }
 }
 
 Modules.__ip_sdiv_i32 = {

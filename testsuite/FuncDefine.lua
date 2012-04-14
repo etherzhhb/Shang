@@ -24,7 +24,7 @@ function escapeNumber(s)
 end
 
 --Decide the bit widths of return value
-function GetRetPort(Size)
+function getRetPort(Size)
   if Size == 0 then        return " "
   elseif Size == 64 then  return "sc_signal<uint64_t>return_value"
   else                    return "sc_signal<uint32_t>return_value"
@@ -32,7 +32,7 @@ function GetRetPort(Size)
 end
 
 --Giving the arguments type in SystemC
-function SetBitWids(Size)
+function getBitWidth(Size)
   if Size == 1 then        return "bool "
   elseif Size == 8 then    return "unsigned int"
   elseif Size == 16 then  return "unsigned int"

@@ -85,7 +85,7 @@ SC_MODULE(V$(RTLModuleName)_tb){
     sc_signal<bool> mem0en;
     sc_signal<uint32_t> mem0cmd;
     sc_signal<uint32_t> mem0be;
-    $(GetRetPort(FuncInfo.ReturnSize));
+    $(getRetPort(FuncInfo.ReturnSize));
     sc_signal<uint$(FUs.MemoryBus.AddressWidth)_t> mem0addr;
     sc_signal<uint64_t> mem0out;
     sc_signal<bool> rstN;
@@ -96,7 +96,7 @@ SC_MODULE(V$(RTLModuleName)_tb){
 
     sc_signal<uint64_t>mem0in;
 #for i,v in ipairs(FuncInfo.Args) do
-    sc_signal<$(SetBitWids(v.Size))>$(v.Name);
+    sc_signal<$(getBitWidth(v.Size))>$(v.Name);
 #end
 
     V$(RTLModuleName) DUT;
