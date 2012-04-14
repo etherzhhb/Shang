@@ -901,6 +901,15 @@ SDValue PerformAddCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
 
   uint64_t OpBVal = 0;
   if (unsigned OpBSize = ExtractConstant(OpB, OpBVal)) {
+    if (CVal == 0)
+      if (GlobalAddressSDNode *GSD = dyn_cast<GlobalAddressSDNode>(OpA)) {
+        SDValue FoldedGSD = DAG.getGlobalAddress(GSD->getGlobal(), dl,
+                                                 GSD->getValueType(0),
+                                                 OpBVal);
+        DCI.CombineTo(N, FoldedGSD, DAG.getTargetConstant(0, MVT::i1));
+        return SDValue(N, 0);
+      }
+    
     // A + ~0 + 1 => A - 0 => {1, A}
     if (isAllOnesValue(CVal, 1) && isAllOnesValue(OpBVal, OpBSize)) {
       DCI.CombineTo(N, OpA, DAG.getTargetConstant(1, MVT::i1));
