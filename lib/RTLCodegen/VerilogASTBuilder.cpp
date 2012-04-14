@@ -1447,7 +1447,7 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
   }
 
   VASTValue *Symbol = VM->getOrCreateSymbol(Name, SymbolWidth, NeedWrapper);
-  if (SymbolWidth)
+  if (SymbolWidth && GetAsInlineOperand)
     Symbol = VM->getOrCreateBitSlice(Symbol, BitWidth, 0)->getAsInlineOperand();
 
   return Symbol;
