@@ -992,16 +992,22 @@ VASTWire *VASTModule::addWire(const std::string &Name, unsigned BitWidth,
 }
 
 VASTValue *VASTModule::getOrCreateSymbol(const std::string &Name,
-                                         unsigned BitWidth) {
+                                         unsigned BitWidth,
+                                         bool CreateWrapper) {
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
   VASTNamedValue *&V = Entry.second;
   if (V == 0) {
-    // Create the wire for the symbol, and assign the symbol to the wire.
-    VASTWire *Wire = addWire(VBEMangle(Name + "_s"), BitWidth);
     const char *S = Entry.getKeyData();
-    Wire->assign(new (Allocator.Allocate<VASTSymbol>()) VASTSymbol(S, 0));
-    // Remember the wire.
-    V = Wire;
+    // If we are going to create a wrapper, apply the bitwidth to the wrapper.
+    unsigned SymbolWidth = CreateWrapper ? 0 : BitWidth;
+    V = new (Allocator.Allocate<VASTSymbol>()) VASTSymbol(S, SymbolWidth);
+    if (CreateWrapper) {
+      // Create the wire for the symbol, and assign the symbol to the wire.
+      VASTWire *Wire = addWire(VBEMangle(Name + "_s"), BitWidth);
+      Wire->assign(V);
+      // Remember the wire.
+      V = Wire;
+    }
   }
 
   assert(V->getBitWidth() == BitWidth

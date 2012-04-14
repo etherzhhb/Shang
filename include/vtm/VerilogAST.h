@@ -1055,7 +1055,9 @@ public:
     return cast<T>(getSymbol(Name));
   }
 
-  VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth);
+  // Create wrapper to allow us get a bitslice of the symbol.
+  VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth,
+                               bool CreateWrapper);
 
   void allocaSlots(unsigned TotalSlots) {
     Slots.assign(TotalSlots, 0);

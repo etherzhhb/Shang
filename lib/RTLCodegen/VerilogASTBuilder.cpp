@@ -654,7 +654,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
     // Add the start/finsh signal and return_value to the signal list.
     indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
-    VM->getOrCreateSymbol(Ports[3], 1);
+    VM->getOrCreateSymbol(Ports[3], 1, false);
     unsigned RetPortIdx = FNNum;
     // Dose the submodule have a return port?
     VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RetPortIdx);
@@ -663,7 +663,9 @@ void VerilogASTBuilder::emitAllocatedFUs() {
       unsigned Latency = VFUs::getModuleOperands(I->getKey(), FNNum, OpInfo);
 
       if (Latency == 0) {
-        VASTValue *PortName = VM->getOrCreateSymbol(Ports[4], Info.getBitWidth());
+        VASTValue *PortName = VM->getOrCreateSymbol(Ports[4],
+                                                    Info.getBitWidth(),
+                                                    false);
         indexVASTValue(RetPortIdx, PortName);
         continue;
       }
@@ -788,7 +790,7 @@ void VerilogASTBuilder::emitAllSignals() {
     }
     case VTM::RBRMRegClassID: {
       VASTValue *V = VM->getOrCreateSymbol(VFUBRam::getInDataBusName(RegNum),
-                                           Info.getBitWidth());
+                                           Info.getBitWidth(), false);
       indexVASTValue(RegNum, V);
       break;
     }
@@ -1437,10 +1439,18 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
   Op.print(SS);
   SS.flush();
 
-  unsigned SymbolWidth = std::max(TD->getPointerSizeInBits(), BitWidth);
-  VASTValue *Symbol = VM->getOrCreateSymbol(Name, SymbolWidth);
-  // Don't get the symbol as inline operand.
-  return VM->getOrCreateBitSlice(Symbol, BitWidth, 0);
+  bool NeedWrapper = false;
+  unsigned SymbolWidth = 0;
+  if (Op.isGlobal()) { // GlobalValues are addresses.
+    SymbolWidth = std::max(TD->getPointerSizeInBits(), BitWidth);
+    NeedWrapper = true;
+  }
+
+  VASTValue *Symbol = VM->getOrCreateSymbol(Name, SymbolWidth, NeedWrapper);
+  if (SymbolWidth)
+    Symbol = VM->getOrCreateBitSlice(Symbol, BitWidth, 0)->getAsInlineOperand();
+
+  return Symbol;
 }
 
 void VerilogASTBuilder::printOperand(ucOperand &Op, raw_ostream &OS) {
