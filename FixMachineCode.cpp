@@ -131,7 +131,8 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 }
 
 bool FixMachineCode::simplifyBitSlice(MachineInstr *MI) {
-  if (MI->getOpcode() != VTM::VOpBitSlice) return false;
+  if (MI->getOpcode() != VTM::VOpBitSlice || !MI->getOperand(1).isReg())
+    return false;
 
   // Only can simplify if lower bound is 0, which means the result simply
   // use the lower part of the src register. We can simply replace the use
