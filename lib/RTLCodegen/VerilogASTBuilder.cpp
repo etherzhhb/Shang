@@ -1080,12 +1080,13 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 
   // Is the function have latency information not captured by schedule?
   if (VASTWire *RetPort = getAsLValue<VASTWire>(MI->getOperand(0))) {
-    VASTExpr *Expr = RetPort->getExpr();
-    for (unsigned i = 0, e = Expr->num_operands(); i < e; ++i) {
-      VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
-      VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds);
+    if (VASTExpr *Expr = RetPort->getExpr()) {
+      for (unsigned i = 0, e = Expr->num_operands(); i < e; ++i) {
+        VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
+        VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds);
+      }
+      return;
     }
-    return;
   }
 
   // Else we had to write the control code to the control block.
