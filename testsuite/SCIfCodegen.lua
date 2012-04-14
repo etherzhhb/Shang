@@ -154,9 +154,9 @@ SC_MODULE(V$(RTLModuleName)_tb){
             case 255: (mem0in)= *((unsigned long long *)(cur_addr)); addrmask = 7; break;
             default: assert(0 && "Unsupported size!"); break;
             }
-
-            assert((cur_addr & addrmask) == 0 && "Unexpected unalign access!");
           }
+
+          assert((cur_addr & addrmask) == 0 && "Unexpected unalign access!");
 
           for (unsigned i = 0; i < CyclesToWait; ++i) {
             mem0waitrequest = 1;
