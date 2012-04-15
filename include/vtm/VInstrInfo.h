@@ -185,7 +185,6 @@ public:
   //static unsigned getTrivialLatency(unsigned OpC);
   static bool isReadAtEmit(unsigned OpC);
 
-  static bool isPrebound(unsigned Opcode);
   static FuncUnitId getPreboundFUId(const MachineInstr *MI);
   static bool mayLoad(const MachineInstr *MI);
   static bool mayStore(const MachineInstr *MI);

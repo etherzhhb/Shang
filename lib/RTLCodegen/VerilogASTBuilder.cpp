@@ -877,7 +877,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpRetVal:        emitOpRetVal(MI, CurSlot, Cnds);          break;
     case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);             break;
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);        break;
-    case VTM::VOpBRam:          emitOpBRam(MI, CurSlot, Cnds);            break;
+    case VTM::VOpBRAMTrans:     emitOpBRam(MI, CurSlot, Cnds);            break;
     case VTM::VOpToState_nt: emitBr(MI, CurSlot, Cnds, CurBB, Pipelined); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);      break;
     case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;

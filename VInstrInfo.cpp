@@ -717,11 +717,6 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
   }
 }
 
-bool VInstrInfo::isPrebound(unsigned Opcode) {
-  return Opcode == VTM::VOpMemTrans || Opcode == VTM::VOpBRam
-         || Opcode == VTM::VOpInternalCall;
-}
-
 bool VInstrInfo::isCopyLike(unsigned Opcode) {
   return Opcode == VTM::COPY
          || Opcode == VTM::PHI
@@ -798,7 +793,7 @@ FuncUnitId VInstrInfo::getPreboundFUId(const MachineInstr *MI) {
     return FuncUnitId(uint16_t(MI->getOperand(2).getImm()));
   case VTM::VOpMemTrans:
     return FuncUnitId(VFUs::MemoryBus, 0);
-  case VTM::VOpBRam: {
+  case VTM::VOpBRAMTrans: {
     unsigned Id = MI->getOperand(5).getImm();
     return FuncUnitId(VFUs::BRam, Id);
   }
@@ -1042,7 +1037,7 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
     unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
     return VFUs::getReductionLatency(size);
   }
-  case VTM::VOpBRam:        return VFUs::BRamLatency;
+  case VTM::VOpBRAMTrans:   return VFUs::BRamLatency;
 
   case VTM::VOpInternalCall:  return 1.0f;
 

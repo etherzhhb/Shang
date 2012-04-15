@@ -164,7 +164,7 @@ const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned OpCode){
   case VTM::VOpMultLoHi:    return VTM::RMULLHRegisterClass;
   case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
   case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
-  case VTM::VOpBRam:        return VTM::RBRMRegisterClass;
+  case VTM::VOpBRAMTrans:   return VTM::RBRMRegisterClass;
     // allocate unsigned comparison fu by default.
   case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
   case VTM::VOpDstMux:      return VTM::RMUXRegisterClass;

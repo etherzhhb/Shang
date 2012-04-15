@@ -953,7 +953,7 @@ void VRASimple::bindDstMux() {
 }
 
 void VRASimple::bindBlockRam() {
-  assert(VInstrInfo::isWriteUntilFinish(VTM::VOpBRam)
+  assert(VInstrInfo::isWriteUntilFinish(VTM::VOpBRAMTrans)
          && "Expected block ram write until finish!");
   std::map<unsigned, LiveInterval*> RepLIs;
 
@@ -964,7 +964,7 @@ void VRASimple::bindBlockRam() {
 
     if (LiveInterval *LI = getInterval(RegNum)) {
       MachineInstr *MI = MRI->getVRegDef(RegNum);
-      assert(MI->getOpcode() == VTM::VOpBRam && "Unexpected opcode!");
+      assert(MI->getOpcode() == VTM::VOpBRAMTrans && "Unexpected opcode!");
       unsigned BRamNum = VInstrInfo::getPreboundFUId(MI).getFUNum();
 
       VFInfo::BRamInfo &Info = VFI->getBRamInfo(BRamNum);

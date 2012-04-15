@@ -383,7 +383,7 @@ SDNode *VDAGToDAGISel::SelectBRamAccess(SDNode *N) {
 
   computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
 
-  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpBRam, N->getVTList(),
+  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpBRAMTrans, N->getVTList(),
                                      Ops, array_lengthof(Ops));
 
   cast<MachineSDNode>(Ret)->setMemRefs(MemOp, MemOp + 1);
