@@ -471,20 +471,15 @@ std::string VFUs::startModule(const std::string &ModName, unsigned ModNum,
   return scriptEngin().getValueStr(ResultName);
 }
 
-unsigned VFUs::getModuleOperands(const std::string &ModName, unsigned FNNum,
-                                 SmallVectorImpl<ModOpInfo> &OpInfo) {
-  luabind::object O = scriptEngin().getModTemplate(ModName);
-  O = O["TimingInfo"];
-  if (luabind::type(O) != LUA_TTABLE) return 0;
+static bool generateOperandNames(const std::string &ModName, luabind::object O,
+                                 unsigned FNNum,
+                                 SmallVectorImpl<VFUs::ModOpInfo> &OpInfo) {
 
   unsigned NumOperands = getProperty<unsigned>(O, "NumOperands");
-  if (NumOperands == 0)  return 0;
-
-  unsigned Latency = getProperty<unsigned>(O, "Latency");
-  if (Latency == 0) return 0;
+  if (NumOperands == 0)  return false;
 
   O = O["OperandInfo"];
-  if (luabind::type(O) != LUA_TTABLE) return 0;
+  if (luabind::type(O) != LUA_TTABLE) return false;
 
   std::string Script;
   raw_string_ostream ScriptBuilder(Script);
@@ -511,10 +506,22 @@ unsigned VFUs::getModuleOperands(const std::string &ModName, unsigned FNNum,
 
     std::string OpName = scriptEngin().getValueStr(ResultName);
     unsigned OpSize = getProperty<unsigned>(OpTab, "SizeInBits");
-    OpInfo.push_back(ModOpInfo(OpName, OpSize));
+    OpInfo.push_back(VFUs::ModOpInfo(OpName, OpSize));
 
     Script.clear();
   }
+}
 
-  return Latency;
+unsigned VFUs::getModuleOperands(const std::string &ModName, unsigned FNNum,
+                                 SmallVectorImpl<ModOpInfo> &OpInfo) {
+  luabind::object O = scriptEngin().getModTemplate(ModName);
+  O = O["TimingInfo"];
+  if (luabind::type(O) != LUA_TTABLE) return 0;
+
+  unsigned Latency = getProperty<unsigned>(O, "Latency");
+
+  if (generateOperandNames(ModName, O, FNNum, OpInfo))
+    return Latency;
+
+  return 0;
 }
