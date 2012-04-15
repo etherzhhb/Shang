@@ -509,7 +509,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     MachineInstr *RepMI = A->getRepresentativeInst();
     if (RepMI) {
       FuncUnitId Id = VInstrInfo::getPreboundFUId(RepMI);
-      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
+      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux &&
+          Id.getFUType() != VFUs::BRam) {
         MachineBasicBlock *MBB = RepMI->getParent();
 
         MachineOperand FU = RepMI->getOperand(0);
@@ -610,6 +611,12 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     // control block.
 
     if (MO.isDef() && SchedSlot != CopySlot && (!isCopyLike || WrappedAround)) {
+      if (MRI.use_empty(RegNo)) {
+        // Need to fix the register class even the register define is dead.
+        MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opc));
+        continue;
+      }
+
       unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
@@ -666,7 +673,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   Inst.removeFromParent();
   MBB.insert((MachineBasicBlock::iterator)IP, &Inst);
 
-  if (isCopyLike && !WrappedAround) {
+  if ((isCopyLike && !WrappedAround) || Defs.empty()) {
     assert(Defs.empty() && "CopyLike instructions do not have extra defs!");
     return;
   }
