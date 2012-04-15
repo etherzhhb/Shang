@@ -672,6 +672,9 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB)
     return getOrCreateBitSlice(AssignExpr->getOperand(0), UB, LB);
   }
 
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U))
+    return getOrCreateImmediate(getBitSlice64(Imm->getValue(), UB, LB), UB - LB);
+
   assert(UB <= OperandSize && UB > LB && "Bad bit range!");
   // FIXME: We can name the expression when necessary.
   assert(isa<VASTNamedValue>(U) && cast<VASTNamedValue>(U)->getName()
