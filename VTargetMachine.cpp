@@ -240,6 +240,9 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual void addIRPasses() {
+    // Try to lower memory access to accessing local memory.
+    PM.add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
+    // Annotate the unhandled stack allocation alias with global variable.
     PM.add(createStackToGlobalPass(*TM->getIntrinsicInfo()));
     // add the pass which will convert the AllocaInst to GlobalVariable.
     //PM.add(createGVNPass(false));

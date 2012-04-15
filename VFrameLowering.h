@@ -22,6 +22,7 @@
 
 namespace llvm {
 class VSubtarget;
+class AllocaInst;
 
 class VFrameInfo : public TargetFrameLowering {
 protected:

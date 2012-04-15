@@ -29,13 +29,12 @@ class VTargetMachine;
 
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
-Pass *createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo);
-
 // Always inline function.
 Pass *createHLSInlinerPass();
 Pass *createTrivialLoopUnrollPass();
 Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
+Pass *createBlockRAMFormation(const TargetIntrinsicInfo &IntrInfo);
 Pass *createStackToGlobalPass(const TargetIntrinsicInfo &IntrInfo);
 Pass *createAllocaAlignerPass();
 

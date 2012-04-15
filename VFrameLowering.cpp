@@ -27,6 +27,7 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -35,12 +36,9 @@
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
-
-static cl::opt<unsigned>
-UnderlyingObjectMaxLookUp("vtm-underlying-object-max-lookup",
-  cl::desc("The Value of MaxLoopUp passed to GetUnderlyingObject"),
-  cl::Hidden,
-  cl::init(8));
+static cl::opt<bool> EnableBRAM("vtm-enable-bram",
+                                cl::desc("Enable block RAM in design"),
+                                cl::init(false));
 
 void VFrameInfo::emitPrologue(MachineFunction &MF) const {
 }
@@ -51,172 +49,121 @@ void VFrameInfo::emitEpilogue(MachineFunction &MF,
 
 
 //===----------------------------------------------------------------------===//
-// This pass translate all alloca instruction to llvm.vtm.alloca_bram intrinsics.
+// Utility function to change the address space of the
 //
-namespace {
-struct LowerFrameInstrs : public FunctionPass {
-  static char ID;
-  Module *M;
-  TargetData *TD;
+template <typename VisitFunc>
+static bool visitPtrUseTree(Value *BasePtr, VisitFunc &Visitor) {
+  typedef Instruction::use_iterator ChildIt;
+  typedef SmallVector<std::pair<Value*, ChildIt>, 16> StackTy;
+  SmallPtrSet<Value*, 8> Visited;
 
-  const TargetIntrinsicInfo &IntrinsicInfo;
-  LowerFrameInstrs(const TargetIntrinsicInfo &II)
-    : FunctionPass(ID), M(0), IntrinsicInfo(II) {}
+  StackTy Stack;
+  Stack.push_back(std::make_pair(BasePtr, BasePtr->use_begin()));
 
-  //template<class InstTy, class OpIt>
-  //InstTy *CreateInst(InstTy *OldInst, OpIt OpBegin, OpIt OpEnd)
-  VAllocaBRamInst *getReferredBRam(Value *V) const;
-  void replaceBRamAccess(Function *F);
+  while (!Stack.empty()) {
+    Value *CurVal = Stack.back().first;
+    ChildIt &CurChildIt = Stack.back().second;
 
-  unsigned lowerAlloca(AllocaInst *AI, unsigned allocatedBRams);
-
-  bool runOnFunction(Function &F);
-};
-}
-
-char LowerFrameInstrs::ID = 0;
-
-VAllocaBRamInst *LowerFrameInstrs::getReferredBRam(Value *V) const {
-  Instruction *Instr = dyn_cast<Instruction>(V);
-
-  // Only an instruction may refer a block ram allocate instruction.
-  if (!Instr) return 0;
-
-  Value *Ptr = GetUnderlyingObject(Instr, TD,
-                                   UnderlyingObjectMaxLookUp);
-
-  return dyn_cast<VAllocaBRamInst>(Ptr);
-}
-
-void LowerFrameInstrs::replaceBRamAccess(Function *F) {
-  SmallVector<Instruction*, 128> Insts;
-
-  // Collect the instructions need to be replaced.
-  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
-    Instruction &Inst = *I;
-    if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))
-      Insts.push_back(&Inst);
-  }
-
-  // Replace the instructions
-  while (!Insts.empty()) {
-    Instruction *Inst = Insts.pop_back_val();
-
-    if (LoadInst *Load = dyn_cast<LoadInst>(Inst)) {
-      Value *Ptr = Load->getPointerOperand();
-      if (VAllocaBRamInst *Ram = getReferredBRam(Ptr)) {
-        Type *ValTys[] = { Load->getType(), Ptr->getType() };
-        Function *TheLoadBRamFn
-          = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_access_bram,
-          ValTys, array_lengthof(ValTys));
-        Type *Int32Ty = Type::getInt32Ty(M->getContext()),
-             *Int1Ty = Type::getInt1Ty(M->getContext());
-
-        Value *Args[] = { Ptr, UndefValue::get(ValTys[0]),
-                          ConstantInt::get(Int1Ty, 0),
-                          ConstantInt::get(Int32Ty, Load->getAlignment()),
-                          ConstantInt::get(Int1Ty, Load->isVolatile()),
-                          ConstantInt::get(Int32Ty,  Ram->getBRamId()) };
-
-        CallInst *NewLD = CallInst::Create(TheLoadBRamFn,
-                                           Args, Load->getName(), Load);
-        Load->replaceAllUsesWith(NewLD);
-        Load->eraseFromParent();
-      }
+    // All children of the current instruction visited, visit the current
+    // instruction.
+    if (CurChildIt == CurVal->use_end()) {
+      Stack.pop_back();
       continue;
     }
 
-    if (StoreInst *Store = dyn_cast<StoreInst>(Inst)) {
-      Value *Ptr = Store->getPointerOperand();
-      if (VAllocaBRamInst *Ram = getReferredBRam(Ptr)) {
-        Value *ValueOperand = Store->getValueOperand();
-        assert(getReferredBRam(ValueOperand) == 0
-               && "Can not store block ram address!");
-        Type *ValTys[] = { ValueOperand->getType(), Ptr->getType() };
-        Function *TheStoreBRamFn
-          = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_access_bram,
-          ValTys, array_lengthof(ValTys));
-        Type *Int32Ty = Type::getInt32Ty(M->getContext()),
-             *Int1Ty = Type::getInt1Ty(M->getContext());
+    Value *Child = *CurChildIt;
+    ++CurChildIt;
+    // Had us visited this node yet?
+    if (!Visited.insert(Child)) continue;
 
-        Value *Args[] = { Ptr, ValueOperand,
-                          ConstantInt::get(Int1Ty, 1),
-                          ConstantInt::get(Int32Ty, Store->getAlignment()),
-                          ConstantInt::get(Int1Ty, Store->isVolatile()),
-                          ConstantInt::get(Int32Ty,  Ram->getBRamId()) };
+    if (!Visitor(Child, CurVal)) return false;
 
-        (void) CallInst::Create(TheStoreBRamFn, Args, "store_bram", Store);
-        // The old store is not use anymore.
-        Store->eraseFromParent();
-      }
-      continue;
-    }
+    // Don't trace the loaded value.
+    if (isa<LoadInst>(Child)) continue;
 
-    // Else check the operand of the instruction, find out the unsupport case.
+    Stack.push_back(std::make_pair(Child, Child->use_begin()));
   }
-}
-
-unsigned LowerFrameInstrs::lowerAlloca(AllocaInst *AI, unsigned allocatedBRams){
-  LLVMContext &Context = M->getContext();
-
-  assert(AI->isStaticAlloca() && "Cannot support dynamic alloca yet!");
-  unsigned NumElems = cast<ConstantInt>(AI->getArraySize())->getZExtValue();
-
-  assert(isa<ArrayType>(AI->getAllocatedType()) && "Only support Array now!");
-  ArrayType *AT = cast<ArrayType>(AI->getAllocatedType());
-  Type *ET = AT->getElementType();
-  unsigned ElemSizeInBytes = ET->getPrimitiveSizeInBits() / 8;
-  assert(ElemSizeInBytes && "Non-primitive type are not supported!");
-  NumElems *= AT->getNumElements();
-
-  // We use address space
-  unsigned AllocaAddrSpace = AI->getType()->getAddressSpace();
-  Type *NewPtrTy = PointerType::get(ET, AllocaAddrSpace);
-  Function *TheAllocaBRamFn
-    = IntrinsicInfo.getDeclaration(M, vtmIntrinsic::vtm_alloca_bram,
-                                   &NewPtrTy, 1);
-
-  Type *Int32Ty = Type::getInt32Ty(Context);
-  Value *Args[] = { ConstantInt::get(Int32Ty, allocatedBRams),
-                    ConstantInt::get(Int32Ty, NumElems),
-                    ConstantInt::get(Int32Ty, ElemSizeInBytes) };
-
-  Instruction *AllocaBRam = CallInst::Create(TheAllocaBRamFn,
-                                             Args, AI->getName(), AI);
-  // Cast pointer that pointing array element to pointer that pointing array.
-  Type *ArrayPtrTy = PointerType::get(AT, AllocaAddrSpace);
-
-  AI->replaceAllUsesWith(BitCastInst::CreatePointerCast(AllocaBRam, ArrayPtrTy,
-                                                        "cast", AI));
-  AI->eraseFromParent();
-
-  return ++allocatedBRams;
-}
-
-bool LowerFrameInstrs::runOnFunction(Function &F) {
-  TD = getAnalysisIfAvailable<TargetData>();
-  M = F.getParent();
-  unsigned allocatedBRams = 1;
-
-  SmallVector<AllocaInst*, 16> Allocas;
-
-  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I)
-    if (AllocaInst *AI = dyn_cast<AllocaInst>(&*I))
-      Allocas.push_back(AI);
-
-  if (Allocas.empty()) return false;
-
-  while (!Allocas.empty()) {
-    allocatedBRams = lowerAlloca(Allocas.back(), allocatedBRams);
-    Allocas.pop_back();
-  }
-
-  replaceBRamAccess(&F);
 
   return true;
 }
 
-Pass
-  *llvm::createLowerFrameInstrsPass(const TargetIntrinsicInfo &IntrinsicInfo) {
-  return new LowerFrameInstrs(IntrinsicInfo);
+namespace {
+struct BlockRAMFormation : public FunctionPass {
+  static char ID;
+  const TargetIntrinsicInfo &IntrInfo;
+  unsigned CurAddrSpace;
+  enum { FirstBlockRAMAddressSpace = 1 };
+  BlockRAMFormation(const TargetIntrinsicInfo &I)
+    : FunctionPass(ID), IntrInfo(I), CurAddrSpace(FirstBlockRAMAddressSpace) {}
+
+  BlockRAMFormation()
+    : FunctionPass(ID), IntrInfo(*new VIntrinsicInfo()), CurAddrSpace(0) {
+    llvm_unreachable("Cannot construct BlockRAMFormation like this!");
+  }
+
+  const char *getPassName() const { return "Block RAM Formation Pass"; }
+  // Try to localize the global variables.
+  bool doInitialization(Module &M) { return false; }
+  bool runOnFunction(Function &F);
+};
+
+struct PtrUseCollector {
+  SmallVector<Value *, 8> Uses;
+
+  bool operator()(Value *ValUser, const Value *V) {
+    if (const Instruction *I = dyn_cast<Instruction>(ValUser)) {
+      switch (I->getOpcode()) {
+      case Instruction::GetElementPtr:
+        Uses.push_back(ValUser);
+        return true;
+        // The pointer must use as pointer operand in load/store.
+      case Instruction::Load: return cast<LoadInst>(I)->getPointerOperand() == V;
+      case Instruction::Store:return cast<StoreInst>(I)->getPointerOperand() == V;
+      }
+    } else if (const ConstantExpr *C = dyn_cast<ConstantExpr>(ValUser)) {
+      if (C->getOpcode() == Instruction::GetElementPtr) {
+        Uses.push_back(ValUser);
+        return true;
+      }
+    }
+
+    return false;
+  }
+};
+}
+
+char BlockRAMFormation::ID = 0;
+
+static void mutateAddressSpace(Value *V, unsigned AS) {
+  PointerType *Ty  = cast<PointerType>(V->getType());
+  assert(Ty->getAddressSpace() == 0 && "V already in some address space!");
+  Ty = PointerType::get(Ty->getElementType(), AS);
+  V->mutateType(Ty);
+}
+
+bool BlockRAMFormation::runOnFunction(Function &F) {
+  bool changed = false;
+  PtrUseCollector Collector;
+  for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
+    AllocaInst *AI = dyn_cast<AllocaInst>(&*I);
+    if (!AI) continue;
+
+    // Can us handle the use tree of the allocated pointer?
+    if (!EnableBRAM || !visitPtrUseTree(AI, Collector)) continue;
+
+    // Change the address space of the alloca, so the backend know the
+    // load/store accessing this alloca are accessing block ram.
+    mutateAddressSpace(AI, CurAddrSpace);
+    while (!Collector.Uses.empty())
+      mutateAddressSpace(Collector.Uses.pop_back_val(), CurAddrSpace);
+
+    changed |= true;
+    ++CurAddrSpace;
+  }
+
+  return changed;
+}
+
+Pass *llvm::createBlockRAMFormation(const TargetIntrinsicInfo &IntrInfo) {
+  return new BlockRAMFormation(IntrInfo);
 }
