@@ -665,11 +665,22 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB)
   else if (VASTWire *W = dyn_cast<VASTWire>(U))
     AssignExpr = W->getExpr();
 
-  if (AssignExpr && AssignExpr->getOpcode() == VASTExpr::dpAssign) {
-    unsigned Offset = AssignExpr->getLB();
-    UB += Offset;
-    LB += Offset;
-    return getOrCreateBitSlice(AssignExpr->getOperand(0), UB, LB);
+  if (AssignExpr) {
+    switch(AssignExpr->getOpcode()) {
+    default: break;
+    case VASTExpr::dpAssign: {
+      unsigned Offset = AssignExpr->getLB();
+      UB += Offset;
+      LB += Offset;
+      return getOrCreateBitSlice(AssignExpr->getOperand(0), UB, LB);
+    }
+    case VASTExpr::dpBitCat: {
+      VASTValue *Hi = AssignExpr->getOperand(0),
+                *Lo = AssignExpr->getOperand(1);
+      if (Lo->getBitWidth() == LB) return getOrCreateBitSlice(Hi, UB - LB, 0);
+      break;
+    }
+    }
   }
 
   if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U))
