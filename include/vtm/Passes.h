@@ -74,10 +74,6 @@ Pass *createRTLCodegenPreparePass();
 Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
 
-
-//ContoBram Pass
-Pass *createContoBromPass(const TargetIntrinsicInfo &IntrinsicInfo);
-
 //
 void initializePrebindMuxBasePass(PassRegistry &Registry);
 void initializePrebindUnbalanceMuxPass(PassRegistry &Registry);

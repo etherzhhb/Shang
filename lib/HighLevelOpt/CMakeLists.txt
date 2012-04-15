@@ -3,7 +3,6 @@ add_llvm_library(VTMHighLevelOpt
   HLSInliner.cpp
   TrivialLoopUnrollPass.cpp
   LoopVectorizePass.cpp
-  ContoBrom.cpp
   )
 
 llvm_config(VTMHighLevelOpt transformutils ipo)
