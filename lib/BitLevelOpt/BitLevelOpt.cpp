@@ -905,7 +905,7 @@ SDValue PerformAddCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
       if (GlobalAddressSDNode *GSD = dyn_cast<GlobalAddressSDNode>(OpA)) {
         SDValue FoldedGSD = DAG.getGlobalAddress(GSD->getGlobal(), dl,
                                                  GSD->getValueType(0),
-                                                 OpBVal);
+                                                 OpBVal + GSD->getOffset());
         DCI.CombineTo(N, FoldedGSD, DAG.getTargetConstant(0, MVT::i1));
         return SDValue(N, 0);
       }
