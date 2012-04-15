@@ -22,4 +22,12 @@ let TargetPrefix = "vtm", isTarget = 1 in {
                                               [llvm_anyptr_ty, llvm_anyptr_ty],
                                               [IntrReadWriteArgMem,
                                               NoCapture<0>, NoCapture<1>]>;
+  // Annotate bram information, including the block ram number,
+  // number of elements, element size in bytes, and the initilize global
+  // variable address.
+  def int_vtm_annotated_bram_info : Intrinsic<[],
+                                              [llvm_i32_ty, llvm_i32_ty,
+                                               llvm_i32_ty, llvm_anyptr_ty],
+                                              [IntrReadWriteArgMem,
+                                               NoCapture<3>]>;
 }//FIXME: add multi-dimension support
