@@ -22,7 +22,7 @@
 
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"

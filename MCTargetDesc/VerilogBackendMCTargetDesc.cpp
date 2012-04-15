@@ -15,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 //#include "VerilogBackendMCAsmInfo.h"
 
 #include "llvm/MC/MachineLocation.h"

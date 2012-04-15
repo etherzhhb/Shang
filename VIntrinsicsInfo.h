@@ -17,7 +17,7 @@
 #ifndef VTM_INTRINSICS_H
 #define VTM_INTRINSICS_H
 
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 
 #include "llvm/IntrinsicInst.h"
 #include "llvm/Target/TargetIntrinsicInfo.h"

@@ -18,7 +18,7 @@
 #define VBE_VLANG_H
 
 #include "vtm/Utilities.h"
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/FUInfo.h"
 #include "vtm/LangSteam.h"
 

@@ -18,7 +18,7 @@
 
 #include "VTargetMachine.h"
 
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/MicroState.h"

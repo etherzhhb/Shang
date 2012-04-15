@@ -17,7 +17,7 @@
 
 #ifndef VTM_FRAMEINFO_H
 #define VTM_FRAMEINFO_H
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {

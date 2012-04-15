@@ -19,7 +19,7 @@
 #ifndef BUNDLE_TOKENS_H
 #define BUNDLE_TOKENS_H
 
-#include "vtm/VerilgoBackendMCTargetDesc.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/FUInfo.h"
 #include "vtm/VInstrInfo.h"
 
