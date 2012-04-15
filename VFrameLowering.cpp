@@ -28,17 +28,22 @@
 #include "llvm/Target/TargetData.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-frame-lowering"
 #include "llvm/Support/Debug.h"
+#include "llvm/ADT/Statistic.h"
 
 using namespace llvm;
 static cl::opt<bool> EnableBRAM("vtm-enable-bram",
                                 cl::desc("Enable block RAM in design"),
                                 cl::init(false));
+
+STATISTIC(NumGlobalAlias, "Number of global alias created for allocas");
+STATISTIC(NumBlockRAMs, "Number of block RAM created");
 
 void VFrameInfo::emitPrologue(MachineFunction &MF) const {
 }
@@ -88,23 +93,26 @@ static bool visitPtrUseTree(Value *BasePtr, VisitFunc &Visitor) {
 }
 
 namespace {
-struct BlockRAMFormation : public FunctionPass {
+struct BlockRAMFormation : public ModulePass {
   static char ID;
   const TargetIntrinsicInfo &IntrInfo;
-  unsigned CurAddrSpace;
+  unsigned CurAddrSpace, AllocaAliasCnt;
   enum { FirstBlockRAMAddressSpace = 1 };
   BlockRAMFormation(const TargetIntrinsicInfo &I)
-    : FunctionPass(ID), IntrInfo(I), CurAddrSpace(FirstBlockRAMAddressSpace) {}
+    : ModulePass(ID), IntrInfo(I), CurAddrSpace(FirstBlockRAMAddressSpace),
+      AllocaAliasCnt(0) {}
 
   BlockRAMFormation()
-    : FunctionPass(ID), IntrInfo(*new VIntrinsicInfo()), CurAddrSpace(0) {
+    : ModulePass(ID), IntrInfo(*new VIntrinsicInfo()), CurAddrSpace(0),
+      AllocaAliasCnt(0) {
     llvm_unreachable("Cannot construct BlockRAMFormation like this!");
   }
 
   const char *getPassName() const { return "Block RAM Formation Pass"; }
-  // Try to localize the global variables.
-  bool doInitialization(Module &M) { return false; }
+  bool runOnModule(Module &M);
   bool runOnFunction(Function &F);
+
+  void allocateGlobalAlias(AllocaInst *AI, Function *F);
 };
 
 struct PtrUseCollector {
@@ -134,6 +142,38 @@ struct PtrUseCollector {
 
 char BlockRAMFormation::ID = 0;
 
+void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Function *F) {
+  Module &M = *F->getParent();
+  PointerType *Ty = AI->getType();
+  Type *AllocatedType = AI->getAllocatedType();
+  // Create the global alias.
+  GlobalVariable *GV =
+    new GlobalVariable(M, AllocatedType, false, GlobalValue::InternalLinkage,
+                       Constant::getNullValue(AllocatedType),
+                       AI->getName() + utostr_32(AllocaAliasCnt) + "_g_alias");
+  GV->setAlignment(AI->getAlignment());
+
+  BasicBlock::iterator IP = llvm::next(BasicBlock::iterator(AI));
+
+  // Create the function call to annotate the alias.
+  Value *Args[] = { AI, GV };
+  // We may need a cast.
+  if (!Ty->getElementType()->isPrimitiveType()) {
+    PointerType *PtrTy = PointerType::getIntNPtrTy(M.getContext(), 8,
+                                                   Ty->getAddressSpace());
+    Args[0] = CastInst::CreatePointerCast(AI, PtrTy, AI->getName()+"_cast", IP);
+    Args[1] = ConstantExpr::getBitCast(GV, PtrTy);
+  }
+
+  Type *ArgTypes[] = { Args[0]->getType(), Args[1]->getType() };
+  Function *AllocaAliasGlobal =
+    IntrInfo.getDeclaration(&M, vtmIntrinsic::vtm_alloca_alias_global,
+                            ArgTypes, 2);
+  CallInst::Create(AllocaAliasGlobal, Args, "", IP);
+  ++NumGlobalAlias;
+  ++AllocaAliasCnt;
+}
+
 static void mutateAddressSpace(Value *V, unsigned AS) {
   PointerType *Ty  = cast<PointerType>(V->getType());
   assert(Ty->getAddressSpace() == 0 && "V already in some address space!");
@@ -148,8 +188,13 @@ bool BlockRAMFormation::runOnFunction(Function &F) {
     AllocaInst *AI = dyn_cast<AllocaInst>(&*I);
     if (!AI) continue;
 
+    changed |= true;
     // Can us handle the use tree of the allocated pointer?
-    if (!EnableBRAM || !visitPtrUseTree(AI, Collector)) continue;
+    if (!EnableBRAM || !visitPtrUseTree(AI, Collector)) {
+      // Otherwise, we need to allocate the object in global memory.
+      allocateGlobalAlias(AI, &F);
+      continue;
+    }
 
     // Change the address space of the alloca, so the backend know the
     // load/store accessing this alloca are accessing block ram.
@@ -157,9 +202,18 @@ bool BlockRAMFormation::runOnFunction(Function &F) {
     while (!Collector.Uses.empty())
       mutateAddressSpace(Collector.Uses.pop_back_val(), CurAddrSpace);
 
-    changed |= true;
+    ++NumBlockRAMs;
     ++CurAddrSpace;
   }
+
+  return changed;
+}
+
+bool BlockRAMFormation::runOnModule(Module &M) {
+  bool changed = false;
+
+  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I)
+    changed |= runOnFunction(*I);
 
   return changed;
 }

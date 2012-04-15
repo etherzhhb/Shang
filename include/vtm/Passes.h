@@ -35,7 +35,6 @@ Pass *createTrivialLoopUnrollPass();
 Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
 Pass *createBlockRAMFormation(const TargetIntrinsicInfo &IntrInfo);
-Pass *createStackToGlobalPass(const TargetIntrinsicInfo &IntrInfo);
 Pass *createAllocaAlignerPass();
 
 Pass *createFunctionFilterPass(raw_ostream &O);
@@ -84,8 +83,6 @@ void initializePrebindMuxBasePass(PassRegistry &Registry);
 void initializePrebindUnbalanceMuxPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);
 
-//Add the initialization implementation of StackToGlobal.cpp.
-void initializeStackToGlobalPass(PassRegistry &Registry);
 void initializeCFGShortestPathPass(PassRegistry &Registry);
 
 void initializeHyperBlockFormationPass(PassRegistry &Registry);

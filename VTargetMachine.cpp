@@ -240,19 +240,14 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual void addIRPasses() {
-    // Try to lower memory access to accessing local memory.
-    PM.add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
-    // Annotate the unhandled stack allocation alias with global variable.
-    PM.add(createStackToGlobalPass(*TM->getIntrinsicInfo()));
     // add the pass which will convert the AllocaInst to GlobalVariable.
     //PM.add(createGVNPass(false));
     // The construct block ram for local memory access.
     // PM.add(createContoBromPass(*getIntrinsicInfo()));
-
-    // Dirty Hack: Map all frame stuffs to bram 1.
-    // PM.add(createLowerFrameInstrsPass(*getIntrinsicInfo()));
-
     TargetPassConfig::addIRPasses();
+    // Try to lower memory access to accessing local memory, and annotate the
+    // unhandled stack allocation alias with global variable.
+    PM.add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
 
     // Turn exception handling constructs into something the code generators can
     // handle.
