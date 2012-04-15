@@ -88,7 +88,7 @@ private:
   SDNode *SelectImmediate(SDNode *N, bool ForceMove = false);
 
   SDNode *SelectMemAccess(SDNode *N);
-  SDNode *SelectBRamAccess(SDNode *N);
+  SDNode *SelectBRAMAccess(SDNode *N);
 
   SDNode *SelectINTRINSIC_W_CHAIN(SDNode *N);
 
@@ -365,7 +365,7 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
   return Ret;
 }
 
-SDNode *VDAGToDAGISel::SelectBRamAccess(SDNode *N) {
+SDNode *VDAGToDAGISel::SelectBRAMAccess(SDNode *N) {
   MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
   MemOp[0] = cast<MemIntrinsicSDNode>(N)->getMemOperand();
 
@@ -395,8 +395,6 @@ SDNode *VDAGToDAGISel::SelectINTRINSIC_W_CHAIN(SDNode *N) {
 
   switch (IntNo) {
   default: break;
-  case vtmIntrinsic::vtm_access_bram:
-    return SelectBRamAccess(N);
   }
 
   return 0;

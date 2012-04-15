@@ -16,22 +16,6 @@
 //
 
 let TargetPrefix = "vtm", isTarget = 1 in {
-  // Read or Write the block ram.
-  // Return the read value.
-  // Arguments: Address to Read/Write, the value to write, isStore, align,
-  // isVolatile, BRamNum
-  def int_vtm_access_bram : Intrinsic<[llvm_anyint_ty],
-                                      [llvm_anyptr_ty,
-                                       LLVMMatchType<0>, llvm_i1_ty,
-                                       llvm_i32_ty, llvm_i1_ty, llvm_i32_ty],
-                                      [IntrReadWriteArgMem, NoCapture<0>]>;
-
-  // Return the base address of the allocated block ram.
-  // Arguments: Initial Value Pointer, BRomNum, NumElement, ElemSizeInBytes
-  def int_vtm_alloca_bram  : Intrinsic<[llvm_anyptr_ty],
-                                       [llvm_anyptr_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                                       [IntrReadMem]>;
-
   // The dummy intrinsics that mark a pointer to the result of alloca is alias
   // with a global address.
   def int_vtm_alloca_alias_global : Intrinsic<[],

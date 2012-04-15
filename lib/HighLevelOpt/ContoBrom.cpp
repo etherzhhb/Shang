@@ -227,9 +227,7 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
   // If we do not have alloca a Bram for the GV, Allocate a Bram for it.
   if (VisitedGV.insert(GV).second) {
   Type *ValTysAL[] = { NewPtrTy, CAPtrTy};
-  Function* TheAllocaBramFn
-    = IntrinsicInfo.getDeclaration(Mod, vtmIntrinsic::vtm_alloca_bram,
-                                   ValTysAL, array_lengthof(ValTysAL));
+  Function* TheAllocaBramFn = 0;
   // record the AllocaBRamFunction and BramNum for the GV.
   TheAllocaBramFnMap[GV] = TheAllocaBramFn;
   BramNumMap[GV] = AllocatedBRamNum;
@@ -275,9 +273,7 @@ void ContoBrom::GetOrCreateBram(GlobalVariable *GV, Function *F,
 void ContoBrom::ReplaceLoadInstWithBRamAccess(LoadInst *LI){
   Value *Ptr = LI->getPointerOperand();
   Type *ValTys[] = { LI->getType(), Ptr->getType() };
-  Function *TheLoadBRamFn
-    = IntrinsicInfo.getDeclaration(Mod, vtmIntrinsic::vtm_access_bram,
-                                   ValTys, array_lengthof(ValTys));
+  Function *TheLoadBRamFn = 0;
   IntegerType *Int32Ty = Type::getInt32Ty(Mod->getContext()),
               *Int1Ty = Type::getInt1Ty(Mod->getContext());
 
