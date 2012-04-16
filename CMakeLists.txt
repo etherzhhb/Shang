@@ -59,7 +59,6 @@ add_llvm_target(VerilogBackend
   VSelectionDAGInfo.cpp
   FixMachineCode.cpp
   FixTerminators.cpp
-  BuildWireTransitiveUsers.cpp
   BBDelayAnalysis.cpp
   HyperBlockFormation.cpp
   ScriptingPass.cpp
