@@ -510,6 +510,7 @@ static bool generateOperandNames(const std::string &ModName, luabind::object O,
 
     Script.clear();
   }
+  return true;
 }
 
 unsigned VFUs::getModuleOperands(const std::string &ModName, unsigned FNNum,
