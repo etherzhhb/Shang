@@ -75,7 +75,7 @@ struct VTMPassConfig : public TargetPassConfig {
     // Run the SCEVAA pass to compute more accurate alias information.
     PM.add(createScalarEvolutionAliasAnalysisPass());
     PM.add(createVPreRegAllocSchedPass());
-    PM.add(createForwardWireUsersPass());
+    PM.add(createBuildWireTransitiveUsersPass());
     //addPass(FinalizeMachineBundlesID);
     return true;
   }

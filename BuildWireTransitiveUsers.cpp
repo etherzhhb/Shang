@@ -1,4 +1,4 @@
-//===- ForwardWireUsers.cpp - Forward the operands use by wire ops-*- C++ -*-=//
+//===- BuildWireTransitiveUsers.cpp - Forward the operands use by wire ops-*- C++ -*-=//
 //
 // Copyright: 2011 by SYSU EDA Group. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
@@ -45,7 +45,7 @@
 using namespace llvm;
 
 namespace {
-struct ForwardWireUsers : public MachineFunctionPass {
+struct BuildWireTransitiveUsers : public MachineFunctionPass {
   static char ID;
 
   typedef std::set<unsigned> RegSet;
@@ -59,7 +59,7 @@ struct ForwardWireUsers : public MachineFunctionPass {
     return at->second;
   }
 
-  ForwardWireUsers() : MachineFunctionPass(ID) {}
+  BuildWireTransitiveUsers() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF);
 
@@ -78,9 +78,9 @@ struct ForwardWireUsers : public MachineFunctionPass {
 };
 }
 
-char ForwardWireUsers::ID = 0;
+char BuildWireTransitiveUsers::ID = 0;
 
-bool ForwardWireUsers::runOnMachineFunction(MachineFunction &MF) {
+bool BuildWireTransitiveUsers::runOnMachineFunction(MachineFunction &MF) {
   WireUse.clear();
 
   buildWireUseMap(MF);
@@ -90,7 +90,7 @@ bool ForwardWireUsers::runOnMachineFunction(MachineFunction &MF) {
   return true;
 }
 
-void ForwardWireUsers::buildWireUseMap(MachineFunction &MF) {
+void BuildWireTransitiveUsers::buildWireUseMap(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
 
   for (MachineFunction::iterator BI = MF.begin(), BE = MF.end();BI != BE;++BI) {
@@ -120,7 +120,7 @@ void ForwardWireUsers::buildWireUseMap(MachineFunction &MF) {
   );
 }
 
-void ForwardWireUsers::addUseToMap(unsigned RegNum,
+void BuildWireTransitiveUsers::addUseToMap(unsigned RegNum,
                                    SmallVectorImpl<WireMapIt> &WireDefs,
                                    MachineRegisterInfo &MRI) {
   if (MRI.getRegClass(RegNum) != VTM::WireRegisterClass) {
@@ -149,7 +149,7 @@ void ForwardWireUsers::addUseToMap(unsigned RegNum,
 }
 
 void
-ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
+BuildWireTransitiveUsers::forwardWireUses(MachineFunction &MF) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   RegSet ImpUses, ExpUse;
 
@@ -197,7 +197,7 @@ ForwardWireUsers::forwardWireUses(MachineFunction &MF) {
   DEBUG(MF.dump());
 }
 
-void ForwardWireUsers::addUseToBundle(MachineInstr *Bundle,
+void BuildWireTransitiveUsers::addUseToBundle(MachineInstr *Bundle,
                                       RegSet &ImpUses, RegSet &ExpUse) {
   // Do not add the register to implicit use if it is explicit used.
   set_subtract(ImpUses, ExpUse);
@@ -214,7 +214,7 @@ void ForwardWireUsers::addUseToBundle(MachineInstr *Bundle,
   ExpUse.clear();
 }
 
-void ForwardWireUsers::buildUseMapForDatapath(MachineInstr *Inst,
+void BuildWireTransitiveUsers::buildUseMapForDatapath(MachineInstr *Inst,
                                               MachineRegisterInfo &MRI) {
   SmallVector<WireMapIt, 2> WireDefs;
 
@@ -244,6 +244,6 @@ void ForwardWireUsers::buildUseMapForDatapath(MachineInstr *Inst,
   }
 }
 
-Pass *llvm::createForwardWireUsersPass() {
-  return new ForwardWireUsers();
+Pass *llvm::createBuildWireTransitiveUsersPass() {
+  return new BuildWireTransitiveUsers();
 }

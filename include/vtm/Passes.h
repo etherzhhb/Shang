@@ -45,7 +45,7 @@ Pass *createBitLevelInfoPass();
 Pass *createLogicSynthesisPass();
 Pass *createFixMachineCodePass(bool IsPreOpt);
 Pass *createFixTerminatorsPass();
-Pass *createForwardWireUsersPass();
+Pass *createBuildWireTransitiveUsersPass();
 Pass *createHyperBlockFormationPass();
 Pass *createPrebindUnbalanceMuxPass();
 Pass *createPrebindMuxBasePass();
