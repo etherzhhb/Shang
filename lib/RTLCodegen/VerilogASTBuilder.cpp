@@ -614,7 +614,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
        I != E; ++I) {
     const VFInfo::BRamInfo &Info = I->second;
     unsigned BramNum = Info.PhyRegNum;
-    const Value* Initializer = Info.Initializer;
+    //const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
     unsigned AddrWidth = Log2_32_Ceil(NumElem);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
@@ -1041,6 +1041,10 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     break;
   case VFUs::CalleeFN:
     EnablePort =  lookupSignal(MI->getOperand(0).getReg() + 1);
+    break;
+  case VFUs::BRam:
+    EnablePort =
+      VM->getSymbol(VFUBRAM::getEnableName(MI->getOperand(0).getReg()));
     break;
   default:
     llvm_unreachable("Unexpected FU to disable!");

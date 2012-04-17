@@ -497,8 +497,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     MachineInstr *RepMI = A->getRepresentativeInst();
     if (RepMI) {
       FuncUnitId Id = VInstrInfo::getPreboundFUId(RepMI);
-      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux &&
-          Id.getFUType() != VFUs::BRam) {
+      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
         MachineBasicBlock *MBB = RepMI->getParent();
 
         MachineOperand FU = RepMI->getOperand(0);
@@ -583,7 +582,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
   // The value defined by this instruction.
   DefVector Defs;
-  
+  bool UsedByDisablFU = !FUId.isTrivial() && FUId.getFUType() != VFUs::Mux;
   // Adjust the operand by the timing.
   for (unsigned i = 0 , e = Inst.getNumOperands(); i != e; ++i) {
     MachineOperand &MO = Inst.getOperand(i);
