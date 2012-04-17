@@ -965,8 +965,8 @@ void VRASimple::bindBlockRam() {
 
       // Merge to the representative live interval.
       LiveInterval *RepLI = RepLIs[PhyReg];
-      // FIXME: Disallow overlap.
-      mergeLI(LI, RepLI, true);
+      // FIXME: Check overlap of the results of VOpPipeStage.
+      mergeLI(LI, RepLI);
     }
   }
 }
