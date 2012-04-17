@@ -314,8 +314,8 @@ public:
     ExitMIs.erase(MI);
   }
 
-  void addDummyLatencyEntry(const MachineInstr *MI) {
-    (void) CachedLatencies[MI];
+  void addDummyLatencyEntry(const MachineInstr *MI, float l = 0.0f) {
+    CachedLatencies.insert(std::make_pair(MI, l));
   }
 
   void reset() {

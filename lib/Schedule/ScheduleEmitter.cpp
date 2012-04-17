@@ -497,21 +497,44 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     MachineInstr *RepMI = A->getRepresentativeInst();
     if (RepMI) {
       FuncUnitId Id = VInstrInfo::getPreboundFUId(RepMI);
-      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
-        MachineBasicBlock *MBB = RepMI->getParent();
+      MachineBasicBlock::iterator II = RepMI;
+      ++II;
+      MachineBasicBlock *MBB = RepMI->getParent();
+      DebugLoc dl = RepMI->getDebugLoc();
 
+      // Insert pseudo copy to model write until finish.
+      // FIXME: Insert for others MI rather than Representative MI?
+      if (A->getLatency() && VInstrInfo::isWriteUntilFinish(A->getOpcode())) {
+        ucOperand &MO = cast<ucOperand>(RepMI->getOperand(0));
+        unsigned OldR = MO.getReg();
+        const TargetRegisterClass *RC =
+          VRegisterInfo::getRepRegisterClass(A->getOpcode());
+        unsigned R = MRI.createVirtualRegister(RC);
+        // Change to the newly allocated register, and kill the new register
+        // with VOpPipelineStage.
+        MO.ChangeToRegister(R, true);
+        MachineInstr *PipeStage =
+          BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
+            .addOperand(ucOperand::CreateReg(OldR, MO.getBitWidth(), true))
+            .addOperand(ucOperand::CreateReg(R, MO.getBitWidth()))
+            .addOperand(*VInstrInfo::getPredOperand(RepMI))
+            .addOperand(ucOperand::CreateTrace(MBB));
+        // Copy the result to register 1 stage later.
+        Insts.push_back(std::make_pair(PipeStage, A->getLatency()));
+        // Copy the result 1 cycle later. FIXME: Set the right latency.
+        State.addDummyLatencyEntry(PipeStage, 1.0f);
+      }
+
+      if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {
         MachineOperand FU = RepMI->getOperand(0);
         FU.clearParent();
         FU.setIsDef(false);
-        DebugLoc dl = RepMI->getDebugLoc();
-        MachineBasicBlock::iterator II = RepMI;
-        ++II;
         MachineInstr *DisableMI =
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
             .addOperand(FU).addImm(Id.getData())
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
             .addOperand(ucOperand::CreateTrace(MBB));
-        // Add the instruction into the emit list.
+        // Add the instruction into the emit list, disable the FU 1 clock later.
         Insts.push_back(std::make_pair(DisableMI, 1));
         State.addDummyLatencyEntry(DisableMI);
       }
@@ -552,10 +575,12 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   bool IsCtrlSlot = SchedSlot.isControl();
   assert(IsCtrlSlot == IsCtrl && "Wrong slot type.");
   bool isCopyLike = VInstrInfo::isCopyLike(Inst.getOpcode());
+  bool isWriteUntilFinish = VInstrInfo::isWriteUntilFinish(Inst.getOpcode());
   // Compute the slots.
   OpSlot ReadSlot = SchedSlot;
 
-  unsigned FinSlot = SchedSlot.getSlot() + State.getStepsToFinish(&Inst);
+  unsigned StepDelay = State.getStepsToFinish(&Inst);
+  unsigned FinSlot = SchedSlot.getSlot() + StepDelay;
   OpSlot CopySlot(FinSlot, true);
   // We can not write the value to a register at the same moment we emit it.
   // Unless we read at emit.
@@ -563,13 +588,16 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   if (CopySlot < SchedSlot) ++CopySlot;
   // Write to register operation need to wait one more slot if the result is
   // written at the moment (clock event) that the atom finish.
-  if (VInstrInfo::isWriteUntilFinish(Inst.getOpcode())) ++CopySlot;
+  //if (VInstrInfo::isWriteUntilFinish(Inst.getOpcode())) ++CopySlot;
 
   unsigned Opc = Inst.getOpcode();
   // SchedSlot is supposed to strictly smaller than CopySlot, if this not hold
   // then slots is wrapped.
-  bool WrappedAround = ((getModuloSlot(SchedSlot) >= getModuloSlot(CopySlot))
-                       && Opc != VTM::VOpMvPhi && Opc != VTM::VOpDisableFU);
+  int WrappedDistance = getModuloSlot(CopySlot) - getModuloSlot(SchedSlot);
+  int Distance = CopySlot.getSlot() - SchedSlot.getSlot();
+  bool WrappedAround = (WrappedDistance != Distance);
+  assert((!WrappedAround || State.isPipelined())
+         && "Live intervals are only wrapped in pipelined block d!");
   // FIX the opcode of terminators.
   if (Inst.isTerminator()) {
     if (VInstrInfo::isBrCndLike(Opc)) Inst.setDesc(TII.get(VTM::VOpToState_nt));
@@ -579,10 +607,13 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Handle the predicate operand.
   ucOperand Pred = *VInstrInfo::getPredOperand(&Inst);
   assert(Pred.isReg() && "Cannot handle predicate operand!");
+  
+  // Do not copy instruction that is write until finish, which is already taken
+  // care by VOpPipelineStage.
+  bool NeedCopy = !isWriteUntilFinish;
 
   // The value defined by this instruction.
   DefVector Defs;
-  bool UsedByDisablFU = !FUId.isTrivial() && FUId.getFUType() != VFUs::Mux;
   // Adjust the operand by the timing.
   for (unsigned i = 0 , e = Inst.getNumOperands(); i != e; ++i) {
     MachineOperand &MO = Inst.getOperand(i);
@@ -591,13 +622,14 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     if (!MO.isReg() || !MO.getReg())
       continue;
 
-    unsigned RegNo = MO.getReg();
+    const unsigned RegNo = MO.getReg();
 
     // Remember the defines.
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
 
-    if (MO.isDef() && SchedSlot != CopySlot && (!isCopyLike || WrappedAround)) {
+    if (MO.isDef() && (NeedCopy || WrappedAround)) {
+      assert((SchedSlot != CopySlot || WrappedAround) && "No need to copy!");
       if (MRI.use_empty(RegNo)) {
         // Need to fix the register class even the register define is dead.
         MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opc));
@@ -614,7 +646,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
       // Define wire for trivial operation, otherwise, the result of function
       // unit should be wire, and there must be a copy follow up.
-      if (!VRegisterInfo::IsWire(RegNo, &MRI)) {
+      if (!VRegisterInfo::IsWire(RegNo, &MRI)  && CopySlot != SchedSlot) {
         WireNum =
           MRI.createVirtualRegister(VRegisterInfo::getRepRegisterClass(Opc));
         NewOp = ucOperand::CreateReg(WireNum, BitWidth, true);
@@ -660,8 +692,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   Inst.removeFromParent();
   MBB.insert((MachineBasicBlock::iterator)IP, &Inst);
 
-  if ((isCopyLike && !WrappedAround) || Defs.empty()) {
-    assert(Defs.empty() && "CopyLike instructions do not have extra defs!");
+  if (!NeedCopy || Defs.empty()) {
     return;
   }
 
