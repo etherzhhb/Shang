@@ -126,7 +126,6 @@ struct VRASimple : public MachineFunctionPass {
     return false;
   }
 
-  void joinPHINodeIntervals();
   void mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
                bool AllowOverlap = false);
 
@@ -693,8 +692,6 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   init(getAnalysis<VirtRegMap>(), getAnalysis<LiveIntervals>());
 
   DEBUG(dbgs() << "Before simple register allocation:\n";F.dump());
-  
-  joinPHINodeIntervals();
 
   // Bind the pre-bind function units.
   bindMemoryBus();
@@ -815,23 +812,6 @@ void VRASimple::addMBBLiveIns(MachineFunction *MF) {
         if (MBB->isLiveIn(PhysReg)) continue;
         MBB->addLiveIn(PhysReg);
       }
-    }
-  }
-}
-
-void VRASimple::joinPHINodeIntervals() {
-  typedef MachineFunction::iterator bb_it;
-  typedef MachineBasicBlock::instr_iterator instr_it;
-
-  for (bb_it BI = MF->begin(), BE = MF->end(); BI != BE; ++BI) {
-    for (instr_it II = BI->instr_begin(),IE = BI->instr_end();II != IE;/*++II*/){
-      MachineInstr *PHIDef = II++;
-
-      if (PHIDef->getOpcode() != VTM::VOpDefPhi) continue;
- 
-      mergeLI(&LIS->getInterval(PHIDef->getOperand(1).getReg()),
-              &LIS->getInterval(PHIDef->getOperand(0).getReg()), true);
-      BI->erase_instr(PHIDef);
     }
   }
 }
