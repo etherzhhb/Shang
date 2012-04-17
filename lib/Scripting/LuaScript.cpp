@@ -171,7 +171,7 @@ void LuaScript::updateFUs() {
   luabind::object FUs = luabind::globals(State)["FUs"];
   FUSet[VFUs::MemoryBus]
     = new VFUMemBus(FUs[VFUDesc::getTypeName(VFUs::MemoryBus)]);
-  FUSet[VFUs::BRam] = new VFUBRam(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
+  FUSet[VFUs::BRam] = new VFUBRAM(FUs[VFUDesc::getTypeName(VFUs::BRam)]);
 
   initSimpleFU(VFUs::AddSub, FUs, VFUs::AddCost, VFUs::AdderLatencies);
 

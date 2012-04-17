@@ -965,11 +965,7 @@ void VRASimple::bindBlockRam() {
 
       // Merge to the representative live interval.
       LiveInterval *RepLI = RepLIs[PhyReg];
-      // DirtyHack: Now bram is write until finish, it is ok to overlap the
-      // live interval of bram for 1 control step(2 indexes in SlotIndex).
-      SlotIndex NextStart = LI->beginIndex().getNextIndex().getNextIndex();
-      assert(!RepLI->overlaps(NextStart, LI->endIndex())
-             && "Unexpected bram overlap!");
+      // FIXME: Disallow overlap.
       mergeLI(LI, RepLI, true);
     }
   }

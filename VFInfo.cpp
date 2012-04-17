@@ -58,15 +58,12 @@ void VFInfo::rememberTotalSlot(const MachineBasicBlock* MBB, unsigned startSlot,
   StateSlotMap.insert(std::make_pair(MBB, SS));
 }
 
-void VFInfo::allocateBRam(uint16_t ID, unsigned NumElem,
+void VFInfo::allocateBRAM(uint16_t ID, unsigned NumElem,
                           unsigned ElemSizeInBytes, const Value* Initializer) {
-  bool Inserted;
-  BRamMapTy::iterator at;
-
-  tie(at, Inserted)
-    = BRams.insert(std::make_pair(ID, BRamInfo(Initializer, NumElem, ElemSizeInBytes)));
-
-  assert(Inserted && "BRam already existed!");
+  bool Inserted = BRams.insert(std::make_pair(ID, BRamInfo(NumElem,
+                                                           ElemSizeInBytes,
+                                                           Initializer))).second;
+  assert(Inserted && "BRAM already existed!");
 }
 
 VFInfo::VFInfo(MachineFunction &MF)

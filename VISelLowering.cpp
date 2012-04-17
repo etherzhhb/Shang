@@ -596,8 +596,16 @@ SDValue VTargetLowering::LowerTruncate(SDValue Op, SelectionDAG &DAG) const {
 SDValue VTargetLowering::LowerFrameIndex(SDValue Op, SelectionDAG &DAG) const {
   VFInfo *Info =DAG.getMachineFunction().getInfo<VFInfo>();
   int FI = cast<FrameIndexSDNode>(Op)->getIndex();
-  const GlobalValue *GV = Info->getGlobalAliasOfFrameIdx(FI);
-  return DAG.getGlobalAddress(GV, Op->getDebugLoc(), Op.getValueType());
+
+  // Alias with a global variable?
+  if (const GlobalValue *GV = Info->getGlobalAliasOfFrameIdx(FI))
+    return DAG.getGlobalAddress(GV, Op->getDebugLoc(), Op.getValueType());
+
+  // Otherwise, it is the offset of the block RAM.
+  // FIXME: There is non-zero offset if we merge the BRAMs, insert a symbol
+  // instead of constant zero, or lower the frame index to target frame
+  // index at last.
+  return DAG.getConstant(0, Op.getValueType());
 }
 
 SDValue VTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
@@ -632,6 +640,20 @@ VTargetLowering::LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const {
     VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
     VFI->rememberFrameIdxAlias(FI->getIndex(), GSD->getGlobal());
     // The node is not need now.
+    return Chain;
+  }
+  case vtmIntrinsic::vtm_annotated_bram_info: {
+    VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
+    unsigned BRamNum = Op->getConstantOperandVal(2),
+             NumElem = Op->getConstantOperandVal(3),
+             ElemSize = Op->getConstantOperandVal(4);
+
+    const Value *Initializer = 0;
+    if (GlobalAddressSDNode *GSD =
+        dyn_cast<GlobalAddressSDNode>(Op->getOperand(5)))
+      Initializer = GSD->getGlobal();
+
+    VFI->allocateBRAM(BRamNum, NumElem, ElemSize, Initializer);
     return Chain;
   }
   }

@@ -59,12 +59,14 @@ class VFInfo : public MachineFunctionInfo {
 public:
   // The data structure to describe the block ram.
   struct BRamInfo {
-    const Value* Initializer;
     unsigned NumElem, ElemSizeInBytes;
     unsigned PhyRegNum;
+    const Value* Initializer;
 
-    BRamInfo(const Value* Initializer, unsigned numElem, unsigned elemSizeInBytes)
-      : Initializer(Initializer), NumElem(numElem), ElemSizeInBytes(elemSizeInBytes), PhyRegNum(0) {}
+    BRamInfo(unsigned numElem, unsigned elemSizeInBytes,
+             const Value* Initializer = 0)
+      : NumElem(numElem), ElemSizeInBytes(elemSizeInBytes),
+        PhyRegNum(0), Initializer(Initializer) {}
   };
 
   typedef std::map<uint16_t, BRamInfo> BRamMapTy;
@@ -95,8 +97,7 @@ public:
 
   const GlobalValue *getGlobalAliasOfFrameIdx(int Idx) const {
     Idx2GVMapTy::const_iterator at = FrameIdx2GV.find(Idx);
-    assert(at != FrameIdx2GV.end() && "Frame index not exist!");
-    return at->second;
+    return at != FrameIdx2GV.end() ? at->second : 0;
   }
 
   bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
@@ -159,7 +160,7 @@ public:
   }
 
   // Block Ram management.
-  void allocateBRam(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes, 
+  void allocateBRAM(uint16_t ID, unsigned NumElem, unsigned ElemSizeInBytes,
                     const Value* Initializer = 0);
 
   const BRamInfo &getBRamInfo(uint16_t ID) const {

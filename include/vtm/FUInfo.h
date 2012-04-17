@@ -292,21 +292,19 @@ typedef VSimpleFUDesc<VFUs::Shift>   VFUShift;
 typedef VSimpleFUDesc<VFUs::Mult>    VFUMult;
 typedef VSimpleFUDesc<VFUs::ICmp>    VFUICmp;
 
-class VFUBRam : public  VFUDesc {
+class VFUBRAM : public  VFUDesc {
   unsigned DataWidth;
   std::string Template; // Template for inferring block ram.
   std::string InitFileDir; // Template for readmemh dir.
   std::set<GlobalVariable*> GVSet;
 public:
-  VFUBRam(luabind::object FUTable);
+  VFUBRAM(luabind::object FUTable);
 
   std::string generateCode(const std::string &Clk, unsigned Num,
-                           unsigned DataWidth, unsigned AddrWidth, std::string Filename) const;
+                           unsigned DataWidth, unsigned AddrWidth,
+                           std::string Filename) const;
 
-  std::string generateInitFile(unsigned DataWidth, const Value* Initializer,
-                           unsigned NumElem);
-
-  static inline bool classof(const VFUBRam *A) {
+  static inline bool classof(const VFUBRAM *A) {
     return true;
   }
 

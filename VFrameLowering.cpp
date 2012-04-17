@@ -96,23 +96,31 @@ namespace {
 struct BlockRAMFormation : public ModulePass {
   static char ID;
   const TargetIntrinsicInfo &IntrInfo;
+  TargetData *TD;
   unsigned CurAddrSpace, AllocaAliasCnt;
   enum { FirstBlockRAMAddressSpace = 1 };
   BlockRAMFormation(const TargetIntrinsicInfo &I)
-    : ModulePass(ID), IntrInfo(I), CurAddrSpace(FirstBlockRAMAddressSpace),
+    : ModulePass(ID), IntrInfo(I),TD(0),CurAddrSpace(FirstBlockRAMAddressSpace),
       AllocaAliasCnt(0) {}
 
   BlockRAMFormation()
-    : ModulePass(ID), IntrInfo(*new VIntrinsicInfo()), CurAddrSpace(0),
+    : ModulePass(ID), IntrInfo(*new VIntrinsicInfo()), TD(0), CurAddrSpace(0),
       AllocaAliasCnt(0) {
     llvm_unreachable("Cannot construct BlockRAMFormation like this!");
   }
 
   const char *getPassName() const { return "Block RAM Formation Pass"; }
+
+  void getAnalysisUsage(AnalysisUsage &U) const {
+    U.addRequired<TargetData>();
+  }
+
   bool runOnModule(Module &M);
   bool runOnFunction(Function &F);
 
-  void allocateGlobalAlias(AllocaInst *AI, Function *F);
+  void allocateGlobalAlias(AllocaInst *AI, Module &M);
+  void annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType, Constant *InitGV,
+                        Instruction *InsertPos, Module &M);
 };
 
 struct PtrUseCollector {
@@ -142,8 +150,7 @@ struct PtrUseCollector {
 
 char BlockRAMFormation::ID = 0;
 
-void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Function *F) {
-  Module &M = *F->getParent();
+void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M) {
   PointerType *Ty = AI->getType();
   Type *AllocatedType = AI->getAllocatedType();
   // Create the global alias.
@@ -168,7 +175,7 @@ void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Function *F) {
   Type *ArgTypes[] = { Args[0]->getType(), Args[1]->getType() };
   Function *AllocaAliasGlobal =
     IntrInfo.getDeclaration(&M, vtmIntrinsic::vtm_alloca_alias_global,
-                            ArgTypes, 2);
+                            ArgTypes, array_lengthof(ArgTypes));
   CallInst::Create(AllocaAliasGlobal, Args, "", IP);
   ++NumGlobalAlias;
   ++AllocaAliasCnt;
@@ -181,6 +188,36 @@ static void mutateAddressSpace(Value *V, unsigned AS) {
   V->mutateType(Ty);
 }
 
+void BlockRAMFormation::annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType,
+                                         Constant *InitGV, Instruction *InsertPos,
+                                         Module &M) {
+  // The element type of a scalar is the type of the scalar.
+  Type *ElemTy = AllocatedType;
+  unsigned NumElem = 1;
+  // Try to expand multi-dimension array to single dimension array.
+  while (const ArrayType *AT = dyn_cast<ArrayType>(ElemTy)) {
+    ElemTy = AT->getElementType();
+    NumElem *= AT->getNumElements();
+  }
+
+  if (!cast<PointerType>(InitGV->getType())->getElementType()->isPrimitiveType()) {
+    Type *PtrType = PointerType::getIntNPtrTy(M.getContext(), 8, 0);
+    InitGV = ConstantExpr::getBitCast(InitGV, PtrType);
+  }
+
+  Type *Int32Ty = IntegerType::get(M.getContext(), 32);
+  Value *Args[] = { ConstantInt::get(Int32Ty, BRAMNum),
+                    ConstantInt::get(Int32Ty, NumElem),
+                    ConstantInt::get(Int32Ty, TD->getTypeStoreSize(ElemTy)),
+                    InitGV };
+
+  Type *ArgTypes[] = { Args[3]->getType() };
+  Function *Annotate =
+    IntrInfo.getDeclaration(&M, vtmIntrinsic::vtm_annotated_bram_info,
+                            ArgTypes, array_lengthof(ArgTypes));
+  CallInst::Create(Annotate, Args, "", InsertPos);
+}
+
 bool BlockRAMFormation::runOnFunction(Function &F) {
   bool changed = false;
   PtrUseCollector Collector;
@@ -191,11 +228,16 @@ bool BlockRAMFormation::runOnFunction(Function &F) {
     changed |= true;
     // Can us handle the use tree of the allocated pointer?
     if (!EnableBRAM || !visitPtrUseTree(AI, Collector)) {
+      Collector.Uses.clear();
       // Otherwise, we need to allocate the object in global memory.
-      allocateGlobalAlias(AI, &F);
+      allocateGlobalAlias(AI, *F.getParent());
       continue;
     }
 
+    Constant *NullInitilizer =
+      Constant::getNullValue(PointerType::getIntNPtrTy(F.getContext(), 8, 0));
+    annotateBRAMInfo(CurAddrSpace, AI->getAllocatedType(),
+                     NullInitilizer, AI, *F.getParent());
     // Change the address space of the alloca, so the backend know the
     // load/store accessing this alloca are accessing block ram.
     mutateAddressSpace(AI, CurAddrSpace);
@@ -211,6 +253,7 @@ bool BlockRAMFormation::runOnFunction(Function &F) {
 
 bool BlockRAMFormation::runOnModule(Module &M) {
   bool changed = false;
+  TD = &getAnalysis<TargetData>();
 
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I)
     changed |= runOnFunction(*I);

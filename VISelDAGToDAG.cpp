@@ -352,14 +352,25 @@ SDNode *VDAGToDAGISel::SelectMemAccess(SDNode *N) {
   MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
   MemOp[0] = cast<MemSDNode>(N)->getMemOperand();
 
-  SDValue Ops[] = { N->getOperand(1), N->getOperand(2), N->getOperand(3),
-                    N->getOperand(4), SDValue()/*The dummy bit width operand*/,
-                    CurDAG->getTargetConstant(0, MVT::i64) /*and trace number*/,
-                    N->getOperand(0) };
+  unsigned Opcode = VTM::VOpMemTrans;
+  SmallVector<SDValue, 8> Ops;
+  Ops.push_back(N->getOperand(1)); // Address
+  Ops.push_back(N->getOperand(2)); // Data to store
+  Ops.push_back(N->getOperand(3)); // write enable
+  Ops.push_back(N->getOperand(4)); // byte enable
+  if (unsigned AS = MemOp[0]->getPointerInfo().getAddrSpace()) {
+    // Block RAM number.
+    Ops.push_back(CurDAG->getTargetConstant(AS, MVT::i32));
+    Opcode = VTM::VOpBRAMTrans;
+  }
+  Ops.push_back(SDValue()); //The dummy bit width operand
+  Ops.push_back(CurDAG->getTargetConstant(0, MVT::i64)); //and trace number*
+  Ops.push_back(N->getOperand(0));
 
-  computeOperandsBitWidth(N, Ops, array_lengthof(Ops) -1 /*Skip the chain*/);
-  SDNode *Ret = CurDAG->SelectNodeTo(N, VTM::VOpMemTrans, N->getVTList(),
-                                     Ops, array_lengthof(Ops));
+
+  computeOperandsBitWidth(N, Ops.data(), Ops.size() -1 /*Skip the chain*/);
+  SDNode *Ret = CurDAG->SelectNodeTo(N, Opcode, N->getVTList(),
+                                     Ops.data(), Ops.size());
 
   cast<MachineSDNode>(Ret)->setMemRefs(MemOp, MemOp + 1);
   return Ret;

@@ -33,6 +33,7 @@
 #include "llvm/Target/Mangler.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetData.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
@@ -352,7 +353,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   void emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
-  void emitOpBRam(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
+  void emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
 
   std::string getSubModulePortName(unsigned FNNum,
                                    const std::string PortName) const {
@@ -608,21 +609,26 @@ void VerilogASTBuilder::emitAllocatedFUs() {
   raw_ostream &S = VM->getDataPathBuffer();
 
   // Generate code for allocated bram.
-  VFUBRam *BlockRam = getFUDesc<VFUBRam>();
+  VFUBRAM *BlockRam = getFUDesc<VFUBRAM>();
   for (VFInfo::const_bram_iterator I = FInfo->bram_begin(), E = FInfo->bram_end();
        I != E; ++I) {
     const VFInfo::BRamInfo &Info = I->second;
     unsigned BramNum = Info.PhyRegNum;
     const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
+    unsigned AddrWidth = Log2_32_Ceil(NumElem);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
-    std::string Filename;
+    assert(Info.Initializer == 0 && "Cannot initialize block RAM yet!");
     // Create the enable signal for bram.
-    VM->addRegister(VFUBRam::getEnableName(BramNum), 1);
-    //Print the Constant into a .txt file as the initializer to bram
-    Filename = BlockRam->generateInitFile(DataWidth, Initializer, NumElem);
+    VM->addRegister(VFUBRAM::getEnableName(BramNum), 1);
+    VM->addRegister(VFUBRAM::getWriteEnableName(BramNum), 1);
+    VM->addRegister(VFUBRAM::getInDataBusName(BramNum), DataWidth);
+    VM->addRegister(VFUBRAM::getAddrBusName(BramNum), AddrWidth);
+    indexVASTValue(BramNum,
+                   VM->addWire(VFUBRAM::getOutDataBusName(BramNum), DataWidth));
+    // FIXME: Get the file name from the initializer name.
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
-                                DataWidth, Log2_32_Ceil(NumElem), Filename)
+                                DataWidth, AddrWidth, "")
       << '\n';
   }
 
@@ -788,12 +794,6 @@ void VerilogASTBuilder::emitAllSignals() {
       indexVASTValue(RegNum, V);
       break;
     }
-    case VTM::RBRMRegClassID: {
-      VASTValue *V = VM->getOrCreateSymbol(VFUBRam::getInDataBusName(RegNum),
-                                           Info.getBitWidth(), false);
-      indexVASTValue(RegNum, V);
-      break;
-    }
     case VTM::RINFRegClassID: {
       // FIXME: Do not use such magic number!
       // The offset of data input port is 3
@@ -801,6 +801,7 @@ void VerilogASTBuilder::emitAllSignals() {
       indexVASTValue(RegNum, VM->getPort(DataInIdx));
       break;
     }
+    case VTM::RBRMRegClassID:
     case VTM::RCFNRegClassID:
       /*Nothing to do, it is allocated by emitAllocatedFUs*/
       break;
@@ -877,7 +878,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpRetVal:        emitOpRetVal(MI, CurSlot, Cnds);          break;
     case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);             break;
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);        break;
-    case VTM::VOpBRAMTrans:     emitOpBRam(MI, CurSlot, Cnds);            break;
+    case VTM::VOpBRAMTrans:     emitOpBRamTrans(MI, CurSlot, Cnds);       break;
     case VTM::VOpToState_nt: emitBr(MI, CurSlot, Cnds, CurBB, Pipelined); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);      break;
     case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;
@@ -1194,43 +1195,39 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
-void VerilogASTBuilder::emitOpBRam(MachineInstr *MI, VASTSlot *Slot,
-                                   VASTValueVecTy &Cnds) {
+void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
+                                         VASTValueVecTy &Cnds) {
   unsigned FUNum = MI->getOperand(0).getReg();
+  unsigned BRamID = MI->getOperand(5).getImm();
+  unsigned SizeInBytes = FInfo->getBRamInfo(BRamID).ElemSizeInBytes;
+  unsigned Alignment = Log2_32_Ceil(SizeInBytes);
 
-  // Emit the control logic.
-  vlang_raw_ostream &OS = VM->getControlBlockBuffer();
-  std::string PredStr;
-  raw_string_ostream PredSS(PredStr);
-  VASTRegister::printCondition(PredSS, Slot, Cnds);
-  PredSS.flush();
-
-  OS.if_begin(PredStr);
-  // Emit Address.
-  OS << VFUBRam::getAddrBusName(FUNum) << " <= (";
-  printOperand(MI->getOperand(1), OS);
-  unsigned SizeInBits = FInfo->getBRamInfo(FUNum).ElemSizeInBytes;
-  OS << " >> " << Log2_32_Ceil(SizeInBits) << ");\n";
+  std::string RegName = VFUBRAM::getAddrBusName(FUNum);
+  VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
+  VASTValue *Addr = getAsOperand(MI->getOperand(1));
+  Addr = VM->getOrCreateBitSlice(Addr, Addr->getBitWidth(), Alignment);
+  VM->addAssignment(R, Addr, Slot, Cnds);
   // Assign store data.
-  OS << VFUBRam::getOutDataBusName(FUNum) << " <= ";
-  printOperand(MI->getOperand(2), OS);
-  OS << ";\n";
+  RegName = VFUBRAM::getInDataBusName(FUNum);
+  R = VM->getSymbol<VASTRegister>(RegName);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
   // And write enable.
-  OS << VFUBRam::getWriteEnableName(FUNum) << " <= ";
-  printOperand(MI->getOperand(3), OS);
-  OS << ";\n";
-  OS.exit_block();
+  RegName = VFUBRAM::getWriteEnableName(FUNum);
+  R = VM->getSymbol<VASTRegister>(RegName);
+  VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds);
   // The byte enable.
-  // OS << VFUMemBus::getByteEnableName(FUNum) << " <= ";
-  // OpBRam.getOperand(4).print(OS);
-  // OS << ";\n";
+  //RegName = VFUBRAM::getByteEnableName(FUNum) + "_r";
+  //R = VM->getSymbol<VASTRegister>(RegName);
+  //VM->addAssignment(R, getAsOperand(MI->getOperand(4)), Slot, Cnds);
 
   // Remember we enabled the memory bus at this slot.
-  std::string EnableName = VFUBRam::getEnableName(FUNum);
+  std::string EnableName = VFUBRAM::getEnableName(FUNum);
   VASTValue *MemEn = VM->getSymbol(EnableName);
 
   VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
+
+  // Remember the output register of block ram is defined at next slot.
 }
 
 template<typename FnTy>
