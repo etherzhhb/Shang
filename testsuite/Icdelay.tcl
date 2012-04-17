@@ -10,7 +10,7 @@ foreach_in_collection path [get_timing_paths -setup  -npath 8 -detail path_only]
     foreach_in_collection pt [ get_path_info $path -arrival_points ] {
       set total     [get_point_info $pt -total]
       set incr      [get_point_info $pt -incr]
-
+      set type      [get_point_info $pt -type]
 			if { $type == "ic" } {
 				set icdelay [expr $icdelay + $incr]
 			}
