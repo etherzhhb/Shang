@@ -135,13 +135,17 @@ namespace {
       assert(SrcMO.isKill() && "Expect source register be killed by copy!");
       LiveInterval *SrcLI = &LIS->getInterval(SrcMO.getReg()),
                    *DstLI = &LIS->getInterval(MI->getOperand(0).getReg());
-      // We need to swap the SrcLI and DstLI if DstLI contains PHIDef/PHIKill.
-      if (Swap) std::swap(SrcLI, DstLI);
+      // No need to coalesce the idnetical copies.
+      if (SrcLI != DstLI) {
+        // We need to swap the SrcLI and DstLI if DstLI contains PHIDef/PHIKill.
+        if (Swap) std::swap(SrcLI, DstLI);
 
-      // Extend SrcLI by adding all live range of DstLI.
-      extendLI(*DstLI, *SrcLI, DefSlot);
-      // Replace DstLI by SrcLI.
-      MRI->replaceRegWith(DstLI->reg, SrcLI->reg);
+        // Extend SrcLI by adding all live range of DstLI.
+        extendLI(*DstLI, *SrcLI, DefSlot);
+        // Replace DstLI by SrcLI.
+        MRI->replaceRegWith(DstLI->reg, SrcLI->reg);
+      }
+
       LIS->RemoveMachineInstrFromMaps(MI);
       MI->eraseFromParent();
     }
