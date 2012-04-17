@@ -103,6 +103,7 @@ struct VRASimple : public MachineFunctionPass {
 
   unsigned getBitWidthOf(unsigned RegNum) {
     unsigned BitWidth = 0;
+    assert(!MRI->reg_empty(RegNum) && "Register not is defined!");
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
          I != MachineRegisterInfo::def_end(); ++I) {
       ucOperand &DefOp = cast<ucOperand>(I.getOperand());
@@ -634,6 +635,7 @@ FunctionPass *llvm::createSimpleRegisterAllocator() {
 char VRASimple::ID = 0;
 
 VRASimple::VRASimple() : MachineFunctionPass(ID) {
+  initializeAdjustLIForBundlesPass(*PassRegistry::getPassRegistry());
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
   initializeCalculateSpillWeightsPass(*PassRegistry::getPassRegistry());
@@ -649,6 +651,8 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<AliasAnalysis>();
   AU.addPreserved<AliasAnalysis>();
   AU.addRequired<LiveIntervals>();
+  AU.addRequiredID(AdjustLIForBundlesID);
+  AU.addPreservedID(AdjustLIForBundlesID);
   AU.addPreserved<SlotIndexes>();
   AU.addRequired<CalculateSpillWeights>();
   AU.addRequired<LiveStacks>();

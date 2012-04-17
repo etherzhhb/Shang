@@ -27,6 +27,8 @@ class PassRegistry;
 class TargetIntrinsicInfo;
 class VTargetMachine;
 
+extern char &AdjustLIForBundlesID;
+
 FunctionPass *createVISelDag(VTargetMachine &TM);
 
 // Always inline function.
@@ -75,6 +77,7 @@ Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
 
 //
+void initializeAdjustLIForBundlesPass(PassRegistry &Registry);
 void initializePrebindMuxBasePass(PassRegistry &Registry);
 void initializePrebindUnbalanceMuxPass(PassRegistry &Registry);
 void initializeBitLevelInfoPass(PassRegistry &Registry);

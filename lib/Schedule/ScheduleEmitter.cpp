@@ -476,18 +476,6 @@ struct MicroStateBuilder {
 
     return CurSlot;
   }
-
-  void buildBundles() {
-    typedef MachineBasicBlock::instr_iterator it;
-    for (it I = MBB.instr_begin(), E = MBB.instr_end(); I != E; ++I) {
-      MachineInstr *MI = I;
-      if (MI->isPHI() || MI->isImplicitDef() ||
-          MI->getOpcode() == VTM::CtrlStart || MI->getOpcode() == VTM::Datapath)
-        continue;
-
-      MI->setIsInsideBundle();
-    }    
-  }
 };
 }
 
@@ -797,8 +785,6 @@ void VSchedGraph::emitSchedule() {
   // Build last state.
   assert(!StateBuilder.emitQueueEmpty() && "Expect atoms for last state!");
   StateBuilder.advanceToSlot(CurSlot, CurSlot + 1);
-  // Remove all unused instructions.
-  StateBuilder.buildBundles();
   // Build the dummy terminator.
   BuildMI(MBB, DebugLoc(), MF->getTarget().getInstrInfo()->get(VTM::EndState))
     .addImm(0).addImm(0);

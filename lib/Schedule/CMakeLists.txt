@@ -13,7 +13,7 @@ add_llvm_library(VTMSchedule
   MicroState.cpp
   VSUnit.cpp
   UnbalanceMuxPrebind.cpp
-  BuildWireTransitiveUsers.cpp
+  AdjustLIForBundles.cpp
   PrebindMuxBase.cpp
   ScheduleEmitter.cpp
   RecurrenceFinder.cpp
