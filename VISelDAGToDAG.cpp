@@ -17,6 +17,7 @@
 
 #include "VTargetMachine.h"
 
+#include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
 #include "vtm/FUInfo.h"
 #include "vtm/Utilities.h"
@@ -571,7 +572,6 @@ void VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
 
   SDValue StoreVal = isStore ? cast<StoreSDNode>(LSNode)->getValue()
                              : DAG.getUNDEF(VT);
-  MachineMemOperand *MemOp = StripPtrCasts(LSNode->getMemOperand(), DAG);
 
   LLVMContext *Cntx = DAG.getContext();
   EVT CmdVT = EVT::getIntegerVT(*Cntx, VFUMemBus::CMDWidth);
@@ -587,6 +587,12 @@ void VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
                     };
 
   unsigned DataBusWidth = getFUDesc<VFUMemBus>()->getDataWidth();
+  MachineMemOperand *MemOp = StripPtrCasts(LSNode->getMemOperand(), DAG);
+  if (unsigned AS = MemOp->getPointerInfo().getAddrSpace()) {
+    VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
+    DataBusWidth = VFI->getBRamInfo(AS).ElemSizeInBytes * 8;
+  }
+
   assert(DataBusWidth >= VTSize && "Unexpected large data!");
 
   MVT DataBusVT =

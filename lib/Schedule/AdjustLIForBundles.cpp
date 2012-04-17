@@ -249,7 +249,6 @@ inst_it AdjustLIForBundles::handleDataPathBundle(inst_it I) {
 RegSet *
 AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
                                                  WireDepMapTy &WireDeps){
-  bool DefVisited = false;
   unsigned DefRegNo = 0;
   RegSet *UsedByWire= 0;
   SlotIndex DefSlot = LIS->getInstructionIndex(Inst).getRegSlot();

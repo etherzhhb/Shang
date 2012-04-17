@@ -40,7 +40,7 @@
 using namespace llvm;
 static cl::opt<bool> EnableBRAM("vtm-enable-bram",
                                 cl::desc("Enable block RAM in design"),
-                                cl::init(false));
+                                cl::init(true));
 
 STATISTIC(NumGlobalAlias, "Number of global alias created for allocas");
 STATISTIC(NumBlockRAMs, "Number of block RAM created");
