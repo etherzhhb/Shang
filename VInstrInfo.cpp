@@ -1107,6 +1107,19 @@ static void accumulateDatapathLatency(DepLatInfoTy &CurLatInfo,
   }
 }
 
+static bool NeedExtraStepToLatchResult(const MachineInstr *MI,
+                                       const MachineRegisterInfo &MRI,
+                                       float Latency) {
+  if (MI->getNumOperands() == 0) return false;
+
+  const MachineOperand &MO = MI->getOperand(0);
+  if (!MO.isReg() || !MO.isDef()) return false;
+
+  assert(MO.getReg() && "Broken instruction defining register 0!");
+  return Latency != 0.0f && VInstrInfo::isWriteUntilFinish(MI->getOpcode())
+         && !MRI.use_empty(MO.getReg());
+}
+
 template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,// Not needed
@@ -1119,7 +1132,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   if (SrcLatInfo == 0) return false;
 
   float SrcMSBLatency = getCachedLatencyResult(SrcMI);
-  if (!IsCtrlDep) {
+  if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, MRI, SrcMSBLatency)) {
     SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
     if (OperandWidth) {
       unsigned SrcSize = cast<ucOperand>(SrcMI->getOperand(0)).getBitWidth();
