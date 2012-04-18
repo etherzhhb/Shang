@@ -53,10 +53,6 @@ struct RTLCodegenPreapare : public MachineFunctionPass {
           unsigned Reg = MI->getOperand(0).getReg();
           MRI.replaceRegWith(Reg, 0);
           MI->eraseFromParent();
-        } else if (MI->getOpcode() == VTM::VOpPipelineStage) {
-          MRI.replaceRegWith(MI->getOperand(0).getReg(),
-                             MI->getOperand(1).getReg());
-          I->erase_instr(MI);
         }
       }
 

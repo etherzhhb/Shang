@@ -168,7 +168,6 @@ const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned OpCode){
     // allocate unsigned comparison fu by default.
   case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
   case VTM::VOpDstMux:      return VTM::RMUXRegisterClass;
-  case VTM::VOpPipelineStage: return VTM::RPIPERegisterClass;
   }
 
   return 0;

@@ -879,7 +879,6 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     case VTM::VOpRet_nt:        emitOpRet(MI, CurSlot, Cnds);             break;
     case VTM::VOpMemTrans:      emitOpMemTrans(MI, CurSlot, Cnds);        break;
     case VTM::VOpBRAMTrans:     emitOpBRamTrans(MI, CurSlot, Cnds);       break;
-    //case VTM::VOpPipelineStage: /*do nothing*/                          break;
     case VTM::VOpToState_nt: emitBr(MI, CurSlot, Cnds, CurBB, Pipelined); break;
     case VTM::VOpReadReturn:    emitOpReadReturn(MI, CurSlot, Cnds);      break;
     case VTM::VOpUnreachable:   emitOpUnreachable(MI, CurSlot, Cnds);     break;
@@ -1297,6 +1296,7 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
     case VTM::VOpROr:       emitUnaryOp(MI, VASTExpr::dpROr);   break;
     case VTM::VOpRAnd:      emitUnaryOp(MI, VASTExpr::dpRAnd);  break;
     case VTM::VOpRXor:      emitUnaryOp(MI, VASTExpr::dpRXor);  break;
+    case VTM::VOpPipelineStage: emitUnaryOp(MI, VASTExpr::dpAssign);break;
     default:  assert(0 && "Unexpected opcode!");    break;
     }
   }

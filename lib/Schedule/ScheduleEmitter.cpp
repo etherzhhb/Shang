@@ -506,6 +506,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       // Insert pseudo copy to model write until finish.
       // FIXME: Insert for others MI rather than Representative MI?
       if (A->getLatency() && VInstrInfo::isWriteUntilFinish(A->getOpcode())) {
+        assert(A->getOpcode() == VTM::VOpBRAMTrans &&
+               "Only support BRAMTrans at the moment.");
         ucOperand &MO = cast<ucOperand>(RepMI->getOperand(0));
         unsigned OldR = MO.getReg();
         const TargetRegisterClass *RC =
@@ -521,9 +523,14 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
             .addOperand(ucOperand::CreateTrace(MBB));
         assert(A->isControl() && "Only control operation write untill finish!");
-        Insts.push_back(std::make_pair(PipeStage, SchedSlot + A->getLatency()));
-        // Copy the result 1 cycle later. FIXME: Set the right latency.
-        State.addDummyLatencyEntry(PipeStage, 1.0f);
+        OpSlot PipeSlot(SchedSlot.getSlot() + A->getLatency() - 1, false);
+        Insts.push_back(std::make_pair(PipeStage, PipeSlot));
+        // Copy the result 1 cycle later after the value is finished, note that
+        // the PipeStage is emit to a data path slot, to delay the VOpReadFU 1
+        // cycle later, we need to set its delay to 2, other wise the copy will
+        // emit right after the RepLI finish, instead of 1 cycle after the RepLI
+        // finish. FIXME: Set the right latency.
+        State.addDummyLatencyEntry(PipeStage, 2.0f);
       }
 
       if (!Id.isTrivial() && Id.getFUType() != VFUs::Mux) {

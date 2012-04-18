@@ -31,8 +31,6 @@ def BR : VTMReg<"bram">;
 def UCMPR : VTMReg<"ucmp">;
 def SCMPR : VTMReg<"scmp">;
 def MUXR : VTMReg<"mux">;
-def PIPER : VTMReg<"pipe">;
-
 def R : VTMReg<"r">;
 def W : VTMReg<"w">;
 
@@ -58,6 +56,3 @@ def RSCMP    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add SCMPR)>;
 
 // Prebinded distributed (in time domain) multiplexer.
 def RMUX    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add MUXR)>;
-
-// Pseudo wire for pipeline stage.
-def RPIPE    : RegisterClass<"VTM", [i1, i8, i16, i32, i64], 64, (add PIPER)>;
