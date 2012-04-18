@@ -1277,8 +1277,9 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
       emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRL>);
       break;
     case VTM::VOpMultLoHi_c:
-    case VTM::VOpMult_c:    emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpMul>);  break;
-
+    case VTM::VOpMult_c:
+      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpMul>);
+      break;
     case VTM::VOpSel:       emitOpSel(MI);                      break;
 
     case VTM::VOpLUT:       emitOpLut(MI);                      break;
