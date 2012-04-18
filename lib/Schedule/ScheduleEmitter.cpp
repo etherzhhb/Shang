@@ -480,7 +480,7 @@ struct MicroStateBuilder {
 }
 
 //===----------------------------------------------------------------------===//
-typedef std::pair<MachineInstr*, int8_t> InSUInstInfo;
+typedef std::pair<MachineInstr*, OpSlot> InSUInstInfo;
 static inline bool sort_intra_latency(const InSUInstInfo &LHS,
                                       const InSUInstInfo &RHS) {
   return LHS.second < RHS.second;
@@ -492,6 +492,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     VSUnit *A = *I;
 
     SmallVector<InSUInstInfo, 8> Insts;
+    OpSlot SchedSlot(A->getSlot(), A->isControl());
 
     // Insert the DiableFU instruction If necessary.
     MachineInstr *RepMI = A->getRepresentativeInst();
@@ -519,8 +520,8 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
             .addOperand(ucOperand::CreateReg(R, MO.getBitWidth()))
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
             .addOperand(ucOperand::CreateTrace(MBB));
-        // Copy the result to register 1 stage later.
-        Insts.push_back(std::make_pair(PipeStage, A->getLatency()));
+        assert(A->isControl() && "Only control operation write untill finish!");
+        Insts.push_back(std::make_pair(PipeStage, SchedSlot + A->getLatency()));
         // Copy the result 1 cycle later. FIXME: Set the right latency.
         State.addDummyLatencyEntry(PipeStage, 1.0f);
       }
@@ -535,7 +536,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
             .addOperand(ucOperand::CreateTrace(MBB));
         // Add the instruction into the emit list, disable the FU 1 clock later.
-        Insts.push_back(std::make_pair(DisableMI, 1));
+        Insts.push_back(std::make_pair(DisableMI, SchedSlot + 1));
         State.addDummyLatencyEntry(DisableMI);
       }
     }
@@ -546,22 +547,22 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       if (Inst && !Inst->isImplicitDef()) {
         if (Inst->isPHI())
           emitPHIDef(Inst);
-        else
-          Insts.push_back(std::make_pair(Inst, i ? A->getLatencyAt(i) : 0));
+        else {
+          OpSlot S = SchedSlot +  (i ? A->getLatencyAt(i) : 0);
+          S = OpSlot::detailStepCeil(S.getDetailStep(),
+                                     VInstrInfo::isDatapath(Inst->getOpcode()));
+          Insts.push_back(std::make_pair(Inst, S));
+        }
       }
     }
 
     // Sort the instructions, so we can emit them in order.
     std::sort(Insts.begin(), Insts.end(), sort_intra_latency);
 
-    OpSlot SchedSlot(A->getSlot(), A->isControl());
-
     typedef SmallVector<InSUInstInfo, 8>::iterator it;
     for (it I = Insts.begin(), E = Insts.end(); I != E; ++I) {
       MachineInstr *MI = I->first;
-      OpSlot S = SchedSlot + I->second;
-      S = OpSlot::detailStepCeil(S.getDetailStep(),
-                                 VInstrInfo::isDatapath(MI->getOpcode()));
+      OpSlot S = I->second;
       fuseInstr(*MI, S, VInstrInfo::getPreboundFUId(MI));
     }
   }
