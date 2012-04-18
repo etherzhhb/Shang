@@ -27,6 +27,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/FoldingSet.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/Support/Allocator.h"
 
 #include <map>
@@ -42,6 +43,7 @@ class VASTWire;
 class VASTExpr;
 class VASTRegister;
 class VASTUse;
+struct VASTValPtr;
 
 class VASTNode {
 public:
@@ -79,6 +81,46 @@ public:
   VASTTypes getASTType() const { return VASTTypes(NodeT); }
 
   void dump() const;
+};
+
+struct VASTValPtr : public PointerIntPair<VASTValue *, 1, bool>{
+  VASTValPtr(VASTValue *V, bool IsInvert = false)
+    : PointerIntPair<VASTValue *, 1, bool>(V, IsInvert) {}
+  VASTValPtr(const VASTValPtr& RHS)
+    : PointerIntPair<VASTValue *, 1, bool>(RHS.getVal(), RHS.isInvert()){
+  }
+  VASTValPtr &operator=(const VASTValPtr &RHS) {
+    setPointer(RHS.getVal());
+    setInt(RHS.isInvert());
+    return *this;
+  }
+
+  VASTValue *getVal() { return getPointer(); }
+  VASTValue *getVal() const { return getPointer(); }
+
+  bool isInvert() { return getInt() == true; }
+  bool isInvert() const { return getInt() == true; }
+
+  VASTValue *operator->() { return getVal(); }
+  const VASTValue *operator->() const{ return getVal(); }
+
+  bool operator==(const VASTValue *RHS) const {
+    return getOpaqueValue() == RHS;
+  }
+  bool operator==(const VASTValPtr RHS) const {
+    return getPointer() == RHS.getPointer() && getInt() == RHS.getInt();
+  }
+  bool operator!=(const VASTValue *RHS) const { return !operator==(RHS); }
+  bool operator!=(const VASTValPtr RHS) const { return !operator==(RHS); }
+  bool operator<(const VASTValue *RHS) const { return getOpaqueValue() < RHS; }
+  bool operator<(const VASTValPtr RHS) const {
+    return getPointer() < RHS.getPointer();
+  }
+  bool operator>(const VASTValue *RHS) const { return getOpaqueValue() > RHS; }
+  bool operator>(const VASTValPtr RHS) const {
+    return getPointer() > RHS.getPointer();
+  }
+
 };
 
 class VASTUse : public ilist_node<VASTUse> {
