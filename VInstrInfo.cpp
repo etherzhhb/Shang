@@ -79,7 +79,10 @@ MachineOperand *VInstrInfo::getPredOperand(MachineInstr *MI) {
 bool VInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                    AliasAnalysis *AA) const {
   const MCInstrDesc &TID = MI->getDesc();
-  return !TID.isBarrier() && hasTrivialFU(TID.getOpcode());
+  return !TID.isBarrier() && hasTrivialFU(TID.getOpcode()) &&
+         // Dont rematerialize control ops if the block already scheduled.
+         (isDatapath(TID.getOpcode()) ||
+          MI->getParent()->back().getOpcode() != VTM::EndState);
 }
 
 bool VInstrInfo::isPredicable(MachineInstr *MI) const {

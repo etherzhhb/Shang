@@ -132,9 +132,9 @@ namespace {
     void coalesceAndEliminateCopy(MachineInstr *MI, SlotIndex DefSlot,
                                   bool Swap = false) {
       MachineOperand &SrcMO = MI->getOperand(1);
-      assert(SrcMO.isKill() && "Expect source register be killed by copy!");
       LiveInterval *SrcLI = &LIS->getInterval(SrcMO.getReg()),
                    *DstLI = &LIS->getInterval(MI->getOperand(0).getReg());
+      assert(SrcMO.isKill() && "Expect source register be killed by copy!");
       // No need to coalesce the idnetical copies.
       if (SrcLI != DstLI) {
         // We need to swap the SrcLI and DstLI if DstLI contains PHIDef/PHIKill.
