@@ -116,7 +116,7 @@ struct BlockRAMFormation : public ModulePass {
   }
 
   bool runOnModule(Module &M);
-  bool runOnFunction(Function &F);
+  bool runOnFunction(Function &F, Module &M);
 
   void allocateGlobalAlias(AllocaInst *AI, Module &M);
   void annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType, Constant *InitGV,
@@ -218,7 +218,7 @@ void BlockRAMFormation::annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType,
   CallInst::Create(Annotate, Args, "", InsertPos);
 }
 
-bool BlockRAMFormation::runOnFunction(Function &F) {
+bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
   bool changed = false;
   PtrUseCollector Collector;
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
@@ -230,7 +230,7 @@ bool BlockRAMFormation::runOnFunction(Function &F) {
     if (!EnableBRAM || !visitPtrUseTree(AI, Collector)) {
       Collector.Uses.clear();
       // Otherwise, we need to allocate the object in global memory.
-      allocateGlobalAlias(AI, *F.getParent());
+      allocateGlobalAlias(AI, M);
       continue;
     }
 
@@ -256,7 +256,7 @@ bool BlockRAMFormation::runOnModule(Module &M) {
   TD = &getAnalysis<TargetData>();
 
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I)
-    changed |= runOnFunction(*I);
+    changed |= runOnFunction(*I, M);
 
   return changed;
 }
