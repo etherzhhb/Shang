@@ -100,7 +100,7 @@ bool FunctionFilter::runOnModule(Module &M) {
     }
   }
 
-if (!isSyntesizingMain) SplitSoftFunctions(M,HWFunctions);
+  if (!isSyntesizingMain) SplitSoftFunctions(M,HWFunctions);
 
   return true;
 }
@@ -172,6 +172,7 @@ void FunctionFilter::SplitSoftFunctions(Module &M,SmallPtrSet<const Function*, 3
 
         I->removeAttribute(~0, Attribute::AlwaysInline);
         I->addAttribute(~0, Attribute::NoInline);
+        I->setLinkage(GlobalValue::ExternalLinkage);
         DEBUG(dbgs() << "No inline -- " << I->getName() << '\n');
       } else if (!I->isDeclaration() && !HWFunctions.count(FHW)) {
         I->setLinkage(GlobalValue::PrivateLinkage);

@@ -152,11 +152,14 @@ int main(int argc, char **argv) {
   PassManager Passes;
   Passes.add(new TargetData(*target->getTargetData()));
   Passes.add(createVerifierPass());
+  // This is the final bitcode, internalize it to expose more optimization
+  // opportunities. Note that we should internalize it before SW/HW partition,
+  // otherwise we may lost some information that help the later internalize.
+  Passes.add(createInternalizePass(true));
 
   // Perform Software/Hardware partition.
   Passes.add(createFunctionFilterPass(S->getOutputStream("SoftwareIROutput")));
   Passes.add(createGlobalDCEPass());
-
   // Optimize the hardware part.
   //Builder.populateFunctionPassManager(*FPasses);
   Builder.populateModulePassManager(Passes);
