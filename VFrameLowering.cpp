@@ -118,7 +118,7 @@ struct BlockRAMFormation : public ModulePass {
   bool runOnModule(Module &M);
   bool runOnFunction(Function &F, Module &M);
 
-  void allocateGlobalAlias(AllocaInst *AI, Module &M);
+  void allocateGlobalAlias(AllocaInst *AI, Module &M, unsigned AddressSpace = 0);
   void annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType, Constant *InitGV,
                         Instruction *InsertPos, Module &M);
 };
@@ -150,14 +150,16 @@ struct PtrUseCollector {
 
 char BlockRAMFormation::ID = 0;
 
-void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M) {
+void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M,
+                                            unsigned AddressSpace) {
   PointerType *Ty = AI->getType();
   Type *AllocatedType = AI->getAllocatedType();
   // Create the global alias.
   GlobalVariable *GV =
     new GlobalVariable(M, AllocatedType, false, GlobalValue::InternalLinkage,
                        Constant::getNullValue(AllocatedType),
-                       AI->getName() + utostr_32(AllocaAliasCnt) + "_g_alias");
+                       AI->getName() + utostr_32(AllocaAliasCnt) + "_g_alias",
+                       0, false, AddressSpace);
   GV->setAlignment(AI->getAlignment());
 
   BasicBlock::iterator IP = llvm::next(BasicBlock::iterator(AI));
@@ -234,6 +236,7 @@ bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
       continue;
     }
 
+    allocateGlobalAlias(AI, M, CurAddrSpace);
     Constant *NullInitilizer =
       Constant::getNullValue(PointerType::getIntNPtrTy(F.getContext(), 8, 0));
     annotateBRAMInfo(CurAddrSpace, AI->getAllocatedType(),

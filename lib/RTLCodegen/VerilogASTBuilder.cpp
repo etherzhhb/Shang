@@ -1433,7 +1433,6 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
   }
   case MachineOperand::MO_Immediate:
     return VM->getOrCreateImmediate(Op.getImm(), BitWidth);
-  //case MachineOperand::MO_ExternalSymbol:  BitWidth = Op.getBitWidth(); break;
   default: break;
   }
 
@@ -1446,6 +1445,11 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
   bool NeedWrapper = false;
   unsigned SymbolWidth = 0;
   if (Op.isGlobal()) { // GlobalValues are addresses.
+    if (Op.getGlobal()->getType()->getAddressSpace())
+      // Not in generic address space, this is the base address of block rams.
+      // The base address is 0 as we do not merge block ram at the moment.
+      return VM->getOrCreateImmediate(0 + Op.getOffset(), BitWidth);
+
     SymbolWidth = std::max(TD->getPointerSizeInBits(), BitWidth);
     NeedWrapper = true;
   }

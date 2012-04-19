@@ -97,7 +97,8 @@ public:
 
   const GlobalValue *getGlobalAliasOfFrameIdx(int Idx) const {
     Idx2GVMapTy::const_iterator at = FrameIdx2GV.find(Idx);
-    return at != FrameIdx2GV.end() ? at->second : 0;
+    assert(at != FrameIdx2GV.end() && "Cannot find global alias!");
+    return at->second;
   }
 
   bool isBitWidthAnnotated() const { return BitWidthAnnotated; }
