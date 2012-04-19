@@ -696,6 +696,44 @@ VASTValue *VASTModule::buildBitSliceExpr(VASTValue *U, uint8_t UB, uint8_t LB)
   return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
 }
 
+VASTValue *VASTModule::buildBitCatExpr(ArrayRef<VASTValue*> Ops,
+                                       unsigned BitWidth) {
+  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0]);
+  SmallVector<VASTValue*, 8> NewOps;
+  NewOps.push_back(Ops[0]);
+
+  // Merge the constant sequence.
+  for (unsigned i = 1; i < Ops.size(); ++i) {
+    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i]);
+
+    if (!CurImm) {
+      LastImm = 0;
+      NewOps.push_back(Ops[i]);
+      continue;
+    }
+
+    if (LastImm) {
+      // Merge the constants.
+      uint64_t HiVal = LastImm->getValue(), LoVal = CurImm->getValue();
+      unsigned HiSizeInBits = LastImm->getBitWidth(),
+               LoSizeInBits = CurImm->getBitWidth();
+      unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
+      assert(SizeInBits <= 64 && "Constant too large!");
+      uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
+      LastImm = getOrCreateImmediate(Val, SizeInBits);
+      NewOps.back() = LastImm;
+    } else {
+      LastImm = CurImm;
+      NewOps.push_back(Ops[i]);
+    }
+  }
+
+  if (NewOps.size() == 1) return NewOps.back();
+
+  // FIXME: Flatten bitcat.
+  return createExpr(VASTExpr::dpBitCat, NewOps, BitWidth, 0);
+}
+
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op,
                                  unsigned BitWidth) {
   VASTValue *Ops[] = { Op };
@@ -763,6 +801,7 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
   case VASTExpr::dpAdd:  return buildAddExpr(Ops, BitWidth);
   case VASTExpr::dpMul:  return buildMulExpr(Ops, BitWidth);
   case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
+  case VASTExpr::dpBitCat: return buildBitCatExpr(Ops, BitWidth);
   }
 
   return createExpr(Opc, Ops, BitWidth, 0);
@@ -1111,7 +1150,6 @@ VASTValue::dp_dep_it VASTValue::dp_dep_end(VASTValue *V) {
   case VASTNode::vastWire: return cast<VASTWire>(V)->op_end();
   default:  return VASTValue::dp_dep_it(0);
   }
-
 }
 
 void VASTImmediate::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {

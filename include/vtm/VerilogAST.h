@@ -1033,6 +1033,7 @@ public:
   bool eliminateConstRegisters();
 
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    Value = getBitSlice64(Value, BitWidth);
     UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
     VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
     if (!Imm) // Create the immediate if it is not yet created.
@@ -1198,7 +1199,7 @@ public:
   }
 
   VASTValue *buildBitSliceExpr(VASTValue *U, uint8_t UB, uint8_t LB);
-
+  VASTValue *buildBitCatExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
   VASTValue *buildAndExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
 
   VASTValue *buildMulExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
