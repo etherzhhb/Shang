@@ -755,7 +755,7 @@ void VerilogASTBuilder::emitAllSignals() {
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       VASTValue *Parent = lookupSignal(Info.getParentRegister());
       indexVASTValue(RegNum,
-                     VM->getOrCreateBitSlice(Parent->getAsInlineOperand(),
+                     VM->buildBitSliceExpr(Parent->getAsInlineOperand(),
                                              Info.getUB(), Info.getLB()));
       continue;
     }
@@ -1210,7 +1210,7 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   std::string RegName = VFUBRAM::getAddrBusName(FUNum);
   VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
   VASTValue *Addr = getAsOperand(MI->getOperand(1));
-  Addr = VM->getOrCreateBitSlice(Addr, Addr->getBitWidth(), Alignment);
+  Addr = VM->buildBitSliceExpr(Addr, Addr->getBitWidth(), Alignment);
   VM->addAssignment(R, Addr, Slot, Cnds);
   // Assign store data.
   RegName = VFUBRAM::getInDataBusName(FUNum);
@@ -1400,7 +1400,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   // Pass RHS without getting inline operand, because for bitslice, only
   // inlining the assign expression is allowed, which already handled in the
   // getOrCreateBitSlice.
-  VM->assign(W, VM->getOrCreateBitSlice(RHS, UB, LB));
+  VM->assign(W, VM->buildBitSliceExpr(RHS, UB, LB));
 }
 
 VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
@@ -1423,7 +1423,7 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
     if (unsigned Reg = Op.getReg())
       if (VASTValue *V = lookupSignal(Reg)) {
         // The operand may only use a sub bitslice of the signal.
-        V = VM->getOrCreateBitSlice(V, BitWidth, 0);
+        V = VM->buildBitSliceExpr(V, BitWidth, 0);
         // Try to inline the operand.
         if (GetAsInlineOperand) V = V->getAsInlineOperand();
         return V;
@@ -1452,7 +1452,7 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
 
   VASTValue *Symbol = VM->getOrCreateSymbol(Name, SymbolWidth, NeedWrapper);
   if (SymbolWidth && GetAsInlineOperand)
-    Symbol = VM->getOrCreateBitSlice(Symbol, BitWidth, 0)->getAsInlineOperand();
+    Symbol = VM->buildBitSliceExpr(Symbol, BitWidth, 0)->getAsInlineOperand();
 
   return Symbol;
 }

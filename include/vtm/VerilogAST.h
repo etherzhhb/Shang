@@ -1197,16 +1197,13 @@ public:
     return V;
   }
 
-  VASTValue *getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB);
+  VASTValue *buildBitSliceExpr(VASTValue *U, uint8_t UB, uint8_t LB);
 
-  VASTValue *buildLogicExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                            unsigned BitWidth);
+  VASTValue *buildAndExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
 
-  VASTValue *buildMulExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                          unsigned BitWidth);
+  VASTValue *buildMulExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
 
-  VASTValue *buildAddExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                          unsigned BitWidth);
+  VASTValue *buildAddExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
 
   VASTValue *buildNotExpr(VASTValue *U);
 

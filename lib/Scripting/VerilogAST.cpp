@@ -644,7 +644,7 @@ VASTValue *VASTModule::buildNotExpr(VASTValue *U) {
   if (VASTExpr *E = dyn_cast<VASTExpr>(U)) {
     if (E->getOpcode() == VASTExpr::dpNot) {
       // We should also propagate the bit slice information.
-      return getOrCreateBitSlice(E->getOperand(0), E->getUB(), E->getLB());
+      return buildBitSliceExpr(E->getOperand(0), E->getUB(), E->getLB());
     }
   } else if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U))
     return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
@@ -652,7 +652,7 @@ VASTValue *VASTModule::buildNotExpr(VASTValue *U) {
   return buildExpr(VASTExpr::dpNot, U, U->getBitWidth());
 }
 
-VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB)
+VASTValue *VASTModule::buildBitSliceExpr(VASTValue *U, uint8_t UB, uint8_t LB)
 {
   unsigned OperandSize = U->getBitWidth();
   // Not a sub bitslice.
@@ -672,12 +672,12 @@ VASTValue *VASTModule::getOrCreateBitSlice(VASTValue *U, uint8_t UB, uint8_t LB)
       unsigned Offset = AssignExpr->getLB();
       UB += Offset;
       LB += Offset;
-      return getOrCreateBitSlice(AssignExpr->getOperand(0), UB, LB);
+      return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB);
     }
     case VASTExpr::dpBitCat: {
       VASTValue *Hi = AssignExpr->getOperand(0),
                 *Lo = AssignExpr->getOperand(1);
-      if (Lo->getBitWidth() == LB) return getOrCreateBitSlice(Hi, UB - LB, 0);
+      if (Lo->getBitWidth() == LB) return buildBitSliceExpr(Hi, UB - LB, 0);
       break;
     }
     }
@@ -734,24 +734,15 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
                             : createExpr(Opc, NewOps, BitWidth, 0);
 }
 
-VASTValue *VASTModule::buildLogicExpr(VASTExpr::Opcode Opc,
-                                      ArrayRef<VASTValue*> Ops,
+VASTValue *VASTModule::buildAndExpr(ArrayRef<VASTValue*> Ops,
                                       unsigned BitWidth) {
-  return flattenExprTree(Opc, Ops, BitWidth);
+  return flattenExprTree(VASTExpr::dpAnd, Ops, BitWidth);
 }
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS,
                                  VASTValue *RHS, unsigned BitWidth) {
   VASTValue *Ops[] = { LHS, RHS };
-
-  switch (Opc) {
-  default: break;
-  case VASTExpr::dpAnd: return buildLogicExpr(Opc, Ops, BitWidth);
-  case VASTExpr::dpAdd: return buildAddExpr(Opc, Ops, BitWidth);
-  case VASTExpr::dpMul: return buildMulExpr(Opc, Ops, BitWidth);
-  }
-
-  return createExpr(Opc, Ops, BitWidth, 0);
+  return buildExpr(Opc, Ops, BitWidth);
 }
 
 VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0,
@@ -769,31 +760,22 @@ VASTValue *VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
     assert(Ops.size() == 1 && "Bad operand number!");
     return buildNotExpr(Ops[0]);
   }
-  case VASTExpr::dpAdd:  return buildAddExpr(Opc, Ops, BitWidth);
-
-  case VASTExpr::dpMul:  return buildMulExpr(Opc, Ops, BitWidth);
-
-  case VASTExpr::dpAnd: {
-    if (Ops.size() == 1)
-      return Ops[0];
-    return buildLogicExpr(Opc, Ops, BitWidth);
-    break;
-  }
+  case VASTExpr::dpAdd:  return buildAddExpr(Ops, BitWidth);
+  case VASTExpr::dpMul:  return buildMulExpr(Ops, BitWidth);
+  case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
   }
 
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
-VASTValue *VASTModule::buildMulExpr(VASTExpr::Opcode Opc,
-                                    ArrayRef<VASTValue*> Ops,
+VASTValue *VASTModule::buildMulExpr(ArrayRef<VASTValue*> Ops,
                                     unsigned BitWidth) {
-  return flattenExprTree(Opc, Ops, BitWidth);
+  return flattenExprTree(VASTExpr::dpMul, Ops, BitWidth);
 }
 
-VASTValue *VASTModule::buildAddExpr(VASTExpr::Opcode Opc,
-                                    ArrayRef<VASTValue*> Ops,
+VASTValue *VASTModule::buildAddExpr(ArrayRef<VASTValue*> Ops,
                                     unsigned BitWidth) {
-  return flattenExprTree(Opc, Ops, BitWidth);
+  return flattenExprTree(VASTExpr::dpAdd, Ops, BitWidth);
 }
 
 VASTValue *VASTModule::buildOrExpr(ArrayRef<VASTValue*> Ops,
@@ -810,7 +792,7 @@ VASTValue *VASTModule::buildOrExpr(ArrayRef<VASTValue*> Ops,
   }
 
   // Build Or operation with the And Inverter Graph (AIG).
-  return buildNotExpr(buildExpr(VASTExpr::dpAnd, NotExprs, BitWidth));
+  return buildNotExpr(buildAndExpr(NotExprs, BitWidth));
 }
 
 VASTValue *VASTModule::buildXorExpr(ArrayRef<VASTValue*> Ops,
