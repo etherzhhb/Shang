@@ -188,7 +188,7 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
   add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_SW_LL}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND echo "Bad Result!" > "${TEST_BINARY_ROOT}/Test.output"
-    COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config.lua  ${EXTRA_HLS_OPTION}" || ${CatchFail}
+    COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config.lua  ${EXTRA_HLS_OPTION} -verify-machineinstrs" || ${CatchFail}
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config.lua"
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "High-levle Synthesising RTL module and interface for ${SYN_FUNC}"
