@@ -123,7 +123,7 @@ struct BlockRAMFormation : public ModulePass {
                         Instruction *InsertPos, Module &M);
 };
 
-struct PtrUseCollector {
+struct AllocateUseCollector {
   SmallVector<Value *, 8> Uses;
 
   bool operator()(Value *ValUser, const Value *V) {
@@ -222,7 +222,7 @@ void BlockRAMFormation::annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType,
 
 bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
   bool changed = false;
-  PtrUseCollector Collector;
+  AllocateUseCollector Collector;
   for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
     AllocaInst *AI = dyn_cast<AllocaInst>(&*I);
     if (!AI) continue;
