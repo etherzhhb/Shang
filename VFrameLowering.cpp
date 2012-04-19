@@ -29,6 +29,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -44,6 +46,8 @@ static cl::opt<bool> EnableBRAM("vtm-enable-bram",
 
 STATISTIC(NumGlobalAlias, "Number of global alias created for allocas");
 STATISTIC(NumBlockRAMs, "Number of block RAM created");
+STATISTIC(NumLocalizedGV, "Number of GlobalVariable localized");
+
 
 void VFrameInfo::emitPrologue(MachineFunction &MF) const {
 }
@@ -117,6 +121,7 @@ struct BlockRAMFormation : public ModulePass {
 
   bool runOnModule(Module &M);
   bool runOnFunction(Function &F, Module &M);
+  bool localizeGV(GlobalVariable *GV, Module &M);
 
   void allocateGlobalAlias(AllocaInst *AI, Module &M, unsigned AddressSpace = 0);
   void annotateBRAMInfo(unsigned BRAMNum, Type *AllocatedType, Constant *InitGV,
@@ -146,6 +151,58 @@ struct AllocateUseCollector {
     return false;
   }
 };
+
+struct GVUseCollector {
+  typedef SmallVector<Value*, 8> UsesVec;
+  DenseMap<Function*, UsesVec> Uses;
+  typedef DenseMap<Function*, UsesVec>::iterator iterator;
+  // Modify information, Is the GV written in a function?
+  DenseMap<const Function*, bool> ModInfo;
+
+  bool operator()(Value *ValUser, const Value *V)  {
+    if (Instruction *I = dyn_cast<Instruction>(ValUser)) {
+      switch (I->getOpcode()) {
+      case Instruction::GetElementPtr:
+        Uses[I->getParent()->getParent()].push_back(ValUser);
+        return true;
+        // The pointer must use as pointer operand in load/store.
+      case Instruction::Load:
+        // Place holder, means there is a user in current function.
+        Uses[I->getParent()->getParent()].push_back(0);
+        return cast<LoadInst>(I)->getPointerOperand() == V;
+      case Instruction::Store:
+        // Place holder, means there is a user in current function.
+        Uses[I->getParent()->getParent()].push_back(0);
+        ModInfo[I->getParent()->getParent()] = true;
+        return cast<StoreInst>(I)->getPointerOperand() == V;
+      }
+    } else if (const ConstantExpr *C = dyn_cast<ConstantExpr>(ValUser)) {
+      if (C->getOpcode() == Instruction::GetElementPtr) {
+        Uses[0].push_back(ValUser);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool canBeLocalized() const {
+    typedef DenseMap<Function*, UsesVec>::const_iterator it;
+    unsigned NumReferredFunctions = 0;
+    bool Written = false;
+
+    for (it I = Uses.begin(), E = Uses.end(); I != E; ++I) {
+      // Used by constant expression?
+      if (I->first == 0) continue;
+
+      ++NumReferredFunctions;
+      Written |= ModInfo.lookup(I->first);
+    }
+
+    // We can localize the GV if it only accessed in one function, or it is not
+    // written.
+    return NumReferredFunctions == 1 || !Written;
+  }
+};
 }
 
 char BlockRAMFormation::ID = 0;
@@ -162,7 +219,7 @@ void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M,
                        0, false, AddressSpace);
   GV->setAlignment(AI->getAlignment());
 
-  BasicBlock::iterator IP = llvm::next(BasicBlock::iterator(AI));
+  BasicBlock::iterator IP = AI->getParent()->getTerminator();
 
   // Create the function call to annotate the alias.
   Value *Args[] = { AI, GV };
@@ -240,7 +297,8 @@ bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
     Constant *NullInitilizer =
       Constant::getNullValue(PointerType::getIntNPtrTy(F.getContext(), 8, 0));
     annotateBRAMInfo(CurAddrSpace, AI->getAllocatedType(),
-                     NullInitilizer, AI, *F.getParent());
+                     NullInitilizer, AI->getParent()->getTerminator(),
+                     *F.getParent());
     // Change the address space of the alloca, so the backend know the
     // load/store accessing this alloca are accessing block ram.
     mutateAddressSpace(AI, CurAddrSpace);
@@ -254,9 +312,55 @@ bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
   return changed;
 }
 
+bool BlockRAMFormation::localizeGV(GlobalVariable *GV, Module &M) {
+  // Cannot localize if the GV may be modified by others module.
+  if (!GV->hasInternalLinkage() && !GV->hasPrivateLinkage() &&
+      (!GV->isConstant() || GV->isDeclaration()))
+    return false;
+
+  assert(GV->hasInitializer() && "Unexpected declaration!");
+  // Not support BRAM initializing at the moment.
+  if (!GV->getInitializer()->isNullValue())
+    return false;
+
+  GVUseCollector Collector;
+
+  if (!visitPtrUseTree(GV, Collector)) return false;
+
+  if (!Collector.canBeLocalized()) return false;
+
+  // Align the address of localized GV.
+  GV->setAlignment(std::max(8u, GV->getAlignment()));
+  // Change the address space of the alloca, so the backend know the
+  // load/store accessing this alloca are accessing block ram.
+  mutateAddressSpace(GV, CurAddrSpace);
+  for (GVUseCollector::iterator I = Collector.Uses.begin(),
+       E = Collector.Uses.end(); I != E; ++I) {
+    GVUseCollector::UsesVec &Uses = I->second;
+
+    while (!Uses.empty())
+      // No need to mutate address space if V is a place holder.
+      if (Value *V = Uses.pop_back_val()) mutateAddressSpace(V, CurAddrSpace);
+
+    if (I->first == 0) continue;
+    
+    Instruction *IP = I->first->getEntryBlock().getTerminator();
+    annotateBRAMInfo(CurAddrSpace, GV->getType()->getElementType(), GV, IP, M);
+  }
+
+  ++CurAddrSpace;
+  ++NumLocalizedGV;
+  return true;
+}
+
 bool BlockRAMFormation::runOnModule(Module &M) {
   bool changed = false;
   TD = &getAnalysis<TargetData>();
+
+  if (EnableBRAM)
+    for (Module::global_iterator I = M.global_begin(), E = M.global_end();
+         I != E; ++I)
+      changed |= localizeGV(I, M);
 
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I)
     changed |= runOnFunction(*I, M);

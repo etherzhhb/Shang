@@ -618,7 +618,6 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     unsigned NumElem = Info.NumElem;
     unsigned AddrWidth = Log2_32_Ceil(NumElem);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
-    assert(Info.Initializer == 0 && "Cannot initialize block RAM yet!");
     // Create the enable signal for bram.
     VM->addRegister(VFUBRAM::getEnableName(BramNum), 1);
     VM->addRegister(VFUBRAM::getWriteEnableName(BramNum), 1);
