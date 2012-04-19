@@ -215,7 +215,7 @@ struct MicroStateBuilder {
       //}
     }
     
-    assert(LoopBoundarySlot > State.getStartSlot()
+    assert((LoopBoundarySlot > State.getStartSlot() || defSlot == copySlot)
            && LoopBoundarySlot >= unsigned(copySlot.getSlot())
            && "LoopBoundary should bigger than start slot and copyt slot!");
     return WireDef(WireNum, Pred, MO, defSlot, copySlot, OpSlot(LoopBoundarySlot, true));
@@ -636,8 +636,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
     // DiryHack: Do not emit write define for copy since copy is write at
     // control block.
 
-    if (MO.isDef() && (NeedCopy || WrappedAround)) {
-      assert((SchedSlot != CopySlot || WrappedAround) && "No need to copy!");
+    if (MO.isDef()) {
       if (MRI.use_empty(RegNo)) {
         // Need to fix the register class even the register define is dead.
         MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opc));
@@ -654,7 +653,9 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
       // Define wire for trivial operation, otherwise, the result of function
       // unit should be wire, and there must be a copy follow up.
-      if (!VRegisterInfo::IsWire(RegNo, &MRI)  && CopySlot != SchedSlot) {
+      if (!VRegisterInfo::IsWire(RegNo, &MRI) && NeedCopy) {
+        assert(CopySlot != SchedSlot
+               && "Copy should already set the right RC up!");
         WireNum =
           MRI.createVirtualRegister(VRegisterInfo::getRepRegisterClass(Opc));
         NewOp = ucOperand::CreateReg(WireNum, BitWidth, true);
@@ -756,8 +757,11 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
     if (isImplicit && WD.LoopBoundary > WD.DefSlot + State.getII())
       break;
 
-    // Emit the PHI at loop boundary
-    RegNo = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot(), false);
+    // Emit the PHI at loop boundary, but do not emit the copy if the wire is
+    // defined at loop boundary, otherwise we will get the value from previous
+    // iteration which is not we want.
+    RegNo = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot(),
+                      WD.LoopBoundary == WD.DefSlot);
     MO = MachineOperand::CreateReg(RegNo, false);
     MO.setBitWidth(SizeInBits);
     WD.Op = MO;
