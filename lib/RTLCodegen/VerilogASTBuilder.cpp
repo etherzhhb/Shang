@@ -616,7 +616,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     unsigned BramNum = Info.PhyRegNum;
     //const Value* Initializer = Info.Initializer;
     unsigned NumElem = Info.NumElem;
-    unsigned AddrWidth = Log2_32_Ceil(NumElem);
+    unsigned AddrWidth = std::max(Log2_32_Ceil(NumElem), 1u);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     // Create the enable signal for bram.
     VM->addRegister(VFUBRAM::getEnableName(BramNum), 1);
