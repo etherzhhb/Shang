@@ -119,7 +119,7 @@ SC_MODULE(V$(RTLModuleName)_tb){
 					_put(v.Name)
 				end
 			 ));
-		  assert(RetVle == 0 && "The main function don't have a return value!");
+		  assert(RetVle == 0 && "Return value of main function is not 0!");
 #end
       ofstream outfile;
       outfile.open ("$(CounterFile)"); 

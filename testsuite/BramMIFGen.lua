@@ -76,10 +76,8 @@ function HexToBin(hexstr,bitwidth)
 return s
 end
 
-BlockRAMInitFileGenScript=[=[
-#local ram_num = 0
-#for k,v in pairs(GlobalVariables) do
-$(local mem_data = ''
+function placeGVinBramInitfile(k,v,ram_num)
+  local mem_data = ''
   --Count in a row in order to form 64 bit for each row 
   local count = 0
   if v.Initializer ~= nil then
@@ -440,6 +438,13 @@ $(local mem_data = ''
 				ram_num = ram_num + 1
 			end
 		end
-	end)
+	end
+
+end
+
+BlockRAMInitFileGenScript=[=[
+#local ram_num = 0
+#for k,v in pairs(GlobalVariables) do
+$(placeGVinBramInitfile(k,v,ram_num))
 #end
 ]=]
