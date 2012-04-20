@@ -260,7 +260,7 @@ module BRAM
   
   // Add the initial file in ram
   initial	begin
-  $('$')readmemb("$(RTLModuleName).mif",ram);
+  $('$')readmemb("$(RTLModuleName)_BramInit.txt",ram);
   end	
 
 	always_ff@(posedge clk)
@@ -332,6 +332,11 @@ always@(posedge clk)begin
   if(startcnt)begin
     if(i1.i1.fin)begin
       $('$')fwrite (wfile,"cycle is %0d\n",cnt);
+      if(i1.i1.return_value == 0)begin
+        $('$')display ("The result is correct~");
+      end else begin
+        $('$')display ("The result is wrong!!!");
+      end
       $('$')fclose(wfile);
       $('#')1000 $('$')stop;
     end else begin

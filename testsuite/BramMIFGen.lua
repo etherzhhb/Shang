@@ -76,375 +76,132 @@ function HexToBin(hexstr,bitwidth)
 return s
 end
 
-function placeGVinBramInitfile(k,v,ram_num)
+function linebyGVBit(k,v,table_name,table_num,LineTotal,strinit,addr)
+  local Size = v.ElemSize
+  local NumElems = v.NumElems
   local mem_data = ''
   --Count in a row in order to form 64 bit for each row 
   local count = 0
-  if v.Initializer ~= nil then
-		if v.ElemSize == 8 then
-			for i,n in ipairs(v.Initializer) do
-				count = count + 1
-        --Line the varables from right to left
-				mem_data = HexToBin(n,8)..mem_data
-        --If the elemsize of v.Initializer is 8 then do like this---------
-        --If each varable's width is 8 then 8 varables would form a row
-				if count == 8 then
-					_put(mem_data)
-          --In order to debug we comment the first line with some markble words
-					if i==8 then
-            _put('   // -8- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-            --Insert each array's beginning address to a table
-						table.insert(table_name, k)
-						table.insert(table_num, ram_num)
-					end
-          --Give each line a '\n' except the last one
-					if(i ~= v.NumElems) then
-            _put('\n')
-          else
-            table.insert(LineTotal, ram_num)
-					end
-					count = 0
-					mem_data = ''
-          --Mark the number of each line then we can caluclate the address at the end of file
-					ram_num = ram_num + 1
-				end
-        --If at the last varables the count is less than 8 we use '0' to make a line is 64 bits
-				if (i == v.NumElems) then
-					if count~=8 and count > 0 then
-					  if v.NumElems > 8 then
-							for j=1,((8-count)*8) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -8- the end of ') _put(count) _put(k)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1
-						elseif v.NumElems < 8 then
-							for j=1,((8-count)*8) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -8_- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-              --Insert each array's beginning address to a table
-							table.insert(table_name, k)
-							table.insert(table_num, ram_num)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1
-						end
-					end
-				end
+  local NumInLine = 64/Size
+  for i=1, NumElems do
+    count = count + 1
+    --Line the varables from right to left
+    if v.Initializer ~= nil then
+      mem_data = HexToBin(v.Initializer[i],Size)..mem_data
+    else
+      mem_data = HexToBin(0,Size)..mem_data
+    end
+    --If the elemsize of v.Initializer is 8 then do like this---------
+    --If each varable's width is 8 then 8 varables would form a row
+    if count == NumInLine then
+      if addr == 0 then 
+        strinit = strinit..mem_data
+      else
+        strinit = strinit..'\n'..mem_data
       end
-    --If the elemsize of v.Initializer is 16 then do like this---------
-		elseif v.ElemSize == 16 then
-    --If each varable's width is 16 then 4 varables would form a row
-			for i,n in ipairs(v.Initializer) do
-				count = count + 1
-        --Line the varables from right to left
-				mem_data = HexToBin(n,16)..mem_data
-				if count == 4 then
-					_put(mem_data)
-					if i == 4 then
-            --In order to debug we comment the first line with some markble words
-            _put('   // -16- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-            --Insert each array's beginning address to a table
-						table.insert(table_name, k)
-						table.insert(table_num, ram_num)
-					end
-          --Give each line a '\n' except the last one
-					if(i ~= v.NumElems) then
-            _put('\n')
-          else
-            table.insert(LineTotal, ram_num)
-					end
-					count = 0
-					mem_data = ''
-          --Mark the number of each line then we can caluclate the address at the end of file
-					ram_num = ram_num + 1
-				end
-
-				if (i == v.NumElems) then
-					if count~=4 and count > 0 then
-					  if v.NumElems >4 then
-							for j=1,((4-count)*16) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -16- the end of ') _put(count) _put(k)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1
-						else
-							for j=1,((4-count)*16) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -16_- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-              --Insert each array's beginning address to a table
-							table.insert(table_name, k)
-							table.insert(table_num, ram_num)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1		
-						end
-					end
-				end
-			end
-    --if the elemsize of v.Initializer is 32 then do like this---------
-		elseif v.ElemSize == 32 then
-    --if each varable's width is 32 then 2 varables would form a row
-			for i,n in ipairs(v.Initializer) do
-				count = count + 1
-        --Line the varables from right to left
-				mem_data = HexToBin(n,32)..mem_data
-				if count == 2 then
-					_put(mem_data)
-					if i==2 then
-            --In order to debug we comment the first line with some markble words
-            _put('   // -32- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-            --Insert each array's beginning address to a table
-						table.insert(table_name, k)
-						table.insert(table_num, ram_num)
-					end
-          --Give each line a '\n' except the last one
-					if(i ~= v.NumElems) then
-            _put('\n')
-          else
-            table.insert(LineTotal, ram_num)
-					end
-					count = 0
-					mem_data = ''
-          --Mark the number of each line then we can caluclate the address at the end of file
-					ram_num = ram_num + 1
-				end
-
-				if (i == v.NumElems) then
-					if count == 1 then
-					  if v.NumElems >2 then
-							for j=1,32 do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -32- the end of ') _put(count) _put(k)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1
-						else
-							for j=1,32 do	mem_data = '0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('    //-32_- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-              --Insert each array's beginning address to a table
-							table.insert(table_name, k)
-							table.insert(table_num, ram_num)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1		
-						end
-					end
-				end
-			end
-    --if the elemsize of v.Initializer is 64 then do like this---------
-		elseif v.ElemSize == 64 then
-			for i,n in ipairs(v.Initializer) do
-				_put(HexToBin(n,64))
-				if i==1 then
-          --In order to debug we comment the first line with some markble words
-          _put('    //-64- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-          --Insert each array's beginning address to a table
-					table.insert(table_name, k)
-					table.insert(table_num, ram_num)
-				end
-        --Give each line a '\n' except the last one
-				if(i ~= v.NumElems) then
-          _put('\n')
-        else
-          table.insert(LineTotal, ram_num)
-				end
-        --Mark the number of each line then we can caluclate the address at the end of file
-				ram_num = ram_num + 1
-			end
-		end
-	else
-    --if v.Initializer is nil then do like this-------------
-    if v.ElemSize == 8 then
-			for i = 1, v.NumElems do
-				count = count + 1
-        --Line the varables from right to left
-				mem_data = HexToBin(0,8)..mem_data
-				if count == 8 then
-					_put(mem_data)
-					if i==8 then
-            _put('   // -8 nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-						table.insert(table_name, k)
-						table.insert(table_num, ram_num)
-					end
-					if(i ~= v.NumElems) then
-            _put('\n')
-          else
-            table.insert(LineTotal, ram_num)
-					end
-					count = 0
-					mem_data = ''
-					ram_num = ram_num + 1
-				end
-				if (i == v.NumElems) then
-					if count~=8 and count > 0 then
-					  if v.NumElems > 8 then
-							for j=1,((8-count)*8) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              _put('   // -8nil- the end of ') _put(count) _put(k)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-							ram_num = ram_num + 1
-						elseif v.NumElems < 8 then
-							for j=1,((8-count)*8) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              _put('   // -8_nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-							table.insert(table_name, k)
-							table.insert(table_num, ram_num)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-							ram_num = ram_num + 1
-						end
-					end
-				end
+      --In order to debug we comment the first line with some markble words
+      if i==NumInLine then
+        strinit = strinit ..'   // -8- \`define gv'
+        --Insert each array's beginning addr to a table
+        table.insert(table_name, k)
+        table.insert(table_num, addr)
       end
-    elseif v.ElemSize == 16 then
-    --If each varable's width is 16 then 4 varables would form a row
-			for i = 1, v.NumElems do
-				count = count + 1
-        --Line the varables from right to left
-				mem_data = HexToBin(0,16)..mem_data
-				if count == 4 then
-					_put(mem_data)
-					if i == 4 then
-            --In order to debug we comment the first line with some markble words
-            _put('   // -16nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-            --Insert each array's beginning address to a table
-						table.insert(table_name, k)
-						table.insert(table_num, ram_num)
-					end
-          --Give each line a '\n' except the last one
-					if(i ~= v.NumElems) then
-            _put('\n')
+      --Give each line a '\n' except the last one
+      if(i == NumElems) then
+        table.insert(LineTotal, addr)
+      end
+      count = 0
+      mem_data = ''
+      --Mark the number of each line then we can caluclate the addr at the end of file
+      addr = addr + 1
+      if(i == NumElems) then
+        return strinit,addr
+      end
+    end
+    --If at the last varables the count is less than 8 we use '0' to make a line is 64 bits
+    if (i == NumElems) then
+      if count~=NumInLine and count > 0 then
+        if NumElems > NumInLine then
+          for j=1,((NumInLine-count)*Size) do	mem_data='0'..mem_data end
+          strinit = strinit..'\n'..mem_data
+          --In order to debug we comment the first line with some markble words
+          strinit = strinit ..'   // -8- the end of '
+          table.insert(LineTotal, addr)
+          count = 0
+          mem_data = ''
+          --Mark the number of each line then we can caluclate the addr at the end of file
+          addr = addr + 1
+          return strinit,addr
+        elseif NumElems < NumInLine then
+          for j=1,((NumInLine-count)*Size) do	mem_data='0'..mem_data end
+          if addr == 0 then 
+            strinit = strinit..mem_data
           else
-            table.insert(LineTotal, ram_num)
-					end
-					count = 0
-					mem_data = ''
-          --Mark the number of each line then we can caluclate the address at the end of file
-					ram_num = ram_num + 1
-				end
+            strinit = strinit..'\n'..mem_data
+          end
+          --In order to debug we comment the first line with some markble words
+          strinit = strinit ..'   // -8_- \`define gv'
+          --Insert each array's beginning addr to a table
+          table.insert(table_name, k)
+          table.insert(table_num, addr)
+          table.insert(LineTotal, addr)
+          count = 0
+          mem_data = ''
+          --Mark the number of each line then we can caluclate the addr at the end of file
+          addr = addr + 1
+          return strinit,addr
+        end
+      end
+    end
+  end
+end
 
-				if i == v.NumElems then
-					if count~=4 and count > 0 then
-					  if v.NumElems >4 then
-							for j=1,((4-count)*16) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -16nil- the end of ') _put(count) _put(k)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1
-						else
-							for j=1,((4-count)*16) do	mem_data='0'..mem_data end
-							_put(mem_data)
-              --In order to debug we comment the first line with some markble words
-              _put('   // -16_nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-              --Insert each array's beginning address to a table
-							table.insert(table_name, k)
-							table.insert(table_num, ram_num)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-              --Mark the number of each line then we can caluclate the address at the end of file
-							ram_num = ram_num + 1	
-						end
-					end
-				end
-			end
-    elseif v.ElemSize == 32 then
-			for i = 1, v.NumElems do
-				count = count + 1
-				mem_data = HexToBin(0,32)..mem_data
-				if count == 2 then
-					_put(mem_data)
-					if i==2 then
-            _put('   // -32nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-						table.insert(table_name, k)
-						table.insert(table_num, ram_num)
-					end
-					if(i ~= v.NumElems) then
-            _put('\n')
-          else
-            table.insert(LineTotal, ram_num)
-					end
-					count = 0
-					mem_data = ''
-					ram_num = ram_num + 1
-				end
+function linebyGVBit64(k,v,table_name,table_num,LineTotal,strinit,addr)
+  local WriteData = ''
+  for i=1,v.NumElems do
+    if v.Initializer ~= nil then
+      WriteData = HexToBin(v.Initializer[i],64)
+    else
+      WriteData = HexToBin(0,64)
+    end
+    if addr == 0 then 
+      strinit = strinit..WriteData
+    else
+      strinit = strinit..'\n'..WriteData
+    end
+    if i==1 then
+      --In order to debug we comment the first line with some markble words
+      strinit = strinit ..'    //-64- \`define gv'
+      --Insert each array's beginning addr to a table
+      table.insert(table_name, k)
+      table.insert(table_num, addr)
+    end
+    --Give each line a '\n' except the last one
+    if(i == v.NumElems) then
+      table.insert(LineTotal, addr)
+    end
+    --Mark the number of each line then we can caluclate the addr at the end of file
+    addr = addr + 1
+    if(i == v.NumElems) then
+      return strinit,addr
+    end
+  end
+end
 
-				if (i == v.NumElems) then
-					if count == 1 then
-					  if v.NumElems >2 then
-							for j=1,32 do	mem_data='0'..mem_data end
-							_put(mem_data)
-              _put('   // -32nil- the end of ') _put(count) _put(k)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-							ram_num = ram_num + 1
-						else
-							for j=1,32 do	mem_data = '0'..mem_data end
-							_put(mem_data)
-              _put('    //-32_nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-							table.insert(table_name, k)
-							table.insert(table_num, ram_num)
-              table.insert(LineTotal, ram_num)
-							count = 0
-							mem_data = ''
-							ram_num = ram_num + 1
-						end
-					end
-				end
-			end
-    --if the elemsize of v.Initializer is 64 then do like this---------
-		elseif v.ElemSize == 64 then
-			for i = 1, v.NumElems do
-				_put(HexToBin(0,64))
-				if i==1 then
-          _put('    //-64 nil- \`define gv') _put(k) _put(' 32\'d') _put(ram_num*8)
-					table.insert(table_name, k)
-					table.insert(table_num, ram_num)
-				end
-				if(i ~= v.NumElems) then
-          _put('\n')
-        else
-          table.insert(LineTotal, ram_num)
-				end
-				ram_num = ram_num + 1
-			end
-		end
-	end
-
+function placeGVinBramInitfile(k,v,strinit,addr,table_name,table_num,LineTotal)
+  if v.ElemSize == 64 then
+    return linebyGVBit64(k,v,table_name,table_num,LineTotal,strinit,addr)
+  else
+    return linebyGVBit(k,v,table_name,table_num,LineTotal,strinit,addr)
+  end
 end
 
 BlockRAMInitFileGenScript=[=[
-#local ram_num = 0
+#local addr = 0
+#local strinit = ''
 #for k,v in pairs(GlobalVariables) do
-$(placeGVinBramInitfile(k,v,ram_num))
+#strinit,addr = placeGVinBramInitfile(k,v,strinit,addr,table_name,table_num,LineTotal)
 #end
+#_put(strinit)
+#_put('\n')
 ]=]

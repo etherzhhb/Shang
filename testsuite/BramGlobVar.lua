@@ -25,11 +25,11 @@ Misc.RTLGlobalScript = [=[
 table_name = {}
 table_num = {}
 LineTotal = {}
-local MifFile = assert(io.open (MIFFILE, "a+"))
+local BramInitFile = assert(io.open (BRAMINIT, "a+"))
 local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=BlockRAMInitFileGenScript, output=MifFile}
+local _, message = preprocess {input=BlockRAMInitFileGenScript, output=BramInitFile}
 if message ~= nil then print(message) end
-MifFile:close()
+BramInitFile:close()
 local preprocess = require "luapp" . preprocess
 RTLGlobalCode, message = preprocess {input=RTLGlobalTemplate}
 if message ~= nil then print(message) end

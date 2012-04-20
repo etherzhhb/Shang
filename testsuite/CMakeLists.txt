@@ -303,7 +303,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_SDC_SRC        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sdc")
   set(MAIN_INT_TOP        "${TEST_BINARY_ROOT}/INTF_${MAIN_RTL_ENTITY}.v")
   set(MAIN_INT_BRAM       "${TEST_BINARY_ROOT}/BRAM.sv")
-  set(MAIN_INT_BRAM_MIF   "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.mif")
+  set(MAIN_INT_BRAMINIT   "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}_BramInit.txt")
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
   set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.v")
@@ -339,7 +339,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   add_custom_target(${TEST}_main_ir DEPENDS ${MAIN_ORIG_BC})
   add_dependencies(main_ir ${TEST}_main_ir)
 
-  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAM_MIF} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
+  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config_main.lua  ${EXTRA_HLS_OPTION}"
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
@@ -356,11 +356,11 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
     )
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounterTB}
+    COMMAND . "${TEST_BINARY_ROOT}/modeldofile"
     COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-    COMMAND . "${TEST_BINARY_ROOT}/modeldofile"
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${CycleCounter} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAM_MIF}
+    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${CycleCounter} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )
