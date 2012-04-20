@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/Format.h"
 #define DEBUG_TYPE "vtm-scripting-pass"
 #include "llvm/Support/Debug.h"
 
@@ -53,31 +54,35 @@ struct ScriptingPass : public MachineFunctionPass {
 
 char ScriptingPass::ID = 0;
 
-static void ExtractConstant(raw_ostream &OS, Constant *C) {
+static void ExtractConstant(raw_ostream &OS, Constant *C, TargetData *TD) {
   if (ConstantInt *CI = dyn_cast<ConstantInt>(C)) {
-    const Type* Ty = CI->getType();
+    Type* Ty = CI->getType();
+    OS << '\'';
     if (Ty == Type::getInt1Ty(C->getContext()))
-      OS << '\'' << (CI->getZExtValue() ? '1' : '0') << '\'';
-    else
-      OS << "\'0x" << utohexstr(CI->getZExtValue()) << '\'';
-
+       OS << (CI->getZExtValue() ? '1' : '0');
+    else {
+      std::string FormatS =
+        "%0" + utostr_32(TD->getTypeStoreSize(Ty) * 2) + "x";
+      OS << "0x" << format_object1<uint64_t>(FormatS.c_str(), CI->getZExtValue());
+    }
+    OS << '\'';
     return;
   }
 
   if (ConstantDataSequential *CDS = dyn_cast<ConstantDataSequential>(C)) {
-    ExtractConstant(OS, CDS->getElementAsConstant(0));
+    ExtractConstant(OS, CDS->getElementAsConstant(0), TD);
     for (unsigned i = 1, e = CDS->getNumElements(); i != e; ++i) {
       OS << ", ";
-      ExtractConstant(OS, CDS->getElementAsConstant(i));
+      ExtractConstant(OS, CDS->getElementAsConstant(i), TD);
     }
     return;
   }
 
   if (ConstantArray *CA = dyn_cast<ConstantArray>(C)) {
-    ExtractConstant(OS, cast<Constant>(CA->getOperand(0)));
+    ExtractConstant(OS, cast<Constant>(CA->getOperand(0)), TD);
     for (unsigned i = 1, e = CA->getNumOperands(); i != e; ++i) {
       OS << ", ";
-      ExtractConstant(OS, cast<Constant>(CA->getOperand(i)));
+      ExtractConstant(OS, cast<Constant>(CA->getOperand(i)), TD);
     }
     return;
   }
@@ -86,7 +91,8 @@ static void ExtractConstant(raw_ostream &OS, Constant *C) {
   OS << '0';
 }
 
-static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV) {
+static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV,
+                                  TargetData *TD) {
   if (!GV->hasInitializer()) {
     OS << "nil";
     return;
@@ -99,7 +105,7 @@ static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV) {
   }
 
   OS << "{ ";
-  ExtractConstant(OS, C);
+  ExtractConstant(OS, C, TD);
   OS << "}";
 }
 
@@ -146,7 +152,7 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
 
     // The initialer table: Initializer = { c0, c1, c2, ... }
     SS << "Initializer = ";
-    CreateInitializerInfo(SS, GV);
+    CreateInitializerInfo(SS, GV, TD);
     SS << '}';
 
     SS.flush();
