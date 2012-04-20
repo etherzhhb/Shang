@@ -79,11 +79,10 @@ end
 BlockRAMInitFileGenScript=[=[
 #local ram_num = 0
 #for k,v in pairs(GlobalVariables) do
-$(
-	local mem_data = ''
+$(local mem_data = ''
   --Count in a row in order to form 64 bit for each row 
   local count = 0
-if v.Initializer ~= nil then
+  if v.Initializer ~= nil then
 		if v.ElemSize == 8 then
 			for i,n in ipairs(v.Initializer) do
 				count = count + 1
