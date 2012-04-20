@@ -185,6 +185,17 @@ struct GVUseCollector {
     return false;
   }
 
+  static bool isLocalizedCandidate(GlobalVariable *GV) {
+    // Cannot localize if the GV may be modified by others module.
+    if (!GV->hasInternalLinkage() && !GV->hasPrivateLinkage() &&
+        (!GV->isConstant() || GV->isDeclaration()))
+      return false;
+
+    assert(GV->hasInitializer() && "Unexpected declaration!");
+
+    return true;
+  }
+
   bool canBeLocalized() const {
     typedef DenseMap<Function*, UsesVec>::const_iterator it;
     unsigned NumReferredFunctions = 0;
@@ -313,12 +324,8 @@ bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
 }
 
 bool BlockRAMFormation::localizeGV(GlobalVariable *GV, Module &M) {
-  // Cannot localize if the GV may be modified by others module.
-  if (!GV->hasInternalLinkage() && !GV->hasPrivateLinkage() &&
-      (!GV->isConstant() || GV->isDeclaration()))
-    return false;
+  if (!GVUseCollector::isLocalizedCandidate(GV)) return false;
 
-  assert(GV->hasInitializer() && "Unexpected declaration!");
   // Not support BRAM initializing at the moment.
   if (!GV->getInitializer()->isNullValue())
     return false;
