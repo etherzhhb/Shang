@@ -227,7 +227,7 @@ table_name = {}
 table_num = {}
 LineTotal = {}
 local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=GS}
+local _, message = preprocess {input=BlockRAMInitFileGenScript}
 local IntfFile = assert(io.open (INTFFILE, "a+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=InterfaceGen, output=IntfFile}
@@ -290,7 +290,7 @@ table_name = {}
 table_num = {}
 LineTotal = {}
 local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=GS}
+local _, message = preprocess {input=BlockRAMInitFileGenScript}
 local BramFile = assert(io.open (BRAMFILE, "a+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=BRAMGen, output=BramFile}

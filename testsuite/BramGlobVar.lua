@@ -27,7 +27,7 @@ table_num = {}
 LineTotal = {}
 local MifFile = assert(io.open (MIFFILE, "a+"))
 local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=GS, output=MifFile}
+local _, message = preprocess {input=BlockRAMInitFileGenScript, output=MifFile}
 if message ~= nil then print(message) end
 MifFile:close()
 local preprocess = require "luapp" . preprocess

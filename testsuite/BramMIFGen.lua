@@ -76,7 +76,7 @@ function HexToBin(hexstr,bitwidth)
 return s
 end
 
-GS =[=[
+BlockRAMInitFileGenScript=[=[
 #local ram_num = 0
 #for k,v in pairs(GlobalVariables) do
 $(
