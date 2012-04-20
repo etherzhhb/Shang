@@ -40,11 +40,14 @@ SoftwareIROutput = [[@MAIN_SW_LL@]]
 IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
 CounterFile = [[@CycleCounter@]]
+CycleCounterTB = [[@CycleCounterTB@]]
 BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
 
 INTFFILE = [[@MAIN_INT_TOP@]]
 BRAMFILE = [[@MAIN_INT_BRAM@]]
 MIFFILE = [[@MAIN_INT_BRAM_MIF@]]
+MODELDOFILE = [[@MAIN_MODELDO_FILE@]]
+TBFILE = [[@MAIN_TB_FILE@]]
 
 -- Define some function
 dofile('@VTS_SOURCE_ROOT@/' .. 'FuncDefine.lua')

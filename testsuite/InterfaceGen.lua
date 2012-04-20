@@ -1,4 +1,4 @@
-function GetGVBit(Num)
+function getGVBit(Num)
   if Num <= 2 then        return 1
   elseif Num <= 4 then    return 2
   elseif Num <= 8 then    return 3
@@ -36,7 +36,7 @@ wire  [3:0] 			  mem0cmd;
 wire  [31:0] 			  mem0addr;
 wire   					    mem0rdy;
 wire  [7:0]			    mem0be;
-wire  [$(GetGVBit(Num64GV)-1):0] 			  addr2R;   //////////////////////////////
+wire  [$(getGVBit(Num64GV)-1):0] 			  addr2R;   //////////////////////////////
 wire  [7:0] 			  byteenable;
 wire  [63:0] 			  data2R;
 wire  [63:0] 			  q_i;
@@ -115,7 +115,7 @@ module Main2Bram(
 	output    	[63:0]    	mem0in,
   //--------Signal to Bram------------------------//
 	output      [7:0]				byen2R,
-	output 	 	  [$(GetGVBit(Num64GV)-1):0] 			addr2R,  ///////////////////////////////////
+	output 	 	  [$(getGVBit(Num64GV)-1):0] 			addr2R,  ///////////////////////////////////
 	output      [63:0]   	  data2R,
 	output     							wren
   );
@@ -193,7 +193,7 @@ wire	 [7:0]		writebyte_en = writeactive? (mem0be<<mem0addr[2:0]):8'b1111_1111;
 assign     		  data2R = writeactive? (mem0out<<{mem0addr[2:0],3'b0}):0;
 assign          wren = writeactive? 1:0;
 assign 					mem0rdy = ((readrdy)||(writerdy))? 1:0;
-assign 					addr2R = (wren)? mem0addr[$(GetGVBit(Num64GV)+2):3]:addr2R_read[$(GetGVBit(Num64GV)+2):3];/////////////////////////////////
+assign 					addr2R = (wren)? mem0addr[$(getGVBit(Num64GV)+2):3]:addr2R_read[$(getGVBit(Num64GV)+2):3];/////////////////////////////////
 assign					byen2R = (wren)? writebyte_en:readbyte_en;
 //-=======================================================================================
 //-=======================================================================================
@@ -240,7 +240,7 @@ BRAMGen = [=[
 #local Num64GV = LineTotal[table_size_tmp] + 1
 module BRAM
 	$('#')(parameter int
-		ADDR_WIDTH = $(GetGVBit(Num64GV)),                       ///////////////////////////
+		ADDR_WIDTH = $(getGVBit(Num64GV)),                       ///////////////////////////
 		BYTE_WIDTH = 8,
 		BYTES = 8,
 		WIDTH = BYTES * BYTE_WIDTH
@@ -296,4 +296,84 @@ local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=BRAMGen, output=BramFile}
 if message ~= nil then print(message) end
 BramFile:close()
+]=]}
+
+DUTtbGen = [=[
+`timescale 1 ps/ 1 ps
+module DUT_TOP_tb();
+reg clk;
+reg rstN;
+reg start;
+wire [7:0] LED7;
+reg startcnt;
+
+DUT_TOP i1 (
+	.clk(clk),
+	.rstN(rstN),
+  .start(start),
+	.LED7(LED7)
+);
+  integer wfile;
+  initial wfile = $('$')fopen("$(CycleCounterTB)");
+
+initial
+begin
+clk = 0;rstN = 1; start = 1; startcnt = 0;
+$('#')6 rstN = 0;
+$('#')10 rstN = 1;start = 0;
+$('#')10 start = 1;startcnt= 1;
+end
+
+always
+$('#')5 clk = ~clk;
+
+reg [31:0] cnt = 0;
+always@(posedge clk)begin
+  if(startcnt)begin
+    if(i1.i1.fin)begin
+      $('$')fwrite (wfile,"cycle is %0d\n",cnt);
+      $('$')fclose(wfile);
+      $('#')1000 $('$')stop;
+    end else begin
+      cnt <= cnt + 1;
+    end
+  end
+end
+
+endmodule
+]=]
+
+Passes.DUTtbGen = { FunctionScript = [=[
+if Functions[FuncInfo.Name] ~= nil then
+end
+]=], GlobalScript =[=[
+local tbFile = assert(io.open (TBFILE, "a+"))
+local preprocess = require "luapp" . preprocess
+local _, message = preprocess {input=DUTtbGen, output=tbFile}
+if message ~= nil then print(message) end
+tbFile:close()
+]=]}
+
+ModelsimScGen = [=[
+$('#')!/bin/dash
+PATH=~/altera/10.1/modelsim_ase/bin/:~/altera/modelsim_ase/bin/:$PATH
+export DISPLAY=:0
+vlib work
+vlog +define+quartus_synthesis $(RTLModuleName).v
+vlog INTF_$(RTLModuleName).v
+vlog DUT_TOP_tb.v
+vlog BRAM.sv
+vsim DUT_TOP_tb -novopt -do "run -all;quit -f"
+
+]=]
+
+Passes.ModelsimScGen = { FunctionScript = [=[
+if Functions[FuncInfo.Name] ~= nil then
+end
+]=], GlobalScript =[=[
+local ModelDoFile = assert(io.open (MODELDOFILE, "a+"))
+local preprocess = require "luapp" . preprocess
+local _, message = preprocess {input=ModelsimScGen, output=ModelDoFile}
+if message ~= nil then print(message) end
+ModelDoFile:close()
 ]=]}

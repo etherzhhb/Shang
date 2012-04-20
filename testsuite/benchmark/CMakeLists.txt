@@ -12,7 +12,7 @@ endmacro(add_benchmark_stats)
 macro(add_benchmark_symain_stats name)
 add_test_main_cases(${name})
 set(TESTNAME ${name}_${PipelineType}_${ScheduleType})
-add_dependencies(benchmart_synthesis_main ${TESTNAME}_synthesis_main)
+add_dependencies(benchmark_synthesis_main ${TESTNAME}_synthesis_main)
 
 endmacro(add_benchmark_symain_stats)
 

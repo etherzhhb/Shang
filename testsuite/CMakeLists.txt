@@ -111,7 +111,7 @@ add_custom_target(benchmark_report
                   COMMENT "Report the area and FMax about the synthesized module of benchmarks with Quartus II")
 add_dependencies(benchmark_report benchmark_test)
 
-add_custom_target(benchmart_synthesis_main
+add_custom_target(benchmark_synthesis_main
           COMMENT "Synthesising main module and Run on FPGA board")
 
 add_custom_target(benchmark_test_main
@@ -305,6 +305,8 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_INT_BRAM       "${TEST_BINARY_ROOT}/BRAM.sv")
   set(MAIN_INT_BRAM_MIF   "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.mif")
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
+  set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
+  set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.v")
 
   set(MAIN_IF_SRC         "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.${postfix}")
   set(MAIN_SC_O           "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.o")
@@ -314,6 +316,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_V__ALL         "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL__ALL.a")
   set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")
+  set(CycleCounterTB        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}_TB.txt")
 
   configure_file (
     ${config_file}
@@ -336,7 +339,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   add_custom_target(${TEST}_main_ir DEPENDS ${MAIN_ORIG_BC})
   add_dependencies(main_ir ${TEST}_main_ir)
 
-  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAM_MIF}
+  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAM_MIF} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config_main.lua  ${EXTRA_HLS_OPTION}"
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
@@ -346,24 +349,25 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   add_custom_target(${TEST}_main_hls DEPENDS ${MAIN_RTL_SRC})
   add_dependencies(main_hls ${TEST}_main_hls)
 
-if(SYNTHESIS_DUT AND TARGET benchmart_synthesis_main)
+if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   configure_file (
     ${setup_prj_file}
     "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
     )
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA}
-    COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
+    #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
+    COMMAND . "${TEST_BINARY_ROOT}/modeldofile"
     DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${CycleCounter} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAM_MIF}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )
-
   add_custom_target(${TEST}_synthesis_main DEPENDS ${MAIN_RTL_STA})
   add_dependencies(${TEST}_synthesis_main ${TEST}_main_hls)
-endif(SYNTHESIS_DUT AND TARGET benchmart_synthesis_main)
+
+endif(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
 
   add_custom_command(OUTPUT ${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL.mk
     COMMAND rm -rf "${TEST_BINARY_ROOT}/obj_dir/*"
