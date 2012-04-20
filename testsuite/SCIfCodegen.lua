@@ -12,6 +12,7 @@ extern "C" {
 $('#')endif
 
 #for k,v in pairs(GlobalVariables) do
+#if v.AddressSpace == 0 then
 void *vlt_$(escapeNumber(k))() {
   $(if v.isLocal == 1 then _put('static') else _put('extern') end)
 #if v.Alignment~=0 then
@@ -31,7 +32,7 @@ void *vlt_$(escapeNumber(k))() {
   end);
   return (void *)$(if v.NumElems == 1 then  _put('&') end)$(k);
 }
-
+#end --end addresssapce == 0
 #end
 
 // Wrapper functions.

@@ -116,9 +116,11 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
   for (Module::global_iterator GI = M.global_begin(), E = M.global_end();
        GI != E; ++GI ){
     GlobalVariable *GV = GI;
+
     // GlobalVariable information:
     // GVInfo {
     //   bool isLocal
+    //   unsigned AddressSpace
     //   unsigned Alignment
     //   unsigned NumElems
     //   unsigned ElemSize
@@ -127,8 +129,8 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
 
     SS << "GlobalVariables." << VBEMangle(GV->getName()) << " = { ";
     SS << "isLocal = " << GV->hasLocalLinkage() << ", ";
+    SS << "AddressSpace = " << GV->getType()->getAddressSpace() << ", ";
     SS << "Alignment = " << GV->getAlignment() << ", ";
-    SS << "NumElems = ";
     Type *Ty = cast<PointerType>(GV->getType())->getElementType();
     // The element type of a scalar is the type of the scalar.
     Type *ElemTy = Ty;
@@ -138,8 +140,7 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
       ElemTy = AT->getElementType();
       NumElem *= AT->getNumElements();
     }
-
-    SS << NumElem << ", ";
+    SS << "NumElems = " << NumElem << ", ";
 
     SS << "ElemSize = " << TD->getTypeStoreSizeInBits(ElemTy) << ", ";
 

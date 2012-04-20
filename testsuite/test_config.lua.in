@@ -68,8 +68,10 @@ RTLGlobalTemplate = [=[
 
 `else
 #for k,v in pairs(GlobalVariables) do
+#if v.AddressSpace == 0 then
 import "DPI-C" function chandle vlt_$(escapeNumber(k))();
 `define gv$(k) vlt_$(escapeNumber(k))()
+#end
 #end
 `endif
 ]=]
