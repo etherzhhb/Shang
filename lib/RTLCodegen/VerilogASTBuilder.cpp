@@ -628,8 +628,11 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     VM->addRegister(VFUBRAM::getWriteEnableName(BramNum), 1);
     VM->addRegister(VFUBRAM::getInDataBusName(BramNum), DataWidth);
     VM->addRegister(VFUBRAM::getAddrBusName(BramNum), AddrWidth);
-    indexVASTValue(BramNum,
-                   VM->addWire(VFUBRAM::getOutDataBusName(BramNum), DataWidth));
+    VASTWire *BRAMOut = VM->addWire(VFUBRAM::getOutDataBusName(BramNum),
+                                    DataWidth);
+    // Used in template.
+    BRAMOut->Pin();
+    indexVASTValue(BramNum, BRAMOut);
     // FIXME: Get the file name from the initializer name.
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
                                 DataWidth, AddrWidth, InitFilePath)
