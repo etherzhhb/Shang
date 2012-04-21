@@ -937,8 +937,6 @@ void VRASimple::bindDstMux() {
 }
 
 void VRASimple::bindBlockRam() {
-  assert(VInstrInfo::isWriteUntilFinish(VTM::VOpBRAMTrans)
-         && "Expected block ram write until finish!");
   std::map<unsigned, LiveInterval*> RepLIs;
 
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {

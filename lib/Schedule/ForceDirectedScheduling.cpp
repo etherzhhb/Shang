@@ -135,16 +135,29 @@ void IterativeModuloScheduling::excludeStep(VSUnit *A, unsigned step) {
 VSUnit *IterativeModuloScheduling::findBlockingSUnit(VSUnit *U, unsigned step) {
   FuncUnitId FU = U->getFUId();
   unsigned Latency = U->getLatency();
+  VFUs::FUTypes UTy = FU.getFUType();
 
   step = computeStepKey(step);
 
   typedef VSchedGraph::sched_iterator it;
   for (it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
     VSUnit *A = *I;
-    if (A->getFUId().isTrivial() || !A->isScheduled() || A->getFUId() != FU)
+    if (A->getFUId().isTrivial() || !A->isScheduled())
       continue;
 
-    unsigned CurStep = computeStepKey(A->getSlot());
+    unsigned CurStep = A->getSlot();
+
+    VFUs::FUTypes ATy = A->getFUType();
+    // Blocked by PipelineStage/PipelineBreaker?
+    if (UTy == VFUs::BRam && (ATy == VFUs::MemoryBus || ATy == VFUs::CalleeFN))
+      --CurStep;
+    else if ((UTy == VFUs::MemoryBus||UTy == VFUs::CalleeFN)&&ATy == VFUs::BRam)
+      ++CurStep;
+    else if (A->getFUId() != FU)
+      continue;
+
+    CurStep = computeStepKey(CurStep);
+
     if (CurStep <= step && CurStep + Latency > step)
       return A;
   }

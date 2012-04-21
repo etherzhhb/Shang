@@ -48,6 +48,9 @@ private:
   typedef std::map<std::pair<FuncUnitId, unsigned>, SparseBitVector<> > RTType;
   RTType RT;
 
+  // Do not mixing pipeline stage with variable latency FUs.
+  typedef DenseMap<unsigned, unsigned> PipelineStatusMap;
+  PipelineStatusMap PipelineStageStatus, PipelineBreakerStatus;
 protected:
   /// @name PriorityQueue
   //{
@@ -98,6 +101,9 @@ public:
   void resetRT() {
     for (RTType::iterator I = RT.begin(), E = RT.end(); I != E; ++I)
       I->second.clear();
+
+    PipelineBreakerStatus.clear();
+    PipelineStageStatus.clear();
   }
 
   SparseBitVector<> &getRTFor(unsigned PredReg, FuncUnitId FU) {

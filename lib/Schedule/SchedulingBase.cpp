@@ -226,6 +226,8 @@ unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
 void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
                             FuncUnitId FU) {
   unsigned PredReg = getPredicateChannel(MI);
+  VFUs::FUTypes Ty = FU.getFUType();
+
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
     SparseBitVector<> &V = getRTFor(PredReg, FU);
@@ -233,6 +235,12 @@ void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
     V.set(s - StartSlot);
     // Also take the un-predicated channel.
     //if (PredReg) getRTFor(PredicatedChannel, FU).set(s - StartSlot);
+
+    // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency".
+    if (Ty == VFUs::BRam)
+      ++PipelineStageStatus[computeStepKey(i + 1)];
+    else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN)
+      ++PipelineBreakerStatus[s];
   }
 }
 
@@ -256,6 +264,7 @@ void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
 bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
                                 FuncUnitId FU) {
   unsigned PredReg = getPredicateChannel(MI);
+  VFUs::FUTypes Ty = FU.getFUType();
   // Do all resource at step been reserve?
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
@@ -268,6 +277,18 @@ bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
     //// Do not conflict with the un-predicated channel as well.
     //if (PredReg && getRTFor(0, FU).test(s - StartSlot))
     //  return false;
+
+    // FIXME: Provide method "hasPipelineStage" and method "isVariableLatency".
+    if (Ty == VFUs::BRam) {
+      // Dont schedule Pipeline FU here, if the pipeline cannot flush before
+      // any pipeline breaker.
+      // FIXME: Should test the the status from start interval + 1 to latency.
+      if (PipelineBreakerStatus.lookup(computeStepKey(i + 1)))
+        return false;
+    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN)
+      // We need to flush the pipeline before issue these operations.
+      if (PipelineStageStatus.lookup(s))
+        return false;
   }
 
   return true;
@@ -311,11 +332,23 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
 void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
                                    unsigned Latency, FuncUnitId FU) {
   unsigned PredReg = getPredicateChannel(MI);
+  VFUs::FUTypes Ty = FU.getFUType();
+
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
     getRTFor(PredReg, FU).reset(s - StartSlot);
     // Also take the un-predicated channel.
     if (PredReg) getRTFor(PredicatedChannel, FU).reset(s - StartSlot);
+
+    if (Ty == VFUs::BRam) {
+      unsigned &Status = PipelineStageStatus[computeStepKey(i + 1)];
+      assert(Status && "Pipeline stage not used!");
+      --Status;
+    } else if (Ty == VFUs::MemoryBus || Ty == VFUs::CalleeFN) {
+      unsigned &Status = PipelineBreakerStatus[s];
+      assert(Status && "Pipeline breaker not used!");
+      --Status;
+    }
   }
 }
 
