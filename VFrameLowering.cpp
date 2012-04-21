@@ -47,6 +47,8 @@ static cl::opt<bool> EnableBRAM("vtm-enable-bram",
 STATISTIC(NumGlobalAlias, "Number of global alias created for allocas");
 STATISTIC(NumBlockRAMs, "Number of block RAM created");
 STATISTIC(NumLocalizedGV, "Number of GlobalVariable localized");
+STATISTIC(NumInitializedGV,
+          "Number of GlobalVariable with initializer localized");
 
 
 void VFrameInfo::emitPrologue(MachineFunction &MF) const {
@@ -326,11 +328,10 @@ bool BlockRAMFormation::runOnFunction(Function &F, Module &M) {
 bool BlockRAMFormation::localizeGV(GlobalVariable *GV, Module &M) {
   if (!GVUseCollector::isLocalizedCandidate(GV)) return false;
 
-  // Not support BRAM initializing at the moment.
-  if (!GV->getInitializer()->isNullValue())
-    return false;
-
   GVUseCollector Collector;
+
+  if (!GV->getInitializer()->isNullValue())
+    ++NumInitializedGV;
 
   if (!visitPtrUseTree(GV, Collector)) return false;
 
