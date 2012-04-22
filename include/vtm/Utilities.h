@@ -16,6 +16,7 @@
 //===----------------------------------------------------------------------===//
 #ifndef VTM_UTILITIES_H
 #define VTM_UTILITIES_H
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
@@ -105,6 +106,23 @@ bool runScriptStr(const std::string &ScriptStr, SMDiagnostic &Err);
 //
 unsigned getIntValueFromEngine(ArrayRef<const char*> Path);
 std::string getStrValueFromEngine(ArrayRef<const char*> Path);
+
+class MachineMemOperand;
+class ScalarEvolution;
+class SCEV;
+// Alias Analysis.
+AliasAnalysis::AliasResult
+MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
+                       AliasAnalysis *AA, ScalarEvolution *SE);
+
+const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE);
+
+static inline
+bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
+                              AliasAnalysis *AA, ScalarEvolution *SE) {
+  return MachineMemOperandAlias(V1, V2, AA, SE) != AliasAnalysis::NoAlias;
+}
+
 }
 
 #endif

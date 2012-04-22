@@ -19,7 +19,7 @@
 #include "VSUnit.h"
 #include "SchedulingBase.h"
 #include "vtm/MicroState.h"
-
+#include "vtm/Utilities.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
@@ -283,108 +283,6 @@ VPreRegAllocSched::~VPreRegAllocSched() {
 }
 
 //===----------------------------------------------------------------------===//
-const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE){
-  const SCEV *S = SE->getSCEV(const_cast<Value*>(V->getValue()));
-  if (int64_t Offset = V->getOffset())
-    S = SE->getAddExpr(S, SE->getConstant(S->getType(), Offset, true));
-
-  return S;
-}
-
-static Value *GetBaseValue(const SCEV *S) {
-  if (const SCEVAddRecExpr *AR = dyn_cast<SCEVAddRecExpr>(S)) {
-    // In an addrec, assume that the base will be in the start, rather
-    // than the step.
-    return GetBaseValue(AR->getStart());
-  } else if (const SCEVAddExpr *A = dyn_cast<SCEVAddExpr>(S)) {
-    // If there's a pointer operand, it'll be sorted at the end of the list.
-    const SCEV *Last = A->getOperand(A->getNumOperands()-1);
-    if (Last->getType()->isPointerTy())
-      return GetBaseValue(Last);
-  } else if (const SCEVUnknown *U = dyn_cast<SCEVUnknown>(S)) {
-    // This is a leaf node.
-    return U->getValue();
-  }
-  // No Identified object found.
-  return 0;
-}
-
-static AliasAnalysis::AliasResult
-MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
-                       AliasAnalysis *AA, ScalarEvolution *SE) {
-  uint64_t V1Size = V1->getSize(), V2Size = V2->getSize();
-  // If either of the memory references is empty, it doesn't matter what the
-  // pointer values are. This allows the code below to ignore this special
-  // case.
-  if (V1Size == 0 || V2Size == 0) return AliasAnalysis::NoAlias;
-
-  Value *V1Ptr = const_cast<Value *>(V1->getValue()),
-        *V2Ptr = const_cast<Value *>(V2->getValue());
-  int64_t V1Offset = V1->getOffset(), V2Offset = V2->getOffset();
-  // FIXME: already implemented in VAliasAnalysis.
-  if (cast<PointerType>(V1Ptr->getType())->getAddressSpace() !=
-      cast<PointerType>(V2Ptr->getType())->getAddressSpace())
-    return AliasAnalysis::NoAlias;
-
-  // AliasAnalysis can handle memory location with zero offset.
-  // Ask AliasAnalysis for help.
-  if (V1Offset == V2Offset) return AA->alias(V1Ptr, V1Size, V2Ptr, V2Size);
-
-  // This is ScalarEvolutionAliasAnalysis. Get the SCEVs!
-  const SCEV *V1S = getMachineMemOperandSCEV(V1, SE);
-  const SCEV *V2S = getMachineMemOperandSCEV(V2, SE);
-
-  // If they evaluate to the same expression, it's a MustAlias.
-  if (V1S == V2S) return AliasAnalysis::MustAlias;
-  // If something is known about the difference between the two addresses,
-  // see if it's enough to prove a NoAlias.
-  if (SE->getEffectiveSCEVType(V1S->getType()) ==
-      SE->getEffectiveSCEVType(V2S->getType())) {
-    unsigned BitWidth = SE->getTypeSizeInBits(V1S->getType());
-    APInt ASizeInt(BitWidth, V1Size);
-    APInt BSizeInt(BitWidth, V2Size);
-
-    // Compute the difference between the two pointers.
-    const SCEV *BA = SE->getMinusSCEV(V2S, V1S);
-
-    // Test whether the difference is known to be great enough that memory of
-    // the given sizes don't overlap. This assumes that ASizeInt and BSizeInt
-    // are non-zero, which is special-cased above.
-    if (ASizeInt.ule(SE->getUnsignedRange(BA).getUnsignedMin()) &&
-        (-BSizeInt).uge(SE->getUnsignedRange(BA).getUnsignedMax()))
-      return AliasAnalysis::NoAlias;
-
-    // Folding the subtraction while preserving range information can be tricky
-    // (because of INT_MIN, etc.); if the prior test failed, swap AS and BS
-    // and try again to see if things fold better that way.
-
-    // Compute the difference between the two pointers.
-    const SCEV *AB = SE->getMinusSCEV(V1S, V2S);
-
-    // Test whether the difference is known to be great enough that memory of
-    // the given sizes don't overlap. This assumes that ASizeInt and BSizeInt
-    // are non-zero, which is special-cased above.
-    if (BSizeInt.ule(SE->getUnsignedRange(AB).getUnsignedMin()) &&
-        (-ASizeInt).uge(SE->getUnsignedRange(AB).getUnsignedMax()))
-      return AliasAnalysis::NoAlias;
-  }
-
-  if (AA->isMustAlias(AliasAnalysis::Location(V1Ptr, V1Size),
-                      AliasAnalysis::Location(V2Ptr, V2Size))) {
-    assert(V1Offset != V2Offset
-           && "MachineMemOperand with same offset should not reach here!");
-    return AliasAnalysis::NoAlias;
-  }
-
-  // Cannot go any further, cause the AliasAnalysis is not offset aware.
-  return AliasAnalysis::MayAlias;
-}
-
-static
-bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
-                              AliasAnalysis *AA, ScalarEvolution *SE) {
-  return MachineMemOperandAlias(V1, V2, AA, SE) != AliasAnalysis::NoAlias;
-}
 VPreRegAllocSched::LoopDep
 VPreRegAllocSched::analyzeLoopDep(MachineMemOperand *SrcAddr,
                                   MachineMemOperand *DstAddr,
