@@ -50,7 +50,7 @@ Pass *createFixTerminatorsPass();
 Pass *createBuildWireTransitiveUsersPass();
 Pass *createHyperBlockFormationPass();
 Pass *createPrebindUnbalanceMuxPass();
-Pass *createPrebindMuxBasePass();
+Pass *createBasicPrebindMuxPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.

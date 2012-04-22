@@ -36,13 +36,15 @@ public:
 
   typedef DenseMap<ucOperand, unsigned, ucOperandValueTrait> OpSet;
 
-  // The (FUID, InPortNum) pair.
+  // The (FUID, InPortNum) pair, identify the input port of a pre-bound FU.
   typedef std::pair<unsigned, unsigned> FUPortTy;
-
+  // The remember the fan-in operands set for each input port.
   typedef DenseMap<FUPortTy, OpSet> PortFanInMapTy;
 
+  // The bitwidth information for each input port.
   typedef DenseMap<FUPortTy, unsigned> PortBitwidthMapTy;
 
+  // Remember the fan-in size for each multiplexer.
   typedef DenseMap<unsigned, unsigned> MuxSizeMapTy;
 
   typedef DenseSet<unsigned> RegSet;

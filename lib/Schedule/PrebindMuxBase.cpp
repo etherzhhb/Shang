@@ -16,7 +16,7 @@ using namespace llvm;
 
 char PrebindMuxBase::ID = 0;
 
-Pass *llvm::createPrebindMuxBasePass() {
+Pass *llvm::createBasicPrebindMuxPass() {
   return new PrebindMuxBase();
 }
 
@@ -146,58 +146,58 @@ void PrebindMuxBase::insertDistrubedMuxOp(MachineFunction &MF) {
     MachineBasicBlock *MBB = BI;
 
     for (MachineBasicBlock::iterator II = MBB->begin(), IE = MBB->end();
-      II != IE; ++II) {
-        MachineInstr *Inst = II;
+         II != IE; ++II) {
+      MachineInstr *Inst = II;
 
-        FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
-        if (Id.isTrivial()) continue;
+      FuncUnitId Id = VInstrInfo::getPreboundFUId(Inst);
+      if (Id.isTrivial()) continue;
 
-        const MCInstrDesc &TID = Inst->getDesc();
-        MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
+      const MCInstrDesc &TID = Inst->getDesc();
+      MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
 
-        for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
-          ucOperand &MO = cast<ucOperand>(Inst->getOperand(i));
+      for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
+        ucOperand &MO = cast<ucOperand>(Inst->getOperand(i));
 
-          // Only handle fan-ins
-          if (MO.isReg() && MO.isDef()) continue;
+        // Only handle fan-ins
+        if (MO.isReg() && MO.isDef()) continue;
 
-          // Predicate not handle by mux.
-          if (i < TID.NumOperands && TID.OpInfo[i].isPredicate()) continue;
+        // Predicate not handle by mux.
+        if (i < TID.NumOperands && TID.OpInfo[i].isPredicate()) continue;
 
-          // Not a valid fan-in.
-          if (MO.isReg() && MO.getReg() == 0) continue;
+        // Not a valid fan-in.
+        if (MO.isReg() && MO.getReg() == 0) continue;
 
-          FUPortTy Port = std::make_pair(Id.getData(), i);
+        FUPortTy Port = std::make_pair(Id.getData(), i);
 
-          PortFanInMapTy::iterator MuxNumAt = FanInInfo.find(Port);
+        PortFanInMapTy::iterator MuxNumAt = FanInInfo.find(Port);
 
-          // No mux allocated for this fan-in.
-          if (MuxNumAt == FanInInfo.end()) continue;
-          unsigned MuxNum = MuxNumAt->second.lookup(MO);
-          // No mux allocated for this fan-in.
-          if (MuxNum == NO_MUX_NUM) continue;
+        // No mux allocated for this fan-in.
+        if (MuxNumAt == FanInInfo.end()) continue;
+        unsigned MuxNum = MuxNumAt->second.lookup(MO);
+        // No mux allocated for this fan-in.
+        if (MuxNum == NO_MUX_NUM) continue;
 
-          unsigned BitWidth = PortBitwidthInfo.lookup(Port);
-          unsigned MuxSize = MuxSizeInfo.lookup(MuxNum);
-          assert(BitWidth && MuxSize && "Bad FU Port bitwidth or Mux size!");
+        unsigned BitWidth = PortBitwidthInfo.lookup(Port);
+        unsigned MuxSize = MuxSizeInfo.lookup(MuxNum);
+        assert(BitWidth && MuxSize && "Bad FU Port bitwidth or Mux size!");
 
-          unsigned NewRegNum = MRI.createVirtualRegister(VTM::RMUXRegisterClass);
-          // Remember the register and do not build multiplexer for it again.
-          MuxRegs.insert(NewRegNum);
-          DEBUG(dbgs() << "Allocated mux register: "
-            << TargetRegisterInfo::virtReg2Index(NewRegNum) << '\n');
+        unsigned NewRegNum = MRI.createVirtualRegister(VTM::RMUXRegisterClass);
+        // Remember the register and do not build multiplexer for it again.
+        MuxRegs.insert(NewRegNum);
+        DEBUG(dbgs() << "Allocated mux register: "
+          << TargetRegisterInfo::virtReg2Index(NewRegNum) << '\n');
 
-          BuildMI(*MBB, Inst, Inst->getDebugLoc(), TII->get((VTM::VOpDstMux)))
-            .addOperand(ucOperand::CreateReg(NewRegNum, BitWidth, true))
-            .addOperand(MO) // Source value.
-            .addOperand(ucOperand::CreateImm(MuxNum, 64)) // MuxNumber.
-            .addOperand(ucOperand::CreateImm(MuxSize, 64)) // Mux size.
-            .addOperand(*PredMO) // Predicate
-            .addOperand(ucOperand::CreateTrace(MBB)); // Trace number.
+        BuildMI(*MBB, Inst, Inst->getDebugLoc(), TII->get((VTM::VOpDstMux)))
+          .addOperand(ucOperand::CreateReg(NewRegNum, BitWidth, true))
+          .addOperand(MO) // Source value.
+          .addOperand(ucOperand::CreateImm(MuxNum, 64)) // MuxNumber.
+          .addOperand(ucOperand::CreateImm(MuxSize, 64)) // Mux size.
+          .addOperand(*PredMO) // Predicate
+          .addOperand(ucOperand::CreateTrace(MBB)); // Trace number.
 
-          // Read the value from mux instead.
-          MO.ChangeToRegister(NewRegNum, false);
-        }
+        // Read the value from mux instead.
+        MO.ChangeToRegister(NewRegNum, false);
+      }
     }
   }
 }
