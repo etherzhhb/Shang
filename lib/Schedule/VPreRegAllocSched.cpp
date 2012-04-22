@@ -321,6 +321,7 @@ MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
   Value *V1Ptr = const_cast<Value *>(V1->getValue()),
         *V2Ptr = const_cast<Value *>(V2->getValue());
   int64_t V1Offset = V1->getOffset(), V2Offset = V2->getOffset();
+  // FIXME: already implemented in VAliasAnalysis.
   if (cast<PointerType>(V1Ptr->getType())->getAddressSpace() !=
       cast<PointerType>(V2Ptr->getType())->getAddressSpace())
     return AliasAnalysis::NoAlias;

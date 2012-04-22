@@ -19,6 +19,7 @@ add_llvm_library(VTMSchedule
   RecurrenceFinder.cpp
   VPreRegAllocSched.cpp
   VRegAllocSimple.cpp
+  VAliasAnalysis.cpp
   SDCScheduler.cpp
 )
 

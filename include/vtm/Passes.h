@@ -54,6 +54,7 @@ Pass *createPrebindMuxBasePass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
+Pass *createVAliasAnalysisPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Register allocation.
@@ -77,6 +78,7 @@ Pass *createScriptingPass(const char *Name, const char *FScript,
                           const char *GScript);
 
 //
+void initializeVAliasAnalysisPass(PassRegistry &Registry);
 void initializeAdjustLIForBundlesPass(PassRegistry &Registry);
 void initializePrebindMuxBasePass(PassRegistry &Registry);
 void initializePrebindUnbalanceMuxPass(PassRegistry &Registry);
