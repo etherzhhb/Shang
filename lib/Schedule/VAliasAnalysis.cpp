@@ -74,12 +74,46 @@ Pass *llvm::createVAliasAnalysisPass() {
 }
 
 namespace llvm {
-const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE){
-  const SCEV *S = SE->getSCEV(const_cast<Value*>(V->getValue()));
-  if (int64_t Offset = V->getOffset())
+static const SCEV *getMachineMemOperandSCEV(const Value *V, int64_t Offset,
+                                            ScalarEvolution *SE){
+  // Try to strip pointer casts.
+  if (const ConstantExpr *E = dyn_cast<ConstantExpr>(V)) {
+    if (E->getOpcode() == Instruction::IntToPtr) {
+      if (ConstantExpr *Int = dyn_cast<ConstantExpr>(E->getOperand(0))) {
+        switch (Int->getOpcode()) {
+        default: break;
+        // IntToPtr(PtrToInt A)
+        case Instruction::PtrToInt:
+          return getMachineMemOperandSCEV(Int->getOperand(0), Offset, SE);
+          // IntToPtr(PtrToInt A + Offset)
+        case Instruction::Add: {
+          const Constant *LHS = Int->getOperand(0),
+                         *RHS = Int->getOperand(1);
+          if (const ConstantExpr *Ptr = dyn_cast<ConstantExpr>(LHS))
+            if (Ptr->getOpcode() == Instruction::PtrToInt)
+              if (const ConstantInt *COffset = dyn_cast<ConstantInt>(RHS))
+                return getMachineMemOperandSCEV(Ptr->getOperand(0),
+                                                Offset+COffset->getSExtValue(),
+                                                SE);
+          break;
+        }
+        }
+      }
+    } else if (E->getOpcode() == Instruction::BitCast &&
+               isa<PointerType>(E->getOperand(0)->getType()))
+      return getMachineMemOperandSCEV(E->getOperand(0), Offset, SE);
+  }
+
+  // Get the SCEV.
+  const SCEV *S = SE->getSCEV(const_cast<Value*>(V));
+  if (Offset)
     S = SE->getAddExpr(S, SE->getConstant(S->getType(), Offset, true));
 
   return S;
+}
+
+const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE){
+  return getMachineMemOperandSCEV(V->getValue(), V->getOffset(), SE);
 }
 
 static Value *GetBaseValue(const SCEV *S) {
@@ -99,7 +133,6 @@ static Value *GetBaseValue(const SCEV *S) {
   // No Identified object found.
   return 0;
 }
-
 
 AliasAnalysis::AliasResult
 MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,

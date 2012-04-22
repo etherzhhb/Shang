@@ -525,41 +525,6 @@ void VDAGToDAGISel::PostprocessISelDAG() {
   CurDAG->setRoot(Dummy.getValue());
 }
 
-static
-MachineMemOperand *StripPtrCasts(MachineMemOperand *MemOp, SelectionDAG &DAG) {
-  MachineFunction &MF = DAG.getMachineFunction();
-  const Value *V = MemOp->getValue();
-  const ConstantExpr *CExpr = dyn_cast<ConstantExpr>(V);
-  if (!CExpr || CExpr->getOpcode() != Instruction::IntToPtr) return MemOp;
-
-  ConstantExpr *TheInt = dyn_cast<ConstantExpr>(CExpr->getOperand(0));
-  if (!TheInt) return MemOp;
-
-  MachinePointerInfo PtrInfo = MemOp->getPointerInfo();
-  switch (TheInt->getOpcode()) {
-  default: return MemOp;
-  case Instruction::PtrToInt: {
-    PtrInfo.V = TheInt->getOperand(0);
-    break;
-  }
-  case Instruction::Add: {
-    const Constant *LHS = TheInt->getOperand(0),
-                   *RHS = TheInt->getOperand(1);
-    if (const ConstantExpr *ThePtr = dyn_cast<ConstantExpr>(LHS))
-      if (ThePtr->getOpcode() == Instruction::PtrToInt)
-        if (const ConstantInt *Offset = dyn_cast<ConstantInt>(RHS)) {
-          PtrInfo.V = ThePtr->getOperand(0);
-          PtrInfo.Offset = Offset->getSExtValue();
-        }
-    break;
-  }
-  }
-
-  return MF.getMachineMemOperand(PtrInfo, MemOp->getFlags(), MemOp->getSize(),
-                                 MemOp->getBaseAlignment(), MemOp->getTBAAInfo(),
-                                 MemOp->getRanges());
-}
-
 void VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
                                        bool isStore) {
   LSBaseSDNode *LSNode = cast<LSBaseSDNode>(N);
@@ -587,7 +552,7 @@ void VDAGToDAGISel::LowerMemAccessISel(SDNode *N, SelectionDAG &DAG,
                     };
 
   unsigned DataBusWidth = getFUDesc<VFUMemBus>()->getDataWidth();
-  MachineMemOperand *MemOp = StripPtrCasts(LSNode->getMemOperand(), DAG);
+  MachineMemOperand *MemOp = LSNode->getMemOperand();
   if (unsigned AS = MemOp->getPointerInfo().getAddrSpace()) {
     VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
     DataBusWidth = VFI->getBRamInfo(AS).ElemSizeInBytes * 8;
