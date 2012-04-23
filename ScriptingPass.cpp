@@ -62,7 +62,7 @@ static void ExtractConstant(raw_ostream &OS, Constant *C, TargetData *TD) {
        OS << (CI->getZExtValue() ? '1' : '0');
     else {
       std::string FormatS =
-        "%0" + utostr_32(TD->getTypeStoreSize(Ty) * 2) + "x";
+        "%0" + utostr_32(TD->getTypeStoreSize(Ty) * 2) + "llx";
       OS << "0x" << format_object1<uint64_t>(FormatS.c_str(), CI->getZExtValue());
     }
     OS << '\'';
