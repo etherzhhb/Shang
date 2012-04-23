@@ -21,6 +21,7 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/Pass.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace llvm;
 
@@ -74,8 +75,8 @@ Pass *llvm::createVAliasAnalysisPass() {
 }
 
 namespace llvm {
-static const SCEV *getMachineMemOperandSCEV(const Value *V, int64_t Offset,
-                                            ScalarEvolution *SE){
+static std::pair<const Value*, int64_t>
+extractPointerAndOffset(const Value *V, int64_t Offset) {
   // Try to strip pointer casts.
   if (const ConstantExpr *E = dyn_cast<ConstantExpr>(V)) {
     if (E->getOpcode() == Instruction::IntToPtr) {
@@ -84,26 +85,31 @@ static const SCEV *getMachineMemOperandSCEV(const Value *V, int64_t Offset,
         default: break;
         // IntToPtr(PtrToInt A)
         case Instruction::PtrToInt:
-          return getMachineMemOperandSCEV(Int->getOperand(0), Offset, SE);
-          // IntToPtr(PtrToInt A + Offset)
+          return extractPointerAndOffset(Int->getOperand(0), Offset);
+        // IntToPtr(PtrToInt A + Offset)
         case Instruction::Add: {
           const Constant *LHS = Int->getOperand(0),
                          *RHS = Int->getOperand(1);
           if (const ConstantExpr *Ptr = dyn_cast<ConstantExpr>(LHS))
             if (Ptr->getOpcode() == Instruction::PtrToInt)
               if (const ConstantInt *COffset = dyn_cast<ConstantInt>(RHS))
-                return getMachineMemOperandSCEV(Ptr->getOperand(0),
-                                                Offset+COffset->getSExtValue(),
-                                                SE);
+                return extractPointerAndOffset(Ptr->getOperand(0),
+                                               Offset+COffset->getSExtValue());
           break;
         }
         }
       }
     } else if (E->getOpcode() == Instruction::BitCast &&
                isa<PointerType>(E->getOperand(0)->getType()))
-      return getMachineMemOperandSCEV(E->getOperand(0), Offset, SE);
+      return extractPointerAndOffset(E->getOperand(0), Offset);
   }
 
+  return std::make_pair(V, Offset);
+}
+
+static const SCEV *getMachineMemOperandSCEV(const Value *V, int64_t Offset,
+                                            ScalarEvolution *SE){
+  tie(V, Offset) = extractPointerAndOffset(V, Offset);
   // Get the SCEV.
   const SCEV *S = SE->getSCEV(const_cast<Value*>(V));
   if (Offset)
