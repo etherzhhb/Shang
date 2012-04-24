@@ -71,6 +71,12 @@ function HexToBin(hexstr,bitwidth)
 			elseif c=='D' then return '1101'
 			elseif c=='E' then return '1110'
 			elseif c=='F' then return '1111'
+			elseif c=='a' then return '1010'
+			elseif c=='b' then return '1011'
+			elseif c=='c' then return '1100'
+			elseif c=='d' then return '1101'
+			elseif c=='e' then return '1110'
+			elseif c=='f' then return '1111'
 			end
 			end)
 return s

@@ -131,7 +131,7 @@ puts $DataJSON ",\n\{\"name\":\"@MAIN_RTL_ENTITY@\","
 puts $DataJSON "\"restricted_fmax\":\"[get_report_panel_data -name {*Fmax*} -col 1 -row 1]\","
 #Read the execution cycles
 set cycleFile [open "@MAIN_RTL_ENTITY@.txt" r]
-#while { [gets $cycleFile line] >= 0 } {  
+#while { [gets $cycleFile line] >= 0 } {
 gets $cycleFile line
 regexp {@MAIN_RTL_ENTITY@ hardware run cycles ([0-9]+) wait cycles ([0-9]+)} $line match total wait
 set total

@@ -21,7 +21,7 @@ reg   [$(datawidth - 1):0]  mem$(num)[0:$(2^addrwidth-1)];
 
 #if filename ~= [[]] then
 initial
-    $readmemh("$(filepath)$(filename)", mem$(num));
+    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", mem$(num));
 #end
 
 always @ (posedge $(clk)) begin
@@ -43,6 +43,7 @@ CounterFile = [[@CycleCounter@]]
 CycleCounterTB = [[@CycleCounterTB@]]
 BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
 
+TESTBINARYFLOD = [[@TEST_BINARY_ROOT@]]
 INTFFILE = [[@MAIN_INT_TOP@]]
 BRAMFILE = [[@MAIN_INT_BRAM@]]
 BRAMINIT = [[@MAIN_INT_BRAMINIT@]]

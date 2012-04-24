@@ -313,7 +313,7 @@ DUT_TOP i1 (
   .start(start),
 	.LED7(LED7)
 );
-  integer wfile;
+  integer wfile,wferror;
   initial wfile = $('$')fopen("$(CycleCounterTB)");
 
 initial
@@ -336,6 +336,9 @@ always@(posedge clk)begin
         $('$')display ("The result is correct~");
       end else begin
         $('$')display ("The result is wrong!!!");
+        wferror = $('$')fopen("$(INTFFILE)","a");
+        $('$')fwrite (wferror,"there is a error");
+        $('$')fclose(wferror);
       end
       $('$')fclose(wfile);
       $('#')1000 $('$')stop;
