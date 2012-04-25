@@ -1217,10 +1217,11 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     MachineInstr *SrcMI = MRI.getVRegDef(SrcReg);
     assert(SrcMI && "Virtual register use without define!");
 
-    // Do we ignore phi as dependence?
-    if (SrcMI->isPHI() && IgnorePHISrc) continue;
+    // Do we ignore phi as dependence? Also ignore self loop.
+    if ((SrcMI->isPHI() && IgnorePHISrc) || SrcMI == MI) continue;
 
     unsigned OpSize = MO.getBitWidth();
+
     float OpDelay = 0.0f;
     if (i < TID.getNumOperands() && TID.OpInfo[i].isPredicate()) {
       OpDelay = VFUs::ClkEnSelLatency;

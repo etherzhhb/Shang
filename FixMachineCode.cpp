@@ -93,8 +93,28 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
       ++II; // We may delete the current instruction.
 
-      if (Inst->isPHI() && !IsPreOpt) {
-        PNs.push_back(Inst);
+      if (Inst->isPHI()) {
+        ucOperand &DstMO = cast<ucOperand>(Inst->getOperand(0));
+        unsigned DstWidth = DstMO.getBitWidthOrZero();
+        SmallVector<ucOperand*, 4> MOs;
+        for (unsigned i = 1, e = Inst->getNumOperands(); i < e; i += 2) {
+          ucOperand *SrcMO = &cast<ucOperand>(Inst->getOperand(i));
+          unsigned SrcBitWidth = SrcMO->getBitWidthOrZero();
+          if (SrcBitWidth == 0) {
+            MOs.push_back(SrcMO);
+            MachineInstr *DefMI = MRI->getVRegDef(SrcMO->getReg());
+            ucOperand &SrcDefMO = cast<ucOperand>(DefMI->getOperand(0));
+            SrcBitWidth = SrcDefMO.getBitWidthOrZero();
+          }
+
+          DstWidth = std::max(SrcBitWidth, DstWidth);
+        }
+
+        DstMO.setBitWidth(DstWidth);
+        while (!MOs.empty())
+          MOs.pop_back_val()->setBitWidth(DstWidth);
+
+        if (!IsPreOpt) PNs.push_back(Inst);
         continue;
       }
 
@@ -102,7 +122,15 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (simplifyBitSlice(Inst)) continue;
       if (handleImplicitDefs(Inst)) continue;
 
-      if (Inst->isCopy()) VInstrInfo::ChangeCopyToMove(Inst);
+      if (Inst->isCopy()) {
+        ucOperand &SrcMO = cast<ucOperand>(Inst->getOperand(1));
+        MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
+        ucOperand &SrcDefMO = cast<ucOperand>(DefMI->getOperand(0));
+        unsigned DstWidth = SrcDefMO.getBitWidth();
+        SrcMO.setBitWidth(DstWidth);
+        cast<ucOperand>(Inst->getOperand(0)).setBitWidth(DstWidth);
+        VInstrInfo::ChangeCopyToMove(Inst);
+      }
 
       // Try to eliminate unnecessary moves.
       if (canbeFold(Inst)) {
