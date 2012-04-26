@@ -312,7 +312,7 @@ struct FanoutChecker {
     MachineInstr *MI = &*I;
 
     // Ignore the datapath at the moment.
-    if (!isCtrlBundle(MI)) return 0;
+    if (!VInstrInfo::isCtrlBundle(MI)) return 0;
     ++NumFanouts;
     if (MI->getNumOperands() == 0) {
       assert(MI->getOpcode() == VTM::VOpRet && "Unexpected empty operand op!");
@@ -848,7 +848,7 @@ void VRASimple::mergeIdenticalDatapath(LiveInterval *LI) {
     if (I.getOperand().isImplicit()) continue;
 
     MachineInstr *MI = &*I;
-    if (isCtrlBundle(MI)) continue;
+    if (VInstrInfo::isCtrlBundle(MI)) continue;
 
     // Datapath op should define and only define its result at operand 0.
     unsigned NewReg = MI->getOperand(0).getReg();

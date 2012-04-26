@@ -286,7 +286,7 @@ AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
         if (src == WireDeps.end()) {
           // Dirty Hack: Build the wire map not if we not visited it yet.
           if (MachineInstr *SrcMI = MRI->getVRegDef(UseRegNo)) {
-            assert(isDatapathBundle(SrcMI) && "Unexpected opcode!");
+            assert(VInstrInfo::isDatapathBundle(SrcMI) && "Unexpected opcode!");
             UsedByWireDep = extendWireUserLITransitively(SrcMI, WireDeps);
           }
         } else

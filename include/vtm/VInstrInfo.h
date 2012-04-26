@@ -22,6 +22,7 @@
 #include "vtm/FUInfo.h"
 #include "vtm/VRegisterInfo.h"
 
+#include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetOpcodes.h"
 #include "llvm/ADT/PointerUnion.h"
@@ -191,6 +192,23 @@ public:
 
   static const MCInstrDesc &getDesc(unsigned Opcode);
   static unsigned countNumRegUses(const MachineInstr *MI);
+
+  static MachineInstr *getBundleHead(MachineInstr *MI);
+
+  static inline unsigned getBundleSlot(MachineInstr *MI) {
+    return getBundleHead(MI)->getOperand(0).getImm();
+  }
+
+  static inline unsigned getInstrSlotNum(MachineInstr *MI) {
+    assert(MI->isInsideBundle() && "Cannot get InstrSlot!");
+    return VInstrInfo::getPredOperand(MI)[1].getImm();
+  }
+
+  static bool isCtrlBundle(MachineInstr *MI);
+
+  static bool isDatapathBundle(MachineInstr *MI);
+
+  static MachineBasicBlock::instr_iterator getCtrlBundleEnd(MachineInstr *MI);
 };
 
 // Helper class for manipulating bit width operand.

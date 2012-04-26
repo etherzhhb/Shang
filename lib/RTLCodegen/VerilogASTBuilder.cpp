@@ -110,12 +110,12 @@ class VerilogASTBuilder : public MachineFunctionPass {
   }
 
   VASTSlot *getInstrSlot(MachineInstr *MI) {
-    unsigned SlotNum = getInstrSlotNum(MI);
+    unsigned SlotNum = VInstrInfo::getInstrSlotNum(MI);
     return VM->getSlot(SlotNum - 1);
   }
 
   VASTSlot *getOrCreateInstrSlot(MachineInstr *MI, unsigned ParentIdx) {
-    unsigned SlotNum = getInstrSlotNum(MI);
+    unsigned SlotNum = VInstrInfo::getInstrSlotNum(MI);
     return VM->getOrCreateSlot(SlotNum - 1, ParentIdx);
   }
 
@@ -527,7 +527,7 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     I = emitDatapath(I);
     // We are assign the register at the previous slot of this slot, so the
     // datapath op with same slot can read the register schedule to this slot.
-    unsigned stateSlot = getBundleSlot(I) - 1;
+    unsigned stateSlot = VInstrInfo::getBundleSlot(I) - 1;
 
     // Collect slot ready signals.
     instr_it NextI = instr_it(I);
@@ -859,7 +859,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     MachineInstr *MI = I;
 
     VASTSlot *CurSlot = getInstrSlot(MI);
-    assert(getInstrSlotNum(MI) != CurSlot->getParentIdx()
+    assert(VInstrInfo::getInstrSlotNum(MI) != CurSlot->getParentIdx()
            && "Unexpected first slot!");
 
     Cnds.clear();
@@ -899,7 +899,7 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
                                             VASTValueVecTy &Cnds) {
   // TODO: Emit PHINodes if necessary.
   MachineInstr *FirstBundle = DstBB->instr_begin();
-  assert(FInfo->getStartSlotFor(DstBB) == getBundleSlot(FirstBundle)
+  assert(FInfo->getStartSlotFor(DstBB) == VInstrInfo::getBundleSlot(FirstBundle)
          && FirstBundle->getOpcode() == VTM::CtrlStart && "Broken Slot!");
   bool Bypassed = false;
 

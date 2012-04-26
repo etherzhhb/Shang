@@ -523,6 +523,34 @@ bool VInstrInfo::isAlwaysTruePred(MachineOperand &MO){
   return false;
 }
 
+
+MachineInstr *VInstrInfo::getBundleHead(MachineInstr *MI) {
+  assert(MI->isBundled() && "Not a bundle!");
+  MachineInstr *Head = getBundleStart(MI);
+  assert((Head->getOpcode() == VTM::CtrlStart ||
+    Head->getOpcode() == VTM::Datapath) && "Broken bundle found!");
+  return Head;
+}
+
+bool VInstrInfo::isCtrlBundle(MachineInstr *MI) {
+  return getBundleHead(MI)->getOpcode() == VTM::CtrlStart;
+}
+
+bool VInstrInfo::isDatapathBundle(MachineInstr *MI) {
+  return getBundleHead(MI)->getOpcode() == VTM::Datapath;
+}
+
+MachineBasicBlock::instr_iterator VInstrInfo::getCtrlBundleEnd(MachineInstr *MI){
+  assert(MI->getOpcode() == VTM::CtrlStart && "Bad MI!");
+  MachineBasicBlock::instr_iterator I = MI;
+  do {
+    ++I;
+    assert(I != I->getParent()->instr_end() && "Broken bundle found!");
+  } while (I->getOpcode() != VTM::CtrlEnd);
+
+  return I;
+}
+
 static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,
                                        MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator IP,
@@ -1219,7 +1247,6 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
 
     // Do we ignore phi as dependence? Also ignore self loop.
     if ((SrcMI->isPHI() && IgnorePHISrc) || SrcMI == MI) continue;
-
     unsigned OpSize = MO.getBitWidth();
 
     float OpDelay = 0.0f;
