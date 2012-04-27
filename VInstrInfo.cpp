@@ -132,7 +132,7 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
       ucOperand &MO = cast<ucOperand>(*I);
       // Are we going to replace the operand?
       if (MO.isReg() && MO.getReg() == Reg) {
-        assert(MO.getBitWidth() <= ImmediateTFs
+        assert(VInstrInfo::getBitWidth(MO) <= ImmediateTFs
           && "Folding immediate with different Bitwidth?");
         MOs.push_back(ImmediateMO);
         // Keep the original flags, because the target flags of ImmediateMO may
@@ -596,11 +596,11 @@ static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *M
   if (VInstrInfo::isPredicateInverted(MO)) {
     Op.clearParent();
     // Remove the invert flag.
-    Op.setBitWidth(1);
+    VInstrInfo::setBitWidth(Op, 1);
     // Build the not instruction.
     unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
     ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
-    Dst.setBitWidth(1);
+    VInstrInfo::setBitWidth(Dst, 1);
     BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
       .addOperand(Dst).addOperand(Op)
       .addOperand(ucOperand::CreatePredicate())
@@ -639,7 +639,7 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
 
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
   ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
-  Dst.setBitWidth(1);
+  VInstrInfo::setBitWidth(Dst, 1);
 
   BuildMI(MBB, IP, DebugLoc(), TII->get(MergeOpC))
     .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
@@ -828,7 +828,7 @@ static unsigned ComputeOperandSizeInByteLog2Ceil(unsigned SizeInBits) {
 
 template<int Idx>
 static float LookupLatency(const float *Table, const MachineInstr *MI){
-  unsigned SizeInBits = cast<ucOperand>(MI->getOperand(Idx)).getBitWidth();
+  unsigned SizeInBits = VInstrInfo::getBitWidth(MI->getOperand(Idx));
 
   unsigned i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
   float latency = Table[i];
@@ -1000,7 +1000,7 @@ struct BitSliceLatencyFN {
   unsigned OperandSize, UB, LB;
 
   BitSliceLatencyFN(const MachineInstr *BitSliceOp)
-    : OperandSize(cast<ucOperand>(BitSliceOp->getOperand(1)).getBitWidth()),
+    : OperandSize(VInstrInfo::getBitWidth(BitSliceOp->getOperand(1))),
       UB(BitSliceOp->getOperand(2).getImm()),
       LB(BitSliceOp->getOperand(3).getImm()) {
     assert(BitSliceOp->getOpcode() == VTM::VOpBitSlice && "Not a bitslice!");
@@ -1100,7 +1100,7 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
   case VTM::VOpROr:
   case VTM::VOpRAnd:
   case VTM::VOpRXor:{
-    unsigned size = cast<ucOperand>(MI->getOperand(1)).getBitWidth();
+    unsigned size = VInstrInfo::getBitWidth(MI->getOperand(1));
     return VFUs::getReductionLatency(size);
   }
   case VTM::VOpBRAMTrans:   return VFUs::BRamLatency;
@@ -1198,7 +1198,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, MRI, SrcMSBLatency)) {
     SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
     if (OperandWidth) {
-      unsigned SrcSize = cast<ucOperand>(SrcMI->getOperand(0)).getBitWidth();
+      unsigned SrcSize = VInstrInfo::getBitWidth(SrcMI->getOperand(0));
       // DirtyHack: Ignore the invert flag.
       if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {
         assert(OperandWidth < SrcSize && "Bad implicit bitslice!");
@@ -1282,7 +1282,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
 
     // Do we ignore phi as dependence? Also ignore self loop.
     if ((SrcMI->isPHI() && IgnorePHISrc) || SrcMI == MI) continue;
-    unsigned OpSize = MO.getBitWidth();
+    unsigned OpSize = VInstrInfo::getBitWidth(MO);
 
     float OpDelay = 0.0f;
     if (i < TID.getNumOperands() && TID.OpInfo[i].isPredicate()) {

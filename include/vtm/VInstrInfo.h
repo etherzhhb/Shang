@@ -213,6 +213,26 @@ public:
   static bool isPredicateInverted(const MachineOperand &MO) {
     return (MO.getTargetFlags() & VInstrInfo::PredInvertFlag) != 0;
   }
+
+  static unsigned getBitWidthOrZero(const MachineOperand &MO) {
+    assert((MO.isImm() || MO.isReg() || MO.isSymbol() || MO.isGlobal())
+      && "Unsupported operand type!");
+    return MO.getTargetFlags() & VInstrInfo::BitwidthMask;
+  }
+
+  static unsigned getBitWidth(const MachineOperand &MO) {
+    unsigned BitWidth = getBitWidthOrZero(MO);
+    assert(BitWidth && "Bit width information not available!");
+    return BitWidth;
+  }
+
+  static void setBitWidth(MachineOperand &MO, unsigned BitWidth) {
+    unsigned TF = MO.getTargetFlags();
+    TF &= ~VInstrInfo::BitwidthMask;
+    TF |= BitWidth & VInstrInfo::BitwidthMask;
+    MO.setTargetFlags(TF);
+    assert(getBitWidthOrZero(MO) == BitWidth && "Bit width overflow!");
+  }
 };
 //ucOperandExpressionTrait - Special DenseMapInfo traits to compare
 //ucOperand* by *value* of the instruction rather than by pointer value.

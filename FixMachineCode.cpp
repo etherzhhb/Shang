@@ -95,24 +95,24 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
 
       if (Inst->isPHI()) {
         ucOperand &DstMO = cast<ucOperand>(Inst->getOperand(0));
-        unsigned DstWidth = DstMO.getBitWidthOrZero();
+        unsigned DstWidth = VInstrInfo::getBitWidthOrZero(DstMO);
         SmallVector<ucOperand*, 4> MOs;
         for (unsigned i = 1, e = Inst->getNumOperands(); i < e; i += 2) {
           ucOperand *SrcMO = &cast<ucOperand>(Inst->getOperand(i));
-          unsigned SrcBitWidth = SrcMO->getBitWidthOrZero();
+          unsigned SrcBitWidth = VInstrInfo::getBitWidthOrZero(*SrcMO);
           if (SrcBitWidth == 0) {
             MOs.push_back(SrcMO);
             MachineInstr *DefMI = MRI->getVRegDef(SrcMO->getReg());
             ucOperand &SrcDefMO = cast<ucOperand>(DefMI->getOperand(0));
-            SrcBitWidth = SrcDefMO.getBitWidthOrZero();
+            SrcBitWidth = VInstrInfo::getBitWidthOrZero(SrcDefMO);
           }
 
           DstWidth = std::max(SrcBitWidth, DstWidth);
         }
 
-        DstMO.setBitWidth(DstWidth);
+        VInstrInfo::setBitWidth(DstMO, DstWidth);
         while (!MOs.empty())
-          MOs.pop_back_val()->setBitWidth(DstWidth);
+          VInstrInfo::setBitWidth(*MOs.pop_back_val(), DstWidth);
 
         if (!IsPreOpt) PNs.push_back(Inst);
         continue;
@@ -126,9 +126,9 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
         ucOperand &SrcMO = cast<ucOperand>(Inst->getOperand(1));
         MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
         ucOperand &SrcDefMO = cast<ucOperand>(DefMI->getOperand(0));
-        unsigned DstWidth = SrcDefMO.getBitWidth();
-        SrcMO.setBitWidth(DstWidth);
-        cast<ucOperand>(Inst->getOperand(0)).setBitWidth(DstWidth);
+        unsigned DstWidth = VInstrInfo::getBitWidth(SrcDefMO);
+        VInstrInfo::setBitWidth(SrcMO, DstWidth);
+        VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
         VInstrInfo::ChangeCopyToMove(Inst);
       }
 
@@ -169,7 +169,7 @@ bool FixMachineCode::simplifyBitSlice(MachineInstr *MI) {
   if (MI->getOperand(3).getImm() != 0) {
     unsigned UB = MI->getOperand(2).getImm();
     // We can narrow the bitwidth of the operand to the upper bound.
-    cast<ucOperand>(MI->getOperand(1)).setBitWidth(UB);
+    VInstrInfo::setBitWidth(MI->getOperand(1), UB);
     return false;
   }
 
@@ -189,7 +189,7 @@ bool FixMachineCode::simplifyReduction(MachineInstr *MI) {
     return false;
 
   ucOperand &Src = cast<ucOperand>(MI->getOperand(1));
-  if (Src.getBitWidth() != 1) return false;
+  if (VInstrInfo::getBitWidth(Src) != 1) return false;
 
   // If the bitwidth of src operand is 1, the reduction is not necessary.
   unsigned SrcReg = Src.getReg();
@@ -220,7 +220,7 @@ FixMachineCode::getPHIMoveInsertPos(MachineBasicBlock *SrcBB,
 }
 
 void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {  
-  unsigned BitWidth = cast<ucOperand>(PN->getOperand(0)).getBitWidth();
+  unsigned BitWidth = VInstrInfo::getBitWidth(PN->getOperand(0));
   //bool isAllImpDef = true;
 
   for (unsigned i = 1, e = PN->getNumOperands(); i != e; i += 2) {
@@ -283,7 +283,7 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
     MachineInstr &UserMI = *I;
     ++I;
     // Implicit value always have 64 bit.
-    MO->setBitWidth(64);
+    VInstrInfo::setBitWidth(*MO, 64);
 
     if (UserMI.isPHI()) {
       use_empty = false;
@@ -345,7 +345,7 @@ void FixMachineCode::FoldAdd(MachineInstr *MI,
   // Build the carry bit of the original
   ucOperand &DummyCarry = cast<ucOperand>(MI->getOperand(1));
   DummyCarry.ChangeToImmediate(0);
-  DummyCarry.setBitWidth(1);
+  VInstrInfo::setBitWidth(DummyCarry, 1);
 }
 
 void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {

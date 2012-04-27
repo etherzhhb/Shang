@@ -152,7 +152,7 @@ struct LogicNetwork {
     MachineRegisterInfo::def_iterator I = MRI.def_begin(MO.getReg());
     assert(I != MRI.def_end() && llvm::next(I) == MRI.def_end() &&
            "Not in SSA form!");
-    return MO.getBitWidth() != cast<ucOperand>(I.getOperand()).getBitWidth();
+    return VInstrInfo::getBitWidth(MO)!=VInstrInfo::getBitWidth(I.getOperand());
   }
 
   NetworkObj *getOrCreateObj(ucOperand &MO) {
@@ -198,7 +198,7 @@ struct LogicNetwork {
       MO.ChangeToRegister(MRI.createVirtualRegister(VTM::DRRegisterClass),
                           false);
 
-    assert(MO.getBitWidthOrZero()
+    assert(VInstrInfo::getBitWidthOrZero(MO)
            && "Instruction defining Obj not inserted yet?");
 
     return MO;
@@ -489,17 +489,17 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
   Abc_ObjForEachFanin(Obj, FI, j) {
     DEBUG(dbgs() << "\tBuilt MO for FI: " << Abc_ObjName(FI) << '\n');
     ucOperand MO = getOperand(FI);
-    assert((SizeInBits == 0 || SizeInBits == MO.getBitWidth())
-      && "Operand SizeInBits not match!");
+    assert((SizeInBits == 0 || SizeInBits == VInstrInfo::getBitWidth(MO))
+           && "Operand SizeInBits not match!");
     Ops.push_back(MO);
-    SizeInBits = MO.getBitWidth();
+    SizeInBits = VInstrInfo::getBitWidth(MO);
   }
 
   // Get the result.
   DEBUG(dbgs() << "Built LUT for FO: " << Abc_ObjName(FO) << "\n\n");
   assert(SizeInBits && "Expect non-zero size output!");
   ucOperand DefMO = getOperand(FO, SizeInBits);
-  assert(DefMO.getBitWidth() == SizeInBits && "Result SizeInBits not match!");
+  assert(VInstrInfo::getBitWidth(DefMO) == SizeInBits && "Result SizeInBits not match!");
   DefMO.setIsDef(true);
 
   // Get the sum of product table.

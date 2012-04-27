@@ -47,26 +47,6 @@ public:
 
   static bool classof(const MachineOperand *) { return true; }
 
-  unsigned getBitWidthOrZero() const {
-    assert((isImm() || isReg() || isSymbol() || isGlobal())
-      && "Unsupported operand type!");
-    return getTargetFlags() & VInstrInfo::BitwidthMask;
-  }
-
-  unsigned getBitWidth() const {
-    unsigned BitWidth = getBitWidthOrZero();
-    assert(BitWidth && "Bit width information not available!");
-    return BitWidth;
-  }
-
-  void setBitWidth(unsigned BitWidth) {
-    unsigned TF = getTargetFlags();
-    TF &= ~VInstrInfo::BitwidthMask;
-    TF |= BitWidth & VInstrInfo::BitwidthMask;
-    setTargetFlags(TF);
-    assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
-  }
-
   static ucOperand CreateReg(unsigned RegNum, unsigned BitWidth,
                              bool IsDef = false);
   static ucOperand CreateImm(int64_t Val, unsigned BitWidth);

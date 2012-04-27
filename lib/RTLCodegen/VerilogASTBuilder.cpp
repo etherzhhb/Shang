@@ -836,7 +836,7 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
   if (DI == MRI->def_end()) return false;
 
   const ucOperand &Op = cast<ucOperand>(DI.getOperand());
-  unsigned Bitwidth = Op.getBitWidth();
+  unsigned Bitwidth = VInstrInfo::getBitWidth(Op);
   if (!isReg) addWire(RegNum, Bitwidth);
   else        addRegister(RegNum, Bitwidth);
 
@@ -1422,18 +1422,19 @@ VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
   return C;
 }
 
-static void printOperandImpl(raw_ostream &OS, const ucOperand &MO,
+static void printOperandImpl(raw_ostream &OS, const MachineOperand &MO,
                              unsigned UB = 64, unsigned LB = 0) {
   switch (MO.getType()) {
   case MachineOperand::MO_ExternalSymbol:
-    UB = std::min(cast<ucOperand>(MO).getBitWidth(), UB);
+    UB = std::min(VInstrInfo::getBitWidth(MO), UB);
     OS << MO.getSymbolName();
-    OS << verilogBitRange(UB, LB, cast<ucOperand>(MO).getBitWidth() != 1);
+    OS << verilogBitRange(UB, LB, VInstrInfo::getBitWidth(MO) != 1);
     return;
   case MachineOperand::MO_GlobalAddress:
     OS << "(`gv" << VBEMangle(MO.getGlobal()->getName());
     if (int64_t Offset = MO.getOffset())
-      OS  << " + " << verilogConstToStr(Offset, cast<ucOperand>(MO).getBitWidth(), false);
+      OS  << " + "
+          << verilogConstToStr(Offset, VInstrInfo::getBitWidth(MO), false);
     OS << ')';
     return;
   default: break;
@@ -1444,7 +1445,7 @@ static void printOperandImpl(raw_ostream &OS, const ucOperand &MO,
 
 VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
                                            bool GetAsInlineOperand) {
-  unsigned BitWidth = Op.getBitWidth();
+  unsigned BitWidth = VInstrInfo::getBitWidth(Op);
   switch (Op.getType()) {
   case MachineOperand::MO_Register: {
     if (unsigned Reg = Op.getReg())

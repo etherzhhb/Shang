@@ -187,7 +187,7 @@ struct MicroStateBuilder {
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
-      return ucOperand::CreateReg(WireNum, Op.getBitWidth());
+      return ucOperand::CreateReg(WireNum, VInstrInfo::getBitWidth(Op));
     }
   };
 
@@ -342,7 +342,8 @@ struct MicroStateBuilder {
       //        || (IsCtrl && ReadSlot == EmitSlot))
       //        && "Assumption of Slots broken!");
       ucOperand Ret = getRegUseOperand(WDef, ReadSlot, MO);
-      if (!MO.isImplicit()) Ret.setBitWidth(MO.getBitWidth());
+      if (!MO.isImplicit())
+        VInstrInfo::setBitWidth(Ret, VInstrInfo::getBitWidth(MO));
       return Ret;
     }
 
@@ -353,7 +354,7 @@ struct MicroStateBuilder {
     if (MO.isImplicit()) return MachineOperand::CreateReg(0, false);
 
     ucOperand Ret = WDef.createOperand();
-    Ret.setBitWidth(MO.getBitWidth());
+    VInstrInfo::setBitWidth(Ret, VInstrInfo::getBitWidth(MO));
     return Ret;
   }
 
@@ -370,7 +371,8 @@ struct MicroStateBuilder {
       unsigned DstReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
 
       BuildMI(MBB, getStateCtrlAt(CopySlot), DebugLoc(), TII.get(VTM::VOpMove))
-        .addOperand(ucOperand::CreateReg(DstReg, SrcMO.getBitWidth(), true))
+        .addOperand(ucOperand::CreateReg(DstReg, VInstrInfo::getBitWidth(SrcMO),
+                                         true))
         .addOperand(getRegUseOperand(SrcMO, CopySlot))
         .addOperand(ucOperand::CreatePredicate())
         .addImm(Slot);
@@ -392,7 +394,8 @@ struct MicroStateBuilder {
     BuildMI(MBB, getStateCtrlAt(OpSlot(InsertSlot, true)), DebugLoc(),
             TII.get(VTM::VOpDefPhi))
       .addOperand(MO)
-      .addOperand(ucOperand::CreateReg(NewReg, MO.getBitWidth(), false))
+      .addOperand(ucOperand::CreateReg(NewReg, VInstrInfo::getBitWidth(MO),
+                                       false))
       .addOperand(ucOperand::CreatePredicate())
       .addImm(InsertSlot);
 
@@ -420,7 +423,7 @@ struct MicroStateBuilder {
       // The register to hold initialize value.
       unsigned InitReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
       ucOperand InitOp = MachineOperand::CreateReg(InitReg, true);
-      InitOp.setBitWidth(SizeInBits);
+      VInstrInfo::setBitWidth(InitOp, SizeInBits);
 
       MachineBasicBlock::iterator IP = PredBB->getFirstTerminator();
       // Insert the imp_def before the PHI incoming copies.
@@ -440,11 +443,11 @@ struct MicroStateBuilder {
     while (!InsertedPHIs.empty()) {
       MachineInstr *PN = InsertedPHIs.pop_back_val();
       ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
-      Op.setBitWidth(SizeInBits);
+      VInstrInfo::setBitWidth(Op, SizeInBits);
 
       for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
         ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
-        SrcOp.setBitWidth(SizeInBits);
+        VInstrInfo::setBitWidth(SrcOp, SizeInBits);
       }
 
       if (!WrapOnly) {
@@ -518,8 +521,9 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         MO.ChangeToRegister(R, true);
         MachineInstr *PipeStage =
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
-            .addOperand(ucOperand::CreateReg(OldR, MO.getBitWidth(), true))
-            .addOperand(ucOperand::CreateReg(R, MO.getBitWidth()))
+            .addOperand(ucOperand::CreateReg(OldR, VInstrInfo::getBitWidth(MO),
+                                             true))
+            .addOperand(ucOperand::CreateReg(R, VInstrInfo::getBitWidth(MO)))
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
             .addOperand(ucOperand::CreateTrace(MBB));
         assert(A->isControl() && "Only control operation write untill finish!");
@@ -643,7 +647,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
         continue;
       }
 
-      unsigned BitWidth = cast<ucOperand>(MO).getBitWidth();
+      unsigned BitWidth = VInstrInfo::getBitWidth(MO);
       // Do not emit write to register unless it not killed in the current state.
       // FIXME: Emit the wire only if the value is not read in a function unit port.
       // if (!NewDef->isSymbol()) {
@@ -747,7 +751,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
   bool isImplicit = MO.isImplicit();
   unsigned RegNo = WD.getOperand().getReg();
   unsigned PredReg = WD.Pred.getReg();
-  unsigned SizeInBits = WD.Op.getBitWidth();
+  unsigned SizeInBits = VInstrInfo::getBitWidth(WD.Op);
 
   // Move the value to a new register otherwise the it will be overwritten.
   // If read before write in machine code, insert a phi node.
@@ -762,8 +766,7 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
     // iteration which is not we want.
     RegNo = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot(),
                       WD.LoopBoundary == WD.DefSlot);
-    MO = MachineOperand::CreateReg(RegNo, false);
-    MO.setBitWidth(SizeInBits);
+    MO = ucOperand::CreateReg(RegNo, SizeInBits, false);
     WD.Op = MO;
 
     if (PredReg) {

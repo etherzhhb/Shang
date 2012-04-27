@@ -160,7 +160,7 @@ void PrebindUnbalanceMux::allocateBalanceMux() {
       }
       // Remember the port bitwidth, there maybe fanins with different width.
       PortBitwidthInfo[I->first] = std::max(PortBitwidthInfo[I->first],
-                                            OI->first.getBitWidth());
+                                            VInstrInfo::getBitWidth(OI->first));
     }
 
     //for (OpSet::iterator OI = FIs2.begin(), OE = FIs2.end(); OI != OE; ++OI) {

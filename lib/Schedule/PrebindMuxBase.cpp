@@ -126,7 +126,7 @@ void PrebindMuxBase::allocateBalanceMux() {
           ++MuxSizeInfo[MuxCounter];
         // Remember the port bitwidth, there maybe fanins with different width.
         PortBitwidthInfo[I->first] = std::max(PortBitwidthInfo[I->first],
-                                              OI->first.getBitWidth());
+                                              VInstrInfo::getBitWidth(OI->first));
         // If the fanin number exceed the maximum mux size, allocate a new mux.
           if (++FICounter >= NumMuxFanins) {
             ++MuxCounter;

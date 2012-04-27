@@ -107,7 +107,7 @@ struct VRASimple : public MachineFunctionPass {
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
          I != MachineRegisterInfo::def_end(); ++I) {
       ucOperand &DefOp = cast<ucOperand>(I.getOperand());
-      BitWidth = std::max(BitWidth, DefOp.getBitWidth());
+      BitWidth = std::max(BitWidth, VInstrInfo::getBitWidth(DefOp));
     }
 
     assert(BitWidth && "Unexpected empty define register");
@@ -432,7 +432,7 @@ struct CompRegEdgeWeight : public CompEdgeWeightBase<1> {
     MachineOperand &MO = I.getOperand();
     if (MO.isDef()) {
       // 1. Get the bit width information.
-      if (!checkWidth(cast<ucOperand>(I.getOperand()).getBitWidth()))
+      if (!checkWidth(VInstrInfo::getBitWidth(I.getOperand())))
         return true;
 
       // 2. Analyze the definition op.
@@ -493,7 +493,7 @@ struct CompBinOpEdgeWeight : public CompEdgeWeightBase<2> {
     MachineOperand &MO = I.getOperand();
     if (I.getOperand().isDef()) {
       // 1. Get the bit width information.
-      if (!checkWidth(cast<ucOperand>(MO).getBitWidth()))
+      if (!checkWidth(VInstrInfo::getBitWidth(MO)))
         return true;
       // 2. Analyze the definition op.
       MachineInstr *MI = &*I;
@@ -563,7 +563,7 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
 
       ucOperand &CondCode = cast<ucOperand>(MI->getOperand(3));
       // Get the bit width information.
-      if (!checkWidth(CondCode.getBitWidth()))
+      if (!checkWidth(VInstrInfo::getBitWidth(CondCode)))
         return true;
       // Are these CC compatible?
       if (hasInCompatibleCC(CondCode.getImm()))
@@ -918,7 +918,7 @@ void VRASimple::bindDstMux() {
       LiveInterval *RepLI = RepLIs[MuxNum];
       // Had we allocate a register for this bram?
       if (RepLI == 0) {
-        unsigned BitWidth = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
+        unsigned BitWidth = VInstrInfo::getBitWidth(MI->getOperand(0));
         unsigned PhyReg = TRI->allocateFN(VTM::RMUXRegClassID, BitWidth);
         RepLIs[MuxNum] = LI;
         assign(*LI, PhyReg);
@@ -980,9 +980,9 @@ unsigned VRASimple::allocateCalleeFNPorts(unsigned RegNum) {
 
     assert(MI->getOpcode() == VTM::VOpReadReturn && "Unexpected callee user!");
     assert((RetPortSize == 0 ||
-            RetPortSize == cast<ucOperand>(MI->getOperand(0)).getBitWidth())
+            RetPortSize == VInstrInfo::getBitWidth(MI->getOperand(0)))
             && "Return port has multiple size?");
-    RetPortSize = cast<ucOperand>(MI->getOperand(0)).getBitWidth();
+    RetPortSize = VInstrInfo::getBitWidth(MI->getOperand(0));
   }
 
   return TRI->allocateFN(VTM::RCFNRegClassID, RetPortSize);

@@ -44,7 +44,7 @@ namespace {
   }
 
   unsigned computeBitRepeatWidth(MachineInstr *BitRepeat) const {
-      unsigned EltWidth = cast<ucOperand>(BitRepeat->getOperand(1)).getBitWidth(),
+      unsigned EltWidth = VInstrInfo::getBitWidth(BitRepeat->getOperand(1)),
                           Times = BitRepeat->getOperand(2).getImm();
       return EltWidth * Times;
   }
@@ -53,7 +53,7 @@ namespace {
       unsigned BitWidth = 0;
       for (MachineInstr::mop_iterator I = BitCat->operands_begin() + 1,
         E = BitCat->operands_end(); I != E; ++I)
-        BitWidth += cast<ucOperand>(*I).getBitWidth();
+        BitWidth += VInstrInfo::getBitWidth(*I);
 
       return BitWidth;
   }
@@ -61,9 +61,9 @@ namespace {
   unsigned computeByOpWithSameWidth(MachineInstr::mop_iterator I,
                                     MachineInstr::mop_iterator E) {
     assert(I != E && "The range is empty!");
-    unsigned BitWidth = cast<ucOperand>(*I).getBitWidth();
+    unsigned BitWidth = VInstrInfo::getBitWidth(*I);
     while (++I != E)
-      if (unsigned Width = cast<ucOperand>(*I).getBitWidth()) {
+      if (unsigned Width = VInstrInfo::getBitWidth(*I)) {
         assert ((BitWidth == 0 || BitWidth == Width)
                  && "Bit width of PHINode not match!");
         BitWidth = Width;
@@ -88,11 +88,11 @@ public:
   unsigned getBitWidth(unsigned R) const;
 
   bool updateBitWidth(MachineOperand &MO, unsigned char BitWidth) {
-    unsigned char OldBitWidth = cast<ucOperand>(MO).getBitWidthOrZero();
+    unsigned char OldBitWidth = VInstrInfo::getBitWidthOrZero(MO);
     assert((OldBitWidth == 0 || OldBitWidth >= BitWidth)
             && "Bit width not convergent!");
     assert(BitWidth && "Invalid bit width!");
-    cast<ucOperand>(MO).setBitWidth(BitWidth);
+   VInstrInfo::setBitWidth(MO, BitWidth);
 
     return OldBitWidth != BitWidth;
   }
@@ -139,7 +139,7 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
       case VTM::VOpRet: {
         // Setup the bit width for predicate operand.
         ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
-        Op.setBitWidth(1);
+        VInstrInfo::setBitWidth(Op, 1);
         continue;
       }
       case VTM::VOpToState:
@@ -149,14 +149,14 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         if (Op.isImm()) {
           assert(Op.getImm() && "Unexpected 'never' in unconditional branch!");
           Op.ChangeToRegister(0, false);
-          Op.setBitWidth(1);
+          VInstrInfo::setBitWidth(Op, 1);
         }
 
         ucOperand &Pred = cast<ucOperand>(Instr.getOperand(2));
         if (Pred.isImm()) {
           assert(Pred.getImm() && "Unexpected 'never' in unconditional branch!");
           Pred.ChangeToRegister(0, false);
-          Pred.setBitWidth(1);
+          VInstrInfo::setBitWidth(Op, 1);
         }
         continue;
       }
@@ -225,7 +225,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
             && TargetRegisterInfo::isVirtualRegister(Operand.getReg())
             && "Not support Physics register yet!");
 
-    unsigned Width = cast<ucOperand>(Operand).getBitWidthOrZero();
+    unsigned Width = VInstrInfo::getBitWidthOrZero(Operand);
 
     if (updateBitWidth(Result, Width))
       Defs.push_back(&Result);
@@ -328,7 +328,7 @@ void BitLevelInfo::computeBitWidth(MachineInstr *Instr) {
   case VTM::VOpSRL: case VTM::VOpSRL_c:
   case VTM::VOpSHL: case VTM::VOpSHL_c: {
     MachineOperand &Result = Instr->getOperand(0);
-    unsigned Width = cast<ucOperand>(Instr->getOperand(1)).getBitWidth();
+    unsigned Width = VInstrInfo::getBitWidth(Instr->getOperand(1));
     if (updateBitWidth(Result, Width))
       Defs.push_back(&Result);
     break;
@@ -347,7 +347,7 @@ unsigned BitLevelInfo::computePHI( MachineInstr *PN ) {
   unsigned BitWidth = 0;
 
   for (unsigned i = 1; i != PN->getNumOperands(); i += 2)
-    if (unsigned Width = cast<ucOperand>(PN->getOperand(i)).getBitWidthOrZero()) {
+    if (unsigned Width = VInstrInfo::getBitWidthOrZero(PN->getOperand(i))) {
       //assert ((BitWidth == 0 || BitWidth == Width)
       //  && "Bit width of PHINode not match!");
       BitWidth = std::max(BitWidth, Width);
@@ -360,7 +360,7 @@ void BitLevelInfo::propagateBitWidth(MachineOperand &MO) {
   assert(MO.isReg() && "Wrong operand type!");
 
   unsigned RegNo = MO.getReg();
-  unsigned char BitWidth = cast<ucOperand>(MO).getBitWidth();
+  unsigned char BitWidth = VInstrInfo::getBitWidth(MO);
   assert(BitWidth && "Bit width not available!");
 
   for (MachineRegisterInfo::use_iterator I = MRI->use_begin(RegNo),
@@ -382,7 +382,7 @@ unsigned BitLevelInfo::getBitWidth(unsigned R) const {
   unsigned Size = 0;
   for (MachineRegisterInfo::def_iterator I = MRI->def_begin(R),
        E = MRI->def_end(); I != E; ++I) {
-    unsigned S = cast<ucOperand>(I.getOperand()).getBitWidthOrZero();
+    unsigned S = VInstrInfo::getBitWidthOrZero(I.getOperand());
     if (S == 0) { // Get the bit width from source operand.
       assert(I->isCopy() && "Can not get register bit width!");
       S = getBitWidth(I->getOperand(1).getReg());
