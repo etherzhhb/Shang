@@ -517,7 +517,7 @@ void VInstrInfo::MergeBranches(MachineBasicBlock *PredFBB,
 bool VInstrInfo::isAlwaysTruePred(MachineOperand &MO){
   assert(MO.isReg() && "Unexpected MO type!");
   if (MO.getReg() == 0) {
-    assert(!cast<ucOperand>(MO).isPredicateInverted()&&"Illegal always false!");
+    assert(!VInstrInfo::isPredicateInverted(MO) && "Illegal always false!");
     return true;
   }
 
@@ -593,7 +593,7 @@ static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *M
   assert(!VInstrInfo::isAlwaysTruePred(MO) && "Unexpected always false!");
   ucOperand Op(MO);
 
-  if (Op.isPredicateInverted()) {
+  if (VInstrInfo::isPredicateInverted(MO)) {
     Op.clearParent();
     // Remove the invert flag.
     Op.setBitWidth(1);

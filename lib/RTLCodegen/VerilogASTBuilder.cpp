@@ -1417,7 +1417,7 @@ VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
   // Otherwise it must be some signal.
   VASTValue *C = lookupSignal(Op.getReg());
 
-  if (Op.isPredicateInverted()) C = VM->buildNotExpr(C);
+  if (VInstrInfo::isPredicateInverted(Op)) C = VM->buildNotExpr(C);
 
   return C;
 }

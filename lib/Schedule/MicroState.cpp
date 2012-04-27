@@ -34,10 +34,6 @@
 
 using namespace llvm;
 
-bool ucOperand::isPredicateInverted() const {
-  return getTargetFlags() & VInstrInfo::PredInvertFlag;
-}
-
 ucOperand ucOperand::CreatePredicate(unsigned Reg) {
   // Read reg0 means always execute.
   ucOperand MO = MachineOperand::CreateReg(Reg, false);

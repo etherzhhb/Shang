@@ -209,6 +209,10 @@ public:
   static bool isDatapathBundle(MachineInstr *MI);
 
   static MachineBasicBlock::instr_iterator getCtrlBundleEnd(MachineInstr *MI);
+
+  static bool isPredicateInverted(const MachineOperand &MO) {
+    return (MO.getTargetFlags() & VInstrInfo::PredInvertFlag) != 0;
+  }
 };
 //ucOperandExpressionTrait - Special DenseMapInfo traits to compare
 //ucOperand* by *value* of the instruction rather than by pointer value.

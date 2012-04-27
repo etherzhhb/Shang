@@ -651,7 +651,8 @@ void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
 
     if (TII->isPredicated(I)) {
       ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
-      unsigned k = MO->getReg() << 1 | (MO->isPredicateInverted() ? 1 :0 );
+      unsigned k = (MO->getReg() << 1)
+                   | (VInstrInfo::isPredicateInverted(*MO) ? 1 :0 );
       unsigned &Reg = PredMap[k];
       if (!Reg)
         Reg = VInstrInfo::MergePred(*MO, Pred, *MBB, I, MRI,

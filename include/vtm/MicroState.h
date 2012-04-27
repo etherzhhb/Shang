@@ -67,8 +67,6 @@ public:
     assert(getBitWidthOrZero() == BitWidth && "Bit width overflow!");
   }
 
-  bool isPredicateInverted() const;
-
   static ucOperand CreateReg(unsigned RegNum, unsigned BitWidth,
                              bool IsDef = false);
   static ucOperand CreateImm(int64_t Val, unsigned BitWidth);
