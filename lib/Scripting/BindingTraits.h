@@ -79,15 +79,15 @@ template<> struct BindingTraits<VASTModule> {
 
     C.enum_("PortTypes")[
       luabind::value("Clk",               CurClass::Clk),
-        luabind::value("RST",               CurClass::RST),
-        luabind::value("Start",             CurClass::Start),
-        luabind::value("SpecialInPortEnd",  CurClass::Clk),
-        luabind::value("Finish",            CurClass::Finish),
-        luabind::value("SpecialOutPortEnd", CurClass::SpecialOutPortEnd),
-        luabind::value("NumSpecialPort",    CurClass::NumSpecialPort),
-        luabind::value("ArgPort",           CurClass::ArgPort),
-        luabind::value("Others",            CurClass::Others),
-        luabind::value("RetPort",           CurClass::RetPort)
+      luabind::value("RST",               CurClass::RST),
+      luabind::value("Start",             CurClass::Start),
+      luabind::value("SpecialInPortEnd",  CurClass::Clk),
+      luabind::value("Finish",            CurClass::Finish),
+      luabind::value("SpecialOutPortEnd", CurClass::SpecialOutPortEnd),
+      luabind::value("NumSpecialPort",    CurClass::NumSpecialPort),
+      luabind::value("ArgPort",           CurClass::ArgPort),
+      luabind::value("Others",            CurClass::Others),
+      luabind::value("RetPort",           CurClass::RetPort)
     ];
     // All ports.
     C.def("getPort",                &CurClass::getPort);

@@ -388,24 +388,20 @@ public:
 };
 
 class VASTPort : public VASTNode {
-  void s(VASTSignal *S) { ptr<VASTSignal>(S); }
-  VASTSignal *s() const { return ptr<VASTSignal>(); }
-  void is_input(bool isInput) { i8<VASTNode::SubClassDataBase>(isInput); }
-  int8_t is_input() const { return i8<VASTNode::SubClassDataBase>(); }
 public:
-  VASTPort(VASTSignal *S, bool isInput) : VASTNode(vastPort) {
+  VASTSignal *const Signal;
+  const bool IsInput;
+
+  VASTPort(VASTSignal *S, bool isInput)
+    : VASTNode(vastPort), IsInput(isInput), Signal(S) {
     assert(!(isInput && isa<VASTRegister>(S)) && "Bad port decl!");
-    s(S);
-    is_input(isInput);
   }
 
-  const char *getName() const { return s()->getName(); }
-  bool isRegister() const { return isa<VASTRegister>(s()); }
-  unsigned getBitWidth() const { return s()->getBitWidth(); }
-  VASTSignal *get() const { return s(); }
-  operator VASTSignal *() const { return s(); }
-
-  bool isInput() const { return is_input(); }
+  const char *getName() const { return Signal->getName(); }
+  bool isRegister() const { return isa<VASTRegister>(Signal); }
+  bool isInput() const { return IsInput; }
+  unsigned getBitWidth() const { return Signal->getBitWidth(); }
+  operator VASTSignal *() const { return Signal; }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTPort *A) { return true; }
@@ -426,14 +422,14 @@ public:
 template<> struct simplify_type<const VASTPort> {
   typedef VASTSignal *SimpleType;
   static SimpleType getSimplifiedValue(const VASTPort &Val) {
-    return Val.get();
+    return Val.Signal;
   }
 };
 
 template<> struct simplify_type<VASTPort> {
   typedef VASTSignal *SimpleType;
   static SimpleType getSimplifiedValue(const VASTPort &Val) {
-    return Val.get();
+    return Val.Signal;
   }
 };
 

@@ -137,7 +137,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
       VASTRegister *LocalReg = VM->addRegister(PortReg, BitWidth);
       VASTPort *P = VM->addOutputPort(PortName, BitWidth, VASTModule::Others,
                                       false);
-      VASTWire *OutputWire = cast<VASTWire>(P->get());
+      VASTWire *OutputWire = cast<VASTWire>(*P);
       // Are we creating the enable port?
       if (LocalEn == 0) {
         // Or all enables together to generate the enable output,
@@ -476,7 +476,7 @@ void VerilogASTBuilder::emitIdleState() {
   MachineBasicBlock *EntryBB =  GraphTraits<MachineFunction*>::getEntryNode(MF);
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
   IdleSlot->buildReadyLogic(*VM);
-  VASTValue *StartPort = VM->getPort(VASTModule::Start).get();
+  VASTValue *StartPort = VM->getPort(VASTModule::Start);
   VM->addSlotSucc(IdleSlot, IdleSlot, VM->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.

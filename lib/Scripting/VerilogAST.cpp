@@ -1131,7 +1131,7 @@ void VASTImmediate::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) co
 }
 
 void VASTPort::print(raw_ostream &OS) const {
-  if (isInput())
+  if (IsInput)
     OS << "input ";
   else
     OS << "output ";
@@ -1147,7 +1147,7 @@ void VASTPort::print(raw_ostream &OS) const {
 }
 
 void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
-  if (isInput())
+  if (IsInput)
     // We need a reg to drive input port.
     OS << "reg";
   else
@@ -1159,7 +1159,7 @@ void VASTPort::printExternalDriver(raw_ostream &OS, uint64_t InitVal) const {
 
   OS << ' ' << getName();
 
-  if (isInput())
+  if (IsInput)
     OS << " = " << verilogConstToStr(InitVal, getBitWidth(), false);
 
   OS << ';';
