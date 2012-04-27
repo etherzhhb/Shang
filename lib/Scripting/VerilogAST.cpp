@@ -17,12 +17,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/VerilogAST.h"
-#include "vtm/MicroState.h"
 #include "vtm/Utilities.h"
 
 #include "llvm/Constants.h"
 #include "llvm/GlobalVariable.h"
 #include "llvm/DerivedTypes.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/SmallString.h"

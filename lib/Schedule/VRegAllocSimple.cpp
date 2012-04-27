@@ -20,9 +20,9 @@
 #include "CompGraph.h"
 #include "CompGraphDOT.h"
 
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
-#include "vtm/MicroState.h"
 #include "vtm/Passes.h"
 #include "vtm/VInstrInfo.h"
 
@@ -106,7 +106,7 @@ struct VRASimple : public MachineFunctionPass {
     assert(!MRI->reg_empty(RegNum) && "Register not is defined!");
     for (MachineRegisterInfo::def_iterator I = MRI->def_begin(RegNum);
          I != MachineRegisterInfo::def_end(); ++I) {
-      ucOperand &DefOp = cast<ucOperand>(I.getOperand());
+      MachineOperand &DefOp = I.getOperand();
       BitWidth = std::max(BitWidth, VInstrInfo::getBitWidth(DefOp));
     }
 
@@ -238,17 +238,13 @@ struct FaninChecker {
   void nextSrc() { ++CurSrc; }
 
   template<int N>
-  void addFanin(ucOperand &FanInOp) {
+  void addFanin(MachineOperand &FanInOp) {
     if (FanInOp.isReg()) {
       // Igore the operand index.
       MergedFanins[N].insert(getRegKey(FanInOp.getReg(), 0));
       ++Fanins[CurSrc][N];
     } else
       ExtraCost += /*LUT Cost*/ VFUs::LUTCost;
-  }
-  template<int N>
-  void addFanin(MachineOperand &SrcOp) {
-    FaninChecker<NUMSRC>::addFanin<N>(cast<ucOperand>(SrcOp));
   }
 
   template<int N>
@@ -561,7 +557,7 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
       MachineInstr *MI = &*I;
       assert(MI->getOpcode() == VTM::VOpICmp && "Unexpected Opcode!");
 
-      ucOperand &CondCode = cast<ucOperand>(MI->getOperand(3));
+      MachineOperand &CondCode = MI->getOperand(3);
       // Get the bit width information.
       if (!checkWidth(VInstrInfo::getBitWidth(CondCode)))
         return true;

@@ -33,7 +33,7 @@
 
 namespace llvm {
 class MachineBasicBlock;
-class ucOperand;
+class MachineOperand;
 class VASTModule;
 class VASTValue;
 class VASTSlot;

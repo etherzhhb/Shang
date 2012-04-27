@@ -18,7 +18,6 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/MicroState.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -94,16 +93,16 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       ++II; // We may delete the current instruction.
 
       if (Inst->isPHI()) {
-        ucOperand &DstMO = cast<ucOperand>(Inst->getOperand(0));
+        MachineOperand &DstMO = Inst->getOperand(0);
         unsigned DstWidth = VInstrInfo::getBitWidthOrZero(DstMO);
-        SmallVector<ucOperand*, 4> MOs;
+        SmallVector<MachineOperand*, 4> MOs;
         for (unsigned i = 1, e = Inst->getNumOperands(); i < e; i += 2) {
-          ucOperand *SrcMO = &cast<ucOperand>(Inst->getOperand(i));
+          MachineOperand *SrcMO = &Inst->getOperand(i);
           unsigned SrcBitWidth = VInstrInfo::getBitWidthOrZero(*SrcMO);
           if (SrcBitWidth == 0) {
             MOs.push_back(SrcMO);
             MachineInstr *DefMI = MRI->getVRegDef(SrcMO->getReg());
-            ucOperand &SrcDefMO = cast<ucOperand>(DefMI->getOperand(0));
+            MachineOperand &SrcDefMO = DefMI->getOperand(0);
             SrcBitWidth = VInstrInfo::getBitWidthOrZero(SrcDefMO);
           }
 
@@ -123,9 +122,9 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (handleImplicitDefs(Inst)) continue;
 
       if (Inst->isCopy()) {
-        ucOperand &SrcMO = cast<ucOperand>(Inst->getOperand(1));
+        MachineOperand &SrcMO = Inst->getOperand(1);
         MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
-        ucOperand &SrcDefMO = cast<ucOperand>(DefMI->getOperand(0));
+        MachineOperand &SrcDefMO = DefMI->getOperand(0);
         unsigned DstWidth = VInstrInfo::getBitWidth(SrcDefMO);
         VInstrInfo::setBitWidth(SrcMO, DstWidth);
         VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
@@ -188,7 +187,7 @@ bool FixMachineCode::simplifyReduction(MachineInstr *MI) {
   if (Opcode != VTM::VOpROr && Opcode != VTM::VOpRAnd && Opcode != VTM::VOpRXor)
     return false;
 
-  ucOperand &Src = cast<ucOperand>(MI->getOperand(1));
+  MachineOperand &Src = MI->getOperand(1);
   if (VInstrInfo::getBitWidth(Src) != 1) return false;
 
   // If the bitwidth of src operand is 1, the reduction is not necessary.
@@ -279,7 +278,7 @@ bool FixMachineCode::handleImplicitDefs(MachineInstr *MI) {
 
   typedef MachineRegisterInfo::use_iterator use_it;
   for (use_it I = MRI->use_begin(Reg), E = MRI->use_end(); I != E; /*++I*/) {
-    ucOperand *MO = cast<ucOperand>(&I.getOperand());
+    MachineOperand *MO = &I.getOperand();
     MachineInstr &UserMI = *I;
     ++I;
     // Implicit value always have 64 bit.
@@ -343,7 +342,7 @@ void FixMachineCode::FoldAdd(MachineInstr *MI,
   }
 
   // Build the carry bit of the original
-  ucOperand &DummyCarry = cast<ucOperand>(MI->getOperand(1));
+  MachineOperand &DummyCarry = MI->getOperand(1);
   DummyCarry.ChangeToImmediate(0);
   VInstrInfo::setBitWidth(DummyCarry, 1);
 }

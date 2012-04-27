@@ -25,12 +25,12 @@ namespace {
 
 struct PrebindUnbalanceMux : public PrebindMuxBase {
   static char ID;
-  std::vector<std::pair<ucOperand,unsigned> > TmpOpSet;
+  std::vector<std::pair<MachineOperand,unsigned> > TmpOpSet;
   PrebindUnbalanceMux() : PrebindMuxBase(ID){
     initializeMachineBlockFrequencyInfoPass(*PassRegistry::getPassRegistry());
   }
   void getFreq(PortFanInMapTy &TmpFanInInfo,MachineBasicBlock *MBB,
-               std::pair<unsigned, unsigned> InstInfoPair,ucOperand &MO);
+               std::pair<unsigned, unsigned> InstInfoPair,MachineOperand &MO);
   void rmPortInTmpFanIn(PortFanInMapTy &TmpFanInInfo,unsigned MaxMuxSize);
   void sortFanInByFreq();
   void allocateBalanceMux();
@@ -47,13 +47,13 @@ INITIALIZE_PASS_BEGIN(PrebindUnbalanceMux, "Bind-Mux",
 INITIALIZE_PASS_END(PrebindUnbalanceMux, "Bind-Mux",
   "Bind Mux", true, false)
 
-static inline bool sort_type(std::pair<ucOperand,unsigned> LHS,
-                             std::pair<ucOperand,unsigned> RHS) {
+static inline bool sort_type(std::pair<MachineOperand,unsigned> LHS,
+                             std::pair<MachineOperand,unsigned> RHS) {
     return LHS.second > RHS.second;
 }
 
 void PrebindUnbalanceMux::getFreq(PortFanInMapTy &TmpFanInInfo,MachineBasicBlock *MBB,
-                                  std::pair<unsigned, unsigned> InstInfoPair,ucOperand &MO){
+                                  std::pair<unsigned, unsigned> InstInfoPair,MachineOperand &MO){
   //Get Block's Freq
   MachineBlockFrequencyInfo &BFI = getAnalysis<MachineBlockFrequencyInfo>();
   BlockFrequency  InsertFreq = BFI.getBlockFreq(MBB);
@@ -136,8 +136,8 @@ void PrebindUnbalanceMux::allocateBalanceMux() {
     for (OpSet::iterator OI = FIs.begin(), OE = FIs.end(); OI != OE; ++OI) {
       ++DbgNum;
   //    dbgs()<<"The Number is : "<<DbgNum<<" ! Each OpSet in TmpFanInInfo has The Freq "<<OI->second<<'\n';
-      // the ucOperand in TmpFanInInfo.OpSet.ucOperand
-      ucOperand &Oprd = OI->first;
+      // the MachineOperand in TmpFanInInfo.OpSet.MachineOperand
+      MachineOperand &Oprd = OI->first;
 
       float CompSum = (float) OI->second/FreqSum;
     //  dbgs()<<"Float CompSum is "<<CompSum<<'\n';

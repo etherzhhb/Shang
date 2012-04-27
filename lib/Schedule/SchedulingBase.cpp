@@ -19,7 +19,6 @@
 #include "SchedulingBase.h"
 #include "ScheduleDOT.h"
 #include "vtm/Passes.h"
-#include "vtm/MicroState.h"
 
 #include "llvm/Support/CommandLine.h"
 
@@ -218,7 +217,7 @@ void SchedulingBase::dumpTimeFrame() const {
 unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
   //MachineOperand *P = VInstrInfo::getPredOperand(MI);
   //unsigned PredReg = P->getReg();
-  //if (cast<ucOperand>(*P).isPredicateInverted()) PredReg = ~PredReg;
+  //if (*P).isPredicateInverted()) PredReg = ~PredReg;
   //return PredReg;
   return 0;
 }

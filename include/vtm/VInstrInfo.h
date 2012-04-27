@@ -242,8 +242,8 @@ public:
 
   static MachineOperand CreateTrace(MachineBasicBlock *MBB);
 };
-//ucOperandExpressionTrait - Special DenseMapInfo traits to compare
-//ucOperand* by *value* of the instruction rather than by pointer value.
+//MachineOperandExpressionTrait - Special DenseMapInfo traits to compare
+//MachineOperand* by *value* of the instruction rather than by pointer value.
 //The hashing and equality testing functions ignore definitions so this is
 //useful for CSE, etc.
 struct VMachineOperandValueTrait : DenseMapInfo<MachineOperand> {

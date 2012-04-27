@@ -18,8 +18,9 @@
 
 #include "VSUnit.h"
 
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VFInfo.h"
-#include "vtm/MicroState.h"
+#include "vtm/VInstrInfo.h"
 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstr.h"
@@ -27,6 +28,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineSSAUpdater.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
@@ -168,8 +170,8 @@ struct MicroStateBuilder {
 
   struct WireDef {
     unsigned WireNum;
-    ucOperand Pred;
-    ucOperand Op;
+    MachineOperand Pred;
+    MachineOperand Op;
     OpSlot DefSlot;
     OpSlot CopySlot;
     OpSlot LoopBoundary;
@@ -323,7 +325,7 @@ struct MicroStateBuilder {
   void fuseInstr(MachineInstr &Inst, OpSlot SchedSlot, FuncUnitId FUId);
 
   // Build the machine operand that use at a specified slot.
-  MachineOperand getRegUseOperand(ucOperand MO, OpSlot ReadSlot) {
+  MachineOperand getRegUseOperand(MachineOperand MO, OpSlot ReadSlot) {
     unsigned Reg = MO.getReg();
     // Else this is a use.
     SWDMapTy::iterator at = StateWireDefs.find(Reg);
@@ -341,7 +343,7 @@ struct MicroStateBuilder {
       //assert(((!IsCtrl && ReadSlot == EmitSlot + 1)
       //        || (IsCtrl && ReadSlot == EmitSlot))
       //        && "Assumption of Slots broken!");
-      ucOperand Ret = getRegUseOperand(WDef, ReadSlot, MO);
+      MachineOperand Ret = getRegUseOperand(WDef, ReadSlot, MO);
       if (!MO.isImplicit())
         VInstrInfo::setBitWidth(Ret, VInstrInfo::getBitWidth(MO));
       return Ret;
@@ -353,19 +355,19 @@ struct MicroStateBuilder {
     // Dirty Hack: Just return something meaningless.
     if (MO.isImplicit()) return MachineOperand::CreateReg(0, false);
 
-    ucOperand Ret = WDef.createOperand();
+    MachineOperand Ret = WDef.createOperand();
     VInstrInfo::setBitWidth(Ret, VInstrInfo::getBitWidth(MO));
     return Ret;
   }
 
   // Build the machine operand that read the wire definition at a specified slot.
-  MachineOperand getRegUseOperand(WireDef &WD, OpSlot ReadSlot, ucOperand MO);
+  MachineOperand getRegUseOperand(WireDef &WD, OpSlot ReadSlot, MachineOperand MO);
  
   void emitPHICopy(MachineInstr *PN, unsigned Slot) {
     for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
       if (PN->getOperand(i + 1).getMBB() != &MBB) continue;
 
-      ucOperand &SrcMO = cast<ucOperand>(PN->getOperand(i));
+      MachineOperand &SrcMO = PN->getOperand(i);
 
       OpSlot CopySlot(Slot, true);
       unsigned DstReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
@@ -385,7 +387,7 @@ struct MicroStateBuilder {
     // FIXME: Place the PHI define at the right slot to avoid the live interval
     // of registers in the PHI overlap. 
     unsigned InsertSlot = /*Slot ? Slot :*/ State.getStartSlot();
-    ucOperand &MO = cast<ucOperand>(PN->getOperand(0));
+    MachineOperand &MO = PN->getOperand(0);
     unsigned PHIReg = MO.getReg();
     assert(MRI.getRegClass(PHIReg) == VTM::DRRegisterClass
            && "Bad register class for PHI!");
@@ -422,7 +424,7 @@ struct MicroStateBuilder {
 
       // The register to hold initialize value.
       unsigned InitReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
-      ucOperand InitOp = MachineOperand::CreateReg(InitReg, true);
+      MachineOperand InitOp = MachineOperand::CreateReg(InitReg, true);
       VInstrInfo::setBitWidth(InitOp, SizeInBits);
 
       MachineBasicBlock::iterator IP = PredBB->getFirstTerminator();
@@ -442,11 +444,11 @@ struct MicroStateBuilder {
     // First ucSate.
     while (!InsertedPHIs.empty()) {
       MachineInstr *PN = InsertedPHIs.pop_back_val();
-      ucOperand &Op = cast<ucOperand>(PN->getOperand(0));
+      MachineOperand &Op = PN->getOperand(0);
       VInstrInfo::setBitWidth(Op, SizeInBits);
 
       for (unsigned i = 1; i != PN->getNumOperands(); i += 2) {
-        ucOperand &SrcOp = cast<ucOperand>(PN->getOperand(i));
+        MachineOperand &SrcOp = PN->getOperand(i);
         VInstrInfo::setBitWidth(SrcOp, SizeInBits);
       }
 
@@ -511,7 +513,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
       if (A->getLatency() && VInstrInfo::isWriteUntilFinish(A->getOpcode())) {
         assert(A->getOpcode() == VTM::VOpBRAMTrans &&
                "Only support BRAMTrans at the moment.");
-        ucOperand &MO = cast<ucOperand>(RepMI->getOperand(0));
+        MachineOperand &MO = RepMI->getOperand(0);
         unsigned OldR = MO.getReg();
         const TargetRegisterClass *RC =
           VRegisterInfo::getRepRegisterClass(A->getOpcode());
@@ -617,7 +619,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   }
 
   // Handle the predicate operand.
-  ucOperand Pred = *VInstrInfo::getPredOperand(&Inst);
+  MachineOperand Pred = *VInstrInfo::getPredOperand(&Inst);
   assert(Pred.isReg() && "Cannot handle predicate operand!");
   
   // Do not copy instruction that is write until finish, which is already taken
@@ -652,7 +654,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
       // FIXME: Emit the wire only if the value is not read in a function unit port.
       // if (!NewDef->isSymbol()) {
       // Define wire for operations.
-      ucOperand NewOp = MO;
+      MachineOperand NewOp = MO;
       unsigned WireNum = NewOp.getReg();
 
       // Define wire for trivial operation, otherwise, the result of function
@@ -747,7 +749,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 }
 
 MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
-                                                   ucOperand MO) {
+                                                   MachineOperand MO) {
   bool isImplicit = MO.isImplicit();
   unsigned RegNo = WD.getOperand().getReg();
   unsigned PredReg = WD.Pred.getReg();

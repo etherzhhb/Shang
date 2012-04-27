@@ -12,6 +12,10 @@
 //===----------------------------------------------------------------------===//
 #include "MuxPrebinding.h"
 
+#include "vtm/VerilogBackendMCTargetDesc.h"
+
+#include "llvm/Target/TargetMachine.h"
+
 using namespace llvm;
 
 char PrebindMuxBase::ID = 0;
@@ -81,7 +85,7 @@ void PrebindMuxBase::collectFanIns(MachineFunction &MF){
         const MCInstrDesc &TID = Inst->getDesc();
 
         for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
-          ucOperand &MO = cast<ucOperand>(Inst->getOperand(i));
+          MachineOperand &MO = Inst->getOperand(i);
 
           // Only handle fan-ins
           if (MO.isReg() && (MO.isDef() || MuxRegs.count(MO.getReg())))
@@ -156,7 +160,7 @@ void PrebindMuxBase::insertDistrubedMuxOp(MachineFunction &MF) {
       MachineOperand *PredMO = VInstrInfo::getPredOperand(Inst);
 
       for (unsigned i = 0, e = Inst->getNumOperands(); i != e; ++i) {
-        ucOperand &MO = cast<ucOperand>(Inst->getOperand(i));
+        MachineOperand &MO = Inst->getOperand(i);
 
         // Only handle fan-ins
         if (MO.isReg() && MO.isDef()) continue;

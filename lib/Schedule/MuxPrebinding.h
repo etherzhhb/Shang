@@ -13,15 +13,14 @@
 #ifndef PRE_BIND_MUX_H
 #define PRE_BIND_MUX_H
 
-#include "llvm/ADT/DenseMap.h"
-#include "vtm/MicroState.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Passes.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/Support/Debug.h"
 
 namespace llvm{
 
@@ -34,7 +33,7 @@ public:
     FIRST_MUXC_NUM = 1
   };
 
-  typedef DenseMap<ucOperand, unsigned, VMachineOperandValueTrait> OpSet;
+  typedef DenseMap<MachineOperand, unsigned, VMachineOperandValueTrait> OpSet;
 
   // The (FUID, InPortNum) pair, identify the input port of a pre-bound FU.
   typedef std::pair<unsigned, unsigned> FUPortTy;
@@ -63,7 +62,7 @@ public:
   bool doInitialization(Module &);
 
   virtual void getFreq(PortFanInMapTy &TmpFanInInfo,MachineBasicBlock *MBB,
-                       std::pair<unsigned, unsigned> InstInfoPair,ucOperand &MO){}
+                       std::pair<unsigned, unsigned> InstInfoPair,MachineOperand &MO){}
   virtual void rmPortInTmpFanIn(PortFanInMapTy &TmpFanInInfo,unsigned MaxMuxSize){}
 
   void collectFanIns(MachineFunction &MF);

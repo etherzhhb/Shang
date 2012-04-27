@@ -18,7 +18,6 @@
 
 #include "vtm/Passes.h"
 #include "vtm/VerilogAST.h"
-#include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/VRegisterInfo.h"
@@ -311,18 +310,12 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitOpBitSlice(MachineInstr *MI);
 
   // Create a condition from a predicate operand.
-  VASTValue *createCnd(ucOperand &Op);
-  VASTValue *createCnd(MachineOperand &Op) {
-    return createCnd(cast<ucOperand>(Op));
-  }
+  VASTValue *createCnd(MachineOperand &Op);
 
-  VASTValue *getAsOperand(ucOperand &Op, bool GetAsInlineOperand = true);
-  VASTValue *getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true) {
-    return getAsOperand(cast<ucOperand>(Op), GetAsInlineOperand);
-  }
+  VASTValue *getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true);
 
   template <class Ty>
-  Ty *getAsLValue(ucOperand &Op) {
+  Ty *getAsLValue(MachineOperand &Op) {
     assert(Op.isReg() && "Bad MO type for LValue!");
 
     if (VASTValue *V = lookupSignal(Op.getReg()))
@@ -330,15 +323,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
     return 0;
   }
-  template <class Ty>
-  Ty *getAsLValue(MachineOperand &Op) {
-    return getAsLValue<Ty>(cast<ucOperand>(Op));
-  }
 
-  void printOperand(ucOperand &Op, raw_ostream &OS);
-  void printOperand(MachineOperand &Op, raw_ostream &OS) {
-    printOperand(cast<ucOperand>(Op), OS);
-  }
+  void printOperand(MachineOperand &Op, raw_ostream &OS);
 
   void emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
@@ -835,7 +821,7 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
   MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
   if (DI == MRI->def_end()) return false;
 
-  const ucOperand &Op = cast<ucOperand>(DI.getOperand());
+  const MachineOperand &Op = DI.getOperand();
   unsigned Bitwidth = VInstrInfo::getBitWidth(Op);
   if (!isReg) addWire(RegNum, Bitwidth);
   else        addRegister(RegNum, Bitwidth);
@@ -940,7 +926,7 @@ bool VerilogASTBuilder::emitFirstCtrlBundle(MachineBasicBlock *DstBB,
 void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
                                VASTValueVecTy &Cnds, MachineBasicBlock *CurBB,
                                bool Pipelined) {
-  ucOperand &CndOp = cast<ucOperand>(MI->getOperand(0));
+  MachineOperand &CndOp = MI->getOperand(0);
   Cnds.push_back(createCnd(CndOp));
 
   MachineBasicBlock *TargetBB = MI->getOperand(1).getMBB();
@@ -1401,7 +1387,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
            LB = MI->getOperand(3).getImm();
 
   // RHS should be a register.
-  ucOperand &MO = cast<ucOperand>(MI->getOperand(1));
+  MachineOperand &MO = MI->getOperand(1);
   VASTValue *RHS = getAsOperand(MO, false);
   //RHS = VM->getOrCreateBitSlice(RHS, MO.getBitWidth(), 0);
   // Pass RHS without getting inline operand, because for bitslice, only
@@ -1410,7 +1396,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   VM->assign(W, VM->buildBitSliceExpr(RHS, UB, LB));
 }
 
-VASTValue *VerilogASTBuilder::createCnd(ucOperand &Op) {
+VASTValue *VerilogASTBuilder::createCnd(MachineOperand &Op) {
   // Is there an always true predicate?
   if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getBoolImmediate(true);
 
@@ -1443,7 +1429,7 @@ static void printOperandImpl(raw_ostream &OS, const MachineOperand &MO,
   MO.print(OS);
 }
 
-VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
+VASTValue *VerilogASTBuilder::getAsOperand(MachineOperand &Op,
                                            bool GetAsInlineOperand) {
   unsigned BitWidth = VInstrInfo::getBitWidth(Op);
   switch (Op.getType()) {
@@ -1489,7 +1475,7 @@ VASTValue *VerilogASTBuilder::getAsOperand(ucOperand &Op,
   return Symbol;
 }
 
-void VerilogASTBuilder::printOperand(ucOperand &Op, raw_ostream &OS) {
+void VerilogASTBuilder::printOperand(MachineOperand &Op, raw_ostream &OS) {
   if(Op.isReg() || Op.isImm()){
     VASTValue *U = getAsOperand(Op);
     U->printAsOperand(OS);

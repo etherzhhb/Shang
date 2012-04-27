@@ -16,10 +16,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
-#include "vtm/MicroState.h"
+#include "vtm/VInstrInfo.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"

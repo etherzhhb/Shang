@@ -21,7 +21,6 @@
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/MicroState.h"
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -129,7 +128,7 @@ bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
     // Else we need to rebuild the UserMI.
     SmallVector<MachineOperand, 6> MOs;
     for (it I = UseMI->operands_begin(), E = UseMI->operands_end(); I != E; ++I) {
-      ucOperand &MO = cast<ucOperand>(*I);
+      MachineOperand &MO = *I;
       // Are we going to replace the operand?
       if (MO.isReg() && MO.getReg() == Reg) {
         assert(VInstrInfo::getBitWidth(MO) <= ImmediateTFs
@@ -616,7 +615,7 @@ static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *M
                                        MachineBasicBlock::iterator IP,
                                        const TargetInstrInfo *TII) {
   assert(!VInstrInfo::isAlwaysTruePred(MO) && "Unexpected always false!");
-  ucOperand Op(MO);
+  MachineOperand Op(MO);
 
   if (VInstrInfo::isPredicateInverted(MO)) {
     Op.clearParent();
@@ -624,7 +623,7 @@ static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *M
     VInstrInfo::setBitWidth(Op, 1);
     // Build the not instruction.
     unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
-    ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
+    MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
     VInstrInfo::setBitWidth(Dst, 1);
     BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
       .addOperand(Dst).addOperand(Op)
@@ -663,7 +662,7 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   }
 
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
-  ucOperand Dst = MachineOperand::CreateReg(DstReg, true);
+  MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
   VInstrInfo::setBitWidth(Dst, 1);
 
   BuildMI(MBB, IP, DebugLoc(), TII->get(MergeOpC))
@@ -1295,7 +1294,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   const MCInstrDesc &TID = MI->getDesc();
   // Iterate from use to define.
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
-    const ucOperand &MO = cast<ucOperand>(MI->getOperand(i));
+    const MachineOperand &MO = MI->getOperand(i);
 
     // Only care about a use register.
     if (!MO.isReg() || MO.isDef() || MO.getReg() == 0)

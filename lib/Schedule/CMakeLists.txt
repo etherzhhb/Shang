@@ -10,7 +10,6 @@ add_llvm_library(VTMSchedule
   ForceDirectedScheduling.cpp
   ILPScheduling.cpp
   SchedulingBase.cpp
-  MicroState.cpp
   MemOpsFusing.cpp
   VSUnit.cpp
   UnbalanceMuxPrebind.cpp

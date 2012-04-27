@@ -18,7 +18,6 @@
 
 #include "VSUnit.h"
 #include "SchedulingBase.h"
-#include "vtm/MicroState.h"
 #include "vtm/Utilities.h"
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
@@ -561,7 +560,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
     assert(MI && "Unexpected entry root!");
     for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
       MachineInstr *DepSrc = 0;
-      const ucOperand &MO = cast<ucOperand>(MI->getOperand(i));
+      const MachineOperand &MO = MI->getOperand(i);
       VSUnit *Dep = getDefSU(MO, CurState, DepSrc);
       // Avoid self-edge
       if (Dep == 0 || Dep->getIdx() == A->getIdx()) continue;

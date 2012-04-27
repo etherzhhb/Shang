@@ -19,7 +19,6 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/MicroState.h"
 
 #include "llvm/../../lib/CodeGen/BranchFolding.h"
 

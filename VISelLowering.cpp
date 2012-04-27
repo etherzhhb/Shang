@@ -18,7 +18,6 @@
 
 #include "VTargetMachine.h"
 #include "vtm/VFInfo.h"
-#include "vtm/MicroState.h"
 #include "vtm/VISelLowering.h"
 #include "vtm/Utilities.h"
 

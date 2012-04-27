@@ -21,7 +21,7 @@
 #include "vtm/VFInfo.h"
 #include "vtm/VRegisterInfo.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/MicroState.h"
+#include "vtm/VerilogBackendMCTargetDesc.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -72,11 +72,11 @@ struct LogicNetwork {
   // Helper class
   struct NetworkObj {
     Abc_Obj_t *Obj;
-    ucOperand MO;
+    MachineOperand MO;
     unsigned ExposedUses;
 
     // The object is exposed by default.
-    NetworkObj(Abc_Obj_t *O, ucOperand &M, unsigned NumUses)
+    NetworkObj(Abc_Obj_t *O, MachineOperand &M, unsigned NumUses)
       : Obj(O), MO(M), ExposedUses(NumUses)
     {
       // Clear the flags.
@@ -99,7 +99,7 @@ struct LogicNetwork {
 
   SpecificBumpPtrAllocator<NetworkObj> NtkObjAllocator;
   // Mapping register number to logic network port.
-  typedef DenseMap<ucOperand, NetworkObj*, VMachineOperandValueTrait> ObjMapTy;
+  typedef DenseMap<MachineOperand, NetworkObj*, VMachineOperandValueTrait> ObjMapTy;
   // Nodes.
   ObjMapTy Nodes;
 
@@ -112,7 +112,7 @@ struct LogicNetwork {
   InstrMapTy FIMap;
   typedef MachineBasicBlock::iterator IPTy;
 
-  typedef StringMap<ucOperand> MOMapTy;
+  typedef StringMap<MachineOperand> MOMapTy;
   MOMapTy MOMap;
 
   unsigned getInstIdx(MachineInstr *MI) const {
@@ -131,7 +131,7 @@ struct LogicNetwork {
   }
 
   //
-  NetworkObj *getObj(ucOperand MO) {
+  NetworkObj *getObj(MachineOperand MO) {
     // Clear the flags berore looking up the object.
     if (MO.isReg()) {
       MO.setIsDef(false);
@@ -146,7 +146,7 @@ struct LogicNetwork {
   }
 
 
-  bool hasImplicitBitslice(ucOperand &MO) {
+  bool hasImplicitBitslice(MachineOperand &MO) {
     if (!MO.isReg() || !MO.getReg()) return false;
 
     MachineRegisterInfo::def_iterator I = MRI.def_begin(MO.getReg());
@@ -155,7 +155,7 @@ struct LogicNetwork {
     return VInstrInfo::getBitWidth(MO)!=VInstrInfo::getBitWidth(I.getOperand());
   }
 
-  NetworkObj *getOrCreateObj(ucOperand &MO) {
+  NetworkObj *getOrCreateObj(MachineOperand &MO) {
     NetworkObj *NtkObj = getObj(MO);
 
     // Object not existed, create a PI for the MO now.
@@ -187,9 +187,9 @@ struct LogicNetwork {
     return NtkObj;
   }
 
-  ucOperand getOperand(Abc_Obj_t *Obj, unsigned SizeInBits = 0) {
+  MachineOperand getOperand(Abc_Obj_t *Obj, unsigned SizeInBits = 0) {
     // Else look it up in the FO map.
-    ucOperand &MO =
+    MachineOperand &MO =
       MOMap.GetOrCreateValue(Abc_ObjName(Obj),
                              VInstrInfo::CreateReg(0, SizeInBits)).second;
 
@@ -279,19 +279,19 @@ struct LogicNetwork {
   // Function for logic network building.
   template <typename BuildFunc>
   bool buildBinaryOpNode(MachineInstr *MI, BuildFunc F) {
-    if (hasImplicitBitslice(cast<ucOperand>(MI->getOperand(1))) ||
-        hasImplicitBitslice(cast<ucOperand>(MI->getOperand(2))))
+    if (hasImplicitBitslice(MI->getOperand(1)) ||
+        hasImplicitBitslice(MI->getOperand(2)))
       return false;
 
-    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
-    NetworkObj *Op1 = getOrCreateObj(cast<ucOperand>(MI->getOperand(2)));
+    NetworkObj *Op0 = getOrCreateObj(MI->getOperand(1));
+    NetworkObj *Op1 = getOrCreateObj(MI->getOperand(2));
 
     // They are used in the logic network.
     Op0->decreaseUses();
     Op1->decreaseUses();
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = F((Abc_Aig_t *)Ntk->pManFunc, Op0->Obj, Op1->Obj);
-    ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
+    MachineOperand &ResMO = MI->getOperand(0);
 
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
     NetworkObj *NtkObj =
@@ -301,16 +301,16 @@ struct LogicNetwork {
   }
 
   bool buildNotNode(MachineInstr *MI) {
-    if (hasImplicitBitslice(cast<ucOperand>(MI->getOperand(1))))
+    if (hasImplicitBitslice(MI->getOperand(1)))
       return false;
 
-    NetworkObj *Op0 = getOrCreateObj(cast<ucOperand>(MI->getOperand(1)));
+    NetworkObj *Op0 = getOrCreateObj(MI->getOperand(1));
     // It is used in the logic network.
     Op0->decreaseUses();
 
     // Create the internal node for this machine instruction.
     Abc_Obj_t *Res = Abc_ObjNot(Op0->Obj);
-    ucOperand &ResMO = cast<ucOperand>(MI->getOperand(0));
+    MachineOperand &ResMO = MI->getOperand(0);
 
     unsigned NumUse = std::distance(MRI.use_begin(ResMO.getReg()), MRI.use_end());
     NetworkObj *NtkObj =
@@ -478,7 +478,7 @@ bool LogicNetwork::addInstr(MachineInstr *MI) {
 
 void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
                                 MachineBasicBlock::iterator IP) {
-  SmallVector<ucOperand, 2> Ops;
+  SmallVector<MachineOperand, 2> Ops;
   Abc_Obj_t *FO = Abc_ObjFanout0(Obj), *FI;
   DEBUG(dbgs() << Abc_ObjName(FO) << '\n');
 
@@ -488,7 +488,7 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
   int j;
   Abc_ObjForEachFanin(Obj, FI, j) {
     DEBUG(dbgs() << "\tBuilt MO for FI: " << Abc_ObjName(FI) << '\n');
-    ucOperand MO = getOperand(FI);
+    MachineOperand MO = getOperand(FI);
     assert((SizeInBits == 0 || SizeInBits == VInstrInfo::getBitWidth(MO))
            && "Operand SizeInBits not match!");
     Ops.push_back(MO);
@@ -498,7 +498,7 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
   // Get the result.
   DEBUG(dbgs() << "Built LUT for FO: " << Abc_ObjName(FO) << "\n\n");
   assert(SizeInBits && "Expect non-zero size output!");
-  ucOperand DefMO = getOperand(FO, SizeInBits);
+  MachineOperand DefMO = getOperand(FO, SizeInBits);
   assert(VInstrInfo::getBitWidth(DefMO) == SizeInBits && "Result SizeInBits not match!");
   DefMO.setIsDef(true);
 

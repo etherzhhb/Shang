@@ -21,7 +21,6 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/VFInfo.h"
 #include "vtm/Passes.h"
-#include "vtm/MicroState.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -138,21 +137,21 @@ bool BitLevelInfo::runOnMachineFunction(MachineFunction &MF) {
         continue;
       case VTM::VOpRet: {
         // Setup the bit width for predicate operand.
-        ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
+        MachineOperand &Op = Instr.getOperand(0);
         VInstrInfo::setBitWidth(Op, 1);
         continue;
       }
       case VTM::VOpToState:
       case VTM::VOpToStateb: {
         // Setup the bit width for predicate operand.
-        ucOperand &Op = cast<ucOperand>(Instr.getOperand(0));
+        MachineOperand &Op = Instr.getOperand(0);
         if (Op.isImm()) {
           assert(Op.getImm() && "Unexpected 'never' in unconditional branch!");
           Op.ChangeToRegister(0, false);
           VInstrInfo::setBitWidth(Op, 1);
         }
 
-        ucOperand &Pred = cast<ucOperand>(Instr.getOperand(2));
+        MachineOperand &Pred = Instr.getOperand(2);
         if (Pred.isImm()) {
           assert(Pred.getImm() && "Unexpected 'never' in unconditional branch!");
           Pred.ChangeToRegister(0, false);

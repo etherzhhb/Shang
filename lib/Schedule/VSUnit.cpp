@@ -19,8 +19,8 @@
 #include "VSUnit.h"
 #include "ScheduleDOT.h"
 
+#include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/SynSettings.h"
-#include "vtm/MicroState.h"
 #include "vtm/VFInfo.h"
 
 #include "llvm/Support/raw_ostream.h"

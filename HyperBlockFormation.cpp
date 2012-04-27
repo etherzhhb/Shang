@@ -21,7 +21,6 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
-#include "vtm/MicroState.h"
 
 #include "llvm/../../lib/CodeGen/BranchFolding.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -650,7 +649,7 @@ void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
       continue;
 
     if (TII->isPredicated(I)) {
-      ucOperand *MO = cast<ucOperand>(VInstrInfo::getPredOperand(I));
+      MachineOperand *MO = VInstrInfo::getPredOperand(I);
       unsigned k = (MO->getReg() << 1)
                    | (VInstrInfo::isPredicateInverted(*MO) ? 1 :0 );
       unsigned &Reg = PredMap[k];

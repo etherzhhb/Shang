@@ -17,7 +17,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "vtm/VerilogBackendMCTargetDesc.h"
-#include "vtm/MicroState.h"
 #include "vtm/VInstrInfo.h"
 #include "vtm/Passes.h"
 
