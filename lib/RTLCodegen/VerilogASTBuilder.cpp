@@ -1414,13 +1414,12 @@ static void printOperandImpl(raw_ostream &OS, const MachineOperand &MO,
   case MachineOperand::MO_ExternalSymbol:
     UB = std::min(VInstrInfo::getBitWidth(MO), UB);
     OS << MO.getSymbolName();
-    OS << verilogBitRange(UB, LB, VInstrInfo::getBitWidth(MO) != 1);
+    OS << VASTValue::printBitRange(UB, LB, VInstrInfo::getBitWidth(MO) != 1);
     return;
   case MachineOperand::MO_GlobalAddress:
     OS << "(`gv" << VBEMangle(MO.getGlobal()->getName());
     if (int64_t Offset = MO.getOffset())
-      OS  << " + "
-          << verilogConstToStr(Offset, VInstrInfo::getBitWidth(MO), false);
+      OS  << " + " << Offset;
     OS << ')';
     return;
   default: break;

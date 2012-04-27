@@ -262,6 +262,9 @@ public:
   static bool is_dp_leaf(VASTValue *V) {
     return dp_dep_begin(V) == dp_dep_end(V);
   }
+
+  // Helper function.
+  static std::string printBitRange(unsigned UB, unsigned LB, bool printOneBit);
 };
 
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
@@ -1344,15 +1347,6 @@ void DepthFirstTraverseDepTree(VASTValue *DepTree, VisitPathFunc VisitPath) {
     ItWorkStack.push_back(VASTValue::dp_dep_begin(ChildNode));
   }
 }
-
-
-std::string verilogConstToStr(Constant *C);
-
-std::string verilogConstToStr(uint64_t value,unsigned bitwidth,
-                              bool isMinValue);
-
-std::string verilogBitRange(unsigned UB, unsigned LB = 0, bool printOneBit = true);
-
 } // end namespace
 
 #endif

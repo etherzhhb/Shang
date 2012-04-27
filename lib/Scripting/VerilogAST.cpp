@@ -48,70 +48,36 @@ ExprInlineThreshold("vtm-expr-inline-thredhold",
 
 //===----------------------------------------------------------------------===//
 // Value and type printing
-
-std::string llvm::verilogBitRange(unsigned UB, unsigned LB, bool printOneBit) {
-  std::stringstream bw;
-  assert(UB && UB >= LB && "Bad bit range!");
-  --UB;
-  if (UB != LB)
-    bw << "[" << UB << ":" << LB << "]";
-  else if(printOneBit)
-    bw << "[" << LB << "]";
-
-  return bw.str();
-}
-
-std::string llvm::verilogConstToStr(Constant *CPV) {
-  if (ConstantInt* CI=dyn_cast<ConstantInt>(CPV)) {
-    bool isMinValue=CI->isMinValue(true);
-    uint64_t v = isMinValue ? CI->getZExtValue() :
-                             (uint64_t)CI->getSExtValue();
-    return verilogConstToStr(v,CI->getBitWidth(),isMinValue);
-  } else if (ConstantExpr *CE = dyn_cast<ConstantExpr>(CPV)) {
-    switch (CE->getOpcode()) {
-    case Instruction::PtrToInt:
-    case Instruction::IntToPtr:
-    case Instruction::BitCast:
-      return verilogConstToStr(CE->getOperand(0));
-    }
-
-  }
-
-  return "??Constant??";
-}
-
-std::string llvm::verilogConstToStr(uint64_t value, unsigned bitwidth,
-                                    bool isMinValue) {
-  std::stringstream pc;
-  pc <<bitwidth<< '\'';
-  if (bitwidth == 1) pc << 'b';
-  else               pc << "h";
+static std::string verilogConstToStr(uint64_t Value, unsigned bitwidth,
+                                     bool isMinValue) {
+  std::string ret;
+  ret = utostr_32(bitwidth) + '\'';
+  if (bitwidth == 1) ret += "b";
+  else               ret += "h";
   // Mask the value that small than 4 bit to prevent printing something
   // like 1'hf out.
-  if (bitwidth < 4)
-    value &= (1 << bitwidth) - 1;
+  if (bitwidth < 4) Value &= (1 << bitwidth) - 1;
 
   if(isMinValue) {
-    pc<<std::hex<<value;
-    return pc.str();
+    ret += utohexstr(Value);
+    return ret;
   }
 
-  std::stringstream ss;
-  ss<<std::hex<<value;
+  std::string ss = utohexstr(Value);
   unsigned int uselength = (bitwidth/4) + (((bitwidth&0x3) == 0) ? 0 : 1);
-  std::string sout = ss.str();
-  if(uselength < sout.length())
-    sout=sout.substr(sout.length()-uselength,uselength);
-  pc<<sout;
+  if(uselength < ss.length())
+    ss = ss.substr(ss.length() - uselength, uselength);
+  ret += ss;
 
-  return pc.str();
+  return ret;
 }
 
 //----------------------------------------------------------------------------//
 // Helper function for Verilog RTL printing.
 
 static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *W) {
-  OS << "assign " << W->getName() << verilogBitRange(W->getBitWidth(), 0, false)
+  OS << "assign " << W->getName()
+     << VASTValue::printBitRange(W->getBitWidth(), 0, false)
      << " = ";
   return OS;
 }
@@ -1101,6 +1067,17 @@ void VASTModule::writeProfileCounters(VASTSlot *S,
   }
 }
 
+std::string VASTValue::printBitRange(unsigned UB, unsigned LB, bool printOneBit){
+  std::string ret;
+  assert(UB && UB >= LB && "Bad bit range!");
+  --UB;
+  if (UB != LB)
+    ret = "[" + utostr_32(UB) + ":" + utostr_32(LB) + "]";
+  else if(printOneBit)
+    ret = "[" + utostr_32(LB) + "]";
+
+  return ret;
+}
 
 void VASTValue::print(raw_ostream &OS) const {
   printAsOperand(OS);
@@ -1113,7 +1090,7 @@ void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const 
 void VASTNamedValue::printAsOperand(raw_ostream &OS, unsigned UB,
                                     unsigned LB) const{
   OS << getName();
-  if (UB) OS << verilogBitRange(UB, LB, getBitWidth() > 1);
+  if (UB) OS << VASTValue::printBitRange(UB, LB, getBitWidth() > 1);
 }
 
 bool VASTValue::replaceAllUseWith(VASTValue *To) {
@@ -1322,8 +1299,8 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
 
   // Create the temporary signal.
   OS << "// Combinational MUX\n"
-     << "reg " << verilogBitRange(W->getBitWidth()) << ' ' << W->getName()
-     << "_mux_wire;\n";
+     << "reg " << VASTValue::printBitRange(W->getBitWidth(), 0, true)
+     << ' ' << W->getName() << "_mux_wire;\n";
 
   // Assign the temporary signal to the wire.
   printAssign(OS, W) << W->getName() << "_mux_wire;\n";
@@ -1381,7 +1358,7 @@ void VASTWire::printAssignment(raw_ostream &OS) const {
 void VASTExpr::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
   assert(UB == getUB() && LB == getLB() && "Cannot print bitslice of Expr!");
   if (const char *Name = lhs_wire_name()) {
-    OS << Name << verilogBitRange(getBitWidth(), 0, false);
+    OS << Name << VASTValue::printBitRange(getBitWidth(), 0, false);
     return;
   }
 
