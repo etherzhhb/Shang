@@ -99,7 +99,7 @@ struct LogicNetwork {
 
   SpecificBumpPtrAllocator<NetworkObj> NtkObjAllocator;
   // Mapping register number to logic network port.
-  typedef DenseMap<ucOperand, NetworkObj*, ucOperandValueTrait> ObjMapTy;
+  typedef DenseMap<ucOperand, NetworkObj*, VMachineOperandValueTrait> ObjMapTy;
   // Nodes.
   ObjMapTy Nodes;
 

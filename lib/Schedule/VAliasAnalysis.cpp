@@ -68,7 +68,7 @@ struct VAliasAnalysis: public FunctionPass, public AliasAnalysis {
 char VAliasAnalysis::ID = 0;
 
 INITIALIZE_AG_PASS(VAliasAnalysis, AliasAnalysis, "vaa",
-                   "VTM Specific Alias Analyais", false, true, false);
+                   "VTM Specific Alias Analyais", false, true, false)
 
 Pass *llvm::createVAliasAnalysisPass() {
   return new VAliasAnalysis();

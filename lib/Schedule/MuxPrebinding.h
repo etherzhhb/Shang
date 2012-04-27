@@ -34,7 +34,7 @@ public:
     FIRST_MUXC_NUM = 1
   };
 
-  typedef DenseMap<ucOperand, unsigned, ucOperandValueTrait> OpSet;
+  typedef DenseMap<ucOperand, unsigned, VMachineOperandValueTrait> OpSet;
 
   // The (FUID, InPortNum) pair, identify the input port of a pre-bound FU.
   typedef std::pair<unsigned, unsigned> FUPortTy;

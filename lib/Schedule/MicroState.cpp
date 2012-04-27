@@ -34,52 +34,6 @@
 
 using namespace llvm;
 
-static uint64_t getMachineOperandHashValue(const MachineOperand &MO) {
-  uint64_t Key = (uint64_t)MO.getType() << 32;
-  switch (MO.getType()) {
-  default: break;
-  case MachineOperand::MO_Register:
-    if (MO.isDef() && TargetRegisterInfo::isVirtualRegister(MO.getReg()))
-      return 0;  // Skip virtual register defs.
-    Key |= MO.getReg();
-    break;
-  case MachineOperand::MO_Immediate:
-    Key |= MO.getImm();
-    break;
-  case MachineOperand::MO_FrameIndex:
-  case MachineOperand::MO_ConstantPoolIndex:
-  case MachineOperand::MO_JumpTableIndex:
-    Key |= MO.getIndex();
-    break;
-  case MachineOperand::MO_MachineBasicBlock:
-    Key |= DenseMapInfo<void*>::getHashValue(MO.getMBB());
-    break;
-  case MachineOperand::MO_GlobalAddress:
-    Key |= DenseMapInfo<void*>::getHashValue(MO.getGlobal());
-    break;
-  case MachineOperand::MO_BlockAddress:
-    Key |= DenseMapInfo<void*>::getHashValue(MO.getBlockAddress());
-    break;
-  case MachineOperand::MO_MCSymbol:
-    Key |= DenseMapInfo<void*>::getHashValue(MO.getMCSymbol());
-    break;
-  }
-  Key += ~(Key << 32);
-  Key ^= (Key >> 22);
-  Key += ~(Key << 13);
-  Key ^= (Key >> 8);
-  Key += (Key << 3);
-  Key ^= (Key >> 15);
-  Key += ~(Key << 27);
-  Key ^= (Key >> 31);
-
-  return Key;
-}
-
-unsigned ucOperandValueTrait::getHashValue(ucOperand Op) {
-  return getMachineOperandHashValue(Op);
-}
-
 bool ucOperand::isPredicateInverted() const {
   return getTargetFlags() & VInstrInfo::PredInvertFlag;
 }

@@ -29,6 +29,7 @@
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Hashing.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-instr-info"
@@ -549,6 +550,40 @@ MachineBasicBlock::instr_iterator VInstrInfo::getCtrlBundleEnd(MachineInstr *MI)
   } while (I->getOpcode() != VTM::CtrlEnd);
 
   return I;
+}
+
+
+static uint64_t getMachineOperandHashValue(const MachineOperand &MO) {
+  switch (MO.getType()) {
+  default: break;
+  case MachineOperand::MO_Register:
+    if (MO.isDef() && TargetRegisterInfo::isVirtualRegister(MO.getReg()))
+      return 0;  // Skip virtual register defs.
+    return hash_combine(MO.getType(), MO.getReg(), MO.getTargetFlags());
+  case MachineOperand::MO_Immediate:
+    return hash_combine(MO.getType(), MO.getImm(), MO.getTargetFlags());
+  case MachineOperand::MO_FrameIndex:
+  case MachineOperand::MO_ConstantPoolIndex:
+  case MachineOperand::MO_JumpTableIndex:
+    return hash_combine(MO.getType(), MO.getIndex(), MO.getTargetFlags());
+  case MachineOperand::MO_MachineBasicBlock:
+    return hash_combine(MO.getType(), MO.getMBB(), MO.getTargetFlags());
+  case MachineOperand::MO_GlobalAddress:
+    return hash_combine(MO.getType(), MO.getGlobal(), MO.getTargetFlags());
+  case MachineOperand::MO_BlockAddress:
+    return hash_combine(MO.getType(), MO.getBlockAddress(), MO.getTargetFlags());
+  case MachineOperand::MO_MCSymbol:
+    return hash_combine(MO.getType(), MO.getMCSymbol(), MO.getTargetFlags());
+  case MachineOperand::MO_ExternalSymbol:
+    return hash_combine(MO.getType(), MO.getSymbolName(), MO.getTargetFlags());
+  }
+
+  llvm_unreachable("Bad machine operand type!");
+  return 0;
+}
+
+unsigned VMachineOperandValueTrait::getHashValue(MachineOperand Op) {
+  return getMachineOperandHashValue(Op);
 }
 
 static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,

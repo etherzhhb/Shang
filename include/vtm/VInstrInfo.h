@@ -210,6 +210,29 @@ public:
 
   static MachineBasicBlock::instr_iterator getCtrlBundleEnd(MachineInstr *MI);
 };
+//ucOperandExpressionTrait - Special DenseMapInfo traits to compare
+//ucOperand* by *value* of the instruction rather than by pointer value.
+//The hashing and equality testing functions ignore definitions so this is
+//useful for CSE, etc.
+struct VMachineOperandValueTrait : DenseMapInfo<MachineOperand> {
+  static inline MachineOperand getEmptyKey() {
+    MachineOperand M = MachineOperand::CreateReg(0, false);
+    M.setTargetFlags(~0);
+    return M;
+  }
+
+  static inline MachineOperand getTombstoneKey() {
+    MachineOperand M = MachineOperand::CreateReg(0, false);
+    M.setTargetFlags(0x7f);
+    return M;
+  }
+
+  static unsigned getHashValue(MachineOperand Op);
+
+  static bool isEqual(const MachineOperand &LHS, const MachineOperand &RHS) {
+    return LHS.isIdenticalTo(RHS);
+  }
+};
 
 // Helper class for manipulating bit width operand.
 class BitWidthAnnotator {
