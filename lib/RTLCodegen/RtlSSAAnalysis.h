@@ -95,7 +95,7 @@ public:
   VASTSlot *getSlot() const { return Slot; }
   std::string getName() const {
     return std::string(getValue()->getName()) + "@"
-      + utostr_32(getSlot()->getSlotNum());
+           + utostr_32(getSlot()->SlotNum);
   }
 
   unsigned getCyclesFromDef(ValueAtSlot *VAS) const {

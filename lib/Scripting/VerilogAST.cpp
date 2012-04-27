@@ -115,13 +115,9 @@ void VASTUse::PinUser() const {
 unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
 
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
-  :VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0) {
-  SlotNum(slotNum);
-  StartSlot(slotNum);
-  EndSlot(slotNum);
-  II(~0);
-  ParentIdx(parentIdx);
-
+  : VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0),
+    StartSlot(slotNum), EndSlot(slotNum), II(~0), SlotNum(slotNum),
+    ParentIdx(parentIdx), BBNum(0) {
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
   SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0,
@@ -198,7 +194,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
   if (hasAliasSlot()) {
     for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
          s < e; s += ii) {
-      if (s == getSlotNum()) continue;
+      if (s == SlotNum) continue;
 
       VASTSlot *AliasSlot = Mod.getSlot(s);
 
@@ -221,7 +217,7 @@ void VASTSlot::buildReadyLogic(VASTModule &Mod) {
 }
 
 bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
-  if (NextSlots.empty()) return NextSlot->getSlotNum() == getSlotNum() + 1;
+  if (NextSlots.empty()) return NextSlot->SlotNum == SlotNum + 1;
 
   return NextSlots.count(NextSlot);
 }
@@ -244,7 +240,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
          s < e; s += ii) {
       CtrlS << s << ", ";
-      if (s == getSlotNum()) continue;
+      if (s == SlotNum) continue;
 
       const VASTSlot *AliasSlot = Mod.getSlot(s);
       if (AliasSlot->hasNextSlot(this)) {
@@ -266,7 +262,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
   } // SS flushes automatically here.
 
   DEBUG(
-  if (getSlotNum() != 0)
+  if (SlotNum != 0)
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
           << " ready at %d\", $time());\n";
   );
@@ -278,13 +274,13 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     CtrlS << "// Enable the successor slots.\n";
     for (VASTSlot::const_succ_cnd_iterator I = succ_cnd_begin(),E = succ_cnd_end();
          I != E; ++I) {
-      hasSelfLoop |= I->first->getSlotNum() == getSlotNum();
+      hasSelfLoop |= I->first->SlotNum == SlotNum;
       VASTRegister *NextSlotReg = I->first->getRegister();
       Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd);
     }
   } else {
     // Enable the default successor slots.
-    VASTSlot *NextSlot = Mod.getSlot(getSlotNum() + 1);
+    VASTSlot *NextSlot = Mod.getSlot(SlotNum + 1);
     VASTRegister *NextSlotReg = NextSlot->getRegister();
     Mod.addAssignment(NextSlotReg, Mod.getBoolImmediate(true), this,
                       EmptySlotEnCnd);
@@ -308,7 +304,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
 
   if (!ReadyPresented) {
     //DEBUG(
-    if (getSlotNum() != 0) {
+    if (SlotNum != 0) {
       CtrlS << "if (start) begin $display(\"" << getName() << " in "
             << Mod.getName()
             << " bad start %b\\n\", start);  $finish(); end\n";
@@ -357,7 +353,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
       if (AliasEnabled) {
         for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
              s < e; s += ii) {
-          if (s == getSlotNum()) continue;
+          if (s == SlotNum) continue;
 
           VASTSlot *ASlot = Mod.getSlot(s);
           assert(!ASlot->isDiabled(I->first)
@@ -860,7 +856,7 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
   assign(Wire, AssignAtSlot, VASTWire::AssignCond);
-  Wire->setSlot(Slot->getSlotNum());
+  Wire->setSlot(Slot->SlotNum);
   // Recover the condition vector.
   if (AddSlotActive) Cnds.pop_back();
 
@@ -1021,13 +1017,13 @@ void VASTModule::anchor() {}
 
 void VASTModule::writeProfileCounters(VASTSlot *S,
                                       VASTModule::StartIdxMapTy &StartIdxMap) {
-  std::string BBCounter = "cnt" + utostr_32(S->getParentIdx());
+  std::string BBCounter = "cnt" + utostr_32(S->ParentIdx);
   std::string FunctionCounter = "cnt" + getName();
   vlang_raw_ostream &CtrlS = getControlBlockBuffer();
   
   // Create the profile counter.
   // Write the counter for the function.
-  if (S->getSlotNum() == 0) {
+  if (S->SlotNum == 0) {
     addRegister(FunctionCounter, 64)->Pin();
     CtrlS.if_begin(getPortName(VASTModule::Finish));
     CtrlS << "$display(\"Module: " << getName();
@@ -1035,8 +1031,8 @@ void VASTModule::writeProfileCounters(VASTSlot *S,
     CtrlS << " total cycles" << "->%d\"," << FunctionCounter << ");\n";
     CtrlS.exit_block() << "\n";
   } else { // Dont count the ilde state at the moment.
-    if (S->getParentIdx() == S->getSlotNum()) {
-      unsigned ParentIdx = S->getParentIdx();
+    if (S->ParentIdx == S->SlotNum) {
+      unsigned ParentIdx = S->ParentIdx;
       addRegister(BBCounter, 64)->Pin();
 
       CtrlS.if_begin(getPortName(VASTModule::Finish));

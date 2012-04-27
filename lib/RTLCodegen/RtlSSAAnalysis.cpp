@@ -79,8 +79,8 @@ struct VASDepBuilder {
 };
 
 void ValueAtSlot::print(raw_ostream &OS) const {
-  OS << getValue()->getName() << '@' << getSlot()->getSlotNum()
-    << "\t <= {";
+  OS << getValue()->getName() << '@' << getSlot()->SlotNum
+     << "\t <= {";
 
   typedef VASCycMapTy::const_iterator it;
   for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I)
@@ -95,7 +95,7 @@ void ValueAtSlot::verify() const {
   for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I) {
     VASTSlot *DefSlot = I->first->getSlot();
     LiveInInfo LI = I->second;
-    if (DefSlot->getParentIdx() == UseSlot->getParentIdx() &&
+    if (DefSlot->ParentIdx == UseSlot->ParentIdx &&
         UseSlot->hasAliasSlot() && !LI.isFromOtherBB() &&
         LI.getCycles() > DefSlot->alias_ii())
       llvm_unreachable("Broken RTL dependence!");
@@ -267,7 +267,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
                                 bool OnlyUndefTiming) {
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
-  unsigned CurBBIdx = To->getSlot()->getParentIdx();
+  unsigned CurBBIdx = To->getSlot()->ParentIdx;
 
   for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
     ValueAtSlot *PredOut = II->first;
@@ -275,7 +275,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
     if (OnlyUndefTiming && ! PredOut->getValue()->isTimingUndef())
       continue;
 
-    unsigned DefBBIdx = PredOut->getSlot()->getParentIdx();
+    unsigned DefBBIdx = PredOut->getSlot()->ParentIdx;
     
     ValueAtSlot::LiveInInfo LI = II->second;
     // Increase the cycles by 1 after the value lives to next slot.
@@ -296,7 +296,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
 
 bool RtlSSAAnalysis::addLiveInFromAliasSlots(VASTSlot *From, SlotInfo *To) {
   bool Changed = false;
-  unsigned FromSlotNum = From->getSlotNum();
+  unsigned FromSlotNum = From->SlotNum;
 
   for (unsigned i = From->alias_start(), e = From->alias_end(),
        ii = From->alias_ii(); i < e; i += ii) {
@@ -335,13 +335,13 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
 
         // No need to update the out set of Slot 0 according its incoming value.
         // It is the first slot of the FSM.
-        if (S->getSlotNum() == 0 && PredSlot->getSlotNum() != 0) continue;
+        if (S->SlotNum == 0 && PredSlot->SlotNum != 0) continue;
 
         SlotInfo *PredSI = getSlotInfo(PredSlot);
 
         Changed |= addLiveIns(PredSI, CurSI, false);
 
-        if (PredSlot->getParentIdx() == S->getParentIdx() &&
+        if (PredSlot->ParentIdx == S->ParentIdx &&
             PredSlot->hasAliasSlot())
           Changed |= addLiveInFromAliasSlots(PredSlot, CurSI);
       }
@@ -360,7 +360,7 @@ void RtlSSAAnalysis::ComputeGenAndKill() {
     // Values are overwritten by the alias slots of its defining slot.
     if (!S->hasAliasSlot()) continue;
 
-    unsigned CurSlotNum = S->getSlotNum();
+    unsigned CurSlotNum = S->SlotNum;
     VASTSignal *V = VAS->getValue();
     for (unsigned i = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
          i < e; i += ii) {

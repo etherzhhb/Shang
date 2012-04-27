@@ -771,21 +771,10 @@ private:
   PredVecTy PredSlots;
 
   SuccVecTy NextSlots;
-  uint16_t SlotNum() const { return i16<VASTNode::SubClassDataBase + 1>(); }
-  void SlotNum(uint16_t S) { i16<VASTNode::SubClassDataBase + 1>(S); }
-  // The start slot of parent state, can identify parent state.
-  uint16_t ParentIdx() const { return i16<VASTNode::SubClassDataBase + 3>(); }
-  void ParentIdx(uint16_t Idx) { i16<VASTNode::SubClassDataBase + 3>(Idx); }
-  uint16_t BBNum() const { return i16<VASTNode::SubClassDataBase + 5>(); }
-  void BBNum(uint16_t Num) { i16<VASTNode::SubClassDataBase + 5>(Num); }
   // Slot ranges of alias slot.
-  uint16_t StartSlot() const { return i16<VASTNode::SubClassDataBase + 7>(); }
-  void StartSlot(uint16_t S) { i16<VASTNode::SubClassDataBase + 7>(S); }
-  uint16_t EndSlot() const { return i16<VASTNode::SubClassDataBase + 9>(); }
-  void EndSlot(uint16_t S) { i16<VASTNode::SubClassDataBase + 9>(S); }
-  uint16_t II() const { return i16<VASTNode::SubClassDataBase + 11>(); }
-  void II(uint16_t ii) { i16<VASTNode::SubClassDataBase + 11>(ii); }
-
+  uint16_t StartSlot;
+  uint16_t EndSlot;
+  uint16_t II;
   // Successor slots of this slot.
   succ_cnd_iterator succ_cnd_begin() { return NextSlots.begin(); }
   succ_cnd_iterator succ_cnd_end() { return NextSlots.end(); }
@@ -800,6 +789,11 @@ private:
 
   friend class VASTModule;
 public:
+  const uint16_t SlotNum;
+  // The start slot of parent state, can identify parent state.
+  const uint16_t ParentIdx;
+  const uint16_t BBNum;
+
   VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM);
 
   void buildCtrlLogic(VASTModule &Mod);
@@ -818,10 +812,6 @@ public:
   VASTRegister *getRegister() const { return cast<VASTRegister>(SlotReg); }
   VASTValue *getReady() const { return *SlotReady; }
   VASTValue *getActive() const { return *SlotActive; }
-
-  unsigned getSlotNum() const { return SlotNum(); }
-  // The start slot of parent state(MachineBasicBlock)
-  unsigned getParentIdx() const { return ParentIdx(); }
 
   // TODO: Rename to addSuccSlot.
   bool hasNextSlot(VASTSlot *NextSlot) const;
@@ -874,24 +864,24 @@ public:
   // The slots from difference stage of the loop may active at the same time,
   // and these slot called "alias".
   void setAliasSlots(unsigned startSlot, unsigned endSlot, unsigned ii) {
-    StartSlot(startSlot);
-    EndSlot(endSlot);
-    II(ii);
+    StartSlot = startSlot ;
+    EndSlot = endSlot;
+    II = ii;
   }
 
   // Is the current slot the first slot of its alias slots?
-  bool isLeaderSlot() const { return StartSlot() == getSlotNum(); }
+  bool isLeaderSlot() const { return StartSlot == SlotNum; }
   // Iterates over all alias slot
-  unsigned alias_start() const { return StartSlot(); }
-  unsigned alias_end() const { return EndSlot(); }
+  unsigned alias_start() const { return StartSlot; }
+  unsigned alias_end() const { return EndSlot; }
   bool hasAliasSlot() const { return alias_start() != alias_end(); }
   unsigned alias_ii() const {
     assert(hasAliasSlot() && "Dont have II!");
-    return II();
+    return II;
   }
 
   bool operator<(const VASTSlot &RHS) const {
-    return getSlotNum() < RHS.getSlotNum();
+    return SlotNum < RHS.SlotNum;
   }
 };
 
@@ -1079,7 +1069,7 @@ public:
 
   VASTSlot *getOrCreateNextSlot(VASTSlot *S) {
     // TODO: Check if the next slot out of bound.
-    return getOrCreateSlot(S->getSlotNum() + 1, S->getParentIdx());
+    return getOrCreateSlot(S->SlotNum + 1, S->ParentIdx);
   }
 
   VASTSlot *getSlot(unsigned SlotNum) const {

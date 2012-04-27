@@ -845,7 +845,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     MachineInstr *MI = I;
 
     VASTSlot *CurSlot = getInstrSlot(MI);
-    assert(VInstrInfo::getInstrSlotNum(MI) != CurSlot->getParentIdx()
+    assert(VInstrInfo::getInstrSlotNum(MI) != CurSlot->ParentIdx
            && "Unexpected first slot!");
 
     Cnds.clear();
