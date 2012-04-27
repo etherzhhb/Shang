@@ -34,28 +34,3 @@
 
 using namespace llvm;
 
-ucOperand ucOperand::CreatePredicate(unsigned Reg) {
-  // Read reg0 means always execute.
-  ucOperand MO = MachineOperand::CreateReg(Reg, false);
-  VInstrInfo::setBitWidth(MO, 1);
-  return MO;
-}
-
-MachineOperand ucOperand::CreateTrace(MachineBasicBlock *MBB) {
-  MachineOperand MO = MachineOperand::CreateImm(MBB->getNumber());
-  MO.setTargetFlags(4);
-  return MO;
-}
-
-ucOperand ucOperand::CreateReg(unsigned RegNum, unsigned BitWidth,
-                               bool IsDef /* = false */) {
-  ucOperand MO = MachineOperand::CreateReg(RegNum, IsDef);
-  VInstrInfo::setBitWidth(MO, BitWidth);
-  return MO;
-}
-
-ucOperand ucOperand::CreateImm(int64_t Val, unsigned BitWidth) {
-  ucOperand MO = MachineOperand::CreateImm(Val);
-  VInstrInfo::setBitWidth(MO, BitWidth);
-  return MO;
-}

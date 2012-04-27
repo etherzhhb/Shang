@@ -235,11 +235,11 @@ void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {
     unsigned NewSrcReg =
       MRI->createVirtualRegister(MRI->getRegClass(SrcMO.getReg()));
 
-    MachineOperand Pred = ucOperand::CreatePredicate();
+    MachineOperand Pred = VInstrInfo::CreatePredicate();
     typedef MachineBasicBlock::instr_iterator it;
     it IP = getPHIMoveInsertPos(SrcBB, CurBB, Pred);
     BuildMI(*SrcBB, IP, DebugLoc(), TII->get(VTM::VOpMvPhi))
-      .addOperand(ucOperand::CreateReg(NewSrcReg, BitWidth, true))
+      .addOperand(VInstrInfo::CreateReg(NewSrcReg, BitWidth, true))
       .addOperand(SrcMO).addMBB(CurBB)
       // The phi copy is only active when SrcBB jumping to CurBB.
       .addOperand(Pred)

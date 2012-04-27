@@ -102,8 +102,8 @@ bool VInstrInfo::isPredicated(const MachineInstr *MI) const {
 
 void VInstrInfo::ChangeCopyToMove(MachineInstr *CopyMI) {
   CopyMI->setDesc(getDesc(VTM::VOpMove));
-  CopyMI->addOperand(ucOperand::CreatePredicate());
-  CopyMI->addOperand(ucOperand::CreateTrace(CopyMI->getParent()));
+  CopyMI->addOperand(VInstrInfo::CreatePredicate());
+  CopyMI->addOperand(VInstrInfo::CreateTrace(CopyMI->getParent()));
 }
 
 bool VInstrInfo::FoldImmediate(MachineInstr *UseMI, MachineInstr *DefMI,
@@ -340,15 +340,15 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
   assert((Cond.size() <= 1) && "Too much conditions!");
   bool isUnconditional = Cond.empty();
   MachineOperand PredOp = isUnconditional ?
-                          ucOperand::CreatePredicate() : Cond[0];
+                          VInstrInfo::CreatePredicate() : Cond[0];
   PredOp.setIsKill(false);
 
   if (FBB == 0) {
     // Insert barrier branch for unconditional branch.
     unsigned Opc = isUnconditional ? VTM::VOpToStateb : VTM::VOpToState;
     BuildMI(&MBB, DL, get(Opc)).addOperand(PredOp).addMBB(TBB)
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&MBB));
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace(&MBB));
     return 1;
   }
 
@@ -357,13 +357,13 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
          && "Uncondtional predicate with true BB and false BB?");
   // Branch to true BB, with the no-barrier version.
   BuildMI(&MBB, DL, get(VTM::VOpToState)).addOperand(PredOp).addMBB(TBB)
-    .addOperand(ucOperand::CreatePredicate())
-    .addOperand(ucOperand::CreateTrace(&MBB));
+    .addOperand(VInstrInfo::CreatePredicate())
+    .addOperand(VInstrInfo::CreateTrace(&MBB));
   // Branch to the false BB.
   ReversePredicateCondition(PredOp);
   BuildMI(&MBB, DL, get(VTM::VOpToStateb)).addOperand(PredOp).addMBB(FBB)
-    .addOperand(ucOperand::CreatePredicate())
-    .addOperand(ucOperand::CreateTrace(&MBB));
+    .addOperand(VInstrInfo::CreatePredicate())
+    .addOperand(VInstrInfo::CreateTrace(&MBB));
    return 2;
 }
 
@@ -374,9 +374,9 @@ void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
   // Dirty hack: We may not evaluate the predicate to always true at the moment.
   if (Table.size() == 1) {
     BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
-      .addOperand(ucOperand::CreatePredicate()).addMBB(*BB.succ_begin())
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&BB));
+      .addOperand(VInstrInfo::CreatePredicate()).addMBB(*BB.succ_begin())
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace(&BB));
     return;
   }
 
@@ -384,8 +384,8 @@ void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
     I->second.setIsKill(false);
     BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
       .addOperand(I->second).addMBB(I->first)
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&BB));
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace(&BB));
   }
 }
 
@@ -552,6 +552,31 @@ MachineBasicBlock::instr_iterator VInstrInfo::getCtrlBundleEnd(MachineInstr *MI)
   return I;
 }
 
+MachineOperand VInstrInfo::CreatePredicate(unsigned Reg) {
+  // Read reg0 means always execute.
+  MachineOperand MO = MachineOperand::CreateReg(Reg, false);
+  VInstrInfo::setBitWidth(MO, 1);
+  return MO;
+}
+
+MachineOperand VInstrInfo::CreateTrace(MachineBasicBlock *MBB) {
+  MachineOperand MO = MachineOperand::CreateImm(MBB->getNumber());
+  MO.setTargetFlags(4);
+  return MO;
+}
+
+MachineOperand VInstrInfo::CreateReg(unsigned RegNum, unsigned BitWidth,
+                                     bool IsDef /* = false */) {
+  MachineOperand MO = MachineOperand::CreateReg(RegNum, IsDef);
+  VInstrInfo::setBitWidth(MO, BitWidth);
+  return MO;
+}
+
+MachineOperand VInstrInfo::CreateImm(int64_t Val, unsigned BitWidth) {
+  MachineOperand MO = MachineOperand::CreateImm(Val);
+  VInstrInfo::setBitWidth(MO, BitWidth);
+  return MO;
+}
 
 static uint64_t getMachineOperandHashValue(const MachineOperand &MO) {
   switch (MO.getType()) {
@@ -603,8 +628,8 @@ static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *M
     VInstrInfo::setBitWidth(Dst, 1);
     BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
       .addOperand(Dst).addOperand(Op)
-      .addOperand(ucOperand::CreatePredicate())
-      .addOperand(ucOperand::CreateTrace(&MBB));
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace(&MBB));
     Dst.setIsDef(false);
     return Dst;
   }
@@ -643,8 +668,8 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
 
   BuildMI(MBB, IP, DebugLoc(), TII->get(MergeOpC))
     .addOperand(Dst).addOperand(NewCnd).addOperand(OldCnd)
-    .addOperand(ucOperand::CreatePredicate())
-    .addOperand(ucOperand::CreateTrace(&MBB));
+    .addOperand(VInstrInfo::CreatePredicate())
+    .addOperand(VInstrInfo::CreateTrace(&MBB));
   Dst.setIsDef(false);
   return Dst;
 }
@@ -672,8 +697,8 @@ MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
                   getDesc(VTM::VOpSel))
             .addOperand(ResDef).addOperand(Pred)
             .addOperand(IfTrueVal).addOperand(IfFalseVal)
-            .addOperand(ucOperand::CreatePredicate())
-            .addOperand(ucOperand::CreateTrace(MBB));
+            .addOperand(VInstrInfo::CreatePredicate())
+            .addOperand(VInstrInfo::CreateTrace(MBB));
 }
 
 MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB, MachineOperand &Result,

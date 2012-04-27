@@ -188,12 +188,12 @@ void PrebindMuxBase::insertDistrubedMuxOp(MachineFunction &MF) {
           << TargetRegisterInfo::virtReg2Index(NewRegNum) << '\n');
 
         BuildMI(*MBB, Inst, Inst->getDebugLoc(), TII->get((VTM::VOpDstMux)))
-          .addOperand(ucOperand::CreateReg(NewRegNum, BitWidth, true))
+          .addOperand(VInstrInfo::CreateReg(NewRegNum, BitWidth, true))
           .addOperand(MO) // Source value.
-          .addOperand(ucOperand::CreateImm(MuxNum, 64)) // MuxNumber.
-          .addOperand(ucOperand::CreateImm(MuxSize, 64)) // Mux size.
+          .addOperand(VInstrInfo::CreateImm(MuxNum, 64)) // MuxNumber.
+          .addOperand(VInstrInfo::CreateImm(MuxSize, 64)) // Mux size.
           .addOperand(*PredMO) // Predicate
-          .addOperand(ucOperand::CreateTrace(MBB)); // Trace number.
+          .addOperand(VInstrInfo::CreateTrace(MBB)); // Trace number.
 
         // Read the value from mux instead.
         MO.ChangeToRegister(NewRegNum, false);

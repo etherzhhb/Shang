@@ -47,13 +47,6 @@ public:
 
   static bool classof(const MachineOperand *) { return true; }
 
-  static ucOperand CreateReg(unsigned RegNum, unsigned BitWidth,
-                             bool IsDef = false);
-  static ucOperand CreateImm(int64_t Val, unsigned BitWidth);
-
-  static ucOperand CreatePredicate(unsigned Reg = 0);
-
-  static MachineOperand CreateTrace(MachineBasicBlock *MBB);
 
   struct Mapper {
     typedef ucOperand &result_type;

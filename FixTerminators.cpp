@@ -115,7 +115,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
     if (!MissedSuccs.empty()) {
       assert(MissedSuccs.size() == 1 && "Fall through to multiple blocks?");
       ++UnconditionalBranches;
-      MachineOperand Cnd = ucOperand::CreatePredicate();
+      MachineOperand Cnd = VInstrInfo::CreatePredicate();
       if (FirstTerminator) {
         MachineOperand &TrueCnd = FirstTerminator->getOperand(0);
         assert(TrueCnd.getReg() != 0 && "Two unconditional branch?");
@@ -126,8 +126,8 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       }
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
         .addOperand(Cnd).addMBB(*MissedSuccs.begin())
-        .addOperand(ucOperand::CreatePredicate())
-        .addOperand(ucOperand::CreateTrace(MBB));
+        .addOperand(VInstrInfo::CreatePredicate())
+        .addOperand(VInstrInfo::CreateTrace(MBB));
     }
     //else if (Table.size() != MBB->succ_size()) {
     //  // Also fix the CFG.
@@ -146,8 +146,8 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
     if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
       ++Unreachables;
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
-        .addOperand(ucOperand::CreatePredicate())
-        .addOperand(ucOperand::CreateTrace(MBB));
+        .addOperand(VInstrInfo::CreatePredicate())
+        .addOperand(VInstrInfo::CreateTrace(MBB));
     }
 
     MissedSuccs.clear();

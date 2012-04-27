@@ -187,7 +187,7 @@ struct MicroStateBuilder {
     MachineOperand getOperand() const { return Op; }
 
     MachineOperand createOperand() const {
-      return ucOperand::CreateReg(WireNum, VInstrInfo::getBitWidth(Op));
+      return VInstrInfo::CreateReg(WireNum, VInstrInfo::getBitWidth(Op));
     }
   };
 
@@ -371,10 +371,10 @@ struct MicroStateBuilder {
       unsigned DstReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
 
       BuildMI(MBB, getStateCtrlAt(CopySlot), DebugLoc(), TII.get(VTM::VOpMove))
-        .addOperand(ucOperand::CreateReg(DstReg, VInstrInfo::getBitWidth(SrcMO),
+        .addOperand(VInstrInfo::CreateReg(DstReg, VInstrInfo::getBitWidth(SrcMO),
                                          true))
         .addOperand(getRegUseOperand(SrcMO, CopySlot))
-        .addOperand(ucOperand::CreatePredicate())
+        .addOperand(VInstrInfo::CreatePredicate())
         .addImm(Slot);
 
       SrcMO.ChangeToRegister(DstReg, false);
@@ -394,9 +394,9 @@ struct MicroStateBuilder {
     BuildMI(MBB, getStateCtrlAt(OpSlot(InsertSlot, true)), DebugLoc(),
             TII.get(VTM::VOpDefPhi))
       .addOperand(MO)
-      .addOperand(ucOperand::CreateReg(NewReg, VInstrInfo::getBitWidth(MO),
+      .addOperand(VInstrInfo::CreateReg(NewReg, VInstrInfo::getBitWidth(MO),
                                        false))
-      .addOperand(ucOperand::CreatePredicate())
+      .addOperand(VInstrInfo::CreatePredicate())
       .addImm(InsertSlot);
 
     // Update the MO of the Original PHI.
@@ -521,11 +521,11 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
         MO.ChangeToRegister(R, true);
         MachineInstr *PipeStage =
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpPipelineStage))
-            .addOperand(ucOperand::CreateReg(OldR, VInstrInfo::getBitWidth(MO),
+            .addOperand(VInstrInfo::CreateReg(OldR, VInstrInfo::getBitWidth(MO),
                                              true))
-            .addOperand(ucOperand::CreateReg(R, VInstrInfo::getBitWidth(MO)))
+            .addOperand(VInstrInfo::CreateReg(R, VInstrInfo::getBitWidth(MO)))
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(ucOperand::CreateTrace(MBB));
+            .addOperand(VInstrInfo::CreateTrace(MBB));
         assert(A->isControl() && "Only control operation write untill finish!");
         OpSlot PipeSlot(SchedSlot.getSlot() + A->getLatency() - 1, false);
         Insts.push_back(std::make_pair(PipeStage, PipeSlot));
@@ -545,7 +545,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
             .addOperand(FU).addImm(Id.getData())
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(ucOperand::CreateTrace(MBB));
+            .addOperand(VInstrInfo::CreateTrace(MBB));
         // Add the instruction into the emit list, disable the FU 1 clock later.
         Insts.push_back(std::make_pair(DisableMI, SchedSlot + 1));
         State.addDummyLatencyEntry(DisableMI);
@@ -662,7 +662,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
                && "Copy should already set the right RC up!");
         WireNum =
           MRI.createVirtualRegister(VRegisterInfo::getRepRegisterClass(Opc));
-        NewOp = ucOperand::CreateReg(WireNum, BitWidth, true);
+        NewOp = VInstrInfo::CreateReg(WireNum, BitWidth, true);
       }
 
       // If the wire define and the copy wrap around?
@@ -766,12 +766,12 @@ MachineOperand MicroStateBuilder::getRegUseOperand(WireDef &WD, OpSlot ReadSlot,
     // iteration which is not we want.
     RegNo = createPHI(RegNo, SizeInBits, WD.LoopBoundary.getSlot(),
                       WD.LoopBoundary == WD.DefSlot);
-    MO = ucOperand::CreateReg(RegNo, SizeInBits, false);
+    MO = VInstrInfo::CreateReg(RegNo, SizeInBits, false);
     WD.Op = MO;
 
     if (PredReg) {
       PredReg = createPHI(PredReg, 1, WD.LoopBoundary.getSlot(), false);
-      WD.Pred = ucOperand::CreatePredicate(PredReg);
+      WD.Pred = VInstrInfo::CreatePredicate(PredReg);
     }
 
     // Update the register.

@@ -191,7 +191,7 @@ struct LogicNetwork {
     // Else look it up in the FO map.
     ucOperand &MO =
       MOMap.GetOrCreateValue(Abc_ObjName(Obj),
-                             ucOperand::CreateReg(0, SizeInBits)).second;
+                             VInstrInfo::CreateReg(0, SizeInBits)).second;
 
     // Allocate the register.
     if (MO.isReg() && MO.getReg() == 0)
@@ -511,8 +511,8 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
     BuildMI(*BB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpLUT))
     .addOperand(DefMO)
     .addExternalSymbol(VFI->allocateSymbol(data), Abc_ObjFaninNum(Obj))
-    .addOperand(ucOperand::CreatePredicate())
-    .addOperand(ucOperand::CreateTrace(BB));
+    .addOperand(VInstrInfo::CreatePredicate())
+    .addOperand(VInstrInfo::CreateTrace(BB));
 
   for (unsigned k = 0, e = Ops.size(); k != e; ++k)
     Builder.addOperand(Ops[k]);

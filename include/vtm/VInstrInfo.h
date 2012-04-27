@@ -233,6 +233,14 @@ public:
     MO.setTargetFlags(TF);
     assert(getBitWidthOrZero(MO) == BitWidth && "Bit width overflow!");
   }
+
+  static MachineOperand CreateReg(unsigned RegNum, unsigned BitWidth,
+                                  bool IsDef = false);
+  static MachineOperand CreateImm(int64_t Val, unsigned BitWidth);
+
+  static MachineOperand CreatePredicate(unsigned Reg = 0);
+
+  static MachineOperand CreateTrace(MachineBasicBlock *MBB);
 };
 //ucOperandExpressionTrait - Special DenseMapInfo traits to compare
 //ucOperand* by *value* of the instruction rather than by pointer value.
