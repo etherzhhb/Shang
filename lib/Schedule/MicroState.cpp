@@ -59,24 +59,3 @@ ucOperand ucOperand::CreateImm(int64_t Val, unsigned BitWidth) {
   MO.setBitWidth(BitWidth);
   return MO;
 }
-
-void ucOperand::print(raw_ostream &OS,
-                      unsigned UB /* = 64 */, unsigned LB /* = 0 */,
-                      bool isPredicate /* = false */) {
-  switch (getType()) {
-  case MachineOperand::MO_ExternalSymbol:
-    UB = std::min(getBitWidth(), UB);
-    OS << getSymbolName();
-    OS << verilogBitRange(UB, LB, getBitWidth() != 1);
-    return;
-  case MachineOperand::MO_GlobalAddress:
-    OS << "(`gv" << VBEMangle(getGlobal()->getName());
-    if (int64_t Offset = getOffset())
-      OS  << " + " << verilogConstToStr(Offset, getBitWidth(), false);
-    OS << ')';
-    return;
-  default: break;
-  }
-
-  MachineOperand::print(OS);
-}
