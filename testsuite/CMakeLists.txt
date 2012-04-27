@@ -32,6 +32,7 @@ set(SHIFT_ChainingThreshold "-1" CACHE STRING "The chaining threshold of shift f
 set(ICMP_ChainingThreshold "-1" CACHE STRING "The chaining threshold of icmp function unit (Set to -1 to chains all)")
 set(EXTRA_HLS_OPTION "" CACHE STRING "Extra high level synthesis options should be passed to sync")
 set(TIMEOUT "240" CACHE STRING "Maximum time allow the simulation to run")
+set(TIMEOUTS "1800" CACHE STRING "Maximum time allow the simulation to run")
 set(MaxAllowedMuxSize "16" CACHE STRING "Maximum allowed mux size without pipeline register")
 set(ENABLE_PHYSICAL_SYNTHESIS "OFF" CACHE BOOL "Enable quartus physical synthesis")
 set(ScheduleType "ASAP" CACHE STRING "The algorithm to schedule linear code region")
@@ -303,6 +304,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
   set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.v")
+  set(MAIN_ICDELAY_TCL    "${TEST_BINARY_ROOT}/Icdelay.tcl")
 
   set(MAIN_IF_SRC         "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.${postfix}")
   set(MAIN_SC_O           "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.o")
@@ -335,7 +337,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   add_custom_target(${TEST}_main_ir DEPENDS ${MAIN_ORIG_BC})
   add_dependencies(main_ir ${TEST}_main_ir)
 
-  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
+  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE} ${MAIN_ICDELAY_TCL}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config_main.lua  ${EXTRA_HLS_OPTION}"
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
@@ -352,11 +354,11 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
     )
 
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounterTB}
-    COMMAND . "${TEST_BINARY_ROOT}/modeldofile"
+    COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
     COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
+    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_ICDELAY_TCL}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )
