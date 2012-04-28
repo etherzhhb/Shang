@@ -260,7 +260,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
   /// emitAllocatedFUs - Set up a vector for allocated resources, and
   /// emit the ports and register, wire and datapath for them.
   void emitAllocatedFUs();
-
+  void emitSubModule(MemBusBuilder &MBBuilder, StringRef CalleeName,
+                     unsigned FNNum);
   void emitIdleState();
 
   // Remember the MBB with specific start slot.
@@ -625,61 +626,73 @@ void VerilogASTBuilder::emitAllocatedFUs() {
   // Generate the code for sub modules/external modules
   typedef VFInfo::const_fn_iterator fn_iterator;
   for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I) {
-    if (const Function *Callee = M->getFunction(I->getKey())) {
-      if (!Callee->isDeclaration()) {
-        S << getSynSetting(Callee->getName())->getModName() << ' '
-          << I->getKey() << "_inst" << "(\n\t";
-        MBBuilder.addSubModule(getSubModulePortName(I->second, "_inst"), S);
-        emitFunctionSignature(Callee);
-        S << ");\n";
-        continue;
-      }
-    }
-
+    StringRef CalleeName = I->getKey();
     unsigned FNNum = I->second;
-    std::string Ports[5] = {
-      VM->getPortName(VASTModule::Clk),
-      VM->getPortName(VASTModule::RST),
-      getSubModulePortName(FNNum, "start"),
-      getSubModulePortName(FNNum, "fin"),
-      getSubModulePortName(FNNum, "return_value")
-    };
-    // Else ask the constraint about how to instantiates this submodule.
-    S << "// External module: " << I->getKey() << '\n';
-    S << VFUs::instantiatesModule(I->getKey(), FNNum, Ports);
-
-    // Add the start/finsh signal and return_value to the signal list.
-    indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
-    VM->getOrCreateSymbol(Ports[3], 1, false);
-    unsigned RetPortIdx = FNNum;
-    // Dose the submodule have a return port?
-    VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RetPortIdx);
-    if (Info.getBitWidth()) {
-      SmallVector<VFUs::ModOpInfo, 4> OpInfo;
-      unsigned Latency = VFUs::getModuleOperands(I->getKey(), FNNum, OpInfo);
-
-      if (Latency == 0) {
-        VASTValue *PortName = VM->getOrCreateSymbol(Ports[4],
-                                                    Info.getBitWidth(),
-                                                    false);
-        indexVASTValue(RetPortIdx, PortName);
-        continue;
-      }
-
-      VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
-      indexVASTValue(RetPortIdx, ResultWire);
-
-      SmallVector<VASTValue*, 4> Ops;
-      for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
-        Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
-
-      VASTValue *Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops, 
-                                      Info.getBitWidth());
-      VM->assignWithExtraDelay(ResultWire, Expr, Latency);
-    } else
-      indexVASTValue(RetPortIdx, 0);
+    emitSubModule(MBBuilder, CalleeName, FNNum);
   }
 }
+
+void VerilogASTBuilder::emitSubModule(MemBusBuilder &MBBuilder,
+                                      StringRef CalleeName, unsigned FNNum) {
+  raw_ostream &S = VM->getDataPathBuffer();
+
+  if (const Function *Callee = M->getFunction(CalleeName)) {
+    if (!Callee->isDeclaration()) {
+      S << getSynSetting(Callee->getName())->getModName() << ' '
+        << CalleeName << "_inst" << "(\n\t";
+      MBBuilder.addSubModule(getSubModulePortName(FNNum, "_inst"), S);
+      emitFunctionSignature(Callee);
+      S << ");\n";
+      return;
+    }
+  }
+
+  std::string Ports[5] = {
+    VM->getPortName(VASTModule::Clk),
+    VM->getPortName(VASTModule::RST),
+    getSubModulePortName(FNNum, "start"),
+    getSubModulePortName(FNNum, "fin"),
+    getSubModulePortName(FNNum, "return_value")
+  };
+  // Else ask the constraint about how to instantiates this submodule.
+  S << "// External module: " << CalleeName << '\n';
+  S << VFUs::instantiatesModule(CalleeName, FNNum, Ports);
+
+  // Add the start/finsh signal and return_value to the signal list.
+  indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
+  VM->getOrCreateSymbol(Ports[3], 1, false);
+  unsigned RetPortIdx = FNNum;
+  // Dose the submodule have a return port?
+  VRegisterInfo::PhyRegInfo Info = TRI->getPhyRegInfo(RetPortIdx);
+  if (Info.getBitWidth()) {
+    SmallVector<VFUs::ModOpInfo, 4> OpInfo;
+    unsigned Latency = VFUs::getModuleOperands(CalleeName, FNNum, OpInfo);
+
+    if (Latency == 0) {
+      VASTValue *PortName = VM->getOrCreateSymbol(Ports[4],
+        Info.getBitWidth(),
+        false);
+      indexVASTValue(RetPortIdx, PortName);
+      return;
+    }
+
+    VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
+    indexVASTValue(RetPortIdx, ResultWire);
+
+    SmallVector<VASTValue*, 4> Ops;
+    for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
+      Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
+
+    VASTValue *Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops,
+                                    Info.getBitWidth());
+    VM->assignWithExtraDelay(ResultWire, Expr, Latency);
+    return;
+  }
+
+  // Else do not has return port.
+  indexVASTValue(RetPortIdx, 0);
+}
+
 
 VASTValue *VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
