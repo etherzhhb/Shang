@@ -114,10 +114,11 @@ void VASTUse::PinUser() const {
 
 unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
 
-VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
+VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
   : VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0),
-    StartSlot(slotNum), EndSlot(slotNum), II(~0), SlotNum(slotNum),
-    ParentIdx(parentIdx) {
+    StartSlot(slotNum), EndSlot(slotNum), II(~0), SlotNum(slotNum) {
+  Contents.ParentBB = BB;
+
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
   SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0 ? 1 : 0,
@@ -133,8 +134,6 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   VASTWire *Active = VM->addWire(SlotName + "Active", 1,
                                  VASTModule::DirectClkEnAttr.c_str());
   SlotActive.set(Active);
-
-  assert(slotNum >= parentIdx && "Slotnum earlier than parent start slot!");
 }
 
 void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTValue *Cnd, VASTModule *VM) {
@@ -543,14 +542,21 @@ void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V) {
   S->addSuccSlot(SuccS, V, this);
 }
 
-void VASTModule::buildSlotLogic(VASTModule::StartIdxMapTy &StartIdxMap) {
-  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I)
+void VASTModule::buildSlotLogic() {
+  bool IsFirstSlotInBB = false;
+  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I){
     if (VASTSlot *S = *I) {
       S->buildCtrlLogic(*this);
 
       // Create a profile counter for each BB.
-      if (EnableBBProfile) writeProfileCounters(S, StartIdxMap);
+      if (EnableBBProfile) writeProfileCounters(S, IsFirstSlotInBB);
+      IsFirstSlotInBB = false;
+      continue;
     }
+
+    // We meet an end slot, The next slot is the first slot in new BB
+    IsFirstSlotInBB = true;
+  }
 }
 
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
@@ -1003,9 +1009,9 @@ VASTValue *VASTModule::getOrCreateSymbol(const std::string &Name,
 // Out of line virtual function to provide home for the class.
 void VASTModule::anchor() {}
 
-void VASTModule::writeProfileCounters(VASTSlot *S,
-                                      VASTModule::StartIdxMapTy &StartIdxMap) {
-  std::string BBCounter = "cnt" + utostr_32(S->ParentIdx);
+void VASTModule::writeProfileCounters(VASTSlot *S, bool isFirstSlot) {
+  MachineBasicBlock *BB = S->getParentBB();
+  std::string BBCounter = "cnt"+ utostr_32(BB ? BB->getNumber() : 0);
   std::string FunctionCounter = "cnt" + getName();
   vlang_raw_ostream &CtrlS = getControlBlockBuffer();
   
@@ -1019,17 +1025,14 @@ void VASTModule::writeProfileCounters(VASTSlot *S,
     CtrlS << " total cycles" << "->%d\"," << FunctionCounter << ");\n";
     CtrlS.exit_block() << "\n";
   } else { // Dont count the ilde state at the moment.
-    if (S->ParentIdx == S->SlotNum) {
-      unsigned ParentIdx = S->ParentIdx;
+    if (isFirstSlot) {
       addRegister(BBCounter, 64)->Pin();
 
       CtrlS.if_begin(getPortName(VASTModule::Finish));
       CtrlS << "$display(\"Module: " << getName();
       // Write the parent MBB name.
-      if (ParentIdx) {
-        const MachineBasicBlock *MBB = StartIdxMap.lookup(ParentIdx);
-        CtrlS << " MBB#" << MBB->getNumber() << ": " << MBB->getName();
-      }
+      if (BB)
+        CtrlS << " MBB#" << BB->getNumber() << ": " << BB->getName();
 
       CtrlS << ' ' << "->%d\"," << BBCounter << ");\n";
       CtrlS.exit_block() << "\n";

@@ -41,6 +41,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/MathExtras.h"
@@ -197,10 +198,10 @@ class VerilogASTBuilder : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VASTModule *VM;
   MemBusBuilder *MBBuilder;
-  StringSet<> VisitedSubModule;
+  StringSet<> EmittedSubModules;
 
-  bool isSubModuleVisited(StringRef Name) {
-    return !VisitedSubModule.insert(Name);
+  bool isSubModuleEmitted(StringRef Name) {
+    return !EmittedSubModules.insert(Name);
   }
 
   typedef DenseMap<unsigned, VASTValue*> RegIdxMapTy;
@@ -256,23 +257,15 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   VASTSlot *getOrCreateInstrSlot(MachineInstr *MI, unsigned ParentIdx) {
     unsigned SlotNum = VInstrInfo::getInstrSlotNum(MI);
-    return VM->getOrCreateSlot(SlotNum - 1, ParentIdx);
+    return VM->getOrCreateSlot(SlotNum - 1, MI->getParent());
   }
 
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
 
-  /// emitAllocatedFUs - Set up a vector for allocated resources, and
-  /// emit the ports and register, wire and datapath for them.
   void emitAllocatedFUs();
   void emitSubModule(StringRef CalleeName, unsigned FNNum);
   void emitIdleState();
-
-  // Remember the MBB with specific start slot.
-  VASTModule::StartIdxMapTy StartIdxMap;
-  void indexMBB(unsigned StartIdx, const MachineBasicBlock *MBB) {
-    StartIdxMap.insert(std::make_pair(StartIdx, MBB));
-  }
 
   void emitBasicBlock(MachineBasicBlock &MBB);
 
@@ -371,8 +364,7 @@ public:
   }
 
   void releaseMemory() {
-    VisitedSubModule.clear();
-    StartIdxMap.clear();
+    EmittedSubModules.clear();
     Idx2Reg.clear();
   }
 
@@ -436,7 +428,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   MBBuilder->buildMemBusMux();
 
   // Building the Slot active signals.
-  VM->buildSlotLogic(StartIdxMap);
+  VM->buildSlotLogic();
 
   // Release the context.
   releaseMemory();
@@ -496,7 +488,7 @@ void VerilogASTBuilder::emitIdleState() {
   if (!emitFirstCtrlBundle(EntryBB, IdleSlot, Cnds)) {
     unsigned EntryStartSlot = FInfo->getStartSlotFor(EntryBB);
     VM->addSlotSucc(IdleSlot,
-                    VM->getOrCreateSlot(EntryStartSlot, EntryStartSlot),
+                    VM->getOrCreateSlot(EntryStartSlot, EntryBB),
                     StartPort);
   }
 }
@@ -514,9 +506,6 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   // Skip the first bundle, it already emitted by the predecessor bbs.
   ++I;
 
-  // Index the mbb for debug.
-  indexMBB(startSlot, &MBB);
-
   // Build the Verilog AST.
   while(!I->isTerminator()) {
     // Emit the datepath of current state.
@@ -532,13 +521,13 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
         addSlotReady(NextI, getOrCreateInstrSlot(NextI, startSlot));
 
     // Create and collect the slots.
-    VASTSlot *LeaderSlot = VM->getOrCreateSlot(stateSlot, startSlot);
+    VASTSlot *LeaderSlot = VM->getOrCreateSlot(stateSlot, &MBB);
     AliasSlots.push_back(LeaderSlot);
     // There will be alias slot if the BB is pipelined.
     if (startSlot + II < EndSlot) {
       LeaderSlot->setAliasSlots(stateSlot, EndSlot, II);
       for (unsigned slot = stateSlot + II; slot < EndSlot; slot += II) {
-        VASTSlot *S = VM->getOrCreateSlot(slot, startSlot);
+        VASTSlot *S = VM->getOrCreateSlot(slot, &MBB);
         S->setAliasSlots(stateSlot, EndSlot, II);
         AliasSlots.push_back(S);
       }
@@ -596,8 +585,6 @@ void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
 
 void VerilogASTBuilder::emitAllocatedFUs() {
   raw_ostream &S = VM->getDataPathBuffer();
-
-  // Generate code for allocated bram.
   VFUBRAM *BlockRam = getFUDesc<VFUBRAM>();
   for (VFInfo::const_bram_iterator I = FInfo->bram_begin(), E = FInfo->bram_end();
        I != E; ++I) {
@@ -629,9 +616,10 @@ void VerilogASTBuilder::emitAllocatedFUs() {
   }
 }
 
+
 void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
   // Do not emit a submodule more than once.
-  if (isSubModuleVisited(CalleeName)) return;
+  if (isSubModuleEmitted(CalleeName)) return;
 
   raw_ostream &S = VM->getDataPathBuffer();
 
@@ -805,7 +793,7 @@ void VerilogASTBuilder::emitAllSignals() {
     }
     case VTM::RBRMRegClassID:
     case VTM::RCFNRegClassID:
-      /*Nothing to do, it is allocated by emitAllocatedFUs*/
+      /*Nothing to do, it is allocated on the fly*/
       break;
     case VTM::RMUXRegClassID: {
       std::string Name = "dstmux" + utostr_32(RegNum) + "r";
@@ -854,7 +842,8 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
     MachineInstr *MI = I;
 
     VASTSlot *CurSlot = getInstrSlot(MI);
-    assert(VInstrInfo::getInstrSlotNum(MI) != CurSlot->ParentIdx
+    assert(VInstrInfo::getInstrSlotNum(MI) !=
+             FInfo->getStartSlotFor(CurSlot->getParentBB())
            && "Unexpected first slot!");
 
     Cnds.clear();
@@ -952,7 +941,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
   if (!emitFirstCtrlBundle(TargetBB, CurSlot, Cnds)) {
     // Build the edge if the edge is not bypassed.
     unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
-    VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetSlotNum);
+    VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetBB);
     VASTValue *Cnd = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
     VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
   }

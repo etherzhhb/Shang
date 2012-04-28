@@ -726,10 +726,10 @@ private:
   friend class VASTModule;
 public:
   const uint16_t SlotNum;
-  // The start slot of parent state, can identify parent state.
-  const uint16_t ParentIdx;
 
-  VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM);
+  VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM);
+
+  MachineBasicBlock *getParentBB() const { return Contents.ParentBB; }
 
   void buildCtrlLogic(VASTModule &Mod);
   // Print the logic of ready signal of this slot, need alias slot information.
@@ -974,9 +974,8 @@ public:
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 
   // Print the slot control flow.
-  typedef DenseMap<unsigned, const MachineBasicBlock*> StartIdxMapTy;
-  void buildSlotLogic(StartIdxMapTy &StartIdxMap);
-  void writeProfileCounters(VASTSlot *S, StartIdxMapTy &StartIdxMap);
+  void buildSlotLogic();
+  void writeProfileCounters(VASTSlot *S, bool isFirstSlot);
 
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     Value = getBitSlice64(Value, BitWidth);
@@ -1010,11 +1009,11 @@ public:
     Slots.assign(TotalSlots, 0);
   }
 
-  VASTSlot *getOrCreateSlot(unsigned SlotNum, unsigned ParentIdx) {
+  VASTSlot *getOrCreateSlot(unsigned SlotNum, MachineBasicBlock *BB) {
     VASTSlot *&Slot = Slots[SlotNum];
     if(Slot == 0) {
       Slot = Allocator.Allocate<VASTSlot>();
-      new (Slot) VASTSlot(SlotNum, ParentIdx, this);
+      new (Slot) VASTSlot(SlotNum, BB, this);
     }
 
     return Slot;
@@ -1022,7 +1021,7 @@ public:
 
   VASTSlot *getOrCreateNextSlot(VASTSlot *S) {
     // TODO: Check if the next slot out of bound.
-    return getOrCreateSlot(S->SlotNum + 1, S->ParentIdx);
+    return getOrCreateSlot(S->SlotNum + 1, S->getParentBB());
   }
 
   VASTSlot *getSlot(unsigned SlotNum) const {

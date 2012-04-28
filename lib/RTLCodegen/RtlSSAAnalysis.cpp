@@ -95,7 +95,7 @@ void ValueAtSlot::verify() const {
   for (it I = DepVAS.begin(), E = DepVAS.end(); I != E; ++I) {
     VASTSlot *DefSlot = I->first->getSlot();
     LiveInInfo LI = I->second;
-    if (DefSlot->ParentIdx == UseSlot->ParentIdx &&
+    if (DefSlot->getParentBB() == UseSlot->getParentBB() &&
         UseSlot->hasAliasSlot() && !LI.isFromOtherBB() &&
         LI.getCycles() > DefSlot->alias_ii())
       llvm_unreachable("Broken RTL dependence!");
@@ -267,7 +267,7 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
                                 bool OnlyUndefTiming) {
   bool Changed = false;
   typedef SlotInfo::vascyc_iterator it;
-  unsigned CurBBIdx = To->getSlot()->ParentIdx;
+  MachineBasicBlock *CurBB = To->getSlot()->getParentBB();
 
   for (it II = From->out_begin(), IE = From->out_end(); II != IE; ++II) {
     ValueAtSlot *PredOut = II->first;
@@ -275,14 +275,14 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
     if (OnlyUndefTiming && ! PredOut->getValue()->isTimingUndef())
       continue;
 
-    unsigned DefBBIdx = PredOut->getSlot()->ParentIdx;
+    MachineBasicBlock *DefBB = PredOut->getSlot()->getParentBB();
     
     ValueAtSlot::LiveInInfo LI = II->second;
     // Increase the cycles by 1 after the value lives to next slot.
     LI.incCycles();
 
     // Trace the propagation path.
-    LI.liveThroughOtherBB(DefBBIdx != CurBBIdx);
+    LI.liveThroughOtherBB(DefBB != CurBB);
 
     Changed |= To->insertIn(PredOut, LI);
     // Do not let the killed VASs go out
@@ -341,7 +341,7 @@ void RtlSSAAnalysis::ComputeReachingDefinition() {
 
         Changed |= addLiveIns(PredSI, CurSI, false);
 
-        if (PredSlot->ParentIdx == S->ParentIdx &&
+        if (PredSlot->getParentBB() == S->getParentBB() &&
             PredSlot->hasAliasSlot())
           Changed |= addLiveInFromAliasSlots(PredSlot, CurSI);
       }
