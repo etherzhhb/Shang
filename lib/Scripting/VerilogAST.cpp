@@ -120,7 +120,8 @@ VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
     ParentIdx(parentIdx) {
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
-  SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0,
+  SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0 ? 1 : 0,
+                              VASTRegister::Slot, slotNum,
                               VASTModule::DirectClkEnAttr.c_str()));
   // The slot enable register's timing is not captured by schedule information.
   getRegister()->setTimingUndef();
@@ -383,8 +384,12 @@ void VASTSlot::print(raw_ostream &OS) const {
 }
 
 VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
-                           uint64_t initVal, const char *Attr)
-  : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {}
+                           uint64_t initVal, VASTRegister::Type T,
+                           uint16_t RegData,const char *Attr)
+  : VASTSignal(vastRegister, Name, BitWidth, Attr), InitVal(initVal) {
+  SignalType = T;
+  SignalData = RegData;
+}
 
 void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
   bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
@@ -585,7 +590,11 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I) {
-    (*I)->printDecl(OS);
+    VASTRegister *R = *I;
+    // The output register already declared in module signature.
+    if (R->getRegType() == VASTRegister::OutputPort) continue;
+
+    R->printDecl(OS);
     OS << "\n";
   }
 }
@@ -910,8 +919,11 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
                                    PortTypes T /*= Others*/) {
   // DIRTYHACK: comment out the deceleration of the signal for ports.
   VASTWire *W = addWire(Name, BitWidth, "//");
+  VASTRegister *VReg = Allocator.Allocate<VASTRegister>();
+  new (VReg) VASTRegister(W->getName(), BitWidth, 0, VASTRegister::Virtual);
+
   // Do not remove the wire for input port.
-  W->setAsInput();
+  W->setAsInput(VReg);
 
   VASTPort *Port = new (Allocator.Allocate<VASTPort>()) VASTPort(W, true);
   if (T < SpecialInPortEnd) {
@@ -937,7 +949,7 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
                                     bool isReg /*= true*/) {
   VASTSignal *V = 0;
   // DIRTYHACK: comment out the deceleration of the signal for ports.
-  if (isReg) V = addRegister(Name, BitWidth, 0, "//");
+  if (isReg) V = addRegister(Name, BitWidth, 0, VASTRegister::OutputPort);
   else       V = addWire(Name, BitWidth, "//");
 
   // Do not remove the signal for output port.
@@ -962,11 +974,12 @@ VASTPort *VASTModule::addOutputPort(const std::string &Name, unsigned BitWidth,
 }
 
 VASTRegister *VASTModule::addRegister(const std::string &Name, unsigned BitWidth,
-                                      unsigned InitVal, const char *Attr) {
+                                      unsigned InitVal, VASTRegister::Type T,
+                                      uint16_t RegData, const char *Attr) {
   SymEntTy &Entry = SymbolTable.GetOrCreateValue(Name);
   assert(Entry.second == 0 && "Symbol already exist!");
   VASTRegister *Reg = Allocator.Allocate<VASTRegister>();
-  new (Reg) VASTRegister(Entry.getKeyData(), BitWidth, InitVal, Attr);
+  new (Reg) VASTRegister(Entry.getKeyData(), BitWidth, InitVal, T, RegData,Attr);
   Entry.second = Reg;
   Registers.push_back(Reg);
 
@@ -1322,6 +1335,13 @@ void VASTWire::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
     assert(V && "Cannot print wire as operand!");
     V->printAsOperand(OS, UB, LB);
   }
+}
+
+void VASTWire::setAsInput(VASTRegister *VReg) {
+  assign(VReg, VASTWire::InputPort);
+  // Pin the signal to prevent it from being optimized away.
+  Pin();
+  setTimingUndef();
 }
 
 void VASTWire::printAssignment(raw_ostream &OS) const {

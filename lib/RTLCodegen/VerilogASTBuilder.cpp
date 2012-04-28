@@ -91,7 +91,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
     Name += "r";
 
-    VASTRegister *R = VM->addRegister(Name, BitWidth, 0, Attr);
+    VASTRegister *R = VM->addRegister(Name, BitWidth, 0, VASTRegister::Data,
+                                      RegNum, Attr);
     indexVASTValue(RegNum, R);
     return R;
   }

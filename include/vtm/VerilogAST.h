@@ -324,7 +324,7 @@ protected:
   // TODO: Annotate the signal so we know that some of them are port signals
   // and no need to declare again in the declaration list.
   const char *AttrStr;
-protected:
+
   VASTSignal(VASTTypes DeclType, const char *Name, unsigned BitWidth,
              const char *Attr = "")
     : VASTNamedValue(DeclType, Name, BitWidth), IsPinned(false),
@@ -574,12 +574,7 @@ private:
     SignalData = 0;
   }
 
-  void setAsInput() {
-    SignalType = InputPort;
-    // Pin the signal to prevent it from being optimized away.
-    Pin();
-    setTimingUndef();
-  }
+  void setAsInput(VASTRegister *VReg);
 
   void setSlot(uint16_t slotNum) {
     assert(getWireType() == VASTWire::AssignCond && "setSlot on wrong type!");
@@ -604,7 +599,13 @@ private:
   friend class VASTValue;
 public:
   VASTValue *getAssigningValue() const {
-    return U.unwrap();
+    // Ignore the virtual register of the input port, the virtual register only
+    // carry the timing information.
+    return getWireType() == InputPort ? 0 : U.unwrap();
+  }
+
+  VASTRegister *getVirturalRegist() const {
+    return cast<VASTRegister>(U.unwrap());
   }
 
   VASTExpr *getExpr() const {
@@ -834,6 +835,12 @@ template<> struct GraphTraits<VASTSlot*> {
 class VASTRegister : public VASTSignal {
 public:
   typedef ArrayRef<VASTValue*> AndCndVec;
+  enum Type {
+    Data,       // Common registers which hold data for data-path.
+    Slot,       // Slot register which hold the enable signals for each slot.
+    OutputPort, // The I/O register of an output port.
+    Virtual     // Virtual registers that only hold timing information.
+  };
 private:
   uint64_t InitVal;
 
@@ -844,10 +851,24 @@ private:
 
   void addAssignment(VASTUse *Src, VASTWire *AssignCnd);
 
+  VASTRegister(const char *Name, unsigned BitWidth, uint64_t InitVal,
+               VASTRegister::Type T = Data, uint16_t RegData = 0,
+               const char *Attr = "");
   friend class VASTModule;
 public:
-  VASTRegister(const char *Name, unsigned BitWidth, uint64_t InitVal,
-               const char *Attr = "");
+  VASTRegister::Type getRegType() const {
+    return VASTRegister::Type(SignalType);
+  }
+
+  unsigned getDataRegNum() const {
+    assert(getRegType() == Data && "Wrong accessor!");
+    return SignalData;
+  }
+
+  unsigned getSlotNum() const {
+    assert(getRegType() == Slot && "Wrong accessor!");
+    return SignalData;
+  }
 
   void clearAssignments() {
     assert(use_empty() && "Cannot clear assignments!");
@@ -1160,7 +1181,8 @@ public:
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
-                            const char *Attr = "");
+                            VASTRegister::Type T = VASTRegister::Data,
+                            uint16_t RegData = 0, const char *Attr = "");
 
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");
