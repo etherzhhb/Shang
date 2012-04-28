@@ -197,6 +197,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   VASTModule *VM;
   MemBusBuilder *MBBuilder;
+  StringSet<> VisitedSubModule;
+
+  bool isSubModuleVisited(StringRef Name) {
+    return !VisitedSubModule.insert(Name);
+  }
 
   typedef DenseMap<unsigned, VASTValue*> RegIdxMapTy;
   RegIdxMapTy Idx2Reg;
@@ -366,6 +371,7 @@ public:
   }
 
   void releaseMemory() {
+    VisitedSubModule.clear();
     StartIdxMap.clear();
     Idx2Reg.clear();
   }
@@ -431,6 +437,9 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
 
   // Building the Slot active signals.
   VM->buildSlotLogic(StartIdxMap);
+
+  // Release the context.
+  releaseMemory();
   return false;
 }
 
@@ -618,14 +627,12 @@ void VerilogASTBuilder::emitAllocatedFUs() {
                                 DataWidth, AddrWidth, InitFilePath)
       << '\n';
   }
-
-  // Generate the code for sub modules/external modules
-  typedef VFInfo::const_fn_iterator fn_iterator;
-  for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I)
-    emitSubModule(I->getKey(), I->second);
 }
 
 void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
+  // Do not emit a submodule more than once.
+  if (isSubModuleVisited(CalleeName)) return;
+
   raw_ostream &S = VM->getDataPathBuffer();
 
   if (const Function *Callee = M->getFunction(CalleeName)) {
@@ -1063,6 +1070,9 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   // Assign input port to some register.
   const char *CalleeName = MI->getOperand(1).getSymbolName();
   unsigned FNNum = FInfo->getCalleeFNNum(CalleeName);
+
+  // Emit the submodule on the fly.
+  emitSubModule(CalleeName, FNNum);
 
   VASTValue *Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   std::string StartPortName = getSubModulePortName(FNNum, "start");
