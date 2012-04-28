@@ -427,10 +427,6 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
 
   // Building the Slot active signals.
   VM->buildSlotLogic(StartIdxMap);
-
-  // TODO: Optimize the RTL net list.
-  // FIXME: Do these in separate passes.
-  VM->eliminateConstRegisters();
   return false;
 }
 

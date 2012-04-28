@@ -978,8 +978,6 @@ public:
   void buildSlotLogic(StartIdxMapTy &StartIdxMap);
   void writeProfileCounters(VASTSlot *S, StartIdxMapTy &StartIdxMap);
 
-  bool eliminateConstRegisters();
-
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     Value = getBitSlice64(Value, BitWidth);
     UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);

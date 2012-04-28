@@ -889,28 +889,6 @@ VASTValue *VASTModule::assignWithExtraDelay(VASTWire *W, VASTValue *V,
   return W;
 }
 
-bool VASTModule::eliminateConstRegisters() {
-  bool Changed = false;
-  typedef RegisterVector::iterator it;
-  //for (it I = Registers.begin(), E = Registers.end(); I != E; ++I) {
-    //VASTRegister *R = *I;
-
-    // VASTUse Const = R->getConstantValue();
-
-    //if (Const.isInvalid()) continue;
-
-    // Replace the register by constant.
-    // FIXME: Also check no one read the register before it is assign, otherwise
-    // it is not safe to do the replacement.
-    //if (replaceAndUpdateUseTree(R, Const))
-    //  R->clearAssignments();
-
-    // Changed = true;
-  //}
-
-  return Changed;
-}
-
 void VASTModule::print(raw_ostream &OS) const {
   // Print the verilog module?
 }
