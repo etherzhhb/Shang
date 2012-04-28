@@ -137,7 +137,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
       VASTRegister *LocalReg = VM->addRegister(PortReg, BitWidth);
       VASTPort *P = VM->addOutputPort(PortName, BitWidth, VASTModule::Others,
                                       false);
-      VASTWire *OutputWire = cast<VASTWire>(*P);
+      VASTWire *OutputWire = cast<VASTWire>(P->get());
       // Are we creating the enable port?
       if (LocalEn == 0) {
         // Or all enables together to generate the enable output,
@@ -1082,7 +1082,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   // Is the function have latency information not captured by schedule?
   if (VASTWire *RetPort = getAsLValue<VASTWire>(MI->getOperand(0))) {
     if (VASTExpr *Expr = RetPort->getExpr()) {
-      for (unsigned i = 0, e = Expr->num_operands(); i < e; ++i) {
+      for (unsigned i = 0, e = Expr->NumOps; i < e; ++i) {
         VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
         VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds);
       }

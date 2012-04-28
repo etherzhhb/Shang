@@ -117,7 +117,7 @@ unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
 VASTSlot::VASTSlot(unsigned slotNum, unsigned parentIdx, VASTModule *VM)
   : VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0),
     StartSlot(slotNum), EndSlot(slotNum), II(~0), SlotNum(slotNum),
-    ParentIdx(parentIdx), BBNum(0) {
+    ParentIdx(parentIdx) {
   // Create the relative signals.
   std::string SlotName = "Slot" + utostr_32(slotNum);
   SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0,
@@ -482,13 +482,10 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 
 VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
                    unsigned LB, const FoldingSetNodeIDRef ID)
-  : VASTValue(vastExpr, UB - LB), FastID(ID) {
-  num_ops(NumOps);
-  opc(Opc);
-  ub(UB);
-  lb(LB);
-  lhs_wire_name(0);
-  assert(num_ops() && ops() && "Unexpected empty operand list!");
+  : VASTValue(vastExpr, UB - LB), FastID(ID), Opc(Opc), NumOps(NumOps),
+    UB(UB), LB(LB) {
+  Contents.Name = 0;
+  assert(NumOps && "Unexpected empty operand list!");
 }
 
 std::string VASTModule::DirectClkEnAttr = "";
@@ -576,7 +573,7 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
         //assert(!E->use_empty() && "E is used by W atleast!");
         // Don't print the expression inline, print the lhs wire instead.
         // And pin W because it will be use as operand later.
-        if (E->set_lhs_wire_name(W->getName())) W->Pin();
+        if (E->setLHSWireName(W->getName())) W->Pin();
       }
     }
 
@@ -606,7 +603,7 @@ VASTValue *VASTModule::buildNotExpr(VASTValue *U) {
   if (VASTExpr *E = dyn_cast<VASTExpr>(U)) {
     if (E->getOpcode() == VASTExpr::dpNot) {
       // We should also propagate the bit slice information.
-      return buildBitSliceExpr(E->getOperand(0), E->getUB(), E->getLB());
+      return buildBitSliceExpr(E->getOperand(0), E->UB, E->LB);
     }
   } else if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U))
     return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
@@ -631,7 +628,7 @@ VASTValue *VASTModule::buildBitSliceExpr(VASTValue *U, uint8_t UB, uint8_t LB)
     switch(AssignExpr->getOpcode()) {
     default: break;
     case VASTExpr::dpAssign: {
-      unsigned Offset = AssignExpr->getLB();
+      unsigned Offset = AssignExpr->LB;
       UB += Offset;
       LB += Offset;
       return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB);
@@ -714,7 +711,7 @@ VASTValue *VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
     // Try to flatten the expression tree.
     if (VASTExpr *Expr = dyn_cast<VASTExpr>(Ops[i])) {
       // Suppose Expr is flatten
-      if (Expr->opc() == Opc) {
+      if (Expr->getOpcode() == Opc) {
         for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
           NewOps.push_back((*I)->getAsInlineOperand());
         continue;
@@ -1282,7 +1279,7 @@ static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 
 static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   VASTExpr *E = W->getExpr();
-  unsigned NumOperands = E->num_operands();
+  unsigned NumOperands = E->NumOps;
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
 
   // Handle the trivial case trivially: Only 1 input.
@@ -1352,8 +1349,8 @@ void VASTWire::printAssignment(raw_ostream &OS) const {
 }
 
 void VASTExpr::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
-  assert(UB == getUB() && LB == getLB() && "Cannot print bitslice of Expr!");
-  if (const char *Name = lhs_wire_name()) {
+  assert(UB == this->UB && LB == this->LB && "Cannot print bitslice of Expr!");
+  if (const char *Name = getLHSWireName()) {
     OS << Name << VASTValue::printBitRange(getBitWidth(), 0, false);
     return;
   }
@@ -1365,7 +1362,7 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   OS << '(';
   typedef ArrayRef<VASTUse> UseArray;
 
-  switch (opc()) {
+  switch (getOpcode()) {
   case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
 
   case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;
@@ -1385,7 +1382,7 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
 
   case dpSel: printSel(OS, getOperands());                     break;
 
-  case dpAssign: getOperand(0)->printAsOperand(OS, getUB(), getLB()); break;
+  case dpAssign: getOperand(0)->printAsOperand(OS, UB, LB); break;
 
   case dpBitCat:    printBitCat(OS, getOperands());    break;
   case dpBitRepeat: printBitRepeat(OS, getOperands()); break;
