@@ -74,7 +74,7 @@ SDCHeader = [=[
 create_clock -name "clk" -period $(PERIOD)ns [get_ports {clk}]
 derive_pll_clocks -create_base_clocks
 
-set isInSta [string match "quartus_sta" $quartus(nameofexecutable)]
+set isInSta 0
 
 if $isInSta {
   # Report the missed constraints.
