@@ -652,9 +652,13 @@ struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {
                                                        : 0);
   }
 
-  static VASTValue *getAssigningValue(const VASTWire *W) {
-    return (W == getEmptyKey() || W == getTombstoneKey() || W == 0) ?
-           0 : W->getAssigningValue();
+  static const VASTValue *getAssigningValue(const VASTWire *W) {
+    if (W == getEmptyKey() || W == getTombstoneKey() || W == 0)
+      return 0;
+
+    if (const VASTValue *V = W->getAssigningValue()) return V;
+
+    return W;
   }
 
   static bool isEqual(const VASTWire *LHS, const VASTWire *RHS) {
