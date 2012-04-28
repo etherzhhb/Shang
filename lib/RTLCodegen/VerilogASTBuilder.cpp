@@ -54,6 +54,140 @@ using namespace llvm;
 STATISTIC(SlotsByPassed, "Number of slots are bypassed");
 
 namespace {
+struct MemBusBuilder {
+  VASTModule *VM;
+  VFUMemBus *Bus;
+  unsigned BusNum;
+  VASTWire *MembusEn, *MembusCmd, *MemBusAddr, *MemBusOutData, *MemBusByteEn;
+  // Helper class to build the expression.
+  VASTExprBuilder EnExpr, CmdExpr, AddrExpr, OutDataExpr, BeExpr;
+
+  VASTWire *createOutputPort(const std::string &PortName, unsigned BitWidth,
+                              VASTRegister *&LocalEn, VASTExprBuilder &Expr) {
+    // We need to create multiplexer to allow current module and its submodules
+    // share the bus.
+    std::string PortReg = PortName + "_r";
+    VASTRegister *LocalReg = VM->addRegister(PortReg, BitWidth);
+    VASTPort *P = VM->addOutputPort(PortName, BitWidth, VASTModule::Others,
+                                    false);
+    VASTWire *OutputWire = cast<VASTWire>(P->get());
+    // Are we creating the enable port?
+    if (LocalEn == 0) {
+      // Or all enables together to generate the enable output,
+      // we use And Inverter Graph here.
+      Expr.init(VASTExpr::dpAnd, OutputWire->getBitWidth(), true);
+      // Add the local enable.
+      assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
+      VASTValue *V =VM->buildNotExpr(LocalReg);
+      Expr.addOperand(V);
+      LocalEn = LocalReg;
+    } else {
+      Expr.init(VASTExpr::dpMux, OutputWire->getBitWidth());
+      // Select the local signal if local enable is true.
+      Expr.addOperand(LocalEn);
+      Expr.addOperand(LocalReg);
+    }
+
+    return OutputWire;
+  }
+
+  void addSubModuleOutPort(raw_ostream &S, VASTWire *OutputWire,
+                            unsigned BitWidth, const std::string &SubModuleName,
+                            VASTWire *&SubModEn, VASTExprBuilder &Expr) {
+    std::string ConnectedWireName = SubModuleName + "_"
+                                    + std::string(OutputWire->getName());
+
+    VASTWire *SubModWire = VM->addWire(ConnectedWireName, BitWidth);
+
+    // Are we creating the enable signal from sub module?
+    if (SubModEn == 0) {
+      // Or all enables together to generate the enable output.
+      // we use And Inverter Graph here.
+      assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
+      VASTValue *V = VM->buildNotExpr(SubModWire);
+      Expr.addOperand(V);
+      SubModEn = SubModWire;
+    } else {
+      // Select the signal from submodule if sub module enable is true.
+      Expr.addOperand(SubModEn);
+      Expr.addOperand(SubModWire);
+    }
+
+    // Write the connection.
+    // The corresponding port name of submodule should be the same as current
+    // output port name.
+    S << '.' << OutputWire->getName() << '(' << ConnectedWireName << "),\n\t";
+  }
+
+  void addSubModuleInPort(raw_ostream &S, const std::string &PortName) {
+    // Simply connect the input port to the corresponding port of submodule,
+    // which suppose to have the same name.
+    S << '.' << PortName << '(' <<  PortName << "),\n\t";
+  }
+
+  void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
+    VASTWire *SubModEn = 0;
+    addSubModuleOutPort(S, MembusEn, 1,
+                          SubModuleName, SubModEn, EnExpr);
+    // Output ports.
+    addSubModuleOutPort(S, MembusCmd,
+                        VFUMemBus::CMDWidth, SubModuleName, SubModEn, CmdExpr);
+    addSubModuleOutPort(S, MemBusAddr,
+                        Bus->getAddrWidth(), SubModuleName, SubModEn,
+                        AddrExpr);
+    addSubModuleOutPort(S, MemBusOutData,
+                        Bus->getDataWidth(), SubModuleName, SubModEn,
+                        OutDataExpr);
+    addSubModuleOutPort(S, MemBusByteEn,
+                        Bus->getDataWidth()/8, SubModuleName, SubModEn,
+                        BeExpr);
+
+    // Input ports.
+    addSubModuleInPort(S, VFUMemBus::getInDataBusName(BusNum));
+    addSubModuleInPort(S, VFUMemBus::getReadyName(BusNum));
+  }
+
+  MemBusBuilder(VASTModule *M, unsigned N)
+    : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N) {
+    // Build the ports for current module.
+    FuncUnitId ID(VFUs::MemoryBus, BusNum);
+    // We need to create multiplexer to allow current module and its submodules
+    // share the memory bus.
+    VM->setFUPortBegin(ID);
+    // The enable signal for local memory bus.
+    VASTRegister *LocalEn = 0;
+    // Control ports.
+    MembusEn =
+      createOutputPort(VFUMemBus::getEnableName(BusNum), 1, LocalEn, EnExpr);
+    MembusCmd =
+      createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
+                        LocalEn, CmdExpr);
+
+    // Address port.
+    MemBusAddr =
+      createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth(),
+                        LocalEn, AddrExpr);
+    // Data ports.
+    VM->addInputPort(VFUMemBus::getInDataBusName(BusNum), Bus->getDataWidth());
+    MemBusOutData =
+      createOutputPort(VFUMemBus::getOutDataBusName(BusNum),
+                        Bus->getDataWidth(), LocalEn, OutDataExpr);
+    // Byte enable.
+    MemBusByteEn =
+      createOutputPort(VFUMemBus::getByteEnableName(BusNum),
+                        Bus->getDataWidth() / 8, LocalEn, BeExpr);
+    // Bus ready.
+    VM->addInputPort(VFUMemBus::getReadyName(BusNum), 1);
+  }
+
+  void buildMemBusMux() {
+    VM->assign(MembusEn, VM->buildExpr(EnExpr));
+    VM->assign(MembusCmd, VM->buildExpr(CmdExpr));
+    VM->assign(MemBusAddr, VM->buildExpr(AddrExpr));
+    VM->assign(MemBusOutData, VM->buildExpr(OutDataExpr));
+    VM->assign(MemBusByteEn, VM->buildExpr(BeExpr));
+  }
+};
 class VerilogASTBuilder : public MachineFunctionPass {
   const Module *M;
   MachineFunction *MF;
@@ -62,6 +196,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
+  MemBusBuilder *MBBuilder;
 
   typedef DenseMap<unsigned, VASTValue*> RegIdxMapTy;
   RegIdxMapTy Idx2Reg;
@@ -122,146 +257,10 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitFunctionSignature(const Function *F);
   void emitCommonPort(unsigned FNNum);
 
-  struct MemBusBuilder {
-    VASTModule *VM;
-    VFUMemBus *Bus;
-    unsigned BusNum;
-    VASTWire *MembusEn, *MembusCmd, *MemBusAddr, *MemBusOutData, *MemBusByteEn;
-    // Helper class to build the expression.
-    VASTExprBuilder EnExpr, CmdExpr, AddrExpr, OutDataExpr, BeExpr;
-
-    VASTWire *createOutputPort(const std::string &PortName, unsigned BitWidth,
-                               VASTRegister *&LocalEn, VASTExprBuilder &Expr) {
-      // We need to create multiplexer to allow current module and its submodules
-      // share the bus.
-      std::string PortReg = PortName + "_r";
-      VASTRegister *LocalReg = VM->addRegister(PortReg, BitWidth);
-      VASTPort *P = VM->addOutputPort(PortName, BitWidth, VASTModule::Others,
-                                      false);
-      VASTWire *OutputWire = cast<VASTWire>(P->get());
-      // Are we creating the enable port?
-      if (LocalEn == 0) {
-        // Or all enables together to generate the enable output,
-        // we use And Inverter Graph here.
-        Expr.init(VASTExpr::dpAnd, OutputWire->getBitWidth(), true);
-        // Add the local enable.
-        assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
-        VASTValue *V =VM->buildNotExpr(LocalReg);
-        Expr.addOperand(V);
-        LocalEn = LocalReg;
-      } else {
-        Expr.init(VASTExpr::dpMux, OutputWire->getBitWidth());
-        // Select the local signal if local enable is true.
-        Expr.addOperand(LocalEn);
-        Expr.addOperand(LocalReg);
-      }
-
-      return OutputWire;
-    }
-
-    void addSubModuleOutPort(raw_ostream &S, VASTWire *OutputWire,
-                             unsigned BitWidth, const std::string &SubModuleName,
-                             VASTWire *&SubModEn, VASTExprBuilder &Expr) {
-      std::string ConnectedWireName = SubModuleName + "_"
-                                      + std::string(OutputWire->getName());
-
-      VASTWire *SubModWire = VM->addWire(ConnectedWireName, BitWidth);
-
-      // Are we creating the enable signal from sub module?
-      if (SubModEn == 0) {
-        // Or all enables together to generate the enable output.
-        // we use And Inverter Graph here.
-        assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
-        VASTValue *V = VM->buildNotExpr(SubModWire);
-        Expr.addOperand(V);
-        SubModEn = SubModWire;
-      } else {
-        // Select the signal from submodule if sub module enable is true.
-        Expr.addOperand(SubModEn);
-        Expr.addOperand(SubModWire);
-      }
-
-      // Write the connection.
-      // The corresponding port name of submodule should be the same as current
-      // output port name.
-      S << '.' << OutputWire->getName() << '(' << ConnectedWireName << "),\n\t";
-    }
-
-    void addSubModuleInPort(raw_ostream &S, const std::string &PortName) {
-      // Simply connect the input port to the corresponding port of submodule,
-      // which suppose to have the same name.
-      S << '.' << PortName << '(' <<  PortName << "),\n\t";
-    }
-
-    void addSubModule(const std::string &SubModuleName, raw_ostream &S) {
-      VASTWire *SubModEn = 0;
-      addSubModuleOutPort(S, MembusEn, 1,
-                           SubModuleName, SubModEn, EnExpr);
-      // Output ports.
-      addSubModuleOutPort(S, MembusCmd,
-                          VFUMemBus::CMDWidth, SubModuleName, SubModEn, CmdExpr);
-      addSubModuleOutPort(S, MemBusAddr,
-                          Bus->getAddrWidth(), SubModuleName, SubModEn,
-                          AddrExpr);
-      addSubModuleOutPort(S, MemBusOutData,
-                          Bus->getDataWidth(), SubModuleName, SubModEn,
-                          OutDataExpr);
-      addSubModuleOutPort(S, MemBusByteEn,
-                          Bus->getDataWidth()/8, SubModuleName, SubModEn,
-                          BeExpr);
-
-      // Input ports.
-      addSubModuleInPort(S, VFUMemBus::getInDataBusName(BusNum));
-      addSubModuleInPort(S, VFUMemBus::getReadyName(BusNum));
-    }
-
-    MemBusBuilder(VASTModule *M, unsigned N)
-      : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N) {
-      // Build the ports for current module.
-      FuncUnitId ID(VFUs::MemoryBus, BusNum);
-      // We need to create multiplexer to allow current module and its submodules
-      // share the memory bus.
-      VM->setFUPortBegin(ID);
-      // The enable signal for local memory bus.
-      VASTRegister *LocalEn = 0;
-      // Control ports.
-      MembusEn =
-        createOutputPort(VFUMemBus::getEnableName(BusNum), 1, LocalEn, EnExpr);
-      MembusCmd =
-        createOutputPort(VFUMemBus::getCmdName(BusNum), VFUMemBus::CMDWidth,
-                         LocalEn, CmdExpr);
-
-      // Address port.
-      MemBusAddr =
-        createOutputPort(VFUMemBus::getAddrBusName(BusNum), Bus->getAddrWidth(),
-                         LocalEn, AddrExpr);
-      // Data ports.
-      VM->addInputPort(VFUMemBus::getInDataBusName(BusNum), Bus->getDataWidth());
-      MemBusOutData =
-        createOutputPort(VFUMemBus::getOutDataBusName(BusNum),
-                         Bus->getDataWidth(), LocalEn, OutDataExpr);
-      // Byte enable.
-      MemBusByteEn =
-        createOutputPort(VFUMemBus::getByteEnableName(BusNum),
-                         Bus->getDataWidth() / 8, LocalEn, BeExpr);
-      // Bus ready.
-      VM->addInputPort(VFUMemBus::getReadyName(BusNum), 1);
-    }
-
-    ~MemBusBuilder() {
-      VM->assign(MembusEn, VM->buildExpr(EnExpr));
-      VM->assign(MembusCmd, VM->buildExpr(CmdExpr));
-      VM->assign(MemBusAddr, VM->buildExpr(AddrExpr));
-      VM->assign(MemBusOutData, VM->buildExpr(OutDataExpr));
-      VM->assign(MemBusByteEn, VM->buildExpr(BeExpr));
-    }
-  };
-
   /// emitAllocatedFUs - Set up a vector for allocated resources, and
   /// emit the ports and register, wire and datapath for them.
   void emitAllocatedFUs();
-  void emitSubModule(MemBusBuilder &MBBuilder, StringRef CalleeName,
-                     unsigned FNNum);
+  void emitSubModule(StringRef CalleeName, unsigned FNNum);
   void emitIdleState();
 
   // Remember the MBB with specific start slot.
@@ -403,18 +402,19 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   TD = getAnalysisIfAvailable<TargetData>();
   FInfo = MF->getInfo<VFInfo>();
   MRI = &MF->getRegInfo();
-
+  VM = FInfo->getRtlMod();
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
 
-  // Reset the current fsm state number.
-
-  // FIXME: Demangle the c++ name.
-  // Dirty Hack: Force the module have the name of the hw subsystem.
-  VM = FInfo->getRtlMod();
-
   emitFunctionSignature(F.getFunction());
+
+  // Note: Create the memory bus builder will add the input/output ports of the
+  // memory bus implicitly. We should add these ports after function
+  // "emitFunctionSignature" is called, which add some other ports that need to
+  // be added before input/output ports of memory bus.
+  MemBusBuilder MBB(VM, 0);
+  MBBuilder = &MBB;
 
   // Emit all function units then emit all register/wires because function units
   // may alias with registers.
@@ -425,6 +425,9 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   emitIdleState();
   for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I)
     emitBasicBlock(*I);
+
+  // Build the mux for memory bus.
+  MBBuilder->buildMemBusMux();
 
   // Building the Slot active signals.
   VM->buildSlotLogic(StartIdxMap);
@@ -583,13 +586,6 @@ void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
 }
 
 void VerilogASTBuilder::emitAllocatedFUs() {
-  //for (id_iterator I = FInfo->id_begin(VFUs::MemoryBus),
-  //     E = FInfo->id_end(VFUs::MemoryBus); I != E; ++I) {
-  // FIXME: In fact, *I return the FUId instead of FUNum.
-  // DIRTYHACK: Every module use memory bus 0, connect the bus.
-  MemBusBuilder MBBuilder(VM, 0);
-  //}
-
   raw_ostream &S = VM->getDataPathBuffer();
 
   // Generate code for allocated bram.
@@ -625,22 +621,18 @@ void VerilogASTBuilder::emitAllocatedFUs() {
 
   // Generate the code for sub modules/external modules
   typedef VFInfo::const_fn_iterator fn_iterator;
-  for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I) {
-    StringRef CalleeName = I->getKey();
-    unsigned FNNum = I->second;
-    emitSubModule(MBBuilder, CalleeName, FNNum);
-  }
+  for (fn_iterator I = FInfo->fn_begin(), E = FInfo->fn_end(); I != E; ++I)
+    emitSubModule(I->getKey(), I->second);
 }
 
-void VerilogASTBuilder::emitSubModule(MemBusBuilder &MBBuilder,
-                                      StringRef CalleeName, unsigned FNNum) {
+void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
   raw_ostream &S = VM->getDataPathBuffer();
 
   if (const Function *Callee = M->getFunction(CalleeName)) {
     if (!Callee->isDeclaration()) {
       S << getSynSetting(Callee->getName())->getModName() << ' '
         << CalleeName << "_inst" << "(\n\t";
-      MBBuilder.addSubModule(getSubModulePortName(FNNum, "_inst"), S);
+      MBBuilder->addSubModule(getSubModulePortName(FNNum, "_inst"), S);
       emitFunctionSignature(Callee);
       S << ");\n";
       return;

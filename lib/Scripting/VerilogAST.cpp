@@ -914,7 +914,7 @@ VASTPort *VASTModule::addInputPort(const std::string &Name, unsigned BitWidth,
   assert(T < RetPort && "Wrong port type!");
   if (T == ArgPort) {
     assert(NumArgPorts == Ports.size() - NumSpecialPort
-      && "Unexpected port added before arg port!");
+           && "Unexpected port added before arg port!");
     ++NumArgPorts;
   }
 
