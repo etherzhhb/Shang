@@ -1274,6 +1274,16 @@ public:
     return addRegister(Name, BitWidth, 0, VASTRegister::Data, RegNum, Attr);
   }
 
+  VASTRegister *addSlotRegister(VASTSlot *S) {
+    std::string SlotName = "Slot" + utostr_32(S->SlotNum);
+    VASTRegister *R = addRegister(SlotName + "r", 1, S->SlotNum == 0 ? 1 : 0,
+                                  VASTRegister::Slot, S->SlotNum,
+                                  VASTModule::DirectClkEnAttr.c_str());
+    // The slot enable register's timing is not captured by schedule information.
+    R->setTimingUndef();
+    return R;
+  }
+
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");
 

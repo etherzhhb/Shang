@@ -120,12 +120,8 @@ VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
   Contents.ParentBB = BB;
 
   // Create the relative signals.
+  SlotReg.set(VM->addSlotRegister(this));
   std::string SlotName = "Slot" + utostr_32(slotNum);
-  SlotReg.set(VM->addRegister(SlotName + "r", 1, slotNum == 0 ? 1 : 0,
-                              VASTRegister::Slot, slotNum,
-                              VASTModule::DirectClkEnAttr.c_str()));
-  // The slot enable register's timing is not captured by schedule information.
-  getRegister()->setTimingUndef();
 
   VASTWire *Ready = VM->addWire(SlotName + "Ready", 1,
                                 VASTModule::DirectClkEnAttr.c_str());
