@@ -1269,6 +1269,11 @@ public:
     return addRegister(Name, BitWidth, 0, VASTRegister::Operand, FUNum, Attr);
   }
 
+  VASTRegister *addDataRegister(const std::string &Name, unsigned BitWidth,
+                                unsigned RegNum = 0, const char *Attr = "") {
+    return addRegister(Name, BitWidth, 0, VASTRegister::Data, RegNum, Attr);
+  }
+
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");
 

@@ -221,8 +221,8 @@ class VerilogASTBuilder : public MachineFunctionPass {
     return V;
   }
 
-  VASTRegister *addRegister(unsigned RegNum, unsigned BitWidth,
-                            unsigned InitVal = 0, const char *Attr = "") {
+  VASTRegister *addDataRegister(unsigned RegNum, unsigned BitWidth,
+                                const char *Attr = "") {
     std::string Name;
 
     if (TargetRegisterInfo::isVirtualRegister(RegNum))
@@ -232,8 +232,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
     Name += "r";
 
-    VASTRegister *R = VM->addRegister(Name, BitWidth, 0, VASTRegister::Data,
-                                      RegNum, Attr);
+    VASTRegister *R = VM->addDataRegister(Name, BitWidth, RegNum, Attr);
     indexVASTValue(RegNum, R);
     return R;
   }
@@ -747,7 +746,7 @@ void VerilogASTBuilder::emitAllSignals() {
 
     switch (Info.getRegClass()) {
     case VTM::DRRegClassID:
-      addRegister(RegNum, Info.getBitWidth());
+      addDataRegister(RegNum, Info.getBitWidth());
       break;
     case VTM::RADDRegClassID:
       indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
@@ -793,7 +792,8 @@ void VerilogASTBuilder::emitAllSignals() {
       break;
     case VTM::RMUXRegClassID: {
       std::string Name = "dstmux" + utostr_32(RegNum) + "r";
-      indexVASTValue(RegNum, VM->addRegister(Name, Info.getBitWidth()));
+      indexVASTValue(RegNum, VM->addDataRegister(Name, Info.getBitWidth(),
+                     RegNum));
       break;
     }
     default: llvm_unreachable("Unexpected register class!"); break;
@@ -817,7 +817,7 @@ bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
   const MachineOperand &Op = DI.getOperand();
   unsigned Bitwidth = VInstrInfo::getBitWidth(Op);
   if (!isReg) addWire(RegNum, Bitwidth);
-  else        addRegister(RegNum, Bitwidth);
+  else        addDataRegister(RegNum, Bitwidth);
 
   return true;
 }
