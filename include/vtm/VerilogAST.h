@@ -919,6 +919,7 @@ public:
   typedef ArrayRef<VASTValPtr> AndCndVec;
   enum Type {
     Data,       // Common registers which hold data for data-path.
+    Operand,    // Operand registers of functional units.
     Slot,       // Slot register which hold the enable signals for each slot.
     OutputPort, // The I/O register of an output port.
     Virtual     // Virtual registers that only hold timing information.
@@ -1262,6 +1263,11 @@ public:
                             unsigned InitVal = 0,
                             VASTRegister::Type T = VASTRegister::Data,
                             uint16_t RegData = 0, const char *Attr = "");
+
+  VASTRegister *addOpRegister(const std::string &Name, unsigned BitWidth,
+                              unsigned FUNum, const char *Attr = "") {
+    return addRegister(Name, BitWidth, 0, VASTRegister::Operand, FUNum, Attr);
+  }
 
   VASTWire *addWire(const std::string &Name, unsigned BitWidth,
                     const char *Attr = "");

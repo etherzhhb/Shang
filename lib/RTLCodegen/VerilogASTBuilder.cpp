@@ -667,7 +667,7 @@ void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
 
     SmallVector<VASTValPtr, 4> Ops;
     for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
-      Ops.push_back(VM->addRegister(OpInfo[i].first, OpInfo[i].second));
+      Ops.push_back(VM->addOpRegister(OpInfo[i].first, OpInfo[i].second, FNNum));
 
     VASTValPtr Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops,
                                     Info.getBitWidth());
@@ -684,12 +684,11 @@ VASTValPtr VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
   // Write the datapath for function unit.
   std::string ResultName = "addsub" + utostr_32(FUNum) + "o";
   unsigned OperandWidth = BitWidth - 1;
+  VASTRegister *LHS = VM->addOpRegister(ResultName + "_a", OperandWidth, FUNum),
+               *RHS = VM->addOpRegister(ResultName + "_b", OperandWidth, FUNum),
+               *C = VM->addOpRegister(ResultName + "_c", 1, FUNum);
   return VM->assign(VM->addWire(ResultName, BitWidth),
-                    VM->buildExpr(VASTExpr::dpAdd,
-                           VM->addRegister(ResultName + "_a", OperandWidth),
-                           VM->addRegister(ResultName + "_b", OperandWidth),
-                           VM->addRegister(ResultName + "_c", 1),
-                           BitWidth));
+                    VM->buildExpr(VASTExpr::dpAdd, LHS, RHS, C, BitWidth));
 }
 
 VASTValPtr VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
@@ -699,25 +698,22 @@ VASTValPtr VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool
   // No need to include the high part is included in the operand register.
   unsigned OperandWidth = BitWidth;
   if (HasHi) OperandWidth /= 2;
-
-  VASTValPtr Expr = VM->buildExpr(VASTExpr::dpMul,
-                              VM->addRegister(ResultName + "_a", OperandWidth),
-                              VM->addRegister(ResultName + "_b", OperandWidth),
-                              BitWidth);
-
-  return VM->assign(Result, Expr);
+  
+  VASTRegister *LHS = VM->addOpRegister(ResultName + "_a", OperandWidth, FUNum),
+               *RHS = VM->addOpRegister(ResultName + "_b", OperandWidth, FUNum);
+  return VM->assign(Result, VM->buildExpr(VASTExpr::dpMul, LHS, RHS, BitWidth));
 }
 
 VASTValPtr VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
                                    VASTExpr::Opcode Opc) {
   std::string ResultName = "shift" + utostr_32(FUNum) + "o";
 
+
+  VASTRegister *LHS = VM->addOpRegister(ResultName + "_a", BitWidth, FUNum),
+               *RHS = VM->addOpRegister(ResultName + "_b",
+                                             Log2_32_Ceil(BitWidth), FUNum);
   return VM->assign(VM->addWire(ResultName, BitWidth),
-                    VM->buildExpr(Opc,
-                                  VM->addRegister(ResultName + "_a", BitWidth),
-                                  VM->addRegister(ResultName + "_b",
-                                                  Log2_32_Ceil(BitWidth)),
-                                  BitWidth));
+                    VM->buildExpr(Opc, LHS, RHS, BitWidth));
 }
 
 VASTValPtr VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
@@ -726,12 +722,12 @@ VASTValPtr VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
   if (isSigned)  ResultName = "s" + ResultName;
   else           ResultName = "u" + ResultName;
 
+  VASTRegister *LHS = VM->addOpRegister(ResultName + "_a", BitWidth, FUNum),
+               *RHS = VM->addOpRegister(ResultName + "_b", BitWidth, FUNum);
   // Comparer have 4 output port.
   return VM->assign(VM->addWire(ResultName, 8),
                     VM->buildExpr(isSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp,
-                                  VM->addRegister(ResultName + "_a", BitWidth),
-                                  VM->addRegister(ResultName + "_b", BitWidth),
-                                  5));
+                                  LHS, RHS, 5));
 }
 
 void VerilogASTBuilder::emitAllSignals() {
