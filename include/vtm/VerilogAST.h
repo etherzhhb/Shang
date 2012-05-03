@@ -43,7 +43,6 @@ class VASTWire;
 class VASTExpr;
 class VASTRegister;
 class VASTUse;
-struct VASTValPtr;
 
 class VASTNode {
 public:
@@ -83,53 +82,92 @@ public:
   void dump() const;
 };
 
-struct VASTValPtr : public PointerIntPair<VASTValue *, 1, bool>{
-  VASTValPtr(VASTValue *V, bool IsInvert = false)
-    : PointerIntPair<VASTValue *, 1, bool>(V, IsInvert) {}
-  VASTValPtr(const VASTValPtr& RHS)
-    : PointerIntPair<VASTValue *, 1, bool>(RHS.getVal(), RHS.isInvert()){
-  }
-  VASTValPtr &operator=(const VASTValPtr &RHS) {
+template<typename T>
+struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
+  PtrInvPair(T *V, bool IsInvert = false)
+    : PointerIntPair<T*, 1, bool>(V, IsInvert) {}
+  template<typename TP>
+  PtrInvPair(const PtrInvPair<TP>& RHS)
+    : PointerIntPair<T*, 1, bool>(RHS.getVal(),
+                                  RHS.isInvert()) {}
+  template<typename TP>
+  PtrInvPair<T> &operator=(const PtrInvPair<TP> &RHS) {
     setPointer(RHS.getVal());
     setInt(RHS.isInvert());
     return *this;
   }
 
-  VASTValue *getVal() { return getPointer(); }
-  VASTValue *getVal() const { return getPointer(); }
-
-  bool isInvert() { return getInt() == true; }
-  bool isInvert() const { return getInt() == true; }
-
-  VASTValue *operator->() { return getVal(); }
-  const VASTValue *operator->() const{ return getVal(); }
-
-  bool operator==(const VASTValue *RHS) const {
-    return getOpaqueValue() == RHS;
-  }
-  bool operator==(const VASTValPtr RHS) const {
-    return getPointer() == RHS.getPointer() && getInt() == RHS.getInt();
-  }
-  bool operator!=(const VASTValue *RHS) const { return !operator==(RHS); }
-  bool operator!=(const VASTValPtr RHS) const { return !operator==(RHS); }
-  bool operator<(const VASTValue *RHS) const { return getOpaqueValue() < RHS; }
-  bool operator<(const VASTValPtr RHS) const {
-    return getPointer() < RHS.getPointer();
-  }
-  bool operator>(const VASTValue *RHS) const { return getOpaqueValue() > RHS; }
-  bool operator>(const VASTValPtr RHS) const {
-    return getPointer() > RHS.getPointer();
+  operator bool() const {
+    return getVal() != 0;
   }
 
+  T *getVal() const { return this->getPointer(); }
+
+  bool isInvert() const { return this->getInt(); }
+
+  T *operator->() { return this->getVal(); }
+  const T *operator->() const{ return this->getVal(); }
+
+  // They are equal when their Opaque Value are equal, which contain the pointer
+  // and Int information.
+  template<typename TP>
+  bool operator==(const TP *RHS) const {  return this->getOpaqueValue() == RHS; }
+  template<typename TP>
+  bool operator==(const PtrInvPair<TP> RHS) const {
+    return this->getOpaqueValue() == RHS.getOpaqueValue() ;
+  }
+  template<typename TP>
+  bool operator!=(const TP *RHS) const { return !operator==(RHS); }
+  template<typename TP>
+  bool operator!=(const PtrInvPair<TP> RHS) const { return !operator==(RHS); }
+  template<typename TP>
+  bool operator<(const TP *RHS) const { return this->getOpaqueValue() < RHS; }
+  template<typename TP>
+  bool operator<(const PtrInvPair<TP> RHS) const {
+    return this->getOpaqueValue() < RHS.getOpaqueValue() ;
+  }
+  template<typename TP>
+  bool operator>(const TP *RHS) const { return this->getOpaqueValue() > RHS; }
+  template<typename TP>
+  bool operator>(const PtrInvPair<TP> RHS) const {
+    return this->getOpaqueValue() > RHS.getOpaqueValue() ;
+  }
+  PtrInvPair<T> getAsInlineOperand() const {
+    return *this;
+  }
 };
 
+// simplify_type - Allow clients to treat PtrInvPairs just like VASTValues when
+// using casting operators.
+template<typename T> struct simplify_type< const PtrInvPair<T> > {
+  typedef T *SimpleType;
+  static SimpleType getSimplifiedValue(const PtrInvPair<T> &Val) {
+    assert(!Val.isInvert() &&
+           "Can not cast PtrInvPair with invert information!");
+    return Val.getVal();
+  }
+};
+
+template<typename T> struct simplify_type< PtrInvPair<T> > {
+  typedef T *SimpleType;
+  static SimpleType getSimplifiedValue(const PtrInvPair<T> &Val) {
+    assert(!Val.isInvert() &&
+           "Can not cast PtrInvPair with invert information!");
+    return Val.getVal();
+  }
+};
+
+typedef PtrInvPair<VASTValue> VASTValPtr;
+typedef PtrInvPair<VASTExpr> VASTExprPtr;
+typedef PtrInvPair<VASTWire> VASTWirePtr;
+
 class VASTUse : public ilist_node<VASTUse> {
-  VASTValue *V;
+  VASTValPtr V;
   VASTValue *User;
   friend class VASTExpr;
 
   friend struct ilist_sentinel_traits<VASTUse>;
-  VASTUse(VASTValue *v = 0, VASTValue *user = 0);
+  VASTUse(VASTValPtr v = 0, VASTValue *user = 0);
 
   void operator=(const VASTUse &RHS); // DO NOT IMPLEMENT
   VASTUse(const VASTUse &RHS); // DO NOT IMPLEMENT
@@ -138,15 +176,15 @@ class VASTUse : public ilist_node<VASTUse> {
   friend class VASTSlot;
   friend class VASTWire;
 public:
-  bool isInvalid() const { return V == 0; }
+  bool isInvalid() const { return !V; }
 
-  void set(VASTValue *RHS) {
-    assert(V == 0 && "Already using some value!");
+  void set(VASTValPtr RHS) {
+    assert(!V && "Already using some value!");
     V = RHS;
   }
 
-  void replaceUseBy(VASTValue *RHS) {
-    assert(V != 0 && V != RHS && "Cannot replace!");
+  void replaceUseBy(VASTValPtr RHS) {
+    assert(V && V != RHS && "Cannot replace!");
     V = RHS;
   }
 
@@ -158,9 +196,9 @@ public:
   void removeFromList();
 
   //operator bool() const { return V != 0; }
-  bool operator==(const VASTValue *RHS) const;
+  bool operator==(const VASTValPtr RHS) const;
 
-  bool operator!=(const VASTValue *RHS) const {
+  bool operator!=(const VASTValPtr RHS) const {
     return !operator==(RHS);
   }
 
@@ -169,16 +207,16 @@ public:
   }
 
   // Return the underlying VASTValue.
-  VASTValue *operator*() const {
+  VASTValPtr operator*() const {
     assert(!isInvalid() && "Not a valid Use!");
     return V;
   }
 
-  operator VASTValue *() const { return operator*(); }
+  operator VASTValPtr() const { return operator*(); }
 
-  VASTValue *operator->() const { return operator*(); }
+  VASTValPtr operator->() const { return operator*(); }
 
-  VASTValue *unwrap() const { return V; }
+  VASTValPtr unwrap() const { return V; }
 
   // Prevent the user from being removed.
   void PinUser() const;
@@ -265,7 +303,7 @@ public:
   virtual void print(raw_ostream &OS) const;
 
   // Print the value as inline operand.
-  virtual VASTValue *getAsInlineOperand() { return this; }
+  virtual VASTValPtr getAsInlineOperand() { return this; }
 
   bool replaceAllUseWith(VASTValue *To);
 
@@ -286,14 +324,14 @@ public:
 template<> struct simplify_type<const VASTUse> {
   typedef VASTValue *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return Val.unwrap();
+    return simplify_type<const VASTValPtr>::getSimplifiedValue(Val.unwrap());
   }
 };
 
 template<> struct simplify_type<VASTUse> {
   typedef VASTValue *SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return Val.unwrap();
+    return simplify_type<VASTValPtr>::getSimplifiedValue(Val.unwrap());
   }
 };
 
@@ -536,7 +574,7 @@ public:
            (getOpcode() == dpAssign && !isSubBitSlice());
   }
 
-  VASTValue *getAsInlineOperand() {
+  VASTValPtr getAsInlineOperand() {
     // Can the expression be printed inline?
     if (getOpcode() == VASTExpr::dpAssign && !isSubBitSlice())
       return getOperand(0)->getAsInlineOperand();
@@ -576,7 +614,7 @@ struct FoldingSetTrait<VASTExpr> : DefaultFoldingSetTrait<VASTExpr> {
   };
 
 struct VASTExprBuilder {
-  SmallVector<VASTValue*, 4> Operands;
+  SmallVector<VASTValPtr, 4> Operands;
   VASTExpr::Opcode Opc;
   unsigned BitWidth;
   bool BuildNot;
@@ -588,7 +626,9 @@ struct VASTExprBuilder {
     BuildNot = buildNot;
   }
 
-  void addOperand(VASTValue *V) { Operands.push_back(V->getAsInlineOperand()); }
+  void addOperand(VASTValPtr V) {
+    Operands.push_back(V.getAsInlineOperand());
+  }
 };
 
 class VASTWire :public VASTSignal {
@@ -623,14 +663,14 @@ private:
     SignalData = slotNum;
   }
 
-  void assign(VASTValue *V, VASTWire::Type T = VASTWire::Common) {
+  void assign(VASTValPtr V, VASTWire::Type T = VASTWire::Common) {
     assert(U.isInvalid() && "The already has an expression!");
     SignalType = T;
     U.set(V);
     U.setUser(this);
   }
 
-  void assignWithExtraDelay(VASTValue *V, unsigned latency) {
+  void assignWithExtraDelay(VASTValPtr V, unsigned latency) {
     assign(V, haveExtraDelay);
     SignalData = latency;
   }
@@ -640,24 +680,24 @@ private:
 
   friend class VASTValue;
 public:
-  VASTValue *getAssigningValue() const {
+  VASTValPtr getAssigningValue() const {
     // Ignore the virtual register of the input port, the virtual register only
     // carry the timing information.
-    return getWireType() == InputPort ? 0 : U.unwrap();
+    return getWireType() == InputPort ? VASTValPtr(0) : U.unwrap();
   }
 
   VASTRegister *getVirturalRegist() const {
     return cast<VASTRegister>(U.unwrap());
   }
 
-  VASTExpr *getExpr() const {
-    return dyn_cast_or_null<VASTExpr>(getAssigningValue());
+  VASTExprPtr getExpr() const {
+    return getAssigningValue()? dyn_cast<VASTExpr>(getAssigningValue()) : 0;
   }
 
-  VASTValue *getAsInlineOperand() {
-    if (VASTValue *V = getAssigningValue()) {
+  VASTValPtr getAsInlineOperand() {
+    if (VASTValPtr V = getAssigningValue()) {
       // Can the expression be printed inline?
-      if (VASTExpr *E = dyn_cast<VASTExpr>(V)) {
+      if (VASTExprPtr E = dyn_cast<VASTExpr>(V)) {
         if (E->isInlinable()) return E->getAsInlineOperand();
       } else // This is a simple assignment.
         return V;
@@ -691,15 +731,15 @@ public:
 
 struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {
   static unsigned getHashValue(const VASTWire *Val) {
-    return DenseMapInfo<VASTValue*>::getHashValue(Val ? Val->getAssigningValue()
-                                                       : 0);
+    return DenseMapInfo<VASTValue*>::getHashValue(Val ?
+      reinterpret_cast<VASTValue*>(Val->getAssigningValue().getOpaqueValue()) : 0);
   }
 
-  static const VASTValue *getAssigningValue(const VASTWire *W) {
+  static const PtrInvPair<const VASTValue> getAssigningValue(const VASTWire *W) {
     if (W == getEmptyKey() || W == getTombstoneKey() || W == 0)
       return 0;
 
-    if (const VASTValue *V = W->getAssigningValue()) return V;
+    if (const VASTValPtr V = W->getAssigningValue()) return V;
 
     return W;
   }
@@ -760,10 +800,10 @@ private:
   const_succ_cnd_iterator succ_cnd_begin() const { return NextSlots.begin(); }
   const_succ_cnd_iterator succ_cnd_end() const { return NextSlots.end(); }
 
-  void addEnable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM);
-  void addReady(VASTValue *V, VASTValue *Cnd, VASTModule *VM);
-  void addDisable(VASTRegister *R, VASTValue *Cnd, VASTModule *VM);
-  void addSuccSlot(VASTSlot *NextSlot, VASTValue *Cnd, VASTModule *VM);
+  void addEnable(VASTRegister *R, VASTValPtr Cnd, VASTModule *VM);
+  void addReady(VASTValue *V, VASTValPtr Cnd, VASTModule *VM);
+  void addDisable(VASTRegister *R, VASTValPtr Cnd, VASTModule *VM);
+  void addSuccSlot(VASTSlot *NextSlot, VASTValPtr Cnd, VASTModule *VM);
 
   friend class VASTModule;
 public:
@@ -780,15 +820,15 @@ public:
   ///
   /// @param OS       The output stream.
   /// @param SrcSlot  Which Slot are the expression printing for?
-  VASTValue *buildFUReadyExpr(VASTModule &VM);
+  VASTValPtr buildFUReadyExpr(VASTModule &VM);
 
   void print(raw_ostream &OS) const;
 
   const char *getName() const;
   // Getting the relative signals.
   VASTRegister *getRegister() const { return cast<VASTRegister>(SlotReg); }
-  VASTValue *getReady() const { return *SlotReady; }
-  VASTValue *getActive() const { return *SlotActive; }
+  VASTValue *getReady() const { return (*SlotReady).getVal(); }
+  VASTValue *getActive() const { return (*SlotActive).getVal(); }
 
   // TODO: Rename to addSuccSlot.
   bool hasNextSlot(VASTSlot *NextSlot) const;
@@ -876,7 +916,7 @@ template<> struct GraphTraits<VASTSlot*> {
 
 class VASTRegister : public VASTSignal {
 public:
-  typedef ArrayRef<VASTValue*> AndCndVec;
+  typedef ArrayRef<VASTValPtr> AndCndVec;
   enum Type {
     Data,       // Common registers which hold data for data-path.
     Slot,       // Slot register which hold the enable signals for each slot.
@@ -1044,7 +1084,7 @@ public:
   }
 
   // Create wrapper to allow us get a bitslice of the symbol.
-  VASTValue *getOrCreateSymbol(const std::string &Name, unsigned BitWidth,
+  VASTValPtr getOrCreateSymbol(const std::string &Name, unsigned BitWidth,
                                bool CreateWrapper);
 
   void allocaSlots(unsigned TotalSlots) {
@@ -1073,10 +1113,10 @@ public:
   }
 
   VASTUse *allocateUse() { return Allocator.Allocate<VASTUse>(); }
-  void addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd);
-  void addSlotReady(VASTSlot *S, VASTValue *V, VASTValue *Cnd);
-  void addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValue *Cnd);
-  void addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValue *V);
+  void addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd);
+  void addSlotReady(VASTSlot *S, VASTValue *V, VASTValPtr Cnd);
+  void addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd);
+  void addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValPtr V);
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
                          PortTypes T = Others);
@@ -1156,28 +1196,28 @@ public:
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
 
-  VASTValue *createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
-                        unsigned UB, unsigned LB);
+  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                        unsigned UB, unsigned LB, bool IsInvert = false);
 
-  VASTValue *getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                        SmallVectorImpl<VASTValue*> &Ops,
+  VASTValPtr getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                        SmallVectorImpl<VASTValPtr> &Ops,
                                         unsigned BitWidth);
 
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+  VASTValPtr buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                        unsigned BitWidth);
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op, unsigned BitWidth);
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *LHS, VASTValue *RHS,
+  VASTValPtr buildExpr(VASTExpr::Opcode Opc,VASTValPtr Op, unsigned BitWidth);
+  VASTValPtr buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS, VASTValPtr RHS,
                        unsigned BitWidth);
   template<VASTExpr::Opcode Opc>
-  static VASTValue *buildExpr(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth,
+  static VASTValPtr buildExpr(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth,
                               VASTModule *VM) {
     return VM->buildExpr(Opc, LHS, RHS, BitWidth);
   }
 
-  VASTValue *buildExpr(VASTExpr::Opcode Opc, VASTValue *Op0, VASTValue *Op1,
-                       VASTValue *Op2, unsigned BitWidth);
-  VASTValue *buildExpr(VASTExprBuilder &Builder) {
-    VASTValue *V = buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
+  VASTValPtr buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op0, VASTValPtr Op1,
+                       VASTValPtr Op2, unsigned BitWidth);
+  VASTValPtr buildExpr(VASTExprBuilder &Builder) {
+    VASTValPtr V = buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
 
     // If opc is dpAnd and BuildNot is true. It mean Or in And Invert Graph.
     if (Builder.BuildNot) V = buildNotExpr(V);
@@ -1185,37 +1225,37 @@ public:
     return V;
   }
 
-  VASTValue *buildBitSliceExpr(VASTValue *U, uint8_t UB, uint8_t LB);
-  VASTValue *buildBitCatExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
-  VASTValue *buildAndExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
+  VASTValPtr buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
+  VASTValPtr buildBitCatExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
+  VASTValPtr buildAndExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
-  VASTValue *buildMulExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
+  VASTValPtr buildMulExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
-  VASTValue *buildAddExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
+  VASTValPtr buildAddExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
-  VASTValue *buildNotExpr(VASTValue *U);
+  VASTValPtr buildNotExpr(VASTValPtr U);
 
-  static VASTValue *buildOr(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth,
+  static VASTValPtr buildOr(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth,
                             VASTModule *VM) {
     return VM->buildOrExpr(LHS, RHS, BitWidth);
   }
 
-  VASTValue *buildOrExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
+  VASTValPtr buildOrExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
-  VASTValue *buildOrExpr(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth) {
-    VASTValue *Ops[] = { LHS, RHS };
+  VASTValPtr buildOrExpr(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth) {
+    VASTValPtr Ops[] = { LHS, RHS };
     return buildOrExpr(Ops, BitWidth);
   }
 
-  static VASTValue *buildXor(VASTValue *LHS, VASTValue *RHS, unsigned BitWidth,
+  static VASTValPtr buildXor(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth,
                              VASTModule *VM) {
-    VASTValue *Ops[] = { LHS, RHS };
+    VASTValPtr Ops[] = { LHS, RHS };
     return VM->buildXorExpr(Ops, BitWidth);
   }
 
-  VASTValue *buildXorExpr(ArrayRef<VASTValue*> Ops, unsigned BitWidth);
+  VASTValPtr buildXorExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
-  VASTValue *flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValue*> Ops,
+  VASTValPtr flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                              unsigned BitWidth);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
@@ -1232,15 +1272,15 @@ public:
   slot_iterator slot_begin() { return Slots.begin(); }
   slot_iterator slot_end() { return Slots.end(); }
 
-  void addAssignment(VASTRegister *Dst, VASTValue *Src, VASTSlot *Slot,
-                     SmallVectorImpl<VASTValue*> &Cnds,
+  void addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
+                     SmallVectorImpl<VASTValPtr> &Cnds,
                      bool AddSlotActive = true);
-  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValue*> &Cnds,
+  VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValPtr> &Cnds,
                            bool AddSlotActive = true);
 
-  VASTValue *assign(VASTWire *W, VASTValue *V,
+  VASTValPtr assign(VASTWire *W, VASTValPtr V,
                     VASTWire::Type T = VASTWire::Common);
-  VASTValue *assignWithExtraDelay(VASTWire *W, VASTValue *V, unsigned latency);
+  VASTValPtr assignWithExtraDelay(VASTWire *W, VASTValPtr V, unsigned latency);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);
@@ -1320,7 +1360,7 @@ void DepthFirstTraverseDepTree(VASTValue *DepTree, VisitPathFunc VisitPath) {
     }
 
     // Depth first traverse the child of current node.
-    VASTValue *ChildNode = *It;
+    VASTValue *ChildNode = (**It).getVal();
     ++ItWorkStack.back();
 
     // Had we visited this node? If the Use slots are same, the same subtree
