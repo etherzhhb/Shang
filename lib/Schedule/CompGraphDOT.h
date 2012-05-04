@@ -27,23 +27,21 @@
 
 namespace llvm {
 
-template<>
-struct DOTGraphTraits<CompGraph<LiveInterval*, unsigned>*>
-  : public DefaultDOTGraphTraits{
-  typedef CompGraphNode<LiveInterval*> NodeTy;
-  typedef CompGraph<LiveInterval*, unsigned> GraphTy;
+template<typename T1, typename T2>
+struct DOTGraphTraits<CompGraph<T1, T2>*> : public DefaultDOTGraphTraits{
+  typedef CompGraph<T1, T2> GraphTy;
+  typedef typename GraphTy::NodeTy NodeTy;
+  typedef typename NodeTy::iterator NodeIterator;
+  typedef CompGraphTraits<T1> Traits;
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
-  static std::string getEdgeSourceLabel(const NodeTy *Node, NodeTy::iterator I){
+  static std::string getEdgeSourceLabel(const NodeTy *Node,NodeIterator I){
     return itostr(Node->getWeightTo(*I));
   }
 
   std::string getNodeLabel(const NodeTy *Node, const GraphTy *Graph) {
-    std::string Str;
-    raw_string_ostream ss(Str);
-    ss << PrintReg(Node->get()->reg);
-    return ss.str();
+    return Traits::getNodeLabel(Node->get());
   }
 
   static std::string getNodeAttributes(const NodeTy *Node,
@@ -52,8 +50,8 @@ struct DOTGraphTraits<CompGraph<LiveInterval*, unsigned>*>
   }
 };
 
-template<>
-void CompGraph<LiveInterval*, unsigned>::viewGraph() {
+template<typename T1, typename T2>
+void CompGraph<T1, T2>::viewGraph() {
   ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
 

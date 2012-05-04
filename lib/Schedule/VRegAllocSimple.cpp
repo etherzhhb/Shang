@@ -592,13 +592,13 @@ struct CompICmpEdgeWeight : public CompBinOpEdgeWeight<VTM::VOpICmp, 1> {
 namespace llvm {
   // Specialized For liveInterval.
 template<> struct CompGraphTraits<LiveInterval*> {
-  static bool isEarlier(LiveInterval *LHS, LiveInterval *RHS) {
+  static bool isEarlier(const LiveInterval *LHS, const LiveInterval *RHS) {
     assert(LHS && RHS && "Unexpected virtual node!");
 
     return *LHS < *RHS;
   }
 
-  static bool compatible(LiveInterval *LHS, LiveInterval *RHS) {
+  static bool compatible(const LiveInterval *LHS, const LiveInterval *RHS) {
     if (LHS == 0 || RHS == 0) return true;
 
     // A LiveInterval may has multiple live ranges for example:
@@ -617,6 +617,13 @@ template<> struct CompGraphTraits<LiveInterval*> {
     // LHS and RHS is compatible if RHS end before LHS begin and vice versa.
     return LHS->beginIndex() >= RHS->endIndex()
             || RHS->beginIndex() >= LHS->endIndex();
+  }
+
+  static std::string getNodeLabel(const LiveInterval *LI) {
+    std::string Str;
+    raw_string_ostream ss(Str);
+    ss << PrintReg(LI->reg);
+    return ss.str();
   }
 };
 }
