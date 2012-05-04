@@ -20,6 +20,7 @@
 
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -150,7 +151,7 @@ public:
   typedef CompGraphNode<T> NodeTy;
 private:
   typedef CompGraphTraits<T> Traits;
-  typedef std::map<T, NodeTy*> NodeMapTy;
+  typedef DenseMap<T, NodeTy*> NodeMapTy;
   // The dummy entry node of the graph.
   NodeTy Entry, Exit;
   // Nodes vector.
