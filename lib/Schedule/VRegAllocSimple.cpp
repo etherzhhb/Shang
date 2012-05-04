@@ -146,7 +146,7 @@ struct VRASimple : public MachineFunctionPass {
 
   typedef const std::vector<unsigned> VRegVec;
   // Register/FU Compatibility Graph.
-  typedef CompGraph<LiveInterval*> LICGraph;
+  typedef CompGraph<LiveInterval*, unsigned> LICGraph;
   typedef CompGraphNode<LiveInterval*> LICGraphNode;
 
   // Compatibility Graph building.

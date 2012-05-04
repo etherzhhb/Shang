@@ -144,7 +144,7 @@ template<class T> struct GraphTraits<CompGraphNode<T>*> {
   }
 };
 
-template<class T>
+template<typename T, typename IDTy>
 class CompGraph {
 public:
   typedef CompGraphNode<T> NodeTy;
@@ -157,8 +157,8 @@ private:
   NodeMapTy Nodes;
 
 public:
-  const unsigned ID;
-  CompGraph(unsigned id) : ID(id) {}
+  const IDTy ID;
+  CompGraph(IDTy id) : ID(id) {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);
@@ -267,14 +267,14 @@ public:
   void viewGraph();
 };
 
-template <class T> struct GraphTraits<CompGraph<T>*>
-  : public GraphTraits<CompGraphNode<T>*> {
+template <typename T1, typename T2> struct GraphTraits<CompGraph<T1, T2>*>
+  : public GraphTraits<CompGraphNode<T1>*> {
   
-  typedef typename CompGraph<T>::iterator nodes_iterator;
-  static nodes_iterator nodes_begin(CompGraph<T> *G) {
+  typedef typename CompGraph<T1, T2>::iterator nodes_iterator;
+  static nodes_iterator nodes_begin(CompGraph<T1, T2> *G) {
     return G->begin();
   }
-  static nodes_iterator nodes_end(CompGraph<T> *G) {
+  static nodes_iterator nodes_end(CompGraph<T1, T2> *G) {
     return G->end();
   }
 };

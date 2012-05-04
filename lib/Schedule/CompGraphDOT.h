@@ -28,9 +28,10 @@
 namespace llvm {
 
 template<>
-struct DOTGraphTraits<CompGraph<LiveInterval*>*> : public DefaultDOTGraphTraits{
+struct DOTGraphTraits<CompGraph<LiveInterval*, unsigned>*>
+  : public DefaultDOTGraphTraits{
   typedef CompGraphNode<LiveInterval*> NodeTy;
-  typedef CompGraph<LiveInterval*> GraphTy;
+  typedef CompGraph<LiveInterval*, unsigned> GraphTy;
 
   DOTGraphTraits(bool isSimple=false) : DefaultDOTGraphTraits(isSimple) {}
 
@@ -52,7 +53,7 @@ struct DOTGraphTraits<CompGraph<LiveInterval*>*> : public DefaultDOTGraphTraits{
 };
 
 template<>
-void CompGraph<LiveInterval*>::viewGraph() {
+void CompGraph<LiveInterval*, unsigned>::viewGraph() {
   ViewGraph(this, "CompatibilityGraph" + utostr_32(ID));
 }
 
