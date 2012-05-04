@@ -97,6 +97,7 @@ public:
 
     // Current node is not the successor of pred node too.
     deleted = Pred->Succs.erase(this);
+    Pred->SuccWeights.erase(this);
     assert(deleted && "this is not the successor of Pred!");
     (void) deleted;
   }
@@ -111,13 +112,25 @@ public:
 
   template<class CompEdgeWeight>
   void updateEdgeWeight(CompEdgeWeight &C) {
+    SmallVector<Self*, 8> SuccToUnlink;
     for (iterator I = succ_begin(), E = succ_end(); I != E; ++I) {
       Self *Succ = *I;
       // Not need to update the weight of the exit edge.
-      if (Succ->get()) SuccWeights[Succ] = C(this->get(), Succ->get());
-      // Make find longest path prefer to end with exit if possible.
-      else             SuccWeights[Succ] = CompGraphWeights::TINY_VAL;
+      if (Succ->get()) {
+        int Weigth = C(this->get(), Succ->get());
+        if (Weigth <= CompGraphWeights::HUGE_NEG_VAL) {
+          SuccToUnlink.push_back(Succ);
+          continue;
+        }
+
+        SuccWeights[Succ] = Weigth;
+      } else
+        // Make find longest path prefer to end with exit if possible.
+        SuccWeights[Succ] = CompGraphWeights::TINY_VAL;
     }
+
+    while (!SuccToUnlink.empty())
+      unlinkSucc(SuccToUnlink.pop_back_val());
   }
 
   // Make the edge with default weight, we will udate the weight later.
