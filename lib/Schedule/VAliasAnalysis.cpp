@@ -75,7 +75,7 @@ Pass *llvm::createVAliasAnalysisPass() {
 }
 
 namespace llvm {
-static std::pair<const Value*, int64_t>
+std::pair<const Value*, int64_t>
 extractPointerAndOffset(const Value *V, int64_t Offset) {
   // Try to strip pointer casts.
   if (const ConstantExpr *E = dyn_cast<ConstantExpr>(V)) {

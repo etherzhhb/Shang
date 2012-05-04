@@ -123,6 +123,8 @@ bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
   return MachineMemOperandAlias(V1, V2, AA, SE) != AliasAnalysis::NoAlias;
 }
 
+std::pair<const Value*, int64_t>
+extractPointerAndOffset(const Value *V, int64_t Offset);
 }
 
 #endif
