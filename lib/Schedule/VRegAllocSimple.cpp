@@ -275,25 +275,25 @@ struct FaninChecker {
   int getMaxMergedSrcMuxSize();
 };
 
-  template<>
-  int FaninChecker<1>::getTotalSavedSrcMuxCost(int BitWidth){
-    return getSavedSrcMuxCost<0>(BitWidth);
-  }
+template<>
+int FaninChecker<1>::getTotalSavedSrcMuxCost(int BitWidth){
+  return getSavedSrcMuxCost<0>(BitWidth);
+}
 
-  template<>
-  int FaninChecker<2>::getTotalSavedSrcMuxCost(int BitWidth){
-    return getSavedSrcMuxCost<0>(BitWidth) + getSavedSrcMuxCost<1>(BitWidth);
-  }
+template<>
+int FaninChecker<2>::getTotalSavedSrcMuxCost(int BitWidth){
+  return getSavedSrcMuxCost<0>(BitWidth) + getSavedSrcMuxCost<1>(BitWidth);
+}
 
-  template<>
-  int FaninChecker<1>::getMaxMergedSrcMuxSize() {
-  return getMergedSrcMuxSize<0>();
-  }
+template<>
+int FaninChecker<1>::getMaxMergedSrcMuxSize() {
+return getMergedSrcMuxSize<0>();
+}
 
-  template<>
-  int FaninChecker<2>::getMaxMergedSrcMuxSize() {
-  return std::max(getMergedSrcMuxSize<0>(), getMergedSrcMuxSize<1>());
-  }
+template<>
+int FaninChecker<2>::getMaxMergedSrcMuxSize() {
+return std::max(getMergedSrcMuxSize<0>(), getMergedSrcMuxSize<1>());
+}
 
 struct FanoutChecker {
   // All copy source both fu of the edge.

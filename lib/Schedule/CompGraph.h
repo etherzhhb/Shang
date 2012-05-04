@@ -145,7 +145,7 @@ template<class T> struct GraphTraits<CompGraphNode<T>*> {
   }
 };
 
-template<typename T, typename IDTy>
+template<typename T, typename IDTy = unsigned>
 class CompGraph {
 public:
   typedef CompGraphNode<T> NodeTy;
@@ -159,7 +159,7 @@ private:
 
 public:
   const IDTy ID;
-  CompGraph(IDTy id) : ID(id) {}
+  CompGraph(IDTy id = IDTy()) : ID(id) {}
 
   ~CompGraph() {
     DeleteContainerSeconds(Nodes);
