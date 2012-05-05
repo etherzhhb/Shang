@@ -904,7 +904,8 @@ bool VInstrInfo::mayLoad(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return !MI->getOperand(3).getImm();
+  case VTM::VOpMemTrans:
+  case VTM::VOpBRAMTrans: return !MI->getOperand(3).getImm();
   }
 }
 
@@ -912,7 +913,8 @@ bool VInstrInfo::mayStore(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default: return false;
     // There is a "isLoad" flag in memory access operation.
-  case VTM::VOpMemTrans: return MI->getOperand(3).getImm();
+  case VTM::VOpMemTrans:
+  case VTM::VOpBRAMTrans:  return MI->getOperand(3).getImm();
   }
 }
 
