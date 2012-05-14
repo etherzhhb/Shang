@@ -47,16 +47,16 @@ class CompGraphNode {
   // Predecessors and Successors.
   NodeVecTy Preds, Succs;
 
-  typedef std::map<Self*, int> WeightVecTy;
+  typedef std::map<const Self*, int> WeightVecTy;
   WeightVecTy SuccWeights;
 
 public:
   explicit CompGraphNode(T Node = T()) : N(Node) {}
 
-  bool isTrivial() const { return N == T(); }
-
-  T get() const { return N; }
-  T operator->() const { return N; }
+  const T &get() const { return N; }
+  const T &operator->() const { return N; }
+  T &get() { return N; }
+  T &operator->() { return N; }
 
   //void print(raw_ostream &OS) const;
   //void dump() const;
@@ -74,12 +74,42 @@ public:
   unsigned num_pred()   const { return Preds.size(); }
   bool     pred_empty() const { return Preds.empty(); }
 
-  int getWeightTo(Self *To) const {
+  unsigned degree() const { return num_succ() + num_pred(); }
+
+  bool isNeighbor(Self *RHS) const {
+    return Preds.count(RHS) || Succs.count(RHS);
+  }
+
+  int getWeightTo(const Self *To) const {
     return SuccWeights.find(To)->second;
   }
 
+  int computeNeighborWeight(Self *RHS = 0) const {
+    int Weight = 0;
+
+    for (iterator I = pred_begin(), E = pred_end(); I != E; ++I) {
+      Self *NP = *I;
+      if (Traits::isTrivial(NP->get())) continue;
+
+      // RHS is null means we want to compute all neighbor weight, otherwise
+      // means we want to compute the common neighbor weight only.
+      if (RHS == 0 || NP->isNeighbor(RHS)) Weight += NP->getWeightTo(this);
+    }
+
+    for (iterator I = succ_begin(), E = succ_end(); I != E; ++I) {
+      Self *NS = *I;
+      if (Traits::isTrivial(NS->get())) continue;
+
+      // RHS is null means we want to compute all neighbor weight, otherwise
+      // means we want to compute the common neighbor weight only.
+      if (RHS == 0 || NS->isNeighbor(RHS)) Weight += getWeightTo(NS);
+    }
+
+    return Weight;
+  }
+
   // Unlink the Succ from current node.
-  void unlinkSucc(CompGraphNode *Succ) {
+  void unlinkSucc(Self *Succ) {
     bool deleted = Succs.erase(Succ);
     assert(deleted && "Succ is not the successor of this!");
     SuccWeights.erase(Succ);
@@ -91,7 +121,7 @@ public:
   }
 
   // Unlink the Pred from current node.
-  void unlinkPred(CompGraphNode *Pred) {
+  void unlinkPred(Self *Pred) {
     bool deleted = Preds.erase(Pred);
     assert(deleted && "Pred is not the predecessor of this!");
 
@@ -100,6 +130,28 @@ public:
     Pred->SuccWeights.erase(this);
     assert(deleted && "this is not the successor of Pred!");
     (void) deleted;
+  }
+
+  void deleteUncommonEdges(Self *RHS) {
+    // Delete edge from P and Q that are not connected to their common neighbors.
+    SmallVector<Self*, 8> ToUnlink;
+    // Unlink preds.
+    for (iterator I = pred_begin(), E = pred_end(); I != E; ++I) {
+      Self *N = *I;
+      if (!RHS->isNeighbor(N)) ToUnlink.push_back(N);
+    }
+
+    while (!ToUnlink.empty())
+      unlinkPred(ToUnlink.pop_back_val());
+
+    // Unlink succs.
+    for (iterator I = succ_begin(), E = succ_end(); I != E; ++I) {
+      Self *N = *I;
+      if (!RHS->isNeighbor(N)) ToUnlink.push_back(N);
+    }
+
+    while (!ToUnlink.empty())
+      unlinkSucc(ToUnlink.pop_back_val());
   }
 
   void unlink() {
@@ -162,8 +214,8 @@ template<typename T, typename IDTy = unsigned>
 class CompGraph {
 public:
   typedef CompGraphNode<T> NodeTy;
-private:
   typedef CompGraphTraits<T> Traits;
+private:
   typedef DenseMap<T, NodeTy*> NodeMapTy;
   // The dummy entry node of the graph.
   NodeTy Entry, Exit;
@@ -178,11 +230,16 @@ public:
     DeleteContainerSeconds(Nodes);
   }
 
+  const NodeTy *getEntry() const { return &Entry; }
+  const NodeTy *getExit() const { return &Exit; }
+
   typedef typename NodeTy::iterator iterator;
 
   // All nodes (except exit node) are successors of the entry node.
   iterator begin() { return Entry.succ_begin(); }
   iterator end()   { return Entry.succ_end(); }
+
+  NodeTy *operator[](T N) const { return Nodes.lookup(N); }
 
   NodeTy *GetOrCreateNode(T N) {
     assert(N && "Unexpected null pointer pass to GetOrCreateNode!");
