@@ -54,18 +54,28 @@ struct ScriptingPass : public MachineFunctionPass {
 
 char ScriptingPass::ID = 0;
 
+static void printConstant(raw_ostream &OS, uint64_t Val, Type* Ty,
+                          TargetData *TD) {
+  OS << '\'';
+  if (TD->getTypeSizeInBits(Ty) == 1)
+    OS << (Val ? '1' : '0');
+  else {
+    std::string FormatS =
+      "%0" + utostr_32(TD->getTypeStoreSize(Ty) * 2) + "llx";
+    OS << "0x" << format_object1<uint64_t>(FormatS.c_str(), Val);
+  }
+  OS << '\'';
+}
+
+
 static void ExtractConstant(raw_ostream &OS, Constant *C, TargetData *TD) {
   if (ConstantInt *CI = dyn_cast<ConstantInt>(C)) {
-    Type* Ty = CI->getType();
-    OS << '\'';
-    if (Ty == Type::getInt1Ty(C->getContext()))
-       OS << (CI->getZExtValue() ? '1' : '0');
-    else {
-      std::string FormatS =
-        "%0" + utostr_32(TD->getTypeStoreSize(Ty) * 2) + "llx";
-      OS << "0x" << format_object1<uint64_t>(FormatS.c_str(), CI->getZExtValue());
-    }
-    OS << '\'';
+    printConstant(OS, CI->getZExtValue(), CI->getType(), TD);
+    return;
+  }
+
+  if (isa<ConstantPointerNull>(C)) {
+    printConstant(OS, 0, C->getType(), TD);
     return;
   }
 
@@ -89,24 +99,6 @@ static void ExtractConstant(raw_ostream &OS, Constant *C, TargetData *TD) {
 
   llvm_unreachable("Unsupported constant type to bind to script engine!");
   OS << '0';
-}
-
-static void CreateInitializerInfo(raw_ostream &OS, GlobalVariable *GV,
-                                  TargetData *TD) {
-  if (!GV->hasInitializer()) {
-    OS << "nil";
-    return;
-  }
-
-  Constant *C = GV->getInitializer();
-  if (C->isNullValue()) {
-    OS << "nil";
-    return;
-  }
-
-  OS << "{ ";
-  ExtractConstant(OS, C, TD);
-  OS << "}";
 }
 
 bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
@@ -152,7 +144,26 @@ bool llvm::runScriptOnGlobalVariables(Module &M, TargetData *TD,
 
     // The initialer table: Initializer = { c0, c1, c2, ... }
     SS << "Initializer = ";
-    CreateInitializerInfo(SS, GV, TD);
+    if (!GV->hasInitializer())
+      SS << "nil";
+    else {
+      Constant *C = GV->getInitializer();
+
+      SS << "{ ";
+      if (C->isNullValue()) {
+        Constant *Null = Constant::getNullValue(ElemTy);
+
+        ExtractConstant(SS, Null, TD);
+        for (unsigned i = 1; i < NumElem; ++i) {
+          SS << ", ";
+          ExtractConstant(SS, Null, TD);
+        }
+      } else
+        ExtractConstant(SS, C, TD);
+
+      SS << "}";
+    }
+
     SS << '}';
 
     SS.flush();
