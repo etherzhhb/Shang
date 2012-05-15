@@ -592,9 +592,9 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     unsigned AddrWidth = std::max(Log2_32_Ceil(NumElem), 1u);
     unsigned DataWidth = Info.ElemSizeInBytes * 8;
     std::string InitFilePath = "";
-    if (Info.Initializer &&
-        !cast<GlobalVariable>(Info.Initializer)->getInitializer()->isNullValue())
-      InitFilePath = VBEMangle(Info.Initializer->getName()) + "_init.txt";
+    if (const GlobalVariable *Initializer =
+        dyn_cast_or_null<GlobalVariable>(Info.Initializer))
+      InitFilePath = VBEMangle(Initializer->getName()) + "_init.txt";
 
     // Create the enable signal for bram.
     VM->addRegister(VFUBRAM::getEnableName(BramNum), 1);
@@ -605,6 +605,9 @@ void VerilogASTBuilder::emitAllocatedFUs() {
                                     DataWidth);
     // Used in template.
     BRAMOut->Pin();
+    S << "// Addrspace: " << I->first;
+    if (Info.Initializer) S << *Info.Initializer;
+    S << '\n';
     indexVASTValue(BramNum, BRAMOut);
     // FIXME: Get the file name from the initializer name.
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
