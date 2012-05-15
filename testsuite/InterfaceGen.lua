@@ -135,8 +135,8 @@ reg               rden;
 //-=======================================================================================
 //-Active signal start the read process
 //-=======================================================================================
-wire  	 					readactive = mem0en&&(mem0cmd==0)? 1:0;
-wire		[7:0]			mem0be_wire = readactive?	(mem0be << mem0addr[2:0]):8'b1111_1111; 
+wire  	 					readactive = mem0en && (mem0cmd==0)? 1:0;
+wire		[7:0]			mem0be_wire = mem0be << mem0addr[2:0];
 wire    [63:0]    q;
 //-=======================================================================================
 assign          q[7:0] = (rden&&byen2R[0])? q_i[7:0]:0;
@@ -148,15 +148,15 @@ assign          q[47:40] = (rden&&byen2R[5])? q_i[47:40]:0;
 assign          q[55:48] = (rden&&byen2R[6])? q_i[55:48]:0;
 assign          q[63:56] = (rden&&byen2R[7])? q_i[63:56]:0;            
 //-=======================================================================================
-assign          mem0in = readrdy? (q >> {addr2R_read[2:0],3'b0}):0;
+assign          mem0in = q >> {addr2R_read[2:0],3'b0};
  
-always@(posedge clk,negedge rstN)begin
+always@(posedge clk, negedge rstN)begin
 	if(!rstN)begin
 		state <= S0;
 		addr2R_read <= 0;
 		readrdy <= 0;
 		readbyte_en <= 8'b1111_1111;
-    rden <= 0;
+		rden <= 0;
 	end else begin
 		case(state)
 			S0 :begin//Get the read or write data when mem0en turns to high
@@ -164,18 +164,19 @@ always@(posedge clk,negedge rstN)begin
 					addr2R_read <= mem0addr;
 					state <= S_wait;
 					readbyte_en <= mem0be_wire;
-          rden <= 1;
+					rden <= 1;
 				end else begin
 					addr2R_read <= 0;
 					state <= S0;
 					readbyte_en <= 8'b1111_1111;
 					readrdy <= 0;
-          rden <= 0;
+					rden <= 0;
 				end
 			end
-			S_wait :begin 
-			  state <= S0;//Write process is less a cycle to Read process
-			  readrdy <= 1;
+			S_wait :begin
+
+				state <= S0;//Write process is less a cycle to Read process
+				readrdy <= 1;
 			end
 			default : state <= S0;			
 		endcase
@@ -188,7 +189,7 @@ end
 //-Active the wren signal 
 //-=======================================================================================
 wire 						writeactive = (mem0en&&mem0cmd)? 1:0;
-wire            writerdy = writeactive? 1:0;
+wire            writerdy = writeactive ? 1 : 0;
 wire	 [7:0]		writebyte_en = writeactive? (mem0be<<mem0addr[2:0]):8'b1111_1111;
 assign     		  data2R = writeactive? (mem0out<<{mem0addr[2:0],3'b0}):0;
 assign          wren = writeactive? 1:0;

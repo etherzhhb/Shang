@@ -88,7 +88,7 @@ bool VerilogASTWriter::doInitialization(Module &Mod) {
   std::string GlobalScript = getStrValueFromEngine(GlobalScriptPath);
   if (!runScriptOnGlobalVariables(Mod, TD, GlobalScript, Err))
     report_fatal_error("VerilogASTWriter: Cannot run globalvariable script:\n"
-    + Err.getMessage());
+                       + Err.getMessage());
 
   const char *GlobalCodePath[] = { "RTLGlobalCode" };
   std::string GlobalCode = getStrValueFromEngine(GlobalCodePath);

@@ -260,7 +260,9 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
 
   DEBUG(
   if (SlotNum != 0)
-    CtrlS << "$display(\"" << getName() << " in " << Mod.getName()
+    CtrlS << "$display(\"" << getName() << " in " << Mod.getName() << " BB#"
+          << getParentBB()->getNumber() << ' '
+          << getParentBB()->getBasicBlock()->getName()
           << " ready at %d\", $time());\n";
   );
 
