@@ -40,7 +40,7 @@ SoftwareIROutput = [[@MAIN_SW_LL@]]
 IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
 CounterFile = [[@CycleCounter@]]
-IcDelayTmp = [[@IcDelayTotal@]]
+CycleCounterTB = [[@CycleCounterTB@]]
 BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
 
 TESTBINARYFLOD = [[@TEST_BINARY_ROOT@]]
@@ -69,24 +69,18 @@ if "@SYNTHESIS_DUT@" == "ON" then
 
 Misc.DatapathScript = [=[
 local SlackFile = assert(io.open ([[@MAIN_SDC_SRC@]], "a+"))
-local DelayTclFile = assert(io.open (ICDELAYTCL, "a+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=RunOnDatapath, output=SlackFile}
-local _, message = preprocess {input=IcdelayTclGen, output=DelayTclFile}
 if message ~= nil then print(message) end
 SlackFile:close()
-DelayTclFile:close()
 ]=]
 
 Misc.TimingConstraintsHeaderScript = [=[
 local SlackFile = assert(io.open ([[@MAIN_SDC_SRC@]], "w"))
-local DelayTclFile = assert(io.open (ICDELAYTCL, "w"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=SDCHeader, output=SlackFile}
-local _, message = preprocess {input=IcdelayTclHeader, output=DelayTclFile}
 if message ~= nil then print(message) end
 SlackFile:close()
-DelayTclFile:close()
 ]=]
 
 SynAttr.ParallelCaseAttr = '/* parallel_case */'

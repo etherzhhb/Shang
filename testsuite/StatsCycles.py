@@ -54,8 +54,5 @@ total_wait = sum(all_waits)
 sheet1.write(2,ColNumber,total_wait)
 total_wait_ratio = float(total_wait) / float(total_sum)
 sheet1.write(3,ColNumber,total_wait_ratio)
-if  total_wait == 12:
-  print("Test result { total_cycles: %d}" %(total_sum))
-else:
-  print("Test result { total_cycles: %d total_wait: %d total_wait_ratio: %f }" %(total_sum,total_wait,total_wait_ratio))
-book.save(OutFile)
+print("Test result { total_cycles: %d total_wait: %d total_wait_ratio: %f }" %(total_sum,total_wait,total_wait_ratio))
+book.save(OutFile)	
