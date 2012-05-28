@@ -292,6 +292,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitBr(MachineInstr *MI, VASTSlot *CurSlot, VASTValueVecTy &Cnds,
               MachineBasicBlock *CurBB, bool Pipelined);
   void emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
+  void emitInvert(MachineInstr *MI);
 
   template<typename FnTy>
   void emitBinaryOp(MachineInstr *MI, FnTy F);
@@ -975,10 +976,10 @@ void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
-  VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
-  VM->assign(W.get(),
+  VM->assign(W,
              VM->buildExpr(VASTExpr::dpAdd, getAsOperand(MI->getOperand(1)),
                            getAsOperand(MI->getOperand(2)),
                            getAsOperand(MI->getOperand(3)),
@@ -1233,9 +1234,9 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
 
 template<typename FnTy>
 void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
-  VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
-  VM->assign(W.get(), F(getAsOperand(MI->getOperand(1)),
+  VM->assign(W, F(getAsOperand(MI->getOperand(1)),
                            getAsOperand(MI->getOperand(2)),
                            W->getBitWidth(), VM));
 }
@@ -1289,7 +1290,7 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
       emitBinaryOp(MI, VASTModule::buildOr);
       break;
 
-    case VTM::VOpNot:       emitUnaryOp(MI, VASTExpr::dpNot);   break;
+    case VTM::VOpNot:       emitInvert(MI);                     break;
     case VTM::VOpROr:       emitUnaryOp(MI, VASTExpr::dpROr);   break;
     case VTM::VOpRAnd:      emitUnaryOp(MI, VASTExpr::dpRAnd);  break;
     case VTM::VOpRXor:      emitUnaryOp(MI, VASTExpr::dpRXor);  break;
@@ -1301,27 +1302,34 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
   return I;
 }
 
-void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
-  VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
+void VerilogASTBuilder::emitInvert(MachineInstr *MI) {
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
-  VM->assign(W.get(), VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
+  VM->assign(W, VM->buildNotExpr(getAsOperand(MI->getOperand(1)))) ;
+}
+
+void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
+  if (W->getAssigningValue()) return;
+
+  VM->assign(W, VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
                               W->getBitWidth())) ;
 }
 
 void VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
-  VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
   VASTValPtr Ops[] = { createCnd(MI->getOperand(1)),
                        getAsOperand(MI->getOperand(2)),
                        getAsOperand(MI->getOperand(3)) };
 
-  VM->assign(W.get(), VM->buildExpr(VASTExpr::dpSel, Ops, W->getBitWidth()));
+  VM->assign(W, VM->buildExpr(VASTExpr::dpSel, Ops, W->getBitWidth()));
 }
 
 void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
-  VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
   unsigned SizeInBits = W->getBitWidth();
@@ -1347,8 +1355,7 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
       case '-': /*Dont care*/ break;
       case '1': ProductOps.push_back(Operands[i]); break;
       case '0':
-        ProductOps.push_back(VM->buildExpr(VASTExpr::dpNot, Operands[i],
-                                           SizeInBits));
+        ProductOps.push_back(VM->buildNotExpr(Operands[i]));
         break;
       }
     }
@@ -1374,15 +1381,15 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   // Or the products together to build the SOP (Sum of Product).
   VASTValPtr SOP = VM->buildOrExpr(SumOps, SizeInBits);
 
-  if (isComplement) SOP = VM->buildExpr(VASTExpr::dpNot, SOP, SizeInBits);
+  if (isComplement) SOP = VM->buildNotExpr(SOP);
 
   // Build the sum;
-  VM->assign(W.get(), SOP, VASTWire::LUT);
+  VM->assign(W, SOP, VASTWire::LUT);
   return;
 }
 
 void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
-  VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
+  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
   // Get the range of the bit slice, Note that the
@@ -1397,7 +1404,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   // Pass RHS without getting inline operand, because for bitslice, only
   // inlining the assign expression is allowed, which already handled in the
   // getOrCreateBitSlice.
-  VM->assign(W.get(), VM->buildBitSliceExpr(RHS, UB, LB));
+  VM->assign(W, VM->buildBitSliceExpr(RHS, UB, LB));
 }
 
 
