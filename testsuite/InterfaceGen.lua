@@ -314,8 +314,9 @@ DUT_TOP i1 (
   .start(start),
 	.LED7(LED7)
 );
-  integer wfile,wferror;
-  initial wfile = $('$')fopen("$(CycleCounterTB)");
+  integer wfile,wferror,wtmpfile;
+  initial wfile = $('$')fopen("$(CounterFile)");
+  initial wtmpfile = $('$')fopen("$(BenchmarkCycles)","a");
 
 initial
 begin
@@ -332,7 +333,8 @@ reg [31:0] cnt = 0;
 always@(posedge clk)begin
   if(startcnt)begin
     if(i1.i1.fin)begin
-      $('$')fwrite (wfile,"cycle is %0d\n",cnt);
+      $('$')fwrite (wfile,"$(RTLModuleName) hardware run cycles %0d\n",cnt);
+      $('$')fwrite (wtmpfile,",\n{\"name\":\"$(RTLModuleName)\", \"total\": %0d, \"wait\": 1}",cnt);
       if(i1.i1.return_value == 0)begin
         $('$')display ("The result is correct~");
       end else begin
@@ -342,6 +344,7 @@ always@(posedge clk)begin
         $('$')fclose(wferror);
       end
       $('$')fclose(wfile);
+      $('$')fclose(wtmpfile);
       $('#')1000 $('$')stop;
     end else begin
       cnt <= cnt + 1;
@@ -385,60 +388,4 @@ local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=ModelsimScGen, output=ModelDoFile}
 if message ~= nil then print(message) end
 ModelDoFile:close()
-]=]}
-
-IcdelayTclGen = [=[
-set CycleseTmpFile "$(BenchmarkCycles)"
-set ModuleName "$(RTLModuleName)"
-set fileid [open $CycleseTmpFile a+]
-set tmpslack 0
-
-foreach_in_collection path [get_timing_paths -setup  -npath 8 -detail path_only] {
-  set pathSlack [get_path_info $path -slack]
-  if {$pathSlack < $tmpslack} {
-		set tmpslack $pathSlack
-		set icdelay 0
-    foreach_in_collection pt [ get_path_info $path -arrival_points ] {
-      set total     [get_point_info $pt -total]
-      set incr      [get_point_info $pt -incr]
-      set type      [get_point_info $pt -type]
-			if { $type == "ic" } {
-				set icdelay [expr $icdelay + $incr]
-			}
-    }
-  }
-}
-
-if {$tmpslack < 0} {
-  set rate [expr $icdelay/$total]
-  puts $fileid "\{\"name\":"
-  puts $fileid $ModuleName
-  puts $fileid ","
-  puts $fileid "\"netdelay\":"
-  puts $fileid $icdelay
-  puts $fileid ","
-  puts $fileid "\"totaldelay\": "
-  puts $fileid $total  
-  puts $fileid ","
-  puts $fileid "\"net_total_rate\": "
-  puts $fileid $rate
-  puts $fileid "\}"
-  puts $fileid ","
-} else {
-  puts $fileid "There is no fail path"
-}
-
-close $fileid
-
-]=]
-
-Passes.IcdelayTclGen = { FunctionScript = [=[
-if Functions[FuncInfo.Name] ~= nil then
-end
-]=], GlobalScript =[=[
-local DelayTclFile = assert(io.open (ICDELAYTCL, "a+"))
-local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=IcdelayTclGen, output=DelayTclFile}
-if message ~= nil then print(message) end
-DelayTclFile:close()
 ]=]}

@@ -113,6 +113,8 @@ add_custom_target(benchmark_report
 add_dependencies(benchmark_report benchmark_test)
 
 add_custom_target(benchmark_synthesis_main
+          COMMAND ${StatsCyclesPy} ${BenchmarkCyclesTmp} ${BenchmarkCyclesXls}
+          COMMAND ${StatsSynthesis} ${BenchmarkSummaryTmp} ${BenchmarkSummaryXls}
           COMMENT "Synthesising main module and Run on FPGA board")
 
 add_custom_target(test_verilogbackend
@@ -314,7 +316,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_V__ALL         "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL__ALL.a")
   set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")
-  set(CycleCounterTB        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}_TB.txt")
+  set(IcDelayTotal        "${VTS_BINARY_ROOT}/${MAIN_RTL_ENTITY}_total.txt")
 
   configure_file (
     ${config_file}
@@ -353,7 +355,7 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
     "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl"
     )
 
-  add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounterTB}
+  add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
     COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
     COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
