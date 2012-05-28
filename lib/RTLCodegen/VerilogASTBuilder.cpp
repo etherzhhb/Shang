@@ -312,7 +312,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VASTValPtr getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true);
 
   template <class Ty>
-  PtrInvPair<Ty> getAsLValue(MachineOperand &Op) {
+  Ty *getAsLValue(MachineOperand &Op) {
     assert(Op.isReg() && "Bad MO type for LValue!");
     if (VASTValPtr V = lookupSignal(Op.getReg()))
       return dyn_cast<Ty>(V);
@@ -964,14 +964,13 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
                                   VASTValueVecTy &Cnds) {
-  VASTWirePtr Result = getAsLValue<VASTWire>(MI->getOperand(0));
+  VASTWire *Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
-  VASTRegister *R
-    = cast<VASTRegister>((*Result->getExpr()->getOperand(0)));
+  VASTRegister *R = cast<VASTRegister>(Result->getExpr()->getOperand(0));
   VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds);
-  R = cast<VASTRegister>((*Result->getExpr()->getOperand(1)));
+  R = cast<VASTRegister>(Result->getExpr()->getOperand(1));
   VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
-  R = cast<VASTRegister>((*Result->getExpr()->getOperand(2)));
+  R = cast<VASTRegister>(Result->getExpr()->getOperand(2));
   VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds);
 }
 
@@ -979,7 +978,7 @@ void VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
   VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
-  VM->assign(W.getVal(),
+  VM->assign(W.get(),
              VM->buildExpr(VASTExpr::dpAdd, getAsOperand(MI->getOperand(1)),
                            getAsOperand(MI->getOperand(2)),
                            getAsOperand(MI->getOperand(3)),
@@ -998,8 +997,7 @@ void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
                                        VASTValueVecTy &Cnds) {
   VASTWirePtr Result = getAsLValue<VASTWire>(MI->getOperand(0));
   assert(Result && "FU result port replaced?");
-  VASTRegister *R =
-    cast<VASTRegister>(Result->getExpr()->getOperand(0));
+  VASTRegister *R = cast<VASTRegister>(Result->getExpr()->getOperand(0));
   VM->addAssignment(R, getAsOperand(MI->getOperand(1)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getExpr()->getOperand(1));
   VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
@@ -1011,7 +1009,7 @@ void VerilogASTBuilder::emitOpCopy(MachineInstr *MI, VASTSlot *Slot,
   // Ignore the identical copy.
   if (Src.isReg() && Dst.getReg() == Src.getReg()) return;
 
-  VASTRegister *R = getAsLValue<VASTRegister>(Dst).getVal();
+  VASTRegister *R = getAsLValue<VASTRegister>(Dst);
   VM->addAssignment(R, getAsOperand(Src), Slot, Cnds);
 }
 
@@ -1045,12 +1043,12 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
   }
 
   VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
-  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort.getVal()), Pred);
+  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort.get()), Pred);
 }
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
                                          VASTValueVecTy &Cnds) {
-  VASTRegister *R = getAsLValue<VASTRegister>(MI->getOperand(0)).getVal();
+  VASTRegister *R = getAsLValue<VASTRegister>(MI->getOperand(0));
   // Dirty Hack: Do not trust the bitwidth information of the operand
   // representing the return port.
   VM->addAssignment(R, lookupSignal(MI->getOperand(1).getReg()), Slot, Cnds);
@@ -1069,7 +1067,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValPtr StartSignal = VM->getSymbol(StartPortName);
-  VM->addSlotEnable(Slot, cast<VASTRegister>(StartSignal.getVal()), Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(StartSignal.get()), Pred);
 
   const Function *FN = M->getFunction(CalleeName);
   if (FN && !FN->isDeclaration()) {
@@ -1195,7 +1193,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValPtr MemEn = VM->getSymbol(EnableName);
   VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
-  VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn.getVal()), Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn.get()), Pred);
 }
 
 void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
@@ -1237,7 +1235,7 @@ template<typename FnTy>
 void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
   VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
-  VM->assign(W.getVal(), F(getAsOperand(MI->getOperand(1)),
+  VM->assign(W.get(), F(getAsOperand(MI->getOperand(1)),
                            getAsOperand(MI->getOperand(2)),
                            W->getBitWidth(), VM));
 }
@@ -1307,7 +1305,7 @@ void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
   VASTWirePtr W = getAsLValue<VASTWire>(MI->getOperand(0));
   if (W->getAssigningValue()) return;
 
-  VM->assign(W.getVal(), VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
+  VM->assign(W.get(), VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
                               W->getBitWidth())) ;
 }
 
@@ -1319,7 +1317,7 @@ void VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
                        getAsOperand(MI->getOperand(2)),
                        getAsOperand(MI->getOperand(3)) };
 
-  VM->assign(W.getVal(), VM->buildExpr(VASTExpr::dpSel, Ops, W->getBitWidth()));
+  VM->assign(W.get(), VM->buildExpr(VASTExpr::dpSel, Ops, W->getBitWidth()));
 }
 
 void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
@@ -1379,7 +1377,7 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   if (isComplement) SOP = VM->buildExpr(VASTExpr::dpNot, SOP, SizeInBits);
 
   // Build the sum;
-  VM->assign(W.getVal(), SOP, VASTWire::LUT);
+  VM->assign(W.get(), SOP, VASTWire::LUT);
   return;
 }
 
@@ -1399,7 +1397,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   // Pass RHS without getting inline operand, because for bitslice, only
   // inlining the assign expression is allowed, which already handled in the
   // getOrCreateBitSlice.
-  VM->assign(W.getVal(), VM->buildBitSliceExpr(RHS, UB, LB));
+  VM->assign(W.get(), VM->buildBitSliceExpr(RHS, UB, LB));
 }
 
 

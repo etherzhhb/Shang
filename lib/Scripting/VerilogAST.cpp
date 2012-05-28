@@ -82,7 +82,10 @@ static raw_ostream &printAssign(raw_ostream &OS, const VASTWire *W) {
   return OS;
 }
 
-void VASTNode::dump() const { print(dbgs()); }
+void VASTNode::dump() const {
+  print(dbgs());
+  dbgs() << '\n';
+}
 
 //----------------------------------------------------------------------------//
 // Classes in Verilog AST.
@@ -91,13 +94,13 @@ VASTUse::VASTUse(VASTValPtr v, VASTValue *u) : V(v), User(u) {
 }
 
 void VASTUse::removeFromList() {
-  operator*()->removeUseFromList(this);
+  get()->removeUseFromList(this);
 }
 
 void VASTUse::setUser(VASTValue *User) {
   assert(!ilist_traits<VASTUse>::inAnyList(this)
          && "Not unlink from old list!");
-  VASTValue *Use = operator*().getVal();
+  VASTValue *Use = get().get();
   assert(Use != User && "Unexpected cycle!");
   this->User = User;
   Use->addUseToList(this);
@@ -108,11 +111,11 @@ bool VASTUse::operator==(const VASTValPtr RHS) const {
 }
 
 void VASTUse::PinUser() const {
-  if (VASTSignal *S = dyn_cast<VASTSignal>(operator*().getVal()))
+  if (VASTSignal *S = dyn_cast<VASTSignal>(get().get()))
     S->Pin();
 }
 
-unsigned VASTUse::getBitWidth() const{ return operator*()->getBitWidth(); }
+unsigned VASTUse::getBitWidth() const{ return get()->getBitWidth(); }
 
 VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
   : VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0),
@@ -390,10 +393,10 @@ VASTRegister::VASTRegister(const char *Name, unsigned BitWidth,
 }
 
 void VASTRegister::addAssignment(VASTUse *Src, VASTWire *AssignCnd) {
-  bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
-  assert(inserted &&  "Assignment condition conflict detected!");
   assert(AssignCnd->getWireType() == VASTWire::AssignCond
          && "Expect wire for assign condition!");
+  bool inserted = Assigns.insert(std::make_pair(AssignCnd, Src)).second;
+  assert(inserted &&  "Assignment condition conflict detected!");
   Src->setUser(this);
 }
 
@@ -419,14 +422,14 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
   if (Slot) {
     VASTValPtr Active = Slot->getActive();
     Active->printAsOperand(OS);
-    if (VASTSignal *S = dyn_cast<VASTSignal>(Active.getVal())) S->Pin();
+    if (VASTSignal *S = dyn_cast<VASTSignal>(Active.get())) S->Pin();
   } else      OS << "1'b1";
 
   typedef AndCndVec::const_iterator and_it;
   for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
     OS << " & ";
     (*CI)->printAsOperand(OS);
-    if (VASTSignal *S = dyn_cast<VASTSignal>(CI->getVal())) S->Pin();
+    if (VASTSignal *S = dyn_cast<VASTSignal>(CI->get())) S->Pin();
   }
 
   OS << ')';
@@ -481,6 +484,11 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   }
 
   if (UseSwitch) OS.switch_end();
+}
+
+void VASTRegister::dumpAssignment() const {
+  vlang_raw_ostream S(dbgs());
+  printAssignment(S);
 }
 
 VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
@@ -578,7 +586,7 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
     VASTWire *W = *I;
 
     // Do not print the LUT inline.
-    if (VASTExpr *E = W->getExpr().getVal()) {
+    if (VASTExpr *E = W->getExpr().get()) {
       if (W->getWireType() == VASTWire::LUT || W->num_uses() > InlineThreshold){
         //assert(!E->use_empty() && "E is used by W atleast!");
         // Don't print the expression inline, print the lhs wire instead.
@@ -615,12 +623,12 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
 VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
   // Try to fold the not expression.
   assert(!U.isInvert() && "U should not be inverted!!");
-  if (VASTExprPtr E = dyn_cast<VASTExpr>(U.getVal())) {
+  if (VASTExprPtr E = dyn_cast<VASTExpr>(U.get())) {
     if (E->getOpcode() == VASTExpr::dpNot) {
       // We should also propagate the bit slice information.
       return buildBitSliceExpr(E->getOperand(0), E->UB, E->LB);
     }
-  } else if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.getVal()))
+  } else if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
     return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
 
   return buildExpr(VASTExpr::dpNot, U, U->getBitWidth());
@@ -639,7 +647,7 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   else if (VASTWire *W = dyn_cast<VASTWire>(U))
     // DirtyHack: the Invert information will be lost by this way. Allocate a
     // new VASTExprPtr?
-    AssignExpr = W->getExpr().getVal();
+    AssignExpr = W->getExpr().get();
 
   if (AssignExpr) {
     switch(AssignExpr->getOpcode()) {
@@ -659,7 +667,7 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
     }
   }
 
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.getVal()))
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
     return getOrCreateImmediate(getBitSlice64(Imm->getValue(), UB, LB), UB - LB);
 
   assert(UB <= OperandSize && UB > LB && "Bad bit range!");
@@ -675,13 +683,13 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
 
 VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                        unsigned BitWidth) {
-  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0].getVal());
+  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0].get());
   SmallVector<VASTValPtr, 8> NewOps;
   NewOps.push_back(Ops[0]);
 
   // Merge the constant sequence.
   for (unsigned i = 1; i < Ops.size(); ++i) {
-    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i].getVal());
+    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i].get());
 
     if (!CurImm) {
       LastImm = 0;
@@ -723,7 +731,7 @@ VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
   SmallVector<VASTValPtr, 8> NewOps;
   typedef const VASTUse *op_iterator;
   bool isCommutative = true;
-  unsigned OperandBitWidth = Ops[0].getVal()->getBitWidth();
+  unsigned OperandBitWidth = Ops[0].get()->getBitWidth();
 
   for (unsigned i = 0; i < Ops.size(); ++i) {
     // Try to flatten the expression tree.
@@ -838,11 +846,12 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
   FoldingSetNodeID ID;
 
   // Profile the elements of VASTExpr.
+  ID.AddBoolean(IsInvert);
   ID.AddInteger(Opc);
   ID.AddInteger(UB);
   ID.AddInteger(LB);
   for (unsigned i = 0; i < Ops.size(); ++i) {
-    ID.AddPointer(Ops[i].getVal());
+    ID.AddPointer(Ops[i].get());
     ID.AddBoolean(Ops[i].isInvert());
   }
   void *IP = 0;
@@ -857,14 +866,11 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
                                  ID.Intern(Allocator));
   UniqueExprs.InsertNode(E, IP);
 
-  void *VPAllocate = Allocator.Allocate<VASTValPtr>();
-  VASTValPtr *VP = new (VPAllocate) VASTValPtr(E, IsInvert);
-
   // Initialize the use list.
   for (unsigned i = 0; i < Ops.size(); ++i)
     (void) new (E->ops() + i) VASTUse(Ops[i], E);
 
-  return *VP;
+  return VASTValPtr(E, IsInvert);
 }
 
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
@@ -1114,7 +1120,7 @@ bool VASTValue::replaceAllUseWith(VASTValue *To) {
     removeUseFromList(U);
     // Move to new list.
     U->set(To);
-    U->setUser(User.getVal());
+    U->setUser(User.get());
   }
 
   return use_empty();
@@ -1287,13 +1293,13 @@ static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 }
 
 static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
-  OS << '{' << cast<VASTImmediate>((*Ops[1]).getVal())->getValue() << '{';
+  OS << '{' << cast<VASTImmediate>((Ops[1]).get())->getValue() << '{';
   Ops[0]->printAsOperand(OS);
   OS << "}}";
 }
 
 static void printCombMux(raw_ostream &OS, const VASTWire *W) {
-  VASTExpr *E = W->getExpr().getVal();
+  VASTExpr *E = W->getExpr().get();
   unsigned NumOperands = E->NumOps;
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
 

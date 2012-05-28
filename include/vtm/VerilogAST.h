@@ -36,6 +36,7 @@ namespace llvm {
 class MachineBasicBlock;
 class MachineOperand;
 class VASTModule;
+template<typename T> struct PtrInvPair;
 class VASTValue;
 class VASTSlot;
 class VASTSignal;
@@ -84,76 +85,88 @@ public:
 
 template<typename T>
 struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
+  typedef PointerIntPair<T*, 1, bool> Base;
   PtrInvPair(T *V, bool IsInvert = false)
     : PointerIntPair<T*, 1, bool>(V, IsInvert) {}
-  template<typename TP>
-  PtrInvPair(const PtrInvPair<TP>& RHS)
-    : PointerIntPair<T*, 1, bool>(RHS.getVal(),
-                                  RHS.isInvert()) {}
-  template<typename TP>
-  PtrInvPair<T> &operator=(const PtrInvPair<TP> &RHS) {
-    setPointer(RHS.getVal());
+
+  template<typename T1>
+  PtrInvPair(const PtrInvPair<T1>& RHS)
+    : PointerIntPair<T*, 1, bool>(RHS.get(), RHS.isInvert()) {}
+
+  template<typename T1>
+  PtrInvPair<T> &operator=(const PtrInvPair<T1> &RHS) {
+    setPointer(RHS.get());
     setInt(RHS.isInvert());
     return *this;
   }
 
-  operator bool() const {
-    return getVal() != 0;
+  operator void*() const {
+    return this->getOpaqueValue();
   }
 
-  T *getVal() const { return this->getPointer(); }
+  T *get() const { return this->getPointer(); }
 
   bool isInvert() const { return this->getInt(); }
 
-  T *operator->() { return this->getVal(); }
-  const T *operator->() const{ return this->getVal(); }
+  T *operator->() { return this->get(); }
+  const T *operator->() const{ return this->get(); }
 
-  // They are equal when their Opaque Value are equal, which contain the pointer
-  // and Int information.
-  template<typename TP>
-  bool operator==(const TP *RHS) const {  return this->getOpaqueValue() == RHS; }
-  template<typename TP>
-  bool operator==(const PtrInvPair<TP> RHS) const {
-    return this->getOpaqueValue() == RHS.getOpaqueValue() ;
-  }
-  template<typename TP>
-  bool operator!=(const TP *RHS) const { return !operator==(RHS); }
-  template<typename TP>
-  bool operator!=(const PtrInvPair<TP> RHS) const { return !operator==(RHS); }
-  template<typename TP>
-  bool operator<(const TP *RHS) const { return this->getOpaqueValue() < RHS; }
-  template<typename TP>
-  bool operator<(const PtrInvPair<TP> RHS) const {
-    return this->getOpaqueValue() < RHS.getOpaqueValue() ;
-  }
-  template<typename TP>
-  bool operator>(const TP *RHS) const { return this->getOpaqueValue() > RHS; }
-  template<typename TP>
-  bool operator>(const PtrInvPair<TP> RHS) const {
-    return this->getOpaqueValue() > RHS.getOpaqueValue() ;
-  }
+  // PtrInvPairs are equal when their Opaque Value are equal, which contain the
+  // pointer and Int information.
+  template<typename T1>
+  bool operator==(const T1 *RHS) const {  return this->getOpaqueValue() == RHS; }
+  template<typename T1>
+  bool operator!=(const T1 *RHS) const { return !operator==(RHS); }
+  template<typename T1>
+  bool operator<(const T1 *RHS) const { return this->getOpaqueValue() < RHS; }
+  template<typename T1>
+  bool operator>(const T1 *RHS) const { return this->getOpaqueValue() > RHS; }
   PtrInvPair<T> getAsInlineOperand() const {
     return *this;
   }
 };
 
-// simplify_type - Allow clients to treat PtrInvPairs just like VASTValues when
-// using casting operators.
-template<typename T> struct simplify_type< const PtrInvPair<T> > {
-  typedef T *SimpleType;
-  static SimpleType getSimplifiedValue(const PtrInvPair<T> &Val) {
-    assert(!Val.isInvert() &&
-           "Can not cast PtrInvPair with invert information!");
-    return Val.getVal();
+// Casting PtrInvPair.
+template<class To, class From>
+struct cast_retty_impl<PtrInvPair<To>, PtrInvPair<From> >{
+  typedef PtrInvPair<To> ret_type;
+};
+
+template<class ToTy, class FromTy> struct cast_convert_val<PtrInvPair<ToTy>,
+                                                           PtrInvPair<FromTy>,
+                                                           PtrInvPair<FromTy> >{
+  typedef PtrInvPair<ToTy> To;
+  typedef PtrInvPair<FromTy> From;
+  static typename cast_retty<To, From>::ret_type doit(const From &Val) {
+    return To(cast_convert_val<ToTy, FromTy*, FromTy*>::doit(Val.get()),
+                                                              Val.isInvert());
   }
 };
 
-template<typename T> struct simplify_type< PtrInvPair<T> > {
-  typedef T *SimpleType;
-  static SimpleType getSimplifiedValue(const PtrInvPair<T> &Val) {
-    assert(!Val.isInvert() &&
-           "Can not cast PtrInvPair with invert information!");
-    return Val.getVal();
+template <typename To, typename From>
+struct isa_impl<PtrInvPair<To>, PtrInvPair<From> > {
+  static inline bool doit(const PtrInvPair<From> &Val) {
+    return To::classof(Val.get());
+  }
+};
+
+template<class To, class From>
+struct cast_retty_impl<To, PtrInvPair<From> > : public cast_retty_impl<To, From*>
+{};
+
+template<class To, class FromTy> struct cast_convert_val<To,
+                                                         PtrInvPair<FromTy>,
+                                                         PtrInvPair<FromTy> > {
+  typedef PtrInvPair<FromTy> From;
+  static typename cast_retty<To, From>::ret_type doit(const From &Val) {
+    return cast_convert_val<To, FromTy*, FromTy*>::doit(Val.get());
+  }
+};
+
+template <typename To, typename From>
+struct isa_impl<To, PtrInvPair<From> > {
+  static inline bool doit(const PtrInvPair<From> &Val) {
+    return !Val.isInvert() && To::classof(Val.get());
   }
 };
 
@@ -207,14 +220,14 @@ public:
   }
 
   // Return the underlying VASTValue.
-  VASTValPtr operator*() const {
+  VASTValPtr get() const {
     assert(!isInvalid() && "Not a valid Use!");
     return V;
   }
 
-  operator VASTValPtr() const { return operator*(); }
+  operator VASTValPtr() const { return get(); }
 
-  VASTValPtr operator->() const { return operator*(); }
+  VASTValPtr operator->() const { return get(); }
 
   VASTValPtr unwrap() const { return V; }
 
@@ -317,21 +330,28 @@ public:
 
   // Helper function.
   static std::string printBitRange(unsigned UB, unsigned LB, bool printOneBit);
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static inline bool classof(const VASTValue *A) { return true; }
+  static inline bool classof(const VASTNode *A) {
+    return A->getASTType() >= vastFirstValueType &&
+           A->getASTType() <= vastLastValueType;
+  }
 };
 
 // simplify_type - Allow clients to treat VASTRValue just like VASTValues when
 // using casting operators.
 template<> struct simplify_type<const VASTUse> {
-  typedef VASTValue *SimpleType;
+  typedef VASTValPtr SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return simplify_type<const VASTValPtr>::getSimplifiedValue(Val.unwrap());
+    return Val.unwrap();
   }
 };
 
 template<> struct simplify_type<VASTUse> {
-  typedef VASTValue *SimpleType;
+  typedef VASTValPtr SimpleType;
   static SimpleType getSimplifiedValue(const VASTUse &Val) {
-    return simplify_type<VASTValPtr>::getSimplifiedValue(Val.unwrap());
+    return Val.unwrap();
   }
 };
 
@@ -691,13 +711,13 @@ public:
   }
 
   VASTExprPtr getExpr() const {
-    return getAssigningValue()? dyn_cast<VASTExpr>(getAssigningValue()) : 0;
+    return getAssigningValue()? dyn_cast<VASTExprPtr>(getAssigningValue()) : 0;
   }
 
   VASTValPtr getAsInlineOperand() {
     if (VASTValPtr V = getAssigningValue()) {
       // Can the expression be printed inline?
-      if (VASTExprPtr E = dyn_cast<VASTExpr>(V)) {
+      if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
         if (E->isInlinable()) return E->getAsInlineOperand();
       } else // This is a simple assignment.
         return V;
@@ -731,8 +751,12 @@ public:
 
 struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {
   static unsigned getHashValue(const VASTWire *Val) {
-    return DenseMapInfo<VASTValue*>::getHashValue(Val ?
-      reinterpret_cast<VASTValue*>(Val->getAssigningValue().getOpaqueValue()) : 0);
+    if (Val == 0) return DenseMapInfo<void*>::getHashValue(0);
+
+    if (VASTValPtr Ptr = Val->getAssigningValue())
+      return DenseMapInfo<void*>::getHashValue(Ptr.getOpaqueValue());
+
+    return DenseMapInfo<void*>::getHashValue(Val);
   }
 
   static const PtrInvPair<const VASTValue> getAssigningValue(const VASTWire *W) {
@@ -827,8 +851,8 @@ public:
   const char *getName() const;
   // Getting the relative signals.
   VASTRegister *getRegister() const { return cast<VASTRegister>(SlotReg); }
-  VASTValue *getReady() const { return (*SlotReady).getVal(); }
-  VASTValue *getActive() const { return (*SlotActive).getVal(); }
+  VASTValue *getReady() const { return cast<VASTValue>(SlotReady); }
+  VASTValue *getActive() const { return cast<VASTValue>(SlotActive); }
 
   // TODO: Rename to addSuccSlot.
   bool hasNextSlot(VASTSlot *NextSlot) const;
@@ -967,6 +991,7 @@ public:
 
   void printAssignment(vlang_raw_ostream &OS) const;
   void printReset(raw_ostream &OS) const;
+  void dumpAssignment() const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTRegister *A) { return true; }
@@ -1381,7 +1406,7 @@ void DepthFirstTraverseDepTree(VASTValue *DepTree, VisitPathFunc VisitPath) {
     }
 
     // Depth first traverse the child of current node.
-    VASTValue *ChildNode = (**It).getVal();
+    VASTValue *ChildNode = (*It).get().get();
     ++ItWorkStack.back();
 
     // Had we visited this node? If the Use slots are same, the same subtree
