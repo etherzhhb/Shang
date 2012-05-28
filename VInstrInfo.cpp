@@ -1242,9 +1242,14 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     PerBitLatency = std::max(SrcMSBLatency / OperandWidth, VFUs::LutLatency);
 
   unsigned Opcode = SrcMI->getOpcode();
+  bool IsDatapath = VInstrInfo::isDatapath(Opcode);
+
+  // Always use worst latency when bit level chaining is disabled.
+  if (!EnableBLC) Opcode = VTM::INSTRUCTION_LIST_END;
+
   switch (Opcode) {
   default:
-    if (VInstrInfo::isDatapath(Opcode))
+    if (IsDatapath)
       accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
                                 PerBitLatency, getWorstLatency);
     else
