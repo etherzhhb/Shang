@@ -546,16 +546,6 @@ private:
 
   friend class VASTModule;
 
-  // Return true if the name is successfully set.
-  bool setLHSWireName(const char *name) {
-    if (Contents.Name) return false;
-    // Set the LHS wire name if not exist.
-    Contents.Name = name;
-    return true;
-  }
-
-  const char *getLHSWireName() const { return Contents.Name; }
-
   void printAsOperandInteral(raw_ostream &OS) const;
 
   void dropOperandsFromUseList() {
@@ -715,12 +705,14 @@ public:
   }
 
   VASTValPtr getAsInlineOperand() {
-    if (VASTValPtr V = getAssigningValue()) {
-      // Can the expression be printed inline?
-      if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
-        if (E->isInlinable()) return E->getAsInlineOperand();
-      } else // This is a simple assignment.
-        return V;
+    if (getWireType() != LUT) {
+      if (VASTValPtr V = getAssigningValue()) {
+        // Can the expression be printed inline?
+        if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
+          if (E->isInlinable()) return E->getAsInlineOperand();
+        } else // This is a simple assignment.
+          return V;
+      }
     }
 
     return this;

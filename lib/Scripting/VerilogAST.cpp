@@ -585,16 +585,6 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
        I != E; ++I) {
     VASTWire *W = *I;
 
-    // Do not print the LUT inline.
-    if (VASTExpr *E = W->getExpr().get()) {
-      if (W->getWireType() == VASTWire::LUT || W->num_uses() > InlineThreshold){
-        //assert(!E->use_empty() && "E is used by W atleast!");
-        // Don't print the expression inline, print the lhs wire instead.
-        // And pin W because it will be use as operand later.
-        if (E->setLHSWireName(W->getName())) W->Pin();
-      }
-    }
-
     // Print the declaration.
     if (W->use_empty() && !W->isPinned()) OS << "//";
     W->printDecl(OS);
@@ -1378,10 +1368,6 @@ void VASTWire::printAssignment(raw_ostream &OS) const {
 
 void VASTExpr::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
   assert(UB == this->UB && LB == this->LB && "Cannot print bitslice of Expr!");
-  if (const char *Name = getLHSWireName()) {
-    OS << Name << VASTValue::printBitRange(getBitWidth(), 0, false);
-    return;
-  }
 
   printAsOperandInteral(OS);
 }
