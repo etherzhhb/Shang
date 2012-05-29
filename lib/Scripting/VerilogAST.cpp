@@ -840,6 +840,13 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
                                   ArrayRef<VASTValPtr> Ops,
                                   unsigned UB, unsigned LB) {
   assert(!Ops.empty() && "Unexpected empty expression");
+  if (Ops.size() == 1) {
+    switch (Opc) {
+    default: break;
+    case VASTExpr::dpAnd: case VASTExpr::dpAdd: case VASTExpr::dpMul:
+      return Ops[0];
+    }
+  }
 
   FoldingSetNodeID ID;
 
