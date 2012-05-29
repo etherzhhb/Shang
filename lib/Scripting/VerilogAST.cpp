@@ -822,7 +822,44 @@ VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
 
 VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
                                     unsigned BitWidth) {
-  return flattenExprTree(VASTExpr::dpAnd, Ops, BitWidth);
+  SmallVector<VASTValPtr, 8> NewOps;
+  typedef const VASTUse *op_iterator;
+
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    // The expression is actually commutative only if all its operands have the
+    // same bitwidth.
+    assert(BitWidth == Ops[i]->getBitWidth() && "Bitwidth not match!");
+
+    // Try to flatten the expression tree.
+    if (VASTExpr *Expr = dyn_cast<VASTExpr>(Ops[i])) {
+      // Suppose Expr is flatten
+      if (Expr->getOpcode() == VASTExpr::dpAnd) {
+        for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I){
+          VASTValPtr V = I->getAsInlineOperand();
+          NewOps.push_back(V);
+        }
+        continue;
+      }
+    }
+
+    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i])) {
+      // X & 1 = X;
+      if (Imm->isAllOnes()) continue;
+
+      // X & 0 = 0;
+      if (Imm->isAllZeros()) return Imm;
+    }
+
+    NewOps.push_back(Ops[i]);
+  }
+
+  if (NewOps.empty())
+    return getOrCreateImmediate(getBitSlice64(~0ull, BitWidth), BitWidth);
+
+  // If new operand is added, we may have new optimization opportunity.
+  if (NewOps.size() != Ops.size()) return buildAndExpr(NewOps, BitWidth);
+  // The expression that can perform tree flatten should be commutative.
+  return getOrCreateCommutativeExpr(VASTExpr::dpAnd, NewOps, BitWidth);
 }
 
 VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS,
