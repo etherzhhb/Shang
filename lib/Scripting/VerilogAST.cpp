@@ -630,14 +630,18 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   if (UB == OperandSize && LB == 0) return U;
 
   // Try to fold the bitslice.
+  VASTValue *V = U.get();
+  bool isInverted = U.isInverted();
   VASTExpr *AssignExpr = 0;
-  assert(!U.isInverted() && "U should not be inverted!!");
-  if (VASTExpr *E = dyn_cast<VASTExpr>(U))
+  if (VASTExpr *E = dyn_cast<VASTExpr>(V))
     AssignExpr = E;
-  else if (VASTWire *W = dyn_cast<VASTWire>(U))
+  else if (VASTWire *W = dyn_cast<VASTWire>(V)) {
+    VASTExprPtr P = W->getExpr().invert(isInverted);
     // DirtyHack: the Invert information will be lost by this way. Allocate a
     // new VASTExprPtr?
-    AssignExpr = W->getExpr().get();
+    AssignExpr = P.get();
+    isInverted = P.isInverted();
+  }
 
   if (AssignExpr) {
     switch(AssignExpr->getOpcode()) {
@@ -651,14 +655,18 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
     case VASTExpr::dpBitCat: {
       VASTValPtr Hi = AssignExpr->getOperand(0),
                  Lo = AssignExpr->getOperand(1);
-      if (Lo->getBitWidth() == LB) return buildBitSliceExpr(Hi, UB - LB, 0);
+      if (Lo->getBitWidth() == LB)
+        return buildBitSliceExpr(Hi, UB - LB, 0).invert(isInverted);
       break;
     }
     }
   }
 
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
-    return getOrCreateImmediate(getBitSlice64(Imm->getValue(), UB, LB), UB - LB);
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get())) {
+    uint64_t imm = getBitSlice64(Imm->getValue(), UB, LB);
+    if (isInverted) imm = ~imm;
+    return getOrCreateImmediate(imm, UB - LB);
+  }
 
   assert(UB <= OperandSize && UB > LB && "Bad bit range!");
   // FIXME: We can name the expression when necessary.
@@ -668,7 +676,7 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
          && "Cannot get bitslice of value without name!");
 
   VASTValPtr Ops[] = { U };
-  return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
+  return createExpr(VASTExpr::dpAssign, Ops, UB, LB).invert(isInverted);
 }
 
 VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
