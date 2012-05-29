@@ -111,8 +111,7 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
     return Invert ? PtrInvPair<T>(get(), !isInverted()) : *this;
   }
 
-  T *operator->() { return this->get(); }
-  const T *operator->() const{ return this->get(); }
+  T *operator->() const { return this->get(); }
 
   // PtrInvPairs are equal when their Opaque Value are equal, which contain the
   // pointer and Int information.
@@ -124,15 +123,15 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
   bool operator<(const T1 *RHS) const { return this->getOpaqueValue() < RHS; }
   template<typename T1>
   bool operator>(const T1 *RHS) const { return this->getOpaqueValue() > RHS; }
+
+  // getAsInlineOperand, with the invert flag.
   PtrInvPair<VASTValue> getAsInlineOperand() const {
     // Get the underlying value.
     PtrInvPair<VASTValue> Ptr
       = cast<PtrInvPair<VASTValue> >(get()->getAsInlineOperand());
 
     // Need to invert the underlying value.
-    if (isInverted()) Ptr = Ptr.invert();
-
-    return Ptr;
+    return Ptr.invert(isInverted());
   }
 };
 
@@ -142,14 +141,13 @@ struct cast_retty_impl<PtrInvPair<To>, PtrInvPair<From> >{
   typedef PtrInvPair<To> ret_type;
 };
 
-template<class ToTy, class FromTy> struct cast_convert_val<PtrInvPair<ToTy>,
-                                                           PtrInvPair<FromTy>,
-                                                           PtrInvPair<FromTy> >{
+template<class ToTy, class FromTy>
+struct cast_convert_val<PtrInvPair<ToTy>, PtrInvPair<FromTy>, PtrInvPair<FromTy> >{
   typedef PtrInvPair<ToTy> To;
   typedef PtrInvPair<FromTy> From;
   static typename cast_retty<To, From>::ret_type doit(const From &Val) {
     return To(cast_convert_val<ToTy, FromTy*, FromTy*>::doit(Val.get()),
-                                                              Val.isInverted());
+              Val.isInverted());
   }
 };
 
@@ -218,7 +216,6 @@ public:
   // Remove this use from use list.
   void removeFromList();
 
-  //operator bool() const { return V != 0; }
   bool operator==(const VASTValPtr RHS) const;
 
   bool operator!=(const VASTValPtr RHS) const {
