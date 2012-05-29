@@ -122,8 +122,15 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
   bool operator<(const T1 *RHS) const { return this->getOpaqueValue() < RHS; }
   template<typename T1>
   bool operator>(const T1 *RHS) const { return this->getOpaqueValue() > RHS; }
-  PtrInvPair<T> getAsInlineOperand() const {
-    return *this;
+  PtrInvPair<VASTValue> getAsInlineOperand() const {
+    // Get the underlying value.
+    PtrInvPair<VASTValue> Ptr
+      = cast<PtrInvPair<VASTValue> >(get()->getAsInlineOperand());
+
+    // Need to invert the underlying value.
+    if (isInverted()) Ptr = Ptr.invert();
+
+    return Ptr;
   }
 };
 
