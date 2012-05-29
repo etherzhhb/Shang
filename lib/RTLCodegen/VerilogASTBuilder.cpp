@@ -315,8 +315,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
   template <class Ty>
   Ty *getAsLValue(MachineOperand &Op) {
     assert(Op.isReg() && "Bad MO type for LValue!");
-    if (VASTValPtr V = lookupSignal(Op.getReg()))
+    if (VASTValPtr V = lookupSignal(Op.getReg())) {
+      assert(!V.isInverted()
+             && "Don't know how to handle inverted LValue at the moment!");
       return dyn_cast<Ty>(V);
+    }
 
     return 0;
   }
@@ -1085,7 +1088,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   typedef PtrInvPair<VASTExpr> VASTExprPtr;
   // Is the function have latency information not captured by schedule?
   if (VASTWirePtr RetPort = getAsLValue<VASTWire>(MI->getOperand(0))) {
-    if (VASTExprPtr Expr = RetPort->getExpr()) {
+    if (VASTExpr *Expr = RetPort->getExpr().get()) {
       for (unsigned i = 0, e = Expr->NumOps; i < e; ++i) {
         VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
         VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds);

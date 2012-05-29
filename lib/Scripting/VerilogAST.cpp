@@ -612,7 +612,7 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
 VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
   // Try to fold the not expression.
   assert(!U.isInverted() && "U should not be inverted!!");
-  if (VASTExprPtr E = dyn_cast<VASTExpr>(U.get())) {
+  if (VASTExpr *E = dyn_cast<VASTExpr>(U.get())) {
     if (E->getOpcode() == VASTExpr::dpNot) {
       // We should also propagate the bit slice information.
       return buildBitSliceExpr(E->getOperand(0), E->UB, E->LB);
