@@ -106,6 +106,9 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
 
   T *get() const { return this->getPointer(); }
 
+  template<typename T1>
+  T1 *getAsLValue() const { return dyn_cast_or_null<T1>(this->getPointer()); }
+
   bool isInverted() const { return this->getInt(); }
   PtrInvPair<T> invert(bool Invert = true) const {
     return Invert ? PtrInvPair<T>(get(), !isInverted()) : *this;
@@ -235,6 +238,9 @@ public:
     assert(!isInvalid() && "Not a valid Use!");
     return V;
   }
+
+  template<typename T>
+  inline T *getAsLValue() const { return get().getAsLValue<T>(); }
 
   operator VASTValPtr() const { return get(); }
 

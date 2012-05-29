@@ -1047,7 +1047,7 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
   }
 
   VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
-  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort.get()), Pred);
+  VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort), Pred);
 }
 
 void VerilogASTBuilder::emitOpReadReturn(MachineInstr *MI, VASTSlot *Slot,
@@ -1071,7 +1071,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValPtr StartSignal = VM->getSymbol(StartPortName);
-  VM->addSlotEnable(Slot, cast<VASTRegister>(StartSignal.get()), Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(StartSignal), Pred);
 
   const Function *FN = M->getFunction(CalleeName);
   if (FN && !FN->isDeclaration()) {
@@ -1087,8 +1087,8 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 
   typedef PtrInvPair<VASTExpr> VASTExprPtr;
   // Is the function have latency information not captured by schedule?
-  if (VASTWirePtr RetPort = getAsLValue<VASTWire>(MI->getOperand(0))) {
-    if (VASTExpr *Expr = RetPort->getExpr().get()) {
+  if (VASTWire *RetPort = getAsLValue<VASTWire>(MI->getOperand(0))) {
+    if (VASTExpr *Expr = RetPort->getExpr().getAsLValue<VASTExpr>()) {
       for (unsigned i = 0, e = Expr->NumOps; i < e; ++i) {
         VASTRegister *R = cast<VASTRegister>(Expr->getOperand(i));
         VM->addAssignment(R, getAsOperand(MI->getOperand(4 + i)), Slot, Cnds);
@@ -1197,7 +1197,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValPtr MemEn = VM->getSymbol(EnableName);
   VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
-  VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn.get()), Pred);
+  VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
 void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,

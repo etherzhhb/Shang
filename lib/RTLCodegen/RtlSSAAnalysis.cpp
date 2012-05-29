@@ -239,7 +239,7 @@ void RtlSSAAnalysis::buildVASGraph() {
       // Build dependence for conditions
       visitDepTree(I->first, VAS);
       // Build dependence for the assigning value.
-      visitDepTree((*I->second).get().get(), VAS);
+      visitDepTree(I->second->getAsLValue<VASTValue>(), VAS);
     }
   }
 }

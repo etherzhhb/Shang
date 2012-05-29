@@ -236,7 +236,7 @@ void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
     // Paths for the assigning value
     extractTimingPaths(DstVAS, I->first, Paths);
     // Paths for the condition.
-    extractTimingPaths(DstVAS, (*I->second).get().get(), Paths);
+    extractTimingPaths(DstVAS, I->second->getAsLValue<VASTValue>(), Paths);
   }
 
   // Sort the delay so we write big delay constraints first, if the loose

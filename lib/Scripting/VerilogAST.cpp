@@ -100,7 +100,7 @@ void VASTUse::removeFromList() {
 void VASTUse::setUser(VASTValue *User) {
   assert(!ilist_traits<VASTUse>::inAnyList(this)
          && "Not unlink from old list!");
-  VASTValue *Use = get().get();
+  VASTValue *Use = getAsLValue<VASTValue>();
   assert(Use != User && "Unexpected cycle!");
   this->User = User;
   Use->addUseToList(this);
@@ -111,7 +111,7 @@ bool VASTUse::operator==(const VASTValPtr RHS) const {
 }
 
 void VASTUse::PinUser() const {
-  if (VASTSignal *S = dyn_cast<VASTSignal>(get().get()))
+  if (VASTSignal *S = dyn_cast<VASTSignal>(getAsLValue<VASTValue>()))
     S->Pin();
 }
 
@@ -421,14 +421,14 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
   if (Slot) {
     VASTValPtr Active = Slot->getActive();
     Active.printAsOperand(OS);
-    if (VASTSignal *S = dyn_cast<VASTSignal>(Active.get())) S->Pin();
+    if (VASTSignal *S = Active.getAsLValue<VASTSignal>()) S->Pin();
   } else      OS << "1'b1";
 
   typedef AndCndVec::const_iterator and_it;
   for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
     OS << " & ";
     CI->printAsOperand(OS);
-    if (VASTSignal *S = dyn_cast<VASTSignal>(CI->get())) S->Pin();
+    if (VASTSignal *S = CI->getAsLValue<VASTSignal>()) S->Pin();
   }
 
   OS << ')';
@@ -649,7 +649,7 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
       unsigned Offset = AssignExpr->LB;
       UB += Offset;
       LB += Offset;
-      return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB);
+      return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB).invert(isInverted);
     }
     case VASTExpr::dpBitCat: {
       VASTValPtr Hi = AssignExpr->getOperand(0),
@@ -661,7 +661,7 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
     }
   }
 
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get())) {
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
     uint64_t imm = getBitSlice64(Imm->getValue(), UB, LB);
     if (isInverted) imm = ~imm;
     return getOrCreateImmediate(imm, UB - LB);
@@ -675,18 +675,18 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
          && "Cannot get bitslice of value without name!");
 
   VASTValPtr Ops[] = { U };
-  return createExpr(VASTExpr::dpAssign, Ops, UB, LB).invert(isInverted);
+  return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
 }
 
 VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                        unsigned BitWidth) {
-  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0].get());
+  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0]);
   SmallVector<VASTValPtr, 8> NewOps;
   NewOps.push_back(Ops[0]);
 
   // Merge the constant sequence.
   for (unsigned i = 1; i < Ops.size(); ++i) {
-    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i].get());
+    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i]);
 
     if (!CurImm) {
       LastImm = 0;
@@ -728,7 +728,7 @@ VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
   SmallVector<VASTValPtr, 8> NewOps;
   typedef const VASTUse *op_iterator;
   bool isCommutative = true;
-  unsigned OperandBitWidth = Ops[0].get()->getBitWidth();
+  unsigned OperandBitWidth = Ops[0]->getBitWidth();
 
   for (unsigned i = 0; i < Ops.size(); ++i) {
     // Try to flatten the expression tree.
@@ -1135,7 +1135,7 @@ bool VASTValue::replaceAllUseWith(VASTValue *To) {
     removeUseFromList(U);
     // Move to new list.
     U->set(To);
-    U->setUser(User.get());
+    U->setUser(User.getAsLValue<VASTValue>());
   }
 
   return use_empty();
@@ -1315,6 +1315,7 @@ static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 }
 
 static void printCombMux(raw_ostream &OS, const VASTWire *W) {
+  assert(!W->getExpr().isInverted() && "Unexpected inverted mux!");
   VASTExpr *E = W->getExpr().get();
   unsigned NumOperands = E->NumOps;
   assert((NumOperands & 0x1) == 0 && "Expect even operand number for CombMUX!");
