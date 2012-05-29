@@ -536,7 +536,6 @@ public:
   enum Opcode {
     // bitwise logic datapath
     dpAnd,
-    dpNot,
     dpRAnd,
     dpROr,
     dpRXor,

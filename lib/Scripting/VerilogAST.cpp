@@ -782,10 +782,6 @@ VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                                  unsigned BitWidth) {
   switch (Opc) {
   default: break;
-  case VASTExpr::dpNot: {
-    assert(Ops.size() == 1 && "Bad operand number!");
-    return buildNotExpr(Ops[0]);
-  }
   case VASTExpr::dpAdd:  return buildAddExpr(Ops, BitWidth);
   case VASTExpr::dpMul:  return buildMulExpr(Ops, BitWidth);
   case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
@@ -1401,8 +1397,6 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   typedef ArrayRef<VASTUse> UseArray;
 
   switch (getOpcode()) {
-  case dpNot: printUnaryOp(OS, getOperand(0), " ~ ");  break;
-
   case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;
 
   case dpRAnd:  printUnaryOp(OS, getOperand(0), "&");  break;
