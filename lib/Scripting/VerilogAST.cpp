@@ -612,7 +612,7 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
 
 VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
   // Try to fold the not expression.
-  assert(!U.isInvert() && "U should not be inverted!!");
+  assert(!U.isInverted() && "U should not be inverted!!");
   if (VASTExprPtr E = dyn_cast<VASTExpr>(U.get())) {
     if (E->getOpcode() == VASTExpr::dpNot) {
       // We should also propagate the bit slice information.
@@ -631,7 +631,7 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
 
   // Try to fold the bitslice.
   VASTExpr *AssignExpr = 0;
-  assert(!U.isInvert() && "U should not be inverted!!");
+  assert(!U.isInverted() && "U should not be inverted!!");
   if (VASTExpr *E = dyn_cast<VASTExpr>(U))
     AssignExpr = E;
   else if (VASTWire *W = dyn_cast<VASTWire>(U))
@@ -842,7 +842,7 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
   ID.AddInteger(LB);
   for (unsigned i = 0; i < Ops.size(); ++i) {
     ID.AddPointer(Ops[i].get());
-    ID.AddBoolean(Ops[i].isInvert());
+    ID.AddBoolean(Ops[i].isInverted());
   }
   void *IP = 0;
   if (VASTExpr *E = UniqueExprs.FindNodeOrInsertPos(ID, IP))

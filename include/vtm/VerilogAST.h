@@ -91,12 +91,12 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
 
   template<typename T1>
   PtrInvPair(const PtrInvPair<T1>& RHS)
-    : PointerIntPair<T*, 1, bool>(RHS.get(), RHS.isInvert()) {}
+    : PointerIntPair<T*, 1, bool>(RHS.get(), RHS.isInverted()) {}
 
   template<typename T1>
   PtrInvPair<T> &operator=(const PtrInvPair<T1> &RHS) {
     setPointer(RHS.get());
-    setInt(RHS.isInvert());
+    setInt(RHS.isInverted());
     return *this;
   }
 
@@ -106,7 +106,7 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
 
   T *get() const { return this->getPointer(); }
 
-  bool isInvert() const { return this->getInt(); }
+  bool isInverted() const { return this->getInt(); }
 
   T *operator->() { return this->get(); }
   const T *operator->() const{ return this->get(); }
@@ -139,7 +139,7 @@ template<class ToTy, class FromTy> struct cast_convert_val<PtrInvPair<ToTy>,
   typedef PtrInvPair<FromTy> From;
   static typename cast_retty<To, From>::ret_type doit(const From &Val) {
     return To(cast_convert_val<ToTy, FromTy*, FromTy*>::doit(Val.get()),
-                                                              Val.isInvert());
+                                                              Val.isInverted());
   }
 };
 
@@ -166,7 +166,7 @@ template<class To, class FromTy> struct cast_convert_val<To,
 template <typename To, typename From>
 struct isa_impl<To, PtrInvPair<From> > {
   static inline bool doit(const PtrInvPair<From> &Val) {
-    return !Val.isInvert() && To::classof(Val.get());
+    return !Val.isInverted() && To::classof(Val.get());
   }
 };
 
