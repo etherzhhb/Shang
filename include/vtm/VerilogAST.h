@@ -126,12 +126,8 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
 
   // getAsInlineOperand, with the invert flag.
   PtrInvPair<VASTValue> getAsInlineOperand() const {
-    // Get the underlying value.
-    PtrInvPair<VASTValue> Ptr
-      = cast<PtrInvPair<VASTValue> >(get()->getAsInlineOperand());
-
-    // Need to invert the underlying value.
-    return Ptr.invert(isInverted());
+    // Get the underlying value, and invert the underlying value if necessary.
+    return cast<PtrInvPair<VASTValue> >(get()->getAsInlineOperand(isInverted()));
   }
 };
 
@@ -235,6 +231,7 @@ public:
   operator VASTValPtr() const { return get(); }
 
   VASTValPtr operator->() const { return get(); }
+  VASTValPtr getAsInlineOperand() const { return get().getAsInlineOperand(); }
 
   VASTValPtr unwrap() const { return V; }
 
@@ -309,6 +306,8 @@ protected:
     printAsOperandImpl(OS, getBitWidth(), 0);
   }
 
+  // Print the value as inline operand.
+  virtual VASTValPtr getAsInlineOperandImpl() { return this; }
 public:
   const uint8_t BitWidth;
   unsigned getBitWidth() const { return BitWidth; }
@@ -323,10 +322,11 @@ public:
   void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
   void printAsOperand(raw_ostream &OS) const;
 
-  virtual void print(raw_ostream &OS) const;
+  VASTValPtr getAsInlineOperand(bool isInverted) {
+    return getAsInlineOperandImpl().invert(isInverted);
+  }
 
-  // Print the value as inline operand.
-  virtual VASTValPtr getAsInlineOperand() { return this; }
+  virtual void print(raw_ostream &OS) const;
 
   bool replaceAllUseWith(VASTValue *To);
 
@@ -569,6 +569,14 @@ private:
   void printAsOperandImpl(raw_ostream &OS) const {
     printAsOperandImpl(OS, UB, LB);
   }
+
+  VASTValPtr getAsInlineOperandImpl() {
+    // Can the expression be printed inline?
+    if (getOpcode() == VASTExpr::dpAssign && !isSubBitSlice())
+      return getOperand(0).getAsInlineOperand();
+
+    return this;
+  }
 public:
   const uint8_t Opc, NumOps,UB, LB;
   Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
@@ -598,14 +606,6 @@ public:
   bool isInlinable() const {
     return getOpcode() <= LastInlinableOpc ||
            (getOpcode() == dpAssign && !isSubBitSlice());
-  }
-
-  VASTValPtr getAsInlineOperand() {
-    // Can the expression be printed inline?
-    if (getOpcode() == VASTExpr::dpAssign && !isSubBitSlice())
-      return getOperand(0)->getAsInlineOperand();
-
-    return this;
   }
 
   void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
@@ -695,11 +695,22 @@ private:
     SignalData = latency;
   }
 
-  VASTValue::dp_dep_it op_begin() const { return U.isInvalid() ? 0 : &U; }
-  VASTValue::dp_dep_it op_end() const { return U.isInvalid() ? 0 : &U + 1; }
 
-  friend class VASTValue;
   void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  VASTValPtr getAsInlineOperandImpl() {
+    if (getWireType() != LUT) {
+      if (VASTValPtr V = getAssigningValue()) {
+        // Can the expression be printed inline?
+        if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
+          if (E->isInlinable()) return E.getAsInlineOperand();
+        } else // This is a simple assignment.
+          return V;
+      }
+    }
+
+    return this;
+  }
 public:
   VASTValPtr getAssigningValue() const {
     // Ignore the virtual register of the input port, the virtual register only
@@ -713,20 +724,6 @@ public:
 
   VASTExprPtr getExpr() const {
     return getAssigningValue()? dyn_cast<VASTExprPtr>(getAssigningValue()) : 0;
-  }
-
-  VASTValPtr getAsInlineOperand() {
-    if (getWireType() != LUT) {
-      if (VASTValPtr V = getAssigningValue()) {
-        // Can the expression be printed inline?
-        if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
-          if (E->isInlinable()) return E->getAsInlineOperand();
-        } else // This is a simple assignment.
-          return V;
-      }
-    }
-
-    return this;
   }
 
   VASTWire::Type getWireType() const { return VASTWire::Type(SignalType); }
@@ -749,6 +746,10 @@ public:
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastWire;
   }
+
+  // Internal function used by VASTValue.
+  VASTValue::dp_dep_it op_begin() const { return U.isInvalid() ? 0 : &U; }
+  VASTValue::dp_dep_it op_end() const { return U.isInvalid() ? 0 : &U + 1; }
 };
 
 struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {

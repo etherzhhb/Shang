@@ -175,8 +175,7 @@ VASTValPtr VASTSlot::buildFUReadyExpr(VASTModule &VM) {
     // Print the code for ready signal.
     // If the condition is true then the signal must be 1 to ready.
     Ops.push_back(VM.buildOrExpr(I->first,
-                                 VM.buildNotExpr((*I->second)->
-                                                  getAsInlineOperand()),
+                                 VM.buildNotExpr(I->second->getAsInlineOperand()),
                                  1));
   
   // No waiting signal means always ready.
@@ -332,8 +331,8 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     EmptySlotEnCnd.push_back(getRegister());
     Mod.addAssignment(cast<VASTRegister>(I->first),
                       Mod.buildExpr(VASTExpr::dpAnd,
-                                    getReady()->getAsInlineOperand(),
-                                    (*I->second)->getAsInlineOperand(), 1),
+                                    getReady()->getAsInlineOperand(false),
+                                    I->second->getAsInlineOperand(), 1),
                       this, EmptySlotEnCnd, false);
   }
 
@@ -737,7 +736,7 @@ VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
       // Suppose Expr is flatten
       if (Expr->getOpcode() == Opc) {
         for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
-          NewOps.push_back((*I)->getAsInlineOperand());
+          NewOps.push_back(I->getAsInlineOperand());
         continue;
       }
     }
@@ -875,7 +874,7 @@ VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
                                      SmallVectorImpl<VASTValPtr> &Cnds,
                                      bool AddSlotActive) {
   // We only assign the Src to Dst when the given slot is active.
-  if (AddSlotActive) Cnds.push_back(Slot->getActive()->getAsInlineOperand());
+  if (AddSlotActive) Cnds.push_back(Slot->getActive()->getAsInlineOperand(false));
   VASTValPtr AssignAtSlot = buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VASTWire *Wire = Allocator.Allocate<VASTWire>();
   new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");

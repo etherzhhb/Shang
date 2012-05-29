@@ -743,8 +743,8 @@ void VerilogASTBuilder::emitAllSignals() {
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       VASTValPtr Parent = lookupSignal(Info.getParentRegister());
       indexVASTValue(RegNum,
-                     VM->buildBitSliceExpr(Parent->getAsInlineOperand(),
-                                             Info.getUB(), Info.getLB()));
+                     VM->buildBitSliceExpr(Parent.getAsInlineOperand(),
+                                           Info.getUB(), Info.getLB()));
       continue;
     }
 
@@ -1450,7 +1450,7 @@ VASTValPtr VerilogASTBuilder::getAsOperand(MachineOperand &Op,
         // The operand may only use a sub bitslice of the signal.
         V = VM->buildBitSliceExpr(V, BitWidth, 0);
         // Try to inline the operand.
-        if (GetAsInlineOperand) V = V->getAsInlineOperand();
+        if (GetAsInlineOperand) V = V.getAsInlineOperand();
         return V;
       }
     return 0;
@@ -1480,7 +1480,7 @@ VASTValPtr VerilogASTBuilder::getAsOperand(MachineOperand &Op,
 
   VASTValPtr Symbol = VM->getOrCreateSymbol(Name, SymbolWidth, NeedWrapper);
   if (SymbolWidth && GetAsInlineOperand)
-    Symbol = VM->buildBitSliceExpr(Symbol, BitWidth, 0)->getAsInlineOperand();
+    Symbol = VM->buildBitSliceExpr(Symbol, BitWidth, 0).getAsInlineOperand();
 
   return Symbol;
 }
