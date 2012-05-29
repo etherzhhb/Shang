@@ -1075,6 +1075,8 @@ private:
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
 
+  VASTValPtr foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
+
 public:
   static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
 

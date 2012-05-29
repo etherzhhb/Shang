@@ -623,7 +623,8 @@ VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
   return buildExpr(VASTExpr::dpNot, U, U->getBitWidth());
 }
 
-VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
+
+VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   unsigned OperandSize = U->getBitWidth();
   // Not a sub bitslice.
   if (UB == OperandSize && LB == 0) return U;
@@ -667,7 +668,14 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
     return getOrCreateImmediate(imm, UB - LB);
   }
 
-  assert(UB <= OperandSize && UB > LB && "Bad bit range!");
+  return VASTValPtr(0);
+}
+
+VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
+  // Try to fold the expression.
+  if (VASTValPtr P = foldBitSliceExpr(U, UB, LB)) return P;
+
+  assert(UB <= U->getBitWidth() && UB > LB && "Bad bit range!");
   // FIXME: We can name the expression when necessary.
   assert(isa<VASTNamedValue>(U)
          && cast<VASTNamedValue>(U)->getName()
