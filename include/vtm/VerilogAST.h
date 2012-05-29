@@ -107,6 +107,7 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
   T *get() const { return this->getPointer(); }
 
   bool isInverted() const { return this->getInt(); }
+  PtrInvPair<T> invert() const { return PtrInvPair<T>(get(), !isInverted()); }
 
   T *operator->() { return this->get(); }
   const T *operator->() const{ return this->get(); }
