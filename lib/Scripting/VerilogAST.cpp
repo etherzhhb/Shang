@@ -1095,12 +1095,21 @@ void VASTValue::print(raw_ostream &OS) const {
   printAsOperand(OS);
 }
 
-void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const{
+  printAsOperandImpl(OS, UB, LB);
+}
+
+void VASTValue::printAsOperand(raw_ostream &OS) const {
+  printAsOperandImpl(OS);
+}
+
+void VASTValue::printAsOperandImpl(raw_ostream &OS, unsigned UB,
+                                   unsigned LB) const {
   assert(0 && "VASTValue::printAsOperand should not be called!");
 }
 
-void VASTNamedValue::printAsOperand(raw_ostream &OS, unsigned UB,
-                                    unsigned LB) const{
+void VASTNamedValue::printAsOperandImpl(raw_ostream &OS, unsigned UB,
+                                        unsigned LB) const{
   OS << getName();
   if (UB) OS << VASTValue::printBitRange(UB, LB, getBitWidth() > 1);
 }
@@ -1141,7 +1150,8 @@ VASTValue::dp_dep_it VASTValue::dp_dep_end(VASTValue *V) {
   }
 }
 
-void VASTImmediate::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+void VASTImmediate::printAsOperandImpl(raw_ostream &OS, unsigned UB,
+                                       unsigned LB) const {
   assert(UB == getBitWidth() && LB == 0 && "Cannot print bitslice of Expr!");
   OS << verilogConstToStr(getValue(), getBitWidth(), false);
 }
@@ -1333,9 +1343,10 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   OS.indent(2) << "endcase\nend  // end mux logic\n";
 }
 
-void VASTWire::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+void VASTWire::printAsOperandImpl(raw_ostream &OS, unsigned UB,
+                                  unsigned LB) const {
   if (getName())
-    VASTNamedValue::printAsOperand(OS, UB, LB);
+    VASTNamedValue::printAsOperandImpl(OS, UB, LB);
   else {
     VASTValPtr V = getAssigningValue();
     assert(V && "Cannot print wire as operand!");
@@ -1374,7 +1385,8 @@ void VASTWire::printAssignment(raw_ostream &OS) const {
   OS << ";\n";
 }
 
-void VASTExpr::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+void VASTExpr::printAsOperandImpl(raw_ostream &OS, unsigned UB,
+                                  unsigned LB) const {
   assert(UB == this->UB && LB == this->LB && "Cannot print bitslice of Expr!");
 
   printAsOperandInteral(OS);

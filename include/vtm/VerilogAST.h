@@ -306,6 +306,12 @@ protected:
   void removeUseFromList(VASTUse *U) { UseList.remove(U); }
   friend class VASTUse;
 
+  virtual void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  virtual void printAsOperandImpl(raw_ostream &OS) const {
+    printAsOperandImpl(OS, getBitWidth(), 0);
+  }
+
 public:
   const uint8_t BitWidth;
   unsigned getBitWidth() const { return BitWidth; }
@@ -317,11 +323,8 @@ public:
   bool use_empty() const { return UseList.empty(); }
   size_t num_uses() const { return UseList.size(); }
 
-  virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
-
-  virtual void printAsOperand(raw_ostream &OS) const {
-    printAsOperand(OS, getBitWidth(), 0);
-  }
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
+  void printAsOperand(raw_ostream &OS) const;
 
   virtual void print(raw_ostream &OS) const;
 
@@ -372,18 +375,18 @@ class VASTImmediate : public VASTValue {
   }
 
   friend class VASTModule;
+
+  void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  void printAsOperandImpl(raw_ostream &OS) const {
+    printAsOperandImpl(OS, getBitWidth(), 0);
+  }
 public:
   uint64_t getValue() const { return Contents.IntVal; }
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTImmediate *A) { return true; }
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() == vastImmediate;
-  }
-
-  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
-
-  void printAsOperand(raw_ostream &OS) const {
-    printAsOperand(OS, getBitWidth(), 0);
   }
 };
 
@@ -396,19 +399,19 @@ protected:
     Contents.Name = Name;
   }
 
+  virtual void printAsOperandImpl(raw_ostream &OS, unsigned UB,
+                                  unsigned LB) const;
+  void printAsOperandImpl(raw_ostream &OS) const {
+    printAsOperandImpl(OS, getBitWidth(), 0);
+  }
 public:
   const char *getName() const { return Contents.Name; }
-  virtual void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTNamedValue *A) { return true; }
   static inline bool classof(const VASTNode *A) {
     return A->getASTType() >= vastFirstNamedType &&
            A->getASTType() <= vastLastNamedType;
-  }
-
-  void printAsOperand(raw_ostream &OS) const {
-    printAsOperand(OS, getBitWidth(), 0);
   }
 };
 
@@ -563,6 +566,12 @@ private:
       I->removeFromList();
   }
 
+
+  void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
+
+  void printAsOperandImpl(raw_ostream &OS) const {
+    printAsOperandImpl(OS, UB, LB);
+  }
 public:
   const uint8_t Opc, NumOps,UB, LB;
   Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
@@ -600,12 +609,6 @@ public:
       return getOperand(0)->getAsInlineOperand();
 
     return this;
-  }
-
-  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
-
-  void printAsOperand(raw_ostream &OS) const {
-    printAsOperand(OS, UB, LB);
   }
 
   void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
@@ -699,6 +702,7 @@ private:
   VASTValue::dp_dep_it op_end() const { return U.isInvalid() ? 0 : &U + 1; }
 
   friend class VASTValue;
+  void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
 public:
   VASTValPtr getAssigningValue() const {
     // Ignore the virtual register of the input port, the virtual register only
@@ -742,7 +746,6 @@ public:
 
   // Print the logic to the output stream.
   void printAssignment(raw_ostream &OS) const;
-  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTWire *A) { return true; }
