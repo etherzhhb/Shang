@@ -125,9 +125,17 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
   bool operator>(const T1 *RHS) const { return this->getOpaqueValue() > RHS; }
 
   // getAsInlineOperand, with the invert flag.
-  PtrInvPair<VASTValue> getAsInlineOperand() const {
+  inline PtrInvPair<VASTValue> getAsInlineOperand() const {
     // Get the underlying value, and invert the underlying value if necessary.
     return cast<PtrInvPair<VASTValue> >(get()->getAsInlineOperand(isInverted()));
+  }
+
+  inline void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+    get()->printAsOperand(OS, UB, LB, isInverted());
+  }
+
+  inline void printAsOperand(raw_ostream &OS) const {
+    get()->printAsOperand(OS, isInverted());
   }
 };
 
@@ -231,7 +239,15 @@ public:
   operator VASTValPtr() const { return get(); }
 
   VASTValPtr operator->() const { return get(); }
-  VASTValPtr getAsInlineOperand() const { return get().getAsInlineOperand(); }
+  inline VASTValPtr getAsInlineOperand() const {
+    return get().getAsInlineOperand(); }
+  inline void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const {
+    get().printAsOperand(OS, UB, LB);
+  }
+
+  inline void printAsOperand(raw_ostream &OS) const {
+    get().printAsOperand(OS);
+  }
 
   VASTValPtr unwrap() const { return V; }
 
@@ -298,6 +314,7 @@ protected:
 
   void addUseToList(VASTUse *U) { UseList.push_back(U); }
   void removeUseFromList(VASTUse *U) { UseList.remove(U); }
+
   friend class VASTUse;
 
   virtual void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
@@ -319,8 +336,9 @@ public:
   bool use_empty() const { return UseList.empty(); }
   size_t num_uses() const { return UseList.size(); }
 
-  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const;
-  void printAsOperand(raw_ostream &OS) const;
+  void printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB,
+                      bool isInverted) const;
+  void printAsOperand(raw_ostream &OS, bool isInverted) const;
 
   VASTValPtr getAsInlineOperand(bool isInverted) {
     return getAsInlineOperandImpl().invert(isInverted);

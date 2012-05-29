@@ -1488,7 +1488,7 @@ VASTValPtr VerilogASTBuilder::getAsOperand(MachineOperand &Op,
 void VerilogASTBuilder::printOperand(MachineOperand &Op, raw_ostream &OS) {
   if(Op.isReg() || Op.isImm()){
     VASTValPtr U = getAsOperand(Op);
-    U->printAsOperand(OS);
+    U.printAsOperand(OS);
     //U.PinUser();
     return;
   }

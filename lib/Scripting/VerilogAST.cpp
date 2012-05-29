@@ -420,14 +420,14 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
   OS << '(';
   if (Slot) {
     VASTValPtr Active = Slot->getActive();
-    Active->printAsOperand(OS);
+    Active.printAsOperand(OS);
     if (VASTSignal *S = dyn_cast<VASTSignal>(Active.get())) S->Pin();
   } else      OS << "1'b1";
 
   typedef AndCndVec::const_iterator and_it;
   for (and_it CI = Cnds.begin(), CE = Cnds.end(); CI != CE; ++CI) {
     OS << " & ";
-    (*CI)->printAsOperand(OS);
+    CI->printAsOperand(OS);
     if (VASTSignal *S = dyn_cast<VASTSignal>(CI->get())) S->Pin();
   }
 
@@ -464,7 +464,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 
     OrVec &Ors = I->second;
     for (OrVec::iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI) {
-      (*OI)->printAsOperand(SS);
+      OI->printAsOperand(SS);
       SS << '|';
     }
 
@@ -473,9 +473,9 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     // Print the assignment under the condition.
     if (UseSwitch) OS.match_case(Pred);
     else OS.if_begin(Pred);
-    printAsOperand(OS);
+    printAsOperandImpl(OS);
     OS << " <= ";
-    I->first->printAsOperand(OS);
+    I->first.printAsOperand(OS);
     OS << ";\n";
     OS.exit_block();
 
@@ -1091,15 +1091,24 @@ std::string VASTValue::printBitRange(unsigned UB, unsigned LB, bool printOneBit)
 }
 
 void VASTValue::print(raw_ostream &OS) const {
-  printAsOperand(OS);
-}
-
-void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB) const{
-  printAsOperandImpl(OS, UB, LB);
-}
-
-void VASTValue::printAsOperand(raw_ostream &OS) const {
   printAsOperandImpl(OS);
+}
+
+void VASTValue::printAsOperand(raw_ostream &OS, unsigned UB, unsigned LB,
+                               bool isInverted) const{
+  if (isInverted) OS << "(~";
+  OS << '(';
+  printAsOperandImpl(OS, UB, LB);
+  OS << ')';
+  if (isInverted) OS << ')';
+}
+
+void VASTValue::printAsOperand(raw_ostream &OS, bool isInverted) const {
+  if (isInverted) OS << "(~";
+  OS << '(';
+  printAsOperandImpl(OS);
+  OS << ')';
+  if (isInverted) OS << ')';
 }
 
 void VASTValue::printAsOperandImpl(raw_ostream &OS, unsigned UB,
@@ -1223,12 +1232,12 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 // Operand printing helper functions.
 static void printSignedOperand(raw_ostream &OS, const VASTUse &U) {
   OS << "$signed(";
-  U->printAsOperand(OS);
+  U.printAsOperand(OS);
   OS << ")";
 }
 
 static void printUnsignedOperand(raw_ostream &OS, const VASTUse &U) {
-  U->printAsOperand(OS);
+  U.printAsOperand(OS);
 }
 
 template<typename PrintOperandFN>
@@ -1258,13 +1267,13 @@ static void printSimpleUnsignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
 // Generic datapath printing helper function.
 static void printUnaryOp(raw_ostream &OS, const VASTUse &U, const char *Opc) {
   OS << Opc;
-  U->printAsOperand(OS);
+  U.printAsOperand(OS);
 }
 
 static void printSRAOp(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   printSignedOperand(OS, Ops[0]);
   OS << " >>> ";
-  Ops[1]->printAsOperand(OS);
+  Ops[1].printAsOperand(OS);
 }
 
 template<typename PrintOperandFN>
@@ -1301,7 +1310,7 @@ static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 
 static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
   OS << '{' << cast<VASTImmediate>((Ops[1]).get())->getValue() << '{';
-  Ops[0]->printAsOperand(OS);
+  Ops[0].printAsOperand(OS);
   OS << "}}";
 }
 
@@ -1313,7 +1322,7 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   // Handle the trivial case trivially: Only 1 input.
   if (NumOperands == 2) {
     printAssign(OS, W);
-    E->getOperand(1)->printAsOperand(OS);
+    E->getOperand(1).printAsOperand(OS);
     OS << ";\n";
     return;
   }
@@ -1331,9 +1340,9 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   OS.indent(2) << VASTModule::ParallelCaseAttr << " case (1'b1)\n";
   for (unsigned i = 0; i < NumOperands; i+=2) {
     OS.indent(4);
-    E->getOperand(i)->printAsOperand(OS);
+    E->getOperand(i).printAsOperand(OS);
     OS << ": " << W->getName() << "_mux_wire = ";
-    E->getOperand(i + 1)->printAsOperand(OS);
+    E->getOperand(i + 1).printAsOperand(OS);
     OS << ";\n";
   }
   // Write the default condition, otherwise latch will be inferred.
@@ -1349,7 +1358,7 @@ void VASTWire::printAsOperandImpl(raw_ostream &OS, unsigned UB,
   else {
     VASTValPtr V = getAssigningValue();
     assert(V && "Cannot print wire as operand!");
-    V->printAsOperand(OS, UB, LB);
+    V.printAsOperand(OS, UB, LB);
   }
 }
 
@@ -1380,7 +1389,7 @@ void VASTWire::printAssignment(raw_ostream &OS) const {
   }
 
   printAssign(OS, this);
-  V->print(OS);
+  V.printAsOperand(OS);
   OS << ";\n";
 }
 
@@ -1415,7 +1424,7 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
 
   case dpSel: printSel(OS, getOperands());                     break;
 
-  case dpAssign: getOperand(0)->printAsOperand(OS, UB, LB); break;
+  case dpAssign: getOperand(0).printAsOperand(OS, UB, LB); break;
 
   case dpBitCat:    printBitCat(OS, getOperands());    break;
   case dpBitRepeat: printBitRepeat(OS, getOperands()); break;
