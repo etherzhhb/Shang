@@ -1252,7 +1252,7 @@ public:
   }
 
   VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                        unsigned UB, unsigned LB, bool IsInvert = false);
+                        unsigned UB, unsigned LB);
 
   VASTValPtr getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
                                         SmallVectorImpl<VASTValPtr> &Ops,

@@ -610,17 +610,15 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
 }
 
 VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
-  // Try to fold the not expression.
-  assert(!U.isInverted() && "U should not be inverted!!");
-  if (VASTExpr *E = dyn_cast<VASTExpr>(U.get())) {
-    if (E->getOpcode() == VASTExpr::dpNot) {
-      // We should also propagate the bit slice information.
-      return buildBitSliceExpr(E->getOperand(0), E->UB, E->LB);
-    }
-  } else if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
-    return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
+  U = U.invert();
 
-  return buildExpr(VASTExpr::dpNot, U, U->getBitWidth());
+  if (U.isInverted()) {
+    // Try to fold the not expression.
+    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
+      return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
+  }
+
+  return U;
 }
 
 
@@ -844,14 +842,12 @@ VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
 
 VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
                                   ArrayRef<VASTValPtr> Ops,
-                                  unsigned UB, unsigned LB,
-                                  bool IsInvert) {
+                                  unsigned UB, unsigned LB) {
   assert(!Ops.empty() && "Unexpected empty expression");
 
   FoldingSetNodeID ID;
 
   // Profile the elements of VASTExpr.
-  ID.AddBoolean(IsInvert);
   ID.AddInteger(Opc);
   ID.AddInteger(UB);
   ID.AddInteger(LB);
@@ -875,7 +871,7 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
   for (unsigned i = 0; i < Ops.size(); ++i)
     (void) new (E->ops() + i) VASTUse(Ops[i], E);
 
-  return VASTValPtr(E, IsInvert);
+  return E;
 }
 
 VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
@@ -906,10 +902,7 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot
 VASTValPtr VASTModule::assign(VASTWire *W, VASTValPtr V, VASTWire::Type T) {
   if (W->getExpr() != V) W->assign(V, T);
 
-  void *VPAllocate = Allocator.Allocate<VASTValPtr>();
-  VASTValPtr *VP = new (VPAllocate) VASTValPtr(W, false);
-
-  return *VP;
+  return W;
 }
 
 VASTValPtr VASTModule::assignWithExtraDelay(VASTWire *W, VASTValPtr V,
@@ -917,10 +910,7 @@ VASTValPtr VASTModule::assignWithExtraDelay(VASTWire *W, VASTValPtr V,
   if (W->getExpr() != V)
     W->assignWithExtraDelay(V, latency);
 
-  void *VPAllocate = Allocator.Allocate<VASTValPtr>();
-  VASTValPtr *VP = new (VPAllocate) VASTValPtr(W, false);
-
-  return *VP;
+  return W;
 }
 
 void VASTModule::print(raw_ostream &OS) const {
@@ -1032,10 +1022,7 @@ VASTValPtr VASTModule::getOrCreateSymbol(const std::string &Name,
   assert(V->getBitWidth() == BitWidth
           && "Getting symbol with wrong bitwidth!");
 
-  void *VPAllocate = Allocator.Allocate<VASTValPtr>();
-  VASTValPtr *VP = new (VPAllocate) VASTValPtr(V, false);
-
-  return *VP;
+  return V;
 }
 
 // Out of line virtual function to provide home for the class.
