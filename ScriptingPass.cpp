@@ -62,7 +62,7 @@ static void printConstant(raw_ostream &OS, uint64_t Val, Type* Ty,
   else {
     std::string FormatS =
       "%0" + utostr_32(TD->getTypeStoreSize(Ty) * 2) + "llx";
-    OS << "0x" << format_object1<uint64_t>(FormatS.c_str(), Val);
+    OS << "0x" << format(FormatS.c_str(), Val);
   }
   OS << '\'';
 }
