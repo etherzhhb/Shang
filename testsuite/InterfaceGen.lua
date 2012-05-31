@@ -371,10 +371,10 @@ $('#')!/bin/sh
 PATH=~/altera/10.1/modelsim_ase/bin/:~/altera/modelsim_ase/bin/:$PATH
 export DISPLAY=:0
 vlib work
-vlog +define+quartus_synthesis $(RTLModuleName).v
-vlog INTF_$(RTLModuleName).v
-vlog DUT_TOP_tb.v
-vlog BRAM.sv
+vlog +define+quartus_synthesis -sv $(RTLModuleName).v
+vlog -sv INTF_$(RTLModuleName).v
+vlog -sv DUT_TOP_tb.v
+vlog -sv BRAM.sv
 vsim DUT_TOP_tb -novopt -do "run -all;quit -f"
 
 ]=]
