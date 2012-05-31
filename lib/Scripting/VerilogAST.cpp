@@ -326,6 +326,8 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
   CtrlS << "// Enable the active FUs.\n";
   for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
        I != E; ++I) {
+
+    assert(!AliasEnables.count(I->first) && "Signal enabled by alias slot!");
     // No need to wait for the slot ready.
     // We may try to enable and disable the same port at the same slot.
     EmptySlotEnCnd.clear();
