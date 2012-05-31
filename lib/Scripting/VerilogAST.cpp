@@ -455,7 +455,7 @@ void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
   // As long as $onehot0(expr) returns true if at most one bit of expr is high,
   // we can use it to detect if more one case condition is true at the same
   // time.
-  OS << "if (!$onehot0(" << AllPred << "))"
+  OS << "\nif (!$onehot0(" << AllPred << "))"
         " begin $display(\"At time %t, register "
         << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
         << " has more than one active assignment: %b!\", $time(), "
@@ -541,7 +541,6 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
   }
 
   if (UseSwitch) OS.switch_end();
-  OS << '\n';
 
   DEBUG_WITH_TYPE("vtm-codegen-self-verify",  verifyAssignCnd(OS, Mod));
 }
