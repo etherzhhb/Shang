@@ -261,7 +261,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     CtrlS << '\n';
   } // SS flushes automatically here.
 
-  DEBUG(
+  DEBUG_WITH_TYPE("vtm-codegen-self-verify",
   if (SlotNum != 0)
     CtrlS << "$display(\"" << getName() << " in " << Mod.getName() << " BB#"
           << getParentBB()->getNumber() << ' '
@@ -305,7 +305,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
   }
 
   if (!ReadyPresented) {
-    //DEBUG(
+    DEBUG_WITH_TYPE("vtm-codegen-self-verify",
     if (SlotNum != 0) {
       CtrlS << "if (start) begin $display(\"" << getName() << " in "
             << Mod.getName()
@@ -319,7 +319,7 @@ void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
     CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
           << Mod.getName()
           << " bad mem0en_r %b\\n\", mem0en_r);  $finish(); end\n";
-    //);
+    );
   }
 
   std::string SlotReady = std::string(getName()) + "Ready";
@@ -437,6 +437,58 @@ void VASTRegister::printCondition(raw_ostream &OS, const VASTSlot *Slot,
   OS << ')';
 }
 
+void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
+                                   const VASTModule *Mod) const {
+  // Concatenate all condition together to detect the case that more than one
+  // case is activated.
+  std::string AllPred;
+  raw_string_ostream AllPredSS(AllPred);
+
+  AllPredSS << '{';
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    I->first->printAsOperand(AllPredSS, false);
+    AllPredSS << ", ";
+  }
+  AllPredSS << "1'b0 }";
+  AllPredSS.flush();
+
+  // As long as $onehot0(expr) returns true if at most one bit of expr is high,
+  // we can use it to detect if more one case condition is true at the same
+  // time.
+  OS << "if (!$onehot0(" << AllPred << "))"
+        " begin $display(\"At time %t, register "
+        << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
+        << " has more than one active assignment: %b!\", $time(), "
+        << AllPred << ");\n";
+
+  // Display the conflicted condition and its slot.
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    OS.indent(2) << "if (";
+    I->first->printAsOperand(OS, false);
+    OS << ") begin\n";
+
+    OS.indent(4) << "$display(\"Condition: ";
+    I->first->printAsOperand(OS, false);
+
+    unsigned CndSlot = I->first->getSlotNum();
+    VASTSlot *S = Mod->getSlot(CndSlot);
+    OS << ", current slot: " << CndSlot << ", ";
+
+    if (CndSlot) OS << "in BB#" << S->getParentBB()->getNumber() << ',';
+
+    if (S->hasAliasSlot()) {
+      OS << " Alias slots: ";
+      for (unsigned s = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
+           s < e; s += ii)
+        OS << s << ", ";
+    }
+    OS << "\");\n";
+    OS.indent(2) << "end\n";
+  }
+
+  OS.indent(2) << "$finish();\nend\n";
+}
+
 void VASTRegister::printReset(raw_ostream &OS) const {
   OS << getName()  << " <= "
      << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
@@ -452,23 +504,10 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
   typedef std::map<VASTValPtr, OrVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
 
-
-  // Concatenate all condition together to detect the case that more than one
-  // case is activated.
-  std::string AllPred;
-  raw_string_ostream AllPredSS(AllPred);
-
-  AllPredSS << '{';
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
-    I->first->printAsOperand(AllPredSS, false);
-
-    AllPredSS << ", ";
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
     SrcCSEMap[*I->second].push_back(I->first);
-  }
-  AllPredSS << "1'b0 }";
-  AllPredSS.flush();
 
-  OS << "\n// Assignment of " << getName() << '\n';
+  OS << "// Assignment of " << getName() << '\n';
   if (UseSwitch) {
     OS << VASTModule::ParallelCaseAttr << ' ';
     OS.switch_begin("1'b1");
@@ -502,42 +541,9 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
   }
 
   if (UseSwitch) OS.switch_end();
+  OS << '\n';
 
-  // As long as $onehot0(expr) returns true if at most one bit of expr is high,
-  // we can use it to detect if more one case condition is true at the same
-  // time.
-  OS << "if (!$onehot0(" << AllPred << "))"
-        " begin $display(\"At time %t, register "
-     << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
-     << " has more than one active assignment: %b!\", $time(), "
-     << AllPred << ");\n";
-
-  // Display the conflicted condition and its slot.
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
-    OS.indent(2) << "if (";
-    I->first->printAsOperand(OS, false);
-    OS << ") begin\n";
-
-    OS.indent(4) << "$display(\"Condition: ";
-    I->first->printAsOperand(OS, false);
-
-    unsigned CndSlot = I->first->getSlotNum();
-    VASTSlot *S = Mod->getSlot(CndSlot);
-    OS << ", current slot: " << CndSlot << ", ";
-
-    if (CndSlot) OS << "in BB#" << S->getParentBB()->getNumber() << ',';
-
-    if (S->hasAliasSlot()) {
-      OS << " Alias slots: ";
-      for (unsigned s = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
-           s < e; s += ii)
-        OS << s << ", ";
-    }
-    OS << "\");\n";
-    OS.indent(2) << "end\n";
-  }
-
-  OS.indent(2) << "$finish();\nend\n";
+  DEBUG_WITH_TYPE("vtm-codegen-self-verify",  verifyAssignCnd(OS, Mod));
 }
 
 void VASTRegister::dumpAssignment() const {

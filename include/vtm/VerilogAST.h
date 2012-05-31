@@ -1019,6 +1019,7 @@ public:
   void printAssignment(vlang_raw_ostream &OS, const VASTModule *Mod) const;
   void printReset(raw_ostream &OS) const;
   void dumpAssignment() const;
+  void verifyAssignCnd(vlang_raw_ostream &OS, const VASTModule *Mod) const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTRegister *A) { return true; }
