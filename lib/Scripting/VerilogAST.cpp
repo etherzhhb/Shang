@@ -506,9 +506,31 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
   // time.
   OS << "if (!$onehot0(" << AllPred << "))"
         " begin $display(\"At time %t, register "
-      << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
-      << " has more than one active assignment: %b!\", $time(), "
-      << AllPred << "); $finish(); end\n";
+     << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
+     << " has more than one active assignment: %b!\", $time(), "
+     << AllPred << ");\n";
+
+  // Display the conflicted condition and its slot.
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    OS.indent(2) << "if (";
+    I->first->printAsOperand(OS, false);
+    OS << ") begin\n";
+    OS.indent(4) << "$display(\"Condition: ";
+    I->first->printAsOperand(OS, false);
+    unsigned CndSlot = I->first->getSlotNum();
+    OS << ", current slot: " << CndSlot << ',';
+    VASTSlot *S = Mod->getSlot(CndSlot);
+    if (S->hasAliasSlot()) {
+      OS << " Alias slots: ";
+      for (unsigned s = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
+           s < e; s += ii)
+        OS << s << ", ";
+    }
+    OS << "\");\n";
+    OS.indent(2) << "end\n";
+  }
+
+  OS.indent(2) << "$finish();\nend\n";
 }
 
 void VASTRegister::dumpAssignment() const {
