@@ -29,6 +29,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Format.h"
 #define DEBUG_TYPE "verilog-ast"
 #include "llvm/Support/Debug.h"
 
@@ -443,21 +444,29 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (Assigns.empty()) return;
 
   bool UseSwitch = Assigns.size() > 1;
-  std::string Pred;
-  raw_string_ostream SS(Pred);
 
   typedef std::vector<VASTValPtr> OrVec;
   typedef std::map<VASTValPtr, OrVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
 
-  SS << '(';
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
-    I->first->printAsOperand(SS, false);
-    SS << '|';
 
+  // Concatenate all condition together to detect the case that more than one
+  // case is activated.
+  std::string AllPred;
+  raw_string_ostream AllPredSS(AllPred);
+  unsigned NumAssignCndBits = 0;
+
+  AllPredSS << '{';
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    I->first->printAsOperand(AllPredSS, false);
+    ++NumAssignCndBits;
+
+    AllPredSS << ",\n       ";
     SrcCSEMap[*I->second].push_back(I->first);
   }
-  SS << "1'b0)";
+  AllPredSS << "1'b0 }";
+  ++NumAssignCndBits;
+  AllPredSS.flush();
 
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {
@@ -465,24 +474,21 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     OS.switch_begin("1'b1");
   }
 
-  // Get the all predicate string, and reset the stream.
-  SS.flush();
-  std::string AllPred = SS.str();
-  Pred.clear();
-
+  std::string Pred;
+  raw_string_ostream PredSS(Pred);
   typedef CSEMapTy::iterator it;
 
   for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I) {
-    SS << '(';
+    PredSS << '(';
 
     OrVec &Ors = I->second;
     for (OrVec::iterator OI = Ors.begin(), OE = Ors.end(); OI != OE; ++OI) {
-      OI->printAsOperand(SS);
-      SS << '|';
+      OI->printAsOperand(PredSS);
+      PredSS << '|';
     }
 
-    SS << "1'b0)";
-    SS.flush();
+    PredSS << "1'b0)";
+    PredSS.flush();
     // Print the assignment under the condition.
     if (UseSwitch) OS.match_case(Pred);
     else OS.if_begin(Pred);
@@ -490,17 +496,26 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     OS << " <= ";
     I->first.printAsOperand(OS);
     OS << ";\n";
-
-    OS << "if (" << AllPred << "& ~" << Pred <<") begin $display(\"Register "
-       << getName() << " is assigned by multiple value at %t\\n\", $time());"
-                       " $finish(); end\n";
-
     OS.exit_block();
 
     Pred.clear();
   }
 
   if (UseSwitch) OS.switch_end();
+
+  if (NumAssignCndBits > 2) {
+    // Also generate the self-verify code.
+    OS.switch_begin(AllPred) << "// Self-verify code:\n";
+    for (unsigned i = 1; i != NumAssignCndBits; ++i)
+      OS << NumAssignCndBits << "'h" << format("%llx", uint64_t(1) << i)
+         << ": begin /*Do not thing*/end\n";
+
+    OS << NumAssignCndBits << "'h0: begin /*Do not thing*/end\n";
+    OS << "default: begin $display(\"At %t register " << getName()
+       << " has more than one active assignment: %b!\", $time(), " << AllPred
+       << " ); $finish(); end\n";
+    OS.switch_end();
+  }
 }
 
 void VASTRegister::dumpAssignment() const {
