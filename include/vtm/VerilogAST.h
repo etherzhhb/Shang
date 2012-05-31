@@ -727,7 +727,8 @@ private:
         // Can the expression be printed inline?
         if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
           if (E->isInlinable()) return E.getAsInlineOperand();
-        } else // This is a simple assignment.
+        } else if (V->getBitWidth()) // The wire may wrapping a symbol.
+          // This is a simple assignment.
           return V;
       }
     }
