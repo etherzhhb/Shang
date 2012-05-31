@@ -824,11 +824,11 @@ VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
     isCommutative &= (OperandBitWidth == Ops[i]->getBitWidth());
   }
 
-  // If new operand is added, we may have new optimization opportunity.
-  if (NewOps.size() != Ops.size()) return buildExpr(Opc, NewOps, BitWidth);
   // The expression that can perform tree flatten should be commutative.
-  else return isCommutative ? getOrCreateCommutativeExpr(Opc, NewOps, BitWidth)
-                            : createExpr(Opc, NewOps, BitWidth, 0);
+  if (isCommutative)
+    return  getOrCreateCommutativeExpr(Opc, NewOps, BitWidth);
+
+  return createExpr(Opc, NewOps, BitWidth, 0);
 }
 
 VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
@@ -856,8 +856,6 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
   if (NewOps.empty())
     return getOrCreateImmediate(getBitSlice64(~0ull, BitWidth), BitWidth);
 
-  // If new operand is added, we may have new optimization opportunity.
-  if (NewOps.size() != Ops.size()) return buildAndExpr(NewOps, BitWidth);
   // The expression that can perform tree flatten should be commutative.
   return getOrCreateCommutativeExpr(VASTExpr::dpAnd, NewOps, BitWidth);
 }
