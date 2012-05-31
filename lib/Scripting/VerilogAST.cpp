@@ -1289,11 +1289,6 @@ static void printSimpleUnsignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
   printSimpleOp(OS, Ops, Opc, printUnsignedOperand);
 }
 
-//static void printSimpleSignedOp(raw_ostream &OS, ArrayRef<VASTUse> Ops,
-//                                  const char *Opc) {
-//  printSimpleOp(OS, Ops, Opc, printSignedOperand);
-//}
-
 //----------------------------------------------------------------------------//
 // Generic datapath printing helper function.
 static void printUnaryOp(raw_ostream &OS, const VASTUse &U, const char *Opc) {
