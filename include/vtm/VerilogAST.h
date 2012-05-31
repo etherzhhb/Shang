@@ -51,13 +51,11 @@ public:
   enum VASTTypes {
     vastImmediate,
     vastFirstValueType = vastImmediate,
-    vastExpr,
     vastSymbol,
-    vastFirstNamedType = vastSymbol,
-    vastRegister,
+    vastExpr,
     vastWire,
-    vastLastNamedType = vastWire,
-    vastLastValueType = vastWire,
+    vastRegister,
+    vastLastValueType = vastRegister,
     vastPort,
     vastSlot,
 
@@ -425,7 +423,7 @@ class VASTNamedValue : public VASTValue {
 protected:
   VASTNamedValue(VASTTypes T, const char *Name, unsigned BitWidth)
     : VASTValue(T, BitWidth) {
-    assert(T >= vastFirstNamedType && T <= vastLastNamedType
+    assert((T == vastSymbol || T == vastWire || T == vastRegister)
            && "Bad DeclType!");
     Contents.Name = Name;
   }
@@ -441,8 +439,9 @@ public:
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTNamedValue *A) { return true; }
   static inline bool classof(const VASTNode *A) {
-    return A->getASTType() >= vastFirstNamedType &&
-           A->getASTType() <= vastLastNamedType;
+    return A->getASTType() == vastSymbol ||
+           A->getASTType() == vastWire ||
+           A->getASTType() == vastRegister;
   }
 };
 
