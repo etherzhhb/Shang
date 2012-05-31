@@ -923,11 +923,18 @@ VASTValPtr VASTModule::buildXorExpr(ArrayRef<VASTValPtr> Ops,
                    BitWidth);
 }
 
+static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
+  if (LHS->getASTType() < RHS->getASTType()) return true;
+  else if (LHS->getASTType() > RHS->getASTType()) return false;
+
+  return LHS < RHS;
+}
+
 VASTValPtr
 VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
                                        SmallVectorImpl<VASTValPtr> &Ops,
                                        unsigned BitWidth) {
-  std::sort(Ops.begin(), Ops.end());
+  std::sort(Ops.begin(), Ops.end(), VASTValPtr_less);
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
