@@ -1016,7 +1016,7 @@ public:
 
   /*VASTUse getConstantValue() const;*/
 
-  void printAssignment(vlang_raw_ostream &OS) const;
+  void printAssignment(vlang_raw_ostream &OS, const VASTModule *Mod) const;
   void printReset(raw_ostream &OS) const;
   void dumpAssignment() const;
 

@@ -440,7 +440,8 @@ void VASTRegister::printReset(raw_ostream &OS) const {
      << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
 }
 
-void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
+void VASTRegister::printAssignment(vlang_raw_ostream &OS,
+                                   const VASTModule *Mod) const {
   if (Assigns.empty()) return;
 
   bool UseSwitch = Assigns.size() > 1;
@@ -454,18 +455,15 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   // case is activated.
   std::string AllPred;
   raw_string_ostream AllPredSS(AllPred);
-  unsigned NumAssignCndBits = 0;
 
   AllPredSS << '{';
   for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
     I->first->printAsOperand(AllPredSS, false);
-    ++NumAssignCndBits;
 
-    AllPredSS << ",\n       ";
+    AllPredSS << ", ";
     SrcCSEMap[*I->second].push_back(I->first);
   }
   AllPredSS << "1'b0 }";
-  ++NumAssignCndBits;
   AllPredSS.flush();
 
   OS << "\n// Assignment of " << getName() << '\n';
@@ -503,24 +501,19 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
 
   if (UseSwitch) OS.switch_end();
 
-  if (NumAssignCndBits > 2) {
-    // Also generate the self-verify code.
-    OS.switch_begin(AllPred) << "// Self-verify code:\n";
-    for (unsigned i = 1; i != NumAssignCndBits; ++i)
-      OS << NumAssignCndBits << "'h" << format("%llx", uint64_t(1) << i)
-         << ": begin /*Do not thing*/end\n";
-
-    OS << NumAssignCndBits << "'h0: begin /*Do not thing*/end\n";
-    OS << "default: begin $display(\"At time %t, register " << getName()
-       << " has more than one active assignment: %b!\", $time(), " << AllPred
-       << " ); $finish(); end\n";
-    OS.switch_end();
-  }
+  // As long as $onehot0(expr) returns true if at most one bit of expr is high,
+  // we can use it to detect if more one case condition is true at the same
+  // time.
+  OS << "if (!$onehot0(" << AllPred << "))"
+        " begin $display(\"At time %t, register "
+      << getName() << " in module " << ( Mod ? Mod->getName() : "Unknown")
+      << " has more than one active assignment: %b!\", $time(), "
+      << AllPred << "); $finish(); end\n";
 }
 
 void VASTRegister::dumpAssignment() const {
   vlang_raw_ostream S(dbgs());
-  printAssignment(S);
+  printAssignment(S, 0);
 }
 
 VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
@@ -562,7 +555,7 @@ void VASTModule::printDatapath(raw_ostream &OS) const{
 void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I)
-    (*I)->printAssignment(OS);
+    (*I)->printAssignment(OS, this);
 }
 
 void VASTModule::addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd) {
