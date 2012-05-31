@@ -442,15 +442,22 @@ void VASTRegister::printReset(raw_ostream &OS) const {
 void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
   if (Assigns.empty()) return;
 
+  bool UseSwitch = Assigns.size() > 1;
   std::string Pred;
   raw_string_ostream SS(Pred);
-  bool UseSwitch = Assigns.size() > 1;
 
   typedef std::vector<VASTValPtr> OrVec;
   typedef std::map<VASTValPtr, OrVec> CSEMapTy;
   CSEMapTy SrcCSEMap;
-  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I)
+
+  SS << '(';
+  for (assign_itertor I = assign_begin(), E = assign_end(); I != E; ++I) {
+    I->first->printAsOperand(SS, false);
+    SS << '|';
+
     SrcCSEMap[*I->second].push_back(I->first);
+  }
+  SS << "1'b0)";
 
   OS << "\n// Assignment of " << getName() << '\n';
   if (UseSwitch) {
@@ -458,7 +465,13 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     OS.switch_begin("1'b1");
   }
 
+  // Get the all predicate string, and reset the stream.
+  SS.flush();
+  std::string AllPred = SS.str();
+  Pred.clear();
+
   typedef CSEMapTy::iterator it;
+
   for (it I = SrcCSEMap.begin(), E = SrcCSEMap.end(); I != E; ++I) {
     SS << '(';
 
@@ -477,6 +490,11 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
     OS << " <= ";
     I->first.printAsOperand(OS);
     OS << ";\n";
+
+    OS << "if (" << AllPred << "& ~" << Pred <<") begin $display(\"Register "
+       << getName() << " is assigned by multiple value at %t\\n\", $time());"
+                       " $finish(); end\n";
+
     OS.exit_block();
 
     Pred.clear();
