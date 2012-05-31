@@ -515,12 +515,16 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
     OS.indent(2) << "if (";
     I->first->printAsOperand(OS, false);
     OS << ") begin\n";
+
     OS.indent(4) << "$display(\"Condition: ";
     I->first->printAsOperand(OS, false);
+
     unsigned CndSlot = I->first->getSlotNum();
     VASTSlot *S = Mod->getSlot(CndSlot);
-    OS << ", current slot: " << CndSlot << ", in BB#"
-       << S->getParentBB()->getNumber() << ', ';
+    OS << ", current slot: " << CndSlot << ", ";
+
+    if (CndSlot) OS << "in BB#" << S->getParentBB()->getNumber() << ',';
+
     if (S->hasAliasSlot()) {
       OS << " Alias slots: ";
       for (unsigned s = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
