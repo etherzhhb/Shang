@@ -511,7 +511,7 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS) const {
          << ": begin /*Do not thing*/end\n";
 
     OS << NumAssignCndBits << "'h0: begin /*Do not thing*/end\n";
-    OS << "default: begin $display(\"At %t register " << getName()
+    OS << "default: begin $display(\"At time %t, register " << getName()
        << " has more than one active assignment: %b!\", $time(), " << AllPred
        << " ); $finish(); end\n";
     OS.switch_end();
