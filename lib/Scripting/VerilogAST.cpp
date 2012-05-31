@@ -788,6 +788,25 @@ VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
+// Inline all operands in the expression whose Opcode is the same as Opc
+// recursively;
+static void flattenExpr(VASTValPtr V, VASTExpr::Opcode Opc,
+                        SmallVectorImpl<VASTValPtr> &NewOps) {
+  if (VASTExpr *Expr = dyn_cast<VASTExpr>(V)) {
+    typedef const VASTUse *op_iterator;
+    if (Expr->getOpcode() == Opc) {
+      for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
+        flattenExpr(I->getAsInlineOperand(), Opc, NewOps);
+
+      return;
+    }
+  }
+
+  NewOps.push_back(V);
+}
+
+
+
 VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
                                        ArrayRef<VASTValPtr> Ops,
                                        unsigned BitWidth) {
@@ -798,16 +817,8 @@ VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
 
   for (unsigned i = 0; i < Ops.size(); ++i) {
     // Try to flatten the expression tree.
-    if (VASTExpr *Expr = dyn_cast<VASTExpr>(Ops[i])) {
-      // Suppose Expr is flatten
-      if (Expr->getOpcode() == Opc) {
-        for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
-          NewOps.push_back(I->getAsInlineOperand());
-        continue;
-      }
-    }
+    flattenExpr(Ops[i], Opc, NewOps);
 
-    NewOps.push_back(Ops[i]);
     // The expression is actually commutative only if all its operands have the
     // same bitwidth.
     isCommutative &= (OperandBitWidth == Ops[i]->getBitWidth());
@@ -830,18 +841,6 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
     // same bitwidth.
     assert(BitWidth == Ops[i]->getBitWidth() && "Bitwidth not match!");
 
-    // Try to flatten the expression tree.
-    if (VASTExpr *Expr = dyn_cast<VASTExpr>(Ops[i])) {
-      // Suppose Expr is flatten
-      if (Expr->getOpcode() == VASTExpr::dpAnd) {
-        for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I){
-          VASTValPtr V = I->getAsInlineOperand();
-          NewOps.push_back(V);
-        }
-        continue;
-      }
-    }
-
     if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i])) {
       // X & 1 = X;
       if (Imm->isAllOnes()) continue;
@@ -850,7 +849,8 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
       if (Imm->isAllZeros()) return Imm;
     }
 
-    NewOps.push_back(Ops[i]);
+    // Try to flatten the expression tree.
+    flattenExpr(Ops[i], VASTExpr::dpAnd, NewOps);
   }
 
   if (NewOps.empty())
