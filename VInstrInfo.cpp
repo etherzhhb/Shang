@@ -1365,8 +1365,11 @@ unsigned DetialLatencyInfo::getStepsFromEntry(const MachineInstr *DstInstr) {
   if (VInstrInfo::isDatapath(DstOpC)) return 0;
 
   // Do not schedule function unit operation to the first state at the moment
-  // there may be potential resource conflict.
-  if (VInstrInfo::countNumRegUses(DstInstr)) return 1;
+  // there may be potential resource conflict: The end slot may be at the middle
+  // of a BB in a pipelined loop body, in that case, any FU can be actived by
+  // the alias slot.
+  if (!VInstrInfo::hasTrivialFU(DstOpC) || VInstrInfo::countNumRegUses(DstInstr))
+    return 1;
 
   return 0;
 }
