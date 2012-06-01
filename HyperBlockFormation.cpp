@@ -368,19 +368,29 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   // Delays before branching to not BB that cannot be merged.
   DenseMap<MachineBasicBlock*, unsigned> UnmergedDelays;
-  unsigned CurTrace = 0;
+  unsigned CurTrace = 1;
 
   while (!SortedBBs.empty()) {
     bool BlockMerged = false;
     MachineBasicBlock *MBB = SortedBBs.back();
     SortedBBs.pop_back();
 
+    // Merge trivial blocks.
     do {
-      ++CurTrace;
+      BlockMerged = false;
+      if (mergeTrivialSuccBlocks(MBB, CurTrace)) {
+        ++CurTrace;
+        MakeChanged = BlockMerged = true;
+      }
+    } while (BlockMerged);
 
-      MakeChanged |= BlockMerged =
-        (mergeSuccBlocks(MBB, UnmergedDelays, CurTrace)
-         || mergeTrivialSuccBlocks(MBB, CurTrace));
+    // Merge hot blocks.
+    do {
+      BlockMerged = false;
+      if (mergeSuccBlocks(MBB, UnmergedDelays, CurTrace)) {
+        ++CurTrace;
+        MakeChanged = BlockMerged = true;
+      }
     } while (BlockMerged);
     // Prepare for next block.
     UnmergedDelays.clear();
@@ -687,11 +697,13 @@ void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
         llvm_unreachable(0);
       }
       I = PseudoInst;
-    } else if (!TII->PredicateInstruction(I, PredVec)) {
-#ifndef NDEBUG
-      dbgs() << "Unable to predicate " << *I << "!\n";
-#endif
-      llvm_unreachable(0);
+    } else {
+       bool Predicated = TII->PredicateInstruction(I, PredVec);
+       assert(Predicated && "Cannot predicate instruction!");
+
+       // Also update the trace number.
+       MachineOperand *MO = VInstrInfo::getPredOperand(I);
+       if (MO[1].getImm() == 0) MO[1].ChangeToImmediate(CurTrace);
     }
   }
 }
