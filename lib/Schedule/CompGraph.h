@@ -244,6 +244,9 @@ public:
   iterator begin() { return Entry.succ_begin(); }
   iterator end()   { return Entry.succ_end(); }
 
+  bool empty() const { return Entry.succ_empty(); }
+  bool hasMoreThanOneNode() const { return Entry.num_succ() > 1; }
+
   NodeTy *operator[](T N) const { return Nodes.lookup(N); }
 
   NodeTy *GetOrCreateNode(T N) {
