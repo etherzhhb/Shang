@@ -571,6 +571,23 @@ unsigned VInstrInfo::GetTrace(const MachineInstr *MI) {
   return 0;
 }
 
+bool VInstrInfo::isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS) {
+  MachineOperand *LHSPred = VInstrInfo::getPredOperand(LHS);
+  MachineOperand *RHSPred = VInstrInfo::getPredOperand(RHS);
+
+  // The same predicate, or there is always true predicate,
+  // not mutual exclusive.
+  if (LHSPred == 0 || RHSPred == 0 ||
+      VInstrInfo::isAlwaysTruePred(*LHSPred) ||
+      VInstrInfo::isAlwaysTruePred(*RHSPred) ||
+      LHSPred->isIdenticalTo(*RHSPred))
+    return false;
+
+  // Compare the trace, if LHS and RHS have the same predecessor trace, they
+  // are mutual exclusive.
+  return LHSPred[1].getImm() == RHSPred[1].getImm();
+}
+
 MachineOperand VInstrInfo::CreateReg(unsigned RegNum, unsigned BitWidth,
                                      bool IsDef /* = false */) {
   MachineOperand MO = MachineOperand::CreateReg(RegNum, IsDef);

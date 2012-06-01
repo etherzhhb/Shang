@@ -48,6 +48,7 @@
 #include "llvm/Support/Debug.h"
 using namespace llvm;
 
+STATISTIC(MutexPredNoAlias, "Number of no-alias because of mutex predicate");
 //===----------------------------------------------------------------------===//
 namespace {
 /// @brief Schedule the operations.
@@ -409,13 +410,19 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       VSUnit *SrcU = I->second;
 
       MachineInstr *SrcMI = SrcU->getRepresentativeInst();
+
+      bool MayBothActive = VInstrInfo::isPredicateMutex(SrcMI, DstMI);
+      if (!MayBothActive) ++MutexPredNoAlias;
+
       // Handle unanalyzable memory access.
       if (DstMO == 0 || SrcMO == 0) {
         // Build the Src -> Dst dependence.
         unsigned Latency = CurState.getStepsToFinish(SrcMI);
+        //if (MayBothActive || SrcMO != DstMO)
         DstU->addDep(getMemDepEdge(SrcU, Latency, 0));
 
-        // Build the Dst -> Src (in next iteration) dependence.
+        // Build the Dst -> Src (in next iteration) dependence, the dependence
+        // occur even if SrcMI and DstMI are mutual exclusive.
         if (CurState.enablePipeLine()) {
           Latency = CurState.getStepsToFinish(SrcMI);
           SrcU->addDep(getMemDepEdge(DstU, Latency, 1));
@@ -436,26 +443,31 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
         assert(IRL && "Can not handle machine loop without IR loop!");
         DEBUG(SrcMI->dump();  dbgs() << "vs\n"; DstMI->dump(); dbgs() << '\n');
 
-        // Compute the iterate distance.
-        LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL, true);
+        // Dst not depend on Src if they are mutual exclusive.
+        if (MayBothActive) {
+          // Compute the iterate distance.
+          LoopDep LD = analyzeLoopDep(SrcMO, DstMO, isSrcLoad, isDstLoad, *IRL,
+                                      true);
 
-        if (LD.hasDep()) {
-          unsigned Latency = CurState.getStepsToFinish(SrcMI);
-          VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, LD.getItDst());
-          DstU->addDep(MemDep);
+          if (LD.hasDep()) {
+            unsigned Latency = CurState.getStepsToFinish(SrcMI);
+            VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, LD.getItDst());
+            DstU->addDep(MemDep);
+          }
         }
 
         // We need to compute if Src depend on Dst even if Dst not depend on Src.
-        // Because dependence depends on execute order.
-        LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL, false);
+        // Because dependence depends on execute order, if SrcMI and DstMI are
+        // mutual exclusive.
+        LoopDep LD = analyzeLoopDep(DstMO, SrcMO, isDstLoad, isSrcLoad, *IRL,
+                                    false);
 
         if (LD.hasDep()) {
           unsigned Latency = CurState.getStepsToFinish(SrcMI);
           VDMemDep *MemDep = getMemDepEdge(DstU, Latency, LD.getItDst());
           SrcU->addDep(MemDep);
         }
-      } else {
-        // Ignore the No-Alias pointers.
+      } else if (MayBothActive) {
         unsigned Latency = CurState.getStepsToFinish(SrcMI);
         VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, 0);
         DstU->addDep(MemDep);

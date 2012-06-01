@@ -248,6 +248,8 @@ public:
   static void ResetTrace(MachineInstr *MI) {
     getPredOperand(MI)[1].ChangeToImmediate(0);
   }
+
+  static bool isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS);
 };
 //MachineOperandExpressionTrait - Special DenseMapInfo traits to compare
 //MachineOperand* by *value* of the instruction rather than by pointer value.
