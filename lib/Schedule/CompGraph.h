@@ -105,6 +105,11 @@ public:
       if (RHS == 0 || NS->isNeighbor(RHS)) Weight += getWeightTo(NS);
     }
 
+    if (RHS && isNeighbor(RHS)) {
+      if (Succs.count(RHS)) Weight += getWeightTo(RHS);
+      else                  Weight += RHS->getWeightTo(this);
+    }
+
     return Weight;
   }
 
