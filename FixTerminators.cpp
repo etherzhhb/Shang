@@ -126,7 +126,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
         .addOperand(Cnd).addMBB(*MissedSuccs.begin())
         .addOperand(VInstrInfo::CreatePredicate())
-        .addOperand(VInstrInfo::CreateTrace(MBB));
+        .addOperand(VInstrInfo::CreateTrace());
     }
     //else if (Table.size() != MBB->succ_size()) {
     //  // Also fix the CFG.
@@ -146,7 +146,7 @@ bool FixTerminators::runOnMachineFunction(MachineFunction &MF) {
       ++Unreachables;
       BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
         .addOperand(VInstrInfo::CreatePredicate())
-        .addOperand(VInstrInfo::CreateTrace(MBB));
+        .addOperand(VInstrInfo::CreateTrace());
     }
 
     MissedSuccs.clear();

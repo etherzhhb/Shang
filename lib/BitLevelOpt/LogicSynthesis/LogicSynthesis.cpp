@@ -512,7 +512,7 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
     .addOperand(DefMO)
     .addExternalSymbol(VFI->allocateSymbol(data), Abc_ObjFaninNum(Obj))
     .addOperand(VInstrInfo::CreatePredicate())
-    .addOperand(VInstrInfo::CreateTrace(BB));
+    .addOperand(VInstrInfo::CreateTrace());
 
   for (unsigned k = 0, e = Ops.size(); k != e; ++k)
     Builder.addOperand(Ops[k]);

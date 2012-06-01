@@ -240,7 +240,14 @@ public:
 
   static MachineOperand CreatePredicate(unsigned Reg = 0);
 
-  static MachineOperand CreateTrace(MachineBasicBlock *MBB);
+  static MachineOperand CreateTrace(unsigned Trace = 0);
+  static unsigned GetTrace(const MachineInstr *MI);
+  static MachineOperand CloneTrace(const MachineInstr *MI) {
+    return CreateTrace(GetTrace(MI));
+  }
+  static void ResetTrace(MachineInstr *MI) {
+    getPredOperand(MI)[1].ChangeToImmediate(0);
+  }
 };
 //MachineOperandExpressionTrait - Special DenseMapInfo traits to compare
 //MachineOperand* by *value* of the instruction rather than by pointer value.

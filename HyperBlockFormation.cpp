@@ -91,14 +91,18 @@ struct HyperBlockFormation : public MachineFunctionPass {
                                  VInstrInfo::JT &DstJT);
 
   typedef SmallVectorImpl<MachineBasicBlock*> BBVecTy;
-  bool mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBsToMerge);
+  bool mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBsToMerge,
+                   unsigned CurTrace);
 
-  bool mergeBlock(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB);
+  bool mergeBlock(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB,
+                  unsigned CurTrace);
   typedef DenseMap<MachineBasicBlock*, unsigned> BB2DelayMapTy;
-  bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays);
+  bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays,
+                       unsigned CurTrace);
 
-  bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB);
-  void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB);
+  bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB, unsigned CurTrace);
+  void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB,
+                      unsigned CurTrace);
 
   bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
                      const TargetInstrInfo *TII);
@@ -225,13 +229,14 @@ INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
 
-bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
+bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs,
+                                      unsigned CurTrace) {
   bool ActuallyMerged = false;
   while (!BBs.empty()) {
     MachineBasicBlock *SuccBB = BBs.back();
     BBs.pop_back();
 
-    ActuallyMerged |= mergeBlock(SuccBB, MBB);
+    ActuallyMerged |= mergeBlock(SuccBB, MBB, CurTrace);
   }
 
   CycleLatencyInfo CL(*MRI);
@@ -243,7 +248,8 @@ bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
 }
 
 bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
-                                          BB2DelayMapTy &UnmergedDelays) {
+                                          BB2DelayMapTy &UnmergedDelays,
+                                          unsigned CurTrace) {
   VInstrInfo::JT CurJT, SuccJT;
   uint64_t WeightSum = 0;
 
@@ -313,10 +319,11 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
     return false;
   }
 
-  return mergeBlocks(MBB, BBsToMerge);
+  return mergeBlocks(MBB, BBsToMerge, CurTrace);
 }
 
-bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
+bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB,
+                                                 unsigned CurTrace) {
   SmallVector<MachineBasicBlock*, 8> BBsToMerge;
   VInstrInfo::JT CurJT, SuccJT;
 
@@ -335,7 +342,7 @@ bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
     }
   }
 
-  return mergeBlocks(MBB, BBsToMerge);
+  return mergeBlocks(MBB, BBsToMerge, CurTrace);
 }
 
 bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
@@ -361,16 +368,20 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   // Delays before branching to not BB that cannot be merged.
   DenseMap<MachineBasicBlock*, unsigned> UnmergedDelays;
+  unsigned CurTrace = 0;
 
   while (!SortedBBs.empty()) {
     bool BlockMerged = false;
     MachineBasicBlock *MBB = SortedBBs.back();
     SortedBBs.pop_back();
 
-    do
+    do {
+      ++CurTrace;
+
       MakeChanged |= BlockMerged =
-        (mergeSuccBlocks(MBB, UnmergedDelays) || mergeTrivialSuccBlocks(MBB));
-    while (BlockMerged);
+        (mergeSuccBlocks(MBB, UnmergedDelays, CurTrace)
+         || mergeTrivialSuccBlocks(MBB, CurTrace));
+    } while (BlockMerged);
     // Prepare for next block.
     UnmergedDelays.clear();
   }
@@ -539,7 +550,8 @@ MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
 }
 
 bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
-                                     MachineBasicBlock *ToBB) {
+                                     MachineBasicBlock *ToBB, unsigned CurTrace)
+{
   VInstrInfo::JT FromJT, ToJT;
   MachineBasicBlock *MergeDst = getMergeDst(FromBB, FromJT, ToJT);
   assert(MergeDst == ToBB && "Cannot merge block!");
@@ -556,7 +568,7 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   MachineOperand PredCnd = at->second;
 
   if (!VInstrInfo::isAlwaysTruePred(PredCnd))
-    PredicateBlock(PredCnd, FromBB);
+    PredicateBlock(PredCnd, FromBB, CurTrace);
 
   // And merge the block into its predecessor.
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
@@ -634,7 +646,8 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
 }
 
 void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
-                                            MachineBasicBlock *MBB ){
+                                         MachineBasicBlock *MBB,
+                                         unsigned CurTrace) {
   typedef std::map<unsigned, unsigned> PredMapTy;
   PredMapTy PredMap;
   SmallVector<MachineOperand, 1> PredVec(1, Pred);
@@ -659,6 +672,9 @@ void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
 
       MO->ChangeToRegister(Reg, false);
       MO->setTargetFlags(1);
+
+      // Also update the trace number.
+      if (MO[1].getImm() == 0) MO[1].ChangeToImmediate(CurTrace);
     } else if (I->getOpcode() <= TargetOpcode::COPY) {
       MachineInstr *PseudoInst = I;
       ++I; // Skip current instruction, we may change it.

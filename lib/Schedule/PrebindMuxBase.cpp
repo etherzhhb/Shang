@@ -197,7 +197,7 @@ void PrebindMuxBase::insertDistrubedMuxOp(MachineFunction &MF) {
           .addOperand(VInstrInfo::CreateImm(MuxNum, 64)) // MuxNumber.
           .addOperand(VInstrInfo::CreateImm(MuxSize, 64)) // Mux size.
           .addOperand(*PredMO) // Predicate
-          .addOperand(VInstrInfo::CreateTrace(MBB)); // Trace number.
+          .addOperand(VInstrInfo::CloneTrace(Inst)); // Trace number.
 
         // Read the value from mux instead.
         MO.ChangeToRegister(NewRegNum, false);

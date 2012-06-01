@@ -527,7 +527,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
                                              true))
             .addOperand(VInstrInfo::CreateReg(R, VInstrInfo::getBitWidth(MO)))
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(VInstrInfo::CreateTrace(MBB));
+            .addOperand(VInstrInfo::CloneTrace(RepMI));
         assert(A->isControl() && "Only control operation write untill finish!");
         OpSlot PipeSlot(SchedSlot.getSlot() + A->getLatency() - 1, false);
         Insts.push_back(std::make_pair(PipeStage, PipeSlot));
@@ -547,7 +547,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
             .addOperand(FU).addImm(Id.getData())
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(VInstrInfo::CreateTrace(MBB));
+            .addOperand(VInstrInfo::CloneTrace(RepMI));
         // Add the instruction into the emit list, disable the FU 1 clock later.
         Insts.push_back(std::make_pair(DisableMI, SchedSlot + 1));
         State.addDummyLatencyEntry(DisableMI);
