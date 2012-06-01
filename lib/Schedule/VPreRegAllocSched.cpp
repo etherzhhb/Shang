@@ -429,6 +429,9 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
       // Ignore RAR dependence.
       if (isDstLoad && isSrcLoad) continue;
 
+      if (!isMachineMemOperandAlias(SrcMO, DstMO, AA, SE))
+        continue;
+
       if (CurState.enablePipeLine()) {
         assert(IRL && "Can not handle machine loop without IR loop!");
         DEBUG(SrcMI->dump();  dbgs() << "vs\n"; DstMI->dump(); dbgs() << '\n');
@@ -452,9 +455,6 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
           SrcU->addDep(MemDep);
         }
       } else {
-        if (!isMachineMemOperandAlias(SrcMO, DstMO, AA, SE))
-          continue;
-
         // Ignore the No-Alias pointers.
         unsigned Latency = CurState.getStepsToFinish(SrcMI);
         VDMemDep *MemDep = getMemDepEdge(SrcU, Latency, 0);
