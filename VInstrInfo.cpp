@@ -984,9 +984,6 @@ void BitWidthAnnotator::changeToDefaultPred() {
 
   MO->ChangeToRegister(0, false);
   MO->setTargetFlags(1);
-  // Dirty Hack: Also fix the trace number.
-  ++MO;
-  MO->setTargetFlags(4);
 }
 
 const MachineInstr *const DetialLatencyInfo::EntryMarker =
