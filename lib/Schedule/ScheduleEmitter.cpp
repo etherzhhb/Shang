@@ -527,7 +527,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
                                              true))
             .addOperand(VInstrInfo::CreateReg(R, VInstrInfo::getBitWidth(MO)))
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(VInstrInfo::CloneTrace(RepMI));
+            .addOperand(*VInstrInfo::getTraceOperand(RepMI));
         assert(A->isControl() && "Only control operation write untill finish!");
         OpSlot PipeSlot(SchedSlot.getSlot() + A->getLatency() - 1, false);
         Insts.push_back(std::make_pair(PipeStage, PipeSlot));
@@ -547,7 +547,7 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
           BuildMI(*MBB, II, dl, VInstrInfo::getDesc(VTM::VOpDisableFU))
             .addOperand(FU).addImm(Id.getData())
             .addOperand(*VInstrInfo::getPredOperand(RepMI))
-            .addOperand(VInstrInfo::CloneTrace(RepMI));
+            .addOperand(*VInstrInfo::getTraceOperand(RepMI));
         // Add the instruction into the emit list, disable the FU 1 clock later.
         Insts.push_back(std::make_pair(DisableMI, SchedSlot + 1));
         State.addDummyLatencyEntry(DisableMI);
@@ -701,7 +701,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Also set the slot of datapath if we need.
   DEBUG_WITH_TYPE("vtm-debug-datapath-slot", InstrSlot = SchedSlot.getSlot());
 
-  VInstrInfo::getPredOperand(&Inst)[1].ChangeToImmediate(InstrSlot);
+  VInstrInfo::getTraceOperand(&Inst)->ChangeToImmediate(InstrSlot);
   // Move the instruction to the right place.
   InsertPosTy IP = getMIAt(SchedSlot);
   Inst.removeFromParent();

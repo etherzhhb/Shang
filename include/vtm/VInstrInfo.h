@@ -201,7 +201,7 @@ public:
 
   static inline unsigned getInstrSlotNum(MachineInstr *MI) {
     assert(MI->isInsideBundle() && "Cannot get InstrSlot!");
-    return VInstrInfo::getPredOperand(MI)[1].getImm();
+    return VInstrInfo::getTraceOperand(MI)->getImm();
   }
 
   static bool isCtrlBundle(MachineInstr *MI);
@@ -240,13 +240,19 @@ public:
 
   static MachineOperand CreatePredicate(unsigned Reg = 0);
 
-  static MachineOperand CreateTrace(unsigned Trace = 0);
-  static unsigned GetTrace(const MachineInstr *MI);
-  static MachineOperand CloneTrace(const MachineInstr *MI) {
-    return CreateTrace(GetTrace(MI));
+  static MachineOperand CreateTrace();
+  static MachineOperand *getTraceOperand(MachineInstr *MI) {
+    MachineOperand *Pred = getPredOperand(MI);
+
+    return Pred ? Pred + 1 : 0;
   }
+
+  static const MachineOperand *getTraceOperand(const MachineInstr *MI) {
+    return getTraceOperand(const_cast<MachineInstr*>(MI));
+  }
+
   static void ResetTrace(MachineInstr *MI) {
-    getPredOperand(MI)[1].ChangeToImmediate(0);
+    getTraceOperand(MI)->ChangeToImmediate(~UINT64_C(0));
   }
 
   static bool isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS);

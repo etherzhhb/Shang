@@ -558,17 +558,10 @@ MachineOperand VInstrInfo::CreatePredicate(unsigned Reg) {
   return MO;
 }
 
-MachineOperand VInstrInfo::CreateTrace(unsigned Trace) {
+MachineOperand VInstrInfo::CreateTrace() {
   MachineOperand MO = MachineOperand::CreateImm(0);
   MO.setTargetFlags(4);
   return MO;
-}
-
-unsigned VInstrInfo::GetTrace(const MachineInstr *MI) {
-  const MachineOperand *Pred = VInstrInfo::getPredOperand(MI);
-  if (Pred) return Pred[1].getImm();
-
-  return 0;
 }
 
 bool VInstrInfo::isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS) {
