@@ -411,7 +411,7 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
 
       MachineInstr *SrcMI = SrcU->getRepresentativeInst();
 
-      bool MayBothActive = VInstrInfo::isPredicateMutex(SrcMI, DstMI);
+      bool MayBothActive = !VInstrInfo::isPredicateMutex(SrcMI, DstMI);
       if (!MayBothActive) ++MutexPredNoAlias;
 
       // Handle unanalyzable memory access.
