@@ -513,7 +513,7 @@ void VInstrInfo::MergeBranches(MachineBasicBlock *PredFBB,
   }
 }
 
-bool VInstrInfo::isAlwaysTruePred(MachineOperand &MO){
+bool VInstrInfo::isAlwaysTruePred(const MachineOperand &MO){
   assert(MO.isReg() && "Unexpected MO type!");
   if (MO.getReg() == 0) {
     assert(!VInstrInfo::isPredicateInverted(MO) && "Illegal always false!");
@@ -564,9 +564,10 @@ MachineOperand VInstrInfo::CreateTrace() {
   return MO;
 }
 
-bool VInstrInfo::isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS) {
-  MachineOperand *LHSPred = VInstrInfo::getPredOperand(LHS);
-  MachineOperand *RHSPred = VInstrInfo::getPredOperand(RHS);
+bool VInstrInfo::isPredicateMutex(const MachineInstr *LHS,
+                                  const  MachineInstr *RHS) {
+  const MachineOperand *LHSPred = VInstrInfo::getPredOperand(LHS);
+  const MachineOperand *RHSPred = VInstrInfo::getPredOperand(RHS);
 
   // The same predicate, or there is always true predicate,
   // not mutual exclusive.

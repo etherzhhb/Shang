@@ -89,7 +89,7 @@ public:
                             SmallVectorImpl<MachineOperand> &Cnd,
                             const TargetInstrInfo *TII);
 
-  static bool isAlwaysTruePred(MachineOperand &MO);
+  static bool isAlwaysTruePred(const MachineOperand &MO);
 
   static MachineOperand MergePred(MachineOperand OldCndMO,
                                   MachineOperand NewCndMO,
@@ -255,7 +255,7 @@ public:
     getTraceOperand(MI)->ChangeToImmediate(~UINT64_C(0));
   }
 
-  static bool isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS);
+  static bool isPredicateMutex(const MachineInstr *LHS, const MachineInstr *RHS);
 };
 //MachineOperandExpressionTrait - Special DenseMapInfo traits to compare
 //MachineOperand* by *value* of the instruction rather than by pointer value.
