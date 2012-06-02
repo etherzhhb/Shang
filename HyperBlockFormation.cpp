@@ -70,6 +70,16 @@ struct HyperBlockFormation : public MachineFunctionPass {
   MachineBlockFrequencyInfo *MBFI;
   BBDelayAnalysis *BBDelay;
 
+  typedef DenseSet<unsigned> IntSetTy;
+  typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
+  CFGMapTy CFGMap;
+
+  // Internal BBNum, Predecessor bit map.
+  typedef std::pair<uint8_t, int64_t> LocalCFGInfo;
+  typedef DenseMap<unsigned, LocalCFGInfo> LocalCFGMapTy;
+  typedef DenseMap<unsigned, LocalCFGMapTy> AllLocalCFGMapTy;
+  AllLocalCFGMapTy AllLocalCFGs;
+
   HyperBlockFormation()
     : MachineFunctionPass(ID), TII(0), MRI(0), LI(0), MBPI(0), MBFI(0),
       BBDelay(0) {
@@ -85,24 +95,61 @@ struct HyperBlockFormation : public MachineFunctionPass {
     //AU.addPreserved<BBDelayAnalysis>();
   }
 
+  void buildCFGForBB(MachineBasicBlock *MBB);
+
+  void annotateLocalCFGInfo(MachineOperand *MO, uint8_t LocalBBNum,
+                            int64_t PredBitMap) {
+    assert(PredBitMap && "Not have any predecessor?");
+    MO->ChangeToImmediate(PredBitMap);
+    assert(LocalBBNum && "Expect no-zero LocalBBNum!");
+    assert(LocalBBNum < 64 && "Only support 64 local BB at most!");
+    MO->setTargetFlags(LocalBBNum);
+  }
+
+  int64_t buildLocalPredBitMap(MachineBasicBlock *MBB, LocalCFGMapTy &LocalCFG){
+    typedef MachineBasicBlock::pred_iterator pred_it;
+    int64_t Result = 0ull;
+    for (pred_it I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
+      unsigned PredNum = (*I)->getNumber();
+
+      LocalCFGInfo Info = LocalCFG.lookup(PredNum);
+      // Add the bit of the current predecessor.
+      Result |= UINT64_C(1) << Info.first;
+      // And the predecessors of the current predecessor.
+      Result |= Info.second;
+    }
+
+    assert(Result && "Not have any predecessor?");
+    return Result;
+  }
+
+  unsigned retrieveBBNum(unsigned ParentBBNum, uint8_t LocalBBNum) const {
+    AllLocalCFGMapTy::const_iterator at = AllLocalCFGs.find(ParentBBNum);
+    assert(at != AllLocalCFGs.end() && "LocalCFG not found!");
+    const LocalCFGMapTy &LocalCFG = at->second;
+    typedef LocalCFGMapTy::const_iterator it;
+    for (it I = LocalCFG.begin(), E = LocalCFG.end(); I != E; ++I)
+      if (I->second.first == LocalBBNum) return I->first;
+
+    llvm_unreachable("Cannot retieve BBNum!");
+    return 0;
+  }
+
   bool runOnMachineFunction(MachineFunction &MF);
   MachineBasicBlock *getMergeDst(MachineBasicBlock *Src,
                                  VInstrInfo::JT &SrcJT,
                                  VInstrInfo::JT &DstJT);
 
   typedef SmallVectorImpl<MachineBasicBlock*> BBVecTy;
-  bool mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBsToMerge,
-                   unsigned CurTrace);
+  bool mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBsToMerge);
 
-  bool mergeBlock(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB,
-                  unsigned CurTrace);
+  bool mergeBlock(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB);
   typedef DenseMap<MachineBasicBlock*, unsigned> BB2DelayMapTy;
-  bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays,
-                       unsigned CurTrace);
+  bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays);
 
-  bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB, unsigned CurTrace);
-  void PredicateBlock(MachineOperand Cnd, MachineBasicBlock *BB,
-                      unsigned CurTrace);
+  bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB);
+  void PredicateBlock(unsigned ToBBNum, MachineOperand Cnd,
+                      MachineBasicBlock *BB);
 
   bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
                      const TargetInstrInfo *TII);
@@ -229,14 +276,13 @@ INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
 
-bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs,
-                                      unsigned CurTrace) {
+bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
   bool ActuallyMerged = false;
   while (!BBs.empty()) {
     MachineBasicBlock *SuccBB = BBs.back();
     BBs.pop_back();
 
-    ActuallyMerged |= mergeBlock(SuccBB, MBB, CurTrace);
+    ActuallyMerged |= mergeBlock(SuccBB, MBB);
   }
 
   CycleLatencyInfo CL(*MRI);
@@ -248,8 +294,7 @@ bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs,
 }
 
 bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
-                                          BB2DelayMapTy &UnmergedDelays,
-                                          unsigned CurTrace) {
+                                          BB2DelayMapTy &UnmergedDelays) {
   VInstrInfo::JT CurJT, SuccJT;
   uint64_t WeightSum = 0;
 
@@ -319,11 +364,10 @@ bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
     return false;
   }
 
-  return mergeBlocks(MBB, BBsToMerge, CurTrace);
+  return mergeBlocks(MBB, BBsToMerge);
 }
 
-bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB,
-                                                 unsigned CurTrace) {
+bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
   SmallVector<MachineBasicBlock*, 8> BBsToMerge;
   VInstrInfo::JT CurJT, SuccJT;
 
@@ -342,7 +386,15 @@ bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB,
     }
   }
 
-  return mergeBlocks(MBB, BBsToMerge, CurTrace);
+  return mergeBlocks(MBB, BBsToMerge);
+}
+
+void HyperBlockFormation::buildCFGForBB(MachineBasicBlock *MBB) {
+  unsigned BBNum = MBB->getNumber();
+
+  typedef MachineBasicBlock::pred_iterator pred_it;
+  for (pred_it I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I)
+    CFGMap[BBNum].insert((*I)->getNumber());
 }
 
 bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
@@ -354,15 +406,18 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   BBDelay = &getAnalysis<BBDelayAnalysis>();
 
   bool MakeChanged = false;
+  AllLocalCFGs.clear();
   typedef MachineFunction::reverse_iterator rev_it;
 
   MF.RenumberBlocks();
-
   // Sort the BBs according they frequency.
   std::vector<MachineBasicBlock*> SortedBBs;
+  CFGMap.clear();
 
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     SortedBBs.push_back(I);
+    buildCFGForBB(I);
+  }
 
   std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
 
@@ -375,10 +430,14 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock *MBB = SortedBBs.back();
     SortedBBs.pop_back();
 
+    unsigned CurBBNum = MBB->getNumber();
+    // Initialize the local CFG.
+    AllLocalCFGs[CurBBNum][CurBBNum] = std::make_pair(0, UINT64_C(0));
+
     // Merge trivial blocks.
     do {
       BlockMerged = false;
-      if (mergeTrivialSuccBlocks(MBB, CurTrace)) {
+      if (mergeTrivialSuccBlocks(MBB)) {
         ++CurTrace;
         MakeChanged = BlockMerged = true;
       }
@@ -387,7 +446,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     // Merge hot blocks.
     do {
       BlockMerged = false;
-      if (mergeSuccBlocks(MBB, UnmergedDelays, CurTrace)) {
+      if (mergeSuccBlocks(MBB, UnmergedDelays)) {
         ++CurTrace;
         MakeChanged = BlockMerged = true;
       }
@@ -560,7 +619,7 @@ MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
 }
 
 bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
-                                     MachineBasicBlock *ToBB, unsigned CurTrace)
+                                     MachineBasicBlock *ToBB)
 {
   VInstrInfo::JT FromJT, ToJT;
   MachineBasicBlock *MergeDst = getMergeDst(FromBB, FromJT, ToJT);
@@ -577,8 +636,7 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   assert(at != ToJT.end() && "ToBB not branching to FromBB?");
   MachineOperand PredCnd = at->second;
 
-  if (!VInstrInfo::isAlwaysTruePred(PredCnd))
-    PredicateBlock(PredCnd, FromBB, CurTrace);
+  PredicateBlock(ToBB->getNumber(), PredCnd, FromBB);
 
   // And merge the block into its predecessor.
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
@@ -655,13 +713,18 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   return true;
 }
 
-void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
-                                         MachineBasicBlock *MBB,
-                                         unsigned CurTrace) {
+void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
+                                         MachineBasicBlock *MBB) {
   typedef std::map<unsigned, unsigned> PredMapTy;
   PredMapTy PredMap;
   SmallVector<MachineOperand, 1> PredVec(1, Pred);
+  const bool isPredAlwaysTrue = VInstrInfo::isAlwaysTruePred(Pred);
 
+  LocalCFGMapTy &LocalCFG = AllLocalCFGs[ToBBNum];
+  const int64_t PredBitMap = buildLocalPredBitMap(MBB, LocalCFG);
+  unsigned LocalBBNum = 0;
+  const unsigned CurBBNum = MBB->getNumber();
+  // Build the local CFG information for this block.
   // Predicate the Block.
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
        I != E; ++I) {
@@ -671,40 +734,63 @@ void HyperBlockFormation::PredicateBlock(MachineOperand Pred,
     if (VInstrInfo::isDatapath(I->getOpcode()))
       continue;
 
-    if (TII->isPredicated(I)) {
-      MachineOperand *MO = VInstrInfo::getPredOperand(I);
-      unsigned k = (MO->getReg() << 1)
-                   | (VInstrInfo::isPredicateInverted(*MO) ? 1 :0 );
-      unsigned &Reg = PredMap[k];
-      if (!Reg)
-        Reg = VInstrInfo::MergePred(*MO, Pred, *MBB, I, MRI,
-                                    TII, VTM::VOpAnd).getReg();
+    bool IsAlreadyPredicated = TII->isPredicated(I);
+    if (!IsAlreadyPredicated) {
+      if (IsAlreadyPredicated) {
+        MachineOperand *MO = VInstrInfo::getPredOperand(I);
+        unsigned k = (MO->getReg() << 1)
+          | (VInstrInfo::isPredicateInverted(*MO) ? 1 :0 );
+        unsigned &Reg = PredMap[k];
+        if (!Reg)
+          Reg = VInstrInfo::MergePred(*MO, Pred, *MBB, I, MRI,
+          TII, VTM::VOpAnd).getReg();
 
-      MO->ChangeToRegister(Reg, false);
-      MO->setTargetFlags(1);
+        MO->ChangeToRegister(Reg, false);
+        MO->setTargetFlags(1);
 
-      // Also update the trace number.
-      if (MO[1].getImm() == 0) MO[1].ChangeToImmediate(CurTrace);
-    } else if (I->getOpcode() <= TargetOpcode::COPY) {
-      MachineInstr *PseudoInst = I;
-      ++I; // Skip current instruction, we may change it.
-      PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst,
-                                                          PredVec);
-      if (!PseudoInst) {
-#ifndef NDEBUG
-        dbgs() << "Unable to predicate " << *I << "!\n";
-#endif
-        llvm_unreachable(0);
+        // Also update the trace number.
+        assert (MO[1].getImm() == 0);
+      } else if (I->getOpcode() <= TargetOpcode::COPY) {
+        MachineInstr *PseudoInst = I;
+        ++I; // Skip current instruction, we may change it.
+        PseudoInst = VInstrInfo::PredicatePseudoInstruction(PseudoInst,
+          PredVec);
+        assert(PseudoInst && "Cannot predicate pseudo instruction!");
+        I = PseudoInst;
+      } else {
+        bool Predicated = TII->PredicateInstruction(I, PredVec);
+        assert(Predicated && "Cannot predicate instruction!");
       }
-      I = PseudoInst;
-    } else {
-       bool Predicated = TII->PredicateInstruction(I, PredVec);
-       assert(Predicated && "Cannot predicate instruction!");
-
-       // Also update the trace number.
-       MachineOperand *MO = VInstrInfo::getPredOperand(I);
-       if (MO[1].getImm() == 0) MO[1].ChangeToImmediate(CurTrace);
     }
+
+    // Also update the trace number.
+    MachineOperand *MO = VInstrInfo::getPredOperand(I);
+    if (MO == 0) continue;
+    // Move from the predicate to the trace operand.
+    ++MO;
+
+    // Create the local BBNum entry on demand.
+    if (LocalBBNum == 0) {
+      LocalBBNum = LocalCFG.size();
+      LocalCFG[MBB->getNumber()] = std::make_pair(LocalBBNum, PredBitMap);
+    }
+
+    uint8_t CurLocalBBNum = LocalBBNum;
+    int64_t CurPredBitMap = PredBitMap;
+
+    // Transform the trace information for new local CFG, with the offset of
+    // current local BBNum.
+    if (IsAlreadyPredicated) {
+      unsigned OldBBNum = retrieveBBNum(CurBBNum, MO->getTargetFlags());
+      LocalCFGInfo &Info = LocalCFG[OldBBNum];
+      // Move the old information.
+      CurLocalBBNum += MO->getTargetFlags();
+      CurPredBitMap |= MO->getImm() << LocalBBNum;
+      // Retrieve the original BB number.
+      Info = std::make_pair(CurLocalBBNum, CurPredBitMap);
+    }
+
+    annotateLocalCFGInfo(MO, CurLocalBBNum, CurPredBitMap);
   }
 }
 

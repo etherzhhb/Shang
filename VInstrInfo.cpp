@@ -583,9 +583,14 @@ bool VInstrInfo::isPredicateMutex(MachineInstr *LHS, MachineInstr *RHS) {
       LHSPred->isIdenticalTo(*RHSPred))
     return false;
 
-  // Compare the trace, if LHS and RHS have the same predecessor trace, they
-  // are mutual exclusive.
-  return LHSPred[1].getImm() != 0 && LHSPred[1].getImm() == RHSPred[1].getImm();
+  // Compare the trace,
+  uint8_t LHSBBNum = LHSPred[1].getTargetFlags(),
+          RHSBBNum = RHSPred[1].getTargetFlags();
+  int64_t LHSPredBits = LHSPred[1].getImm(), RHSPredBits = RHSPred[1].getImm();
+
+  // If the two predicates are mutual exclusive if they cannot reach each other.
+  return !(LHSPredBits & (UINT64_C(1) << RHSBBNum))
+         && !(RHSPredBits & (UINT64_C(1) << LHSBBNum));
 }
 
 MachineOperand VInstrInfo::CreateReg(unsigned RegNum, unsigned BitWidth,
