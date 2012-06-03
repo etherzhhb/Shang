@@ -474,7 +474,9 @@ void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
     VASTSlot *S = Mod->getSlot(CndSlot);
     OS << ", current slot: " << CndSlot << ", ";
 
-    if (CndSlot) OS << "in BB#" << S->getParentBB()->getNumber() << ',';
+    if (CndSlot)
+      OS << "in BB#" << S->getParentBB()->getNumber() << ' '
+         << S->getParentBB()->getBasicBlock()->getName() << ',';
 
     if (S->hasAliasSlot()) {
       OS << " Alias slots: ";
