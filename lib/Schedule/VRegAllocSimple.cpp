@@ -899,7 +899,7 @@ void VRASimple::bindMemoryBus() {
       }
 
       // Merge all others LI to MemBusLI.
-      mergeLI(LI, MemBusLI);
+      mergeLI(LI, MemBusLI, true);
     }
   }
 }
@@ -934,7 +934,7 @@ void VRASimple::bindDstMux() {
       //SlotIndex NextStart = LI->beginIndex().getNextIndex().getNextIndex();
       //assert(!RepLI->overlaps(NextStart, LI->endIndex())
         //&& "Unexpected bram overlap!");
-      mergeLI(LI, RepLI);
+      mergeLI(LI, RepLI, true);
     }
   }
 }
@@ -967,7 +967,7 @@ void VRASimple::bindBlockRam() {
       // Merge to the representative live interval.
       LiveInterval *RepLI = RepLIs[PhyReg];
       // FIXME: Check overlap of the results of VOpPipeStage.
-      mergeLI(LI, RepLI);
+      mergeLI(LI, RepLI, true);
     }
   }
 }
@@ -1023,7 +1023,7 @@ void VRASimple::bindCalleeFN() {
       }
 
       // Merge to the representative live interval.
-      mergeLI(LI, RepLI);
+      mergeLI(LI, RepLI, true);
     }
   }
 }

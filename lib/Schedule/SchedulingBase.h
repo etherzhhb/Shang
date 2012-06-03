@@ -21,7 +21,7 @@
 #include "VSUnit.h"
 
 #include "llvm/ADT/PriorityQueue.h"
-#include "llvm/ADT/SparseBitVector.h"
+#include "llvm/ADT/SmallVector.h"
 #include <map>
 using namespace llvm;
 
@@ -42,10 +42,22 @@ private:
   typedef std::map<const VSUnit*, TimeFrame> TFMapTy;
   TFMapTy SUnitToTF;
 
-  static const unsigned PredicatedChannel = ~0u;
-  // Predicate -> resource usage at step.
-  // Resource -> resource usage at each step.
-  typedef std::map<std::pair<FuncUnitId, unsigned>, SparseBitVector<> > RTType;
+  typedef SmallVector<MachineInstr*, 4> InstSetTy;
+  static InstSetTy::iterator findConflictedInst(InstSetTy &Set, MachineInstr *MI);
+  bool hasConflictedInst(InstSetTy &Set, MachineInstr *MI) {
+    // Nothing to conflict if the set is empty.
+    if (Set.empty()) return false;
+
+    // Even the two MIs not in the same trace, the different trace may active at
+    // the same time in different iterations.
+    if (State.enablePipeLine()) return true;
+
+    return findConflictedInst(Set, MI) != Set.end();
+  }
+
+  // Remember the Instructions those are scheduled to a particular step.
+  // (FU, Step) -> Instructions.
+  typedef std::map<std::pair<FuncUnitId, unsigned>, InstSetTy> RTType;
   RTType RT;
 
   // Do not mixing pipeline stage with variable latency FUs.
@@ -106,10 +118,9 @@ public:
     PipelineStageStatus.clear();
   }
 
-  SparseBitVector<> &getRTFor(unsigned PredReg, FuncUnitId FU) {
-    return RT[std::make_pair(FU, PredReg)];
+  InstSetTy &getRTFor(unsigned Step, FuncUnitId FU) {
+    return RT[std::make_pair(FU, Step)];
   }
-  unsigned getPredicateChannel(MachineInstr *MI);
 
   void revertFUUsage(MachineInstr *MI, unsigned step, unsigned Latency,
                      FuncUnitId FU);

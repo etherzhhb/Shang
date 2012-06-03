@@ -27,7 +27,6 @@
 
 using namespace llvm;
 using namespace llvm;
-
 //===----------------------------------------------------------------------===//
 void SchedulingBase::buildTimeFrame() {
   VSUnit *EntryRoot = State.getEntryRoot();
@@ -214,24 +213,29 @@ void SchedulingBase::dumpTimeFrame() const {
   printTimeFrame(dbgs());
 }
 
-unsigned SchedulingBase::getPredicateChannel(MachineInstr *MI) {
-  //MachineOperand *P = VInstrInfo::getPredOperand(MI);
-  //unsigned PredReg = P->getReg();
-  //if (*P).isPredicateInverted()) PredReg = ~PredReg;
-  //return PredReg;
-  return 0;
+SchedulingBase::InstSetTy::iterator
+SchedulingBase::findConflictedInst(InstSetTy &Set, MachineInstr *MI) {
+  typedef InstSetTy::iterator it;
+  it I = Set.begin(), E = Set.end();
+
+  while (I != E) {
+    if (!VInstrInfo::isPredicateMutex(MI, *I)) return I;
+
+    ++I;
+  }
+
+  return I;
 }
 
 void SchedulingBase::takeFU(MachineInstr *MI, unsigned step, unsigned Latency,
                             FuncUnitId FU) {
-  unsigned PredReg = getPredicateChannel(MI);
   VFUs::FUTypes Ty = FU.getFUType();
 
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    SparseBitVector<> &V = getRTFor(PredReg, FU);
-    assert(!V.test(s - StartSlot) && "FU already in use!");
-    V.set(s - StartSlot);
+    InstSetTy &InstSet = getRTFor(s, FU);
+    assert(!hasConflictedInst(InstSet, MI) && "FU conflict detected!");
+    InstSet.push_back(MI);
     // Also take the un-predicated channel.
     //if (PredReg) getRTFor(PredicatedChannel, FU).set(s - StartSlot);
 
@@ -262,14 +266,12 @@ void SchedulingBase::takeFU(VSUnit *U, unsigned step) {
 
 bool SchedulingBase::hasSpareFU(MachineInstr *MI,unsigned step,unsigned Latency,
                                 FuncUnitId FU) {
-  unsigned PredReg = getPredicateChannel(MI);
   VFUs::FUTypes Ty = FU.getFUType();
   // Do all resource at step been reserve?
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    SparseBitVector<> &V = getRTFor(PredReg, FU);
-    if (V.test(s - StartSlot))
-      return false;
+    InstSetTy &InstSet = getRTFor(s, FU);
+    if (hasConflictedInst(InstSet, MI)) return false;
     //// Do not conflict with the predicated channel as well.
     //if (PredReg == 0 && getRTFor(PredicatedChannel, FU).test(s - StartSlot))
     //  return false;
@@ -330,14 +332,14 @@ void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
 
 void SchedulingBase::revertFUUsage(MachineInstr *MI, unsigned step,
                                    unsigned Latency, FuncUnitId FU) {
-  unsigned PredReg = getPredicateChannel(MI);
   VFUs::FUTypes Ty = FU.getFUType();
 
   for (unsigned i = step, e = step + Latency; i != e; ++i) {
     unsigned s = computeStepKey(i);
-    getRTFor(PredReg, FU).reset(s - StartSlot);
-    // Also take the un-predicated channel.
-    if (PredReg) getRTFor(PredicatedChannel, FU).reset(s - StartSlot);
+    InstSetTy &InstSet = getRTFor(s, FU);
+    InstSetTy::iterator at = std::find(InstSet.begin(), InstSet.end(), MI);
+    assert(at != InstSet.end() && "MI not exist in FU table!");
+    InstSet.erase(at);
 
     if (Ty == VFUs::BRam) {
       unsigned &Status = PipelineStageStatus[computeStepKey(i + 1)];
