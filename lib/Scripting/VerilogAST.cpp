@@ -542,7 +542,9 @@ void VASTRegister::printAssignment(vlang_raw_ostream &OS,
 
   if (UseSwitch) OS.switch_end();
 
-  DEBUG_WITH_TYPE("vtm-codegen-self-verify",  verifyAssignCnd(OS, Mod));
+  OS << "// synthesis translate_off\n";
+  verifyAssignCnd(OS, Mod);
+  OS << "// synthesis translate_on\n";
 }
 
 void VASTRegister::dumpAssignment() const {
