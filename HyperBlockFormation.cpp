@@ -71,7 +71,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
   MachineBlockFrequencyInfo *MBFI;
   BBDelayAnalysis *BBDelay;
 
-  typedef DenseSet<unsigned> IntSetTy;
+  typedef SmallVector<unsigned, 4> IntSetTy;
   typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
   CFGMapTy CFGMap;
 
@@ -106,11 +106,13 @@ struct HyperBlockFormation : public MachineFunctionPass {
     MO->setTargetFlags(LocalBBNum);
   }
 
-  int64_t buildLocalPredBitMap(MachineBasicBlock *MBB, LocalCFGMapTy &LocalCFG){
-    typedef MachineBasicBlock::pred_iterator pred_it;
+  int64_t buildLocalPredBitMap(MachineBasicBlock *MBB,
+                               const LocalCFGMapTy &LocalCFG) const {
+    const IntSetTy &Preds = CFGMap.lookup(MBB->getNumber());
+    typedef IntSetTy::const_iterator pred_it;
     int64_t Result = 0ull;
-    for (pred_it I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
-      unsigned PredNum = (*I)->getNumber();
+    for (pred_it I = Preds.begin(), E = Preds.end(); I != E; ++I) {
+      unsigned PredNum = *I;
 
       LocalCFGInfo Info = LocalCFG.lookup(PredNum);
       // Add the bit of the current predecessor.
@@ -394,7 +396,7 @@ void HyperBlockFormation::buildCFGForBB(MachineBasicBlock *MBB) {
 
   typedef MachineBasicBlock::pred_iterator pred_it;
   for (pred_it I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I)
-    CFGMap[BBNum].insert((*I)->getNumber());
+    CFGMap[BBNum].push_back((*I)->getNumber());
 }
 
 bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
