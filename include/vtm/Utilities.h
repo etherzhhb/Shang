@@ -125,6 +125,10 @@ bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
 
 std::pair<const Value*, int64_t>
 extractPointerAndOffset(const Value *V, int64_t Offset);
+
+class MachineBasicBlock;
+class TargetInstrInfo;
+void fixTerminators(MachineBasicBlock *MBB, const TargetInstrInfo *TII);
 }
 
 #endif

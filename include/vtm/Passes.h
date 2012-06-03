@@ -46,7 +46,6 @@ Pass *createFunctionFilterPass(raw_ostream &O);
 Pass *createBitLevelInfoPass();
 Pass *createLogicSynthesisPass();
 Pass *createFixMachineCodePass(bool IsPreOpt);
-Pass *createFixTerminatorsPass();
 Pass *createBuildWireTransitiveUsersPass();
 Pass *createHyperBlockFormationPass();
 Pass *createPrebindUnbalanceMuxPass();

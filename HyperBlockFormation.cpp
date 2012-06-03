@@ -21,6 +21,7 @@
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/../../lib/CodeGen/BranchFolding.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -417,6 +418,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     SortedBBs.push_back(I);
     buildCFGForBB(I);
+    fixTerminators(I, TII);
   }
 
   std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
@@ -467,6 +469,10 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
                                      getAnalysisIfAvailable<MachineModuleInfo>());
 
   MF.RenumberBlocks();
+
+  // Fix terminators after branch folding.
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
+    fixTerminators(I, TII);
 
   return MakeChanged;
 }

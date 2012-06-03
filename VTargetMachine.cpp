@@ -134,11 +134,9 @@ struct VTMPassConfig : public TargetPassConfig {
     //PM.add(createPrebindMuxBasePass());
 
     // Optimize the CFG.
-    PM.add(createFixTerminatorsPass());
     PM.add(createHyperBlockFormationPass());
     printAndVerify("After merge fall through pass.");
     // Make sure we have a branch instruction for every success block.
-    PM.add(createFixTerminatorsPass());
 
     // Fix the machine code for schedule and function unit allocation.
     PM.add(createFixMachineCodePass(false));
