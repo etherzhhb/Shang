@@ -724,7 +724,7 @@ void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
   typedef std::map<unsigned, unsigned> PredMapTy;
   PredMapTy PredMap;
   SmallVector<MachineOperand, 1> PredVec(1, Pred);
-  const bool isPredAlwaysTrue = VInstrInfo::isAlwaysTruePred(Pred);
+  const bool isPredNotAlwaysTrue = !VInstrInfo::isAlwaysTruePred(Pred);
 
   LocalCFGMapTy &LocalCFG = AllLocalCFGs[ToBBNum];
   const int64_t PredBitMap = buildLocalPredBitMap(MBB, LocalCFG);
@@ -741,7 +741,8 @@ void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
       continue;
 
     bool IsAlreadyPredicated = TII->isPredicated(I);
-    if (!IsAlreadyPredicated) {
+    // Need to predicate the block, if the predicate is not always true.
+    if (isPredNotAlwaysTrue) {
       if (IsAlreadyPredicated) {
         MachineOperand *MO = VInstrInfo::getPredOperand(I);
         unsigned k = (MO->getReg() << 1)
