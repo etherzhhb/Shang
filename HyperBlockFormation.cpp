@@ -75,15 +75,17 @@ struct HyperBlockFormation : public MachineFunctionPass {
   typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
   CFGMapTy CFGMap;
 
-  // Internal BBNum, Predecessor bit map.
-  typedef std::pair<uint8_t, int64_t> LocalCFGInfo;
-  typedef DenseMap<unsigned, LocalCFGInfo> LocalCFGMapTy;
-  typedef DenseMap<unsigned, LocalCFGMapTy> AllLocalCFGMapTy;
-  AllLocalCFGMapTy AllLocalCFGs;
+  // Trace number, Trace bit map.
+  typedef std::pair<uint8_t, int64_t> TraceInfo;
+  // MBB number -> trace number.
+  typedef DenseMap<unsigned, TraceInfo> TraceMapTy;
+  typedef DenseMap<unsigned, TraceMapTy> AllTraceMapTy;
+  AllTraceMapTy AllTraces;
+  uint8_t NextTraceNum;
 
   HyperBlockFormation()
     : MachineFunctionPass(ID), TII(0), MRI(0), LI(0), MBPI(0), MBFI(0),
-      BBDelay(0) {
+      BBDelay(0), NextTraceNum(0) {
     initializeHyperBlockFormationPass(*PassRegistry::getPassRegistry());
   }
 
@@ -98,26 +100,30 @@ struct HyperBlockFormation : public MachineFunctionPass {
 
   void buildCFGForBB(MachineBasicBlock *MBB);
 
-  void annotateLocalCFGInfo(MachineOperand *MO, uint8_t LocalBBNum,
-                            int64_t PredBitMap) {
-    assert((PredBitMap || LocalBBNum == 0)&& "Not have any predecessor?");
-    MO->ChangeToImmediate(PredBitMap);
-    assert(LocalBBNum < 64 && "Only support 64 local BB at most!");
-    MO->setTargetFlags(LocalBBNum);
+  void annotateLocalCFGInfo(MachineOperand *MO, uint8_t TraceNum,
+                            int64_t TraceBitMap) {
+    assert((TraceBitMap || TraceNum == 0) && "Not have any predecessor?");
+    MO->ChangeToImmediate(TraceBitMap);
+    assert(TraceNum < 64 && "Only support 64 local BB at most!");
+    MO->setTargetFlags(TraceNum);
   }
 
-  int64_t buildLocalPredBitMap(MachineBasicBlock *MBB,
-                               const LocalCFGMapTy &LocalCFG) const {
-    const IntSetTy &Preds = CFGMap.lookup(MBB->getNumber());
+  int64_t buildTraceBitMap(unsigned SrcBBNum, unsigned DstBBNum,
+                           const TraceMapTy &TraceMap) const {
+    if (SrcBBNum == DstBBNum) return UINT64_C(0);
+
+    const IntSetTy &Preds = CFGMap.lookup(DstBBNum);
     typedef IntSetTy::const_iterator pred_it;
     int64_t Result = 0ull;
     for (pred_it I = Preds.begin(), E = Preds.end(); I != E; ++I) {
-      unsigned PredNum = *I;
+      unsigned PredBBNum = *I;
 
-      LocalCFGInfo Info = LocalCFG.lookup(PredNum);
+      TraceInfo Info = TraceMap.lookup(PredBBNum);
       // Add the bit of the current predecessor.
       Result |= UINT64_C(1) << Info.first;
       // And the predecessors of the current predecessor.
+      assert((Info.second || PredBBNum == SrcBBNum)
+             && "Do not have predecessor trace?");
       Result |= Info.second;
     }
 
@@ -125,17 +131,9 @@ struct HyperBlockFormation : public MachineFunctionPass {
     return Result;
   }
 
-  unsigned retrieveBBNum(unsigned ParentBBNum, uint8_t LocalBBNum) const {
-    AllLocalCFGMapTy::const_iterator at = AllLocalCFGs.find(ParentBBNum);
-    assert(at != AllLocalCFGs.end() && "LocalCFG not found!");
-    const LocalCFGMapTy &LocalCFG = at->second;
-    typedef LocalCFGMapTy::const_iterator it;
-    for (it I = LocalCFG.begin(), E = LocalCFG.end(); I != E; ++I)
-      if (I->second.first == LocalBBNum) return I->first;
-
-    llvm_unreachable("Cannot retieve BBNum!");
-    return 0;
-  }
+  unsigned mergeHyperBlockTrace(unsigned CurBBNum, uint8_t NextTraceNum,
+                                int64_t CurTraceBitMap, TraceMapTy &ParentTrace)
+                                const;
 
   bool runOnMachineFunction(MachineFunction &MF);
   MachineBasicBlock *getMergeDst(MachineBasicBlock *Src,
@@ -408,7 +406,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   BBDelay = &getAnalysis<BBDelayAnalysis>();
 
   bool MakeChanged = false;
-  AllLocalCFGs.clear();
+  AllTraces.clear();
   typedef MachineFunction::reverse_iterator rev_it;
 
   MF.RenumberBlocks();
@@ -426,7 +424,6 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   // Delays before branching to not BB that cannot be merged.
   DenseMap<MachineBasicBlock*, unsigned> UnmergedDelays;
-  unsigned CurTrace = 1;
 
   while (!SortedBBs.empty()) {
     bool BlockMerged = false;
@@ -435,25 +432,18 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
     unsigned CurBBNum = MBB->getNumber();
     // Initialize the local CFG.
-    AllLocalCFGs[CurBBNum][CurBBNum] = std::make_pair(0, UINT64_C(0));
+    AllTraces[CurBBNum][CurBBNum] = std::make_pair(0, UINT64_C(0));
+    NextTraceNum = 1;
 
     // Merge trivial blocks.
     do {
-      BlockMerged = false;
-      if (mergeTrivialSuccBlocks(MBB)) {
-        ++CurTrace;
-        MakeChanged = BlockMerged = true;
-      }
-    } while (BlockMerged);
+      MakeChanged |= BlockMerged = mergeTrivialSuccBlocks(MBB);
+    } while (BlockMerged && NextTraceNum < 64);
 
     // Merge hot blocks.
     do {
-      BlockMerged = false;
-      if (mergeSuccBlocks(MBB, UnmergedDelays)) {
-        ++CurTrace;
-        MakeChanged = BlockMerged = true;
-      }
-    } while (BlockMerged);
+      MakeChanged |= BlockMerged = mergeSuccBlocks(MBB, UnmergedDelays);
+    } while (BlockMerged && NextTraceNum < 64);
     // Prepare for next block.
     UnmergedDelays.clear();
   }
@@ -727,10 +717,16 @@ void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
   SmallVector<MachineOperand, 1> PredVec(1, Pred);
   const bool isPredNotAlwaysTrue = !VInstrInfo::isAlwaysTruePred(Pred);
 
-  LocalCFGMapTy &LocalCFG = AllLocalCFGs[ToBBNum];
-  uint8_t LocalBBNum = 0;
-  uint64_t LocalPredBitMap = 0;
+  TraceMapTy &TraceMap = AllTraces[ToBBNum];
   const unsigned CurBBNum = MBB->getNumber();
+
+  const uint64_t TraceBitMap =
+    buildTraceBitMap(ToBBNum, CurBBNum, TraceMap);
+  // Create the trace entry.
+  TraceInfo &Info = TraceMap[CurBBNum];
+  Info.second = TraceBitMap;
+  uint8_t &TraceNum = Info.first;
+
   // Build the local CFG information for this block.
   // Predicate the Block.
   for (MachineBasicBlock::iterator I = MBB->begin(), E = MBB->end();
@@ -778,37 +774,61 @@ void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
     ++MO;
 
     // Create the local BBNum entry on demand.
-    if (LocalBBNum == 0) {
-      if (isPredNotAlwaysTrue) {
-        LocalBBNum = LocalCFG.size();
-        LocalPredBitMap =  buildLocalPredBitMap(MBB, LocalCFG);
-        LocalCFG[CurBBNum] = std::make_pair(LocalBBNum, LocalPredBitMap);
-      } else {
-        // If the predicate is always true, treate the current BB and the
-        // predecessor BB as the same BB.
-        LocalCFGInfo &Info = LocalCFG[ToBBNum];
-        LocalBBNum = Info.first;
-        LocalPredBitMap = Info.second;
-      }
+    if (TraceNum == 0) {
+      // Note that we need to allocate new trace number even the predicate is
+      // always true, because the current block maybe the join block of a
+      // diamond CFG, which have two predecessors.
+      TraceNum = NextTraceNum++;
+      // If the current BB is already a hyper-block, merge its traces.
+      NextTraceNum =
+        mergeHyperBlockTrace(CurBBNum, NextTraceNum, TraceBitMap, TraceMap);
     }
 
-    uint8_t CurLocalBBNum = LocalBBNum;
-    int64_t CurPredBitMap = LocalPredBitMap;
+    uint8_t CurTraceNum = TraceNum;
+    int64_t CurTraceBitMap = TraceBitMap;
 
     // Transform the trace information for new local CFG, with the offset of
     // current local BBNum.
     if (IsAlreadyPredicated) {
-      unsigned OldBBNum = retrieveBBNum(CurBBNum, MO->getTargetFlags());
-      LocalCFGInfo &Info = LocalCFG[OldBBNum];
-      // Move the old information.
-      CurLocalBBNum += MO->getTargetFlags();
-      CurPredBitMap |= MO->getImm() << LocalBBNum;
-      // Retrieve the original BB number.
-      Info = std::make_pair(CurLocalBBNum, CurPredBitMap);
+      // Adjust the local BBNum.
+      CurTraceNum += MO->getTargetFlags();
+      assert(CurTraceNum < NextTraceNum && "Trace number not sync!");
+      CurTraceBitMap |= MO->getImm() << TraceNum;
     }
 
-    annotateLocalCFGInfo(MO, CurLocalBBNum, CurPredBitMap);
+    annotateLocalCFGInfo(MO, CurTraceNum, CurTraceBitMap);
   }
+}
+
+unsigned HyperBlockFormation::mergeHyperBlockTrace(unsigned CurBBNum,
+                                                   uint8_t NextTraceNum,
+                                                   int64_t CurTraceBitMap,
+                                                   TraceMapTy &ParentTraceMap)
+                                                   const {
+  AllTraceMapTy::const_iterator at = AllTraces.find(CurBBNum);
+
+  // If current BB a Hyper-block?
+  if (at == AllTraces.end() || at->second.size() == 1) return NextTraceNum;
+
+  const uint8_t CurTraceNum = NextTraceNum - 1;
+  // Merge the trace information of the hyper-block.
+  const TraceMapTy &TraceMap = at->second;
+  typedef TraceMapTy::const_iterator it;
+  for (it I = TraceMap.begin(), E = TraceMap.end(); I != E; ++I) {
+    uint8_t NewTraceNum = I->second.first + CurTraceNum;
+    // There is an entry for the trace, allocate its number in current
+    // hyper-block.
+    if (NewTraceNum != CurTraceNum) ++NextTraceNum;
+
+    // Move the bitmap.
+    int64_t TraceBitMap = (I->second.second << CurTraceNum) | CurTraceBitMap;
+
+    unsigned BBNum = I->first;
+    // Insert the entry into the parent trace map.
+    ParentTraceMap[BBNum] = std::make_pair(NewTraceNum, TraceBitMap);
+  }
+
+  return NextTraceNum;
 }
 
 Pass *llvm::createHyperBlockFormationPass() {
