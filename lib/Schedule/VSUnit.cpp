@@ -444,7 +444,8 @@ void VSUnit::print(raw_ostream &OS) const {
     if (MachineInstr *Instr = getInstrAt(i)) {
       const TargetInstrInfo *TII = Instr->getParent()->getParent()->getTarget()
                                          .getInstrInfo();
-      OS << TII->getName(Instr->getDesc().getOpcode());
+      OS << TII->getName(Instr->getDesc().getOpcode()) << ' '
+         << *VInstrInfo::getTraceOperand(Instr);
       if (i) OS << ' ' << int(getLatencyAt(i));
       OS << '\n';
       DEBUG(OS << *Instr << '\n');

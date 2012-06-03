@@ -565,7 +565,7 @@ MachineOperand VInstrInfo::CreateTrace() {
 }
 
 bool VInstrInfo::isPredicateMutex(const MachineInstr *LHS,
-                                  const  MachineInstr *RHS) {
+                                  const MachineInstr *RHS) {
   const MachineOperand *LHSPred = VInstrInfo::getPredOperand(LHS);
   const MachineOperand *RHSPred = VInstrInfo::getPredOperand(RHS);
 
@@ -573,13 +573,16 @@ bool VInstrInfo::isPredicateMutex(const MachineInstr *LHS,
   // not mutual exclusive.
   if (LHSPred == 0 || RHSPred == 0 ||
       VInstrInfo::isAlwaysTruePred(*LHSPred) ||
-      VInstrInfo::isAlwaysTruePred(*RHSPred) ||
-      LHSPred->isIdenticalTo(*RHSPred))
+      VInstrInfo::isAlwaysTruePred(*RHSPred))
     return false;
 
   // Compare the trace,
   uint8_t LHSBBNum = LHSPred[1].getTargetFlags(),
           RHSBBNum = RHSPred[1].getTargetFlags();
+
+  // Inside the same local BB.
+  if (LHSBBNum == RHSBBNum) return false;
+
   int64_t LHSPredBits = LHSPred[1].getImm(), RHSPredBits = RHSPred[1].getImm();
 
   // If the two predicates are mutual exclusive if they cannot reach each other.
