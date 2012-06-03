@@ -100,9 +100,8 @@ struct HyperBlockFormation : public MachineFunctionPass {
 
   void annotateLocalCFGInfo(MachineOperand *MO, uint8_t LocalBBNum,
                             int64_t PredBitMap) {
-    assert(PredBitMap && "Not have any predecessor?");
+    assert((PredBitMap || LocalBBNum == 0)&& "Not have any predecessor?");
     MO->ChangeToImmediate(PredBitMap);
-    assert(LocalBBNum && "Expect no-zero LocalBBNum!");
     assert(LocalBBNum < 64 && "Only support 64 local BB at most!");
     MO->setTargetFlags(LocalBBNum);
   }
@@ -727,8 +726,8 @@ void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
   const bool isPredNotAlwaysTrue = !VInstrInfo::isAlwaysTruePred(Pred);
 
   LocalCFGMapTy &LocalCFG = AllLocalCFGs[ToBBNum];
-  const int64_t PredBitMap = buildLocalPredBitMap(MBB, LocalCFG);
-  unsigned LocalBBNum = 0;
+  uint8_t LocalBBNum = 0;
+  uint64_t LocalPredBitMap = 0;
   const unsigned CurBBNum = MBB->getNumber();
   // Build the local CFG information for this block.
   // Predicate the Block.
@@ -778,12 +777,21 @@ void HyperBlockFormation::PredicateBlock(unsigned ToBBNum, MachineOperand Pred,
 
     // Create the local BBNum entry on demand.
     if (LocalBBNum == 0) {
-      LocalBBNum = LocalCFG.size();
-      LocalCFG[MBB->getNumber()] = std::make_pair(LocalBBNum, PredBitMap);
+      if (isPredNotAlwaysTrue) {
+        LocalBBNum = LocalCFG.size();
+        LocalPredBitMap =  buildLocalPredBitMap(MBB, LocalCFG);
+        LocalCFG[CurBBNum] = std::make_pair(LocalBBNum, LocalPredBitMap);
+      } else {
+        // If the predicate is always true, treate the current BB and the
+        // predecessor BB as the same BB.
+        LocalCFGInfo &Info = LocalCFG[ToBBNum];
+        LocalBBNum = Info.first;
+        LocalPredBitMap = Info.second;
+      }
     }
 
     uint8_t CurLocalBBNum = LocalBBNum;
-    int64_t CurPredBitMap = PredBitMap;
+    int64_t CurPredBitMap = LocalPredBitMap;
 
     // Transform the trace information for new local CFG, with the offset of
     // current local BBNum.
