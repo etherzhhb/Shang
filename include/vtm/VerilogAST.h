@@ -403,13 +403,11 @@ class VASTImmediate : public VASTValue {
 public:
   uint64_t getValue() const { return Contents.IntVal; }
   bool isAllZeros() const {
-    return getBitSlice64(getValue(), getBitWidth()) ==
-           getBitSlice64(0ull, getBitWidth());
+    return isAllZeros64(getValue(), getBitWidth());
   }
 
   bool isAllOnes() const {
-    return getBitSlice64(getValue(), getBitWidth()) ==
-           getBitSlice64(~0ull, getBitWidth());
+    return isAllOnes64(getValue(), getBitWidth());
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:

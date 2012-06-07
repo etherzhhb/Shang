@@ -42,6 +42,15 @@ inline int64_t SignExtend64(uint64_t x, unsigned SizeInBits) {
   return int64_t(x << (64 - SizeInBits)) >> (64 - SizeInBits);
 }
 
+inline bool isAllZeros64(uint64_t V, unsigned BitWidth) {
+  return getBitSlice64(V, BitWidth) == getBitSlice64(UINT64_C(0), BitWidth);
+}
+
+inline bool isAllOnes64(uint64_t V, unsigned BitWidth) {
+  return getBitSlice64(V, BitWidth) == getBitSlice64(~UINT64_C(0), BitWidth);
+
+}
+
 inline std::string VBEMangle(const std::string &S) {
   std::string Result;
 

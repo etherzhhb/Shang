@@ -21,6 +21,7 @@
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VFInfo.h"
 #include "vtm/VInstrInfo.h"
+#include "vtm/Utilities.h"
 
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -601,6 +602,14 @@ MachineOperand VInstrInfo::CreateImm(int64_t Val, unsigned BitWidth) {
   MachineOperand MO = MachineOperand::CreateImm(Val);
   VInstrInfo::setBitWidth(MO, BitWidth);
   return MO;
+}
+
+bool VInstrInfo::isAllOnes(const MachineOperand &MO) {
+  return MO.isImm() && isAllOnes64(MO.getImm(), getBitWidth(MO));
+}
+
+bool VInstrInfo::isAllZeros(const MachineOperand &MO) {
+  return MO.isImm() && isAllZeros64(MO.getImm(), getBitWidth(MO));
 }
 
 static uint64_t getMachineOperandHashValue(const MachineOperand &MO) {

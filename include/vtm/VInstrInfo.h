@@ -234,6 +234,9 @@ public:
     assert(getBitWidthOrZero(MO) == BitWidth && "Bit width overflow!");
   }
 
+  static bool isAllZeros(const MachineOperand &MO);
+  static bool isAllOnes(const MachineOperand &MO);
+
   static MachineOperand CreateReg(unsigned RegNum, unsigned BitWidth,
                                   bool IsDef = false);
   static MachineOperand CreateImm(int64_t Val, unsigned BitWidth);
