@@ -481,6 +481,28 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
   SmallVector<MachineOperand, 2> Ops;
   Abc_Obj_t *FO = Abc_ObjFanout0(Obj), *FI;
   DEBUG(dbgs() << Abc_ObjName(FO) << '\n');
+  if (Abc_NodeIsConst(Obj)) {
+    MOMapTy::iterator at = MOMap.find(Abc_ObjName(FO));
+    assert(at != MOMap.end() && "MachineOperand for constant node not found!");
+    MachineOperand MO = at->second;
+
+    // Internal constant nodes should be already optimized away by ABC.
+    assert(getObj(MO) && getObj(MO)->ExposedUses
+           && "Expected constant node are exposed!");
+
+    // Create the instruction to copy the constant to the register, this
+    // copy can be optimized away by the FixMachineCode pass.
+    MO.setIsDef(true);
+    unsigned Bitwidth = VInstrInfo::getBitWidth(MO);
+    uint64_t Imm = Abc_NodeIsConst0(Obj) ? UINT64_C(0) : ~UINT64_C(0);
+    MachineInstrBuilder Builder =
+      BuildMI(*BB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpMove))
+      .addOperand(MO).addOperand(VInstrInfo::CreateImm(Imm, Bitwidth))
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace());
+
+    return;
+  }
 
   // Get all operands and compute the bit width of the result.
   Ops.clear();
