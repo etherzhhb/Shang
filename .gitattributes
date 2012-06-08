@@ -20,3 +20,10 @@
 *.PDF	 diff=astextplain
 *.rtf	 diff=astextplain
 *.RTF	 diff=astextplain
+
+*.exe binary
+*.a binary
+*.o binary
+testsuite/benchmark/DSPStone/adpcm/is2_flt_adpcm/data.in binary
+testsuite/benchmark/DSPStone/adpcm/is2_flt_adpcm/data.in.2freq binary
+testsuite/benchmark/DSPStone/adpcm/is2_flt_adpcm/data.in.sinus binary
