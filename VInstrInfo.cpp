@@ -881,20 +881,11 @@ bool VInstrInfo::isReadAtEmit(unsigned OpC) {
          || isCopyLike(OpC);
 }
 
-static unsigned ComputeOperandSizeInByteLog2Ceil(unsigned SizeInBits) {
-  return std::max(Log2_32_Ceil(SizeInBits), 3u) - 3;
-}
-
 template<int Idx>
 static float LookupLatency(const float *Table, const MachineInstr *MI){
   unsigned SizeInBits = VInstrInfo::getBitWidth(MI->getOperand(Idx));
 
-  unsigned i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
-  float latency = Table[i];
-  unsigned SizeRoundUpToByteInBits = 8 << i;
-  // Scale the latency accoriding to the actually width.
-  latency = latency / float(SizeRoundUpToByteInBits) * float(SizeInBits);
-  return latency;
+  return VFUs::lookupLatency(Table, SizeInBits);
 }
 
 float VInstrInfo::getOperandLatency(const MachineInstr *MI, unsigned MOIdx) {

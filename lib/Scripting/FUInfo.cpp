@@ -43,6 +43,10 @@ static PropType getProperty(luabind::object &FUTable, IdxType PropName,
     return Result.get();
 }
 
+static unsigned ComputeOperandSizeInByteLog2Ceil(unsigned SizeInBits) {
+  return std::max(Log2_32_Ceil(SizeInBits), 3u) - 3;
+}
+
 //===----------------------------------------------------------------------===//
 /// Hardware resource.
 void VFUDesc::print(raw_ostream &OS) const {
@@ -111,6 +115,15 @@ namespace llvm {
         computeCost(CopyTable[2], CopyTable[3], 16, 16, 15, CostTable);
         //Initial the array form a[31] to a[63]
         computeCost(CopyTable[3], CopyTable[4], 33, 32, 31, CostTable);
+    }
+
+    float lookupLatency(const float *Table, unsigned SizeInBits) {
+      unsigned i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
+      float latency = Table[i];
+      unsigned SizeRoundUpToByteInBits = 8 << i;
+      // Scale the latency accoriding to the actually width.
+      latency = latency / float(SizeRoundUpToByteInBits) * float(SizeInBits);
+      return latency;
     }
 
     float getReductionLatency(unsigned Size) {

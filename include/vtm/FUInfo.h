@@ -114,6 +114,8 @@ namespace VFUs {
                         unsigned Size);
   void initCostTable(luabind::object LuaCostTable, unsigned *CostTable,
                         unsigned Size);
+
+  float lookupLatency(const float *Table, unsigned SizeInBits);
 }
 
 class FuncUnitId {
