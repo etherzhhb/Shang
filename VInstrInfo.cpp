@@ -45,7 +45,7 @@ extern const MCInstrDesc VTMInsts[];
 using namespace llvm;
 static cl::opt<bool>
 EnableBLC("vtm-enable-blc", cl::desc("Enable bit level chaining"),
-          cl::init(true));
+          cl::init(false));
 
 //----------------------------------------------------------------------------//
 // Halper function.
@@ -1264,14 +1264,17 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   if (OperandWidth)
     PerBitLatency = std::max(SrcMSBLatency / OperandWidth, VFUs::LutLatency);
 
-  unsigned Opcode = SrcMI->getOpcode();
+  unsigned Opcode = VTM::INSTRUCTION_LIST_END;
+  bool isCtrl = VInstrInfo::isControl(SrcMI->getOpcode());
+  if (EnableBLC) Opcode = SrcMI->getOpcode();
+
   switch (Opcode) {
   default:
-    if (VInstrInfo::isDatapath(Opcode))
+    if (isCtrl)
+      updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
+    else
       accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
                                 PerBitLatency, getWorstLatency);
-    else
-      updateLatency(CurLatInfo, SrcMI, SrcMSBLatency, SrcMSBLatency);
     break;
     // Result bits are computed from LSB to MSB.
   case VTM::VOpAdd_c:
