@@ -1595,3 +1595,30 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
 
   OS << ')';
 }
+
+const char *VASTExpr::OpcName[] = {
+    // bitwise logic datapath
+    "And",
+    "RAnd",
+    "ROr",
+    "RXor",
+    "Sel",
+    // bit level assignment.
+    "BitCat",
+    "BitRepeat",
+    // Simple wire assignment.
+    "Assign",
+    // Cannot inline.
+    // FU datapath
+    "Add",
+    "Mul",
+    "Shl",
+    "SRA",
+    "SRL",
+    "SCmp",
+    "UCmp",
+    // Mux in datapath.
+    "Mux",
+    // Blackbox,
+    "BlackBox"
+};

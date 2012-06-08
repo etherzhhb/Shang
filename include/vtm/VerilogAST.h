@@ -568,6 +568,7 @@ public:
     dpBlackBox
   };
 private:
+  static const char *OpcName[];
   // Operands, right after this VASTExpr.
   const VASTUse *ops() const {
     return reinterpret_cast<const VASTUse*>(this + 1);
@@ -611,6 +612,7 @@ private:
 public:
   const uint8_t Opc, NumOps,UB, LB;
   Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
+  const char *getOpcodeName() const { return OpcName[getOpcode()]; }
 
   const VASTUse &getOperand(unsigned Idx) const {
     assert(Idx < NumOps && "Index out of range!");
