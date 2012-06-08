@@ -51,6 +51,24 @@ struct TimingPathNode {
   VASTValue *operator->() const { return V; }
   TimingPathNode(VASTValue *V, float MSBInc = 0.0f, float LSBInc = 0.0f)
     : V(V), MSBInc(MSBInc), LSBInc(LSBInc) {}
+
+  void printBindingLuaCode(raw_ostream &OS) const {
+    // Skip the unnamed nodes.
+    const char *Name = "n/a";
+    const char *OpcName = "n/a";
+
+    if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
+      if (const char *N = NV->getName()) Name = N;
+    } else if (const VASTExpr *E = dyn_cast<VASTExpr>(V))
+      OpcName = E->getOpcodeName();
+
+    // Write the code.
+    OS << " { Name ='"    << Name << "',"
+          " BitWidth = "<< V->getBitWidth() << ","
+          " LSBInc = "  << LSBInc << ","
+          " MSBInc = "  << MSBInc << ","
+          " Opcode = '" << OpcName << "' }";
+  }
 };
 }
 
@@ -138,16 +156,13 @@ void TimingPath::bindPath2ScriptEngine() {
 
   Script.clear();
 
-  SS << "RTLDatapath.Nodes = {{ Name = '"
-     << cast<VASTNamedValue>(Path[0])->getName() << "', BitWidth = "<< Path[0]->getBitWidth(); 
+  SS << "RTLDatapath.Nodes = { ";
+  Path[0].printBindingLuaCode(SS);
   for (unsigned i = 1; i < PathSize; ++i) {
-    // Skip the unnamed nodes.
-    if (VASTNamedValue *NV = dyn_cast<VASTNamedValue>(Path[i])) {
-      const char *Name = NV->getName();
-      if (Name) SS << " }, { Name ='" << Name << "', BitWidth = "<< Path[i]->getBitWidth();
-    }
+    SS << ",\n";
+    Path[i].printBindingLuaCode(SS);
   }
-  SS << " }}";
+  SS << " }";
 
   SS.flush();
   if (!runScriptStr(Script, Err))
