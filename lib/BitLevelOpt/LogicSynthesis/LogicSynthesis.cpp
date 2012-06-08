@@ -156,6 +156,18 @@ struct LogicNetwork {
   }
 
   NetworkObj *getOrCreateObj(MachineOperand &MO) {
+    if (MO.isImm()) {
+      Abc_Obj_t *Obj = 0;
+      if (VInstrInfo::isAllOnes(MO))
+        Obj = Abc_AigConst1(Ntk);
+      else if (VInstrInfo::isAllZeros(MO))
+        Obj = Abc_ObjNot(Abc_AigConst1(Ntk));
+
+      // If we can handle the constant...
+      if (Obj) // Constants are not exposed.
+        return new (NtkObjAllocator.Allocate()) NetworkObj(Obj, MO, 0);
+    }
+
     NetworkObj *NtkObj = getObj(MO);
 
     // Object not existed, create a PI for the MO now.
