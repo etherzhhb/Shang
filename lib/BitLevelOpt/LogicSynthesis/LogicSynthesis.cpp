@@ -501,17 +501,13 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
     // Internal constant nodes should be already optimized away by ABC.
     assert(getObj(MO) && getObj(MO)->ExposedUses
            && "Expected constant node are exposed!");
-
-    // Create the instruction to copy the constant to the register, this
-    // copy can be optimized away by the FixMachineCode pass.
-    MO.setIsDef(true);
-    unsigned Bitwidth = VInstrInfo::getBitWidth(MO);
     uint64_t Imm = Abc_NodeIsConst0(Obj) ? UINT64_C(0) : ~UINT64_C(0);
-    MachineInstrBuilder Builder =
-      BuildMI(*BB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpMove))
-      .addOperand(MO).addOperand(VInstrInfo::CreateImm(Imm, Bitwidth))
-      .addOperand(VInstrInfo::CreatePredicate())
-      .addOperand(VInstrInfo::CreateTrace());
+
+    // Replace the register by immediate.
+    typedef MachineRegisterInfo::use_iterator it;
+    for (it I = MRI.use_begin(MO.getReg()); I != MachineRegisterInfo::use_end();
+         /*++I*/)
+      (I++).getOperand().ChangeToImmediate(Imm);
 
     return;
   }
