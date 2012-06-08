@@ -44,9 +44,30 @@ DisableTimingScriptGeneration("vtm-disable-timing-script",
                               cl::init(false));
 
 namespace{
+struct TimingPathNode {
+  VASTValue *V;
+  float MSBInc, LSBInc;
+
+  VASTValue *operator->() const { return V; }
+  TimingPathNode(VASTValue *V, float MSBInc = 0.0f, float LSBInc = 0.0f)
+    : V(V), MSBInc(MSBInc), LSBInc(LSBInc) {}
+};
+}
+
+namespace llvm {
+  template<> struct simplify_type<TimingPathNode> {
+    typedef VASTValue *SimpleType;
+    static SimpleType getSimplifiedValue(const TimingPathNode &Val) {
+      return Val.V;
+    }
+  };
+}
+
+namespace {
 struct TimingPath {
   int Delay;
-  VASTValue **Path;
+  float ActualMSBDelay, ActualLSBDelay;
+  TimingPathNode *Path;
   unsigned PathSize;
 
   void bindPath2ScriptEngine();
@@ -108,7 +129,9 @@ void TimingPath::bindPath2ScriptEngine() {
 
   std::string Script;
   raw_string_ostream SS(Script);
-  SS << "RTLDatapath.Slack = " << Delay;
+  SS << "RTLDatapath.Slack = " << Delay << '\n';
+  SS << "RTLDatapath.ActualLSBDelay = " << ActualLSBDelay << '\n';
+  SS << "RTLDatapath.ActualMSBDelay = " << ActualMSBDelay << '\n';
   SS.flush();
   if (!runScriptStr(Script, Err))
     llvm_unreachable("Cannot create slack of RTLDatapath!");
@@ -182,18 +205,51 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
 
   // The Path should include the Dst.
   P->PathSize = Path.size() + 1;
-  P->Path = Allocator.Allocate<VASTValue*>(P->PathSize);
+  P->Path = Allocator.Allocate<TimingPathNode>(P->PathSize);
+  P->ActualLSBDelay = P->ActualMSBDelay = 0;
 
   unsigned ExtraDelay = 0;
+  VASTExpr *LastBitSlice = 0;
 
   P->Path[0] = Dst->getValue();
   for (unsigned i = 0; i < Path.size(); ++i) {
     VASTValue *V = Path[i];
-    P->Path[i + 1] = V;
+    TimingPathNode N(V);
 
-    // Accumulates the block box latency.
-    if (VASTWire *W = dyn_cast<VASTWire>(V))
-      ExtraDelay += W->getExtraDelayIfAny();
+    if (VASTExpr *E = dyn_cast<VASTExpr>(V)) {
+      N.LSBInc = E->getLSBDelay();
+      N.MSBInc = E->getMSBDelay();
+      if (LastBitSlice) {
+        // Adjust the delay for bit slice.
+        unsigned BitSliceLSB = LastBitSlice->LB,
+                 BitSliceMSB = LastBitSlice->UB;
+        unsigned ExprSize = E->getBitWidth();
+        float PerBitInc = (N.MSBInc - N.LSBInc) / float(ExprSize);
+        N.MSBInc = PerBitInc * BitSliceMSB + N.LSBInc;
+        N.LSBInc = PerBitInc * BitSliceLSB + N.LSBInc;
+
+        LastBitSlice = 0;
+      }
+
+      if (E->isSubBitSlice()) {
+        assert(LastBitSlice == 0 && "Unexpected nested bit slice!");
+        LastBitSlice = E;
+      }
+
+    } if (VASTWire *W = dyn_cast<VASTWire>(V)) {
+      // Accumulates the block box latency.
+      unsigned Delay = W->getExtraDelayIfAny();
+      if (W->getWireType() == VASTWire::LUT)
+        Delay += VFUs::LutLatency;
+
+      ExtraDelay += Delay;
+      N.LSBInc = N.MSBInc = Delay;
+    }
+
+    P->Path[i + 1] = N;
+    // Accumulate the path delay.
+    P->ActualLSBDelay += N.LSBInc;
+    P->ActualMSBDelay += N.MSBInc;
   }
 
   assert((ExtraDelay == 0 || PathDelay == 1)
