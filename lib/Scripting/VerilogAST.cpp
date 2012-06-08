@@ -558,10 +558,71 @@ void VASTRegister::dumpAssignment() const {
 
 VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
                    unsigned LB, const FoldingSetNodeIDRef ID)
-  : VASTValue(vastExpr, UB - LB), FastID(ID), Opc(Opc), NumOps(NumOps),
-    UB(UB), LB(LB) {
+  : VASTValue(vastExpr, UB - LB), FastID(ID), CachedDelay(-1.0f), Opc(Opc),
+    NumOps(NumOps), UB(UB), LB(LB) {
   Contents.Name = 0;
   assert(NumOps && "Unexpected empty operand list!");
+}
+
+float VASTExpr::getTotalDelay() const {
+  if (CachedDelay != -1.0f) return CachedDelay;
+
+  switch (getOpcode()) {
+  case VASTExpr::dpAnd:
+  case VASTExpr::dpBitCat:
+  case VASTExpr::dpBitRepeat:
+  case VASTExpr::dpAssign:
+  case VASTExpr::dpBlackBox:
+    CachedDelay = 0.0f;
+    break;
+  case VASTExpr::dpRAnd:
+  case VASTExpr::dpROr:
+  case VASTExpr::dpRXor:
+    CachedDelay = VFUs::getReductionLatency(getBitWidth());
+    break;
+  case VASTExpr::dpSel:
+    CachedDelay = VFUs::LutLatency;
+    break;
+  case VASTExpr::dpMux:
+    CachedDelay = VFUs::getMuxLatency((NumOps + 1) / 2);
+    break;
+  case VASTExpr::dpAdd:
+    CachedDelay = VFUs::lookupLatency(VFUs::AdderLatencies, getBitWidth());
+    break;
+  case VASTExpr::dpMul:
+    CachedDelay = VFUs::lookupLatency(VFUs::MultLatencies, getBitWidth());
+    break;
+  case VASTExpr::dpShl:
+  case VASTExpr::dpSRA:
+  case VASTExpr::dpSRL:
+    CachedDelay = VFUs::lookupLatency(VFUs::ShiftLatencies, getBitWidth());
+    break;
+  case VASTExpr::dpSCmp:
+  case VASTExpr::dpUCmp:
+    CachedDelay = VFUs::lookupLatency(VFUs::CmpLatencies, getBitWidth());
+    break;
+  default: llvm_unreachable("Unkown opcode!"); break;
+  }
+
+  return CachedDelay;
+}
+
+float VASTExpr::getMSBDelay() const {
+  float Delay = getTotalDelay();
+  // The delay of compare is propagated from MSB to LSB.
+  if (getOpcode() == VASTExpr::dpUCmp || getOpcode() == VASTExpr::dpSCmp)
+    Delay = std::max(Delay / getBitWidth(), VFUs::LutLatency);
+
+  return Delay;
+}
+
+float VASTExpr::getLSBDelay() const {
+  float Delay = getTotalDelay();
+  // The delay of Add and Mul is propagated from LSB to MSB.
+  if (getOpcode() == VASTExpr::dpAdd || getOpcode() == VASTExpr::dpMul)
+    Delay = std::max(Delay / getBitWidth(), VFUs::LutLatency);
+
+  return Delay;
 }
 
 std::string VASTModule::DirectClkEnAttr = "";

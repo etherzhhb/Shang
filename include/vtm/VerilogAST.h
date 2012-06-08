@@ -578,6 +578,7 @@ private:
   /// FastID - A reference to an Interned FoldingSetNodeID for this node.
   /// The ScalarEvolution's BumpPtrAllocator holds the data.
   const FoldingSetNodeIDRef FastID;
+  mutable float CachedDelay;
 
   VASTExpr(const VASTExpr&);             // Do not implement
 
@@ -639,6 +640,10 @@ public:
   }
 
   void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
+
+  float getTotalDelay() const;
+  float getMSBDelay() const;
+  float getLSBDelay() const;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const VASTExpr *A) { return true; }
