@@ -1025,7 +1025,7 @@ public:
   typedef AssignMapTy::const_iterator assign_itertor;
   assign_itertor assign_begin() const { return Assigns.begin(); }
   assign_itertor assign_end() const { return Assigns.end(); }
-
+  unsigned num_assigns() const { return Assigns.size(); }
   /*VASTUse getConstantValue() const;*/
 
   void printAssignment(vlang_raw_ostream &OS, const VASTModule *Mod) const;
