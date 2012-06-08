@@ -219,8 +219,8 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
 
   // The Path should include the Dst.
-  P->PathSize = Path.size() + 1;
-  P->Path = Allocator.Allocate<TimingPathNode>(P->PathSize);
+  P->PathSize = 1;
+  P->Path = Allocator.Allocate<TimingPathNode>(Path.size() + 1);
   P->ActualLSBDelay = P->ActualMSBDelay = 0;
 
   unsigned ExtraDelay = 0;
@@ -249,9 +249,14 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
       if (E->isSubBitSlice()) {
         assert(LastBitSlice == 0 && "Unexpected nested bit slice!");
         LastBitSlice = E;
+        // No need to bind the bitslice.
+        continue;
       }
 
     } if (VASTWire *W = dyn_cast<VASTWire>(V)) {
+      // No need to bind the wire without name.
+      if (W->getName() == 0) continue;
+      
       // Accumulates the block box latency.
       unsigned Delay = W->getExtraDelayIfAny();
       if (W->getWireType() == VASTWire::LUT)
@@ -261,7 +266,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
       N.LSBInc = N.MSBInc = Delay;
     }
 
-    P->Path[i + 1] = N;
+    P->Path[P->PathSize++] = N;
     // Accumulate the path delay.
     P->ActualLSBDelay += N.LSBInc;
     P->ActualMSBDelay += N.MSBInc;
