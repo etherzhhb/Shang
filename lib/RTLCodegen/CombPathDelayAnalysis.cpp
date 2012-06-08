@@ -34,6 +34,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-comb-path-delay"
 #include "llvm/Support/Debug.h"
 using namespace llvm;
@@ -43,6 +44,10 @@ DisableTimingScriptGeneration("vtm-disable-timing-script",
                               cl::desc("Disable timing script generation"),
                               cl::init(false));
 
+
+STATISTIC(NumTimingPath, "Number of timing pathes analyzed");
+STATISTIC(NumFalseTimingPath, "Number of false timing pathes detected");
+STATISTIC(NumNegSlackTimingPath, "Number of timing paths with negative slack");
 namespace{
 struct TimingPathNode {
   VASTValue *V;
@@ -214,7 +219,10 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
 
   // The path {SrcReg -> DstReg} maybe a false path, i.e. SrcReg never reaches
   // DstSlot.
-  if ((int)PathDelay == -1) return 0;
+  if ((int)PathDelay == -1) {
+    ++NumFalseTimingPath;
+    return 0;
+  }
 
   TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
 
@@ -278,8 +286,9 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   // and the delay of block boxes.
   P->Delay = std::max(PathDelay, ExtraDelay);
   
-  DEBUG(if (P->Delay < P->ActualLSBDelay || P->Delay < P->ActualMSBDelay) {
-    unsigned ReachableSrcs = 0;
+  if (P->Delay < P->ActualLSBDelay || P->Delay < P->ActualMSBDelay) {
+    ++NumNegSlackTimingPath;
+    DEBUG(unsigned ReachableSrcs = 0;
     VASTRegister *DstReg = cast<VASTRegister>(Dst->getValue());
     dbgs() << "Find timing violation dst: " << Dst->getName() << " #"
            << SrcReg->num_assigns() << " src,  #" << DstReg->num_assigns()
@@ -314,9 +323,10 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
                 << (float(Distance) - P->ActualMSBDelay) << '\n';
     }
 
-    dbgs().indent(2) << "Total reachable sources: " << ReachableSrcs << '\n';
-  });
+    dbgs().indent(2) << "Total reachable sources: " << ReachableSrcs << '\n';);
+  }
 
+  ++NumTimingPath;
   return P;
 }
 
