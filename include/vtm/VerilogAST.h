@@ -628,9 +628,9 @@ public:
     return ArrayRef<VASTUse>(ops(), NumOps);
   }
 
-  bool isSubBitSlice() const {
-    assert(getOpcode() == dpAssign && "Not an assignment!");
-    return UB != getOperand(0)->getBitWidth() || LB != 0;
+  inline bool isSubBitSlice() const {
+    return getOpcode() == dpAssign
+           && (UB != getOperand(0)->getBitWidth() || LB != 0);
   }
 
   bool isInlinable() const {

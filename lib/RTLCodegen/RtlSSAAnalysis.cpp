@@ -286,9 +286,10 @@ bool RtlSSAAnalysis::addLiveIns(SlotInfo *From, SlotInfo *To,
 
     Changed |= To->insertIn(PredOut, LI);
     // Do not let the killed VASs go out
-    if (!To->isVASKilled(PredOut))
-      // New out occur.
-      Changed |= To->insertOut(PredOut, LI);
+    if (To->isVASKilled(PredOut)) continue;
+
+    // New out occur.
+    Changed |= To->insertOut(PredOut, LI);
   }
 
   return Changed;
