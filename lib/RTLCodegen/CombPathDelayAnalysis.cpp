@@ -257,6 +257,45 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   // The path delay is the sum of minimum distance between source/destinate slot
   // and the delay of block boxes.
   P->Delay = std::max(PathDelay, ExtraDelay);
+  
+  DEBUG(if (P->Delay < P->ActualLSBDelay || P->Delay < P->ActualMSBDelay) {
+    unsigned ReachableSrcs = 0;
+    VASTRegister *DstReg = cast<VASTRegister>(Dst->getValue());
+    dbgs() << "Find timing violation dst: " << Dst->getName() << " #"
+           << SrcReg->num_assigns() << " src,  #" << DstReg->num_assigns()
+           << " dst:\n";
+    
+    // Dump the path.
+    for (unsigned i = 0; i < P->PathSize; ++i) {
+      P->Path[i]->print(dbgs().indent(4));
+      dbgs() << '\n';
+      dbgs().indent(4) << "LSB +" << P->Path[i].LSBInc
+                       << " MSB +" << P->Path[i].MSBInc
+                       << '\n';
+    }
+
+    for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
+         I != E; ++I) {
+      VASTSlot *SrcSlot = VM->getSlot(I->first->getSlotNum());
+      ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
+
+      // Update the PathDelay if the source VAS reaches DstSlot.
+      unsigned Distance = Dst->getCyclesFromDef(SrcVAS);
+      
+      if (Distance == 0) continue;
+
+      ++ReachableSrcs;
+      if (Distance < P->ActualLSBDelay)
+        dbgs().indent(2) << SrcVAS->getName() << " LSB Slack: "
+                << (float(Distance) - P->ActualLSBDelay) << '\n';
+
+      if (Distance < P->ActualMSBDelay)
+        dbgs().indent(2) << SrcVAS->getName() << " MSB Slack: "
+                << (float(Distance) - P->ActualMSBDelay) << '\n';
+    }
+
+    dbgs().indent(2) << "Total reachable sources: " << ReachableSrcs << '\n';
+  });
 
   return P;
 }
