@@ -1116,7 +1116,7 @@ unsigned VInstrInfo::countNumRegUses(const MachineInstr *MI) {
 }
 
 // Get the latency of a machineinstr in cycle ratio.
-float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
+float VInstrInfo::getDetialLatency(const MachineInstr *MI) {
   unsigned OpC = MI->getOpcode();
 
   switch (OpC) {
@@ -1172,7 +1172,7 @@ float DetialLatencyInfo::getDetialLatency(const MachineInstr *MI) {
 }
 
 float DetialLatencyInfo::computeLatencyFor(const MachineInstr *MI) {
-  float TotalLatency = getDetialLatency(MI);
+  float TotalLatency = VInstrInfo::getDetialLatency(MI);
   // Remember the latency from all MI's dependence leaves.
   CachedLatencies.insert(std::make_pair(MI, TotalLatency));
   return TotalLatency;

@@ -192,6 +192,7 @@ public:
 
   static const MCInstrDesc &getDesc(unsigned Opcode);
   static unsigned countNumRegUses(const MachineInstr *MI);
+  static float getDetialLatency(const MachineInstr *MI);
 
   static MachineInstr *getBundleHead(MachineInstr *MI);
 
@@ -342,7 +343,6 @@ public:
 
   MachineRegisterInfo &MRI;
 private:
-  static float getDetialLatency(const MachineInstr *MI);
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
