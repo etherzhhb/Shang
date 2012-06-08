@@ -118,12 +118,18 @@ namespace llvm {
     }
 
     float lookupLatency(const float *Table, unsigned SizeInBits) {
-      unsigned i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
-      float latency = Table[i];
+      int i = ComputeOperandSizeInByteLog2Ceil(SizeInBits);
+      float RoundUpLatency   = Table[i],
+            RoundDownLatency = i ? Table[i - 1] : 0.0f;
       unsigned SizeRoundUpToByteInBits = 8 << i;
+      unsigned SizeRoundDownToByteInBits = i ? (8 << (i - 1)) : 0;
+      float PerBitLatency =
+        (RoundUpLatency - RoundDownLatency)
+        / (SizeRoundUpToByteInBits - SizeRoundDownToByteInBits);
       // Scale the latency accoriding to the actually width.
-      latency = latency / float(SizeRoundUpToByteInBits) * float(SizeInBits);
-      return latency;
+      return
+        RoundDownLatency
+        + PerBitLatency * float(SizeInBits - SizeRoundDownToByteInBits);
     }
 
     float getReductionLatency(unsigned Size) {
