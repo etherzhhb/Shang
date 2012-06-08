@@ -102,11 +102,11 @@ RunOnDatapath = [=[
 $(_put('#')) Slack $(RTLDatapath.Slack)
 #_put('# Path nodes: ')
 #for _, n in pairs(RTLDatapath.Nodes) do
-#_put(n .. ', ')
+#_put(n.Name .. ', ')
 #end
 #local Slack = RTLDatapath.Slack
-#local DstName = RTLDatapath.Nodes[1]
-#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)]
+#local DstName = RTLDatapath.Nodes[1].Name
+#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
 #if Functions[FuncInfo.Name] == nil then
 #DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
 #SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName

@@ -115,15 +115,16 @@ void TimingPath::bindPath2ScriptEngine() {
 
   Script.clear();
 
-  SS << "RTLDatapath.Nodes = {'" << cast<VASTNamedValue>(Path[0])->getName();
+  SS << "RTLDatapath.Nodes = {{ Name = '"
+     << cast<VASTNamedValue>(Path[0])->getName() << "', BitWidth = "<< Path[0]->getBitWidth(); 
   for (unsigned i = 1; i < PathSize; ++i) {
     // Skip the unnamed nodes.
     if (VASTNamedValue *NV = dyn_cast<VASTNamedValue>(Path[i])) {
       const char *Name = NV->getName();
-      if (Name) SS << "', '" << Name;
+      if (Name) SS << " }, { Name ='" << Name << "', BitWidth = "<< Path[i]->getBitWidth();
     }
   }
-  SS << "'}";
+  SS << " }}";
 
   SS.flush();
   if (!runScriptStr(Script, Err))

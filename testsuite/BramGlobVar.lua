@@ -54,8 +54,8 @@ if message ~= nil then print(message) end
 RunOnDatapath = [=[
 $(_put('#')) Slack $(RTLDatapath.Slack)
 #local Slack = RTLDatapath.Slack
-#local DstName = RTLDatapath.Nodes[1]
-#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)]
+#local DstName = RTLDatapath.Nodes[1].Name
+#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
 #DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
 #SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
 set dst [get_keepers {$(DstName)*}]
@@ -90,11 +90,12 @@ if $isInSta {
 IcdelayTclGen = [=[
 $(_put('#')) Slack $(RTLDatapath.Slack)
 #local Slack = RTLDatapath.Slack
-#local DstName = RTLDatapath.Nodes[1]
-#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)]
+#local DstName = RTLDatapath.Nodes[1].Name
+#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
 #DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
 #SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
 set fileid [open "$(IcDelayTmp)" a+]
+
 set dst [get_keepers {$(DstName)*}]
 set src [get_keepers {$(SrcName)*}]
 if { [get_collection_size $src] && [get_collection_size $dst] } {
