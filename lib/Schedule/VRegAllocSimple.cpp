@@ -811,8 +811,8 @@ void VRASimple::addMBBLiveIns(MachineFunction *MF) {
       for (MBBVec::iterator I = liveInMBBs.begin(), E = liveInMBBs.end();
            I != E; ++I) {
         MachineBasicBlock *MBB = *I;
-        if (MBB == &entryMBB) continue;
-        if (MBB->isLiveIn(PhysReg)) continue;
+        if (MBB == &entryMBB || MBB->isLiveIn(PhysReg)) continue;
+
         MBB->addLiveIn(PhysReg);
       }
     }
