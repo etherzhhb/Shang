@@ -108,6 +108,7 @@ if {"@ENABLE_PHYSICAL_SYNTHESIS@" == "ON"} {
 #Don't produce too much messages
 set_global_assignment -name HDL_MESSAGE_LEVEL LEVEL1
 set_global_assignment -name SYNTH_MESSAGE_LEVEL LOW
+set_global_assignment -name SYNTH_PROTECT_SDC_CONSTRAINT ON
 
 # Timing report.
 #Enable Worst-Case Timing Report
@@ -216,4 +217,3 @@ close $DataJSON
 unload_report
 
 project_close
-
