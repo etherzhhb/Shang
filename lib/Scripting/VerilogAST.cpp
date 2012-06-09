@@ -36,6 +36,11 @@
 #include <sstream>
 
 using namespace llvm;
+static cl::opt<unsigned>
+ExprInlineThreshold("vtm-expr-inline-thredhold",
+                    cl::desc("Inline the expression which has less than N "
+                             "operand  (16 by default)"),
+                    cl::init(16));
 
 static cl::opt<bool>
 EnableBBProfile("vtm-enable-bb-profile",
@@ -553,8 +558,8 @@ void VASTRegister::dumpAssignment() const {
 
 VASTExpr::VASTExpr(Opcode Opc, uint8_t NumOps, unsigned UB,
                    unsigned LB, const FoldingSetNodeIDRef ID)
-  : VASTValue(vastExpr, UB - LB), FastID(ID), CachedDelay(-1.0f), Opc(Opc),
-    NumOps(NumOps), UB(UB), LB(LB) {
+  : VASTValue(vastExpr, UB - LB), FastID(ID), CachedDelay(-1.0f), ExprSize(0),
+    Opc(Opc), NumOps(NumOps), UB(UB), LB(LB) {
   Contents.Name = 0;
   assert(NumOps && "Unexpected empty operand list!");
 }
@@ -600,6 +605,12 @@ float VASTExpr::getTotalDelay() const {
   }
 
   return CachedDelay;
+}
+
+bool llvm::VASTExpr::isInlinable() const {
+  return ExprSize < ExprInlineThreshold
+         && (getOpcode() <= LastInlinableOpc
+             || (getOpcode() == dpAssign && !isSubBitSlice()));
 }
 
 float VASTExpr::getMSBDelay() const {
@@ -978,7 +989,7 @@ VASTValPtr VASTModule::buildXorExpr(ArrayRef<VASTValPtr> Ops,
 
   // Build the Xor Expr with the And Inverter Graph (AIG).
   return buildExpr(VASTExpr::dpAnd, buildOrExpr(Ops, BitWidth),
-                   buildNotExpr(buildExpr(VASTExpr::dpAnd, Ops, BitWidth)),
+                   buildNotExpr(buildAndExpr(Ops, BitWidth)),
                    BitWidth);
 }
 
@@ -1022,7 +1033,7 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
   void *IP = 0;
   if (VASTExpr *E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
     return E;
-  
+
   // If the Expression do not exist, allocate a new one.
   // Place the VASTUse array right after the VASTExpr.
   void *P = Allocator.Allocate(sizeof(VASTExpr) + Ops.size() * sizeof(VASTUse),
@@ -1031,10 +1042,17 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
                                  ID.Intern(Allocator));
   UniqueExprs.InsertNode(E, IP);
 
-  // Initialize the use list.
-  for (unsigned i = 0; i < Ops.size(); ++i)
-    (void) new (E->ops() + i) VASTUse(Ops[i], E);
+  // Initialize the use list and compute the actual size of the expression.
+  unsigned ExprSize = 0;
 
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    if (VASTExpr *E = Ops[i].getAsLValue<VASTExpr>()) ExprSize += E->ExprSize;
+    else                                              ++ExprSize;
+    
+    (void) new (E->ops() + i) VASTUse(Ops[i], E);
+  }
+
+  E->ExprSize = ExprSize;
   return E;
 }
 

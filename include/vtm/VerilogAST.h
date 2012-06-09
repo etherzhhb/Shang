@@ -580,6 +580,8 @@ private:
   /// The ScalarEvolution's BumpPtrAllocator holds the data.
   const FoldingSetNodeIDRef FastID;
   mutable float CachedDelay;
+  // The total operand of this expression.
+  unsigned ExprSize;
 
   VASTExpr(const VASTExpr&);             // Do not implement
 
@@ -636,10 +638,7 @@ public:
            && (UB != getOperand(0)->getBitWidth() || LB != 0);
   }
 
-  bool isInlinable() const {
-    return getOpcode() <= LastInlinableOpc ||
-           (getOpcode() == dpAssign && !isSubBitSlice());
-  }
+  bool isInlinable() const;
 
   void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
 
@@ -736,15 +735,13 @@ private:
   void printAsOperandImpl(raw_ostream &OS, unsigned UB, unsigned LB) const;
 
   VASTValPtr getAsInlineOperandImpl() {
-    if (getWireType() != LUT) {
-      if (VASTValPtr V = getAssigningValue()) {
-        // Can the expression be printed inline?
-        if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
-          if (E->isInlinable()) return E.getAsInlineOperand();
-        } else if (V->getBitWidth()) // The wire may wrapping a symbol.
-          // This is a simple assignment.
-          return V;
-      }
+    if (VASTValPtr V = getAssigningValue()) {
+      // Can the expression be printed inline?
+      if (VASTExprPtr E = dyn_cast<VASTExprPtr>(V)) {
+        if (E->isInlinable()) return E.getAsInlineOperand();
+      } else if (V->getBitWidth()) // The wire may wrapping a symbol.
+        // This is a simple assignment.
+        return V;
     }
 
     return this;
