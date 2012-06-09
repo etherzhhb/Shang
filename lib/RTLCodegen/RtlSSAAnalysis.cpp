@@ -362,7 +362,7 @@ void RtlSSAAnalysis::ComputeGenAndKill() {
     if (!S->hasAliasSlot()) continue;
 
     unsigned CurSlotNum = S->SlotNum;
-    VASTSignal *V = VAS->getValue();
+    VASTRegister *V = VAS->getValue();
     for (unsigned i = S->alias_start(), e = S->alias_end(), ii = S->alias_ii();
          i < e; i += ii) {
        if (i == CurSlotNum) continue;

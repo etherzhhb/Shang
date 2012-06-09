@@ -57,8 +57,8 @@ class ValueAtSlot {
     }
   };
 
-  VASTSignal *V;
-  VASTSlot *Slot;
+  VASTRegister *const V;
+  VASTSlot *const Slot;
 
   // Vector for the dependent ValueAtSlots which is a Predecessor VAS.
   typedef DenseMap<ValueAtSlot*, LiveInInfo> VASCycMapTy;
@@ -80,7 +80,7 @@ class ValueAtSlot {
       Info = NewLI;
   }
 
-  ValueAtSlot(VASTSignal *v, VASTSlot *slot) : V(v), Slot(slot){}
+  ValueAtSlot(VASTRegister *v, VASTSlot *slot) : V(v), Slot(slot){}
   ValueAtSlot(const ValueAtSlot&); // Do not implement.
 
   LiveInInfo getDepInfo(ValueAtSlot *VAS) const {
@@ -91,7 +91,7 @@ class ValueAtSlot {
   friend class SlotInfo;
   friend class RtlSSAAnalysis;
 public:
-  VASTSignal *getValue() const { return V; }
+  VASTRegister *getValue() const { return V; }
   VASTSlot *getSlot() const { return Slot; }
   std::string getName() const {
     return std::string(getValue()->getName()) + "@"
