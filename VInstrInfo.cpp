@@ -45,7 +45,7 @@ extern const MCInstrDesc VTMInsts[];
 using namespace llvm;
 static cl::opt<bool>
 EnableBLC("vtm-enable-blc", cl::desc("Enable bit level chaining"),
-          cl::init(false));
+          cl::init(true));
 
 //----------------------------------------------------------------------------//
 // Halper function.

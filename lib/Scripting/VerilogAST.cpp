@@ -40,7 +40,7 @@ static cl::opt<unsigned>
 ExprInlineThreshold("vtm-expr-inline-thredhold",
                     cl::desc("Inline the expression which has less than N "
                              "operand  (16 by default)"),
-                    cl::init(16));
+                    cl::init(32));
 
 static cl::opt<bool>
 EnableBBProfile("vtm-enable-bb-profile",
