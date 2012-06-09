@@ -477,7 +477,7 @@ void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
     if (MachineBasicBlock *MBB = S->getParentBB()) {
       OS << "in BB#" << MBB->getNumber() << ',';
       if (const BasicBlock *BB = MBB->getBasicBlock())
-        OS << S->getParentBB()->getBasicBlock()->getName() << ',';
+        OS << BB->getName() << ',';
     }
 
     if (S->hasAliasSlot()) {
@@ -1389,7 +1389,9 @@ void VASTPort::anchor() {}
 
 void VASTSignal::printDecl(raw_ostream &OS) const {
   OS << AttrStr << ' ';
-  if (isa<VASTRegister>(this))
+
+  bool isRegister = isa<VASTRegister>(this);
+  if (isRegister)
     OS << "reg";
   else
     OS << "wire";
@@ -1399,7 +1401,7 @@ void VASTSignal::printDecl(raw_ostream &OS) const {
 
   OS << ' ' << getName();
 
-  if (isa<VASTRegister>(this))
+  if (isRegister)
     OS << " = " << verilogConstToStr(0, getBitWidth(), false);
 
   OS << ";";
