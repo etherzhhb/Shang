@@ -783,8 +783,12 @@ public:
   }
 
   // Internal function used by VASTValue.
-  VASTValue::dp_dep_it op_begin() const { return U.isInvalid() ? 0 : &U; }
-  VASTValue::dp_dep_it op_end() const { return U.isInvalid() ? 0 : &U + 1; }
+  VASTValue::dp_dep_it op_begin() const {
+    return (U.isInvalid() || getWireType() == InputPort) ? 0 : &U;
+  }
+  VASTValue::dp_dep_it op_end() const {
+    return (U.isInvalid() || getWireType() == InputPort) ? 0 : &U + 1;
+  }
 };
 
 struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {
