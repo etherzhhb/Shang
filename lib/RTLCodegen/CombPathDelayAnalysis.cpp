@@ -204,7 +204,7 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   // Add the end slots.
   VASTRegister *SrcReg = cast<VASTRegister>(Path.back());
 
-  unsigned PathDelay = -1;
+  unsigned PathDelay = 10000;
 
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
@@ -213,15 +213,18 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
     ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
 
     // Update the PathDelay if the source VAS reaches DstSlot.
-    if (unsigned Distance = Dst->getCyclesFromDef(SrcVAS))
+    if (unsigned Distance = Dst->getCyclesFromDef(SrcVAS)) {
+      assert(Distance < 10000 && "Distance too large!");
       PathDelay = std::min(PathDelay, Distance);
+    }
   }
 
   // The path {SrcReg -> DstReg} maybe a false path, i.e. SrcReg never reaches
   // DstSlot.
-  if ((int)PathDelay == -1) {
+  bool isFalsePath = false;
+  if ((int)PathDelay == 10000) {
+    isFalsePath = true;
     ++NumFalseTimingPath;
-    return 0;
   }
 
   TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
@@ -238,6 +241,10 @@ TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
   for (unsigned i = 0; i < Path.size(); ++i) {
     VASTValue *V = Path[i];
     TimingPathNode N(V);
+    if (isFalsePath) {
+      P->Path[P->PathSize++] = N;
+      continue;
+    }
 
     if (VASTExpr *E = dyn_cast<VASTExpr>(V)) {
       N.LSBInc = E->getLSBDelay();
