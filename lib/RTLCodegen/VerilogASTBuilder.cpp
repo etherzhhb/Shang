@@ -308,7 +308,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitOpBitSlice(MachineInstr *MI);
 
   // Create a condition from a predicate operand.
-  VASTValPtr createCnd(MachineOperand &Op);
+  VASTValPtr createCnd(MachineOperand Op);
 
   VASTValPtr getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true);
 
@@ -1411,14 +1411,18 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
 }
 
 
-VASTValPtr VerilogASTBuilder::createCnd(MachineOperand &Op) {
+VASTValPtr VerilogASTBuilder::createCnd(MachineOperand Op) {
   // Is there an always true predicate?
   if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getBoolImmediate(true);
 
-  // Otherwise it must be some signal.
-  VASTValPtr C = lookupSignal(Op.getReg());
+  bool isInverted = VInstrInfo::isPredicateInverted(Op);
+  // Fix the bitwidth, the bitwidth of condition is always 1.
+  VInstrInfo::setBitWidth(Op, 1);
 
-  if (VInstrInfo::isPredicateInverted(Op)) C = VM->buildNotExpr(C);
+  // Otherwise it must be some signal.
+  VASTValPtr C = getAsOperand(Op);
+
+  if (isInverted) C = VM->buildNotExpr(C);
 
   return C;
 }
