@@ -493,9 +493,13 @@ void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
   OS.indent(2) << "$finish();\nend\n";
 }
 
-void VASTRegister::printReset(raw_ostream &OS) const {
+bool VASTRegister::printReset(raw_ostream &OS) const {
+  if (num_assigns() == 0 && getRegType() != VASTRegister::OutputPort)
+    return false;
+
   OS << getName()  << " <= "
      << verilogConstToStr(InitVal, getBitWidth(), false) << ";";
+  return true;
 }
 
 void VASTRegister::printAssignment(vlang_raw_ostream &OS,
@@ -734,8 +738,7 @@ void VASTModule::printSignalDecl(raw_ostream &OS) {
 void VASTModule::printRegisterReset(raw_ostream &OS) {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I) {
-    (*I)->printReset(OS);
-    OS << "\n";
+    if ((*I)->printReset(OS)) OS << "\n";
   }
 }
 

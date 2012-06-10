@@ -1028,7 +1028,8 @@ public:
   /*VASTUse getConstantValue() const;*/
 
   void printAssignment(vlang_raw_ostream &OS, const VASTModule *Mod) const;
-  void printReset(raw_ostream &OS) const;
+  // Return true if the reset is actually printed.
+  bool printReset(raw_ostream &OS) const;
   void dumpAssignment() const;
   void verifyAssignCnd(vlang_raw_ostream &OS, const VASTModule *Mod) const;
 
