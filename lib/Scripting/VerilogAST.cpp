@@ -116,8 +116,6 @@ void VASTUse::PinUser() const {
     S->Pin();
 }
 
-unsigned VASTUse::getBitWidth() const{ return get()->getBitWidth(); }
-
 VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
   : VASTNode(vastSlot), SlotReg(0, 0), SlotActive(0, 0), SlotReady(0, 0),
     StartSlot(slotNum), EndSlot(slotNum), II(~0), SlotNum(slotNum) {
@@ -1309,7 +1307,7 @@ bool VASTValue::replaceAllUseWith(VASTValue *To) {
   for (it I = use_begin(), E = use_end(); I != E; /*++I*/) {
     VASTUse *U = I.get();
     ++I;
-    assert(U->getBitWidth() == To->getBitWidth() && "Bitwidth not match!");
+    assert((*U)->getBitWidth() == To->getBitWidth() && "Bitwidth not match!");
     VASTValPtr User = U->getUser();
     // Unlink from old list.
     removeUseFromList(U);

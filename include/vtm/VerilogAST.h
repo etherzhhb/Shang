@@ -138,6 +138,9 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
   inline void printAsOperand(raw_ostream &OS) const {
     get()->printAsOperand(OS, isInverted());
   }
+
+  template<typename T1>
+  bool isa() const { return llvm::isa<T1>(get()); }
 };
 
 // Casting PtrInvPair.
@@ -240,6 +243,9 @@ public:
   template<typename T>
   inline T *getAsLValue() const { return get().getAsLValue<T>(); }
 
+  template<typename T>
+  bool isa() const { return get().isa<T>(); }
+
   operator VASTValPtr() const { return get(); }
 
   VASTValPtr operator->() const { return get(); }
@@ -257,8 +263,6 @@ public:
 
   // Prevent the user from being removed.
   void PinUser() const;
-
-  unsigned getBitWidth() const ;
 };
 
 template<>
