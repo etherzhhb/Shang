@@ -156,6 +156,10 @@ macro(add_general_test test_file config_file setup_prj_file postfix)
   set(CatchFail           ${FIXFAILLIST_SH} ${XFAILLIST} ${test_file} ${FAILLIST})
 
   configure_file (
+    "${VTS_SOURCE_ROOT}/common_config.lua.in"
+    "${TEST_BINARY_ROOT}/common_config.lua"
+  )
+  configure_file (
     ${config_file}
     "${TEST_BINARY_ROOT}/${TEST}_config.lua"
   )
@@ -318,6 +322,10 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")
 
   configure_file (
+    "${VTS_SOURCE_ROOT}/common_config.lua.in"
+    "${TEST_BINARY_ROOT}/common_config.lua"
+  )
+  configure_file (
     ${config_file}
     "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
     )
@@ -357,7 +365,6 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
     COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
     COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
-    COMMAND ${StatsCyclesPy} ${BenchmarkCyclesTmp} ${BenchmarkCyclesXls}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
     DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}

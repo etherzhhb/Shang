@@ -6,6 +6,7 @@ IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
 CounterFile = [[@CycleCounter@]]
 BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
+test_binary_root = [[@TEST_BINARY_ROOT@]]
 
 local FMAX = @FMAX@
 PERIOD = 1000.0 / FMAX
@@ -15,32 +16,13 @@ ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
 SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
 MULT_ChainingThreshold = @MULT_ChainingThreshold@
 ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
+POINTER_SIZE_IN_BITS = @POINTER_SIZE_IN_BITS@
 
 -- load platform information script
 dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C35F672C6.lua')
 
-FUs.MemoryBus = { Latency= 0.5, StartInterval=1, AddressWidth=@POINTER_SIZE_IN_BITS@, DataWidth=64 }
-FUs.BRam = {  Latency=1, StartInterval=1, DataWidth = 64, Template=[=[
-// Block Ram $(num)
-reg   [$(datawidth - 1):0]   bram$(num)out_r;
-assign bram$(num)out = bram$(num)out_r;
-reg   [$(datawidth - 1):0]  mem$(num)[0:$(2^addrwidth-1)];
-
-#if filename ~= [[]] then
-initial
-    $(_put('$'))readmemh("$([[@TEST_BINARY_ROOT@]] .. '/' .. filename)", mem$(num));
-#end
-
-always @ (posedge $(clk)) begin
-  if (bram$(num)en) begin
-    if (bram$(num)we)
-      mem$(num)[bram$(num)addr] <= bram$(num)in;
-
-    bram$(num)out_r <= mem$(num)[bram$(num)addr];
-  end
-end
-]=]}
-
+-- Load bram initfile
+dofile('@TEST_BINARY_ROOT@/' .. 'common_config.lua')
 
 -- Define some function
 dofile('@VTS_SOURCE_ROOT@/' .. 'FuncDefine.lua')
@@ -77,22 +59,7 @@ import "DPI-C" function chandle vlt_$(escapeNumber(k))();
 ]=]
 
 Misc.RTLGlobalScript = [=[
---Generate initialize file for block rams.
-for k,v in pairs(GlobalVariables) do
-  if v.AddressSpace ~= 0 then
-    if v.Initializer ~= nil then
-      InitFile = io.open ([[@TEST_BINARY_ROOT@]] .. '/' .. k .. '_init.txt', 'w')
-      for i,n in ipairs(v.Initializer) do
-        InitFile:write(string.sub(n, 3)..'\n')
-      end
-      io.close(InitFile)
-    end
-  end --end addresssapce == 0
-end
-
-local preprocess = require "luapp" . preprocess
-RTLGlobalCode, message = preprocess {input=RTLGlobalTemplate}
-if message ~= nil then print(message) end
+dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
 ]=]
 
 if "@SYNTHESIS_DUT@" == "ON" then
