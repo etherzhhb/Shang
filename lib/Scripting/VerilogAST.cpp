@@ -610,9 +610,7 @@ float VASTExpr::getTotalDelay() const {
 }
 
 bool llvm::VASTExpr::isInlinable() const {
-  return ExprSize < ExprInlineThreshold
-         && (getOpcode() <= LastInlinableOpc
-             || (getOpcode() == dpAssign && !isSubBitSlice()));
+  return ExprSize < ExprInlineThreshold && getOpcode() <= LastInlinableOpc;
 }
 
 float VASTExpr::getMSBDelay() const {
