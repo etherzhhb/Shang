@@ -87,11 +87,12 @@ set(XFAILLIST ${VTS_SOURCE_ROOT}/ExpectFails)
 set(StatsCyclesPy ${VTS_SOURCE_ROOT}/StatsCycles.py)
 set(StatsSynthesis ${VTS_SOURCE_ROOT}/StatsSynthesis.py)
 
-set(IcDelayTmp ${VTS_BINARY_ROOT}/benchmark.icdelay.json.tmp)
+set(BenchmarkSlackTmp ${VTS_BINARY_ROOT}/benchmark.slack.json.tmp)
 set(BenchmarkSummaryTmp ${VTS_BINARY_ROOT}/benchmark.summary.json.tmp)
 set(BenchmarkReportTmp ${VTS_BINARY_ROOT}/benchmark.report.json.tmp)
 set(BenchmarkCyclesTmp ${VTS_BINARY_ROOT}/benchmark.cycles.json.tmp)
 set(BenchmarkCyclesXls ${VTS_BINARY_ROOT}/benchmark.cycles.xls)
+set(BenchmarkSlackXls ${VTS_BINARY_ROOT}/benchmark.slack.xls)
 set(BenchmarkSummaryXls ${VTS_BINARY_ROOT}/benchmark.summary.xls)
 
 SET_DIRECTORY_PROPERTIES(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES
@@ -306,7 +307,6 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_RTL_STA        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.sta.rpt")
   set(MAIN_MODELDO_FILE   "${TEST_BINARY_ROOT}/modeldofile")
   set(MAIN_TB_FILE        "${TEST_BINARY_ROOT}/DUT_TOP_tb.v")
-  set(MAIN_ICDELAY_TCL    "${TEST_BINARY_ROOT}/Icdelay.tcl")
 
   set(MAIN_IF_SRC         "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.${postfix}")
   set(MAIN_SC_O           "${TEST_BINARY_ROOT}/${DUT_NAME}_IF.o")
@@ -316,7 +316,6 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   set(MAIN_V__ALL         "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL__ALL.a")
   set(SC_TB_EXE           "${MAIN_OBJ_PRJ_ROOT}/V${DUT_NAME}_RTL")
   set(CycleCounter        "${TEST_BINARY_ROOT}/${MAIN_RTL_ENTITY}.txt")
-  set(IcDelayTotal        "${VTS_BINARY_ROOT}/${MAIN_RTL_ENTITY}_total.txt")
 
   configure_file (
     ${config_file}
@@ -339,7 +338,7 @@ macro(add_general_main_test test_file config_file setup_prj_file postfix)
   add_custom_target(${TEST}_main_ir DEPENDS ${MAIN_ORIG_BC})
   add_dependencies(main_ir ${TEST}_main_ir)
 
-  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE} ${MAIN_ICDELAY_TCL}
+  add_custom_command(OUTPUT ${MAIN_RTL_SRC} ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_TB_FILE} ${MAIN_MODELDO_FILE}
     COMMAND echo "Bad RTL source!" > ${MAIN_RTL_SRC}
     COMMAND timeout ${TIMEOUT}s sh -c "${SYNC} -vtm-enable-memscm=false ${TEST_BINARY_ROOT}/${TEST}_config_main.lua  ${EXTRA_HLS_OPTION}"
     DEPENDS ${MAIN_ORIG_BC} ${SYNC} "${TEST_BINARY_ROOT}/${TEST}_config_main.lua"
@@ -358,9 +357,10 @@ if(SYNTHESIS_DUT AND TARGET benchmark_synthesis_main)
   add_custom_command(OUTPUT ${MAIN_RTL_STA} ${CycleCounter}
     COMMAND timeout ${TIMEOUTS}s sh "${MAIN_MODELDO_FILE}"
     COMMAND ${QUARTUS_BIN_DIR}/quartus_sh -t "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" > /dev/null
+    COMMAND ${StatsCyclesPy} ${BenchmarkCyclesTmp} ${BenchmarkCyclesXls}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sh --flow compile ${MAIN_RTL_ENTITY}
     #COMMAND ${QUARTUS_BIN_DIR}/quartus_sta ${MAIN_RTL_ENTITY} --do_report_timing
-    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT} ${MAIN_ICDELAY_TCL}
+    DEPENDS ${MAIN_RTL_SRC} "${TEST_BINARY_ROOT}/${TEST}_setup_prj_symain.tcl" ${MAIN_SDC_SRC} ${MAIN_INT_TOP} ${MAIN_INT_BRAM} ${MAIN_INT_BRAMINIT}
     WORKING_DIRECTORY ${TEST_BINARY_ROOT}
     COMMENT "Synthesising RTL module and interface for ${SYN_FUNC}"
   )

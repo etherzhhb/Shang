@@ -1,8 +1,22 @@
+InputFile = [[@MAIN_ORIG_BC@]]
+RTLOutput = [[@MAIN_RTL_SRC@]]
+MainSDCOutput = [[@MAIN_SDC_SRC@]]
+SoftwareIROutput = [[@MAIN_SW_LL@]]
+IFFileName = [[@MAIN_IF_SRC@]]
+RTLModuleName = [[@MAIN_RTL_ENTITY@]]
+CounterFile = [[@CycleCounter@]]
+BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
+
+TESTBINARYFLOD = [[@TEST_BINARY_ROOT@]]
+INTFFILE = [[@MAIN_INT_TOP@]]
+BRAMFILE = [[@MAIN_INT_BRAM@]]
+BRAMINIT = [[@MAIN_INT_BRAMINIT@]]
+MODELDOFILE = [[@MAIN_MODELDO_FILE@]]
+TBFILE = [[@MAIN_TB_FILE@]]
+
 local FMAX = @FMAX@
 PERIOD = 1000.0 / FMAX
 FUs.MaxAllowedMuxSize = @MaxAllowedMuxSize@
-FUs.RegCost = 64
-FUs.LUTCost = 64
 
 ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
 SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
@@ -34,23 +48,6 @@ always @ (posedge $(clk)) begin
 end
 ]=]}
 
-InputFile = [[@MAIN_ORIG_BC@]]
-RTLOutput = [[@MAIN_RTL_SRC@]]
-SoftwareIROutput = [[@MAIN_SW_LL@]]
-IFFileName = [[@MAIN_IF_SRC@]]
-RTLModuleName = [[@MAIN_RTL_ENTITY@]]
-CounterFile = [[@CycleCounter@]]
-IcDelayTmp = [[@IcDelayTotal@]]
-BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
-
-TESTBINARYFLOD = [[@TEST_BINARY_ROOT@]]
-INTFFILE = [[@MAIN_INT_TOP@]]
-BRAMFILE = [[@MAIN_INT_BRAM@]]
-BRAMINIT = [[@MAIN_INT_BRAMINIT@]]
-MODELDOFILE = [[@MAIN_MODELDO_FILE@]]
-TBFILE = [[@MAIN_TB_FILE@]]
-ICDELAYTCL = [[@MAIN_ICDELAY_TCL@]]
-
 -- Define some function
 dofile('@VTS_SOURCE_ROOT@/' .. 'FuncDefine.lua')
 
@@ -66,29 +63,5 @@ dofile('@VTS_SOURCE_ROOT@/' .. 'InterfaceGen.lua')
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
 
 if "@SYNTHESIS_DUT@" == "ON" then
-
-Misc.DatapathScript = [=[
-local SlackFile = assert(io.open ([[@MAIN_SDC_SRC@]], "a+"))
-local DelayTclFile = assert(io.open (ICDELAYTCL, "a+"))
-local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=RunOnDatapath, output=SlackFile}
-local _, message = preprocess {input=IcdelayTclGen, output=DelayTclFile}
-if message ~= nil then print(message) end
-SlackFile:close()
-DelayTclFile:close()
-]=]
-
-Misc.TimingConstraintsHeaderScript = [=[
-local SlackFile = assert(io.open ([[@MAIN_SDC_SRC@]], "w"))
-local DelayTclFile = assert(io.open (ICDELAYTCL, "w"))
-local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=SDCHeader, output=SlackFile}
-local _, message = preprocess {input=IcdelayTclHeader, output=DelayTclFile}
-if message ~= nil then print(message) end
-SlackFile:close()
-DelayTclFile:close()
-]=]
-
-SynAttr.ParallelCaseAttr = '/* parallel_case */'
-SynAttr.FullCaseAttr = '/* full_case */'
+  dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
 end

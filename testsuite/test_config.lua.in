@@ -1,21 +1,20 @@
-local FMAX = @FMAX@
-PERIOD = 1000.0 / FMAX
-FUs.MaxAllowedMuxSize = @MaxAllowedMuxSize@
-FUs.RegCost = 64
-FUs.LUTCost = 64
-
-ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
-SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
-MULT_ChainingThreshold = @MULT_ChainingThreshold@
-ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
-
 InputFile = [[@MAIN_ORIG_BC@]]
 RTLOutput = [[@MAIN_RTL_SRC@]]
+MainSDCOutput = [[@MAIN_SDC_SRC@]]
 SoftwareIROutput = [[@MAIN_SW_LL@]]
 IFFileName = [[@MAIN_IF_SRC@]]
 RTLModuleName = [[@MAIN_RTL_ENTITY@]]
 CounterFile = [[@CycleCounter@]]
 BenchmarkCycles = [[@BenchmarkCyclesTmp@]]
+
+local FMAX = @FMAX@
+PERIOD = 1000.0 / FMAX
+FUs.MaxAllowedMuxSize = @MaxAllowedMuxSize@
+
+ADDSUB_ChainingThreshold = @ADDSUB_ChainingThreshold@
+SHIFT_ChainingThreshold = @SHIFT_ChainingThreshold@
+MULT_ChainingThreshold = @MULT_ChainingThreshold@
+ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
 
 -- load platform information script
 dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C35F672C6.lua')
@@ -97,67 +96,5 @@ if message ~= nil then print(message) end
 ]=]
 
 if "@SYNTHESIS_DUT@" == "ON" then
-
-RunOnDatapath = [=[
-$(_put('#')) Slack $(RTLDatapath.Slack)
-#_put('# Path nodes: ')
-#for _, n in pairs(RTLDatapath.Nodes) do
-#_put(n.Name .. ', ')
-#end
-#local Slack = RTLDatapath.Slack
-#local DstName = RTLDatapath.Nodes[1].Name
-#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
-#if Functions[FuncInfo.Name] == nil then
-#DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
-#SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
-#end
-
-set dst [get_keepers {$(DstName)*}]
-set src [get_keepers {$(SrcName)*}]
-
-if { [get_collection_size $src] && [get_collection_size $dst] } {
-  $(if Slack == 1 then _put('#') end) set_max_delay -from $src -to $dst $(Slack * PERIOD - PERIOD * 0.05)ns
-} elseif {$isInSta && $(Slack) > 1} {
-  add_row_to_table -id $missedPanelid [list {$(SrcName)} {$(DstName)} {$(Slack)}]
-  #FIXME: Dont save the database every time when a row appended
-  save_report_database
-}
-]=]
-
-SDCHeader = [=[
-create_clock -name "clk" -period $(PERIOD)ns [get_ports {clk}]
-derive_pll_clocks -create_base_clocks
-
-set isInSta [string match "quartus_sta" $quartus(nameofexecutable)]
-
-if $isInSta {
-  # Report the missed constraints.
-  load_package report
-  load_report
-  create_report_panel -folder "Timing Constraints"
-  set missedPanelid  [create_report_panel -table "Timing Constraints||Missed Constraints"]
-  add_row_to_table -id $missedPanelid [list {src} {dst} {cycles}]
-}
-
-]=]
-
-
-Misc.DatapathScript = [=[
-local SlackFile = assert(io.open ([[@MAIN_SDC_SRC@]], "a+"))
-local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=RunOnDatapath, output=SlackFile}
-if message ~= nil then print(message) end
-SlackFile:close()
-]=]
-
-Misc.TimingConstraintsHeaderScript = [=[
-local SlackFile = assert(io.open ([[@MAIN_SDC_SRC@]], "w"))
-local preprocess = require "luapp" . preprocess
-local _, message = preprocess {input=SDCHeader, output=SlackFile}
-if message ~= nil then print(message) end
-SlackFile:close()
-]=]
-
-SynAttr.ParallelCaseAttr = '/* parallel_case */'
-SynAttr.FullCaseAttr = '/* full_case */'
+  dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
 end

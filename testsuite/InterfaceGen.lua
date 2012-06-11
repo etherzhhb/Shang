@@ -229,7 +229,7 @@ table_num = {}
 LineTotal = {}
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=BlockRAMInitFileGenScript}
-local IntfFile = assert(io.open (INTFFILE, "a+"))
+local IntfFile = assert(io.open (INTFFILE, "w+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=InterfaceGen, output=IntfFile}
 if message ~= nil then print(message) end
@@ -292,7 +292,7 @@ table_num = {}
 LineTotal = {}
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=BlockRAMInitFileGenScript}
-local BramFile = assert(io.open (BRAMFILE, "a+"))
+local BramFile = assert(io.open (BRAMFILE, "w+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=BRAMGen, output=BramFile}
 if message ~= nil then print(message) end
@@ -359,7 +359,7 @@ Passes.DUTtbGen = { FunctionScript = [=[
 if Functions[FuncInfo.Name] ~= nil then
 end
 ]=], GlobalScript =[=[
-local tbFile = assert(io.open (TBFILE, "a+"))
+local tbFile = assert(io.open (TBFILE, "w+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=DUTtbGen, output=tbFile}
 if message ~= nil then print(message) end
@@ -383,7 +383,7 @@ Passes.ModelsimScGen = { FunctionScript = [=[
 if Functions[FuncInfo.Name] ~= nil then
 end
 ]=], GlobalScript =[=[
-local ModelDoFile = assert(io.open (MODELDOFILE, "a+"))
+local ModelDoFile = assert(io.open (MODELDOFILE, "w+"))
 local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=ModelsimScGen, output=ModelDoFile}
 if message ~= nil then print(message) end
