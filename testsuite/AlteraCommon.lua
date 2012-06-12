@@ -25,7 +25,6 @@ set_max_delay -from $(SrcName)* -through $(ThuName)* -to $(DstName)* $(Slack * P
 #if (Slack > 1 and RTLDatapath.isCriticalPath == 1) then
   set_max_delay -from $src -to $dst $(Slack * PERIOD)ns
 #end
-}
 ]=]
 
 SDCHeader = [=[
