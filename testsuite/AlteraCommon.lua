@@ -1,55 +1,36 @@
 RunOnDatapath = [=[
-#_put('# Slack ' .. RTLDatapath.Slack .. ' Path nodes: ')
+#local Slack = RTLDatapath.Slack
+#local DstName = RTLDatapath.Nodes[1].Name
+#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
+#_put('#' .. DstName .. '<-' .. SrcName .. ' Slack ' .. Slack .. ' Path nodes: ')
 #for i, n in pairs(RTLDatapath.Nodes) do
 #  _put(n.Name .. ', ')
 #end
 
-#local Slack = RTLDatapath.Slack
-#local DstName = RTLDatapath.Nodes[1].Name
-#local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
 #if Functions[FuncInfo.Name] == nil then
-#DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
-#SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
+#  DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
+#  SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
 #end
-set dst [get_keepers {$(DstName)*}]
-set src [get_keepers {$(SrcName)*}]
-if { [get_collection_size $src] && [get_collection_size $dst] } {
-#  for i, n in pairs(RTLDatapath.Nodes) do
-#    if n.Name ~= 'n/a' and n.Name ~= DstName and n.Name ~= SrcName then
-#      local ThuName = n.Name
-#      if Functions[FuncInfo.Name] == nil then
-#        ThuName = '*' .. CurModule:getName() .. '_inst|' .. ThuName
-#      end
-  set thu [get_keepers {$(ThuName)*}]
-  if { [get_collection_size $thu]} {
-    set_max_delay -from $src -through $thu -to $dst $(Slack * PERIOD)ns
-  }
+#local has_thu_node = false
+#for i, n in pairs(RTLDatapath.Nodes) do
+#  if n.Name ~= 'n/a' and n.Name ~= DstName and n.Name ~= SrcName then
+#    local ThuName = n.Name
+#    if Functions[FuncInfo.Name] == nil then
+#      ThuName = '*' .. CurModule:getName() .. '_inst|' .. ThuName
+#    end
+set_max_delay -from $(SrcName)* -through $(ThuName)* -to $(DstName)* $(Slack * PERIOD)ns
+#  end -- End valid thu node.
+#end -- end for
 
-#    end -- End valid thu node.
-#  end -- end for
+#if (Slack > 1 and RTLDatapath.isCriticalPath == 1) then
   set_max_delay -from $src -to $dst $(Slack * PERIOD)ns
-} elseif {$isInSta && $(Slack) > 1} {
-  add_row_to_table -id $missedPanelid [list {$(SrcName)} {$(DstName)} {$(Slack)}]
-  #FIXME: Dont save the database every time when a row appended
-  save_report_database
+#end
 }
 ]=]
 
 SDCHeader = [=[
 create_clock -name "clk" -period $(PERIOD)ns [get_ports {clk}]
 derive_pll_clocks -create_base_clocks
-
-set isInSta [string match "quartus_sta" $quartus(nameofexecutable)]
-
-if $isInSta {
-  # Report the missed constraints.
-  load_package report
-  load_report
-  create_report_panel -folder "Timing Constraints"
-  set missedPanelid  [create_report_panel -table "Timing Constraints||Missed Constraints"]
-  add_row_to_table -id $missedPanelid [list {src} {dst} {cycles}]
-}
-
 ]=]
 
 Misc.DatapathScript = [=[
