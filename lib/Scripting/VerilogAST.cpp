@@ -1086,14 +1086,14 @@ void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot
   }
 }
 
-VASTValPtr VASTModule::assign(VASTWire *W, VASTValPtr V, VASTWire::Type T) {
+VASTWire *VASTModule::assign(VASTWire *W, VASTValPtr V, VASTWire::Type T) {
   if (W->getExpr() != V) W->assign(V, T);
 
   return W;
 }
 
-VASTValPtr VASTModule::assignWithExtraDelay(VASTWire *W, VASTValPtr V,
-                                            unsigned latency) {
+VASTWire *VASTModule::assignWithExtraDelay(VASTWire *W, VASTValPtr V,
+                                           unsigned latency) {
   if (W->getExpr() != V)
     W->assignWithExtraDelay(V, latency);
 

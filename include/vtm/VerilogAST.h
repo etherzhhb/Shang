@@ -1376,9 +1376,9 @@ public:
   VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValPtr> &Cnds,
                            bool AddSlotActive = true);
 
-  VASTValPtr assign(VASTWire *W, VASTValPtr V,
-                    VASTWire::Type T = VASTWire::Common);
-  VASTValPtr assignWithExtraDelay(VASTWire *W, VASTValPtr V, unsigned latency);
+  VASTWire *assign(VASTWire *W, VASTValPtr V,
+                   VASTWire::Type T = VASTWire::Common);
+  VASTWire *assignWithExtraDelay(VASTWire *W, VASTValPtr V, unsigned latency);
 
   void printSignalDecl(raw_ostream &OS);
   void printRegisterReset(raw_ostream &OS);
