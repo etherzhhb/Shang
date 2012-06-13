@@ -46,10 +46,18 @@ DisableTimingScriptGeneration("vtm-disable-timing-script",
                               cl::desc("Disable timing script generation"),
                               cl::init(false));
 
-
-STATISTIC(NumTimingPath, "Number of timing pathes analyzed");
-STATISTIC(NumFalseTimingPath, "Number of false timing pathes detected");
+STATISTIC(NumTimingPath, "Number of timing paths analyzed (From->To pair)");
+STATISTIC(NumMultiCyclesTimingPath, "Number of multicycles timing paths "
+                                    "analyzed (From->To pair)");
+STATISTIC(NumMaskedMultiCyclesTimingPath,
+          "Number of timing paths that masked by path with smaller slack "
+          "(From->To pair)");
+STATISTIC(NumFalseTimingPath,
+          "Number of false timing paths detected (From->To pair)");
 STATISTIC(NumNegSlackTimingPath, "Number of timing paths with negative slack");
+STATISTIC(NumConstraintsWritten,
+          "Number of false timing constrainted are written "
+          "(From->Through->To pair)");
 namespace{
 struct CombPathDelayAnalysis;
 
@@ -99,10 +107,10 @@ struct PathDelayQueryCache {
   void bindAllPath2ScriptEngine(VASTRegister *Dst) const;
   void bindAllPath2ScriptEngine(VASTRegister *Dst, bool IsSimple,
                                 DenseSet<VASTRegister*> &BoundSrc) const;
-  bool bindPath2ScriptEngine(VASTRegister *DstReg, VASTRegister *SrcReg,
-                             unsigned Delay, bool SkipThu, bool IsCritical)const;
-  bool printPathWithDelayFrom(raw_ostream &OS, VASTRegister *SrcReg,
-                              unsigned Delay) const;
+  unsigned bindPath2ScriptEngine(VASTRegister *DstReg, VASTRegister *SrcReg,
+                                 unsigned Delay, bool SkipThu, bool IsCritical)const;
+  unsigned printPathWithDelayFrom(raw_ostream &OS, VASTRegister *SrcReg,
+                                  unsigned Delay) const;
 
   typedef DenseSet<VASTRegister*>::const_iterator src_it;
   typedef DelayStatsMapTy::const_iterator delay_it;
@@ -181,7 +189,7 @@ static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
 }
 
 static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
-  bool NamePrinted = false;
+  unsigned NamePrinted = false;
   if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
     if (const char *N = NV->getName()) {
       OS << " { Name ='" << N << "',";
@@ -276,10 +284,10 @@ void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
   }
 }
 
-bool PathDelayQueryCache::printPathWithDelayFrom(raw_ostream &OS,
-                                                 VASTRegister *SrcReg,
-                                                 unsigned Delay) const {
-  bool AnyNodePrinted = false;
+unsigned PathDelayQueryCache::printPathWithDelayFrom(raw_ostream &OS,
+                                                     VASTRegister *SrcReg,
+                                                     unsigned Delay) const {
+  unsigned NumNodesPrinted = 0;
 
   typedef QueryCacheTy::const_iterator it;
   for (it I = QueryCache.begin(), E = QueryCache.end(); I != E; ++I) {
@@ -288,11 +296,11 @@ bool PathDelayQueryCache::printPathWithDelayFrom(raw_ostream &OS,
 
     if (printBindingLuaCode(OS, I->first)) {
       OS << ", ";
-      AnyNodePrinted = true;
+      ++NumNodesPrinted;
     }
   }
 
-  return AnyNodePrinted;
+  return NumNodesPrinted;
 }
 
 void PathDelayQueryCache::dump() const {
@@ -318,10 +326,10 @@ void PathDelayQueryCache::dump() const {
 
 // The first node of the path is the use node and the last node of the path is
 // the define node.
-bool PathDelayQueryCache::bindPath2ScriptEngine(VASTRegister *DstReg,
-                                                VASTRegister *SrcReg,
-                                                unsigned Delay, bool SkipThu,
-                                                bool IsCritical) const {
+unsigned PathDelayQueryCache::bindPath2ScriptEngine(VASTRegister *DstReg,
+                                                    VASTRegister *SrcReg,
+                                                    unsigned Delay, bool SkipThu,
+                                                    bool IsCritical) const {
   // Path table:
   // Datapath: {
   //  unsigned Slack,
@@ -342,13 +350,13 @@ bool PathDelayQueryCache::bindPath2ScriptEngine(VASTRegister *DstReg,
 
   Script.clear();
 
-  bool ThuNodesPrinted = SkipThu;
+  unsigned NumThuNodePrinted = 0;
   SS << "RTLDatapath.Nodes = { ";
   printBindingLuaCode(SS, DstReg);
   SS << ", ";
 
-  if (!ThuNodesPrinted)
-    ThuNodesPrinted = printPathWithDelayFrom(SS, SrcReg, Delay);
+  if (!SkipThu)
+    NumThuNodePrinted = printPathWithDelayFrom(SS, SrcReg, Delay);
 
   printBindingLuaCode(SS, SrcReg);
   SS << " }";
@@ -362,7 +370,7 @@ bool PathDelayQueryCache::bindPath2ScriptEngine(VASTRegister *DstReg,
   if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
     report_fatal_error("Error occur while running datapath script:\n"
                        + Err.getMessage());
-  return SkipThu;
+  return NumThuNodePrinted;
 }
 
 void PathDelayQueryCache::bindAllPath2ScriptEngine(VASTRegister *Dst,
@@ -379,12 +387,19 @@ void PathDelayQueryCache::bindAllPath2ScriptEngine(VASTRegister *Dst,
       bool Visited = !BoundSrc.insert(SrcReg).second;
       assert((!IsSimple || !Visited)
              && "A simple path should not have been visited!");
+      ++NumTimingPath;
+      if (Delay == 10000) ++NumFalseTimingPath;
+      else if (Delay > 1) ++NumMultiCyclesTimingPath;
+
       DEBUG(dbgs().indent(2) << "from: " << SrcReg->getName() << '#'
                              << I->first << '\n');
       // If we not visited the path before, this path is the critical path,
       // since we are iteration the path from the smallest delay to biggest
       // delay.
-      bindPath2ScriptEngine(Dst, SrcReg, Delay, IsSimple, !Visited);
+      unsigned NumConstraints = bindPath2ScriptEngine(Dst, SrcReg, Delay,
+                                                      IsSimple, !Visited);
+      if (NumConstraints == 0 && !IsSimple && Delay > 1)
+        ++NumMaskedMultiCyclesTimingPath;
     }
   }
 }
