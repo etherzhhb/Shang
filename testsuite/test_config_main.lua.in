@@ -66,7 +66,7 @@ import "DPI-C" function chandle vlt_$(escapeNumber(k))();
 `endif
 ]=]
 
-Misc.RTLGlobalScript = [=[
+Misc.MainSynthesisRTLGlobalScript = [=[
 table_name = {}
 table_num = {}
 LineTotal = {}
@@ -75,9 +75,10 @@ local preprocess = require "luapp" . preprocess
 local _, message = preprocess {input=BlockRAMInitFileGenScript, output=BramInitFile}
 if message ~= nil then print(message) end
 BramInitFile:close()
+]=]
 
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
-]=]
+Misc.RTLGlobalScript = Misc.MainSynthesisRTLGlobalScript .. Misc.CommonRTLGlobalScript
 
 if "@SYNTHESIS_DUT@" == "ON" then
   dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')

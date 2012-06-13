@@ -19,3 +19,73 @@ always @ (posedge $(clk)) begin
   end
 end
 ]=]}
+
+FUs.CommonTemplate =[=[
+
+module shang_addc#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  input wire c,
+  output wire[C_WIDTH-1:0] d
+);
+	assign d = a + b + c;
+endmodule
+
+module shang_mult#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  output wire[C_WIDTH-1:0] c
+);
+	assign c = a * b;
+endmodule
+
+module shang_shl#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  output wire[C_WIDTH-1:0] c
+);
+	assign c = a << b;
+endmodule
+
+module shang_sra#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  output wire[C_WIDTH-1:0] c
+);
+	assign c = $signed(a) >> b;
+endmodule
+
+module shang_srl#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  output wire[C_WIDTH-1:0] c
+);
+	assign c = a >> b;
+endmodule
+
+module shang_scmp#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  output wire[7:0] c
+);
+	assign c[7:5] = 3'bx;
+	assign c[4] = ($signed(a) >  $signed(b)) ? 1'b1 : 1'b0;
+	assign c[3] = ($signed(a) >= $signed(b)) ? 1'b1 : 1'b0;
+	assign c[2] = ($signed(a) == $signed(b)) ? 1'b1 : 1'b0;
+	assign c[1] = ($signed(a) != $signed(b)) ? 1'b1 : 1'b0;
+	assign c[0] = 1'bx;
+endmodule
+
+module shang_ucmp#(parameter A_WIDTH = 0, B_WIDTH = 0, C_WIDTH = 0) (
+  input wire[A_WIDTH-1:0] a,
+  input wire[B_WIDTH-1:0] b,
+  output wire[7:0] c
+);
+	assign c[7:5] = 3'bx;
+	assign c[4] = (a > b)  ? 1'b1 : 1'b0;
+	assign c[3] = (a >= b) ? 1'b1 : 1'b0;
+	assign c[2] = (a == b) ? 1'b1 : 1'b0;
+	assign c[1] = (a != b) ? 1'b1 : 1'b0;
+	assign c[0] = 1'bx;
+endmodule
+]=]

@@ -47,6 +47,12 @@ EnableBBProfile("vtm-enable-bb-profile",
                 cl::desc("Generate counters to profile the design"),
                 cl::init(false));
 
+
+static cl::opt<bool>
+InstSubModForFU("vtm-instantiate-submod-for-fu",
+                cl::desc("Instantiate submodule for each functional unit"),
+                cl::init(false));
+
 //===----------------------------------------------------------------------===//
 // Value and type printing
 static std::string verilogConstToStr(uint64_t Value, unsigned bitwidth,
@@ -1525,6 +1531,62 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
   OS.indent(2) << "endcase\nend  // end mux logic\n";
 }
 
+static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
+  assert(!W->getExpr().isInverted() && "Unexpected inverted mux!");
+  VASTExpr *E = W->getExpr().get();
+  unsigned NumOperands = E->NumOps;
+
+  if (NumOperands != 3) return false;
+
+  const VASTUse &OpA = E->getOperand(0), &OpB = E->getOperand(1);
+
+  if (OpA.isa<VASTImmediate>() || OpA.isa<VASTSymbol>()) return false;
+  if (OpB.isa<VASTImmediate>() || OpB.isa<VASTSymbol>()) return false;
+
+  OS << E->getFUName() << "#("
+     << OpA->getBitWidth() << ", "
+     << OpB->getBitWidth() << ", "
+     << W->getBitWidth() << ") "
+     << E->getFUName() << E << '(';
+
+  OpA.printAsOperand(OS);
+  OS << ", ";
+  OpB.printAsOperand(OS);
+  OS << ", ";
+  E->getOperand(2).printAsOperand(OS);
+  OS << ", ";
+  W->printAsOperand(OS, false);
+  OS << ");\n";
+  return true;
+}
+
+static bool printBinFU(raw_ostream &OS, const VASTWire *W) {
+  assert(!W->getExpr().isInverted() && "Unexpected inverted mux!");
+  VASTExpr *E = W->getExpr().get();
+  unsigned NumOperands = E->NumOps;
+
+  if (NumOperands != 2) return false;
+
+  const VASTUse &OpA = E->getOperand(0), &OpB = E->getOperand(1);
+
+  if (OpA.isa<VASTImmediate>() || OpA.isa<VASTSymbol>()) return false;
+  if (OpB.isa<VASTImmediate>() || OpB.isa<VASTSymbol>()) return false;
+
+  OS << E->getFUName() << "#("
+     << OpA->getBitWidth() << ", "
+     << OpB->getBitWidth() << ", "
+     << W->getBitWidth() << ") "
+     << E->getFUName() << E << '(';
+
+  OpA.printAsOperand(OS);
+  OS << ", ";
+  OpB.printAsOperand(OS);
+  OS << ", ";
+  W->printAsOperand(OS, false);
+  OS << ");\n";
+  return true;
+}
+
 void VASTWire::printAsOperandImpl(raw_ostream &OS, unsigned UB,
                                   unsigned LB) const {
   if (getName())
@@ -1552,13 +1614,22 @@ void VASTWire::printAssignment(raw_ostream &OS) const {
   assert(V && "Cannot print the wire!");
 
   if (VASTExpr *Expr = dyn_cast<VASTExpr>(V)) {
-    // Dont know how to print black box.
-    if (Expr->getOpcode() == VASTExpr::dpBlackBox) return;
-
-    // MUX need special printing method.
-    if (Expr->getOpcode() == VASTExpr::dpMux) {
-      printCombMux(OS, this);
-      return;
+    switch (Expr->getOpcode()) {
+    default: break;
+    case VASTExpr::dpAdd:
+      if (InstSubModForFU && printFUAdd(OS, this)) return;
+      break;
+    case VASTExpr::dpMul:
+    case VASTExpr::dpShl:
+    case VASTExpr::dpSRA:
+    case VASTExpr::dpSRL:
+    case VASTExpr::dpSCmp:
+    case VASTExpr::dpUCmp:
+      if (InstSubModForFU &&printBinFU(OS, this)) return;
+      break;
+    case VASTExpr::dpMux: printCombMux(OS, this); return;
+    // Don't know how to print black box.
+    case VASTExpr::dpBlackBox: return;
     }
   }
 
@@ -1607,29 +1678,29 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   OS << ')';
 }
 
-const char *VASTExpr::OpcName[] = {
+const char *VASTExpr::StandarFUName[] = {
     // bitwise logic datapath
-    "And",
-    "RAnd",
-    "ROr",
-    "RXor",
-    "Sel",
+    0,
+    0,
+    0,
+    0,
+    0,
     // bit level assignment.
-    "BitCat",
-    "BitRepeat",
+    0,
+    0,
     // Simple wire assignment.
-    "Assign",
+    0,
     // Cannot inline.
     // FU datapath
-    "Add",
-    "Mul",
-    "Shl",
-    "SRA",
-    "SRL",
-    "SCmp",
-    "UCmp",
+    "shang_addc",
+    "shang_mult",
+    "shang_shl",
+    "shang_sra",
+    "shang_srl",
+    "shang_scmp",
+    "shang_ucmp",
     // Mux in datapath.
-    "Mux",
+    0,
     // Blackbox,
-    "BlackBox"
+    0
 };

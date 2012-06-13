@@ -554,25 +554,27 @@ public:
     // bit level assignment.
     dpBitCat,
     dpBitRepeat,
-    LastInlinableOpc = dpBitRepeat,
     // Simple wire assignment.
     dpAssign,
+    LastInlinableOpc = dpAssign,
     // Cannot inline.
     // FU datapath
     dpAdd,
+    FirstFUOpc = dpAdd,
     dpMul,
     dpShl,
     dpSRA,
     dpSRL,
     dpSCmp,
     dpUCmp,
+    LastFUOpc = dpUCmp,
     // Mux in datapath.
     dpMux,
     // Blackbox,
     dpBlackBox
   };
 private:
-  static const char *OpcName[];
+  static const char *StandarFUName[];
   // Operands, right after this VASTExpr.
   const VASTUse *ops() const {
     return reinterpret_cast<const VASTUse*>(this + 1);
@@ -618,7 +620,7 @@ private:
 public:
   const uint8_t Opc, NumOps,UB, LB;
   Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
-  const char *getOpcodeName() const { return OpcName[getOpcode()]; }
+  const char *getFUName() const { return StandarFUName[getOpcode()]; }
 
   const VASTUse &getOperand(unsigned Idx) const {
     assert(Idx < NumOps && "Index out of range!");

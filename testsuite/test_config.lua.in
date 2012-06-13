@@ -58,9 +58,8 @@ import "DPI-C" function chandle vlt_$(escapeNumber(k))();
 `endif
 ]=]
 
-Misc.RTLGlobalScript = [=[
 dofile('@VTS_SOURCE_ROOT@/' .. 'BramGlobVar.lua')
-]=]
+Misc.RTLGlobalScript = Misc.CommonRTLGlobalScript
 
 if "@SYNTHESIS_DUT@" == "ON" then
   dofile('@VTS_SOURCE_ROOT@/' .. 'AlteraCommon.lua')
