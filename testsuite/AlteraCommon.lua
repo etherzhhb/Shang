@@ -30,7 +30,6 @@ $(_put('#')) $(DstName) <- $(ThuName) <- $(SrcName) Slack $(Slack)
 #  end -- End valid thu node.
 #end -- for
 }
-}
 ]=]
 
 SDCHeader = [=[
