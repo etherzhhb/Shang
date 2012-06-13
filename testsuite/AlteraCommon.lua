@@ -2,27 +2,35 @@ RunOnDatapath = [=[
 #local Slack = RTLDatapath.Slack
 #local DstName = RTLDatapath.Nodes[1].Name
 #local SrcName = RTLDatapath.Nodes[table.getn(RTLDatapath.Nodes)].Name
-
-#if (RTLDatapath.isCriticalPath == 1) then
-$(_put('#')) $(DstName) <- $(SrcName) Slack $(Slack)
-set_multicycle_path -from $(SrcName)* -to $(DstName)* -setup -end $(Slack)
-#end
 #if Functions[FuncInfo.Name] == nil then
 #  DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
 #  SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
 #end
-#local has_thu_node = false
+
+set src [get_keepers $(SrcName)*]
+set dst [get_keepers $(DstName)*]
+if {[get_collection_size $src] && [get_collection_size $dst]} {
+#if (RTLDatapath.isCriticalPath == 1) then
+$(_put('#')) $(DstName) <- $(SrcName) Slack $(Slack)
+  set_multicycle_path -from $src -to $dst -setup -end $(Slack)
+#end -- Only generate constraits with -though if the current path is not critical.
 #for i, n in pairs(RTLDatapath.Nodes) do
-#  if n.Name ~= 'n/a' and n.Name ~= DstName and n.Name ~= SrcName then
+#  if (i~=1 and i~= table.getn(RTLDatapath.Nodes)) then
 #    local ThuName = n.Name
-#    has_thu_node = true
 #    if Functions[FuncInfo.Name] == nil then
 #      ThuName = '*' .. CurModule:getName() .. '_inst|' .. ThuName
 #    end
 $(_put('#')) $(DstName) <- $(ThuName) <- $(SrcName) Slack $(Slack)
-set_multicycle_path -from $(SrcName)* -through $(ThuName)* -to $(DstName)* -setup -end $(Slack)
+#    if (RTLDatapath.isCriticalPath ~= 1) then
+  set thu [get_nets $(ThuName)*]
+  if {[get_collection_size $thu]} {
+    set_multicycle_path -from $src -through $thu -to $dst -setup -end $(Slack)
+  }
+#    end
 #  end -- End valid thu node.
-#end -- end for
+#end -- for
+}
+}
 ]=]
 
 SDCHeader = [=[
