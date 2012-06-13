@@ -30,10 +30,12 @@
 #include "vtm/Utilities.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Target/TargetData.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-comb-path-delay"
 #include "llvm/Support/Debug.h"
@@ -49,57 +51,70 @@ STATISTIC(NumTimingPath, "Number of timing pathes analyzed");
 STATISTIC(NumFalseTimingPath, "Number of false timing pathes detected");
 STATISTIC(NumNegSlackTimingPath, "Number of timing paths with negative slack");
 namespace{
-struct TimingPathNode {
-  VASTValue *V;
-  float MSBInc, LSBInc;
+struct CombPathDelayAnalysis;
 
-  VASTValue *operator->() const { return V; }
-  TimingPathNode(VASTValue *V, float MSBInc = 0.0f, float LSBInc = 0.0f)
-    : V(V), MSBInc(MSBInc), LSBInc(LSBInc) {}
+struct PathDelayQueryCache {
+  typedef std::map<unsigned, DenseSet<VASTRegister*> > DelayStatsMapTy;
+  typedef DenseMap<VASTRegister*, unsigned> RegSetTy;
+  typedef DenseMap<VASTValue*, RegSetTy> QueryCacheTy;
+  QueryCacheTy QueryCache;
+  // Statistics for simple path and complex paths.
+  DelayStatsMapTy Stats[2];
 
-  void printBindingLuaCode(raw_ostream &OS) const {
-    // Skip the unnamed nodes.
-    const char *Name = "n/a";
-    const char *OpcName = "n/a";
-
-    if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
-      if (const char *N = NV->getName()) Name = N;
-    } else if (const VASTExpr *E = dyn_cast<VASTExpr>(V))
-      OpcName = E->getOpcodeName();
-
-    // Write the code.
-    OS << " { Name ='"    << Name << "',"
-          " BitWidth = "<< V->getBitWidth() << ","
-          " LSBInc = "  << LSBInc << ","
-          " MSBInc = "  << MSBInc << ","
-          " Opcode = '" << OpcName << "' }";
+  void reset() {
+    QueryCache.clear();
+    Stats[0].clear();
+    Stats[1].clear();
   }
-};
-}
 
-namespace llvm {
-  template<> struct simplify_type<TimingPathNode> {
-    typedef VASTValue *SimpleType;
-    static SimpleType getSimplifiedValue(const TimingPathNode &Val) {
-      return Val.V;
+  void addDelayFromToStats(VASTRegister *Src, unsigned Delay, bool isSimple) {
+    Stats[isSimple][Delay].insert(Src);
+  }
+
+  void annotatePathDelay(CombPathDelayAnalysis &A, VASTValue *Tree,
+                         ArrayRef<ValueAtSlot*> DstVAS);
+
+  bool updateDelay(RegSetTy &To, const RegSetTy &From,
+                   const RegSetTy &LocalDelayMap) {
+    bool Changed = false;
+
+    typedef RegSetTy::const_iterator it;
+    for (it I = From.begin(), E = From.end(); I != E; ++I) {
+      assert(I->second && "Unexpected zero delay!");
+
+      unsigned &ExistDelay = To[I->first];
+      // Look up the delay from local delay map, because the delay of the From
+      // map may correspond to another data-path with different destination.
+      unsigned NewDelay = LocalDelayMap.lookup(I->first);
+      assert(NewDelay && "Node not visited yet?");
+      if (ExistDelay == 0 || ExistDelay > NewDelay) {
+        ExistDelay = NewDelay;
+        Changed |= true;
+      }
     }
-  };
-}
 
-namespace {
-struct TimingPath {
-  int Delay;
-  float ActualMSBDelay, ActualLSBDelay;
-  TimingPathNode *Path;
-  unsigned PathSize;
+    return Changed;
+  }
 
-  void bindPath2ScriptEngine();
+  void bindAllPath2ScriptEngine(VASTRegister *Dst) const;
+  void bindAllPath2ScriptEngine(VASTRegister *Dst, bool IsSimple,
+                                DenseSet<VASTRegister*> &BoundSrc) const;
+  bool bindPath2ScriptEngine(VASTRegister *DstReg, VASTRegister *SrcReg,
+                             unsigned Delay, bool SkipThu, bool IsCritical)const;
+  bool printPathWithDelayFrom(raw_ostream &OS, VASTRegister *SrcReg,
+                              unsigned Delay) const;
+
+  typedef DenseSet<VASTRegister*>::const_iterator src_it;
+  typedef DelayStatsMapTy::const_iterator delay_it;
+  delay_it stats_begin(bool IsSimple) const { return Stats[IsSimple].begin(); }
+  delay_it stats_end(bool IsSimple) const { return Stats[IsSimple].end(); }
+
+  void dump() const;
 };
 
 struct CombPathDelayAnalysis : public MachineFunctionPass {
   RtlSSAAnalysis *RtlSSA;
   VASTModule *VM;
-  BumpPtrAllocator Allocator;
 
   static char ID;
 
@@ -112,8 +127,9 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
 
   void writeConstraintsForDstReg(VASTRegister *DstReg);
 
-  void extractTimingPaths(ValueAtSlot *DstVAS, VASTValue *DepTree,
-                          SmallVectorImpl<TimingPath*> &Paths);
+  void extractTimingPaths(PathDelayQueryCache &Cache,
+                          ArrayRef<ValueAtSlot*> DstVAS,
+                          VASTValue *DepTree);
 
   bool runOnMachineFunction(MachineFunction &MF);
 
@@ -131,15 +147,181 @@ struct CombPathDelayAnalysis : public MachineFunctionPass {
   CombPathDelayAnalysis() : MachineFunctionPass(ID), RtlSSA(0), VM(0) {
     initializeCombPathDelayAnalysisPass(*PassRegistry::getPassRegistry());
   }
-
-  TimingPath *createTimingPath(ValueAtSlot *Dst, ArrayRef<VASTValue*> Path);
 };
+}
+
+static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
+                                ValueAtSlot *Dst) {
+  unsigned PathDelay = 10000;
+
+  typedef VASTRegister::assign_itertor assign_it;
+  for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
+       I != E; ++I) {
+    VASTSlot *SrcSlot = A.VM->getSlot(I->first->getSlotNum());
+    ValueAtSlot *SrcVAS = A.RtlSSA->getValueASlot(SrcReg, SrcSlot);
+
+    // Update the PathDelay if the source VAS reaches DstSlot.
+    if (unsigned Distance = Dst->getCyclesFromDef(SrcVAS)) {
+      assert(Distance < 10000 && "Distance too large!");
+      PathDelay = std::min(PathDelay, Distance);
+    }
+  }
+
+  return PathDelay;
+}
+
+static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
+                                ArrayRef<ValueAtSlot*> DstVAS) {
+  unsigned PathDelay = 10000;
+  typedef ArrayRef<ValueAtSlot*>::iterator it;
+  for (it I = DstVAS.begin(), E = DstVAS.end(); I != E; ++I)
+    PathDelay = std::min(PathDelay, getMinimalDelay(A, SrcReg, *I));
+
+  return PathDelay;
+}
+
+static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
+  bool NamePrinted = false;
+  if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
+    if (const char *N = NV->getName()) {
+      OS << " { Name ='" << N << "',";
+      NamePrinted = true;
+    }
+  } else if (const VASTExpr *E = dyn_cast<VASTExpr>(V)) {
+    VASTExpr::Opcode Opc = E->getOpcode();
+    if (Opc >= VASTExpr::FirstFUOpc && Opc <= VASTExpr::LastFUOpc) {
+      OS << " { Name ='" << E->getFUName() << E << "',";
+      NamePrinted = true;
+    }
+  }
+
+  // Write the code.
+  if (NamePrinted) OS << " BitWidth = "<< V->getBitWidth() <<  " }";
+  return NamePrinted;
+}
+
+void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
+                                            VASTValue *Root,
+                                            ArrayRef<ValueAtSlot*> DstVAS) {
+  assert((isa<VASTWire>(Root) || isa<VASTExpr>(Root)) && "Bad root type!");
+  typedef VASTValue::dp_dep_it ChildIt;
+  std::vector<std::pair<VASTValue*, ChildIt> > VisitStack;
+  std::set<VASTValue*> Visited;
+  RegSetTy LocalDelay;
+
+  unsigned ExtraDelay = 0;
+  if (VASTWire *W = dyn_cast<VASTWire>(Root))
+    ExtraDelay += W->getExtraDelayIfAny();
+
+  VisitStack.push_back(std::make_pair(Root, VASTValue::dp_dep_begin(Root)));
+  while (!VisitStack.empty()) {
+    VASTValue *Node = VisitStack.back().first;
+    ChildIt It = VisitStack.back().second;
+
+    RegSetTy &ParentReachableRegs = QueryCache[Node];
+
+    // All sources of this node is visited.
+    if (It == VASTValue::dp_dep_end(Node)) {
+      VisitStack.pop_back();
+      // Add the supporting register of current node to its parent's
+      // supporting register set.
+      if (!VisitStack.empty())
+        updateDelay(QueryCache[VisitStack.back().first], ParentReachableRegs,
+                    LocalDelay);
+
+      continue;
+    }
+
+    // Otherwise, remember the node and visit its children first.
+    VASTValue *ChildNode = It->getAsLValue<VASTValue>();
+    ++VisitStack.back().second;
+
+    if (VASTRegister *R = dyn_cast<VASTRegister>(ChildNode)) {
+      unsigned Delay = getMinimalDelay(A, R, DstVAS);
+
+      // If there are black box in the path.
+      if (ExtraDelay) {
+        // Only allow the wire and the black box expression, we only allocate
+        // 1 static slot for the black box that has very big delay, whose
+        // actually delay is available from getExtraDelayIfAny of the wire.
+        assert(Delay == 1 && VisitStack.size() == 2
+                && "Unexpected chained black box!");
+        Delay = ExtraDelay;
+      }
+
+      bool inserted = LocalDelay.insert(std::make_pair(R, Delay)).second;
+      unsigned &ExistedDelay = ParentReachableRegs[R];
+      if (ExistedDelay == 0 || Delay < ExistedDelay)
+        ExistedDelay = Delay;
+
+      // Add the information to statistics.
+      addDelayFromToStats(R, Delay, false);
+      continue;
+    }
+
+    if (!isa<VASTWire>(ChildNode) && !isa<VASTExpr>(ChildNode)) continue;
+
+    RegSetTy &ChildReachableRegs = QueryCache[ChildNode];
+
+    // And do not visit a node twice.
+    if (!Visited.insert(ChildNode).second) {
+      // If there are tighter delay from the child, it means we had already
+      // visited the sub-tree.
+      updateDelay(ParentReachableRegs, ChildReachableRegs, LocalDelay);
+      continue;
+    }
+
+    VisitStack.push_back(std::make_pair(ChildNode,
+                                        VASTValue::dp_dep_begin(ChildNode)));
+  }
+}
+
+bool PathDelayQueryCache::printPathWithDelayFrom(raw_ostream &OS,
+                                                 VASTRegister *SrcReg,
+                                                 unsigned Delay) const {
+  bool AnyNodePrinted = false;
+
+  typedef QueryCacheTy::const_iterator it;
+  for (it I = QueryCache.begin(), E = QueryCache.end(); I != E; ++I) {
+    const RegSetTy &Set = I->second;
+    if (Set.lookup(SrcReg) != Delay) continue;
+
+    if (printBindingLuaCode(OS, I->first)) {
+      OS << ", ";
+      AnyNodePrinted = true;
+    }
+  }
+
+  return AnyNodePrinted;
+}
+
+void PathDelayQueryCache::dump() const {
+  dbgs() << "\nCurrent data-path timing:\n";
+  typedef QueryCacheTy::const_iterator it;
+  for (it I = QueryCache.begin(), E = QueryCache.end(); I != E; ++I) {
+    const RegSetTy &Set = I->second;
+    typedef RegSetTy::const_iterator reg_it;
+
+    if (!printBindingLuaCode(dbgs(), I->first))
+      continue;
+
+    dbgs() << "\n\t{ ";
+    for (reg_it RI = Set.begin(), RE = Set.end(); RI != RE; ++RI) {
+      dbgs() << '(';
+      printBindingLuaCode(dbgs(), RI->first);
+      dbgs() << '#' << RI->second << "), ";
+    }
+
+    dbgs() << "}\n";
+  }
 }
 
 // The first node of the path is the use node and the last node of the path is
 // the define node.
-void TimingPath::bindPath2ScriptEngine() {
-  assert(PathSize >= 2 && "Path vector have less than 2 nodes!");
+bool PathDelayQueryCache::bindPath2ScriptEngine(VASTRegister *DstReg,
+                                                VASTRegister *SrcReg,
+                                                unsigned Delay, bool SkipThu,
+                                                bool IsCritical) const {
   // Path table:
   // Datapath: {
   //  unsigned Slack,
@@ -153,20 +335,22 @@ void TimingPath::bindPath2ScriptEngine() {
   std::string Script;
   raw_string_ostream SS(Script);
   SS << "RTLDatapath.Slack = " << Delay << '\n';
-  SS << "RTLDatapath.ActualLSBDelay = " << ActualLSBDelay << '\n';
-  SS << "RTLDatapath.ActualMSBDelay = " << ActualMSBDelay << '\n';
+  SS << "RTLDatapath.isCriticalPath = " << (SkipThu || IsCritical) << '\n';
   SS.flush();
   if (!runScriptStr(Script, Err))
     llvm_unreachable("Cannot create slack of RTLDatapath!");
 
   Script.clear();
 
+  bool ThuNodesPrinted = SkipThu;
   SS << "RTLDatapath.Nodes = { ";
-  Path[0].printBindingLuaCode(SS);
-  for (unsigned i = 1; i < PathSize; ++i) {
-    SS << ",\n";
-    Path[i].printBindingLuaCode(SS);
-  }
+  printBindingLuaCode(SS, DstReg);
+  SS << ", ";
+
+  if (!ThuNodesPrinted)
+    ThuNodesPrinted = printPathWithDelayFrom(SS, SrcReg, Delay);
+
+  printBindingLuaCode(SS, SrcReg);
   SS << " }";
 
   SS.flush();
@@ -178,163 +362,40 @@ void TimingPath::bindPath2ScriptEngine() {
   if (!runScriptStr(getStrValueFromEngine(DatapathScriptPath), Err))
     report_fatal_error("Error occur while running datapath script:\n"
                        + Err.getMessage());
+  return SkipThu;
 }
 
-// Helper class
-struct TimgPathBuilder {
-  CombPathDelayAnalysis &A;
-  ValueAtSlot *DstVAS;
-  SmallVectorImpl<TimingPath*> &Paths;
+void PathDelayQueryCache::bindAllPath2ScriptEngine(VASTRegister *Dst,
+                                                   bool IsSimple,
+                                                   DenseSet<VASTRegister*>
+                                                   &BoundSrc) const {
+  DEBUG(dbgs() << "Binding path for dst register: "
+               << Dst->getName() << '\n');
+  for (delay_it I = stats_begin(IsSimple), E = stats_end(IsSimple);I != E;++I) {
+    unsigned Delay = I->first;
 
-  TimgPathBuilder(CombPathDelayAnalysis &a, ValueAtSlot *V,
-                  SmallVectorImpl<TimingPath*> &P) : A(a), DstVAS(V), Paths(P){}
-
-  void operator() (ArrayRef<VASTValue*> PathArray) {
-    VASTValue *SrcUse = PathArray.back();
-    if (isa<VASTRegister>(SrcUse)){
-      TimingPath *P = A.createTimingPath(DstVAS, PathArray);
-      // Ignore the false path.
-      if (P) Paths.push_back(P);
+    for (src_it SI = I->second.begin(), SE = I->second.end(); SI != SE; ++SI) {
+      VASTRegister *SrcReg = *SI;
+      bool Visited = !BoundSrc.insert(SrcReg).second;
+      assert((!IsSimple || !Visited)
+             && "A simple path should not have been visited!");
+      DEBUG(dbgs().indent(2) << "from: " << SrcReg->getName() << '#'
+                             << I->first << '\n');
+      // If we not visited the path before, this path is the critical path,
+      // since we are iteration the path from the smallest delay to biggest
+      // delay.
+      bindPath2ScriptEngine(Dst, SrcReg, Delay, IsSimple, !Visited);
     }
   }
-};
+}
 
-TimingPath *CombPathDelayAnalysis::createTimingPath(ValueAtSlot *Dst,
-                                                    ArrayRef<VASTValue*> Path) {
-  // Add the end slots.
-  VASTRegister *SrcReg = cast<VASTRegister>(Path.back());
-
-  unsigned PathDelay = 10000;
-
-  typedef VASTRegister::assign_itertor assign_it;
-  for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
-       I != E; ++I) {
-    VASTSlot *SrcSlot = VM->getSlot(I->first->getSlotNum());
-    ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
-
-    // Update the PathDelay if the source VAS reaches DstSlot.
-    if (unsigned Distance = Dst->getCyclesFromDef(SrcVAS)) {
-      assert(Distance < 10000 && "Distance too large!");
-      PathDelay = std::min(PathDelay, Distance);
-    }
-  }
-
-  // The path {SrcReg -> DstReg} maybe a false path, i.e. SrcReg never reaches
-  // DstSlot.
-  bool isFalsePath = false;
-  if ((int)PathDelay == 10000) {
-    isFalsePath = true;
-    ++NumFalseTimingPath;
-  }
-
-  TimingPath *P = new (Allocator.Allocate<TimingPath>()) TimingPath();
-
-  // The Path should include the Dst.
-  P->PathSize = 1;
-  P->Path = Allocator.Allocate<TimingPathNode>(Path.size() + 1);
-  P->ActualLSBDelay = P->ActualMSBDelay = 0;
-
-  unsigned ExtraDelay = 0;
-  VASTExpr *LastBitSlice = 0;
-
-  P->Path[0] = Dst->getValue();
-  for (unsigned i = 0; i < Path.size(); ++i) {
-    VASTValue *V = Path[i];
-    TimingPathNode N(V);
-    if (isFalsePath) {
-      P->Path[P->PathSize++] = N;
-      continue;
-    }
-
-    if (VASTExpr *E = dyn_cast<VASTExpr>(V)) {
-      N.LSBInc = E->getLSBDelay();
-      N.MSBInc = E->getMSBDelay();
-      if (LastBitSlice) {
-        // Adjust the delay for bit slice.
-        unsigned BitSliceLSB = LastBitSlice->LB,
-                 BitSliceMSB = LastBitSlice->UB;
-        unsigned ExprSize = E->getBitWidth();
-        float PerBitInc = (N.MSBInc - N.LSBInc) / float(ExprSize);
-        N.MSBInc = PerBitInc * BitSliceMSB + N.LSBInc;
-        N.LSBInc = PerBitInc * BitSliceLSB + N.LSBInc;
-
-        LastBitSlice = 0;
-      }
-
-      if (E->isSubBitSlice()) {
-        assert(LastBitSlice == 0 && "Unexpected nested bit slice!");
-        LastBitSlice = E;
-        // No need to bind the bitslice.
-        continue;
-      }
-
-    } if (VASTWire *W = dyn_cast<VASTWire>(V)) {
-      // No need to bind the wire without name.
-      if (W->getName() == 0) continue;
-      
-      // Accumulates the block box latency.
-      unsigned Delay = W->getExtraDelayIfAny();
-      if (W->getWireType() == VASTWire::LUT)
-        Delay += VFUs::LutLatency;
-
-      ExtraDelay += Delay;
-      N.LSBInc = N.MSBInc = Delay;
-    }
-
-    P->Path[P->PathSize++] = N;
-    // Accumulate the path delay.
-    P->ActualLSBDelay += N.LSBInc;
-    P->ActualMSBDelay += N.MSBInc;
-  }
-
-  assert((ExtraDelay == 0 || PathDelay == 1)
-         && "Unexpected multi-cycles path with extra delay!");
-  // The path delay is the sum of minimum distance between source/destinate slot
-  // and the delay of block boxes.
-  P->Delay = std::max(PathDelay, ExtraDelay);
-  
-  if (P->Delay < P->ActualLSBDelay || P->Delay < P->ActualMSBDelay) {
-    ++NumNegSlackTimingPath;
-    DEBUG(unsigned ReachableSrcs = 0;
-    VASTRegister *DstReg = cast<VASTRegister>(Dst->getValue());
-    dbgs() << "Find timing violation dst: " << Dst->getName() << " #"
-           << SrcReg->num_assigns() << " src,  #" << DstReg->num_assigns()
-           << " dst:\n";
-    
-    // Dump the path.
-    for (unsigned i = 0; i < P->PathSize; ++i) {
-      P->Path[i]->print(dbgs().indent(4));
-      dbgs() << '\n';
-      dbgs().indent(4) << "LSB +" << P->Path[i].LSBInc
-                       << " MSB +" << P->Path[i].MSBInc
-                       << '\n';
-    }
-
-    for (assign_it I = SrcReg->assign_begin(), E = SrcReg->assign_end();
-         I != E; ++I) {
-      VASTSlot *SrcSlot = VM->getSlot(I->first->getSlotNum());
-      ValueAtSlot *SrcVAS = RtlSSA->getValueASlot(SrcReg, SrcSlot);
-
-      // Update the PathDelay if the source VAS reaches DstSlot.
-      unsigned Distance = Dst->getCyclesFromDef(SrcVAS);
-      
-      if (Distance == 0) continue;
-
-      ++ReachableSrcs;
-      if (Distance < P->ActualLSBDelay)
-        dbgs().indent(2) << SrcVAS->getName() << " LSB Slack: "
-                << (float(Distance) - P->ActualLSBDelay) << '\n';
-
-      if (Distance < P->ActualMSBDelay)
-        dbgs().indent(2) << SrcVAS->getName() << " MSB Slack: "
-                << (float(Distance) - P->ActualMSBDelay) << '\n';
-    }
-
-    dbgs().indent(2) << "Total reachable sources: " << ReachableSrcs << '\n';);
-  }
-
-  ++NumTimingPath;
-  return P;
+void PathDelayQueryCache::bindAllPath2ScriptEngine(VASTRegister *Dst) const {
+  DenseSet<VASTRegister*> BoundSrc;
+  DEBUG(dbgs() << "Going to bind delay information of graph: \n");
+  DEBUG(dump());
+  // Bind the simple paths first, which are the most general.
+  bindAllPath2ScriptEngine(Dst, true, BoundSrc);
+  bindAllPath2ScriptEngine(Dst, false, BoundSrc);
 }
 
 bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
@@ -353,62 +414,51 @@ bool CombPathDelayAnalysis::runOnMachineFunction(MachineFunction &MF) {
   return false;
 }
 
-static bool path_delay_is_bigger(const TimingPath *LHS, const TimingPath *RHS) {
-  return LHS->Delay > RHS->Delay;
-}
-
 void CombPathDelayAnalysis::writeConstraintsForDstReg(VASTRegister *DstReg) {
-  SmallVector<TimingPath*, 8> Paths;
+  DenseMap<VASTValue*, SmallVector<ValueAtSlot*, 8> > DatapathMap;
 
   typedef VASTRegister::assign_itertor assign_it;
   for (assign_it I = DstReg->assign_begin(), E = DstReg->assign_end();
        I != E; ++I) {
     VASTSlot *S = VM->getSlot(I->first->getSlotNum());
     ValueAtSlot *DstVAS = RtlSSA->getValueASlot(DstReg, S);
-
-    // Paths for the assigning value
-    extractTimingPaths(DstVAS, I->first, Paths);
     // Paths for the condition.
-    extractTimingPaths(DstVAS, I->second->getAsLValue<VASTValue>(), Paths);
+    DatapathMap[I->first].push_back(DstVAS);
+    // Paths for the assigning value
+    DatapathMap[I->second->getAsLValue<VASTValue>()].push_back(DstVAS);
   }
 
-  // Sort the delay so we write big delay constraints first, if the loose
-  // constraint is not applied, we may always apply the tighter constraint,
-  // so the design can synthesized correctly.
-  std::sort(Paths.begin(), Paths.end(), path_delay_is_bigger);
+  PathDelayQueryCache Cache;
+  typedef DenseMap<VASTValue*, SmallVector<ValueAtSlot*, 8> >::iterator it;
+  for (it I = DatapathMap.begin(), E = DatapathMap.end(); I != E; ++I)
+    extractTimingPaths(Cache, I->second, I->first);
 
-  typedef SmallVector<TimingPath*, 8>::iterator path_it;
-  for (path_it DI = Paths.begin(), DE = Paths.end(); DI != DE; ++DI)
-    (*DI)->bindPath2ScriptEngine();
-
-  Allocator.Reset();
+  Cache.bindAllPath2ScriptEngine(DstReg);
 }
 
-void CombPathDelayAnalysis::extractTimingPaths(ValueAtSlot *DstVAS,
-                                               VASTValue *DepTree,
-                                               SmallVectorImpl<TimingPath*>
-                                               &Paths) {
+void CombPathDelayAnalysis::extractTimingPaths(PathDelayQueryCache &Cache,
+                                               ArrayRef<ValueAtSlot*> DstVAS,
+                                               VASTValue *DepTree) {
   VASTValue *SrcValue = DepTree;
-
-  // If Define Value is immediate or symbol, skip it.
-  if (!SrcValue) return;
 
   // Trivial case: register to register path.
   if (VASTRegister *SrcReg = dyn_cast<VASTRegister>(SrcValue)){
     VASTValue *Path[] = { SrcReg };
-    TimingPath *P = createTimingPath(DstVAS, Path);
+    int Delay = getMinimalDelay(*this, SrcReg, DstVAS);
+    Cache.addDelayFromToStats(SrcReg, Delay, true);
     // Even a trivial path can be a false path, e.g.:
     // slot 1:
     // reg_a <= c + x;
     // slot 2:
     // reg_a <= reg_b
     // For DstAVS = reg_a@1, there are no timing path from reg_b.
-    if (P) Paths.push_back(P);
     return;
   }
 
-  TimgPathBuilder B(*this, DstVAS, Paths);
-  DepthFirstTraverseDepTree(DepTree, B);
+  // If Define Value is immediate or symbol, skip it.
+  if (!isa<VASTWire>(SrcValue) && !isa<VASTExpr>(SrcValue)) return;
+
+  Cache.annotatePathDelay(*this, DepTree, DstVAS);
 }
 
 char CombPathDelayAnalysis::ID = 0;
