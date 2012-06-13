@@ -82,9 +82,9 @@ public:
 };
 
 template<typename T>
-struct PtrInvPair : public PointerIntPair<T*, 1, bool>{
+struct PtrInvPair : public PointerIntPair<T*, 1, bool> {
   typedef PointerIntPair<T*, 1, bool> Base;
-  PtrInvPair(T *V, bool IsInvert = false)
+  PtrInvPair(T *V = 0, bool IsInvert = false)
     : PointerIntPair<T*, 1, bool>(V, IsInvert) {}
 
   template<typename T1>
