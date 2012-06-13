@@ -204,18 +204,75 @@ class VerilogASTBuilder : public MachineFunctionPass {
     return !EmittedSubModules.insert(Name);
   }
 
-  typedef DenseMap<unsigned, VASTValPtr> RegIdxMapTy;
+  typedef std::map<unsigned, VASTValPtr> RegIdxMapTy;
   RegIdxMapTy Idx2Reg;
+  RegIdxMapTy Idx2Wire;
 
-  VASTValPtr lookupSignal(unsigned RegNum) const {
-    RegIdxMapTy::const_iterator at = Idx2Reg.find(RegNum);
-    assert(at != Idx2Reg.end() && "Signal not found!");
+  // Keep the wires are single defined and CSEd.
+  typedef std::map<VASTValPtr, VASTWire*> ExprLHSMapTy;
+  ExprLHSMapTy ExprLHS;
 
-    return at->second;
+  VASTValPtr lookupSignal(unsigned RegNum) {
+    if (TargetRegisterInfo::isPhysicalRegister(RegNum)) {
+      RegIdxMapTy::const_iterator at = Idx2Reg.find(RegNum);
+      assert(at != Idx2Reg.end() && "Signal not found!");
+
+      return at->second;
+    }
+
+    return getOrCreateWire(RegNum);
   }
 
-  VASTValPtr indexVASTValue(unsigned RegNum, VASTValPtr V) {
+  VASTValPtr lookupWire(unsigned WireNum) const {
+    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
+           && "Expect virtual register!");
+    RegIdxMapTy::const_iterator at = Idx2Wire.find(WireNum);
+    if(at != Idx2Wire.end()) return at->second;
+
+    return 0;
+  }
+
+ VASTValPtr getOrCreateWire(unsigned WireNum, MachineInstr *MI = 0) {
+    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
+           && "Expected virtual register!");
+    VASTValPtr &W = Idx2Wire[WireNum];
+    if (W) return W;
+
+    // Build the expression if it had not existed yet.
+    if (MI == 0) MI = MRI->getVRegDef(WireNum);
+    assert(MI && "Virtual register for wire not defined!");
+    VASTValPtr Expr = emitDatapathExpr(MI);
+    VASTWire *&LHSWire = ExprLHS[Expr];
+    if (LHSWire) return  (W = LHSWire);
+
+    // Create the LHS wire if it had not existed yet.
+    const MachineOperand &DefMO = MI->getOperand(0);
+    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
+           && "Unexpected physics register as wire!");
+    std::string Name =
+      "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
+    unsigned BitWidth = VInstrInfo::getBitWidth(DefMO);
+
+    VASTWire::Type T = VASTWire::Common;
+    if (MI->getOpcode() == VTM::VOpLUT) T = VASTWire::LUT;
+
+    W = LHSWire = VM->assign(VM->addWire(Name, BitWidth), Expr, T);
+    return W;
+  }
+
+  VASTValPtr indexVASTRegister(unsigned RegNum, VASTValPtr V) {
+    assert(TargetRegisterInfo::isPhysicalRegister(RegNum)
+           && "Expect physical register!");
     bool inserted = Idx2Reg.insert(std::make_pair(RegNum, V)).second;
+    assert(inserted && "RegNum already indexed some value!");
+
+    return V;
+  }
+
+  VASTValPtr indexVASTWire(unsigned WireNum, VASTValPtr V) {
+    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
+           && "Expect physical register!");
+    bool inserted = Idx2Wire.insert(std::make_pair(WireNum, V)).second;
     assert(inserted && "RegNum already indexed some value!");
 
     return V;
@@ -223,30 +280,11 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   VASTRegister *addDataRegister(unsigned RegNum, unsigned BitWidth,
                                 const char *Attr = "") {
-    std::string Name;
-
-    if (TargetRegisterInfo::isVirtualRegister(RegNum))
-      Name = "v" + utostr_32(TargetRegisterInfo::virtReg2Index(RegNum));
-    else
-      Name = "p" + utostr_32(RegNum);
-
-    Name += "r";
+    std::string Name = "p" + utostr_32(RegNum) + "r";
 
     VASTRegister *R = VM->addDataRegister(Name, BitWidth, RegNum, Attr);
-    indexVASTValue(RegNum, R);
+    indexVASTRegister(RegNum, R);
     return R;
-  }
-
-  VASTWire *addWire(unsigned WireNum, unsigned BitWidth, const char *Attr = ""){
-    std::string Name;
-
-    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
-           && "Unexpected physics register as wire!");
-    Name = "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
-
-    VASTWire *W = VM->addWire(Name, BitWidth, Attr);
-    indexVASTValue(WireNum, W);
-    return W;
   }
 
   VASTSlot *getInstrSlot(MachineInstr *MI) {
@@ -268,7 +306,6 @@ class VerilogASTBuilder : public MachineFunctionPass {
   void emitBasicBlock(MachineBasicBlock &MBB);
 
   void emitAllSignals();
-  bool emitVReg(unsigned RegNum, const TargetRegisterClass *RC, bool isReg);
   VASTValPtr emitFUAdd(unsigned FUNum, unsigned BitWidth);
   VASTValPtr emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi);
   VASTValPtr emitFUShift(unsigned FUNum, unsigned BitWidth,
@@ -281,6 +318,17 @@ class VerilogASTBuilder : public MachineFunctionPass {
                   unsigned II, bool Pipelined);
 
   MachineBasicBlock::iterator emitDatapath(MachineInstr *Bundle);
+  VASTValPtr emitDatapathExpr(MachineInstr *MI);
+  VASTValPtr emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
+  VASTValPtr emitInvert(MachineInstr *MI);
+  template<typename FnTy>
+  VASTValPtr emitBinaryOp(MachineInstr *MI, FnTy F);
+  VASTValPtr emitOpLut(MachineInstr *MI);
+  VASTValPtr emitOpSel(MachineInstr *MI);
+  VASTValPtr emitChainedOpAdd(MachineInstr *MI);
+  VASTValPtr emitChainedOpICmp(MachineInstr *MI);
+  VASTValPtr emitOpBitSlice(MachineInstr *MI);
+
 
   typedef SmallVectorImpl<VASTValPtr> VASTValueVecTy;
   // Emit the operations in the first micro state in the FSM state when we are
@@ -291,21 +339,9 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   void emitBr(MachineInstr *MI, VASTSlot *CurSlot, VASTValueVecTy &Cnds,
               MachineBasicBlock *CurBB, bool Pipelined);
-  void emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
-  void emitInvert(MachineInstr *MI);
-
-  template<typename FnTy>
-  void emitBinaryOp(MachineInstr *MI, FnTy F);
-  void emitOpLut(MachineInstr *MI);
-  void emitOpSel(MachineInstr *MI);
-
-  void emitChainedOpAdd(MachineInstr *MI);
-  void emitChainedOpICmp(MachineInstr *MI);
 
   void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
-
-  void emitOpBitSlice(MachineInstr *MI);
 
   // Create a condition from a predicate operand.
   VASTValPtr createCnd(MachineOperand Op);
@@ -367,6 +403,8 @@ public:
   void releaseMemory() {
     EmittedSubModules.clear();
     Idx2Reg.clear();
+    Idx2Wire.clear();
+    ExprLHS.clear();
   }
 
   bool runOnMachineFunction(MachineFunction &MF);
@@ -466,7 +504,7 @@ void VerilogASTBuilder::emitFunctionSignature(const Function *F) {
       VM->addOutputPort("return_value", BitWidth, VASTModule::RetPort);
     else {
       std::string WireName = getSubModulePortName(FNNum, "return_value");
-      indexVASTValue(FNNum, VM->addWire(WireName, BitWidth));
+      indexVASTRegister(FNNum, VM->addWire(WireName, BitWidth));
       S << ".return_value(" << WireName << "),\n\t";
     }
   }
@@ -573,7 +611,7 @@ void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
     VM->addOutputPort("fin", 1, VASTModule::Finish);
   } else { // It is a callee function, emit the signal for the sub module.
     std::string StartPortName = getSubModulePortName(FNNum, "start");
-    indexVASTValue(FNNum + 1, VM->addRegister(StartPortName, 1));
+    indexVASTRegister(FNNum + 1, VM->addRegister(StartPortName, 1));
     std::string FinPortName = getSubModulePortName(FNNum, "fin");
     VM->addWire(FinPortName, 1);
     // Connect to the ports
@@ -612,7 +650,7 @@ void VerilogASTBuilder::emitAllocatedFUs() {
     S << "// Addrspace: " << I->first;
     if (Info.Initializer) S << *Info.Initializer;
     S << '\n';
-    indexVASTValue(BramNum, BRAMOut);
+    indexVASTRegister(BramNum, BRAMOut);
     // FIXME: Get the file name from the initializer name.
     S << BlockRam->generateCode(VM->getPortName(VASTModule::Clk), BramNum,
                                 DataWidth, AddrWidth, InitFilePath)
@@ -651,7 +689,7 @@ void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
   S << VFUs::instantiatesModule(CalleeName, FNNum, Ports);
 
   // Add the start/finsh signal and return_value to the signal list.
-  indexVASTValue(FNNum + 1, VM->addRegister(Ports[2], 1));
+  indexVASTRegister(FNNum + 1, VM->addRegister(Ports[2], 1));
   VM->getOrCreateSymbol(Ports[3], 1, false);
   unsigned RetPortIdx = FNNum;
   // Dose the submodule have a return port?
@@ -664,12 +702,12 @@ void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
       VASTValPtr PortName = VM->getOrCreateSymbol(Ports[4],
         Info.getBitWidth(),
         false);
-      indexVASTValue(RetPortIdx, PortName);
+      indexVASTRegister(RetPortIdx, PortName);
       return;
     }
 
     VASTWire *ResultWire = VM->addWire(Ports[4], Info.getBitWidth());
-    indexVASTValue(RetPortIdx, ResultWire);
+    indexVASTRegister(RetPortIdx, ResultWire);
 
     SmallVector<VASTValPtr, 4> Ops;
     for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
@@ -682,7 +720,7 @@ void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
   }
 
   // Else do not has return port.
-  indexVASTValue(RetPortIdx, 0);
+  indexVASTRegister(RetPortIdx, 0);
 }
 
 
@@ -745,7 +783,7 @@ void VerilogASTBuilder::emitAllSignals() {
         // emitFunctionSignature called by emitAllocatedFUs;
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       VASTValPtr Parent = lookupSignal(Info.getParentRegister());
-      indexVASTValue(RegNum,
+      indexVASTRegister(RegNum,
                      VM->buildBitSliceExpr(Parent.getAsInlineOperand(),
                                            Info.getUB(), Info.getLB()));
       continue;
@@ -756,33 +794,33 @@ void VerilogASTBuilder::emitAllSignals() {
       addDataRegister(RegNum, Info.getBitWidth());
       break;
     case VTM::RADDRegClassID:
-      indexVASTValue(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
+      indexVASTRegister(RegNum, emitFUAdd(RegNum, Info.getBitWidth()));
       break;
     case VTM::RUCMPRegClassID:
-      indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), false));
+      indexVASTRegister(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), false));
       break;
     case VTM::RSCMPRegClassID:
-      indexVASTValue(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), true));
+      indexVASTRegister(RegNum, emitFUCmp(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RMULRegClassID:
-      indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), false));
+      indexVASTRegister(RegNum, emitFUMult(RegNum, Info.getBitWidth(), false));
       break;
     case VTM::RMULLHRegClassID:
-      indexVASTValue(RegNum, emitFUMult(RegNum, Info.getBitWidth(), true));
+      indexVASTRegister(RegNum, emitFUMult(RegNum, Info.getBitWidth(), true));
       break;
     case VTM::RASRRegClassID: {
       VASTValPtr V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpSRA);
-      indexVASTValue(RegNum, V);
+      indexVASTRegister(RegNum, V);
       break;
     }
     case VTM::RLSRRegClassID:{
       VASTValPtr V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpSRL);
-      indexVASTValue(RegNum, V);
+      indexVASTRegister(RegNum, V);
       break;
     }
     case VTM::RSHLRegClassID:{
       VASTValPtr V = emitFUShift(RegNum, Info.getBitWidth(), VASTExpr::dpShl);
-      indexVASTValue(RegNum, V);
+      indexVASTRegister(RegNum, V);
       break;
     }
     case VTM::RINFRegClassID: {
@@ -790,7 +828,7 @@ void VerilogASTBuilder::emitAllSignals() {
       // The offset of data input port is 3
       unsigned DataInIdx = VM->getFUPortOf(FuncUnitId(VFUs::MemoryBus, 0)) + 3;
       VASTValue *V = VM->getPort(DataInIdx);
-      indexVASTValue(RegNum, V);
+      indexVASTRegister(RegNum, V);
       break;
     }
     case VTM::RBRMRegClassID:
@@ -799,36 +837,14 @@ void VerilogASTBuilder::emitAllSignals() {
       break;
     case VTM::RMUXRegClassID: {
       std::string Name = "dstmux" + utostr_32(RegNum) + "r";
-      indexVASTValue(RegNum, VM->addDataRegister(Name, Info.getBitWidth(),
-                     RegNum));
+      indexVASTRegister(RegNum, VM->addDataRegister(Name, Info.getBitWidth(),
+                        RegNum));
       break;
     }
     default: llvm_unreachable("Unexpected register class!"); break;
     }
   }
-
-  for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
-    unsigned VReg = TargetRegisterInfo::index2VirtReg(i);
-    emitVReg(VReg, VTM::WireRegisterClass, false);
-  }
 }
-
-bool VerilogASTBuilder::emitVReg(unsigned RegNum, const TargetRegisterClass *RC,
-                                 bool isReg) {
-  if (MRI->getRegClass(RegNum) != RC)
-    return false;
-
-  MachineRegisterInfo::def_iterator DI = MRI->def_begin(RegNum);
-  if (DI == MRI->def_end()) return false;
-
-  const MachineOperand &Op = DI.getOperand();
-  unsigned Bitwidth = VInstrInfo::getBitWidth(Op);
-  if (!isReg) addWire(RegNum, Bitwidth);
-  else        addDataRegister(RegNum, Bitwidth);
-
-  return true;
-}
-
 
 VerilogASTBuilder::~VerilogASTBuilder() {}
 
@@ -976,25 +992,6 @@ void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
   VM->addAssignment(R, getAsOperand(MI->getOperand(2)), Slot, Cnds);
   R = cast<VASTRegister>(Result->getExpr()->getOperand(2));
   VM->addAssignment(R, getAsOperand(MI->getOperand(3)), Slot, Cnds);
-}
-
-void VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
-
-  VM->assign(W,
-             VM->buildExpr(VASTExpr::dpAdd, getAsOperand(MI->getOperand(1)),
-                           getAsOperand(MI->getOperand(2)),
-                           getAsOperand(MI->getOperand(3)),
-                           W->getBitWidth()));
-}
-
-void VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
-  unsigned CndCode = MI->getOperand(3).getImm();
-  if (CndCode == VFUs::CmpSigned)
-    emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSCmp>);
-  else
-    emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpUCmp>);
 }
 
 void VerilogASTBuilder::emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot,
@@ -1235,15 +1232,6 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   // Remember the output register of block ram is defined at next slot.
 }
 
-template<typename FnTy>
-void VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
-  VM->assign(W, F(getAsOperand(MI->getOperand(1)),
-                           getAsOperand(MI->getOperand(2)),
-                           W->getBitWidth(), VM));
-}
-
 MachineBasicBlock::iterator
 VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
   typedef MachineBasicBlock::instr_iterator instr_it;
@@ -1251,92 +1239,97 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
          && "Expect data-path bundle start!");
 
   instr_it I = Bundle;
-   while ((++I)->isInsideBundle()) {
-    MachineInstr *MI = I;
-    switch (MI->getOpcode()) {
-    case VTM::VOpBitSlice:  emitOpBitSlice(MI);                       break;
-    case VTM::VOpBitCat:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitCat>);
-      break;
-    case VTM::VOpBitRepeat:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitRepeat>);
-      break;
-
-    case VTM::ImpUse:       /*Not need to handle*/  break;
-
-    case VTM::VOpAdd_c:     emitChainedOpAdd(MI); break;
-    case VTM::VOpICmp_c:    emitChainedOpICmp(MI); break;
-
-    case VTM::VOpSHL_c:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpShl>);
-      break;
-    case VTM::VOpSRA_c:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRA>);
-      break;
-    case VTM::VOpSRL_c:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRL>);
-      break;
-    case VTM::VOpMultLoHi_c:
-    case VTM::VOpMult_c:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpMul>);
-      break;
-    case VTM::VOpSel:       emitOpSel(MI);                      break;
-
-    case VTM::VOpLUT:       emitOpLut(MI);                      break;
-    case VTM::VOpXor:
-      emitBinaryOp(MI, VASTModule::buildXor);
-      break;
-    case VTM::VOpAnd:
-      emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpAnd>);
-      break;
-    case VTM::VOpOr:
-      emitBinaryOp(MI, VASTModule::buildOr);
-      break;
-
-    case VTM::VOpNot:       emitInvert(MI);                     break;
-    case VTM::VOpROr:       emitUnaryOp(MI, VASTExpr::dpROr);   break;
-    case VTM::VOpRAnd:      emitUnaryOp(MI, VASTExpr::dpRAnd);  break;
-    case VTM::VOpRXor:      emitUnaryOp(MI, VASTExpr::dpRXor);  break;
-    case VTM::VOpPipelineStage: emitUnaryOp(MI, VASTExpr::dpAssign);break;
-    default:  assert(0 && "Unexpected opcode!");    break;
-    }
-  }
+   while ((++I)->isInsideBundle())
+    getOrCreateWire(I->getOperand(0).getReg(), I);
 
   return I;
 }
 
-void VerilogASTBuilder::emitInvert(MachineInstr *MI) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
+VASTValPtr VerilogASTBuilder::emitDatapathExpr(MachineInstr *MI) {
+  switch (MI->getOpcode()) {
+  case VTM::VOpBitSlice:  return emitOpBitSlice(MI);
+  case VTM::VOpBitCat:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitCat>);
+  case VTM::VOpBitRepeat:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitRepeat>);
 
-  VM->assign(W, VM->buildNotExpr(getAsOperand(MI->getOperand(1)))) ;
+  case VTM::VOpAdd_c:     return emitChainedOpAdd(MI);
+  case VTM::VOpICmp_c:    return emitChainedOpICmp(MI);
+
+  case VTM::VOpSHL_c:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpShl>);
+  case VTM::VOpSRA_c:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRA>);
+  case VTM::VOpSRL_c:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRL>);
+
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpMul>);
+
+  case VTM::VOpSel:       return emitOpSel(MI);
+
+  case VTM::VOpLUT:       return emitOpLut(MI);
+
+  case VTM::VOpXor:       return emitBinaryOp(MI, VASTModule::buildXor);
+  case VTM::VOpAnd:
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpAnd>);
+  case VTM::VOpOr:        return emitBinaryOp(MI, VASTModule::buildOr);
+  case VTM::VOpNot:       return emitInvert(MI);
+  case VTM::VOpROr:       return emitUnaryOp(MI, VASTExpr::dpROr);
+  case VTM::VOpRAnd:      return emitUnaryOp(MI, VASTExpr::dpRAnd);
+  case VTM::VOpRXor:      return emitUnaryOp(MI, VASTExpr::dpRXor);
+  case VTM::VOpPipelineStage: return emitUnaryOp(MI, VASTExpr::dpAssign);
+  default:  assert(0 && "Unexpected opcode!");    break;
+  }
+
+  return VASTValPtr(0);
 }
 
-void VerilogASTBuilder::emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
-
-  VM->assign(W, VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
-                              W->getBitWidth())) ;
+template<typename FnTy>
+VASTValPtr VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
+  return  F(getAsOperand(MI->getOperand(1)), getAsOperand(MI->getOperand(2)),
+            VInstrInfo::getBitWidth(MI->getOperand(0)), VM);
 }
 
-void VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
+VASTValPtr VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
+  return VM->buildExpr(VASTExpr::dpAdd,
+                       getAsOperand(MI->getOperand(1)),
+                       getAsOperand(MI->getOperand(2)),
+                       getAsOperand(MI->getOperand(3)),
+                       VInstrInfo::getBitWidth(MI->getOperand(0)));
+}
 
+VASTValPtr VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
+  unsigned CndCode = MI->getOperand(3).getImm();
+  if (CndCode == VFUs::CmpSigned)
+    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSCmp>);
+
+  // else
+  return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpUCmp>);
+}
+
+VASTValPtr VerilogASTBuilder::emitInvert(MachineInstr *MI) {
+  return VM->buildNotExpr(getAsOperand(MI->getOperand(1)));
+}
+
+VASTValPtr VerilogASTBuilder::emitUnaryOp(MachineInstr *MI,
+                                          VASTExpr::Opcode Opc) {
+  return VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
+                       VInstrInfo::getBitWidth(MI->getOperand(0)));
+}
+
+VASTValPtr VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
   VASTValPtr Ops[] = { createCnd(MI->getOperand(1)),
                        getAsOperand(MI->getOperand(2)),
                        getAsOperand(MI->getOperand(3)) };
 
-  VM->assign(W, VM->buildExpr(VASTExpr::dpSel, Ops, W->getBitWidth()));
+  return VM->buildExpr(VASTExpr::dpSel, Ops,
+                       VInstrInfo::getBitWidth(MI->getOperand(0)));
 }
 
-void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
-
-  unsigned SizeInBits = W->getBitWidth();
-  std::string NamePrefix = W->getName();
+VASTValPtr VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
+  unsigned SizeInBits = VInstrInfo::getBitWidth(MI->getOperand(0));
 
   SmallVector<VASTValPtr, 8> Operands;
   for (unsigned i = 4, e = MI->getNumOperands(); i < e; ++i)
@@ -1387,14 +1380,10 @@ void VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   if (isComplement) SOP = VM->buildNotExpr(SOP);
 
   // Build the sum;
-  VM->assign(W, SOP, VASTWire::LUT);
-  return;
+  return SOP;
 }
 
-void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
-  VASTWire *W = getAsLValue<VASTWire>(MI->getOperand(0));
-  if (W->getAssigningValue()) return;
-
+VASTValPtr VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   // Get the range of the bit slice, Note that the
   // bit at upper bound is excluded in VOpBitSlice
   unsigned UB = MI->getOperand(2).getImm(),
@@ -1407,7 +1396,7 @@ void VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
   // Pass RHS without getting inline operand, because for bitslice, only
   // inlining the assign expression is allowed, which already handled in the
   // getOrCreateBitSlice.
-  VM->assign(W, VM->buildBitSliceExpr(RHS, UB, LB));
+  return VM->buildBitSliceExpr(RHS, UB, LB);
 }
 
 
