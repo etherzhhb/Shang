@@ -1029,6 +1029,15 @@ static LatInfoTy getMSB2LSBLatency(float SrcMSBLatency, float SrcLSBLatency,
   return std::make_pair(MSBLatency, LSBLatency);
 }
 
+static LatInfoTy getCmpLatency(float SrcMSBLatency, float SrcLSBLatency,
+                               float TotalLatency, float PerBitLatency) {
+  LatInfoTy LatInfo = getMSB2LSBLatency(SrcMSBLatency, SrcLSBLatency,
+                                        TotalLatency, PerBitLatency);
+  // We need to get the worst delay because the cmps only have 1 bit output.
+  float WorstLat = std::max(LatInfo.first, LatInfo.second);
+  return std::make_pair(WorstLat, WorstLat);
+}
+
 static LatInfoTy getWorstLatency(float SrcMSBLatency, float SrcLSBLatency,
                                  float TotalLatency, float /*PerBitLatency*/) {
   float MSBLatency = TotalLatency + SrcMSBLatency;
@@ -1304,7 +1313,7 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
     break;
   case VTM::VOpICmp_c:
     accumulateDatapathLatency(CurLatInfo, SrcLatInfo, SrcMSBLatency,
-                              PerBitLatency, getMSB2LSBLatency);
+                              PerBitLatency, getCmpLatency);
     break;
   case VTM::VOpICmp:
     // Result bits are computed from MSB to LSB.
