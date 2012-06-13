@@ -51,7 +51,7 @@ EnableBBProfile("vtm-enable-bb-profile",
 static cl::opt<bool>
 InstSubModForFU("vtm-instantiate-submod-for-fu",
                 cl::desc("Instantiate submodule for each functional unit"),
-                cl::init(false));
+                cl::init(true));
 
 //===----------------------------------------------------------------------===//
 // Value and type printing
