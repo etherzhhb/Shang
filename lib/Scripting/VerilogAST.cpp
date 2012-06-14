@@ -40,7 +40,7 @@ static cl::opt<unsigned>
 ExprInlineThreshold("vtm-expr-inline-thredhold",
                     cl::desc("Inline the expression which has less than N "
                              "operand  (16 by default)"),
-                    cl::init(32));
+                    cl::init(8));
 
 static cl::opt<bool>
 EnableBBProfile("vtm-enable-bb-profile",
@@ -1547,7 +1547,7 @@ static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
      << OpA->getBitWidth() << ", "
      << OpB->getBitWidth() << ", "
      << W->getBitWidth() << ") "
-     << E->getFUName() << E << '(';
+     << E->getSubModName() << '(';
 
   OpA.printAsOperand(OS);
   OS << ", ";
@@ -1576,7 +1576,7 @@ static bool printBinFU(raw_ostream &OS, const VASTWire *W) {
      << OpA->getBitWidth() << ", "
      << OpB->getBitWidth() << ", "
      << W->getBitWidth() << ") "
-     << E->getFUName() << E << '(';
+     << E->getSubModName() << '(';
 
   OpA.printAsOperand(OS);
   OS << ", ";
@@ -1704,3 +1704,15 @@ const char *VASTExpr::StandarFUName[] = {
     // Blackbox,
     0
 };
+
+const std::string VASTExpr::getSubModName() const {
+  const char *FUName = getFUName();
+
+  if (FUName == 0) return std::string("");
+
+  std::string Name(FUName);
+  raw_string_ostream SS(Name);
+  SS << this << 'w' << getBitWidth();
+  SS.flush();
+  return Name;
+}

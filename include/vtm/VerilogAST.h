@@ -621,6 +621,7 @@ public:
   const uint8_t Opc, NumOps,UB, LB;
   Opcode getOpcode() const { return VASTExpr::Opcode(Opc); }
   const char *getFUName() const { return StandarFUName[getOpcode()]; }
+  const std::string getSubModName() const;
 
   const VASTUse &getOperand(unsigned Idx) const {
     assert(Idx < NumOps && "Index out of range!");

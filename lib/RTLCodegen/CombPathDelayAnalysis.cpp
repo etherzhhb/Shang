@@ -192,20 +192,18 @@ static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
   unsigned NamePrinted = false;
   if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
     if (const char *N = NV->getName()) {
-      OS << " { Name ='" << N << "',";
-      NamePrinted = true;
+      OS << " { Name ='" << N << "' }";
+      return true;
     }
   } else if (const VASTExpr *E = dyn_cast<VASTExpr>(V)) {
     VASTExpr::Opcode Opc = E->getOpcode();
     if (Opc >= VASTExpr::FirstFUOpc && Opc <= VASTExpr::LastFUOpc) {
-      OS << " { Name ='" << E->getFUName() << E << "',";
-      NamePrinted = true;
+      OS << " { Name ='" << E->getSubModName() << "' }";
+      return true;
     }
   }
 
-  // Write the code.
-  if (NamePrinted) OS << " BitWidth = "<< V->getBitWidth() <<  " }";
-  return NamePrinted;
+  return false;
 }
 
 void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
