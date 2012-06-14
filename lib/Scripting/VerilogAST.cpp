@@ -1712,7 +1712,12 @@ const std::string VASTExpr::getSubModName() const {
 
   std::string Name(FUName);
   raw_string_ostream SS(Name);
-  SS << this << 'w' << getBitWidth();
+  SS << this << 'w' ;
+  if (getOpcode() == VASTExpr::dpUCmp || VASTExpr::dpSCmp)
+    SS << getOperand(0)->getBitWidth();
+  else
+    SS << getBitWidth();
+
   SS.flush();
   return Name;
 }
