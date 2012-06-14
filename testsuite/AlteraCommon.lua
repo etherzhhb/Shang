@@ -5,6 +5,9 @@ RunOnDatapath = [=[
 #if Functions[FuncInfo.Name] == nil then
 #  DstName = '*' .. CurModule:getName() .. '_inst|' .. DstName
 #  SrcName = '*' .. CurModule:getName() .. '_inst|' .. SrcName
+#elseif FuncInfo.Name == 'main' then
+#  DstName = '*' .. Functions[FuncInfo.Name].ModName .. '_inst|' .. DstName
+#  SrcName = '*' .. Functions[FuncInfo.Name].ModName .. '_inst|' .. SrcName
 #end
 
 set src [get_keepers $(SrcName)*]
@@ -19,6 +22,8 @@ $(_put('#')) $(DstName) <- $(SrcName) Slack $(Slack)
 #    local ThuName = n.Name
 #    if Functions[FuncInfo.Name] == nil then
 #      ThuName = '*' .. CurModule:getName() .. '_inst|' .. ThuName
+#    elseif FuncInfo.Name == 'main' then
+#      ThuName = '*' .. Functions[FuncInfo.Name].ModName .. '_inst|' .. ThuName
 #    end
 $(_put('#')) $(DstName) <- $(ThuName) <- $(SrcName) Slack $(Slack)
 #    if (RTLDatapath.isCriticalPath ~= 1) then
