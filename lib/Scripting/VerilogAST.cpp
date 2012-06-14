@@ -880,7 +880,20 @@ static void flattenExpr(VASTValPtr V, VASTExpr::Opcode Opc,
   NewOps.push_back(V);
 }
 
+static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
+  if (LHS->getASTType() < RHS->getASTType()) return true;
+  else if (LHS->getASTType() > RHS->getASTType()) return false;
 
+  return LHS < RHS;
+}
+
+VASTValPtr
+VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                       SmallVectorImpl<VASTValPtr> &Ops,
+                                       unsigned BitWidth) {
+  std::sort(Ops.begin(), Ops.end(), VASTValPtr_less);
+  return createExpr(Opc, Ops, BitWidth, 0);
+}
 
 VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
                                        ArrayRef<VASTValPtr> Ops,
@@ -931,8 +944,29 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
   if (NewOps.empty())
     return getOrCreateImmediate(getBitSlice64(~0ull, BitWidth), BitWidth);
 
-  // The expression that can perform tree flatten should be commutative.
-  return getOrCreateCommutativeExpr(VASTExpr::dpAnd, NewOps, BitWidth);
+  std::sort(NewOps.begin(), NewOps.end(), VASTValPtr_less);
+  typedef SmallVectorImpl<VASTValPtr>::iterator it;
+  VASTValPtr LastVal;
+  unsigned ActualPos = 0;
+  for (unsigned i = 0, e = NewOps.size(); i != e; ++i) {
+    VASTValPtr CurVal = NewOps[i];
+    if (CurVal == LastVal) {
+      // A & A = A
+      continue;
+    } else if (CurVal.invert() == LastVal)
+      // A & ~A => 0
+      return getBoolImmediate(false);
+
+    NewOps[ActualPos++] = CurVal;
+    LastVal = CurVal;
+  }
+  // If there is only 1 operand left, simply return the operand.
+  if (ActualPos == 1) return LastVal;
+
+  // Resize the operand vector so it only contains valid operands.
+  NewOps.resize(ActualPos);
+
+  return createExpr(VASTExpr::dpAnd, NewOps, BitWidth, 0);
 }
 
 VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS,
@@ -996,21 +1030,6 @@ VASTValPtr VASTModule::buildXorExpr(ArrayRef<VASTValPtr> Ops,
   return buildExpr(VASTExpr::dpAnd, buildOrExpr(Ops, BitWidth),
                    buildNotExpr(buildAndExpr(Ops, BitWidth)),
                    BitWidth);
-}
-
-static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
-  if (LHS->getASTType() < RHS->getASTType()) return true;
-  else if (LHS->getASTType() > RHS->getASTType()) return false;
-
-  return LHS < RHS;
-}
-
-VASTValPtr
-VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                       SmallVectorImpl<VASTValPtr> &Ops,
-                                       unsigned BitWidth) {
-  std::sort(Ops.begin(), Ops.end(), VASTValPtr_less);
-  return createExpr(Opc, Ops, BitWidth, 0);
 }
 
 VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
