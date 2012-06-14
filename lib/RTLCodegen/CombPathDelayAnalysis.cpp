@@ -93,10 +93,10 @@ struct PathDelayQueryCache {
       unsigned &ExistDelay = To[I->first];
       // Look up the delay from local delay map, because the delay of the From
       // map may correspond to another data-path with different destination.
-      unsigned NewDelay = LocalDelayMap.lookup(I->first);
-      assert(NewDelay && "Node not visited yet?");
-      if (ExistDelay == 0 || ExistDelay > NewDelay) {
-        ExistDelay = NewDelay;
+      RegSetTy::const_iterator at = LocalDelayMap.find(I->first);
+      assert(at != LocalDelayMap.end() && "Node not visited yet?");
+      if (ExistDelay == 0 || ExistDelay > at->second) {
+        ExistDelay = at->second;
         Changed |= true;
       }
     }
@@ -242,6 +242,14 @@ void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
     VASTValue *ChildNode = It->getAsLValue<VASTValue>();
     ++VisitStack.back().second;
 
+    // And do not visit a node twice.
+    if (!Visited.insert(ChildNode).second) {
+      // If there are tighter delay from the child, it means we had already
+      // visited the sub-tree.
+      updateDelay(ParentReachableRegs, QueryCache[ChildNode], LocalDelay);
+      continue;
+    }
+
     if (VASTRegister *R = dyn_cast<VASTRegister>(ChildNode)) {
       unsigned Delay = getMinimalDelay(A, R, DstVAS);
 
@@ -251,11 +259,12 @@ void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
         // 1 static slot for the black box that has very big delay, whose
         // actually delay is available from getExtraDelayIfAny of the wire.
         assert(Delay == 1 && VisitStack.size() == 2
-                && "Unexpected chained black box!");
+               && "Unexpected chained black box!");
         Delay = ExtraDelay;
       }
 
       bool inserted = LocalDelay.insert(std::make_pair(R, Delay)).second;
+      assert(inserted && "Node had already been visited?");
       unsigned &ExistedDelay = ParentReachableRegs[R];
       if (ExistedDelay == 0 || Delay < ExistedDelay)
         ExistedDelay = Delay;
@@ -266,16 +275,6 @@ void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
     }
 
     if (!isa<VASTWire>(ChildNode) && !isa<VASTExpr>(ChildNode)) continue;
-
-    RegSetTy &ChildReachableRegs = QueryCache[ChildNode];
-
-    // And do not visit a node twice.
-    if (!Visited.insert(ChildNode).second) {
-      // If there are tighter delay from the child, it means we had already
-      // visited the sub-tree.
-      updateDelay(ParentReachableRegs, ChildReachableRegs, LocalDelay);
-      continue;
-    }
 
     VisitStack.push_back(std::make_pair(ChildNode,
                                         VASTValue::dp_dep_begin(ChildNode)));
@@ -290,7 +289,9 @@ unsigned PathDelayQueryCache::printPathWithDelayFrom(raw_ostream &OS,
   typedef QueryCacheTy::const_iterator it;
   for (it I = QueryCache.begin(), E = QueryCache.end(); I != E; ++I) {
     const RegSetTy &Set = I->second;
-    if (Set.lookup(SrcReg) != Delay) continue;
+    RegSetTy::const_iterator at = Set.find(SrcReg);
+    // The register may be not reachable from this node.
+    if (at == Set.end() || at->second != Delay) continue;
 
     if (printBindingLuaCode(OS, I->first)) {
       OS << ", ";
