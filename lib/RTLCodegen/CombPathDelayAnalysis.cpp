@@ -189,7 +189,6 @@ static unsigned getMinimalDelay(CombPathDelayAnalysis &A, VASTRegister *SrcReg,
 }
 
 static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
-  unsigned NamePrinted = false;
   if (const VASTNamedValue *NV = dyn_cast<VASTNamedValue>(V)) {
     if (const char *N = NV->getName()) {
       OS << " { Name ='" << N << "' }";
@@ -279,6 +278,39 @@ void PathDelayQueryCache::annotatePathDelay(CombPathDelayAnalysis &A,
     VisitStack.push_back(std::make_pair(ChildNode,
                                         VASTValue::dp_dep_begin(ChildNode)));
   }
+
+  // Check the result, debug only.
+  DEBUG(QueryCacheTy::iterator at = QueryCache.find(Root);
+  assert(at != QueryCache.end()
+         && "Timing path information for root not found!");
+  const RegSetTy &RootSet = at->second;
+  typedef RegSetTy::const_iterator it;
+  bool DelayMasked = false;
+  for (it I = LocalDelay.begin(), E = LocalDelay.end(); I != E; ++I) {
+    RegSetTy::const_iterator ActualDelayAt = RootSet.find(I->first);
+    assert(ActualDelayAt != RootSet.end() && "Timing path entire missed!");
+    assert(ActualDelayAt->second <= I->second
+           && "Delay information not applied?");
+    if (ActualDelayAt->second == I->second) continue;
+
+    dbgs() << "Timing path masked: Root is";
+    Root->printAsOperand(dbgs(), false);
+    dbgs() << " end node is " << I->first->getName()
+            << " masked delay: " << I->second
+            << " actual delay: " << ActualDelayAt->second << '\n';
+    DelayMasked = true;
+  }
+
+  if (DelayMasked) {
+    dbgs() << " going to dump the nodes in the tree:\n";
+
+    typedef std::set<VASTValue*>::iterator node_it;
+    for (node_it NI = Visited.begin(), NE = Visited.end(); NI != NE; ++NI) {
+      (*NI)->printAsOperand(dbgs(), false);
+      dbgs() << ", ";
+    }
+    dbgs() << '\n';
+  });
 }
 
 unsigned PathDelayQueryCache::printPathWithDelayFrom(raw_ostream &OS,
@@ -457,7 +489,6 @@ void CombPathDelayAnalysis::extractTimingPaths(PathDelayQueryCache &Cache,
 
   // Trivial case: register to register path.
   if (VASTRegister *SrcReg = dyn_cast<VASTRegister>(SrcValue)){
-    VASTValue *Path[] = { SrcReg };
     int Delay = getMinimalDelay(*this, SrcReg, DstVAS);
     Cache.addDelayFromToStats(SrcReg, Delay, true);
     // Even a trivial path can be a false path, e.g.:
