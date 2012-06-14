@@ -158,8 +158,76 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
 }
 
+VASTValPtr VASTModule::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
+                                      unsigned BitWidth) {
+  assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
+
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Op)) {
+    uint64_t Val = Imm->getValue();
+    switch (Opc) {
+    case VASTExpr::dpROr:
+      // Only reduce to 0 if all bits are 0.
+      if (isAllZeros64(Val, Imm->getBitWidth()))
+        return getBoolImmediate(false);
+      else
+        return getBoolImmediate(true);
+    case VASTExpr::dpRAnd:
+      // Only reduce to 1 if all bits are 1.
+      if (isAllOnes64(Val, Imm->getBitWidth()))
+        return getBoolImmediate(true);
+      else
+        return getBoolImmediate(false);
+    case VASTExpr::dpRXor:
+      // Only reduce to 1 if there are odd 1s.
+      if (CountPopulation_64(Val) & 0x1)
+        return getBoolImmediate(true);
+      else
+        return getBoolImmediate(false);
+      break; // FIXME: Who knows how to evaluate this?
+    default:  llvm_unreachable("Unexpected Reduction Node!");
+    }
+  }
+
+  if (VASTExpr *Expr = dyn_cast<VASTExpr>(Op)) {
+    switch (Expr->getOpcode()) {
+    default: break;
+    case VASTExpr::dpBitCat: {
+      SmallVector<VASTValPtr, 8> Ops;
+      typedef VASTExpr::op_iterator it;
+      for (it I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
+        Ops.push_back(buildReduction(Opc, *I, BitWidth));
+
+      switch (Opc) {
+      case VASTExpr::dpROr:   return buildOrExpr(Ops, BitWidth);
+      case VASTExpr::dpRAnd: return buildAndExpr(Ops, BitWidth);
+      case VASTExpr::dpRXor: return buildXorExpr(Ops, BitWidth);
+      default:  llvm_unreachable("Unexpected Reduction Node!");
+      }
+    }
+    }
+  } else if (Op.isInverted()) {
+    switch (Opc) {
+    case VASTExpr::dpROr: // ~(A & B) = (~A | ~B)
+      return buildNotExpr(buildReduction(VASTExpr::dpRAnd,Op.invert(),BitWidth));
+    case VASTExpr::dpRAnd:
+      return buildNotExpr(buildReduction(VASTExpr::dpROr,Op.invert(),BitWidth));
+    default: break;
+    }
+  }
+
+  return createExpr(Opc, Op, BitWidth, 0);
+}
+
 VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
                                  unsigned BitWidth) {
+  switch (Opc) {
+  default: break;
+  case VASTExpr::dpROr:
+  case VASTExpr::dpRAnd:
+  case VASTExpr::dpRXor:
+    return buildReduction(Opc, Op, BitWidth);
+  }
+
   VASTValPtr Ops[] = { Op };
   return createExpr(Opc, Ops, BitWidth, 0);
 }
