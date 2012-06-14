@@ -1241,6 +1241,21 @@ static bool NeedExtraStepToLatchResult(const MachineInstr *MI,
          && !MRI.use_empty(MO.getReg());
 }
 
+bool DetialLatencyInfo::propagateFromLSB2MSB(unsigned Opcode) {
+  switch (Opcode) {
+  default: break;
+  case VTM::VOpAdd_c:
+  case VTM::VOpMultLoHi_c:
+  case VTM::VOpMult_c:
+  case VTM::VOpAdd:
+  case VTM::VOpMult:
+  case VTM::VOpMultLoHi:
+    return true;
+  }
+
+  return false;
+}
+
 template<bool IsCtrlDep>
 bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
                                         const MachineInstr *DstMI,// Not needed
@@ -1255,7 +1270,10 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   float SrcMSBLatency = getCachedLatencyResult(SrcMI);
   if (!IsCtrlDep || NeedExtraStepToLatchResult(SrcMI, MRI, SrcMSBLatency)) {
     SrcMSBLatency = adjustChainingLatency(SrcMSBLatency, SrcMI, DstMI);
-    if (OperandWidth) {
+    // If we are only reading the lower part of the result of SrcMI, and the
+    // LSB of the result of SrcMI are available before SrcMI completely finish,
+    // we can read the subword before SrcMI finish.
+    if (OperandWidth && propagateFromLSB2MSB(SrcMI->getOpcode())) {
       unsigned SrcSize = VInstrInfo::getBitWidth(SrcMI->getOperand(0));
       // DirtyHack: Ignore the invert flag.
       if (OperandWidth != SrcSize && SrcSize != 1 && OperandWidth != 3) {

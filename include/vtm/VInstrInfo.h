@@ -353,6 +353,8 @@ private:
     return at->second;
   }
 
+  static bool propagateFromLSB2MSB(unsigned Opcode);
+
   // The latency from all register source through the datapath to a given
   // wire/register define by a datapath/control op
   typedef std::map<const MachineInstr*, DepLatInfoTy> LatencyMapTy;
