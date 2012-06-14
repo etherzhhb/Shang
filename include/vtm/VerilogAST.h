@@ -405,7 +405,10 @@ class VASTImmediate : public VASTValue {
     printAsOperandImpl(OS, getBitWidth(), 0);
   }
 public:
-  uint64_t getValue() const { return Contents.IntVal; }
+  uint64_t getValue() const {
+    return getBitSlice64(Contents.IntVal, getBitWidth());
+  }
+
   bool isAllZeros() const {
     return isAllZeros64(getValue(), getBitWidth());
   }
