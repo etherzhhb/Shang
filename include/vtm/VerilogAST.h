@@ -1334,9 +1334,6 @@ public:
 
   VASTValPtr buildXorExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
-  VASTValPtr flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                             unsigned BitWidth);
-
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,
                             VASTRegister::Type T = VASTRegister::Data,

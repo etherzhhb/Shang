@@ -21,6 +21,31 @@
 
 using namespace llvm;
 
+// Inline all operands in the expression whose Opcode is the same as Opc
+// recursively;
+static void flattenExpr(VASTValPtr V, VASTExpr::Opcode Opc,
+                        SmallVectorImpl<VASTValPtr> &NewOps) {
+  if (VASTExpr *Expr = dyn_cast<VASTExpr>(V)) {
+    typedef const VASTUse *op_iterator;
+    if (Expr->getOpcode() == Opc) {
+      for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
+        flattenExpr(I->getAsInlineOperand(), Opc, NewOps);
+
+      return;
+    }
+  }
+
+  NewOps.push_back(V);
+}
+
+
+static void flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                            SmallVectorImpl<VASTValPtr> &NewOps) {
+  for (unsigned i = 0, e = Ops.size(); i < e; ++i)
+    // Try to flatten the expression tree.
+    flattenExpr(Ops[i], Opc, NewOps);
+}
+
 VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
@@ -139,23 +164,6 @@ VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
   return createExpr(Opc, Ops, BitWidth, 0);
 }
 
-// Inline all operands in the expression whose Opcode is the same as Opc
-// recursively;
-static void flattenExpr(VASTValPtr V, VASTExpr::Opcode Opc,
-                        SmallVectorImpl<VASTValPtr> &NewOps) {
-  if (VASTExpr *Expr = dyn_cast<VASTExpr>(V)) {
-    typedef const VASTUse *op_iterator;
-    if (Expr->getOpcode() == Opc) {
-      for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
-        flattenExpr(I->getAsInlineOperand(), Opc, NewOps);
-
-      return;
-    }
-  }
-
-  NewOps.push_back(V);
-}
-
 static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
   if (LHS->getASTType() < RHS->getASTType()) return true;
   else if (LHS->getASTType() > RHS->getASTType()) return false;
@@ -169,30 +177,6 @@ VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
                                        unsigned BitWidth) {
   std::sort(Ops.begin(), Ops.end(), VASTValPtr_less);
   return createExpr(Opc, Ops, BitWidth, 0);
-}
-
-VASTValPtr VASTModule::flattenExprTree(VASTExpr::Opcode Opc,
-                                       ArrayRef<VASTValPtr> Ops,
-                                       unsigned BitWidth) {
-  SmallVector<VASTValPtr, 8> NewOps;
-  typedef const VASTUse *op_iterator;
-  bool isCommutative = true;
-  unsigned OperandBitWidth = Ops[0]->getBitWidth();
-
-  for (unsigned i = 0; i < Ops.size(); ++i) {
-    // Try to flatten the expression tree.
-    flattenExpr(Ops[i], Opc, NewOps);
-
-    // The expression is actually commutative only if all its operands have the
-    // same bitwidth.
-    isCommutative &= (OperandBitWidth == Ops[i]->getBitWidth());
-  }
-
-  // The expression that can perform tree flatten should be commutative.
-  if (isCommutative)
-    return  getOrCreateCommutativeExpr(Opc, NewOps, BitWidth);
-
-  return createExpr(Opc, NewOps, BitWidth, 0);
 }
 
 VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
@@ -273,12 +257,17 @@ VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
 
 VASTValPtr VASTModule::buildMulExpr(ArrayRef<VASTValPtr> Ops,
                                     unsigned BitWidth) {
-  return flattenExprTree(VASTExpr::dpMul, Ops, BitWidth);
+  SmallVector<VASTValPtr, 8> NewOps;
+  flattenExprTree(VASTExpr::dpMul, Ops, NewOps);
+
+  return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
 
 VASTValPtr VASTModule::buildAddExpr(ArrayRef<VASTValPtr> Ops,
                                     unsigned BitWidth) {
-  return flattenExprTree(VASTExpr::dpAdd, Ops, BitWidth);
+  SmallVector<VASTValPtr, 8> NewOps;
+  flattenExprTree(VASTExpr::dpAdd, Ops, NewOps);
+  return createExpr(VASTExpr::dpAdd, NewOps, BitWidth, 0);
 }
 
 VASTValPtr VASTModule::buildOrExpr(ArrayRef<VASTValPtr> Ops,
