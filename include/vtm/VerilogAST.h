@@ -683,24 +683,6 @@ struct FoldingSetTrait<VASTExpr> : DefaultFoldingSetTrait<VASTExpr> {
       }
   };
 
-struct VASTExprBuilder {
-  SmallVector<VASTValPtr, 4> Operands;
-  VASTExpr::Opcode Opc;
-  unsigned BitWidth;
-  bool BuildNot;
-  bool isBuildingOrExpr() { return BuildNot == true && Opc == VASTExpr::dpAnd; }
-
-  void init(VASTExpr::Opcode opc, unsigned bitWidth, bool buildNot = false) {
-    Opc = opc;
-    BitWidth = bitWidth;
-    BuildNot = buildNot;
-  }
-
-  void addOperand(VASTValPtr V) {
-    Operands.push_back(V.getAsInlineOperand());
-  }
-};
-
 class VASTWire :public VASTSignal {
 public:
   enum Type {
@@ -1061,8 +1043,34 @@ public:
                              const AndCndVec &Cnds);
 };
 
+class VASTExprBuilderContext {
+public:
+  virtual ~VASTExprBuilderContext() {}
+
+  virtual VASTValPtr nameExpr(VASTValPtr V) { return V; }
+
+  virtual void *Allocate(size_t Num, size_t Alignment){
+    return 0;
+  }
+
+  BumpPtrAllocator *getAllocator() { return 0; }
+
+  virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    return 0;
+  }
+
+  VASTImmediate *getBoolImmediate(bool Value) {
+    return getOrCreateImmediate(Value, 1);
+  }
+
+  virtual VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                                unsigned UB, unsigned LB) {
+    return 0;
+  }
+};
+
 // The class that represent Verilog modulo.
-class VASTModule : public VASTNode {
+class VASTModule : public VASTNode, public VASTExprBuilderContext {
 public:
   typedef SmallVector<VASTPort*, 16> PortVector;
   typedef PortVector::iterator port_iterator;
@@ -1088,7 +1096,6 @@ private:
   RegisterVector Registers;
 
   // Expression in data-path
-  typedef FoldingSet<VASTExpr>::iterator fs_vas_it;
   FoldingSet<VASTExpr> UniqueExprs;
 
   typedef StringMap<VASTNamedValue*> SymTabTy;
@@ -1105,8 +1112,6 @@ private:
   // The port starting offset of a specific function unit.
   SmallVector<std::map<unsigned, unsigned>, VFUs::NumCommonFUs> FUPortOffsets;
   unsigned NumArgPorts, RetPortIdx;
-
-  VASTValPtr foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
 
 public:
   static std::string DirectClkEnAttr, ParallelCaseAttr, FullCaseAttr;
@@ -1145,19 +1150,6 @@ public:
   void buildSlotLogic();
   void writeProfileCounters(VASTSlot *S, bool isFirstSlot);
 
-  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    Value = getBitSlice64(Value, BitWidth);
-    UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
-    VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
-    if (!Imm) // Create the immediate if it is not yet created.
-      Imm = new (Allocator.Allocate<VASTImmediate>()) VASTImmediate(Value, BitWidth);
-    return Imm;
-  }
-
-  VASTImmediate *getBoolImmediate(bool Value) {
-    return getOrCreateImmediate(Value ? 1 : 0, 1);
-  }
-
   VASTValue *getSymbol(const std::string &Name) const {
     SymTabTy::const_iterator at = SymbolTable.find(Name);
     assert(at != SymbolTable.end() && "Symbol not found!");
@@ -1187,6 +1179,32 @@ public:
 
   void allocaSlots(unsigned TotalSlots) {
     Slots.assign(TotalSlots, 0);
+  }
+
+  VASTValPtr nameExpr(VASTValPtr V);
+
+  virtual void *Allocate(size_t Num, size_t Alignment){
+    return Allocator.Allocate(Num, Alignment);
+  }
+
+  BumpPtrAllocator *getAllocator() { return &Allocator; }
+
+  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                        unsigned UB, unsigned LB);
+
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    Value = getBitSlice64(Value, BitWidth);
+    UniqueImmSetTy::key_type key = std::make_pair(Value, BitWidth);
+    VASTImmediate *&Imm = UniqueImms.FindAndConstruct(key).second;
+    if (!Imm) {// Create the immediate if it is not yet created.
+      Imm = Allocator.Allocate<VASTImmediate>();
+      new (Imm) VASTImmediate(Value, BitWidth);
+    }
+    return Imm;
+  }
+
+  VASTImmediate *getBoolImmediate(bool Value) {
+    return getOrCreateImmediate(Value ? 1 : 0, 1);
   }
 
   VASTSlot *getOrCreateSlot(unsigned SlotNum, MachineBasicBlock *BB) {
@@ -1293,66 +1311,6 @@ public:
   const_port_iterator common_ports_begin() const {
     return Ports.begin() + VASTModule::SpecialOutPortEnd;
   }
-
-  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                        unsigned UB, unsigned LB);
-
-  VASTValPtr getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                        SmallVectorImpl<VASTValPtr> &Ops,
-                                        unsigned BitWidth);
-
-  VASTValPtr buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                       unsigned BitWidth);
-  VASTValPtr buildExpr(VASTExpr::Opcode Opc,VASTValPtr Op, unsigned BitWidth);
-  VASTValPtr buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS, VASTValPtr RHS,
-                       unsigned BitWidth);
-  template<VASTExpr::Opcode Opc>
-  static VASTValPtr buildExpr(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth,
-                              VASTModule *VM) {
-    return VM->buildExpr(Opc, LHS, RHS, BitWidth);
-  }
-
-  VASTValPtr buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op0, VASTValPtr Op1,
-                       VASTValPtr Op2, unsigned BitWidth);
-  VASTValPtr buildExpr(VASTExprBuilder &Builder) {
-    VASTValPtr V = buildExpr(Builder.Opc, Builder.Operands, Builder.BitWidth);
-
-    // If opc is dpAnd and BuildNot is true. It mean Or in And Invert Graph.
-    if (Builder.BuildNot) V = buildNotExpr(V);
-
-    return V;
-  }
-
-  VASTValPtr buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
-  VASTValPtr buildBitCatExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
-  VASTValPtr buildAndExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
-  VASTValPtr buildMulExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
-  VASTValPtr buildAddExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
-
-  VASTValPtr buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
-                            unsigned BitWidth);
-
-  VASTValPtr buildNotExpr(VASTValPtr U);
-
-  static VASTValPtr buildOr(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth,
-                            VASTModule *VM) {
-    return VM->buildOrExpr(LHS, RHS, BitWidth);
-  }
-
-  VASTValPtr buildOrExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
-
-  VASTValPtr buildOrExpr(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth) {
-    VASTValPtr Ops[] = { LHS, RHS };
-    return buildOrExpr(Ops, BitWidth);
-  }
-
-  static VASTValPtr buildXor(VASTValPtr LHS, VASTValPtr RHS, unsigned BitWidth,
-                             VASTModule *VM) {
-    VASTValPtr Ops[] = { LHS, RHS };
-    return VM->buildXorExpr(Ops, BitWidth);
-  }
-
-  VASTValPtr buildXorExpr(ArrayRef<VASTValPtr> Ops, unsigned BitWidth);
 
   VASTRegister *addRegister(const std::string &Name, unsigned BitWidth,
                             unsigned InitVal = 0,

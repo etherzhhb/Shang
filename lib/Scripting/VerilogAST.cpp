@@ -687,6 +687,65 @@ void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValPtr V) {
   S->addSuccSlot(SuccS, V, this);
 }
 
+VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
+                                  ArrayRef<VASTValPtr> Ops,
+                                  unsigned UB, unsigned LB) {
+  assert(!Ops.empty() && "Unexpected empty expression");
+  if (Ops.size() == 1) {
+    switch (Opc) {
+    default: break;
+    case VASTExpr::dpAnd: case VASTExpr::dpAdd: case VASTExpr::dpMul:
+      return Ops[0];
+    }
+  }
+
+  FoldingSetNodeID ID;
+
+  // Profile the elements of VASTExpr.
+  ID.AddInteger(Opc);
+  ID.AddInteger(UB);
+  ID.AddInteger(LB);
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    ID.AddPointer(Ops[i].get());
+    ID.AddBoolean(Ops[i].isInverted());
+  }
+  void *IP = 0;
+  if (VASTExpr *E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
+    return E;
+
+  // If the Expression do not exist, allocate a new one.
+  // Place the VASTUse array right after the VASTExpr.
+  void *P = Allocator.Allocate(sizeof(VASTExpr) + Ops.size() * sizeof(VASTUse),
+                               alignOf<VASTExpr>());
+  VASTExpr *E = new (P) VASTExpr(Opc, Ops.size(), UB, LB, ID.Intern(Allocator));
+  UniqueExprs.InsertNode(E, IP);
+
+  // Initialize the use list and compute the actual size of the expression.
+  unsigned ExprSize = 0;
+
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    if (VASTExpr *E = Ops[i].getAsLValue<VASTExpr>()) ExprSize += E->ExprSize;
+    else                                              ++ExprSize;
+
+    (void) new (E->ops() + i) VASTUse(Ops[i], E);
+  }
+
+  E->ExprSize = ExprSize;
+  return E;
+}
+
+VASTValPtr VASTModule::nameExpr(VASTValPtr V) {
+  // Name the expression when necessary.
+  if (isa<VASTNamedValue>(V.get()) && cast<VASTNamedValue>(V.get())->getName())
+    return V;
+
+  std::string Name = "e" + utohexstr(uint64_t(V.get())) + "w";
+  // Try to create the temporary wire for the bitslice.
+  if (VASTValue *V = lookupSymbol(Name)) return V;
+
+  return assign(addWire(Name, V->getBitWidth()), V);
+}
+
 void VASTModule::buildSlotLogic() {
   bool IsFirstSlotInBB = false;
   for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I){

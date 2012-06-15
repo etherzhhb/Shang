@@ -1,4 +1,4 @@
-//===------------ VerilogASTExprs.cpp - Verilog AST Expressions -*- C++ -*-===//
+//===--- VASTExprBuilder.cpp - Building Verilog AST Expressions -*- C++ -*-===//
 //
 // Copyright: 2011 by SYSU EDA Group. all rights reserved.
 // IMPORTANT: This software is supplied to you by Hongbin Zheng in consideration
@@ -16,7 +16,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vtm/VerilogAST.h"
+#include "VASTExprBuilder.h"
 #include "vtm/Utilities.h"
 
 using namespace llvm;
@@ -46,19 +46,21 @@ static void flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
     flattenExpr(Ops[i], Opc, NewOps);
 }
 
-VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
+VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
   if (U.isInverted()) {
     // Try to fold the not expression.
     if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
-      return getOrCreateImmediate(~Imm->getUnsignedValue(), Imm->getBitWidth());
+      return Context.getOrCreateImmediate(~Imm->getUnsignedValue(),
+                                          Imm->getBitWidth());
   }
 
   return U;
 }
 
-VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
+VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
+                                             uint8_t LB) {
   unsigned OperandSize = U->getBitWidth();
   // Not a sub bitslice.
   if (UB == OperandSize && LB == 0) return U;
@@ -70,7 +72,7 @@ VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
     uint64_t imm = getBitSlice64(Imm->getUnsignedValue(), UB, LB);
     if (isInverted) imm = ~imm;
-    return getOrCreateImmediate(imm, UB - LB);
+    return Context.getOrCreateImmediate(imm, UB - LB);
   }
 
   VASTExpr *Expr = dyn_cast<VASTExpr>(V);
@@ -101,8 +103,8 @@ VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   return VASTValPtr(0);
 }
 
-VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
-                                       unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
+                                            unsigned BitWidth) {
   VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0]);
   SmallVector<VASTValPtr, 8> NewOps;
   NewOps.push_back(Ops[0]);
@@ -126,7 +128,7 @@ VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
       unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
       assert(SizeInBits <= 64 && "Constant too large!");
       uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
-      LastImm = getOrCreateImmediate(Val, SizeInBits);
+      LastImm = Context.getOrCreateImmediate(Val, SizeInBits);
       NewOps.back() = LastImm;
     } else {
       LastImm = CurImm;
@@ -137,33 +139,25 @@ VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
   if (NewOps.size() == 1) return NewOps.back();
 
   // FIXME: Flatten bitcat.
-  return createExpr(VASTExpr::dpBitCat, NewOps, BitWidth, 0);
+  return Context.createExpr(VASTExpr::dpBitCat, NewOps, BitWidth, 0);
 }
 
-VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
+VASTValPtr VASTExprBuilder::buildBitSliceExpr(VASTValPtr U, uint8_t UB,
+                                              uint8_t LB) {
   // Try to fold the expression.
   if (VASTValPtr P = foldBitSliceExpr(U, UB, LB)) return P;
 
   assert(UB <= U->getBitWidth() && UB > LB && "Bad bit range!");
 
-  // Name the expression when necessary.
-  if (!isa<VASTNamedValue>(U.get())
-      || !cast<VASTNamedValue>(U.get())->getName()) {
-
-    std::string Name = "e" + utohexstr(uint64_t(U.get())) + "w";
-    // Try to create the temporary wire for the bitslice.
-    if (VASTValue *V = lookupSymbol(Name))
-      U = V;
-    else
-      U = assign(addWire(Name, U->getBitWidth()), U);
-  }
+  // Name the expression if necessary.
+  U = Context.nameExpr(U);
 
   VASTValPtr Ops[] = { U };
-  return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
+  return Context.createExpr(VASTExpr::dpAssign, Ops, UB, LB);
 }
 
-VASTValPtr VASTModule::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
-                                      unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
+                                           unsigned BitWidth) {
   assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
 
   if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Op)) {
@@ -172,21 +166,21 @@ VASTValPtr VASTModule::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
     case VASTExpr::dpROr:
       // Only reduce to 0 if all bits are 0.
       if (isAllZeros64(Val, Imm->getBitWidth()))
-        return getBoolImmediate(false);
+        return Context.getBoolImmediate(false);
       else
-        return getBoolImmediate(true);
+        return Context.getBoolImmediate(true);
     case VASTExpr::dpRAnd:
       // Only reduce to 1 if all bits are 1.
       if (isAllOnes64(Val, Imm->getBitWidth()))
-        return getBoolImmediate(true);
+        return Context.getBoolImmediate(true);
       else
-        return getBoolImmediate(false);
+        return Context.getBoolImmediate(false);
     case VASTExpr::dpRXor:
       // Only reduce to 1 if there are odd 1s.
       if (CountPopulation_64(Val) & 0x1)
-        return getBoolImmediate(true);
+        return Context.getBoolImmediate(true);
       else
-        return getBoolImmediate(false);
+        return Context.getBoolImmediate(false);
       break; // FIXME: Who knows how to evaluate this?
     default:  llvm_unreachable("Unexpected Reduction Node!");
     }
@@ -219,11 +213,11 @@ VASTValPtr VASTModule::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
     }
   }
 
-  return createExpr(Opc, Op, BitWidth, 0);
+  return Context.createExpr(Opc, Op, BitWidth, 0);
 }
 
-VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
-                                 unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
+                                      unsigned BitWidth) {
   switch (Opc) {
   default: break;
   case VASTExpr::dpROr:
@@ -233,7 +227,7 @@ VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
   }
 
   VASTValPtr Ops[] = { Op };
-  return createExpr(Opc, Ops, BitWidth, 0);
+  return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
 static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
@@ -244,15 +238,15 @@ static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
 }
 
 VASTValPtr
-VASTModule::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
-                                       SmallVectorImpl<VASTValPtr> &Ops,
-                                       unsigned BitWidth) {
+VASTExprBuilder::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
+                                            SmallVectorImpl<VASTValPtr> &Ops,
+                                             unsigned BitWidth) {
   std::sort(Ops.begin(), Ops.end(), VASTValPtr_less);
-  return createExpr(Opc, Ops, BitWidth, 0);
+  return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
-VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
-                                    unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
+                                         unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   typedef const VASTUse *op_iterator;
 
@@ -274,7 +268,8 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
   }
 
   if (NewOps.empty())
-    return getOrCreateImmediate(getBitSlice64(~0ull, BitWidth), BitWidth);
+    return Context.getOrCreateImmediate(getBitSlice64(~0ull, BitWidth),
+                                        BitWidth);
 
   std::sort(NewOps.begin(), NewOps.end(), VASTValPtr_less);
   typedef SmallVectorImpl<VASTValPtr>::iterator it;
@@ -287,7 +282,7 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
       continue;
     } else if (CurVal.invert() == LastVal)
       // A & ~A => 0
-      return getBoolImmediate(false);
+      return Context.getBoolImmediate(false);
 
     NewOps[ActualPos++] = CurVal;
     LastVal = CurVal;
@@ -298,24 +293,25 @@ VASTValPtr VASTModule::buildAndExpr(ArrayRef<VASTValPtr> Ops,
   // Resize the operand vector so it only contains valid operands.
   NewOps.resize(ActualPos);
 
-  return createExpr(VASTExpr::dpAnd, NewOps, BitWidth, 0);
+  return Context.createExpr(VASTExpr::dpAnd, NewOps, BitWidth, 0);
 }
 
-VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS,
-                                 VASTValPtr RHS, unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS,
+                                      VASTValPtr RHS, unsigned BitWidth) {
   VASTValPtr Ops[] = { LHS, RHS };
   return buildExpr(Opc, Ops, BitWidth);
 }
 
-VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op0,
-                                 VASTValPtr Op1, VASTValPtr Op2,
-                                 unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op0,
+                                       VASTValPtr Op1, VASTValPtr Op2,
+                                       unsigned BitWidth) {
   VASTValPtr Ops[] = { Op0, Op1, Op2 };
   return buildExpr(Opc, Ops, BitWidth);
 }
 
-VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                                 unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
+                                      ArrayRef<VASTValPtr> Ops,
+                                      unsigned BitWidth) {
   switch (Opc) {
   default: break;
   case VASTExpr::dpAdd:  return buildAddExpr(Ops, BitWidth);
@@ -324,19 +320,19 @@ VASTValPtr VASTModule::buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
   case VASTExpr::dpBitCat: return buildBitCatExpr(Ops, BitWidth);
   }
 
-  return createExpr(Opc, Ops, BitWidth, 0);
+  return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
-VASTValPtr VASTModule::buildMulExpr(ArrayRef<VASTValPtr> Ops,
-                                    unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
+                                         unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   flattenExprTree(VASTExpr::dpMul, Ops, NewOps);
 
   return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
 
-VASTValPtr VASTModule::buildAddExpr(ArrayRef<VASTValPtr> Ops,
-                                    unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
+                                         unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   uint64_t ImmVal = 0;
   unsigned MaxImmWidth = 0;
@@ -361,10 +357,10 @@ VASTValPtr VASTModule::buildAddExpr(ArrayRef<VASTValPtr> Ops,
 
   // Add the immediate value back to the operand list.
   if (ImmVal)
-    NewOps.push_back(getOrCreateImmediate(ImmVal, MaxImmWidth));
+    NewOps.push_back(Context.getOrCreateImmediate(ImmVal, MaxImmWidth));
 
   // All operands are zero?
-  if (NewOps.empty()) return getOrCreateImmediate(UINT64_C(0), BitWidth);
+  if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
 
   if (NewOps.size() == 1) {
     VASTValPtr V = NewOps.back();
@@ -374,15 +370,15 @@ VASTValPtr VASTModule::buildAddExpr(ArrayRef<VASTValPtr> Ops,
     if (ZeroBits == 0) return V;
 
     // Pad the MSB by zeros.
-    VASTValPtr Ops[] = { getOrCreateImmediate(UINT64_C(0), ZeroBits), V };
+    VASTValPtr Ops[] = {Context.getOrCreateImmediate(UINT64_C(0), ZeroBits), V};
     return buildBitCatExpr(Ops, BitWidth);
   }
 
-  return createExpr(VASTExpr::dpAdd, NewOps, BitWidth, 0);
+  return Context.createExpr(VASTExpr::dpAdd, NewOps, BitWidth, 0);
 }
 
-VASTValPtr VASTModule::buildOrExpr(ArrayRef<VASTValPtr> Ops,
-                                   unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildOrExpr(ArrayRef<VASTValPtr> Ops,
+                                        unsigned BitWidth) {
   if (Ops.size() == 1) return Ops[0];
 
   assert (Ops.size() > 1 && "There should be more than one operand!!");
@@ -398,60 +394,12 @@ VASTValPtr VASTModule::buildOrExpr(ArrayRef<VASTValPtr> Ops,
   return buildNotExpr(buildAndExpr(NotExprs, BitWidth));
 }
 
-VASTValPtr VASTModule::buildXorExpr(ArrayRef<VASTValPtr> Ops,
-                                    unsigned BitWidth) {
+VASTValPtr VASTExprBuilder::buildXorExpr(ArrayRef<VASTValPtr> Ops,
+                                         unsigned BitWidth) {
   assert (Ops.size() == 2 && "There should be more than one operand!!");
 
   // Build the Xor Expr with the And Inverter Graph (AIG).
   return buildExpr(VASTExpr::dpAnd, buildOrExpr(Ops, BitWidth),
                    buildNotExpr(buildAndExpr(Ops, BitWidth)),
                    BitWidth);
-}
-
-VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
-                                  ArrayRef<VASTValPtr> Ops,
-                                  unsigned UB, unsigned LB) {
-  assert(!Ops.empty() && "Unexpected empty expression");
-  if (Ops.size() == 1) {
-    switch (Opc) {
-    default: break;
-    case VASTExpr::dpAnd: case VASTExpr::dpAdd: case VASTExpr::dpMul:
-      return Ops[0];
-    }
-  }
-
-  FoldingSetNodeID ID;
-
-  // Profile the elements of VASTExpr.
-  ID.AddInteger(Opc);
-  ID.AddInteger(UB);
-  ID.AddInteger(LB);
-  for (unsigned i = 0; i < Ops.size(); ++i) {
-    ID.AddPointer(Ops[i].get());
-    ID.AddBoolean(Ops[i].isInverted());
-  }
-  void *IP = 0;
-  if (VASTExpr *E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
-    return E;
-
-  // If the Expression do not exist, allocate a new one.
-  // Place the VASTUse array right after the VASTExpr.
-  void *P = Allocator.Allocate(sizeof(VASTExpr) + Ops.size() * sizeof(VASTUse),
-                               alignOf<VASTExpr>());
-  VASTExpr *E = new (P) VASTExpr(Opc, Ops.size(), UB, LB,
-                                 ID.Intern(Allocator));
-  UniqueExprs.InsertNode(E, IP);
-
-  // Initialize the use list and compute the actual size of the expression.
-  unsigned ExprSize = 0;
-
-  for (unsigned i = 0; i < Ops.size(); ++i) {
-    if (VASTExpr *E = Ops[i].getAsLValue<VASTExpr>()) ExprSize += E->ExprSize;
-    else                                              ++ExprSize;
-    
-    (void) new (E->ops() + i) VASTUse(Ops[i], E);
-  }
-
-  E->ExprSize = ExprSize;
-  return E;
 }
