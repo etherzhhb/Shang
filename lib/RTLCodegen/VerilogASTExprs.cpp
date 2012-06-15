@@ -66,6 +66,13 @@ VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   // Try to fold the bitslice.
   VASTValue *V = U.get();
   bool isInverted = U.isInverted();
+
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
+    uint64_t imm = getBitSlice64(Imm->getValue(), UB, LB);
+    if (isInverted) imm = ~imm;
+    return getOrCreateImmediate(imm, UB - LB);
+  }
+
   VASTExpr *AssignExpr = 0;
   if (VASTExpr *E = dyn_cast<VASTExpr>(V))
     AssignExpr = E;
@@ -77,29 +84,27 @@ VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
     isInverted = P.isInverted();
   }
 
-  if (AssignExpr) {
-    switch(AssignExpr->getOpcode()) {
-    default: break;
-    case VASTExpr::dpAssign: {
-      unsigned Offset = AssignExpr->LB;
-      UB += Offset;
-      LB += Offset;
-      return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB).invert(isInverted);
-    }
-    case VASTExpr::dpBitCat: {
-      VASTValPtr Hi = AssignExpr->getOperand(0),
-                 Lo = AssignExpr->getOperand(1);
-      if (Lo->getBitWidth() == LB)
-        return buildBitSliceExpr(Hi, UB - LB, 0).invert(isInverted);
-      break;
-    }
-    }
+  if (AssignExpr == 0) return VASTValPtr(0);
+
+  if (AssignExpr->getOpcode() == VASTExpr::dpAssign){
+    unsigned Offset = AssignExpr->LB;
+    UB += Offset;
+    LB += Offset;
+    return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB).invert(isInverted);
   }
 
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
-    uint64_t imm = getBitSlice64(Imm->getValue(), UB, LB);
-    if (isInverted) imm = ~imm;
-    return getOrCreateImmediate(imm, UB - LB);
+  if (AssignExpr->getOpcode() == VASTExpr::dpBitCat) {
+    VASTValPtr Hi = AssignExpr->getOperand(0),
+               Lo = AssignExpr->getOperand(1);
+    unsigned SplitBit = Lo->getBitWidth();
+    if (UB <= SplitBit)
+      return buildBitSliceExpr(Lo, UB, LB).invert(isInverted);
+    if (LB >= SplitBit)
+      return buildBitSliceExpr(Hi, UB - SplitBit, LB - SplitBit).invert(isInverted);
+
+    VASTValPtr Ops[] = { buildBitSliceExpr(Hi, UB - SplitBit, 0),
+                         buildBitSliceExpr(Lo, SplitBit, LB) };
+    return buildBitCatExpr(Ops, UB - LB).invert(isInverted);
   }
 
   return VASTValPtr(0);
