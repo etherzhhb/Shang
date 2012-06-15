@@ -30,10 +30,15 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-rtl-codegen"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+
+static cl::opt<bool>
+EnalbeDumpIR("vtm-dump-ir", cl::desc("Dump the IR to the RTL code."),
+             cl::init(false));
 
 namespace {
   class VerilogASTWriter : public MachineFunctionPass {
@@ -100,11 +105,11 @@ bool VerilogASTWriter::doInitialization(Module &Mod) {
 bool VerilogASTWriter::runOnMachineFunction(MachineFunction &F) {
   VFInfo *FInfo =F.getInfo<VFInfo>();
 
-  DEBUG(
+  if (EnalbeDumpIR) {
     Out << "`ifdef wtf_is_this\n" << "Function for RTL Codegen:\n";
     F.print(Out);
     Out << "`endif\n";
-  );
+  }
 
   VASTModule *VM = FInfo->getRtlMod();
 
