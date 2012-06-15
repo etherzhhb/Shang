@@ -1391,7 +1391,7 @@ const char *VASTExpr::StandarFUName[] = {
 const std::string VASTExpr::getSubModName() const {
   const char *FUName = getFUName();
 
-  if (FUName == 0) return std::string("");
+  if (FUName == 0 || !InstSubModForFU) return std::string("");
 
   std::string Name(FUName);
   raw_string_ostream SS(Name);

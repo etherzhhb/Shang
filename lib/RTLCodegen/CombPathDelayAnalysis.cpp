@@ -196,7 +196,8 @@ static bool printBindingLuaCode(raw_ostream &OS, const VASTValue *V) {
     }
   } else if (const VASTExpr *E = dyn_cast<VASTExpr>(V)) {
     VASTExpr::Opcode Opc = E->getOpcode();
-    if (Opc >= VASTExpr::FirstFUOpc && Opc <= VASTExpr::LastFUOpc) {
+    std::string Name = E->getSubModName();
+    if (!Name.empty()) {
       OS << " { Name ='" << E->getSubModName() << "' }";
       return true;
     }
