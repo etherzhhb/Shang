@@ -338,14 +338,30 @@ VASTValPtr VASTModule::buildMulExpr(ArrayRef<VASTValPtr> Ops,
 VASTValPtr VASTModule::buildAddExpr(ArrayRef<VASTValPtr> Ops,
                                     unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
+  uint64_t ImmVal = 0;
+  unsigned MaxImmWidth = 0;
+  VASTValPtr Carry = 0;
   for (unsigned i = 0; i < Ops.size(); ++i) {
     // X + 0 = 0;
-    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i]))
-      if (Imm->isAllZeros()) continue;
+    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i])) {
+      ImmVal += Imm->getUnsignedValue();
+      MaxImmWidth = std::max(MaxImmWidth, Imm->getBitWidth());
+      continue;
+    } else if (Ops[i]->getBitWidth() == 1) {
+      assert(!Carry && "unexpected multiple carry bit!");
+      Carry = Ops[i];
+      continue;
+    }
 
-    // Try to flatten the expression tree.
-    flattenExpr(Ops[i], VASTExpr::dpAdd, NewOps);
+    NewOps.push_back(Ops[i]);
   }
+
+  // Add the carry bit back to the operand list.
+  if (Carry) NewOps.push_back(Carry);
+
+  // Add the immediate value back to the operand list.
+  if (ImmVal)
+    NewOps.push_back(getOrCreateImmediate(ImmVal, MaxImmWidth));
 
   // All operands are zero?
   if (NewOps.empty()) return getOrCreateImmediate(UINT64_C(0), BitWidth);
