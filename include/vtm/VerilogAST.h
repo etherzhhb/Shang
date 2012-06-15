@@ -1157,6 +1157,18 @@ public:
     return at->second;
   }
 
+  VASTValue *lookupSymbol(const std::string &Name) const {
+    SymTabTy::const_iterator at = SymbolTable.find(Name);
+    if (at == SymbolTable.end()) return 0;
+
+    return at->second;
+  }
+
+  template<class T>
+  T *lookupSymbol(const std::string &Name) const {
+    return cast_or_null<T>(lookupSymbol(Name));
+  }
+
   template<class T>
   T *getSymbol(const std::string &Name) const {
     return cast<T>(getSymbol(Name));
