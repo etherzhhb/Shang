@@ -15,9 +15,9 @@
 // in form of RTL verilog code.
 //
 //===----------------------------------------------------------------------===//
+#include "VASTExprBuilder.h"
 
 #include "vtm/Passes.h"
-#include "vtm/VerilogAST.h"
 #include "vtm/VFInfo.h"
 #include "vtm/LangSteam.h"
 #include "vtm/VRegisterInfo.h"
@@ -57,14 +57,15 @@ STATISTIC(SlotsByPassed, "Number of slots are bypassed");
 namespace {
 struct MemBusBuilder {
   VASTModule *VM;
+  VASTExprBuilder &Builder;
   VFUMemBus *Bus;
   unsigned BusNum;
   VASTWire *MembusEn, *MembusCmd, *MemBusAddr, *MemBusOutData, *MemBusByteEn;
   // Helper class to build the expression.
-  VASTExprBuilder EnExpr, CmdExpr, AddrExpr, OutDataExpr, BeExpr;
+  VASTExprHelper EnExpr, CmdExpr, AddrExpr, OutDataExpr, BeExpr;
 
   VASTWire *createOutputPort(const std::string &PortName, unsigned BitWidth,
-                              VASTRegister *&LocalEn, VASTExprBuilder &Expr) {
+                              VASTRegister *&LocalEn, VASTExprHelper &Expr) {
     // We need to create multiplexer to allow current module and its submodules
     // share the bus.
     std::string PortReg = PortName + "_r";
@@ -78,8 +79,9 @@ struct MemBusBuilder {
       // we use And Inverter Graph here.
       Expr.init(VASTExpr::dpAnd, OutputWire->getBitWidth(), true);
       // Add the local enable.
-      assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
-      VASTValPtr V =VM->buildNotExpr(LocalReg);
+      assert(Expr.BuildNot && Expr.Opc == VASTExpr::dpAnd
+             && "It is not building an Or Expr!");
+      VASTValPtr V = Builder.buildNotExpr(LocalReg);
       Expr.addOperand(V);
       LocalEn = LocalReg;
     } else {
@@ -94,7 +96,7 @@ struct MemBusBuilder {
 
   void addSubModuleOutPort(raw_ostream &S, VASTWire *OutputWire,
                             unsigned BitWidth, const std::string &SubModuleName,
-                            VASTWire *&SubModEn, VASTExprBuilder &Expr) {
+                            VASTWire *&SubModEn, VASTExprHelper &Expr) {
     std::string ConnectedWireName = SubModuleName + "_"
                                     + std::string(OutputWire->getName());
 
@@ -104,8 +106,9 @@ struct MemBusBuilder {
     if (SubModEn == 0) {
       // Or all enables together to generate the enable output.
       // we use And Inverter Graph here.
-      assert(Expr.isBuildingOrExpr() && "It is not building an Or Expr!");
-      VASTValPtr V = VM->buildNotExpr(SubModWire);
+      assert(Expr.BuildNot && Expr.Opc == VASTExpr::dpAnd
+             && "It is not building an Or Expr!");
+      VASTValPtr V = Builder.buildNotExpr(SubModWire);
       Expr.addOperand(V);
       SubModEn = SubModWire;
     } else {
@@ -148,8 +151,8 @@ struct MemBusBuilder {
     addSubModuleInPort(S, VFUMemBus::getReadyName(BusNum));
   }
 
-  MemBusBuilder(VASTModule *M, unsigned N)
-    : VM(M), Bus(getFUDesc<VFUMemBus>()), BusNum(N) {
+  MemBusBuilder(VASTModule *VM, VASTExprBuilder &Builder, unsigned N)
+    : VM(VM), Builder(Builder), Bus(getFUDesc<VFUMemBus>()), BusNum(N) {
     // Build the ports for current module.
     FuncUnitId ID(VFUs::MemoryBus, BusNum);
     // We need to create multiplexer to allow current module and its submodules
@@ -182,11 +185,11 @@ struct MemBusBuilder {
   }
 
   void buildMemBusMux() {
-    VM->assign(MembusEn, VM->buildExpr(EnExpr));
-    VM->assign(MembusCmd, VM->buildExpr(CmdExpr));
-    VM->assign(MemBusAddr, VM->buildExpr(AddrExpr));
-    VM->assign(MemBusOutData, VM->buildExpr(OutDataExpr));
-    VM->assign(MemBusByteEn, VM->buildExpr(BeExpr));
+    VM->assign(MembusEn, Builder.buildExpr(EnExpr));
+    VM->assign(MembusCmd, Builder.buildExpr(CmdExpr));
+    VM->assign(MemBusAddr, Builder.buildExpr(AddrExpr));
+    VM->assign(MemBusOutData, Builder.buildExpr(OutDataExpr));
+    VM->assign(MemBusByteEn, Builder.buildExpr(BeExpr));
   }
 };
 class VerilogASTBuilder : public MachineFunctionPass {
@@ -197,6 +200,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
+  OwningPtr<VASTExprBuilder> Builder;
   MemBusBuilder *MBBuilder;
   StringSet<> EmittedSubModules;
 
@@ -404,6 +408,7 @@ public:
   }
 
   void releaseMemory() {
+    Builder.reset();
     EmittedSubModules.clear();
     Idx2Reg.clear();
     Idx2Expr.clear();
@@ -446,6 +451,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
+  Builder.reset(new VASTExprBuilder(*VM));
 
   emitFunctionSignature(F.getFunction());
 
@@ -453,7 +459,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   // memory bus implicitly. We should add these ports after function
   // "emitFunctionSignature" is called, which add some other ports that need to
   // be added before input/output ports of memory bus.
-  MemBusBuilder MBB(VM, 0);
+  MemBusBuilder MBB(VM, *Builder, 0);
   MBBuilder = &MBB;
 
   // Emit all function units then emit all register/wires because function units
@@ -521,7 +527,7 @@ void VerilogASTBuilder::emitIdleState() {
   VASTSlot *IdleSlot = VM->getOrCreateSlot(0, 0);
   IdleSlot->buildReadyLogic(*VM);
   VASTValue *StartPort = VM->getPort(VASTModule::Start);
-  VM->addSlotSucc(IdleSlot, IdleSlot, VM->buildNotExpr(StartPort));
+  VM->addSlotSucc(IdleSlot, IdleSlot, Builder->buildNotExpr(StartPort));
 
   // Always Disable the finish signal.
   VM->addSlotDisable(IdleSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
@@ -716,8 +722,8 @@ void VerilogASTBuilder::emitSubModule(StringRef CalleeName, unsigned FNNum) {
     for (unsigned i = 0, e = OpInfo.size(); i < e; ++i)
       Ops.push_back(VM->addOpRegister(OpInfo[i].first, OpInfo[i].second, FNNum));
 
-    VASTValPtr Expr = VM->buildExpr(VASTExpr::dpBlackBox, Ops,
-                                    Info.getBitWidth());
+    VASTValPtr Expr = Builder->buildExpr(VASTExpr::dpBlackBox, Ops,
+                                         Info.getBitWidth());
     VM->assignWithExtraDelay(ResultWire, Expr, Latency);
     return;
   }
@@ -735,7 +741,7 @@ VASTValPtr VerilogASTBuilder::emitFUAdd(unsigned FUNum, unsigned BitWidth) {
                *RHS = VM->addOpRegister(ResultName + "_b", OperandWidth, FUNum),
                *C = VM->addOpRegister(ResultName + "_c", 1, FUNum);
   return VM->assign(VM->addWire(ResultName, BitWidth),
-                    VM->buildExpr(VASTExpr::dpAdd, LHS, RHS, C, BitWidth));
+                    Builder->buildExpr(VASTExpr::dpAdd, LHS, RHS, C, BitWidth));
 }
 
 VASTValPtr VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool HasHi){
@@ -748,7 +754,8 @@ VASTValPtr VerilogASTBuilder::emitFUMult(unsigned FUNum, unsigned BitWidth, bool
   
   VASTRegister *LHS = VM->addOpRegister(ResultName + "_a", OperandWidth, FUNum),
                *RHS = VM->addOpRegister(ResultName + "_b", OperandWidth, FUNum);
-  return VM->assign(Result, VM->buildExpr(VASTExpr::dpMul, LHS, RHS, BitWidth));
+  return VM->assign(Result,
+                    Builder->buildExpr(VASTExpr::dpMul, LHS, RHS, BitWidth));
 }
 
 VASTValPtr VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
@@ -760,7 +767,7 @@ VASTValPtr VerilogASTBuilder::emitFUShift(unsigned FUNum, unsigned BitWidth,
                *RHS = VM->addOpRegister(ResultName + "_b",
                                              Log2_32_Ceil(BitWidth), FUNum);
   return VM->assign(VM->addWire(ResultName, BitWidth),
-                    VM->buildExpr(Opc, LHS, RHS, BitWidth));
+                    Builder->buildExpr(Opc, LHS, RHS, BitWidth));
 }
 
 VASTValPtr VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
@@ -773,8 +780,9 @@ VASTValPtr VerilogASTBuilder::emitFUCmp(unsigned FUNum, unsigned BitWidth,
                *RHS = VM->addOpRegister(ResultName + "_b", BitWidth, FUNum);
   // Comparer have 4 output port.
   return VM->assign(VM->addWire(ResultName, 8),
-                    VM->buildExpr(isSigned ? VASTExpr::dpSCmp : VASTExpr::dpUCmp,
-                                  LHS, RHS, 5));
+                    Builder->buildExpr(isSigned ? VASTExpr::dpSCmp
+                                                : VASTExpr::dpUCmp,
+                                       LHS, RHS, 5));
 }
 
 void VerilogASTBuilder::emitAllSignals() {
@@ -787,8 +795,8 @@ void VerilogASTBuilder::emitAllSignals() {
         && Info.getRegClass() != VTM::RCFNRegClassID) {
       VASTValPtr Parent = lookupSignal(Info.getParentRegister());
       indexVASTRegister(RegNum,
-                     VM->buildBitSliceExpr(Parent.getAsInlineOperand(),
-                                           Info.getUB(), Info.getLB()));
+                        Builder->buildBitSliceExpr(Parent.getAsInlineOperand(),
+                                                   Info.getUB(), Info.getLB()));
       continue;
     }
 
@@ -957,7 +965,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
   if (TargetBB == CurBB && Pipelined)
     // The loop op of pipelined loop enable next slot explicitly.
     VM->addSlotSucc(CurSlot, VM->getOrCreateNextSlot(CurSlot),
-    VM->getBoolImmediate(true));
+                    VM->getBoolImmediate(true));
 
   // Emit the first micro state of the target state.
   if (!emitFirstCtrlBundle(TargetBB, CurSlot, Cnds)) {
@@ -965,7 +973,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
     unsigned TargetSlotNum = FInfo->getStartSlotFor(TargetBB);
 
     VASTSlot *TargetSlot = VM->getOrCreateSlot(TargetSlotNum, TargetBB);
-    VASTValPtr Cnd = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+    VASTValPtr Cnd = Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1);
     VM->addSlotSucc(CurSlot, TargetSlot, Cnd);
   }
 }
@@ -982,7 +990,8 @@ void VerilogASTBuilder::emitOpUnreachable(MachineInstr *MI, VASTSlot *Slot,
   OS << "$finish();\n";
   OS.exit_block();
 
-  VM->addSlotSucc(Slot, VM->getOrCreateSlot(0, 0), VM->getBoolImmediate(true));
+  VM->addSlotSucc(Slot, VM->getOrCreateSlot(0, 0),
+                  VM->getBoolImmediate(true));
 }
 
 void VerilogASTBuilder::emitOpAdd(MachineInstr *MI, VASTSlot *Slot,
@@ -1046,7 +1055,7 @@ void VerilogASTBuilder::emitOpDisableFU(MachineInstr *MI, VASTSlot *Slot,
     break;
   }
 
-  VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValPtr Pred = Builder->buildExpr(VASTExpr::dpAnd, Cnds, 1);
   VM->addSlotDisable(Slot, cast<VASTRegister>(EnablePort), Pred);
 }
 
@@ -1067,7 +1076,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
   // Emit the submodule on the fly.
   emitSubModule(CalleeName, FNNum);
 
-  VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValPtr Pred = Builder->buildAndExpr(Cnds, 1);
 
   std::string StartPortName = getSubModulePortName(FNNum, "start");
   VASTValPtr StartSignal = VM->getSymbol(StartPortName);
@@ -1158,7 +1167,7 @@ void VerilogASTBuilder::emitOpInternalCall(MachineInstr *MI, VASTSlot *Slot,
 void VerilogASTBuilder::emitOpRet(MachineInstr *MI, VASTSlot *CurSlot,
                                   VASTValueVecTy &Cnds) {
   // Go back to the idle slot.
-  VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValPtr Pred = Builder->buildAndExpr(Cnds, 1);
   VM->addSlotSucc(CurSlot, VM->getOrCreateSlot(0, 0), Pred);
   VM->addSlotEnable(CurSlot, cast<VASTRegister>(VM->getPort(VASTModule::Finish)),
                     Pred);
@@ -1196,7 +1205,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
   // Remember we enabled the memory bus at this slot.
   std::string EnableName = VFUMemBus::getEnableName(FUNum) + "_r";
   VASTValPtr MemEn = VM->getSymbol(EnableName);
-  VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValPtr Pred = Builder->buildAndExpr(Cnds, 1);
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 }
 
@@ -1210,7 +1219,7 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   std::string RegName = VFUBRAM::getAddrBusName(FUNum);
   VASTRegister *R = VM->getSymbol<VASTRegister>(RegName);
   VASTValPtr Addr = getAsOperand(MI->getOperand(1));
-  Addr = VM->buildBitSliceExpr(Addr, Addr->getBitWidth(), Alignment);
+  Addr = Builder->buildBitSliceExpr(Addr, Addr->getBitWidth(), Alignment);
   VM->addAssignment(R, Addr, Slot, Cnds);
   // Assign store data.
   RegName = VFUBRAM::getInDataBusName(FUNum);
@@ -1229,7 +1238,7 @@ void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
   std::string EnableName = VFUBRAM::getEnableName(FUNum);
   VASTValPtr MemEn = VM->getSymbol(EnableName);
 
-  VASTValPtr Pred = VM->buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTValPtr Pred = Builder->buildAndExpr(Cnds, 1);
   VM->addSlotEnable(Slot, cast<VASTRegister>(MemEn), Pred);
 
   // Remember the output register of block ram is defined at next slot.
@@ -1252,32 +1261,32 @@ VASTValPtr VerilogASTBuilder::emitDatapathExpr(MachineInstr *MI) {
   switch (MI->getOpcode()) {
   case VTM::VOpBitSlice:  return emitOpBitSlice(MI);
   case VTM::VOpBitCat:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitCat>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpBitCat>);
   case VTM::VOpBitRepeat:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpBitRepeat>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpBitRepeat>);
 
   case VTM::VOpAdd_c:     return emitChainedOpAdd(MI);
   case VTM::VOpICmp_c:    return emitChainedOpICmp(MI);
 
   case VTM::VOpSHL_c:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpShl>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpShl>);
   case VTM::VOpSRA_c:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRA>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpSRA>);
   case VTM::VOpSRL_c:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSRL>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpSRL>);
 
   case VTM::VOpMultLoHi_c:
   case VTM::VOpMult_c:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpMul>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpMul>);
 
   case VTM::VOpSel:       return emitOpSel(MI);
 
   case VTM::VOpLUT:       return emitOpLut(MI);
 
-  case VTM::VOpXor:       return emitBinaryOp(MI, VASTModule::buildXor);
+  case VTM::VOpXor:       return emitBinaryOp(MI, VASTExprBuilder::buildXor);
   case VTM::VOpAnd:
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpAnd>);
-  case VTM::VOpOr:        return emitBinaryOp(MI, VASTModule::buildOr);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpAnd>);
+  case VTM::VOpOr:        return emitBinaryOp(MI, VASTExprBuilder::buildOr);
   case VTM::VOpNot:       return emitInvert(MI);
   case VTM::VOpROr:       return emitUnaryOp(MI, VASTExpr::dpROr);
   case VTM::VOpRAnd:      return emitUnaryOp(MI, VASTExpr::dpRAnd);
@@ -1292,34 +1301,34 @@ VASTValPtr VerilogASTBuilder::emitDatapathExpr(MachineInstr *MI) {
 template<typename FnTy>
 VASTValPtr VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
   return  F(getAsOperand(MI->getOperand(1)), getAsOperand(MI->getOperand(2)),
-            VInstrInfo::getBitWidth(MI->getOperand(0)), VM);
+            VInstrInfo::getBitWidth(MI->getOperand(0)), Builder.get());
 }
 
 VASTValPtr VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
-  return VM->buildExpr(VASTExpr::dpAdd,
-                       getAsOperand(MI->getOperand(1)),
-                       getAsOperand(MI->getOperand(2)),
-                       getAsOperand(MI->getOperand(3)),
-                       VInstrInfo::getBitWidth(MI->getOperand(0)));
+  return Builder->buildExpr(VASTExpr::dpAdd,
+                            getAsOperand(MI->getOperand(1)),
+                            getAsOperand(MI->getOperand(2)),
+                            getAsOperand(MI->getOperand(3)),
+                            VInstrInfo::getBitWidth(MI->getOperand(0)));
 }
 
 VASTValPtr VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
   unsigned CndCode = MI->getOperand(3).getImm();
   if (CndCode == VFUs::CmpSigned)
-    return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpSCmp>);
+    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpSCmp>);
 
   // else
-  return emitBinaryOp(MI, VASTModule::buildExpr<VASTExpr::dpUCmp>);
+  return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpUCmp>);
 }
 
 VASTValPtr VerilogASTBuilder::emitInvert(MachineInstr *MI) {
-  return VM->buildNotExpr(getAsOperand(MI->getOperand(1)));
+  return Builder->buildNotExpr(getAsOperand(MI->getOperand(1)));
 }
 
 VASTValPtr VerilogASTBuilder::emitUnaryOp(MachineInstr *MI,
                                           VASTExpr::Opcode Opc) {
-  return VM->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
-                       VInstrInfo::getBitWidth(MI->getOperand(0)));
+  return Builder->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
+                            VInstrInfo::getBitWidth(MI->getOperand(0)));
 }
 
 VASTValPtr VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
@@ -1327,8 +1336,8 @@ VASTValPtr VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
                        getAsOperand(MI->getOperand(2)),
                        getAsOperand(MI->getOperand(3)) };
 
-  return VM->buildExpr(VASTExpr::dpSel, Ops,
-                       VInstrInfo::getBitWidth(MI->getOperand(0)));
+  return Builder->buildExpr(VASTExpr::dpSel, Ops,
+                            VInstrInfo::getBitWidth(MI->getOperand(0)));
 }
 
 VASTValPtr VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
@@ -1354,7 +1363,7 @@ VASTValPtr VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
       case '-': /*Dont care*/ break;
       case '1': ProductOps.push_back(Operands[i]); break;
       case '0':
-        ProductOps.push_back(VM->buildNotExpr(Operands[i]));
+        ProductOps.push_back(Builder->buildNotExpr(Operands[i]));
         break;
       }
     }
@@ -1365,7 +1374,7 @@ VASTValPtr VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
 
     // Create the product.
     // Add the product to the operand list of the sum.
-    SumOps.push_back(VM->buildExpr(VASTExpr::dpAnd, ProductOps, SizeInBits));
+    SumOps.push_back(Builder->buildAndExpr(ProductOps, SizeInBits));
 
     // Is the output inverted?
     char c = *p++;
@@ -1378,9 +1387,9 @@ VASTValPtr VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
   }
 
   // Or the products together to build the SOP (Sum of Product).
-  VASTValPtr SOP = VM->buildOrExpr(SumOps, SizeInBits);
+  VASTValPtr SOP = Builder->buildOrExpr(SumOps, SizeInBits);
 
-  if (isComplement) SOP = VM->buildNotExpr(SOP);
+  if (isComplement) SOP = Builder->buildNotExpr(SOP);
 
   // Build the sum;
   return SOP;
@@ -1394,7 +1403,7 @@ VASTValPtr VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
 
   // RHS should be a register.
   MachineOperand &MO = MI->getOperand(1);
-  return VM->buildBitSliceExpr(getAsOperand(MO), UB, LB);
+  return Builder->buildBitSliceExpr(getAsOperand(MO), UB, LB);
 }
 
 
@@ -1409,7 +1418,7 @@ VASTValPtr VerilogASTBuilder::createCnd(MachineOperand Op) {
   // Otherwise it must be some signal.
   VASTValPtr C = getAsOperand(Op);
 
-  if (isInverted) C = VM->buildNotExpr(C);
+  if (isInverted) C = Builder->buildNotExpr(C);
 
   return C;
 }
@@ -1442,7 +1451,7 @@ VASTValPtr VerilogASTBuilder::getAsOperand(MachineOperand &Op,
     if (unsigned Reg = Op.getReg())
       if (VASTValPtr V = lookupSignal(Reg)) {
         // The operand may only use a sub bitslice of the signal.
-        V = VM->buildBitSliceExpr(V, BitWidth, 0);
+        V = Builder->buildBitSliceExpr(V, BitWidth, 0);
         // Try to inline the operand.
         if (GetAsInlineOperand) V = V.getAsInlineOperand();
         return V;
@@ -1474,7 +1483,7 @@ VASTValPtr VerilogASTBuilder::getAsOperand(MachineOperand &Op,
 
   VASTValPtr Symbol = VM->getOrCreateSymbol(Name, SymbolWidth, NeedWrapper);
   if (SymbolWidth && GetAsInlineOperand)
-    Symbol = VM->buildBitSliceExpr(Symbol, BitWidth, 0).getAsInlineOperand();
+    Symbol = Builder->buildBitSliceExpr(Symbol, BitWidth, 0).getAsInlineOperand();
 
   return Symbol;
 }
