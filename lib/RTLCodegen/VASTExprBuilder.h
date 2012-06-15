@@ -50,6 +50,14 @@ public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
 
+  VASTValPtr getBoolImmediate(bool Val) {
+    return Context.getBoolImmediate(Val);
+  }
+
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    return Context.getOrCreateImmediate(Value, BitWidth);
+  }
+
   VASTValPtr getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
                                         SmallVectorImpl<VASTValPtr> &Ops,
                                         unsigned BitWidth);

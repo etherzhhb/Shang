@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the VerilogASTBuilder pass, which write VTM machine instructions
-// in form of RTL verilog code.
+// This file implement the VerilogASTBuilder pass, which write VTM machine
+// instructions in form of RTL verilog code.
 //
 //===----------------------------------------------------------------------===//
 #include "VASTExprBuilder.h"
