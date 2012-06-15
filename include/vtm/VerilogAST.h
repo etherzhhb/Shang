@@ -1158,8 +1158,6 @@ public:
     Slots.assign(TotalSlots, 0);
   }
 
-  VASTValPtr nameExpr(VASTValPtr V);
-
   virtual void *Allocate(size_t Num, size_t Alignment){
     return Allocator.Allocate(Num, Alignment);
   }

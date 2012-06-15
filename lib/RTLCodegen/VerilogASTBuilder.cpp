@@ -209,8 +209,6 @@ class VerilogASTBuilder : public MachineFunctionPass,
     return !EmittedSubModules.insert(Name);
   }
 
-  VASTValPtr nameExpr(VASTValPtr V) { return VM->nameExpr(V); }
-
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     return VM->getOrCreateImmediate(Value, BitWidth);
   }
@@ -265,6 +263,21 @@ class VerilogASTBuilder : public MachineFunctionPass,
     if (wire_at == ExprLHS.end()) return 0;
 
     return wire_at->second;
+  }
+
+  VASTValPtr nameExpr(VASTValPtr V) {
+    // Name the expression when necessary.
+    if (isa<VASTNamedValue>(V.get()) && cast<VASTNamedValue>(V.get())->getName())
+      return V;
+
+    ExprLHSMapTy::iterator at = ExprLHS.find(V);
+    if (at != ExprLHS.end()) return at->second;
+
+    std::string Name = "e" + utohexstr(uint64_t(V.get())) + "w";
+    // Try to create the temporary wire for the bitslice.
+    if (VASTValue *V = VM->lookupSymbol(Name)) return V;
+
+    return VM->assign(VM->addWire(Name, V->getBitWidth()), V);
   }
 
  VASTValPtr getOrCreateExpr(unsigned WireNum, MachineInstr *MI = 0) {

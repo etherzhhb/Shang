@@ -509,18 +509,6 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
   return E;
 }
 
-VASTValPtr VASTModule::nameExpr(VASTValPtr V) {
-  // Name the expression when necessary.
-  if (isa<VASTNamedValue>(V.get()) && cast<VASTNamedValue>(V.get())->getName())
-    return V;
-
-  std::string Name = "e" + utohexstr(uint64_t(V.get())) + "w";
-  // Try to create the temporary wire for the bitslice.
-  if (VASTValue *V = lookupSymbol(Name)) return V;
-
-  return assign(addWire(Name, V->getBitWidth()), V);
-}
-
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
   OS << "module " << getName() << "(\n";
   Ports.front()->print(OS.indent(4));
