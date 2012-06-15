@@ -73,29 +73,20 @@ VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
     return getOrCreateImmediate(imm, UB - LB);
   }
 
-  VASTExpr *AssignExpr = 0;
-  if (VASTExpr *E = dyn_cast<VASTExpr>(V))
-    AssignExpr = E;
-  else if (VASTWire *W = dyn_cast<VASTWire>(V)) {
-    VASTExprPtr P = W->getExpr().invert(isInverted);
-    // DirtyHack: the Invert information will be lost by this way. Allocate a
-    // new VASTExprPtr?
-    AssignExpr = P.get();
-    isInverted = P.isInverted();
-  }
+  VASTExpr *Expr = dyn_cast<VASTExpr>(V);
 
-  if (AssignExpr == 0) return VASTValPtr(0);
+  if (Expr == 0) return VASTValPtr(0);
 
-  if (AssignExpr->getOpcode() == VASTExpr::dpAssign){
-    unsigned Offset = AssignExpr->LB;
+  if (Expr->getOpcode() == VASTExpr::dpAssign){
+    unsigned Offset = Expr->LB;
     UB += Offset;
     LB += Offset;
-    return buildBitSliceExpr(AssignExpr->getOperand(0), UB, LB).invert(isInverted);
+    return buildBitSliceExpr(Expr->getOperand(0), UB, LB).invert(isInverted);
   }
 
-  if (AssignExpr->getOpcode() == VASTExpr::dpBitCat) {
-    VASTValPtr Hi = AssignExpr->getOperand(0),
-               Lo = AssignExpr->getOperand(1);
+  if (Expr->getOpcode() == VASTExpr::dpBitCat) {
+    VASTValPtr Hi = Expr->getOperand(0),
+               Lo = Expr->getOperand(1);
     unsigned SplitBit = Lo->getBitWidth();
     if (UB <= SplitBit)
       return buildBitSliceExpr(Lo, UB, LB).invert(isInverted);

@@ -1391,12 +1391,7 @@ VASTValPtr VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
 
   // RHS should be a register.
   MachineOperand &MO = MI->getOperand(1);
-  VASTValPtr RHS = getAsOperand(MO, false);
-  //RHS = VM->getOrCreateBitSlice(RHS, MO.getBitWidth(), 0);
-  // Pass RHS without getting inline operand, because for bitslice, only
-  // inlining the assign expression is allowed, which already handled in the
-  // getOrCreateBitSlice.
-  return VM->buildBitSliceExpr(RHS, UB, LB);
+  return VM->buildBitSliceExpr(getAsOperand(MO), UB, LB);
 }
 
 
