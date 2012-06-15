@@ -64,6 +64,7 @@ struct FixMachineCode : public MachineFunctionPass {
   bool handleImplicitDefs(MachineInstr *MI);
   void FoldInstructions(std::vector<MachineInstr*> &InstrToFold);
 
+  void replaceCopyByMove(MachineInstr * Inst);
   void FoldMove(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
   void FoldAdd(MachineInstr *MI, std::vector<MachineInstr*> &InstrToFold);
 
@@ -121,15 +122,8 @@ bool FixMachineCode::runOnMachineFunction(MachineFunction &MF) {
       if (simplifyBitSlice(Inst)) continue;
       if (handleImplicitDefs(Inst)) continue;
 
-      if (Inst->isCopy()) {
-        MachineOperand &SrcMO = Inst->getOperand(1);
-        MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
-        MachineOperand &SrcDefMO = DefMI->getOperand(0);
-        unsigned DstWidth = VInstrInfo::getBitWidth(SrcDefMO);
-        VInstrInfo::setBitWidth(SrcMO, DstWidth);
-        VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
-        VInstrInfo::ChangeCopyToMove(Inst);
-      }
+      // Replace Copy by Move, which can be predicated.
+      if (Inst->isCopy()) replaceCopyByMove(Inst);
 
       // Try to eliminate unnecessary moves.
       if (canbeFold(Inst)) {
@@ -364,6 +358,16 @@ void FixMachineCode::FoldInstructions(std::vector<MachineInstr*> &InstrToFold) {
       llvm_unreachable("Trying to fold unexpected instruction!");
     }
   }
+}
+
+void FixMachineCode::replaceCopyByMove(MachineInstr *Inst) {
+  MachineOperand &SrcMO = Inst->getOperand(1);
+  MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
+  MachineOperand &SrcDefMO = DefMI->getOperand(0);
+  unsigned DstWidth = VInstrInfo::getBitWidth(SrcDefMO);
+  VInstrInfo::setBitWidth(SrcMO, DstWidth);
+  VInstrInfo::setBitWidth(Inst->getOperand(0), DstWidth);
+  VInstrInfo::ChangeCopyToMove(Inst);
 }
 
 Pass *llvm::createFixMachineCodePass(bool IsPreOpt) {
