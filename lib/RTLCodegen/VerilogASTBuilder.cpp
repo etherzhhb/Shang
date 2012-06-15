@@ -206,7 +206,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   typedef std::map<unsigned, VASTValPtr> RegIdxMapTy;
   RegIdxMapTy Idx2Reg;
-  RegIdxMapTy Idx2Wire;
+  RegIdxMapTy Idx2Expr;
 
   // Keep the wires are single defined and CSEd.
   typedef std::map<VASTValPtr, VASTWire*> ExprLHSMapTy;
@@ -220,44 +220,47 @@ class VerilogASTBuilder : public MachineFunctionPass {
       return at->second;
     }
 
-    return getOrCreateWire(RegNum);
+    // Retrieve the expression.
+    VASTValPtr Expr = getOrCreateExpr(RegNum);
+    VASTExprPtr Ptr = dyn_cast<VASTExprPtr>(Expr);
+    // If the expression is inlinalbe, do not create the wire.
+    if (!Ptr || Ptr->isInlinable()) return Expr;
+
+    // Try to get the wire.
+    VASTWire *&LHSWire = ExprLHS[Expr];    
+    if (LHSWire) return  LHSWire;
+
+    // Create the LHS wire if it had not existed yet.
+    assert(TargetRegisterInfo::isVirtualRegister(RegNum)
+           && "Unexpected physics register as wire!");
+    std::string Name =
+      "w" + utostr_32(TargetRegisterInfo::virtReg2Index(RegNum)) + "w";
+
+    return (LHSWire = VM->assign(VM->addWire(Name, Expr->getBitWidth()), Expr));
   }
 
-  VASTValPtr lookupWire(unsigned WireNum) const {
+  VASTWire *lookupWire(unsigned WireNum) const {
     assert(TargetRegisterInfo::isVirtualRegister(WireNum)
            && "Expect virtual register!");
-    RegIdxMapTy::const_iterator at = Idx2Wire.find(WireNum);
-    if(at != Idx2Wire.end()) return at->second;
+    RegIdxMapTy::const_iterator at = Idx2Expr.find(WireNum);
+    if(at == Idx2Expr.end()) return 0;
+    
+    ExprLHSMapTy::const_iterator wire_at = ExprLHS.find(at->second);
+    if (wire_at == ExprLHS.end()) return 0;
 
-    return 0;
+    return wire_at->second;
   }
 
- VASTValPtr getOrCreateWire(unsigned WireNum, MachineInstr *MI = 0) {
+ VASTValPtr getOrCreateExpr(unsigned WireNum, MachineInstr *MI = 0) {
     assert(TargetRegisterInfo::isVirtualRegister(WireNum)
            && "Expected virtual register!");
-    VASTValPtr &W = Idx2Wire[WireNum];
-    if (W) return W;
+    VASTValPtr &Expr = Idx2Expr[WireNum];
+    if (Expr) return Expr;
 
     // Build the expression if it had not existed yet.
     if (MI == 0) MI = MRI->getVRegDef(WireNum);
     assert(MI && "Virtual register for wire not defined!");
-    VASTValPtr Expr = emitDatapathExpr(MI);
-    VASTWire *&LHSWire = ExprLHS[Expr];
-    if (LHSWire) return  (W = LHSWire);
-
-    // Create the LHS wire if it had not existed yet.
-    const MachineOperand &DefMO = MI->getOperand(0);
-    assert(TargetRegisterInfo::isVirtualRegister(WireNum)
-           && "Unexpected physics register as wire!");
-    std::string Name =
-      "w" + utostr_32(TargetRegisterInfo::virtReg2Index(WireNum)) + "w";
-    unsigned BitWidth = VInstrInfo::getBitWidth(DefMO);
-
-    VASTWire::Type T = VASTWire::Common;
-    if (MI->getOpcode() == VTM::VOpLUT) T = VASTWire::LUT;
-
-    W = LHSWire = VM->assign(VM->addWire(Name, BitWidth), Expr, T);
-    return W;
+    return (Expr = emitDatapathExpr(MI));
   }
 
   VASTValPtr indexVASTRegister(unsigned RegNum, VASTValPtr V) {
@@ -272,7 +275,7 @@ class VerilogASTBuilder : public MachineFunctionPass {
   VASTValPtr indexVASTWire(unsigned WireNum, VASTValPtr V) {
     assert(TargetRegisterInfo::isVirtualRegister(WireNum)
            && "Expect physical register!");
-    bool inserted = Idx2Wire.insert(std::make_pair(WireNum, V)).second;
+    bool inserted = Idx2Expr.insert(std::make_pair(WireNum, V)).second;
     assert(inserted && "RegNum already indexed some value!");
 
     return V;
@@ -403,7 +406,7 @@ public:
   void releaseMemory() {
     EmittedSubModules.clear();
     Idx2Reg.clear();
-    Idx2Wire.clear();
+    Idx2Expr.clear();
     ExprLHS.clear();
   }
 
@@ -1240,7 +1243,7 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
 
   instr_it I = Bundle;
    while ((++I)->isInsideBundle())
-    getOrCreateWire(I->getOperand(0).getReg(), I);
+    getOrCreateExpr(I->getOperand(0).getReg(), I);
 
   return I;
 }
