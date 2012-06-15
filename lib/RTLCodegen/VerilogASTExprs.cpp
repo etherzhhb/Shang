@@ -153,11 +153,18 @@ VASTValPtr VASTModule::buildBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   if (VASTValPtr P = foldBitSliceExpr(U, UB, LB)) return P;
 
   assert(UB <= U->getBitWidth() && UB > LB && "Bad bit range!");
-  // FIXME: We can name the expression when necessary.
-  assert(isa<VASTNamedValue>(U)
-         && cast<VASTNamedValue>(U)->getName()
-         && *cast<VASTNamedValue>(U)->getName() != '\0'
-         && "Cannot get bitslice of value without name!");
+
+  // Name the expression when necessary.
+  if (!isa<VASTNamedValue>(U.get())
+      || !cast<VASTNamedValue>(U.get())->getName()) {
+
+    std::string Name = "e" + utohexstr(uint64_t(U.get())) + "w";
+    // Try to create the temporary wire for the bitslice.
+    if (VASTValue *V = lookupSymbol(Name))
+      U = V;
+    else
+      U = assign(addWire(Name, U->getBitWidth()), U);
+  }
 
   VASTValPtr Ops[] = { U };
   return createExpr(VASTExpr::dpAssign, Ops, UB, LB);
