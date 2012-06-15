@@ -337,7 +337,30 @@ VASTValPtr VASTModule::buildMulExpr(ArrayRef<VASTValPtr> Ops,
 VASTValPtr VASTModule::buildAddExpr(ArrayRef<VASTValPtr> Ops,
                                     unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
-  flattenExprTree(VASTExpr::dpAdd, Ops, NewOps);
+  for (unsigned i = 0; i < Ops.size(); ++i) {
+    // X + 0 = 0;
+    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i]))
+      if (Imm->isAllZeros()) continue;
+
+    // Try to flatten the expression tree.
+    flattenExpr(Ops[i], VASTExpr::dpAdd, NewOps);
+  }
+
+  // All operands are zero?
+  if (NewOps.empty()) return getOrCreateImmediate(UINT64_C(0), BitWidth);
+
+  if (NewOps.size() == 1) {
+    VASTValPtr V = NewOps.back();
+    assert(BitWidth >= V->getBitWidth() && "Bad bitwidth!");
+    unsigned ZeroBits = BitWidth - V->getBitWidth();
+
+    if (ZeroBits == 0) return V;
+
+    // Pad the MSB by zeros.
+    VASTValPtr Ops[] = { getOrCreateImmediate(UINT64_C(0), ZeroBits), V };
+    return buildBitCatExpr(Ops, BitWidth);
+  }
+
   return createExpr(VASTExpr::dpAdd, NewOps, BitWidth, 0);
 }
 

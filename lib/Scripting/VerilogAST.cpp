@@ -1216,10 +1216,11 @@ static void printCombMux(raw_ostream &OS, const VASTWire *W) {
 
 static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
   assert(!W->getExpr().isInverted() && "Unexpected inverted mux!");
-  VASTExpr *E = W->getExpr().get();
-  unsigned NumOperands = E->NumOps;
+  VASTExpr *E = dyn_cast<VASTExpr>(W->getExpr());
+  if (E == 0) return false;
 
-  if (NumOperands != 3) return false;
+  assert(E->NumOps >= 2 && "bad operand number!");
+  if (E->NumOps > 3) return false;
 
   const VASTUse &OpA = E->getOperand(0), &OpB = E->getOperand(1);
 
@@ -1236,7 +1237,8 @@ static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
   OS << ", ";
   OpB.printAsOperand(OS);
   OS << ", ";
-  E->getOperand(2).printAsOperand(OS);
+  if (E->NumOps == 3) E->getOperand(2).printAsOperand(OS);
+  else                OS << "1'b0";
   OS << ", ";
   W->printAsOperand(OS, false);
   OS << ");\n";
@@ -1245,10 +1247,9 @@ static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
 
 static bool printBinFU(raw_ostream &OS, const VASTWire *W) {
   assert(!W->getExpr().isInverted() && "Unexpected inverted mux!");
-  VASTExpr *E = W->getExpr().get();
-  unsigned NumOperands = E->NumOps;
-
-  if (NumOperands != 2) return false;
+  VASTExpr *E = dyn_cast<VASTExpr>(W->getExpr());
+  assert(E->NumOps == 2 && "Not a binary expression!");
+  if (E == 0) return false;
 
   const VASTUse &OpA = E->getOperand(0), &OpB = E->getOperand(1);
 
