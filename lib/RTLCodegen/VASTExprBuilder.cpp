@@ -166,21 +166,21 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
     case VASTExpr::dpROr:
       // Only reduce to 0 if all bits are 0.
       if (isAllZeros64(Val, Imm->getBitWidth()))
-        return Context.getBoolImmediate(false);
+        return getBoolImmediate(false);
       else
-        return Context.getBoolImmediate(true);
+        return getBoolImmediate(true);
     case VASTExpr::dpRAnd:
       // Only reduce to 1 if all bits are 1.
       if (isAllOnes64(Val, Imm->getBitWidth()))
-        return Context.getBoolImmediate(true);
+        return getBoolImmediate(true);
       else
-        return Context.getBoolImmediate(false);
+        return getBoolImmediate(false);
     case VASTExpr::dpRXor:
       // Only reduce to 1 if there are odd 1s.
       if (CountPopulation_64(Val) & 0x1)
-        return Context.getBoolImmediate(true);
+        return getBoolImmediate(true);
       else
-        return Context.getBoolImmediate(false);
+        return getBoolImmediate(false);
       break; // FIXME: Who knows how to evaluate this?
     default:  llvm_unreachable("Unexpected Reduction Node!");
     }
@@ -282,7 +282,7 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
       continue;
     } else if (CurVal.invert() == LastVal)
       // A & ~A => 0
-      return Context.getBoolImmediate(false);
+      return getBoolImmediate(false);
 
     NewOps[ActualPos++] = CurVal;
     LastVal = CurVal;

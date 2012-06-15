@@ -1046,34 +1046,8 @@ public:
                              const AndCndVec &Cnds);
 };
 
-class VASTExprBuilderContext {
-public:
-  virtual ~VASTExprBuilderContext() {}
-
-  virtual VASTValPtr nameExpr(VASTValPtr V) { return V; }
-
-  virtual void *Allocate(size_t Num, size_t Alignment){
-    return 0;
-  }
-
-  BumpPtrAllocator *getAllocator() { return 0; }
-
-  virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
-    return 0;
-  }
-
-  VASTImmediate *getBoolImmediate(bool Value) {
-    return getOrCreateImmediate(Value, 1);
-  }
-
-  virtual VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                                unsigned UB, unsigned LB) {
-    return 0;
-  }
-};
-
 // The class that represent Verilog modulo.
-class VASTModule : public VASTNode, public VASTExprBuilderContext {
+class VASTModule : public VASTNode {
 public:
   typedef SmallVector<VASTPort*, 16> PortVector;
   typedef PortVector::iterator port_iterator;

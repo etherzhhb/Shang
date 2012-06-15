@@ -192,7 +192,8 @@ struct MemBusBuilder {
     VM->assign(MemBusByteEn, Builder.buildExpr(BeExpr));
   }
 };
-class VerilogASTBuilder : public MachineFunctionPass {
+class VerilogASTBuilder : public MachineFunctionPass,
+                          public VASTExprBuilderContext {
   const Module *M;
   MachineFunction *MF;
   TargetData *TD;
@@ -206,6 +207,17 @@ class VerilogASTBuilder : public MachineFunctionPass {
 
   bool isSubModuleEmitted(StringRef Name) {
     return !EmittedSubModules.insert(Name);
+  }
+
+  VASTValPtr nameExpr(VASTValPtr V) { return VM->nameExpr(V); }
+
+  VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    return VM->getOrCreateImmediate(Value, BitWidth);
+  }
+
+  VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                        unsigned UB, unsigned LB) {
+    return VM->createExpr(Opc, Ops, UB, LB);
   }
 
   typedef std::map<unsigned, VASTValPtr> RegIdxMapTy;
@@ -472,7 +484,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
-  Builder.reset(new VASTExprBuilder(*VM));
+  Builder.reset(new VASTExprBuilder(*this));
 
   emitFunctionSignature(F.getFunction());
 

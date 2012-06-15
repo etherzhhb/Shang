@@ -39,6 +39,22 @@ struct VASTExprHelper {
   }
 };
 
+class VASTExprBuilderContext {
+public:
+  virtual ~VASTExprBuilderContext() {}
+
+  virtual VASTValPtr nameExpr(VASTValPtr V) { return V; }
+
+  virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
+    return 0;
+  }
+
+  virtual VASTValPtr createExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                                unsigned UB, unsigned LB) {
+    return 0;
+  }
+};
+
 class VASTExprBuilder {
   void operator=(const VASTExprBuilder &RHS); // DO NOT IMPLEMENT
   VASTExprBuilder(const VASTExprBuilder &RHS); // DO NOT IMPLEMENT
@@ -51,7 +67,7 @@ public:
     : Context(Context) {}
 
   VASTValPtr getBoolImmediate(bool Val) {
-    return Context.getBoolImmediate(Val);
+    return Context.getOrCreateImmediate(Val, 1);
   }
 
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
