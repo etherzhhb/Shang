@@ -1026,7 +1026,7 @@ VASTValue::dp_dep_it VASTValue::dp_dep_end(VASTValue *V) {
 void VASTImmediate::printAsOperandImpl(raw_ostream &OS, unsigned UB,
                                        unsigned LB) const {
   assert(UB == getBitWidth() && LB == 0 && "Cannot print bitslice of Expr!");
-  OS << verilogConstToStr(getValue(), getBitWidth(), false);
+  OS << verilogConstToStr(getUnsignedValue(), getBitWidth(), false);
 }
 
 void VASTPort::print(raw_ostream &OS) const {
@@ -1171,7 +1171,7 @@ static void printBitCat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
 }
 
 static void printBitRepeat(raw_ostream &OS, ArrayRef<VASTUse> Ops) {
-  OS << '{' << cast<VASTImmediate>((Ops[1]).get())->getValue() << '{';
+  OS << '{' << cast<VASTImmediate>((Ops[1]).get())->getUnsignedValue() << '{';
   Ops[0].printAsOperand(OS);
   OS << "}}";
 }

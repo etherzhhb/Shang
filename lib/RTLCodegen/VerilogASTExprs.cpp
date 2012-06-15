@@ -52,7 +52,7 @@ VASTValPtr VASTModule::buildNotExpr(VASTValPtr U) {
   if (U.isInverted()) {
     // Try to fold the not expression.
     if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
-      return getOrCreateImmediate(~Imm->getValue(), Imm->getBitWidth());
+      return getOrCreateImmediate(~Imm->getUnsignedValue(), Imm->getBitWidth());
   }
 
   return U;
@@ -68,7 +68,7 @@ VASTValPtr VASTModule::foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB) {
   bool isInverted = U.isInverted();
 
   if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
-    uint64_t imm = getBitSlice64(Imm->getValue(), UB, LB);
+    uint64_t imm = getBitSlice64(Imm->getUnsignedValue(), UB, LB);
     if (isInverted) imm = ~imm;
     return getOrCreateImmediate(imm, UB - LB);
   }
@@ -119,7 +119,8 @@ VASTValPtr VASTModule::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
 
     if (LastImm) {
       // Merge the constants.
-      uint64_t HiVal = LastImm->getValue(), LoVal = CurImm->getValue();
+      uint64_t HiVal = LastImm->getUnsignedValue(),
+               LoVal = CurImm->getUnsignedValue();
       unsigned HiSizeInBits = LastImm->getBitWidth(),
                LoSizeInBits = CurImm->getBitWidth();
       unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
@@ -166,7 +167,7 @@ VASTValPtr VASTModule::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
   assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
 
   if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Op)) {
-    uint64_t Val = Imm->getValue();
+    uint64_t Val = Imm->getUnsignedValue();
     switch (Opc) {
     case VASTExpr::dpROr:
       // Only reduce to 0 if all bits are 0.

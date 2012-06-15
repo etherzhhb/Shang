@@ -405,16 +405,20 @@ class VASTImmediate : public VASTValue {
     printAsOperandImpl(OS, getBitWidth(), 0);
   }
 public:
-  uint64_t getValue() const {
+  uint64_t getUnsignedValue() const {
     return getBitSlice64(Contents.IntVal, getBitWidth());
   }
 
+  int64_t getSignedValue() const {
+    return SignExtend64(getUnsignedValue(), getBitWidth());
+  }
+
   bool isAllZeros() const {
-    return isAllZeros64(getValue(), getBitWidth());
+    return isAllZeros64(getUnsignedValue(), getBitWidth());
   }
 
   bool isAllOnes() const {
-    return isAllOnes64(getValue(), getBitWidth());
+    return isAllOnes64(getUnsignedValue(), getBitWidth());
   }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
