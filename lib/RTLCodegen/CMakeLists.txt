@@ -3,6 +3,7 @@ add_llvm_library(VTMRTLCodegen
   VASTExprBuilder.cpp
   VerilogASTBuilder.cpp
   VerilogASTWriter.cpp
+  ControlLogicBuilder.cpp
   CombPathDelayAnalysis.cpp
   RtlSSAAnalysis.cpp
 )

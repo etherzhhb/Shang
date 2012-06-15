@@ -403,3 +403,28 @@ VASTValPtr VASTExprBuilder::buildXorExpr(ArrayRef<VASTValPtr> Ops,
                    buildNotExpr(buildAndExpr(Ops, BitWidth)),
                    BitWidth);
 }
+
+VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
+                                     SmallVectorImpl<VASTValPtr> &Cnds,
+                                     VASTExprBuilder &Builder,
+                                     bool AddSlotActive) {
+  // We only assign the Src to Dst when the given slot is active.
+  if (AddSlotActive) Cnds.push_back(Slot->getActive()->getAsInlineOperand(false));
+  VASTValPtr AssignAtSlot = Builder.buildExpr(VASTExpr::dpAnd, Cnds, 1);
+  VASTWire *Wire = Allocator.Allocate<VASTWire>();
+  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
+  assign(Wire, AssignAtSlot, VASTWire::AssignCond)->setSlot(Slot->SlotNum);
+  // Recover the condition vector.
+  if (AddSlotActive) Cnds.pop_back();
+
+  return Wire;
+}
+
+void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
+                               SmallVectorImpl<VASTValPtr> &Cnds,
+                               VASTExprBuilder &Builder, bool AddSlotActive) {
+  if (Src) {
+    VASTWire *Cnd = buildAssignCnd(Slot, Cnds, Builder, AddSlotActive);
+    Dst->addAssignment(new (Allocator.Allocate<VASTUse>()) VASTUse(Src, 0), Cnd);
+  }
+}

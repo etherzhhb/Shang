@@ -44,6 +44,7 @@ class VASTWire;
 class VASTExpr;
 class VASTRegister;
 class VASTUse;
+class VASTExprBuilder;
 
 class VASTNode {
 public:
@@ -215,6 +216,11 @@ public:
   void replaceUseBy(VASTValPtr RHS) {
     assert(V && V != RHS && "Cannot replace!");
     V = RHS;
+  }
+
+  VASTUse &operator=(VASTValPtr NewV) {
+    if (V) replaceUseBy(NewV);
+    else   set(NewV);
   }
 
   // Set the user of this use and insert this use to use list.
@@ -862,11 +868,6 @@ private:
   const_succ_cnd_iterator succ_cnd_begin() const { return NextSlots.begin(); }
   const_succ_cnd_iterator succ_cnd_end() const { return NextSlots.end(); }
 
-  void addEnable(VASTRegister *R, VASTValPtr Cnd, VASTModule *VM);
-  void addReady(VASTValue *V, VASTValPtr Cnd, VASTModule *VM);
-  void addDisable(VASTRegister *R, VASTValPtr Cnd, VASTModule *VM);
-  void addSuccSlot(VASTSlot *NextSlot, VASTValPtr Cnd, VASTModule *VM);
-
   friend class VASTModule;
 public:
   const uint16_t SlotNum;
@@ -875,14 +876,10 @@ public:
 
   MachineBasicBlock *getParentBB() const { return Contents.ParentBB; }
 
-  void buildCtrlLogic(VASTModule &Mod);
+  void buildCtrlLogic(VASTModule &Mod, VASTExprBuilder &Builder);
   // Print the logic of ready signal of this slot, need alias slot information.
-  void buildReadyLogic(VASTModule &Mod);
-  /// @briefPrint the ready expression of this slot.
-  ///
-  /// @param OS       The output stream.
-  /// @param SrcSlot  Which Slot are the expression printing for?
-  VASTValPtr buildFUReadyExpr(VASTModule &VM);
+  void buildReadyLogic(VASTModule &Mod, VASTExprBuilder &Builder);
+  VASTValPtr buildFUReadyExpr(VASTExprBuilder &Builder);
 
   void print(raw_ostream &OS) const;
 
@@ -892,7 +889,7 @@ public:
   VASTValue *getReady() const { return cast<VASTValue>(SlotReady); }
   VASTValue *getActive() const { return cast<VASTValue>(SlotActive); }
 
-  // TODO: Rename to addSuccSlot.
+  void addSuccSlot(VASTSlot *NextSlot, VASTValPtr Cnd, VASTModule *VM);
   bool hasNextSlot(VASTSlot *NextSlot) const;
   // Dose this slot jump to some other slot conditionally instead just fall
   // through to SlotNum + 1 slot?
@@ -922,6 +919,12 @@ public:
   // Predecessor slots of this slot.
   pred_it pred_begin() { return PredSlots.begin(); }
   pred_it pred_end() { return PredSlots.end(); }
+
+
+  VASTUse &allocateEnable(VASTRegister *R, VASTModule *VM);
+  VASTUse &allocateReady(VASTValue *V, VASTModule *VM);
+  VASTUse &allocateDisable(VASTRegister *R, VASTModule *VM);
+  VASTUse &allocateSuccSlot(VASTSlot *S, VASTModule *VM);
 
   // Signals need to be enabled at this slot.
   bool isEnabled(VASTRegister *R) const { return Enables.count(R); }
@@ -1147,7 +1150,7 @@ public:
   void printRegisterAssign(vlang_raw_ostream &OS) const;
 
   // Print the slot control flow.
-  void buildSlotLogic();
+  void buildSlotLogic(VASTExprBuilder &Builder);
   void writeProfileCounters(VASTSlot *S, bool isFirstSlot);
 
   VASTValue *getSymbol(const std::string &Name) const {
@@ -1229,10 +1232,6 @@ public:
   }
 
   VASTUse *allocateUse() { return Allocator.Allocate<VASTUse>(); }
-  void addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd);
-  void addSlotReady(VASTSlot *S, VASTValue *V, VASTValPtr Cnd);
-  void addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd);
-  void addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValPtr V);
   // Allow user to add ports.
   VASTPort *addInputPort(const std::string &Name, unsigned BitWidth,
                          PortTypes T = Others);
@@ -1348,9 +1347,9 @@ public:
 
   void addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
                      SmallVectorImpl<VASTValPtr> &Cnds,
-                     bool AddSlotActive = true);
+                     VASTExprBuilder &Builder, bool AddSlotActive = true);
   VASTWire *buildAssignCnd(VASTSlot *Slot, SmallVectorImpl<VASTValPtr> &Cnds,
-                           bool AddSlotActive = true);
+                           VASTExprBuilder &Builder, bool AddSlotActive = true);
 
   VASTWire *assign(VASTWire *W, VASTValPtr V,
                    VASTWire::Type T = VASTWire::Common);

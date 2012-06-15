@@ -43,12 +43,6 @@ ExprInlineThreshold("vtm-expr-inline-thredhold",
                     cl::init(8));
 
 static cl::opt<bool>
-EnableBBProfile("vtm-enable-bb-profile",
-                cl::desc("Generate counters to profile the design"),
-                cl::init(false));
-
-
-static cl::opt<bool>
 InstSubModForFU("vtm-instantiate-submod-for-fu",
                 cl::desc("Instantiate submodule for each functional unit"),
                 cl::init(true));
@@ -142,246 +136,43 @@ VASTSlot::VASTSlot(unsigned slotNum, MachineBasicBlock *BB, VASTModule *VM)
 
 void VASTSlot::addSuccSlot(VASTSlot *NextSlot, VASTValPtr Cnd, VASTModule *VM) {
   VASTUse *&U = NextSlots[NextSlot];
-  if (U == 0) {
-    NextSlot->PredSlots.push_back(this);
-    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
-  } else
-    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
+  assert(U == 0 && "Succ Slot already existed!");
+  NextSlot->PredSlots.push_back(this);
+  U = new (VM->allocateUse()) VASTUse(Cnd, 0);
 }
 
-void VASTSlot::addEnable(VASTRegister *R, VASTValPtr Cnd, VASTModule *VM) {
+VASTUse &VASTSlot::allocateEnable(VASTRegister *R, VASTModule *VM) {
   VASTUse *&U = Enables[R];
-  if (U == 0)
-    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
-  else
-    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
+  if (U == 0) U = new (VM->allocateUse()) VASTUse(0, 0);
+
+  return *U;
 }
 
-void VASTSlot::addReady(VASTValue *V, VASTValPtr Cnd, VASTModule *VM) {
+VASTUse &VASTSlot::allocateReady(VASTValue *V, VASTModule *VM) {
   VASTUse *&U = Readys[V];
-  if (U == 0)
-    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
-  else
-    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
+  if (U == 0) U = new (VM->allocateUse()) VASTUse(0, 0);
+
+  return *U;
 }
 
-void VASTSlot::addDisable(VASTRegister *R, VASTValPtr Cnd, VASTModule *VM) {
+VASTUse &VASTSlot::allocateDisable(VASTRegister *R, VASTModule *VM) {
   VASTUse *&U = Disables[R];
-  if (U == 0)
-    U = new (VM->allocateUse()) VASTUse(Cnd, 0);
-  else
-    U->replaceUseBy(VM->buildOrExpr(Cnd, U->unwrap(), 1));
+  if (U == 0) U = new (VM->allocateUse()) VASTUse(0, 0);
+
+  return *U;
 }
 
-VASTValPtr VASTSlot::buildFUReadyExpr(VASTModule &VM) {
-  SmallVector<VASTValPtr, 4> Ops;
+VASTUse &VASTSlot::allocateSuccSlot(VASTSlot *NextSlot, VASTModule *VM) {
+  VASTUse *&U = NextSlots[NextSlot];
+  if (U == 0) U = new (VM->allocateUse()) VASTUse(0, 0);
 
-  for (VASTSlot::const_fu_rdy_it I = ready_begin(), E = ready_end();I != E; ++I)
-    // Print the code for ready signal.
-    // If the condition is true then the signal must be 1 to ready.
-    Ops.push_back(VM.buildOrExpr(I->first,
-                                 VM.buildNotExpr(I->second->getAsInlineOperand()),
-                                 1));
-  
-  // No waiting signal means always ready.
-  if (Ops.empty()) Ops.push_back(VM.getBoolImmediate(true));
-  
-  return VM.buildExpr(VASTExpr::dpAnd, Ops, 1);
-}
-
-void VASTSlot::buildReadyLogic(VASTModule &Mod) {
-  SmallVector<VASTValPtr, 4> Ops;
-  // FU ready for current slot.
-  Ops.push_back(buildFUReadyExpr(Mod));
-
-  if (hasAliasSlot()) {
-    for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
-         s < e; s += ii) {
-      if (s == SlotNum) continue;
-
-      VASTSlot *AliasSlot = Mod.getSlot(s);
-
-      if (!AliasSlot->readyEmpty()) {
-        // FU ready for alias slot, when alias slot register is 1, its waiting
-        // signal must be 1.
-        Ops.push_back(Mod.buildOrExpr(Mod.buildNotExpr(AliasSlot->
-                                                       getRegister()),
-                                      AliasSlot->buildFUReadyExpr(Mod), 1));
-      }
-    }
-  }
-
-  // All signals should be 1 before the slot is ready.
-  VASTValPtr ReadyExpr = Mod.buildExpr(VASTExpr::dpAnd, Ops, 1);
-  Mod.assign(cast<VASTWire>(getReady()), ReadyExpr);
-  // The slot is actived when the slot is enable and all waiting signal is ready
-  Mod.assign(cast<VASTWire>(getActive()),
-             Mod.buildExpr(VASTExpr::dpAnd, SlotReg, ReadyExpr, 1));
+  return *U;
 }
 
 bool VASTSlot::hasNextSlot(VASTSlot *NextSlot) const {
   if (NextSlots.empty()) return NextSlot->SlotNum == SlotNum + 1;
 
   return NextSlots.count(NextSlot);
-}
-
-void VASTSlot::buildCtrlLogic(VASTModule &Mod) {
-  vlang_raw_ostream &CtrlS = Mod.getControlBlockBuffer();
-  // TODO: Build the AST for these logic.
-  CtrlS.if_begin(getName());
-  bool ReadyPresented = !readyEmpty();
-
-  // DirtyHack: Remember the enabled signals in alias slots, the signal may be
-  // assigned at a alias slot.
-  std::set<const VASTValue *> AliasEnables;
-  // A slot may be enable by its alias slot if II of a pipelined loop is 1.
-  VASTValPtr PredAliasSlots = 0;
-
-  if (hasAliasSlot()) {
-    CtrlS << "// Alias slots: ";
-
-    for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
-         s < e; s += ii) {
-      CtrlS << s << ", ";
-      if (s == SlotNum) continue;
-
-      const VASTSlot *AliasSlot = Mod.getSlot(s);
-      if (AliasSlot->hasNextSlot(this)) {
-        assert(!PredAliasSlots
-               && "More than one PredAliasSlots found!");
-        PredAliasSlots = AliasSlot->getActive();
-      }
-
-      for (VASTSlot::const_fu_ctrl_it I = AliasSlot->enable_begin(),
-           E = AliasSlot->enable_end(); I != E; ++I) {
-        bool inserted = AliasEnables.insert(I->first).second;
-        assert(inserted && "The same signal is enabled twice!");
-        (void) inserted;
-      }
-
-      ReadyPresented  |= !AliasSlot->readyEmpty();
-    }
-
-    CtrlS << '\n';
-  } // SS flushes automatically here.
-
-  DEBUG_WITH_TYPE("vtm-codegen-self-verify",
-  if (SlotNum != 0)
-    CtrlS << "$display(\"" << getName() << " in " << Mod.getName() << " BB#"
-          << getParentBB()->getNumber() << ' '
-          << getParentBB()->getBasicBlock()->getName()
-          << " ready at %d\", $time());\n";
-  );
-
-  bool hasSelfLoop = false;
-  SmallVector<VASTValPtr, 2> EmptySlotEnCnd;
-
-  if (hasExplicitNextSlots()) {
-    CtrlS << "// Enable the successor slots.\n";
-    for (VASTSlot::const_succ_cnd_iterator I = succ_cnd_begin(),E = succ_cnd_end();
-         I != E; ++I) {
-      hasSelfLoop |= I->first->SlotNum == SlotNum;
-      VASTRegister *NextSlotReg = I->first->getRegister();
-      Mod.addAssignment(NextSlotReg, *I->second, this, EmptySlotEnCnd);
-    }
-  } else {
-    // Enable the default successor slots.
-    VASTSlot *NextSlot = Mod.getSlot(SlotNum + 1);
-    VASTRegister *NextSlotReg = NextSlot->getRegister();
-    Mod.addAssignment(NextSlotReg, Mod.getBoolImmediate(true), this,
-                      EmptySlotEnCnd);
-    // And connect the fall through edge now.
-    Mod.addSlotSucc(this, NextSlot, Mod.getBoolImmediate(true));
-  }
-
-  assert(!(hasSelfLoop && PredAliasSlots)
-         && "Unexpected have self loop and pred alias slot at the same time.");
-  // Do not assign a value to the current slot enable twice.
-  if (!hasSelfLoop) {
-    // Only disable the current slot if there is no alias slot enable current
-    // slot.
-    if (PredAliasSlots)
-      EmptySlotEnCnd.push_back(Mod.buildNotExpr(PredAliasSlots));
-
-    // Disable the current slot.
-    Mod.addAssignment(getRegister(), Mod.getBoolImmediate(false), this,
-                      EmptySlotEnCnd);
-  }
-
-  if (!ReadyPresented) {
-    DEBUG_WITH_TYPE("vtm-codegen-self-verify",
-    if (SlotNum != 0) {
-      CtrlS << "if (start) begin $display(\"" << getName() << " in "
-            << Mod.getName()
-            << " bad start %b\\n\", start);  $finish(); end\n";
-
-      CtrlS << "if (Slot0r) begin $display(\"" << getName() << " in "
-            << Mod.getName()
-            << " bad Slot0 %b\\n\", Slot0r);  $finish(); end\n";
-    }
-
-    CtrlS << "if (mem0en_r) begin $display(\"" << getName() << " in "
-          << Mod.getName()
-          << " bad mem0en_r %b\\n\", mem0en_r);  $finish(); end\n";
-    );
-  }
-
-  std::string SlotReady = std::string(getName()) + "Ready";
-  CtrlS << "// Enable the active FUs.\n";
-  for (VASTSlot::const_fu_ctrl_it I = enable_begin(), E = enable_end();
-       I != E; ++I) {
-
-    assert(!AliasEnables.count(I->first) && "Signal enabled by alias slot!");
-    // No need to wait for the slot ready.
-    // We may try to enable and disable the same port at the same slot.
-    EmptySlotEnCnd.clear();
-    EmptySlotEnCnd.push_back(getRegister());
-    Mod.addAssignment(cast<VASTRegister>(I->first),
-                      Mod.buildExpr(VASTExpr::dpAnd,
-                                    getReady()->getAsInlineOperand(false),
-                                    I->second->getAsInlineOperand(), 1),
-                      this, EmptySlotEnCnd, false);
-  }
-
-  SmallVector<VASTValPtr, 4> DisableAndCnds;
-  if (!disableEmpty()) {
-    CtrlS << "// Disable the resources when the condition is true.\n";
-    for (VASTSlot::const_fu_ctrl_it I = disable_begin(), E = disable_end();
-         I != E; ++I) {
-      // Look at the current enable set and alias enables set;
-      // The port assigned at the current slot, and it will be disabled if
-      // The slot is not ready or the enable condition is false. And it is
-      // ok that the port is enabled.
-      if (isEnabled(I->first)) continue;
-
-      DisableAndCnds.push_back(getRegister());
-      // If the port enabled in alias slots, disable it only if others slots is
-      // not active.
-      bool AliasEnabled = AliasEnables.count(I->first);
-      if (AliasEnabled) {
-        for (unsigned s = alias_start(), e = alias_end(), ii = alias_ii();
-             s < e; s += ii) {
-          if (s == SlotNum) continue;
-
-          VASTSlot *ASlot = Mod.getSlot(s);
-          assert(!ASlot->isDiabled(I->first)
-                 && "Same signal disabled in alias slot!");
-          if (ASlot->isEnabled(I->first)) {
-            DisableAndCnds.push_back(Mod.buildNotExpr(ASlot->getRegister()));
-            continue;
-          }
-        }
-      }
-
-      DisableAndCnds.push_back(*I->second);
-
-      VASTRegister *En = cast<VASTRegister>(I->first);
-      Mod.addAssignment(En, Mod.getBoolImmediate(false), this,
-                        DisableAndCnds, false);
-      DisableAndCnds.clear();
-    }
-  }
-  CtrlS.exit_block("\n\n");
 }
 
 const char *VASTSlot::getName() const { return getRegister()->getName(); }
@@ -671,22 +462,6 @@ void VASTModule::printRegisterAssign(vlang_raw_ostream &OS) const {
     (*I)->printAssignment(OS, this);
 }
 
-void VASTModule::addSlotEnable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd) {
-  S->addEnable(R, Cnd, this);
-}
-
-void VASTModule::addSlotDisable(VASTSlot *S, VASTRegister *R, VASTValPtr Cnd) {
-  S->addDisable(R, Cnd, this);
-}
-
-void VASTModule::addSlotReady(VASTSlot *S, VASTValue *V, VASTValPtr Cnd) {
-  S->addReady(V, Cnd, this);
-}
-
-void VASTModule::addSlotSucc(VASTSlot *S, VASTSlot *SuccS, VASTValPtr V) {
-  S->addSuccSlot(SuccS, V, this);
-}
-
 VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
                                   ArrayRef<VASTValPtr> Ops,
                                   unsigned UB, unsigned LB) {
@@ -746,23 +521,6 @@ VASTValPtr VASTModule::nameExpr(VASTValPtr V) {
   return assign(addWire(Name, V->getBitWidth()), V);
 }
 
-void VASTModule::buildSlotLogic() {
-  bool IsFirstSlotInBB = false;
-  for (SlotVecTy::const_iterator I = Slots.begin(), E = Slots.end();I != E;++I){
-    if (VASTSlot *S = *I) {
-      S->buildCtrlLogic(*this);
-
-      // Create a profile counter for each BB.
-      if (EnableBBProfile) writeProfileCounters(S, IsFirstSlotInBB);
-      IsFirstSlotInBB = false;
-      continue;
-    }
-
-    // We meet an end slot, The next slot is the first slot in new BB
-    IsFirstSlotInBB = true;
-  }
-}
-
 void VASTModule::printModuleDecl(raw_ostream &OS) const {
   OS << "module " << getName() << "(\n";
   Ports.front()->print(OS.indent(4));
@@ -800,31 +558,6 @@ void VASTModule::printRegisterReset(raw_ostream &OS) {
   for (RegisterVector::const_iterator I = Registers.begin(), E = Registers.end();
        I != E; ++I) {
     if ((*I)->printReset(OS)) OS << "\n";
-  }
-}
-
-VASTWire *VASTModule::buildAssignCnd(VASTSlot *Slot,
-                                     SmallVectorImpl<VASTValPtr> &Cnds,
-                                     bool AddSlotActive) {
-  // We only assign the Src to Dst when the given slot is active.
-  if (AddSlotActive) Cnds.push_back(Slot->getActive()->getAsInlineOperand(false));
-  VASTValPtr AssignAtSlot = buildExpr(VASTExpr::dpAnd, Cnds, 1);
-  VASTWire *Wire = Allocator.Allocate<VASTWire>();
-  new (Wire) VASTWire(0, AssignAtSlot->getBitWidth(), "");
-  assign(Wire, AssignAtSlot, VASTWire::AssignCond);
-  Wire->setSlot(Slot->SlotNum);
-  // Recover the condition vector.
-  if (AddSlotActive) Cnds.pop_back();
-
-  return Wire;
-}
-
-void VASTModule::addAssignment(VASTRegister *Dst, VASTValPtr Src, VASTSlot *Slot,
-                               SmallVectorImpl<VASTValPtr> &Cnds,
-                               bool AddSlotActive) {
-  if (Src) {
-    VASTWire *Cnd = buildAssignCnd(Slot, Cnds, AddSlotActive);
-    Dst->addAssignment(new (Allocator.Allocate<VASTUse>()) VASTUse(Src, 0), Cnd);
   }
 }
 
