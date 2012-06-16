@@ -127,17 +127,18 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
 
 VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                             unsigned BitWidth) {
-  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0]);
-  SmallVector<VASTValPtr, 8> NewOps;
-  NewOps.push_back(Ops[0]);
+  SmallVector<VASTValPtr, 8> NewOps(Ops.begin(), Ops.end());
+
+  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
+  unsigned ActualOpPos = 1;
 
   // Merge the constant sequence.
-  for (unsigned i = 1; i < Ops.size(); ++i) {
-    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i]);
+  for (unsigned i = 1, e = NewOps.size(); i < e; ++i) {
+    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(NewOps[i]);
 
     if (!CurImm) {
       LastImm = 0;
-      NewOps.push_back(Ops[i]);
+      NewOps[ActualOpPos++] = NewOps[i]; //push_back.
       continue;
     }
 
@@ -151,13 +152,14 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
       assert(SizeInBits <= 64 && "Constant too large!");
       uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
       LastImm = Context.getOrCreateImmediate(Val, SizeInBits);
-      NewOps.back() = LastImm;
+      NewOps[ActualOpPos - 1] = LastImm; // Modify back.
     } else {
       LastImm = CurImm;
-      NewOps.push_back(Ops[i]);
+      NewOps[ActualOpPos++] = NewOps[i]; //push_back.
     }
   }
 
+  NewOps.resize(ActualOpPos);
   if (NewOps.size() == 1) return NewOps.back();
 
   // FIXME: Flatten bitcat.
