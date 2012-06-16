@@ -72,6 +72,23 @@ class VASTExprBuilder {
   void flattenExpr(VASTValPtr V, visitor F);
   template<VASTExpr::Opcode Opcode, typename iterator, typename visitor>
   void flattenExpr(iterator begin, iterator end, visitor F);
+
+  VASTValPtr trimZeros(VASTValPtr V, unsigned &Offset);
+  VASTValPtr trimLeadingZeros(VASTValPtr V) {
+    unsigned Offset = 0;
+    VASTValPtr TrimedVal = trimZeros(V, Offset);
+    if (Offset == 0) return TrimedVal;
+
+    return V;
+  }
+
+  static bool isAllZeros(VASTValPtr V) {
+    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V))
+      return Imm->isAllZeros();
+
+    return false;
+  }
+
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
