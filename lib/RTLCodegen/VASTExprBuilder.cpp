@@ -19,6 +19,9 @@
 #include "VASTExprBuilder.h"
 #include "vtm/Utilities.h"
 
+#define DEBUG_TYPE "vtm-vast-expr-builder"
+#include "llvm/Support/Debug.h"
+
 using namespace llvm;
 
 // Inline all operands in the expression whose Opcode is the same as Opc
@@ -105,21 +108,53 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
     unsigned Offset = Expr->LB;
     UB += Offset;
     LB += Offset;
-    return buildBitSliceExpr(Expr->getOperand(0), UB, LB).invert(isInverted);
+    VASTValPtr Ptr = buildBitSliceExpr(Expr->getOperand(0), UB, LB);
+    if (isInverted) Ptr = buildNotExpr(Ptr);
+    return Ptr;
   }
 
   if (Expr->getOpcode() == VASTExpr::dpBitCat) {
-    VASTValPtr Hi = Expr->getOperand(0),
-               Lo = Expr->getOperand(1);
-    unsigned SplitBit = Lo->getBitWidth();
-    if (UB <= SplitBit)
-      return buildBitSliceExpr(Lo, UB, LB).invert(isInverted);
-    if (LB >= SplitBit)
-      return buildBitSliceExpr(Hi, UB - SplitBit, LB - SplitBit).invert(isInverted);
+    // Collect the bitslices which fall into (UB, LB]
+    SmallVector<VASTValPtr, 8> Ops;
+    unsigned CurUB = Expr->getBitWidth(), CurLB = 0;
+    unsigned LeadingBitsToLeft = 0, TailingBitsToTrim = 0;
+    for (unsigned i = 0; i < Expr->NumOps; ++i) {
+      VASTValPtr CurBitSlice = Expr->getOperand(i);
+      CurLB = CurUB - CurBitSlice->getBitWidth();
+      // Not fall into (UB, LB] yet.
+      if (CurLB >= UB) {
+        CurUB = CurLB;
+        continue;
+      }
+      // The entire range is visited.
+      if (CurUB <= LB) break;
+      // Now we have CurLB < UB and CurUB > LB.
+      // Compute LeadingBitsToLeft if UB fall into [CurUB, CurLB), which imply
+      // CurUB >= UB >= CurLB.
+      if (CurUB >= UB) LeadingBitsToLeft = UB - CurLB;
+      // Compute TailingBitsToTrim if LB fall into (CurUB, CurLB], which imply
+      // CurUB >= LB >= CurLB.
+      if (LB >= CurLB) TailingBitsToTrim = LB - CurLB;
 
-    VASTValPtr Ops[] = { buildBitSliceExpr(Hi, UB - SplitBit, 0),
-                         buildBitSliceExpr(Lo, SplitBit, LB) };
-    return buildBitCatExpr(Ops, UB - LB).invert(isInverted);
+      Ops.push_back(CurBitSlice);
+      CurUB = CurLB;
+    }
+
+    // Trival case: Only 1 bitslice in range.
+    if (Ops.size() == 1) {
+      VASTValPtr Ptr = buildBitSliceExpr(Ops.back(), LeadingBitsToLeft,
+                                         TailingBitsToTrim);
+      if (isInverted) Ptr = buildNotExpr(Ptr);
+      return Ptr;
+    }
+
+    Ops.front() = buildBitSliceExpr(Ops.front(), LeadingBitsToLeft, 0);
+    Ops.back() = buildBitSliceExpr(Ops.back(), Ops.back()->getBitWidth(),
+                                   TailingBitsToTrim);
+
+    VASTValPtr Ptr = buildBitCatExpr(Ops, UB - LB);
+    if (isInverted) Ptr = buildNotExpr(Ptr);
+    return Ptr;
   }
 
   return VASTValPtr(0);
@@ -127,7 +162,9 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
 
 VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                             unsigned BitWidth) {
-  SmallVector<VASTValPtr, 8> NewOps(Ops.begin(), Ops.end());
+  SmallVector<VASTValPtr, 8> NewOps;
+  flattenExpr<VASTExpr::dpBitCat>(Ops.begin(), Ops.end(),
+                                  std::back_inserter(NewOps));
 
   VASTImmediate *LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
   unsigned ActualOpPos = 1;
@@ -162,7 +199,18 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
   NewOps.resize(ActualOpPos);
   if (NewOps.size() == 1) return NewOps.back();
 
-  // FIXME: Flatten bitcat.
+#ifndef NDEBUG
+  unsigned TotalBits = 0;
+  for (unsigned i = 0, e = NewOps.size(); i < e; ++i)
+    TotalBits += NewOps[i]->getBitWidth();
+  if (TotalBits != BitWidth) {
+    dbgs() << "Bad bitcat operands: \n";
+    for (unsigned i = 0, e = NewOps.size(); i < e; ++i)
+      NewOps[i]->dump();
+    llvm_unreachable("Bitwidth not match!");
+  }
+#endif
+
   return Context.createExpr(VASTExpr::dpBitCat, NewOps, BitWidth, 0);
 }
 
