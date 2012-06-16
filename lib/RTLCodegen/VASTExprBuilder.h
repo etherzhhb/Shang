@@ -67,6 +67,11 @@ class VASTExprBuilder {
   VASTExprBuilderContext &Context;
 
   VASTValPtr foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
+
+  template<VASTExpr::Opcode Opcode, typename visitor>
+  void flattenExpr(VASTValPtr V, visitor F);
+  template<VASTExpr::Opcode Opcode, typename iterator, typename visitor>
+  void flattenExpr(iterator begin, iterator end, visitor F);
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}

@@ -23,27 +23,25 @@ using namespace llvm;
 
 // Inline all operands in the expression whose Opcode is the same as Opc
 // recursively;
-static void flattenExpr(VASTValPtr V, VASTExpr::Opcode Opc,
-                        SmallVectorImpl<VASTValPtr> &NewOps) {
+template<VASTExpr::Opcode Opcode, typename visitor>
+void VASTExprBuilder::flattenExpr(VASTValPtr V, visitor F) {
   if (VASTExpr *Expr = dyn_cast<VASTExpr>(V)) {
     typedef const VASTUse *op_iterator;
-    if (Expr->getOpcode() == Opc) {
+    if (Expr->getOpcode() == Opcode && shouldExprBeFlatten(Expr)) {
       for (op_iterator I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
-        flattenExpr(I->getAsInlineOperand(), Opc, NewOps);
+        flattenExpr<Opcode>(I->getAsInlineOperand(), F);
 
       return;
     }
   }
 
-  NewOps.push_back(V);
+  F++ = V;
 }
 
-
-static void flattenExprTree(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
-                            SmallVectorImpl<VASTValPtr> &NewOps) {
-  for (unsigned i = 0, e = Ops.size(); i < e; ++i)
-    // Try to flatten the expression tree.
-    flattenExpr(Ops[i], Opc, NewOps);
+template<VASTExpr::Opcode Opcode, typename iterator, typename visitor>
+void VASTExprBuilder::flattenExpr(iterator begin, iterator end, visitor F) {
+  while (begin != end)
+    flattenExpr<Opcode>(*begin++, F);
 }
 
 VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
@@ -264,7 +262,7 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
     }
 
     // Try to flatten the expression tree.
-    flattenExpr(Ops[i], VASTExpr::dpAnd, NewOps);
+    flattenExpr<VASTExpr::dpAnd>(Ops[i], std::back_inserter(NewOps));
   }
 
   if (NewOps.empty())
@@ -326,7 +324,8 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
 VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
-  flattenExprTree(VASTExpr::dpMul, Ops, NewOps);
+  flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
+                               std::back_inserter(NewOps));
 
   return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
