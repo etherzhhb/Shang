@@ -432,10 +432,26 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
     NewOps.push_back(V);
   }
 
-
   // Add the immediate value back to the operand list.
   if (ImmVal)
     NewOps.push_back(Context.getOrCreateImmediate(ImmVal, MaxImmWidth));
+
+  // If the addition contains only 2 operand, check if we can inline a operand
+  // of this addition to make use of the carry bit.
+  if (NewOps.size() == 2 && !Carry) {
+    unsigned ExprIdx = 0;
+    VASTExpr *Expr = Context.getAddExprToFlatten(NewOps[ExprIdx]);
+    if (Expr == 0) Expr = Context.getAddExprToFlatten(NewOps[++ExprIdx]);
+
+    // If we can find such expression, flatten the expression tree.
+    if (Expr) {
+      // Replace the expression by the no-carry operand
+      NewOps[ExprIdx] = Expr->getOperand(0);
+      // And add the carry from the expression.
+      Carry = Expr->getOperand(1);
+      assert(Carry->getBitWidth() == 1 && "Carry is not 1 bit!");
+    }
+  }
 
   // Sort the operands excluding carry bit, we want to place the carry bit at
   // last.

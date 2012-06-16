@@ -58,6 +58,23 @@ public:
     return V;
   }
 
+  // If V is an addition which can be flatten the addition that using its result
+  // return the expression, or return null otherwise.
+  virtual VASTExpr *getAddExprToFlatten(VASTValPtr V) {
+    V = stripName(stripZeroBasedBitSlize(V));
+
+    VASTExpr *Expr = dyn_cast<VASTExpr>(V);
+    if (!Expr || Expr->getOpcode() != VASTExpr::dpAdd) return 0;
+
+    // We only flatten the expression to make full use of the carry bit.
+    // So check if there is only 2 operand and the second operand can be fitted
+    // into the carry bit.
+    if (Expr->NumOps != 2 || Expr->getOperand(1)->getBitWidth() != 1)
+      return 0;
+
+    return Expr;
+  }
+
   virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     return 0;
   }
