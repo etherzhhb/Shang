@@ -361,18 +361,24 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   unsigned MaxImmWidth = 0;
   VASTValPtr Carry = 0;
   for (unsigned i = 0; i < Ops.size(); ++i) {
+    VASTValPtr V = Ops[i];
     // X + 0 = 0;
-    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i])) {
+    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
       ImmVal += Imm->getUnsignedValue();
       MaxImmWidth = std::max(MaxImmWidth, Imm->getBitWidth());
       continue;
-    } else if (Ops[i]->getBitWidth() == 1) {
+    }
+
+    // Discard the leading zeros of the operand of addition;
+    V = trimLeadingZeros(V);
+
+    if (V->getBitWidth() == 1) {
       assert(!Carry && "unexpected multiple carry bit!");
-      Carry = Ops[i];
+      Carry = V;
       continue;
     }
 
-    NewOps.push_back(Ops[i]);
+    NewOps.push_back(V);
   }
 
   // Add the carry bit back to the operand list.
