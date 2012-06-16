@@ -221,6 +221,7 @@ public:
   VASTUse &operator=(VASTValPtr NewV) {
     if (V) replaceUseBy(NewV);
     else   set(NewV);
+    return *this;
   }
 
   // Set the user of this use and insert this use to use list.
