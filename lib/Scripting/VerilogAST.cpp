@@ -164,7 +164,10 @@ VASTUse &VASTSlot::allocateDisable(VASTRegister *R, VASTModule *VM) {
 
 VASTUse &VASTSlot::allocateSuccSlot(VASTSlot *NextSlot, VASTModule *VM) {
   VASTUse *&U = NextSlots[NextSlot];
-  if (U == 0) U = new (VM->allocateUse()) VASTUse(0, 0);
+  if (U == 0) {
+    U = new (VM->allocateUse()) VASTUse(0, 0);
+    NextSlot->PredSlots.push_back(this);
+  }
 
   return *U;
 }
