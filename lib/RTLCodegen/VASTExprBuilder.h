@@ -50,6 +50,14 @@ public:
     return E->isInlinable();
   }
 
+  VASTValPtr stripZeroBasedBitSlize(VASTValPtr V) {
+    VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
+    if (Expr.get() && Expr->isSubBitSlice() && Expr->LB == 0)
+      return Expr.getOperand(0);
+
+    return V;
+  }
+
   virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     return 0;
   }
