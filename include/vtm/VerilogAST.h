@@ -115,6 +115,9 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool> {
 
   T *operator->() const { return this->get(); }
 
+  inline PtrInvPair<VASTValue> getOperand(unsigned i) const;
+  inline PtrInvPair<VASTExpr> getExpr() const;
+
   // PtrInvPairs are equal when their Opaque Value are equal, which contain the
   // pointer and Int information.
   template<typename T1>
@@ -188,8 +191,6 @@ struct isa_impl<To, PtrInvPair<From> > {
 };
 
 typedef PtrInvPair<VASTValue> VASTValPtr;
-typedef PtrInvPair<VASTExpr> VASTExprPtr;
-typedef PtrInvPair<VASTWire> VASTWirePtr;
 
 class VASTUse : public ilist_node<VASTUse> {
   VASTValPtr V;
@@ -673,6 +674,11 @@ public:
     return A->getASTType() == vastExpr;
   }
 };
+typedef PtrInvPair<VASTExpr> VASTExprPtr;
+template<>
+inline VASTValPtr PtrInvPair<VASTExpr>::getOperand(unsigned i) const {
+  return get()->getOperand(i).get().invert(isInverted());
+}
 
 // Specialize FoldingSetTrait for VASTWire to avoid needing to compute
 // temporary FoldingSetNodeID values.
@@ -793,6 +799,13 @@ public:
     return (U.isInvalid() || getWireType() == InputPort) ? 0 : &U + 1;
   }
 };
+
+typedef PtrInvPair<VASTWire> VASTWirePtr;
+
+template<>
+inline VASTExprPtr PtrInvPair<VASTWire>::getExpr() const {
+  return get()->getExpr().invert(isInverted());
+}
 
 struct VASTWireExpressionTrait : public DenseMapInfo<VASTWire*> {
   static unsigned getHashValue(const VASTWire *Val) {
