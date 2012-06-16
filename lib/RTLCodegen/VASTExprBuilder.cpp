@@ -48,6 +48,20 @@ void VASTExprBuilder::flattenExpr(iterator begin, iterator end, visitor F) {
 }
 
 VASTValPtr VASTExprBuilder::trimZeros(VASTValPtr V, unsigned &Offset) {
+  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
+    uint64_t Val = Imm->getSignedValue();
+    if (isAllZeros64(Val, Imm->getBitWidth())) return V;
+    
+    unsigned TrailingZeros = CountTrailingZeros_64(Val);
+    unsigned LeadingZeros = CountLeadingZeros_64(Val);
+    Val = getBitSlice64(Val, 64 - LeadingZeros, TrailingZeros);
+    if (LeadingZeros) LeadingZeros -= 64 - Imm->getBitWidth();    
+    unsigned NewBitWidth = Imm->getBitWidth() - LeadingZeros - TrailingZeros;
+    assert(NewBitWidth <= Imm->getBitWidth() && "Bad bitwidth!");
+    Offset = TrailingZeros;
+    return getOrCreateImmediate(Val, NewBitWidth);
+  }
+  
   VASTExpr *Expr = dyn_cast<VASTExpr>(V);
   if (!Expr || Expr->getOpcode() != VASTExpr::dpBitCat) return V;
 
@@ -412,15 +426,15 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   VASTValPtr Carry = 0;
   for (unsigned i = 0; i < Ops.size(); ++i) {
     VASTValPtr V = Ops[i];
+    // Discard the leading zeros of the operand of addition;
+    V = trimLeadingZeros(V);
+
     // X + 0 = 0;
     if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
       ImmVal += Imm->getUnsignedValue();
       MaxImmWidth = std::max(MaxImmWidth, Imm->getBitWidth());
       continue;
     }
-
-    // Discard the leading zeros of the operand of addition;
-    V = trimLeadingZeros(V);
 
     if (V->getBitWidth() == 1) {
       if (Carry) NewOps.push_back(Carry);
