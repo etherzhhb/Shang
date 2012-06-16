@@ -423,7 +423,8 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
     V = trimLeadingZeros(V);
 
     if (V->getBitWidth() == 1) {
-      assert(!Carry && "unexpected multiple carry bit!");
+      if (Carry) NewOps.push_back(Carry);
+
       Carry = V;
       continue;
     }
@@ -431,12 +432,17 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
     NewOps.push_back(V);
   }
 
-  // Add the carry bit back to the operand list.
-  if (Carry) NewOps.push_back(Carry);
 
   // Add the immediate value back to the operand list.
   if (ImmVal)
     NewOps.push_back(Context.getOrCreateImmediate(ImmVal, MaxImmWidth));
+
+  // Sort the operands excluding carry bit, we want to place the carry bit at
+  // last.
+  std::sort(NewOps.begin(), NewOps.end(), VASTValPtr_less);
+
+  // Add the carry bit back to the operand list.
+  if (Carry) NewOps.push_back(Carry);
 
   // All operands are zero?
   if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
