@@ -127,23 +127,20 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
 
 VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                             unsigned BitWidth) {
-  SmallVector<VASTValPtr, 8> NewOps(Ops.begin(), Ops.end());
-
-  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
-  // Skip the first operand since we have already processed it.
-  unsigned ActualOpPos = 1;
+  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(Ops[0]);
+  SmallVector<VASTValPtr, 8> NewOps;
+  NewOps.push_back(Ops[0]);
 
   // Merge the constant sequence.
-  for (unsigned i = 1; i < NewOps.size(); ++i) {
-    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(NewOps[i]);
+  for (unsigned i = 1; i < Ops.size(); ++i) {
+    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(Ops[i]);
 
     if (!CurImm) {
       LastImm = 0;
-      NewOps[ActualOpPos++] = NewOps[i];
+      NewOps.push_back(Ops[i]);
       continue;
     }
 
-    // Now CurImm holds a immediate.
     if (LastImm) {
       // Merge the constants.
       uint64_t HiVal = LastImm->getUnsignedValue(),
@@ -154,16 +151,14 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
       assert(SizeInBits <= 64 && "Constant too large!");
       uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
       LastImm = Context.getOrCreateImmediate(Val, SizeInBits);
-      NewOps[ActualOpPos] = LastImm;
+      NewOps.back() = LastImm;
     } else {
-      // Add the immediate to operand list.
       LastImm = CurImm;
-      NewOps[ActualOpPos++] = NewOps[i];
+      NewOps.push_back(Ops[i]);
     }
   }
 
-  if (ActualOpPos == 1) return NewOps.back();
-  NewOps.resize(ActualOpPos);
+  if (NewOps.size() == 1) return NewOps.back();
 
   // FIXME: Flatten bitcat.
   return Context.createExpr(VASTExpr::dpBitCat, NewOps, BitWidth, 0);
