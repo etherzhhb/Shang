@@ -280,6 +280,16 @@ class VerilogASTBuilder : public MachineFunctionPass,
     return VM->assign(VM->addWire(Name, V->getBitWidth()), V);
   }
 
+  VASTValPtr stripName(VASTValPtr V) {
+    // Try to get the underlying expression.
+    if (VASTWirePtr Ptr = dyn_cast<VASTWire>(V)) {
+      VASTExprPtr ExprPtr = Ptr->getExpr().invert(Ptr.isInverted());
+      if (ExprPtr.get()) return ExprPtr;
+    }
+
+    return V;
+  }
+
  VASTValPtr getOrCreateExpr(unsigned WireNum, MachineInstr *MI = 0) {
     assert(TargetRegisterInfo::isVirtualRegister(WireNum)
            && "Expected virtual register!");

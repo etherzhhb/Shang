@@ -44,6 +44,11 @@ public:
   virtual ~VASTExprBuilderContext() {}
 
   virtual VASTValPtr nameExpr(VASTValPtr V) { return V; }
+  virtual VASTValPtr stripName(VASTValPtr V) const { return V; }
+
+  virtual bool shouldExprBeFlatten(VASTExpr *E) const {
+    return E->isInlinable();
+  }
 
   virtual VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     return 0;
@@ -72,6 +77,10 @@ public:
 
   VASTImmediate *getOrCreateImmediate(uint64_t Value, int8_t BitWidth) {
     return Context.getOrCreateImmediate(Value, BitWidth);
+  }
+
+  bool shouldExprBeFlatten(VASTExpr *E) const {
+    return Context.shouldExprBeFlatten(E);
   }
 
   VASTValPtr getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
