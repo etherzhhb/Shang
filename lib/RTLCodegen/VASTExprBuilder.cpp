@@ -239,9 +239,7 @@ VASTValPtr VASTExprBuilder::buildBitSliceExpr(VASTValPtr U, uint8_t UB,
   return Context.createExpr(VASTExpr::dpAssign, Ops, UB, LB);
 }
 
-VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
-                                           unsigned BitWidth) {
-  assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
+VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
 
   if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Op)) {
     uint64_t Val = Imm.getUnsignedValue();
@@ -276,12 +274,12 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
       SmallVector<VASTValPtr, 8> Ops;
       typedef VASTExpr::op_iterator it;
       for (it I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
-        Ops.push_back(buildReduction(Opc, *I, BitWidth));
+        Ops.push_back(buildReduction(Opc, *I));
 
       switch (Opc) {
-      case VASTExpr::dpROr:   return buildOrExpr(Ops, BitWidth);
-      case VASTExpr::dpRAnd: return buildAndExpr(Ops, BitWidth);
-      case VASTExpr::dpRXor: return buildXorExpr(Ops, BitWidth);
+      case VASTExpr::dpROr:   return buildOrExpr(Ops, 1);
+      case VASTExpr::dpRAnd: return buildAndExpr(Ops, 1);
+      case VASTExpr::dpRXor: return buildXorExpr(Ops, 1);
       default:  llvm_unreachable("Unexpected Reduction Node!");
       }
     }
@@ -289,14 +287,14 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
   } else if (Op.isInverted()) {
     switch (Opc) {
     case VASTExpr::dpROr: // ~(A & B) = (~A | ~B)
-      return buildNotExpr(buildReduction(VASTExpr::dpRAnd,Op.invert(),BitWidth));
+      return buildNotExpr(buildReduction(VASTExpr::dpRAnd, buildNotExpr(Op)));
     case VASTExpr::dpRAnd:
-      return buildNotExpr(buildReduction(VASTExpr::dpROr,Op.invert(),BitWidth));
+      return buildNotExpr(buildReduction(VASTExpr::dpROr, buildNotExpr(Op)));
     default: break;
     }
   }
 
-  return Context.createExpr(Opc, Op, BitWidth, 0);
+  return Context.createExpr(Opc, Op, 1, 0);
 }
 
 VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
@@ -306,7 +304,8 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
   case VASTExpr::dpROr:
   case VASTExpr::dpRAnd:
   case VASTExpr::dpRXor:
-    return buildReduction(Opc, Op, BitWidth);
+    assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
+    return buildReduction(Opc, Op);
   }
 
   VASTValPtr Ops[] = { Op };
