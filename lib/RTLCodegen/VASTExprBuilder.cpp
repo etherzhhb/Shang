@@ -288,12 +288,6 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
   if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Op)) {
     uint64_t Val = Imm.getUnsignedValue();
     switch (Opc) {
-    case VASTExpr::dpROr:
-      // Only reduce to 0 if all bits are 0.
-      if (isAllZeros64(Val, Imm->getBitWidth()))
-        return getBoolImmediate(false);
-      else
-        return getBoolImmediate(true);
     case VASTExpr::dpRAnd:
       // Only reduce to 1 if all bits are 1.
       if (isAllOnes64(Val, Imm->getBitWidth()))
@@ -314,7 +308,6 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
   // Try to fold the expression according to the bit mask.
   uint64_t KnownZeros, KnownOnes;
   calculateBitMask(Op, KnownZeros, KnownOnes);
-  if (KnownOnes && Opc == VASTExpr::dpROr) return getBoolImmediate(true);
 
   if (KnownZeros && Opc == VASTExpr::dpRAnd) return getBoolImmediate(false);
 
@@ -329,20 +322,11 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
         Ops.push_back(buildReduction(Opc, *I));
 
       switch (Opc) {
-      case VASTExpr::dpROr:   return buildOrExpr(Ops, 1);
       case VASTExpr::dpRAnd: return buildAndExpr(Ops, 1);
       case VASTExpr::dpRXor: return buildXorExpr(Ops, 1);
       default:  llvm_unreachable("Unexpected Reduction Node!");
       }
     }
-    }
-  } else if (Op.isInverted()) {
-    switch (Opc) {
-    case VASTExpr::dpROr: // ~(A & B) = (~A | ~B)
-      return buildNotExpr(buildReduction(VASTExpr::dpRAnd, buildNotExpr(Op)));
-    case VASTExpr::dpRAnd:
-      return buildNotExpr(buildReduction(VASTExpr::dpROr, buildNotExpr(Op)));
-    default: break;
     }
   }
 
@@ -456,7 +440,6 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
   case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
   case VASTExpr::dpBitCat: return buildBitCatExpr(Ops, BitWidth);
 
-  case VASTExpr::dpROr:
   case VASTExpr::dpRAnd:
   case VASTExpr::dpRXor:
     assert(Ops.size() == 1 && "Unexpected more than 1 operands for reduction!");
@@ -471,7 +454,6 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
                                       unsigned BitWidth) {
   switch (Opc) {
   default: break;
-  case VASTExpr::dpROr:
   case VASTExpr::dpRAnd:
   case VASTExpr::dpRXor:
     assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");

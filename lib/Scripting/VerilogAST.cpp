@@ -378,7 +378,6 @@ float VASTExpr::getTotalDelay() const {
     CachedDelay = 0.0f;
     break;
   case VASTExpr::dpRAnd:
-  case VASTExpr::dpROr:
   case VASTExpr::dpRXor:
     CachedDelay = VFUs::getReductionLatency(getBitWidth());
     break;
@@ -1120,7 +1119,6 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
   case dpAnd: printSimpleUnsignedOp(OS, getOperands(), " & "); break;
 
   case dpRAnd:  printUnaryOp(OS, getOperand(0), "&");  break;
-  case dpROr:   printUnaryOp(OS, getOperand(0), "|");  break;
   case dpRXor:  printUnaryOp(OS, getOperand(0), "^");  break;
 
   case dpSCmp:  printCmpFU(OS, getOperands(), printSignedOperand); break;
@@ -1147,7 +1145,6 @@ void VASTExpr::printAsOperandInteral(raw_ostream &OS) const {
 
 const char *VASTExpr::StandarFUName[] = {
     // bitwise logic datapath
-    0,
     0,
     0,
     0,

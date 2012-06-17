@@ -590,7 +590,6 @@ public:
     // bitwise logic datapath
     dpAnd,
     dpRAnd,
-    dpROr,
     dpRXor,
     dpSel,
     // bit level assignment.

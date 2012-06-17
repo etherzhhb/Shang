@@ -384,6 +384,7 @@ class VerilogASTBuilder : public MachineFunctionPass,
   VASTValPtr emitDatapathExpr(MachineInstr *MI);
   VASTValPtr emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
   VASTValPtr emitInvert(MachineInstr *MI);
+  VASTValPtr emitReduceOr(MachineInstr *MI);
   template<typename FnTy>
   VASTValPtr emitBinaryOp(MachineInstr *MI, FnTy F);
   VASTValPtr emitOpLut(MachineInstr *MI);
@@ -1347,7 +1348,7 @@ VASTValPtr VerilogASTBuilder::emitDatapathExpr(MachineInstr *MI) {
     return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpAnd>);
   case VTM::VOpOr:        return emitBinaryOp(MI, VASTExprBuilder::buildOr);
   case VTM::VOpNot:       return emitInvert(MI);
-  case VTM::VOpROr:       return emitUnaryOp(MI, VASTExpr::dpROr);
+  case VTM::VOpROr:       return emitReduceOr(MI);
   case VTM::VOpRAnd:      return emitUnaryOp(MI, VASTExpr::dpRAnd);
   case VTM::VOpRXor:      return emitUnaryOp(MI, VASTExpr::dpRXor);
   case VTM::VOpPipelineStage: return emitUnaryOp(MI, VASTExpr::dpAssign);
@@ -1382,6 +1383,13 @@ VASTValPtr VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
 
 VASTValPtr VerilogASTBuilder::emitInvert(MachineInstr *MI) {
   return Builder->buildNotExpr(getAsOperand(MI->getOperand(1)));
+}
+
+VASTValPtr VerilogASTBuilder::emitReduceOr(MachineInstr *MI) {
+  // A | B .. | Z = ~(~A & ~B ... & ~Z).
+  VASTValPtr V = Builder->buildNotExpr(getAsOperand(MI->getOperand(1)));
+  V = Builder->buildNotExpr(Builder->buildExpr(VASTExpr::dpRAnd, V, 1));
+  return V;
 }
 
 VASTValPtr VerilogASTBuilder::emitUnaryOp(MachineInstr *MI,
