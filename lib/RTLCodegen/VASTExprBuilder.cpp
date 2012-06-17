@@ -347,7 +347,8 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
     }
 
     // Try to flatten the expression tree.
-    flattenExpr<VASTExpr::dpAnd>(Ops[i], std::back_inserter(NewOps));
+    flattenExpr<VASTExpr::dpAnd>(Ops[i],
+                                 bmc_back_inserter<VASTExpr::dpAnd>(NewOps));
   }
 
   if (NewOps.empty())
@@ -410,7 +411,7 @@ VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
-                               std::back_inserter(NewOps));
+                               bmc_back_inserter<VASTExpr::dpMul>(NewOps));
 
   return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }

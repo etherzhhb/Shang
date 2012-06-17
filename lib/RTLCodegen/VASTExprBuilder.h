@@ -114,6 +114,28 @@ class VASTExprBuilder {
     return false;
   }
 
+  // Bit mask analyzing, bitmask_collecting_iterator.
+  template<VASTExpr::Opcode Opcode, class _Container>
+  struct bmc_back_iterator :  public std::back_insert_iterator<_Container> {
+    typedef bmc_back_iterator<Opcode, _Container> Self;
+    typedef std::back_insert_iterator<_Container> supper;
+    typedef VASTExprBuilderContext Context;
+
+    Context &Cntx;
+    VASTValPtr MostBenefitBitMask;
+    explicit bmc_back_iterator(_Container &C, Context &Cntx)
+      : supper(C), MostBenefitBitMask(0), Cntx(Cntx) {}
+
+    Self& operator=(VASTValPtr V) {
+      // Do nothing by default.
+      supper::operator =(V);
+    }
+  };
+
+  template<VASTExpr::Opcode Opcode, class _Container>
+  bmc_back_iterator<Opcode, _Container> bmc_back_inserter(_Container &C) {
+    return bmc_back_iterator<Opcode, _Container>(C, Context);
+  }
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
