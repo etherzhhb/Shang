@@ -445,7 +445,7 @@ typedef PtrInvPair<VASTImmediate> VASTImmPtr;
 template<>
 inline uint64_t PtrInvPair<VASTImmediate>::getUnsignedValue() const {
   int64_t Val = get()->getUnsignedValue();
-  return isInverted() ? ~Val : Val;
+  return isInverted() ? getBitSlice64(~Val, get()->getBitWidth()) : Val;
 }
 
 template<>

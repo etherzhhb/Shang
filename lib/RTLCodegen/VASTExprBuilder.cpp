@@ -66,7 +66,6 @@ void VASTExprBuilder::calculateBitCatBitMask(VASTExprPtr Expr,
 
     CurUB = CurLB;
   }
-
 }
 
 void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
