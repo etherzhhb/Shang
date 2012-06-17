@@ -338,12 +338,12 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
     // same bitwidth.
     assert(BitWidth == Ops[i]->getBitWidth() && "Bitwidth not match!");
 
-    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Ops[i])) {
+    if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Ops[i])) {
       // X & 1 = X;
-      if (Imm->isAllOnes()) continue;
+      if (Imm.isAllOnes()) continue;
 
       // X & 0 = 0;
-      if (Imm->isAllZeros()) return Imm;
+      if (Imm.isAllZeros()) return Imm;
     }
 
     // Try to flatten the expression tree.
