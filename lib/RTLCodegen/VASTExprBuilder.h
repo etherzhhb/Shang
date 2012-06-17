@@ -195,6 +195,16 @@ public:
 
   VASTValPtr buildExpr(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
                        unsigned BitWidth);
+
+  VASTValPtr buildExprByOpBitSlice(VASTExpr::Opcode Opc, ArrayRef<VASTValPtr> Ops,
+                                   uint8_t UB, uint8_t LB) {
+    SmallVector<VASTValPtr, 8> OpBitSlices;
+    for (unsigned i = 0; i < Ops.size(); ++i)
+      OpBitSlices.push_back(buildBitSliceExpr(Ops[i], UB, LB));
+
+    return buildExpr(Opc, OpBitSlices, UB - LB);
+  }
+
   VASTValPtr buildExpr(VASTExpr::Opcode Opc,VASTValPtr Op, unsigned BitWidth);
   VASTValPtr buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS, VASTValPtr RHS,
                        unsigned BitWidth);

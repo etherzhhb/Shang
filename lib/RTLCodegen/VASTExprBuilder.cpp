@@ -381,6 +381,34 @@ struct VASTExprOpInfo<VASTExpr::dpAnd> {
   bool hasAnyZero() const  { return getBitSlice64(KnownZeros, OperandWidth); }
   // For the and expression, only zero is known.
   uint64_t getImmVal() const { return ~KnownZeros; }
+
+  bool getZeroMaskSplitPoints(unsigned &HiPt, unsigned &LoPt) const {
+    HiPt = OperandWidth;
+    LoPt = 0;
+
+    if (!KnownZeros) return false;
+
+    if (isShiftedMask_64(KnownZeros) || isMask_64(KnownZeros)) {
+      unsigned NumZeros = CountPopulation_64(KnownZeros);
+      if (NumZeros < OperandWidth / 2) return false;
+
+      LoPt = CountTrailingZeros_64(KnownZeros);
+      HiPt = std::min(OperandWidth, 64 - CountLeadingZeros_64(KnownZeros));
+      return true;
+    }
+
+    unsigned NotKnownZeros = ~KnownZeros;
+    if (isShiftedMask_64(NotKnownZeros) || isMask_64(NotKnownZeros)) {
+      unsigned NumZeros = CountPopulation_64(KnownZeros);
+      if (NumZeros < OperandWidth / 2) return false;
+
+      LoPt = CountTrailingZeros_64(NotKnownZeros);
+      HiPt = std::min(OperandWidth, 64 - CountLeadingZeros_64(NotKnownZeros));
+      return true;
+    }
+
+    return false;
+  }
 };
 }
 
@@ -396,8 +424,27 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
   if (OpInfo.isAllZeros())
     return getOrCreateImmediate(UINT64_C(0), BitWidth);
 
-  if (OpInfo.hasAnyZero())
+  if (OpInfo.hasAnyZero()) {
     NewOps.push_back(Context.getOrCreateImmediate(OpInfo.getImmVal(), BitWidth));
+
+    // Split the word according to known zeros.
+    unsigned HiPt, LoPt;
+    if (OpInfo.getZeroMaskSplitPoints(HiPt, LoPt)) {
+      assert(BitWidth >= HiPt && HiPt > LoPt && "Bad split point!");
+      SmallVector<VASTValPtr, 4> Ops;
+
+      if (HiPt != BitWidth)
+        Ops.push_back(buildExprByOpBitSlice(VASTExpr::dpAnd, NewOps, BitWidth,
+                                            HiPt));
+
+      Ops.push_back(buildExprByOpBitSlice(VASTExpr::dpAnd, NewOps, HiPt, LoPt));
+
+      if (LoPt != 0)
+        Ops.push_back(buildExprByOpBitSlice(VASTExpr::dpAnd, NewOps, LoPt, 0));
+
+      return buildBitCatExpr(Ops, BitWidth);
+    }
+  }
 
   if (NewOps.empty())
     return Context.getOrCreateImmediate(getBitSlice64(~0ull, BitWidth),
