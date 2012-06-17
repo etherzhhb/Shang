@@ -93,6 +93,17 @@ VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
     if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
       return Context.getOrCreateImmediate(~Imm->getUnsignedValue(),
                                           Imm->getBitWidth());
+
+    if (VASTExpr *Expr = dyn_cast<VASTExpr>(U.get())) {
+      if (Expr->getOpcode() == VASTExpr::dpBitCat) {
+        typedef VASTExpr::op_iterator it;
+        SmallVector<VASTValPtr, 4> Ops;
+        for (it I = Expr->op_begin(), E = Expr->op_end(); I != E; ++I)
+          Ops.push_back(buildNotExpr(*I));
+
+        return buildBitCatExpr(Ops, Expr->getBitWidth());
+      }
+    }
   }
 
   return U;
