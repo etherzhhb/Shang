@@ -351,24 +351,36 @@ namespace llvm {
 template<>
 struct VASTExprOpInfo<VASTExpr::dpAnd> {
   unsigned OperandWidth;
-  uint64_t ImmVal;
+  uint64_t KnownZeros, KnownOnes;
 
   VASTExprOpInfo(unsigned OperandWidth)
-    : OperandWidth(OperandWidth), ImmVal(~UINT64_C(0)){}
+    : OperandWidth(OperandWidth), KnownZeros(UINT64_C(0)),
+      KnownOnes(~UINT64_C(0)) /*Assume all bits are ones*/{}
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
     assert(OperandWidth == V->getBitWidth() && "Bitwidth not match!");
+
     if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
-      ImmVal &= Imm.getSignedValue();
+      // The bit is known one only if the bit of all operand are one.
+      KnownOnes &= Imm.getSignedValue();
+      // The bit is known zero if the bit of any operand are zero.
+      KnownZeros |= ~Imm.getSignedValue();
       return 0;
     }
+
+    uint64_t OpKnownZeros, OpKnownOnes;
+    VASTExprBuilder::calculateBitMask(V, OpKnownZeros, OpKnownOnes);
+    KnownOnes &= OpKnownOnes;
+    KnownZeros |=OpKnownZeros;
 
     // Do nothing by default.
     return V;
   }
 
-  bool isAllZeros() const { return isAllZeros64(ImmVal, OperandWidth); }
-  bool isAllOnes() const { return isAllOnes64(ImmVal, OperandWidth); }
+  bool isAllZeros() const { return isAllOnes64(KnownZeros, OperandWidth); }
+  bool hasAnyZero() const  { return getBitSlice64(KnownZeros, OperandWidth); }
+  // For the and expression, only zero is known.
+  uint64_t getImmVal() const { return ~KnownZeros; }
 };
 }
 
@@ -384,8 +396,8 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
   if (OpInfo.isAllZeros())
     return getOrCreateImmediate(UINT64_C(0), BitWidth);
 
-  if (!OpInfo.isAllOnes())
-    NewOps.push_back(Context.getOrCreateImmediate(OpInfo.ImmVal, BitWidth));
+  if (OpInfo.hasAnyZero())
+    NewOps.push_back(Context.getOrCreateImmediate(OpInfo.getImmVal(), BitWidth));
 
   if (NewOps.empty())
     return Context.getOrCreateImmediate(getBitSlice64(~0ull, BitWidth),

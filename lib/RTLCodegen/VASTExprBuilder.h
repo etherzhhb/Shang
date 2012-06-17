@@ -124,12 +124,6 @@ class VASTExprBuilder {
     return false;
   }
 
-  // Bit mask analyzing, bitmask_collecting_iterator.
-  static void calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
-                               uint64_t &KnownOnes);
-  static void calculateBitCatBitMask(VASTExprPtr Expr, uint64_t &KnownZeros,
-                                     uint64_t &KnownOnes);
-
   template<VASTExpr::Opcode Opcode, class _Container>
   struct op_filler_iterator : public std::iterator<std::output_iterator_tag,
                                                    void, void, void, void> {
@@ -175,6 +169,13 @@ class VASTExprBuilder {
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
+  
+
+  // Bit mask analyzing, bitmask_collecting_iterator.
+  static void calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
+                               uint64_t &KnownOnes);
+  static void calculateBitCatBitMask(VASTExprPtr Expr, uint64_t &KnownZeros,
+                                     uint64_t &KnownOnes);
 
   VASTValPtr getBoolImmediate(bool Val) {
     return Context.getOrCreateImmediate(Val, 1);

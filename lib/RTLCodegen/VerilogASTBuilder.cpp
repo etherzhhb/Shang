@@ -1270,7 +1270,7 @@ void VerilogASTBuilder::emitOpMemTrans(MachineInstr *MI, VASTSlot *Slot,
 }
 
 void VerilogASTBuilder::emitOpBRamTrans(MachineInstr *MI, VASTSlot *Slot,
-                                         VASTValueVecTy &Cnds) {
+                                        VASTValueVecTy &Cnds) {
   unsigned FUNum = MI->getOperand(0).getReg();
   unsigned BRamID = MI->getOperand(5).getImm();
   unsigned SizeInBytes = FInfo->getBRamInfo(BRamID).ElemSizeInBytes;
