@@ -100,7 +100,7 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool> {
   }
 
   operator void*() const {
-    return this->getOpaqueValue();
+    return get() ? this->getOpaqueValue() : 0;
   }
 
   T *get() const { return this->getPointer(); }
@@ -115,8 +115,13 @@ struct PtrInvPair : public PointerIntPair<T*, 1, bool> {
 
   T *operator->() const { return this->get(); }
 
+  // Forwarding function of VASTValues
   inline PtrInvPair<VASTValue> getOperand(unsigned i) const;
   inline PtrInvPair<VASTExpr> getExpr() const;
+  inline uint64_t getUnsignedValue() const;
+  inline int64_t getSignedValue() const;
+  inline bool isAllZeros() const;
+  inline bool isAllOnes() const;
 
   // PtrInvPairs are equal when their Opaque Value are equal, which contain the
   // pointer and Int information.
@@ -435,6 +440,28 @@ public:
     return A->getASTType() == vastImmediate;
   }
 };
+
+typedef PtrInvPair<VASTImmediate> VASTImmPtr;
+template<>
+inline uint64_t PtrInvPair<VASTImmediate>::getUnsignedValue() const {
+  int64_t Val = get()->getUnsignedValue();
+  return isInverted() ? ~Val : Val;
+}
+
+template<>
+inline int64_t PtrInvPair<VASTImmediate>::getSignedValue() const {
+  int64_t Val = get()->getSignedValue();
+  return isInverted() ? ~Val : Val;
+}
+
+template<>
+inline bool PtrInvPair<VASTImmediate>::isAllZeros() const {
+  return isInverted() ? get()->isAllOnes() : get()->isAllZeros();
+}
+template<>
+inline bool PtrInvPair<VASTImmediate>::isAllOnes() const {
+  return isInverted() ? get()->isAllZeros() : get()->isAllOnes();
+}
 
 class VASTNamedValue : public VASTValue {
 protected:

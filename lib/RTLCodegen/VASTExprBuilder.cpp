@@ -88,12 +88,11 @@ VASTValPtr VASTExprBuilder::trimZeros(VASTValPtr V, unsigned &Offset) {
 VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
-  if (U.isInverted()) {
-    // Try to fold the not expression.
-    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(U.get()))
-      return Context.getOrCreateImmediate(~Imm->getUnsignedValue(),
-                                          Imm->getBitWidth());
+  if (VASTImmPtr ImmPtr = dyn_cast<VASTImmediate>(U))
+    return Context.getOrCreateImmediate(ImmPtr.getUnsignedValue(),
+                                        ImmPtr->getBitWidth());
 
+  if (U.isInverted()) {
     if (VASTExpr *Expr = dyn_cast<VASTExpr>(U.get())) {
       if (Expr->getOpcode() == VASTExpr::dpBitCat) {
         typedef VASTExpr::op_iterator it;
@@ -115,15 +114,14 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
   // Not a sub bitslice.
   if (UB == OperandSize && LB == 0) return U;
 
+  if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(U)) {
+    uint64_t imm = getBitSlice64(Imm.getUnsignedValue(), UB, LB);
+    return Context.getOrCreateImmediate(imm, UB - LB);
+  }
+
   // Try to fold the bitslice.
   VASTValue *V = U.get();
   bool isInverted = U.isInverted();
-
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
-    uint64_t imm = getBitSlice64(Imm->getUnsignedValue(), UB, LB);
-    if (isInverted) imm = ~imm;
-    return Context.getOrCreateImmediate(imm, UB - LB);
-  }
 
   VASTExpr *Expr = dyn_cast<VASTExpr>(V);
 
@@ -191,12 +189,12 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
   flattenExpr<VASTExpr::dpBitCat>(Ops.begin(), Ops.end(),
                                   std::back_inserter(NewOps));
 
-  VASTImmediate *LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
+  VASTImmPtr LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
   unsigned ActualOpPos = 1;
 
   // Merge the constant sequence.
   for (unsigned i = 1, e = NewOps.size(); i < e; ++i) {
-    VASTImmediate *CurImm = dyn_cast<VASTImmediate>(NewOps[i]);
+    VASTImmPtr CurImm = dyn_cast<VASTImmediate>(NewOps[i]);
 
     if (!CurImm) {
       LastImm = 0;
@@ -206,8 +204,8 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
 
     if (LastImm) {
       // Merge the constants.
-      uint64_t HiVal = LastImm->getUnsignedValue(),
-               LoVal = CurImm->getUnsignedValue();
+      uint64_t HiVal = LastImm.getUnsignedValue(),
+               LoVal = CurImm.getUnsignedValue();
       unsigned HiSizeInBits = LastImm->getBitWidth(),
                LoSizeInBits = CurImm->getBitWidth();
       unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
@@ -257,8 +255,8 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op,
                                            unsigned BitWidth) {
   assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
 
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(Op)) {
-    uint64_t Val = Imm->getUnsignedValue();
+  if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Op)) {
+    uint64_t Val = Imm.getUnsignedValue();
     switch (Opc) {
     case VASTExpr::dpROr:
       // Only reduce to 0 if all bits are 0.
@@ -441,7 +439,7 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
     V = trimLeadingZeros(V);
 
     // X + 0 = 0;
-    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
+    if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
       ImmVal += Imm->getUnsignedValue();
       MaxImmWidth = std::max(MaxImmWidth, Imm->getBitWidth());
       continue;
