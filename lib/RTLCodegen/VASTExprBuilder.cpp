@@ -119,11 +119,7 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
     return Context.getOrCreateImmediate(imm, UB - LB);
   }
 
-  // Try to fold the bitslice.
-  VASTValue *V = U.get();
-  bool isInverted = U.isInverted();
-
-  VASTExpr *Expr = dyn_cast<VASTExpr>(V);
+  VASTExprPtr Expr = dyn_cast<VASTExpr>(U);
 
   if (Expr == 0) return VASTValPtr(0);
 
@@ -131,9 +127,7 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
     unsigned Offset = Expr->LB;
     UB += Offset;
     LB += Offset;
-    VASTValPtr Ptr = buildBitSliceExpr(Expr->getOperand(0), UB, LB);
-    if (isInverted) Ptr = buildNotExpr(Ptr);
-    return Ptr;
+    return buildBitSliceExpr(Expr.getOperand(0), UB, LB);
   }
 
   if (Expr->getOpcode() == VASTExpr::dpBitCat) {
@@ -142,7 +136,7 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
     unsigned CurUB = Expr->getBitWidth(), CurLB = 0;
     unsigned LeadingBitsToLeft = 0, TailingBitsToTrim = 0;
     for (unsigned i = 0; i < Expr->NumOps; ++i) {
-      VASTValPtr CurBitSlice = Expr->getOperand(i);
+      VASTValPtr CurBitSlice = Expr.getOperand(i);
       CurLB = CurUB - CurBitSlice->getBitWidth();
       // Not fall into (UB, LB] yet.
       if (CurLB >= UB) {
@@ -164,20 +158,14 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
     }
 
     // Trival case: Only 1 bitslice in range.
-    if (Ops.size() == 1) {
-      VASTValPtr Ptr = buildBitSliceExpr(Ops.back(), LeadingBitsToLeft,
-                                         TailingBitsToTrim);
-      if (isInverted) Ptr = buildNotExpr(Ptr);
-      return Ptr;
-    }
+    if (Ops.size() == 1)
+      return buildBitSliceExpr(Ops.back(), LeadingBitsToLeft, TailingBitsToTrim);
 
     Ops.front() = buildBitSliceExpr(Ops.front(), LeadingBitsToLeft, 0);
     Ops.back() = buildBitSliceExpr(Ops.back(), Ops.back()->getBitWidth(),
                                    TailingBitsToTrim);
 
-    VASTValPtr Ptr = buildBitCatExpr(Ops, UB - LB);
-    if (isInverted) Ptr = buildNotExpr(Ptr);
-    return Ptr;
+    return buildBitCatExpr(Ops, UB - LB);
   }
 
   return VASTValPtr(0);
