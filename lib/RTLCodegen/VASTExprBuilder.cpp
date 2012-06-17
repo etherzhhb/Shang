@@ -560,17 +560,15 @@ VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
 }
 
 namespace llvm {
-template<>
-struct VASTExprOpInfo<VASTExpr::dpAdd> {
+struct AddMultOpInfoBase {
   VASTExprBuilder &Builder;
-  VASTValPtr Carry;
   uint64_t ImmVal;
   unsigned ImmSize;
   unsigned MaxTailingZeros;
   VASTValPtr OpWithTailingZeros;
 
-  VASTExprOpInfo(VASTExprBuilder &Builder) : Builder(Builder), Carry(0),
-    ImmVal(0), ImmSize(0), MaxTailingZeros(0), OpWithTailingZeros(0) {}
+  AddMultOpInfoBase(VASTExprBuilder &Builder) : Builder(Builder), ImmVal(0),
+    ImmSize(0), MaxTailingZeros(0), OpWithTailingZeros(0) {}
 
   VASTValPtr analyzeBitMask(VASTValPtr V,  unsigned &CurTailingZeros) {
     uint64_t KnownZeros, KnownOnes;
@@ -599,6 +597,22 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> {
     return V;
   }
 
+  void updateTailingZeros(VASTValPtr V, unsigned CurTailingZeros) {
+    // Remember the operand with tailing zeros.
+    if (MaxTailingZeros < CurTailingZeros) {
+      MaxTailingZeros = CurTailingZeros;
+      OpWithTailingZeros = V;
+    }
+  }
+};
+
+template<>
+struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
+  VASTValPtr Carry;
+
+  VASTExprOpInfo(VASTExprBuilder &Builder)
+    : AddMultOpInfoBase(Builder), Carry(0) {}
+
   VASTValPtr analyzeOperand(VASTValPtr V) {
     unsigned CurTailingZeros;
 
@@ -619,11 +633,7 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> {
       return 0;
     }
 
-    // Remember the operand with tailing zeros.
-    if (MaxTailingZeros < CurTailingZeros) {
-      MaxTailingZeros = CurTailingZeros;
-      OpWithTailingZeros = V;
-    }
+    updateTailingZeros(V, CurTailingZeros);
 
     return V;
   }
@@ -634,11 +644,7 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> {
       uint64_t KnownZeros = ~Imm.getUnsignedValue();
       unsigned CurTailingZeros = CountTrailingOnes_64(KnownZeros);
 
-      // Do not forget to analyze the tailing zeros.
-      if (MaxTailingZeros < CurTailingZeros) {
-        MaxTailingZeros = CurTailingZeros;
-        OpWithTailingZeros = Imm;
-      }
+      updateTailingZeros(Imm, CurTailingZeros);
 
       return Imm;
     }
