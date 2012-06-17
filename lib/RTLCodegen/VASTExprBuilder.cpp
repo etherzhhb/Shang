@@ -47,6 +47,51 @@ void VASTExprBuilder::flattenExpr(iterator begin, iterator end, visitor F) {
     flattenExpr<Opcode>(*begin++, F);
 }
 
+void VASTExprBuilder::calculateBitCatBitMask(VASTExprPtr Expr,
+                                             uint64_t &KnownZeros,
+                                             uint64_t &KnownOnes) {
+  // Clear the mask.
+  KnownOnes = KnownZeros = UINT64_C(0);
+
+  unsigned CurUB = Expr->getBitWidth(), CurLB = 0;
+  uint64_t CurKnownZeros = UINT64_C(0), CurKnownOnes = UINT64_C(0);
+
+  // Concatenate the bit mask together.
+  for (unsigned i = 0; i < Expr->NumOps; ++i) {
+    VASTValPtr CurBitSlice = Expr.getOperand(i);
+    CurLB = CurUB - CurBitSlice->getBitWidth();
+    calculateBitMask(CurBitSlice, CurKnownZeros, CurKnownOnes);
+    KnownZeros   |= CurKnownZeros << CurLB;
+    CurKnownOnes |= CurKnownOnes << CurLB;
+
+    CurUB = CurLB;
+  }
+
+}
+
+void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
+                                       uint64_t &KnownOnes) {
+  // Clear the mask.
+  KnownOnes = KnownZeros = UINT64_C(0);
+
+  // Most simple case: Immediate.
+  if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
+    KnownOnes = Imm.getUnsignedValue();
+    KnownZeros = ~KnownOnes;
+    return;
+  }
+
+  VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
+  if (!Expr) return;
+
+  switch(Expr->getOpcode()) {
+  default: return;
+  case VASTExpr::dpBitCat:
+    calculateBitCatBitMask(Expr, KnownZeros, KnownOnes);
+    return;
+  }
+}
+
 VASTValPtr VASTExprBuilder::trimZeros(VASTValPtr V, unsigned &Offset) {
   if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
     uint64_t Val = Imm->getSignedValue();

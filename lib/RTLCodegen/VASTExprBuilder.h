@@ -125,6 +125,11 @@ class VASTExprBuilder {
   }
 
   // Bit mask analyzing, bitmask_collecting_iterator.
+  static void calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
+                               uint64_t &KnownOnes);
+  static void calculateBitCatBitMask(VASTExprPtr Expr, uint64_t &KnownZeros,
+                                     uint64_t &KnownOnes);
+
   template<VASTExpr::Opcode Opcode, class _Container>
   struct op_filler_iterator :  public std::back_insert_iterator<_Container> {
     typedef op_filler_iterator<Opcode, _Container> Self;
