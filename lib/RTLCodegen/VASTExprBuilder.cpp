@@ -285,7 +285,6 @@ VASTValPtr VASTExprBuilder::buildBitSliceExpr(VASTValPtr U, uint8_t UB,
 }
 
 VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
-
   if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Op)) {
     uint64_t Val = Imm.getUnsignedValue();
     switch (Opc) {
@@ -312,6 +311,14 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
     }
   }
 
+  // Try to fold the expression according to the bit mask.
+  uint64_t KnownZeros, KnownOnes;
+  calculateBitMask(Op, KnownZeros, KnownOnes);
+  if (KnownOnes && Opc == VASTExpr::dpROr) return getBoolImmediate(true);
+
+  if (KnownZeros && Opc == VASTExpr::dpRAnd) return getBoolImmediate(false);
+
+  // Promote the reduction to the operands.
   if (VASTExpr *Expr = dyn_cast<VASTExpr>(Op)) {
     switch (Expr->getOpcode()) {
     default: break;
