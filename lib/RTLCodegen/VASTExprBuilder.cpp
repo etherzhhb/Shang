@@ -560,43 +560,74 @@ VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
   return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
 
-VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
-                                         unsigned BitWidth) {
-  SmallVector<VASTValPtr, 8> NewOps;
-  uint64_t ImmVal = 0;
-  unsigned MaxImmWidth = 0;
-  VASTValPtr Carry = 0;
-  VASTExprOpInfo<VASTExpr::dpAdd> OpInfo;
+namespace llvm {
+template<>
+struct VASTExprOpInfo<VASTExpr::dpAdd> {
+  VASTExprBuilder &Builder;
+  VASTValPtr Carry;
+  uint64_t ImmVal;
+  unsigned ImmSize;
 
-  for (unsigned i = 0; i < Ops.size(); ++i) {
-    VASTValPtr V = Ops[i];
-    // Discard the leading zeros of the operand of addition;
-    V = trimLeadingZeros(V);
+  VASTExprOpInfo(VASTExprBuilder &Builder) : Builder(Builder), Carry(0),
+    ImmVal(0), ImmSize(0) {}
+
+  VASTValPtr analyzeOperand(VASTValPtr V) {
+    uint64_t KnownZeros, KnownOnes;
+    unsigned OperandSize = V->getBitWidth();
+    VASTExprBuilder::calculateBitMask(V, KnownZeros, KnownOnes);
+    // Any known zeros?
+    if (KnownZeros) {
+      // Try to trim the leading zeros.
+      KnownZeros = SignExtend64(KnownZeros, OperandSize);
+      // Ignore the zero operand for the addition.
+      if (KnownZeros == ~UINT64_C(0)) return 0;
+      // Any known leading zeros?
+      if (KnownZeros >> 63) {
+        unsigned NoZerosUB = 64 - CountLeadingOnes_64(KnownZeros);
+
+        V = Builder.buildBitSliceExpr(V, NoZerosUB, 0);
+      }
+    }
 
     // Fold the immediate.
     if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
       ImmVal += Imm->getUnsignedValue();
-      MaxImmWidth = std::max(MaxImmWidth, Imm->getBitWidth());
-      continue;
+      ImmSize = std::max(ImmSize, Imm->getBitWidth());
+      return 0;
     }
 
-    if (V->getBitWidth() == 1) {
-      if (Carry) NewOps.push_back(Carry);
-
+    // Cache the carry and make sure we place the carry at the last of the
+    // operand list.
+    if (V->getBitWidth() == 1 && !Carry) {
       Carry = V;
-      continue;
+      return 0;
     }
 
-    flattenExpr<VASTExpr::dpAdd>(V, op_filler<VASTExpr::dpAdd>(NewOps, OpInfo));
+    return V;
   }
 
+  VASTValPtr createImmOperand() const {
+    if (ImmVal) return Builder.getOrCreateImmediate(ImmVal, ImmSize);
+
+    return 0;
+  }
+};
+}
+
+VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
+                                         unsigned BitWidth) {
+  SmallVector<VASTValPtr, 8> NewOps;
+  VASTExprOpInfo<VASTExpr::dpAdd> OpInfo(*this);
+  flattenExpr<VASTExpr::dpAdd>(Ops.begin(), Ops.end(),
+                               op_filler<VASTExpr::dpAdd>(NewOps, OpInfo));
+
   // Add the immediate value back to the operand list.
-  if (ImmVal)
-    NewOps.push_back(Context.getOrCreateImmediate(ImmVal, MaxImmWidth));
+  if (VASTValPtr V = OpInfo.createImmOperand())
+    NewOps.push_back(V);
 
   // If the addition contains only 2 operand, check if we can inline a operand
   // of this addition to make use of the carry bit.
-  if (NewOps.size() == 2 && !Carry) {
+  if (NewOps.size() == 2 && !OpInfo.Carry) {
     unsigned ExprIdx = 0;
     VASTExpr *Expr = Context.getAddExprToFlatten(NewOps[ExprIdx]);
     if (Expr == 0) Expr = Context.getAddExprToFlatten(NewOps[++ExprIdx]);
@@ -606,8 +637,8 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
       // Replace the expression by the no-carry operand
       NewOps[ExprIdx] = Expr->getOperand(0);
       // And add the carry from the expression.
-      Carry = Expr->getOperand(1);
-      assert(Carry->getBitWidth() == 1 && "Carry is not 1 bit!");
+      OpInfo.Carry = Expr->getOperand(1);
+      assert(OpInfo.Carry->getBitWidth() == 1 && "Carry is not 1 bit!");
     }
   }
 
@@ -616,7 +647,7 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   std::sort(NewOps.begin(), NewOps.end(), VASTValPtr_less);
 
   // Add the carry bit back to the operand list.
-  if (Carry) NewOps.push_back(Carry);
+  if (OpInfo.Carry) NewOps.push_back(OpInfo.Carry);
 
   // All operands are zero?
   if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
