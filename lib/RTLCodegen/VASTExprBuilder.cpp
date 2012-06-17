@@ -566,27 +566,44 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> {
   VASTValPtr Carry;
   uint64_t ImmVal;
   unsigned ImmSize;
+  unsigned MaxTailingZeros;
+  VASTValPtr OpWithTailingZeros;
 
   VASTExprOpInfo(VASTExprBuilder &Builder) : Builder(Builder), Carry(0),
-    ImmVal(0), ImmSize(0) {}
+    ImmVal(0), ImmSize(0), MaxTailingZeros(0), OpWithTailingZeros(0) {}
 
-  VASTValPtr analyzeOperand(VASTValPtr V) {
+  VASTValPtr analyzeBitMask(VASTValPtr V,  unsigned &CurTailingZeros) {
     uint64_t KnownZeros, KnownOnes;
     unsigned OperandSize = V->getBitWidth();
+    CurTailingZeros = 0;
+
     VASTExprBuilder::calculateBitMask(V, KnownZeros, KnownOnes);
     // Any known zeros?
     if (KnownZeros) {
       // Try to trim the leading zeros.
       KnownZeros = SignExtend64(KnownZeros, OperandSize);
+
       // Ignore the zero operand for the addition.
       if (KnownZeros == ~UINT64_C(0)) return 0;
+
       // Any known leading zeros?
       if (KnownZeros >> 63) {
         unsigned NoZerosUB = 64 - CountLeadingOnes_64(KnownZeros);
 
         V = Builder.buildBitSliceExpr(V, NoZerosUB, 0);
       }
+
+      CurTailingZeros = CountTrailingOnes_64(KnownZeros);
     }
+
+    return V;
+  }
+
+  VASTValPtr analyzeOperand(VASTValPtr V) {
+    unsigned CurTailingZeros;
+
+    V = analyzeBitMask(V, CurTailingZeros);
+    if (!V) return 0;
 
     // Fold the immediate.
     if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
@@ -602,11 +619,29 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> {
       return 0;
     }
 
+    // Remember the operand with tailing zeros.
+    if (MaxTailingZeros < CurTailingZeros) {
+      MaxTailingZeros = CurTailingZeros;
+      OpWithTailingZeros = V;
+    }
+
     return V;
   }
 
-  VASTValPtr createImmOperand() const {
-    if (ImmVal) return Builder.getOrCreateImmediate(ImmVal, ImmSize);
+  VASTValPtr createImmOperand() {
+    if (ImmVal) {
+      VASTImmPtr Imm = Builder.getOrCreateImmediate(ImmVal, ImmSize);
+      uint64_t KnownZeros = ~Imm.getUnsignedValue();
+      unsigned CurTailingZeros = CountTrailingOnes_64(KnownZeros);
+
+      // Do not forget to analyze the tailing zeros.
+      if (MaxTailingZeros < CurTailingZeros) {
+        MaxTailingZeros = CurTailingZeros;
+        OpWithTailingZeros = Imm;
+      }
+
+      return Imm;
+    }
 
     return 0;
   }
@@ -673,6 +708,40 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   if (NewOps.size() == 1)
     // Pad the higer bits by zeros.
     return padHigherBits(NewOps.back(), BitWidth, false);
+
+  // If one of the operand has tailing zeros, we can directly forward the value
+  // of the corresponding bitslice of another operand.
+  if (NewOps.size() == 2 && OpInfo.OpWithTailingZeros) {
+    VASTValPtr NotEndWithZeros = NewOps[0],
+               EndWithZeros = OpInfo.OpWithTailingZeros;
+    if (NotEndWithZeros == EndWithZeros)
+      NotEndWithZeros = NewOps[1];
+
+    unsigned TailingZeros = OpInfo.MaxTailingZeros;
+
+    VASTValPtr Hi =
+      buildBitSliceExpr(EndWithZeros, EndWithZeros->getBitWidth(),TailingZeros);
+    // NotEndWithZeros cannot entirely fit into the zero bits, addition is
+    // need for the higher part.
+    if (NotEndWithZeros->getBitWidth() > TailingZeros) {
+      VASTValPtr HiAddOps[] = {
+        buildBitSliceExpr(NotEndWithZeros, NotEndWithZeros->getBitWidth(),
+                          TailingZeros),
+        Hi
+      };
+      Hi = buildAddExpr(HiAddOps, BitWidth - TailingZeros);
+      Hi = Context.nameExpr(Hi);
+    } else
+      // In this case, no addition is needed, we can simply concatenate the
+      // operands together, still, we may pad the higher bit for additions.
+      Hi = padHigherBits(Hi, BitWidth - TailingZeros, false);
+
+    // We can directly forward the lower part.
+    VASTValPtr Lo = buildBitSliceExpr(NotEndWithZeros, TailingZeros, 0);
+    // Concatenate them together.
+    VASTValPtr BitCatOps[] = { Hi, Lo };
+    return buildBitCatExpr(BitCatOps, BitWidth);
+  }
 
   return Context.createExpr(VASTExpr::dpAdd, NewOps, BitWidth, 0);
 }
