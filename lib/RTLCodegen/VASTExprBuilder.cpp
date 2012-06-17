@@ -634,8 +634,13 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
 
     // If we can find such expression, flatten the expression tree.
     if (Expr) {
+      // Try to keep the operand bitwidth unchanged.
+      unsigned OpBitwidth = NewOps[ExprIdx]->getBitWidth();
       // Replace the expression by the no-carry operand
-      NewOps[ExprIdx] = Expr->getOperand(0);
+      VASTValPtr NoCarryOperand = Expr->getOperand(0);
+      if (NoCarryOperand->getBitWidth() > OpBitwidth)
+        NoCarryOperand = buildBitSliceExpr(NoCarryOperand, OpBitwidth, 0);
+      NewOps[ExprIdx] = NoCarryOperand;
       // And add the carry from the expression.
       OpInfo.Carry = Expr->getOperand(1);
       assert(OpInfo.Carry->getBitWidth() == 1 && "Carry is not 1 bit!");
