@@ -131,19 +131,37 @@ class VASTExprBuilder {
                                      uint64_t &KnownOnes);
 
   template<VASTExpr::Opcode Opcode, class _Container>
-  struct op_filler_iterator :  public std::back_insert_iterator<_Container> {
+  struct op_filler_iterator : public std::iterator<std::output_iterator_tag,
+                                                   void, void, void, void> {
     typedef op_filler_iterator<Opcode, _Container> Self;
-    typedef std::back_insert_iterator<_Container> supper;
 
     VASTExprBuilder &Builder;
     VASTExprOpInfo<Opcode> &OpInfo;
+    _Container &C;
     explicit op_filler_iterator(_Container &C, VASTExprOpInfo<Opcode> &OpInfo,
                                 VASTExprBuilder &Builder)
-      : supper(C), Builder(Builder), OpInfo(OpInfo) {}
+      : Builder(Builder), OpInfo(OpInfo), C(C) {}
 
-    Self& operator=(VASTValPtr V) {
-      if (V = OpInfo.analyzeOperand<Opcode>(V))
-        supper::operator =(V);
+    Self &operator=(VASTValPtr V) {
+      if (V = OpInfo.analyzeOperand(V))
+        C.push_back(V);
+
+      return *this;
+    }
+
+    Self& operator*() {
+      // pretend to return designated value
+      return (*this);
+    }
+
+    Self& operator++() {
+      // pretend to preincrement
+      return (*this);
+    }
+
+    Self operator++(int) {
+      // pretend to postincrement
+      return (*this);
     }
   };
 
