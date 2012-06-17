@@ -297,21 +297,6 @@ VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
   return Context.createExpr(Opc, Op, 1, 0);
 }
 
-VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
-                                      unsigned BitWidth) {
-  switch (Opc) {
-  default: break;
-  case VASTExpr::dpROr:
-  case VASTExpr::dpRAnd:
-  case VASTExpr::dpRXor:
-    assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
-    return buildReduction(Opc, Op);
-  }
-
-  VASTValPtr Ops[] = { Op };
-  return Context.createExpr(Opc, Ops, BitWidth, 0);
-}
-
 static bool VASTValPtr_less(const VASTValPtr LHS, const VASTValPtr RHS) {
   if (LHS->getASTType() < RHS->getASTType()) return true;
   else if (LHS->getASTType() > RHS->getASTType()) return false;
@@ -418,8 +403,30 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
   case VASTExpr::dpMul:  return buildMulExpr(Ops, BitWidth);
   case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
   case VASTExpr::dpBitCat: return buildBitCatExpr(Ops, BitWidth);
+
+  case VASTExpr::dpROr:
+  case VASTExpr::dpRAnd:
+  case VASTExpr::dpRXor:
+    assert(Ops.size() == 1 && "Unexpected more than 1 operands for reduction!");
+    assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
+    return buildReduction(Opc, Ops[0]);
   }
 
+  return Context.createExpr(Opc, Ops, BitWidth, 0);
+}
+
+VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
+                                      unsigned BitWidth) {
+  switch (Opc) {
+  default: break;
+  case VASTExpr::dpROr:
+  case VASTExpr::dpRAnd:
+  case VASTExpr::dpRXor:
+    assert(BitWidth == 1 && "Bitwidth of reduction should be 1!");
+    return buildReduction(Opc, Op);
+  }
+
+  VASTValPtr Ops[] = { Op };
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
