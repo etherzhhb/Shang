@@ -328,29 +328,45 @@ VASTExprBuilder::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
+namespace llvm {
+template<>
+struct VASTExprOpInfo<VASTExpr::dpAnd> {
+  unsigned OperandWidth;
+  uint64_t ImmVal;
+
+  VASTExprOpInfo(unsigned OperandWidth)
+    : OperandWidth(OperandWidth), ImmVal(~UINT64_C(0)){}
+
+  VASTValPtr analyzeOperand(VASTValPtr V) {
+    assert(OperandWidth == V->getBitWidth() && "Bitwidth not match!");
+    if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
+      ImmVal &= Imm.getSignedValue();
+      return 0;
+    }
+
+    // Do nothing by default.
+    return V;
+  }
+
+  bool isAllZeros() const { return isAllZeros64(ImmVal, OperandWidth); }
+  bool isAllOnes() const { return isAllOnes64(ImmVal, OperandWidth); }
+};
+}
+
 VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   typedef const VASTUse *op_iterator;
-  VASTExprOpInfo<VASTExpr::dpAnd> OpInfo;
+  VASTExprOpInfo<VASTExpr::dpAnd> OpInfo(BitWidth);
+  flattenExpr<VASTExpr::dpAnd>(Ops.begin(), Ops.end(),
+                               op_filler<VASTExpr::dpAnd>(NewOps, OpInfo));
 
-  for (unsigned i = 0; i < Ops.size(); ++i) {
-    // The expression is actually commutative only if all its operands have the
-    // same bitwidth.
-    assert(BitWidth == Ops[i]->getBitWidth() && "Bitwidth not match!");
+  // Check the immediate mask.
+  if (OpInfo.isAllZeros())
+    return getOrCreateImmediate(UINT64_C(0), BitWidth);
 
-    if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Ops[i])) {
-      // X & 1 = X;
-      if (Imm.isAllOnes()) continue;
-
-      // X & 0 = 0;
-      if (Imm.isAllZeros()) return Imm;
-    }
-
-    // Try to flatten the expression tree.
-    flattenExpr<VASTExpr::dpAnd>(Ops[i],
-                                 op_filler<VASTExpr::dpAnd>(NewOps, OpInfo));
-  }
+  if (!OpInfo.isAllOnes())
+    NewOps.push_back(Context.getOrCreateImmediate(OpInfo.ImmVal, BitWidth));
 
   if (NewOps.empty())
     return Context.getOrCreateImmediate(getBitSlice64(~0ull, BitWidth),
