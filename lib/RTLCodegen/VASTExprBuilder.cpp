@@ -332,6 +332,7 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   typedef const VASTUse *op_iterator;
+  VASTExprOpInfo<VASTExpr::dpAnd> OpInfo;
 
   for (unsigned i = 0; i < Ops.size(); ++i) {
     // The expression is actually commutative only if all its operands have the
@@ -348,7 +349,7 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
 
     // Try to flatten the expression tree.
     flattenExpr<VASTExpr::dpAnd>(Ops[i],
-                                 bmc_back_inserter<VASTExpr::dpAnd>(NewOps));
+                                 op_filler<VASTExpr::dpAnd>(NewOps, OpInfo));
   }
 
   if (NewOps.empty())
@@ -410,8 +411,10 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
 VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
+  VASTExprOpInfo<VASTExpr::dpMul> OpInfo;
+
   flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
-                               bmc_back_inserter<VASTExpr::dpMul>(NewOps));
+                               op_filler<VASTExpr::dpMul>(NewOps, OpInfo));
 
   return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
@@ -422,12 +425,14 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   uint64_t ImmVal = 0;
   unsigned MaxImmWidth = 0;
   VASTValPtr Carry = 0;
+  VASTExprOpInfo<VASTExpr::dpAdd> OpInfo;
+
   for (unsigned i = 0; i < Ops.size(); ++i) {
     VASTValPtr V = Ops[i];
     // Discard the leading zeros of the operand of addition;
     V = trimLeadingZeros(V);
 
-    // X + 0 = 0;
+    // Fold the immediate.
     if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
       ImmVal += Imm->getUnsignedValue();
       MaxImmWidth = std::max(MaxImmWidth, Imm->getBitWidth());
@@ -441,7 +446,7 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
       continue;
     }
 
-    NewOps.push_back(V);
+    flattenExpr<VASTExpr::dpAdd>(V, op_filler<VASTExpr::dpAdd>(NewOps, OpInfo));
   }
 
   // Add the immediate value back to the operand list.

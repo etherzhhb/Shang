@@ -85,6 +85,16 @@ public:
   }
 };
 
+template<VASTExpr::Opcode Opcode>
+struct VASTExprOpInfo {
+  VASTExprOpInfo() {}
+
+  VASTValPtr analyzeOperand(VASTValPtr V) {
+    // Do nothing by default.
+    return V;
+  }
+};
+
 class VASTExprBuilder {
   void operator=(const VASTExprBuilder &RHS); // DO NOT IMPLEMENT
   VASTExprBuilder(const VASTExprBuilder &RHS); // DO NOT IMPLEMENT
@@ -116,26 +126,29 @@ class VASTExprBuilder {
 
   // Bit mask analyzing, bitmask_collecting_iterator.
   template<VASTExpr::Opcode Opcode, class _Container>
-  struct bmc_back_iterator :  public std::back_insert_iterator<_Container> {
-    typedef bmc_back_iterator<Opcode, _Container> Self;
+  struct op_filler_iterator :  public std::back_insert_iterator<_Container> {
+    typedef op_filler_iterator<Opcode, _Container> Self;
     typedef std::back_insert_iterator<_Container> supper;
-    typedef VASTExprBuilderContext Context;
 
-    Context &Cntx;
-    VASTValPtr MostBenefitBitMask;
-    explicit bmc_back_iterator(_Container &C, Context &Cntx)
-      : supper(C), MostBenefitBitMask(0), Cntx(Cntx) {}
+    VASTExprBuilder &Builder;
+    VASTExprOpInfo<Opcode> &OpInfo;
+    explicit op_filler_iterator(_Container &C, VASTExprOpInfo<Opcode> &OpInfo,
+                                VASTExprBuilder &Builder)
+      : supper(C), Builder(Builder), OpInfo(OpInfo) {}
 
     Self& operator=(VASTValPtr V) {
-      // Do nothing by default.
-      supper::operator =(V);
+      if (V = OpInfo.analyzeOperand<Opcode>(V))
+        supper::operator =(V);
     }
   };
 
   template<VASTExpr::Opcode Opcode, class _Container>
-  bmc_back_iterator<Opcode, _Container> bmc_back_inserter(_Container &C) {
-    return bmc_back_iterator<Opcode, _Container>(C, Context);
+  op_filler_iterator<Opcode, _Container> op_filler(_Container &C,
+                                                   VASTExprOpInfo<Opcode> &Info)
+  {
+    return op_filler_iterator<Opcode, _Container>(C, Info, *this);
   }
+
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
