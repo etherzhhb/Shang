@@ -645,17 +645,30 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
 
 template<>
 struct VASTExprOpInfo<VASTExpr::dpMul> : public AddMultOpInfoBase {
+  bool ZeroDetected;
 
   VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
-    : AddMultOpInfoBase(Builder, ResultSize) {}
+    : AddMultOpInfoBase(Builder, ResultSize), ZeroDetected(false) {}
 
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
+    // Zero detected, no need to analyze.
+    if (ZeroDetected) return 0;
+
     unsigned CurTailingZeros;
+    V = analyzeBitMask(V, CurTailingZeros);
 
-    if (VASTValPtr Op = analyzeBitMask(V, CurTailingZeros))
-      return Op;
+    if (!V) {
+      ZeroDetected = true;
+      return 0;
+    }
 
+    if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
+      // Ignore multiply by 1.
+      if (Imm.getUnsignedValue() == 1) return 0;
+    }
+
+    updateTailingZeros(V, CurTailingZeros);
     return V;
   }
 };
@@ -679,13 +692,33 @@ VASTValPtr VASTExprBuilder::padHeadOrTail(VASTValPtr V, unsigned BitWidth,
 
 VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
-    SmallVector<VASTValPtr, 8> NewOps;
-    VASTExprOpInfo<VASTExpr::dpMul> OpInfo(*this, BitWidth);
+  SmallVector<VASTValPtr, 8> NewOps;
+  VASTExprOpInfo<VASTExpr::dpMul> OpInfo(*this, BitWidth);
 
-    flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
-                                 op_filler<VASTExpr::dpMul>(NewOps, OpInfo));
+  flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
+                                op_filler<VASTExpr::dpMul>(NewOps, OpInfo));
 
-    return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
+  if (OpInfo.ZeroDetected) return getOrCreateImmediate(UINT64_C(0), BitWidth);
+
+  // Reduce the size of multiply according to tailing zero.
+  if (NewOps.size() == 2 && OpInfo.OpWithTailingZeros) {
+    VASTValPtr NotEndWithZeros = NewOps[0],
+               EndWithZeros = OpInfo.OpWithTailingZeros;
+    if (NotEndWithZeros == EndWithZeros)
+      NotEndWithZeros = NewOps[1];
+
+    unsigned TailingZeros = OpInfo.MaxTailingZeros;
+    VASTValPtr TrimedOp =
+      buildBitSliceExpr(EndWithZeros, EndWithZeros->getBitWidth(), TailingZeros);
+
+    // Build the new multiply without known zeros.
+    unsigned NewMultSize = BitWidth - TailingZeros;
+    VASTValPtr NewMultOps[] = { NotEndWithZeros, TrimedOp };
+    VASTValPtr NewMult = Context.nameExpr(buildMulExpr(NewMultOps, NewMultSize));
+    return padLowerBits(NewMult, BitWidth, false);
+  }
+
+  return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
 
 VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
