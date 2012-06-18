@@ -562,17 +562,23 @@ VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
 namespace llvm {
 struct AddMultOpInfoBase {
   VASTExprBuilder &Builder;
+  const unsigned ResultSize;
   uint64_t ImmVal;
   unsigned ImmSize;
   unsigned MaxTailingZeros;
   VASTValPtr OpWithTailingZeros;
 
-  AddMultOpInfoBase(VASTExprBuilder &Builder) : Builder(Builder), ImmVal(0),
-    ImmSize(0), MaxTailingZeros(0), OpWithTailingZeros(0) {}
+  AddMultOpInfoBase(VASTExprBuilder &Builder, unsigned ResultSize)
+    : Builder(Builder), ResultSize(ResultSize), ImmVal(0), ImmSize(0),
+      MaxTailingZeros(0), OpWithTailingZeros(0) {}
 
   VASTValPtr analyzeBitMask(VASTValPtr V,  unsigned &CurTailingZeros) {
     uint64_t KnownZeros, KnownOnes;
     unsigned OperandSize = V->getBitWidth();
+    // Trim the unused bits according to the result's size
+    if (OperandSize > ResultSize)
+      V = Builder.buildBitSliceExpr(V, ResultSize, 0);
+
     CurTailingZeros = 0;
 
     VASTExprBuilder::calculateBitMask(V, KnownZeros, KnownOnes);
@@ -610,8 +616,8 @@ template<>
 struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
   VASTValPtr Carry;
 
-  VASTExprOpInfo(VASTExprBuilder &Builder)
-    : AddMultOpInfoBase(Builder), Carry(0) {}
+  VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
+    : AddMultOpInfoBase(Builder, ResultSize), Carry(0) {}
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
     unsigned CurTailingZeros;
@@ -671,7 +677,7 @@ VASTValPtr VASTExprBuilder::padHigherBits(VASTValPtr V, unsigned BitWidth,
 VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
-  VASTExprOpInfo<VASTExpr::dpAdd> OpInfo(*this);
+  VASTExprOpInfo<VASTExpr::dpAdd> OpInfo(*this, BitWidth);
   flattenExpr<VASTExpr::dpAdd>(Ops.begin(), Ops.end(),
                                op_filler<VASTExpr::dpAdd>(NewOps, OpInfo));
 
