@@ -88,6 +88,12 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
   case VASTExpr::dpBitCat:
     calculateBitCatBitMask(Expr, KnownZeros, KnownOnes);
     return;
+  case VASTExpr::dpAssign:
+    calculateBitMask(Expr.getOperand(0), KnownZeros, KnownOnes);
+    // Adjust the bitmask by LB.
+    KnownOnes = getBitSlice64(KnownOnes >> Expr->LB, Expr->getBitWidth());
+    KnownZeros = getBitSlice64(KnownZeros >> Expr->LB, Expr->getBitWidth());
+    return;
   }
 }
 
