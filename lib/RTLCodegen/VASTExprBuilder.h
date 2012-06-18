@@ -99,8 +99,6 @@ class VASTExprBuilder {
   void operator=(const VASTExprBuilder &RHS); // DO NOT IMPLEMENT
   VASTExprBuilder(const VASTExprBuilder &RHS); // DO NOT IMPLEMENT
 
-  VASTExprBuilderContext &Context;
-
   VASTValPtr foldBitSliceExpr(VASTValPtr U, uint8_t UB, uint8_t LB);
 
   template<VASTExpr::Opcode Opcode, typename visitor>
@@ -168,6 +166,9 @@ class VASTExprBuilder {
   VASTValPtr padLowerBits(VASTValPtr V, unsigned BitWidth, bool ByOnes) {
     return padHeadOrTail(V, BitWidth, ByOnes, true);
   }
+
+protected:
+  VASTExprBuilderContext &Context;
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}

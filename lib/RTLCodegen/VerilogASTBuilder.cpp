@@ -15,7 +15,7 @@
 // instructions in form of RTL verilog code.
 //
 //===----------------------------------------------------------------------===//
-#include "VASTExprBuilder.h"
+#include "MachineFunction2Datapath.h"
 
 #include "vtm/Passes.h"
 #include "vtm/VFInfo.h"
@@ -193,7 +193,7 @@ struct MemBusBuilder {
   }
 };
 class VerilogASTBuilder : public MachineFunctionPass,
-                          public VASTExprBuilderContext {
+                          public DatapathBuilderContext {
   const Module *M;
   MachineFunction *MF;
   TargetData *TD;
@@ -201,7 +201,7 @@ class VerilogASTBuilder : public MachineFunctionPass,
   VFInfo *FInfo;
   MachineRegisterInfo *MRI;
   VASTModule *VM;
-  OwningPtr<VASTExprBuilder> Builder;
+  OwningPtr<DatapathBuilder> Builder;
   MemBusBuilder *MBBuilder;
   StringSet<> EmittedSubModules;
 
@@ -299,7 +299,7 @@ class VerilogASTBuilder : public MachineFunctionPass,
     // Build the expression if it had not existed yet.
     if (MI == 0) MI = MRI->getVRegDef(WireNum);
     assert(MI && "Virtual register for wire not defined!");
-    return (Expr = emitDatapathExpr(MI));
+    return (Expr = Builder->buildDatapathExpr(MI));
   }
 
   VASTValPtr indexVASTRegister(unsigned RegNum, VASTValPtr V) {
@@ -381,18 +381,6 @@ class VerilogASTBuilder : public MachineFunctionPass,
                   unsigned II, bool Pipelined);
 
   MachineBasicBlock::iterator emitDatapath(MachineInstr *Bundle);
-  VASTValPtr emitDatapathExpr(MachineInstr *MI);
-  VASTValPtr emitUnaryOp(MachineInstr *MI, VASTExpr::Opcode Opc);
-  VASTValPtr emitInvert(MachineInstr *MI);
-  VASTValPtr emitReduceOr(MachineInstr *MI);
-  template<typename FnTy>
-  VASTValPtr emitBinaryOp(MachineInstr *MI, FnTy F);
-  VASTValPtr emitOpLut(MachineInstr *MI);
-  VASTValPtr emitOpSel(MachineInstr *MI);
-  VASTValPtr emitChainedOpAdd(MachineInstr *MI);
-  VASTValPtr emitChainedOpICmp(MachineInstr *MI);
-  VASTValPtr emitOpBitSlice(MachineInstr *MI);
-
 
   typedef SmallVectorImpl<VASTValPtr> VASTValueVecTy;
   // Emit the operations in the first micro state in the FSM state when we are
@@ -406,9 +394,6 @@ class VerilogASTBuilder : public MachineFunctionPass,
 
   void emitOpAdd(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
   void emitBinaryFUOp(MachineInstr *MI, VASTSlot *Slot, VASTValueVecTy &Cnds);
-
-  // Create a condition from a predicate operand.
-  VASTValPtr createCnd(MachineOperand Op);
 
   VASTValPtr getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true);
 
@@ -508,7 +493,7 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
   TargetRegisterInfo *RegInfo
     = const_cast<TargetRegisterInfo*>(MF->getTarget().getRegisterInfo());
   TRI = reinterpret_cast<VRegisterInfo*>(RegInfo);
-  Builder.reset(new VASTExprBuilder(*this));
+  Builder.reset(new DatapathBuilder(*this));
 
   emitFunctionSignature(F.getFunction());
 
@@ -665,7 +650,7 @@ void VerilogASTBuilder::addSlotReady(MachineInstr *MI, VASTSlot *S) {
   default: return;
   }
   // TODO: Assert not in first slot.
-  addSlotReady(S, ReadyPort, createCnd(*VInstrInfo::getPredOperand(MI)));
+  addSlotReady(S, ReadyPort, Builder->createCnd(MI));
 }
 
 void VerilogASTBuilder::emitCommonPort(unsigned FNNum) {
@@ -933,7 +918,7 @@ void VerilogASTBuilder::emitCtrlOp(MachineBasicBlock::instr_iterator ctrl_begin,
            && "Unexpected first slot!");
 
     Cnds.clear();
-    Cnds.push_back(createCnd(*VInstrInfo::getPredOperand(MI)));
+    Cnds.push_back(Builder->createCnd(MI));
 
     // Emit the operations.
     switch (MI->getOpcode()) {
@@ -1011,7 +996,7 @@ void VerilogASTBuilder::emitBr(MachineInstr *MI, VASTSlot *CurSlot,
                                VASTValueVecTy &Cnds, MachineBasicBlock *CurBB,
                                bool Pipelined) {
   MachineOperand &CndOp = MI->getOperand(0);
-  Cnds.push_back(createCnd(CndOp));
+  Cnds.push_back(Builder->createCnd(CndOp));
 
   MachineBasicBlock *TargetBB = MI->getOperand(1).getMBB();
   assert(VInstrInfo::getPredOperand(MI)->getReg() == 0 &&
@@ -1315,179 +1300,6 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
     getOrCreateExpr(I->getOperand(0).getReg(), I);
 
   return I;
-}
-
-VASTValPtr VerilogASTBuilder::emitDatapathExpr(MachineInstr *MI) {
-  switch (MI->getOpcode()) {
-  case VTM::VOpBitSlice:  return emitOpBitSlice(MI);
-  case VTM::VOpBitCat:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpBitCat>);
-  case VTM::VOpBitRepeat:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpBitRepeat>);
-
-  case VTM::VOpAdd_c:     return emitChainedOpAdd(MI);
-  case VTM::VOpICmp_c:    return emitChainedOpICmp(MI);
-
-  case VTM::VOpSHL_c:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpShl>);
-  case VTM::VOpSRA_c:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpSRA>);
-  case VTM::VOpSRL_c:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpSRL>);
-
-  case VTM::VOpMultLoHi_c:
-  case VTM::VOpMult_c:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpMul>);
-
-  case VTM::VOpSel:       return emitOpSel(MI);
-
-  case VTM::VOpLUT:       return emitOpLut(MI);
-
-  case VTM::VOpXor:       return emitBinaryOp(MI, VASTExprBuilder::buildXor);
-  case VTM::VOpAnd:
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpAnd>);
-  case VTM::VOpOr:        return emitBinaryOp(MI, VASTExprBuilder::buildOr);
-  case VTM::VOpNot:       return emitInvert(MI);
-  case VTM::VOpROr:       return emitReduceOr(MI);
-  case VTM::VOpRAnd:      return emitUnaryOp(MI, VASTExpr::dpRAnd);
-  case VTM::VOpRXor:      return emitUnaryOp(MI, VASTExpr::dpRXor);
-  case VTM::VOpPipelineStage: return emitUnaryOp(MI, VASTExpr::dpAssign);
-  default:  assert(0 && "Unexpected opcode!");    break;
-  }
-
-  return VASTValPtr(0);
-}
-
-template<typename FnTy>
-VASTValPtr VerilogASTBuilder::emitBinaryOp(MachineInstr *MI, FnTy F) {
-  return  F(getAsOperand(MI->getOperand(1)), getAsOperand(MI->getOperand(2)),
-            VInstrInfo::getBitWidth(MI->getOperand(0)), Builder.get());
-}
-
-VASTValPtr VerilogASTBuilder::emitChainedOpAdd(MachineInstr *MI) {
-  return Builder->buildExpr(VASTExpr::dpAdd,
-                            getAsOperand(MI->getOperand(1)),
-                            getAsOperand(MI->getOperand(2)),
-                            getAsOperand(MI->getOperand(3)),
-                            VInstrInfo::getBitWidth(MI->getOperand(0)));
-}
-
-VASTValPtr VerilogASTBuilder::emitChainedOpICmp(MachineInstr *MI) {
-  unsigned CndCode = MI->getOperand(3).getImm();
-  if (CndCode == VFUs::CmpSigned)
-    return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpSCmp>);
-
-  // else
-  return emitBinaryOp(MI, VASTExprBuilder::buildExpr<VASTExpr::dpUCmp>);
-}
-
-VASTValPtr VerilogASTBuilder::emitInvert(MachineInstr *MI) {
-  return Builder->buildNotExpr(getAsOperand(MI->getOperand(1)));
-}
-
-VASTValPtr VerilogASTBuilder::emitReduceOr(MachineInstr *MI) {
-  // A | B .. | Z = ~(~A & ~B ... & ~Z).
-  VASTValPtr V = Builder->buildNotExpr(getAsOperand(MI->getOperand(1)));
-  V = Builder->buildNotExpr(Builder->buildExpr(VASTExpr::dpRAnd, V, 1));
-  return V;
-}
-
-VASTValPtr VerilogASTBuilder::emitUnaryOp(MachineInstr *MI,
-                                          VASTExpr::Opcode Opc) {
-  return Builder->buildExpr(Opc, getAsOperand(MI->getOperand(1)),
-                            VInstrInfo::getBitWidth(MI->getOperand(0)));
-}
-
-VASTValPtr VerilogASTBuilder::emitOpSel(MachineInstr *MI) {
-  VASTValPtr Ops[] = { createCnd(MI->getOperand(1)),
-                       getAsOperand(MI->getOperand(2)),
-                       getAsOperand(MI->getOperand(3)) };
-
-  return Builder->buildExpr(VASTExpr::dpSel, Ops,
-                            VInstrInfo::getBitWidth(MI->getOperand(0)));
-}
-
-VASTValPtr VerilogASTBuilder::emitOpLut(MachineInstr *MI) {
-  unsigned SizeInBits = VInstrInfo::getBitWidth(MI->getOperand(0));
-
-  SmallVector<VASTValPtr, 8> Operands;
-  for (unsigned i = 4, e = MI->getNumOperands(); i < e; ++i)
-    Operands.push_back(getAsOperand(MI->getOperand(i)));
-  unsigned NumInputs = Operands.size();
-
-  // Interpret the sum of product table.
-  const char *p = MI->getOperand(1).getSymbolName();
-  SmallVector<VASTValPtr, 8> ProductOps, SumOps;
-  bool isComplement = false;
-  
-  while (*p) {
-    // Interpret the product.
-    ProductOps.clear();
-    for (unsigned i = 0; i < NumInputs; ++i) {
-      char c = *p++;
-      switch (c) {
-      default: llvm_unreachable("Unexpected SOP char!");
-      case '-': /*Dont care*/ break;
-      case '1': ProductOps.push_back(Operands[i]); break;
-      case '0':
-        ProductOps.push_back(Builder->buildNotExpr(Operands[i]));
-        break;
-      }
-    }
-
-    // Inputs and outputs are seperated by blank space.
-    assert(*p == ' ' && "Expect the blank space!");
-    ++p;
-
-    // Create the product.
-    // Add the product to the operand list of the sum.
-    SumOps.push_back(Builder->buildAndExpr(ProductOps, SizeInBits));
-
-    // Is the output inverted?
-    char c = *p++;
-    assert((c == '0' || c == '1') && "Unexpected SOP char!");
-    isComplement = (c == '0');
-
-    // Products are separated by new line.
-    assert(*p == '\n' && "Expect the new line!");
-    ++p;
-  }
-
-  // Or the products together to build the SOP (Sum of Product).
-  VASTValPtr SOP = Builder->buildOrExpr(SumOps, SizeInBits);
-
-  if (isComplement) SOP = Builder->buildNotExpr(SOP);
-
-  // Build the sum;
-  return SOP;
-}
-
-VASTValPtr VerilogASTBuilder::emitOpBitSlice(MachineInstr *MI) {
-  // Get the range of the bit slice, Note that the
-  // bit at upper bound is excluded in VOpBitSlice
-  unsigned UB = MI->getOperand(2).getImm(),
-           LB = MI->getOperand(3).getImm();
-
-  // RHS should be a register.
-  MachineOperand &MO = MI->getOperand(1);
-  return Builder->buildBitSliceExpr(getAsOperand(MO), UB, LB);
-}
-
-
-VASTValPtr VerilogASTBuilder::createCnd(MachineOperand Op) {
-  // Is there an always true predicate?
-  if (VInstrInfo::isAlwaysTruePred(Op)) return VM->getBoolImmediate(true);
-
-  bool isInverted = VInstrInfo::isPredicateInverted(Op);
-  // Fix the bitwidth, the bitwidth of condition is always 1.
-  VInstrInfo::setBitWidth(Op, 1);
-
-  // Otherwise it must be some signal.
-  VASTValPtr C = getAsOperand(Op);
-
-  if (isInverted) C = Builder->buildNotExpr(C);
-
-  return C;
 }
 
 static void printOperandImpl(raw_ostream &OS, const MachineOperand &MO,
