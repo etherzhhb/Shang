@@ -81,7 +81,15 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
   }
 
   VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
-  if (!Expr) return;
+  if (!Expr) {
+    VASTValPtr NameStripped = Context.stripName(V);
+    if (NameStripped != V)
+      // Compute the bitmask of underlying expression if name is actually
+      // stripped.
+      calculateBitMask(NameStripped, KnownZeros, KnownOnes);
+    
+    return;
+  }
 
   switch(Expr->getOpcode()) {
   default: return;
@@ -382,11 +390,12 @@ VASTExprBuilder::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
 namespace llvm {
 template<>
 struct VASTExprOpInfo<VASTExpr::dpAnd> {
+  VASTExprBuilder &Builder;
   unsigned OperandWidth;
   uint64_t KnownZeros, KnownOnes;
 
-  VASTExprOpInfo(unsigned OperandWidth)
-    : OperandWidth(OperandWidth), KnownZeros(UINT64_C(0)),
+  VASTExprOpInfo(VASTExprBuilder &Builder, unsigned OperandWidth)
+    : Builder(Builder), OperandWidth(OperandWidth), KnownZeros(UINT64_C(0)),
       KnownOnes(~UINT64_C(0)) /*Assume all bits are ones*/{}
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
@@ -401,7 +410,7 @@ struct VASTExprOpInfo<VASTExpr::dpAnd> {
     }
 
     uint64_t OpKnownZeros, OpKnownOnes;
-    VASTExprBuilder::calculateBitMask(V, OpKnownZeros, OpKnownOnes);
+    Builder.calculateBitMask(V, OpKnownZeros, OpKnownOnes);
     KnownOnes &= OpKnownOnes;
     KnownZeros |=OpKnownZeros;
 
@@ -448,7 +457,7 @@ VASTValPtr VASTExprBuilder::buildAndExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
   typedef const VASTUse *op_iterator;
-  VASTExprOpInfo<VASTExpr::dpAnd> OpInfo(BitWidth);
+  VASTExprOpInfo<VASTExpr::dpAnd> OpInfo(*this, BitWidth);
   flattenExpr<VASTExpr::dpAnd>(Ops.begin(), Ops.end(),
                                op_filler<VASTExpr::dpAnd>(NewOps, OpInfo));
 
@@ -587,7 +596,7 @@ struct AddMultOpInfoBase {
 
     CurTailingZeros = 0;
 
-    VASTExprBuilder::calculateBitMask(V, KnownZeros, KnownOnes);
+    Builder.calculateBitMask(V, KnownZeros, KnownOnes);
     // Any known zeros?
     if (KnownZeros) {
       // Try to trim the leading zeros.
