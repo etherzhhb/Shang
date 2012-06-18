@@ -661,17 +661,19 @@ struct VASTExprOpInfo<VASTExpr::dpMul> : public AddMultOpInfoBase {
 };
 }
 
-VASTValPtr VASTExprBuilder::padHigherBits(VASTValPtr V, unsigned BitWidth,
-                                          bool ByOnes) {
+VASTValPtr VASTExprBuilder::padHeadOrTail(VASTValPtr V, unsigned BitWidth,
+                                          bool ByOnes, bool PadTail) {
   assert(BitWidth >= V->getBitWidth() && "Bad bitwidth!");
   unsigned ZeroBits = BitWidth - V->getBitWidth();
 
   if (ZeroBits == 0) return V;
 
-  // Pad the MSB by zeros.
   VASTValPtr Pader =
     Context.getOrCreateImmediate(ByOnes ? ~UINT64_C(0) : UINT64_C(0), ZeroBits);
-  VASTValPtr Ops[] = {Pader, V};
+
+  VASTValPtr Hi = PadTail ? V : Pader, Lo = PadTail ? Pader : V;
+
+  VASTValPtr Ops[] = { Hi, Lo};
   return buildBitCatExpr(Ops, BitWidth);
 }
 

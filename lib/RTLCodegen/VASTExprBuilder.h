@@ -157,7 +157,17 @@ class VASTExprBuilder {
     return op_filler_iterator<Opcode, _Container>(C, Info, *this);
   }
 
-  VASTValPtr padHigherBits(VASTValPtr V, unsigned BitWidth, bool ByOnes);
+
+  VASTValPtr padHeadOrTail(VASTValPtr V, unsigned BitWidth, bool ByOnes,
+                           bool PadTail);
+
+  VASTValPtr padHigherBits(VASTValPtr V, unsigned BitWidth, bool ByOnes) {
+    return padHeadOrTail(V, BitWidth, ByOnes, false);
+  }
+
+  VASTValPtr padLowerBits(VASTValPtr V, unsigned BitWidth, bool ByOnes) {
+    return padHeadOrTail(V, BitWidth, ByOnes, true);
+  }
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
