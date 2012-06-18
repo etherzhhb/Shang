@@ -1158,6 +1158,8 @@ public:
 
   ~VASTModule();
 
+  void reset();
+
   const std::string &getName() const { return Name; }
 
   void printDatapath(raw_ostream &OS) const;

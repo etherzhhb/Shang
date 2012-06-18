@@ -434,7 +434,7 @@ std::string VASTModule::DirectClkEnAttr = "";
 std::string VASTModule::ParallelCaseAttr = "";
 std::string VASTModule::FullCaseAttr = "";
 
-VASTModule::~VASTModule() {
+void VASTModule::reset() {
   // Release all ports.
   Ports.clear();
   Wires.clear();
@@ -443,6 +443,10 @@ VASTModule::~VASTModule() {
   Allocator.Reset();
   SymbolTable.clear();
   UniqueExprs.clear();
+}
+
+VASTModule::~VASTModule() {
+  reset();
 
   delete &(DataPath.str());
   delete &(ControlBlock.str());
