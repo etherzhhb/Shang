@@ -137,7 +137,7 @@ class VASTExprBuilder {
       : Builder(Builder), OpInfo(OpInfo), C(C) {}
 
     Self &operator=(VASTValPtr V) {
-      if (V = OpInfo.analyzeOperand(V))
+      if ((V = OpInfo.analyzeOperand(V)))
         C.push_back(V);
 
       return *this;
