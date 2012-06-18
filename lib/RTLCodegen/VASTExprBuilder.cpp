@@ -74,13 +74,13 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
   KnownOnes = KnownZeros = UINT64_C(0);
 
   // Most simple case: Immediate.
-  if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
     KnownOnes = Imm.getUnsignedValue();
     KnownZeros = getBitSlice64(~KnownOnes, Imm->getBitWidth());
     return;
   }
 
-  VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
+  VASTExprPtr Expr = dyn_cast<VASTExprPtr>(V);
   if (!Expr) {
     VASTValPtr NameStripped = Context.stripName(V);
     if (NameStripped != V)
@@ -108,7 +108,7 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
 VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
-  if (VASTImmPtr ImmPtr = dyn_cast<VASTImmediate>(U))
+  if (VASTImmPtr ImmPtr = dyn_cast<VASTImmPtr>(U))
     return Context.getOrCreateImmediate(ImmPtr.getUnsignedValue(),
                                         ImmPtr->getBitWidth());
 
@@ -134,12 +134,12 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
   // Not a sub bitslice.
   if (UB == OperandSize && LB == 0) return U;
 
-  if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(U)) {
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(U)) {
     uint64_t imm = getBitSlice64(Imm.getUnsignedValue(), UB, LB);
     return Context.getOrCreateImmediate(imm, UB - LB);
   }
 
-  VASTExprPtr Expr = dyn_cast<VASTExpr>(U);
+  VASTExprPtr Expr = dyn_cast<VASTExprPtr>(U);
 
   if (Expr == 0) return VASTValPtr(0);
 
@@ -202,7 +202,7 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
 }
 
 static VASTExprPtr getAsBitSliceExpr(VASTValPtr V) {
-  VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
+  VASTExprPtr Expr = dyn_cast<VASTExprPtr>(V);
   if (!Expr || !Expr->isSubBitSlice()) return 0;
 
   return Expr;
@@ -214,7 +214,7 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
   flattenExpr<VASTExpr::dpBitCat>(Ops.begin(), Ops.end(),
                                   std::back_inserter(NewOps));
 
-  VASTImmPtr LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
+  VASTImmPtr LastImm = dyn_cast<VASTImmPtr>(NewOps[0]);
   VASTExprPtr LastBitSlice = getAsBitSliceExpr(NewOps[0]);
 
   unsigned ActualOpPos = 1;
@@ -222,7 +222,7 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
   // Merge the constant sequence.
   for (unsigned i = 1, e = NewOps.size(); i < e; ++i) {
     VASTValPtr V = NewOps[i];
-    if (VASTImmPtr CurImm = dyn_cast<VASTImmediate>(V)) {
+    if (VASTImmPtr CurImm = dyn_cast<VASTImmPtr>(V)) {
       if (LastImm) {
         // Merge the constants.
         uint64_t HiVal = LastImm.getUnsignedValue(),
@@ -296,7 +296,7 @@ VASTValPtr VASTExprBuilder::buildBitSliceExpr(VASTValPtr U, uint8_t UB,
 }
 
 VASTValPtr VASTExprBuilder::buildReduction(VASTExpr::Opcode Opc,VASTValPtr Op) {
-  if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(Op)) {
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(Op)) {
     uint64_t Val = Imm.getUnsignedValue();
     switch (Opc) {
     case VASTExpr::dpRAnd:
@@ -373,7 +373,7 @@ struct VASTExprOpInfo<VASTExpr::dpAnd> {
   VASTValPtr analyzeOperand(VASTValPtr V) {
     assert(OperandWidth == V->getBitWidth() && "Bitwidth not match!");
 
-    if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
+    if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
       // The bit is known one only if the bit of all operand are one.
       KnownOnes &= Imm.getSignedValue();
       // The bit is known zero if the bit of any operand are zero.
@@ -613,7 +613,7 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
     if (!V) return 0;
 
     // Fold the immediate.
-    if (VASTImmPtr Imm = dyn_cast<VASTImmediate>(V)) {
+    if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
       ImmVal += Imm->getUnsignedValue();
       ImmSize = std::max(ImmSize, Imm->getBitWidth());
       return 0;

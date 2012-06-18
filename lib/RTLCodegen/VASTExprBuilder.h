@@ -51,7 +51,7 @@ public:
   }
 
   VASTValPtr stripZeroBasedBitSlize(VASTValPtr V) {
-    VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
+    VASTExprPtr Expr = dyn_cast<VASTExprPtr>(V);
     if (Expr.get() && Expr->isSubBitSlice() && Expr->LB == 0)
       return Expr.getOperand(0);
 
@@ -109,7 +109,7 @@ class VASTExprBuilder {
   void flattenExpr(iterator begin, iterator end, visitor F);
 
   static bool isAllZeros(VASTValPtr V) {
-    if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V))
+    if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V))
       return Imm->isAllZeros();
 
     return false;
