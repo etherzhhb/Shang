@@ -105,44 +105,6 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
   }
 }
 
-VASTValPtr VASTExprBuilder::trimZeros(VASTValPtr V, unsigned &Offset) {
-  if (VASTImmediate *Imm = dyn_cast<VASTImmediate>(V)) {
-    uint64_t Val = Imm->getSignedValue();
-    if (isAllZeros64(Val, Imm->getBitWidth())) return V;
-    
-    unsigned TrailingZeros = CountTrailingZeros_64(Val);
-    unsigned LeadingZeros = CountLeadingZeros_64(Val);
-    Val = getBitSlice64(Val, 64 - LeadingZeros, TrailingZeros);
-    if (LeadingZeros) LeadingZeros -= 64 - Imm->getBitWidth();    
-    unsigned NewBitWidth = Imm->getBitWidth() - LeadingZeros - TrailingZeros;
-    assert(NewBitWidth <= Imm->getBitWidth() && "Bad bitwidth!");
-    Offset = TrailingZeros;
-    return getOrCreateImmediate(Val, NewBitWidth);
-  }
-  
-  VASTExpr *Expr = dyn_cast<VASTExpr>(V);
-  if (!Expr || Expr->getOpcode() != VASTExpr::dpBitCat) return V;
-
-  // Too complex to handle.
-  if (Expr->NumOps != 2) return V;
-
-  VASTValPtr Hi = Expr->getOperand(0), Lo = Expr->getOperand(1);
-
-  if (isAllZeros(Hi)) {
-      // The higher part are zeros, offset is zero.
-      Offset = 0;
-      return Lo;
-  }
-
-  if (isAllZeros(Lo)) {
-    // The higher part are zeros, offset is zero.
-    Offset = Lo->getBitWidth();
-    return Hi;
-  }
-
-  return V;
-}
-
 VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
