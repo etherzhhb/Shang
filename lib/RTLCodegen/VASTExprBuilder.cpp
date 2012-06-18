@@ -108,11 +108,13 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
 VASTValPtr VASTExprBuilder::buildNotExpr(VASTValPtr U) {
   U = U.invert();
 
-  if (VASTImmPtr ImmPtr = dyn_cast<VASTImmPtr>(U))
-    return Context.getOrCreateImmediate(ImmPtr.getUnsignedValue(),
-                                        ImmPtr->getBitWidth());
 
+  // Try to promote the invert flag
   if (U.isInverted()) {
+    if (VASTImmPtr ImmPtr = dyn_cast<VASTImmPtr>(U))
+        return getOrCreateImmediate(ImmPtr.getUnsignedValue(),
+                                    ImmPtr->getBitWidth());
+
     if (VASTExpr *Expr = dyn_cast<VASTExpr>(U.get())) {
       if (Expr->getOpcode() == VASTExpr::dpBitCat) {
         typedef VASTExpr::op_iterator it;
