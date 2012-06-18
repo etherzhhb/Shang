@@ -25,27 +25,43 @@
 #include "llvm/CodeGen/MachineFunction.h"
 
 namespace llvm {
+class MachineRegisterInfo;
+
 class DatapathBuilderContext : public VASTExprBuilderContext {
 public:
   virtual VASTValPtr getAsOperand(MachineOperand &Op,
                                   bool GetAsInlineOperand = true) {
     return 0;
   }
-
 };
 
 class DatapathBuilder : public VASTExprBuilder {
+public:
+  typedef std::map<unsigned, VASTValPtr> RegIdxMapTy;
+  MachineRegisterInfo &MRI;
+  RegIdxMapTy Idx2Expr;
+
   DatapathBuilderContext &getContext() {
     return reinterpret_cast<DatapathBuilderContext&>(Context);
   }
 
 public:
-  explicit DatapathBuilder(VASTExprBuilderContext &Context)
-    : VASTExprBuilder(Context) {}
+  explicit DatapathBuilder(VASTExprBuilderContext &Context,
+                           MachineRegisterInfo &MRI)
+    : VASTExprBuilder(Context), MRI(MRI) {}
 
   VASTValPtr getAsOperand(MachineOperand &Op, bool GetAsInlineOperand = true) {
     return getContext().getAsOperand(Op, GetAsInlineOperand);
   }
+
+  // Virtual register mapping.
+  VASTValPtr getOrCreateExpr(unsigned RegNo, MachineInstr *MI = 0);
+  VASTValPtr getOrCreateExpr(MachineInstr *MI) {
+    return getOrCreateExpr(MI->getOperand(0).getReg(), MI);
+  }
+
+  VASTValPtr lookupExpr(unsigned RegNo) const;
+  VASTValPtr indexVASTExpr(unsigned RegNo, VASTValPtr V);
 
   // Build VASTExpr from MachineInstr.
   VASTValPtr buildDatapathExpr(MachineInstr *MI);

@@ -17,6 +17,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MachineFunction2Datapath.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 
 using namespace llvm;
 
@@ -183,4 +184,32 @@ VASTValPtr DatapathBuilder::buildBitSlice(MachineInstr *MI) {
   // RHS should be a register.
   MachineOperand &MO = MI->getOperand(1);
   return buildBitSliceExpr(getAsOperand(MO), UB, LB);
+}
+
+VASTValPtr DatapathBuilder::getOrCreateExpr(unsigned RegNo, MachineInstr *MI) {
+  assert(TargetRegisterInfo::isVirtualRegister(RegNo)
+          && "Expected virtual register!");
+  VASTValPtr &Expr = Idx2Expr[RegNo];
+  if (Expr) return Expr;
+
+  // Build the expression if it had not existed yet.
+  if (MI == 0) MI = MRI.getVRegDef(RegNo);
+  assert(MI && "Virtual register for wire not defined!");
+  return (Expr = buildDatapathExpr(MI));
+}
+
+VASTValPtr DatapathBuilder::lookupExpr(unsigned RegNo) const {
+   assert(TargetRegisterInfo::isVirtualRegister(RegNo)
+          && "Expect virtual register!");
+   RegIdxMapTy::const_iterator at = Idx2Expr.find(RegNo);
+   return at == Idx2Expr.end() ? 0 : at->second;
+ }
+
+VASTValPtr DatapathBuilder::indexVASTExpr(unsigned RegNo, VASTValPtr V) {
+  assert(TargetRegisterInfo::isVirtualRegister(RegNo)
+    && "Expect physical register!");
+  bool inserted = Idx2Expr.insert(std::make_pair(RegNo, V)).second;
+  assert(inserted && "RegNum already indexed some value!");
+
+  return V;
 }
