@@ -669,13 +669,19 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
     return V;
   }
 
-  VASTValPtr createImmOperand() {
+  VASTValPtr flushImmOperand() {
     if (ImmVal) {
       VASTImmPtr Imm = Builder.getOrCreateImmediate(ImmVal, ImmSize);
       uint64_t KnownZeros = ~Imm.getUnsignedValue();
       unsigned CurTailingZeros = CountTrailingOnes_64(KnownZeros);
 
       updateTailingZeros(Imm, CurTailingZeros);
+
+      // Try to treat 1 bit immediate as carry bit.
+      if (ImmSize == 1 && !Carry) {
+        Carry = Imm;
+        return 0;
+      }
 
       return Imm;
     }
@@ -707,7 +713,7 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
                                op_filler<VASTExpr::dpAdd>(NewOps, OpInfo));
 
   // Add the immediate value back to the operand list.
-  if (VASTValPtr V = OpInfo.createImmOperand())
+  if (VASTValPtr V = OpInfo.flushImmOperand())
     NewOps.push_back(V);
 
   // If the addition contains only 2 operand, check if we can inline a operand
