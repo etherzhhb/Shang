@@ -14,11 +14,13 @@ project_new DUT_TOP -overwrite
 if {"@MAIN_RTL_ENTITY@" == "jpeg2bmp_main_IMS_ASAP_main_DUT_RTL" | "@MAIN_RTL_ENTITY@" == "adpcm_main_IMS_ASAP_main_DUT_RTL"} {
 # Target: CycloneII
 set_global_assignment -name FAMILY CycloneII
-set_global_assignment -name DEVICE EP2C70F672C6
+set_global_assignment -name DEVICE EP2C70F896C6
+#set_global_assignment -name DEVICE EP2C70F672C6
 } else {
 # Target: DE2 Board
 set_global_assignment -name FAMILY CycloneII
-set_global_assignment -name DEVICE EP2C35F672C6
+set_global_assignment -name DEVICE EP2C70F896C6
+#set_global_assignment -name DEVICE EP2C35F672C6
 }
 
 # Build project and specify some confige
@@ -36,17 +38,17 @@ if {"@MAIN_RTL_ENTITY@" == "jpeg2bmp_main_IMS_ASAP_main_DUT_RTL" | "@MAIN_RTL_EN
 } else {
 # Assign pins
 # =====================
-set_location_assignment PIN_G26 -to rstN
-set_location_assignment PIN_N23 -to start
-set_location_assignment PIN_AE22 -to LED7[0]
-set_location_assignment PIN_AF22 -to LED7[1]
-set_location_assignment PIN_W19 -to LED7[2]
-set_location_assignment PIN_V18 -to LED7[3]
-set_location_assignment PIN_U18 -to LED7[4]
-set_location_assignment PIN_U17 -to LED7[5]
-set_location_assignment PIN_AA20 -to LED7[6]
-set_location_assignment PIN_Y18 -to LED7[7]
-set_location_assignment PIN_N2 -to clk
+set_location_assignment PIN_T29 -to rstN
+set_location_assignment PIN_T28 -to start
+set_location_assignment PIN_W27 -to LED7[0]
+set_location_assignment PIN_W25 -to LED7[1]
+set_location_assignment PIN_W23 -to LED7[2]
+set_location_assignment PIN_Y27 -to LED7[3]
+set_location_assignment PIN_Y24 -to LED7[4]
+set_location_assignment PIN_Y23 -to LED7[5]
+set_location_assignment PIN_AA27 -to LED7[6]
+set_location_assignment PIN_AA24 -to LED7[7]
+set_location_assignment PIN_D16 -to clk
 }
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
 set_global_assignment -name RESERVE_ASDO_AFTER_CONFIGURATION "AS OUTPUT DRIVING AN UNSPECIFIED SIGNAL"

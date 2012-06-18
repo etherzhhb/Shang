@@ -24,7 +24,7 @@ MULT_ChainingThreshold = @MULT_ChainingThreshold@
 ICMP_ChainingThreshold = @ICMP_ChainingThreshold@
 
 -- load platform information script
-dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C35F672C6.lua')
+dofile('@VTS_SOURCE_ROOT@/' .. 'EP2C70F896C6.lua')
 
 -- Load bram initfile
 dofile('@TEST_BINARY_ROOT@/' .. 'common_config.lua')
