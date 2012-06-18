@@ -537,17 +537,6 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op,
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
-VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
-                                         unsigned BitWidth) {
-  SmallVector<VASTValPtr, 8> NewOps;
-  VASTExprOpInfo<VASTExpr::dpMul> OpInfo;
-
-  flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
-                               op_filler<VASTExpr::dpMul>(NewOps, OpInfo));
-
-  return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
-}
-
 namespace llvm {
 struct AddMultOpInfoBase {
   VASTExprBuilder &Builder;
@@ -653,6 +642,23 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
     return 0;
   }
 };
+
+template<>
+struct VASTExprOpInfo<VASTExpr::dpMul> : public AddMultOpInfoBase {
+
+  VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
+    : AddMultOpInfoBase(Builder, ResultSize) {}
+
+
+  VASTValPtr analyzeOperand(VASTValPtr V) {
+    unsigned CurTailingZeros;
+
+    if (VASTValPtr Op = analyzeBitMask(V, CurTailingZeros))
+      return Op;
+
+    return V;
+  }
+};
 }
 
 VASTValPtr VASTExprBuilder::padHigherBits(VASTValPtr V, unsigned BitWidth,
@@ -667,6 +673,17 @@ VASTValPtr VASTExprBuilder::padHigherBits(VASTValPtr V, unsigned BitWidth,
     Context.getOrCreateImmediate(ByOnes ? ~UINT64_C(0) : UINT64_C(0), ZeroBits);
   VASTValPtr Ops[] = {Pader, V};
   return buildBitCatExpr(Ops, BitWidth);
+}
+
+VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
+                                         unsigned BitWidth) {
+    SmallVector<VASTValPtr, 8> NewOps;
+    VASTExprOpInfo<VASTExpr::dpMul> OpInfo(*this, BitWidth);
+
+    flattenExpr<VASTExpr::dpMul>(Ops.begin(), Ops.end(),
+                                 op_filler<VASTExpr::dpMul>(NewOps, OpInfo));
+
+    return getOrCreateCommutativeExpr(VASTExpr::dpMul, NewOps, BitWidth);
 }
 
 VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
