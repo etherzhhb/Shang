@@ -226,6 +226,16 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
     return buildBitCatExpr(Ops, UB - LB);
   }
 
+  if (Expr->getOpcode() == VASTExpr::dpBitRepeat) {
+    VASTValPtr Pattern = Expr.getOperand(0);
+    // Simply repeat the pattern by the correct number.
+    if (Pattern->getBitWidth() == 1) {
+      VASTValPtr Ops[] = { Pattern, getOrCreateImmediate(UB - LB, 64) };
+      return buildExpr(VASTExpr::dpBitRepeat, Ops, UB - LB);
+    }
+    // TODO: Build the correct pattern.
+  }
+
   return VASTValPtr(0);
 }
 
