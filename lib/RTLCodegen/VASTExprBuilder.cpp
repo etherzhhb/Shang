@@ -102,6 +102,15 @@ void VASTExprBuilder::calculateBitMask(VASTValPtr V, uint64_t &KnownZeros,
     KnownOnes = getBitSlice64(KnownOnes >> Expr->LB, Expr->getBitWidth());
     KnownZeros = getBitSlice64(KnownZeros >> Expr->LB, Expr->getBitWidth());
     return;
+  case VASTExpr::dpSel: {
+    VASTValPtr OpTrue = Expr.getOperand(1), OpFalse = Expr.getOperand(2);;
+    calculateBitMask(OpTrue, KnownZeros, KnownOnes);
+    uint64_t OpFalseKnownOnes, OpFalseKnownZeros;
+    calculateBitMask(OpFalse, OpFalseKnownZeros, OpFalseKnownOnes);
+    KnownOnes &= OpFalseKnownOnes;
+    KnownZeros &= OpFalseKnownZeros;
+    return;
+  }
   }
 }
 
