@@ -215,6 +215,13 @@ VASTValPtr VASTExprBuilder::foldBitSliceExpr(VASTValPtr U, uint8_t UB,
   return VASTValPtr(0);
 }
 
+static VASTExprPtr getAsBitSliceExpr(VASTValPtr V) {
+  VASTExprPtr Expr = dyn_cast<VASTExpr>(V);
+  if (!Expr || !Expr->isSubBitSlice()) return 0;
+
+  return Expr;
+}
+
 VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                             unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
@@ -222,33 +229,53 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
                                   std::back_inserter(NewOps));
 
   VASTImmPtr LastImm = dyn_cast<VASTImmediate>(NewOps[0]);
+  VASTExprPtr LastBitSlice = getAsBitSliceExpr(NewOps[0]);
+
   unsigned ActualOpPos = 1;
 
   // Merge the constant sequence.
   for (unsigned i = 1, e = NewOps.size(); i < e; ++i) {
-    VASTImmPtr CurImm = dyn_cast<VASTImmediate>(NewOps[i]);
-
-    if (!CurImm) {
+    VASTValPtr V = NewOps[i];
+    if (VASTImmPtr CurImm = dyn_cast<VASTImmediate>(V)) {
+      if (LastImm) {
+        // Merge the constants.
+        uint64_t HiVal = LastImm.getUnsignedValue(),
+                 LoVal = CurImm.getUnsignedValue();
+        unsigned HiSizeInBits = LastImm->getBitWidth(),
+                 LoSizeInBits = CurImm->getBitWidth();
+        unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
+        assert(SizeInBits <= 64 && "Constant too large!");
+        uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
+        LastImm = Context.getOrCreateImmediate(Val, SizeInBits);
+        NewOps[ActualOpPos - 1] = LastImm; // Modify back.
+        continue;
+      } else {
+        LastImm = CurImm;
+        NewOps[ActualOpPos++] = V; //push_back.
+        continue;
+      }
+    } else // Reset LastImm, since the current value is not immediate.
       LastImm = 0;
-      NewOps[ActualOpPos++] = NewOps[i]; //push_back.
-      continue;
-    }
 
-    if (LastImm) {
-      // Merge the constants.
-      uint64_t HiVal = LastImm.getUnsignedValue(),
-               LoVal = CurImm.getUnsignedValue();
-      unsigned HiSizeInBits = LastImm->getBitWidth(),
-               LoSizeInBits = CurImm->getBitWidth();
-      unsigned SizeInBits = LoSizeInBits + HiSizeInBits;
-      assert(SizeInBits <= 64 && "Constant too large!");
-      uint64_t Val = (LoVal) | (HiVal << LoSizeInBits);
-      LastImm = Context.getOrCreateImmediate(Val, SizeInBits);
-      NewOps[ActualOpPos - 1] = LastImm; // Modify back.
-    } else {
-      LastImm = CurImm;
-      NewOps[ActualOpPos++] = NewOps[i]; //push_back.
-    }
+    if (VASTExprPtr CurBitSlice = getAsBitSliceExpr(V)) {
+      VASTValPtr CurBitSliceParent = CurBitSlice.getOperand(0);
+      if (LastBitSlice && CurBitSliceParent == LastBitSlice.getOperand(0)
+          && LastBitSlice->LB == CurBitSlice->UB) {
+        VASTValPtr MergedBitSlice
+          = buildBitSliceExpr(CurBitSliceParent, LastBitSlice->UB,
+                              CurBitSlice->LB);
+        NewOps[ActualOpPos - 1] = MergedBitSlice; // Modify back.
+        LastBitSlice = getAsBitSliceExpr(MergedBitSlice);
+        continue;
+      } else {
+        LastBitSlice = CurBitSlice;
+        NewOps[ActualOpPos++] = V; //push_back.
+        continue;
+      }
+    } else
+      LastBitSlice = 0;
+
+    NewOps[ActualOpPos++] = V; //push_back.
   }
 
   NewOps.resize(ActualOpPos);
