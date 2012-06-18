@@ -298,10 +298,9 @@ VASTValPtr VASTExprBuilder::buildBitCatExpr(ArrayRef<VASTValPtr> Ops,
 
 VASTValPtr VASTExprBuilder::buildBitSliceExpr(VASTValPtr U, uint8_t UB,
                                               uint8_t LB) {
+  assert(UB <= U->getBitWidth() && UB > LB && "Bad bit range!");
   // Try to fold the expression.
   if (VASTValPtr P = foldBitSliceExpr(U, UB, LB)) return P;
-
-  assert(UB <= U->getBitWidth() && UB > LB && "Bad bit range!");
 
   // Name the expression if necessary.
   U = Context.nameExpr(U);
@@ -614,6 +613,20 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> {
 };
 }
 
+VASTValPtr VASTExprBuilder::padHigherBits(VASTValPtr V, unsigned BitWidth,
+                                          bool ByOnes) {
+  assert(BitWidth >= V->getBitWidth() && "Bad bitwidth!");
+  unsigned ZeroBits = BitWidth - V->getBitWidth();
+
+  if (ZeroBits == 0) return V;
+
+  // Pad the MSB by zeros.
+  VASTValPtr Pader =
+    Context.getOrCreateImmediate(ByOnes ? ~UINT64_C(0) : UINT64_C(0), ZeroBits);
+  VASTValPtr Ops[] = {Pader, V};
+  return buildBitCatExpr(Ops, BitWidth);
+}
+
 VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
                                          unsigned BitWidth) {
   SmallVector<VASTValPtr, 8> NewOps;
@@ -657,17 +670,9 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   // All operands are zero?
   if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
 
-  if (NewOps.size() == 1) {
-    VASTValPtr V = NewOps.back();
-    assert(BitWidth >= V->getBitWidth() && "Bad bitwidth!");
-    unsigned ZeroBits = BitWidth - V->getBitWidth();
-
-    if (ZeroBits == 0) return V;
-
-    // Pad the MSB by zeros.
-    VASTValPtr Ops[] = {Context.getOrCreateImmediate(UINT64_C(0), ZeroBits), V};
-    return buildBitCatExpr(Ops, BitWidth);
-  }
+  if (NewOps.size() == 1)
+    // Pad the higer bits by zeros.
+    return padHigherBits(NewOps.back(), BitWidth, false);
 
   return Context.createExpr(VASTExpr::dpAdd, NewOps, BitWidth, 0);
 }

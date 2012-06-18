@@ -166,6 +166,7 @@ class VASTExprBuilder {
     return op_filler_iterator<Opcode, _Container>(C, Info, *this);
   }
 
+  VASTValPtr padHigherBits(VASTValPtr V, unsigned BitWidth, bool ByOnes);
 public:
   explicit VASTExprBuilder(VASTExprBuilderContext &Context)
     : Context(Context) {}
