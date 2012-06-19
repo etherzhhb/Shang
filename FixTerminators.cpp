@@ -42,7 +42,7 @@ STATISTIC(Unreachables,
   "Number of Unreachable inserted for machine basic block without sucessor");
 
 namespace llvm {
-void fixTerminators(MachineBasicBlock *MBB, const TargetInstrInfo *TII) {
+void fixTerminators(MachineBasicBlock *MBB) {
   SmallPtrSet<MachineBasicBlock*, 2> MissedSuccs;
   MissedSuccs.insert(MBB->succ_begin(), MBB->succ_end());
   MachineInstr *FirstTerminator = 0;
@@ -93,7 +93,7 @@ void fixTerminators(MachineBasicBlock *MBB, const TargetInstrInfo *TII) {
       Cnd = TrueCnd;
       VInstrInfo::ReversePredicateCondition(Cnd);
     }
-    BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpToStateb))
+    BuildMI(MBB, DebugLoc(), VInstrInfo::getDesc(VTM::VOpToStateb))
       .addOperand(Cnd).addMBB(*MissedSuccs.begin())
       .addOperand(VInstrInfo::CreatePredicate())
       .addOperand(VInstrInfo::CreateTrace());
@@ -114,7 +114,7 @@ void fixTerminators(MachineBasicBlock *MBB, const TargetInstrInfo *TII) {
 
   if (MBB->succ_size() == 0 && MBB->getFirstTerminator() == MBB->end()) {
     ++Unreachables;
-    BuildMI(MBB, DebugLoc(), TII->get(VTM::VOpUnreachable))
+    BuildMI(MBB, DebugLoc(), VInstrInfo::getDesc(VTM::VOpUnreachable))
       .addOperand(VInstrInfo::CreatePredicate())
       .addOperand(VInstrInfo::CreateTrace());
   }

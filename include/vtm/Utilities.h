@@ -137,7 +137,7 @@ extractPointerAndOffset(const Value *V, int64_t Offset);
 
 class MachineBasicBlock;
 class TargetInstrInfo;
-void fixTerminators(MachineBasicBlock *MBB, const TargetInstrInfo *TII);
+void fixTerminators(MachineBasicBlock *MBB);
 }
 
 #endif

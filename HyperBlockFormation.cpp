@@ -417,7 +417,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     SortedBBs.push_back(I);
     buildCFGForBB(I);
-    fixTerminators(I, TII);
+    fixTerminators(I);
   }
 
   std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
@@ -463,7 +463,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   // Fix terminators after branch folding.
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
-    fixTerminators(I, TII);
+    fixTerminators(I);
 
   return MakeChanged;
 }
