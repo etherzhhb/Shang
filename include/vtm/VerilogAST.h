@@ -686,6 +686,10 @@ public:
            && (UB != getOperand(0)->getBitWidth() || LB != 0);
   }
 
+  inline bool isZeroBasedBitSlice() const {
+    return isSubBitSlice() && LB == 0;
+  }
+
   bool isInlinable() const;
 
   void print(raw_ostream &OS) const { printAsOperandInteral(OS); }
