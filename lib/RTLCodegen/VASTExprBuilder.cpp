@@ -370,6 +370,19 @@ VASTExprBuilder::getOrCreateCommutativeExpr(VASTExpr::Opcode Opc,
   return Context.createExpr(Opc, Ops, BitWidth, 0);
 }
 
+VASTValPtr VASTExprBuilder::buildSelExpr(VASTValPtr Cnd, VASTValPtr TrueV,
+                                         VASTValPtr FalseV, unsigned BitWidth) {
+  assert(Cnd->getBitWidth() == 1 && "Bad condition width!");
+  assert(TrueV->getBitWidth() == FalseV->getBitWidth()
+         && TrueV->getBitWidth() == BitWidth && "Bad bitwidth!");
+
+  if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(Cnd))
+    return Imm.getUnsignedValue() ? TrueV : FalseV;
+
+  VASTValPtr Ops[] = { Cnd, TrueV, FalseV };
+  return Context.createExpr(VASTExpr::dpSel, Ops, BitWidth, 0);
+}
+
 namespace llvm {
 template<>
 struct VASTExprOpInfo<VASTExpr::dpAnd> {
@@ -508,6 +521,8 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr LHS,
 VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc, VASTValPtr Op0,
                                        VASTValPtr Op1, VASTValPtr Op2,
                                        unsigned BitWidth) {
+  if (Opc == VASTExpr::dpSel) return buildSelExpr(Op0, Op1, Op2, BitWidth);
+
   VASTValPtr Ops[] = { Op0, Op1, Op2 };
   return buildExpr(Opc, Ops, BitWidth);
 }
@@ -521,6 +536,7 @@ VASTValPtr VASTExprBuilder::buildExpr(VASTExpr::Opcode Opc,
   case VASTExpr::dpMul:  return buildMulExpr(Ops, BitWidth);
   case VASTExpr::dpAnd:  return buildAndExpr(Ops, BitWidth);
   case VASTExpr::dpBitCat: return buildBitCatExpr(Ops, BitWidth);
+  case VASTExpr::dpSel:  return buildSelExpr(Ops[0], Ops[1], Ops[2], BitWidth);
 
   case VASTExpr::dpRAnd:
   case VASTExpr::dpRXor:
