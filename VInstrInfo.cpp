@@ -800,6 +800,8 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *BrDstBB,
                         const SmallVectorImpl<MachineOperand> &BrCnd) {
   SmallVector<std::pair<MachineOperand, MachineBasicBlock*>, 2> SrcVals;
   SmallVector<MachineInstr*, 8> PHIs;
+  assert(BrDstBB->pred_size() <= 1
+         && "Unexpected BrDstBB has multiple predecessors!");
 
   // Fix up any PHI nodes in the successor.
   for (MachineBasicBlock::iterator MI = Succ->begin(), ME = Succ->end();

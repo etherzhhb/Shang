@@ -23,7 +23,6 @@
 #include "vtm/VInstrInfo.h"
 #include "vtm/Utilities.h"
 
-#include "llvm/../../lib/CodeGen/BranchFolding.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -71,7 +70,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
   MachineBlockFrequencyInfo *MBFI;
   BBDelayAnalysis *BBDelay;
 
-  typedef SmallVector<unsigned, 4> IntSetTy;
+  typedef std::set<unsigned> IntSetTy;
   typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
   CFGMapTy CFGMap;
 
@@ -104,6 +103,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
     return MBB->getFirstNonPHI()->isTerminator();
   }
 
+  void addPredToSet(MachineBasicBlock *MBB, IntSetTy &Set);
   void buildCFGForBB(MachineBasicBlock *MBB);
 
   void annotateLocalCFGInfo(MachineOperand *MO, uint8_t TraceNum,
@@ -142,6 +142,9 @@ struct HyperBlockFormation : public MachineFunctionPass {
                                 const;
 
   bool runOnMachineFunction(MachineFunction &MF);
+
+  void eliminateEmptyBlocks(MachineFunction &MF);
+
   MachineBasicBlock *getMergeDst(MachineBasicBlock *Src,
                                  VInstrInfo::JT &SrcJT,
                                  VInstrInfo::JT &DstJT);
@@ -162,6 +165,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
                       MachineBasicBlock *BB);
 
   bool optimizeRetBB(MachineBasicBlock &RetBB);
+  bool eliminateEmptyBlock(MachineBasicBlock *MBB);
   void moveRetValBeforePHI(MachineInstr *PHI, MachineBasicBlock *RetBB);
   const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
@@ -403,12 +407,18 @@ bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
   return mergeBlocks(MBB, BBsToMerge);
 }
 
-void HyperBlockFormation::buildCFGForBB(MachineBasicBlock *MBB) {
-  unsigned BBNum = MBB->getNumber();
-
+void HyperBlockFormation::addPredToSet(MachineBasicBlock *MBB, IntSetTy &Set) {
   typedef MachineBasicBlock::pred_iterator pred_it;
-  for (pred_it I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I)
-    CFGMap[BBNum].push_back((*I)->getNumber());
+  for (pred_it I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
+    MachineBasicBlock *PredBB = (*I);
+
+    Set.insert(PredBB->getNumber());
+  }
+}
+
+void HyperBlockFormation::buildCFGForBB(MachineBasicBlock *MBB) {
+  IntSetTy &PredSet = CFGMap[MBB->getNumber()];
+  addPredToSet(MBB, PredSet);
 }
 
 bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
@@ -421,17 +431,18 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   bool MakeChanged = false;
   AllTraces.clear();
-  typedef MachineFunction::reverse_iterator rev_it;
 
-  MF.RenumberBlocks();
   // Sort the BBs according they frequency.
   std::vector<MachineBasicBlock*> SortedBBs;
   CFGMap.clear();
 
+  // Eliminate the empty blocks.
+  eliminateEmptyBlocks(MF);
+
+  // Cache the original CFG.
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     SortedBBs.push_back(I);
     buildCFGForBB(I);
-    fixTerminators(I);
   }
 
   std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
@@ -464,20 +475,239 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
         && I->back().getOpcode() == VTM::VOpRet)
       MakeChanged |= optimizeRetBB(*I);
 
-  // Optimize the cfg, but do not perform tail merge.
-  BranchFolder BF(true, true);
-  MakeChanged |= BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
-                                     getAnalysisIfAvailable<MachineModuleInfo>());
-
-
-
-  // Fix terminators after branch folding.
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
-    fixTerminators(I);
+  eliminateEmptyBlocks(MF);
 
   MF.RenumberBlocks();
 
   return MakeChanged;
+}
+
+namespace {
+class PHIEditor {
+  typedef std::map<MachineBasicBlock*, unsigned> PHISrcMapTy;
+  PHISrcMapTy SrcMap;
+  MachineRegisterInfo &MRI;
+  MachineInstr *PHI;
+  unsigned BitWidth;
+  const TargetRegisterClass *RC;
+
+  void buildSrcMap() {
+    assert(PHI->isPHI() && "Expect PHINode!");
+
+    while (PHI->getNumOperands() > 1) {
+      unsigned Idx = PHI->getNumOperands() - 2;
+      MachineBasicBlock *SrcBB = PHI->getOperand(Idx + 1).getMBB();
+      unsigned SrcReg = PHI->getOperand(Idx).getReg();
+      bool inserted = SrcMap.insert(std::make_pair(SrcBB, SrcReg)).second;
+      assert(inserted && "Entry already existed?");
+      PHI->RemoveOperand(Idx + 1);
+      PHI->RemoveOperand(Idx);
+    }
+
+    BitWidth = VInstrInfo::getBitWidth(PHI->getOperand(0));
+    RC = MRI.getRegClass(PHI->getOperand(0).getReg());
+  }
+
+  void addNewSrcValFrom(unsigned NewSrcReg, MachineBasicBlock *EdgeSrc,
+                        MachineBasicBlock *EdgeDst) {
+    unsigned &Reg = SrcMap[EdgeSrc];
+    if (Reg == 0 || Reg == NewSrcReg) {
+      Reg = NewSrcReg;
+      return;
+    }
+
+    // Else we need to merge the value.
+    MachineOperand Pred;
+    MachineInstr *InsertPos
+      = VInstrInfo::getEdgeCndAndInsertPos(EdgeSrc, EdgeDst, Pred);
+    // Build the selection:
+    // NewReg = (Branch taken from EdgeSrc to EdgeDst) ?
+    //          Value from EdgeDst (NewSrcReg) : Value from EdgeSrc (Reg).
+    unsigned NewReg = MRI.createVirtualRegister(RC);
+    BuildMI(*EdgeSrc, InsertPos, DebugLoc(), VInstrInfo::getDesc(VTM::VOpSel))
+      .addOperand(VInstrInfo::CreateReg(NewReg, BitWidth, true))
+      .addOperand(Pred).addOperand(VInstrInfo::CreateReg(NewSrcReg, BitWidth))
+      .addOperand(VInstrInfo::CreateReg(Reg, BitWidth))
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace());
+
+    Reg = NewSrcReg;
+  }
+public:
+  PHIEditor(MachineRegisterInfo &MRI, MachineInstr *PHI = 0)
+    : MRI(MRI), PHI(PHI), BitWidth(0), RC(0) {
+    if (PHI) buildSrcMap();
+  }
+
+  void reset(MachineInstr *P = 0) {
+    SrcMap.clear();
+    BitWidth = 0;
+    RC = 0;
+    if ((PHI = P))  buildSrcMap();    
+  }
+
+  void forwardPHISrcFrom(MachineBasicBlock *PredBB) {
+    PHISrcMapTy::iterator at = SrcMap.find(PredBB);
+    assert(at != SrcMap.end() && "Bad PredBB!");
+
+    unsigned Reg = at->second;
+    SrcMap.erase(at);
+
+    MachineInstr *DefMI = MRI.getVRegDef(Reg);
+    assert(DefMI && "Not in SSA Form?");
+
+    if (!DefMI->isPHI() || DefMI->getParent() != PredBB) {
+      assert(DefMI->getParent() != PredBB && "Cannot PHI source values!");
+
+      typedef MachineBasicBlock::pred_iterator pred_iterator;
+      for (pred_iterator I = PredBB->pred_begin(), E = PredBB->pred_end();
+           I != E; ++I) {
+        addNewSrcValFrom(Reg, *I, PredBB);
+      }
+      return;
+    }
+
+    for (unsigned i = 1, e = DefMI->getNumOperands(); i != e; i += 2) {
+      unsigned SrcReg = DefMI->getOperand(i).getReg();
+      MachineBasicBlock *SrcBB = DefMI->getOperand(i + 1).getMBB();
+      addNewSrcValFrom(SrcReg, SrcBB, PredBB);
+    }
+  }
+
+  template<typename iterator>
+  void fillBySelfLoop(iterator begin, iterator end){
+    unsigned PHIReg = PHI->getOperand(0).getReg();
+    while (begin != end) {
+      MachineBasicBlock *SrcBB = *begin++;      
+      SrcMap.insert(std::make_pair(SrcBB, PHIReg));
+    }
+  }
+
+  void removeSrc(MachineBasicBlock *From) {
+    SrcMap.erase(From);
+  }
+
+  void flush() {
+    for (PHISrcMapTy::iterator I = SrcMap.begin(), E = SrcMap.end();I != E;++I){
+      PHI->addOperand(VInstrInfo::CreateReg(I->second, BitWidth));
+      PHI->addOperand(MachineOperand::CreateMBB(I->first));
+    }
+
+    reset();
+  }
+
+  static unsigned DoPHITranslation(unsigned Reg, MachineBasicBlock *CurBB,
+                                   MachineBasicBlock *PredBB,
+                                   MachineRegisterInfo &MRI) {
+    MachineInstr *DefMI = MRI.getVRegDef(Reg);
+    assert(DefMI && "Register not defined!");
+    if (DefMI->getParent() == CurBB && DefMI->isPHI()) {
+      for (unsigned i = 1, e = DefMI->getNumOperands(); i != e; i += 2)
+        if (DefMI->getOperand(i + 1).getMBB() == PredBB)
+          return DefMI->getOperand(i).getReg();
+
+      llvm_unreachable("PredBB is not the incoming block?");
+    }
+
+    return Reg;
+  }
+};
+}
+
+bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
+  assert(isBlockAlmostEmtpy(MBB) && "Not an empty MBB!");
+  // Cannot handle.
+  if (MBB->succ_size() > 1 /*&& MBB->instr_begin()->isPHI()*/) return false;
+  
+  VInstrInfo::JT EmptyBBJT, PredJT;
+  if (VInstrInfo::extractJumpTable(*MBB, EmptyBBJT))
+    return false;
+
+  SmallVector<MachineBasicBlock*, 8> Preds(MBB->pred_begin(), MBB->pred_end()),
+                                     Succs(MBB->succ_begin(), MBB->succ_end());
+
+  typedef MachineBasicBlock::instr_iterator instr_iterator;
+  typedef SmallVectorImpl<MachineBasicBlock*>::iterator pred_iterator;
+  typedef SmallVectorImpl<MachineBasicBlock*>::iterator succ_iterator;
+  PHIEditor Editor(*MRI);
+  // Fix the incoming value of PHIs.
+  for (succ_iterator SI = Succs.begin(), SE = Succs.end(); SI != SE; ++SI) {
+    MachineBasicBlock *Succ = *SI;      
+    for (instr_iterator MI = Succ->instr_begin(), ME = Succ->instr_end();
+         MI != ME && MI->isPHI(); ++MI) {
+      Editor.reset(MI);
+      Editor.forwardPHISrcFrom(MBB);
+      Editor.flush();
+    }
+  }
+
+  for (instr_iterator MI = MBB->instr_begin(), ME = MBB->instr_end();
+       MI != ME && MI->isPHI(); /*++MI*/) {
+    if (MRI->use_empty(MI->getOperand(0).getReg())) {
+      MachineInstr *MIToDel = MI++;
+      MIToDel->eraseFromParent();
+      continue;
+    }
+
+    // FIXME: This not work if there is more then 1 successors.
+    assert(Succs.size() == 1 && "Cannot handle yet!");
+    Editor.reset(MI);
+    MachineBasicBlock *Succ = Succs.front(); 
+    Editor.fillBySelfLoop(Succ->pred_begin(), Succ->pred_end());
+    Editor.removeSrc(MBB);
+    Editor.flush();
+    MachineInstr *MIToMove = MI++;
+    MIToMove->removeFromParent();
+    Succ->insert(Succ->instr_begin(), MIToMove);
+  }
+
+  TII->RemoveBranch(*MBB);
+  for (pred_iterator PI = Preds.begin(), PE = Preds.end(); PI != PE; ++PI) {
+    MachineBasicBlock *PredBB = *PI;
+    PredJT.clear();
+    bool fail = VInstrInfo::extractJumpTable(*PredBB, PredJT);
+    assert(!fail && "Cannot extract jump table!");
+    TII->RemoveBranch(*PredBB);
+    foldCFGEdge(PredBB, PredJT, MBB, EmptyBBJT);
+  }
+
+  while (MBB->succ_size())
+    MBB->removeSuccessor(MBB->succ_begin());
+
+  //typedef SmallVectorImpl<MachineBasicBlock*>::iterator succ_iterator;
+  // Move the PHIs to Successor blocks.
+
+  assert(MBB->succ_empty() && MBB->pred_empty() && "Cannot fold MBB!");
+  MBB->eraseFromParent();
+  return true;
+}
+
+void HyperBlockFormation::eliminateEmptyBlocks(MachineFunction &MF) {
+  MachineBasicBlock *Entry = MF.begin();
+  MachineFunction::iterator I = MF.begin();
+  while (I != MF.end()) {
+    MachineBasicBlock *MBB = I++;
+
+    // Directly eliminate the unreachable blocks.
+    if (MBB->pred_empty() && MBB != Entry) {
+      assert(MBB->succ_empty() && "Unreachable block has successor?");
+      MBB->eraseFromParent();
+      continue;
+    }
+
+    // We need to fix the terminators so the eliminateEmptyBlock can work
+    // correctly.
+    fixTerminators(MBB);
+  }
+
+  // Try to eliminate the almost empty blocks.
+  I = MF.begin();
+  while (I != MF.end()) {
+    MachineBasicBlock *MBB = I++;
+
+    if (isBlockAlmostEmtpy(MBB))
+      eliminateEmptyBlock(MBB);
+  }
 }
 
 bool HyperBlockFormation::optimizeRetBB(MachineBasicBlock &RetBB) {
