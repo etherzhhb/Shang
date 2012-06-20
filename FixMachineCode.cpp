@@ -55,9 +55,6 @@ struct FixMachineCode : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  MachineBasicBlock::instr_iterator
-  getPHIMoveInsertPos(MachineBasicBlock *SrcBB, MachineBasicBlock *DstBB,
-                      MachineOperand &Pred);
   void handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB);
   bool simplifyReduction(MachineInstr *MI);
   bool simplifyBitSlice(MachineInstr *MI);
@@ -196,22 +193,6 @@ bool FixMachineCode::simplifyReduction(MachineInstr *MI) {
   return true;
 }
 
-MachineBasicBlock::instr_iterator
-FixMachineCode::getPHIMoveInsertPos(MachineBasicBlock *SrcBB,
-                                    MachineBasicBlock *DstBB,
-                                    MachineOperand &Pred) {
-  VInstrInfo::JT SrcJT;
-  bool success = !VInstrInfo::extractJumpTable(*SrcBB, SrcJT, false);
-  assert(success && "Broken machine code?");
-  // TODO: Handle critical edges.
-
-  // Insert the PHI copy.
-  VInstrInfo::JT::iterator at = SrcJT.find(DstBB);
-  assert(at != SrcJT.end() && "Broken CFG?");
-  Pred = at->second;
-  return SrcBB->getFirstInstrTerminator();
-}
-
 void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {  
   unsigned BitWidth = VInstrInfo::getBitWidth(PN->getOperand(0));
   //bool isAllImpDef = true;
@@ -230,7 +211,7 @@ void FixMachineCode::handlePHI(MachineInstr *PN, MachineBasicBlock *CurBB) {
 
     MachineOperand Pred = VInstrInfo::CreatePredicate();
     typedef MachineBasicBlock::instr_iterator it;
-    it IP = getPHIMoveInsertPos(SrcBB, CurBB, Pred);
+    it IP = VInstrInfo::getEdgeCndAndInsertPos(SrcBB, CurBB, Pred);
     BuildMI(*SrcBB, IP, DebugLoc(), TII->get(VTM::VOpMvPhi))
       .addOperand(VInstrInfo::CreateReg(NewSrcReg, BitWidth, true))
       .addOperand(SrcMO).addMBB(CurBB)

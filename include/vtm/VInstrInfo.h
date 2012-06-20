@@ -132,6 +132,10 @@ public:
                           MachineBasicBlock *ToBB, MachineRegisterInfo &MRI,
                           const SmallVectorImpl<MachineOperand> &FromBBCnd);
 
+  static MachineInstr *getEdgeCndAndInsertPos(MachineBasicBlock *From,
+                                              MachineBasicBlock *To,
+                                              MachineOperand &Pred);
+
   static const MachineOperand *getPredOperand(const MachineInstr *MI);
   static MachineOperand *getPredOperand(MachineInstr *MI);
 

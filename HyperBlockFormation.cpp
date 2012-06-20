@@ -153,9 +153,6 @@ struct HyperBlockFormation : public MachineFunctionPass {
 
   bool optimizeRetBB(MachineFunction &MF, MachineBasicBlock &RetBB);
   void moveRetValBeforePHI(MachineInstr *PHI, MachineBasicBlock *RetBB);
-  MachineInstr *getInsertPosBeforePHI(MachineBasicBlock *SrcBB,
-                                      MachineBasicBlock *DstBB,
-                                      MachineOperand &Pred);
   const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
 
@@ -510,7 +507,7 @@ bool HyperBlockFormation::optimizeRetBB(MachineFunction &MF,
     typedef MachineBasicBlock::pred_iterator pred_it;
     for (pred_it I = RetBB.pred_begin(), E = RetBB.pred_end(); I != E; ++I) {
       MachineOperand Pred = VInstrInfo::CreatePredicate();
-      it IP = getInsertPosBeforePHI(*I, &RetBB, Pred);
+      it IP = VInstrInfo::getEdgeCndAndInsertPos(*I, &RetBB, Pred);
       BuildMI(**I, IP, DebugLoc(), TII->get(VTM::VOpRetVal))
         .addOperand(RetValMO).addOperand(VInstrInfo::CreateImm(0, 8))
         .addOperand(Pred).addOperand(VInstrInfo::CreateTrace());
@@ -536,7 +533,7 @@ void HyperBlockFormation::moveRetValBeforePHI(MachineInstr *PHI,
 
     MachineOperand Pred = VInstrInfo::CreatePredicate();
     typedef MachineBasicBlock::instr_iterator it;
-    it IP = getInsertPosBeforePHI(SrcBB, RetBB, Pred);
+    it IP = VInstrInfo::getEdgeCndAndInsertPos(SrcBB, RetBB, Pred);
 
     BuildMI(*SrcBB, IP, DebugLoc(), TII->get(VTM::VOpRetVal))
       .addOperand(SrcMO).addOperand(VInstrInfo::CreateImm(0, 8))
@@ -545,21 +542,6 @@ void HyperBlockFormation::moveRetValBeforePHI(MachineInstr *PHI,
 
   assert(MRI->use_empty(PHI->getOperand(0).getReg()) && "Unexpected other use!");
   PHI->eraseFromParent();
-}
-
-MachineInstr *HyperBlockFormation::getInsertPosBeforePHI(MachineBasicBlock *Src,
-                                                         MachineBasicBlock *Dst,
-                                                         MachineOperand &Pred) {
-  VInstrInfo::JT SrcJT;
-  bool success = !VInstrInfo::extractJumpTable(*Src, SrcJT, false);
-  assert(success && "Broken machine code?");
-  // TODO: Handle critical edges.
-
-  // Insert the PHI copy.
-  VInstrInfo::JT::iterator at = SrcJT.find(Dst);
-  assert(at != SrcJT.end() && "Broken CFG?");
-  Pred = at->second;
-  return Src->getFirstInstrTerminator();
 }
 
 MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,

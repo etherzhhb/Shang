@@ -779,6 +779,21 @@ static bool AddSrcValToPHI(MachineOperand SrcVal, MachineBasicBlock *SrcBB,
     return true;
 }
 
+MachineInstr *VInstrInfo::getEdgeCndAndInsertPos(MachineBasicBlock *From,
+                                                 MachineBasicBlock *To,
+                                                 MachineOperand &Pred) {
+  VInstrInfo::JT SrcJT;
+  bool success = !VInstrInfo::extractJumpTable(*From, SrcJT, false);
+  assert(success && "Broken machine code?");
+  // TODO: Handle critical edges.
+
+  // Insert the PHI copy.
+  VInstrInfo::JT::iterator at = SrcJT.find(To);
+  assert(at != SrcJT.end() && "Broken CFG?");
+  Pred = at->second;
+  return From->getFirstInstrTerminator();
+}
+
 void
 VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
                         MachineBasicBlock *ToBB, MachineRegisterInfo &MRI,
