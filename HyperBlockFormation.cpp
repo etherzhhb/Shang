@@ -151,7 +151,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
   void PredicateBlock(unsigned ToBBNum, MachineOperand Cnd,
                       MachineBasicBlock *BB);
 
-  bool optimizeRetBB(MachineFunction &MF, MachineBasicBlock &RetBB);
+  bool optimizeRetBB(MachineBasicBlock &RetBB);
   void moveRetValBeforePHI(MachineInstr *PHI, MachineBasicBlock *RetBB);
   const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
@@ -455,9 +455,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
     if (I->succ_size() == 0 && !I->empty()
-        && I->back().getOpcode() == VTM::VOpRet) {
-      MakeChanged |= optimizeRetBB(MF, *I);
-    }
+        && I->back().getOpcode() == VTM::VOpRet)
+      MakeChanged |= optimizeRetBB(*I);
 
   // Optimize the cfg, but do not perform tail merge.
   BranchFolder BF(true, true);
@@ -475,8 +474,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   return MakeChanged;
 }
 
-bool HyperBlockFormation::optimizeRetBB(MachineFunction &MF,
-                                        MachineBasicBlock &RetBB) {
+bool HyperBlockFormation::optimizeRetBB(MachineBasicBlock &RetBB) {
   // Return block do not have any successor.
   if (RetBB.succ_size()) return false;
 
@@ -490,34 +488,60 @@ bool HyperBlockFormation::optimizeRetBB(MachineFunction &MF,
   }
 
   // Nothing to optimize.
-  if (RetVal == 0) return false;
-
-  // Try to move the VOpRetVal to the predecessor block.
-  MachineOperand RetValMO = RetVal->getOperand(0);
-  if (RetValMO.isReg()) {
-    RetValDef = MRI->getVRegDef(RetValMO.getReg());
-    assert(RetValDef && "Not in SSA Form!");
-    // Cannot move to predecessor block.
-    if (RetValDef->getParent() != &RetBB || !RetValDef->isPHI())
-      return false;
-  }
-
-  if (!RetValDef || !RetValDef->isPHI()) {
-    RetVal->eraseFromParent();
-    typedef MachineBasicBlock::pred_iterator pred_it;
-    for (pred_it I = RetBB.pred_begin(), E = RetBB.pred_end(); I != E; ++I) {
-      MachineOperand Pred = VInstrInfo::CreatePredicate();
-      it IP = VInstrInfo::getEdgeCndAndInsertPos(*I, &RetBB, Pred);
-      BuildMI(**I, IP, DebugLoc(), TII->get(VTM::VOpRetVal))
-        .addOperand(RetValMO).addOperand(VInstrInfo::CreateImm(0, 8))
-        .addOperand(Pred).addOperand(VInstrInfo::CreateTrace());
+  if (RetVal) {
+    // Try to move the VOpRetVal to the predecessor block.
+    MachineOperand RetValMO = RetVal->getOperand(0);
+    if (RetValMO.isReg()) {
+      RetValDef = MRI->getVRegDef(RetValMO.getReg());
+      assert(RetValDef && "Not in SSA Form!");
+      // Cannot move to predecessor block.
+      if (RetValDef->getParent() != &RetBB || !RetValDef->isPHI())
+        return false;
     }
 
-    return true;
+    RetVal->eraseFromParent();
+
+    if (!RetValDef || !RetValDef->isPHI()) {
+      typedef MachineBasicBlock::pred_iterator pred_it;
+
+      for (pred_it I = RetBB.pred_begin(), E = RetBB.pred_end(); I != E; ++I) {
+        MachineOperand Pred = VInstrInfo::CreatePredicate();
+        it IP = VInstrInfo::getEdgeCndAndInsertPos(*I, &RetBB, Pred);
+        BuildMI(**I, IP, DebugLoc(), TII->get(VTM::VOpRetVal))
+          .addOperand(RetValMO).addOperand(VInstrInfo::CreateImm(0, 8))
+          .addOperand(Pred).addOperand(VInstrInfo::CreateTrace());
+      }
+    } else
+      moveRetValBeforePHI(RetValDef, &RetBB);
   }
 
-  RetVal->eraseFromParent();
-  moveRetValBeforePHI(RetValDef, &RetBB);
+  // Also move the VOpRet to the predecessor block.
+  if (RetBB.begin()->getOpcode() == VTM::VOpRet) {
+    typedef SmallVectorImpl<MachineBasicBlock*>::iterator pred_it;
+    SmallVector<MachineBasicBlock*, 4> Preds(RetBB.pred_begin(),
+                                             RetBB.pred_end());
+
+    for (pred_it I = Preds.begin(), E = Preds.end(); I != E; ++I) {
+      MachineBasicBlock *PredBB = *I;
+      MachineOperand Pred = VInstrInfo::CreatePredicate();
+      it IP = VInstrInfo::getEdgeCndAndInsertPos(PredBB, &RetBB, Pred);
+      BuildMI(**I, IP, DebugLoc(), TII->get(VTM::VOpRet))
+        .addOperand(Pred).addOperand(VInstrInfo::CreateTrace());
+      PredBB->removeSuccessor(&RetBB);
+      // Also remove the corresponding branch condition.
+      MachineBasicBlock::reverse_instr_iterator RI = PredBB->instr_rbegin();
+      while (VInstrInfo::isBrCndLike(RI->getOpcode())) {
+        if (RI->getOperand(1).getMBB() == &RetBB) {
+          RI->eraseFromParent();
+          break;
+        }
+
+        ++RI;
+      }
+    }
+
+    RetBB.begin()->eraseFromParent();
+  }
 
   return true;
 }
