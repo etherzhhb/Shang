@@ -144,6 +144,10 @@ struct HyperBlockFormation : public MachineFunctionPass {
   bool mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBsToMerge);
 
   bool mergeBlock(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB);
+
+  void foldCFGEdge(MachineBasicBlock *EdgeSrc, VInstrInfo::JT &SrcJT,
+                   MachineBasicBlock *EdgeDst, const VInstrInfo::JT &DstJT);
+
   typedef DenseMap<MachineBasicBlock*, unsigned> BB2DelayMapTy;
   bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays);
 
@@ -447,10 +451,6 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     } while (BlockMerged && NextTraceNum < 64);
     // Prepare for next block.
     UnmergedDelays.clear();
-
-
-    VInstrInfo::JT T;
-    VInstrInfo::extractJumpTable(*MBB, T, false);
   }
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
@@ -600,9 +600,85 @@ MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
   return DstBB;
 }
 
+void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
+                                      VInstrInfo::JT &SrcJT,
+                                      MachineBasicBlock *EdgeDst,
+                                      const VInstrInfo::JT &DstJT) {
+  typedef VInstrInfo::JT::iterator jt_it;
+  typedef VInstrInfo::JT::const_iterator const_jt_it;
+  jt_it at = SrcJT.find(EdgeDst);
+  assert(at != SrcJT.end() && "ToBB not branching to FromBB?");
+  MachineOperand PredCnd = at->second;
+
+  SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
+
+  typedef DenseMap<MachineBasicBlock*, Probability> ProbMapTy;
+  ProbMapTy BBProbs;
+  uint32_t WeightLCM = 1;
+  // The probability of the edge from ToBB to FromBB.
+  BranchProbability MergedBBProb =MBPI->getEdgeProbability(EdgeSrc, EdgeDst);
+
+  for (const_jt_it I = DstJT.begin(),E = DstJT.end(); I != E; ++I){
+    MachineBasicBlock *Succ = I->first;
+
+    Probability SuccProb = MBPI->getEdgeProbability(EdgeDst, Succ);
+    // In the merged block, sum of probabilities of FromBB's successor should
+    // be the original edge probability from ToBB to FromBB.
+    SuccProb *= MergedBBProb;
+    BBProbs.insert(std::make_pair(Succ, SuccProb));
+    WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
+  }
+
+  typedef MachineBasicBlock::succ_iterator succ_it;
+  for (unsigned i = EdgeSrc->succ_size(); i > 0; --i) {
+    succ_it SuccIt = EdgeSrc->succ_begin() + i - 1;
+    MachineBasicBlock *Succ = *SuccIt;
+    if (Succ != EdgeDst) {
+      Probability &SuccProb = BBProbs[Succ];
+      SuccProb += MBPI->getEdgeProbability(EdgeSrc, Succ);
+      WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
+    }
+
+    EdgeSrc->removeSuccessor(SuccIt);
+  }
+
+  // Rebuild the successor list with new weights.
+  for (ProbMapTy::iterator I = BBProbs.begin(), E = BBProbs.end(); I != E; ++I){
+    Probability Prob = I->second;
+    uint32_t w = Prob.getNumerator() * WeightLCM / Prob.getDenominator();
+    DEBUG(dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n');
+    EdgeSrc->addSuccessor(I->first, w);
+  }
+
+  // Do not jump to FromBB any more.
+  SrcJT.erase(EdgeDst);
+  // We had assert FromJT not contains FromBB.
+  // FromJT.erase(FromBB);
+
+  // Build the new Jump table.
+  for (const_jt_it I = DstJT.begin(), E = DstJT.end(); I != E; ++I) {
+    MachineBasicBlock *Succ = I->first;
+    // And predicate the jump table.
+    MachineOperand DstPred = VInstrInfo::MergePred(I->second, PredCnd, *EdgeSrc,
+                                                   EdgeSrc->end(), MRI, TII,
+                                                   VTM::VOpAnd);
+
+    jt_it at = SrcJT.find(Succ);
+    // If the entry already exist in target jump table, merge it with opcode OR.
+    if (at != SrcJT.end())
+      at->second = VInstrInfo::MergePred(at->second, DstPred, *EdgeSrc,
+                                         EdgeSrc->end(), MRI, TII, VTM::VOpOr);
+    else // Simply insert the entry.
+      SrcJT.insert(std::make_pair(Succ, DstPred));
+  }
+
+  // Re-insert the jump table.
+  VInstrInfo::insertJumpTable(*EdgeSrc, SrcJT, DebugLoc());
+  ++BBsMerged;
+}
+
 bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
-                                     MachineBasicBlock *ToBB)
-{
+                                     MachineBasicBlock *ToBB) {
   VInstrInfo::JT FromJT, ToJT;
   MachineBasicBlock *MergeDst = getMergeDst(FromBB, FromJT, ToJT);
   assert(MergeDst == ToBB && "Cannot merge block!");
@@ -623,75 +699,20 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   // And merge the block into its predecessor.
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
 
+  foldCFGEdge(ToBB, ToJT, FromBB, FromJT);
+
   SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
-
-  typedef DenseMap<MachineBasicBlock*, Probability> ProbMapTy;
-  ProbMapTy BBProbs;
-  uint32_t WeightLCM = 1;
-  // The probability of the edge from ToBB to FromBB.
-  BranchProbability MergedBBProb =MBPI->getEdgeProbability(ToBB, FromBB);
-
+  // The Block is dead, remove all its successor.
   for (jt_it I = FromJT.begin(),E = FromJT.end(); I != E; ++I){
     MachineBasicBlock *Succ = I->first;
     // Merge the PHINodes.
     VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, PredVec);
-
-    Probability SuccProb = MBPI->getEdgeProbability(FromBB, Succ);
-    // In the merged block, sum of probabilities of FromBB's successor should
-    // be the original edge probability from ToBB to FromBB.
-    SuccProb *= MergedBBProb;
-    BBProbs.insert(std::make_pair(Succ, SuccProb));
-    WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
-
     FromBB->removeSuccessor(Succ);
-
-    // And predicate the jump table.
-    I->second = VInstrInfo::MergePred(I->second, PredCnd, *ToBB, ToBB->end(),
-                                      MRI, TII, VTM::VOpAnd);
   }
 
-  typedef MachineBasicBlock::succ_iterator succ_it;
-  for (unsigned i = ToBB->succ_size(); i > 0; --i) {
-    succ_it SuccIt = ToBB->succ_begin() + i - 1;
-    MachineBasicBlock *Succ = *SuccIt;
-    if (Succ != FromBB) {
-      Probability &SuccProb = BBProbs[Succ];
-      SuccProb += MBPI->getEdgeProbability(ToBB, Succ);
-      WeightLCM = lcm(WeightLCM, SuccProb.getDenominator());
-    }
-
-    ToBB->removeSuccessor(SuccIt);
-  }
-
-  // Rebuild the successor list with new weights.
-  for (ProbMapTy::iterator I = BBProbs.begin(), E = BBProbs.end(); I != E; ++I){
-    Probability Prob = I->second;
-    uint32_t w = Prob.getNumerator() * WeightLCM / Prob.getDenominator();
-    DEBUG(dbgs() << I->first->getName() << ' ' << I->second << ' ' << w <<'\n');
-    ToBB->addSuccessor(I->first, w);
-  }
-
-  // Do not jump to FromBB any more.
-  ToJT.erase(FromBB);
-  // We had assert FromJT not contains FromBB.
-  // FromJT.erase(FromBB);
-
-  // Build the new Jump table.
-  for (jt_it I = FromJT.begin(), E = FromJT.end(); I != E; ++I) {
-    MachineBasicBlock *Succ = I->first;
-    jt_it at = ToJT.find(Succ);
-    // If the entry already exist in target jump table, merge it with opcode OR.
-    if (at != ToJT.end())
-      at->second = VInstrInfo::MergePred(at->second, I->second,
-                                         *ToBB, ToBB->end(), MRI, TII,
-                                         VTM::VOpOr);
-    else // Simply insert the entry.
-      ToJT.insert(*I);
-  }
-
-  // Re-insert the jump table.
-  VInstrInfo::insertJumpTable(*ToBB, ToJT, DebugLoc());
-  ++BBsMerged;
+  assert(FromBB->empty() && FromBB->pred_empty() && FromBB->succ_empty()
+         && "BB not fully merged!");
+  //FromBB->eraseFromParent();
   return true;
 }
 
