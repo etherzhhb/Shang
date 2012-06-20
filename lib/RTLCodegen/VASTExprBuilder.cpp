@@ -658,8 +658,12 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
 
       updateTailingZeros(Imm, CurTailingZeros);
 
+      // Reset the Immediate context.
+      ImmSize = 0;
+      ImmVal = 0;
+
       // Try to treat 1 bit immediate as carry bit.
-      if (ImmSize == 1 && !Carry) {
+      if (Imm->getBitWidth() == 1 && !Carry) {
         Carry = Imm;
         return 0;
       }
@@ -762,23 +766,42 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
 
   // If the addition contains only 2 operand, check if we can inline a operand
   // of this addition to make use of the carry bit.
-  if (NewOps.size() == 2 && !OpInfo.Carry) {
+  if (NewOps.size() == (OpInfo.Carry ? 1 : 2)) {
+    bool MustHasCarry = (NewOps.size() != 1);
     unsigned ExprIdx = 0;
-    VASTExpr *Expr = Context.getAddExprToFlatten(NewOps[ExprIdx]);
-    if (Expr == 0) Expr = Context.getAddExprToFlatten(NewOps[++ExprIdx]);
+    VASTExpr *Expr = Context.getAddExprToFlatten(NewOps[ExprIdx],MustHasCarry);
+    if (Expr == 0 && NewOps.size() > 1)
+      Expr = Context.getAddExprToFlatten(NewOps[++ExprIdx], MustHasCarry);
 
     // If we can find such expression, flatten the expression tree.
     if (Expr) {
       // Try to keep the operand bitwidth unchanged.
       unsigned OpBitwidth = NewOps[ExprIdx]->getBitWidth();
+      NewOps.erase(NewOps.begin() + ExprIdx);
+
       // Replace the expression by the no-carry operand
-      VASTValPtr NoCarryOperand = Expr->getOperand(0);
-      if (NoCarryOperand->getBitWidth() > OpBitwidth)
-        NoCarryOperand = buildBitSliceExpr(NoCarryOperand, OpBitwidth, 0);
-      NewOps[ExprIdx] = NoCarryOperand;
-      // And add the carry from the expression.
-      OpInfo.Carry = Expr->getOperand(1);
+      VASTValPtr ExprLHS = Expr->getOperand(0);
+      if (ExprLHS->getBitWidth() > OpBitwidth)
+        ExprLHS = buildBitSliceExpr(ExprLHS, OpBitwidth, 0);
+
+      if (VASTValPtr V = OpInfo.analyzeOperand(ExprLHS))
+        NewOps.push_back(V);
+
+      VASTValPtr ExprRHS = Expr->getOperand(1);
+      if (ExprRHS->getBitWidth() > OpBitwidth)
+        ExprRHS = buildBitSliceExpr(ExprRHS, OpBitwidth, 0);
+
+      if (VASTValPtr V = OpInfo.analyzeOperand(ExprRHS))
+        NewOps.push_back(V);
+
+      if (VASTValPtr V = OpInfo.flushImmOperand())
+        NewOps.push_back(V);
+
       assert(OpInfo.Carry->getBitWidth() == 1 && "Carry is not 1 bit!");
+      NewOps.push_back(OpInfo.Carry);
+
+      assert(NewOps.size() < 4 && "Bad add folding!");
+      return buildAddExpr(NewOps, BitWidth);
     }
   }
 
