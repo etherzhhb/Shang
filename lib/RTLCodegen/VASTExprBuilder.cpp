@@ -630,8 +630,11 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
 
     // Fold the immediate.
     if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
-      ImmVal += Imm->getUnsignedValue();
       ImmSize = std::max(ImmSize, Imm->getBitWidth());
+      // Each addition will produce 1 extra bit (carry bit).
+      if (ImmVal) ImmSize = std::min(ImmSize + 1, ResultSize);
+
+      ImmVal += Imm->getUnsignedValue();
       return 0;
     }
 
