@@ -98,6 +98,12 @@ struct HyperBlockFormation : public MachineFunctionPass {
     //AU.addPreserved<BBDelayAnalysis>();
   }
 
+  static bool isBlockAlmostEmtpy(MachineBasicBlock *MBB) {
+    if (MBB->empty()) return true;
+
+    return MBB->getFirstNonPHI()->isTerminator();
+  }
+
   void buildCFGForBB(MachineBasicBlock *MBB);
 
   void annotateLocalCFGInfo(MachineOperand *MO, uint8_t TraceNum,
@@ -382,7 +388,7 @@ bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
     // Cannot merge Succ to MBB.
     if (getMergeDst(Succ, SuccJT, CurJT) != MBB) continue;
 
-    if (Succ->empty()||Succ->getFirstInstrTerminator() ==Succ->instr_begin()) {
+    if (isBlockAlmostEmtpy(Succ)) {
       BBsToMerge.push_back(Succ);
       continue;
     }
@@ -576,7 +582,9 @@ MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
 
   MachineBasicBlock *DstBB = *SrcBB->pred_begin();
   // Do not change the parent loop of MBB.
-  if (LI->getLoopFor(SrcBB) != LI->getLoopFor(DstBB)) return 0;
+  if (LI->getLoopFor(SrcBB) != LI->getLoopFor(DstBB)
+      && !isBlockAlmostEmtpy(SrcBB))
+    return 0;
 
   // Do not mess up with strange CFG.
   if (VInstrInfo::extractJumpTable(*DstBB, DstJT)) return 0;
