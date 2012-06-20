@@ -151,9 +151,11 @@ struct HyperBlockFormation : public MachineFunctionPass {
   void PredicateBlock(unsigned ToBBNum, MachineOperand Cnd,
                       MachineBasicBlock *BB);
 
-  bool mergeReturnBB(MachineFunction &MF, MachineBasicBlock &RetBB,
-                     const TargetInstrInfo *TII);
-
+  bool optimizeRetBB(MachineFunction &MF, MachineBasicBlock &RetBB);
+  void moveRetValBeforePHI(MachineInstr *PHI, MachineBasicBlock *RetBB);
+  MachineInstr *getInsertPosBeforePHI(MachineBasicBlock *SrcBB,
+                                      MachineBasicBlock *DstBB,
+                                      MachineOperand &Pred);
   const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
 
@@ -379,6 +381,11 @@ bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
     // Cannot merge Succ to MBB.
     if (getMergeDst(Succ, SuccJT, CurJT) != MBB) continue;
 
+    if (Succ->empty()||Succ->getFirstInstrTerminator() ==Succ->instr_begin()) {
+      BBsToMerge.push_back(Succ);
+      continue;
+    }
+
     unsigned Delay = BBDelay->getBBDelay(Succ);
     if (Delay < TrivialBBThreshold) {
       ++TrivialBBsMerged;
@@ -435,152 +442,124 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     AllTraces[CurBBNum][CurBBNum] = std::make_pair(0, UINT64_C(0));
     NextTraceNum = 1;
 
-    // Merge trivial blocks.
+    // Merge trivial blocks and hot blocks.
     do {
-      MakeChanged |= BlockMerged = mergeTrivialSuccBlocks(MBB);
-    } while (BlockMerged && NextTraceNum < 64);
-
-    // Merge hot blocks.
-    do {
-      MakeChanged |= BlockMerged = mergeSuccBlocks(MBB, UnmergedDelays);
+      BlockMerged = false;
+      MakeChanged |= BlockMerged |= mergeTrivialSuccBlocks(MBB);
+      MakeChanged |= BlockMerged |= mergeSuccBlocks(MBB, UnmergedDelays);
     } while (BlockMerged && NextTraceNum < 64);
     // Prepare for next block.
     UnmergedDelays.clear();
+
+
+    VInstrInfo::JT T;
+    VInstrInfo::extractJumpTable(*MBB, T, false);
   }
 
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
     if (I->succ_size() == 0 && !I->empty()
-        && I->back().getOpcode() == VTM::VOpRet)
-      MakeChanged |= mergeReturnBB(MF, *I, TII);
-  }
+        && I->back().getOpcode() == VTM::VOpRet) {
+      MakeChanged |= optimizeRetBB(MF, *I);
+    }
 
   // Optimize the cfg, but do not perform tail merge.
   BranchFolder BF(true, true);
   MakeChanged |= BF.OptimizeFunction(MF, TII, MF.getTarget().getRegisterInfo(),
                                      getAnalysisIfAvailable<MachineModuleInfo>());
 
-  MF.RenumberBlocks();
+
 
   // Fix terminators after branch folding.
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
     fixTerminators(I);
 
+  MF.RenumberBlocks();
+
   return MakeChanged;
 }
 
-bool HyperBlockFormation::mergeReturnBB(MachineFunction &MF,
-                                           MachineBasicBlock &RetBB,
-                                           const TargetInstrInfo *TII) {
-  // Return port do not have any successor.
+bool HyperBlockFormation::optimizeRetBB(MachineFunction &MF,
+                                        MachineBasicBlock &RetBB) {
+  // Return block do not have any successor.
   if (RetBB.succ_size()) return false;
 
-  assert(!RetBB.empty() && "Unexpected empty return block!");
+  MachineInstr *RetVal = 0, *RetValDef = 0;
+  typedef MachineBasicBlock::instr_iterator it;
+  for (it I = RetBB.instr_begin(), E = RetBB.instr_end(); I != E; ++I) {
+    if (I->getOpcode() != VTM::VOpRetVal) continue;
 
-  MachineInstr *RetValPHI = 0, *RetVal = 0, *Ret = 0;
-
-  MachineBasicBlock::iterator I = RetBB.begin();
-  if (I->isPHI()) {
-    // Too much PHIs.
-    if (RetValPHI) return false;
-
-    RetValPHI = I;
-    ++I;
-  }
-
-  if (I->getOpcode() == VTM::VOpRetVal) {
     RetVal = I;
-    ++I;
+    break;
   }
 
-  if (I->getOpcode() == VTM::VOpRet) {
-    Ret = I;
-    ++I;
+  // Nothing to optimize.
+  if (RetVal == 0) return false;
+
+  // Try to move the VOpRetVal to the predecessor block.
+  MachineOperand RetValMO = RetVal->getOperand(0);
+  if (RetValMO.isReg()) {
+    RetValDef = MRI->getVRegDef(RetValMO.getReg());
+    assert(RetValDef && "Not in SSA Form!");
+    // Cannot move to predecessor block.
+    if (RetValDef->getParent() != &RetBB || !RetValDef->isPHI())
+      return false;
   }
 
-  // Do not merge, if there are any unexpected instructions.
-  if (I != RetBB.end() || !Ret) return false;
-
-  unsigned RetReg = 0;
-  if (RetVal && RetVal->getOperand(0).isReg())
-    RetReg = RetVal->getOperand(0).getReg();
-
-  // Build the income value map, it is enough to only store the register number
-  // since the PHI node will not change the bit width of the register.
-  std::map<MachineBasicBlock*, unsigned> SrcMOs;
-  if (RetValPHI)
-    for (unsigned i = 1, e = RetValPHI->getNumOperands(); i != e; i += 2)
-      SrcMOs.insert(std::make_pair(RetValPHI->getOperand(i + 1).getMBB(),
-                                   RetValPHI->getOperand(i).getReg()));
-
-  // Replace branch to retbb by the return instruction
-  SmallVector<MachineBasicBlock*, 8> PredBBs(RetBB.pred_begin(),
-                                             RetBB.pred_end());
-  while (!PredBBs.empty()) {
-    MachineBasicBlock *PredBB = PredBBs.pop_back_val();
-
-    MachineBasicBlock::iterator FirstTerm = PredBB->getFirstTerminator();
-    for (MachineBasicBlock::iterator PI = FirstTerm, PE = PredBB->end();
-         PI != PE ; ++PI) {
-      MachineInstr *Term = PI;
-      assert(VInstrInfo::isBrCndLike(Term->getOpcode()) && "Unexpected opcode!");
-      if (Term->getOperand(1).getMBB() == &RetBB) {
-        SmallVector<MachineOperand, 1> Cnds(1, Term->getOperand(0));
-
-        if (RetVal) {
-          std::map<MachineBasicBlock*, unsigned>::iterator at
-            = SrcMOs.find(PredBB);
-          if (at != SrcMOs.end()) {
-            RetReg = at->second;
-            // Remove the incoming value from the PHI.
-            for (unsigned i = 1, e = RetValPHI->getNumOperands();i != e;i += 2)
-              if (RetValPHI->getOperand(i + 1).getMBB() == PredBB) {
-                RetValPHI->RemoveOperand(i);
-                RetValPHI->RemoveOperand(i);
-                break;
-              }
-          }
-
-          MachineInstr *NewRetVal = MF.CloneMachineInstr(RetVal);
-          // Update the return value and the predicate.
-          NewRetVal->getOperand(0).ChangeToRegister(RetReg, false);
-          TII->PredicateInstruction(NewRetVal, Cnds);
-          // Insert the returnvalue.
-          PredBB->insert(FirstTerm, NewRetVal);
-        }
-
-        // Predicate and insert the return
-        MachineInstr *NewRet = MF.CloneMachineInstr(Ret);
-        //TII->PredicateInstruction(NewRet, Cnds);
-        // DirtyHack: PredicateInstruction will not predicate return, predicate
-        // it manually
-        MachineOperand &RetPred = NewRet->getOperand(0);
-        RetPred.setTargetFlags(Cnds.front().getTargetFlags());
-        RetPred.ChangeToRegister(Cnds.front().getReg(), false);
-        // Insert it into the predecessor.
-        PredBB->insert(FirstTerm, NewRet);
-
-        // The original branch instruction is not used any more.
-        Term->eraseFromParent();
-        // Go on process next predicate.
-        break;
-      }
+  if (!RetValDef || !RetValDef->isPHI()) {
+    RetVal->eraseFromParent();
+    typedef MachineBasicBlock::pred_iterator pred_it;
+    for (pred_it I = RetBB.pred_begin(), E = RetBB.pred_end(); I != E; ++I) {
+      MachineOperand Pred = VInstrInfo::CreatePredicate();
+      it IP = getInsertPosBeforePHI(*I, &RetBB, Pred);
+      BuildMI(**I, IP, DebugLoc(), TII->get(VTM::VOpRetVal))
+        .addOperand(RetValMO).addOperand(VInstrInfo::CreateImm(0, 8))
+        .addOperand(Pred).addOperand(VInstrInfo::CreateTrace());
     }
 
-    // We had merge the retbb into the its predecessor, and not jumping to the
-    // retbb anymore.
-    PredBB->removeSuccessor(&RetBB);
+    return true;
   }
 
-  // Clear the return block if it is unreachable
-  if (RetBB.pred_empty()) RetBB.clear();
-  else if (RetBB.pred_size() == 1 && RetValPHI) {
-    // The PHI should be delete if there is only 1 incoming bb.
-    RetVal->getOperand(0).ChangeToRegister(RetValPHI->getOperand(1).getReg(),
-                                           false);
-    RetValPHI->removeFromParent();
-  }
+  RetVal->eraseFromParent();
+  moveRetValBeforePHI(RetValDef, &RetBB);
 
   return true;
+}
+
+void HyperBlockFormation::moveRetValBeforePHI(MachineInstr *PHI,
+                                              MachineBasicBlock *RetBB) {
+  for (unsigned i = 1, e = PHI->getNumOperands(); i != e; i += 2) {
+    MachineOperand &SrcMO = PHI->getOperand(i);
+    MachineInstr *DefMI = MRI->getVRegDef(SrcMO.getReg());
+    assert(DefMI && "Not in SSA form?");
+
+    MachineBasicBlock *SrcBB = PHI->getOperand(i + 1).getMBB();
+
+    MachineOperand Pred = VInstrInfo::CreatePredicate();
+    typedef MachineBasicBlock::instr_iterator it;
+    it IP = getInsertPosBeforePHI(SrcBB, RetBB, Pred);
+
+    BuildMI(*SrcBB, IP, DebugLoc(), TII->get(VTM::VOpRetVal))
+      .addOperand(SrcMO).addOperand(VInstrInfo::CreateImm(0, 8))
+      .addOperand(Pred).addOperand(VInstrInfo::CreateTrace());
+  }
+
+  assert(MRI->use_empty(PHI->getOperand(0).getReg()) && "Unexpected other use!");
+  PHI->eraseFromParent();
+}
+
+MachineInstr *HyperBlockFormation::getInsertPosBeforePHI(MachineBasicBlock *Src,
+                                                         MachineBasicBlock *Dst,
+                                                         MachineOperand &Pred) {
+  VInstrInfo::JT SrcJT;
+  bool success = !VInstrInfo::extractJumpTable(*Src, SrcJT, false);
+  assert(success && "Broken machine code?");
+  // TODO: Handle critical edges.
+
+  // Insert the PHI copy.
+  VInstrInfo::JT::iterator at = SrcJT.find(Dst);
+  assert(at != SrcJT.end() && "Broken CFG?");
+  Pred = at->second;
+  return Src->getFirstInstrTerminator();
 }
 
 MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
