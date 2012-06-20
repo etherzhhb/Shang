@@ -795,9 +795,9 @@ MachineInstr *VInstrInfo::getEdgeCndAndInsertPos(MachineBasicBlock *From,
 }
 
 void
-VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
-                        MachineBasicBlock *ToBB, MachineRegisterInfo &MRI,
-                        const SmallVectorImpl<MachineOperand> &FromBBCnd) {
+VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *BrDstBB,
+                        MachineBasicBlock *BrSrcBB, MachineRegisterInfo &MRI,
+                        const SmallVectorImpl<MachineOperand> &BrCnd) {
   SmallVector<std::pair<MachineOperand, MachineBasicBlock*>, 2> SrcVals;
   SmallVector<MachineInstr*, 8> PHIs;
 
@@ -811,7 +811,7 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
     unsigned Idx = 1;
     while (Idx < MI->getNumOperands()) {
       MachineBasicBlock *SrcBB = MI->getOperand(Idx + 1).getMBB();
-      if (SrcBB != FromBB && SrcBB != ToBB ) {
+      if (SrcBB != BrDstBB && SrcBB != BrSrcBB ) {
         Idx += 2;
         continue;
       }
@@ -823,7 +823,7 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
 
     // If only 1 value comes from BB, re-add it to the PHI.
     if (SrcVals.size() == 1) {
-      AddSrcValToPHI(SrcVals.pop_back_val().first, ToBB, MI, MRI);
+      AddSrcValToPHI(SrcVals.pop_back_val().first, BrSrcBB, MI, MRI);
       continue;
     }
 
@@ -832,28 +832,28 @@ VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
     // Read the same register?
     if (SrcVals[0].first.getReg() == SrcVals[1].first.getReg()) {
       SrcVals.pop_back();
-      AddSrcValToPHI(SrcVals.pop_back_val().first, ToBB, MI, MRI);
+      AddSrcValToPHI(SrcVals.pop_back_val().first, BrSrcBB, MI, MRI);
       continue;
     }
 
     // Make sure value from FromBB in SrcVals[1].
-    if (SrcVals.back().second != FromBB)
+    if (SrcVals.back().second != BrDstBB)
       std::swap(SrcVals[0], SrcVals[1]);
 
-    assert(SrcVals.back().second == FromBB
+    assert(SrcVals.back().second == BrDstBB
       && "Cannot build select for value!");
-    assert(!FromBBCnd.empty()
+    assert(!BrCnd.empty()
       && "Do not know how to select without condition!");
     // Merge the value with select instruction.
     MachineOperand Result = MachineOperand::CreateReg(0, false);
     Result.setTargetFlags(MI->getOperand(0).getTargetFlags());
     MachineOperand FromBBIncomingVal = SrcVals.pop_back_val().first;
     MachineOperand ToBBIncomingVal = SrcVals.pop_back_val().first;
-    VInstrInfo::BuildSelect(ToBB, Result, FromBBCnd,
+    VInstrInfo::BuildSelect(BrSrcBB, Result, BrCnd,
                             FromBBIncomingVal, // Value from FromBB
                             ToBBIncomingVal // Value from ToBB
                             );
-    AddSrcValToPHI(Result, ToBB, MI, MRI);
+    AddSrcValToPHI(Result, BrSrcBB, MI, MRI);
   }
 }
 
