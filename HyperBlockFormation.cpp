@@ -143,7 +143,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF);
 
-  void eliminateEmptyBlocks(MachineFunction &MF);
+  bool simplifyCFG(MachineFunction &MF);
 
   MachineBasicBlock *getMergeDst(MachineBasicBlock *Src,
                                  VInstrInfo::JT &SrcJT,
@@ -437,7 +437,11 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   CFGMap.clear();
 
   // Eliminate the empty blocks.
-  eliminateEmptyBlocks(MF);
+  MakeChanged |= simplifyCFG(MF);
+
+  MF.RenumberBlocks();
+
+  if (MF.size() == 1) return MakeChanged;
 
   // Cache the original CFG.
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
@@ -475,7 +479,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
         && I->back().getOpcode() == VTM::VOpRet)
       MakeChanged |= optimizeRetBB(*I);
 
-  eliminateEmptyBlocks(MF);
+  MakeChanged |= simplifyCFG(MF);
 
   MF.RenumberBlocks();
 
@@ -531,7 +535,7 @@ class PHIEditor {
       .addOperand(VInstrInfo::CreatePredicate())
       .addOperand(VInstrInfo::CreateTrace());
 
-    Reg = NewSrcReg;
+    Reg = NewReg;
   }
 public:
   PHIEditor(MachineRegisterInfo &MRI, MachineInstr *PHI = 0)
@@ -587,13 +591,24 @@ public:
     SrcMap.erase(From);
   }
 
-  void flush() {
-    for (PHISrcMapTy::iterator I = SrcMap.begin(), E = SrcMap.end();I != E;++I){
-      PHI->addOperand(VInstrInfo::CreateReg(I->second, BitWidth));
-      PHI->addOperand(MachineOperand::CreateMBB(I->first));
+  MachineInstr *flush() {
+    if (SrcMap.size() > 1) {
+      for (PHISrcMapTy::iterator I = SrcMap.begin(), E = SrcMap.end();I != E;++I){
+        PHI->addOperand(VInstrInfo::CreateReg(I->second, BitWidth));
+        PHI->addOperand(MachineOperand::CreateMBB(I->first));
+      }
+
+      MachineInstr *PHIToReturn = PHI;
+      reset();
+      return PHIToReturn;
     }
 
+    unsigned PHIReg = PHI->getOperand(0).getReg();
+    PHI->eraseFromParent();
+    unsigned SrcVal = SrcMap.size() ? SrcMap.begin()->second : 0;
+    MRI.replaceRegWith(PHIReg, SrcVal);
     reset();
+    return 0;
   }
 
   static unsigned DoPHITranslation(unsigned Reg, MachineBasicBlock *CurBB,
@@ -634,8 +649,8 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   for (succ_iterator SI = Succs.begin(), SE = Succs.end(); SI != SE; ++SI) {
     MachineBasicBlock *Succ = *SI;      
     for (instr_iterator MI = Succ->instr_begin(), ME = Succ->instr_end();
-         MI != ME && MI->isPHI(); ++MI) {
-      Editor.reset(MI);
+         MI != ME && MI->isPHI(); /*++MI*/) {
+      Editor.reset(MI++);
       Editor.forwardPHISrcFrom(MBB);
       Editor.flush();
     }
@@ -651,14 +666,15 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
 
     // FIXME: This not work if there is more then 1 successors.
     assert(Succs.size() == 1 && "Cannot handle yet!");
-    Editor.reset(MI);
+    Editor.reset(MI++);
     MachineBasicBlock *Succ = Succs.front(); 
     Editor.fillBySelfLoop(Succ->pred_begin(), Succ->pred_end());
     Editor.removeSrc(MBB);
-    Editor.flush();
-    MachineInstr *MIToMove = MI++;
-    MIToMove->removeFromParent();
-    Succ->insert(Succ->instr_begin(), MIToMove);
+
+    if (MachineInstr *MIToMove = Editor.flush()) {
+      MIToMove->removeFromParent();
+      Succ->insert(Succ->instr_begin(), MIToMove);
+    }
   }
 
   TII->RemoveBranch(*MBB);
@@ -682,7 +698,9 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   return true;
 }
 
-void HyperBlockFormation::eliminateEmptyBlocks(MachineFunction &MF) {
+bool HyperBlockFormation::simplifyCFG(MachineFunction &MF) {
+  bool changed = false;
+
   MachineBasicBlock *Entry = MF.begin();
   MachineFunction::iterator I = MF.begin();
   while (I != MF.end()) {
@@ -692,6 +710,7 @@ void HyperBlockFormation::eliminateEmptyBlocks(MachineFunction &MF) {
     if (MBB->pred_empty() && MBB != Entry) {
       assert(MBB->succ_empty() && "Unreachable block has successor?");
       MBB->eraseFromParent();
+      changed = true;
       continue;
     }
 
@@ -706,8 +725,35 @@ void HyperBlockFormation::eliminateEmptyBlocks(MachineFunction &MF) {
     MachineBasicBlock *MBB = I++;
 
     if (isBlockAlmostEmtpy(MBB))
-      eliminateEmptyBlock(MBB);
+      changed |= eliminateEmptyBlock(MBB);
   }
+
+  I = MF.begin();
+  while (I != MF.end()) {
+    MachineBasicBlock *MBB = I++;
+
+    if (MBB->pred_size() != 1) continue;
+
+    MachineBasicBlock *Pred = *MBB->pred_begin();
+
+    if (Pred->succ_size() != 1) continue;
+
+    // Do merge the block if there is a early return.
+    if (Pred->getFirstInstrTerminator()->getOpcode() == VTM::VOpRet)
+      continue;
+
+    // Now the edge is a trivial edge, merge the MBBs.
+    TII->RemoveBranch(*Pred);
+
+    // And merge the block into its predecessor.
+    Pred->splice(Pred->end(), MBB, MBB->begin(), MBB->end());
+    Pred->transferSuccessorsAndUpdatePHIs(MBB);
+    Pred->removeSuccessor(MBB);
+    MBB->eraseFromParent();
+    changed = true;
+  }
+
+  return changed;
 }
 
 bool HyperBlockFormation::optimizeRetBB(MachineBasicBlock &RetBB) {
