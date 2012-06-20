@@ -436,13 +436,17 @@ std::string VASTModule::FullCaseAttr = "";
 
 void VASTModule::reset() {
   // Release all ports.
+  Slots.clear();
   Ports.clear();
   Wires.clear();
   Registers.clear();
-  Slots.clear();
-  Allocator.Reset();
-  SymbolTable.clear();
   UniqueExprs.clear();
+  SymbolTable.clear();
+  UniqueImms.clear();
+  Allocator.Reset();
+  FUPortOffsets.clear();
+  NumArgPorts = 0;
+  RetPortIdx = 0;
 }
 
 VASTModule::~VASTModule() {
