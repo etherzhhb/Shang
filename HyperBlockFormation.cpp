@@ -632,7 +632,7 @@ public:
 bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   assert(isBlockAlmostEmtpy(MBB) && "Not an empty MBB!");
   // Cannot handle.
-  if (MBB->succ_size() > 1 /*&& MBB->instr_begin()->isPHI()*/) return false;
+  if (MBB->succ_size() > 1 && MBB->instr_begin()->isPHI()) return false;
   
   VInstrInfo::JT EmptyBBJT, PredJT;
   if (VInstrInfo::extractJumpTable(*MBB, EmptyBBJT))
@@ -854,8 +854,8 @@ void HyperBlockFormation::moveRetValBeforePHI(MachineInstr *PHI,
 }
 
 MachineBasicBlock *HyperBlockFormation::getMergeDst(MachineBasicBlock *SrcBB,
-                                                     VInstrInfo::JT &SrcJT,
-                                                     VInstrInfo::JT &DstJT) {
+                                                    VInstrInfo::JT &SrcJT,
+                                                    VInstrInfo::JT &DstJT) {
   // Only handle simple case at the moment
   if (SrcBB->pred_size() != 1) return 0;
 

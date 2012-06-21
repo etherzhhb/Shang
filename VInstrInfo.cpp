@@ -304,7 +304,7 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
   for (MachineBasicBlock::iterator I = MBB.getFirstTerminator(), E = MBB.end();
        I != E; ++I) {
     MachineInstr *Inst = I;
-    if (!Inst->getDesc().isTerminator()) continue;
+    assert(Inst->getDesc().isTerminator() && "Broken terminator!");
 
     if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
       Terms.push_back(Inst);

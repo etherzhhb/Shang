@@ -1009,7 +1009,7 @@ static bool printFUAdd(raw_ostream &OS, const VASTWire *W) {
   VASTExpr *E = dyn_cast<VASTExpr>(W->getExpr());
   if (E == 0) return false;
 
-  assert(E->NumOps >= 2 && "bad operand number!");
+  assert(E->NumOps >= 2 && E->NumOps <=3 && "bad operand number!");
   if (E->NumOps > 3) return false;
 
   const VASTUse &OpA = E->getOperand(0), &OpB = E->getOperand(1);
