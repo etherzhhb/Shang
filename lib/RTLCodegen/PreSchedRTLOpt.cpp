@@ -40,17 +40,13 @@ using namespace llvm;
 
 namespace llvm {
 class VASTMachineOperand : public VASTValue {
-  MachineInstr *MOHolder;
-  unsigned Index;
+  const MachineOperand MO;
 public:
-  VASTMachineOperand(MachineInstr *MOHolder, unsigned Index)
-    : VASTValue(VASTNode::vastMachineOperand,
-                VInstrInfo::getBitWidth(MOHolder->getOperand(Index))),
-      MOHolder(MOHolder), Index(Index) {}
+  VASTMachineOperand(const MachineOperand &MO)
+    : VASTValue(VASTNode::vastMachineOperand, VInstrInfo::getBitWidth(MO)),
+      MO(MO) {}
 
   MachineOperand getMO() const {
-    MachineOperand MO = MOHolder->getOperand(Index);
-    MO.clearParent();
     return MO;
   }
 
@@ -73,7 +69,6 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
   MachineRegisterInfo *MRI;
   MachineDominatorTree *DT;
   MachineBasicBlock *Entry;
-  MachineInstr *MOHolder;
   // VASTExpr management, managed by VASTModule.
   VASTModule Mod;
   OwningPtr<DatapathBuilder> Builder;
@@ -111,10 +106,8 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     assert((!DefMO.isReg() || !DefMO.isDef())
            && "The define flag should had been clear!");
     VASTMachineOperand *&VASTMO = VASTMOs[DefMO];
-    if (!VASTMO) {
-      MOHolder->addOperand(DefMO);
-      VASTMO = new VASTMachineOperand(MOHolder, MOHolder->getNumOperands() - 1);
-    }
+    if (!VASTMO)
+      VASTMO = new VASTMachineOperand(DefMO);
 
     return VASTMO;
   }
@@ -125,8 +118,7 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     return E->isInlinable();
   }
 
-  PreSchedRTLOpt() : MachineFunctionPass(ID), MRI(0), DT(0), Entry(0),
-                     MOHolder(0), Mod("dummy") {
+  PreSchedRTLOpt() : MachineFunctionPass(ID), MRI(0), DT(0), Entry(0), Mod("m"){
     initializeMachineDominatorTreePass(*PassRegistry::getPassRegistry());
   }
 
@@ -206,18 +198,22 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
 
   MachineOperand getAsOperand(VASTValPtr V);
 
-  unsigned allocateRegNum(VASTExprPtr Expr) {
-    unsigned RegNum = lookupRegNum(Expr);
+  unsigned allocateRegNum(VASTValPtr V) {
+    unsigned RegNum = lookupRegNum(V);
     assert((!RegNum || !MRI->getVRegDef(RegNum))
            && "Reg already allocated for expression!");
-    if (RegNum == 0) RegNum = MRI->createVirtualRegister(VTM::DRRegisterClass);
+    if (RegNum == 0) {
+      RegNum = MRI->createVirtualRegister(VTM::DRRegisterClass);
+      // Index the expression by the the newly created register number.
+      if (V) Builder->indexVASTExpr(RegNum, V);
+    }
 
     return RegNum;;
   }
 
-  MachineOperand allocateRegMO(VASTExprPtr Expr, unsigned BitWidth = 0) {
-    if (BitWidth == 0) BitWidth = Expr->getBitWidth();
-    return VInstrInfo::CreateReg(allocateRegNum(Expr), BitWidth, true);;
+  MachineOperand allocateRegMO(VASTValPtr V, unsigned BitWidth = 0) {
+    if (BitWidth == 0) BitWidth = V->getBitWidth();
+    return VInstrInfo::CreateReg(allocateRegNum(V), BitWidth, true);;
   }
 
   template<bool AllowDifference>
@@ -265,17 +261,11 @@ bool PreSchedRTLOpt::runOnMachineFunction(MachineFunction &F) {
   Builder.reset(new DatapathBuilder(*this, *MRI));
 
   Entry = F.begin();
-  DebugLoc dl;
-  MOHolder
-    = BuildMI(*Entry, Entry->begin(), dl, VInstrInfo::getDesc(VTM::CtrlEnd));
-
   ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
   typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
 
   for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I)
     Changed = optimizeMBB(**I);
-
-  MOHolder->eraseFromParent();
 
   // Verify the function.
   F.verify(this);
@@ -549,11 +539,11 @@ unsigned PreSchedRTLOpt::rewriteAssign(VASTExpr *Expr) {
   assert(Expr->isSubBitSlice() && "Unexpected trivial assign!");
 
   MachineOperand SrcMO = getAsOperand(Expr->getOperand(0));
-
-  if (Expr->isZeroBasedBitSlice() && SrcMO.isReg())
-    return SrcMO.getReg();
-
   MachineOperand DefMO = allocateRegMO(Expr);
+  // Do not create self-assign.
+  //if (SrcMO.isReg() && SrcMO.getReg() == DefMO.getReg())
+  //  return DefMO.getReg();
+  
   MachineInstr *IP = getInsertPos(SrcMO);
   DebugLoc dl;
 
@@ -654,10 +644,6 @@ unsigned PreSchedRTLOpt::rewriteExpr(VASTExprPtr E, MachineInstr *IP) {
       break;
     case VASTExpr::dpAssign:
       RegNo = rewriteAssign(Expr);
-      // Dirty hack: We may need to preform register replacing for zero-based
-      // bitslice.
-      if (Expr->isZeroBasedBitSlice())
-        RegNo = rememberRegNumForExpr<true>(Expr, RegNo);
       break;
     case VASTExpr::dpAdd:
       RegNo = rewriteAdd(Expr, IP);
@@ -704,7 +690,10 @@ PreSchedRTLOpt::getAsOperand(MachineOperand &Op, bool GetAsInlineOperand) {
     VASTValPtr V = Builder->lookupExpr(Reg);
 
     if (!V) {
-      MachineOperand DefMO = MRI->getVRegDef(Reg)->getOperand(0);
+      MachineInstr *DefMI = check(MRI->getVRegDef(Reg));
+      assert(VInstrInfo::isControl(DefMI->getOpcode())
+             && "Reg defined by data-path should had already been indexed!");
+      MachineOperand DefMO = DefMI->getOperand(0);
       DefMO.setIsDef(false);
       V = getOrCreateVASTMO(DefMO);
     }
@@ -746,8 +735,9 @@ MachineOperand PreSchedRTLOpt::getAsOperand(VASTValPtr V) {
   MachineOperand MO = getAsOperand(Inv);
 
   // Build the not operation.
-  unsigned RegNum = allocateRegNum(dyn_cast<VASTExprPtr>(V));
+  unsigned RegNum = allocateRegNum(V);
   buildNot(RegNum, MO);
+
   return VInstrInfo::CreateReg(RegNum, V->getBitWidth());
 }
 
