@@ -784,21 +784,15 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
       if (ExprLHS->getBitWidth() > OpBitwidth)
         ExprLHS = buildBitSliceExpr(ExprLHS, OpBitwidth, 0);
 
-      if (VASTValPtr V = OpInfo.analyzeOperand(ExprLHS))
-        NewOps.push_back(V);
+      NewOps.push_back(ExprLHS);
 
       VASTValPtr ExprRHS = Expr->getOperand(1);
       if (ExprRHS->getBitWidth() > OpBitwidth)
         ExprRHS = buildBitSliceExpr(ExprRHS, OpBitwidth, 0);
 
-      if (VASTValPtr V = OpInfo.analyzeOperand(ExprRHS))
-        NewOps.push_back(V);
+      NewOps.push_back(ExprRHS);;
 
-      if (VASTValPtr V = OpInfo.flushImmOperand())
-        NewOps.push_back(V);
-
-      assert(OpInfo.Carry->getBitWidth() == 1 && "Carry is not 1 bit!");
-      NewOps.push_back(OpInfo.Carry);
+      if (OpInfo.Carry) NewOps.push_back(OpInfo.Carry);
 
       assert(NewOps.size() < 4 && "Bad add folding!");
       return buildAddExpr(NewOps, BitWidth);
