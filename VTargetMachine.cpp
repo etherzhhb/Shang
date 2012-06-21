@@ -37,10 +37,16 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/CommandLine.h"
 #define DEBUG_TYPE "vtm-emit-passes"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;
+cl::opt<bool>
+EnablePreSchedRTLOpt("vtm-pre-schedule-data-path-opt",
+                     cl::desc("Pre-schedule data-path optimization"),
+                     cl::init(false));
+
 //===----------------------------------------------------------------------===//
 
 extern "C" void LLVMInitializeVerilogBackendTarget() {
@@ -128,6 +134,7 @@ struct VTMPassConfig : public TargetPassConfig {
 
     // Fix the machine code to avoid unnecessary mux.
     PM.add(createFixMachineCodePass(true));
+    if (EnablePreSchedRTLOpt) PM.add(createPreSchedRTLOptPass());
 
     // Construct multiplexer tree for prebound function units.
     PM.add(createPrebindUnbalanceMuxPass());
