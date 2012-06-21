@@ -236,7 +236,14 @@ class VerilogASTBuilder : public MachineFunctionPass,
 
     // Retrieve the expression.
     VASTValPtr Expr = Builder->lookupExpr(RegNum);
-    assert(Expr && "Expression for RegNum not existed!");
+    if (!Expr) {
+      // For pipelined loop, we may visit the user before visiting
+      // the defining instruction.
+      MachineInstr *MI = MRI->getVRegDef(RegNum);
+      assert(MI && "Register definition not found!");
+      Expr = Builder->createAndIndexExpr(MI);
+    }
+    
     VASTExprPtr Ptr = dyn_cast<VASTExprPtr>(Expr);
     // If the expression is inlinalbe, do not create the wire.
     if (!Ptr || Ptr->isInlinable()) return Expr;
