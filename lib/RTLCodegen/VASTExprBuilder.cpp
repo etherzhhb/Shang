@@ -566,14 +566,15 @@ namespace llvm {
 struct AddMultOpInfoBase {
   VASTExprBuilder &Builder;
   const unsigned ResultSize;
+  unsigned ActualResultSize;
   uint64_t ImmVal;
   unsigned ImmSize;
   unsigned MaxTailingZeros;
   VASTValPtr OpWithTailingZeros;
 
   AddMultOpInfoBase(VASTExprBuilder &Builder, unsigned ResultSize)
-    : Builder(Builder), ResultSize(ResultSize), ImmVal(0), ImmSize(0),
-      MaxTailingZeros(0), OpWithTailingZeros(0) {}
+    : Builder(Builder), ResultSize(ResultSize), ActualResultSize(0), ImmVal(0),
+      ImmSize(0), MaxTailingZeros(0), OpWithTailingZeros(0) {}
 
   VASTValPtr analyzeBitMask(VASTValPtr V,  unsigned &CurTailingZeros) {
     uint64_t KnownZeros, KnownOnes;
@@ -617,10 +618,9 @@ struct AddMultOpInfoBase {
 
 template<>
 struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
-  unsigned ActualResultSize;
 
   VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
-    : AddMultOpInfoBase(Builder, ResultSize), ActualResultSize(0) {}
+    : AddMultOpInfoBase(Builder, ResultSize) {}
 
   void updateActualResultSize(unsigned OperandSize) {
     if (ActualResultSize == 0)
@@ -692,6 +692,12 @@ struct VASTExprOpInfo<VASTExpr::dpMul> : public AddMultOpInfoBase {
   VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
     : AddMultOpInfoBase(Builder, ResultSize), ZeroDetected(false) {}
 
+  void updateActualResultSize(unsigned OperandSize) {
+    if (ActualResultSize == 0)
+      ActualResultSize = OperandSize;
+    else
+      ActualResultSize = std::min(ActualResultSize + OperandSize, ResultSize);
+  }
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
     // Zero detected, no need to analyze.
@@ -704,6 +710,8 @@ struct VASTExprOpInfo<VASTExpr::dpMul> : public AddMultOpInfoBase {
       ZeroDetected = true;
       return 0;
     }
+
+    updateActualResultSize(V->getBitWidth());
 
     if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
       // Ignore multiply by 1.
@@ -741,6 +749,11 @@ VASTValPtr VASTExprBuilder::buildMulExpr(ArrayRef<VASTValPtr> Ops,
                                 op_filler<VASTExpr::dpMul>(NewOps, OpInfo));
 
   if (OpInfo.ZeroDetected) return getOrCreateImmediate(UINT64_C(0), BitWidth);
+
+  if (OpInfo.ActualResultSize < BitWidth) {
+    VASTValPtr NarrowedMul = buildMulExpr(NewOps, OpInfo.ActualResultSize);
+    return padHigherBits(NarrowedMul, BitWidth, false);
+  }
 
   // Reduce the size of multiply according to tailing zero.
   if (NewOps.size() == 2 && OpInfo.OpWithTailingZeros) {
