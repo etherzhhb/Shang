@@ -415,10 +415,10 @@ void PreSchedRTLOpt::rewriteExprTreeForMO(MachineOperand &MO, MachineInstr *IP,
 
 VASTValPtr PreSchedRTLOpt::buildDatapath(MachineInstr *MI) {
   if (VInstrInfo::isDatapath(MI->getOpcode()))
-    return Builder->getOrCreateExpr(MI);
+    return Builder->createAndIndexExpr(MI);
 
   // Else this is a Control operation.
-  return false;
+  return 0;
 }
 
 unsigned PreSchedRTLOpt::rewriteExprTree(VASTExprPtr Expr, MachineInstr *IP) {

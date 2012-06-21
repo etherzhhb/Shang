@@ -37,6 +37,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -234,7 +235,8 @@ class VerilogASTBuilder : public MachineFunctionPass,
     }
 
     // Retrieve the expression.
-    VASTValPtr Expr = Builder->getOrCreateExpr(RegNum);
+    VASTValPtr Expr = Builder->lookupExpr(RegNum);
+    assert(Expr && "Expression for RegNum not existed!");
     VASTExprPtr Ptr = dyn_cast<VASTExprPtr>(Expr);
     // If the expression is inlinalbe, do not create the wire.
     if (!Ptr || Ptr->isInlinable()) return Expr;
@@ -486,8 +488,11 @@ bool VerilogASTBuilder::runOnMachineFunction(MachineFunction &F) {
 
   // States of the control flow.
   emitIdleState();
-  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I)
-    emitBasicBlock(*I);
+  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(F.begin());
+  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+
+  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I)
+    emitBasicBlock(**I);
 
   // Build the mux for memory bus.
   MBBuilder->buildMemBusMux();
@@ -1271,8 +1276,8 @@ VerilogASTBuilder::emitDatapath(MachineInstr *Bundle) {
          && "Expect data-path bundle start!");
 
   instr_it I = Bundle;
-   while ((++I)->isInsideBundle())
-    Builder->getOrCreateExpr(I);
+  while ((++I)->isInsideBundle())
+    Builder->createAndIndexExpr(I, true);
 
   return I;
 }

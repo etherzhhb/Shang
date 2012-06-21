@@ -54,12 +54,9 @@ public:
     return getContext().getAsOperand(Op, GetAsInlineOperand);
   }
 
-  // Virtual register mapping.
-  VASTValPtr getOrCreateExpr(unsigned RegNo, MachineInstr *MI = 0);
-  VASTValPtr getOrCreateExpr(MachineInstr *MI) {
-    return getOrCreateExpr(MI->getOperand(0).getReg(), MI);
-  }
+  VASTValPtr createAndIndexExpr(MachineInstr *MI, bool mayExisted = false);
 
+  // Virtual register mapping.
   VASTValPtr lookupExpr(unsigned RegNo) const;
   VASTValPtr indexVASTExpr(unsigned RegNo, VASTValPtr V);
 

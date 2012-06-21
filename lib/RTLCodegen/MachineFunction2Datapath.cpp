@@ -186,15 +186,16 @@ VASTValPtr DatapathBuilder::buildBitSlice(MachineInstr *MI) {
   return buildBitSliceExpr(getAsOperand(MO), UB, LB);
 }
 
-VASTValPtr DatapathBuilder::getOrCreateExpr(unsigned RegNo, MachineInstr *MI) {
+VASTValPtr DatapathBuilder::createAndIndexExpr(MachineInstr *MI,
+                                               bool mayExisted) {
+  unsigned RegNo = MI->getOperand(0).getReg();
   assert(TargetRegisterInfo::isVirtualRegister(RegNo)
-          && "Expected virtual register!");
+         && "Expected virtual register!");
   VASTValPtr &Expr = Idx2Expr[RegNo];
-  if (Expr) return Expr;
+  assert((!Expr || mayExisted) && "Expression had already been created!");
 
-  // Build the expression if it had not existed yet.
-  if (MI == 0) MI = MRI.getVRegDef(RegNo);
-  assert(MI && "Virtual register for wire not defined!");
+  if (Expr) return Expr;
+  
   return (Expr = buildDatapathExpr(MI));
 }
 
