@@ -617,11 +617,10 @@ struct AddMultOpInfoBase {
 
 template<>
 struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
-  VASTValPtr Carry;
   unsigned ActualResultSize;
 
   VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
-    : AddMultOpInfoBase(Builder, ResultSize), Carry(0), ActualResultSize(0) {}
+    : AddMultOpInfoBase(Builder, ResultSize), ActualResultSize(0) {}
 
   void updateActualResultSize(unsigned OperandSize) {
     if (ActualResultSize == 0)
@@ -651,14 +650,6 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
       return 0;
     }
 
-
-    // Cache the carry and make sure we place the carry at the last of the
-    // operand list.
-    if (V->getBitWidth() == 1 && !Carry) {
-      Carry = V;
-      return 0;
-    }
-
     updateTailingZeros(V, CurTailingZeros);
 
     return V;
@@ -676,16 +667,21 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
       ImmSize = 0;
       ImmVal = 0;
 
-      // Try to treat 1 bit immediate as carry bit.
-      if (Imm->getBitWidth() == 1 && !Carry) {
-        Carry = Imm;
-        return 0;
-      }
-
       return Imm;
     }
 
     return 0;
+  }
+
+
+  static bool sort(const VASTValPtr LHS, const VASTValPtr RHS) {
+    if (LHS->getBitWidth() > RHS->getBitWidth()) return true;
+    else if (LHS->getBitWidth() < RHS->getBitWidth()) return false;
+
+    if (LHS->getASTType() < RHS->getASTType()) return true;
+    else if (LHS->getASTType() > RHS->getASTType()) return false;
+
+    return LHS < RHS;
   }
 };
 
@@ -778,20 +774,29 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   if (VASTValPtr V = OpInfo.flushImmOperand())
     NewOps.push_back(V);
 
+  // Sort the operands excluding carry bit, we want to place the carry bit at
+  // last.
+  std::sort(NewOps.begin(), NewOps.end(), VASTExprOpInfo<VASTExpr::dpAdd>::sort);
+
+  // All operands are zero?
+  if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
+
+  bool CarryPresented = NewOps.back()->getBitWidth() == 1;
+
   // If the addition contains only 2 operand, check if we can inline a operand
   // of this addition to make use of the carry bit.
-  if (NewOps.size() == (OpInfo.Carry ? 1 : 2)) {
-    bool MustHasCarry = (NewOps.size() != 1);
+  if (NewOps.size() < 3) {
     unsigned ExprIdx = 0;
-    VASTExpr *Expr = Context.getAddExprToFlatten(NewOps[ExprIdx],MustHasCarry);
+    VASTExpr *Expr=Context.getAddExprToFlatten(NewOps[ExprIdx],!CarryPresented);
     if (Expr == 0 && NewOps.size() > 1)
-      Expr = Context.getAddExprToFlatten(NewOps[++ExprIdx], MustHasCarry);
+      Expr = Context.getAddExprToFlatten(NewOps[++ExprIdx], !CarryPresented);
 
     // If we can find such expression, flatten the expression tree.
     if (Expr) {
       // Try to keep the operand bitwidth unchanged.
       unsigned OpBitwidth = NewOps[ExprIdx]->getBitWidth();
       NewOps.erase(NewOps.begin() + ExprIdx);
+      assert(Expr->NumOps == 2&&"Unexpected operand number of sub-expression!");
 
       // Replace the expression by the no-carry operand
       VASTValPtr ExprLHS = Expr->getOperand(0);
@@ -804,24 +809,12 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
       if (ExprRHS->getBitWidth() > OpBitwidth)
         ExprRHS = buildBitSliceExpr(ExprRHS, OpBitwidth, 0);
 
-      NewOps.push_back(ExprRHS);;
-
-      if (OpInfo.Carry) NewOps.push_back(OpInfo.Carry);
+      NewOps.push_back(ExprRHS);
 
       assert(NewOps.size() < 4 && "Bad add folding!");
       return buildAddExpr(NewOps, BitWidth);
     }
   }
-
-  // Sort the operands excluding carry bit, we want to place the carry bit at
-  // last.
-  std::sort(NewOps.begin(), NewOps.end(), VASTValPtr_less);
-
-  // Add the carry bit back to the operand list.
-  if (OpInfo.Carry) NewOps.push_back(OpInfo.Carry);
-
-  // All operands are zero?
-  if (NewOps.empty()) return Context.getOrCreateImmediate(UINT64_C(0),BitWidth);
 
   if (NewOps.size() == 1)
     // Pad the higer bits by zeros.

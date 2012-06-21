@@ -60,7 +60,7 @@ public:
 
   // If V is an addition which can be flatten the addition that using its result
   // return the expression, or return null otherwise.
-  virtual VASTExpr *getAddExprToFlatten(VASTValPtr V, bool HasCarryOnly) {
+  virtual VASTExpr *getAddExprToFlatten(VASTValPtr V, bool MustHasCarry) {
     V = stripName(stripZeroBasedBitSlize(V));
 
     VASTExpr *Expr = dyn_cast<VASTExpr>(V);
@@ -71,7 +71,7 @@ public:
     // into the carry bit.
     if (Expr->NumOps != 2) return 0;
 
-    if (HasCarryOnly && Expr->getOperand(1)->getBitWidth() != 1)
+    if (MustHasCarry && Expr->getOperand(1)->getBitWidth() != 1)
       return 0;
 
     return Expr;
