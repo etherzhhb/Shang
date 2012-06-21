@@ -437,9 +437,6 @@ MachineInstr *VInstrInfo::PredicatePseudoInstruction(MachineInstr *MI,
 
   if (MI->isImplicitDef()) return MI;
 
-  if (MI->getOpcode() != VTM::COPY)
-    return 0;
-
   SmallVector<MachineOperand, 2> Ops;
   while (MI->getNumOperands()) {
     unsigned LastOp = MI->getNumOperands() - 1;
@@ -790,7 +787,8 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
   ResDef.setIsDef();
 
   return *BuildMI(MBB, IP, DebugLoc(), getDesc(VTM::VOpMove))
-            .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0]);
+            .addOperand(ResDef).addOperand(IfTrueVal).addOperand(Pred[0])
+            .addOperand(VInstrInfo::CreateTrace());
 }
 
 // Add Source to PHINode, if PHINod only have 1 source value, replace the PHI by

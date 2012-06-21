@@ -506,8 +506,29 @@ void LogicNetwork::buildLUTInst(Abc_Obj_t *Obj, VFInfo *VFI,
     // Replace the register by immediate.
     typedef MachineRegisterInfo::use_iterator it;
     for (it I = MRI.use_begin(MO.getReg()); I != MachineRegisterInfo::use_end();
-         /*++I*/)
+         /*++I*/) {
+      MachineInstr &MI = *I;
+      if (MI.getOpcode() == VTM::VOpSel && I.getOperandNo() == 1) {
+        // Change the condition to always true condition.
+        if (Imm == 0) {
+          MachineOperand TrueVal = MI.getOperand(2),FalseVal = MI.getOperand(3);
+          MI.RemoveOperand(5);
+          MI.RemoveOperand(4);
+          MI.RemoveOperand(3);
+          MI.RemoveOperand(2);
+          MI.addOperand(FalseVal);
+          MI.addOperand(TrueVal);
+          MI.addOperand(VInstrInfo::CreatePredicate());
+          MI.addOperand(VInstrInfo::CreateTrace());
+        }
+
+        VInstrInfo::setBitWidth(I.getOperand(), 1);
+        (I++).getOperand().ChangeToRegister(0, false);
+        continue;
+      }
+
       (I++).getOperand().ChangeToImmediate(Imm);
+    }
 
     return;
   }

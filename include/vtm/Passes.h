@@ -41,10 +41,10 @@ Pass *createAllocaAlignerPass();
 
 Pass *createFunctionFilterPass(raw_ostream &O);
 
-
 // Bit level information analysis
 Pass *createBitLevelInfoPass();
 Pass *createLogicSynthesisPass();
+Pass *createPreSchedRTLOptPass();
 Pass *createFixMachineCodePass(bool IsPreOpt);
 Pass *createBuildWireTransitiveUsersPass();
 Pass *createHyperBlockFormationPass();

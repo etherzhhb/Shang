@@ -4,6 +4,7 @@ add_llvm_library(VTMRTLCodegen
   VerilogASTBuilder.cpp
   VerilogASTWriter.cpp
   MachineFunction2Datapath.cpp
+  PreSchedRTLOpt.cpp
   ControlLogicBuilder.cpp
   CombPathDelayAnalysis.cpp
   RtlSSAAnalysis.cpp

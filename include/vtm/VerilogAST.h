@@ -56,7 +56,8 @@ public:
     vastExpr,
     vastWire,
     vastRegister,
-    vastLastValueType = vastRegister,
+    vastMachineOperand,
+    vastLastValueType = vastMachineOperand,
     vastPort,
     vastSlot,
 
