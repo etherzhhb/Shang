@@ -618,15 +618,28 @@ struct AddMultOpInfoBase {
 template<>
 struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
   VASTValPtr Carry;
+  unsigned ActualResultSize;
 
   VASTExprOpInfo(VASTExprBuilder &Builder, unsigned ResultSize)
-    : AddMultOpInfoBase(Builder, ResultSize), Carry(0) {}
+    : AddMultOpInfoBase(Builder, ResultSize), Carry(0), ActualResultSize(0) {}
+
+  void updateActualResultSize(unsigned OperandSize) {
+    if (ActualResultSize == 0)
+      ActualResultSize = OperandSize;
+    else {
+      // Each addition will produce 1 extra bit (carry bit).
+      ActualResultSize = std::max(ActualResultSize, OperandSize);
+      ActualResultSize = std::min(ActualResultSize + 1, ResultSize);
+    }
+  }
 
   VASTValPtr analyzeOperand(VASTValPtr V) {
     unsigned CurTailingZeros;
 
     V = analyzeBitMask(V, CurTailingZeros);
     if (!V) return 0;
+
+    updateActualResultSize(V->getBitWidth());
 
     // Fold the immediate.
     if (VASTImmPtr Imm = dyn_cast<VASTImmPtr>(V)) {
@@ -637,6 +650,7 @@ struct VASTExprOpInfo<VASTExpr::dpAdd> : public AddMultOpInfoBase {
       ImmVal += Imm->getUnsignedValue();
       return 0;
     }
+
 
     // Cache the carry and make sure we place the carry at the last of the
     // operand list.
@@ -812,6 +826,11 @@ VASTValPtr VASTExprBuilder::buildAddExpr(ArrayRef<VASTValPtr> Ops,
   if (NewOps.size() == 1)
     // Pad the higer bits by zeros.
     return padHigherBits(NewOps.back(), BitWidth, false);
+
+  if (OpInfo.ActualResultSize < BitWidth) {
+    VASTValPtr NarrowedAdd = buildAddExpr(NewOps, OpInfo.ActualResultSize);
+    return padHigherBits(NarrowedAdd, BitWidth, false);
+  }
 
   // If one of the operand has tailing zeros, we can directly forward the value
   // of the corresponding bitslice of another operand.
