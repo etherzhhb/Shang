@@ -131,7 +131,7 @@ struct VRASimple : public MachineFunctionPass {
 
   // Put all datapath op that using the corresponding register of the LI to
   // the user vector.
-  typedef DenseMap<MachineInstr*, unsigned, MachineInstrExpressionTrait>
+  typedef DenseMap<MachineInstr*, unsigned, VMachineInstrExpressionTrait>
     DatapathOpMap;
   void mergeIdenticalDatapath(LiveInterval *LI);
   typedef EquivalenceClasses<unsigned> EquRegClasses;

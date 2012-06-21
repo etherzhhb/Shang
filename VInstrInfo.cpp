@@ -645,6 +645,36 @@ unsigned VMachineOperandValueTrait::getHashValue(MachineOperand Op) {
   return getMachineOperandHashValue(Op);
 }
 
+unsigned
+VMachineInstrExpressionTrait::getHashValue(const MachineInstr* const &MI) {
+  // Build up a buffer of hash code components.
+  //
+  // FIXME: This is a total hack. We should have a hash_value overload for
+  // MachineOperand, but currently that doesn't work because there are many
+  // different ideas of "equality" and thus different sets of information that
+  // contribute to the hash code. This one happens to want to take a specific
+  // subset. And it's still not clear that this routine uses the *correct*
+  // subset of information when computing the hash code. The goal is to use the
+  // same inputs for the hash code here that MachineInstr::isIdenticalTo uses to
+  // test for equality when passed the 'IgnoreVRegDefs' filter flag. It would
+  // be very useful to factor the selection of relevant inputs out of the two
+  // functions and into a common routine, but it's not clear how that can be
+  // done.
+  SmallVector<size_t, 8> HashComponents;
+  HashComponents.reserve(MI->getNumOperands() + 1);
+  HashComponents.push_back(MI->getOpcode());
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
+    // Ignore the virtual register definition.
+    if (MO.isReg() && MO.isDef()
+        && TargetRegisterInfo::isVirtualRegister(MO.getReg()))
+      continue;
+
+    HashComponents.push_back(getMachineOperandHashValue(MO));
+  }
+  return hash_combine_range(HashComponents.begin(), HashComponents.end());
+}
+
 static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *MRI,
                                        MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator IP,

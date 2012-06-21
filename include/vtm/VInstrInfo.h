@@ -289,6 +289,30 @@ struct VMachineOperandValueTrait : DenseMapInfo<MachineOperand> {
   }
 };
 
+/// VMachineInstrExpressionTrait - Special DenseMapInfo traits to compare
+/// MachineInstr* by *value* of the instruction rather than by pointer value.
+/// The hashing and equality testing functions ignore definitions so this is
+/// useful for CSE, etc.
+struct VMachineInstrExpressionTrait : DenseMapInfo<MachineInstr*> {
+  static inline MachineInstr *getEmptyKey() {
+    return 0;
+  }
+
+  static inline MachineInstr *getTombstoneKey() {
+    return reinterpret_cast<MachineInstr*>(-1);
+  }
+
+  static unsigned getHashValue(const MachineInstr* const &MI);
+
+  static bool isEqual(const MachineInstr* const &LHS,
+                      const MachineInstr* const &RHS) {
+    if (RHS == getEmptyKey() || RHS == getTombstoneKey() ||
+        LHS == getEmptyKey() || LHS == getTombstoneKey())
+      return LHS == RHS;
+    return LHS->isIdenticalTo(RHS, MachineInstr::IgnoreVRegDefs);
+  }
+};
+
 // Helper class for manipulating bit width operand.
 class BitWidthAnnotator {
   MachineOperand *MO;
