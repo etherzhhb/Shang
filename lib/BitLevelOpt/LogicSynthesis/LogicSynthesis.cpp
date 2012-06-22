@@ -28,6 +28,7 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Allocator.h"
 #define DEBUG_TYPE "vtm-logic-synthesis"
@@ -155,6 +156,21 @@ struct LogicNetwork {
     return VInstrInfo::getBitWidth(MO)!=VInstrInfo::getBitWidth(I.getOperand());
   }
 
+  // Convert a value to shortest string, the string must not containing \0 in
+  // the middle. This can simply done by converting th value to 255-based digits
+  // string and increase each digit by 1.
+  static inline SmallString<9> &intToStr(uint64_t V, SmallString<9> &S) {
+    assert(V && "Cannot convert 0 yet!");
+    while (V) {
+      unsigned char Digit = V % 255;
+      Digit += 1;
+      S += Digit;
+      V /= 255;
+    }
+
+    return S;
+  }
+
   NetworkObj *getOrCreateObj(MachineOperand &MO) {
     if (MO.isImm()) {
       Abc_Obj_t *Obj = 0;
@@ -173,8 +189,12 @@ struct LogicNetwork {
     // Object not existed, create a PI for the MO now.
     if (NtkObj == 0) {
       Abc_Obj_t *Obj = Abc_NtkCreatePi(Ntk);
-      std::string PIName = "i" + utostr_32(Abc_ObjId(Abc_ObjRegular(Obj)));
-      Abc_ObjAssignName(Obj, const_cast<char*>(PIName.c_str()), 0);
+
+      SmallString<9> S;
+      intToStr(Abc_ObjId(Abc_ObjRegular(Obj)), S);
+      // DirtyHack: Terminate the string manually.
+      S.push_back(0);
+      Abc_ObjAssignName(Obj, S.data(), 0);
       char *Name = Abc_ObjName(Abc_ObjRegular(Obj));
 
       // Remember the MI that define this MO so we can compute the insert
@@ -231,8 +251,11 @@ struct LogicNetwork {
       Abc_ObjAddFanin(PO, Obj);
       Obj = PO;
 
-      std::string POName = "o" + utostr_32(Abc_ObjId(Abc_ObjRegular(Obj)));
-      Abc_ObjAssignName(Obj, const_cast<char*>(POName.c_str()), 0);
+      SmallString<9> S;
+      intToStr(Abc_ObjId(Abc_ObjRegular(Obj)), S);
+      // DirtyHack: Terminate the string manually.
+      S.push_back(0);
+      Abc_ObjAssignName(Obj, S.data(), 0);
 
       // Remember the MO.
       MOMap.GetOrCreateValue(Abc_ObjName(Abc_ObjRegular(Obj)), Node.MO);
