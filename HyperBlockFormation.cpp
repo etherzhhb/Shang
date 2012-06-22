@@ -437,7 +437,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   CFGMap.clear();
 
   // Eliminate the empty blocks.
-  MakeChanged |= simplifyCFG(MF);
+  while (simplifyCFG(MF))
+    MakeChanged = true;
 
   MF.RenumberBlocks();
 
@@ -479,7 +480,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
         && I->back().getOpcode() == VTM::VOpRet)
       MakeChanged |= optimizeRetBB(*I);
 
-  MakeChanged |= simplifyCFG(MF);
+  while (simplifyCFG(MF))
+    MakeChanged = true;
 
   MF.RenumberBlocks();
 
