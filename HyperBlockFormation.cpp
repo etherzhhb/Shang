@@ -517,7 +517,12 @@ class PHIEditor {
   void addNewSrcValFrom(unsigned NewSrcReg, MachineBasicBlock *EdgeSrc,
                         MachineBasicBlock *EdgeDst) {
     unsigned &Reg = SrcMap[EdgeSrc];
-    if (Reg == 0 || Reg == NewSrcReg) {
+
+    // Identical incoming value found, nothing to do.
+    if (Reg == NewSrcReg) return;
+
+    // Simply create the new entry.
+    if (Reg == 0) {
       Reg = NewSrcReg;
       return;
     }
@@ -539,6 +544,7 @@ class PHIEditor {
 
     Reg = NewReg;
   }
+
 public:
   PHIEditor(MachineRegisterInfo &MRI, MachineInstr *PHI = 0)
     : MRI(MRI), PHI(PHI), BitWidth(0), RC(0) {
@@ -552,7 +558,7 @@ public:
     if ((PHI = P))  buildSrcMap();    
   }
 
-  void forwardPHISrcFrom(MachineBasicBlock *PredBB) {
+  void forwardAllIncomingFrom(MachineBasicBlock *PredBB) {
     PHISrcMapTy::iterator at = SrcMap.find(PredBB);
     assert(at != SrcMap.end() && "Bad PredBB!");
 
@@ -578,6 +584,43 @@ public:
       MachineBasicBlock *SrcBB = DefMI->getOperand(i + 1).getMBB();
       addNewSrcValFrom(SrcReg, SrcBB, PredBB);
     }
+  }
+
+  // Change the incoming value from SrcMBB to DstMBB.
+  void forwardIncoming(MachineBasicBlock *SrcMBB, MachineBasicBlock *DstMBB,
+                       const MachineOperand &CndDst2Src) {
+    PHISrcMapTy::iterator at = SrcMap.find(SrcMBB);
+    assert(at != SrcMap.end() && "Bad SrcMBB!");
+
+    unsigned RegToForward = at->second;
+    SrcMap.erase(at);
+
+    unsigned &ExistedIncomingReg = SrcMap[DstMBB];
+
+    // Identical incoming value found, nothing to do.
+    if (ExistedIncomingReg == RegToForward) return;
+
+    // Simply create the new entry.
+    if (ExistedIncomingReg == 0) {
+      ExistedIncomingReg = RegToForward;
+      return;
+    }
+
+    // Else we need to merge the value.
+    MachineInstr *InsertPos = DstMBB->getFirstInstrTerminator();
+    // Build the selection:
+    // NewReg = (Branch taken from EdgeSrc to EdgeDst) ?
+    //          Value from EdgeDst (NewSrcReg) : Value from EdgeSrc (Reg).
+    unsigned NewReg = MRI.createVirtualRegister(RC);
+    BuildMI(*DstMBB, InsertPos, DebugLoc(), VInstrInfo::getDesc(VTM::VOpSel))
+      .addOperand(VInstrInfo::CreateReg(NewReg, BitWidth, true))
+      .addOperand(CndDst2Src)
+      .addOperand(VInstrInfo::CreateReg(RegToForward, BitWidth))
+      .addOperand(VInstrInfo::CreateReg(ExistedIncomingReg, BitWidth))
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace());
+
+    ExistedIncomingReg = NewReg;
   }
 
   template<typename iterator>
@@ -629,8 +672,8 @@ public:
     return Reg;
   }
 
-  static bool forwardAllPHISrcFrom(MachineBasicBlock *MBB,
-                                   MachineRegisterInfo &MRI) {
+  static void forwardIncomingFrom(MachineBasicBlock *MBB,
+                                  MachineRegisterInfo &MRI) {
     typedef MachineBasicBlock::succ_iterator succ_it;
     typedef MachineBasicBlock::instr_iterator instr_iterator;
     PHIEditor Editor(MRI);
@@ -640,7 +683,27 @@ public:
       for (instr_iterator MI = Succ->instr_begin(), ME = Succ->instr_end();
            MI != ME && MI->isPHI(); /*++MI*/) {
         Editor.reset(MI++);
-        Editor.forwardPHISrcFrom(MBB);
+        Editor.forwardAllIncomingFrom(MBB);
+        Editor.flush();
+      }
+    }
+  }
+
+  static void forwardIncoming(MachineBasicBlock *SrcMBB,
+                              MachineBasicBlock *DstMBB,
+                              const MachineOperand &CndDst2Src,
+                              MachineRegisterInfo &MRI) {
+    typedef MachineBasicBlock::succ_iterator succ_it;
+    typedef MachineBasicBlock::instr_iterator instr_iterator;
+    PHIEditor Editor(MRI);
+    // Fix the incoming value of PHIs.
+    for (succ_it SI = SrcMBB->succ_begin(), SE = SrcMBB->succ_end();
+         SI != SE; ++SI) {
+      MachineBasicBlock *Succ = *SI;
+      for (instr_iterator MI = Succ->instr_begin(), ME = Succ->instr_end();
+           MI != ME && MI->isPHI(); /*++MI*/) {
+        Editor.reset(MI++);
+        Editor.forwardIncoming(SrcMBB, DstMBB, CndDst2Src);
         Editor.flush();
       }
     }
@@ -663,7 +726,7 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   typedef MachineBasicBlock::instr_iterator instr_iterator;
   typedef SmallVectorImpl<MachineBasicBlock*>::iterator pred_iterator;
 
-  PHIEditor::forwardAllPHISrcFrom(MBB, *MRI);
+  PHIEditor::forwardIncomingFrom(MBB, *MRI);
 
   PHIEditor Editor(*MRI);
   for (instr_iterator MI = MBB->instr_begin(), ME = MBB->instr_end();
@@ -997,13 +1060,12 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
   ToBB->splice(ToBB->end(), FromBB, FromBB->begin(), FromBB->end());
 
   foldCFGEdge(ToBB, ToJT, FromBB, FromJT);
+  PHIEditor::forwardIncoming(FromBB, ToBB, PredCnd, *MRI);
 
   SmallVector<MachineOperand, 1> PredVec(1, PredCnd);
   // The Block is dead, remove all its successor.
   for (jt_it I = FromJT.begin(),E = FromJT.end(); I != E; ++I){
     MachineBasicBlock *Succ = I->first;
-    // Merge the PHINodes.
-    VInstrInfo::mergePHISrc(Succ, FromBB, ToBB, *MRI, PredVec);
     FromBB->removeSuccessor(Succ);
   }
 

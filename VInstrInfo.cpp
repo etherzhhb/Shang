@@ -735,41 +735,6 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   return Dst;
 }
 
-MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB,
-                                      MachineOperand &Result,
-                                      MachineOperand Pred,
-                                      MachineOperand IfTrueVal,
-                                      MachineOperand IfFalseVal) {
-  assert(!isAlwaysTruePred(Pred) && "Selection op with always true condition?");
-  // create the result register if necessary.
-  if (!Result.getReg()) {
-    MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
-    const TargetRegisterClass *RC = MRI.getRegClass(IfTrueVal.getReg());
-    assert(MRI.getRegClass(IfFalseVal.getReg()) == RC
-      && "Register class dose not match!");
-    Result.setReg(MRI.createVirtualRegister(RC));
-  }
-
-  MachineOperand ResDef(Result);
-  ResDef.setIsDef();
-
-  // Build and insert the select instruction at the end of the BB.
-  return *BuildMI(*MBB, MBB->getFirstTerminator(), DebugLoc(),
-                  getDesc(VTM::VOpSel))
-            .addOperand(ResDef).addOperand(Pred)
-            .addOperand(IfTrueVal).addOperand(IfFalseVal)
-            .addOperand(VInstrInfo::CreatePredicate())
-            .addOperand(VInstrInfo::CreateTrace());
-}
-
-MachineInstr &VInstrInfo::BuildSelect(MachineBasicBlock *MBB, MachineOperand &Result,
-                                      const SmallVectorImpl<MachineOperand> &Pred,
-                                      MachineOperand IfTrueVal,
-                                      MachineOperand IfFalseVal){
-  // Build and insert the select instruction at the end of the BB.
-  assert(Pred.size() == 1 && "Cannot select value!");
-  return BuildSelect(MBB, Result, Pred[0], IfTrueVal, IfFalseVal);
-}
 
 MachineInstr &
 VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
@@ -791,22 +756,6 @@ VInstrInfo::BuildConditionnalMove(MachineBasicBlock &MBB,
             .addOperand(VInstrInfo::CreateTrace());
 }
 
-// Add Source to PHINode, if PHINod only have 1 source value, replace the PHI by
-// a copy, adjust and return true
-static bool AddSrcValToPHI(MachineOperand SrcVal, MachineBasicBlock *SrcBB,
-                           MachineInstr *PN, MachineRegisterInfo &MRI) {
-    if (PN->getNumOperands() != 1) {
-      PN->addOperand(SrcVal);
-      PN->addOperand(MachineOperand::CreateMBB(SrcBB));
-      return false;
-    }
-
-    // A redundant PHI have only 1 incoming value after SrcVal added.
-    MRI.replaceRegWith(PN->getOperand(0).getReg(), SrcVal.getReg());
-    PN->eraseFromParent();
-    return true;
-}
-
 MachineInstr *VInstrInfo::getEdgeCndAndInsertPos(MachineBasicBlock *From,
                                                  MachineBasicBlock *To,
                                                  MachineOperand &Pred) {
@@ -820,71 +769,6 @@ MachineInstr *VInstrInfo::getEdgeCndAndInsertPos(MachineBasicBlock *From,
   assert(at != SrcJT.end() && "Broken CFG?");
   Pred = at->second;
   return From->getFirstInstrTerminator();
-}
-
-void
-VInstrInfo::mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *BrDstBB,
-                        MachineBasicBlock *BrSrcBB, MachineRegisterInfo &MRI,
-                        const SmallVectorImpl<MachineOperand> &BrCnd) {
-  SmallVector<std::pair<MachineOperand, MachineBasicBlock*>, 2> SrcVals;
-  SmallVector<MachineInstr*, 8> PHIs;
-  assert(BrDstBB->pred_size() <= 1
-         && "Unexpected BrDstBB has multiple predecessors!");
-
-  // Fix up any PHI nodes in the successor.
-  for (MachineBasicBlock::iterator MI = Succ->begin(), ME = Succ->end();
-       MI != ME && MI->isPHI(); ++MI)
-    PHIs.push_back(MI);
-
-  while (!PHIs.empty()) {
-    MachineInstr *MI = PHIs.pop_back_val();
-    unsigned Idx = 1;
-    while (Idx < MI->getNumOperands()) {
-      MachineBasicBlock *SrcBB = MI->getOperand(Idx + 1).getMBB();
-      if (SrcBB != BrDstBB && SrcBB != BrSrcBB ) {
-        Idx += 2;
-        continue;
-      }
-      // Take the operand away.
-      SrcVals.push_back(std::make_pair(MI->getOperand(Idx), SrcBB));
-      MI->RemoveOperand(Idx);
-      MI->RemoveOperand(Idx);
-    }
-
-    // If only 1 value comes from BB, re-add it to the PHI.
-    if (SrcVals.size() == 1) {
-      AddSrcValToPHI(SrcVals.pop_back_val().first, BrSrcBB, MI, MRI);
-      continue;
-    }
-
-    assert(SrcVals.size() == 2 && "Too many edges!");
-
-    // Read the same register?
-    if (SrcVals[0].first.getReg() == SrcVals[1].first.getReg()) {
-      SrcVals.pop_back();
-      AddSrcValToPHI(SrcVals.pop_back_val().first, BrSrcBB, MI, MRI);
-      continue;
-    }
-
-    // Make sure value from FromBB in SrcVals[1].
-    if (SrcVals.back().second != BrDstBB)
-      std::swap(SrcVals[0], SrcVals[1]);
-
-    assert(SrcVals.back().second == BrDstBB
-      && "Cannot build select for value!");
-    assert(!BrCnd.empty()
-      && "Do not know how to select without condition!");
-    // Merge the value with select instruction.
-    MachineOperand Result = MachineOperand::CreateReg(0, false);
-    Result.setTargetFlags(MI->getOperand(0).getTargetFlags());
-    MachineOperand FromBBIncomingVal = SrcVals.pop_back_val().first;
-    MachineOperand ToBBIncomingVal = SrcVals.pop_back_val().first;
-    VInstrInfo::BuildSelect(BrSrcBB, Result, BrCnd,
-                            FromBBIncomingVal, // Value from FromBB
-                            ToBBIncomingVal // Value from ToBB
-                            );
-    AddSrcValToPHI(Result, BrSrcBB, MI, MRI);
-  }
 }
 
 bool VInstrInfo::isCopyLike(unsigned Opcode) {

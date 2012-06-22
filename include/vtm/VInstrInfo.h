@@ -120,35 +120,12 @@ public:
   virtual bool isReallyTriviallyReMaterializable(const MachineInstr *MI,
                                                  AliasAnalysis *AA) const;
 
-  /// @brief Merge the source of the PHINodes in Succ after FromBB is predicated
-  ///        and merged to ToBB.
-  ///
-  /// @param Succ       The successor block of FromBB
-  /// @param FromBB     The BB that predicated and merged
-  /// @param ToBB       The BB that FromBB merged to.
-  /// @param MRI
-  /// @param FromBBCnd  The condition that jumping from ToBB to FromBB
-  static void mergePHISrc(MachineBasicBlock *Succ, MachineBasicBlock *FromBB,
-                          MachineBasicBlock *ToBB, MachineRegisterInfo &MRI,
-                          const SmallVectorImpl<MachineOperand> &FromBBCnd);
-
   static MachineInstr *getEdgeCndAndInsertPos(MachineBasicBlock *From,
                                               MachineBasicBlock *To,
                                               MachineOperand &Pred);
 
   static const MachineOperand *getPredOperand(const MachineInstr *MI);
   static MachineOperand *getPredOperand(MachineInstr *MI);
-
-  // Build machine instructions for a = Pred ? IfTrueVal : IfFalseVal in MBB,
-  // and return the register that holding this value.
-  static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
-                                   const SmallVectorImpl<MachineOperand> &Pred,
-                                   MachineOperand IfTrueVal,
-                                   MachineOperand IfFalseVal);
-  static MachineInstr &BuildSelect(MachineBasicBlock *MBB, MachineOperand &Res,
-                                   MachineOperand Pred,
-                                   MachineOperand IfTrueVal,
-                                   MachineOperand IfFalseVal);
 
   static MachineInstr&
   BuildConditionnalMove(MachineBasicBlock &MBB, MachineBasicBlock::iterator IP,
