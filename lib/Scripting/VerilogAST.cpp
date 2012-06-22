@@ -490,10 +490,9 @@ VASTValPtr VASTModule::createExpr(VASTExpr::Opcode Opc,
   ID.AddInteger(Opc);
   ID.AddInteger(UB);
   ID.AddInteger(LB);
-  for (unsigned i = 0; i < Ops.size(); ++i) {
-    ID.AddPointer(Ops[i].get());
-    ID.AddBoolean(Ops[i].isInverted());
-  }
+  for (unsigned i = 0; i < Ops.size(); ++i)
+    ID.AddPointer(Ops[i]);
+
   void *IP = 0;
   if (VASTExpr *E = UniqueExprs.FindNodeOrInsertPos(ID, IP))
     return E;
