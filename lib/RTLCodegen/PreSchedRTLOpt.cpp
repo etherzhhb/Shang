@@ -296,8 +296,6 @@ bool PreSchedRTLOpt::optimizeMBB(MachineBasicBlock &MBB) {
 
     // Try to add the instruction into the Datapath net-list.
     if (VASTValPtr V = buildDatapath(MI)) {
-      // Remember the register number mapping, the register maybe CSEd.
-      rememberRegNumForExpr<true>(V, MI->getOperand(0).getReg());
       MI->eraseFromParent();
       continue;
     }
@@ -414,11 +412,18 @@ void PreSchedRTLOpt::rewriteExprTreeForMO(MachineOperand &MO, MachineInstr *IP,
 }
 
 VASTValPtr PreSchedRTLOpt::buildDatapath(MachineInstr *MI) {
-  if (VInstrInfo::isDatapath(MI->getOpcode()))
-    return Builder->createAndIndexExpr(MI);
+  if (!VInstrInfo::isDatapath(MI->getOpcode())) return 0;
 
-  // Else this is a Control operation.
-  return 0;
+  unsigned ResultReg = MI->getOperand(0).getReg();
+  VASTValPtr V = Builder->buildDatapathExpr(MI);
+
+  // Remember the register number mapping, the register maybe CSEd.
+  unsigned FoldedReg = rememberRegNumForExpr<true>(V, ResultReg);
+  // If ResultReg is not CSEd to other Regs, index the newly created Expr.
+  if (FoldedReg == ResultReg)
+    Builder->indexVASTExpr(FoldedReg, V);
+
+  return V;
 }
 
 unsigned PreSchedRTLOpt::rewriteExprTree(VASTExprPtr Expr, MachineInstr *IP) {
