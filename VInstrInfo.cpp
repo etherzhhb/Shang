@@ -1309,7 +1309,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
 
   // Assume MI do not have any user in the same BB, if it has, it will be
   // deleted later.
-  ExitMIs.insert(MI);
+  if (VInstrInfo::isControl(TID.getOpcode()) || AddDataPathOpToExitMIs)
+    ExitMIs.insert(MI);
   // We will not get any latency information if a datapath operation do not
   // depends any control operation in the same BB
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of

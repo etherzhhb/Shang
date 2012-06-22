@@ -348,6 +348,7 @@ public:
 
   MachineRegisterInfo &MRI;
 private:
+  const bool AddDataPathOpToExitMIs;
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
@@ -377,7 +378,8 @@ protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                        bool IgnorePHISrc);
 public:
-  DetialLatencyInfo(MachineRegisterInfo &mri) : MRI(mri) {}
+  DetialLatencyInfo(MachineRegisterInfo &mri, bool AddDataPathOpToExitMIs = true)
+    : MRI(mri), AddDataPathOpToExitMIs(AddDataPathOpToExitMIs) {}
 
   static const MachineInstr *const EntryMarker;
 
@@ -416,10 +418,13 @@ public:
     CachedLatencies.insert(std::make_pair(MI, l));
   }
 
+  void resetExitSet() { ExitMIs.clear(); }
+  void clearCachedLatencies() { CachedLatencies.clear(); }
+
   void reset() {
-    CachedLatencies.clear();
     LatencyMap.clear();
-    ExitMIs.clear();
+    clearCachedLatencies();
+    resetExitSet();
   }
 
   float getMaxLatency(const MachineInstr *MI) const {
@@ -429,7 +434,6 @@ public:
   unsigned getStepsToFinish(const MachineInstr *MI) const {
     return ceil(getMaxLatency(MI));
   }
-
 
   // Return the edge latency between SrcInstr and DstInstr considering chaining
   // effect.
