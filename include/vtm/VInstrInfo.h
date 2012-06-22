@@ -186,6 +186,11 @@ public:
     return VInstrInfo::getTraceOperand(MI)->getImm();
   }
 
+  static void setInstrSlotNum(MachineInstr *MI, unsigned InstrSlot) {
+    VInstrInfo::getTraceOperand(MI)->ChangeToImmediate(InstrSlot);
+    VInstrInfo::getTraceOperand(MI)->setTargetFlags(0xff);
+  }
+
   static bool isCtrlBundle(MachineInstr *MI);
 
   static bool isDatapathBundle(MachineInstr *MI);

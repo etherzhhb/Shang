@@ -660,11 +660,18 @@ VMachineInstrExpressionTrait::getHashValue(const MachineInstr* const &MI) {
   SmallVector<size_t, 8> HashComponents;
   HashComponents.reserve(MI->getNumOperands() + 1);
   HashComponents.push_back(MI->getOpcode());
+
+  const MCInstrDesc &TID = MI->getDesc();
+
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
     // Ignore the virtual register definition.
     if (MO.isReg() && MO.isDef()
         && TargetRegisterInfo::isVirtualRegister(MO.getReg()))
+      continue;
+
+    // Ignore the SlotNumber.
+    if (i < TID.getNumOperands() && TID.OpInfo[i].isPredicate() && MO.isImm())
       continue;
 
     HashComponents.push_back(getMachineOperandHashValue(MO));

@@ -701,7 +701,7 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Also set the slot of datapath if we need.
   DEBUG_WITH_TYPE("vtm-debug-datapath-slot", InstrSlot = SchedSlot.getSlot());
 
-  VInstrInfo::getTraceOperand(&Inst)->ChangeToImmediate(InstrSlot);
+  VInstrInfo::setInstrSlotNum(&Inst, InstrSlot);
   // Move the instruction to the right place.
   InsertPosTy IP = getMIAt(SchedSlot);
   Inst.removeFromParent();
