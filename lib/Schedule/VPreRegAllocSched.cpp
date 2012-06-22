@@ -248,9 +248,13 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   ReversePostOrderTraversal<MachineBasicBlock*> RPOT(MF.begin());
   typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
 
+  DetialLatencyInfo DLInfo(*MRI);
+
   for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
-    VSchedGraph State(*MRI, MBB, couldBePipelined(MBB), getTotalCycle());
+    DLInfo.reset();
+
+    VSchedGraph State(DLInfo, MBB, couldBePipelined(MBB), getTotalCycle());
     buildControlPathGraph(State);
     DEBUG(State.viewGraph());
     State.scheduleCtrl();
@@ -728,7 +732,7 @@ bool VPreRegAllocSched::mergeUnaryOp(MachineInstr *MI, unsigned OpIdx,
 
   // Merge it into the EntryRoot.
   return CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                           DetialLatencyInfo::getStepsFromEntry(MI));
+                           CurState.getStepsFromEntry(MI));
 }
 
 void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &CurState) {
@@ -790,7 +794,7 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
     // Merge the the PHI into entry root if the BB is not pipelined.
     if (!CurState.enablePipeLine()) {
       CurState.mapMI2SU(MI, CurState.getEntryRoot(),
-                        DetialLatencyInfo::getStepsFromEntry(MI));
+                        CurState.getStepsFromEntry(MI));
       return;
     }
     break;

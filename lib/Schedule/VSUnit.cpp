@@ -94,7 +94,7 @@ VSUnit *VSchedGraph::createVSUnit(MachineInstr *I, unsigned fuid) {
 
   AllSUs.push_back(SU);
 
-  bool mapped = mapMI2SU(I, SU, getStepsToFinish(I));
+  bool mapped = mapMI2SU(I, SU, DLInfo.getStepsToFinish(I));
   (void) mapped;
   assert(mapped && "Cannot add SU to the inst2su map!");
   return SU;
@@ -285,7 +285,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
   assert(U->num_instrs() == 1 && "Unexpected datapath operation merged!");
 
   MachineInstr *MI = U->getRepresentativeInst();
-  const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = getDepLatInfo(MI);
+  const DetialLatencyInfo::DepLatInfoTy *DepLatInfo = DLInfo.getDepLatInfo(MI);
   assert(DepLatInfo && "dependence latency information not available?");
 
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator dep_it;
@@ -319,7 +319,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
            && "Expect datapath operation have only 1 define!");
 
     unsigned Reg = MI->getOperand(0).getReg();
-    MRI.setRegClass(Reg, VTM::WireRegisterClass);
+    DLInfo.MRI.setRegClass(Reg, VTM::WireRegisterClass);
   }
 }
 

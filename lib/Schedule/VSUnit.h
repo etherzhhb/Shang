@@ -476,10 +476,11 @@ typedef df_iterator<const VSUnit*, SmallPtrSet<const VSUnit*, 8>, false,
   GraphTraits<Inverse<const VSUnit*> > > const_deptree_iterator;
 
 
-class VSchedGraph : public DetialLatencyInfo {
+class VSchedGraph {
 public:
   typedef std::vector<VSUnit*> SUnitVecTy;
   enum { NULL_SU_IDX = 0u };
+  DetialLatencyInfo &DLInfo;
 private:
   MachineBasicBlock *MBB;
   SUnitVecTy AllSUs;
@@ -503,9 +504,9 @@ private:
   bool trySetLoopOp(MachineInstr *MI);
 
 public:
-  VSchedGraph(MachineRegisterInfo &MRI, MachineBasicBlock *MachBB,
+  VSchedGraph(DetialLatencyInfo &DLInfo, MachineBasicBlock *MBB,
               bool HaveLoopOp, unsigned short StartSlot)
-    : DetialLatencyInfo(MRI), MBB(MachBB), Entry(new VSUnit(1)), Exit(0),
+    : DLInfo(DLInfo), MBB(MBB), Entry(new VSUnit(1)), Exit(0),
       SUCount(/*We already have the entry node and a null node (index 0)*/2),
       startSlot(StartSlot), LoopOp(0, HaveLoopOp) {
     AllSUs.push_back(Entry);
@@ -513,6 +514,49 @@ public:
 
   ~VSchedGraph() {
     std::for_each(AllSUs.begin(), AllSUs.end(), deleter<VSUnit>);
+  }
+
+  // Forwarding function from DetialLatencyInfo.
+  unsigned getStepsToFinish(const MachineInstr *MI) const {
+    return DLInfo.getStepsToFinish(MI);
+  }
+
+  void addDummyLatencyEntry(const MachineInstr *MI, float l = 0.0f) {
+    DLInfo.addDummyLatencyEntry(MI, l);
+  }
+
+  typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
+  const DepLatInfoTy *getDepLatInfo(const MachineInstr *DstMI) const {
+    return DLInfo.getDepLatInfo(DstMI);
+  }
+
+
+  float getChainingLatency(const MachineInstr *SrcInstr,
+                           const MachineInstr *DstInstr) const {
+    return DLInfo.getChainingLatency(SrcInstr, DstInstr);
+  }
+
+  void addInstr(const MachineInstr *MI) {
+    DLInfo.addInstr(MI);
+  }
+
+  void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info) {
+    DLInfo.buildExitMIInfo(ExitMI, Info);
+  }
+
+  // Erase the instructions from exit set.
+  void eraseFromExitSet(const MachineInstr *MI) {
+    DLInfo.eraseFromExitSet(MI);
+  }
+
+  template<bool IsValDep>
+  unsigned getCtrlStepBetween(const MachineInstr *SrcInstr,
+                              const MachineInstr *DstInstr) {
+    return DLInfo.getCtrlStepBetween<IsValDep>(SrcInstr, DstInstr);
+  }
+
+  unsigned getStepsFromEntry(const MachineInstr *DstInstr) const {
+    return DLInfo.getStepsFromEntry(DstInstr);
   }
 
   // Verify the schedule graph, should be call after the graph is built.
