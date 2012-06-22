@@ -45,7 +45,7 @@ using namespace llvm;
 cl::opt<bool>
 EnablePreSchedRTLOpt("vtm-pre-schedule-data-path-opt",
                      cl::desc("Pre-schedule data-path optimization"),
-                     cl::init(false));
+                     cl::init(true));
 
 //===----------------------------------------------------------------------===//
 
