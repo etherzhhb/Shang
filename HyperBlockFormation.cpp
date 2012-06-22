@@ -626,6 +626,23 @@ public:
 
     return Reg;
   }
+
+  static bool forwardAllPHISrcFrom(MachineBasicBlock *MBB,
+                                   MachineRegisterInfo &MRI) {
+    typedef MachineBasicBlock::succ_iterator succ_it;
+    typedef MachineBasicBlock::instr_iterator instr_iterator;
+    PHIEditor Editor(MRI);
+    // Fix the incoming value of PHIs.
+    for (succ_it SI = MBB->succ_begin(), SE = MBB->succ_end(); SI != SE; ++SI) {
+      MachineBasicBlock *Succ = *SI;
+      for (instr_iterator MI = Succ->instr_begin(), ME = Succ->instr_end();
+           MI != ME && MI->isPHI(); /*++MI*/) {
+        Editor.reset(MI++);
+        Editor.forwardPHISrcFrom(MBB);
+        Editor.flush();
+      }
+    }
+  }
 };
 }
 
@@ -643,19 +660,10 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
 
   typedef MachineBasicBlock::instr_iterator instr_iterator;
   typedef SmallVectorImpl<MachineBasicBlock*>::iterator pred_iterator;
-  typedef SmallVectorImpl<MachineBasicBlock*>::iterator succ_iterator;
-  PHIEditor Editor(*MRI);
-  // Fix the incoming value of PHIs.
-  for (succ_iterator SI = Succs.begin(), SE = Succs.end(); SI != SE; ++SI) {
-    MachineBasicBlock *Succ = *SI;      
-    for (instr_iterator MI = Succ->instr_begin(), ME = Succ->instr_end();
-         MI != ME && MI->isPHI(); /*++MI*/) {
-      Editor.reset(MI++);
-      Editor.forwardPHISrcFrom(MBB);
-      Editor.flush();
-    }
-  }
 
+  PHIEditor::forwardAllPHISrcFrom(MBB, *MRI);
+
+  PHIEditor Editor(*MRI);
   for (instr_iterator MI = MBB->instr_begin(), ME = MBB->instr_end();
        MI != ME && MI->isPHI(); /*++MI*/) {
     if (MRI->use_empty(MI->getOperand(0).getReg())) {

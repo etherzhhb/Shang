@@ -278,7 +278,6 @@ bool PreSchedRTLOpt::optimizeMBB(MachineBasicBlock &MBB) {
   DEBUG(dbgs() << "Before Rtl Optimization:\n";
         MBB.dump(););
 
-
   MachineBasicBlock::instr_iterator I = MBB.instr_begin(), E = MBB.instr_end();
 
   // Skip the PHINodes.
