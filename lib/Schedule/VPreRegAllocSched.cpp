@@ -40,6 +40,7 @@
 #include "llvm/CodeGen/LiveVariables.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/GraphWriter.h"
@@ -244,9 +245,11 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   IRLI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
 
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end();
-       I != E; ++I) {
-    MachineBasicBlock *MBB = &*I;
+  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(MF.begin());
+  typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+
+  for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
+    MachineBasicBlock *MBB = *I;
     VSchedGraph State(*MRI, MBB, couldBePipelined(MBB), getTotalCycle());
     buildControlPathGraph(State);
     DEBUG(State.viewGraph());
