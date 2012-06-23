@@ -545,14 +545,13 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   // Dirt
   MIOffset = std::min(MIOffset, 0);
   MachineBasicBlock *CurMBB = CurState.getMachineBasicBlock();
-
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
     MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
     // Get the latency from SrcMI to MI.
     float DetailLatency = DetialLatencyInfo::getLatency(*I);
-    int Latency = int(ceil(DetailLatency)) - MIOffset;
+    int Latency = int(ceil(DetailLatency));
 
     assert(SrcMI && "Unexpected null SrcMI!");
     // LatencyInfo use a special marker to mark the current MI have some latency
@@ -563,6 +562,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
       Latency = std::max(1, Latency);
+      Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
     } else if (SrcMI->getParent() != CurMBB) {
@@ -570,6 +570,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       Latency -= getCyclesToBB(SrcMI, CurMBB);
       // FIXME: We can set latency to 0 in some case.
       Latency = std::max(1, Latency);
+      Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
     }
@@ -585,6 +586,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
     Latency = std::max(int(S), Latency);
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
+    Latency -= MIOffset;
     A->addDep(DepEdgeTy::CreateDep(SrcSU, Latency));
   }
 }
