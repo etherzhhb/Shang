@@ -569,7 +569,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       // From other BasicBlock.
       Latency -= getCyclesToBB(SrcMI, CurMBB);
       // FIXME: We can set latency to 0 in some case.
-      Latency = std::max(1, Latency);
+      Latency = std::max(A->isPHI() ? 0 : 1, Latency);
       Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
