@@ -982,9 +982,11 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
       continue;
     }
 
+    // Compute the dependence information.
+    CurState.addInstr(MI);
+
     // Build the schedule unit for loop back operation.
     if (CurState.isLoopOp(I)) {
-      CurState.addInstr(MI);
       VSUnit *LoopOp = CurState.createVSUnit(MI);
       addSchedDepForSU(LoopOp, CurState);
       continue;
@@ -993,9 +995,12 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   
   for (instr_it I = FirstTerminator, E = CurState->end(); I != E; ++I) {
     MachineInstr *MI = I;
+    // Ignore the VOpMvPhis, which are handled, and also ignore the looping-back
+    // terminator, which had been handled in the previous loop.
     if (!I->isTerminator() || CurState.isLoopOp(I)) continue;
 
-    CurState.addInstr(MI);
+    // No need to wait the terminator.
+    CurState.eraseFromWaitSet(MI);
     
     // Build a exit root or merge the terminators into the exit root.
     if (ExitSU == 0) {
@@ -1032,13 +1037,13 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
         (void) mapped;
         assert(mapped && "Cannot merge terminators!");
       }
+
+      // No need to wait VOpMvPhi, because we are going to merge it into the
+      // exit root.
+      CurState.eraseFromWaitSet(MI);
     } else if (CurState.isLoopOp(I))
       continue;
 
-    // Compute the dependence information.
-    CurState.addInstr(MI);
-    // No need to wait the terminator.
-    CurState.eraseFromWaitSet(MI);
     // Build datapath latency information for the terminator.
     CurState.buildExitMIInfo(MI, ExitDepInfo);
   }
@@ -1088,11 +1093,11 @@ void VPreRegAllocSched::buildControlPathGraph(VSchedGraph &State) {
   // moves are added to the PHI schedule unit as intra iteration dependences,
   // which is incorrect, all dependences of a PHI should be inter iteration
   // dependences.
-  for (instr_it I = BI; !I->isTerminator(); ++I)
-    if (State.isLoopPHIMove(I)) {
-      State.addInstr(I);
-      buildSUnit(I, State);
-    }
+  for (instr_it I = BI; !I->isTerminator(); ++I) {
+    State.addInstr(I);
+
+    if (State.isLoopPHIMove(I)) buildSUnit(I, State);
+  }
 
   // Create the exit node, now BI points to the first terminator.
   buildExitRoot(State, BI);
