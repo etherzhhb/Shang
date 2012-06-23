@@ -174,7 +174,8 @@ public:
 /// @brief Base Class of all hardware atom.
 class VSUnit {
   // TODO: typedef SlotType
-  unsigned SchedSlot;
+  unsigned SchedSlot : 31;
+  bool     IsDangling : 1;
   unsigned short InstIdx;
   unsigned short FUNum;
 
@@ -206,7 +207,7 @@ class VSUnit {
   }
 
   VSUnit(unsigned short Idx, unsigned fuid)
-    : SchedSlot(0), InstIdx(Idx), FUNum(fuid) {}
+    : SchedSlot(0), IsDangling(true), InstIdx(Idx), FUNum(fuid) {}
 
   void addInstr(MachineInstr *I, int8_t Latency) {
     Instrs.push_back(I);
@@ -230,6 +231,8 @@ public:
   ~VSUnit() { cleanDeps(); }
 
   unsigned short getIdx() const { return InstIdx; }
+  bool isDangling() const { return IsDangling; }
+  void setIsDangling(bool isDangling = true) { IsDangling = isDangling; }
 
   typedef SmallVectorImpl<VDEdge*>::iterator edge_iterator;
   edge_iterator edge_begin() { return Deps.begin(); }

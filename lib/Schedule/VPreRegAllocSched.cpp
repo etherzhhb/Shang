@@ -59,6 +59,7 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // The loop Info
   MachineRegisterInfo *MRI;
   VFInfo *FInfo;
+  IndexedMap<unsigned> CyclesFromEntry;
 
   TargetData *TD;
 
@@ -70,10 +71,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   // Total states
   // Cycle is start from 1 because  cycle 0 is reserve for idle state.
   unsigned short totalCycle;
-  // Remember the last cmd seq.
-  VSUnit *LastCmdSeq;
 
-  VPreRegAllocSched() : MachineFunctionPass(ID), totalCycle(1), LastCmdSeq(0) {}
+  VPreRegAllocSched() : MachineFunctionPass(ID), CyclesFromEntry(UINT32_MAX),
+    totalCycle(1) {}
 
   //===--------------------------------------------------------------------===//
   // Loop memory dependence information.
@@ -116,6 +116,16 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   VDMemDep *getMemDepEdge(VSUnit *Src, unsigned Latency, unsigned Diff) {
     return new VDMemDep(Src, Latency, Diff);
   }
+
+  unsigned getCyclesFromEntry(const MachineBasicBlock *MBB) const {
+    return CyclesFromEntry[MBB->getNumber()];
+  }
+
+  unsigned &getCyclesFromEntry(const MachineBasicBlock *MBB) {
+    return CyclesFromEntry[MBB->getNumber()];
+  }
+
+  unsigned getCyclesToBB(MachineInstr *SrcMI, MachineBasicBlock *DstBB);
 
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
@@ -168,8 +178,11 @@ struct VPreRegAllocSched : public MachineFunctionPass {
   typedef MachineBasicBlock::iterator instr_it;
   void buildExitRoot(VSchedGraph &CurState, MachineInstr *FirstTerminator);
 
-  template<int AllowHanging>
-  void buildExitDeps( VSchedGraph &CurState );
+  void scheduleDanglingDatapathOps(VSchedGraph &State);
+  void clearDanglingFlagForTree(VSUnit *Root);
+
+  template<int AllowDangling>
+  void buildExitDeps(VSchedGraph &CurState);
 
   void buildSUnit(MachineInstr *MI, VSchedGraph &CurState);
 
@@ -245,14 +258,22 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
   IRLI = &getAnalysis<LoopInfo>();
   SE = &getAnalysis<ScalarEvolution>();
 
-  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(MF.begin());
+  MachineBasicBlock *Entry = MF.begin();
+  ReversePostOrderTraversal<MachineBasicBlock*> RPOT(Entry);
   typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
 
-  DetialLatencyInfo DLInfo(*MRI);
+  DetialLatencyInfo DLInfo(*MRI, false);
+  CyclesFromEntry.resize(MF.getNumBlockIDs());
+  getCyclesFromEntry(Entry) = 0;
 
   for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I) {
     MachineBasicBlock *MBB = *I;
-    DLInfo.reset();
+    DLInfo.resetExitSet();
+
+    unsigned &CurCyclesFromEntry = getCyclesFromEntry(MBB);
+    typedef MachineBasicBlock::pred_iterator pred_it;
+    for (pred_it PI = MBB->pred_begin(), PE = MBB->pred_end(); PI != PE; ++PI)
+      CurCyclesFromEntry = std::min(CurCyclesFromEntry, getCyclesFromEntry(*PI));
 
     VSchedGraph State(DLInfo, MBB, couldBePipelined(MBB), getTotalCycle());
     buildControlPathGraph(State);
@@ -264,10 +285,11 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     setTotalCycle(State.getEndSlot() + 1);
     DEBUG(State.viewGraph());
     State.emitSchedule();
+
+    CurCyclesFromEntry += State.getTotalSlot();
   }
 
   FInfo->setTotalSlots(totalCycle);
-
   cleanUpSchedule();
 
   return true;
@@ -276,6 +298,7 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
 void VPreRegAllocSched::clear() {
   // Reset total Cycle
   totalCycle = 1;
+  CyclesFromEntry.clear();
 }
 
 void VPreRegAllocSched::releaseMemory() {
@@ -486,6 +509,33 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   }
 }
 
+unsigned VPreRegAllocSched::getCyclesToBB(MachineInstr *SrcMI,
+                                          MachineBasicBlock *DstBB) {
+  if (SrcMI->getOpcode() == VTM::VOpMvPhi
+      && SrcMI->getOperand(2).getMBB() == DstBB)
+    return 0;
+
+  assert(VInstrInfo::isControl(SrcMI->getOpcode())
+         && "Expect control instruction!");
+
+  MachineBasicBlock *SrcMBB = SrcMI->getParent();
+  unsigned SrcMISlot = 0;
+  if (const MachineOperand *SlotMO = VInstrInfo::getTraceOperand(SrcMI)) {
+    assert(SlotMO->getTargetFlags() == 0xff && "Instruction not scheduled!");
+    SrcMISlot = SlotMO->getImm();
+  } else {
+    assert(SrcMI->isPHI() && "Unexpected pseudo instruction type!");
+    SrcMISlot = FInfo->getStartSlotFor(SrcMBB);
+  }
+
+  unsigned SrcMBBEndSlot = FInfo->getEndSlotFor(SrcMBB);
+  int CyclesToBB = SrcMBBEndSlot - SrcMISlot;
+  assert(CyclesToBB >=0 && "Bad schedule!");
+  CyclesToBB += getCyclesFromEntry(DstBB) - getCyclesFromEntry(SrcMBB);
+  assert(CyclesToBB >=0 && "Bad cross BB distance!");
+  return CyclesToBB;
+}
+
 //===----------------------------------------------------------------------===//
 template<typename DepEdgeTy>
 void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
@@ -494,6 +544,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   assert(MI && "Unexpected entry root!");
   // Dirt
   MIOffset = std::min(MIOffset, 0);
+  MachineBasicBlock *CurMBB = CurState.getMachineBasicBlock();
 
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
@@ -511,6 +562,13 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       // Since there are some datapath between current schedule unit and the
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
+      Latency = std::max(1, Latency);
+      A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
+      continue;
+    } else if (SrcMI->getParent() != CurMBB) {
+      // From other BasicBlock.
+      Latency -= getCyclesToBB(SrcMI, CurMBB);
+      // FIXME: We can set latency to 0 in some case.
       Latency = std::max(1, Latency);
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
@@ -533,6 +591,7 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
 
 void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurState){
   assert(PHISU->isPHI() && "Expect PHI in addIncomingDepForPHI!");
+  MachineBasicBlock *CurMBB = CurState.getMachineBasicBlock();
 
   // Find the incoming copy.
   MachineInstr *IncomingCopy = PHISU->getInstrAt(1);
@@ -548,7 +607,8 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
 
     assert(SrcMI && "Unexpected null SrcMI!");
     // Simply ignore the edge from entry, it is not an anti-dependence.
-    if (SrcMI == DetialLatencyInfo::EntryMarker) continue;
+    if (SrcMI == DetialLatencyInfo::EntryMarker || SrcMI->getParent() != CurMBB)
+      continue;
     
     VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
     assert(SrcSU && "Src SUnit not found!");
@@ -603,6 +663,10 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
         if (CurState.isPipelined())
           // The iterate distance for back-edge to PHI is always 1.
           A->addDep(VDMemDep::CreateDep<1>(Dep, Latency));
+        else
+          // Else connect the schedule unit to exit root, since it is not
+          // dangling.
+          CurState.getExitRoot()->addDep(VDCtrlDep::CreateDep(Dep, Latency));
       } else {
         A->addDep(VDValDep::CreateDep(Dep, Latency));
         ++NumValDep;
@@ -772,7 +836,7 @@ void VPreRegAllocSched::mergeDstMux(VSUnit * U, VSchedGraph &CurState) {
 
 void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   assert(!MI->getDesc().isTerminator() && "Unexpected terminator!");
-  bool isCmdSeq = false;
+
   switch (MI->getOpcode()) {
   default: break;
   case VTM::VOpMove:
@@ -825,23 +889,26 @@ void VPreRegAllocSched::buildSUnit(MachineInstr *MI,  VSchedGraph &CurState) {
   FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
   VSUnit *U = CurState.createVSUnit(MI, Id.getFUNum());
   if (Id.isBound()) mergeDstMux(U, CurState);
-
-  // Remember the new command sequence.
-  if (isCmdSeq) LastCmdSeq = U;
 }
 
-template<int AllowHanging>
+template<int AllowDangling>
 void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
   typedef VSchedGraph::sched_iterator it;
   VSUnit *ExitRoot = CurState.getExitRoot();
   MachineInstr *ExitMI = ExitRoot->getRepresentativeInst();
   for (it I = CurState.sched_begin(), E = CurState.sched_end(); I != E; ++I) {
     VSUnit *VSU = *I;
+
+    if (VSU->isScheduled()) continue;
+
     // Since the exit root already added to state sunit list, skip the
     // exit itself.
     if (VSU->getNumUses() == 0 && VSU != ExitRoot) {
-      assert((AllowHanging || CurState.isLoopOp(VSU->getRepresentativeInst()))
+      assert((AllowDangling || CurState.isLoopOp(VSU->getRepresentativeInst()))
              && "Unexpected handing node!");
+
+      if (VSU->isDatapath() && AllowDangling) continue;
+
       // A PHIMove can be scheduled to the same slot with the exit root.
       unsigned Latency = VSU->getMaxLatencyTo<false>(ExitMI, CurState);
       // We do not need to wait the trivial operation finish before exiting the
@@ -855,6 +922,48 @@ void VPreRegAllocSched::buildExitDeps(VSchedGraph &CurState) {
 
       ExitRoot->addDep(VDCtrlDep::CreateDep(VSU,  Latency));
     }
+  }
+}
+
+void VPreRegAllocSched::scheduleDanglingDatapathOps(VSchedGraph &State){
+  typedef VSchedGraph::sched_iterator sched_it;
+
+  unsigned DanglingStep = State.getEndSlot();
+
+  // Schedule all dangling nodes to dangling step.
+  for (sched_it I = State.sched_begin(), E = State.sched_end(); I != E; ++I) {
+    VSUnit *U = *I;
+
+    if (!U->isDangling()) continue;
+
+    assert(U->isDatapath() && "Unexpected dangling control operation.");
+    U->scheduledTo(DanglingStep);
+  }
+}
+
+void VPreRegAllocSched::clearDanglingFlagForTree(VSUnit *Root) {
+  // Perform depth first search to find node that reachable from Root.
+  std::vector<std::pair<VSUnit*, VSUnit::dep_iterator> > WorkStack;
+  WorkStack.push_back(std::make_pair(Root, Root->dep_begin()));
+  Root->setIsDangling(false);
+
+  while (!WorkStack.empty()) {
+    VSUnit *U = WorkStack.back().first;
+    VSUnit::dep_iterator ChildIt = WorkStack.back().second;
+
+    if (ChildIt == U->dep_end()) {
+      WorkStack.pop_back();
+      continue;
+    }
+
+    VSUnit *ChildNode = *ChildIt;
+    ++WorkStack.back().second;
+
+    if (!ChildNode->isDangling()) continue;
+
+    // If the node is reachable from exit, then it is not dangling.
+    ChildNode->setIsDangling(false);
+    WorkStack.push_back(std::make_pair(ChildNode, ChildNode->dep_begin()));
   }
 }
 
@@ -953,7 +1062,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   CurState.prepareForCtrlSched();
 
   // If there is still schedule unit not connect to exit, connect it now, but
-  // they are supposed to be connected in the previous stages, so hanging node
+  // they are supposed to be connected in the previous stages, so dangling node
   // is not allow.
   buildExitDeps<false>(CurState);
 }
@@ -1006,9 +1115,18 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
     addValDep(State, U);
   }
 
-  // Build control dependence for exitroot, hanging node is allowed because we
+  // Clear the dangling flag for all node that used (directly/indirectly) by
+  // a scheduled node.
+  for (su_it I = State.begin(), E = State.end(); I != E; ++I) {
+    VSUnit *U = *I;
+    if (U->isScheduled()) clearDanglingFlagForTree(U);
+  }
+
+  // Build control dependence for exitroot, dangling node is allowed because we
   // do not handle them explicitly.
   buildExitDeps<true>(State);
+
+  scheduleDanglingDatapathOps(State);
 
   // Verify the schedule graph.
   State.verify();

@@ -262,6 +262,10 @@ struct MicroStateBuilder {
       DataPathIPs.push_back(Start);
       CtrlIPs.push_back(End);
     }
+
+    // Build Datapath bundle for dangling data-paths.
+    BuildMI(MBB, InsertPos, DebugLoc(), TII.get(VTM::Datapath))
+      .addImm(EndSlot).addImm(0).addImm(0);
   }
 
   unsigned getModuloSlot(OpSlot S) const {
@@ -625,6 +629,16 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Do not copy instruction that is write until finish, which is already taken
   // care by VOpPipelineStage.
   bool NeedCopy = !isWriteUntilFinish;
+
+  // Simply place the dangling node at the end.
+  if (VInstrInfo::isDatapath(Opc) && SchedSlot.getSlot() == State.getEndSlot()){
+    unsigned RegNo = Inst.getOperand(0).getReg();
+    MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opc));
+    VInstrInfo::setInstrSlotNum(&Inst, 0);
+    Inst.removeFromParent();
+    MBB.push_back(&Inst);
+    return;
+  }
 
   // The value defined by this instruction.
   DefVector Defs;

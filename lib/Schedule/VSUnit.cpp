@@ -296,7 +296,8 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
     const MachineInstr *SrcMI = I->first;
 
     // Ignore the entry root.
-    if (SrcMI == DetialLatencyInfo::EntryMarker) continue;
+    if (SrcMI == DetialLatencyInfo::EntryMarker || SrcMI->getParent() != MBB)
+      continue;
 
     unsigned SrcOpC = SrcMI->getOpcode();
     // Ignore the operations without interesting function unit.
@@ -453,4 +454,5 @@ void VSUnit::print(raw_ostream &OS) const {
     }
 
   OS << getFUId() << "\nAt slot: " << getSlot();
+  if (isDangling()) OS << " <Dangling>";
 }

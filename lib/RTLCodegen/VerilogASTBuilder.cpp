@@ -581,17 +581,18 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
   it I = MBB.getFirstNonPHI();
   // Skip the first bundle, it already emitted by the predecessor bbs.
   ++I;
+  // Emit the data-path bundle right after the first bundle.
+  I = emitDatapath(I);
 
-  // Build the Verilog AST.
+  // Emit the other bundles.
   while(!I->isTerminator()) {
-    // Emit the datepath of current state.
-    I = emitDatapath(I);
     // We are assign the register at the previous slot of this slot, so the
     // datapath op with same slot can read the register schedule to this slot.
     unsigned stateSlot = VInstrInfo::getBundleSlot(I) - 1;
 
     // Collect slot ready signals.
     instr_it NextI = instr_it(I);
+
     while ((++NextI)->getOpcode() != VTM::CtrlEnd)
       if (NextI->getOpcode() == VTM::VOpReadFU)
         addSlotReady(NextI, getOrCreateInstrSlot(NextI, startSlot));
@@ -616,6 +617,8 @@ void VerilogASTBuilder::emitBasicBlock(MachineBasicBlock &MBB) {
     // Emit the control operations.
     emitCtrlOp(instr_it(I), NextI, II, IISlot < EndSlot);
     I = it(llvm::next(NextI));
+    // Emit the datepath of current state.
+    I = emitDatapath(I);
   }
 }
 

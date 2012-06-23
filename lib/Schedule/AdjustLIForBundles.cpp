@@ -242,9 +242,11 @@ inst_it AdjustLIForBundles::handleDataPathBundle(inst_it I) {
   assert(I->getOpcode() == VTM::Datapath && "Unexpected instruction!");
 
   SlotIndex BundleStartIdx = LIS->getInstructionIndex(I).getRegSlot();
+  ++I;
+
   // No need to bundle the datapath instructions.
-  while ((++I)->getOpcode() != VTM::CtrlStart)
-    moveDefUseIntoBundle(I, BundleStartIdx);
+  while (VInstrInfo::isDatapath(I->getOpcode()) && !I->isTerminator())
+    moveDefUseIntoBundle(I++, BundleStartIdx);
 
   return I;
 }
