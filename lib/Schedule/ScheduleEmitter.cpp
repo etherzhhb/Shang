@@ -576,9 +576,23 @@ MachineInstr* MicroStateBuilder::buildMicroState(unsigned Slot) {
     // Sort the instructions, so we can emit them in order.
     std::sort(Insts.begin(), Insts.end(), sort_intra_latency);
 
+    bool IsDangling = A->isDangling();
+
     typedef SmallVector<InSUInstInfo, 8>::iterator it;
     for (it I = Insts.begin(), E = Insts.end(); I != E; ++I) {
       MachineInstr *MI = I->first;
+
+      // Simply place the dangling node at the end.
+      if (IsDangling){
+        unsigned RegNo = MI->getOperand(0).getReg();
+        unsigned Opcode = MI->getOpcode();
+        MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opcode));
+        VInstrInfo::setInstrSlotNum(MI, 0);
+        MI->removeFromParent();
+        MBB.push_back(MI);
+        continue;
+      }
+
       OpSlot S = I->second;
       fuseInstr(*MI, S, VInstrInfo::getPreboundFUId(MI));
     }
@@ -629,16 +643,6 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
   // Do not copy instruction that is write until finish, which is already taken
   // care by VOpPipelineStage.
   bool NeedCopy = !isWriteUntilFinish;
-
-  // Simply place the dangling node at the end.
-  if (VInstrInfo::isDatapath(Opc) && SchedSlot.getSlot() == State.getEndSlot()){
-    unsigned RegNo = Inst.getOperand(0).getReg();
-    MRI.setRegClass(RegNo, VRegisterInfo::getRepRegisterClass(Opc));
-    VInstrInfo::setInstrSlotNum(&Inst, 0);
-    Inst.removeFromParent();
-    MBB.push_back(&Inst);
-    return;
-  }
 
   // The value defined by this instruction.
   DefVector Defs;
