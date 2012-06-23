@@ -285,8 +285,12 @@ bool VPreRegAllocSched::runOnMachineFunction(MachineFunction &MF) {
     setTotalCycle(State.getEndSlot() + 1);
     DEBUG(State.viewGraph());
     State.emitSchedule();
-
-    CurCyclesFromEntry += State.getTotalSlot();
+    // Compute the shortest distance from the entry to the end of this BB, note
+    // that the last slot is in fact alias with the first slot of its successors,
+    // so do not include the last slot when computing distance.
+    unsigned TotalSlots = State.getTotalSlot();
+    if (TotalSlots) TotalSlots -= 1;    
+    CurCyclesFromEntry += TotalSlots;
   }
 
   FInfo->setTotalSlots(totalCycle);
