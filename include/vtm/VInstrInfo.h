@@ -353,7 +353,7 @@ public:
 
   MachineRegisterInfo &MRI;
 private:
-  const bool AddDataPathOpToExitMIs;
+  const bool WaitAllOps;
   // Cache the computational delay for every instruction.
   typedef std::map<const MachineInstr*, float> CachedLatMapTy;
   CachedLatMapTy CachedLatencies;
@@ -378,13 +378,13 @@ private:
                        float OperandDelay);
   // Also remember the operations that do not use by any others operations in
   // the same bb.
-  std::set<const MachineInstr*> ExitMIs;
+  std::set<const MachineInstr*> MIsToWait, MIsToRead;
 protected:
   const DepLatInfoTy &addInstrInternal(const MachineInstr *MI,
                                        bool IgnorePHISrc);
 public:
-  DetialLatencyInfo(MachineRegisterInfo &mri, bool AddDataPathOpToExitMIs = true)
-    : MRI(mri), AddDataPathOpToExitMIs(AddDataPathOpToExitMIs) {}
+  DetialLatencyInfo(MachineRegisterInfo &mri, bool WaitAllOps = true)
+    : MRI(mri), WaitAllOps(WaitAllOps) {}
 
   static const MachineInstr *const EntryMarker;
 
@@ -415,15 +415,17 @@ public:
   void buildExitMIInfo(const MachineInstr *ExitMI, DepLatInfoTy &Info);
 
   // Erase the instructions from exit set.
-  void eraseFromExitSet(const MachineInstr *MI) {
-    ExitMIs.erase(MI);
-  }
+  void eraseFromWaitSet(const MachineInstr *MI);
 
   void addDummyLatencyEntry(const MachineInstr *MI, float l = 0.0f) {
     CachedLatencies.insert(std::make_pair(MI, l));
   }
 
-  void resetExitSet() { ExitMIs.clear(); }
+  void resetExitSet() {
+    MIsToWait.clear();
+    MIsToRead.clear();
+  }
+
   void clearCachedLatencies() { CachedLatencies.clear(); }
 
   void reset() {

@@ -545,8 +545,8 @@ public:
   }
 
   // Erase the instructions from exit set.
-  void eraseFromExitSet(const MachineInstr *MI) {
-    DLInfo.eraseFromExitSet(MI);
+  void eraseFromWaitSet(const MachineInstr *MI) {
+    DLInfo.eraseFromWaitSet(MI);
   }
 
   template<bool IsValDep>

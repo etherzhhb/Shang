@@ -886,7 +886,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     MachineInstr *MI = I;
     if (!I->isTerminator() || CurState.isLoopOp(I)) continue;
 
-    CurState.addDummyLatencyEntry(MI);
+    CurState.addInstr(MI);
     
     // Build a exit root or merge the terminators into the exit root.
     if (ExitSU == 0) {
@@ -929,7 +929,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
     // Compute the dependence information.
     CurState.addInstr(MI);
     // No need to wait the terminator.
-    CurState.eraseFromExitSet(MI);
+    CurState.eraseFromWaitSet(MI);
     // Build datapath latency information for the terminator.
     CurState.buildExitMIInfo(MI, ExitDepInfo);
   }

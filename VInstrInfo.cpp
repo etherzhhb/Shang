@@ -521,7 +521,6 @@ bool VInstrInfo::isAlwaysTruePred(const MachineOperand &MO){
   return false;
 }
 
-
 MachineInstr *VInstrInfo::getBundleHead(MachineInstr *MI) {
   assert(MI->isBundled() && "Not a bundle!");
   MachineInstr *Head = getBundleStart(MI);
@@ -1278,11 +1277,18 @@ bool DetialLatencyInfo::buildDepLatInfo(const MachineInstr *SrcMI,
   return true;
 }
 
+void DetialLatencyInfo::eraseFromWaitSet(const MachineInstr *MI) {
+  MIsToWait.erase(MI);
+  MIsToRead.erase(MI);
+}
+
 const DetialLatencyInfo::DepLatInfoTy &
 DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   DepLatInfoTy &CurLatInfo = LatencyMap[MI];
+  const MachineBasicBlock *CurMBB = MI->getParent();
 
   const MCInstrDesc &TID = MI->getDesc();
+  unsigned Opcode = TID.getOpcode();
   // Iterate from use to define.
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
@@ -1305,19 +1311,41 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     } else
       OpDelay = VInstrInfo::getOperandLatency(MI, i);
 
-    if (buildDepLatInfo<false>(SrcMI, MI, CurLatInfo, OpSize, OpDelay))
-      // If we build the Latency Info for SrcMI sucessfully, that means SrcMI
-      // have user now.
-      ExitMIs.erase(SrcMI);
+    if (!buildDepLatInfo<false>(SrcMI, MI, CurLatInfo, OpSize, OpDelay))
+      continue;
+
+    // If we build the Latency Info for SrcMI successfully, that means SrcMI
+    // have user now.
+    if (CurMBB != SrcMI->getParent()) continue;
+
+    // Now MI is actually depends on SrcMI in this MBB, no need to wait them
+    // explicitly.
+    MIsToWait.erase(SrcMI);
   }
+
+  // Find all MIs that are read by other control operation, and we do not need
+  // to read them explicilty.
+  if (VInstrInfo::isControl(Opcode))
+    for (DepLatInfoTy::iterator I = CurLatInfo.begin(), E = CurLatInfo.end();
+         I != E; ++I) {
+      const MachineInstr *SrcMI = I->first;
+      if (SrcMI == EntryMarker || CurMBB != SrcMI->getParent())
+        continue;
+
+      MIsToRead.erase(SrcMI);
+    }
 
   // Align the compute the latency of MI.
   float Latency = computeLatencyFor(MI);
 
   // Assume MI do not have any user in the same BB, if it has, it will be
   // deleted later.
-  if (VInstrInfo::isControl(TID.getOpcode()) || AddDataPathOpToExitMIs)
-    ExitMIs.insert(MI);
+  if (VInstrInfo::isControl(Opcode) || WaitAllOps)
+    MIsToWait.insert(MI);
+
+  if (VInstrInfo::isControl(Opcode))
+    MIsToRead.insert(MI);
+
   // We will not get any latency information if a datapath operation do not
   // depends any control operation in the same BB
   // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
@@ -1334,8 +1362,14 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
 void DetialLatencyInfo::buildExitMIInfo(const MachineInstr *ExitMI,
                                         DepLatInfoTy &Info) {
   typedef std::set<const MachineInstr*>::const_iterator exit_it;
-  for (exit_it I = ExitMIs.begin(), E = ExitMIs.end(); I != E; ++I)
+  // Exiting directly, no need to read the result fore fore exting.
+  for (exit_it I = MIsToWait.begin(), E = MIsToWait.end(); I != E; ++I)
     buildDepLatInfo<true>(*I, ExitMI, Info, 0, 0.0);
+
+  // Exiting via data-path operation, the value need to be read before exiting.
+  for (exit_it I = MIsToRead.begin(), E = MIsToRead.end();
+       I != E; ++I)
+    buildDepLatInfo<false>(*I, ExitMI, Info, 0, 0.0);
 }
 
 const float DetialLatencyInfo::DeltaLatency = FLT_EPSILON * 8.0f;
