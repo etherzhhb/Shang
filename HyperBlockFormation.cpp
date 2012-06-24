@@ -27,6 +27,7 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
+#include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/BranchProbability.h"
@@ -50,6 +51,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
   const TargetInstrInfo *TII;
   MachineRegisterInfo *MRI;
   MachineLoopInfo *LI;
+  MachineDominatorTree *DT;
   MachineBranchProbabilityInfo *MBPI;
   typedef std::set<unsigned> IntSetTy;
   typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
@@ -64,14 +66,16 @@ struct HyperBlockFormation : public MachineFunctionPass {
   uint8_t NextTraceNum;
 
   HyperBlockFormation() : MachineFunctionPass(ID), TII(0), MRI(0), LI(0),
-                          MBPI(0), NextTraceNum(0) {
+                          DT(0), MBPI(0), NextTraceNum(0) {
     initializeHyperBlockFormationPass(*PassRegistry::getPassRegistry());
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
-    AU.addRequired<MachineLoopInfo>();
     AU.addRequired<MachineBranchProbabilityInfo>();
+    AU.addRequired<MachineDominatorTree>();
+    AU.addPreserved<MachineDominatorTree>();
+    AU.addRequired<MachineLoopInfo>();
   }
 
   static bool isBlockAlmostEmtpy(MachineBasicBlock *MBB) {
@@ -137,6 +141,9 @@ struct HyperBlockFormation : public MachineFunctionPass {
   bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB);
   void PredicateBlock(unsigned ToBBNum, MachineOperand Cnd,
                       MachineBasicBlock *BB);
+
+  // Delete the machine basic block and update the dominator tree.
+  void deleteMBBAndUpdateDT(MachineBasicBlock *MBB);
 
   bool optimizeRetBB(MachineBasicBlock &RetBB);
   bool eliminateEmptyBlock(MachineBasicBlock *MBB);
@@ -246,9 +253,23 @@ char HyperBlockFormation::ID = 0;
 
 INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
                       "VTM - Hyper Block Formation", false, false)
+  INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
   INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
+
+void HyperBlockFormation::deleteMBBAndUpdateDT(MachineBasicBlock *MBB) {
+  MachineDomTreeNode *MBBNode = DT->getNode(MBB);
+  MachineDomTreeNode *IDomNode = MBBNode->getIDom();
+
+  // Transfer the children of the node to be deleted to its immediate dominator.
+  typedef MachineDomTreeNode::iterator child_iterator;
+  while (MBBNode->getNumChildren())
+    DT->changeImmediateDominator(MBBNode->getChildren().back(), IDomNode);
+
+  DT->eraseNode(MBB);
+  MBB->eraseFromParent();
+}
 
 bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
   bool ActuallyMerged = false;
@@ -302,6 +323,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   MRI = &MF.getRegInfo();
   LI = &getAnalysis<MachineLoopInfo>();
   MBPI = &getAnalysis<MachineBranchProbabilityInfo>();
+  DT = &getAnalysis<MachineDominatorTree>();
 
   bool MakeChanged = false;
   AllTraces.clear();
@@ -633,7 +655,7 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   // Move the PHIs to Successor blocks.
 
   assert(MBB->succ_empty() && MBB->pred_empty() && "Cannot fold MBB!");
-  MBB->eraseFromParent();
+  deleteMBBAndUpdateDT(MBB);
   return true;
 }
 
@@ -648,7 +670,7 @@ bool HyperBlockFormation::simplifyCFG(MachineFunction &MF) {
     // Directly eliminate the unreachable blocks.
     if (MBB->pred_empty() && MBB != Entry) {
       assert(MBB->succ_empty() && "Unreachable block has successor?");
-      MBB->eraseFromParent();
+      deleteMBBAndUpdateDT(MBB);
       changed = true;
       continue;
     }
@@ -688,7 +710,7 @@ bool HyperBlockFormation::simplifyCFG(MachineFunction &MF) {
     Pred->splice(Pred->end(), MBB, MBB->begin(), MBB->end());
     Pred->transferSuccessorsAndUpdatePHIs(MBB);
     Pred->removeSuccessor(MBB);
-    MBB->eraseFromParent();
+    deleteMBBAndUpdateDT(MBB);
     changed = true;
   }
 
@@ -937,7 +959,7 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
 
   assert(FromBB->empty() && FromBB->pred_empty() && FromBB->succ_empty()
          && "BB not fully merged!");
-  FromBB->eraseFromParent();
+  deleteMBBAndUpdateDT(FromBB);
   return true;
 }
 
