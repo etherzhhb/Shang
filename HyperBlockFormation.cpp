@@ -642,7 +642,7 @@ bool HyperBlockFormation::eliminateEmptyBlock(MachineBasicBlock *MBB) {
   for (pred_iterator PI = Preds.begin(), PE = Preds.end(); PI != PE; ++PI) {
     MachineBasicBlock *PredBB = *PI;
     PredJT.clear();
-    bool fail = VInstrInfo::extractJumpTable(*PredBB, PredJT);
+    bool fail = VInstrInfo::extractJumpTable(*PredBB, PredJT, false);
     assert(!fail && "Cannot extract jump table!");
     TII->RemoveBranch(*PredBB);
     foldCFGEdge(PredBB, PredJT, MBB, EmptyBBJT);

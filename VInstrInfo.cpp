@@ -273,6 +273,11 @@ bool VInstrInfo::extractJumpTable(MachineBasicBlock &BB, JT &Table, bool BrOnly)
     // We can only handle conditional jump.
     if (!VInstrInfo::isBrCndLike(I->getOpcode())) {
       if (BrOnly) return true;
+
+      const MachineOperand *Pred = getPredOperand(I);
+      MachineBasicBlock *TargetBB = 0;
+      bool inserted = Table.insert(std::make_pair(TargetBB, *Pred)).second;
+      assert(inserted && "BB with multiple entry in jump table?");
       continue;
     }
 
@@ -287,8 +292,7 @@ bool VInstrInfo::extractJumpTable(MachineBasicBlock &BB, JT &Table, bool BrOnly)
     assert(inserted && "BB with multiple entry in jump table?");
   }
 
-  // Are we fail to extract all jump table entry?
-  return Table.size() != BB.succ_size();
+  return false;
 }
 
 unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
@@ -306,8 +310,8 @@ unsigned VInstrInfo::RemoveBranch(MachineBasicBlock &MBB) const {
     MachineInstr *Inst = I;
     assert(Inst->getDesc().isTerminator() && "Broken terminator!");
 
-    if (VInstrInfo::isBrCndLike(Inst->getOpcode()))
-      Terms.push_back(Inst);
+    // Also remove return operation.
+    Terms.push_back(Inst);
   }
 
   unsigned RemovedBranches = 0;
@@ -369,8 +373,16 @@ unsigned VInstrInfo::InsertBranch(MachineBasicBlock &MBB,
 
 void VInstrInfo::insertJumpTable(MachineBasicBlock &BB, JT &Table, DebugLoc dl){
   assert(BB.getFirstTerminator() == BB.end() && "Cannot insert jump table!");
-  assert(Table.size() == BB.succ_size()&&"Table size and succ_size not match!");
 
+  // Insert the return operation
+  JT::iterator RetPredAt = Table.find(0);
+  if (RetPredAt != Table.end()) {
+    BuildMI(&BB, dl, getDesc(VTM::VOpRet))
+      .addOperand(RetPredAt->second).addOperand(VInstrInfo::CreateTrace());
+    Table.erase(RetPredAt);
+  }
+
+  assert(Table.size() == BB.succ_size()&&"Table size and succ_size not match!");
   // Dirty hack: We may not evaluate the predicate to always true at the moment.
   if (Table.size() == 1) {
     BuildMI(&BB, dl, getDesc(VTM::VOpToStateb))
@@ -1285,7 +1297,8 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   const MachineBasicBlock *CurMBB = MI->getParent();
 
   const MCInstrDesc &TID = MI->getDesc();
-  unsigned Opcode = TID.getOpcode();
+  bool IsControl = VInstrInfo::isControl(TID.getOpcode());
+
   // Iterate from use to define.
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
