@@ -26,13 +26,13 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
-#include "llvm/CodeGen/MachineBlockFrequencyInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Format.h"
@@ -45,14 +45,7 @@ using namespace llvm;
 
 STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
 STATISTIC(TrivialBBsMerged, "Number of trivial blocks are merged into hyperblock");
-STATISTIC(BBsMergedNotBenefit, "Number of blocks are not merged into hyperblock"
-                               " (weighted path not benefit)");
-STATISTIC(BBsMergedBigIncrement, "Number of blocks are not merged into hyperblock"
-                               " (BB delay increase too much)");
 
-cl::opt<unsigned> PathDiffThreshold("vtm-hyper-block-path-threshold",
-                                    cl::desc("HyperBlock merging threshold"),
-                                    cl::init(8));
 cl::opt<unsigned>
 TrivialBBThreshold("vtm-hyper-block-trivial-bb",
                    cl::desc("The minimal delay of bb that will be treated as"
@@ -67,9 +60,7 @@ struct HyperBlockFormation : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   MachineLoopInfo *LI;
   MachineBranchProbabilityInfo *MBPI;
-  MachineBlockFrequencyInfo *MBFI;
   BBDelayAnalysis *BBDelay;
-
   typedef std::set<unsigned> IntSetTy;
   typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
   CFGMapTy CFGMap;
@@ -82,19 +73,16 @@ struct HyperBlockFormation : public MachineFunctionPass {
   AllTraceMapTy AllTraces;
   uint8_t NextTraceNum;
 
-  HyperBlockFormation()
-    : MachineFunctionPass(ID), TII(0), MRI(0), LI(0), MBPI(0), MBFI(0),
-      BBDelay(0), NextTraceNum(0) {
+  HyperBlockFormation() : MachineFunctionPass(ID), TII(0), MRI(0), LI(0),
+                          MBPI(0), BBDelay(0), NextTraceNum(0) {
     initializeHyperBlockFormationPass(*PassRegistry::getPassRegistry());
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<MachineLoopInfo>();
-    AU.addRequired<MachineBranchProbabilityInfo>();
-    AU.addRequired<MachineBlockFrequencyInfo>();
     AU.addRequired<BBDelayAnalysis>();
-    //AU.addPreserved<BBDelayAnalysis>();
+    AU.addRequired<MachineBranchProbabilityInfo>();
   }
 
   static bool isBlockAlmostEmtpy(MachineBasicBlock *MBB) {
@@ -157,9 +145,6 @@ struct HyperBlockFormation : public MachineFunctionPass {
   void foldCFGEdge(MachineBasicBlock *EdgeSrc, VInstrInfo::JT &SrcJT,
                    MachineBasicBlock *EdgeDst, const VInstrInfo::JT &DstJT);
 
-  typedef DenseMap<MachineBasicBlock*, unsigned> BB2DelayMapTy;
-  bool mergeSuccBlocks(MachineBasicBlock *MBB, BB2DelayMapTy &UnmergedDelays);
-
   bool mergeTrivialSuccBlocks(MachineBasicBlock *MBB);
   void PredicateBlock(unsigned ToBBNum, MachineOperand Cnd,
                       MachineBasicBlock *BB);
@@ -170,17 +155,6 @@ struct HyperBlockFormation : public MachineFunctionPass {
   const char *getPassName() const { return "Hyper-Block Formation Pass"; }
 };
 
-// Helper class for BB sorting.
-struct sort_bb_by_freq {
-  MachineBlockFrequencyInfo *MBFI;
-
-  explicit sort_bb_by_freq(MachineBlockFrequencyInfo *mbfi) : MBFI(mbfi) {}
-
-  inline bool operator() (const MachineBasicBlock *LHS,
-                          const MachineBasicBlock *RHS) const {
-    return MBFI->getBlockFreq(LHS) < MBFI->getBlockFreq(RHS);
-  }
-};
 
 template<typename T>
 static T gcd(T a, T b) {
@@ -283,9 +257,8 @@ char HyperBlockFormation::ID = 0;
 
 INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
                       "VTM - Hyper Block Formation", false, false)
-  INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
-  INITIALIZE_PASS_DEPENDENCY(MachineBlockFrequencyInfo)
   INITIALIZE_PASS_DEPENDENCY(BBDelayAnalysis)
+  INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
 
@@ -304,80 +277,6 @@ bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
     BBDelay->updateDelay(MBB, CL.computeLatency(*MBB));
 
   return ActuallyMerged;
-}
-
-bool HyperBlockFormation::mergeSuccBlocks(MachineBasicBlock *MBB,
-                                          BB2DelayMapTy &UnmergedDelays) {
-  VInstrInfo::JT CurJT, SuccJT;
-  uint64_t WeightSum = 0;
-
-  // Latency statistics.
-  CycleLatencyInfo CL(*MRI);
-  unsigned MBBDelay = CL.computeLatency(*MBB), MaxMergedDelay = 0;
-  // Weighted delays.
-  uint64_t UnmergedTotalDelay = 0, MergedTotalDelay = 0;
-  // The delay after BB is merged.
-  SmallVector<MachineBasicBlock*, 8> BBsToMerge;
-  SmallPtrSet<MachineBasicBlock*, 8> UmergedBBs;
-
-  typedef MachineBasicBlock::succ_iterator succ_iterator;
-  for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
-    MachineBasicBlock *SuccBB = *I;
-    SuccJT.clear();
-    CurJT.clear();
-
-    uint64_t EdgeWeight = MBPI->getEdgeWeight(MBB, SuccBB);
-    WeightSum += EdgeWeight;
-
-    unsigned UnmergedPathDelay = MBBDelay + BBDelay->getBBDelay(SuccBB);
-    DenseMap<MachineBasicBlock*, unsigned>::const_iterator at;
-    bool updated;
-    tie(at, updated) = UnmergedDelays.insert(std::make_pair(MBB,
-                                                            UnmergedPathDelay));
-    // Delay already in the map.
-    if (!updated) UnmergedPathDelay = at->second;
-    // Weighted delay of unmerged edge.
-    UnmergedTotalDelay += UnmergedPathDelay * EdgeWeight;
-
-    MachineBasicBlock *MergeDst = getMergeDst(SuccBB, SuccJT, CurJT);
-    if (!MergeDst) {
-      UmergedBBs.insert(SuccBB);
-      continue;
-    }
-
-    assert(MergeDst == MBB && "Succ have more than one Pred?");
-    unsigned MergedDelay = CL.computeLatency(*SuccBB);
-    BBsToMerge.push_back(SuccBB);
-    MaxMergedDelay = std::max(MaxMergedDelay, MergedDelay);
-  }
-
-  // Compute the delay of paths after BBs are merged.
-  for (succ_iterator I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
-    MachineBasicBlock *SuccBB = *I;
-    // The path delay of the merged edge becomes the max delay of the merged block.
-    unsigned PathDelay = MaxMergedDelay;
-    // The block delay still contributes to the path delay for umerged block.
-    if (UmergedBBs.count(SuccBB)) PathDelay += BBDelay->getBBDelay(SuccBB);
-
-    MergedTotalDelay += MaxMergedDelay * MBPI->getEdgeWeight(MBB, SuccBB);
-  }
-
-  // Only merge the SuccBB into current BB if the merge is beneficial.
-  // TODO: Remove the SuccBB with smallest beneficial and try again.
-  if (UnmergedTotalDelay < MergedTotalDelay) {
-    ++BBsMergedNotBenefit;
-    return false;
-  }
-
-  // Do not completely trust the branch probability analysis! Do merge the
-  // blocks if the delay increase too much.
-  if (double(MaxMergedDelay) / double(MBBDelay) >
-      PathDiffThreshold / double(LI->getLoopDepth(MBB) + 1)) {
-    ++BBsMergedBigIncrement;
-    return false;
-  }
-
-  return mergeBlocks(MBB, BBsToMerge);
 }
 
 bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
@@ -425,9 +324,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   LI = &getAnalysis<MachineLoopInfo>();
-  MBPI = &getAnalysis<MachineBranchProbabilityInfo>();
-  MBFI = &getAnalysis<MachineBlockFrequencyInfo>();
   BBDelay = &getAnalysis<BBDelayAnalysis>();
+  MBPI = &getAnalysis<MachineBranchProbabilityInfo>();
 
   bool MakeChanged = false;
   AllTraces.clear();
@@ -450,15 +348,9 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     buildCFGForBB(I);
   }
 
-  std::sort(SortedBBs.begin(), SortedBBs.end(), sort_bb_by_freq(MBFI));
-
-  // Delays before branching to not BB that cannot be merged.
-  DenseMap<MachineBasicBlock*, unsigned> UnmergedDelays;
-
-  while (!SortedBBs.empty()) {
+  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     bool BlockMerged = false;
-    MachineBasicBlock *MBB = SortedBBs.back();
-    SortedBBs.pop_back();
+    MachineBasicBlock *MBB = I;
 
     unsigned CurBBNum = MBB->getNumber();
     // Initialize the local CFG.
@@ -468,11 +360,8 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     // Merge trivial blocks and hot blocks.
     do {
       BlockMerged = false;
-      MakeChanged |= BlockMerged |= mergeTrivialSuccBlocks(MBB);
-      MakeChanged |= BlockMerged |= mergeSuccBlocks(MBB, UnmergedDelays);
+      MakeChanged |= BlockMerged = mergeTrivialSuccBlocks(MBB);
     } while (BlockMerged && NextTraceNum < 64);
-    // Prepare for next block.
-    UnmergedDelays.clear();
   }
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
@@ -976,7 +865,7 @@ void HyperBlockFormation::foldCFGEdge(MachineBasicBlock *EdgeSrc,
   ProbMapTy BBProbs;
   uint32_t WeightLCM = 1;
   // The probability of the edge from ToBB to FromBB.
-  BranchProbability MergedBBProb =MBPI->getEdgeProbability(EdgeSrc, EdgeDst);
+  BranchProbability MergedBBProb = MBPI->getEdgeProbability(EdgeSrc, EdgeDst);
 
   for (const_jt_it I = DstJT.begin(),E = DstJT.end(); I != E; ++I){
     MachineBasicBlock *Succ = I->first;
