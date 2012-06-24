@@ -296,7 +296,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
     const MachineInstr *SrcMI = I->first;
 
     // Ignore the entry root.
-    if (SrcMI == DetialLatencyInfo::EntryMarker || SrcMI->getParent() != MBB)
+    if (SrcMI == 0 || SrcMI->getParent() != MBB)
       continue;
 
     unsigned SrcOpC = SrcMI->getOpcode();

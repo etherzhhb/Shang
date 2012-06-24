@@ -923,13 +923,10 @@ void BitWidthAnnotator::changeToDefaultPred() {
   MO->setTargetFlags(1);
 }
 
-const MachineInstr *const DetialLatencyInfo::EntryMarker =
-  reinterpret_cast<const MachineInstr *const>(-1);
-
 typedef DetialLatencyInfo::DepLatInfoTy DepLatInfoTy;
 typedef DepLatInfoTy::mapped_type LatInfoTy;
 
-static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
+static void updateLatency(DepLatInfoTy &CurLatInfo, DetialLatencyInfo::PtrTy Src,
                           float MSBLatency, float LSBLatency) {
   // Latency from a control operation is simply the latency of the control
   // operation.
@@ -940,7 +937,7 @@ static void updateLatency(DepLatInfoTy &CurLatInfo, const MachineInstr *SrcMI,
   //    |   /
   // current op
   // We should update the latency if we get a bigger latency.
-  DepLatInfoTy::mapped_type &V = CurLatInfo[SrcMI];
+  DepLatInfoTy::mapped_type &V = CurLatInfo[Src];
   float &OldLSBLatency = V.second;
   OldLSBLatency = std::max(OldLSBLatency, LSBLatency);
   //assert(LSBLatency <= MSBLatency && "Broken latency pair!");
@@ -1329,7 +1326,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     for (DepLatInfoTy::iterator I = CurLatInfo.begin(), E = CurLatInfo.end();
          I != E; ++I) {
       const MachineInstr *SrcMI = I->first;
-      if (SrcMI == EntryMarker || CurMBB != SrcMI->getParent())
+      if (SrcMI == 0 || CurMBB != SrcMI->getParent())
         continue;
 
       MIsToRead.erase(SrcMI);
@@ -1352,8 +1349,7 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
   // the BB.
   if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
     float latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
-    CurLatInfo.insert(std::make_pair(EntryMarker,
-                                     std::make_pair(latency, latency)));
+    CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(latency, latency)));
   }
 
   return CurLatInfo;
@@ -1422,13 +1418,14 @@ unsigned CycleLatencyInfo::computeLatency(MachineBasicBlock &MBB, bool Reset) {
     typedef DepLatInfoTy::const_iterator dep_it;
     for (dep_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
       const MachineInstr *DepMI = I->first;
+      if (!DepMI) continue;
+      
       // Get the delay (from entry) of DepMI.
       DepLatencyMap::iterator at = DepInfo.find(DepMI);
       assert(at != DepInfo.end() && "Dependence missed?");
       // Compute the delay of thie MI by accumulating the edge delay to the
       // delay of DepMI.
       L = at->second + std::ceil(I->second.first);
-      if (DepMI == DetialLatencyInfo::EntryMarker) DepMI = 0;
       L = std::max(L, getCtrlStepBetween<true>(DepMI, MI));
     }
 

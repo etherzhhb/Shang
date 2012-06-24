@@ -342,9 +342,48 @@ public:
 // a given MBB.
 class DetialLatencyInfo {
 public:
+  struct PtrTy : public PointerUnion<const MachineInstr*,
+                                     const MachineBasicBlock*> {
+    typedef PointerUnion<const MachineInstr*, const MachineBasicBlock*> Base;
+
+    bool isMI() const { return is<const MachineInstr*>(); }
+    bool isMBB() const { return is<const MachineBasicBlock*>(); }
+
+    const MachineInstr* dyn_cast_mi() const {
+      return dyn_cast<const MachineInstr*>();
+    }
+
+    const MachineBasicBlock* dyn_cast_mbb() const {
+      return dyn_cast<const MachineBasicBlock*>();
+    }
+
+    const MachineInstr* get_mi() const {
+      return get<const MachineInstr*>();
+    }
+
+    const MachineBasicBlock* get_mbb() const {
+      return get<const MachineBasicBlock*>();
+    }
+
+    operator const MachineInstr*() const {
+      return dyn_cast_mi();
+    }
+
+    bool operator< (PtrTy RHS) const {
+      return getOpaqueValue() < RHS.getOpaqueValue();
+    }
+
+    /*implicit*/ PtrTy(const MachineInstr *MI) : Base(MI) {
+      assert(MI && "Unexpected null pointer!");
+    }
+
+    /*implicit*/ PtrTy(const MachineBasicBlock *MBB) : Base(MBB) {
+      assert(MBB && "Unexpected null pointer!");
+    }
+  };
   // The latency of MSB and LSB from a particular operation to the current
   // operation.
-  typedef std::map<const MachineInstr*, std::pair<float, float> > DepLatInfoTy;
+  typedef std::map<PtrTy, std::pair<float, float> > DepLatInfoTy;
   static float getLatency(DepLatInfoTy::value_type v) {
     return std::max(v.second.first, v.second.second);
   }
@@ -385,8 +424,6 @@ protected:
 public:
   DetialLatencyInfo(MachineRegisterInfo &mri, bool WaitAllOps = true)
     : MRI(mri), WaitAllOps(WaitAllOps) {}
-
-  static const MachineInstr *const EntryMarker;
 
   // Add the a machine instruction and compute the corresponding latency
   // information, return true if the MI is a control operation, false otherwise.
@@ -482,7 +519,6 @@ public:
     DetialLatencyInfo::reset();
     FUInfo.clear();
     DepInfo.clear();
-    DepInfo.insert(std::make_pair(DetialLatencyInfo::EntryMarker, 0));
   }
 };
 } // end namespace llvm

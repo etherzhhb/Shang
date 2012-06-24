@@ -126,7 +126,10 @@ struct VPreRegAllocSched : public MachineFunctionPass {
     return CyclesFromEntry[MBB->getNumber()];
   }
 
-  unsigned getCyclesToBB(MachineInstr *SrcMI, MachineBasicBlock *DstBB);
+  unsigned getCyclesToBB(const MachineInstr *SrcMI,
+                         const MachineBasicBlock *DstBB) const;
+  unsigned getCyclesToBB(const MachineBasicBlock *SrcBB,
+                         const MachineBasicBlock *DstBB) const;
 
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
@@ -514,8 +517,8 @@ void VPreRegAllocSched::buildMemDepEdges(VSchedGraph &CurState) {
   }
 }
 
-unsigned VPreRegAllocSched::getCyclesToBB(MachineInstr *SrcMI,
-                                          MachineBasicBlock *DstBB) {
+unsigned VPreRegAllocSched::getCyclesToBB(const MachineInstr *SrcMI,
+                                          const MachineBasicBlock *DstBB) const{
   if (SrcMI->getOpcode() == VTM::VOpMvPhi
       && SrcMI->getOperand(2).getMBB() == DstBB)
     return 0;
@@ -523,7 +526,7 @@ unsigned VPreRegAllocSched::getCyclesToBB(MachineInstr *SrcMI,
   assert(VInstrInfo::isControl(SrcMI->getOpcode())
          && "Expect control instruction!");
 
-  MachineBasicBlock *SrcMBB = SrcMI->getParent();
+  const MachineBasicBlock *SrcBB = SrcMI->getParent();
   unsigned SrcMISlot = 0;
   if (const MachineOperand *SlotMO = VInstrInfo::getTraceOperand(SrcMI)) {
     assert(SlotMO->getTargetFlags() == 0xff && "Instruction not scheduled!");
@@ -535,13 +538,23 @@ unsigned VPreRegAllocSched::getCyclesToBB(MachineInstr *SrcMI,
     if (VInstrInfo::isWriteUntilFinish(SrcMI->getOpcode())) ++SrcMISlot;
   } else {
     assert(SrcMI->isPHI() && "Unexpected pseudo instruction type!");
-    SrcMISlot = FInfo->getStartSlotFor(SrcMBB);
+    SrcMISlot = FInfo->getStartSlotFor(SrcBB);
   }
 
-  unsigned SrcMBBEndSlot = FInfo->getEndSlotFor(SrcMBB);
+  unsigned SrcMBBEndSlot = FInfo->getEndSlotFor(SrcBB);
   int CyclesToBB = SrcMBBEndSlot - SrcMISlot;
   assert(CyclesToBB >=0 && "Bad schedule!");
-  CyclesToBB += getCyclesFromEntry(DstBB) - getCyclesFromEntry(SrcMBB);
+  CyclesToBB += getCyclesFromEntry(DstBB) - getCyclesFromEntry(SrcBB);
+  assert(CyclesToBB >=0 && "Bad cross BB distance!");
+  return CyclesToBB;
+}
+
+unsigned VPreRegAllocSched::getCyclesToBB(const MachineBasicBlock *SrcBB,
+                                          const MachineBasicBlock *DstBB) const{
+  if (SrcBB == DstBB) return 0;
+  
+  int CyclesToBB = FInfo->getTotalSlotFor(SrcBB);
+  CyclesToBB += getCyclesFromEntry(DstBB) - getCyclesFromEntry(SrcBB);
   assert(CyclesToBB >=0 && "Bad cross BB distance!");
   return CyclesToBB;
 }
@@ -558,24 +571,26 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
   // FIXME: If several SrcMIs merged into a same SUnit, we may adding edges
   // from the same source.
   for (src_it I = LatInfo.begin(), E = LatInfo.end(); I != E; ++I) {
-    MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
+    DetialLatencyInfo::PtrTy Src = I->first;
     // Get the latency from SrcMI to MI.
     float DetailLatency = DetialLatencyInfo::getLatency(*I);
     int Latency = int(ceil(DetailLatency));
 
-    assert(SrcMI && "Unexpected null SrcMI!");
     // LatencyInfo use a special marker to mark the current MI have some latency
     // from entry of the MBB.
-    if (SrcMI == DetialLatencyInfo::EntryMarker) {
-      assert(!A->isPHI() && "Unexpected datapath between PHI and entry node!");
+    if (!Src.isMI()) {
       // Since there are some datapath between current schedule unit and the
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
-      Latency = std::max(1, Latency);
+      Latency -= getCyclesToBB(Src.get_mbb(), CurMBB);
+      Latency = std::max(A->isPHI() ? 0 : 1, Latency);
       Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
-    } else if (SrcMI->getParent() != CurMBB) {
+    }
+
+    MachineInstr *SrcMI = const_cast<MachineInstr*>(Src.get_mi());
+    if (SrcMI->getParent() != CurMBB) {
       // From other BasicBlock.
       Latency -= getCyclesToBB(SrcMI, CurMBB);
       // FIXME: We can set latency to 0 in some case.
@@ -611,15 +626,14 @@ void VPreRegAllocSched::addIncomingDepForPHI(VSUnit *PHISU, VSchedGraph &CurStat
   DepLatInfoTy *LatInfo = CurState.getDepLatInfo(IncomingCopy);
   assert(LatInfo && "Latency information for incoming copy not avaiable!");
 
-  for (src_it I = LatInfo->begin(), E = LatInfo->end(); I != E; ++I) {
-    MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first);
+  for (src_it I = LatInfo->begin(), E = LatInfo->end(); I != E; ++I) {    
+    MachineInstr *SrcMI = const_cast<MachineInstr*>(I->first.dyn_cast_mi());
     // Get the latency from SrcMI to MI.
     float DetailLatency = DetialLatencyInfo::getLatency(*I);
     int Latency = int(ceil(DetailLatency));
 
-    assert(SrcMI && "Unexpected null SrcMI!");
     // Simply ignore the edge from entry, it is not an anti-dependence.
-    if (SrcMI == DetialLatencyInfo::EntryMarker || SrcMI->getParent() != CurMBB)
+    if (SrcMI == 0 || SrcMI->getParent() != CurMBB)
       continue;
     
     VSUnit *SrcSU = CurState.lookupSUnit(SrcMI);
