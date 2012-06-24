@@ -393,9 +393,8 @@ void PreSchedRTLOpt::rewriteExprTreeForMO(MachineOperand &MO, MachineInstr *IP,
     return;
   }
 
-  if (!isPHI) {
-    MO.clearParent();
-    MO = NewMO;
+  if (!isPHI && NewMO.isImm()) {
+    MO.ChangeToImmediate(NewMO.getImm());
     return;
   }
 
