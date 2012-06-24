@@ -348,7 +348,9 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
     buildCFGForBB(I);
   }
 
-  for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
+  // Need to compare I to MF.end() in every iteration, because we will delete
+  // the merged MBB.
+  for (MachineFunction::iterator I = MF.begin(); I != MF.end(); ++I) {
     bool BlockMerged = false;
     MachineBasicBlock *MBB = I;
 
@@ -359,7 +361,6 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
     // Merge trivial blocks and hot blocks.
     do {
-      BlockMerged = false;
       MakeChanged |= BlockMerged = mergeTrivialSuccBlocks(MBB);
     } while (BlockMerged && NextTraceNum < 64);
   }
@@ -960,7 +961,7 @@ bool HyperBlockFormation::mergeBlock(MachineBasicBlock *FromBB,
 
   assert(FromBB->empty() && FromBB->pred_empty() && FromBB->succ_empty()
          && "BB not fully merged!");
-  //FromBB->eraseFromParent();
+  FromBB->eraseFromParent();
   return true;
 }
 
