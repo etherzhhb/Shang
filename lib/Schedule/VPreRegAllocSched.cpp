@@ -50,6 +50,7 @@
 using namespace llvm;
 
 STATISTIC(MutexPredNoAlias, "Number of no-alias because of mutex predicate");
+STATISTIC(DanglingDatapath, "Number of dangling data-path operations");
 //===----------------------------------------------------------------------===//
 namespace {
 /// @brief Schedule the operations.
@@ -949,6 +950,7 @@ void VPreRegAllocSched::scheduleDanglingDatapathOps(VSchedGraph &State){
 
     assert(U->isDatapath() && "Unexpected dangling control operation.");
     U->scheduledTo(DanglingStep);
+    ++DanglingDatapath;
   }
 }
 
