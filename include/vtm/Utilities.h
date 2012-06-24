@@ -138,6 +138,18 @@ extractPointerAndOffset(const Value *V, int64_t Offset);
 class MachineBasicBlock;
 class TargetInstrInfo;
 void fixTerminators(MachineBasicBlock *MBB);
+
+class MachineDominatorTree;
+class MachineInstr;
+class MachineRegisterInfo;
+bool hoistDatapathOp(MachineInstr *MI, MachineDominatorTree  *DT,
+                     MachineRegisterInfo *MRI);
+
+bool hoistDatapathOpInMBB(MachineBasicBlock *MBB, MachineDominatorTree *DT,
+                          MachineRegisterInfo *MRI);
+
+bool hoistDatapathOpInSuccs(MachineBasicBlock *MBB, MachineDominatorTree *DT,
+                            MachineRegisterInfo *MRI);
 }
 
 #endif

@@ -359,6 +359,7 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
 
     // Merge trivial blocks and hot blocks.
     do {
+      hoistDatapathOpInSuccs(MBB, DT, MRI);
       MakeChanged |= BlockMerged = mergeTrivialSuccBlocks(MBB);
     } while (BlockMerged && NextTraceNum < 64);
   }
