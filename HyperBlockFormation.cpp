@@ -15,9 +15,6 @@
 // predecessor blocks to increase instruction level parallelism.
 //
 //===----------------------------------------------------------------------===//
-
-#include "BBDelayAnalysis.h"
-
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
@@ -46,12 +43,6 @@ using namespace llvm;
 STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
 STATISTIC(TrivialBBsMerged, "Number of trivial blocks are merged into hyperblock");
 
-cl::opt<unsigned>
-TrivialBBThreshold("vtm-hyper-block-trivial-bb",
-                   cl::desc("The minimal delay of bb that will be treated as"
-                            " non-trivial bb in HyperBlock Formation"),
-                            cl::init(1)); //Disabled at the moment.
-
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {
   static char ID;
@@ -60,7 +51,6 @@ struct HyperBlockFormation : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
   MachineLoopInfo *LI;
   MachineBranchProbabilityInfo *MBPI;
-  BBDelayAnalysis *BBDelay;
   typedef std::set<unsigned> IntSetTy;
   typedef DenseMap<unsigned, IntSetTy> CFGMapTy;
   CFGMapTy CFGMap;
@@ -74,14 +64,13 @@ struct HyperBlockFormation : public MachineFunctionPass {
   uint8_t NextTraceNum;
 
   HyperBlockFormation() : MachineFunctionPass(ID), TII(0), MRI(0), LI(0),
-                          MBPI(0), BBDelay(0), NextTraceNum(0) {
+                          MBPI(0), NextTraceNum(0) {
     initializeHyperBlockFormationPass(*PassRegistry::getPassRegistry());
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     MachineFunctionPass::getAnalysisUsage(AU);
     AU.addRequired<MachineLoopInfo>();
-    AU.addRequired<BBDelayAnalysis>();
     AU.addRequired<MachineBranchProbabilityInfo>();
   }
 
@@ -257,7 +246,6 @@ char HyperBlockFormation::ID = 0;
 
 INITIALIZE_PASS_BEGIN(HyperBlockFormation, "vtm-hyper-block",
                       "VTM - Hyper Block Formation", false, false)
-  INITIALIZE_PASS_DEPENDENCY(BBDelayAnalysis)
   INITIALIZE_PASS_DEPENDENCY(MachineBranchProbabilityInfo)
 INITIALIZE_PASS_END(HyperBlockFormation, "vtm-hyper-block",
                     "VTM - Hyper Block Formation", false, false)
@@ -270,11 +258,6 @@ bool HyperBlockFormation::mergeBlocks(MachineBasicBlock *MBB, BBVecTy &BBs) {
 
     ActuallyMerged |= mergeBlock(SuccBB, MBB);
   }
-
-  CycleLatencyInfo CL(*MRI);
-  // Update the delay.
-  if (ActuallyMerged)
-    BBDelay->updateDelay(MBB, CL.computeLatency(*MBB));
 
   return ActuallyMerged;
 }
@@ -294,12 +277,6 @@ bool HyperBlockFormation::mergeTrivialSuccBlocks(MachineBasicBlock *MBB) {
     if (isBlockAlmostEmtpy(Succ)) {
       BBsToMerge.push_back(Succ);
       continue;
-    }
-
-    unsigned Delay = BBDelay->getBBDelay(Succ);
-    if (Delay < TrivialBBThreshold) {
-      ++TrivialBBsMerged;
-      BBsToMerge.push_back(Succ);
     }
   }
 
@@ -324,7 +301,6 @@ bool HyperBlockFormation::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getTarget().getInstrInfo();
   MRI = &MF.getRegInfo();
   LI = &getAnalysis<MachineLoopInfo>();
-  BBDelay = &getAnalysis<BBDelayAnalysis>();
   MBPI = &getAnalysis<MachineBranchProbabilityInfo>();
 
   bool MakeChanged = false;
