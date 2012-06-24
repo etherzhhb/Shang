@@ -1331,11 +1331,16 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
     // Now MI is actually depends on SrcMI in this MBB, no need to wait them
     // explicitly.
     MIsToWait.erase(SrcMI);
+
+    // SrcMI is read by a data-path operation, we need to wait its result before
+    // exiting the BB if there is no other control operation read it.
+    if (VInstrInfo::isControl(SrcMI->getOpcode()) && !IsControl)
+      MIsToRead.insert(SrcMI);
   }
 
   // Find all MIs that are read by other control operation, and we do not need
-  // to read them explicilty.
-  if (VInstrInfo::isControl(Opcode))
+  // to read them explicitly.
+  if (IsControl)
     for (DepLatInfoTy::iterator I = CurLatInfo.begin(), E = CurLatInfo.end();
          I != E; ++I) {
       const MachineInstr *SrcMI = I->first;
@@ -1350,17 +1355,12 @@ DetialLatencyInfo::addInstrInternal(const MachineInstr *MI, bool IgnorePHISrc) {
 
   // Assume MI do not have any user in the same BB, if it has, it will be
   // deleted later.
-  if (VInstrInfo::isControl(Opcode) || WaitAllOps)
+  if (IsControl || WaitAllOps)
     MIsToWait.insert(MI);
 
-  if (VInstrInfo::isControl(Opcode))
-    MIsToRead.insert(MI);
-
   // We will not get any latency information if a datapath operation do not
-  // depends any control operation in the same BB
-  // Dirty Hack: Use a marker machine instruction to mark it depend on entry of
-  // the BB.
-  if (CurLatInfo.empty() && VInstrInfo::isDatapath(MI->getOpcode())) {
+  // depends any control operation in the same BB.
+  if (CurLatInfo.empty() && !IsControl) {
     float latency = std::max(Latency, DetialLatencyInfo::DeltaLatency);
     CurLatInfo.insert(std::make_pair(CurMBB, std::make_pair(latency, latency)));
   }
