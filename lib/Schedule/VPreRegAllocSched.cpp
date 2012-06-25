@@ -532,10 +532,12 @@ unsigned VPreRegAllocSched::getCyclesToBB(const MachineInstr *SrcMI,
     assert(SlotMO->getTargetFlags() == 0xff && "Instruction not scheduled!");
     SrcMISlot = SlotMO->getImm();
     // Note that the dangling node are not chained with its depending control
-    // operations, so for the scheduled instruction that is write until finish,
-    // the result is written to register 1 slot it is expected when we are
-    // computing the original latency.
-    if (VInstrInfo::isWriteUntilFinish(SrcMI->getOpcode())) ++SrcMISlot;
+    // operations, so for the scheduled instruction that is write until finish
+    // and has nozero latency, the result is written to register 1 slot it is
+    // expected when we are computing the original latency.
+    unsigned Opcode = SrcMI->getOpcode();
+    if (VInstrInfo::isWriteUntilFinish(Opcode)&&!VInstrInfo::isCopyLike(Opcode))
+      ++SrcMISlot;
   } else {
     assert(SrcMI->isPHI() && "Unexpected pseudo instruction type!");
     SrcMISlot = FInfo->getStartSlotFor(SrcBB);
