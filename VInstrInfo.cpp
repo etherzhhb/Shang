@@ -723,23 +723,17 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
                                      MachineRegisterInfo *MRI,
                                      const TargetInstrInfo *TII,
                                      unsigned MergeOpC) {
-  if (isAlwaysTruePred(OldCnd)) {
-    OldCnd = MachineOperand::CreateImm(1);
-    OldCnd.setTargetFlags(1);
-  } else {
-    OldCnd.clearParent();
-    MRI->clearKillFlags(OldCnd.getReg());
-    OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
-  }
+  // Perform simple optimization: A & 1 => A
+  if (isAlwaysTruePred(OldCnd)) return NewCnd;
+  if (isAlwaysTruePred(NewCnd)) return OldCnd;
 
-  if (isAlwaysTruePred(NewCnd)) {
-    NewCnd = MachineOperand::CreateImm(1);
-    NewCnd.setTargetFlags(1);
-  } else {
-    NewCnd.clearParent();
-    MRI->clearKillFlags(NewCnd.getReg());
-    NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
-  }
+  OldCnd.clearParent();
+  MRI->clearKillFlags(OldCnd.getReg());
+  OldCnd = RemoveInvertFlag(OldCnd, MRI, MBB, IP, TII);
+
+  NewCnd.clearParent();
+  MRI->clearKillFlags(NewCnd.getReg());
+  NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
 
   unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
   MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
