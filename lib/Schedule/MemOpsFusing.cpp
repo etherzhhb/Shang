@@ -25,9 +25,11 @@
 #include "vtm/Utilities.h"
 
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -45,28 +47,22 @@ namespace {
 struct AccessInfo {
   typedef PointerIntPair<const Value*, 1, bool> BaseAddrPtrTy;
   /*const */MachineInstr *Inst;
-  const Value *BaseAddr;
-  /*const */int64_t Offset;
-  /*const */int64_t Size;
-  /*const */unsigned Alignment;
-  /*const */unsigned Id : 31;
-  /*const */bool     IsWrite : 1;
+  /*const */unsigned Id;
 
   operator MachineInstr*() const { return Inst; }
   MachineInstr *operator->() const { return Inst; }
 
-  BaseAddrPtrTy getBaseAddr() const {
-    return BaseAddrPtrTy(BaseAddr, IsWrite);
-  }
+  MachineMemOperand *getAddr() const { return *Inst->memoperands_begin(); }
+
+  uint64_t getSize() const { return getAddr()->getSize(); }
+  uint64_t getAlignment() const { return getAddr()->getAlignment(); }
+  bool isStore() const { return getAddr()->isStore(); }
 
   AccessInfo(MachineInstr *RHS = 0, bool isDummy = false)
-    : Inst(RHS), Offset(0), Size(0), Alignment(0), Id(0),
-    IsWrite((!isDummy && RHS) ? VInstrInfo::mayStore(RHS) : false) {}
+    : Inst(RHS), Id(isDummy ? 0 : ~0) {}
 
-  AccessInfo(MachineInstr *MI, bool IsWrite, const Value *BaseAddr,
-             int64_t Offset, int64_t Size, unsigned Alignment, unsigned Id)
-    : Inst(MI), BaseAddr(BaseAddr), Offset(Offset), Size(Size),
-      Alignment(0), Id(Id), IsWrite(IsWrite) {}
+  AccessInfo(MachineInstr *MI, unsigned Id)
+    : Inst(MI), Id(Id) {}
 
   bool operator==(const AccessInfo &RHS) const {
     return Inst == RHS.Inst;
@@ -76,21 +72,7 @@ struct AccessInfo {
 
   static AccessInfo Create(MachineInstr *MI, unsigned Id) {
     assert(MI->getOpcode() == VTM::VOpMemTrans && "Unexpected opcode!");
-    bool IsWrite = VInstrInfo::mayStore(MI);
-
-    MachineMemOperand *MemOperand = *MI->memoperands_begin();
-    const Value *BaseAddr;
-    int64_t Offset;
-    tie(BaseAddr, Offset) = extractPointerAndOffset(MemOperand->getValue(),
-                                                    MemOperand->getOffset());
-
-    int64_t Size = MemOperand->getSize();
-    return AccessInfo(MI, IsWrite, BaseAddr, Offset, Size,
-                      MemOperand->getAlignment(), Id);
-  }
-
-  static int64_t getRangeBetween(const AccessInfo LHS, const AccessInfo RHS) {
-    return std::max(LHS.Offset - RHS.Offset + RHS.Size, LHS.Size);
+    return AccessInfo(MI, Id);
   }
 };
 }
@@ -120,34 +102,7 @@ template<> struct CompGraphTraits<AccessInfo> {
   }
 
   static bool compatible(AccessInfo LHS, AccessInfo RHS) {
-    if (!LHS || !RHS) return true;
-
-    // Don't fuse read/write together.
-    if (LHS.getBaseAddr() != RHS.getBaseAddr())
-      return false;
-
-    // Make sure LHS is Earlier than RHS.
-    if (isEarlier(RHS, LHS)) std::swap(LHS, RHS);
-
-    // Don't exceed the width of data port of MemBus.
-    int64_t FusedWidth = AccessInfo::getRangeBetween(RHS, LHS);
-
-    // LHS and RHS have the same address.
-    if (FusedWidth == std::max(LHS.Size, RHS.Size)) {
-      // Need to check if the two access are writing the same data, and writing
-      // The same size.
-      if (LHS.IsWrite)
-        return LHS->getOperand(2).isIdenticalTo(RHS->getOperand(2))
-               && LHS->getOperand(4).isIdenticalTo(RHS->getOperand(4));
-
-      // Two operation reading the same address are always compatible.
-      return true;
-    }
-
-    // if (FusedWidth <= getFUDesc<VFUMemBus>()->getDataWidth() / 8)
-    //  return true;
-
-    return false;
+    return LHS.isStore() == RHS.isStore();
   }
 
   static bool isTrivial(const AccessInfo &LHS) {
@@ -272,7 +227,7 @@ struct UseTransClosure : public InstGraphBase {
     if (LHS->getOpcode() != VTM::VOpMemTrans) return false;
     if (RHS->getOpcode() != VTM::VOpMemTrans) return false;
 
-    for (unsigned i = 1, e = VInstrInfo::mayStore(LHS) ? 5 : 4; i < 5; ++i)
+    for (unsigned i = 1, e = VInstrInfo::mayStore(LHS) ? 5 : 4; i < e; ++i)
       if (!LHS->getOperand(i).isIdenticalTo(RHS->getOperand(i)))
         return false;
 
@@ -321,9 +276,46 @@ struct UseTransClosure : public InstGraphBase {
   }
 
   int operator()(AccessInfo LHS, AccessInfo RHS) {
-    // Do not merge the Instruction with difference base address.
-    if (LHS.getBaseAddr() != RHS.getBaseAddr())
+    MachineMemOperand *LHSAddr = LHS.getAddr(), *RHSAddr = RHS.getAddr();
+
+    const SCEVConstant *DeltaSCEV
+      = dyn_cast<SCEVConstant>(getAddressDeltaSCEV(RHSAddr, LHSAddr, &MDG.SE));
+
+    // Cannot fuse two memory access with unknown distance.
+    if (!DeltaSCEV) return CompGraphWeights::HUGE_NEG_VAL;
+
+    int64_t Delta = DeltaSCEV->getValue()->getSExtValue();
+    // Make sure LHS is in the lower address.
+    if (Delta < 0) {
+      Delta = -Delta;
+      std::swap(LHS, RHS);
+    }
+
+    assert(LHSAddr->isStore() == RHSAddr->isStore()
+           && "Unexpected different access type!");
+    // For the stores, we must make sure the higher address is just next to
+    // the lower address.
+    if (LHSAddr->isStore()
+        && (uint64_t(Delta) >= LHS.getSize() || LHS.getSize() != RHS.getSize()))
       return CompGraphWeights::HUGE_NEG_VAL;
+
+    // Don't exceed the width of data port of MemBus.
+    uint64_t FusedWidth = std::max(LHS.getSize(), Delta + RHS.getSize());
+    if (FusedWidth > LHS.getAlignment())
+      return CompGraphWeights::HUGE_NEG_VAL;
+    
+    int64_t BusWidth = getFUDesc<VFUMemBus>()->getDataWidth() / 8; 
+
+    // LHS and RHS have the same address.
+    if (FusedWidth == LHS.getSize()) {
+      // Need to check if the two access are writing the same data, and writing
+      // the same size.
+      if (!LHS->getOperand(2).isIdenticalTo(RHS->getOperand(2))
+            || !LHS->getOperand(4).isIdenticalTo(RHS->getOperand(4)))
+        return CompGraphWeights::HUGE_NEG_VAL;
+    }
+
+    if (FusedWidth > BusWidth) return CompGraphWeights::HUGE_NEG_VAL;
 
     // Ensure LHS is before than RHS in execution order.
     if (RHS.Id < LHS.Id) std::swap(LHS, RHS);
@@ -333,18 +325,19 @@ struct UseTransClosure : public InstGraphBase {
     for (it I = llvm::next(it(LHS)), E = it(RHS); I != E; ++I)
       trackUsesOfSrc(LHS, I);
 
-    return trackUsesOfSrc(LHS, RHS) ? CompGraphWeights::HUGE_NEG_VAL
-                                    : CompGraphWeights::TINY_VAL;
+    if (trackUsesOfSrc(LHS, RHS)) return CompGraphWeights::HUGE_NEG_VAL;
+
+    return (2 * BusWidth - FusedWidth) * CompGraphWeights::TINY_VAL;
   }
 };
 
 struct MemOpsFusing : public MachineFunctionPass {
   static char ID;
-
+  ScalarEvolution *SE;
   MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
 
-  MemOpsFusing() : MachineFunctionPass(ID), MRI(0), TII(0) {}
+  MemOpsFusing() : MachineFunctionPass(ID), SE(0), MRI(0), TII(0) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.addRequired<ScalarEvolution>();
@@ -356,6 +349,7 @@ struct MemOpsFusing : public MachineFunctionPass {
 
   bool runOnMachineFunction(MachineFunction &MF) {
     bool changed = false;
+    SE = &getAnalysis<ScalarEvolution>();
     MRI = &MF.getRegInfo();
     TII = MF.getTarget().getInstrInfo();
 
@@ -467,7 +461,6 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
 
       AccessInfo &MergeFrom = NodeToMerge->get(), &MergeTo = P->get();
       assert(MergeFrom.Id < MergeTo.Id && "Bad merge order!");
-      unsigned OriginalMergeToId = MergeTo.Id;
 
       // Move all use between LHS and RHS after RHS.
       MachineInstr *MergeFromMI = MergeFrom, *MergeToMI = MergeTo;
@@ -535,32 +528,121 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
          && To->getOpcode() == VTM::VOpMemTrans
          && "Unexpected type of MachineInstr to merge!!");
 
-  // Check if the store data, read/write, and byte enable are identical.
-  for (unsigned i = 2, e = VInstrInfo::mayStore(To) ? 5 : 4; i < e; ++i) {
-    assert(From->getOperand(i).isIdenticalTo(To->getOperand(i))
-           && "Can only merge identical Memory access at the moment!");
+  // Get the new address, i.e. the lower address which has a bigger
+  // alignment.
+  unsigned LowerReg = From->getOperand(0).getReg();
+  MachineOperand LowerAddr = From->getOperand(1);
+  MachineOperand LowerData = From->getOperand(2);
+  MachineMemOperand *LowerMemOp = *From->memoperands_begin();
+  LowerAddr.clearParent();
+  LowerData.clearParent();
+  unsigned HigherReg = To->getOperand(0).getReg();
+  MachineOperand HigherAddr = To->getOperand(1);
+  MachineOperand HigherData = To->getOperand(2);
+  MachineMemOperand *HigherMemOp = *To->memoperands_begin();
+  HigherAddr.clearParent();
+  HigherData.clearParent();
+  int64_t Delta = getAddressDelta(HigherMemOp, LowerMemOp, SE);
+  // Make sure lower address is actually lower.
+  if (Delta < 0) {
+    Delta = - Delta;
+    std::swap(LowerAddr, HigherAddr);
+    std::swap(LowerData, HigherData);
+    std::swap(LowerMemOp, HigherMemOp);
+    std::swap(LowerReg, HigherReg);
   }
 
-  // Only merge the predicate.
+  int64_t NewSize = std::max(LowerMemOp->getSize(),
+                             Delta + HigherMemOp->getSize());
+  NewSize = NextPowerOf2(NewSize - 1);
+  MachineBasicBlock *CurMBB = To->getParent();
+  MachineFunction *MF = CurMBB->getParent();
+  // Get the new address from the lower address.
+  MachineMemOperand **NewMO = MF->allocateMemRefsArray(1);
+  NewMO[0] = MF->getMachineMemOperand(LowerMemOp, 0, NewSize);
+  To->setMemRefs(NewMO, NewMO + 1);
+
+  // Get the Byte enable.
+  unsigned ByteEn = getByteEnable(NewSize);
+  assert((((getBitSlice64(From->getOperand(4).getImm(), 8)
+            | getBitSlice64(From->getOperand(4).getImm(), 8)) == ByteEn)
+         || !NewMO[0]->isStore()) && "New Access writing extra bytes!");
+
+  assert((!NewMO[0]->isStore()
+          || From->getOperand(3).isIdenticalTo(To->getOperand(3)))
+         && "Cannot mixing load and store!");
+
+  // Merge the predicate and get the trace operand.
   MachineOperand *FromPred = VInstrInfo::getPredOperand(From),
                  *ToPred = VInstrInfo::getPredOperand(To);
 
+  // Build the new data to store by concatenating them together.
+  if (LowerData.isReg() && LowerData.getReg()) {
+    unsigned NewReg
+      = MRI->createVirtualRegister(MRI->getRegClass(LowerData.getReg()));
+    unsigned NewDataSizeInBit = VInstrInfo::getBitWidth(LowerData)
+                                + VInstrInfo::getBitWidth(HigherData);
+    BuildMI(*CurMBB, To, DebugLoc(), VInstrInfo::getDesc(VTM::VOpBitCat))
+      .addOperand(VInstrInfo::CreateReg(NewReg, NewDataSizeInBit, true))
+      .addOperand(HigherData).addOperand(LowerData)
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace());
+
+    LowerData = VInstrInfo::CreateReg(NewReg, NewDataSizeInBit);
+  }
+  
   unsigned NewPred =
     VInstrInfo::MergePred(*FromPred, *ToPred, *To->getParent(),
                           To, MRI, TII, VTM::VOpOr).getReg();
 
-  ToPred->ChangeToRegister(NewPred, false);
-  ToPred->setTargetFlags(1);
-  // Update the byte enable.
-  int64_t ByteEn = std::max(To->getOperand(4).getImm(),
-                            From->getOperand(4).getImm());
-  To->getOperand(4).ChangeToImmediate(ByteEn);
 
   if (!FromPred[1].isIdenticalTo(ToPred[1]))
     VInstrInfo::ResetTrace(To);
 
-  // Use From instead of To.
-  MRI->replaceRegWith(From->getOperand(0).getReg(), To->getOperand(0).getReg());
+  MachineOperand TraceOperand = *VInstrInfo::getTraceOperand(To);
+  TraceOperand.clearParent();
+
+  // Refresh the machine operand.
+  To->RemoveOperand(6);
+  To->RemoveOperand(5);
+  To->RemoveOperand(4);
+  To->RemoveOperand(3);
+  To->RemoveOperand(2);
+  To->RemoveOperand(1);
+
+  // Add the new address operand.
+  To->addOperand(LowerAddr);
+  // Add the data to store.
+  To->addOperand(LowerData);
+  To->addOperand(VInstrInfo::CreateImm(NewMO[0]->isStore(), 1));
+  To->addOperand(VInstrInfo::CreateImm(ByteEn, 8));
+  To->addOperand(VInstrInfo::CreatePredicate(NewPred));
+  To->addOperand(TraceOperand);
+
+  // Update the result registers.
+  if (NewMO[0]->isLoad()) {
+    const TargetRegisterClass *RC = MRI->getRegClass(LowerReg);
+    // Get the new higher data from the higher part of the result of the fused
+    // memory access.
+    unsigned NewHigherReg = MRI->createVirtualRegister(RC);
+    unsigned HigherRegSizeInBits = HigherMemOp->getSize() * 8;
+    unsigned DataSizeInBit = getFUDesc<VFUMemBus>()->getDataWidth() ;
+    // Insert the bitslice after the load.
+    MachineBasicBlock::instr_iterator IP = To;
+    ++IP;
+    BuildMI(*CurMBB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpBitSlice))
+      .addOperand(VInstrInfo::CreateReg(NewHigherReg, HigherRegSizeInBits, true))
+      .addOperand(VInstrInfo::CreateReg(LowerReg, DataSizeInBit))
+      .addOperand(VInstrInfo::CreateImm(NewSize * 8, 8))
+      .addOperand(VInstrInfo::CreateImm(Delta * 8, 8))
+      .addOperand(VInstrInfo::CreatePredicate())
+      .addOperand(VInstrInfo::CreateTrace());
+
+    // Update the result register.
+    MRI->replaceRegWith(HigherReg, NewHigherReg);
+    To->getOperand(0).ChangeToRegister(LowerReg, true);
+  }
+  
   ++MemOpFused;
 }
 

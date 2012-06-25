@@ -122,6 +122,20 @@ const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE){
   return getMachineMemOperandSCEV(V->getValue(), V->getOffset(), SE);
 }
 
+const SCEV *getAddressDeltaSCEV(MachineMemOperand *LHS, MachineMemOperand *RHS,
+                                ScalarEvolution *SE) {
+  const SCEV *LHSSCEV = getMachineMemOperandSCEV(LHS, SE);
+  const SCEV *RHSSCEV = getMachineMemOperandSCEV(RHS, SE);
+  return SE->getMinusSCEV(LHSSCEV, RHSSCEV);
+}
+
+int64_t getAddressDelta(MachineMemOperand *LHS, MachineMemOperand *RHS,
+                        ScalarEvolution *SE) {
+  const SCEVConstant *Delta
+    = cast<SCEVConstant>(getAddressDeltaSCEV(LHS, RHS, SE));
+  return Delta->getValue()->getSExtValue();
+}
+
 static Value *GetBaseValue(const SCEV *S) {
   if (const SCEVAddRecExpr *AR = dyn_cast<SCEVAddRecExpr>(S)) {
     // In an addrec, assume that the base will be in the start, rather

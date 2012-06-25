@@ -124,7 +124,13 @@ AliasAnalysis::AliasResult
 MachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
                        AliasAnalysis *AA, ScalarEvolution *SE);
 
-const SCEV *getMachineMemOperandSCEV(MachineMemOperand* V, ScalarEvolution *SE);
+const SCEV *getMachineMemOperandSCEV(MachineMemOperand *V, ScalarEvolution *SE);
+
+const SCEV *getAddressDeltaSCEV(MachineMemOperand *LHS, MachineMemOperand *RHS,
+                                ScalarEvolution *SE);
+
+int64_t getAddressDelta(MachineMemOperand *LHS, MachineMemOperand *RHS,
+                        ScalarEvolution *SE);
 
 static inline
 bool isMachineMemOperandAlias(MachineMemOperand* V1, MachineMemOperand *V2,
