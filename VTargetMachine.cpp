@@ -136,13 +136,14 @@ struct VTMPassConfig : public TargetPassConfig {
     PM.add(createFixMachineCodePass(true));
     if (EnablePreSchedRTLOpt) PM.add(createPreSchedRTLOptPass());
 
-    // Construct multiplexer tree for prebound function units.
-    PM.add(createPrebindUnbalanceMuxPass());
     //PM.add(createPrebindMuxBasePass());
 
     // Optimize the CFG.
     PM.add(createHyperBlockFormationPass());
     printAndVerify("After merge fall through pass.");
+    // Construct multiplexer tree for prebound function units.
+    PM.add(createPrebindUnbalanceMuxPass());
+
     // Make sure we have a branch instruction for every success block.
 
     // Fix the machine code for schedule and function unit allocation.
