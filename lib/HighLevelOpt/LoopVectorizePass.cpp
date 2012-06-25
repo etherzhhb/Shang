@@ -32,7 +32,6 @@
 
 using namespace llvm;
 STATISTIC(NumLoopUnrollForVecotirze, "Number of loops unrolled for vectrizie");
-STATISTIC(NumMemOpVecotirzed, "Number memory operations be vectorized");
 
 namespace {
 //
@@ -250,60 +249,6 @@ bool LoopVectorizer::runOnLoop(Loop *L, LPPassManager &LPM) {
       const SCEV *Ptr = SE->getSCEV(SI->getPointerOperand());
       unsigned Align = (1 << SE->GetMinTrailingZeros(Ptr));
       SI->setAlignment(Align);
-    }
-  }
-
-  DEBUG(LatchBlock->dump());
-  VectorizeConfig C;
-  C.AlignedOnly = true;
-  C.NoCasts = true;
-  C.VectorBits = 64;
-  vectorizeBasicBlock(this, *LatchBlock, C);
-
-  DEBUG(LatchBlock->dump());
-
-  for (BasicBlock::iterator I = LatchBlock->begin(), E = LatchBlock->end();
-       I != E; /*++I*/) {
-     Instruction *Inst = I++;
-     if (StoreInst *SI = dyn_cast<StoreInst>(Inst)) {
-       Value *V = SI->getValueOperand();
-       Type *T = V->getType();
-       if (!T->isVectorTy()) continue;
-       ++NumMemOpVecotirzed;
-
-       Type *ScalarTy =
-         IntegerType::get(T->getContext(), T->getPrimitiveSizeInBits());
-       // Cast the stored value.
-       Instruction *CastedValue =
-         CastInst::Create(Instruction::BitCast, V, ScalarTy, "", Inst);
-       SI->getOperandUse(0).set(CastedValue);
-       // Cast the pointer.
-       Instruction *CastedPtr =
-         CastInst::Create(Instruction::BitCast, SI->getPointerOperand(),
-                          PointerType::get(ScalarTy, 0), "", Inst);
-       SI->getOperandUse(1).set(CastedPtr);
-    } else if (LoadInst *LI = dyn_cast<LoadInst>(Inst)) {
-      Type *T = LI->getType();
-      if (!T->isVectorTy()) continue;
-      ++NumMemOpVecotirzed;
-
-      Instruction *NewLI = LI->clone();
-      NewLI->insertBefore(Inst);
-      Type *ScalarTy =
-        IntegerType::get(T->getContext(), T->getPrimitiveSizeInBits());
-
-      // Cast the pointer.
-      Instruction *CastedPtr =
-        CastInst::Create(Instruction::BitCast, LI->getPointerOperand(),
-                        PointerType::get(ScalarTy, 0), "", NewLI);
-       NewLI->getOperandUse(0).set(CastedPtr);
-      // Setup the right type for the load.
-      NewLI->mutateType(ScalarTy);
-      // Cast the loaded value back to vector.
-      Instruction *CastedValue =
-        CastInst::Create(Instruction::BitCast, NewLI, T, "", Inst);
-      LI->replaceAllUsesWith(CastedValue);
-      LI->eraseFromParent();
     }
   }
 
