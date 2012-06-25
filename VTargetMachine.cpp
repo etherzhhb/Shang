@@ -141,6 +141,9 @@ struct VTMPassConfig : public TargetPassConfig {
     // Optimize the CFG.
     PM.add(createHyperBlockFormationPass());
     printAndVerify("After merge fall through pass.");
+
+    // Fuse the memory access together to mak full use of memory bandwidth.
+    PM.add(createMemOpsFusingPass());
     // Construct multiplexer tree for prebound function units.
     PM.add(createPrebindUnbalanceMuxPass());
 
