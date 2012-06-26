@@ -719,9 +719,11 @@ void VASTModule::writeProfileCounters(VASTSlot *S, bool isFirstSlot) {
     // Increase the profile counter.
     if (S->isLeaderSlot()) {
       CtrlS.if_() << S->getRegister()->getName();
-      for (unsigned i = S->alias_start(), e = S->alias_end(),
-        k = S->alias_ii(); i < e; i += k) {
-          CtrlS << '|' << getSlot(i)->getRegister()->getName();
+      if (S->hasAliasSlot()) {
+        for (unsigned i = S->alias_start(), e = S->alias_end(),
+          k = S->alias_ii(); i < e; i += k) {
+            CtrlS << '|' << getSlot(i)->getRegister()->getName();
+        }
       }
 
       CtrlS._then();
