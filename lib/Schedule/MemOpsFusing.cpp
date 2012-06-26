@@ -643,14 +643,16 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
     unsigned NewHigherReg = MRI->createVirtualRegister(RC);
     unsigned HigherRegSizeInBits = HigherMemOp->getSize() * 8;
     unsigned DataSizeInBit = getFUDesc<VFUMemBus>()->getDataWidth() ;
+    unsigned LB = Delta * 8;
+    unsigned UB = LB + HigherRegSizeInBits;
     // Insert the bitslice after the load.
     MachineBasicBlock::instr_iterator IP = To;
     ++IP;
     BuildMI(*CurMBB, IP, DebugLoc(), VInstrInfo::getDesc(VTM::VOpBitSlice))
       .addOperand(VInstrInfo::CreateReg(NewHigherReg, HigherRegSizeInBits, true))
       .addOperand(VInstrInfo::CreateReg(LowerReg, DataSizeInBit))
-      .addOperand(VInstrInfo::CreateImm(NewSize * 8, 8))
-      .addOperand(VInstrInfo::CreateImm(Delta * 8, 8))
+      .addOperand(VInstrInfo::CreateImm(UB, 8))
+      .addOperand(VInstrInfo::CreateImm(LB, 8))
       .addOperand(VInstrInfo::CreatePredicate())
       .addOperand(VInstrInfo::CreateTrace());
 
