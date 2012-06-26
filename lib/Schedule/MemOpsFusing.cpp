@@ -174,7 +174,7 @@ struct MemDepGraph : public InstGraphBase {
 
     typedef MachineBasicBlock::instr_iterator it;
     MachineBasicBlock *MBB = Inst->getParent();
-    for (it I = MBB->instr_begin(), E = MBB->instr_end(); I != E; ++I) {
+    for (it I = MBB->instr_begin(), E = Inst; I != E; ++I) {
       MachineInstr *SrcMI = I;
       // Do not add loop to dependent graph.
       if (SrcMI == Inst) continue;
