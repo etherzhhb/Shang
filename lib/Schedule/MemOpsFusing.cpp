@@ -211,7 +211,9 @@ struct MemDepGraph : public InstGraphBase {
     assert(at != Graph.end() && "From not exist!");
 
     // Merge the set.
-    Graph[To].insert(at->second.begin(), at->second.end());
+    InstSetTy &ToDepSet = Graph[To];
+    ToDepSet.insert(at->second.begin(), at->second.end());
+    ToDepSet.erase(From);
 
     Graph.erase(at);
   }
