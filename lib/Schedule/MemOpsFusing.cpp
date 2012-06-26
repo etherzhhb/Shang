@@ -550,12 +550,14 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
   MachineOperand LowerAddr = From->getOperand(1);
   MachineOperand LowerData = From->getOperand(2);
   MachineMemOperand *LowerMemOp = *From->memoperands_begin();
+  unsigned LowerByteEn = getBitSlice64(From->getOperand(4).getImm(), 8);
   LowerAddr.clearParent();
   LowerData.clearParent();
   unsigned HigherReg = To->getOperand(0).getReg();
   MachineOperand HigherAddr = To->getOperand(1);
   MachineOperand HigherData = To->getOperand(2);
   MachineMemOperand *HigherMemOp = *To->memoperands_begin();
+  unsigned HigherByteEn = getBitSlice64(To->getOperand(4).getImm(), 8);
   HigherAddr.clearParent();
   HigherData.clearParent();
   int64_t Delta = getAddressDelta(HigherMemOp, LowerMemOp, SE);
@@ -566,6 +568,7 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
     std::swap(LowerData, HigherData);
     std::swap(LowerMemOp, HigherMemOp);
     std::swap(LowerReg, HigherReg);
+    std::swap(LowerByteEn, HigherByteEn);
   }
 
   int64_t NewSize = std::max(LowerMemOp->getSize(),
@@ -580,9 +583,10 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
 
   // Get the Byte enable.
   unsigned ByteEn = getByteEnable(NewSize);
-  assert((((getBitSlice64(From->getOperand(4).getImm(), 8)
-            | getBitSlice64(From->getOperand(4).getImm(), 8)) == ByteEn)
+  assert((((LowerByteEn | (HigherByteEn << Delta)) == ByteEn)
          || !NewMO[0]->isStore()) && "New Access writing extra bytes!");
+  (void) LowerByteEn;
+  (void) HigherByteEn;
 
   assert((!NewMO[0]->isStore()
           || From->getOperand(3).isIdenticalTo(To->getOperand(3)))
