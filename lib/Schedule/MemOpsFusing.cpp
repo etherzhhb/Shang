@@ -309,11 +309,20 @@ struct UseTransClosure : public InstGraphBase {
 
     assert(LHSAddr->isStore() == RHSAddr->isStore()
            && "Unexpected different access type!");
-    // For the stores, we must make sure the higher address is just next to
-    // the lower address.
-    if (LHSAddr->isStore()
-        && (uint64_t(Delta) >= LHS.getSize() || LHS.getSize() != RHS.getSize()))
-      return CompGraphWeights::HUGE_NEG_VAL;
+    if (LHSAddr->isStore()) {
+      // For the stores, we must make sure the higher address is just next to
+      // the lower address.
+      if (Delta && uint64_t(Delta) != LHS.getSize())
+        return CompGraphWeights::HUGE_NEG_VAL;
+
+      // LHS and RHS have the same address.
+      if (Delta == 0 &&
+        // Need to check if the two access are writing the same data, and writing
+        // the same size.
+          (!LHS->getOperand(2).isIdenticalTo(RHS->getOperand(2))
+            || LHSAddr->getSize() != RHSAddr->getSize()))
+          return CompGraphWeights::HUGE_NEG_VAL;
+    }
 
     // Don't exceed the width of data port of MemBus.
     uint64_t FusedWidth = std::max(LHS.getSize(), Delta + RHS.getSize());
@@ -321,15 +330,6 @@ struct UseTransClosure : public InstGraphBase {
       return CompGraphWeights::HUGE_NEG_VAL;
     
     uint64_t BusWidth = getFUDesc<VFUMemBus>()->getDataWidth() / 8;
-
-    // LHS and RHS have the same address.
-    if (FusedWidth == LHS.getSize()) {
-      // Need to check if the two access are writing the same data, and writing
-      // the same size.
-      if (!LHS->getOperand(2).isIdenticalTo(RHS->getOperand(2))
-            || !LHS->getOperand(4).isIdenticalTo(RHS->getOperand(4)))
-        return CompGraphWeights::HUGE_NEG_VAL;
-    }
 
     if (FusedWidth > BusWidth) return CompGraphWeights::HUGE_NEG_VAL;
 
