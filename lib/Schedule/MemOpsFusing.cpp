@@ -427,6 +427,7 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
   bool changed = false;
 
   for(;;) {
+    MemOps.recomputeCompatibility();
     MemOps.updateEdgeWeight(UseClosure);
 
     // 1. Pick a node with smallest degree and call it P.

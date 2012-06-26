@@ -53,6 +53,12 @@ class CompGraphNode {
 public:
   explicit CompGraphNode(T Node = T()) : N(Node) {}
 
+  void dropAllEdges() {
+    Preds.clear();
+    Succs.clear();
+    SuccWeights.clear();
+  }
+
   const T &get() const { return N; }
   const T &operator->() const { return N; }
   T &get() { return N; }
@@ -335,6 +341,32 @@ public:
     }
 
     return FinalPathWeight;
+  }
+
+  void recomputeCompatibility() {
+    Entry.dropAllEdges();
+    Exit.dropAllEdges();
+
+    typedef typename NodeMapTy::iterator node_iterator;
+    for (node_iterator I = Nodes.begin(), E = Nodes.end(); I != E; ++I)
+      I->second->dropAllEdges();
+
+    for (node_iterator I = Nodes.begin(), E = Nodes.end(); I != E; ++I) {
+      NodeTy *Node = I->second;
+
+      // And insert the node into the graph.
+      for (iterator I = begin(), E = end(); I != E; ++I) {
+        NodeTy *Other = *I;
+
+        // Make edge between compatible nodes.
+        if (Traits::compatible(Node->get(), Other->get()))
+          NodeTy::MakeEdge(Node, Other);
+      }
+
+      // There will always edge from entry to a node and from node to exit.
+      NodeTy::MakeEdge(&Entry, Node);
+      NodeTy::MakeEdge(Node, &Exit);
+    }
   }
 
   template<class CompEdgeWeight>
