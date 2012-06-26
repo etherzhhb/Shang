@@ -738,11 +738,12 @@ bool HyperBlockFormation::optimizeRetBB(MachineBasicBlock &RetBB) {
       RetValDef = MRI->getVRegDef(RetValMO.getReg());
       assert(RetValDef && "Not in SSA Form!");
       // Cannot move to predecessor block.
-      if (RetValDef->getParent() != &RetBB || !RetValDef->isPHI())
+      if (RetValDef->getParent() == &RetBB && !RetValDef->isPHI())
         return false;
 
       // The register has more than one use, it is not benefit to eliminate.
-      if (!MRI->hasOneUse(RetValMO.getReg())) return false;
+      if (RetValDef->isPHI() && !MRI->hasOneUse(RetValMO.getReg()))
+        return false;
     }
 
     RetVal->eraseFromParent();
