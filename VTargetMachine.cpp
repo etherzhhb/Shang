@@ -77,33 +77,33 @@ struct VTMPassConfig : public TargetPassConfig {
     : TargetPassConfig(TM, PM) {}
 
   virtual bool addPreRegAlloc() {
-    PM.add(createBasicAliasAnalysisPass());
+    PM->add(createBasicAliasAnalysisPass());
     // Run the SCEVAA pass to compute more accurate alias information.
-    PM.add(createScalarEvolutionAliasAnalysisPass());
-    PM.add(createVAliasAnalysisPass());
-    PM.add(createVPreRegAllocSchedPass());
+    PM->add(createScalarEvolutionAliasAnalysisPass());
+    PM->add(createVAliasAnalysisPass());
+    PM->add(createVPreRegAllocSchedPass());
     return true;
   }
 
   virtual bool addInstSelector() {
-    PM.add(createVISelDag(getTM<VTargetMachine>()));
+    PM->add(createVISelDag(getTM<VTargetMachine>()));
     return false;
   }
 
   virtual bool addFinalizeRegAlloc() {
-    PM.add(createRTLCodegenPreparePass());
+    PM->add(createRTLCodegenPreparePass());
     // Generate the code.
-    PM.add(createVerilogASTBuilderPass());
+    PM->add(createVerilogASTBuilderPass());
 
     // Analyse the dependency between registers.
-    PM.add(createRtlSSAAnalysisPass());
+    PM->add(createRtlSSAAnalysisPass());
 
     return true;
   }
 
   virtual void addMachineSSAOptimization() {
     // Annotate the bit level information.
-    PM.add(createBitLevelInfoPass());
+    PM->add(createBitLevelInfoPass());
 
     // Pre-ra tail duplication.
     if (addPass(EarlyTailDuplicateID) != &NoPassID)
@@ -133,27 +133,27 @@ struct VTMPassConfig : public TargetPassConfig {
     printAndVerify("After codegen peephole optimization pass");
 
     // Fix the machine code to avoid unnecessary mux.
-    PM.add(createFixMachineCodePass(true));
-    if (EnablePreSchedRTLOpt) PM.add(createPreSchedRTLOptPass());
+    PM->add(createFixMachineCodePass(true));
+    if (EnablePreSchedRTLOpt) PM->add(createPreSchedRTLOptPass());
 
-    //PM.add(createPrebindMuxBasePass());
+    //PM->add(createPrebindMuxBasePass());
 
     // Optimize the CFG.
-    PM.add(createHyperBlockFormationPass());
+    PM->add(createHyperBlockFormationPass());
     printAndVerify("After merge fall through pass.");
 
     // Fuse the memory access together to mak full use of memory bandwidth.
-    PM.add(createMemOpsFusingPass());
+    PM->add(createMemOpsFusingPass());
     // Construct multiplexer tree for prebound function units.
-    PM.add(createPrebindUnbalanceMuxPass());
+    PM->add(createPrebindUnbalanceMuxPass());
 
     // Make sure we have a branch instruction for every success block.
 
     // Fix the machine code for schedule and function unit allocation.
-    PM.add(createFixMachineCodePass(false));
+    PM->add(createFixMachineCodePass(false));
 
     // Perform logic synthesis.
-    PM.add(createLogicSynthesisPass());
+    PM->add(createLogicSynthesisPass());
     printAndVerify("After logic synthesis.");
 
     // Clean up the MachineFunction.
@@ -163,6 +163,7 @@ struct VTMPassConfig : public TargetPassConfig {
   }
 
   virtual void addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
+    addPass(ProcessImplicitDefsID);
     // LiveVariables currently requires pure SSA form.
     //
     // FIXME: Once TwoAddressInstruction pass no longer uses kill flags,
@@ -181,19 +182,13 @@ struct VTMPassConfig : public TargetPassConfig {
     // }
     // addPass(TwoAddressInstructionPassID);
 
-    // FIXME: Either remove this pass completely, or fix it so that it works on
-    // SSA form. We could modify LiveIntervals to be independent of this pass, But
-    // it would be even better to simply eliminate *all* IMPLICIT_DEFs before
-    // leaving SSA.
-    addPass(ProcessImplicitDefsID);
-
     //if (EnableStrongPHIElim)
     //  addPass(StrongPHIEliminationID);
 
     addPass(RegisterCoalescerID);
 
     // Add the selected register allocation pass.
-    PM.add(RegAllocPass);
+    PM->add(RegAllocPass);
     printAndVerify("After Register Allocation");
 
     // FinalizeRegAlloc is convenient until MachineInstrBundles is more mature,
@@ -253,18 +248,18 @@ struct VTMPassConfig : public TargetPassConfig {
     // before standard target orient IR passes which create ugly instructions
     // and these intructions are not able to be handle by the BlockRAMFormation
     // pass.
-    PM.add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
+    PM->add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
     // add the pass which will convert the AllocaInst to GlobalVariable.
-    //PM.add(createGVNPass(false));
+    //PM->add(createGVNPass(false));
     // The construct block ram for local memory access.
-    // PM.add(createContoBromPass(*getIntrinsicInfo()));
+    // PM->add(createContoBromPass(*getIntrinsicInfo()));
     TargetPassConfig::addIRPasses();
 
     // Turn exception handling constructs into something the code generators can
     // handle.
-    PM.add(createLowerInvokePass(getTargetLowering()));
+    PM->add(createLowerInvokePass(getTargetLowering()));
 
-    PM.add(createCFGSimplificationPass());
+    PM->add(createCFGSimplificationPass());
   }
 };
 } // namespace

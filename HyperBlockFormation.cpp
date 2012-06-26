@@ -42,7 +42,6 @@
 using namespace llvm;
 
 STATISTIC(BBsMerged, "Number of blocks are merged into hyperblock");
-STATISTIC(TrivialBBsMerged, "Number of trivial blocks are merged into hyperblock");
 
 namespace {
 struct HyperBlockFormation : public MachineFunctionPass {

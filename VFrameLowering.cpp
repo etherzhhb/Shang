@@ -229,7 +229,7 @@ void BlockRAMFormation::allocateGlobalAlias(AllocaInst *AI, Module &M,
     new GlobalVariable(M, AllocatedType, false, GlobalValue::InternalLinkage,
                        Constant::getNullValue(AllocatedType),
                        AI->getName() + utostr_32(AllocaAliasCnt) + "_g_alias",
-                       0, false, AddressSpace);
+                       0, GlobalVariable::NotThreadLocal, AddressSpace);
   GV->setAlignment(AI->getAlignment());
 
   BasicBlock::iterator IP = AI->getParent()->getTerminator();

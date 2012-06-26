@@ -1169,7 +1169,7 @@ void VPreRegAllocSched::buildDataPathGraph(VSchedGraph &State) {
 void VPreRegAllocSched::cleanUpSchedule() {
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
      unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
-    cleanUpRegisterClass(RegNum, VTM::DRRegisterClass);
+    cleanUpRegisterClass(RegNum, &VTM::DRRegClass);
   }
 }
 
@@ -1197,7 +1197,7 @@ bool VPreRegAllocSched::cleanUpRegisterClass(unsigned RegNum,
   // Preserve the read fu information, and keep reading the source fu register
   if (DefMI.getOpcode() == VTM::VOpReadFU ||
       DefMI.getOpcode() == VTM::VOpPipelineStage)    
-    DI.getOperand().ChangeToRegister(0, false);
+    DI.getOperand().ChangeToRegister(0, true);
   else {
     // FIXME: Remove the PHI, and incoming copies (Bug 14).
     if (DefMI.getOpcode() == VTM::VOpDefPhi) return false;

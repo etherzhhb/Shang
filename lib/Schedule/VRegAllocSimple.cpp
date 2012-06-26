@@ -94,7 +94,7 @@ struct VRASimple : public MachineFunctionPass {
 
     LiveInterval &LI = LIS->getInterval(RegNum);
     if (LI.empty()) {
-      LIS->removeInterval(RegNum);
+      //LIS->removeInterval(RegNum);
       return 0;
     }
 
@@ -159,6 +159,8 @@ struct VRASimple : public MachineFunctionPass {
   void bindICmps(LICGraph &G);
 
   bool runOnMachineFunction(MachineFunction &F);
+
+  void rewrite();
   void addMBBLiveIns(MachineFunction *MF);
 
   const char *getPassName() const {
@@ -640,10 +642,6 @@ VRASimple::VRASimple() : MachineFunctionPass(ID) {
   initializeAdjustLIForBundlesPass(*PassRegistry::getPassRegistry());
   initializeLiveIntervalsPass(*PassRegistry::getPassRegistry());
   initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
-  initializeCalculateSpillWeightsPass(*PassRegistry::getPassRegistry());
-  initializeLiveStacksPass(*PassRegistry::getPassRegistry());
-  initializeMachineDominatorTreePass(*PassRegistry::getPassRegistry());
-  initializeMachineLoopInfoPass(*PassRegistry::getPassRegistry());
   initializeVirtRegMapPass(*PassRegistry::getPassRegistry());
   initializeBitLevelInfoPass(*PassRegistry::getPassRegistry());
 }
@@ -656,13 +654,6 @@ void VRASimple::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequiredID(AdjustLIForBundlesID);
   AU.addPreservedID(AdjustLIForBundlesID);
   AU.addPreserved<SlotIndexes>();
-  AU.addRequired<CalculateSpillWeights>();
-  AU.addRequired<LiveStacks>();
-  AU.addPreserved<LiveStacks>();
-  AU.addRequiredID(MachineDominatorsID);
-  AU.addPreservedID(MachineDominatorsID);
-  AU.addRequired<MachineLoopInfo>();
-  AU.addPreserved<MachineLoopInfo>();
   AU.addRequired<VirtRegMap>();
   AU.addPreserved<VirtRegMap>();
   MachineFunctionPass::getAnalysisUsage(AU);
@@ -753,32 +744,11 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   bindCompGraph(LsrCG);
   bindCompGraph(ShlCG);
 
-  addMBBLiveIns(MF);
-  LIS->addKillFlags();
-
-  // FIXME: Verification currently must run before VirtRegRewriter. We should
-  // make the rewriter a separate pass and override verifyAnalysis instead. When
-  // that happens, verification naturally falls under VerifyMachineCode.
-#ifndef NDEBUG
-  //if (VerifyEnabled) {
-  //  // Verify accuracy of LiveIntervals. The standard machine code verifier
-  //  // ensures that each LiveIntervals covers all uses of the virtual reg.
-
-  //  // FIXME: MachineVerifier is badly broken when using the standard
-  //  // spiller. Always use -spiller=inline with -verify-regalloc. Even with the
-  //  // inline spiller, some tests fail to verify because the coalescer does not
-  //  // always generate verifiable code.
-  //  MF->verify(this, "In RABasic::verify");
-
-  //  // Verify that LiveIntervals are partitioned into unions and disjoint within
-  //  // the unions.
-  //  verify();
-  //}
-#endif // !NDEBUG
-
   // Run rewriter
-  VRM->rewrite(LIS->getSlotIndexes());
-
+  LIS->addKillFlags();
+  addMBBLiveIns(MF);
+  rewrite();
+  VRM->clearAllVirt();
   releaseMemory();
 
   DEBUG(dbgs() << "After simple register allocation:\n";
@@ -787,6 +757,52 @@ bool VRASimple::runOnMachineFunction(MachineFunction &F) {
   MRI->leaveSSA();
   MRI->invalidateLiveness();
   return true;
+}
+
+void VRASimple::rewrite() {
+
+  for (MachineFunction::iterator MBBI = MF->begin(), MBBE = MF->end();
+       MBBI != MBBE; ++MBBI) {
+    DEBUG(MBBI->print(dbgs(), LIS->getSlotIndexes()));
+    for (MachineBasicBlock::instr_iterator
+           MII = MBBI->instr_begin(), MIE = MBBI->instr_end(); MII != MIE;) {
+      MachineInstr *MI = MII;
+      ++MII;
+
+      for (MachineInstr::mop_iterator MOI = MI->operands_begin(),
+           MOE = MI->operands_end(); MOI != MOE; ++MOI) {
+        MachineOperand &MO = *MOI;
+
+        // Make sure MRI knows about registers clobbered by regmasks.
+        if (MO.isRegMask())
+          MRI->addPhysRegsUsedFromRegMask(MO.getRegMask());
+
+        if (!MO.isReg() || !TargetRegisterInfo::isVirtualRegister(MO.getReg()))
+          continue;
+        unsigned VirtReg = MO.getReg();
+        unsigned PhysReg = VRM->getPhys(VirtReg);
+        // assert(PhysReg != VirtRegMap::NO_PHYS_REG &&
+        //        "Instruction uses unmapped VirtReg");
+        if (PhysReg == VirtRegMap::NO_PHYS_REG) continue;
+        //assert(!Reserved.test(PhysReg) && "Reserved register assignment");
+
+        // Preserve semantics of sub-register operands.
+        assert(!MO.getSubReg() && "Unexpected sub-regster!");
+        // Rewrite. Note we could have used MachineOperand::substPhysReg(), but
+        // we need the inlining here.
+        MO.setReg(PhysReg);
+      }
+
+      DEBUG(dbgs() << "> " << *MI);
+
+      // TODO: remove any identity copies.
+    }
+  }
+
+  // Tell MRI about physical registers in use.
+  for (unsigned Reg = 1, RegE = TRI->getNumRegs(); Reg != RegE; ++Reg)
+    if (!MRI->reg_nodbg_empty(Reg))
+      MRI->setPhysRegUsed(Reg);
 }
 
 void VRASimple::addMBBLiveIns(MachineFunction *MF) {
@@ -888,7 +904,7 @@ void VRASimple::bindMemoryBus() {
 
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
     unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
-    if (MRI->getRegClass(RegNum) != VTM::RINFRegisterClass)
+    if (MRI->getRegClass(RegNum) != &VTM::RINFRegClass)
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
@@ -909,7 +925,7 @@ void VRASimple::bindDstMux() {
 
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
     unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
-    if (MRI->getRegClass(RegNum) != VTM::RMUXRegisterClass)
+    if (MRI->getRegClass(RegNum) != &VTM::RMUXRegClass)
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
@@ -944,7 +960,7 @@ void VRASimple::bindBlockRam() {
 
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
     unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
-    if (MRI->getRegClass(RegNum) != VTM::RBRMRegisterClass)
+    if (MRI->getRegClass(RegNum) != &VTM::RBRMRegClass)
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {
@@ -996,7 +1012,7 @@ void VRASimple::bindCalleeFN() {
 
   for (unsigned i = 0, e = MRI->getNumVirtRegs(); i != e; ++i) {
     unsigned RegNum = TargetRegisterInfo::index2VirtReg(i);
-    if (MRI->getRegClass(RegNum) != VTM::RCFNRegisterClass)
+    if (MRI->getRegClass(RegNum) != &VTM::RCFNRegClass)
       continue;
 
     if (LiveInterval *LI = getInterval(RegNum)) {

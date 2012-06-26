@@ -227,7 +227,7 @@ struct LogicNetwork {
 
     // Allocate the register.
     if (MO.isReg() && MO.getReg() == 0)
-      MO.ChangeToRegister(MRI.createVirtualRegister(VTM::DRRegisterClass),
+      MO.ChangeToRegister(MRI.createVirtualRegister(&VTM::DRRegClass),
                           false);
 
     assert(VInstrInfo::getBitWidthOrZero(MO)

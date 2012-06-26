@@ -34,6 +34,10 @@
 namespace llvm {
   extern const MCRegisterDesc VTMRegDesc[];
   extern const uint16_t VTMRegLists[];
+  extern const uint16_t VTMRegDiffLists[];
+  extern const char VTMRegStrings[];
+  extern const uint16_t VTMRegUnitRoots[][2];
+  extern const uint16_t VTMRegEncodingTable[];
 }
 
 using namespace llvm;
@@ -42,9 +46,16 @@ VRegisterInfo::VRegisterInfo() : VTMGenRegisterInfo(0) {
   // Dirty hack: Allocate enough physical register for the backend.
   InitMCRegisterInfo(VTMRegDesc, MaxPhyRegs, 0,
                      VTMMCRegisterClasses, 14,
-                     VTMRegLists,
-                     NULL, 0);
+                     VTMRegUnitRoots, 14,
+                     VTMRegLists, VTMRegDiffLists, VTMRegStrings, NULL, 0,
+                     VTMRegEncodingTable);
 }
+
+const TargetRegisterClass *
+VRegisterInfo::getPointerRegClass(const MachineFunction &, unsigned) const {
+  return &VTM::DRRegClass;
+}
+
 
 const uint16_t*
 VRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -104,7 +115,7 @@ bool VRegisterInfo::needsStackRealignment(const MachineFunction &) const {
 
 const TargetRegisterClass *
 VRegisterInfo::getPointerRegClass(unsigned Kind) const {
-  return VTM::DRRegisterClass;
+  return &VTM::DRRegClass;
 }
 
 bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {
@@ -112,7 +123,7 @@ bool VRegisterInfo::IsWire(unsigned RegNo, const MachineRegisterInfo *MRI) {
     return false;
 
   const TargetRegisterClass *RC = MRI->getRegClass(RegNo);
-  return RC != VTM::DRRegisterClass;
+  return RC != &VTM::DRRegClass;
 }
 
 unsigned VRegisterInfo::allocatePhyReg(unsigned RegClassID, unsigned Width) {
@@ -155,19 +166,19 @@ unsigned VRegisterInfo::getSubReg(unsigned RegNo, unsigned Index) const {
 
 const TargetRegisterClass *VRegisterInfo::getRepRegisterClass(unsigned OpCode){
   switch (OpCode) {
-  default:                  return VTM::WireRegisterClass;
-  case VTM::VOpAdd:         return VTM::RADDRegisterClass;
-  case VTM::VOpSRA:         return VTM::RASRRegisterClass;
-  case VTM::VOpSRL:         return VTM::RLSRRegisterClass;
-  case VTM::VOpSHL:         return VTM::RSHLRegisterClass;
-  case VTM::VOpMult:        return VTM::RMULRegisterClass;
-  case VTM::VOpMultLoHi:    return VTM::RMULLHRegisterClass;
-  case VTM::VOpMemTrans:    return VTM::RINFRegisterClass;
-  case VTM::VOpInternalCall:return VTM::RCFNRegisterClass;
-  case VTM::VOpBRAMTrans:   return VTM::RBRMRegisterClass;
+  default:                  return &VTM::WireRegClass;
+  case VTM::VOpAdd:         return &VTM::RADDRegClass;
+  case VTM::VOpSRA:         return &VTM::RASRRegClass;
+  case VTM::VOpSRL:         return &VTM::RLSRRegClass;
+  case VTM::VOpSHL:         return &VTM::RSHLRegClass;
+  case VTM::VOpMult:        return &VTM::RMULRegClass;
+  case VTM::VOpMultLoHi:    return &VTM::RMULLHRegClass;
+  case VTM::VOpMemTrans:    return &VTM::RINFRegClass;
+  case VTM::VOpInternalCall:return &VTM::RCFNRegClass;
+  case VTM::VOpBRAMTrans:   return &VTM::RBRMRegClass;
     // allocate unsigned comparison fu by default.
-  case VTM::VOpICmp:        return VTM::RUCMPRegisterClass;
-  case VTM::VOpDstMux:      return VTM::RMUXRegisterClass;
+  case VTM::VOpICmp:        return &VTM::RUCMPRegClass;
+  case VTM::VOpDstMux:      return &VTM::RMUXRegClass;
   }
 
   return 0;

@@ -320,7 +320,7 @@ void VSchedGraph::fixChainedDatapathRC(VSUnit *U) {
            && "Expect datapath operation have only 1 define!");
 
     unsigned Reg = MI->getOperand(0).getReg();
-    DLInfo.MRI.setRegClass(Reg, VTM::WireRegisterClass);
+    DLInfo.MRI.setRegClass(Reg, &VTM::WireRegClass);
   }
 }
 

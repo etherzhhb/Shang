@@ -75,20 +75,11 @@ VTargetLowering::VTargetLowering(TargetMachine &TM)
   setSchedulingPreference(Sched::ILP);
 
   // Set up the legal register classes.
-  addRegisterClass(MVT::i1,   VTM::DRRegisterClass);
-  addRegisterClass(MVT::i8,   VTM::DRRegisterClass);
-  addRegisterClass(MVT::i16,  VTM::DRRegisterClass);
-  addRegisterClass(MVT::i32,  VTM::DRRegisterClass);
-  addRegisterClass(MVT::i64,  VTM::DRRegisterClass);
-
-  //addRegisterClass(MVT::v2i8,  VTM::DRRegisterClass);
-  //addRegisterClass(MVT::v2i16,  VTM::DRRegisterClass);
-  //addRegisterClass(MVT::v2i32,  VTM::DRRegisterClass);
-
-  //addRegisterClass(MVT::v4i8,  VTM::DRRegisterClass);
-  //addRegisterClass(MVT::v4i16,  VTM::DRRegisterClass);
-
-  //addRegisterClass(MVT::v8i8,  VTM::DRRegisterClass);
+  addRegisterClass(MVT::i1,   &VTM::DRRegClass);
+  addRegisterClass(MVT::i8,   &VTM::DRRegClass);
+  addRegisterClass(MVT::i16,  &VTM::DRRegClass);
+  addRegisterClass(MVT::i32,  &VTM::DRRegClass);
+  addRegisterClass(MVT::i64,  &VTM::DRRegClass);
 
   computeRegisterProperties();
 
@@ -216,7 +207,7 @@ EVT VTargetLowering::getSetCCResultType(EVT VT) const {
 }
 
 const TargetRegisterClass *VTargetLowering::getRepRegClassFor(EVT VT) const {
-  return VTM::DRRegisterClass;
+  return &VTM::DRRegClass;
 }
 
 uint8_t VTargetLowering::getRepRegClassCostFor(EVT VT) const {
@@ -295,16 +286,10 @@ VTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   return DAG.getNode(VTMISD::Ret, dl, MVT::Other, Chain);
 }
 
-SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
-                                   CallingConv::ID CallConv, bool isVarArg,
-                                   bool doesNotRet, bool &isTailCall,
-                                   const SmallVectorImpl<ISD::OutputArg> &Outs,
-                                   const SmallVectorImpl<SDValue> &OutVals,
-                                   const SmallVectorImpl<ISD::InputArg> &Ins,
-                                   DebugLoc dl, SelectionDAG &DAG,
+SDValue VTargetLowering::LowerCall(CallLoweringInfo &CLI,
                                    SmallVectorImpl<SDValue> &InVals) const {
   // Do not mess with tail call.
-  isTailCall = false;
+  CLI.IsTailCall = false;
   // assert(!isVarArg && "VarArg not support yet!");
 
   // TODO: Handle calling conversions.
@@ -316,46 +301,46 @@ SDValue VTargetLowering::LowerCall(SDValue Chain, SDValue Callee,
 
   SmallVector<SDValue, 8> Ops;
   // Reserve space for the chain and the function name.
-  Ops.push_back(Chain);
+  Ops.push_back(CLI.Chain);
 
-  VFInfo *VFI = DAG.getMachineFunction().getInfo<VFInfo>();
+  VFInfo *VFI = CLI.DAG.getMachineFunction().getInfo<VFInfo>();
 
   unsigned Id;
-  if (GlobalAddressSDNode *CalleeNode = dyn_cast<GlobalAddressSDNode>(Callee)) {
+  if (GlobalAddressSDNode *CalleeNode = dyn_cast<GlobalAddressSDNode>(CLI.Callee)) {
     const Function *CalleeFN = cast<Function>(CalleeNode->getGlobal());
-    assert((OutVals.size() == CalleeFN->arg_size() || isVarArg)
+    assert((CLI.OutVals.size() == CalleeFN->arg_size() || CLI.IsVarArg)
            && "Argument size do not match!");
     // Get the Id for the internal module.
     Id = VFI->getOrCreateCalleeFN(CalleeFN->getName());
     SDValue CalleeFNName
-      = DAG.getTargetExternalSymbol(CalleeFN->getValueName()->getKeyData(),
-                                    MVT::i64, Id);
+      = CLI.DAG.getTargetExternalSymbol(CalleeFN->getValueName()->getKeyData(),
+                                        MVT::i64, Id);
     Ops.push_back(CalleeFNName);
   } else {
-    ExternalSymbolSDNode *CalleeName = cast<ExternalSymbolSDNode>(Callee);
+    ExternalSymbolSDNode *CalleeName = cast<ExternalSymbolSDNode>(CLI.Callee);
     Id = VFI->getOrCreateCalleeFN(CalleeName->getSymbol());
-    Ops.push_back(DAG.getTargetExternalSymbol(CalleeName->getSymbol(),
-                                              MVT::i64, Id));
+    Ops.push_back(CLI.DAG.getTargetExternalSymbol(CalleeName->getSymbol(),
+                                                  MVT::i64, Id));
   }
 
   // Push others arguments.
-  for (unsigned I = 0, E = OutVals.size(); I != E; ++I)
-    Ops.push_back(OutVals[I]);
+  for (unsigned I = 0, E = CLI.OutVals.size(); I != E; ++I)
+    Ops.push_back(CLI.OutVals[I]);
 
   // The call node return a i1 value as token to keep the dependence between
   // the call and the follow up extract value.
-  SDValue CallNode = DAG.getNode(VTMISD::InternalCall, dl,
-                                 DAG.getVTList(MVT::i1, MVT::Other),
-                                 Ops.data(), Ops.size());
+  SDValue CallNode = CLI.DAG.getNode(VTMISD::InternalCall, CLI.DL,
+                                     CLI.DAG.getVTList(MVT::i1, MVT::Other),
+                                     Ops.data(), Ops.size());
 
   // Read the return value from return port.
-  if (!Ins.empty()) {
-    assert(Ins.size() == 1 && "Can only handle 1 return value at the moment!");
-    EVT RetVT = Ins[0].VT;
+  if (!CLI.Ins.empty()) {
+    assert(CLI.Ins.size() == 1 && "Can only handle 1 return value at the moment!");
+    EVT RetVT = CLI.Ins[0].VT;
     // The FU port index is start from 1.
-    SDValue RetPortIdx = DAG.getTargetConstant(0 + VFUs::RetPortOffset, RetVT);
-    SDValue RetValue = DAG.getNode(VTMISD::ReadReturn, dl, RetVT, CallNode,
-                                   RetPortIdx);
+    SDValue RetPortIdx = CLI.DAG.getTargetConstant(0 + VFUs::RetPortOffset, RetVT);
+    SDValue RetValue = CLI.DAG.getNode(VTMISD::ReadReturn, CLI.DL, RetVT,
+                                       CallNode, RetPortIdx);
     InVals.push_back(RetValue);
   }
 

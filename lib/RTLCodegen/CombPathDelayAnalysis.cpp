@@ -54,10 +54,7 @@ STATISTIC(NumMaskedMultiCyclesTimingPath,
           "(From->To pair)");
 STATISTIC(NumFalseTimingPath,
           "Number of false timing paths detected (From->To pair)");
-STATISTIC(NumNegSlackTimingPath, "Number of timing paths with negative slack");
-STATISTIC(NumConstraintsWritten,
-          "Number of false timing constrainted are written "
-          "(From->Through->To pair)");
+
 namespace{
 struct CombPathDelayAnalysis;
 

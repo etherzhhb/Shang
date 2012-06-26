@@ -717,14 +717,16 @@ template<>
 struct FoldingSetTrait<VASTExpr> : DefaultFoldingSetTrait<VASTExpr> {
     static void Profile(const VASTExpr &X, FoldingSetNodeID& ID) {
         ID = X.FastID;
-      }
+    }
+
     static bool Equals(const VASTExpr &X, const FoldingSetNodeID &ID,
-        FoldingSetNodeID &TempID) {
-            return ID == X.FastID;
-        }
+                       unsigned IDHash, FoldingSetNodeID &TempID) {
+      return ID == X.FastID;
+    }
+
     static unsigned ComputeHash(const VASTExpr &X, FoldingSetNodeID &TempID) {
-        return X.FastID.ComputeHash();
-      }
+      return X.FastID.ComputeHash();
+    }
   };
 
 class VASTWire :public VASTSignal {

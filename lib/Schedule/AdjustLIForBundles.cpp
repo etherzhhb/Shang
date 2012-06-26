@@ -24,6 +24,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #define DEBUG_TYPE "vtm-adjust-li"
 #include "llvm/Support/Debug.h"
 
@@ -165,13 +166,19 @@ namespace {
         }
 
         if (I->isCopy()) {
-          MachineInstr *MI = I;
-          ++I;
+          MachineInstr *MI = I++;
           SlotIndex LastBundleSlot = LIS->getInstructionIndex(LastCtrlStart);
           LastBundleSlot = LastBundleSlot.getRegSlot();
           moveDefUseIntoBundle(MI, LastBundleSlot, false);
           // Swap the extending the LI of Destinated register of the copy.
           coalesceAndEliminateCopy(MI, LastBundleSlot, true);
+          continue;
+        } else if (I->isImplicitDef()) {
+          MachineInstr *MI = I++;
+          SlotIndex LastBundleSlot = LIS->getInstructionIndex(LastCtrlStart);
+          LastBundleSlot = LastBundleSlot.getRegSlot();
+          moveDefUseIntoBundle(MI, LastBundleSlot, false);
+          MI->eraseFromParent();
           continue;
         }
 
@@ -190,8 +197,10 @@ namespace {
       LIS = &getAnalysis<LiveIntervals>();
       MRI = &MF.getRegInfo();
 
-      for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I)
-        buildBundleAndAdjustLIs(*I);
+      ReversePostOrderTraversal<MachineBasicBlock*> RPOT(MF.begin());
+      typedef ReversePostOrderTraversal<MachineBasicBlock*>::rpo_iterator rpo_it;
+      for (rpo_it I = RPOT.begin(), E = RPOT.end(); I != E; ++I)
+        buildBundleAndAdjustLIs(**I);
 
       extendAllWireUserLITransitively(MF);
       DEBUG(LIS->dump());
@@ -280,7 +289,7 @@ AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
       assert(DefRegNo && UsedByWire && "Datapath dose not defines wire?");
       unsigned UseRegNo = RegNo;
       // Make sure we had visit and extend the wire dependences.
-      if (MRI->getRegClass(UseRegNo) == VTM::WireRegisterClass) {
+      if (MRI->getRegClass(UseRegNo) == &VTM::WireRegClass) {
 
         WireMapIt src = WireDeps.find(UseRegNo);
         RegSet *UsedByWireDep = 0;
@@ -299,7 +308,7 @@ AdjustLIForBundles::extendWireUserLITransitively(MachineInstr *Inst,
         for (reg_it RI = UsedByWireDep->begin(), RE = UsedByWireDep->end();
              RI != RE; ++RI) {
           unsigned TransitiveUsedReg = *RI;
-          assert(MRI->getRegClass(TransitiveUsedReg) != VTM::WireRegisterClass
+          assert(MRI->getRegClass(TransitiveUsedReg) != &VTM::WireRegClass
                  && "Unexpected wire!");
           extendLI(DefRegNo, TransitiveUsedReg, DefSlot);
           UsedByWire->insert(TransitiveUsedReg);

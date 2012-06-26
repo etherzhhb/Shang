@@ -203,7 +203,7 @@ struct PreSchedRTLOpt : public MachineFunctionPass,
     assert((!RegNum || !MRI->getVRegDef(RegNum))
            && "Reg already allocated for expression!");
     if (RegNum == 0) {
-      RegNum = MRI->createVirtualRegister(VTM::DRRegisterClass);
+      RegNum = MRI->createVirtualRegister(&VTM::DRRegClass);
       // Index the expression by the the newly created register number.
       if (V) Builder->indexVASTExpr(RegNum, V);
     }

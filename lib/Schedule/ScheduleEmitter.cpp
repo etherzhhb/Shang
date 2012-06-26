@@ -374,7 +374,7 @@ struct MicroStateBuilder {
       MachineOperand &SrcMO = PN->getOperand(i);
 
       OpSlot CopySlot(Slot, true);
-      unsigned DstReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
+      unsigned DstReg = MRI.createVirtualRegister(&VTM::DRRegClass);
 
       BuildMI(MBB, getStateCtrlAt(CopySlot), DebugLoc(), TII.get(VTM::VOpMove))
         .addOperand(VInstrInfo::CreateReg(DstReg, VInstrInfo::getBitWidth(SrcMO),
@@ -393,9 +393,9 @@ struct MicroStateBuilder {
     unsigned InsertSlot = /*Slot ? Slot :*/ State.getStartSlot();
     MachineOperand &MO = PN->getOperand(0);
     unsigned PHIReg = MO.getReg();
-    assert(MRI.getRegClass(PHIReg) == VTM::DRRegisterClass
+    assert(MRI.getRegClass(PHIReg) == &VTM::DRRegClass
            && "Bad register class for PHI!");
-    unsigned NewReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
+    unsigned NewReg = MRI.createVirtualRegister(&VTM::DRRegClass);
 
     BuildMI(MBB, getStateCtrlAt(OpSlot(InsertSlot, true)), DebugLoc(),
             TII.get(VTM::VOpDefPhi))
@@ -427,7 +427,7 @@ struct MicroStateBuilder {
       if (PredBB == &MBB) continue;
 
       // The register to hold initialize value.
-      unsigned InitReg = MRI.createVirtualRegister(VTM::DRRegisterClass);
+      unsigned InitReg = MRI.createVirtualRegister(&VTM::DRRegClass);
       MachineOperand InitOp = MachineOperand::CreateReg(InitReg, true);
       VInstrInfo::setBitWidth(InitOp, SizeInBits);
 
@@ -458,7 +458,7 @@ struct MicroStateBuilder {
 
       if (!WrapOnly) {
         // If the PHI need copy, set the its register class to DR.
-        MRI.setRegClass(Op.getReg(), VTM::DRRegisterClass);
+        MRI.setRegClass(Op.getReg(), &VTM::DRRegClass);
         // Emit instructions to preserve the dependence about PHINodes.
         emitPHIDef(PN);
         emitPHICopy(PN, WriteSlot);

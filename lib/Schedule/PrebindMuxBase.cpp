@@ -185,7 +185,7 @@ void PrebindMuxBase::insertDistrubedMuxOp(MachineFunction &MF) {
         unsigned MuxSize = MuxSizeInfo.lookup(MuxNum);
         assert(BitWidth && MuxSize && "Bad FU Port bitwidth or Mux size!");
 
-        unsigned NewRegNum = MRI.createVirtualRegister(VTM::RMUXRegisterClass);
+        unsigned NewRegNum = MRI.createVirtualRegister(&VTM::RMUXRegClass);
         // Remember the register and do not build multiplexer for it again.
         MuxRegs.insert(NewRegNum);
         DEBUG(dbgs() << "Allocated mux register: "

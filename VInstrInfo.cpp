@@ -408,7 +408,7 @@ bool VInstrInfo::DefinesPredicate(MachineInstr *MI,
   //  MachineOperand &MO =MI->getOperand(i);
   //  if (!MO.isReg() || !MO.isDef()) continue;
 
-  //  if (MRI.getRegClass(MO.getReg()) == VTM::PredRRegisterClass)
+  //  if (MRI.getRegClass(MO.getReg()) == VTM::PredRRegClass)
   //    Pred.push_back(MO);
   //}
 
@@ -702,7 +702,7 @@ static MachineOperand RemoveInvertFlag(MachineOperand MO, MachineRegisterInfo *M
     // Remove the invert flag.
     VInstrInfo::setBitWidth(Op, 1);
     // Build the not instruction.
-    unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
+    unsigned DstReg = MRI->createVirtualRegister(&VTM::DRRegClass);
     MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
     VInstrInfo::setBitWidth(Dst, 1);
     BuildMI(MBB, IP, DebugLoc(), TII->get(VTM::VOpNot))
@@ -735,7 +735,7 @@ MachineOperand VInstrInfo::MergePred(MachineOperand OldCnd,
   MRI->clearKillFlags(NewCnd.getReg());
   NewCnd = RemoveInvertFlag(NewCnd, MRI, MBB, IP, TII);
 
-  unsigned DstReg = MRI->createVirtualRegister(VTM::DRRegisterClass);
+  unsigned DstReg = MRI->createVirtualRegister(&VTM::DRRegClass);
   MachineOperand Dst = MachineOperand::CreateReg(DstReg, true);
   VInstrInfo::setBitWidth(Dst, 1);
 
