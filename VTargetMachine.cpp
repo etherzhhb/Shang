@@ -143,6 +143,8 @@ struct VTMPassConfig : public TargetPassConfig {
     printAndVerify("After merge fall through pass.");
 
     // Fuse the memory access together to mak full use of memory bandwidth.
+    PM->add(createScalarEvolutionAliasAnalysisPass());
+    PM->add(createVAliasAnalysisPass());
     PM->add(createMemOpsFusingPass());
     // Construct multiplexer tree for prebound function units.
     PM->add(createPrebindUnbalanceMuxPass());
