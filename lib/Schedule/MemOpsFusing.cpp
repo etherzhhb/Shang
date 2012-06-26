@@ -320,7 +320,7 @@ struct UseTransClosure : public InstGraphBase {
     if (FusedWidth > LHS.getAlignment())
       return CompGraphWeights::HUGE_NEG_VAL;
     
-    int64_t BusWidth = getFUDesc<VFUMemBus>()->getDataWidth() / 8; 
+    uint64_t BusWidth = getFUDesc<VFUMemBus>()->getDataWidth() / 8;
 
     // LHS and RHS have the same address.
     if (FusedWidth == LHS.getSize()) {
