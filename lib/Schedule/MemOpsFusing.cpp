@@ -598,9 +598,8 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
                  *ToPred = VInstrInfo::getPredOperand(To);
 
   // Build the new data to store by concatenating them together.
-  if (LowerData.isReg() && LowerData.getReg()) {
-    unsigned NewReg
-      = MRI->createVirtualRegister(MRI->getRegClass(LowerData.getReg()));
+  if (NewMO[0]->isStore()) {
+    unsigned NewReg = MRI->createVirtualRegister(&VTM::DRRegClass);
     unsigned NewDataSizeInBit = VInstrInfo::getBitWidth(LowerData)
                                 + VInstrInfo::getBitWidth(HigherData);
     BuildMI(*CurMBB, To, DebugLoc(), VInstrInfo::getDesc(VTM::VOpBitCat))
@@ -611,7 +610,7 @@ void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
 
     LowerData = VInstrInfo::CreateReg(NewReg, NewDataSizeInBit);
   }
-  
+
   unsigned NewPred =
     VInstrInfo::MergePred(*FromPred, *ToPred, *To->getParent(),
                           To, MRI, TII, VTM::VOpOr).getReg();
