@@ -292,7 +292,7 @@ void VASTRegister::verifyAssignCnd(vlang_raw_ostream &OS,
 }
 
 bool VASTRegister::printReset(raw_ostream &OS) const {
-  if (num_assigns() == 0 && getRegType() != VASTRegister::OutputPort)
+  if (num_assigns() == 0 && !isPinned())
     return false;
 
   OS << getName()  << " <= "
@@ -697,6 +697,7 @@ void VASTModule::writeProfileCounters(VASTSlot *S, bool isFirstSlot) {
   // Write the counter for the function.
   if (S->SlotNum == 0) {
     addRegister(FunctionCounter, 64)->Pin();
+    addRegister(BBCounter, 64)->Pin();
     CtrlS.if_begin(getPortName(VASTModule::Finish));
     CtrlS << "$display(\"Module: " << getName();
 
