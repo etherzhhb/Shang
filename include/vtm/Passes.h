@@ -37,7 +37,7 @@ Pass *createTrivialLoopUnrollPass();
 Pass *createLoopVectorizerPass();
 //Convert the AllocaInst to GlobalVariable.
 Pass *createBlockRAMFormation(const TargetIntrinsicInfo &IntrInfo);
-Pass *createAllocaAlignerPass();
+Pass *createMemoryAccessAlignerPass();
 
 Pass *createFunctionFilterPass(raw_ostream &O);
 

@@ -35,13 +35,15 @@ STATISTIC(NumLoopUnrollForVecotirze, "Number of loops unrolled for vectrizie");
 
 namespace {
 //
-struct AllocaAligner : public FunctionPass {
+struct MemoryAccessAligner : public FunctionPass {
   static char ID;
 
-  AllocaAligner() : FunctionPass(ID) {}
+  MemoryAccessAligner() : FunctionPass(ID) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.setPreservesCFG();
+    AU.addRequired<ScalarEvolution>();
+    AU.addPreserved<ScalarEvolution>();
   }
 
   bool runOnFunction(Function &F) {
@@ -55,7 +57,25 @@ struct AllocaAligner : public FunctionPass {
       AI->setAlignment(std::max(8u, AI->getAlignment()));
     }
 
+    ScalarEvolution &SE = getAnalysis<ScalarEvolution>();
+    for (Function::iterator I = F.begin(), E = F.end(); I != E; ++I)
+      alignMemoryAccess(I, SE);
+    
     return changed;
+  }
+
+  static void alignMemoryAccess(BasicBlock *BB, ScalarEvolution &SE) {
+    for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
+      if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+        const SCEV *Ptr = SE.getSCEV(LI->getPointerOperand());
+        unsigned Align = (1 << SE.GetMinTrailingZeros(Ptr));
+        if (Align > LI->getAlignment()) LI->setAlignment(Align);
+      } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+        const SCEV *Ptr = SE.getSCEV(SI->getPointerOperand());
+        unsigned Align = (1 << SE.GetMinTrailingZeros(Ptr));
+        if (Align > SI->getAlignment()) SI->setAlignment(Align);
+      }
+    }
   }
 };
 
@@ -92,11 +112,11 @@ struct LoopVectorizer : public LoopPass {
 };
 }
 
-Pass *llvm::createAllocaAlignerPass() {
-  return new AllocaAligner();
+Pass *llvm::createMemoryAccessAlignerPass() {
+  return new MemoryAccessAligner();
 }
 
-char AllocaAligner::ID = 0;
+char MemoryAccessAligner::ID = 0;
 
 Pass *llvm::createLoopVectorizerPass() {
   return new LoopVectorizer();
@@ -239,18 +259,7 @@ bool LoopVectorizer::runOnLoop(Loop *L, LPPassManager &LPM) {
   if (!UnrollLoop(L, UnrollCount, TripCount, false, TripMultiple, LI, &LPM))
     return false;
 
-  for (BasicBlock::iterator I = LatchBlock->begin(), E = LatchBlock->end();
-       I != E; ++I) {
-    if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
-      const SCEV *Ptr = SE->getSCEV(LI->getPointerOperand());
-      unsigned Align = (1 << SE->GetMinTrailingZeros(Ptr));
-      LI->setAlignment(Align);
-    } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
-      const SCEV *Ptr = SE->getSCEV(SI->getPointerOperand());
-      unsigned Align = (1 << SE->GetMinTrailingZeros(Ptr));
-      SI->setAlignment(Align);
-    }
-  }
+  MemoryAccessAligner::alignMemoryAccess(LatchBlock, *SE);
 
   ++NumLoopUnrollForVecotirze;
   return true;
