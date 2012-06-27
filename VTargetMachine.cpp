@@ -243,19 +243,41 @@ struct VTMPassConfig : public TargetPassConfig {
     //else
     //  addFastRegAlloc(createRegAllocPass(false));
   }
+  virtual void addISelPrepare() {
+    // Do not pass the TLI to CodeGenPrepare pass, so it won't sink the address
+    // computation. We can handle sinking by ourself.
+    PM->add(createCodeGenPreparePass(0));
+
+    PM->add(createStackProtectorPass(getTargetLowering()));
+
+    addPreISel();
+
+    // All passes which modify the LLVM IR are now complete; run the verifier
+    // to ensure that the IR is valid.
+    if (!DisableVerify)
+      PM->add(createVerifierPass());
+  }
 
   virtual void addIRPasses() {
+    // Basic AliasAnalysis support.
+    // Add TypeBasedAliasAnalysis before BasicAliasAnalysis so that
+    // BasicAliasAnalysis wins if they disagree. This is intended to help
+    // support "obvious" type-punning idioms.
+    PM->add(createTypeBasedAliasAnalysisPass());
+    PM->add(createBasicAliasAnalysisPass());
+
     // Try to lower memory access to accessing local memory, and annotate the
     // unhandled stack allocation alias with global variable, schedule this pass
     // before standard target orient IR passes which create ugly instructions
     // and these intructions are not able to be handle by the BlockRAMFormation
     // pass.
     PM->add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
-    // add the pass which will convert the AllocaInst to GlobalVariable.
-    //PM->add(createGVNPass(false));
-    // The construct block ram for local memory access.
-    // PM->add(createContoBromPass(*getIntrinsicInfo()));
-    TargetPassConfig::addIRPasses();
+
+    PM->add(createLoopStrengthReducePass(getTargetLowering()));
+    PM->add(createGCLoweringPass());
+
+    // Make sure that no unreachable blocks are instruction selected.
+    PM->add(createUnreachableBlockEliminationPass());
 
     // Turn exception handling constructs into something the code generators can
     // handle.
