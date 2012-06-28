@@ -14,6 +14,11 @@
 // This file implement the MemOpsFusing Pass, which fully utilize the bandwidth
 // of memory bus to boost the speed performance of the design.
 //
+// You can find the original description of the clique partitioning algorithm
+// in paper:
+//   New Efficient Clique Partitioning Algorithms for Register-Transfer Synthesis
+//   of Data Paths
+//   Jong Tae Kim and Dong Ryeol Shin, 2001
 //===----------------------------------------------------------------------===//
 #include "CompGraphTraits.h"
 #include "CompGraph.h"
@@ -430,9 +435,11 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
     MemOps.recomputeCompatibility();
     MemOps.updateEdgeWeight(UseClosure);
 
-    // 1. Pick a node with smallest degree and call it P.
+    // 1. Pick a node with neighbor weight and call it P.
     NodeTy *P = 0;
-    int MaxNeighborWeight = 0;
+    // Initialize MaxNeighborWeight to a nozero value so we can ignore the
+    // trivial nodes.
+    int MaxNeighborWeight = 1;
 
     for (allnodes_it I = MemOps.begin(), E = MemOps.end(); I != E; ++I) {
       MemOpCompGraph::NodeTy *N = *I;
@@ -441,10 +448,16 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
 
       int CurrentNeighborWeight = N->computeNeighborWeight();
 
-      if (CurrentNeighborWeight > MaxNeighborWeight) {
-        P = N;
-        MaxNeighborWeight = CurrentNeighborWeight;
-      }
+      // Do not update P if N has smaller neighbor weight.
+      if (CurrentNeighborWeight < MaxNeighborWeight) continue;
+
+      // If N and P have the same neighbor weight, pick the one with bigger Id.
+      if (P && CurrentNeighborWeight == MaxNeighborWeight
+          && N->get().Id < P->get().Id)
+        continue;
+
+      P = N;
+      MaxNeighborWeight = CurrentNeighborWeight;
     }
 
     if (P == 0) break;
@@ -676,8 +689,7 @@ MemOpsFusing::getNeighborToCombine(MemOpCompGraph::NodeTy *P,
 
   unsigned MaxCommonNeighbors = 0;
   MemOpCompGraph::NodeTy *Q = 0;
-  // 2. Pick a neighbor of p, q, such that the number of common neighbor is
-  //    maximum
+
   for (neighbor_it I = P->pred_begin(), E = P->pred_end(); I != E; ++I) {
     if (MemOpCompGraph::Traits::isTrivial((*I)->get())) continue;
 
@@ -697,15 +709,20 @@ MemOpsFusing::getNeighborToCombine(MemOpCompGraph::NodeTy *P,
 
 void MemOpsFusing::updateQ(MemOpCompGraph::NodeTy *N, MemOpCompGraph::NodeTy *P,
                            MemOpCompGraph::NodeTy *&Q, unsigned &MaxCommon) {
-  if (unsigned NCommonNeighbors = N->computeNeighborWeight(P)) {
-    if (NCommonNeighbors > MaxCommon
-        // Tie-breaking: Select q such that the node degree of q is minimum.
-        || (NCommonNeighbors == MaxCommon
-            && N->degree() < Q->degree())) {
-      MaxCommon = NCommonNeighbors;
-      Q = N;
-    }
-  }
+  unsigned NCommonNeighbors = N->computeNeighborWeight(P);
+  // 2. Pick a neighbor of p, q, such that the number of common neighbor is
+  //    maximum
+  if (NCommonNeighbors == 0 || NCommonNeighbors < MaxCommon) return;
+
+  // Tie-breaking: Select q such that the node degree of q is minimum.
+  if (Q && NCommonNeighbors == MaxCommon && Q->degree() < N->degree())
+    return;
+
+  // If they have the same neighbors weight, pick the node with bigger Id.
+  if (Q && Q->degree() < P->degree() && Q->get().Id > N->get().Id) return;
+
+  MaxCommon = NCommonNeighbors;
+  Q = N;
 }
 
 Pass *llvm::createMemOpsFusingPass() {
