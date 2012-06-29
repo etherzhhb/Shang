@@ -314,7 +314,12 @@ struct UseTransClosure : public InstGraphBase {
 
     assert(LHSAddr->isStore() == RHSAddr->isStore()
            && "Unexpected different access type!");
+    uint64_t FusedWidth = std::max(LHS.getSize(), Delta + RHS.getSize());
+
     if (LHSAddr->isStore()) {
+      // Cannot store with irregular byteenable at the moment.
+      if (!isPowerOf2_64(FusedWidth)) return CompGraphWeights::HUGE_NEG_VAL;
+
       // For the stores, we must make sure the higher address is just next to
       // the lower address.
       if (Delta && uint64_t(Delta) != LHS.getSize())
@@ -329,13 +334,13 @@ struct UseTransClosure : public InstGraphBase {
           return CompGraphWeights::HUGE_NEG_VAL;
     }
 
-    // Don't exceed the width of data port of MemBus.
-    uint64_t FusedWidth = std::max(LHS.getSize(), Delta + RHS.getSize());
+    // Do not generate unaligned memory access.
     if (FusedWidth > LHS.getAlignment())
       return CompGraphWeights::HUGE_NEG_VAL;
     
     uint64_t BusWidth = getFUDesc<VFUMemBus>()->getDataWidth() / 8;
 
+    // Don't exceed the width of data port of MemBus.
     if (FusedWidth > BusWidth) return CompGraphWeights::HUGE_NEG_VAL;
 
     // Ensure LHS is before than RHS in execution order.
