@@ -140,30 +140,18 @@ public:
   }
 };
 
-struct MemDepGraph : public InstGraphBase {
+// Transitive Closure of dependent relation
+struct UseTransClosure : public InstGraphBase {
   ScalarEvolution &SE;
   AliasAnalysis &AA;
+  MachineBasicBlock &MBB;
+  MachineRegisterInfo &MRI;
 
-  MemDepGraph(Pass *P)
-    : SE(P->getAnalysis<ScalarEvolution>()), AA(P->getAnalysis<AliasAnalysis>())
-  {}
+  UseTransClosure(Pass *P, MachineBasicBlock &MBB)
+    : SE(P->getAnalysis<ScalarEvolution>()), AA(P->getAnalysis<AliasAnalysis>()),
+      MBB(MBB), MRI(MBB.getParent()->getRegInfo()) {}
 
-  void addMemInstr(MachineInstr *DstMI) {
-    InstSetTy &DepSet = Graph[DstMI];
-
-    // Already visited.
-    if (!DepSet.empty()) return;
-
-    typedef MachineBasicBlock::instr_iterator it;
-    MachineBasicBlock *MBB = DstMI->getParent();
-    for (it I = MBB->instr_begin(), E = DstMI; I != E; ++I) {
-      MachineInstr *SrcMI = I;
-
-      if (hasDependency(DstMI, SrcMI)) DepSet.insert(SrcMI);
-    }
-  }
-
-  bool hasDependency(MachineInstr *DstMI, MachineInstr *SrcMI) {
+  bool hasMemDependency(MachineInstr *DstMI, MachineInstr *SrcMI) {
     unsigned Opcode = DstMI->getOpcode();
     bool ForceDstDep =  Opcode == VTM::VOpInternalCall;
     bool IsDstMemTrans = Opcode == VTM::VOpMemTrans;
@@ -199,37 +187,6 @@ struct MemDepGraph : public InstGraphBase {
   }
 
 
-  void mergeDepSet(MachineInstr *From, MachineInstr *To) {
-    InstGraphTy::iterator at = Graph.find(From);
-
-    assert(at != Graph.end() && "From not exist!");
-
-    // Merge the set.
-    InstSetTy &ToDepSet = Graph[To];
-    ToDepSet.insert(at->second.begin(), at->second.end());
-    ToDepSet.erase(From);
-
-    Graph.erase(at);
-  }
-};
-
-// Transitive Closure of dependent relation
-struct UseTransClosure : public InstGraphBase {
-  MemDepGraph MDG;
-  MachineBasicBlock &MBB;
-  MachineRegisterInfo &MRI;
-
-  UseTransClosure(Pass *P, MachineBasicBlock &MBB)
-    : MDG(P), MBB(MBB), MRI(MBB.getParent()->getRegInfo()) {}
-
-  void addMemInstr(MachineInstr *Inst) {
-    MDG.addMemInstr(Inst);
-  }
-
-  void mergeMemDepSet(MachineInstr *From, MachineInstr *To) {
-    MDG.mergeDepSet(From, To);
-  }
-
   void clearUseCache() { Graph.clear(); }
 
   bool isIdenticalMemTrans(MachineInstr *LHS, MachineInstr *RHS) {
@@ -251,7 +208,7 @@ struct UseTransClosure : public InstGraphBase {
 
     // Check the memory dependence, note that we can move the identical accesses
     // across each other.
-    if ((MDG.IsConnected(Src, Dst) && !isIdenticalMemTrans(Dst, Src))) {
+    if (hasMemDependency(Dst, Src) && !isIdenticalMemTrans(Dst, Src)) {
       // There is a memory dependency between Src and Dst.
       UseSet.insert(Dst);
       return true;
@@ -260,7 +217,7 @@ struct UseTransClosure : public InstGraphBase {
     typedef InstSetTy::iterator iterator;
     for (iterator I = UseSet.begin(), E = UseSet.end(); I != E; ++I) {
       MachineInstr *SrcUser = *I;
-      if (MDG.IsConnected(SrcUser, Dst)) {
+      if (hasMemDependency(Dst, SrcUser)) {
         // There is a memory dependency between SrcUser and Dst, so we cannot
         // move SrcUser after Dst, and we need to model this as a use
         // relationship.
@@ -300,7 +257,7 @@ struct UseTransClosure : public InstGraphBase {
     MachineMemOperand *LHSAddr = LHS.getAddr(), *RHSAddr = RHS.getAddr();
 
     const SCEVConstant *DeltaSCEV
-      = dyn_cast<SCEVConstant>(getAddressDeltaSCEV(RHSAddr, LHSAddr, &MDG.SE));
+      = dyn_cast<SCEVConstant>(getAddressDeltaSCEV(RHSAddr, LHSAddr, &SE));
 
     // Cannot fuse two memory access with unknown distance.
     if (!DeltaSCEV) return CompGraphWeights::HUGE_NEG_VAL;
@@ -412,8 +369,6 @@ bool MemOpsFusing::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   // 1. Collect the fusing candidates.
   typedef MachineBasicBlock::instr_iterator instr_it;
   for (instr_it I = MBB.instr_begin(), E = MBB.instr_end(); I != E; ++I) {
-    UseClosure.addMemInstr(I);
-
     // Only fuse the accesses via memory bus
     if (I->getOpcode() != VTM::VOpMemTrans)
       continue;
@@ -504,8 +459,7 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
       // Merge LHS into RHS.
       fuseMachineInstr(MergeFrom.Inst, MergeTo.Inst);
 
-      // Update the use closure.
-      UseClosure.mergeMemDepSet(MergeFrom.Inst, MergeTo.Inst);
+      UseClosure.clearUseCache();
 
       // Remove LHS.
       MergeFrom.Inst->eraseFromParent();
