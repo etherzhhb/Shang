@@ -138,19 +138,6 @@ public:
     InstGraphTy::const_iterator at = Graph.find(DstMI);
     return at == Graph.end() ? false : at->second.count(SrcMI);
   }
-
-  bool IsDstDepsConnectedToSrc(MachineInstr *SrcMI, MachineInstr *DstMI) const {
-    InstGraphTy::const_iterator at = Graph.find(DstMI);
-
-    if (at == Graph.end()) return false;
-
-    const InstSetTy DepSet = at->second;
-    typedef InstSetTy::const_iterator iterator;
-    for (iterator I = DepSet.begin(), E = DepSet.end(); I != E; ++I)
-      if (IsConnected(SrcMI, *I)) return true;
-
-    return false;
-  }
 };
 
 struct MemDepGraph : public InstGraphBase {
@@ -264,11 +251,22 @@ struct UseTransClosure : public InstGraphBase {
 
     // Check the memory dependence, note that we can move the identical accesses
     // across each other.
-    if ((MDG.IsConnected(Src, Dst) && !isIdenticalMemTrans(Dst, Src))
-        || MDG.IsDstDepsConnectedToSrc(Src, Dst)) {
-      // Src is (indirectly) used by Dst.
+    if ((MDG.IsConnected(Src, Dst) && !isIdenticalMemTrans(Dst, Src))) {
+      // There is a memory dependency between Src and Dst.
       UseSet.insert(Dst);
       return true;
+    }
+
+    typedef InstSetTy::iterator iterator;
+    for (iterator I = UseSet.begin(), E = UseSet.end(); I != E; ++I) {
+      MachineInstr *SrcUser = *I;
+      if (MDG.IsConnected(SrcUser, Dst)) {
+        // There is a memory dependency between SrcUser and Dst, so we cannot
+        // move SrcUser after Dst, and we need to model this as a use
+        // relationship.
+        UseSet.insert(Dst);
+        return true;
+      }      
     }
 
     // Iterate from use to define.
