@@ -395,6 +395,9 @@ struct MemOpsFusing : public MachineFunctionPass {
                                                MemOpCompGraph &MemOps);
   bool fuseMemOp(MemOpCompGraph &MemOps, UseTransClosure &UseClosure);
 
+  void moveUsesAfter(AccessInfo &MergeFrom, AccessInfo &MergeTo,
+                     UseTransClosure &UseClosure, MemOpCompGraph &MemOps);
+
   void fuseMachineInstr(MachineInstr *From, MachineInstr *To);
 };
 }
@@ -470,14 +473,11 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
 
     changed |= true;
 
-    UseTransClosure::InstSetTy InstSet;
-    SmallVector<NodeTy*, 8> NeedToUpdateID;
-
-    typedef MachineBasicBlock::instr_iterator instr_it;
-
     // If P has any no-virtual neighbor.
     while (P->degree() > 2) {
-      DEBUG(dbgs() << "MemOp order:\n";
+      DEBUG(
+        typedef MachineBasicBlock::instr_iterator instr_it;
+        dbgs() << "MemOp order:\n";
         for (instr_it I = UseClosure.MBB.instr_begin(),
              E = UseClosure.MBB.instr_end(); I != E; ++I)
           if (NodeTy *N = MemOps[AccessInfo(I)])
@@ -499,63 +499,75 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
 
       // Move all use of "MergeFrom" between "MergeFrom" and "MergeTo" after
       // "MergeTo", and update the ID of the memory access instructions.
-      MachineInstr *MergeFromMI = MergeFrom, *MergeToMI = MergeTo;
-      assert(MergeFromMI && MergeToMI && "Unexpected virtual node!");
-      unsigned CurId = MergeFrom.Id;
-
-      DEBUG(dbgs() << "Going to merge:\n[" << MergeFrom.Id << ']'
-                   << *MergeFromMI << "into\n[" << MergeTo.Id << ']'
-                   << *MergeToMI);
-      instr_it L = MergeFromMI, InsertPos = MergeToMI;
-
-      // Skip MergeFromMI.
-      ++L;
-      // Insert moved instruction after MergeToMI.
-      ++InsertPos;
-
-      InstSet.clear();
-      NeedToUpdateID.clear();
-      while (L != instr_it(MergeToMI)) {
-        assert(L != UseClosure.MBB.instr_end()
-               && "Iterator pass the end of the list!");
-        MachineInstr *MIToMove = L++;
-        NodeTy *N = MemOps[AccessInfo(MIToMove)];
-
-        DEBUG(if (N) dbgs() << "Get [" << N->get().Id << ']' << *MIToMove;);
-
-        assert((N == 0 || N->get().Id < MergeTo.Id) && "MemOp has bad order!");
-
-        if (!UseClosure.trackUsesOfSrc(InstSet, MergeFromMI, MIToMove)) {
-          if (N) N->get().Id = ++CurId;
-          continue;
-        }
-
-        // We cannot determinate the id of nodes that moved after MergeToMI
-        // right now, we need to update their id after all nodes are moved.
-        if (N) NeedToUpdateID.push_back(N);
-        MIToMove->removeFromParent();
-        UseClosure.MBB.insert(InsertPos, MIToMove);
-      }
-
-      MergeTo.Id = ++CurId;
-      // Update the moved nodes' ID.
-      for (unsigned i = 0, e = NeedToUpdateID.size(); i != e; ++i)
-        NeedToUpdateID[i]->get().Id = ++CurId;
+      moveUsesAfter(MergeFrom, MergeTo, UseClosure, MemOps);
 
       // Merge LHS into RHS.
-      fuseMachineInstr(MergeFromMI, MergeToMI);
+      fuseMachineInstr(MergeFrom.Inst, MergeTo.Inst);
 
       // Update the use closure.
-      UseClosure.mergeMemDepSet(MergeFromMI, MergeToMI);
+      UseClosure.mergeMemDepSet(MergeFrom.Inst, MergeTo.Inst);
 
       // Remove LHS.
-      MergeFromMI->eraseFromParent();
+      MergeFrom.Inst->eraseFromParent();
       MemOps.deleteNode(NodeToMerge);
     }
   }
 
   return changed;
 }
+
+void MemOpsFusing::moveUsesAfter(AccessInfo &MergeFrom, AccessInfo &MergeTo,
+                                 UseTransClosure &UseClosure,
+                                 MemOpCompGraph &MemOps) {
+  MachineInstr *MergeFromMI = MergeFrom, *MergeToMI = MergeTo;
+  assert(MergeFromMI && MergeToMI && "Unexpected virtual node!");
+  unsigned CurId = MergeFrom.Id;
+
+  DEBUG(dbgs() << "Going to merge:\n[" << MergeFrom.Id << ']'
+        << *MergeFromMI << "into\n[" << MergeTo.Id << ']'
+        << *MergeToMI);
+
+  typedef MachineBasicBlock::instr_iterator instr_it;
+  instr_it L = MergeFromMI, InsertPos = MergeToMI;
+
+  // Skip MergeFromMI.
+  ++L;
+  // Insert moved instruction after MergeToMI.
+  ++InsertPos;
+
+  typedef MemOpCompGraph::NodeTy NodeTy;
+  SmallVector<NodeTy*, 8> NeedToUpdateID;
+  UseTransClosure::InstSetTy InstSet;
+
+  while (L != instr_it(MergeToMI)) {
+    assert(L != UseClosure.MBB.instr_end()
+           && "Iterator pass the end of the list!");
+    MachineInstr *MIToMove = L++;
+    NodeTy *N = MemOps[AccessInfo(MIToMove)];
+
+    DEBUG(if (N) dbgs() << "Get [" << N->get().Id << ']' << *MIToMove;);
+
+    assert((N == 0 || N->get().Id < MergeTo.Id) && "MemOp has bad order!");
+
+    if (!UseClosure.trackUsesOfSrc(InstSet, MergeFromMI, MIToMove)) {
+      if (N) N->get().Id = ++CurId;
+      continue;
+    }
+
+    // We cannot determinate the id of nodes that moved after MergeToMI
+    // right now, we need to update their id after all nodes are moved.
+    if (N) NeedToUpdateID.push_back(N);
+    MIToMove->removeFromParent();
+    UseClosure.MBB.insert(InsertPos, MIToMove);
+  }
+
+  MergeTo.Id = ++CurId;
+  // Update the moved nodes' ID.
+  for (unsigned i = 0, e = NeedToUpdateID.size(); i != e; ++i)
+    NeedToUpdateID[i]->get().Id = ++CurId;
+}
+
+
 
 void MemOpsFusing::fuseMachineInstr(MachineInstr *From, MachineInstr *To) {
   assert(From->getOpcode() == VTM::VOpMemTrans
