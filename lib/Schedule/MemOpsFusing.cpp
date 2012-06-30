@@ -161,54 +161,56 @@ struct MemDepGraph : public InstGraphBase {
     : SE(P->getAnalysis<ScalarEvolution>()), AA(P->getAnalysis<AliasAnalysis>())
   {}
 
-  void addMemInstr(MachineInstr *Inst) {
-    unsigned Opcode = Inst->getOpcode();
-    bool ForceDstDep =  Opcode == VTM::VOpInternalCall;
-    bool IsDstMemTrans = Opcode == VTM::VOpMemTrans;
-    IsDstMemTrans |= Opcode == VTM::VOpBRAMTrans;
-
-    if (!IsDstMemTrans && !ForceDstDep) return;
-
-    InstSetTy &DepSet = Graph[Inst];
+  void addMemInstr(MachineInstr *DstMI) {
+    InstSetTy &DepSet = Graph[DstMI];
 
     // Already visited.
     if (!DepSet.empty()) return;
 
-    bool DstMayStore = VInstrInfo::mayStore(Inst);
-    MachineMemOperand *DstMO = IsDstMemTrans ? *Inst->memoperands_begin() : 0;
-
     typedef MachineBasicBlock::instr_iterator it;
-    MachineBasicBlock *MBB = Inst->getParent();
-    for (it I = MBB->instr_begin(), E = Inst; I != E; ++I) {
+    MachineBasicBlock *MBB = DstMI->getParent();
+    for (it I = MBB->instr_begin(), E = DstMI; I != E; ++I) {
       MachineInstr *SrcMI = I;
-      // Do not add loop to dependent graph.
-      if (SrcMI == Inst) continue;
 
-      unsigned SrcOpcode = SrcMI->getOpcode();
-      if (SrcOpcode != VTM::VOpMemTrans && SrcOpcode != VTM::VOpBRAMTrans
-          && SrcOpcode != VTM::VOpInternalCall)
-        continue;
-
-      if (VInstrInfo::isPredicateMutex(SrcMI, Inst)) continue;
-
-      // Handle force dependency.
-      if (ForceDstDep || SrcOpcode == VTM::VOpInternalCall) {
-        DepSet.insert(SrcMI);
-        continue;
-      }
-
-      bool SrcMayStore = VInstrInfo::mayStore(SrcMI);
-
-      // Ignore RAR dependency.
-      if (!SrcMayStore && ! DstMayStore) continue;
-
-      MachineMemOperand *SrcMO = *SrcMI->memoperands_begin();
-
-      // Is DstMI depends on SrcMI?
-      if (isMachineMemOperandAlias(SrcMO, DstMO, &AA, &SE))
-        DepSet.insert(SrcMI);
+      if (hasDependency(DstMI, SrcMI)) DepSet.insert(SrcMI);
     }
   }
+
+  bool hasDependency(MachineInstr *DstMI, MachineInstr *SrcMI) {
+    unsigned Opcode = DstMI->getOpcode();
+    bool ForceDstDep =  Opcode == VTM::VOpInternalCall;
+    bool IsDstMemTrans = Opcode == VTM::VOpMemTrans;
+    IsDstMemTrans |= Opcode == VTM::VOpBRAMTrans;
+
+    if (!IsDstMemTrans && !ForceDstDep) return false;
+
+    bool DstMayStore = VInstrInfo::mayStore(DstMI);
+    MachineMemOperand *DstMO = IsDstMemTrans ? *DstMI->memoperands_begin() : 0;
+    // Do not add loop to dependent graph.
+    if (SrcMI == DstMI) return false;
+
+    unsigned SrcOpcode = SrcMI->getOpcode();
+    if (SrcOpcode != VTM::VOpMemTrans && SrcOpcode != VTM::VOpBRAMTrans
+        && SrcOpcode != VTM::VOpInternalCall)
+      return false;
+
+    if (VInstrInfo::isPredicateMutex(SrcMI, DstMI)) return false;
+
+    // Handle force dependency.
+    if (ForceDstDep || SrcOpcode == VTM::VOpInternalCall)
+      return true;
+
+    bool SrcMayStore = VInstrInfo::mayStore(SrcMI);
+
+    // Ignore RAR dependency.
+    if (!SrcMayStore && ! DstMayStore) return false;
+
+    MachineMemOperand *SrcMO = *SrcMI->memoperands_begin();
+
+    // Is DstMI depends on SrcMI?
+    return isMachineMemOperandAlias(SrcMO, DstMO, &AA, &SE);
+  }
+
 
   void mergeDepSet(MachineInstr *From, MachineInstr *To) {
     InstGraphTy::iterator at = Graph.find(From);
