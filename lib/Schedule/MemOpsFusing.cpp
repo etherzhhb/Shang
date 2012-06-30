@@ -316,6 +316,9 @@ struct UseTransClosure : public InstGraphBase {
            && "Unexpected different access type!");
     uint64_t FusedWidth = std::max(LHS.getSize(), Delta + RHS.getSize());
 
+    // Do not generate unaligned memory access.
+    if (FusedWidth > LHS.getAlignment()) return CompGraphWeights::HUGE_NEG_VAL;
+
     if (LHSAddr->isStore()) {
       // Cannot store with irregular byteenable at the moment.
       if (!isPowerOf2_64(FusedWidth)) return CompGraphWeights::HUGE_NEG_VAL;
@@ -333,10 +336,6 @@ struct UseTransClosure : public InstGraphBase {
             || LHSAddr->getSize() != RHSAddr->getSize()))
           return CompGraphWeights::HUGE_NEG_VAL;
     }
-
-    // Do not generate unaligned memory access.
-    if (FusedWidth > LHS.getAlignment())
-      return CompGraphWeights::HUGE_NEG_VAL;
     
     uint64_t BusWidth = getFUDesc<VFUMemBus>()->getDataWidth() / 8;
 
@@ -494,10 +493,12 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
       }
       P->deleteUncommonEdges(NodeToMerge);
 
+      // Now the instruction "MergeFrom" is before the instruction "MergeTo".
       AccessInfo &MergeFrom = NodeToMerge->get(), &MergeTo = P->get();
       assert(MergeFrom.Id < MergeTo.Id && "Bad merge order!");
 
-      // Move all use between LHS and RHS after RHS.
+      // Move all use of "MergeFrom" between "MergeFrom" and "MergeTo" after
+      // "MergeTo", and update the ID of the memory access instructions.
       MachineInstr *MergeFromMI = MergeFrom, *MergeToMI = MergeTo;
       assert(MergeFromMI && MergeToMI && "Unexpected virtual node!");
       unsigned CurId = MergeFrom.Id;
@@ -505,13 +506,11 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
       DEBUG(dbgs() << "Going to merge:\n[" << MergeFrom.Id << ']'
                    << *MergeFromMI << "into\n[" << MergeTo.Id << ']'
                    << *MergeToMI);
-      // Move the user of LHSMI between LHSMI and RHSMI after RHSMI, and update
-      // the ID of the memory access instructions.
       instr_it L = MergeFromMI, InsertPos = MergeToMI;
 
-      // Skip LHSMI.
+      // Skip MergeFromMI.
       ++L;
-      // Insert moved instruction after RHSMI.
+      // Insert moved instruction after MergeToMI.
       ++InsertPos;
 
       InstSet.clear();
@@ -531,8 +530,8 @@ bool MemOpsFusing::fuseMemOp(MemOpCompGraph &MemOps,
           continue;
         }
 
-        // We can determinate the id of nodes that moved after LHSMI, we need to
-        // update their id after all nodes are moved.
+        // We cannot determinate the id of nodes that moved after MergeToMI
+        // right now, we need to update their id after all nodes are moved.
         if (N) NeedToUpdateID.push_back(N);
         MIToMove->removeFromParent();
         UseClosure.MBB.insert(InsertPos, MIToMove);
