@@ -892,6 +892,12 @@ void VRASimple::mergeLI(LiveInterval *FromLI, LiveInterval *ToLI,
   assert(getBitWidthOf(FromLI->reg) == getBitWidthOf(ToLI->reg)
          && "Cannot merge LIs difference with bit width!");
   // Merge two live intervals.
+  while (ToLI->getNumValNums() > 1) {
+    ToLI->MergeValueNumberInto(ToLI->getValNumInfo(1),
+                               ToLI->getValNumInfo(0));
+    ToLI->RenumberValues(*LIS);
+  }
+
   ToLI->MergeRangesInAsValue(*FromLI, ToLI->getValNumInfo(0));
   MRI->replaceRegWith(FromLI->reg, ToLI->reg);
   ++LIMerged;
