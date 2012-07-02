@@ -273,15 +273,14 @@ struct VTMPassConfig : public TargetPassConfig {
     // pass.
     PM->add(createBlockRAMFormation(*TM->getIntrinsicInfo()));
 
-    PM->add(createLoopStrengthReducePass(getTargetLowering()));
+    // Do not passs the target lowering information to LoopStrengthReducePass,
+    // by doing this, the LSR pass will not perform address mode related
+    // optimization which will generate inefficient code for our backend.
+    PM->add(createLoopStrengthReducePass(0));
     PM->add(createGCLoweringPass());
 
     // Make sure that no unreachable blocks are instruction selected.
     PM->add(createUnreachableBlockEliminationPass());
-
-    // Turn exception handling constructs into something the code generators can
-    // handle.
-    PM->add(createLowerInvokePass(getTargetLowering()));
 
     PM->add(createCFGSimplificationPass());
   }
