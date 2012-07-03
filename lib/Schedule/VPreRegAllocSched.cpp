@@ -705,9 +705,7 @@ void VPreRegAllocSched::addValDep(VSchedGraph &CurState, VSUnit *A) {
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (NumValDep == 0) {
-    int Latency =  A->getMaxLatencyFromEntry();
-
-    A->addDep(VDCtrlDep::CreateDep(CurState.getEntryRoot(), Latency));
+    A->addDep(VDCtrlDep::CreateDep(CurState.getEntryRoot(), 0));
     return;
   }
 
