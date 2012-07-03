@@ -60,6 +60,7 @@ add_llvm_target(VerilogBackend
   FixMachineCode.cpp
   FixTerminators.cpp
   DatapathCodehMotion.cpp
+  DeadMemOpElimination.cpp
   BBDelayAnalysis.cpp
   HyperBlockFormation.cpp
   ScriptingPass.cpp

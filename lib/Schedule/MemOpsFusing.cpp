@@ -326,6 +326,7 @@ struct MemOpsFusing : public MachineFunctionPass {
     AU.addPreserved<ScalarEvolution>();
     AU.addRequired<AliasAnalysis>();
     AU.addPreserved<AliasAnalysis>();
+    AU.setPreservesCFG();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
