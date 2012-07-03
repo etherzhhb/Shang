@@ -130,6 +130,9 @@ struct VPreRegAllocSched : public MachineFunctionPass {
                          const MachineBasicBlock *DstBB) const;
   unsigned getCyclesToBB(const MachineBasicBlock *SrcBB,
                          const MachineBasicBlock *DstBB) const;
+  unsigned calculateLatencyFromEntry(MachineInstr *MI) const;
+  bool hasFUConflictAtLastSlot(FuncUnitId Id, MachineBasicBlock *MBB) const;
+  unsigned calculateLatencyFromEntry(VSUnit *U) const;
 
   // We need to iterate over the operand latency table.
   typedef DetialLatencyInfo::DepLatInfoTy::const_iterator src_it;
@@ -560,6 +563,123 @@ unsigned VPreRegAllocSched::getCyclesToBB(const MachineBasicBlock *SrcBB,
   return CyclesToBB;
 }
 
+unsigned VPreRegAllocSched::calculateLatencyFromEntry(MachineInstr *MI) const {
+  MachineBasicBlock *MBB = MI->getParent();
+
+  // PHIs can be scheduled to the first slot.
+  if (MI->isPHI()) return 0;
+
+  // Schedule data-path operation right after the first control slot.
+  if (VInstrInfo::isDatapath(MI->getOpcode())) return 0;
+
+  // Reading the result of operation in the same MBB?
+  for (unsigned i = 0, e = MI->getNumOperands(); i < e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
+
+    if (!MO.isReg() || !MO.getReg() || MO.isDef())
+      continue;
+
+    unsigned UseReg = MO.getReg();
+    MachineInstr *DefMI = MRI->getVRegDef(UseReg);
+    assert(DefMI && "DefMI not found!");
+    // Cannot schedule to the first slot if MI is using the result of the
+    // operations in the same BB.
+    if (DefMI->getParent() == MBB) return 1;
+
+    // No need to check the data-path definition.
+    if (VInstrInfo::isDatapath(DefMI->getOpcode())) continue;
+
+    assert(DefMI->getParent()->back().getOpcode() == VTM::EndState
+           && "Unexpected unscheduled MBB!");
+    // DefMI write its result at the first slot of MBB, cannot schedule its
+    // user to the first slot.
+    if (getCyclesToBB(DefMI, MBB) == 0) return 1;
+  }
+
+  FuncUnitId Id = VInstrInfo::getPreboundFUId(MI);
+
+  // The not-yet-bound MI will never conflict.
+  if (!Id.isBound()) return 0;
+
+  // Check if there is any FU conflict or register conflict.
+  typedef MachineBasicBlock::pred_iterator pred_iterator;
+  SmallVector<std::pair<MachineBasicBlock*, pred_iterator>, 4> WorkStack;
+  SmallPtrSet<MachineBasicBlock*, 4> Visited;
+  // No need to check current BB, the scheduler will handle the FU conflicts.
+  Visited.insert(MBB);
+
+  WorkStack.push_back(std::make_pair(MBB, MBB->pred_begin()));
+  unsigned CurStartSlot = getCyclesFromEntry(MBB);
+
+  while (!WorkStack.empty()) {
+    MachineBasicBlock *CurMBB = WorkStack.back().first;
+    pred_iterator ChildIt = WorkStack.back().second;
+
+    if (ChildIt == CurMBB->pred_end()) {
+      WorkStack.pop_back();
+      continue;
+    }
+
+    MachineBasicBlock *ChildBB = *ChildIt;
+    ++WorkStack.back().second;
+
+    // ChildBB had already been visited.
+    if (!Visited.insert(ChildBB)) continue;
+
+    // We assume there is always a conflict in the unscheduled blocks.
+    if (ChildBB->back().getOpcode() != VTM::EndState) return 1;
+
+    // Try to detect conflict.
+    if (hasFUConflictAtLastSlot(Id, ChildBB)) return 1;
+
+    // Only check the BB whose last slot overlap with the first slot of current
+    // MBB.
+    if (getCyclesFromEntry(ChildBB) != CurStartSlot) continue;
+
+    WorkStack.push_back(std::make_pair(ChildBB, ChildBB->pred_begin()));
+  }
+
+  return 0;
+}
+
+bool VPreRegAllocSched::hasFUConflictAtLastSlot(FuncUnitId Id,
+                                                MachineBasicBlock *MBB) const {
+  // We assume there is always a conflict in the unscheduled blocks.
+  if (MBB->back().getOpcode() != VTM::EndState) return true;
+
+  unsigned EndSlot = FInfo->getEndSlotFor(MBB);
+
+  // Scan the instructions in the MBB to detect the conflict.
+  // FIXME: We had better to setup a global FU usage table.
+  typedef MachineBasicBlock::reverse_instr_iterator rev_it;
+  for (rev_it I = MBB->instr_rbegin(), E = MBB->instr_rend(); I != E; ++I) {
+    MachineInstr &MI = *I;
+
+    if (MI.isPseudo() || VInstrInfo::isDatapath(MI.getOpcode())) continue;
+
+    // Get the slot that the MI is scheduled to.
+    if (VInstrInfo::getTraceOperand(&MI)->getImm() != EndSlot) continue;
+
+    // The instruction in the last slot accessing the same FU?
+    if (VInstrInfo::getPreboundFUId(&MI) == Id) return true;
+  }
+
+  return false;
+}
+
+unsigned VPreRegAllocSched::calculateLatencyFromEntry(VSUnit *U) const {
+  int Latency = 0;
+
+  for (unsigned i = 0, e = U->num_instrs(); i < e; ++i) {
+    // Do not consider positive intra schedule unit latency at the moment.
+    int IntraLatency = i ? std::min(int(U->getLatencyAt(i)), 0) : 0;
+    int InstLatency = calculateLatencyFromEntry(U->getInstrAt(i));
+    Latency = std::max(Latency, InstLatency - IntraLatency);
+  }
+
+  return Latency;
+}
+
 //===----------------------------------------------------------------------===//
 template<typename DepEdgeTy>
 void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
@@ -584,18 +704,27 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
       // entry node, we cannot schedule current schedule unit to the same slot
       // with the entry root.
       Latency -= getCyclesToBB(Src.get_mbb(), CurMBB);
-      Latency = std::max(A->isPHI() ? 0 : 1, Latency);
+      // Adjust the latency to avoid register/FU conflict.
+      Latency = std::max(int(calculateLatencyFromEntry(MI)), Latency);
       Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
     }
 
     MachineInstr *SrcMI = const_cast<MachineInstr*>(Src.get_mi());
+    // Step between MI and its dependent.
+    unsigned MinCtrlDistance
+      = CurState.getCtrlStepBetween<DepEdgeTy::IsValDep>(SrcMI, MI);
+    // The the latency must bigger than the minimal latency between two control
+    // operations.
+    Latency = std::max(int(MinCtrlDistance), Latency);
+
     if (SrcMI->getParent() != CurMBB) {
-      // From other BasicBlock.
+      // Now SrcMI is from other BasicBlock, try to make use of the steps from
+      // SrcMI's schedule to the entry of current BB.
       Latency -= getCyclesToBB(SrcMI, CurMBB);
-      // FIXME: We can set latency to 0 in some case.
-      Latency = std::max(A->isPHI() ? 0 : 1, Latency);
+      // Adjust the latency to avoid register/FU conflict.
+      Latency = std::max(int(calculateLatencyFromEntry(MI)), Latency);
       Latency -= MIOffset;
       A->addDep(DepEdgeTy::CreateDep(CurState.getEntryRoot(), Latency));
       continue;
@@ -606,10 +735,6 @@ void VPreRegAllocSched::addSchedDepForMI(MachineInstr *MI, int MIOffset,
     assert(SrcSU->isControl() && "Datapath dependence should be forwarded!");
     // Avoid the back-edge or self-edge.
     if (SrcSU->getIdx() >= A->getIdx()) continue;
-    // Step between MI and its dependent.
-    unsigned S = CurState.getCtrlStepBetween<DepEdgeTy::IsValDep>(SrcMI, MI);
-    // Adjust the step between SrcMI and MI.
-    Latency = std::max(int(S), Latency);
     // Call getLatencyTo to accumulate the intra-unit latency.
     Latency = SrcSU->getLatencyFrom(SrcMI, Latency);
     Latency -= MIOffset;
@@ -743,7 +868,7 @@ void VPreRegAllocSched::addSchedDepForSU(VSUnit *A, VSchedGraph &CurState,
   // If the atom depend on nothing and it must has some dependence edge,
   // make it depend on the entry node.
   if (A->dep_empty() && !isExit) {
-    int Latency = A->getMaxLatencyFromEntry();
+    unsigned Latency = calculateLatencyFromEntry(A);
     A->addDep(VDCtrlDep::CreateDep(CurState.getEntryRoot(), Latency));
   }
 }
@@ -1085,7 +1210,7 @@ void VPreRegAllocSched::buildExitRoot(VSchedGraph &CurState,
   // simply connect them together.
   VSUnit *Entry = CurState.getEntryRoot();
   if (Entry->use_empty()) {
-    unsigned L = ExitSU->getMaxLatencyFromEntry();
+    unsigned L = calculateLatencyFromEntry(ExitSU);
     ExitSU->addDep(VDCtrlDep::CreateDep(Entry, L));
   }
 

@@ -347,19 +347,6 @@ public:
   template<bool IsValDep>
   int getMaxLatencyTo(MachineInstr *DstMI, VSchedGraph &G) const;
 
-  // Get the latency considering negative latency.
-  int getMaxLatencyFromEntry() const {
-    int latency = 0;
-    for (unsigned i = 0, e = num_instrs(); i < e; ++i) {
-      // Do not consider positive intra schedule unit latency at the moment. 
-      int IntraLatency = i ? std::min(int(getLatencyAt(i)), 0) : 0;
-      int InstLatency = DetialLatencyInfo::getStepsFromEntry(getInstrAt(i));
-      latency = std::max(latency, InstLatency - IntraLatency);
-    }
-
-    return latency;
-  }
-
   typedef SmallVectorImpl<MachineInstr*>::iterator instr_iterator;
 
   instr_iterator instr_begin() { return Instrs.begin(); }
