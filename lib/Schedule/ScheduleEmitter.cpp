@@ -397,13 +397,15 @@ struct MicroStateBuilder {
            && "Bad register class for PHI!");
     unsigned NewReg = MRI.createVirtualRegister(&VTM::DRRegClass);
 
-    BuildMI(MBB, getStateCtrlAt(OpSlot(InsertSlot, true)), DebugLoc(),
-            TII.get(VTM::VOpDefPhi))
-      .addOperand(MO)
-      .addOperand(VInstrInfo::CreateReg(NewReg, VInstrInfo::getBitWidth(MO),
-                                       false))
-      .addOperand(VInstrInfo::CreatePredicate())
-      .addImm(InsertSlot);
+    MachineInstr *DefPHI
+      = BuildMI(MBB, getStateCtrlAt(OpSlot(InsertSlot, true)), DebugLoc(),
+                TII.get(VTM::VOpDefPhi))
+          .addOperand(MO)
+          .addOperand(VInstrInfo::CreateReg(NewReg,
+                                            VInstrInfo::getBitWidth(MO),
+                                            false))
+          .addOperand(VInstrInfo::CreatePredicate()).addImm(0);
+    VInstrInfo::setInstrSlotNum(DefPHI, InsertSlot);
 
     // Update the MO of the Original PHI.
     MO.ChangeToRegister(NewReg, true);
@@ -760,8 +762,11 @@ void MicroStateBuilder::fuseInstr(MachineInstr &Inst, OpSlot SchedSlot,
 
       // Get the predicate operand at current slot.
       Builder.addOperand(getRegUseOperand(WD->Pred, CopySlot));
-      // Add the slot number.
-      Builder.addImm(Slot);
+
+      // Add the operand to hold the schedule.
+      Builder.addImm(0);
+      // Set the slot number.
+      VInstrInfo::setInstrSlotNum(Builder, Slot);
     }
   }
 }
