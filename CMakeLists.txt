@@ -48,6 +48,14 @@ tablegen(LLVM VerilogBackendGenIntrinsics.inc -gen-tgt-intrinsic)
 add_public_tablegen_target(VerilogBackendTableGen)
 
 add_llvm_target(VerilogBackend
+  BBDelayAnalysis.cpp
+  DatapathCodehMotion.cpp
+  DeadMemOpElimination.cpp
+  FixMachineCode.cpp
+  FixTerminators.cpp
+  HyperBlockFormation.cpp
+  MemOpsFusing.cpp
+  ScriptingPass.cpp
   VTargetMachine.cpp
   VFrameLowering.cpp
   VFInfo.cpp
@@ -57,13 +65,6 @@ add_llvm_target(VerilogBackend
   VIntrinsicsInfo.cpp
   VRegisterInfo.cpp
   VSelectionDAGInfo.cpp
-  FixMachineCode.cpp
-  FixTerminators.cpp
-  DatapathCodehMotion.cpp
-  DeadMemOpElimination.cpp
-  BBDelayAnalysis.cpp
-  HyperBlockFormation.cpp
-  ScriptingPass.cpp
 )
 
 target_link_libraries (LLVMVerilogBackend

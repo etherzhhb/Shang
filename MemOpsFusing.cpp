@@ -14,16 +14,7 @@
 // This file implement the MemOpsFusing Pass, which fully utilize the bandwidth
 // of memory bus to boost the speed performance of the design.
 //
-// You can find the original description of the clique partitioning algorithm
-// in paper:
-//   New Efficient Clique Partitioning Algorithms for Register-Transfer Synthesis
-//   of Data Paths
-//   Jong Tae Kim and Dong Ryeol Shin, 2001
 //===----------------------------------------------------------------------===//
-#include "CompGraphTraits.h"
-#include "CompGraph.h"
-#include "CompGraphDOT.h"
-
 #include "vtm/Passes.h"
 #include "vtm/VerilogBackendMCTargetDesc.h"
 #include "vtm/VInstrInfo.h"
@@ -39,8 +30,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/ADT/PointerIntPair.h"
-#include "llvm/ADT/SetOperations.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
 #define DEBUG_TYPE "vtm-memop-fusing"
 #include "llvm/Support/Debug.h"
