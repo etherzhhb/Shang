@@ -51,6 +51,7 @@ Pass *createHyperBlockFormationPass();
 Pass *createPrebindUnbalanceMuxPass();
 Pass *createBasicPrebindMuxPass();
 Pass *createMemOpsFusingPass();
+Pass *createDeadMemOpEliminationPass();
 Pass *createVPreRegAllocSchedPass();
 
 // Scheduling pass.
