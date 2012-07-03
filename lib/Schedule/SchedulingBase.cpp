@@ -325,6 +325,7 @@ bool SchedulingBase::tryTakeResAtStep(VSUnit *U, unsigned step) {
 }
 
 void SchedulingBase::scheduleSU(VSUnit *U, unsigned step) {
+  assert(hasSpareFU(U, step) && "Cannot schedule VSUnit to the given step!");
   U->scheduledTo(step);
 
   takeFU(U, step);
